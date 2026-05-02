@@ -148,6 +148,42 @@ describe('ChartsKpiComponent', () => {
     expect(component.titleDisplay).toBe('M/S');
   });
 
+  it('keeps full titles and applies row layout in compact row mode', async () => {
+    component.compactRow = true;
+    component.reserveTitleActionSpace = true;
+    component.chartType = DASHBOARD_MONOTONY_STRAIN_KPI_CHART_TYPE;
+    component.monotonyStrain = {
+      latestDayMs: Date.UTC(2026, 0, 1),
+      weeklyLoad7: 360,
+      monotony: 1.7,
+      strain: 612,
+      trend8Weeks: [{ time: Date.UTC(2025, 11, 1), value: 520 }],
+    };
+
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const nativeElement = fixture.nativeElement as HTMLElement;
+    expect(component.title).toBe('Monotony / Strain');
+    expect(component.titleDisplay).toBe('Monotony / Strain');
+    expect(nativeElement.querySelector('.kpi-layout-row')).not.toBeNull();
+    expect(nativeElement.querySelector('.kpi-layout-reserve-actions')).not.toBeNull();
+    expect(nativeElement.querySelector('.kpi-copy-block .kpi-title')?.textContent?.trim()).toBe('Monotony / Strain');
+    expect(nativeElement.querySelector('.kpi-subtitle-row')?.textContent).toContain('Strain');
+    expect(nativeElement.querySelector('.kpi-value-block .kpi-value')?.textContent?.trim()).toBe('612');
+
+    await (component as any).refreshChart();
+    const latestSetOptionArgs = mockLoader.setOption.mock.calls.at(-1) || [];
+    const option = latestSetOptionArgs.find((arg) => (
+      !!arg
+      && typeof arg === 'object'
+      && 'tooltip' in (arg as Record<string, unknown>)
+    )) as Record<string, any> | undefined;
+    expect(option?.tooltip?.show).toBe(false);
+    expect(option?.series?.[0]?.silent).toBe(true);
+  });
+
   it('updates compact title alias when action-space reservation toggles without data changes', async () => {
     component.chartType = DASHBOARD_MONOTONY_STRAIN_KPI_CHART_TYPE;
     component.monotonyStrain = {
@@ -181,6 +217,37 @@ describe('ChartsKpiComponent', () => {
 
     expect(component.showNoDataError).toBe(true);
     expect(component.noDataErrorMessage).toBe('KPI is updating');
+  });
+
+  it('renders no-data as an inline row status in compact row mode', async () => {
+    component.compactRow = true;
+    component.chartType = DASHBOARD_ACWR_KPI_CHART_TYPE;
+    component.acwr = null;
+    component.acwrStatus = 'missing';
+
+    fixture.detectChanges();
+    await fixture.whenStable();
+    await (component as any).refreshChart();
+    fixture.detectChanges();
+
+    const nativeElement = fixture.nativeElement as HTMLElement;
+    const rowStatus = nativeElement.querySelector('.kpi-row-status');
+    expect(component.showNoDataError).toBe(true);
+    expect(rowStatus?.querySelector('span')?.textContent?.trim()).toBe('No data');
+    expect(nativeElement.querySelector('.kpi-sparkline-muted')).not.toBeNull();
+  });
+
+  it('renders loading as an inline progress state in compact row mode', async () => {
+    component.compactRow = true;
+    component.isLoading = true;
+
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    const nativeElement = fixture.nativeElement as HTMLElement;
+    const rowStatus = nativeElement.querySelector('.kpi-row-status-loading');
+    expect(rowStatus).not.toBeNull();
+    expect(rowStatus?.querySelector('mat-progress-bar')).not.toBeNull();
   });
 
   it('renders Form Now readiness KPI presentation', async () => {

@@ -21,54 +21,64 @@
   </div>
   }
   @if (kpiLaneTiles.length) {
-  <div
-    class="dashboard-kpi-lane"
-    cdkDropList
-    cdkDropListOrientation="horizontal"
-    [cdkDropListData]="kpiLaneTiles"
-    [cdkDropListDisabled]="!desktopTileDragEnabled"
-    [class.desktop-tile-drop-list]="desktopTileDragEnabled"
-    (cdkDropListSorted)="onKpiTilesSort($event)"
-    (cdkDropListDropped)="onKpiTilesDrop($event)">
-    @for (tile of kpiLaneTiles; track trackByTile($index, tile)) {
-    <div
-      class="dashboard-kpi-tile"
-      cdkDrag
-      [cdkDragPreviewContainer]="'parent'"
-      [cdkDragDisabled]="!desktopTileDragEnabled"
-      [class.desktop-draggable-tile]="desktopTileDragEnabled">
-      <app-tile-chart class="qs-glass-card-panel" [user]="user" [type]="tile.type" [chartType]="getChartTile(tile).chartType"
-        [isLoading]="isTileLoading(tile)" [data]="getChartTile(tile).data" [showActions]="showActions" [darkTheme]="darkTheme"
-        [dataType]="getChartTile(tile).dataType" [dataValueType]="getChartTile(tile).dataValueType"
-        [dataCategoryType]="getChartTile(tile).dataCategoryType" [dataTimeInterval]="getChartTile(tile).timeInterval"
-        [eventFilters]="getTileEventFilters(tile)" [canNavigateTileEventsNewer]="canNavigateTileEventsNewer(tile)"
-        [recoveryNow]="getChartTile(tile).recoveryNow" [recoveryNowStatus]="getRecoveryNowStatusForTile(tile)"
-        [formStatus]="getFormStatusForTile(tile)"
-        [acwr]="getChartTile(tile).acwr" [acwrStatus]="getAcwrStatusForTile(tile)"
-        [rampRate]="getChartTile(tile).rampRate" [rampRateStatus]="getRampRateStatusForTile(tile)"
-        [monotonyStrain]="getChartTile(tile).monotonyStrain" [monotonyStrainStatus]="getMonotonyStrainStatusForTile(tile)"
-        [formNow]="getChartTile(tile).formNow" [formNowStatus]="getFormNowStatusForTile(tile)"
-        [formPlus7d]="getChartTile(tile).formPlus7d" [formPlus7dStatus]="getFormPlus7dStatusForTile(tile)"
-        [easyPercent]="getChartTile(tile).easyPercent" [easyPercentStatus]="getEasyPercentStatusForTile(tile)"
-        [hardPercent]="getChartTile(tile).hardPercent" [hardPercentStatus]="getHardPercentStatusForTile(tile)"
-        [efficiencyDelta4w]="getChartTile(tile).efficiencyDelta4w" [efficiencyDelta4wStatus]="getEfficiencyDelta4wStatusForTile(tile)"
-        [freshnessForecast]="getChartTile(tile).freshnessForecast" [freshnessForecastStatus]="getFreshnessForecastStatusForTile(tile)"
-        [intensityDistribution]="getChartTile(tile).intensityDistribution" [intensityDistributionStatus]="getIntensityDistributionStatusForTile(tile)"
-        [efficiencyTrend]="getChartTile(tile).efficiencyTrend" [efficiencyTrendStatus]="getEfficiencyTrendStatusForTile(tile)"
-        [sleepTrend]="getChartTile(tile).sleepTrend" [sleepTrendRange]="sleepTrendRange"
-        [sleepTrendWindowLabel]="sleepTrendWindowLabel" [sleepTrendCanNavigateOlder]="sleepTrendCanNavigateOlder"
-        [sleepTrendCanNavigateNewer]="sleepTrendCanNavigateNewer"
-        [absoluteLatestFormPoint]="getChartTile(tile).absoluteLatestFormPoint"
-        [size]="tile.size" [order]="tile.order" [enableDesktopDrag]="desktopTileDragEnabled"
-        (editInDashboardManager)="openDashboardManagerForTileOrder($event)"
-        (eventFilterRangeChange)="onTileEventFilterRangeChange(tile.order, $event)"
-        (eventFilterActivityTypesChange)="onTileEventFilterActivityTypesChange(tile.order, $event)"
-        (eventFilterNavigate)="onTileEventFilterNavigate(tile.order, $event)"
-        (sleepTrendRangeChange)="onSleepTrendRangeChange($event)"
-        (sleepTrendNavigate)="onSleepTrendNavigate($event)"></app-tile-chart>
+  <section class="dashboard-today-section" aria-labelledby="dashboard-today-title">
+    <div class="dashboard-section-header">
+      <mat-icon aria-hidden="true">today</mat-icon>
+      <h2 id="dashboard-today-title">Today</h2>
     </div>
-    }
-  </div>
+    <div
+      class="dashboard-kpi-lane"
+      cdkDropList
+      cdkDropListOrientation="mixed"
+      [cdkDropListData]="kpiLaneTiles"
+      [cdkDropListDisabled]="!desktopTileDragEnabled"
+      [class.desktop-tile-drop-list]="desktopTileDragEnabled"
+      (cdkDropListSorted)="onKpiTilesSort($event)"
+      (cdkDropListDropped)="onKpiTilesDrop($event)">
+      @for (tile of kpiLaneTiles; track trackByTile($index, tile)) {
+      <div
+        class="dashboard-kpi-tile"
+        cdkDrag
+        [cdkDragPreviewContainer]="'parent'"
+        [cdkDragDisabled]="!desktopTileDragEnabled"
+        [class.desktop-draggable-tile]="desktopTileDragEnabled">
+        <app-tile-chart class="qs-glass-card-panel" [user]="user" [type]="tile.type" [chartType]="getChartTile(tile).chartType"
+          [isLoading]="isTileLoading(tile)" [data]="getChartTile(tile).data" [showActions]="showActions" [darkTheme]="darkTheme"
+          [compactKpiRow]="true"
+          [dataType]="getChartTile(tile).dataType" [dataValueType]="getChartTile(tile).dataValueType"
+          [dataCategoryType]="getChartTile(tile).dataCategoryType" [dataTimeInterval]="getChartTile(tile).timeInterval"
+          [eventFilters]="getTileEventFilters(tile)" [canNavigateTileEventsNewer]="canNavigateTileEventsNewer(tile)"
+          [recoveryNow]="getChartTile(tile).recoveryNow" [recoveryNowStatus]="getRecoveryNowStatusForTile(tile)"
+          [formStatus]="getFormStatusForTile(tile)"
+          [acwr]="getChartTile(tile).acwr" [acwrStatus]="getAcwrStatusForTile(tile)"
+          [rampRate]="getChartTile(tile).rampRate" [rampRateStatus]="getRampRateStatusForTile(tile)"
+          [monotonyStrain]="getChartTile(tile).monotonyStrain" [monotonyStrainStatus]="getMonotonyStrainStatusForTile(tile)"
+          [formNow]="getChartTile(tile).formNow" [formNowStatus]="getFormNowStatusForTile(tile)"
+          [formPlus7d]="getChartTile(tile).formPlus7d" [formPlus7dStatus]="getFormPlus7dStatusForTile(tile)"
+          [easyPercent]="getChartTile(tile).easyPercent" [easyPercentStatus]="getEasyPercentStatusForTile(tile)"
+          [hardPercent]="getChartTile(tile).hardPercent" [hardPercentStatus]="getHardPercentStatusForTile(tile)"
+          [efficiencyDelta4w]="getChartTile(tile).efficiencyDelta4w" [efficiencyDelta4wStatus]="getEfficiencyDelta4wStatusForTile(tile)"
+          [freshnessForecast]="getChartTile(tile).freshnessForecast" [freshnessForecastStatus]="getFreshnessForecastStatusForTile(tile)"
+          [intensityDistribution]="getChartTile(tile).intensityDistribution" [intensityDistributionStatus]="getIntensityDistributionStatusForTile(tile)"
+          [efficiencyTrend]="getChartTile(tile).efficiencyTrend" [efficiencyTrendStatus]="getEfficiencyTrendStatusForTile(tile)"
+          [sleepTrend]="getChartTile(tile).sleepTrend" [sleepTrendRange]="sleepTrendRange"
+          [sleepTrendWindowLabel]="sleepTrendWindowLabel" [sleepTrendCanNavigateOlder]="sleepTrendCanNavigateOlder"
+          [sleepTrendCanNavigateNewer]="sleepTrendCanNavigateNewer"
+          [absoluteLatestFormPoint]="getChartTile(tile).absoluteLatestFormPoint"
+          [size]="tile.size" [order]="tile.order" [enableDesktopDrag]="desktopTileDragEnabled"
+          (editInDashboardManager)="openDashboardManagerForTileOrder($event)"
+          (eventFilterRangeChange)="onTileEventFilterRangeChange(tile.order, $event)"
+          (eventFilterActivityTypesChange)="onTileEventFilterActivityTypesChange(tile.order, $event)"
+          (eventFilterNavigate)="onTileEventFilterNavigate(tile.order, $event)"
+          (sleepTrendRangeChange)="onSleepTrendRangeChange($event)"
+          (sleepTrendNavigate)="onSleepTrendNavigate($event)"></app-tile-chart>
+      </div>
+      }
+    </div>
+  </section>
+  }
+  @if (kpiLaneTiles.length && mainGridTiles.length) {
+  <mat-divider class="dashboard-section-divider"></mat-divider>
   }
   <div
     class="dashboard-grid"

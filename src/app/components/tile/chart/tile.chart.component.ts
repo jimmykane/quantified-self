@@ -71,6 +71,7 @@ export class TileChartComponent extends TileAbstractDirective {
   @Input() darkTheme = false;
   @Input() showActions: boolean;
   @Input() enableDesktopDrag = false;
+  @Input() compactKpiRow = false;
   @Input() dataTimeInterval: TimeIntervals;
   @Input() data: any;
   @Input() eventFilters?: AppDashboardTileEventFiltersInterface | null;

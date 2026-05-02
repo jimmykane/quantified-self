@@ -30,11 +30,13 @@ describe('ChartRangeSelectorComponent', () => {
     fixture.detectChanges();
 
     const button = fixture.nativeElement.querySelector('.chart-range-selector-button') as HTMLButtonElement;
+    const content = fixture.nativeElement.querySelector('.chart-range-selector-content') as HTMLElement;
     const label = fixture.nativeElement.querySelector('.chart-range-selector-label') as HTMLElement;
     const icon = fixture.nativeElement.querySelector('.chart-range-selector-icon') as HTMLElement;
     const menu = fixture.debugElement.query(By.directive(MatMenu));
 
     expect(button).toBeTruthy();
+    expect(content).toBeTruthy();
     expect(button.getAttribute('aria-label')).toBe('Select sleep range');
     expect(button.hasAttribute('appHapticTap')).toBe(true);
     expect(button.textContent).toContain('14d');

@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, EventEmitter, Input, Output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, EventEmitter, Input, OnChanges, Output, SimpleChanges } from '@angular/core';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
 import type { ChartRangeSelectorOption } from '../../charts/shared/chart-range-selector/chart-range-selector.component';
 import {
@@ -20,7 +20,7 @@ import type {
   changeDetection: ChangeDetectionStrategy.OnPush,
   standalone: false,
 })
-export class DashboardTileEventFiltersComponent {
+export class DashboardTileEventFiltersComponent implements OnChanges {
   @Input() eventFilters?: AppDashboardTileEventFiltersInterface | null;
   @Input() disabled = false;
   @Input() canNavigateNewer = false;
@@ -30,28 +30,19 @@ export class DashboardTileEventFiltersComponent {
 
   public readonly rangeSelectorOptions: ReadonlyArray<ChartRangeSelectorOption> = DASHBOARD_TILE_EVENT_RANGE_OPTIONS.map(option => ({
     value: option.range,
-    label: option.label,
+    label: this.getCompactRangeLabel(option.label),
   }));
 
-  get normalizedFilters(): AppDashboardTileEventFiltersInterface {
-    return normalizeDashboardTileEventFilters(this.eventFilters);
-  }
+  public normalizedFilters = normalizeDashboardTileEventFilters(null);
+  public selectedRange: AppDashboardTileEventFilterRange = normalizeDashboardTileEventFilterRange(this.normalizedFilters.range);
+  public selectedActivityTypes: ActivityTypes[] = [];
+  public showNavigation = dashboardTileEventRangeDays(this.selectedRange) !== null;
 
-  get selectedRange(): AppDashboardTileEventFilterRange {
-    return normalizeDashboardTileEventFilterRange(this.normalizedFilters.range);
-  }
-
-  get selectedActivityTypes(): ActivityTypes[] {
-    return this.normalizedFilters.activityTypes || [];
-  }
-
-  get showNavigation(): boolean {
-    return dashboardTileEventRangeDays(this.selectedRange) !== null;
-  }
-
-  get activityFilterLabel(): string {
-    const count = this.selectedActivityTypes.length;
-    return count > 0 ? `${count} activity filters` : 'All activities';
+  ngOnChanges(changes: SimpleChanges): void {
+    if (!changes['eventFilters']) {
+      return;
+    }
+    this.refreshFilterState();
   }
 
   onRangeSelection(value: string): void {
@@ -59,7 +50,8 @@ export class DashboardTileEventFiltersComponent {
   }
 
   onActivityTypesChange(activityTypes: ActivityTypes[]): void {
-    this.activityTypesChange.emit(activityTypes || []);
+    this.selectedActivityTypes = activityTypes || [];
+    this.activityTypesChange.emit(this.selectedActivityTypes);
   }
 
   onNavigate(direction: DashboardTileEventNavigationDirection): void {
@@ -70,5 +62,23 @@ export class DashboardTileEventFiltersComponent {
       return;
     }
     this.navigate.emit(direction);
+  }
+
+  private getCompactRangeLabel(label: string): string {
+    switch (label) {
+      case 'This week':
+        return 'Week';
+      case 'This month':
+        return 'Month';
+      default:
+        return label;
+    }
+  }
+
+  private refreshFilterState(): void {
+    this.normalizedFilters = normalizeDashboardTileEventFilters(this.eventFilters);
+    this.selectedRange = normalizeDashboardTileEventFilterRange(this.normalizedFilters.range);
+    this.showNavigation = dashboardTileEventRangeDays(this.selectedRange) !== null;
+    this.selectedActivityTypes = this.normalizedFilters.activityTypes || [];
   }
 }

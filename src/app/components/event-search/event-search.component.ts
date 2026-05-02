@@ -11,7 +11,7 @@ import {
 } from '@angular/core';
 import { AbstractControl, UntypedFormControl, UntypedFormGroup, ValidationErrors, ValidatorFn } from '@angular/forms';
 import { DaysOfTheWeek } from '@sports-alliance/sports-lib';
-import { ActivityTypes, ActivityTypesHelper } from '@sports-alliance/sports-lib';
+import { ActivityTypes } from '@sports-alliance/sports-lib';
 import { MatButtonToggleChange } from '@angular/material/button-toggle';
 import { LoadingAbstractDirective } from '../loading/loading-abstract.directive';
 import { DateRanges } from '@sports-alliance/sports-lib';
@@ -43,6 +43,7 @@ export class EventSearchComponent extends LoadingAbstractDirective implements On
   @Input() showActivityTypePicker = true;
   @Input() showMergedEventsToggle = false;
   @Input() includeMergedEvents = true;
+  @Input() compact = false;
   @Input() mergedEventsToggleDisabled = false;
   @Input() mergedEventsToggleLabel = 'Merged events';
   @Input() mergedEventsToggleHint = 'Merged events are excluded';
@@ -64,9 +65,6 @@ export class EventSearchComponent extends LoadingAbstractDirective implements On
   public searchFormGroup!: UntypedFormGroup;
   public dateRanges = DateRanges;
   public currentYear = new Date().getFullYear();
-  public activityTypes = ActivityTypesHelper.getActivityTypesAsUniqueArray();
-
-
   constructor(
     changeDetector: ChangeDetectorRef,
     private dialog?: MatDialog,

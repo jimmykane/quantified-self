@@ -6,7 +6,8 @@
     [defaultExpanded]="searchPeekDefaultExpanded()"
     borderMode="none" [expandedSizePx]="332" [collapsedSizePx]="28" ariaLabelExpand="Expand filters"
     ariaLabelCollapse="Collapse filters">
-    <app-event-search [startOfTheWeek]="user.settings.unitSettings.startOfTheWeek" [showDatePicker]="false"
+    <app-event-search class="compact-filter-layout" [compact]="true"
+      [startOfTheWeek]="user.settings.unitSettings.startOfTheWeek" [showDatePicker]="false"
       [showActivityTypePicker]="false" [dateRangesToShow]="dateRangesToShow"
       [selectedActivityTypes]="user.settings.myTracksSettings?.activityTypes"
       [selectedDateRange]="user.settings.myTracksSettings?.dateRange" [includeMergedEvents]="false"

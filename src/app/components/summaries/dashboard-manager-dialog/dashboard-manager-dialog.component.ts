@@ -204,7 +204,7 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit {
       value: 'kpi',
       label: 'KPI',
       icon: 'monitoring',
-      description: 'Compact derived KPI cards',
+      description: 'Compact derived KPI rows',
     },
     {
       value: 'custom',

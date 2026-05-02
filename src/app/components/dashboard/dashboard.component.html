@@ -51,15 +51,17 @@
       }
 
       @if (user) {
-      <app-event-search [isLoading]="isLoading" [selectedDateRange]="eventTableFilters.dateRange"
-        [selectedStartDate]="searchStartDate" [selectedEndDate]="searchEndDate" [startOfTheWeek]="startOfTheWeek"
-        [selectedActivityTypes]="eventTableFilters.activityTypes"
-        [showMergedEventsToggle]="hasMergedEvents"
-        [includeMergedEvents]="eventTableFilters.includeMergedEvents !== false"
-        (searchChange)="search($event)">
-      </app-event-search>
       <app-event-table [targetUser]="targetUser" [isLoading]="isLoading" [user]="user"
-        [showActions]="!targetUser || targetUser.uid === user.uid" [events]="events"></app-event-table>
+        [showActions]="!targetUser || targetUser.uid === user.uid" [events]="events">
+        <app-event-search event-table-filters class="table-toolbar-layout compact-filter-layout"
+          [isLoading]="isLoading" [compact]="true" [selectedDateRange]="eventTableFilters.dateRange"
+          [selectedStartDate]="searchStartDate" [selectedEndDate]="searchEndDate" [startOfTheWeek]="startOfTheWeek"
+          [selectedActivityTypes]="eventTableFilters.activityTypes"
+          [showMergedEventsToggle]="hasMergedEvents"
+          [includeMergedEvents]="eventTableFilters.includeMergedEvents !== false"
+          (searchChange)="search($event)">
+        </app-event-search>
+      </app-event-table>
       }
     </div>
   </app-loading-overlay>

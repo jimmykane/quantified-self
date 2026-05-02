@@ -238,6 +238,18 @@ describe('EventTableComponent', () => {
         expect(component).toBeTruthy();
     });
 
+    it('should render a table toolbar with a filter projection slot', () => {
+        const toolbar = fixture.nativeElement.querySelector('.table-toolbar') as HTMLElement;
+        const mainRow = fixture.nativeElement.querySelector('.table-toolbar-main') as HTMLElement;
+        const filtersRow = fixture.nativeElement.querySelector('.table-toolbar-filters') as HTMLElement;
+        const searchField = fixture.nativeElement.querySelector('.qs-search-field') as HTMLElement;
+
+        expect(toolbar).toBeTruthy();
+        expect(mainRow).toBeTruthy();
+        expect(filtersRow).toBeTruthy();
+        expect(searchField).toBeTruthy();
+    });
+
     it('should call loading and return early in ngOnChanges when events are missing', () => {
         const loadingSpy = vi.spyOn(component as any, 'loading');
         component.events = null as any;

@@ -1,6 +1,7 @@
 import {
   AfterViewInit,
   ChangeDetectionStrategy,
+  ChangeDetectorRef,
   Component,
   ElementRef,
   Input,
@@ -83,6 +84,7 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
   @Input() chartType: DashboardKpiChartType = DASHBOARD_ACWR_KPI_CHART_TYPE;
   @Input() infoTooltip?: string | null;
   @Input() reserveTitleActionSpace = false;
+  @Input() compactRow = false;
   @Input() acwr?: DashboardAcwrContext | null;
   @Input() rampRate?: DashboardRampRateContext | null;
   @Input() monotonyStrain?: DashboardMonotonyStrainContext | null;
@@ -116,11 +118,13 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
   public noDataErrorMessage = 'No data yet';
   public noDataErrorHint = 'This KPI needs derived training metrics.';
   public noDataErrorIcon = 'insights';
+  public compactRowStatusText = 'No data';
 
   constructor(
     private eChartsLoader: EChartsLoaderService,
     private logger: LoggerService,
     private hapticsService: AppHapticsService,
+    private changeDetectorRef: ChangeDetectorRef,
   ) {
     this.chartHost = new EChartsHostController({
       eChartsLoader: this.eChartsLoader,
@@ -158,6 +162,7 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
       || changes.easyPercentStatus
       || changes.hardPercentStatus
       || changes.efficiencyDelta4wStatus
+      || changes.compactRow
     );
 
     if (requiresChartRefresh) {
@@ -234,6 +239,8 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
       this.noDataErrorHint = 'Derived metrics are being recalculated in the background.';
       this.noDataErrorIcon = 'autorenew';
     }
+    this.compactRowStatusText = this.noDataErrorMessage === 'KPI is updating' ? 'Updating' : 'No data';
+    this.changeDetectorRef.markForCheck();
 
     return presentation;
   }
@@ -368,6 +375,9 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
   }
 
   private resolveDisplayTitle(): string {
+    if (this.compactRow) {
+      return this.title;
+    }
     if (this.reserveTitleActionSpace !== true) {
       return this.title;
     }
@@ -480,46 +490,11 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
         axisLine: { show: false },
         splitLine: { show: false },
       },
-      tooltip: {
-        show: true,
-        trigger: 'axis',
-        // Keep tooltip available on compact KPI cards across desktop/mobile.
-        triggerOn: resolveEChartsTooltipTriggerOn(true, false),
-        axisPointer: {
-          type: 'line',
-          lineStyle: {
-            color: this.withAlpha(sparklineStyle.lineColor, 0.42),
-            width: 1,
-          },
-        },
-        renderMode: 'html',
-        ...resolveEChartsTooltipSurfaceConfig(isMobileTooltipViewport),
-        borderWidth: 1,
-        borderColor: style.tooltipBorderColor,
-        backgroundColor: style.tooltipBackgroundColor,
-        textStyle: {
-          color: style.tooltipTextColor,
-          fontFamily: ECHARTS_GLOBAL_FONT_FAMILY,
-          fontSize: style.axisFontSize,
-        },
-        formatter: (params: Array<{ data?: [number, number | null] }>) => {
-          const entry = params?.[0]?.data;
-          if (!entry) {
-            return '';
-          }
-          const dateLabel = new Date(entry[0]).toLocaleDateString(undefined, {
-            month: 'short',
-            day: 'numeric',
-            year: 'numeric',
-          });
-          const heading = this.isWeeklyTrendKpi() ? `Week of ${dateLabel}` : dateLabel;
-          const valueText = this.formatPrimaryValue(entry[1]);
-          return `${heading}<br/><strong>${valueText}</strong>`;
-        },
-      },
+      tooltip: this.buildTooltipOption(style, isMobileTooltipViewport, sparklineStyle),
       series: [
         {
           type: 'line',
+          silent: this.compactRow,
           data: trendData,
           smooth: true,
           showSymbol: false,
@@ -579,6 +554,53 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
             : undefined,
         },
       ],
+    };
+  }
+
+  private buildTooltipOption(
+    style: ReturnType<typeof buildDashboardEChartsStyleTokens>,
+    isMobileTooltipViewport: boolean,
+    sparklineStyle: KpiSparklineStyle,
+  ): Record<string, unknown> {
+    if (this.compactRow) {
+      return { show: false };
+    }
+
+    return {
+      show: true,
+      trigger: 'axis',
+      triggerOn: resolveEChartsTooltipTriggerOn(true, false),
+      axisPointer: {
+        type: 'line',
+        lineStyle: {
+          color: this.withAlpha(sparklineStyle.lineColor, 0.42),
+          width: 1,
+        },
+      },
+      renderMode: 'html',
+      ...resolveEChartsTooltipSurfaceConfig(isMobileTooltipViewport),
+      borderWidth: 1,
+      borderColor: style.tooltipBorderColor,
+      backgroundColor: style.tooltipBackgroundColor,
+      textStyle: {
+        color: style.tooltipTextColor,
+        fontFamily: ECHARTS_GLOBAL_FONT_FAMILY,
+        fontSize: style.axisFontSize,
+      },
+      formatter: (params: Array<{ data?: [number, number | null] }>) => {
+        const entry = params?.[0]?.data;
+        if (!entry) {
+          return '';
+        }
+        const dateLabel = new Date(entry[0]).toLocaleDateString(undefined, {
+          month: 'short',
+          day: 'numeric',
+          year: 'numeric',
+        });
+        const heading = this.isWeeklyTrendKpi() ? `Week of ${dateLabel}` : dateLabel;
+        const valueText = this.formatPrimaryValue(entry[1]);
+        return `${heading}<br/><strong>${valueText}</strong>`;
+      },
     };
   }
 

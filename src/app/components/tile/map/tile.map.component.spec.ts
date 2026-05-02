@@ -76,6 +76,11 @@ describe('TileMapComponent', () => {
 
     fixture.detectChanges();
 
+    const headerControls = fixture.nativeElement.querySelector('.tile-header-controls') as HTMLElement;
+    expect(headerControls).toBeTruthy();
+    expect(headerControls.querySelector('.tile-event-filter-controls')).toBeTruthy();
+    expect(headerControls.querySelector('.actions')).toBeTruthy();
+
     const filters = fixture.debugElement.query(By.directive(MockDashboardTileEventFiltersComponent))
       .componentInstance as MockDashboardTileEventFiltersComponent;
     expect(filters.eventFilters).toEqual(eventFilters);

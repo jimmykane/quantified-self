@@ -1,14 +1,16 @@
-<section>
-  @if (showEventFilters) {
-  <app-dashboard-tile-event-filters class="tile-event-filter-controls" [eventFilters]="eventFilters"
-    [canNavigateNewer]="canNavigateTileEventsNewer"
-    (rangeChange)="eventFilterRangeChange.emit($event)"
-    (activityTypesChange)="eventFilterActivityTypesChange.emit($event)"
-    (navigate)="eventFilterNavigate.emit($event)">
-  </app-dashboard-tile-event-filters>
-  }
-  @if (showActions) {
-  <div class="actions">
+<section [class.tile-chart-kpi-row]="compactKpiRow">
+  @if (showEventFilters || showActions) {
+  <div class="tile-header-controls">
+    @if (showEventFilters) {
+    <app-dashboard-tile-event-filters class="tile-event-filter-controls" [eventFilters]="eventFilters"
+      [canNavigateNewer]="canNavigateTileEventsNewer"
+      (rangeChange)="eventFilterRangeChange.emit($event)"
+      (activityTypesChange)="eventFilterActivityTypesChange.emit($event)"
+      (navigate)="eventFilterNavigate.emit($event)">
+    </app-dashboard-tile-event-filters>
+    }
+    @if (showActions) {
+    <div class="actions">
     @if (enableDesktopDrag) {
     <button mat-icon-button cdkDragHandle class="drag-handle-indicator" aria-label="Drag tile">
       <mat-icon>drag_indicator</mat-icon>
@@ -20,6 +22,8 @@
       (savingChange)="onTileActionSaving($event)"
       (editInDashboardManager)="onEditInDashboardManager($event)">
     </app-tile-chart-actions>
+    </div>
+    }
   </div>
   }
   @if (chartType === recoveryNowChartType) {
@@ -52,6 +56,7 @@
   ) {
   <app-kpi-chart [isLoading]="isLoading || isTileActionSaving" [darkTheme]="darkTheme" [chartType]="chartType"
     [infoTooltip]="chartInfoTooltip" [reserveTitleActionSpace]="showActions"
+    [compactRow]="compactKpiRow"
     [acwr]="acwr" [rampRate]="rampRate" [monotonyStrain]="monotonyStrain"
     [formNow]="formNow" [formPlus7d]="formPlus7d" [easyPercent]="easyPercent" [hardPercent]="hardPercent"
     [efficiencyDelta4w]="efficiencyDelta4w"

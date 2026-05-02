@@ -119,6 +119,18 @@ describe('DashboardComponent', () => {
         expect(component).toBeTruthy();
     });
 
+    it('should place event search filters inside the event table toolbar slot', () => {
+        mockActivatedRoute.snapshot.data.dashboardData.user = mockUser;
+
+        fixture.detectChanges();
+
+        const projectedSearch = fixture.nativeElement.querySelector(
+            'app-event-table app-event-search[event-table-filters].table-toolbar-layout.compact-filter-layout'
+        ) as HTMLElement;
+
+        expect(projectedSearch).toBeTruthy();
+    });
+
     it('should use resolved events on init', async () => {
         fixture.detectChanges(); // Trigger ngOnInit
         await fixture.whenStable(); // Wait for async operations to complete

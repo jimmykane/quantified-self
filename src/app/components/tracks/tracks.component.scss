@@ -36,9 +36,15 @@ app-peek-panel.tracks-search-peek {
 }
 
 app-peek-panel.tracks-search-peek app-event-search {
+  box-sizing: border-box;
   display: block;
   height: auto;
+  max-width: 100%;
   padding: 4px 8px;
+}
+
+:host ::ng-deep app-peek-panel.tracks-search-peek .peek-body {
+  overflow-x: hidden;
 }
 
 

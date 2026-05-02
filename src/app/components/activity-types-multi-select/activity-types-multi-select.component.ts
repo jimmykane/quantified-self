@@ -32,6 +32,8 @@ export class ActivityTypeSelectionModel {
 export class ActivityTypesMultiSelectComponent implements OnInit, OnChanges {
 
   @Input() selectedActivityTypes: ActivityTypes[];
+  @Input() label = 'Filter by activities';
+  @Input() placeholder = 'Filter by activities';
   @Output() selectedActivityTypesChange: EventEmitter<ActivityTypes[]> = new EventEmitter<ActivityTypes[]>();
 
   activityTypesControl = new UntypedFormControl();

@@ -1,0 +1,31 @@
+<button mat-icon-button class="activity-types-filter-button" [class.is-active]="selectedActivityTypes.length > 0"
+  appHapticTap [matMenuTriggerFor]="activityMenu" [disabled]="disabled" [matTooltip]="activityFilterLabel"
+  matTooltipPosition="below" [attr.aria-label]="ariaLabel">
+  <mat-icon>filter_alt</mat-icon>
+</button>
+
+<mat-menu #activityMenu="matMenu" class="qs-menu-panel activity-types-filter-menu" xPosition="before"
+  [overlapTrigger]="false">
+  <div class="activity-types-filter-list" (click)="$event.stopPropagation()">
+    <div class="activity-types-filter-label">Activities</div>
+
+    <button mat-menu-item type="button" class="activity-types-filter-option"
+      [class.is-selected]="!selectedActivityTypes.length" [disabled]="disabled"
+      [attr.aria-checked]="!selectedActivityTypes.length" role="menuitemcheckbox"
+      (click)="$event.stopPropagation(); clearActivityTypes()">
+      <mat-icon>{{ selectedActivityTypes.length ? 'select_all' : 'check' }}</mat-icon>
+      <span>All activities</span>
+    </button>
+
+    <mat-divider></mat-divider>
+
+    @for (activityType of activityTypeOptions; track activityType.value) {
+    <button mat-menu-item type="button" class="activity-types-filter-option" [class.is-selected]="activityType.selected"
+      [disabled]="disabled" [attr.aria-checked]="activityType.selected" role="menuitemcheckbox"
+      (click)="$event.stopPropagation(); onActivityTypeToggle(activityType.value, !activityType.selected)">
+      <mat-icon>{{ activityType.selected ? 'check_box' : 'check_box_outline_blank' }}</mat-icon>
+      <span>{{ activityType.label }}</span>
+    </button>
+    }
+  </div>
+</mat-menu>

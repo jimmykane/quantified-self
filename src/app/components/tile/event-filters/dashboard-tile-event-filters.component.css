@@ -30,8 +30,3 @@
   --chart-range-selector-font-size: 0.78rem;
   --chart-range-selector-icon-size: 18px;
 }
-
-.tile-event-activity-menu-content {
-  width: min(320px, 80vw);
-  padding: 12px;
-}

@@ -8,7 +8,6 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 2px;
   box-sizing: border-box;
   min-width: 0;
   height: var(--chart-range-selector-height, 30px);
@@ -22,6 +21,16 @@
   line-height: var(--chart-range-selector-height, 30px);
 }
 
+.chart-range-selector-content {
+  display: grid;
+  grid-template-columns:
+    var(--chart-range-selector-icon-size, 18px)
+    minmax(0, auto)
+    var(--chart-range-selector-icon-size, 18px);
+  align-items: center;
+  min-width: 0;
+}
+
 .chart-range-selector-button:hover {
   background: color-mix(in srgb, var(--mat-sys-primary), transparent 87%);
 }
@@ -29,16 +38,21 @@
 .chart-range-selector-label {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
+  grid-column: 2;
+  min-width: 0;
   line-height: 1;
+  text-align: center;
 }
 
 .chart-range-selector-icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  grid-column: 3;
   width: var(--chart-range-selector-icon-size, 18px);
   height: var(--chart-range-selector-icon-size, 18px);
   font-size: var(--chart-range-selector-icon-size, 18px);
   line-height: var(--chart-range-selector-icon-size, 18px);
-  margin: 0 0 0 1px;
+  margin: 0;
 }

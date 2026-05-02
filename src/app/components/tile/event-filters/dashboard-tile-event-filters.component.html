@@ -18,17 +18,8 @@
   </button>
   }
 
-  <button mat-icon-button class="tile-event-filter-button" appHapticTap [matMenuTriggerFor]="activityMenu"
-    [disabled]="disabled" [matTooltip]="activityFilterLabel" matTooltipPosition="below"
-    aria-label="Filter tile activities">
-    <mat-icon>filter_alt</mat-icon>
-  </button>
+  <app-activity-types-filter-menu class="tile-event-activity-filter" [selectedActivityTypes]="selectedActivityTypes"
+    [disabled]="disabled" ariaLabel="Filter tile activities"
+    (selectedActivityTypesChange)="onActivityTypesChange($event)">
+  </app-activity-types-filter-menu>
 </nav>
-
-<mat-menu #activityMenu="matMenu" class="tile-event-activity-menu">
-  <div class="tile-event-activity-menu-content" (click)="$event.stopPropagation()">
-    <app-activity-types-multi-select [selectedActivityTypes]="selectedActivityTypes"
-      (selectedActivityTypesChange)="onActivityTypesChange($event)">
-    </app-activity-types-multi-select>
-  </div>
-</mat-menu>

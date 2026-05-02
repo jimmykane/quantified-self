@@ -143,6 +143,45 @@ describe('SummariesComponent', () => {
     expect(component).toBeTruthy();
   });
 
+  it('renders KPI tiles inside a Today section and keeps non-KPI tiles in the main grid', () => {
+    const kpiTile = {
+      type: TileTypes.Chart,
+      order: 0,
+      chartType: DASHBOARD_ACWR_KPI_CHART_TYPE,
+      dataCategoryType: ChartDataCategoryTypes.DateType,
+      dataValueType: ChartDataValueTypes.Total,
+      data: [],
+      timeInterval: TimeIntervals.Daily,
+      size: { columns: 1, rows: 1 },
+    } as any;
+    const mainGridTile = {
+      type: TileTypes.Chart,
+      order: 1,
+      chartType: ChartTypes.ColumnsVertical,
+      dataCategoryType: ChartDataCategoryTypes.DateType,
+      dataValueType: ChartDataValueTypes.Total,
+      data: [],
+      timeInterval: TimeIntervals.Daily,
+      size: { columns: 1, rows: 1 },
+    } as any;
+
+    component.user = { settings: { dashboardSettings: { tiles: [] } } } as any;
+    component.tiles = [kpiTile, mainGridTile];
+    component.kpiLaneTiles = [kpiTile];
+    component.mainGridTiles = [mainGridTile];
+
+    fixture.detectChanges();
+
+    const nativeElement = fixture.nativeElement as HTMLElement;
+    const todaySection = nativeElement.querySelector('.dashboard-today-section');
+    expect(todaySection).not.toBeNull();
+    expect(todaySection?.querySelector('#dashboard-today-title')?.textContent?.trim()).toBe('Today');
+    expect(todaySection?.querySelector('.dashboard-kpi-lane')).not.toBeNull();
+    expect(todaySection?.querySelectorAll('.dashboard-kpi-tile')).toHaveLength(1);
+    expect(nativeElement.querySelectorAll('.dashboard-section-divider')).toHaveLength(1);
+    expect(nativeElement.querySelectorAll('.dashboard-grid-tile')).toHaveLength(1);
+  });
+
   it('should delegate tile building with dashboard tiles, events, preferences, and logger on input changes', async () => {
     const builtTiles = [{
       type: TileTypes.Chart,

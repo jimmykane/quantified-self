@@ -237,7 +237,16 @@ describe('ChartsSleepTrendComponent', () => {
         data: [{ name: 'Avg HRV', yAxis: 52 }],
       },
     });
-    expect(hrvSeries.markLine.label.formatter).toBe('Avg 52ms');
+    expect(hrvSeries.markLine.label.formatter).toBe('Avg HRV 52ms');
+    expect(hrvSeries.markLine.label).toMatchObject({
+      position: 'middle',
+      distance: 8,
+      color: AppColors.Green,
+      borderColor: AppColors.Green,
+      borderWidth: 1,
+      borderRadius: 4,
+      padding: [2, 6],
+    });
     expect(hrvSeries.markLine.lineStyle).toMatchObject({
       color: AppColors.Green,
       type: 'dashed',

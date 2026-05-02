@@ -103,7 +103,7 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('status notice');
   });
 
-  it('should document new derived KPI cards and curated charts', () => {
+  it('should document new derived KPI rows and curated charts', () => {
     const gettingStartedSection = HELP_SECTIONS.find(section => section.id === 'getting-started');
 
     expect(gettingStartedSection?.content).toContain('Freshness Forecast');
@@ -125,8 +125,8 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('Latest week');
     expect(gettingStartedSection?.content).toContain('Training-derived tiles do not fall back');
     expect(gettingStartedSection?.content).toContain('**info** icon');
-    expect(gettingStartedSection?.content).toContain('KPI lane');
-    expect(gettingStartedSection?.content).toContain('horizontal scroll lane');
+    expect(gettingStartedSection?.content).toContain('**Today** section');
+    expect(gettingStartedSection?.content).toContain('Today rows stay compact');
   });
 
   it('should document mobile dashboard haptic feedback behavior and fallback', () => {

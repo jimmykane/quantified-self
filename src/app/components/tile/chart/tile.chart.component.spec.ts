@@ -140,6 +140,7 @@ class MockKpiChartComponent {
   @Input() chartType: any;
   @Input() infoTooltip?: string | null;
   @Input() reserveTitleActionSpace = false;
+  @Input() compactRow = false;
   @Input() acwr: any;
   @Input() rampRate: any;
   @Input() monotonyStrain: any;
@@ -399,6 +400,7 @@ describe('TileChartComponent', () => {
 
   it('should render and re-emit event filter controls for custom chart tiles', () => {
     component.chartType = ChartTypes.ColumnsVertical;
+    component.showActions = true;
     component.eventFilters = { range: '90d', activityTypes: [] };
     component.canNavigateTileEventsNewer = true;
     const ranges: string[] = [];
@@ -409,6 +411,11 @@ describe('TileChartComponent', () => {
     component.eventFilterNavigate.subscribe(direction => directions.push(direction));
 
     fixture.detectChanges();
+
+    const headerControls = fixture.nativeElement.querySelector('.tile-header-controls') as HTMLElement;
+    expect(headerControls).toBeTruthy();
+    expect(headerControls.querySelector('.tile-event-filter-controls')).toBeTruthy();
+    expect(headerControls.querySelector('.actions')).toBeTruthy();
 
     const filters = getEventFiltersComponent();
     expect(filters.eventFilters).toEqual(component.eventFilters);
@@ -630,6 +637,15 @@ describe('TileChartComponent', () => {
     expect(component.chartInfoTooltip).toContain('7 days');
     expect(getKpiComponent().infoTooltip).toContain('7 days');
     expect(getKpiComponent().reserveTitleActionSpace).toBe(true);
+  });
+
+  it('should pass compact KPI row mode to the KPI renderer', () => {
+    component.chartType = DASHBOARD_ACWR_KPI_CHART_TYPE as any;
+    component.compactKpiRow = true;
+    fixture.detectChanges();
+
+    expect(getKpiComponent().compactRow).toBe(true);
+    expect(fixture.nativeElement.querySelector('.tile-chart-kpi-row')).toBeTruthy();
   });
 
   it('should keep tooltip text null for custom chart types', () => {
