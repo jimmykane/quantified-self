@@ -4,7 +4,9 @@ import {
   Component,
   DoCheck,
   HostListener,
+  Inject,
   Input,
+  LOCALE_ID,
   OnChanges,
   OnDestroy,
   OnInit,
@@ -143,6 +145,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   public sleepTrendWindowLabel = 'Last 14 days';
   public sleepTrendCanNavigateOlder = true;
   public sleepTrendCanNavigateNewer = false;
+  public todayDateSubtitle = '';
 
 
   private appThemeSubscription: Subscription | null = null;
@@ -199,11 +202,13 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     private dialog: MatDialog,
     changeDetector: ChangeDetectorRef,
     logger: LoggerService,
+    @Inject(LOCALE_ID) private locale: string,
   ) {
     super(changeDetector);
     this.logger = logger;
     this.rowHeight = this.getRowHeight();
     this.numberOfCols = this.getNumberOfColumns();
+    this.todayDateSubtitle = this.formatTodayDateSubtitle(new Date());
   }
 
   @HostListener('window:resize', ['$event'])
@@ -254,6 +259,24 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     return `${mapItem.clusterMarkers}${mapItem.mapTheme}${mapItem.mapStyle}${mapItem.name}${mapItem.order}${mapItem.showHeatMap}`;
   }
 
+  private formatTodayDateSubtitle(date: Date): string {
+    try {
+      return new Intl.DateTimeFormat(this.locale || undefined, {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+      }).format(date);
+    } catch (_error) {
+      return new Intl.DateTimeFormat(undefined, {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+      }).format(date);
+    }
+  }
+
   public async onTilesDrop(_event: CdkDragDrop<DashboardTileViewModel[]>): Promise<void> {
     this.ensureTileLanesInitializedFromTiles();
     await this.persistLaneOrder();
@@ -302,8 +325,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       return;
     }
 
-    this.isDashboardManagerOpen = true;
-    this.changeDetector.markForCheck();
+    this.setDashboardManagerOpenState(true);
 
     try {
       const dialogRef = this.dialog.open(DashboardManagerDialogComponent, {
@@ -315,14 +337,24 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
         width: '680px',
         maxWidth: '95vw',
       });
+      dialogRef.beforeClosed?.().pipe(take(1)).subscribe(() => {
+        this.setDashboardManagerOpenState(false);
+      });
       const result = await firstValueFrom(dialogRef.afterClosed().pipe(take(1)));
       if (result?.saved === true) {
         await this.rebuildTilesFromCurrentState();
       }
     } finally {
-      this.isDashboardManagerOpen = false;
-      this.changeDetector.markForCheck();
+      this.setDashboardManagerOpenState(false);
     }
+  }
+
+  private setDashboardManagerOpenState(isOpen: boolean): void {
+    if (this.isDashboardManagerOpen === isOpen) {
+      return;
+    }
+    this.isDashboardManagerOpen = isOpen;
+    this.changeDetector.markForCheck();
   }
 
   private async unsubscribeAndCreateCharts() {

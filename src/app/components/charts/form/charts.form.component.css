@@ -99,9 +99,6 @@
 .form-granularity-selector {
   flex: 0 0 auto;
   margin-right: 2px;
-  --chart-range-selector-height: 30px;
-  --chart-range-selector-font-size: 0.82rem;
-  --chart-range-selector-icon-size: 18px;
 }
 
 .form-stats-row {

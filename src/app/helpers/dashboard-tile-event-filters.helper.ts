@@ -9,6 +9,8 @@ import { getDatesForDateRange } from './date-range-helper';
 export interface DashboardTileEventRangeOption {
   range: AppDashboardTileEventFilterRange;
   label: string;
+  buttonLabel: string;
+  shortLabel: string;
   days?: number;
 }
 
@@ -24,16 +26,16 @@ export const DASHBOARD_TILE_EVENT_DEFAULT_RANGE: AppDashboardTileEventFilterRang
 export const DASHBOARD_TILE_EVENT_LEGACY_ALL_RANGE: AppDashboardTileEventFilterRange = '1y';
 
 export const DASHBOARD_TILE_EVENT_RANGE_OPTIONS: ReadonlyArray<DashboardTileEventRangeOption> = [
-  { range: 'thisWeek', label: 'This week' },
-  { range: 'thisMonth', label: 'This month' },
-  { range: '14d', label: '14d', days: 14 },
-  { range: '30d', label: '30d', days: 30 },
-  { range: '90d', label: '90d', days: 90 },
-  { range: '1y', label: '1y', days: 365 },
-  { range: '2y', label: '2y', days: 365 * 2 },
-  { range: '3y', label: '3y', days: 365 * 3 },
-  { range: '4y', label: '4y', days: 365 * 4 },
-  { range: 'all', label: 'All' },
+  { range: 'thisWeek', label: 'This week', buttonLabel: 'Week', shortLabel: 'W' },
+  { range: 'thisMonth', label: 'This month', buttonLabel: 'Month', shortLabel: 'M' },
+  { range: '14d', label: '14d', buttonLabel: '14d', shortLabel: '14d', days: 14 },
+  { range: '30d', label: '30d', buttonLabel: '30d', shortLabel: '30d', days: 30 },
+  { range: '90d', label: '90d', buttonLabel: '90d', shortLabel: '90d', days: 90 },
+  { range: '1y', label: '1y', buttonLabel: '1y', shortLabel: '1y', days: 365 },
+  { range: '2y', label: '2y', buttonLabel: '2y', shortLabel: '2y', days: 365 * 2 },
+  { range: '3y', label: '3y', buttonLabel: '3y', shortLabel: '3y', days: 365 * 3 },
+  { range: '4y', label: '4y', buttonLabel: '4y', shortLabel: '4y', days: 365 * 4 },
+  { range: 'all', label: 'All', buttonLabel: 'All', shortLabel: 'All' },
 ];
 
 const VALID_TILE_EVENT_RANGES = new Set<AppDashboardTileEventFilterRange>(

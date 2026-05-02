@@ -106,6 +106,8 @@ export class ChartsSleepTrendComponent implements AfterViewInit, OnChanges, OnDe
   public rangeSelectorOptions: ReadonlyArray<ChartRangeSelectorOption> = DASHBOARD_SLEEP_TREND_RANGE_OPTIONS.map(option => ({
     value: option.range,
     label: option.label,
+    shortLabel: option.shortLabel,
+    menuLabel: option.menuLabel,
   }));
   public sleepRangeLabel = this.resolveSleepRangeLabel(DASHBOARD_SLEEP_TREND_DEFAULT_RANGE);
 

@@ -5,12 +5,14 @@ export const DASHBOARD_SLEEP_TREND_DEFAULT_RANGE: AppDashboardSleepTrendRange = 
 export const DASHBOARD_SLEEP_TREND_RANGE_OPTIONS: ReadonlyArray<{
   range: AppDashboardSleepTrendRange;
   label: string;
+  shortLabel: string;
+  menuLabel: string;
   days: number;
 }> = [
-  { range: '14d', label: '14d', days: 14 },
-  { range: '30d', label: '30d', days: 30 },
-  { range: '90d', label: '90d', days: 90 },
-  { range: '1y', label: '1y', days: 365 },
+  { range: '14d', label: '14d', shortLabel: '14d', menuLabel: '14 days', days: 14 },
+  { range: '30d', label: '30d', shortLabel: '30d', menuLabel: '30 days', days: 30 },
+  { range: '90d', label: '90d', shortLabel: '90d', menuLabel: '90 days', days: 90 },
+  { range: '1y', label: '1y', shortLabel: '1y', menuLabel: '1 year', days: 365 },
 ];
 
 export type DashboardSleepTrendNavigationDirection = 'older' | 'newer';

@@ -351,12 +351,16 @@ describe('ChartsFormComponent', () => {
     const weeklyMax = weeklyOption.xAxis[1].max;
 
     const granularityMenuButton = fixture.nativeElement.querySelector('.chart-range-selector-button');
+    const granularityFullLabel = fixture.nativeElement.querySelector('.chart-range-selector-label-full');
+    const granularityCompactLabel = fixture.nativeElement.querySelector('.chart-range-selector-label-compact');
     const granularityMenu = fixture.debugElement.query(By.directive(MatMenu));
     expect(granularityMenuButton).toBeTruthy();
-    expect(granularityMenuButton?.getAttribute('aria-label')).toBe('Select Form and TSS timeline window');
-    expect(granularityMenuButton?.textContent).toContain('W');
+    expect(granularityMenuButton?.getAttribute('aria-label')).toBe('Select Form and TSS timeline window: Week');
+    expect(granularityFullLabel?.textContent?.trim()).toBe('Week');
+    expect(granularityCompactLabel?.textContent?.trim()).toBe('W');
     expect(granularityMenu).toBeTruthy();
-    expect(component.granularityOptions.map(option => option.label)).toEqual(['W', 'M', 'Y']);
+    expect(component.granularityOptions.map(option => option.label)).toEqual(['Week', 'Month', 'Year']);
+    expect(component.granularityRangeOptions.map(option => option.shortLabel)).toEqual(['W', 'M', 'Y']);
 
     component.onGranularityChange('m');
     fixture.detectChanges();

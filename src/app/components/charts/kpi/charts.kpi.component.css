@@ -67,6 +67,7 @@
 .kpi-title {
   flex: 0 0 auto;
   min-width: auto;
+  font-family: 'Barlow Condensed', sans-serif;
   font-size: 0.9rem;
   font-weight: 600;
   line-height: 1.1;
@@ -289,18 +290,18 @@
 
 @media (max-width: 767px) {
   .kpi-layout.kpi-layout-row {
-    gap: 8px;
-    grid-template-columns: minmax(0, 1fr) 72px;
+    gap: 6px;
+    grid-template-columns: minmax(0, 1fr) 68px;
     padding: 6px 8px;
   }
 
   .kpi-layout.kpi-layout-row.kpi-layout-reserve-actions {
-    padding-right: 46px;
+    padding-right: 38px;
   }
 
   .kpi-layout-row .kpi-header {
-    column-gap: 8px;
-    grid-template-columns: minmax(0, 1fr) 68px;
+    column-gap: 6px;
+    grid-template-columns: minmax(0, 1fr) 52px;
     row-gap: 1px;
   }
 

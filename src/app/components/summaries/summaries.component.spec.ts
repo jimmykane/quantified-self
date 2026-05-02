@@ -1,4 +1,4 @@
-import { NO_ERRORS_SCHEMA } from '@angular/core';
+import { LOCALE_ID, NO_ERRORS_SCHEMA } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { afterEach, describe, it, expect, vi, beforeEach } from 'vitest';
 import { of, Subject } from 'rxjs';
@@ -123,6 +123,7 @@ describe('SummariesComponent', () => {
         { provide: AppEventService, useValue: mockEventService },
         { provide: LoggerService, useValue: mockLogger },
         { provide: MatDialog, useValue: mockDialog },
+        { provide: LOCALE_ID, useValue: 'en-US' },
       ],
     }).compileComponents();
 
@@ -166,6 +167,7 @@ describe('SummariesComponent', () => {
     } as any;
 
     component.user = { settings: { dashboardSettings: { tiles: [] } } } as any;
+    component.showActions = true;
     component.tiles = [kpiTile, mainGridTile];
     component.kpiLaneTiles = [kpiTile];
     component.mainGridTiles = [mainGridTile];
@@ -176,10 +178,41 @@ describe('SummariesComponent', () => {
     const todaySection = nativeElement.querySelector('.dashboard-today-section');
     expect(todaySection).not.toBeNull();
     expect(todaySection?.querySelector('#dashboard-today-title')?.textContent?.trim()).toBe('Today');
+    expect(todaySection?.querySelector('.dashboard-section-subtitle')?.textContent?.trim()).toBe(component.todayDateSubtitle);
+    expect(todaySection?.querySelector('.dashboard-section-actions')).not.toBeNull();
+    expect(todaySection?.querySelector('.dashboard-manager-button-desktop span')?.textContent?.trim()).toBe('Dashboard manager');
+    expect(todaySection?.querySelector('.dashboard-manager-button-mobile')).not.toBeNull();
     expect(todaySection?.querySelector('.dashboard-kpi-lane')).not.toBeNull();
     expect(todaySection?.querySelectorAll('.dashboard-kpi-tile')).toHaveLength(1);
+    expect(nativeElement.querySelector('.dashboard-summary-actions')).toBeNull();
     expect(nativeElement.querySelectorAll('.dashboard-section-divider')).toHaveLength(1);
     expect(nativeElement.querySelectorAll('.dashboard-grid-tile')).toHaveLength(1);
+  });
+
+  it('renders the fallback dashboard manager action when there is no Today section', () => {
+    const mainGridTile = {
+      type: TileTypes.Chart,
+      order: 0,
+      chartType: ChartTypes.ColumnsVertical,
+      dataCategoryType: ChartDataCategoryTypes.DateType,
+      dataValueType: ChartDataValueTypes.Total,
+      data: [],
+      timeInterval: TimeIntervals.Daily,
+      size: { columns: 1, rows: 1 },
+    } as any;
+
+    component.user = { settings: { dashboardSettings: { tiles: [] } } } as any;
+    component.showActions = true;
+    component.tiles = [mainGridTile];
+    component.kpiLaneTiles = [];
+    component.mainGridTiles = [mainGridTile];
+
+    fixture.detectChanges();
+
+    const nativeElement = fixture.nativeElement as HTMLElement;
+    expect(nativeElement.querySelector('.dashboard-today-section')).toBeNull();
+    expect(nativeElement.querySelector('.dashboard-summary-actions')).not.toBeNull();
+    expect(nativeElement.querySelector('.dashboard-summary-actions span')?.textContent?.trim()).toBe('Dashboard manager');
   });
 
   it('should delegate tile building with dashboard tiles, events, preferences, and logger on input changes', async () => {
@@ -1188,6 +1221,46 @@ describe('SummariesComponent', () => {
       }),
     }));
     expect(rebuildSpy).toHaveBeenCalledTimes(1);
+    expect(component.isDashboardManagerOpen).toBe(false);
+  });
+
+  it('should re-enable dashboard manager button as soon as the dialog starts closing', async () => {
+    component.user = {
+      settings: {
+        dashboardSettings: {
+          tiles: [{
+            type: TileTypes.Chart,
+            order: 0,
+            chartType: ChartTypes.ColumnsVertical,
+            dataType: DataAscent.type,
+            dataValueType: ChartDataValueTypes.Total,
+            dataCategoryType: ChartDataCategoryTypes.ActivityType,
+            size: { columns: 1, rows: 1 },
+          }],
+        },
+      },
+    } as any;
+    component.showActions = true;
+    const beforeClosedSubject = new Subject<void>();
+    const afterClosedSubject = new Subject<{ saved: boolean } | undefined>();
+    mockDialog.open.mockReturnValueOnce({
+      beforeClosed: () => beforeClosedSubject.asObservable(),
+      afterClosed: () => afterClosedSubject.asObservable(),
+    });
+
+    const openPromise = component.openDashboardManagerDialog();
+
+    expect(component.isDashboardManagerOpen).toBe(true);
+
+    beforeClosedSubject.next();
+    beforeClosedSubject.complete();
+
+    expect(component.isDashboardManagerOpen).toBe(false);
+
+    afterClosedSubject.next(undefined);
+    afterClosedSubject.complete();
+    await openPromise;
+
     expect(component.isDashboardManagerOpen).toBe(false);
   });
 

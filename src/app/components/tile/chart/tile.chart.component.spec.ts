@@ -183,6 +183,7 @@ class MockIntensityDistributionChartComponent {
   @Input() distribution: any;
   @Input() status?: string | null;
   @Input() infoTooltip?: string | null;
+  @Input() reserveTitleActionSpace = false;
 }
 
 @Component({
@@ -196,6 +197,7 @@ class MockEfficiencyTrendChartComponent {
   @Input() trend: any;
   @Input() status?: string | null;
   @Input() infoTooltip?: string | null;
+  @Input() reserveTitleActionSpace = false;
 }
 
 @Component({
@@ -570,18 +572,24 @@ describe('TileChartComponent', () => {
 
   it('should route intensity distribution chart type to dedicated renderer', () => {
     component.chartType = DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE as any;
+    component.showActions = true;
     component.intensityDistribution = { weeks: [] } as any;
     component.intensityDistributionStatus = 'processing' as any;
     fixture.detectChanges();
-    expect(getIntensityDistributionComponent().distribution).toEqual(component.intensityDistribution);
+    const intensityDistribution = getIntensityDistributionComponent();
+    expect(intensityDistribution.distribution).toEqual(component.intensityDistribution);
+    expect(intensityDistribution.reserveTitleActionSpace).toBe(true);
   });
 
   it('should route efficiency trend chart type to dedicated renderer', () => {
     component.chartType = DASHBOARD_EFFICIENCY_TREND_CHART_TYPE as any;
+    component.showActions = true;
     component.efficiencyTrend = { points: [] } as any;
     component.efficiencyTrendStatus = 'failed' as any;
     fixture.detectChanges();
-    expect(getEfficiencyTrendComponent().trend).toEqual(component.efficiencyTrend);
+    const efficiencyTrend = getEfficiencyTrendComponent();
+    expect(efficiencyTrend.trend).toEqual(component.efficiencyTrend);
+    expect(efficiencyTrend.reserveTitleActionSpace).toBe(true);
   });
 
   it('should route sleep trend chart type to dedicated renderer', () => {

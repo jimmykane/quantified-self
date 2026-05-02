@@ -8,9 +8,9 @@ describe('DashboardTileEventFiltersComponent', () => {
     const component = new DashboardTileEventFiltersComponent();
 
     expect(component.rangeSelectorOptions).toEqual(expect.arrayContaining([
-      { value: 'thisWeek', label: 'Week' },
-      { value: 'thisMonth', label: 'Month' },
-      { value: '90d', label: '90d' },
+      expect.objectContaining({ value: 'thisWeek', label: 'Week', shortLabel: 'W', menuLabel: 'This week' }),
+      expect.objectContaining({ value: 'thisMonth', label: 'Month', shortLabel: 'M', menuLabel: 'This month' }),
+      expect.objectContaining({ value: '90d', label: '90d', shortLabel: '90d', menuLabel: '90d' }),
     ]));
   });
 

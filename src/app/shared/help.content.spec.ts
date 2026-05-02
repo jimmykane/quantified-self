@@ -123,6 +123,7 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('Execution');
     expect(gettingStartedSection?.content).toContain('Current week');
     expect(gettingStartedSection?.content).toContain('Latest week');
+    expect(gettingStartedSection?.content).toContain('8w / 12w / 6m / 1y / All');
     expect(gettingStartedSection?.content).toContain('Training-derived tiles do not fall back');
     expect(gettingStartedSection?.content).toContain('**info** icon');
     expect(gettingStartedSection?.content).toContain('**Today** section');

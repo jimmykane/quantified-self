@@ -1,7 +1,11 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { NO_ERRORS_SCHEMA } from '@angular/core';
+import { MatButtonModule } from '@angular/material/button';
+import { MatIconModule } from '@angular/material/icon';
+import { MatMenuModule } from '@angular/material/menu';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ChartsEfficiencyTrendComponent } from './charts.efficiency-trend.component';
+import { ChartRangeSelectorComponent } from '../shared/chart-range-selector/chart-range-selector.component';
 import { EChartsLoaderService } from '../../../services/echarts-loader.service';
 import { LoggerService } from '../../../services/logger.service';
 
@@ -43,7 +47,8 @@ describe('ChartsEfficiencyTrendComponent', () => {
     };
 
     await TestBed.configureTestingModule({
-      declarations: [ChartsEfficiencyTrendComponent],
+      declarations: [ChartsEfficiencyTrendComponent, ChartRangeSelectorComponent],
+      imports: [MatButtonModule, MatIconModule, MatMenuModule],
       providers: [
         { provide: EChartsLoaderService, useValue: mockLoader },
         { provide: LoggerService, useValue: { error: vi.fn(), warn: vi.fn() } },
@@ -182,5 +187,31 @@ describe('ChartsEfficiencyTrendComponent', () => {
     } finally {
       window.matchMedia = originalMatchMedia;
     }
+  });
+
+  it('renders a chart range selector and filters to the selected weekly window', async () => {
+    const baseWeekMs = Date.UTC(2025, 0, 6);
+    const weekMs = 7 * 24 * 60 * 60 * 1000;
+    component.trend = {
+      latestWeekStartMs: baseWeekMs + (59 * weekMs),
+      latestValue: 2.1,
+      points: Array.from({ length: 60 }, (_, index) => ({
+        weekStartMs: baseWeekMs + (index * weekMs),
+        value: 1.5 + (index / 100),
+        sampleCount: 2,
+        totalDurationSeconds: 7200,
+      })),
+    };
+
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(fixture.nativeElement.querySelector('.chart-range-selector-button')).toBeTruthy();
+    expect((component as any).getVisiblePoints()).toHaveLength(52);
+
+    component.onRangeSelection('8w');
+
+    expect(component.selectedRange).toBe('8w');
+    expect((component as any).getVisiblePoints()).toHaveLength(8);
   });
 });

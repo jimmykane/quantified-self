@@ -1,6 +1,6 @@
 @if (tiles.length) {
 <section class="pie">
-  @if (showActions) {
+  @if (showActions && !kpiLaneTiles.length) {
   <div class="dashboard-summary-actions">
     <button mat-flat-button class="qs-mat-primary" appHapticTap (click)="openDashboardManagerDialog()" [disabled]="isDashboardManagerOpen">
       <mat-icon>add_chart</mat-icon>
@@ -23,8 +23,26 @@
   @if (kpiLaneTiles.length) {
   <section class="dashboard-today-section" aria-labelledby="dashboard-today-title">
     <div class="dashboard-section-header">
-      <mat-icon aria-hidden="true">today</mat-icon>
-      <h2 id="dashboard-today-title">Today</h2>
+      <div class="dashboard-section-title-block">
+        <mat-icon aria-hidden="true">today</mat-icon>
+        <div class="dashboard-section-title-copy">
+          <h2 id="dashboard-today-title">Today</h2>
+          <div class="dashboard-section-subtitle">{{ todayDateSubtitle }}</div>
+        </div>
+      </div>
+      @if (showActions) {
+      <div class="dashboard-section-actions">
+        <button mat-flat-button class="qs-mat-primary dashboard-manager-button dashboard-manager-button-desktop" appHapticTap
+          (click)="openDashboardManagerDialog()" [disabled]="isDashboardManagerOpen">
+          <mat-icon>add_chart</mat-icon>
+          <span>Dashboard manager</span>
+        </button>
+        <button mat-icon-button class="dashboard-manager-button dashboard-manager-button-mobile" appHapticTap
+          (click)="openDashboardManagerDialog()" [disabled]="isDashboardManagerOpen" aria-label="Dashboard manager">
+          <mat-icon>add_chart</mat-icon>
+        </button>
+      </div>
+      }
     </div>
     <div
       class="dashboard-kpi-lane"

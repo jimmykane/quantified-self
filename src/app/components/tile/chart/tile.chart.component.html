@@ -73,12 +73,14 @@
   }
   @if (chartType === intensityDistributionChartType) {
   <app-intensity-distribution-chart [isLoading]="isLoading || isTileActionSaving" [darkTheme]="darkTheme"
-    [distribution]="intensityDistribution" [status]="intensityDistributionStatus" [infoTooltip]="chartInfoTooltip">
+    [distribution]="intensityDistribution" [status]="intensityDistributionStatus" [infoTooltip]="chartInfoTooltip"
+    [reserveTitleActionSpace]="showActions">
   </app-intensity-distribution-chart>
   }
   @if (chartType === efficiencyTrendChartType) {
   <app-efficiency-trend-chart [isLoading]="isLoading || isTileActionSaving" [darkTheme]="darkTheme"
-    [trend]="efficiencyTrend" [status]="efficiencyTrendStatus" [infoTooltip]="chartInfoTooltip">
+    [trend]="efficiencyTrend" [status]="efficiencyTrendStatus" [infoTooltip]="chartInfoTooltip"
+    [reserveTitleActionSpace]="showActions">
   </app-efficiency-trend-chart>
   }
   @if (chartType === sleepTrendChartType) {

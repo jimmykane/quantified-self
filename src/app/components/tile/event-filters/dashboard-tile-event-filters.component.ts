@@ -30,7 +30,9 @@ export class DashboardTileEventFiltersComponent implements OnChanges {
 
   public readonly rangeSelectorOptions: ReadonlyArray<ChartRangeSelectorOption> = DASHBOARD_TILE_EVENT_RANGE_OPTIONS.map(option => ({
     value: option.range,
-    label: this.getCompactRangeLabel(option.label),
+    label: option.buttonLabel,
+    shortLabel: option.shortLabel,
+    menuLabel: option.label,
   }));
 
   public normalizedFilters = normalizeDashboardTileEventFilters(null);
@@ -62,17 +64,6 @@ export class DashboardTileEventFiltersComponent implements OnChanges {
       return;
     }
     this.navigate.emit(direction);
-  }
-
-  private getCompactRangeLabel(label: string): string {
-    switch (label) {
-      case 'This week':
-        return 'Week';
-      case 'This month':
-        return 'Month';
-      default:
-        return label;
-    }
   }
 
   private refreshFilterState(): void {

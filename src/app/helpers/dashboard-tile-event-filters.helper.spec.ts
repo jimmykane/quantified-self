@@ -4,6 +4,7 @@ import {
   AppDashboardTileEventFilterRange,
 } from '../models/app-user.interface';
 import {
+  DASHBOARD_TILE_EVENT_RANGE_OPTIONS,
   dashboardTileEventRangeDays,
   cloneDashboardTileEventFilters,
   eventMatchesDashboardActivityTypes,
@@ -58,6 +59,14 @@ describe('dashboard-tile-event-filters.helper', () => {
       });
       expect(dashboardTileEventRangeDays(range)).toBe(days);
     });
+  });
+
+  it('keeps tile range menu labels separate from button and mobile labels', () => {
+    expect(DASHBOARD_TILE_EVENT_RANGE_OPTIONS).toEqual(expect.arrayContaining([
+      expect.objectContaining({ range: 'thisWeek', label: 'This week', buttonLabel: 'Week', shortLabel: 'W' }),
+      expect.objectContaining({ range: 'thisMonth', label: 'This month', buttonLabel: 'Month', shortLabel: 'M' }),
+      expect.objectContaining({ range: '90d', label: '90d', buttonLabel: '90d', shortLabel: '90d' }),
+    ]));
   });
 
   it('resolves this week and this month as bounded current calendar windows', () => {

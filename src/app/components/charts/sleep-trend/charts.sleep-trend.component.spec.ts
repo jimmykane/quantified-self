@@ -155,6 +155,9 @@ describe('ChartsSleepTrendComponent', () => {
     expect(rangeMenuButton?.textContent).toContain('30d');
     expect(rangeMenu).toBeTruthy();
     expect(component.rangeOptions.map(option => option.label)).toEqual(['14d', '30d', '90d', '1y']);
+    expect(component.rangeSelectorOptions).toEqual(expect.arrayContaining([
+      expect.objectContaining({ value: '30d', label: '30d', shortLabel: '30d', menuLabel: '30 days' }),
+    ]));
     expect(navButtons).toHaveLength(2);
     expect((navButtons[0] as HTMLButtonElement).disabled).toBe(false);
     expect((navButtons[1] as HTMLButtonElement).disabled).toBe(true);

@@ -23,10 +23,3 @@
   line-height: 18px;
   font-size: 18px;
 }
-
-.tile-event-range-selector {
-  --chart-range-selector-height: 30px;
-  --chart-range-selector-horizontal-padding: 8px;
-  --chart-range-selector-font-size: 0.78rem;
-  --chart-range-selector-icon-size: 18px;
-}

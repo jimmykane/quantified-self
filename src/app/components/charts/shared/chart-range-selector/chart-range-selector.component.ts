@@ -3,6 +3,8 @@ import { ChangeDetectionStrategy, Component, EventEmitter, Input, Output } from 
 export interface ChartRangeSelectorOption {
   value: string;
   label: string;
+  shortLabel?: string;
+  menuLabel?: string;
 }
 
 @Component({
@@ -20,11 +22,32 @@ export class ChartRangeSelectorComponent {
   @Output() valueChange = new EventEmitter<string>();
 
   get selectedLabel(): string {
-    return this.options.find(option => option.value === this.value)?.label || this.options[0]?.label || '';
+    return this.selectedOption?.label || '';
+  }
+
+  get selectedShortLabel(): string {
+    return this.selectedOption?.shortLabel || this.selectedOption?.label || '';
+  }
+
+  get hasDistinctShortLabel(): boolean {
+    return this.selectedShortLabel !== this.selectedLabel;
+  }
+
+  get selectedAriaLabel(): string {
+    const selectedMenuLabel = this.selectedOption?.menuLabel || this.selectedOption?.label || '';
+    return selectedMenuLabel ? `${this.ariaLabel}: ${selectedMenuLabel}` : this.ariaLabel;
+  }
+
+  get selectedValue(): string | null {
+    return this.selectedOption?.value || null;
+  }
+
+  private get selectedOption(): ChartRangeSelectorOption | undefined {
+    return this.options.find(option => option.value === this.value) || this.options[0];
   }
 
   selectValue(nextValue: string): void {
-    if (this.disabled || nextValue === this.value) {
+    if (this.disabled || nextValue === this.selectedValue) {
       return;
     }
     this.valueChange.emit(nextValue);

@@ -22,6 +22,7 @@ This always-on rule applies to frontend UI changes.
 ## Dialogs and Overlays
 - Do not add custom `panelClass` unless there is a documented exception.
 - Prefer the global dialog container conventions.
+- For `mat-menu`, use Angular Material's public menu class API deliberately: classes on `<mat-menu>` are applied to the menu panel, while `overlayPanelClass` targets the CDK overlay pane. App-styled menus should include the shared `qs-menu-panel` class on `<mat-menu>` so they inherit the same surface, radius, scrolling, and sizing as the rest of the app.
 
 ## Checklist
 - Standard Material component used where available

@@ -69,14 +69,16 @@ const FORM_FATIGUE_COLOR = AppColors.Red;
 export class ChartsFormComponent implements AfterViewInit, OnChanges, OnDestroy {
   private static readonly FORM_MODE = 'same-day' as const;
 
-  readonly granularityOptions: ReadonlyArray<{ key: DashboardFormTimelineWindow; label: string }> = [
-    { key: 'w', label: 'W' },
-    { key: 'm', label: 'M' },
-    { key: 'y', label: 'Y' },
+  readonly granularityOptions: ReadonlyArray<{ key: DashboardFormTimelineWindow; label: string; shortLabel: string }> = [
+    { key: 'w', label: 'Week', shortLabel: 'W' },
+    { key: 'm', label: 'Month', shortLabel: 'M' },
+    { key: 'y', label: 'Year', shortLabel: 'Y' },
   ];
   readonly granularityRangeOptions: ReadonlyArray<ChartRangeSelectorOption> = this.granularityOptions.map(option => ({
     value: option.key,
     label: option.label,
+    shortLabel: option.shortLabel,
+    menuLabel: option.label,
   }));
 
   @Input() darkTheme = false;
@@ -178,7 +180,7 @@ export class ChartsFormComponent implements AfterViewInit, OnChanges, OnDestroy 
   }
 
   private resolveGranularityLabel(value: DashboardFormTimelineWindow): string {
-    return this.granularityOptions.find(option => option.key === value)?.label || 'W';
+    return this.granularityOptions.find(option => option.key === value)?.label || 'Week';
   }
 
   private async refreshChart(): Promise<void> {

@@ -30,8 +30,16 @@ import type {
   DashboardEfficiencyTrendContext,
   DashboardEfficiencyTrendPoint,
 } from '../../../helpers/dashboard-derived-metrics.helper';
+import {
+  DASHBOARD_DERIVED_CHART_DEFAULT_RANGE,
+  DASHBOARD_DERIVED_CHART_RANGE_OPTIONS,
+  filterDashboardDerivedWeeklyRange,
+  normalizeDashboardDerivedChartRange,
+  type DashboardDerivedChartRange,
+} from '../../../helpers/dashboard-derived-chart-range.helper';
 import { EChartsLoaderService } from '../../../services/echarts-loader.service';
 import { LoggerService } from '../../../services/logger.service';
+import type { ChartRangeSelectorOption } from '../shared/chart-range-selector/chart-range-selector.component';
 
 type ChartOption = Parameters<EChartsType['setOption']>[0];
 type EfficiencyXAxisLabelMode = 'year' | 'month-year' | 'day-month';
@@ -52,6 +60,7 @@ export class ChartsEfficiencyTrendComponent implements AfterViewInit, OnChanges,
   @Input() trend?: DashboardEfficiencyTrendContext | null;
   @Input() status?: DashboardDerivedMetricStatus | null;
   @Input() infoTooltip?: string | null;
+  @Input() reserveTitleActionSpace = false;
 
   @ViewChild('chartDiv', { static: true }) chartDiv!: ElementRef<HTMLDivElement>;
 
@@ -62,6 +71,13 @@ export class ChartsEfficiencyTrendComponent implements AfterViewInit, OnChanges,
   public noDataErrorMessage = 'No data yet';
   public noDataErrorHint = 'This chart needs derived efficiency trend data.';
   public noDataErrorIcon = 'show_chart';
+  public selectedRange: DashboardDerivedChartRange = DASHBOARD_DERIVED_CHART_DEFAULT_RANGE;
+  public readonly rangeSelectorOptions: ReadonlyArray<ChartRangeSelectorOption> = DASHBOARD_DERIVED_CHART_RANGE_OPTIONS.map(option => ({
+    value: option.range,
+    label: option.label,
+    shortLabel: option.shortLabel,
+    menuLabel: option.menuLabel,
+  }));
 
   constructor(
     private eChartsLoader: EChartsLoaderService,
@@ -92,8 +108,17 @@ export class ChartsEfficiencyTrendComponent implements AfterViewInit, OnChanges,
     this.chartHost.dispose();
   }
 
+  public onRangeSelection(value: unknown): void {
+    const nextRange = normalizeDashboardDerivedChartRange(value);
+    if (nextRange === this.selectedRange) {
+      return;
+    }
+    this.selectedRange = nextRange;
+    void this.refreshChart();
+  }
+
   private async refreshChart(): Promise<void> {
-    const points = this.getSortedPoints();
+    const points = this.getVisiblePoints();
     this.updateHeaderAndErrorState(points);
     const chart = await this.chartHost.init(
       this.chartDiv?.nativeElement,
@@ -114,7 +139,11 @@ export class ChartsEfficiencyTrendComponent implements AfterViewInit, OnChanges,
       .sort((left, right) => left.weekStartMs - right.weekStartMs);
   }
 
-  private updateHeaderAndErrorState(points: DashboardEfficiencyTrendPoint[] = this.getSortedPoints()): void {
+  private getVisiblePoints(): DashboardEfficiencyTrendPoint[] {
+    return filterDashboardDerivedWeeklyRange(this.getSortedPoints(), this.selectedRange);
+  }
+
+  private updateHeaderAndErrorState(points: DashboardEfficiencyTrendPoint[] = this.getVisiblePoints()): void {
     const latest = points[points.length - 1] || null;
     this.latestValueText = this.formatValue(latest?.value ?? null);
 

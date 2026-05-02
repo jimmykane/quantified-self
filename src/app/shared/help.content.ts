@@ -178,6 +178,7 @@ export const HELP_SECTIONS: HelpSection[] = [
 - **Intensity Distribution** uses power zones when available, otherwise heart-rate zones, grouped to Easy/Moderate/Hard by week.
 - Intensity Distribution headline percentages are labeled as **Current week**; when no current-week bucket exists they are labeled **Latest week**.
 - **Efficiency Trend** uses weekly duration-weighted average of avgPower/avgHeartRate.
+- Intensity Distribution and Efficiency Trend include compact **8w / 12w / 6m / 1y / All** range selectors that only change the visible derived weekly history.
 - Training-derived tiles do not fall back to currently loaded dashboard events.
 
 ### Merge events
