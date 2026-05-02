@@ -172,6 +172,29 @@ describe('insertSuuntoAppActivityToQueue', () => {
     });
   });
 
+  it('routes typed legacy Basic form notifications through legacy auth', async () => {
+    const response = createResponse();
+    const request = createRequest({
+      body: {
+        type: 'WORKOUT_CREATED',
+        username: 'legacy-user',
+        workoutid: 'legacy-workout',
+      },
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        Authorization: legacyAuthorizationHeader(),
+      },
+    });
+
+    await insertSuuntoAppActivityToQueue(request as any, response as any);
+
+    expect(response.status).toHaveBeenCalledWith(200);
+    expect(hoisted.addToQueueForSuunto).toHaveBeenCalledWith({
+      userName: 'legacy-user',
+      workoutID: 'legacy-workout',
+    });
+  });
+
   it('returns 500 when JSON workout queue insertion fails', async () => {
     hoisted.addToQueueForSuunto.mockRejectedValueOnce(new Error('queue failed'));
     const response = createResponse();

@@ -27,7 +27,7 @@ function getRequestHeader(req: functions.https.Request, headerName: string): str
 
 function isSuuntoJsonNotificationRequest(req: functions.https.Request): boolean {
   const contentType = getRequestHeader(req, 'Content-Type')?.toLowerCase() || '';
-  return contentType.includes('application/json') || asString(asRecord(req.body).type) !== null;
+  return contentType.includes('application/json');
 }
 
 function getLegacyWorkoutNotification(req: functions.https.Request): { userName: string | null, workoutID: string | null } {
@@ -108,4 +108,3 @@ export const insertSuuntoAppActivityToQueue = functions.region('europe-west2').r
 
   await enqueueSuuntoWorkout(userName, workoutID, res);
 });
-
