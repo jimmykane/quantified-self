@@ -9,6 +9,7 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { of, Subject } from 'rxjs';
 import {
+    ActivityTypes,
     DateRanges,
     DistanceUnits,
     PaceUnits,
@@ -613,5 +614,44 @@ describe('DashboardComponent', () => {
 
         expect(component.searchStartDate).toEqual(new Date('2026-04-27T00:00:00.000'));
         expect(component.searchEndDate).toEqual(new Date('2026-05-03T23:59:59.999'));
+    });
+
+    it('returns a stable event table filter object for equivalent dashboard settings', () => {
+        mockUser.settings.dashboardSettings.eventTableFilters = {
+            searchTerm: null,
+            dateRange: DateRanges.thisWeek,
+            startDate: null,
+            endDate: null,
+            activityTypes: [],
+            includeMergedEvents: true,
+        };
+        component.user = mockUser;
+
+        const firstFilters = component.eventTableFilters;
+        const secondFilters = component.eventTableFilters;
+
+        expect(secondFilters).toBe(firstFilters);
+    });
+
+    it('refreshes the stable event table filter object when dashboard settings change', () => {
+        mockUser.settings.dashboardSettings.eventTableFilters = {
+            searchTerm: null,
+            dateRange: DateRanges.thisWeek,
+            startDate: null,
+            endDate: null,
+            activityTypes: [],
+            includeMergedEvents: true,
+        };
+        component.user = mockUser;
+
+        const firstFilters = component.eventTableFilters;
+        mockUser.settings.dashboardSettings.eventTableFilters = {
+            ...mockUser.settings.dashboardSettings.eventTableFilters,
+            activityTypes: [ActivityTypes.Running],
+        };
+        const secondFilters = component.eventTableFilters;
+
+        expect(secondFilters).not.toBe(firstFilters);
+        expect(secondFilters.activityTypes).toEqual([ActivityTypes.Running]);
     });
 });

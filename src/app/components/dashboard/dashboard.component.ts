@@ -61,6 +61,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
   private initialLiveReconcilePending = false;
   private initialResolvedEventsForReconcile: EventInterface[] = [];
   private initialResolvedUserIDForReconcile: string | null = null;
+  private eventTableFiltersCacheSignature: string | null = null;
+  private eventTableFiltersCache: AppDashboardEventTableFiltersInterface | null = null;
   private analyticsService = inject(AppAnalyticsService);
   private logger = inject(LoggerService);
   private destroyRef = inject(DestroyRef);
@@ -565,12 +567,31 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   private getEventTableFilters(user: AppUserInterface | null | undefined): AppDashboardEventTableFiltersInterface {
     const dashboardSettings = user?.settings?.dashboardSettings;
-    return normalizeDashboardEventTableFilters(dashboardSettings?.eventTableFilters, {
+    const normalizedFilters = normalizeDashboardEventTableFilters(dashboardSettings?.eventTableFilters, {
       dateRange: dashboardSettings?.dateRange,
       startDate: dashboardSettings?.startDate,
       endDate: dashboardSettings?.endDate,
       activityTypes: dashboardSettings?.activityTypes,
       includeMergedEvents: dashboardSettings?.includeMergedEvents,
+    });
+    const cacheSignature = this.getEventTableFiltersSignature(normalizedFilters);
+    if (this.eventTableFiltersCache && this.eventTableFiltersCacheSignature === cacheSignature) {
+      return this.eventTableFiltersCache;
+    }
+
+    this.eventTableFiltersCacheSignature = cacheSignature;
+    this.eventTableFiltersCache = normalizedFilters;
+    return normalizedFilters;
+  }
+
+  private getEventTableFiltersSignature(filters: AppDashboardEventTableFiltersInterface): string {
+    return JSON.stringify({
+      searchTerm: filters.searchTerm || null,
+      dateRange: filters.dateRange,
+      startDate: filters.startDate,
+      endDate: filters.endDate,
+      includeMergedEvents: filters.includeMergedEvents !== false,
+      activityTypes: filters.activityTypes || [],
     });
   }
 
