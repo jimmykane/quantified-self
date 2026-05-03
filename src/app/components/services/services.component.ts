@@ -13,6 +13,14 @@ import { AppWindowService } from '../../services/app.window.service';
 import { Auth2ServiceTokenInterface } from '@sports-alliance/sports-lib';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 
+type ServiceSectionId = 'suunto' | 'garmin' | 'coros';
+
+interface ServiceSectionOption {
+  id: ServiceSectionId;
+  label: string;
+  description: string;
+  svgIcon: string;
+}
 
 @Component({
   selector: 'app-services',
@@ -26,11 +34,28 @@ export class ServicesComponent implements OnInit, OnDestroy {
   public user!: User;
 
   public suuntoAppTokens: Auth2ServiceTokenInterface[] = [];
-  public activeSection: 'suunto' | 'garmin' | 'coros' = 'suunto';
-  public readonly sectionOrder: Array<'suunto' | 'garmin' | 'coros'> = ['suunto', 'garmin', 'coros'];
-  public readonly tabsStickyHeader = true;
-  public readonly tabsTopOffset = '0px';
-  public readonly tabsLazyContent = false;
+  public activeSection: ServiceSectionId = 'suunto';
+  public readonly sectionOrder: ServiceSectionId[] = ['suunto', 'garmin', 'coros'];
+  public readonly serviceSectionOptions: ServiceSectionOption[] = [
+    {
+      id: 'suunto',
+      label: 'Suunto',
+      description: 'Suunto App tools',
+      svgIcon: 'suunto',
+    },
+    {
+      id: 'garmin',
+      label: 'Garmin',
+      description: 'Garmin Connect tools',
+      svgIcon: 'garmin',
+    },
+    {
+      id: 'coros',
+      label: 'COROS',
+      description: 'COROS account tools',
+      svgIcon: 'coros',
+    },
+  ];
   public serviceNames = ServiceNames;
   public hasProAccess = false;
   public isAdmin = false;
@@ -95,7 +120,7 @@ export class ServicesComponent implements OnInit, OnDestroy {
     });
   }
 
-  async selectService(section: 'suunto' | 'garmin' | 'coros') {
+  async selectService(section: ServiceSectionId) {
     let serviceName: string;
     switch (section) {
       case 'garmin':
@@ -113,22 +138,6 @@ export class ServicesComponent implements OnInit, OnDestroy {
       queryParams: { serviceName: serviceName },
       queryParamsHandling: 'merge',
     });
-  }
-
-  get selectedSectionIndex(): number {
-    const index = this.sectionOrder.indexOf(this.activeSection);
-    return index >= 0 ? index : 0;
-  }
-
-  async onSelectedSectionIndexChange(index: number) {
-    const nextSection = this.indexToSectionId(index);
-    if (nextSection !== this.activeSection) {
-      await this.selectService(nextSection);
-    }
-  }
-
-  private indexToSectionId(index: number): 'suunto' | 'garmin' | 'coros' {
-    return this.sectionOrder[index] || 'suunto';
   }
 
   processUser(user: User | null, isPro: boolean) {

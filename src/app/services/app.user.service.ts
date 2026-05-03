@@ -5,7 +5,6 @@ import { toSignal } from '@angular/core/rxjs-interop';
 import { Observable, from, firstValueFrom, of, combineLatest, distinctUntilChanged, throwError, timer } from 'rxjs';
 import { StripeRole } from '../models/stripe-role.model';
 import { User } from '@sports-alliance/sports-lib';
-import { Privacy } from '@sports-alliance/sports-lib';
 import { AppEventService } from './app.event.service';
 import { catchError, map, take, switchMap, shareReplay, retry } from 'rxjs/operators';
 import {
@@ -178,7 +177,6 @@ export class AppUserService implements OnDestroy {
       acceptedDataPolicy: false,
       acceptedTrackingPolicy: false,
       acceptedDiagnosticsPolicy: true,
-      privacy: Privacy.Private,
       creationDate: authCreationDate ?? new Date(),
       lastSignInDate: authLastSignInDate ?? authCreationDate ?? new Date()
     } as any;
@@ -783,6 +781,11 @@ export class AppUserService implements OnDestroy {
       }
     });
 
+    if ('privacy' in propertiesToUpdate) {
+      this.logger.warn('[AppUserService] Stripping deprecated account privacy field from update payload.');
+      delete propertiesToUpdate.privacy;
+    }
+
     if (Object.keys(propertiesToUpdate).length > 0) {
       const userDocRef = doc(this.firestore, 'users', user.uid);
       promises.push(updateDoc(userDocRef, propertiesToUpdate)
@@ -822,6 +825,7 @@ export class AppUserService implements OnDestroy {
       'isPro',
       'lastSignInDate',
       'impersonatedBy',
+      'privacy',
       ...AppUserService.legalFields
     ];
 

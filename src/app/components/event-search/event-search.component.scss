@@ -254,6 +254,50 @@ mat-button-toggle:active {
   font-size: 0.76rem !important;
 }
 
+:host(.table-toolbar-layout) form {
+  gap: 0;
+  width: 100%;
+}
+
+:host(.table-toolbar-layout) ::ng-deep app-loading-overlay.search-overlay .loading-overlay-container {
+  align-content: center;
+  align-items: center;
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  min-width: 0;
+}
+
+:host(.table-toolbar-layout) .filters-row {
+  align-items: center;
+  flex: 0 0 auto;
+  gap: 6px;
+  min-width: 0;
+}
+
+:host(.table-toolbar-layout) .date-range-field {
+  flex: 0 0 216px;
+  width: 216px;
+}
+
+:host(.table-toolbar-layout) .button-groups {
+  align-content: center;
+  align-items: center;
+  flex: 1 1 420px;
+  justify-content: flex-start;
+  min-height: 32px;
+  min-width: 0;
+}
+
+:host(.table-toolbar-layout) .toolbar-range-group {
+  flex: 0 1 auto;
+  max-width: 100%;
+}
+
+:host(.table-toolbar-layout) .secondary-ranges-button {
+  flex: 0 0 auto;
+}
+
 /* Tablet: Reduce gap and padding to prevent overflow */
 @include bp.handset-or-tablet-portrait {
   .button-groups {
@@ -329,5 +373,51 @@ mat-button-toggle:active {
   :host(.compact-filter-layout) mat-button-toggle-group {
     flex: 0 0 auto;
     width: 100%;
+  }
+
+  :host(.table-toolbar-layout) ::ng-deep app-loading-overlay.search-overlay .loading-overlay-container {
+    align-items: center;
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+
+  :host(.table-toolbar-layout) .filters-row {
+    align-items: center;
+    flex-direction: row;
+    flex-wrap: nowrap;
+  }
+
+  :host(.table-toolbar-layout) .date-range-field {
+    flex: 1 1 auto;
+    width: auto;
+  }
+
+  :host(.table-toolbar-layout) .button-groups {
+    align-items: center;
+    flex-direction: row;
+    flex-wrap: wrap;
+    flex: 1 1 100%;
+    gap: 6px;
+    min-width: 0;
+    overflow-x: visible;
+    width: 100%;
+  }
+
+  :host(.table-toolbar-layout) mat-button-toggle-group {
+    flex: 0 0 auto;
+    width: auto;
+  }
+
+  :host(.table-toolbar-layout) .toolbar-range-group {
+    flex: 1 1 100%;
+    width: 100%;
+  }
+
+  :host(.table-toolbar-layout) .toolbar-range-group mat-button-toggle {
+    flex: 1 1 0;
+  }
+
+  :host(.table-toolbar-layout) .secondary-ranges-button {
+    flex: 0 0 auto;
   }
 }

@@ -6,7 +6,10 @@ import { getDatesForDateRange } from '../../helpers/date-range-helper';
 import { EventSearchComponent } from './event-search.component';
 
 describe('EventSearchComponent', () => {
-  const createComponent = (dialog?: { open: ReturnType<typeof vi.fn> }) => {
+  const createComponent = (
+    dialog?: { open: ReturnType<typeof vi.fn> },
+    configure?: (component: EventSearchComponent) => void,
+  ) => {
     const changeDetectorRef = {
       markForCheck: vi.fn(),
       detectChanges: vi.fn(),
@@ -20,6 +23,7 @@ describe('EventSearchComponent', () => {
     component.selectedEndDate = new Date('2025-01-31T23:59:59.999Z');
     component.startOfTheWeek = DaysOfTheWeek.Monday;
     component.selectedActivityTypes = [];
+    configure?.(component);
     component.ngOnInit();
     return { component, hapticsService };
   };
@@ -36,6 +40,63 @@ describe('EventSearchComponent', () => {
     expect(searchSpy).toHaveBeenCalledTimes(1);
     expect(component.selectedDateRange).toBe(DateRanges.lastWeek);
     expect(hapticsService.selection).toHaveBeenCalledTimes(1);
+  });
+
+  it('should expose one flattened shortcut group for table toolbar layout', () => {
+    const { component } = createComponent(undefined, searchComponent => {
+      searchComponent.compact = true;
+      searchComponent.toolbarRangeLayout = true;
+    });
+
+    expect(component.primaryToolbarDateRangeOptions.map(option => option.label)).toEqual([
+      'This wk',
+      'Last wk',
+      '7d',
+      'This mo',
+      'Last mo',
+      '30d',
+    ]);
+    expect(component.secondaryToolbarDateRangeOptions.map(option => option.label)).toEqual([
+      `${component.currentYear}`,
+      `${component.currentYear - 1}`,
+      'All',
+    ]);
+    expect(component.secondaryDateRangeButtonLabel).toBe('More');
+  });
+
+  it('should update the secondary range menu label when a secondary shortcut is selected', async () => {
+    const { component, hapticsService } = createComponent(undefined, searchComponent => {
+      searchComponent.compact = true;
+      searchComponent.toolbarRangeLayout = true;
+    });
+    const searchSpy = vi.spyOn(component, 'search').mockResolvedValue(undefined);
+
+    await component.onSecondaryDateRangeSelection(DateRanges.lastYear);
+
+    expect(searchSpy).toHaveBeenCalledTimes(1);
+    expect(component.selectedDateRange).toBe(DateRanges.lastYear);
+    expect(component.secondaryDateRangeButtonLabel).toBe(`${component.currentYear - 1}`);
+    expect(hapticsService.selection).toHaveBeenCalledTimes(1);
+  });
+
+  it('should reuse the all-range warning for secondary toolbar shortcuts', async () => {
+    const dialog = {
+      open: vi.fn().mockReturnValue({
+        afterClosed: () => of(true),
+      }),
+    };
+    const { component } = createComponent(dialog, searchComponent => {
+      searchComponent.compact = true;
+      searchComponent.toolbarRangeLayout = true;
+    });
+    const searchSpy = vi.spyOn(component, 'search').mockResolvedValue(undefined);
+
+    await component.onSecondaryDateRangeSelection(DateRanges.all);
+
+    expect(dialog.open).toHaveBeenCalledTimes(1);
+    expect(searchSpy).toHaveBeenCalledTimes(1);
+    expect(component.selectedDateRange).toBe(DateRanges.all);
+    expect(component.secondaryDateRangeButtonLabel).toBe('All');
   });
 
   it('should auto-search when a valid custom date change occurs', async () => {

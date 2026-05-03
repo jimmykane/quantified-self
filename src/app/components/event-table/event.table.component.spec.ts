@@ -248,6 +248,7 @@ describe('EventTableComponent', () => {
         expect(mainRow).toBeTruthy();
         expect(filtersRow).toBeTruthy();
         expect(searchField).toBeTruthy();
+        expect(mainRow.contains(filtersRow)).toBe(true);
     });
 
     it('should call loading and return early in ngOnChanges when events are missing', () => {

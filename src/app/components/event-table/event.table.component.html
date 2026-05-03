@@ -12,6 +12,10 @@
         </button>
       </mat-form-field>
 
+      <div class="table-toolbar-filters">
+        <ng-content select="[event-table-filters]"></ng-content>
+      </div>
+
       @if (selection.selected.length) {
       <div class="buttons" [@expandCollapse]>
         @if (this.selection.selected.length > 1) {
@@ -60,10 +64,6 @@
         </button>
       </div>
       }
-    </div>
-
-    <div class="table-toolbar-filters">
-      <ng-content select="[event-table-filters]"></ng-content>
     </div>
   </div>
 

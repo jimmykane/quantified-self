@@ -23,29 +23,32 @@
 }
 
 .table-toolbar {
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: 10px;
-  padding: 12px 16px 8px;
+  display: block;
+  padding: 12px;
   border-bottom: 1px solid var(--mat-sys-outline-variant);
   background: color-mix(in srgb, var(--mat-sys-surface-container-low), transparent 12%);
 }
 
 .table-toolbar-main {
-  display: flex;
+  display: grid;
   align-items: center;
-  gap: 12px;
+  grid-template-columns: minmax(280px, 420px) minmax(0, 1fr) auto;
+  gap: 10px;
   min-width: 0;
+}
+
+.table-toolbar-main .buttons {
+  justify-self: end;
+  margin-left: 0;
+  padding-right: 0;
 }
 
 .table-toolbar-main .qs-search-field {
   --mat-form-field-container-height: 40px;
   --mat-form-field-container-text-size: 0.9rem;
   --mat-form-field-container-vertical-padding: 8px;
-  flex: 1 1 auto;
+  width: 100%;
   min-width: 0;
-  max-width: 420px;
 }
 
 .table-toolbar-main .qs-search-field ::ng-deep .mat-mdc-form-field-infix {
@@ -75,9 +78,12 @@
 }
 
 .table-toolbar-filters {
-  display: block;
+  align-items: center;
+  display: flex;
+  justify-content: flex-start;
   min-width: 0;
   min-height: 0;
+  overflow: hidden;
 }
 
 .table-toolbar-filters:empty {
@@ -108,17 +114,24 @@
 @include bp.handset-or-tablet-portrait {
 
   .table-toolbar {
-    padding: 10px 12px 8px;
-    gap: 8px;
+    padding: 10px 12px;
   }
 
   .table-toolbar-main {
-    flex-wrap: wrap;
+    grid-template-columns: minmax(0, 1fr) auto;
     gap: 8px;
   }
 
   .table-toolbar-main .qs-search-field {
-    max-width: 100%;
+    grid-column: 1 / -1;
+  }
+
+  .table-toolbar-filters {
+    grid-column: 1 / -1;
+  }
+
+  .table-toolbar-main .buttons {
+    grid-column: 1 / -1;
   }
 
   .mat-column-Start-Date,

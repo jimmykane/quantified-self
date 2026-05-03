@@ -166,6 +166,7 @@ describe('AppUserService', () => {
         expect(mergedUser.emailVerified).toBe(true);
         expect(mergedUser.email).toBe('test@example.com');
         expect(mergedUser.acceptedPrivacyPolicy).toBe(false);
+        expect((mergedUser as any).privacy).toBeUndefined();
         expect(mergedUser.settings?.appSettings?.unitSetupCompleted).toBe(false);
         expect(service.hasIncompleteProfileReads('u1')).toBe(true);
     });
@@ -885,6 +886,21 @@ describe('AppUserService', () => {
                 { displayName: 'New Name' }
             );
         });
+
+        it('should strip deprecated account privacy from partial updates', async () => {
+            const user = { uid: 'test-uid' } as AppUserInterface;
+            const propertiesToUpdate = {
+                displayName: 'New Name',
+                privacy: 'public'
+            };
+
+            await service.updateUserProperties(user, propertiesToUpdate);
+
+            expect(updateDoc).toHaveBeenCalledWith(
+                expect.anything(),
+                { displayName: 'New Name' }
+            );
+        });
     });
 
     describe('updateUser', () => {
@@ -897,6 +913,7 @@ describe('AppUserService', () => {
                 uid: 'test-uid',
                 displayName: 'Test User',
                 impersonatedBy: 'admin-uid',
+                privacy: 'public',
                 creationDate: new Date('2026-01-01T00:00:00.000Z'),
                 lastSignInDate: new Date('2026-01-02T00:00:00.000Z')
             } as AppUserInterface;
@@ -908,6 +925,7 @@ describe('AppUserService', () => {
             expect(writtenData.creationDate).toEqual(new Date('2026-01-01T00:00:00.000Z'));
             expect(writtenData.lastSignInDate).toBeUndefined();
             expect(writtenData.impersonatedBy).toBeUndefined();
+            expect(writtenData.privacy).toBeUndefined();
         });
 
         it('should retry full user write without creationDate when merge write is permission-denied', async () => {

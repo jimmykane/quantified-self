@@ -1,121 +1,16 @@
 @use '../../../styles/breakpoints' as bp;
 
 :host {
-    // Removed local vars that override global theme
     --section-spacing: 24px;
 }
 
-// Override global form limit for settings page
 ::ng-deep .qs-form {
     max-width: 100% !important;
-}
-
-/* User Profile Header container */
-.user-profile-header {
-    border-radius: 16px !important;
-    background: linear-gradient(135deg,
-            color-mix(in srgb, var(--mat-sys-primary) 8%, transparent),
-            color-mix(in srgb, var(--mat-sys-primary) 3%, transparent)) !important;
-    border: 1px solid color-mix(in srgb, var(--mat-sys-primary) 10%, transparent) !important;
-    transition: transform 0.2s ease, box-shadow 0.2s ease !important;
-    cursor: default;
-
-    &:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12) !important;
-    }
-
-    .header-avatar {
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-        border: 3px solid rgba(255, 255, 255, 0.9);
-        background-size: cover;
-        background-position: center;
-    }
-
-    .name-row {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        margin-bottom: 4px;
-
-        h2 {
-            margin: 0;
-            font-weight: 600;
-        }
-    }
-
-    .pro-badge,
-    .basic-badge {
-        display: inline-flex;
-        align-items: center;
-        gap: 4px;
-        font-size: 0.65rem;
-        font-weight: 600;
-        color: #fff;
-        padding: 2px 8px;
-        border-radius: 10px;
-        margin-left: 8px;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-
-        mat-icon {
-            font-size: 14px;
-            width: 14px;
-            height: 14px;
-        }
-    }
-
-    .pro-badge {
-        background: linear-gradient(135deg, #FFD700, #FFA000);
-    }
-
-    .basic-badge {
-        background: linear-gradient(135deg, #64B5F6, #1976D2);
-    }
-}
-
-:host-context(.dark-theme) .user-profile-header {
-    background: linear-gradient(135deg,
-            color-mix(in srgb, var(--mat-sys-primary) 10%, transparent),
-            color-mix(in srgb, var(--mat-sys-primary) 3%, transparent)) !important;
-    border-color: color-mix(in srgb, var(--mat-sys-primary) 15%, transparent) !important;
-
-    &:hover {
-        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4) !important;
-    }
-
-    .header-avatar {
-        border-color: rgba(255, 255, 255, 0.15);
-    }
-}
-
-@include bp.xsmall {
-    .user-profile-header {
-        .header-content {
-            flex-direction: column;
-            text-align: center;
-            gap: 16px;
-        }
-
-        .name-row {
-            justify-content: center;
-        }
-
-        .header-actions {
-            margin-left: 0;
-            width: 100%;
-            display: flex;
-            justify-content: center;
-        }
-    }
 }
 
 .settings-container {
     display: block;
     min-height: calc(100vh - var(--qs-effective-top-offset, 0px));
-    // background-color: #f4f7f6; /* REMOVED: Managed by global theme */
-
     position: relative;
 }
 
@@ -125,69 +20,271 @@
     }
 }
 
-/* Tab Navigation */
-.settings-nav {
-    margin-bottom: 0;
-    display: block;
-    padding: 0 40px 12px;
-    border-radius: 0;
+.settings-profile-shell {
+    max-width: 100%;
+    margin: 0;
+    padding: 0;
 }
 
-/* Mobile Responsive Adjustments */
-@include bp.xsmall {
-    .settings-nav {
+.user-profile-header {
+    display: inline-flex;
+    max-width: min(100%, 560px);
+
+    .header-content {
+        display: grid;
+        grid-template-columns: 40px minmax(0, 1fr);
+        align-items: center;
+        gap: 10px;
+        min-width: 0;
         padding: 0;
     }
 
-    .settings-content {
-        padding: 24px 16px;
+    .header-avatar {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        background-size: cover;
+        background-position: center;
+    }
+
+    .header-info {
+        display: grid;
+        gap: 1px;
+        min-width: 0;
+    }
+
+    .name-row {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        min-width: 0;
+        margin: 0;
+    }
+
+    .user-display-name-wrapper {
+        display: flex;
+        align-items: center;
+        min-width: 0;
+        gap: 6px;
+    }
+
+    .user-display-name {
+        overflow: hidden;
+        margin: 0;
+        color: var(--mat-sys-on-surface);
+        font-size: 1rem;
+        line-height: 1.2;
+        font-weight: 650;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .profile-meta-row {
+        display: flex;
+        flex-direction: column;
+        gap: 1px;
+        min-width: 0;
+    }
+
+    .user-email,
+    .user-id {
+        overflow: hidden;
+        margin: 0;
+        color: var(--mat-sys-on-surface-variant);
+        font-size: 0.78rem;
+        line-height: 1.25;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .user-email {
+        max-width: 320px;
+    }
+
+    .user-id {
+        max-width: 320px;
+    }
+
+    .pro-badge,
+    .basic-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        color: var(--mat-sys-on-primary-container);
+        background: var(--mat-sys-primary-container);
+        font-size: 0.65rem;
+        font-weight: 700;
+        padding: 1px 6px;
+        border-radius: 999px;
+        text-transform: uppercase;
+
+        mat-icon {
+            font-size: 13px;
+            width: 13px;
+            height: 13px;
+        }
     }
 }
 
-/* Main Content Area */
 .settings-content {
-    flex: 1;
-    padding: 24px 40px;
-    max-width: 100%;
+    max-width: 1180px;
     margin: 0 auto;
+    padding: 20px 40px 32px;
 }
 
-.section-header {
-    margin-bottom: 32px;
+.settings-workspace {
+    display: grid;
+    grid-template-columns: 216px minmax(0, 1fr);
+    gap: 28px;
+    align-items: start;
 }
 
-.section-header h1 {
-    margin: 0 0 8px 0;
-    font-size: 1.8rem;
-    font-weight: 400;
-    // color: var(--text-primary); /* REMOVED */
+.workspace-nav {
+    position: sticky;
+    top: calc(var(--qs-effective-top-offset, 0px) + 24px);
 }
 
-.section-header p {
-    margin: 0;
-    // color: var(--text-secondary); /* REMOVED */
-    opacity: 0.7;
-    font-size: 1rem;
+.workspace-nav-title {
+    margin: 0 0 8px;
+    color: var(--mat-sys-on-surface-variant);
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
 }
 
-/* Redesigned Card Styling */
-.settings-card {
-    // background: var(--card-bg); /* REMOVED */
-    // Use mat-card mixin or global card style if applying to div, otherwise assume standard mat-card usage
-    // The HTML uses mat-card, so we just let it be.
-    // Exception: if it's a div acting as card.
-    // Assuming mat-card is used based on "settings-card" name potentially being applied to mat-card?
-    // If it's a class on mat-card, global styles handle it.
+.workspace-nav-list {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
 
-    margin-bottom: var(--section-spacing);
-    overflow: hidden;
+.workspace-nav-button {
+    width: 100%;
+    height: auto;
+    min-height: 40px;
+    justify-content: flex-start;
+    padding: 7px 10px;
+    border-radius: 6px;
+    color: var(--mat-sys-on-surface-variant);
+    text-align: left;
+}
+
+.workspace-nav-button.active {
+    background: var(--mat-sys-secondary-container);
+    color: var(--mat-sys-on-secondary-container);
+}
+
+.workspace-nav-icon {
+    flex: 0 0 20px;
+    width: 20px;
+    height: 20px;
+    margin-right: 10px;
+    font-size: 20px;
+}
+
+.workspace-nav-copy {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    line-height: 1.2;
+}
+
+.workspace-nav-label {
+    color: var(--mat-sys-on-surface);
+    font-size: 0.88rem;
+    font-weight: 600;
+}
+
+.workspace-nav-button.active .workspace-nav-label {
+    color: var(--mat-sys-on-secondary-container);
+}
+
+.workspace-nav-description {
+    display: none;
+}
+
+.workspace-main {
+    min-width: 0;
+}
+
+.settings-panel-section {
+    max-width: 760px;
+}
+
+.settings-panel-header {
+    margin-bottom: 16px;
+
+    h1 {
+        margin: 0 0 4px;
+        color: var(--mat-sys-on-surface);
+        font-size: 1.5rem;
+        line-height: 1.2;
+        font-weight: 700;
+    }
+
+    p {
+        margin: 0;
+        color: var(--mat-sys-on-surface-variant);
+        font-size: 0.9rem;
+        line-height: 1.4;
+    }
+}
+
+.settings-panel-body {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    padding-top: 24px;
+}
+
+.settings-toggle-block {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+
+    p {
+        margin: 0;
+        color: var(--mat-sys-on-surface-variant);
+        font-size: 0.85rem;
+        line-height: 1.4;
+    }
+}
+
+.settings-toggle-list,
+.settings-toggle-grid {
+    display: grid;
+    gap: 16px;
+}
+
+.settings-toggle-grid,
+.settings-slider-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.settings-slider-grid {
+    display: grid;
+    gap: 24px;
+}
+
+.settings-slider-block {
+    p {
+        margin: 0 0 8px;
+        color: var(--mat-sys-on-surface);
+        font-size: 0.9rem;
+        font-weight: 500;
+    }
+
+    mat-slider {
+        width: 100%;
+    }
 }
 
 .card-content {
-    padding: 24px;
     display: flex;
     flex-direction: column;
     gap: 20px;
+    padding: 24px;
 }
 
 .unit-simple-settings {
@@ -207,10 +304,10 @@
 
     h2 {
         margin: 0;
+        color: var(--mat-sys-on-surface);
         font-size: 1rem;
         line-height: 1.25;
         font-weight: 700;
-        color: var(--mat-sys-on-surface);
     }
 
     p {
@@ -301,7 +398,168 @@
     line-height: 1.25;
 }
 
-@include bp.xsmall {
+.brand-text-upgrade {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    color: var(--mat-sys-on-surface-variant);
+
+    mat-icon {
+        color: var(--mat-sys-primary);
+    }
+}
+
+.danger-card {
+    max-width: 760px;
+    margin-top: 0;
+    border-color: color-mix(in srgb, var(--mat-sys-error) 30%, var(--mat-sys-outline-variant));
+    background-color: color-mix(in srgb, var(--mat-sys-error) 3%, var(--mat-sys-surface));
+}
+
+.danger-title {
+    color: var(--mat-sys-error);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 500;
+}
+
+.settings-validation-debug {
+    max-width: 820px;
+    margin: 0 0 24px;
+    padding: 12px 14px;
+    border-radius: 8px;
+    border: 1px solid color-mix(in srgb, var(--mat-sys-error) 35%, transparent);
+    background: color-mix(in srgb, var(--mat-sys-error) 8%, transparent);
+    color: var(--mat-sys-on-surface);
+}
+
+.settings-validation-debug__title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 500;
+
+    mat-icon {
+        color: var(--mat-sys-error);
+    }
+}
+
+.settings-validation-debug__list {
+    margin: 8px 0 0;
+    padding-left: 22px;
+
+    li {
+        margin-bottom: 4px;
+    }
+}
+
+.settings-validation-debug__errors {
+    margin-left: 6px;
+    opacity: 0.75;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+    font-size: 0.8rem;
+}
+
+.qs-form-actions-floating {
+    position: fixed;
+    bottom: 40px;
+    right: 40px;
+    z-index: 100;
+}
+
+.mobile-save-bar {
+    display: none;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    padding: 16px;
+    background: var(--mat-sys-surface-container-lowest);
+    box-shadow: 0 -4px 20px color-mix(in srgb, var(--mat-sys-on-surface) 10%, transparent);
+    z-index: 100;
+}
+
+.mobile-save-bar button {
+    width: 100%;
+}
+
+.qs-form-actions-floating button[disabled],
+.mobile-save-bar button[disabled] {
+    opacity: 0.5;
+    filter: grayscale(1);
+    pointer-events: none;
+}
+
+@include bp.max-768 {
+    .settings-profile-shell,
+    .settings-content {
+        padding-inline: 16px;
+    }
+
+    .settings-profile-shell {
+        padding-top: 0;
+    }
+
+    .settings-content {
+        padding-top: 24px;
+        padding-bottom: 80px;
+    }
+
+    .user-profile-header {
+        max-width: 100%;
+    }
+
+    .user-profile-header .header-content {
+        grid-template-columns: 36px minmax(0, 1fr);
+        align-items: center;
+    }
+
+    .user-profile-header .header-avatar {
+        width: 36px;
+        height: 36px;
+    }
+
+    .user-profile-header .profile-meta-row {
+        flex-direction: column;
+        gap: 1px;
+    }
+
+    .user-profile-header .user-email,
+    .user-profile-header .user-id {
+        max-width: 100%;
+    }
+
+    .settings-workspace {
+        display: block;
+    }
+
+    .workspace-nav {
+        position: static;
+        margin-bottom: 18px;
+    }
+
+    .workspace-nav-list {
+        flex-direction: row;
+        gap: 8px;
+        overflow-x: auto;
+        padding-bottom: 4px;
+    }
+
+    .workspace-nav-button {
+        flex: 0 0 150px;
+    }
+
+    .settings-panel-header h1 {
+        font-size: 1.35rem;
+    }
+
+    .settings-toggle-grid,
+    .settings-slider-grid {
+        grid-template-columns: 1fr;
+    }
+
     .unit-simple-settings {
         align-items: stretch;
         flex-direction: column;
@@ -357,128 +615,7 @@
         font-size: 0.72rem;
         white-space: normal;
     }
-}
 
-.brand-text-upgrade {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    flex-wrap: wrap;
-    color: var(--mat-sys-on-surface-variant);
-
-    mat-icon {
-        color: var(--mat-sys-primary);
-    }
-}
-
-.danger-card {
-    border: 1px solid color-mix(in srgb, var(--mat-sys-error) 20%, transparent);
-    background-color: color-mix(in srgb, var(--mat-sys-error) 2%, transparent);
-}
-
-.danger-title {
-    color: var(--mat-sys-error);
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-weight: 400;
-    margin-bottom: 12px;
-}
-
-.settings-validation-debug {
-    margin: 12px 0 20px;
-    padding: 12px 14px;
-    border-radius: 12px;
-    border: 1px solid color-mix(in srgb, var(--mat-sys-error) 35%, transparent);
-    background: color-mix(in srgb, var(--mat-sys-error) 8%, transparent);
-    color: var(--mat-sys-on-surface);
-}
-
-.settings-validation-debug__title {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-weight: 500;
-
-    mat-icon {
-        color: var(--mat-sys-error);
-    }
-}
-
-.settings-validation-debug__list {
-    margin: 8px 0 0;
-    padding-left: 22px;
-
-    li {
-        margin-bottom: 4px;
-    }
-}
-
-.settings-validation-debug__errors {
-    margin-left: 6px;
-    opacity: 0.75;
-    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
-    font-size: 0.8rem;
-}
-
-/* Responsive */
-@include bp.max-768 {
-    .settings-container {
-        flex-direction: column;
-    }
-
-    .settings-sidebar {
-        width: 100%;
-        height: auto;
-        border-right: none;
-        border-bottom: 1px solid var(--mat-sys-outline-variant);
-        position: relative;
-        padding: 12px 0;
-    }
-
-    :host-context(.dark-theme) .settings-sidebar {
-        border-bottom: 1px solid var(--mat-sys-outline-variant);
-    }
-
-    .settings-nav {
-        padding: 0;
-    }
-
-    .settings-content {
-        padding: 24px 16px;
-    }
-}
-
-/* Save Button Styles */
-.qs-form-actions-floating {
-    position: fixed;
-    bottom: 40px;
-    right: 40px;
-    z-index: 100;
-}
-
-.mobile-save-bar {
-    display: none;
-    position: fixed;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    padding: 16px;
-    background: var(--mat-sys-surface-container-lowest);
-    box-shadow: 0 -4px 20px color-mix(in srgb, var(--mat-sys-on-surface) 10%, transparent);
-    z-index: 100;
-}
-
-:host-context(.dark-theme) .mobile-save-bar {
-    background: var(--mat-sys-surface-container-lowest);
-    box-shadow: 0 -4px 20px color-mix(in srgb, black 50%, transparent);
-}
-
-.mobile-save-bar button {
-    width: 100%;
-}
-
-@include bp.max-768 {
     .qs-form-actions-floating {
         display: none;
     }
@@ -486,16 +623,4 @@
     .mobile-save-bar {
         display: block;
     }
-
-    /* Add padding to bottom of content to avoid overlap with sticky bar */
-    .settings-content {
-        padding-bottom: 80px;
-    }
-}
-
-.qs-form-actions-floating button[disabled],
-.mobile-save-bar button[disabled] {
-    opacity: 0.5;
-    filter: grayscale(1);
-    pointer-events: none;
 }

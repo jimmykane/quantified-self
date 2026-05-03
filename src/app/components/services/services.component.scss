@@ -3,8 +3,6 @@
 .settings-container {
     display: block;
     min-height: calc(100vh - var(--qs-effective-top-offset, 0px));
-    // background-color: #f4f7f6; /* REMOVED */
-
     position: relative;
 }
 
@@ -14,78 +12,164 @@
     }
 }
 
-/* Tab Navigation */
-.settings-nav {
-    padding: 0 0 16px;
-    margin-bottom: 0;
-}
-
-/* Main Content Area */
 .settings-content {
-    flex: 1;
-    padding: 24px 40px;
-    max-width: 900px;
+    padding: 32px 40px;
+    max-width: 1180px;
     margin: 0 auto;
 }
 
-.section-header {
-    margin-bottom: 32px;
+.services-workspace {
+    display: grid;
+    grid-template-columns: 240px minmax(0, 1fr);
+    gap: 32px;
+    align-items: start;
 }
 
-.section-header h1 {
-    margin: 0 0 8px 0;
-    font-size: 1.8rem;
-    font-weight: 400;
-    // color: var(--text-primary); /* REMOVED */
+.workspace-nav {
+    position: sticky;
+    top: calc(var(--qs-effective-top-offset, 0px) + 24px);
 }
 
-.header-content {
-    display: flex;
-    align-items: center;
-    gap: 24px;
-    padding: 24px;
-    padding-bottom: 0;
+.workspace-nav-title {
+    margin: 0 0 12px;
+    color: var(--mat-sys-on-surface-variant);
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
 }
 
-.layer-icon {
-    width: 64px;
-    height: 64px;
-    font-size: 64px;
-    margin-bottom: 0;
-    transform-origin: left;
-}
-
-.section-header p {
-    margin: 0;
-    // color: var(--text-secondary); /* REMOVED */
-    opacity: 0.7;
-    font-size: 1rem;
-}
-
-/* Card Styling */
-.settings-card {
-    // background: var(--card-bg); /* REMOVED */
-    // Use default material card styling or surface default
-    border-radius: 12px;
-    // box-shadow: var(--card-shadow); /* REMOVED */
-    margin-bottom: 24px;
-    overflow: hidden;
-}
-
-.card-content {
-    padding: 24px;
+.workspace-nav-list {
     display: flex;
     flex-direction: column;
-    gap: 20px;
+    gap: 4px;
 }
 
-/* Mobile Responsive Adjustments */
-@include bp.xsmall {
-    .settings-nav {
-        padding: 0;
-    }
+.workspace-nav-button {
+    width: 100%;
+    height: auto;
+    min-height: 56px;
+    justify-content: flex-start;
+    padding: 10px 12px;
+    border-radius: 8px;
+    color: var(--mat-sys-on-surface-variant);
+    text-align: left;
+}
 
+.workspace-nav-button.active {
+    background: var(--mat-sys-secondary-container);
+    color: var(--mat-sys-on-secondary-container);
+}
+
+.workspace-nav-icon {
+    flex: 0 0 28px;
+    width: 28px;
+    height: 28px;
+    margin-right: 12px;
+}
+
+.workspace-nav-copy {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 2px;
+    line-height: 1.2;
+}
+
+.workspace-nav-label {
+    color: var(--mat-sys-on-surface);
+    font-size: 0.95rem;
+    font-weight: 600;
+}
+
+.workspace-nav-button.active .workspace-nav-label {
+    color: var(--mat-sys-on-secondary-container);
+}
+
+.workspace-nav-description {
+    overflow: hidden;
+    color: var(--mat-sys-on-surface-variant);
+    font-size: 0.78rem;
+    font-weight: 400;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.workspace-main {
+    min-width: 0;
+}
+
+.service-detail-header {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    margin-bottom: 24px;
+}
+
+.service-detail-logo {
+    flex: 0 0 72px;
+    width: 72px;
+    height: 56px;
+    font-size: 56px;
+}
+
+.service-detail-header h1 {
+    margin: 0 0 6px;
+    color: var(--mat-sys-on-surface);
+    font-size: 2rem;
+    line-height: 1.15;
+    font-weight: 700;
+}
+
+.service-detail-header p {
+    margin: 0;
+    color: var(--mat-sys-on-surface-variant);
+    font-size: 1rem;
+    line-height: 1.5;
+}
+
+.service-detail-body {
+    padding-top: 24px;
+}
+
+@include bp.max-768 {
     .settings-content {
         padding: 24px 16px;
+    }
+
+    .services-workspace {
+        display: block;
+    }
+
+    .workspace-nav {
+        position: static;
+        margin-bottom: 24px;
+    }
+
+    .workspace-nav-list {
+        flex-direction: row;
+        gap: 8px;
+        overflow-x: auto;
+        padding-bottom: 4px;
+    }
+
+    .workspace-nav-button {
+        flex: 0 0 184px;
+    }
+
+    .service-detail-header {
+        align-items: flex-start;
+        gap: 16px;
+    }
+
+    .service-detail-logo {
+        flex-basis: 56px;
+        width: 56px;
+        height: 44px;
+        font-size: 44px;
+    }
+
+    .service-detail-header h1 {
+        font-size: 1.5rem;
     }
 }

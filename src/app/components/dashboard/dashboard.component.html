@@ -57,6 +57,7 @@
           [isLoading]="isLoading" [compact]="true" [selectedDateRange]="eventTableFilters.dateRange"
           [selectedStartDate]="searchStartDate" [selectedEndDate]="searchEndDate" [startOfTheWeek]="startOfTheWeek"
           [selectedActivityTypes]="eventTableFilters.activityTypes"
+          [toolbarRangeLayout]="true"
           [showMergedEventsToggle]="hasMergedEvents"
           [includeMergedEvents]="eventTableFilters.includeMergedEvents !== false"
           (searchChange)="search($event)">

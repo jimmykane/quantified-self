@@ -25,6 +25,12 @@ import { firstValueFrom } from 'rxjs';
 import { take } from 'rxjs/operators';
 import { AppHapticsService } from '../../services/app.haptics.service';
 
+interface DateRangeShortcutOption {
+  ariaLabel: string;
+  label: string;
+  value: DateRanges;
+}
+
 @Component({
   selector: 'app-event-search',
   templateUrl: './event-search.component.html',
@@ -44,6 +50,7 @@ export class EventSearchComponent extends LoadingAbstractDirective implements On
   @Input() showMergedEventsToggle = false;
   @Input() includeMergedEvents = true;
   @Input() compact = false;
+  @Input() toolbarRangeLayout = false;
   @Input() mergedEventsToggleDisabled = false;
   @Input() mergedEventsToggleLabel = 'Merged events';
   @Input() mergedEventsToggleHint = 'Merged events are excluded';
@@ -65,6 +72,9 @@ export class EventSearchComponent extends LoadingAbstractDirective implements On
   public searchFormGroup!: UntypedFormGroup;
   public dateRanges = DateRanges;
   public currentYear = new Date().getFullYear();
+  public primaryToolbarDateRangeOptions: DateRangeShortcutOption[] = [];
+  public secondaryToolbarDateRangeOptions: DateRangeShortcutOption[] = [];
+  public secondaryDateRangeButtonLabel = 'More';
   constructor(
     changeDetector: ChangeDetectorRef,
     private dialog?: MatDialog,
@@ -82,6 +92,7 @@ export class EventSearchComponent extends LoadingAbstractDirective implements On
   }
 
   ngOnInit(): void {
+    this.syncToolbarDateRangeOptions();
     const { startDate, endDate } = this.resolveCurrentRangeDates();
     this.searchFormGroup = new UntypedFormGroup({
       search: new UntypedFormControl(null, [
@@ -103,6 +114,10 @@ export class EventSearchComponent extends LoadingAbstractDirective implements On
   }
 
   ngOnChanges(changes: SimpleChanges): void {
+    if (changes['selectedDateRange'] || changes['dateRangesToShow'] || changes['compact']) {
+      this.syncToolbarDateRangeOptions();
+    }
+
     if (!this.searchFormGroup) {
       return;
     }
@@ -154,13 +169,26 @@ export class EventSearchComponent extends LoadingAbstractDirective implements On
   onSubmit(event) {
     event.preventDefault();
     this.selectedDateRange = this.dateRanges.custom;
+    this.syncToolbarDateRangeOptions();
     this.search();
     this.searchFormGroup.markAsPristine();
   }
 
   async dateToggleChange(event: MatButtonToggleChange) {
+    const nextRange = event.value ?? event.source?.value;
+    return this.selectDateRange(nextRange);
+  }
+
+  async onSecondaryDateRangeSelection(dateRange: DateRanges) {
+    return this.selectDateRange(dateRange);
+  }
+
+  private async selectDateRange(nextRange: DateRanges) {
+    if (nextRange === undefined || nextRange === null) {
+      return;
+    }
+
     this.hapticsService?.selection();
-    const nextRange = event.source.value;
     const previousRange = this.selectedDateRange;
     if (nextRange === DateRanges.all && previousRange !== DateRanges.all) {
       const confirmed = await this.confirmAllRangeSelection();
@@ -169,6 +197,7 @@ export class EventSearchComponent extends LoadingAbstractDirective implements On
         const previousRangeDates = this.resolveCurrentRangeDates();
         this.startDateControl?.setValue(previousRangeDates.startDate);
         this.endDateControl?.setValue(previousRangeDates.endDate);
+        this.syncToolbarDateRangeOptions();
         return;
       }
     }
@@ -176,7 +205,8 @@ export class EventSearchComponent extends LoadingAbstractDirective implements On
     const computedRange = getDatesForDateRange(nextRange, this.startOfTheWeek);
     this.startDateControl?.setValue(computedRange.startDate);
     this.endDateControl?.setValue(computedRange.endDate);
-    this.selectedDateRange = event.source.value;
+    this.selectedDateRange = nextRange;
+    this.syncToolbarDateRangeOptions();
     return this.search();
   }
 
@@ -195,12 +225,14 @@ export class EventSearchComponent extends LoadingAbstractDirective implements On
     }
     this.hapticsService?.selection();
     this.selectedDateRange = this.dateRanges.custom;
+    this.syncToolbarDateRangeOptions();
     return this.search();
   }
 
   setCustomDateRange() {
     this.hapticsService?.selection();
     this.selectedDateRange = this.dateRanges.custom;
+    this.syncToolbarDateRangeOptions();
   }
 
   async onActivityTypesChange(activityTypes) {
@@ -230,6 +262,42 @@ export class EventSearchComponent extends LoadingAbstractDirective implements On
     return {
       startDate: range.startDate ?? null,
       endDate: range.endDate ?? null,
+    };
+  }
+
+  private syncToolbarDateRangeOptions(): void {
+    const visibleDateRanges = new Set(this.dateRangesToShow ?? []);
+
+    this.primaryToolbarDateRangeOptions = [
+      this.createDateRangeShortcut(DateRanges.thisWeek, 'This week', 'This wk', 'This week'),
+      this.createDateRangeShortcut(DateRanges.lastWeek, 'Last week', 'Last wk', 'Last week'),
+      this.createDateRangeShortcut(DateRanges.lastSevenDays, '7 days', '7d', '7 days'),
+      this.createDateRangeShortcut(DateRanges.thisMonth, 'This month', 'This mo', 'This month'),
+      this.createDateRangeShortcut(DateRanges.lastMonth, 'Last month', 'Last mo', 'Last month'),
+      this.createDateRangeShortcut(DateRanges.lastThirtyDays, '30 days', '30d', '30 days'),
+    ].filter(option => visibleDateRanges.has(option.value));
+
+    this.secondaryToolbarDateRangeOptions = [
+      this.createDateRangeShortcut(DateRanges.thisYear, `${this.currentYear}`, `${this.currentYear}`, 'This year'),
+      this.createDateRangeShortcut(DateRanges.lastYear, `${this.currentYear - 1}`, `${this.currentYear - 1}`, 'Last year'),
+      this.createDateRangeShortcut(DateRanges.all, 'All', 'All', 'All'),
+    ].filter(option => visibleDateRanges.has(option.value));
+
+    this.secondaryDateRangeButtonLabel = this.secondaryToolbarDateRangeOptions.find(
+      option => option.value === this.selectedDateRange,
+    )?.label ?? 'More';
+  }
+
+  private createDateRangeShortcut(
+    value: DateRanges,
+    label: string,
+    compactLabel: string,
+    ariaLabel: string,
+  ): DateRangeShortcutOption {
+    return {
+      ariaLabel,
+      label: this.compact ? compactLabel : label,
+      value,
     };
   }
 
