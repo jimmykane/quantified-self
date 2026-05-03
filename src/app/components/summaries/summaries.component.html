@@ -98,29 +98,28 @@
   @if (kpiLaneTiles.length && mainGridTiles.length) {
   <mat-divider class="dashboard-section-divider"></mat-divider>
   }
-  <div
-    class="dashboard-grid"
+  @if (mainGridTiles.length) {
+  <app-dashboard-tile-board
     cdkDropList
     cdkDropListOrientation="mixed"
     [cdkDropListData]="mainGridTiles"
     [cdkDropListDisabled]="!desktopTileDragEnabled"
     [class.desktop-tile-drop-list]="desktopTileDragEnabled"
-    [style.--dashboard-cols]="numberOfCols"
-    [style.--dashboard-row-height]="rowHeight"
-    [style.--dashboard-grid-gap]="'1em'"
+    [cols]="numberOfCols"
+    [rowHeight]="rowHeight"
     (cdkDropListSorted)="onTilesSort($event)"
     (cdkDropListDropped)="onTilesDrop($event)">
     @for (tile of mainGridTiles; track trackByTile($index, tile)) {
-    <div
-      class="dashboard-grid-tile"
+    <app-dashboard-tile-cell
       cdkDrag
-      [cdkDragPreviewContainer]="'parent'"
+      [cdkDragPreviewContainer]="'global'"
       [cdkDragDisabled]="!desktopTileDragEnabled"
       [class.desktop-draggable-tile]="desktopTileDragEnabled"
-      [style.grid-column]="'span ' + (tile.size.columns > numberOfCols ? numberOfCols : tile.size.columns)"
-      [style.grid-row]="'span ' + tile.size.rows">
+      [columns]="tile.size.columns"
+      [rows]="tile.size.rows"
+      [maxColumns]="numberOfCols">
       @if (tile.type === tileTypes.Chart) {
-      <app-tile-chart class="qs-glass-card-panel" [user]="user" [type]="tile.type" [chartType]="getChartTile(tile).chartType"
+      <app-tile-chart [user]="user" [type]="tile.type" [chartType]="getChartTile(tile).chartType"
         [isLoading]="isTileLoading(tile)" [data]="getChartTile(tile).data" [showActions]="showActions" [darkTheme]="darkTheme"
         [dataType]="getChartTile(tile).dataType" [dataValueType]="getChartTile(tile).dataValueType"
         [dataCategoryType]="getChartTile(tile).dataCategoryType" [dataTimeInterval]="getChartTile(tile).timeInterval"
@@ -151,7 +150,7 @@
         (sleepTrendNavigate)="onSleepTrendNavigate($event)"></app-tile-chart>
       }
       @if (tile.type === tileTypes.Map) {
-      <app-tile-map class="qs-glass-card-panel" [user]="user" [type]="tile.type" [isLoading]="isTileLoading(tile)"
+      <app-tile-map [user]="user" [type]="tile.type" [isLoading]="isTileLoading(tile)"
         [showActions]="showActions" [events]="getMapTile(tile).events" [mapStyle]="getMapTile(tile).mapStyle || 'default'"
         [clusterMarkers]="getMapTile(tile).clusterMarkers" [size]="tile.size" [order]="tile.order"
         [enableDesktopDrag]="desktopTileDragEnabled" [eventFilters]="getTileEventFilters(tile)"
@@ -161,8 +160,9 @@
         (eventFilterActivityTypesChange)="onTileEventFilterActivityTypesChange(tile.order, $event)"
         (eventFilterNavigate)="onTileEventFilterNavigate(tile.order, $event)"></app-tile-map>
       }
-    </div>
+    </app-dashboard-tile-cell>
     }
-  </div>
+  </app-dashboard-tile-board>
+  }
 </section>
 }

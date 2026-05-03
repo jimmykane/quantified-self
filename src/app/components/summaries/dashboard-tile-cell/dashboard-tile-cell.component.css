@@ -1,0 +1,8 @@
+:host {
+  background: var(--mat-sys-surface);
+  box-sizing: border-box;
+  display: block;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+}

@@ -27,6 +27,8 @@ import {
   DASHBOARD_SLEEP_TREND_CHART_TYPE,
 } from '../../helpers/dashboard-special-chart-types';
 import { SummariesComponent } from './summaries.component';
+import { DashboardTileBoardComponent } from './dashboard-tile-board/dashboard-tile-board.component';
+import { DashboardTileCellComponent } from './dashboard-tile-cell/dashboard-tile-cell.component';
 
 describe('SummariesComponent', () => {
   let component: SummariesComponent;
@@ -113,7 +115,7 @@ describe('SummariesComponent', () => {
     });
 
     await TestBed.configureTestingModule({
-      declarations: [SummariesComponent],
+      declarations: [SummariesComponent, DashboardTileBoardComponent, DashboardTileCellComponent],
       schemas: [NO_ERRORS_SCHEMA],
       providers: [
         { provide: AppThemeService, useValue: mockThemeService },
@@ -165,12 +167,20 @@ describe('SummariesComponent', () => {
       timeInterval: TimeIntervals.Daily,
       size: { columns: 1, rows: 1 },
     } as any;
+    const mainMapTile = {
+      type: TileTypes.Map,
+      order: 2,
+      events: [],
+      mapStyle: 'default',
+      clusterMarkers: true,
+      size: { columns: 1, rows: 1 },
+    } as any;
 
     component.user = { settings: { dashboardSettings: { tiles: [] } } } as any;
     component.showActions = true;
-    component.tiles = [kpiTile, mainGridTile];
+    component.tiles = [kpiTile, mainGridTile, mainMapTile];
     component.kpiLaneTiles = [kpiTile];
-    component.mainGridTiles = [mainGridTile];
+    component.mainGridTiles = [mainGridTile, mainMapTile];
 
     fixture.detectChanges();
 
@@ -184,9 +194,19 @@ describe('SummariesComponent', () => {
     expect(todaySection?.querySelector('.dashboard-manager-button-mobile')).not.toBeNull();
     expect(todaySection?.querySelector('.dashboard-kpi-lane')).not.toBeNull();
     expect(todaySection?.querySelectorAll('.dashboard-kpi-tile')).toHaveLength(1);
+    expect(todaySection?.querySelector('app-tile-chart')?.classList.contains('qs-glass-card-panel')).toBe(true);
     expect(nativeElement.querySelector('.dashboard-summary-actions')).toBeNull();
     expect(nativeElement.querySelectorAll('.dashboard-section-divider')).toHaveLength(1);
-    expect(nativeElement.querySelectorAll('.dashboard-grid-tile')).toHaveLength(1);
+    const board = nativeElement.querySelector('app-dashboard-tile-board') as HTMLElement | null;
+    expect(board).not.toBeNull();
+    expect(board?.style.getPropertyValue('--dashboard-tile-board-cols')).toBe(`${component.numberOfCols}`);
+    expect(nativeElement.querySelectorAll('app-dashboard-tile-cell.dashboard-grid-tile')).toHaveLength(2);
+    const mainChart = board?.querySelector('app-tile-chart') as HTMLElement | null;
+    expect(mainChart).not.toBeNull();
+    expect(mainChart?.classList.contains('qs-glass-card-panel')).toBe(false);
+    const mainMap = board?.querySelector('app-tile-map') as HTMLElement | null;
+    expect(mainMap).not.toBeNull();
+    expect(mainMap?.classList.contains('qs-glass-card-panel')).toBe(false);
   });
 
   it('renders the fallback dashboard manager action when there is no Today section', () => {
