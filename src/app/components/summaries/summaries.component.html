@@ -45,7 +45,7 @@
       }
     </div>
     <div
-      class="dashboard-kpi-lane"
+      class="qs-glass-card-panel dashboard-kpi-lane"
       cdkDropList
       cdkDropListOrientation="mixed"
       [cdkDropListData]="kpiLaneTiles"
@@ -60,7 +60,7 @@
         [cdkDragPreviewContainer]="'parent'"
         [cdkDragDisabled]="!desktopTileDragEnabled"
         [class.desktop-draggable-tile]="desktopTileDragEnabled">
-        <app-tile-chart class="qs-glass-card-panel" [user]="user" [type]="tile.type" [chartType]="getChartTile(tile).chartType"
+        <app-tile-chart [user]="user" [type]="tile.type" [chartType]="getChartTile(tile).chartType"
           [isLoading]="isTileLoading(tile)" [data]="getChartTile(tile).data" [showActions]="showActions" [darkTheme]="darkTheme"
           [compactKpiRow]="true"
           [dataType]="getChartTile(tile).dataType" [dataValueType]="getChartTile(tile).dataValueType"
@@ -94,9 +94,6 @@
       }
     </div>
   </section>
-  }
-  @if (kpiLaneTiles.length && mainGridTiles.length) {
-  <mat-divider class="dashboard-section-divider"></mat-divider>
   }
   @if (mainGridTiles.length) {
   <app-dashboard-tile-board

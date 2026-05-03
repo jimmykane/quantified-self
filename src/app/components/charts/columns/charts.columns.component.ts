@@ -34,7 +34,13 @@ import {
 } from '../../../helpers/echarts-tooltip-interaction.helper';
 import { buildDashboardEChartsStyleTokens } from '../../../helpers/dashboard-echarts-style.helper';
 import { buildDashboardValueAxisConfig } from '../../../helpers/dashboard-echarts-yaxis.helper';
-import { ECHARTS_GLOBAL_FONT_FAMILY, resolveEChartsThemeName } from '../../../helpers/echarts-theme.helper';
+import {
+  ECHARTS_DASHBOARD_CHART_TITLE_FONT_FAMILY,
+  ECHARTS_DASHBOARD_CHART_TITLE_FONT_SIZE,
+  ECHARTS_DASHBOARD_CHART_TITLE_FONT_WEIGHT,
+  ECHARTS_GLOBAL_FONT_FAMILY,
+  resolveEChartsThemeName
+} from '../../../helpers/echarts-theme.helper';
 import {
   formatDashboardDataDisplay,
   formatDashboardNumericValue,
@@ -375,11 +381,11 @@ export class ChartsColumnsComponent implements AfterViewInit, OnChanges, OnDestr
               type: 'text',
               style: {
                 text: summaryLabel,
-                fontSize: isCompactLayout ? 12 : 13,
-                fontWeight: 500,
+                fontSize: ECHARTS_DASHBOARD_CHART_TITLE_FONT_SIZE,
+                fontWeight: ECHARTS_DASHBOARD_CHART_TITLE_FONT_WEIGHT,
                 fill: textColor,
                 opacity: 0.85,
-                fontFamily: "'Barlow Condensed', sans-serif"
+                fontFamily: ECHARTS_DASHBOARD_CHART_TITLE_FONT_FAMILY
               },
               left: 0,
               top: 0

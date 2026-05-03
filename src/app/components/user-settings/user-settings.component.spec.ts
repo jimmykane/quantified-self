@@ -209,6 +209,41 @@ describe('UserSettingsComponent', () => {
         ]);
     });
 
+    it('renders the settings selector as Material tab navigation', () => {
+        const tabNav = fixture.nativeElement.querySelector('nav[mat-tab-nav-bar]');
+        const tabLabels = Array.from(tabNav.querySelectorAll('.mat-mdc-tab-link'))
+            .map((link: Element) => link.querySelector('.settings-tab-label > span:last-child')?.textContent?.trim());
+
+        expect(tabNav).toBeTruthy();
+        expect(tabLabels).toEqual([
+            'Profile',
+            'General',
+            'Dashboard',
+            'Maps',
+            'Charts',
+            'Units',
+            'Delete Account',
+        ]);
+    });
+
+    it('renders the desktop settings selector as vertical Material list navigation', () => {
+        const desktopNav = fixture.nativeElement.querySelector('.desktop-section-nav');
+        const navLabels = Array.from(desktopNav.querySelectorAll('.desktop-section-nav-label'))
+            .map((label: Element) => label.textContent?.trim());
+
+        expect(desktopNav).toBeTruthy();
+        expect(desktopNav.querySelector('mat-nav-list')).toBeTruthy();
+        expect(navLabels).toEqual([
+            'Profile',
+            'General',
+            'Dashboard',
+            'Maps',
+            'Charts',
+            'Units',
+            'Delete Account',
+        ]);
+    });
+
     it('shows delete account as its own final settings section', () => {
         const sectionIds = component.settingsSectionOptions.map(section => section.id);
 

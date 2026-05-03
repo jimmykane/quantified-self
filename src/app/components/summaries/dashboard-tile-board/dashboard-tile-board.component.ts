@@ -8,6 +8,9 @@ import { ChangeDetectionStrategy, Component, HostBinding, Input } from '@angular
   standalone: false,
 })
 export class DashboardTileBoardComponent {
+  @HostBinding('class.qs-glass-card-panel')
+  readonly glassPanelClass = true;
+
   @Input() cols: number | string | null = 1;
   @Input() rowHeight: string | null = null;
 

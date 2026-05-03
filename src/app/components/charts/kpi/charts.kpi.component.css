@@ -18,7 +18,7 @@
   align-items: center;
   box-sizing: border-box;
   gap: 8px;
-  grid-template-columns: minmax(0, 1fr) 88px;
+  grid-template-columns: minmax(0, 1fr) 94px;
   grid-template-rows: minmax(0, 1fr);
   padding: 6px 12px;
 }
@@ -37,7 +37,7 @@
 .kpi-layout-row .kpi-header {
   align-items: center;
   column-gap: 12px;
-  grid-template-columns: minmax(0, 1fr) 72px;
+  grid-template-columns: minmax(0, 1fr) 82px;
   padding: 0;
 }
 
@@ -67,10 +67,6 @@
 .kpi-title {
   flex: 0 0 auto;
   min-width: auto;
-  font-family: 'Barlow Condensed', sans-serif;
-  font-size: 0.9rem;
-  font-weight: 600;
-  line-height: 1.1;
   color: var(--mat-sys-on-surface-variant);
   white-space: nowrap;
   overflow: visible;
@@ -79,7 +75,6 @@
 
 .kpi-layout-row .kpi-title {
   flex: 0 1 auto;
-  font-size: 0.82rem;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -157,7 +152,7 @@
 
 .kpi-layout-row .kpi-value {
   font-variant-numeric: tabular-nums;
-  font-size: 1.18rem;
+  font-size: 1.34rem;
   white-space: nowrap;
 }
 
@@ -169,7 +164,7 @@
 }
 
 .kpi-layout-row .kpi-primary-label {
-  font-size: 0.61rem;
+  font-size: 0.69rem;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -189,7 +184,7 @@
 
 .kpi-layout-row .kpi-secondary-label {
   flex: 0 1 auto;
-  font-size: 0.66rem;
+  font-size: 0.7rem;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -206,7 +201,7 @@
 
 .kpi-layout-row .kpi-secondary-value {
   flex: 0 0 auto;
-  font-size: 0.82rem;
+  font-size: 0.92rem;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

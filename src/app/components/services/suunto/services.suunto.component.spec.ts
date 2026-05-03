@@ -92,16 +92,14 @@ describe('ServicesSuuntoComponent', () => {
         expect(accountIcon).toBeFalsy();
     });
 
-    describe('History Import Card', () => {
+    describe('History Import Tab', () => {
         it('should be unlocked/available if user has pro access AND is connected', () => {
             component.hasProAccess = true;
             component.isAdmin = false;
-            // Mock connected state
             component.serviceTokens = [{ accessToken: 'token' } as any];
             fixture.detectChanges();
 
-            const card = fixture.nativeElement.querySelectorAll('.feature-card')[1]; // History import is the second card
-            const historyForm = card.querySelector('app-history-import-form');
+            const historyForm = fixture.nativeElement.querySelector('app-history-import-form');
 
             expect(historyForm).toBeTruthy();
         });
@@ -111,29 +109,26 @@ describe('ServicesSuuntoComponent', () => {
             component.serviceTokens = []; // Not connected
             fixture.detectChanges();
 
-            const card = fixture.nativeElement.querySelectorAll('.feature-card')[1];
-            const historyForm = card.querySelector('app-history-import-form');
-            const cardContent = card.textContent;
+            const historyForm = fixture.nativeElement.querySelector('app-history-import-form');
+            const content = fixture.nativeElement.textContent;
 
             expect(historyForm).toBeFalsy();
-            expect(cardContent).toContain('Connect Account First');
+            expect(content).toContain('before importing history');
         });
     });
 
-    describe('Upload Cards', () => {
+    describe('Uploads Tab', () => {
         it('should hide upload actions and show connect-first messaging when pro user is not connected', () => {
             component.hasProAccess = true;
             component.serviceTokens = [];
             fixture.detectChanges();
 
-            const cards = fixture.nativeElement.querySelectorAll('.feature-card');
-            const fitUploadCard = cards[2];
-            const gpxUploadCard = cards[3];
+            const content = fixture.nativeElement.textContent;
 
-            expect(fitUploadCard.querySelector('app-upload-activity-to-service')).toBeFalsy();
-            expect(gpxUploadCard.querySelector('app-upload-route-to-service')).toBeFalsy();
-            expect(fitUploadCard.textContent).toContain('Connect Account First');
-            expect(gpxUploadCard.textContent).toContain('Connect Account First');
+            expect(fixture.nativeElement.querySelector('app-upload-activity-to-service')).toBeFalsy();
+            expect(fixture.nativeElement.querySelector('app-upload-route-to-service')).toBeFalsy();
+            expect(content).toContain('before uploading activities');
+            expect(content).toContain('before uploading routes');
         });
 
         it('should render upload actions when pro user is connected', () => {
@@ -141,12 +136,8 @@ describe('ServicesSuuntoComponent', () => {
             component.serviceTokens = [{ accessToken: 'token' } as any];
             fixture.detectChanges();
 
-            const cards = fixture.nativeElement.querySelectorAll('.feature-card');
-            const fitUploadCard = cards[2];
-            const gpxUploadCard = cards[3];
-
-            expect(fitUploadCard.querySelector('app-upload-activity-to-service')).toBeTruthy();
-            expect(gpxUploadCard.querySelector('app-upload-route-to-service')).toBeTruthy();
+            expect(fixture.nativeElement.querySelector('app-upload-activity-to-service')).toBeTruthy();
+            expect(fixture.nativeElement.querySelector('app-upload-route-to-service')).toBeTruthy();
         });
     });
 

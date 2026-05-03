@@ -27,29 +27,46 @@
         </ng-template>
 
         <div class="settings-workspace">
-          <aside class="workspace-nav" aria-label="Settings sections">
-            <div class="workspace-nav-title">Settings</div>
-            <div class="workspace-nav-list">
+          <nav
+            mat-tab-nav-bar
+            [tabPanel]="settingsTabsPanel"
+            mat-stretch-tabs="false"
+            class="mobile-settings-tabs"
+            aria-label="Settings sections">
+            @for (section of settingsSectionOptions; track section.id) {
+            <a
+              href=""
+              mat-tab-link
+              [active]="activeSection === section.id"
+              (click)="$event.preventDefault(); selectSettingsSection(section.id)">
+              <span class="settings-tab-label">
+                <mat-icon>{{ section.icon }}</mat-icon>
+                <span>{{ section.label }}</span>
+              </span>
+            </a>
+            }
+          </nav>
+
+          <aside class="desktop-section-nav" aria-label="Settings sections">
+            <div class="desktop-section-nav-title">Settings</div>
+            <mat-nav-list class="desktop-section-nav-list">
               @for (section of settingsSectionOptions; track section.id) {
-              <button
-                type="button"
-                mat-button
-                class="workspace-nav-button"
-                [class.active]="activeSection === section.id"
-                [attr.aria-current]="activeSection === section.id ? 'page' : null"
-                (click)="selectSettingsSection(section.id)">
-                <mat-icon class="workspace-nav-icon">{{ section.icon }}</mat-icon>
-                <span class="workspace-nav-copy">
-                  <span class="workspace-nav-label">{{ section.label }}</span>
-                  <span class="workspace-nav-description">{{ section.description }}</span>
-                </span>
-              </button>
+              <a
+                href=""
+                mat-list-item
+                [activated]="activeSection === section.id"
+                (click)="$event.preventDefault(); selectSettingsSection(section.id)">
+                <mat-icon matListItemIcon>{{ section.icon }}</mat-icon>
+                <span matListItemTitle class="desktop-section-nav-label">{{ section.label }}</span>
+                <span matListItemLine>{{ section.description }}</span>
+              </a>
               }
-            </div>
+            </mat-nav-list>
           </aside>
 
-          <section class="workspace-main">
-            <ng-container *ngTemplateOutlet="settingsValidationInfo"></ng-container>
+          <mat-tab-nav-panel #settingsTabsPanel>
+            <section class="workspace-main">
+              <ng-container *ngTemplateOutlet="settingsValidationInfo"></ng-container>
 
             @switch (activeSection) {
             @case ('app') {
@@ -440,7 +457,8 @@
             </section>
             }
             }
-          </section>
+            </section>
+          </mat-tab-nav-panel>
         </div>
 
         @if (activeSection !== 'delete-account') {

@@ -44,9 +44,6 @@
 
 .form-status-title {
   margin: 0;
-  font-size: 0.96rem;
-  font-weight: 700;
-  line-height: 1.1;
   color: var(--mat-sys-on-surface);
 }
 
@@ -145,10 +142,6 @@
 @media (max-width: 640px) {
   .form-chart-header {
     padding: 6px 8px 0;
-  }
-
-  .form-status-title {
-    font-size: 0.9rem;
   }
 
   .form-status-row {

@@ -22,6 +22,7 @@ describe('DashboardTileBoardComponent', () => {
     fixture.detectChanges();
 
     const host = fixture.nativeElement as HTMLElement;
+    expect(host.classList.contains('qs-glass-card-panel')).toBe(true);
     expect(host.style.getPropertyValue('--dashboard-tile-board-cols')).toBe('3');
     expect(host.style.getPropertyValue('--dashboard-tile-board-row-height')).toBe('180px');
   });

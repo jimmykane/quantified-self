@@ -169,7 +169,7 @@ describe('ChartsKpiComponent', () => {
     expect(component.titleDisplay).toBe('Monotony / Strain');
     expect(nativeElement.querySelector('.kpi-layout-row')).not.toBeNull();
     expect(nativeElement.querySelector('.kpi-layout-reserve-actions')).not.toBeNull();
-    expect(nativeElement.querySelector('.kpi-copy-block .kpi-title')?.textContent?.trim()).toBe('Monotony / Strain');
+    expect(nativeElement.querySelector('.kpi-copy-block .kpi-title.qs-dashboard-chart-title')?.textContent?.trim()).toBe('Monotony / Strain');
     expect(nativeElement.querySelector('.kpi-subtitle-row')?.textContent).toContain('Strain');
     expect(nativeElement.querySelector('.kpi-value-block .kpi-value')?.textContent?.trim()).toBe('612');
 

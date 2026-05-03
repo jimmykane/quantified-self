@@ -13,25 +13,30 @@
 }
 
 .settings-content {
-    padding: 32px 40px;
     max-width: 1180px;
     margin: 0 auto;
+    padding: 32px 40px;
 }
 
-.services-workspace {
+.services-shell {
     display: grid;
     grid-template-columns: 240px minmax(0, 1fr);
     gap: 32px;
     align-items: start;
 }
 
-.workspace-nav {
+.mobile-section-tabs {
+    display: none;
+    width: 100%;
+}
+
+.desktop-section-nav {
     position: sticky;
     top: calc(var(--qs-effective-top-offset, 0px) + 24px);
 }
 
-.workspace-nav-title {
-    margin: 0 0 12px;
+.desktop-section-nav-title {
+    margin: 0 0 8px;
     color: var(--mat-sys-on-surface-variant);
     font-size: 0.75rem;
     font-weight: 600;
@@ -39,60 +44,20 @@
     text-transform: uppercase;
 }
 
-.workspace-nav-list {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
+.desktop-section-nav-list {
+    padding: 0;
 }
 
-.workspace-nav-button {
-    width: 100%;
-    height: auto;
-    min-height: 56px;
-    justify-content: flex-start;
-    padding: 10px 12px;
-    border-radius: 8px;
-    color: var(--mat-sys-on-surface-variant);
-    text-align: left;
-}
-
-.workspace-nav-button.active {
-    background: var(--mat-sys-secondary-container);
-    color: var(--mat-sys-on-secondary-container);
-}
-
-.workspace-nav-icon {
-    flex: 0 0 28px;
-    width: 28px;
-    height: 28px;
-    margin-right: 12px;
-}
-
-.workspace-nav-copy {
-    display: flex;
-    min-width: 0;
-    flex-direction: column;
-    gap: 2px;
-    line-height: 1.2;
-}
-
-.workspace-nav-label {
-    color: var(--mat-sys-on-surface);
-    font-size: 0.95rem;
-    font-weight: 600;
-}
-
-.workspace-nav-button.active .workspace-nav-label {
-    color: var(--mat-sys-on-secondary-container);
-}
-
-.workspace-nav-description {
-    overflow: hidden;
-    color: var(--mat-sys-on-surface-variant);
-    font-size: 0.78rem;
-    font-weight: 400;
-    text-overflow: ellipsis;
+.section-tab-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
     white-space: nowrap;
+}
+
+.section-tab-label mat-icon {
+    width: 22px;
+    height: 22px;
 }
 
 .workspace-main {
@@ -137,24 +102,18 @@
         padding: 24px 16px;
     }
 
-    .services-workspace {
-        display: block;
+    .services-shell {
+        display: flex;
+        flex-direction: column;
+        gap: 24px;
     }
 
-    .workspace-nav {
-        position: static;
-        margin-bottom: 24px;
+    .desktop-section-nav {
+        display: none;
     }
 
-    .workspace-nav-list {
-        flex-direction: row;
-        gap: 8px;
-        overflow-x: auto;
-        padding-bottom: 4px;
-    }
-
-    .workspace-nav-button {
-        flex: 0 0 184px;
+    .mobile-section-tabs {
+        display: flex;
     }
 
     .service-detail-header {

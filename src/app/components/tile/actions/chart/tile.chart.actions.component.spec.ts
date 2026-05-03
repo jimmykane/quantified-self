@@ -138,6 +138,20 @@ describe('TileChartActionsComponent', () => {
     expect(hapticsMock.selection).toHaveBeenCalledTimes(1);
   });
 
+  it('should hide and ignore layout controls when disabled', async () => {
+    component.showLayoutControls = false;
+    fixture.detectChanges();
+
+    expect((fixture.nativeElement as HTMLElement).querySelector('.tile-size-actions')).toBeNull();
+    expect((fixture.nativeElement as HTMLElement).querySelector('.tile-actions-divider')).toBeNull();
+
+    await component.changeTileColumnSize({ value: 3 } as any);
+
+    expect(userMock.settings.dashboardSettings.tiles[0].size.columns).toBe(1);
+    expect(userMock.updateUserProperties).not.toHaveBeenCalled();
+    expect(hapticsMock.selection).not.toHaveBeenCalled();
+  });
+
   it('should expose move boundaries for the first tile', () => {
     expect(component.canMoveTileBackward()).toBe(false);
     expect(component.canMoveTileForward()).toBe(true);

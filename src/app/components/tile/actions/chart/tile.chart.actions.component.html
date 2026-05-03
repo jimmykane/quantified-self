@@ -4,6 +4,7 @@
 </button>
 <mat-menu #chartOptions="matMenu" class="qs-menu-panel qs-menu-panel-form qs-config-menu qs-tile-actions-menu">
   <div class="tile-actions-menu-shell">
+    @if (showLayoutControls) {
     <section class="tile-actions-section tile-size-actions" aria-label="Tile layout" (click)="$event.stopPropagation()">
       <div class="tile-section-heading">
         <mat-icon aria-hidden="true">dashboard_customize</mat-icon>
@@ -34,6 +35,7 @@
     </section>
 
     <div class="tile-actions-divider" role="separator"></div>
+    }
 
     <button mat-menu-item type="button" class="tile-action-menu-item" (click)="moveTileBackward()" [disabled]="!canMoveTileBackward()">
       <mat-icon>arrow_back</mat-icon>

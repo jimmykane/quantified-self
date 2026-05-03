@@ -1,81 +1,99 @@
 <div class="settings-container">
   <app-loading-overlay [isLoading]="isLoading" [showSkeleton]="false" height="auto">
     <main class="settings-content">
-      <div class="services-workspace">
-        <aside class="workspace-nav" aria-label="Service integrations">
-          <div class="workspace-nav-title">Integrations</div>
-          <div class="workspace-nav-list">
+      <div class="services-shell">
+        <nav
+          mat-tab-nav-bar
+          [tabPanel]="serviceTabsPanel"
+          mat-stretch-tabs="false"
+          class="mobile-section-tabs"
+          aria-label="Service integrations">
+          @for (section of serviceSectionOptions; track section.id) {
+          <a
+            href=""
+            mat-tab-link
+            [active]="activeSection === section.id"
+            (click)="$event.preventDefault(); selectService(section.id)">
+            <span class="section-tab-label">
+              <mat-icon [svgIcon]="section.svgIcon"></mat-icon>
+              <span>{{ section.label }}</span>
+            </span>
+          </a>
+          }
+        </nav>
+
+        <aside class="desktop-section-nav" aria-label="Service integrations">
+          <div class="desktop-section-nav-title">Integrations</div>
+          <mat-nav-list class="desktop-section-nav-list">
             @for (section of serviceSectionOptions; track section.id) {
-            <button
-              type="button"
-              mat-button
-              class="workspace-nav-button"
-              [class.active]="activeSection === section.id"
-              [attr.aria-current]="activeSection === section.id ? 'page' : null"
-              (click)="selectService(section.id)">
-              <mat-icon class="workspace-nav-icon" [svgIcon]="section.svgIcon"></mat-icon>
-              <span class="workspace-nav-copy">
-                <span class="workspace-nav-label">{{ section.label }}</span>
-                <span class="workspace-nav-description">{{ section.description }}</span>
-              </span>
-            </button>
+            <a
+              href=""
+              mat-list-item
+              [activated]="activeSection === section.id"
+              (click)="$event.preventDefault(); selectService(section.id)">
+              <mat-icon matListItemIcon [svgIcon]="section.svgIcon"></mat-icon>
+              <span matListItemTitle class="desktop-section-nav-label">{{ section.label }}</span>
+              <span matListItemLine>{{ section.description }}</span>
+            </a>
             }
-          </div>
+          </mat-nav-list>
         </aside>
 
-        <section class="workspace-main">
-          @switch (activeSection) {
-          @case ('garmin') {
-          <section class="service-detail" aria-labelledby="service-garmin-title">
-            <header class="service-detail-header">
-              <mat-icon class="service-detail-logo" svgIcon="garmin"></mat-icon>
-              <div>
-                <h1 id="service-garmin-title">Garmin Integration</h1>
-                <p>Manage your connection with Garmin Connect.</p>
+        <mat-tab-nav-panel #serviceTabsPanel>
+          <section class="workspace-main">
+            @switch (activeSection) {
+            @case ('garmin') {
+            <section class="service-detail" aria-labelledby="service-garmin-title">
+              <header class="service-detail-header">
+                <mat-icon class="service-detail-logo" svgIcon="garmin"></mat-icon>
+                <div>
+                  <h1 id="service-garmin-title">Garmin Integration</h1>
+                  <p>Manage your connection with Garmin Connect.</p>
+                </div>
+              </header>
+              <mat-divider></mat-divider>
+              <div class="service-detail-body">
+                <app-services-garmin
+                  [user]="user"
+                  [hasProAccess]="hasProAccess"
+                  [isAdmin]="isAdmin">
+                </app-services-garmin>
               </div>
-            </header>
-            <mat-divider></mat-divider>
-            <div class="service-detail-body">
-              <app-services-garmin
-                [user]="user"
-                [hasProAccess]="hasProAccess"
-                [isAdmin]="isAdmin">
-              </app-services-garmin>
-            </div>
-          </section>
-          }
-          @case ('coros') {
-          <section class="service-detail" aria-labelledby="service-coros-title">
-            <header class="service-detail-header">
-              <mat-icon class="service-detail-logo" svgIcon="coros"></mat-icon>
-              <div>
-                <h1 id="service-coros-title">COROS Integration</h1>
-                <p>Manage your connection with COROS.</p>
+            </section>
+            }
+            @case ('coros') {
+            <section class="service-detail" aria-labelledby="service-coros-title">
+              <header class="service-detail-header">
+                <mat-icon class="service-detail-logo" svgIcon="coros"></mat-icon>
+                <div>
+                  <h1 id="service-coros-title">COROS Integration</h1>
+                  <p>Manage your connection with COROS.</p>
+                </div>
+              </header>
+              <mat-divider></mat-divider>
+              <div class="service-detail-body">
+                <app-services-coros [user]="user" [hasProAccess]="hasProAccess"></app-services-coros>
               </div>
-            </header>
-            <mat-divider></mat-divider>
-            <div class="service-detail-body">
-              <app-services-coros [user]="user" [hasProAccess]="hasProAccess"></app-services-coros>
-            </div>
-          </section>
-          }
-          @default {
-          <section class="service-detail" aria-labelledby="service-suunto-title">
-            <header class="service-detail-header">
-              <mat-icon class="service-detail-logo" svgIcon="suunto"></mat-icon>
-              <div>
-                <h1 id="service-suunto-title">Suunto Integration</h1>
-                <p>Manage your connection with Suunto App.</p>
+            </section>
+            }
+            @default {
+            <section class="service-detail" aria-labelledby="service-suunto-title">
+              <header class="service-detail-header">
+                <mat-icon class="service-detail-logo" svgIcon="suunto"></mat-icon>
+                <div>
+                  <h1 id="service-suunto-title">Suunto Integration</h1>
+                  <p>Manage your connection with Suunto App.</p>
+                </div>
+              </header>
+              <mat-divider></mat-divider>
+              <div class="service-detail-body">
+                <app-services-suunto [user]="user" [hasProAccess]="hasProAccess"></app-services-suunto>
               </div>
-            </header>
-            <mat-divider></mat-divider>
-            <div class="service-detail-body">
-              <app-services-suunto [user]="user" [hasProAccess]="hasProAccess"></app-services-suunto>
-            </div>
+            </section>
+            }
+            }
           </section>
-          }
-          }
-        </section>
+        </mat-tab-nav-panel>
       </div>
     </main>
   </app-loading-overlay>

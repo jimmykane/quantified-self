@@ -13,6 +13,9 @@ import { AppWindowService } from '../../services/app.window.service';
 import { of } from 'rxjs';
 import { CUSTOM_ELEMENTS_SCHEMA } from '@angular/core';
 import { ServiceNames } from '@sports-alliance/sports-lib';
+import { MaterialModule } from '../../modules/material.module';
+import { NoopAnimationsModule } from '@angular/platform-browser/animations';
+import { MatIconRegistry } from '@angular/material/icon';
 
 describe('ServicesComponent', () => {
     let component: ServicesComponent;
@@ -21,6 +24,7 @@ describe('ServicesComponent', () => {
     let mockAuthService: any;
     let mockRouter: any;
     let mockActivatedRoute: any;
+    let mockIconRegistry: any;
 
     beforeEach(async () => {
         mockUserService = {
@@ -47,10 +51,16 @@ describe('ServicesComponent', () => {
                 get: vi.fn()
             })
         };
+        mockIconRegistry = {
+            getNamedSvgIcon: vi.fn(() => {
+                const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+                return of(svg);
+            }),
+        };
 
         await TestBed.configureTestingModule({
             declarations: [ServicesComponent],
-            imports: [HttpClientTestingModule, MatSnackBarModule],
+            imports: [HttpClientTestingModule, MatSnackBarModule, MaterialModule, NoopAnimationsModule],
             providers: [
                 { provide: AppUserService, useValue: mockUserService },
                 { provide: AppAuthService, useValue: mockAuthService },
@@ -58,7 +68,8 @@ describe('ServicesComponent', () => {
                 { provide: ActivatedRoute, useValue: mockActivatedRoute },
                 { provide: AppFileService, useValue: {} },
                 { provide: AppEventService, useValue: {} },
-                { provide: AppWindowService, useValue: {} }
+                { provide: AppWindowService, useValue: {} },
+                { provide: MatIconRegistry, useValue: mockIconRegistry }
             ],
             schemas: [CUSTOM_ELEMENTS_SCHEMA]
         }).compileComponents();
@@ -111,5 +122,28 @@ describe('ServicesComponent', () => {
             'garmin',
             'coros',
         ]);
+    });
+
+    it('renders the service selector as Material tab navigation', () => {
+        fixture.detectChanges();
+
+        const tabNav = fixture.nativeElement.querySelector('nav[mat-tab-nav-bar]');
+        const tabLabels = Array.from(tabNav.querySelectorAll('.mat-mdc-tab-link'))
+            .map((link: Element) => link.querySelector('.section-tab-label > span:last-child')?.textContent?.trim());
+
+        expect(tabNav).toBeTruthy();
+        expect(tabLabels).toEqual(['Suunto', 'Garmin', 'COROS']);
+    });
+
+    it('renders the desktop service selector as vertical Material list navigation', () => {
+        fixture.detectChanges();
+
+        const desktopNav = fixture.nativeElement.querySelector('.desktop-section-nav');
+        const navLabels = Array.from(desktopNav.querySelectorAll('.desktop-section-nav-label'))
+            .map((label: Element) => label.textContent?.trim());
+
+        expect(desktopNav).toBeTruthy();
+        expect(desktopNav.querySelector('mat-nav-list')).toBeTruthy();
+        expect(navLabels).toEqual(['Suunto', 'Garmin', 'COROS']);
     });
 });

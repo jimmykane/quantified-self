@@ -139,12 +139,17 @@
     align-items: start;
 }
 
-.workspace-nav {
+.mobile-settings-tabs {
+    display: none;
+    width: 100%;
+}
+
+.desktop-section-nav {
     position: sticky;
     top: calc(var(--qs-effective-top-offset, 0px) + 24px);
 }
 
-.workspace-nav-title {
+.desktop-section-nav-title {
     margin: 0 0 8px;
     color: var(--mat-sys-on-surface-variant);
     font-size: 0.75rem;
@@ -153,55 +158,21 @@
     text-transform: uppercase;
 }
 
-.workspace-nav-list {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
+.desktop-section-nav-list {
+    padding: 0;
 }
 
-.workspace-nav-button {
-    width: 100%;
-    height: auto;
-    min-height: 40px;
-    justify-content: flex-start;
-    padding: 7px 10px;
-    border-radius: 6px;
-    color: var(--mat-sys-on-surface-variant);
-    text-align: left;
+.settings-tab-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    white-space: nowrap;
 }
 
-.workspace-nav-button.active {
-    background: var(--mat-sys-secondary-container);
-    color: var(--mat-sys-on-secondary-container);
-}
-
-.workspace-nav-icon {
-    flex: 0 0 20px;
+.settings-tab-label mat-icon {
+    font-size: 20px;
     width: 20px;
     height: 20px;
-    margin-right: 10px;
-    font-size: 20px;
-}
-
-.workspace-nav-copy {
-    display: flex;
-    min-width: 0;
-    flex-direction: column;
-    line-height: 1.2;
-}
-
-.workspace-nav-label {
-    color: var(--mat-sys-on-surface);
-    font-size: 0.88rem;
-    font-weight: 600;
-}
-
-.workspace-nav-button.active .workspace-nav-label {
-    color: var(--mat-sys-on-secondary-container);
-}
-
-.workspace-nav-description {
-    display: none;
 }
 
 .workspace-main {
@@ -532,23 +503,17 @@
     }
 
     .settings-workspace {
-        display: block;
+        display: flex;
+        flex-direction: column;
+        gap: 24px;
     }
 
-    .workspace-nav {
-        position: static;
-        margin-bottom: 18px;
+    .desktop-section-nav {
+        display: none;
     }
 
-    .workspace-nav-list {
-        flex-direction: row;
-        gap: 8px;
-        overflow-x: auto;
-        padding-bottom: 4px;
-    }
-
-    .workspace-nav-button {
-        flex: 0 0 150px;
+    .mobile-settings-tabs {
+        display: flex;
     }
 
     .settings-panel-header h1 {

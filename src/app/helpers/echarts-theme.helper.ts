@@ -1,4 +1,7 @@
 export const ECHARTS_GLOBAL_FONT_FAMILY = "'Barlow Condensed', sans-serif";
+export const ECHARTS_DASHBOARD_CHART_TITLE_FONT_FAMILY = "'Inter', sans-serif";
+export const ECHARTS_DASHBOARD_CHART_TITLE_FONT_SIZE = 15;
+export const ECHARTS_DASHBOARD_CHART_TITLE_FONT_WEIGHT = 600;
 
 export interface EChartsOfficialThemeTokens {
   themeName: 'light' | 'dark';

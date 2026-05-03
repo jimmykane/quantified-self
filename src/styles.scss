@@ -66,6 +66,11 @@ $app-dark-theme: mat.define-theme((color: (theme-type: dark,
 
 // Activity Gradients
 :root {
+  --qs-dashboard-chart-title-font-family: 'Inter', sans-serif;
+  --qs-dashboard-chart-title-font-size: 0.92rem;
+  --qs-dashboard-chart-title-font-weight: 600;
+  --qs-dashboard-chart-title-line-height: 1.1;
+
   --gradient-running: linear-gradient(135deg, #FDD300, #FF9100);
   --gradient-trail-running: linear-gradient(135deg, #c7ef0c, #8bc34a);
   --gradient-cycling: linear-gradient(135deg, #FF7C3B, #d84315);
@@ -78,6 +83,13 @@ $app-dark-theme: mat.define-theme((color: (theme-type: dark,
   --gradient-diving: linear-gradient(135deg, #72E3DE, #0097A7);
   --gradient-team-racket: linear-gradient(135deg, #9A7DEA, #512DA8);
   --gradient-unspecified: linear-gradient(135deg, #A3ADB0, #546E7A);
+}
+
+.qs-dashboard-chart-title {
+  font-family: var(--qs-dashboard-chart-title-font-family);
+  font-size: var(--qs-dashboard-chart-title-font-size);
+  font-weight: var(--qs-dashboard-chart-title-font-weight);
+  line-height: var(--qs-dashboard-chart-title-line-height);
 }
 
 // Include theme styles for core and each component used in your app.
@@ -866,6 +878,18 @@ tr.mat-row:focus,
   max-height: inherit;
   border-radius: inherit;
   padding: 6px 0;
+}
+
+/* Datepicker overlays do not inherit MAT_MENU_DEFAULT_OPTIONS, so align their
+   Material panel surface with the same app overlay treatment used by menus. */
+.mat-datepicker-content {
+  @extend .qs-glass-card-panel;
+  background: var(--mat-sys-surface) !important;
+  color: var(--mat-sys-on-surface);
+}
+
+.mat-datepicker-content .mat-calendar {
+  background: transparent;
 }
 
 .qs-action-menu-trigger {

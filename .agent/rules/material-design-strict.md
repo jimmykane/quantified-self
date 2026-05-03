@@ -18,6 +18,9 @@ This always-on rule applies to frontend UI changes.
 ## Allowed Custom CSS
 - Component-level classes for semantic structure, layout, and documented states.
 - Avoid hardcoded colors, custom shadows, and one-off visual systems.
+- Do not introduce custom-styled controls, tabs, cards, badges, or decorative surfaces when Angular Material or an existing app pattern already covers the need.
+- When custom CSS is necessary, keep it consistent with nearby app layouts and limit it to structure, density, spacing, and responsive behavior.
+- Prefer reusing existing shared app classes and Material theme tokens over inventing new component-specific visual language.
 
 ## Dialogs and Overlays
 - Do not add custom `panelClass` unless there is a documented exception.

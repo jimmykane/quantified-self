@@ -42,7 +42,13 @@ import {
   resolveEChartsTooltipSurfaceConfig,
   resolveEChartsTooltipTriggerOn
 } from '../../../helpers/echarts-tooltip-interaction.helper';
-import { ECHARTS_GLOBAL_FONT_FAMILY, resolveEChartsThemeName } from '../../../helpers/echarts-theme.helper';
+import {
+  ECHARTS_DASHBOARD_CHART_TITLE_FONT_FAMILY,
+  ECHARTS_DASHBOARD_CHART_TITLE_FONT_SIZE,
+  ECHARTS_DASHBOARD_CHART_TITLE_FONT_WEIGHT,
+  ECHARTS_GLOBAL_FONT_FAMILY,
+  resolveEChartsThemeName
+} from '../../../helpers/echarts-theme.helper';
 import {
   formatDashboardDataDisplay,
   formatDashboardNumericValue,
@@ -337,13 +343,13 @@ export class ChartsPieComponent implements AfterViewInit, OnChanges, OnDestroy {
                   text: centerLabel,
                   width: isCompactLayout ? 120 : 146,
                   overflow: 'break',
-                  lineHeight: isCompactLayout ? 14 : 16,
-                  fontSize: isCompactLayout ? 11 : 12,
-                  fontWeight: 600,
+                  lineHeight: 17,
+                  fontSize: ECHARTS_DASHBOARD_CHART_TITLE_FONT_SIZE,
+                  fontWeight: ECHARTS_DASHBOARD_CHART_TITLE_FONT_WEIGHT,
                   fill: textColor,
                   opacity: 0.9,
                   textAlign: 'center',
-                  fontFamily: ECHARTS_GLOBAL_FONT_FAMILY,
+                  fontFamily: ECHARTS_DASHBOARD_CHART_TITLE_FONT_FAMILY,
                 },
                 left: 'center',
                 top: isCompactLayout ? -24 : -28
@@ -371,12 +377,12 @@ export class ChartsPieComponent implements AfterViewInit, OnChanges, OnDestroy {
                 type: 'text',
                 style: {
                   text: centerLabel,
-                  fontSize: isCompactLayout ? 12 : 13,
-                  fontWeight: 500,
+                  fontSize: ECHARTS_DASHBOARD_CHART_TITLE_FONT_SIZE,
+                  fontWeight: ECHARTS_DASHBOARD_CHART_TITLE_FONT_WEIGHT,
                   fill: textColor,
                   opacity: 0.86,
                   textAlign: 'center',
-                  fontFamily: ECHARTS_GLOBAL_FONT_FAMILY,
+                  fontFamily: ECHARTS_DASHBOARD_CHART_TITLE_FONT_FAMILY,
                 },
                 left: 'center',
                 top: isCompactLayout ? -22 : -24

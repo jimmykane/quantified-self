@@ -19,6 +19,11 @@ import { LoggerService } from '../../../services/logger.service';
 import { formatDashboardNumericValue } from '../../../helpers/dashboard-chart-data.helper';
 import { getOrCreateEChartsTooltipHost } from '../../../helpers/echarts-tooltip-host.helper';
 import { getViewportConstrainedTooltipPosition } from '../../../helpers/echarts-tooltip-position.helper';
+import {
+  ECHARTS_DASHBOARD_CHART_TITLE_FONT_FAMILY,
+  ECHARTS_DASHBOARD_CHART_TITLE_FONT_SIZE,
+  ECHARTS_DASHBOARD_CHART_TITLE_FONT_WEIGHT,
+} from '../../../helpers/echarts-theme.helper';
 
 type ResizeObserverRecord = {
   observe: ReturnType<typeof vi.fn>;
@@ -234,6 +239,9 @@ describe('ChartsColumnsComponent', () => {
     await waitForChartStabilization();
 
     const option = getLastOption();
+    expect(option.graphic[0].children[0].style.fontFamily).toBe(ECHARTS_DASHBOARD_CHART_TITLE_FONT_FAMILY);
+    expect(option.graphic[0].children[0].style.fontSize).toBe(ECHARTS_DASHBOARD_CHART_TITLE_FONT_SIZE);
+    expect(option.graphic[0].children[0].style.fontWeight).toBe(ECHARTS_DASHBOARD_CHART_TITLE_FONT_WEIGHT);
     expect(option.graphic[0].children[2].style.text).toBe('Total per activity type');
   });
 

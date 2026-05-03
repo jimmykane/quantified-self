@@ -116,15 +116,14 @@ describe('ServicesCorosComponent', () => {
         expect(accountIcon).toBeFalsy();
     });
 
-    describe('History Import Card', () => {
+    describe('History Import Tab', () => {
         it('should be unlocked/available if user has pro access AND is connected', () => {
             component.hasProAccess = true;
             component.isAdmin = false;
             component.serviceTokens = [{ accessToken: 'token' } as any];
             fixture.detectChanges();
 
-            const card = fixture.nativeElement.querySelectorAll('.feature-card')[1];
-            const historyForm = card.querySelector('app-history-import-form');
+            const historyForm = fixture.nativeElement.querySelector('app-history-import-form');
 
             expect(historyForm).toBeTruthy();
         });
@@ -134,12 +133,11 @@ describe('ServicesCorosComponent', () => {
             component.serviceTokens = [];
             fixture.detectChanges();
 
-            const card = fixture.nativeElement.querySelectorAll('.feature-card')[1];
-            const historyForm = card.querySelector('app-history-import-form');
-            const cardContent = card.textContent;
+            const historyForm = fixture.nativeElement.querySelector('app-history-import-form');
+            const content = fixture.nativeElement.textContent;
 
             expect(historyForm).toBeFalsy();
-            expect(cardContent).toContain('Connect Account First');
+            expect(content).toContain('before importing history');
         });
     });
 

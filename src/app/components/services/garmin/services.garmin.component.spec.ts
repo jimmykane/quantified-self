@@ -126,35 +126,26 @@ describe('ServicesGarminComponent', () => {
         expect(component).toBeTruthy();
     });
 
-    describe('History Import Card', () => {
-        it('should be locked via PRO badge if user has no pro access', () => {
+    describe('History Import Tab', () => {
+        it('should show Pro requirement if user has no pro access', () => {
             component.hasProAccess = false;
             component.isAdmin = false;
             fixture.detectChanges();
 
-            const card = fixture.nativeElement.querySelectorAll('.feature-card')[1]; // Second card is History Import
-            const lockOverlay = card.querySelector('.lock-overlay');
-            const badge = card.querySelector('.pro-badge');
+            const content = fixture.nativeElement.textContent;
 
-            expect(card.classList).toContain('locked');
-            expect(lockOverlay).toBeTruthy();
-            expect(badge.textContent.trim()).toBe('PRO');
-            expect(card.classList).not.toContain('coming-soon');
+            expect(content).toContain('History import is a Pro feature');
+            expect(fixture.nativeElement.querySelector('.pro-required-inline')).toBeTruthy();
         });
 
         it('should be unlocked/available if user has pro access AND is connected', () => {
             component.hasProAccess = true;
             component.isAdmin = false;
-            // Mock connected state
             component.serviceTokens = [{ accessToken: 'token', permissions: [] } as any];
             fixture.detectChanges();
 
-            const card = fixture.nativeElement.querySelectorAll('.feature-card')[1];
-            const lockOverlay = card.querySelector('.lock-overlay');
-            const historyForm = card.querySelector('app-history-import-form');
+            const historyForm = fixture.nativeElement.querySelector('app-history-import-form');
 
-            expect(card.classList).not.toContain('locked');
-            expect(lockOverlay).toBeFalsy();
             expect(historyForm).toBeTruthy();
         });
 
@@ -163,13 +154,11 @@ describe('ServicesGarminComponent', () => {
             component.serviceTokens = []; // Not connected
             fixture.detectChanges();
 
-            const card = fixture.nativeElement.querySelectorAll('.feature-card')[1];
-            const historyForm = card.querySelector('app-history-import-form');
-            // We look for the text content since we don't have a specific class on the new div
-            const cardContent = card.textContent;
+            const historyForm = fixture.nativeElement.querySelector('app-history-import-form');
+            const content = fixture.nativeElement.textContent;
 
             expect(historyForm).toBeFalsy();
-            expect(cardContent).toContain('Connect Account First');
+            expect(content).toContain('before importing history');
         });
     });
 

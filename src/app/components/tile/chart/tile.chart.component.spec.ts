@@ -63,6 +63,7 @@ class MockTileChartActionsComponent {
   @Input() chartDataCategoryType?: ChartDataCategoryTypes;
   @Input() chartTimeInterval?: TimeIntervals;
   @Input() chartDataValueType?: ChartDataValueTypes;
+  @Input() showLayoutControls = true;
   @Output() savingChange = new EventEmitter<boolean>();
   @Output() editInDashboardManager = new EventEmitter<number>();
 }
@@ -527,6 +528,24 @@ describe('TileChartComponent', () => {
     expect(kpi.chartType).toBe(DASHBOARD_FORM_NOW_KPI_CHART_TYPE);
     expect(kpi.formNow).toEqual(component.formNow);
     expect(kpi.formNowStatus).toBe('processing');
+  });
+
+  it('should hide layout controls for compact KPI row actions', () => {
+    component.chartType = DASHBOARD_FORM_NOW_KPI_CHART_TYPE as any;
+    component.showActions = true;
+    component.compactKpiRow = true;
+    fixture.detectChanges();
+
+    expect(getActionsComponent().showLayoutControls).toBe(false);
+  });
+
+  it('should keep layout controls for non-compact chart tile actions', () => {
+    component.chartType = ChartTypes.ColumnsVertical;
+    component.showActions = true;
+    component.compactKpiRow = false;
+    fixture.detectChanges();
+
+    expect(getActionsComponent().showLayoutControls).toBe(true);
   });
 
   it('should route Efficiency Δ (4w) KPI chart type to the KPI renderer', () => {
