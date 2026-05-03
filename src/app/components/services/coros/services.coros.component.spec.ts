@@ -103,6 +103,18 @@ describe('ServicesCorosComponent', () => {
         expect(component).toBeTruthy();
     });
 
+    it('renders connection status outside the provider tool tabs', () => {
+        fixture.detectChanges();
+
+        const connectionStatus = fixture.nativeElement.querySelector('.connection-status-panel');
+        const providerTabs = fixture.nativeElement.querySelectorAll('mat-tab');
+
+        expect(connectionStatus).toBeTruthy();
+        expect(connectionStatus.textContent).toContain('Manage your COROS connection');
+        expect(providerTabs.length).toBe(1);
+        expect(fixture.nativeElement.querySelector('mat-tab .connection-status-panel')).toBeFalsy();
+    });
+
     it('should show syncing state when forceConnected is true but tokens are not yet loaded', () => {
         component.forceConnected = true;
         component.serviceTokens = undefined;

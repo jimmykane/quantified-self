@@ -92,6 +92,18 @@ describe('ServicesSuuntoComponent', () => {
         expect(accountIcon).toBeFalsy();
     });
 
+    it('renders connection status outside the provider tool tabs', () => {
+        fixture.detectChanges();
+
+        const connectionStatus = fixture.nativeElement.querySelector('.connection-status-panel');
+        const providerTabs = fixture.nativeElement.querySelectorAll('mat-tab');
+
+        expect(connectionStatus).toBeTruthy();
+        expect(connectionStatus.textContent).toContain('Manage your Suunto connection');
+        expect(providerTabs.length).toBe(2);
+        expect(fixture.nativeElement.querySelector('mat-tab .connection-status-panel')).toBeFalsy();
+    });
+
     describe('History Import Tab', () => {
         it('should be unlocked/available if user has pro access AND is connected', () => {
             component.hasProAccess = true;

@@ -126,6 +126,18 @@ describe('ServicesGarminComponent', () => {
         expect(component).toBeTruthy();
     });
 
+    it('renders connection status outside the provider tool tabs', () => {
+        fixture.detectChanges();
+
+        const connectionStatus = fixture.nativeElement.querySelector('.connection-status-panel');
+        const providerTabs = fixture.nativeElement.querySelectorAll('mat-tab');
+
+        expect(connectionStatus).toBeTruthy();
+        expect(connectionStatus.textContent).toContain('Manage your Garmin connection');
+        expect(providerTabs.length).toBe(1);
+        expect(fixture.nativeElement.querySelector('mat-tab .connection-status-panel')).toBeFalsy();
+    });
+
     describe('History Import Tab', () => {
         it('should show Pro requirement if user has no pro access', () => {
             component.hasProAccess = false;

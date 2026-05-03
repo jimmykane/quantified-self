@@ -2,6 +2,10 @@
   margin: 0 0 1.25rem;
 }
 
+.dashboard-today-section--merged {
+  margin-bottom: 0;
+}
+
 .dashboard-section-header {
   align-items: center;
   color: var(--mat-sys-on-surface);
@@ -73,6 +77,13 @@
   align-items: stretch;
   gap: 0;
   overflow: hidden;
+}
+
+.dashboard-kpi-lane--merged-with-board {
+  border-bottom: 0;
+  border-bottom-left-radius: 0 !important;
+  border-bottom-right-radius: 0 !important;
+  box-shadow: none !important;
 }
 
 .dashboard-kpi-tile {
@@ -169,6 +180,11 @@
 .dashboard-grid-tile {
   min-width: 0;
   min-height: 0;
+}
+
+app-dashboard-tile-board.dashboard-tile-board--merged-after-kpis {
+  border-top-left-radius: 0 !important;
+  border-top-right-radius: 0 !important;
 }
 
 /* Common style for the tile content components */

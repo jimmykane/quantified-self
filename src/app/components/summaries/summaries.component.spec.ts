@@ -187,6 +187,7 @@ describe('SummariesComponent', () => {
     const nativeElement = fixture.nativeElement as HTMLElement;
     const todaySection = nativeElement.querySelector('.dashboard-today-section');
     expect(todaySection).not.toBeNull();
+    expect(todaySection?.classList.contains('dashboard-today-section--merged')).toBe(true);
     expect(todaySection?.querySelector('#dashboard-today-title')?.textContent?.trim()).toBe('Today');
     expect(todaySection?.querySelector('.dashboard-section-subtitle')?.textContent?.trim()).toBe(component.todayDateSubtitle);
     expect(todaySection?.querySelector('.dashboard-section-actions')).not.toBeNull();
@@ -195,6 +196,7 @@ describe('SummariesComponent', () => {
     const kpiLane = todaySection?.querySelector('.dashboard-kpi-lane') as HTMLElement | null;
     expect(kpiLane).not.toBeNull();
     expect(kpiLane?.classList.contains('qs-glass-card-panel')).toBe(true);
+    expect(kpiLane?.classList.contains('dashboard-kpi-lane--merged-with-board')).toBe(true);
     expect(todaySection?.querySelectorAll('.dashboard-kpi-tile')).toHaveLength(1);
     expect(kpiLane?.querySelector('app-tile-chart')?.classList.contains('qs-glass-card-panel')).toBe(false);
     expect(nativeElement.querySelector('.dashboard-summary-actions')).toBeNull();
@@ -202,6 +204,7 @@ describe('SummariesComponent', () => {
     const board = nativeElement.querySelector('app-dashboard-tile-board') as HTMLElement | null;
     expect(board).not.toBeNull();
     expect(board?.classList.contains('qs-glass-card-panel')).toBe(true);
+    expect(board?.classList.contains('dashboard-tile-board--merged-after-kpis')).toBe(true);
     expect(board?.style.getPropertyValue('--dashboard-tile-board-cols')).toBe(`${component.numberOfCols}`);
     expect(nativeElement.querySelectorAll('app-dashboard-tile-cell.dashboard-grid-tile')).toHaveLength(2);
     const mainChart = board?.querySelector('app-tile-chart') as HTMLElement | null;

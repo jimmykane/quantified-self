@@ -21,7 +21,7 @@
   </div>
   }
   @if (kpiLaneTiles.length) {
-  <section class="dashboard-today-section" aria-labelledby="dashboard-today-title">
+  <section class="dashboard-today-section" [class.dashboard-today-section--merged]="mainGridTiles.length" aria-labelledby="dashboard-today-title">
     <div class="dashboard-section-header">
       <div class="dashboard-section-title-block">
         <mat-icon aria-hidden="true">today</mat-icon>
@@ -46,6 +46,7 @@
     </div>
     <div
       class="qs-glass-card-panel dashboard-kpi-lane"
+      [class.dashboard-kpi-lane--merged-with-board]="mainGridTiles.length"
       cdkDropList
       cdkDropListOrientation="mixed"
       [cdkDropListData]="kpiLaneTiles"
@@ -97,6 +98,7 @@
   }
   @if (mainGridTiles.length) {
   <app-dashboard-tile-board
+    [class.dashboard-tile-board--merged-after-kpis]="kpiLaneTiles.length"
     cdkDropList
     cdkDropListOrientation="mixed"
     [cdkDropListData]="mainGridTiles"
