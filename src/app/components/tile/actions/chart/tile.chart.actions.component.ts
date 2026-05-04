@@ -16,6 +16,7 @@ import {
 import {
   DASHBOARD_AUTO_TILE_SLEEP_TREND_ID,
   DASHBOARD_AUTO_TILE_SLEEP_TREND_SOURCE,
+  DASHBOARD_AUTO_TILE_RECOVERY_NOW_ID,
   getDashboardAutoTileDescriptorForTile,
   isDashboardSleepTrendTile,
   markDashboardAutoTileDismissed,
@@ -55,10 +56,10 @@ export class TileChartActionsComponent extends TileActionsAbstractDirective impl
     const previousAutoTiles = this.cloneAutoTiles(dashboardSettings.autoTiles || {});
     const tile = dashboardTiles.find(candidate => candidate.order === this.order);
     const chartType = (tile as TileChartSettingsInterface | null)?.chartType || this.chartType;
-    if (isDashboardRecoveryNowChartType(chartType)) {
+    const autoTileDescriptor = getDashboardAutoTileDescriptorForTile(tile);
+    if (isDashboardRecoveryNowChartType(chartType) || autoTileDescriptor?.id === DASHBOARD_AUTO_TILE_RECOVERY_NOW_ID) {
       dashboardSettings.dismissedCuratedRecoveryNowTile = true;
     }
-    const autoTileDescriptor = getDashboardAutoTileDescriptorForTile(tile);
     if (autoTileDescriptor || isDashboardSleepTrendTile(tile) || `${chartType}` === DASHBOARD_SLEEP_TREND_CHART_TYPE) {
       markDashboardAutoTileDismissed(
         dashboardSettings,

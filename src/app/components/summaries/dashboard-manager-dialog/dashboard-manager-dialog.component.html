@@ -5,6 +5,23 @@
   <p class="dashboard-manager-hint">Add or edit dashboard tiles from one place.</p>
 
   <section class="dashboard-manager-section">
+    <div class="dashboard-manager-section-title">Bulk actions</div>
+    <div class="dashboard-manager-bulk-actions">
+      <button mat-stroked-button type="button" class="qs-mat-primary" (click)="addAllTiles()" [disabled]="isAddAllDisabled">
+        <mat-icon>library_add</mat-icon>
+        <span>Add all</span>
+      </button>
+      <button mat-stroked-button type="button" class="qs-mat-warn" (click)="removeAllTiles()" [disabled]="isRemoveAllDisabled">
+        <mat-icon>delete_sweep</mat-icon>
+        <span>Remove all</span>
+      </button>
+    </div>
+    <p class="dashboard-manager-hint">
+      Add all inserts every missing Dashboard manager preset. Remove all clears the dashboard and prevents automatic suggestions from reappearing.
+    </p>
+  </section>
+
+  <section class="dashboard-manager-section">
     <div class="dashboard-manager-section-title">Mode</div>
     <mat-radio-group class="dashboard-manager-inline-radio-group" [value]="mode" (change)="onModeChange($event.value)">
       @for (modeOption of modeOptions; track modeOption.value) {

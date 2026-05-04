@@ -123,7 +123,8 @@ export const HELP_SECTIONS: HelpSection[] = [
 - Derived curated and KPI chart types are unique: only one tile per special derived chart type can exist at a time.
 - Map tiles are also unique: only one map tile can exist at a time.
 - Map style and cluster-marker settings are edited inside Dashboard manager.
-- Default manager sizes: KPI tiles start at **1x1** and curated derived charts start at **2x1**.
+- Default manager sizes: dashboard tiles start at **1x1**.
+- Dashboard manager bulk actions can add every missing preset at once, or remove every dashboard chart/map tile and keep automatic suggestions dismissed.
 
 ### Reorder dashboard tiles
 

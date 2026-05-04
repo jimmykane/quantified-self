@@ -4,6 +4,7 @@ import {
   ChartDataCategoryTypes,
   ChartDataValueTypes,
   ChartTypes,
+  DataRecoveryTime,
   TileSettingsInterface,
   TileTypes,
   TimeIntervals,
@@ -195,6 +196,24 @@ describe('DashboardAutoTileService', () => {
       'Undo',
       { duration: 7000 },
     );
+  });
+
+  it('does not add Recovery when a legacy recovery metric tile already exists', async () => {
+    const user = createUser([{
+      ...createCustomTile(0),
+      name: 'Recovery',
+      chartType: ChartTypes.LinesVertical,
+      dataType: DataRecoveryTime.type,
+    }]);
+
+    const result = await service.applyEligibleAutoTiles(user, {
+      [DASHBOARD_AUTO_TILE_RECOVERY_NOW_ID]: true,
+    });
+
+    expect(result.persisted).toBe(false);
+    expect(user.settings?.dashboardSettings?.tiles).toHaveLength(1);
+    expect(mockUserService.updateUserProperties).not.toHaveBeenCalled();
+    expect(mockSnackBar.open).not.toHaveBeenCalled();
   });
 
   it('undo removes the whole auto-added batch and marks those rules dismissed', async () => {

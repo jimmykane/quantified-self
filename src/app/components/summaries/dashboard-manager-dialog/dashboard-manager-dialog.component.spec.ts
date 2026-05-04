@@ -12,6 +12,7 @@ import {
   ActivityTypes,
   DataDistance,
   DataDuration,
+  DataRecoveryTime,
   TileTypes,
   TimeIntervals,
 } from '@sports-alliance/sports-lib';
@@ -583,10 +584,195 @@ describe('DashboardManagerDialogComponent', () => {
     const templatePath = resolve(process.cwd(), 'src/app/components/summaries/dashboard-manager-dialog/dashboard-manager-dialog.component.html');
     const template = readFileSync(templatePath, 'utf8');
 
+    expect(template).toContain('Add all');
+    expect(template).toContain('Remove all');
     expect(template).toContain('Preset category');
     expect(template).toContain('Presets');
     expect(template).toContain('Apply preset');
     expect(template).toContain('mat-chip-listbox');
+  });
+
+  it('adds all missing manager presets in one save', async () => {
+    await component.addAllTiles();
+
+    const tiles = dialogData.user.settings.dashboardSettings.tiles;
+    expect(tiles).toHaveLength(1 + component.presetDefinitions.length);
+    expect(tiles.filter((tile: any) => tile.type === TileTypes.Map)).toHaveLength(1);
+    expect(tiles.some((tile: any) => tile.chartType === DASHBOARD_RECOVERY_NOW_CHART_TYPE)).toBe(true);
+    expect(tiles.some((tile: any) => tile.chartType === DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE)).toBe(true);
+    expect(tiles.some((tile: any) => tile.chartType === DASHBOARD_ACWR_KPI_CHART_TYPE)).toBe(true);
+    expect(tiles.some((tile: any) => tile.chartType === ChartTypes.Pie && tile.dataType === DataDuration.type)).toBe(true);
+    expect(dialogData.user.settings.dashboardSettings.autoTiles.curatedRecoveryNow).toMatchObject({
+      state: 'added',
+      source: 'default-curated',
+    });
+    expect(dialogData.user.settings.dashboardSettings.autoTiles.kpiAcwr).toMatchObject({
+      state: 'added',
+      source: 'default-kpi',
+    });
+    expect(dialogData.user.settings.dashboardSettings.dismissedCuratedRecoveryNowTile).toBe(false);
+    expect(userServiceMock.updateUserProperties).toHaveBeenCalledTimes(1);
+    expect(hapticsMock.selection).toHaveBeenCalledTimes(1);
+    expect(hapticsMock.success).toHaveBeenCalledTimes(1);
+    expect(component.isAddAllDisabled).toBe(true);
+    expect(component.isRemoveAllDisabled).toBe(false);
+    expect(dialogRefMock.close).toHaveBeenCalledWith({ saved: true });
+  });
+
+  it('does not duplicate existing presets when adding all', async () => {
+    await component.addAllTiles();
+    userServiceMock.updateUserProperties.mockClear();
+    dialogRefMock.close.mockClear();
+
+    await component.addAllTiles();
+
+    expect(dialogData.user.settings.dashboardSettings.tiles).toHaveLength(1 + component.presetDefinitions.length);
+    expect(userServiceMock.updateUserProperties).not.toHaveBeenCalled();
+    expect(dialogRefMock.close).not.toHaveBeenCalledWith({ saved: true });
+  });
+
+  it('treats a legacy recovery metric tile as the Recovery preset when adding all', async () => {
+    dialogData.user.settings.dashboardSettings.tiles = [{
+      type: TileTypes.Chart,
+      order: 0,
+      name: 'Recovery',
+      chartType: ChartTypes.LinesVertical,
+      dataType: DataRecoveryTime.type,
+      dataValueType: ChartDataValueTypes.Total,
+      dataCategoryType: ChartDataCategoryTypes.DateType,
+      dataTimeInterval: TimeIntervals.Auto,
+      size: { columns: 1, rows: 1 },
+    }];
+    component.ngOnInit();
+
+    await component.addAllTiles();
+
+    const tiles = dialogData.user.settings.dashboardSettings.tiles;
+    const recoveryLikeTiles = tiles.filter((tile: any) => (
+      tile.chartType === DASHBOARD_RECOVERY_NOW_CHART_TYPE
+      || tile.dataType === DataRecoveryTime.type
+    ));
+    expect(recoveryLikeTiles).toHaveLength(1);
+    expect(recoveryLikeTiles[0].chartType).toBe(ChartTypes.LinesVertical);
+    expect(dialogData.user.settings.dashboardSettings.autoTiles.curatedRecoveryNow).toBeUndefined();
+  });
+
+  it('restores dashboard settings when adding all fails', async () => {
+    dialogData.user.settings.dashboardSettings.autoTiles = {
+      kpiAcwr: {
+        state: 'dismissed',
+        dismissedAt: 1_777_000_000_000,
+        source: 'default-kpi',
+      },
+    };
+    const originalTiles = dialogData.user.settings.dashboardSettings.tiles.map((tile: any) => ({
+      ...tile,
+      size: tile.size ? { ...tile.size } : tile.size,
+    }));
+    userServiceMock.updateUserProperties.mockRejectedValueOnce(new Error('network down'));
+
+    await component.addAllTiles();
+
+    expect(component.saveError).toBe('Could not save dashboard tile settings.');
+    expect(dialogData.user.settings.dashboardSettings.tiles).toStrictEqual(originalTiles);
+    expect(dialogData.user.settings.dashboardSettings.autoTiles.kpiAcwr).toEqual({
+      state: 'dismissed',
+      dismissedAt: 1_777_000_000_000,
+      source: 'default-kpi',
+    });
+    expect(hapticsMock.error).toHaveBeenCalledTimes(1);
+    expect(dialogRefMock.close).not.toHaveBeenCalledWith({ saved: true });
+  });
+
+  it('removes all dashboard tiles after confirmation and dismisses auto tiles', async () => {
+    dialogData.user.settings.dashboardSettings.tiles.push({
+      type: TileTypes.Chart,
+      order: 1,
+      name: 'Recovery',
+      chartType: DASHBOARD_RECOVERY_NOW_CHART_TYPE,
+      dataType: 'Recovery Time',
+      dataValueType: ChartDataValueTypes.Total,
+      dataCategoryType: ChartDataCategoryTypes.DateType,
+      dataTimeInterval: TimeIntervals.Auto,
+      size: { columns: 1, rows: 1 },
+    });
+    dialogData.user.settings.dashboardSettings.dismissedCuratedRecoveryNowTile = false;
+    dialogData.user.settings.dashboardSettings.autoTiles = {
+      curatedRecoveryNow: {
+        state: 'added',
+        addedAt: 1_777_000_000_000,
+        source: 'default-curated',
+      },
+    };
+    dialogMock.open.mockReturnValueOnce({
+      afterClosed: () => of(true),
+    });
+
+    await component.removeAllTiles();
+
+    expect(dialogData.user.settings.dashboardSettings.tiles).toEqual([]);
+    expect(dialogData.user.settings.dashboardSettings.dismissedCuratedRecoveryNowTile).toBe(true);
+    expect(dialogData.user.settings.dashboardSettings.autoTiles.sleepTrend).toMatchObject({
+      state: 'dismissed',
+      source: 'sleep-sync',
+    });
+    expect(dialogData.user.settings.dashboardSettings.autoTiles.curatedRecoveryNow).toMatchObject({
+      state: 'dismissed',
+      source: 'default-curated',
+    });
+    expect(dialogData.user.settings.dashboardSettings.autoTiles.kpiAcwr).toMatchObject({
+      state: 'dismissed',
+      source: 'default-kpi',
+    });
+    expect(userServiceMock.updateUserProperties).toHaveBeenCalledTimes(1);
+    expect(hapticsMock.success).toHaveBeenCalledTimes(1);
+    expect(component.isRemoveAllDisabled).toBe(true);
+    expect(component.isAddAllDisabled).toBe(false);
+    expect(dialogRefMock.close).toHaveBeenCalledWith({ saved: true });
+  });
+
+  it('keeps dashboard tiles when remove all is cancelled', async () => {
+    dialogMock.open.mockReturnValueOnce({
+      afterClosed: () => of(false),
+    });
+
+    await component.removeAllTiles();
+
+    expect(dialogData.user.settings.dashboardSettings.tiles).toHaveLength(1);
+    expect(userServiceMock.updateUserProperties).not.toHaveBeenCalled();
+    expect(dialogRefMock.close).not.toHaveBeenCalledWith({ saved: true });
+  });
+
+  it('restores dashboard settings when removing all fails', async () => {
+    dialogData.user.settings.dashboardSettings.dismissedCuratedRecoveryNowTile = false;
+    dialogData.user.settings.dashboardSettings.autoTiles = {
+      curatedRecoveryNow: {
+        state: 'added',
+        addedAt: 1_777_000_000_000,
+        source: 'default-curated',
+      },
+    };
+    const originalTiles = dialogData.user.settings.dashboardSettings.tiles.map((tile: any) => ({
+      ...tile,
+      size: tile.size ? { ...tile.size } : tile.size,
+    }));
+    dialogMock.open.mockReturnValueOnce({
+      afterClosed: () => of(true),
+    });
+    userServiceMock.updateUserProperties.mockRejectedValueOnce(new Error('network down'));
+
+    await component.removeAllTiles();
+
+    expect(component.saveError).toBe('Could not save dashboard tile settings.');
+    expect(dialogData.user.settings.dashboardSettings.tiles).toStrictEqual(originalTiles);
+    expect(dialogData.user.settings.dashboardSettings.dismissedCuratedRecoveryNowTile).toBe(false);
+    expect(dialogData.user.settings.dashboardSettings.autoTiles.curatedRecoveryNow).toEqual({
+      state: 'added',
+      addedAt: 1_777_000_000_000,
+      source: 'default-curated',
+    });
+    expect(hapticsMock.error).toHaveBeenCalledTimes(1);
+    expect(dialogRefMock.close).not.toHaveBeenCalledWith({ saved: true });
   });
 
   it('applies a preset in add mode and appends a new tile', async () => {

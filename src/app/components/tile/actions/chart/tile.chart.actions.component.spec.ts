@@ -11,7 +11,7 @@ import { MatSelectModule } from '@angular/material/select';
 import { MatIconModule } from '@angular/material/icon';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { FormsModule } from '@angular/forms';
-import { ChartTypes, ChartDataValueTypes, ChartDataCategoryTypes } from '@sports-alliance/sports-lib';
+import { ChartTypes, ChartDataValueTypes, ChartDataCategoryTypes, DataRecoveryTime } from '@sports-alliance/sports-lib';
 import { vi } from 'vitest';
 import {
   DASHBOARD_ACWR_KPI_CHART_TYPE,
@@ -211,6 +211,36 @@ describe('TileChartActionsComponent', () => {
     expect(userMock.settings.dashboardSettings.tiles).toHaveLength(1);
     expect(userMock.updateUserProperties).toHaveBeenCalled();
     expect(hapticsMock.selection).toHaveBeenCalledTimes(1);
+  });
+
+  it('should persist recovery dismissal when deleting a legacy recovery metric tile', async () => {
+    userMock.settings.dashboardSettings.dismissedCuratedRecoveryNowTile = false;
+    userMock.settings.dashboardSettings.autoTiles = {};
+    userMock.settings.dashboardSettings.tiles = [
+      {
+        order: 0,
+        chartType: ChartTypes.LinesVertical,
+        dataType: DataRecoveryTime.type,
+        dataValueType: ChartDataValueTypes.Total,
+        dataCategoryType: ChartDataCategoryTypes.DateType,
+        size: { columns: 1, rows: 1 },
+        type: 'Chart',
+      },
+      { order: 1, chartType: ChartTypes.Line, size: { columns: 1, rows: 1 }, type: 'Chart' },
+    ];
+    component.chartType = ChartTypes.LinesVertical as any;
+    component.order = 0;
+    fixture.detectChanges();
+
+    await component.deleteTile({} as any);
+
+    expect(userMock.settings.dashboardSettings.dismissedCuratedRecoveryNowTile).toBe(true);
+    expect(userMock.settings.dashboardSettings.autoTiles.curatedRecoveryNow).toMatchObject({
+      state: 'dismissed',
+      source: 'default-curated',
+    });
+    expect(userMock.settings.dashboardSettings.tiles).toHaveLength(1);
+    expect(userMock.updateUserProperties).toHaveBeenCalled();
   });
 
   it('should persist sleep auto-tile dismissal when deleting Sleep Trend', async () => {

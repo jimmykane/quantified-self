@@ -178,7 +178,12 @@ export function isDashboardCuratedAutoTile(
     return false;
   }
 
-  return `${(tile as TileChartSettingsInterface).chartType}` === chartType;
+  const chartTile = tile as TileChartSettingsInterface;
+  return `${chartTile.chartType}` === chartType
+    || (
+      chartType === DASHBOARD_RECOVERY_NOW_CHART_TYPE
+      && chartTile.dataType === DataRecoveryTime.type
+    );
 }
 
 export function isDashboardKpiAutoTile(
@@ -206,7 +211,15 @@ export function getDashboardAutoTileDescriptorForTile(
     return null;
   }
 
-  const chartType = `${(tile as TileChartSettingsInterface).chartType}` as DashboardDefaultCuratedChartType | DashboardKpiChartType;
+  const chartTile = tile as TileChartSettingsInterface;
+  if (chartTile.dataType === DataRecoveryTime.type) {
+    return {
+      id: DASHBOARD_AUTO_TILE_RECOVERY_NOW_ID,
+      source: DASHBOARD_AUTO_TILE_CURATED_SOURCE,
+    };
+  }
+
+  const chartType = `${chartTile.chartType}` as DashboardDefaultCuratedChartType | DashboardKpiChartType;
   const curatedId = DASHBOARD_AUTO_TILE_CURATED_ID_BY_CHART_TYPE[chartType as DashboardDefaultCuratedChartType];
   if (curatedId) {
     return { id: curatedId, source: DASHBOARD_AUTO_TILE_CURATED_SOURCE };

@@ -154,7 +154,7 @@ describe('SummariesComponent', () => {
     expect(component).toBeTruthy();
   });
 
-  it('renders KPI tiles inside a Today section and keeps non-KPI tiles in the main grid', () => {
+  it('renders the Today dashboard header separately from KPI and main-grid tiles', () => {
     const kpiTile = {
       type: TileTypes.Chart,
       order: 0,
@@ -193,21 +193,23 @@ describe('SummariesComponent', () => {
     fixture.detectChanges();
 
     const nativeElement = fixture.nativeElement as HTMLElement;
-    const todaySection = nativeElement.querySelector('.dashboard-today-section');
-    expect(todaySection).not.toBeNull();
-    expect(todaySection?.classList.contains('dashboard-today-section--merged')).toBe(true);
-    expect(todaySection?.querySelector('#dashboard-today-title')?.textContent?.trim()).toBe('Today');
-    expect(todaySection?.querySelector('.dashboard-section-subtitle')?.textContent?.trim()).toBe(component.todayDateSubtitle);
-    expect(todaySection?.querySelector('.dashboard-section-actions')).not.toBeNull();
-    expect(todaySection?.querySelector('.dashboard-manager-button-desktop span')?.textContent?.trim()).toBe('Dashboard manager');
-    expect(todaySection?.querySelector('.dashboard-manager-button-mobile')).not.toBeNull();
-    const kpiLane = todaySection?.querySelector('.dashboard-kpi-lane') as HTMLElement | null;
+    const dashboardHeader = nativeElement.querySelector('.dashboard-summary-header');
+    expect(dashboardHeader).not.toBeNull();
+    expect(dashboardHeader?.querySelector('#dashboard-today-title')?.textContent?.trim()).toBe('Today');
+    expect(dashboardHeader?.querySelector('.dashboard-section-subtitle')?.textContent?.trim()).toBe(component.todayDateSubtitle);
+    expect(dashboardHeader?.querySelector('.dashboard-section-actions')).not.toBeNull();
+    expect(dashboardHeader?.querySelector('.dashboard-manager-button-desktop span')?.textContent?.trim()).toBe('Dashboard manager');
+    expect(dashboardHeader?.querySelector('.dashboard-manager-button-mobile')).not.toBeNull();
+    expect(dashboardHeader?.querySelector('.dashboard-kpi-lane')).toBeNull();
+    const kpiSection = nativeElement.querySelector('.dashboard-kpi-section');
+    expect(kpiSection).not.toBeNull();
+    expect(kpiSection?.classList.contains('dashboard-kpi-section--merged')).toBe(true);
+    const kpiLane = kpiSection?.querySelector('.dashboard-kpi-lane') as HTMLElement | null;
     expect(kpiLane).not.toBeNull();
     expect(kpiLane?.classList.contains('qs-glass-card-panel')).toBe(true);
     expect(kpiLane?.classList.contains('dashboard-kpi-lane--merged-with-board')).toBe(true);
-    expect(todaySection?.querySelectorAll('.dashboard-kpi-tile')).toHaveLength(1);
+    expect(kpiSection?.querySelectorAll('.dashboard-kpi-tile')).toHaveLength(1);
     expect(kpiLane?.querySelector('app-tile-chart')?.classList.contains('qs-glass-card-panel')).toBe(false);
-    expect(nativeElement.querySelector('.dashboard-summary-actions')).toBeNull();
     expect(nativeElement.querySelectorAll('.dashboard-section-divider')).toHaveLength(0);
     const board = nativeElement.querySelector('app-dashboard-tile-board') as HTMLElement | null;
     expect(board).not.toBeNull();
@@ -264,7 +266,7 @@ describe('SummariesComponent', () => {
     expect(placeholder?.getAttribute('aria-hidden')).toBe('true');
   });
 
-  it('renders the fallback dashboard manager action when there is no Today section', () => {
+  it('renders the dashboard header and manager action when there are no KPI tiles', () => {
     const mainGridTile = {
       type: TileTypes.Chart,
       order: 0,
@@ -285,9 +287,41 @@ describe('SummariesComponent', () => {
     fixture.detectChanges();
 
     const nativeElement = fixture.nativeElement as HTMLElement;
-    expect(nativeElement.querySelector('.dashboard-today-section')).toBeNull();
-    expect(nativeElement.querySelector('.dashboard-summary-actions')).not.toBeNull();
-    expect(nativeElement.querySelector('.dashboard-summary-actions span')?.textContent?.trim()).toBe('Dashboard manager');
+    expect(nativeElement.querySelector('.dashboard-kpi-section')).toBeNull();
+    expect(nativeElement.querySelector('.dashboard-summary-header')).not.toBeNull();
+    expect(nativeElement.querySelector('#dashboard-today-title')?.textContent?.trim()).toBe('Today');
+    expect(nativeElement.querySelector('.dashboard-manager-button-desktop span')?.textContent?.trim()).toBe('Dashboard manager');
+  });
+
+  it('renders the dashboard header and manager action for an editable empty dashboard', () => {
+    component.user = { settings: { dashboardSettings: { tiles: [] } } } as any;
+    component.showActions = true;
+    component.tiles = [];
+    component.kpiLaneTiles = [];
+    component.mainGridTiles = [];
+
+    fixture.detectChanges();
+
+    const nativeElement = fixture.nativeElement as HTMLElement;
+    expect(nativeElement.querySelector('.dashboard-kpi-section')).toBeNull();
+    expect(nativeElement.querySelector('app-dashboard-tile-board')).toBeNull();
+    expect(nativeElement.querySelector('.dashboard-summary-header')).not.toBeNull();
+    expect(nativeElement.querySelector('#dashboard-today-title')?.textContent?.trim()).toBe('Today');
+    expect(nativeElement.querySelector('.dashboard-manager-button-desktop span')?.textContent?.trim()).toBe('Dashboard manager');
+  });
+
+  it('does not render an empty read-only dashboard shell', () => {
+    component.user = { settings: { dashboardSettings: { tiles: [] } } } as any;
+    component.showActions = false;
+    component.tiles = [];
+    component.kpiLaneTiles = [];
+    component.mainGridTiles = [];
+
+    fixture.detectChanges();
+
+    const nativeElement = fixture.nativeElement as HTMLElement;
+    expect(nativeElement.querySelector('.pie')).toBeNull();
+    expect(nativeElement.querySelector('.dashboard-summary-header')).toBeNull();
   });
 
   it('should delegate tile building with dashboard tiles, events, preferences, and logger on input changes', async () => {
