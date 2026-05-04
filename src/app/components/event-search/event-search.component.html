@@ -5,7 +5,7 @@
       [ngStyle]="{display: showDatePicker || showActivityTypePicker || showMergedEventsToggle ? 'flex' : 'none' }">
       @if (searchFormGroup) {
       <mat-form-field [style.display]="showDatePicker ? null : 'none'"
-        class="big date-range-field qs-subscript-hidden">
+        appearance="outline" subscriptSizing="dynamic" class="big date-range-field qs-subscript-hidden">
         <mat-label>{{ compact ? 'Dates' : 'Select date range' }}</mat-label>
         <mat-date-range-input [formGroup]="searchFormGroup" [rangePicker]="picker"
           (click)="setCustomDateRange(); picker.open()">

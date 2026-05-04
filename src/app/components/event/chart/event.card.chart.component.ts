@@ -21,6 +21,7 @@ import {
   ActivityInterface,
   ChartCursorBehaviours,
   DataDistance,
+  DataHeartRate,
   DataStrydDistance,
   EventInterface,
   LapTypes,
@@ -491,6 +492,7 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
           dataTypesToUse: this.dataTypesToUse,
           userUnitSettings: this.userUnitSettings,
           eventColorService: this.eventColorService,
+          colorHeartRateZones: this.shouldColorHeartRateZones(),
         });
         this.lastPanelRebuildKey = panelRebuildKey;
 
@@ -683,6 +685,8 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
     const allActivitiesKey = this.buildActivitiesKey(allActivities);
     const dataTypesKey = [...(this.dataTypesToUse || [])].sort((left, right) => left.localeCompare(right)).join(',');
     const unitSettingsKey = this.buildUnitSettingsKey(this.userUnitSettings);
+    const heartRateZoneColoringKey = this.shouldColorHeartRateZones() ? 'hr-zones:1' : 'hr-zones:0';
+    const heartRateZoneBoundariesKey = this.buildHeartRateZoneBoundariesKey(selectedActivities);
 
     return [
       eventID,
@@ -692,6 +696,8 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
       allActivitiesKey,
       dataTypesKey,
       unitSettingsKey,
+      heartRateZoneColoringKey,
+      heartRateZoneBoundariesKey,
     ].join('|');
   }
 
@@ -727,6 +733,33 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
   private buildActivitiesKey(activities: ActivityInterface[]): string {
     return (activities || [])
       .map((activity) => `${activity?.getID?.() || ''}`)
+      .join(',');
+  }
+
+  private shouldColorHeartRateZones(): boolean {
+    return this.event?.isMerge !== true;
+  }
+
+  private buildHeartRateZoneBoundariesKey(activities: ActivityInterface[]): string {
+    return (activities || [])
+      .map((activity) => {
+        const activityID = activity?.getID?.() || '';
+        const heartRateZones = activity.intensityZones
+          ?.find((zone) => zone?.type === DataHeartRate.type);
+        if (!heartRateZones) {
+          return `${activityID}:`;
+        }
+
+        return [
+          activityID,
+          heartRateZones.zone2LowerLimit ?? '',
+          heartRateZones.zone3LowerLimit ?? '',
+          heartRateZones.zone4LowerLimit ?? '',
+          heartRateZones.zone5LowerLimit ?? '',
+          heartRateZones.zone6LowerLimit ?? '',
+          heartRateZones.zone7LowerLimit ?? '',
+        ].join(':');
+      })
       .join(',');
   }
 

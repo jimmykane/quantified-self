@@ -82,6 +82,19 @@ class MockDashboardTileEventFiltersComponent {
 }
 
 @Component({
+  selector: 'app-chart-range-selector',
+  template: '',
+  standalone: false
+})
+class MockChartRangeSelectorComponent {
+  @Input() options: any[] = [];
+  @Input() value?: string | null;
+  @Input() ariaLabel = '';
+  @Input() disabled = false;
+  @Output() valueChange = new EventEmitter<string>();
+}
+
+@Component({
   selector: 'app-xy-chart',
   template: '',
   standalone: false
@@ -128,6 +141,8 @@ class MockFormChartComponent {
   @Input() absoluteLatestPoint: any;
   @Input() formStatus?: string | null;
   @Input() infoTooltip?: string | null;
+  @Input() timelineWindow?: string;
+  @Input() reserveTitleActionSpace = false;
 }
 
 @Component({
@@ -184,6 +199,7 @@ class MockIntensityDistributionChartComponent {
   @Input() distribution: any;
   @Input() status?: string | null;
   @Input() infoTooltip?: string | null;
+  @Input() range?: string;
   @Input() reserveTitleActionSpace = false;
 }
 
@@ -198,6 +214,7 @@ class MockEfficiencyTrendChartComponent {
   @Input() trend: any;
   @Input() status?: string | null;
   @Input() infoTooltip?: string | null;
+  @Input() range?: string;
   @Input() reserveTitleActionSpace = false;
 }
 
@@ -216,8 +233,6 @@ class MockSleepTrendChartComponent {
   @Input() canNavigateNewer = false;
   @Input() infoTooltip?: string | null;
   @Input() reserveTitleActionSpace = false;
-  @Output() sleepRangeChange = new EventEmitter<any>();
-  @Output() sleepNavigate = new EventEmitter<any>();
 }
 
 describe('TileChartComponent', () => {
@@ -231,6 +246,7 @@ describe('TileChartComponent', () => {
         MockColumnsChartComponent,
         MockTileChartActionsComponent,
         MockDashboardTileEventFiltersComponent,
+        MockChartRangeSelectorComponent,
         MockXYChartComponent,
         MockPieChartComponent,
         MockFormChartComponent,
@@ -273,6 +289,11 @@ describe('TileChartComponent', () => {
     const filtersDebugElement = fixture.debugElement.query(By.directive(MockDashboardTileEventFiltersComponent));
     return filtersDebugElement?.componentInstance as MockDashboardTileEventFiltersComponent;
   };
+
+  const getRangeSelectorComponents = (): MockChartRangeSelectorComponent[] =>
+    fixture.debugElement
+      .queryAll(By.directive(MockChartRangeSelectorComponent))
+      .map(debugElement => debugElement.componentInstance as MockChartRangeSelectorComponent);
 
   const getPieComponent = (): MockPieChartComponent => {
     const pieDebugElement = fixture.debugElement.query(By.directive(MockPieChartComponent));
@@ -596,7 +617,13 @@ describe('TileChartComponent', () => {
     component.intensityDistributionStatus = 'processing' as any;
     fixture.detectChanges();
     const intensityDistribution = getIntensityDistributionComponent();
+    const rangeSelector = getRangeSelectorComponents()[0];
+
+    expect(fixture.nativeElement.querySelector('.tile-header-controls .tile-local-range-selector')).toBeTruthy();
+    expect(rangeSelector.value).toBe('1y');
+    expect(rangeSelector.options.map(option => option.value)).toEqual(['8w', '12w', '6m', '1y', 'all']);
     expect(intensityDistribution.distribution).toEqual(component.intensityDistribution);
+    expect(intensityDistribution.range).toBe('1y');
     expect(intensityDistribution.reserveTitleActionSpace).toBe(true);
   });
 
@@ -607,8 +634,44 @@ describe('TileChartComponent', () => {
     component.efficiencyTrendStatus = 'failed' as any;
     fixture.detectChanges();
     const efficiencyTrend = getEfficiencyTrendComponent();
+    const rangeSelector = getRangeSelectorComponents()[0];
+
+    expect(fixture.nativeElement.querySelector('.tile-header-controls .tile-local-range-selector')).toBeTruthy();
+    expect(rangeSelector.value).toBe('1y');
     expect(efficiencyTrend.trend).toEqual(component.efficiencyTrend);
+    expect(efficiencyTrend.range).toBe('1y');
     expect(efficiencyTrend.reserveTitleActionSpace).toBe(true);
+  });
+
+  it('should update derived chart range through the shared tile header selector', () => {
+    component.chartType = DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE as any;
+    component.showActions = true;
+    fixture.detectChanges();
+
+    const rangeSelector = getRangeSelectorComponents()[0];
+    rangeSelector.valueChange.emit('8w');
+    fixture.detectChanges();
+
+    expect(component.derivedChartRange).toBe('8w');
+    expect(getIntensityDistributionComponent().range).toBe('8w');
+  });
+
+  it('should route form chart window selection through the shared tile header selector', () => {
+    component.chartType = DASHBOARD_FORM_CHART_TYPE as any;
+    component.showActions = true;
+    fixture.detectChanges();
+
+    const rangeSelector = getRangeSelectorComponents()[0];
+    expect(rangeSelector.value).toBe('w');
+    expect(rangeSelector.options.map(option => option.value)).toEqual(['w', 'm', 'y']);
+
+    rangeSelector.valueChange.emit('m');
+    fixture.detectChanges();
+
+    const form = getFormComponent();
+    expect(component.formTimelineWindow).toBe('m');
+    expect(form.timelineWindow).toBe('m');
+    expect(form.reserveTitleActionSpace).toBe(true);
   });
 
   it('should route sleep trend chart type to dedicated renderer', () => {
@@ -622,6 +685,15 @@ describe('TileChartComponent', () => {
     fixture.detectChanges();
 
     const sleepTrend = getSleepTrendComponent();
+    const rangeSelector = getRangeSelectorComponents()[0];
+    const navButtons = fixture.nativeElement.querySelectorAll('.tile-header-controls .tile-local-range-nav-button');
+
+    expect(fixture.nativeElement.querySelector('.tile-header-controls .tile-local-range-navigation')).toBeTruthy();
+    expect(rangeSelector.value).toBe('30d');
+    expect(rangeSelector.options.map(option => option.value)).toEqual(['14d', '30d', '90d', '1y']);
+    expect(navButtons).toHaveLength(2);
+    expect((navButtons[0] as HTMLButtonElement).disabled).toBe(false);
+    expect((navButtons[1] as HTMLButtonElement).disabled).toBe(true);
     expect(sleepTrend.sleepTrend).toEqual(component.sleepTrend);
     expect(sleepTrend.sleepRange).toBe('30d');
     expect(sleepTrend.sleepWindowLabel).toBe('Last 30 days');
@@ -631,20 +703,25 @@ describe('TileChartComponent', () => {
     expect(sleepTrend.reserveTitleActionSpace).toBe(true);
   });
 
-  it('should re-emit sleep trend range and navigation events from the renderer', () => {
+  it('should emit sleep trend range and navigation events from shared tile header controls', () => {
     component.chartType = DASHBOARD_SLEEP_TREND_CHART_TYPE as any;
+    component.sleepTrendRange = '14d';
+    component.sleepTrendCanNavigateOlder = true;
+    component.sleepTrendCanNavigateNewer = true;
     const ranges: string[] = [];
     const directions: string[] = [];
     component.sleepTrendRangeChange.subscribe(range => ranges.push(range));
     component.sleepTrendNavigate.subscribe(direction => directions.push(direction));
     fixture.detectChanges();
 
-    const sleepTrend = getSleepTrendComponent();
-    sleepTrend.sleepRangeChange.emit('90d');
-    sleepTrend.sleepNavigate.emit('older');
+    const rangeSelector = getRangeSelectorComponents()[0];
+    const navButtons = fixture.nativeElement.querySelectorAll('.tile-header-controls .tile-local-range-nav-button');
+    rangeSelector.valueChange.emit('90d');
+    (navButtons[0] as HTMLButtonElement).click();
+    (navButtons[1] as HTMLButtonElement).click();
 
     expect(ranges).toEqual(['90d']);
-    expect(directions).toEqual(['older']);
+    expect(directions).toEqual(['older', 'newer']);
   });
 
   it('should pass info tooltip text to derived curated chart renderers', () => {

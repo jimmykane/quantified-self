@@ -109,6 +109,7 @@ describe('ServicesComponent', () => {
 
     it('should navigate with correct query params when selectService is called', async () => {
         await component.selectService('garmin');
+        expect(component.activeSection).toBe('garmin');
         expect(mockRouter.navigate).toHaveBeenCalledWith([], {
             relativeTo: mockActivatedRoute,
             queryParams: { serviceName: ServiceNames.GarminAPI },
@@ -141,9 +142,29 @@ describe('ServicesComponent', () => {
         const desktopNav = fixture.nativeElement.querySelector('.desktop-section-nav');
         const navLabels = Array.from(desktopNav.querySelectorAll('.desktop-section-nav-label'))
             .map((label: Element) => label.textContent?.trim());
+        const navDescriptions = Array.from(desktopNav.querySelectorAll('.desktop-section-nav-description'))
+            .map((description: Element) => description.textContent?.trim());
 
         expect(desktopNav).toBeTruthy();
         expect(desktopNav.querySelector('mat-nav-list')).toBeTruthy();
         expect(navLabels).toEqual(['Suunto', 'Garmin', 'COROS']);
+        expect(navDescriptions).toEqual(['Suunto App', 'Garmin Connect', 'COROS account']);
+    });
+
+    it('keeps service panels mounted and hides inactive panels during tab switches', () => {
+        fixture.detectChanges();
+
+        const servicePanels = fixture.nativeElement.querySelectorAll('.service-detail');
+
+        expect(servicePanels.length).toBe(3);
+        expect(fixture.nativeElement.querySelector('#service-suunto-title').closest('.service-detail').hidden).toBe(false);
+        expect(fixture.nativeElement.querySelector('#service-garmin-title').closest('.service-detail').hidden).toBe(true);
+        expect(fixture.nativeElement.querySelector('#service-coros-title').closest('.service-detail').hidden).toBe(true);
+
+        component.activeSection = 'coros';
+        fixture.detectChanges();
+
+        expect(fixture.nativeElement.querySelector('#service-suunto-title').closest('.service-detail').hidden).toBe(true);
+        expect(fixture.nativeElement.querySelector('#service-coros-title').closest('.service-detail').hidden).toBe(false);
     });
 });

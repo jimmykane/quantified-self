@@ -12,9 +12,6 @@
           </button>
           }
         </div>
-        <app-chart-range-selector class="efficiency-range-selector" [options]="rangeSelectorOptions"
-          [value]="selectedRange" ariaLabel="Select efficiency trend range" (valueChange)="onRangeSelection($event)">
-        </app-chart-range-selector>
       </div>
       <div class="efficiency-value">{{ latestValueText }}</div>
       <div class="efficiency-subtitle">Latest power / heart-rate ratio</div>

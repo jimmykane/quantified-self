@@ -2,12 +2,9 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
-import { MatMenu, MatMenuModule } from '@angular/material/menu';
-import { By } from '@angular/platform-browser';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SLEEP_PROVIDERS } from '@shared/sleep';
 import { ChartsSleepTrendComponent } from './charts.sleep-trend.component';
-import { ChartRangeSelectorComponent } from '../shared/chart-range-selector/chart-range-selector.component';
 import type { DashboardSleepTrendPoint } from '../../../helpers/dashboard-sleep-chart.helper';
 import { AppColors } from '../../../services/color/app.colors';
 import { EChartsLoaderService } from '../../../services/echarts-loader.service';
@@ -51,8 +48,8 @@ describe('ChartsSleepTrendComponent', () => {
     };
 
     await TestBed.configureTestingModule({
-      declarations: [ChartsSleepTrendComponent, ChartRangeSelectorComponent],
-      imports: [MatButtonModule, MatIconModule, MatMenuModule],
+      declarations: [ChartsSleepTrendComponent],
+      imports: [MatButtonModule, MatIconModule],
       providers: [
         { provide: EChartsLoaderService, useValue: mockLoader },
         { provide: LoggerService, useValue: { error: vi.fn(), warn: vi.fn() } },
@@ -133,7 +130,7 @@ describe('ChartsSleepTrendComponent', () => {
     expect(visibleLabelCount).toBeLessThanOrEqual(10);
   });
 
-  it('renders sleep range controls and navigation buttons', () => {
+  it('reserves header space while sleep controls live in the tile header', () => {
     component.sleepRange = '30d';
     component.sleepWindowLabel = 'Last 30 days';
     component.canNavigateOlder = true;
@@ -146,57 +143,19 @@ describe('ChartsSleepTrendComponent', () => {
     const rangeMenuButton = element.querySelector('.chart-range-selector-button');
     const reservedHeader = element.querySelector('.sleep-header.sleep-header-reserve-actions');
     const controlsInTitleRow = element.querySelector('.title-row .sleep-controls');
-    const rangeMenu = fixture.debugElement.query(By.directive(MatMenu));
     const navButtons = element.querySelectorAll('.sleep-nav-button');
 
-    expect(rangeMenuButton).toBeTruthy();
+    expect(rangeMenuButton).toBeNull();
     expect(reservedHeader).toBeTruthy();
-    expect(controlsInTitleRow).toBeTruthy();
-    expect(rangeMenuButton?.textContent).toContain('30d');
-    expect(rangeMenu).toBeTruthy();
-    expect(component.rangeOptions.map(option => option.label)).toEqual(['14d', '30d', '90d', '1y']);
-    expect(component.rangeSelectorOptions).toEqual(expect.arrayContaining([
-      expect.objectContaining({ value: '30d', label: '30d', shortLabel: '30d', menuLabel: '30 days' }),
-    ]));
-    expect(navButtons).toHaveLength(2);
-    expect((navButtons[0] as HTMLButtonElement).disabled).toBe(false);
-    expect((navButtons[1] as HTMLButtonElement).disabled).toBe(true);
+    expect(controlsInTitleRow).toBeNull();
+    expect(navButtons).toHaveLength(0);
     expect(element.querySelector('.sleep-context-label')?.textContent).toContain('Last 30 days');
   });
 
-  it('emits sleep range and navigation events from component controls', () => {
-    const ranges: string[] = [];
-    const directions: string[] = [];
-    component.sleepRange = '14d';
-    component.canNavigateOlder = true;
-    component.canNavigateNewer = true;
-    component.sleepRangeChange.subscribe(range => ranges.push(range));
-    component.sleepNavigate.subscribe(direction => directions.push(direction));
+  it('normalizes invalid sleep range input while controls live in the tile header', () => {
+    component.sleepRange = 'not-a-range' as any;
 
-    component.onSleepRangeSelection('90d');
-    component.navigateSleep('older');
-    component.navigateSleep('newer');
-
-    expect(ranges).toEqual(['90d']);
-    expect(directions).toEqual(['older', 'newer']);
-  });
-
-  it('does not emit disabled newer navigation or redundant range changes', () => {
-    const ranges: string[] = [];
-    const directions: string[] = [];
-    component.sleepRange = '14d';
-    component.canNavigateOlder = true;
-    component.canNavigateNewer = false;
-    component.sleepRangeChange.subscribe(range => ranges.push(range));
-    component.sleepNavigate.subscribe(direction => directions.push(direction));
-
-    component.onSleepRangeSelection('14d');
-    component.navigateSleep('newer');
-    component.canNavigateOlder = false;
-    component.navigateSleep('older');
-
-    expect(ranges).toEqual([]);
-    expect(directions).toEqual([]);
+    expect(component.sleepRange).toBe('14d');
   });
 
   it('renders recorded sleep HRV as a secondary-axis line', async () => {

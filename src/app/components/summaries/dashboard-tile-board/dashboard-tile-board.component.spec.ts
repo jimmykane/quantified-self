@@ -25,6 +25,8 @@ describe('DashboardTileBoardComponent', () => {
     expect(host.classList.contains('qs-glass-card-panel')).toBe(true);
     expect(host.style.getPropertyValue('--dashboard-tile-board-cols')).toBe('3');
     expect(host.style.getPropertyValue('--dashboard-tile-board-row-height')).toBe('180px');
+    expect(host.style.getPropertyValue('--dashboard-tile-board-divider')).toBe('1px solid var(--qs-glass-panel-border, var(--mat-sys-outline-variant))');
+    expect(host.style.getPropertyValue('--dashboard-tile-cell-inline-divider')).toBe('var(--dashboard-tile-board-divider)');
   });
 
   it('should fall back to a single column and default row height for invalid inputs', () => {
@@ -36,5 +38,6 @@ describe('DashboardTileBoardComponent', () => {
     const host = fixture.nativeElement as HTMLElement;
     expect(host.style.getPropertyValue('--dashboard-tile-board-cols')).toBe('1');
     expect(host.style.getPropertyValue('--dashboard-tile-board-row-height')).toBe('150px');
+    expect(host.style.getPropertyValue('--dashboard-tile-cell-inline-divider')).toBe('0');
   });
 });

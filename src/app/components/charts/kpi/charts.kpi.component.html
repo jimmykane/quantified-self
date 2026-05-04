@@ -1,6 +1,5 @@
-<app-loading-overlay [isLoading]="isLoading" [hasError]="!compactRow && showNoDataError" [allowErrorPassthrough]="true" [errorMessage]="noDataErrorMessage"
-  [errorHint]="noDataErrorHint" [errorIcon]="noDataErrorIcon" [showProgressBar]="!compactRow" [showShade]="!compactRow"
-  [showSkeleton]="false" height="100%" [style.height.%]="100">
+<app-loading-overlay [isLoading]="isLoading" [hasError]="!isLoading && showNoDataError" [allowErrorPassthrough]="true" [errorMessage]="noDataErrorMessage"
+  [errorHint]="noDataErrorHint" [errorIcon]="noDataErrorIcon" [showSkeleton]="false" height="100%" [style.height.%]="100">
   <section class="kpi-layout" [class.kpi-layout-dark]="darkTheme" [class.kpi-layout-row]="compactRow"
     [class.kpi-layout-reserve-actions]="reserveTitleActionSpace" (click)="onKpiLayoutClick($event)">
     <header class="kpi-header" [class.kpi-header-reserve-actions]="reserveTitleActionSpace">
@@ -52,17 +51,7 @@
       }
     </header>
     <div class="kpi-sparkline-shell">
-      <div #chartDiv class="kpi-sparkline" [class.kpi-sparkline-muted]="compactRow && (isLoading || showNoDataError)"></div>
-      @if (compactRow && (isLoading || showNoDataError)) {
-      <div class="kpi-row-status" [class.kpi-row-status-loading]="isLoading" aria-live="polite">
-        @if (isLoading) {
-        <mat-progress-bar mode="indeterminate" aria-label="Loading KPI"></mat-progress-bar>
-        } @else {
-        <mat-icon aria-hidden="true">{{ noDataErrorIcon }}</mat-icon>
-        <span>{{ compactRowStatusText }}</span>
-        }
-      </div>
-      }
+      <div #chartDiv class="kpi-sparkline"></div>
     </div>
   </section>
 </app-loading-overlay>

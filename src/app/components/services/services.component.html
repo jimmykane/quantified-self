@@ -33,7 +33,7 @@
               (click)="$event.preventDefault(); selectService(section.id)">
               <mat-icon matListItemIcon [svgIcon]="section.svgIcon"></mat-icon>
               <span matListItemTitle class="desktop-section-nav-label">{{ section.label }}</span>
-              <span matListItemLine>{{ section.description }}</span>
+              <span matListItemLine class="desktop-section-nav-description">{{ section.description }}</span>
             </a>
             }
           </mat-nav-list>
@@ -41,9 +41,10 @@
 
         <mat-tab-nav-panel #serviceTabsPanel>
           <section class="workspace-main">
-            @switch (activeSection) {
-            @case ('garmin') {
-            <section class="service-detail" aria-labelledby="service-garmin-title">
+            <section
+              class="service-detail"
+              [hidden]="activeSection !== 'garmin'"
+              aria-labelledby="service-garmin-title">
               <header class="service-detail-header">
                 <mat-icon class="service-detail-logo" svgIcon="garmin"></mat-icon>
                 <div>
@@ -60,9 +61,11 @@
                 </app-services-garmin>
               </div>
             </section>
-            }
-            @case ('coros') {
-            <section class="service-detail" aria-labelledby="service-coros-title">
+
+            <section
+              class="service-detail"
+              [hidden]="activeSection !== 'coros'"
+              aria-labelledby="service-coros-title">
               <header class="service-detail-header">
                 <mat-icon class="service-detail-logo" svgIcon="coros"></mat-icon>
                 <div>
@@ -75,9 +78,11 @@
                 <app-services-coros [user]="user" [hasProAccess]="hasProAccess"></app-services-coros>
               </div>
             </section>
-            }
-            @default {
-            <section class="service-detail" aria-labelledby="service-suunto-title">
+
+            <section
+              class="service-detail"
+              [hidden]="activeSection !== 'suunto'"
+              aria-labelledby="service-suunto-title">
               <header class="service-detail-header">
                 <mat-icon class="service-detail-logo" svgIcon="suunto"></mat-icon>
                 <div>
@@ -90,8 +95,6 @@
                 <app-services-suunto [user]="user" [hasProAccess]="hasProAccess"></app-services-suunto>
               </div>
             </section>
-            }
-            }
           </section>
         </mat-tab-nav-panel>
       </div>

@@ -32,14 +32,12 @@ import type {
 } from '../../../helpers/dashboard-derived-metrics.helper';
 import {
   DASHBOARD_DERIVED_CHART_DEFAULT_RANGE,
-  DASHBOARD_DERIVED_CHART_RANGE_OPTIONS,
   filterDashboardDerivedWeeklyRange,
   normalizeDashboardDerivedChartRange,
   type DashboardDerivedChartRange,
 } from '../../../helpers/dashboard-derived-chart-range.helper';
 import { EChartsLoaderService } from '../../../services/echarts-loader.service';
 import { LoggerService } from '../../../services/logger.service';
-import type { ChartRangeSelectorOption } from '../shared/chart-range-selector/chart-range-selector.component';
 
 type ChartOption = Parameters<EChartsType['setOption']>[0];
 type EfficiencyXAxisLabelMode = 'year' | 'month-year' | 'day-month';
@@ -61,7 +59,19 @@ export class ChartsEfficiencyTrendComponent implements AfterViewInit, OnChanges,
   @Input() status?: DashboardDerivedMetricStatus | null;
   @Input() infoTooltip?: string | null;
   @Input() reserveTitleActionSpace = false;
-
+  @Input()
+  set range(value: DashboardDerivedChartRange | null | undefined) {
+    const nextRange = normalizeDashboardDerivedChartRange(value);
+    if (nextRange === this.selectedRange) {
+      return;
+    }
+    this.selectedRange = nextRange;
+    if (this.chartDiv?.nativeElement) {
+      void this.refreshChart();
+    } else {
+      this.updateHeaderAndErrorState();
+    }
+  }
   @ViewChild('chartDiv', { static: true }) chartDiv!: ElementRef<HTMLDivElement>;
 
   private readonly chartHost: EChartsHostController;
@@ -72,12 +82,6 @@ export class ChartsEfficiencyTrendComponent implements AfterViewInit, OnChanges,
   public noDataErrorHint = 'This chart needs derived efficiency trend data.';
   public noDataErrorIcon = 'show_chart';
   public selectedRange: DashboardDerivedChartRange = DASHBOARD_DERIVED_CHART_DEFAULT_RANGE;
-  public readonly rangeSelectorOptions: ReadonlyArray<ChartRangeSelectorOption> = DASHBOARD_DERIVED_CHART_RANGE_OPTIONS.map(option => ({
-    value: option.range,
-    label: option.label,
-    shortLabel: option.shortLabel,
-    menuLabel: option.menuLabel,
-  }));
 
   constructor(
     private eChartsLoader: EChartsLoaderService,
@@ -106,15 +110,6 @@ export class ChartsEfficiencyTrendComponent implements AfterViewInit, OnChanges,
 
   ngOnDestroy(): void {
     this.chartHost.dispose();
-  }
-
-  public onRangeSelection(value: unknown): void {
-    const nextRange = normalizeDashboardDerivedChartRange(value);
-    if (nextRange === this.selectedRange) {
-      return;
-    }
-    this.selectedRange = nextRange;
-    void this.refreshChart();
   }
 
   private async refreshChart(): Promise<void> {

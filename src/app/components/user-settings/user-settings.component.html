@@ -52,13 +52,14 @@
             <mat-nav-list class="desktop-section-nav-list">
               @for (section of settingsSectionOptions; track section.id) {
               <a
+                class="desktop-section-nav-item"
                 href=""
                 mat-list-item
                 [activated]="activeSection === section.id"
                 (click)="$event.preventDefault(); selectSettingsSection(section.id)">
                 <mat-icon matListItemIcon>{{ section.icon }}</mat-icon>
                 <span matListItemTitle class="desktop-section-nav-label">{{ section.label }}</span>
-                <span matListItemLine>{{ section.description }}</span>
+                <span matListItemLine class="desktop-section-nav-description">{{ section.description }}</span>
               </a>
               }
             </mat-nav-list>
@@ -270,13 +271,13 @@
               </header>
               <mat-divider></mat-divider>
               <div class="settings-panel-body">
-                <div class="unit-simple-settings">
-                  <div class="unit-simple-settings__copy">
-                    <h2>Simple preset</h2>
+                <div class="settings-option-block">
+                  <div>
+                    <h2 class="settings-subsection-title">Simple preset</h2>
                     <p>Choose the units most of the app should use.</p>
                   </div>
                   <mat-button-toggle-group
-                    class="unit-simple-settings__choices"
+                    appearance="standard"
                     [value]="selectedUnitPreset"
                     hideSingleSelectionIndicator
                     aria-label="Unit preset"
@@ -287,13 +288,13 @@
                   </mat-button-toggle-group>
                 </div>
 
-                <mat-expansion-panel class="unit-advanced-settings">
+                <mat-expansion-panel class="qs-glass-card-panel">
                   <mat-expansion-panel-header>
                     <mat-panel-title>Fine-tune units</mat-panel-title>
                     <mat-panel-description>Individual settings</mat-panel-description>
                   </mat-expansion-panel-header>
-                  <div class="unit-advanced-settings__fields">
-                    <mat-form-field class="unit-advanced-settings__field" appearance="outline">
+                  <div class="settings-field-list">
+                    <mat-form-field appearance="outline">
                       <mat-label>Distance</mat-label>
                       <mat-select formControlName="distanceUnitsToUse">
                         @for (unit of distanceUnitOptions; track unit.value) {
@@ -303,7 +304,7 @@
                       <mat-hint>Dashboard and activity distances.</mat-hint>
                     </mat-form-field>
 
-                    <mat-form-field class="unit-advanced-settings__field" appearance="outline">
+                    <mat-form-field appearance="outline">
                       <mat-label>Speed</mat-label>
                       <mat-select formControlName="speedUnitsToUse" multiple>
                         @for (unit of speedUnits | keyvalue; track unit.key) {
@@ -313,7 +314,7 @@
                       <mat-hint>Running, cycling, and activity speed.</mat-hint>
                     </mat-form-field>
 
-                    <mat-form-field class="unit-advanced-settings__field" appearance="outline">
+                    <mat-form-field appearance="outline">
                       <mat-label>Pace</mat-label>
                       <mat-select formControlName="paceUnitsToUse" multiple>
                         @for (unit of paceUnits | keyvalue; track unit.key) {
@@ -323,7 +324,7 @@
                       <mat-hint>Time per kilometer or mile.</mat-hint>
                     </mat-form-field>
 
-                    <mat-form-field class="unit-advanced-settings__field" appearance="outline">
+                    <mat-form-field appearance="outline">
                       <mat-label>Swim pace</mat-label>
                       <mat-select formControlName="swimPaceUnitsToUse" multiple>
                         @for (unit of swimPaceUnits | keyvalue; track unit.key) {
@@ -333,7 +334,7 @@
                       <mat-hint>Pool and swim segment pace.</mat-hint>
                     </mat-form-field>
 
-                    <mat-form-field class="unit-advanced-settings__field" appearance="outline">
+                    <mat-form-field appearance="outline">
                       <mat-label>Vertical speed</mat-label>
                       <mat-select formControlName="verticalSpeedUnitsToUse" multiple>
                         @for (unit of verticalSpeedUnits | keyvalue; track unit.key) {

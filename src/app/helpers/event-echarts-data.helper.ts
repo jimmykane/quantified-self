@@ -5,6 +5,7 @@ import {
   DataCadenceAvg,
   DataDistance,
   DataDuration,
+  DataHeartRate,
   DataHeartRateAvg,
   DataInterface,
   DataGradeAdjustedSpeed,
@@ -43,6 +44,13 @@ export interface EventChartPoint {
   time: number;
 }
 
+export interface EventChartZoneColorPiece {
+  zone: string;
+  color: string;
+  gte?: number;
+  lt?: number;
+}
+
 export interface EventChartPanelSeries {
   id: string;
   activityID: string;
@@ -52,6 +60,7 @@ export interface EventChartPanelSeries {
   displayName: string;
   unit: string;
   points: EventChartPoint[];
+  zoneColorPieces?: EventChartZoneColorPiece[];
 }
 
 export interface EventChartPanelModel {
@@ -93,6 +102,7 @@ export interface BuildEventChartPanelsInput {
   dataTypesToUse: string[];
   userUnitSettings: UserUnitSettingsInterface;
   eventColorService: AppEventColorService;
+  colorHeartRateZones?: boolean;
 }
 
 const EMPTY_PANEL_DOMAIN = { minX: 0, maxX: 1 };
@@ -110,6 +120,17 @@ const ALL_KNOWN_UNIT_VARIANTS = new Set<string>(
     .dataTypeUnitGroups ?? {})
     .flatMap((group) => Object.keys(group || {}))
 );
+const HEART_RATE_ZONE_LOWER_LIMIT_KEYS = [
+  'zone2LowerLimit',
+  'zone3LowerLimit',
+  'zone4LowerLimit',
+  'zone5LowerLimit',
+  'zone6LowerLimit',
+  'zone7LowerLimit',
+] as const;
+const MIN_HEART_RATE_ZONE_LOWER_LIMIT_COUNT = 2;
+
+type ActivityIntensityZone = ActivityInterface['intensityZones'][number];
 
 interface ActivityNumericCache {
   startTimeMs: number;
@@ -176,6 +197,9 @@ export function buildEventChartPanels(input: BuildEventChartPanelsInput): EventC
 
       const panel = panelsMap.get(stream.type) as EventChartPanelModel;
       const activityID = activity.getID() || '';
+      const zoneColorPieces = input.colorHeartRateZones === true
+        ? buildHeartRateZoneColorPieces(activity, stream.type, input.eventColorService)
+        : [];
       panel.series.push({
         id: `${activityID}::${stream.type}`,
         activityID,
@@ -185,6 +209,7 @@ export function buildEventChartPanels(input: BuildEventChartPanelsInput): EventC
         displayName,
         unit,
         points,
+        ...(zoneColorPieces.length > 0 ? { zoneColorPieces } : {}),
       });
     });
   });
@@ -204,6 +229,78 @@ export function buildEventChartPanels(input: BuildEventChartPanelsInput): EventC
     .sort((left, right) => comparePanelsByPreference(left, right, preferredDataTypeOrder));
 
   return panels;
+}
+
+function buildHeartRateZoneColorPieces(
+  activity: ActivityInterface,
+  streamType: string,
+  eventColorService: AppEventColorService
+): EventChartZoneColorPiece[] {
+  if (streamType !== DataHeartRate.type) {
+    return [];
+  }
+
+  const heartRateZones = activity.intensityZones
+    ?.find((zone) => zone?.type === DataHeartRate.type);
+  if (!heartRateZones) {
+    return [];
+  }
+
+  const lowerLimits = readHeartRateZoneLowerLimits(heartRateZones);
+  if (!lowerLimits.length) {
+    return [];
+  }
+
+  const pieces: EventChartZoneColorPiece[] = [
+    {
+      zone: 'Zone 1',
+      color: eventColorService.getColorForZoneHex('Zone 1'),
+      lt: lowerLimits[0],
+    },
+  ];
+
+  for (let index = 0; index < lowerLimits.length; index += 1) {
+    const zoneNumber = index + 2;
+    const nextLowerLimit = lowerLimits[index + 1];
+    pieces.push({
+      zone: `Zone ${zoneNumber}`,
+      color: eventColorService.getColorForZoneHex(`Zone ${zoneNumber}`),
+      gte: lowerLimits[index],
+      ...(Number.isFinite(nextLowerLimit) ? { lt: nextLowerLimit } : {}),
+    });
+  }
+
+  return pieces;
+}
+
+function readHeartRateZoneLowerLimits(heartRateZones: ActivityIntensityZone): number[] {
+  const lowerLimits: number[] = [];
+  let foundMissingBoundary = false;
+
+  for (const key of HEART_RATE_ZONE_LOWER_LIMIT_KEYS) {
+    const rawLimit = heartRateZones[key];
+    if (rawLimit === undefined || rawLimit === null) {
+      foundMissingBoundary = true;
+      continue;
+    }
+
+    if (foundMissingBoundary) {
+      return [];
+    }
+
+    const limit = Number(rawLimit);
+    if (!Number.isFinite(limit)) {
+      return [];
+    }
+
+    if (lowerLimits.length > 0 && limit <= lowerLimits[lowerLimits.length - 1]) {
+      return [];
+    }
+
+    lowerLimits.push(limit);
+  }
+
+  return lowerLimits.length >= MIN_HEART_RATE_ZONE_LOWER_LIMIT_COUNT ? lowerLimits : [];
 }
 
 export function hasEventChartableData(

@@ -20,19 +20,13 @@
 .form-status-row {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: 12px;
-  padding-right: 72px;
   margin-bottom: 8px;
 }
 
-.form-status-controls {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  flex-wrap: wrap;
-  gap: 5px;
-  min-width: 0;
+.form-chart-header-reserve-actions .form-status-row {
+  padding-right: 132px;
 }
 
 .form-status-title-row {
@@ -85,22 +79,9 @@
   color: var(--mat-sys-on-surface-variant);
 }
 
-.form-status-meta {
-  font-size: 0.88rem;
-  font-weight: 600;
-  line-height: 1.1;
-  color: var(--mat-sys-on-surface-variant);
-  white-space: nowrap;
-}
-
-.form-granularity-selector {
-  flex: 0 0 auto;
-  margin-right: 2px;
-}
-
 .form-stats-row {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 8px;
   margin-bottom: 8px;
 }
@@ -146,13 +127,10 @@
 
   .form-status-row {
     align-items: flex-start;
-    padding-right: 44px;
   }
 
-  .form-status-controls {
-    flex-direction: column;
-    align-items: flex-end;
-    gap: 4px;
+  .form-chart-header-reserve-actions .form-status-row {
+    padding-right: 104px;
   }
 
   .form-stat-value {

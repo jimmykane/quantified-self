@@ -16,7 +16,7 @@
   align-items: center;
   gap: 4px;
   margin-left: auto;
-  min-height: 40px;
+  min-height: 46px;
   padding: 0 16px 0 4px;
   white-space: nowrap;
   overflow: visible !important;
@@ -44,31 +44,31 @@
 }
 
 .table-toolbar-main .qs-search-field {
-  --mat-form-field-container-height: 40px;
-  --mat-form-field-container-text-size: 0.9rem;
-  --mat-form-field-container-vertical-padding: 8px;
+  --mat-form-field-container-height: 46px;
+  --mat-form-field-container-text-size: 0.95rem;
+  --mat-form-field-container-vertical-padding: 10px;
   width: 100%;
   min-width: 0;
 }
 
 .table-toolbar-main .qs-search-field ::ng-deep .mat-mdc-form-field-infix {
-  min-height: 40px;
-  padding-top: 8px !important;
-  padding-bottom: 8px !important;
+  min-height: 46px;
+  padding-top: 10px !important;
+  padding-bottom: 10px !important;
 }
 
 .table-toolbar-main .qs-search-field ::ng-deep .mat-mdc-icon-button {
-  width: 34px;
-  height: 34px;
-  padding: 5px;
+  width: 38px;
+  height: 38px;
+  padding: 7px;
 }
 
 .table-toolbar-main .qs-search-field ::ng-deep .mat-mdc-form-field-flex {
-  min-height: 40px;
+  min-height: 46px;
 }
 
 .table-toolbar-main .qs-search-field ::ng-deep input.mat-mdc-input-element {
-  font-size: 0.9rem;
+  font-size: 0.95rem;
 }
 
 .table-toolbar-main .qs-search-field mat-icon {
@@ -83,7 +83,7 @@
   justify-content: flex-start;
   min-width: 0;
   min-height: 0;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .table-toolbar-filters:empty {

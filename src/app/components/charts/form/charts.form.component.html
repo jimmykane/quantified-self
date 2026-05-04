@@ -2,7 +2,7 @@
   [errorHint]="noDataErrorHint" [errorIcon]="noDataErrorIcon" [showSkeleton]="false"
   height="100%" [style.height.%]="100">
   <section class="form-chart-layout">
-    <header class="form-chart-header">
+    <header class="form-chart-header" [class.form-chart-header-reserve-actions]="reserveTitleActionSpace">
       <div class="form-status-row">
         <div class="form-status-title-row">
           <h3 class="form-status-title qs-dashboard-chart-title" [attr.data-status]="status().key">{{ status().title }}</h3>
@@ -12,13 +12,6 @@
             <mat-icon>info</mat-icon>
           </button>
           }
-        </div>
-        <div class="form-status-controls">
-          <div class="form-status-meta">Latest TSS: {{ headlineStats().tss.value }}</div>
-          <app-chart-range-selector class="form-granularity-selector" [options]="granularityRangeOptions"
-            [value]="selectedGranularity()" ariaLabel="Select Form and TSS timeline window"
-            (valueChange)="onGranularityChange($event)">
-          </app-chart-range-selector>
         </div>
       </div>
 
@@ -34,6 +27,10 @@
         <div class="form-stat">
           <div class="form-stat-value">{{ headlineStats().form.value }}</div>
           <div class="form-stat-label">Form (TSB)</div>
+        </div>
+        <div class="form-stat">
+          <div class="form-stat-value">{{ headlineStats().tss.value }}</div>
+          <div class="form-stat-label">Latest TSS</div>
         </div>
       </div>
     </header>

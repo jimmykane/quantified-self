@@ -230,6 +230,8 @@ describe('UserSettingsComponent', () => {
         const desktopNav = fixture.nativeElement.querySelector('.desktop-section-nav');
         const navLabels = Array.from(desktopNav.querySelectorAll('.desktop-section-nav-label'))
             .map((label: Element) => label.textContent?.trim());
+        const navDescriptions = Array.from(desktopNav.querySelectorAll('.desktop-section-nav-description'))
+            .map((description: Element) => description.textContent?.trim());
 
         expect(desktopNav).toBeTruthy();
         expect(desktopNav.querySelector('mat-nav-list')).toBeTruthy();
@@ -242,6 +244,7 @@ describe('UserSettingsComponent', () => {
             'Units',
             'Delete Account',
         ]);
+        expect(navDescriptions).toEqual(component.settingsSectionOptions.map(section => section.description));
     });
 
     it('shows delete account as its own final settings section', () => {
@@ -497,6 +500,21 @@ describe('UserSettingsComponent', () => {
         expect(component.userSettingsFormGroup.get('swimPaceUnitsToUse').value).toEqual([SwimPaceUnits.MinutesPer100Yard]);
         expect(component.userSettingsFormGroup.get('verticalSpeedUnitsToUse').value).toEqual([VerticalSpeedUnits.FeetPerSecond]);
         expect(component.userSettingsFormGroup.dirty).toBe(true);
+    });
+
+    it('renders unit presets and advanced units with plain Material controls', () => {
+        component.activeSection = 'units';
+        fixture.detectChanges();
+
+        const presetGroup = fixture.nativeElement.querySelector('mat-button-toggle-group');
+        const advancedPanel = fixture.nativeElement.querySelector('mat-expansion-panel');
+
+        expect(presetGroup).toBeTruthy();
+        expect(advancedPanel).toBeTruthy();
+        expect(presetGroup.hasAttribute('hideSingleSelectionIndicator')).toBe(true);
+        expect(advancedPanel.classList.contains('qs-glass-card-panel')).toBe(true);
+        expect(fixture.nativeElement.querySelector('.unit-simple-settings')).toBeFalsy();
+        expect(fixture.nativeElement.querySelector('.unit-advanced-settings')).toBeFalsy();
     });
 
     it('should save trimmed brandText for paid users', async () => {

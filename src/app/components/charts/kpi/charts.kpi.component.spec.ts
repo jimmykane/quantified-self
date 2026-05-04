@@ -1,5 +1,6 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { NO_ERRORS_SCHEMA, SimpleChange } from '@angular/core';
+import { Component, Input, NO_ERRORS_SCHEMA, SimpleChange } from '@angular/core';
+import { By } from '@angular/platform-browser';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MatTooltip } from '@angular/material/tooltip';
 import { ChartsKpiComponent } from './charts.kpi.component';
@@ -16,6 +17,22 @@ import {
   DASHBOARD_MONOTONY_STRAIN_KPI_CHART_TYPE,
   DASHBOARD_RAMP_RATE_KPI_CHART_TYPE,
 } from '../../../helpers/dashboard-special-chart-types';
+
+@Component({
+  selector: 'app-loading-overlay',
+  template: '<ng-content></ng-content>',
+  standalone: false,
+})
+class MockLoadingOverlayComponent {
+  @Input() isLoading = false;
+  @Input() hasError = false;
+  @Input() allowErrorPassthrough = false;
+  @Input() errorMessage = '';
+  @Input() errorHint = '';
+  @Input() errorIcon = '';
+  @Input() showSkeleton = true;
+  @Input() height = '';
+}
 
 describe('ChartsKpiComponent', () => {
   let fixture: ComponentFixture<ChartsKpiComponent>;
@@ -57,7 +74,7 @@ describe('ChartsKpiComponent', () => {
     hapticsMock = { selection: vi.fn() };
 
     await TestBed.configureTestingModule({
-      declarations: [ChartsKpiComponent],
+      declarations: [ChartsKpiComponent, MockLoadingOverlayComponent],
       providers: [
         { provide: AppHapticsService, useValue: hapticsMock },
         { provide: EChartsLoaderService, useValue: mockLoader },
@@ -81,6 +98,11 @@ describe('ChartsKpiComponent', () => {
     };
   });
 
+  const getLoadingOverlay = (): MockLoadingOverlayComponent => {
+    const debugElement = fixture.debugElement.query(By.directive(MockLoadingOverlayComponent));
+    return debugElement.componentInstance as MockLoadingOverlayComponent;
+  };
+
   afterEach(() => {
     if (originalResizeObserver) {
       globalThis.ResizeObserver = originalResizeObserver;
@@ -95,6 +117,8 @@ describe('ChartsKpiComponent', () => {
 
     expect(component.title).toBe('ACWR');
     expect(component.primaryValueText).toBe('1.11');
+    expect(component.secondaryLabel).toBe('Acute / Chronic');
+    expect(component.secondaryValueText).toBe('210 / 190');
   });
 
   it('switches presentation for ramp rate', async () => {
@@ -112,6 +136,8 @@ describe('ChartsKpiComponent', () => {
 
     expect(component.title).toBe('Ramp Rate');
     expect(component.primaryValueText).toBe('4');
+    expect(component.secondaryLabel).toBe('CTL today');
+    expect(component.secondaryValueText).toBe('65');
   });
 
   it('switches presentation for monotony/strain', async () => {
@@ -128,6 +154,8 @@ describe('ChartsKpiComponent', () => {
 
     expect(component.title).toBe('Monotony / Strain');
     expect(component.primaryValueText).toBe('612');
+    expect(component.secondaryLabel).toBe('Monotony');
+    expect(component.secondaryValueText).toBe('1.7');
   });
 
   it('uses compact title aliases when action space is reserved', async () => {
@@ -219,11 +247,12 @@ describe('ChartsKpiComponent', () => {
     expect(component.noDataErrorMessage).toBe('KPI is updating');
   });
 
-  it('renders no-data as an inline row status in compact row mode', async () => {
+  it('shows no-data through the shared loading overlay after compact KPI loading finishes', async () => {
     component.compactRow = true;
     component.chartType = DASHBOARD_ACWR_KPI_CHART_TYPE;
     component.acwr = null;
     component.acwrStatus = 'missing';
+    component.isLoading = false;
 
     fixture.detectChanges();
     await fixture.whenStable();
@@ -231,23 +260,31 @@ describe('ChartsKpiComponent', () => {
     fixture.detectChanges();
 
     const nativeElement = fixture.nativeElement as HTMLElement;
-    const rowStatus = nativeElement.querySelector('.kpi-row-status');
+    const overlay = getLoadingOverlay();
+
     expect(component.showNoDataError).toBe(true);
-    expect(rowStatus?.querySelector('span')?.textContent?.trim()).toBe('No data');
-    expect(nativeElement.querySelector('.kpi-sparkline-muted')).not.toBeNull();
+    expect(overlay.isLoading).toBe(false);
+    expect(overlay.hasError).toBe(true);
+    expect(overlay.errorMessage).toBe('No data yet');
+    expect(nativeElement.querySelector('.kpi-row-status')).toBeNull();
   });
 
-  it('renders loading as an inline progress state in compact row mode', async () => {
+  it('uses the shared loading overlay while compact KPI data is loading', async () => {
     component.compactRow = true;
     component.isLoading = true;
+    component.acwr = null;
 
     fixture.detectChanges();
     await fixture.whenStable();
 
     const nativeElement = fixture.nativeElement as HTMLElement;
-    const rowStatus = nativeElement.querySelector('.kpi-row-status-loading');
-    expect(rowStatus).not.toBeNull();
-    expect(rowStatus?.querySelector('mat-progress-bar')).not.toBeNull();
+    const overlay = getLoadingOverlay();
+
+    expect(component.showNoDataError).toBe(true);
+    expect(overlay.isLoading).toBe(true);
+    expect(overlay.hasError).toBe(false);
+    expect(overlay.showSkeleton).toBe(false);
+    expect(nativeElement.querySelector('.kpi-row-status')).toBeNull();
   });
 
   it('renders Form Now readiness KPI presentation', async () => {

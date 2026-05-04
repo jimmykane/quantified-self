@@ -3,6 +3,8 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { afterEach, describe, it, expect, vi, beforeEach } from 'vitest';
 import { of, Subject } from 'rxjs';
 import { MatDialog } from '@angular/material/dialog';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import {
   ActivityTypes,
   ChartDataCategoryTypes,
@@ -213,6 +215,14 @@ describe('SummariesComponent', () => {
     const mainMap = board?.querySelector('app-tile-map') as HTMLElement | null;
     expect(mainMap).not.toBeNull();
     expect(mainMap?.classList.contains('qs-glass-card-panel')).toBe(false);
+  });
+
+  it('squares loading shades inside the joined KPI lane surface', () => {
+    const stylePath = resolve(process.cwd(), 'src/app/components/summaries/summaries.component.css');
+    const styles = readFileSync(stylePath, 'utf8');
+
+    expect(styles).toContain('.dashboard-kpi-lane {');
+    expect(styles).toContain('--loading-shade-border-radius: 0;');
   });
 
   it('renders the fallback dashboard manager action when there is no Today section', () => {
@@ -531,6 +541,7 @@ describe('SummariesComponent', () => {
 
   it('should not drive derived tile loading from table loading state', () => {
     component.isLoading = true;
+    (component as any).derivedMetricsHydrated = true;
     component.tileEventLoadingByOrder[0] = true;
 
     expect(component.isTileLoading({
@@ -548,6 +559,20 @@ describe('SummariesComponent', () => {
       order: 2,
       chartType: DASHBOARD_ACWR_KPI_CHART_TYPE,
     } as any)).toBe(false);
+  });
+
+  it('should show KPI loading until derived metrics hydrate', () => {
+    const kpiTile = {
+      type: TileTypes.Chart,
+      order: 2,
+      chartType: DASHBOARD_ACWR_KPI_CHART_TYPE,
+    } as any;
+
+    (component as any).derivedMetricsHydrated = false;
+    expect(component.isTileLoading(kpiTile)).toBe(true);
+
+    (component as any).derivedMetricsHydrated = true;
+    expect(component.isTileLoading(kpiTile)).toBe(false);
   });
 
   it('should navigate duration tile event windows transiently without persisting filters', async () => {

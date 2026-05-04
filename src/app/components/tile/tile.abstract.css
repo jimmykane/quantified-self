@@ -41,6 +41,41 @@ section{
   min-width: 0;
 }
 
+.tile-header-controls .tile-local-range-selector {
+  flex: 0 0 auto;
+}
+
+.tile-header-controls .tile-local-range-navigation {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex: 0 0 auto;
+  min-width: 0;
+}
+
+.tile-local-range-nav-button {
+  width: 30px;
+  min-width: 30px;
+  height: 30px;
+  min-height: 30px;
+  line-height: 30px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  --mdc-icon-button-state-layer-size: 30px;
+  --mat-icon-button-state-layer-size: 30px;
+  --mat-icon-button-touch-target-size: 30px;
+  --mat-icon-button-touch-target-display: none;
+}
+
+.tile-local-range-nav-button mat-icon {
+  width: 20px;
+  height: 20px;
+  line-height: 20px;
+  font-size: 20px;
+}
+
 .actions app-tile-chart-actions,
 .actions app-tile-map-actions {
   display: inline-flex;

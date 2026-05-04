@@ -1,4 +1,6 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { DashboardComponent } from './dashboard.component';
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { AppEventService } from '../../services/app.event.service';
@@ -129,6 +131,21 @@ describe('DashboardComponent', () => {
         ) as HTMLElement;
 
         expect(projectedSearch).toBeTruthy();
+    });
+
+    it('renders dashboard summaries eagerly before the event table to avoid layout shifts', () => {
+        mockActivatedRoute.snapshot.data.dashboardData.user = mockUser;
+
+        fixture.detectChanges();
+
+        const summaries = fixture.nativeElement.querySelector('app-summaries') as HTMLElement;
+        const eventTable = fixture.nativeElement.querySelector('app-event-table') as HTMLElement;
+        const template = readFileSync(resolve(process.cwd(), 'src/app/components/dashboard/dashboard.component.html'), 'utf8');
+
+        expect(summaries).toBeTruthy();
+        expect(eventTable).toBeTruthy();
+        expect(summaries.compareDocumentPosition(eventTable) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        expect(template).not.toContain('@defer');
     });
 
     it('should use resolved events on init', async () => {

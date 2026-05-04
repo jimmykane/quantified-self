@@ -3,11 +3,9 @@ import {
   ChangeDetectionStrategy,
   Component,
   ElementRef,
-  EventEmitter,
   Input,
   OnChanges,
   OnDestroy,
-  Output,
   SimpleChanges,
   ViewChild,
 } from '@angular/core';
@@ -30,15 +28,12 @@ import {
 } from '../../../helpers/dashboard-sleep-chart.helper';
 import {
   DASHBOARD_SLEEP_TREND_DEFAULT_RANGE,
-  DASHBOARD_SLEEP_TREND_RANGE_OPTIONS,
   normalizeDashboardSleepTrendRange,
-  type DashboardSleepTrendNavigationDirection,
 } from '../../../helpers/dashboard-sleep-range.helper';
 import type { AppDashboardSleepTrendRange } from '../../../models/app-user.interface';
 import { AppColors } from '../../../services/color/app.colors';
 import { EChartsLoaderService } from '../../../services/echarts-loader.service';
 import { LoggerService } from '../../../services/logger.service';
-import type { ChartRangeSelectorOption } from '../shared/chart-range-selector/chart-range-selector.component';
 
 type ChartOption = Parameters<EChartsType['setOption']>[0];
 type AxisTooltipParam = { dataIndex?: number; seriesName?: string; value?: number };
@@ -76,7 +71,6 @@ export class ChartsSleepTrendComponent implements AfterViewInit, OnChanges, OnDe
   @Input()
   set sleepRange(value: AppDashboardSleepTrendRange | null | undefined) {
     this._sleepRange = normalizeDashboardSleepTrendRange(value);
-    this.sleepRangeLabel = this.resolveSleepRangeLabel(this._sleepRange);
   }
   get sleepRange(): AppDashboardSleepTrendRange {
     return this._sleepRange;
@@ -86,8 +80,6 @@ export class ChartsSleepTrendComponent implements AfterViewInit, OnChanges, OnDe
   @Input() canNavigateNewer = false;
   @Input() infoTooltip?: string | null;
   @Input() reserveTitleActionSpace = false;
-  @Output() sleepRangeChange = new EventEmitter<AppDashboardSleepTrendRange>();
-  @Output() sleepNavigate = new EventEmitter<DashboardSleepTrendNavigationDirection>();
 
   @ViewChild('chartDiv', { static: true }) chartDiv!: ElementRef<HTMLDivElement>;
 
@@ -102,14 +94,6 @@ export class ChartsSleepTrendComponent implements AfterViewInit, OnChanges, OnDe
   public noDataErrorMessage = 'No sleep data yet';
   public noDataErrorHint = 'Connect Garmin, Suunto, or COROS sleep sync to populate this chart.';
   public noDataErrorIcon = 'hotel';
-  public rangeOptions = DASHBOARD_SLEEP_TREND_RANGE_OPTIONS;
-  public rangeSelectorOptions: ReadonlyArray<ChartRangeSelectorOption> = DASHBOARD_SLEEP_TREND_RANGE_OPTIONS.map(option => ({
-    value: option.range,
-    label: option.label,
-    shortLabel: option.shortLabel,
-    menuLabel: option.menuLabel,
-  }));
-  public sleepRangeLabel = this.resolveSleepRangeLabel(DASHBOARD_SLEEP_TREND_DEFAULT_RANGE);
 
   constructor(
     private eChartsLoader: EChartsLoaderService,
@@ -138,24 +122,6 @@ export class ChartsSleepTrendComponent implements AfterViewInit, OnChanges, OnDe
 
   ngOnDestroy(): void {
     this.chartHost.dispose();
-  }
-
-  public onSleepRangeSelection(value: unknown): void {
-    const nextRange = normalizeDashboardSleepTrendRange(value);
-    if (nextRange === this.sleepRange) {
-      return;
-    }
-    this.sleepRangeChange.emit(nextRange);
-  }
-
-  public navigateSleep(direction: DashboardSleepTrendNavigationDirection): void {
-    if (direction === 'older' && !this.canNavigateOlder) {
-      return;
-    }
-    if (direction === 'newer' && !this.canNavigateNewer) {
-      return;
-    }
-    this.sleepNavigate.emit(direction);
   }
 
   private async refreshChart(): Promise<void> {
@@ -445,10 +411,6 @@ export class ChartsSleepTrendComponent implements AfterViewInit, OnChanges, OnDe
     visibleIndexes.add(lastIndex);
 
     return (index: number) => visibleIndexes.has(index);
-  }
-
-  private resolveSleepRangeLabel(range: AppDashboardSleepTrendRange): string {
-    return DASHBOARD_SLEEP_TREND_RANGE_OPTIONS.find(option => option.range === range)?.label || DASHBOARD_SLEEP_TREND_DEFAULT_RANGE;
   }
 
   private formatDateTime(timestampMs: number): string {

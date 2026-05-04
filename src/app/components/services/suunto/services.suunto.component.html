@@ -4,28 +4,19 @@
 </p>
 
 <div class="service-container">
-  <section class="connection-status-panel" [class.locked-panel]="!hasProAccess && !isConnectedToService()"
+  <app-service-connection-status
+    serviceLabel="Suunto App"
+    description="Required for history imports and FIT activity uploads."
+    [connected]="isConnectedToService()"
+    [loading]="isLoading"
+    [locked]="!hasProAccess && !isConnectedToService()"
+    [proRequired]="!hasProAccess && !isConnectedToService()"
+    [showDetails]="isConnectedToService()"
     (click)="!hasProAccess && !isConnectedToService() && triggerUpsell()">
-    @if (!hasProAccess && !isConnectedToService()) {
-    <div class="pro-required-inline">
-      <mat-icon>lock</mat-icon>
-      <span>PRO</span>
-    </div>
-    }
-
-    <div class="connection-status-header">
-      <div>
-        <div class="connection-status-title">
-          <mat-icon>{{ isConnectedToService() ? 'link' : 'link_off' }}</mat-icon>
-          <span>{{ isConnectedToService() ? 'Connected' : 'Not connected' }}</span>
-        </div>
-        <p class="connection-status-description">Manage your Suunto connection for imports and uploads.</p>
-      </div>
-    </div>
-
-    <mat-progress-bar mode="indeterminate" *ngIf="isLoading"></mat-progress-bar>
-
+    <div connection-body class="connection-details">
     @if (isConnectedToService()) {
+    <div class="connection-account-row">
+      <div class="connection-account-info">
     @if (!suuntoUserName) {
     <app-service-syncing-state></app-service-syncing-state>
     } @else {
@@ -39,9 +30,26 @@
       }
     </mat-list>
     }
-    }
+      </div>
 
-    <div class="tool-actions">
+      <button mat-stroked-button class="connection-disconnect-button qs-mat-warn"
+        [disabled]="isLoading || isDisconnecting" (click)="deauthorizeService($event)">
+        @if (isDisconnecting) {
+        <ng-container>
+          <mat-spinner diameter="20" class="qs-spinner-warn"></mat-spinner>
+          Disconnecting...
+        </ng-container>
+        } @else {
+        <ng-container>
+          <mat-icon>link_off</mat-icon> Disconnect
+        </ng-container>
+        }
+      </button>
+    </div>
+    }
+    </div>
+
+    <div connection-actions class="tool-actions">
       @if (isConnectedToService() && hasActiveSyncRoutesUsingService) {
       <div class="active-sync-warning-pill">
         <mat-icon>warning</mat-icon>
@@ -64,27 +72,12 @@
       </button>
       }
 
-      @if (isConnectedToService()) {
-      <button mat-stroked-button class="qs-mat-warn" [disabled]="isLoading || isDisconnecting"
-        (click)="deauthorizeService($event)">
-        @if (isDisconnecting) {
-        <ng-container>
-          <mat-spinner diameter="20" class="qs-spinner-warn"></mat-spinner>
-          Disconnecting...
-        </ng-container>
-        } @else {
-        <ng-container>
-          <mat-icon>link_off</mat-icon> Disconnect
-        </ng-container>
-        }
-      </button>
-      }
     </div>
-  </section>
+  </app-service-connection-status>
 
   <mat-divider class="connection-tools-divider"></mat-divider>
 
-  <mat-tab-group class="provider-tools-tabs" mat-stretch-tabs="false" animationDuration="0ms">
+  <mat-tab-group class="provider-tools-tabs" mat-stretch-tabs="false" [dynamicHeight]="true" animationDuration="0ms">
     <mat-tab>
       <ng-template mat-tab-label>
         <span class="provider-tab-label">

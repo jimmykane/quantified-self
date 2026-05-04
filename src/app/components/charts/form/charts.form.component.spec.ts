@@ -2,12 +2,8 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
-import { MatMenu, MatMenuModule } from '@angular/material/menu';
-import { By } from '@angular/platform-browser';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ChartsFormComponent } from './charts.form.component';
-import { ChartRangeSelectorComponent } from '../shared/chart-range-selector/chart-range-selector.component';
-import { AppHapticsService } from '../../../services/app.haptics.service';
 import { EChartsLoaderService } from '../../../services/echarts-loader.service';
 import { LoggerService } from '../../../services/logger.service';
 import type { DashboardFormPoint } from '../../../helpers/dashboard-form.helper';
@@ -43,8 +39,6 @@ describe('ChartsFormComponent', () => {
     subscribeToViewportResize: ReturnType<typeof vi.fn>;
     attachMobileSeriesTapFeedback: ReturnType<typeof vi.fn>;
   };
-  let hapticsMock: { selection: ReturnType<typeof vi.fn> };
-
   const waitForChartStabilization = async (): Promise<void> => {
     await fixture.whenStable();
     await new Promise<void>((resolve) => setTimeout(resolve, 0));
@@ -133,13 +127,10 @@ describe('ChartsFormComponent', () => {
       subscribeToViewportResize: vi.fn(() => () => { }),
       attachMobileSeriesTapFeedback: vi.fn(() => () => { }),
     };
-    hapticsMock = { selection: vi.fn() };
-
     await TestBed.configureTestingModule({
-      declarations: [ChartsFormComponent, ChartRangeSelectorComponent],
-      imports: [MatButtonModule, MatIconModule, MatMenuModule],
+      declarations: [ChartsFormComponent],
+      imports: [MatButtonModule, MatIconModule],
       providers: [
-        { provide: AppHapticsService, useValue: hapticsMock },
         { provide: EChartsLoaderService, useValue: mockLoader },
         { provide: LoggerService, useValue: { error: vi.fn(), warn: vi.fn() } },
       ],
@@ -353,16 +344,12 @@ describe('ChartsFormComponent', () => {
     const granularityMenuButton = fixture.nativeElement.querySelector('.chart-range-selector-button');
     const granularityFullLabel = fixture.nativeElement.querySelector('.chart-range-selector-label-full');
     const granularityCompactLabel = fixture.nativeElement.querySelector('.chart-range-selector-label-compact');
-    const granularityMenu = fixture.debugElement.query(By.directive(MatMenu));
-    expect(granularityMenuButton).toBeTruthy();
-    expect(granularityMenuButton?.getAttribute('aria-label')).toBe('Select Form and TSS timeline window: Week');
-    expect(granularityFullLabel?.textContent?.trim()).toBe('Week');
-    expect(granularityCompactLabel?.textContent?.trim()).toBe('W');
-    expect(granularityMenu).toBeTruthy();
+    expect(granularityMenuButton).toBeNull();
+    expect(granularityFullLabel).toBeNull();
+    expect(granularityCompactLabel).toBeNull();
     expect(component.granularityOptions.map(option => option.label)).toEqual(['Week', 'Month', 'Year']);
-    expect(component.granularityRangeOptions.map(option => option.shortLabel)).toEqual(['W', 'M', 'Y']);
 
-    component.onGranularityChange('m');
+    component.timelineWindow = 'm';
     fixture.detectChanges();
     await waitForChartStabilization();
 
@@ -379,11 +366,10 @@ describe('ChartsFormComponent', () => {
     expect(monthlyLength).toBeLessThan(weeklyLength);
     expect(monthlyMin).toBeLessThan(weeklyMin);
     expect(monthlyMax).toBeLessThanOrEqual(weeklyMax);
-    expect(hapticsMock.selection).toHaveBeenCalledTimes(1);
     expect(monthlyOption.dataZoom).toBeUndefined();
     expect(monthlyOption.toolbox).toBeUndefined();
 
-    component.onGranularityChange('y');
+    component.timelineWindow = 'y';
     fixture.detectChanges();
     await waitForChartStabilization();
 
@@ -400,7 +386,6 @@ describe('ChartsFormComponent', () => {
     expect(yearlyMin).toBe(yearlyFormSeries.data[0][0]);
     expect(yearlyMax).toBeLessThanOrEqual(weeklyMax);
     expect(yearlyMin).toBeLessThan(monthlyMin);
-    expect(hapticsMock.selection).toHaveBeenCalledTimes(2);
     expect(yearlyOption.dataZoom).toBeUndefined();
     expect(yearlyOption.toolbox).toBeUndefined();
   });

@@ -43,15 +43,27 @@ import {
   type DashboardChartType,
   isDashboardSpecialChartType,
 } from '../../../helpers/dashboard-special-chart-types';
+import {
+  DASHBOARD_DERIVED_CHART_DEFAULT_RANGE,
+  DASHBOARD_DERIVED_CHART_RANGE_OPTIONS,
+  normalizeDashboardDerivedChartRange,
+  type DashboardDerivedChartRange,
+} from '../../../helpers/dashboard-derived-chart-range.helper';
 import { resolveDashboardChartInfoTooltip } from '../../../helpers/dashboard-chart-info.helper';
 import type { DerivedMetricSnapshotStatus } from '@shared/derived-metrics';
 import type { DashboardDerivedMetricStatus } from '../../../helpers/derived-metric-status.helper';
 import type { AppDashboardSleepTrendRange } from '../../../models/app-user.interface';
+import {
+  DASHBOARD_SLEEP_TREND_RANGE_OPTIONS,
+  normalizeDashboardSleepTrendRange,
+} from '../../../helpers/dashboard-sleep-range.helper';
 import type {
   AppDashboardTileEventFilterRange,
   AppDashboardTileEventFiltersInterface,
 } from '../../../models/app-user.interface';
 import type { DashboardTileEventNavigationDirection } from '../../../helpers/dashboard-tile-event-filters.helper';
+import type { ChartRangeSelectorOption } from '../../charts/shared/chart-range-selector/chart-range-selector.component';
+import type { DashboardFormTimelineWindow } from '../../charts/form/charts.form.component';
 
 type DashboardRecoveryNowSnapshotStatus = DerivedMetricSnapshotStatus | 'missing' | 'queued' | 'processing';
 
@@ -130,6 +142,25 @@ export class TileChartComponent extends TileAbstractDirective {
   public efficiencyTrendChartType = DASHBOARD_EFFICIENCY_TREND_CHART_TYPE;
   public sleepTrendChartType = DASHBOARD_SLEEP_TREND_CHART_TYPE;
   public isTileActionSaving = false;
+  public derivedChartRange: DashboardDerivedChartRange = DASHBOARD_DERIVED_CHART_DEFAULT_RANGE;
+  public formTimelineWindow: DashboardFormTimelineWindow = 'w';
+  public readonly derivedRangeSelectorOptions: ReadonlyArray<ChartRangeSelectorOption> = DASHBOARD_DERIVED_CHART_RANGE_OPTIONS.map(option => ({
+    value: option.range,
+    label: option.label,
+    shortLabel: option.shortLabel,
+    menuLabel: option.menuLabel,
+  }));
+  public readonly formTimelineWindowOptions: ReadonlyArray<ChartRangeSelectorOption> = [
+    { value: 'w', label: 'Week', shortLabel: 'W', menuLabel: 'Week' },
+    { value: 'm', label: 'Month', shortLabel: 'M', menuLabel: 'Month' },
+    { value: 'y', label: 'Year', shortLabel: 'Y', menuLabel: 'Year' },
+  ];
+  public readonly sleepRangeSelectorOptions: ReadonlyArray<ChartRangeSelectorOption> = DASHBOARD_SLEEP_TREND_RANGE_OPTIONS.map(option => ({
+    value: option.range,
+    label: option.label,
+    shortLabel: option.shortLabel,
+    menuLabel: option.menuLabel,
+  }));
 
   get chartInfoTooltip(): string | null {
     return resolveDashboardChartInfoTooltip(this.chartType);
@@ -137,6 +168,41 @@ export class TileChartComponent extends TileAbstractDirective {
 
   get showEventFilters(): boolean {
     return this.chartType !== undefined && !isDashboardSpecialChartType(this.chartType);
+  }
+
+  get showDerivedRangeSelector(): boolean {
+    return this.chartType === this.intensityDistributionChartType || this.chartType === this.efficiencyTrendChartType;
+  }
+
+  get showFormRangeSelector(): boolean {
+    return this.chartType === this.formChartType;
+  }
+
+  get showSleepRangeControls(): boolean {
+    return this.chartType === this.sleepTrendChartType;
+  }
+
+  get showSharedRangeControls(): boolean {
+    return this.showEventFilters || this.showDerivedRangeSelector || this.showFormRangeSelector || this.showSleepRangeControls;
+  }
+
+  get showHeaderControls(): boolean {
+    return this.showSharedRangeControls || this.showActions;
+  }
+
+  onDerivedRangeSelection(value: unknown): void {
+    this.derivedChartRange = normalizeDashboardDerivedChartRange(value);
+  }
+
+  onFormTimelineWindowSelection(value: unknown): void {
+    if (value !== 'w' && value !== 'm' && value !== 'y') {
+      return;
+    }
+    this.formTimelineWindow = value;
+  }
+
+  onSleepRangeSelection(value: unknown): void {
+    this.sleepTrendRangeChange.emit(normalizeDashboardSleepTrendRange(value));
   }
 
   onTileActionSaving(isSaving: boolean): void {

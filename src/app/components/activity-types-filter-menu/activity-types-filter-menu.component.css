@@ -33,14 +33,36 @@
   padding: 2px 0;
 }
 
+.activity-types-filter-header {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+  min-width: 220px;
+  padding: 4px 8px 4px 16px;
+}
+
 .activity-types-filter-label {
-  padding: 6px 16px 4px;
   color: color-mix(in srgb, var(--mat-sys-on-surface) 72%, transparent);
   font-size: 0.72rem;
   font-weight: 700;
   letter-spacing: 0.08em;
   line-height: 1.2;
   text-transform: uppercase;
+}
+
+.activity-types-filter-clear-button {
+  --mat-text-button-label-text-size: 0.78rem;
+  --mat-text-button-horizontal-padding: 8px;
+  flex: 0 0 auto;
+  min-width: 0;
+}
+
+.activity-types-filter-clear-button .mat-icon {
+  font-size: 18px;
+  height: 18px;
+  margin-right: 4px;
+  width: 18px;
 }
 
 .activity-types-filter-option {

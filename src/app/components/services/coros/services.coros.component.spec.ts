@@ -10,6 +10,7 @@ import { RouterTestingModule } from '@angular/router/testing';
 import { FormsModule } from '@angular/forms';
 import { MatDatepickerModule } from '@angular/material/datepicker';
 import { MatNativeDateModule } from '@angular/material/core';
+import { MatChipsModule } from '@angular/material/chips';
 import { MatInputModule } from '@angular/material/input';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
@@ -29,6 +30,7 @@ import { AppAnalyticsService } from '../../../services/app.analytics.service';
 import { CUSTOM_ELEMENTS_SCHEMA } from '@angular/core';
 import { of } from 'rxjs';
 import { ACTIVITY_SYNC_ROUTE_IDS } from '@shared/activity-sync-routes';
+import { ServiceConnectionStatusComponent } from '../service-connection-status/service-connection-status.component';
 
 describe('ServicesCorosComponent', () => {
     let component: ServicesCorosComponent;
@@ -60,7 +62,7 @@ describe('ServicesCorosComponent', () => {
         };
 
         await TestBed.configureTestingModule({
-            declarations: [ServicesCorosComponent, ServiceSyncingStateComponent],
+            declarations: [ServicesCorosComponent, ServiceSyncingStateComponent, ServiceConnectionStatusComponent],
             imports: [
                 MatCardModule,
                 MatIconModule,
@@ -70,6 +72,7 @@ describe('ServicesCorosComponent', () => {
                 FormsModule,
                 MatDatepickerModule,
                 MatNativeDateModule,
+                MatChipsModule,
                 MatInputModule,
                 MatFormFieldModule,
                 MatSlideToggleModule,
@@ -106,13 +109,30 @@ describe('ServicesCorosComponent', () => {
     it('renders connection status outside the provider tool tabs', () => {
         fixture.detectChanges();
 
-        const connectionStatus = fixture.nativeElement.querySelector('.connection-status-panel');
+        const connectionStatus = fixture.nativeElement.querySelector('.service-connection-status');
         const providerTabs = fixture.nativeElement.querySelectorAll('mat-tab');
 
         expect(connectionStatus).toBeTruthy();
-        expect(connectionStatus.textContent).toContain('Manage your COROS connection');
+        expect(connectionStatus.textContent).toContain('COROS connection');
         expect(providerTabs.length).toBe(1);
-        expect(fixture.nativeElement.querySelector('mat-tab .connection-status-panel')).toBeFalsy();
+        expect(fixture.nativeElement.querySelector('mat-tab .service-connection-status')).toBeFalsy();
+    });
+
+    it('renders disconnect beside the connected account details', () => {
+        component.hasProAccess = true;
+        component.serviceTokens = [{
+            accessToken: 'token',
+            openId: 'coros-user',
+            dateCreated: new Date('2026-05-03T10:00:00Z'),
+        } as any];
+        fixture.detectChanges();
+
+        const accountRow = fixture.nativeElement.querySelector('.connection-account-row');
+
+        expect(accountRow).toBeTruthy();
+        expect(accountRow.textContent).toContain('coros-user');
+        expect(accountRow.querySelector('.connection-disconnect-button')?.textContent).toContain('Disconnect');
+        expect(fixture.nativeElement.querySelector('.service-connection-status__actions .connection-disconnect-button')).toBeFalsy();
     });
 
     it('should show syncing state when forceConnected is true but tokens are not yet loaded', () => {

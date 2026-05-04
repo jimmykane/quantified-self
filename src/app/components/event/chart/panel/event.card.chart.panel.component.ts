@@ -47,7 +47,10 @@ import {
 import { buildEventEChartsVisualTokens } from '../../../../helpers/event-echarts-common.helper';
 import { ECHARTS_GLOBAL_FONT_FAMILY, resolveEChartsThemeName } from '../../../../helpers/echarts-theme.helper';
 import { DynamicDataLoader } from '@sports-alliance/sports-lib';
-import type { EventChartPoint } from '../../../../helpers/event-echarts-data.helper';
+import type {
+  EventChartPoint,
+  EventChartZoneColorPiece,
+} from '../../../../helpers/event-echarts-data.helper';
 import { AppUserUtilities } from '../../../../utils/app.user.utilities';
 import type { LineSeriesOption } from 'echarts/charts';
 import { resolveUnitAwareDisplayFromValue } from '@shared/unit-aware-display';
@@ -536,6 +539,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
 
     const seriesOptions: ChartLineSeriesOption[] = panel.series.map((series) => {
       const connectAcrossMissingValues = this.isBatteryStreamType(series.streamType);
+      const useZoneColors = !!series.zoneColorPieces?.length;
       return {
         id: series.id,
         name: series.activityName,
@@ -550,11 +554,13 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
         animation: this.useAnimations === true,
         lineStyle: {
           width: seriesStrokeWidth,
-          color: series.color,
+          ...(!useZoneColors ? { color: series.color } : {}),
         },
-        itemStyle: {
-          color: series.color,
-        },
+        ...(!useZoneColors ? {
+          itemStyle: {
+            color: series.color,
+          },
+        } : {}),
         areaStyle: {
           color: series.color,
           opacity: seriesFillOpacity,
@@ -570,6 +576,8 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     if (seriesOptions[0]) {
       seriesOptions[0].markLine = this.buildLapMarkLine(chartStyle);
     }
+
+    const zoneVisualMaps = this.buildZoneVisualMapOptions(panel);
 
     return {
       animation: this.useAnimations === true,
@@ -701,8 +709,43 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
           throttle: DATA_ZOOM_THROTTLE_MS,
         }
       ],
+      ...(zoneVisualMaps.length > 0 ? { visualMap: zoneVisualMaps } : {}),
       series: seriesOptions
     } as ChartOption;
+  }
+
+  private buildZoneVisualMapOptions(panel: EventChartPanelModel): Record<string, unknown>[] {
+    const visualMaps: Record<string, unknown>[] = [];
+
+    for (let seriesIndex = 0; seriesIndex < panel.series.length; seriesIndex += 1) {
+      const series = panel.series[seriesIndex];
+      if (!series.zoneColorPieces?.length) {
+        continue;
+      }
+
+      visualMaps.push({
+        type: 'piecewise',
+        show: false,
+        hoverLink: false,
+        seriesIndex,
+        dimension: 1,
+        pieces: this.toZoneVisualMapPieces(series.zoneColorPieces),
+        outOfRange: {
+          color: series.color,
+        },
+      });
+    }
+
+    return visualMaps;
+  }
+
+  private toZoneVisualMapPieces(pieces: EventChartZoneColorPiece[]): Record<string, unknown>[] {
+    return pieces.map((piece) => ({
+      ...(Number.isFinite(piece.gte) ? { gte: piece.gte } : {}),
+      ...(Number.isFinite(piece.lt) ? { lt: piece.lt } : {}),
+      color: piece.color,
+      label: piece.zone,
+    }));
   }
 
   private buildWatermarkGraphic(chartStyle: ReturnType<typeof buildEventEChartsVisualTokens>): Record<string, unknown>[] {
@@ -1205,8 +1248,9 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       const resolvedPoint = resolvedPoints[index];
       const formatted = this.formatDataValue(resolvedPoint.series.streamType || '', resolvedPoint.point.y as number);
       const label = this.showActivityNamesInTooltip ? `${resolvedPoint.series.activityName}: ` : '';
+      const markerColor = this.resolveSeriesPointColor(resolvedPoint.series, resolvedPoint.point.y);
       tooltipLines.push(
-        `<div><span style="display:inline-block;margin-right:6px;border-radius:50%;width:8px;height:8px;background:${resolvedPoint.series.color};"></span>${label}${formatted}</div>`
+        `<div><span style="display:inline-block;margin-right:6px;border-radius:50%;width:8px;height:8px;background:${markerColor};"></span>${label}${formatted}</div>`
       );
     }
 
@@ -1215,6 +1259,27 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     }
 
     return `<div style="font-weight:600;margin-bottom:4px;">${header}</div>${tooltipLines.join('')}`;
+  }
+
+  private resolveSeriesPointColor(series: PanelSeriesModel, value: number | null): string {
+    if (typeof value !== 'number' || !Number.isFinite(value) || !series.zoneColorPieces?.length) {
+      return series.color;
+    }
+
+    const zonePiece = series.zoneColorPieces.find((piece) => this.isValueInsideZoneColorPiece(value, piece));
+    return zonePiece?.color || series.color;
+  }
+
+  private isValueInsideZoneColorPiece(value: number, piece: EventChartZoneColorPiece): boolean {
+    if (Number.isFinite(piece.gte) && value < (piece.gte as number)) {
+      return false;
+    }
+
+    if (Number.isFinite(piece.lt) && value >= (piece.lt as number)) {
+      return false;
+    }
+
+    return true;
   }
 
   private getTooltipXAxisValue(params: TooltipFormatterParams[]): number {

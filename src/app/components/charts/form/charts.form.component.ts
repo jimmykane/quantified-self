@@ -44,15 +44,13 @@ import {
   type DashboardDerivedMetricStatus,
   isDerivedMetricPendingStatus,
 } from '../../../helpers/derived-metric-status.helper';
-import { AppHapticsService } from '../../../services/app.haptics.service';
-import type { ChartRangeSelectorOption } from '../shared/chart-range-selector/chart-range-selector.component';
 
 type ChartOption = Parameters<EChartsType['setOption']>[0];
 type EChartsTooltipPositionSize = {
   contentSize?: [number, number];
   viewSize?: [number, number];
 };
-type DashboardFormTimelineWindow = 'w' | 'm' | 'y';
+export type DashboardFormTimelineWindow = 'w' | 'm' | 'y';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const WEEK_VIEW_SPAN_MS = 84 * DAY_MS;
@@ -74,17 +72,25 @@ export class ChartsFormComponent implements AfterViewInit, OnChanges, OnDestroy 
     { key: 'm', label: 'Month', shortLabel: 'M' },
     { key: 'y', label: 'Year', shortLabel: 'Y' },
   ];
-  readonly granularityRangeOptions: ReadonlyArray<ChartRangeSelectorOption> = this.granularityOptions.map(option => ({
-    value: option.key,
-    label: option.label,
-    shortLabel: option.shortLabel,
-    menuLabel: option.label,
-  }));
 
   @Input() darkTheme = false;
   @Input() isLoading = false;
   @Input() formStatus?: DashboardDerivedMetricStatus | null;
   @Input() infoTooltip?: string | null;
+  @Input() reserveTitleActionSpace = false;
+  @Input()
+  set timelineWindow(value: DashboardFormTimelineWindow | null | undefined) {
+    if (value !== 'w' && value !== 'm' && value !== 'y') {
+      return;
+    }
+    if (this.selectedTimelineWindowSignal() === value) {
+      return;
+    }
+    this.selectedTimelineWindowSignal.set(value);
+    if (this.chartDiv?.nativeElement) {
+      void this.refreshChart();
+    }
+  }
   @Input() set data(value: DashboardFormPoint[] | null | undefined) {
     this.pointsSignal.set(Array.isArray(value) ? value : []);
     if (this.chartDiv?.nativeElement) {
@@ -137,7 +143,6 @@ export class ChartsFormComponent implements AfterViewInit, OnChanges, OnDestroy 
   constructor(
     private eChartsLoader: EChartsLoaderService,
     private logger: LoggerService,
-    private hapticsService: AppHapticsService,
   ) {
     this.chartHost = new EChartsHostController({
       eChartsLoader: this.eChartsLoader,
@@ -163,20 +168,6 @@ export class ChartsFormComponent implements AfterViewInit, OnChanges, OnDestroy 
 
   ngOnDestroy(): void {
     this.chartHost.dispose();
-  }
-
-  onGranularityChange(value: unknown): void {
-    if (value !== 'w' && value !== 'm' && value !== 'y') {
-      return;
-    }
-    if (this.selectedTimelineWindowSignal() === value) {
-      return;
-    }
-    this.hapticsService.selection();
-    this.selectedTimelineWindowSignal.set(value);
-    if (this.chartDiv?.nativeElement) {
-      void this.refreshChart();
-    }
   }
 
   private resolveGranularityLabel(value: DashboardFormTimelineWindow): string {

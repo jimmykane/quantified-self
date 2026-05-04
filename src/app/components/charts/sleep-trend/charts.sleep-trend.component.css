@@ -24,7 +24,7 @@
 }
 
 .sleep-header.sleep-header-reserve-actions {
-  padding-right: 72px;
+  padding-right: 180px;
 }
 
 .title-row {
@@ -50,43 +50,6 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.sleep-controls {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  flex: 0 0 auto;
-  width: fit-content;
-  max-width: 100%;
-  min-width: 0;
-}
-
-.sleep-range-selector {
-  flex: 0 0 auto;
-}
-
-.sleep-nav-button {
-  width: 30px;
-  min-width: 30px;
-  height: 30px;
-  min-height: 30px;
-  line-height: 30px;
-  padding: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  --mdc-icon-button-state-layer-size: 30px;
-  --mat-icon-button-state-layer-size: 30px;
-  --mat-icon-button-touch-target-size: 30px;
-  --mat-icon-button-touch-target-display: none;
-}
-
-.sleep-nav-button mat-icon {
-  width: 20px;
-  height: 20px;
-  line-height: 20px;
-  font-size: 20px;
 }
 
 .title-info-button {
@@ -151,6 +114,6 @@
 
 @media (max-width: 640px) {
   .sleep-header.sleep-header-reserve-actions {
-    padding-right: 44px;
+    padding-right: 132px;
   }
 }

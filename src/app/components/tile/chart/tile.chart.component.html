@@ -1,5 +1,5 @@
 <section [class.tile-chart-kpi-row]="compactKpiRow">
-  @if (showEventFilters || showActions) {
+  @if (showHeaderControls) {
   <div class="tile-header-controls">
     @if (showEventFilters) {
     <app-dashboard-tile-event-filters class="tile-event-filter-controls" [eventFilters]="eventFilters"
@@ -8,6 +8,34 @@
       (activityTypesChange)="eventFilterActivityTypesChange.emit($event)"
       (navigate)="eventFilterNavigate.emit($event)">
     </app-dashboard-tile-event-filters>
+    }
+    @if (showDerivedRangeSelector) {
+    <app-chart-range-selector class="tile-local-range-selector" [options]="derivedRangeSelectorOptions"
+      [value]="derivedChartRange" ariaLabel="Select chart range" (valueChange)="onDerivedRangeSelection($event)">
+    </app-chart-range-selector>
+    }
+    @if (showFormRangeSelector) {
+    <app-chart-range-selector class="tile-local-range-selector" [options]="formTimelineWindowOptions"
+      [value]="formTimelineWindow" ariaLabel="Select Form and TSS timeline window"
+      (valueChange)="onFormTimelineWindowSelection($event)">
+    </app-chart-range-selector>
+    }
+    @if (showSleepRangeControls) {
+    <div class="tile-local-range-navigation" aria-label="Sleep trend range navigation">
+      <button mat-icon-button class="tile-local-range-nav-button" appHapticTap [disabled]="!sleepTrendCanNavigateOlder"
+        (click)="sleepTrendNavigate.emit('older')" matTooltip="Older sleep window" matTooltipPosition="below"
+        aria-label="Show older sleep window">
+        <mat-icon>chevron_left</mat-icon>
+      </button>
+      <app-chart-range-selector class="tile-local-range-selector" [options]="sleepRangeSelectorOptions"
+        [value]="sleepTrendRange" ariaLabel="Select sleep range" (valueChange)="onSleepRangeSelection($event)">
+      </app-chart-range-selector>
+      <button mat-icon-button class="tile-local-range-nav-button" appHapticTap [disabled]="!sleepTrendCanNavigateNewer"
+        (click)="sleepTrendNavigate.emit('newer')" matTooltip="Newer sleep window" matTooltipPosition="below"
+        aria-label="Show newer sleep window">
+        <mat-icon>chevron_right</mat-icon>
+      </button>
+    </div>
     }
     @if (showActions) {
     <div class="actions">
@@ -42,7 +70,8 @@
   }
   @if (chartType === formChartType) {
   <app-form-chart [isLoading]="isLoading || isTileActionSaving" [data]="data" [darkTheme]="darkTheme"
-    [absoluteLatestPoint]="absoluteLatestFormPoint" [formStatus]="formStatus" [infoTooltip]="chartInfoTooltip">
+    [absoluteLatestPoint]="absoluteLatestFormPoint" [formStatus]="formStatus" [infoTooltip]="chartInfoTooltip"
+    [timelineWindow]="formTimelineWindow" [reserveTitleActionSpace]="showHeaderControls">
   </app-form-chart>
   }
   @if (
@@ -75,22 +104,20 @@
   @if (chartType === intensityDistributionChartType) {
   <app-intensity-distribution-chart [isLoading]="isLoading || isTileActionSaving" [darkTheme]="darkTheme"
     [distribution]="intensityDistribution" [status]="intensityDistributionStatus" [infoTooltip]="chartInfoTooltip"
-    [reserveTitleActionSpace]="showActions">
+    [range]="derivedChartRange" [reserveTitleActionSpace]="showHeaderControls">
   </app-intensity-distribution-chart>
   }
   @if (chartType === efficiencyTrendChartType) {
   <app-efficiency-trend-chart [isLoading]="isLoading || isTileActionSaving" [darkTheme]="darkTheme"
     [trend]="efficiencyTrend" [status]="efficiencyTrendStatus" [infoTooltip]="chartInfoTooltip"
-    [reserveTitleActionSpace]="showActions">
+    [range]="derivedChartRange" [reserveTitleActionSpace]="showHeaderControls">
   </app-efficiency-trend-chart>
   }
   @if (chartType === sleepTrendChartType) {
   <app-sleep-trend-chart [isLoading]="isLoading || isTileActionSaving" [darkTheme]="darkTheme"
     [sleepTrend]="sleepTrend" [sleepRange]="sleepTrendRange" [sleepWindowLabel]="sleepTrendWindowLabel"
     [canNavigateOlder]="sleepTrendCanNavigateOlder" [canNavigateNewer]="sleepTrendCanNavigateNewer"
-    [infoTooltip]="chartInfoTooltip" [reserveTitleActionSpace]="showActions"
-    (sleepRangeChange)="sleepTrendRangeChange.emit($event)"
-    (sleepNavigate)="sleepTrendNavigate.emit($event)">
+    [infoTooltip]="chartInfoTooltip" [reserveTitleActionSpace]="showHeaderControls">
   </app-sleep-trend-chart>
   }
   @if (chartType === chartTypes.LinesHorizontal

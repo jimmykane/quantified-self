@@ -37,6 +37,7 @@
 
 .desktop-section-nav-title {
     margin: 0 0 8px;
+    padding-inline-start: 56px;
     color: var(--mat-sys-on-surface-variant);
     font-size: 0.75rem;
     font-weight: 600;
@@ -61,6 +62,10 @@
 }
 
 .workspace-main {
+    min-width: 0;
+}
+
+.service-detail {
     min-width: 0;
 }
 

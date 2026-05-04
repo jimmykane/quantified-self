@@ -118,7 +118,6 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
   public noDataErrorMessage = 'No data yet';
   public noDataErrorHint = 'This KPI needs derived training metrics.';
   public noDataErrorIcon = 'insights';
-  public compactRowStatusText = 'No data';
 
   constructor(
     private eChartsLoader: EChartsLoaderService,
@@ -239,7 +238,6 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
       this.noDataErrorHint = 'Derived metrics are being recalculated in the background.';
       this.noDataErrorIcon = 'autorenew';
     }
-    this.compactRowStatusText = this.noDataErrorMessage === 'KPI is updating' ? 'Updating' : 'No data';
     this.changeDetectorRef.markForCheck();
 
     return presentation;
@@ -312,13 +310,15 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
 
     if (this.chartType === DASHBOARD_RAMP_RATE_KPI_CHART_TYPE) {
       const context = this.rampRate || null;
+      const ctlTodayText = context?.ctlToday !== null && context?.ctlToday !== undefined
+        ? this.formatPrimaryValue(context.ctlToday)
+        : '';
       return {
         title: 'Ramp Rate',
         primaryValue: context?.rampRate ?? null,
         primaryLabel: 'CTL delta (7d)',
-        secondaryLabel: context?.ctlToday !== null && context?.ctlToday !== undefined
-          ? `CTL today ${this.formatPrimaryValue(context.ctlToday)}`
-          : 'Fitness acceleration over the last 7 days',
+        secondaryLabel: ctlTodayText ? 'CTL today' : 'Fitness acceleration over the last 7 days',
+        secondaryValueText: ctlTodayText,
         trend: (context?.trend8Weeks || []).map(point => ({ time: point.time, value: point.value })),
       };
     }
@@ -326,25 +326,28 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
     if (this.chartType === DASHBOARD_MONOTONY_STRAIN_KPI_CHART_TYPE) {
       const context = this.monotonyStrain || null;
       const monotonyText = context?.monotony !== null && context?.monotony !== undefined
-        ? `Monotony ${this.formatPrimaryValue(context.monotony)}`
-        : 'Weekly monotony and strain';
+        ? this.formatPrimaryValue(context.monotony)
+        : '';
       return {
         title: 'Monotony / Strain',
         primaryValue: context?.strain ?? null,
         primaryLabel: 'Strain',
-        secondaryLabel: monotonyText,
+        secondaryLabel: monotonyText ? 'Monotony' : 'Weekly monotony and strain',
+        secondaryValueText: monotonyText,
         trend: (context?.trend8Weeks || []).map(point => ({ time: point.time, value: point.value })),
       };
     }
 
     const context = this.acwr || null;
+    const acuteChronicText = context
+      ? `${this.formatPrimaryValue(context.acuteLoad7)} / ${this.formatPrimaryValue(context.chronicLoad28)}`
+      : '';
     return {
       title: 'ACWR',
       primaryValue: context?.ratio ?? null,
       primaryLabel: 'Ratio',
-      secondaryLabel: context
-        ? `Acute ${this.formatPrimaryValue(context.acuteLoad7)} / Chronic ${this.formatPrimaryValue(context.chronicLoad28)}`
-        : 'Acute 7-day vs chronic 28-day load',
+      secondaryLabel: acuteChronicText ? 'Acute / Chronic' : 'Acute 7-day vs chronic 28-day load',
+      secondaryValueText: acuteChronicText,
       trend: (context?.trend8Weeks || []).map(point => ({ time: point.time, value: point.value })),
     };
   }

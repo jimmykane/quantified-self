@@ -5,6 +5,8 @@ import { ShadeComponent } from '../shade.component';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatIconModule } from '@angular/material/icon';
 import { By } from '@angular/platform-browser';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 
 describe('AppLoadingOverlayComponent', () => {
     let component: AppLoadingOverlayComponent;
@@ -88,5 +90,12 @@ describe('AppLoadingOverlayComponent', () => {
 
         const shade = fixture.debugElement.query(By.directive(ShadeComponent));
         expect((shade.componentInstance as ShadeComponent).allowErrorPassthrough).toBe(true);
+    });
+
+    it('should let consumers override the loading shade radius with a CSS variable', () => {
+        const stylePath = resolve(process.cwd(), 'src/app/components/loading/shade.component.css');
+        const styles = readFileSync(stylePath, 'utf8');
+
+        expect(styles).toContain('border-radius: var(--loading-shade-border-radius, 0.5em);');
     });
 });

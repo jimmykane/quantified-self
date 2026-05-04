@@ -70,6 +70,7 @@
 }
 
 .dashboard-kpi-lane {
+  --loading-shade-border-radius: 0;
   --dashboard-kpi-divider: 1px solid var(--qs-glass-panel-border, var(--mat-sys-outline-variant));
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

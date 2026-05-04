@@ -12,19 +12,6 @@
           </button>
           }
         </div>
-        <nav class="sleep-controls" aria-label="Sleep trend range navigation">
-          <button mat-icon-button class="sleep-nav-button" appHapticTap [disabled]="!canNavigateOlder"
-            (click)="navigateSleep('older')" matTooltip="Older sleep window" matTooltipPosition="below" aria-label="Show older sleep window">
-            <mat-icon>chevron_left</mat-icon>
-          </button>
-          <app-chart-range-selector class="sleep-range-selector" [options]="rangeSelectorOptions" [value]="sleepRange"
-            ariaLabel="Select sleep range" (valueChange)="onSleepRangeSelection($event)">
-          </app-chart-range-selector>
-          <button mat-icon-button class="sleep-nav-button" appHapticTap [disabled]="!canNavigateNewer"
-            (click)="navigateSleep('newer')" matTooltip="Newer sleep window" matTooltipPosition="below" aria-label="Show newer sleep window">
-            <mat-icon>chevron_right</mat-icon>
-          </button>
-        </nav>
       </div>
       <div class="sleep-stats">
         <div class="sleep-stat">

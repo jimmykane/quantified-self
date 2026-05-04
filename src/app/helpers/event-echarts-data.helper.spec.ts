@@ -30,6 +30,61 @@ describe('event-echarts-data.helper', () => {
     vi.restoreAllMocks();
   });
 
+  function mockEventChartStreamDependencies(displayType = 'Heart Rate', unit = 'bpm'): void {
+    vi.spyOn(ActivityUtilities, 'createUnitStreamsFromStreams').mockReturnValue([] as any);
+    vi.spyOn(DynamicDataLoader, 'getUnitBasedDataTypesFromDataTypes').mockImplementation((types: any) => types as any);
+    vi.spyOn(DynamicDataLoader, 'getUnitBasedDataTypesFromDataType').mockImplementation((type: any) => [type] as any);
+    vi.spyOn(DynamicDataLoader, 'getNonUnitBasedDataTypes').mockReturnValue([DataDistance.type]);
+    vi.spyOn(DynamicDataLoader, 'getDataClassFromDataType').mockImplementation((type: string) => ({
+      displayType,
+      type,
+      unit
+    } as any));
+  }
+
+  function buildSingleStreamPanel(input: {
+    streamType: string;
+    intensityZones?: Array<Record<string, unknown>>;
+    colorHeartRateZones?: boolean;
+    eventColorService?: {
+      getActivityColor?: ReturnType<typeof vi.fn>;
+      getColorForZoneHex?: ReturnType<typeof vi.fn>;
+    };
+  }) {
+    const stream = {
+      type: input.streamType,
+      getData: () => [110, 125, 145, 165],
+    } as any;
+    const timeStream = {
+      type: XAxisTypes.Time,
+      getData: () => [0, 1, 2, 3],
+    } as any;
+    const activity = {
+      startDate: new Date('2024-01-01T00:00:00.000Z'),
+      creator: { name: 'Garmin' },
+      type: 'Running',
+      intensityZones: input.intensityZones ?? [],
+      getID: () => 'a-hr-zone',
+      getAllStreams: () => [stream],
+      getStream: (type: string) => (type === XAxisTypes.Time ? timeStream : null),
+    } as any;
+    const eventColorService = input.eventColorService ?? {
+      getActivityColor: vi.fn(() => '#ff0000'),
+      getColorForZoneHex: vi.fn((zone: string) => `color-${zone}`),
+    };
+
+    return buildEventChartPanels({
+      selectedActivities: [activity],
+      allActivities: [activity],
+      xAxisType: XAxisTypes.Duration,
+      showAllData: false,
+      dataTypesToUse: [input.streamType],
+      userUnitSettings: {} as any,
+      eventColorService: eventColorService as any,
+      colorHeartRateZones: input.colorHeartRateZones ?? true,
+    });
+  }
+
   it('builds full-resolution points for selected data types', () => {
     vi.spyOn(ActivityUtilities, 'createUnitStreamsFromStreams').mockReturnValue([] as any);
     vi.spyOn(DynamicDataLoader, 'getUnitBasedDataTypesFromDataTypes').mockImplementation((types: any) => types as any);
@@ -77,6 +132,135 @@ describe('event-echarts-data.helper', () => {
     expect(panels[0].series[0].points).toHaveLength(5);
     expect(panels[0].series[0].points.map((point) => point.x)).toEqual([0, 1, 2, 3, 4]);
     expect(panels[0].series[0].color).toBe((AppDataColors as any).Power);
+  });
+
+  it('adds heart-rate zone color pieces from provider intensity-zone boundaries when enabled', () => {
+    mockEventChartStreamDependencies();
+    const getColorForZoneHex = vi.fn((zone: string) => `color-${zone}`);
+
+    const panels = buildSingleStreamPanel({
+      streamType: DataHeartRate.type,
+      intensityZones: [
+        {
+          type: DataHeartRate.type,
+          zone2LowerLimit: 120,
+          zone3LowerLimit: 140,
+          zone4LowerLimit: 160,
+        }
+      ],
+      eventColorService: {
+        getActivityColor: vi.fn(() => '#ff0000'),
+        getColorForZoneHex,
+      },
+    });
+
+    expect(panels).toHaveLength(1);
+    expect(panels[0].series[0].zoneColorPieces).toEqual([
+      { zone: 'Zone 1', color: 'color-Zone 1', lt: 120 },
+      { zone: 'Zone 2', color: 'color-Zone 2', gte: 120, lt: 140 },
+      { zone: 'Zone 3', color: 'color-Zone 3', gte: 140, lt: 160 },
+      { zone: 'Zone 4', color: 'color-Zone 4', gte: 160 },
+    ]);
+    expect(getColorForZoneHex).toHaveBeenCalledWith('Zone 1');
+    expect(getColorForZoneHex).toHaveBeenCalledWith('Zone 4');
+  });
+
+  it('does not add heart-rate zone color pieces when zone coloring is disabled for merged events', () => {
+    mockEventChartStreamDependencies();
+    const getColorForZoneHex = vi.fn((zone: string) => `color-${zone}`);
+
+    const panels = buildSingleStreamPanel({
+      streamType: DataHeartRate.type,
+      colorHeartRateZones: false,
+      intensityZones: [
+        {
+          type: DataHeartRate.type,
+          zone2LowerLimit: 120,
+          zone3LowerLimit: 140,
+        }
+      ],
+      eventColorService: {
+        getActivityColor: vi.fn(() => '#ff0000'),
+        getColorForZoneHex,
+      },
+    });
+
+    expect(panels).toHaveLength(1);
+    expect(panels[0].series[0].zoneColorPieces).toBeUndefined();
+    expect(getColorForZoneHex).not.toHaveBeenCalled();
+  });
+
+  it('does not infer zone coloring for non-heart-rate streams or unusable heart-rate boundaries', () => {
+    mockEventChartStreamDependencies();
+
+    expect(buildSingleStreamPanel({
+      streamType: DataPower.type,
+      intensityZones: [
+        {
+          type: DataHeartRate.type,
+          zone2LowerLimit: 120,
+          zone3LowerLimit: 140,
+        }
+      ],
+    })[0].series[0].zoneColorPieces).toBeUndefined();
+
+    expect(buildSingleStreamPanel({
+      streamType: DataHeartRate.type,
+      intensityZones: [
+        {
+          type: DataHeartRate.type,
+          zone2LowerLimit: 120,
+          zone3LowerLimit: Number.NaN,
+        }
+      ],
+    })[0].series[0].zoneColorPieces).toBeUndefined();
+
+    expect(buildSingleStreamPanel({
+      streamType: DataHeartRate.type,
+      intensityZones: [
+        {
+          type: DataHeartRate.type,
+          zone2LowerLimit: 140,
+          zone3LowerLimit: 120,
+        }
+      ],
+    })[0].series[0].zoneColorPieces).toBeUndefined();
+
+    expect(buildSingleStreamPanel({
+      streamType: DataHeartRate.type,
+      intensityZones: [
+        {
+          type: DataHeartRate.type,
+          zone2LowerLimit: 120,
+        }
+      ],
+    })[0].series[0].zoneColorPieces).toBeUndefined();
+
+    expect(buildSingleStreamPanel({
+      streamType: DataHeartRate.type,
+      intensityZones: [
+        {
+          type: DataHeartRate.type,
+          zone2LowerLimit: 120,
+          zone4LowerLimit: 160,
+        }
+      ],
+    })[0].series[0].zoneColorPieces).toBeUndefined();
+
+    expect(buildSingleStreamPanel({
+      streamType: DataHeartRate.type,
+      intensityZones: [
+        {
+          type: DataHeartRate.type,
+          zone3LowerLimit: 140,
+        }
+      ],
+    })[0].series[0].zoneColorPieces).toBeUndefined();
+
+    expect(buildSingleStreamPanel({
+      streamType: DataHeartRate.type,
+      intensityZones: [],
+    })[0].series[0].zoneColorPieces).toBeUndefined();
   });
 
   it('orders event panels with the canonical priority override', () => {

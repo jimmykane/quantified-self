@@ -37,6 +37,10 @@ export class ActivityTypesFilterMenuComponent implements OnChanges {
   }
 
   onActivityTypeToggle(activityType: ActivityTypes, checked: boolean): void {
+    if (this.disabled) {
+      return;
+    }
+
     const current = this.selectedActivityTypes || [];
     const nextActivityTypes = checked
       ? Array.from(new Set([...current, activityType]))
@@ -47,6 +51,10 @@ export class ActivityTypesFilterMenuComponent implements OnChanges {
   }
 
   clearActivityTypes(): void {
+    if (this.disabled) {
+      return;
+    }
+
     if (!this.selectedActivityTypes.length) {
       return;
     }

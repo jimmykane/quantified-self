@@ -1,0 +1,45 @@
+<section
+  class="service-connection-status"
+  [class.service-connection-status--connected]="connected"
+  [class.service-connection-status--locked]="locked"
+  [attr.aria-label]="serviceLabel + ' connection status'">
+  <div class="service-connection-status__content">
+    <div class="service-connection-status__summary">
+      <div class="service-connection-status__indicator" aria-hidden="true">
+        <mat-icon>{{ statusIcon }}</mat-icon>
+      </div>
+
+      <div class="service-connection-status__copy">
+        <span class="service-connection-status__eyebrow">{{ serviceLabel }} connection</span>
+        <span class="service-connection-status__title">{{ statusLabel }}</span>
+        @if (description) {
+        <p>{{ description }}</p>
+        }
+      </div>
+
+      @if (proRequired) {
+      <mat-chip-set class="service-connection-status__chips" aria-label="Connection requirements">
+        <mat-chip>
+          <mat-icon>lock</mat-icon>
+          PRO
+        </mat-chip>
+      </mat-chip-set>
+      }
+
+      <div class="service-connection-status__actions">
+        <ng-content select="[connection-actions]"></ng-content>
+      </div>
+    </div>
+
+    @if (loading) {
+    <mat-progress-bar mode="indeterminate"></mat-progress-bar>
+    }
+
+    @if (showDetails) {
+    <mat-divider></mat-divider>
+    <div class="service-connection-status__details">
+      <ng-content select="[connection-body]"></ng-content>
+    </div>
+    }
+  </div>
+</section>

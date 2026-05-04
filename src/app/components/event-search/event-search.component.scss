@@ -4,6 +4,11 @@ mat-icon {
   vertical-align: middle;
 }
 
+:host {
+  --qs-event-search-control-height: 46px;
+  --qs-event-search-toggle-height: 34px;
+}
+
 
 .big {
   width: auto;
@@ -188,16 +193,16 @@ mat-button-toggle:active {
 }
 
 :host(.compact-filter-layout) .date-range-field {
-  --mat-form-field-container-height: 40px;
-  --mat-form-field-container-vertical-padding: 8px;
-  --mat-form-field-container-text-size: 0.85rem;
-  --mat-form-field-outlined-label-text-size: 0.74rem;
+  --mat-form-field-container-height: var(--qs-event-search-control-height);
+  --mat-form-field-container-vertical-padding: 10px;
+  --mat-form-field-container-text-size: 0.9rem;
+  --mat-form-field-outlined-label-text-size: 0.76rem;
 }
 
 :host(.compact-filter-layout) .button-groups {
   align-content: flex-start;
   flex: 1 1 420px;
-  min-height: 40px;
+  min-height: var(--qs-event-search-control-height);
   min-width: 0;
   max-width: 100%;
   justify-content: flex-start;
@@ -228,30 +233,30 @@ mat-button-toggle:active {
 
 /* Scoped density exception: Material date-range/autocomplete internals do not fully honor public height tokens. */
 :host(.compact-filter-layout) ::ng-deep .filters-row .mat-mdc-form-field-infix {
-  min-height: 40px;
-  padding-top: 8px !important;
-  padding-bottom: 8px !important;
+  min-height: var(--qs-event-search-control-height);
+  padding-top: 10px !important;
+  padding-bottom: 10px !important;
 }
 
 :host(.compact-filter-layout) ::ng-deep .filters-row .mat-mdc-icon-button {
-  width: 34px;
-  height: 34px;
-  padding: 5px;
+  width: 38px;
+  height: 38px;
+  padding: 7px;
 }
 
 :host(.compact-filter-layout) ::ng-deep .filters-row .mat-mdc-form-field-flex {
-  min-height: 40px;
+  min-height: var(--qs-event-search-control-height);
 }
 
 :host(.compact-filter-layout) ::ng-deep .filters-row .mat-date-range-input-container,
 :host(.compact-filter-layout) ::ng-deep .filters-row input.mat-mdc-input-element {
-  font-size: 0.85rem;
+  font-size: 0.9rem;
 }
 
 :host(.compact-filter-layout) ::ng-deep .mat-button-toggle-label-content {
-  line-height: 28px !important;
-  padding: 0 8px !important;
-  font-size: 0.76rem !important;
+  line-height: var(--qs-event-search-toggle-height) !important;
+  padding: 0 10px !important;
+  font-size: 0.8rem !important;
 }
 
 :host(.table-toolbar-layout) form {
@@ -285,7 +290,7 @@ mat-button-toggle:active {
   align-items: center;
   flex: 1 1 420px;
   justify-content: flex-start;
-  min-height: 32px;
+  min-height: var(--qs-event-search-control-height);
   min-width: 0;
 }
 

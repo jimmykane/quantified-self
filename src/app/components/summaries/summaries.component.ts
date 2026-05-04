@@ -687,6 +687,9 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     if (this.isEventDataTile(tile)) {
       return this.tileEventLoadingByOrder[tile.order] === true;
     }
+    if (this.isKpiLaneTile(tile)) {
+      return !this.derivedMetricsHydrated;
+    }
     return false;
   }
 

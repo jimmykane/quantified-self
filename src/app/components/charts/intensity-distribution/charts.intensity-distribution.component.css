@@ -24,7 +24,7 @@
 }
 
 .intensity-header.intensity-header-reserve-actions {
-  padding-right: 72px;
+  padding-right: 132px;
 }
 
 .title-row {
@@ -52,10 +52,6 @@
   white-space: nowrap;
 }
 
-.intensity-range-selector {
-  flex: 0 0 auto;
-}
-
 .title-info-button {
   width: 20px;
   min-width: 20px;
@@ -68,6 +64,12 @@
   align-items: center;
   justify-content: center;
   --mdc-icon-button-state-layer-size: 20px;
+}
+
+@media (max-width: 640px) {
+  .intensity-header.intensity-header-reserve-actions {
+    padding-right: 104px;
+  }
 }
 
 .title-info-button mat-icon {

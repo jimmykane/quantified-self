@@ -24,6 +24,18 @@ export class DashboardTileBoardComponent {
     return this.rowHeight || '150px';
   }
 
+  @HostBinding('style.--dashboard-tile-board-divider')
+  get boardDivider(): string {
+    return '1px solid var(--qs-glass-panel-border, var(--mat-sys-outline-variant))';
+  }
+
+  @HostBinding('style.--dashboard-tile-cell-inline-divider')
+  get boardInlineDivider(): string {
+    return this.normalizePositiveInteger(this.cols, 1) > 1
+      ? 'var(--dashboard-tile-board-divider)'
+      : '0';
+  }
+
   private normalizePositiveInteger(value: number | string | null, fallback: number): number {
     const parsed = Number(value);
     if (!Number.isFinite(parsed) || parsed < 1) {

@@ -55,4 +55,22 @@ describe('ActivityTypesFilterMenuComponent', () => {
     expect(component.selectedActivityTypes).toEqual([]);
     expect(component.activityFilterLabel).toBe('All activities');
   });
+
+  it('does not change activity filters while disabled', () => {
+    const component = new ActivityTypesFilterMenuComponent();
+    const emittedActivityTypes: ActivityTypes[][] = [];
+    component.selectedActivityTypesChange.subscribe(activityTypes => emittedActivityTypes.push(activityTypes));
+    component.selectedActivityTypes = [ActivityTypes.Running];
+    component.disabled = true;
+    component.ngOnChanges({
+      selectedActivityTypes: new SimpleChange([], component.selectedActivityTypes, true),
+    });
+
+    component.onActivityTypeToggle(ActivityTypes.Cycling, true);
+    component.clearActivityTypes();
+
+    expect(emittedActivityTypes).toEqual([]);
+    expect(component.selectedActivityTypes).toEqual([ActivityTypes.Running]);
+    expect(component.activityFilterLabel).toBe('1 activity filter');
+  });
 });

@@ -40,19 +40,19 @@ export class ServicesComponent implements OnInit, OnDestroy {
     {
       id: 'suunto',
       label: 'Suunto',
-      description: 'Suunto App tools',
+      description: 'Suunto App',
       svgIcon: 'suunto',
     },
     {
       id: 'garmin',
       label: 'Garmin',
-      description: 'Garmin Connect tools',
+      description: 'Garmin Connect',
       svgIcon: 'garmin',
     },
     {
       id: 'coros',
       label: 'COROS',
-      description: 'COROS account tools',
+      description: 'COROS account',
       svgIcon: 'coros',
     },
   ];
@@ -63,6 +63,11 @@ export class ServicesComponent implements OnInit, OnDestroy {
 
   private userSubscription!: Subscription;
   private routeSubscription!: Subscription;
+  private readonly serviceNameBySection: Record<ServiceSectionId, ServiceNames> = {
+    suunto: ServiceNames.SuuntoApp,
+    garmin: ServiceNames.GarminAPI,
+    coros: ServiceNames.COROSAPI,
+  };
 
   constructor(private http: HttpClient, private fileService: AppFileService,
     private eventService: AppEventService,
@@ -109,30 +114,14 @@ export class ServicesComponent implements OnInit, OnDestroy {
     }));
 
     this.routeSubscription = this.route.queryParamMap.subscribe(params => {
-      const serviceNameParam = params.get('serviceName');
-      if (serviceNameParam === ServiceNames.GarminAPI) {
-        this.activeSection = 'garmin';
-      } else if (serviceNameParam === ServiceNames.COROSAPI) {
-        this.activeSection = 'coros';
-      } else {
-        this.activeSection = 'suunto';
-      }
+      this.activeSection = this.getSectionFromServiceName(params.get('serviceName'));
     });
   }
 
   async selectService(section: ServiceSectionId) {
-    let serviceName: string;
-    switch (section) {
-      case 'garmin':
-        serviceName = ServiceNames.GarminAPI;
-        break;
-      case 'coros':
-        serviceName = ServiceNames.COROSAPI;
-        break;
-      default:
-        serviceName = ServiceNames.SuuntoApp;
-        break;
-    }
+    this.activeSection = section;
+
+    const serviceName = this.serviceNameBySection[section];
     await this.router.navigate([], {
       relativeTo: this.route,
       queryParams: { serviceName: serviceName },
@@ -153,14 +142,7 @@ export class ServicesComponent implements OnInit, OnDestroy {
     this.hasProAccess = isPro;
 
     // Initial check from snapshot if not already set by subscription
-    const serviceNameParam = this.route.snapshot.queryParamMap.get('serviceName');
-    if (serviceNameParam === ServiceNames.GarminAPI) {
-      this.activeSection = 'garmin';
-    } else if (serviceNameParam === ServiceNames.COROSAPI) {
-      this.activeSection = 'coros';
-    } else {
-      this.activeSection = 'suunto';
-    }
+    this.activeSection = this.getSectionFromServiceName(this.route.snapshot.queryParamMap.get('serviceName'));
     this.isLoading = false;
   }
 
@@ -171,5 +153,15 @@ export class ServicesComponent implements OnInit, OnDestroy {
     if (this.routeSubscription) {
       this.routeSubscription.unsubscribe();
     }
+  }
+
+  private getSectionFromServiceName(serviceName: string | null): ServiceSectionId {
+    if (serviceName === ServiceNames.GarminAPI) {
+      return 'garmin';
+    }
+    if (serviceName === ServiceNames.COROSAPI) {
+      return 'coros';
+    }
+    return 'suunto';
   }
 }
