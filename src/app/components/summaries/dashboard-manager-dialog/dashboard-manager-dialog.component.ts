@@ -44,8 +44,10 @@ import * as SpeedMax from '@sports-alliance/sports-lib';
 import { AppUserService } from '../../../services/app.user.service';
 import { AppUserInterface } from '../../../models/app-user.interface';
 import type {
+  AppDashboardAutoTileState,
   AppDashboardChartTileSettingsInterface,
   AppDashboardMapTileSettingsInterface,
+  AppDashboardSettingsInterface,
   AppDashboardTileEventFilterRange,
   AppDashboardTileEventFiltersInterface,
 } from '../../../models/app-user.interface';
@@ -99,6 +101,17 @@ import {
 import { ConfirmationDialogComponent } from '../../confirmation-dialog/confirmation-dialog.component';
 import { firstValueFrom } from 'rxjs';
 import { take } from 'rxjs/operators';
+import {
+  DASHBOARD_AUTO_TILE_SLEEP_TREND_ID,
+  DASHBOARD_AUTO_TILE_SLEEP_TREND_SOURCE,
+  DASHBOARD_AUTO_TILE_RECOVERY_NOW_ID,
+  buildDashboardKpiAutoTile,
+  getDashboardAutoTileDescriptorForTile,
+  isDashboardSleepTrendTile,
+  markDashboardAutoTileAdded,
+  markDashboardAutoTileDismissed,
+  type DashboardAutoTileDescriptor,
+} from '../../../helpers/dashboard-auto-tile.helper';
 
 export interface DashboardManagerDialogData {
   user: AppUserInterface;
@@ -685,6 +698,7 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit {
     const dashboardSettings = this.data.user.settings.dashboardSettings;
     const previousTiles = this.cloneTiles(dashboardSettings.tiles || []);
     const previousDismissedRecoveryTile = dashboardSettings.dismissedCuratedRecoveryNowTile;
+    const previousAutoTiles = this.cloneAutoTiles(dashboardSettings.autoTiles || {});
 
     try {
       const clonedTiles = this.cloneTiles(dashboardSettings.tiles || []);
@@ -741,6 +755,7 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit {
       if (dashboardSettings.tiles.some(tile => tile.type === TileTypes.Chart && isDashboardRecoveryNowChartType((tile as TileChartSettingsInterface).chartType))) {
         dashboardSettings.dismissedCuratedRecoveryNowTile = false;
       }
+      this.syncAutoTileStateAfterSave(dashboardSettings, previousTiles, clonedTiles);
 
       await this.userService.updateUserProperties(this.data.user, { settings: this.data.user.settings });
       this.hapticsService.success();
@@ -748,6 +763,7 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit {
     } catch (error) {
       dashboardSettings.tiles = this.cloneTiles(previousTiles);
       dashboardSettings.dismissedCuratedRecoveryNowTile = previousDismissedRecoveryTile;
+      dashboardSettings.autoTiles = previousAutoTiles as AppDashboardSettingsInterface['autoTiles'];
       this.saveError = 'Could not save dashboard tile settings.';
       this.hapticsService.error();
       console.error('[DashboardManagerDialogComponent] Failed to save dashboard tile settings', error);
@@ -816,6 +832,98 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit {
       }
       return clonedTile as TileSettingsInterface;
     });
+  }
+
+  private cloneAutoTiles(
+    autoTiles: Partial<Record<string, AppDashboardAutoTileState>>,
+  ): Partial<Record<string, AppDashboardAutoTileState>> {
+    return Object.entries(autoTiles).reduce<Partial<Record<string, AppDashboardAutoTileState>>>((cloned, [id, state]) => {
+      if (state) {
+        cloned[id] = { ...state };
+      }
+      return cloned;
+    }, {});
+  }
+
+  private syncSleepTrendAutoTileStateAfterSave(
+    dashboardSettings: AppDashboardSettingsInterface,
+    previousTiles: TileSettingsInterface[],
+    nextTiles: TileSettingsInterface[],
+    nowMs: number,
+  ): void {
+    const previousHadSleepTrend = previousTiles.some(tile => isDashboardSleepTrendTile(tile));
+    const nextHasSleepTrend = nextTiles.some(tile => isDashboardSleepTrendTile(tile));
+    const currentSleepTrendState = dashboardSettings.autoTiles?.[DASHBOARD_AUTO_TILE_SLEEP_TREND_ID]?.state;
+
+    if (nextHasSleepTrend && (!previousHadSleepTrend || currentSleepTrendState === 'dismissed')) {
+      markDashboardAutoTileAdded(
+        dashboardSettings,
+        DASHBOARD_AUTO_TILE_SLEEP_TREND_ID,
+        DASHBOARD_AUTO_TILE_SLEEP_TREND_SOURCE,
+        nowMs,
+      );
+      return;
+    }
+
+    if (!nextHasSleepTrend && previousHadSleepTrend) {
+      markDashboardAutoTileDismissed(
+        dashboardSettings,
+        DASHBOARD_AUTO_TILE_SLEEP_TREND_ID,
+        DASHBOARD_AUTO_TILE_SLEEP_TREND_SOURCE,
+        nowMs,
+      );
+    }
+  }
+
+  private syncChartBackedAutoTileStatesAfterSave(
+    dashboardSettings: AppDashboardSettingsInterface,
+    previousTiles: TileSettingsInterface[],
+    nextTiles: TileSettingsInterface[],
+    nowMs: number,
+  ): void {
+    const previousDescriptors = previousTiles
+      .map(tile => getDashboardAutoTileDescriptorForTile(tile))
+      .filter((descriptor): descriptor is DashboardAutoTileDescriptor => !!descriptor);
+    const nextDescriptors = nextTiles
+      .map(tile => getDashboardAutoTileDescriptorForTile(tile))
+      .filter((descriptor): descriptor is DashboardAutoTileDescriptor => !!descriptor);
+
+    nextDescriptors.forEach((descriptor) => {
+      if (descriptor.id === DASHBOARD_AUTO_TILE_SLEEP_TREND_ID) {
+        return;
+      }
+      const wasPresent = previousDescriptors.some(previous => previous.id === descriptor.id);
+      const currentState = dashboardSettings.autoTiles?.[descriptor.id]?.state;
+      if (!wasPresent || currentState === 'dismissed') {
+        markDashboardAutoTileAdded(dashboardSettings, descriptor.id, descriptor.source, nowMs);
+        if (descriptor.id === DASHBOARD_AUTO_TILE_RECOVERY_NOW_ID) {
+          dashboardSettings.dismissedCuratedRecoveryNowTile = false;
+        }
+      }
+    });
+
+    previousDescriptors.forEach((descriptor) => {
+      if (descriptor.id === DASHBOARD_AUTO_TILE_SLEEP_TREND_ID) {
+        return;
+      }
+      const isPresent = nextDescriptors.some(next => next.id === descriptor.id);
+      if (!isPresent) {
+        markDashboardAutoTileDismissed(dashboardSettings, descriptor.id, descriptor.source, nowMs);
+        if (descriptor.id === DASHBOARD_AUTO_TILE_RECOVERY_NOW_ID) {
+          dashboardSettings.dismissedCuratedRecoveryNowTile = true;
+        }
+      }
+    });
+  }
+
+  private syncAutoTileStateAfterSave(
+    dashboardSettings: AppDashboardSettingsInterface,
+    previousTiles: TileSettingsInterface[],
+    nextTiles: TileSettingsInterface[],
+  ): void {
+    const nowMs = Date.now();
+    this.syncSleepTrendAutoTileStateAfterSave(dashboardSettings, previousTiles, nextTiles, nowMs);
+    this.syncChartBackedAutoTileStatesAfterSave(dashboardSettings, previousTiles, nextTiles, nowMs);
   }
 
   private buildTileForMode(
@@ -966,30 +1074,7 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit {
     order: number,
     size: { columns: number; rows: number },
   ): TileChartSettingsInterface {
-    const chartNameByType: Record<DashboardKpiChartType, string> = {
-      [DASHBOARD_ACWR_KPI_CHART_TYPE]: 'ACWR',
-      [DASHBOARD_RAMP_RATE_KPI_CHART_TYPE]: 'Ramp Rate',
-      [DASHBOARD_MONOTONY_STRAIN_KPI_CHART_TYPE]: 'Monotony / Strain',
-      [DASHBOARD_FORM_NOW_KPI_CHART_TYPE]: 'Form Now',
-      [DASHBOARD_FITNESS_CTL_KPI_CHART_TYPE]: 'Fitness (CTL)',
-      [DASHBOARD_FATIGUE_ATL_KPI_CHART_TYPE]: 'Fatigue (ATL)',
-      [DASHBOARD_FORM_PLUS_7D_KPI_CHART_TYPE]: 'Form +7d',
-      [DASHBOARD_EASY_PERCENT_KPI_CHART_TYPE]: 'Easy %',
-      [DASHBOARD_HARD_PERCENT_KPI_CHART_TYPE]: 'Hard %',
-      [DASHBOARD_EFFICIENCY_DELTA_4W_KPI_CHART_TYPE]: 'Efficiency Δ (4w)',
-    };
-    const chartName = chartNameByType[chartType];
-    return {
-      name: chartName,
-      type: TileTypes.Chart,
-      order,
-      size,
-      chartType: chartType as unknown as ChartTypes,
-      dataType: DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE,
-      dataValueType: ChartDataValueTypes.Total,
-      dataCategoryType: ChartDataCategoryTypes.DateType,
-      dataTimeInterval: TimeIntervals.Weekly,
-    };
+    return buildDashboardKpiAutoTile(chartType, order, size);
   }
 
   private buildMapTile(

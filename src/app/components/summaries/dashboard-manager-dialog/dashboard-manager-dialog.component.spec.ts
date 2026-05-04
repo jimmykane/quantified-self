@@ -193,6 +193,13 @@ describe('DashboardManagerDialogComponent', () => {
   });
 
   it('adds a KPI tile with fixed derived settings', async () => {
+    dialogData.user.settings.dashboardSettings.autoTiles = {
+      kpiRampRate: {
+        state: 'dismissed',
+        dismissedAt: 1_777_000_000_000,
+        source: 'default-kpi',
+      },
+    };
     component.mode = 'add';
     component.category = 'kpi' as any;
     component.kpiChartType = DASHBOARD_RAMP_RATE_KPI_CHART_TYPE as any;
@@ -208,6 +215,10 @@ describe('DashboardManagerDialogComponent', () => {
       dataValueType: ChartDataValueTypes.Total,
       dataTimeInterval: TimeIntervals.Weekly,
       size: { columns: 1, rows: 1 },
+    });
+    expect(dialogData.user.settings.dashboardSettings.autoTiles.kpiRampRate).toMatchObject({
+      state: 'added',
+      source: 'default-kpi',
     });
   });
 
@@ -240,6 +251,265 @@ describe('DashboardManagerDialogComponent', () => {
       type: TileTypes.Chart,
       chartType: DASHBOARD_RECOVERY_NOW_CHART_TYPE,
       size: { columns: 1, rows: 1 },
+    });
+  });
+
+  it('marks regular curated auto-tile state added when manually adding a dismissed curated chart', async () => {
+    dialogData.user.settings.dashboardSettings.autoTiles = {
+      curatedIntensityDistribution: {
+        state: 'dismissed',
+        dismissedAt: 1_777_000_000_000,
+        source: 'default-curated',
+      },
+    };
+    component.mode = 'add';
+    component.category = 'curated';
+    component.curatedChartType = DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE as any;
+
+    await component.save();
+
+    const tiles = dialogData.user.settings.dashboardSettings.tiles;
+    expect(tiles).toHaveLength(2);
+    expect(tiles[1]).toMatchObject({
+      type: TileTypes.Chart,
+      chartType: DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE,
+      size: { columns: 1, rows: 1 },
+    });
+    expect(dialogData.user.settings.dashboardSettings.autoTiles.curatedIntensityDistribution).toMatchObject({
+      state: 'added',
+      source: 'default-curated',
+    });
+  });
+
+  it('marks Sleep Trend auto-tile state added when manually adding Sleep Trend', async () => {
+    dialogData.user.settings.dashboardSettings.autoTiles = {
+      sleepTrend: {
+        state: 'dismissed',
+        dismissedAt: 1_777_000_000_000,
+        source: 'sleep-sync',
+      },
+    };
+    component.mode = 'add';
+    component.category = 'curated';
+    component.curatedChartType = DASHBOARD_SLEEP_TREND_CHART_TYPE as any;
+
+    await component.save();
+
+    const tiles = dialogData.user.settings.dashboardSettings.tiles;
+    expect(tiles).toHaveLength(2);
+    expect(tiles[1]).toMatchObject({
+      type: TileTypes.Chart,
+      chartType: DASHBOARD_SLEEP_TREND_CHART_TYPE,
+      size: { columns: 1, rows: 1 },
+    });
+    expect(dialogData.user.settings.dashboardSettings.autoTiles.sleepTrend).toMatchObject({
+      state: 'added',
+      source: 'sleep-sync',
+    });
+  });
+
+  it('marks Sleep Trend auto-tile state dismissed when replacing it with another tile', async () => {
+    dialogData.user.settings.dashboardSettings.tiles = [{
+      type: TileTypes.Chart,
+      order: 0,
+      name: 'Sleep',
+      chartType: DASHBOARD_SLEEP_TREND_CHART_TYPE,
+      dataType: 'SleepDuration',
+      dataValueType: ChartDataValueTypes.Total,
+      dataCategoryType: ChartDataCategoryTypes.DateType,
+      dataTimeInterval: TimeIntervals.Daily,
+      size: { columns: 1, rows: 1 },
+    }];
+    dialogData.user.settings.dashboardSettings.autoTiles = {
+      sleepTrend: {
+        state: 'added',
+        addedAt: 1_777_000_000_000,
+        source: 'sleep-sync',
+      },
+    };
+    component.ngOnInit();
+    component.mode = 'edit';
+    component.editTileOrder = 0;
+    component.category = 'curated';
+    component.curatedChartType = DASHBOARD_FORM_CHART_TYPE as any;
+
+    await component.save();
+
+    const tiles = dialogData.user.settings.dashboardSettings.tiles;
+    expect(tiles).toHaveLength(1);
+    expect(tiles[0].chartType).toBe(DASHBOARD_FORM_CHART_TYPE);
+    expect(dialogData.user.settings.dashboardSettings.autoTiles.sleepTrend).toMatchObject({
+      state: 'dismissed',
+      source: 'sleep-sync',
+    });
+  });
+
+  it('marks KPI auto-tile state dismissed when replacing it with another tile', async () => {
+    dialogData.user.settings.dashboardSettings.tiles = [{
+      type: TileTypes.Chart,
+      order: 0,
+      name: 'ACWR',
+      chartType: DASHBOARD_ACWR_KPI_CHART_TYPE,
+      dataType: DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE,
+      dataValueType: ChartDataValueTypes.Total,
+      dataCategoryType: ChartDataCategoryTypes.DateType,
+      dataTimeInterval: TimeIntervals.Weekly,
+      size: { columns: 1, rows: 1 },
+    }];
+    dialogData.user.settings.dashboardSettings.autoTiles = {
+      kpiAcwr: {
+        state: 'added',
+        addedAt: 1_777_000_000_000,
+        source: 'default-kpi',
+      },
+    };
+    component.ngOnInit();
+    component.mode = 'edit';
+    component.editTileOrder = 0;
+    component.category = 'custom';
+    component.customChartType = ChartTypes.ColumnsVertical;
+    component.customDataType = DataDistance.type;
+    component.customDataCategoryType = ChartDataCategoryTypes.DateType;
+    component.customDataValueType = ChartDataValueTypes.Total;
+    component.customTimeInterval = TimeIntervals.Auto;
+
+    await component.save();
+
+    const tiles = dialogData.user.settings.dashboardSettings.tiles;
+    expect(tiles).toHaveLength(1);
+    expect(tiles[0].chartType).toBe(ChartTypes.ColumnsVertical);
+    expect(dialogData.user.settings.dashboardSettings.autoTiles.kpiAcwr).toMatchObject({
+      state: 'dismissed',
+      source: 'default-kpi',
+    });
+  });
+
+  it('marks regular curated auto-tile state dismissed when replacing it with another tile', async () => {
+    dialogData.user.settings.dashboardSettings.tiles = [{
+      type: TileTypes.Chart,
+      order: 0,
+      name: 'Intensity Distribution',
+      chartType: DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE,
+      dataType: DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE,
+      dataValueType: ChartDataValueTypes.Total,
+      dataCategoryType: ChartDataCategoryTypes.DateType,
+      dataTimeInterval: TimeIntervals.Weekly,
+      size: { columns: 1, rows: 1 },
+    }];
+    dialogData.user.settings.dashboardSettings.autoTiles = {
+      curatedIntensityDistribution: {
+        state: 'added',
+        addedAt: 1_777_000_000_000,
+        source: 'default-curated',
+      },
+    };
+    component.ngOnInit();
+    component.mode = 'edit';
+    component.editTileOrder = 0;
+    component.category = 'custom';
+    component.customChartType = ChartTypes.ColumnsVertical;
+    component.customDataType = DataDistance.type;
+    component.customDataCategoryType = ChartDataCategoryTypes.DateType;
+    component.customDataValueType = ChartDataValueTypes.Total;
+    component.customTimeInterval = TimeIntervals.Auto;
+
+    await component.save();
+
+    const tiles = dialogData.user.settings.dashboardSettings.tiles;
+    expect(tiles).toHaveLength(1);
+    expect(tiles[0].chartType).toBe(ChartTypes.ColumnsVertical);
+    expect(dialogData.user.settings.dashboardSettings.autoTiles.curatedIntensityDistribution).toMatchObject({
+      state: 'dismissed',
+      source: 'default-curated',
+    });
+  });
+
+  it('marks Recovery auto-tile and legacy recovery state dismissed when replacing Recovery', async () => {
+    dialogData.user.settings.dashboardSettings.tiles = [{
+      type: TileTypes.Chart,
+      order: 0,
+      name: 'Recovery',
+      chartType: DASHBOARD_RECOVERY_NOW_CHART_TYPE,
+      dataType: 'Recovery Time',
+      dataValueType: ChartDataValueTypes.Total,
+      dataCategoryType: ChartDataCategoryTypes.DateType,
+      dataTimeInterval: TimeIntervals.Auto,
+      size: { columns: 1, rows: 1 },
+    }];
+    dialogData.user.settings.dashboardSettings.dismissedCuratedRecoveryNowTile = false;
+    dialogData.user.settings.dashboardSettings.autoTiles = {
+      curatedRecoveryNow: {
+        state: 'added',
+        addedAt: 1_777_000_000_000,
+        source: 'default-curated',
+      },
+    };
+    component.ngOnInit();
+    component.mode = 'edit';
+    component.editTileOrder = 0;
+    component.category = 'custom';
+    component.customChartType = ChartTypes.ColumnsVertical;
+    component.customDataType = DataDistance.type;
+    component.customDataCategoryType = ChartDataCategoryTypes.DateType;
+    component.customDataValueType = ChartDataValueTypes.Total;
+    component.customTimeInterval = TimeIntervals.Auto;
+
+    await component.save();
+
+    expect(dialogData.user.settings.dashboardSettings.dismissedCuratedRecoveryNowTile).toBe(true);
+    expect(dialogData.user.settings.dashboardSettings.autoTiles.curatedRecoveryNow).toMatchObject({
+      state: 'dismissed',
+      source: 'default-curated',
+    });
+  });
+
+  it('preserves existing Sleep Trend auto-tile metadata when saving an unrelated tile', async () => {
+    dialogData.user.settings.dashboardSettings.tiles = [{
+      type: TileTypes.Chart,
+      order: 0,
+      name: 'Sleep',
+      chartType: DASHBOARD_SLEEP_TREND_CHART_TYPE,
+      dataType: 'SleepDuration',
+      dataValueType: ChartDataValueTypes.Total,
+      dataCategoryType: ChartDataCategoryTypes.DateType,
+      dataTimeInterval: TimeIntervals.Daily,
+      size: { columns: 1, rows: 1 },
+    }, {
+      type: TileTypes.Chart,
+      order: 1,
+      name: 'Distance',
+      chartType: ChartTypes.ColumnsVertical,
+      dataType: DataDistance.type,
+      dataValueType: ChartDataValueTypes.Total,
+      dataCategoryType: ChartDataCategoryTypes.DateType,
+      dataTimeInterval: TimeIntervals.Auto,
+      size: { columns: 1, rows: 1 },
+    }];
+    dialogData.user.settings.dashboardSettings.autoTiles = {
+      sleepTrend: {
+        state: 'added',
+        addedAt: 1_777_000_000_000,
+        lastQualifiedAt: 1_777_000_000_000,
+        source: 'sleep-sync',
+      },
+    };
+    component.ngOnInit();
+    component.mode = 'edit';
+    component.editTileOrder = 1;
+    component.category = 'custom';
+    component.customChartType = ChartTypes.LinesVertical;
+    component.customDataType = DataDistance.type;
+    component.customDataCategoryType = ChartDataCategoryTypes.DateType;
+    component.customDataValueType = ChartDataValueTypes.Total;
+    component.customTimeInterval = TimeIntervals.Weekly;
+
+    await component.save();
+
+    expect(dialogData.user.settings.dashboardSettings.autoTiles.sleepTrend).toEqual({
+      state: 'added',
+      addedAt: 1_777_000_000_000,
+      lastQualifiedAt: 1_777_000_000_000,
+      source: 'sleep-sync',
     });
   });
 

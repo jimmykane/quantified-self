@@ -382,6 +382,8 @@ export class UserSettingsComponent implements OnChanges, OnDestroy, OnInit {
   }
 
   async selectSettingsSection(section: SettingsSectionId): Promise<void> {
+    this.activeSection = section;
+
     await this.router.navigate([], {
       relativeTo: this.route,
       queryParams: { section },

@@ -99,6 +99,27 @@ describe('EventSearchComponent', () => {
     expect(component.secondaryDateRangeButtonLabel).toBe('All');
   });
 
+  it('should require confirmation when selecting all from the table toolbar even if all is already active', async () => {
+    const dialog = {
+      open: vi.fn().mockReturnValue({
+        afterClosed: () => of(false),
+      }),
+    };
+    const { component } = createComponent(dialog, searchComponent => {
+      searchComponent.selectedDateRange = DateRanges.all;
+      searchComponent.compact = true;
+      searchComponent.toolbarRangeLayout = true;
+    });
+    const searchSpy = vi.spyOn(component, 'search').mockResolvedValue(undefined);
+
+    await component.onSecondaryDateRangeSelection(DateRanges.all);
+
+    expect(dialog.open).toHaveBeenCalledTimes(1);
+    expect(searchSpy).not.toHaveBeenCalled();
+    expect(component.selectedDateRange).toBe(DateRanges.all);
+    expect(component.secondaryDateRangeButtonLabel).toBe('All');
+  });
+
   it('should auto-search when a valid custom date change occurs', async () => {
     const { component, hapticsService } = createComponent();
     const searchSpy = vi.spyOn(component, 'search').mockResolvedValue(undefined);

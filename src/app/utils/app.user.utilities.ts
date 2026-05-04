@@ -58,6 +58,8 @@ import {
     AppChartSettingsInterface,
     AppDashboardChartTileSettingsInterface,
     AppDashboardMapTileSettingsInterface,
+    AppDashboardAutoTiles,
+    AppDashboardAutoTileState,
     AppMapStyleName,
     AppDashboardSettingsInterface,
     AppDashboardTileEventFiltersInterface,
@@ -67,6 +69,9 @@ import {
 } from '../models/app-user.interface';
 import {
     DASHBOARD_RECOVERY_NOW_CHART_TYPE,
+    DASHBOARD_SLEEP_TREND_CHART_TYPE,
+    getDashboardCuratedChartDefinitions,
+    getDashboardKpiChartDefinitions,
     isDashboardRecoveryNowChartType,
     isDashboardSpecialChartType,
 } from '../helpers/dashboard-special-chart-types';
@@ -77,6 +82,11 @@ import {
     normalizeDashboardTileEventFilters,
     resolveLegacyDashboardTileEventFilterRange,
 } from '../helpers/dashboard-tile-event-filters.helper';
+import {
+    buildDashboardCuratedAutoTile,
+    buildDashboardKpiAutoTile,
+    type DashboardDefaultCuratedChartType,
+} from '../helpers/dashboard-auto-tile.helper';
 import { ACTIVITY_SYNC_ROUTES, ActivitySyncRouteId } from '@shared/activity-sync-routes';
 import { normalizeDistanceUnits } from '@shared/unit-aware-display';
 
@@ -153,7 +163,7 @@ export class AppUserUtilities {
     }
 
     static getDefaultUserDashboardTiles(): TileSettingsInterface[] {
-        return [<AppDashboardMapTileSettingsInterface><unknown>{
+        const defaultMainTiles: TileSettingsInterface[] = [<AppDashboardMapTileSettingsInterface><unknown>{
             name: 'Clustered HeatMap',
             order: 0,
             type: TileTypes.Map,
@@ -196,21 +206,33 @@ export class AppUserUtilities {
             dataValueType: ChartDataValueTypes.Total,
             size: { columns: 1, rows: 1 },
             eventFilters: AppUserUtilities.getDefaultDashboardTileEventFilters(),
-        }]
+        }];
+        const defaultCuratedTiles = AppUserUtilities.getDefaultUserDashboardCuratedTiles(defaultMainTiles.length);
+        return [
+            ...defaultMainTiles,
+            ...defaultCuratedTiles,
+            ...AppUserUtilities.getDefaultUserDashboardKpiTiles(defaultMainTiles.length + defaultCuratedTiles.length),
+        ];
+    }
+
+    private static getDefaultUserDashboardCuratedTiles(startOrder: number): TileChartSettingsInterface[] {
+        return getDashboardCuratedChartDefinitions()
+            .filter(definition => definition.chartType !== DASHBOARD_SLEEP_TREND_CHART_TYPE)
+            .map((definition, index) => buildDashboardCuratedAutoTile(
+                definition.chartType as DashboardDefaultCuratedChartType,
+                startOrder + index,
+            ));
+    }
+
+    private static getDefaultUserDashboardKpiTiles(startOrder: number): TileChartSettingsInterface[] {
+        return getDashboardKpiChartDefinitions().map((definition, index) => buildDashboardKpiAutoTile(
+            definition.chartType,
+            startOrder + index,
+        ));
     }
 
     private static getDefaultUserDashboardRecoveryTile(order: number): TileChartSettingsInterface {
-        return {
-            name: 'Recovery',
-            order,
-            type: TileTypes.Chart,
-            chartType: DASHBOARD_RECOVERY_NOW_CHART_TYPE as unknown as ChartTypes,
-            dataCategoryType: ChartDataCategoryTypes.DateType,
-            dataType: DataRecoveryTime.type,
-            dataTimeInterval: TimeIntervals.Auto,
-            dataValueType: ChartDataValueTypes.Total,
-            size: { columns: 1, rows: 1 },
-        };
+        return buildDashboardCuratedAutoTile(DASHBOARD_RECOVERY_NOW_CHART_TYPE, order);
     }
 
     private static isRecoveryDashboardChartTile(tile: TileSettingsInterface): boolean {
@@ -513,6 +535,7 @@ export class AppUserUtilities {
             ...(settings.dashboardSettings.sleepTrend || {}),
             range: normalizeDashboardSleepTrendRange(settings.dashboardSettings.sleepTrend?.range),
         };
+        settings.dashboardSettings.autoTiles = AppUserUtilities.normalizeDashboardAutoTiles(settings.dashboardSettings.autoTiles);
         settings.dashboardSettings.tiles = settings.dashboardSettings.tiles || AppUserUtilities.getDefaultUserDashboardTiles();
         let hasNormalizedRecoveryDashboardTile = false;
         let hasNormalizedMapDashboardTile = false;
@@ -705,5 +728,58 @@ export class AppUserUtilities {
         const stripeRole = (user as any).stripeRole;
         const isProFlag = (user as any).isPro === true;
         return stripeRole === 'basic' || stripeRole === 'pro' || isProFlag || AppUserUtilities.isGracePeriodActive(user);
+    }
+
+    private static normalizeDashboardAutoTiles(value: unknown): AppDashboardAutoTiles {
+        if (!value || typeof value !== 'object') {
+            return {};
+        }
+
+        return Object.entries(value as Record<string, unknown>)
+            .reduce<AppDashboardAutoTiles>((normalized, [id, state]) => {
+                const normalizedState = AppUserUtilities.normalizeDashboardAutoTileState(state);
+                if (normalizedState) {
+                    normalized[id] = normalizedState;
+                }
+                return normalized;
+            }, {});
+    }
+
+    private static normalizeDashboardAutoTileState(value: unknown): AppDashboardAutoTileState | null {
+        if (!value || typeof value !== 'object') {
+            return null;
+        }
+
+        const state = value as Partial<AppDashboardAutoTileState>;
+        if (state.state !== 'added' && state.state !== 'dismissed') {
+            return null;
+        }
+
+        const normalized: AppDashboardAutoTileState = { state: state.state };
+        const addedAt = AppUserUtilities.normalizeOptionalTimestamp(state.addedAt);
+        const dismissedAt = AppUserUtilities.normalizeOptionalTimestamp(state.dismissedAt);
+        const lastQualifiedAt = AppUserUtilities.normalizeOptionalTimestamp(state.lastQualifiedAt);
+        const source = typeof state.source === 'string' ? state.source.trim() : '';
+
+        if (addedAt !== null) {
+            normalized.addedAt = addedAt;
+        }
+        if (dismissedAt !== null) {
+            normalized.dismissedAt = dismissedAt;
+        }
+        if (lastQualifiedAt !== null) {
+            normalized.lastQualifiedAt = lastQualifiedAt;
+        }
+        if (source) {
+            normalized.source = source;
+        }
+
+        return normalized;
+    }
+
+    private static normalizeOptionalTimestamp(value: unknown): number | null {
+        return typeof value === 'number' && Number.isFinite(value) && value >= 0
+            ? value
+            : null;
     }
 }

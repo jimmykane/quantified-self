@@ -147,6 +147,7 @@
 .desktop-section-nav {
     position: sticky;
     top: calc(var(--qs-effective-top-offset, 0px) + 24px);
+    z-index: 1;
 }
 
 .desktop-section-nav-title {
@@ -192,6 +193,12 @@
 
 .workspace-main {
     min-width: 0;
+}
+
+.settings-tab-panel {
+    display: block;
+    min-width: 0;
+    overflow: hidden;
 }
 
 .settings-panel-section {
@@ -266,6 +273,13 @@
 
     mat-form-field {
         width: 100%;
+    }
+}
+
+@include bp.min-768 {
+    .settings-field-list--units {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 }
 

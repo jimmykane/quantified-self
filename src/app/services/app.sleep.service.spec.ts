@@ -50,6 +50,25 @@ describe('AppSleepService', () => {
     expect(collection).not.toHaveBeenCalled();
   });
 
+  it('returns false for sleep availability without a user id', async () => {
+    await expect(firstValueFrom(service.watchHasAnySleepSession(''))).resolves.toBe(false);
+    expect(collection).not.toHaveBeenCalled();
+  });
+
+  it('checks sleep availability with a one-document query', async () => {
+    vi.mocked(collectionData).mockReturnValue(of([
+      { id: 'sleep-1', startTimeMs: 1, endTimeMs: 2 },
+    ] as any));
+
+    await expect(firstValueFrom(service.watchHasAnySleepSession('user-1'))).resolves.toBe(true);
+
+    expect(collection).toHaveBeenCalledWith(expect.anything(), 'users', 'user-1', 'sleepSessions');
+    expect(limit).toHaveBeenCalledWith(1);
+    expect(query).toHaveBeenCalled();
+    expect(where).not.toHaveBeenCalled();
+    expect(orderBy).not.toHaveBeenCalled();
+  });
+
   it('queries with an overnight buffer and filters sessions by overlap', async () => {
     const start = Date.UTC(2026, 0, 5);
     const end = Date.UTC(2026, 0, 6);

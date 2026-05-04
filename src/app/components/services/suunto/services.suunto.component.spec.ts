@@ -103,10 +103,12 @@ describe('ServicesSuuntoComponent', () => {
         fixture.detectChanges();
 
         const connectionStatus = fixture.nativeElement.querySelector('.service-connection-status');
+        const providerToolTabs = fixture.nativeElement.querySelector('.provider-tools-tabs');
         const providerTabs = fixture.nativeElement.querySelectorAll('mat-tab');
 
         expect(connectionStatus).toBeTruthy();
         expect(connectionStatus.textContent).toContain('Suunto App connection');
+        expect(providerToolTabs.hasAttribute('ng-reflect-dynamic-height')).toBe(false);
         expect(providerTabs.length).toBe(2);
         expect(fixture.nativeElement.querySelector('mat-tab .service-connection-status')).toBeFalsy();
     });

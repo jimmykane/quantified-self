@@ -38,6 +38,36 @@ export interface AppDashboardSleepTrendSettingsInterface {
     range?: AppDashboardSleepTrendRange;
 }
 
+export type AppDashboardAutoTileId =
+    | 'sleepTrend'
+    | 'curatedRecoveryNow'
+    | 'curatedForm'
+    | 'curatedFreshnessForecast'
+    | 'curatedIntensityDistribution'
+    | 'curatedEfficiencyTrend'
+    | 'kpiAcwr'
+    | 'kpiRampRate'
+    | 'kpiMonotonyStrain'
+    | 'kpiFormNow'
+    | 'kpiFitnessCtl'
+    | 'kpiFatigueAtl'
+    | 'kpiFormPlus7d'
+    | 'kpiEasyPercent'
+    | 'kpiHardPercent'
+    | 'kpiEfficiencyDelta4w';
+export type AppDashboardAutoTileStateValue = 'added' | 'dismissed';
+
+export interface AppDashboardAutoTileState {
+    state: AppDashboardAutoTileStateValue;
+    addedAt?: number;
+    dismissedAt?: number;
+    lastQualifiedAt?: number;
+    source?: string;
+}
+
+export type AppDashboardAutoTiles = Partial<Record<AppDashboardAutoTileId, AppDashboardAutoTileState>>
+    & Record<string, AppDashboardAutoTileState | undefined>;
+
 export type AppDashboardTileEventFilterRange =
     'thisWeek'
     | 'thisMonth'
@@ -77,6 +107,7 @@ export interface AppDashboardSettingsInterface extends UserDashboardSettingsInte
     includeMergedEvents?: boolean;
     dismissedCuratedRecoveryNowTile?: boolean;
     sleepTrend?: AppDashboardSleepTrendSettingsInterface;
+    autoTiles?: AppDashboardAutoTiles;
     eventTableFilters?: AppDashboardEventTableFiltersInterface;
 }
 

@@ -30,6 +30,19 @@ export class AppSleepService {
 
   private firestore = inject(Firestore);
 
+  watchHasAnySleepSession(userID: string | null | undefined): Observable<boolean> {
+    const uid = `${userID || ''}`.trim();
+    if (!uid) {
+      return of(false);
+    }
+
+    const sleepCollection = collection(this.firestore, 'users', uid, SLEEP_SESSIONS_COLLECTION_ID);
+    const sleepQuery = query(sleepCollection, limit(1));
+    return (collectionData(sleepQuery) as Observable<SleepSession[]>).pipe(
+      map((sessions) => (sessions || []).length > 0),
+    );
+  }
+
   watchForDashboard(
     userID: string | null | undefined,
     startDate: Date | number | null | undefined,

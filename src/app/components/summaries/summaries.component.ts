@@ -104,7 +104,9 @@ import {
   resolveDashboardTileEventWindow,
   type DashboardTileEventNavigationDirection,
 } from '../../helpers/dashboard-tile-event-filters.helper';
+import { getTrailingDashboardGridPlaceholderCount } from '../../helpers/dashboard-grid-layout.helper';
 import { AppEventService } from '../../services/app.event.service';
+import { DashboardAutoTileService } from '../../services/dashboard-auto-tile.service';
 import { WhereFilterOp } from 'firebase/firestore';
 
 interface DashboardDerivedMetricsBanner {
@@ -139,6 +141,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   public tiles: DashboardTileViewModel[] = [];
   public kpiLaneTiles: DashboardChartTileViewModel[] = [];
   public mainGridTiles: DashboardTileViewModel[] = [];
+  public mainGridTrailingPlaceholders: number[] = [];
 
   public tileTypes = TileTypes;
   public desktopTileDragEnabled = false;
@@ -155,6 +158,8 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   private derivedMetricsUserUID: string | null = null;
   private sleepSubscription: Subscription | null = null;
   private sleepListenerKey: string | null = null;
+  private dashboardAutoTileSubscription: Subscription | null = null;
+  private dashboardAutoTileListenerKey: string | null = null;
   private sleepTrendAnchorEndMs: number | null = null;
   private tileEventSubscriptions = new Map<number, Subscription>();
   private tileEventListenerKeys = new Map<number, string>();
@@ -201,6 +206,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     private dashboardDerivedMetricsService: DashboardDerivedMetricsService,
     private sleepService: AppSleepService,
     private eventService: AppEventService,
+    private dashboardAutoTileService: DashboardAutoTileService,
     private dialog: MatDialog,
     changeDetector: ChangeDetectorRef,
     logger: LoggerService,
@@ -218,6 +224,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   resizeOROrientationChange(event?) {
     this.numberOfCols = this.getNumberOfColumns();
     this.rowHeight = this.getRowHeight();
+    this.refreshMainGridTrailingPlaceholders();
     this.updateDesktopTileDragCapability();
   }
 
@@ -232,6 +239,9 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       || simpleChanges.eventUser
     ) {
       return this.unsubscribeAndCreateCharts();
+    }
+    if (simpleChanges.showActions) {
+      this.syncDashboardAutoTileSubscription();
     }
   }
 
@@ -373,6 +383,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     });
     this.syncDerivedMetricsSubscription();
     this.syncSleepSubscription();
+    this.syncDashboardAutoTileSubscription();
     this.syncTileEventSubscriptions();
     await this.rebuildTilesFromCurrentState();
   }
@@ -625,6 +636,48 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
         this.sleepSessions = sessions;
         void this.rebuildTilesFromCurrentState();
       });
+  }
+
+  private syncDashboardAutoTileSubscription(): void {
+    const listenerKey = this.resolveDashboardAutoTileListenerKey();
+    if (!listenerKey) {
+      this.unsubscribeDashboardAutoTileSubscription();
+      return;
+    }
+
+    if (this.dashboardAutoTileListenerKey === listenerKey && this.dashboardAutoTileSubscription) {
+      return;
+    }
+
+    this.unsubscribeDashboardAutoTileSubscription();
+    this.dashboardAutoTileListenerKey = listenerKey;
+    this.dashboardAutoTileSubscription = this.dashboardAutoTileService.watchForDashboard(this.user as AppUserInterface);
+  }
+
+  private resolveDashboardAutoTileListenerKey(): string | null {
+    if (this.showActions !== true) {
+      return null;
+    }
+
+    const uid = `${this.user?.uid || ''}`.trim();
+    if (!uid) {
+      return null;
+    }
+
+    const eventUserUID = `${this.eventUser?.uid || ''}`.trim();
+    if (eventUserUID && eventUserUID !== uid) {
+      return null;
+    }
+
+    return uid;
+  }
+
+  private unsubscribeDashboardAutoTileSubscription(): void {
+    if (this.dashboardAutoTileSubscription) {
+      this.dashboardAutoTileSubscription.unsubscribe();
+      this.dashboardAutoTileSubscription = null;
+    }
+    this.dashboardAutoTileListenerKey = null;
   }
 
   public async onSleepTrendRangeChange(range: AppDashboardSleepTrendRange): Promise<void> {
@@ -1070,6 +1123,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     const orderedTiles = [...this.tiles].sort((left, right) => left.order - right.order);
     this.kpiLaneTiles = orderedTiles.filter((tile): tile is DashboardChartTileViewModel => this.isKpiLaneTile(tile));
     this.mainGridTiles = orderedTiles.filter(tile => !this.isKpiLaneTile(tile));
+    this.refreshMainGridTrailingPlaceholders();
   }
 
   private ensureTileLanesInitializedFromTiles(): void {
@@ -1080,6 +1134,12 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
 
   private syncTilesFromLanesForPreview(): void {
     this.tiles = [...this.kpiLaneTiles, ...this.mainGridTiles];
+    this.refreshMainGridTrailingPlaceholders();
+  }
+
+  private refreshMainGridTrailingPlaceholders(): void {
+    const placeholderCount = getTrailingDashboardGridPlaceholderCount(this.mainGridTiles, this.numberOfCols);
+    this.mainGridTrailingPlaceholders = Array.from({ length: placeholderCount }, (_, index) => index);
   }
 
   private async persistLaneOrder(): Promise<void> {
@@ -1166,6 +1226,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       this.sleepSubscription = null;
       this.sleepListenerKey = null;
     }
+    this.unsubscribeDashboardAutoTileSubscription();
     this.unsubscribeTileEventSubscriptions();
   }
 

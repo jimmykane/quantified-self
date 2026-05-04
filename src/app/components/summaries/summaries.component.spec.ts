@@ -1,7 +1,7 @@
 import { LOCALE_ID, NO_ERRORS_SCHEMA } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { afterEach, describe, it, expect, vi, beforeEach } from 'vitest';
-import { of, Subject } from 'rxjs';
+import { of, Subject, Subscription } from 'rxjs';
 import { MatDialog } from '@angular/material/dialog';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -21,6 +21,7 @@ import { AppUserService } from '../../services/app.user.service';
 import { DashboardDerivedMetricsService } from '../../services/dashboard-derived-metrics.service';
 import { AppSleepService } from '../../services/app.sleep.service';
 import { AppEventService } from '../../services/app.event.service';
+import { DashboardAutoTileService } from '../../services/dashboard-auto-tile.service';
 import * as dashboardTileViewModelHelper from '../../helpers/dashboard-tile-view-model.helper';
 import {
   DASHBOARD_ACWR_KPI_CHART_TYPE,
@@ -43,6 +44,7 @@ describe('SummariesComponent', () => {
   };
   let mockSleepService: { watchForDashboard: ReturnType<typeof vi.fn> };
   let mockEventService: { getEventsBy: ReturnType<typeof vi.fn> };
+  let mockDashboardAutoTileService: { watchForDashboard: ReturnType<typeof vi.fn> };
   let mockLogger: { error: ReturnType<typeof vi.fn>; warn: ReturnType<typeof vi.fn>; log: ReturnType<typeof vi.fn> };
   let mockDialog: { open: ReturnType<typeof vi.fn> };
   let buildDashboardTileViewModelsSpy: ReturnType<typeof vi.spyOn>;
@@ -93,6 +95,9 @@ describe('SummariesComponent', () => {
     mockEventService = {
       getEventsBy: vi.fn().mockReturnValue(of([])),
     };
+    mockDashboardAutoTileService = {
+      watchForDashboard: vi.fn().mockImplementation(() => new Subscription()),
+    };
     mockLogger = { error: vi.fn(), warn: vi.fn(), log: vi.fn() };
     mockDialog = {
       open: vi.fn().mockReturnValue({
@@ -125,6 +130,7 @@ describe('SummariesComponent', () => {
         { provide: DashboardDerivedMetricsService, useValue: mockDashboardDerivedMetricsService },
         { provide: AppSleepService, useValue: mockSleepService },
         { provide: AppEventService, useValue: mockEventService },
+        { provide: DashboardAutoTileService, useValue: mockDashboardAutoTileService },
         { provide: LoggerService, useValue: mockLogger },
         { provide: MatDialog, useValue: mockDialog },
         { provide: LOCALE_ID, useValue: 'en-US' },
@@ -225,6 +231,39 @@ describe('SummariesComponent', () => {
     expect(styles).toContain('--loading-shade-border-radius: 0;');
   });
 
+  it('fills partial final chart-grid rows with non-draggable placeholder cells', () => {
+    const mainGridTiles = [0, 1, 2].map(order => ({
+      type: TileTypes.Chart,
+      order,
+      chartType: ChartTypes.ColumnsVertical,
+      dataCategoryType: ChartDataCategoryTypes.DateType,
+      dataValueType: ChartDataValueTypes.Total,
+      data: [],
+      timeInterval: TimeIntervals.Daily,
+      size: { columns: 1, rows: 1 },
+    })) as any[];
+
+    component.user = { settings: { dashboardSettings: { tiles: [] } } } as any;
+    component.numberOfCols = 2;
+    component.tiles = mainGridTiles;
+    component.kpiLaneTiles = [];
+    component.mainGridTiles = mainGridTiles;
+    (component as any).refreshMainGridTrailingPlaceholders();
+
+    fixture.detectChanges();
+
+    const nativeElement = fixture.nativeElement as HTMLElement;
+    const board = nativeElement.querySelector('app-dashboard-tile-board') as HTMLElement | null;
+    expect(board).not.toBeNull();
+    expect(component.mainGridTrailingPlaceholders).toEqual([0]);
+    expect(board?.querySelectorAll('app-dashboard-tile-cell.dashboard-grid-tile')).toHaveLength(4);
+    const placeholder = board?.querySelector('app-dashboard-tile-cell.dashboard-grid-placeholder') as HTMLElement | null;
+    expect(placeholder).not.toBeNull();
+    expect(placeholder?.hasAttribute('cdkdrag')).toBe(false);
+    expect(placeholder?.style.gridColumn).toBe('span 1');
+    expect(placeholder?.getAttribute('aria-hidden')).toBe('true');
+  });
+
   it('renders the fallback dashboard manager action when there is no Today section', () => {
     const mainGridTile = {
       type: TileTypes.Chart,
@@ -320,6 +359,95 @@ describe('SummariesComponent', () => {
       },
     });
     expect(component.tiles).toBe(builtTiles);
+  });
+
+  it('subscribes to dashboard auto tiles for editable owner dashboards', async () => {
+    const autoTileSubscription = new Subscription();
+    const unsubscribeSpy = vi.spyOn(autoTileSubscription, 'unsubscribe');
+    mockDashboardAutoTileService.watchForDashboard.mockReturnValueOnce(autoTileSubscription);
+    component.user = {
+      uid: 'owner-user',
+      settings: { dashboardSettings: { tiles: [] } },
+    } as any;
+    component.showActions = true;
+
+    await component.ngOnChanges({
+      user: {
+        currentValue: component.user,
+        previousValue: null,
+        firstChange: true,
+        isFirstChange: () => true,
+      } as any,
+      showActions: {
+        currentValue: true,
+        previousValue: false,
+        firstChange: true,
+        isFirstChange: () => true,
+      } as any,
+    });
+
+    expect(mockDashboardAutoTileService.watchForDashboard).toHaveBeenCalledWith(component.user);
+
+    component.ngOnDestroy();
+    expect(unsubscribeSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not subscribe to dashboard auto tiles for shared target dashboards', async () => {
+    component.user = {
+      uid: 'viewer-user',
+      settings: { dashboardSettings: { tiles: [] } },
+    } as any;
+    component.eventUser = { uid: 'target-user' } as any;
+    component.showActions = true;
+
+    await component.ngOnChanges({
+      user: {
+        currentValue: component.user,
+        previousValue: null,
+        firstChange: true,
+        isFirstChange: () => true,
+      } as any,
+      eventUser: {
+        currentValue: component.eventUser,
+        previousValue: null,
+        firstChange: true,
+        isFirstChange: () => true,
+      } as any,
+    });
+
+    expect(mockDashboardAutoTileService.watchForDashboard).not.toHaveBeenCalled();
+  });
+
+  it('unsubscribes dashboard auto tiles when dashboard actions become read-only', async () => {
+    const autoTileSubscription = new Subscription();
+    const unsubscribeSpy = vi.spyOn(autoTileSubscription, 'unsubscribe');
+    mockDashboardAutoTileService.watchForDashboard.mockReturnValueOnce(autoTileSubscription);
+    component.user = {
+      uid: 'owner-user',
+      settings: { dashboardSettings: { tiles: [] } },
+    } as any;
+    component.showActions = true;
+
+    await component.ngOnChanges({
+      user: {
+        currentValue: component.user,
+        previousValue: null,
+        firstChange: true,
+        isFirstChange: () => true,
+      } as any,
+    });
+
+    component.showActions = false;
+    await component.ngOnChanges({
+      showActions: {
+        currentValue: false,
+        previousValue: true,
+        firstChange: false,
+        isFirstChange: () => false,
+      } as any,
+    });
+
+    expect(unsubscribeSpy).toHaveBeenCalledTimes(1);
   });
 
   it('should keep table date-range state out of tile view-model building', async () => {

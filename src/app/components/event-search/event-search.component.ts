@@ -190,7 +190,7 @@ export class EventSearchComponent extends LoadingAbstractDirective implements On
 
     this.hapticsService?.selection();
     const previousRange = this.selectedDateRange;
-    if (nextRange === DateRanges.all && previousRange !== DateRanges.all) {
+    if (nextRange === DateRanges.all) {
       const confirmed = await this.confirmAllRangeSelection();
       if (!confirmed) {
         this.selectedDateRange = previousRange;

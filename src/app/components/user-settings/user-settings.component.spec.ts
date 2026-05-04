@@ -228,12 +228,14 @@ describe('UserSettingsComponent', () => {
 
     it('renders the desktop settings selector as vertical Material list navigation', () => {
         const desktopNav = fixture.nativeElement.querySelector('.desktop-section-nav');
+        const tabPanel = fixture.nativeElement.querySelector('.settings-tab-panel');
         const navLabels = Array.from(desktopNav.querySelectorAll('.desktop-section-nav-label'))
             .map((label: Element) => label.textContent?.trim());
         const navDescriptions = Array.from(desktopNav.querySelectorAll('.desktop-section-nav-description'))
             .map((description: Element) => description.textContent?.trim());
 
         expect(desktopNav).toBeTruthy();
+        expect(tabPanel).toBeTruthy();
         expect(desktopNav.querySelector('mat-nav-list')).toBeTruthy();
         expect(navLabels).toEqual([
             'Profile',
@@ -256,7 +258,10 @@ describe('UserSettingsComponent', () => {
 
     it('should update section query param when a settings section is selected', async () => {
         component.activeSection = 'profile';
-        await component.selectSettingsSection('map');
+        const selection = component.selectSettingsSection('map');
+
+        expect(component.activeSection).toBe('map');
+        await selection;
 
         expect(mockRouter.navigate).toHaveBeenCalledWith([], {
             relativeTo: mockActivatedRoute,
@@ -502,17 +507,20 @@ describe('UserSettingsComponent', () => {
         expect(component.userSettingsFormGroup.dirty).toBe(true);
     });
 
-    it('renders unit presets and advanced units with plain Material controls', () => {
+    it('renders unit presets and fine-tune unit controls without an expander', () => {
         component.activeSection = 'units';
         fixture.detectChanges();
 
         const presetGroup = fixture.nativeElement.querySelector('mat-button-toggle-group');
-        const advancedPanel = fixture.nativeElement.querySelector('mat-expansion-panel');
+        const unitsFieldList = fixture.nativeElement.querySelector('.settings-field-list--units');
+        const formFields = fixture.nativeElement.querySelectorAll('mat-form-field');
 
         expect(presetGroup).toBeTruthy();
-        expect(advancedPanel).toBeTruthy();
+        expect(unitsFieldList).toBeTruthy();
         expect(presetGroup.hasAttribute('hideSingleSelectionIndicator')).toBe(true);
-        expect(advancedPanel.classList.contains('qs-glass-card-panel')).toBe(true);
+        expect(fixture.nativeElement.querySelector('mat-expansion-panel')).toBeFalsy();
+        expect(fixture.nativeElement.textContent).toContain('Fine-tune units');
+        expect(formFields.length).toBeGreaterThanOrEqual(5);
         expect(fixture.nativeElement.querySelector('.unit-simple-settings')).toBeFalsy();
         expect(fixture.nativeElement.querySelector('.unit-advanced-settings')).toBeFalsy();
     });

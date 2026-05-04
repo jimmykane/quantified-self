@@ -72,6 +72,11 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('Custom** charts use their own tile date-range and activity filters');
     expect(gettingStartedSection?.content).toContain('Map** tiles use their own tile date-range and activity filters');
     expect(gettingStartedSection?.content).toContain('derived tiles stay independent from event table filters and custom/map tile filters');
+    expect(gettingStartedSection?.content).toContain('dashboard can add the **Sleep** tile once');
+    expect(gettingStartedSection?.content).toContain('removing it prevents future automatic Sleep tile adds');
+    expect(gettingStartedSection?.content).toContain('default curated chart set');
+    expect(gettingStartedSection?.content).toContain('KPI row set automatically once');
+    expect(gettingStartedSection?.content).toContain('removing an auto-added curated chart or KPI prevents that chart from being suggested again');
   });
 
   it('should document that distance values follow unit preferences across the app', () => {

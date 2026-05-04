@@ -165,6 +165,14 @@
       }
     </app-dashboard-tile-cell>
     }
+    @for (placeholder of mainGridTrailingPlaceholders; track placeholder) {
+    <app-dashboard-tile-cell
+      class="dashboard-grid-placeholder"
+      aria-hidden="true"
+      [columns]="1"
+      [rows]="1"
+      [maxColumns]="numberOfCols"></app-dashboard-tile-cell>
+    }
   </app-dashboard-tile-board>
   }
 </section>

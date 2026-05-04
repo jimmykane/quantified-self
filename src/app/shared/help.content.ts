@@ -118,6 +118,8 @@ export const HELP_SECTIONS: HelpSection[] = [
 - Distance values in dashboards, event charts, activity chips, and CSV exports follow your kilometers or miles preference from **Settings -> Units**; jump distances display in feet when miles are selected.
 - **Map** tiles use their own tile date-range and activity filters, independent from the event table search.
 - Curated, KPI, form, recovery, sleep, and other derived tiles stay independent from event table filters and custom/map tile filters.
+- When sleep sync imports sleep sessions, the dashboard can add the **Sleep** tile once; removing it prevents future automatic Sleep tile adds.
+- Existing dashboards can receive the default curated chart set and KPI row set automatically once; removing an auto-added curated chart or KPI prevents that chart from being suggested again.
 - Derived curated and KPI chart types are unique: only one tile per special derived chart type can exist at a time.
 - Map tiles are also unique: only one map tile can exist at a time.
 - Map style and cluster-marker settings are edited inside Dashboard manager.
@@ -132,7 +134,7 @@ export const HELP_SECTIONS: HelpSection[] = [
 
 ### Recovery tile summary
 
-- The curated **Recovery** pie tile is optional and not added automatically.
+- The curated **Recovery** pie tile is optional; existing dashboards can receive it once through the default curated auto-add, and removing it prevents future automatic adds.
 - The tile shows live recovery split between **Left now** and **Elapsed**.
 - The summary shows **Recovery Left Now**, plus **Active total** and **Latest workout** recovery context.
 - Active totals only include currently active recovery windows, not all historical recovery values.

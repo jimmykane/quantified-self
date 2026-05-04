@@ -183,6 +183,10 @@
   min-height: 0;
 }
 
+.dashboard-grid-placeholder {
+  pointer-events: none;
+}
+
 app-dashboard-tile-board.dashboard-tile-board--merged-after-kpis {
   border-top-left-radius: 0 !important;
   border-top-right-radius: 0 !important;
