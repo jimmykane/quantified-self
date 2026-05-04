@@ -454,6 +454,25 @@ describe('TileChartComponent', () => {
     expect(directions).toEqual(['older']);
   });
 
+  it('should offset chart loading shades when top header controls are shown', () => {
+    component.chartType = ChartTypes.ColumnsVertical;
+    component.showActions = true;
+
+    fixture.detectChanges();
+
+    expect((fixture.nativeElement.querySelector('section') as HTMLElement).classList.contains('tile-has-header-controls')).toBe(true);
+  });
+
+  it('should not offset compact KPI row loading shades', () => {
+    component.chartType = DASHBOARD_ACWR_KPI_CHART_TYPE as any;
+    component.showActions = true;
+    component.compactKpiRow = true;
+
+    fixture.detectChanges();
+
+    expect((fixture.nativeElement.querySelector('section') as HTMLElement).classList.contains('tile-has-header-controls')).toBe(false);
+  });
+
   it('should hide event filter controls for derived chart tiles', () => {
     component.chartType = DASHBOARD_FORM_CHART_TYPE as any;
 
@@ -765,5 +784,16 @@ describe('TileChartComponent', () => {
     const template = readFileSync(templatePath, 'utf8');
     expect(template).toContain('button mat-icon-button cdkDragHandle class="drag-handle-indicator"');
     expect(template).toContain('drag_indicator');
+  });
+
+  it('should provide the shared loading overlay offset from tile styles', () => {
+    const stylePath = resolve(process.cwd(), 'src/app/components/tile/tile.abstract.css');
+    const styles = readFileSync(stylePath, 'utf8');
+
+    expect(styles).toContain('.tile-has-header-controls {');
+    expect(styles).toContain('--tile-header-controls-height: 48px;');
+    expect(styles).toContain('--loading-overlay-top-offset: var(--tile-header-controls-height);');
+    expect(styles).toContain('section > :not(.tile-header-controls) {');
+    expect(styles).toContain('z-index: 20;');
   });
 });

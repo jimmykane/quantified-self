@@ -1,27 +1,32 @@
-<section>
-  <div class="tile-header-controls">
-    <app-dashboard-tile-event-filters class="tile-event-filter-controls" [eventFilters]="eventFilters"
-      [canNavigateNewer]="canNavigateTileEventsNewer"
-      (rangeChange)="eventFilterRangeChange.emit($event)"
-      (activityTypesChange)="eventFilterActivityTypesChange.emit($event)"
-      (navigate)="eventFilterNavigate.emit($event)">
-    </app-dashboard-tile-event-filters>
-    @if (showActions) {
-    <div class="actions">
-    @if (enableDesktopDrag) {
-    <button mat-icon-button cdkDragHandle class="drag-handle-indicator" aria-label="Drag tile">
-      <mat-icon>drag_indicator</mat-icon>
-    </button>
-    }
-    <app-tile-map-actions [user]="user" [order]="order" [size]="size" [type]="type"
-      (editInDashboardManager)="onEditInDashboardManager($event)">
-    </app-tile-map-actions>
+<section class="tile-map-layout">
+  <header class="tile-map-header">
+    <div class="tile-map-title qs-dashboard-chart-title">Map</div>
+    <div class="tile-header-controls">
+      <app-dashboard-tile-event-filters class="tile-event-filter-controls" [eventFilters]="eventFilters"
+        [canNavigateNewer]="canNavigateTileEventsNewer"
+        (rangeChange)="eventFilterRangeChange.emit($event)"
+        (activityTypesChange)="eventFilterActivityTypesChange.emit($event)"
+        (navigate)="eventFilterNavigate.emit($event)">
+      </app-dashboard-tile-event-filters>
+      @if (showActions) {
+      <div class="actions">
+      @if (enableDesktopDrag) {
+      <button mat-icon-button cdkDragHandle class="drag-handle-indicator" aria-label="Drag tile">
+        <mat-icon>drag_indicator</mat-icon>
+      </button>
+      }
+      <app-tile-map-actions [user]="user" [order]="order" [size]="size" [type]="type"
+        (editInDashboardManager)="onEditInDashboardManager($event)">
+      </app-tile-map-actions>
+      </div>
+      }
     </div>
+  </header>
+  <div class="tile-map-body">
+    @if (events) {
+    <app-events-map [user]="user" [events]="events" [isLoading]="isLoading" [mapStyle]="mapStyle"
+      [clusterMarkers]="clusterMarkers">
+    </app-events-map>
     }
   </div>
-  @if (events) {
-  <app-events-map [user]="user" [events]="events" [isLoading]="isLoading" [mapStyle]="mapStyle"
-    [clusterMarkers]="clusterMarkers">
-  </app-events-map>
-  }
 </section>

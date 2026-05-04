@@ -1,4 +1,66 @@
-app-events-map{
+:host {
+  display: block;
   width: 100%;
   height: 100%;
+}
+
+.tile-map-layout {
+  display: grid;
+  grid-template-rows: var(--tile-header-controls-height, 48px) minmax(0, 1fr);
+  min-width: 0;
+  min-height: 0;
+}
+
+.tile-map-header {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  box-sizing: border-box;
+  min-width: 0;
+  min-height: var(--tile-header-controls-height, 48px);
+  gap: 8px;
+  padding: 0 8px 0 10px;
+  border-bottom: 1px solid var(--mat-sys-outline-variant);
+}
+
+.tile-map-title {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--mat-sys-on-surface-variant);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tile-map-layout .tile-header-controls {
+  position: static;
+  z-index: auto;
+  flex: 0 1 auto;
+  max-width: min(78%, 420px);
+}
+
+.tile-map-body {
+  position: relative;
+  z-index: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
+.tile-map-body app-events-map {
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+
+@media (max-width: 640px) {
+  .tile-map-header {
+    gap: 6px;
+    padding-inline: 8px;
+  }
+
+  .tile-map-layout .tile-header-controls {
+    max-width: min(84%, 360px);
+  }
 }

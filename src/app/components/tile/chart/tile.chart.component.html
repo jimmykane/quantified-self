@@ -1,4 +1,4 @@
-<section [class.tile-chart-kpi-row]="compactKpiRow">
+<section [class.tile-chart-kpi-row]="compactKpiRow" [class.tile-has-header-controls]="showHeaderControls && !compactKpiRow">
   @if (showHeaderControls) {
   <div class="tile-header-controls">
     @if (showEventFilters) {

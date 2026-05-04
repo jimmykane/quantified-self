@@ -95,6 +95,26 @@ describe('TileMapComponent', () => {
     expect(directions).toEqual(['newer']);
   });
 
+  it('should render map controls in a header and keep the map inside the body', () => {
+    const section = fixture.nativeElement.querySelector('section') as HTMLElement;
+    const header = fixture.nativeElement.querySelector('.tile-map-header') as HTMLElement;
+    const body = fixture.nativeElement.querySelector('.tile-map-body') as HTMLElement;
+
+    expect(section.classList.contains('tile-map-layout')).toBe(true);
+    expect(section.classList.contains('tile-has-header-controls')).toBe(false);
+    expect(header.querySelector('.tile-map-title')?.textContent?.trim()).toBe('Map');
+    expect(header.querySelector('.tile-header-controls')).toBeTruthy();
+    expect(body.querySelector('app-events-map')).toBeTruthy();
+  });
+
+  it('should align the map body to the shared chart control band height', () => {
+    const stylePath = resolve(process.cwd(), 'src/app/components/tile/map/tile.map.component.css');
+    const styles = readFileSync(stylePath, 'utf8');
+
+    expect(styles).toContain('grid-template-rows: var(--tile-header-controls-height, 48px) minmax(0, 1fr);');
+    expect(styles).toContain('min-height: var(--tile-header-controls-height, 48px);');
+  });
+
   it('should render a visible drag handle button for desktop drag mode', () => {
     const templatePath = resolve(process.cwd(), 'src/app/components/tile/map/tile.map.component.html');
     const template = readFileSync(templatePath, 'utf8');

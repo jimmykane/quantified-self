@@ -98,4 +98,12 @@ describe('AppLoadingOverlayComponent', () => {
 
         expect(styles).toContain('border-radius: var(--loading-shade-border-radius, 0.5em);');
     });
+
+    it('should let consumers offset loading indicators and shade from the top', () => {
+        const stylePath = resolve(process.cwd(), 'src/app/components/loading/loading-overlay/loading-overlay.component.css');
+        const styles = readFileSync(stylePath, 'utf8');
+
+        expect(styles).toContain('top: var(--loading-overlay-top-offset, 0);');
+        expect(styles).toContain('app-shade {');
+    });
 });

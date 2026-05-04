@@ -61,6 +61,7 @@ import {
 import { normalizeUnitDerivedTypeLabel } from '../../../helpers/stat-label.helper';
 
 type ChartOption = Parameters<EChartsType['setOption']>[0];
+type ChartSetOptionSettings = Parameters<EChartsType['setOption']>[1];
 type ChartDataTimeBounds = { first: number | null; last: number | null };
 
 @Component({
@@ -100,6 +101,10 @@ export class ChartsColumnsComponent implements AfterViewInit, OnChanges, OnDestr
     AppColors.DeepBlue,
     AppColors.LightGreen
   ];
+  private static readonly EMPTY_DATA_UPDATE_SETTINGS: ChartSetOptionSettings = {
+    notMerge: true,
+    lazyUpdate: false,
+  };
 
   constructor(
     private eChartsLoader: EChartsLoaderService,
@@ -170,7 +175,12 @@ export class ChartsColumnsComponent implements AfterViewInit, OnChanges, OnDestr
     this.logCustomChartRenderDebug(points, aggregate);
     const option = this.buildChartOption(points, aggregate);
     this.chartHost.hideTooltip();
-    this.chartHost.setOption(option, ECHARTS_CARTESIAN_IMMEDIATE_UPDATE_SETTINGS);
+    this.chartHost.setOption(
+      option,
+      points.length
+        ? ECHARTS_CARTESIAN_IMMEDIATE_UPDATE_SETTINGS
+        : ChartsColumnsComponent.EMPTY_DATA_UPDATE_SETTINGS,
+    );
     this.chartHost.scheduleResize();
   }
 
@@ -230,10 +240,12 @@ export class ChartsColumnsComponent implements AfterViewInit, OnChanges, OnDestr
     if (!points.length) {
       return {
         animation: this.useAnimations === true,
+        tooltip: { show: false },
         legend: { show: false },
         xAxis: [],
         yAxis: [],
         series: [],
+        graphic: [],
       };
     }
 

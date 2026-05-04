@@ -1,7 +1,18 @@
 section{
   position: relative;
+  isolation: isolate;
+  --tile-header-controls-height: 48px;
   width: 100%;
   height: 100%;
+}
+
+.tile-has-header-controls {
+  --loading-overlay-top-offset: var(--tile-header-controls-height);
+}
+
+section > :not(.tile-header-controls) {
+  position: relative;
+  z-index: 1;
 }
 
 .actions{
@@ -18,7 +29,7 @@ section{
   position: absolute;
   right: 2px;
   top: 8px;
-  z-index: 3;
+  z-index: 20;
   display: flex;
   align-items: center;
   justify-content: flex-end;
