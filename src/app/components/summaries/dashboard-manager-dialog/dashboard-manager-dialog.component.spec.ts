@@ -2,7 +2,7 @@ import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { MAT_DIALOG_DATA, MatDialog, MatDialogRef } from '@angular/material/dialog';
 import { describe, expect, it, beforeEach, vi } from 'vitest';
-import { of } from 'rxjs';
+import { BehaviorSubject, of } from 'rxjs';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import {
@@ -12,6 +12,8 @@ import {
   ActivityTypes,
   DataDistance,
   DataDuration,
+  DataEnergy,
+  DataHeartRateAvg,
   DataRecoveryTime,
   TileTypes,
   TimeIntervals,
@@ -36,8 +38,10 @@ import {
   DASHBOARD_SLEEP_TREND_CHART_TYPE,
 } from '../../../helpers/dashboard-special-chart-types';
 import { DASHBOARD_MANAGER_PRESET_IDS } from '../../../helpers/dashboard-manager-presets.helper';
+import { AppUserUtilities } from '../../../utils/app.user.utilities';
 import { AppUserService } from '../../../services/app.user.service';
 import { AppHapticsService } from '../../../services/app.haptics.service';
+import { AppSleepService } from '../../../services/app.sleep.service';
 import { DashboardManagerDialogComponent } from './dashboard-manager-dialog.component';
 
 function createUser(tiles: any[] = []): any {
@@ -54,12 +58,45 @@ function createUser(tiles: any[] = []): any {
   };
 }
 
+function dashboardTileSignature(tile: any): Record<string, unknown> {
+  return tile?.type === TileTypes.Map
+    ? {
+      type: tile.type,
+      mapStyle: tile.mapStyle,
+      clusterMarkers: tile.clusterMarkers,
+    }
+    : {
+      type: tile.type,
+      chartType: `${tile.chartType}`,
+      dataType: tile.dataType,
+      dataValueType: tile.dataValueType,
+      dataCategoryType: tile.dataCategoryType,
+      dataTimeInterval: tile.dataTimeInterval,
+    };
+}
+
+function createDeferred<T = unknown>(): {
+  promise: Promise<T>;
+  resolve: (value: T) => void;
+  reject: (reason?: unknown) => void;
+} {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((promiseResolve, promiseReject) => {
+    resolve = promiseResolve;
+    reject = promiseReject;
+  });
+  return { promise, resolve, reject };
+}
+
 describe('DashboardManagerDialogComponent', () => {
   let component: DashboardManagerDialogComponent;
   let fixture: ComponentFixture<DashboardManagerDialogComponent>;
   let userServiceMock: { updateUserProperties: ReturnType<typeof vi.fn> };
   let dialogRefMock: { close: ReturnType<typeof vi.fn> };
   let dialogMock: { open: ReturnType<typeof vi.fn> };
+  let sleepEligibilitySubject: BehaviorSubject<boolean>;
+  let sleepServiceMock: { watchHasAnySleepSession: ReturnType<typeof vi.fn> };
   let hapticsMock: {
     selection: ReturnType<typeof vi.fn>;
     success: ReturnType<typeof vi.fn>;
@@ -94,6 +131,10 @@ describe('DashboardManagerDialogComponent', () => {
         afterClosed: () => of(false),
       }),
     };
+    sleepEligibilitySubject = new BehaviorSubject<boolean>(false);
+    sleepServiceMock = {
+      watchHasAnySleepSession: vi.fn().mockReturnValue(sleepEligibilitySubject.asObservable()),
+    };
     hapticsMock = {
       selection: vi.fn(),
       success: vi.fn(),
@@ -105,6 +146,7 @@ describe('DashboardManagerDialogComponent', () => {
       providers: [
         { provide: AppUserService, useValue: userServiceMock },
         { provide: AppHapticsService, useValue: hapticsMock },
+        { provide: AppSleepService, useValue: sleepServiceMock },
         { provide: MatDialogRef, useValue: dialogRefMock },
         { provide: MatDialog, useValue: dialogMock },
         { provide: MAT_DIALOG_DATA, useValue: dialogData },
@@ -582,7 +624,9 @@ describe('DashboardManagerDialogComponent', () => {
 
   it('should render presets tab content and category controls in template', () => {
     const templatePath = resolve(process.cwd(), 'src/app/components/summaries/dashboard-manager-dialog/dashboard-manager-dialog.component.html');
+    const stylesPath = resolve(process.cwd(), 'src/app/components/summaries/dashboard-manager-dialog/dashboard-manager-dialog.component.css');
     const template = readFileSync(templatePath, 'utf8');
+    const styles = readFileSync(stylesPath, 'utf8');
 
     expect(template).toContain('Add all');
     expect(template).toContain('Remove all');
@@ -590,18 +634,30 @@ describe('DashboardManagerDialogComponent', () => {
     expect(template).toContain('Presets');
     expect(template).toContain('Apply preset');
     expect(template).toContain('mat-chip-listbox');
+    expect(styles).toContain('.dashboard-manager-button-content');
+    expect(styles).toContain('align-items: center;');
+    expect(styles).toContain('line-height: 1;');
+    expect(styles).toContain('.dashboard-manager-button-content mat-icon');
+    expect(styles).toContain('.dashboard-manager-button-content mat-spinner');
   });
 
-  it('adds all missing manager presets in one save', async () => {
+  it('adds all missing new-user default dashboard tiles in one save', async () => {
+    dialogData.user.settings.dashboardSettings.tiles = [];
+
     await component.addAllTiles();
 
     const tiles = dialogData.user.settings.dashboardSettings.tiles;
-    expect(tiles).toHaveLength(1 + component.presetDefinitions.length);
+    const defaultTiles = AppUserUtilities.getDefaultUserDashboardTiles();
+    expect(tiles).toHaveLength(defaultTiles.length);
+    expect(tiles.map(dashboardTileSignature)).toEqual(defaultTiles.map(dashboardTileSignature));
     expect(tiles.filter((tile: any) => tile.type === TileTypes.Map)).toHaveLength(1);
+    expect(tiles.filter((tile: any) => tile.type === TileTypes.Chart && tile.dataType === DataDistance.type)).toHaveLength(1);
     expect(tiles.some((tile: any) => tile.chartType === DASHBOARD_RECOVERY_NOW_CHART_TYPE)).toBe(true);
     expect(tiles.some((tile: any) => tile.chartType === DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE)).toBe(true);
     expect(tiles.some((tile: any) => tile.chartType === DASHBOARD_ACWR_KPI_CHART_TYPE)).toBe(true);
     expect(tiles.some((tile: any) => tile.chartType === ChartTypes.Pie && tile.dataType === DataDuration.type)).toBe(true);
+    expect(tiles.some((tile: any) => tile.dataType === DataEnergy.type)).toBe(false);
+    expect(tiles.some((tile: any) => tile.dataType === DataHeartRateAvg.type)).toBe(false);
     expect(dialogData.user.settings.dashboardSettings.autoTiles.curatedRecoveryNow).toMatchObject({
       state: 'added',
       source: 'default-curated',
@@ -619,14 +675,70 @@ describe('DashboardManagerDialogComponent', () => {
     expect(dialogRefMock.close).toHaveBeenCalledWith({ saved: true });
   });
 
-  it('does not duplicate existing presets when adding all', async () => {
-    await component.addAllTiles();
-    userServiceMock.updateUserProperties.mockClear();
-    dialogRefMock.close.mockClear();
+  it('shows an Add all loading state while bulk add is saving', async () => {
+    dialogData.user.settings.dashboardSettings.tiles = [];
+    const saveDeferred = createDeferred<boolean>();
+    userServiceMock.updateUserProperties.mockReturnValueOnce(saveDeferred.promise);
+
+    const addAllPromise = component.addAllTiles();
+    await Promise.resolve();
+    await Promise.resolve();
+    fixture.detectChanges();
+
+    const addAllButton: HTMLElement = fixture.nativeElement.querySelector('[data-testid="dashboard-manager-add-all-button"]');
+    expect(component.isAddAllSaving).toBe(true);
+    expect(component.savingAction).toBe('addAll');
+    expect(addAllButton.getAttribute('aria-busy')).toBe('true');
+    expect(addAllButton.textContent).toContain('Adding...');
+    expect(addAllButton.querySelector('mat-spinner')).toBeTruthy();
+
+    saveDeferred.resolve(true);
+    await addAllPromise;
+
+    expect(component.isSaving).toBe(false);
+    expect(component.savingAction).toBeNull();
+  });
+
+  it('adds the Sleep tile with the default tiles only when sleep data exists', async () => {
+    dialogData.user.settings.dashboardSettings.tiles = [];
+    sleepEligibilitySubject.next(true);
 
     await component.addAllTiles();
 
-    expect(dialogData.user.settings.dashboardSettings.tiles).toHaveLength(1 + component.presetDefinitions.length);
+    const defaultTiles = AppUserUtilities.getDefaultUserDashboardTiles();
+    const tiles = dialogData.user.settings.dashboardSettings.tiles;
+    const sleepTiles = tiles.filter((tile: any) => tile.chartType === DASHBOARD_SLEEP_TREND_CHART_TYPE || tile.dataType === 'SleepDuration');
+
+    expect(tiles).toHaveLength(defaultTiles.length + 1);
+    expect(sleepTiles).toHaveLength(1);
+    expect(sleepTiles[0]).toMatchObject({
+      name: 'Sleep',
+      order: defaultTiles.length,
+      size: { columns: 1, rows: 1 },
+    });
+    expect(dialogData.user.settings.dashboardSettings.autoTiles.sleepTrend).toMatchObject({
+      state: 'added',
+      source: 'sleep-sync',
+    });
+    expect(userServiceMock.updateUserProperties).toHaveBeenCalledTimes(1);
+    expect(dialogRefMock.close).toHaveBeenCalledWith({ saved: true });
+  });
+
+  it('refreshes sleep eligibility when adding all tiles', async () => {
+    dialogData.user.settings.dashboardSettings.tiles = [];
+    sleepServiceMock.watchHasAnySleepSession.mockReturnValueOnce(of(true));
+
+    await component.addAllTiles();
+
+    const tiles = dialogData.user.settings.dashboardSettings.tiles;
+    expect(tiles.some((tile: any) => tile.chartType === DASHBOARD_SLEEP_TREND_CHART_TYPE)).toBe(true);
+    expect(sleepServiceMock.watchHasAnySleepSession).toHaveBeenCalledWith('user-1');
+  });
+
+  it('does not duplicate existing default dashboard tiles when adding all', async () => {
+    dialogData.user.settings.dashboardSettings.tiles = AppUserUtilities.getDefaultUserDashboardTiles();
+    await component.addAllTiles();
+
     expect(userServiceMock.updateUserProperties).not.toHaveBeenCalled();
     expect(dialogRefMock.close).not.toHaveBeenCalledWith({ saved: true });
   });

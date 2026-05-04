@@ -212,7 +212,7 @@ export const HELP_SECTIONS: HelpSection[] = [
 
 - In Event details, if selected indoor activities do not include distance data, the chart automatically falls back to a **Duration** x-axis.
 - In that case, the **Distance** x-axis option stays visible but is disabled until a compatible activity selection is active.
-- When provider heart-rate zone boundaries are available on non-merged events, the **Heart Rate** chart colors the line by zone.`,
+- When provider heart-rate or power zone boundaries are available on non-merged events, the **Heart Rate** and **Power** charts color their lines by zone.`,
     links: [
       { label: 'Login', icon: 'login', kind: 'route', target: '/login' },
       { label: 'Dashboard', icon: 'space_dashboard', kind: 'route', target: '/dashboard' },

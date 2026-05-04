@@ -5,6 +5,7 @@ import {
   ChartCursorBehaviours,
   DataDistance,
   DataHeartRate,
+  DataPower,
   DistanceUnits,
   DynamicDataLoader,
   LapTypes,
@@ -811,6 +812,64 @@ describe('EventCardChartPanelComponent', () => {
         ],
         outOfRange: {
           color: '#bb0000',
+        },
+      })
+    ]);
+  });
+
+  it('renders power zone visual maps without coloring the grid', async () => {
+    component.panel = {
+      dataType: DataPower.type,
+      displayName: 'Power',
+      unit: 'W',
+      colorGroupKey: 'Power',
+      minX: 0,
+      maxX: 10,
+      series: [
+        {
+          id: 'a1::Power',
+          activityID: 'a1',
+          activityName: 'Garmin',
+          color: '#aa0000',
+          streamType: DataPower.type,
+          displayName: 'Power',
+          unit: 'W',
+          points: [
+            { x: 0, y: 190, time: 0 },
+            { x: 10, y: 260, time: 10 },
+          ],
+          zoneColorPieces: [
+            { zone: 'Zone 1', color: '#0099ff', lt: 180 },
+            { zone: 'Zone 2', color: '#00aa00', gte: 180, lt: 240 },
+            { zone: 'Zone 3', color: '#ffaa00', gte: 240 },
+          ],
+        }
+      ],
+    } as any;
+
+    await renderComponent();
+
+    const option = getRenderedOption();
+    expect(option?.series?.[0]?.lineStyle).toEqual(
+      expect.not.objectContaining({
+        color: expect.any(String),
+      })
+    );
+    expect(option?.yAxis?.splitArea).toBeUndefined();
+    expect(option?.visualMap).toEqual([
+      expect.objectContaining({
+        type: 'piecewise',
+        show: false,
+        hoverLink: false,
+        seriesIndex: 0,
+        dimension: 1,
+        pieces: [
+          { color: '#0099ff', label: 'Zone 1', lt: 180 },
+          { color: '#00aa00', label: 'Zone 2', gte: 180, lt: 240 },
+          { color: '#ffaa00', label: 'Zone 3', gte: 240 },
+        ],
+        outOfRange: {
+          color: '#aa0000',
         },
       })
     ]);
@@ -1659,6 +1718,51 @@ describe('EventCardChartPanelComponent', () => {
     ]);
 
     expect(tooltipHtml).toContain('background:#00aa00;');
+    expect(tooltipHtml).not.toContain('background:#aa0000;');
+  });
+
+  it('uses power zone colors for tooltip markers when zone pieces exist', async () => {
+    component.panel = {
+      dataType: DataPower.type,
+      displayName: 'Power',
+      unit: 'W',
+      colorGroupKey: 'Power',
+      minX: 0,
+      maxX: 10,
+      series: [
+        {
+          id: 'a1::Power',
+          activityID: 'a1',
+          activityName: 'Garmin',
+          color: '#aa0000',
+          streamType: DataPower.type,
+          displayName: 'Power',
+          unit: 'W',
+          points: [
+            { x: 0, y: 190, time: 0 },
+            { x: 10, y: 260, time: 10 },
+          ],
+          zoneColorPieces: [
+            { zone: 'Zone 1', color: '#0099ff', lt: 180 },
+            { zone: 'Zone 2', color: '#00aa00', gte: 180, lt: 240 },
+            { zone: 'Zone 3', color: '#ffaa00', gte: 240 },
+          ],
+        }
+      ],
+    } as any;
+
+    await renderComponent();
+
+    const tooltipHtml = (component as any).formatTooltip([
+      {
+        seriesId: 'a1::Power',
+        seriesName: 'Garmin',
+        color: '#aa0000',
+        value: [10, 260],
+      }
+    ]);
+
+    expect(tooltipHtml).toContain('background:#ffaa00;');
     expect(tooltipHtml).not.toContain('background:#aa0000;');
   });
 

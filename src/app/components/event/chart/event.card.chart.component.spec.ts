@@ -8,6 +8,8 @@ import {
   ActivityTypes,
   ChartCursorBehaviours,
   DataDistance,
+  DataHeartRate,
+  DataPower,
   DataSpeed,
   DataStrydDistance,
   XAxisTypes,
@@ -144,7 +146,7 @@ describe('EventCardChartComponent', () => {
     expect(component.xDomain).toEqual({ start: 0, end: 1 });
   });
 
-  it('passes heart-rate zone coloring enabled for non-merged events', async () => {
+  it('passes intensity-zone line coloring enabled for non-merged events', async () => {
     const buildPanelsSpy = vi.spyOn(eventDataHelper, 'buildEventChartPanels').mockReturnValue([]);
     component.event = {
       isMerge: false,
@@ -156,11 +158,11 @@ describe('EventCardChartComponent', () => {
     await fixture.whenStable();
 
     expect(buildPanelsSpy).toHaveBeenCalledWith(expect.objectContaining({
-      colorHeartRateZones: true,
+      colorIntensityZoneLines: true,
     }));
   });
 
-  it('passes heart-rate zone coloring disabled for merged events', async () => {
+  it('passes intensity-zone line coloring disabled for merged events', async () => {
     const buildPanelsSpy = vi.spyOn(eventDataHelper, 'buildEventChartPanels').mockReturnValue([]);
     component.event = {
       isMerge: true,
@@ -172,17 +174,21 @@ describe('EventCardChartComponent', () => {
     await fixture.whenStable();
 
     expect(buildPanelsSpy).toHaveBeenCalledWith(expect.objectContaining({
-      colorHeartRateZones: false,
+      colorIntensityZoneLines: false,
     }));
   });
 
-  it('rebuilds panels when heart-rate zone coloring inputs change', async () => {
+  it('rebuilds panels when intensity-zone coloring inputs change', async () => {
     const activity = {
       getID: () => 'a1',
       intensityZones: [
         {
-          type: 'Heart Rate',
+          type: DataHeartRate.type,
           zone2LowerLimit: 120,
+        },
+        {
+          type: DataPower.type,
+          zone2LowerLimit: 180,
         }
       ],
     } as any;
@@ -212,9 +218,14 @@ describe('EventCardChartComponent', () => {
     expect(buildPanelsSpy).toHaveBeenCalledTimes(1);
 
     activity.intensityZones[0].zone2LowerLimit = 125;
-    (component as any).rebuildPanels('zone-boundary-change');
+    (component as any).rebuildPanels('heart-rate-zone-boundary-change');
 
     expect(buildPanelsSpy).toHaveBeenCalledTimes(2);
+
+    activity.intensityZones[1].zone2LowerLimit = 185;
+    (component as any).rebuildPanels('power-zone-boundary-change');
+
+    expect(buildPanelsSpy).toHaveBeenCalledTimes(3);
 
     component.event = {
       isMerge: true,
@@ -223,7 +234,7 @@ describe('EventCardChartComponent', () => {
     } as any;
     (component as any).rebuildPanels('merge-flag-change');
 
-    expect(buildPanelsSpy).toHaveBeenCalledTimes(3);
+    expect(buildPanelsSpy).toHaveBeenCalledTimes(4);
   });
 
   it('shows activity names in tooltips for merge events', () => {

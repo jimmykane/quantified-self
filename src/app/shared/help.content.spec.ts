@@ -90,12 +90,12 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('jump distances display in feet when miles are selected');
   });
 
-  it('should document non-merged event heart-rate zone line coloring', () => {
+  it('should document non-merged event heart-rate and power zone line coloring', () => {
     const gettingStartedSection = HELP_SECTIONS.find(section => section.id === 'getting-started');
 
-    expect(gettingStartedSection?.content).toContain('provider heart-rate zone boundaries');
+    expect(gettingStartedSection?.content).toContain('provider heart-rate or power zone boundaries');
     expect(gettingStartedSection?.content).toContain('non-merged events');
-    expect(gettingStartedSection?.content).toContain('**Heart Rate** chart colors the line');
+    expect(gettingStartedSection?.content).toContain('**Heart Rate** and **Power** charts color their lines');
     expect(gettingStartedSection?.content).not.toContain('lightly tints the chart grid by zone');
   });
 

@@ -45,7 +45,7 @@ describe('event-echarts-data.helper', () => {
   function buildSingleStreamPanel(input: {
     streamType: string;
     intensityZones?: Array<Record<string, unknown>>;
-    colorHeartRateZones?: boolean;
+    colorIntensityZoneLines?: boolean;
     eventColorService?: {
       getActivityColor?: ReturnType<typeof vi.fn>;
       getColorForZoneHex?: ReturnType<typeof vi.fn>;
@@ -81,7 +81,7 @@ describe('event-echarts-data.helper', () => {
       dataTypesToUse: [input.streamType],
       userUnitSettings: {} as any,
       eventColorService: eventColorService as any,
-      colorHeartRateZones: input.colorHeartRateZones ?? true,
+      colorIntensityZoneLines: input.colorIntensityZoneLines ?? true,
     });
   }
 
@@ -165,13 +165,44 @@ describe('event-echarts-data.helper', () => {
     expect(getColorForZoneHex).toHaveBeenCalledWith('Zone 4');
   });
 
-  it('does not add heart-rate zone color pieces when zone coloring is disabled for merged events', () => {
+  it('adds power zone color pieces from provider intensity-zone boundaries when enabled', () => {
+    mockEventChartStreamDependencies('Power', 'W');
+    const getColorForZoneHex = vi.fn((zone: string) => `color-${zone}`);
+
+    const panels = buildSingleStreamPanel({
+      streamType: DataPower.type,
+      intensityZones: [
+        {
+          type: DataPower.type,
+          zone2LowerLimit: 180,
+          zone3LowerLimit: 240,
+          zone4LowerLimit: 300,
+        }
+      ],
+      eventColorService: {
+        getActivityColor: vi.fn(() => '#ff0000'),
+        getColorForZoneHex,
+      },
+    });
+
+    expect(panels).toHaveLength(1);
+    expect(panels[0].series[0].zoneColorPieces).toEqual([
+      { zone: 'Zone 1', color: 'color-Zone 1', lt: 180 },
+      { zone: 'Zone 2', color: 'color-Zone 2', gte: 180, lt: 240 },
+      { zone: 'Zone 3', color: 'color-Zone 3', gte: 240, lt: 300 },
+      { zone: 'Zone 4', color: 'color-Zone 4', gte: 300 },
+    ]);
+    expect(getColorForZoneHex).toHaveBeenCalledWith('Zone 1');
+    expect(getColorForZoneHex).toHaveBeenCalledWith('Zone 4');
+  });
+
+  it('does not add intensity-zone color pieces when zone coloring is disabled for merged events', () => {
     mockEventChartStreamDependencies();
     const getColorForZoneHex = vi.fn((zone: string) => `color-${zone}`);
 
     const panels = buildSingleStreamPanel({
       streamType: DataHeartRate.type,
-      colorHeartRateZones: false,
+      colorIntensityZoneLines: false,
       intensityZones: [
         {
           type: DataHeartRate.type,
@@ -188,10 +219,40 @@ describe('event-echarts-data.helper', () => {
     expect(panels).toHaveLength(1);
     expect(panels[0].series[0].zoneColorPieces).toBeUndefined();
     expect(getColorForZoneHex).not.toHaveBeenCalled();
+
+    const powerPanels = buildSingleStreamPanel({
+      streamType: DataPower.type,
+      colorIntensityZoneLines: false,
+      intensityZones: [
+        {
+          type: DataPower.type,
+          zone2LowerLimit: 180,
+          zone3LowerLimit: 240,
+        }
+      ],
+      eventColorService: {
+        getActivityColor: vi.fn(() => '#ff0000'),
+        getColorForZoneHex,
+      },
+    });
+
+    expect(powerPanels[0].series[0].zoneColorPieces).toBeUndefined();
+    expect(getColorForZoneHex).not.toHaveBeenCalled();
   });
 
-  it('does not infer zone coloring for non-heart-rate streams or unusable heart-rate boundaries', () => {
+  it('does not infer zone coloring for unsupported streams or unusable boundaries', () => {
     mockEventChartStreamDependencies();
+
+    expect(buildSingleStreamPanel({
+      streamType: DataSpeed.type,
+      intensityZones: [
+        {
+          type: DataHeartRate.type,
+          zone2LowerLimit: 120,
+          zone3LowerLimit: 140,
+        }
+      ],
+    })[0].series[0].zoneColorPieces).toBeUndefined();
 
     expect(buildSingleStreamPanel({
       streamType: DataPower.type,
@@ -253,6 +314,73 @@ describe('event-echarts-data.helper', () => {
         {
           type: DataHeartRate.type,
           zone3LowerLimit: 140,
+        }
+      ],
+    })[0].series[0].zoneColorPieces).toBeUndefined();
+
+    expect(buildSingleStreamPanel({
+      streamType: DataPower.type,
+      intensityZones: [
+        {
+          type: DataPower.type,
+          zone1Duration: 100,
+          zone2Duration: 200,
+          zone3Duration: 300,
+        }
+      ],
+    })[0].series[0].zoneColorPieces).toBeUndefined();
+
+    expect(buildSingleStreamPanel({
+      streamType: DataPower.type,
+      intensityZones: [
+        {
+          type: DataPower.type,
+          zone2LowerLimit: 180,
+          zone3LowerLimit: Number.NaN,
+        }
+      ],
+    })[0].series[0].zoneColorPieces).toBeUndefined();
+
+    expect(buildSingleStreamPanel({
+      streamType: DataPower.type,
+      intensityZones: [
+        {
+          type: DataPower.type,
+          zone2LowerLimit: 240,
+          zone3LowerLimit: 180,
+        }
+      ],
+    })[0].series[0].zoneColorPieces).toBeUndefined();
+
+    expect(buildSingleStreamPanel({
+      streamType: DataPower.type,
+      intensityZones: [
+        {
+          type: DataPower.type,
+          zone2LowerLimit: 180,
+          zone4LowerLimit: 300,
+        }
+      ],
+    })[0].series[0].zoneColorPieces).toBeUndefined();
+
+    expect(buildSingleStreamPanel({
+      streamType: DataPower.type,
+      intensityZones: [
+        {
+          type: DataPower.type,
+          zone2LowerLimit: '',
+          zone3LowerLimit: 240,
+        }
+      ],
+    })[0].series[0].zoneColorPieces).toBeUndefined();
+
+    expect(buildSingleStreamPanel({
+      streamType: DataPower.type,
+      intensityZones: [
+        {
+          type: DataPower.type,
+          zone2LowerLimit: 180,
+          zone3LowerLimit: true,
         }
       ],
     })[0].series[0].zoneColorPieces).toBeUndefined();

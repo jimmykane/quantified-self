@@ -23,7 +23,6 @@ import { SharedModule } from './modules/shared.module';
 import { ClipboardModule } from '@angular/cdk/clipboard';
 import { FullscreenOverlayContainer, OverlayContainer } from '@angular/cdk/overlay';
 import { MAT_FORM_FIELD_DEFAULT_OPTIONS } from '@angular/material/form-field';
-import { MAT_DIALOG_DEFAULT_OPTIONS } from '@angular/material/dialog';
 import { MAT_BOTTOM_SHEET_DEFAULT_OPTIONS } from '@angular/material/bottom-sheet';
 import { MAT_ICON_DEFAULT_OPTIONS } from '@angular/material/icon';
 import { MAT_MENU_DEFAULT_OPTIONS, MatMenuDefaultOptions } from '@angular/material/menu';
@@ -140,7 +139,6 @@ type FirestoreInitSettings = Parameters<typeof initializeFirestore>[1] & {
     { provide: MAT_FORM_FIELD_DEFAULT_OPTIONS, useValue: { appearance: 'outline' } },
     { provide: MAT_ICON_DEFAULT_OPTIONS, useValue: { fontSet: 'material-symbols-rounded' } },
     { provide: MAT_MENU_DEFAULT_OPTIONS, useValue: QS_MENU_DEFAULT_OPTIONS },
-    { provide: MAT_DIALOG_DEFAULT_OPTIONS, useValue: { panelClass: 'qs-dialog-container', hasBackdrop: true } },
     { provide: MAT_BOTTOM_SHEET_DEFAULT_OPTIONS, useValue: { autoFocus: 'dialog', panelClass: 'qs-bottom-sheet-container' } },
     MAT_DATE_LOCALE_PROVIDER,
     { provide: LOCALE_ID, useFactory: getBrowserLocale },

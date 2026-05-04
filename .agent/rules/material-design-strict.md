@@ -29,5 +29,7 @@ This always-on rule applies to frontend UI changes.
 
 ## Checklist
 - Standard Material component used where available
+- Async UI actions show an explicit loading state on or next to the triggering control, with layout kept stable while the action is pending
+- Icon+text Material buttons keep icons, spinners, and labels vertically centered with one explicit center-aligned content row and normalized icon/spinner dimensions
 - No new global utility classes
 - Colors and text styles use Material tokens

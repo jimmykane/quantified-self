@@ -1,4 +1,4 @@
-import { AfterViewInit, Component, ElementRef, Inject, OnInit, ViewChild } from '@angular/core';
+import { AfterViewInit, Component, ElementRef, Inject, OnDestroy, OnInit, ViewChild } from '@angular/core';
 import { MAT_DIALOG_DATA, MatDialog, MatDialogRef } from '@angular/material/dialog';
 import { MatSelect } from '@angular/material/select';
 import {
@@ -90,6 +90,7 @@ import {
   type DashboardManagerPresetId,
 } from '../../../helpers/dashboard-manager-presets.helper';
 import { AppHapticsService } from '../../../services/app.haptics.service';
+import { AppSleepService } from '../../../services/app.sleep.service';
 import {
   cloneDashboardTileEventFilters,
   DASHBOARD_TILE_EVENT_RANGE_OPTIONS,
@@ -97,7 +98,7 @@ import {
   normalizeDashboardTileEventFilters,
 } from '../../../helpers/dashboard-tile-event-filters.helper';
 import { ConfirmationDialogComponent } from '../../confirmation-dialog/confirmation-dialog.component';
-import { firstValueFrom } from 'rxjs';
+import { firstValueFrom, Subscription } from 'rxjs';
 import { take } from 'rxjs/operators';
 import {
   DASHBOARD_AUTO_TILE_CURATED_ID_BY_CHART_TYPE,
@@ -151,13 +152,15 @@ interface DashboardManagerSettingsSnapshot {
   autoTiles: Partial<Record<string, AppDashboardAutoTileState>>;
 }
 
+type DashboardManagerSavingAction = 'save' | 'addAll' | 'removeAll' | null;
+
 @Component({
   selector: 'app-dashboard-manager-dialog',
   templateUrl: './dashboard-manager-dialog.component.html',
   styleUrls: ['./dashboard-manager-dialog.component.css'],
   standalone: false,
 })
-export class DashboardManagerDialogComponent implements OnInit, AfterViewInit {
+export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, OnDestroy {
   private static readonly excludedChartTypePatterns = [
     /^bri.*dev/i,
     /^spiral$/i,
@@ -352,9 +355,12 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit {
   public selectedPresetId: DashboardManagerPresetId | null = DASHBOARD_MANAGER_PRESET_IDS.CURATED_RECOVERY;
 
   public isSaving = false;
+  public savingAction: DashboardManagerSavingAction = null;
   public saveError = '';
 
   private hasSavedChanges = false;
+  private hasSleepDataForAddAll = false;
+  private sleepEligibilitySubscription = new Subscription();
   private shouldAutoFocusEditSection = false;
 
   @ViewChild('customSection') private customSectionRef?: ElementRef<HTMLElement>;
@@ -371,6 +377,7 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit {
     private dialog: MatDialog,
     private userService: AppUserService,
     private hapticsService: AppHapticsService,
+    private sleepService: AppSleepService,
   ) { }
 
   ngOnInit(): void {
@@ -392,6 +399,7 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit {
 
     this.dataGroups = this.buildDataGroups();
     this.ensurePresetSelection();
+    this.watchSleepEligibilityForAddAll();
 
     if (this.dashboardTiles.length > 0) {
       this.editTileOrder = this.dashboardTiles[0].order;
@@ -414,6 +422,10 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit {
 
   ngAfterViewInit(): void {
     this.scrollAndFocusInitialEditSection();
+  }
+
+  ngOnDestroy(): void {
+    this.sleepEligibilitySubscription.unsubscribe();
   }
 
   get dashboardTiles(): TileSettingsInterface[] {
@@ -488,11 +500,23 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit {
   }
 
   get isAddAllDisabled(): boolean {
-    return this.isSaving || this.getMissingAllPresetDefinitions().length === 0;
+    return this.isSaving || this.getMissingAddAllDashboardTiles().length === 0;
   }
 
   get isRemoveAllDisabled(): boolean {
     return this.isSaving || this.dashboardTiles.length === 0;
+  }
+
+  get isSaveSaving(): boolean {
+    return this.savingAction === 'save';
+  }
+
+  get isAddAllSaving(): boolean {
+    return this.savingAction === 'addAll';
+  }
+
+  get isRemoveAllSaving(): boolean {
+    return this.savingAction === 'removeAll';
   }
 
   onModeChange(nextMode: 'add' | 'edit'): void {
@@ -713,7 +737,7 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit {
       return;
     }
 
-    this.isSaving = true;
+    this.startSaving('save');
     this.saveError = '';
     const dashboardSettings = this.data.user.settings.dashboardSettings;
     const previousSettings = this.snapshotDashboardSettings(dashboardSettings);
@@ -727,7 +751,7 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit {
           ? this.buildPresetTileForMode(clonedTiles.length, defaultSizeForAdd)
           : this.buildTileForMode(clonedTiles.length, defaultSizeForAdd, null);
         if (!newTile) {
-          this.isSaving = false;
+          this.stopSaving();
           return;
         }
         clonedTiles.push(newTile);
@@ -735,14 +759,14 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit {
         const editTile = this.resolveEditTile();
         if (!editTile) {
           this.saveError = 'Select a tile to edit.';
-          this.isSaving = false;
+          this.stopSaving();
           return;
         }
 
         const editIndex = clonedTiles.findIndex(tile => tile.order === editTile.order);
         if (editIndex < 0) {
           this.saveError = 'Could not find the selected tile.';
-          this.isSaving = false;
+          this.stopSaving();
           return;
         }
 
@@ -750,7 +774,7 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit {
           ? this.buildPresetTileForMode(editTile.order, editTile.size || { columns: 1, rows: 1 })
           : this.buildTileForMode(editTile.order, editTile.size || { columns: 1, rows: 1 }, editTile);
         if (!replacement) {
-          this.isSaving = false;
+          this.stopSaving();
           return;
         }
 
@@ -759,13 +783,13 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit {
 
       if (this.hasDuplicateSpecialTiles(clonedTiles)) {
         this.saveError = 'Derived curated and KPI chart types can only be added once each.';
-        this.isSaving = false;
+        this.stopSaving();
         return;
       }
 
       if (this.hasDuplicateMapTiles(clonedTiles)) {
         this.saveError = 'Map tile can only be added once.';
-        this.isSaving = false;
+        this.stopSaving();
         return;
       }
 
@@ -783,7 +807,7 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit {
       this.rollbackDashboardSettings(dashboardSettings, previousSettings);
       this.handleDashboardSettingsSaveError(error);
     } finally {
-      this.isSaving = false;
+      this.stopSaving();
     }
   }
 
@@ -793,38 +817,36 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit {
     }
 
     this.hapticsService.selection();
-    this.isSaving = true;
+    this.startSaving('addAll');
     this.saveError = '';
     const dashboardSettings = this.data.user.settings.dashboardSettings;
     const previousSettings = this.snapshotDashboardSettings(dashboardSettings);
 
     try {
+      await this.refreshSleepEligibilityForAddAll();
       const clonedTiles = this.cloneTiles(dashboardSettings.tiles || []);
-      const missingDefinitions = this.getMissingAllPresetDefinitions(clonedTiles);
-      if (!missingDefinitions.length) {
-        this.saveError = 'All Dashboard manager presets are already on your dashboard.';
-        this.isSaving = false;
+      const missingTiles = this.getMissingAddAllDashboardTiles(clonedTiles);
+      if (!missingTiles.length) {
+        this.saveError = 'Default dashboard tiles are already on your dashboard.';
+        this.stopSaving();
         return;
       }
 
-      const defaultSize = this.resolveDefaultAddTileSize();
-      missingDefinitions.forEach((definition) => {
-        clonedTiles.push(buildDashboardManagerPresetTile({
-          presetId: definition.id,
-          order: clonedTiles.length,
-          size: { ...defaultSize },
-        }));
+      let nextOrder = this.resolveNextTileOrder(clonedTiles);
+      missingTiles.forEach((tile) => {
+        clonedTiles.push(this.cloneTileForAddAll(tile, nextOrder));
+        nextOrder += 1;
       });
 
       if (this.hasDuplicateSpecialTiles(clonedTiles)) {
         this.saveError = 'Derived curated and KPI chart types can only be added once each.';
-        this.isSaving = false;
+        this.stopSaving();
         return;
       }
 
       if (this.hasDuplicateMapTiles(clonedTiles)) {
         this.saveError = 'Map tile can only be added once.';
-        this.isSaving = false;
+        this.stopSaving();
         return;
       }
 
@@ -838,7 +860,7 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit {
       this.rollbackDashboardSettings(dashboardSettings, previousSettings);
       this.handleDashboardSettingsSaveError(error);
     } finally {
-      this.isSaving = false;
+      this.stopSaving();
     }
   }
 
@@ -853,7 +875,7 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit {
       return;
     }
 
-    this.isSaving = true;
+    this.startSaving('removeAll');
     this.saveError = '';
     const dashboardSettings = this.data.user.settings.dashboardSettings;
     const previousSettings = this.snapshotDashboardSettings(dashboardSettings);
@@ -873,8 +895,18 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit {
       this.rollbackDashboardSettings(dashboardSettings, previousSettings);
       this.handleDashboardSettingsSaveError(error);
     } finally {
-      this.isSaving = false;
+      this.stopSaving();
     }
+  }
+
+  private startSaving(action: Exclude<DashboardManagerSavingAction, null>): void {
+    this.isSaving = true;
+    this.savingAction = action;
+  }
+
+  private stopSaving(): void {
+    this.isSaving = false;
+    this.savingAction = null;
   }
 
   private resolveEditTile(): TileSettingsInterface | null {
@@ -1229,45 +1261,95 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit {
     return confirmed === true;
   }
 
-  private getMissingAllPresetDefinitions(
+  private getMissingAddAllDashboardTiles(
     tiles: TileSettingsInterface[] = this.dashboardTiles,
-  ): DashboardManagerPresetDefinition[] {
-    return this.presetDefinitions.filter(definition => !this.hasPresetTile(tiles, definition));
+  ): TileSettingsInterface[] {
+    const defaultTiles = AppUserUtilities.getDefaultUserDashboardTiles();
+    if (this.hasSleepDataForAddAll) {
+      defaultTiles.push(buildDashboardSleepTrendAutoTile(defaultTiles.length));
+    }
+    return defaultTiles.filter(defaultTile => !tiles.some(tile => this.isTileForDefaultDashboardTile(tile, defaultTile)));
   }
 
-  private hasPresetTile(
-    tiles: TileSettingsInterface[],
-    definition: DashboardManagerPresetDefinition,
-  ): boolean {
-    return tiles.some(tile => this.isTileForPreset(tile, definition));
-  }
-
-  private isTileForPreset(
+  private isTileForDefaultDashboardTile(
     tile: TileSettingsInterface,
-    definition: DashboardManagerPresetDefinition,
+    defaultTile: TileSettingsInterface,
   ): boolean {
-    if (definition.category === 'map') {
+    if (defaultTile.type === TileTypes.Map) {
       return tile.type === TileTypes.Map;
     }
 
-    if (tile.type !== TileTypes.Chart) {
+    if (tile.type !== TileTypes.Chart || defaultTile.type !== TileTypes.Chart) {
       return false;
     }
 
+    if (isDashboardSleepTrendTile(defaultTile)) {
+      return isDashboardSleepTrendTile(tile);
+    }
+
+    const defaultDescriptor = getDashboardAutoTileDescriptorForTile(defaultTile);
+    if (defaultDescriptor) {
+      return getDashboardAutoTileDescriptorForTile(tile)?.id === defaultDescriptor.id;
+    }
+
     const chartTile = tile as TileChartSettingsInterface;
-    if (definition.category === 'curated') {
-      return this.isTileForCuratedChartType(chartTile, definition.curatedChartType);
+    const defaultChartTile = defaultTile as TileChartSettingsInterface;
+    return `${chartTile.chartType}` === `${defaultChartTile.chartType}`
+      && chartTile.dataType === defaultChartTile.dataType
+      && chartTile.dataValueType === defaultChartTile.dataValueType
+      && chartTile.dataCategoryType === defaultChartTile.dataCategoryType
+      && chartTile.dataTimeInterval === defaultChartTile.dataTimeInterval;
+  }
+
+  private cloneTileForAddAll(tile: TileSettingsInterface, order: number): TileSettingsInterface {
+    const clonedTile = this.cloneTiles([tile])[0];
+    return {
+      ...clonedTile,
+      order,
+      size: clonedTile.size ? { ...clonedTile.size } : this.resolveDefaultAddTileSize(),
+    };
+  }
+
+  private resolveNextTileOrder(tiles: readonly TileSettingsInterface[]): number {
+    if (!tiles.length) {
+      return 0;
+    }
+    return Math.max(...tiles.map(tile => Number(tile?.order || 0))) + 1;
+  }
+
+  private watchSleepEligibilityForAddAll(): void {
+    this.sleepEligibilitySubscription.unsubscribe();
+    this.sleepEligibilitySubscription = new Subscription();
+    this.hasSleepDataForAddAll = false;
+    const uid = `${this.data?.user?.uid || ''}`.trim();
+    if (!uid) {
+      return;
     }
 
-    if (definition.category === 'kpi') {
-      return `${chartTile.chartType}` === `${definition.kpiChartType}`;
+    this.sleepEligibilitySubscription = this.sleepService.watchHasAnySleepSession(uid).subscribe({
+      next: (hasSleepData) => {
+        this.hasSleepDataForAddAll = hasSleepData === true;
+      },
+      error: () => {
+        this.hasSleepDataForAddAll = false;
+      },
+    });
+  }
+
+  private async refreshSleepEligibilityForAddAll(): Promise<void> {
+    const uid = `${this.data?.user?.uid || ''}`.trim();
+    if (!uid) {
+      this.hasSleepDataForAddAll = false;
+      return;
     }
 
-    return `${chartTile.chartType}` === `${definition.chartType}`
-      && chartTile.dataType === definition.dataType
-      && chartTile.dataValueType === definition.dataValueType
-      && chartTile.dataCategoryType === definition.dataCategoryType
-      && chartTile.dataTimeInterval === definition.dataTimeInterval;
+    try {
+      this.hasSleepDataForAddAll = await firstValueFrom(
+        this.sleepService.watchHasAnySleepSession(uid).pipe(take(1)),
+      ) === true;
+    } catch {
+      this.hasSleepDataForAddAll = false;
+    }
   }
 
   private markAllDashboardAutoTilesDismissed(

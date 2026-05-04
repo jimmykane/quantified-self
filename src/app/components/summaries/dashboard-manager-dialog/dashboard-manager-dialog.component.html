@@ -7,17 +7,29 @@
   <section class="dashboard-manager-section">
     <div class="dashboard-manager-section-title">Bulk actions</div>
     <div class="dashboard-manager-bulk-actions">
-      <button mat-stroked-button type="button" class="qs-mat-primary" (click)="addAllTiles()" [disabled]="isAddAllDisabled">
-        <mat-icon>library_add</mat-icon>
-        <span>Add all</span>
+      <button mat-stroked-button type="button" class="qs-mat-primary" data-testid="dashboard-manager-add-all-button" (click)="addAllTiles()" [disabled]="isAddAllDisabled" [attr.aria-busy]="isAddAllSaving">
+        <span class="dashboard-manager-button-content">
+          @if (isAddAllSaving) {
+          <mat-spinner class="qs-spinner-primary" diameter="18"></mat-spinner>
+          } @else {
+          <mat-icon>library_add</mat-icon>
+          }
+          <span>{{ isAddAllSaving ? 'Adding...' : 'Add all' }}</span>
+        </span>
       </button>
-      <button mat-stroked-button type="button" class="qs-mat-warn" (click)="removeAllTiles()" [disabled]="isRemoveAllDisabled">
-        <mat-icon>delete_sweep</mat-icon>
-        <span>Remove all</span>
+      <button mat-stroked-button type="button" class="qs-mat-warn" data-testid="dashboard-manager-remove-all-button" (click)="removeAllTiles()" [disabled]="isRemoveAllDisabled" [attr.aria-busy]="isRemoveAllSaving">
+        <span class="dashboard-manager-button-content">
+          @if (isRemoveAllSaving) {
+          <mat-spinner class="qs-spinner-warn" diameter="18"></mat-spinner>
+          } @else {
+          <mat-icon>delete_sweep</mat-icon>
+          }
+          <span>{{ isRemoveAllSaving ? 'Removing...' : 'Remove all' }}</span>
+        </span>
       </button>
     </div>
     <p class="dashboard-manager-hint">
-      Add all inserts every missing Dashboard manager preset. Remove all clears the dashboard and prevents automatic suggestions from reappearing.
+      Add all inserts every missing default dashboard tile. Remove all clears the dashboard and prevents automatic suggestions from reappearing.
     </p>
   </section>
 
@@ -328,8 +340,13 @@
 </mat-dialog-content>
 
 <mat-dialog-actions class="dashboard-manager-actions" align="end">
-  <button mat-button (click)="close()">Cancel</button>
-  <button mat-flat-button class="qs-mat-primary" (click)="save()" [disabled]="isSaveDisabled">
-    {{ activeWorkflowTab === 'presets' ? 'Apply preset' : (mode === 'add' ? 'Add tile' : 'Save changes') }}
+  <button mat-button type="button" (click)="close()" [disabled]="isSaving">Cancel</button>
+  <button mat-flat-button type="button" class="qs-mat-primary" data-testid="dashboard-manager-save-button" (click)="save()" [disabled]="isSaveDisabled" [attr.aria-busy]="isSaveSaving">
+    <span class="dashboard-manager-button-content">
+      @if (isSaveSaving) {
+      <mat-spinner class="qs-spinner-primary" diameter="18"></mat-spinner>
+      }
+      <span>{{ isSaveSaving ? 'Saving...' : (activeWorkflowTab === 'presets' ? 'Apply preset' : (mode === 'add' ? 'Add tile' : 'Save changes')) }}</span>
+    </span>
   </button>
 </mat-dialog-actions>

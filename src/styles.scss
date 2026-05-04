@@ -226,6 +226,8 @@ section.component-container {
   --mat-sys-primary: var(--qs-theme-primary);
   --mat-sidenav-content-background-color: var(--mat-sys-background);
   --mat-sidenav-container-background-color: var(--mat-sys-surface-container-lowest);
+  --qs-overlay-surface: var(--mat-sys-surface-container-lowest);
+  --qs-overlay-surface-border: var(--mat-sys-outline-variant);
 }
 
 .dark-theme {
@@ -246,6 +248,8 @@ section.component-container {
   --mat-sys-primary: var(--qs-theme-primary);
   --mat-sidenav-content-background-color: var(--mat-sys-background);
   --mat-sidenav-container-background-color: var(--mat-sys-surface-container-lowest);
+  --qs-overlay-surface: color-mix(in srgb, var(--mat-sys-surface) 88%, var(--mat-sys-on-surface) 12%);
+  --qs-overlay-surface-border: var(--mat-sys-outline-variant);
 }
 
 
@@ -636,12 +640,12 @@ mat-table {
   @extend .qs-glass-card-panel;
   @extend .qs-scrollbar;
   --qs-glass-panel-blur: 16px;
-  --mat-bottom-sheet-container-background-color: transparent;
+  --mat-bottom-sheet-container-background-color: var(--qs-overlay-surface);
   --mat-bottom-sheet-container-shape: 20px;
-  background: var(--mat-sys-surface) !important;
+  background: var(--qs-overlay-surface) !important;
   /* Keep only the top corners rounded; bottom edge stays flush with viewport */
   border-radius: 20px 20px 0 0 !important;
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  border: 1px solid var(--qs-overlay-surface-border);
   box-shadow:
     0 -8px 32px rgba(0, 0, 0, 0.12),
     0 -2px 8px rgba(0, 0, 0, 0.08) !important;
@@ -665,11 +669,11 @@ mat-table {
   overflow: auto;
 
   &::-webkit-scrollbar-track {
-    background: var(--mat-sys-surface);
+    background: var(--qs-overlay-surface);
   }
 
   &::-webkit-scrollbar-corner {
-    background: var(--mat-sys-surface);
+    background: var(--qs-overlay-surface);
   }
 }
 
@@ -681,7 +685,7 @@ mat-table {
 }
 
 .dark-theme .mat-bottom-sheet-container {
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--qs-overlay-surface-border);
   box-shadow:
     0 -8px 32px rgba(0, 0, 0, 0.4),
     0 -2px 8px rgba(0, 0, 0, 0.2) !important;
@@ -690,80 +694,19 @@ mat-table {
 /* Ensure Overlays (Bottom Sheets, Dialogs) are always on top of App Bars and Banners */
 .cdk-overlay-container {
   z-index: 2000 !important;
-}
-
-/* ==========================================================================
-   Global Dialog Styles
-   Standardized Material Dialog overrides for glassmorphism consistency.
-   Applied via MAT_DIALOG_DEFAULT_OPTIONS in app.module.ts.
-   ========================================================================== */
-.qs-dialog-container {
-
-  .mat-mdc-dialog-container,
-  .mat-mdc-dialog-surface {
-    @extend .qs-glass-card-panel;
-    --qs-glass-panel-blur: 16px;
-    background: var(--mat-sys-surface) !important;
-    border: 1px solid rgba(255, 255, 255, 0.15);
-    border-radius: 16px !important;
-    box-shadow:
-      0 8px 32px rgba(0, 0, 0, 0.12),
-      0 2px 8px rgba(0, 0, 0, 0.08) !important;
-    transition: box-shadow 0.25s ease, border-color 0.25s ease !important;
-  }
-
-  .mat-mdc-dialog-title {
-    font: var(--mat-sys-headline-small) !important;
-    color: var(--mat-sys-on-surface) !important;
-    padding: 24px 24px 8px !important;
-    margin: 0 !important;
-  }
-
-  .mat-mdc-dialog-content {
-    color: var(--mat-sys-on-surface) !important;
-    padding: 8px 24px !important;
-    @extend .qs-scrollbar;
-  }
-
-  .mat-mdc-dialog-actions {
-    padding: 16px 24px 24px !important;
-    gap: 8px;
-  }
-}
-
-@media (max-width: 599.98px) {
-  .qs-dialog-container {
-    .mat-mdc-dialog-title {
-      padding: 20px 16px 6px !important;
-    }
-
-    .mat-mdc-dialog-content {
-      padding: 8px 16px !important;
-    }
-
-    .mat-mdc-dialog-actions {
-      padding: 12px 16px 16px !important;
-    }
-  }
-}
-
-/* Dark Theme Dialog Overrides */
-.dark-theme .qs-dialog-container {
-
-  .mat-mdc-dialog-container,
-  .mat-mdc-dialog-surface {
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    box-shadow:
-      0 8px 32px rgba(0, 0, 0, 0.4),
-      0 2px 8px rgba(0, 0, 0, 0.2) !important;
-  }
+  --qs-glass-panel-bg: var(--qs-overlay-surface);
+  --mat-autocomplete-background-color: var(--qs-overlay-surface);
+  --mat-bottom-sheet-container-background-color: var(--qs-overlay-surface);
+  --mat-datepicker-calendar-container-background-color: var(--qs-overlay-surface);
+  --mat-dialog-container-color: var(--qs-overlay-surface);
+  --mat-menu-container-color: var(--qs-overlay-surface);
+  --mat-select-panel-background-color: var(--qs-overlay-surface);
 }
 
 /* Shared overlay surface system.
    One global overlay theme, with semantic content variants for components rendered inside
    dialog/bottom-sheet shells. Use --flat only for report/feed style content that should not
    stack a second surface inside an already styled overlay shell. */
-.qs-dialog-container,
 .qs-bottom-sheet-container,
 .qs-whats-new-page {
   --qs-overlay-section-bg: var(--mat-sys-surface-container-high);
@@ -782,7 +725,6 @@ mat-table {
 /* Default overlay section treatment for common overlay surface primitives rendered
    inside dialogs and bottom sheets. Custom div sections still opt in with
    .qs-overlay-section. */
-.qs-dialog-container :is(.mat-mdc-card, .mat-expansion-panel, .qs-glass-card-panel):not(.qs-overlay-flat):not(.mat-mdc-dialog-container):not(.mat-mdc-dialog-surface),
 .qs-bottom-sheet-container :is(.mat-mdc-card, .mat-expansion-panel, .qs-glass-card-panel):not(.qs-overlay-flat):not(.mat-bottom-sheet-container),
 .qs-whats-new-page :is(.mat-mdc-card, .mat-expansion-panel, .qs-glass-card-panel):not(.qs-overlay-flat) {
   background: var(--qs-overlay-section-bg) !important;
@@ -853,7 +795,8 @@ tr.mat-row:focus,
 .mat-mdc-menu-panel.qs-menu-panel {
   @extend .qs-glass-card-panel;
   @include qs-scrollbar-skin;
-  background: var(--mat-sys-surface) !important;
+  --mat-menu-container-color: var(--qs-overlay-surface);
+  background: var(--qs-overlay-surface) !important;
   min-width: 180px !important;
   max-width: min(360px, calc(100vw - 24px)) !important;
   overflow: hidden !important;
@@ -884,7 +827,8 @@ tr.mat-row:focus,
    Material panel surface with the same app overlay treatment used by menus. */
 .mat-datepicker-content {
   @extend .qs-glass-card-panel;
-  background: var(--mat-sys-surface) !important;
+  --mat-datepicker-calendar-container-background-color: var(--qs-overlay-surface);
+  background: var(--qs-overlay-surface) !important;
   color: var(--mat-sys-on-surface);
 }
 
@@ -1145,7 +1089,8 @@ tr.mat-row:focus,
 
 .mat-mdc-select-panel.qs-config-submenu {
   @extend .qs-glass-card-panel;
-  background: var(--mat-sys-surface) !important;
+  --mat-select-panel-background-color: var(--qs-overlay-surface);
+  background: var(--qs-overlay-surface) !important;
   border-radius: 12px !important;
   padding: 4px 0 !important;
   max-width: min(320px, calc(100vw - 24px)) !important;
@@ -1153,6 +1098,14 @@ tr.mat-row:focus,
 
 /* Apply QS scrollbar skin to all Material select panels globally. */
 .mat-mdc-select-panel {
+  --mat-select-panel-background-color: var(--qs-overlay-surface);
+  background: var(--qs-overlay-surface) !important;
+  @include qs-scrollbar-skin;
+}
+
+.mat-mdc-autocomplete-panel {
+  --mat-autocomplete-background-color: var(--qs-overlay-surface);
+  background: var(--qs-overlay-surface) !important;
   @include qs-scrollbar-skin;
 }
 

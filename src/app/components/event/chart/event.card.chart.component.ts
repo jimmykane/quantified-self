@@ -21,7 +21,6 @@ import {
   ActivityInterface,
   ChartCursorBehaviours,
   DataDistance,
-  DataHeartRate,
   DataStrydDistance,
   EventInterface,
   LapTypes,
@@ -39,6 +38,8 @@ import {
   buildEventChartPanels,
   buildEventLapMarkers,
   buildEventZoomOverviewData,
+  EVENT_CHART_INTENSITY_ZONE_LINE_DATA_TYPES,
+  EVENT_CHART_INTENSITY_ZONE_LOWER_LIMIT_KEYS,
   EventChartLapMarker,
   EventChartPanelModel,
 } from '../../../helpers/event-echarts-data.helper';
@@ -492,7 +493,7 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
           dataTypesToUse: this.dataTypesToUse,
           userUnitSettings: this.userUnitSettings,
           eventColorService: this.eventColorService,
-          colorHeartRateZones: this.shouldColorHeartRateZones(),
+          colorIntensityZoneLines: this.shouldColorIntensityZoneLines(),
         });
         this.lastPanelRebuildKey = panelRebuildKey;
 
@@ -685,8 +686,8 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
     const allActivitiesKey = this.buildActivitiesKey(allActivities);
     const dataTypesKey = [...(this.dataTypesToUse || [])].sort((left, right) => left.localeCompare(right)).join(',');
     const unitSettingsKey = this.buildUnitSettingsKey(this.userUnitSettings);
-    const heartRateZoneColoringKey = this.shouldColorHeartRateZones() ? 'hr-zones:1' : 'hr-zones:0';
-    const heartRateZoneBoundariesKey = this.buildHeartRateZoneBoundariesKey(selectedActivities);
+    const intensityZoneColoringKey = this.shouldColorIntensityZoneLines() ? 'intensity-zones:1' : 'intensity-zones:0';
+    const intensityZoneBoundariesKey = this.buildIntensityZoneBoundariesKey(selectedActivities);
 
     return [
       eventID,
@@ -696,8 +697,8 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
       allActivitiesKey,
       dataTypesKey,
       unitSettingsKey,
-      heartRateZoneColoringKey,
-      heartRateZoneBoundariesKey,
+      intensityZoneColoringKey,
+      intensityZoneBoundariesKey,
     ].join('|');
   }
 
@@ -736,29 +737,28 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
       .join(',');
   }
 
-  private shouldColorHeartRateZones(): boolean {
+  private shouldColorIntensityZoneLines(): boolean {
     return this.event?.isMerge !== true;
   }
 
-  private buildHeartRateZoneBoundariesKey(activities: ActivityInterface[]): string {
+  private buildIntensityZoneBoundariesKey(activities: ActivityInterface[]): string {
     return (activities || [])
       .map((activity) => {
         const activityID = activity?.getID?.() || '';
-        const heartRateZones = activity.intensityZones
-          ?.find((zone) => zone?.type === DataHeartRate.type);
-        if (!heartRateZones) {
-          return `${activityID}:`;
-        }
+        const zoneBoundaries = EVENT_CHART_INTENSITY_ZONE_LINE_DATA_TYPES.map((dataType) => {
+          const intensityZones = activity.intensityZones
+            ?.find((zone) => zone?.type === dataType);
+          if (!intensityZones) {
+            return `${dataType}:`;
+          }
 
-        return [
-          activityID,
-          heartRateZones.zone2LowerLimit ?? '',
-          heartRateZones.zone3LowerLimit ?? '',
-          heartRateZones.zone4LowerLimit ?? '',
-          heartRateZones.zone5LowerLimit ?? '',
-          heartRateZones.zone6LowerLimit ?? '',
-          heartRateZones.zone7LowerLimit ?? '',
-        ].join(':');
+          return [
+            dataType,
+            ...EVENT_CHART_INTENSITY_ZONE_LOWER_LIMIT_KEYS.map((key) => intensityZones[key] ?? ''),
+          ].join(':');
+        });
+
+        return [activityID, ...zoneBoundaries].join(':');
       })
       .join(',');
   }

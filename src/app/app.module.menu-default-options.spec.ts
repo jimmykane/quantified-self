@@ -1,5 +1,8 @@
 import { FullscreenOverlayContainer, OverlayContainer } from '@angular/cdk/overlay';
+import { MAT_DIALOG_DEFAULT_OPTIONS } from '@angular/material/dialog';
 import { MAT_MENU_DEFAULT_OPTIONS } from '@angular/material/menu';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { AppModule, QS_MENU_DEFAULT_OPTIONS } from './app.module';
 
@@ -29,5 +32,28 @@ describe('AppModule menu defaults', () => {
 
     expect(overlayProvider).toBeTruthy();
     expect(overlayProvider.useClass).toBe(FullscreenOverlayContainer);
+  });
+
+  it('does not install a global dialog panel class that overrides Material dialog motion', () => {
+    const providers = ((AppModule as any).ɵinj?.providers ?? []) as Array<any>;
+    const dialogProvider = providers.find((provider) => provider?.provide === MAT_DIALOG_DEFAULT_OPTIONS);
+    const stylesPath = resolve(process.cwd(), 'src/styles.scss');
+    const styles = readFileSync(stylesPath, 'utf8');
+
+    expect(dialogProvider).toBeFalsy();
+    expect(styles).not.toContain('qs-dialog-container');
+  });
+
+  it('routes Material overlay surfaces through the shared app overlay token', () => {
+    const stylesPath = resolve(process.cwd(), 'src/styles.scss');
+    const styles = readFileSync(stylesPath, 'utf8');
+
+    expect(styles).toContain('--qs-overlay-surface:');
+    expect(styles).toContain('--mat-autocomplete-background-color: var(--qs-overlay-surface);');
+    expect(styles).toContain('--mat-bottom-sheet-container-background-color: var(--qs-overlay-surface);');
+    expect(styles).toContain('--mat-datepicker-calendar-container-background-color: var(--qs-overlay-surface);');
+    expect(styles).toContain('--mat-dialog-container-color: var(--qs-overlay-surface);');
+    expect(styles).toContain('--mat-menu-container-color: var(--qs-overlay-surface);');
+    expect(styles).toContain('--mat-select-panel-background-color: var(--qs-overlay-surface);');
   });
 });

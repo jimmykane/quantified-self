@@ -12,6 +12,7 @@ import {
   DataLatitudeDegrees,
   DataLongitudeDegrees,
   DataPaceAvg,
+  DataPower,
   DataPowerAvg,
   DataSpeedAvg,
   DataDescent,
@@ -102,7 +103,7 @@ export interface BuildEventChartPanelsInput {
   dataTypesToUse: string[];
   userUnitSettings: UserUnitSettingsInterface;
   eventColorService: AppEventColorService;
-  colorHeartRateZones?: boolean;
+  colorIntensityZoneLines?: boolean;
 }
 
 const EMPTY_PANEL_DOMAIN = { minX: 0, maxX: 1 };
@@ -120,7 +121,11 @@ const ALL_KNOWN_UNIT_VARIANTS = new Set<string>(
     .dataTypeUnitGroups ?? {})
     .flatMap((group) => Object.keys(group || {}))
 );
-const HEART_RATE_ZONE_LOWER_LIMIT_KEYS = [
+export const EVENT_CHART_INTENSITY_ZONE_LINE_DATA_TYPES = [
+  DataHeartRate.type,
+  DataPower.type,
+] as const;
+export const EVENT_CHART_INTENSITY_ZONE_LOWER_LIMIT_KEYS = [
   'zone2LowerLimit',
   'zone3LowerLimit',
   'zone4LowerLimit',
@@ -128,7 +133,8 @@ const HEART_RATE_ZONE_LOWER_LIMIT_KEYS = [
   'zone6LowerLimit',
   'zone7LowerLimit',
 ] as const;
-const MIN_HEART_RATE_ZONE_LOWER_LIMIT_COUNT = 2;
+const EVENT_CHART_INTENSITY_ZONE_LINE_DATA_TYPE_SET = new Set<string>(EVENT_CHART_INTENSITY_ZONE_LINE_DATA_TYPES);
+const MIN_INTENSITY_ZONE_LOWER_LIMIT_COUNT = 2;
 
 type ActivityIntensityZone = ActivityInterface['intensityZones'][number];
 
@@ -197,8 +203,8 @@ export function buildEventChartPanels(input: BuildEventChartPanelsInput): EventC
 
       const panel = panelsMap.get(stream.type) as EventChartPanelModel;
       const activityID = activity.getID() || '';
-      const zoneColorPieces = input.colorHeartRateZones === true
-        ? buildHeartRateZoneColorPieces(activity, stream.type, input.eventColorService)
+      const zoneColorPieces = input.colorIntensityZoneLines === true
+        ? buildIntensityZoneColorPieces(activity, stream.type, input.eventColorService)
         : [];
       panel.series.push({
         id: `${activityID}::${stream.type}`,
@@ -231,22 +237,22 @@ export function buildEventChartPanels(input: BuildEventChartPanelsInput): EventC
   return panels;
 }
 
-function buildHeartRateZoneColorPieces(
+function buildIntensityZoneColorPieces(
   activity: ActivityInterface,
   streamType: string,
   eventColorService: AppEventColorService
 ): EventChartZoneColorPiece[] {
-  if (streamType !== DataHeartRate.type) {
+  if (!EVENT_CHART_INTENSITY_ZONE_LINE_DATA_TYPE_SET.has(streamType)) {
     return [];
   }
 
-  const heartRateZones = activity.intensityZones
-    ?.find((zone) => zone?.type === DataHeartRate.type);
-  if (!heartRateZones) {
+  const intensityZones = activity.intensityZones
+    ?.find((zone) => zone?.type === streamType);
+  if (!intensityZones) {
     return [];
   }
 
-  const lowerLimits = readHeartRateZoneLowerLimits(heartRateZones);
+  const lowerLimits = readIntensityZoneLowerLimits(intensityZones);
   if (!lowerLimits.length) {
     return [];
   }
@@ -273,13 +279,13 @@ function buildHeartRateZoneColorPieces(
   return pieces;
 }
 
-function readHeartRateZoneLowerLimits(heartRateZones: ActivityIntensityZone): number[] {
+function readIntensityZoneLowerLimits(intensityZones: ActivityIntensityZone): number[] {
   const lowerLimits: number[] = [];
   let foundMissingBoundary = false;
 
-  for (const key of HEART_RATE_ZONE_LOWER_LIMIT_KEYS) {
-    const rawLimit = heartRateZones[key];
-    if (rawLimit === undefined || rawLimit === null) {
+  for (const key of EVENT_CHART_INTENSITY_ZONE_LOWER_LIMIT_KEYS) {
+    const rawLimit = intensityZones[key];
+    if (isMissingIntensityZoneLowerLimit(rawLimit)) {
       foundMissingBoundary = true;
       continue;
     }
@@ -288,8 +294,8 @@ function readHeartRateZoneLowerLimits(heartRateZones: ActivityIntensityZone): nu
       return [];
     }
 
-    const limit = Number(rawLimit);
-    if (!Number.isFinite(limit)) {
+    const limit = toFiniteIntensityZoneLowerLimit(rawLimit);
+    if (limit === null) {
       return [];
     }
 
@@ -300,7 +306,20 @@ function readHeartRateZoneLowerLimits(heartRateZones: ActivityIntensityZone): nu
     lowerLimits.push(limit);
   }
 
-  return lowerLimits.length >= MIN_HEART_RATE_ZONE_LOWER_LIMIT_COUNT ? lowerLimits : [];
+  return lowerLimits.length >= MIN_INTENSITY_ZONE_LOWER_LIMIT_COUNT ? lowerLimits : [];
+}
+
+function isMissingIntensityZoneLowerLimit(value: unknown): boolean {
+  return value === undefined || value === null || (typeof value === 'string' && value.trim().length === 0);
+}
+
+function toFiniteIntensityZoneLowerLimit(value: unknown): number | null {
+  if (typeof value !== 'number' && typeof value !== 'string') {
+    return null;
+  }
+
+  const limit = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(limit) ? limit : null;
 }
 
 export function hasEventChartableData(
