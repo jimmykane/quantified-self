@@ -227,6 +227,22 @@ describe('DashboardManagerDialogComponent', () => {
     });
   });
 
+  it('adds regular curated charts with one-column default size', async () => {
+    component.mode = 'add';
+    component.category = 'curated';
+    component.curatedChartType = DASHBOARD_RECOVERY_NOW_CHART_TYPE as any;
+
+    await component.save();
+
+    const tiles = dialogData.user.settings.dashboardSettings.tiles;
+    expect(tiles).toHaveLength(2);
+    expect(tiles[1]).toMatchObject({
+      type: TileTypes.Chart,
+      chartType: DASHBOARD_RECOVERY_NOW_CHART_TYPE,
+      size: { columns: 1, rows: 1 },
+    });
+  });
+
   it('applies freshness forecast curated preset with one-column default size', async () => {
     component.mode = 'add';
     component.onWorkflowTabChange(1);
@@ -240,6 +256,23 @@ describe('DashboardManagerDialogComponent', () => {
     expect(tiles[1]).toMatchObject({
       type: TileTypes.Chart,
       chartType: DASHBOARD_FRESHNESS_FORECAST_CHART_TYPE,
+      size: { columns: 1, rows: 1 },
+    });
+  });
+
+  it('applies regular curated presets with one-column default size', async () => {
+    component.mode = 'add';
+    component.onWorkflowTabChange(1);
+    component.onPresetCategoryChange('curated');
+    component.onPresetSelectionChange(DASHBOARD_MANAGER_PRESET_IDS.CURATED_RECOVERY);
+
+    await component.save();
+
+    const tiles = dialogData.user.settings.dashboardSettings.tiles;
+    expect(tiles).toHaveLength(2);
+    expect(tiles[1]).toMatchObject({
+      type: TileTypes.Chart,
+      chartType: DASHBOARD_RECOVERY_NOW_CHART_TYPE,
       size: { columns: 1, rows: 1 },
     });
   });
