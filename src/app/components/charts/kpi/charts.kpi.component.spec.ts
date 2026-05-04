@@ -11,6 +11,8 @@ import {
   DASHBOARD_ACWR_KPI_CHART_TYPE,
   DASHBOARD_EASY_PERCENT_KPI_CHART_TYPE,
   DASHBOARD_EFFICIENCY_DELTA_4W_KPI_CHART_TYPE,
+  DASHBOARD_FATIGUE_ATL_KPI_CHART_TYPE,
+  DASHBOARD_FITNESS_CTL_KPI_CHART_TYPE,
   DASHBOARD_FORM_NOW_KPI_CHART_TYPE,
   DASHBOARD_FORM_PLUS_7D_KPI_CHART_TYPE,
   DASHBOARD_HARD_PERCENT_KPI_CHART_TYPE,
@@ -299,6 +301,40 @@ describe('ChartsKpiComponent', () => {
     expect(component.title).toBe('Form Now');
     expect(component.primaryLabel).toBe('Same-day TSB');
     expect(component.primaryValueText).toBe('-2.4');
+  });
+
+  it('renders Fitness CTL KPI presentation', async () => {
+    component.chartType = DASHBOARD_FITNESS_CTL_KPI_CHART_TYPE;
+    component.fitnessCtl = {
+      latestDayMs: Date.UTC(2026, 0, 1),
+      value: 58.42,
+      trend8Weeks: [{ time: Date.UTC(2025, 11, 1), value: 52.8 }],
+    };
+
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(component.title).toBe('Fitness (CTL)');
+    expect(component.primaryLabel).toBe('CTL');
+    expect(component.secondaryLabel).toBe('42-day TSS load');
+    expect(component.primaryValueText).toBe('58.4');
+  });
+
+  it('renders Fatigue ATL KPI presentation', async () => {
+    component.chartType = DASHBOARD_FATIGUE_ATL_KPI_CHART_TYPE;
+    component.fatigueAtl = {
+      latestDayMs: Date.UTC(2026, 0, 1),
+      value: 71.37,
+      trend8Weeks: [{ time: Date.UTC(2025, 11, 1), value: 62.4 }],
+    };
+
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(component.title).toBe('Fatigue (ATL)');
+    expect(component.primaryLabel).toBe('ATL');
+    expect(component.secondaryLabel).toBe('7-day TSS load');
+    expect(component.primaryValueText).toBe('71.4');
   });
 
   it('renders Form +7d readiness KPI presentation', async () => {

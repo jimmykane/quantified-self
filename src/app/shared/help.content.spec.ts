@@ -123,6 +123,8 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('Ramp Rate');
     expect(gettingStartedSection?.content).toContain('Monotony / Strain');
     expect(gettingStartedSection?.content).toContain('Form Now');
+    expect(gettingStartedSection?.content).toContain('Fitness (CTL)');
+    expect(gettingStartedSection?.content).toContain('Fatigue (ATL)');
     expect(gettingStartedSection?.content).toContain('Form +7d');
     expect(gettingStartedSection?.content).toContain('Easy %');
     expect(gettingStartedSection?.content).toContain('Hard %');

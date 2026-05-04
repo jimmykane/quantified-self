@@ -4,6 +4,8 @@ import {
   resolveDashboardEfficiencyDelta4wContext,
   resolveDashboardAcwrContext,
   resolveDashboardEfficiencyTrendContext,
+  resolveDashboardFatigueAtlContext,
+  resolveDashboardFitnessCtlContext,
   resolveDashboardFreshnessForecastContext,
   resolveDashboardFormNowContext,
   resolveDashboardFormPlus7dContext,
@@ -124,6 +126,56 @@ describe('dashboard-derived-metrics.helper', () => {
     expect(formPlus7d?.projectedDayMs).toBe(Date.UTC(2026, 0, 17));
     expect(easyPercent?.value).toBe(66);
     expect(hardPercent?.value).toBe(14);
+  });
+
+  it('derives Fitness CTL and Fatigue ATL KPI contexts from official Form points through today', () => {
+    const fitness = resolveDashboardFitnessCtlContext([
+      {
+        time: Date.UTC(2026, 0, 5),
+        trainingStressScore: 42,
+        ctl: 10,
+        atl: 14,
+        formSameDay: -4,
+        formPriorDay: -3,
+      },
+      {
+        time: Date.UTC(2026, 0, 6),
+        trainingStressScore: 84,
+        ctl: 12,
+        atl: 20,
+        formSameDay: -8,
+        formPriorDay: -4,
+      },
+    ], Date.UTC(2026, 0, 8, 12));
+    const fatigue = resolveDashboardFatigueAtlContext([
+      {
+        time: Date.UTC(2026, 0, 5),
+        trainingStressScore: 42,
+        ctl: 10,
+        atl: 14,
+        formSameDay: -4,
+        formPriorDay: -3,
+      },
+      {
+        time: Date.UTC(2026, 0, 6),
+        trainingStressScore: 84,
+        ctl: 12,
+        atl: 20,
+        formSameDay: -8,
+        formPriorDay: -4,
+      },
+    ], Date.UTC(2026, 0, 8, 12));
+
+    expect(fitness?.latestDayMs).toBe(Date.UTC(2026, 0, 8));
+    expect(fitness?.value).toBeCloseTo(11.4354, 4);
+    expect(fitness?.trend8Weeks).toEqual([
+      { time: Date.UTC(2026, 0, 5), value: 11.4354 },
+    ]);
+    expect(fatigue?.latestDayMs).toBe(Date.UTC(2026, 0, 8));
+    expect(fatigue?.value).toBeCloseTo(14.6939, 4);
+    expect(fatigue?.trend8Weeks).toEqual([
+      { time: Date.UTC(2026, 0, 5), value: 14.6939 },
+    ]);
   });
 
   it('normalizes efficiency delta payload context', () => {

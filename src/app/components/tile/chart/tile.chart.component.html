@@ -79,6 +79,8 @@
   || chartType === rampRateKpiChartType
   || chartType === monotonyStrainKpiChartType
   || chartType === formNowKpiChartType
+  || chartType === fitnessCtlKpiChartType
+  || chartType === fatigueAtlKpiChartType
   || chartType === formPlus7dKpiChartType
   || chartType === easyPercentKpiChartType
   || chartType === hardPercentKpiChartType
@@ -88,10 +90,12 @@
     [infoTooltip]="chartInfoTooltip" [reserveTitleActionSpace]="showActions"
     [compactRow]="compactKpiRow"
     [acwr]="acwr" [rampRate]="rampRate" [monotonyStrain]="monotonyStrain"
-    [formNow]="formNow" [formPlus7d]="formPlus7d" [easyPercent]="easyPercent" [hardPercent]="hardPercent"
+    [formNow]="formNow" [fitnessCtl]="fitnessCtl" [fatigueAtl]="fatigueAtl"
+    [formPlus7d]="formPlus7d" [easyPercent]="easyPercent" [hardPercent]="hardPercent"
     [efficiencyDelta4w]="efficiencyDelta4w"
     [acwrStatus]="acwrStatus" [rampRateStatus]="rampRateStatus" [monotonyStrainStatus]="monotonyStrainStatus"
-    [formNowStatus]="formNowStatus" [formPlus7dStatus]="formPlus7dStatus"
+    [formNowStatus]="formNowStatus" [fitnessCtlStatus]="fitnessCtlStatus" [fatigueAtlStatus]="fatigueAtlStatus"
+    [formPlus7dStatus]="formPlus7dStatus"
     [easyPercentStatus]="easyPercentStatus" [hardPercentStatus]="hardPercentStatus"
     [efficiencyDelta4wStatus]="efficiencyDelta4wStatus">
   </app-kpi-chart>

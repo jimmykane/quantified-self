@@ -32,6 +32,8 @@ import type {
   DashboardEasyPercentContext,
   DashboardEfficiencyDelta4wContext,
   DashboardEfficiencyTrendContext,
+  DashboardFatigueAtlContext,
+  DashboardFitnessCtlContext,
   DashboardFreshnessForecastContext,
   DashboardFormNowContext,
   DashboardFormPlus7dContext,
@@ -39,6 +41,10 @@ import type {
   DashboardIntensityDistributionContext,
   DashboardMonotonyStrainContext,
   DashboardRampRateContext,
+} from './dashboard-derived-metrics.helper';
+import {
+  resolveDashboardFatigueAtlContext,
+  resolveDashboardFitnessCtlContext,
 } from './dashboard-derived-metrics.helper';
 import {
   buildDashboardSleepTrendContext,
@@ -53,6 +59,8 @@ import {
   DASHBOARD_EASY_PERCENT_KPI_CHART_TYPE,
   DASHBOARD_EFFICIENCY_DELTA_4W_KPI_CHART_TYPE,
   DASHBOARD_EFFICIENCY_TREND_CHART_TYPE,
+  DASHBOARD_FATIGUE_ATL_KPI_CHART_TYPE,
+  DASHBOARD_FITNESS_CTL_KPI_CHART_TYPE,
   DASHBOARD_FRESHNESS_FORECAST_CHART_TYPE,
   DASHBOARD_FORM_NOW_KPI_CHART_TYPE,
   DASHBOARD_FORM_PLUS_7D_KPI_CHART_TYPE,
@@ -66,6 +74,8 @@ import {
   isDashboardEasyPercentKpiChartType,
   isDashboardEfficiencyDelta4wKpiChartType,
   isDashboardEfficiencyTrendChartType,
+  isDashboardFatigueAtlKpiChartType,
+  isDashboardFitnessCtlKpiChartType,
   isDashboardFreshnessForecastChartType,
   isDashboardFormChartType,
   isDashboardFormNowKpiChartType,
@@ -88,6 +98,8 @@ export interface DashboardChartTileViewModel extends TileChartSettingsInterface 
   rampRate?: DashboardRampRateContext | null;
   monotonyStrain?: DashboardMonotonyStrainContext | null;
   formNow?: DashboardFormNowContext | null;
+  fitnessCtl?: DashboardFitnessCtlContext | null;
+  fatigueAtl?: DashboardFatigueAtlContext | null;
   formPlus7d?: DashboardFormPlus7dContext | null;
   easyPercent?: DashboardEasyPercentContext | null;
   hardPercent?: DashboardHardPercentContext | null;
@@ -281,6 +293,8 @@ export function buildDashboardTileViewModels(
   const derivedRampRateContext = input.derivedMetrics?.rampRate || null;
   const derivedMonotonyStrainContext = input.derivedMetrics?.monotonyStrain || null;
   const derivedFormNowContext = input.derivedMetrics?.formNow || null;
+  const derivedFitnessCtlContext = resolveDashboardFitnessCtlContext(derivedFormPoints);
+  const derivedFatigueAtlContext = resolveDashboardFatigueAtlContext(derivedFormPoints);
   const derivedFormPlus7dContext = input.derivedMetrics?.formPlus7d || null;
   const derivedEasyPercentContext = input.derivedMetrics?.easyPercent || null;
   const derivedHardPercentContext = input.derivedMetrics?.hardPercent || null;
@@ -360,6 +374,28 @@ export function buildDashboardTileViewModels(
         timeInterval: TimeIntervals.Weekly,
         data: [],
         formNow: derivedFormNowContext,
+      });
+      return viewModels;
+    }
+
+    if (isDashboardFitnessCtlKpiChartType(chartTile.chartType)) {
+      viewModels.push({
+        ...chartTile,
+        chartType: DASHBOARD_FITNESS_CTL_KPI_CHART_TYPE as unknown as ChartTypes,
+        timeInterval: TimeIntervals.Weekly,
+        data: [],
+        fitnessCtl: derivedFitnessCtlContext,
+      });
+      return viewModels;
+    }
+
+    if (isDashboardFatigueAtlKpiChartType(chartTile.chartType)) {
+      viewModels.push({
+        ...chartTile,
+        chartType: DASHBOARD_FATIGUE_ATL_KPI_CHART_TYPE as unknown as ChartTypes,
+        timeInterval: TimeIntervals.Weekly,
+        data: [],
+        fatigueAtl: derivedFatigueAtlContext,
       });
       return viewModels;
     }

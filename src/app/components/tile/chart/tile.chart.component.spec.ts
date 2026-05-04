@@ -18,6 +18,8 @@ import {
   DASHBOARD_EASY_PERCENT_KPI_CHART_TYPE,
   DASHBOARD_EFFICIENCY_DELTA_4W_KPI_CHART_TYPE,
   DASHBOARD_EFFICIENCY_TREND_CHART_TYPE,
+  DASHBOARD_FATIGUE_ATL_KPI_CHART_TYPE,
+  DASHBOARD_FITNESS_CTL_KPI_CHART_TYPE,
   DASHBOARD_FRESHNESS_FORECAST_CHART_TYPE,
   DASHBOARD_FORM_CHART_TYPE,
   DASHBOARD_FORM_NOW_KPI_CHART_TYPE,
@@ -161,6 +163,8 @@ class MockKpiChartComponent {
   @Input() rampRate: any;
   @Input() monotonyStrain: any;
   @Input() formNow: any;
+  @Input() fitnessCtl: any;
+  @Input() fatigueAtl: any;
   @Input() formPlus7d: any;
   @Input() easyPercent: any;
   @Input() hardPercent: any;
@@ -169,6 +173,8 @@ class MockKpiChartComponent {
   @Input() rampRateStatus?: string | null;
   @Input() monotonyStrainStatus?: string | null;
   @Input() formNowStatus?: string | null;
+  @Input() fitnessCtlStatus?: string | null;
+  @Input() fatigueAtlStatus?: string | null;
   @Input() formPlus7dStatus?: string | null;
   @Input() easyPercentStatus?: string | null;
   @Input() hardPercentStatus?: string | null;
@@ -568,6 +574,30 @@ describe('TileChartComponent', () => {
     expect(kpi.chartType).toBe(DASHBOARD_FORM_NOW_KPI_CHART_TYPE);
     expect(kpi.formNow).toEqual(component.formNow);
     expect(kpi.formNowStatus).toBe('processing');
+  });
+
+  it('should route Fitness CTL KPI chart type to the KPI renderer', () => {
+    component.chartType = DASHBOARD_FITNESS_CTL_KPI_CHART_TYPE as any;
+    component.fitnessCtl = { value: 58.4 } as any;
+    component.fitnessCtlStatus = 'ready' as any;
+    fixture.detectChanges();
+
+    const kpi = getKpiComponent();
+    expect(kpi.chartType).toBe(DASHBOARD_FITNESS_CTL_KPI_CHART_TYPE);
+    expect(kpi.fitnessCtl).toEqual(component.fitnessCtl);
+    expect(kpi.fitnessCtlStatus).toBe('ready');
+  });
+
+  it('should route Fatigue ATL KPI chart type to the KPI renderer', () => {
+    component.chartType = DASHBOARD_FATIGUE_ATL_KPI_CHART_TYPE as any;
+    component.fatigueAtl = { value: 71.4 } as any;
+    component.fatigueAtlStatus = 'stale' as any;
+    fixture.detectChanges();
+
+    const kpi = getKpiComponent();
+    expect(kpi.chartType).toBe(DASHBOARD_FATIGUE_ATL_KPI_CHART_TYPE);
+    expect(kpi.fatigueAtl).toEqual(component.fatigueAtl);
+    expect(kpi.fatigueAtlStatus).toBe('stale');
   });
 
   it('should hide layout controls for compact KPI row actions', () => {

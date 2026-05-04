@@ -105,7 +105,7 @@ export const HELP_SECTIONS: HelpSection[] = [
 - **Curated Recovery** remains a fixed insight and does not react to event table or custom tile date ranges.
 - **Curated Form/TSS** computes from full history and does not react to event table or custom tile date ranges.
 - New curated charts: **Freshness Forecast**, **Intensity Distribution**, and **Efficiency Trend**.
-- KPI rows are derived-only compact tiles: **ACWR**, **Ramp Rate**, **Monotony / Strain**, **Form Now**, **Form +7d**, **Easy %**, **Hard %**, and **Efficiency Δ (4w)**.
+- KPI rows are derived-only compact tiles: **ACWR**, **Ramp Rate**, **Monotony / Strain**, **Form Now**, **Fitness (CTL)**, **Fatigue (ATL)**, **Form +7d**, **Easy %**, **Hard %**, and **Efficiency Δ (4w)**.
 - KPI rows are shown in the compact **Today** section above the main dashboard grid.
 - On mobile, Today rows stay compact while the chart/map grid stays unchanged below.
 - KPI choices in Dashboard manager are grouped as **Load**, **Readiness**, and **Execution** for both manual and preset flows.
@@ -171,6 +171,8 @@ export const HELP_SECTIONS: HelpSection[] = [
 - **Ramp Rate** uses CTL(today) - CTL(today-7d) with an 8-week sparkline.
 - **Monotony / Strain** uses 7-day load mean/stddev for monotony, and load * monotony for strain.
 - **Form Now** uses same-day TSB readiness from the latest derived load state.
+- **Fitness (CTL)** uses the derived Form model's current 42-day chronic training load.
+- **Fatigue (ATL)** uses the derived Form model's current 7-day acute training load.
 - **Form +7d** projects same-day TSB at day +7 assuming zero load.
 - **Easy %** and **Hard %** use the latest weekly intensity distribution bucket.
 - **Efficiency Δ (4w)** shows current efficiency versus the prior 4-week baseline as absolute + percent delta.

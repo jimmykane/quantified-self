@@ -63,6 +63,8 @@ import {
   isDashboardEasyPercentKpiChartType,
   isDashboardEfficiencyDelta4wKpiChartType,
   isDashboardEfficiencyTrendChartType,
+  isDashboardFatigueAtlKpiChartType,
+  isDashboardFitnessCtlKpiChartType,
   isDashboardFreshnessForecastChartType,
   isDashboardFormChartType,
   isDashboardFormNowKpiChartType,
@@ -1376,6 +1378,26 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     return this.derivedFormNowStatus;
   }
 
+  getFitnessCtlStatusForTile(tile: DashboardTileViewModel | TileSettingsInterface): DashboardDerivedMetricStatus | null {
+    if (!isDashboardChartTileViewModel(tile)) {
+      return null;
+    }
+    if (!isDashboardFitnessCtlKpiChartType(tile.chartType)) {
+      return null;
+    }
+    return this.derivedFormStatus;
+  }
+
+  getFatigueAtlStatusForTile(tile: DashboardTileViewModel | TileSettingsInterface): DashboardDerivedMetricStatus | null {
+    if (!isDashboardChartTileViewModel(tile)) {
+      return null;
+    }
+    if (!isDashboardFatigueAtlKpiChartType(tile.chartType)) {
+      return null;
+    }
+    return this.derivedFormStatus;
+  }
+
   getFormPlus7dStatusForTile(tile: DashboardTileViewModel | TileSettingsInterface): DashboardDerivedMetricStatus | null {
     if (!isDashboardChartTileViewModel(tile)) {
       return null;
@@ -1464,6 +1486,9 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     }
     if (isDashboardFormNowKpiChartType(chartType)) {
       return this.derivedFormNowStatus;
+    }
+    if (isDashboardFitnessCtlKpiChartType(chartType) || isDashboardFatigueAtlKpiChartType(chartType)) {
+      return this.derivedFormStatus;
     }
     if (isDashboardFormPlus7dKpiChartType(chartType)) {
       return this.derivedFormPlus7dStatus;

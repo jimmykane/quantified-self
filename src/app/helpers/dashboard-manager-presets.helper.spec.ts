@@ -16,19 +16,20 @@ import {
 } from './dashboard-manager-presets.helper';
 import {
   DASHBOARD_ACWR_KPI_CHART_TYPE,
+  DASHBOARD_FITNESS_CTL_KPI_CHART_TYPE,
   DASHBOARD_FORM_NOW_KPI_CHART_TYPE,
   DASHBOARD_FORM_CHART_TYPE,
   DASHBOARD_RECOVERY_NOW_CHART_TYPE,
 } from './dashboard-special-chart-types';
 
 describe('dashboard-manager-presets.helper', () => {
-  it('exposes the expanded preset catalog with 21 unique definitions', () => {
+  it('exposes the expanded preset catalog with 23 unique definitions', () => {
     const definitions = getDashboardManagerPresetDefinitions();
 
-    expect(definitions).toHaveLength(21);
-    expect(new Set(definitions.map(definition => definition.id)).size).toBe(21);
+    expect(definitions).toHaveLength(23);
+    expect(new Set(definitions.map(definition => definition.id)).size).toBe(23);
     expect(definitions.filter(definition => definition.category === 'curated')).toHaveLength(5);
-    expect(definitions.filter(definition => definition.category === 'kpi')).toHaveLength(8);
+    expect(definitions.filter(definition => definition.category === 'kpi')).toHaveLength(10);
     expect(definitions.filter(definition => definition.category === 'custom')).toHaveLength(7);
     expect(definitions.filter(definition => definition.category === 'map')).toHaveLength(1);
     expect(definitions.map(definition => definition.id)).not.toContain(DASHBOARD_MANAGER_PRESET_IDS.CURATED_SLEEP);
@@ -149,6 +150,20 @@ describe('dashboard-manager-presets.helper', () => {
     expect(formNowTile).toMatchObject({
       type: TileTypes.Chart,
       chartType: DASHBOARD_FORM_NOW_KPI_CHART_TYPE,
+      dataCategoryType: ChartDataCategoryTypes.DateType,
+      dataValueType: ChartDataValueTypes.Total,
+      dataTimeInterval: TimeIntervals.Weekly,
+      size: { columns: 1, rows: 1 },
+    });
+
+    const fitnessTile = buildDashboardManagerPresetTile({
+      presetId: DASHBOARD_MANAGER_PRESET_IDS.KPI_FITNESS_CTL,
+      order: 3,
+      size: { columns: 1, rows: 1 },
+    });
+    expect(fitnessTile).toMatchObject({
+      type: TileTypes.Chart,
+      chartType: DASHBOARD_FITNESS_CTL_KPI_CHART_TYPE,
       dataCategoryType: ChartDataCategoryTypes.DateType,
       dataValueType: ChartDataValueTypes.Total,
       dataTimeInterval: TimeIntervals.Weekly,

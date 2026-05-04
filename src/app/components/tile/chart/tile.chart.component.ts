@@ -13,6 +13,8 @@ import type {
   DashboardEasyPercentContext,
   DashboardEfficiencyDelta4wContext,
   DashboardEfficiencyTrendContext,
+  DashboardFatigueAtlContext,
+  DashboardFitnessCtlContext,
   DashboardFreshnessForecastContext,
   DashboardFormNowContext,
   DashboardFormPlus7dContext,
@@ -30,6 +32,8 @@ import {
   DASHBOARD_EASY_PERCENT_KPI_CHART_TYPE,
   DASHBOARD_EFFICIENCY_DELTA_4W_KPI_CHART_TYPE,
   DASHBOARD_EFFICIENCY_TREND_CHART_TYPE,
+  DASHBOARD_FATIGUE_ATL_KPI_CHART_TYPE,
+  DASHBOARD_FITNESS_CTL_KPI_CHART_TYPE,
   DASHBOARD_FRESHNESS_FORECAST_CHART_TYPE,
   DASHBOARD_FORM_CHART_TYPE,
   DASHBOARD_FORM_NOW_KPI_CHART_TYPE,
@@ -95,6 +99,8 @@ export class TileChartComponent extends TileAbstractDirective {
   @Input() rampRate?: DashboardRampRateContext | null;
   @Input() monotonyStrain?: DashboardMonotonyStrainContext | null;
   @Input() formNow?: DashboardFormNowContext | null;
+  @Input() fitnessCtl?: DashboardFitnessCtlContext | null;
+  @Input() fatigueAtl?: DashboardFatigueAtlContext | null;
   @Input() formPlus7d?: DashboardFormPlus7dContext | null;
   @Input() easyPercent?: DashboardEasyPercentContext | null;
   @Input() hardPercent?: DashboardHardPercentContext | null;
@@ -111,6 +117,8 @@ export class TileChartComponent extends TileAbstractDirective {
   @Input() rampRateStatus?: DashboardDerivedMetricStatus | null;
   @Input() monotonyStrainStatus?: DashboardDerivedMetricStatus | null;
   @Input() formNowStatus?: DashboardDerivedMetricStatus | null;
+  @Input() fitnessCtlStatus?: DashboardDerivedMetricStatus | null;
+  @Input() fatigueAtlStatus?: DashboardDerivedMetricStatus | null;
   @Input() formPlus7dStatus?: DashboardDerivedMetricStatus | null;
   @Input() easyPercentStatus?: DashboardDerivedMetricStatus | null;
   @Input() hardPercentStatus?: DashboardDerivedMetricStatus | null;
@@ -133,6 +141,8 @@ export class TileChartComponent extends TileAbstractDirective {
   public rampRateKpiChartType = DASHBOARD_RAMP_RATE_KPI_CHART_TYPE;
   public monotonyStrainKpiChartType = DASHBOARD_MONOTONY_STRAIN_KPI_CHART_TYPE;
   public formNowKpiChartType = DASHBOARD_FORM_NOW_KPI_CHART_TYPE;
+  public fitnessCtlKpiChartType = DASHBOARD_FITNESS_CTL_KPI_CHART_TYPE;
+  public fatigueAtlKpiChartType = DASHBOARD_FATIGUE_ATL_KPI_CHART_TYPE;
   public formPlus7dKpiChartType = DASHBOARD_FORM_PLUS_7D_KPI_CHART_TYPE;
   public easyPercentKpiChartType = DASHBOARD_EASY_PERCENT_KPI_CHART_TYPE;
   public hardPercentKpiChartType = DASHBOARD_HARD_PERCENT_KPI_CHART_TYPE;

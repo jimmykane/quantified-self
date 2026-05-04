@@ -31,6 +31,8 @@ import type {
   DashboardAcwrContext,
   DashboardEasyPercentContext,
   DashboardEfficiencyDelta4wContext,
+  DashboardFatigueAtlContext,
+  DashboardFitnessCtlContext,
   DashboardMonotonyStrainContext,
   DashboardFormNowContext,
   DashboardFormPlus7dContext,
@@ -41,6 +43,8 @@ import {
   DASHBOARD_ACWR_KPI_CHART_TYPE,
   DASHBOARD_EASY_PERCENT_KPI_CHART_TYPE,
   DASHBOARD_EFFICIENCY_DELTA_4W_KPI_CHART_TYPE,
+  DASHBOARD_FATIGUE_ATL_KPI_CHART_TYPE,
+  DASHBOARD_FITNESS_CTL_KPI_CHART_TYPE,
   DASHBOARD_FORM_NOW_KPI_CHART_TYPE,
   DASHBOARD_FORM_PLUS_7D_KPI_CHART_TYPE,
   DASHBOARD_HARD_PERCENT_KPI_CHART_TYPE,
@@ -89,6 +93,8 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
   @Input() rampRate?: DashboardRampRateContext | null;
   @Input() monotonyStrain?: DashboardMonotonyStrainContext | null;
   @Input() formNow?: DashboardFormNowContext | null;
+  @Input() fitnessCtl?: DashboardFitnessCtlContext | null;
+  @Input() fatigueAtl?: DashboardFatigueAtlContext | null;
   @Input() formPlus7d?: DashboardFormPlus7dContext | null;
   @Input() easyPercent?: DashboardEasyPercentContext | null;
   @Input() hardPercent?: DashboardHardPercentContext | null;
@@ -97,6 +103,8 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
   @Input() rampRateStatus?: DashboardDerivedMetricStatus | null;
   @Input() monotonyStrainStatus?: DashboardDerivedMetricStatus | null;
   @Input() formNowStatus?: DashboardDerivedMetricStatus | null;
+  @Input() fitnessCtlStatus?: DashboardDerivedMetricStatus | null;
+  @Input() fatigueAtlStatus?: DashboardDerivedMetricStatus | null;
   @Input() formPlus7dStatus?: DashboardDerivedMetricStatus | null;
   @Input() easyPercentStatus?: DashboardDerivedMetricStatus | null;
   @Input() hardPercentStatus?: DashboardDerivedMetricStatus | null;
@@ -149,6 +157,8 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
       || changes.rampRate
       || changes.monotonyStrain
       || changes.formNow
+      || changes.fitnessCtl
+      || changes.fatigueAtl
       || changes.formPlus7d
       || changes.easyPercent
       || changes.hardPercent
@@ -157,6 +167,8 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
       || changes.rampRateStatus
       || changes.monotonyStrainStatus
       || changes.formNowStatus
+      || changes.fitnessCtlStatus
+      || changes.fatigueAtlStatus
       || changes.formPlus7dStatus
       || changes.easyPercentStatus
       || changes.hardPercentStatus
@@ -252,6 +264,28 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
         primaryLabel: 'Same-day TSB',
         secondaryLabel: 'Current readiness state',
         primarySigned: true,
+        trend: (context?.trend8Weeks || []).map(point => ({ time: point.time, value: point.value })),
+      };
+    }
+
+    if (this.chartType === DASHBOARD_FITNESS_CTL_KPI_CHART_TYPE) {
+      const context = this.fitnessCtl || null;
+      return {
+        title: 'Fitness (CTL)',
+        primaryValue: context?.value ?? null,
+        primaryLabel: 'CTL',
+        secondaryLabel: '42-day TSS load',
+        trend: (context?.trend8Weeks || []).map(point => ({ time: point.time, value: point.value })),
+      };
+    }
+
+    if (this.chartType === DASHBOARD_FATIGUE_ATL_KPI_CHART_TYPE) {
+      const context = this.fatigueAtl || null;
+      return {
+        title: 'Fatigue (ATL)',
+        primaryValue: context?.value ?? null,
+        primaryLabel: 'ATL',
+        secondaryLabel: '7-day TSS load',
         trend: (context?.trend8Weeks || []).map(point => ({ time: point.time, value: point.value })),
       };
     }
@@ -356,6 +390,12 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
     if (this.chartType === DASHBOARD_FORM_NOW_KPI_CHART_TYPE) {
       return this.formNowStatus || null;
     }
+    if (this.chartType === DASHBOARD_FITNESS_CTL_KPI_CHART_TYPE) {
+      return this.fitnessCtlStatus || null;
+    }
+    if (this.chartType === DASHBOARD_FATIGUE_ATL_KPI_CHART_TYPE) {
+      return this.fatigueAtlStatus || null;
+    }
     if (this.chartType === DASHBOARD_FORM_PLUS_7D_KPI_CHART_TYPE) {
       return this.formPlus7dStatus || null;
     }
@@ -392,6 +432,12 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
     }
     if (this.chartType === DASHBOARD_EFFICIENCY_DELTA_4W_KPI_CHART_TYPE) {
       return 'Eff Δ';
+    }
+    if (this.chartType === DASHBOARD_FITNESS_CTL_KPI_CHART_TYPE) {
+      return 'Fitness';
+    }
+    if (this.chartType === DASHBOARD_FATIGUE_ATL_KPI_CHART_TYPE) {
+      return 'Fatigue';
     }
     return this.title;
   }
@@ -672,6 +718,17 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
           neutralColor,
           neutralThreshold: 0.15,
         }),
+        areaColor: neutralColor,
+        areaOpacity: 0.14,
+      };
+    }
+
+    if (
+      this.chartType === DASHBOARD_FITNESS_CTL_KPI_CHART_TYPE
+      || this.chartType === DASHBOARD_FATIGUE_ATL_KPI_CHART_TYPE
+    ) {
+      return {
+        lineColor: neutralColor,
         areaColor: neutralColor,
         areaOpacity: 0.14,
       };

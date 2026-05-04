@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   ActivityTypes,
   ChartDataCategoryTypes,
@@ -20,6 +20,8 @@ import {
   DASHBOARD_EASY_PERCENT_KPI_CHART_TYPE,
   DASHBOARD_EFFICIENCY_DELTA_4W_KPI_CHART_TYPE,
   DASHBOARD_EFFICIENCY_TREND_CHART_TYPE,
+  DASHBOARD_FATIGUE_ATL_KPI_CHART_TYPE,
+  DASHBOARD_FITNESS_CTL_KPI_CHART_TYPE,
   DASHBOARD_FRESHNESS_FORECAST_CHART_TYPE,
   DASHBOARD_FORM_CHART_TYPE,
   DASHBOARD_FORM_NOW_KPI_CHART_TYPE,
@@ -1034,5 +1036,57 @@ describe('dashboard-tile-view-model.helper', () => {
     expect((viewModels[9] as any).efficiencyTrend).toBeTruthy();
     expect((viewModels[10] as any).sleepTrend?.points).toHaveLength(1);
     expect((viewModels[10] as any).timeInterval).toBe(TimeIntervals.Daily);
+  });
+
+  it('should derive Fitness CTL and Fatigue ATL KPI contexts from Form points', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(Date.UTC(2026, 0, 8, 12)));
+
+    const viewModels = buildDashboardTileViewModels({
+      tiles: [
+        {
+          type: TileTypes.Chart,
+          order: 0,
+          chartType: DASHBOARD_FITNESS_CTL_KPI_CHART_TYPE as any,
+          dataType: 'Training Stress Score',
+          dataValueType: ChartDataValueTypes.Total,
+          dataCategoryType: ChartDataCategoryTypes.DateType,
+          dataTimeInterval: TimeIntervals.Weekly,
+          size: { columns: 1, rows: 1 },
+        },
+        {
+          type: TileTypes.Chart,
+          order: 1,
+          chartType: DASHBOARD_FATIGUE_ATL_KPI_CHART_TYPE as any,
+          dataType: 'Training Stress Score',
+          dataValueType: ChartDataValueTypes.Total,
+          dataCategoryType: ChartDataCategoryTypes.DateType,
+          dataTimeInterval: TimeIntervals.Weekly,
+          size: { columns: 1, rows: 1 },
+        },
+      ] as any,
+      events: [],
+      derivedMetrics: {
+        formPoints: [
+          {
+            time: Date.UTC(2026, 0, 6),
+            trainingStressScore: 84,
+            ctl: 12,
+            atl: 20,
+            formSameDay: -8,
+            formPriorDay: -4,
+          },
+        ] as any,
+      },
+    });
+
+    expect((viewModels[0] as any).chartType).toBe(DASHBOARD_FITNESS_CTL_KPI_CHART_TYPE);
+    expect((viewModels[0] as any).fitnessCtl?.latestDayMs).toBe(Date.UTC(2026, 0, 8));
+    expect((viewModels[0] as any).fitnessCtl?.value).toBeCloseTo(11.4354, 4);
+    expect((viewModels[1] as any).chartType).toBe(DASHBOARD_FATIGUE_ATL_KPI_CHART_TYPE);
+    expect((viewModels[1] as any).fatigueAtl?.latestDayMs).toBe(Date.UTC(2026, 0, 8));
+    expect((viewModels[1] as any).fatigueAtl?.value).toBeCloseTo(14.6939, 4);
+
+    vi.useRealTimers();
   });
 });
