@@ -25,6 +25,7 @@ vi.mock('../queue', () => ({
   addToQueueForSuunto: hoisted.addToQueueForSuunto,
 }));
 
+import * as logger from 'firebase-functions/logger';
 import { insertSuuntoAppActivityToQueue } from './queue';
 
 function createResponse() {
@@ -98,6 +99,10 @@ describe('insertSuuntoAppActivityToQueue', () => {
     await insertSuuntoAppActivityToQueue(request as any, response as any);
 
     expect(response.status).toHaveBeenCalledWith(200);
+    expect(logger.info).toHaveBeenCalledWith('Suunto workout webhook routed', {
+      format: 'json_hmac',
+      notificationType: 'WORKOUT_CREATED',
+    });
     expect(hoisted.addToQueueForSuunto).toHaveBeenCalledWith({
       userName: 'johndoe123',
       workoutID: '67604889401b942184624cb8',
@@ -134,6 +139,10 @@ describe('insertSuuntoAppActivityToQueue', () => {
     await insertSuuntoAppActivityToQueue(request as any, response as any);
 
     expect(response.status).toHaveBeenCalledWith(200);
+    expect(logger.info).toHaveBeenCalledWith('Ignoring non-workout Suunto JSON notification', {
+      format: 'json_hmac',
+      notificationType: 'SUUNTO_247_SLEEP_CREATED',
+    });
     expect(hoisted.addToQueueForSuunto).not.toHaveBeenCalled();
   });
 
@@ -166,6 +175,9 @@ describe('insertSuuntoAppActivityToQueue', () => {
     await insertSuuntoAppActivityToQueue(request as any, response as any);
 
     expect(response.status).toHaveBeenCalledWith(200);
+    expect(logger.info).toHaveBeenCalledWith('Suunto workout webhook routed', {
+      format: 'legacy_basic',
+    });
     expect(hoisted.addToQueueForSuunto).toHaveBeenCalledWith({
       userName: 'legacy-user',
       workoutID: 'legacy-workout',

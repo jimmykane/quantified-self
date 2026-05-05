@@ -77,6 +77,10 @@ export const insertSuuntoAppActivityToQueue = functions.region('europe-west2').r
 
     const body = asRecord(req.body);
     if (body.type !== 'WORKOUT_CREATED') {
+      logger.info('Ignoring non-workout Suunto JSON notification', {
+        format: 'json_hmac',
+        notificationType: asString(body.type) || 'unknown',
+      });
       res.status(200).send();
       return;
     }
@@ -88,6 +92,10 @@ export const insertSuuntoAppActivityToQueue = functions.region('europe-west2').r
       return;
     }
 
+    logger.info('Suunto workout webhook routed', {
+      format: 'json_hmac',
+      notificationType: 'WORKOUT_CREATED',
+    });
     await enqueueSuuntoWorkout(userName, workoutID, res);
     return;
   }
@@ -106,5 +114,8 @@ export const insertSuuntoAppActivityToQueue = functions.region('europe-west2').r
     return;
   }
 
+  logger.info('Suunto workout webhook routed', {
+    format: 'legacy_basic',
+  });
   await enqueueSuuntoWorkout(userName, workoutID, res);
 });
