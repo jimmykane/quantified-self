@@ -52,8 +52,8 @@ describe('dashboard-special-chart-types', () => {
       DASHBOARD_FRESHNESS_FORECAST_CHART_TYPE,
       DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE,
       DASHBOARD_EFFICIENCY_TREND_CHART_TYPE,
+      DASHBOARD_SLEEP_TREND_CHART_TYPE,
     ]);
-    expect(definitions.map(definition => definition.chartType)).not.toContain(DASHBOARD_SLEEP_TREND_CHART_TYPE);
   });
 
   it('returns KPI chart definitions and guards', () => {

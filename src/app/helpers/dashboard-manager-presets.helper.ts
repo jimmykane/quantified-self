@@ -178,6 +178,15 @@ const DASHBOARD_MANAGER_PRESET_DEFINITIONS: DashboardManagerPresetDefinition[] =
     curatedChartType: DASHBOARD_EFFICIENCY_TREND_CHART_TYPE,
   },
   {
+    id: DASHBOARD_MANAGER_PRESET_IDS.CURATED_SLEEP,
+    label: 'Sleep',
+    tileName: 'Sleep',
+    description: 'Sleep duration, stages, and HRV by connected source.',
+    icon: 'hotel',
+    category: 'curated',
+    curatedChartType: DASHBOARD_SLEEP_TREND_CHART_TYPE,
+  },
+  {
     id: DASHBOARD_MANAGER_PRESET_IDS.KPI_ACWR,
     label: 'KPI: ACWR',
     tileName: 'ACWR',

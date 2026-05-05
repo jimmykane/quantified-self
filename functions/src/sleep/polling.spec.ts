@@ -5,7 +5,7 @@ import { SLEEP_PROVIDERS } from '../../../shared/sleep';
 const hoisted = vi.hoisted(() => ({
     collectionGroup: vi.fn(),
     collection: vi.fn(),
-    allowedTokenGet: vi.fn(),
+    collectionGroupGet: vi.fn(),
 }));
 
 vi.mock('firebase-functions/v2/scheduler', () => ({
@@ -50,15 +50,11 @@ describe('sleep polling', () => {
         };
     }
 
-    function installAllowedUserTokenMock(docs: unknown[]) {
-        hoisted.allowedTokenGet.mockResolvedValue({ docs });
-        hoisted.collection.mockReturnValue({
-            doc: vi.fn(() => ({
-                collection: vi.fn(() => ({
-                    where: vi.fn().mockReturnThis(),
-                    get: hoisted.allowedTokenGet,
-                })),
-            })),
+    function installCollectionGroupTokenMock(docs: unknown[]) {
+        hoisted.collectionGroupGet.mockResolvedValue({ docs });
+        hoisted.collectionGroup.mockReturnValue({
+            where: vi.fn().mockReturnThis(),
+            get: hoisted.collectionGroupGet,
         });
     }
 
@@ -87,11 +83,11 @@ describe('sleep polling', () => {
         expect(addSleepSyncQueueItem).not.toHaveBeenCalled();
     });
 
-    it('queries only allowed user token roots while sleep sync is scoped', async () => {
-        const allowedUserID = 'xcsAolLDDTWTgtRN9eYF3lW2YKL2';
+    it('queries all Suunto token docs when sleep sync is open to all users', async () => {
+        const userID = 'suunto-user-id';
         const nowMs = Date.UTC(2026, 3, 28);
-        installAllowedUserTokenMock([
-            createTokenDoc(allowedUserID, {
+        installCollectionGroupTokenMock([
+            createTokenDoc(userID, {
                 serviceName: ServiceNames.SuuntoApp,
                 userName: 'suunto-user-1',
             }),
@@ -105,12 +101,12 @@ describe('sleep polling', () => {
         );
 
         expect(queued).toBe(1);
-        expect(hoisted.collection).toHaveBeenCalledWith('suuntoAppAccessTokens');
-        expect(hoisted.collectionGroup).not.toHaveBeenCalled();
+        expect(hoisted.collectionGroup).toHaveBeenCalledWith('tokens');
+        expect(hoisted.collection).not.toHaveBeenCalled();
         expect(addSleepSyncQueueItem).toHaveBeenCalledWith(expect.objectContaining({
             type: 'suunto_poll',
             provider: SLEEP_PROVIDERS.SuuntoApp,
-            userID: allowedUserID,
+            userID,
             providerUserId: 'suunto-user-1',
         }));
     });

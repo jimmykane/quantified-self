@@ -2,7 +2,8 @@
 
 Sleep sync is controlled independently from activity sync. The v1 sleep pipeline supports
 Garmin, Suunto, and COROS, but Garmin and COROS are currently disabled in code while their
-sleep payloads are not actively testable.
+sleep payloads are not actively testable. Suunto sleep sync is enabled for all connected
+Suunto users.
 
 ## Provider Kill Switch
 
@@ -23,6 +24,23 @@ export const SLEEP_SYNC_DISABLED_PROVIDERS: readonly SleepProvider[] = [
 
 This constant only affects sleep sync. Existing activity sync behavior for Garmin, Suunto,
 and COROS is unchanged.
+
+## User Rollout
+
+Sleep user rollout is also source controlled in:
+
+```text
+functions/src/sleep/provider-flags.ts
+```
+
+Current setting:
+
+```ts
+export const SLEEP_SYNC_ALLOWED_USER_IDS: readonly string[] = [];
+```
+
+An empty allowlist means all users. To scope sleep sync again, add Firebase UIDs to this
+constant and deploy/restart the Functions runtime.
 
 ## What Disabled Means
 
