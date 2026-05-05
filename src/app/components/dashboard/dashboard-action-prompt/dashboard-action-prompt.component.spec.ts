@@ -68,16 +68,17 @@ describe('DashboardActionPromptComponent', () => {
     fixture.detectChanges();
   });
 
-  it('renders prompt copy, icon, projected controls, actions, and menu trigger', () => {
+  it('renders prompt copy, icon, projected controls, and inline actions', () => {
     const text = fixture.nativeElement.textContent;
 
     expect(text).toContain('Default units');
     expect(text).toContain('Choose units.');
     expect(text).toContain('Projected controls');
     expect(text).toContain('Not now');
+    expect(text).toContain('Advanced settings');
     expect(text).toContain('Apply');
     expect(fixture.nativeElement.querySelector('mat-icon')?.textContent?.trim()).toBe('straighten');
-    expect(fixture.nativeElement.querySelector('[aria-label="More prompt actions"]')).toBeTruthy();
+    expect(fixture.nativeElement.querySelector('[aria-label="More prompt actions"]')).toBeNull();
     expect(fixture.nativeElement.querySelector('mat-card')?.classList.contains('qs-glass-card-panel')).toBe(true);
     expect(fixture.nativeElement.querySelector('mat-card-title')?.classList.contains('dashboard-action-prompt__title')).toBe(true);
     expect(fixture.nativeElement.querySelector('mat-card-subtitle')?.classList.contains('dashboard-action-prompt__subtitle')).toBe(true);
@@ -171,14 +172,15 @@ describe('DashboardActionPromptComponent', () => {
     }));
   });
 
-  it('emits menu actions with prompt context', () => {
-    const promptComponent = fixture.debugElement.query(By.directive(DashboardActionPromptComponent)).componentInstance as DashboardActionPromptComponent;
+  it('emits inline menu actions with prompt context', () => {
+    const advancedSettingsButton = fixture.debugElement.queryAll(By.css('button'))
+      .find(button => button.nativeElement.textContent.includes('Advanced settings'));
 
-    promptComponent.emitMenuAction({ id: 'openUnitSettings', label: 'Advanced settings' });
+    advancedSettingsButton?.nativeElement.click();
 
     expect(host.onMenuAction).toHaveBeenCalledWith({
       promptId: 'unitSetup',
-      action: { id: 'openUnitSettings', label: 'Advanced settings' },
+      action: { id: 'openUnitSettings', label: 'Advanced settings', icon: 'tune' },
     });
   });
 

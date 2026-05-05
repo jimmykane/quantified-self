@@ -85,6 +85,7 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('Distance values in dashboards, event charts, activity chips, and CSV exports');
     expect(gettingStartedSection?.content).toContain('Dashboard **Action prompts**');
     expect(gettingStartedSection?.content).toContain('dashboard **Default units** action prompt');
+    expect(gettingStartedSection?.content).toContain('Users without Pro access and no uploaded activities');
     expect(gettingStartedSection?.content).toContain('**Upload your first activities** action prompt');
     expect(gettingStartedSection?.content).toContain('FIT, GPX, TCX, JSON, or SML files');
     expect(gettingStartedSection?.content).toContain('upgrade to Pro for automatic activity sync');

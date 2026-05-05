@@ -202,6 +202,29 @@ describe('DashboardComponent', () => {
         expect(component.dashboardActionPrompts.some(prompt => prompt.id === 'firstActivityUpload')).toBe(true);
     });
 
+    it('shows first activity upload prompt for basic owner dashboards with no uploaded activities', async () => {
+        mockUser.stripeRole = 'basic';
+        mockEventService.getEventCount.mockResolvedValue(0);
+
+        fixture.detectChanges();
+        await fixture.whenStable();
+
+        expect(mockEventService.getEventCount).toHaveBeenCalledWith(mockUser);
+        expect(component.dashboardActionPrompts.some(prompt => prompt.id === 'firstActivityUpload')).toBe(true);
+    });
+
+    it('shows first activity upload prompt for admin owner dashboards with no uploaded activities', async () => {
+        mockUser.admin = true;
+        mockUser.stripeRole = 'free';
+        mockEventService.getEventCount.mockResolvedValue(0);
+
+        fixture.detectChanges();
+        await fixture.whenStable();
+
+        expect(mockEventService.getEventCount).toHaveBeenCalledWith(mockUser);
+        expect(component.dashboardActionPrompts.some(prompt => prompt.id === 'firstActivityUpload')).toBe(true);
+    });
+
     it('does not show first activity upload prompt when the user already has activities', async () => {
         mockUser.stripeRole = 'free';
         mockEventService.getEventCount.mockResolvedValue(3);
@@ -231,7 +254,7 @@ describe('DashboardComponent', () => {
         expect(mockEventService.getEventCount).not.toHaveBeenCalled();
     });
 
-    it('does not count activities for paid users when evaluating first activity upload prompt', async () => {
+    it('does not count activities for pro users when evaluating first activity upload prompt', async () => {
         mockUser.stripeRole = 'pro';
 
         fixture.detectChanges();

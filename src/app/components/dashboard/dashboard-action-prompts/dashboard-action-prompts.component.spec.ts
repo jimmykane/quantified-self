@@ -23,6 +23,7 @@ class UploadActivitiesStubComponent {
   @Input() disabled = false;
   @Input() promptAction = false;
   @Input() showUploadIcon = false;
+  @Input() showRemainingCountWithCustomLabel = false;
   @Output() activityUploadComplete = new EventEmitter<void>();
 }
 
@@ -122,9 +123,10 @@ describe('DashboardActionPromptsComponent', () => {
     const uploadAction = uploadActionDebug.nativeElement.querySelector('.upload-activities-stub');
 
     expect(uploadAction).toBeTruthy();
-    expect(uploadAction.textContent).toContain('Upload first activities');
-    expect(uploadActionDebug.componentInstance.promptAction).toBe(true);
-    expect(uploadActionDebug.componentInstance.showUploadIcon).toBe(true);
+    expect(uploadAction.textContent).toContain('Upload first activity');
+    expect(uploadActionDebug.componentInstance.promptAction).toBe(false);
+    expect(uploadActionDebug.componentInstance.showUploadIcon).toBe(false);
+    expect(uploadActionDebug.componentInstance.showRemainingCountWithCustomLabel).toBe(true);
   });
 
   it('emits a control change when the first-activity upload completes', () => {

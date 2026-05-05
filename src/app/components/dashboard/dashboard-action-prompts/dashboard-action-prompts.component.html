@@ -28,9 +28,8 @@
       [user]="user"
       [hasProAccess]="false"
       [disabled]="prompt.busy === true"
-      [promptAction]="true"
-      [showUploadIcon]="true"
-      uploadLabel="Upload first activities"
+      [showRemainingCountWithCustomLabel]="true"
+      uploadLabel="Upload first activity"
       (activityUploadComplete)="onControlChange(prompt.id, 'activityUploaded')">
     </app-upload-activities>
     }

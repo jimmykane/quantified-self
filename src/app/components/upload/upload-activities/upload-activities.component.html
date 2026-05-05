@@ -17,7 +17,7 @@
         <span *ngIf="hasProAccess">{{ uploadLabel || 'Upload' }}</span>
         <span *ngIf="!hasProAccess">
           {{ uploadLabel || 'Upload' }}
-          @if (!uploadLabel) {
+          @if (!uploadLabel || showRemainingCountWithCustomLabel) {
             ({{ (uploadLimit - uploadCount) > 0 ? (uploadLimit - uploadCount) : 0 }} remaining)
           }
         </span>

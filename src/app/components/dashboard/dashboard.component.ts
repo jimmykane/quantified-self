@@ -673,7 +673,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
       return false;
     }
 
-    if (AppUserUtilities.hasPaidAccessUser(user, user.admin === true)) {
+    if (AppUserUtilities.hasProAccess(user, false)) {
       return false;
     }
 

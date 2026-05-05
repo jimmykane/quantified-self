@@ -147,6 +147,17 @@ describe('UploadActivitiesComponent', () => {
     expect(fixture.nativeElement.textContent).not.toContain('remaining');
   });
 
+  it('should show remaining uploads with a custom label when requested', async () => {
+    component.uploadLabel = 'Upload first activity';
+    component.showRemainingCountWithCustomLabel = true;
+
+    await component.ngOnInit();
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.textContent).toContain('Upload first activity');
+    expect(fixture.nativeElement.textContent).toContain(`${USAGE_LIMITS.free - 5} remaining`);
+  });
+
   it('should use the prompt action Material styling when embedded in a prompt', async () => {
     component.uploadLabel = 'Upload first activity';
     component.promptAction = true;

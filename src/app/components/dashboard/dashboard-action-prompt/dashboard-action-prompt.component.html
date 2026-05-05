@@ -38,14 +38,20 @@
     }
 
     @if (prompt.menuActions?.length && !prompt.primaryAction?.menuTrigger) {
-    <button
-      mat-icon-button
-      type="button"
-      [disabled]="prompt.busy"
-      [matMenuTriggerFor]="promptMenu"
-      aria-label="More prompt actions">
-      <mat-icon>more_vert</mat-icon>
-    </button>
+      @for (action of prompt.menuActions || []; track action.id + '-' + (action.value || action.label)) {
+      <button
+        mat-button
+        type="button"
+        [disabled]="prompt.busy"
+        (click)="emitMenuAction(action)">
+        <span class="dashboard-action-prompt__button-content">
+          @if (action.icon) {
+          <mat-icon>{{ action.icon }}</mat-icon>
+          }
+          <span>{{ action.label }}</span>
+        </span>
+      </button>
+      }
     }
 
     @if (hasActionControls) {
