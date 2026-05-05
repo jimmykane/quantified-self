@@ -13,6 +13,7 @@ import { AppHapticsService } from '../../../services/app.haptics.service';
 export class TileActionsAbstractDirective extends TileAbstractDirective {
   protected analyticsService = inject(AppAnalyticsService);
   protected hapticsService = inject(AppHapticsService);
+  @Input() showLayoutControls = true;
   @Output() savingChange = new EventEmitter<boolean>();
 
   constructor(protected userService: AppUserService) {
@@ -41,6 +42,9 @@ export class TileActionsAbstractDirective extends TileAbstractDirective {
   }
 
   async changeTileColumnSize(event) {
+    if (!this.showLayoutControls) {
+      return;
+    }
     this.analyticsService.logEvent('dashboard_tile_action', { method: 'changeTileSize' });
     this.hapticsService.selection();
     const tile = <TileSettingsInterface>this.user.settings.dashboardSettings.tiles.find(tileToFind => tileToFind.order === this.order);
@@ -49,6 +53,9 @@ export class TileActionsAbstractDirective extends TileAbstractDirective {
   }
 
   async changeTileRowSize(event) {
+    if (!this.showLayoutControls) {
+      return;
+    }
     this.analyticsService.logEvent('dashboard_tile_action', { method: 'changeTileSize' });
     this.hapticsService.selection();
     const tile = <TileSettingsInterface>this.user.settings.dashboardSettings.tiles.find(tileToFind => tileToFind.order === this.order);

@@ -17,6 +17,50 @@
   min-width: 0;
 }
 
+.dashboard-manager-bulk-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 0.35rem;
+}
+
+.dashboard-manager-bulk-actions button {
+  min-width: 8rem;
+}
+
+.dashboard-manager-button-content {
+  align-items: center;
+  display: inline-flex;
+  gap: 0.4rem;
+  justify-content: center;
+  line-height: 1;
+  min-height: 1.125rem;
+  min-width: 0;
+  vertical-align: middle;
+}
+
+.dashboard-manager-button-content mat-icon {
+  align-items: center;
+  display: inline-flex;
+  flex: 0 0 1.125rem;
+  font-size: 1.125rem;
+  height: 1.125rem;
+  justify-content: center;
+  line-height: 1;
+  margin: 0;
+  width: 1.125rem;
+}
+
+.dashboard-manager-button-content mat-spinner {
+  flex: 0 0 1.125rem;
+}
+
+.dashboard-manager-button-content > span {
+  align-items: center;
+  display: inline-flex;
+  line-height: 1;
+}
+
 .dashboard-manager-tab-group {
   width: 100%;
 }
@@ -157,6 +201,10 @@
 
 .dashboard-manager-map-toggle {
   margin-top: 0.25rem;
+}
+
+.dashboard-manager-activity-filter {
+  min-width: 0;
 }
 
 .dashboard-manager-option-description {

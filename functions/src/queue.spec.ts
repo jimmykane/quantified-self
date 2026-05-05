@@ -33,8 +33,19 @@ const { mockDocRef, mockBatch, mockDocSnapshot, mockCollection } = vi.hoisted(()
     const docRef = {
         update: vi.fn(() => Promise.resolve()),
         set: vi.fn(() => Promise.resolve()),
+        create: vi.fn(() => Promise.resolve()),
         delete: vi.fn(() => Promise.resolve()),
         id: 'mock-doc-id',
+        get: vi.fn(() => Promise.resolve({
+            exists: true,
+            data: () => ({
+                id: 'user1-work1',
+                dateCreated: 123456,
+                processed: false,
+                retryCount: 0,
+                dispatchedToCloudTask: null,
+            }),
+        })),
         parent: {
             id: 'tokens',
             parent: { id: 'mock-user-id' }
@@ -502,6 +513,41 @@ describe('queue', () => {
             expect(utils.enqueueWorkoutTask).toHaveBeenNthCalledWith(3, ServiceNames.GarminAPI, '3', expect.any(Number), delayPerItem * 2);
         });
 
+        it('should treat missing dispatch marker docs as success when scheduled dispatch races with DLQ move', async () => {
+            const utils = await import('./utils');
+            vi.mocked(utils.getCloudTaskQueueDepth).mockResolvedValue(0);
+            const { dispatchQueueItemTasks } = await import('./queue');
+            const admin = await import('firebase-admin');
+
+            const notFoundError: any = new Error('No document to update');
+            notFoundError.code = 5;
+            const mockDoc = {
+                id: 'doc-moved-to-dlq',
+                ref: { update: vi.fn().mockRejectedValueOnce(notFoundError) },
+                data: () => ({ dateCreated: Date.now() }),
+            };
+
+            const firestore = admin.firestore();
+            vi.mocked(firestore.collection('any').get).mockResolvedValue({
+                docs: [mockDoc] as any,
+                size: 1,
+                empty: false,
+                isEqual: vi.fn(),
+            } as any);
+            mockDocRef.get.mockResolvedValueOnce({
+                exists: true,
+                data: () => ({
+                    originalCollection: 'suuntoAppWorkoutQueue',
+                }),
+            });
+
+            await dispatchQueueItemTasks(ServiceNames.SuuntoApp);
+
+            expect(utils.enqueueWorkoutTask).toHaveBeenCalledWith(ServiceNames.SuuntoApp, 'doc-moved-to-dlq', expect.any(Number), 0);
+            expect(mockDoc.ref.update).toHaveBeenCalledWith({ dispatchedToCloudTask: expect.any(Number) });
+            expect(mockDocRef.get).toHaveBeenCalled();
+        });
+
         it('should do nothing if no items found', async () => {
             const utils = await import('./utils');
             vi.mocked(utils.getCloudTaskQueueDepth).mockResolvedValue(0);
@@ -726,11 +772,96 @@ describe('queue', () => {
             expect(result.id).toBe('mock-doc-id');
             const admin = await import('firebase-admin');
             const doc = admin.firestore().collection('suuntoAppWorkoutQueue').doc('user1-work1');
-            expect(doc.set).toHaveBeenCalledWith(expect.objectContaining({
+            expect(doc.create).toHaveBeenCalledWith(expect.objectContaining({
+                id: 'user1-work1',
+                userName: 'user1',
+                workoutID: 'work1',
+                dispatchedToCloudTask: null
+            }));
+            expect(doc.set).not.toHaveBeenCalled();
+            expect(utils.enqueueWorkoutTask).toHaveBeenCalledWith(ServiceNames.SuuntoApp, 'user1-work1', expect.any(Number));
+            expect(doc.update).toHaveBeenCalledWith({ dispatchedToCloudTask: expect.any(Number) });
+        });
+
+        it('addToQueueForSuunto should treat missing dispatch marker doc as success when the worker already moved it to failed_jobs', async () => {
+            const notFoundError: any = new Error('No document to update');
+            notFoundError.code = 5;
+            mockDocRef.update.mockRejectedValueOnce(notFoundError);
+            mockDocRef.get.mockResolvedValueOnce({
+                exists: true,
+                data: () => ({
+                    originalCollection: 'suuntoAppWorkoutQueue',
+                }),
+            });
+
+            const result = await addToQueueForSuunto({ userName: 'user1', workoutID: 'work1' });
+
+            expect(result.id).toBe('mock-doc-id');
+            expect(utils.enqueueWorkoutTask).toHaveBeenCalledWith(ServiceNames.SuuntoApp, 'user1-work1', expect.any(Number));
+            expect(mockDocRef.get).toHaveBeenCalled();
+        });
+
+        it('addToQueueForSuunto should rethrow missing dispatch marker doc errors when failed_jobs does not contain the item', async () => {
+            const notFoundError: any = new Error('No document to update');
+            notFoundError.code = 5;
+            mockDocRef.update.mockRejectedValueOnce(notFoundError);
+            mockDocRef.get.mockResolvedValueOnce({
+                exists: false,
+                data: () => undefined,
+            });
+
+            await expect(addToQueueForSuunto({ userName: 'user1', workoutID: 'work1' })).rejects.toThrow('No document to update');
+        });
+
+        it('addToQueueForSuunto should re-dispatch duplicate unprocessed queue items', async () => {
+            const alreadyExistsError: any = new Error('ALREADY_EXISTS');
+            alreadyExistsError.code = 6;
+            mockDocRef.create.mockRejectedValueOnce(alreadyExistsError);
+            mockDocRef.get.mockResolvedValueOnce({
+                exists: true,
+                data: () => ({
+                    id: 'user1-work1',
+                    dateCreated: 123456,
+                    processed: false,
+                    retryCount: 0,
+                    dispatchedToCloudTask: Date.now(),
+                }),
+            });
+
+            const result = await addToQueueForSuunto({ userName: 'user1', workoutID: 'work1' });
+
+            expect(result.id).toBe('mock-doc-id');
+            expect(mockDocRef.create).toHaveBeenCalledWith(expect.objectContaining({
                 id: 'user1-work1',
                 userName: 'user1',
                 workoutID: 'work1'
             }));
+            expect(mockDocRef.set).not.toHaveBeenCalled();
+            expect(utils.enqueueWorkoutTask).toHaveBeenCalledWith(ServiceNames.SuuntoApp, 'user1-work1', 123456);
+            expect(mockDocRef.update).toHaveBeenCalledWith({ dispatchedToCloudTask: expect.any(Number) });
+        });
+
+        it('addToQueueForSuunto should skip duplicate queue items that are already processed', async () => {
+            const alreadyExistsError: any = new Error('ALREADY_EXISTS');
+            alreadyExistsError.code = 6;
+            mockDocRef.create.mockRejectedValueOnce(alreadyExistsError);
+            mockDocRef.get.mockResolvedValueOnce({
+                exists: true,
+                data: () => ({
+                    id: 'user1-work1',
+                    dateCreated: 123456,
+                    processed: true,
+                    retryCount: 0,
+                    dispatchedToCloudTask: Date.now(),
+                }),
+            });
+
+            const result = await addToQueueForSuunto({ userName: 'user1', workoutID: 'work1' });
+
+            expect(result.id).toBe('mock-doc-id');
+            expect(mockDocRef.create).toHaveBeenCalled();
+            expect(mockDocRef.set).not.toHaveBeenCalled();
+            expect(utils.enqueueWorkoutTask).not.toHaveBeenCalled();
         });
 
         it('addToQueueForCOROS should insert item', async () => {

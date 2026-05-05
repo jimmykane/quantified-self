@@ -1,4 +1,6 @@
 .qs-splash-loader {
+  --qs-loader-font-family: "Roboto Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+
   position: relative;
   display: flex;
   flex-direction: column;
@@ -63,7 +65,7 @@
 }
 
 .qs-digit-label {
-  font-family: "Roboto Mono", "Barlow Condensed", monospace;
+  font-family: var(--qs-loader-font-family);
   font-size: clamp(9px, 1vw, 11px);
   font-weight: 500;
   letter-spacing: 0.09em;
@@ -88,7 +90,7 @@
   justify-content: center;
   gap: clamp(0.16em, 0.36vw, 0.28em);
   min-width: max-content;
-  font-family: "Roboto Mono", "Barlow Condensed", monospace;
+  font-family: var(--qs-loader-font-family);
   font-size: clamp(17px, 3.7vw, 28px);
   font-weight: 600;
   letter-spacing: 0.04em;
@@ -112,7 +114,7 @@
 }
 
 .qs-digit-unit {
-  font-family: "Roboto Mono", "Barlow Condensed", monospace;
+  font-family: var(--qs-loader-font-family);
   font-size: clamp(10px, 1.7vw, 13px);
   font-weight: 500;
   letter-spacing: 0.04em;

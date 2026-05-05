@@ -14,6 +14,19 @@
   overflow: hidden;
 }
 
+.kpi-layout.kpi-layout-row {
+  align-items: center;
+  box-sizing: border-box;
+  gap: 8px;
+  grid-template-columns: minmax(0, 1fr) 94px;
+  grid-template-rows: minmax(0, 1fr);
+  padding: 6px 12px;
+}
+
+.kpi-layout.kpi-layout-row.kpi-layout-reserve-actions {
+  padding-right: 58px;
+}
+
 .kpi-header {
   display: grid;
   gap: 4px;
@@ -21,8 +34,19 @@
   min-width: 0;
 }
 
+.kpi-layout-row .kpi-header {
+  align-items: center;
+  column-gap: 12px;
+  grid-template-columns: minmax(0, 1fr) 82px;
+  padding: 0;
+}
+
 .kpi-header.kpi-header-reserve-actions {
   padding-right: 62px;
+}
+
+.kpi-layout-row .kpi-header.kpi-header-reserve-actions {
+  padding-right: 0;
 }
 
 .title-row {
@@ -33,16 +57,52 @@
   max-width: calc(100% - 2px);
 }
 
+.kpi-layout-row .title-row {
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  width: auto;
+}
+
 .kpi-title {
   flex: 0 0 auto;
   min-width: auto;
-  font-size: 0.82rem;
-  font-weight: 600;
-  line-height: 1.1;
   color: var(--mat-sys-on-surface-variant);
   white-space: nowrap;
   overflow: visible;
   text-overflow: clip;
+}
+
+.kpi-layout-row .kpi-title {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.kpi-layout-row .title-info-button {
+  flex: 0 0 18px;
+}
+
+.kpi-copy-block {
+  display: grid;
+  min-width: 0;
+  row-gap: 2px;
+}
+
+.kpi-subtitle-row {
+  align-items: baseline;
+  color: var(--mat-sys-on-surface-variant);
+  display: flex;
+  gap: 4px;
+  line-height: 1.2;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.kpi-subtitle-separator {
+  opacity: 0.66;
 }
 
 .title-info-button {
@@ -74,10 +134,26 @@
 
 .kpi-value {
   font-family: 'Barlow Condensed', sans-serif;
+  font-variant-numeric: tabular-nums;
   font-size: 1.4rem;
   line-height: 1;
   font-weight: 700;
   color: var(--mat-sys-on-surface);
+}
+
+.kpi-value-block {
+  min-width: 0;
+}
+
+.kpi-layout-row .kpi-value-block {
+  justify-self: stretch;
+  text-align: right;
+}
+
+.kpi-layout-row .kpi-value {
+  font-variant-numeric: tabular-nums;
+  font-size: 1.34rem;
+  white-space: nowrap;
 }
 
 .kpi-primary-label {
@@ -87,18 +163,60 @@
   color: var(--mat-sys-on-surface-variant);
 }
 
+.kpi-layout-row .kpi-primary-label {
+  font-size: 0.69rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.kpi-meta {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
 .kpi-secondary-label {
   font-size: 0.68rem;
   line-height: 1.2;
   color: var(--mat-sys-on-surface-variant);
 }
 
+.kpi-layout-row .kpi-secondary-label {
+  flex: 0 1 auto;
+  font-size: 0.7rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .kpi-secondary-value {
   font-family: 'Barlow Condensed', sans-serif;
+  font-variant-numeric: tabular-nums;
   font-size: 0.9rem;
   line-height: 1.1;
   font-weight: 600;
   color: var(--mat-sys-on-surface);
+}
+
+.kpi-layout-row .kpi-secondary-value {
+  flex: 0 0 auto;
+  font-size: 0.92rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.kpi-sparkline-shell {
+  display: block;
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  max-height: 100%;
+  min-width: 0;
+  margin-top: 2px;
+  overflow: hidden;
 }
 
 .kpi-sparkline {
@@ -108,6 +226,43 @@
   min-height: 0;
   max-height: 100%;
   min-width: 0;
-  margin-top: 2px;
   overflow: hidden;
+}
+
+.kpi-layout-row .kpi-sparkline-shell {
+  align-self: center;
+  height: 38px;
+  margin-top: 0;
+  min-height: 38px;
+}
+
+@media (max-width: 767px) {
+  .kpi-layout.kpi-layout-row {
+    gap: 6px;
+    grid-template-columns: minmax(0, 1fr) 68px;
+    padding: 6px 8px;
+  }
+
+  .kpi-layout.kpi-layout-row.kpi-layout-reserve-actions {
+    padding-right: 38px;
+  }
+
+  .kpi-layout-row .kpi-header {
+    column-gap: 6px;
+    grid-template-columns: minmax(0, 1fr) 52px;
+    row-gap: 1px;
+  }
+
+  .kpi-layout-row .kpi-subtitle-row {
+    gap: 3px;
+  }
+
+  .kpi-layout-row .kpi-secondary-value {
+    display: none;
+  }
+
+  .kpi-layout-row .kpi-sparkline-shell {
+    height: 36px;
+    min-height: 36px;
+  }
 }

@@ -5,6 +5,35 @@
   <p class="dashboard-manager-hint">Add or edit dashboard tiles from one place.</p>
 
   <section class="dashboard-manager-section">
+    <div class="dashboard-manager-section-title">Bulk actions</div>
+    <div class="dashboard-manager-bulk-actions">
+      <button mat-stroked-button type="button" class="qs-mat-primary" data-testid="dashboard-manager-add-all-button" (click)="addAllTiles()" [disabled]="isAddAllDisabled" [attr.aria-busy]="isAddAllSaving">
+        <span class="dashboard-manager-button-content">
+          @if (isAddAllSaving) {
+          <mat-spinner class="qs-spinner-primary" diameter="18"></mat-spinner>
+          } @else {
+          <mat-icon>library_add</mat-icon>
+          }
+          <span>{{ isAddAllSaving ? 'Adding...' : 'Add all' }}</span>
+        </span>
+      </button>
+      <button mat-stroked-button type="button" class="qs-mat-warn" data-testid="dashboard-manager-remove-all-button" (click)="removeAllTiles()" [disabled]="isRemoveAllDisabled" [attr.aria-busy]="isRemoveAllSaving">
+        <span class="dashboard-manager-button-content">
+          @if (isRemoveAllSaving) {
+          <mat-spinner class="qs-spinner-warn" diameter="18"></mat-spinner>
+          } @else {
+          <mat-icon>delete_sweep</mat-icon>
+          }
+          <span>{{ isRemoveAllSaving ? 'Removing...' : 'Remove all' }}</span>
+        </span>
+      </button>
+    </div>
+    <p class="dashboard-manager-hint">
+      Add all inserts every missing default dashboard tile. Remove all clears the dashboard and prevents automatic suggestions from reappearing.
+    </p>
+  </section>
+
+  <section class="dashboard-manager-section">
     <div class="dashboard-manager-section-title">Mode</div>
     <mat-radio-group class="dashboard-manager-inline-radio-group" [value]="mode" (change)="onModeChange($event.value)">
       @for (modeOption of modeOptions; track modeOption.value) {
@@ -110,7 +139,7 @@
           </mat-radio-group>
           <p class="dashboard-manager-hint dashboard-manager-tip-hint" role="note" aria-label="KPI tip">
             <mat-icon>info</mat-icon>
-            <span>KPI cards are derived-only compact tiles with fixed logic.</span>
+            <span>KPI rows are derived-only compact tiles with fixed logic.</span>
           </p>
         </section>
         }
@@ -179,6 +208,22 @@
               </mat-select>
             </mat-form-field>
             }
+
+            <mat-form-field appearance="outline" class="dashboard-manager-full-width">
+              <mat-label>Tile date range</mat-label>
+              <mat-icon matPrefix>date_range</mat-icon>
+              <mat-select [value]="customEventRange" (selectionChange)="onCustomEventRangeChange($event.value)">
+                @for (rangeOption of tileEventRangeOptions; track rangeOption.range) {
+                <mat-option [value]="rangeOption.range">{{ rangeOption.label }}</mat-option>
+                }
+              </mat-select>
+            </mat-form-field>
+
+            <div class="dashboard-manager-full-width dashboard-manager-activity-filter">
+              <app-activity-types-multi-select [selectedActivityTypes]="customEventActivityTypes"
+                (selectedActivityTypesChange)="onCustomEventActivityTypesChange($event)">
+              </app-activity-types-multi-select>
+            </div>
           </div>
         </section>
         }
@@ -198,6 +243,20 @@
             <mat-slide-toggle class="dashboard-manager-map-toggle" [checked]="mapClusterMarkers" (change)="mapClusterMarkers = $event.checked">
               Cluster markers
             </mat-slide-toggle>
+            <mat-form-field appearance="outline" class="dashboard-manager-full-width">
+              <mat-label>Tile date range</mat-label>
+              <mat-icon matPrefix>date_range</mat-icon>
+              <mat-select [value]="mapEventRange" (selectionChange)="onMapEventRangeChange($event.value)">
+                @for (rangeOption of tileEventRangeOptions; track rangeOption.range) {
+                <mat-option [value]="rangeOption.range">{{ rangeOption.label }}</mat-option>
+                }
+              </mat-select>
+            </mat-form-field>
+            <div class="dashboard-manager-full-width dashboard-manager-activity-filter">
+              <app-activity-types-multi-select [selectedActivityTypes]="mapEventActivityTypes"
+                (selectedActivityTypesChange)="onMapEventActivityTypesChange($event)">
+              </app-activity-types-multi-select>
+            </div>
           </div>
 
           @if (isMapOptionDisabled()) {
@@ -281,8 +340,13 @@
 </mat-dialog-content>
 
 <mat-dialog-actions class="dashboard-manager-actions" align="end">
-  <button mat-button (click)="close()">Cancel</button>
-  <button mat-flat-button class="qs-mat-primary" (click)="save()" [disabled]="isSaveDisabled">
-    {{ activeWorkflowTab === 'presets' ? 'Apply preset' : (mode === 'add' ? 'Add tile' : 'Save changes') }}
+  <button mat-button type="button" (click)="close()" [disabled]="isSaving">Cancel</button>
+  <button mat-flat-button type="button" class="qs-mat-primary" data-testid="dashboard-manager-save-button" (click)="save()" [disabled]="isSaveDisabled" [attr.aria-busy]="isSaveSaving">
+    <span class="dashboard-manager-button-content">
+      @if (isSaveSaving) {
+      <mat-spinner class="qs-spinner-primary" diameter="18"></mat-spinner>
+      }
+      <span>{{ isSaveSaving ? 'Saving...' : (activeWorkflowTab === 'presets' ? 'Apply preset' : (mode === 'add' ? 'Add tile' : 'Save changes')) }}</span>
+    </span>
   </button>
 </mat-dialog-actions>

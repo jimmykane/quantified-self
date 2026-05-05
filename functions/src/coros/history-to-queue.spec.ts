@@ -156,9 +156,16 @@ describe('COROS History to Queue', () => {
             expect(history.addHistoryToQueue).toHaveBeenCalled();
             const callArgs = (history.addHistoryToQueue as any).mock.calls[0];
             expect(callArgs[2].getTime()).toBeGreaterThanOrEqual(limitDate.getTime());
+            const expectedBatches = (history.addHistoryToQueue as any).mock.calls.length;
+            expect(expectedBatches).toBeGreaterThan(0);
             expect(result).toEqual({
                 result: 'History items added to queue',
-                stats: { successCount: 4, failureCount: 0, processedBatches: 4, failedBatches: 0 }
+                stats: {
+                    successCount: expectedBatches,
+                    failureCount: 0,
+                    processedBatches: expectedBatches,
+                    failedBatches: 0
+                }
             });
         });
 

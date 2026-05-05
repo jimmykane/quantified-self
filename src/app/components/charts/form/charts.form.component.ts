@@ -11,7 +11,6 @@ import {
   computed,
   signal,
 } from '@angular/core';
-import type { MatButtonToggleChange } from '@angular/material/button-toggle';
 import type { EChartsType } from 'echarts/core';
 import { TimeIntervals } from '@sports-alliance/sports-lib';
 import { AppColors } from '../../../services/color/app.colors';
@@ -45,14 +44,13 @@ import {
   type DashboardDerivedMetricStatus,
   isDerivedMetricPendingStatus,
 } from '../../../helpers/derived-metric-status.helper';
-import { AppHapticsService } from '../../../services/app.haptics.service';
 
 type ChartOption = Parameters<EChartsType['setOption']>[0];
 type EChartsTooltipPositionSize = {
   contentSize?: [number, number];
   viewSize?: [number, number];
 };
-type DashboardFormTimelineWindow = 'w' | 'm' | 'y';
+export type DashboardFormTimelineWindow = 'w' | 'm' | 'y';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const WEEK_VIEW_SPAN_MS = 84 * DAY_MS;
@@ -69,16 +67,30 @@ const FORM_FATIGUE_COLOR = AppColors.Red;
 export class ChartsFormComponent implements AfterViewInit, OnChanges, OnDestroy {
   private static readonly FORM_MODE = 'same-day' as const;
 
-  readonly granularityOptions: ReadonlyArray<{ key: DashboardFormTimelineWindow; label: string }> = [
-    { key: 'w', label: 'W' },
-    { key: 'm', label: 'M' },
-    { key: 'y', label: 'Y' },
+  readonly granularityOptions: ReadonlyArray<{ key: DashboardFormTimelineWindow; label: string; shortLabel: string }> = [
+    { key: 'w', label: 'Week', shortLabel: 'W' },
+    { key: 'm', label: 'Month', shortLabel: 'M' },
+    { key: 'y', label: 'Year', shortLabel: 'Y' },
   ];
 
   @Input() darkTheme = false;
   @Input() isLoading = false;
   @Input() formStatus?: DashboardDerivedMetricStatus | null;
   @Input() infoTooltip?: string | null;
+  @Input() reserveTitleActionSpace = false;
+  @Input()
+  set timelineWindow(value: DashboardFormTimelineWindow | null | undefined) {
+    if (value !== 'w' && value !== 'm' && value !== 'y') {
+      return;
+    }
+    if (this.selectedTimelineWindowSignal() === value) {
+      return;
+    }
+    this.selectedTimelineWindowSignal.set(value);
+    if (this.chartDiv?.nativeElement) {
+      void this.refreshChart();
+    }
+  }
   @Input() set data(value: DashboardFormPoint[] | null | undefined) {
     this.pointsSignal.set(Array.isArray(value) ? value : []);
     if (this.chartDiv?.nativeElement) {
@@ -108,6 +120,7 @@ export class ChartsFormComponent implements AfterViewInit, OnChanges, OnDestroy 
   readonly selectedFormValue = computed(() => resolveDashboardFormValue(this.latestCurrentDayPoint(), ChartsFormComponent.FORM_MODE));
   readonly status = computed(() => resolveDashboardFormStatus(this.selectedFormValue()));
   readonly selectedGranularity = computed(() => this.selectedTimelineWindowSignal());
+  readonly selectedGranularityLabel = computed(() => this.resolveGranularityLabel(this.selectedTimelineWindowSignal()));
   readonly headlineStats = computed(() => {
     const latestCurrent = this.latestCurrentDayPoint();
     const latestReal = this.latestRealWorkoutPoint();
@@ -130,7 +143,6 @@ export class ChartsFormComponent implements AfterViewInit, OnChanges, OnDestroy 
   constructor(
     private eChartsLoader: EChartsLoaderService,
     private logger: LoggerService,
-    private hapticsService: AppHapticsService,
   ) {
     this.chartHost = new EChartsHostController({
       eChartsLoader: this.eChartsLoader,
@@ -158,19 +170,8 @@ export class ChartsFormComponent implements AfterViewInit, OnChanges, OnDestroy 
     this.chartHost.dispose();
   }
 
-  onGranularityChange(event: MatButtonToggleChange | DashboardFormTimelineWindow | null | undefined): void {
-    const value = typeof event === 'string' ? event : `${event?.value || ''}`;
-    if (value !== 'w' && value !== 'm' && value !== 'y') {
-      return;
-    }
-    if (this.selectedTimelineWindowSignal() === value) {
-      return;
-    }
-    this.hapticsService.selection();
-    this.selectedTimelineWindowSignal.set(value);
-    if (this.chartDiv?.nativeElement) {
-      void this.refreshChart();
-    }
+  private resolveGranularityLabel(value: DashboardFormTimelineWindow): string {
+    return this.granularityOptions.find(option => option.key === value)?.label || 'Week';
   }
 
   private async refreshChart(): Promise<void> {

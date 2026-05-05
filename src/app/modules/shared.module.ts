@@ -14,6 +14,7 @@ import { DataTypeIconComponent } from '../components/data-type-icon/data-type-ic
 import { RouterModule } from '@angular/router';
 
 import { EventSearchComponent } from '../components/event-search/event-search.component';
+import { ActivityTypesFilterMenuComponent } from '../components/activity-types-filter-menu/activity-types-filter-menu.component';
 import { ActivityTypesMultiSelectComponent } from '../components/activity-types-multi-select/activity-types-multi-select.component';
 import { ActivityTypeIconComponent } from '../components/activity-type-icon/activity-type-icon.component';
 
@@ -36,6 +37,7 @@ import { MenuRadioListComponent } from '../components/shared/menu-radio-list/men
 import { TypedPromptRotatorComponent } from '../components/shared/typed-prompt-rotator/typed-prompt-rotator.component';
 import { HapticTapDirective } from '../directives/haptic-tap.directive';
 import { TooltipTapDirective } from '../directives/tooltip-tap.directive';
+import { UploadActivitiesComponent } from '../components/upload/upload-activities/upload-activities.component';
 
 @NgModule({
     imports: [
@@ -53,6 +55,7 @@ import { TooltipTapDirective } from '../directives/tooltip-tap.directive';
         ConfirmationDialogComponent,
         DataTypeIconComponent,
         EventSearchComponent,
+        ActivityTypesFilterMenuComponent,
         ActivityTypesMultiSelectComponent,
         ActivityTypeIconComponent,
         AppSkeletonComponent,
@@ -76,6 +79,7 @@ import { TooltipTapDirective } from '../directives/tooltip-tap.directive';
         TypedPromptRotatorComponent,
         HapticTapDirective,
         TooltipTapDirective,
+        UploadActivitiesComponent,
     ],
     providers: [],
     exports: [
@@ -93,6 +97,7 @@ import { TooltipTapDirective } from '../directives/tooltip-tap.directive';
         ReactiveFormsModule,
         FormsModule,
         EventSearchComponent,
+        ActivityTypesFilterMenuComponent,
         ActivityTypesMultiSelectComponent,
         ActivityTypeIconComponent,
         ServiceSyncingStateComponent,
@@ -112,6 +117,7 @@ import { TooltipTapDirective } from '../directives/tooltip-tap.directive';
         TypedPromptRotatorComponent,
         HapticTapDirective,
         TooltipTapDirective,
+        UploadActivitiesComponent,
     ]
 })
 

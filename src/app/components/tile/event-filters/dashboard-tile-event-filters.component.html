@@ -1,0 +1,25 @@
+<nav class="tile-event-filters" aria-label="Tile event filters">
+  @if (showNavigation) {
+  <button mat-icon-button class="tile-event-filter-button" appHapticTap [disabled]="disabled"
+    (click)="onNavigate('older')" matTooltip="Older window" matTooltipPosition="below" aria-label="Show older window">
+    <mat-icon>chevron_left</mat-icon>
+  </button>
+  }
+
+  <app-chart-range-selector class="tile-event-range-selector" [options]="rangeSelectorOptions"
+    [value]="selectedRange" ariaLabel="Select tile range" [disabled]="disabled"
+    (valueChange)="onRangeSelection($event)">
+  </app-chart-range-selector>
+
+  @if (showNavigation) {
+  <button mat-icon-button class="tile-event-filter-button" appHapticTap [disabled]="disabled || !canNavigateNewer"
+    (click)="onNavigate('newer')" matTooltip="Newer window" matTooltipPosition="below" aria-label="Show newer window">
+    <mat-icon>chevron_right</mat-icon>
+  </button>
+  }
+
+  <app-activity-types-filter-menu class="tile-event-activity-filter" [selectedActivityTypes]="selectedActivityTypes"
+    [disabled]="disabled" ariaLabel="Filter tile activities"
+    (selectedActivityTypesChange)="onActivityTypesChange($event)">
+  </app-activity-types-filter-menu>
+</nav>

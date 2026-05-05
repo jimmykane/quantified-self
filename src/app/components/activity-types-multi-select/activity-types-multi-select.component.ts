@@ -32,6 +32,8 @@ export class ActivityTypeSelectionModel {
 export class ActivityTypesMultiSelectComponent implements OnInit, OnChanges {
 
   @Input() selectedActivityTypes: ActivityTypes[];
+  @Input() label = 'Filter by activities';
+  @Input() placeholder = 'Filter by activities';
   @Output() selectedActivityTypesChange: EventEmitter<ActivityTypes[]> = new EventEmitter<ActivityTypes[]>();
 
   activityTypesControl = new UntypedFormControl();
@@ -42,22 +44,32 @@ export class ActivityTypesMultiSelectComponent implements OnInit, OnChanges {
 
   filteredActivityTypes: Observable<ActivityTypeSelectionModel[]>;
   lastFilter = '';
+  private selectedActivityTypesSignature = '';
 
   constructor(private userService: AppUserService) {
   }
 
   ngOnInit() {
-
-  }
-
-  ngOnChanges(changes: SimpleChanges): void {
-    this.selectedActivityTypes = this.selectedActivityTypes || [];
     this.filteredActivityTypes = this.activityTypesControl.valueChanges.pipe(
       startWith<string | ActivityTypeSelectionModel[]>(''),
       map(value => typeof value === 'string' ? value : this.lastFilter),
       map(filter => this.filter(filter))
     );
+  }
+
+  ngOnChanges(changes: SimpleChanges): void {
+    const selectedActivityTypes = this.selectedActivityTypes || [];
+    this.selectedActivityTypes = selectedActivityTypes;
+    const selectedActivityTypesSignature = selectedActivityTypes.join('|');
+    if (!changes.selectedActivityTypes || selectedActivityTypesSignature === this.selectedActivityTypesSignature) {
+      return;
+    }
+
+    this.selectedActivityTypesSignature = selectedActivityTypesSignature;
     this.selectedActivityTypesSelectionModel = [];
+    this.activityTypesSelectionModelList.forEach(model => {
+      model.selected = false;
+    });
     this.selectedActivityTypes.forEach(activityType => {
       const model = this.activityTypesSelectionModelList.find(ac => ac.activityType === activityType);
       if (model) {
@@ -65,7 +77,7 @@ export class ActivityTypesMultiSelectComponent implements OnInit, OnChanges {
         this.selectedActivityTypesSelectionModel.push(model)
       }
     })
-    this.activityTypesControl.setValue(this.selectedActivityTypesSelectionModel);
+    this.activityTypesControl.setValue(this.selectedActivityTypesSelectionModel, { emitEvent: false });
   }
 
 
@@ -118,6 +130,13 @@ export class ActivityTypesMultiSelectComponent implements OnInit, OnChanges {
   }
 
   clearSelection() {
+    this.selectedActivityTypes = [];
+    this.selectedActivityTypesSignature = '';
+    this.selectedActivityTypesSelectionModel = [];
+    this.activityTypesSelectionModelList.forEach(model => {
+      model.selected = false;
+    });
+    this.activityTypesControl.setValue([], { emitEvent: false });
     this.selectedActivityTypesChange.emit([]);
   }
 }

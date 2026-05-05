@@ -13,6 +13,10 @@ import { MaterialPillTabsComponent } from './material-pill-tabs.component';
       [selectedIndex]="selectedIndex"
       [density]="density"
       [lazyContent]="lazyContent"
+      [disablePagination]="disablePagination"
+      [fitInkBarToContent]="fitInkBarToContent"
+      [stretchTabs]="stretchTabs"
+      [alignTabs]="alignTabs"
       [stickyHeader]="stickyHeader"
       [topOffset]="topOffset"
       (selectedIndexChange)="onSelectedIndexChange($event)"
@@ -31,6 +35,10 @@ class HostComponent {
   selectedIndex = 0;
   density: 'regular' | 'compact' = 'regular';
   lazyContent = true;
+  disablePagination = false;
+  fitInkBarToContent = true;
+  stretchTabs = false;
+  alignTabs: 'start' | 'center' | 'end' = 'start';
   stickyHeader = false;
   topOffset = '0px';
 
@@ -87,6 +95,14 @@ describe('MaterialPillTabsComponent', () => {
     fixture.detectChanges();
     const tabGroup = fixture.debugElement.query(By.directive(MatTabGroup)).componentInstance as MatTabGroup;
     expect(tabGroup.selectedIndex).toBe(1);
+  });
+
+  it('should use Material tab pagination and content-sized labels by default', () => {
+    const tabGroup = fixture.debugElement.query(By.directive(MatTabGroup)).componentInstance as MatTabGroup;
+
+    expect(tabGroup.disablePagination).toBe(false);
+    expect(tabGroup.fitInkBarToContent).toBe(true);
+    expect(tabGroup.stretchTabs).toBe(false);
   });
 
   it('should emit selectedIndexChange from native tabs', async () => {

@@ -21,6 +21,11 @@ import { BenchmarkModule } from './benchmark.module';
 import { AppChartsModule } from './app-charts.module';
 import { DragDropModule } from '@angular/cdk/drag-drop';
 import { DashboardManagerDialogComponent } from '../components/summaries/dashboard-manager-dialog/dashboard-manager-dialog.component';
+import { DashboardTileEventFiltersComponent } from '../components/tile/event-filters/dashboard-tile-event-filters.component';
+import { DashboardTileBoardComponent } from '../components/summaries/dashboard-tile-board/dashboard-tile-board.component';
+import { DashboardTileCellComponent } from '../components/summaries/dashboard-tile-cell/dashboard-tile-cell.component';
+import { DashboardActionPromptComponent } from '../components/dashboard/dashboard-action-prompt/dashboard-action-prompt.component';
+import { DashboardActionPromptsComponent } from '../components/dashboard/dashboard-action-prompts/dashboard-action-prompts.component';
 
 @NgModule({
     imports: [
@@ -47,7 +52,12 @@ import { DashboardManagerDialogComponent } from '../components/summaries/dashboa
         EventTableActionsComponent,
         TileChartComponent,
         TileMapComponent,
+        DashboardTileEventFiltersComponent,
         DashboardManagerDialogComponent,
+        DashboardTileBoardComponent,
+        DashboardTileCellComponent,
+        DashboardActionPromptComponent,
+        DashboardActionPromptsComponent,
 
     ],
     providers: [

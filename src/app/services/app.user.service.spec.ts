@@ -166,6 +166,7 @@ describe('AppUserService', () => {
         expect(mergedUser.emailVerified).toBe(true);
         expect(mergedUser.email).toBe('test@example.com');
         expect(mergedUser.acceptedPrivacyPolicy).toBe(false);
+        expect((mergedUser as any).privacy).toBeUndefined();
         expect(mergedUser.settings?.appSettings?.unitSetupCompleted).toBe(false);
         expect(service.hasIncompleteProfileReads('u1')).toBe(true);
     });
@@ -688,6 +689,52 @@ describe('AppUserService', () => {
 
             expect(result).toEqual([]);
         });
+
+        it('watchHasAnyActivityServiceConnection should emit false without a user', async () => {
+            const result = await firstValueFrom(service.watchHasAnyActivityServiceConnection(null));
+
+            expect(result).toBe(false);
+            expect(collectionData).not.toHaveBeenCalled();
+        });
+
+        it('watchHasAnyActivityServiceConnection should emit false when activity service token streams are empty', async () => {
+            const user = { uid: 'u7' } as any;
+            (collectionData as any)
+                .mockReturnValueOnce(of([]))
+                .mockReturnValueOnce(of([]))
+                .mockReturnValueOnce(of([]));
+
+            const result = await firstValueFrom(service.watchHasAnyActivityServiceConnection(user));
+
+            expect(result).toBe(false);
+            expect(collection).toHaveBeenNthCalledWith(1, expect.anything(), 'garminAPITokens', 'u7', 'tokens');
+            expect(collection).toHaveBeenNthCalledWith(2, expect.anything(), 'suuntoAppAccessTokens', 'u7', 'tokens');
+            expect(collection).toHaveBeenNthCalledWith(3, expect.anything(), 'COROSAPIAccessTokens', 'u7', 'tokens');
+        });
+
+        it('watchHasAnyActivityServiceConnection should emit true when any activity service has a token', async () => {
+            const user = { uid: 'u8' } as any;
+            (collectionData as any)
+                .mockReturnValueOnce(of([]))
+                .mockReturnValueOnce(of([{ accessToken: 'suunto-token' }]))
+                .mockReturnValueOnce(of([]));
+
+            const result = await firstValueFrom(service.watchHasAnyActivityServiceConnection(user));
+
+            expect(result).toBe(true);
+        });
+
+        it('watchHasAnyActivityServiceConnection should fail closed when token reads fail', async () => {
+            const user = { uid: 'u9' } as any;
+            (collectionData as any)
+                .mockReturnValueOnce(throwError(() => new Error('Garmin read failed')))
+                .mockReturnValueOnce(throwError(() => new Error('Suunto read failed')))
+                .mockReturnValueOnce(throwError(() => new Error('COROS read failed')));
+
+            const result = await firstValueFrom(service.watchHasAnyActivityServiceConnection(user));
+
+            expect(result).toBe(false);
+        });
     });
 
     describe('gracePeriodUntil signal', () => {
@@ -885,6 +932,21 @@ describe('AppUserService', () => {
                 { displayName: 'New Name' }
             );
         });
+
+        it('should strip deprecated account privacy from partial updates', async () => {
+            const user = { uid: 'test-uid' } as AppUserInterface;
+            const propertiesToUpdate = {
+                displayName: 'New Name',
+                privacy: 'public'
+            };
+
+            await service.updateUserProperties(user, propertiesToUpdate);
+
+            expect(updateDoc).toHaveBeenCalledWith(
+                expect.anything(),
+                { displayName: 'New Name' }
+            );
+        });
     });
 
     describe('updateUser', () => {
@@ -897,6 +959,7 @@ describe('AppUserService', () => {
                 uid: 'test-uid',
                 displayName: 'Test User',
                 impersonatedBy: 'admin-uid',
+                privacy: 'public',
                 creationDate: new Date('2026-01-01T00:00:00.000Z'),
                 lastSignInDate: new Date('2026-01-02T00:00:00.000Z')
             } as AppUserInterface;
@@ -908,6 +971,7 @@ describe('AppUserService', () => {
             expect(writtenData.creationDate).toEqual(new Date('2026-01-01T00:00:00.000Z'));
             expect(writtenData.lastSignInDate).toBeUndefined();
             expect(writtenData.impersonatedBy).toBeUndefined();
+            expect(writtenData.privacy).toBeUndefined();
         });
 
         it('should retry full user write without creationDate when merge write is permission-denied', async () => {
@@ -986,6 +1050,22 @@ describe('AppUserService', () => {
                     startDate: startDate.toISOString(),
                     endDate: endDate.toISOString()
                 });
+            });
+        });
+
+        describe('backfillSuuntoSleepForCurrentUser', () => {
+            it('should call cloud function for Suunto sleep backfill', async () => {
+                const response = {
+                    queued: 135,
+                    startDate: '2016-01-01T00:00:00.000Z',
+                    endDate: '2026-04-30T12:00:00.000Z',
+                    nextAllowedAtMs: 1_778_244_000_000,
+                };
+                mockFunctionsService.call.mockResolvedValueOnce({ data: response });
+
+                await expect(service.backfillSuuntoSleepForCurrentUser()).resolves.toEqual(response);
+
+                expect(mockFunctionsService.call).toHaveBeenCalledWith('backfillSuuntoAppSleep');
             });
         });
 

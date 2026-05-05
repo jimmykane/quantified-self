@@ -1,4 +1,6 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { DashboardComponent } from './dashboard.component';
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { AppEventService } from '../../services/app.event.service';
@@ -9,18 +11,19 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { of, Subject } from 'rxjs';
 import {
+    ActivityTypes,
     DateRanges,
     DistanceUnits,
-    EventInterface,
     PaceUnits,
     SpeedUnits,
     SwimPaceUnits,
+    ServiceNames,
     User,
     VerticalSpeedUnits
 } from '@sports-alliance/sports-lib';
 import { AppUserInterface } from '../../models/app-user.interface';
 import { Analytics } from 'app/firebase/analytics';
-import { vi, describe, it, expect, beforeEach } from 'vitest';
+import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { BehaviorSubject } from 'rxjs';
 import { LoggerService } from '../../services/logger.service';
 
@@ -39,6 +42,10 @@ describe('DashboardComponent', () => {
 
     const mockUser = new User('testUser') as AppUserInterface;
 
+    afterEach(() => {
+        vi.useRealTimers();
+    });
+
     beforeEach(async () => {
         mockUser.settings = {
             appSettings: {},
@@ -52,6 +59,8 @@ describe('DashboardComponent', () => {
             unitSettings: { startOfTheWeek: 1 },
             chartSettings: {}
         } as any;
+        mockUser.stripeRole = null;
+        mockUser.admin = false;
 
         mockAuthService = {
             user$: of(mockUser),
@@ -59,21 +68,23 @@ describe('DashboardComponent', () => {
         };
 
         mockEventService = {
-            getEventsBy: vi.fn().mockReturnValue(of([{ id: 'event1' }]))
+            getEventsBy: vi.fn().mockReturnValue(of([{ id: 'event1' }])),
+            getEventCount: vi.fn().mockResolvedValue(1)
         };
 
         mockUserService = {
             getUserByID: vi.fn().mockReturnValue(of(new User('targetUser'))),
             shouldShowPromo: vi.fn().mockReturnValue(false),
-            updateUserProperties: vi.fn().mockReturnValue(Promise.resolve())
+            updateUserProperties: vi.fn().mockReturnValue(Promise.resolve()),
+            watchHasAnyActivityServiceConnection: vi.fn().mockReturnValue(of(false))
         };
 
-        mockRouter = { navigate: vi.fn() };
+        mockRouter = { navigate: vi.fn().mockResolvedValue(true) };
 
         mockActivatedRoute = {
             snapshot: {
                 paramMap: {
-                    get: (key: string) => null
+                    get: (_key: string) => null
                 },
                 data: {
                     dashboardData: {
@@ -115,6 +126,33 @@ describe('DashboardComponent', () => {
         expect(component).toBeTruthy();
     });
 
+    it('should place event search filters inside the event table toolbar slot', () => {
+        mockActivatedRoute.snapshot.data.dashboardData.user = mockUser;
+
+        fixture.detectChanges();
+
+        const projectedSearch = fixture.nativeElement.querySelector(
+            'app-event-table app-event-search[event-table-filters].table-toolbar-layout.compact-filter-layout'
+        ) as HTMLElement;
+
+        expect(projectedSearch).toBeTruthy();
+    });
+
+    it('renders dashboard summaries eagerly before the event table to avoid layout shifts', () => {
+        mockActivatedRoute.snapshot.data.dashboardData.user = mockUser;
+
+        fixture.detectChanges();
+
+        const summaries = fixture.nativeElement.querySelector('app-summaries') as HTMLElement;
+        const eventTable = fixture.nativeElement.querySelector('app-event-table') as HTMLElement;
+        const template = readFileSync(resolve(process.cwd(), 'src/app/components/dashboard/dashboard.component.html'), 'utf8');
+
+        expect(summaries).toBeTruthy();
+        expect(eventTable).toBeTruthy();
+        expect(summaries.compareDocumentPosition(eventTable) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        expect(template).not.toContain('@defer');
+    });
+
     it('should use resolved events on init', async () => {
         fixture.detectChanges(); // Trigger ngOnInit
         await fixture.whenStable(); // Wait for async operations to complete
@@ -122,6 +160,16 @@ describe('DashboardComponent', () => {
         expect(mockEventService.getEventsBy).toHaveBeenCalled();
         expect(component.events.length).toBe(1);
         expect(component.isLoading).toBe(false);
+    });
+
+    it('redirects signed-out dashboard visitors to login without opening a snackbar', async () => {
+        mockAuthService.user$ = of(null);
+
+        fixture.detectChanges();
+        await fixture.whenStable();
+
+        expect(mockRouter.navigate).toHaveBeenCalledWith(['login']);
+        expect(mockSnackBar.open).not.toHaveBeenCalled();
     });
 
     it('shows unit setup prompt for owner dashboard when setup is explicitly incomplete', async () => {
@@ -151,6 +199,158 @@ describe('DashboardComponent', () => {
         await fixture.whenStable();
 
         expect(component.showUnitSetupPrompt).toBe(false);
+    });
+
+    it('shows first activity upload prompt for free owner dashboards with no uploaded activities', async () => {
+        mockUser.stripeRole = 'free';
+        mockEventService.getEventCount.mockResolvedValue(0);
+
+        fixture.detectChanges();
+        await fixture.whenStable();
+
+        expect(mockEventService.getEventCount).toHaveBeenCalledWith(mockUser);
+        expect(component.dashboardActionPrompts.some(prompt => prompt.id === 'firstActivityUpload')).toBe(true);
+    });
+
+    it('shows first activity upload prompt for basic owner dashboards with no uploaded activities', async () => {
+        mockUser.stripeRole = 'basic';
+        mockEventService.getEventCount.mockResolvedValue(0);
+
+        fixture.detectChanges();
+        await fixture.whenStable();
+
+        expect(mockEventService.getEventCount).toHaveBeenCalledWith(mockUser);
+        expect(component.dashboardActionPrompts.some(prompt => prompt.id === 'firstActivityUpload')).toBe(true);
+    });
+
+    it('shows first activity upload prompt for admin owner dashboards with no uploaded activities', async () => {
+        mockUser.admin = true;
+        mockUser.stripeRole = 'free';
+        mockEventService.getEventCount.mockResolvedValue(0);
+
+        fixture.detectChanges();
+        await fixture.whenStable();
+
+        expect(mockEventService.getEventCount).toHaveBeenCalledWith(mockUser);
+        expect(component.dashboardActionPrompts.some(prompt => prompt.id === 'firstActivityUpload')).toBe(true);
+    });
+
+    it('does not show first activity upload prompt when the user already has activities', async () => {
+        mockUser.stripeRole = 'free';
+        mockEventService.getEventCount.mockResolvedValue(3);
+
+        fixture.detectChanges();
+        await fixture.whenStable();
+
+        expect(component.dashboardActionPrompts.some(prompt => prompt.id === 'firstActivityUpload')).toBe(false);
+    });
+
+    it('does not show first activity upload prompt when dismissed', async () => {
+        mockUser.stripeRole = 'free';
+        mockUser.settings.appSettings = {
+            dashboardActionPrompts: {
+                firstActivityUpload: {
+                    state: 'dismissed',
+                    dismissedAt: 1,
+                },
+            },
+        } as any;
+        mockEventService.getEventCount.mockResolvedValue(0);
+
+        fixture.detectChanges();
+        await fixture.whenStable();
+
+        expect(component.dashboardActionPrompts.some(prompt => prompt.id === 'firstActivityUpload')).toBe(false);
+        expect(mockEventService.getEventCount).not.toHaveBeenCalled();
+    });
+
+    it('does not count activities for pro users when evaluating first activity upload prompt', async () => {
+        mockUser.stripeRole = 'pro';
+
+        fixture.detectChanges();
+        await fixture.whenStable();
+
+        expect(mockEventService.getEventCount).not.toHaveBeenCalled();
+        expect(component.dashboardActionPrompts.some(prompt => prompt.id === 'firstActivityUpload')).toBe(false);
+    });
+
+    it('dismisses first activity upload prompt and persists action prompt state', async () => {
+        mockUser.stripeRole = 'free';
+        mockUser.settings.appSettings = {};
+        component.user = mockUser;
+        (component as any).uploadedActivityCount = 0;
+        (component as any).syncDashboardActionPromptState();
+
+        await component.dismissFirstActivityUploadPrompt();
+
+        expect(mockUserService.updateUserProperties).toHaveBeenCalledWith(
+            mockUser,
+            {
+                settings: {
+                    appSettings: {
+                        dashboardActionPrompts: {
+                            firstActivityUpload: expect.objectContaining({
+                                state: 'dismissed',
+                                source: 'first-activity-upload',
+                            }),
+                        },
+                    },
+                },
+            },
+        );
+        expect(component.dashboardActionPrompts.some(prompt => prompt.id === 'firstActivityUpload')).toBe(false);
+    });
+
+    it('shows service connection prompt for pro owner dashboard with no connected activity service', async () => {
+        mockUser.stripeRole = 'pro';
+        mockUser.settings.appSettings = {};
+        mockUserService.watchHasAnyActivityServiceConnection.mockReturnValue(of(false));
+
+        fixture.detectChanges();
+        await fixture.whenStable();
+
+        expect(component.dashboardActionPrompts.some(prompt => prompt.id === 'connectActivityService')).toBe(true);
+    });
+
+    it('does not show service connection prompt when an activity service is connected', async () => {
+        mockUser.stripeRole = 'pro';
+        mockUser.settings.appSettings = {};
+        mockUserService.watchHasAnyActivityServiceConnection.mockReturnValue(of(true));
+
+        fixture.detectChanges();
+        await fixture.whenStable();
+
+        expect(component.dashboardActionPrompts.some(prompt => prompt.id === 'connectActivityService')).toBe(false);
+    });
+
+    it('does not show service connection prompt when dismissed', async () => {
+        mockUser.stripeRole = 'pro';
+        mockUser.settings.appSettings = {
+            dashboardActionPrompts: {
+                connectActivityService: {
+                    state: 'dismissed',
+                    dismissedAt: 1,
+                },
+            },
+        } as any;
+
+        fixture.detectChanges();
+        await fixture.whenStable();
+
+        expect(component.dashboardActionPrompts.some(prompt => prompt.id === 'connectActivityService')).toBe(false);
+        expect(mockUserService.watchHasAnyActivityServiceConnection).not.toHaveBeenCalled();
+    });
+
+    it('does not show service connection prompt on another user dashboard', async () => {
+        mockUser.stripeRole = 'pro';
+        mockActivatedRoute.snapshot.data.dashboardData.user = mockUser;
+        mockActivatedRoute.snapshot.data.dashboardData.targetUser = { uid: 'other-user' };
+
+        fixture.detectChanges();
+        await fixture.whenStable();
+
+        expect(component.dashboardActionPrompts.some(prompt => prompt.id === 'connectActivityService')).toBe(false);
+        expect(mockUserService.watchHasAnyActivityServiceConnection).not.toHaveBeenCalled();
     });
 
     it('applies the miles unit setup preset and completes setup', async () => {
@@ -210,6 +410,96 @@ describe('DashboardComponent', () => {
         );
         expect(mockUserService.updateUserProperties.mock.calls[0][1].settings.unitSettings).toBeUndefined();
         expect(component.showUnitSetupPrompt).toBe(false);
+    });
+
+    it('navigates to settings units from the unit prompt menu action', async () => {
+        component.onDashboardActionPromptMenuAction({
+            promptId: 'unitSetup',
+            action: {
+                id: 'openUnitSettings',
+                label: 'Advanced settings',
+            },
+        });
+
+        await fixture.whenStable();
+
+        expect(mockRouter.navigate).toHaveBeenCalledWith(['/settings'], {
+            queryParams: { section: 'units' },
+        });
+    });
+
+    it('navigates to the selected services provider from the service prompt menu action', async () => {
+        component.onDashboardActionPromptMenuAction({
+            promptId: 'connectActivityService',
+            action: {
+                id: 'connectServiceProvider',
+                label: 'Garmin',
+                value: ServiceNames.GarminAPI,
+            },
+        });
+
+        await fixture.whenStable();
+
+        expect(mockRouter.navigate).toHaveBeenCalledWith(['/services'], {
+            queryParams: { serviceName: ServiceNames.GarminAPI },
+        });
+    });
+
+    it('navigates to subscriptions from the first activity upgrade action', async () => {
+        component.onDashboardActionPromptPrimary({
+            promptId: 'firstActivityUpload',
+            action: {
+                id: 'upgradeToPro',
+                label: 'Upgrade to Pro',
+            },
+        });
+
+        await fixture.whenStable();
+
+        expect(mockRouter.navigate).toHaveBeenCalledWith(['/subscriptions']);
+    });
+
+    it('hides first activity upload prompt after a successful upload completes', async () => {
+        mockUser.stripeRole = 'free';
+        component.user = mockUser;
+        (component as any).uploadedActivityCount = 0;
+        (component as any).syncDashboardActionPromptState();
+
+        expect(component.dashboardActionPrompts.some(prompt => prompt.id === 'firstActivityUpload')).toBe(true);
+
+        component.onDashboardActionPromptControlChange({
+            promptId: 'firstActivityUpload',
+            value: 'activityUploaded',
+        });
+
+        expect(component.dashboardActionPrompts.some(prompt => prompt.id === 'firstActivityUpload')).toBe(false);
+    });
+
+    it('dismisses service connection prompt and persists action prompt state', async () => {
+        mockUser.stripeRole = 'pro';
+        mockUser.settings.appSettings = {};
+        component.user = mockUser;
+        (component as any).hasActivityServiceConnection = false;
+        (component as any).syncDashboardActionPromptState();
+
+        await component.dismissConnectActivityServicePrompt();
+
+        expect(mockUserService.updateUserProperties).toHaveBeenCalledWith(
+            mockUser,
+            {
+                settings: {
+                    appSettings: {
+                        dashboardActionPrompts: {
+                            connectActivityService: expect.objectContaining({
+                                state: 'dismissed',
+                                source: 'activity-service-connection',
+                            }),
+                        },
+                    },
+                },
+            },
+        );
+        expect(component.dashboardActionPrompts.some(prompt => prompt.id === 'connectActivityService')).toBe(false);
     });
 
     it('should attach initial live query when resolver already returned user data', async () => {
@@ -493,7 +783,51 @@ describe('DashboardComponent', () => {
         expect(component.user.settings.dashboardSettings.startDate).toBe(previousStartDate.getTime());
         expect(component.user.settings.dashboardSettings.endDate).toBe(previousEndDate.getTime());
         expect(component.user.settings.dashboardSettings.activityTypes).toEqual(previousActivityTypes);
-        expect(mockSnackBar.open).toHaveBeenCalledWith('Could not update dashboard filters');
+        expect(mockSnackBar.open).toHaveBeenCalledWith('Could not update event table filters');
+    });
+
+    it('should persist event search changes only to event table filters', async () => {
+        const userForSearch = {
+            ...mockUser,
+            settings: {
+                ...mockUser.settings,
+                dashboardSettings: {
+                    ...mockUser.settings.dashboardSettings,
+                    includeMergedEvents: true,
+                    dateRange: DateRanges.all,
+                    startDate: null,
+                    endDate: null,
+                    activityTypes: []
+                }
+            }
+        } as any;
+        const startDate = new Date('2025-02-01T00:00:00.000Z');
+        const endDate = new Date('2025-02-10T23:59:59.000Z');
+        component.user = userForSearch;
+
+        await component.search({
+            searchTerm: 'tempo',
+            startDate,
+            endDate,
+            dateRange: DateRanges.lastThirtyDays,
+            activityTypes: ['cycling'] as any,
+            includeMergedEvents: false
+        });
+
+        expect(component.user.settings.dashboardSettings.eventTableFilters).toEqual({
+            searchTerm: 'tempo',
+            includeMergedEvents: false,
+            dateRange: DateRanges.lastThirtyDays,
+            startDate: startDate.getTime(),
+            endDate: endDate.getTime(),
+            activityTypes: ['cycling']
+        });
+        expect(component.user.settings.dashboardSettings.includeMergedEvents).toBe(true);
+        expect(component.user.settings.dashboardSettings.dateRange).toBe(DateRanges.all);
+        expect(component.user.settings.dashboardSettings.startDate).toBeNull();
+        expect(component.user.settings.dashboardSettings.endDate).toBeNull();
+        expect(component.user.settings.dashboardSettings.activityTypes).toEqual([]);
+        expect(mockUserService.updateUserProperties).toHaveBeenCalledWith(component.user, { settings: component.user.settings });
     });
 
     it('should re-run manual search when submitting identical filters twice', async () => {
@@ -544,5 +878,66 @@ describe('DashboardComponent', () => {
 
         expect(component.isLoading).toBe(false);
         expect(mockEventService.getEventsBy.mock.calls.length).toBeGreaterThan(callsAfterFirstSearch);
+    });
+
+    it('should default bounded event table ranges to Monday when unit start of week is missing', () => {
+        vi.useFakeTimers();
+        vi.setSystemTime(new Date('2026-04-30T12:00:00.000Z'));
+
+        (component as any).applyEventTableFilterDates({
+            searchTerm: null,
+            dateRange: DateRanges.thisWeek,
+            startDate: null,
+            endDate: null,
+            activityTypes: [],
+            includeMergedEvents: true,
+        }, {
+            settings: {
+                unitSettings: {},
+                dashboardSettings: {},
+            },
+        });
+
+        expect(component.searchStartDate).toEqual(new Date('2026-04-27T00:00:00.000'));
+        expect(component.searchEndDate).toEqual(new Date('2026-05-03T23:59:59.999'));
+    });
+
+    it('returns a stable event table filter object for equivalent dashboard settings', () => {
+        mockUser.settings.dashboardSettings.eventTableFilters = {
+            searchTerm: null,
+            dateRange: DateRanges.thisWeek,
+            startDate: null,
+            endDate: null,
+            activityTypes: [],
+            includeMergedEvents: true,
+        };
+        component.user = mockUser;
+
+        const firstFilters = component.eventTableFilters;
+        const secondFilters = component.eventTableFilters;
+
+        expect(secondFilters).toBe(firstFilters);
+    });
+
+    it('refreshes the stable event table filter object when dashboard settings change', () => {
+        mockUser.settings.dashboardSettings.eventTableFilters = {
+            searchTerm: null,
+            dateRange: DateRanges.thisWeek,
+            startDate: null,
+            endDate: null,
+            activityTypes: [],
+            includeMergedEvents: true,
+        };
+        component.user = mockUser;
+
+        const firstFilters = component.eventTableFilters;
+        mockUser.settings.dashboardSettings.eventTableFilters = {
+            ...mockUser.settings.dashboardSettings.eventTableFilters,
+            activityTypes: [ActivityTypes.Running],
+        };
+        const secondFilters = component.eventTableFilters;
+
+        expect(secondFilters).not.toBe(firstFilters);
+        expect(secondFilters.activityTypes).toEqual([ActivityTypes.Running]);
     });
 });

@@ -102,24 +102,32 @@ export const HELP_SECTIONS: HelpSection[] = [
 - Dashboard manager supports two workflows: **Manual** and **Presets**.
 - You can choose between **Curated**, **KPI**, **Custom**, and **Map** categories.
 - **Presets** provide quick-start tile templates and can be applied in both **Add** and **Edit** modes.
-- **Curated Recovery** remains a fixed insight and does not react to dashboard date-range changes.
-- **Curated Form/TSS** computes from full history and does not react to dashboard date-range changes.
+- **Curated Recovery** remains a fixed insight and does not react to event table or custom tile date ranges.
+- **Curated Form/TSS** computes from full history and does not react to event table or custom tile date ranges.
 - New curated charts: **Freshness Forecast**, **Intensity Distribution**, and **Efficiency Trend**.
-- KPI cards are derived-only compact tiles: **ACWR**, **Ramp Rate**, **Monotony / Strain**, **Form Now**, **Form +7d**, **Easy %**, **Hard %**, and **Efficiency Δ (4w)**.
-- KPI cards are shown in a dedicated compact **KPI lane** above the main dashboard grid.
-- On mobile, KPI cards use a horizontal scroll lane while the chart/map grid stays unchanged below.
+- KPI rows are derived-only compact tiles: **ACWR**, **Ramp Rate**, **Monotony / Strain**, **Form Now**, **Fitness (CTL)**, **Fatigue (ATL)**, **Form +7d**, **Easy %**, **Hard %**, and **Efficiency Δ (4w)**.
+- KPI rows are shown in the compact **Today** section above the main dashboard grid.
+- On mobile, Today rows stay compact while the chart/map grid stays unchanged below.
 - KPI choices in Dashboard manager are grouped as **Load**, **Readiness**, and **Execution** for both manual and preset flows.
 - Curated and KPI tiles include an **info** icon beside the title with formulas and interpretation guidance.
 - On supported mobile devices, dashboard buttons and chart interactions provide lightweight haptic feedback.
 - Haptics automatically fall back to no-op when vibration support is unavailable or reduced-motion is enabled.
-- **Custom** charts keep the existing configurable behavior and react to dashboard filters/date range.
-- New users can choose a kilometers or miles preset from the dashboard unit prompt; choose **Advanced settings** there, or open **Settings -> Units**, to fine-tune individual unit preferences later.
+- Event search filters only the dashboard event table.
+- **Custom** charts use their own tile date-range and activity filters, with matching controls in Dashboard manager.
+- Dashboard **Action prompts** are contextual setup cards shown above your dashboard when an account action needs attention.
+- New users can choose a kilometers or miles preset from the dashboard **Default units** action prompt; choose **Advanced settings** there, or open **Settings -> Units**, to fine-tune individual unit preferences later.
+- Users without Pro access and no uploaded activities may see an **Upload your first activities** action prompt with options to upload FIT, GPX, TCX, JSON, or SML files, or upgrade to Pro for automatic activity sync. Dismissing it hides the prompt; manual uploads remain available from the header and upload tools.
+- Pro users without a connected activity service may see a one-time **Connect a service** action prompt; dismissing it hides the prompt permanently, and services can still be connected later from **Services**.
 - Distance values in dashboards, event charts, activity chips, and CSV exports follow your kilometers or miles preference from **Settings -> Units**; jump distances display in feet when miles are selected.
-- **Map** keeps the existing map behavior and reacts to dashboard filters/date range.
+- **Map** tiles use their own tile date-range and activity filters, independent from the event table search.
+- Curated, KPI, form, recovery, sleep, and other derived tiles stay independent from event table filters and custom/map tile filters.
+- When sleep sync imports sleep sessions, the dashboard can add the **Sleep** tile once; removing it prevents future automatic Sleep tile adds.
+- Existing dashboards can receive the default curated chart set and KPI row set automatically once; removing an auto-added curated chart or KPI prevents that chart from being suggested again.
 - Derived curated and KPI chart types are unique: only one tile per special derived chart type can exist at a time.
 - Map tiles are also unique: only one map tile can exist at a time.
 - Map style and cluster-marker settings are edited inside Dashboard manager.
-- Default manager sizes: KPI tiles start at **1x1** and curated derived charts start at **2x1**.
+- Default manager sizes: dashboard tiles start at **1x1**.
+- Dashboard manager bulk actions can add every missing preset at once, or remove every dashboard chart/map tile and keep automatic suggestions dismissed.
 
 ### Reorder dashboard tiles
 
@@ -130,7 +138,7 @@ export const HELP_SECTIONS: HelpSection[] = [
 
 ### Recovery tile summary
 
-- The curated **Recovery** pie tile is optional and not added automatically.
+- The curated **Recovery** pie tile is optional; existing dashboards can receive it once through the default curated auto-add, and removing it prevents future automatic adds.
 - The tile shows live recovery split between **Left now** and **Elapsed**.
 - The summary shows **Recovery Left Now**, plus **Active total** and **Latest workout** recovery context.
 - Active totals only include currently active recovery windows, not all historical recovery values.
@@ -169,6 +177,8 @@ export const HELP_SECTIONS: HelpSection[] = [
 - **Ramp Rate** uses CTL(today) - CTL(today-7d) with an 8-week sparkline.
 - **Monotony / Strain** uses 7-day load mean/stddev for monotony, and load * monotony for strain.
 - **Form Now** uses same-day TSB readiness from the latest derived load state.
+- **Fitness (CTL)** uses the derived Form model's current 42-day chronic training load.
+- **Fatigue (ATL)** uses the derived Form model's current 7-day acute training load.
 - **Form +7d** projects same-day TSB at day +7 assuming zero load.
 - **Easy %** and **Hard %** use the latest weekly intensity distribution bucket.
 - **Efficiency Δ (4w)** shows current efficiency versus the prior 4-week baseline as absolute + percent delta.
@@ -176,6 +186,7 @@ export const HELP_SECTIONS: HelpSection[] = [
 - **Intensity Distribution** uses power zones when available, otherwise heart-rate zones, grouped to Easy/Moderate/Hard by week.
 - Intensity Distribution headline percentages are labeled as **Current week**; when no current-week bucket exists they are labeled **Latest week**.
 - **Efficiency Trend** uses weekly duration-weighted average of avgPower/avgHeartRate.
+- Intensity Distribution and Efficiency Trend include compact **8w / 12w / 6m / 1y / All** range selectors that only change the visible derived weekly history.
 - Training-derived tiles do not fall back to currently loaded dashboard events.
 
 ### Merge events
@@ -203,7 +214,8 @@ export const HELP_SECTIONS: HelpSection[] = [
 ### Event chart x-axis fallback
 
 - In Event details, if selected indoor activities do not include distance data, the chart automatically falls back to a **Duration** x-axis.
-- In that case, the **Distance** x-axis option stays visible but is disabled until a compatible activity selection is active.`,
+- In that case, the **Distance** x-axis option stays visible but is disabled until a compatible activity selection is active.
+- When provider heart-rate or power zone boundaries are available on non-merged events, the **Heart Rate** and **Power** charts color their lines and visible fill by zone.`,
     links: [
       { label: 'Login', icon: 'login', kind: 'route', target: '/login' },
       { label: 'Dashboard', icon: 'space_dashboard', kind: 'route', target: '/dashboard' },
@@ -431,7 +443,7 @@ Garmin, Suunto, and COROS connections are part of **Pro**.
 
 ## Sleep data
 
-Sleep sync is server-owned health data. When available, Garmin, Suunto, and COROS sleep sessions are imported as separate source records and shown by the dashboard **Sleep** tile. V1 does not provide a user-facing historical sleep backfill tool.
+Sleep sync is server-owned health data. When available, Garmin, Suunto, and COROS sleep sessions are imported as separate source records and shown by the dashboard **Sleep** tile. The sleep chart has its own 14d, 30d, 90d, and 1y range control with older/newer paging, independent from dashboard event filters. It stacks sleep stages and overlays recorded sleep HRV with an average HRV reference line when the provider includes it. Suunto Pro users can queue **Backfill Sleep History** from History Import; it requests Suunto sleep from Jan 1, 2016 to today and uses a 7-day sleep backfill cooldown.
 
 ## Suunto
 
@@ -439,6 +451,7 @@ Suunto tools currently include:
 
 - connecting your account,
 - syncing recent sleep samples,
+- backfilling sleep history from Jan 1, 2016,
 - importing history,
 - uploading FIT activities to Suunto,
 - uploading GPX routes to Suunto.

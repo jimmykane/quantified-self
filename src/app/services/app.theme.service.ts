@@ -1,4 +1,5 @@
 import { Injectable, OnDestroy, Signal } from '@angular/core';
+import { OverlayContainer } from '@angular/cdk/overlay';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { AppThemes, User } from '@sports-alliance/sports-lib';
 import { BehaviorSubject, Observable, Subscription } from 'rxjs';
@@ -46,6 +47,7 @@ export class AppThemeService implements OnDestroy {
   constructor(
     private userService: AppUserService,
     private authService: AppAuthService,
+    private overlayContainer: OverlayContainer,
   ) {
     this.mediaQueryList = window.matchMedia(this.MEDIA_QUERY);
     this.systemThemeListener = this.handleSystemThemeChange.bind(this);
@@ -116,12 +118,12 @@ export class AppThemeService implements OnDestroy {
   }
 
   private applyThemeState(appTheme: AppThemes, applyToBody: boolean = true) {
-    if (this.appThemeSubject.getValue() === appTheme) {
-      return;
-    }
-
     if (applyToBody) {
       this.applyBodyTheme(appTheme);
+    }
+
+    if (this.appThemeSubject.getValue() === appTheme) {
+      return;
     }
 
     this.appThemeSubject.next(appTheme);
@@ -170,12 +172,16 @@ export class AppThemeService implements OnDestroy {
   }
 
   public applyBodyTheme(appTheme: AppThemes) {
+    const overlayContainerElement = this.overlayContainer.getContainerElement();
+
     if (appTheme === AppThemes.Normal) {
       document.body.classList.remove('dark-theme');
+      overlayContainerElement.classList.remove('dark-theme');
       return;
     }
 
     document.body.classList.add('dark-theme');
+    overlayContainerElement.classList.add('dark-theme');
   }
 
   /**

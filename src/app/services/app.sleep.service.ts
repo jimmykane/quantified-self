@@ -3,6 +3,8 @@ import {
   Firestore,
   collection,
   collectionData,
+  doc,
+  docData,
   limit,
   orderBy,
   query,
@@ -11,8 +13,11 @@ import {
 import { Observable, of } from 'rxjs';
 import { map } from 'rxjs/operators';
 import {
+  SleepProvider,
   SleepSession,
+  SleepSyncState,
   SLEEP_SESSIONS_COLLECTION_ID,
+  SLEEP_SYNC_STATE_COLLECTION_ID,
 } from '@shared/sleep';
 
 @Injectable({
@@ -25,6 +30,19 @@ export class AppSleepService {
 
   private firestore = inject(Firestore);
 
+  watchHasAnySleepSession(userID: string | null | undefined): Observable<boolean> {
+    const uid = `${userID || ''}`.trim();
+    if (!uid) {
+      return of(false);
+    }
+
+    const sleepCollection = collection(this.firestore, 'users', uid, SLEEP_SESSIONS_COLLECTION_ID);
+    const sleepQuery = query(sleepCollection, limit(1));
+    return (collectionData(sleepQuery) as Observable<SleepSession[]>).pipe(
+      map((sessions) => (sessions || []).length > 0),
+    );
+  }
+
   watchForDashboard(
     userID: string | null | undefined,
     startDate: Date | number | null | undefined,
@@ -35,22 +53,39 @@ export class AppSleepService {
       return of([]);
     }
 
-    const endTimeMs = this.toMs(endDate) || Date.now();
-    const startTimeMs = this.toMs(startDate) || (endTimeMs - AppSleepService.FALLBACK_LOOKBACK_MS);
+    const requestedStartTimeMs = this.toMs(startDate);
+    const endTimeMs = this.toMs(endDate) ?? Date.now();
+    const startTimeMs = requestedStartTimeMs ?? (endTimeMs - AppSleepService.FALLBACK_LOOKBACK_MS);
     const queryStartMs = Math.max(0, startTimeMs - AppSleepService.OVERNIGHT_LOOKBACK_MS);
+    const isFallbackWindow = requestedStartTimeMs === null;
     const sleepCollection = collection(this.firestore, 'users', uid, SLEEP_SESSIONS_COLLECTION_ID);
     const sleepQuery = query(
       sleepCollection,
       where('startTimeMs', '>=', queryStartMs),
       where('startTimeMs', '<=', endTimeMs),
       orderBy('startTimeMs', 'desc'),
-      limit(AppSleepService.FALLBACK_LIMIT),
+      ...(isFallbackWindow ? [limit(AppSleepService.FALLBACK_LIMIT)] : []),
     );
 
     return (collectionData(sleepQuery, { idField: 'id' }) as Observable<SleepSession[]>).pipe(
       map((sessions) => sessions
         .filter((session) => this.overlapsDashboardRange(session, startTimeMs, endTimeMs))
         .sort((left, right) => left.startTimeMs - right.startTimeMs)),
+    );
+  }
+
+  watchSyncState(
+    userID: string | null | undefined,
+    provider: SleepProvider,
+  ): Observable<SleepSyncState | null> {
+    const uid = `${userID || ''}`.trim();
+    if (!uid) {
+      return of(null);
+    }
+
+    const stateDoc = doc(this.firestore, 'users', uid, SLEEP_SYNC_STATE_COLLECTION_ID, provider);
+    return (docData(stateDoc) as Observable<SleepSyncState | undefined>).pipe(
+      map((state) => state || null),
     );
   }
 

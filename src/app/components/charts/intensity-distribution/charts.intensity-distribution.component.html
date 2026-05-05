@@ -1,15 +1,17 @@
 <app-loading-overlay [isLoading]="isLoading" [hasError]="showNoDataError" [allowErrorPassthrough]="true" [errorMessage]="noDataErrorMessage"
   [errorHint]="noDataErrorHint" [errorIcon]="noDataErrorIcon" [showSkeleton]="false" height="100%" [style.height.%]="100">
   <section class="intensity-layout">
-    <header class="intensity-header">
+    <header class="intensity-header" [class.intensity-header-reserve-actions]="reserveTitleActionSpace">
       <div class="title-row">
-        <div class="intensity-title">Intensity Distribution</div>
-        @if (infoTooltip) {
-        <button mat-icon-button class="title-info-button" appHapticTap appTooltipTap [matTooltip]="infoTooltip" matTooltipPosition="below"
-          aria-label="How this chart is calculated">
-          <mat-icon>info</mat-icon>
-        </button>
-        }
+        <div class="intensity-title-group">
+          <div class="intensity-title qs-dashboard-chart-title">Intensity Distribution</div>
+          @if (infoTooltip) {
+          <button mat-icon-button class="title-info-button" appHapticTap appTooltipTap [matTooltip]="infoTooltip" matTooltipPosition="below"
+            aria-label="How this chart is calculated">
+            <mat-icon>info</mat-icon>
+          </button>
+          }
+        </div>
       </div>
       <div class="intensity-stats">
         <div class="intensity-stat">

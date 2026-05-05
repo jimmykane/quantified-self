@@ -1,5 +1,6 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { NO_ERRORS_SCHEMA, SimpleChange } from '@angular/core';
+import { Component, Input, NO_ERRORS_SCHEMA, SimpleChange } from '@angular/core';
+import { By } from '@angular/platform-browser';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MatTooltip } from '@angular/material/tooltip';
 import { ChartsKpiComponent } from './charts.kpi.component';
@@ -10,12 +11,30 @@ import {
   DASHBOARD_ACWR_KPI_CHART_TYPE,
   DASHBOARD_EASY_PERCENT_KPI_CHART_TYPE,
   DASHBOARD_EFFICIENCY_DELTA_4W_KPI_CHART_TYPE,
+  DASHBOARD_FATIGUE_ATL_KPI_CHART_TYPE,
+  DASHBOARD_FITNESS_CTL_KPI_CHART_TYPE,
   DASHBOARD_FORM_NOW_KPI_CHART_TYPE,
   DASHBOARD_FORM_PLUS_7D_KPI_CHART_TYPE,
   DASHBOARD_HARD_PERCENT_KPI_CHART_TYPE,
   DASHBOARD_MONOTONY_STRAIN_KPI_CHART_TYPE,
   DASHBOARD_RAMP_RATE_KPI_CHART_TYPE,
 } from '../../../helpers/dashboard-special-chart-types';
+
+@Component({
+  selector: 'app-loading-overlay',
+  template: '<ng-content></ng-content>',
+  standalone: false,
+})
+class MockLoadingOverlayComponent {
+  @Input() isLoading = false;
+  @Input() hasError = false;
+  @Input() allowErrorPassthrough = false;
+  @Input() errorMessage = '';
+  @Input() errorHint = '';
+  @Input() errorIcon = '';
+  @Input() showSkeleton = true;
+  @Input() height = '';
+}
 
 describe('ChartsKpiComponent', () => {
   let fixture: ComponentFixture<ChartsKpiComponent>;
@@ -57,7 +76,7 @@ describe('ChartsKpiComponent', () => {
     hapticsMock = { selection: vi.fn() };
 
     await TestBed.configureTestingModule({
-      declarations: [ChartsKpiComponent],
+      declarations: [ChartsKpiComponent, MockLoadingOverlayComponent],
       providers: [
         { provide: AppHapticsService, useValue: hapticsMock },
         { provide: EChartsLoaderService, useValue: mockLoader },
@@ -81,6 +100,11 @@ describe('ChartsKpiComponent', () => {
     };
   });
 
+  const getLoadingOverlay = (): MockLoadingOverlayComponent => {
+    const debugElement = fixture.debugElement.query(By.directive(MockLoadingOverlayComponent));
+    return debugElement.componentInstance as MockLoadingOverlayComponent;
+  };
+
   afterEach(() => {
     if (originalResizeObserver) {
       globalThis.ResizeObserver = originalResizeObserver;
@@ -95,6 +119,8 @@ describe('ChartsKpiComponent', () => {
 
     expect(component.title).toBe('ACWR');
     expect(component.primaryValueText).toBe('1.11');
+    expect(component.secondaryLabel).toBe('Acute / Chronic');
+    expect(component.secondaryValueText).toBe('210 / 190');
   });
 
   it('switches presentation for ramp rate', async () => {
@@ -112,6 +138,8 @@ describe('ChartsKpiComponent', () => {
 
     expect(component.title).toBe('Ramp Rate');
     expect(component.primaryValueText).toBe('4');
+    expect(component.secondaryLabel).toBe('CTL today');
+    expect(component.secondaryValueText).toBe('65');
   });
 
   it('switches presentation for monotony/strain', async () => {
@@ -128,6 +156,8 @@ describe('ChartsKpiComponent', () => {
 
     expect(component.title).toBe('Monotony / Strain');
     expect(component.primaryValueText).toBe('612');
+    expect(component.secondaryLabel).toBe('Monotony');
+    expect(component.secondaryValueText).toBe('1.7');
   });
 
   it('uses compact title aliases when action space is reserved', async () => {
@@ -146,6 +176,42 @@ describe('ChartsKpiComponent', () => {
 
     expect(component.title).toBe('Monotony / Strain');
     expect(component.titleDisplay).toBe('M/S');
+  });
+
+  it('keeps full titles and applies row layout in compact row mode', async () => {
+    component.compactRow = true;
+    component.reserveTitleActionSpace = true;
+    component.chartType = DASHBOARD_MONOTONY_STRAIN_KPI_CHART_TYPE;
+    component.monotonyStrain = {
+      latestDayMs: Date.UTC(2026, 0, 1),
+      weeklyLoad7: 360,
+      monotony: 1.7,
+      strain: 612,
+      trend8Weeks: [{ time: Date.UTC(2025, 11, 1), value: 520 }],
+    };
+
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const nativeElement = fixture.nativeElement as HTMLElement;
+    expect(component.title).toBe('Monotony / Strain');
+    expect(component.titleDisplay).toBe('Monotony / Strain');
+    expect(nativeElement.querySelector('.kpi-layout-row')).not.toBeNull();
+    expect(nativeElement.querySelector('.kpi-layout-reserve-actions')).not.toBeNull();
+    expect(nativeElement.querySelector('.kpi-copy-block .kpi-title.qs-dashboard-chart-title')?.textContent?.trim()).toBe('Monotony / Strain');
+    expect(nativeElement.querySelector('.kpi-subtitle-row')?.textContent).toContain('Strain');
+    expect(nativeElement.querySelector('.kpi-value-block .kpi-value')?.textContent?.trim()).toBe('612');
+
+    await (component as any).refreshChart();
+    const latestSetOptionArgs = mockLoader.setOption.mock.calls.at(-1) || [];
+    const option = latestSetOptionArgs.find((arg) => (
+      !!arg
+      && typeof arg === 'object'
+      && 'tooltip' in (arg as Record<string, unknown>)
+    )) as Record<string, any> | undefined;
+    expect(option?.tooltip?.show).toBe(false);
+    expect(option?.series?.[0]?.silent).toBe(true);
   });
 
   it('updates compact title alias when action-space reservation toggles without data changes', async () => {
@@ -180,7 +246,49 @@ describe('ChartsKpiComponent', () => {
     await fixture.whenStable();
 
     expect(component.showNoDataError).toBe(true);
-    expect(component.noDataErrorMessage).toBe('KPI is updating');
+    expect(component.noDataErrorMessage).toBe('Updating KPI data');
+    expect(component.noDataErrorHint).toBe('Training metrics are being recalculated in the background.');
+  });
+
+  it('shows no-data through the shared loading overlay after compact KPI loading finishes', async () => {
+    component.compactRow = true;
+    component.chartType = DASHBOARD_ACWR_KPI_CHART_TYPE;
+    component.acwr = null;
+    component.acwrStatus = 'missing';
+    component.isLoading = false;
+
+    fixture.detectChanges();
+    await fixture.whenStable();
+    await (component as any).refreshChart();
+    fixture.detectChanges();
+
+    const nativeElement = fixture.nativeElement as HTMLElement;
+    const overlay = getLoadingOverlay();
+
+    expect(component.showNoDataError).toBe(true);
+    expect(overlay.isLoading).toBe(false);
+    expect(overlay.hasError).toBe(true);
+    expect(overlay.errorMessage).toBe('No KPI data yet');
+    expect(overlay.errorHint).toBe('Upload activities with training load to calculate this metric.');
+    expect(nativeElement.querySelector('.kpi-row-status')).toBeNull();
+  });
+
+  it('uses the shared loading overlay while compact KPI data is loading', async () => {
+    component.compactRow = true;
+    component.isLoading = true;
+    component.acwr = null;
+
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    const nativeElement = fixture.nativeElement as HTMLElement;
+    const overlay = getLoadingOverlay();
+
+    expect(component.showNoDataError).toBe(true);
+    expect(overlay.isLoading).toBe(true);
+    expect(overlay.hasError).toBe(false);
+    expect(overlay.showSkeleton).toBe(false);
+    expect(nativeElement.querySelector('.kpi-row-status')).toBeNull();
   });
 
   it('renders Form Now readiness KPI presentation', async () => {
@@ -195,6 +303,40 @@ describe('ChartsKpiComponent', () => {
     expect(component.title).toBe('Form Now');
     expect(component.primaryLabel).toBe('Same-day TSB');
     expect(component.primaryValueText).toBe('-2.4');
+  });
+
+  it('renders Fitness CTL KPI presentation', async () => {
+    component.chartType = DASHBOARD_FITNESS_CTL_KPI_CHART_TYPE;
+    component.fitnessCtl = {
+      latestDayMs: Date.UTC(2026, 0, 1),
+      value: 58.42,
+      trend8Weeks: [{ time: Date.UTC(2025, 11, 1), value: 52.8 }],
+    };
+
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(component.title).toBe('Fitness (CTL)');
+    expect(component.primaryLabel).toBe('CTL');
+    expect(component.secondaryLabel).toBe('42-day TSS load');
+    expect(component.primaryValueText).toBe('58.4');
+  });
+
+  it('renders Fatigue ATL KPI presentation', async () => {
+    component.chartType = DASHBOARD_FATIGUE_ATL_KPI_CHART_TYPE;
+    component.fatigueAtl = {
+      latestDayMs: Date.UTC(2026, 0, 1),
+      value: 71.37,
+      trend8Weeks: [{ time: Date.UTC(2025, 11, 1), value: 62.4 }],
+    };
+
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(component.title).toBe('Fatigue (ATL)');
+    expect(component.primaryLabel).toBe('ATL');
+    expect(component.secondaryLabel).toBe('7-day TSS load');
+    expect(component.primaryValueText).toBe('71.4');
   });
 
   it('renders Form +7d readiness KPI presentation', async () => {

@@ -1,7 +1,18 @@
 section{
   position: relative;
+  isolation: isolate;
+  --tile-header-controls-height: 48px;
   width: 100%;
   height: 100%;
+}
+
+.tile-has-header-controls {
+  --loading-overlay-top-offset: var(--tile-header-controls-height);
+}
+
+section > :not(.tile-header-controls) {
+  position: relative;
+  z-index: 1;
 }
 
 .actions{
@@ -12,6 +23,68 @@ section{
   display: flex;
   align-items: center;
   gap: 4px;
+}
+
+.tile-header-controls {
+  position: absolute;
+  right: 2px;
+  top: 8px;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  max-width: calc(100% - 16px);
+  min-width: 0;
+}
+
+.tile-header-controls .actions {
+  position: static;
+  right: auto;
+  top: auto;
+  z-index: auto;
+  flex: 0 0 auto;
+}
+
+.tile-header-controls .tile-event-filter-controls {
+  position: static;
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.tile-header-controls .tile-local-range-selector {
+  flex: 0 0 auto;
+}
+
+.tile-header-controls .tile-local-range-navigation {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex: 0 0 auto;
+  min-width: 0;
+}
+
+.tile-local-range-nav-button {
+  width: 30px;
+  min-width: 30px;
+  height: 30px;
+  min-height: 30px;
+  line-height: 30px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  --mdc-icon-button-state-layer-size: 30px;
+  --mat-icon-button-state-layer-size: 30px;
+  --mat-icon-button-touch-target-size: 30px;
+  --mat-icon-button-touch-target-display: none;
+}
+
+.tile-local-range-nav-button mat-icon {
+  width: 20px;
+  height: 20px;
+  line-height: 20px;
+  font-size: 20px;
 }
 
 .actions app-tile-chart-actions,

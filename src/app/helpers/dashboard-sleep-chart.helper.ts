@@ -64,6 +64,7 @@ function dateLabel(sleepDate: string): string {
     return sleepDate || 'Sleep';
   }
   return new Intl.DateTimeFormat(undefined, {
+    weekday: 'short',
     month: 'short',
     day: 'numeric',
   }).format(new Date(parsed));
@@ -97,7 +98,7 @@ function buildPoint(session: SleepSession): DashboardSleepTrendPoint | null {
     sleepDate: resolvedSleepDate,
     provider,
     providerLabel: label,
-    categoryLabel: `${dateLabel(resolvedSleepDate)}\n${label}`,
+    categoryLabel: dateLabel(resolvedSleepDate),
     startTimeMs,
     endTimeMs,
     totalSeconds,
@@ -113,6 +114,18 @@ function buildPoint(session: SleepSession): DashboardSleepTrendPoint | null {
   };
 }
 
+function resolveCategoryLabels(points: DashboardSleepTrendPoint[]): DashboardSleepTrendPoint[] {
+  const providerCount = new Set(points.map(point => point.provider)).size;
+  if (providerCount <= 1) {
+    return points;
+  }
+
+  return points.map(point => ({
+    ...point,
+    categoryLabel: `${dateLabel(point.sleepDate)}\n${point.providerLabel}`,
+  }));
+}
+
 function compareSleepRecency(left: DashboardSleepTrendPoint, right: DashboardSleepTrendPoint): number {
   if (left.endTimeMs !== right.endTimeMs) {
     return left.endTimeMs - right.endTimeMs;
@@ -121,7 +134,7 @@ function compareSleepRecency(left: DashboardSleepTrendPoint, right: DashboardSle
 }
 
 export function buildDashboardSleepTrendContext(sessions: readonly SleepSession[] | null | undefined): DashboardSleepTrendContext {
-  const points = [...(sessions || [])]
+  const points = resolveCategoryLabels([...(sessions || [])]
     .map(buildPoint)
     .filter((point): point is DashboardSleepTrendPoint => point !== null)
     .sort((left, right) => {
@@ -132,7 +145,7 @@ export function buildDashboardSleepTrendContext(sessions: readonly SleepSession[
         return left.providerLabel.localeCompare(right.providerLabel);
       }
       return left.startTimeMs - right.startTimeMs;
-    });
+    }));
   const latestPoint = points.reduce<DashboardSleepTrendPoint | null>((latest, point) => {
     if (!latest || compareSleepRecency(latest, point) < 0) {
       return point;

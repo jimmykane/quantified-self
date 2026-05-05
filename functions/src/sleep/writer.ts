@@ -126,6 +126,11 @@ export async function updateSleepSyncState(
         lastPollAtMs: number | null;
         nextPollFromMs: number | null;
         lastSyncedAtMs: number | null;
+        lastBackfillQueuedAtMs: number | null;
+        lastBackfillStartMs: number | null;
+        lastBackfillEndMs: number | null;
+        lastBackfillQueueItems: number | null;
+        nextBackfillAllowedAtMs: number | null;
         lastError: string | null;
     }>,
     nowMs = Date.now(),

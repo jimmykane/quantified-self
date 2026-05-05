@@ -11,6 +11,7 @@ import { RouterTestingModule } from '@angular/router/testing';
 import { FormsModule } from '@angular/forms';
 import { MatDatepickerModule } from '@angular/material/datepicker';
 import { MatNativeDateModule } from '@angular/material/core';
+import { MatChipsModule } from '@angular/material/chips';
 import { MatInputModule } from '@angular/material/input';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
@@ -32,6 +33,7 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { CUSTOM_ELEMENTS_SCHEMA } from '@angular/core';
 import { of } from 'rxjs';
 import { ACTIVITY_SYNC_ROUTE_IDS } from '@shared/activity-sync-routes';
+import { ServiceConnectionStatusComponent } from '../service-connection-status/service-connection-status.component';
 
 const ACTIVITY_SYNC_ALLOWLISTED_UID = 'xcsAolLDDTWTgtRN9eYF3lW2YKL2';
 
@@ -79,7 +81,7 @@ describe('ServicesGarminComponent', () => {
         };
 
         await TestBed.configureTestingModule({
-            declarations: [ServicesGarminComponent, ServiceSyncingStateComponent],
+            declarations: [ServicesGarminComponent, ServiceSyncingStateComponent, ServiceConnectionStatusComponent],
             imports: [
                 MatCardModule,
                 MatIconModule,
@@ -89,6 +91,7 @@ describe('ServicesGarminComponent', () => {
                 FormsModule,
                 MatDatepickerModule,
                 MatNativeDateModule,
+                MatChipsModule,
                 MatInputModule,
                 MatFormFieldModule,
                 MatSlideToggleModule,
@@ -126,35 +129,58 @@ describe('ServicesGarminComponent', () => {
         expect(component).toBeTruthy();
     });
 
-    describe('History Import Card', () => {
-        it('should be locked via PRO badge if user has no pro access', () => {
+    it('renders connection status outside the provider tool tabs', () => {
+        fixture.detectChanges();
+
+        const connectionStatus = fixture.nativeElement.querySelector('.service-connection-status');
+        const providerToolTabs = fixture.nativeElement.querySelector('.provider-tools-tabs');
+        const providerTabs = fixture.nativeElement.querySelectorAll('mat-tab');
+
+        expect(connectionStatus).toBeTruthy();
+        expect(connectionStatus.textContent).toContain('Garmin connection');
+        expect(providerToolTabs.hasAttribute('ng-reflect-dynamic-height')).toBe(false);
+        expect(providerTabs.length).toBe(1);
+        expect(fixture.nativeElement.querySelector('mat-tab .service-connection-status')).toBeFalsy();
+    });
+
+    it('renders disconnect beside the connected account details', () => {
+        component.hasProAccess = true;
+        component.serviceTokens = [{
+            accessToken: 'token',
+            userID: 'garmin-user',
+            permissions: [],
+            dateCreated: new Date('2026-05-03T10:00:00Z'),
+        } as any];
+        fixture.detectChanges();
+
+        const accountRow = fixture.nativeElement.querySelector('.connection-account-row');
+
+        expect(accountRow).toBeTruthy();
+        expect(accountRow.textContent).toContain('garmin-user');
+        expect(accountRow.querySelector('.connection-disconnect-button')?.textContent).toContain('Disconnect');
+        expect(fixture.nativeElement.querySelector('.service-connection-status__actions .connection-disconnect-button')).toBeFalsy();
+    });
+
+    describe('History Import Tab', () => {
+        it('should show Pro requirement if user has no pro access', () => {
             component.hasProAccess = false;
             component.isAdmin = false;
             fixture.detectChanges();
 
-            const card = fixture.nativeElement.querySelectorAll('.feature-card')[1]; // Second card is History Import
-            const lockOverlay = card.querySelector('.lock-overlay');
-            const badge = card.querySelector('.pro-badge');
+            const content = fixture.nativeElement.textContent;
 
-            expect(card.classList).toContain('locked');
-            expect(lockOverlay).toBeTruthy();
-            expect(badge.textContent.trim()).toBe('PRO');
-            expect(card.classList).not.toContain('coming-soon');
+            expect(content).toContain('History import is a Pro feature');
+            expect(fixture.nativeElement.querySelector('.pro-required-inline')).toBeTruthy();
         });
 
         it('should be unlocked/available if user has pro access AND is connected', () => {
             component.hasProAccess = true;
             component.isAdmin = false;
-            // Mock connected state
             component.serviceTokens = [{ accessToken: 'token', permissions: [] } as any];
             fixture.detectChanges();
 
-            const card = fixture.nativeElement.querySelectorAll('.feature-card')[1];
-            const lockOverlay = card.querySelector('.lock-overlay');
-            const historyForm = card.querySelector('app-history-import-form');
+            const historyForm = fixture.nativeElement.querySelector('app-history-import-form');
 
-            expect(card.classList).not.toContain('locked');
-            expect(lockOverlay).toBeFalsy();
             expect(historyForm).toBeTruthy();
         });
 
@@ -163,13 +189,11 @@ describe('ServicesGarminComponent', () => {
             component.serviceTokens = []; // Not connected
             fixture.detectChanges();
 
-            const card = fixture.nativeElement.querySelectorAll('.feature-card')[1];
-            const historyForm = card.querySelector('app-history-import-form');
-            // We look for the text content since we don't have a specific class on the new div
-            const cardContent = card.textContent;
+            const historyForm = fixture.nativeElement.querySelector('app-history-import-form');
+            const content = fixture.nativeElement.textContent;
 
             expect(historyForm).toBeFalsy();
-            expect(cardContent).toContain('Connect Account First');
+            expect(content).toContain('before importing history');
         });
     });
 

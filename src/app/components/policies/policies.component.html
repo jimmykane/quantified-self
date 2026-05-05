@@ -6,7 +6,7 @@
 <div class="policies-container">
   <div class="policies-grid">
 
-    <mat-card *ngFor="let policy of policies" class="policy-card mat-elevation-z2" [ngClass]="[policy.id]">
+    <mat-card appearance="outlined" *ngFor="let policy of policies" class="policy-card">
       <mat-card-header>
         <div mat-card-avatar class="policy-avatar">
           <mat-icon>{{policy.icon}}</mat-icon>
@@ -15,13 +15,7 @@
         <mat-card-subtitle>{{policy.subtitle}}</mat-card-subtitle>
       </mat-card-header>
       <mat-card-content>
-        <!-- Generic Loop for content items -->
         <ng-container *ngFor="let item of policy.content">
-          <!-- Check if item starts with tags that suggest it should be rendered as HTML directly, 
-                  or wrap in <p> or <li>. 
-                  My content array has some strings starting with <ul> (GDPR) and others just <strong> text.
-                  Let's use [innerHTML] for flexibility since source is trusted.
-             -->
           <div [innerHTML]="item" class="policy-content-item"></div>
         </ng-container>
 

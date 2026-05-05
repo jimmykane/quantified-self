@@ -4,8 +4,11 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { ServicesSuuntoComponent } from './services.suunto.component';
 import { ServiceSyncingStateComponent } from '../../shared/service-syncing-state/service-syncing-state.component';
 import { MatCardModule } from '@angular/material/card';
+import { MatChipsModule } from '@angular/material/chips';
+import { MatDividerModule } from '@angular/material/divider';
 import { MatIconModule } from '@angular/material/icon';
 import { HttpClientTestingModule } from '@angular/common/http/testing';
+import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { RouterTestingModule } from '@angular/router/testing';
@@ -19,6 +22,7 @@ import { LoggerService } from '../../../services/logger.service';
 import { CUSTOM_ELEMENTS_SCHEMA } from '@angular/core';
 import { of } from 'rxjs';
 import { ACTIVITY_SYNC_ROUTE_IDS } from '@shared/activity-sync-routes';
+import { ServiceConnectionStatusComponent } from '../service-connection-status/service-connection-status.component';
 
 describe('ServicesSuuntoComponent', () => {
     let component: ServicesSuuntoComponent;
@@ -47,11 +51,14 @@ describe('ServicesSuuntoComponent', () => {
         };
 
         await TestBed.configureTestingModule({
-            declarations: [ServicesSuuntoComponent, ServiceSyncingStateComponent],
+            declarations: [ServicesSuuntoComponent, ServiceSyncingStateComponent, ServiceConnectionStatusComponent],
             imports: [
                 MatCardModule,
+                MatChipsModule,
+                MatDividerModule,
                 MatIconModule,
                 HttpClientTestingModule,
+                MatProgressBarModule,
                 MatSnackBarModule,
                 RouterTestingModule
             ],
@@ -92,16 +99,45 @@ describe('ServicesSuuntoComponent', () => {
         expect(accountIcon).toBeFalsy();
     });
 
-    describe('History Import Card', () => {
+    it('renders connection status outside the provider tool tabs', () => {
+        fixture.detectChanges();
+
+        const connectionStatus = fixture.nativeElement.querySelector('.service-connection-status');
+        const providerToolTabs = fixture.nativeElement.querySelector('.provider-tools-tabs');
+        const providerTabs = fixture.nativeElement.querySelectorAll('mat-tab');
+
+        expect(connectionStatus).toBeTruthy();
+        expect(connectionStatus.textContent).toContain('Suunto App connection');
+        expect(providerToolTabs.hasAttribute('ng-reflect-dynamic-height')).toBe(false);
+        expect(providerTabs.length).toBe(2);
+        expect(fixture.nativeElement.querySelector('mat-tab .service-connection-status')).toBeFalsy();
+    });
+
+    it('renders disconnect beside the connected account details', () => {
+        component.hasProAccess = true;
+        component.serviceTokens = [{
+            accessToken: 'token',
+            userName: 'suunto-user',
+            dateCreated: new Date('2026-05-03T10:00:00Z'),
+        } as any];
+        fixture.detectChanges();
+
+        const accountRow = fixture.nativeElement.querySelector('.connection-account-row');
+
+        expect(accountRow).toBeTruthy();
+        expect(accountRow.textContent).toContain('suunto-user');
+        expect(accountRow.querySelector('.connection-disconnect-button')?.textContent).toContain('Disconnect');
+        expect(fixture.nativeElement.querySelector('.service-connection-status__actions .connection-disconnect-button')).toBeFalsy();
+    });
+
+    describe('History Import Tab', () => {
         it('should be unlocked/available if user has pro access AND is connected', () => {
             component.hasProAccess = true;
             component.isAdmin = false;
-            // Mock connected state
             component.serviceTokens = [{ accessToken: 'token' } as any];
             fixture.detectChanges();
 
-            const card = fixture.nativeElement.querySelectorAll('.feature-card')[1]; // History import is the second card
-            const historyForm = card.querySelector('app-history-import-form');
+            const historyForm = fixture.nativeElement.querySelector('app-history-import-form');
 
             expect(historyForm).toBeTruthy();
         });
@@ -111,29 +147,26 @@ describe('ServicesSuuntoComponent', () => {
             component.serviceTokens = []; // Not connected
             fixture.detectChanges();
 
-            const card = fixture.nativeElement.querySelectorAll('.feature-card')[1];
-            const historyForm = card.querySelector('app-history-import-form');
-            const cardContent = card.textContent;
+            const historyForm = fixture.nativeElement.querySelector('app-history-import-form');
+            const content = fixture.nativeElement.textContent;
 
             expect(historyForm).toBeFalsy();
-            expect(cardContent).toContain('Connect Account First');
+            expect(content).toContain('before importing history');
         });
     });
 
-    describe('Upload Cards', () => {
+    describe('Uploads Tab', () => {
         it('should hide upload actions and show connect-first messaging when pro user is not connected', () => {
             component.hasProAccess = true;
             component.serviceTokens = [];
             fixture.detectChanges();
 
-            const cards = fixture.nativeElement.querySelectorAll('.feature-card');
-            const fitUploadCard = cards[2];
-            const gpxUploadCard = cards[3];
+            const content = fixture.nativeElement.textContent;
 
-            expect(fitUploadCard.querySelector('app-upload-activity-to-service')).toBeFalsy();
-            expect(gpxUploadCard.querySelector('app-upload-route-to-service')).toBeFalsy();
-            expect(fitUploadCard.textContent).toContain('Connect Account First');
-            expect(gpxUploadCard.textContent).toContain('Connect Account First');
+            expect(fixture.nativeElement.querySelector('app-upload-activity-to-service')).toBeFalsy();
+            expect(fixture.nativeElement.querySelector('app-upload-route-to-service')).toBeFalsy();
+            expect(content).toContain('before uploading activities');
+            expect(content).toContain('before uploading routes');
         });
 
         it('should render upload actions when pro user is connected', () => {
@@ -141,12 +174,8 @@ describe('ServicesSuuntoComponent', () => {
             component.serviceTokens = [{ accessToken: 'token' } as any];
             fixture.detectChanges();
 
-            const cards = fixture.nativeElement.querySelectorAll('.feature-card');
-            const fitUploadCard = cards[2];
-            const gpxUploadCard = cards[3];
-
-            expect(fitUploadCard.querySelector('app-upload-activity-to-service')).toBeTruthy();
-            expect(gpxUploadCard.querySelector('app-upload-route-to-service')).toBeTruthy();
+            expect(fixture.nativeElement.querySelector('app-upload-activity-to-service')).toBeTruthy();
+            expect(fixture.nativeElement.querySelector('app-upload-route-to-service')).toBeTruthy();
         });
     });
 

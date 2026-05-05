@@ -1,5 +1,7 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { NO_ERRORS_SCHEMA } from '@angular/core';
+import { MatButtonModule } from '@angular/material/button';
+import { MatIconModule } from '@angular/material/icon';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ChartsIntensityDistributionComponent } from './charts.intensity-distribution.component';
 import { EChartsLoaderService } from '../../../services/echarts-loader.service';
@@ -44,6 +46,7 @@ describe('ChartsIntensityDistributionComponent', () => {
 
     await TestBed.configureTestingModule({
       declarations: [ChartsIntensityDistributionComponent],
+      imports: [MatButtonModule, MatIconModule],
       providers: [
         { provide: EChartsLoaderService, useValue: mockLoader },
         { provide: LoggerService, useValue: { error: vi.fn(), warn: vi.fn() } },
@@ -190,5 +193,34 @@ describe('ChartsIntensityDistributionComponent', () => {
     expect(typeof formatter).toBe('function');
     const label = formatter(Date.UTC(2026, 0, 5));
     expect(label).toContain('2026');
+  });
+
+  it('filters to the selected weekly window from the tile header range', async () => {
+    const baseWeekMs = Date.UTC(2025, 0, 6);
+    const weekMs = 7 * 24 * 60 * 60 * 1000;
+    component.distribution = {
+      latestWeekStartMs: baseWeekMs + (59 * weekMs),
+      latestEasyPercent: 50,
+      latestModeratePercent: 30,
+      latestHardPercent: 20,
+      weeks: Array.from({ length: 60 }, (_, index) => ({
+        weekStartMs: baseWeekMs + (index * weekMs),
+        easySeconds: 3600 + index,
+        moderateSeconds: 1800,
+        hardSeconds: 900,
+        source: 'power' as const,
+      })),
+    };
+
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(fixture.nativeElement.querySelector('.chart-range-selector-button')).toBeNull();
+    expect((component as any).getVisibleWeeks()).toHaveLength(52);
+
+    component.range = '8w';
+
+    expect(component.selectedRange).toBe('8w');
+    expect((component as any).getVisibleWeeks()).toHaveLength(8);
   });
 });

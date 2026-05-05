@@ -101,7 +101,7 @@ export async function dispatchQueueItemTasks(serviceName: ServiceNames) {
 
     await enqueueWorkoutTask(serviceName, doc.id, data.dateCreated, delay);
     // Mark as dispatched prevents re-queueing
-    return doc.ref.update({ dispatchedToCloudTask: Date.now() });
+    return markWorkoutQueueItemDispatched(doc.ref, doc.id, serviceName);
   });
 
   await Promise.all(promises);
@@ -153,7 +153,7 @@ export async function addToQueueForSuunto(queueItem: { userName: string, workout
     retryCount: 0,
     processed: false,
     dispatchedToCloudTask: null,
-  }, ServiceNames.SuuntoApp);
+  }, ServiceNames.SuuntoApp, false, true);
 }
 
 /**
@@ -442,16 +442,80 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
   return increaseRetryCountForQueueItem(queueItem, lastError, retryIncrement, bulkWriter);
 }
 
-async function addToWorkoutQueue(queueItem: SuuntoAppWorkoutQueueItemInterface | GarminAPIActivityQueueItemInterface | COROSAPIWorkoutQueueItemInterface, serviceName: ServiceNames, deferDispatch: boolean = false): Promise<admin.firestore.DocumentReference> {
+function isFirestoreAlreadyExistsError(error: unknown): boolean {
+  const code = (error as any)?.code;
+  const message = `${(error as any)?.message || ''}`;
+  return code === 6 || code === 'already-exists' || code === 'ALREADY_EXISTS' || message.includes('ALREADY_EXISTS');
+}
+
+function isFirestoreNotFoundError(error: unknown): boolean {
+  const code = (error as any)?.code;
+  const message = `${(error as any)?.message || ''}`;
+  return code === 5 || code === 'not-found' || code === 'NOT_FOUND' || message.includes('NOT_FOUND') || message.includes('No document to update');
+}
+
+async function markWorkoutQueueItemDispatched(
+  queueItemDocument: admin.firestore.DocumentReference,
+  queueItemId: string,
+  serviceName: ServiceNames,
+): Promise<void> {
+  try {
+    await queueItemDocument.update({ dispatchedToCloudTask: Date.now() });
+  } catch (error) {
+    if (!isFirestoreNotFoundError(error)) {
+      throw error;
+    }
+
+    const failedJobSnapshot = await admin.firestore().collection('failed_jobs').doc(queueItemId).get();
+    const failedJob = failedJobSnapshot.exists ? failedJobSnapshot.data() as { originalCollection?: unknown } : null;
+    const originalCollection = typeof failedJob?.originalCollection === 'string' ? failedJob.originalCollection : null;
+    const expectedCollection = getServiceWorkoutQueueName(serviceName);
+    if (originalCollection === expectedCollection) {
+      logger.info(`Queue item ${queueItemId} for ${serviceName} was already moved to failed_jobs before dispatch timestamp update.`);
+      return;
+    }
+
+    throw error;
+  }
+}
+
+async function addToWorkoutQueue(queueItem: SuuntoAppWorkoutQueueItemInterface | GarminAPIActivityQueueItemInterface | COROSAPIWorkoutQueueItemInterface, serviceName: ServiceNames, deferDispatch: boolean = false, createOnly: boolean = false): Promise<admin.firestore.DocumentReference> {
   const queueItemDocument = admin.firestore().collection(getServiceWorkoutQueueName(serviceName)).doc(queueItem.id);
-  await queueItemDocument.set(Object.assign(queueItem, {
+  const queuePayload = Object.assign(queueItem, {
     expireAt: getExpireAtTimestamp(TTL_CONFIG.QUEUE_ITEM_IN_DAYS),
-    dispatchedToCloudTask: deferDispatch ? null : Date.now(),
-  }));
+    dispatchedToCloudTask: null,
+  });
+
+  if (createOnly) {
+    try {
+      await queueItemDocument.create(queuePayload);
+    } catch (error) {
+      if (isFirestoreAlreadyExistsError(error)) {
+        const existingSnapshot = await queueItemDocument.get();
+        const existingQueueItem = existingSnapshot.data() as ({ dateCreated?: number, processed?: boolean } | undefined);
+        if (existingQueueItem?.processed === true) {
+          logger.info(`Queue item ${queueItem.id} already processed for ${serviceName}; skipping duplicate enqueue.`);
+          return queueItemDocument;
+        }
+
+        const dateCreated = typeof existingQueueItem?.dateCreated === 'number'
+          ? existingQueueItem.dateCreated
+          : queueItem.dateCreated;
+        logger.info(`Queue item ${queueItem.id} already exists for ${serviceName}; ensuring duplicate webhook is dispatched.`);
+        await enqueueWorkoutTask(serviceName, queueItem.id, dateCreated);
+        await markWorkoutQueueItemDispatched(queueItemDocument, queueItem.id, serviceName);
+        return queueItemDocument;
+      }
+      throw error;
+    }
+  } else {
+    await queueItemDocument.set(queuePayload);
+  }
 
   if (!deferDispatch) {
     // Dispatch a Cloud Task for immediate processing
     await enqueueWorkoutTask(serviceName, queueItem.id, queueItem.dateCreated);
+    await markWorkoutQueueItemDispatched(queueItemDocument, queueItem.id, serviceName);
   }
   return queueItemDocument;
 }

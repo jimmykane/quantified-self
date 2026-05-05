@@ -4,6 +4,11 @@ mat-icon {
   vertical-align: middle;
 }
 
+:host {
+  --qs-event-search-control-height: 46px;
+  --qs-event-search-toggle-height: 34px;
+}
+
 
 .big {
   width: auto;
@@ -134,6 +139,170 @@ mat-button-toggle:active {
   opacity: 0.7;
 }
 
+:host(.compact-filter-layout) {
+  box-sizing: border-box;
+  display: block;
+  max-width: 100%;
+  min-width: 0;
+  width: 100%;
+}
+
+:host(.compact-filter-layout) form {
+  gap: 8px;
+  height: auto;
+  min-height: 0;
+}
+
+:host(.compact-filter-layout) app-loading-overlay.search-overlay {
+  display: block;
+  height: auto;
+  min-height: 0;
+}
+
+/* Scoped layout exception: the loading overlay owns the actual projected-content container. */
+:host(.compact-filter-layout) ::ng-deep app-loading-overlay.search-overlay .loading-overlay-container {
+  align-content: flex-start;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 8px;
+  display: flex;
+  height: auto !important;
+  min-height: 0;
+}
+
+:host(.compact-filter-layout) .filters-row {
+  align-items: flex-start;
+  flex: 0 1 auto;
+  gap: 8px;
+  margin-bottom: 0;
+}
+
+:host(.compact-filter-layout) .filters-row .big {
+  min-width: 0;
+}
+
+:host(.compact-filter-layout) .date-range-field {
+  flex: 0 0 224px;
+  width: 224px;
+}
+
+:host(.compact-filter-layout) .activity-filter-field {
+  align-self: center;
+  flex: 0 0 auto;
+}
+
+:host(.compact-filter-layout) .date-range-field {
+  --mat-form-field-container-height: var(--qs-event-search-control-height);
+  --mat-form-field-container-vertical-padding: 10px;
+  --mat-form-field-container-text-size: 0.9rem;
+  --mat-form-field-outlined-label-text-size: 0.76rem;
+}
+
+:host(.compact-filter-layout) .button-groups {
+  align-content: flex-start;
+  flex: 1 1 420px;
+  min-height: var(--qs-event-search-control-height);
+  min-width: 0;
+  max-width: 100%;
+  justify-content: flex-start;
+  gap: 6px;
+}
+
+:host(.compact-filter-layout) mat-button-toggle-group {
+  flex: 0 1 auto;
+  max-width: 100%;
+  border-radius: 10px !important;
+  box-shadow: none;
+  gap: 2px;
+  padding: 2px !important;
+}
+
+:host(.compact-filter-layout) mat-button-toggle {
+  min-width: 0;
+}
+
+:host(.compact-filter-layout) mat-button-toggle.mat-button-toggle-checked,
+:host(.compact-filter-layout) mat-button-toggle:active {
+  transform: none !important;
+}
+
+:host(.compact-filter-layout) mat-icon {
+  font-size: 20px;
+}
+
+/* Scoped density exception: Material date-range/autocomplete internals do not fully honor public height tokens. */
+:host(.compact-filter-layout) ::ng-deep .filters-row .mat-mdc-form-field-infix {
+  min-height: var(--qs-event-search-control-height);
+  padding-top: 10px !important;
+  padding-bottom: 10px !important;
+}
+
+:host(.compact-filter-layout) ::ng-deep .filters-row .mat-mdc-icon-button {
+  width: 38px;
+  height: 38px;
+  padding: 7px;
+}
+
+:host(.compact-filter-layout) ::ng-deep .filters-row .mat-mdc-form-field-flex {
+  min-height: var(--qs-event-search-control-height);
+}
+
+:host(.compact-filter-layout) ::ng-deep .filters-row .mat-date-range-input-container,
+:host(.compact-filter-layout) ::ng-deep .filters-row input.mat-mdc-input-element {
+  font-size: 0.9rem;
+}
+
+:host(.compact-filter-layout) ::ng-deep .mat-button-toggle-label-content {
+  line-height: var(--qs-event-search-toggle-height) !important;
+  padding: 0 10px !important;
+  font-size: 0.8rem !important;
+}
+
+:host(.table-toolbar-layout) form {
+  gap: 0;
+  width: 100%;
+}
+
+:host(.table-toolbar-layout) ::ng-deep app-loading-overlay.search-overlay .loading-overlay-container {
+  align-content: center;
+  align-items: center;
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  min-width: 0;
+}
+
+:host(.table-toolbar-layout) .filters-row {
+  align-items: center;
+  flex: 0 0 auto;
+  gap: 6px;
+  min-width: 0;
+}
+
+:host(.table-toolbar-layout) .date-range-field {
+  flex: 0 0 216px;
+  width: 216px;
+}
+
+:host(.table-toolbar-layout) .button-groups {
+  align-content: center;
+  align-items: center;
+  flex: 1 1 420px;
+  justify-content: flex-start;
+  min-height: var(--qs-event-search-control-height);
+  min-width: 0;
+}
+
+:host(.table-toolbar-layout) .toolbar-range-group {
+  flex: 0 1 auto;
+  max-width: 100%;
+}
+
+:host(.table-toolbar-layout) .secondary-ranges-button {
+  flex: 0 0 auto;
+}
+
 /* Tablet: Reduce gap and padding to prevent overflow */
 @include bp.handset-or-tablet-portrait {
   .button-groups {
@@ -175,5 +344,85 @@ mat-button-toggle:active {
 
   .merge-toggle-group {
     width: 100%;
+  }
+
+  :host(.compact-filter-layout) ::ng-deep app-loading-overlay.search-overlay .loading-overlay-container {
+    align-items: stretch;
+    flex-direction: column;
+    flex-wrap: nowrap;
+  }
+
+  :host(.compact-filter-layout) .filters-row {
+    align-items: center;
+    flex-direction: row;
+    flex-wrap: nowrap;
+  }
+
+  :host(.compact-filter-layout) .date-range-field {
+    flex: 1 1 auto;
+    min-width: 0;
+    width: auto;
+  }
+
+  :host(.compact-filter-layout) .activity-filter-field {
+    align-self: center;
+    flex: 0 0 auto;
+  }
+
+  :host(.compact-filter-layout) .button-groups {
+    align-items: stretch;
+    flex: 0 0 auto;
+    gap: 6px;
+  }
+
+  :host(.compact-filter-layout) mat-button-toggle-group {
+    flex: 0 0 auto;
+    width: 100%;
+  }
+
+  :host(.table-toolbar-layout) ::ng-deep app-loading-overlay.search-overlay .loading-overlay-container {
+    align-items: center;
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+
+  :host(.table-toolbar-layout) .filters-row {
+    align-items: center;
+    flex-direction: row;
+    flex-wrap: nowrap;
+  }
+
+  :host(.table-toolbar-layout) .date-range-field {
+    flex: 1 1 auto;
+    width: auto;
+  }
+
+  :host(.table-toolbar-layout) .button-groups {
+    align-items: center;
+    flex-direction: row;
+    flex-wrap: wrap;
+    flex: 1 1 100%;
+    gap: 6px;
+    min-width: 0;
+    overflow-x: visible;
+    width: 100%;
+  }
+
+  :host(.table-toolbar-layout) mat-button-toggle-group {
+    flex: 0 0 auto;
+    width: auto;
+  }
+
+  :host(.table-toolbar-layout) .toolbar-range-group {
+    flex: 1 1 100%;
+    width: 100%;
+  }
+
+  :host(.table-toolbar-layout) .toolbar-range-group mat-button-toggle {
+    flex: 1 1 0;
+  }
+
+  :host(.table-toolbar-layout) .secondary-ranges-button {
+    flex: 0 0 auto;
   }
 }

@@ -7,7 +7,10 @@ import {
     ActivityTypes,
     UserAppSettingsInterface,
     UserDashboardSettingsInterface,
-    UserMapSettingsInterface
+    UserMapSettingsInterface,
+    DateRanges,
+    TileChartSettingsInterface,
+    TileMapSettingsInterface,
 } from '@sports-alliance/sports-lib';
 import { Timestamp } from 'app/firebase/firestore';
 import { StripeRole } from './stripe-role.model';
@@ -29,9 +32,95 @@ export interface AppMyTracksSettings extends UserMyTracksSettingsInterface {
     showJumpHeatmap?: boolean;
 }
 
+export type AppDashboardSleepTrendRange = '14d' | '30d' | '90d' | '1y';
+
+export interface AppDashboardSleepTrendSettingsInterface {
+    range?: AppDashboardSleepTrendRange;
+}
+
+export type AppDashboardAutoTileId =
+    | 'sleepTrend'
+    | 'curatedRecoveryNow'
+    | 'curatedForm'
+    | 'curatedFreshnessForecast'
+    | 'curatedIntensityDistribution'
+    | 'curatedEfficiencyTrend'
+    | 'kpiAcwr'
+    | 'kpiRampRate'
+    | 'kpiMonotonyStrain'
+    | 'kpiFormNow'
+    | 'kpiFitnessCtl'
+    | 'kpiFatigueAtl'
+    | 'kpiFormPlus7d'
+    | 'kpiEasyPercent'
+    | 'kpiHardPercent'
+    | 'kpiEfficiencyDelta4w';
+export type AppDashboardAutoTileStateValue = 'added' | 'dismissed';
+
+export interface AppDashboardAutoTileState {
+    state: AppDashboardAutoTileStateValue;
+    addedAt?: number;
+    dismissedAt?: number;
+    lastQualifiedAt?: number;
+    source?: string;
+}
+
+export type AppDashboardAutoTiles = Partial<Record<AppDashboardAutoTileId, AppDashboardAutoTileState>>
+    & Record<string, AppDashboardAutoTileState | undefined>;
+
+export type AppDashboardActionPromptId = 'unitSetup' | 'firstActivityUpload' | 'connectActivityService';
+export type AppDashboardActionPromptStateValue = 'dismissed';
+
+export interface AppDashboardActionPromptState {
+    state: AppDashboardActionPromptStateValue;
+    dismissedAt?: number;
+    source?: string;
+}
+
+export type AppDashboardActionPrompts = Partial<Record<AppDashboardActionPromptId, AppDashboardActionPromptState>>
+    & Record<string, AppDashboardActionPromptState | undefined>;
+
+export type AppDashboardTileEventFilterRange =
+    'thisWeek'
+    | 'thisMonth'
+    | '14d'
+    | '30d'
+    | '90d'
+    | '1y'
+    | '2y'
+    | '3y'
+    | '4y'
+    | 'all';
+
+export interface AppDashboardEventTableFiltersInterface {
+    searchTerm: string | null;
+    dateRange: DateRanges;
+    startDate: number | null;
+    endDate: number | null;
+    activityTypes: ActivityTypes[];
+    includeMergedEvents: boolean;
+}
+
+export interface AppDashboardTileEventFiltersInterface {
+    range?: AppDashboardTileEventFilterRange;
+    activityTypes?: ActivityTypes[];
+}
+
+export interface AppDashboardChartTileSettingsInterface extends TileChartSettingsInterface {
+    eventFilters?: AppDashboardTileEventFiltersInterface;
+}
+
+export interface AppDashboardMapTileSettingsInterface extends TileMapSettingsInterface {
+    mapStyle?: AppMapStyleName;
+    eventFilters?: AppDashboardTileEventFiltersInterface;
+}
+
 export interface AppDashboardSettingsInterface extends UserDashboardSettingsInterface {
     includeMergedEvents?: boolean;
     dismissedCuratedRecoveryNowTile?: boolean;
+    sleepTrend?: AppDashboardSleepTrendSettingsInterface;
+    autoTiles?: AppDashboardAutoTiles;
+    eventTableFilters?: AppDashboardEventTableFiltersInterface;
 }
 
 export interface AppChartSettingsInterface extends Omit<UserChartSettingsInterface, 'theme' | 'extraMaxForPower' | 'extraMaxForPace'> {
@@ -44,6 +133,7 @@ export interface AppAppSettingsInterface extends UserAppSettingsInterface {
     lastSeenChangelogDate?: AppDateValue;
     themePreference?: AppThemePreference;
     unitSetupCompleted?: boolean;
+    dashboardActionPrompts?: AppDashboardActionPrompts;
 }
 
 export interface ActivitySyncRouteSettingsInterface {

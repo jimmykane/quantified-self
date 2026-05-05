@@ -33,6 +33,23 @@ describe('ServiceSourceIconComponent', () => {
         expect(component).toBeTruthy();
     });
 
+    it('should render an explicit service source without an event lookup', () => {
+        component.sourceServiceName = ServiceNames.SuuntoApp;
+
+        component.ngOnChanges({
+            sourceServiceName: {
+                currentValue: ServiceNames.SuuntoApp,
+                previousValue: null,
+                firstChange: true,
+                isFirstChange: () => true
+            }
+        });
+
+        expect(eventService.getEventMetaDataKeys).not.toHaveBeenCalled();
+        expect(component.serviceName).toBe(ServiceNames.SuuntoApp);
+        expect(component.serviceLogo).toBe('suunto');
+    });
+
     it('should detect Garmin service source', () => {
         const user = { getID: () => 'user-1' } as any as User;
         const event = { getID: () => 'event-1' } as any as EventInterface;
@@ -111,5 +128,15 @@ describe('ServiceSourceIconComponent', () => {
 
         component.serviceName = ServiceNames.COROSAPI;
         expect(component.serviceDisplayName).toBe('COROS');
+    });
+
+    it('should expose a human-readable tooltip only when enabled', () => {
+        component.serviceName = ServiceNames.GarminAPI;
+
+        expect(component.serviceTooltip).toBe('Synced from Garmin');
+
+        component.showTooltip = false;
+
+        expect(component.serviceTooltip).toBe('');
     });
 });

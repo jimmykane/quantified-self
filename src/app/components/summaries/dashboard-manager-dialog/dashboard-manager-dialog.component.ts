@@ -1,10 +1,11 @@
-import { AfterViewInit, Component, ElementRef, Inject, OnInit, ViewChild } from '@angular/core';
-import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
+import { AfterViewInit, Component, ElementRef, Inject, OnDestroy, OnInit, ViewChild } from '@angular/core';
+import { MAT_DIALOG_DATA, MatDialog, MatDialogRef } from '@angular/material/dialog';
 import { MatSelect } from '@angular/material/select';
 import {
   ChartDataCategoryTypes,
   ChartDataValueTypes,
   ChartTypes,
+  ActivityTypes,
   DataAerobicTrainingEffect,
   DataAltitudeAvg,
   DataAltitudeMax,
@@ -26,14 +27,12 @@ import {
   DataPowerMax,
   DataPowerMin,
   DataRPE,
-  DataRecoveryTime,
   DataTemperatureAvg,
   DataTemperatureMax,
   DataTemperatureMin,
   DataVO2Max,
   SpeedUnitsToGradeAdjustedSpeedUnits,
   TileChartSettingsInterface,
-  TileMapSettingsInterface,
   TileSettingsInterface,
   TileTypes,
   TimeIntervals,
@@ -43,11 +42,21 @@ import * as SpeedMin from '@sports-alliance/sports-lib';
 import * as SpeedMax from '@sports-alliance/sports-lib';
 import { AppUserService } from '../../../services/app.user.service';
 import { AppUserInterface } from '../../../models/app-user.interface';
+import type {
+  AppDashboardAutoTileState,
+  AppDashboardChartTileSettingsInterface,
+  AppDashboardMapTileSettingsInterface,
+  AppDashboardSettingsInterface,
+  AppDashboardTileEventFilterRange,
+  AppDashboardTileEventFiltersInterface,
+} from '../../../models/app-user.interface';
 import {
   DASHBOARD_ACWR_KPI_CHART_TYPE,
   DASHBOARD_EASY_PERCENT_KPI_CHART_TYPE,
   DASHBOARD_EFFICIENCY_DELTA_4W_KPI_CHART_TYPE,
   DASHBOARD_EFFICIENCY_TREND_CHART_TYPE,
+  DASHBOARD_FATIGUE_ATL_KPI_CHART_TYPE,
+  DASHBOARD_FITNESS_CTL_KPI_CHART_TYPE,
   DASHBOARD_FRESHNESS_FORECAST_CHART_TYPE,
   DASHBOARD_FORM_CHART_TYPE,
   DASHBOARD_FORM_NOW_KPI_CHART_TYPE,
@@ -69,7 +78,6 @@ import {
   isDashboardSpecialChartType,
   resolveDashboardChartCategory,
 } from '../../../helpers/dashboard-special-chart-types';
-import { DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE } from '../../../helpers/dashboard-form.helper';
 import { AppUserUtilities } from '../../../utils/app.user.utilities';
 import type { MapStyleName } from '../../../services/map/map-style.types';
 import {
@@ -82,6 +90,34 @@ import {
   type DashboardManagerPresetId,
 } from '../../../helpers/dashboard-manager-presets.helper';
 import { AppHapticsService } from '../../../services/app.haptics.service';
+import { AppSleepService } from '../../../services/app.sleep.service';
+import {
+  cloneDashboardTileEventFilters,
+  DASHBOARD_TILE_EVENT_RANGE_OPTIONS,
+  DASHBOARD_TILE_EVENT_DEFAULT_RANGE,
+  normalizeDashboardTileEventFilters,
+} from '../../../helpers/dashboard-tile-event-filters.helper';
+import { ConfirmationDialogComponent } from '../../confirmation-dialog/confirmation-dialog.component';
+import { firstValueFrom, Subscription } from 'rxjs';
+import { take } from 'rxjs/operators';
+import {
+  DASHBOARD_AUTO_TILE_CURATED_ID_BY_CHART_TYPE,
+  DASHBOARD_AUTO_TILE_CURATED_SOURCE,
+  DASHBOARD_AUTO_TILE_KPI_ID_BY_CHART_TYPE,
+  DASHBOARD_AUTO_TILE_KPI_SOURCE,
+  DASHBOARD_AUTO_TILE_SLEEP_TREND_ID,
+  DASHBOARD_AUTO_TILE_SLEEP_TREND_SOURCE,
+  DASHBOARD_AUTO_TILE_RECOVERY_NOW_ID,
+  buildDashboardCuratedAutoTile,
+  buildDashboardKpiAutoTile,
+  buildDashboardSleepTrendAutoTile,
+  getDashboardAutoTileDescriptorForTile,
+  isDashboardSleepTrendTile,
+  markDashboardAutoTileAdded,
+  markDashboardAutoTileDismissed,
+  type DashboardAutoTileDescriptor,
+  type DashboardDefaultCuratedChartType,
+} from '../../../helpers/dashboard-auto-tile.helper';
 
 export interface DashboardManagerDialogData {
   user: AppUserInterface;
@@ -94,7 +130,7 @@ export interface DashboardManagerDialogResult {
 }
 
 type DashboardManagerCategory = DashboardManagerPresetCategory;
-type DashboardMapTileSettings = TileMapSettingsInterface & { mapStyle?: MapStyleName };
+type DashboardMapTileSettings = AppDashboardMapTileSettingsInterface;
 type DashboardManagerWorkflowTab = 'manual' | 'presets';
 
 interface DataGroupInterface {
@@ -110,13 +146,21 @@ interface IconOption<TValue> {
   description?: string;
 }
 
+interface DashboardManagerSettingsSnapshot {
+  tiles: TileSettingsInterface[];
+  dismissedCuratedRecoveryNowTile?: boolean;
+  autoTiles: Partial<Record<string, AppDashboardAutoTileState>>;
+}
+
+type DashboardManagerSavingAction = 'save' | 'addAll' | 'removeAll' | null;
+
 @Component({
   selector: 'app-dashboard-manager-dialog',
   templateUrl: './dashboard-manager-dialog.component.html',
   styleUrls: ['./dashboard-manager-dialog.component.css'],
   standalone: false,
 })
-export class DashboardManagerDialogComponent implements OnInit, AfterViewInit {
+export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, OnDestroy {
   private static readonly excludedChartTypePatterns = [
     /^bri.*dev/i,
     /^spiral$/i,
@@ -189,19 +233,19 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit {
       value: 'kpi',
       label: 'KPI',
       icon: 'monitoring',
-      description: 'Compact derived KPI cards',
+      description: 'Compact derived KPI rows',
     },
     {
       value: 'custom',
       label: 'Custom',
       icon: 'tune',
-      description: 'Configurable chart that reacts to dashboard filters',
+      description: 'Configurable chart with its own event filters',
     },
     {
       value: 'map',
       label: 'Map',
       icon: 'map',
-      description: 'Dashboard map tile that reacts to dashboard filters',
+      description: 'Map tile with its own event filters',
     },
   ];
   public readonly presetCategoryOptions: IconOption<DashboardManagerPresetCategory>[] = [
@@ -252,6 +296,8 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit {
     [DASHBOARD_RAMP_RATE_KPI_CHART_TYPE]: 'speed',
     [DASHBOARD_MONOTONY_STRAIN_KPI_CHART_TYPE]: 'stacked_line_chart',
     [DASHBOARD_FORM_NOW_KPI_CHART_TYPE]: 'self_improvement',
+    [DASHBOARD_FITNESS_CTL_KPI_CHART_TYPE]: 'fitness_center',
+    [DASHBOARD_FATIGUE_ATL_KPI_CHART_TYPE]: 'battery_alert',
     [DASHBOARD_FORM_PLUS_7D_KPI_CHART_TYPE]: 'trending_up',
     [DASHBOARD_EASY_PERCENT_KPI_CHART_TYPE]: 'wb_sunny',
     [DASHBOARD_HARD_PERCENT_KPI_CHART_TYPE]: 'flash_on',
@@ -262,6 +308,8 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit {
     [DASHBOARD_RAMP_RATE_KPI_CHART_TYPE]: 'CTL delta over 7 days with 8-week sparkline.',
     [DASHBOARD_MONOTONY_STRAIN_KPI_CHART_TYPE]: 'Weekly strain KPI with monotony context and sparkline.',
     [DASHBOARD_FORM_NOW_KPI_CHART_TYPE]: 'Same-day TSB readiness from derived load state.',
+    [DASHBOARD_FITNESS_CTL_KPI_CHART_TYPE]: 'Current CTL from the derived Form model with 8-week sparkline.',
+    [DASHBOARD_FATIGUE_ATL_KPI_CHART_TYPE]: 'Current ATL from the derived Form model with 8-week sparkline.',
     [DASHBOARD_FORM_PLUS_7D_KPI_CHART_TYPE]: 'Same-day TSB projection at +7d with zero load.',
     [DASHBOARD_EASY_PERCENT_KPI_CHART_TYPE]: 'Latest weekly Easy (Z1-2) intensity share.',
     [DASHBOARD_HARD_PERCENT_KPI_CHART_TYPE]: 'Latest weekly Hard (Z5-7) intensity share.',
@@ -278,6 +326,7 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit {
     { label: 'Weekly', value: TimeIntervals.Weekly },
     { label: 'Monthly', value: TimeIntervals.Monthly },
   ];
+  public readonly tileEventRangeOptions = DASHBOARD_TILE_EVENT_RANGE_OPTIONS;
 
   public dataGroups: DataGroupInterface[] = [];
 
@@ -295,15 +344,23 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit {
   public customDataValueType = AppUserUtilities.getDefaultUserDashboardChartTile().dataValueType;
   public customDataCategoryType = AppUserUtilities.getDefaultUserDashboardChartTile().dataCategoryType;
   public customTimeInterval = AppUserUtilities.getDefaultUserDashboardChartTile().dataTimeInterval;
+  public customEventRange: AppDashboardTileEventFilterRange = AppUserUtilities.getDefaultDashboardTileEventFilters().range || DASHBOARD_TILE_EVENT_DEFAULT_RANGE;
+  public customEventActivityTypes = AppUserUtilities.getDefaultDashboardTileEventFilters().activityTypes;
 
   public mapStyle: MapStyleName = this.normalizeMapStyle(AppUserUtilities.getDefaultDashboardMapStyle());
   public mapClusterMarkers = true;
+  public mapEventRange: AppDashboardTileEventFilterRange = AppUserUtilities.getDefaultDashboardTileEventFilters().range || DASHBOARD_TILE_EVENT_DEFAULT_RANGE;
+  public mapEventActivityTypes = AppUserUtilities.getDefaultDashboardTileEventFilters().activityTypes;
   public presetCategory: DashboardManagerPresetCategory = 'curated';
   public selectedPresetId: DashboardManagerPresetId | null = DASHBOARD_MANAGER_PRESET_IDS.CURATED_RECOVERY;
 
   public isSaving = false;
+  public savingAction: DashboardManagerSavingAction = null;
   public saveError = '';
 
+  private hasSavedChanges = false;
+  private hasSleepDataForAddAll = false;
+  private sleepEligibilitySubscription = new Subscription();
   private shouldAutoFocusEditSection = false;
 
   @ViewChild('customSection') private customSectionRef?: ElementRef<HTMLElement>;
@@ -317,8 +374,10 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit {
   constructor(
     @Inject(MAT_DIALOG_DATA) public data: DashboardManagerDialogData,
     private dialogRef: MatDialogRef<DashboardManagerDialogComponent, DashboardManagerDialogResult>,
+    private dialog: MatDialog,
     private userService: AppUserService,
     private hapticsService: AppHapticsService,
+    private sleepService: AppSleepService,
   ) { }
 
   ngOnInit(): void {
@@ -340,6 +399,7 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit {
 
     this.dataGroups = this.buildDataGroups();
     this.ensurePresetSelection();
+    this.watchSleepEligibilityForAddAll();
 
     if (this.dashboardTiles.length > 0) {
       this.editTileOrder = this.dashboardTiles[0].order;
@@ -362,6 +422,10 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit {
 
   ngAfterViewInit(): void {
     this.scrollAndFocusInitialEditSection();
+  }
+
+  ngOnDestroy(): void {
+    this.sleepEligibilitySubscription.unsubscribe();
   }
 
   get dashboardTiles(): TileSettingsInterface[] {
@@ -435,6 +499,26 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit {
     return false;
   }
 
+  get isAddAllDisabled(): boolean {
+    return this.isSaving || this.getMissingAddAllDashboardTiles().length === 0;
+  }
+
+  get isRemoveAllDisabled(): boolean {
+    return this.isSaving || this.dashboardTiles.length === 0;
+  }
+
+  get isSaveSaving(): boolean {
+    return this.savingAction === 'save';
+  }
+
+  get isAddAllSaving(): boolean {
+    return this.savingAction === 'addAll';
+  }
+
+  get isRemoveAllSaving(): boolean {
+    return this.savingAction === 'removeAll';
+  }
+
   onModeChange(nextMode: 'add' | 'edit'): void {
     this.hapticsService.selection();
     this.mode = nextMode;
@@ -450,6 +534,8 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit {
     }
 
     this.category = 'custom';
+    this.resetCustomEventFilters();
+    this.resetMapEventFilters();
     this.ensurePresetSelection();
   }
 
@@ -493,10 +579,22 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit {
       return;
     }
 
+    if (nextCategory === 'custom') {
+      const editTile = this.resolveEditTile();
+      if (editTile?.type === TileTypes.Chart && !isDashboardSpecialChartType((editTile as TileChartSettingsInterface).chartType)) {
+        this.syncFormStateFromTile(editTile);
+      } else {
+        this.resetCustomEventFilters();
+      }
+      return;
+    }
+
     if (nextCategory === 'map') {
       const editTile = this.resolveEditTile();
       if (editTile?.type === TileTypes.Map) {
         this.syncFormStateFromTile(editTile);
+      } else {
+        this.resetMapEventFilters();
       }
     }
   }
@@ -559,10 +657,46 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit {
     }
   }
 
+  async onCustomEventRangeChange(nextRange: AppDashboardTileEventFilterRange): Promise<void> {
+    const previousRange = this.customEventRange;
+    if (nextRange === 'all') {
+      const confirmed = await this.confirmAllTileEventRangeSelection();
+      if (!confirmed) {
+        this.customEventRange = previousRange;
+        return;
+      }
+    }
+    this.hapticsService.selection();
+    this.customEventRange = nextRange;
+  }
+
+  onCustomEventActivityTypesChange(activityTypes: ActivityTypes[]): void {
+    this.hapticsService.selection();
+    this.customEventActivityTypes = activityTypes || [];
+  }
+
+  async onMapEventRangeChange(nextRange: AppDashboardTileEventFilterRange): Promise<void> {
+    const previousRange = this.mapEventRange;
+    if (nextRange === 'all') {
+      const confirmed = await this.confirmAllTileEventRangeSelection();
+      if (!confirmed) {
+        this.mapEventRange = previousRange;
+        return;
+      }
+    }
+    this.hapticsService.selection();
+    this.mapEventRange = nextRange;
+  }
+
+  onMapEventActivityTypesChange(activityTypes: ActivityTypes[]): void {
+    this.hapticsService.selection();
+    this.mapEventActivityTypes = activityTypes || [];
+  }
+
   isCuratedOptionDisabled(chartType: DashboardCuratedChartType): boolean {
     const editedOrder = this.mode === 'edit' ? this.editTileOrder : null;
     return this.chartTiles.some((tile) => (
-      `${tile.chartType}` === `${chartType}`
+      this.isTileForCuratedChartType(tile, chartType)
       && (editedOrder === null || tile.order !== editedOrder)
     ));
   }
@@ -595,7 +729,7 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit {
 
   close(): void {
     this.hapticsService.selection();
-    this.dialogRef.close({ saved: false });
+    this.dialogRef.close({ saved: this.hasSavedChanges });
   }
 
   async save(): Promise<void> {
@@ -603,20 +737,13 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit {
       return;
     }
 
-    this.isSaving = true;
+    this.startSaving('save');
     this.saveError = '';
     const dashboardSettings = this.data.user.settings.dashboardSettings;
-    const previousTiles = (dashboardSettings.tiles || []).map((tile: TileSettingsInterface) => ({
-      ...tile,
-      size: tile.size ? { ...tile.size } : tile.size,
-    }));
-    const previousDismissedRecoveryTile = dashboardSettings.dismissedCuratedRecoveryNowTile;
+    const previousSettings = this.snapshotDashboardSettings(dashboardSettings);
 
     try {
-      const clonedTiles = (dashboardSettings.tiles || []).map((tile: TileSettingsInterface) => ({
-        ...tile,
-        size: tile.size ? { ...tile.size } : tile.size,
-      }));
+      const clonedTiles = this.cloneTiles(dashboardSettings.tiles || []);
 
       if (this.mode === 'add') {
         const defaultSizeForAdd = this.resolveDefaultAddTileSize();
@@ -624,7 +751,7 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit {
           ? this.buildPresetTileForMode(clonedTiles.length, defaultSizeForAdd)
           : this.buildTileForMode(clonedTiles.length, defaultSizeForAdd, null);
         if (!newTile) {
-          this.isSaving = false;
+          this.stopSaving();
           return;
         }
         clonedTiles.push(newTile);
@@ -632,14 +759,14 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit {
         const editTile = this.resolveEditTile();
         if (!editTile) {
           this.saveError = 'Select a tile to edit.';
-          this.isSaving = false;
+          this.stopSaving();
           return;
         }
 
         const editIndex = clonedTiles.findIndex(tile => tile.order === editTile.order);
         if (editIndex < 0) {
           this.saveError = 'Could not find the selected tile.';
-          this.isSaving = false;
+          this.stopSaving();
           return;
         }
 
@@ -647,7 +774,7 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit {
           ? this.buildPresetTileForMode(editTile.order, editTile.size || { columns: 1, rows: 1 })
           : this.buildTileForMode(editTile.order, editTile.size || { columns: 1, rows: 1 }, editTile);
         if (!replacement) {
-          this.isSaving = false;
+          this.stopSaving();
           return;
         }
 
@@ -656,13 +783,13 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit {
 
       if (this.hasDuplicateSpecialTiles(clonedTiles)) {
         this.saveError = 'Derived curated and KPI chart types can only be added once each.';
-        this.isSaving = false;
+        this.stopSaving();
         return;
       }
 
       if (this.hasDuplicateMapTiles(clonedTiles)) {
         this.saveError = 'Map tile can only be added once.';
-        this.isSaving = false;
+        this.stopSaving();
         return;
       }
 
@@ -670,22 +797,116 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit {
       if (dashboardSettings.tiles.some(tile => tile.type === TileTypes.Chart && isDashboardRecoveryNowChartType((tile as TileChartSettingsInterface).chartType))) {
         dashboardSettings.dismissedCuratedRecoveryNowTile = false;
       }
+      this.syncAutoTileStateAfterSave(dashboardSettings, previousSettings.tiles, clonedTiles);
 
       await this.userService.updateUserProperties(this.data.user, { settings: this.data.user.settings });
+      this.hasSavedChanges = true;
       this.hapticsService.success();
       this.dialogRef.close({ saved: true });
     } catch (error) {
-      dashboardSettings.tiles = previousTiles.map((tile: TileSettingsInterface) => ({
-        ...tile,
-        size: tile.size ? { ...tile.size } : tile.size,
-      }));
-      dashboardSettings.dismissedCuratedRecoveryNowTile = previousDismissedRecoveryTile;
-      this.saveError = 'Could not save dashboard tile settings.';
-      this.hapticsService.error();
-      console.error('[DashboardManagerDialogComponent] Failed to save dashboard tile settings', error);
+      this.rollbackDashboardSettings(dashboardSettings, previousSettings);
+      this.handleDashboardSettingsSaveError(error);
     } finally {
-      this.isSaving = false;
+      this.stopSaving();
     }
+  }
+
+  async addAllTiles(): Promise<void> {
+    if (this.isAddAllDisabled) {
+      return;
+    }
+
+    this.hapticsService.selection();
+    this.startSaving('addAll');
+    this.saveError = '';
+    const dashboardSettings = this.data.user.settings.dashboardSettings;
+    const previousSettings = this.snapshotDashboardSettings(dashboardSettings);
+
+    try {
+      await this.refreshSleepEligibilityForAddAll();
+      const clonedTiles = this.cloneTiles(dashboardSettings.tiles || []);
+      const missingTiles = this.getMissingAddAllDashboardTiles(clonedTiles);
+      if (!missingTiles.length) {
+        this.saveError = 'Default dashboard tiles are already on your dashboard.';
+        this.stopSaving();
+        return;
+      }
+
+      let nextOrder = this.resolveNextTileOrder(clonedTiles);
+      missingTiles.forEach((tile) => {
+        clonedTiles.push(this.cloneTileForAddAll(tile, nextOrder));
+        nextOrder += 1;
+      });
+
+      if (this.hasDuplicateSpecialTiles(clonedTiles)) {
+        this.saveError = 'Derived curated and KPI chart types can only be added once each.';
+        this.stopSaving();
+        return;
+      }
+
+      if (this.hasDuplicateMapTiles(clonedTiles)) {
+        this.saveError = 'Map tile can only be added once.';
+        this.stopSaving();
+        return;
+      }
+
+      dashboardSettings.tiles = clonedTiles;
+      this.syncAutoTileStateAfterSave(dashboardSettings, previousSettings.tiles, clonedTiles);
+      await this.userService.updateUserProperties(this.data.user, { settings: this.data.user.settings });
+      this.hasSavedChanges = true;
+      this.hapticsService.success();
+      this.dialogRef.close({ saved: true });
+    } catch (error) {
+      this.rollbackDashboardSettings(dashboardSettings, previousSettings);
+      this.handleDashboardSettingsSaveError(error);
+    } finally {
+      this.stopSaving();
+    }
+  }
+
+  async removeAllTiles(): Promise<void> {
+    if (this.isRemoveAllDisabled) {
+      return;
+    }
+
+    this.hapticsService.selection();
+    const confirmed = await this.confirmRemoveAllTiles();
+    if (!confirmed) {
+      return;
+    }
+
+    this.startSaving('removeAll');
+    this.saveError = '';
+    const dashboardSettings = this.data.user.settings.dashboardSettings;
+    const previousSettings = this.snapshotDashboardSettings(dashboardSettings);
+
+    try {
+      dashboardSettings.tiles = [];
+      this.markAllDashboardAutoTilesDismissed(dashboardSettings, Date.now());
+      dashboardSettings.dismissedCuratedRecoveryNowTile = true;
+      await this.userService.updateUserProperties(this.data.user, { settings: this.data.user.settings });
+      this.hasSavedChanges = true;
+      this.mode = 'add';
+      this.editTileOrder = null;
+      this.ensurePresetSelection(true);
+      this.hapticsService.success();
+      this.dialogRef.close({ saved: true });
+    } catch (error) {
+      this.rollbackDashboardSettings(dashboardSettings, previousSettings);
+      this.handleDashboardSettingsSaveError(error);
+    } finally {
+      this.stopSaving();
+    }
+  }
+
+  private startSaving(action: Exclude<DashboardManagerSavingAction, null>): void {
+    this.isSaving = true;
+    this.savingAction = action;
+  }
+
+  private stopSaving(): void {
+    this.isSaving = false;
+    this.savingAction = null;
   }
 
   private resolveEditTile(): TileSettingsInterface | null {
@@ -701,6 +922,9 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit {
       this.category = 'map';
       this.mapStyle = this.normalizeMapStyle(mapTile.mapStyle);
       this.mapClusterMarkers = mapTile.clusterMarkers !== false;
+      const mapFilters = normalizeDashboardTileEventFilters((mapTile as AppDashboardMapTileSettingsInterface).eventFilters);
+      this.mapEventRange = mapFilters.range;
+      this.mapEventActivityTypes = mapFilters.activityTypes || [];
       return;
     }
 
@@ -724,6 +948,144 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit {
     this.customDataValueType = chartTile.dataValueType;
     this.customDataCategoryType = chartTile.dataCategoryType;
     this.customTimeInterval = chartTile.dataTimeInterval || TimeIntervals.Auto;
+    const customFilters = normalizeDashboardTileEventFilters((chartTile as AppDashboardChartTileSettingsInterface).eventFilters);
+    this.customEventRange = customFilters.range;
+    this.customEventActivityTypes = customFilters.activityTypes || [];
+  }
+
+  private cloneTiles(tiles: TileSettingsInterface[]): TileSettingsInterface[] {
+    return (tiles || []).map((tile: TileSettingsInterface) => {
+      const clonedTile = {
+        ...tile,
+        size: tile.size ? { ...tile.size } : tile.size,
+      } as TileSettingsInterface & { eventFilters?: AppDashboardTileEventFiltersInterface };
+      const eventFilters = cloneDashboardTileEventFilters(
+        (tile as AppDashboardChartTileSettingsInterface | AppDashboardMapTileSettingsInterface).eventFilters,
+      );
+      if (eventFilters) {
+        clonedTile.eventFilters = eventFilters;
+      } else {
+        delete clonedTile.eventFilters;
+      }
+      return clonedTile as TileSettingsInterface;
+    });
+  }
+
+  private cloneAutoTiles(
+    autoTiles: Partial<Record<string, AppDashboardAutoTileState>>,
+  ): Partial<Record<string, AppDashboardAutoTileState>> {
+    return Object.entries(autoTiles).reduce<Partial<Record<string, AppDashboardAutoTileState>>>((cloned, [id, state]) => {
+      if (state) {
+        cloned[id] = { ...state };
+      }
+      return cloned;
+    }, {});
+  }
+
+  private snapshotDashboardSettings(
+    dashboardSettings: AppDashboardSettingsInterface,
+  ): DashboardManagerSettingsSnapshot {
+    return {
+      tiles: this.cloneTiles(dashboardSettings.tiles || []),
+      dismissedCuratedRecoveryNowTile: dashboardSettings.dismissedCuratedRecoveryNowTile,
+      autoTiles: this.cloneAutoTiles(dashboardSettings.autoTiles || {}),
+    };
+  }
+
+  private rollbackDashboardSettings(
+    dashboardSettings: AppDashboardSettingsInterface,
+    previousSettings: DashboardManagerSettingsSnapshot,
+  ): void {
+    dashboardSettings.tiles = this.cloneTiles(previousSettings.tiles);
+    dashboardSettings.dismissedCuratedRecoveryNowTile = previousSettings.dismissedCuratedRecoveryNowTile;
+    dashboardSettings.autoTiles = previousSettings.autoTiles as AppDashboardSettingsInterface['autoTiles'];
+  }
+
+  private handleDashboardSettingsSaveError(error: unknown): void {
+    this.saveError = 'Could not save dashboard tile settings.';
+    this.hapticsService.error();
+    console.error('[DashboardManagerDialogComponent] Failed to save dashboard tile settings', error);
+  }
+
+  private syncSleepTrendAutoTileStateAfterSave(
+    dashboardSettings: AppDashboardSettingsInterface,
+    previousTiles: TileSettingsInterface[],
+    nextTiles: TileSettingsInterface[],
+    nowMs: number,
+  ): void {
+    const previousHadSleepTrend = previousTiles.some(tile => isDashboardSleepTrendTile(tile));
+    const nextHasSleepTrend = nextTiles.some(tile => isDashboardSleepTrendTile(tile));
+    const currentSleepTrendState = dashboardSettings.autoTiles?.[DASHBOARD_AUTO_TILE_SLEEP_TREND_ID]?.state;
+
+    if (nextHasSleepTrend && (!previousHadSleepTrend || currentSleepTrendState === 'dismissed')) {
+      markDashboardAutoTileAdded(
+        dashboardSettings,
+        DASHBOARD_AUTO_TILE_SLEEP_TREND_ID,
+        DASHBOARD_AUTO_TILE_SLEEP_TREND_SOURCE,
+        nowMs,
+      );
+      return;
+    }
+
+    if (!nextHasSleepTrend && previousHadSleepTrend) {
+      markDashboardAutoTileDismissed(
+        dashboardSettings,
+        DASHBOARD_AUTO_TILE_SLEEP_TREND_ID,
+        DASHBOARD_AUTO_TILE_SLEEP_TREND_SOURCE,
+        nowMs,
+      );
+    }
+  }
+
+  private syncChartBackedAutoTileStatesAfterSave(
+    dashboardSettings: AppDashboardSettingsInterface,
+    previousTiles: TileSettingsInterface[],
+    nextTiles: TileSettingsInterface[],
+    nowMs: number,
+  ): void {
+    const previousDescriptors = previousTiles
+      .map(tile => getDashboardAutoTileDescriptorForTile(tile))
+      .filter((descriptor): descriptor is DashboardAutoTileDescriptor => !!descriptor);
+    const nextDescriptors = nextTiles
+      .map(tile => getDashboardAutoTileDescriptorForTile(tile))
+      .filter((descriptor): descriptor is DashboardAutoTileDescriptor => !!descriptor);
+
+    nextDescriptors.forEach((descriptor) => {
+      if (descriptor.id === DASHBOARD_AUTO_TILE_SLEEP_TREND_ID) {
+        return;
+      }
+      const wasPresent = previousDescriptors.some(previous => previous.id === descriptor.id);
+      const currentState = dashboardSettings.autoTiles?.[descriptor.id]?.state;
+      if (!wasPresent || currentState === 'dismissed') {
+        markDashboardAutoTileAdded(dashboardSettings, descriptor.id, descriptor.source, nowMs);
+        if (descriptor.id === DASHBOARD_AUTO_TILE_RECOVERY_NOW_ID) {
+          dashboardSettings.dismissedCuratedRecoveryNowTile = false;
+        }
+      }
+    });
+
+    previousDescriptors.forEach((descriptor) => {
+      if (descriptor.id === DASHBOARD_AUTO_TILE_SLEEP_TREND_ID) {
+        return;
+      }
+      const isPresent = nextDescriptors.some(next => next.id === descriptor.id);
+      if (!isPresent) {
+        markDashboardAutoTileDismissed(dashboardSettings, descriptor.id, descriptor.source, nowMs);
+        if (descriptor.id === DASHBOARD_AUTO_TILE_RECOVERY_NOW_ID) {
+          dashboardSettings.dismissedCuratedRecoveryNowTile = true;
+        }
+      }
+    });
+  }
+
+  private syncAutoTileStateAfterSave(
+    dashboardSettings: AppDashboardSettingsInterface,
+    previousTiles: TileSettingsInterface[],
+    nextTiles: TileSettingsInterface[],
+  ): void {
+    const nowMs = Date.now();
+    this.syncSleepTrendAutoTileStateAfterSave(dashboardSettings, previousTiles, nextTiles, nowMs);
+    this.syncChartBackedAutoTileStatesAfterSave(dashboardSettings, previousTiles, nextTiles, nowMs);
   }
 
   private buildTileForMode(
@@ -786,87 +1148,11 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit {
     order: number,
     size: { columns: number; rows: number },
   ): TileChartSettingsInterface {
-    if (chartType === DASHBOARD_FORM_CHART_TYPE) {
-      return {
-        name: 'Form',
-        type: TileTypes.Chart,
-        order,
-        size,
-        chartType: DASHBOARD_FORM_CHART_TYPE as unknown as ChartTypes,
-        dataType: DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE,
-        dataValueType: ChartDataValueTypes.Total,
-        dataCategoryType: ChartDataCategoryTypes.DateType,
-        dataTimeInterval: TimeIntervals.Daily,
-      };
-    }
-
-    if (chartType === DASHBOARD_FRESHNESS_FORECAST_CHART_TYPE) {
-      return {
-        name: 'Freshness Forecast',
-        type: TileTypes.Chart,
-        order,
-        size,
-        chartType: DASHBOARD_FRESHNESS_FORECAST_CHART_TYPE as unknown as ChartTypes,
-        dataType: DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE,
-        dataValueType: ChartDataValueTypes.Total,
-        dataCategoryType: ChartDataCategoryTypes.DateType,
-        dataTimeInterval: TimeIntervals.Weekly,
-      };
-    }
-
-    if (chartType === DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE) {
-      return {
-        name: 'Intensity Distribution',
-        type: TileTypes.Chart,
-        order,
-        size,
-        chartType: DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE as unknown as ChartTypes,
-        dataType: DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE,
-        dataValueType: ChartDataValueTypes.Total,
-        dataCategoryType: ChartDataCategoryTypes.DateType,
-        dataTimeInterval: TimeIntervals.Weekly,
-      };
-    }
-
-    if (chartType === DASHBOARD_EFFICIENCY_TREND_CHART_TYPE) {
-      return {
-        name: 'Efficiency Trend',
-        type: TileTypes.Chart,
-        order,
-        size,
-        chartType: DASHBOARD_EFFICIENCY_TREND_CHART_TYPE as unknown as ChartTypes,
-        dataType: DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE,
-        dataValueType: ChartDataValueTypes.Total,
-        dataCategoryType: ChartDataCategoryTypes.DateType,
-        dataTimeInterval: TimeIntervals.Weekly,
-      };
-    }
-
     if (chartType === DASHBOARD_SLEEP_TREND_CHART_TYPE) {
-      return {
-        name: 'Sleep',
-        type: TileTypes.Chart,
-        order,
-        size,
-        chartType: DASHBOARD_SLEEP_TREND_CHART_TYPE as unknown as ChartTypes,
-        dataType: 'SleepDuration',
-        dataValueType: ChartDataValueTypes.Total,
-        dataCategoryType: ChartDataCategoryTypes.DateType,
-        dataTimeInterval: TimeIntervals.Daily,
-      };
+      return buildDashboardSleepTrendAutoTile(order, size);
     }
 
-    return {
-      name: 'Recovery',
-      type: TileTypes.Chart,
-      order,
-      size,
-      chartType: DASHBOARD_RECOVERY_NOW_CHART_TYPE as unknown as ChartTypes,
-      dataType: DataRecoveryTime.type,
-      dataValueType: ChartDataValueTypes.Total,
-      dataCategoryType: ChartDataCategoryTypes.DateType,
-      dataTimeInterval: TimeIntervals.Auto,
-    };
+    return buildDashboardCuratedAutoTile(chartType as DashboardDefaultCuratedChartType, order, size);
   }
 
   private buildKpiTile(
@@ -874,28 +1160,7 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit {
     order: number,
     size: { columns: number; rows: number },
   ): TileChartSettingsInterface {
-    const chartNameByType: Record<DashboardKpiChartType, string> = {
-      [DASHBOARD_ACWR_KPI_CHART_TYPE]: 'ACWR',
-      [DASHBOARD_RAMP_RATE_KPI_CHART_TYPE]: 'Ramp Rate',
-      [DASHBOARD_MONOTONY_STRAIN_KPI_CHART_TYPE]: 'Monotony / Strain',
-      [DASHBOARD_FORM_NOW_KPI_CHART_TYPE]: 'Form Now',
-      [DASHBOARD_FORM_PLUS_7D_KPI_CHART_TYPE]: 'Form +7d',
-      [DASHBOARD_EASY_PERCENT_KPI_CHART_TYPE]: 'Easy %',
-      [DASHBOARD_HARD_PERCENT_KPI_CHART_TYPE]: 'Hard %',
-      [DASHBOARD_EFFICIENCY_DELTA_4W_KPI_CHART_TYPE]: 'Efficiency Δ (4w)',
-    };
-    const chartName = chartNameByType[chartType];
-    return {
-      name: chartName,
-      type: TileTypes.Chart,
-      order,
-      size,
-      chartType: chartType as unknown as ChartTypes,
-      dataType: DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE,
-      dataValueType: ChartDataValueTypes.Total,
-      dataCategoryType: ChartDataCategoryTypes.DateType,
-      dataTimeInterval: TimeIntervals.Weekly,
-    };
+    return buildDashboardKpiAutoTile(chartType, order, size);
   }
 
   private buildMapTile(
@@ -918,6 +1183,7 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit {
       clusterMarkers: this.mapClusterMarkers,
       mapTheme: existingMapTile?.mapTheme ?? defaultMapTile.mapTheme,
       showHeatMap: existingMapTile?.showHeatMap ?? defaultMapTile.showHeatMap,
+      eventFilters: this.buildTileEventFilters(this.mapEventRange, this.mapEventActivityTypes),
     };
   }
 
@@ -925,7 +1191,7 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit {
     order: number,
     size: { columns: number; rows: number },
     existingTile: TileSettingsInterface | null,
-  ): TileChartSettingsInterface {
+  ): AppDashboardChartTileSettingsInterface {
     const existingChartTile = existingTile?.type === TileTypes.Chart ? existingTile as TileChartSettingsInterface : null;
     const isIntensityZones = this.customChartType === ChartTypes.IntensityZones;
     const isPie = this.customChartType === ChartTypes.Pie;
@@ -941,7 +1207,169 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit {
       dataValueType: isPie ? ChartDataValueTypes.Total : this.customDataValueType,
       dataCategoryType: this.customDataCategoryType,
       dataTimeInterval: this.customTimeInterval,
+      eventFilters: this.buildTileEventFilters(this.customEventRange, this.customEventActivityTypes),
     };
+  }
+
+  private buildTileEventFilters(
+    range: AppDashboardTileEventFilterRange,
+    activityTypes: ActivityTypes[],
+  ): AppDashboardTileEventFiltersInterface {
+    return normalizeDashboardTileEventFilters({
+      range,
+      activityTypes: activityTypes || [],
+    });
+  }
+
+  private resetCustomEventFilters(): void {
+    const defaultFilters = AppUserUtilities.getDefaultDashboardTileEventFilters();
+    this.customEventRange = defaultFilters.range || DASHBOARD_TILE_EVENT_DEFAULT_RANGE;
+    this.customEventActivityTypes = [...(defaultFilters.activityTypes || [])];
+  }
+
+  private resetMapEventFilters(): void {
+    const defaultFilters = AppUserUtilities.getDefaultDashboardTileEventFilters();
+    this.mapEventRange = defaultFilters.range || DASHBOARD_TILE_EVENT_DEFAULT_RANGE;
+    this.mapEventActivityTypes = [...(defaultFilters.activityTypes || [])];
+  }
+
+  private async confirmAllTileEventRangeSelection(): Promise<boolean> {
+    const dialogRef = this.dialog.open(ConfirmationDialogComponent, {
+      data: {
+        title: 'Load all tile events?',
+        message: 'Selecting All may degrade app performance and increase loading times. Continue?',
+        confirmLabel: 'OK',
+        cancelLabel: 'Cancel',
+        confirmColor: 'warn',
+      },
+    });
+    const confirmed = await firstValueFrom(dialogRef.afterClosed().pipe(take(1)));
+    return confirmed === true;
+  }
+
+  private async confirmRemoveAllTiles(): Promise<boolean> {
+    const dialogRef = this.dialog.open(ConfirmationDialogComponent, {
+      data: {
+        title: 'Remove all dashboard tiles?',
+        message: 'This clears every chart and map tile from your dashboard. Automatic dashboard suggestions will also stay dismissed until you add them again.',
+        confirmLabel: 'Remove all',
+        cancelLabel: 'Cancel',
+        confirmColor: 'warn',
+      },
+    });
+    const confirmed = await firstValueFrom(dialogRef.afterClosed().pipe(take(1)));
+    return confirmed === true;
+  }
+
+  private getMissingAddAllDashboardTiles(
+    tiles: TileSettingsInterface[] = this.dashboardTiles,
+  ): TileSettingsInterface[] {
+    const defaultTiles = AppUserUtilities.getDefaultUserDashboardTiles();
+    if (this.hasSleepDataForAddAll) {
+      defaultTiles.push(buildDashboardSleepTrendAutoTile(defaultTiles.length));
+    }
+    return defaultTiles.filter(defaultTile => !tiles.some(tile => this.isTileForDefaultDashboardTile(tile, defaultTile)));
+  }
+
+  private isTileForDefaultDashboardTile(
+    tile: TileSettingsInterface,
+    defaultTile: TileSettingsInterface,
+  ): boolean {
+    if (defaultTile.type === TileTypes.Map) {
+      return tile.type === TileTypes.Map;
+    }
+
+    if (tile.type !== TileTypes.Chart || defaultTile.type !== TileTypes.Chart) {
+      return false;
+    }
+
+    if (isDashboardSleepTrendTile(defaultTile)) {
+      return isDashboardSleepTrendTile(tile);
+    }
+
+    const defaultDescriptor = getDashboardAutoTileDescriptorForTile(defaultTile);
+    if (defaultDescriptor) {
+      return getDashboardAutoTileDescriptorForTile(tile)?.id === defaultDescriptor.id;
+    }
+
+    const chartTile = tile as TileChartSettingsInterface;
+    const defaultChartTile = defaultTile as TileChartSettingsInterface;
+    return `${chartTile.chartType}` === `${defaultChartTile.chartType}`
+      && chartTile.dataType === defaultChartTile.dataType
+      && chartTile.dataValueType === defaultChartTile.dataValueType
+      && chartTile.dataCategoryType === defaultChartTile.dataCategoryType
+      && chartTile.dataTimeInterval === defaultChartTile.dataTimeInterval;
+  }
+
+  private cloneTileForAddAll(tile: TileSettingsInterface, order: number): TileSettingsInterface {
+    const clonedTile = this.cloneTiles([tile])[0];
+    return {
+      ...clonedTile,
+      order,
+      size: clonedTile.size ? { ...clonedTile.size } : this.resolveDefaultAddTileSize(),
+    };
+  }
+
+  private resolveNextTileOrder(tiles: readonly TileSettingsInterface[]): number {
+    if (!tiles.length) {
+      return 0;
+    }
+    return Math.max(...tiles.map(tile => Number(tile?.order || 0))) + 1;
+  }
+
+  private watchSleepEligibilityForAddAll(): void {
+    this.sleepEligibilitySubscription.unsubscribe();
+    this.sleepEligibilitySubscription = new Subscription();
+    this.hasSleepDataForAddAll = false;
+    const uid = `${this.data?.user?.uid || ''}`.trim();
+    if (!uid) {
+      return;
+    }
+
+    this.sleepEligibilitySubscription = this.sleepService.watchHasAnySleepSession(uid).subscribe({
+      next: (hasSleepData) => {
+        this.hasSleepDataForAddAll = hasSleepData === true;
+      },
+      error: () => {
+        this.hasSleepDataForAddAll = false;
+      },
+    });
+  }
+
+  private async refreshSleepEligibilityForAddAll(): Promise<void> {
+    const uid = `${this.data?.user?.uid || ''}`.trim();
+    if (!uid) {
+      this.hasSleepDataForAddAll = false;
+      return;
+    }
+
+    try {
+      this.hasSleepDataForAddAll = await firstValueFrom(
+        this.sleepService.watchHasAnySleepSession(uid).pipe(take(1)),
+      ) === true;
+    } catch {
+      this.hasSleepDataForAddAll = false;
+    }
+  }
+
+  private markAllDashboardAutoTilesDismissed(
+    dashboardSettings: AppDashboardSettingsInterface,
+    nowMs: number,
+  ): void {
+    markDashboardAutoTileDismissed(
+      dashboardSettings,
+      DASHBOARD_AUTO_TILE_SLEEP_TREND_ID,
+      DASHBOARD_AUTO_TILE_SLEEP_TREND_SOURCE,
+      nowMs,
+    );
+
+    Object.values(DASHBOARD_AUTO_TILE_CURATED_ID_BY_CHART_TYPE).forEach((id) => {
+      markDashboardAutoTileDismissed(dashboardSettings, id, DASHBOARD_AUTO_TILE_CURATED_SOURCE, nowMs);
+    });
+
+    Object.values(DASHBOARD_AUTO_TILE_KPI_ID_BY_CHART_TYPE).forEach((id) => {
+      markDashboardAutoTileDismissed(dashboardSettings, id, DASHBOARD_AUTO_TILE_KPI_SOURCE, nowMs);
+    });
   }
 
   private hasDuplicateSpecialTiles(tiles: TileSettingsInterface[]): boolean {
@@ -951,36 +1379,38 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit {
         continue;
       }
       const chartTile = tile as TileChartSettingsInterface;
-      if (!isDashboardSpecialChartType(chartTile.chartType)) {
+      const uniquenessKey = this.getSpecialTileUniquenessKey(chartTile);
+      if (!uniquenessKey) {
         continue;
       }
-      if (seen.has(`${chartTile.chartType}`)) {
+      if (seen.has(uniquenessKey)) {
         return true;
       }
-      seen.add(`${chartTile.chartType}`);
+      seen.add(uniquenessKey);
     }
     return false;
   }
 
+  private isTileForCuratedChartType(
+    tile: TileChartSettingsInterface,
+    chartType: DashboardCuratedChartType,
+  ): boolean {
+    if (chartType === DASHBOARD_RECOVERY_NOW_CHART_TYPE) {
+      return getDashboardAutoTileDescriptorForTile(tile)?.id === DASHBOARD_AUTO_TILE_RECOVERY_NOW_ID;
+    }
+
+    return `${tile.chartType}` === `${chartType}`;
+  }
+
+  private getSpecialTileUniquenessKey(tile: TileChartSettingsInterface): string | null {
+    const descriptor = getDashboardAutoTileDescriptorForTile(tile);
+    if (descriptor) {
+      return descriptor.id;
+    }
+    return isDashboardSpecialChartType(tile.chartType) ? `${tile.chartType}` : null;
+  }
+
   private resolveDefaultAddTileSize(): { columns: number; rows: number } {
-    if (this.activeWorkflowTab === 'presets') {
-      const selectedPreset = this.selectedPresetDefinition;
-      if (selectedPreset?.category === 'curated') {
-        if (selectedPreset.curatedChartType === DASHBOARD_FRESHNESS_FORECAST_CHART_TYPE) {
-          return { columns: 1, rows: 1 };
-        }
-        return { columns: 2, rows: 1 };
-      }
-      return { columns: 1, rows: 1 };
-    }
-
-    if (this.category === 'curated') {
-      if (this.curatedChartType === DASHBOARD_FRESHNESS_FORECAST_CHART_TYPE) {
-        return { columns: 1, rows: 1 };
-      }
-      return { columns: 2, rows: 1 };
-    }
-
     return { columns: 1, rows: 1 };
   }
 

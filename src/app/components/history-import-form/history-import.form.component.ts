@@ -20,9 +20,12 @@ import { UserServiceMetaInterface } from '@sports-alliance/sports-lib';
 import { Subscription } from 'rxjs';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { COROS_HISTORY_IMPORT_LIMIT_MONTHS, GARMIN_HISTORY_IMPORT_COOLDOWN_DAYS, HISTORY_IMPORT_ACTIVITIES_PER_DAY_LIMIT, HISTORY_IMPORT_PROCESSING_CAPACITY_PER_DAY_PER_USER_ESTIMATE } from '@shared/history-import.constants';
+import { SLEEP_BACKFILL_COOLDOWN_DAYS, SLEEP_BACKFILL_START_DATE_ISO, SleepBackfillQueueResponse } from '@shared/sleep-backfill';
+import { SLEEP_PROVIDERS, SleepSyncState } from '@shared/sleep';
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
 import { AppAuthService } from '../../authentication/app.auth.service';
+import { AppSleepService } from '../../services/app.sleep.service';
 
 dayjs.extend(relativeTime);
 
@@ -62,10 +65,15 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
   public activitiesPerDayLimit = HISTORY_IMPORT_ACTIVITIES_PER_DAY_LIMIT;
   public processingCapacityPerDay = HISTORY_IMPORT_PROCESSING_CAPACITY_PER_DAY_PER_USER_ESTIMATE;
   public garminCooldownDays = GARMIN_HISTORY_IMPORT_COOLDOWN_DAYS;
+  public sleepBackfillCooldownDays = SLEEP_BACKFILL_COOLDOWN_DAYS;
+  public sleepBackfillStartDate = new Date(SLEEP_BACKFILL_START_DATE_ISO);
   /** Optimistic UI flag - blocks re-submission immediately after success */
   public isHistoryImportPending = signal(false);
   /** stores the actual backend response for display (COROS/Suunto only) */
   public pendingImportResult = signal<HistoryImportResult | null>(null);
+  public isSleepBackfillSubmitting = signal(false);
+  public pendingSleepBackfillResult = signal<SleepBackfillQueueResponse | null>(null);
+  public suuntoSleepSyncState = signal<SleepSyncState | null>(null);
   /** Max date for any import is today (using dayjs for datepicker compatibility) */
   public today = dayjs().endOf('day');
   /** Expose Math for template calculations */
@@ -77,6 +85,10 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
   private snackBar = inject(MatSnackBar);
   private changeDetectorRef = inject(ChangeDetectorRef);
   private authService = inject(AppAuthService);
+  private sleepService = inject(AppSleepService);
+  private currentUserID: string | null = null;
+  private sleepSyncStateSubscription: Subscription | null = null;
+  private sleepSyncStateKey: string | null = null;
 
   async ngOnInit() {
     this.formGroup = new UntypedFormGroup({
@@ -95,6 +107,7 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
 
     const user = await this.authService.getUser();
     this.isPro = AppUserUtilities.hasProAccess(user);
+    this.currentUserID = this.coerceUserID(user);
 
     this.processChanges();
   }
@@ -136,6 +149,8 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
   }
 
   private processChanges() {
+    this.syncSleepBackfillStateSubscription();
+
     if (!this.userMetaForService || !this.userMetaForService.didLastHistoryImport) {
       this.isAllowedToDoHistoryImport = true;
       (this.isAllowedToDoHistoryImport && !this.isMissingGarminPermissions) ? this.formGroup.enable() : this.formGroup.disable();
@@ -283,7 +298,7 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
   }
 
   ngOnDestroy(): void {
-
+    this.sleepSyncStateSubscription?.unsubscribe();
   }
 
   get cooldownDays(): number {
@@ -322,5 +337,102 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
     // > 1 day
     const completionDate = dayjs().add(totalDays, 'day');
     return `Estimated to finish ${completionDate.fromNow()} (${completionDate.format('dddd')}).`;
+  }
+
+  get isSuuntoSleepBackfillVisible(): boolean {
+    return this.serviceName === ServiceNames.SuuntoApp
+      && this.isPro
+      && !!this.userMetaForService;
+  }
+
+  get sleepBackfillNextAllowedAtMs(): number | null {
+    const nextAllowedAtMs = Number(
+      this.pendingSleepBackfillResult()?.nextAllowedAtMs
+      ?? this.suuntoSleepSyncState()?.nextBackfillAllowedAtMs
+    );
+    return Number.isFinite(nextAllowedAtMs) ? nextAllowedAtMs : null;
+  }
+
+  get isSleepBackfillCooldownActive(): boolean {
+    const nextAllowedAtMs = this.sleepBackfillNextAllowedAtMs;
+    return nextAllowedAtMs !== null && nextAllowedAtMs > Date.now();
+  }
+
+  get canSubmitSuuntoSleepBackfill(): boolean {
+    return this.isSuuntoSleepBackfillVisible
+      && !this.isSubmitting
+      && !this.isLoadingParent
+      && !this.isSleepBackfillSubmitting()
+      && !this.isSleepBackfillCooldownActive;
+  }
+
+  async onSuuntoSleepBackfill(event: Event) {
+    event.preventDefault();
+    event.stopPropagation();
+    if (!this.canSubmitSuuntoSleepBackfill) {
+      return;
+    }
+
+    this.isSleepBackfillSubmitting.set(true);
+    this.changeDetectorRef.detectChanges();
+
+    try {
+      this.analyticsService.logEvent('backfilled_sleep_history', { method: ServiceNames.SuuntoApp });
+    } catch (e) {
+      this.logger.error(e);
+    }
+
+    try {
+      const result = await this.userService.backfillSuuntoSleepForCurrentUser();
+      this.pendingSleepBackfillResult.set(result);
+      this.snackBar.open(`Sleep backfill queued: ${result.queued} windows.`, undefined, {
+        duration: 3000,
+      });
+    } catch (e: any) {
+      this.logger.error(e);
+      this.snackBar.open(`Could not queue sleep backfill due to ${e.message}`, undefined, {
+        duration: 3000,
+      });
+    } finally {
+      this.isSleepBackfillSubmitting.set(false);
+      this.changeDetectorRef.detectChanges();
+    }
+  }
+
+  private syncSleepBackfillStateSubscription(): void {
+    const key = this.serviceName === ServiceNames.SuuntoApp && this.currentUserID
+      ? `${this.currentUserID}:${SLEEP_PROVIDERS.SuuntoApp}`
+      : null;
+    if (this.sleepSyncStateKey === key) {
+      return;
+    }
+
+    this.sleepSyncStateSubscription?.unsubscribe();
+    this.sleepSyncStateSubscription = null;
+    this.sleepSyncStateKey = key;
+    this.suuntoSleepSyncState.set(null);
+
+    if (!key || !this.currentUserID) {
+      return;
+    }
+
+    this.sleepSyncStateSubscription = this.sleepService
+      .watchSyncState(this.currentUserID, SLEEP_PROVIDERS.SuuntoApp)
+      .subscribe({
+        next: (state) => {
+          this.suuntoSleepSyncState.set(state);
+          this.changeDetectorRef.markForCheck();
+        },
+        error: (error) => {
+          this.logger.error(error);
+          this.suuntoSleepSyncState.set(null);
+          this.changeDetectorRef.markForCheck();
+        },
+      });
+  }
+
+  private coerceUserID(user: User | null | undefined): string | null {
+    const uid = `${(user as { uid?: unknown } | null | undefined)?.uid || ''}`.trim();
+    return uid || null;
   }
 }

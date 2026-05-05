@@ -1,0 +1,9 @@
+:host {
+  box-sizing: border-box;
+  display: grid;
+  gap: 0;
+  grid-auto-rows: var(--dashboard-tile-board-row-height, 150px);
+  grid-template-columns: repeat(var(--dashboard-tile-board-cols, 1), minmax(0, 1fr));
+  min-width: 0;
+  overflow: hidden;
+}

@@ -1,0 +1,10 @@
+:host {
+  --loading-shade-border-radius: 0;
+  border-block-end: var(--dashboard-tile-cell-block-divider, var(--dashboard-tile-board-divider, 0));
+  border-inline-end: var(--dashboard-tile-cell-inline-divider, var(--dashboard-tile-board-divider, 0));
+  box-sizing: border-box;
+  display: block;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+}

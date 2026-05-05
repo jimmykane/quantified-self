@@ -1,15 +1,17 @@
 <app-loading-overlay [isLoading]="isLoading" [hasError]="showNoDataError" [allowErrorPassthrough]="true" [errorMessage]="noDataErrorMessage"
   [errorHint]="noDataErrorHint" [errorIcon]="noDataErrorIcon" [showSkeleton]="false" height="100%" [style.height.%]="100">
   <section class="efficiency-layout">
-    <header class="efficiency-header">
+    <header class="efficiency-header" [class.efficiency-header-reserve-actions]="reserveTitleActionSpace">
       <div class="title-row">
-        <div class="efficiency-title">Efficiency Trend</div>
-        @if (infoTooltip) {
-        <button mat-icon-button class="title-info-button" appHapticTap appTooltipTap [matTooltip]="infoTooltip" matTooltipPosition="below"
-          aria-label="How this chart is calculated">
-          <mat-icon>info</mat-icon>
-        </button>
-        }
+        <div class="efficiency-title-group">
+          <div class="efficiency-title qs-dashboard-chart-title">Efficiency Trend</div>
+          @if (infoTooltip) {
+          <button mat-icon-button class="title-info-button" appHapticTap appTooltipTap [matTooltip]="infoTooltip" matTooltipPosition="below"
+            aria-label="How this chart is calculated">
+            <mat-icon>info</mat-icon>
+          </button>
+          }
+        </div>
       </div>
       <div class="efficiency-value">{{ latestValueText }}</div>
       <div class="efficiency-subtitle">Latest power / heart-rate ratio</div>

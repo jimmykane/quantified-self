@@ -1938,6 +1938,17 @@ describe('TracksComponent', () => {
       expect(tripsPanel).not.toBeNull();
     });
 
+    it('uses the shared compact event search layout for the tracks search panel', () => {
+      component.user = mockUser as any;
+      fixture.detectChanges();
+
+      const eventSearch = fixture.nativeElement.querySelector(
+        'app-peek-panel.tracks-search-peek app-event-search.compact-filter-layout'
+      ) as HTMLElement;
+
+      expect(eventSearch).not.toBeNull();
+    });
+
     it('hides trips peek panel when no trips and no home area are detected', () => {
       component.user = mockUser as any;
       component.detectedTrips.set([]);

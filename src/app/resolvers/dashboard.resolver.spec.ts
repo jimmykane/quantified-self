@@ -1,6 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { ResolveFn, Router, ActivatedRouteSnapshot, RouterStateSnapshot } from '@angular/router';
-import { EventInterface, User, DateRanges, DaysOfTheWeek, ActivityTypes } from '@sports-alliance/sports-lib';
+import { User, DateRanges, DaysOfTheWeek } from '@sports-alliance/sports-lib';
 import { AppUserInterface } from '../models/app-user.interface';
 import { of, throwError } from 'rxjs';
 import { MatSnackBar } from '@angular/material/snack-bar';
@@ -8,7 +8,7 @@ import { AppEventService } from '../services/app.event.service';
 import { AppUserService } from '../services/app.user.service';
 import { AppAuthService } from '../authentication/app.auth.service';
 import { dashboardResolver, DashboardResolverData } from './dashboard.resolver';
-import { vi, describe, it, expect, beforeEach } from 'vitest';
+import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { LoggerService } from '../services/logger.service';
 
 describe('dashboardResolver', () => {
@@ -64,6 +64,10 @@ describe('dashboardResolver', () => {
                 { provide: LoggerService, useValue: loggerSpy }
             ]
         });
+    });
+
+    afterEach(() => {
+        vi.useRealTimers();
     });
 
     it('should be created', () => {
@@ -139,6 +143,40 @@ describe('dashboardResolver', () => {
         });
     }));
 
+    it('should default bounded event table ranges to Monday when unit start of week is missing', () => new Promise<void>(done => {
+        vi.useFakeTimers();
+        vi.setSystemTime(new Date('2026-04-30T12:00:00.000Z'));
+        mockUser.settings.dashboardSettings.dateRange = DateRanges.thisWeek;
+        mockUser.settings.dashboardSettings.activityTypes = [];
+        mockUser.settings.unitSettings = {} as any;
+        eventServiceSpy.getEventsOnceByWithMeta.mockReturnValue(of({ events: [], source: 'cache' }));
+
+        const route = new ActivatedRouteSnapshot();
+        vi.spyOn(route.paramMap, 'get').mockReturnValue(null);
+
+        const state = {} as RouterStateSnapshot;
+
+        (executeResolver(route, state) as any).subscribe((result: DashboardResolverData) => {
+            expect(result.events).toEqual([]);
+            expect(eventServiceSpy.getEventsOnceByWithMeta).toHaveBeenCalledWith(
+                mockUser,
+                [
+                    { fieldPath: 'startDate', opStr: '>=', value: new Date('2026-04-27T00:00:00.000').getTime() },
+                    { fieldPath: 'startDate', opStr: '<=', value: new Date('2026-05-03T23:59:59.999').getTime() },
+                ],
+                'startDate',
+                false,
+                0,
+                {
+                    preferCache: true,
+                    warmServer: false,
+                    seedLiveQuery: true,
+                },
+            );
+            done();
+        });
+    }));
+
     it('should handle error when fetching targetUser and navigate', () => new Promise<void>(done => {
         userServiceSpy.getUserByID.mockReturnValue(throwError(() => new Error('User not found')));
         eventServiceSpy.getEventsOnceByWithMeta.mockReturnValue(of({ events: [], source: 'cache' }));
@@ -148,7 +186,7 @@ describe('dashboardResolver', () => {
 
         const state = {} as RouterStateSnapshot;
 
-        (executeResolver(route, state) as any).subscribe((result: DashboardResolverData) => {
+        (executeResolver(route, state) as any).subscribe((_result: DashboardResolverData) => {
             // Depending on impl, it returns partial data or navigates
             expect(snackBarSpy.open).toHaveBeenCalled();
             expect(routerSpy.navigate).toHaveBeenCalledWith(['dashboard']);

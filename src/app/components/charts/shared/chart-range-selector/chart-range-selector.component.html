@@ -1,0 +1,16 @@
+<button mat-button type="button" class="chart-range-selector-button" [matMenuTriggerFor]="rangeMenu"
+  [attr.aria-label]="selectedAriaLabel" [disabled]="disabled" appHapticTap>
+  <span class="chart-range-selector-label chart-range-selector-label-full"
+    [class.chart-range-selector-label-mobile-hidden]="hasDistinctShortLabel">{{ selectedLabel }}</span>
+  <span class="chart-range-selector-label chart-range-selector-label-compact"
+    [class.chart-range-selector-label-mobile-visible]="hasDistinctShortLabel" aria-hidden="true">{{ selectedShortLabel }}</span>
+  <mat-icon class="chart-range-selector-icon" iconPositionEnd>keyboard_arrow_down</mat-icon>
+</button>
+
+<mat-menu #rangeMenu="matMenu" class="qs-menu-panel chart-range-selector-menu">
+  @for (option of options; track option.value) {
+  <button mat-menu-item type="button" appHapticTap [disabled]="option.value === selectedValue" (click)="selectValue(option.value)">
+    <span>{{ option.menuLabel || option.label }}</span>
+  </button>
+  }
+</mat-menu>

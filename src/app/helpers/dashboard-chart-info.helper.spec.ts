@@ -5,6 +5,8 @@ import {
   DASHBOARD_EASY_PERCENT_KPI_CHART_TYPE,
   DASHBOARD_EFFICIENCY_DELTA_4W_KPI_CHART_TYPE,
   DASHBOARD_EFFICIENCY_TREND_CHART_TYPE,
+  DASHBOARD_FATIGUE_ATL_KPI_CHART_TYPE,
+  DASHBOARD_FITNESS_CTL_KPI_CHART_TYPE,
   DASHBOARD_FRESHNESS_FORECAST_CHART_TYPE,
   DASHBOARD_FORM_CHART_TYPE,
   DASHBOARD_FORM_NOW_KPI_CHART_TYPE,
@@ -29,6 +31,8 @@ const SUPPORTED_CHART_TYPES = [
   DASHBOARD_RAMP_RATE_KPI_CHART_TYPE,
   DASHBOARD_MONOTONY_STRAIN_KPI_CHART_TYPE,
   DASHBOARD_FORM_NOW_KPI_CHART_TYPE,
+  DASHBOARD_FITNESS_CTL_KPI_CHART_TYPE,
+  DASHBOARD_FATIGUE_ATL_KPI_CHART_TYPE,
   DASHBOARD_FORM_PLUS_7D_KPI_CHART_TYPE,
   DASHBOARD_EASY_PERCENT_KPI_CHART_TYPE,
   DASHBOARD_HARD_PERCENT_KPI_CHART_TYPE,
@@ -53,11 +57,15 @@ describe('dashboard-chart-info.helper', () => {
   it('documents formula context for form and ACWR cards', () => {
     const formInfo = resolveDashboardChartInfoTooltip(DASHBOARD_FORM_CHART_TYPE);
     const acwrInfo = resolveDashboardChartInfoTooltip(DASHBOARD_ACWR_KPI_CHART_TYPE);
+    const fitnessInfo = resolveDashboardChartInfoTooltip(DASHBOARD_FITNESS_CTL_KPI_CHART_TYPE);
+    const fatigueInfo = resolveDashboardChartInfoTooltip(DASHBOARD_FATIGUE_ATL_KPI_CHART_TYPE);
 
     expect(formInfo).toContain('CTL');
     expect(formInfo).toContain('ATL');
     expect(formInfo).toContain('same-day');
     expect(acwrInfo).toContain('7 days');
     expect(acwrInfo).toContain('28 days');
+    expect(fitnessInfo).toContain('42-day');
+    expect(fatigueInfo).toContain('7-day');
   });
 });

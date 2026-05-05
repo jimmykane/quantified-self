@@ -13,6 +13,9 @@ import { AppWindowService } from '../../services/app.window.service';
 import { of } from 'rxjs';
 import { CUSTOM_ELEMENTS_SCHEMA } from '@angular/core';
 import { ServiceNames } from '@sports-alliance/sports-lib';
+import { MaterialModule } from '../../modules/material.module';
+import { NoopAnimationsModule } from '@angular/platform-browser/animations';
+import { MatIconRegistry } from '@angular/material/icon';
 
 describe('ServicesComponent', () => {
     let component: ServicesComponent;
@@ -21,6 +24,7 @@ describe('ServicesComponent', () => {
     let mockAuthService: any;
     let mockRouter: any;
     let mockActivatedRoute: any;
+    let mockIconRegistry: any;
 
     beforeEach(async () => {
         mockUserService = {
@@ -47,10 +51,16 @@ describe('ServicesComponent', () => {
                 get: vi.fn()
             })
         };
+        mockIconRegistry = {
+            getNamedSvgIcon: vi.fn(() => {
+                const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+                return of(svg);
+            }),
+        };
 
         await TestBed.configureTestingModule({
             declarations: [ServicesComponent],
-            imports: [HttpClientTestingModule, MatSnackBarModule],
+            imports: [HttpClientTestingModule, MatSnackBarModule, MaterialModule, NoopAnimationsModule],
             providers: [
                 { provide: AppUserService, useValue: mockUserService },
                 { provide: AppAuthService, useValue: mockAuthService },
@@ -58,7 +68,8 @@ describe('ServicesComponent', () => {
                 { provide: ActivatedRoute, useValue: mockActivatedRoute },
                 { provide: AppFileService, useValue: {} },
                 { provide: AppEventService, useValue: {} },
-                { provide: AppWindowService, useValue: {} }
+                { provide: AppWindowService, useValue: {} },
+                { provide: MatIconRegistry, useValue: mockIconRegistry }
             ],
             schemas: [CUSTOM_ELEMENTS_SCHEMA]
         }).compileComponents();
@@ -98,6 +109,7 @@ describe('ServicesComponent', () => {
 
     it('should navigate with correct query params when selectService is called', async () => {
         await component.selectService('garmin');
+        expect(component.activeSection).toBe('garmin');
         expect(mockRouter.navigate).toHaveBeenCalledWith([], {
             relativeTo: mockActivatedRoute,
             queryParams: { serviceName: ServiceNames.GarminAPI },
@@ -105,20 +117,54 @@ describe('ServicesComponent', () => {
         });
     });
 
-    it('should map active section to selected tab index', () => {
+    it('should expose service navigation sections in display order', () => {
+        expect(component.serviceSectionOptions.map(section => section.id)).toEqual([
+            'suunto',
+            'garmin',
+            'coros',
+        ]);
+    });
+
+    it('renders the service selector as Material tab navigation', () => {
+        fixture.detectChanges();
+
+        const tabNav = fixture.nativeElement.querySelector('nav[mat-tab-nav-bar]');
+        const tabLabels = Array.from(tabNav.querySelectorAll('.mat-mdc-tab-link'))
+            .map((link: Element) => link.querySelector('.section-tab-label > span:last-child')?.textContent?.trim());
+
+        expect(tabNav).toBeTruthy();
+        expect(tabLabels).toEqual(['Suunto', 'Garmin', 'COROS']);
+    });
+
+    it('renders the desktop service selector as vertical Material list navigation', () => {
+        fixture.detectChanges();
+
+        const desktopNav = fixture.nativeElement.querySelector('.desktop-section-nav');
+        const navLabels = Array.from(desktopNav.querySelectorAll('.desktop-section-nav-label'))
+            .map((label: Element) => label.textContent?.trim());
+        const navDescriptions = Array.from(desktopNav.querySelectorAll('.desktop-section-nav-description'))
+            .map((description: Element) => description.textContent?.trim());
+
+        expect(desktopNav).toBeTruthy();
+        expect(desktopNav.querySelector('mat-nav-list')).toBeTruthy();
+        expect(navLabels).toEqual(['Suunto', 'Garmin', 'COROS']);
+        expect(navDescriptions).toEqual(['Suunto App', 'Garmin Connect', 'COROS account']);
+    });
+
+    it('keeps service panels mounted and hides inactive panels during tab switches', () => {
+        fixture.detectChanges();
+
+        const servicePanels = fixture.nativeElement.querySelectorAll('.service-detail');
+
+        expect(servicePanels.length).toBe(3);
+        expect(fixture.nativeElement.querySelector('#service-suunto-title').closest('.service-detail').hidden).toBe(false);
+        expect(fixture.nativeElement.querySelector('#service-garmin-title').closest('.service-detail').hidden).toBe(true);
+        expect(fixture.nativeElement.querySelector('#service-coros-title').closest('.service-detail').hidden).toBe(true);
+
         component.activeSection = 'coros';
-        expect(component.selectedSectionIndex).toBe(2);
-    });
+        fixture.detectChanges();
 
-    it('should enable sticky tabs config for shared tabs wrapper', () => {
-        expect(component.tabsStickyHeader).toBe(true);
-        expect(component.tabsTopOffset).toBe('0px');
-        expect(component.tabsLazyContent).toBe(false);
-    });
-
-    it('should navigate when selected tab index changes', async () => {
-        const selectSpy = vi.spyOn(component, 'selectService').mockResolvedValue(undefined);
-        await component.onSelectedSectionIndexChange(1);
-        expect(selectSpy).toHaveBeenCalledWith('garmin');
+        expect(fixture.nativeElement.querySelector('#service-suunto-title').closest('.service-detail').hidden).toBe(true);
+        expect(fixture.nativeElement.querySelector('#service-coros-title').closest('.service-detail').hidden).toBe(false);
     });
 });

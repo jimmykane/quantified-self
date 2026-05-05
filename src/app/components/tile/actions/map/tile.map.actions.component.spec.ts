@@ -118,6 +118,14 @@ describe('TileMapActionsComponent', () => {
     expect(hapticsMock.selection).toHaveBeenCalledTimes(1);
   });
 
+  it('should hide layout controls when disabled', () => {
+    component.showLayoutControls = false;
+    fixture.detectChanges();
+
+    expect((fixture.nativeElement as HTMLElement).querySelector('.tile-size-actions')).toBeNull();
+    expect((fixture.nativeElement as HTMLElement).querySelector('.tile-actions-divider')).toBeNull();
+  });
+
   it('should expose move boundaries for the first tile', () => {
     expect(component.canMoveTileBackward()).toBe(false);
     expect(component.canMoveTileForward()).toBe(true);

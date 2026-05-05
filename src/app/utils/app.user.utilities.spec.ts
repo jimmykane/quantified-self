@@ -9,13 +9,26 @@ import {
     ChartDataValueTypes,
     ChartTypes,
     DataRecoveryTime,
+    DataDistance,
     DataHeartRateAvg,
     DistanceUnits,
     TileTypes,
     TimeIntervals
 } from '@sports-alliance/sports-lib';
-import { AppUserInterface } from '../models/app-user.interface';
-import { DASHBOARD_RECOVERY_NOW_CHART_TYPE, DASHBOARD_SLEEP_TREND_CHART_TYPE } from '../helpers/dashboard-special-chart-types';
+import { DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE } from '../helpers/dashboard-form.helper';
+import {
+    DASHBOARD_EFFICIENCY_TREND_CHART_TYPE,
+    DASHBOARD_FORM_CHART_TYPE,
+    DASHBOARD_FRESHNESS_FORECAST_CHART_TYPE,
+    DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE,
+    DASHBOARD_RECOVERY_NOW_CHART_TYPE,
+    DASHBOARD_SLEEP_TREND_CHART_TYPE,
+    getDashboardCuratedChartDefinitions,
+    getDashboardKpiChartDefinitions,
+    isDashboardCuratedChartType,
+    isDashboardKpiChartType,
+    isDashboardSpecialChartType,
+} from '../helpers/dashboard-special-chart-types';
 import { ACTIVITY_SYNC_ROUTE_IDS } from '@shared/activity-sync-routes';
 
 describe('AppUserUtilities', () => {
@@ -173,13 +186,49 @@ describe('AppUserUtilities', () => {
     });
 
     describe('fillMissingAppSettings', () => {
-        it('should not include recovery tile in default dashboard tiles', () => {
-            const tiles = AppUserUtilities.getDefaultUserDashboardTiles();
-            const recoveryTiles = tiles.filter((tile: any) => (
-                tile?.type === TileTypes.Chart && tile?.dataType === DataRecoveryTime.type
+        it('should include all non-sleep curated tiles in default dashboard tiles', () => {
+            const tiles = AppUserUtilities.getDefaultUserDashboardTiles() as any[];
+            const curatedDefinitions = getDashboardCuratedChartDefinitions()
+                .filter(definition => definition.chartType !== DASHBOARD_SLEEP_TREND_CHART_TYPE);
+            const curatedTiles = tiles.filter((tile: any) => (
+                tile?.type === TileTypes.Chart && isDashboardCuratedChartType(tile?.chartType)
             ));
 
-            expect(recoveryTiles).toHaveLength(0);
+            expect(curatedTiles.map(tile => tile.chartType)).toEqual(curatedDefinitions.map(definition => definition.chartType));
+            expect(curatedTiles.map(tile => tile.name)).toEqual([
+                'Recovery',
+                'Form',
+                'Freshness Forecast',
+                'Intensity Distribution',
+                'Efficiency Trend',
+            ]);
+            curatedTiles.forEach((tile, index) => {
+                expect(tile).toMatchObject({
+                    order: 4 + index,
+                    size: { columns: 1, rows: 1 },
+                    dataCategoryType: ChartDataCategoryTypes.DateType,
+                    dataValueType: ChartDataValueTypes.Total,
+                });
+                expect(tile.eventFilters).toBeUndefined();
+            });
+            expect(curatedTiles.find(tile => tile.chartType === DASHBOARD_RECOVERY_NOW_CHART_TYPE)).toMatchObject({
+                dataType: DataRecoveryTime.type,
+                dataTimeInterval: TimeIntervals.Auto,
+            });
+            expect(curatedTiles.find(tile => tile.chartType === DASHBOARD_FORM_CHART_TYPE)).toMatchObject({
+                dataType: DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE,
+                dataTimeInterval: TimeIntervals.Daily,
+            });
+            [
+                DASHBOARD_FRESHNESS_FORECAST_CHART_TYPE,
+                DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE,
+                DASHBOARD_EFFICIENCY_TREND_CHART_TYPE,
+            ].forEach((chartType) => {
+                expect(curatedTiles.find(tile => tile.chartType === chartType)).toMatchObject({
+                    dataType: DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE,
+                    dataTimeInterval: TimeIntervals.Weekly,
+                });
+            });
         });
 
         it('should not include sleep tile in default dashboard tiles', () => {
@@ -192,15 +241,48 @@ describe('AppUserUtilities', () => {
             expect(sleepTiles).toHaveLength(0);
         });
 
+        it('should include all KPI tiles in default dashboard tiles', () => {
+            const tiles = AppUserUtilities.getDefaultUserDashboardTiles() as any[];
+            const kpiDefinitions = getDashboardKpiChartDefinitions();
+            const kpiTiles = tiles.filter(tile => (
+                tile?.type === TileTypes.Chart && isDashboardKpiChartType(tile?.chartType)
+            ));
+
+            expect(kpiTiles.map(tile => tile.chartType)).toEqual(kpiDefinitions.map(definition => definition.chartType));
+            kpiTiles.forEach((tile, index) => {
+                expect(tile).toMatchObject({
+                    name: kpiDefinitions[index].label,
+                    order: 9 + index,
+                    size: { columns: 1, rows: 1 },
+                    dataType: DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE,
+                    dataCategoryType: ChartDataCategoryTypes.DateType,
+                    dataValueType: ChartDataValueTypes.Total,
+                    dataTimeInterval: TimeIntervals.Weekly,
+                });
+                expect(tile.eventFilters).toBeUndefined();
+            });
+        });
+
         it('should fill defaults for empty settings', () => {
             const user = { settings: {} } as User;
             const settings = AppUserUtilities.fillMissingAppSettings(user);
             expect(settings.appSettings?.theme).toBe(AppThemes.Normal);
             expect((settings.appSettings as any)?.unitSetupCompleted).toBeUndefined();
+            expect((settings.appSettings as any)?.dashboardActionPrompts).toEqual({});
             expect(settings.chartSettings?.stackYAxes).toBe(false);
             expect(settings.chartSettings?.syncChartHoverToMap).toBe(false);
             expect(settings.dashboardSettings?.dateRange).toBe(DateRanges.all);
             expect(settings.dashboardSettings?.includeMergedEvents).toBe(true);
+            expect(settings.dashboardSettings?.eventTableFilters).toEqual({
+                searchTerm: null,
+                dateRange: DateRanges.all,
+                startDate: null,
+                endDate: null,
+                activityTypes: [],
+                includeMergedEvents: true
+            });
+            expect(settings.dashboardSettings?.sleepTrend?.range).toBe('14d');
+            expect(settings.dashboardSettings?.autoTiles).toEqual({});
             expect(settings.dashboardSettings?.tiles?.some((tile: any) => (
                 tile?.type === TileTypes.Chart
                 && (tile?.chartType === DASHBOARD_SLEEP_TREND_CHART_TYPE || tile?.dataType === 'SleepDuration')
@@ -212,11 +294,254 @@ describe('AppUserUtilities', () => {
             expect(settings.serviceSyncSettings?.activitySyncRoutes?.[ACTIVITY_SYNC_ROUTE_IDS.COROSAPI_to_SuuntoApp]?.enabled).toBe(false);
         });
 
+        it('should preserve valid dashboard action prompt dismissal state', () => {
+            const user = {
+                settings: {
+                    appSettings: {
+                        dashboardActionPrompts: {
+                            connectActivityService: {
+                                state: 'dismissed',
+                                dismissedAt: 1_777_200_000_000,
+                                source: 'activity-service-connection',
+                            },
+                        },
+                    },
+                },
+            } as unknown as User;
+
+            const settings = AppUserUtilities.fillMissingAppSettings(user);
+
+            expect((settings.appSettings as any)?.dashboardActionPrompts).toEqual({
+                connectActivityService: {
+                    state: 'dismissed',
+                    dismissedAt: 1_777_200_000_000,
+                    source: 'activity-service-connection',
+                },
+            });
+        });
+
+        it('should drop invalid dashboard action prompt states and preserve valid future states', () => {
+            const user = {
+                settings: {
+                    appSettings: {
+                        dashboardActionPrompts: {
+                            connectActivityService: {
+                                state: 'added',
+                                dismissedAt: 'bad',
+                            },
+                            futurePrompt: {
+                                state: 'dismissed',
+                                dismissedAt: 1_777_300_000_000,
+                                source: 'future-source',
+                            },
+                        },
+                    },
+                },
+            } as unknown as User;
+
+            const settings = AppUserUtilities.fillMissingAppSettings(user);
+
+            expect((settings.appSettings as any)?.dashboardActionPrompts).toEqual({
+                futurePrompt: {
+                    state: 'dismissed',
+                    dismissedAt: 1_777_300_000_000,
+                    source: 'future-source',
+                },
+            });
+        });
+
+        it('should preserve valid dashboard auto-tile state', () => {
+            const user = {
+                settings: {
+                    dashboardSettings: {
+                        autoTiles: {
+                            sleepTrend: {
+                                state: 'dismissed',
+                                dismissedAt: 1_777_000_000_000,
+                                lastQualifiedAt: 1_776_000_000_000,
+                                source: 'sleep-sync',
+                            },
+                        },
+                    },
+                },
+            } as unknown as User;
+
+            const settings = AppUserUtilities.fillMissingAppSettings(user);
+
+            expect(settings.dashboardSettings?.autoTiles).toEqual({
+                sleepTrend: {
+                    state: 'dismissed',
+                    dismissedAt: 1_777_000_000_000,
+                    lastQualifiedAt: 1_776_000_000_000,
+                    source: 'sleep-sync',
+                },
+            });
+        });
+
+        it('should drop invalid dashboard auto-tile state and preserve valid future states without touching tiles', () => {
+            const user = {
+                settings: {
+                    dashboardSettings: {
+                        autoTiles: {
+                            sleepTrend: {
+                                state: 'invalid',
+                                addedAt: 'bad',
+                            },
+                            unknown: {
+                                state: 'dismissed',
+                                dismissedAt: 1_777_100_000_000,
+                                source: 'future-rule',
+                            },
+                        },
+                        tiles: [{
+                            type: TileTypes.Chart,
+                            chartType: ChartTypes.ColumnsHorizontal,
+                            dataType: DataDistance.type,
+                            dataValueType: ChartDataValueTypes.Total,
+                            dataCategoryType: ChartDataCategoryTypes.ActivityType,
+                            dataTimeInterval: TimeIntervals.Auto,
+                            name: 'Distance',
+                            order: 0,
+                            size: { columns: 1, rows: 1 }
+                        }],
+                    },
+                },
+            } as unknown as User;
+
+            const settings = AppUserUtilities.fillMissingAppSettings(user);
+
+            expect(settings.dashboardSettings?.autoTiles).toEqual({
+                unknown: {
+                    state: 'dismissed',
+                    dismissedAt: 1_777_100_000_000,
+                    source: 'future-rule',
+                },
+            });
+            expect(settings.dashboardSettings?.tiles).toHaveLength(1);
+            expect(settings.dashboardSettings?.tiles?.[0].name).toBe('Distance');
+        });
+
+        it('should normalize event table filters from legacy dashboard fields', () => {
+            const startDate = new Date('2026-01-01T00:00:00.000Z').getTime();
+            const endDate = new Date('2026-01-31T23:59:59.999Z').getTime();
+            const user = {
+                settings: {
+                    dashboardSettings: {
+                        dateRange: DateRanges.custom,
+                        startDate,
+                        endDate,
+                        activityTypes: [ActivityTypes.Running],
+                        includeMergedEvents: false
+                    }
+                }
+            } as unknown as User;
+
+            const settings = AppUserUtilities.fillMissingAppSettings(user);
+
+            expect(settings.dashboardSettings?.eventTableFilters).toEqual({
+                searchTerm: null,
+                dateRange: DateRanges.custom,
+                startDate,
+                endDate,
+                activityTypes: [ActivityTypes.Running],
+                includeMergedEvents: false
+            });
+            expect(settings.dashboardSettings?.dateRange).toBe(DateRanges.custom);
+            expect(settings.dashboardSettings?.activityTypes).toEqual([ActivityTypes.Running]);
+        });
+
+        it('should default new custom chart and map tiles to 90d and all activities', () => {
+            const defaultChart = AppUserUtilities.getDefaultUserDashboardChartTile() as any;
+            const defaultMap = AppUserUtilities.getDefaultUserDashboardMapTile() as any;
+            const dashboardTiles = AppUserUtilities.getDefaultUserDashboardTiles() as any[];
+
+            expect(defaultChart.eventFilters).toEqual({ range: '90d', activityTypes: [] });
+            expect(defaultMap.eventFilters).toEqual({ range: '90d', activityTypes: [] });
+            dashboardTiles
+                .filter(tile => tile.type === TileTypes.Map || !isDashboardSpecialChartType(tile.chartType))
+                .forEach(tile => {
+                    expect(tile.eventFilters).toEqual({ range: '90d', activityTypes: [] });
+                });
+        });
+
+        it('should add event filters to existing custom chart and map tiles from legacy dashboard filters', () => {
+            const user = {
+                settings: {
+                    dashboardSettings: {
+                        dateRange: DateRanges.all,
+                        activityTypes: [ActivityTypes.Cycling],
+                        tiles: [
+                            {
+                                type: TileTypes.Chart,
+                                chartType: ChartTypes.ColumnsHorizontal,
+                                dataType: DataDistance.type,
+                                dataValueType: ChartDataValueTypes.Total,
+                                dataCategoryType: ChartDataCategoryTypes.ActivityType,
+                                dataTimeInterval: TimeIntervals.Auto,
+                                name: 'Distance',
+                                order: 0,
+                                size: { columns: 1, rows: 1 }
+                            },
+                            {
+                                type: TileTypes.Map,
+                                order: 1,
+                                name: 'Map',
+                                mapStyle: 'default',
+                                mapTheme: 'normal',
+                                showHeatMap: true,
+                                clusterMarkers: true,
+                                size: { columns: 1, rows: 1 }
+                            }
+                        ]
+                    }
+                }
+            } as unknown as User;
+
+            const settings = AppUserUtilities.fillMissingAppSettings(user);
+            const [customTile, mapTile] = settings.dashboardSettings?.tiles || [];
+
+            expect((customTile as any).eventFilters).toEqual({
+                range: '1y',
+                activityTypes: [ActivityTypes.Cycling]
+            });
+            expect((mapTile as any).eventFilters).toEqual({
+                range: '1y',
+                activityTypes: [ActivityTypes.Cycling]
+            });
+        });
+
+        it('should remove event filters from curated and derived chart tiles', () => {
+            const user = {
+                settings: {
+                    dashboardSettings: {
+                        tiles: [
+                            {
+                                type: TileTypes.Chart,
+                                chartType: DASHBOARD_FORM_CHART_TYPE,
+                                dataType: 'Training Stress Score',
+                                dataValueType: ChartDataValueTypes.Total,
+                                dataCategoryType: ChartDataCategoryTypes.DateType,
+                                dataTimeInterval: TimeIntervals.Daily,
+                                name: 'Form',
+                                order: 0,
+                                size: { columns: 1, rows: 1 },
+                                eventFilters: { range: 'all', activityTypes: [ActivityTypes.Running] }
+                            }
+                        ]
+                    }
+                }
+            } as unknown as User;
+
+            const settings = AppUserUtilities.fillMissingAppSettings(user);
+
+            expect((settings.dashboardSettings?.tiles?.[0] as any).eventFilters).toBeUndefined();
+        });
+
         it('should preserve existing settings', () => {
             const user = {
                 settings: {
                     appSettings: { theme: AppThemes.Dark, unitSetupCompleted: false } as any,
-                    dashboardSettings: { dateRange: DateRanges.lastYear, includeMergedEvents: false }
+                    dashboardSettings: { dateRange: DateRanges.lastYear, includeMergedEvents: false, sleepTrend: { range: '90d' } }
                 }
             } as User;
             const settings = AppUserUtilities.fillMissingAppSettings(user);
@@ -224,6 +549,23 @@ describe('AppUserUtilities', () => {
             expect((settings.appSettings as any)?.unitSetupCompleted).toBe(false);
             expect(settings.dashboardSettings?.dateRange).toBe(DateRanges.lastYear);
             expect(settings.dashboardSettings?.includeMergedEvents).toBe(false);
+            expect(settings.dashboardSettings?.sleepTrend?.range).toBe('90d');
+        });
+
+        it('should normalize invalid sleep trend range settings to 14d', () => {
+            const user = {
+                settings: {
+                    dashboardSettings: {
+                        sleepTrend: {
+                            range: '7d',
+                        },
+                    },
+                },
+            } as any;
+
+            const settings = AppUserUtilities.fillMissingAppSettings(user);
+
+            expect(settings.dashboardSettings?.sleepTrend?.range).toBe('14d');
         });
 
         it('should preserve explicit service sync route toggle', () => {

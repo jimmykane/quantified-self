@@ -7,6 +7,7 @@ import {
   ChartDataCategoryTypes,
   ChartDataValueTypes,
   ChartTypes,
+  ActivityTypes,
   TimeIntervals
 } from '@sports-alliance/sports-lib';
 import { describe, expect, it, beforeEach } from 'vitest';
@@ -17,6 +18,8 @@ import {
   DASHBOARD_EASY_PERCENT_KPI_CHART_TYPE,
   DASHBOARD_EFFICIENCY_DELTA_4W_KPI_CHART_TYPE,
   DASHBOARD_EFFICIENCY_TREND_CHART_TYPE,
+  DASHBOARD_FATIGUE_ATL_KPI_CHART_TYPE,
+  DASHBOARD_FITNESS_CTL_KPI_CHART_TYPE,
   DASHBOARD_FRESHNESS_FORECAST_CHART_TYPE,
   DASHBOARD_FORM_CHART_TYPE,
   DASHBOARD_FORM_NOW_KPI_CHART_TYPE,
@@ -62,8 +65,35 @@ class MockTileChartActionsComponent {
   @Input() chartDataCategoryType?: ChartDataCategoryTypes;
   @Input() chartTimeInterval?: TimeIntervals;
   @Input() chartDataValueType?: ChartDataValueTypes;
+  @Input() showLayoutControls = true;
   @Output() savingChange = new EventEmitter<boolean>();
   @Output() editInDashboardManager = new EventEmitter<number>();
+}
+
+@Component({
+  selector: 'app-dashboard-tile-event-filters',
+  template: '',
+  standalone: false
+})
+class MockDashboardTileEventFiltersComponent {
+  @Input() eventFilters: any;
+  @Input() canNavigateNewer = false;
+  @Output() rangeChange = new EventEmitter<any>();
+  @Output() activityTypesChange = new EventEmitter<any>();
+  @Output() navigate = new EventEmitter<any>();
+}
+
+@Component({
+  selector: 'app-chart-range-selector',
+  template: '',
+  standalone: false
+})
+class MockChartRangeSelectorComponent {
+  @Input() options: any[] = [];
+  @Input() value?: string | null;
+  @Input() ariaLabel = '';
+  @Input() disabled = false;
+  @Output() valueChange = new EventEmitter<string>();
 }
 
 @Component({
@@ -113,6 +143,8 @@ class MockFormChartComponent {
   @Input() absoluteLatestPoint: any;
   @Input() formStatus?: string | null;
   @Input() infoTooltip?: string | null;
+  @Input() timelineWindow?: string;
+  @Input() reserveTitleActionSpace = false;
 }
 
 @Component({
@@ -126,10 +158,13 @@ class MockKpiChartComponent {
   @Input() chartType: any;
   @Input() infoTooltip?: string | null;
   @Input() reserveTitleActionSpace = false;
+  @Input() compactRow = false;
   @Input() acwr: any;
   @Input() rampRate: any;
   @Input() monotonyStrain: any;
   @Input() formNow: any;
+  @Input() fitnessCtl: any;
+  @Input() fatigueAtl: any;
   @Input() formPlus7d: any;
   @Input() easyPercent: any;
   @Input() hardPercent: any;
@@ -138,6 +173,8 @@ class MockKpiChartComponent {
   @Input() rampRateStatus?: string | null;
   @Input() monotonyStrainStatus?: string | null;
   @Input() formNowStatus?: string | null;
+  @Input() fitnessCtlStatus?: string | null;
+  @Input() fatigueAtlStatus?: string | null;
   @Input() formPlus7dStatus?: string | null;
   @Input() easyPercentStatus?: string | null;
   @Input() hardPercentStatus?: string | null;
@@ -168,6 +205,8 @@ class MockIntensityDistributionChartComponent {
   @Input() distribution: any;
   @Input() status?: string | null;
   @Input() infoTooltip?: string | null;
+  @Input() range?: string;
+  @Input() reserveTitleActionSpace = false;
 }
 
 @Component({
@@ -181,6 +220,8 @@ class MockEfficiencyTrendChartComponent {
   @Input() trend: any;
   @Input() status?: string | null;
   @Input() infoTooltip?: string | null;
+  @Input() range?: string;
+  @Input() reserveTitleActionSpace = false;
 }
 
 @Component({
@@ -192,7 +233,12 @@ class MockSleepTrendChartComponent {
   @Input() isLoading = false;
   @Input() darkTheme = false;
   @Input() sleepTrend: any;
+  @Input() sleepRange: any;
+  @Input() sleepWindowLabel?: string | null;
+  @Input() canNavigateOlder = false;
+  @Input() canNavigateNewer = false;
   @Input() infoTooltip?: string | null;
+  @Input() reserveTitleActionSpace = false;
 }
 
 describe('TileChartComponent', () => {
@@ -205,6 +251,8 @@ describe('TileChartComponent', () => {
         TileChartComponent,
         MockColumnsChartComponent,
         MockTileChartActionsComponent,
+        MockDashboardTileEventFiltersComponent,
+        MockChartRangeSelectorComponent,
         MockXYChartComponent,
         MockPieChartComponent,
         MockFormChartComponent,
@@ -242,6 +290,16 @@ describe('TileChartComponent', () => {
     const actionsDebugElement = fixture.debugElement.query(By.directive(MockTileChartActionsComponent));
     return actionsDebugElement.componentInstance as MockTileChartActionsComponent;
   };
+
+  const getEventFiltersComponent = (): MockDashboardTileEventFiltersComponent => {
+    const filtersDebugElement = fixture.debugElement.query(By.directive(MockDashboardTileEventFiltersComponent));
+    return filtersDebugElement?.componentInstance as MockDashboardTileEventFiltersComponent;
+  };
+
+  const getRangeSelectorComponents = (): MockChartRangeSelectorComponent[] =>
+    fixture.debugElement
+      .queryAll(By.directive(MockChartRangeSelectorComponent))
+      .map(debugElement => debugElement.componentInstance as MockChartRangeSelectorComponent);
 
   const getPieComponent = (): MockPieChartComponent => {
     const pieDebugElement = fixture.debugElement.query(By.directive(MockPieChartComponent));
@@ -370,6 +428,65 @@ describe('TileChartComponent', () => {
     expect(emittedOrders).toEqual([4]);
   });
 
+  it('should render and re-emit event filter controls for custom chart tiles', () => {
+    component.chartType = ChartTypes.ColumnsVertical;
+    component.showActions = true;
+    component.eventFilters = { range: '90d', activityTypes: [] };
+    component.canNavigateTileEventsNewer = true;
+    const ranges: string[] = [];
+    const activitySelections: ActivityTypes[][] = [];
+    const directions: string[] = [];
+    component.eventFilterRangeChange.subscribe(range => ranges.push(range));
+    component.eventFilterActivityTypesChange.subscribe(activityTypes => activitySelections.push(activityTypes));
+    component.eventFilterNavigate.subscribe(direction => directions.push(direction));
+
+    fixture.detectChanges();
+
+    const headerControls = fixture.nativeElement.querySelector('.tile-header-controls') as HTMLElement;
+    expect(headerControls).toBeTruthy();
+    expect(headerControls.querySelector('.tile-event-filter-controls')).toBeTruthy();
+    expect(headerControls.querySelector('.actions')).toBeTruthy();
+
+    const filters = getEventFiltersComponent();
+    expect(filters.eventFilters).toEqual(component.eventFilters);
+    expect(filters.canNavigateNewer).toBe(true);
+
+    filters.rangeChange.emit('30d');
+    filters.activityTypesChange.emit([ActivityTypes.Running]);
+    filters.navigate.emit('older');
+
+    expect(ranges).toEqual(['30d']);
+    expect(activitySelections).toEqual([[ActivityTypes.Running]]);
+    expect(directions).toEqual(['older']);
+  });
+
+  it('should offset chart loading shades when top header controls are shown', () => {
+    component.chartType = ChartTypes.ColumnsVertical;
+    component.showActions = true;
+
+    fixture.detectChanges();
+
+    expect((fixture.nativeElement.querySelector('section') as HTMLElement).classList.contains('tile-has-header-controls')).toBe(true);
+  });
+
+  it('should not offset compact KPI row loading shades', () => {
+    component.chartType = DASHBOARD_ACWR_KPI_CHART_TYPE as any;
+    component.showActions = true;
+    component.compactKpiRow = true;
+
+    fixture.detectChanges();
+
+    expect((fixture.nativeElement.querySelector('section') as HTMLElement).classList.contains('tile-has-header-controls')).toBe(false);
+  });
+
+  it('should hide event filter controls for derived chart tiles', () => {
+    component.chartType = DASHBOARD_FORM_CHART_TYPE as any;
+
+    fixture.detectChanges();
+
+    expect(getEventFiltersComponent()).toBeFalsy();
+  });
+
   it('should keep generic pie renderer in non-curated mode', () => {
     const recoveryNow = { totalSeconds: 4800, endTimeMs: Date.UTC(2024, 0, 3, 10, 0, 0) };
     component.chartType = ChartTypes.Pie;
@@ -459,6 +576,48 @@ describe('TileChartComponent', () => {
     expect(kpi.formNowStatus).toBe('processing');
   });
 
+  it('should route Fitness CTL KPI chart type to the KPI renderer', () => {
+    component.chartType = DASHBOARD_FITNESS_CTL_KPI_CHART_TYPE as any;
+    component.fitnessCtl = { value: 58.4 } as any;
+    component.fitnessCtlStatus = 'ready' as any;
+    fixture.detectChanges();
+
+    const kpi = getKpiComponent();
+    expect(kpi.chartType).toBe(DASHBOARD_FITNESS_CTL_KPI_CHART_TYPE);
+    expect(kpi.fitnessCtl).toEqual(component.fitnessCtl);
+    expect(kpi.fitnessCtlStatus).toBe('ready');
+  });
+
+  it('should route Fatigue ATL KPI chart type to the KPI renderer', () => {
+    component.chartType = DASHBOARD_FATIGUE_ATL_KPI_CHART_TYPE as any;
+    component.fatigueAtl = { value: 71.4 } as any;
+    component.fatigueAtlStatus = 'stale' as any;
+    fixture.detectChanges();
+
+    const kpi = getKpiComponent();
+    expect(kpi.chartType).toBe(DASHBOARD_FATIGUE_ATL_KPI_CHART_TYPE);
+    expect(kpi.fatigueAtl).toEqual(component.fatigueAtl);
+    expect(kpi.fatigueAtlStatus).toBe('stale');
+  });
+
+  it('should hide layout controls for compact KPI row actions', () => {
+    component.chartType = DASHBOARD_FORM_NOW_KPI_CHART_TYPE as any;
+    component.showActions = true;
+    component.compactKpiRow = true;
+    fixture.detectChanges();
+
+    expect(getActionsComponent().showLayoutControls).toBe(false);
+  });
+
+  it('should keep layout controls for non-compact chart tile actions', () => {
+    component.chartType = ChartTypes.ColumnsVertical;
+    component.showActions = true;
+    component.compactKpiRow = false;
+    fixture.detectChanges();
+
+    expect(getActionsComponent().showLayoutControls).toBe(true);
+  });
+
   it('should route Efficiency Δ (4w) KPI chart type to the KPI renderer', () => {
     component.chartType = DASHBOARD_EFFICIENCY_DELTA_4W_KPI_CHART_TYPE as any;
     component.efficiencyDelta4w = { deltaAbs: 0.12, deltaPct: 6 } as any;
@@ -502,27 +661,116 @@ describe('TileChartComponent', () => {
 
   it('should route intensity distribution chart type to dedicated renderer', () => {
     component.chartType = DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE as any;
+    component.showActions = true;
     component.intensityDistribution = { weeks: [] } as any;
     component.intensityDistributionStatus = 'processing' as any;
     fixture.detectChanges();
-    expect(getIntensityDistributionComponent().distribution).toEqual(component.intensityDistribution);
+    const intensityDistribution = getIntensityDistributionComponent();
+    const rangeSelector = getRangeSelectorComponents()[0];
+
+    expect(fixture.nativeElement.querySelector('.tile-header-controls .tile-local-range-selector')).toBeTruthy();
+    expect(rangeSelector.value).toBe('1y');
+    expect(rangeSelector.options.map(option => option.value)).toEqual(['8w', '12w', '6m', '1y', 'all']);
+    expect(intensityDistribution.distribution).toEqual(component.intensityDistribution);
+    expect(intensityDistribution.range).toBe('1y');
+    expect(intensityDistribution.reserveTitleActionSpace).toBe(true);
   });
 
   it('should route efficiency trend chart type to dedicated renderer', () => {
     component.chartType = DASHBOARD_EFFICIENCY_TREND_CHART_TYPE as any;
+    component.showActions = true;
     component.efficiencyTrend = { points: [] } as any;
     component.efficiencyTrendStatus = 'failed' as any;
     fixture.detectChanges();
-    expect(getEfficiencyTrendComponent().trend).toEqual(component.efficiencyTrend);
+    const efficiencyTrend = getEfficiencyTrendComponent();
+    const rangeSelector = getRangeSelectorComponents()[0];
+
+    expect(fixture.nativeElement.querySelector('.tile-header-controls .tile-local-range-selector')).toBeTruthy();
+    expect(rangeSelector.value).toBe('1y');
+    expect(efficiencyTrend.trend).toEqual(component.efficiencyTrend);
+    expect(efficiencyTrend.range).toBe('1y');
+    expect(efficiencyTrend.reserveTitleActionSpace).toBe(true);
+  });
+
+  it('should update derived chart range through the shared tile header selector', () => {
+    component.chartType = DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE as any;
+    component.showActions = true;
+    fixture.detectChanges();
+
+    const rangeSelector = getRangeSelectorComponents()[0];
+    rangeSelector.valueChange.emit('8w');
+    fixture.detectChanges();
+
+    expect(component.derivedChartRange).toBe('8w');
+    expect(getIntensityDistributionComponent().range).toBe('8w');
+  });
+
+  it('should route form chart window selection through the shared tile header selector', () => {
+    component.chartType = DASHBOARD_FORM_CHART_TYPE as any;
+    component.showActions = true;
+    fixture.detectChanges();
+
+    const rangeSelector = getRangeSelectorComponents()[0];
+    expect(rangeSelector.value).toBe('w');
+    expect(rangeSelector.options.map(option => option.value)).toEqual(['w', 'm', 'y']);
+
+    rangeSelector.valueChange.emit('m');
+    fixture.detectChanges();
+
+    const form = getFormComponent();
+    expect(component.formTimelineWindow).toBe('m');
+    expect(form.timelineWindow).toBe('m');
+    expect(form.reserveTitleActionSpace).toBe(true);
   });
 
   it('should route sleep trend chart type to dedicated renderer', () => {
     component.chartType = DASHBOARD_SLEEP_TREND_CHART_TYPE as any;
+    component.showActions = true;
     component.sleepTrend = { points: [], latestPoint: null } as any;
+    component.sleepTrendRange = '30d';
+    component.sleepTrendWindowLabel = 'Last 30 days';
+    component.sleepTrendCanNavigateOlder = true;
+    component.sleepTrendCanNavigateNewer = false;
     fixture.detectChanges();
 
-    expect(getSleepTrendComponent().sleepTrend).toEqual(component.sleepTrend);
-    expect(getSleepTrendComponent().infoTooltip).toContain('Sleep Trend');
+    const sleepTrend = getSleepTrendComponent();
+    const rangeSelector = getRangeSelectorComponents()[0];
+    const navButtons = fixture.nativeElement.querySelectorAll('.tile-header-controls .tile-local-range-nav-button');
+
+    expect(fixture.nativeElement.querySelector('.tile-header-controls .tile-local-range-navigation')).toBeTruthy();
+    expect(rangeSelector.value).toBe('30d');
+    expect(rangeSelector.options.map(option => option.value)).toEqual(['14d', '30d', '90d', '1y']);
+    expect(navButtons).toHaveLength(2);
+    expect((navButtons[0] as HTMLButtonElement).disabled).toBe(false);
+    expect((navButtons[1] as HTMLButtonElement).disabled).toBe(true);
+    expect(sleepTrend.sleepTrend).toEqual(component.sleepTrend);
+    expect(sleepTrend.sleepRange).toBe('30d');
+    expect(sleepTrend.sleepWindowLabel).toBe('Last 30 days');
+    expect(sleepTrend.canNavigateOlder).toBe(true);
+    expect(sleepTrend.canNavigateNewer).toBe(false);
+    expect(sleepTrend.infoTooltip).toContain('Sleep Trend');
+    expect(sleepTrend.reserveTitleActionSpace).toBe(true);
+  });
+
+  it('should emit sleep trend range and navigation events from shared tile header controls', () => {
+    component.chartType = DASHBOARD_SLEEP_TREND_CHART_TYPE as any;
+    component.sleepTrendRange = '14d';
+    component.sleepTrendCanNavigateOlder = true;
+    component.sleepTrendCanNavigateNewer = true;
+    const ranges: string[] = [];
+    const directions: string[] = [];
+    component.sleepTrendRangeChange.subscribe(range => ranges.push(range));
+    component.sleepTrendNavigate.subscribe(direction => directions.push(direction));
+    fixture.detectChanges();
+
+    const rangeSelector = getRangeSelectorComponents()[0];
+    const navButtons = fixture.nativeElement.querySelectorAll('.tile-header-controls .tile-local-range-nav-button');
+    rangeSelector.valueChange.emit('90d');
+    (navButtons[0] as HTMLButtonElement).click();
+    (navButtons[1] as HTMLButtonElement).click();
+
+    expect(ranges).toEqual(['90d']);
+    expect(directions).toEqual(['older', 'newer']);
   });
 
   it('should pass info tooltip text to derived curated chart renderers', () => {
@@ -544,6 +792,15 @@ describe('TileChartComponent', () => {
     expect(getKpiComponent().reserveTitleActionSpace).toBe(true);
   });
 
+  it('should pass compact KPI row mode to the KPI renderer', () => {
+    component.chartType = DASHBOARD_ACWR_KPI_CHART_TYPE as any;
+    component.compactKpiRow = true;
+    fixture.detectChanges();
+
+    expect(getKpiComponent().compactRow).toBe(true);
+    expect(fixture.nativeElement.querySelector('.tile-chart-kpi-row')).toBeTruthy();
+  });
+
   it('should keep tooltip text null for custom chart types', () => {
     component.chartType = ChartTypes.ColumnsVertical;
     component.showActions = false;
@@ -557,5 +814,16 @@ describe('TileChartComponent', () => {
     const template = readFileSync(templatePath, 'utf8');
     expect(template).toContain('button mat-icon-button cdkDragHandle class="drag-handle-indicator"');
     expect(template).toContain('drag_indicator');
+  });
+
+  it('should provide the shared loading overlay offset from tile styles', () => {
+    const stylePath = resolve(process.cwd(), 'src/app/components/tile/tile.abstract.css');
+    const styles = readFileSync(stylePath, 'utf8');
+
+    expect(styles).toContain('.tile-has-header-controls {');
+    expect(styles).toContain('--tile-header-controls-height: 48px;');
+    expect(styles).toContain('--loading-overlay-top-offset: var(--tile-header-controls-height);');
+    expect(styles).toContain('section > :not(.tile-header-controls) {');
+    expect(styles).toContain('z-index: 20;');
   });
 });

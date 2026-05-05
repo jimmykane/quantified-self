@@ -11,9 +11,14 @@ import { MatSelectModule } from '@angular/material/select';
 import { MatIconModule } from '@angular/material/icon';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { FormsModule } from '@angular/forms';
-import { ChartTypes, ChartDataValueTypes, ChartDataCategoryTypes } from '@sports-alliance/sports-lib';
+import { ChartTypes, ChartDataValueTypes, ChartDataCategoryTypes, DataRecoveryTime } from '@sports-alliance/sports-lib';
 import { vi } from 'vitest';
-import { DASHBOARD_RECOVERY_NOW_CHART_TYPE } from '../../../../helpers/dashboard-special-chart-types';
+import {
+  DASHBOARD_ACWR_KPI_CHART_TYPE,
+  DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE,
+  DASHBOARD_RECOVERY_NOW_CHART_TYPE,
+  DASHBOARD_SLEEP_TREND_CHART_TYPE,
+} from '../../../../helpers/dashboard-special-chart-types';
 
 describe('TileChartActionsComponent', () => {
   let component: TileChartActionsComponent;
@@ -138,6 +143,20 @@ describe('TileChartActionsComponent', () => {
     expect(hapticsMock.selection).toHaveBeenCalledTimes(1);
   });
 
+  it('should hide and ignore layout controls when disabled', async () => {
+    component.showLayoutControls = false;
+    fixture.detectChanges();
+
+    expect((fixture.nativeElement as HTMLElement).querySelector('.tile-size-actions')).toBeNull();
+    expect((fixture.nativeElement as HTMLElement).querySelector('.tile-actions-divider')).toBeNull();
+
+    await component.changeTileColumnSize({ value: 3 } as any);
+
+    expect(userMock.settings.dashboardSettings.tiles[0].size.columns).toBe(1);
+    expect(userMock.updateUserProperties).not.toHaveBeenCalled();
+    expect(hapticsMock.selection).not.toHaveBeenCalled();
+  });
+
   it('should expose move boundaries for the first tile', () => {
     expect(component.canMoveTileBackward()).toBe(false);
     expect(component.canMoveTileForward()).toBe(true);
@@ -165,6 +184,7 @@ describe('TileChartActionsComponent', () => {
 
   it('should persist curated recovery tile dismissal when deleting it', async () => {
     userMock.settings.dashboardSettings.dismissedCuratedRecoveryNowTile = false;
+    userMock.settings.dashboardSettings.autoTiles = {};
     userMock.settings.dashboardSettings.tiles = [
       {
         order: 0,
@@ -184,8 +204,182 @@ describe('TileChartActionsComponent', () => {
     await component.deleteTile({} as any);
 
     expect(userMock.settings.dashboardSettings.dismissedCuratedRecoveryNowTile).toBe(true);
+    expect(userMock.settings.dashboardSettings.autoTiles.curatedRecoveryNow).toMatchObject({
+      state: 'dismissed',
+      source: 'default-curated',
+    });
     expect(userMock.settings.dashboardSettings.tiles).toHaveLength(1);
     expect(userMock.updateUserProperties).toHaveBeenCalled();
     expect(hapticsMock.selection).toHaveBeenCalledTimes(1);
+  });
+
+  it('should persist recovery dismissal when deleting a legacy recovery metric tile', async () => {
+    userMock.settings.dashboardSettings.dismissedCuratedRecoveryNowTile = false;
+    userMock.settings.dashboardSettings.autoTiles = {};
+    userMock.settings.dashboardSettings.tiles = [
+      {
+        order: 0,
+        chartType: ChartTypes.LinesVertical,
+        dataType: DataRecoveryTime.type,
+        dataValueType: ChartDataValueTypes.Total,
+        dataCategoryType: ChartDataCategoryTypes.DateType,
+        size: { columns: 1, rows: 1 },
+        type: 'Chart',
+      },
+      { order: 1, chartType: ChartTypes.Line, size: { columns: 1, rows: 1 }, type: 'Chart' },
+    ];
+    component.chartType = ChartTypes.LinesVertical as any;
+    component.order = 0;
+    fixture.detectChanges();
+
+    await component.deleteTile({} as any);
+
+    expect(userMock.settings.dashboardSettings.dismissedCuratedRecoveryNowTile).toBe(true);
+    expect(userMock.settings.dashboardSettings.autoTiles.curatedRecoveryNow).toMatchObject({
+      state: 'dismissed',
+      source: 'default-curated',
+    });
+    expect(userMock.settings.dashboardSettings.tiles).toHaveLength(1);
+    expect(userMock.updateUserProperties).toHaveBeenCalled();
+  });
+
+  it('should persist sleep auto-tile dismissal when deleting Sleep Trend', async () => {
+    userMock.settings.dashboardSettings.autoTiles = {};
+    userMock.settings.dashboardSettings.tiles = [
+      {
+        order: 0,
+        chartType: DASHBOARD_SLEEP_TREND_CHART_TYPE,
+        dataType: 'SleepDuration',
+        dataValueType: ChartDataValueTypes.Total,
+        dataCategoryType: ChartDataCategoryTypes.DateType,
+        size: { columns: 1, rows: 1 },
+        type: 'Chart',
+      },
+      { order: 1, chartType: ChartTypes.Line, size: { columns: 1, rows: 1 }, type: 'Chart' },
+    ];
+    component.chartType = DASHBOARD_SLEEP_TREND_CHART_TYPE as any;
+    component.order = 0;
+    fixture.detectChanges();
+
+    await component.deleteTile({} as any);
+
+    expect(userMock.settings.dashboardSettings.autoTiles.sleepTrend).toMatchObject({
+      state: 'dismissed',
+      source: 'sleep-sync',
+    });
+    expect(userMock.settings.dashboardSettings.tiles).toHaveLength(1);
+    expect(userMock.updateUserProperties).toHaveBeenCalled();
+    expect(hapticsMock.selection).toHaveBeenCalledTimes(1);
+  });
+
+  it('should restore auto-tile state and tiles when deleting Sleep Trend fails to persist', async () => {
+    const previousAutoTileState = {
+      state: 'added',
+      addedAt: 1_777_000_000_000,
+      source: 'sleep-sync',
+    };
+    userMock.settings.dashboardSettings.autoTiles = {
+      sleepTrend: previousAutoTileState,
+    };
+    userMock.settings.dashboardSettings.tiles = [
+      {
+        order: 0,
+        chartType: DASHBOARD_SLEEP_TREND_CHART_TYPE,
+        dataType: 'SleepDuration',
+        dataValueType: ChartDataValueTypes.Total,
+        dataCategoryType: ChartDataCategoryTypes.DateType,
+        size: { columns: 1, rows: 1 },
+        type: 'Chart',
+      },
+      { order: 1, chartType: ChartTypes.Line, size: { columns: 1, rows: 1 }, type: 'Chart' },
+    ];
+    userMock.updateUserProperties.mockRejectedValueOnce(new Error('network down'));
+    component.chartType = DASHBOARD_SLEEP_TREND_CHART_TYPE as any;
+    component.order = 0;
+    fixture.detectChanges();
+
+    await expect(component.deleteTile({} as any)).rejects.toThrow('network down');
+
+    expect(userMock.settings.dashboardSettings.tiles).toHaveLength(2);
+    expect(userMock.settings.dashboardSettings.tiles[0].chartType).toBe(DASHBOARD_SLEEP_TREND_CHART_TYPE);
+    expect(userMock.settings.dashboardSettings.autoTiles.sleepTrend).toEqual(previousAutoTileState);
+  });
+
+  it('should not mark Sleep Trend dismissed when deleting the only tile is rejected', async () => {
+    userMock.settings.dashboardSettings.autoTiles = {};
+    userMock.settings.dashboardSettings.tiles = [{
+      order: 0,
+      chartType: DASHBOARD_SLEEP_TREND_CHART_TYPE,
+      dataType: 'SleepDuration',
+      dataValueType: ChartDataValueTypes.Total,
+      dataCategoryType: ChartDataCategoryTypes.DateType,
+      size: { columns: 1, rows: 1 },
+      type: 'Chart',
+    }];
+    component.chartType = DASHBOARD_SLEEP_TREND_CHART_TYPE as any;
+    component.order = 0;
+    fixture.detectChanges();
+
+    await expect(component.deleteTile({} as any)).rejects.toThrow('Cannot delete tile there is only one left');
+
+    expect(userMock.settings.dashboardSettings.autoTiles).toEqual({});
+    expect(userMock.settings.dashboardSettings.tiles).toHaveLength(1);
+    expect(userMock.updateUserProperties).not.toHaveBeenCalled();
+  });
+
+  it('should persist KPI auto-tile dismissal when deleting a default KPI tile', async () => {
+    userMock.settings.dashboardSettings.autoTiles = {};
+    userMock.settings.dashboardSettings.tiles = [
+      {
+        order: 0,
+        chartType: DASHBOARD_ACWR_KPI_CHART_TYPE,
+        dataType: 'Training Stress Score',
+        dataValueType: ChartDataValueTypes.Total,
+        dataCategoryType: ChartDataCategoryTypes.DateType,
+        size: { columns: 1, rows: 1 },
+        type: 'Chart',
+      },
+      { order: 1, chartType: ChartTypes.Line, size: { columns: 1, rows: 1 }, type: 'Chart' },
+    ];
+    component.chartType = DASHBOARD_ACWR_KPI_CHART_TYPE as any;
+    component.order = 0;
+    fixture.detectChanges();
+
+    await component.deleteTile({} as any);
+
+    expect(userMock.settings.dashboardSettings.autoTiles.kpiAcwr).toMatchObject({
+      state: 'dismissed',
+      source: 'default-kpi',
+    });
+    expect(userMock.settings.dashboardSettings.tiles).toHaveLength(1);
+    expect(userMock.updateUserProperties).toHaveBeenCalled();
+  });
+
+  it('should persist curated auto-tile dismissal when deleting a default curated tile', async () => {
+    userMock.settings.dashboardSettings.autoTiles = {};
+    userMock.settings.dashboardSettings.tiles = [
+      {
+        order: 0,
+        chartType: DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE,
+        dataType: 'Training Stress Score',
+        dataValueType: ChartDataValueTypes.Total,
+        dataCategoryType: ChartDataCategoryTypes.DateType,
+        size: { columns: 1, rows: 1 },
+        type: 'Chart',
+      },
+      { order: 1, chartType: ChartTypes.Line, size: { columns: 1, rows: 1 }, type: 'Chart' },
+    ];
+    component.chartType = DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE as any;
+    component.order = 0;
+    fixture.detectChanges();
+
+    await component.deleteTile({} as any);
+
+    expect(userMock.settings.dashboardSettings.autoTiles.curatedIntensityDistribution).toMatchObject({
+      state: 'dismissed',
+      source: 'default-curated',
+    });
+    expect(userMock.settings.dashboardSettings.tiles).toHaveLength(1);
+    expect(userMock.updateUserProperties).toHaveBeenCalled();
   });
 });

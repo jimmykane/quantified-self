@@ -2,7 +2,8 @@ import { ChangeDetectionStrategy, Component, EventEmitter, Input, Output } from 
 import {
   ChartDataCategoryTypes,
   ChartDataValueTypes,
-  ChartTypes, TimeIntervals
+  ChartTypes, TimeIntervals,
+  ActivityTypes,
 } from '@sports-alliance/sports-lib';
 import { TileAbstractDirective } from '../tile-abstract.directive';
 import type { DashboardFormPoint } from '../../../helpers/dashboard-form.helper';
@@ -12,6 +13,8 @@ import type {
   DashboardEasyPercentContext,
   DashboardEfficiencyDelta4wContext,
   DashboardEfficiencyTrendContext,
+  DashboardFatigueAtlContext,
+  DashboardFitnessCtlContext,
   DashboardFreshnessForecastContext,
   DashboardFormNowContext,
   DashboardFormPlus7dContext,
@@ -21,11 +24,16 @@ import type {
   DashboardRampRateContext,
 } from '../../../helpers/dashboard-derived-metrics.helper';
 import type { DashboardSleepTrendContext } from '../../../helpers/dashboard-sleep-chart.helper';
+import type {
+  DashboardSleepTrendNavigationDirection,
+} from '../../../helpers/dashboard-sleep-range.helper';
 import {
   DASHBOARD_ACWR_KPI_CHART_TYPE,
   DASHBOARD_EASY_PERCENT_KPI_CHART_TYPE,
   DASHBOARD_EFFICIENCY_DELTA_4W_KPI_CHART_TYPE,
   DASHBOARD_EFFICIENCY_TREND_CHART_TYPE,
+  DASHBOARD_FATIGUE_ATL_KPI_CHART_TYPE,
+  DASHBOARD_FITNESS_CTL_KPI_CHART_TYPE,
   DASHBOARD_FRESHNESS_FORECAST_CHART_TYPE,
   DASHBOARD_FORM_CHART_TYPE,
   DASHBOARD_FORM_NOW_KPI_CHART_TYPE,
@@ -37,10 +45,29 @@ import {
   DASHBOARD_RECOVERY_NOW_CHART_TYPE,
   DASHBOARD_SLEEP_TREND_CHART_TYPE,
   type DashboardChartType,
+  isDashboardSpecialChartType,
 } from '../../../helpers/dashboard-special-chart-types';
+import {
+  DASHBOARD_DERIVED_CHART_DEFAULT_RANGE,
+  DASHBOARD_DERIVED_CHART_RANGE_OPTIONS,
+  normalizeDashboardDerivedChartRange,
+  type DashboardDerivedChartRange,
+} from '../../../helpers/dashboard-derived-chart-range.helper';
 import { resolveDashboardChartInfoTooltip } from '../../../helpers/dashboard-chart-info.helper';
 import type { DerivedMetricSnapshotStatus } from '@shared/derived-metrics';
 import type { DashboardDerivedMetricStatus } from '../../../helpers/derived-metric-status.helper';
+import type { AppDashboardSleepTrendRange } from '../../../models/app-user.interface';
+import {
+  DASHBOARD_SLEEP_TREND_RANGE_OPTIONS,
+  normalizeDashboardSleepTrendRange,
+} from '../../../helpers/dashboard-sleep-range.helper';
+import type {
+  AppDashboardTileEventFilterRange,
+  AppDashboardTileEventFiltersInterface,
+} from '../../../models/app-user.interface';
+import type { DashboardTileEventNavigationDirection } from '../../../helpers/dashboard-tile-event-filters.helper';
+import type { ChartRangeSelectorOption } from '../../charts/shared/chart-range-selector/chart-range-selector.component';
+import type { DashboardFormTimelineWindow } from '../../charts/form/charts.form.component';
 
 type DashboardRecoveryNowSnapshotStatus = DerivedMetricSnapshotStatus | 'missing' | 'queued' | 'processing';
 
@@ -60,8 +87,11 @@ export class TileChartComponent extends TileAbstractDirective {
   @Input() darkTheme = false;
   @Input() showActions: boolean;
   @Input() enableDesktopDrag = false;
+  @Input() compactKpiRow = false;
   @Input() dataTimeInterval: TimeIntervals;
   @Input() data: any;
+  @Input() eventFilters?: AppDashboardTileEventFiltersInterface | null;
+  @Input() canNavigateTileEventsNewer = false;
   @Input() recoveryNow?: DashboardRecoveryNowContext | null;
   @Input() recoveryNowStatus?: DashboardRecoveryNowSnapshotStatus | null;
   @Input() formStatus?: DashboardDerivedMetricStatus | null;
@@ -69,6 +99,8 @@ export class TileChartComponent extends TileAbstractDirective {
   @Input() rampRate?: DashboardRampRateContext | null;
   @Input() monotonyStrain?: DashboardMonotonyStrainContext | null;
   @Input() formNow?: DashboardFormNowContext | null;
+  @Input() fitnessCtl?: DashboardFitnessCtlContext | null;
+  @Input() fatigueAtl?: DashboardFatigueAtlContext | null;
   @Input() formPlus7d?: DashboardFormPlus7dContext | null;
   @Input() easyPercent?: DashboardEasyPercentContext | null;
   @Input() hardPercent?: DashboardHardPercentContext | null;
@@ -77,10 +109,16 @@ export class TileChartComponent extends TileAbstractDirective {
   @Input() intensityDistribution?: DashboardIntensityDistributionContext | null;
   @Input() efficiencyTrend?: DashboardEfficiencyTrendContext | null;
   @Input() sleepTrend?: DashboardSleepTrendContext | null;
+  @Input() sleepTrendRange?: AppDashboardSleepTrendRange;
+  @Input() sleepTrendWindowLabel?: string | null;
+  @Input() sleepTrendCanNavigateOlder = false;
+  @Input() sleepTrendCanNavigateNewer = false;
   @Input() acwrStatus?: DashboardDerivedMetricStatus | null;
   @Input() rampRateStatus?: DashboardDerivedMetricStatus | null;
   @Input() monotonyStrainStatus?: DashboardDerivedMetricStatus | null;
   @Input() formNowStatus?: DashboardDerivedMetricStatus | null;
+  @Input() fitnessCtlStatus?: DashboardDerivedMetricStatus | null;
+  @Input() fatigueAtlStatus?: DashboardDerivedMetricStatus | null;
   @Input() formPlus7dStatus?: DashboardDerivedMetricStatus | null;
   @Input() easyPercentStatus?: DashboardDerivedMetricStatus | null;
   @Input() hardPercentStatus?: DashboardDerivedMetricStatus | null;
@@ -90,6 +128,11 @@ export class TileChartComponent extends TileAbstractDirective {
   @Input() efficiencyTrendStatus?: DashboardDerivedMetricStatus | null;
   @Input() absoluteLatestFormPoint?: DashboardFormPoint | null;
   @Output() editInDashboardManager = new EventEmitter<number>();
+  @Output() sleepTrendRangeChange = new EventEmitter<AppDashboardSleepTrendRange>();
+  @Output() sleepTrendNavigate = new EventEmitter<DashboardSleepTrendNavigationDirection>();
+  @Output() eventFilterRangeChange = new EventEmitter<AppDashboardTileEventFilterRange>();
+  @Output() eventFilterActivityTypesChange = new EventEmitter<ActivityTypes[]>();
+  @Output() eventFilterNavigate = new EventEmitter<DashboardTileEventNavigationDirection>();
 
   public chartTypes = ChartTypes;
   public recoveryNowChartType = DASHBOARD_RECOVERY_NOW_CHART_TYPE;
@@ -98,6 +141,8 @@ export class TileChartComponent extends TileAbstractDirective {
   public rampRateKpiChartType = DASHBOARD_RAMP_RATE_KPI_CHART_TYPE;
   public monotonyStrainKpiChartType = DASHBOARD_MONOTONY_STRAIN_KPI_CHART_TYPE;
   public formNowKpiChartType = DASHBOARD_FORM_NOW_KPI_CHART_TYPE;
+  public fitnessCtlKpiChartType = DASHBOARD_FITNESS_CTL_KPI_CHART_TYPE;
+  public fatigueAtlKpiChartType = DASHBOARD_FATIGUE_ATL_KPI_CHART_TYPE;
   public formPlus7dKpiChartType = DASHBOARD_FORM_PLUS_7D_KPI_CHART_TYPE;
   public easyPercentKpiChartType = DASHBOARD_EASY_PERCENT_KPI_CHART_TYPE;
   public hardPercentKpiChartType = DASHBOARD_HARD_PERCENT_KPI_CHART_TYPE;
@@ -107,9 +152,67 @@ export class TileChartComponent extends TileAbstractDirective {
   public efficiencyTrendChartType = DASHBOARD_EFFICIENCY_TREND_CHART_TYPE;
   public sleepTrendChartType = DASHBOARD_SLEEP_TREND_CHART_TYPE;
   public isTileActionSaving = false;
+  public derivedChartRange: DashboardDerivedChartRange = DASHBOARD_DERIVED_CHART_DEFAULT_RANGE;
+  public formTimelineWindow: DashboardFormTimelineWindow = 'w';
+  public readonly derivedRangeSelectorOptions: ReadonlyArray<ChartRangeSelectorOption> = DASHBOARD_DERIVED_CHART_RANGE_OPTIONS.map(option => ({
+    value: option.range,
+    label: option.label,
+    shortLabel: option.shortLabel,
+    menuLabel: option.menuLabel,
+  }));
+  public readonly formTimelineWindowOptions: ReadonlyArray<ChartRangeSelectorOption> = [
+    { value: 'w', label: 'Week', shortLabel: 'W', menuLabel: 'Week' },
+    { value: 'm', label: 'Month', shortLabel: 'M', menuLabel: 'Month' },
+    { value: 'y', label: 'Year', shortLabel: 'Y', menuLabel: 'Year' },
+  ];
+  public readonly sleepRangeSelectorOptions: ReadonlyArray<ChartRangeSelectorOption> = DASHBOARD_SLEEP_TREND_RANGE_OPTIONS.map(option => ({
+    value: option.range,
+    label: option.label,
+    shortLabel: option.shortLabel,
+    menuLabel: option.menuLabel,
+  }));
 
   get chartInfoTooltip(): string | null {
     return resolveDashboardChartInfoTooltip(this.chartType);
+  }
+
+  get showEventFilters(): boolean {
+    return this.chartType !== undefined && !isDashboardSpecialChartType(this.chartType);
+  }
+
+  get showDerivedRangeSelector(): boolean {
+    return this.chartType === this.intensityDistributionChartType || this.chartType === this.efficiencyTrendChartType;
+  }
+
+  get showFormRangeSelector(): boolean {
+    return this.chartType === this.formChartType;
+  }
+
+  get showSleepRangeControls(): boolean {
+    return this.chartType === this.sleepTrendChartType;
+  }
+
+  get showSharedRangeControls(): boolean {
+    return this.showEventFilters || this.showDerivedRangeSelector || this.showFormRangeSelector || this.showSleepRangeControls;
+  }
+
+  get showHeaderControls(): boolean {
+    return this.showSharedRangeControls || this.showActions;
+  }
+
+  onDerivedRangeSelection(value: unknown): void {
+    this.derivedChartRange = normalizeDashboardDerivedChartRange(value);
+  }
+
+  onFormTimelineWindowSelection(value: unknown): void {
+    if (value !== 'w' && value !== 'm' && value !== 'y') {
+      return;
+    }
+    this.formTimelineWindow = value;
+  }
+
+  onSleepRangeSelection(value: unknown): void {
+    this.sleepTrendRangeChange.emit(normalizeDashboardSleepTrendRange(value));
   }
 
   onTileActionSaving(isSaving: boolean): void {

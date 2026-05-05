@@ -43,6 +43,15 @@ import {
   UnitSetupPreset,
 } from '../../helpers/unit-setup-preset.helper';
 
+type SettingsSectionId = 'profile' | 'app' | 'dashboard' | 'map' | 'charts' | 'units' | 'delete-account';
+
+interface SettingsSectionOption {
+  id: SettingsSectionId;
+  label: string;
+  description: string;
+  icon: string;
+}
+
 @Component({
   selector: 'app-user-settings',
   templateUrl: './user-settings.component.html',
@@ -60,18 +69,60 @@ export class UserSettingsComponent implements OnChanges, OnDestroy, OnInit {
   public consentToDelete: boolean;
   public errorDeleting;
   public errorSaving;
-  public activeSection: 'profile' | 'app' | 'dashboard' | 'map' | 'charts' | 'units' = 'profile';
-  public readonly sectionOrder: Array<'profile' | 'app' | 'dashboard' | 'map' | 'charts' | 'units'> = [
+  public activeSection: SettingsSectionId = 'profile';
+  public readonly sectionOrder: SettingsSectionId[] = [
     'profile',
     'app',
     'dashboard',
     'map',
     'charts',
     'units',
+    'delete-account',
   ];
-  public readonly tabsStickyHeader = true;
-  public readonly tabsTopOffset = '0px';
-  public readonly tabsLazyContent = false;
+  public readonly settingsSectionOptions: SettingsSectionOption[] = [
+    {
+      id: 'profile',
+      label: 'Profile',
+      description: 'Identity and account controls',
+      icon: 'manage_accounts',
+    },
+    {
+      id: 'app',
+      label: 'General',
+      description: 'Theme, tracking, and email',
+      icon: 'tune',
+    },
+    {
+      id: 'dashboard',
+      label: 'Dashboard',
+      description: 'Summary and table behavior',
+      icon: 'dashboard_customize',
+    },
+    {
+      id: 'map',
+      label: 'Maps',
+      description: 'Route rendering defaults',
+      icon: 'map',
+    },
+    {
+      id: 'charts',
+      label: 'Charts',
+      description: 'Metrics and chart defaults',
+      icon: 'monitoring',
+    },
+    {
+      id: 'units',
+      label: 'Units',
+      description: 'Distance, pace, and speed',
+      icon: 'straighten',
+    },
+    {
+      id: 'delete-account',
+      label: 'Delete Account',
+      description: 'Permanent account removal',
+      icon: 'delete_forever',
+    },
+  ];
   public readonly brandTextMaxLength = 60;
 
   public xAxisTypes = XAxisTypes;
@@ -219,7 +270,6 @@ export class UserSettingsComponent implements OnChanges, OnDestroy, OnInit {
 
     this.userSettingsFormGroup = new UntypedFormGroup({
       displayName: new UntypedFormControl(this.user.displayName, []),
-      description: new UntypedFormControl(this.user.description, []),
       dataTypesToUse: new UntypedFormControl(dataTypesToUse, [
         Validators.required,
       ]),
@@ -331,19 +381,9 @@ export class UserSettingsComponent implements OnChanges, OnDestroy, OnInit {
     return this.mandatoryDescentExclusions.indexOf(type) >= 0;
   }
 
-  get selectedSectionIndex(): number {
-    const index = this.sectionOrder.indexOf(this.activeSection);
-    return index >= 0 ? index : 0;
-  }
+  async selectSettingsSection(section: SettingsSectionId): Promise<void> {
+    this.activeSection = section;
 
-  async onSelectedSectionIndexChange(index: number): Promise<void> {
-    const nextSection = this.indexToSectionId(index);
-    if (nextSection !== this.activeSection) {
-      await this.selectSettingsSection(nextSection);
-    }
-  }
-
-  async selectSettingsSection(section: 'profile' | 'app' | 'dashboard' | 'map' | 'charts' | 'units'): Promise<void> {
     await this.router.navigate([], {
       relativeTo: this.route,
       queryParams: { section },
@@ -363,15 +403,6 @@ export class UserSettingsComponent implements OnChanges, OnDestroy, OnInit {
       verticalSpeedUnitsToUse: presetSettings.verticalSpeedUnits,
     });
     this.userSettingsFormGroup.markAsDirty();
-  }
-
-  sectionIdToIndex(section: 'profile' | 'app' | 'dashboard' | 'map' | 'charts' | 'units'): number {
-    const index = this.sectionOrder.indexOf(section);
-    return index >= 0 ? index : 0;
-  }
-
-  indexToSectionId(index: number): 'profile' | 'app' | 'dashboard' | 'map' | 'charts' | 'units' {
-    return this.sectionOrder[index] || 'profile';
   }
 
   async onSubmit(event) {
@@ -443,7 +474,6 @@ export class UserSettingsComponent implements OnChanges, OnDestroy, OnInit {
 
       const propertiesToUpdate: any = {
         displayName: this.userSettingsFormGroup.get('displayName').value,
-        description: this.userSettingsFormGroup.get('description').value,
         acceptedTrackingPolicy: this.userSettingsFormGroup.get('acceptedTrackingPolicy').value,
         acceptedMarketingPolicy: this.userSettingsFormGroup.get('acceptedMarketingPolicy').value,
         settings: <UserSettingsInterface>{
@@ -552,7 +582,7 @@ export class UserSettingsComponent implements OnChanges, OnDestroy, OnInit {
     this.activeSection = 'profile';
   }
 
-  private isSettingsSection(section: unknown): section is 'profile' | 'app' | 'dashboard' | 'map' | 'charts' | 'units' {
+  private isSettingsSection(section: unknown): section is SettingsSectionId {
     return typeof section === 'string' && this.sectionOrder.includes(section as any);
   }
 

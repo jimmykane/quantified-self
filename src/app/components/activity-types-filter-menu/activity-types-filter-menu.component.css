@@ -1,0 +1,78 @@
+:host {
+  display: inline-flex;
+  align-items: center;
+}
+
+.activity-types-filter-button {
+  width: 30px;
+  min-width: 30px;
+  height: 30px;
+  min-height: 30px;
+  padding: 0;
+  --mdc-icon-button-state-layer-size: 30px;
+  --mat-icon-button-state-layer-size: 30px;
+  --mat-icon-button-touch-target-size: 30px;
+}
+
+.activity-types-filter-button mat-icon {
+  width: 18px;
+  height: 18px;
+  line-height: 18px;
+  font-size: 18px;
+}
+
+.activity-types-filter-button.is-active {
+  color: var(--mat-sys-primary);
+  background-color: color-mix(in srgb, var(--mat-sys-primary) 12%, transparent);
+}
+
+.activity-types-filter-list {
+  display: block;
+  max-height: min(360px, calc(100vh - 96px));
+  overflow: auto;
+  padding: 2px 0;
+}
+
+.activity-types-filter-header {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+  min-width: 220px;
+  padding: 4px 8px 4px 16px;
+}
+
+.activity-types-filter-label {
+  color: color-mix(in srgb, var(--mat-sys-on-surface) 72%, transparent);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.activity-types-filter-clear-button {
+  --mat-text-button-label-text-size: 0.78rem;
+  --mat-text-button-horizontal-padding: 8px;
+  flex: 0 0 auto;
+  min-width: 0;
+}
+
+.activity-types-filter-clear-button .mat-icon {
+  font-size: 18px;
+  height: 18px;
+  margin-right: 4px;
+  width: 18px;
+}
+
+.activity-types-filter-option {
+  min-width: 220px;
+}
+
+.activity-types-filter-option .mat-icon {
+  margin-right: 8px;
+}
+
+.activity-types-filter-option.is-selected .mat-icon {
+  color: var(--mat-sys-primary);
+}

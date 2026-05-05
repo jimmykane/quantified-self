@@ -1,64 +1,103 @@
 <div class="settings-container">
   <app-loading-overlay [isLoading]="isLoading" [showSkeleton]="false" height="auto">
     <main class="settings-content">
-      <app-material-pill-tabs class="settings-nav" [selectedIndex]="selectedSectionIndex"
-        (selectedIndexChange)="onSelectedSectionIndexChange($event)" [dynamicHeight]="true"
-        [lazyContent]="tabsLazyContent"
-        [stickyHeader]="tabsStickyHeader" [topOffset]="tabsTopOffset"
-        ariaLabel="Service integrations">
+      <div class="services-shell">
+        <nav
+          mat-tab-nav-bar
+          [tabPanel]="serviceTabsPanel"
+          mat-stretch-tabs="false"
+          class="mobile-section-tabs"
+          aria-label="Service integrations">
+          @for (section of serviceSectionOptions; track section.id) {
+          <a
+            href=""
+            mat-tab-link
+            [active]="activeSection === section.id"
+            (click)="$event.preventDefault(); selectService(section.id)">
+            <span class="section-tab-label">
+              <mat-icon [svgIcon]="section.svgIcon"></mat-icon>
+              <span>{{ section.label }}</span>
+            </span>
+          </a>
+          }
+        </nav>
 
-        <ng-template appMaterialPillTab="Suunto">
-            <mat-card class="settings-card">
-              <div class="header-content">
-                <div class="header-avatar">
-                  <mat-icon class="layer-icon" svgIcon="suunto"></mat-icon>
-                </div>
-                <div class="header-info">
-                  <h1>Suunto Integration</h1>
-                  <p>Manage your connection with Suunto App.</p>
-                </div>
-              </div>
-              <div class="card-content">
-                <app-services-suunto [user]="user" [hasProAccess]="hasProAccess"></app-services-suunto>
-              </div>
-            </mat-card>
-          </ng-template>
+        <aside class="desktop-section-nav" aria-label="Service integrations">
+          <div class="desktop-section-nav-title">Integrations</div>
+          <mat-nav-list class="desktop-section-nav-list">
+            @for (section of serviceSectionOptions; track section.id) {
+            <a
+              href=""
+              mat-list-item
+              [activated]="activeSection === section.id"
+              (click)="$event.preventDefault(); selectService(section.id)">
+              <mat-icon matListItemIcon [svgIcon]="section.svgIcon"></mat-icon>
+              <span matListItemTitle class="desktop-section-nav-label">{{ section.label }}</span>
+              <span matListItemLine class="desktop-section-nav-description">{{ section.description }}</span>
+            </a>
+            }
+          </mat-nav-list>
+        </aside>
 
-        <ng-template appMaterialPillTab="Garmin">
-            <mat-card class="settings-card">
-              <div class="header-content">
-                <div class="header-avatar">
-                  <mat-icon class="layer-icon" svgIcon="garmin"></mat-icon>
-                </div>
-                <div class="header-info">
-                  <h1>Garmin Integration</h1>
+        <mat-tab-nav-panel #serviceTabsPanel>
+          <section class="workspace-main">
+            <section
+              class="service-detail"
+              [hidden]="activeSection !== 'garmin'"
+              aria-labelledby="service-garmin-title">
+              <header class="service-detail-header">
+                <mat-icon class="service-detail-logo" svgIcon="garmin"></mat-icon>
+                <div>
+                  <h1 id="service-garmin-title">Garmin Integration</h1>
                   <p>Manage your connection with Garmin Connect.</p>
                 </div>
+              </header>
+              <mat-divider></mat-divider>
+              <div class="service-detail-body">
+                <app-services-garmin
+                  [user]="user"
+                  [hasProAccess]="hasProAccess"
+                  [isAdmin]="isAdmin">
+                </app-services-garmin>
               </div>
-              <div class="card-content">
-                <app-services-garmin [user]="user" [hasProAccess]="hasProAccess"
-                  [isAdmin]="isAdmin"></app-services-garmin>
-              </div>
-            </mat-card>
-          </ng-template>
+            </section>
 
-        <ng-template appMaterialPillTab="COROS">
-            <mat-card class="settings-card">
-              <div class="header-content">
-                <div class="header-avatar">
-                  <mat-icon class="layer-icon" svgIcon="coros"></mat-icon>
-                </div>
-                <div class="header-info">
-                  <h1>COROS Integration</h1>
+            <section
+              class="service-detail"
+              [hidden]="activeSection !== 'coros'"
+              aria-labelledby="service-coros-title">
+              <header class="service-detail-header">
+                <mat-icon class="service-detail-logo" svgIcon="coros"></mat-icon>
+                <div>
+                  <h1 id="service-coros-title">COROS Integration</h1>
                   <p>Manage your connection with COROS.</p>
                 </div>
-              </div>
-              <div class="card-content">
+              </header>
+              <mat-divider></mat-divider>
+              <div class="service-detail-body">
                 <app-services-coros [user]="user" [hasProAccess]="hasProAccess"></app-services-coros>
               </div>
-            </mat-card>
-          </ng-template>
-      </app-material-pill-tabs>
+            </section>
+
+            <section
+              class="service-detail"
+              [hidden]="activeSection !== 'suunto'"
+              aria-labelledby="service-suunto-title">
+              <header class="service-detail-header">
+                <mat-icon class="service-detail-logo" svgIcon="suunto"></mat-icon>
+                <div>
+                  <h1 id="service-suunto-title">Suunto Integration</h1>
+                  <p>Manage your connection with Suunto App.</p>
+                </div>
+              </header>
+              <mat-divider></mat-divider>
+              <div class="service-detail-body">
+                <app-services-suunto [user]="user" [hasProAccess]="hasProAccess"></app-services-suunto>
+              </div>
+            </section>
+          </section>
+        </mat-tab-nav-panel>
+      </div>
     </main>
   </app-loading-overlay>
 </div>

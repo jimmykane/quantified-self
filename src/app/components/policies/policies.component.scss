@@ -60,15 +60,7 @@
     height: 100%;
     display: flex;
     flex-direction: column;
-    transition: transform 0.2s, box-shadow 0.2s;
-    border-radius: 8px;
     overflow: hidden;
-    // Note: Standard mat-card styles will apply background/color automatically.
-}
-
-.policy-card:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
 }
 
 .policy-avatar {
@@ -110,27 +102,6 @@ mat-card-content p {
     // color: rgba(0, 0, 0, 0.87); /* REMOVED */
     opacity: 0.87;
     line-height: 1.5;
-}
-
-/* Specific Card Colors (Optional Accents) */
-.policy-card.privacy mat-icon {
-    color: #4CAF50;
-}
-
-.policy-card.data mat-icon {
-    color: #2196F3;
-}
-
-.policy-card.tracking mat-icon {
-    color: #FF9800;
-}
-
-.policy-card.tos mat-icon {
-    color: #F44336;
-}
-
-.policy-card.gdpr mat-icon {
-    color: #9C27B0;
 }
 
 /* Content items within cards */

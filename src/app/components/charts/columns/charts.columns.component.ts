@@ -34,7 +34,13 @@ import {
 } from '../../../helpers/echarts-tooltip-interaction.helper';
 import { buildDashboardEChartsStyleTokens } from '../../../helpers/dashboard-echarts-style.helper';
 import { buildDashboardValueAxisConfig } from '../../../helpers/dashboard-echarts-yaxis.helper';
-import { ECHARTS_GLOBAL_FONT_FAMILY, resolveEChartsThemeName } from '../../../helpers/echarts-theme.helper';
+import {
+  ECHARTS_DASHBOARD_CHART_TITLE_FONT_FAMILY,
+  ECHARTS_DASHBOARD_CHART_TITLE_FONT_SIZE,
+  ECHARTS_DASHBOARD_CHART_TITLE_FONT_WEIGHT,
+  ECHARTS_GLOBAL_FONT_FAMILY,
+  resolveEChartsThemeName
+} from '../../../helpers/echarts-theme.helper';
 import {
   formatDashboardDataDisplay,
   formatDashboardNumericValue,
@@ -55,6 +61,7 @@ import {
 import { normalizeUnitDerivedTypeLabel } from '../../../helpers/stat-label.helper';
 
 type ChartOption = Parameters<EChartsType['setOption']>[0];
+type ChartSetOptionSettings = Parameters<EChartsType['setOption']>[1];
 type ChartDataTimeBounds = { first: number | null; last: number | null };
 
 @Component({
@@ -94,6 +101,10 @@ export class ChartsColumnsComponent implements AfterViewInit, OnChanges, OnDestr
     AppColors.DeepBlue,
     AppColors.LightGreen
   ];
+  private static readonly EMPTY_DATA_UPDATE_SETTINGS: ChartSetOptionSettings = {
+    notMerge: true,
+    lazyUpdate: false,
+  };
 
   constructor(
     private eChartsLoader: EChartsLoaderService,
@@ -164,7 +175,12 @@ export class ChartsColumnsComponent implements AfterViewInit, OnChanges, OnDestr
     this.logCustomChartRenderDebug(points, aggregate);
     const option = this.buildChartOption(points, aggregate);
     this.chartHost.hideTooltip();
-    this.chartHost.setOption(option, ECHARTS_CARTESIAN_IMMEDIATE_UPDATE_SETTINGS);
+    this.chartHost.setOption(
+      option,
+      points.length
+        ? ECHARTS_CARTESIAN_IMMEDIATE_UPDATE_SETTINGS
+        : ChartsColumnsComponent.EMPTY_DATA_UPDATE_SETTINGS,
+    );
     this.chartHost.scheduleResize();
   }
 
@@ -224,10 +240,12 @@ export class ChartsColumnsComponent implements AfterViewInit, OnChanges, OnDestr
     if (!points.length) {
       return {
         animation: this.useAnimations === true,
+        tooltip: { show: false },
         legend: { show: false },
         xAxis: [],
         yAxis: [],
         series: [],
+        graphic: [],
       };
     }
 
@@ -375,11 +393,11 @@ export class ChartsColumnsComponent implements AfterViewInit, OnChanges, OnDestr
               type: 'text',
               style: {
                 text: summaryLabel,
-                fontSize: isCompactLayout ? 12 : 13,
-                fontWeight: 500,
+                fontSize: ECHARTS_DASHBOARD_CHART_TITLE_FONT_SIZE,
+                fontWeight: ECHARTS_DASHBOARD_CHART_TITLE_FONT_WEIGHT,
                 fill: textColor,
                 opacity: 0.85,
-                fontFamily: "'Barlow Condensed', sans-serif"
+                fontFamily: ECHARTS_DASHBOARD_CHART_TITLE_FONT_FAMILY
               },
               left: 0,
               top: 0

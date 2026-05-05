@@ -1,9 +1,36 @@
-<app-loading-overlay [isLoading]="isLoading" [hasError]="showNoDataError" [allowErrorPassthrough]="true" [errorMessage]="noDataErrorMessage"
+<app-loading-overlay [isLoading]="isLoading" [hasError]="!isLoading && showNoDataError" [allowErrorPassthrough]="true" [errorMessage]="noDataErrorMessage"
   [errorHint]="noDataErrorHint" [errorIcon]="noDataErrorIcon" [showSkeleton]="false" height="100%" [style.height.%]="100">
-  <section class="kpi-layout" [class.kpi-layout-dark]="darkTheme" (click)="onKpiLayoutClick($event)">
+  <section class="kpi-layout" [class.kpi-layout-dark]="darkTheme" [class.kpi-layout-row]="compactRow"
+    [class.kpi-layout-reserve-actions]="reserveTitleActionSpace" (click)="onKpiLayoutClick($event)">
     <header class="kpi-header" [class.kpi-header-reserve-actions]="reserveTitleActionSpace">
+      @if (compactRow) {
+      <div class="kpi-copy-block">
+        <div class="title-row">
+          <div class="kpi-title qs-dashboard-chart-title" [attr.title]="title">{{ titleDisplay }}</div>
+          @if (infoTooltip) {
+          <button mat-icon-button class="title-info-button" [matTooltip]="infoTooltip" matTooltipPosition="below"
+            aria-label="How this KPI is calculated" (click)="onInfoButtonClick($event)">
+            <mat-icon>info</mat-icon>
+          </button>
+          }
+        </div>
+        <div class="kpi-subtitle-row">
+          <span class="kpi-primary-label">{{ primaryLabel }}</span>
+          @if (secondaryLabel) {
+          <span class="kpi-subtitle-separator" aria-hidden="true">·</span>
+          <span class="kpi-secondary-label">{{ secondaryLabel }}</span>
+          }
+          @if (secondaryValueText) {
+          <span class="kpi-secondary-value">{{ secondaryValueText }}</span>
+          }
+        </div>
+      </div>
+      <div class="kpi-value-block">
+        <div class="kpi-value">{{ primaryValueText }}</div>
+      </div>
+      } @else {
       <div class="title-row">
-        <div class="kpi-title" [attr.title]="title">{{ titleDisplay }}</div>
+        <div class="kpi-title qs-dashboard-chart-title" [attr.title]="title">{{ titleDisplay }}</div>
         @if (infoTooltip) {
         <button mat-icon-button class="title-info-button" [matTooltip]="infoTooltip" matTooltipPosition="below"
           aria-label="How this KPI is calculated" (click)="onInfoButtonClick($event)">
@@ -11,13 +38,20 @@
         </button>
         }
       </div>
-      <div class="kpi-value">{{ primaryValueText }}</div>
-      <div class="kpi-primary-label">{{ primaryLabel }}</div>
-      <div class="kpi-secondary-label">{{ secondaryLabel }}</div>
-      @if (secondaryValueText) {
-      <div class="kpi-secondary-value">{{ secondaryValueText }}</div>
+      <div class="kpi-value-block">
+        <div class="kpi-value">{{ primaryValueText }}</div>
+        <div class="kpi-primary-label">{{ primaryLabel }}</div>
+      </div>
+      <div class="kpi-meta">
+        <div class="kpi-secondary-label">{{ secondaryLabel }}</div>
+        @if (secondaryValueText) {
+        <div class="kpi-secondary-value">{{ secondaryValueText }}</div>
+        }
+      </div>
       }
     </header>
-    <div #chartDiv class="kpi-sparkline"></div>
+    <div class="kpi-sparkline-shell">
+      <div #chartDiv class="kpi-sparkline"></div>
+    </div>
   </section>
 </app-loading-overlay>

@@ -148,3 +148,42 @@
 </div>
 }
 }
+
+@if (isSuuntoSleepBackfillVisible) {
+<section class="sleep-backfill-section" aria-label="Suunto sleep history backfill">
+  <div class="sleep-backfill-copy">
+    <div class="sleep-backfill-title">Sleep history</div>
+    <p>
+      Queues Suunto sleep from {{ sleepBackfillStartDate | date:'mediumDate' }} to today.
+      Existing sleep records are updated idempotently.
+    </p>
+    <p class="sleep-backfill-note">
+      This can run once every {{ sleepBackfillCooldownDays }} days.
+    </p>
+    @if (isSleepBackfillCooldownActive && sleepBackfillNextAllowedAtMs) {
+    <p class="sleep-backfill-note">
+      Next available {{ sleepBackfillNextAllowedAtMs | date:'medium' }}.
+    </p>
+    }
+    @if (pendingSleepBackfillResult()) {
+    <p class="sleep-backfill-note">
+      Queued {{ pendingSleepBackfillResult()?.queued ?? 0 }} sleep windows from
+      {{ pendingSleepBackfillResult()?.startDate | date:'mediumDate' }} to
+      {{ pendingSleepBackfillResult()?.endDate | date:'mediumDate' }}.
+    </p>
+    }
+  </div>
+
+  <button mat-stroked-button type="button" class="qs-mat-primary sleep-backfill-button"
+    (click)="onSuuntoSleepBackfill($event)" [disabled]="!canSubmitSuuntoSleepBackfill">
+    <span class="sleep-backfill-button-content">
+      @if (isSleepBackfillSubmitting()) {
+      <mat-spinner diameter="18" class="sleep-backfill-progress" aria-hidden="true"></mat-spinner>
+      } @else {
+      <mat-icon aria-hidden="true">bedtime</mat-icon>
+      }
+      <span>{{ isSleepBackfillSubmitting() ? 'Queueing...' : 'Backfill Sleep History' }}</span>
+    </span>
+  </button>
+</section>
+}

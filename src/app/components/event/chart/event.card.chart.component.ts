@@ -38,6 +38,8 @@ import {
   buildEventChartPanels,
   buildEventLapMarkers,
   buildEventZoomOverviewData,
+  EVENT_CHART_INTENSITY_ZONE_LINE_DATA_TYPES,
+  EVENT_CHART_INTENSITY_ZONE_LOWER_LIMIT_KEYS,
   EventChartLapMarker,
   EventChartPanelModel,
 } from '../../../helpers/event-echarts-data.helper';
@@ -491,6 +493,7 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
           dataTypesToUse: this.dataTypesToUse,
           userUnitSettings: this.userUnitSettings,
           eventColorService: this.eventColorService,
+          colorIntensityZoneLines: this.shouldColorIntensityZoneLines(),
         });
         this.lastPanelRebuildKey = panelRebuildKey;
 
@@ -683,6 +686,8 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
     const allActivitiesKey = this.buildActivitiesKey(allActivities);
     const dataTypesKey = [...(this.dataTypesToUse || [])].sort((left, right) => left.localeCompare(right)).join(',');
     const unitSettingsKey = this.buildUnitSettingsKey(this.userUnitSettings);
+    const intensityZoneColoringKey = this.shouldColorIntensityZoneLines() ? 'intensity-zones:1' : 'intensity-zones:0';
+    const intensityZoneBoundariesKey = this.buildIntensityZoneBoundariesKey(selectedActivities);
 
     return [
       eventID,
@@ -692,6 +697,8 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
       allActivitiesKey,
       dataTypesKey,
       unitSettingsKey,
+      intensityZoneColoringKey,
+      intensityZoneBoundariesKey,
     ].join('|');
   }
 
@@ -727,6 +734,32 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
   private buildActivitiesKey(activities: ActivityInterface[]): string {
     return (activities || [])
       .map((activity) => `${activity?.getID?.() || ''}`)
+      .join(',');
+  }
+
+  private shouldColorIntensityZoneLines(): boolean {
+    return this.event?.isMerge !== true;
+  }
+
+  private buildIntensityZoneBoundariesKey(activities: ActivityInterface[]): string {
+    return (activities || [])
+      .map((activity) => {
+        const activityID = activity?.getID?.() || '';
+        const zoneBoundaries = EVENT_CHART_INTENSITY_ZONE_LINE_DATA_TYPES.map((dataType) => {
+          const intensityZones = activity.intensityZones
+            ?.find((zone) => zone?.type === dataType);
+          if (!intensityZones) {
+            return `${dataType}:`;
+          }
+
+          return [
+            dataType,
+            ...EVENT_CHART_INTENSITY_ZONE_LOWER_LIMIT_KEYS.map((key) => intensityZones[key] ?? ''),
+          ].join(':');
+        });
+
+        return [activityID, ...zoneBoundaries].join(':');
+      })
       .join(',');
   }
 

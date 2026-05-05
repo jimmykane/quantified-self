@@ -1,6 +1,7 @@
 import {
   AfterViewInit,
   ChangeDetectionStrategy,
+  ChangeDetectorRef,
   Component,
   ElementRef,
   Input,
@@ -30,6 +31,8 @@ import type {
   DashboardAcwrContext,
   DashboardEasyPercentContext,
   DashboardEfficiencyDelta4wContext,
+  DashboardFatigueAtlContext,
+  DashboardFitnessCtlContext,
   DashboardMonotonyStrainContext,
   DashboardFormNowContext,
   DashboardFormPlus7dContext,
@@ -40,6 +43,8 @@ import {
   DASHBOARD_ACWR_KPI_CHART_TYPE,
   DASHBOARD_EASY_PERCENT_KPI_CHART_TYPE,
   DASHBOARD_EFFICIENCY_DELTA_4W_KPI_CHART_TYPE,
+  DASHBOARD_FATIGUE_ATL_KPI_CHART_TYPE,
+  DASHBOARD_FITNESS_CTL_KPI_CHART_TYPE,
   DASHBOARD_FORM_NOW_KPI_CHART_TYPE,
   DASHBOARD_FORM_PLUS_7D_KPI_CHART_TYPE,
   DASHBOARD_HARD_PERCENT_KPI_CHART_TYPE,
@@ -83,10 +88,13 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
   @Input() chartType: DashboardKpiChartType = DASHBOARD_ACWR_KPI_CHART_TYPE;
   @Input() infoTooltip?: string | null;
   @Input() reserveTitleActionSpace = false;
+  @Input() compactRow = false;
   @Input() acwr?: DashboardAcwrContext | null;
   @Input() rampRate?: DashboardRampRateContext | null;
   @Input() monotonyStrain?: DashboardMonotonyStrainContext | null;
   @Input() formNow?: DashboardFormNowContext | null;
+  @Input() fitnessCtl?: DashboardFitnessCtlContext | null;
+  @Input() fatigueAtl?: DashboardFatigueAtlContext | null;
   @Input() formPlus7d?: DashboardFormPlus7dContext | null;
   @Input() easyPercent?: DashboardEasyPercentContext | null;
   @Input() hardPercent?: DashboardHardPercentContext | null;
@@ -95,6 +103,8 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
   @Input() rampRateStatus?: DashboardDerivedMetricStatus | null;
   @Input() monotonyStrainStatus?: DashboardDerivedMetricStatus | null;
   @Input() formNowStatus?: DashboardDerivedMetricStatus | null;
+  @Input() fitnessCtlStatus?: DashboardDerivedMetricStatus | null;
+  @Input() fatigueAtlStatus?: DashboardDerivedMetricStatus | null;
   @Input() formPlus7dStatus?: DashboardDerivedMetricStatus | null;
   @Input() easyPercentStatus?: DashboardDerivedMetricStatus | null;
   @Input() hardPercentStatus?: DashboardDerivedMetricStatus | null;
@@ -113,14 +123,15 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
   public secondaryLabel = 'Acute / chronic load';
   public secondaryValueText = '';
   public showNoDataError = false;
-  public noDataErrorMessage = 'No data yet';
-  public noDataErrorHint = 'This KPI needs derived training metrics.';
+  public noDataErrorMessage = 'No KPI data yet';
+  public noDataErrorHint = 'Upload activities with training load to calculate this metric.';
   public noDataErrorIcon = 'insights';
 
   constructor(
     private eChartsLoader: EChartsLoaderService,
     private logger: LoggerService,
     private hapticsService: AppHapticsService,
+    private changeDetectorRef: ChangeDetectorRef,
   ) {
     this.chartHost = new EChartsHostController({
       eChartsLoader: this.eChartsLoader,
@@ -146,6 +157,8 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
       || changes.rampRate
       || changes.monotonyStrain
       || changes.formNow
+      || changes.fitnessCtl
+      || changes.fatigueAtl
       || changes.formPlus7d
       || changes.easyPercent
       || changes.hardPercent
@@ -154,10 +167,13 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
       || changes.rampRateStatus
       || changes.monotonyStrainStatus
       || changes.formNowStatus
+      || changes.fitnessCtlStatus
+      || changes.fatigueAtlStatus
       || changes.formPlus7dStatus
       || changes.easyPercentStatus
       || changes.hardPercentStatus
       || changes.efficiencyDelta4wStatus
+      || changes.compactRow
     );
 
     if (requiresChartRefresh) {
@@ -224,16 +240,17 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
 
     const hasRenderableValue = presentation.primaryValue !== null;
     this.showNoDataError = !hasRenderableValue;
-    this.noDataErrorMessage = 'No data yet';
-    this.noDataErrorHint = 'This KPI needs derived training metrics.';
+    this.noDataErrorMessage = 'No KPI data yet';
+    this.noDataErrorHint = 'Upload activities with training load to calculate this metric.';
     this.noDataErrorIcon = 'insights';
 
     if (isDerivedMetricPendingStatus(this.resolveActiveStatus()) && !hasRenderableValue) {
       this.showNoDataError = true;
-      this.noDataErrorMessage = 'KPI is updating';
-      this.noDataErrorHint = 'Derived metrics are being recalculated in the background.';
+      this.noDataErrorMessage = 'Updating KPI data';
+      this.noDataErrorHint = 'Training metrics are being recalculated in the background.';
       this.noDataErrorIcon = 'autorenew';
     }
+    this.changeDetectorRef.markForCheck();
 
     return presentation;
   }
@@ -247,6 +264,28 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
         primaryLabel: 'Same-day TSB',
         secondaryLabel: 'Current readiness state',
         primarySigned: true,
+        trend: (context?.trend8Weeks || []).map(point => ({ time: point.time, value: point.value })),
+      };
+    }
+
+    if (this.chartType === DASHBOARD_FITNESS_CTL_KPI_CHART_TYPE) {
+      const context = this.fitnessCtl || null;
+      return {
+        title: 'Fitness (CTL)',
+        primaryValue: context?.value ?? null,
+        primaryLabel: 'CTL',
+        secondaryLabel: '42-day TSS load',
+        trend: (context?.trend8Weeks || []).map(point => ({ time: point.time, value: point.value })),
+      };
+    }
+
+    if (this.chartType === DASHBOARD_FATIGUE_ATL_KPI_CHART_TYPE) {
+      const context = this.fatigueAtl || null;
+      return {
+        title: 'Fatigue (ATL)',
+        primaryValue: context?.value ?? null,
+        primaryLabel: 'ATL',
+        secondaryLabel: '7-day TSS load',
         trend: (context?.trend8Weeks || []).map(point => ({ time: point.time, value: point.value })),
       };
     }
@@ -305,13 +344,15 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
 
     if (this.chartType === DASHBOARD_RAMP_RATE_KPI_CHART_TYPE) {
       const context = this.rampRate || null;
+      const ctlTodayText = context?.ctlToday !== null && context?.ctlToday !== undefined
+        ? this.formatPrimaryValue(context.ctlToday)
+        : '';
       return {
         title: 'Ramp Rate',
         primaryValue: context?.rampRate ?? null,
         primaryLabel: 'CTL delta (7d)',
-        secondaryLabel: context?.ctlToday !== null && context?.ctlToday !== undefined
-          ? `CTL today ${this.formatPrimaryValue(context.ctlToday)}`
-          : 'Fitness acceleration over the last 7 days',
+        secondaryLabel: ctlTodayText ? 'CTL today' : 'Fitness acceleration over the last 7 days',
+        secondaryValueText: ctlTodayText,
         trend: (context?.trend8Weeks || []).map(point => ({ time: point.time, value: point.value })),
       };
     }
@@ -319,25 +360,28 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
     if (this.chartType === DASHBOARD_MONOTONY_STRAIN_KPI_CHART_TYPE) {
       const context = this.monotonyStrain || null;
       const monotonyText = context?.monotony !== null && context?.monotony !== undefined
-        ? `Monotony ${this.formatPrimaryValue(context.monotony)}`
-        : 'Weekly monotony and strain';
+        ? this.formatPrimaryValue(context.monotony)
+        : '';
       return {
         title: 'Monotony / Strain',
         primaryValue: context?.strain ?? null,
         primaryLabel: 'Strain',
-        secondaryLabel: monotonyText,
+        secondaryLabel: monotonyText ? 'Monotony' : 'Weekly monotony and strain',
+        secondaryValueText: monotonyText,
         trend: (context?.trend8Weeks || []).map(point => ({ time: point.time, value: point.value })),
       };
     }
 
     const context = this.acwr || null;
+    const acuteChronicText = context
+      ? `${this.formatPrimaryValue(context.acuteLoad7)} / ${this.formatPrimaryValue(context.chronicLoad28)}`
+      : '';
     return {
       title: 'ACWR',
       primaryValue: context?.ratio ?? null,
       primaryLabel: 'Ratio',
-      secondaryLabel: context
-        ? `Acute ${this.formatPrimaryValue(context.acuteLoad7)} / Chronic ${this.formatPrimaryValue(context.chronicLoad28)}`
-        : 'Acute 7-day vs chronic 28-day load',
+      secondaryLabel: acuteChronicText ? 'Acute / Chronic' : 'Acute 7-day vs chronic 28-day load',
+      secondaryValueText: acuteChronicText,
       trend: (context?.trend8Weeks || []).map(point => ({ time: point.time, value: point.value })),
     };
   }
@@ -345,6 +389,12 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
   private resolveActiveStatus(): DashboardDerivedMetricStatus | null {
     if (this.chartType === DASHBOARD_FORM_NOW_KPI_CHART_TYPE) {
       return this.formNowStatus || null;
+    }
+    if (this.chartType === DASHBOARD_FITNESS_CTL_KPI_CHART_TYPE) {
+      return this.fitnessCtlStatus || null;
+    }
+    if (this.chartType === DASHBOARD_FATIGUE_ATL_KPI_CHART_TYPE) {
+      return this.fatigueAtlStatus || null;
     }
     if (this.chartType === DASHBOARD_FORM_PLUS_7D_KPI_CHART_TYPE) {
       return this.formPlus7dStatus || null;
@@ -368,6 +418,9 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
   }
 
   private resolveDisplayTitle(): string {
+    if (this.compactRow) {
+      return this.title;
+    }
     if (this.reserveTitleActionSpace !== true) {
       return this.title;
     }
@@ -379,6 +432,12 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
     }
     if (this.chartType === DASHBOARD_EFFICIENCY_DELTA_4W_KPI_CHART_TYPE) {
       return 'Eff Δ';
+    }
+    if (this.chartType === DASHBOARD_FITNESS_CTL_KPI_CHART_TYPE) {
+      return 'Fitness';
+    }
+    if (this.chartType === DASHBOARD_FATIGUE_ATL_KPI_CHART_TYPE) {
+      return 'Fatigue';
     }
     return this.title;
   }
@@ -480,46 +539,11 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
         axisLine: { show: false },
         splitLine: { show: false },
       },
-      tooltip: {
-        show: true,
-        trigger: 'axis',
-        // Keep tooltip available on compact KPI cards across desktop/mobile.
-        triggerOn: resolveEChartsTooltipTriggerOn(true, false),
-        axisPointer: {
-          type: 'line',
-          lineStyle: {
-            color: this.withAlpha(sparklineStyle.lineColor, 0.42),
-            width: 1,
-          },
-        },
-        renderMode: 'html',
-        ...resolveEChartsTooltipSurfaceConfig(isMobileTooltipViewport),
-        borderWidth: 1,
-        borderColor: style.tooltipBorderColor,
-        backgroundColor: style.tooltipBackgroundColor,
-        textStyle: {
-          color: style.tooltipTextColor,
-          fontFamily: ECHARTS_GLOBAL_FONT_FAMILY,
-          fontSize: style.axisFontSize,
-        },
-        formatter: (params: Array<{ data?: [number, number | null] }>) => {
-          const entry = params?.[0]?.data;
-          if (!entry) {
-            return '';
-          }
-          const dateLabel = new Date(entry[0]).toLocaleDateString(undefined, {
-            month: 'short',
-            day: 'numeric',
-            year: 'numeric',
-          });
-          const heading = this.isWeeklyTrendKpi() ? `Week of ${dateLabel}` : dateLabel;
-          const valueText = this.formatPrimaryValue(entry[1]);
-          return `${heading}<br/><strong>${valueText}</strong>`;
-        },
-      },
+      tooltip: this.buildTooltipOption(style, isMobileTooltipViewport, sparklineStyle),
       series: [
         {
           type: 'line',
+          silent: this.compactRow,
           data: trendData,
           smooth: true,
           showSymbol: false,
@@ -579,6 +603,53 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
             : undefined,
         },
       ],
+    };
+  }
+
+  private buildTooltipOption(
+    style: ReturnType<typeof buildDashboardEChartsStyleTokens>,
+    isMobileTooltipViewport: boolean,
+    sparklineStyle: KpiSparklineStyle,
+  ): Record<string, unknown> {
+    if (this.compactRow) {
+      return { show: false };
+    }
+
+    return {
+      show: true,
+      trigger: 'axis',
+      triggerOn: resolveEChartsTooltipTriggerOn(true, false),
+      axisPointer: {
+        type: 'line',
+        lineStyle: {
+          color: this.withAlpha(sparklineStyle.lineColor, 0.42),
+          width: 1,
+        },
+      },
+      renderMode: 'html',
+      ...resolveEChartsTooltipSurfaceConfig(isMobileTooltipViewport),
+      borderWidth: 1,
+      borderColor: style.tooltipBorderColor,
+      backgroundColor: style.tooltipBackgroundColor,
+      textStyle: {
+        color: style.tooltipTextColor,
+        fontFamily: ECHARTS_GLOBAL_FONT_FAMILY,
+        fontSize: style.axisFontSize,
+      },
+      formatter: (params: Array<{ data?: [number, number | null] }>) => {
+        const entry = params?.[0]?.data;
+        if (!entry) {
+          return '';
+        }
+        const dateLabel = new Date(entry[0]).toLocaleDateString(undefined, {
+          month: 'short',
+          day: 'numeric',
+          year: 'numeric',
+        });
+        const heading = this.isWeeklyTrendKpi() ? `Week of ${dateLabel}` : dateLabel;
+        const valueText = this.formatPrimaryValue(entry[1]);
+        return `${heading}<br/><strong>${valueText}</strong>`;
+      },
     };
   }
 
@@ -647,6 +718,17 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
           neutralColor,
           neutralThreshold: 0.15,
         }),
+        areaColor: neutralColor,
+        areaOpacity: 0.14,
+      };
+    }
+
+    if (
+      this.chartType === DASHBOARD_FITNESS_CTL_KPI_CHART_TYPE
+      || this.chartType === DASHBOARD_FATIGUE_ATL_KPI_CHART_TYPE
+    ) {
+      return {
+        lineColor: neutralColor,
         areaColor: neutralColor,
         areaOpacity: 0.14,
       };

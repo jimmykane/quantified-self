@@ -163,16 +163,105 @@ describe('UserSettingsComponent', () => {
         expect(emailLine).toBeNull();
     });
 
-    it('should map section id to tab index and back', () => {
-        expect(component.sectionIdToIndex('profile')).toBe(0);
-        expect(component.sectionIdToIndex('units')).toBe(5);
-        expect(component.indexToSectionId(1)).toBe('app');
-        expect(component.indexToSectionId(99)).toBe('profile');
+    it('renders the profile identity strip only inside the profile section', () => {
+        component.activeSection = 'profile';
+        fixture.detectChanges();
+
+        expect(fixture.nativeElement.querySelector('.settings-panel-body .user-profile-header')).toBeTruthy();
+
+        component.activeSection = 'units';
+        fixture.detectChanges();
+
+        expect(fixture.nativeElement.querySelector('.user-profile-header')).toBeNull();
     });
 
-    it('should update section query param when selected tab index changes', async () => {
+    it('does not expose the About You profile description in user settings', () => {
+        component.user = { ...(component.user as any), description: 'Legacy profile bio' } as any;
+        component.ngOnChanges();
+        fixture.detectChanges();
+
+        expect(fixture.nativeElement.textContent).not.toContain('About You');
+        expect(fixture.nativeElement.textContent).not.toContain('Legacy profile bio');
+        expect(fixture.nativeElement.querySelector('[formControlName="description"]')).toBeNull();
+        expect(fixture.nativeElement.querySelector('.user-bio')).toBeNull();
+        expect(component.userSettingsFormGroup.get('description')).toBeNull();
+    });
+
+    it('does not expose account public or private privacy state in user settings', () => {
+        component.user = { ...(component.user as any), privacy: 'public' } as any;
+        component.ngOnChanges();
+        fixture.detectChanges();
+
+        expect(fixture.nativeElement.querySelector('app-privacy-icon')).toBeNull();
+        expect(fixture.nativeElement.querySelector('[formControlName="privacy"]')).toBeNull();
+        expect(component.userSettingsFormGroup.get('privacy')).toBeNull();
+    });
+
+    it('should expose settings navigation sections in display order', () => {
+        expect(component.settingsSectionOptions.map(section => section.id)).toEqual([
+            'profile',
+            'app',
+            'dashboard',
+            'map',
+            'charts',
+            'units',
+            'delete-account',
+        ]);
+    });
+
+    it('renders the settings selector as Material tab navigation', () => {
+        const tabNav = fixture.nativeElement.querySelector('nav[mat-tab-nav-bar]');
+        const tabLabels = Array.from(tabNav.querySelectorAll('.mat-mdc-tab-link'))
+            .map((link: Element) => link.querySelector('.settings-tab-label > span:last-child')?.textContent?.trim());
+
+        expect(tabNav).toBeTruthy();
+        expect(tabLabels).toEqual([
+            'Profile',
+            'General',
+            'Dashboard',
+            'Maps',
+            'Charts',
+            'Units',
+            'Delete Account',
+        ]);
+    });
+
+    it('renders the desktop settings selector as vertical Material list navigation', () => {
+        const desktopNav = fixture.nativeElement.querySelector('.desktop-section-nav');
+        const tabPanel = fixture.nativeElement.querySelector('.settings-tab-panel');
+        const navLabels = Array.from(desktopNav.querySelectorAll('.desktop-section-nav-label'))
+            .map((label: Element) => label.textContent?.trim());
+        const navDescriptions = Array.from(desktopNav.querySelectorAll('.desktop-section-nav-description'))
+            .map((description: Element) => description.textContent?.trim());
+
+        expect(desktopNav).toBeTruthy();
+        expect(tabPanel).toBeTruthy();
+        expect(desktopNav.querySelector('mat-nav-list')).toBeTruthy();
+        expect(navLabels).toEqual([
+            'Profile',
+            'General',
+            'Dashboard',
+            'Maps',
+            'Charts',
+            'Units',
+            'Delete Account',
+        ]);
+        expect(navDescriptions).toEqual(component.settingsSectionOptions.map(section => section.description));
+    });
+
+    it('shows delete account as its own final settings section', () => {
+        const sectionIds = component.settingsSectionOptions.map(section => section.id);
+
+        expect(sectionIds[sectionIds.length - 2]).toBe('units');
+        expect(sectionIds[sectionIds.length - 1]).toBe('delete-account');
+    });
+
+    it('should update section query param when a settings section is selected', async () => {
         component.activeSection = 'profile';
-        await component.onSelectedSectionIndexChange(3);
+        const selection = component.selectSettingsSection('map');
+
+        expect(component.activeSection).toBe('map');
+        await selection;
 
         expect(mockRouter.navigate).toHaveBeenCalledWith([], {
             relativeTo: mockActivatedRoute,
@@ -180,31 +269,38 @@ describe('UserSettingsComponent', () => {
             queryParamsHandling: 'merge',
         });
         expect(component.activeSection).toBe('map');
-        expect(component.selectedSectionIndex).toBe(3);
     });
 
-    it('should update the active tab from section query param changes', () => {
+    it('should update the active section from section query param changes', () => {
         component.activeSection = 'profile';
 
-        queryParamMapSubject.next(convertToParamMap({ section: 'units' }));
+        queryParamMapSubject.next(convertToParamMap({ section: 'delete-account' }));
 
-        expect(component.activeSection).toBe('units');
-        expect(component.selectedSectionIndex).toBe(5);
+        expect(component.activeSection).toBe('delete-account');
     });
 
-    it('should restore the profile tab when the section query param is missing', () => {
+    it('should restore the profile section when the section query param is missing', () => {
         component.activeSection = 'units';
 
         queryParamMapSubject.next(convertToParamMap({}));
 
         expect(component.activeSection).toBe('profile');
-        expect(component.selectedSectionIndex).toBe(0);
     });
 
-    it('should enable sticky tabs config for shared tabs wrapper', () => {
-        expect(component.tabsStickyHeader).toBe(true);
-        expect(component.tabsTopOffset).toBe('0px');
-        expect(component.tabsLazyContent).toBe(false);
+    it('renders delete account only in the delete account section', () => {
+        component.activeSection = 'profile';
+        fixture.detectChanges();
+
+        expect(fixture.nativeElement.querySelector('.danger-card')).toBeNull();
+        expect(fixture.nativeElement.textContent).not.toContain('Delete My Account');
+
+        component.activeSection = 'delete-account';
+        fixture.detectChanges();
+
+        expect(fixture.nativeElement.querySelector('.danger-card')).toBeTruthy();
+        expect(fixture.nativeElement.textContent).toContain('Delete My Account');
+        expect(fixture.nativeElement.querySelector('.qs-form-actions-floating')).toBeNull();
+        expect(fixture.nativeElement.querySelector('.mobile-save-bar')).toBeNull();
     });
 
     it('should initialize acceptedTrackingPolicy from user data', () => {
@@ -313,6 +409,20 @@ describe('UserSettingsComponent', () => {
         );
     });
 
+    it('should not include profile description when settings are saved', async () => {
+        const userService = TestBed.inject(AppUserService);
+        const updateUserPropertiesSpy = vi.spyOn(userService, 'updateUserProperties').mockResolvedValue(true as any);
+
+        component.user = { ...(component.user as any), description: 'Legacy profile bio' } as any;
+        component.ngOnChanges();
+        component.userSettingsFormGroup.get('acceptedMarketingPolicy').setValue(true);
+
+        await component.onSubmit(new Event('submit'));
+
+        const payload = updateUserPropertiesSpy.mock.calls[0][1];
+        expect(payload.description).toBeUndefined();
+    });
+
     it('should initialize and save distance unit preference when form is submitted', async () => {
         const userService = TestBed.inject(AppUserService);
         const updateUserPropertiesSpy = vi.spyOn(userService, 'updateUserProperties').mockResolvedValue(true as any);
@@ -395,6 +505,24 @@ describe('UserSettingsComponent', () => {
         expect(component.userSettingsFormGroup.get('swimPaceUnitsToUse').value).toEqual([SwimPaceUnits.MinutesPer100Yard]);
         expect(component.userSettingsFormGroup.get('verticalSpeedUnitsToUse').value).toEqual([VerticalSpeedUnits.FeetPerSecond]);
         expect(component.userSettingsFormGroup.dirty).toBe(true);
+    });
+
+    it('renders unit presets and fine-tune unit controls without an expander', () => {
+        component.activeSection = 'units';
+        fixture.detectChanges();
+
+        const presetGroup = fixture.nativeElement.querySelector('mat-button-toggle-group');
+        const unitsFieldList = fixture.nativeElement.querySelector('.settings-field-list--units');
+        const formFields = fixture.nativeElement.querySelectorAll('mat-form-field');
+
+        expect(presetGroup).toBeTruthy();
+        expect(unitsFieldList).toBeTruthy();
+        expect(presetGroup.hasAttribute('hideSingleSelectionIndicator')).toBe(true);
+        expect(fixture.nativeElement.querySelector('mat-expansion-panel')).toBeFalsy();
+        expect(fixture.nativeElement.textContent).toContain('Fine-tune units');
+        expect(formFields.length).toBeGreaterThanOrEqual(5);
+        expect(fixture.nativeElement.querySelector('.unit-simple-settings')).toBeFalsy();
+        expect(fixture.nativeElement.querySelector('.unit-advanced-settings')).toBeFalsy();
     });
 
     it('should save trimmed brandText for paid users', async () => {

@@ -1,15 +1,20 @@
 import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
+import { MAT_DIALOG_DATA, MatDialog, MatDialogRef } from '@angular/material/dialog';
 import { describe, expect, it, beforeEach, vi } from 'vitest';
+import { BehaviorSubject, of } from 'rxjs';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import {
   ChartDataCategoryTypes,
   ChartDataValueTypes,
   ChartTypes,
+  ActivityTypes,
   DataDistance,
   DataDuration,
+  DataEnergy,
+  DataHeartRateAvg,
+  DataRecoveryTime,
   TileTypes,
   TimeIntervals,
 } from '@sports-alliance/sports-lib';
@@ -19,6 +24,8 @@ import {
   DASHBOARD_EASY_PERCENT_KPI_CHART_TYPE,
   DASHBOARD_EFFICIENCY_DELTA_4W_KPI_CHART_TYPE,
   DASHBOARD_EFFICIENCY_TREND_CHART_TYPE,
+  DASHBOARD_FATIGUE_ATL_KPI_CHART_TYPE,
+  DASHBOARD_FITNESS_CTL_KPI_CHART_TYPE,
   DASHBOARD_FRESHNESS_FORECAST_CHART_TYPE,
   DASHBOARD_FORM_CHART_TYPE,
   DASHBOARD_FORM_NOW_KPI_CHART_TYPE,
@@ -31,8 +38,10 @@ import {
   DASHBOARD_SLEEP_TREND_CHART_TYPE,
 } from '../../../helpers/dashboard-special-chart-types';
 import { DASHBOARD_MANAGER_PRESET_IDS } from '../../../helpers/dashboard-manager-presets.helper';
+import { AppUserUtilities } from '../../../utils/app.user.utilities';
 import { AppUserService } from '../../../services/app.user.service';
 import { AppHapticsService } from '../../../services/app.haptics.service';
+import { AppSleepService } from '../../../services/app.sleep.service';
 import { DashboardManagerDialogComponent } from './dashboard-manager-dialog.component';
 
 function createUser(tiles: any[] = []): any {
@@ -49,11 +58,45 @@ function createUser(tiles: any[] = []): any {
   };
 }
 
+function dashboardTileSignature(tile: any): Record<string, unknown> {
+  return tile?.type === TileTypes.Map
+    ? {
+      type: tile.type,
+      mapStyle: tile.mapStyle,
+      clusterMarkers: tile.clusterMarkers,
+    }
+    : {
+      type: tile.type,
+      chartType: `${tile.chartType}`,
+      dataType: tile.dataType,
+      dataValueType: tile.dataValueType,
+      dataCategoryType: tile.dataCategoryType,
+      dataTimeInterval: tile.dataTimeInterval,
+    };
+}
+
+function createDeferred<T = unknown>(): {
+  promise: Promise<T>;
+  resolve: (value: T) => void;
+  reject: (reason?: unknown) => void;
+} {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((promiseResolve, promiseReject) => {
+    resolve = promiseResolve;
+    reject = promiseReject;
+  });
+  return { promise, resolve, reject };
+}
+
 describe('DashboardManagerDialogComponent', () => {
   let component: DashboardManagerDialogComponent;
   let fixture: ComponentFixture<DashboardManagerDialogComponent>;
   let userServiceMock: { updateUserProperties: ReturnType<typeof vi.fn> };
   let dialogRefMock: { close: ReturnType<typeof vi.fn> };
+  let dialogMock: { open: ReturnType<typeof vi.fn> };
+  let sleepEligibilitySubject: BehaviorSubject<boolean>;
+  let sleepServiceMock: { watchHasAnySleepSession: ReturnType<typeof vi.fn> };
   let hapticsMock: {
     selection: ReturnType<typeof vi.fn>;
     success: ReturnType<typeof vi.fn>;
@@ -83,6 +126,15 @@ describe('DashboardManagerDialogComponent', () => {
     dialogRefMock = {
       close: vi.fn(),
     };
+    dialogMock = {
+      open: vi.fn().mockReturnValue({
+        afterClosed: () => of(false),
+      }),
+    };
+    sleepEligibilitySubject = new BehaviorSubject<boolean>(false);
+    sleepServiceMock = {
+      watchHasAnySleepSession: vi.fn().mockReturnValue(sleepEligibilitySubject.asObservable()),
+    };
     hapticsMock = {
       selection: vi.fn(),
       success: vi.fn(),
@@ -94,7 +146,9 @@ describe('DashboardManagerDialogComponent', () => {
       providers: [
         { provide: AppUserService, useValue: userServiceMock },
         { provide: AppHapticsService, useValue: hapticsMock },
+        { provide: AppSleepService, useValue: sleepServiceMock },
         { provide: MatDialogRef, useValue: dialogRefMock },
+        { provide: MatDialog, useValue: dialogMock },
         { provide: MAT_DIALOG_DATA, useValue: dialogData },
       ],
       schemas: [NO_ERRORS_SCHEMA],
@@ -121,6 +175,8 @@ describe('DashboardManagerDialogComponent', () => {
       DASHBOARD_RAMP_RATE_KPI_CHART_TYPE,
       DASHBOARD_MONOTONY_STRAIN_KPI_CHART_TYPE,
       DASHBOARD_FORM_NOW_KPI_CHART_TYPE,
+      DASHBOARD_FITNESS_CTL_KPI_CHART_TYPE,
+      DASHBOARD_FATIGUE_ATL_KPI_CHART_TYPE,
       DASHBOARD_FORM_PLUS_7D_KPI_CHART_TYPE,
       DASHBOARD_EASY_PERCENT_KPI_CHART_TYPE,
       DASHBOARD_HARD_PERCENT_KPI_CHART_TYPE,
@@ -136,6 +192,8 @@ describe('DashboardManagerDialogComponent', () => {
     component.customDataCategoryType = ChartDataCategoryTypes.ActivityType;
     component.customDataValueType = ChartDataValueTypes.Maximum;
     component.customTimeInterval = TimeIntervals.Monthly;
+    component.customEventRange = '30d';
+    component.customEventActivityTypes = [ActivityTypes.Running];
 
     await component.save();
 
@@ -144,6 +202,10 @@ describe('DashboardManagerDialogComponent', () => {
     expect(tiles[1].chartType).toBe(ChartTypes.Pie);
     expect(tiles[1].dataType).toBe(DataDistance.type);
     expect(tiles[1].dataValueType).toBe(ChartDataValueTypes.Total);
+    expect(tiles[1].eventFilters).toEqual({
+      range: '30d',
+      activityTypes: [ActivityTypes.Running],
+    });
     expect(userServiceMock.updateUserProperties).toHaveBeenCalledWith(dialogData.user, {
       settings: dialogData.user.settings,
     });
@@ -156,6 +218,8 @@ describe('DashboardManagerDialogComponent', () => {
     component.category = 'map' as any;
     component.mapStyle = 'satellite';
     component.mapClusterMarkers = false;
+    component.mapEventRange = '1y';
+    component.mapEventActivityTypes = [ActivityTypes.Cycling];
 
     await component.save();
 
@@ -164,10 +228,21 @@ describe('DashboardManagerDialogComponent', () => {
     expect(tiles[1].type).toBe(TileTypes.Map);
     expect(tiles[1].mapStyle).toBe('satellite');
     expect(tiles[1].clusterMarkers).toBe(false);
+    expect(tiles[1].eventFilters).toEqual({
+      range: '1y',
+      activityTypes: [ActivityTypes.Cycling],
+    });
     expect(userServiceMock.updateUserProperties).toHaveBeenCalledTimes(1);
   });
 
   it('adds a KPI tile with fixed derived settings', async () => {
+    dialogData.user.settings.dashboardSettings.autoTiles = {
+      kpiRampRate: {
+        state: 'dismissed',
+        dismissedAt: 1_777_000_000_000,
+        source: 'default-kpi',
+      },
+    };
     component.mode = 'add';
     component.category = 'kpi' as any;
     component.kpiChartType = DASHBOARD_RAMP_RATE_KPI_CHART_TYPE as any;
@@ -184,6 +259,10 @@ describe('DashboardManagerDialogComponent', () => {
       dataTimeInterval: TimeIntervals.Weekly,
       size: { columns: 1, rows: 1 },
     });
+    expect(dialogData.user.settings.dashboardSettings.autoTiles.kpiRampRate).toMatchObject({
+      state: 'added',
+      source: 'default-kpi',
+    });
   });
 
   it('adds freshness forecast curated tile with one-column default size', async () => {
@@ -199,6 +278,281 @@ describe('DashboardManagerDialogComponent', () => {
       type: TileTypes.Chart,
       chartType: DASHBOARD_FRESHNESS_FORECAST_CHART_TYPE,
       size: { columns: 1, rows: 1 },
+    });
+  });
+
+  it('adds regular curated charts with one-column default size', async () => {
+    component.mode = 'add';
+    component.category = 'curated';
+    component.curatedChartType = DASHBOARD_RECOVERY_NOW_CHART_TYPE as any;
+
+    await component.save();
+
+    const tiles = dialogData.user.settings.dashboardSettings.tiles;
+    expect(tiles).toHaveLength(2);
+    expect(tiles[1]).toMatchObject({
+      type: TileTypes.Chart,
+      chartType: DASHBOARD_RECOVERY_NOW_CHART_TYPE,
+      size: { columns: 1, rows: 1 },
+    });
+  });
+
+  it('marks regular curated auto-tile state added when manually adding a dismissed curated chart', async () => {
+    dialogData.user.settings.dashboardSettings.autoTiles = {
+      curatedIntensityDistribution: {
+        state: 'dismissed',
+        dismissedAt: 1_777_000_000_000,
+        source: 'default-curated',
+      },
+    };
+    component.mode = 'add';
+    component.category = 'curated';
+    component.curatedChartType = DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE as any;
+
+    await component.save();
+
+    const tiles = dialogData.user.settings.dashboardSettings.tiles;
+    expect(tiles).toHaveLength(2);
+    expect(tiles[1]).toMatchObject({
+      type: TileTypes.Chart,
+      chartType: DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE,
+      size: { columns: 1, rows: 1 },
+    });
+    expect(dialogData.user.settings.dashboardSettings.autoTiles.curatedIntensityDistribution).toMatchObject({
+      state: 'added',
+      source: 'default-curated',
+    });
+  });
+
+  it('marks Sleep Trend auto-tile state added when manually adding Sleep Trend', async () => {
+    dialogData.user.settings.dashboardSettings.autoTiles = {
+      sleepTrend: {
+        state: 'dismissed',
+        dismissedAt: 1_777_000_000_000,
+        source: 'sleep-sync',
+      },
+    };
+    component.mode = 'add';
+    component.category = 'curated';
+    component.curatedChartType = DASHBOARD_SLEEP_TREND_CHART_TYPE as any;
+
+    await component.save();
+
+    const tiles = dialogData.user.settings.dashboardSettings.tiles;
+    expect(tiles).toHaveLength(2);
+    expect(tiles[1]).toMatchObject({
+      type: TileTypes.Chart,
+      chartType: DASHBOARD_SLEEP_TREND_CHART_TYPE,
+      size: { columns: 1, rows: 1 },
+    });
+    expect(dialogData.user.settings.dashboardSettings.autoTiles.sleepTrend).toMatchObject({
+      state: 'added',
+      source: 'sleep-sync',
+    });
+  });
+
+  it('marks Sleep Trend auto-tile state dismissed when replacing it with another tile', async () => {
+    dialogData.user.settings.dashboardSettings.tiles = [{
+      type: TileTypes.Chart,
+      order: 0,
+      name: 'Sleep',
+      chartType: DASHBOARD_SLEEP_TREND_CHART_TYPE,
+      dataType: 'SleepDuration',
+      dataValueType: ChartDataValueTypes.Total,
+      dataCategoryType: ChartDataCategoryTypes.DateType,
+      dataTimeInterval: TimeIntervals.Daily,
+      size: { columns: 1, rows: 1 },
+    }];
+    dialogData.user.settings.dashboardSettings.autoTiles = {
+      sleepTrend: {
+        state: 'added',
+        addedAt: 1_777_000_000_000,
+        source: 'sleep-sync',
+      },
+    };
+    component.ngOnInit();
+    component.mode = 'edit';
+    component.editTileOrder = 0;
+    component.category = 'curated';
+    component.curatedChartType = DASHBOARD_FORM_CHART_TYPE as any;
+
+    await component.save();
+
+    const tiles = dialogData.user.settings.dashboardSettings.tiles;
+    expect(tiles).toHaveLength(1);
+    expect(tiles[0].chartType).toBe(DASHBOARD_FORM_CHART_TYPE);
+    expect(dialogData.user.settings.dashboardSettings.autoTiles.sleepTrend).toMatchObject({
+      state: 'dismissed',
+      source: 'sleep-sync',
+    });
+  });
+
+  it('marks KPI auto-tile state dismissed when replacing it with another tile', async () => {
+    dialogData.user.settings.dashboardSettings.tiles = [{
+      type: TileTypes.Chart,
+      order: 0,
+      name: 'ACWR',
+      chartType: DASHBOARD_ACWR_KPI_CHART_TYPE,
+      dataType: DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE,
+      dataValueType: ChartDataValueTypes.Total,
+      dataCategoryType: ChartDataCategoryTypes.DateType,
+      dataTimeInterval: TimeIntervals.Weekly,
+      size: { columns: 1, rows: 1 },
+    }];
+    dialogData.user.settings.dashboardSettings.autoTiles = {
+      kpiAcwr: {
+        state: 'added',
+        addedAt: 1_777_000_000_000,
+        source: 'default-kpi',
+      },
+    };
+    component.ngOnInit();
+    component.mode = 'edit';
+    component.editTileOrder = 0;
+    component.category = 'custom';
+    component.customChartType = ChartTypes.ColumnsVertical;
+    component.customDataType = DataDistance.type;
+    component.customDataCategoryType = ChartDataCategoryTypes.DateType;
+    component.customDataValueType = ChartDataValueTypes.Total;
+    component.customTimeInterval = TimeIntervals.Auto;
+
+    await component.save();
+
+    const tiles = dialogData.user.settings.dashboardSettings.tiles;
+    expect(tiles).toHaveLength(1);
+    expect(tiles[0].chartType).toBe(ChartTypes.ColumnsVertical);
+    expect(dialogData.user.settings.dashboardSettings.autoTiles.kpiAcwr).toMatchObject({
+      state: 'dismissed',
+      source: 'default-kpi',
+    });
+  });
+
+  it('marks regular curated auto-tile state dismissed when replacing it with another tile', async () => {
+    dialogData.user.settings.dashboardSettings.tiles = [{
+      type: TileTypes.Chart,
+      order: 0,
+      name: 'Intensity Distribution',
+      chartType: DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE,
+      dataType: DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE,
+      dataValueType: ChartDataValueTypes.Total,
+      dataCategoryType: ChartDataCategoryTypes.DateType,
+      dataTimeInterval: TimeIntervals.Weekly,
+      size: { columns: 1, rows: 1 },
+    }];
+    dialogData.user.settings.dashboardSettings.autoTiles = {
+      curatedIntensityDistribution: {
+        state: 'added',
+        addedAt: 1_777_000_000_000,
+        source: 'default-curated',
+      },
+    };
+    component.ngOnInit();
+    component.mode = 'edit';
+    component.editTileOrder = 0;
+    component.category = 'custom';
+    component.customChartType = ChartTypes.ColumnsVertical;
+    component.customDataType = DataDistance.type;
+    component.customDataCategoryType = ChartDataCategoryTypes.DateType;
+    component.customDataValueType = ChartDataValueTypes.Total;
+    component.customTimeInterval = TimeIntervals.Auto;
+
+    await component.save();
+
+    const tiles = dialogData.user.settings.dashboardSettings.tiles;
+    expect(tiles).toHaveLength(1);
+    expect(tiles[0].chartType).toBe(ChartTypes.ColumnsVertical);
+    expect(dialogData.user.settings.dashboardSettings.autoTiles.curatedIntensityDistribution).toMatchObject({
+      state: 'dismissed',
+      source: 'default-curated',
+    });
+  });
+
+  it('marks Recovery auto-tile and legacy recovery state dismissed when replacing Recovery', async () => {
+    dialogData.user.settings.dashboardSettings.tiles = [{
+      type: TileTypes.Chart,
+      order: 0,
+      name: 'Recovery',
+      chartType: DASHBOARD_RECOVERY_NOW_CHART_TYPE,
+      dataType: 'Recovery Time',
+      dataValueType: ChartDataValueTypes.Total,
+      dataCategoryType: ChartDataCategoryTypes.DateType,
+      dataTimeInterval: TimeIntervals.Auto,
+      size: { columns: 1, rows: 1 },
+    }];
+    dialogData.user.settings.dashboardSettings.dismissedCuratedRecoveryNowTile = false;
+    dialogData.user.settings.dashboardSettings.autoTiles = {
+      curatedRecoveryNow: {
+        state: 'added',
+        addedAt: 1_777_000_000_000,
+        source: 'default-curated',
+      },
+    };
+    component.ngOnInit();
+    component.mode = 'edit';
+    component.editTileOrder = 0;
+    component.category = 'custom';
+    component.customChartType = ChartTypes.ColumnsVertical;
+    component.customDataType = DataDistance.type;
+    component.customDataCategoryType = ChartDataCategoryTypes.DateType;
+    component.customDataValueType = ChartDataValueTypes.Total;
+    component.customTimeInterval = TimeIntervals.Auto;
+
+    await component.save();
+
+    expect(dialogData.user.settings.dashboardSettings.dismissedCuratedRecoveryNowTile).toBe(true);
+    expect(dialogData.user.settings.dashboardSettings.autoTiles.curatedRecoveryNow).toMatchObject({
+      state: 'dismissed',
+      source: 'default-curated',
+    });
+  });
+
+  it('preserves existing Sleep Trend auto-tile metadata when saving an unrelated tile', async () => {
+    dialogData.user.settings.dashboardSettings.tiles = [{
+      type: TileTypes.Chart,
+      order: 0,
+      name: 'Sleep',
+      chartType: DASHBOARD_SLEEP_TREND_CHART_TYPE,
+      dataType: 'SleepDuration',
+      dataValueType: ChartDataValueTypes.Total,
+      dataCategoryType: ChartDataCategoryTypes.DateType,
+      dataTimeInterval: TimeIntervals.Daily,
+      size: { columns: 1, rows: 1 },
+    }, {
+      type: TileTypes.Chart,
+      order: 1,
+      name: 'Distance',
+      chartType: ChartTypes.ColumnsVertical,
+      dataType: DataDistance.type,
+      dataValueType: ChartDataValueTypes.Total,
+      dataCategoryType: ChartDataCategoryTypes.DateType,
+      dataTimeInterval: TimeIntervals.Auto,
+      size: { columns: 1, rows: 1 },
+    }];
+    dialogData.user.settings.dashboardSettings.autoTiles = {
+      sleepTrend: {
+        state: 'added',
+        addedAt: 1_777_000_000_000,
+        lastQualifiedAt: 1_777_000_000_000,
+        source: 'sleep-sync',
+      },
+    };
+    component.ngOnInit();
+    component.mode = 'edit';
+    component.editTileOrder = 1;
+    component.category = 'custom';
+    component.customChartType = ChartTypes.LinesVertical;
+    component.customDataType = DataDistance.type;
+    component.customDataCategoryType = ChartDataCategoryTypes.DateType;
+    component.customDataValueType = ChartDataValueTypes.Total;
+    component.customTimeInterval = TimeIntervals.Weekly;
+
+    await component.save();
+
+    expect(dialogData.user.settings.dashboardSettings.autoTiles.sleepTrend).toEqual({
+      state: 'added',
+      addedAt: 1_777_000_000_000,
+      lastQualifiedAt: 1_777_000_000_000,
+      source: 'sleep-sync',
     });
   });
 
@@ -219,12 +573,31 @@ describe('DashboardManagerDialogComponent', () => {
     });
   });
 
+  it('applies regular curated presets with one-column default size', async () => {
+    component.mode = 'add';
+    component.onWorkflowTabChange(1);
+    component.onPresetCategoryChange('curated');
+    component.onPresetSelectionChange(DASHBOARD_MANAGER_PRESET_IDS.CURATED_RECOVERY);
+
+    await component.save();
+
+    const tiles = dialogData.user.settings.dashboardSettings.tiles;
+    expect(tiles).toHaveLength(2);
+    expect(tiles[1]).toMatchObject({
+      type: TileTypes.Chart,
+      chartType: DASHBOARD_RECOVERY_NOW_CHART_TYPE,
+      size: { columns: 1, rows: 1 },
+    });
+  });
+
   it('filters manual KPI options by selected KPI group', () => {
     component.category = 'kpi' as any;
     component.onKpiGroupChange('readiness');
 
     expect(component.filteredKpiChartDefinitions.map(definition => definition.chartType)).toEqual([
       DASHBOARD_FORM_NOW_KPI_CHART_TYPE,
+      DASHBOARD_FITNESS_CTL_KPI_CHART_TYPE,
+      DASHBOARD_FATIGUE_ATL_KPI_CHART_TYPE,
       DASHBOARD_FORM_PLUS_7D_KPI_CHART_TYPE,
     ]);
 
@@ -243,18 +616,275 @@ describe('DashboardManagerDialogComponent', () => {
 
     expect(component.filteredPresetDefinitions.map(definition => definition.id)).toEqual([
       DASHBOARD_MANAGER_PRESET_IDS.KPI_FORM_NOW,
+      DASHBOARD_MANAGER_PRESET_IDS.KPI_FITNESS_CTL,
+      DASHBOARD_MANAGER_PRESET_IDS.KPI_FATIGUE_ATL,
       DASHBOARD_MANAGER_PRESET_IDS.KPI_FORM_PLUS_7D,
     ]);
   });
 
   it('should render presets tab content and category controls in template', () => {
     const templatePath = resolve(process.cwd(), 'src/app/components/summaries/dashboard-manager-dialog/dashboard-manager-dialog.component.html');
+    const stylesPath = resolve(process.cwd(), 'src/app/components/summaries/dashboard-manager-dialog/dashboard-manager-dialog.component.css');
     const template = readFileSync(templatePath, 'utf8');
+    const styles = readFileSync(stylesPath, 'utf8');
 
+    expect(template).toContain('Add all');
+    expect(template).toContain('Remove all');
     expect(template).toContain('Preset category');
     expect(template).toContain('Presets');
     expect(template).toContain('Apply preset');
     expect(template).toContain('mat-chip-listbox');
+    expect(styles).toContain('.dashboard-manager-button-content');
+    expect(styles).toContain('align-items: center;');
+    expect(styles).toContain('line-height: 1;');
+    expect(styles).toContain('.dashboard-manager-button-content mat-icon');
+    expect(styles).toContain('.dashboard-manager-button-content mat-spinner');
+  });
+
+  it('adds all missing new-user default dashboard tiles in one save', async () => {
+    dialogData.user.settings.dashboardSettings.tiles = [];
+
+    await component.addAllTiles();
+
+    const tiles = dialogData.user.settings.dashboardSettings.tiles;
+    const defaultTiles = AppUserUtilities.getDefaultUserDashboardTiles();
+    expect(tiles).toHaveLength(defaultTiles.length);
+    expect(tiles.map(dashboardTileSignature)).toEqual(defaultTiles.map(dashboardTileSignature));
+    expect(tiles.filter((tile: any) => tile.type === TileTypes.Map)).toHaveLength(1);
+    expect(tiles.filter((tile: any) => tile.type === TileTypes.Chart && tile.dataType === DataDistance.type)).toHaveLength(1);
+    expect(tiles.some((tile: any) => tile.chartType === DASHBOARD_RECOVERY_NOW_CHART_TYPE)).toBe(true);
+    expect(tiles.some((tile: any) => tile.chartType === DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE)).toBe(true);
+    expect(tiles.some((tile: any) => tile.chartType === DASHBOARD_ACWR_KPI_CHART_TYPE)).toBe(true);
+    expect(tiles.some((tile: any) => tile.chartType === ChartTypes.Pie && tile.dataType === DataDuration.type)).toBe(true);
+    expect(tiles.some((tile: any) => tile.dataType === DataEnergy.type)).toBe(false);
+    expect(tiles.some((tile: any) => tile.dataType === DataHeartRateAvg.type)).toBe(false);
+    expect(dialogData.user.settings.dashboardSettings.autoTiles.curatedRecoveryNow).toMatchObject({
+      state: 'added',
+      source: 'default-curated',
+    });
+    expect(dialogData.user.settings.dashboardSettings.autoTiles.kpiAcwr).toMatchObject({
+      state: 'added',
+      source: 'default-kpi',
+    });
+    expect(dialogData.user.settings.dashboardSettings.dismissedCuratedRecoveryNowTile).toBe(false);
+    expect(userServiceMock.updateUserProperties).toHaveBeenCalledTimes(1);
+    expect(hapticsMock.selection).toHaveBeenCalledTimes(1);
+    expect(hapticsMock.success).toHaveBeenCalledTimes(1);
+    expect(component.isAddAllDisabled).toBe(true);
+    expect(component.isRemoveAllDisabled).toBe(false);
+    expect(dialogRefMock.close).toHaveBeenCalledWith({ saved: true });
+  });
+
+  it('shows an Add all loading state while bulk add is saving', async () => {
+    dialogData.user.settings.dashboardSettings.tiles = [];
+    const saveDeferred = createDeferred<boolean>();
+    userServiceMock.updateUserProperties.mockReturnValueOnce(saveDeferred.promise);
+
+    const addAllPromise = component.addAllTiles();
+    await Promise.resolve();
+    await Promise.resolve();
+    fixture.detectChanges();
+
+    const addAllButton: HTMLElement = fixture.nativeElement.querySelector('[data-testid="dashboard-manager-add-all-button"]');
+    expect(component.isAddAllSaving).toBe(true);
+    expect(component.savingAction).toBe('addAll');
+    expect(addAllButton.getAttribute('aria-busy')).toBe('true');
+    expect(addAllButton.textContent).toContain('Adding...');
+    expect(addAllButton.querySelector('mat-spinner')).toBeTruthy();
+
+    saveDeferred.resolve(true);
+    await addAllPromise;
+
+    expect(component.isSaving).toBe(false);
+    expect(component.savingAction).toBeNull();
+  });
+
+  it('adds the Sleep tile with the default tiles only when sleep data exists', async () => {
+    dialogData.user.settings.dashboardSettings.tiles = [];
+    sleepEligibilitySubject.next(true);
+
+    await component.addAllTiles();
+
+    const defaultTiles = AppUserUtilities.getDefaultUserDashboardTiles();
+    const tiles = dialogData.user.settings.dashboardSettings.tiles;
+    const sleepTiles = tiles.filter((tile: any) => tile.chartType === DASHBOARD_SLEEP_TREND_CHART_TYPE || tile.dataType === 'SleepDuration');
+
+    expect(tiles).toHaveLength(defaultTiles.length + 1);
+    expect(sleepTiles).toHaveLength(1);
+    expect(sleepTiles[0]).toMatchObject({
+      name: 'Sleep',
+      order: defaultTiles.length,
+      size: { columns: 1, rows: 1 },
+    });
+    expect(dialogData.user.settings.dashboardSettings.autoTiles.sleepTrend).toMatchObject({
+      state: 'added',
+      source: 'sleep-sync',
+    });
+    expect(userServiceMock.updateUserProperties).toHaveBeenCalledTimes(1);
+    expect(dialogRefMock.close).toHaveBeenCalledWith({ saved: true });
+  });
+
+  it('refreshes sleep eligibility when adding all tiles', async () => {
+    dialogData.user.settings.dashboardSettings.tiles = [];
+    sleepServiceMock.watchHasAnySleepSession.mockReturnValueOnce(of(true));
+
+    await component.addAllTiles();
+
+    const tiles = dialogData.user.settings.dashboardSettings.tiles;
+    expect(tiles.some((tile: any) => tile.chartType === DASHBOARD_SLEEP_TREND_CHART_TYPE)).toBe(true);
+    expect(sleepServiceMock.watchHasAnySleepSession).toHaveBeenCalledWith('user-1');
+  });
+
+  it('does not duplicate existing default dashboard tiles when adding all', async () => {
+    dialogData.user.settings.dashboardSettings.tiles = AppUserUtilities.getDefaultUserDashboardTiles();
+    await component.addAllTiles();
+
+    expect(userServiceMock.updateUserProperties).not.toHaveBeenCalled();
+    expect(dialogRefMock.close).not.toHaveBeenCalledWith({ saved: true });
+  });
+
+  it('treats a legacy recovery metric tile as the Recovery preset when adding all', async () => {
+    dialogData.user.settings.dashboardSettings.tiles = [{
+      type: TileTypes.Chart,
+      order: 0,
+      name: 'Recovery',
+      chartType: ChartTypes.LinesVertical,
+      dataType: DataRecoveryTime.type,
+      dataValueType: ChartDataValueTypes.Total,
+      dataCategoryType: ChartDataCategoryTypes.DateType,
+      dataTimeInterval: TimeIntervals.Auto,
+      size: { columns: 1, rows: 1 },
+    }];
+    component.ngOnInit();
+
+    await component.addAllTiles();
+
+    const tiles = dialogData.user.settings.dashboardSettings.tiles;
+    const recoveryLikeTiles = tiles.filter((tile: any) => (
+      tile.chartType === DASHBOARD_RECOVERY_NOW_CHART_TYPE
+      || tile.dataType === DataRecoveryTime.type
+    ));
+    expect(recoveryLikeTiles).toHaveLength(1);
+    expect(recoveryLikeTiles[0].chartType).toBe(ChartTypes.LinesVertical);
+    expect(dialogData.user.settings.dashboardSettings.autoTiles.curatedRecoveryNow).toBeUndefined();
+  });
+
+  it('restores dashboard settings when adding all fails', async () => {
+    dialogData.user.settings.dashboardSettings.autoTiles = {
+      kpiAcwr: {
+        state: 'dismissed',
+        dismissedAt: 1_777_000_000_000,
+        source: 'default-kpi',
+      },
+    };
+    const originalTiles = dialogData.user.settings.dashboardSettings.tiles.map((tile: any) => ({
+      ...tile,
+      size: tile.size ? { ...tile.size } : tile.size,
+    }));
+    userServiceMock.updateUserProperties.mockRejectedValueOnce(new Error('network down'));
+
+    await component.addAllTiles();
+
+    expect(component.saveError).toBe('Could not save dashboard tile settings.');
+    expect(dialogData.user.settings.dashboardSettings.tiles).toStrictEqual(originalTiles);
+    expect(dialogData.user.settings.dashboardSettings.autoTiles.kpiAcwr).toEqual({
+      state: 'dismissed',
+      dismissedAt: 1_777_000_000_000,
+      source: 'default-kpi',
+    });
+    expect(hapticsMock.error).toHaveBeenCalledTimes(1);
+    expect(dialogRefMock.close).not.toHaveBeenCalledWith({ saved: true });
+  });
+
+  it('removes all dashboard tiles after confirmation and dismisses auto tiles', async () => {
+    dialogData.user.settings.dashboardSettings.tiles.push({
+      type: TileTypes.Chart,
+      order: 1,
+      name: 'Recovery',
+      chartType: DASHBOARD_RECOVERY_NOW_CHART_TYPE,
+      dataType: 'Recovery Time',
+      dataValueType: ChartDataValueTypes.Total,
+      dataCategoryType: ChartDataCategoryTypes.DateType,
+      dataTimeInterval: TimeIntervals.Auto,
+      size: { columns: 1, rows: 1 },
+    });
+    dialogData.user.settings.dashboardSettings.dismissedCuratedRecoveryNowTile = false;
+    dialogData.user.settings.dashboardSettings.autoTiles = {
+      curatedRecoveryNow: {
+        state: 'added',
+        addedAt: 1_777_000_000_000,
+        source: 'default-curated',
+      },
+    };
+    dialogMock.open.mockReturnValueOnce({
+      afterClosed: () => of(true),
+    });
+
+    await component.removeAllTiles();
+
+    expect(dialogData.user.settings.dashboardSettings.tiles).toEqual([]);
+    expect(dialogData.user.settings.dashboardSettings.dismissedCuratedRecoveryNowTile).toBe(true);
+    expect(dialogData.user.settings.dashboardSettings.autoTiles.sleepTrend).toMatchObject({
+      state: 'dismissed',
+      source: 'sleep-sync',
+    });
+    expect(dialogData.user.settings.dashboardSettings.autoTiles.curatedRecoveryNow).toMatchObject({
+      state: 'dismissed',
+      source: 'default-curated',
+    });
+    expect(dialogData.user.settings.dashboardSettings.autoTiles.kpiAcwr).toMatchObject({
+      state: 'dismissed',
+      source: 'default-kpi',
+    });
+    expect(userServiceMock.updateUserProperties).toHaveBeenCalledTimes(1);
+    expect(hapticsMock.success).toHaveBeenCalledTimes(1);
+    expect(component.isRemoveAllDisabled).toBe(true);
+    expect(component.isAddAllDisabled).toBe(false);
+    expect(dialogRefMock.close).toHaveBeenCalledWith({ saved: true });
+  });
+
+  it('keeps dashboard tiles when remove all is cancelled', async () => {
+    dialogMock.open.mockReturnValueOnce({
+      afterClosed: () => of(false),
+    });
+
+    await component.removeAllTiles();
+
+    expect(dialogData.user.settings.dashboardSettings.tiles).toHaveLength(1);
+    expect(userServiceMock.updateUserProperties).not.toHaveBeenCalled();
+    expect(dialogRefMock.close).not.toHaveBeenCalledWith({ saved: true });
+  });
+
+  it('restores dashboard settings when removing all fails', async () => {
+    dialogData.user.settings.dashboardSettings.dismissedCuratedRecoveryNowTile = false;
+    dialogData.user.settings.dashboardSettings.autoTiles = {
+      curatedRecoveryNow: {
+        state: 'added',
+        addedAt: 1_777_000_000_000,
+        source: 'default-curated',
+      },
+    };
+    const originalTiles = dialogData.user.settings.dashboardSettings.tiles.map((tile: any) => ({
+      ...tile,
+      size: tile.size ? { ...tile.size } : tile.size,
+    }));
+    dialogMock.open.mockReturnValueOnce({
+      afterClosed: () => of(true),
+    });
+    userServiceMock.updateUserProperties.mockRejectedValueOnce(new Error('network down'));
+
+    await component.removeAllTiles();
+
+    expect(component.saveError).toBe('Could not save dashboard tile settings.');
+    expect(dialogData.user.settings.dashboardSettings.tiles).toStrictEqual(originalTiles);
+    expect(dialogData.user.settings.dashboardSettings.dismissedCuratedRecoveryNowTile).toBe(false);
+    expect(dialogData.user.settings.dashboardSettings.autoTiles.curatedRecoveryNow).toEqual({
+      state: 'added',
+      addedAt: 1_777_000_000_000,
+      source: 'default-curated',
+    });
+    expect(hapticsMock.error).toHaveBeenCalledTimes(1);
+    expect(dialogRefMock.close).not.toHaveBeenCalledWith({ saved: true });
   });
 
   it('applies a preset in add mode and appends a new tile', async () => {
@@ -274,6 +904,7 @@ describe('DashboardManagerDialogComponent', () => {
       dataType: DataDistance.type,
       order: 1,
       size: { columns: 1, rows: 1 },
+      eventFilters: { range: '90d', activityTypes: [] },
     });
   });
 
@@ -469,6 +1100,7 @@ describe('DashboardManagerDialogComponent', () => {
     expect(tile.type).toBe(TileTypes.Map);
     expect(tile.mapStyle).toBe('satellite');
     expect(tile.clusterMarkers).toBe(true);
+    expect(tile.eventFilters).toEqual({ range: '90d', activityTypes: [] });
   });
 
   it('converts a map tile to custom chart in edit mode', async () => {
@@ -499,6 +1131,95 @@ describe('DashboardManagerDialogComponent', () => {
     expect(tile.type).toBe(TileTypes.Chart);
     expect(tile.chartType).toBe(ChartTypes.ColumnsHorizontal);
     expect(tile.dataType).toBe(DataDistance.type);
+    expect(tile.eventFilters).toEqual({ range: '90d', activityTypes: [] });
+  });
+
+  it('resets stale event filters when converting selected tiles into custom or map tiles', () => {
+    dialogData.user.settings.dashboardSettings.tiles = [{
+      type: TileTypes.Chart,
+      order: 0,
+      name: 'Custom distance',
+      chartType: ChartTypes.ColumnsVertical,
+      dataType: DataDistance.type,
+      dataValueType: ChartDataValueTypes.Total,
+      dataCategoryType: ChartDataCategoryTypes.DateType,
+      dataTimeInterval: TimeIntervals.Auto,
+      size: { columns: 1, rows: 1 },
+      eventFilters: { range: '2y', activityTypes: [ActivityTypes.Running] },
+    }, {
+      type: TileTypes.Map,
+      order: 1,
+      name: 'Map tile',
+      mapStyle: 'default',
+      mapTheme: 'normal',
+      showHeatMap: true,
+      clusterMarkers: true,
+      size: { columns: 1, rows: 1 },
+      eventFilters: { range: '3y', activityTypes: [ActivityTypes.Cycling] },
+    }];
+    component.ngOnInit();
+    component.onModeChange('edit');
+
+    component.onEditTileSelectionChange(0);
+    expect(component.customEventRange).toBe('2y');
+    expect(component.customEventActivityTypes).toEqual([ActivityTypes.Running]);
+
+    component.mapEventRange = '4y';
+    component.mapEventActivityTypes = [ActivityTypes.Swimming];
+    component.onCategoryChange('map');
+    expect(component.mapEventRange).toBe('90d');
+    expect(component.mapEventActivityTypes).toEqual([]);
+
+    component.onEditTileSelectionChange(1);
+    expect(component.mapEventRange).toBe('3y');
+    expect(component.mapEventActivityTypes).toEqual([ActivityTypes.Cycling]);
+
+    component.customEventRange = '1y';
+    component.customEventActivityTypes = [ActivityTypes.Swimming];
+    component.onCategoryChange('custom');
+    expect(component.customEventRange).toBe('90d');
+    expect(component.customEventActivityTypes).toEqual([]);
+  });
+
+  it('resets event filters when returning to add mode', () => {
+    dialogData.user.settings.dashboardSettings.tiles[0].eventFilters = {
+      range: '2y',
+      activityTypes: [ActivityTypes.Running],
+    };
+    component.ngOnInit();
+
+    component.onModeChange('edit');
+    component.onEditTileSelectionChange(0);
+    expect(component.customEventRange).toBe('2y');
+
+    component.mapEventRange = '3y';
+    component.mapEventActivityTypes = [ActivityTypes.Cycling];
+    component.onModeChange('add');
+
+    expect(component.category).toBe('custom');
+    expect(component.customEventRange).toBe('90d');
+    expect(component.customEventActivityTypes).toEqual([]);
+    expect(component.mapEventRange).toBe('90d');
+    expect(component.mapEventActivityTypes).toEqual([]);
+  });
+
+  it('requires confirmation before selecting all events in manager tile filters', async () => {
+    component.customEventRange = '90d';
+    dialogMock.open.mockReturnValueOnce({
+      afterClosed: () => of(false),
+    });
+
+    await component.onCustomEventRangeChange('all');
+
+    expect(component.customEventRange).toBe('90d');
+
+    dialogMock.open.mockReturnValueOnce({
+      afterClosed: () => of(true),
+    });
+
+    await component.onCustomEventRangeChange('all');
+
+    expect(component.customEventRange).toBe('all');
   });
 
   it('restores dashboard settings when saving fails', async () => {
@@ -516,10 +1237,38 @@ describe('DashboardManagerDialogComponent', () => {
     await component.save();
 
     expect(component.saveError).toBe('Could not save dashboard tile settings.');
-    expect(dialogData.user.settings.dashboardSettings.tiles).toEqual(originalTiles);
+    expect(dialogData.user.settings.dashboardSettings.tiles).toStrictEqual(originalTiles);
+    expect(dialogData.user.settings.dashboardSettings.tiles[0]).not.toHaveProperty('eventFilters');
     expect(dialogData.user.settings.dashboardSettings.dismissedCuratedRecoveryNowTile).toBe(true);
     expect(hapticsMock.error).toHaveBeenCalledTimes(1);
     expect(dialogRefMock.close).not.toHaveBeenCalledWith({ saved: true });
+  });
+
+  it('restores nested event filters when saving an edit fails', async () => {
+    dialogData.user.settings.dashboardSettings.tiles[0].eventFilters = {
+      range: '30d',
+      activityTypes: [ActivityTypes.Running],
+    };
+    userServiceMock.updateUserProperties.mockRejectedValueOnce(new Error('network down'));
+    component.ngOnInit();
+    component.mode = 'edit';
+    component.editTileOrder = 0;
+    component.category = 'custom';
+    component.customChartType = ChartTypes.ColumnsVertical;
+    component.customDataType = DataDistance.type;
+    component.customDataCategoryType = ChartDataCategoryTypes.DateType;
+    component.customDataValueType = ChartDataValueTypes.Total;
+    component.customTimeInterval = TimeIntervals.Auto;
+    component.customEventRange = '1y';
+    component.customEventActivityTypes = [ActivityTypes.Cycling];
+
+    await component.save();
+
+    expect(dialogData.user.settings.dashboardSettings.tiles[0].eventFilters).toEqual({
+      range: '30d',
+      activityTypes: [ActivityTypes.Running],
+    });
+    expect(dialogData.user.settings.dashboardSettings.tiles[0].eventFilters.activityTypes).toEqual([ActivityTypes.Running]);
   });
 
   it('triggers selection haptics for manager interaction changes and close', () => {
@@ -604,6 +1353,20 @@ describe('DashboardManagerDialogComponent', () => {
     expect(component.customDataType).toBe(DataDistance.type);
   });
 
+  it('loads current custom event filters when edit mode selects a custom tile', () => {
+    dialogData.user.settings.dashboardSettings.tiles[0].eventFilters = {
+      range: '2y',
+      activityTypes: [ActivityTypes.Running],
+    };
+    component.ngOnInit();
+
+    component.onModeChange('edit');
+    component.onEditTileSelectionChange(0);
+
+    expect(component.customEventRange).toBe('2y');
+    expect(component.customEventActivityTypes).toEqual([ActivityTypes.Running]);
+  });
+
   it('loads current map values when edit mode selects a map tile', () => {
     dialogData.user.settings.dashboardSettings.tiles.push({
       type: TileTypes.Map,
@@ -614,6 +1377,7 @@ describe('DashboardManagerDialogComponent', () => {
       showHeatMap: true,
       clusterMarkers: false,
       size: { columns: 1, rows: 1 },
+      eventFilters: { range: '3y', activityTypes: [ActivityTypes.Cycling] },
     });
     component.ngOnInit();
     component.onModeChange('edit');
@@ -622,6 +1386,8 @@ describe('DashboardManagerDialogComponent', () => {
     expect(component.category).toBe('map');
     expect(component.mapStyle).toBe('outdoors');
     expect(component.mapClusterMarkers).toBe(false);
+    expect(component.mapEventRange).toBe('3y');
+    expect(component.mapEventActivityTypes).toEqual([ActivityTypes.Cycling]);
   });
 
   it('initializes in edit mode when dialog receives initial edit state', () => {

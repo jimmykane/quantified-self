@@ -10,6 +10,7 @@ import { ServicesSuuntoComponent } from '../components/services/suunto/services.
 import { ServicesGarminComponent } from '../components/services/garmin/services.garmin.component';
 import { ServicesCorosComponent } from '../components/services/coros/services.coros.component';
 import { UploadActivitiesToServiceComponent } from '../components/upload/upload-activities-to-service/upload-activities-to-service.component';
+import { ServiceConnectionStatusComponent } from '../components/services/service-connection-status/service-connection-status.component';
 
 @NgModule({
     imports: [
@@ -24,6 +25,7 @@ import { UploadActivitiesToServiceComponent } from '../components/upload/upload-
         ServicesSuuntoComponent,
         ServicesGarminComponent,
         ServicesCorosComponent,
+        ServiceConnectionStatusComponent,
         HistoryImportFormComponent,
         UploadRoutesToServiceComponent,
         UploadActivitiesToServiceComponent

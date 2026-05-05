@@ -2,6 +2,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { TileActionsFooterComponent } from './tile.actions.footer.component';
 import { MatIconModule } from '@angular/material/icon';
 import { MatButtonModule } from '@angular/material/button';
+import { MatMenuModule } from '@angular/material/menu';
 import { vi } from 'vitest';
 
 describe('TileActionsFooterComponent', () => {
@@ -11,7 +12,7 @@ describe('TileActionsFooterComponent', () => {
     beforeEach(async () => {
         await TestBed.configureTestingModule({
             declarations: [TileActionsFooterComponent],
-            imports: [MatIconModule, MatButtonModule],
+            imports: [MatIconModule, MatButtonModule, MatMenuModule],
         })
             .compileComponents();
 

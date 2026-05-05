@@ -26,6 +26,12 @@ import {
   DashboardSleepTrendPoint,
   formatSleepDuration,
 } from '../../../helpers/dashboard-sleep-chart.helper';
+import {
+  DASHBOARD_SLEEP_TREND_DEFAULT_RANGE,
+  normalizeDashboardSleepTrendRange,
+} from '../../../helpers/dashboard-sleep-range.helper';
+import type { AppDashboardSleepTrendRange } from '../../../models/app-user.interface';
+import { AppColors } from '../../../services/color/app.colors';
 import { EChartsLoaderService } from '../../../services/echarts-loader.service';
 import { LoggerService } from '../../../services/logger.service';
 
@@ -40,8 +46,16 @@ const STAGE_SERIES = [
   { key: 'awakeSeconds', name: 'Awake', color: '#F9A825' },
 ] as const;
 
+const HRV_SERIES = {
+  name: 'HRV',
+  color: AppColors.Green,
+} as const;
+
 const GRID_BOTTOM_WITH_LEGEND = 58;
 const GRID_BOTTOM_COMPACT = 34;
+const MIN_SINGLE_SOURCE_AXIS_LABEL_WIDTH = 58;
+const MIN_MULTI_SOURCE_AXIS_LABEL_WIDTH = 72;
+const FALLBACK_MAX_AXIS_LABELS = 8;
 
 @Component({
   selector: 'app-sleep-trend-chart',
@@ -54,11 +68,23 @@ export class ChartsSleepTrendComponent implements AfterViewInit, OnChanges, OnDe
   @Input() darkTheme = false;
   @Input() isLoading = false;
   @Input() sleepTrend?: DashboardSleepTrendContext | null;
+  @Input()
+  set sleepRange(value: AppDashboardSleepTrendRange | null | undefined) {
+    this._sleepRange = normalizeDashboardSleepTrendRange(value);
+  }
+  get sleepRange(): AppDashboardSleepTrendRange {
+    return this._sleepRange;
+  }
+  @Input() sleepWindowLabel?: string | null;
+  @Input() canNavigateOlder = false;
+  @Input() canNavigateNewer = false;
   @Input() infoTooltip?: string | null;
+  @Input() reserveTitleActionSpace = false;
 
   @ViewChild('chartDiv', { static: true }) chartDiv!: ElementRef<HTMLDivElement>;
 
   private readonly chartHost: EChartsHostController;
+  private _sleepRange: AppDashboardSleepTrendRange = DASHBOARD_SLEEP_TREND_DEFAULT_RANGE;
 
   public latestDurationText = '--';
   public latestScoreText = '--';
@@ -121,9 +147,10 @@ export class ChartsSleepTrendComponent implements AfterViewInit, OnChanges, OnDe
 
   private updateHeaderAndErrorState(points: DashboardSleepTrendPoint[] = this.getPoints()): void {
     const latest = this.sleepTrend?.latestPoint || points[points.length - 1] || null;
+    const latestHrvMs = this.toFiniteMetric(latest?.averageHrvMs);
     this.latestDurationText = latest ? formatSleepDuration(latest.totalSeconds) : '--';
     this.latestScoreText = latest?.score !== null && latest?.score !== undefined ? `${Math.round(latest.score)}` : '--';
-    this.latestHrvText = latest?.averageHrvMs !== null && latest?.averageHrvMs !== undefined ? `${Math.round(latest.averageHrvMs)}` : '--';
+    this.latestHrvText = latestHrvMs !== null ? `${Math.round(latestHrvMs)}` : '--';
     this.latestContextText = latest ? `${latest.providerLabel} · ${this.formatDateTime(latest.endTimeMs)}` : 'Latest sleep';
     this.showNoDataError = points.length === 0;
   }
@@ -142,7 +169,100 @@ export class ChartsSleepTrendComponent implements AfterViewInit, OnChanges, OnDe
     const chartWidth = this.chartDiv?.nativeElement?.clientWidth || 0;
     const style = buildDashboardEChartsStyleTokens(this.darkTheme, chartWidth);
     const isMobileTooltipViewport = isEChartsMobileTooltipViewport();
+    const mobileAxisPointerHandle = isMobileTooltipViewport
+      ? {
+        show: true,
+        size: 20,
+        margin: 4,
+        throttle: 16,
+        color: style.axisColor,
+      }
+      : { show: false };
     const categories = points.map(point => point.categoryLabel);
+    const xAxisLabelInterval = this.buildXAxisLabelInterval(points, chartWidth);
+    const hrvData = points.map(point => this.toFiniteMetric(point.averageHrvMs));
+    const hasHrvSeries = hrvData.some(value => value !== null);
+    const averageHrvMs = this.averageMetric(hrvData);
+    const sleepDurationAxis = {
+      type: 'value',
+      min: 0,
+      axisLabel: {
+        color: style.secondaryTextColor,
+        fontSize: style.axisFontSize,
+        formatter: (value: number) => `${value}h`,
+      },
+      splitLine: { lineStyle: { color: style.gridColor } },
+    };
+    const hrvAxis = {
+      type: 'value',
+      min: 0,
+      axisLabel: {
+        color: style.secondaryTextColor,
+        fontSize: style.axisFontSize,
+        formatter: (value: number) => `${Math.round(value)}ms`,
+      },
+      splitLine: { show: false },
+    };
+    const stageSeries = STAGE_SERIES.map((stage) => ({
+      name: stage.name,
+      type: 'bar',
+      stack: 'sleep',
+      barMaxWidth: 32,
+      yAxisIndex: 0,
+      itemStyle: {
+        color: stage.color,
+        borderRadius: stage.key === 'awakeSeconds' ? [3, 3, 0, 0] : 0,
+      },
+      emphasis: { focus: 'series' },
+      data: points.map(point => this.secondsToHours(point[stage.key])),
+    }));
+    const hrvSeries = hasHrvSeries ? [{
+      name: HRV_SERIES.name,
+      type: 'line',
+      yAxisIndex: 1,
+      smooth: false,
+      connectNulls: false,
+      showSymbol: true,
+      symbolSize: 5,
+      lineStyle: {
+        color: HRV_SERIES.color,
+        width: 2,
+      },
+      itemStyle: {
+        color: HRV_SERIES.color,
+      },
+      emphasis: { focus: 'series' },
+      markLine: averageHrvMs === null ? undefined : {
+        silent: true,
+        symbol: 'none',
+        lineStyle: {
+          color: HRV_SERIES.color,
+          type: 'dashed',
+          width: 1.5,
+          opacity: 0.72,
+        },
+        label: {
+          show: true,
+          position: 'middle',
+          distance: 8,
+          color: HRV_SERIES.color,
+          backgroundColor: style.tooltipBackgroundColor,
+          borderColor: HRV_SERIES.color,
+          borderWidth: 1,
+          borderRadius: 4,
+          padding: [2, 6],
+          fontFamily: ECHARTS_GLOBAL_FONT_FAMILY,
+          fontSize: style.axisFontSize,
+          fontWeight: 600,
+          formatter: `Avg HRV ${Math.round(averageHrvMs)}ms`,
+        },
+        data: [{
+          name: 'Avg HRV',
+          yAxis: averageHrvMs,
+        }],
+      },
+      data: hrvData,
+    }] : [];
 
     return {
       animation: false,
@@ -153,15 +273,19 @@ export class ChartsSleepTrendComponent implements AfterViewInit, OnChanges, OnDe
       },
       grid: {
         left: 26,
-        right: 8,
+        right: hasHrvSeries ? 32 : 8,
         top: 8,
         bottom: style.isCompactLayout ? GRID_BOTTOM_COMPACT : GRID_BOTTOM_WITH_LEGEND,
       },
       tooltip: {
         show: true,
         trigger: 'axis',
-        triggerOn: resolveEChartsTooltipTriggerOn(true, false),
-        axisPointer: { type: 'shadow' },
+        triggerOn: resolveEChartsTooltipTriggerOn(true, isMobileTooltipViewport),
+        axisPointer: {
+          type: 'shadow',
+          axis: 'x',
+          snap: true,
+        },
         renderMode: 'html',
         ...resolveEChartsTooltipSurfaceConfig(isMobileTooltipViewport),
         borderWidth: 1,
@@ -188,37 +312,28 @@ export class ChartsSleepTrendComponent implements AfterViewInit, OnChanges, OnDe
       xAxis: {
         type: 'category',
         data: categories,
+        axisPointer: {
+          show: true,
+          snap: true,
+          triggerTooltip: true,
+          label: { show: false },
+          handle: mobileAxisPointerHandle,
+        },
         axisTick: { show: false },
         axisLine: { lineStyle: { color: style.axisColor } },
         axisLabel: {
           color: style.secondaryTextColor,
           fontSize: style.axisFontSize,
           lineHeight: 14,
-          interval: 0,
+          interval: xAxisLabelInterval,
+          hideOverlap: true,
         },
       },
-      yAxis: {
-        type: 'value',
-        min: 0,
-        axisLabel: {
-          color: style.secondaryTextColor,
-          fontSize: style.axisFontSize,
-          formatter: (value: number) => `${value}h`,
-        },
-        splitLine: { lineStyle: { color: style.gridColor } },
-      },
-      series: STAGE_SERIES.map((stage) => ({
-        name: stage.name,
-        type: 'bar',
-        stack: 'sleep',
-        barMaxWidth: 32,
-        itemStyle: {
-          color: stage.color,
-          borderRadius: stage.key === 'awakeSeconds' ? [3, 3, 0, 0] : 0,
-        },
-        emphasis: { focus: 'series' },
-        data: points.map(point => this.secondsToHours(point[stage.key])),
-      })),
+      yAxis: hasHrvSeries ? [sleepDurationAxis, hrvAxis] : sleepDurationAxis,
+      series: [
+        ...stageSeries,
+        ...hrvSeries,
+      ],
     };
   }
 
@@ -231,6 +346,7 @@ export class ChartsSleepTrendComponent implements AfterViewInit, OnChanges, OnDe
     if (!point) {
       return '';
     }
+    const averageHrvMs = this.toFiniteMetric(point.averageHrvMs);
 
     const lines = [
       `${point.providerLabel} · ${point.sleepDate}`,
@@ -241,7 +357,7 @@ export class ChartsSleepTrendComponent implements AfterViewInit, OnChanges, OnDe
         .map(stage => `${stage.name}: ${formatSleepDuration(point[stage.key])}`),
       point.score !== null ? `Score: ${Math.round(point.score)}` : '',
       point.averageHeartRateBpm !== null ? `HR avg: ${Math.round(point.averageHeartRateBpm)} bpm` : '',
-      point.averageHrvMs !== null ? `HRV: ${Math.round(point.averageHrvMs)} ms` : '',
+      averageHrvMs !== null ? `HRV: ${Math.round(averageHrvMs)} ms` : '',
       point.maxSpo2Percent !== null ? `SpO2 max: ${Math.round(point.maxSpo2Percent)}%` : '',
     ].filter(line => line.length > 0);
 
@@ -250,6 +366,51 @@ export class ChartsSleepTrendComponent implements AfterViewInit, OnChanges, OnDe
 
   private secondsToHours(seconds: number): number {
     return Math.round((seconds / 3600) * 100) / 100;
+  }
+
+  private toFiniteMetric(value: number | null | undefined): number | null {
+    return Number.isFinite(value) ? Number(value) : null;
+  }
+
+  private averageMetric(values: ReadonlyArray<number | null>): number | null {
+    const finiteValues = values.filter((value): value is number => value !== null);
+    if (!finiteValues.length) {
+      return null;
+    }
+    const total = finiteValues.reduce((sum, value) => sum + value, 0);
+    return total / finiteValues.length;
+  }
+
+  private buildXAxisLabelInterval(points: DashboardSleepTrendPoint[], chartWidth: number): 0 | ((index: number) => boolean) {
+    if (points.length <= 1) {
+      return 0;
+    }
+
+    const hasProviderLine = points.some(point => point.categoryLabel.includes('\n'));
+    const minimumLabelWidth = hasProviderLine ? MIN_MULTI_SOURCE_AXIS_LABEL_WIDTH : MIN_SINGLE_SOURCE_AXIS_LABEL_WIDTH;
+    const availableWidth = Math.max(0, chartWidth - 68);
+    const maxLabels = availableWidth > 0
+      ? Math.max(2, Math.floor(availableWidth / minimumLabelWidth))
+      : FALLBACK_MAX_AXIS_LABELS;
+
+    if (points.length <= maxLabels) {
+      return 0;
+    }
+
+    const lastIndex = points.length - 1;
+    const step = Math.max(1, Math.ceil(points.length / maxLabels));
+    const visibleIndexes = new Set<number>();
+    for (let index = 0; index < points.length; index += step) {
+      visibleIndexes.add(index);
+    }
+
+    const previousVisibleIndex = Math.max(...Array.from(visibleIndexes).filter(index => index < lastIndex));
+    if (Number.isFinite(previousVisibleIndex) && previousVisibleIndex > 0 && lastIndex - previousVisibleIndex < Math.ceil(step / 2)) {
+      visibleIndexes.delete(previousVisibleIndex);
+    }
+    visibleIndexes.add(lastIndex);
+
+    return (index: number) => visibleIndexes.has(index);
   }
 
   private formatDateTime(timestampMs: number): string {

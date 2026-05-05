@@ -20,17 +20,13 @@
 .form-status-row {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: 12px;
-  padding-right: 72px;
   margin-bottom: 8px;
 }
 
-.form-status-controls {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  min-width: 0;
+.form-chart-header-reserve-actions .form-status-row {
+  padding-right: 132px;
 }
 
 .form-status-title-row {
@@ -42,9 +38,6 @@
 
 .form-status-title {
   margin: 0;
-  font-size: 0.9rem;
-  font-weight: 700;
-  line-height: 1.1;
   color: var(--mat-sys-on-surface);
 }
 
@@ -86,33 +79,9 @@
   color: var(--mat-sys-on-surface-variant);
 }
 
-.form-status-meta {
-  font-size: 0.68rem;
-  color: var(--mat-sys-on-surface-variant);
-  white-space: nowrap;
-}
-
-.form-granularity-toggle {
-  --mat-standard-button-toggle-height: 18px;
-  --mat-standard-button-toggle-shape: 999px;
-  flex: 0 0 auto;
-  margin-right: 2px;
-}
-
-:host ::ng-deep .form-granularity-toggle .mat-button-toggle-button {
-  min-width: 16px !important;
-}
-
-:host ::ng-deep .form-granularity-toggle .mat-button-toggle-label-content {
-  line-height: 18px !important;
-  font-size: 0.56rem !important;
-  font-weight: 600 !important;
-  padding: 0 4px !important;
-}
-
 .form-stats-row {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 8px;
   margin-bottom: 8px;
 }
@@ -156,19 +125,12 @@
     padding: 6px 8px 0;
   }
 
-  .form-status-title {
-    font-size: 0.86rem;
-  }
-
   .form-status-row {
     align-items: flex-start;
-    padding-right: 44px;
   }
 
-  .form-status-controls {
-    flex-direction: column;
-    align-items: flex-end;
-    gap: 4px;
+  .form-chart-header-reserve-actions .form-status-row {
+    padding-right: 104px;
   }
 
   .form-stat-value {

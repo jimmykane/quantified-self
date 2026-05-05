@@ -14,7 +14,9 @@ import { AppEventService } from '../../../services/app.event.service';
 export class ServiceSourceIconComponent implements OnChanges, OnDestroy {
     @Input() event!: EventInterface;
     @Input() user!: User;
+    @Input() sourceServiceName: ServiceNames | null = null;
     @Input() showIcon = true;
+    @Input() showTooltip = true;
     @Input() showText = false;
 
     serviceName: ServiceNames | null = null;
@@ -24,6 +26,17 @@ export class ServiceSourceIconComponent implements OnChanges, OnDestroy {
     constructor(private eventService: AppEventService, private cd: ChangeDetectorRef) { }
 
     ngOnChanges(changes: SimpleChanges): void {
+        if (this.sourceServiceName) {
+            this.metadataKeysSubscription?.unsubscribe();
+            this.setServiceSource(this.sourceServiceName);
+            return;
+        }
+
+        if (changes['sourceServiceName']) {
+            this.checkServiceSource();
+            return;
+        }
+
         if (changes['event'] || changes['user']) {
             this.checkServiceSource();
         }
@@ -34,9 +47,7 @@ export class ServiceSourceIconComponent implements OnChanges, OnDestroy {
 
         const eventID = this.event?.getID?.();
         if (!this.user || !this.event || !eventID) {
-            this.serviceName = null;
-            this.serviceLogo = null;
-            this.cd.markForCheck();
+            this.setServiceSource(null);
             return;
         }
         this.metadataKeysSubscription = this.eventService.getEventMetaDataKeys(this.user, eventID)
@@ -52,10 +63,7 @@ export class ServiceSourceIconComponent implements OnChanges, OnDestroy {
                     this.serviceName = null;
                 }
 
-                this.serviceLogo = this.serviceName
-                    ? this.getServiceLogo(this.serviceName)
-                    : null;
-                this.cd.markForCheck();
+                this.setServiceSource(this.serviceName);
             });
     }
 
@@ -76,6 +84,14 @@ export class ServiceSourceIconComponent implements OnChanges, OnDestroy {
         }
     }
 
+    get serviceTooltip(): string {
+        if (!this.showTooltip || !this.serviceName) {
+            return '';
+        }
+
+        return `Synced from ${this.serviceDisplayName || this.serviceName}`;
+    }
+
     private getServiceLogo(serviceName: ServiceNames): string {
         switch (serviceName) {
             case ServiceNames.COROSAPI:
@@ -87,5 +103,13 @@ export class ServiceSourceIconComponent implements OnChanges, OnDestroy {
             default:
                 return '';
         }
+    }
+
+    private setServiceSource(serviceName: ServiceNames | null): void {
+        this.serviceName = serviceName;
+        this.serviceLogo = serviceName
+            ? this.getServiceLogo(serviceName)
+            : null;
+        this.cd.markForCheck();
     }
 }

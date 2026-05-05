@@ -30,6 +30,9 @@ export class MaterialPillTabsComponent implements AfterContentInit {
   @Input() lazyContent = true;
   @Input() dynamicHeight = false;
   @Input() disablePagination = false;
+  @Input() fitInkBarToContent = true;
+  @Input() stretchTabs = false;
+  @Input() alignTabs: 'start' | 'center' | 'end' = 'start';
   @Input() stickyHeader = false;
   @Input() topOffset = '0px';
   @Input() density: 'regular' | 'compact' = 'regular';

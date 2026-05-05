@@ -46,6 +46,7 @@ vi.mock('firebase-admin', () => {
     const mockDocRef = {
         update: () => Promise.resolve(),
         set: () => Promise.resolve(),
+        create: () => Promise.resolve(),
         delete: () => Promise.resolve(),
         id: 'mock-doc-id',
         get: () => Promise.resolve({ data: () => ({}), exists: true }),

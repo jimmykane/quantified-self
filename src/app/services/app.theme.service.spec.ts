@@ -1,4 +1,5 @@
 import { TestBed } from '@angular/core/testing';
+import { OverlayContainer } from '@angular/cdk/overlay';
 import { AppThemeService } from './app.theme.service';
 import { AppUserService } from './app.user.service';
 import { AppAuthService } from '../authentication/app.auth.service';
@@ -14,6 +15,8 @@ describe('AppThemeService', () => {
     let userSubject: BehaviorSubject<any>;
     let mediaQueryListeners: ((e: MediaQueryListEvent) => void)[] = [];
     let mockMediaQueryList: any;
+    let overlayContainerElement: HTMLElement;
+    let mockOverlayContainer: Pick<OverlayContainer, 'getContainerElement'>;
 
     beforeEach(() => {
         // Clear localStorage before each test
@@ -49,11 +52,17 @@ describe('AppThemeService', () => {
             updateUserProperties: vi.fn().mockResolvedValue(undefined)
         };
 
+        overlayContainerElement = document.createElement('div');
+        mockOverlayContainer = {
+            getContainerElement: vi.fn().mockReturnValue(overlayContainerElement),
+        };
+
         TestBed.configureTestingModule({
             providers: [
                 AppThemeService,
                 { provide: AppUserService, useValue: mockUserService },
-                { provide: AppAuthService, useValue: mockAuthService }
+                { provide: AppAuthService, useValue: mockAuthService },
+                { provide: OverlayContainer, useValue: mockOverlayContainer }
             ]
         });
 
@@ -62,6 +71,7 @@ describe('AppThemeService', () => {
 
     afterEach(() => {
         document.body.classList.remove('dark-theme');
+        overlayContainerElement.classList.remove('dark-theme');
         if (service) {
             service.ngOnDestroy();
         }
@@ -205,14 +215,30 @@ describe('AppThemeService', () => {
             expect(document.body.classList.contains('dark-theme')).toBe(true);
         });
 
+        it('should add dark-theme class to the overlay container for dark theme', () => {
+            service.setAppTheme(AppThemes.Dark);
+            expect(overlayContainerElement.classList.contains('dark-theme')).toBe(true);
+        });
+
         it('should remove dark-theme class from body for light theme', () => {
             // First set to Dark to ensure state change
             service.setAppTheme(AppThemes.Dark);
             expect(document.body.classList.contains('dark-theme')).toBe(true);
+            expect(overlayContainerElement.classList.contains('dark-theme')).toBe(true);
 
             // Now switch to Normal
             service.setAppTheme(AppThemes.Normal);
             expect(document.body.classList.contains('dark-theme')).toBe(false);
+            expect(overlayContainerElement.classList.contains('dark-theme')).toBe(false);
+        });
+
+        it('should resync the overlay container even when the theme value does not change', () => {
+            service.setAppTheme(AppThemes.Dark);
+            overlayContainerElement.classList.remove('dark-theme');
+
+            service.setAppTheme(AppThemes.Dark, false);
+
+            expect(overlayContainerElement.classList.contains('dark-theme')).toBe(true);
         });
 
         it('should save to localStorage by default', () => {

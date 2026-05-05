@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { SPORTS_LIB_REPARSE_TARGET_VERSION } from '../reparse/sports-lib-reparse.config';
 
 const TARGET_SPORTS_LIB_VERSION = SPORTS_LIB_REPARSE_TARGET_VERSION;
-const TARGET_SPORTS_LIB_VERSION_CODE = 9_001_004;
+const TARGET_SPORTS_LIB_VERSION_CODE = 13_000_000;
 
 vi.mock('firebase-functions/v2/scheduler', () => ({
     onSchedule: (_opts: unknown, handler: any) => handler,

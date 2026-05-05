@@ -176,11 +176,21 @@ export class EChartsLoaderService {
       }
       this.hapticsService.selection();
     };
+    let lastAxisPointerHapticKey: string | null = null;
+    const onAxisPointerUpdate = (params: unknown) => {
+      const hapticKey = this.resolveAxisPointerHapticKey(params);
+      if (!hapticKey || hapticKey === lastAxisPointerHapticKey) {
+        return;
+      }
+      lastAxisPointerHapticKey = hapticKey;
+      this.hapticsService.selection();
+    };
 
     this.zone.runOutsideAngular(() => {
       chart.on('click', onChartClick as never);
       chart.on('datazoom', onDataZoom as never);
       chart.on('brushEnd', onBrushEnd as never);
+      chart.on('updateAxisPointer', onAxisPointerUpdate as never);
     });
 
     return () => {
@@ -188,6 +198,7 @@ export class EChartsLoaderService {
         chart.off('click', onChartClick as never);
         chart.off('datazoom', onDataZoom as never);
         chart.off('brushEnd', onBrushEnd as never);
+        chart.off('updateAxisPointer', onAxisPointerUpdate as never);
       });
     };
   }
@@ -268,6 +279,52 @@ export class EChartsLoaderService {
     }
 
     return brushParams.areas.length > 0;
+  }
+
+  private resolveAxisPointerHapticKey(params: unknown): string | null {
+    if (this.isSuppressedHapticSource(params) || !params || typeof params !== 'object') {
+      return null;
+    }
+
+    const axisPointerParams = params as { axesInfo?: unknown };
+    if (!Array.isArray(axisPointerParams.axesInfo)) {
+      return null;
+    }
+
+    for (const axisInfo of axisPointerParams.axesInfo) {
+      if (!axisInfo || typeof axisInfo !== 'object') {
+        continue;
+      }
+
+      const info = axisInfo as {
+        axisDim?: unknown;
+        axisIndex?: unknown;
+        value?: unknown;
+      };
+      if (info.axisDim !== 'x') {
+        continue;
+      }
+
+      const value = this.normalizeAxisPointerValue(info.value);
+      if (value === null) {
+        continue;
+      }
+
+      const axisIndex = Number.isFinite(Number(info.axisIndex)) ? Number(info.axisIndex) : 0;
+      return `x:${axisIndex}:${value}`;
+    }
+
+    return null;
+  }
+
+  private normalizeAxisPointerValue(value: unknown): string | null {
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      return `${value}`;
+    }
+    if (typeof value === 'string' && value.trim()) {
+      return value.trim();
+    }
+    return null;
   }
 
   private isSuppressedHapticSource(params: unknown): boolean {

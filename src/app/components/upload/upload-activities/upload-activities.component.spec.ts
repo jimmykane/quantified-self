@@ -137,6 +137,43 @@ describe('UploadActivitiesComponent', () => {
     expect(component.uploadLimit).toBe(USAGE_LIMITS.free);
   });
 
+  it('should render a custom upload label when provided', async () => {
+    component.uploadLabel = 'Upload first activity';
+
+    await component.ngOnInit();
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.textContent).toContain('Upload first activity');
+    expect(fixture.nativeElement.textContent).not.toContain('remaining');
+  });
+
+  it('should show remaining uploads with a custom label when requested', async () => {
+    component.uploadLabel = 'Upload first activity';
+    component.showRemainingCountWithCustomLabel = true;
+
+    await component.ngOnInit();
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.textContent).toContain('Upload first activity');
+    expect(fixture.nativeElement.textContent).toContain(`${USAGE_LIMITS.free - 5} remaining`);
+  });
+
+  it('should use the prompt action Material styling when embedded in a prompt', async () => {
+    component.uploadLabel = 'Upload first activity';
+    component.promptAction = true;
+    component.showUploadIcon = true;
+
+    await component.ngOnInit();
+    fixture.detectChanges();
+
+    const button = fixture.nativeElement.querySelector('button') as HTMLButtonElement;
+
+    expect(button.classList.contains('qs-mat-primary')).toBe(true);
+    expect(button.classList.contains('prompt-action')).toBe(true);
+    expect(button.classList.contains('upload-cta')).toBe(false);
+    expect(button.querySelector('.upload-button-content mat-icon')?.textContent?.trim()).toBe('upload_file');
+  });
+
   it('should skip upload count checks for pro users', async () => {
     component.user = { uid: 'u1' } as any;
     userServiceMock.hasProAccessSignal.mockReturnValueOnce(true);
@@ -200,6 +237,25 @@ describe('UploadActivitiesComponent', () => {
       'run.fit',
     );
     expect(result.eventId).toBe('event-1');
+  });
+
+  it('should emit activityUploadComplete after a successful upload batch', async () => {
+    component.user = { uid: 'u1' } as any;
+    const uploadCompleteSpy = vi.fn();
+    component.activityUploadComplete.subscribe(uploadCompleteSpy);
+    mockFileReaderResult(new Uint8Array([1, 2, 3]).buffer);
+    const fileInputEvent = {
+      stopPropagation: vi.fn(),
+      preventDefault: vi.fn(),
+      target: {
+        files: [makeUploadFile('run.fit', 'fit').file],
+        value: 'run.fit',
+      },
+    };
+
+    await component.getFiles(fileInputEvent);
+
+    expect(uploadCompleteSpy).toHaveBeenCalled();
   });
 
   it('should gzip text files and upload with .gz extension', async () => {

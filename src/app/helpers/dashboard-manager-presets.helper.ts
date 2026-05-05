@@ -21,6 +21,8 @@ import {
   DASHBOARD_EASY_PERCENT_KPI_CHART_TYPE,
   DASHBOARD_EFFICIENCY_DELTA_4W_KPI_CHART_TYPE,
   DASHBOARD_EFFICIENCY_TREND_CHART_TYPE,
+  DASHBOARD_FATIGUE_ATL_KPI_CHART_TYPE,
+  DASHBOARD_FITNESS_CTL_KPI_CHART_TYPE,
   DASHBOARD_FRESHNESS_FORECAST_CHART_TYPE,
   DASHBOARD_FORM_CHART_TYPE,
   DASHBOARD_FORM_NOW_KPI_CHART_TYPE,
@@ -37,6 +39,11 @@ import {
   type DashboardKpiChartType,
 } from './dashboard-special-chart-types';
 import { DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE } from './dashboard-form.helper';
+import type {
+  AppDashboardChartTileSettingsInterface,
+  AppDashboardMapTileSettingsInterface,
+} from '../models/app-user.interface';
+import { AppUserUtilities } from '../utils/app.user.utilities';
 
 export const DASHBOARD_MANAGER_PRESET_IDS = {
   CURATED_RECOVERY: 'curated-recovery',
@@ -49,6 +56,8 @@ export const DASHBOARD_MANAGER_PRESET_IDS = {
   KPI_RAMP_RATE: 'kpi-ramp-rate',
   KPI_MONOTONY_STRAIN: 'kpi-monotony-strain',
   KPI_FORM_NOW: 'kpi-form-now',
+  KPI_FITNESS_CTL: 'kpi-fitness-ctl',
+  KPI_FATIGUE_ATL: 'kpi-fatigue-atl',
   KPI_FORM_PLUS_7D: 'kpi-form-plus-7d',
   KPI_EASY_PERCENT: 'kpi-easy-percent',
   KPI_HARD_PERCENT: 'kpi-hard-percent',
@@ -206,6 +215,26 @@ const DASHBOARD_MANAGER_PRESET_DEFINITIONS: DashboardManagerPresetDefinition[] =
     icon: 'self_improvement',
     category: 'kpi',
     kpiChartType: DASHBOARD_FORM_NOW_KPI_CHART_TYPE,
+    kpiGroup: 'readiness',
+  },
+  {
+    id: DASHBOARD_MANAGER_PRESET_IDS.KPI_FITNESS_CTL,
+    label: 'KPI: Fitness (CTL)',
+    tileName: 'Fitness (CTL)',
+    description: 'Current 42-day chronic training load with mini trend.',
+    icon: 'fitness_center',
+    category: 'kpi',
+    kpiChartType: DASHBOARD_FITNESS_CTL_KPI_CHART_TYPE,
+    kpiGroup: 'readiness',
+  },
+  {
+    id: DASHBOARD_MANAGER_PRESET_IDS.KPI_FATIGUE_ATL,
+    label: 'KPI: Fatigue (ATL)',
+    tileName: 'Fatigue (ATL)',
+    description: 'Current 7-day acute training load with mini trend.',
+    icon: 'battery_alert',
+    category: 'kpi',
+    kpiChartType: DASHBOARD_FATIGUE_ATL_KPI_CHART_TYPE,
     kpiGroup: 'readiness',
   },
   {
@@ -370,7 +399,7 @@ export function buildDashboardManagerPresetTile(
   }
 
   if (definition.category === 'map') {
-    const mapTile = <DashboardManagerPresetMapTileSettings><unknown>{
+    const mapTile = <DashboardManagerPresetMapTileSettings & AppDashboardMapTileSettingsInterface><unknown>{
       name: definition.tileName,
       type: TileTypes.Map,
       order: input.order,
@@ -379,6 +408,7 @@ export function buildDashboardManagerPresetTile(
       mapTheme: MapThemes.Normal,
       showHeatMap: true,
       clusterMarkers: definition.clusterMarkers,
+      eventFilters: AppUserUtilities.getDefaultDashboardTileEventFilters(),
     };
     return mapTile;
   }
@@ -447,7 +477,7 @@ export function buildDashboardManagerPresetTile(
     return kpiTile;
   }
 
-  const customTile: TileChartSettingsInterface = {
+  const customTile: AppDashboardChartTileSettingsInterface = {
     name: definition.tileName,
     type: TileTypes.Chart,
     order: input.order,
@@ -457,6 +487,7 @@ export function buildDashboardManagerPresetTile(
     dataValueType: definition.dataValueType,
     dataCategoryType: definition.dataCategoryType,
     dataTimeInterval: definition.dataTimeInterval,
+    eventFilters: AppUserUtilities.getDefaultDashboardTileEventFilters(),
   };
   return customTile;
 }

@@ -3,8 +3,6 @@
 .settings-container {
     display: block;
     min-height: calc(100vh - var(--qs-effective-top-offset, 0px));
-    // background-color: #f4f7f6; /* REMOVED */
-
     position: relative;
 }
 
@@ -14,78 +12,128 @@
     }
 }
 
-/* Horizontal Chip Navigation */
-.settings-nav {
-    padding: 0 0 16px;
-    margin-bottom: 0;
-}
-
-/* Main Content Area */
 .settings-content {
-    flex: 1;
-    padding: 24px 40px;
-    max-width: 900px;
+    max-width: 1180px;
     margin: 0 auto;
+    padding: 32px 40px;
 }
 
-.section-header {
-    margin-bottom: 32px;
+.services-shell {
+    display: grid;
+    grid-template-columns: 240px minmax(0, 1fr);
+    gap: 32px;
+    align-items: start;
 }
 
-.section-header h1 {
-    margin: 0 0 8px 0;
-    font-size: 1.8rem;
-    font-weight: 400;
-    // color: var(--text-primary); /* REMOVED */
+.mobile-section-tabs {
+    display: none;
+    width: 100%;
 }
 
-.header-content {
+.desktop-section-nav {
+    position: sticky;
+    top: calc(var(--qs-effective-top-offset, 0px) + 24px);
+}
+
+.desktop-section-nav-title {
+    margin: 0 0 8px;
+    padding-inline-start: 56px;
+    color: var(--mat-sys-on-surface-variant);
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.desktop-section-nav-list {
+    padding: 0;
+}
+
+.section-tab-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    white-space: nowrap;
+}
+
+.section-tab-label mat-icon {
+    width: 22px;
+    height: 22px;
+}
+
+.workspace-main {
+    min-width: 0;
+}
+
+.service-detail {
+    min-width: 0;
+}
+
+.service-detail-header {
     display: flex;
     align-items: center;
-    gap: 24px;
-    padding: 24px;
-    padding-bottom: 0;
-}
-
-.layer-icon {
-    width: 64px;
-    height: 64px;
-    font-size: 64px;
-    margin-bottom: 0;
-    transform-origin: left;
-}
-
-.section-header p {
-    margin: 0;
-    // color: var(--text-secondary); /* REMOVED */
-    opacity: 0.7;
-    font-size: 1rem;
-}
-
-/* Card Styling */
-.settings-card {
-    // background: var(--card-bg); /* REMOVED */
-    // Use default material card styling or surface default
-    border-radius: 12px;
-    // box-shadow: var(--card-shadow); /* REMOVED */
-    margin-bottom: 24px;
-    overflow: hidden;
-}
-
-.card-content {
-    padding: 24px;
-    display: flex;
-    flex-direction: column;
     gap: 20px;
+    margin-bottom: 24px;
 }
 
-/* Mobile Responsive Adjustments */
-@include bp.xsmall {
-    .settings-nav {
-        padding: 0;
-    }
+.service-detail-logo {
+    flex: 0 0 72px;
+    width: 72px;
+    height: 56px;
+    font-size: 56px;
+}
 
+.service-detail-header h1 {
+    margin: 0 0 6px;
+    color: var(--mat-sys-on-surface);
+    font-size: 2rem;
+    line-height: 1.15;
+    font-weight: 700;
+}
+
+.service-detail-header p {
+    margin: 0;
+    color: var(--mat-sys-on-surface-variant);
+    font-size: 1rem;
+    line-height: 1.5;
+}
+
+.service-detail-body {
+    padding-top: 24px;
+}
+
+@include bp.max-768 {
     .settings-content {
         padding: 24px 16px;
+    }
+
+    .services-shell {
+        display: flex;
+        flex-direction: column;
+        gap: 24px;
+    }
+
+    .desktop-section-nav {
+        display: none;
+    }
+
+    .mobile-section-tabs {
+        display: flex;
+    }
+
+    .service-detail-header {
+        align-items: flex-start;
+        gap: 16px;
+    }
+
+    .service-detail-logo {
+        flex-basis: 56px;
+        width: 56px;
+        height: 44px;
+        font-size: 44px;
+    }
+
+    .service-detail-header h1 {
+        font-size: 1.5rem;
     }
 }

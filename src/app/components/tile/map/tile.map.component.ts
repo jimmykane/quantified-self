@@ -1,7 +1,12 @@
 import { ChangeDetectionStrategy, Component, EventEmitter, Input, Output } from '@angular/core';
-import { EventInterface } from '@sports-alliance/sports-lib';
+import { ActivityTypes, EventInterface } from '@sports-alliance/sports-lib';
 import { TileAbstractDirective } from '../tile-abstract.directive';
 import { MapStyleName } from '../../../services/map/map-style.types';
+import type {
+  AppDashboardTileEventFilterRange,
+  AppDashboardTileEventFiltersInterface,
+} from '../../../models/app-user.interface';
+import type { DashboardTileEventNavigationDirection } from '../../../helpers/dashboard-tile-event-filters.helper';
 
 @Component({
   selector: 'app-tile-map',
@@ -17,7 +22,12 @@ export class TileMapComponent extends TileAbstractDirective {
   @Input() enableDesktopDrag = false;
   @Input() clusterMarkers!: boolean;
   @Input() events: EventInterface[] = [];
+  @Input() eventFilters?: AppDashboardTileEventFiltersInterface | null;
+  @Input() canNavigateTileEventsNewer = false;
   @Output() editInDashboardManager = new EventEmitter<number>();
+  @Output() eventFilterRangeChange = new EventEmitter<AppDashboardTileEventFilterRange>();
+  @Output() eventFilterActivityTypesChange = new EventEmitter<ActivityTypes[]>();
+  @Output() eventFilterNavigate = new EventEmitter<DashboardTileEventNavigationDirection>();
 
   onEditInDashboardManager(order: number): void {
     this.editInDashboardManager.emit(order);

@@ -4,7 +4,9 @@ import {
   Component,
   DoCheck,
   HostListener,
+  Inject,
   Input,
+  LOCALE_ID,
   OnChanges,
   OnDestroy,
   OnInit,
@@ -21,8 +23,8 @@ import {
   TileChartSettingsInterface,
   TileSettingsInterface,
   TileTypes,
-  DateRanges,
   TimeIntervals,
+  ActivityTypes,
 } from '@sports-alliance/sports-lib';
 import { LoadingAbstractDirective } from '../loading/loading-abstract.directive';
 import equal from 'fast-deep-equal';
@@ -61,6 +63,8 @@ import {
   isDashboardEasyPercentKpiChartType,
   isDashboardEfficiencyDelta4wKpiChartType,
   isDashboardEfficiencyTrendChartType,
+  isDashboardFatigueAtlKpiChartType,
+  isDashboardFitnessCtlKpiChartType,
   isDashboardFreshnessForecastChartType,
   isDashboardFormChartType,
   isDashboardFormNowKpiChartType,
@@ -71,10 +75,39 @@ import {
   isDashboardMonotonyStrainKpiChartType,
   isDashboardRampRateKpiChartType,
   isDashboardRecoveryNowChartType,
+  isDashboardSpecialChartType,
 } from '../../helpers/dashboard-special-chart-types';
 import { MatDialog } from '@angular/material/dialog';
 import { DashboardManagerDialogComponent } from './dashboard-manager-dialog/dashboard-manager-dialog.component';
+import { ConfirmationDialogComponent } from '../confirmation-dialog/confirmation-dialog.component';
 import type { SleepSession } from '@shared/sleep';
+import type {
+  AppDashboardChartTileSettingsInterface,
+  AppDashboardMapTileSettingsInterface,
+  AppDashboardSettingsInterface,
+  AppDashboardSleepTrendRange,
+  AppDashboardTileEventFilterRange,
+  AppDashboardTileEventFiltersInterface,
+  AppUserInterface,
+} from '../../models/app-user.interface';
+import {
+  dashboardSleepTrendRangeDays,
+  type DashboardSleepTrendNavigationDirection,
+  DASHBOARD_SLEEP_TREND_DEFAULT_RANGE,
+  normalizeDashboardSleepTrendRange,
+} from '../../helpers/dashboard-sleep-range.helper';
+import {
+  cloneDashboardTileEventFilters,
+  isDashboardTileEventDurationRange,
+  navigateDashboardTileEventWindow,
+  normalizeDashboardTileEventFilters,
+  resolveDashboardTileEventWindow,
+  type DashboardTileEventNavigationDirection,
+} from '../../helpers/dashboard-tile-event-filters.helper';
+import { getTrailingDashboardGridPlaceholderCount } from '../../helpers/dashboard-grid-layout.helper';
+import { AppEventService } from '../../services/app.event.service';
+import { DashboardAutoTileService } from '../../services/dashboard-auto-tile.service';
+import { WhereFilterOp } from 'firebase/firestore';
 
 interface DashboardDerivedMetricsBanner {
   type: 'pending' | 'warning';
@@ -97,12 +130,9 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   private static readonly hoverMediaQuery = '(hover: hover)';
   private static readonly derivedPendingBannerDebounceMs = 250;
 
-  @Input() events: EventInterface[];
   @Input() user: User;
+  @Input() eventUser: User;
   @Input() showActions: boolean;
-  @Input() dashboardDateRange: DateRanges | null = null;
-  @Input() dashboardStartDate: Date | number | null = null;
-  @Input() dashboardEndDate: Date | number | null = null;
 
   public rowHeight;
   public numberOfCols: number;
@@ -111,10 +141,16 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   public tiles: DashboardTileViewModel[] = [];
   public kpiLaneTiles: DashboardChartTileViewModel[] = [];
   public mainGridTiles: DashboardTileViewModel[] = [];
+  public mainGridTrailingPlaceholders: number[] = [];
 
   public tileTypes = TileTypes;
   public desktopTileDragEnabled = false;
   public isDashboardManagerOpen = false;
+  public sleepTrendRange: AppDashboardSleepTrendRange = DASHBOARD_SLEEP_TREND_DEFAULT_RANGE;
+  public sleepTrendWindowLabel = 'Last 14 days';
+  public sleepTrendCanNavigateOlder = true;
+  public sleepTrendCanNavigateNewer = false;
+  public todayDateSubtitle = '';
 
 
   private appThemeSubscription: Subscription | null = null;
@@ -122,6 +158,15 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   private derivedMetricsUserUID: string | null = null;
   private sleepSubscription: Subscription | null = null;
   private sleepListenerKey: string | null = null;
+  private dashboardAutoTileSubscription: Subscription | null = null;
+  private dashboardAutoTileListenerKey: string | null = null;
+  private dashboardAutoTileUser: AppUserInterface | null = null;
+  private sleepTrendAnchorEndMs: number | null = null;
+  private tileEventSubscriptions = new Map<number, Subscription>();
+  private tileEventListenerKeys = new Map<number, string>();
+  private tileEventAnchorEndMsByOrder = new Map<number, number | null>();
+  private tileEventsByOrder: Record<number, EventInterface[]> = {};
+  public tileEventLoadingByOrder: Record<number, boolean> = {};
   public darkTheme = false;
   private logger: LoggerService;
   private dashboardTileSettingsSnapshot: TileSettingsInterface[] = [];
@@ -161,14 +206,18 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     private userService: AppUserService,
     private dashboardDerivedMetricsService: DashboardDerivedMetricsService,
     private sleepService: AppSleepService,
+    private eventService: AppEventService,
+    private dashboardAutoTileService: DashboardAutoTileService,
     private dialog: MatDialog,
     changeDetector: ChangeDetectorRef,
     logger: LoggerService,
+    @Inject(LOCALE_ID) private locale: string,
   ) {
     super(changeDetector);
     this.logger = logger;
     this.rowHeight = this.getRowHeight();
     this.numberOfCols = this.getNumberOfColumns();
+    this.todayDateSubtitle = this.formatTodayDateSubtitle(new Date());
   }
 
   @HostListener('window:resize', ['$event'])
@@ -176,6 +225,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   resizeOROrientationChange(event?) {
     this.numberOfCols = this.getNumberOfColumns();
     this.rowHeight = this.getRowHeight();
+    this.refreshMainGridTrailingPlaceholders();
     this.updateDesktopTileDragCapability();
   }
 
@@ -186,13 +236,13 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   async ngOnChanges(simpleChanges: SimpleChanges) {
     this.updateDesktopTileDragCapability();
     if (
-      simpleChanges.events
-      || simpleChanges.user
-      || simpleChanges.dashboardDateRange
-      || simpleChanges.dashboardStartDate
-      || simpleChanges.dashboardEndDate
+      simpleChanges.user
+      || simpleChanges.eventUser
     ) {
       return this.unsubscribeAndCreateCharts();
+    }
+    if (simpleChanges.showActions) {
+      this.syncDashboardAutoTileSubscription();
     }
   }
 
@@ -220,6 +270,24 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     }
     const mapItem = item as DashboardMapTileViewModel;
     return `${mapItem.clusterMarkers}${mapItem.mapTheme}${mapItem.mapStyle}${mapItem.name}${mapItem.order}${mapItem.showHeatMap}`;
+  }
+
+  private formatTodayDateSubtitle(date: Date): string {
+    try {
+      return new Intl.DateTimeFormat(this.locale || undefined, {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+      }).format(date);
+    } catch (_error) {
+      return new Intl.DateTimeFormat(undefined, {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+      }).format(date);
+    }
   }
 
   public async onTilesDrop(_event: CdkDragDrop<DashboardTileViewModel[]>): Promise<void> {
@@ -270,8 +338,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       return;
     }
 
-    this.isDashboardManagerOpen = true;
-    this.changeDetector.markForCheck();
+    this.setDashboardManagerOpenState(true);
 
     try {
       const dialogRef = this.dialog.open(DashboardManagerDialogComponent, {
@@ -283,14 +350,24 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
         width: '680px',
         maxWidth: '95vw',
       });
+      dialogRef.beforeClosed?.().pipe(take(1)).subscribe(() => {
+        this.setDashboardManagerOpenState(false);
+      });
       const result = await firstValueFrom(dialogRef.afterClosed().pipe(take(1)));
       if (result?.saved === true) {
         await this.rebuildTilesFromCurrentState();
       }
     } finally {
-      this.isDashboardManagerOpen = false;
-      this.changeDetector.markForCheck();
+      this.setDashboardManagerOpenState(false);
     }
+  }
+
+  private setDashboardManagerOpenState(isOpen: boolean): void {
+    if (this.isDashboardManagerOpen === isOpen) {
+      return;
+    }
+    this.isDashboardManagerOpen = isOpen;
+    this.changeDetector.markForCheck();
   }
 
   private async unsubscribeAndCreateCharts() {
@@ -307,6 +384,8 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     });
     this.syncDerivedMetricsSubscription();
     this.syncSleepSubscription();
+    this.syncDashboardAutoTileSubscription();
+    this.syncTileEventSubscriptions();
     await this.rebuildTilesFromCurrentState();
   }
 
@@ -316,14 +395,9 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     this.refreshDerivedMetricsBannerState();
     const newTiles = buildDashboardTileViewModels({
       tiles: this.user?.settings?.dashboardSettings?.tiles ?? [],
-      events: this.events,
+      events: [],
+      tileEventsByOrder: this.tileEventsByOrder,
       sleepSessions: this.sleepSessions,
-      dashboardDateRange: {
-        dateRange: this.dashboardDateRange,
-        startDate: this.dashboardStartDate,
-        endDate: this.dashboardEndDate,
-        startOfTheWeek: this.user?.settings?.unitSettings?.startOfTheWeek,
-      },
       preferences: this.getAggregationPreferences(),
       logger: this.logger,
       derivedMetrics: {
@@ -345,7 +419,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     this.dashboardTileSettingsSnapshot = this.getDashboardTileSettingsSnapshot();
     this.logger.log('[perf] summaries_build_tiles', {
       durationMs: Number((performance.now() - buildStart).toFixed(2)),
-      inputEvents: this.events?.length || 0,
+      inputEvents: Object.values(this.tileEventsByOrder).reduce((total, events) => total + (events?.length || 0), 0),
       generatedTiles: newTiles.length,
     });
 
@@ -525,6 +599,9 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     if (!uid) {
       this.sleepSessions = [];
       this.sleepListenerKey = null;
+      this.sleepTrendRange = DASHBOARD_SLEEP_TREND_DEFAULT_RANGE;
+      this.sleepTrendAnchorEndMs = null;
+      this.updateSleepTrendWindowState(this.buildSleepTrendWindow());
       if (this.sleepSubscription) {
         this.sleepSubscription.unsubscribe();
         this.sleepSubscription = null;
@@ -532,7 +609,15 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       return;
     }
 
-    const listenerKey = this.buildSleepListenerKey(uid);
+    const previousRange = this.sleepTrendRange;
+    this.sleepTrendRange = this.getSleepTrendRange();
+    if (previousRange !== this.sleepTrendRange) {
+      this.sleepTrendAnchorEndMs = null;
+    }
+
+    const window = this.buildSleepTrendWindow();
+    this.updateSleepTrendWindowState(window);
+    const listenerKey = this.buildSleepListenerKey(uid, window);
     if (this.sleepListenerKey === listenerKey && this.sleepSubscription) {
       return;
     }
@@ -544,7 +629,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
 
     this.sleepListenerKey = listenerKey;
     this.sleepSubscription = this.sleepService
-      .watchForDashboard(uid, null, null)
+      .watchForDashboard(uid, window.startMs, window.endMs)
       .subscribe((sessions) => {
         if (equal(this.sleepSessions, sessions)) {
           return;
@@ -554,8 +639,378 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       });
   }
 
-  private buildSleepListenerKey(uid: string): string {
+  private syncDashboardAutoTileSubscription(): void {
+    const listenerKey = this.resolveDashboardAutoTileListenerKey();
+    if (!listenerKey) {
+      this.unsubscribeDashboardAutoTileSubscription();
+      return;
+    }
+
+    const user = this.user as AppUserInterface;
+    if (
+      this.dashboardAutoTileListenerKey === listenerKey
+      && this.dashboardAutoTileSubscription
+      && this.dashboardAutoTileUser === user
+    ) {
+      return;
+    }
+
+    this.unsubscribeDashboardAutoTileSubscription();
+    this.dashboardAutoTileListenerKey = listenerKey;
+    this.dashboardAutoTileUser = user;
+    this.dashboardAutoTileSubscription = this.dashboardAutoTileService.watchForDashboard(user);
+  }
+
+  private resolveDashboardAutoTileListenerKey(): string | null {
+    if (this.showActions !== true) {
+      return null;
+    }
+
+    const uid = `${this.user?.uid || ''}`.trim();
+    if (!uid) {
+      return null;
+    }
+
+    const eventUserUID = `${this.eventUser?.uid || ''}`.trim();
+    if (eventUserUID && eventUserUID !== uid) {
+      return null;
+    }
+
     return uid;
+  }
+
+  private unsubscribeDashboardAutoTileSubscription(): void {
+    if (this.dashboardAutoTileSubscription) {
+      this.dashboardAutoTileSubscription.unsubscribe();
+      this.dashboardAutoTileSubscription = null;
+    }
+    this.dashboardAutoTileListenerKey = null;
+    this.dashboardAutoTileUser = null;
+  }
+
+  public async onSleepTrendRangeChange(range: AppDashboardSleepTrendRange): Promise<void> {
+    const nextRange = normalizeDashboardSleepTrendRange(range);
+    if (nextRange === this.getSleepTrendRange()) {
+      return;
+    }
+    if (!this.user) {
+      return;
+    }
+
+    const userWithSettings = this.user as AppUserInterface;
+    userWithSettings.settings = userWithSettings.settings || {};
+    const dashboardSettings = (userWithSettings.settings.dashboardSettings || {}) as AppDashboardSettingsInterface;
+    userWithSettings.settings.dashboardSettings = dashboardSettings;
+    const previousSleepTrend = { ...(dashboardSettings.sleepTrend || {}) };
+
+    dashboardSettings.sleepTrend = {
+      ...previousSleepTrend,
+      range: nextRange,
+    };
+    this.sleepTrendRange = nextRange;
+    this.sleepTrendAnchorEndMs = null;
+    this.syncSleepSubscription();
+    this.changeDetector.markForCheck();
+
+    try {
+      await this.userService.updateUserProperties(this.user as AppUserInterface, { settings: userWithSettings.settings });
+    } catch (error) {
+      dashboardSettings.sleepTrend = previousSleepTrend;
+      this.sleepTrendRange = normalizeDashboardSleepTrendRange(previousSleepTrend.range);
+      this.sleepTrendAnchorEndMs = null;
+      this.syncSleepSubscription();
+      this.changeDetector.markForCheck();
+      this.logger.error('[SummariesComponent] Failed to persist sleep trend range update', error);
+    }
+  }
+
+  public onSleepTrendNavigate(direction: DashboardSleepTrendNavigationDirection): void {
+    const days = dashboardSleepTrendRangeDays(this.sleepTrendRange);
+    const nowMs = Date.now();
+    const windowMs = days * 24 * 60 * 60 * 1000;
+    const currentWindow = this.buildSleepTrendWindow(nowMs);
+    if (direction === 'older') {
+      this.sleepTrendAnchorEndMs = Math.max(windowMs, currentWindow.endMs - windowMs);
+    } else {
+      const nextEndMs = currentWindow.endMs + windowMs;
+      this.sleepTrendAnchorEndMs = nextEndMs >= nowMs ? null : nextEndMs;
+    }
+
+    this.syncSleepSubscription();
+    this.changeDetector.markForCheck();
+  }
+
+  public getTileEventFilters(tile: DashboardTileViewModel): AppDashboardTileEventFiltersInterface {
+    return normalizeDashboardTileEventFilters((tile as DashboardTileViewModel & {
+      eventFilters?: AppDashboardTileEventFiltersInterface;
+    }).eventFilters);
+  }
+
+  public isTileLoading(tile: DashboardTileViewModel): boolean {
+    if (this.isEventDataTile(tile)) {
+      return this.tileEventLoadingByOrder[tile.order] === true;
+    }
+    if (this.isKpiLaneTile(tile)) {
+      return !this.derivedMetricsHydrated;
+    }
+    return false;
+  }
+
+  public canNavigateTileEventsNewer(tile: DashboardTileViewModel): boolean {
+    return this.tileEventAnchorEndMsByOrder.has(tile.order)
+      && this.tileEventAnchorEndMsByOrder.get(tile.order) !== null;
+  }
+
+  public async onTileEventFilterRangeChange(
+    order: number,
+    range: AppDashboardTileEventFilterRange,
+  ): Promise<void> {
+    if (range === 'all') {
+      const confirmed = await this.confirmAllTileEventRangeSelection();
+      if (!confirmed) {
+        return;
+      }
+    }
+    await this.updateTileEventFilters(order, { range });
+  }
+
+  public async onTileEventFilterActivityTypesChange(order: number, activityTypes: ActivityTypes[]): Promise<void> {
+    await this.updateTileEventFilters(order, { activityTypes: activityTypes || [] });
+  }
+
+  public onTileEventFilterNavigate(order: number, direction: DashboardTileEventNavigationDirection): void {
+    const tile = this.getOrderedDashboardSettingsTiles().find(candidate => candidate.order === order);
+    if (!tile || !this.isEventDataSettingsTile(tile)) {
+      return;
+    }
+    const filters = this.getSettingsTileEventFilters(tile);
+    const nextAnchor = navigateDashboardTileEventWindow(
+      filters,
+      direction,
+      this.tileEventAnchorEndMsByOrder.get(order) ?? null,
+    );
+    this.tileEventAnchorEndMsByOrder.set(order, nextAnchor);
+    this.syncTileEventSubscriptions();
+    this.changeDetector.markForCheck();
+  }
+
+  private syncTileEventSubscriptions(): void {
+    const eventUser = (this.eventUser || this.user) as User | null;
+    const uid = `${eventUser?.uid || ''}`.trim();
+    if (!uid) {
+      this.unsubscribeTileEventSubscriptions();
+      return;
+    }
+
+    const eventDataTiles = this.getOrderedDashboardSettingsTiles().filter(tile => this.isEventDataSettingsTile(tile));
+    const activeOrders = new Set(eventDataTiles.map(tile => tile.order));
+    for (const order of Array.from(this.tileEventSubscriptions.keys())) {
+      if (!activeOrders.has(order)) {
+        this.tileEventSubscriptions.get(order)?.unsubscribe();
+        this.tileEventSubscriptions.delete(order);
+        this.tileEventListenerKeys.delete(order);
+        this.tileEventAnchorEndMsByOrder.delete(order);
+        delete this.tileEventsByOrder[order];
+        delete this.tileEventLoadingByOrder[order];
+      }
+    }
+
+    eventDataTiles.forEach((tile) => {
+      const filters = this.getSettingsTileEventFilters(tile);
+      const window = resolveDashboardTileEventWindow(
+        filters,
+        this.user?.settings?.unitSettings?.startOfTheWeek,
+        this.tileEventAnchorEndMsByOrder.get(tile.order) ?? null,
+      );
+      const listenerKey = this.buildTileEventListenerKey(uid, tile.order, filters, window);
+      if (this.tileEventListenerKeys.get(tile.order) === listenerKey && this.tileEventSubscriptions.has(tile.order)) {
+        return;
+      }
+
+      this.tileEventSubscriptions.get(tile.order)?.unsubscribe();
+      this.tileEventListenerKeys.set(tile.order, listenerKey);
+      this.tileEventLoadingByOrder[tile.order] = true;
+
+      const where = this.buildTileEventWhereClauses(window);
+      this.tileEventSubscriptions.set(tile.order, this.eventService
+        .getEventsBy(eventUser, where, 'startDate', false, 0)
+        .subscribe({
+          next: (events) => {
+            this.tileEventsByOrder[tile.order] = (events || []).filter(event => !event.isMerge);
+            this.tileEventLoadingByOrder[tile.order] = false;
+            void this.rebuildTilesFromCurrentState();
+            this.changeDetector.markForCheck();
+          },
+          error: (error) => {
+            this.tileEventsByOrder[tile.order] = [];
+            this.tileEventLoadingByOrder[tile.order] = false;
+            this.logger.error('[SummariesComponent] Failed to load dashboard tile events', error);
+            void this.rebuildTilesFromCurrentState();
+            this.changeDetector.markForCheck();
+          },
+        }));
+    });
+  }
+
+  private buildTileEventWhereClauses(window: { startMs: number | null; endMs: number | null }): Array<{ fieldPath: string; opStr: WhereFilterOp; value: number }> {
+    if (window.startMs === null || window.endMs === null) {
+      return [];
+    }
+    return [{
+      fieldPath: 'startDate',
+      opStr: '>=',
+      value: window.startMs,
+    }, {
+      fieldPath: 'startDate',
+      opStr: '<=',
+      value: window.endMs,
+    }];
+  }
+
+  private buildTileEventListenerKey(
+    uid: string,
+    order: number,
+    filters: AppDashboardTileEventFiltersInterface,
+    window: { startMs: number | null; endMs: number | null },
+  ): string {
+    const range = normalizeDashboardTileEventFilters(filters).range;
+    const anchorEndMs = this.tileEventAnchorEndMsByOrder.get(order) ?? null;
+    const windowKey = isDashboardTileEventDurationRange(range) && anchorEndMs === null
+      ? 'latest'
+      : `${window.startMs}:${window.endMs}`;
+    return JSON.stringify({
+      uid,
+      order,
+      range,
+      windowKey,
+    });
+  }
+
+  private async updateTileEventFilters(
+    order: number,
+    patch: Partial<AppDashboardTileEventFiltersInterface>,
+  ): Promise<void> {
+    if (!this.user?.settings?.dashboardSettings?.tiles) {
+      return;
+    }
+
+    const dashboardSettings = (this.user as AppUserInterface).settings.dashboardSettings as AppDashboardSettingsInterface;
+    const previousTiles = this.cloneDashboardTiles(dashboardSettings.tiles);
+    const tile = dashboardSettings.tiles.find(candidate => candidate.order === order);
+    if (!tile || !this.isEventDataSettingsTile(tile)) {
+      return;
+    }
+
+    const tileWithFilters = tile as (AppDashboardChartTileSettingsInterface | AppDashboardMapTileSettingsInterface);
+    const previousFilters = this.getSettingsTileEventFilters(tileWithFilters);
+    tileWithFilters.eventFilters = normalizeDashboardTileEventFilters({
+      ...previousFilters,
+      ...patch,
+    });
+    this.tileEventAnchorEndMsByOrder.delete(order);
+    this.syncTileEventSubscriptions();
+    await this.rebuildTilesFromCurrentState();
+    this.changeDetector.markForCheck();
+
+    try {
+      await this.userService.updateUserProperties(this.user as AppUserInterface, { settings: (this.user as AppUserInterface).settings });
+    } catch (error) {
+      dashboardSettings.tiles = previousTiles;
+      this.tileEventAnchorEndMsByOrder.delete(order);
+      this.syncTileEventSubscriptions();
+      await this.rebuildTilesFromCurrentState();
+      this.changeDetector.markForCheck();
+      this.logger.error('[SummariesComponent] Failed to persist dashboard tile event filters', error);
+    }
+  }
+
+  private getSettingsTileEventFilters(tile: TileSettingsInterface): AppDashboardTileEventFiltersInterface {
+    return normalizeDashboardTileEventFilters((tile as (AppDashboardChartTileSettingsInterface | AppDashboardMapTileSettingsInterface)).eventFilters);
+  }
+
+  private isEventDataTile(tile: DashboardTileViewModel): boolean {
+    if (tile.type === TileTypes.Map) {
+      return true;
+    }
+    return tile.type === TileTypes.Chart && !isDashboardSpecialChartType((tile as DashboardChartTileViewModel).chartType);
+  }
+
+  private isEventDataSettingsTile(tile: TileSettingsInterface): boolean {
+    if (tile.type === TileTypes.Map) {
+      return true;
+    }
+    return tile.type === TileTypes.Chart && !isDashboardSpecialChartType((tile as TileChartSettingsInterface).chartType);
+  }
+
+  private cloneDashboardTiles(tiles: TileSettingsInterface[]): TileSettingsInterface[] {
+    return (tiles || []).map((tile) => this.cloneDashboardTile(tile));
+  }
+
+  private async confirmAllTileEventRangeSelection(): Promise<boolean> {
+    const dialogRef = this.dialog.open(ConfirmationDialogComponent, {
+      data: {
+        title: 'Load all tile events?',
+        message: 'Selecting All may degrade app performance and increase loading times. Continue?',
+        confirmLabel: 'OK',
+        cancelLabel: 'Cancel',
+        confirmColor: 'warn',
+      },
+    });
+    const confirmed = await firstValueFrom(dialogRef.afterClosed().pipe(take(1)));
+    return confirmed === true;
+  }
+
+  private buildSleepListenerKey(uid: string, window: { range: AppDashboardSleepTrendRange; startMs: number; endMs: number }): string {
+    const anchorKey = this.sleepTrendAnchorEndMs === null ? 'latest' : `${window.startMs}:${window.endMs}`;
+    return `${uid}:${window.range}:${anchorKey}`;
+  }
+
+  private getSleepTrendRange(): AppDashboardSleepTrendRange {
+    return normalizeDashboardSleepTrendRange((this.user as AppUserInterface)?.settings?.dashboardSettings?.sleepTrend?.range);
+  }
+
+  private buildSleepTrendWindow(nowMs = Date.now()): {
+    range: AppDashboardSleepTrendRange;
+    startMs: number;
+    endMs: number;
+  } {
+    const range = this.sleepTrendRange || this.getSleepTrendRange();
+    const days = dashboardSleepTrendRangeDays(range);
+    const windowMs = days * 24 * 60 * 60 * 1000;
+    const anchorEndMs = Number.isFinite(this.sleepTrendAnchorEndMs) && this.sleepTrendAnchorEndMs !== null
+      ? Math.min(this.sleepTrendAnchorEndMs, nowMs)
+      : nowMs;
+    return {
+      range,
+      startMs: Math.max(0, anchorEndMs - windowMs),
+      endMs: anchorEndMs,
+    };
+  }
+
+  private updateSleepTrendWindowState(window: { range: AppDashboardSleepTrendRange; startMs: number; endMs: number }): void {
+    this.sleepTrendRange = window.range;
+    this.sleepTrendCanNavigateOlder = true;
+    this.sleepTrendCanNavigateNewer = this.sleepTrendAnchorEndMs !== null;
+    this.sleepTrendWindowLabel = this.formatSleepTrendWindowLabel(window);
+  }
+
+  private formatSleepTrendWindowLabel(window: { range: AppDashboardSleepTrendRange; startMs: number; endMs: number }): string {
+    const days = dashboardSleepTrendRangeDays(window.range);
+    if (this.sleepTrendAnchorEndMs === null) {
+      if (window.range === '1y') {
+        return 'Last 1 year';
+      }
+      return `Last ${days} days`;
+    }
+    return `${this.formatSleepTrendWindowDate(window.startMs)} - ${this.formatSleepTrendWindowDate(window.endMs)}`;
+  }
+
+  private formatSleepTrendWindowDate(timestampMs: number): string {
+    return new Intl.DateTimeFormat(undefined, {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+    }).format(new Date(timestampMs));
   }
 
   private resetDerivedMetricsState(): void {
@@ -592,10 +1047,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
 
   private getDashboardTileSettingsSnapshot(): TileSettingsInterface[] {
     return (this.user?.settings?.dashboardSettings?.tiles ?? []).map((tile: TileSettingsInterface) => {
-      const snapshot: TileSettingsInterface = {
-        ...tile,
-        size: tile.size ? { ...tile.size } : tile.size
-      };
+      const snapshot = this.cloneDashboardTile(tile);
 
       if (tile.type !== TileTypes.Chart) {
         return snapshot;
@@ -606,6 +1058,22 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
         dataTimeInterval: (tile as TileChartSettingsInterface).dataTimeInterval || TimeIntervals.Auto
       } as TileChartSettingsInterface;
     });
+  }
+
+  private cloneDashboardTile(tile: TileSettingsInterface): TileSettingsInterface {
+    const clonedTile = {
+      ...tile,
+      size: tile.size ? { ...tile.size } : tile.size,
+    } as TileSettingsInterface & { eventFilters?: AppDashboardTileEventFiltersInterface };
+    const eventFilters = cloneDashboardTileEventFilters(
+      (tile as AppDashboardChartTileSettingsInterface | AppDashboardMapTileSettingsInterface).eventFilters,
+    );
+    if (eventFilters) {
+      clonedTile.eventFilters = eventFilters;
+    } else {
+      delete clonedTile.eventFilters;
+    }
+    return clonedTile as TileSettingsInterface;
   }
 
   private getOrderedDashboardSettingsTiles(): TileSettingsInterface[] {
@@ -631,10 +1099,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   }
 
   private cloneTileSettings(tiles: TileSettingsInterface[]): TileSettingsInterface[] {
-    return tiles.map((tile: TileSettingsInterface) => ({
-      ...tile,
-      size: tile.size ? { ...tile.size } : tile.size
-    }));
+    return tiles.map((tile: TileSettingsInterface) => this.cloneDashboardTile(tile));
   }
 
   private cloneDashboardViewModels(tiles: DashboardTileViewModel[]): DashboardTileViewModel[] {
@@ -666,6 +1131,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     const orderedTiles = [...this.tiles].sort((left, right) => left.order - right.order);
     this.kpiLaneTiles = orderedTiles.filter((tile): tile is DashboardChartTileViewModel => this.isKpiLaneTile(tile));
     this.mainGridTiles = orderedTiles.filter(tile => !this.isKpiLaneTile(tile));
+    this.refreshMainGridTrailingPlaceholders();
   }
 
   private ensureTileLanesInitializedFromTiles(): void {
@@ -676,6 +1142,12 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
 
   private syncTilesFromLanesForPreview(): void {
     this.tiles = [...this.kpiLaneTiles, ...this.mainGridTiles];
+    this.refreshMainGridTrailingPlaceholders();
+  }
+
+  private refreshMainGridTrailingPlaceholders(): void {
+    const placeholderCount = getTrailingDashboardGridPlaceholderCount(this.mainGridTiles, this.numberOfCols);
+    this.mainGridTrailingPlaceholders = Array.from({ length: placeholderCount }, (_, index) => index);
   }
 
   private async persistLaneOrder(): Promise<void> {
@@ -725,6 +1197,9 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     this.tiles = this.withSequentialOrder(this.cloneDashboardViewModels([...this.kpiLaneTiles, ...this.mainGridTiles]));
     this.refreshTileLanes();
     this.dashboardTileSettingsSnapshot = this.getDashboardTileSettingsSnapshot();
+    this.unsubscribeTileEventSubscriptions();
+    this.syncTileEventSubscriptions();
+    await this.rebuildTilesFromCurrentState();
 
     try {
       await this.userService.updateUserProperties(this.user as any, { settings: this.user?.settings });
@@ -734,6 +1209,9 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       this.tiles = this.withSequentialOrder(this.cloneDashboardViewModels(previousRenderedTilesByPersistedOrder));
       this.refreshTileLanes();
       this.dashboardTileSettingsSnapshot = this.getDashboardTileSettingsSnapshot();
+      this.unsubscribeTileEventSubscriptions();
+      this.syncTileEventSubscriptions();
+      await this.rebuildTilesFromCurrentState();
       this.updateDesktopTileDragCapability();
       this.logger.error('[SummariesComponent] Failed to persist dashboard tile drag order update', error);
     }
@@ -756,6 +1234,17 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       this.sleepSubscription = null;
       this.sleepListenerKey = null;
     }
+    this.unsubscribeDashboardAutoTileSubscription();
+    this.unsubscribeTileEventSubscriptions();
+  }
+
+  private unsubscribeTileEventSubscriptions(): void {
+    this.tileEventSubscriptions.forEach(subscription => subscription.unsubscribe());
+    this.tileEventSubscriptions.clear();
+    this.tileEventListenerKeys.clear();
+    this.tileEventAnchorEndMsByOrder.clear();
+    this.tileEventsByOrder = {};
+    this.tileEventLoadingByOrder = {};
   }
 
   public retryDerivedMetricsRebuild(): void {
@@ -958,6 +1447,26 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     return this.derivedFormNowStatus;
   }
 
+  getFitnessCtlStatusForTile(tile: DashboardTileViewModel | TileSettingsInterface): DashboardDerivedMetricStatus | null {
+    if (!isDashboardChartTileViewModel(tile)) {
+      return null;
+    }
+    if (!isDashboardFitnessCtlKpiChartType(tile.chartType)) {
+      return null;
+    }
+    return this.derivedFormStatus;
+  }
+
+  getFatigueAtlStatusForTile(tile: DashboardTileViewModel | TileSettingsInterface): DashboardDerivedMetricStatus | null {
+    if (!isDashboardChartTileViewModel(tile)) {
+      return null;
+    }
+    if (!isDashboardFatigueAtlKpiChartType(tile.chartType)) {
+      return null;
+    }
+    return this.derivedFormStatus;
+  }
+
   getFormPlus7dStatusForTile(tile: DashboardTileViewModel | TileSettingsInterface): DashboardDerivedMetricStatus | null {
     if (!isDashboardChartTileViewModel(tile)) {
       return null;
@@ -1047,6 +1556,9 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     if (isDashboardFormNowKpiChartType(chartType)) {
       return this.derivedFormNowStatus;
     }
+    if (isDashboardFitnessCtlKpiChartType(chartType) || isDashboardFatigueAtlKpiChartType(chartType)) {
+      return this.derivedFormStatus;
+    }
     if (isDashboardFormPlus7dKpiChartType(chartType)) {
       return this.derivedFormPlus7dStatus;
     }
@@ -1090,7 +1602,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     this.logger.log('[debug][recovery-now] summaries_pipeline_state', {
       stage,
       hasRecoveryTile,
-      dashboardEvents: this.events?.length || 0,
+      tileEventBuckets: Object.keys(this.tileEventsByOrder).length,
       derivedStatus: this.derivedRecoveryNowStatus,
       derivedAvailable: !!this.derivedRecoveryNowContext,
       derivedTotalSeconds: this.derivedRecoveryNowContext?.totalSeconds ?? null,

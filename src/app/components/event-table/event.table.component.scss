@@ -16,38 +16,78 @@
   align-items: center;
   gap: 4px;
   margin-left: auto;
-  min-height: 40px;
+  min-height: 46px;
   padding: 0 16px 0 4px;
   white-space: nowrap;
   overflow: visible !important;
 }
 
 .table-toolbar {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 12px 16px 8px;
+  display: block;
+  padding: 12px;
   border-bottom: 1px solid var(--mat-sys-outline-variant);
   background: color-mix(in srgb, var(--mat-sys-surface-container-low), transparent 12%);
 }
 
-.table-toolbar .qs-search-field {
-  --mat-form-field-container-height: 44px;
-  --mat-form-field-container-vertical-padding: 10px;
-  flex: 1 1 auto;
+.table-toolbar-main {
+  display: grid;
+  align-items: center;
+  grid-template-columns: minmax(280px, 420px) minmax(0, 1fr) auto;
+  gap: 10px;
   min-width: 0;
-  max-width: 420px;
 }
 
-.table-toolbar .qs-search-field ::ng-deep .mat-mdc-form-field-infix {
-  min-height: 44px;
+.table-toolbar-main .buttons {
+  justify-self: end;
+  margin-left: 0;
+  padding-right: 0;
+}
+
+.table-toolbar-main .qs-search-field {
+  --mat-form-field-container-height: 46px;
+  --mat-form-field-container-text-size: 0.95rem;
+  --mat-form-field-container-vertical-padding: 10px;
+  width: 100%;
+  min-width: 0;
+}
+
+.table-toolbar-main .qs-search-field ::ng-deep .mat-mdc-form-field-infix {
+  min-height: 46px;
   padding-top: 10px !important;
   padding-bottom: 10px !important;
 }
 
-.table-toolbar .qs-search-field ::ng-deep .mat-mdc-icon-button {
-  width: 36px;
-  height: 36px;
+.table-toolbar-main .qs-search-field ::ng-deep .mat-mdc-icon-button {
+  width: 38px;
+  height: 38px;
+  padding: 7px;
+}
+
+.table-toolbar-main .qs-search-field ::ng-deep .mat-mdc-form-field-flex {
+  min-height: 46px;
+}
+
+.table-toolbar-main .qs-search-field ::ng-deep input.mat-mdc-input-element {
+  font-size: 0.95rem;
+}
+
+.table-toolbar-main .qs-search-field mat-icon {
+  font-size: 20px;
+  height: 20px;
+  width: 20px;
+}
+
+.table-toolbar-filters {
+  align-items: center;
+  display: flex;
+  justify-content: flex-start;
+  min-width: 0;
+  min-height: 0;
+  overflow: visible;
+}
+
+.table-toolbar-filters:empty {
+  display: none;
 }
 
 /* Allow columns to size naturally or use flex */
@@ -74,13 +114,24 @@
 @include bp.handset-or-tablet-portrait {
 
   .table-toolbar {
-    flex-wrap: wrap;
-    padding: 12px;
+    padding: 10px 12px;
+  }
+
+  .table-toolbar-main {
+    grid-template-columns: minmax(0, 1fr) auto;
     gap: 8px;
   }
 
-  .table-toolbar .qs-search-field {
-    max-width: 100%;
+  .table-toolbar-main .qs-search-field {
+    grid-column: 1 / -1;
+  }
+
+  .table-toolbar-filters {
+    grid-column: 1 / -1;
+  }
+
+  .table-toolbar-main .buttons {
+    grid-column: 1 / -1;
   }
 
   .mat-column-Start-Date,

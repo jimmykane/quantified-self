@@ -5,7 +5,6 @@ import { toSignal } from '@angular/core/rxjs-interop';
 import { Observable, from, firstValueFrom, of, combineLatest, distinctUntilChanged, throwError, timer } from 'rxjs';
 import { StripeRole } from '../models/stripe-role.model';
 import { User } from '@sports-alliance/sports-lib';
-import { Privacy } from '@sports-alliance/sports-lib';
 import { AppEventService } from './app.event.service';
 import { catchError, map, take, switchMap, shareReplay, retry } from 'rxjs/operators';
 import {
@@ -85,6 +84,7 @@ import { DataRecoveryTime } from '@sports-alliance/sports-lib';
 import { Firestore, doc, docData, collection, collectionData, setDoc, updateDoc } from 'app/firebase/firestore';
 import { AppFunctionsService } from './app.functions.service';
 import { FunctionName } from '@shared/functions-manifest';
+import { SleepBackfillQueueResponse } from '@shared/sleep-backfill';
 
 export interface ActivitySyncBackfillFailedEvent {
   eventID: string;
@@ -177,7 +177,6 @@ export class AppUserService implements OnDestroy {
       acceptedDataPolicy: false,
       acceptedTrackingPolicy: false,
       acceptedDiagnosticsPolicy: true,
-      privacy: Privacy.Private,
       creationDate: authCreationDate ?? new Date(),
       lastSignInDate: authLastSignInDate ?? authCreationDate ?? new Date()
     } as any;
@@ -576,6 +575,35 @@ export class AppUserService implements OnDestroy {
     }
   }
 
+  public watchHasAnyActivityServiceConnection(user: User | null | undefined): Observable<boolean> {
+    const uid = `${user?.uid || ''}`.trim();
+    if (!uid || !user) {
+      return of(false);
+    }
+
+    const activityServices = [
+      ServiceNames.GarminAPI,
+      ServiceNames.SuuntoApp,
+      ServiceNames.COROSAPI,
+    ];
+
+    return combineLatest(activityServices.map(serviceName => (
+      this.getServiceToken(user, serviceName).pipe(
+        map(tokens => Array.isArray(tokens) && tokens.length > 0),
+        catchError(error => {
+          this.logger.warn('[AppUserService] Failed to read activity service connection state', {
+            userID: uid,
+            serviceName,
+          }, error);
+          return of(false);
+        })
+      )
+    ))).pipe(
+      map(connectionStates => connectionStates.some(Boolean)),
+      distinctUntilChanged(),
+    );
+  }
+
   public getUserMetaForService(user: User, serviceName: string): Observable<UserServiceMetaInterface> {
     const metaDoc = doc(this.firestore, 'users', user.uid, 'meta', serviceName);
     return docData(metaDoc).pipe(map((d) => {
@@ -607,6 +635,11 @@ export class AppUserService implements OnDestroy {
     }
 
     const result = await this.functionsService.call(functionName, payload);
+    return result.data;
+  }
+
+  async backfillSuuntoSleepForCurrentUser(): Promise<SleepBackfillQueueResponse> {
+    const result = await this.functionsService.call<undefined, SleepBackfillQueueResponse>('backfillSuuntoAppSleep');
     return result.data;
   }
 
@@ -777,6 +810,11 @@ export class AppUserService implements OnDestroy {
       }
     });
 
+    if ('privacy' in propertiesToUpdate) {
+      this.logger.warn('[AppUserService] Stripping deprecated account privacy field from update payload.');
+      delete propertiesToUpdate.privacy;
+    }
+
     if (Object.keys(propertiesToUpdate).length > 0) {
       const userDocRef = doc(this.firestore, 'users', user.uid);
       promises.push(updateDoc(userDocRef, propertiesToUpdate)
@@ -816,6 +854,7 @@ export class AppUserService implements OnDestroy {
       'isPro',
       'lastSignInDate',
       'impersonatedBy',
+      'privacy',
       ...AppUserService.legalFields
     ];
 

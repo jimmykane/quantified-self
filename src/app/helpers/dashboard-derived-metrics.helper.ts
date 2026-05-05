@@ -11,6 +11,10 @@ import type {
   DerivedMonotonyStrainMetricPayload,
   DerivedRampRateMetricPayload,
 } from '@shared/derived-metrics';
+import {
+  extendDashboardFormPointsWithZeroLoadUntil,
+  type DashboardFormPoint,
+} from './dashboard-form.helper';
 
 export interface DashboardDerivedTrendPoint {
   time: number;
@@ -46,6 +50,16 @@ export interface DashboardFormNowContext {
   value: number | null;
   trend8Weeks: DashboardDerivedTrendPoint[];
 }
+
+interface DashboardFormMetricKpiContext {
+  latestDayMs: number | null;
+  value: number | null;
+  trend8Weeks: DashboardDerivedTrendPoint[];
+}
+
+export type DashboardFitnessCtlContext = DashboardFormMetricKpiContext;
+
+export type DashboardFatigueAtlContext = DashboardFormMetricKpiContext;
 
 export interface DashboardFormPlus7dContext {
   latestDayMs: number | null;
@@ -152,6 +166,64 @@ function normalizeTrendPoints(
     .filter((point): point is DashboardDerivedTrendPoint => !!point);
 }
 
+function resolveUtcWeekStartMs(timeMs: number): number {
+  const date = new Date(timeMs);
+  const dayIndexMondayFirst = (date.getUTCDay() + 6) % 7;
+  return Date.UTC(
+    date.getUTCFullYear(),
+    date.getUTCMonth(),
+    date.getUTCDate() - dayIndexMondayFirst,
+  );
+}
+
+function toRoundedMetricValue(value: number | null, precision = 4): number | null {
+  if (value === null || !Number.isFinite(value)) {
+    return null;
+  }
+  const scale = 10 ** precision;
+  return Math.round(value * scale) / scale;
+}
+
+function buildDashboardFormMetricTrend8Weeks(
+  points: readonly DashboardFormPoint[],
+  valueSelector: (point: DashboardFormPoint) => number | null,
+): DashboardDerivedTrendPoint[] {
+  const trendByWeek = new Map<number, DashboardDerivedTrendPoint>();
+  points.forEach((point) => {
+    const time = toFiniteNumber(point.time);
+    if (time === null) {
+      return;
+    }
+    const value = toRoundedMetricValue(valueSelector(point));
+    const weekStartMs = resolveUtcWeekStartMs(time);
+    trendByWeek.set(weekStartMs, {
+      time: weekStartMs,
+      value,
+    });
+  });
+
+  return [...trendByWeek.values()]
+    .sort((left, right) => left.time - right.time)
+    .slice(-8);
+}
+
+function resolveDashboardFormMetricKpiContext(
+  points: readonly DashboardFormPoint[] | null | undefined,
+  valueSelector: (point: DashboardFormPoint) => number | null,
+  nowMs = Date.now(),
+): DashboardFormMetricKpiContext | null {
+  if (!Array.isArray(points)) {
+    return null;
+  }
+  const pointsUntilToday = extendDashboardFormPointsWithZeroLoadUntil(points, nowMs);
+  const latestPoint = pointsUntilToday[pointsUntilToday.length - 1] || null;
+  return {
+    latestDayMs: latestPoint?.time ?? null,
+    value: latestPoint ? toRoundedMetricValue(valueSelector(latestPoint)) : null,
+    trend8Weeks: buildDashboardFormMetricTrend8Weeks(pointsUntilToday, valueSelector),
+  };
+}
+
 export function resolveDashboardAcwrContext(payload: unknown): DashboardAcwrContext | null {
   const normalized = (payload || {}) as Partial<DerivedAcwrMetricPayload>;
   const acuteLoad7 = toFiniteNumber(normalized.acuteLoad7);
@@ -202,6 +274,20 @@ export function resolveDashboardFormNowContext(payload: unknown): DashboardFormN
     value: toFiniteNumber(normalized.value),
     trend8Weeks: normalizeTrendPoints(normalized.trend8Weeks, 'weekStartMs', 'value'),
   };
+}
+
+export function resolveDashboardFitnessCtlContext(
+  points: readonly DashboardFormPoint[] | null | undefined,
+  nowMs = Date.now(),
+): DashboardFitnessCtlContext | null {
+  return resolveDashboardFormMetricKpiContext(points, point => toFiniteNumber(point.ctl), nowMs);
+}
+
+export function resolveDashboardFatigueAtlContext(
+  points: readonly DashboardFormPoint[] | null | undefined,
+  nowMs = Date.now(),
+): DashboardFatigueAtlContext | null {
+  return resolveDashboardFormMetricKpiContext(points, point => toFiniteNumber(point.atl), nowMs);
 }
 
 export function resolveDashboardFormPlus7dContext(payload: unknown): DashboardFormPlus7dContext | null {

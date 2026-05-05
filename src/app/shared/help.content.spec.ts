@@ -68,17 +68,43 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('Custom');
     expect(gettingStartedSection?.content).toContain('Map');
     expect(gettingStartedSection?.content).toContain('one map tile');
+    expect(gettingStartedSection?.content).toContain('Event search filters only the dashboard event table');
+    expect(gettingStartedSection?.content).toContain('Custom** charts use their own tile date-range and activity filters');
+    expect(gettingStartedSection?.content).toContain('Map** tiles use their own tile date-range and activity filters');
+    expect(gettingStartedSection?.content).toContain('derived tiles stay independent from event table filters and custom/map tile filters');
+    expect(gettingStartedSection?.content).toContain('dashboard can add the **Sleep** tile once');
+    expect(gettingStartedSection?.content).toContain('removing it prevents future automatic Sleep tile adds');
+    expect(gettingStartedSection?.content).toContain('default curated chart set');
+    expect(gettingStartedSection?.content).toContain('KPI row set automatically once');
+    expect(gettingStartedSection?.content).toContain('removing an auto-added curated chart or KPI prevents that chart from being suggested again');
   });
 
   it('should document that distance values follow unit preferences across the app', () => {
     const gettingStartedSection = HELP_SECTIONS.find(section => section.id === 'getting-started');
 
     expect(gettingStartedSection?.content).toContain('Distance values in dashboards, event charts, activity chips, and CSV exports');
-    expect(gettingStartedSection?.content).toContain('dashboard unit prompt');
+    expect(gettingStartedSection?.content).toContain('Dashboard **Action prompts**');
+    expect(gettingStartedSection?.content).toContain('dashboard **Default units** action prompt');
+    expect(gettingStartedSection?.content).toContain('Users without Pro access and no uploaded activities');
+    expect(gettingStartedSection?.content).toContain('**Upload your first activities** action prompt');
+    expect(gettingStartedSection?.content).toContain('FIT, GPX, TCX, JSON, or SML files');
+    expect(gettingStartedSection?.content).toContain('upgrade to Pro for automatic activity sync');
+    expect(gettingStartedSection?.content).toContain('manual uploads remain available from the header and upload tools');
+    expect(gettingStartedSection?.content).toContain('**Connect a service** action prompt');
+    expect(gettingStartedSection?.content).toContain('dismissing it hides the prompt permanently');
     expect(gettingStartedSection?.content).toContain('Advanced settings');
     expect(gettingStartedSection?.content).toContain('kilometers or miles');
     expect(gettingStartedSection?.content).toContain('Settings -> Units');
     expect(gettingStartedSection?.content).toContain('jump distances display in feet when miles are selected');
+  });
+
+  it('should document non-merged event heart-rate and power zone line and fill coloring', () => {
+    const gettingStartedSection = HELP_SECTIONS.find(section => section.id === 'getting-started');
+
+    expect(gettingStartedSection?.content).toContain('provider heart-rate or power zone boundaries');
+    expect(gettingStartedSection?.content).toContain('non-merged events');
+    expect(gettingStartedSection?.content).toContain('**Heart Rate** and **Power** charts color their lines and visible fill');
+    expect(gettingStartedSection?.content).not.toContain('lightly tints the chart grid by zone');
   });
 
   it('should document the dashboard form tile CTL/ATL/TSB behavior', () => {
@@ -99,7 +125,7 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('status notice');
   });
 
-  it('should document new derived KPI cards and curated charts', () => {
+  it('should document new derived KPI rows and curated charts', () => {
     const gettingStartedSection = HELP_SECTIONS.find(section => section.id === 'getting-started');
 
     expect(gettingStartedSection?.content).toContain('Freshness Forecast');
@@ -110,6 +136,8 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('Ramp Rate');
     expect(gettingStartedSection?.content).toContain('Monotony / Strain');
     expect(gettingStartedSection?.content).toContain('Form Now');
+    expect(gettingStartedSection?.content).toContain('Fitness (CTL)');
+    expect(gettingStartedSection?.content).toContain('Fatigue (ATL)');
     expect(gettingStartedSection?.content).toContain('Form +7d');
     expect(gettingStartedSection?.content).toContain('Easy %');
     expect(gettingStartedSection?.content).toContain('Hard %');
@@ -119,10 +147,11 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('Execution');
     expect(gettingStartedSection?.content).toContain('Current week');
     expect(gettingStartedSection?.content).toContain('Latest week');
+    expect(gettingStartedSection?.content).toContain('8w / 12w / 6m / 1y / All');
     expect(gettingStartedSection?.content).toContain('Training-derived tiles do not fall back');
     expect(gettingStartedSection?.content).toContain('**info** icon');
-    expect(gettingStartedSection?.content).toContain('KPI lane');
-    expect(gettingStartedSection?.content).toContain('horizontal scroll lane');
+    expect(gettingStartedSection?.content).toContain('**Today** section');
+    expect(gettingStartedSection?.content).toContain('Today rows stay compact');
   });
 
   it('should document mobile dashboard haptic feedback behavior and fallback', () => {
@@ -145,7 +174,12 @@ describe('help.content', () => {
     expect(serviceConnectionsSection?.content).toContain('can run even when the Garmin -> Suunto auto-sync toggle is off');
     expect(serviceConnectionsSection?.content).toContain('Disconnecting Garmin, COROS, or Suunto automatically disables related route auto-sync settings');
     expect(serviceConnectionsSection?.content).toContain('Sleep sync is server-owned health data');
-    expect(serviceConnectionsSection?.content).toContain('V1 does not provide a user-facing historical sleep backfill tool');
+    expect(serviceConnectionsSection?.content).toContain('14d, 30d, 90d, and 1y range control');
+    expect(serviceConnectionsSection?.content).toContain('independent from dashboard event filters');
+    expect(serviceConnectionsSection?.content).toContain('overlays recorded sleep HRV with an average HRV reference line');
+    expect(serviceConnectionsSection?.content).toContain('Backfill Sleep History');
+    expect(serviceConnectionsSection?.content).toContain('Jan 1, 2016');
+    expect(serviceConnectionsSection?.content).toContain('7-day sleep backfill cooldown');
     expect(serviceConnectionsSection?.content).toContain('COROS -> Suunto activity sync is route-based');
     expect(serviceConnectionsSection?.content).toContain('enable the route toggle in COROS Services');
     expect(serviceConnectionsSection?.content).toContain('Automatic sync runs only for newly imported COROS activities');

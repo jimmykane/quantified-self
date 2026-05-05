@@ -1,51 +1,57 @@
-<button mat-icon-button [matMenuTriggerFor]="chartOptions"
+<button mat-icon-button class="tile-actions-trigger" [matMenuTriggerFor]="chartOptions" aria-label="Tile actions"
   (click)="$event.preventDefault(); $event.stopPropagation(); fixDisappearIOSBug();">
   <mat-icon>more_vert</mat-icon>
 </button>
 <mat-menu #chartOptions="matMenu" class="qs-menu-panel qs-menu-panel-form qs-config-menu qs-tile-actions-menu">
-  <section mat-menu-item class="tile-size-actions">
-    <span class="tile-size-label">Tile size</span>
-    <div class="tile-size-fields">
-      <mat-form-field class="tile-size-field" subscriptSizing="dynamic">
-        <mat-label>Cols</mat-label>
-        <mat-select [value]="size.columns" panelClass="qs-config-submenu qs-config-submenu-compact"
-          (selectionChange)="changeTileColumnSize($event)">
-          <mat-option [value]="1">1</mat-option>
-          <mat-option [value]="2">2</mat-option>
-          <mat-option [value]="3">3</mat-option>
-          <mat-option [value]="4">4</mat-option>
-        </mat-select>
-      </mat-form-field>
-      <mat-form-field class="tile-size-field" subscriptSizing="dynamic">
-        <mat-label>Rows</mat-label>
-        <mat-select [value]="size.rows" panelClass="qs-config-submenu qs-config-submenu-compact"
-          (selectionChange)="changeTileRowSize($event)">
-          <mat-option [value]="1">1</mat-option>
-          <mat-option [value]="2">2</mat-option>
-          <mat-option [value]="3">3</mat-option>
-          <mat-option [value]="4">4</mat-option>
-        </mat-select>
-      </mat-form-field>
-    </div>
-  </section>
+  <div class="tile-actions-menu-shell">
+    @if (showLayoutControls) {
+    <section class="tile-actions-section tile-size-actions" aria-label="Tile layout" (click)="$event.stopPropagation()">
+      <div class="tile-section-heading">
+        <mat-icon aria-hidden="true">dashboard_customize</mat-icon>
+        <span>Layout</span>
+      </div>
+      <div class="tile-size-fields">
+        <mat-form-field appearance="outline" class="tile-size-field" subscriptSizing="dynamic">
+          <mat-label>Columns</mat-label>
+          <mat-select [value]="size.columns" panelClass="qs-config-submenu qs-config-submenu-compact"
+            (selectionChange)="changeTileColumnSize($event)">
+            <mat-option [value]="1">1</mat-option>
+            <mat-option [value]="2">2</mat-option>
+            <mat-option [value]="3">3</mat-option>
+            <mat-option [value]="4">4</mat-option>
+          </mat-select>
+        </mat-form-field>
+        <mat-form-field appearance="outline" class="tile-size-field" subscriptSizing="dynamic">
+          <mat-label>Rows</mat-label>
+          <mat-select [value]="size.rows" panelClass="qs-config-submenu qs-config-submenu-compact"
+            (selectionChange)="changeTileRowSize($event)">
+            <mat-option [value]="1">1</mat-option>
+            <mat-option [value]="2">2</mat-option>
+            <mat-option [value]="3">3</mat-option>
+            <mat-option [value]="4">4</mat-option>
+          </mat-select>
+        </mat-form-field>
+      </div>
+    </section>
 
-  <section mat-menu-item class="tile-move-actions">
-    <button mat-button (click)="moveTileBackward()" [disabled]="!canMoveTileBackward()">
+    <div class="tile-actions-divider" role="separator"></div>
+    }
+
+    <button mat-menu-item type="button" class="tile-action-menu-item" (click)="moveTileBackward()" [disabled]="!canMoveTileBackward()">
       <mat-icon>arrow_back</mat-icon>
       <span>Move earlier</span>
     </button>
-    <button mat-button (click)="moveTileForward()" [disabled]="!canMoveTileForward()">
+    <button mat-menu-item type="button" class="tile-action-menu-item" (click)="moveTileForward()" [disabled]="!canMoveTileForward()">
+      <mat-icon>arrow_forward</mat-icon>
       <span>Move later</span>
-      <mat-icon iconPositionEnd>arrow_forward</mat-icon>
     </button>
-  </section>
+    <button mat-menu-item type="button" class="tile-action-menu-item" (click)="openEditInDashboardManager($event)">
+      <mat-icon>edit</mat-icon>
+      <span>Edit in manager</span>
+    </button>
 
-  <button mat-menu-item type="button" (click)="openEditInDashboardManager($event)">
-    <mat-icon>edit</mat-icon>
-    <span>Edit</span>
-  </button>
-
-  @if (user.settings.dashboardSettings.tiles.length > 1) {
-  <app-tile-actions-footer (delete)="deleteTile($event)"></app-tile-actions-footer>
-  }
+    @if (user.settings.dashboardSettings.tiles.length > 1) {
+    <app-tile-actions-footer (delete)="deleteTile($event)"></app-tile-actions-footer>
+    }
+  </div>
 </mat-menu>
