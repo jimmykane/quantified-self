@@ -77,6 +77,18 @@
           <span>{{ prompt.busy ? (prompt.primaryAction.loadingLabel || prompt.primaryAction.label) : prompt.primaryAction.label }}</span>
         </span>
       </button>
+      <mat-menu #promptMenu="matMenu" class="qs-menu-panel">
+        @for (action of prompt.menuActions || []; track action.id + '-' + (action.value || action.label)) {
+        <button mat-menu-item type="button" [disabled]="prompt.busy" (click)="emitMenuAction(action)">
+          @if (action.serviceName) {
+          <app-service-source-icon [sourceServiceName]="action.serviceName" [showTooltip]="false"></app-service-source-icon>
+          } @else if (action.icon) {
+          <mat-icon>{{ action.icon }}</mat-icon>
+          }
+          <span>{{ action.label }}</span>
+        </button>
+        }
+      </mat-menu>
       } @else {
       <button
         mat-flat-button
@@ -96,20 +108,5 @@
       }
     }
   </mat-card-actions>
-
-  @if (prompt.primaryAction?.menuTrigger) {
-  <mat-menu #promptMenu="matMenu" class="qs-menu-panel">
-    @for (action of prompt.menuActions || []; track action.id + '-' + (action.value || action.label)) {
-    <button mat-menu-item type="button" [disabled]="prompt.busy" (click)="emitMenuAction(action)">
-      @if (action.serviceName) {
-      <app-service-source-icon [sourceServiceName]="action.serviceName" [showTooltip]="false"></app-service-source-icon>
-      } @else if (action.icon) {
-      <mat-icon>{{ action.icon }}</mat-icon>
-      }
-      <span>{{ action.label }}</span>
-    </button>
-    }
-  </mat-menu>
-  }
 </mat-card>
 }
