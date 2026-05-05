@@ -160,6 +160,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   private sleepListenerKey: string | null = null;
   private dashboardAutoTileSubscription: Subscription | null = null;
   private dashboardAutoTileListenerKey: string | null = null;
+  private dashboardAutoTileUser: AppUserInterface | null = null;
   private sleepTrendAnchorEndMs: number | null = null;
   private tileEventSubscriptions = new Map<number, Subscription>();
   private tileEventListenerKeys = new Map<number, string>();
@@ -645,13 +646,19 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       return;
     }
 
-    if (this.dashboardAutoTileListenerKey === listenerKey && this.dashboardAutoTileSubscription) {
+    const user = this.user as AppUserInterface;
+    if (
+      this.dashboardAutoTileListenerKey === listenerKey
+      && this.dashboardAutoTileSubscription
+      && this.dashboardAutoTileUser === user
+    ) {
       return;
     }
 
     this.unsubscribeDashboardAutoTileSubscription();
     this.dashboardAutoTileListenerKey = listenerKey;
-    this.dashboardAutoTileSubscription = this.dashboardAutoTileService.watchForDashboard(this.user as AppUserInterface);
+    this.dashboardAutoTileUser = user;
+    this.dashboardAutoTileSubscription = this.dashboardAutoTileService.watchForDashboard(user);
   }
 
   private resolveDashboardAutoTileListenerKey(): string | null {
@@ -678,6 +685,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       this.dashboardAutoTileSubscription = null;
     }
     this.dashboardAutoTileListenerKey = null;
+    this.dashboardAutoTileUser = null;
   }
 
   public async onSleepTrendRangeChange(range: AppDashboardSleepTrendRange): Promise<void> {

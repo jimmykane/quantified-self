@@ -426,6 +426,49 @@ describe('SummariesComponent', () => {
     expect(unsubscribeSpy).toHaveBeenCalledTimes(1);
   });
 
+  it('resubscribes dashboard auto tiles when the owner user object refreshes with the same uid', async () => {
+    const firstSubscription = new Subscription();
+    const secondSubscription = new Subscription();
+    const firstUnsubscribeSpy = vi.spyOn(firstSubscription, 'unsubscribe');
+    mockDashboardAutoTileService.watchForDashboard
+      .mockReturnValueOnce(firstSubscription)
+      .mockReturnValueOnce(secondSubscription);
+    const originalUser = {
+      uid: 'owner-user',
+      settings: { dashboardSettings: { tiles: [], testSettingsVersion: 'stale' } },
+    } as any;
+    const refreshedUser = {
+      uid: 'owner-user',
+      settings: { dashboardSettings: { tiles: [], testSettingsVersion: 'fresh' } },
+    } as any;
+    component.user = originalUser;
+    component.showActions = true;
+
+    await component.ngOnChanges({
+      user: {
+        currentValue: originalUser,
+        previousValue: null,
+        firstChange: true,
+        isFirstChange: () => true,
+      } as any,
+    });
+
+    component.user = refreshedUser;
+    await component.ngOnChanges({
+      user: {
+        currentValue: refreshedUser,
+        previousValue: originalUser,
+        firstChange: false,
+        isFirstChange: () => false,
+      } as any,
+    });
+
+    expect(firstUnsubscribeSpy).toHaveBeenCalledTimes(1);
+    expect(mockDashboardAutoTileService.watchForDashboard).toHaveBeenCalledTimes(2);
+    expect(mockDashboardAutoTileService.watchForDashboard).toHaveBeenNthCalledWith(1, originalUser);
+    expect(mockDashboardAutoTileService.watchForDashboard).toHaveBeenNthCalledWith(2, refreshedUser);
+  });
+
   it('does not subscribe to dashboard auto tiles for shared target dashboards', async () => {
     component.user = {
       uid: 'viewer-user',

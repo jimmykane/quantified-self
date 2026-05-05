@@ -178,9 +178,6 @@ export class DashboardComponent implements OnInit, OnDestroy {
       // Get the user
       if (!user) {
         void this.router.navigate(['login'])
-          .then(() => {
-            this.snackBar.open('You were signed out out');
-          })
           .catch((error) => {
             this.logger.error('[DashboardComponent] Failed to navigate to login after sign-out', error);
           });

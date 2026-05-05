@@ -79,7 +79,7 @@ describe('DashboardComponent', () => {
             watchHasAnyActivityServiceConnection: vi.fn().mockReturnValue(of(false))
         };
 
-        mockRouter = { navigate: vi.fn() };
+        mockRouter = { navigate: vi.fn().mockResolvedValue(true) };
 
         mockActivatedRoute = {
             snapshot: {
@@ -160,6 +160,16 @@ describe('DashboardComponent', () => {
         expect(mockEventService.getEventsBy).toHaveBeenCalled();
         expect(component.events.length).toBe(1);
         expect(component.isLoading).toBe(false);
+    });
+
+    it('redirects signed-out dashboard visitors to login without opening a snackbar', async () => {
+        mockAuthService.user$ = of(null);
+
+        fixture.detectChanges();
+        await fixture.whenStable();
+
+        expect(mockRouter.navigate).toHaveBeenCalledWith(['login']);
+        expect(mockSnackBar.open).not.toHaveBeenCalled();
     });
 
     it('shows unit setup prompt for owner dashboard when setup is explicitly incomplete', async () => {
