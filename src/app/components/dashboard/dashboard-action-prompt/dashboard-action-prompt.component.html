@@ -97,6 +97,7 @@
     }
   </mat-card-actions>
 
+  @if (prompt.primaryAction?.menuTrigger) {
   <mat-menu #promptMenu="matMenu" class="qs-menu-panel">
     @for (action of prompt.menuActions || []; track action.id + '-' + (action.value || action.label)) {
     <button mat-menu-item type="button" [disabled]="prompt.busy" (click)="emitMenuAction(action)">
@@ -109,5 +110,6 @@
     </button>
     }
   </mat-menu>
+  }
 </mat-card>
 }
