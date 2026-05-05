@@ -1,4 +1,6 @@
 import { ChangeDetectorRef } from '@angular/core';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { DateRanges, DaysOfTheWeek } from '@sports-alliance/sports-lib';
 import { describe, expect, it, vi } from 'vitest';
 import { of } from 'rxjs';
@@ -62,6 +64,16 @@ describe('EventSearchComponent', () => {
       'All',
     ]);
     expect(component.secondaryDateRangeButtonLabel).toBe('More');
+  });
+
+  it('should use a mobile grid for table toolbar date shortcuts so labels do not collide', () => {
+    const styles = readFileSync(
+      resolve(process.cwd(), 'src/app/components/event-search/event-search.component.scss'),
+      'utf8',
+    );
+
+    expect(styles).toContain(':host(.table-toolbar-layout) .toolbar-range-group');
+    expect(styles).toContain('grid-template-columns: repeat(3, minmax(0, 1fr));');
   });
 
   it('should update the secondary range menu label when a secondary shortcut is selected', async () => {

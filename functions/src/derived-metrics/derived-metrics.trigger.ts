@@ -1,5 +1,6 @@
 import { onDocumentWritten } from 'firebase-functions/v2/firestore';
 import * as logger from 'firebase-functions/logger';
+import * as admin from 'firebase-admin';
 import { FUNCTIONS_MANIFEST } from '../../../shared/functions-manifest';
 import { isDerivedMetricsUidAllowed } from './derived-metrics-uid-gate';
 import { enqueueDerivedMetricsIngressTask } from '../shared/cloud-tasks';
@@ -33,6 +34,19 @@ export const onDashboardDerivedMetricsEventWrite = onDocumentWritten({
     const afterExists = !!event.data?.after?.exists;
     if (!beforeExists && !afterExists) {
         return;
+    }
+    // Account-deletion cleanup can emit event delete writes after the user root
+    // has already been removed. Skip enqueueing ingress for missing roots to
+    // avoid orphaned derived-metrics coordinators.
+    if (beforeExists && !afterExists) {
+        const userDoc = await admin.firestore().collection('users').doc(uid).get();
+        if (!userDoc.exists) {
+            logger.info('[derived-metrics] Skipping ingress enqueue because user root is missing.', {
+                uid,
+                eventId: event.params?.eventId || null,
+            });
+            return;
+        }
     }
 
     // Debounce mutation ingress by uid + short time bucket.

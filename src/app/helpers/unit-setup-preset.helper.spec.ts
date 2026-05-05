@@ -59,14 +59,11 @@ describe('unit setup preset helper', () => {
     }
   });
 
-  it('resolves week start from locale when available', () => {
-    expect(resolveStartOfTheWeekForUnitSetup('en-US')).toBe(DaysOfTheWeek.Sunday);
+  it('defaults unit setup week start to Monday for every locale', () => {
+    expect(resolveStartOfTheWeekForUnitSetup('en-US')).toBe(DaysOfTheWeek.Monday);
     expect(resolveStartOfTheWeekForUnitSetup('en-GB')).toBe(DaysOfTheWeek.Monday);
-    expect(resolveStartOfTheWeekForUnitSetup('fa-AF')).toBe(6);
-  });
-
-  it('falls back to Sunday for US-like locales and Monday otherwise', () => {
-    expect(resolveStartOfTheWeekForUnitSetup('bad-US')).toBe(DaysOfTheWeek.Sunday);
+    expect(resolveStartOfTheWeekForUnitSetup('fa-AF')).toBe(DaysOfTheWeek.Monday);
+    expect(resolveStartOfTheWeekForUnitSetup('bad-US')).toBe(DaysOfTheWeek.Monday);
     expect(resolveStartOfTheWeekForUnitSetup('bad-FI')).toBe(DaysOfTheWeek.Monday);
     expect(resolveStartOfTheWeekForUnitSetup(null)).toBe(DaysOfTheWeek.Monday);
   });
@@ -93,7 +90,7 @@ describe('unit setup preset helper', () => {
       swimPaceUnits: [SwimPaceUnits.MinutesPer100Yard],
       verticalSpeedUnits: [VerticalSpeedUnits.FeetPerSecond],
       distanceUnits: DistanceUnits.Miles,
-      startOfTheWeek: DaysOfTheWeek.Sunday,
+      startOfTheWeek: DaysOfTheWeek.Monday,
     });
   });
 

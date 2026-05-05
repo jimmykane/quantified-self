@@ -25,6 +25,10 @@ const hoisted = vi.hoisted(() => {
     const where = vi.fn();
     const transactionGet = vi.fn();
     const transactionSet = vi.fn();
+    const userRootGet = vi.fn();
+    const userRootRef = {
+        get: userRootGet,
+    };
     const coordinatorRef = {
         id: 'coordinator-ref',
         set: vi.fn(),
@@ -35,7 +39,15 @@ const hoisted = vi.hoisted(() => {
         set: batchSet,
         commit: batchCommit,
     }));
-    const doc = vi.fn(() => coordinatorRef);
+    const doc = vi.fn((path?: string) => {
+        if (typeof path === 'string' && path.endsWith('/derivedMetrics/coordinator')) {
+            return coordinatorRef;
+        }
+        if (typeof path === 'string' && path.includes('/derivedMetrics/')) {
+            return coordinatorRef;
+        }
+        return userRootRef;
+    });
     const runTransaction = vi.fn(async (updateFunction: (transaction: unknown) => Promise<void>) => {
         await updateFunction({
             get: transactionGet,
@@ -60,6 +72,7 @@ const hoisted = vi.hoisted(() => {
         where,
         transactionGet,
         transactionSet,
+        userRootGet,
         coordinatorRef,
         batchSet,
         batchCommit,
@@ -91,6 +104,7 @@ vi.mock('../shared/cloud-tasks', () => ({
 describe('fetchRecoveryLookbackEventDocs', () => {
     beforeEach(() => {
         vi.clearAllMocks();
+        hoisted.userRootGet.mockResolvedValue({ exists: true });
         hoisted.where.mockReturnValue({ select: hoisted.select });
         hoisted.select.mockReturnValue({ get: hoisted.get });
         hoisted.get.mockResolvedValue({ docs: [{ id: 'doc-1' }] });
@@ -159,6 +173,7 @@ describe('resolveDerivedMetricSourceRequirements', () => {
 describe('startDerivedMetricsProcessing', () => {
     beforeEach(() => {
         vi.clearAllMocks();
+        hoisted.userRootGet.mockResolvedValue({ exists: true });
         hoisted.runTransaction.mockImplementation(async (updateFunction: (transaction: unknown) => Promise<void>) => {
             await updateFunction({
                 get: hoisted.transactionGet,
@@ -261,6 +276,7 @@ describe('startDerivedMetricsProcessing', () => {
 describe('markDerivedMetricsDirtyAndMaybeQueue', () => {
     beforeEach(() => {
         vi.clearAllMocks();
+        hoisted.userRootGet.mockResolvedValue({ exists: true });
         hoisted.runTransaction.mockImplementation(async (updateFunction: (transaction: unknown) => Promise<void>) => {
             await updateFunction({
                 get: hoisted.transactionGet,
@@ -444,6 +460,25 @@ describe('markDerivedMetricsDirtyAndMaybeQueue', () => {
                 generation: 30,
             }),
         );
+    });
+
+    it('skips dirty-mark queueing when user root document is missing', async () => {
+        const { markDerivedMetricsDirtyAndMaybeQueue } = await import('./derived-metrics.service');
+        hoisted.userRootGet.mockResolvedValueOnce({ exists: false });
+
+        const response = await markDerivedMetricsDirtyAndMaybeQueue(
+            'missing-user',
+            [DERIVED_METRIC_KINDS.Form],
+        );
+
+        expect(response).toEqual({
+            accepted: false,
+            queued: false,
+            generation: null,
+            metricKinds: [DERIVED_METRIC_KINDS.Form],
+        });
+        expect(hoisted.runTransaction).not.toHaveBeenCalled();
+        expect(hoisted.enqueueDerivedMetricsTask).not.toHaveBeenCalled();
     });
 });
 

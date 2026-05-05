@@ -1449,6 +1449,10 @@ function getCoordinatorDocRef(uid: string): FirebaseFirestore.DocumentReference 
     return admin.firestore().doc(`users/${uid}/${DERIVED_METRICS_COLLECTION_ID}/${DERIVED_METRICS_COORDINATOR_DOC_ID}`);
 }
 
+function getUserDocRef(uid: string): FirebaseFirestore.DocumentReference {
+    return admin.firestore().doc(`users/${uid}`);
+}
+
 function getMetricDocRef(uid: string, metricKind: DerivedMetricKind): FirebaseFirestore.DocumentReference {
     return admin.firestore().doc(`users/${uid}/${DERIVED_METRICS_COLLECTION_ID}/${getDerivedMetricDocId(metricKind)}`);
 }
@@ -1531,6 +1535,20 @@ export async function markDerivedMetricsDirtyAndMaybeQueue(
         logger.info('[derived-metrics] Skipping dirty-mark enqueue due to UID allowlist gate.', {
             uid,
             allowlistSize: getDerivedMetricsUidAllowlist().size,
+        });
+        return {
+            accepted: false,
+            queued: false,
+            generation: null,
+            metricKinds,
+        };
+    }
+
+    const userDocSnapshot = await getUserDocRef(uid).get();
+    if (!userDocSnapshot.exists) {
+        logger.info('[derived-metrics] Skipping dirty-mark enqueue because user root is missing.', {
+            uid,
+            metricKinds,
         });
         return {
             accepted: false,
