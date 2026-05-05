@@ -268,6 +268,7 @@ describe('AppUserUtilities', () => {
             const settings = AppUserUtilities.fillMissingAppSettings(user);
             expect(settings.appSettings?.theme).toBe(AppThemes.Normal);
             expect((settings.appSettings as any)?.unitSetupCompleted).toBeUndefined();
+            expect((settings.appSettings as any)?.dashboardActionPrompts).toEqual({});
             expect(settings.chartSettings?.stackYAxes).toBe(false);
             expect(settings.chartSettings?.syncChartHoverToMap).toBe(false);
             expect(settings.dashboardSettings?.dateRange).toBe(DateRanges.all);
@@ -291,6 +292,62 @@ describe('AppUserUtilities', () => {
             expect((settings.myTracksSettings as any)?.showJumpHeatmap).toBe(true);
             expect(settings.serviceSyncSettings?.activitySyncRoutes?.[ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp]?.enabled).toBe(false);
             expect(settings.serviceSyncSettings?.activitySyncRoutes?.[ACTIVITY_SYNC_ROUTE_IDS.COROSAPI_to_SuuntoApp]?.enabled).toBe(false);
+        });
+
+        it('should preserve valid dashboard action prompt dismissal state', () => {
+            const user = {
+                settings: {
+                    appSettings: {
+                        dashboardActionPrompts: {
+                            connectActivityService: {
+                                state: 'dismissed',
+                                dismissedAt: 1_777_200_000_000,
+                                source: 'activity-service-connection',
+                            },
+                        },
+                    },
+                },
+            } as unknown as User;
+
+            const settings = AppUserUtilities.fillMissingAppSettings(user);
+
+            expect((settings.appSettings as any)?.dashboardActionPrompts).toEqual({
+                connectActivityService: {
+                    state: 'dismissed',
+                    dismissedAt: 1_777_200_000_000,
+                    source: 'activity-service-connection',
+                },
+            });
+        });
+
+        it('should drop invalid dashboard action prompt states and preserve valid future states', () => {
+            const user = {
+                settings: {
+                    appSettings: {
+                        dashboardActionPrompts: {
+                            connectActivityService: {
+                                state: 'added',
+                                dismissedAt: 'bad',
+                            },
+                            futurePrompt: {
+                                state: 'dismissed',
+                                dismissedAt: 1_777_300_000_000,
+                                source: 'future-source',
+                            },
+                        },
+                    },
+                },
+            } as unknown as User;
+
+            const settings = AppUserUtilities.fillMissingAppSettings(user);
+
+            expect((settings.appSettings as any)?.dashboardActionPrompts).toEqual({
+                futurePrompt: {
+                    state: 'dismissed',
+                    dismissedAt: 1_777_300_000_000,
+                    source: 'future-source',
+                },
+            });
         });
 
         it('should preserve valid dashboard auto-tile state', () => {

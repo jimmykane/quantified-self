@@ -793,8 +793,12 @@ describe('EventCardChartPanelComponent', () => {
     expect(option?.series?.[1]?.itemStyle).toBeUndefined();
     expect(option?.series?.[1]?.areaStyle).toEqual(
       expect.objectContaining({
-        color: '#bb0000',
         opacity: 0.4,
+      })
+    );
+    expect(option?.series?.[1]?.areaStyle).toEqual(
+      expect.not.objectContaining({
+        color: expect.any(String),
       })
     );
     expect(option?.yAxis?.splitArea).toBeUndefined();
@@ -818,6 +822,7 @@ describe('EventCardChartPanelComponent', () => {
   });
 
   it('renders power zone visual maps without coloring the grid', async () => {
+    component.fillOpacity = 0.35;
     component.panel = {
       dataType: DataPower.type,
       displayName: 'Power',
@@ -851,6 +856,16 @@ describe('EventCardChartPanelComponent', () => {
 
     const option = getRenderedOption();
     expect(option?.series?.[0]?.lineStyle).toEqual(
+      expect.not.objectContaining({
+        color: expect.any(String),
+      })
+    );
+    expect(option?.series?.[0]?.areaStyle).toEqual(
+      expect.objectContaining({
+        opacity: 0.35,
+      })
+    );
+    expect(option?.series?.[0]?.areaStyle).toEqual(
       expect.not.objectContaining({
         color: expect.any(String),
       })

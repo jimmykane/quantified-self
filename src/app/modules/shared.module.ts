@@ -37,6 +37,7 @@ import { MenuRadioListComponent } from '../components/shared/menu-radio-list/men
 import { TypedPromptRotatorComponent } from '../components/shared/typed-prompt-rotator/typed-prompt-rotator.component';
 import { HapticTapDirective } from '../directives/haptic-tap.directive';
 import { TooltipTapDirective } from '../directives/tooltip-tap.directive';
+import { UploadActivitiesComponent } from '../components/upload/upload-activities/upload-activities.component';
 
 @NgModule({
     imports: [
@@ -78,6 +79,7 @@ import { TooltipTapDirective } from '../directives/tooltip-tap.directive';
         TypedPromptRotatorComponent,
         HapticTapDirective,
         TooltipTapDirective,
+        UploadActivitiesComponent,
     ],
     providers: [],
     exports: [
@@ -115,6 +117,7 @@ import { TooltipTapDirective } from '../directives/tooltip-tap.directive';
         TypedPromptRotatorComponent,
         HapticTapDirective,
         TooltipTapDirective,
+        UploadActivitiesComponent,
     ]
 })
 

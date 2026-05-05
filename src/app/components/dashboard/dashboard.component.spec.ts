@@ -17,6 +17,7 @@ import {
     PaceUnits,
     SpeedUnits,
     SwimPaceUnits,
+    ServiceNames,
     User,
     VerticalSpeedUnits
 } from '@sports-alliance/sports-lib';
@@ -58,6 +59,8 @@ describe('DashboardComponent', () => {
             unitSettings: { startOfTheWeek: 1 },
             chartSettings: {}
         } as any;
+        mockUser.stripeRole = null;
+        mockUser.admin = false;
 
         mockAuthService = {
             user$: of(mockUser),
@@ -65,13 +68,15 @@ describe('DashboardComponent', () => {
         };
 
         mockEventService = {
-            getEventsBy: vi.fn().mockReturnValue(of([{ id: 'event1' }]))
+            getEventsBy: vi.fn().mockReturnValue(of([{ id: 'event1' }])),
+            getEventCount: vi.fn().mockResolvedValue(1)
         };
 
         mockUserService = {
             getUserByID: vi.fn().mockReturnValue(of(new User('targetUser'))),
             shouldShowPromo: vi.fn().mockReturnValue(false),
-            updateUserProperties: vi.fn().mockReturnValue(Promise.resolve())
+            updateUserProperties: vi.fn().mockReturnValue(Promise.resolve()),
+            watchHasAnyActivityServiceConnection: vi.fn().mockReturnValue(of(false))
         };
 
         mockRouter = { navigate: vi.fn() };
@@ -186,6 +191,135 @@ describe('DashboardComponent', () => {
         expect(component.showUnitSetupPrompt).toBe(false);
     });
 
+    it('shows first activity upload prompt for free owner dashboards with no uploaded activities', async () => {
+        mockUser.stripeRole = 'free';
+        mockEventService.getEventCount.mockResolvedValue(0);
+
+        fixture.detectChanges();
+        await fixture.whenStable();
+
+        expect(mockEventService.getEventCount).toHaveBeenCalledWith(mockUser);
+        expect(component.dashboardActionPrompts.some(prompt => prompt.id === 'firstActivityUpload')).toBe(true);
+    });
+
+    it('does not show first activity upload prompt when the user already has activities', async () => {
+        mockUser.stripeRole = 'free';
+        mockEventService.getEventCount.mockResolvedValue(3);
+
+        fixture.detectChanges();
+        await fixture.whenStable();
+
+        expect(component.dashboardActionPrompts.some(prompt => prompt.id === 'firstActivityUpload')).toBe(false);
+    });
+
+    it('does not show first activity upload prompt when dismissed', async () => {
+        mockUser.stripeRole = 'free';
+        mockUser.settings.appSettings = {
+            dashboardActionPrompts: {
+                firstActivityUpload: {
+                    state: 'dismissed',
+                    dismissedAt: 1,
+                },
+            },
+        } as any;
+        mockEventService.getEventCount.mockResolvedValue(0);
+
+        fixture.detectChanges();
+        await fixture.whenStable();
+
+        expect(component.dashboardActionPrompts.some(prompt => prompt.id === 'firstActivityUpload')).toBe(false);
+        expect(mockEventService.getEventCount).not.toHaveBeenCalled();
+    });
+
+    it('does not count activities for paid users when evaluating first activity upload prompt', async () => {
+        mockUser.stripeRole = 'pro';
+
+        fixture.detectChanges();
+        await fixture.whenStable();
+
+        expect(mockEventService.getEventCount).not.toHaveBeenCalled();
+        expect(component.dashboardActionPrompts.some(prompt => prompt.id === 'firstActivityUpload')).toBe(false);
+    });
+
+    it('dismisses first activity upload prompt and persists action prompt state', async () => {
+        mockUser.stripeRole = 'free';
+        mockUser.settings.appSettings = {};
+        component.user = mockUser;
+        (component as any).uploadedActivityCount = 0;
+        (component as any).syncDashboardActionPromptState();
+
+        await component.dismissFirstActivityUploadPrompt();
+
+        expect(mockUserService.updateUserProperties).toHaveBeenCalledWith(
+            mockUser,
+            {
+                settings: {
+                    appSettings: {
+                        dashboardActionPrompts: {
+                            firstActivityUpload: expect.objectContaining({
+                                state: 'dismissed',
+                                source: 'first-activity-upload',
+                            }),
+                        },
+                    },
+                },
+            },
+        );
+        expect(component.dashboardActionPrompts.some(prompt => prompt.id === 'firstActivityUpload')).toBe(false);
+    });
+
+    it('shows service connection prompt for pro owner dashboard with no connected activity service', async () => {
+        mockUser.stripeRole = 'pro';
+        mockUser.settings.appSettings = {};
+        mockUserService.watchHasAnyActivityServiceConnection.mockReturnValue(of(false));
+
+        fixture.detectChanges();
+        await fixture.whenStable();
+
+        expect(component.dashboardActionPrompts.some(prompt => prompt.id === 'connectActivityService')).toBe(true);
+    });
+
+    it('does not show service connection prompt when an activity service is connected', async () => {
+        mockUser.stripeRole = 'pro';
+        mockUser.settings.appSettings = {};
+        mockUserService.watchHasAnyActivityServiceConnection.mockReturnValue(of(true));
+
+        fixture.detectChanges();
+        await fixture.whenStable();
+
+        expect(component.dashboardActionPrompts.some(prompt => prompt.id === 'connectActivityService')).toBe(false);
+    });
+
+    it('does not show service connection prompt when dismissed', async () => {
+        mockUser.stripeRole = 'pro';
+        mockUser.settings.appSettings = {
+            dashboardActionPrompts: {
+                connectActivityService: {
+                    state: 'dismissed',
+                    dismissedAt: 1,
+                },
+            },
+        } as any;
+
+        fixture.detectChanges();
+        await fixture.whenStable();
+
+        expect(component.dashboardActionPrompts.some(prompt => prompt.id === 'connectActivityService')).toBe(false);
+        expect(mockUserService.watchHasAnyActivityServiceConnection).not.toHaveBeenCalled();
+    });
+
+    it('does not show service connection prompt on another user dashboard', async () => {
+        mockUser.stripeRole = 'pro';
+        mockActivatedRoute.snapshot.data.dashboardData.user = mockUser;
+        mockActivatedRoute.snapshot.data.dashboardData.targetUser = { uid: 'other-user' };
+
+        fixture.detectChanges();
+        await fixture.whenStable();
+
+        expect(component.dashboardActionPrompts.some(prompt => prompt.id === 'connectActivityService')).toBe(false);
+        expect(mockUserService.watchHasAnyActivityServiceConnection).not.toHaveBeenCalled();
+    });
+
     it('applies the miles unit setup preset and completes setup', async () => {
         (mockUser.settings.appSettings as any).unitSetupCompleted = false;
         (mockUser.settings.appSettings as any).otherAppSetting = 'stale-local-value';
@@ -243,6 +377,96 @@ describe('DashboardComponent', () => {
         );
         expect(mockUserService.updateUserProperties.mock.calls[0][1].settings.unitSettings).toBeUndefined();
         expect(component.showUnitSetupPrompt).toBe(false);
+    });
+
+    it('navigates to settings units from the unit prompt menu action', async () => {
+        component.onDashboardActionPromptMenuAction({
+            promptId: 'unitSetup',
+            action: {
+                id: 'openUnitSettings',
+                label: 'Advanced settings',
+            },
+        });
+
+        await fixture.whenStable();
+
+        expect(mockRouter.navigate).toHaveBeenCalledWith(['/settings'], {
+            queryParams: { section: 'units' },
+        });
+    });
+
+    it('navigates to the selected services provider from the service prompt menu action', async () => {
+        component.onDashboardActionPromptMenuAction({
+            promptId: 'connectActivityService',
+            action: {
+                id: 'connectServiceProvider',
+                label: 'Garmin',
+                value: ServiceNames.GarminAPI,
+            },
+        });
+
+        await fixture.whenStable();
+
+        expect(mockRouter.navigate).toHaveBeenCalledWith(['/services'], {
+            queryParams: { serviceName: ServiceNames.GarminAPI },
+        });
+    });
+
+    it('navigates to subscriptions from the first activity upgrade action', async () => {
+        component.onDashboardActionPromptPrimary({
+            promptId: 'firstActivityUpload',
+            action: {
+                id: 'upgradeToPro',
+                label: 'Upgrade to Pro',
+            },
+        });
+
+        await fixture.whenStable();
+
+        expect(mockRouter.navigate).toHaveBeenCalledWith(['/subscriptions']);
+    });
+
+    it('hides first activity upload prompt after a successful upload completes', async () => {
+        mockUser.stripeRole = 'free';
+        component.user = mockUser;
+        (component as any).uploadedActivityCount = 0;
+        (component as any).syncDashboardActionPromptState();
+
+        expect(component.dashboardActionPrompts.some(prompt => prompt.id === 'firstActivityUpload')).toBe(true);
+
+        component.onDashboardActionPromptControlChange({
+            promptId: 'firstActivityUpload',
+            value: 'activityUploaded',
+        });
+
+        expect(component.dashboardActionPrompts.some(prompt => prompt.id === 'firstActivityUpload')).toBe(false);
+    });
+
+    it('dismisses service connection prompt and persists action prompt state', async () => {
+        mockUser.stripeRole = 'pro';
+        mockUser.settings.appSettings = {};
+        component.user = mockUser;
+        (component as any).hasActivityServiceConnection = false;
+        (component as any).syncDashboardActionPromptState();
+
+        await component.dismissConnectActivityServicePrompt();
+
+        expect(mockUserService.updateUserProperties).toHaveBeenCalledWith(
+            mockUser,
+            {
+                settings: {
+                    appSettings: {
+                        dashboardActionPrompts: {
+                            connectActivityService: expect.objectContaining({
+                                state: 'dismissed',
+                                source: 'activity-service-connection',
+                            }),
+                        },
+                    },
+                },
+            },
+        );
+        expect(component.dashboardActionPrompts.some(prompt => prompt.id === 'connectActivityService')).toBe(false);
     });
 
     it('should attach initial live query when resolver already returned user data', async () => {

@@ -27,7 +27,6 @@ import { MAT_BOTTOM_SHEET_DEFAULT_OPTIONS } from '@angular/material/bottom-sheet
 import { MAT_ICON_DEFAULT_OPTIONS } from '@angular/material/icon';
 import { MAT_MENU_DEFAULT_OPTIONS, MatMenuDefaultOptions } from '@angular/material/menu';
 import { ServiceWorkerModule } from '@angular/service-worker';
-import { UploadActivitiesComponent } from './components/upload/upload-activities/upload-activities.component';
 import { maybeConnectAuthEmulator } from './authentication/auth-emulator.config';
 
 import { AppUpdateService } from './services/app.update.service';
@@ -67,7 +66,6 @@ type FirestoreInitSettings = Parameters<typeof initializeFirestore>[1] & {
     AppComponent,
     AppShellComponent,
     SideNavComponent,
-    UploadActivitiesComponent,
     ProcessingIndicatorComponent,
     GracePeriodBannerComponent,
     RouteLoaderComponent,

@@ -68,6 +68,18 @@ export interface AppDashboardAutoTileState {
 export type AppDashboardAutoTiles = Partial<Record<AppDashboardAutoTileId, AppDashboardAutoTileState>>
     & Record<string, AppDashboardAutoTileState | undefined>;
 
+export type AppDashboardActionPromptId = 'unitSetup' | 'firstActivityUpload' | 'connectActivityService';
+export type AppDashboardActionPromptStateValue = 'dismissed';
+
+export interface AppDashboardActionPromptState {
+    state: AppDashboardActionPromptStateValue;
+    dismissedAt?: number;
+    source?: string;
+}
+
+export type AppDashboardActionPrompts = Partial<Record<AppDashboardActionPromptId, AppDashboardActionPromptState>>
+    & Record<string, AppDashboardActionPromptState | undefined>;
+
 export type AppDashboardTileEventFilterRange =
     'thisWeek'
     | 'thisMonth'
@@ -121,6 +133,7 @@ export interface AppAppSettingsInterface extends UserAppSettingsInterface {
     lastSeenChangelogDate?: AppDateValue;
     themePreference?: AppThemePreference;
     unitSetupCompleted?: boolean;
+    dashboardActionPrompts?: AppDashboardActionPrompts;
 }
 
 export interface ActivitySyncRouteSettingsInterface {

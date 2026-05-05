@@ -123,8 +123,8 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
   public secondaryLabel = 'Acute / chronic load';
   public secondaryValueText = '';
   public showNoDataError = false;
-  public noDataErrorMessage = 'No data yet';
-  public noDataErrorHint = 'This KPI needs derived training metrics.';
+  public noDataErrorMessage = 'No KPI data yet';
+  public noDataErrorHint = 'Upload activities with training load to calculate this metric.';
   public noDataErrorIcon = 'insights';
 
   constructor(
@@ -240,14 +240,14 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
 
     const hasRenderableValue = presentation.primaryValue !== null;
     this.showNoDataError = !hasRenderableValue;
-    this.noDataErrorMessage = 'No data yet';
-    this.noDataErrorHint = 'This KPI needs derived training metrics.';
+    this.noDataErrorMessage = 'No KPI data yet';
+    this.noDataErrorHint = 'Upload activities with training load to calculate this metric.';
     this.noDataErrorIcon = 'insights';
 
     if (isDerivedMetricPendingStatus(this.resolveActiveStatus()) && !hasRenderableValue) {
       this.showNoDataError = true;
-      this.noDataErrorMessage = 'KPI is updating';
-      this.noDataErrorHint = 'Derived metrics are being recalculated in the background.';
+      this.noDataErrorMessage = 'Updating KPI data';
+      this.noDataErrorHint = 'Training metrics are being recalculated in the background.';
       this.noDataErrorIcon = 'autorenew';
     }
     this.changeDetectorRef.markForCheck();

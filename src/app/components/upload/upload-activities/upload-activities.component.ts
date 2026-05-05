@@ -1,10 +1,10 @@
-import { Component, inject, Input, OnInit } from '@angular/core';
+import { Component, EventEmitter, inject, Input, OnInit, Output } from '@angular/core';
 
 import { AppAuthService } from '../../../authentication/app.auth.service';
 import { AppAnalyticsService } from '../../../services/app.analytics.service';
 import { AppEventService } from '../../../services/app.event.service';
 import { AppFitUploadService } from '../../../services/app.fit-upload.service';
-import { UploadAbstractDirective } from '../upload-abstract.directive';
+import { UploadAbstractDirective, UploadBatchSummary } from '../upload-abstract.directive';
 import { FileInterface } from '../file.interface';
 import { USAGE_LIMITS } from '@shared/limits';
 import { BrowserCompatibilityService } from '../../../services/browser.compatibility.service';
@@ -20,6 +20,13 @@ const TEXT_COMPRESSIBLE_EXTENSIONS = new Set(['gpx', 'tcx', 'json', 'sml']);
 })
 export class UploadActivitiesComponent extends UploadAbstractDirective implements OnInit {
   @Input() isHandset: boolean = false;
+  @Input() uploadLabel: string | null = null;
+  @Input() upgradeLabel: string | null = null;
+  @Input() disabled = false;
+  @Input() promptAction = false;
+  @Input() showUploadIcon = false;
+  @Input() uploadIcon = 'upload_file';
+  @Output() activityUploadComplete = new EventEmitter<void>();
 
   protected eventService = inject(AppEventService);
   protected analyticsService = inject(AppAnalyticsService);
@@ -183,5 +190,11 @@ export class UploadActivitiesComponent extends UploadAbstractDirective implement
     }
 
     return rawMessage;
+  }
+
+  protected override onUploadBatchFinished(summary: UploadBatchSummary): void {
+    if (summary.successfulUploads > 0) {
+      this.activityUploadComplete.emit();
+    }
   }
 }

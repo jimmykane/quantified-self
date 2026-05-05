@@ -562,7 +562,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
           },
         } : {}),
         areaStyle: {
-          color: series.color,
+          ...(!useZoneColors ? { color: series.color } : {}),
           opacity: seriesFillOpacity,
           origin: areaFillOrigin,
         },

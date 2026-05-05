@@ -1,0 +1,107 @@
+@if (prompt) {
+<mat-card class="dashboard-action-prompt qs-glass-card-panel" appearance="outlined">
+  <mat-card-header>
+    <div mat-card-avatar class="dashboard-action-prompt__avatar" aria-hidden="true">
+      <mat-icon>{{ prompt.icon }}</mat-icon>
+    </div>
+    <mat-card-title class="dashboard-action-prompt__title">{{ prompt.title }}</mat-card-title>
+    <mat-card-subtitle class="dashboard-action-prompt__subtitle">{{ prompt.description }}</mat-card-subtitle>
+  </mat-card-header>
+
+  @if (hasControls || prompt.error) {
+  <mat-card-content class="dashboard-action-prompt__content">
+    <ng-content select="[prompt-controls]"></ng-content>
+
+    @if (prompt.error) {
+    <p class="dashboard-action-prompt__error" role="alert">
+      <mat-icon aria-hidden="true">error</mat-icon>
+      <span>{{ prompt.error }}</span>
+    </p>
+    }
+  </mat-card-content>
+  }
+
+  <mat-card-actions class="dashboard-action-prompt__actions" align="end">
+    @if (prompt.secondaryAction) {
+    <button
+      mat-button
+      type="button"
+      [disabled]="prompt.busy || prompt.secondaryAction.disabled"
+      (click)="emitSecondary()">
+      <span class="dashboard-action-prompt__button-content">
+        @if (prompt.secondaryAction.icon) {
+        <mat-icon>{{ prompt.secondaryAction.icon }}</mat-icon>
+        }
+        <span>{{ prompt.secondaryAction.label }}</span>
+      </span>
+    </button>
+    }
+
+    @if (prompt.menuActions?.length && !prompt.primaryAction?.menuTrigger) {
+    <button
+      mat-icon-button
+      type="button"
+      [disabled]="prompt.busy"
+      [matMenuTriggerFor]="promptMenu"
+      aria-label="More prompt actions">
+      <mat-icon>more_vert</mat-icon>
+    </button>
+    }
+
+    @if (hasActionControls) {
+    <span class="dashboard-action-prompt__projected-actions">
+      <ng-content select="[prompt-actions]"></ng-content>
+    </span>
+    }
+
+    @if (prompt.primaryAction) {
+      @if (prompt.primaryAction.menuTrigger) {
+      <button
+        mat-flat-button
+        type="button"
+        class="qs-mat-primary"
+        [disabled]="prompt.busy || prompt.primaryAction.disabled"
+        [matMenuTriggerFor]="promptMenu">
+        <span class="dashboard-action-prompt__button-content">
+          @if (prompt.busy) {
+          <mat-progress-spinner diameter="18" mode="indeterminate"></mat-progress-spinner>
+          } @else if (prompt.primaryAction.icon) {
+          <mat-icon>{{ prompt.primaryAction.icon }}</mat-icon>
+          }
+          <span>{{ prompt.busy ? (prompt.primaryAction.loadingLabel || prompt.primaryAction.label) : prompt.primaryAction.label }}</span>
+        </span>
+      </button>
+      } @else {
+      <button
+        mat-flat-button
+        type="button"
+        class="qs-mat-primary"
+        [disabled]="prompt.busy || prompt.primaryAction.disabled"
+        (click)="emitPrimary()">
+        <span class="dashboard-action-prompt__button-content">
+          @if (prompt.busy) {
+          <mat-progress-spinner diameter="18" mode="indeterminate"></mat-progress-spinner>
+          } @else if (prompt.primaryAction.icon) {
+          <mat-icon>{{ prompt.primaryAction.icon }}</mat-icon>
+          }
+          <span>{{ prompt.busy ? (prompt.primaryAction.loadingLabel || prompt.primaryAction.label) : prompt.primaryAction.label }}</span>
+        </span>
+      </button>
+      }
+    }
+  </mat-card-actions>
+
+  <mat-menu #promptMenu="matMenu" class="qs-menu-panel">
+    @for (action of prompt.menuActions || []; track action.id + '-' + (action.value || action.label)) {
+    <button mat-menu-item type="button" [disabled]="prompt.busy" (click)="emitMenuAction(action)">
+      @if (action.serviceName) {
+      <app-service-source-icon [sourceServiceName]="action.serviceName" [showTooltip]="false"></app-service-source-icon>
+      } @else if (action.icon) {
+      <mat-icon>{{ action.icon }}</mat-icon>
+      }
+      <span>{{ action.label }}</span>
+    </button>
+    }
+  </mat-menu>
+</mat-card>
+}

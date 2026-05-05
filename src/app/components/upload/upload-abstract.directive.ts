@@ -9,6 +9,12 @@ import { MatDialog } from '@angular/material/dialog';
 import { AppProcessingService } from '../../services/app.processing.service';
 import { AppUserService } from '../../services/app.user.service';
 
+export interface UploadBatchSummary {
+  totalFiles: number;
+  successfulUploads: number;
+  duplicateUploads: number;
+  failedUploads: number;
+}
 
 @Directive()
 export abstract class UploadAbstractDirective implements OnInit {
@@ -42,6 +48,9 @@ export abstract class UploadAbstractDirective implements OnInit {
   }
 
   abstract processAndUploadFile(file: FileInterface): Promise<any>;
+
+  protected onUploadBatchFinished(_summary: UploadBatchSummary): void {
+  }
 
   /**
    * This can be called multiple times as the user drops more files etc
@@ -139,6 +148,12 @@ export abstract class UploadAbstractDirective implements OnInit {
     this.snackBar.open(message, 'OK', {
       duration: 5000,
     });
+    this.onUploadBatchFinished({
+      totalFiles: filesToProcess.length,
+      successfulUploads,
+      duplicateUploads,
+      failedUploads,
+    });
 
     // Pass event to removeDragData for cleanup
     if (event.dataTransfer && event.dataTransfer.items) {
@@ -152,4 +167,3 @@ export abstract class UploadAbstractDirective implements OnInit {
     event.target.value = '';
   }
 }
-

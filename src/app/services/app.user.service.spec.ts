@@ -689,6 +689,52 @@ describe('AppUserService', () => {
 
             expect(result).toEqual([]);
         });
+
+        it('watchHasAnyActivityServiceConnection should emit false without a user', async () => {
+            const result = await firstValueFrom(service.watchHasAnyActivityServiceConnection(null));
+
+            expect(result).toBe(false);
+            expect(collectionData).not.toHaveBeenCalled();
+        });
+
+        it('watchHasAnyActivityServiceConnection should emit false when activity service token streams are empty', async () => {
+            const user = { uid: 'u7' } as any;
+            (collectionData as any)
+                .mockReturnValueOnce(of([]))
+                .mockReturnValueOnce(of([]))
+                .mockReturnValueOnce(of([]));
+
+            const result = await firstValueFrom(service.watchHasAnyActivityServiceConnection(user));
+
+            expect(result).toBe(false);
+            expect(collection).toHaveBeenNthCalledWith(1, expect.anything(), 'garminAPITokens', 'u7', 'tokens');
+            expect(collection).toHaveBeenNthCalledWith(2, expect.anything(), 'suuntoAppAccessTokens', 'u7', 'tokens');
+            expect(collection).toHaveBeenNthCalledWith(3, expect.anything(), 'COROSAPIAccessTokens', 'u7', 'tokens');
+        });
+
+        it('watchHasAnyActivityServiceConnection should emit true when any activity service has a token', async () => {
+            const user = { uid: 'u8' } as any;
+            (collectionData as any)
+                .mockReturnValueOnce(of([]))
+                .mockReturnValueOnce(of([{ accessToken: 'suunto-token' }]))
+                .mockReturnValueOnce(of([]));
+
+            const result = await firstValueFrom(service.watchHasAnyActivityServiceConnection(user));
+
+            expect(result).toBe(true);
+        });
+
+        it('watchHasAnyActivityServiceConnection should fail closed when token reads fail', async () => {
+            const user = { uid: 'u9' } as any;
+            (collectionData as any)
+                .mockReturnValueOnce(throwError(() => new Error('Garmin read failed')))
+                .mockReturnValueOnce(throwError(() => new Error('Suunto read failed')))
+                .mockReturnValueOnce(throwError(() => new Error('COROS read failed')));
+
+            const result = await firstValueFrom(service.watchHasAnyActivityServiceConnection(user));
+
+            expect(result).toBe(false);
+        });
     });
 
     describe('gracePeriodUntil signal', () => {

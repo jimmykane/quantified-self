@@ -2,8 +2,8 @@
   display: inline-block;
 }
 
-button,
-a[mat-flat-button] {
+button.upload-cta,
+a.upload-cta[mat-flat-button] {
   border-radius: 20px;
   padding: 0 24px;
   height: 40px;
@@ -29,6 +29,34 @@ a.upload-cta[mat-flat-button] {
   --mat-button-filled-label-text-color: #101010;
   --mat-button-filled-state-layer-color: #101010;
   --mat-button-filled-ripple-color: rgba(16, 16, 16, 0.18);
+}
+
+button.prompt-action,
+a.prompt-action[mat-flat-button] {
+  box-sizing: border-box;
+}
+
+.upload-button-content {
+  align-items: center;
+  display: inline-flex;
+  gap: 0.5rem;
+  justify-content: center;
+  line-height: 1;
+  min-height: 1.125rem;
+  min-width: 0;
+  vertical-align: middle;
+}
+
+.upload-button-content mat-icon {
+  align-items: center;
+  display: inline-flex;
+  flex: 0 0 1.125rem;
+  font-size: 1.125rem;
+  height: 1.125rem;
+  justify-content: center;
+  line-height: 1;
+  margin: 0;
+  width: 1.125rem;
 }
 
 /* Icon-only button for mobile */

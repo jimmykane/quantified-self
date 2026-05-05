@@ -83,19 +83,26 @@ describe('help.content', () => {
     const gettingStartedSection = HELP_SECTIONS.find(section => section.id === 'getting-started');
 
     expect(gettingStartedSection?.content).toContain('Distance values in dashboards, event charts, activity chips, and CSV exports');
-    expect(gettingStartedSection?.content).toContain('dashboard unit prompt');
+    expect(gettingStartedSection?.content).toContain('Dashboard **Action prompts**');
+    expect(gettingStartedSection?.content).toContain('dashboard **Default units** action prompt');
+    expect(gettingStartedSection?.content).toContain('**Upload your first activities** action prompt');
+    expect(gettingStartedSection?.content).toContain('FIT, GPX, TCX, JSON, or SML files');
+    expect(gettingStartedSection?.content).toContain('upgrade to Pro for automatic activity sync');
+    expect(gettingStartedSection?.content).toContain('manual uploads remain available from the header and upload tools');
+    expect(gettingStartedSection?.content).toContain('**Connect a service** action prompt');
+    expect(gettingStartedSection?.content).toContain('dismissing it hides the prompt permanently');
     expect(gettingStartedSection?.content).toContain('Advanced settings');
     expect(gettingStartedSection?.content).toContain('kilometers or miles');
     expect(gettingStartedSection?.content).toContain('Settings -> Units');
     expect(gettingStartedSection?.content).toContain('jump distances display in feet when miles are selected');
   });
 
-  it('should document non-merged event heart-rate and power zone line coloring', () => {
+  it('should document non-merged event heart-rate and power zone line and fill coloring', () => {
     const gettingStartedSection = HELP_SECTIONS.find(section => section.id === 'getting-started');
 
     expect(gettingStartedSection?.content).toContain('provider heart-rate or power zone boundaries');
     expect(gettingStartedSection?.content).toContain('non-merged events');
-    expect(gettingStartedSection?.content).toContain('**Heart Rate** and **Power** charts color their lines');
+    expect(gettingStartedSection?.content).toContain('**Heart Rate** and **Power** charts color their lines and visible fill');
     expect(gettingStartedSection?.content).not.toContain('lightly tints the chart grid by zone');
   });
 

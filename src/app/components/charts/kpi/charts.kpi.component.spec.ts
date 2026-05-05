@@ -246,7 +246,8 @@ describe('ChartsKpiComponent', () => {
     await fixture.whenStable();
 
     expect(component.showNoDataError).toBe(true);
-    expect(component.noDataErrorMessage).toBe('KPI is updating');
+    expect(component.noDataErrorMessage).toBe('Updating KPI data');
+    expect(component.noDataErrorHint).toBe('Training metrics are being recalculated in the background.');
   });
 
   it('shows no-data through the shared loading overlay after compact KPI loading finishes', async () => {
@@ -267,7 +268,8 @@ describe('ChartsKpiComponent', () => {
     expect(component.showNoDataError).toBe(true);
     expect(overlay.isLoading).toBe(false);
     expect(overlay.hasError).toBe(true);
-    expect(overlay.errorMessage).toBe('No data yet');
+    expect(overlay.errorMessage).toBe('No KPI data yet');
+    expect(overlay.errorHint).toBe('Upload activities with training load to calculate this metric.');
     expect(nativeElement.querySelector('.kpi-row-status')).toBeNull();
   });
 

@@ -87,6 +87,7 @@ import {
     buildDashboardKpiAutoTile,
     type DashboardDefaultCuratedChartType,
 } from '../helpers/dashboard-auto-tile.helper';
+import { normalizeDashboardActionPrompts } from '../helpers/dashboard-action-prompt.helper';
 import { ACTIVITY_SYNC_ROUTES, ActivitySyncRouteId } from '@shared/activity-sync-routes';
 import { normalizeDistanceUnits } from '@shared/unit-aware-display';
 
@@ -452,6 +453,9 @@ export class AppUserUtilities {
         // App
         settings.appSettings = settings.appSettings || <UserAppSettingsInterface>{};
         settings.appSettings.theme = settings.appSettings.theme || AppUserUtilities.getDefaultAppTheme();
+        (settings.appSettings as AppUserSettingsInterface['appSettings']).dashboardActionPrompts = normalizeDashboardActionPrompts(
+            (settings.appSettings as AppUserSettingsInterface['appSettings']).dashboardActionPrompts,
+        );
 
         // Chart
         settings.chartSettings = settings.chartSettings || <UserChartSettingsInterface>{};

@@ -575,6 +575,35 @@ export class AppUserService implements OnDestroy {
     }
   }
 
+  public watchHasAnyActivityServiceConnection(user: User | null | undefined): Observable<boolean> {
+    const uid = `${user?.uid || ''}`.trim();
+    if (!uid || !user) {
+      return of(false);
+    }
+
+    const activityServices = [
+      ServiceNames.GarminAPI,
+      ServiceNames.SuuntoApp,
+      ServiceNames.COROSAPI,
+    ];
+
+    return combineLatest(activityServices.map(serviceName => (
+      this.getServiceToken(user, serviceName).pipe(
+        map(tokens => Array.isArray(tokens) && tokens.length > 0),
+        catchError(error => {
+          this.logger.warn('[AppUserService] Failed to read activity service connection state', {
+            userID: uid,
+            serviceName,
+          }, error);
+          return of(false);
+        })
+      )
+    ))).pipe(
+      map(connectionStates => connectionStates.some(Boolean)),
+      distinctUntilChanged(),
+    );
+  }
+
   public getUserMetaForService(user: User, serviceName: string): Observable<UserServiceMetaInterface> {
     const metaDoc = doc(this.firestore, 'users', user.uid, 'meta', serviceName);
     return docData(metaDoc).pipe(map((d) => {

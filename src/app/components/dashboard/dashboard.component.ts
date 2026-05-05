@@ -1,19 +1,21 @@
 import { Component, DestroyRef, OnDestroy, OnInit, inject } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { AppEventService } from '../../services/app.event.service';
-import { merge, of, Subject } from 'rxjs';
+import { from, merge, of, Subject } from 'rxjs';
 import { EventInterface } from '@sports-alliance/sports-lib';
+import { ServiceNames } from '@sports-alliance/sports-lib';
 import { ActivatedRoute, Router } from '@angular/router';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { AppAuthService } from '../../authentication/app.auth.service';
-import { AppDashboardEventTableFiltersInterface, AppUserInterface } from '../../models/app-user.interface';
+import { AppAppSettingsInterface, AppDashboardEventTableFiltersInterface, AppUserInterface } from '../../models/app-user.interface';
 import { DateRanges } from '@sports-alliance/sports-lib';
 import { Search } from '../event-search/event-search.component';
 import { AppUserService } from '../../services/app.user.service';
 import { DaysOfTheWeek } from '@sports-alliance/sports-lib';
-import { distinctUntilChanged, filter, map, switchMap, take, tap } from 'rxjs/operators';
+import { catchError, distinctUntilChanged, filter, map, switchMap, take, tap } from 'rxjs/operators';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { LoggerService } from '../../services/logger.service';
+import { AppUserUtilities } from '../../utils/app.user.utilities';
 
 import { getDatesForDateRange } from '../../helpers/date-range-helper';
 import { WhereFilterOp } from 'firebase/firestore';
@@ -28,6 +30,20 @@ import {
   eventMatchesDashboardActivityTypes,
   normalizeDashboardEventTableFilters,
 } from '../../helpers/dashboard-tile-event-filters.helper';
+import {
+  buildDashboardActionPromptViewModels,
+  DASHBOARD_ACTION_PROMPT_CONNECT_ACTIVITY_SERVICE_ID,
+  DASHBOARD_ACTION_PROMPT_CONNECT_ACTIVITY_SERVICE_SOURCE,
+  DASHBOARD_ACTION_PROMPT_FIRST_ACTIVITY_UPLOAD_ID,
+  DASHBOARD_ACTION_PROMPT_FIRST_ACTIVITY_UPLOAD_SOURCE,
+  DASHBOARD_ACTION_PROMPT_UNIT_SETUP_ID,
+  DashboardActionPromptControlChange,
+  DashboardActionPromptEvent,
+  DashboardActionPromptMenuEvent,
+  DashboardActionPromptViewModel,
+  isDashboardActionPromptDismissed,
+  markDashboardActionPromptDismissed,
+} from '../../helpers/dashboard-action-prompt.helper';
 
 
 @Component({
@@ -54,6 +70,11 @@ export class DashboardComponent implements OnInit, OnDestroy {
   public showUnitSetupPrompt = false;
   public isSavingUnitSetup = false;
   public unitSetupError: string | null = null;
+  public dashboardActionPrompts: DashboardActionPromptViewModel[] = [];
+  public isDismissingFirstActivityUploadPrompt = false;
+  public firstActivityUploadPromptError: string | null = null;
+  public isDismissingConnectActivityServicePrompt = false;
+  public connectActivityServicePromptError: string | null = null;
 
   private shouldSearch: boolean;
   private manualSearchTrigger$ = new Subject<{ user: AppUserInterface | null; refreshToken: number }>();
@@ -63,6 +84,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
   private initialResolvedUserIDForReconcile: string | null = null;
   private eventTableFiltersCacheSignature: string | null = null;
   private eventTableFiltersCache: AppDashboardEventTableFiltersInterface | null = null;
+  private hasActivityServiceConnection: boolean | null = null;
+  private uploadedActivityCount: number | null = null;
   private analyticsService = inject(AppAnalyticsService);
   private logger = inject(LoggerService);
   private destroyRef = inject(DestroyRef);
@@ -101,7 +124,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
         this.applyEventTableFilterDates(this.getEventTableFilters(this.user), this.user);
         this.startOfTheWeek = this.user.settings.unitSettings?.startOfTheWeek;
       }
-      this.syncUnitSetupPromptState();
+      this.syncDashboardActionPromptState();
       this.logPerf('resolved_dashboard_data', resolvedDataStart, {
         events: this.events?.length || 0,
         eventsPrefetchSkipped: isEventsPrefetchSkipped,
@@ -116,7 +139,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
       const targetUserFetchStart = performance.now();
       try {
         this.targetUser = await this.userService.getUserByID(userID).pipe(take(1)).toPromise();
-        this.syncUnitSetupPromptState();
+        this.syncDashboardActionPromptState();
         this.logPerf('target_user_fetch', targetUserFetchStart, { userID });
       } catch {
         void this.router.navigate(['dashboard'])
@@ -129,6 +152,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
         return;
       }
     }
+    this.watchFirstActivityUploadPromptState();
+    this.watchActivityServiceConnectionPromptState();
     merge(
       this.authService.user$.pipe(
         map((user: AppUserInterface | null) => ({ user, refreshToken: 0 }))
@@ -282,7 +307,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
       this.user = eventsAndUser.user;
       this.isLoading = false;
       this.isInitialized = true;
-      this.syncUnitSetupPromptState();
+      this.syncDashboardActionPromptState();
       this.logger.info('[perf] dashboard_state_update', { events: this.events.length });
 
     });
@@ -341,6 +366,69 @@ export class DashboardComponent implements OnInit, OnDestroy {
   onUnitSetupPresetChange(preset: UnitSetupPreset): void {
     this.selectedUnitSetupPreset = preset;
     this.unitSetupError = null;
+    this.syncDashboardActionPromptState();
+  }
+
+  onDashboardActionPromptPrimary(event: DashboardActionPromptEvent): void {
+    if (event.promptId === DASHBOARD_ACTION_PROMPT_UNIT_SETUP_ID && event.action.id === 'applyUnitSetup') {
+      void this.applyUnitSetupPreset();
+      return;
+    }
+
+    if (event.promptId === DASHBOARD_ACTION_PROMPT_FIRST_ACTIVITY_UPLOAD_ID && event.action.id === 'upgradeToPro') {
+      void this.openSubscriptions();
+    }
+  }
+
+  onDashboardActionPromptSecondary(event: DashboardActionPromptEvent): void {
+    if (event.promptId === DASHBOARD_ACTION_PROMPT_UNIT_SETUP_ID && event.action.id === 'dismissUnitSetup') {
+      void this.dismissUnitSetupPrompt();
+      return;
+    }
+
+    if (
+      event.promptId === DASHBOARD_ACTION_PROMPT_FIRST_ACTIVITY_UPLOAD_ID
+      && event.action.id === 'dismissFirstActivityUpload'
+    ) {
+      void this.dismissFirstActivityUploadPrompt();
+      return;
+    }
+
+    if (
+      event.promptId === DASHBOARD_ACTION_PROMPT_CONNECT_ACTIVITY_SERVICE_ID
+      && event.action.id === 'dismissConnectActivityService'
+    ) {
+      void this.dismissConnectActivityServicePrompt();
+    }
+  }
+
+  onDashboardActionPromptMenuAction(event: DashboardActionPromptMenuEvent): void {
+    if (event.promptId === DASHBOARD_ACTION_PROMPT_UNIT_SETUP_ID && event.action.id === 'openUnitSettings') {
+      void this.openUnitSettings();
+      return;
+    }
+
+    if (
+      event.promptId === DASHBOARD_ACTION_PROMPT_CONNECT_ACTIVITY_SERVICE_ID
+      && event.action.id === 'connectServiceProvider'
+    ) {
+      void this.openServiceProvider(event.action.value);
+    }
+  }
+
+  onDashboardActionPromptControlChange(event: DashboardActionPromptControlChange): void {
+    if (event.promptId === DASHBOARD_ACTION_PROMPT_UNIT_SETUP_ID) {
+      this.onUnitSetupPresetChange(event.value as UnitSetupPreset);
+      return;
+    }
+
+    if (
+      event.promptId === DASHBOARD_ACTION_PROMPT_FIRST_ACTIVITY_UPLOAD_ID
+      && event.value === 'activityUploaded'
+    ) {
+      this.uploadedActivityCount = 1;
+      this.syncDashboardActionPromptState();
+    }
   }
 
   async applyUnitSetupPreset(): Promise<void> {
@@ -372,7 +460,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
         unitSettings: nextUnitSettings,
         appSettings: nextAppSettings as any,
       };
-      this.syncUnitSetupPromptState();
+      this.syncDashboardActionPromptState();
       this.snackBar.open('Unit preferences saved', undefined, { duration: 2000 });
       this.analyticsService.logEvent('unit_setup_complete', { preset: this.selectedUnitSetupPreset });
     } catch (error) {
@@ -380,6 +468,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
       this.logger.error('[DashboardComponent] Failed to apply unit setup preset', error);
     } finally {
       this.isSavingUnitSetup = false;
+      this.syncDashboardActionPromptState();
     }
   }
 
@@ -407,7 +496,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
       });
       this.user.settings = this.user.settings || {} as any;
       this.user.settings.appSettings = nextAppSettings as any;
-      this.syncUnitSetupPromptState();
+      this.syncDashboardActionPromptState();
       this.snackBar.open('You can change units in Settings anytime', undefined, { duration: 2500 });
       this.analyticsService.logEvent('unit_setup_skip');
     } catch (error) {
@@ -415,6 +504,93 @@ export class DashboardComponent implements OnInit, OnDestroy {
       this.logger.error('[DashboardComponent] Failed to dismiss unit setup prompt', error);
     } finally {
       this.isSavingUnitSetup = false;
+      this.syncDashboardActionPromptState();
+    }
+  }
+
+  async dismissFirstActivityUploadPrompt(): Promise<void> {
+    if (!this.user) {
+      return;
+    }
+
+    this.isDismissingFirstActivityUploadPrompt = true;
+    this.firstActivityUploadPromptError = null;
+    this.syncDashboardActionPromptState();
+
+    try {
+      this.user.settings = this.user.settings || {} as any;
+      const nextAppSettings = {
+        ...(this.user.settings.appSettings || {}),
+      } as AppAppSettingsInterface;
+      const dismissedState = markDashboardActionPromptDismissed(
+        nextAppSettings,
+        DASHBOARD_ACTION_PROMPT_FIRST_ACTIVITY_UPLOAD_ID,
+        DASHBOARD_ACTION_PROMPT_FIRST_ACTIVITY_UPLOAD_SOURCE,
+        Date.now(),
+      );
+
+      await this.userService.updateUserProperties(this.user, {
+        settings: {
+          appSettings: {
+            dashboardActionPrompts: {
+              [DASHBOARD_ACTION_PROMPT_FIRST_ACTIVITY_UPLOAD_ID]: dismissedState,
+            },
+          },
+        },
+      });
+      this.user.settings.appSettings = nextAppSettings;
+      this.analyticsService.logEvent('dashboard_action_prompt_dismiss', {
+        prompt_id: DASHBOARD_ACTION_PROMPT_FIRST_ACTIVITY_UPLOAD_ID,
+      });
+    } catch (error) {
+      this.firstActivityUploadPromptError = 'Could not save this choice.';
+      this.logger.error('[DashboardComponent] Failed to dismiss first activity prompt', error);
+    } finally {
+      this.isDismissingFirstActivityUploadPrompt = false;
+      this.syncDashboardActionPromptState();
+    }
+  }
+
+  async dismissConnectActivityServicePrompt(): Promise<void> {
+    if (!this.user) {
+      return;
+    }
+
+    this.isDismissingConnectActivityServicePrompt = true;
+    this.connectActivityServicePromptError = null;
+    this.syncDashboardActionPromptState();
+
+    try {
+      this.user.settings = this.user.settings || {} as any;
+      const nextAppSettings = {
+        ...(this.user.settings.appSettings || {}),
+      } as AppAppSettingsInterface;
+      const dismissedState = markDashboardActionPromptDismissed(
+        nextAppSettings,
+        DASHBOARD_ACTION_PROMPT_CONNECT_ACTIVITY_SERVICE_ID,
+        DASHBOARD_ACTION_PROMPT_CONNECT_ACTIVITY_SERVICE_SOURCE,
+        Date.now(),
+      );
+
+      await this.userService.updateUserProperties(this.user, {
+        settings: {
+          appSettings: {
+            dashboardActionPrompts: {
+              [DASHBOARD_ACTION_PROMPT_CONNECT_ACTIVITY_SERVICE_ID]: dismissedState,
+            },
+          },
+        },
+      });
+      this.user.settings.appSettings = nextAppSettings;
+      this.analyticsService.logEvent('dashboard_action_prompt_dismiss', {
+        prompt_id: DASHBOARD_ACTION_PROMPT_CONNECT_ACTIVITY_SERVICE_ID,
+      });
+    } catch (error) {
+      this.connectActivityServicePromptError = 'Could not save this choice.';
+      this.logger.error('[DashboardComponent] Failed to dismiss service connection prompt', error);
+    } finally {
+      this.isDismissingConnectActivityServicePrompt = false;
+      this.syncDashboardActionPromptState();
     }
   }
 
@@ -435,8 +611,131 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.logPerf('events_listener_emit', emitStart, { incomingEvents: eventsArray?.length || 0 });
   }
 
-  private syncUnitSetupPromptState(): void {
+  private syncDashboardActionPromptState(): void {
     this.showUnitSetupPrompt = shouldShowUnitSetupPrompt(this.user, this.targetUser);
+    this.dashboardActionPrompts = buildDashboardActionPromptViewModels({
+      showUnitSetupPrompt: this.showUnitSetupPrompt,
+      unitSetupBusy: this.isSavingUnitSetup,
+      unitSetupError: this.unitSetupError,
+      showFirstActivityUploadPrompt: this.shouldShowFirstActivityUploadPrompt(),
+      firstActivityUploadBusy: this.isDismissingFirstActivityUploadPrompt,
+      firstActivityUploadError: this.firstActivityUploadPromptError,
+      showConnectActivityServicePrompt: this.shouldShowConnectActivityServicePrompt(),
+      connectActivityServiceBusy: this.isDismissingConnectActivityServicePrompt,
+      connectActivityServiceError: this.connectActivityServicePromptError,
+    });
+  }
+
+  private watchFirstActivityUploadPromptState(): void {
+    this.authService.user$.pipe(
+      switchMap((user: AppUserInterface | null) => {
+        this.uploadedActivityCount = null;
+        this.syncDashboardActionPromptState();
+
+        if (!this.shouldEvaluateFirstActivityUploadPrompt(user)) {
+          return of(null);
+        }
+
+        return from(this.eventService.getEventCount(user)).pipe(
+          catchError(error => {
+            this.logger.warn('[DashboardComponent] Failed to read activity count for dashboard prompt', {
+              userID: user.uid,
+            }, error);
+            return of(null);
+          }),
+        );
+      }),
+      takeUntilDestroyed(this.destroyRef),
+    ).subscribe((activityCount) => {
+      this.uploadedActivityCount = activityCount;
+      this.syncDashboardActionPromptState();
+    });
+  }
+
+  private watchActivityServiceConnectionPromptState(): void {
+    this.authService.user$.pipe(
+      switchMap((user: AppUserInterface | null) => {
+        if (!this.shouldEvaluateActivityServiceConnectionPrompt(user)) {
+          return of(null);
+        }
+
+        return this.userService.watchHasAnyActivityServiceConnection(user);
+      }),
+      takeUntilDestroyed(this.destroyRef),
+    ).subscribe((hasConnection) => {
+      this.hasActivityServiceConnection = hasConnection;
+      this.syncDashboardActionPromptState();
+    });
+  }
+
+  private shouldEvaluateFirstActivityUploadPrompt(user: AppUserInterface | null | undefined): user is AppUserInterface {
+    if (!user || !this.isOwnerDashboard(user)) {
+      return false;
+    }
+
+    if (AppUserUtilities.hasPaidAccessUser(user, user.admin === true)) {
+      return false;
+    }
+
+    return !isDashboardActionPromptDismissed(
+      user.settings?.appSettings,
+      DASHBOARD_ACTION_PROMPT_FIRST_ACTIVITY_UPLOAD_ID,
+    );
+  }
+
+  private shouldShowFirstActivityUploadPrompt(): boolean {
+    if (!this.user || this.uploadedActivityCount !== 0) {
+      return false;
+    }
+
+    return this.shouldEvaluateFirstActivityUploadPrompt(this.user);
+  }
+
+  private shouldEvaluateActivityServiceConnectionPrompt(user: AppUserInterface | null | undefined): user is AppUserInterface {
+    if (!user || !this.isOwnerDashboard(user)) {
+      return false;
+    }
+
+    if (!AppUserUtilities.hasProAccess(user, user.admin === true)) {
+      return false;
+    }
+
+    return !isDashboardActionPromptDismissed(
+      user.settings?.appSettings,
+      DASHBOARD_ACTION_PROMPT_CONNECT_ACTIVITY_SERVICE_ID,
+    );
+  }
+
+  private shouldShowConnectActivityServicePrompt(): boolean {
+    if (!this.user || this.hasActivityServiceConnection !== false) {
+      return false;
+    }
+
+    return this.shouldEvaluateActivityServiceConnectionPrompt(this.user);
+  }
+
+  private isOwnerDashboard(user: AppUserInterface): boolean {
+    return !this.targetUser || this.targetUser.uid === user.uid;
+  }
+
+  private async openUnitSettings(): Promise<void> {
+    await this.router.navigate(['/settings'], {
+      queryParams: { section: 'units' },
+    });
+  }
+
+  private async openServiceProvider(serviceName: ServiceNames | string | undefined): Promise<void> {
+    if (!serviceName) {
+      return;
+    }
+
+    await this.router.navigate(['/services'], {
+      queryParams: { serviceName },
+    });
+  }
+
+  private async openSubscriptions(): Promise<void> {
+    await this.router.navigate(['/subscriptions']);
   }
 
   private areEventsEquivalentByIdentity(previousEvents: EventInterface[] = [], currentEvents: EventInterface[] = []): boolean {
