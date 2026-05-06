@@ -6,18 +6,11 @@
       <mat-icon aria-hidden="true">today</mat-icon>
       <div class="dashboard-section-title-copy">
         <h2 id="dashboard-today-title">Today</h2>
-        <div class="dashboard-section-subtitle">{{ todayDateSubtitle }}</div>
+        <div class="dashboard-section-subtitle">
+          {{ todayDateSubtitle }}@if (eventStats && displayedEventStatsTotal !== null) {<span>. {{ displayedEventStatsTotal | compactCount }} uploaded activities.</span>}
+        </div>
       </div>
     </div>
-    @if (eventStats) {
-    <div class="dashboard-uploaded-activities-stat" aria-label="Uploaded activities">
-      <mat-icon aria-hidden="true">fitness_center</mat-icon>
-      <div class="dashboard-uploaded-activities-copy">
-        <span class="dashboard-uploaded-activities-value">{{ eventStats.total | number }}</span>
-        <span class="dashboard-uploaded-activities-label">Uploaded activities</span>
-      </div>
-    </div>
-    }
     @if (showActions) {
     <div class="dashboard-section-actions">
       <button mat-flat-button class="qs-mat-primary dashboard-manager-button dashboard-manager-button-desktop" appHapticTap

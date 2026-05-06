@@ -33,6 +33,7 @@ import {
 import { SummariesComponent } from './summaries.component';
 import { DashboardTileBoardComponent } from './dashboard-tile-board/dashboard-tile-board.component';
 import { DashboardTileCellComponent } from './dashboard-tile-cell/dashboard-tile-cell.component';
+import { CompactCountPipe } from '../../helpers/compact-count.pipe';
 
 describe('SummariesComponent', () => {
   let component: SummariesComponent;
@@ -139,6 +140,7 @@ describe('SummariesComponent', () => {
 
     await TestBed.configureTestingModule({
       declarations: [SummariesComponent, DashboardTileBoardComponent, DashboardTileCellComponent],
+      imports: [CompactCountPipe],
       schemas: [NO_ERRORS_SCHEMA],
       providers: [
         { provide: AppThemeService, useValue: mockThemeService },
@@ -242,21 +244,22 @@ describe('SummariesComponent', () => {
     expect(mainMap?.classList.contains('qs-glass-card-panel')).toBe(false);
   });
 
-  it('renders uploaded activities totals in the Today header', () => {
+  it('renders uploaded activities totals inline in the Today subtitle', () => {
     component.user = { uid: 'user-1', settings: { dashboardSettings: { tiles: [] } } } as any;
     component.eventUser = component.user;
     component.showActions = true;
     component.eventStats = {
-      total: 1234,
+      total: 10_120,
     };
+    component.displayedEventStatsTotal = 10_120;
 
     fixture.detectChanges();
 
     const nativeElement = fixture.nativeElement as HTMLElement;
-    const stat = nativeElement.querySelector('.dashboard-uploaded-activities-stat');
-    expect(stat).not.toBeNull();
-    expect(stat?.textContent).toContain('1,234');
-    expect(stat?.textContent).toContain('Uploaded activities');
+    const subtitle = nativeElement.querySelector('.dashboard-section-subtitle');
+    expect(nativeElement.querySelector('.dashboard-uploaded-activities-stat')).toBeNull();
+    expect(subtitle?.querySelector('mat-icon')).toBeNull();
+    expect(subtitle?.textContent).toContain('10.12K uploaded activities.');
   });
 
   it('loads event stats only for the signed-in user dashboard', () => {
@@ -278,6 +281,61 @@ describe('SummariesComponent', () => {
     (component as any).syncEventStatsSubscription();
 
     expect(component.eventStats).toBeNull();
+  });
+
+  it('counts uploaded activities up to the loaded total', () => {
+    const originalRequestAnimationFrame = window.requestAnimationFrame;
+    const originalCancelAnimationFrame = window.cancelAnimationFrame;
+    const animationCallbacks: FrameRequestCallback[] = [];
+    const requestAnimationFrameMock = vi.fn((callback: FrameRequestCallback) => {
+      animationCallbacks.push(callback);
+      return animationCallbacks.length;
+    });
+    const cancelAnimationFrameMock = vi.fn();
+
+    Object.defineProperty(window, 'requestAnimationFrame', {
+      configurable: true,
+      writable: true,
+      value: requestAnimationFrameMock,
+    });
+    Object.defineProperty(window, 'cancelAnimationFrame', {
+      configurable: true,
+      writable: true,
+      value: cancelAnimationFrameMock,
+    });
+
+    try {
+      mockEventStatsService.loadUserEventStats.mockReturnValueOnce(of({
+        total: 12,
+      }));
+      component.user = { uid: 'user-1', settings: { dashboardSettings: { tiles: [] } } } as any;
+      component.eventUser = { uid: 'user-1' } as any;
+      component.showActions = true;
+
+      (component as any).syncEventStatsSubscription();
+
+      expect(component.displayedEventStatsTotal).toBe(0);
+      expect(requestAnimationFrameMock).toHaveBeenCalled();
+
+      const initialCallbacks = animationCallbacks.splice(0);
+      initialCallbacks.forEach(callback => callback(0));
+      expect(component.displayedEventStatsTotal).toBe(0);
+
+      const completionCallbacks = animationCallbacks.splice(0);
+      completionCallbacks.forEach(callback => callback(650));
+      expect(component.displayedEventStatsTotal).toBe(12);
+    } finally {
+      Object.defineProperty(window, 'requestAnimationFrame', {
+        configurable: true,
+        writable: true,
+        value: originalRequestAnimationFrame,
+      });
+      Object.defineProperty(window, 'cancelAnimationFrame', {
+        configurable: true,
+        writable: true,
+        value: originalCancelAnimationFrame,
+      });
+    }
   });
 
   it('squares loading shades inside the joined KPI lane surface', () => {

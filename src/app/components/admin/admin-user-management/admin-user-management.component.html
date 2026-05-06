@@ -113,7 +113,7 @@
                 </div>
                 @if (userStats) {
                 @if (userStats.events.total !== null) {
-                <div class="app-stat-value">{{ userStats.events.total | number }}</div>
+                <div class="app-stat-value">{{ userStats.events.total | compactCount }}</div>
                 } @else {
                 <div class="app-stat-value app-stat-value-muted">-</div>
                 }
@@ -281,7 +281,7 @@
                         <th mat-header-cell *matHeaderCellDef> Events </th>
                         <td mat-cell *matCellDef="let user">
                             @if (user.eventStats?.total !== null && user.eventStats?.total !== undefined) {
-                            <span>{{ user.eventStats?.total | number }}</span>
+                            <span>{{ user.eventStats?.total | compactCount }}</span>
                             } @else {
                             <span class="text-detail-muted">-</span>
                             }

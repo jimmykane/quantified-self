@@ -153,6 +153,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   public sleepTrendCanNavigateNewer = false;
   public todayDateSubtitle = '';
   public eventStats: AppEventStats | null = null;
+  public displayedEventStatsTotal: number | null = null;
 
 
   private appThemeSubscription: Subscription | null = null;
@@ -162,6 +163,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   private sleepListenerKey: string | null = null;
   private eventStatsSubscription: Subscription | null = null;
   private eventStatsUserUID: string | null = null;
+  private eventStatsAnimationFrame: number | null = null;
   private dashboardAutoTileSubscription: Subscription | null = null;
   private dashboardAutoTileListenerKey: string | null = null;
   private dashboardAutoTileUser: AppUserInterface | null = null;
@@ -676,9 +678,10 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     const uid = this.resolveOwnDashboardUID();
     if (!uid) {
       const hadEventStatsState = this.eventStats !== null
+        || this.displayedEventStatsTotal !== null
         || this.eventStatsUserUID !== null
         || this.eventStatsSubscription !== null;
-      this.eventStats = null;
+      this.resetEventStatsState();
       this.eventStatsUserUID = null;
       if (this.eventStatsSubscription) {
         this.eventStatsSubscription.unsubscribe();
@@ -699,15 +702,85 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       this.eventStatsSubscription = null;
     }
 
-    this.eventStats = null;
+    this.resetEventStatsState();
     this.eventStatsUserUID = uid;
     this.eventStatsSubscription = this.eventStatsService.loadUserEventStats(this.user).subscribe((stats) => {
       if (equal(this.eventStats, stats)) {
         return;
       }
-      this.eventStats = stats;
-      this.changeDetector.markForCheck();
+      this.applyEventStats(stats);
     });
+  }
+
+  private applyEventStats(stats: AppEventStats | null): void {
+    this.eventStats = stats;
+    this.animateEventStatsTotal(stats?.total ?? null);
+    this.changeDetector.markForCheck();
+  }
+
+  private resetEventStatsState(): void {
+    this.cancelEventStatsAnimation();
+    this.eventStats = null;
+    this.displayedEventStatsTotal = null;
+  }
+
+  private animateEventStatsTotal(targetTotal: number | null): void {
+    this.cancelEventStatsAnimation();
+
+    if (targetTotal === null || targetTotal === undefined) {
+      this.displayedEventStatsTotal = null;
+      return;
+    }
+
+    const normalizedTarget = Math.max(0, Math.floor(targetTotal));
+    const startValue = this.displayedEventStatsTotal ?? 0;
+    const reducedMotion = typeof window !== 'undefined'
+      && typeof window.matchMedia === 'function'
+      && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const canAnimate = typeof window !== 'undefined'
+      && typeof window.requestAnimationFrame === 'function'
+      && typeof window.cancelAnimationFrame === 'function';
+
+    if (reducedMotion || !canAnimate || startValue === normalizedTarget) {
+      this.displayedEventStatsTotal = normalizedTarget;
+      return;
+    }
+
+    const durationMs = 650;
+    let startedAtMs: number | null = null;
+    this.displayedEventStatsTotal = startValue;
+
+    const step = (timestampMs: number) => {
+      if (startedAtMs === null) {
+        startedAtMs = timestampMs;
+      }
+
+      const progress = Math.min(1, (timestampMs - startedAtMs) / durationMs);
+      const easedProgress = 1 - Math.pow(1 - progress, 3);
+      this.displayedEventStatsTotal = Math.round(
+        startValue + ((normalizedTarget - startValue) * easedProgress)
+      );
+      this.changeDetector.markForCheck();
+
+      if (progress < 1) {
+        this.eventStatsAnimationFrame = window.requestAnimationFrame(step);
+      } else {
+        this.eventStatsAnimationFrame = null;
+      }
+    };
+
+    this.eventStatsAnimationFrame = window.requestAnimationFrame(step);
+  }
+
+  private cancelEventStatsAnimation(): void {
+    if (
+      this.eventStatsAnimationFrame !== null
+      && typeof window !== 'undefined'
+      && typeof window.cancelAnimationFrame === 'function'
+    ) {
+      window.cancelAnimationFrame(this.eventStatsAnimationFrame);
+    }
+    this.eventStatsAnimationFrame = null;
   }
 
   private resolveOwnDashboardUID(): string | null {
@@ -1303,7 +1376,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       this.eventStatsSubscription.unsubscribe();
       this.eventStatsSubscription = null;
       this.eventStatsUserUID = null;
-      this.eventStats = null;
+      this.resetEventStatsState();
     }
     this.unsubscribeDashboardAutoTileSubscription();
     this.unsubscribeTileEventSubscriptions();

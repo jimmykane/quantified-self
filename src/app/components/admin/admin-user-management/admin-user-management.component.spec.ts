@@ -27,6 +27,7 @@ import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { ActivatedRoute, Router } from '@angular/router';
 import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { EChartsLoaderService } from '../../../services/echarts-loader.service';
+import { CompactCountPipe } from '../../../helpers/compact-count.pipe';
 
 // Mock canvas for charts
 Object.defineProperty(HTMLCanvasElement.prototype, 'getContext', {
@@ -285,7 +286,8 @@ describe('AdminUserManagementComponent', () => {
                 MatIconModule,
                 MatProgressSpinnerModule,
                 NoopAnimationsModule,
-                FormsModule
+                FormsModule,
+                CompactCountPipe
             ],
             providers: [
                 { provide: AdminService, useValue: adminServiceSpy },
@@ -379,7 +381,7 @@ describe('AdminUserManagementComponent', () => {
 
         const nativeElement = fixture.nativeElement as HTMLElement;
         expect(nativeElement.textContent).toContain('Total Events');
-        expect(nativeElement.textContent).toContain('1,000,000');
+        expect(nativeElement.textContent).toContain('1M');
         expect(nativeElement.textContent).toContain('125');
     });
 

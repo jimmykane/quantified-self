@@ -632,22 +632,7 @@ describe('Firestore Security Rules', () => {
                 }));
             });
 
-            it('should allow owner updating the legacy manual merge flag', async () => {
-                const db = testEnv.authenticatedContext(userId).firestore();
-                await testEnv.withSecurityRulesDisabled(async (context) => {
-                    await context.firestore().doc(`users/${userId}/events/${eventId}`).set({
-                        name: 'Morning Run',
-                        privacy: 'private',
-                        isMerge: false
-                    });
-                });
-
-                await assertSucceeds(db.collection(`users/${userId}/events`).doc(eventId).update({
-                    isMerge: true
-                }));
-            });
-
-            it('should deny owner updating server-owned merge type metadata', async () => {
+            it('should deny owner updating merge classification metadata', async () => {
                 const db = testEnv.authenticatedContext(userId).firestore();
                 await testEnv.withSecurityRulesDisabled(async (context) => {
                     await context.firestore().doc(`users/${userId}/events/${eventId}`).set({

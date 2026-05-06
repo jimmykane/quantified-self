@@ -3,7 +3,6 @@ import { Router } from '@angular/router';
 import { EventInterface } from '@sports-alliance/sports-lib';
 import { AppEventService } from '../../services/app.event.service';
 import { AppFileService } from '../../services/app.file.service';
-import { EventFormComponent } from '../event-form/event.form.component';
 import { User } from '@sports-alliance/sports-lib';
 import { ConfirmationDialogComponent, ConfirmationDialogData } from '../confirmation-dialog/confirmation-dialog.component';
 import { take } from 'rxjs/operators';
@@ -97,17 +96,6 @@ export class EventActionsComponent implements OnInit, OnDestroy {
 
   hasPositionalData() {
     return this.event.getStat(DataStartPosition.type) || this.event.getActivities().filter(activity => activity.hasPositionData()).length > 0
-  }
-
-  editEvent() {
-    const dialogRef = this.dialog.open(EventFormComponent, {
-      width: '75vw',
-      disableClose: false,
-      data: {
-        event: this.event,
-        user: this.user
-      },
-    });
   }
 
   public canReimportFromOriginalFile(): boolean {
