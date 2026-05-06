@@ -171,6 +171,7 @@ export const receiveGarminAPISleepData = functions.region('europe-west2').runWit
                 providerUserId,
                 callbackURL: trustedCallbackURL,
                 dedupeKey: trustedCallbackURL,
+                dispatchImmediately: true,
             });
         }
         const refs = await Promise.all(queueItems.map((queueItem) => addSleepSyncQueueItem(queueItem)));
@@ -228,6 +229,7 @@ export const receiveSuuntoAppSleepData = functions.region('europe-west2').runWit
             providerUserId,
             payload: { samples },
             dedupeKey: buildSuuntoSleepDedupeKey(providerUserId, samples),
+            dispatchImmediately: true,
         });
         logger.info(`[SleepSync][Suunto] Queued ${samples.length} sleep samples for ${providerUserId}`);
         res.status(200).send();

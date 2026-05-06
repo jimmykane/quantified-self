@@ -19,6 +19,7 @@ const hoisted = vi.hoisted(() => ({
     markSleepSyncError: vi.fn(),
     updateSleepSyncState: vi.fn(),
     upsertSleepSessions: vi.fn(),
+    enqueueSleepSyncTask: vi.fn(),
 }));
 
 vi.mock('firebase-functions/logger', () => ({
@@ -103,6 +104,14 @@ vi.mock('../request-helper', () => ({
     get: hoisted.requestGet,
 }));
 
+vi.mock('../utils', async () => {
+    const actual = await vi.importActual<typeof import('../utils')>('../utils');
+    return {
+        ...actual,
+        enqueueSleepSyncTask: hoisted.enqueueSleepSyncTask,
+    };
+});
+
 import { addSleepSyncQueueItem, processSleepSyncQueueItem } from './queue';
 
 describe('sleep queue', () => {
@@ -123,6 +132,7 @@ describe('sleep queue', () => {
         hoisted.markSleepSyncError.mockResolvedValue(undefined);
         hoisted.updateSleepSyncState.mockResolvedValue(undefined);
         hoisted.upsertSleepSessions.mockResolvedValue({ written: 0, skipped: 0 });
+        hoisted.enqueueSleepSyncTask.mockResolvedValue(true);
     });
 
     it('uses deterministic queue ids for duplicated webhook or poll payloads', async () => {
@@ -148,6 +158,35 @@ describe('sleep queue', () => {
             providerUserId: 'suunto-user-1',
             payload: { samples: [{ SleepId: 123 }] },
         }), { merge: false });
+    });
+
+    it('can dispatch webhook queue items immediately after writing the queue document', async () => {
+        vi.useFakeTimers();
+        vi.setSystemTime(new Date('2026-05-06T05:30:00.000Z'));
+        try {
+            await addSleepSyncQueueItem({
+                type: 'suunto_webhook',
+                provider: 'SuuntoApp',
+                providerUserId: 'suunto-user-1',
+                payload: { samples: [{ SleepId: 123 }] },
+                dedupeKey: 'suunto-user-1:123',
+                dispatchImmediately: true,
+            });
+
+            expect(hoisted.enqueueSleepSyncTask).toHaveBeenCalledWith(
+                hoisted.docIdValues[0],
+                Date.now(),
+            );
+            expect(hoisted.docUpdate).toHaveBeenCalledWith({
+                dispatchedToCloudTask: Date.now(),
+            });
+            expect(hoisted.docSet.mock.invocationCallOrder[0])
+                .toBeLessThan(hoisted.enqueueSleepSyncTask.mock.invocationCallOrder[0]);
+            expect(hoisted.enqueueSleepSyncTask.mock.invocationCallOrder[0])
+                .toBeLessThan(hoisted.docUpdate.mock.invocationCallOrder[0]);
+        } finally {
+            vi.useRealTimers();
+        }
     });
 
     it('marks disabled provider queue items processed without resolving tokens', async () => {

@@ -13,7 +13,7 @@ import {
     SleepSyncQueueItemType,
 } from '../queue/queue-item.interface';
 import { getExpireAtTimestamp, TTL_CONFIG } from '../shared/ttl-config';
-import { generateIDFromParts } from '../utils';
+import { enqueueSleepSyncTask, generateIDFromParts } from '../utils';
 import { SLEEP_SYNC_QUEUE_COLLECTION_NAME } from './constants';
 import {
     mapCorosDailySleep,
@@ -46,6 +46,7 @@ interface AddSleepSyncQueueItemInput {
     rangeStartMs?: number;
     rangeEndMs?: number;
     dedupeKey?: string;
+    dispatchImmediately?: boolean;
 }
 
 function queueCollection(): admin.firestore.CollectionReference {
@@ -97,7 +98,42 @@ export async function addSleepSyncQueueItem(input: AddSleepSyncQueueItemInput): 
         expireAt: getExpireAtTimestamp(TTL_CONFIG.QUEUE_ITEM_IN_DAYS),
         ...compactQueuePayload(input),
     }, { merge: false });
+    if (input.dispatchImmediately) {
+        const wasTaskEnqueued = await enqueueSleepSyncTask(queueId, nowMs);
+        if (wasTaskEnqueued) {
+            await markSleepQueueItemDispatched(docRef, queueId, nowMs);
+        }
+    }
     return docRef;
+}
+
+function isFirestoreNotFoundError(error: unknown): boolean {
+    const code = (error as any)?.code;
+    const message = `${(error as any)?.message || ''}`;
+    return code === 5 || code === 'not-found' || code === 'NOT_FOUND' || message.includes('NOT_FOUND') || message.includes('No document to update');
+}
+
+async function markSleepQueueItemDispatched(
+    queueItemDocument: admin.firestore.DocumentReference,
+    queueItemId: string,
+    dispatchedAtMs: number,
+): Promise<void> {
+    try {
+        await queueItemDocument.update({ dispatchedToCloudTask: dispatchedAtMs });
+    } catch (error) {
+        if (!isFirestoreNotFoundError(error)) {
+            throw error;
+        }
+
+        const failedJobSnapshot = await admin.firestore().collection('failed_jobs').doc(queueItemId).get();
+        const failedJob = failedJobSnapshot.exists ? failedJobSnapshot.data() as { originalCollection?: unknown } : null;
+        if (failedJob?.originalCollection === SLEEP_SYNC_QUEUE_COLLECTION_NAME) {
+            logger.info(`[SleepSync] Queue item ${queueItemId} was already moved to failed_jobs before dispatch timestamp update.`);
+            return;
+        }
+
+        throw error;
+    }
 }
 
 function isTokenFromCollection(tokenSnapshot: TokenSnapshot, collectionName: string): boolean {
