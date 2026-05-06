@@ -195,7 +195,8 @@ describe('AppThemeService', () => {
         it('should defer the local theme update when an animated origin is provided', async () => {
             const mockUser = {
                 settings: {
-                    appSettings: { theme: AppThemes.Normal }
+                    appSettings: { theme: AppThemes.Normal, unitSetupCompleted: true },
+                    dashboardSettings: { tiles: [] }
                 }
             };
 
@@ -205,7 +206,18 @@ describe('AppThemeService', () => {
 
             const theme = await firstValueFrom(service.getAppTheme());
             expect(theme).toBe(AppThemes.Normal);
-            expect(mockUserService.updateUserProperties).toHaveBeenCalled();
+            expect(mockUserService.updateUserProperties).toHaveBeenCalledWith(
+                expect.any(Object),
+                {
+                    settings: {
+                        appSettings: {
+                            theme: AppThemes.Dark,
+                            themePreference: AppThemes.Dark,
+                        },
+                    },
+                },
+            );
+            expect(mockUserService.updateUserProperties.mock.calls[0][1].settings.dashboardSettings).toBeUndefined();
         });
     });
 

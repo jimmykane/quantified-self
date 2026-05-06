@@ -1,6 +1,5 @@
 <button mat-icon-button class="activity-types-filter-button" [class.is-active]="selectedActivityTypes.length > 0"
-  appHapticTap [matMenuTriggerFor]="activityMenu" [disabled]="disabled" [matTooltip]="activityFilterLabel"
-  matTooltipPosition="below" [attr.aria-label]="ariaLabel">
+  appHapticTap [matMenuTriggerFor]="activityMenu" [disabled]="disabled" [attr.aria-label]="activityFilterAriaLabel">
   <mat-icon>filter_alt</mat-icon>
 </button>
 

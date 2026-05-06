@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { ServiceNames } from '@sports-alliance/sports-lib';
 import { QueueResult } from '../queue-utils';
 
 const hoisted = vi.hoisted(() => ({
@@ -13,12 +14,15 @@ const hoisted = vi.hoisted(() => ({
     tokenRootWhere: vi.fn(),
     tokenRootLimit: vi.fn(),
     tokenRootGet: vi.fn(),
+    collectionGroupWhere: vi.fn(),
+    collectionGroupLimit: vi.fn(),
     collectionGroupGet: vi.fn(),
     getTokenData: vi.fn(),
     requestGet: vi.fn(),
     markSleepSyncError: vi.fn(),
     updateSleepSyncState: vi.fn(),
     upsertSleepSessions: vi.fn(),
+    enqueueSleepSyncTask: vi.fn(),
 }));
 
 vi.mock('firebase-functions/logger', () => ({
@@ -43,10 +47,12 @@ vi.mock('firebase-admin', () => {
     hoisted.tokenRootLimit.mockReturnValue(tokenRootQuery);
 
     const collectionGroupQuery: any = {
-        where: vi.fn().mockReturnThis(),
-        limit: vi.fn().mockReturnThis(),
+        where: hoisted.collectionGroupWhere,
+        limit: hoisted.collectionGroupLimit,
         get: hoisted.collectionGroupGet,
     };
+    hoisted.collectionGroupWhere.mockReturnValue(collectionGroupQuery);
+    hoisted.collectionGroupLimit.mockReturnValue(collectionGroupQuery);
 
     const firestoreFn = vi.fn(() => ({
         collection: vi.fn((name: string) => ({
@@ -103,6 +109,14 @@ vi.mock('../request-helper', () => ({
     get: hoisted.requestGet,
 }));
 
+vi.mock('../utils', async () => {
+    const actual = await vi.importActual<typeof import('../utils')>('../utils');
+    return {
+        ...actual,
+        enqueueSleepSyncTask: hoisted.enqueueSleepSyncTask,
+    };
+});
+
 import { addSleepSyncQueueItem, processSleepSyncQueueItem } from './queue';
 
 describe('sleep queue', () => {
@@ -123,6 +137,7 @@ describe('sleep queue', () => {
         hoisted.markSleepSyncError.mockResolvedValue(undefined);
         hoisted.updateSleepSyncState.mockResolvedValue(undefined);
         hoisted.upsertSleepSessions.mockResolvedValue({ written: 0, skipped: 0 });
+        hoisted.enqueueSleepSyncTask.mockResolvedValue(true);
     });
 
     it('uses deterministic queue ids for duplicated webhook or poll payloads', async () => {
@@ -148,6 +163,35 @@ describe('sleep queue', () => {
             providerUserId: 'suunto-user-1',
             payload: { samples: [{ SleepId: 123 }] },
         }), { merge: false });
+    });
+
+    it('can dispatch webhook queue items immediately after writing the queue document', async () => {
+        vi.useFakeTimers();
+        vi.setSystemTime(new Date('2026-05-06T05:30:00.000Z'));
+        try {
+            await addSleepSyncQueueItem({
+                type: 'suunto_webhook',
+                provider: 'SuuntoApp',
+                providerUserId: 'suunto-user-1',
+                payload: { samples: [{ SleepId: 123 }] },
+                dedupeKey: 'suunto-user-1:123',
+                dispatchImmediately: true,
+            });
+
+            expect(hoisted.enqueueSleepSyncTask).toHaveBeenCalledWith(
+                hoisted.docIdValues[0],
+                Date.now(),
+            );
+            expect(hoisted.docUpdate).toHaveBeenCalledWith({
+                dispatchedToCloudTask: Date.now(),
+            });
+            expect(hoisted.docSet.mock.invocationCallOrder[0])
+                .toBeLessThan(hoisted.enqueueSleepSyncTask.mock.invocationCallOrder[0]);
+            expect(hoisted.enqueueSleepSyncTask.mock.invocationCallOrder[0])
+                .toBeLessThan(hoisted.docUpdate.mock.invocationCallOrder[0]);
+        } finally {
+            vi.useRealTimers();
+        }
     });
 
     it('marks disabled provider queue items processed without resolving tokens', async () => {
@@ -495,9 +539,107 @@ describe('sleep queue', () => {
         expect(hoisted.docUpdate).not.toHaveBeenCalled();
     });
 
+    it('moves queue items with unresolved provider users to DLQ instead of retrying Cloud Tasks', async () => {
+        hoisted.allowedUserIDs.splice(0, hoisted.allowedUserIDs.length);
+        hoisted.collectionGroupGet.mockResolvedValue({
+            docs: [],
+            empty: true,
+        });
+        const queueRef = {
+            parent: { id: 'sleepSyncQueue' },
+        };
+
+        const result = await processSleepSyncQueueItem({
+            id: 'suunto-sleep-no-token',
+            dateCreated: 1_700_000_000_000,
+            dispatchedToCloudTask: 1_700_000_000_500,
+            processed: false,
+            provider: 'SuuntoApp',
+            providerUserId: 'unknown-suunto-user',
+            retryCount: 0,
+            type: 'suunto_webhook',
+            payload: { samples: [{ SleepId: 123 }] },
+            ref: queueRef as any,
+        });
+
+        expect(result).toBe(QueueResult.MovedToDLQ);
+        expect(hoisted.batchSet).toHaveBeenCalledWith(expect.objectContaining({
+            id: 'suunto-sleep-no-token',
+        }), expect.objectContaining({
+            originalCollection: 'sleepSyncQueue',
+            context: 'NO_TOKEN_FOUND',
+            error: 'No SuuntoApp token found for unknown-suunto-user',
+        }));
+        expect(hoisted.batchDelete).toHaveBeenCalledWith(queueRef);
+        expect(hoisted.docUpdate).not.toHaveBeenCalled();
+    });
+
+    it('resolves all-user Suunto queue items with an indexed userName and serviceName token query', async () => {
+        hoisted.allowedUserIDs.splice(0, hoisted.allowedUserIDs.length);
+        hoisted.collectionGroupGet.mockResolvedValue({
+            docs: [{
+                id: 'suunto-token-1',
+                data: () => ({
+                    userName: 'suunto-user-1',
+                    serviceName: 'Suunto app',
+                }),
+                ref: {
+                    parent: {
+                        parent: {
+                            id: 'user-id',
+                            parent: {
+                                id: 'suuntoAppAccessTokens',
+                            },
+                        },
+                    },
+                },
+            }],
+            empty: false,
+        });
+        hoisted.upsertSleepSessions.mockResolvedValue({ written: 1, skipped: 0 });
+        const update = vi.fn().mockResolvedValue(undefined);
+
+        const result = await processSleepSyncQueueItem({
+            id: 'suunto-sleep-token',
+            dateCreated: 1_700_000_000_000,
+            dispatchedToCloudTask: 1_700_000_000_500,
+            processed: false,
+            provider: 'SuuntoApp',
+            providerUserId: 'suunto-user-1',
+            retryCount: 0,
+            type: 'suunto_webhook',
+            payload: {
+                samples: [{
+                    entryData: {
+                        SleepId: 123,
+                        DateTime: '2026-04-28T21:51:00.000+03:00',
+                        Duration: 28_800,
+                    },
+                }],
+            },
+            ref: {
+                update,
+            } as any,
+        });
+
+        expect(result).toBe(QueueResult.Processed);
+        expect(hoisted.collectionGroupWhere).toHaveBeenCalledWith('userName', '==', 'suunto-user-1');
+        expect(hoisted.collectionGroupWhere).toHaveBeenCalledWith('serviceName', '==', ServiceNames.SuuntoApp);
+        expect(hoisted.collectionGroupLimit).toHaveBeenCalledWith(1);
+        expect(hoisted.upsertSleepSessions).toHaveBeenCalledWith('user-id', expect.any(Array));
+        expect(update).toHaveBeenCalledWith(expect.objectContaining({
+            processed: true,
+            resultStatus: 'success',
+            sessionsWritten: 1,
+        }));
+        expect(hoisted.batchSet).not.toHaveBeenCalled();
+    });
+
     it('does not resolve another users token when an allowed queue item has mismatched provider user id', async () => {
         hoisted.disabledProviders.splice(0, hoisted.disabledProviders.length, 'GarminAPI', 'COROSAPI');
-        const update = vi.fn().mockResolvedValue(undefined);
+        const queueRef = {
+            parent: { id: 'sleepSyncQueue' },
+        };
 
         const result = await processSleepSyncQueueItem({
             id: 'suunto-sleep-provider-mismatch',
@@ -510,17 +652,25 @@ describe('sleep queue', () => {
             retryCount: 0,
             type: 'suunto_webhook',
             payload: { samples: [{ SleepId: 123 }] },
-            ref: {
-                update,
-            } as any,
+            ref: queueRef as any,
         });
 
-        expect(result).toBe(QueueResult.RetryIncremented);
+        expect(result).toBe(QueueResult.MovedToDLQ);
         expect(hoisted.tokenRootWhere).toHaveBeenCalledWith('userName', '==', 'other-suunto-user');
         expect(hoisted.collectionGroupGet).not.toHaveBeenCalled();
-        expect(update).toHaveBeenCalledWith(expect.objectContaining({
-            retryCount: 1,
-            dispatchedToCloudTask: null,
+        expect(hoisted.markSleepSyncError).toHaveBeenCalledWith(
+            'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+            'SuuntoApp',
+            expect.objectContaining({
+                message: 'No SuuntoApp token found for other-suunto-user',
+            }),
+        );
+        expect(hoisted.batchSet).toHaveBeenCalledWith(expect.objectContaining({
+            id: 'suunto-sleep-provider-mismatch',
+        }), expect.objectContaining({
+            originalCollection: 'sleepSyncQueue',
+            context: 'NO_TOKEN_FOUND',
         }));
+        expect(hoisted.batchDelete).toHaveBeenCalledWith(queueRef);
     });
 });

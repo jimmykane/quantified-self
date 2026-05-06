@@ -38,6 +38,7 @@ export class TileChartActionsComponent extends TileActionsAbstractDirective impl
   @Input() chartTimeInterval: TimeIntervals;
   @Input() chartOrder: number;
   @Output() editInDashboardManager = new EventEmitter<number>();
+  private persistAutoTileStateWithNextSave = false;
 
   constructor(
     userService: AppUserService) {
@@ -59,6 +60,7 @@ export class TileChartActionsComponent extends TileActionsAbstractDirective impl
     const autoTileDescriptor = getDashboardAutoTileDescriptorForTile(tile);
     if (isDashboardRecoveryNowChartType(chartType) || autoTileDescriptor?.id === DASHBOARD_AUTO_TILE_RECOVERY_NOW_ID) {
       dashboardSettings.dismissedCuratedRecoveryNowTile = true;
+      this.persistAutoTileStateWithNextSave = true;
     }
     if (autoTileDescriptor || isDashboardSleepTrendTile(tile) || `${chartType}` === DASHBOARD_SLEEP_TREND_CHART_TYPE) {
       markDashboardAutoTileDismissed(
@@ -67,6 +69,7 @@ export class TileChartActionsComponent extends TileActionsAbstractDirective impl
         autoTileDescriptor?.source || DASHBOARD_AUTO_TILE_SLEEP_TREND_SOURCE,
         Date.now(),
       );
+      this.persistAutoTileStateWithNextSave = true;
     }
     try {
       return await super.deleteTile(event);
@@ -75,6 +78,8 @@ export class TileChartActionsComponent extends TileActionsAbstractDirective impl
       dashboardSettings.dismissedCuratedRecoveryNowTile = previousDismissedRecoveryTile;
       dashboardSettings.autoTiles = previousAutoTiles as AppDashboardSettingsInterface['autoTiles'];
       throw error;
+    } finally {
+      this.persistAutoTileStateWithNextSave = false;
     }
   }
 
@@ -96,6 +101,22 @@ export class TileChartActionsComponent extends TileActionsAbstractDirective impl
       ...tile,
       size: tile.size ? { ...tile.size } : tile.size,
     } as TileSettingsInterface));
+  }
+
+  protected override buildDashboardSettingsPersistencePatch(): Partial<AppDashboardSettingsInterface> {
+    const dashboardSettings = this.user?.settings?.dashboardSettings as AppDashboardSettingsInterface | undefined;
+    const patch = super.buildDashboardSettingsPersistencePatch();
+    if (!dashboardSettings || !this.persistAutoTileStateWithNextSave) {
+      return patch;
+    }
+
+    if (dashboardSettings.autoTiles) {
+      patch.autoTiles = dashboardSettings.autoTiles;
+    }
+    if (dashboardSettings.dismissedCuratedRecoveryNowTile !== undefined) {
+      patch.dismissedCuratedRecoveryNowTile = dashboardSettings.dismissedCuratedRecoveryNowTile;
+    }
+    return patch;
   }
 
   private cloneAutoTiles(

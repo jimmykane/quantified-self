@@ -91,6 +91,10 @@ const DASHBOARD_CURATED_CHART_DEFINITIONS: DashboardCuratedChartDefinition[] = [
     chartType: DASHBOARD_EFFICIENCY_TREND_CHART_TYPE,
     label: 'Efficiency Trend',
   },
+  {
+    chartType: DASHBOARD_SLEEP_TREND_CHART_TYPE,
+    label: 'Sleep',
+  },
 ];
 
 const DASHBOARD_KPI_CHART_DEFINITIONS: DashboardKpiChartDefinition[] = [
@@ -144,6 +148,13 @@ const DASHBOARD_KPI_CHART_DEFINITIONS: DashboardKpiChartDefinition[] = [
     label: 'Efficiency Δ (4w)',
     group: 'execution',
   },
+];
+
+const DASHBOARD_DEFAULT_KPI_CHART_TYPES: DashboardKpiChartType[] = [
+  DASHBOARD_FORM_NOW_KPI_CHART_TYPE,
+  DASHBOARD_FITNESS_CTL_KPI_CHART_TYPE,
+  DASHBOARD_FATIGUE_ATL_KPI_CHART_TYPE,
+  DASHBOARD_RAMP_RATE_KPI_CHART_TYPE,
 ];
 
 export function isDashboardRecoveryNowChartType(chartType: unknown): chartType is DashboardRecoveryNowChartType {
@@ -252,4 +263,10 @@ export function getDashboardCuratedChartDefinitions(): DashboardCuratedChartDefi
 
 export function getDashboardKpiChartDefinitions(): DashboardKpiChartDefinition[] {
   return [...DASHBOARD_KPI_CHART_DEFINITIONS];
+}
+
+export function getDefaultDashboardKpiChartDefinitions(): DashboardKpiChartDefinition[] {
+  return DASHBOARD_DEFAULT_KPI_CHART_TYPES
+    .map(chartType => DASHBOARD_KPI_CHART_DEFINITIONS.find(definition => definition.chartType === chartType))
+    .filter((definition): definition is DashboardKpiChartDefinition => !!definition);
 }

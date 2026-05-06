@@ -23,6 +23,10 @@ export class ActivityTypesFilterMenuComponent implements OnChanges {
   public activityFilterLabel = 'All activities';
   public activityTypeOptions: ReadonlyArray<ActivityTypeFilterOption> = [];
 
+  get activityFilterAriaLabel(): string {
+    return `${this.ariaLabel}: ${this.activityFilterLabel}`;
+  }
+
   private readonly activityTypeValues: ReadonlyArray<ActivityTypes> = Array.from(new Set(
     ActivityTypesHelper.getActivityTypesAsUniqueArray()
       .map(activityType => ActivityTypes[activityType as keyof typeof ActivityTypes])

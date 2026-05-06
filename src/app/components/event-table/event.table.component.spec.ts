@@ -19,6 +19,8 @@ import { User, EventInterface, DataPace, DataGradeAdjustedPace, DataSpeedAvg, Ac
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { Analytics } from 'app/firebase/analytics';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 // Mock MatTableDataSource
 vi.mock('@angular/material/table', () => ({
@@ -101,6 +103,7 @@ describe('EventTableComponent', () => {
                 selectedColumns: []
             }
         },
+        appSettings: { theme: 'dark' },
         unitSettings: { startOfTheWeek: 1 }
     } as any;
 
@@ -212,6 +215,15 @@ describe('EventTableComponent', () => {
     beforeEach(() => {
         fixture = TestBed.createComponent(EventTableComponent);
         component = fixture.componentInstance;
+        mockUser.settings = {
+            dashboardSettings: {
+                tableSettings: {
+                    selectedColumns: []
+                }
+            },
+            appSettings: { theme: 'dark' },
+            unitSettings: { startOfTheWeek: 1 }
+        } as any;
         component.user = mockUser;
         component.events = [
             new MockEvent('event1') as any,
@@ -234,6 +246,16 @@ describe('EventTableComponent', () => {
         fixture.detectChanges();
     });
 
+    const expectDashboardSettingsWrite = (dashboardSettingsPatch: Record<string, unknown>) => {
+        const calls = mockUserService.updateUserProperties.mock.calls;
+        const settingsPayload = calls[calls.length - 1][1].settings;
+        expect(settingsPayload).toEqual({
+            dashboardSettings: dashboardSettingsPatch,
+        });
+        expect(settingsPayload.appSettings).toBeUndefined();
+        expect(settingsPayload.unitSettings).toBeUndefined();
+    };
+
     it('should create', () => {
         expect(component).toBeTruthy();
     });
@@ -249,6 +271,72 @@ describe('EventTableComponent', () => {
         expect(filtersRow).toBeTruthy();
         expect(searchField).toBeTruthy();
         expect(mainRow.contains(filtersRow)).toBe(true);
+    });
+
+    it('should render selected-event actions outside the main toolbar row', () => {
+        fixture.componentRef.setInput('showActions', true);
+        component.selection.select({ Event: new MockEvent('selected') } as any);
+        fixture.detectChanges();
+
+        const mainRow = fixture.nativeElement.querySelector('.table-toolbar-main') as HTMLElement;
+        const selectionToolbar = fixture.nativeElement.querySelector('.table-selection-toolbar') as HTMLElement;
+        const actionButtons = fixture.nativeElement.querySelectorAll('.table-selection-toolbar .bulk-action-button');
+
+        expect(selectionToolbar).toBeTruthy();
+        expect(selectionToolbar.textContent).toContain('1 event selected');
+        expect(mainRow.contains(selectionToolbar)).toBe(false);
+        expect(mainRow.querySelector('.selection-actions')).toBeNull();
+        expect(actionButtons.length).toBe(5);
+    });
+
+    it('should keep selected-event actions accessible without hover tooltip overlays', () => {
+        fixture.componentRef.setInput('showActions', true);
+        component.selection.select({ Event: new MockEvent('selected-1') } as any);
+        component.selection.select({ Event: new MockEvent('selected-2') } as any);
+        fixture.detectChanges();
+
+        const actionButtons = Array.from(
+            fixture.nativeElement.querySelectorAll('.table-selection-toolbar .bulk-action-button')
+        ) as HTMLButtonElement[];
+
+        expect(actionButtons.map((button) => button.getAttribute('aria-label'))).toEqual([
+            'Merge 2 events',
+            'Download CSV for 2 events',
+            'Download original files',
+            'Delete 2 events',
+            'Clear selection',
+        ]);
+        expect(actionButtons.every((button) => !button.hasAttribute('mattooltip'))).toBe(true);
+    });
+
+    it('should clip selected-event action state layers to their Material buttons', () => {
+        const styles = readFileSync(
+            join(process.cwd(), 'src/app/components/event-table/event.table.component.scss'),
+            'utf8'
+        );
+
+        expect(styles).toMatch(/\.bulk-action-button\s*{[\s\S]*overflow:\s*hidden;/);
+        expect(styles).toMatch(/\.bulk-action-button\s*{[\s\S]*isolation:\s*isolate;/);
+        expect(styles).toMatch(/\.bulk-action-button\s*{[\s\S]*--mat-button-text-state-layer-color:\s*var\(--mat-sys-on-surface\);/);
+    });
+
+    it('should avoid backdrop blur on the large table surface under hover overlays', () => {
+        const styles = readFileSync(
+            join(process.cwd(), 'src/app/components/event-table/event.table.component.scss'),
+            'utf8'
+        );
+
+        expect(styles).toMatch(/\.table-container\s*{[\s\S]*--qs-glass-panel-blur:\s*0px;/);
+        expect(styles).toMatch(/\.table-container\s*{[\s\S]*backdrop-filter:\s*none;/);
+        expect(styles).toMatch(/\.table-container\s*{[\s\S]*-webkit-backdrop-filter:\s*none;/);
+    });
+
+    it('should clear the contextual table selection', () => {
+        component.selection.select({ Event: new MockEvent('selected') } as any);
+
+        component.clearSelection();
+
+        expect(component.selection.selected).toHaveLength(0);
     });
 
     it('should call loading and return early in ngOnChanges when events are missing', () => {
@@ -297,6 +385,27 @@ describe('EventTableComponent', () => {
         await component.pageChanges({ pageSize: 25 } as any);
 
         expect(mockUserService.updateUserProperties).not.toHaveBeenCalled();
+    });
+
+    it('should persist page size without writing unrelated user settings', async () => {
+        component.user.settings.dashboardSettings.tableSettings.eventsPerPage = 25;
+
+        await component.pageChanges({ pageSize: 50 } as any);
+
+        expectDashboardSettingsWrite({ tableSettings: { eventsPerPage: 50 } });
+    });
+
+    it('should persist selected columns without writing unrelated user settings', async () => {
+        await component.selectedColumnsChange(['Name', 'Start Date']);
+
+        expectDashboardSettingsWrite({ tableSettings: { selectedColumns: ['Name', 'Start Date'] } });
+    });
+
+    it('should persist sort changes without writing unrelated user settings', async () => {
+        (component.sort.sortChange as Subject<any>).next({ active: 'startDate', direction: 'asc' });
+        await Promise.resolve();
+
+        expectDashboardSettingsWrite({ tableSettings: { active: 'startDate', direction: 'asc' } });
     });
 
     it('should initialize data source with events', () => {

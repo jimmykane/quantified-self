@@ -6,9 +6,7 @@ export const SLEEP_SYNC_DISABLED_PROVIDERS: readonly SleepProvider[] = [
 ];
 
 // Empty list means all users; non-empty keeps the rollout scoped without scanning every token.
-export const SLEEP_SYNC_ALLOWED_USER_IDS: readonly string[] = [
-    'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
-];
+export const SLEEP_SYNC_ALLOWED_USER_IDS: readonly string[] = [];
 
 export function getDisabledSleepProviders(): readonly SleepProvider[] {
     return SLEEP_SYNC_DISABLED_PROVIDERS;

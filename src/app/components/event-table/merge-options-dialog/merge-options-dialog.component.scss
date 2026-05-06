@@ -18,26 +18,22 @@ mat-dialog-content {
 }
 
 .option-card {
+  --option-accent: var(--mat-sys-primary);
+  --option-accent-container: var(--mat-sys-primary-container);
+  --qs-overlay-section-bg: var(--mat-sys-surface-container-high);
+  --qs-overlay-section-border: color-mix(in srgb, var(--mat-sys-outline-variant) 90%, transparent);
+  --qs-overlay-section-radius: 12px;
+  --qs-overlay-section-shadow: none;
+
   position: relative;
   overflow: hidden;
-  isolation: isolate;
   padding: 18px;
   cursor: pointer;
   display: flex;
   flex-direction: column;
   gap: 14px;
-  border-color: color-mix(in srgb, var(--mat-sys-outline-variant) 90%, transparent);
-  outline: 2px solid transparent;
-  outline-offset: 0;
-  background:
-    linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--mat-sys-surface-container-low) 92%, var(--mat-sys-surface)) 0%,
-      var(--mat-sys-surface) 100%
-    ) !important;
   transition:
     border-color 0.2s ease,
-    outline-color 0.2s ease,
     background 0.2s ease;
 }
 
@@ -47,36 +43,18 @@ mat-dialog-content {
   inset: 0 auto 0 0;
   width: 4px;
   opacity: 0;
+  background: var(--option-accent);
   transition: opacity 0.2s ease;
 }
 
 .option-card:not(.disabled):hover {
-  border-color: color-mix(in srgb, var(--mat-sys-outline) 34%, var(--mat-sys-outline-variant));
+  --qs-overlay-section-bg: color-mix(in srgb, var(--option-accent-container) 22%, var(--mat-sys-surface-container-high));
+  --qs-overlay-section-border: color-mix(in srgb, var(--option-accent) 34%, var(--mat-sys-outline-variant));
 }
 
-.option-card > * {
-  position: relative;
-  z-index: 1;
-}
-
-.option-card.option-card-benchmark:not(.disabled):hover {
-  outline-color: color-mix(in srgb, var(--mat-sys-secondary) 22%, transparent);
-  background:
-    linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--mat-sys-secondary-container) 28%, var(--mat-sys-surface)) 0%,
-      var(--mat-sys-surface) 100%
-    ) !important;
-}
-
-.option-card.option-card-multi:not(.disabled):hover {
-  outline-color: color-mix(in srgb, var(--mat-sys-primary) 22%, transparent);
-  background:
-    linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--mat-sys-primary-container) 30%, var(--mat-sys-surface)) 0%,
-      var(--mat-sys-surface) 100%
-    ) !important;
+.option-card:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--option-accent) 58%, transparent);
+  outline-offset: 2px;
 }
 
 .option-card.disabled {
@@ -84,34 +62,20 @@ mat-dialog-content {
   opacity: 0.7;
 }
 
-.option-card.option-card-benchmark::before {
-  background: var(--mat-sys-secondary);
+.option-card.option-card-benchmark {
+  --option-accent: var(--mat-sys-secondary);
+  --option-accent-container: var(--mat-sys-secondary-container);
 }
 
-.option-card.option-card-multi::before {
-  background: var(--mat-sys-primary);
+.option-card.option-card-multi {
+  --option-accent: var(--mat-sys-primary);
+  --option-accent-container: var(--mat-sys-primary-container);
 }
 
-.option-card.option-card-benchmark.selected {
-  border-color: var(--mat-sys-secondary);
-  outline-color: color-mix(in srgb, var(--mat-sys-secondary) 28%, transparent);
-  background:
-    linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--mat-sys-secondary-container) 64%, var(--mat-sys-surface)) 0%,
-      var(--mat-sys-surface) 100%
-    ) !important;
-}
-
+.option-card.option-card-benchmark.selected,
 .option-card.option-card-multi.selected {
-  border-color: var(--mat-sys-primary);
-  outline-color: color-mix(in srgb, var(--mat-sys-primary) 28%, transparent);
-  background:
-    linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--mat-sys-primary-container) 68%, var(--mat-sys-surface)) 0%,
-      var(--mat-sys-surface) 100%
-    ) !important;
+  --qs-overlay-section-bg: color-mix(in srgb, var(--option-accent-container) 38%, var(--mat-sys-surface-container-high));
+  --qs-overlay-section-border: var(--option-accent);
 }
 
 .option-card.selected::before {
@@ -132,14 +96,7 @@ mat-dialog-content {
   line-height: 1.2;
   margin-bottom: 4px;
   text-transform: uppercase;
-}
-
-.option-card-benchmark .option-eyebrow {
-  color: var(--mat-sys-secondary);
-}
-
-.option-card-multi .option-eyebrow {
-  color: var(--mat-sys-primary);
+  color: var(--option-accent);
 }
 
 .option-indicator {
@@ -148,12 +105,8 @@ mat-dialog-content {
   transition: color 0.2s ease;
 }
 
-.option-card-benchmark.selected .option-indicator {
-  color: var(--mat-sys-secondary);
-}
-
-.option-card-multi.selected .option-indicator {
-  color: var(--mat-sys-primary);
+.option-card.selected .option-indicator {
+  color: var(--option-accent);
 }
 
 .option-title {
@@ -186,6 +139,21 @@ mat-dialog-content {
 .option-chip-secondary {
   --mdc-chip-elevated-container-color: var(--mat-sys-secondary-container);
   --mdc-chip-label-text-color: var(--mat-sys-on-secondary-container);
+}
+
+.option-detail {
+  display: grid;
+  gap: 4px;
+  color: var(--mat-sys-on-surface-variant);
+  font-size: 0.85rem;
+  line-height: 1.4;
+}
+
+.option-detail-title {
+  color: var(--mat-sys-on-surface);
+  font-size: 0.78rem;
+  font-weight: 700;
+  line-height: 1.2;
 }
 
 .merge-button-content {

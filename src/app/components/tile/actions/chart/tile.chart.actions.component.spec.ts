@@ -30,6 +30,8 @@ describe('TileChartActionsComponent', () => {
   beforeEach(async () => {
     userMock = {
       settings: {
+        appSettings: { theme: 'dark' },
+        unitSettings: { startOfTheWeek: 1 },
         dashboardSettings: {
           dismissedCuratedRecoveryNowTile: false,
           tiles: [
@@ -139,7 +141,15 @@ describe('TileChartActionsComponent', () => {
     await component.changeTileColumnSize({ value: 2 } as any);
 
     expect(emittedStates).toEqual([true, false]);
-    expect(userMock.updateUserProperties).toHaveBeenCalled();
+    expect(userMock.updateUserProperties).toHaveBeenCalledWith(userMock, {
+      settings: {
+        dashboardSettings: {
+          tiles: userMock.settings.dashboardSettings.tiles,
+        },
+      },
+    });
+    expect(userMock.updateUserProperties.mock.calls[0][1].settings.appSettings).toBeUndefined();
+    expect(userMock.updateUserProperties.mock.calls[0][1].settings.unitSettings).toBeUndefined();
     expect(hapticsMock.selection).toHaveBeenCalledTimes(1);
   });
 

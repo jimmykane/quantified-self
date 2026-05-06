@@ -50,6 +50,17 @@ describe('SummariesComponent', () => {
   let buildDashboardTileViewModelsSpy: ReturnType<typeof vi.spyOn>;
   let originalMatchMedia: typeof window.matchMedia | undefined;
 
+  const expectDashboardSettingsWrite = (user: any, dashboardSettingsPatch: Record<string, unknown>): void => {
+    expect(mockUserService.updateUserProperties).toHaveBeenCalledWith(user, {
+      settings: {
+        dashboardSettings: dashboardSettingsPatch,
+      },
+    });
+    const settingsPayload = mockUserService.updateUserProperties.mock.calls.at(-1)?.[1]?.settings;
+    expect(settingsPayload.appSettings).toBeUndefined();
+    expect(settingsPayload.unitSettings).toBeUndefined();
+  };
+
   beforeEach(async () => {
     vi.restoreAllMocks();
     mockThemeService = {
@@ -937,7 +948,9 @@ describe('SummariesComponent', () => {
     await component.onTileEventFilterRangeChange(0, 'all');
 
     expect(component.user.settings.dashboardSettings.tiles[0].eventFilters).toEqual({ range: 'all', activityTypes: [] });
-    expect(mockUserService.updateUserProperties).toHaveBeenCalledWith(component.user, { settings: component.user.settings });
+    expectDashboardSettingsWrite(component.user, {
+      tiles: component.user.settings.dashboardSettings.tiles,
+    });
     expect(mockEventService.getEventsBy).toHaveBeenLastCalledWith(component.user, [], 'startDate', false, 0);
   });
 
@@ -1011,7 +1024,9 @@ describe('SummariesComponent', () => {
     expect(component.user.settings.dashboardSettings.sleepTrend.range).toBe('30d');
     expect(component.sleepTrendRange).toBe('30d');
     expect(component.sleepTrendWindowLabel).toBe('Last 30 days');
-    expect(mockUserService.updateUserProperties).toHaveBeenCalledWith(component.user, { settings: component.user.settings });
+    expectDashboardSettingsWrite(component.user, {
+      sleepTrend: component.user.settings.dashboardSettings.sleepTrend,
+    });
     expect(mockSleepService.watchForDashboard).toHaveBeenCalledWith('user-1', nowMs - thirtyDaysMs, nowMs);
   });
 
@@ -1619,7 +1634,9 @@ describe('SummariesComponent', () => {
     expect(component.user.settings.dashboardSettings.tiles[1].order).toBe(1);
     expect(component.tiles[0].type).toBe(TileTypes.Map);
     expect(component.tiles[1].type).toBe(TileTypes.Chart);
-    expect(mockUserService.updateUserProperties).toHaveBeenCalledWith(component.user, { settings: component.user.settings });
+    expectDashboardSettingsWrite(component.user, {
+      tiles: component.user.settings.dashboardSettings.tiles,
+    });
   });
 
   it('should reset per-order tile event state after dashboard tile reorder', async () => {

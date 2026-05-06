@@ -23,8 +23,8 @@ import {
     DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE,
     DASHBOARD_RECOVERY_NOW_CHART_TYPE,
     DASHBOARD_SLEEP_TREND_CHART_TYPE,
+    getDefaultDashboardKpiChartDefinitions,
     getDashboardCuratedChartDefinitions,
-    getDashboardKpiChartDefinitions,
     isDashboardCuratedChartType,
     isDashboardKpiChartType,
     isDashboardSpecialChartType,
@@ -241,9 +241,9 @@ describe('AppUserUtilities', () => {
             expect(sleepTiles).toHaveLength(0);
         });
 
-        it('should include all KPI tiles in default dashboard tiles', () => {
+        it('should include recommended KPI tiles in default dashboard tiles', () => {
             const tiles = AppUserUtilities.getDefaultUserDashboardTiles() as any[];
-            const kpiDefinitions = getDashboardKpiChartDefinitions();
+            const kpiDefinitions = getDefaultDashboardKpiChartDefinitions();
             const kpiTiles = tiles.filter(tile => (
                 tile?.type === TileTypes.Chart && isDashboardKpiChartType(tile?.chartType)
             ));

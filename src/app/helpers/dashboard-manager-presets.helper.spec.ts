@@ -20,19 +20,20 @@ import {
   DASHBOARD_FORM_NOW_KPI_CHART_TYPE,
   DASHBOARD_FORM_CHART_TYPE,
   DASHBOARD_RECOVERY_NOW_CHART_TYPE,
+  DASHBOARD_SLEEP_TREND_CHART_TYPE,
 } from './dashboard-special-chart-types';
 
 describe('dashboard-manager-presets.helper', () => {
-  it('exposes the expanded preset catalog with 23 unique definitions', () => {
+  it('exposes the expanded preset catalog with 24 unique definitions', () => {
     const definitions = getDashboardManagerPresetDefinitions();
 
-    expect(definitions).toHaveLength(23);
-    expect(new Set(definitions.map(definition => definition.id)).size).toBe(23);
-    expect(definitions.filter(definition => definition.category === 'curated')).toHaveLength(5);
+    expect(definitions).toHaveLength(24);
+    expect(new Set(definitions.map(definition => definition.id)).size).toBe(24);
+    expect(definitions.filter(definition => definition.category === 'curated')).toHaveLength(6);
     expect(definitions.filter(definition => definition.category === 'kpi')).toHaveLength(10);
     expect(definitions.filter(definition => definition.category === 'custom')).toHaveLength(7);
     expect(definitions.filter(definition => definition.category === 'map')).toHaveLength(1);
-    expect(definitions.map(definition => definition.id)).not.toContain(DASHBOARD_MANAGER_PRESET_IDS.CURATED_SLEEP);
+    expect(definitions.map(definition => definition.id)).toContain(DASHBOARD_MANAGER_PRESET_IDS.CURATED_SLEEP);
   });
 
   it('returns null for unknown preset ids', () => {
@@ -72,13 +73,25 @@ describe('dashboard-manager-presets.helper', () => {
     });
   });
 
-  it('does not expose the hidden sleep preset through dashboard manager helpers', () => {
-    expect(getDashboardManagerPresetDefinition(DASHBOARD_MANAGER_PRESET_IDS.CURATED_SLEEP)).toBeNull();
-    expect(() => buildDashboardManagerPresetTile({
+  it('builds the Sleep preset as a curated dashboard manager tile', () => {
+    expect(getDashboardManagerPresetDefinition(DASHBOARD_MANAGER_PRESET_IDS.CURATED_SLEEP)).toMatchObject({
+      label: 'Sleep',
+      category: 'curated',
+      curatedChartType: DASHBOARD_SLEEP_TREND_CHART_TYPE,
+    });
+    expect(buildDashboardManagerPresetTile({
       presetId: DASHBOARD_MANAGER_PRESET_IDS.CURATED_SLEEP,
       order: 6,
       size: { columns: 2, rows: 1 },
-    })).toThrow(/Unknown dashboard manager preset id/);
+    })).toMatchObject({
+      name: 'Sleep',
+      type: TileTypes.Chart,
+      order: 6,
+      size: { columns: 2, rows: 1 },
+      chartType: DASHBOARD_SLEEP_TREND_CHART_TYPE,
+      dataType: 'SleepDuration',
+      dataTimeInterval: TimeIntervals.Daily,
+    });
   });
 
   it('builds deterministic custom and map preset tiles', () => {

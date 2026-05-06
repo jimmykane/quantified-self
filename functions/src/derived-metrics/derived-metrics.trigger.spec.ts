@@ -4,6 +4,10 @@ const hoisted = vi.hoisted(() => ({
     onDocumentWritten: vi.fn((_opts: unknown, handler: any) => handler),
     enqueueDerivedMetricsIngressTask: vi.fn(),
     isDerivedMetricsUidAllowed: vi.fn(),
+    userDocGet: vi.fn(),
+    usersDoc: vi.fn(),
+    usersCollection: vi.fn(),
+    firestore: vi.fn(),
 }));
 
 vi.mock('firebase-functions/v2/firestore', () => ({
@@ -12,6 +16,9 @@ vi.mock('firebase-functions/v2/firestore', () => ({
 
 vi.mock('../shared/cloud-tasks', () => ({
     enqueueDerivedMetricsIngressTask: hoisted.enqueueDerivedMetricsIngressTask,
+}));
+vi.mock('firebase-admin', () => ({
+    firestore: hoisted.firestore,
 }));
 vi.mock('./derived-metrics-uid-gate', () => ({
     isDerivedMetricsUidAllowed: hoisted.isDerivedMetricsUidAllowed,
@@ -35,6 +42,14 @@ import { onDashboardDerivedMetricsEventWrite } from './derived-metrics.trigger';
 
 describe('onDashboardDerivedMetricsEventWrite', () => {
     beforeEach(() => {
+        hoisted.userDocGet.mockReset();
+        hoisted.userDocGet.mockResolvedValue({ exists: true });
+        hoisted.usersDoc.mockReset();
+        hoisted.usersDoc.mockReturnValue({ get: hoisted.userDocGet });
+        hoisted.usersCollection.mockReset();
+        hoisted.usersCollection.mockReturnValue({ doc: hoisted.usersDoc });
+        hoisted.firestore.mockReset();
+        hoisted.firestore.mockReturnValue({ collection: hoisted.usersCollection });
         hoisted.enqueueDerivedMetricsIngressTask.mockClear();
         hoisted.enqueueDerivedMetricsIngressTask.mockResolvedValue(true);
         hoisted.isDerivedMetricsUidAllowed.mockReset();
@@ -115,6 +130,21 @@ describe('onDashboardDerivedMetricsEventWrite', () => {
             },
         });
 
+        expect(hoisted.enqueueDerivedMetricsIngressTask).not.toHaveBeenCalled();
+    });
+
+    it('skips delete ingress when user root document is already missing', async () => {
+        hoisted.userDocGet.mockResolvedValueOnce({ exists: false });
+
+        await (onDashboardDerivedMetricsEventWrite as any)({
+            params: { uid: 'user-1', eventId: 'event-1' },
+            data: {
+                before: { exists: true },
+                after: { exists: false },
+            },
+        });
+
+        expect(hoisted.userDocGet).toHaveBeenCalledTimes(1);
         expect(hoisted.enqueueDerivedMetricsIngressTask).not.toHaveBeenCalled();
     });
 });

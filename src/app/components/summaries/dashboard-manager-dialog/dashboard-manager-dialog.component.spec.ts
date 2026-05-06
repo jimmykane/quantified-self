@@ -10,6 +10,7 @@ import {
   ChartDataValueTypes,
   ChartTypes,
   ActivityTypes,
+  AppThemes,
   DataDistance,
   DataDuration,
   DataEnergy,
@@ -48,6 +49,10 @@ function createUser(tiles: any[] = []): any {
   return {
     uid: 'user-1',
     settings: {
+      appSettings: {
+        theme: AppThemes.Dark,
+        themePreference: AppThemes.Dark,
+      },
       unitSettings: {
         speedUnits: [],
       },
@@ -73,6 +78,34 @@ function dashboardTileSignature(tile: any): Record<string, unknown> {
       dataCategoryType: tile.dataCategoryType,
       dataTimeInterval: tile.dataTimeInterval,
     };
+}
+
+function expectDashboardSettingsOnlyWrite(
+  userServiceMock: { updateUserProperties: ReturnType<typeof vi.fn> },
+  dialogData: { user: any },
+  callIndex = 0,
+): void {
+  const dashboardSettings = dialogData.user.settings.dashboardSettings;
+  const dashboardSettingsPatch: Record<string, unknown> = {
+    tiles: dashboardSettings.tiles || [],
+  };
+  if (dashboardSettings.autoTiles !== undefined) {
+    dashboardSettingsPatch.autoTiles = dashboardSettings.autoTiles;
+  }
+  if (dashboardSettings.dismissedCuratedRecoveryNowTile !== undefined) {
+    dashboardSettingsPatch.dismissedCuratedRecoveryNowTile = dashboardSettings.dismissedCuratedRecoveryNowTile;
+  }
+  expect(userServiceMock.updateUserProperties.mock.calls[callIndex]).toEqual([
+    dialogData.user,
+    {
+      settings: {
+        dashboardSettings: dashboardSettingsPatch,
+      },
+    },
+  ]);
+  expect(userServiceMock.updateUserProperties.mock.calls[callIndex][1].settings.appSettings).toBeUndefined();
+  expect(userServiceMock.updateUserProperties.mock.calls[callIndex][1].settings.unitSettings).toBeUndefined();
+  expect(userServiceMock.updateUserProperties.mock.calls[callIndex][1].settings.dashboardSettings.eventTableFilters).toBeUndefined();
 }
 
 function createDeferred<T = unknown>(): {
@@ -167,9 +200,9 @@ describe('DashboardManagerDialogComponent', () => {
       DASHBOARD_FRESHNESS_FORECAST_CHART_TYPE,
       DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE,
       DASHBOARD_EFFICIENCY_TREND_CHART_TYPE,
+      DASHBOARD_SLEEP_TREND_CHART_TYPE,
     ]);
-    expect(component.curatedChartDefinitions.map(definition => definition.chartType)).not.toContain(DASHBOARD_SLEEP_TREND_CHART_TYPE);
-    expect(component.presetDefinitions.map(definition => definition.id)).not.toContain(DASHBOARD_MANAGER_PRESET_IDS.CURATED_SLEEP);
+    expect(component.presetDefinitions.map(definition => definition.id)).toContain(DASHBOARD_MANAGER_PRESET_IDS.CURATED_SLEEP);
     expect(component.kpiChartDefinitions.map(definition => definition.chartType)).toEqual([
       DASHBOARD_ACWR_KPI_CHART_TYPE,
       DASHBOARD_RAMP_RATE_KPI_CHART_TYPE,
@@ -206,9 +239,7 @@ describe('DashboardManagerDialogComponent', () => {
       range: '30d',
       activityTypes: [ActivityTypes.Running],
     });
-    expect(userServiceMock.updateUserProperties).toHaveBeenCalledWith(dialogData.user, {
-      settings: dialogData.user.settings,
-    });
+    expectDashboardSettingsOnlyWrite(userServiceMock, dialogData);
     expect(hapticsMock.success).toHaveBeenCalledTimes(1);
     expect(dialogRefMock.close).toHaveBeenCalledWith({ saved: true });
   });
@@ -654,7 +685,8 @@ describe('DashboardManagerDialogComponent', () => {
     expect(tiles.filter((tile: any) => tile.type === TileTypes.Chart && tile.dataType === DataDistance.type)).toHaveLength(1);
     expect(tiles.some((tile: any) => tile.chartType === DASHBOARD_RECOVERY_NOW_CHART_TYPE)).toBe(true);
     expect(tiles.some((tile: any) => tile.chartType === DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE)).toBe(true);
-    expect(tiles.some((tile: any) => tile.chartType === DASHBOARD_ACWR_KPI_CHART_TYPE)).toBe(true);
+    expect(tiles.some((tile: any) => tile.chartType === DASHBOARD_FORM_NOW_KPI_CHART_TYPE)).toBe(true);
+    expect(tiles.some((tile: any) => tile.chartType === DASHBOARD_ACWR_KPI_CHART_TYPE)).toBe(false);
     expect(tiles.some((tile: any) => tile.chartType === ChartTypes.Pie && tile.dataType === DataDuration.type)).toBe(true);
     expect(tiles.some((tile: any) => tile.dataType === DataEnergy.type)).toBe(false);
     expect(tiles.some((tile: any) => tile.dataType === DataHeartRateAvg.type)).toBe(false);
@@ -662,12 +694,13 @@ describe('DashboardManagerDialogComponent', () => {
       state: 'added',
       source: 'default-curated',
     });
-    expect(dialogData.user.settings.dashboardSettings.autoTiles.kpiAcwr).toMatchObject({
+    expect(dialogData.user.settings.dashboardSettings.autoTiles.kpiFormNow).toMatchObject({
       state: 'added',
       source: 'default-kpi',
     });
     expect(dialogData.user.settings.dashboardSettings.dismissedCuratedRecoveryNowTile).toBe(false);
     expect(userServiceMock.updateUserProperties).toHaveBeenCalledTimes(1);
+    expectDashboardSettingsOnlyWrite(userServiceMock, dialogData);
     expect(hapticsMock.selection).toHaveBeenCalledTimes(1);
     expect(hapticsMock.success).toHaveBeenCalledTimes(1);
     expect(component.isAddAllDisabled).toBe(true);
@@ -837,6 +870,7 @@ describe('DashboardManagerDialogComponent', () => {
       source: 'default-kpi',
     });
     expect(userServiceMock.updateUserProperties).toHaveBeenCalledTimes(1);
+    expectDashboardSettingsOnlyWrite(userServiceMock, dialogData);
     expect(hapticsMock.success).toHaveBeenCalledTimes(1);
     expect(component.isRemoveAllDisabled).toBe(true);
     expect(component.isAddAllDisabled).toBe(false);

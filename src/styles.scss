@@ -162,8 +162,17 @@ body.app-hydrated mat-icon {
 
 .dark-theme {
   color-scheme: dark;
-  background-color: var(--mat-sys-background);
   color: var(--mat-sys-on-surface);
+}
+
+body.dark-theme {
+  background-color: var(--mat-sys-background);
+}
+
+.cdk-overlay-container.dark-theme {
+  // The overlay container is fixed and viewport-sized. It may receive dark-theme
+  // for Material overlay tokens, but it must never paint a page-sized backdrop.
+  background-color: transparent;
 }
 
 // ... existing code ...
@@ -695,6 +704,10 @@ mat-table {
 .cdk-overlay-container {
   z-index: 2000 !important;
   --qs-glass-panel-bg: var(--qs-overlay-surface);
+  --qs-overlay-section-bg: var(--mat-sys-surface-container-high);
+  --qs-overlay-section-border: var(--mat-sys-outline-variant);
+  --qs-overlay-section-shadow: none;
+  --qs-overlay-section-radius: 12px;
   --mat-autocomplete-background-color: var(--qs-overlay-surface);
   --mat-bottom-sheet-container-background-color: var(--qs-overlay-surface);
   --mat-datepicker-calendar-container-background-color: var(--qs-overlay-surface);
@@ -707,7 +720,6 @@ mat-table {
    One global overlay theme, with semantic content variants for components rendered inside
    dialog/bottom-sheet shells. Use --flat only for report/feed style content that should not
    stack a second surface inside an already styled overlay shell. */
-.qs-bottom-sheet-container,
 .qs-whats-new-page {
   --qs-overlay-section-bg: var(--mat-sys-surface-container-high);
   --qs-overlay-section-border: var(--mat-sys-outline-variant);

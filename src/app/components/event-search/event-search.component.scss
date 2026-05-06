@@ -414,12 +414,15 @@ mat-button-toggle:active {
   }
 
   :host(.table-toolbar-layout) .toolbar-range-group {
+    display: grid;
     flex: 1 1 100%;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     width: 100%;
   }
 
   :host(.table-toolbar-layout) .toolbar-range-group mat-button-toggle {
-    flex: 1 1 0;
+    min-width: 0;
+    width: 100%;
   }
 
   :host(.table-toolbar-layout) .secondary-ranges-button {

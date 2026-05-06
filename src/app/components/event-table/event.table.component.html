@@ -15,56 +15,69 @@
       <div class="table-toolbar-filters">
         <ng-content select="[event-table-filters]"></ng-content>
       </div>
-
-      @if (selection.selected.length) {
-      <div class="buttons" [@expandCollapse]>
-        @if (this.selection.selected.length > 1) {
-        <button mat-icon-button matTooltip="Merge {{selection.selected.length}} events"
-          class="action-icon-button"
-          (click)="$event.preventDefault(); $event.stopPropagation();mergeSelection($event)">
-          <mat-icon
-            class="qs-app-badge qs-app-badge--large"
-            [matBadge]="selection.selected.length"
-            matBadgeSize="large"
-            matBadgePosition="above after"
-            matBadgeOverlap="true">compare_arrows</mat-icon>
-        </button>
-        }
-        <button mat-icon-button
-          class="action-icon-button"
-          matTooltip="Download as csv {{ selection.selected.length }} events"
-          (click)="$event.preventDefault(); $event.stopPropagation(); downloadAsCSV($event)">
-          <mat-icon
-            class="qs-app-badge qs-app-badge--large"
-            [matBadge]="selection.selected.length"
-            matBadgeSize="large"
-            matBadgePosition="above after"
-            matBadgeOverlap="true">csv</mat-icon>
-        </button>
-        <button mat-icon-button
-          class="action-icon-button"
-          matTooltip="Download original files"
-          (click)="$event.preventDefault(); $event.stopPropagation(); downloadOriginals()">
-          <mat-icon
-            class="qs-app-badge qs-app-badge--large"
-            [matBadge]="selection.selected.length"
-            matBadgeSize="large"
-            matBadgePosition="above after"
-            matBadgeOverlap="true">folder_zip</mat-icon>
-        </button>
-        <button mat-icon-button matTooltip="Delete {{selection.selected.length}} events"
-          class="action-icon-button"
-          (click)="$event.preventDefault(); $event.stopPropagation();deleteSelection()">
-          <mat-icon
-            class="qs-app-badge qs-app-badge--large"
-            [matBadge]="selection.selected.length"
-            matBadgeSize="large"
-            matBadgePosition="above after"
-            matBadgeOverlap="true">delete</mat-icon>
-        </button>
-      </div>
-      }
     </div>
+
+    @if (showActions && selection.selected.length > 0) {
+      <div class="table-selection-toolbar" aria-live="polite">
+        <div class="selection-summary">
+          <mat-icon>check_circle</mat-icon>
+          <span>{{ selection.selected.length }} {{ selection.selected.length === 1 ? 'event' : 'events' }} selected</span>
+        </div>
+
+        <div class="selection-actions">
+          <button mat-button
+            class="bulk-action-button"
+            [disabled]="selection.selected.length < 2"
+            [attr.aria-label]="'Merge ' + selection.selected.length + ' ' + (selection.selected.length === 1 ? 'event' : 'events')"
+            (click)="$event.preventDefault(); $event.stopPropagation();mergeSelection($event)">
+            <span class="bulk-action-button-content">
+              <mat-icon>compare_arrows</mat-icon>
+              <span class="bulk-action-label">Merge</span>
+            </span>
+          </button>
+
+          <button mat-button
+            class="bulk-action-button"
+            [attr.aria-label]="'Download CSV for ' + selection.selected.length + ' ' + (selection.selected.length === 1 ? 'event' : 'events')"
+            (click)="$event.preventDefault(); $event.stopPropagation(); downloadAsCSV($event)">
+            <span class="bulk-action-button-content">
+              <mat-icon>csv</mat-icon>
+              <span class="bulk-action-label">CSV</span>
+            </span>
+          </button>
+
+          <button mat-button
+            class="bulk-action-button"
+            aria-label="Download original files"
+            (click)="$event.preventDefault(); $event.stopPropagation(); downloadOriginals()">
+            <span class="bulk-action-button-content">
+              <mat-icon>folder_zip</mat-icon>
+              <span class="bulk-action-label">Originals</span>
+            </span>
+          </button>
+
+          <button mat-button color="warn"
+            class="bulk-action-button"
+            [attr.aria-label]="'Delete ' + selection.selected.length + ' ' + (selection.selected.length === 1 ? 'event' : 'events')"
+            (click)="$event.preventDefault(); $event.stopPropagation();deleteSelection()">
+            <span class="bulk-action-button-content">
+              <mat-icon>delete</mat-icon>
+              <span class="bulk-action-label">Delete</span>
+            </span>
+          </button>
+
+          <button mat-button
+            class="bulk-action-button"
+            aria-label="Clear selection"
+            (click)="clearSelection($event)">
+            <span class="bulk-action-button-content">
+              <mat-icon>close</mat-icon>
+              <span class="bulk-action-label">Clear</span>
+            </span>
+          </button>
+        </div>
+      </div>
+    }
   </div>
 
   <app-loading-overlay [isLoading]="isLoading" [hasError]="this.events && this.events.length === 0"

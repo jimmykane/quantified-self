@@ -17,6 +17,7 @@ import {
   DASHBOARD_RAMP_RATE_KPI_CHART_TYPE,
   DASHBOARD_RECOVERY_NOW_CHART_TYPE,
   DASHBOARD_SLEEP_TREND_CHART_TYPE,
+  getDefaultDashboardKpiChartDefinitions,
   getDashboardCuratedChartDefinitions,
   getDashboardKpiChartDefinitions,
   isDashboardCuratedChartType,
@@ -52,8 +53,8 @@ describe('dashboard-special-chart-types', () => {
       DASHBOARD_FRESHNESS_FORECAST_CHART_TYPE,
       DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE,
       DASHBOARD_EFFICIENCY_TREND_CHART_TYPE,
+      DASHBOARD_SLEEP_TREND_CHART_TYPE,
     ]);
-    expect(definitions.map(definition => definition.chartType)).not.toContain(DASHBOARD_SLEEP_TREND_CHART_TYPE);
   });
 
   it('returns KPI chart definitions and guards', () => {
@@ -81,5 +82,16 @@ describe('dashboard-special-chart-types', () => {
     expect(isDashboardKpiChartType(DASHBOARD_EASY_PERCENT_KPI_CHART_TYPE)).toBe(true);
     expect(isDashboardKpiChartType(DASHBOARD_HARD_PERCENT_KPI_CHART_TYPE)).toBe(true);
     expect(isDashboardKpiChartType(DASHBOARD_EFFICIENCY_DELTA_4W_KPI_CHART_TYPE)).toBe(true);
+  });
+
+  it('returns the recommended default KPI chart definitions', () => {
+    const definitions = getDefaultDashboardKpiChartDefinitions();
+
+    expect(definitions.map(definition => definition.chartType)).toEqual([
+      DASHBOARD_FORM_NOW_KPI_CHART_TYPE,
+      DASHBOARD_FITNESS_CTL_KPI_CHART_TYPE,
+      DASHBOARD_FATIGUE_ATL_KPI_CHART_TYPE,
+      DASHBOARD_RAMP_RATE_KPI_CHART_TYPE,
+    ]);
   });
 });

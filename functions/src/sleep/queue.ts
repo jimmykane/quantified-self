@@ -13,7 +13,7 @@ import {
     SleepSyncQueueItemType,
 } from '../queue/queue-item.interface';
 import { getExpireAtTimestamp, TTL_CONFIG } from '../shared/ttl-config';
-import { generateIDFromParts } from '../utils';
+import { enqueueSleepSyncTask, generateIDFromParts } from '../utils';
 import { SLEEP_SYNC_QUEUE_COLLECTION_NAME } from './constants';
 import {
     mapCorosDailySleep,
@@ -46,6 +46,7 @@ interface AddSleepSyncQueueItemInput {
     rangeStartMs?: number;
     rangeEndMs?: number;
     dedupeKey?: string;
+    dispatchImmediately?: boolean;
 }
 
 function queueCollection(): admin.firestore.CollectionReference {
@@ -97,10 +98,58 @@ export async function addSleepSyncQueueItem(input: AddSleepSyncQueueItemInput): 
         expireAt: getExpireAtTimestamp(TTL_CONFIG.QUEUE_ITEM_IN_DAYS),
         ...compactQueuePayload(input),
     }, { merge: false });
+    if (input.dispatchImmediately) {
+        const wasTaskEnqueued = await enqueueSleepSyncTask(queueId, nowMs);
+        if (wasTaskEnqueued) {
+            await markSleepQueueItemDispatched(docRef, queueId, nowMs);
+        }
+    }
     return docRef;
 }
 
-async function findTokenByProviderUserId(provider: SleepProvider, providerUserId: string): Promise<TokenSnapshot | null> {
+function isFirestoreNotFoundError(error: unknown): boolean {
+    const code = (error as any)?.code;
+    const message = `${(error as any)?.message || ''}`;
+    return code === 5 || code === 'not-found' || code === 'NOT_FOUND' || message.includes('NOT_FOUND') || message.includes('No document to update');
+}
+
+async function markSleepQueueItemDispatched(
+    queueItemDocument: admin.firestore.DocumentReference,
+    queueItemId: string,
+    dispatchedAtMs: number,
+): Promise<void> {
+    try {
+        await queueItemDocument.update({ dispatchedToCloudTask: dispatchedAtMs });
+    } catch (error) {
+        if (!isFirestoreNotFoundError(error)) {
+            throw error;
+        }
+
+        const failedJobSnapshot = await admin.firestore().collection('failed_jobs').doc(queueItemId).get();
+        const failedJob = failedJobSnapshot.exists ? failedJobSnapshot.data() as { originalCollection?: unknown } : null;
+        if (failedJob?.originalCollection === SLEEP_SYNC_QUEUE_COLLECTION_NAME) {
+            logger.info(`[SleepSync] Queue item ${queueItemId} was already moved to failed_jobs before dispatch timestamp update.`);
+            return;
+        }
+
+        throw error;
+    }
+}
+
+async function findSuuntoTokenByUserName(providerUserId: string): Promise<TokenSnapshot | null> {
+    const snapshot = await admin.firestore().collectionGroup('tokens')
+        .where('userName', '==', providerUserId)
+        .where('serviceName', '==', ServiceNames.SuuntoApp)
+        .limit(1)
+        .get();
+    return snapshot.docs[0] || null;
+}
+
+export async function findSleepTokenByProviderUserId(provider: SleepProvider, providerUserId: string): Promise<TokenSnapshot | null> {
+    if (provider === SLEEP_PROVIDERS.SuuntoApp) {
+        return findSuuntoTokenByUserName(providerUserId);
+    }
+
     const tokenField = providerUserIdTokenField(provider);
     if (!tokenField) {
         return null;
@@ -126,7 +175,7 @@ async function findTokenForQueueItem(queueItem: SleepSyncQueueItemInterface): Pr
             .get();
         return snapshot.docs[0] || null;
     }
-    return findTokenByProviderUserId(queueItem.provider, queueItem.providerUserId);
+    return findSleepTokenByProviderUserId(queueItem.provider, queueItem.providerUserId);
 }
 
 function getTokenRoot(provider: SleepProvider, userID: string): admin.firestore.CollectionReference | null {
@@ -142,7 +191,7 @@ function getTokenRoot(provider: SleepProvider, userID: string): admin.firestore.
     }
 }
 
-function firebaseUserIdFromTokenSnapshot(tokenSnapshot: TokenSnapshot): string {
+export function firebaseUserIdFromSleepTokenSnapshot(tokenSnapshot: TokenSnapshot): string {
     const userRef = tokenSnapshot.ref.parent.parent;
     if (!userRef) {
         throw new Error(`Token ${tokenSnapshot.id} has no user parent`);
@@ -240,17 +289,23 @@ class UnsupportedGarminPushPayloadError extends Error {
     }
 }
 
+class MissingSleepProviderTokenError extends Error {
+    constructor(public readonly provider: SleepProvider, public readonly providerUserId: string) {
+        super(`No ${provider} token found for ${providerUserId}`);
+    }
+}
+
 async function resolveTokenAndUser(queueItem: SleepSyncQueueItemInterface): Promise<{
     tokenSnapshot: TokenSnapshot;
     firebaseUserID: string;
 }> {
     const tokenSnapshot = await findTokenForQueueItem(queueItem);
     if (!tokenSnapshot) {
-        throw new Error(`No ${queueItem.provider} token found for ${queueItem.providerUserId}`);
+        throw new MissingSleepProviderTokenError(queueItem.provider, queueItem.providerUserId);
     }
     return {
         tokenSnapshot,
-        firebaseUserID: firebaseUserIdFromTokenSnapshot(tokenSnapshot),
+        firebaseUserID: firebaseUserIdFromSleepTokenSnapshot(tokenSnapshot),
     };
 }
 
@@ -446,6 +501,13 @@ export async function processSleepSyncQueueItem(queueItem: SleepSyncQueueItemInt
         if (error instanceof UnsupportedGarminPushPayloadError) {
             logger.warn(`[SleepSync] Queue item ${queueItem.id} has unsupported Garmin push payload; moving to DLQ`);
             return moveToDeadLetterQueue(queueItem, error, undefined, 'UNSUPPORTED_GARMIN_PUSH_PAYLOAD');
+        }
+        if (error instanceof MissingSleepProviderTokenError) {
+            if (queueItem.userID) {
+                await markSleepSyncError(queueItem.userID, queueItem.provider, error);
+            }
+            logger.warn(`[SleepSync] Queue item ${queueItem.id} has no connected ${error.provider} token for ${error.providerUserId}; moving to DLQ`);
+            return moveToDeadLetterQueue(queueItem, error, undefined, 'NO_TOKEN_FOUND');
         }
         if (queueItem.userID) {
             await markSleepSyncError(queueItem.userID, queueItem.provider, error);

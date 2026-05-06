@@ -17,6 +17,7 @@ import {
     DataPowerZoneOneDuration,
     DataPowerZoneThreeDuration,
     DataPowerZoneTwoDuration,
+    DataRecoveryTime,
 } from '@sports-alliance/sports-lib';
 
 const hoisted = vi.hoisted(() => {
@@ -25,6 +26,10 @@ const hoisted = vi.hoisted(() => {
     const where = vi.fn();
     const transactionGet = vi.fn();
     const transactionSet = vi.fn();
+    const userRootGet = vi.fn();
+    const userRootRef = {
+        get: userRootGet,
+    };
     const coordinatorRef = {
         id: 'coordinator-ref',
         set: vi.fn(),
@@ -35,7 +40,15 @@ const hoisted = vi.hoisted(() => {
         set: batchSet,
         commit: batchCommit,
     }));
-    const doc = vi.fn(() => coordinatorRef);
+    const doc = vi.fn((path?: string) => {
+        if (typeof path === 'string' && path.endsWith('/derivedMetrics/coordinator')) {
+            return coordinatorRef;
+        }
+        if (typeof path === 'string' && path.includes('/derivedMetrics/')) {
+            return coordinatorRef;
+        }
+        return userRootRef;
+    });
     const runTransaction = vi.fn(async (updateFunction: (transaction: unknown) => Promise<void>) => {
         await updateFunction({
             get: transactionGet,
@@ -60,6 +73,7 @@ const hoisted = vi.hoisted(() => {
         where,
         transactionGet,
         transactionSet,
+        userRootGet,
         coordinatorRef,
         batchSet,
         batchCommit,
@@ -91,6 +105,7 @@ vi.mock('../shared/cloud-tasks', () => ({
 describe('fetchRecoveryLookbackEventDocs', () => {
     beforeEach(() => {
         vi.clearAllMocks();
+        hoisted.userRootGet.mockResolvedValue({ exists: true });
         hoisted.where.mockReturnValue({ select: hoisted.select });
         hoisted.select.mockReturnValue({ get: hoisted.get });
         hoisted.get.mockResolvedValue({ docs: [{ id: 'doc-1' }] });
@@ -159,6 +174,7 @@ describe('resolveDerivedMetricSourceRequirements', () => {
 describe('startDerivedMetricsProcessing', () => {
     beforeEach(() => {
         vi.clearAllMocks();
+        hoisted.userRootGet.mockResolvedValue({ exists: true });
         hoisted.runTransaction.mockImplementation(async (updateFunction: (transaction: unknown) => Promise<void>) => {
             await updateFunction({
                 get: hoisted.transactionGet,
@@ -261,6 +277,7 @@ describe('startDerivedMetricsProcessing', () => {
 describe('markDerivedMetricsDirtyAndMaybeQueue', () => {
     beforeEach(() => {
         vi.clearAllMocks();
+        hoisted.userRootGet.mockResolvedValue({ exists: true });
         hoisted.runTransaction.mockImplementation(async (updateFunction: (transaction: unknown) => Promise<void>) => {
             await updateFunction({
                 get: hoisted.transactionGet,
@@ -444,6 +461,25 @@ describe('markDerivedMetricsDirtyAndMaybeQueue', () => {
                 generation: 30,
             }),
         );
+    });
+
+    it('skips dirty-mark queueing when user root document is missing', async () => {
+        const { markDerivedMetricsDirtyAndMaybeQueue } = await import('./derived-metrics.service');
+        hoisted.userRootGet.mockResolvedValueOnce({ exists: false });
+
+        const response = await markDerivedMetricsDirtyAndMaybeQueue(
+            'missing-user',
+            [DERIVED_METRIC_KINDS.Form],
+        );
+
+        expect(response).toEqual({
+            accepted: false,
+            queued: false,
+            generation: null,
+            metricKinds: [DERIVED_METRIC_KINDS.Form],
+        });
+        expect(hoisted.runTransaction).not.toHaveBeenCalled();
+        expect(hoisted.enqueueDerivedMetricsTask).not.toHaveBeenCalled();
     });
 });
 
@@ -750,5 +786,69 @@ describe('writeDerivedMetricSnapshotsReady', () => {
         expect((findPersistedPayload(DERIVED_METRIC_KINDS.EasyPercent).payload as Record<string, unknown>).value).toBeNull();
         expect((findPersistedPayload(DERIVED_METRIC_KINDS.HardPercent).payload as Record<string, unknown>).value).toBeNull();
         expect((findPersistedPayload(DERIVED_METRIC_KINDS.EfficiencyDelta4w).payload as Record<string, unknown>).deltaAbs).toBeNull();
+    });
+
+    it('excludes benchmark merges but includes multi merges in derived calculations', async () => {
+        const { writeDerivedMetricSnapshotsReady } = await import('./derived-metrics.service');
+        vi.useFakeTimers();
+        vi.setSystemTime(Date.UTC(2026, 0, 3, 12, 0, 0));
+
+        const formDocs = [
+            buildEventDoc({
+                startDate: Date.UTC(2026, 0, 1, 8, 0, 0),
+                endDate: Date.UTC(2026, 0, 1, 9, 0, 0),
+                isMerge: true,
+                mergeType: 'benchmark',
+                originalFiles: [{ path: 'f1.fit' }, { path: 'f2.fit' }],
+                stats: {
+                    'Training Stress Score': 100,
+                    [DataRecoveryTime.type]: 10_000,
+                },
+            }),
+            buildEventDoc({
+                startDate: Date.UTC(2026, 0, 2, 8, 0, 0),
+                endDate: Date.UTC(2026, 0, 2, 9, 0, 0),
+                isMerge: false,
+                mergeType: 'multi',
+                originalFiles: [{ path: 'f3.fit' }, { path: 'f4.fit' }],
+                stats: {
+                    'Training Stress Score': 40,
+                    [DataRecoveryTime.type]: 4_000,
+                },
+            }),
+            buildEventDoc({
+                startDate: Date.UTC(2026, 0, 3, 8, 0, 0),
+                endDate: Date.UTC(2026, 0, 3, 9, 0, 0),
+                stats: {
+                    'Training Stress Score': 10,
+                    [DataRecoveryTime.type]: 1_000,
+                },
+            }),
+        ];
+
+        await writeDerivedMetricSnapshotsReady(
+            'user-1',
+            [DERIVED_METRIC_KINDS.Form, DERIVED_METRIC_KINDS.RecoveryNow],
+            {
+                formDocs: formDocs as any,
+                recoveryNowDocs: formDocs as any,
+            },
+            {
+                builtFromEventMutationVersion: 42,
+            },
+        );
+
+        const formPersistedSnapshot = findPersistedPayload(DERIVED_METRIC_KINDS.Form);
+        expect(formPersistedSnapshot.sourceEventCount).toBe(2);
+        const formPayload = formPersistedSnapshot.payload as Record<string, unknown>;
+        expect(formPayload.dailyLoads).toEqual([
+            { dayMs: Date.UTC(2026, 0, 2), load: 40 },
+            { dayMs: Date.UTC(2026, 0, 3), load: 10 },
+        ]);
+
+        const recoveryPayload = findPersistedPayload(DERIVED_METRIC_KINDS.RecoveryNow).payload as Record<string, unknown>;
+        expect(recoveryPayload.totalSeconds).toBe(5_000);
+        expect(recoveryPayload.latestWorkoutSeconds).toBe(1_000);
+        expect((recoveryPayload.segments as unknown[]).length).toBe(2);
     });
 });
