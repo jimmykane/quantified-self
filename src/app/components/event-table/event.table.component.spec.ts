@@ -19,6 +19,8 @@ import { User, EventInterface, DataPace, DataGradeAdjustedPace, DataSpeedAvg, Ac
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { Analytics } from 'app/firebase/analytics';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 // Mock MatTableDataSource
 vi.mock('@angular/material/table', () => ({
@@ -285,6 +287,48 @@ describe('EventTableComponent', () => {
         expect(mainRow.contains(selectionToolbar)).toBe(false);
         expect(mainRow.querySelector('.selection-actions')).toBeNull();
         expect(actionButtons.length).toBe(5);
+    });
+
+    it('should keep selected-event actions accessible without hover tooltip overlays', () => {
+        fixture.componentRef.setInput('showActions', true);
+        component.selection.select({ Event: new MockEvent('selected-1') } as any);
+        component.selection.select({ Event: new MockEvent('selected-2') } as any);
+        fixture.detectChanges();
+
+        const actionButtons = Array.from(
+            fixture.nativeElement.querySelectorAll('.table-selection-toolbar .bulk-action-button')
+        ) as HTMLButtonElement[];
+
+        expect(actionButtons.map((button) => button.getAttribute('aria-label'))).toEqual([
+            'Merge 2 events',
+            'Download CSV for 2 events',
+            'Download original files',
+            'Delete 2 events',
+            'Clear selection',
+        ]);
+        expect(actionButtons.every((button) => !button.hasAttribute('mattooltip'))).toBe(true);
+    });
+
+    it('should clip selected-event action state layers to their Material buttons', () => {
+        const styles = readFileSync(
+            join(process.cwd(), 'src/app/components/event-table/event.table.component.scss'),
+            'utf8'
+        );
+
+        expect(styles).toMatch(/\.bulk-action-button\s*{[\s\S]*overflow:\s*hidden;/);
+        expect(styles).toMatch(/\.bulk-action-button\s*{[\s\S]*isolation:\s*isolate;/);
+        expect(styles).toMatch(/\.bulk-action-button\s*{[\s\S]*--mat-button-text-state-layer-color:\s*var\(--mat-sys-on-surface\);/);
+    });
+
+    it('should avoid backdrop blur on the large table surface under hover overlays', () => {
+        const styles = readFileSync(
+            join(process.cwd(), 'src/app/components/event-table/event.table.component.scss'),
+            'utf8'
+        );
+
+        expect(styles).toMatch(/\.table-container\s*{[\s\S]*--qs-glass-panel-blur:\s*0px;/);
+        expect(styles).toMatch(/\.table-container\s*{[\s\S]*backdrop-filter:\s*none;/);
+        expect(styles).toMatch(/\.table-container\s*{[\s\S]*-webkit-backdrop-filter:\s*none;/);
     });
 
     it('should clear the contextual table selection', () => {

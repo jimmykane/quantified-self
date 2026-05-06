@@ -28,7 +28,7 @@
           <button mat-button
             class="bulk-action-button"
             [disabled]="selection.selected.length < 2"
-            matTooltip="Merge {{ selection.selected.length }} {{ selection.selected.length === 1 ? 'event' : 'events' }}"
+            [attr.aria-label]="'Merge ' + selection.selected.length + ' ' + (selection.selected.length === 1 ? 'event' : 'events')"
             (click)="$event.preventDefault(); $event.stopPropagation();mergeSelection($event)">
             <span class="bulk-action-button-content">
               <mat-icon>compare_arrows</mat-icon>
@@ -38,7 +38,7 @@
 
           <button mat-button
             class="bulk-action-button"
-            matTooltip="Download CSV for {{ selection.selected.length }} {{ selection.selected.length === 1 ? 'event' : 'events' }}"
+            [attr.aria-label]="'Download CSV for ' + selection.selected.length + ' ' + (selection.selected.length === 1 ? 'event' : 'events')"
             (click)="$event.preventDefault(); $event.stopPropagation(); downloadAsCSV($event)">
             <span class="bulk-action-button-content">
               <mat-icon>csv</mat-icon>
@@ -48,7 +48,7 @@
 
           <button mat-button
             class="bulk-action-button"
-            matTooltip="Download original files"
+            aria-label="Download original files"
             (click)="$event.preventDefault(); $event.stopPropagation(); downloadOriginals()">
             <span class="bulk-action-button-content">
               <mat-icon>folder_zip</mat-icon>
@@ -56,8 +56,9 @@
             </span>
           </button>
 
-          <button mat-button color="warn" matTooltip="Delete {{ selection.selected.length }} {{ selection.selected.length === 1 ? 'event' : 'events' }}"
+          <button mat-button color="warn"
             class="bulk-action-button"
+            [attr.aria-label]="'Delete ' + selection.selected.length + ' ' + (selection.selected.length === 1 ? 'event' : 'events')"
             (click)="$event.preventDefault(); $event.stopPropagation();deleteSelection()">
             <span class="bulk-action-button-content">
               <mat-icon>delete</mat-icon>
@@ -67,7 +68,7 @@
 
           <button mat-button
             class="bulk-action-button"
-            matTooltip="Clear selection"
+            aria-label="Clear selection"
             (click)="clearSelection($event)">
             <span class="bulk-action-button-content">
               <mat-icon>close</mat-icon>

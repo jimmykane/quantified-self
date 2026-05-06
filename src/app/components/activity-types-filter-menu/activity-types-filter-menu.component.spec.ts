@@ -2,6 +2,8 @@ import { SimpleChange } from '@angular/core';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
 import { describe, expect, it } from 'vitest';
 import { ActivityTypesFilterMenuComponent } from './activity-types-filter-menu.component';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 describe('ActivityTypesFilterMenuComponent', () => {
   it('builds checkbox options from selected activity filters', () => {
@@ -13,6 +15,7 @@ describe('ActivityTypesFilterMenuComponent', () => {
     });
 
     expect(component.activityFilterLabel).toBe('1 activity filter');
+    expect(component.activityFilterAriaLabel).toBe('Filter activities: 1 activity filter');
     expect(component.activityTypeOptions.some(option => (
       option.value === ActivityTypes.Running && option.selected
     ))).toBe(true);
@@ -72,5 +75,15 @@ describe('ActivityTypesFilterMenuComponent', () => {
     expect(emittedActivityTypes).toEqual([]);
     expect(component.selectedActivityTypes).toEqual([ActivityTypes.Running]);
     expect(component.activityFilterLabel).toBe('1 activity filter');
+  });
+
+  it('keeps the trigger accessible without a hover-created tooltip overlay', () => {
+    const template = readFileSync(
+      join(process.cwd(), 'src/app/components/activity-types-filter-menu/activity-types-filter-menu.component.html'),
+      'utf8'
+    );
+
+    expect(template).toContain('[attr.aria-label]="activityFilterAriaLabel"');
+    expect(template).not.toContain('matTooltip');
   });
 });

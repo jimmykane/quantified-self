@@ -116,7 +116,19 @@
 }
 
 .bulk-action-button {
+  --mat-button-text-ripple-color: color-mix(in srgb, var(--mat-sys-on-surface) 12%, transparent);
+  --mat-button-text-state-layer-color: var(--mat-sys-on-surface);
+
+  border-radius: 999px;
+  isolation: isolate;
   min-width: 0;
+  overflow: hidden;
+  position: relative;
+}
+
+.bulk-action-button[color='warn'] {
+  --mat-button-text-ripple-color: color-mix(in srgb, var(--mat-sys-error) 12%, transparent);
+  --mat-button-text-state-layer-color: var(--mat-sys-error);
 }
 
 .bulk-action-button-content {
@@ -345,8 +357,11 @@ mat-icon {
 
 /* Table Container and Glass Card Styles (matching Admin Dashboard) */
 .table-container {
+  --qs-glass-panel-blur: 0px;
+
   border-radius: 12px;
-  backdrop-filter: blur(10px);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
   background: var(--mat-sys-surface-container-low);
   border: 1px solid var(--mat-sys-outline-variant);
   box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
