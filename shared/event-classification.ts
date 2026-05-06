@@ -15,6 +15,10 @@ export function classifyEventForTrainingMetrics(
         return 'benchmark';
     }
 
+    if (mergeType === 'multi') {
+        return 'standard';
+    }
+
     if (eventData.isMerge === true) {
         return 'benchmark';
     }

@@ -15,6 +15,8 @@ describe('event training metrics classifier', () => {
     it('classifies multi merges as standard', () => {
         expect(classifyEventForTrainingMetrics({ mergeType: 'multi', isMerge: false })).toBe('standard');
         expect(classifyEventForTrainingMetrics({ mergeType: ' multi ' })).toBe('standard');
+        expect(classifyEventForTrainingMetrics({ mergeType: 'multi', isMerge: true })).toBe('standard');
+        expect(isBenchmarkEventForTrainingMetrics({ mergeType: 'multi', isMerge: true })).toBe(false);
     });
 
     it('classifies benchmark merges as benchmark', () => {
@@ -25,7 +27,7 @@ describe('event training metrics classifier', () => {
 
     it('treats isMerge=true as benchmark fallback', () => {
         expect(classifyEventForTrainingMetrics({ isMerge: true })).toBe('benchmark');
-        expect(classifyEventForTrainingMetrics({ isMerge: true, mergeType: 'multi' })).toBe('benchmark');
+        expect(classifyEventForTrainingMetrics({ isMerge: true, mergeType: 'unknown' })).toBe('benchmark');
     });
 
     it('treats malformed fields as standard', () => {
