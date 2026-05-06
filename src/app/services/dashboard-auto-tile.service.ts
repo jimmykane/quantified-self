@@ -34,8 +34,8 @@ import {
 import {
   DASHBOARD_RECOVERY_NOW_CHART_TYPE,
   DASHBOARD_SLEEP_TREND_CHART_TYPE,
+  getDefaultDashboardKpiChartDefinitions,
   getDashboardCuratedChartDefinitions,
-  getDashboardKpiChartDefinitions,
 } from '../helpers/dashboard-special-chart-types';
 import { cloneDashboardTileEventFilters } from '../helpers/dashboard-tile-event-filters.helper';
 import { AppSleepService } from './app.sleep.service';
@@ -58,7 +58,7 @@ export interface DashboardAutoTileApplyResult {
   persisted: boolean;
 }
 
-const DASHBOARD_KPI_AUTO_TILE_RULES: DashboardAutoTileRule[] = getDashboardKpiChartDefinitions().map(definition => ({
+const DASHBOARD_KPI_AUTO_TILE_RULES: DashboardAutoTileRule[] = getDefaultDashboardKpiChartDefinitions().map(definition => ({
   id: DASHBOARD_AUTO_TILE_KPI_ID_BY_CHART_TYPE[definition.chartType],
   label: definition.label,
   source: DASHBOARD_AUTO_TILE_KPI_SOURCE,
@@ -290,7 +290,7 @@ export class DashboardAutoTileService {
   }
 
   private buildDefaultKpiEligibility(): DashboardAutoTileEligibility {
-    return getDashboardKpiChartDefinitions().reduce<DashboardAutoTileEligibility>((eligibility, definition) => {
+    return getDefaultDashboardKpiChartDefinitions().reduce<DashboardAutoTileEligibility>((eligibility, definition) => {
       eligibility[DASHBOARD_AUTO_TILE_KPI_ID_BY_CHART_TYPE[definition.chartType]] = true;
       return eligibility;
     }, {});

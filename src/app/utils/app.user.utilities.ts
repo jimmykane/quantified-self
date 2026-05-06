@@ -70,8 +70,8 @@ import {
 import {
     DASHBOARD_RECOVERY_NOW_CHART_TYPE,
     DASHBOARD_SLEEP_TREND_CHART_TYPE,
+    getDefaultDashboardKpiChartDefinitions,
     getDashboardCuratedChartDefinitions,
-    getDashboardKpiChartDefinitions,
     isDashboardRecoveryNowChartType,
     isDashboardSpecialChartType,
 } from '../helpers/dashboard-special-chart-types';
@@ -226,7 +226,7 @@ export class AppUserUtilities {
     }
 
     private static getDefaultUserDashboardKpiTiles(startOrder: number): TileChartSettingsInterface[] {
-        return getDashboardKpiChartDefinitions().map((definition, index) => buildDashboardKpiAutoTile(
+        return getDefaultDashboardKpiChartDefinitions().map((definition, index) => buildDashboardKpiAutoTile(
             definition.chartType,
             startOrder + index,
         ));

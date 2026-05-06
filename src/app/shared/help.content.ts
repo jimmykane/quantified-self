@@ -105,7 +105,8 @@ export const HELP_SECTIONS: HelpSection[] = [
 - **Curated Recovery** remains a fixed insight and does not react to event table or custom tile date ranges.
 - **Curated Form/TSS** computes from full history and does not react to event table or custom tile date ranges.
 - New curated charts: **Freshness Forecast**, **Intensity Distribution**, and **Efficiency Trend**.
-- KPI rows are derived-only compact tiles: **ACWR**, **Ramp Rate**, **Monotony / Strain**, **Form Now**, **Fitness (CTL)**, **Fatigue (ATL)**, **Form +7d**, **Easy %**, **Hard %**, and **Efficiency Δ (4w)**.
+- The default KPI rows are the core derived training-metrics set: **Form Now**, **Fitness (CTL)**, **Fatigue (ATL)**, and **Ramp Rate**.
+- Additional KPI rows such as **ACWR**, **Monotony / Strain**, **Form +7d**, **Easy %**, **Hard %**, and **Efficiency Δ (4w)** remain available from Dashboard manager.
 - KPI rows are shown in the compact **Today** section above the main dashboard grid.
 - On mobile, Today rows stay compact while the chart/map grid stays unchanged below.
 - KPI choices in Dashboard manager are grouped as **Load**, **Readiness**, and **Execution** for both manual and preset flows.
@@ -122,7 +123,7 @@ export const HELP_SECTIONS: HelpSection[] = [
 - **Map** tiles use their own tile date-range and activity filters, independent from the event table search.
 - Curated, KPI, form, recovery, sleep, and other derived tiles stay independent from event table filters and custom/map tile filters.
 - When sleep sync imports sleep sessions, the dashboard can add the **Sleep** tile once, and you can also add it manually from Dashboard manager; removing an auto-added Sleep tile prevents future automatic Sleep tile adds.
-- Existing dashboards can receive the default curated chart set and KPI row set automatically once; removing an auto-added curated chart or KPI prevents that chart from being suggested again.
+- Existing dashboards can receive the default curated chart set and core KPI row set automatically once; removing an auto-added curated chart or KPI prevents that chart from being suggested again.
 - Derived curated and KPI chart types are unique: only one tile per special derived chart type can exist at a time.
 - Map tiles are also unique: only one map tile can exist at a time.
 - Map style and cluster-marker settings are edited inside Dashboard manager.

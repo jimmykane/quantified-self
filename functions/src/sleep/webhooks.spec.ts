@@ -7,6 +7,7 @@ const hoisted = vi.hoisted(() => ({
     suuntoEnabled: true,
     allowedUserIDs: ['xcsAolLDDTWTgtRN9eYF3lW2YKL2'] as string[],
     suuntoWebhookTokenMatches: true,
+    suuntoWebhookResolvedUserID: 'resolved-suunto-user-id',
 }));
 
 vi.mock('firebase-functions/v1', () => ({
@@ -39,11 +40,45 @@ vi.mock('firebase-admin', () => ({
                 })),
             })),
         })),
+        collectionGroup: vi.fn(() => ({
+            where: vi.fn().mockReturnThis(),
+            limit: vi.fn().mockReturnThis(),
+            get: vi.fn().mockResolvedValue({
+                empty: !hoisted.suuntoWebhookTokenMatches,
+                docs: hoisted.suuntoWebhookTokenMatches ? [{
+                    id: 'suunto-token-1',
+                    data: () => ({
+                        userName: 'suunto-user-1',
+                    }),
+                    ref: {
+                        parent: {
+                            parent: {
+                                id: hoisted.suuntoWebhookResolvedUserID,
+                                parent: {
+                                    id: 'suuntoAppAccessTokens',
+                                },
+                            },
+                        },
+                    },
+                }] : [],
+            }),
+        })),
     })),
 }));
 
 vi.mock('./queue', () => ({
     addSleepSyncQueueItem: hoisted.addSleepSyncQueueItem,
+    findSleepTokenByProviderUserId: vi.fn(async () => (hoisted.suuntoWebhookTokenMatches ? {
+        id: 'suunto-token-1',
+        ref: {
+            parent: {
+                parent: {
+                    id: hoisted.suuntoWebhookResolvedUserID,
+                },
+            },
+        },
+    } : null)),
+    firebaseUserIdFromSleepTokenSnapshot: vi.fn((tokenSnapshot: any) => tokenSnapshot.ref.parent.parent.id),
 }));
 
 vi.mock('./provider-flags', () => ({
@@ -76,6 +111,7 @@ describe('sleep webhooks', () => {
         hoisted.suuntoEnabled = true;
         hoisted.allowedUserIDs = ['xcsAolLDDTWTgtRN9eYF3lW2YKL2'];
         hoisted.suuntoWebhookTokenMatches = true;
+        hoisted.suuntoWebhookResolvedUserID = 'resolved-suunto-user-id';
         process.env.SUUNTOAPP_NOTIFICATION_SECRET = 'suunto-notification-secret';
         hoisted.addSleepSyncQueueItem.mockResolvedValue({ id: 'queue-id' });
     });
@@ -210,6 +246,59 @@ describe('sleep webhooks', () => {
             body: {
                 type: 'SUUNTO_247_SLEEP_CREATED',
                 username: 'other-suunto-user',
+                samples: [{ SleepId: 123, StartTime: 1760000000000 }],
+            },
+            get: vi.fn((header: string) => header === 'X-HMAC-SHA256-Signature' ? signature : undefined),
+        } as any, response as any);
+
+        expect(response.status).toHaveBeenCalledWith(200);
+        expect(hoisted.addSleepSyncQueueItem).not.toHaveBeenCalled();
+    });
+
+    it('resolves all-user Suunto sleep webhooks to a connected app user before queueing', async () => {
+        hoisted.allowedUserIDs = [];
+        hoisted.suuntoWebhookResolvedUserID = 'connected-user-id';
+        const rawBody = Buffer.from(JSON.stringify({ type: 'SUUNTO_247_SLEEP_CREATED' }));
+        const signature = createHmac('sha256', process.env.SUUNTOAPP_NOTIFICATION_SECRET || '')
+            .update(rawBody)
+            .digest('hex');
+        const response = createResponse();
+
+        await receiveSuuntoAppSleepData({
+            rawBody,
+            body: {
+                type: 'SUUNTO_247_SLEEP_CREATED',
+                username: 'suunto-user-1',
+                samples: [{ SleepId: 123, StartTime: 1760000000000 }],
+            },
+            get: vi.fn((header: string) => header === 'X-HMAC-SHA256-Signature' ? signature : undefined),
+        } as any, response as any);
+
+        expect(response.status).toHaveBeenCalledWith(200);
+        expect(hoisted.addSleepSyncQueueItem).toHaveBeenCalledWith(expect.objectContaining({
+            type: 'suunto_webhook',
+            provider: 'SuuntoApp',
+            userID: 'connected-user-id',
+            providerUserId: 'suunto-user-1',
+            payload: { samples: [{ SleepId: 123, StartTime: 1760000000000 }] },
+            dedupeKey: 'suunto-user-1:123',
+        }));
+    });
+
+    it('acknowledges all-user Suunto sleep webhooks without queueing when no connected token exists', async () => {
+        hoisted.allowedUserIDs = [];
+        hoisted.suuntoWebhookTokenMatches = false;
+        const rawBody = Buffer.from(JSON.stringify({ type: 'SUUNTO_247_SLEEP_CREATED' }));
+        const signature = createHmac('sha256', process.env.SUUNTOAPP_NOTIFICATION_SECRET || '')
+            .update(rawBody)
+            .digest('hex');
+        const response = createResponse();
+
+        await receiveSuuntoAppSleepData({
+            rawBody,
+            body: {
+                type: 'SUUNTO_247_SLEEP_CREATED',
+                username: 'unknown-suunto-user',
                 samples: [{ SleepId: 123, StartTime: 1760000000000 }],
             },
             get: vi.fn((header: string) => header === 'X-HMAC-SHA256-Signature' ? signature : undefined),

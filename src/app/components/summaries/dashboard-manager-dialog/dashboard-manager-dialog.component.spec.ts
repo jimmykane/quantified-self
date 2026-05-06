@@ -654,7 +654,8 @@ describe('DashboardManagerDialogComponent', () => {
     expect(tiles.filter((tile: any) => tile.type === TileTypes.Chart && tile.dataType === DataDistance.type)).toHaveLength(1);
     expect(tiles.some((tile: any) => tile.chartType === DASHBOARD_RECOVERY_NOW_CHART_TYPE)).toBe(true);
     expect(tiles.some((tile: any) => tile.chartType === DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE)).toBe(true);
-    expect(tiles.some((tile: any) => tile.chartType === DASHBOARD_ACWR_KPI_CHART_TYPE)).toBe(true);
+    expect(tiles.some((tile: any) => tile.chartType === DASHBOARD_FORM_NOW_KPI_CHART_TYPE)).toBe(true);
+    expect(tiles.some((tile: any) => tile.chartType === DASHBOARD_ACWR_KPI_CHART_TYPE)).toBe(false);
     expect(tiles.some((tile: any) => tile.chartType === ChartTypes.Pie && tile.dataType === DataDuration.type)).toBe(true);
     expect(tiles.some((tile: any) => tile.dataType === DataEnergy.type)).toBe(false);
     expect(tiles.some((tile: any) => tile.dataType === DataHeartRateAvg.type)).toBe(false);
@@ -662,7 +663,7 @@ describe('DashboardManagerDialogComponent', () => {
       state: 'added',
       source: 'default-curated',
     });
-    expect(dialogData.user.settings.dashboardSettings.autoTiles.kpiAcwr).toMatchObject({
+    expect(dialogData.user.settings.dashboardSettings.autoTiles.kpiFormNow).toMatchObject({
       state: 'added',
       source: 'default-kpi',
     });

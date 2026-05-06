@@ -5,7 +5,11 @@ import * as admin from 'firebase-admin';
 import {
     SLEEP_PROVIDERS,
 } from '../../../shared/sleep';
-import { addSleepSyncQueueItem } from './queue';
+import {
+    addSleepSyncQueueItem,
+    findSleepTokenByProviderUserId,
+    firebaseUserIdFromSleepTokenSnapshot,
+} from './queue';
 import { verifySuuntoWebhookSignature } from '../suunto/webhook-signature';
 import {
     getAllowedSleepSyncUserIds,
@@ -104,7 +108,8 @@ function hasNumberField(record: ExternalRecord, fieldName: string): boolean {
 async function resolveScopedSuuntoWebhookUserID(providerUserId: string): Promise<string | null | undefined> {
     const allowedUserIDs = getAllowedSleepSyncUserIds();
     if (allowedUserIDs.length === 0) {
-        return undefined;
+        const tokenSnapshot = await findSleepTokenByProviderUserId(SLEEP_PROVIDERS.SuuntoApp, providerUserId);
+        return tokenSnapshot ? firebaseUserIdFromSleepTokenSnapshot(tokenSnapshot) : null;
     }
 
     for (const userID of allowedUserIDs) {
@@ -211,7 +216,7 @@ export const receiveSuuntoAppSleepData = functions.region('europe-west2').runWit
     try {
         const scopedUserID = await resolveScopedSuuntoWebhookUserID(providerUserId);
         if (scopedUserID === null) {
-            logger.info('[SleepSync][Suunto] Ignoring webhook for user outside SLEEP_SYNC_ALLOWED_USER_IDS');
+            logger.info('[SleepSync][Suunto] Ignoring webhook without a connected Suunto token or outside SLEEP_SYNC_ALLOWED_USER_IDS');
             res.status(200).send();
             return;
         }

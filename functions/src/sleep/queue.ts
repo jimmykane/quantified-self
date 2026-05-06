@@ -100,7 +100,35 @@ export async function addSleepSyncQueueItem(input: AddSleepSyncQueueItemInput): 
     return docRef;
 }
 
-async function findTokenByProviderUserId(provider: SleepProvider, providerUserId: string): Promise<TokenSnapshot | null> {
+function isTokenFromCollection(tokenSnapshot: TokenSnapshot, collectionName: string): boolean {
+    return tokenSnapshot.ref.parent.parent?.parent?.id === collectionName;
+}
+
+function tokenMatchesServiceName(tokenSnapshot: TokenSnapshot, serviceName: ServiceNames): boolean {
+    const storedServiceName = tokenSnapshot.data().serviceName;
+    return !storedServiceName || storedServiceName === serviceName;
+}
+
+async function findSuuntoTokenByUserName(providerUserId: string): Promise<TokenSnapshot | null> {
+    const snapshot = await admin.firestore().collectionGroup('tokens')
+        .where('userName', '==', providerUserId)
+        .limit(10)
+        .get();
+    const candidates = snapshot.docs.filter((tokenSnapshot) => (
+        isTokenFromCollection(tokenSnapshot, 'suuntoAppAccessTokens')
+        && tokenMatchesServiceName(tokenSnapshot, ServiceNames.SuuntoApp)
+    ));
+
+    return candidates.find((tokenSnapshot) => tokenSnapshot.data().serviceName === ServiceNames.SuuntoApp)
+        || candidates[0]
+        || null;
+}
+
+export async function findSleepTokenByProviderUserId(provider: SleepProvider, providerUserId: string): Promise<TokenSnapshot | null> {
+    if (provider === SLEEP_PROVIDERS.SuuntoApp) {
+        return findSuuntoTokenByUserName(providerUserId);
+    }
+
     const tokenField = providerUserIdTokenField(provider);
     if (!tokenField) {
         return null;
@@ -126,7 +154,7 @@ async function findTokenForQueueItem(queueItem: SleepSyncQueueItemInterface): Pr
             .get();
         return snapshot.docs[0] || null;
     }
-    return findTokenByProviderUserId(queueItem.provider, queueItem.providerUserId);
+    return findSleepTokenByProviderUserId(queueItem.provider, queueItem.providerUserId);
 }
 
 function getTokenRoot(provider: SleepProvider, userID: string): admin.firestore.CollectionReference | null {
@@ -142,7 +170,7 @@ function getTokenRoot(provider: SleepProvider, userID: string): admin.firestore.
     }
 }
 
-function firebaseUserIdFromTokenSnapshot(tokenSnapshot: TokenSnapshot): string {
+export function firebaseUserIdFromSleepTokenSnapshot(tokenSnapshot: TokenSnapshot): string {
     const userRef = tokenSnapshot.ref.parent.parent;
     if (!userRef) {
         throw new Error(`Token ${tokenSnapshot.id} has no user parent`);
@@ -240,17 +268,23 @@ class UnsupportedGarminPushPayloadError extends Error {
     }
 }
 
+class MissingSleepProviderTokenError extends Error {
+    constructor(public readonly provider: SleepProvider, public readonly providerUserId: string) {
+        super(`No ${provider} token found for ${providerUserId}`);
+    }
+}
+
 async function resolveTokenAndUser(queueItem: SleepSyncQueueItemInterface): Promise<{
     tokenSnapshot: TokenSnapshot;
     firebaseUserID: string;
 }> {
     const tokenSnapshot = await findTokenForQueueItem(queueItem);
     if (!tokenSnapshot) {
-        throw new Error(`No ${queueItem.provider} token found for ${queueItem.providerUserId}`);
+        throw new MissingSleepProviderTokenError(queueItem.provider, queueItem.providerUserId);
     }
     return {
         tokenSnapshot,
-        firebaseUserID: firebaseUserIdFromTokenSnapshot(tokenSnapshot),
+        firebaseUserID: firebaseUserIdFromSleepTokenSnapshot(tokenSnapshot),
     };
 }
 
@@ -446,6 +480,13 @@ export async function processSleepSyncQueueItem(queueItem: SleepSyncQueueItemInt
         if (error instanceof UnsupportedGarminPushPayloadError) {
             logger.warn(`[SleepSync] Queue item ${queueItem.id} has unsupported Garmin push payload; moving to DLQ`);
             return moveToDeadLetterQueue(queueItem, error, undefined, 'UNSUPPORTED_GARMIN_PUSH_PAYLOAD');
+        }
+        if (error instanceof MissingSleepProviderTokenError) {
+            if (queueItem.userID) {
+                await markSleepSyncError(queueItem.userID, queueItem.provider, error);
+            }
+            logger.warn(`[SleepSync] Queue item ${queueItem.id} has no connected ${error.provider} token for ${error.providerUserId}; moving to DLQ`);
+            return moveToDeadLetterQueue(queueItem, error, undefined, 'NO_TOKEN_FOUND');
         }
         if (queueItem.userID) {
             await markSleepSyncError(queueItem.userID, queueItem.provider, error);
