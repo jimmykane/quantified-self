@@ -27,6 +27,7 @@ import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { ActivatedRoute, Router } from '@angular/router';
 import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { EChartsLoaderService } from '../../../services/echarts-loader.service';
+import { CompactCountPipe } from '../../../helpers/compact-count.pipe';
 
 // Mock canvas for charts
 Object.defineProperty(HTMLCanvasElement.prototype, 'getContext', {
@@ -101,7 +102,10 @@ describe('AdminUserManagementComponent', () => {
             metadata: { lastSignInTime: '2023-01-01', creationTime: '2022-01-01' },
             disabled: false,
             providerIds: ['password'],
-            hasSubscribedOnce: true
+            hasSubscribedOnce: true,
+            eventStats: {
+                total: 125,
+            }
         },
         {
             uid: 'user2',
@@ -111,7 +115,10 @@ describe('AdminUserManagementComponent', () => {
             metadata: { lastSignInTime: '2023-01-02', creationTime: '2022-01-02' },
             disabled: true,
             providerIds: ['google.com'],
-            hasSubscribedOnce: false
+            hasSubscribedOnce: false,
+            eventStats: {
+                total: null,
+            }
         }
     ];
 
@@ -219,7 +226,10 @@ describe('AdminUserManagementComponent', () => {
                 everPaid: 85,
                 canceled: 15,
                 cancelScheduled: 8,
-                onboardingCompleted: 80
+                onboardingCompleted: 80,
+                events: {
+                    total: 1_000_000,
+                }
             })),
             getUserGrowthTrend: vi.fn().mockReturnValue(of(mockTrend)),
             getSubscriptionHistoryTrend: vi.fn().mockReturnValue(of(mockSubscriptionTrend))
@@ -276,7 +286,8 @@ describe('AdminUserManagementComponent', () => {
                 MatIconModule,
                 MatProgressSpinnerModule,
                 NoopAnimationsModule,
-                FormsModule
+                FormsModule,
+                CompactCountPipe
             ],
             providers: [
                 { provide: AdminService, useValue: adminServiceSpy },
@@ -304,7 +315,10 @@ describe('AdminUserManagementComponent', () => {
                                         everPaid: 85,
                                         canceled: 15,
                                         cancelScheduled: 8,
-                                        onboardingCompleted: 80
+                                        onboardingCompleted: 80,
+                                        events: {
+                                            total: 1_000_000,
+                                        }
                                     },
                                     userGrowthTrend: mockTrend,
                                     subscriptionHistoryTrend: mockSubscriptionTrend
@@ -332,6 +346,7 @@ describe('AdminUserManagementComponent', () => {
         expect(component.displayedColumns).toContain('uid');
         expect(component.displayedColumns).toContain('subscriptionHistory');
         expect(component.displayedColumns).toContain('aiCreditsConsumed');
+        expect(component.displayedColumns).toContain('eventStats');
         expect(component.displayedColumns).not.toContain('subscription');
     });
 
@@ -354,8 +369,20 @@ describe('AdminUserManagementComponent', () => {
             everPaid: 85,
             canceled: 15,
             cancelScheduled: 8,
-            onboardingCompleted: 80
+            onboardingCompleted: 80,
+            events: {
+                total: 1_000_000,
+            }
         });
+    });
+
+    it('should show event totals in cards and the user table', () => {
+        fixture.detectChanges();
+
+        const nativeElement = fixture.nativeElement as HTMLElement;
+        expect(nativeElement.textContent).toContain('Total Events');
+        expect(nativeElement.textContent).toContain('1M');
+        expect(nativeElement.textContent).toContain('125');
     });
 
     it('should use resolved user growth trend data on init', () => {

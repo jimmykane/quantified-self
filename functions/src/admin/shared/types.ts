@@ -2,6 +2,10 @@ export interface GetQueueStatsRequest {
     includeAnalysis?: boolean;
 }
 
+export interface EventCountStats {
+    total: number | null;
+}
+
 export interface ListUsersRequest {
     pageSize?: number;
     page?: number;
@@ -36,6 +40,7 @@ export interface EnrichedUser extends BasicUser {
     onboardingCompleted: boolean;
     hasSubscribedOnce: boolean;
     aiCreditsConsumed: number;
+    eventStats: EventCountStats;
 }
 
 export interface ListUsersResponse {
@@ -54,6 +59,7 @@ export interface UserCountResponse {
     monthlyPaid: number;
     yearlyPaid: number;
     onboardingCompleted: number;
+    events: EventCountStats;
     providers: Record<string, number>;
 }
 

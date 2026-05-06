@@ -52,6 +52,7 @@ import {
     EChartsHostController
 } from '../../../helpers/echarts-host-controller';
 import { buildOfficialEChartsThemeTokens, ECHARTS_GLOBAL_FONT_FAMILY, resolveEChartsThemeName } from '../../../helpers/echarts-theme.helper';
+import { CompactCountPipe } from '../../../helpers/compact-count.pipe';
 import dayjs from 'dayjs';
 import localizedFormat from 'dayjs/plugin/localizedFormat';
 
@@ -88,6 +89,7 @@ const EMPTY_CHART_UPDATE_SETTINGS: ChartSetOptionSettings = {
         MatCardModule,
         MatDialogModule,
         MatSnackBarModule,
+        CompactCountPipe,
     ]
 })
 export class AdminUserManagementComponent implements OnInit, OnDestroy, AfterViewInit {
@@ -124,7 +126,7 @@ export class AdminUserManagementComponent implements OnInit, OnDestroy, AfterVie
 
     displayedColumns: string[] = [
         'photoURL', 'email', 'uid', 'providerIds', 'displayName', 'role', 'subscriptionHistory',
-        'aiCreditsConsumed', 'services', 'created', 'lastLogin', 'onboarding', 'status', 'actions'
+        'aiCreditsConsumed', 'eventStats', 'services', 'created', 'lastLogin', 'onboarding', 'status', 'actions'
     ];
 
     private searchSubject = new Subject<string>();

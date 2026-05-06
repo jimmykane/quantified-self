@@ -4,6 +4,10 @@ import { from, Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
 import { AppFunctionsService } from './app.functions.service';
 
+export interface EventCountStats {
+    total: number | null;
+}
+
 export interface AdminUser {
     uid: string;
     email: string;
@@ -33,6 +37,7 @@ export interface AdminUser {
     }[];
     hasSubscribedOnce?: boolean;
     aiCreditsConsumed?: number;
+    eventStats?: EventCountStats;
 }
 
 export interface ListUsersParams {
@@ -63,6 +68,7 @@ export interface UserCountStats {
     cancelScheduled: number;
     onboardingCompleted: number;
     providers: Record<string, number>;
+    events: EventCountStats;
 }
 
 export interface SubscriptionHistoryTrendBucket {
@@ -318,6 +324,7 @@ export class AdminService {
             cancelScheduled?: number;
             onboardingCompleted?: number;
             providers: Record<string, number>;
+            events?: Partial<EventCountStats>;
         }>('getUserCount')).pipe(
             map(result => ({
                 total: result.data.total ?? result.data.count, // Fallback for safety
@@ -330,7 +337,12 @@ export class AdminService {
                 canceled: result.data.canceled ?? 0,
                 cancelScheduled: result.data.cancelScheduled ?? 0,
                 onboardingCompleted: result.data.onboardingCompleted ?? 0,
-                providers: result.data.providers || {}
+                providers: result.data.providers || {},
+                events: {
+                    total: typeof result.data.events?.total === 'number'
+                        ? result.data.events.total
+                        : null,
+                }
             }))
         );
     }

@@ -11,6 +11,7 @@ import {
     fetchDerivedMetricsEventDocs,
     fetchRecoveryLookbackEventDocs,
     getDerivedRecoveryLookbackWindowSeconds,
+    isDerivedMetricsUserWriteBlocked,
     markDerivedMetricSnapshotsBuilding,
     markDerivedMetricSnapshotsFailed,
     resolveDerivedMetricSourceRequirements,
@@ -61,6 +62,9 @@ export const processDerivedMetricsTask = onTaskDispatched({
     }
 
     try {
+        if (await isDerivedMetricsUserWriteBlocked(uid, 'task before snapshot building', { generation, dirtyMetricKinds })) {
+            return;
+        }
         await markDerivedMetricSnapshotsBuilding(uid, dirtyMetricKinds);
         const sourceRequirements = resolveDerivedMetricSourceRequirements(dirtyMetricKinds);
         const projectionOnlyKinds = areOnlyProjectionSensitiveMetricKinds(dirtyMetricKinds);
@@ -94,6 +98,9 @@ export const processDerivedMetricsTask = onTaskDispatched({
             ? await fetchRecoveryLookbackEventDocs(uid)
             : [];
 
+        if (await isDerivedMetricsUserWriteBlocked(uid, 'task before snapshot ready write', { generation, dirtyMetricKinds })) {
+            return;
+        }
         await writeDerivedMetricSnapshotsReady(uid, dirtyMetricKinds, {
             formDocs,
             recoveryNowDocs,
@@ -103,6 +110,9 @@ export const processDerivedMetricsTask = onTaskDispatched({
             formSourceEventCount: projectionFormSnapshotSeed?.sourceEventCount ?? null,
             formSourceDocCount: projectionFormSnapshotSeed?.sourceDocCount ?? null,
         });
+        if (await isDerivedMetricsUserWriteBlocked(uid, 'task before processing completion', { generation, dirtyMetricKinds })) {
+            return;
+        }
         const completion = await completeDerivedMetricsProcessing(uid, Math.floor(generation));
 
         logger.info('[derived-metrics] Processed derived metrics task.', {
@@ -131,8 +141,10 @@ export const processDerivedMetricsTask = onTaskDispatched({
             error: processingError,
             durationMs: Date.now() - processingStart,
         });
-        await markDerivedMetricSnapshotsFailed(uid, dirtyMetricKinds, processingError);
-        await failDerivedMetricsProcessing(uid, Math.floor(generation), processingError, dirtyMetricKinds);
+        if (!await isDerivedMetricsUserWriteBlocked(uid, 'task before failure writes', { generation, dirtyMetricKinds })) {
+            await markDerivedMetricSnapshotsFailed(uid, dirtyMetricKinds, processingError);
+            await failDerivedMetricsProcessing(uid, Math.floor(generation), processingError, dirtyMetricKinds);
+        }
         throw processingError;
     }
 });

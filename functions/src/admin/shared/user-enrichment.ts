@@ -6,6 +6,14 @@ import { COROSAPI_ACCESS_TOKENS_COLLECTION_NAME } from '../../coros/constants';
 import { toEpochMillis } from './date.utils';
 import { BasicUser, EnrichedUser } from './types';
 
+function normalizeCount(value: unknown): number {
+    if (typeof value !== 'number' || !Number.isFinite(value)) {
+        return 0;
+    }
+
+    return Math.max(0, Math.floor(value));
+}
+
 function buildAiInsightsUsageDocIdForSubscriptionPeriod(
     periodStart: unknown,
     periodEnd: unknown
@@ -39,21 +47,20 @@ function resolveAiCreditsConsumedFromUsageData(value: unknown): number {
 }
 
 /**
- * Enrich a small batch of users with Firestore data (subscriptions, services)
- * This is the ONLY place we do Firestore reads
+ * Enrich a small batch of users with Firestore data (subscriptions, services, event counts).
  */
 export async function enrichUsers(
     users: BasicUser[],
     db: admin.firestore.Firestore
 ): Promise<EnrichedUser[]> {
     const userFlagsByUid = new Map<string, { onboardingCompleted: boolean; hasSubscribedOnce: boolean }>();
+    const eventStatsByUid = new Map<string, EnrichedUser['eventStats']>();
 
     if (users.length > 0) {
         try {
             const userDocRefs = users.map(user => db.collection('users').doc(user.uid));
-            const userDocs = await db.getAll(...userDocRefs);
-
-            userDocs.forEach(snapshot => {
+            const snapshots = await db.getAll(...userDocRefs);
+            snapshots.forEach(snapshot => {
                 const userData = snapshot.data() || {};
                 userFlagsByUid.set(snapshot.id, {
                     onboardingCompleted: userData.onboardingCompleted === true,
@@ -63,6 +70,20 @@ export async function enrichUsers(
         } catch (e) {
             logger.warn('Failed to fetch onboarding flags for admin user list', e);
         }
+
+        await Promise.all(users.map(async (user) => {
+            try {
+                const snapshot = await db.collection('users')
+                    .doc(user.uid)
+                    .collection('events')
+                    .count()
+                    .get();
+                eventStatsByUid.set(user.uid, { total: normalizeCount(snapshot.data().count) });
+            } catch (e) {
+                logger.warn(`Failed to count events for ${user.uid}`, e);
+                eventStatsByUid.set(user.uid, { total: null });
+            }
+        }));
     }
 
     return Promise.all(
@@ -159,7 +180,10 @@ export async function enrichUsers(
                 connectedServices: connectedServices,
                 onboardingCompleted: userFlagsByUid.get(user.uid)?.onboardingCompleted === true,
                 hasSubscribedOnce,
-                aiCreditsConsumed
+                aiCreditsConsumed,
+                eventStats: eventStatsByUid.get(user.uid) || {
+                    total: null,
+                },
             };
         })
     );

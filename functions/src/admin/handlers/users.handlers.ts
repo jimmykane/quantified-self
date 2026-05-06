@@ -13,7 +13,7 @@ import {
 } from '../shared/subscription.constants';
 import { clampListUsersPageSize } from '../shared/date.utils';
 import { enrichUsers } from '../shared/user-enrichment';
-import { BasicUser, ListUsersRequest, ListUsersResponse, UserCountResponse } from '../shared/types';
+import { BasicUser, EventCountStats, ListUsersRequest, ListUsersResponse, UserCountResponse } from '../shared/types';
 
 const resolveSubscriptionInterval = (subscription: Record<string, unknown>): string | null => {
     const items = Array.isArray(subscription.items) ? subscription.items : [];
@@ -45,6 +45,24 @@ const resolveSubscriptionInterval = (subscription: Record<string, unknown>): str
     return null;
 };
 
+function normalizeCount(value: unknown): number {
+    if (typeof value !== 'number' || !Number.isFinite(value)) {
+        return 0;
+    }
+
+    return Math.max(0, Math.floor(value));
+}
+
+async function getGlobalEventCount(db: admin.firestore.Firestore): Promise<EventCountStats> {
+    try {
+        const snapshot = await db.collectionGroup('events').count().get();
+        return { total: normalizeCount(snapshot.data().count) };
+    } catch (error) {
+        logger.warn('Failed to count events for admin user stats', error);
+        return { total: null };
+    }
+}
+
 /**
  * Lists all users with pagination, search, and sorting support.
  * OPTIMIZED: Only enriches users on the current page to minimize Firestore reads.
@@ -52,8 +70,8 @@ const resolveSubscriptionInterval = (subscription: Record<string, unknown>): str
  * Performance:
  * - Firebase Auth listUsers: FREE (no Firestore reads)
  * - Search/Sort on Auth data: FREE
- * - Enrich current page only: ~5-7 reads per user (onboarding, subscription, service tokens, AI usage with fallback lookup)
- * - For pageSize=10: ~50-70 Firestore reads total
+ * - Enrich current page only: user detail reads plus one event count aggregation per visible user
+ * - Event counts are display-only and are not used for sorting/filtering in v1
  */
 export const listUsers = onAdminCall<ListUsersRequest, ListUsersResponse>({
     region: FUNCTIONS_MANIFEST.listUsers.region,
@@ -213,8 +231,7 @@ export const listUsers = onAdminCall<ListUsersRequest, ListUsersResponse>({
 
         // ============================================
         // STEP 5: Enrich ONLY the current page users
-        // This is the ONLY place we do Firestore reads!
-        // ~4 reads per user = ~40 reads for pageSize=10
+        // This is the only place we read Firestore user details and run per-visible-user event counts.
         // ============================================
         const db = admin.firestore();
         const enrichedUsers = await enrichUsers(pageUsers, db);
@@ -245,7 +262,7 @@ export const getUserCount = onAdminCall<void, UserCountResponse>({
 
         // 1. Get stats from Firestore (subscriptions)
         // Parallel efficient count queries
-        const [totalSnapshot, proSnapshot, basicSnapshot, onboardedSnapshot] = await Promise.all([
+        const [totalSnapshot, proSnapshot, basicSnapshot, onboardedSnapshot, eventStats] = await Promise.all([
             db.collection('users').count().get(),
             db.collectionGroup('subscriptions')
                 .where('status', 'in', [...ACTIVE_SUBSCRIPTION_STATUSES])
@@ -257,7 +274,8 @@ export const getUserCount = onAdminCall<void, UserCountResponse>({
                 .count().get(),
             db.collection('users')
                 .where('onboardingCompleted', '==', true)
-                .count().get()
+                .count().get(),
+            getGlobalEventCount(db)
         ]);
 
         const total = totalSnapshot.data().count;
@@ -326,6 +344,7 @@ export const getUserCount = onAdminCall<void, UserCountResponse>({
             monthlyPaid,
             yearlyPaid,
             onboardingCompleted,
+            events: eventStats,
             providers: providerCounts
         };
     } catch (error: unknown) {

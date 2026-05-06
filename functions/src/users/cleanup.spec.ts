@@ -14,10 +14,14 @@ const { authBuilderMock, deauthorizeServiceMock, firestoreMock, getServiceConfig
 
     // Mock for tokens subcollection - returns empty by default
     const tokensGetMock = vi.fn().mockResolvedValue({ empty: true, docs: [] });
-    const tokensCollectionMock = vi.fn().mockReturnValue({ get: tokensGetMock });
+    const tokensCollectionMock = vi.fn((collectionId?: string) => ({
+        path: `subcollection/${collectionId || ''}`,
+        get: tokensGetMock
+    }));
 
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+     
     const docMock = vi.fn((_id?: string) => ({
+        path: `doc/${_id || ''}`,
         delete: deleteMock,
         collection: tokensCollectionMock,  // Support for subcollection queries
         set: setMock
@@ -285,6 +289,15 @@ describe('cleanupUserAccounts', () => {
         // Verify recursiveDelete was called with the correct doc ref
         const docRef = firestoreMock().collection('mockCollection').doc('testUser123');
         expect(recursiveDeleteMock).toHaveBeenCalledWith(docRef);
+    });
+
+    it('should recursively delete generated derived metrics subtree', async () => {
+        const wrapped = cleanupUserAccounts;
+        const user = testEnv.auth.makeUserRecord({ uid: 'testUser123' });
+
+        await wrapped(user, { eventId: 'eventId' } as unknown as functions.EventContext);
+
+        expect(recursiveDeleteMock).toHaveBeenCalledWith(expect.objectContaining({ path: 'subcollection/derivedMetrics' }));
     });
 
     it('should handle subcollection deletion error and continue', async () => {
