@@ -58,4 +58,19 @@ describe('AppModule menu defaults', () => {
     expect(styles).toContain('--qs-overlay-section-bg: var(--mat-sys-surface-container-high);');
     expect(styles).toContain('--qs-overlay-section-border: var(--mat-sys-outline-variant);');
   });
+
+  it('keeps the dark theme page background off the CDK overlay container', () => {
+    const stylesPath = resolve(process.cwd(), 'src/styles.scss');
+    const styles = readFileSync(stylesPath, 'utf8');
+
+    expect(styles).toMatch(/body\.dark-theme\s*{[^}]*background-color:\s*var\(--mat-sys-background\);/s);
+    expect(styles).toMatch(/\.cdk-overlay-container\.dark-theme\s*{[^}]*background-color:\s*transparent;/s);
+    const topLevelDarkThemeBlocks = Array.from(
+      styles.matchAll(/(?:^|\n)\.dark-theme\s*{([^}]*)}/g),
+      (match) => match[1]
+    );
+
+    expect(topLevelDarkThemeBlocks).not.toHaveLength(0);
+    expect(topLevelDarkThemeBlocks.some((block) => /(?:^|\n)\s*background-color\s*:/.test(block))).toBe(false);
+  });
 });

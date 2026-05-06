@@ -162,8 +162,17 @@ body.app-hydrated mat-icon {
 
 .dark-theme {
   color-scheme: dark;
-  background-color: var(--mat-sys-background);
   color: var(--mat-sys-on-surface);
+}
+
+body.dark-theme {
+  background-color: var(--mat-sys-background);
+}
+
+.cdk-overlay-container.dark-theme {
+  // The overlay container is fixed and viewport-sized. It may receive dark-theme
+  // for Material overlay tokens, but it must never paint a page-sized backdrop.
+  background-color: transparent;
 }
 
 // ... existing code ...
