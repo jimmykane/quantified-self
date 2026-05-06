@@ -43,8 +43,7 @@ describe('adminResolver', () => {
             canceled: 3,
             cancelScheduled: 1,
             onboardingCompleted: 8,
-            events: { total: 100, standard: 98, benchmark: 2 },
-            eventsBackfilled: true,
+            events: { total: 100 },
             providers: {}
         };
         const mockTrend = {

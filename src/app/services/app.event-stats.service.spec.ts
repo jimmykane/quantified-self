@@ -1,18 +1,12 @@
 import { TestBed } from '@angular/core/testing';
-import { firstValueFrom, of, throwError } from 'rxjs';
+import { firstValueFrom } from 'rxjs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { Firestore, doc, docData } from 'app/firebase/firestore';
-import {
-  EVENT_STATS_COLLECTION_ID,
-  EVENT_STATS_DOC_ID,
-  EVENT_STATS_KIND,
-  EVENT_STATS_SCHEMA_VERSION,
-} from '@shared/event-stats';
+import { Firestore, collection, getCountFromServer } from 'app/firebase/firestore';
 import { AppEventStatsService } from './app.event-stats.service';
 
 const hoisted = vi.hoisted(() => ({
-  docMock: vi.fn(),
-  docDataMock: vi.fn(),
+  collectionMock: vi.fn(),
+  getCountFromServerMock: vi.fn(),
 }));
 
 vi.mock('app/firebase/firestore', async (importOriginal) => {
@@ -21,8 +15,8 @@ vi.mock('app/firebase/firestore', async (importOriginal) => {
   return {
     ...actual,
     Firestore: MockFirestore,
-    doc: hoisted.docMock,
-    docData: hoisted.docDataMock,
+    collection: hoisted.collectionMock,
+    getCountFromServer: hoisted.getCountFromServerMock,
   };
 });
 
@@ -30,12 +24,12 @@ describe('AppEventStatsService', () => {
   let service: AppEventStatsService;
 
   beforeEach(() => {
-    hoisted.docMock.mockReset();
-    hoisted.docDataMock.mockReset();
-    hoisted.docMock.mockImplementation((_firestore, ...segments: string[]) => ({
+    hoisted.collectionMock.mockReset();
+    hoisted.getCountFromServerMock.mockReset();
+    hoisted.collectionMock.mockImplementation((_firestore, ...segments: string[]) => ({
       path: segments.join('/'),
     }));
-    hoisted.docDataMock.mockReturnValue(of(undefined));
+    hoisted.getCountFromServerMock.mockResolvedValue({ data: () => ({ count: 0 }) });
 
     TestBed.configureTestingModule({
       providers: [
@@ -48,74 +42,36 @@ describe('AppEventStatsService', () => {
   });
 
   it('returns null without a user uid', async () => {
-    const stats = await firstValueFrom(service.watchUserEventStats(null));
+    const stats = await firstValueFrom(service.loadUserEventStats(null));
 
     expect(stats).toBeNull();
-    expect(doc).not.toHaveBeenCalled();
-    expect(docData).not.toHaveBeenCalled();
+    expect(collection).not.toHaveBeenCalled();
+    expect(getCountFromServer).not.toHaveBeenCalled();
   });
 
-  it('reads exact event stats after backfill', async () => {
-    hoisted.docDataMock.mockReturnValueOnce(of({
-      kind: EVENT_STATS_KIND,
-      schemaVersion: EVENT_STATS_SCHEMA_VERSION,
-      total: 12,
-      standard: 10,
-      benchmark: 2,
-      backfilledAt: { seconds: 1, nanoseconds: 0 },
-    }));
+  it('counts current user event documents from Firestore aggregation', async () => {
+    hoisted.getCountFromServerMock.mockResolvedValueOnce({ data: () => ({ count: 12 }) });
 
-    const stats = await firstValueFrom(service.watchUserEventStats({ uid: 'user-1' }));
+    const stats = await firstValueFrom(service.loadUserEventStats({ uid: 'user-1' }));
 
-    expect(doc).toHaveBeenCalledWith(
+    expect(collection).toHaveBeenCalledWith(
       {},
       'users',
       'user-1',
-      EVENT_STATS_COLLECTION_ID,
-      EVENT_STATS_DOC_ID,
+      'events',
     );
-    expect(stats).toEqual({
-      total: 12,
-      standard: 10,
-      benchmark: 2,
-      backfilled: true,
-    });
-  });
-
-  it('hides stats until the backfill marker is present', async () => {
-    hoisted.docDataMock.mockReturnValueOnce(of({
-      kind: EVENT_STATS_KIND,
-      schemaVersion: EVENT_STATS_SCHEMA_VERSION,
-      total: 12,
-      standard: 10,
-      benchmark: 2,
-    }));
-
-    const stats = await firstValueFrom(service.watchUserEventStats({ uid: 'user-1' }));
-
-    expect(stats).toBeNull();
+    expect(getCountFromServer).toHaveBeenCalledWith({ path: 'users/user-1/events' });
+    expect(stats).toEqual({ total: 12 });
   });
 
   it('normalizes malformed counts and suppresses read errors', async () => {
-    hoisted.docDataMock.mockReturnValueOnce(of({
-      kind: EVENT_STATS_KIND,
-      schemaVersion: EVENT_STATS_SCHEMA_VERSION,
-      total: '7',
-      standard: -1,
-      benchmark: Number.NaN,
-      backfilledAt: true,
-    }));
+    hoisted.getCountFromServerMock.mockResolvedValueOnce({ data: () => ({ count: Number.NaN }) });
 
-    const stats = await firstValueFrom(service.watchUserEventStats({ uid: 'user-1' }));
+    const stats = await firstValueFrom(service.loadUserEventStats({ uid: 'user-1' }));
 
-    expect(stats).toEqual({
-      total: 0,
-      standard: 0,
-      benchmark: 0,
-      backfilled: true,
-    });
+    expect(stats).toEqual({ total: 0 });
 
-    hoisted.docDataMock.mockReturnValueOnce(throwError(() => new Error('permission-denied')));
-    await expect(firstValueFrom(service.watchUserEventStats({ uid: 'user-1' }))).resolves.toBeNull();
+    hoisted.getCountFromServerMock.mockRejectedValueOnce(new Error('permission-denied'));
+    await expect(firstValueFrom(service.loadUserEventStats({ uid: 'user-1' }))).resolves.toBeNull();
   });
 });

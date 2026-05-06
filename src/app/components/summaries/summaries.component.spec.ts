@@ -45,7 +45,7 @@ describe('SummariesComponent', () => {
   };
   let mockSleepService: { watchForDashboard: ReturnType<typeof vi.fn> };
   let mockEventService: { getEventsBy: ReturnType<typeof vi.fn> };
-  let mockEventStatsService: { watchUserEventStats: ReturnType<typeof vi.fn> };
+  let mockEventStatsService: { loadUserEventStats: ReturnType<typeof vi.fn> };
   let mockDashboardAutoTileService: { watchForDashboard: ReturnType<typeof vi.fn> };
   let mockLogger: { error: ReturnType<typeof vi.fn>; warn: ReturnType<typeof vi.fn>; log: ReturnType<typeof vi.fn> };
   let mockDialog: { open: ReturnType<typeof vi.fn> };
@@ -109,7 +109,7 @@ describe('SummariesComponent', () => {
       getEventsBy: vi.fn().mockReturnValue(of([])),
     };
     mockEventStatsService = {
-      watchUserEventStats: vi.fn().mockReturnValue(of(null)),
+      loadUserEventStats: vi.fn().mockReturnValue(of(null)),
     };
     mockDashboardAutoTileService = {
       watchForDashboard: vi.fn().mockImplementation(() => new Subscription()),
@@ -242,15 +242,12 @@ describe('SummariesComponent', () => {
     expect(mainMap?.classList.contains('qs-glass-card-panel')).toBe(false);
   });
 
-  it('renders uploaded activities totals in the Today header when stats are exact', () => {
+  it('renders uploaded activities totals in the Today header', () => {
     component.user = { uid: 'user-1', settings: { dashboardSettings: { tiles: [] } } } as any;
     component.eventUser = component.user;
     component.showActions = true;
     component.eventStats = {
       total: 1234,
-      standard: 1230,
-      benchmark: 4,
-      backfilled: true,
     };
 
     fixture.detectChanges();
@@ -260,15 +257,11 @@ describe('SummariesComponent', () => {
     expect(stat).not.toBeNull();
     expect(stat?.textContent).toContain('1,234');
     expect(stat?.textContent).toContain('Uploaded activities');
-    expect(stat?.textContent).toContain('4 benchmark');
   });
 
-  it('watches event stats only for the signed-in user dashboard', () => {
-    mockEventStatsService.watchUserEventStats.mockReturnValueOnce(of({
+  it('loads event stats only for the signed-in user dashboard', () => {
+    mockEventStatsService.loadUserEventStats.mockReturnValueOnce(of({
       total: 12,
-      standard: 11,
-      benchmark: 1,
-      backfilled: true,
     }));
     component.user = { uid: 'user-1', settings: { dashboardSettings: { tiles: [] } } } as any;
     component.eventUser = { uid: 'user-1' } as any;
@@ -276,12 +269,9 @@ describe('SummariesComponent', () => {
 
     (component as any).syncEventStatsSubscription();
 
-    expect(mockEventStatsService.watchUserEventStats).toHaveBeenCalledWith(component.user);
+    expect(mockEventStatsService.loadUserEventStats).toHaveBeenCalledWith(component.user);
     expect(component.eventStats).toEqual({
       total: 12,
-      standard: 11,
-      benchmark: 1,
-      backfilled: true,
     });
 
     component.eventUser = { uid: 'other-user' } as any;

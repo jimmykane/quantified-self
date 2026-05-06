@@ -632,7 +632,22 @@ describe('Firestore Security Rules', () => {
                 }));
             });
 
-            it('should deny owner updating benchmark merge classification metadata', async () => {
+            it('should allow owner updating the legacy manual merge flag', async () => {
+                const db = testEnv.authenticatedContext(userId).firestore();
+                await testEnv.withSecurityRulesDisabled(async (context) => {
+                    await context.firestore().doc(`users/${userId}/events/${eventId}`).set({
+                        name: 'Morning Run',
+                        privacy: 'private',
+                        isMerge: false
+                    });
+                });
+
+                await assertSucceeds(db.collection(`users/${userId}/events`).doc(eventId).update({
+                    isMerge: true
+                }));
+            });
+
+            it('should deny owner updating server-owned merge type metadata', async () => {
                 const db = testEnv.authenticatedContext(userId).firestore();
                 await testEnv.withSecurityRulesDisabled(async (context) => {
                     await context.firestore().doc(`users/${userId}/events/${eventId}`).set({
@@ -667,27 +682,6 @@ describe('Firestore Security Rules', () => {
                 const db = testEnv.authenticatedContext(userId).firestore();
                 await assertFails(db.collection('users').doc(userId).collection('system').doc('status').update({
                     isPro: true
-                }));
-            });
-        });
-
-        describe('Event Stats (users/{uid}/stats/events)', () => {
-            it('should allow user to read their own event stats', async () => {
-                const db = testEnv.authenticatedContext(userId).firestore();
-                await assertSucceeds(db.collection('users').doc(userId).collection('stats').doc('events').get());
-            });
-
-            it('should deny user reading another user event stats', async () => {
-                const db = testEnv.authenticatedContext(userId).firestore();
-                await assertFails(db.collection('users').doc(otherId).collection('stats').doc('events').get());
-            });
-
-            it('should deny user writing their own event stats', async () => {
-                const db = testEnv.authenticatedContext(userId).firestore();
-                await assertFails(db.collection('users').doc(userId).collection('stats').doc('events').set({
-                    total: 100,
-                    standard: 99,
-                    benchmark: 1
                 }));
             });
         });

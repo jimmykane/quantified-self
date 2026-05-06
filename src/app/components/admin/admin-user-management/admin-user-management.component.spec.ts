@@ -104,9 +104,6 @@ describe('AdminUserManagementComponent', () => {
             hasSubscribedOnce: true,
             eventStats: {
                 total: 125,
-                standard: 120,
-                benchmark: 5,
-                backfilled: true
             }
         },
         {
@@ -119,10 +116,7 @@ describe('AdminUserManagementComponent', () => {
             providerIds: ['google.com'],
             hasSubscribedOnce: false,
             eventStats: {
-                total: 0,
-                standard: 0,
-                benchmark: 0,
-                backfilled: false
+                total: null,
             }
         }
     ];
@@ -234,10 +228,7 @@ describe('AdminUserManagementComponent', () => {
                 onboardingCompleted: 80,
                 events: {
                     total: 1_000_000,
-                    standard: 999_000,
-                    benchmark: 1_000
-                },
-                eventsBackfilled: true
+                }
             })),
             getUserGrowthTrend: vi.fn().mockReturnValue(of(mockTrend)),
             getSubscriptionHistoryTrend: vi.fn().mockReturnValue(of(mockSubscriptionTrend))
@@ -325,10 +316,7 @@ describe('AdminUserManagementComponent', () => {
                                         onboardingCompleted: 80,
                                         events: {
                                             total: 1_000_000,
-                                            standard: 999_000,
-                                            benchmark: 1_000
-                                        },
-                                        eventsBackfilled: true
+                                        }
                                     },
                                     userGrowthTrend: mockTrend,
                                     subscriptionHistoryTrend: mockSubscriptionTrend
@@ -382,24 +370,17 @@ describe('AdminUserManagementComponent', () => {
             onboardingCompleted: 80,
             events: {
                 total: 1_000_000,
-                standard: 999_000,
-                benchmark: 1_000
-            },
-            eventsBackfilled: true
+            }
         });
     });
 
-    it('should show backfilled event totals in cards and the user table', () => {
+    it('should show event totals in cards and the user table', () => {
         fixture.detectChanges();
 
         const nativeElement = fixture.nativeElement as HTMLElement;
         expect(nativeElement.textContent).toContain('Total Events');
-        expect(nativeElement.textContent).toContain('Benchmark Events');
         expect(nativeElement.textContent).toContain('1,000,000');
-        expect(nativeElement.textContent).toContain('1,000');
-        expect(component.getEventStatsTotal(mockUsers[0])).toBe(125);
-        expect(component.getEventStatsBenchmark(mockUsers[0])).toBe(5);
-        expect(component.getEventStatsTotal(mockUsers[1])).toBeNull();
+        expect(nativeElement.textContent).toContain('125');
     });
 
     it('should use resolved user growth trend data on init', () => {

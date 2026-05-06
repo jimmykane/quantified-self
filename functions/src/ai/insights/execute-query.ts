@@ -35,7 +35,7 @@ import {
   resolveAutoAggregationTimeInterval,
 } from '../../../../shared/event-stat-aggregation';
 import type { EventStatAggregationResult } from '../../../../shared/event-stat-aggregation.types';
-import { isBenchmarkEventForStats } from '../../../../shared/event-stats';
+import { isBenchmarkEventForTrainingMetrics } from '../../../../shared/event-classification';
 import { serializeErrorForLogging } from './error-logging';
 import { buildExecutionPromptLogContext } from './execute-query.logging';
 import { executeQueryByResultKind } from './execute-query.result-kind-handlers';
@@ -369,7 +369,7 @@ const defaultExecuteQueryDependencies: ExecuteQueryDependencies = {
 };
 
 function isMergedEventDocument(rawEventData: Record<string, unknown>): boolean {
-  return isBenchmarkEventForStats(rawEventData);
+  return isBenchmarkEventForTrainingMetrics(rawEventData);
 }
 
 function toFirestoreTimestampDate(value: unknown): Date | null {

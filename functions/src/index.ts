@@ -152,7 +152,6 @@ export { importActivityToCOROSAPI } from './coros/activities';
 
 // Events
 export { cleanupEventFile } from './events/cleanup';
-export { onEventStatsWrite } from './events/event-stats';
 export { uploadActivity } from './events/upload-activity';
 export { reprocessEvent } from './events/reprocess-event';
 export { mergeEvents } from './events/merge-events';

@@ -37,8 +37,8 @@ describe('getUserCount Cloud Function', () => {
                 }))
             ]
         });
-        const mockEventStatsAggregateGet = vi.fn().mockResolvedValue({
-            data: () => ({ backfilledUsers: 150, total: 1_000_000, standard: 999_000, benchmark: 1_000 })
+        const mockEventCountGet = vi.fn().mockResolvedValue({
+            data: () => ({ count: 1_000_000 })
         });
 
         // Mock implementation for chainable queries
@@ -47,9 +47,8 @@ describe('getUserCount Cloud Function', () => {
             count: vi.fn().mockReturnValue({ get: mockCountGet }),
             select: vi.fn().mockReturnValue({ get: mockActiveSubscriptionsGet })
         };
-        const mockStatsQuery = {
-            where: vi.fn().mockReturnThis(),
-            aggregate: vi.fn().mockReturnValue({ get: mockEventStatsAggregateGet })
+        const mockEventsQuery = {
+            count: vi.fn().mockReturnValue({ get: mockEventCountGet })
         };
 
         mockCollection.mockImplementation((name) => {
@@ -69,8 +68,8 @@ describe('getUserCount Cloud Function', () => {
                 // This handles collectionGroup('subscriptions')
                 return mockQuery;
             }
-            if (name === 'stats') {
-                return mockStatsQuery;
+            if (name === 'events') {
+                return mockEventsQuery;
             }
             return {};
         });
@@ -88,16 +87,57 @@ describe('getUserCount Cloud Function', () => {
             onboardingCompleted: 40,
             events: {
                 total: 1_000_000,
-                standard: 999_000,
-                benchmark: 1_000
             },
-            eventsBackfilled: true,
             providers: {}
         });
         expect(mockCollection).toHaveBeenCalledWith('users');
         expect(mockCollection).toHaveBeenCalledWith('subscriptions'); // collectionGroup calls this name
-        expect(mockStatsQuery.where).toHaveBeenCalledWith('kind', '==', 'events');
-        expect(mockStatsQuery.where).toHaveBeenCalledWith('schemaVersion', '==', 1);
-        expect(mockStatsQuery.where).toHaveBeenCalledWith('backfilledAt', '!=', null);
+        expect(mockCollection).toHaveBeenCalledWith('events');
+        expect(mockEventsQuery.count).toHaveBeenCalled();
+    });
+
+    it('should report event count as unavailable when the event aggregation fails', async () => {
+        const request = {
+            auth: { uid: 'admin-uid', token: { admin: true } },
+            app: { appId: 'mock-app-id' }
+        } as unknown as CallableRequest<any>;
+        mockListUsers.mockResolvedValue({ users: [], pageToken: undefined });
+
+        const mockCountGet = vi.fn()
+            .mockResolvedValueOnce({ data: () => ({ count: 0 }) })
+            .mockResolvedValueOnce({ data: () => ({ count: 0 }) });
+        const mockEventsCountGet = vi.fn().mockRejectedValue(new Error('event count failed'));
+        const mockSubscriptionQuery = {
+            where: vi.fn().mockReturnThis(),
+            count: vi.fn().mockReturnValue({ get: mockCountGet }),
+        };
+
+        mockCollection.mockImplementation((name) => {
+            if (name === 'users') {
+                return {
+                    where: vi.fn().mockReturnValue({
+                        count: vi.fn().mockReturnValue({
+                            get: vi.fn().mockResolvedValue({ data: () => ({ count: 7 }) })
+                        })
+                    }),
+                    count: vi.fn().mockReturnValue({
+                        get: vi.fn().mockResolvedValue({ data: () => ({ count: 10 }) })
+                    })
+                };
+            }
+            if (name === 'subscriptions') {
+                return mockSubscriptionQuery;
+            }
+            if (name === 'events') {
+                return {
+                    count: vi.fn().mockReturnValue({ get: mockEventsCountGet })
+                };
+            }
+            return {};
+        });
+
+        const result = await (getUserCount as any)(request);
+
+        expect(result.events).toEqual({ total: null });
     });
 });

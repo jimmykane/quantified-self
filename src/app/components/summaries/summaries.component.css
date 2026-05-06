@@ -105,8 +105,7 @@
   line-height: 1;
 }
 
-.dashboard-uploaded-activities-label,
-.dashboard-uploaded-activities-detail {
+.dashboard-uploaded-activities-label {
   color: var(--mat-sys-on-surface-variant);
   font-size: 0.72rem;
   line-height: 1.15;

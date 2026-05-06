@@ -4,6 +4,7 @@ import * as admin from 'firebase-admin';
 import { FUNCTIONS_MANIFEST } from '../../../shared/functions-manifest';
 import { isDerivedMetricsUidAllowed } from './derived-metrics-uid-gate';
 import { enqueueDerivedMetricsIngressTask } from '../shared/cloud-tasks';
+import { getUserDeletionGuardState } from '../shared/user-deletion-guard';
 
 function resolveEventTimeMs(event: { time?: unknown }): number | null {
     const eventTimeIso = `${event?.time || ''}`.trim();
@@ -35,18 +36,15 @@ export const onDashboardDerivedMetricsEventWrite = onDocumentWritten({
     if (!beforeExists && !afterExists) {
         return;
     }
-    // Account-deletion cleanup can emit event delete writes after the user root
-    // has already been removed. Skip enqueueing ingress for missing roots to
-    // avoid orphaned derived-metrics coordinators.
-    if (beforeExists && !afterExists) {
-        const userDoc = await admin.firestore().collection('users').doc(uid).get();
-        if (!userDoc.exists) {
-            logger.info('[derived-metrics] Skipping ingress enqueue because user root is missing.', {
-                uid,
-                eventId: event.params?.eventId || null,
-            });
-            return;
-        }
+    const deletionGuard = await getUserDeletionGuardState(admin.firestore(), uid);
+    if (deletionGuard.shouldSkip) {
+        logger.info('[derived-metrics] Skipping ingress enqueue because user deletion is in progress or user root is missing.', {
+            uid,
+            eventId: event.params?.eventId || null,
+            userExists: deletionGuard.userExists,
+            deletionInProgress: deletionGuard.deletionInProgress,
+        });
+        return;
     }
 
     // Debounce mutation ingress by uid + short time bucket.

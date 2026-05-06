@@ -54,8 +54,12 @@ import {
     normalizeDerivedFormDailyLoads,
     type EnsureDerivedMetricsResponse,
 } from '../../../shared/derived-metrics';
-import { isBenchmarkEventForStats } from '../../../shared/event-stats';
+import { isBenchmarkEventForTrainingMetrics } from '../../../shared/event-classification';
 import { enqueueDerivedMetricsTask } from '../shared/cloud-tasks';
+import {
+    getUserDeletionGuardState,
+    getUserDeletionGuardStateInTransaction,
+} from '../shared/user-deletion-guard';
 import { getDerivedMetricsUidAllowlist, isDerivedMetricsUidAllowed } from './derived-metrics-uid-gate';
 
 const FORM_STAT_TYPE = 'Training Stress Score';
@@ -312,7 +316,7 @@ function isDerivedMetricsCoordinatorStuck(
 }
 
 function isMergedEvent(eventData: Record<string, unknown>): boolean {
-    return isBenchmarkEventForStats(eventData);
+    return isBenchmarkEventForTrainingMetrics(eventData);
 }
 
 function resolveRawStats(eventData: Record<string, unknown>): Record<string, unknown> {
@@ -1436,10 +1440,6 @@ function getCoordinatorDocRef(uid: string): FirebaseFirestore.DocumentReference 
     return admin.firestore().doc(`users/${uid}/${DERIVED_METRICS_COLLECTION_ID}/${DERIVED_METRICS_COORDINATOR_DOC_ID}`);
 }
 
-function getUserDocRef(uid: string): FirebaseFirestore.DocumentReference {
-    return admin.firestore().doc(`users/${uid}`);
-}
-
 function getMetricDocRef(uid: string, metricKind: DerivedMetricKind): FirebaseFirestore.DocumentReference {
     return admin.firestore().doc(`users/${uid}/${DERIVED_METRICS_COLLECTION_ID}/${getDerivedMetricDocId(metricKind)}`);
 }
@@ -1447,6 +1447,49 @@ function getMetricDocRef(uid: string, metricKind: DerivedMetricKind): FirebaseFi
 async function queueDerivedMetricsTask(uid: string, generation: number): Promise<boolean> {
     const queued = await enqueueDerivedMetricsTask(uid, generation);
     return queued;
+}
+
+async function readDerivedMetricsWriteBlocked(
+    uid: string,
+    logContext: string,
+    extraContext: Record<string, unknown> = {},
+): Promise<boolean> {
+    const deletionGuard = await getUserDeletionGuardState(admin.firestore(), uid);
+    if (deletionGuard.shouldSkip) {
+        logger.info(`[derived-metrics] Skipping ${logContext} because user deletion is in progress or user root is missing.`, {
+            uid,
+            userExists: deletionGuard.userExists,
+            deletionInProgress: deletionGuard.deletionInProgress,
+            ...extraContext,
+        });
+    }
+    return deletionGuard.shouldSkip;
+}
+
+async function readDerivedMetricsWriteBlockedInTransaction(
+    transaction: admin.firestore.Transaction,
+    uid: string,
+    logContext: string,
+    extraContext: Record<string, unknown> = {},
+): Promise<boolean> {
+    const deletionGuard = await getUserDeletionGuardStateInTransaction(admin.firestore(), transaction, uid);
+    if (deletionGuard.shouldSkip) {
+        logger.info(`[derived-metrics] Skipping ${logContext} because user deletion is in progress or user root is missing.`, {
+            uid,
+            userExists: deletionGuard.userExists,
+            deletionInProgress: deletionGuard.deletionInProgress,
+            ...extraContext,
+        });
+    }
+    return deletionGuard.shouldSkip;
+}
+
+export async function isDerivedMetricsUserWriteBlocked(
+    uid: string,
+    logContext: string,
+    extraContext: Record<string, unknown> = {},
+): Promise<boolean> {
+    return readDerivedMetricsWriteBlocked(uid, logContext, extraContext);
 }
 
 export async function fetchDerivedMetricsEventDocs(uid: string): Promise<FirestoreQueryDocumentSnapshot[]> {
@@ -1531,12 +1574,7 @@ export async function markDerivedMetricsDirtyAndMaybeQueue(
         };
     }
 
-    const userDocSnapshot = await getUserDocRef(uid).get();
-    if (!userDocSnapshot.exists) {
-        logger.info('[derived-metrics] Skipping dirty-mark enqueue because user root is missing.', {
-            uid,
-            metricKinds,
-        });
+    if (await readDerivedMetricsWriteBlocked(uid, 'dirty-mark enqueue', { metricKinds })) {
         return {
             accepted: false,
             queued: false,
@@ -1550,9 +1588,17 @@ export async function markDerivedMetricsDirtyAndMaybeQueue(
 
     let shouldEnqueue = false;
     let generationToQueue: number | null = null;
+    let blockedByDeletion = false;
 
     await admin.firestore().runTransaction(async (transaction) => {
         const coordinatorSnapshot = await transaction.get(coordinatorRef);
+        if (await readDerivedMetricsWriteBlockedInTransaction(transaction, uid, 'dirty-mark transaction', { metricKinds })) {
+            blockedByDeletion = true;
+            shouldEnqueue = false;
+            generationToQueue = null;
+            return;
+        }
+
         const coordinator = parseCoordinator(coordinatorSnapshot.data());
         const nextDirtyMetricKinds = mergeDerivedMetricKinds(coordinator.dirtyMetricKinds, metricKinds);
         const isAlreadyQueuedOrProcessing = coordinator.status === 'queued' || coordinator.status === 'processing';
@@ -1624,6 +1670,15 @@ export async function markDerivedMetricsDirtyAndMaybeQueue(
         transaction.set(coordinatorRef, coordinatorUpdatePayload, { merge: true });
     });
 
+    if (blockedByDeletion) {
+        return {
+            accepted: false,
+            queued: false,
+            generation: null,
+            metricKinds,
+        };
+    }
+
     if (shouldEnqueue && generationToQueue !== null) {
         try {
             await queueDerivedMetricsTask(uid, generationToQueue);
@@ -1633,12 +1688,14 @@ export async function markDerivedMetricsDirtyAndMaybeQueue(
                 generation: generationToQueue,
                 error,
             });
-            await coordinatorRef.set({
-                entryType: DERIVED_METRICS_ENTRY_TYPES.Coordinator,
-                status: 'failed',
-                lastError: toSafeString((error as { message?: unknown } | null)?.message) || 'enqueue_failed',
-                updatedAtMs: Date.now(),
-            }, { merge: true });
+            if (!await readDerivedMetricsWriteBlocked(uid, 'dirty-mark enqueue failure write', { generation: generationToQueue })) {
+                await coordinatorRef.set({
+                    entryType: DERIVED_METRICS_ENTRY_TYPES.Coordinator,
+                    status: 'failed',
+                    lastError: toSafeString((error as { message?: unknown } | null)?.message) || 'enqueue_failed',
+                    updatedAtMs: Date.now(),
+                }, { merge: true });
+            }
 
             return {
                 accepted: false,
@@ -1675,6 +1732,11 @@ export async function startDerivedMetricsProcessing(
         const rawCoordinatorData = coordinatorSnapshot.data();
         const coordinator = parseCoordinator(rawCoordinatorData);
         if (coordinator.generation !== generation) {
+            startedResult = null;
+            return;
+        }
+
+        if (await readDerivedMetricsWriteBlockedInTransaction(transaction, uid, 'processing claim', { generation })) {
             startedResult = null;
             return;
         }
@@ -1769,6 +1831,10 @@ export async function completeDerivedMetricsProcessing(
             return;
         }
 
+        if (await readDerivedMetricsWriteBlockedInTransaction(transaction, uid, 'processing completion', { generation })) {
+            return;
+        }
+
         const pendingDirtyMetricKinds = normalizeDerivedMetricKindsStrict(coordinator.dirtyMetricKinds);
         if (pendingDirtyMetricKinds.length) {
             const nextGeneration = coordinator.generation + 1;
@@ -1808,6 +1874,12 @@ export async function completeDerivedMetricsProcessing(
 
     if (completion.requeued && completion.nextGeneration !== null) {
         try {
+            if (await readDerivedMetricsWriteBlocked(uid, 'follow-up task enqueue', {
+                generation,
+                nextGeneration: completion.nextGeneration,
+            })) {
+                return completion;
+            }
             await queueDerivedMetricsTask(uid, completion.nextGeneration);
         } catch (error) {
             logger.error('[derived-metrics] Failed to enqueue follow-up derived metrics task', {
@@ -1816,12 +1888,17 @@ export async function completeDerivedMetricsProcessing(
                 nextGeneration: completion.nextGeneration,
                 error,
             });
-            await coordinatorRef.set({
-                entryType: DERIVED_METRICS_ENTRY_TYPES.Coordinator,
-                status: 'failed',
-                lastError: toSafeString((error as { message?: unknown } | null)?.message) || 'enqueue_follow_up_failed',
-                updatedAtMs: Date.now(),
-            }, { merge: true });
+            if (!await readDerivedMetricsWriteBlocked(uid, 'follow-up enqueue failure write', {
+                generation,
+                nextGeneration: completion.nextGeneration,
+            })) {
+                await coordinatorRef.set({
+                    entryType: DERIVED_METRICS_ENTRY_TYPES.Coordinator,
+                    status: 'failed',
+                    lastError: toSafeString((error as { message?: unknown } | null)?.message) || 'enqueue_follow_up_failed',
+                    updatedAtMs: Date.now(),
+                }, { merge: true });
+            }
         }
     }
 
@@ -1849,6 +1926,10 @@ export async function failDerivedMetricsProcessing(
             return;
         }
 
+        if (await readDerivedMetricsWriteBlockedInTransaction(transaction, uid, 'processing failure', { generation })) {
+            return;
+        }
+
         const retainedDirtyMetricKinds = mergeDerivedMetricKinds(
             normalizeDerivedMetricKindsStrict(coordinator.dirtyMetricKinds),
             normalizeDerivedMetricKindsStrict(processedMetricKinds),
@@ -1868,6 +1949,10 @@ export async function markDerivedMetricSnapshotsBuilding(
     uid: string,
     metricKinds: readonly DerivedMetricKind[],
 ): Promise<void> {
+    if (await readDerivedMetricsWriteBlocked(uid, 'snapshot building write', { metricKinds })) {
+        return;
+    }
+
     const nowMs = Date.now();
     const batch = admin.firestore().batch();
     metricKinds.forEach((metricKind) => {
@@ -1888,6 +1973,10 @@ export async function markDerivedMetricSnapshotsFailed(
     metricKinds: readonly DerivedMetricKind[],
     error: unknown,
 ): Promise<void> {
+    if (await readDerivedMetricsWriteBlocked(uid, 'snapshot failure write', { metricKinds })) {
+        return;
+    }
+
     const nowMs = Date.now();
     const errorMessage = toSafeString((error as { message?: unknown } | null)?.message) || toSafeString(error) || 'unknown_error';
     const batch = admin.firestore().batch();
@@ -1918,6 +2007,10 @@ export async function writeDerivedMetricSnapshotsReady(
         formSourceDocCount?: number | null;
     },
 ): Promise<void> {
+    if (await readDerivedMetricsWriteBlocked(uid, 'snapshot ready write', { metricKinds })) {
+        return;
+    }
+
     const nowMs = Date.now();
     const batch = admin.firestore().batch();
     const normalizedFormDailyLoads = normalizeDerivedFormDailyLoads(options?.formDailyLoads || []);

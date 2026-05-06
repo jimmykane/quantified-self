@@ -5,12 +5,14 @@ import { SUUNTOAPP_ACCESS_TOKENS_COLLECTION_NAME } from '../../suunto/constants'
 import { COROSAPI_ACCESS_TOKENS_COLLECTION_NAME } from '../../coros/constants';
 import { toEpochMillis } from './date.utils';
 import { BasicUser, EnrichedUser } from './types';
-import {
-    EVENT_STATS_COLLECTION_ID,
-    EVENT_STATS_DOC_ID,
-    hasExactEventStats,
-    normalizeEventStatsCounts,
-} from '../../../../shared/event-stats';
+
+function normalizeCount(value: unknown): number {
+    if (typeof value !== 'number' || !Number.isFinite(value)) {
+        return 0;
+    }
+
+    return Math.max(0, Math.floor(value));
+}
 
 function buildAiInsightsUsageDocIdForSubscriptionPeriod(
     periodStart: unknown,
@@ -45,8 +47,7 @@ function resolveAiCreditsConsumedFromUsageData(value: unknown): number {
 }
 
 /**
- * Enrich a small batch of users with Firestore data (subscriptions, services)
- * This is the ONLY place we do Firestore reads
+ * Enrich a small batch of users with Firestore data (subscriptions, services, event counts).
  */
 export async function enrichUsers(
     users: BasicUser[],
@@ -58,32 +59,31 @@ export async function enrichUsers(
     if (users.length > 0) {
         try {
             const userDocRefs = users.map(user => db.collection('users').doc(user.uid));
-            const eventStatsRefs = users.map(user => db.doc(`users/${user.uid}/${EVENT_STATS_COLLECTION_ID}/${EVENT_STATS_DOC_ID}`));
-            const snapshots = await db.getAll(...userDocRefs, ...eventStatsRefs);
-            const userDocs = snapshots.slice(0, users.length);
-            const eventStatsDocs = snapshots.slice(users.length);
-
-            userDocs.forEach(snapshot => {
+            const snapshots = await db.getAll(...userDocRefs);
+            snapshots.forEach(snapshot => {
                 const userData = snapshot.data() || {};
                 userFlagsByUid.set(snapshot.id, {
                     onboardingCompleted: userData.onboardingCompleted === true,
                     hasSubscribedOnce: userData.hasSubscribedOnce === true
                 });
             });
-            eventStatsDocs.forEach((snapshot, index) => {
-                const uid = users[index]?.uid;
-                if (!uid) {
-                    return;
-                }
-                const statsData = snapshot?.data?.() as Record<string, unknown> | undefined;
-                eventStatsByUid.set(uid, {
-                    ...normalizeEventStatsCounts(statsData),
-                    backfilled: hasExactEventStats(statsData),
-                });
-            });
         } catch (e) {
-            logger.warn('Failed to fetch onboarding flags or event stats for admin user list', e);
+            logger.warn('Failed to fetch onboarding flags for admin user list', e);
         }
+
+        await Promise.all(users.map(async (user) => {
+            try {
+                const snapshot = await db.collection('users')
+                    .doc(user.uid)
+                    .collection('events')
+                    .count()
+                    .get();
+                eventStatsByUid.set(user.uid, { total: normalizeCount(snapshot.data().count) });
+            } catch (e) {
+                logger.warn(`Failed to count events for ${user.uid}`, e);
+                eventStatsByUid.set(user.uid, { total: null });
+            }
+        }));
     }
 
     return Promise.all(
@@ -182,10 +182,7 @@ export async function enrichUsers(
                 hasSubscribedOnce,
                 aiCreditsConsumed,
                 eventStats: eventStatsByUid.get(user.uid) || {
-                    total: 0,
-                    standard: 0,
-                    benchmark: 0,
-                    backfilled: false,
+                    total: null,
                 },
             };
         })

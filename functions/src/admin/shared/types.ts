@@ -1,7 +1,9 @@
-import type { EventStatsCounts } from '../../../../shared/event-stats';
-
 export interface GetQueueStatsRequest {
     includeAnalysis?: boolean;
+}
+
+export interface EventCountStats {
+    total: number | null;
 }
 
 export interface ListUsersRequest {
@@ -38,9 +40,7 @@ export interface EnrichedUser extends BasicUser {
     onboardingCompleted: boolean;
     hasSubscribedOnce: boolean;
     aiCreditsConsumed: number;
-    eventStats: EventStatsCounts & {
-        backfilled: boolean;
-    };
+    eventStats: EventCountStats;
 }
 
 export interface ListUsersResponse {
@@ -59,8 +59,7 @@ export interface UserCountResponse {
     monthlyPaid: number;
     yearlyPaid: number;
     onboardingCompleted: number;
-    events: EventStatsCounts;
-    eventsBackfilled: boolean;
+    events: EventCountStats;
     providers: Record<string, number>;
 }
 

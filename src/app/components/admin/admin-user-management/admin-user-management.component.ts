@@ -360,18 +360,6 @@ export class AdminUserManagementComponent implements OnInit, OnDestroy, AfterVie
         return user.customClaims?.admin === true;
     }
 
-    getEventStatsTotal(user: AdminUser): number | null {
-        if (user.eventStats?.backfilled !== true) {
-            return null;
-        }
-
-        return user.eventStats.total ?? 0;
-    }
-
-    getEventStatsBenchmark(user: AdminUser): number {
-        return user.eventStats?.benchmark ?? 0;
-    }
-
     getSubscriptionHistoryState(user: AdminUser): SubscriptionHistoryState {
         const status = user.subscription?.status?.toLowerCase();
         const hasActiveSubscription = status === 'active' || status === 'trialing' || status === 'past_due';

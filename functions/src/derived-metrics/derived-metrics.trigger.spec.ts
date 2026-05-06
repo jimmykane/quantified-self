@@ -4,9 +4,11 @@ const hoisted = vi.hoisted(() => ({
     onDocumentWritten: vi.fn((_opts: unknown, handler: any) => handler),
     enqueueDerivedMetricsIngressTask: vi.fn(),
     isDerivedMetricsUidAllowed: vi.fn(),
-    userDocGet: vi.fn(),
+    getAll: vi.fn(),
     usersDoc: vi.fn(),
+    tombstonesDoc: vi.fn(),
     usersCollection: vi.fn(),
+    tombstonesCollection: vi.fn(),
     firestore: vi.fn(),
 }));
 
@@ -42,14 +44,31 @@ import { onDashboardDerivedMetricsEventWrite } from './derived-metrics.trigger';
 
 describe('onDashboardDerivedMetricsEventWrite', () => {
     beforeEach(() => {
-        hoisted.userDocGet.mockReset();
-        hoisted.userDocGet.mockResolvedValue({ exists: true });
         hoisted.usersDoc.mockReset();
-        hoisted.usersDoc.mockReturnValue({ get: hoisted.userDocGet });
+        hoisted.usersDoc.mockReturnValue({ path: 'users/user-1' });
+        hoisted.tombstonesDoc.mockReset();
+        hoisted.tombstonesDoc.mockReturnValue({ path: 'userDeletionTombstones/user-1' });
         hoisted.usersCollection.mockReset();
         hoisted.usersCollection.mockReturnValue({ doc: hoisted.usersDoc });
+        hoisted.tombstonesCollection.mockReset();
+        hoisted.tombstonesCollection.mockReturnValue({ doc: hoisted.tombstonesDoc });
         hoisted.firestore.mockReset();
-        hoisted.firestore.mockReturnValue({ collection: hoisted.usersCollection });
+        hoisted.getAll.mockReset();
+        hoisted.getAll.mockImplementation(async (...refs: Array<{ path?: string }>) => refs.map(ref => {
+            if (`${ref.path || ''}`.startsWith('users/')) {
+                return { exists: true, data: () => ({}) };
+            }
+            return { exists: false, data: () => undefined };
+        }));
+        hoisted.firestore.mockReturnValue({
+            collection: vi.fn((collectionId: string) => {
+                if (collectionId === 'userDeletionTombstones') {
+                    return hoisted.tombstonesCollection();
+                }
+                return hoisted.usersCollection();
+            }),
+            getAll: hoisted.getAll,
+        });
         hoisted.enqueueDerivedMetricsIngressTask.mockClear();
         hoisted.enqueueDerivedMetricsIngressTask.mockResolvedValue(true);
         hoisted.isDerivedMetricsUidAllowed.mockReset();
@@ -134,7 +153,10 @@ describe('onDashboardDerivedMetricsEventWrite', () => {
     });
 
     it('skips delete ingress when user root document is already missing', async () => {
-        hoisted.userDocGet.mockResolvedValueOnce({ exists: false });
+        hoisted.getAll.mockResolvedValueOnce([
+            { exists: false, data: () => undefined },
+            { exists: false, data: () => undefined },
+        ]);
 
         await (onDashboardDerivedMetricsEventWrite as any)({
             params: { uid: 'user-1', eventId: 'event-1' },
@@ -144,7 +166,24 @@ describe('onDashboardDerivedMetricsEventWrite', () => {
             },
         });
 
-        expect(hoisted.userDocGet).toHaveBeenCalledTimes(1);
+        expect(hoisted.getAll).toHaveBeenCalledTimes(1);
+        expect(hoisted.enqueueDerivedMetricsIngressTask).not.toHaveBeenCalled();
+    });
+
+    it('skips ingress when a deletion tombstone is active', async () => {
+        hoisted.getAll.mockResolvedValueOnce([
+            { exists: true, data: () => ({}) },
+            { exists: true, data: () => ({ expireAt: { toMillis: () => Date.now() + 60_000 } }) },
+        ]);
+
+        await (onDashboardDerivedMetricsEventWrite as any)({
+            params: { uid: 'user-1', eventId: 'event-1' },
+            data: {
+                before: { exists: true },
+                after: { exists: true },
+            },
+        });
+
         expect(hoisted.enqueueDerivedMetricsIngressTask).not.toHaveBeenCalled();
     });
 });

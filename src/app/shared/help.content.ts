@@ -108,7 +108,7 @@ export const HELP_SECTIONS: HelpSection[] = [
 - The default KPI rows are the core derived training-metrics set: **Form Now**, **Fitness (CTL)**, **Fatigue (ATL)**, and **Ramp Rate**.
 - Additional KPI rows such as **ACWR**, **Monotony / Strain**, **Form +7d**, **Easy %**, **Hard %**, and **Efficiency Δ (4w)** remain available from Dashboard manager.
 - KPI rows are shown in the compact **Today** section above the main dashboard grid.
-- The **Today** header can show **Uploaded activities**, which counts current uploaded activity events after account stats are backfilled.
+- The **Today** header can show **Uploaded activities**, which counts current uploaded activity events.
 - On mobile, Today rows stay compact while the chart/map grid stays unchanged below.
 - KPI choices in Dashboard manager are grouped as **Load**, **Readiness**, and **Execution** for both manual and preset flows.
 - Curated and KPI tiles include an **info** icon beside the title with formulas and interpretation guidance.

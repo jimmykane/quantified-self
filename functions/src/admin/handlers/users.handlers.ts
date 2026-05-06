@@ -13,14 +13,7 @@ import {
 } from '../shared/subscription.constants';
 import { clampListUsersPageSize } from '../shared/date.utils';
 import { enrichUsers } from '../shared/user-enrichment';
-import { BasicUser, ListUsersRequest, ListUsersResponse, UserCountResponse } from '../shared/types';
-import {
-    EVENT_STATS_COLLECTION_ID,
-    EVENT_STATS_KIND,
-    EVENT_STATS_SCHEMA_VERSION,
-    normalizeEventStatsCounts,
-    type EventStatsCounts,
-} from '../../../../shared/event-stats';
+import { BasicUser, EventCountStats, ListUsersRequest, ListUsersResponse, UserCountResponse } from '../shared/types';
 
 const resolveSubscriptionInterval = (subscription: Record<string, unknown>): string | null => {
     const items = Array.isArray(subscription.items) ? subscription.items : [];
@@ -52,34 +45,21 @@ const resolveSubscriptionInterval = (subscription: Record<string, unknown>): str
     return null;
 };
 
-interface GlobalEventStats extends EventStatsCounts {
-    backfilledUsers: number;
+function normalizeCount(value: unknown): number {
+    if (typeof value !== 'number' || !Number.isFinite(value)) {
+        return 0;
+    }
+
+    return Math.max(0, Math.floor(value));
 }
 
-async function getGlobalEventStats(db: admin.firestore.Firestore): Promise<GlobalEventStats> {
+async function getGlobalEventCount(db: admin.firestore.Firestore): Promise<EventCountStats> {
     try {
-        const snapshot = await db.collectionGroup(EVENT_STATS_COLLECTION_ID)
-            .where('kind', '==', EVENT_STATS_KIND)
-            .where('schemaVersion', '==', EVENT_STATS_SCHEMA_VERSION)
-            .where('backfilledAt', '!=', null)
-            .aggregate({
-                backfilledUsers: admin.firestore.AggregateField.count(),
-                total: admin.firestore.AggregateField.sum('total'),
-                standard: admin.firestore.AggregateField.sum('standard'),
-                benchmark: admin.firestore.AggregateField.sum('benchmark'),
-            })
-            .get();
-
-        const data = snapshot.data() as Record<string, unknown>;
-        return {
-            ...normalizeEventStatsCounts(data),
-            backfilledUsers: typeof data.backfilledUsers === 'number' && Number.isFinite(data.backfilledUsers)
-                ? Math.max(0, data.backfilledUsers)
-                : 0,
-        };
+        const snapshot = await db.collectionGroup('events').count().get();
+        return { total: normalizeCount(snapshot.data().count) };
     } catch (error) {
-        logger.warn('Failed to aggregate event stats for admin user count', error);
-        return { total: 0, standard: 0, benchmark: 0, backfilledUsers: 0 };
+        logger.warn('Failed to count events for admin user stats', error);
+        return { total: null };
     }
 }
 
@@ -90,8 +70,8 @@ async function getGlobalEventStats(db: admin.firestore.Firestore): Promise<Globa
  * Performance:
  * - Firebase Auth listUsers: FREE (no Firestore reads)
  * - Search/Sort on Auth data: FREE
- * - Enrich current page only: ~5-7 reads per user (onboarding, subscription, service tokens, AI usage with fallback lookup)
- * - For pageSize=10: ~50-70 Firestore reads total
+ * - Enrich current page only: user detail reads plus one event count aggregation per visible user
+ * - Event counts are display-only and are not used for sorting/filtering in v1
  */
 export const listUsers = onAdminCall<ListUsersRequest, ListUsersResponse>({
     region: FUNCTIONS_MANIFEST.listUsers.region,
@@ -251,8 +231,7 @@ export const listUsers = onAdminCall<ListUsersRequest, ListUsersResponse>({
 
         // ============================================
         // STEP 5: Enrich ONLY the current page users
-        // This is the ONLY place we do Firestore reads!
-        // ~4 reads per user = ~40 reads for pageSize=10
+        // This is the only place we read Firestore user details and run per-visible-user event counts.
         // ============================================
         const db = admin.firestore();
         const enrichedUsers = await enrichUsers(pageUsers, db);
@@ -296,7 +275,7 @@ export const getUserCount = onAdminCall<void, UserCountResponse>({
             db.collection('users')
                 .where('onboardingCompleted', '==', true)
                 .count().get(),
-            getGlobalEventStats(db)
+            getGlobalEventCount(db)
         ]);
 
         const total = totalSnapshot.data().count;
@@ -365,12 +344,7 @@ export const getUserCount = onAdminCall<void, UserCountResponse>({
             monthlyPaid,
             yearlyPaid,
             onboardingCompleted,
-            events: {
-                total: eventStats.total,
-                standard: eventStats.standard,
-                benchmark: eventStats.benchmark,
-            },
-            eventsBackfilled: eventStats.backfilledUsers >= total,
+            events: eventStats,
             providers: providerCounts
         };
     } catch (error: unknown) {

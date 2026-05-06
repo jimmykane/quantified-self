@@ -701,7 +701,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
 
     this.eventStats = null;
     this.eventStatsUserUID = uid;
-    this.eventStatsSubscription = this.eventStatsService.watchUserEventStats(this.user).subscribe((stats) => {
+    this.eventStatsSubscription = this.eventStatsService.loadUserEventStats(this.user).subscribe((stats) => {
       if (equal(this.eventStats, stats)) {
         return;
       }
