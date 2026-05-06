@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { ServiceNames } from '@sports-alliance/sports-lib';
 import { QueueResult } from '../queue-utils';
 
 const hoisted = vi.hoisted(() => ({
@@ -13,6 +14,8 @@ const hoisted = vi.hoisted(() => ({
     tokenRootWhere: vi.fn(),
     tokenRootLimit: vi.fn(),
     tokenRootGet: vi.fn(),
+    collectionGroupWhere: vi.fn(),
+    collectionGroupLimit: vi.fn(),
     collectionGroupGet: vi.fn(),
     getTokenData: vi.fn(),
     requestGet: vi.fn(),
@@ -44,10 +47,12 @@ vi.mock('firebase-admin', () => {
     hoisted.tokenRootLimit.mockReturnValue(tokenRootQuery);
 
     const collectionGroupQuery: any = {
-        where: vi.fn().mockReturnThis(),
-        limit: vi.fn().mockReturnThis(),
+        where: hoisted.collectionGroupWhere,
+        limit: hoisted.collectionGroupLimit,
         get: hoisted.collectionGroupGet,
     };
+    hoisted.collectionGroupWhere.mockReturnValue(collectionGroupQuery);
+    hoisted.collectionGroupLimit.mockReturnValue(collectionGroupQuery);
 
     const firestoreFn = vi.fn(() => ({
         collection: vi.fn((name: string) => ({
@@ -569,18 +574,19 @@ describe('sleep queue', () => {
         expect(hoisted.docUpdate).not.toHaveBeenCalled();
     });
 
-    it('resolves all-user Suunto queue items against legacy Suunto tokens without serviceName', async () => {
+    it('resolves all-user Suunto queue items with an indexed userName and serviceName token query', async () => {
         hoisted.allowedUserIDs.splice(0, hoisted.allowedUserIDs.length);
         hoisted.collectionGroupGet.mockResolvedValue({
             docs: [{
-                id: 'legacy-suunto-token-1',
+                id: 'suunto-token-1',
                 data: () => ({
-                    userName: 'legacy-suunto-user',
+                    userName: 'suunto-user-1',
+                    serviceName: 'Suunto app',
                 }),
                 ref: {
                     parent: {
                         parent: {
-                            id: 'legacy-user-id',
+                            id: 'user-id',
                             parent: {
                                 id: 'suuntoAppAccessTokens',
                             },
@@ -594,12 +600,12 @@ describe('sleep queue', () => {
         const update = vi.fn().mockResolvedValue(undefined);
 
         const result = await processSleepSyncQueueItem({
-            id: 'suunto-sleep-legacy-token',
+            id: 'suunto-sleep-token',
             dateCreated: 1_700_000_000_000,
             dispatchedToCloudTask: 1_700_000_000_500,
             processed: false,
             provider: 'SuuntoApp',
-            providerUserId: 'legacy-suunto-user',
+            providerUserId: 'suunto-user-1',
             retryCount: 0,
             type: 'suunto_webhook',
             payload: {
@@ -617,7 +623,10 @@ describe('sleep queue', () => {
         });
 
         expect(result).toBe(QueueResult.Processed);
-        expect(hoisted.upsertSleepSessions).toHaveBeenCalledWith('legacy-user-id', expect.any(Array));
+        expect(hoisted.collectionGroupWhere).toHaveBeenCalledWith('userName', '==', 'suunto-user-1');
+        expect(hoisted.collectionGroupWhere).toHaveBeenCalledWith('serviceName', '==', ServiceNames.SuuntoApp);
+        expect(hoisted.collectionGroupLimit).toHaveBeenCalledWith(1);
+        expect(hoisted.upsertSleepSessions).toHaveBeenCalledWith('user-id', expect.any(Array));
         expect(update).toHaveBeenCalledWith(expect.objectContaining({
             processed: true,
             resultStatus: 'success',

@@ -136,28 +136,13 @@ async function markSleepQueueItemDispatched(
     }
 }
 
-function isTokenFromCollection(tokenSnapshot: TokenSnapshot, collectionName: string): boolean {
-    return tokenSnapshot.ref.parent.parent?.parent?.id === collectionName;
-}
-
-function tokenMatchesServiceName(tokenSnapshot: TokenSnapshot, serviceName: ServiceNames): boolean {
-    const storedServiceName = tokenSnapshot.data().serviceName;
-    return !storedServiceName || storedServiceName === serviceName;
-}
-
 async function findSuuntoTokenByUserName(providerUserId: string): Promise<TokenSnapshot | null> {
     const snapshot = await admin.firestore().collectionGroup('tokens')
         .where('userName', '==', providerUserId)
-        .limit(10)
+        .where('serviceName', '==', ServiceNames.SuuntoApp)
+        .limit(1)
         .get();
-    const candidates = snapshot.docs.filter((tokenSnapshot) => (
-        isTokenFromCollection(tokenSnapshot, 'suuntoAppAccessTokens')
-        && tokenMatchesServiceName(tokenSnapshot, ServiceNames.SuuntoApp)
-    ));
-
-    return candidates.find((tokenSnapshot) => tokenSnapshot.data().serviceName === ServiceNames.SuuntoApp)
-        || candidates[0]
-        || null;
+    return snapshot.docs[0] || null;
 }
 
 export async function findSleepTokenByProviderUserId(provider: SleepProvider, providerUserId: string): Promise<TokenSnapshot | null> {
