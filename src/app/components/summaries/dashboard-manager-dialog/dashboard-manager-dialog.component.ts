@@ -799,7 +799,7 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
       }
       this.syncAutoTileStateAfterSave(dashboardSettings, previousSettings.tiles, clonedTiles);
 
-      await this.userService.updateUserProperties(this.data.user, { settings: this.data.user.settings });
+      await this.persistDashboardSettings(dashboardSettings);
       this.hasSavedChanges = true;
       this.hapticsService.success();
       this.dialogRef.close({ saved: true });
@@ -852,7 +852,7 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
 
       dashboardSettings.tiles = clonedTiles;
       this.syncAutoTileStateAfterSave(dashboardSettings, previousSettings.tiles, clonedTiles);
-      await this.userService.updateUserProperties(this.data.user, { settings: this.data.user.settings });
+      await this.persistDashboardSettings(dashboardSettings);
       this.hasSavedChanges = true;
       this.hapticsService.success();
       this.dialogRef.close({ saved: true });
@@ -884,7 +884,7 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
       dashboardSettings.tiles = [];
       this.markAllDashboardAutoTilesDismissed(dashboardSettings, Date.now());
       dashboardSettings.dismissedCuratedRecoveryNowTile = true;
-      await this.userService.updateUserProperties(this.data.user, { settings: this.data.user.settings });
+      await this.persistDashboardSettings(dashboardSettings);
       this.hasSavedChanges = true;
       this.mode = 'add';
       this.editTileOrder = null;
@@ -1005,6 +1005,14 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
     this.saveError = 'Could not save dashboard tile settings.';
     this.hapticsService.error();
     console.error('[DashboardManagerDialogComponent] Failed to save dashboard tile settings', error);
+  }
+
+  private async persistDashboardSettings(dashboardSettings: AppDashboardSettingsInterface): Promise<void> {
+    await this.userService.updateUserProperties(this.data.user, {
+      settings: {
+        dashboardSettings,
+      },
+    });
   }
 
   private syncSleepTrendAutoTileStateAfterSave(

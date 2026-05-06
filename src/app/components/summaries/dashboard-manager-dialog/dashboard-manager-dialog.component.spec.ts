@@ -10,6 +10,7 @@ import {
   ChartDataValueTypes,
   ChartTypes,
   ActivityTypes,
+  AppThemes,
   DataDistance,
   DataDuration,
   DataEnergy,
@@ -48,6 +49,10 @@ function createUser(tiles: any[] = []): any {
   return {
     uid: 'user-1',
     settings: {
+      appSettings: {
+        theme: AppThemes.Dark,
+        themePreference: AppThemes.Dark,
+      },
       unitSettings: {
         speedUnits: [],
       },
@@ -73,6 +78,23 @@ function dashboardTileSignature(tile: any): Record<string, unknown> {
       dataCategoryType: tile.dataCategoryType,
       dataTimeInterval: tile.dataTimeInterval,
     };
+}
+
+function expectDashboardSettingsOnlyWrite(
+  userServiceMock: { updateUserProperties: ReturnType<typeof vi.fn> },
+  dialogData: { user: any },
+  callIndex = 0,
+): void {
+  expect(userServiceMock.updateUserProperties.mock.calls[callIndex]).toEqual([
+    dialogData.user,
+    {
+      settings: {
+        dashboardSettings: dialogData.user.settings.dashboardSettings,
+      },
+    },
+  ]);
+  expect(userServiceMock.updateUserProperties.mock.calls[callIndex][1].settings.appSettings).toBeUndefined();
+  expect(userServiceMock.updateUserProperties.mock.calls[callIndex][1].settings.unitSettings).toBeUndefined();
 }
 
 function createDeferred<T = unknown>(): {
@@ -206,9 +228,7 @@ describe('DashboardManagerDialogComponent', () => {
       range: '30d',
       activityTypes: [ActivityTypes.Running],
     });
-    expect(userServiceMock.updateUserProperties).toHaveBeenCalledWith(dialogData.user, {
-      settings: dialogData.user.settings,
-    });
+    expectDashboardSettingsOnlyWrite(userServiceMock, dialogData);
     expect(hapticsMock.success).toHaveBeenCalledTimes(1);
     expect(dialogRefMock.close).toHaveBeenCalledWith({ saved: true });
   });
@@ -669,6 +689,7 @@ describe('DashboardManagerDialogComponent', () => {
     });
     expect(dialogData.user.settings.dashboardSettings.dismissedCuratedRecoveryNowTile).toBe(false);
     expect(userServiceMock.updateUserProperties).toHaveBeenCalledTimes(1);
+    expectDashboardSettingsOnlyWrite(userServiceMock, dialogData);
     expect(hapticsMock.selection).toHaveBeenCalledTimes(1);
     expect(hapticsMock.success).toHaveBeenCalledTimes(1);
     expect(component.isAddAllDisabled).toBe(true);
@@ -838,6 +859,7 @@ describe('DashboardManagerDialogComponent', () => {
       source: 'default-kpi',
     });
     expect(userServiceMock.updateUserProperties).toHaveBeenCalledTimes(1);
+    expectDashboardSettingsOnlyWrite(userServiceMock, dialogData);
     expect(hapticsMock.success).toHaveBeenCalledTimes(1);
     expect(component.isRemoveAllDisabled).toBe(true);
     expect(component.isAddAllDisabled).toBe(false);
