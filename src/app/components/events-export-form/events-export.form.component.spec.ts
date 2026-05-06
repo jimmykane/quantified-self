@@ -56,6 +56,7 @@ describe('EventsExportFormComponent', () => {
             user: {
               uid: 'user-1',
               settings: {
+                appSettings: { theme: 'dark' },
                 unitSettings: {},
                 exportToCSVSettings: {
                   startDate: false,
@@ -120,10 +121,14 @@ describe('EventsExportFormComponent', () => {
     expect(mockFileService.downloadFile).toHaveBeenCalled();
     expect(mockUserService.updateUserProperties).toHaveBeenCalledWith(
       expect.objectContaining({ uid: 'user-1' }),
-      expect.objectContaining({
-        settings: expect.any(Object),
-      }),
+      {
+        settings: {
+          exportToCSVSettings: component.user.settings.exportToCSVSettings,
+        },
+      },
     );
+    expect(mockUserService.updateUserProperties.mock.calls[0][1].settings.appSettings).toBeUndefined();
+    expect(mockUserService.updateUserProperties.mock.calls[0][1].settings.unitSettings).toBeUndefined();
     expect(mockLogger.error).toHaveBeenCalledWith(
       '[EventsExportFormComponent] Failed to persist export settings',
       expect.any(Error),

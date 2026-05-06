@@ -8,6 +8,7 @@ import { AppAnalyticsService } from '../../../services/app.analytics.service';
 import { EventEmitter, Input, Output, Directive, inject } from '@angular/core';
 import { User } from '@sports-alliance/sports-lib';
 import { AppHapticsService } from '../../../services/app.haptics.service';
+import { AppDashboardSettingsInterface } from '../../../models/app-user.interface';
 
 @Directive()
 export class TileActionsAbstractDirective extends TileAbstractDirective {
@@ -30,7 +31,27 @@ export class TileActionsAbstractDirective extends TileAbstractDirective {
   }
 
   protected async persistUserSettings(): Promise<unknown> {
-    return this.withSavingState(() => this.userService.updateUserProperties(this.user, { settings: this.user.settings }));
+    const dashboardSettingsPatch = this.buildDashboardSettingsPersistencePatch();
+    if (Object.keys(dashboardSettingsPatch).length === 0) {
+      return this.withSavingState(() => Promise.resolve());
+    }
+
+    return this.withSavingState(() => this.userService.updateUserProperties(this.user, {
+      settings: {
+        dashboardSettings: dashboardSettingsPatch,
+      },
+    }));
+  }
+
+  protected buildDashboardSettingsPersistencePatch(): Partial<AppDashboardSettingsInterface> {
+    const dashboardSettings = this.user?.settings?.dashboardSettings as AppDashboardSettingsInterface | undefined;
+    if (!dashboardSettings) {
+      return {};
+    }
+
+    return {
+      tiles: dashboardSettings.tiles || [],
+    };
   }
 
   async changeTileType(event) {

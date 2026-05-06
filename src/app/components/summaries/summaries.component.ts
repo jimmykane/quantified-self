@@ -688,6 +688,16 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     this.dashboardAutoTileUser = null;
   }
 
+  private persistDashboardSettings(dashboardSettings: Partial<AppDashboardSettingsInterface>): Promise<void> {
+    if (!this.user) {
+      return Promise.resolve();
+    }
+
+    return this.userService.updateUserProperties(this.user as AppUserInterface, {
+      settings: { dashboardSettings },
+    });
+  }
+
   public async onSleepTrendRangeChange(range: AppDashboardSleepTrendRange): Promise<void> {
     const nextRange = normalizeDashboardSleepTrendRange(range);
     if (nextRange === this.getSleepTrendRange()) {
@@ -713,7 +723,9 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     this.changeDetector.markForCheck();
 
     try {
-      await this.userService.updateUserProperties(this.user as AppUserInterface, { settings: userWithSettings.settings });
+      await this.persistDashboardSettings({
+        sleepTrend: dashboardSettings.sleepTrend,
+      });
     } catch (error) {
       dashboardSettings.sleepTrend = previousSleepTrend;
       this.sleepTrendRange = normalizeDashboardSleepTrendRange(previousSleepTrend.range);
@@ -913,7 +925,9 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     this.changeDetector.markForCheck();
 
     try {
-      await this.userService.updateUserProperties(this.user as AppUserInterface, { settings: (this.user as AppUserInterface).settings });
+      await this.persistDashboardSettings({
+        tiles: dashboardSettings.tiles,
+      });
     } catch (error) {
       dashboardSettings.tiles = previousTiles;
       this.tileEventAnchorEndMsByOrder.delete(order);
@@ -1202,7 +1216,9 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     await this.rebuildTilesFromCurrentState();
 
     try {
-      await this.userService.updateUserProperties(this.user as any, { settings: this.user?.settings });
+      await this.persistDashboardSettings({
+        tiles: dashboardSettings.tiles,
+      });
       this.updateDesktopTileDragCapability();
     } catch (error) {
       dashboardSettings.tiles = this.cloneTileSettings(previousSettingsTiles);

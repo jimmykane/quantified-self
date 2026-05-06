@@ -113,7 +113,12 @@ export class AppThemeService implements OnDestroy {
     ) as User;
 
     await this.userService.updateUserProperties(this.user, {
-      settings: nextSettings
+      settings: {
+        appSettings: {
+          theme: resolvedTheme,
+          themePreference,
+        },
+      },
     });
   }
 

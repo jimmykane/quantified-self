@@ -86,6 +86,7 @@ describe('DashboardAutoTileService', () => {
     expect(user.settings?.dashboardSettings?.autoTiles?.sleepTrend?.state).toBe('added');
     expect(user.settings?.dashboardSettings?.autoTiles?.sleepTrend?.source).toBe('sleep-sync');
     expect(mockUserService.updateUserProperties).toHaveBeenCalledTimes(1);
+    expectDashboardSettingsOnlyWrite(mockUserService, user);
     expect(mockSnackBar.open).toHaveBeenCalledWith('Added Sleep chart to your dashboard.', 'Undo', { duration: 7000 });
   });
 
@@ -236,6 +237,7 @@ describe('DashboardAutoTileService', () => {
     expect((user.settings?.dashboardSettings?.autoTiles as any).first.state).toBe('dismissed');
     expect((user.settings?.dashboardSettings?.autoTiles as any).second.state).toBe('dismissed');
     expect(mockUserService.updateUserProperties).toHaveBeenCalledTimes(1);
+    expectDashboardSettingsOnlyWrite(mockUserService, user);
   });
 
   it('undo dismisses auto-added Recovery through both auto-tile state and the legacy recovery flag', async () => {
@@ -448,12 +450,35 @@ function createUser(
   return {
     uid: 'user-1',
     settings: {
+      appSettings: { theme: 'dark' } as any,
+      unitSettings: { startOfTheWeek: 1 } as any,
       dashboardSettings: {
         tiles,
         autoTiles,
       },
     },
   } as AppUserInterface;
+}
+
+function expectDashboardSettingsOnlyWrite(
+  mockUserService: { updateUserProperties: ReturnType<typeof vi.fn> },
+  user: AppUserInterface,
+): void {
+  const calls = mockUserService.updateUserProperties.mock.calls;
+  const dashboardSettings = user.settings?.dashboardSettings;
+  const dashboardSettingsPatch: Record<string, unknown> = {
+    tiles: dashboardSettings?.tiles || [],
+    autoTiles: dashboardSettings?.autoTiles || {},
+  };
+  if (dashboardSettings?.dismissedCuratedRecoveryNowTile !== undefined) {
+    dashboardSettingsPatch.dismissedCuratedRecoveryNowTile = dashboardSettings.dismissedCuratedRecoveryNowTile;
+  }
+  const settingsPayload = calls[calls.length - 1][1].settings;
+  expect(settingsPayload).toEqual({
+    dashboardSettings: dashboardSettingsPatch,
+  });
+  expect(settingsPayload.appSettings).toBeUndefined();
+  expect(settingsPayload.unitSettings).toBeUndefined();
 }
 
 function createCustomTile(order: number): TileSettingsInterface {

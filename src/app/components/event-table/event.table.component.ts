@@ -196,7 +196,12 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       if (tableSettings.active !== sort.active || tableSettings.direction !== sort.direction) {
         tableSettings.active = sort.active;
         tableSettings.direction = sort.direction as OrderByDirection;
-        await this.userService.updateUserProperties(this.user, { settings: this.user.settings })
+        await this.persistDashboardSettings({
+          tableSettings: {
+            active: tableSettings.active,
+            direction: tableSettings.direction,
+          },
+        });
       }
     });
     if (this.events) {
@@ -212,6 +217,17 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     event?.preventDefault();
     event?.stopPropagation();
     this.selection.clear();
+  }
+
+  private persistDashboardSettings(dashboardSettingsPatch: Record<string, unknown>): Promise<void> {
+    const dashboardSettings = this.user?.settings?.dashboardSettings;
+    if (!dashboardSettings) {
+      return Promise.resolve();
+    }
+
+    return this.userService.updateUserProperties(this.user, {
+      settings: { dashboardSettings: dashboardSettingsPatch },
+    });
   }
 
   /**
@@ -657,7 +673,11 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
         return;
       }
       this.user.settings.dashboardSettings.tableSettings.eventsPerPage = pageEvent.pageSize;
-      return this.userService.updateUserProperties(this.user, { settings: this.user.settings })
+      return this.persistDashboardSettings({
+        tableSettings: {
+          eventsPerPage: pageEvent.pageSize,
+        },
+      });
     }
   }
 
@@ -688,7 +708,11 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     this.selectedColumns = event
     this.updateDisplayedColumns();
     this.user.settings.dashboardSettings.tableSettings.selectedColumns = this.selectedColumns
-    await this.userService.updateUserProperties(this.user, { settings: this.user.settings })
+    await this.persistDashboardSettings({
+      tableSettings: {
+        selectedColumns: this.selectedColumns,
+      },
+    });
   }
 
   ngOnDestroy() {

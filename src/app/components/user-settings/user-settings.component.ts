@@ -465,9 +465,6 @@ export class UserSettingsComponent implements OnChanges, OnDestroy, OnInit {
         theme: resolvedTheme,
         themePreference: selectedThemePreference
       };
-      if ((settings.appSettings as any)?.unitSetupCompleted !== undefined) {
-        appSettingsToSave.unitSetupCompleted = (settings.appSettings as any).unitSetupCompleted;
-      }
       if (shouldCompleteUnitSetup) {
         appSettingsToSave.unitSetupCompleted = true;
       }
@@ -498,14 +495,7 @@ export class UserSettingsComponent implements OnChanges, OnDestroy, OnInit {
             startOfTheWeek: this.userSettingsFormGroup.get('startOfTheWeek').value,
           },
           dashboardSettings: <AppDashboardSettingsInterface>{
-            tiles: settings.dashboardSettings.tiles,
-            startDate: settings.dashboardSettings.startDate,
-            endDate: settings.dashboardSettings.endDate,
-            dateRange: settings.dashboardSettings.dateRange,
-            includeMergedEvents: settings.dashboardSettings.includeMergedEvents,
             tableSettings: {
-              active: settings.dashboardSettings.tableSettings.active,
-              direction: settings.dashboardSettings.tableSettings.direction,
               eventsPerPage: this.userSettingsFormGroup.get('eventsPerPage').value
             }
           },

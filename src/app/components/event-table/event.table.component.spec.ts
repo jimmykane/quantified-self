@@ -101,6 +101,7 @@ describe('EventTableComponent', () => {
                 selectedColumns: []
             }
         },
+        appSettings: { theme: 'dark' },
         unitSettings: { startOfTheWeek: 1 }
     } as any;
 
@@ -212,6 +213,15 @@ describe('EventTableComponent', () => {
     beforeEach(() => {
         fixture = TestBed.createComponent(EventTableComponent);
         component = fixture.componentInstance;
+        mockUser.settings = {
+            dashboardSettings: {
+                tableSettings: {
+                    selectedColumns: []
+                }
+            },
+            appSettings: { theme: 'dark' },
+            unitSettings: { startOfTheWeek: 1 }
+        } as any;
         component.user = mockUser;
         component.events = [
             new MockEvent('event1') as any,
@@ -233,6 +243,16 @@ describe('EventTableComponent', () => {
 
         fixture.detectChanges();
     });
+
+    const expectDashboardSettingsWrite = (dashboardSettingsPatch: Record<string, unknown>) => {
+        const calls = mockUserService.updateUserProperties.mock.calls;
+        const settingsPayload = calls[calls.length - 1][1].settings;
+        expect(settingsPayload).toEqual({
+            dashboardSettings: dashboardSettingsPatch,
+        });
+        expect(settingsPayload.appSettings).toBeUndefined();
+        expect(settingsPayload.unitSettings).toBeUndefined();
+    };
 
     it('should create', () => {
         expect(component).toBeTruthy();
@@ -321,6 +341,27 @@ describe('EventTableComponent', () => {
         await component.pageChanges({ pageSize: 25 } as any);
 
         expect(mockUserService.updateUserProperties).not.toHaveBeenCalled();
+    });
+
+    it('should persist page size without writing unrelated user settings', async () => {
+        component.user.settings.dashboardSettings.tableSettings.eventsPerPage = 25;
+
+        await component.pageChanges({ pageSize: 50 } as any);
+
+        expectDashboardSettingsWrite({ tableSettings: { eventsPerPage: 50 } });
+    });
+
+    it('should persist selected columns without writing unrelated user settings', async () => {
+        await component.selectedColumnsChange(['Name', 'Start Date']);
+
+        expectDashboardSettingsWrite({ tableSettings: { selectedColumns: ['Name', 'Start Date'] } });
+    });
+
+    it('should persist sort changes without writing unrelated user settings', async () => {
+        (component.sort.sortChange as Subject<any>).next({ active: 'startDate', direction: 'asc' });
+        await Promise.resolve();
+
+        expectDashboardSettingsWrite({ tableSettings: { active: 'startDate', direction: 'asc' } });
     });
 
     it('should initialize data source with events', () => {

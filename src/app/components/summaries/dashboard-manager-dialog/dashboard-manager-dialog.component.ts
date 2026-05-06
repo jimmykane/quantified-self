@@ -1008,9 +1008,19 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
   }
 
   private async persistDashboardSettings(dashboardSettings: AppDashboardSettingsInterface): Promise<void> {
+    const dashboardSettingsPatch: Partial<AppDashboardSettingsInterface> = {
+      tiles: dashboardSettings.tiles || [],
+    };
+    if (dashboardSettings.autoTiles !== undefined) {
+      dashboardSettingsPatch.autoTiles = dashboardSettings.autoTiles;
+    }
+    if (dashboardSettings.dismissedCuratedRecoveryNowTile !== undefined) {
+      dashboardSettingsPatch.dismissedCuratedRecoveryNowTile = dashboardSettings.dismissedCuratedRecoveryNowTile;
+    }
+
     await this.userService.updateUserProperties(this.data.user, {
       settings: {
-        dashboardSettings,
+        dashboardSettings: dashboardSettingsPatch,
       },
     });
   }

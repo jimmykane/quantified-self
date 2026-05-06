@@ -348,7 +348,9 @@ export class EventsExportFormComponent extends FormsAbstract {
     await this.close(new Event('Done'));
 
     void this.userService.updateUserProperties(this.user, {
-      settings: this.user.settings
+      settings: {
+        exportToCSVSettings: this.user.settings.exportToCSVSettings,
+      },
     }).catch((error) => {
       this.logger.error('[EventsExportFormComponent] Failed to persist export settings', error);
     });

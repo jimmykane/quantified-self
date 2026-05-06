@@ -483,7 +483,7 @@ describe('UserSettingsComponent', () => {
         await component.onSubmit(new Event('submit'));
 
         const payload = updateUserPropertiesSpy.mock.calls[0][1];
-        expect(payload.settings.appSettings.unitSetupCompleted).toBe(false);
+        expect(payload.settings.appSettings.unitSetupCompleted).toBeUndefined();
     });
 
     it('should expose kilometers and miles labels for distance unit choices', () => {
@@ -592,6 +592,59 @@ describe('UserSettingsComponent', () => {
 
         const payload = updateUserPropertiesSpy.mock.calls[0][1];
         expect(payload.settings.mapSettings.showPoints).toBeUndefined();
+    });
+
+    it('does not rewrite dashboard-specific settings when saving general settings', async () => {
+        const userService = TestBed.inject(AppUserService);
+        const updateUserPropertiesSpy = vi.spyOn(userService, 'updateUserProperties').mockResolvedValue(true as any);
+        const dashboardActionPrompts = {
+            unitSetup: { state: 'dismissed', dismissedAt: 123 },
+        };
+        component.user = {
+            ...(component.user as any),
+            settings: {
+                ...(component.user as any).settings,
+                appSettings: {
+                    ...(component.user as any).settings.appSettings,
+                    dashboardActionPrompts,
+                },
+                dashboardSettings: {
+                    ...(component.user as any).settings.dashboardSettings,
+                    eventTableFilters: {
+                        searchTerm: 'tempo',
+                        dateRange: 1,
+                        startDate: 1000,
+                        endDate: 2000,
+                        activityTypes: ['Running'],
+                        includeMergedEvents: false,
+                    },
+                    sleepTrend: { range: '30d' },
+                    autoTiles: {
+                        sleepTrend: { state: 'added', addedAt: 456 },
+                    },
+                    tableSettings: {
+                        eventsPerPage: 10,
+                        selectedColumns: ['Name', 'Start Date'],
+                        active: 'startDate',
+                        direction: 'asc',
+                    },
+                },
+            },
+        } as any;
+
+        component.ngOnChanges();
+        component.userSettingsFormGroup.get('eventsPerPage').setValue(25);
+
+        await component.onSubmit(new Event('submit'));
+
+        const payload = updateUserPropertiesSpy.mock.calls[0][1];
+        expect(payload.settings.appSettings.dashboardActionPrompts).toBeUndefined();
+        expect(payload.settings.dashboardSettings.eventTableFilters).toBeUndefined();
+        expect(payload.settings.dashboardSettings.sleepTrend).toBeUndefined();
+        expect(payload.settings.dashboardSettings.autoTiles).toBeUndefined();
+        expect(payload.settings.dashboardSettings.tableSettings).toEqual({
+            eventsPerPage: 25,
+        });
     });
 
     it('should reject brandText values longer than 60 chars after trim', async () => {

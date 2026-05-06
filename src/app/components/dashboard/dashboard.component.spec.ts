@@ -827,7 +827,14 @@ describe('DashboardComponent', () => {
         expect(component.user.settings.dashboardSettings.startDate).toBeNull();
         expect(component.user.settings.dashboardSettings.endDate).toBeNull();
         expect(component.user.settings.dashboardSettings.activityTypes).toEqual([]);
-        expect(mockUserService.updateUserProperties).toHaveBeenCalledWith(component.user, { settings: component.user.settings });
+        expect(mockUserService.updateUserProperties).toHaveBeenCalledWith(component.user, {
+            settings: {
+                dashboardSettings: {
+                    eventTableFilters: component.user.settings.dashboardSettings.eventTableFilters,
+                },
+            },
+        });
+        expect(mockUserService.updateUserProperties.mock.calls[0][1].settings.appSettings).toBeUndefined();
     });
 
     it('should re-run manual search when submitting identical filters twice', async () => {

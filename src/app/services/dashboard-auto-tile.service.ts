@@ -188,7 +188,7 @@ export class DashboardAutoTileService {
       });
       dashboardSettings.tiles = tiles;
 
-      await this.userService.updateUserProperties(user, { settings: user.settings });
+      await this.persistDashboardTileState(user, dashboardSettings);
       this.showAddedSnackbar(user, eligibleRules);
       return { addedRules: eligibleRules, persisted: true };
     } catch (error) {
@@ -246,7 +246,7 @@ export class DashboardAutoTileService {
           dashboardSettings.dismissedCuratedRecoveryNowTile = true;
         }
       });
-      await this.userService.updateUserProperties(user, { settings: user.settings });
+      await this.persistDashboardTileState(user, dashboardSettings);
     } catch (error) {
       dashboardSettings.tiles = previousTiles;
       dashboardSettings.autoTiles = previousAutoTiles as AppDashboardSettingsInterface['autoTiles'];
@@ -267,6 +267,23 @@ export class DashboardAutoTileService {
       ? `${visibleLabels.join(', ')}, and ${remainingCount} more`
       : visibleLabels.join(', ');
     return `Added ${rules.length} dashboard charts: ${labelSummary}.`;
+  }
+
+  private persistDashboardTileState(
+    user: AppUserInterface,
+    dashboardSettings: AppDashboardSettingsInterface,
+  ): Promise<void> {
+    const dashboardSettingsPatch: Partial<AppDashboardSettingsInterface> = {
+      tiles: dashboardSettings.tiles || [],
+      autoTiles: dashboardSettings.autoTiles || {},
+    };
+    if (dashboardSettings.dismissedCuratedRecoveryNowTile !== undefined) {
+      dashboardSettingsPatch.dismissedCuratedRecoveryNowTile = dashboardSettings.dismissedCuratedRecoveryNowTile;
+    }
+
+    return this.userService.updateUserProperties(user, {
+      settings: { dashboardSettings: dashboardSettingsPatch },
+    });
   }
 
   private buildDefaultDashboardEligibility(user: AppUserInterface): DashboardAutoTileEligibility {

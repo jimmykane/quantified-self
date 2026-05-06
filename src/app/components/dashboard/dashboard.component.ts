@@ -7,7 +7,12 @@ import { ServiceNames } from '@sports-alliance/sports-lib';
 import { ActivatedRoute, Router } from '@angular/router';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { AppAuthService } from '../../authentication/app.auth.service';
-import { AppAppSettingsInterface, AppDashboardEventTableFiltersInterface, AppUserInterface } from '../../models/app-user.interface';
+import {
+  AppAppSettingsInterface,
+  AppDashboardEventTableFiltersInterface,
+  AppDashboardSettingsInterface,
+  AppUserInterface,
+} from '../../models/app-user.interface';
 import { DateRanges } from '@sports-alliance/sports-lib';
 import { Search } from '../event-search/event-search.component';
 import { AppUserService } from '../../services/app.user.service';
@@ -347,7 +352,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
         refreshToken: this.manualSearchRefreshToken,
       });
       this.analyticsService.logEvent('dashboard_search', { method: DateRanges[search.dateRange] });
-      await this.userService.updateUserProperties(this.user, { settings: this.user.settings });
+      await this.persistDashboardSettings({
+        eventTableFilters: this.user.settings.dashboardSettings.eventTableFilters,
+      });
     } catch (error) {
       this.searchTerm = previousSearchState.searchTerm;
       this.searchStartDate = previousSearchState.searchStartDate;
@@ -859,6 +866,12 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   public get eventTableFilters(): AppDashboardEventTableFiltersInterface {
     return this.getEventTableFilters(this.user);
+  }
+
+  private persistDashboardSettings(dashboardSettings: Partial<AppDashboardSettingsInterface>): Promise<void> {
+    return this.userService.updateUserProperties(this.user, {
+      settings: { dashboardSettings },
+    });
   }
 
   private getEventTableFilters(user: AppUserInterface | null | undefined): AppDashboardEventTableFiltersInterface {

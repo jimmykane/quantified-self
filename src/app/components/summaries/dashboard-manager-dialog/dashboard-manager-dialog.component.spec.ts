@@ -85,16 +85,27 @@ function expectDashboardSettingsOnlyWrite(
   dialogData: { user: any },
   callIndex = 0,
 ): void {
+  const dashboardSettings = dialogData.user.settings.dashboardSettings;
+  const dashboardSettingsPatch: Record<string, unknown> = {
+    tiles: dashboardSettings.tiles || [],
+  };
+  if (dashboardSettings.autoTiles !== undefined) {
+    dashboardSettingsPatch.autoTiles = dashboardSettings.autoTiles;
+  }
+  if (dashboardSettings.dismissedCuratedRecoveryNowTile !== undefined) {
+    dashboardSettingsPatch.dismissedCuratedRecoveryNowTile = dashboardSettings.dismissedCuratedRecoveryNowTile;
+  }
   expect(userServiceMock.updateUserProperties.mock.calls[callIndex]).toEqual([
     dialogData.user,
     {
       settings: {
-        dashboardSettings: dialogData.user.settings.dashboardSettings,
+        dashboardSettings: dashboardSettingsPatch,
       },
     },
   ]);
   expect(userServiceMock.updateUserProperties.mock.calls[callIndex][1].settings.appSettings).toBeUndefined();
   expect(userServiceMock.updateUserProperties.mock.calls[callIndex][1].settings.unitSettings).toBeUndefined();
+  expect(userServiceMock.updateUserProperties.mock.calls[callIndex][1].settings.dashboardSettings.eventTableFilters).toBeUndefined();
 }
 
 function createDeferred<T = unknown>(): {
