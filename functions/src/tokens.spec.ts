@@ -398,19 +398,7 @@ describe('tokens', () => {
             expect(mockToken.refresh).toHaveBeenCalledTimes(2);
         });
 
-        it('should skip Suunto app tokens if target service is not Suunto App', async () => {
-            // Logic: if serviceName === ServiceNames.SuuntoApp (passed arg)
-            // AND authToken.data().serviceName is defined
-            // AND authToken.data().serviceName !== ServiceNames.SuuntoApp
-            // THEN continue
-
-            // Wait, looking at code:
-            // if (serviceName === ServiceNames.SuuntoApp
-            //   && authToken.data().serviceName
-            //   && authToken.data().serviceName !== ServiceNames.SuuntoApp
-            // )
-            // This logic seems to filter OUT tokens that claim to be something else when we are processing SuuntoApp?
-
+        it('should process the provided snapshot without Suunto-specific serviceName exceptions', async () => {
             const mixedDocs = [
                 {
                     id: 'suunto-doc',
@@ -431,17 +419,7 @@ describe('tokens', () => {
 
             await refreshTokens(mockQuerySnapshot as any, ServiceNames.SuuntoApp);
 
-            // Only suunto-doc should be processed
-            // Actually, since I didn't mock getTokenData to NOT fail, it might fail.
-            // But the loop continues on error.
-            // I want to verify getTokenData was called only once.
-
-            // Since I am testing `tokens.ts`, `getTokenData` is an export from the same file.
-            // I can't easily mock it unless I separate it or spy on it if it called via `exports`.
-            // But here it calls `getTokenData` directly.
-            // I will rely on `getServiceConfig` being called as a proxy for `getTokenData` being called.
-
-            expect(getServiceConfig).toHaveBeenCalledTimes(1);
+            expect(getServiceConfig).toHaveBeenCalledTimes(2);
         });
     });
 });
