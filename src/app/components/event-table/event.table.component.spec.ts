@@ -251,6 +251,30 @@ describe('EventTableComponent', () => {
         expect(mainRow.contains(filtersRow)).toBe(true);
     });
 
+    it('should render selected-event actions outside the main toolbar row', () => {
+        fixture.componentRef.setInput('showActions', true);
+        component.selection.select({ Event: new MockEvent('selected') } as any);
+        fixture.detectChanges();
+
+        const mainRow = fixture.nativeElement.querySelector('.table-toolbar-main') as HTMLElement;
+        const selectionToolbar = fixture.nativeElement.querySelector('.table-selection-toolbar') as HTMLElement;
+        const actionButtons = fixture.nativeElement.querySelectorAll('.table-selection-toolbar .bulk-action-button');
+
+        expect(selectionToolbar).toBeTruthy();
+        expect(selectionToolbar.textContent).toContain('1 event selected');
+        expect(mainRow.contains(selectionToolbar)).toBe(false);
+        expect(mainRow.querySelector('.selection-actions')).toBeNull();
+        expect(actionButtons.length).toBe(5);
+    });
+
+    it('should clear the contextual table selection', () => {
+        component.selection.select({ Event: new MockEvent('selected') } as any);
+
+        component.clearSelection();
+
+        expect(component.selection.selected).toHaveLength(0);
+    });
+
     it('should call loading and return early in ngOnChanges when events are missing', () => {
         const loadingSpy = vi.spyOn(component as any, 'loading');
         component.events = null as any;

@@ -5,7 +5,7 @@
   </p>
 
   <div class="merge-options" role="radiogroup" aria-label="Merge event behavior">
-    <div class="qs-glass-card-panel option-card option-card-benchmark" role="radio"
+    <div class="qs-overlay-section option-card option-card-benchmark" role="radio"
       [class.selected]="selectedOption === 'benchmark'"
       [attr.aria-checked]="selectedOption === 'benchmark'"
       [class.disabled]="isMerging" [attr.aria-disabled]="isMerging"
@@ -32,12 +32,13 @@
           Benchmark tools enabled
         </mat-chip>
       </mat-chip-set>
-      <app-status-info type="pending" title="What changes">
-        Use this when you want comparison reports and benchmark workflows instead of normal training totals.
-      </app-status-info>
+      <div class="option-detail">
+        <span class="option-detail-title">What changes</span>
+        <span>Use this when you want comparison reports and benchmark workflows instead of normal training totals.</span>
+      </div>
     </div>
 
-    <div class="qs-glass-card-panel option-card option-card-multi" role="radio"
+    <div class="qs-overlay-section option-card option-card-multi" role="radio"
       [class.selected]="selectedOption === 'multi'"
       [attr.aria-checked]="selectedOption === 'multi'"
       [class.disabled]="isMerging" [attr.aria-disabled]="isMerging"
@@ -64,9 +65,10 @@
           Standard event behavior
         </mat-chip>
       </mat-chip-set>
-      <app-status-info type="success" title="What changes">
-        Use this when you want one normal event that still behaves like any other multi-activity workout.
-      </app-status-info>
+      <div class="option-detail">
+        <span class="option-detail-title">What changes</span>
+        <span>Use this when you want one normal event that still behaves like any other multi-activity workout.</span>
+      </div>
     </div>
   </div>
 </mat-dialog-content>

@@ -55,5 +55,7 @@ describe('AppModule menu defaults', () => {
     expect(styles).toContain('--mat-dialog-container-color: var(--qs-overlay-surface);');
     expect(styles).toContain('--mat-menu-container-color: var(--qs-overlay-surface);');
     expect(styles).toContain('--mat-select-panel-background-color: var(--qs-overlay-surface);');
+    expect(styles).toContain('--qs-overlay-section-bg: var(--mat-sys-surface-container-high);');
+    expect(styles).toContain('--qs-overlay-section-border: var(--mat-sys-outline-variant);');
   });
 });

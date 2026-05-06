@@ -42,6 +42,14 @@ describe('MergeOptionsDialogComponent', () => {
     ]);
   });
 
+  it('uses overlay sections for choices without nesting glass panels inside the dialog', () => {
+    const optionCards = fixture.debugElement.queryAll(By.css('.option-card'));
+
+    expect(optionCards).toHaveLength(2);
+    expect(optionCards.every((card) => card.nativeElement.classList.contains('qs-overlay-section'))).toBe(true);
+    expect(optionCards.some((card) => card.nativeElement.classList.contains('qs-glass-card-panel'))).toBe(false);
+  });
+
   it('keeps the primary action label stable when the selected merge type changes', () => {
     let actionLabel = fixture.debugElement.query(By.css('button.qs-mat-primary')).nativeElement.textContent as string;
     expect(actionLabel).toContain('Merge selected events');

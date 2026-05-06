@@ -29,7 +29,7 @@ import { EventInterface } from '@sports-alliance/sports-lib';
 import { User } from '@sports-alliance/sports-lib';
 import { debounceTime, map } from 'rxjs/operators';
 import { firstValueFrom, race, Subject, Subscription } from 'rxjs';
-import { rowsAnimation, expandCollapse } from '../../animations/animations';
+import { rowsAnimation } from '../../animations/animations';
 import { DataActivityTypes } from '@sports-alliance/sports-lib';
 import { ConfirmationDialogComponent } from '../confirmation-dialog/confirmation-dialog.component';
 import { AppUserService } from '../../services/app.user.service';
@@ -61,8 +61,7 @@ interface EventTableRowCacheEntry {
   templateUrl: './event.table.component.html',
   styleUrls: ['./event.table.component.scss'],
   animations: [
-    rowsAnimation,
-    expandCollapse
+    rowsAnimation
   ],
   providers: [DatePipe],
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -207,6 +206,12 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
 
   checkBoxClick(row) {
     this.selection.toggle(row);
+  }
+
+  clearSelection(event?: Event): void {
+    event?.preventDefault();
+    event?.stopPropagation();
+    this.selection.clear();
   }
 
   /**
