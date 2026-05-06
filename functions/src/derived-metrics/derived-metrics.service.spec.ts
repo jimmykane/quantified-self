@@ -17,6 +17,7 @@ import {
     DataPowerZoneOneDuration,
     DataPowerZoneThreeDuration,
     DataPowerZoneTwoDuration,
+    DataRecoveryTime,
 } from '@sports-alliance/sports-lib';
 
 const hoisted = vi.hoisted(() => {
@@ -785,5 +786,69 @@ describe('writeDerivedMetricSnapshotsReady', () => {
         expect((findPersistedPayload(DERIVED_METRIC_KINDS.EasyPercent).payload as Record<string, unknown>).value).toBeNull();
         expect((findPersistedPayload(DERIVED_METRIC_KINDS.HardPercent).payload as Record<string, unknown>).value).toBeNull();
         expect((findPersistedPayload(DERIVED_METRIC_KINDS.EfficiencyDelta4w).payload as Record<string, unknown>).deltaAbs).toBeNull();
+    });
+
+    it('excludes benchmark merges but includes multi merges in derived calculations', async () => {
+        const { writeDerivedMetricSnapshotsReady } = await import('./derived-metrics.service');
+        vi.useFakeTimers();
+        vi.setSystemTime(Date.UTC(2026, 0, 3, 12, 0, 0));
+
+        const formDocs = [
+            buildEventDoc({
+                startDate: Date.UTC(2026, 0, 1, 8, 0, 0),
+                endDate: Date.UTC(2026, 0, 1, 9, 0, 0),
+                isMerge: true,
+                mergeType: 'benchmark',
+                originalFiles: [{ path: 'f1.fit' }, { path: 'f2.fit' }],
+                stats: {
+                    'Training Stress Score': 100,
+                    [DataRecoveryTime.type]: 10_000,
+                },
+            }),
+            buildEventDoc({
+                startDate: Date.UTC(2026, 0, 2, 8, 0, 0),
+                endDate: Date.UTC(2026, 0, 2, 9, 0, 0),
+                isMerge: false,
+                mergeType: 'multi',
+                originalFiles: [{ path: 'f3.fit' }, { path: 'f4.fit' }],
+                stats: {
+                    'Training Stress Score': 40,
+                    [DataRecoveryTime.type]: 4_000,
+                },
+            }),
+            buildEventDoc({
+                startDate: Date.UTC(2026, 0, 3, 8, 0, 0),
+                endDate: Date.UTC(2026, 0, 3, 9, 0, 0),
+                stats: {
+                    'Training Stress Score': 10,
+                    [DataRecoveryTime.type]: 1_000,
+                },
+            }),
+        ];
+
+        await writeDerivedMetricSnapshotsReady(
+            'user-1',
+            [DERIVED_METRIC_KINDS.Form, DERIVED_METRIC_KINDS.RecoveryNow],
+            {
+                formDocs: formDocs as any,
+                recoveryNowDocs: formDocs as any,
+            },
+            {
+                builtFromEventMutationVersion: 42,
+            },
+        );
+
+        const formPersistedSnapshot = findPersistedPayload(DERIVED_METRIC_KINDS.Form);
+        expect(formPersistedSnapshot.sourceEventCount).toBe(2);
+        const formPayload = formPersistedSnapshot.payload as Record<string, unknown>;
+        expect(formPayload.dailyLoads).toEqual([
+            { dayMs: Date.UTC(2026, 0, 2), load: 40 },
+            { dayMs: Date.UTC(2026, 0, 3), load: 10 },
+        ]);
+
+        const recoveryPayload = findPersistedPayload(DERIVED_METRIC_KINDS.RecoveryNow).payload as Record<string, unknown>;
+        expect(recoveryPayload.totalSeconds).toBe(5_000);
+        expect(recoveryPayload.latestWorkoutSeconds).toBe(1_000);
+        expect((recoveryPayload.segments as unknown[]).length).toBe(2);
     });
 });

@@ -59,7 +59,7 @@ import { getDerivedMetricsUidAllowlist, isDerivedMetricsUidAllowed } from './der
 
 const FORM_STAT_TYPE = 'Training Stress Score';
 const LEGACY_FORM_STAT_TYPE = 'Power Training Stress Score';
-const DERIVED_METRICS_EVENT_FIELDS = ['startDate', 'endDate', 'stats', 'isMerge', 'mergeType', 'originalFiles'] as const;
+const DERIVED_METRICS_EVENT_FIELDS = ['startDate', 'endDate', 'stats', 'isMerge', 'mergeType'] as const;
 const DAY_MS = 24 * 60 * 60 * 1000;
 const CTL_TIME_CONSTANT_DAYS = 42;
 const ATL_TIME_CONSTANT_DAYS = 7;
@@ -311,20 +311,20 @@ function isDerivedMetricsCoordinatorStuck(
 }
 
 function isMergedEvent(eventData: Record<string, unknown>): boolean {
+    const mergeType = toSafeString(eventData.mergeType).trim().toLowerCase();
+    // Merge options contract:
+    // - benchmark => excluded from totals/derived calculations
+    // - multi => included as a normal multi-activity event
+    if (mergeType === 'benchmark') {
+        return true;
+    }
+    if (mergeType === 'multi') {
+        return false;
+    }
+    // Legacy benchmark merges may only have isMerge=true.
     if (eventData.isMerge === true) {
         return true;
     }
-
-    const mergeType = toSafeString(eventData.mergeType).trim();
-    if (mergeType.length > 0) {
-        return true;
-    }
-
-    const originalFiles = eventData.originalFiles;
-    if (Array.isArray(originalFiles) && originalFiles.length > 1) {
-        return true;
-    }
-
     return false;
 }
 
