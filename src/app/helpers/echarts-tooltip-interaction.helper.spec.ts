@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { getOrCreateEChartsTooltipHost } from './echarts-tooltip-host.helper';
 import { getViewportConstrainedTooltipPosition } from './echarts-tooltip-position.helper';
 import {
+  DASHBOARD_ECHARTS_MOBILE_TAP_FEEDBACK_OPTIONS,
   resolveEChartsTooltipSurfaceConfig,
   resolveEChartsTooltipTriggerOn
 } from './echarts-tooltip-interaction.helper';
@@ -18,6 +19,13 @@ describe('echarts-tooltip-interaction.helper', () => {
 
   it('returns mousemove plus click trigger for non-mobile viewport', () => {
     expect(resolveEChartsTooltipTriggerOn(true, false)).toBe('mousemove|click');
+  });
+
+  it('keeps dashboard axis-pointer haptics gated until an intentional chart interaction', () => {
+    expect(DASHBOARD_ECHARTS_MOBILE_TAP_FEEDBACK_OPTIONS).toEqual({
+      axisPointerFeedback: 'afterFirstInteraction',
+      clickFeedback: false,
+    });
   });
 
   it('returns confined tooltip surface for mobile viewport', () => {

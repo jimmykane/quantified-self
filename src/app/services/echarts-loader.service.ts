@@ -2,9 +2,12 @@ import { Inject, Injectable, NgZone, PLATFORM_ID } from '@angular/core';
 import { isPlatformBrowser } from '@angular/common';
 import type { EChartsType } from 'echarts/core';
 import { AppHapticsService } from './app.haptics.service';
+import type { EChartsMobileTapFeedbackOptions } from '../helpers/echarts-tooltip-interaction.helper';
 
 type EChartsCoreModule = typeof import('echarts/core');
 type EChartsOption = Parameters<EChartsType['setOption']>[0];
+
+const CLICK_AXIS_POINTER_HAPTIC_SUPPRESSION_MS = 180;
 type EChartsSetOptionSettings = Parameters<EChartsType['setOption']>[1];
 type EChartsResizeOptions = NonNullable<Parameters<EChartsType['resize']>[0]>;
 type EChartsInitOptions = Parameters<EChartsCoreModule['init']>[2];
@@ -153,36 +156,68 @@ export class EChartsLoaderService {
     };
   }
 
-  public attachMobileSeriesTapFeedback(chart: EChartsType): () => void {
+  public attachMobileSeriesTapFeedback(chart: EChartsType, options: EChartsMobileTapFeedbackOptions = {}): () => void {
     if (!isPlatformBrowser(this.platformId)) {
       return () => { };
     }
+
+    const axisPointerFeedback = options.axisPointerFeedback || 'always';
+    const clickFeedback = options.clickFeedback !== false;
+    let axisPointerHapticsArmed = axisPointerFeedback === 'always';
+    let suppressAxisPointerHapticUntilMs = 0;
+    const armAxisPointerHaptics = (suppressClickEcho = false) => {
+      if (axisPointerFeedback !== 'afterFirstInteraction') {
+        return;
+      }
+
+      axisPointerHapticsArmed = true;
+      if (suppressClickEcho) {
+        suppressAxisPointerHapticUntilMs = Math.max(
+          suppressAxisPointerHapticUntilMs,
+          Date.now() + CLICK_AXIS_POINTER_HAPTIC_SUPPRESSION_MS
+        );
+      }
+    };
 
     const onChartClick = (params: unknown) => {
       if (!this.isHapticEligibleClickEvent(params)) {
         return;
       }
-      this.hapticsService.selection();
+      if (clickFeedback) {
+        this.hapticsService.selection();
+      }
+      armAxisPointerHaptics(true);
     };
     const onDataZoom = (params: unknown) => {
       if (!this.isHapticEligibleDataZoomEvent(params)) {
         return;
       }
       this.hapticsService.selection();
+      armAxisPointerHaptics();
     };
     const onBrushEnd = (params: unknown) => {
       if (!this.isHapticEligibleBrushEndEvent(params)) {
         return;
       }
       this.hapticsService.selection();
+      armAxisPointerHaptics();
     };
     let lastAxisPointerHapticKey: string | null = null;
     const onAxisPointerUpdate = (params: unknown) => {
+      if (axisPointerFeedback === 'off' || !axisPointerHapticsArmed) {
+        return;
+      }
+
       const hapticKey = this.resolveAxisPointerHapticKey(params);
       if (!hapticKey || hapticKey === lastAxisPointerHapticKey) {
         return;
       }
       lastAxisPointerHapticKey = hapticKey;
+      if (suppressAxisPointerHapticUntilMs > 0 && Date.now() <= suppressAxisPointerHapticUntilMs) {
+        return;
+      }
+      suppressAxisPointerHapticUntilMs = 0;
+
       this.hapticsService.selection();
     };
 

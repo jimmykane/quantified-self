@@ -16,7 +16,10 @@ import { ChartsColumnsComponent } from './charts.columns.component';
 import { EChartsLoaderService } from '../../../services/echarts-loader.service';
 import { AppEventColorService } from '../../../services/color/app.event.color.service';
 import { LoggerService } from '../../../services/logger.service';
-import { formatDashboardNumericValue } from '../../../helpers/dashboard-chart-data.helper';
+import {
+  formatDashboardAxisNumericValue,
+  formatDashboardNumericValue,
+} from '../../../helpers/dashboard-chart-data.helper';
 import { getOrCreateEChartsTooltipHost } from '../../../helpers/echarts-tooltip-host.helper';
 import { getViewportConstrainedTooltipPosition } from '../../../helpers/echarts-tooltip-position.helper';
 import {
@@ -308,7 +311,37 @@ describe('ChartsColumnsComponent', () => {
       component.userUnitSettings,
     );
     expect(option.graphic[0].children[1].style.text).toBe(expectedValue);
-    expect(option.yAxis.axisLabel.formatter(10000)).toBe(expectedValue);
+    expect(option.yAxis.axisLabel.formatter(10000)).toBe(formatDashboardAxisNumericValue(
+      DataDistance.type,
+      10000,
+      undefined as any,
+      component.userUnitSettings,
+      option.yAxis.max,
+    ));
+  });
+
+  it('should keep horizontal distance axis labels compact with one stable metric unit', async () => {
+    component.vertical = false;
+    component.chartDataType = DataDistance.type;
+    component.chartDataValueType = ChartDataValueTypes.Total;
+    component.chartDataCategoryType = ChartDataCategoryTypes.ActivityType;
+    component.userUnitSettings = normalizeUserUnitSettings({
+      distanceUnits: DistanceUnits.Kilometers,
+    });
+    component.data = [
+      { type: 'Running', [ChartDataValueTypes.Total]: 350000, count: 1 },
+      { type: 'Cycling', [ChartDataValueTypes.Total]: 555550, count: 1 },
+    ];
+
+    fixture.detectChanges();
+    await waitForChartStabilization();
+
+    const option = getLastOption();
+    expect(option.xAxis.axisLabel.formatter(0)).toBe('0 km');
+    expect(option.xAxis.axisLabel.formatter(100000)).toBe('100 km');
+    expect(option.xAxis.axisLabel.formatter(200000)).toBe('200 km');
+    expect(option.xAxis.axisLabel.formatter(100000)).not.toContain('.00');
+    expect(option.xAxis.axisLabel.formatter(100000)).not.toContain('Km');
   });
 
   it('should fill missing daily date buckets with zero-valued bars', async () => {

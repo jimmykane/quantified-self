@@ -17,6 +17,7 @@ import {
 import { buildDashboardEChartsStyleTokens } from '../../../helpers/dashboard-echarts-style.helper';
 import { buildDashboardValueAxisConfig } from '../../../helpers/dashboard-echarts-yaxis.helper';
 import {
+  type EChartsMobileTapFeedbackOptions,
   isEChartsMobileTooltipViewport,
   resolveEChartsTooltipSurfaceConfig,
   resolveEChartsTooltipTriggerOn,
@@ -52,6 +53,7 @@ export class ChartsFreshnessForecastComponent implements AfterViewInit, OnChange
   @Input() forecast?: DashboardFreshnessForecastContext | null;
   @Input() status?: DashboardDerivedMetricStatus | null;
   @Input() infoTooltip?: string | null;
+  @Input() mobileTapFeedbackOptions?: EChartsMobileTapFeedbackOptions | null;
 
   @ViewChild('chartDiv', { static: true }) chartDiv!: ElementRef<HTMLDivElement>;
 
@@ -72,6 +74,7 @@ export class ChartsFreshnessForecastComponent implements AfterViewInit, OnChange
       eChartsLoader: this.eChartsLoader,
       logger: this.logger,
       logPrefix: '[ChartsFreshnessForecastComponent]',
+      mobileTapFeedbackOptions: () => this.mobileTapFeedbackOptions,
     });
   }
 
@@ -190,7 +193,7 @@ export class ChartsFreshnessForecastComponent implements AfterViewInit, OnChange
       tooltip: {
         show: true,
         trigger: 'axis',
-        triggerOn: resolveEChartsTooltipTriggerOn(true, false),
+        triggerOn: resolveEChartsTooltipTriggerOn(true, isMobileTooltipViewport),
         axisPointer: { type: 'line' },
         renderMode: 'html',
         ...resolveEChartsTooltipSurfaceConfig(isMobileTooltipViewport),

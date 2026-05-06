@@ -139,6 +139,36 @@ describe('EChartsHostController', () => {
     expect(loader.attachMobileSeriesTapFeedback).not.toHaveBeenCalled();
   });
 
+  it('should forward mobile tap feedback options to the loader', async () => {
+    const loader = buildLoaderMock();
+    const mobileTapFeedbackOptions = { axisPointerFeedback: 'afterFirstInteraction' as const };
+    const controller = new EChartsHostController({
+      eChartsLoader: loader as any,
+      mobileTapFeedbackOptions,
+    });
+    const container = document.createElement('div');
+
+    await controller.init(container);
+
+    expect(loader.attachMobileSeriesTapFeedback).toHaveBeenCalledWith(chartMock, mobileTapFeedbackOptions);
+  });
+
+  it('should resolve mobile tap feedback options lazily when attaching feedback', async () => {
+    const loader = buildLoaderMock();
+    const mobileTapFeedbackOptions = { axisPointerFeedback: 'afterFirstInteraction' as const };
+    const resolveMobileTapFeedbackOptions = vi.fn(() => mobileTapFeedbackOptions);
+    const controller = new EChartsHostController({
+      eChartsLoader: loader as any,
+      mobileTapFeedbackOptions: resolveMobileTapFeedbackOptions,
+    });
+    const container = document.createElement('div');
+
+    await controller.init(container);
+
+    expect(resolveMobileTapFeedbackOptions).toHaveBeenCalledTimes(1);
+    expect(loader.attachMobileSeriesTapFeedback).toHaveBeenCalledWith(chartMock, mobileTapFeedbackOptions);
+  });
+
   it('should reinitialize the chart when the requested theme changes', async () => {
     const loader = buildLoaderMock();
     const controller = new EChartsHostController({

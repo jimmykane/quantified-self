@@ -425,6 +425,52 @@ describe('EChartsLoaderService', () => {
     expect(chart.off).toHaveBeenCalledWith('updateAxisPointer', axisPointerHandler);
   });
 
+  it('should gate axis-pointer haptics until the first intentional chart interaction when requested', () => {
+    let nowMs = 1000;
+    const nowSpy = vi.spyOn(Date, 'now').mockImplementation(() => nowMs);
+    try {
+      const handlers = new Map<string, (params: unknown) => void>();
+      const chart = {
+        on: vi.fn((eventName: string, handler: (params: unknown) => void) => {
+          handlers.set(eventName, handler);
+        }),
+        off: vi.fn(),
+      } as any;
+
+      service.attachMobileSeriesTapFeedback(chart, {
+        axisPointerFeedback: 'afterFirstInteraction',
+        clickFeedback: false,
+      });
+      const clickHandler = handlers.get('click');
+      const axisPointerHandler = handlers.get('updateAxisPointer');
+
+      expect(clickHandler).toBeTypeOf('function');
+      expect(axisPointerHandler).toBeTypeOf('function');
+
+      axisPointerHandler?.({ axesInfo: [{ axisDim: 'x', axisIndex: 0, value: 100 }] });
+      expect(hapticsMock.selection).not.toHaveBeenCalled();
+
+      clickHandler?.({ componentType: 'legend' });
+      axisPointerHandler?.({ axesInfo: [{ axisDim: 'x', axisIndex: 0, value: 101 }] });
+      expect(hapticsMock.selection).not.toHaveBeenCalled();
+
+      clickHandler?.({ componentType: 'series' });
+      expect(hapticsMock.selection).not.toHaveBeenCalled();
+
+      axisPointerHandler?.({ axesInfo: [{ axisDim: 'x', axisIndex: 0, value: 102 }] });
+      expect(hapticsMock.selection).not.toHaveBeenCalled();
+
+      nowMs = 1300;
+      axisPointerHandler?.({ axesInfo: [{ axisDim: 'x', axisIndex: 0, value: 103 }] });
+      expect(hapticsMock.selection).toHaveBeenCalledTimes(1);
+
+      axisPointerHandler?.({ axesInfo: [{ axisDim: 'x', axisIndex: 0, value: 103 }] });
+      expect(hapticsMock.selection).toHaveBeenCalledTimes(1);
+    } finally {
+      nowSpy.mockRestore();
+    }
+  });
+
   it('should throw when loading in non-browser platform', async () => {
     TestBed.resetTestingModule();
     TestBed.configureTestingModule({

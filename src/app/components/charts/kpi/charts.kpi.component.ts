@@ -22,11 +22,13 @@ import {
   isDerivedMetricPendingStatus,
 } from '../../../helpers/derived-metric-status.helper';
 import {
+  type EChartsMobileTapFeedbackOptions,
   isEChartsMobileTooltipViewport,
   resolveEChartsTooltipSurfaceConfig,
   resolveEChartsTooltipTriggerOn,
 } from '../../../helpers/echarts-tooltip-interaction.helper';
 import { ECHARTS_GLOBAL_FONT_FAMILY, resolveEChartsThemeName } from '../../../helpers/echarts-theme.helper';
+import { formatDashboardWeekRangeLabel } from '../../../helpers/dashboard-chart-data.helper';
 import type {
   DashboardAcwrContext,
   DashboardEasyPercentContext,
@@ -89,6 +91,7 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
   @Input() infoTooltip?: string | null;
   @Input() reserveTitleActionSpace = false;
   @Input() compactRow = false;
+  @Input() mobileTapFeedbackOptions?: EChartsMobileTapFeedbackOptions | null;
   @Input() acwr?: DashboardAcwrContext | null;
   @Input() rampRate?: DashboardRampRateContext | null;
   @Input() monotonyStrain?: DashboardMonotonyStrainContext | null;
@@ -137,6 +140,7 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
       eChartsLoader: this.eChartsLoader,
       logger: this.logger,
       logPrefix: '[ChartsKpiComponent]',
+      mobileTapFeedbackOptions: () => this.mobileTapFeedbackOptions,
     });
   }
 
@@ -618,7 +622,7 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
     return {
       show: true,
       trigger: 'axis',
-      triggerOn: resolveEChartsTooltipTriggerOn(true, false),
+      triggerOn: resolveEChartsTooltipTriggerOn(true, isMobileTooltipViewport),
       axisPointer: {
         type: 'line',
         lineStyle: {
@@ -646,7 +650,9 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
           day: 'numeric',
           year: 'numeric',
         });
-        const heading = this.isWeeklyTrendKpi() ? `Week of ${dateLabel}` : dateLabel;
+        const heading = this.isWeeklyTrendKpi()
+          ? formatDashboardWeekRangeLabel(entry[0], undefined, 'UTC')
+          : dateLabel;
         const valueText = this.formatPrimaryValue(entry[1]);
         return `${heading}<br/><strong>${valueText}</strong>`;
       },

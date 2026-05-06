@@ -27,6 +27,7 @@ import {
   EChartsHostController
 } from '../../../helpers/echarts-host-controller';
 import {
+  type EChartsMobileTapFeedbackOptions,
   isEChartsMobileTooltipViewport,
   resolveEChartsTooltipSurfaceConfig,
   resolveEChartsTooltipTriggerOn
@@ -41,6 +42,7 @@ import {
   resolveEChartsThemeName
 } from '../../../helpers/echarts-theme.helper';
 import {
+  formatDashboardAxisNumericValue,
   formatDashboardDataDisplay,
   formatDashboardNumericValue,
   getDashboardAggregateData,
@@ -75,6 +77,7 @@ export class ChartsXYComponent implements AfterViewInit, OnChanges, OnDestroy {
   @Input() isLoading = false;
   @Input() vertical = true;
   @Input() userUnitSettings?: UserUnitSettingsInterface | null;
+  @Input() mobileTapFeedbackOptions?: EChartsMobileTapFeedbackOptions | null;
 
   @ViewChild('chartDiv', { static: true }) chartDiv!: ElementRef<HTMLDivElement>;
 
@@ -104,7 +107,8 @@ export class ChartsXYComponent implements AfterViewInit, OnChanges, OnDestroy {
     this.chartHost = new EChartsHostController({
       eChartsLoader: this.eChartsLoader,
       logger: this.logger,
-      logPrefix: '[ChartsXYComponent]'
+      logPrefix: '[ChartsXYComponent]',
+      mobileTapFeedbackOptions: () => this.mobileTapFeedbackOptions,
     });
   }
 
@@ -278,7 +282,7 @@ export class ChartsXYComponent implements AfterViewInit, OnChanges, OnDestroy {
       axisLabel: {
         color: textColor,
         fontSize: axisFontSize,
-        formatter: (value: number) => this.formatValue(value)
+        formatter: (value: number) => this.formatAxisValue(value, valueAxisConfig.max)
       }
     };
 
@@ -441,6 +445,16 @@ export class ChartsXYComponent implements AfterViewInit, OnChanges, OnDestroy {
       value,
       this.logger,
       this.getNormalizedUnitSettings(),
+    );
+  }
+
+  private formatAxisValue(value: number | null, axisMax: number): string {
+    return formatDashboardAxisNumericValue(
+      this.chartDataType,
+      value,
+      this.logger,
+      this.getNormalizedUnitSettings(),
+      axisMax,
     );
   }
 

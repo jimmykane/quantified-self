@@ -1,11 +1,15 @@
 import type { EChartsType } from 'echarts/core';
 import { EChartsLoaderService } from '../services/echarts-loader.service';
+import type { EChartsMobileTapFeedbackOptions } from './echarts-tooltip-interaction.helper';
 
 type ChartOption = Parameters<EChartsType['setOption']>[0];
 type ChartSetOptionSettings = Parameters<EChartsType['setOption']>[1];
 type ChartActionPayload = Parameters<EChartsType['dispatchAction']>[0];
 type ChartInitSettings = NonNullable<Parameters<EChartsLoaderService['init']>[2]>;
 type ChartMainType = 'series' | 'xAxis' | 'yAxis' | 'dataZoom';
+type MobileTapFeedbackOptionsResolver =
+  | EChartsMobileTapFeedbackOptions
+  | (() => EChartsMobileTapFeedbackOptions | null | undefined);
 
 function buildMergeUpdateSettings(
   replaceMerge: readonly ChartMainType[],
@@ -37,6 +41,7 @@ export interface EChartsHostControllerConfig {
   logPrefix?: string;
   initOptions?: ChartInitSettings;
   enableMobileTapFeedback?: boolean;
+  mobileTapFeedbackOptions?: MobileTapFeedbackOptionsResolver;
 }
 
 export class EChartsHostController {
@@ -219,7 +224,16 @@ export class EChartsHostController {
       return;
     }
 
-    this.unsubscribeTapFeedback = this.config.eChartsLoader.attachMobileSeriesTapFeedback(this.chart);
+    this.unsubscribeTapFeedback = this.config.eChartsLoader.attachMobileSeriesTapFeedback(
+      this.chart,
+      this.resolveMobileTapFeedbackOptions()
+    );
+  }
+
+  private resolveMobileTapFeedbackOptions(): EChartsMobileTapFeedbackOptions | undefined {
+    const options = this.config.mobileTapFeedbackOptions;
+    const resolvedOptions = typeof options === 'function' ? options() : options;
+    return resolvedOptions || undefined;
   }
 
   private dispatchAction(payload: ChartActionPayload): boolean {

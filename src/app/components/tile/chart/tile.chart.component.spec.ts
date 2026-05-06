@@ -31,6 +31,7 @@ import {
   DASHBOARD_RECOVERY_NOW_CHART_TYPE,
   DASHBOARD_SLEEP_TREND_CHART_TYPE,
 } from '../../../helpers/dashboard-special-chart-types';
+import { DASHBOARD_ECHARTS_MOBILE_TAP_FEEDBACK_OPTIONS } from '../../../helpers/echarts-tooltip-interaction.helper';
 
 @Component({
   selector: 'app-columns-chart',
@@ -48,6 +49,7 @@ class MockColumnsChartComponent {
   @Input() chartDataCategoryType?: ChartDataCategoryTypes;
   @Input() chartDataTimeInterval?: TimeIntervals;
   @Input() recoveryNow?: DashboardRecoveryNowContext | null;
+  @Input() mobileTapFeedbackOptions?: unknown;
 }
 
 @Component({
@@ -111,6 +113,7 @@ class MockXYChartComponent {
   @Input() chartDataTimeInterval?: TimeIntervals;
   @Input() vertical = true;
   @Input() recoveryNow?: DashboardRecoveryNowContext | null;
+  @Input() mobileTapFeedbackOptions?: unknown;
 }
 
 @Component({
@@ -129,6 +132,7 @@ class MockPieChartComponent {
   @Input() recoveryNow?: DashboardRecoveryNowContext | null;
   @Input() recoveryNowStatus?: string | null;
   @Input() enableRecoveryNowMode = false;
+  @Input() mobileTapFeedbackOptions?: unknown;
 }
 
 @Component({
@@ -145,6 +149,7 @@ class MockFormChartComponent {
   @Input() infoTooltip?: string | null;
   @Input() timelineWindow?: string;
   @Input() reserveTitleActionSpace = false;
+  @Input() mobileTapFeedbackOptions?: unknown;
 }
 
 @Component({
@@ -159,6 +164,7 @@ class MockKpiChartComponent {
   @Input() infoTooltip?: string | null;
   @Input() reserveTitleActionSpace = false;
   @Input() compactRow = false;
+  @Input() mobileTapFeedbackOptions?: unknown;
   @Input() acwr: any;
   @Input() rampRate: any;
   @Input() monotonyStrain: any;
@@ -192,6 +198,7 @@ class MockFreshnessForecastChartComponent {
   @Input() forecast: any;
   @Input() status?: string | null;
   @Input() infoTooltip?: string | null;
+  @Input() mobileTapFeedbackOptions?: unknown;
 }
 
 @Component({
@@ -207,6 +214,7 @@ class MockIntensityDistributionChartComponent {
   @Input() infoTooltip?: string | null;
   @Input() range?: string;
   @Input() reserveTitleActionSpace = false;
+  @Input() mobileTapFeedbackOptions?: unknown;
 }
 
 @Component({
@@ -222,6 +230,7 @@ class MockEfficiencyTrendChartComponent {
   @Input() infoTooltip?: string | null;
   @Input() range?: string;
   @Input() reserveTitleActionSpace = false;
+  @Input() mobileTapFeedbackOptions?: unknown;
 }
 
 @Component({
@@ -239,6 +248,7 @@ class MockSleepTrendChartComponent {
   @Input() canNavigateNewer = false;
   @Input() infoTooltip?: string | null;
   @Input() reserveTitleActionSpace = false;
+  @Input() mobileTapFeedbackOptions?: unknown;
 }
 
 describe('TileChartComponent', () => {
@@ -362,6 +372,14 @@ describe('TileChartComponent', () => {
     const columns = getColumnsComponent();
     expect(columns.type).toBe('columns');
     expect(columns.vertical).toBe(false);
+  });
+
+  it('should pass the dashboard mobile tap profile to custom chart renderers', () => {
+    component.chartType = ChartTypes.ColumnsVertical;
+
+    fixture.detectChanges();
+
+    expect(getColumnsComponent().mobileTapFeedbackOptions).toBe(DASHBOARD_ECHARTS_MOBILE_TAP_FEEDBACK_OPTIONS);
   });
 
   it('should set vertical=true for ColumnsVertical', () => {
@@ -545,6 +563,7 @@ describe('TileChartComponent', () => {
     const kpi = getKpiComponent();
     expect(kpi.chartType).toBe(DASHBOARD_ACWR_KPI_CHART_TYPE);
     expect(kpi.acwr).toEqual(component.acwr);
+    expect(kpi.mobileTapFeedbackOptions).toBe(DASHBOARD_ECHARTS_MOBILE_TAP_FEEDBACK_OPTIONS);
   });
 
   it('should route Ramp Rate KPI chart type to the KPI renderer', () => {

@@ -28,6 +28,7 @@ import {
   EChartsHostController
 } from '../../../helpers/echarts-host-controller';
 import {
+  type EChartsMobileTapFeedbackOptions,
   isEChartsMobileTooltipViewport,
   resolveEChartsTooltipSurfaceConfig,
   resolveEChartsTooltipTriggerOn
@@ -42,6 +43,7 @@ import {
   resolveEChartsThemeName
 } from '../../../helpers/echarts-theme.helper';
 import {
+  formatDashboardAxisNumericValue,
   formatDashboardDataDisplay,
   formatDashboardNumericValue,
   getDashboardAggregateData,
@@ -82,6 +84,7 @@ export class ChartsColumnsComponent implements AfterViewInit, OnChanges, OnDestr
   @Input() isLoading = false;
   @Input() userUnitSettings?: UserUnitSettingsInterface | null;
   @Input() preferDateActivitySegmentation = false;
+  @Input() mobileTapFeedbackOptions?: EChartsMobileTapFeedbackOptions | null;
 
   @Input() vertical = true;
   @Input() type: 'columns' | 'pyramids' = 'columns';
@@ -114,7 +117,8 @@ export class ChartsColumnsComponent implements AfterViewInit, OnChanges, OnDestr
     this.chartHost = new EChartsHostController({
       eChartsLoader: this.eChartsLoader,
       logger: this.logger,
-      logPrefix: '[ChartsColumnsComponent]'
+      logPrefix: '[ChartsColumnsComponent]',
+      mobileTapFeedbackOptions: () => this.mobileTapFeedbackOptions,
     });
   }
 
@@ -337,7 +341,7 @@ export class ChartsColumnsComponent implements AfterViewInit, OnChanges, OnDestr
       axisLabel: {
         color: textColor,
         fontSize: axisFontSize,
-        formatter: (value: number) => this.formatValue(value)
+        formatter: (value: number) => this.formatAxisValue(value, valueAxisConfig.max)
       }
     };
 
@@ -712,6 +716,16 @@ export class ChartsColumnsComponent implements AfterViewInit, OnChanges, OnDestr
       value,
       this.logger,
       this.getNormalizedUnitSettings(),
+    );
+  }
+
+  private formatAxisValue(value: number | null, axisMax: number): string {
+    return formatDashboardAxisNumericValue(
+      this.chartDataType,
+      value,
+      this.logger,
+      this.getNormalizedUnitSettings(),
+      axisMax,
     );
   }
 

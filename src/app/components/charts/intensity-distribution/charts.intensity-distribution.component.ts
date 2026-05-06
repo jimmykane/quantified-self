@@ -16,6 +16,7 @@ import {
 } from '../../../helpers/echarts-host-controller';
 import { buildDashboardEChartsStyleTokens } from '../../../helpers/dashboard-echarts-style.helper';
 import {
+  type EChartsMobileTapFeedbackOptions,
   isEChartsMobileTooltipViewport,
   resolveEChartsTooltipSurfaceConfig,
   resolveEChartsTooltipTriggerOn,
@@ -35,6 +36,7 @@ import {
   normalizeDashboardDerivedChartRange,
   type DashboardDerivedChartRange,
 } from '../../../helpers/dashboard-derived-chart-range.helper';
+import { formatDashboardWeekRangeLabel } from '../../../helpers/dashboard-chart-data.helper';
 import { EChartsLoaderService } from '../../../services/echarts-loader.service';
 import { LoggerService } from '../../../services/logger.service';
 
@@ -55,6 +57,7 @@ export class ChartsIntensityDistributionComponent implements AfterViewInit, OnCh
   @Input() status?: DashboardDerivedMetricStatus | null;
   @Input() infoTooltip?: string | null;
   @Input() reserveTitleActionSpace = false;
+  @Input() mobileTapFeedbackOptions?: EChartsMobileTapFeedbackOptions | null;
   @Input()
   set range(value: DashboardDerivedChartRange | null | undefined) {
     const nextRange = normalizeDashboardDerivedChartRange(value);
@@ -90,6 +93,7 @@ export class ChartsIntensityDistributionComponent implements AfterViewInit, OnCh
       eChartsLoader: this.eChartsLoader,
       logger: this.logger,
       logPrefix: '[ChartsIntensityDistributionComponent]',
+      mobileTapFeedbackOptions: () => this.mobileTapFeedbackOptions,
     });
   }
 
@@ -210,7 +214,7 @@ export class ChartsIntensityDistributionComponent implements AfterViewInit, OnCh
       tooltip: {
         show: true,
         trigger: 'axis',
-        triggerOn: resolveEChartsTooltipTriggerOn(true, false),
+        triggerOn: resolveEChartsTooltipTriggerOn(true, isMobileTooltipViewport),
         axisPointer: { type: 'shadow' },
         renderMode: 'html',
         ...resolveEChartsTooltipSurfaceConfig(isMobileTooltipViewport),
@@ -226,8 +230,7 @@ export class ChartsIntensityDistributionComponent implements AfterViewInit, OnCh
           if (!Array.isArray(params) || params.length === 0) {
             return '';
           }
-          const axisHeadingLabel = this.formatXAxisLabel(params[0]?.axisValue ?? null, xAxisLabelMode);
-          const axisHeading = axisHeadingLabel ? `Week of ${axisHeadingLabel}` : '';
+          const axisHeading = this.formatTooltipWeekLabel(params[0]?.axisValue ?? null);
           const lines = params
             .map((entry) => {
               const seriesName = `${entry?.seriesName || ''}`.trim();
@@ -360,5 +363,13 @@ export class ChartsIntensityDistributionComponent implements AfterViewInit, OnCh
       default:
         return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
     }
+  }
+
+  private formatTooltipWeekLabel(value: string | number | null | undefined): string {
+    if (value === null || value === undefined || !Number.isFinite(Number(value))) {
+      return '';
+    }
+
+    return formatDashboardWeekRangeLabel(Number(value), undefined, 'UTC');
   }
 }

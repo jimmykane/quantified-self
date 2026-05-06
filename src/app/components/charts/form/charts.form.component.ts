@@ -23,6 +23,7 @@ import {
 import { buildDashboardEChartsStyleTokens } from '../../../helpers/dashboard-echarts-style.helper';
 import { buildDashboardValueAxisConfig } from '../../../helpers/dashboard-echarts-yaxis.helper';
 import {
+  type EChartsMobileTapFeedbackOptions,
   isEChartsMobileTooltipViewport,
   resolveEChartsTooltipTriggerOn,
 } from '../../../helpers/echarts-tooltip-interaction.helper';
@@ -78,6 +79,7 @@ export class ChartsFormComponent implements AfterViewInit, OnChanges, OnDestroy 
   @Input() formStatus?: DashboardDerivedMetricStatus | null;
   @Input() infoTooltip?: string | null;
   @Input() reserveTitleActionSpace = false;
+  @Input() mobileTapFeedbackOptions?: EChartsMobileTapFeedbackOptions | null;
   @Input()
   set timelineWindow(value: DashboardFormTimelineWindow | null | undefined) {
     if (value !== 'w' && value !== 'm' && value !== 'y') {
@@ -148,6 +150,7 @@ export class ChartsFormComponent implements AfterViewInit, OnChanges, OnDestroy 
       eChartsLoader: this.eChartsLoader,
       logger: this.logger,
       logPrefix: '[ChartsFormComponent]',
+      mobileTapFeedbackOptions: () => this.mobileTapFeedbackOptions,
     });
   }
 

@@ -17,6 +17,7 @@ import {
 import { buildDashboardEChartsStyleTokens } from '../../../helpers/dashboard-echarts-style.helper';
 import { buildDashboardValueAxisConfig } from '../../../helpers/dashboard-echarts-yaxis.helper';
 import {
+  type EChartsMobileTapFeedbackOptions,
   isEChartsMobileTooltipViewport,
   resolveEChartsTooltipSurfaceConfig,
   resolveEChartsTooltipTriggerOn,
@@ -59,6 +60,7 @@ export class ChartsEfficiencyTrendComponent implements AfterViewInit, OnChanges,
   @Input() status?: DashboardDerivedMetricStatus | null;
   @Input() infoTooltip?: string | null;
   @Input() reserveTitleActionSpace = false;
+  @Input() mobileTapFeedbackOptions?: EChartsMobileTapFeedbackOptions | null;
   @Input()
   set range(value: DashboardDerivedChartRange | null | undefined) {
     const nextRange = normalizeDashboardDerivedChartRange(value);
@@ -91,6 +93,7 @@ export class ChartsEfficiencyTrendComponent implements AfterViewInit, OnChanges,
       eChartsLoader: this.eChartsLoader,
       logger: this.logger,
       logPrefix: '[ChartsEfficiencyTrendComponent]',
+      mobileTapFeedbackOptions: () => this.mobileTapFeedbackOptions,
     });
   }
 
@@ -198,7 +201,7 @@ export class ChartsEfficiencyTrendComponent implements AfterViewInit, OnChanges,
       tooltip: {
         show: true,
         trigger: 'axis',
-        triggerOn: resolveEChartsTooltipTriggerOn(true, false),
+        triggerOn: resolveEChartsTooltipTriggerOn(true, isMobileTooltipViewport),
         axisPointer: { type: 'line' },
         renderMode: 'html',
         ...resolveEChartsTooltipSurfaceConfig(isMobileTooltipViewport),

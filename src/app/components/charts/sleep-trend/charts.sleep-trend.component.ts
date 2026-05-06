@@ -16,6 +16,7 @@ import {
 } from '../../../helpers/echarts-host-controller';
 import { buildDashboardEChartsStyleTokens } from '../../../helpers/dashboard-echarts-style.helper';
 import {
+  type EChartsMobileTapFeedbackOptions,
   isEChartsMobileTooltipViewport,
   resolveEChartsTooltipSurfaceConfig,
   resolveEChartsTooltipTriggerOn,
@@ -80,6 +81,7 @@ export class ChartsSleepTrendComponent implements AfterViewInit, OnChanges, OnDe
   @Input() canNavigateNewer = false;
   @Input() infoTooltip?: string | null;
   @Input() reserveTitleActionSpace = false;
+  @Input() mobileTapFeedbackOptions?: EChartsMobileTapFeedbackOptions | null;
 
   @ViewChild('chartDiv', { static: true }) chartDiv!: ElementRef<HTMLDivElement>;
 
@@ -103,6 +105,7 @@ export class ChartsSleepTrendComponent implements AfterViewInit, OnChanges, OnDe
       eChartsLoader: this.eChartsLoader,
       logger: this.logger,
       logPrefix: '[ChartsSleepTrendComponent]',
+      mobileTapFeedbackOptions: () => this.mobileTapFeedbackOptions,
     });
   }
 

@@ -38,6 +38,7 @@ import {
 } from '../../../helpers/echarts-host-controller';
 import { buildDashboardEChartsStyleTokens } from '../../../helpers/dashboard-echarts-style.helper';
 import {
+  type EChartsMobileTapFeedbackOptions,
   isEChartsMobileTooltipViewport,
   resolveEChartsTooltipSurfaceConfig,
   resolveEChartsTooltipTriggerOn
@@ -98,6 +99,7 @@ export class ChartsPieComponent implements AfterViewInit, OnChanges, OnDestroy {
   @Input() recoveryNowStatus?: DashboardDerivedMetricStatus | null;
   // Curated recovery is a dedicated dashboard chart type. Keep generic pie behavior isolated.
   @Input() enableRecoveryNowMode = false;
+  @Input() mobileTapFeedbackOptions?: EChartsMobileTapFeedbackOptions | null;
 
   @ViewChild('chartDiv', { static: true }) chartDiv!: ElementRef<HTMLDivElement>;
 
@@ -133,7 +135,8 @@ export class ChartsPieComponent implements AfterViewInit, OnChanges, OnDestroy {
     this.chartHost = new EChartsHostController({
       eChartsLoader: this.eChartsLoader,
       logger: this.logger,
-      logPrefix: '[ChartsPieComponent]'
+      logPrefix: '[ChartsPieComponent]',
+      mobileTapFeedbackOptions: () => this.mobileTapFeedbackOptions,
     });
   }
 
