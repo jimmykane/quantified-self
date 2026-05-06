@@ -101,7 +101,13 @@ describe('AdminUserManagementComponent', () => {
             metadata: { lastSignInTime: '2023-01-01', creationTime: '2022-01-01' },
             disabled: false,
             providerIds: ['password'],
-            hasSubscribedOnce: true
+            hasSubscribedOnce: true,
+            eventStats: {
+                total: 125,
+                standard: 120,
+                benchmark: 5,
+                backfilled: true
+            }
         },
         {
             uid: 'user2',
@@ -111,7 +117,13 @@ describe('AdminUserManagementComponent', () => {
             metadata: { lastSignInTime: '2023-01-02', creationTime: '2022-01-02' },
             disabled: true,
             providerIds: ['google.com'],
-            hasSubscribedOnce: false
+            hasSubscribedOnce: false,
+            eventStats: {
+                total: 0,
+                standard: 0,
+                benchmark: 0,
+                backfilled: false
+            }
         }
     ];
 
@@ -219,7 +231,13 @@ describe('AdminUserManagementComponent', () => {
                 everPaid: 85,
                 canceled: 15,
                 cancelScheduled: 8,
-                onboardingCompleted: 80
+                onboardingCompleted: 80,
+                events: {
+                    total: 1_000_000,
+                    standard: 999_000,
+                    benchmark: 1_000
+                },
+                eventsBackfilled: true
             })),
             getUserGrowthTrend: vi.fn().mockReturnValue(of(mockTrend)),
             getSubscriptionHistoryTrend: vi.fn().mockReturnValue(of(mockSubscriptionTrend))
@@ -304,7 +322,13 @@ describe('AdminUserManagementComponent', () => {
                                         everPaid: 85,
                                         canceled: 15,
                                         cancelScheduled: 8,
-                                        onboardingCompleted: 80
+                                        onboardingCompleted: 80,
+                                        events: {
+                                            total: 1_000_000,
+                                            standard: 999_000,
+                                            benchmark: 1_000
+                                        },
+                                        eventsBackfilled: true
                                     },
                                     userGrowthTrend: mockTrend,
                                     subscriptionHistoryTrend: mockSubscriptionTrend
@@ -332,6 +356,7 @@ describe('AdminUserManagementComponent', () => {
         expect(component.displayedColumns).toContain('uid');
         expect(component.displayedColumns).toContain('subscriptionHistory');
         expect(component.displayedColumns).toContain('aiCreditsConsumed');
+        expect(component.displayedColumns).toContain('eventStats');
         expect(component.displayedColumns).not.toContain('subscription');
     });
 
@@ -354,8 +379,27 @@ describe('AdminUserManagementComponent', () => {
             everPaid: 85,
             canceled: 15,
             cancelScheduled: 8,
-            onboardingCompleted: 80
+            onboardingCompleted: 80,
+            events: {
+                total: 1_000_000,
+                standard: 999_000,
+                benchmark: 1_000
+            },
+            eventsBackfilled: true
         });
+    });
+
+    it('should show backfilled event totals in cards and the user table', () => {
+        fixture.detectChanges();
+
+        const nativeElement = fixture.nativeElement as HTMLElement;
+        expect(nativeElement.textContent).toContain('Total Events');
+        expect(nativeElement.textContent).toContain('Benchmark Events');
+        expect(nativeElement.textContent).toContain('1,000,000');
+        expect(nativeElement.textContent).toContain('1,000');
+        expect(component.getEventStatsTotal(mockUsers[0])).toBe(125);
+        expect(component.getEventStatsBenchmark(mockUsers[0])).toBe(5);
+        expect(component.getEventStatsTotal(mockUsers[1])).toBeNull();
     });
 
     it('should use resolved user growth trend data on init', () => {

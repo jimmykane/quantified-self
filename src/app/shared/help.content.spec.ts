@@ -78,6 +78,8 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('default curated chart set');
     expect(gettingStartedSection?.content).toContain('KPI row set automatically once');
     expect(gettingStartedSection?.content).toContain('removing an auto-added curated chart or KPI prevents that chart from being suggested again');
+    expect(gettingStartedSection?.content).toContain('**Uploaded activities**');
+    expect(gettingStartedSection?.content).toContain('account stats are backfilled');
   });
 
   it('should document that distance values follow unit preferences across the app', () => {

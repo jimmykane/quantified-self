@@ -124,7 +124,7 @@ export class AdminUserManagementComponent implements OnInit, OnDestroy, AfterVie
 
     displayedColumns: string[] = [
         'photoURL', 'email', 'uid', 'providerIds', 'displayName', 'role', 'subscriptionHistory',
-        'aiCreditsConsumed', 'services', 'created', 'lastLogin', 'onboarding', 'status', 'actions'
+        'aiCreditsConsumed', 'eventStats', 'services', 'created', 'lastLogin', 'onboarding', 'status', 'actions'
     ];
 
     private searchSubject = new Subject<string>();
@@ -358,6 +358,18 @@ export class AdminUserManagementComponent implements OnInit, OnDestroy, AfterVie
 
     isAdmin(user: AdminUser): boolean {
         return user.customClaims?.admin === true;
+    }
+
+    getEventStatsTotal(user: AdminUser): number | null {
+        if (user.eventStats?.backfilled !== true) {
+            return null;
+        }
+
+        return user.eventStats.total ?? 0;
+    }
+
+    getEventStatsBenchmark(user: AdminUser): number {
+        return user.eventStats?.benchmark ?? 0;
     }
 
     getSubscriptionHistoryState(user: AdminUser): SubscriptionHistoryState {

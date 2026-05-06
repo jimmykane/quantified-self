@@ -97,6 +97,12 @@ describe('AdminService', () => {
             canceled: 20,
             cancelScheduled: 12,
             onboardingCompleted: 160,
+            events: {
+                total: 1_000_000,
+                standard: 999_000,
+                benchmark: 1_000
+            },
+            eventsBackfilled: true,
             providers: {}
         };
         functionsServiceMock.call.mockResolvedValue({ data: mockData });
@@ -106,6 +112,20 @@ describe('AdminService', () => {
 
         expect(functionsServiceMock.call).toHaveBeenCalledWith('getUserCount');
         expect(stats).toEqual(mockData);
+    });
+
+    it('should default missing event count fields from getUserCount', async () => {
+        functionsServiceMock.call.mockResolvedValue({
+            data: {
+                count: 2,
+                providers: {}
+            }
+        });
+
+        const stats = await firstValueFrom(service.getTotalUserCount());
+
+        expect(stats.events).toEqual({ total: 0, standard: 0, benchmark: 0 });
+        expect(stats.eventsBackfilled).toBe(false);
     });
 
     it('should call impersonateUser Cloud Function and return token', async () => {

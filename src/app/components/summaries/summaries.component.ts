@@ -106,6 +106,7 @@ import {
 } from '../../helpers/dashboard-tile-event-filters.helper';
 import { getTrailingDashboardGridPlaceholderCount } from '../../helpers/dashboard-grid-layout.helper';
 import { AppEventService } from '../../services/app.event.service';
+import { AppEventStatsService, type AppEventStats } from '../../services/app.event-stats.service';
 import { DashboardAutoTileService } from '../../services/dashboard-auto-tile.service';
 import { WhereFilterOp } from 'firebase/firestore';
 
@@ -151,6 +152,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   public sleepTrendCanNavigateOlder = true;
   public sleepTrendCanNavigateNewer = false;
   public todayDateSubtitle = '';
+  public eventStats: AppEventStats | null = null;
 
 
   private appThemeSubscription: Subscription | null = null;
@@ -158,6 +160,8 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   private derivedMetricsUserUID: string | null = null;
   private sleepSubscription: Subscription | null = null;
   private sleepListenerKey: string | null = null;
+  private eventStatsSubscription: Subscription | null = null;
+  private eventStatsUserUID: string | null = null;
   private dashboardAutoTileSubscription: Subscription | null = null;
   private dashboardAutoTileListenerKey: string | null = null;
   private dashboardAutoTileUser: AppUserInterface | null = null;
@@ -207,6 +211,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     private dashboardDerivedMetricsService: DashboardDerivedMetricsService,
     private sleepService: AppSleepService,
     private eventService: AppEventService,
+    private eventStatsService: AppEventStatsService,
     private dashboardAutoTileService: DashboardAutoTileService,
     private dialog: MatDialog,
     changeDetector: ChangeDetectorRef,
@@ -242,6 +247,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       return this.unsubscribeAndCreateCharts();
     }
     if (simpleChanges.showActions) {
+      this.syncEventStatsSubscription();
       this.syncDashboardAutoTileSubscription();
     }
   }
@@ -384,6 +390,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     });
     this.syncDerivedMetricsSubscription();
     this.syncSleepSubscription();
+    this.syncEventStatsSubscription();
     this.syncDashboardAutoTileSubscription();
     this.syncTileEventSubscriptions();
     await this.rebuildTilesFromCurrentState();
@@ -662,6 +669,48 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   }
 
   private resolveDashboardAutoTileListenerKey(): string | null {
+    return this.resolveOwnDashboardUID();
+  }
+
+  private syncEventStatsSubscription(): void {
+    const uid = this.resolveOwnDashboardUID();
+    if (!uid) {
+      const hadEventStatsState = this.eventStats !== null
+        || this.eventStatsUserUID !== null
+        || this.eventStatsSubscription !== null;
+      this.eventStats = null;
+      this.eventStatsUserUID = null;
+      if (this.eventStatsSubscription) {
+        this.eventStatsSubscription.unsubscribe();
+        this.eventStatsSubscription = null;
+      }
+      if (hadEventStatsState) {
+        this.changeDetector.markForCheck();
+      }
+      return;
+    }
+
+    if (this.eventStatsUserUID === uid && this.eventStatsSubscription) {
+      return;
+    }
+
+    if (this.eventStatsSubscription) {
+      this.eventStatsSubscription.unsubscribe();
+      this.eventStatsSubscription = null;
+    }
+
+    this.eventStats = null;
+    this.eventStatsUserUID = uid;
+    this.eventStatsSubscription = this.eventStatsService.watchUserEventStats(this.user).subscribe((stats) => {
+      if (equal(this.eventStats, stats)) {
+        return;
+      }
+      this.eventStats = stats;
+      this.changeDetector.markForCheck();
+    });
+  }
+
+  private resolveOwnDashboardUID(): string | null {
     if (this.showActions !== true) {
       return null;
     }
@@ -1249,6 +1298,12 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       this.sleepSubscription.unsubscribe();
       this.sleepSubscription = null;
       this.sleepListenerKey = null;
+    }
+    if (this.eventStatsSubscription) {
+      this.eventStatsSubscription.unsubscribe();
+      this.eventStatsSubscription = null;
+      this.eventStatsUserUID = null;
+      this.eventStats = null;
     }
     this.unsubscribeDashboardAutoTileSubscription();
     this.unsubscribeTileEventSubscriptions();

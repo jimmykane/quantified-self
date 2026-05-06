@@ -136,6 +136,35 @@ describe('listUsers Cloud Function', () => {
         expect(result.users[0].hasSubscribedOnce).toBe(false);
     });
 
+    it('should include event stats from the user stats doc', async () => {
+        mockListUsers.mockResolvedValue({
+            users: [{ uid: 'user1', email: 'alice@test.com', providerData: [], metadata: {}, customClaims: {} }],
+            pageToken: undefined
+        });
+        mockGetAll.mockResolvedValue([
+            { id: 'user1', data: () => ({ onboardingCompleted: true }) },
+            {
+                id: 'events',
+                data: () => ({
+                    kind: 'events',
+                    schemaVersion: 1,
+                    total: 12,
+                    standard: 10,
+                    benchmark: 2,
+                    backfilledAt: 'done'
+                })
+            }
+        ]);
+
+        const result: any = await (listUsers as any)(getAdminRequest({ page: 0, pageSize: 25 }));
+        expect(result.users[0].eventStats).toEqual({
+            total: 12,
+            standard: 10,
+            benchmark: 2,
+            backfilled: true
+        });
+    });
+
     it('should filter users by searchTerm', async () => {
         const mockUsers = [
             { uid: 'user1', email: 'alice@test.com', displayName: 'Alice', disabled: false, metadata: {}, customClaims: {}, providerData: [] },

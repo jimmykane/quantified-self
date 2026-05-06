@@ -21,6 +21,7 @@ import { AppUserService } from '../../services/app.user.service';
 import { DashboardDerivedMetricsService } from '../../services/dashboard-derived-metrics.service';
 import { AppSleepService } from '../../services/app.sleep.service';
 import { AppEventService } from '../../services/app.event.service';
+import { AppEventStatsService } from '../../services/app.event-stats.service';
 import { DashboardAutoTileService } from '../../services/dashboard-auto-tile.service';
 import * as dashboardTileViewModelHelper from '../../helpers/dashboard-tile-view-model.helper';
 import {
@@ -44,6 +45,7 @@ describe('SummariesComponent', () => {
   };
   let mockSleepService: { watchForDashboard: ReturnType<typeof vi.fn> };
   let mockEventService: { getEventsBy: ReturnType<typeof vi.fn> };
+  let mockEventStatsService: { watchUserEventStats: ReturnType<typeof vi.fn> };
   let mockDashboardAutoTileService: { watchForDashboard: ReturnType<typeof vi.fn> };
   let mockLogger: { error: ReturnType<typeof vi.fn>; warn: ReturnType<typeof vi.fn>; log: ReturnType<typeof vi.fn> };
   let mockDialog: { open: ReturnType<typeof vi.fn> };
@@ -106,6 +108,9 @@ describe('SummariesComponent', () => {
     mockEventService = {
       getEventsBy: vi.fn().mockReturnValue(of([])),
     };
+    mockEventStatsService = {
+      watchUserEventStats: vi.fn().mockReturnValue(of(null)),
+    };
     mockDashboardAutoTileService = {
       watchForDashboard: vi.fn().mockImplementation(() => new Subscription()),
     };
@@ -141,6 +146,7 @@ describe('SummariesComponent', () => {
         { provide: DashboardDerivedMetricsService, useValue: mockDashboardDerivedMetricsService },
         { provide: AppSleepService, useValue: mockSleepService },
         { provide: AppEventService, useValue: mockEventService },
+        { provide: AppEventStatsService, useValue: mockEventStatsService },
         { provide: DashboardAutoTileService, useValue: mockDashboardAutoTileService },
         { provide: LoggerService, useValue: mockLogger },
         { provide: MatDialog, useValue: mockDialog },
@@ -234,6 +240,54 @@ describe('SummariesComponent', () => {
     const mainMap = board?.querySelector('app-tile-map') as HTMLElement | null;
     expect(mainMap).not.toBeNull();
     expect(mainMap?.classList.contains('qs-glass-card-panel')).toBe(false);
+  });
+
+  it('renders uploaded activities totals in the Today header when stats are exact', () => {
+    component.user = { uid: 'user-1', settings: { dashboardSettings: { tiles: [] } } } as any;
+    component.eventUser = component.user;
+    component.showActions = true;
+    component.eventStats = {
+      total: 1234,
+      standard: 1230,
+      benchmark: 4,
+      backfilled: true,
+    };
+
+    fixture.detectChanges();
+
+    const nativeElement = fixture.nativeElement as HTMLElement;
+    const stat = nativeElement.querySelector('.dashboard-uploaded-activities-stat');
+    expect(stat).not.toBeNull();
+    expect(stat?.textContent).toContain('1,234');
+    expect(stat?.textContent).toContain('Uploaded activities');
+    expect(stat?.textContent).toContain('4 benchmark');
+  });
+
+  it('watches event stats only for the signed-in user dashboard', () => {
+    mockEventStatsService.watchUserEventStats.mockReturnValueOnce(of({
+      total: 12,
+      standard: 11,
+      benchmark: 1,
+      backfilled: true,
+    }));
+    component.user = { uid: 'user-1', settings: { dashboardSettings: { tiles: [] } } } as any;
+    component.eventUser = { uid: 'user-1' } as any;
+    component.showActions = true;
+
+    (component as any).syncEventStatsSubscription();
+
+    expect(mockEventStatsService.watchUserEventStats).toHaveBeenCalledWith(component.user);
+    expect(component.eventStats).toEqual({
+      total: 12,
+      standard: 11,
+      benchmark: 1,
+      backfilled: true,
+    });
+
+    component.eventUser = { uid: 'other-user' } as any;
+    (component as any).syncEventStatsSubscription();
+
+    expect(component.eventStats).toBeNull();
   });
 
   it('squares loading shades inside the joined KPI lane surface', () => {

@@ -54,6 +54,7 @@ import {
     normalizeDerivedFormDailyLoads,
     type EnsureDerivedMetricsResponse,
 } from '../../../shared/derived-metrics';
+import { isBenchmarkEventForStats } from '../../../shared/event-stats';
 import { enqueueDerivedMetricsTask } from '../shared/cloud-tasks';
 import { getDerivedMetricsUidAllowlist, isDerivedMetricsUidAllowed } from './derived-metrics-uid-gate';
 
@@ -311,21 +312,7 @@ function isDerivedMetricsCoordinatorStuck(
 }
 
 function isMergedEvent(eventData: Record<string, unknown>): boolean {
-    const mergeType = toSafeString(eventData.mergeType).trim().toLowerCase();
-    // Merge options contract:
-    // - benchmark => excluded from totals/derived calculations
-    // - multi => included as a normal multi-activity event
-    if (mergeType === 'benchmark') {
-        return true;
-    }
-    if (mergeType === 'multi') {
-        return false;
-    }
-    // Legacy benchmark merges may only have isMerge=true.
-    if (eventData.isMerge === true) {
-        return true;
-    }
-    return false;
+    return isBenchmarkEventForStats(eventData);
 }
 
 function resolveRawStats(eventData: Record<string, unknown>): Record<string, unknown> {

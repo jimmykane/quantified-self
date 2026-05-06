@@ -104,6 +104,32 @@
                     <mat-spinner diameter="24"></mat-spinner>
                 </div>
             </mat-card>
+
+            @if (userStats?.eventsBackfilled) {
+            <!-- Total Events -->
+            <mat-card class="app-stat-card">
+                <div class="app-stat-header">
+                    <mat-icon>fitness_center</mat-icon>
+                    <span>Total Events</span>
+                </div>
+                <div class="app-stat-value" *ngIf="userStats">{{ userStats.events.total | number }}</div>
+                <div class="app-spinner-mini" *ngIf="!userStats">
+                    <mat-spinner diameter="24"></mat-spinner>
+                </div>
+            </mat-card>
+
+            <!-- Benchmark Events -->
+            <mat-card class="app-stat-card">
+                <div class="app-stat-header">
+                    <mat-icon>leaderboard</mat-icon>
+                    <span>Benchmark Events</span>
+                </div>
+                <div class="app-stat-value app-stat-value-muted" *ngIf="userStats">{{ userStats.events.benchmark | number }}</div>
+                <div class="app-spinner-mini" *ngIf="!userStats">
+                    <mat-spinner diameter="24"></mat-spinner>
+                </div>
+            </mat-card>
+            }
         </div>
 
         <!-- Auth Provider Breakdown Chart -->
@@ -256,6 +282,23 @@
                     <ng-container matColumnDef="aiCreditsConsumed">
                         <th mat-header-cell *matHeaderCellDef> AI Credits Used </th>
                         <td mat-cell *matCellDef="let user"> {{ (user.aiCreditsConsumed ?? 0) | number }} </td>
+                    </ng-container>
+
+                    <!-- Events Column -->
+                    <ng-container matColumnDef="eventStats">
+                        <th mat-header-cell *matHeaderCellDef> Events </th>
+                        <td mat-cell *matCellDef="let user">
+                            @if (getEventStatsTotal(user) !== null) {
+                            <div class="event-stats-cell">
+                                <span>{{ getEventStatsTotal(user) | number }}</span>
+                                @if (getEventStatsBenchmark(user) > 0) {
+                                <span class="text-detail-muted">{{ getEventStatsBenchmark(user) | number }} benchmark</span>
+                                }
+                            </div>
+                            } @else {
+                            <span class="text-detail-muted">-</span>
+                            }
+                        </td>
                     </ng-container>
 
                     <!-- Services Column -->

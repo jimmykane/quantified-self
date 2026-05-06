@@ -20,6 +20,10 @@
   min-width: 0;
 }
 
+.dashboard-summary-header {
+  flex-wrap: wrap;
+}
+
 .dashboard-section-title-block {
   align-items: center;
   display: flex;
@@ -59,6 +63,54 @@
   display: flex;
   flex: 0 0 auto;
   margin-left: auto;
+}
+
+.dashboard-summary-header .dashboard-section-actions {
+  margin-left: 0;
+}
+
+.dashboard-uploaded-activities-stat {
+  align-items: center;
+  border: 1px solid var(--mat-sys-outline-variant);
+  border-radius: 6px;
+  box-sizing: border-box;
+  display: flex;
+  flex: 0 1 auto;
+  gap: 0.45rem;
+  margin-left: auto;
+  min-height: 48px;
+  min-width: 0;
+  padding: 0.35rem 0.65rem;
+}
+
+.dashboard-uploaded-activities-stat > mat-icon {
+  color: var(--mat-sys-primary);
+  flex: 0 0 auto;
+  font-size: 1.2rem;
+  height: 1.2rem;
+  width: 1.2rem;
+}
+
+.dashboard-uploaded-activities-copy {
+  display: grid;
+  gap: 0.05rem;
+  min-width: 0;
+}
+
+.dashboard-uploaded-activities-value {
+  color: var(--mat-sys-on-surface);
+  font-family: var(--app-display-font-family, inherit);
+  font-size: 1.1rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.dashboard-uploaded-activities-label,
+.dashboard-uploaded-activities-detail {
+  color: var(--mat-sys-on-surface-variant);
+  font-size: 0.72rem;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
 }
 
 .dashboard-manager-button {
@@ -226,6 +278,11 @@ section {
 @media (max-width: 767px) {
   .dashboard-section-header {
     gap: 0.75rem;
+  }
+
+  .dashboard-uploaded-activities-stat {
+    flex: 1 1 100%;
+    margin-left: 0;
   }
 
   .dashboard-section-subtitle {

@@ -9,6 +9,18 @@
         <div class="dashboard-section-subtitle">{{ todayDateSubtitle }}</div>
       </div>
     </div>
+    @if (eventStats) {
+    <div class="dashboard-uploaded-activities-stat" aria-label="Uploaded activities">
+      <mat-icon aria-hidden="true">fitness_center</mat-icon>
+      <div class="dashboard-uploaded-activities-copy">
+        <span class="dashboard-uploaded-activities-value">{{ eventStats.total | number }}</span>
+        <span class="dashboard-uploaded-activities-label">Uploaded activities</span>
+        @if (eventStats.benchmark > 0) {
+        <span class="dashboard-uploaded-activities-detail">{{ eventStats.benchmark | number }} benchmark</span>
+        }
+      </div>
+    </div>
+    }
     @if (showActions) {
     <div class="dashboard-section-actions">
       <button mat-flat-button class="qs-mat-primary dashboard-manager-button dashboard-manager-button-desktop" appHapticTap

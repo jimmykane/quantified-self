@@ -14,6 +14,13 @@ import {
 import { clampListUsersPageSize } from '../shared/date.utils';
 import { enrichUsers } from '../shared/user-enrichment';
 import { BasicUser, ListUsersRequest, ListUsersResponse, UserCountResponse } from '../shared/types';
+import {
+    EVENT_STATS_COLLECTION_ID,
+    EVENT_STATS_KIND,
+    EVENT_STATS_SCHEMA_VERSION,
+    normalizeEventStatsCounts,
+    type EventStatsCounts,
+} from '../../../../shared/event-stats';
 
 const resolveSubscriptionInterval = (subscription: Record<string, unknown>): string | null => {
     const items = Array.isArray(subscription.items) ? subscription.items : [];
@@ -44,6 +51,37 @@ const resolveSubscriptionInterval = (subscription: Record<string, unknown>): str
 
     return null;
 };
+
+interface GlobalEventStats extends EventStatsCounts {
+    backfilledUsers: number;
+}
+
+async function getGlobalEventStats(db: admin.firestore.Firestore): Promise<GlobalEventStats> {
+    try {
+        const snapshot = await db.collectionGroup(EVENT_STATS_COLLECTION_ID)
+            .where('kind', '==', EVENT_STATS_KIND)
+            .where('schemaVersion', '==', EVENT_STATS_SCHEMA_VERSION)
+            .where('backfilledAt', '!=', null)
+            .aggregate({
+                backfilledUsers: admin.firestore.AggregateField.count(),
+                total: admin.firestore.AggregateField.sum('total'),
+                standard: admin.firestore.AggregateField.sum('standard'),
+                benchmark: admin.firestore.AggregateField.sum('benchmark'),
+            })
+            .get();
+
+        const data = snapshot.data() as Record<string, unknown>;
+        return {
+            ...normalizeEventStatsCounts(data),
+            backfilledUsers: typeof data.backfilledUsers === 'number' && Number.isFinite(data.backfilledUsers)
+                ? Math.max(0, data.backfilledUsers)
+                : 0,
+        };
+    } catch (error) {
+        logger.warn('Failed to aggregate event stats for admin user count', error);
+        return { total: 0, standard: 0, benchmark: 0, backfilledUsers: 0 };
+    }
+}
 
 /**
  * Lists all users with pagination, search, and sorting support.
@@ -245,7 +283,7 @@ export const getUserCount = onAdminCall<void, UserCountResponse>({
 
         // 1. Get stats from Firestore (subscriptions)
         // Parallel efficient count queries
-        const [totalSnapshot, proSnapshot, basicSnapshot, onboardedSnapshot] = await Promise.all([
+        const [totalSnapshot, proSnapshot, basicSnapshot, onboardedSnapshot, eventStats] = await Promise.all([
             db.collection('users').count().get(),
             db.collectionGroup('subscriptions')
                 .where('status', 'in', [...ACTIVE_SUBSCRIPTION_STATUSES])
@@ -257,7 +295,8 @@ export const getUserCount = onAdminCall<void, UserCountResponse>({
                 .count().get(),
             db.collection('users')
                 .where('onboardingCompleted', '==', true)
-                .count().get()
+                .count().get(),
+            getGlobalEventStats(db)
         ]);
 
         const total = totalSnapshot.data().count;
@@ -326,6 +365,12 @@ export const getUserCount = onAdminCall<void, UserCountResponse>({
             monthlyPaid,
             yearlyPaid,
             onboardingCompleted,
+            events: {
+                total: eventStats.total,
+                standard: eventStats.standard,
+                benchmark: eventStats.benchmark,
+            },
+            eventsBackfilled: eventStats.backfilledUsers >= total,
             providers: providerCounts
         };
     } catch (error: unknown) {

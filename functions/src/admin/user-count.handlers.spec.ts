@@ -37,12 +37,19 @@ describe('getUserCount Cloud Function', () => {
                 }))
             ]
         });
+        const mockEventStatsAggregateGet = vi.fn().mockResolvedValue({
+            data: () => ({ backfilledUsers: 150, total: 1_000_000, standard: 999_000, benchmark: 1_000 })
+        });
 
         // Mock implementation for chainable queries
         const mockQuery = {
             where: vi.fn().mockReturnThis(),
             count: vi.fn().mockReturnValue({ get: mockCountGet }),
             select: vi.fn().mockReturnValue({ get: mockActiveSubscriptionsGet })
+        };
+        const mockStatsQuery = {
+            where: vi.fn().mockReturnThis(),
+            aggregate: vi.fn().mockReturnValue({ get: mockEventStatsAggregateGet })
         };
 
         mockCollection.mockImplementation((name) => {
@@ -62,6 +69,9 @@ describe('getUserCount Cloud Function', () => {
                 // This handles collectionGroup('subscriptions')
                 return mockQuery;
             }
+            if (name === 'stats') {
+                return mockStatsQuery;
+            }
             return {};
         });
 
@@ -76,9 +86,18 @@ describe('getUserCount Cloud Function', () => {
             monthlyPaid: 45,
             yearlyPaid: 5,
             onboardingCompleted: 40,
+            events: {
+                total: 1_000_000,
+                standard: 999_000,
+                benchmark: 1_000
+            },
+            eventsBackfilled: true,
             providers: {}
         });
         expect(mockCollection).toHaveBeenCalledWith('users');
         expect(mockCollection).toHaveBeenCalledWith('subscriptions'); // collectionGroup calls this name
+        expect(mockStatsQuery.where).toHaveBeenCalledWith('kind', '==', 'events');
+        expect(mockStatsQuery.where).toHaveBeenCalledWith('schemaVersion', '==', 1);
+        expect(mockStatsQuery.where).toHaveBeenCalledWith('backfilledAt', '!=', null);
     });
 });

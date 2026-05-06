@@ -3,6 +3,11 @@ import { Firestore } from 'app/firebase/firestore';
 import { from, Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
 import { AppFunctionsService } from './app.functions.service';
+import type { EventStatsCounts } from '@shared/event-stats';
+
+export interface AdminUserEventStats extends EventStatsCounts {
+    backfilled: boolean;
+}
 
 export interface AdminUser {
     uid: string;
@@ -33,6 +38,7 @@ export interface AdminUser {
     }[];
     hasSubscribedOnce?: boolean;
     aiCreditsConsumed?: number;
+    eventStats?: AdminUserEventStats;
 }
 
 export interface ListUsersParams {
@@ -63,6 +69,8 @@ export interface UserCountStats {
     cancelScheduled: number;
     onboardingCompleted: number;
     providers: Record<string, number>;
+    events: EventStatsCounts;
+    eventsBackfilled: boolean;
 }
 
 export interface SubscriptionHistoryTrendBucket {
@@ -318,6 +326,8 @@ export class AdminService {
             cancelScheduled?: number;
             onboardingCompleted?: number;
             providers: Record<string, number>;
+            events?: Partial<EventStatsCounts>;
+            eventsBackfilled?: boolean;
         }>('getUserCount')).pipe(
             map(result => ({
                 total: result.data.total ?? result.data.count, // Fallback for safety
@@ -330,7 +340,13 @@ export class AdminService {
                 canceled: result.data.canceled ?? 0,
                 cancelScheduled: result.data.cancelScheduled ?? 0,
                 onboardingCompleted: result.data.onboardingCompleted ?? 0,
-                providers: result.data.providers || {}
+                providers: result.data.providers || {},
+                events: {
+                    total: result.data.events?.total ?? 0,
+                    standard: result.data.events?.standard ?? 0,
+                    benchmark: result.data.events?.benchmark ?? 0
+                },
+                eventsBackfilled: result.data.eventsBackfilled === true
             }))
         );
     }

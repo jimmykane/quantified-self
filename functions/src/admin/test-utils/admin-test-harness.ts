@@ -134,6 +134,10 @@ vi.mock('firebase-admin', () => {
     firestoreMock.FieldPath = {
         documentId: vi.fn(() => '__name__'),
     };
+    firestoreMock.AggregateField = {
+        sum: vi.fn((field: string) => ({ field, op: 'sum' })),
+        count: vi.fn(() => ({ op: 'count' })),
+    };
 
     return {
         auth: () => mockAuth,

@@ -5,6 +5,12 @@ import { SUUNTOAPP_ACCESS_TOKENS_COLLECTION_NAME } from '../../suunto/constants'
 import { COROSAPI_ACCESS_TOKENS_COLLECTION_NAME } from '../../coros/constants';
 import { toEpochMillis } from './date.utils';
 import { BasicUser, EnrichedUser } from './types';
+import {
+    EVENT_STATS_COLLECTION_ID,
+    EVENT_STATS_DOC_ID,
+    hasExactEventStats,
+    normalizeEventStatsCounts,
+} from '../../../../shared/event-stats';
 
 function buildAiInsightsUsageDocIdForSubscriptionPeriod(
     periodStart: unknown,
@@ -47,11 +53,15 @@ export async function enrichUsers(
     db: admin.firestore.Firestore
 ): Promise<EnrichedUser[]> {
     const userFlagsByUid = new Map<string, { onboardingCompleted: boolean; hasSubscribedOnce: boolean }>();
+    const eventStatsByUid = new Map<string, EnrichedUser['eventStats']>();
 
     if (users.length > 0) {
         try {
             const userDocRefs = users.map(user => db.collection('users').doc(user.uid));
-            const userDocs = await db.getAll(...userDocRefs);
+            const eventStatsRefs = users.map(user => db.doc(`users/${user.uid}/${EVENT_STATS_COLLECTION_ID}/${EVENT_STATS_DOC_ID}`));
+            const snapshots = await db.getAll(...userDocRefs, ...eventStatsRefs);
+            const userDocs = snapshots.slice(0, users.length);
+            const eventStatsDocs = snapshots.slice(users.length);
 
             userDocs.forEach(snapshot => {
                 const userData = snapshot.data() || {};
@@ -60,8 +70,19 @@ export async function enrichUsers(
                     hasSubscribedOnce: userData.hasSubscribedOnce === true
                 });
             });
+            eventStatsDocs.forEach((snapshot, index) => {
+                const uid = users[index]?.uid;
+                if (!uid) {
+                    return;
+                }
+                const statsData = snapshot?.data?.() as Record<string, unknown> | undefined;
+                eventStatsByUid.set(uid, {
+                    ...normalizeEventStatsCounts(statsData),
+                    backfilled: hasExactEventStats(statsData),
+                });
+            });
         } catch (e) {
-            logger.warn('Failed to fetch onboarding flags for admin user list', e);
+            logger.warn('Failed to fetch onboarding flags or event stats for admin user list', e);
         }
     }
 
@@ -159,7 +180,13 @@ export async function enrichUsers(
                 connectedServices: connectedServices,
                 onboardingCompleted: userFlagsByUid.get(user.uid)?.onboardingCompleted === true,
                 hasSubscribedOnce,
-                aiCreditsConsumed
+                aiCreditsConsumed,
+                eventStats: eventStatsByUid.get(user.uid) || {
+                    total: 0,
+                    standard: 0,
+                    benchmark: 0,
+                    backfilled: false,
+                },
             };
         })
     );
