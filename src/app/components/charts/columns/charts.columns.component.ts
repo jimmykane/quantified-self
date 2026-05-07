@@ -33,7 +33,11 @@ import {
   resolveEChartsTooltipSurfaceConfig,
   resolveEChartsTooltipTriggerOn
 } from '../../../helpers/echarts-tooltip-interaction.helper';
-import { buildDashboardEChartsStyleTokens } from '../../../helpers/dashboard-echarts-style.helper';
+import {
+  buildDashboardEChartsTooltipChrome,
+  buildDashboardEChartsStyleTokens,
+  renderDashboardEChartsTooltipCard,
+} from '../../../helpers/dashboard-echarts-style.helper';
 import { buildDashboardValueAxisConfig } from '../../../helpers/dashboard-echarts-yaxis.helper';
 import {
   ECHARTS_DASHBOARD_CHART_TITLE_FONT_FAMILY,
@@ -197,8 +201,6 @@ export class ChartsColumnsComponent implements AfterViewInit, OnChanges, OnDestr
     const textColor = chartStyle.textColor;
     const axisColor = chartStyle.axisColor;
     const gridColor = chartStyle.gridColor;
-    const tooltipBackgroundColor = chartStyle.tooltipBackgroundColor;
-    const tooltipBorderColor = chartStyle.tooltipBorderColor;
     const isCompactLayout = chartStyle.isCompactLayout;
     const axisFontSize = chartStyle.axisFontSize;
     const isMobileTooltipViewport = isEChartsMobileTooltipViewport();
@@ -366,21 +368,15 @@ export class ChartsColumnsComponent implements AfterViewInit, OnChanges, OnDestr
         axisPointer: useDateActivitySegmentation ? { type: 'shadow' } : undefined,
         renderMode: 'html',
         ...resolveEChartsTooltipSurfaceConfig(isMobileTooltipViewport),
-        backgroundColor: tooltipBackgroundColor,
-        borderColor: tooltipBorderColor,
-        borderWidth: 1,
-        textStyle: {
-          color: chartStyle.tooltipTextColor,
-          fontFamily: ECHARTS_GLOBAL_FONT_FAMILY,
-          fontSize: isCompactLayout ? 12 : 13
-        },
+        ...buildDashboardEChartsTooltipChrome(chartStyle),
         formatter: useDateActivitySegmentation && dateActivitySegmentation && dateActivityColorMap
           ? (params: any) => this.formatDateActivityTooltip(
             dateActivitySegmentation.buckets,
             params,
-            dateActivityColorMap
+            dateActivityColorMap,
+            chartStyle
           )
-          : (params: { dataIndex: number }) => this.formatTooltip(points, params.dataIndex)
+          : (params: { dataIndex: number }) => this.formatTooltip(points, params.dataIndex, chartStyle)
       },
       legend: { show: false },
       xAxis: this.vertical ? categoryAxis : valueAxis,
@@ -729,7 +725,11 @@ export class ChartsColumnsComponent implements AfterViewInit, OnChanges, OnDestr
     );
   }
 
-  private formatTooltip(points: DashboardCartesianPoint[], dataIndex: number): string {
+  private formatTooltip(
+    points: DashboardCartesianPoint[],
+    dataIndex: number,
+    chartStyle: ReturnType<typeof buildDashboardEChartsStyleTokens>,
+  ): string {
     const point = points[dataIndex];
     if (!point || !Number.isFinite(point.value)) {
       return '';
@@ -737,23 +737,32 @@ export class ChartsColumnsComponent implements AfterViewInit, OnChanges, OnDestr
 
     const valueText = this.formatValue(point.value);
     const valueTypeLabel = this.chartDataValueType || 'Value';
-    const activityCountLabel = point.count > 0 ? `<br/>${point.count} Activities` : '';
     const additiveTypeBreakdown = this.buildNonAdditiveDateActivityBreakdown(point.rawItem);
-    const breakdownLines = additiveTypeBreakdown.map((entry, index) => {
+    const breakdownRows = additiveTypeBreakdown.map((entry, index) => {
       const color = this.resolveBreakdownColor(entry.activityLabel, index);
-      const marker = `<span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:${color};margin-right:6px;"></span>`;
       const entryValueText = this.formatValue(entry.value);
       const entryCountText = entry.count > 0 ? `, ${entry.count} Activities` : '';
-      return `${marker}${entry.activityLabel}: <strong>${entryValueText}</strong>${entryCountText}`;
+      return {
+        label: entry.activityLabel,
+        value: `${entryValueText}${entryCountText}`,
+        markerColor: color,
+      };
     });
-    const breakdownText = breakdownLines.length ? `<br/>${breakdownLines.join('<br/>')}` : '';
-    return `${point.label}<br/>${valueTypeLabel}: <strong>${valueText}</strong>${activityCountLabel}${breakdownText}`;
+    return renderDashboardEChartsTooltipCard(chartStyle, {
+      title: point.label,
+      rows: [
+        { label: valueTypeLabel, value: valueText },
+        ...(point.count > 0 ? [{ label: 'Activities', value: `${point.count}` }] : []),
+        ...breakdownRows,
+      ],
+    });
   }
 
   private formatDateActivityTooltip(
     buckets: DashboardDateActivityBucket[],
     params: any,
-    colorMap: Map<string, string>
+    colorMap: Map<string, string>,
+    chartStyle: ReturnType<typeof buildDashboardEChartsStyleTokens> = buildDashboardEChartsStyleTokens(this.darkTheme, this.chartDiv?.nativeElement?.clientWidth || 0),
   ): string {
     const paramArray = Array.isArray(params) ? params : [params];
     const firstWithDataIndex = paramArray.find((entry) => Number.isFinite(entry?.dataIndex));
@@ -773,21 +782,29 @@ export class ChartsColumnsComponent implements AfterViewInit, OnChanges, OnDestr
     const isTotalAggregation = this.chartDataValueType === ChartDataValueTypes.Total;
     const totalText = this.formatValue(bucket.total);
     const valueTypeLabel = this.chartDataValueType || 'Value';
-    const activityCountLabel = bucket.count > 0 ? `<br/>${bucket.count} Activities` : '';
-    const lines = bucket.segments
+    const segmentRows = bucket.segments
       .filter((segment) => Number.isFinite(segment.value) && segment.value !== 0)
       .map((segment, index) => {
         const color = colorMap.get(segment.activityKey) || this.dateTypePalette[index % this.dateTypePalette.length];
-        const marker = `<span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:${color};margin-right:6px;"></span>`;
         const segmentDisplayValue = isTotalAggregation ? segment.value : segment.rawValue;
         const valueText = this.formatValue(segmentDisplayValue);
         const percentText = isTotalAggregation ? ` (${segment.percent.toFixed(1)}%)` : '';
         const countText = segment.count > 0 ? `, ${segment.count} Activities` : '';
-        return `${marker}${segment.label}: <strong>${valueText}</strong>${percentText}${countText}`;
+        return {
+          label: segment.label,
+          value: `${valueText}${percentText}${countText}`,
+          markerColor: color,
+        };
       });
 
-    const breakdownText = lines.length ? `<br/>${lines.join('<br/>')}` : '';
-    return `${bucket.label}<br/>${valueTypeLabel}: <strong>${totalText}</strong>${activityCountLabel}${breakdownText}`;
+    return renderDashboardEChartsTooltipCard(chartStyle, {
+      title: bucket.label,
+      rows: [
+        { label: valueTypeLabel, value: totalText },
+        ...(bucket.count > 0 ? [{ label: 'Activities', value: `${bucket.count}` }] : []),
+        ...segmentRows,
+      ],
+    });
   }
 
   private buildNonAdditiveDateActivityBreakdown(

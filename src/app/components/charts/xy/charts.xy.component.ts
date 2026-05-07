@@ -32,7 +32,11 @@ import {
   resolveEChartsTooltipSurfaceConfig,
   resolveEChartsTooltipTriggerOn
 } from '../../../helpers/echarts-tooltip-interaction.helper';
-import { buildDashboardEChartsStyleTokens } from '../../../helpers/dashboard-echarts-style.helper';
+import {
+  buildDashboardEChartsTooltipChrome,
+  buildDashboardEChartsStyleTokens,
+  renderDashboardEChartsTooltipCard,
+} from '../../../helpers/dashboard-echarts-style.helper';
 import { buildDashboardValueAxisConfig } from '../../../helpers/dashboard-echarts-yaxis.helper';
 import {
   ECHARTS_DASHBOARD_CHART_TITLE_FONT_FAMILY,
@@ -182,8 +186,6 @@ export class ChartsXYComponent implements AfterViewInit, OnChanges, OnDestroy {
     const textColor = chartStyle.textColor;
     const axisColor = chartStyle.axisColor;
     const gridColor = chartStyle.gridColor;
-    const tooltipBackgroundColor = chartStyle.tooltipBackgroundColor;
-    const tooltipBorderColor = chartStyle.tooltipBorderColor;
     const isCompactLayout = chartStyle.isCompactLayout;
     const axisFontSize = chartStyle.axisFontSize;
     const isMobileTooltipViewport = isEChartsMobileTooltipViewport();
@@ -306,15 +308,8 @@ export class ChartsXYComponent implements AfterViewInit, OnChanges, OnDestroy {
         triggerOn: resolveEChartsTooltipTriggerOn(true, isMobileTooltipViewport),
         renderMode: 'html',
         ...resolveEChartsTooltipSurfaceConfig(isMobileTooltipViewport),
-        backgroundColor: tooltipBackgroundColor,
-        borderColor: tooltipBorderColor,
-        borderWidth: 1,
-        textStyle: {
-          color: chartStyle.tooltipTextColor,
-          fontFamily: ECHARTS_GLOBAL_FONT_FAMILY,
-          fontSize: isCompactLayout ? 12 : 13
-        },
-        formatter: (params: { dataIndex: number }) => this.formatTooltip(points, params.dataIndex)
+        ...buildDashboardEChartsTooltipChrome(chartStyle),
+        formatter: (params: { dataIndex: number }) => this.formatTooltip(points, params.dataIndex, chartStyle)
       },
       legend: { show: false },
       xAxis: this.vertical ? categoryAxis : valueAxis,
@@ -458,7 +453,11 @@ export class ChartsXYComponent implements AfterViewInit, OnChanges, OnDestroy {
     );
   }
 
-  private formatTooltip(points: DashboardCartesianPoint[], dataIndex: number): string {
+  private formatTooltip(
+    points: DashboardCartesianPoint[],
+    dataIndex: number,
+    chartStyle: ReturnType<typeof buildDashboardEChartsStyleTokens>,
+  ): string {
     const point = points[dataIndex];
     if (!point || !Number.isFinite(point.value)) {
       return '';
@@ -466,8 +465,13 @@ export class ChartsXYComponent implements AfterViewInit, OnChanges, OnDestroy {
 
     const valueText = this.formatValue(point.value);
     const valueTypeLabel = this.chartDataValueType || 'Value';
-    const activityCountLabel = point.count > 0 ? `<br/>${point.count} Activities` : '';
-    return `${point.label}<br/>${valueTypeLabel}: <strong>${valueText}</strong>${activityCountLabel}`;
+    return renderDashboardEChartsTooltipCard(chartStyle, {
+      title: point.label,
+      rows: [
+        { label: valueTypeLabel, value: valueText },
+        ...(point.count > 0 ? [{ label: 'Activities', value: `${point.count}` }] : []),
+      ],
+    });
   }
 
   private getNormalizedUnitSettings(): UserUnitSettingsInterface {

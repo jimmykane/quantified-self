@@ -36,7 +36,11 @@ import {
   ECHARTS_SERIES_IMMEDIATE_UPDATE_SETTINGS,
   EChartsHostController
 } from '../../../helpers/echarts-host-controller';
-import { buildDashboardEChartsStyleTokens } from '../../../helpers/dashboard-echarts-style.helper';
+import {
+  buildDashboardEChartsTooltipChrome,
+  buildDashboardEChartsStyleTokens,
+  renderDashboardEChartsTooltipCard,
+} from '../../../helpers/dashboard-echarts-style.helper';
 import {
   type EChartsMobileTapFeedbackOptions,
   isEChartsMobileTooltipViewport,
@@ -219,8 +223,6 @@ export class ChartsPieComponent implements AfterViewInit, OnChanges, OnDestroy {
     const chartStyle = buildDashboardEChartsStyleTokens(this.darkTheme, chartWidth);
     const darkTheme = chartStyle.darkTheme;
     const textColor = chartStyle.textColor;
-    const tooltipBackgroundColor = chartStyle.tooltipBackgroundColor;
-    const tooltipBorderColor = chartStyle.tooltipBorderColor;
     const isCompactLayout = chartStyle.isCompactLayout;
     const isMobileTooltipViewport = isEChartsMobileTooltipViewport();
     const recoverySeriesData = this.buildRecoverySeriesData(chartStyle.subtleBorderColor);
@@ -276,14 +278,7 @@ export class ChartsPieComponent implements AfterViewInit, OnChanges, OnDestroy {
         triggerOn: resolveEChartsTooltipTriggerOn(true, isMobileTooltipViewport),
         renderMode: 'html',
         ...resolveEChartsTooltipSurfaceConfig(isMobileTooltipViewport),
-        backgroundColor: tooltipBackgroundColor,
-        borderColor: tooltipBorderColor,
-        borderWidth: 1,
-        textStyle: {
-          color: chartStyle.tooltipTextColor,
-          fontFamily: ECHARTS_GLOBAL_FONT_FAMILY,
-          fontSize: isCompactLayout ? 12 : 13
-        },
+        ...buildDashboardEChartsTooltipChrome(chartStyle),
         formatter: (params: { data?: any }) => {
           const entry = params?.data;
           if (!entry) {
@@ -296,9 +291,16 @@ export class ChartsPieComponent implements AfterViewInit, OnChanges, OnDestroy {
             this.getNormalizedUnitSettings(),
           );
           const percent = Number(entry.percent || 0).toFixed(1);
-          const activitiesCountLabel = entry.count > 0 ? `<br/>${entry.count} Activities` : '';
+          const valueTypeLabel = this.chartDataValueType || 'Value';
 
-          return `${entry.name}<br/>${percent}%<br/><strong>${valueText}</strong>${activitiesCountLabel}`;
+          return renderDashboardEChartsTooltipCard(chartStyle, {
+            title: entry.name,
+            subtitle: `${percent}%`,
+            rows: [
+              { label: valueTypeLabel, value: valueText },
+              ...(entry.count > 0 ? [{ label: 'Activities', value: `${entry.count}` }] : []),
+            ],
+          });
         }
       },
       legend: {
@@ -460,7 +462,7 @@ export class ChartsPieComponent implements AfterViewInit, OnChanges, OnDestroy {
       normalizedUnitSettings,
     );
     return {
-      label: 'Recovery Left Now',
+      label: 'Recovery left',
       value: remainingText,
       meta: `Total recovery: ${totalText}`,
       layoutMode: 'default',

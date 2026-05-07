@@ -142,7 +142,7 @@ export const HELP_SECTIONS: HelpSection[] = [
 
 - The curated **Recovery** pie tile is optional; existing dashboards can receive it once through the default curated auto-add, and removing it prevents future automatic adds.
 - The tile shows live recovery split between **Left now** and **Elapsed**.
-- The summary shows **Recovery Left Now**, plus **Active total** and **Latest workout** recovery context.
+- The summary shows **Recovery left**, plus **Active total** and **Latest workout** recovery context.
 - Active totals only include currently active recovery windows, not all historical recovery values.
 - Extremely large recovery values above 14 days are treated as outliers and ignored.
 - Remaining recovery updates every minute while the tile is visible.

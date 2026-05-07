@@ -136,7 +136,7 @@ const DASHBOARD_MANAGER_PRESET_DEFINITIONS: DashboardManagerPresetDefinition[] =
     id: DASHBOARD_MANAGER_PRESET_IDS.CURATED_RECOVERY,
     label: 'Recovery',
     tileName: 'Recovery',
-    description: 'Recovery left now vs elapsed recovery.',
+    description: 'Recovery left vs elapsed recovery.',
     icon: 'health_and_safety',
     category: 'curated',
     curatedChartType: DASHBOARD_RECOVERY_NOW_CHART_TYPE,

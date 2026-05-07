@@ -414,7 +414,8 @@ describe('ChartsXYComponent', () => {
     const tooltipText = formatter({ dataIndex: 0 });
 
     expect(tooltipText).toContain('Running');
-    expect(tooltipText).toContain('<strong>');
+    expect(tooltipText).toContain('qs-dashboard-echarts-tooltip-card');
+    expect(tooltipText).toContain('aria-label="Total:');
     expect(tooltipText).toContain('Activities');
   });
 

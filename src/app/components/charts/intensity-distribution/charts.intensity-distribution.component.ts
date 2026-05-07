@@ -14,7 +14,11 @@ import {
   ECHARTS_CARTESIAN_IMMEDIATE_UPDATE_SETTINGS,
   EChartsHostController,
 } from '../../../helpers/echarts-host-controller';
-import { buildDashboardEChartsStyleTokens } from '../../../helpers/dashboard-echarts-style.helper';
+import {
+  buildDashboardEChartsTooltipChrome,
+  buildDashboardEChartsStyleTokens,
+  renderDashboardEChartsTooltipCard,
+} from '../../../helpers/dashboard-echarts-style.helper';
 import {
   type EChartsMobileTapFeedbackOptions,
   isEChartsMobileTooltipViewport,
@@ -218,30 +222,25 @@ export class ChartsIntensityDistributionComponent implements AfterViewInit, OnCh
         axisPointer: { type: 'shadow' },
         renderMode: 'html',
         ...resolveEChartsTooltipSurfaceConfig(isMobileTooltipViewport),
-        borderWidth: 1,
-        borderColor: style.tooltipBorderColor,
-        backgroundColor: style.tooltipBackgroundColor,
-        textStyle: {
-          color: style.tooltipTextColor,
-          fontFamily: ECHARTS_GLOBAL_FONT_FAMILY,
-          fontSize: style.axisFontSize,
-        },
+        ...buildDashboardEChartsTooltipChrome(style),
         formatter: (params: Array<{ axisValue?: string | number; seriesName?: string; value?: number }>) => {
           if (!Array.isArray(params) || params.length === 0) {
             return '';
           }
           const axisHeading = this.formatTooltipWeekLabel(params[0]?.axisValue ?? null);
-          const lines = params
+          const rows = params
             .map((entry) => {
               const seriesName = `${entry?.seriesName || ''}`.trim();
               const valueText = this.formatPercent(entry?.value ?? null);
-              return seriesName ? `${seriesName}: ${valueText}` : valueText;
+              return seriesName
+                ? { label: seriesName, value: valueText }
+                : { label: 'Value', value: valueText };
             })
-            .filter((line) => line.trim().length > 0);
-          if (!lines.length) {
-            return axisHeading;
-          }
-          return axisHeading ? `${axisHeading}<br/>${lines.join('<br/>')}` : lines.join('<br/>');
+            .filter((row) => row.value.trim().length > 0);
+          return renderDashboardEChartsTooltipCard(style, {
+            title: axisHeading,
+            rows,
+          });
         },
       },
       xAxis: {

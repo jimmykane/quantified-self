@@ -161,6 +161,10 @@ describe('ChartsFreshnessForecastComponent', () => {
     expect(typeof formatter).toBe('function');
 
     const tooltipHtml = formatter?.([{ data: [dayThree, 47] }]) || '';
+    expect(tooltipHtml).toContain('qs-dashboard-echarts-tooltip-card');
+    expect(tooltipHtml).toContain('font-size:14px');
+    expect(tooltipHtml).toContain('font-size:13px');
+    expect(tooltipHtml).toContain('font-size:12px');
     expect(tooltipHtml).toContain('Forecast · Day +1');
     expect(tooltipHtml).toContain('Fitness (CTL): 47');
     expect(tooltipHtml).toContain('Fatigue (ATL): 40');

@@ -16,7 +16,11 @@ import {
   ECHARTS_CARTESIAN_IMMEDIATE_UPDATE_SETTINGS,
   EChartsHostController,
 } from '../../../helpers/echarts-host-controller';
-import { buildDashboardEChartsStyleTokens } from '../../../helpers/dashboard-echarts-style.helper';
+import {
+  buildDashboardEChartsTooltipChrome,
+  buildDashboardEChartsStyleTokens,
+  renderDashboardEChartsTooltipCard,
+} from '../../../helpers/dashboard-echarts-style.helper';
 import {
   type DashboardDerivedMetricStatus,
   isDerivedMetricPendingStatus,
@@ -632,14 +636,7 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
       },
       renderMode: 'html',
       ...resolveEChartsTooltipSurfaceConfig(isMobileTooltipViewport),
-      borderWidth: 1,
-      borderColor: style.tooltipBorderColor,
-      backgroundColor: style.tooltipBackgroundColor,
-      textStyle: {
-        color: style.tooltipTextColor,
-        fontFamily: ECHARTS_GLOBAL_FONT_FAMILY,
-        fontSize: style.axisFontSize,
-      },
+      ...buildDashboardEChartsTooltipChrome(style),
       formatter: (params: Array<{ data?: [number, number | null] }>) => {
         const entry = params?.[0]?.data;
         if (!entry) {
@@ -654,7 +651,10 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
           ? formatDashboardWeekRangeLabel(entry[0], undefined, 'UTC')
           : dateLabel;
         const valueText = this.formatPrimaryValue(entry[1]);
-        return `${heading}<br/><strong>${valueText}</strong>`;
+        return renderDashboardEChartsTooltipCard(style, {
+          title: heading,
+          rows: [{ label: this.primaryLabel || 'Value', value: valueText }],
+        });
       },
     };
   }

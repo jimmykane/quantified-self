@@ -390,19 +390,26 @@ describe('ChartsFormComponent', () => {
     expect(yearlyOption.toolbox).toBeUndefined();
   });
 
-  it('should render a rich tooltip card with status/date and metric grid', async () => {
+  it('should render a rich tooltip card with shared dashboard tooltip typography', async () => {
     fixture.detectChanges();
     await waitForChartStabilization();
 
     const option = getLastFullChartOption();
     const tooltipHtml = option.tooltip.formatter([{ dataIndex: 0 }]);
 
-    expect(tooltipHtml).toContain('qs-form-tooltip-card');
+    expect(tooltipHtml).toContain('qs-dashboard-echarts-tooltip-card');
     expect(tooltipHtml).toContain('Fitness');
     expect(tooltipHtml).toContain('Fatigue');
     expect(tooltipHtml).toContain('Form');
     expect(tooltipHtml).toContain('TSS');
     expect(tooltipHtml).toContain('Fitness change');
+    expect(tooltipHtml).toContain('width:max-content');
+    expect(tooltipHtml).toContain('font-size:14px');
+    expect(tooltipHtml).toContain('font-size:13px');
+    expect(tooltipHtml).toContain('font-size:12px');
+    expect(tooltipHtml).not.toContain('min-width:312px');
+    expect(tooltipHtml).not.toContain('font-size:16px');
+    expect(tooltipHtml).not.toContain('aria-hidden="true"');
 
     const position = option.tooltip.position(
       [0, 0],

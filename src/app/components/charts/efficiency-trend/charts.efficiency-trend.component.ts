@@ -14,7 +14,11 @@ import {
   ECHARTS_CARTESIAN_IMMEDIATE_UPDATE_SETTINGS,
   EChartsHostController,
 } from '../../../helpers/echarts-host-controller';
-import { buildDashboardEChartsStyleTokens } from '../../../helpers/dashboard-echarts-style.helper';
+import {
+  buildDashboardEChartsTooltipChrome,
+  buildDashboardEChartsStyleTokens,
+  renderDashboardEChartsTooltipCard,
+} from '../../../helpers/dashboard-echarts-style.helper';
 import { buildDashboardValueAxisConfig } from '../../../helpers/dashboard-echarts-yaxis.helper';
 import {
   type EChartsMobileTapFeedbackOptions,
@@ -37,10 +41,14 @@ import {
   normalizeDashboardDerivedChartRange,
   type DashboardDerivedChartRange,
 } from '../../../helpers/dashboard-derived-chart-range.helper';
+import { formatDashboardWeekRangeLabel } from '../../../helpers/dashboard-chart-data.helper';
 import { EChartsLoaderService } from '../../../services/echarts-loader.service';
 import { LoggerService } from '../../../services/logger.service';
 
 type ChartOption = Parameters<EChartsType['setOption']>[0];
+type AxisTooltipParam = {
+  data?: [number, number | null];
+};
 type EfficiencyXAxisLabelMode = 'year' | 'month-year' | 'day-month';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -205,13 +213,16 @@ export class ChartsEfficiencyTrendComponent implements AfterViewInit, OnChanges,
         axisPointer: { type: 'line' },
         renderMode: 'html',
         ...resolveEChartsTooltipSurfaceConfig(isMobileTooltipViewport),
-        borderWidth: 1,
-        borderColor: style.tooltipBorderColor,
-        backgroundColor: style.tooltipBackgroundColor,
-        textStyle: {
-          color: style.tooltipTextColor,
-          fontFamily: ECHARTS_GLOBAL_FONT_FAMILY,
-          fontSize: style.axisFontSize,
+        ...buildDashboardEChartsTooltipChrome(style),
+        formatter: (params: AxisTooltipParam[]) => {
+          const entry = Array.isArray(params) ? params[0]?.data : null;
+          if (!entry) {
+            return '';
+          }
+          return renderDashboardEChartsTooltipCard(style, {
+            title: formatDashboardWeekRangeLabel(entry[0], undefined, 'UTC'),
+            rows: [{ label: 'Efficiency', value: this.formatValue(entry[1]) }],
+          });
         },
       },
       xAxis: {
