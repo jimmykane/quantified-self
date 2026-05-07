@@ -29,10 +29,19 @@ const hoisted = vi.hoisted(() => {
     const userRootGet = vi.fn();
     const tombstoneGet = vi.fn();
     const eventsCollection = { where };
+    const derivedMetricsCollectionRef = {
+        path: 'users/user-1/derivedMetrics',
+    };
+    const recursiveDelete = vi.fn();
     const userRootRef = {
         path: 'users/user-1',
         get: userRootGet,
-        collection: vi.fn(() => eventsCollection),
+        collection: vi.fn((collectionName?: string) => {
+            if (collectionName === 'derivedMetrics') {
+                return derivedMetricsCollectionRef;
+            }
+            return eventsCollection;
+        }),
     };
     const tombstoneRef = {
         path: 'userDeletionTombstones/user-1',
@@ -87,6 +96,7 @@ const hoisted = vi.hoisted(() => {
         doc,
         getAll,
         batch,
+        recursiveDelete,
         runTransaction,
     };
     const loggerWarn = vi.fn();
@@ -102,6 +112,8 @@ const hoisted = vi.hoisted(() => {
         tombstoneGet,
         userRootRef,
         tombstoneRef,
+        derivedMetricsCollectionRef,
+        recursiveDelete,
         coordinatorRef,
         batchSet,
         batchCommit,
@@ -343,6 +355,220 @@ describe('startDerivedMetricsProcessing', () => {
 
         expect(result).toBeNull();
         expect(hoisted.transactionSet).not.toHaveBeenCalled();
+    });
+});
+
+describe('abandonDerivedMetricsProcessingAfterWriteBlock', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        hoisted.userRootGet.mockResolvedValue({ exists: true });
+        hoisted.tombstoneGet.mockResolvedValue({ exists: false, data: () => undefined });
+        mockTransactionDeletionGuardDefaults();
+        hoisted.runTransaction.mockImplementation(async (updateFunction: (transaction: unknown) => Promise<void>) => {
+            await updateFunction({
+                get: hoisted.transactionGet,
+                set: hoisted.transactionSet,
+            });
+        });
+        hoisted.enqueueDerivedMetricsTask.mockResolvedValue(true);
+        hoisted.recursiveDelete.mockResolvedValue(undefined);
+    });
+
+    it('recursively deletes derived metric state when the deletion guard is still active after claiming work', async () => {
+        const { abandonDerivedMetricsProcessingAfterWriteBlock } = await import('./derived-metrics.service');
+        hoisted.tombstoneGet.mockResolvedValueOnce({
+            exists: true,
+            data: () => ({ expireAt: { toMillis: () => Date.now() + 60_000 } }),
+        });
+
+        const result = await abandonDerivedMetricsProcessingAfterWriteBlock(
+            'user-1',
+            42,
+            [DERIVED_METRIC_KINDS.Form],
+            'task before snapshot building',
+        );
+
+        expect(result).toEqual({
+            cleaned: true,
+            requeued: false,
+            nextGeneration: null,
+            dirtyMetricKinds: [DERIVED_METRIC_KINDS.Form],
+        });
+        expect(hoisted.recursiveDelete).toHaveBeenCalledWith(hoisted.derivedMetricsCollectionRef);
+        expect(hoisted.runTransaction).not.toHaveBeenCalled();
+        expect(hoisted.enqueueDerivedMetricsTask).not.toHaveBeenCalled();
+    });
+
+    it('requeues claimed work on a fresh generation when the write block has cleared before finalization', async () => {
+        const { abandonDerivedMetricsProcessingAfterWriteBlock } = await import('./derived-metrics.service');
+        hoisted.transactionGet.mockResolvedValueOnce({
+            exists: true,
+            data: () => ({
+                status: 'processing',
+                generation: 42,
+                dirtyMetricKinds: [DERIVED_METRIC_KINDS.RecoveryNow],
+                processingMetricKinds: [DERIVED_METRIC_KINDS.Form],
+                updatedAtMs: Date.now(),
+                startedAtMs: Date.now(),
+            }),
+        });
+
+        const result = await abandonDerivedMetricsProcessingAfterWriteBlock(
+            'user-1',
+            42,
+            [DERIVED_METRIC_KINDS.Form],
+            'task before snapshot building',
+        );
+
+        expect(result).toEqual({
+            cleaned: false,
+            requeued: true,
+            nextGeneration: 43,
+            dirtyMetricKinds: [DERIVED_METRIC_KINDS.RecoveryNow, DERIVED_METRIC_KINDS.Form],
+        });
+        expect(hoisted.transactionSet).toHaveBeenCalledWith(
+            hoisted.coordinatorRef,
+            expect.objectContaining({
+                status: 'queued',
+                generation: 43,
+                dirtyMetricKinds: [DERIVED_METRIC_KINDS.RecoveryNow, DERIVED_METRIC_KINDS.Form],
+                processingMetricKinds: [],
+                startedAtMs: null,
+                completedAtMs: null,
+            }),
+            { merge: true },
+        );
+        expect(hoisted.enqueueDerivedMetricsTask).toHaveBeenCalledWith('user-1', 43);
+        expect(hoisted.recursiveDelete).not.toHaveBeenCalled();
+    });
+
+    it('does not requeue stale claimed work after the coordinator already left processing', async () => {
+        const { abandonDerivedMetricsProcessingAfterWriteBlock } = await import('./derived-metrics.service');
+        hoisted.transactionGet.mockResolvedValueOnce({
+            exists: true,
+            data: () => ({
+                status: 'idle',
+                generation: 42,
+                dirtyMetricKinds: [],
+                processingMetricKinds: [],
+                updatedAtMs: Date.now(),
+                completedAtMs: Date.now(),
+            }),
+        });
+
+        const result = await abandonDerivedMetricsProcessingAfterWriteBlock(
+            'user-1',
+            42,
+            [DERIVED_METRIC_KINDS.Form],
+            'task before snapshot building',
+        );
+
+        expect(result).toEqual({
+            cleaned: false,
+            requeued: false,
+            nextGeneration: null,
+            dirtyMetricKinds: [DERIVED_METRIC_KINDS.Form],
+        });
+        expect(hoisted.transactionSet).not.toHaveBeenCalled();
+        expect(hoisted.enqueueDerivedMetricsTask).not.toHaveBeenCalled();
+        expect(hoisted.recursiveDelete).not.toHaveBeenCalled();
+    });
+
+    it('retries requeue finalization when the transaction guard clears after a blocked transaction', async () => {
+        const { abandonDerivedMetricsProcessingAfterWriteBlock } = await import('./derived-metrics.service');
+        const coordinatorSnapshot = {
+            exists: true,
+            data: () => ({
+                status: 'processing',
+                generation: 42,
+                dirtyMetricKinds: [],
+                processingMetricKinds: [DERIVED_METRIC_KINDS.Form],
+                updatedAtMs: Date.now(),
+                startedAtMs: Date.now(),
+            }),
+        };
+        hoisted.transactionGet
+            .mockResolvedValueOnce(coordinatorSnapshot)
+            .mockResolvedValueOnce({ exists: true, data: () => ({}) })
+            .mockResolvedValueOnce({
+                exists: true,
+                data: () => ({ expireAt: { toMillis: () => Date.now() + 60_000 } }),
+            })
+            .mockResolvedValueOnce(coordinatorSnapshot)
+            .mockResolvedValueOnce({ exists: true, data: () => ({}) })
+            .mockResolvedValueOnce({ exists: false, data: () => undefined });
+
+        const result = await abandonDerivedMetricsProcessingAfterWriteBlock(
+            'user-1',
+            42,
+            [DERIVED_METRIC_KINDS.Form],
+            'task before snapshot building',
+        );
+
+        expect(result).toEqual({
+            cleaned: false,
+            requeued: true,
+            nextGeneration: 43,
+            dirtyMetricKinds: [DERIVED_METRIC_KINDS.Form],
+        });
+        expect(hoisted.runTransaction).toHaveBeenCalledTimes(2);
+        expect(hoisted.transactionSet).toHaveBeenCalledWith(
+            hoisted.coordinatorRef,
+            expect.objectContaining({
+                status: 'queued',
+                generation: 43,
+                dirtyMetricKinds: [DERIVED_METRIC_KINDS.Form],
+            }),
+            { merge: true },
+        );
+        expect(hoisted.enqueueDerivedMetricsTask).toHaveBeenCalledWith('user-1', 43);
+        expect(hoisted.recursiveDelete).not.toHaveBeenCalled();
+    });
+
+    it('cleans generated state if deletion starts before the replacement task is enqueued', async () => {
+        const { abandonDerivedMetricsProcessingAfterWriteBlock } = await import('./derived-metrics.service');
+        hoisted.tombstoneGet
+            .mockResolvedValueOnce({ exists: false, data: () => undefined })
+            .mockResolvedValueOnce({
+                exists: true,
+                data: () => ({ expireAt: { toMillis: () => Date.now() + 60_000 } }),
+            });
+        hoisted.transactionGet.mockResolvedValueOnce({
+            exists: true,
+            data: () => ({
+                status: 'processing',
+                generation: 42,
+                dirtyMetricKinds: [],
+                processingMetricKinds: [DERIVED_METRIC_KINDS.Form],
+                updatedAtMs: Date.now(),
+                startedAtMs: Date.now(),
+            }),
+        });
+
+        const result = await abandonDerivedMetricsProcessingAfterWriteBlock(
+            'user-1',
+            42,
+            [DERIVED_METRIC_KINDS.Form],
+            'task before snapshot building',
+        );
+
+        expect(result).toEqual({
+            cleaned: true,
+            requeued: false,
+            nextGeneration: null,
+            dirtyMetricKinds: [DERIVED_METRIC_KINDS.Form],
+        });
+        expect(hoisted.transactionSet).toHaveBeenCalledWith(
+            hoisted.coordinatorRef,
+            expect.objectContaining({
+                status: 'queued',
+                generation: 43,
+                dirtyMetricKinds: [DERIVED_METRIC_KINDS.Form],
+            }),
+            { merge: true },
+        );
+        expect(hoisted.recursiveDelete).toHaveBeenCalledWith(hoisted.derivedMetricsCollectionRef);
+        expect(hoisted.enqueueDerivedMetricsTask).not.toHaveBeenCalled();
     });
 });
 

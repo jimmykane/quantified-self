@@ -18,7 +18,10 @@ import { ProcessingMetaData } from '../shared/processing-metadata.interface';
 import { SPORTS_LIB_VERSION } from '../shared/sports-lib-version.node';
 import { sportsLibVersionToCode } from '../reparse/sports-lib-reparse.service';
 import { USAGE_LIMITS } from '../../../shared/limits';
-import { stripStreamsRecursivelyInPlace } from '../../../shared/firestore-write-sanitizer';
+import {
+  sanitizeEventFirestoreWritePayload,
+  stripStreamsRecursivelyInPlace,
+} from '../../../shared/firestore-write-sanitizer';
 import { FUNCTIONS_MANIFEST } from '../../../shared/functions-manifest';
 
 type MergeType = 'benchmark' | 'multi';
@@ -393,11 +396,12 @@ async function persistProcessingMetadata(userID: string, eventID: string): Promi
 }
 
 async function finalizeMergedEventMetadata(userID: string, eventID: string, mergeType: MergeType): Promise<void> {
+  const mergeMetadataPayload = sanitizeEventFirestoreWritePayload({
+    isMerge: mergeType === 'benchmark',
+    mergeType,
+  });
   const results = await Promise.allSettled([
-    admin.firestore().doc(`users/${userID}/events/${eventID}`).set({
-      isMerge: mergeType === 'benchmark',
-      mergeType,
-    }, { merge: true }),
+    admin.firestore().doc(`users/${userID}/events/${eventID}`).set(mergeMetadataPayload, { merge: true }),
     persistProcessingMetadata(userID, eventID),
   ]);
 
@@ -409,7 +413,7 @@ async function finalizeMergedEventMetadata(userID: string, eventID: string, merg
     return;
   }
 
-  logger.warn('[mergeEvents] Merged event was written but metadata finalization failed.', {
+  logger.error('[mergeEvents] Merged event was written but metadata finalization failed; returning failure.', {
     userID,
     eventID,
     mergeType,
@@ -418,6 +422,8 @@ async function finalizeMergedEventMetadata(userID: string, eventID: string, merg
       error: serializeError(result.reason),
     })),
   });
+
+  throw new HttpsError('internal', 'Could not merge events.');
 }
 
 async function resolveUploadLimitForUser(userID: string): Promise<number | null> {

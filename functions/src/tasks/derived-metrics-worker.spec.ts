@@ -24,6 +24,7 @@ vi.mock('../../../shared/functions-manifest', () => ({
 }));
 
 const hoisted = vi.hoisted(() => ({
+    abandonDerivedMetricsProcessingAfterWriteBlock: vi.fn(),
     fetchDerivedFormSnapshotSeed: vi.fn(),
     completeDerivedMetricsProcessing: vi.fn(),
     failDerivedMetricsProcessing: vi.fn(),
@@ -43,6 +44,7 @@ vi.mock('../derived-metrics/derived-metrics.service', async () => {
     );
     return {
         ...actual,
+        abandonDerivedMetricsProcessingAfterWriteBlock: hoisted.abandonDerivedMetricsProcessingAfterWriteBlock,
         fetchDerivedFormSnapshotSeed: hoisted.fetchDerivedFormSnapshotSeed,
         completeDerivedMetricsProcessing: hoisted.completeDerivedMetricsProcessing,
         failDerivedMetricsProcessing: hoisted.failDerivedMetricsProcessing,
@@ -63,6 +65,12 @@ describe('processDerivedMetricsTask', () => {
     beforeEach(() => {
         vi.clearAllMocks();
         hoisted.fetchDerivedFormSnapshotSeed.mockResolvedValue(null);
+        hoisted.abandonDerivedMetricsProcessingAfterWriteBlock.mockResolvedValue({
+            cleaned: true,
+            requeued: false,
+            nextGeneration: null,
+            dirtyMetricKinds: [DERIVED_METRIC_KINDS.Form, DERIVED_METRIC_KINDS.RecoveryNow],
+        });
         hoisted.startDerivedMetricsProcessing.mockResolvedValue({
             dirtyMetricKinds: [DERIVED_METRIC_KINDS.Form, DERIVED_METRIC_KINDS.RecoveryNow],
             startedAtMs: Date.now(),
@@ -191,6 +199,58 @@ describe('processDerivedMetricsTask', () => {
         expect(hoisted.markDerivedMetricSnapshotsBuilding).not.toHaveBeenCalled();
         expect(hoisted.writeDerivedMetricSnapshotsReady).not.toHaveBeenCalled();
         expect(hoisted.completeDerivedMetricsProcessing).not.toHaveBeenCalled();
+        expect(hoisted.abandonDerivedMetricsProcessingAfterWriteBlock).toHaveBeenCalledWith(
+            'deleted-user',
+            12,
+            [DERIVED_METRIC_KINDS.Form, DERIVED_METRIC_KINDS.RecoveryNow],
+            'task before snapshot building',
+        );
+    });
+
+    it('finalizes claimed work when deletion becomes active before ready snapshot writes', async () => {
+        hoisted.isDerivedMetricsUserWriteBlocked
+            .mockResolvedValueOnce(false)
+            .mockResolvedValueOnce(true);
+
+        await (processDerivedMetricsTask as any)({
+            data: {
+                uid: 'deleted-before-ready',
+                generation: 16,
+            },
+        });
+
+        expect(hoisted.markDerivedMetricSnapshotsBuilding).toHaveBeenCalled();
+        expect(hoisted.writeDerivedMetricSnapshotsReady).not.toHaveBeenCalled();
+        expect(hoisted.completeDerivedMetricsProcessing).not.toHaveBeenCalled();
+        expect(hoisted.abandonDerivedMetricsProcessingAfterWriteBlock).toHaveBeenCalledWith(
+            'deleted-before-ready',
+            16,
+            [DERIVED_METRIC_KINDS.Form, DERIVED_METRIC_KINDS.RecoveryNow],
+            'task before snapshot ready write',
+        );
+    });
+
+    it('finalizes claimed work when deletion becomes active before coordinator completion', async () => {
+        hoisted.isDerivedMetricsUserWriteBlocked
+            .mockResolvedValueOnce(false)
+            .mockResolvedValueOnce(false)
+            .mockResolvedValueOnce(true);
+
+        await (processDerivedMetricsTask as any)({
+            data: {
+                uid: 'deleted-before-complete',
+                generation: 17,
+            },
+        });
+
+        expect(hoisted.writeDerivedMetricSnapshotsReady).toHaveBeenCalled();
+        expect(hoisted.completeDerivedMetricsProcessing).not.toHaveBeenCalled();
+        expect(hoisted.abandonDerivedMetricsProcessingAfterWriteBlock).toHaveBeenCalledWith(
+            'deleted-before-complete',
+            17,
+            [DERIVED_METRIC_KINDS.Form, DERIVED_METRIC_KINDS.RecoveryNow],
+            'task before processing completion',
+        );
     });
 
     it('queries full event docs for new KPI derived kinds', async () => {
@@ -247,7 +307,7 @@ describe('processDerivedMetricsTask', () => {
         );
     });
 
-    it('does not write failed snapshots or coordinator state when deletion becomes active after processing error', async () => {
+    it('finalizes claimed work without failed snapshot writes when deletion becomes active after processing error', async () => {
         const transientError = new Error('transient_processing_failure');
         hoisted.writeDerivedMetricSnapshotsReady.mockRejectedValueOnce(transientError);
         hoisted.isDerivedMetricsUserWriteBlocked
@@ -264,5 +324,11 @@ describe('processDerivedMetricsTask', () => {
 
         expect(hoisted.markDerivedMetricSnapshotsFailed).not.toHaveBeenCalled();
         expect(hoisted.failDerivedMetricsProcessing).not.toHaveBeenCalled();
+        expect(hoisted.abandonDerivedMetricsProcessingAfterWriteBlock).toHaveBeenCalledWith(
+            'deleted-during-error',
+            15,
+            [DERIVED_METRIC_KINDS.Form, DERIVED_METRIC_KINDS.RecoveryNow],
+            'task before failure writes',
+        );
     });
 });

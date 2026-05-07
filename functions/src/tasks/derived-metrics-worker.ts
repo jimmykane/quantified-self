@@ -4,6 +4,7 @@ import { CLOUD_TASK_RETRY_CONFIG } from '../shared/queue-config';
 import { FUNCTIONS_MANIFEST } from '../../../shared/functions-manifest';
 import { DERIVED_METRIC_SCHEMA_VERSION } from '../../../shared/derived-metrics';
 import {
+    abandonDerivedMetricsProcessingAfterWriteBlock,
     areOnlyProjectionSensitiveMetricKinds,
     completeDerivedMetricsProcessing,
     failDerivedMetricsProcessing,
@@ -60,9 +61,16 @@ export const processDerivedMetricsTask = onTaskDispatched({
         });
         return;
     }
+    const abandonAfterWriteBlock = (logContext: string) => abandonDerivedMetricsProcessingAfterWriteBlock(
+        uid,
+        Math.floor(generation),
+        dirtyMetricKinds,
+        logContext,
+    );
 
     try {
         if (await isDerivedMetricsUserWriteBlocked(uid, 'task before snapshot building', { generation, dirtyMetricKinds })) {
+            await abandonAfterWriteBlock('task before snapshot building');
             return;
         }
         await markDerivedMetricSnapshotsBuilding(uid, dirtyMetricKinds);
@@ -99,6 +107,7 @@ export const processDerivedMetricsTask = onTaskDispatched({
             : [];
 
         if (await isDerivedMetricsUserWriteBlocked(uid, 'task before snapshot ready write', { generation, dirtyMetricKinds })) {
+            await abandonAfterWriteBlock('task before snapshot ready write');
             return;
         }
         await writeDerivedMetricSnapshotsReady(uid, dirtyMetricKinds, {
@@ -111,6 +120,7 @@ export const processDerivedMetricsTask = onTaskDispatched({
             formSourceDocCount: projectionFormSnapshotSeed?.sourceDocCount ?? null,
         });
         if (await isDerivedMetricsUserWriteBlocked(uid, 'task before processing completion', { generation, dirtyMetricKinds })) {
+            await abandonAfterWriteBlock('task before processing completion');
             return;
         }
         const completion = await completeDerivedMetricsProcessing(uid, Math.floor(generation));
@@ -144,6 +154,8 @@ export const processDerivedMetricsTask = onTaskDispatched({
         if (!await isDerivedMetricsUserWriteBlocked(uid, 'task before failure writes', { generation, dirtyMetricKinds })) {
             await markDerivedMetricSnapshotsFailed(uid, dirtyMetricKinds, processingError);
             await failDerivedMetricsProcessing(uid, Math.floor(generation), processingError, dirtyMetricKinds);
+        } else {
+            await abandonAfterWriteBlock('task before failure writes');
         }
         throw processingError;
     }

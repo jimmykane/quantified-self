@@ -626,22 +626,47 @@ describe('mergeEvents', () => {
     }, { merge: true });
   });
 
-  it('should still return success when metadata finalization fails after writing the merged event', async () => {
+  it('should surface merge classification finalization failures after writing the merged event', async () => {
     hoisted.mockDocSet.mockRejectedValueOnce(new Error('metadata write failed'));
 
     await expect(mergeEvents({
       auth: { uid: 'u1' },
       app: { appId: 'app-id' },
       data: { eventIds: ['e1', 'e2'], mergeType: 'benchmark' },
-    } as any)).resolves.toMatchObject({
-      eventId: 'merged-event-id',
-      mergeType: 'benchmark',
-    });
+    } as any)).rejects.toMatchObject({ code: 'internal' });
 
     expect(hoisted.mockWriteAllEventData).toHaveBeenCalledTimes(1);
     expect(hoisted.mockDocSet).toHaveBeenCalledWith({
       isMerge: true,
       mergeType: 'benchmark',
+    }, { merge: true });
+    expect(hoisted.mockDocSet).toHaveBeenCalledWith({
+      sportsLibVersion: expect.any(String),
+      sportsLibVersionCode: 9001004,
+      processedAt: 'SERVER_TIMESTAMP',
+    }, { merge: true });
+  });
+
+  it('should surface processing metadata finalization failures after writing the merged event', async () => {
+    hoisted.mockDocSet
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new Error('processing metadata write failed'));
+
+    await expect(mergeEvents({
+      auth: { uid: 'u1' },
+      app: { appId: 'app-id' },
+      data: { eventIds: ['e1', 'e2'], mergeType: 'benchmark' },
+    } as any)).rejects.toMatchObject({ code: 'internal' });
+
+    expect(hoisted.mockWriteAllEventData).toHaveBeenCalledTimes(1);
+    expect(hoisted.mockDocSet).toHaveBeenCalledWith({
+      isMerge: true,
+      mergeType: 'benchmark',
+    }, { merge: true });
+    expect(hoisted.mockDocSet).toHaveBeenCalledWith({
+      sportsLibVersion: expect.any(String),
+      sportsLibVersionCode: 9001004,
+      processedAt: 'SERVER_TIMESTAMP',
     }, { merge: true });
   });
 
