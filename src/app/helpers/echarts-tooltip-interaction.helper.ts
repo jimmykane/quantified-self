@@ -12,11 +12,17 @@ export interface EChartsTooltipSurfaceConfig {
 export interface EChartsMobileTapFeedbackOptions {
   axisPointerFeedback?: EChartsAxisPointerHapticFeedback;
   clickFeedback?: boolean;
+  surfaceClickFeedback?: boolean;
+  surfaceDragFeedback?: boolean;
+  surfaceDragThresholdPx?: number;
+  surfaceDragBucketPx?: number;
 }
 
 export const DASHBOARD_ECHARTS_MOBILE_TAP_FEEDBACK_OPTIONS: EChartsMobileTapFeedbackOptions = {
-  axisPointerFeedback: 'afterFirstInteraction',
+  axisPointerFeedback: 'always',
   clickFeedback: true,
+  surfaceClickFeedback: true,
+  surfaceDragFeedback: true,
 };
 
 export function isEChartsMobileTooltipViewport(): boolean {

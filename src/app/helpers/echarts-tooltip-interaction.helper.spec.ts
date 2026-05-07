@@ -21,10 +21,12 @@ describe('echarts-tooltip-interaction.helper', () => {
     expect(resolveEChartsTooltipTriggerOn(true, false)).toBe('mousemove|click');
   });
 
-  it('keeps dashboard axis-pointer haptics gated while preserving intentional tap feedback', () => {
+  it('enables dashboard tap and drag haptics explicitly', () => {
     expect(DASHBOARD_ECHARTS_MOBILE_TAP_FEEDBACK_OPTIONS).toEqual({
-      axisPointerFeedback: 'afterFirstInteraction',
+      axisPointerFeedback: 'always',
       clickFeedback: true,
+      surfaceClickFeedback: true,
+      surfaceDragFeedback: true,
     });
   });
 

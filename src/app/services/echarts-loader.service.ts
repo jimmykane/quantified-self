@@ -8,9 +8,18 @@ type EChartsCoreModule = typeof import('echarts/core');
 type EChartsOption = Parameters<EChartsType['setOption']>[0];
 
 const CLICK_AXIS_POINTER_HAPTIC_SUPPRESSION_MS = 180;
+const DEFAULT_SURFACE_DRAG_THRESHOLD_PX = 8;
+const DEFAULT_SURFACE_DRAG_BUCKET_PX = 24;
 type EChartsSetOptionSettings = Parameters<EChartsType['setOption']>[1];
 type EChartsResizeOptions = NonNullable<Parameters<EChartsType['resize']>[0]>;
 type EChartsInitOptions = Parameters<EChartsCoreModule['init']>[2];
+type ZRenderLike = {
+  on(eventName: string, handler: (params: unknown) => void): void;
+  off(eventName: string, handler: (params: unknown) => void): void;
+};
+type EChartsWithZRender = EChartsType & {
+  getZr?: () => ZRenderLike | null | undefined;
+};
 const SUPPRESSED_HAPTIC_EVENT_SOURCES = new Set([
   'event-chart-brush-zoom',
 ]);
@@ -163,8 +172,24 @@ export class EChartsLoaderService {
 
     const axisPointerFeedback = options.axisPointerFeedback || 'always';
     const clickFeedback = options.clickFeedback !== false;
+    const surfaceClickFeedback = options.surfaceClickFeedback === true;
+    const surfaceDragFeedback = options.surfaceDragFeedback === true;
+    const surfaceDragThresholdPx = this.resolvePositiveNumber(
+      options.surfaceDragThresholdPx,
+      DEFAULT_SURFACE_DRAG_THRESHOLD_PX
+    );
+    const surfaceDragBucketPx = this.resolvePositiveNumber(
+      options.surfaceDragBucketPx,
+      DEFAULT_SURFACE_DRAG_BUCKET_PX
+    );
     let axisPointerHapticsArmed = axisPointerFeedback === 'always';
     let suppressAxisPointerHapticUntilMs = 0;
+    let suppressChartClickHapticUntilMs = 0;
+    let suppressSurfaceClickHapticUntilMs = 0;
+    let surfacePointerActive = false;
+    let surfacePointerStart: { x: number; y: number } | null = null;
+    let surfacePointerMoved = false;
+    let lastSurfaceDragHapticKey: string | null = null;
     const armAxisPointerHaptics = (suppressClickEcho = false) => {
       if (axisPointerFeedback !== 'afterFirstInteraction') {
         return;
@@ -178,14 +203,60 @@ export class EChartsLoaderService {
         );
       }
     };
+    const suppressAxisPointerEcho = () => {
+      if (axisPointerFeedback !== 'afterFirstInteraction') {
+        return;
+      }
+      suppressAxisPointerHapticUntilMs = Math.max(
+        suppressAxisPointerHapticUntilMs,
+        Date.now() + CLICK_AXIS_POINTER_HAPTIC_SUPPRESSION_MS
+      );
+    };
+    const suppressAllClickEcho = () => {
+      const suppressUntilMs = Date.now() + CLICK_AXIS_POINTER_HAPTIC_SUPPRESSION_MS;
+      suppressChartClickHapticUntilMs = Math.max(
+        suppressChartClickHapticUntilMs,
+        suppressUntilMs
+      );
+      suppressSurfaceClickHapticUntilMs = Math.max(
+        suppressSurfaceClickHapticUntilMs,
+        suppressUntilMs
+      );
+    };
+    const suppressSurfaceClickEcho = () => {
+      suppressSurfaceClickHapticUntilMs = Math.max(
+        suppressSurfaceClickHapticUntilMs,
+        Date.now() + CLICK_AXIS_POINTER_HAPTIC_SUPPRESSION_MS
+      );
+    };
+    const suppressChartClickEcho = () => {
+      suppressChartClickHapticUntilMs = Math.max(
+        suppressChartClickHapticUntilMs,
+        Date.now() + CLICK_AXIS_POINTER_HAPTIC_SUPPRESSION_MS
+      );
+    };
+    const triggerChartClickFeedback = () => {
+      if (!clickFeedback || Date.now() <= suppressChartClickHapticUntilMs) {
+        return;
+      }
+      suppressSurfaceClickEcho();
+      suppressAxisPointerEcho();
+      this.hapticsService.selection();
+    };
+    const triggerSurfaceClickFeedback = () => {
+      if (!clickFeedback || Date.now() <= suppressSurfaceClickHapticUntilMs) {
+        return;
+      }
+      suppressChartClickEcho();
+      suppressAxisPointerEcho();
+      this.hapticsService.selection();
+    };
 
     const onChartClick = (params: unknown) => {
       if (!this.isHapticEligibleClickEvent(params)) {
         return;
       }
-      if (clickFeedback) {
-        this.hapticsService.selection();
-      }
+      triggerChartClickFeedback();
       armAxisPointerHaptics(true);
     };
     const onDataZoom = (params: unknown) => {
@@ -220,12 +291,73 @@ export class EChartsLoaderService {
 
       this.hapticsService.selection();
     };
+    const onSurfacePointerDown = (params: unknown) => {
+      surfacePointerActive = true;
+      surfacePointerStart = this.resolveSurfacePointerPosition(params);
+      surfacePointerMoved = false;
+      lastSurfaceDragHapticKey = null;
+    };
+    const onSurfacePointerMove = (params: unknown) => {
+      if (!surfaceDragFeedback || !surfacePointerActive || !surfacePointerStart) {
+        return;
+      }
+
+      const currentPointer = this.resolveSurfacePointerPosition(params);
+      if (!currentPointer) {
+        return;
+      }
+
+      const distance = Math.hypot(
+        currentPointer.x - surfacePointerStart.x,
+        currentPointer.y - surfacePointerStart.y
+      );
+      if (distance < surfaceDragThresholdPx) {
+        return;
+      }
+
+      surfacePointerMoved = true;
+      const hapticKey = this.resolveSurfaceDragHapticKey(currentPointer, surfaceDragBucketPx);
+      if (hapticKey === lastSurfaceDragHapticKey) {
+        return;
+      }
+
+      lastSurfaceDragHapticKey = hapticKey;
+      suppressAllClickEcho();
+      this.hapticsService.selection();
+      armAxisPointerHaptics();
+    };
+    const onSurfacePointerUp = () => {
+      surfacePointerActive = false;
+      surfacePointerStart = null;
+      lastSurfaceDragHapticKey = null;
+      if (surfacePointerMoved) {
+        suppressAllClickEcho();
+      }
+    };
+    const onSurfaceClick = () => {
+      if (!surfaceClickFeedback || surfacePointerMoved) {
+        surfacePointerMoved = false;
+        return;
+      }
+
+      triggerSurfaceClickFeedback();
+      armAxisPointerHaptics(true);
+    };
+
+    const zRender = surfaceClickFeedback || surfaceDragFeedback
+      ? (chart as EChartsWithZRender).getZr?.()
+      : null;
 
     this.zone.runOutsideAngular(() => {
       chart.on('click', onChartClick as never);
       chart.on('datazoom', onDataZoom as never);
       chart.on('brushEnd', onBrushEnd as never);
       chart.on('updateAxisPointer', onAxisPointerUpdate as never);
+      zRender?.on('mousedown', onSurfacePointerDown);
+      zRender?.on('mousemove', onSurfacePointerMove);
+      zRender?.on('mouseup', onSurfacePointerUp);
+      zRender?.on('globalout', onSurfacePointerUp);
+      zRender?.on('click', onSurfaceClick);
     });
 
     return () => {
@@ -234,6 +366,11 @@ export class EChartsLoaderService {
         chart.off('datazoom', onDataZoom as never);
         chart.off('brushEnd', onBrushEnd as never);
         chart.off('updateAxisPointer', onAxisPointerUpdate as never);
+        zRender?.off('mousedown', onSurfacePointerDown);
+        zRender?.off('mousemove', onSurfacePointerMove);
+        zRender?.off('mouseup', onSurfacePointerUp);
+        zRender?.off('globalout', onSurfacePointerUp);
+        zRender?.off('click', onSurfaceClick);
       });
     };
   }
@@ -360,6 +497,50 @@ export class EChartsLoaderService {
       return value.trim();
     }
     return null;
+  }
+
+  private resolveSurfacePointerPosition(params: unknown): { x: number; y: number } | null {
+    if (!params || typeof params !== 'object') {
+      return null;
+    }
+
+    const eventParams = params as {
+      offsetX?: unknown;
+      offsetY?: unknown;
+      event?: {
+        offsetX?: unknown;
+        offsetY?: unknown;
+        zrX?: unknown;
+        zrY?: unknown;
+      };
+    };
+    const x = this.resolveFiniteNumber(eventParams.offsetX, eventParams.event?.offsetX, eventParams.event?.zrX);
+    const y = this.resolveFiniteNumber(eventParams.offsetY, eventParams.event?.offsetY, eventParams.event?.zrY);
+    if (x === null || y === null) {
+      return null;
+    }
+
+    return { x, y };
+  }
+
+  private resolveSurfaceDragHapticKey(position: { x: number; y: number }, bucketPx: number): string {
+    return `${Math.floor(position.x / bucketPx)}:${Math.floor(position.y / bucketPx)}`;
+  }
+
+  private resolveFiniteNumber(...values: unknown[]): number | null {
+    for (const value of values) {
+      const numberValue = Number(value);
+      if (Number.isFinite(numberValue)) {
+        return numberValue;
+      }
+    }
+
+    return null;
+  }
+
+  private resolvePositiveNumber(value: unknown, fallback: number): number {
+    const numberValue = Number(value);
+    return Number.isFinite(numberValue) && numberValue > 0 ? numberValue : fallback;
   }
 
   private isSuppressedHapticSource(params: unknown): boolean {

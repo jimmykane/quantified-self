@@ -251,6 +251,19 @@ class MockSleepTrendChartComponent {
   @Input() mobileTapFeedbackOptions?: unknown;
 }
 
+@Component({
+  selector: 'app-event-intensity-zones',
+  template: '',
+  standalone: false
+})
+class MockEventIntensityZonesComponent {
+  @Input() activities: any;
+  @Input() darkTheme = false;
+  @Input() orientation?: 'horizontal' | 'vertical';
+  @Input() showHeader = true;
+  @Input() mobileTapFeedbackOptions?: unknown;
+}
+
 describe('TileChartComponent', () => {
   let fixture: ComponentFixture<TileChartComponent>;
   let component: TileChartComponent;
@@ -271,6 +284,7 @@ describe('TileChartComponent', () => {
         MockIntensityDistributionChartComponent,
         MockEfficiencyTrendChartComponent,
         MockSleepTrendChartComponent,
+        MockEventIntensityZonesComponent,
       ],
       schemas: [NO_ERRORS_SCHEMA]
     }).compileComponents();
@@ -380,6 +394,16 @@ describe('TileChartComponent', () => {
     fixture.detectChanges();
 
     expect(getColumnsComponent().mobileTapFeedbackOptions).toBe(DASHBOARD_ECHARTS_MOBILE_TAP_FEEDBACK_OPTIONS);
+  });
+
+  it('should pass the dashboard mobile tap profile to intensity zones chart renderer', () => {
+    component.chartType = ChartTypes.IntensityZones;
+
+    fixture.detectChanges();
+
+    const intensityZones = fixture.debugElement.query(By.directive(MockEventIntensityZonesComponent))
+      .componentInstance as MockEventIntensityZonesComponent;
+    expect(intensityZones.mobileTapFeedbackOptions).toBe(DASHBOARD_ECHARTS_MOBILE_TAP_FEEDBACK_OPTIONS);
   });
 
   it('should set vertical=true for ColumnsVertical', () => {
