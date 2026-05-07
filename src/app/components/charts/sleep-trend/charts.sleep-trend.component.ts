@@ -14,8 +14,13 @@ import {
   ECHARTS_CARTESIAN_IMMEDIATE_UPDATE_SETTINGS,
   EChartsHostController,
 } from '../../../helpers/echarts-host-controller';
-import { buildDashboardEChartsStyleTokens } from '../../../helpers/dashboard-echarts-style.helper';
 import {
+  buildDashboardEChartsTooltipChrome,
+  buildDashboardEChartsStyleTokens,
+  renderDashboardEChartsTooltipCard,
+} from '../../../helpers/dashboard-echarts-style.helper';
+import {
+  type EChartsMobileTapFeedbackOptions,
   isEChartsMobileTooltipViewport,
   resolveEChartsTooltipSurfaceConfig,
   resolveEChartsTooltipTriggerOn,
@@ -80,6 +85,7 @@ export class ChartsSleepTrendComponent implements AfterViewInit, OnChanges, OnDe
   @Input() canNavigateNewer = false;
   @Input() infoTooltip?: string | null;
   @Input() reserveTitleActionSpace = false;
+  @Input() mobileTapFeedbackOptions?: EChartsMobileTapFeedbackOptions | null;
 
   @ViewChild('chartDiv', { static: true }) chartDiv!: ElementRef<HTMLDivElement>;
 
@@ -103,6 +109,7 @@ export class ChartsSleepTrendComponent implements AfterViewInit, OnChanges, OnDe
       eChartsLoader: this.eChartsLoader,
       logger: this.logger,
       logPrefix: '[ChartsSleepTrendComponent]',
+      mobileTapFeedbackOptions: () => this.mobileTapFeedbackOptions,
     });
   }
 
@@ -288,15 +295,8 @@ export class ChartsSleepTrendComponent implements AfterViewInit, OnChanges, OnDe
         },
         renderMode: 'html',
         ...resolveEChartsTooltipSurfaceConfig(isMobileTooltipViewport),
-        borderWidth: 1,
-        borderColor: style.tooltipBorderColor,
-        backgroundColor: style.tooltipBackgroundColor,
-        textStyle: {
-          color: style.tooltipTextColor,
-          fontFamily: ECHARTS_GLOBAL_FONT_FAMILY,
-          fontSize: style.axisFontSize,
-        },
-        formatter: (params: AxisTooltipParam[]) => this.formatTooltip(params, points),
+        ...buildDashboardEChartsTooltipChrome(style),
+        formatter: (params: AxisTooltipParam[]) => this.formatTooltip(params, points, style),
       },
       legend: {
         show: !style.isCompactLayout,
@@ -337,7 +337,11 @@ export class ChartsSleepTrendComponent implements AfterViewInit, OnChanges, OnDe
     };
   }
 
-  private formatTooltip(params: AxisTooltipParam[], points: DashboardSleepTrendPoint[]): string {
+  private formatTooltip(
+    params: AxisTooltipParam[],
+    points: DashboardSleepTrendPoint[],
+    style: ReturnType<typeof buildDashboardEChartsStyleTokens>,
+  ): string {
     if (!Array.isArray(params) || params.length === 0) {
       return '';
     }
@@ -348,20 +352,22 @@ export class ChartsSleepTrendComponent implements AfterViewInit, OnChanges, OnDe
     }
     const averageHrvMs = this.toFiniteMetric(point.averageHrvMs);
 
-    const lines = [
-      `${point.providerLabel} · ${point.sleepDate}`,
-      `${this.formatDateTime(point.startTimeMs)} - ${this.formatDateTime(point.endTimeMs)}`,
-      `Total: ${formatSleepDuration(point.totalSeconds)}`,
+    const rows = [
+      { label: 'Total', value: formatSleepDuration(point.totalSeconds) },
       ...STAGE_SERIES
         .filter(stage => point[stage.key] > 0)
-        .map(stage => `${stage.name}: ${formatSleepDuration(point[stage.key])}`),
-      point.score !== null ? `Score: ${Math.round(point.score)}` : '',
-      point.averageHeartRateBpm !== null ? `HR avg: ${Math.round(point.averageHeartRateBpm)} bpm` : '',
-      averageHrvMs !== null ? `HRV: ${Math.round(averageHrvMs)} ms` : '',
-      point.maxSpo2Percent !== null ? `SpO2 max: ${Math.round(point.maxSpo2Percent)}%` : '',
-    ].filter(line => line.length > 0);
+        .map(stage => ({ label: stage.name, value: formatSleepDuration(point[stage.key]) })),
+      ...(point.score !== null ? [{ label: 'Score', value: `${Math.round(point.score)}` }] : []),
+      ...(point.averageHeartRateBpm !== null ? [{ label: 'HR avg', value: `${Math.round(point.averageHeartRateBpm)} bpm` }] : []),
+      ...(averageHrvMs !== null ? [{ label: 'HRV', value: `${Math.round(averageHrvMs)} ms` }] : []),
+      ...(point.maxSpo2Percent !== null ? [{ label: 'SpO2 max', value: `${Math.round(point.maxSpo2Percent)}%` }] : []),
+    ];
 
-    return lines.join('<br/>');
+    return renderDashboardEChartsTooltipCard(style, {
+      title: `${point.providerLabel} · ${point.sleepDate}`,
+      subtitle: `${this.formatDateTime(point.startTimeMs)} - ${this.formatDateTime(point.endTimeMs)}`,
+      rows,
+    });
   }
 
   private secondsToHours(seconds: number): number {

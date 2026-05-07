@@ -7,7 +7,6 @@ import { MaterialModule } from './material.module';
 import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { PrivacyIconComponent } from '../components/privacy-icon/privacy-icon.component';
 import { EventActionsComponent } from '../components/event-actions/event.actions.component';
-import { EventFormComponent } from '../components/event-form/event.form.component';
 import { ConfirmationDialogComponent } from '../components/confirmation-dialog/confirmation-dialog.component';
 import { DataTypeIconComponent } from '../components/data-type-icon/data-type-icon.component';
 
@@ -51,7 +50,6 @@ import { UploadActivitiesComponent } from '../components/upload/upload-activitie
         ShadeComponent,
         PrivacyIconComponent,
         EventActionsComponent,
-        EventFormComponent,
         ConfirmationDialogComponent,
         DataTypeIconComponent,
         EventSearchComponent,
@@ -91,7 +89,6 @@ import { UploadActivitiesComponent } from '../components/upload/upload-activitie
         AppLoadingOverlayComponent,
         PrivacyIconComponent,
         EventActionsComponent,
-        EventFormComponent,
         ConfirmationDialogComponent,
         DataTypeIconComponent,
         ReactiveFormsModule,

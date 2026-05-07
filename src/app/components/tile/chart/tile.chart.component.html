@@ -59,19 +59,22 @@
   <app-pie-chart [isLoading]="isLoading || isTileActionSaving" [data]="data" [darkTheme]="darkTheme" [chartDataType]="dataType"
     [chartDataValueType]="dataValueType" [chartDataCategoryType]="dataCategoryType"
     [chartDataTimeInterval]="dataTimeInterval" [userUnitSettings]="user?.settings?.unitSettings"
-    [recoveryNow]="recoveryNow" [recoveryNowStatus]="recoveryNowStatus" [enableRecoveryNowMode]="true">
+    [recoveryNow]="recoveryNow" [recoveryNowStatus]="recoveryNowStatus" [enableRecoveryNowMode]="true"
+    [mobileTapFeedbackOptions]="dashboardMobileTapFeedbackOptions">
   </app-pie-chart>
   }
   @if (chartType === chartTypes.Pie) {
   <app-pie-chart [isLoading]="isLoading || isTileActionSaving" [data]="data" [darkTheme]="darkTheme" [chartDataType]="dataType"
     [chartDataValueType]="dataValueType" [chartDataCategoryType]="dataCategoryType"
-    [chartDataTimeInterval]="dataTimeInterval" [userUnitSettings]="user?.settings?.unitSettings">
+    [chartDataTimeInterval]="dataTimeInterval" [userUnitSettings]="user?.settings?.unitSettings"
+    [mobileTapFeedbackOptions]="dashboardMobileTapFeedbackOptions">
   </app-pie-chart>
   }
   @if (chartType === formChartType) {
   <app-form-chart [isLoading]="isLoading || isTileActionSaving" [data]="data" [darkTheme]="darkTheme"
     [absoluteLatestPoint]="absoluteLatestFormPoint" [formStatus]="formStatus" [infoTooltip]="chartInfoTooltip"
-    [timelineWindow]="formTimelineWindow" [reserveTitleActionSpace]="showHeaderControls">
+    [timelineWindow]="formTimelineWindow" [reserveTitleActionSpace]="showHeaderControls"
+    [mobileTapFeedbackOptions]="dashboardMobileTapFeedbackOptions">
   </app-form-chart>
   }
   @if (
@@ -88,7 +91,7 @@
   ) {
   <app-kpi-chart [isLoading]="isLoading || isTileActionSaving" [darkTheme]="darkTheme" [chartType]="chartType"
     [infoTooltip]="chartInfoTooltip" [reserveTitleActionSpace]="showActions"
-    [compactRow]="compactKpiRow"
+    [compactRow]="compactKpiRow" [mobileTapFeedbackOptions]="dashboardMobileTapFeedbackOptions"
     [acwr]="acwr" [rampRate]="rampRate" [monotonyStrain]="monotonyStrain"
     [formNow]="formNow" [fitnessCtl]="fitnessCtl" [fatigueAtl]="fatigueAtl"
     [formPlus7d]="formPlus7d" [easyPercent]="easyPercent" [hardPercent]="hardPercent"
@@ -102,26 +105,30 @@
   }
   @if (chartType === freshnessForecastChartType) {
   <app-freshness-forecast-chart [isLoading]="isLoading || isTileActionSaving" [darkTheme]="darkTheme"
-    [forecast]="freshnessForecast" [status]="freshnessForecastStatus" [infoTooltip]="chartInfoTooltip">
+    [forecast]="freshnessForecast" [status]="freshnessForecastStatus" [infoTooltip]="chartInfoTooltip"
+    [mobileTapFeedbackOptions]="dashboardMobileTapFeedbackOptions">
   </app-freshness-forecast-chart>
   }
   @if (chartType === intensityDistributionChartType) {
   <app-intensity-distribution-chart [isLoading]="isLoading || isTileActionSaving" [darkTheme]="darkTheme"
     [distribution]="intensityDistribution" [status]="intensityDistributionStatus" [infoTooltip]="chartInfoTooltip"
-    [range]="derivedChartRange" [reserveTitleActionSpace]="showHeaderControls">
+    [range]="derivedChartRange" [reserveTitleActionSpace]="showHeaderControls"
+    [mobileTapFeedbackOptions]="dashboardMobileTapFeedbackOptions">
   </app-intensity-distribution-chart>
   }
   @if (chartType === efficiencyTrendChartType) {
   <app-efficiency-trend-chart [isLoading]="isLoading || isTileActionSaving" [darkTheme]="darkTheme"
     [trend]="efficiencyTrend" [status]="efficiencyTrendStatus" [infoTooltip]="chartInfoTooltip"
-    [range]="derivedChartRange" [reserveTitleActionSpace]="showHeaderControls">
+    [range]="derivedChartRange" [reserveTitleActionSpace]="showHeaderControls"
+    [mobileTapFeedbackOptions]="dashboardMobileTapFeedbackOptions">
   </app-efficiency-trend-chart>
   }
   @if (chartType === sleepTrendChartType) {
   <app-sleep-trend-chart [isLoading]="isLoading || isTileActionSaving" [darkTheme]="darkTheme"
     [sleepTrend]="sleepTrend" [sleepRange]="sleepTrendRange" [sleepWindowLabel]="sleepTrendWindowLabel"
     [canNavigateOlder]="sleepTrendCanNavigateOlder" [canNavigateNewer]="sleepTrendCanNavigateNewer"
-    [infoTooltip]="chartInfoTooltip" [reserveTitleActionSpace]="showHeaderControls">
+    [infoTooltip]="chartInfoTooltip" [reserveTitleActionSpace]="showHeaderControls"
+    [mobileTapFeedbackOptions]="dashboardMobileTapFeedbackOptions">
   </app-sleep-trend-chart>
   }
   @if (chartType === chartTypes.LinesHorizontal
@@ -129,7 +136,8 @@
   <app-xy-chart [isLoading]="isLoading || isTileActionSaving" [data]="data" [darkTheme]="darkTheme" [chartDataType]="dataType"
     [chartDataValueType]="dataValueType" [chartDataCategoryType]="dataCategoryType"
     [chartDataTimeInterval]="dataTimeInterval" [vertical]="chartType !== chartTypes.LinesHorizontal"
-    [userUnitSettings]="user?.settings?.unitSettings">
+    [userUnitSettings]="user?.settings?.unitSettings"
+    [mobileTapFeedbackOptions]="dashboardMobileTapFeedbackOptions">
   </app-xy-chart>
   }
   @if (chartType === chartTypes.ColumnsHorizontal
@@ -139,7 +147,8 @@
       ? 'columns'
       : 'pyramids'" [vertical]="chartType !== chartTypes.ColumnsHorizontal" [chartDataType]="dataType" [chartDataValueType]="dataValueType"
     [chartDataCategoryType]="dataCategoryType" [chartDataTimeInterval]="dataTimeInterval"
-    [userUnitSettings]="user?.settings?.unitSettings">
+    [userUnitSettings]="user?.settings?.unitSettings"
+    [mobileTapFeedbackOptions]="dashboardMobileTapFeedbackOptions">
   </app-columns-chart>
   }
 
@@ -148,7 +157,7 @@
     [errorHint]="'Needs activities with heart rate or power data'" [errorIcon]="'favorite'" [showSkeleton]="false"
     height="100%" [style.height.%]="100">
     <app-event-intensity-zones [activities]="data" [darkTheme]="darkTheme" [orientation]="'vertical'"
-      [showHeader]="false">
+      [showHeader]="false" [mobileTapFeedbackOptions]="dashboardMobileTapFeedbackOptions">
     </app-event-intensity-zones>
   </app-loading-overlay>
   }

@@ -3,11 +3,27 @@ import { getOrCreateEChartsTooltipHost } from './echarts-tooltip-host.helper';
 import { getViewportConstrainedTooltipPosition } from './echarts-tooltip-position.helper';
 
 export type EChartsTooltipTriggerOn = 'none' | 'click' | 'mousemove|click';
+export type EChartsAxisPointerHapticFeedback = 'always' | 'afterFirstInteraction' | 'off';
 export interface EChartsTooltipSurfaceConfig {
   appendTo?: typeof getOrCreateEChartsTooltipHost;
   confine: boolean;
   position?: typeof getViewportConstrainedTooltipPosition;
 }
+export interface EChartsMobileTapFeedbackOptions {
+  axisPointerFeedback?: EChartsAxisPointerHapticFeedback;
+  clickFeedback?: boolean;
+  surfaceClickFeedback?: boolean;
+  surfaceDragFeedback?: boolean;
+  surfaceDragThresholdPx?: number;
+  surfaceDragBucketPx?: number;
+}
+
+export const DASHBOARD_ECHARTS_MOBILE_TAP_FEEDBACK_OPTIONS: EChartsMobileTapFeedbackOptions = {
+  axisPointerFeedback: 'always',
+  clickFeedback: true,
+  surfaceClickFeedback: true,
+  surfaceDragFeedback: true,
+};
 
 export function isEChartsMobileTooltipViewport(): boolean {
   if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {

@@ -34,6 +34,7 @@ import {
 } from '../../../helpers/echarts-host-controller';
 import { buildEventEChartsVisualTokens } from '../../../helpers/event-echarts-common.helper';
 import {
+  type EChartsMobileTapFeedbackOptions,
   resolveEChartsTooltipSurfaceConfig,
   resolveEChartsTooltipTriggerOn
 } from '../../../helpers/echarts-tooltip-interaction.helper';
@@ -54,6 +55,7 @@ export class EventIntensityZonesComponent implements AfterViewInit, OnChanges, O
   @Input() useAnimations = false;
   @Input() orientation: 'horizontal' | 'vertical' = 'horizontal';
   @Input() showHeader = true;
+  @Input() mobileTapFeedbackOptions?: EChartsMobileTapFeedbackOptions | null;
 
   @ViewChild('chartDiv', { static: true }) chartDiv!: ElementRef<HTMLDivElement>;
 
@@ -74,6 +76,7 @@ export class EventIntensityZonesComponent implements AfterViewInit, OnChanges, O
       initOptions: {
         useDirtyRect: true,
       },
+      mobileTapFeedbackOptions: () => this.mobileTapFeedbackOptions,
     });
 
     this.breakpointSubscription = this.breakpointObserver

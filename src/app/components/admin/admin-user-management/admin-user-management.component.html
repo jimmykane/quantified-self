@@ -104,6 +104,36 @@
                     <mat-spinner diameter="24"></mat-spinner>
                 </div>
             </mat-card>
+
+            <!-- Total Events -->
+            <mat-card class="app-stat-card">
+                <div class="app-stat-header">
+                    <mat-icon>fitness_center</mat-icon>
+                    <span>Total Events</span>
+                    <button mat-icon-button type="button" class="app-stat-action" matTooltip="Refresh event count"
+                        aria-label="Refresh event count" [disabled]="isRefreshingEventCount"
+                        (click)="refreshGlobalEventCount()">
+                        @if (isRefreshingEventCount) {
+                        <mat-spinner diameter="18"></mat-spinner>
+                        } @else {
+                        <mat-icon>refresh</mat-icon>
+                        }
+                    </button>
+                </div>
+                @if (userStats) {
+                @if (userStats.events.total !== null) {
+                <div class="app-stat-value">{{ userStats.events.total | compactCount }}</div>
+                @if (userStats.events.computedAt) {
+                <div class="app-stat-footnote">Updated {{ userStats.events.computedAt | date:'short' }}</div>
+                }
+                } @else {
+                <div class="app-stat-value app-stat-value-muted">-</div>
+                }
+                }
+                <div class="app-spinner-mini" *ngIf="!userStats">
+                    <mat-spinner diameter="24"></mat-spinner>
+                </div>
+            </mat-card>
         </div>
 
         <!-- Auth Provider Breakdown Chart -->
@@ -256,6 +286,18 @@
                     <ng-container matColumnDef="aiCreditsConsumed">
                         <th mat-header-cell *matHeaderCellDef> AI Credits Used </th>
                         <td mat-cell *matCellDef="let user"> {{ (user.aiCreditsConsumed ?? 0) | number }} </td>
+                    </ng-container>
+
+                    <!-- Events Column -->
+                    <ng-container matColumnDef="eventStats">
+                        <th mat-header-cell *matHeaderCellDef> Events </th>
+                        <td mat-cell *matCellDef="let user">
+                            @if (user.eventStats?.total !== null && user.eventStats?.total !== undefined) {
+                            <span>{{ user.eventStats?.total | compactCount }}</span>
+                            } @else {
+                            <span class="text-detail-muted">-</span>
+                            }
+                        </td>
                     </ng-container>
 
                     <!-- Services Column -->

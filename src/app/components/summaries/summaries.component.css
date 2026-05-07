@@ -20,6 +20,10 @@
   min-width: 0;
 }
 
+.dashboard-summary-header {
+  flex-wrap: wrap;
+}
+
 .dashboard-section-title-block {
   align-items: center;
   display: flex;
@@ -59,6 +63,10 @@
   display: flex;
   flex: 0 0 auto;
   margin-left: auto;
+}
+
+.dashboard-summary-header .dashboard-section-actions {
+  margin-left: 0;
 }
 
 .dashboard-manager-button {

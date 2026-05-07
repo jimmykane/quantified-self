@@ -631,6 +631,23 @@ describe('Firestore Security Rules', () => {
                     originalFiles: [{ path: 'users/attacker/events/e1/original.fit' }]
                 }));
             });
+
+            it('should deny owner updating merge classification metadata', async () => {
+                const db = testEnv.authenticatedContext(userId).firestore();
+                await testEnv.withSecurityRulesDisabled(async (context) => {
+                    await context.firestore().doc(`users/${userId}/events/${eventId}`).set({
+                        name: 'Morning Run',
+                        privacy: 'private',
+                        isMerge: false,
+                        mergeType: 'multi'
+                    });
+                });
+
+                await assertFails(db.collection(`users/${userId}/events`).doc(eventId).update({
+                    isMerge: true,
+                    mergeType: 'benchmark'
+                }));
+            });
         });
 
         describe('System Status (users/{uid}/system/status)', () => {

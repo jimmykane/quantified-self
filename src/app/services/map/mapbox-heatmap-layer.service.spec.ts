@@ -91,6 +91,25 @@ describe('MapboxHeatmapLayerService', () => {
         expect(map.off).toHaveBeenCalledWith('idle', expect.any(Function));
     });
 
+    it('renderGeoJsonHeatmapLayer should not defer work on a removed map', () => {
+        const { map } = createMapHarness({ styleReady: false });
+        (map as any)._removed = true;
+
+        service.renderGeoJsonHeatmapLayer(map as any, {
+            sourceId: 'heat-source',
+            layerId: 'heat-layer',
+            featureCollection: {
+                type: 'FeatureCollection' as const,
+                features: [{ type: 'Feature', geometry: { type: 'Point', coordinates: [0, 0] }, properties: {} }]
+            },
+            paint: { 'heatmap-opacity': 0.8 }
+        });
+
+        expect(map.on).not.toHaveBeenCalled();
+        expect(map.addSource).not.toHaveBeenCalled();
+        expect(map.addLayer).not.toHaveBeenCalled();
+    });
+
     it('setLayerVisibility should defer until style is ready and then apply visibility', () => {
         const { map, handlers, setStyleReady } = createMapHarness({ styleReady: false, hasLayer: true });
 
@@ -120,5 +139,34 @@ describe('MapboxHeatmapLayerService', () => {
         expect(mapWithoutLayerAndSource.removeLayer).not.toHaveBeenCalled();
         expect(mapWithoutLayerAndSource.removeSource).not.toHaveBeenCalled();
     });
-});
 
+    it('clearLayerAndSource should no-op when Mapbox style internals are unavailable', () => {
+        const mapDuringStyleTeardown = createMapHarness({ hasLayer: true, hasSource: true }).map;
+        mapDuringStyleTeardown.getLayer.mockImplementation(() => {
+            throw new TypeError("Cannot read properties of undefined (reading 'getOwnLayer')");
+        });
+        mapDuringStyleTeardown.getSource.mockImplementation(() => {
+            throw new TypeError("Cannot read properties of undefined (reading 'getOwnSource')");
+        });
+
+        expect(() => service.clearLayerAndSource(mapDuringStyleTeardown as any, 'heat-source', 'heat-layer')).not.toThrow();
+
+        expect(mapDuringStyleTeardown.removeLayer).not.toHaveBeenCalled();
+        expect(mapDuringStyleTeardown.removeSource).not.toHaveBeenCalled();
+    });
+
+    it('clearLayerAndSource should ignore remove failures during Mapbox teardown', () => {
+        const mapDuringRemoval = createMapHarness({ hasLayer: true, hasSource: true }).map;
+        mapDuringRemoval.removeLayer.mockImplementation(() => {
+            throw new Error('Style is not done loading');
+        });
+        mapDuringRemoval.removeSource.mockImplementation(() => {
+            throw new Error('Style is not done loading');
+        });
+
+        expect(() => service.clearLayerAndSource(mapDuringRemoval as any, 'heat-source', 'heat-layer')).not.toThrow();
+
+        expect(mapDuringRemoval.removeLayer).toHaveBeenCalledWith('heat-layer');
+        expect(mapDuringRemoval.removeSource).toHaveBeenCalledWith('heat-source');
+    });
+});

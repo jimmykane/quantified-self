@@ -108,6 +108,7 @@ export const HELP_SECTIONS: HelpSection[] = [
 - The default KPI rows are the core derived training-metrics set: **Form Now**, **Fitness (CTL)**, **Fatigue (ATL)**, and **Ramp Rate**.
 - Additional KPI rows such as **ACWR**, **Monotony / Strain**, **Form +7d**, **Easy %**, **Hard %**, and **Efficiency Δ (4w)** remain available from Dashboard manager.
 - KPI rows are shown in the compact **Today** section above the main dashboard grid.
+- The **Today** header can show **Uploaded activities**, which counts current uploaded activity events.
 - On mobile, Today rows stay compact while the chart/map grid stays unchanged below.
 - KPI choices in Dashboard manager are grouped as **Load**, **Readiness**, and **Execution** for both manual and preset flows.
 - Curated and KPI tiles include an **info** icon beside the title with formulas and interpretation guidance.
@@ -141,7 +142,7 @@ export const HELP_SECTIONS: HelpSection[] = [
 
 - The curated **Recovery** pie tile is optional; existing dashboards can receive it once through the default curated auto-add, and removing it prevents future automatic adds.
 - The tile shows live recovery split between **Left now** and **Elapsed**.
-- The summary shows **Recovery Left Now**, plus **Active total** and **Latest workout** recovery context.
+- The summary shows **Recovery left**, plus **Active total** and **Latest workout** recovery context.
 - Active totals only include currently active recovery windows, not all historical recovery values.
 - Extremely large recovery values above 14 days are treated as outliers and ignored.
 - Remaining recovery updates every minute while the tile is visible.

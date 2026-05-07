@@ -18,7 +18,10 @@ import { ProcessingMetaData } from '../shared/processing-metadata.interface';
 import { SPORTS_LIB_VERSION } from '../shared/sports-lib-version.node';
 import { sportsLibVersionToCode } from '../reparse/sports-lib-reparse.service';
 import { USAGE_LIMITS } from '../../../shared/limits';
-import { stripStreamsRecursivelyInPlace } from '../../../shared/firestore-write-sanitizer';
+import {
+  sanitizeEventFirestoreWritePayload,
+  stripStreamsRecursivelyInPlace,
+} from '../../../shared/firestore-write-sanitizer';
 import { FUNCTIONS_MANIFEST } from '../../../shared/functions-manifest';
 
 type MergeType = 'benchmark' | 'multi';
@@ -392,6 +395,37 @@ async function persistProcessingMetadata(userID: string, eventID: string): Promi
     .set(processingPayload, { merge: true });
 }
 
+async function finalizeMergedEventMetadata(userID: string, eventID: string, mergeType: MergeType): Promise<void> {
+  const mergeMetadataPayload = sanitizeEventFirestoreWritePayload({
+    isMerge: mergeType === 'benchmark',
+    mergeType,
+  });
+  const results = await Promise.allSettled([
+    admin.firestore().doc(`users/${userID}/events/${eventID}`).set(mergeMetadataPayload, { merge: true }),
+    persistProcessingMetadata(userID, eventID),
+  ]);
+
+  const failures = results
+    .map((result, index) => ({ result, index }))
+    .filter((entry): entry is { result: PromiseRejectedResult; index: number } => entry.result.status === 'rejected');
+
+  if (!failures.length) {
+    return;
+  }
+
+  logger.error('[mergeEvents] Merged event was written but metadata finalization failed; returning failure.', {
+    userID,
+    eventID,
+    mergeType,
+    failures: failures.map(({ result, index }) => ({
+      write: index === 0 ? 'mergeMetadata' : 'processingMetadata',
+      error: serializeError(result.reason),
+    })),
+  });
+
+  throw new HttpsError('internal', 'Could not merge events.');
+}
+
 async function resolveUploadLimitForUser(userID: string): Promise<number | null> {
   if (await hasProAccess(userID)) {
     return null;
@@ -549,11 +583,7 @@ export const mergeEvents = onCall({
 
     const writer = new EventWriter(getFirestoreAdapter(), getStorageAdapter());
     await writer.writeAllEventData(userID, mergedEvent as any, originalFiles);
-    await admin.firestore().doc(`users/${userID}/events/${mergedEventID}`).set({
-      isMerge: mergeType === 'benchmark',
-      mergeType,
-    }, { merge: true });
-    await persistProcessingMetadata(userID, mergedEventID);
+    await finalizeMergedEventMetadata(userID, mergedEventID, mergeType);
 
     return {
       eventId: mergedEventID,

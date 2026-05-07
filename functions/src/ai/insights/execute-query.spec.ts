@@ -335,6 +335,14 @@ describe('execute-query', () => {
       { id: 'e1', data: () => ({ startDate: new Date('2026-01-10T12:00:00.000Z') }) },
       { id: 'e2', data: () => ({ startDate: new Date('2026-01-11T12:00:00.000Z') }) },
       { id: 'e3', data: () => ({ startDate: new Date('2026-01-12T12:00:00.000Z') }) },
+      {
+        id: 'e4',
+        data: () => ({
+          startDate: new Date('2026-01-13T12:00:00.000Z'),
+          mergeType: 'multi',
+          originalFiles: [{ path: 'source-a.fit' }, { path: 'source-b.fit' }],
+        }),
+      },
     ]);
 
     const importEvent = vi
@@ -357,12 +365,18 @@ describe('execute-query', () => {
         startDate: new Date('2026-01-12T12:00:00.000Z'),
         activityTypes: [ActivityTypes.Running],
         stats: { [DataDistance.type]: 10 },
+      }))
+      .mockImplementationOnce(() => createMockEvent({
+        id: 'e4',
+        startDate: new Date('2026-01-13T12:00:00.000Z'),
+        activityTypes: [ActivityTypes.Cycling],
+        stats: { [DataDistance.type]: 100 },
       }));
 
     setExecuteQueryDependenciesForTesting({
       fetchEventDocs,
       fetchDebugEventSnapshot: vi.fn(async () => ({
-        totalEventsCount: 3,
+        totalEventsCount: 4,
         recentEventsSample: [],
       })),
       importEvent,

@@ -267,6 +267,26 @@ describe('TracksMapManager', () => {
             const afterStyleReload = mockMap.addLayer.mock.calls.filter((call) => call[0]?.id === 'jump-heat-layer').length;
             expect(afterStyleReload).toBeGreaterThan(beforeStyleReload);
         });
+
+        it('should not throw when jump heatmap visibility changes during style teardown', () => {
+            mockMap.getSource.mockReturnValue(null);
+            mockMap.getLayer.mockReturnValue(null);
+            manager.setJumpHeatPoints([{ lng: 10, lat: 20, hangTime: 1.1, distance: 3.2 }]);
+            vi.clearAllMocks();
+
+            mockMap.isStyleLoaded.mockReturnValue(false);
+            mockMap.getLayer.mockImplementation(() => {
+                throw new TypeError("Cannot read properties of undefined (reading 'getOwnLayer')");
+            });
+
+            expect(() => manager.setJumpHeatmapVisible(false)).not.toThrow();
+
+            expect(mockMap.setLayoutProperty).not.toHaveBeenCalled();
+            expect(mockMap.on).toHaveBeenCalledWith('style.load', expect.any(Function));
+
+            mockMap.getLayer.mockReset();
+            mockMap.isStyleLoaded.mockReturnValue(true);
+        });
     });
 
     describe('home area', () => {

@@ -47,7 +47,7 @@ import { AppProcessingService } from '../../services/app.processing.service';
 import { AppEventUtilities } from '../../utils/app.event.utilities';
 import { AppBenchmarkFlowService } from '../../services/app.benchmark-flow.service';
 import { MergeOptionsDialogComponent } from './merge-options-dialog/merge-options-dialog.component';
-import { AppEventMergeService, MergeType } from '../../services/app.event-merge.service';
+import { AppEventMergeService, MergeEventResponse, MergeType } from '../../services/app.event-merge.service';
 
 interface EventTableRowCacheEntry {
   event: EventInterface;
@@ -428,15 +428,9 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       return;
     }
 
+    let result: MergeEventResponse;
     try {
-      const result = await this.eventMergeService.mergeEvents(eventIDs, mergeType);
-
-      this.analyticsService.logEvent('merge_events');
-      await this.router.navigate(['/user', this.user.uid, 'event', result.eventId], {});
-      dialogRef.close(true);
-      this.snackBar.open('Events merged', undefined, {
-        duration: 2000,
-      });
+      result = await this.eventMergeService.mergeEvents(eventIDs, mergeType);
     } catch (error) {
       this.logger.captureException(error, {
         extra: {
@@ -450,7 +444,40 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       });
       dialogRef.disableClose = false;
       dialogRef.componentInstance.isMerging = false;
+      return;
     }
+
+    try {
+      this.analyticsService.logEvent('merge_events');
+    } catch (error) {
+      this.logger.warn('Failed to log merge event analytics.', error);
+    }
+
+    dialogRef.close(true);
+
+    try {
+      const navigated = await this.router.navigate(['/user', this.user.uid, 'event', result.eventId], {});
+      if (navigated) {
+        this.snackBar.open('Events merged', undefined, {
+          duration: 2000,
+        });
+        return;
+      }
+    } catch (error) {
+      this.logger.captureException(error, {
+        extra: {
+          eventIDs,
+          mergeType,
+          mergedEventID: result.eventId,
+          stage: 'open_merged_event',
+        }
+      });
+    }
+
+    this.loaded();
+    this.snackBar.open('Events merged. Open the merged event from the table once it appears.', undefined, {
+      duration: 5000,
+    });
   }
 
   async deleteSelection() {

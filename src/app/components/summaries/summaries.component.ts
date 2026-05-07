@@ -152,7 +152,6 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   public sleepTrendCanNavigateNewer = false;
   public todayDateSubtitle = '';
 
-
   private appThemeSubscription: Subscription | null = null;
   private derivedMetricsSubscription: Subscription | null = null;
   private derivedMetricsUserUID: string | null = null;
@@ -662,6 +661,10 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   }
 
   private resolveDashboardAutoTileListenerKey(): string | null {
+    return this.resolveOwnDashboardUID();
+  }
+
+  private resolveOwnDashboardUID(): string | null {
     if (this.showActions !== true) {
       return null;
     }

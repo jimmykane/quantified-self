@@ -97,6 +97,9 @@ describe('AdminService', () => {
             canceled: 20,
             cancelScheduled: 12,
             onboardingCompleted: 160,
+            events: {
+                total: 1_000_000,
+            },
             providers: {}
         };
         functionsServiceMock.call.mockResolvedValue({ data: mockData });
@@ -106,6 +109,45 @@ describe('AdminService', () => {
 
         expect(functionsServiceMock.call).toHaveBeenCalledWith('getUserCount');
         expect(stats).toEqual(mockData);
+    });
+
+    it('should mark missing event count fields from getUserCount as unavailable', async () => {
+        functionsServiceMock.call.mockResolvedValue({
+            data: {
+                count: 2,
+                providers: {}
+            }
+        });
+
+        const stats = await firstValueFrom(service.getTotalUserCount());
+
+        expect(stats.events).toEqual({ total: null });
+    });
+
+    it('should request a forced event count refresh when asked', async () => {
+        functionsServiceMock.call.mockResolvedValue({
+            data: {
+                count: 2,
+                total: 2,
+                providers: {},
+                events: {
+                    total: 123,
+                    cacheStatus: 'refreshed',
+                    computedAt: '2026-05-07T05:00:00.000Z',
+                    expireAt: '2026-05-07T06:00:00.000Z',
+                },
+            }
+        });
+
+        const stats = await firstValueFrom(service.getTotalUserCount({ refreshEventCount: true }));
+
+        expect(functionsServiceMock.call).toHaveBeenCalledWith('getUserCount', { refreshEventCount: true });
+        expect(stats.events).toEqual({
+            total: 123,
+            cacheStatus: 'refreshed',
+            computedAt: '2026-05-07T05:00:00.000Z',
+            expireAt: '2026-05-07T06:00:00.000Z',
+        });
     });
 
     it('should call impersonateUser Cloud Function and return token', async () => {

@@ -14,9 +14,14 @@ import {
   ECHARTS_CARTESIAN_IMMEDIATE_UPDATE_SETTINGS,
   EChartsHostController,
 } from '../../../helpers/echarts-host-controller';
-import { buildDashboardEChartsStyleTokens } from '../../../helpers/dashboard-echarts-style.helper';
+import {
+  buildDashboardEChartsTooltipChrome,
+  buildDashboardEChartsStyleTokens,
+  renderDashboardEChartsTooltipCard,
+} from '../../../helpers/dashboard-echarts-style.helper';
 import { buildDashboardValueAxisConfig } from '../../../helpers/dashboard-echarts-yaxis.helper';
 import {
+  type EChartsMobileTapFeedbackOptions,
   isEChartsMobileTooltipViewport,
   resolveEChartsTooltipSurfaceConfig,
   resolveEChartsTooltipTriggerOn,
@@ -52,6 +57,7 @@ export class ChartsFreshnessForecastComponent implements AfterViewInit, OnChange
   @Input() forecast?: DashboardFreshnessForecastContext | null;
   @Input() status?: DashboardDerivedMetricStatus | null;
   @Input() infoTooltip?: string | null;
+  @Input() mobileTapFeedbackOptions?: EChartsMobileTapFeedbackOptions | null;
 
   @ViewChild('chartDiv', { static: true }) chartDiv!: ElementRef<HTMLDivElement>;
 
@@ -72,6 +78,7 @@ export class ChartsFreshnessForecastComponent implements AfterViewInit, OnChange
       eChartsLoader: this.eChartsLoader,
       logger: this.logger,
       logPrefix: '[ChartsFreshnessForecastComponent]',
+      mobileTapFeedbackOptions: () => this.mobileTapFeedbackOptions,
     });
   }
 
@@ -190,19 +197,12 @@ export class ChartsFreshnessForecastComponent implements AfterViewInit, OnChange
       tooltip: {
         show: true,
         trigger: 'axis',
-        triggerOn: resolveEChartsTooltipTriggerOn(true, false),
+        triggerOn: resolveEChartsTooltipTriggerOn(true, isMobileTooltipViewport),
         axisPointer: { type: 'line' },
         renderMode: 'html',
         ...resolveEChartsTooltipSurfaceConfig(isMobileTooltipViewport),
-        borderWidth: 1,
-        borderColor: style.tooltipBorderColor,
-        backgroundColor: style.tooltipBackgroundColor,
-        textStyle: {
-          color: style.tooltipTextColor,
-          fontFamily: ECHARTS_GLOBAL_FONT_FAMILY,
-          fontSize: style.axisFontSize,
-        },
-        formatter: (params: AxisTooltipParam[]) => this.formatTooltip(params, points),
+        ...buildDashboardEChartsTooltipChrome(style),
+        formatter: (params: AxisTooltipParam[]) => this.formatTooltip(params, points, style),
       },
       xAxis: {
         type: 'time',
@@ -291,7 +291,11 @@ export class ChartsFreshnessForecastComponent implements AfterViewInit, OnChange
     };
   }
 
-  private formatTooltip(params: AxisTooltipParam[], points: DashboardFreshnessForecastPoint[]): string {
+  private formatTooltip(
+    params: AxisTooltipParam[],
+    points: DashboardFreshnessForecastPoint[],
+    style: ReturnType<typeof buildDashboardEChartsStyleTokens>,
+  ): string {
     const point = this.resolveTooltipPoint(params, points);
     if (!point) {
       return '';
@@ -318,21 +322,22 @@ export class ChartsFreshnessForecastComponent implements AfterViewInit, OnChange
       ? `Forecast${forecastOffset ? ` · Day +${forecastOffset}` : ''}`
       : 'Observed';
 
-    const lines = [
-      dateLabel,
-      phaseLabel,
-      `Fitness (CTL): ${this.formatValue(point.ctl)}`,
-      `Fatigue (ATL): ${this.formatValue(point.atl)}`,
-      `Form (TSB): ${this.formatSignedValue(formValue)} · ${status.title}`,
-      `TSS: ${this.formatValue(point.trainingStressScore)}`,
+    const rows = [
+      { label: 'Fitness (CTL)', value: this.formatValue(point.ctl) },
+      { label: 'Fatigue (ATL)', value: this.formatValue(point.atl) },
+      { label: 'Form (TSB)', value: `${this.formatSignedValue(formValue)} · ${status.title}` },
+      { label: 'TSS', value: this.formatValue(point.trainingStressScore) },
     ];
     if (deltaForm !== null) {
-      lines.push(`Δ Form vs prev: ${this.formatSignedValue(deltaForm)}`);
+      rows.push({ label: 'Δ Form vs prev', value: this.formatSignedValue(deltaForm) });
     }
-    if (point.isForecast) {
-      lines.push('Assumes zero load.');
-    }
-    return lines.join('<br/>');
+
+    return renderDashboardEChartsTooltipCard(style, {
+      title: status.title,
+      subtitle: `${dateLabel} · ${phaseLabel}`,
+      rows,
+      notes: point.isForecast ? ['Assumes zero load.'] : [],
+    });
   }
 
   private resolveTooltipPoint(

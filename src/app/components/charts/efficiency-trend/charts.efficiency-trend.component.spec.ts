@@ -180,6 +180,7 @@ describe('ChartsEfficiencyTrendComponent', () => {
       const setOptionCall = mockLoader.setOption.mock.calls.at(-1) || [];
       const optionCandidate = setOptionCall[1] || setOptionCall[0];
       const option = optionCandidate as Record<string, any>;
+      expect(option?.tooltip?.triggerOn).toBe('click');
       expect(option?.xAxis?.axisPointer?.handle?.show).toBe(true);
       expect(option?.xAxis?.axisPointer?.handle?.size).toBe(20);
     } finally {

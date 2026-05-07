@@ -266,7 +266,7 @@ describe('ChartsPieComponent', () => {
       component.userUnitSettings,
     );
     const recoverySliceNames = option.series[0].data.map((entry: { name: string }) => entry.name);
-    expect(option.graphic[0].children[0].style.text).toBe('Recovery Left Now');
+    expect(option.graphic[0].children[0].style.text).toBe('Recovery left');
     expect(option.graphic[0].children[1].style.text).toBe(expectedRemaining);
     expect(option.graphic[0].children[2].style.text).toBe(`Total recovery: ${expectedTotal}`);
     expect(recoverySliceNames).toEqual(['Left now', 'Elapsed']);
@@ -342,7 +342,7 @@ describe('ChartsPieComponent', () => {
     await new Promise(resolve => setTimeout(resolve, 0));
 
     const option = mockLoader.setOption.mock.calls.at(-1)?.[1] as Record<string, any>;
-    expect(option.graphic[0].children[0].style.text).not.toBe('Recovery Left Now');
+    expect(option.graphic[0].children[0].style.text).not.toBe('Recovery left');
     expect(option.series[0].data.map((entry: { name: string }) => entry.name)).not.toEqual(['Left now', 'Elapsed']);
   });
 

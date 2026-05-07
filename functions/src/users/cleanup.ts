@@ -5,6 +5,7 @@ import { deauthorizeServiceForUser, getServiceConfig } from '../OAuth2';
 import { GARMIN_API_TOKENS_COLLECTION_NAME } from '../garmin/constants';
 
 import { ServiceNames } from '@sports-alliance/sports-lib';
+import { DERIVED_METRICS_COLLECTION_ID } from '../../../shared/derived-metrics';
 import { getExpireAtTimestamp, TTL_CONFIG } from '../shared/ttl-config';
 
 export const ORPHANED_SERVICE_TOKENS_COLLECTION_NAME = 'orphaned_service_tokens';
@@ -129,6 +130,23 @@ async function safeDeauthorizeAndCleanup(uid: string, config: ServiceCleanupConf
     }
 }
 
+async function cleanupUserScopedGeneratedState(uid: string): Promise<void> {
+    const db = admin.firestore();
+    const userRef = db.collection('users').doc(uid);
+    const cleanupTargets = [
+        { label: 'derived metrics', ref: userRef.collection(DERIVED_METRICS_COLLECTION_ID) },
+    ];
+
+    for (const target of cleanupTargets) {
+        try {
+            await db.recursiveDelete(target.ref);
+            logger.info(`[Cleanup] Recursively deleted ${target.label} generated state for user ${uid}`);
+        } catch (error) {
+            logger.error(`[Cleanup] Failed to recursively delete ${target.label} generated state for user ${uid}`, error);
+        }
+    }
+}
+
 export const cleanupUserAccounts = functions.region('europe-west2').auth.user().onDelete(async (user) => {
     const uid = user.uid;
     logger.info(`[Cleanup] User ${uid} deleted. Starting service deauthorization cleanup.`);
@@ -167,6 +185,8 @@ export const cleanupUserAccounts = functions.region('europe-west2').auth.user().
     }
 
     logger.info(`[Cleanup] Service deauthorization clean up completed for user ${uid}`);
+
+    await cleanupUserScopedGeneratedState(uid);
 
     // Cleanup Emails
     try {

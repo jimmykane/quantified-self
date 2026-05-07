@@ -16,7 +16,10 @@ import { ChartsXYComponent } from './charts.xy.component';
 import { EChartsLoaderService } from '../../../services/echarts-loader.service';
 import { AppEventColorService } from '../../../services/color/app.event.color.service';
 import { LoggerService } from '../../../services/logger.service';
-import { formatDashboardNumericValue } from '../../../helpers/dashboard-chart-data.helper';
+import {
+  formatDashboardAxisNumericValue,
+  formatDashboardNumericValue,
+} from '../../../helpers/dashboard-chart-data.helper';
 import { getOrCreateEChartsTooltipHost } from '../../../helpers/echarts-tooltip-host.helper';
 import { getViewportConstrainedTooltipPosition } from '../../../helpers/echarts-tooltip-position.helper';
 import {
@@ -265,7 +268,13 @@ describe('ChartsXYComponent', () => {
       component.userUnitSettings,
     );
     expect(option.graphic[0].children[1].style.text).toBe(expectedValue);
-    expect(option.yAxis.axisLabel.formatter(10000)).toBe(expectedValue);
+    expect(option.yAxis.axisLabel.formatter(10000)).toBe(formatDashboardAxisNumericValue(
+      DataDistance.type,
+      10000,
+      undefined as any,
+      component.userUnitSettings,
+      option.yAxis.max,
+    ));
   });
 
   it('should render horizontal axes when vertical is false', async () => {
@@ -405,7 +414,8 @@ describe('ChartsXYComponent', () => {
     const tooltipText = formatter({ dataIndex: 0 });
 
     expect(tooltipText).toContain('Running');
-    expect(tooltipText).toContain('<strong>');
+    expect(tooltipText).toContain('qs-dashboard-echarts-tooltip-card');
+    expect(tooltipText).toContain('aria-label="Total:');
     expect(tooltipText).toContain('Activities');
   });
 

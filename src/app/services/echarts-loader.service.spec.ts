@@ -425,6 +425,188 @@ describe('EChartsLoaderService', () => {
     expect(chart.off).toHaveBeenCalledWith('updateAxisPointer', axisPointerHandler);
   });
 
+  it('should gate axis-pointer haptics until the first intentional chart interaction when requested', () => {
+    let nowMs = 1000;
+    const nowSpy = vi.spyOn(Date, 'now').mockImplementation(() => nowMs);
+    try {
+      const handlers = new Map<string, (params: unknown) => void>();
+      const chart = {
+        on: vi.fn((eventName: string, handler: (params: unknown) => void) => {
+          handlers.set(eventName, handler);
+        }),
+        off: vi.fn(),
+      } as any;
+
+      service.attachMobileSeriesTapFeedback(chart, {
+        axisPointerFeedback: 'afterFirstInteraction',
+        clickFeedback: false,
+      });
+      const clickHandler = handlers.get('click');
+      const axisPointerHandler = handlers.get('updateAxisPointer');
+
+      expect(clickHandler).toBeTypeOf('function');
+      expect(axisPointerHandler).toBeTypeOf('function');
+
+      axisPointerHandler?.({ axesInfo: [{ axisDim: 'x', axisIndex: 0, value: 100 }] });
+      expect(hapticsMock.selection).not.toHaveBeenCalled();
+
+      clickHandler?.({ componentType: 'legend' });
+      axisPointerHandler?.({ axesInfo: [{ axisDim: 'x', axisIndex: 0, value: 101 }] });
+      expect(hapticsMock.selection).not.toHaveBeenCalled();
+
+      clickHandler?.({ componentType: 'series' });
+      expect(hapticsMock.selection).not.toHaveBeenCalled();
+
+      axisPointerHandler?.({ axesInfo: [{ axisDim: 'x', axisIndex: 0, value: 102 }] });
+      expect(hapticsMock.selection).not.toHaveBeenCalled();
+
+      nowMs = 1300;
+      axisPointerHandler?.({ axesInfo: [{ axisDim: 'x', axisIndex: 0, value: 103 }] });
+      expect(hapticsMock.selection).toHaveBeenCalledTimes(1);
+
+      axisPointerHandler?.({ axesInfo: [{ axisDim: 'x', axisIndex: 0, value: 103 }] });
+      expect(hapticsMock.selection).toHaveBeenCalledTimes(1);
+    } finally {
+      nowSpy.mockRestore();
+    }
+  });
+
+  it('should preserve click haptics while suppressing the immediate axis-pointer echo when gated', () => {
+    let nowMs = 1000;
+    const nowSpy = vi.spyOn(Date, 'now').mockImplementation(() => nowMs);
+    try {
+      const handlers = new Map<string, (params: unknown) => void>();
+      const chart = {
+        on: vi.fn((eventName: string, handler: (params: unknown) => void) => {
+          handlers.set(eventName, handler);
+        }),
+        off: vi.fn(),
+      } as any;
+
+      service.attachMobileSeriesTapFeedback(chart, {
+        axisPointerFeedback: 'afterFirstInteraction',
+        clickFeedback: true,
+      });
+      const clickHandler = handlers.get('click');
+      const axisPointerHandler = handlers.get('updateAxisPointer');
+
+      expect(clickHandler).toBeTypeOf('function');
+      expect(axisPointerHandler).toBeTypeOf('function');
+
+      axisPointerHandler?.({ axesInfo: [{ axisDim: 'x', axisIndex: 0, value: 100 }] });
+      expect(hapticsMock.selection).not.toHaveBeenCalled();
+
+      clickHandler?.({ componentType: 'series' });
+      expect(hapticsMock.selection).toHaveBeenCalledTimes(1);
+
+      axisPointerHandler?.({ axesInfo: [{ axisDim: 'x', axisIndex: 0, value: 101 }] });
+      expect(hapticsMock.selection).toHaveBeenCalledTimes(1);
+
+      nowMs = 1300;
+      axisPointerHandler?.({ axesInfo: [{ axisDim: 'x', axisIndex: 0, value: 102 }] });
+      expect(hapticsMock.selection).toHaveBeenCalledTimes(2);
+    } finally {
+      nowSpy.mockRestore();
+    }
+  });
+
+  it('should trigger surface click fallback for dashboard charts without double-triggering chart clicks', () => {
+    let nowMs = 1000;
+    const nowSpy = vi.spyOn(Date, 'now').mockImplementation(() => nowMs);
+    try {
+      const handlers = new Map<string, (params: unknown) => void>();
+      const surfaceHandlers = new Map<string, (params: unknown) => void>();
+      const zRender = {
+        on: vi.fn((eventName: string, handler: (params: unknown) => void) => {
+          surfaceHandlers.set(eventName, handler);
+        }),
+        off: vi.fn(),
+      };
+      const chart = {
+        on: vi.fn((eventName: string, handler: (params: unknown) => void) => {
+          handlers.set(eventName, handler);
+        }),
+        off: vi.fn(),
+        getZr: vi.fn(() => zRender),
+      } as any;
+
+      const unsubscribe = service.attachMobileSeriesTapFeedback(chart, {
+        axisPointerFeedback: 'always',
+        clickFeedback: true,
+        surfaceClickFeedback: true,
+      });
+      const clickHandler = handlers.get('click');
+      const surfaceClickHandler = surfaceHandlers.get('click');
+
+      expect(surfaceClickHandler).toBeTypeOf('function');
+
+      surfaceClickHandler?.({ offsetX: 20, offsetY: 10 });
+      expect(hapticsMock.selection).toHaveBeenCalledTimes(1);
+
+      clickHandler?.({ componentType: 'series' });
+      expect(hapticsMock.selection).toHaveBeenCalledTimes(1);
+
+      nowMs = 1300;
+      clickHandler?.({ componentType: 'series' });
+      expect(hapticsMock.selection).toHaveBeenCalledTimes(2);
+
+      unsubscribe();
+      expect(zRender.off).toHaveBeenCalledWith('click', surfaceClickHandler);
+    } finally {
+      nowSpy.mockRestore();
+    }
+  });
+
+  it('should trigger surface drag haptics while the dashboard chart surface is actively dragged', () => {
+    const surfaceHandlers = new Map<string, (params: unknown) => void>();
+    const zRender = {
+      on: vi.fn((eventName: string, handler: (params: unknown) => void) => {
+        surfaceHandlers.set(eventName, handler);
+      }),
+      off: vi.fn(),
+    };
+    const chart = {
+      on: vi.fn(),
+      off: vi.fn(),
+      getZr: vi.fn(() => zRender),
+    } as any;
+
+    service.attachMobileSeriesTapFeedback(chart, {
+      axisPointerFeedback: 'always',
+      surfaceDragFeedback: true,
+      surfaceDragThresholdPx: 8,
+      surfaceDragBucketPx: 24,
+    });
+    const surfacePointerDownHandler = surfaceHandlers.get('mousedown');
+    const surfacePointerMoveHandler = surfaceHandlers.get('mousemove');
+    const surfacePointerUpHandler = surfaceHandlers.get('mouseup');
+    const surfaceClickHandler = surfaceHandlers.get('click');
+
+    expect(surfacePointerDownHandler).toBeTypeOf('function');
+    expect(surfacePointerMoveHandler).toBeTypeOf('function');
+    expect(surfacePointerUpHandler).toBeTypeOf('function');
+
+    surfacePointerMoveHandler?.({ offsetX: 40, offsetY: 10 });
+    expect(hapticsMock.selection).not.toHaveBeenCalled();
+
+    surfacePointerDownHandler?.({ offsetX: 10, offsetY: 10 });
+    surfacePointerMoveHandler?.({ offsetX: 14, offsetY: 13 });
+    expect(hapticsMock.selection).not.toHaveBeenCalled();
+
+    surfacePointerMoveHandler?.({ offsetX: 35, offsetY: 10 });
+    expect(hapticsMock.selection).toHaveBeenCalledTimes(1);
+
+    surfacePointerMoveHandler?.({ offsetX: 36, offsetY: 11 });
+    expect(hapticsMock.selection).toHaveBeenCalledTimes(1);
+
+    surfacePointerMoveHandler?.({ offsetX: 60, offsetY: 10 });
+    expect(hapticsMock.selection).toHaveBeenCalledTimes(2);
+
+    surfacePointerUpHandler?.({});
+    surfaceClickHandler?.({ offsetX: 60, offsetY: 10 });
+    expect(hapticsMock.selection).toHaveBeenCalledTimes(2);
+  });
+
   it('should throw when loading in non-browser platform', async () => {
     TestBed.resetTestingModule();
     TestBed.configureTestingModule({

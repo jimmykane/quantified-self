@@ -27,6 +27,7 @@ import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { ActivatedRoute, Router } from '@angular/router';
 import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { EChartsLoaderService } from '../../../services/echarts-loader.service';
+import { CompactCountPipe } from '../../../helpers/compact-count.pipe';
 
 // Mock canvas for charts
 Object.defineProperty(HTMLCanvasElement.prototype, 'getContext', {
@@ -87,6 +88,7 @@ describe('AdminUserManagementComponent', () => {
     let impersonationServiceSpy: any;
     let routerSpy: any;
     let matDialogSpy: any;
+    let matSnackBarSpy: any;
     let appThemeServiceMock: any;
     let themeSubject: BehaviorSubject<AppThemes>;
     let mockLogger: any;
@@ -101,7 +103,10 @@ describe('AdminUserManagementComponent', () => {
             metadata: { lastSignInTime: '2023-01-01', creationTime: '2022-01-01' },
             disabled: false,
             providerIds: ['password'],
-            hasSubscribedOnce: true
+            hasSubscribedOnce: true,
+            eventStats: {
+                total: 125,
+            }
         },
         {
             uid: 'user2',
@@ -111,7 +116,10 @@ describe('AdminUserManagementComponent', () => {
             metadata: { lastSignInTime: '2023-01-02', creationTime: '2022-01-02' },
             disabled: true,
             providerIds: ['google.com'],
-            hasSubscribedOnce: false
+            hasSubscribedOnce: false,
+            eventStats: {
+                total: null,
+            }
         }
     ];
 
@@ -219,7 +227,10 @@ describe('AdminUserManagementComponent', () => {
                 everPaid: 85,
                 canceled: 15,
                 cancelScheduled: 8,
-                onboardingCompleted: 80
+                onboardingCompleted: 80,
+                events: {
+                    total: 1_000_000,
+                }
             })),
             getUserGrowthTrend: vi.fn().mockReturnValue(of(mockTrend)),
             getSubscriptionHistoryTrend: vi.fn().mockReturnValue(of(mockSubscriptionTrend))
@@ -237,6 +248,9 @@ describe('AdminUserManagementComponent', () => {
             open: vi.fn().mockReturnValue({
                 afterClosed: () => of(true)
             })
+        };
+        matSnackBarSpy = {
+            open: vi.fn()
         };
 
         themeSubject = new BehaviorSubject<AppThemes>(AppThemes.Dark);
@@ -276,7 +290,8 @@ describe('AdminUserManagementComponent', () => {
                 MatIconModule,
                 MatProgressSpinnerModule,
                 NoopAnimationsModule,
-                FormsModule
+                FormsModule,
+                CompactCountPipe
             ],
             providers: [
                 { provide: AdminService, useValue: adminServiceSpy },
@@ -285,7 +300,7 @@ describe('AdminUserManagementComponent', () => {
                 { provide: LoggerService, useValue: mockLogger },
                 { provide: Router, useValue: routerSpy },
                 { provide: MatDialog, useValue: matDialogSpy },
-                { provide: MatSnackBar, useValue: { open: vi.fn() } },
+                { provide: MatSnackBar, useValue: matSnackBarSpy },
                 { provide: EChartsLoaderService, useValue: mockEchartsService },
                 {
                     provide: ActivatedRoute,
@@ -304,7 +319,10 @@ describe('AdminUserManagementComponent', () => {
                                         everPaid: 85,
                                         canceled: 15,
                                         cancelScheduled: 8,
-                                        onboardingCompleted: 80
+                                        onboardingCompleted: 80,
+                                        events: {
+                                            total: 1_000_000,
+                                        }
                                     },
                                     userGrowthTrend: mockTrend,
                                     subscriptionHistoryTrend: mockSubscriptionTrend
@@ -317,6 +335,7 @@ describe('AdminUserManagementComponent', () => {
             schemas: [NO_ERRORS_SCHEMA]
         })
             .overrideProvider(MatDialog, { useValue: matDialogSpy })
+            .overrideProvider(MatSnackBar, { useValue: matSnackBarSpy })
             .compileComponents();
 
         fixture = TestBed.createComponent(AdminUserManagementComponent);
@@ -332,6 +351,7 @@ describe('AdminUserManagementComponent', () => {
         expect(component.displayedColumns).toContain('uid');
         expect(component.displayedColumns).toContain('subscriptionHistory');
         expect(component.displayedColumns).toContain('aiCreditsConsumed');
+        expect(component.displayedColumns).toContain('eventStats');
         expect(component.displayedColumns).not.toContain('subscription');
     });
 
@@ -354,8 +374,51 @@ describe('AdminUserManagementComponent', () => {
             everPaid: 85,
             canceled: 15,
             cancelScheduled: 8,
-            onboardingCompleted: 80
+            onboardingCompleted: 80,
+            events: {
+                total: 1_000_000,
+            }
         });
+    });
+
+    it('should show event totals in cards and the user table', () => {
+        fixture.detectChanges();
+
+        const nativeElement = fixture.nativeElement as HTMLElement;
+        expect(nativeElement.textContent).toContain('Total Events');
+        expect(nativeElement.textContent).toContain('1M');
+        expect(nativeElement.textContent).toContain('125');
+    });
+
+    it('should force refresh the global event count from the Total Events card', () => {
+        adminServiceSpy.getTotalUserCount.mockReturnValueOnce(of({
+            total: 100,
+            pro: 30,
+            basic: 70,
+            free: 0,
+            monthlyPaid: 70,
+            yearlyPaid: 0,
+            everPaid: 85,
+            canceled: 15,
+            cancelScheduled: 8,
+            onboardingCompleted: 80,
+            events: {
+                total: 1_250_000,
+                cacheStatus: 'refreshed',
+                computedAt: '2026-05-07T05:00:00.000Z',
+                expireAt: '2026-05-07T06:00:00.000Z',
+            },
+            providers: {
+                password: 50,
+            },
+        }));
+
+        component.refreshGlobalEventCount();
+
+        expect(adminServiceSpy.getTotalUserCount).toHaveBeenCalledWith({ refreshEventCount: true });
+        expect(component.userStats?.events.total).toBe(1_250_000);
+        expect(component.isRefreshingEventCount).toBe(false);
+        expect(matSnackBarSpy.open).toHaveBeenCalledWith('Event count refreshed', undefined, { duration: 3000 });
     });
 
     it('should use resolved user growth trend data on init', () => {

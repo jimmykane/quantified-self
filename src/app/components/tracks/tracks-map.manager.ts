@@ -616,7 +616,7 @@ export class TracksMapManager {
 
         this.zone.runOutsideAngular(() => {
             this.trackLayerBaseColors.forEach((baseColor, layerId) => {
-                if (!this.map.getLayer?.(layerId) || !this.map.setPaintProperty) return;
+                if (!this.hasMapLayer(layerId) || !this.map.setPaintProperty) return;
                 try {
                     const role = this.resolveLayerRole(layerId);
                     const paint = this.buildLayerPaint(role, baseColor);
@@ -700,6 +700,15 @@ export class TracksMapManager {
             () => this.restoreTracksAfterStyleReload(),
             'tracks-map-manager'
         );
+    }
+
+    private hasMapLayer(layerId: string): boolean {
+        if (!this.map?.getLayer || !layerId) return false;
+        try {
+            return !!this.map.getLayer(layerId);
+        } catch {
+            return false;
+        }
     }
 
     private restoreTracksAfterStyleReload() {
@@ -792,7 +801,7 @@ export class TracksMapManager {
 
         this.zone.runOutsideAngular(() => {
             const layerId = TracksMapManager.JUMP_HEAT_LAYER_ID;
-            if (!this.map.getLayer?.(layerId)) {
+            if (!this.hasMapLayer(layerId)) {
                 this.renderJumpHeatmap();
                 return;
             }
@@ -1098,7 +1107,7 @@ export class TracksMapManager {
                 `track-layer-${activityId}`
             ];
             layerIds.forEach((layerId) => {
-                if (!this.map.getLayer?.(layerId) || !this.map.setPaintProperty) return;
+                if (!this.hasMapLayer(layerId) || !this.map.setPaintProperty) return;
                 const role = this.resolveLayerRole(layerId);
                 const paint = this.buildLayerPaint(role, baseColor, isHighlighted);
                 this.applyPaintProperties(layerId, paint);

@@ -284,7 +284,7 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
     [DASHBOARD_SLEEP_TREND_CHART_TYPE]: 'hotel',
   };
   public readonly curatedChartDescriptionByType: Record<DashboardCuratedChartType, string> = {
-    [DASHBOARD_RECOVERY_NOW_CHART_TYPE]: 'Recovery left now vs elapsed recovery.',
+    [DASHBOARD_RECOVERY_NOW_CHART_TYPE]: 'Recovery left vs elapsed recovery.',
     [DASHBOARD_FORM_CHART_TYPE]: 'Fitness/fatigue/form trend from derived training stress.',
     [DASHBOARD_FRESHNESS_FORECAST_CHART_TYPE]: '7-day projected freshness from current CTL/ATL decay.',
     [DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE]: 'Weekly easy/moderate/hard intensity split (Power or HR fallback).',

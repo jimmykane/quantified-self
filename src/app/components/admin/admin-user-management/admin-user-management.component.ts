@@ -26,7 +26,7 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatSelectModule } from '@angular/material/select';
 import { MatCardModule } from '@angular/material/card';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
-import { MatSnackBarModule } from '@angular/material/snack-bar';
+import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { Subject, of } from 'rxjs';
 import { catchError, debounceTime, distinctUntilChanged, takeUntil } from 'rxjs/operators';
 
@@ -52,6 +52,7 @@ import {
     EChartsHostController
 } from '../../../helpers/echarts-host-controller';
 import { buildOfficialEChartsThemeTokens, ECHARTS_GLOBAL_FONT_FAMILY, resolveEChartsThemeName } from '../../../helpers/echarts-theme.helper';
+import { CompactCountPipe } from '../../../helpers/compact-count.pipe';
 import dayjs from 'dayjs';
 import localizedFormat from 'dayjs/plugin/localizedFormat';
 
@@ -88,6 +89,7 @@ const EMPTY_CHART_UPDATE_SETTINGS: ChartSetOptionSettings = {
         MatCardModule,
         MatDialogModule,
         MatSnackBarModule,
+        CompactCountPipe,
     ]
 })
 export class AdminUserManagementComponent implements OnInit, OnDestroy, AfterViewInit {
@@ -101,6 +103,7 @@ export class AdminUserManagementComponent implements OnInit, OnDestroy, AfterVie
     private impersonationService = inject(AppImpersonationService);
     private route = inject(ActivatedRoute);
     private dialog = inject(MatDialog);
+    private snackBar = inject(MatSnackBar);
     private logger = inject(LoggerService);
     private eChartsLoader = inject(EChartsLoaderService);
     private locale = inject(LOCALE_ID);
@@ -110,6 +113,7 @@ export class AdminUserManagementComponent implements OnInit, OnDestroy, AfterVie
     users: AdminUser[] = [];
     userStats: UserCountStats | null = null;
     isLoading = true;
+    isRefreshingEventCount = false;
     error: string | null = null;
     totalCount = 0;
     currentPage = 0;
@@ -124,7 +128,7 @@ export class AdminUserManagementComponent implements OnInit, OnDestroy, AfterVie
 
     displayedColumns: string[] = [
         'photoURL', 'email', 'uid', 'providerIds', 'displayName', 'role', 'subscriptionHistory',
-        'aiCreditsConsumed', 'services', 'created', 'lastLogin', 'onboarding', 'status', 'actions'
+        'aiCreditsConsumed', 'eventStats', 'services', 'created', 'lastLogin', 'onboarding', 'status', 'actions'
     ];
 
     private searchSubject = new Subject<string>();
@@ -349,6 +353,31 @@ export class AdminUserManagementComponent implements OnInit, OnDestroy, AfterVie
                 this.isLoading = false;
             });
         });
+    }
+
+    refreshGlobalEventCount(): void {
+        if (this.isRefreshingEventCount) {
+            return;
+        }
+
+        this.isRefreshingEventCount = true;
+        this.adminService.getTotalUserCount({ refreshEventCount: true })
+            .pipe(takeUntil(this.destroy$))
+            .subscribe({
+                next: (stats) => {
+                    this.userStats = stats;
+                    if (stats.providers) {
+                        this.updateAuthChart(stats.providers);
+                    }
+                    this.isRefreshingEventCount = false;
+                    this.snackBar.open('Event count refreshed', undefined, { duration: 3000 });
+                },
+                error: (err) => {
+                    this.isRefreshingEventCount = false;
+                    this.logger.error('AdminUserManagement event count refresh error:', err);
+                    this.snackBar.open('Failed to refresh event count', undefined, { duration: 5000 });
+                }
+            });
     }
 
     // Helper methods

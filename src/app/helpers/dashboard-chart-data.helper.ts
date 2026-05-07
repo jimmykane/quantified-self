@@ -1,16 +1,23 @@
 import {
   ChartDataCategoryTypes,
   ChartDataValueTypes,
+  DataDistance,
   DataDuration,
   DataInterface,
   DynamicDataLoader,
+  DistanceUnits,
   UserUnitSettingsInterface,
   TimeIntervals
 } from '@sports-alliance/sports-lib';
 import * as weeknumber from 'weeknumber';
 import type { AggregatedChartRow } from './aggregated-chart-row.helper';
 import { getBrowserLocale } from '../shared/adapters/date-locale.config';
-import { resolveUnitAwareDisplayStat, resolveUnitAwareDisplayFromValue } from '@shared/unit-aware-display';
+import {
+  normalizeUserUnitSettings,
+  resolveUnitAwareDisplayStat,
+  resolveUnitAwareDisplayFromValue,
+  type UnitAwareStatDisplay,
+} from '@shared/unit-aware-display';
 
 type WarnLogger = {
   warn?: (...args: unknown[]) => void;
@@ -49,6 +56,38 @@ function toValidDate(value: number | Date | string): Date | null {
     return null;
   }
   return date;
+}
+
+function formatCompactAxisNumber(value: number): string {
+  if (!Number.isFinite(value)) {
+    return '';
+  }
+
+  const absoluteValue = Math.abs(value);
+  const maximumFractionDigits = absoluteValue >= 100 ? 0 : absoluteValue >= 10 ? 1 : 2;
+  return value.toLocaleString(undefined, {
+    maximumFractionDigits,
+    minimumFractionDigits: 0,
+  });
+}
+
+function normalizeDashboardAxisUnit(unit: string): string {
+  return unit === 'Km' ? 'km' : unit;
+}
+
+function formatCompactAxisDisplay(display: UnitAwareStatDisplay | null): string | null {
+  if (!display) {
+    return null;
+  }
+
+  const numericDisplayValue = Number(display.value.replace(/,/g, ''));
+  if (!Number.isFinite(numericDisplayValue)) {
+    return display.text;
+  }
+
+  const valueText = formatCompactAxisNumber(numericDisplayValue);
+  const unitText = normalizeDashboardAxisUnit(display.unit);
+  return unitText ? `${valueText} ${unitText}` : valueText;
 }
 
 function withOptionalTimeZone<T extends Intl.DateTimeFormatOptions>(
@@ -169,6 +208,27 @@ export function formatDashboardDateByInterval(
     locale,
     timeZone,
   });
+}
+
+export function formatDashboardWeekRangeLabel(
+  value: number | Date | string,
+  locale = getBrowserLocale(),
+  timeZone?: string,
+): string {
+  const startDate = toValidDate(value);
+  if (!startDate) {
+    return '';
+  }
+
+  const endDate = new Date(startDate.getTime() + (6 * SECONDS_PER_DAY * 1000));
+  const week = weeknumber.weekNumber(getZonedCalendarDate(startDate, timeZone));
+  const dateFormat = withOptionalTimeZone({ day: '2-digit', month: 'short', year: 'numeric' } as const, timeZone);
+  const startLabel = startDate.toLocaleDateString(locale, dateFormat);
+  const endLabel = endDate.toLocaleDateString(locale, dateFormat);
+
+  return Number.isFinite(week)
+    ? `Week ${week}, ${startLabel} - ${endLabel}`
+    : `${startLabel} - ${endLabel}`;
 }
 
 export function formatDashboardDateRange(
@@ -302,6 +362,46 @@ export function formatDashboardNumericValue(
   }
 
   return formatDashboardDataDisplay(data, unitSettings);
+}
+
+export function formatDashboardAxisNumericValue(
+  chartDataType: string | undefined,
+  value: unknown,
+  logger?: WarnLogger,
+  unitSettings?: UserUnitSettingsInterface | null,
+  axisMax?: number,
+): string {
+  const numericValue = toFiniteNumber(value);
+  if (numericValue === null) {
+    return '--';
+  }
+
+  if (chartDataType === DataDistance.type) {
+    const normalizedUnitSettings = normalizeUserUnitSettings(unitSettings);
+    if (normalizedUnitSettings.distanceUnits === DistanceUnits.Miles) {
+      const display = resolveUnitAwareDisplayFromValue(chartDataType, numericValue, normalizedUnitSettings, {
+        stripRepeatedUnit: true,
+      });
+      return formatCompactAxisDisplay(display) || formatCompactAxisNumber(numericValue);
+    }
+
+    const distanceAxisMax = Math.max(Math.abs(toFiniteNumber(axisMax) ?? 0), Math.abs(numericValue));
+    if (distanceAxisMax >= 1000) {
+      return `${formatCompactAxisNumber(numericValue / 1000)} km`;
+    }
+
+    return `${formatCompactAxisNumber(numericValue)} m`;
+  }
+
+  const display = resolveUnitAwareDisplayFromValue(chartDataType, numericValue, unitSettings, {
+    stripRepeatedUnit: true,
+  });
+  const compactDisplay = formatCompactAxisDisplay(display);
+  if (compactDisplay) {
+    return compactDisplay;
+  }
+
+  return formatDashboardNumericValue(chartDataType, numericValue, logger, unitSettings);
 }
 
 export function getDashboardChartSortComparator(

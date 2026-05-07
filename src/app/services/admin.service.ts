@@ -4,6 +4,17 @@ import { from, Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
 import { AppFunctionsService } from './app.functions.service';
 
+export interface EventCountStats {
+    total: number | null;
+    cacheStatus?: 'fresh' | 'refreshed' | 'stale' | 'unavailable';
+    computedAt?: string | null;
+    expireAt?: string | null;
+}
+
+export interface GetTotalUserCountOptions {
+    refreshEventCount?: boolean;
+}
+
 export interface AdminUser {
     uid: string;
     email: string;
@@ -33,6 +44,7 @@ export interface AdminUser {
     }[];
     hasSubscribedOnce?: boolean;
     aiCreditsConsumed?: number;
+    eventStats?: EventCountStats;
 }
 
 export interface ListUsersParams {
@@ -63,6 +75,23 @@ export interface UserCountStats {
     cancelScheduled: number;
     onboardingCompleted: number;
     providers: Record<string, number>;
+    events: EventCountStats;
+}
+
+interface UserCountFunctionResponse {
+    count: number;
+    total: number;
+    pro: number;
+    basic: number;
+    free: number;
+    monthlyPaid?: number;
+    yearlyPaid?: number;
+    everPaid?: number;
+    canceled?: number;
+    cancelScheduled?: number;
+    onboardingCompleted?: number;
+    providers: Record<string, number>;
+    events?: Partial<EventCountStats>;
 }
 
 export interface SubscriptionHistoryTrendBucket {
@@ -304,34 +333,47 @@ export class AdminService {
         );
     }
 
-    getTotalUserCount(): Observable<UserCountStats> {
-        return from(this.functionsService.call<void, {
-            count: number;
-            total: number;
-            pro: number;
-            basic: number;
-            free: number;
-            monthlyPaid?: number;
-            yearlyPaid?: number;
-            everPaid?: number;
-            canceled?: number;
-            cancelScheduled?: number;
-            onboardingCompleted?: number;
-            providers: Record<string, number>;
-        }>('getUserCount')).pipe(
-            map(result => ({
-                total: result.data.total ?? result.data.count, // Fallback for safety
-                pro: result.data.pro ?? 0,
-                basic: result.data.basic ?? 0,
-                free: result.data.free ?? 0,
-                monthlyPaid: result.data.monthlyPaid ?? 0,
-                yearlyPaid: result.data.yearlyPaid ?? 0,
-                everPaid: result.data.everPaid ?? 0,
-                canceled: result.data.canceled ?? 0,
-                cancelScheduled: result.data.cancelScheduled ?? 0,
-                onboardingCompleted: result.data.onboardingCompleted ?? 0,
-                providers: result.data.providers || {}
-            }))
+    getTotalUserCount(options: GetTotalUserCountOptions = {}): Observable<UserCountStats> {
+        const payload = options.refreshEventCount === true
+            ? { refreshEventCount: true }
+            : undefined;
+
+        const request = payload
+            ? this.functionsService.call<{ refreshEventCount?: boolean }, UserCountFunctionResponse>('getUserCount', payload)
+            : this.functionsService.call<void, UserCountFunctionResponse>('getUserCount');
+
+        return from(request).pipe(
+            map(result => {
+                const events: EventCountStats = {
+                    total: typeof result.data.events?.total === 'number'
+                        ? result.data.events.total
+                        : null,
+                };
+                if (result.data.events?.cacheStatus) {
+                    events.cacheStatus = result.data.events.cacheStatus;
+                }
+                if (result.data.events && Object.prototype.hasOwnProperty.call(result.data.events, 'computedAt')) {
+                    events.computedAt = result.data.events.computedAt ?? null;
+                }
+                if (result.data.events && Object.prototype.hasOwnProperty.call(result.data.events, 'expireAt')) {
+                    events.expireAt = result.data.events.expireAt ?? null;
+                }
+
+                return {
+                    total: result.data.total ?? result.data.count, // Fallback for safety
+                    pro: result.data.pro ?? 0,
+                    basic: result.data.basic ?? 0,
+                    free: result.data.free ?? 0,
+                    monthlyPaid: result.data.monthlyPaid ?? 0,
+                    yearlyPaid: result.data.yearlyPaid ?? 0,
+                    everPaid: result.data.everPaid ?? 0,
+                    canceled: result.data.canceled ?? 0,
+                    cancelScheduled: result.data.cancelScheduled ?? 0,
+                    onboardingCompleted: result.data.onboardingCompleted ?? 0,
+                    providers: result.data.providers || {},
+                    events,
+                };
+            })
         );
     }
 

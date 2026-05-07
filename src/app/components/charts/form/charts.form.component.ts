@@ -20,9 +20,14 @@ import {
   ECHARTS_CARTESIAN_IMMEDIATE_UPDATE_SETTINGS,
   EChartsHostController,
 } from '../../../helpers/echarts-host-controller';
-import { buildDashboardEChartsStyleTokens } from '../../../helpers/dashboard-echarts-style.helper';
+import {
+  buildDashboardEChartsTooltipChrome,
+  buildDashboardEChartsStyleTokens,
+  renderDashboardEChartsTooltipCard,
+} from '../../../helpers/dashboard-echarts-style.helper';
 import { buildDashboardValueAxisConfig } from '../../../helpers/dashboard-echarts-yaxis.helper';
 import {
+  type EChartsMobileTapFeedbackOptions,
   isEChartsMobileTooltipViewport,
   resolveEChartsTooltipTriggerOn,
 } from '../../../helpers/echarts-tooltip-interaction.helper';
@@ -78,6 +83,7 @@ export class ChartsFormComponent implements AfterViewInit, OnChanges, OnDestroy 
   @Input() formStatus?: DashboardDerivedMetricStatus | null;
   @Input() infoTooltip?: string | null;
   @Input() reserveTitleActionSpace = false;
+  @Input() mobileTapFeedbackOptions?: EChartsMobileTapFeedbackOptions | null;
   @Input()
   set timelineWindow(value: DashboardFormTimelineWindow | null | undefined) {
     if (value !== 'w' && value !== 'm' && value !== 'y') {
@@ -148,6 +154,7 @@ export class ChartsFormComponent implements AfterViewInit, OnChanges, OnDestroy 
       eChartsLoader: this.eChartsLoader,
       logger: this.logger,
       logPrefix: '[ChartsFormComponent]',
+      mobileTapFeedbackOptions: () => this.mobileTapFeedbackOptions,
     });
   }
 
@@ -400,15 +407,7 @@ export class ChartsFormComponent implements AfterViewInit, OnChanges, OnDestroy 
           position: (_point: number[], _params: unknown, _dom: unknown, _rect: unknown, size: EChartsTooltipPositionSize) => (
             this.resolveTooltipPosition(size)
           ),
-          backgroundColor: chartStyle.tooltipBackgroundColor,
-          borderColor: chartStyle.tooltipBorderColor,
-          borderWidth: 1,
-          padding: 0,
-          textStyle: {
-            color: chartStyle.tooltipTextColor,
-            fontFamily: ECHARTS_GLOBAL_FONT_FAMILY,
-            fontSize: chartStyle.isCompactLayout ? 12 : 13,
-          },
+          ...buildDashboardEChartsTooltipChrome(chartStyle),
           formatter: (params: { dataIndex: number }[]) => this.formatTooltip(points, params, renderTimeInterval, chartStyle),
         },
         xAxis: [
@@ -562,35 +561,19 @@ export class ChartsFormComponent implements AfterViewInit, OnChanges, OnDestroy 
 
     const dateLabel = formatDashboardDateByInterval(point.time, renderTimeInterval);
     const statusColor = FORM_FATIGUE_COLOR;
-    const valueColor = chartStyle.tooltipTextColor;
-    const labelColor = chartStyle.secondaryTextColor;
-    const dividerColor = chartStyle.tooltipBorderColor;
 
-    const renderMetric = (label: string, value: string): string => (
-      `<div style="display:flex;flex-direction:column;gap:2px;min-width:0;">`
-      + `<div style="font-family:${ECHARTS_GLOBAL_FONT_FAMILY};font-size:${chartStyle.isCompactLayout ? 15 : 16}px;line-height:1.15;font-weight:700;color:${valueColor};">${this.escapeHtml(value)}</div>`
-      + `<div style="font-size:${chartStyle.isCompactLayout ? 11 : 12}px;line-height:1.2;color:${labelColor};white-space:nowrap;">${this.escapeHtml(label)}</div>`
-      + `</div>`
-    );
-
-    return (
-      `<div class="qs-form-tooltip-card" style="min-width:312px;max-width:340px;`
-      + `padding:12px 14px 10px;font-family:${ECHARTS_GLOBAL_FONT_FAMILY};">`
-      + `<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;">`
-      + `<div style="font-size:13px;line-height:1.2;font-weight:700;color:${statusColor};">${this.escapeHtml(statusTitle)}</div>`
-      + `<div style="font-size:12px;line-height:1.2;color:${labelColor};white-space:nowrap;">${this.escapeHtml(dateLabel)}</div>`
-      + `</div>`
-      + `<div style="height:1px;background:${dividerColor};margin:9px 0 10px;"></div>`
-      + `<div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px 12px;">`
-      + renderMetric('Fitness', this.formatRoundedValue(point.ctl))
-      + renderMetric('Fatigue', this.formatRoundedValue(point.atl))
-      + renderMetric('Form', this.formatRoundedValue(formValue))
-      + renderMetric('TSS', this.formatRoundedValue(point.trainingStressScore))
-      + renderMetric('Fitness change', this.formatSignedRoundedValue(fitnessChange))
-      + `<div aria-hidden="true"></div>`
-      + `</div>`
-      + `</div>`
-    );
+    return renderDashboardEChartsTooltipCard(chartStyle, {
+      title: statusTitle,
+      titleColor: statusColor,
+      subtitle: dateLabel,
+      rows: [
+        { label: 'Fitness', value: this.formatRoundedValue(point.ctl) },
+        { label: 'Fatigue', value: this.formatRoundedValue(point.atl) },
+        { label: 'Form', value: this.formatRoundedValue(formValue) },
+        { label: 'TSS', value: this.formatRoundedValue(point.trainingStressScore) },
+        { label: 'Fitness change', value: this.formatSignedRoundedValue(fitnessChange) },
+      ],
+    });
   }
 
   private formatRoundedValue(value: number | null | undefined): string {
@@ -606,15 +589,6 @@ export class ChartsFormComponent implements AfterViewInit, OnChanges, OnDestroy 
       return `+${rounded}`;
     }
     return `${rounded}`;
-  }
-
-  private escapeHtml(value: string): string {
-    return value
-      .replaceAll('&', '&amp;')
-      .replaceAll('<', '&lt;')
-      .replaceAll('>', '&gt;')
-      .replaceAll('"', '&quot;')
-      .replaceAll('\'', '&#39;');
   }
 
   private resolveTooltipPosition(size: EChartsTooltipPositionSize): [number, number] {

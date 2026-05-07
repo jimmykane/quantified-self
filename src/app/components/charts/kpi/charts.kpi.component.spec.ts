@@ -444,6 +444,38 @@ describe('ChartsKpiComponent', () => {
     expect(tooltipEnabledOption?.tooltip?.renderMode).toBe('html');
   });
 
+  it('uses tap-only tooltip triggering on mobile viewport', async () => {
+    const originalMatchMedia = window.matchMedia;
+    const matchMediaSpy = vi.fn().mockImplementation(() => ({
+      matches: true,
+      media: '',
+      onchange: null,
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    }));
+    window.matchMedia = matchMediaSpy as unknown as typeof window.matchMedia;
+
+    try {
+      fixture.detectChanges();
+      await fixture.whenStable();
+      await (component as any).refreshChart();
+
+      const latestSetOptionArgs = mockLoader.setOption.mock.calls.at(-1) || [];
+      const option = latestSetOptionArgs.find((arg) => (
+        !!arg
+        && typeof arg === 'object'
+        && 'tooltip' in (arg as Record<string, unknown>)
+      )) as Record<string, any> | undefined;
+
+      expect(option?.tooltip?.triggerOn).toBe('click');
+    } finally {
+      window.matchMedia = originalMatchMedia;
+    }
+  });
+
   it('trims null trend edges and clamps sparkline x-axis to data bounds', async () => {
     component.chartType = DASHBOARD_ACWR_KPI_CHART_TYPE;
     component.acwr = {
@@ -480,6 +512,37 @@ describe('ChartsKpiComponent', () => {
       [Date.UTC(2025, 11, 1), 0.9],
       [Date.UTC(2025, 11, 8), 1.0],
     ]);
+  });
+
+  it('formats weekly sparkline tooltip headings with week number and exact range', async () => {
+    component.chartType = DASHBOARD_ACWR_KPI_CHART_TYPE;
+    component.acwr = {
+      latestDayMs: Date.UTC(2026, 3, 6),
+      acuteLoad7: 210,
+      chronicLoad28: 190,
+      ratio: 1.11,
+      trend8Weeks: [
+        { time: Date.UTC(2026, 3, 6), value: 1.11 },
+      ],
+    };
+
+    fixture.detectChanges();
+    await fixture.whenStable();
+    await (component as any).refreshChart();
+
+    const latestSetOptionArgs = mockLoader.setOption.mock.calls.at(-1) || [];
+    const option = latestSetOptionArgs.find((arg) => (
+      !!arg
+      && typeof arg === 'object'
+      && 'tooltip' in (arg as Record<string, unknown>)
+    )) as Record<string, any> | undefined;
+    const formatter = option?.tooltip?.formatter as ((params: Array<{ data?: [number, number | null] }>) => string);
+
+    const tooltipHtml = formatter([{ data: [Date.UTC(2026, 3, 6), 1.11] }]);
+    expect(tooltipHtml).toContain('Week 15,');
+    expect(tooltipHtml).toContain('Apr');
+    expect(tooltipHtml).toContain('2026 -');
+    expect(tooltipHtml).not.toContain('Week of Apr 6');
   });
 
   it('shows the info tooltip when clicking the KPI layout', () => {

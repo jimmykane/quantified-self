@@ -15,9 +15,11 @@ import {
 import { describe, expect, it } from 'vitest';
 import {
   formatDashboardBucketDateByInterval,
+  formatDashboardAxisNumericValue,
   formatDashboardDataDisplay,
   formatDashboardDateByInterval,
   formatDashboardDateRange,
+  formatDashboardWeekRangeLabel,
   formatDashboardNumericValue,
   getDashboardAxisDateFormat,
   getDashboardChartDateFormat,
@@ -84,6 +86,12 @@ describe('dashboard-chart-data.helper', () => {
 
     expect(british).toBe('02 Mar 2024 to 09 Mar 2024');
     expect(american).toBe('Mar 02, 2024 to Mar 09, 2024');
+  });
+
+  it('should format weekly tooltip labels with week number and exact range', () => {
+    const weekStart = Date.UTC(2026, 2, 30);
+
+    expect(formatDashboardWeekRangeLabel(weekStart, 'en-GB', 'UTC')).toBe('Week 14, 30 Mar 2026 - 05 Apr 2026');
   });
 
   it('should format bounded date ranges using an explicit query timezone when provided', () => {
@@ -168,6 +176,30 @@ describe('dashboard-chart-data.helper', () => {
     );
 
     expect(value).toBe('6.22 mi');
+  });
+
+  it('should format distance axis values with a stable compact unit', () => {
+    expect(formatDashboardAxisNumericValue(
+      DataDistance.type,
+      0,
+      undefined,
+      normalizeUserUnitSettings({ distanceUnits: DistanceUnits.Kilometers }),
+      600000,
+    )).toBe('0 km');
+    expect(formatDashboardAxisNumericValue(
+      DataDistance.type,
+      100000,
+      undefined,
+      normalizeUserUnitSettings({ distanceUnits: DistanceUnits.Kilometers }),
+      600000,
+    )).toBe('100 km');
+    expect(formatDashboardAxisNumericValue(
+      DataDistance.type,
+      10000,
+      undefined,
+      normalizeUserUnitSettings({ distanceUnits: DistanceUnits.Miles }),
+      20000,
+    )).toBe('6.22 mi');
   });
 
   it('should sort activity rows by their selected aggregate value', () => {

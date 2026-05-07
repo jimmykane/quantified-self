@@ -35,6 +35,7 @@ import {
   resolveAutoAggregationTimeInterval,
 } from '../../../../shared/event-stat-aggregation';
 import type { EventStatAggregationResult } from '../../../../shared/event-stat-aggregation.types';
+import { isBenchmarkEventForTrainingMetrics } from '../../../../shared/event-classification';
 import { serializeErrorForLogging } from './error-logging';
 import { buildExecutionPromptLogContext } from './execute-query.logging';
 import { executeQueryByResultKind } from './execute-query.result-kind-handlers';
@@ -368,11 +369,14 @@ const defaultExecuteQueryDependencies: ExecuteQueryDependencies = {
 };
 
 function isMergedEventDocument(rawEventData: Record<string, unknown>): boolean {
-  if (rawEventData.isMerge === true) {
+  if (isBenchmarkEventForTrainingMetrics(rawEventData)) {
     return true;
   }
 
-  if (typeof rawEventData.mergeType === 'string' && rawEventData.mergeType.trim().length > 0) {
+  const mergeType = typeof rawEventData.mergeType === 'string'
+    ? rawEventData.mergeType.trim().toLowerCase()
+    : '';
+  if (mergeType === 'multi') {
     return true;
   }
 

@@ -68,6 +68,7 @@ import type {
 import type { DashboardTileEventNavigationDirection } from '../../../helpers/dashboard-tile-event-filters.helper';
 import type { ChartRangeSelectorOption } from '../../charts/shared/chart-range-selector/chart-range-selector.component';
 import type { DashboardFormTimelineWindow } from '../../charts/form/charts.form.component';
+import { DASHBOARD_ECHARTS_MOBILE_TAP_FEEDBACK_OPTIONS } from '../../../helpers/echarts-tooltip-interaction.helper';
 
 type DashboardRecoveryNowSnapshotStatus = DerivedMetricSnapshotStatus | 'missing' | 'queued' | 'processing';
 
@@ -171,6 +172,7 @@ export class TileChartComponent extends TileAbstractDirective {
     shortLabel: option.shortLabel,
     menuLabel: option.menuLabel,
   }));
+  public readonly dashboardMobileTapFeedbackOptions = DASHBOARD_ECHARTS_MOBILE_TAP_FEEDBACK_OPTIONS;
 
   get chartInfoTooltip(): string | null {
     return resolveDashboardChartInfoTooltip(this.chartType);

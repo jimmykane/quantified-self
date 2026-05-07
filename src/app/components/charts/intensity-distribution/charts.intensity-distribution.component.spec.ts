@@ -162,11 +162,67 @@ describe('ChartsIntensityDistributionComponent', () => {
       { axisValue: Date.UTC(2025, 11, 29), seriesName: 'Hard', value: 14.285714 },
     ]);
 
-    expect(tooltipHtml).toContain('Week of Dec 29');
+    expect(tooltipHtml).toContain('Week 1,');
+    expect(tooltipHtml).toContain('2025 -');
+    expect(tooltipHtml).toContain('2026');
     expect(tooltipHtml).toContain('Easy: 57%');
     expect(tooltipHtml).toContain('Moderate: 29%');
     expect(tooltipHtml).toContain('Hard: 14%');
     expect(tooltipHtml).not.toContain('57.1');
+  });
+
+  it('keeps tooltip week headings specific when x-axis labels collapse to month-year', () => {
+    const weekMs = 7 * 24 * 60 * 60 * 1000;
+    const weeks = Array.from({ length: 30 }, (_, index) => ({
+      weekStartMs: Date.UTC(2026, 0, 5) + (index * weekMs),
+      easySeconds: 7200,
+      moderateSeconds: 3600,
+      hardSeconds: 1800,
+      source: 'power' as const,
+    }));
+
+    const option = (component as any).buildOption(weeks) as Record<string, any>;
+    const formatter = option?.tooltip?.formatter as ((params: Array<{ axisValue?: string | number; seriesName?: string; value?: number }>) => string);
+    const tooltipHtml = formatter([
+      { axisValue: Date.UTC(2026, 3, 6), seriesName: 'Easy', value: 57 },
+    ]);
+
+    expect(tooltipHtml).toContain('Week 15,');
+    expect(tooltipHtml).toContain('Apr');
+    expect(tooltipHtml).toContain('2026 -');
+    expect(tooltipHtml).not.toContain('Week of Apr 2026');
+  });
+
+  it('uses tap-only tooltip triggering on mobile viewport', () => {
+    const originalMatchMedia = window.matchMedia;
+    const matchMediaSpy = vi.fn().mockImplementation(() => ({
+      matches: true,
+      media: '',
+      onchange: null,
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    }));
+    window.matchMedia = matchMediaSpy as unknown as typeof window.matchMedia;
+
+    try {
+      const weeks = [
+        {
+          weekStartMs: Date.UTC(2025, 11, 29),
+          easySeconds: 7200,
+          moderateSeconds: 3600,
+          hardSeconds: 1800,
+          source: 'power' as const,
+        },
+      ];
+      const option = (component as any).buildOption(weeks) as Record<string, any>;
+
+      expect(option?.tooltip?.triggerOn).toBe('click');
+    } finally {
+      window.matchMedia = originalMatchMedia;
+    }
   });
 
   it('formats x-axis labels with year for cross-year ranges', () => {

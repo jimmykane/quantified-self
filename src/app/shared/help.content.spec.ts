@@ -51,7 +51,7 @@ describe('help.content', () => {
   it('should document the dashboard recovery tile now/active/latest summary behavior', () => {
     const gettingStartedSection = HELP_SECTIONS.find(section => section.id === 'getting-started');
 
-    expect(gettingStartedSection?.content).toContain('Recovery Left Now');
+    expect(gettingStartedSection?.content).toContain('Recovery left');
     expect(gettingStartedSection?.content).toContain('Active total');
     expect(gettingStartedSection?.content).toContain('Latest workout');
     expect(gettingStartedSection?.content).toContain('updating');
@@ -78,6 +78,7 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('default curated chart set');
     expect(gettingStartedSection?.content).toContain('KPI row set automatically once');
     expect(gettingStartedSection?.content).toContain('removing an auto-added curated chart or KPI prevents that chart from being suggested again');
+    expect(gettingStartedSection?.content).toContain('**Uploaded activities**');
   });
 
   it('should document that distance values follow unit preferences across the app', () => {
