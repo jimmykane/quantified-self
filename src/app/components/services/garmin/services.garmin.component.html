@@ -20,18 +20,22 @@
     @if (!garminUserID || !hasPermissionsLoaded) {
     <app-service-syncing-state></app-service-syncing-state>
     } @else {
-    <mat-list class="connected-list">
-      <mat-list-item>
-        <mat-icon matListItemIcon>account_circle</mat-icon>
-        <div matListItemTitle>{{ garminUserID }}</div>
-        <div matListItemLine>Connected: {{ serviceTokens?.[0]?.dateCreated | date:'short' }}</div>
-      </mat-list-item>
-      <mat-list-item *ngIf="permissionsLastChangedAt">
-        <mat-icon matListItemIcon>update</mat-icon>
-        <div matListItemTitle>Permissions Updated</div>
-        <div matListItemLine>{{ permissionsLastChangedAt * 1000 | date:'short' }}</div>
-      </mat-list-item>
-    </mat-list>
+    <div class="connected-account-list" role="list">
+      <div class="connected-account-item" role="listitem">
+        <mat-icon class="connected-account-icon">account_circle</mat-icon>
+        <div class="connected-account-copy">
+          <div class="connected-account-title">{{ garminUserID }}</div>
+          <div class="connected-account-line">Connected: {{ serviceTokens?.[0]?.dateCreated | date:'short' }}</div>
+        </div>
+      </div>
+      <div *ngIf="permissionsLastChangedAt" class="connected-account-item" role="listitem">
+        <mat-icon class="connected-account-icon">update</mat-icon>
+        <div class="connected-account-copy">
+          <div class="connected-account-title">Permissions Updated</div>
+          <div class="connected-account-line">{{ permissionsLastChangedAt * 1000 | date:'short' }}</div>
+        </div>
+      </div>
+    </div>
     }
       </div>
 
@@ -104,42 +108,63 @@
 
   <mat-divider class="connection-tools-divider"></mat-divider>
 
-  <mat-tab-group class="provider-tools-tabs" mat-stretch-tabs="false" animationDuration="0ms">
-    <mat-tab>
-      <ng-template mat-tab-label>
-        <span class="provider-tab-label">
-          <mat-icon>history</mat-icon>
-          <span>History Import</span>
-        </span>
-      </ng-template>
-      <section class="provider-tool-panel" [class.locked-panel]="!hasProAccess"
-        (click)="!hasProAccess && triggerUpsell()">
-        @if (!hasProAccess) {
-        <div class="pro-required-inline">
-          <mat-icon>lock</mat-icon>
-          <span>History import is a Pro feature.</span>
-        </div>
-        } @else if (isConnectedToService()) {
-        <app-history-import-form [serviceName]="serviceName" [userMetaForService]="serviceMeta"
-          [missingPermissions]="missingPermissions" [isLoadingParent]="isLoading"
-          (importInitiated)="onHistoryImportInitiated()"></app-history-import-form>
-        } @else {
-        <app-status-info type="info" title="Connect Account First">
-          You need to connect your Garmin account before importing history.
-        </app-status-info>
-        }
-      </section>
-    </mat-tab>
+  <nav
+    mat-tab-nav-bar
+    [tabPanel]="providerToolsPanel"
+    mat-stretch-tabs="false"
+    class="provider-tools-tabs"
+    aria-label="Garmin tools">
+    <a
+      href=""
+      mat-tab-link
+      [active]="activeProviderTool === 'history'"
+      (click)="$event.preventDefault(); selectProviderTool('history')">
+      <span class="provider-tab-label">
+        <mat-icon>history</mat-icon>
+        <span>History Import</span>
+      </span>
+    </a>
+    @if (isGarminToSuuntoRouteAvailableForUser) {
+    <a
+      href=""
+      mat-tab-link
+      [active]="activeProviderTool === 'auto-sync'"
+      (click)="$event.preventDefault(); selectProviderTool('auto-sync')">
+      <span class="provider-tab-label">
+        <mat-icon>published_with_changes</mat-icon>
+        <span>Auto Sync</span>
+      </span>
+    </a>
+    }
+  </nav>
+
+  <mat-tab-nav-panel #providerToolsPanel class="provider-tools-panel">
+    <section
+      class="provider-tool-panel"
+      [hidden]="activeProviderTool !== 'history'"
+      [class.locked-panel]="!hasProAccess"
+      (click)="!hasProAccess && triggerUpsell()">
+      @if (!hasProAccess) {
+      <div class="pro-required-inline">
+        <mat-icon>lock</mat-icon>
+        <span>History import is a Pro feature.</span>
+      </div>
+      } @else if (isConnectedToService()) {
+      <app-history-import-form [serviceName]="serviceName" [userMetaForService]="serviceMeta"
+        [missingPermissions]="missingPermissions" [isLoadingParent]="isLoading"
+        (importInitiated)="onHistoryImportInitiated()"></app-history-import-form>
+      } @else {
+      <app-status-info type="info" title="Connect Account First">
+        You need to connect your Garmin account before importing history.
+      </app-status-info>
+      }
+    </section>
 
     @if (isGarminToSuuntoRouteAvailableForUser) {
-    <mat-tab>
-      <ng-template mat-tab-label>
-        <span class="provider-tab-label">
-          <mat-icon>published_with_changes</mat-icon>
-          <span>Auto Sync</span>
-        </span>
-      </ng-template>
-      <section class="provider-tool-panel" [class.locked-panel]="!hasProAccess"
+    <section
+      class="provider-tool-panel"
+      [hidden]="activeProviderTool !== 'auto-sync'"
+      [class.locked-panel]="!hasProAccess"
         (click)="!hasProAccess && triggerUpsell()">
         <div class="tool-subsection-title">
           <mat-icon>published_with_changes</mat-icon>
@@ -226,7 +251,6 @@
         }
         }
       </section>
-    </mat-tab>
     }
-  </mat-tab-group>
+  </mat-tab-nav-panel>
 </div>

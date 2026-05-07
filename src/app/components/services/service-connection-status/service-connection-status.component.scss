@@ -15,7 +15,10 @@
     display: flex;
     flex-direction: column;
     gap: 12px;
+    min-width: 0;
+    max-width: 100%;
     padding: 8px 0 12px;
+    overflow-x: hidden;
 }
 
 .service-connection-status__summary {
@@ -108,6 +111,9 @@
     display: flex;
     flex-direction: column;
     gap: 10px;
+    min-width: 0;
+    max-width: 100%;
+    overflow-x: hidden;
 }
 
 @media (max-width: 640px) {

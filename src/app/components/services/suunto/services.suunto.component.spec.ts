@@ -10,6 +10,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatSnackBarModule } from '@angular/material/snack-bar';
+import { MatTabsModule } from '@angular/material/tabs';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { RouterTestingModule } from '@angular/router/testing';
 import { MatDialog } from '@angular/material/dialog';
@@ -60,6 +61,7 @@ describe('ServicesSuuntoComponent', () => {
                 HttpClientTestingModule,
                 MatProgressBarModule,
                 MatSnackBarModule,
+                MatTabsModule,
                 RouterTestingModule
             ],
             providers: [
@@ -95,7 +97,7 @@ describe('ServicesSuuntoComponent', () => {
         const syncingText = fixture.nativeElement.textContent;
         expect(syncingText).toContain('Syncing connection details...');
 
-        const accountIcon = fixture.nativeElement.querySelector('mat-icon[matListItemIcon]');
+        const accountIcon = fixture.nativeElement.querySelector('.connected-account-icon');
         expect(accountIcon).toBeFalsy();
     });
 
@@ -104,13 +106,39 @@ describe('ServicesSuuntoComponent', () => {
 
         const connectionStatus = fixture.nativeElement.querySelector('.service-connection-status');
         const providerToolTabs = fixture.nativeElement.querySelector('.provider-tools-tabs');
-        const providerTabs = fixture.nativeElement.querySelectorAll('mat-tab');
+        const providerToolPanel = fixture.nativeElement.querySelector('.provider-tools-panel');
+        const providerTabs = fixture.nativeElement.querySelectorAll('a[mat-tab-link]');
 
         expect(connectionStatus).toBeTruthy();
         expect(connectionStatus.textContent).toContain('Suunto App connection');
-        expect(providerToolTabs.hasAttribute('ng-reflect-dynamic-height')).toBe(false);
+        expect(providerToolTabs.tagName.toLowerCase()).toBe('nav');
+        expect(fixture.nativeElement.querySelector('mat-tab-group')).toBeFalsy();
+        expect(providerToolPanel).toBeTruthy();
         expect(providerTabs.length).toBe(2);
-        expect(fixture.nativeElement.querySelector('mat-tab .service-connection-status')).toBeFalsy();
+        expect(fixture.nativeElement.querySelector('.provider-tools-panel .service-connection-status')).toBeFalsy();
+    });
+
+    it('hides inactive provider tool panels when switching tabs', () => {
+        component.hasProAccess = true;
+        component.serviceTokens = [{ accessToken: 'token', userName: 'suunto-user' } as any];
+        fixture.detectChanges();
+
+        const tabs = fixture.nativeElement.querySelectorAll('a[mat-tab-link]');
+        const panels = fixture.nativeElement.querySelectorAll('.provider-tool-panel');
+
+        expect(panels.length).toBe(2);
+        expect(panels[0].hidden).toBe(false);
+        expect(panels[1].hidden).toBe(true);
+        expect(getComputedStyle(panels[1]).display).toBe('none');
+
+        tabs[1].dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+        fixture.detectChanges();
+
+        expect(component.activeProviderTool).toBe('uploads');
+        expect(panels[0].hidden).toBe(true);
+        expect(getComputedStyle(panels[0]).display).toBe('none');
+        expect(panels[1].hidden).toBe(false);
+        expect(panels[1].textContent).toContain('Upload FIT Activity');
     });
 
     it('renders disconnect beside the connected account details', () => {
@@ -126,6 +154,10 @@ describe('ServicesSuuntoComponent', () => {
 
         expect(accountRow).toBeTruthy();
         expect(accountRow.textContent).toContain('suunto-user');
+        expect(accountRow.querySelector('.connected-account-list')).toBeTruthy();
+        expect(accountRow.querySelector('.connected-account-title')?.textContent).toContain('suunto-user');
+        expect(accountRow.querySelector('.connected-account-line')?.textContent).toContain('Connected:');
+        expect(accountRow.querySelector('mat-list')).toBeFalsy();
         expect(accountRow.querySelector('.connection-disconnect-button')?.textContent).toContain('Disconnect');
         expect(fixture.nativeElement.querySelector('.service-connection-status__actions .connection-disconnect-button')).toBeFalsy();
     });
