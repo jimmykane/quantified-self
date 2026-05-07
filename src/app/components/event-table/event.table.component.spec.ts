@@ -12,6 +12,7 @@ import { AppEventColorService } from '../../services/color/app.event.color.servi
 import { AppFileService } from '../../services/app.file.service';
 import { AppProcessingService } from '../../services/app.processing.service';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
+import { LoggerService } from '../../services/logger.service';
 import { DatePipe } from '@angular/common';
 import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { of, Subject, delay } from 'rxjs';
@@ -95,6 +96,7 @@ describe('EventTableComponent', () => {
     let mockProcessingService: any;
     let mockEventMergeService: any;
     let mockAnalyticsService: any;
+    let mockLogger: any;
 
     const mockUser = new User('testUser');
     mockUser.settings = {
@@ -122,7 +124,7 @@ describe('EventTableComponent', () => {
             updateUserProperties: vi.fn().mockReturnValue(Promise.resolve())
         };
 
-        mockRouter = { navigate: vi.fn() };
+        mockRouter = { navigate: vi.fn().mockResolvedValue(true) };
         mockDialog = {
             open: vi.fn().mockReturnValue({
                 afterClosed: () => of(null),
@@ -189,6 +191,12 @@ describe('EventTableComponent', () => {
         mockAnalyticsService = {
             logEvent: vi.fn(),
         };
+        mockLogger = {
+            info: vi.fn(),
+            warn: vi.fn(),
+            error: vi.fn(),
+            captureException: vi.fn(),
+        };
 
         await TestBed.configureTestingModule({
             imports: [NoopAnimationsModule],
@@ -206,6 +214,7 @@ describe('EventTableComponent', () => {
                 { provide: AppEventColorService, useValue: mockColorService },
                 { provide: AppFileService, useValue: mockFileService },
                 { provide: AppProcessingService, useValue: mockProcessingService },
+                { provide: LoggerService, useValue: mockLogger },
                 DatePipe
             ],
             schemas: [NO_ERRORS_SCHEMA]
@@ -654,6 +663,33 @@ describe('EventTableComponent', () => {
         await component.mergeSelection(new Event('click'));
 
         expect(mockSnackBar.open).toHaveBeenCalledWith('Mapped merge error', undefined, { duration: 5000 });
+    });
+
+    it('should not report merge failure when opening the merged event fails after a successful merge', async () => {
+        const e1 = new MockEvent('event1');
+        const e2 = new MockEvent('event2');
+        const navigationError = new Error('navigation failed');
+        component.selection.select({ 'Event': e1 } as any);
+        component.selection.select({ 'Event': e2 } as any);
+        mockRouter.navigate.mockRejectedValueOnce(navigationError);
+
+        await component.mergeSelection(new Event('click'));
+
+        expect(mockEventMergeService.mergeEvents).toHaveBeenCalledWith(['event1', 'event2'], 'benchmark');
+        expect(mockEventMergeService.getMergeErrorMessage).not.toHaveBeenCalled();
+        expect(mockSnackBar.open).toHaveBeenCalledWith(
+            'Events merged. Open the merged event from the table once it appears.',
+            undefined,
+            { duration: 5000 }
+        );
+        expect(mockLogger.captureException).toHaveBeenCalledWith(navigationError, {
+            extra: {
+                eventIDs: ['event1', 'event2'],
+                mergeType: 'benchmark',
+                mergedEventID: 'merged-event',
+                stage: 'open_merged_event',
+            }
+        });
     });
 
     describe('deleteSelection', () => {

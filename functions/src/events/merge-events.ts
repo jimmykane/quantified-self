@@ -392,6 +392,34 @@ async function persistProcessingMetadata(userID: string, eventID: string): Promi
     .set(processingPayload, { merge: true });
 }
 
+async function finalizeMergedEventMetadata(userID: string, eventID: string, mergeType: MergeType): Promise<void> {
+  const results = await Promise.allSettled([
+    admin.firestore().doc(`users/${userID}/events/${eventID}`).set({
+      isMerge: mergeType === 'benchmark',
+      mergeType,
+    }, { merge: true }),
+    persistProcessingMetadata(userID, eventID),
+  ]);
+
+  const failures = results
+    .map((result, index) => ({ result, index }))
+    .filter((entry): entry is { result: PromiseRejectedResult; index: number } => entry.result.status === 'rejected');
+
+  if (!failures.length) {
+    return;
+  }
+
+  logger.warn('[mergeEvents] Merged event was written but metadata finalization failed.', {
+    userID,
+    eventID,
+    mergeType,
+    failures: failures.map(({ result, index }) => ({
+      write: index === 0 ? 'mergeMetadata' : 'processingMetadata',
+      error: serializeError(result.reason),
+    })),
+  });
+}
+
 async function resolveUploadLimitForUser(userID: string): Promise<number | null> {
   if (await hasProAccess(userID)) {
     return null;
@@ -549,11 +577,7 @@ export const mergeEvents = onCall({
 
     const writer = new EventWriter(getFirestoreAdapter(), getStorageAdapter());
     await writer.writeAllEventData(userID, mergedEvent as any, originalFiles);
-    await admin.firestore().doc(`users/${userID}/events/${mergedEventID}`).set({
-      isMerge: mergeType === 'benchmark',
-      mergeType,
-    }, { merge: true });
-    await persistProcessingMetadata(userID, mergedEventID);
+    await finalizeMergedEventMetadata(userID, mergedEventID, mergeType);
 
     return {
       eventId: mergedEventID,

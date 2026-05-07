@@ -626,6 +626,25 @@ describe('mergeEvents', () => {
     }, { merge: true });
   });
 
+  it('should still return success when metadata finalization fails after writing the merged event', async () => {
+    hoisted.mockDocSet.mockRejectedValueOnce(new Error('metadata write failed'));
+
+    await expect(mergeEvents({
+      auth: { uid: 'u1' },
+      app: { appId: 'app-id' },
+      data: { eventIds: ['e1', 'e2'], mergeType: 'benchmark' },
+    } as any)).resolves.toMatchObject({
+      eventId: 'merged-event-id',
+      mergeType: 'benchmark',
+    });
+
+    expect(hoisted.mockWriteAllEventData).toHaveBeenCalledTimes(1);
+    expect(hoisted.mockDocSet).toHaveBeenCalledWith({
+      isMerge: true,
+      mergeType: 'benchmark',
+    }, { merge: true });
+  });
+
   it('should map source event parse failures to internal HttpsError', async () => {
     hoisted.mockEventImporterJSON.getEventFromJSON.mockImplementationOnce(() => {
       throw new Error('parse failure');
