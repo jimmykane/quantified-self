@@ -13,7 +13,11 @@ import {
 } from '../shared/subscription.constants';
 import { clampListUsersPageSize } from '../shared/date.utils';
 import { enrichUsers } from '../shared/user-enrichment';
-import { BasicUser, EventCountStats, ListUsersRequest, ListUsersResponse, UserCountResponse } from '../shared/types';
+import { BasicUser, EventCountStats, ListUsersRequest, ListUsersResponse, UserCountRequest, UserCountResponse } from '../shared/types';
+
+const ADMIN_STATS_COLLECTION = 'adminStats';
+const ADMIN_EVENT_COUNTS_DOC = 'eventCounts';
+const GLOBAL_EVENT_COUNT_CACHE_TTL_MS = 60 * 60 * 1000;
 
 const resolveSubscriptionInterval = (subscription: Record<string, unknown>): string | null => {
     const items = Array.isArray(subscription.items) ? subscription.items : [];
@@ -53,13 +57,153 @@ function normalizeCount(value: unknown): number {
     return Math.max(0, Math.floor(value));
 }
 
-async function getGlobalEventCount(db: admin.firestore.Firestore): Promise<EventCountStats> {
+function toEpochMillis(value: unknown): number | null {
+    if (!value) {
+        return null;
+    }
+
+    if (value instanceof Date) {
+        const time = value.getTime();
+        return Number.isFinite(time) ? time : null;
+    }
+
+    if (typeof value === 'number' && Number.isFinite(value)) {
+        return value;
+    }
+
+    if (typeof value === 'string') {
+        const time = Date.parse(value);
+        return Number.isFinite(time) ? time : null;
+    }
+
+    const timestampLike = value as {
+        toMillis?: () => number;
+        seconds?: number;
+        nanoseconds?: number;
+    };
+    if (typeof timestampLike.toMillis === 'function') {
+        const time = timestampLike.toMillis();
+        return Number.isFinite(time) ? time : null;
+    }
+
+    if (typeof timestampLike.seconds === 'number') {
+        const time = (timestampLike.seconds * 1000) + Math.floor((timestampLike.nanoseconds || 0) / 1_000_000);
+        return Number.isFinite(time) ? time : null;
+    }
+
+    return null;
+}
+
+function toIsoString(value: unknown): string | null {
+    const time = toEpochMillis(value);
+    return time === null ? null : new Date(time).toISOString();
+}
+
+function readCachedGlobalEventCount(data: admin.firestore.DocumentData | undefined, nowMs: number): EventCountStats | null {
+    const total = data?.total;
+    if (typeof total !== 'number' || !Number.isFinite(total)) {
+        return null;
+    }
+
+    const expireAtMs = toEpochMillis(data?.expireAt);
+    if (expireAtMs === null || expireAtMs <= nowMs) {
+        return null;
+    }
+
+    return {
+        total: normalizeCount(total),
+        cacheStatus: 'fresh',
+        computedAt: toIsoString(data?.computedAt),
+        expireAt: new Date(expireAtMs).toISOString(),
+    };
+}
+
+function readStaleGlobalEventCount(data: admin.firestore.DocumentData | undefined): EventCountStats | null {
+    const total = data?.total;
+    if (typeof total !== 'number' || !Number.isFinite(total)) {
+        return null;
+    }
+
+    return {
+        total: normalizeCount(total),
+        cacheStatus: 'stale',
+        computedAt: toIsoString(data?.computedAt),
+        expireAt: toIsoString(data?.expireAt),
+    };
+}
+
+function resolveGlobalEventCountCacheRef(db: admin.firestore.Firestore): admin.firestore.DocumentReference | null {
+    try {
+        const collectionRef = db.collection(ADMIN_STATS_COLLECTION);
+        if (!collectionRef || typeof collectionRef.doc !== 'function') {
+            return null;
+        }
+        return collectionRef.doc(ADMIN_EVENT_COUNTS_DOC);
+    } catch (error) {
+        logger.warn('Failed to resolve admin global event count cache doc', error);
+        return null;
+    }
+}
+
+async function getGlobalEventCount(
+    db: admin.firestore.Firestore,
+    options: { forceRefresh?: boolean; requestedByUid?: string | null } = {}
+): Promise<EventCountStats> {
+    const nowMs = Date.now();
+    const cacheRef = resolveGlobalEventCountCacheRef(db);
+    let cachedData: admin.firestore.DocumentData | undefined;
+
+    if (cacheRef) {
+        try {
+            const cacheSnapshot = await cacheRef.get();
+            cachedData = cacheSnapshot.exists ? cacheSnapshot.data() : undefined;
+            if (!options.forceRefresh) {
+                const cached = readCachedGlobalEventCount(cachedData, nowMs);
+                if (cached) {
+                    return cached;
+                }
+            }
+        } catch (error) {
+            logger.warn('Failed to read admin global event count cache', error);
+        }
+    }
+
     try {
         const snapshot = await db.collectionGroup('events').count().get();
-        return { total: normalizeCount(snapshot.data().count) };
+        const total = normalizeCount(snapshot.data().count);
+        const computedAt = new Date(nowMs);
+        const expireAt = new Date(nowMs + GLOBAL_EVENT_COUNT_CACHE_TTL_MS);
+
+        if (cacheRef) {
+            try {
+                await cacheRef.set({
+                    kind: 'eventCounts',
+                    schemaVersion: 1,
+                    total,
+                    computedAt,
+                    expireAt,
+                    refreshedBy: options.requestedByUid || null,
+                    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+                }, { merge: true });
+            } catch (error) {
+                logger.warn('Failed to write admin global event count cache', error);
+            }
+        }
+
+        return {
+            total,
+            cacheStatus: 'refreshed',
+            computedAt: computedAt.toISOString(),
+            expireAt: expireAt.toISOString(),
+        };
     } catch (error) {
         logger.warn('Failed to count events for admin user stats', error);
-        return { total: null };
+        return readStaleGlobalEventCount(cachedData) || {
+            total: null,
+            cacheStatus: 'unavailable',
+            computedAt: null,
+            expireAt: null,
+        };
     }
 }
 
@@ -253,12 +397,13 @@ export const listUsers = onAdminCall<ListUsersRequest, ListUsersResponse>({
  * Gets the total number of users in the system, broken down by subscription status.
  * Uses optimized Aggregation Queries.
  */
-export const getUserCount = onAdminCall<void, UserCountResponse>({
+export const getUserCount = onAdminCall<UserCountRequest, UserCountResponse>({
     region: FUNCTIONS_MANIFEST.getUserCount.region,
     memory: '256MiB',
-}, async () => {
+}, async (request) => {
     try {
         const db = admin.firestore();
+        const forceRefreshEventCount = request.data?.refreshEventCount === true;
 
         // 1. Get stats from Firestore (subscriptions)
         // Parallel efficient count queries
@@ -275,7 +420,10 @@ export const getUserCount = onAdminCall<void, UserCountResponse>({
             db.collection('users')
                 .where('onboardingCompleted', '==', true)
                 .count().get(),
-            getGlobalEventCount(db)
+            getGlobalEventCount(db, {
+                forceRefresh: forceRefreshEventCount,
+                requestedByUid: request.auth?.uid || null,
+            })
         ]);
 
         const total = totalSnapshot.data().count;

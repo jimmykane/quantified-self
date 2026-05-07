@@ -88,6 +88,7 @@ describe('AdminUserManagementComponent', () => {
     let impersonationServiceSpy: any;
     let routerSpy: any;
     let matDialogSpy: any;
+    let matSnackBarSpy: any;
     let appThemeServiceMock: any;
     let themeSubject: BehaviorSubject<AppThemes>;
     let mockLogger: any;
@@ -248,6 +249,9 @@ describe('AdminUserManagementComponent', () => {
                 afterClosed: () => of(true)
             })
         };
+        matSnackBarSpy = {
+            open: vi.fn()
+        };
 
         themeSubject = new BehaviorSubject<AppThemes>(AppThemes.Dark);
         appThemeServiceMock = {
@@ -296,7 +300,7 @@ describe('AdminUserManagementComponent', () => {
                 { provide: LoggerService, useValue: mockLogger },
                 { provide: Router, useValue: routerSpy },
                 { provide: MatDialog, useValue: matDialogSpy },
-                { provide: MatSnackBar, useValue: { open: vi.fn() } },
+                { provide: MatSnackBar, useValue: matSnackBarSpy },
                 { provide: EChartsLoaderService, useValue: mockEchartsService },
                 {
                     provide: ActivatedRoute,
@@ -331,6 +335,7 @@ describe('AdminUserManagementComponent', () => {
             schemas: [NO_ERRORS_SCHEMA]
         })
             .overrideProvider(MatDialog, { useValue: matDialogSpy })
+            .overrideProvider(MatSnackBar, { useValue: matSnackBarSpy })
             .compileComponents();
 
         fixture = TestBed.createComponent(AdminUserManagementComponent);
@@ -383,6 +388,37 @@ describe('AdminUserManagementComponent', () => {
         expect(nativeElement.textContent).toContain('Total Events');
         expect(nativeElement.textContent).toContain('1M');
         expect(nativeElement.textContent).toContain('125');
+    });
+
+    it('should force refresh the global event count from the Total Events card', () => {
+        adminServiceSpy.getTotalUserCount.mockReturnValueOnce(of({
+            total: 100,
+            pro: 30,
+            basic: 70,
+            free: 0,
+            monthlyPaid: 70,
+            yearlyPaid: 0,
+            everPaid: 85,
+            canceled: 15,
+            cancelScheduled: 8,
+            onboardingCompleted: 80,
+            events: {
+                total: 1_250_000,
+                cacheStatus: 'refreshed',
+                computedAt: '2026-05-07T05:00:00.000Z',
+                expireAt: '2026-05-07T06:00:00.000Z',
+            },
+            providers: {
+                password: 50,
+            },
+        }));
+
+        component.refreshGlobalEventCount();
+
+        expect(adminServiceSpy.getTotalUserCount).toHaveBeenCalledWith({ refreshEventCount: true });
+        expect(component.userStats?.events.total).toBe(1_250_000);
+        expect(component.isRefreshingEventCount).toBe(false);
+        expect(matSnackBarSpy.open).toHaveBeenCalledWith('Event count refreshed', undefined, { duration: 3000 });
     });
 
     it('should use resolved user growth trend data on init', () => {

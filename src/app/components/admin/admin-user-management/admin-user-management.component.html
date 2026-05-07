@@ -110,10 +110,22 @@
                 <div class="app-stat-header">
                     <mat-icon>fitness_center</mat-icon>
                     <span>Total Events</span>
+                    <button mat-icon-button type="button" class="app-stat-action" matTooltip="Refresh event count"
+                        aria-label="Refresh event count" [disabled]="isRefreshingEventCount"
+                        (click)="refreshGlobalEventCount()">
+                        @if (isRefreshingEventCount) {
+                        <mat-spinner diameter="18"></mat-spinner>
+                        } @else {
+                        <mat-icon>refresh</mat-icon>
+                        }
+                    </button>
                 </div>
                 @if (userStats) {
                 @if (userStats.events.total !== null) {
                 <div class="app-stat-value">{{ userStats.events.total | compactCount }}</div>
+                @if (userStats.events.computedAt) {
+                <div class="app-stat-footnote">Updated {{ userStats.events.computedAt | date:'short' }}</div>
+                }
                 } @else {
                 <div class="app-stat-value app-stat-value-muted">-</div>
                 }

@@ -123,6 +123,8 @@ To ensure data hygiene and compliance, we enforce Time-To-Live (TTL) policies on
 | `aiInsightsPromptRepairs` | ~90 days | `expireAt` | Server-owned backlog of AI-repaired prompts for deterministic parser improvements |
 | `failed_jobs` | 7 days | `expireAt` | Logs for failed background jobs |
 | `*Queue` | 7 days | `expireAt` | Temporary queue items for processing |
+| `adminStats` | ~1 hour | `expireAt` | Short-lived admin aggregate cache documents |
+| `userDeletionTombstones` | Account-deletion retention window | `expireAt` | Durable deletion guard tombstones with TTL fallback cleanup |
 
 ## 🤝 Contribution
 

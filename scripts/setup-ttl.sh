@@ -2,6 +2,7 @@
 
 # Array of collection group names
 COLLECTIONS=(
+    "adminStats"
     "aiInsightsPromptRepairs"
     "COROSAPIWorkoutQueue"
     "suuntoAppWorkoutQueue"
@@ -12,6 +13,7 @@ COLLECTIONS=(
     "failed_jobs"
     "mail"
     "orphaned_service_tokens"
+    "userDeletionTombstones"
 )
 
 # Field name for TTL

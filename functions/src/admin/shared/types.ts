@@ -4,6 +4,13 @@ export interface GetQueueStatsRequest {
 
 export interface EventCountStats {
     total: number | null;
+    cacheStatus?: 'fresh' | 'refreshed' | 'stale' | 'unavailable';
+    computedAt?: string | null;
+    expireAt?: string | null;
+}
+
+export interface UserCountRequest {
+    refreshEventCount?: boolean;
 }
 
 export interface ListUsersRequest {
