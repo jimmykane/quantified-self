@@ -16,7 +16,7 @@ export interface EChartsMobileTapFeedbackOptions {
 
 export const DASHBOARD_ECHARTS_MOBILE_TAP_FEEDBACK_OPTIONS: EChartsMobileTapFeedbackOptions = {
   axisPointerFeedback: 'afterFirstInteraction',
-  clickFeedback: false,
+  clickFeedback: true,
 };
 
 export function isEChartsMobileTooltipViewport(): boolean {

@@ -21,10 +21,10 @@ describe('echarts-tooltip-interaction.helper', () => {
     expect(resolveEChartsTooltipTriggerOn(true, false)).toBe('mousemove|click');
   });
 
-  it('keeps dashboard axis-pointer haptics gated until an intentional chart interaction', () => {
+  it('keeps dashboard axis-pointer haptics gated while preserving intentional tap feedback', () => {
     expect(DASHBOARD_ECHARTS_MOBILE_TAP_FEEDBACK_OPTIONS).toEqual({
       axisPointerFeedback: 'afterFirstInteraction',
-      clickFeedback: false,
+      clickFeedback: true,
     });
   });
 
