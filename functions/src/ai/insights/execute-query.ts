@@ -369,7 +369,18 @@ const defaultExecuteQueryDependencies: ExecuteQueryDependencies = {
 };
 
 function isMergedEventDocument(rawEventData: Record<string, unknown>): boolean {
-  return isBenchmarkEventForTrainingMetrics(rawEventData);
+  if (isBenchmarkEventForTrainingMetrics(rawEventData)) {
+    return true;
+  }
+
+  const mergeType = typeof rawEventData.mergeType === 'string'
+    ? rawEventData.mergeType.trim().toLowerCase()
+    : '';
+  if (mergeType === 'multi') {
+    return true;
+  }
+
+  return Array.isArray(rawEventData.originalFiles) && rawEventData.originalFiles.length > 1;
 }
 
 function toFirestoreTimestampDate(value: unknown): Date | null {
