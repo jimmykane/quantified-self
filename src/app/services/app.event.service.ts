@@ -1820,8 +1820,35 @@ export class AppEventService implements OnDestroy {
    * @todo Cache this result (e.g., in a Signal or BehaviorSubject) to avoid unnecessary server calls on every navigation.
    */
   public async getEventCount(user: User): Promise<number> {
-    const eventsRef = collection(this.firestore, `users/${user.uid}/events`);
-    const snapshot = await getCountFromServer(query(eventsRef));
-    return snapshot.data().count;
+    const path = `users/${user.uid}/events`;
+    const startedAt = performance.now();
+    this.logger.info('[debug] app_event_service_event_count_request_start', {
+      path,
+      source: 'server_aggregation',
+      localCache: 'skipped_by_getCountFromServer',
+    });
+
+    try {
+      const eventsRef = collection(this.firestore, path);
+      const snapshot = await getCountFromServer(query(eventsRef));
+      const count = snapshot.data().count;
+      this.logger.info('[debug] app_event_service_event_count_request_success', {
+        path,
+        source: 'server_aggregation',
+        localCache: 'skipped_by_getCountFromServer',
+        durationMs: Number((performance.now() - startedAt).toFixed(2)),
+        total: count,
+      });
+      return count;
+    } catch (error: unknown) {
+      this.logger.info('[debug] app_event_service_event_count_request_failed', {
+        path,
+        source: 'server_aggregation',
+        localCache: 'skipped_by_getCountFromServer',
+        durationMs: Number((performance.now() - startedAt).toFixed(2)),
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
+    }
   }
 }

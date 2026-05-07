@@ -26,7 +26,6 @@ import { DashboardTileBoardComponent } from '../components/summaries/dashboard-t
 import { DashboardTileCellComponent } from '../components/summaries/dashboard-tile-cell/dashboard-tile-cell.component';
 import { DashboardActionPromptComponent } from '../components/dashboard/dashboard-action-prompt/dashboard-action-prompt.component';
 import { DashboardActionPromptsComponent } from '../components/dashboard/dashboard-action-prompts/dashboard-action-prompts.component';
-import { CompactCountPipe } from '../helpers/compact-count.pipe';
 
 @NgModule({
     imports: [
@@ -38,7 +37,6 @@ import { CompactCountPipe } from '../helpers/compact-count.pipe';
         DragDropModule,
         DashboardRoutingModule,
         EventsMapComponent,
-        CompactCountPipe,
     ],
     exports: [],
     declarations: [
