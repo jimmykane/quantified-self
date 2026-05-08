@@ -17,20 +17,22 @@ import {
 import {
   DASHBOARD_ACWR_KPI_CHART_TYPE,
   DASHBOARD_FITNESS_CTL_KPI_CHART_TYPE,
+  DASHBOARD_FITNESS_TREND_KPI_CHART_TYPE,
   DASHBOARD_FORM_NOW_KPI_CHART_TYPE,
   DASHBOARD_FORM_CHART_TYPE,
+  DASHBOARD_LOAD_STATUS_KPI_CHART_TYPE,
   DASHBOARD_RECOVERY_NOW_CHART_TYPE,
   DASHBOARD_SLEEP_TREND_CHART_TYPE,
 } from './dashboard-special-chart-types';
 
 describe('dashboard-manager-presets.helper', () => {
-  it('exposes the expanded preset catalog with 24 unique definitions', () => {
+  it('exposes the expanded preset catalog with 29 unique definitions', () => {
     const definitions = getDashboardManagerPresetDefinitions();
 
-    expect(definitions).toHaveLength(24);
-    expect(new Set(definitions.map(definition => definition.id)).size).toBe(24);
+    expect(definitions).toHaveLength(29);
+    expect(new Set(definitions.map(definition => definition.id)).size).toBe(29);
     expect(definitions.filter(definition => definition.category === 'curated')).toHaveLength(6);
-    expect(definitions.filter(definition => definition.category === 'kpi')).toHaveLength(10);
+    expect(definitions.filter(definition => definition.category === 'kpi')).toHaveLength(15);
     expect(definitions.filter(definition => definition.category === 'custom')).toHaveLength(7);
     expect(definitions.filter(definition => definition.category === 'map')).toHaveLength(1);
     expect(definitions.map(definition => definition.id)).toContain(DASHBOARD_MANAGER_PRESET_IDS.CURATED_SLEEP);
@@ -177,6 +179,34 @@ describe('dashboard-manager-presets.helper', () => {
     expect(fitnessTile).toMatchObject({
       type: TileTypes.Chart,
       chartType: DASHBOARD_FITNESS_CTL_KPI_CHART_TYPE,
+      dataCategoryType: ChartDataCategoryTypes.DateType,
+      dataValueType: ChartDataValueTypes.Total,
+      dataTimeInterval: TimeIntervals.Weekly,
+      size: { columns: 1, rows: 1 },
+    });
+
+    const loadStatusTile = buildDashboardManagerPresetTile({
+      presetId: DASHBOARD_MANAGER_PRESET_IDS.KPI_LOAD_STATUS,
+      order: 4,
+      size: { columns: 1, rows: 1 },
+    });
+    expect(loadStatusTile).toMatchObject({
+      type: TileTypes.Chart,
+      chartType: DASHBOARD_LOAD_STATUS_KPI_CHART_TYPE,
+      dataCategoryType: ChartDataCategoryTypes.DateType,
+      dataValueType: ChartDataValueTypes.Total,
+      dataTimeInterval: TimeIntervals.Weekly,
+      size: { columns: 1, rows: 1 },
+    });
+
+    const fitnessTrendTile = buildDashboardManagerPresetTile({
+      presetId: DASHBOARD_MANAGER_PRESET_IDS.KPI_FITNESS_TREND,
+      order: 5,
+      size: { columns: 1, rows: 1 },
+    });
+    expect(fitnessTrendTile).toMatchObject({
+      type: TileTypes.Chart,
+      chartType: DASHBOARD_FITNESS_TREND_KPI_CHART_TYPE,
       dataCategoryType: ChartDataCategoryTypes.DateType,
       dataValueType: ChartDataValueTypes.Total,
       dataTimeInterval: TimeIntervals.Weekly,

@@ -81,10 +81,15 @@
   chartType === acwrKpiChartType
   || chartType === rampRateKpiChartType
   || chartType === monotonyStrainKpiChartType
+  || chartType === loadStatusKpiChartType
   || chartType === formNowKpiChartType
   || chartType === fitnessCtlKpiChartType
   || chartType === fatigueAtlKpiChartType
+  || chartType === fitnessTrendKpiChartType
+  || chartType === fatigueTrendKpiChartType
+  || chartType === recoveryDebtKpiChartType
   || chartType === formPlus7dKpiChartType
+  || chartType === trainingBalanceKpiChartType
   || chartType === easyPercentKpiChartType
   || chartType === hardPercentKpiChartType
   || chartType === efficiencyDelta4wKpiChartType
@@ -96,11 +101,13 @@
     [formNow]="formNow" [fitnessCtl]="fitnessCtl" [fatigueAtl]="fatigueAtl"
     [formPlus7d]="formPlus7d" [easyPercent]="easyPercent" [hardPercent]="hardPercent"
     [efficiencyDelta4w]="efficiencyDelta4w"
+    [freshnessForecast]="freshnessForecast" [intensityDistribution]="intensityDistribution"
     [acwrStatus]="acwrStatus" [rampRateStatus]="rampRateStatus" [monotonyStrainStatus]="monotonyStrainStatus"
     [formNowStatus]="formNowStatus" [fitnessCtlStatus]="fitnessCtlStatus" [fatigueAtlStatus]="fatigueAtlStatus"
     [formPlus7dStatus]="formPlus7dStatus"
     [easyPercentStatus]="easyPercentStatus" [hardPercentStatus]="hardPercentStatus"
-    [efficiencyDelta4wStatus]="efficiencyDelta4wStatus">
+    [efficiencyDelta4wStatus]="efficiencyDelta4wStatus"
+    [freshnessForecastStatus]="freshnessForecastStatus" [intensityDistributionStatus]="intensityDistributionStatus">
   </app-kpi-chart>
   }
   @if (chartType === freshnessForecastChartType) {

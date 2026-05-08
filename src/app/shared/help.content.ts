@@ -105,8 +105,8 @@ export const HELP_SECTIONS: HelpSection[] = [
 - **Curated Recovery** remains a fixed insight and does not react to event table or custom tile date ranges.
 - **Curated Form/TSS** computes from full history and does not react to event table or custom tile date ranges.
 - New curated charts: **Freshness Forecast**, **Intensity Distribution**, and **Efficiency Trend**.
-- The default KPI rows are the core derived training-metrics set: **Form Now**, **Fitness (CTL)**, **Fatigue (ATL)**, and **Ramp Rate**.
-- Additional KPI rows such as **ACWR**, **Monotony / Strain**, **Form +7d**, **Easy %**, **Hard %**, and **Efficiency Δ (4w)** remain available from Dashboard manager.
+- The default KPI rows are the current-state set: **Load Status**, **Form Now**, **Fitness Trend**, **Fatigue Trend**, **Recovery Debt**, and **Training Balance**.
+- Additional KPI rows such as **Fitness (CTL)**, **Fatigue (ATL)**, **ACWR**, **Ramp Rate**, **Monotony / Strain**, **Form +7d**, **Easy %**, **Hard %**, and **Efficiency Δ (4w)** remain available from Dashboard manager.
 - KPI rows are shown in the compact **Today** section above the main dashboard grid.
 - The **Today** header can show **Uploaded activities**, which counts current uploaded activity events.
 - On mobile, Today rows stay compact while the chart/map grid stays unchanged below.
@@ -179,10 +179,15 @@ export const HELP_SECTIONS: HelpSection[] = [
 - **ACWR** uses acute 7-day load versus chronic 28-day load/4 and shows an 8-week sparkline.
 - **Ramp Rate** uses CTL(today) - CTL(today-7d) with an 8-week sparkline.
 - **Monotony / Strain** uses 7-day load mean/stddev for monotony, and load * monotony for strain.
+- **Load Status** summarizes current training state from same-day Form, ramp rate, Fitness, and Fatigue.
 - **Form Now** uses same-day TSB readiness from the latest derived load state.
 - **Fitness (CTL)** uses the derived Form model's current 42-day chronic training load.
 - **Fatigue (ATL)** uses the derived Form model's current 7-day acute training load.
+- **Fitness Trend** shows recent CTL direction from the derived Form model.
+- **Fatigue Trend** shows recent ATL direction from the derived Form model.
+- **Recovery Debt** estimates zero-load days until same-day Form returns to neutral.
 - **Form +7d** projects same-day TSB at day +7 assuming zero load.
+- **Training Balance** summarizes the latest weekly Easy/Moderate/Hard intensity mix.
 - **Easy %** and **Hard %** use the latest weekly intensity distribution bucket.
 - **Efficiency Δ (4w)** shows current efficiency versus the prior 4-week baseline as absolute + percent delta.
 - **Freshness Forecast** projects 7 future days with zero load from the latest derived day.

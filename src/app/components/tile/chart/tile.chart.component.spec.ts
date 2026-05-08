@@ -19,17 +19,22 @@ import {
   DASHBOARD_EFFICIENCY_DELTA_4W_KPI_CHART_TYPE,
   DASHBOARD_EFFICIENCY_TREND_CHART_TYPE,
   DASHBOARD_FATIGUE_ATL_KPI_CHART_TYPE,
+  DASHBOARD_FATIGUE_TREND_KPI_CHART_TYPE,
   DASHBOARD_FITNESS_CTL_KPI_CHART_TYPE,
+  DASHBOARD_FITNESS_TREND_KPI_CHART_TYPE,
   DASHBOARD_FRESHNESS_FORECAST_CHART_TYPE,
   DASHBOARD_FORM_CHART_TYPE,
   DASHBOARD_FORM_NOW_KPI_CHART_TYPE,
   DASHBOARD_FORM_PLUS_7D_KPI_CHART_TYPE,
   DASHBOARD_HARD_PERCENT_KPI_CHART_TYPE,
   DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE,
+  DASHBOARD_LOAD_STATUS_KPI_CHART_TYPE,
   DASHBOARD_MONOTONY_STRAIN_KPI_CHART_TYPE,
   DASHBOARD_RAMP_RATE_KPI_CHART_TYPE,
+  DASHBOARD_RECOVERY_DEBT_KPI_CHART_TYPE,
   DASHBOARD_RECOVERY_NOW_CHART_TYPE,
   DASHBOARD_SLEEP_TREND_CHART_TYPE,
+  DASHBOARD_TRAINING_BALANCE_KPI_CHART_TYPE,
 } from '../../../helpers/dashboard-special-chart-types';
 import { DASHBOARD_ECHARTS_MOBILE_TAP_FEEDBACK_OPTIONS } from '../../../helpers/echarts-tooltip-interaction.helper';
 
@@ -175,6 +180,8 @@ class MockKpiChartComponent {
   @Input() easyPercent: any;
   @Input() hardPercent: any;
   @Input() efficiencyDelta4w: any;
+  @Input() freshnessForecast: any;
+  @Input() intensityDistribution: any;
   @Input() acwrStatus?: string | null;
   @Input() rampRateStatus?: string | null;
   @Input() monotonyStrainStatus?: string | null;
@@ -185,6 +192,8 @@ class MockKpiChartComponent {
   @Input() easyPercentStatus?: string | null;
   @Input() hardPercentStatus?: string | null;
   @Input() efficiencyDelta4wStatus?: string | null;
+  @Input() freshnessForecastStatus?: string | null;
+  @Input() intensityDistributionStatus?: string | null;
 }
 
 @Component({
@@ -641,6 +650,73 @@ describe('TileChartComponent', () => {
     expect(kpi.chartType).toBe(DASHBOARD_FATIGUE_ATL_KPI_CHART_TYPE);
     expect(kpi.fatigueAtl).toEqual(component.fatigueAtl);
     expect(kpi.fatigueAtlStatus).toBe('stale');
+  });
+
+  it('should route Load Status KPI chart type to the KPI renderer', () => {
+    component.chartType = DASHBOARD_LOAD_STATUS_KPI_CHART_TYPE as any;
+    component.formNow = { value: -3 } as any;
+    component.rampRate = { rampRate: 1.2 } as any;
+    component.fitnessCtl = { value: 40 } as any;
+    component.fatigueAtl = { value: 55 } as any;
+    component.formNowStatus = 'ready' as any;
+    fixture.detectChanges();
+
+    const kpi = getKpiComponent();
+    expect(kpi.chartType).toBe(DASHBOARD_LOAD_STATUS_KPI_CHART_TYPE);
+    expect(kpi.formNow).toEqual(component.formNow);
+    expect(kpi.rampRate).toEqual(component.rampRate);
+    expect(kpi.fitnessCtl).toEqual(component.fitnessCtl);
+    expect(kpi.fatigueAtl).toEqual(component.fatigueAtl);
+  });
+
+  it('should route Recovery Debt KPI chart type to the KPI renderer', () => {
+    component.chartType = DASHBOARD_RECOVERY_DEBT_KPI_CHART_TYPE as any;
+    component.formNow = { value: -3 } as any;
+    component.formPlus7d = { value: 5 } as any;
+    component.freshnessForecast = { points: [] } as any;
+    component.freshnessForecastStatus = 'processing' as any;
+    fixture.detectChanges();
+
+    const kpi = getKpiComponent();
+    expect(kpi.chartType).toBe(DASHBOARD_RECOVERY_DEBT_KPI_CHART_TYPE);
+    expect(kpi.formNow).toEqual(component.formNow);
+    expect(kpi.formPlus7d).toEqual(component.formPlus7d);
+    expect(kpi.freshnessForecast).toEqual(component.freshnessForecast);
+    expect(kpi.freshnessForecastStatus).toBe('processing');
+  });
+
+  it('should route Training Balance KPI chart type to the KPI renderer', () => {
+    component.chartType = DASHBOARD_TRAINING_BALANCE_KPI_CHART_TYPE as any;
+    component.easyPercent = { value: 70 } as any;
+    component.hardPercent = { value: 12 } as any;
+    component.intensityDistribution = { latestEasyPercent: 70, latestModeratePercent: 18, latestHardPercent: 12 } as any;
+    component.intensityDistributionStatus = 'ready' as any;
+    fixture.detectChanges();
+
+    const kpi = getKpiComponent();
+    expect(kpi.chartType).toBe(DASHBOARD_TRAINING_BALANCE_KPI_CHART_TYPE);
+    expect(kpi.easyPercent).toEqual(component.easyPercent);
+    expect(kpi.hardPercent).toEqual(component.hardPercent);
+    expect(kpi.intensityDistribution).toEqual(component.intensityDistribution);
+    expect(kpi.intensityDistributionStatus).toBe('ready');
+  });
+
+  it('should route Fitness Trend KPI chart type to the KPI renderer', () => {
+    component.chartType = DASHBOARD_FITNESS_TREND_KPI_CHART_TYPE as any;
+    component.fitnessCtl = { value: 58.4 } as any;
+    fixture.detectChanges();
+
+    expect(getKpiComponent().chartType).toBe(DASHBOARD_FITNESS_TREND_KPI_CHART_TYPE);
+    expect(getKpiComponent().fitnessCtl).toEqual(component.fitnessCtl);
+  });
+
+  it('should route Fatigue Trend KPI chart type to the KPI renderer', () => {
+    component.chartType = DASHBOARD_FATIGUE_TREND_KPI_CHART_TYPE as any;
+    component.fatigueAtl = { value: 71.4 } as any;
+    fixture.detectChanges();
+
+    expect(getKpiComponent().chartType).toBe(DASHBOARD_FATIGUE_TREND_KPI_CHART_TYPE);
+    expect(getKpiComponent().fatigueAtl).toEqual(component.fatigueAtl);
   });
 
   it('should hide layout controls for compact KPI row actions', () => {

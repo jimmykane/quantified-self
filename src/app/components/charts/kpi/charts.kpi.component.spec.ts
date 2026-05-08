@@ -12,12 +12,17 @@ import {
   DASHBOARD_EASY_PERCENT_KPI_CHART_TYPE,
   DASHBOARD_EFFICIENCY_DELTA_4W_KPI_CHART_TYPE,
   DASHBOARD_FATIGUE_ATL_KPI_CHART_TYPE,
+  DASHBOARD_FATIGUE_TREND_KPI_CHART_TYPE,
   DASHBOARD_FITNESS_CTL_KPI_CHART_TYPE,
+  DASHBOARD_FITNESS_TREND_KPI_CHART_TYPE,
   DASHBOARD_FORM_NOW_KPI_CHART_TYPE,
   DASHBOARD_FORM_PLUS_7D_KPI_CHART_TYPE,
   DASHBOARD_HARD_PERCENT_KPI_CHART_TYPE,
+  DASHBOARD_LOAD_STATUS_KPI_CHART_TYPE,
   DASHBOARD_MONOTONY_STRAIN_KPI_CHART_TYPE,
   DASHBOARD_RAMP_RATE_KPI_CHART_TYPE,
+  DASHBOARD_RECOVERY_DEBT_KPI_CHART_TYPE,
+  DASHBOARD_TRAINING_BALANCE_KPI_CHART_TYPE,
 } from '../../../helpers/dashboard-special-chart-types';
 
 @Component({
@@ -337,6 +342,132 @@ describe('ChartsKpiComponent', () => {
     expect(component.primaryLabel).toBe('ATL');
     expect(component.secondaryLabel).toBe('7-day TSS load');
     expect(component.primaryValueText).toBe('71.4');
+  });
+
+  it('renders Load Status as a current-state KPI presentation', async () => {
+    component.chartType = DASHBOARD_LOAD_STATUS_KPI_CHART_TYPE;
+    component.formNow = {
+      latestDayMs: Date.UTC(2026, 0, 1),
+      value: -4,
+      trend8Weeks: [{ time: Date.UTC(2025, 11, 1), value: -2 }],
+    };
+    component.rampRate = {
+      latestDayMs: Date.UTC(2026, 0, 1),
+      ctlToday: 62,
+      ctl7DaysAgo: 58,
+      rampRate: 4,
+      trend8Weeks: [{ time: Date.UTC(2025, 11, 1), value: 3 }],
+    };
+    component.fitnessCtl = {
+      latestDayMs: Date.UTC(2026, 0, 1),
+      value: 62,
+      trend8Weeks: [{ time: Date.UTC(2025, 11, 1), value: 58 }],
+    };
+    component.fatigueAtl = {
+      latestDayMs: Date.UTC(2026, 0, 1),
+      value: 66,
+      trend8Weeks: [{ time: Date.UTC(2025, 11, 1), value: 60 }],
+    };
+
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(component.title).toBe('Load Status');
+    expect(component.primaryValueText).toBe('Building');
+    expect(component.primaryLabel).toBe('Productive load');
+    expect(component.secondaryValueText).toContain('TSB -4');
+    expect(component.secondaryValueText).toContain('Ramp +4');
+  });
+
+  it('renders Fitness Trend KPI presentation', async () => {
+    component.chartType = DASHBOARD_FITNESS_TREND_KPI_CHART_TYPE;
+    component.fitnessCtl = {
+      latestDayMs: Date.UTC(2026, 0, 1),
+      value: 58,
+      trend8Weeks: [
+        { time: Date.UTC(2025, 11, 1), value: 50 },
+        { time: Date.UTC(2025, 11, 8), value: 52 },
+        { time: Date.UTC(2025, 11, 15), value: 54 },
+        { time: Date.UTC(2025, 11, 22), value: 56 },
+        { time: Date.UTC(2025, 11, 29), value: 58 },
+      ],
+    };
+
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(component.title).toBe('Fitness Trend');
+    expect(component.primaryLabel).toBe('CTL delta (4w)');
+    expect(component.primaryValueText).toBe('+8');
+    expect(component.secondaryValueText).toBe('58');
+  });
+
+  it('renders Fatigue Trend KPI presentation', async () => {
+    component.chartType = DASHBOARD_FATIGUE_TREND_KPI_CHART_TYPE;
+    component.fatigueAtl = {
+      latestDayMs: Date.UTC(2026, 0, 1),
+      value: 72,
+      trend8Weeks: [
+        { time: Date.UTC(2025, 11, 22), value: 66 },
+        { time: Date.UTC(2025, 11, 29), value: 72 },
+      ],
+    };
+
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(component.title).toBe('Fatigue Trend');
+    expect(component.primaryLabel).toBe('ATL delta (1w)');
+    expect(component.primaryValueText).toBe('+6');
+    expect(component.secondaryValueText).toBe('72');
+  });
+
+  it('renders Recovery Debt from freshness forecast zero-load projection', async () => {
+    component.chartType = DASHBOARD_RECOVERY_DEBT_KPI_CHART_TYPE;
+    component.formNow = {
+      latestDayMs: Date.UTC(2026, 0, 1),
+      value: -12,
+      trend8Weeks: [{ time: Date.UTC(2025, 11, 1), value: -8 }],
+    };
+    component.freshnessForecast = {
+      generatedAtMs: Date.UTC(2026, 0, 1),
+      points: [
+        { dayMs: Date.UTC(2026, 0, 1), trainingStressScore: 0, ctl: 55, atl: 67, formSameDay: -12, formPriorDay: -10, isForecast: false },
+        { dayMs: Date.UTC(2026, 0, 2), trainingStressScore: 0, ctl: 54, atl: 60, formSameDay: -6, formPriorDay: -12, isForecast: true },
+        { dayMs: Date.UTC(2026, 0, 3), trainingStressScore: 0, ctl: 53, atl: 52, formSameDay: 1, formPriorDay: -6, isForecast: true },
+      ],
+    };
+
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(component.title).toBe('Recovery Debt');
+    expect(component.primaryValueText).toBe('2 d');
+    expect(component.secondaryLabel).toBe('TSB now');
+    expect(component.secondaryValueText).toBe('-12');
+  });
+
+  it('renders Training Balance from the latest intensity distribution split', async () => {
+    component.chartType = DASHBOARD_TRAINING_BALANCE_KPI_CHART_TYPE;
+    component.intensityDistribution = {
+      latestWeekStartMs: Date.UTC(2026, 0, 1),
+      latestEasyPercent: 64,
+      latestModeratePercent: 22,
+      latestHardPercent: 14,
+      weeks: [],
+    };
+    component.hardPercent = {
+      latestWeekStartMs: Date.UTC(2026, 0, 1),
+      value: 14,
+      trend8Weeks: [{ time: Date.UTC(2025, 11, 1), value: 12 }],
+    };
+
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(component.title).toBe('Training Balance');
+    expect(component.primaryValueText).toBe('Balanced');
+    expect(component.secondaryValueText).toBe('Easy 64% / Moderate 22% / Hard 14%');
   });
 
   it('renders Form +7d readiness KPI presentation', async () => {

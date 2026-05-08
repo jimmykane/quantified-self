@@ -79,6 +79,8 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('KPI row set automatically once');
     expect(gettingStartedSection?.content).toContain('removing an auto-added curated chart or KPI prevents that chart from being suggested again');
     expect(gettingStartedSection?.content).toContain('**Uploaded activities**');
+    expect(gettingStartedSection?.content).toContain('current-state set: **Load Status**, **Form Now**, **Fitness Trend**, **Fatigue Trend**, **Recovery Debt**, and **Training Balance**');
+    expect(gettingStartedSection?.content).toContain('Additional KPI rows such as **Fitness (CTL)**, **Fatigue (ATL)**');
   });
 
   it('should document that distance values follow unit preferences across the app', () => {
@@ -140,10 +142,15 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('ACWR');
     expect(gettingStartedSection?.content).toContain('Ramp Rate');
     expect(gettingStartedSection?.content).toContain('Monotony / Strain');
+    expect(gettingStartedSection?.content).toContain('Load Status');
     expect(gettingStartedSection?.content).toContain('Form Now');
     expect(gettingStartedSection?.content).toContain('Fitness (CTL)');
     expect(gettingStartedSection?.content).toContain('Fatigue (ATL)');
+    expect(gettingStartedSection?.content).toContain('Fitness Trend');
+    expect(gettingStartedSection?.content).toContain('Fatigue Trend');
+    expect(gettingStartedSection?.content).toContain('Recovery Debt');
     expect(gettingStartedSection?.content).toContain('Form +7d');
+    expect(gettingStartedSection?.content).toContain('Training Balance');
     expect(gettingStartedSection?.content).toContain('Easy %');
     expect(gettingStartedSection?.content).toContain('Hard %');
     expect(gettingStartedSection?.content).toContain('Efficiency Δ (4w)');

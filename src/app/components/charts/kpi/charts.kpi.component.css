@@ -151,8 +151,11 @@
 }
 
 .kpi-layout-row .kpi-value {
+  display: block;
   font-variant-numeric: tabular-nums;
   font-size: 1.34rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
@@ -239,7 +242,7 @@
 @media (max-width: 767px) {
   .kpi-layout.kpi-layout-row {
     gap: 6px;
-    grid-template-columns: minmax(0, 1fr) 68px;
+    grid-template-columns: minmax(0, 1fr) 58px;
     padding: 6px 8px;
   }
 
@@ -248,13 +251,23 @@
   }
 
   .kpi-layout-row .kpi-header {
-    column-gap: 6px;
-    grid-template-columns: minmax(0, 1fr) 52px;
+    column-gap: 8px;
+    grid-template-columns: minmax(0, 1fr) minmax(72px, max-content);
     row-gap: 1px;
+  }
+
+  .kpi-layout-row .kpi-value {
+    font-size: 1.28rem;
+    max-width: 82px;
   }
 
   .kpi-layout-row .kpi-subtitle-row {
     gap: 3px;
+  }
+
+  .kpi-layout-row .kpi-subtitle-separator,
+  .kpi-layout-row .kpi-secondary-label {
+    display: none;
   }
 
   .kpi-layout-row .kpi-secondary-value {
