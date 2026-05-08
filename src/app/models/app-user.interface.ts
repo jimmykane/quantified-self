@@ -68,7 +68,11 @@ export interface AppDashboardAutoTileState {
 export type AppDashboardAutoTiles = Partial<Record<AppDashboardAutoTileId, AppDashboardAutoTileState>>
     & Record<string, AppDashboardAutoTileState | undefined>;
 
-export type AppDashboardActionPromptId = 'unitSetup' | 'firstActivityUpload' | 'connectActivityService';
+export type AppDashboardActionPromptId =
+    | 'unitSetup'
+    | 'firstActivityUpload'
+    | 'connectActivityService'
+    | 'enableActivityAutoSync';
 export type AppDashboardActionPromptStateValue = 'dismissed';
 
 export interface AppDashboardActionPromptState {

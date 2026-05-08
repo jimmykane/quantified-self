@@ -133,23 +133,9 @@ export class ServicesCorosComponent extends ServicesAbstractComponentDirective {
 
     this.isSavingSyncRoute = true;
     try {
-      await this.userService.updateUserProperties(this.user as any, {
-        settings: {
-          serviceSyncSettings: {
-            activitySyncRoutes: {
-              [this.corosToSuuntoRouteID]: {
-                enabled,
-              },
-            },
-          },
-        },
+      await this.userService.updateActivitySyncRouteSettings(this.user, {
+        [this.corosToSuuntoRouteID]: enabled,
       });
-
-      const settings: any = this.user.settings || {};
-      settings.serviceSyncSettings = settings.serviceSyncSettings || {};
-      settings.serviceSyncSettings.activitySyncRoutes = settings.serviceSyncSettings.activitySyncRoutes || {};
-      settings.serviceSyncSettings.activitySyncRoutes[this.corosToSuuntoRouteID] = { enabled };
-      this.user.settings = settings;
 
       this.analyticsService.logActivitySyncRouteToggle(this.corosToSuuntoRouteID, enabled);
       this.snackBar.open(enabled ? 'COROS to Suunto auto-sync enabled.' : 'COROS to Suunto auto-sync disabled.', undefined, { duration: 3000 });

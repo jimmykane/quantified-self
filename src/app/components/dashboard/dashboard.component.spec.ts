@@ -26,6 +26,7 @@ import { Analytics } from 'app/firebase/analytics';
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { BehaviorSubject } from 'rxjs';
 import { LoggerService } from '../../services/logger.service';
+import { ACTIVITY_SYNC_ROUTE_IDS } from '@shared/activity-sync-routes';
 
 describe('DashboardComponent', () => {
     let component: DashboardComponent;
@@ -76,7 +77,13 @@ describe('DashboardComponent', () => {
             getUserByID: vi.fn().mockReturnValue(of(new User('targetUser'))),
             shouldShowPromo: vi.fn().mockReturnValue(false),
             updateUserProperties: vi.fn().mockReturnValue(Promise.resolve()),
-            watchHasAnyActivityServiceConnection: vi.fn().mockReturnValue(of(false))
+            updateActivitySyncRouteSettings: vi.fn().mockReturnValue(Promise.resolve()),
+            watchHasAnyActivityServiceConnection: vi.fn().mockReturnValue(of(false)),
+            watchActivityServiceConnectionState: vi.fn().mockReturnValue(of({
+                [ServiceNames.GarminAPI]: false,
+                [ServiceNames.SuuntoApp]: false,
+                [ServiceNames.COROSAPI]: false,
+            }))
         };
 
         mockRouter = { navigate: vi.fn().mockResolvedValue(true) };
@@ -304,7 +311,11 @@ describe('DashboardComponent', () => {
     it('shows service connection prompt for pro owner dashboard with no connected activity service', async () => {
         mockUser.stripeRole = 'pro';
         mockUser.settings.appSettings = {};
-        mockUserService.watchHasAnyActivityServiceConnection.mockReturnValue(of(false));
+        mockUserService.watchActivityServiceConnectionState.mockReturnValue(of({
+            [ServiceNames.GarminAPI]: false,
+            [ServiceNames.SuuntoApp]: false,
+            [ServiceNames.COROSAPI]: false,
+        }));
 
         fixture.detectChanges();
         await fixture.whenStable();
@@ -315,7 +326,11 @@ describe('DashboardComponent', () => {
     it('does not show service connection prompt when an activity service is connected', async () => {
         mockUser.stripeRole = 'pro';
         mockUser.settings.appSettings = {};
-        mockUserService.watchHasAnyActivityServiceConnection.mockReturnValue(of(true));
+        mockUserService.watchActivityServiceConnectionState.mockReturnValue(of({
+            [ServiceNames.GarminAPI]: true,
+            [ServiceNames.SuuntoApp]: false,
+            [ServiceNames.COROSAPI]: false,
+        }));
 
         fixture.detectChanges();
         await fixture.whenStable();
@@ -338,7 +353,6 @@ describe('DashboardComponent', () => {
         await fixture.whenStable();
 
         expect(component.dashboardActionPrompts.some(prompt => prompt.id === 'connectActivityService')).toBe(false);
-        expect(mockUserService.watchHasAnyActivityServiceConnection).not.toHaveBeenCalled();
     });
 
     it('does not show service connection prompt on another user dashboard', async () => {
@@ -350,7 +364,229 @@ describe('DashboardComponent', () => {
         await fixture.whenStable();
 
         expect(component.dashboardActionPrompts.some(prompt => prompt.id === 'connectActivityService')).toBe(false);
-        expect(mockUserService.watchHasAnyActivityServiceConnection).not.toHaveBeenCalled();
+        expect(mockUserService.watchActivityServiceConnectionState).not.toHaveBeenCalled();
+    });
+
+    it('shows activity auto-sync prompt for pro owner dashboards with Suunto and a disabled connected source route', async () => {
+        mockUser.stripeRole = 'pro';
+        mockUser.settings.appSettings = {};
+        mockUser.settings.serviceSyncSettings = {
+            activitySyncRoutes: {
+                [ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp]: { enabled: false },
+            },
+        };
+        mockUserService.watchActivityServiceConnectionState.mockReturnValue(of({
+            [ServiceNames.GarminAPI]: true,
+            [ServiceNames.SuuntoApp]: true,
+            [ServiceNames.COROSAPI]: false,
+        }));
+
+        fixture.detectChanges();
+        await fixture.whenStable();
+
+        expect(component.dashboardActionPrompts.some(prompt => prompt.id === 'enableActivityAutoSync')).toBe(true);
+        expect(component.dashboardActionPrompts.find(prompt => prompt.id === 'enableActivityAutoSync')?.description)
+            .toContain('Enable Garmin -> Suunto auto-sync');
+    });
+
+    it('shows activity auto-sync prompt for only the missing disabled route', async () => {
+        mockUser.stripeRole = 'pro';
+        mockUser.settings.appSettings = {};
+        mockUser.settings.serviceSyncSettings = {
+            activitySyncRoutes: {
+                [ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp]: { enabled: true },
+                [ACTIVITY_SYNC_ROUTE_IDS.COROSAPI_to_SuuntoApp]: { enabled: false },
+            },
+        };
+        mockUserService.watchActivityServiceConnectionState.mockReturnValue(of({
+            [ServiceNames.GarminAPI]: true,
+            [ServiceNames.SuuntoApp]: true,
+            [ServiceNames.COROSAPI]: true,
+        }));
+
+        fixture.detectChanges();
+        await fixture.whenStable();
+
+        const prompt = component.dashboardActionPrompts.find(prompt => prompt.id === 'enableActivityAutoSync');
+        expect(prompt?.description).toContain('Enable COROS -> Suunto auto-sync');
+        expect(prompt?.description).not.toContain('Garmin and COROS');
+    });
+
+    it('does not show activity auto-sync prompt when dismissed', async () => {
+        mockUser.stripeRole = 'pro';
+        mockUser.settings.appSettings = {
+            dashboardActionPrompts: {
+                enableActivityAutoSync: {
+                    state: 'dismissed',
+                    dismissedAt: 1,
+                },
+            },
+        } as any;
+        mockUserService.watchActivityServiceConnectionState.mockReturnValue(of({
+            [ServiceNames.GarminAPI]: true,
+            [ServiceNames.SuuntoApp]: true,
+            [ServiceNames.COROSAPI]: false,
+        }));
+
+        fixture.detectChanges();
+        await fixture.whenStable();
+
+        expect(component.dashboardActionPrompts.some(prompt => prompt.id === 'enableActivityAutoSync')).toBe(false);
+    });
+
+    it('does not show activity auto-sync prompt for non-pro users', async () => {
+        mockUser.stripeRole = 'free';
+        mockUser.settings.appSettings = {};
+        mockUser.settings.serviceSyncSettings = {
+            activitySyncRoutes: {
+                [ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp]: { enabled: false },
+            },
+        };
+
+        fixture.detectChanges();
+        await fixture.whenStable();
+
+        expect(component.dashboardActionPrompts.some(prompt => prompt.id === 'enableActivityAutoSync')).toBe(false);
+        expect(mockUserService.watchActivityServiceConnectionState).not.toHaveBeenCalled();
+    });
+
+    it('does not show activity auto-sync prompt without a Suunto connection', async () => {
+        mockUser.stripeRole = 'pro';
+        mockUser.settings.appSettings = {};
+        mockUser.settings.serviceSyncSettings = {
+            activitySyncRoutes: {
+                [ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp]: { enabled: false },
+            },
+        };
+        mockUserService.watchActivityServiceConnectionState.mockReturnValue(of({
+            [ServiceNames.GarminAPI]: true,
+            [ServiceNames.SuuntoApp]: false,
+            [ServiceNames.COROSAPI]: false,
+        }));
+
+        fixture.detectChanges();
+        await fixture.whenStable();
+
+        expect(component.dashboardActionPrompts.some(prompt => prompt.id === 'enableActivityAutoSync')).toBe(false);
+    });
+
+    it('does not show activity auto-sync prompt when all eligible routes are enabled', async () => {
+        mockUser.stripeRole = 'pro';
+        mockUser.settings.appSettings = {};
+        mockUser.settings.serviceSyncSettings = {
+            activitySyncRoutes: {
+                [ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp]: { enabled: true },
+                [ACTIVITY_SYNC_ROUTE_IDS.COROSAPI_to_SuuntoApp]: { enabled: true },
+            },
+        };
+        mockUserService.watchActivityServiceConnectionState.mockReturnValue(of({
+            [ServiceNames.GarminAPI]: true,
+            [ServiceNames.SuuntoApp]: true,
+            [ServiceNames.COROSAPI]: true,
+        }));
+
+        fixture.detectChanges();
+        await fixture.whenStable();
+
+        expect(component.dashboardActionPrompts.some(prompt => prompt.id === 'enableActivityAutoSync')).toBe(false);
+    });
+
+    it('does not show activity auto-sync prompt on another user dashboard', async () => {
+        mockUser.stripeRole = 'pro';
+        mockActivatedRoute.snapshot.data.dashboardData.user = mockUser;
+        mockActivatedRoute.snapshot.data.dashboardData.targetUser = { uid: 'other-user' };
+        mockUser.settings.appSettings = {};
+        mockUser.settings.serviceSyncSettings = {
+            activitySyncRoutes: {
+                [ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp]: { enabled: false },
+            },
+        };
+
+        fixture.detectChanges();
+        await fixture.whenStable();
+
+        expect(component.dashboardActionPrompts.some(prompt => prompt.id === 'enableActivityAutoSync')).toBe(false);
+        expect(mockUserService.watchActivityServiceConnectionState).not.toHaveBeenCalled();
+    });
+
+    it('enables missing activity auto-sync routes directly and keeps unrelated settings', async () => {
+        mockUser.stripeRole = 'pro';
+        mockUser.settings.appSettings = { theme: 'dark' } as any;
+        mockUser.settings.dashboardSettings = {
+            ...(mockUser.settings.dashboardSettings || {}),
+            tiles: [{ name: 'Existing' }],
+        } as any;
+        mockUser.settings.serviceSyncSettings = {
+            activitySyncRoutes: {
+                [ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp]: { enabled: false },
+                [ACTIVITY_SYNC_ROUTE_IDS.COROSAPI_to_SuuntoApp]: { enabled: false },
+            },
+        };
+        (component as any).user = mockUser;
+        (component as any).activityServiceConnectionState = {
+            [ServiceNames.GarminAPI]: true,
+            [ServiceNames.SuuntoApp]: true,
+            [ServiceNames.COROSAPI]: true,
+        };
+        mockUserService.updateActivitySyncRouteSettings.mockImplementation(async (user: AppUserInterface, routeSettings: Record<string, boolean>) => {
+            user.settings = user.settings || {} as any;
+            user.settings.serviceSyncSettings = user.settings.serviceSyncSettings || {};
+            user.settings.serviceSyncSettings.activitySyncRoutes = {
+                ...(user.settings.serviceSyncSettings.activitySyncRoutes || {}),
+            };
+            Object.entries(routeSettings).forEach(([routeID, enabled]) => {
+                user.settings!.serviceSyncSettings!.activitySyncRoutes![routeID as any] = { enabled };
+            });
+        });
+
+        (component as any).syncDashboardActionPromptState();
+        expect(component.dashboardActionPrompts.some(prompt => prompt.id === 'enableActivityAutoSync')).toBe(true);
+
+        await component.enableActivityAutoSyncPrompt();
+
+        expect(mockUserService.updateActivitySyncRouteSettings).toHaveBeenCalledWith(mockUser, {
+            [ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp]: true,
+            [ACTIVITY_SYNC_ROUTE_IDS.COROSAPI_to_SuuntoApp]: true,
+        });
+        expect(mockUser.settings.appSettings?.theme).toBe('dark');
+        expect(mockUser.settings.dashboardSettings?.tiles).toEqual([{ name: 'Existing' }]);
+        expect(mockSnackBar.open).toHaveBeenCalledWith(
+            'Auto-sync enabled for Garmin and COROS -> Suunto.',
+            undefined,
+            { duration: 3000 },
+        );
+        expect(component.dashboardActionPrompts.some(prompt => prompt.id === 'enableActivityAutoSync')).toBe(false);
+    });
+
+    it('dismisses activity auto-sync prompt and persists action prompt state', async () => {
+        mockUser.stripeRole = 'pro';
+        mockUser.settings.appSettings = {};
+        component.user = mockUser;
+        (component as any).activityServiceConnectionState = {
+            [ServiceNames.GarminAPI]: true,
+            [ServiceNames.SuuntoApp]: true,
+            [ServiceNames.COROSAPI]: false,
+        };
+        (component as any).syncDashboardActionPromptState();
+
+        await component.dismissActivityAutoSyncPrompt();
+
+        expect(mockUserService.updateUserProperties).toHaveBeenCalledWith(
+            mockUser,
+            {
+                settings: {
+                    appSettings: {
+                        dashboardActionPrompts: {
+                            enableActivityAutoSync: expect.objectContaining({
+                                state: 'dismissed',
+                                source: 'activity-auto-sync',
+                            }),
+                        },
+                    },
+                },
+            },
+        );
+        expect(component.dashboardActionPrompts.some(prompt => prompt.id === 'enableActivityAutoSync')).toBe(false);
     });
 
     it('applies the miles unit setup preset and completes setup', async () => {

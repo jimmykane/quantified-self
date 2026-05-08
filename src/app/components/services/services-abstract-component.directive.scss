@@ -35,7 +35,6 @@ mat-icon {
 .service-container {
     max-width: 760px;
     min-width: 0;
-    overflow-x: hidden;
 }
 
 .provider-tools-tabs {
@@ -98,7 +97,6 @@ mat-icon {
     gap: 10px;
     min-width: 0;
     max-width: 100%;
-    overflow-x: hidden;
 }
 
 .connection-account-row {
@@ -113,7 +111,6 @@ mat-icon {
     flex: 1 1 auto;
     min-width: 0;
     max-width: 100%;
-    overflow-x: hidden;
 }
 
 .connection-disconnect-button {
@@ -128,7 +125,6 @@ mat-icon {
     width: 100%;
     min-width: 0;
     max-width: 100%;
-    overflow-x: hidden;
 }
 
 .connected-account-item {
@@ -152,10 +148,16 @@ mat-icon {
     gap: 2px;
     min-width: 0;
     max-width: 100%;
-    overflow: hidden;
 }
 
-.connected-account-title,
+.connected-account-title {
+    display: block;
+    min-width: 0;
+    max-width: 100%;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+
 .connected-account-line {
     display: block;
     min-width: 0;
@@ -302,6 +304,33 @@ mat-icon {
 }
 
 @media (max-width: 640px) {
+    .provider-tools-tabs {
+        width: fit-content;
+        max-width: 100%;
+        margin-inline: auto;
+    }
+
+    .provider-tab-label {
+        flex-direction: column;
+        justify-content: center;
+        gap: 2px;
+        text-align: center;
+        white-space: normal;
+        font-size: 0.76rem;
+        line-height: 1.1;
+    }
+
+    .provider-tab-label mat-icon {
+        width: 20px;
+        height: 20px;
+        font-size: 20px;
+    }
+
+    .provider-tab-label > span:last-child {
+        display: block;
+        line-height: 1.1;
+    }
+
     .connection-account-row {
         align-items: stretch;
         flex-direction: column;

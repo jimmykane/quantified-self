@@ -57,6 +57,7 @@ describe('ServicesCorosComponent', () => {
             getServiceToken: vi.fn().mockReturnValue(of([])),
             getUserMetaForService: vi.fn().mockReturnValue(of(undefined)),
             updateUserProperties: vi.fn().mockResolvedValue(undefined),
+            updateActivitySyncRouteSettings: vi.fn().mockResolvedValue(undefined),
             backfillActivitySyncRouteForCurrentUser: vi.fn().mockResolvedValue({ scanned: 0, queued: 0, skippedByReason: {}, failedCount: 0, failedEvents: [] }),
             deauthorizeService: vi.fn().mockResolvedValue(undefined),
         };
@@ -215,16 +216,8 @@ describe('ServicesCorosComponent', () => {
 
             await component.onCorosToSuuntoRouteToggle(true);
 
-            expect(mockUserService.updateUserProperties).toHaveBeenCalledWith(component.user, {
-                settings: {
-                    serviceSyncSettings: {
-                        activitySyncRoutes: {
-                            [ACTIVITY_SYNC_ROUTE_IDS.COROSAPI_to_SuuntoApp]: {
-                                enabled: true
-                            }
-                        }
-                    }
-                }
+            expect(mockUserService.updateActivitySyncRouteSettings).toHaveBeenCalledWith(component.user, {
+                [ACTIVITY_SYNC_ROUTE_IDS.COROSAPI_to_SuuntoApp]: true
             });
             expect(mockAnalyticsService.logActivitySyncRouteToggle).toHaveBeenCalledWith(
                 ACTIVITY_SYNC_ROUTE_IDS.COROSAPI_to_SuuntoApp,
@@ -242,7 +235,7 @@ describe('ServicesCorosComponent', () => {
 
             await component.onCorosToSuuntoRouteToggle(true);
 
-            expect(mockUserService.updateUserProperties).not.toHaveBeenCalled();
+            expect(mockUserService.updateActivitySyncRouteSettings).not.toHaveBeenCalled();
             expect(snackBarSpy).toHaveBeenCalledWith(
                 'Connect both COROS and Suunto accounts before enabling sync.',
                 undefined,
@@ -267,16 +260,8 @@ describe('ServicesCorosComponent', () => {
 
             await component.onCorosToSuuntoRouteToggle(false);
 
-            expect(mockUserService.updateUserProperties).toHaveBeenCalledWith(component.user, {
-                settings: {
-                    serviceSyncSettings: {
-                        activitySyncRoutes: {
-                            [ACTIVITY_SYNC_ROUTE_IDS.COROSAPI_to_SuuntoApp]: {
-                                enabled: false
-                            }
-                        }
-                    }
-                }
+            expect(mockUserService.updateActivitySyncRouteSettings).toHaveBeenCalledWith(component.user, {
+                [ACTIVITY_SYNC_ROUTE_IDS.COROSAPI_to_SuuntoApp]: false
             });
             expect(mockAnalyticsService.logActivitySyncRouteToggle).toHaveBeenCalledWith(
                 ACTIVITY_SYNC_ROUTE_IDS.COROSAPI_to_SuuntoApp,

@@ -37,7 +37,7 @@ import {
   DateRanges,
   TableSettings
 } from '@sports-alliance/sports-lib';
-import { AppUserInterface } from '../models/app-user.interface';
+import { AppUserInterface, AppUserSettingsInterface } from '../models/app-user.interface';
 import {
   ChartDataCategoryTypes,
   ChartDataValueTypes,
@@ -85,6 +85,16 @@ import { Firestore, doc, docData, collection, collectionData, setDoc, updateDoc 
 import { AppFunctionsService } from './app.functions.service';
 import { FunctionName } from '@shared/functions-manifest';
 import { SleepBackfillQueueResponse } from '@shared/sleep-backfill';
+import { ActivitySyncRouteId } from '@shared/activity-sync-routes';
+
+export const ACTIVITY_SERVICE_CONNECTION_NAMES = [
+  ServiceNames.GarminAPI,
+  ServiceNames.SuuntoApp,
+  ServiceNames.COROSAPI,
+] as const;
+
+export type ActivityServiceConnectionName = typeof ACTIVITY_SERVICE_CONNECTION_NAMES[number];
+export type ActivityServiceConnectionState = Record<ActivityServiceConnectionName, boolean>;
 
 export interface ActivitySyncBackfillFailedEvent {
   eventID: string;
@@ -576,18 +586,19 @@ export class AppUserService implements OnDestroy {
   }
 
   public watchHasAnyActivityServiceConnection(user: User | null | undefined): Observable<boolean> {
+    return this.watchActivityServiceConnectionState(user).pipe(
+      map(connectionState => ACTIVITY_SERVICE_CONNECTION_NAMES.some(serviceName => connectionState[serviceName])),
+      distinctUntilChanged(),
+    );
+  }
+
+  public watchActivityServiceConnectionState(user: User | null | undefined): Observable<ActivityServiceConnectionState> {
     const uid = `${user?.uid || ''}`.trim();
     if (!uid || !user) {
-      return of(false);
+      return of(this.createEmptyActivityServiceConnectionState());
     }
 
-    const activityServices = [
-      ServiceNames.GarminAPI,
-      ServiceNames.SuuntoApp,
-      ServiceNames.COROSAPI,
-    ];
-
-    return combineLatest(activityServices.map(serviceName => (
+    return combineLatest(ACTIVITY_SERVICE_CONNECTION_NAMES.map(serviceName => (
       this.getServiceToken(user, serviceName).pipe(
         map(tokens => Array.isArray(tokens) && tokens.length > 0),
         catchError(error => {
@@ -599,9 +610,48 @@ export class AppUserService implements OnDestroy {
         })
       )
     ))).pipe(
-      map(connectionStates => connectionStates.some(Boolean)),
-      distinctUntilChanged(),
+      map(connectionStates => ACTIVITY_SERVICE_CONNECTION_NAMES.reduce<ActivityServiceConnectionState>((state, serviceName, index) => ({
+        ...state,
+        [serviceName]: connectionStates[index] === true,
+      }), this.createEmptyActivityServiceConnectionState())),
+      distinctUntilChanged((previous, current) => (
+        ACTIVITY_SERVICE_CONNECTION_NAMES.every(serviceName => previous[serviceName] === current[serviceName])
+      )),
     );
+  }
+
+  public async updateActivitySyncRouteSettings(
+    user: AppUserInterface,
+    routeSettings: Partial<Record<ActivitySyncRouteId, boolean>>,
+  ): Promise<void> {
+    const uid = `${user?.uid || ''}`.trim();
+    if (!uid) {
+      throw new Error('Cannot update activity sync route settings without a user.');
+    }
+
+    if (this.hasIncompleteProfileReads(uid)) {
+      throw new Error('Cannot update activity sync route settings until user settings finish loading.');
+    }
+
+    const activitySyncRoutes = Object.entries(routeSettings)
+      .reduce<Partial<Record<ActivitySyncRouteId, { enabled: boolean }>>>((updates, [routeID, enabled]) => {
+        updates[routeID as ActivitySyncRouteId] = { enabled: enabled === true };
+        return updates;
+      }, {});
+
+    if (Object.keys(activitySyncRoutes).length === 0) {
+      return;
+    }
+
+    await this.updateUserProperties(user, {
+      settings: {
+        serviceSyncSettings: {
+          activitySyncRoutes,
+        },
+      },
+    });
+
+    this.applyActivitySyncRouteSettingsToUser(user, activitySyncRoutes);
   }
 
   public getUserMetaForService(user: User, serviceName: string): Observable<UserServiceMetaInterface> {
@@ -1000,6 +1050,34 @@ export class AppUserService implements OnDestroy {
         return of([]);
       })
     );
+  }
+
+  private createEmptyActivityServiceConnectionState(): ActivityServiceConnectionState {
+    return {
+      [ServiceNames.GarminAPI]: false,
+      [ServiceNames.SuuntoApp]: false,
+      [ServiceNames.COROSAPI]: false,
+    };
+  }
+
+  private applyActivitySyncRouteSettingsToUser(
+    user: AppUserInterface,
+    routeSettings: Partial<Record<ActivitySyncRouteId, { enabled: boolean }>>,
+  ): void {
+    const settings = (user.settings || {}) as AppUserSettingsInterface;
+    settings.serviceSyncSettings = settings.serviceSyncSettings || {};
+    settings.serviceSyncSettings.activitySyncRoutes = {
+      ...(settings.serviceSyncSettings.activitySyncRoutes || {}),
+    };
+
+    for (const [routeID, routeSetting] of Object.entries(routeSettings)) {
+      settings.serviceSyncSettings.activitySyncRoutes[routeID as ActivitySyncRouteId] = {
+        ...(settings.serviceSyncSettings.activitySyncRoutes[routeID as ActivitySyncRouteId] || {}),
+        enabled: routeSetting.enabled,
+      };
+    }
+
+    user.settings = settings;
   }
 
 }

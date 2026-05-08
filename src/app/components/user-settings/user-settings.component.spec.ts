@@ -9,9 +9,11 @@ import { MatDialog } from '@angular/material/dialog';
 import { LoggerService } from '../../services/logger.service';
 import { Analytics } from 'app/firebase/analytics';
 import { NO_ERRORS_SCHEMA } from '@angular/core';
+import { By } from '@angular/platform-browser';
 import { ReactiveFormsModule } from '@angular/forms';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { MaterialModule } from '../../modules/material.module';
+import { MatFormField } from '@angular/material/form-field';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { BehaviorSubject, of } from 'rxjs';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
@@ -247,6 +249,22 @@ describe('UserSettingsComponent', () => {
             'Delete Account',
         ]);
         expect(navDescriptions).toEqual(component.settingsSectionOptions.map(section => section.description));
+    });
+
+    it('uses dynamic Material subscript sizing for settings form fields', () => {
+        const sectionsWithFormFields = ['profile', 'app', 'dashboard', 'map', 'charts', 'units'] as const;
+
+        for (const section of sectionsWithFormFields) {
+            component.activeSection = section;
+            fixture.detectChanges();
+
+            const formFields = fixture.debugElement
+                .queryAll(By.directive(MatFormField))
+                .map(field => field.componentInstance as MatFormField);
+
+            expect(formFields.length).toBeGreaterThan(0);
+            expect(formFields.every(field => field.subscriptSizing === 'dynamic')).toBe(true);
+        }
     });
 
     it('shows delete account as its own final settings section', () => {

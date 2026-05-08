@@ -304,6 +304,11 @@ describe('AppUserUtilities', () => {
                                 dismissedAt: 1_777_200_000_000,
                                 source: 'activity-service-connection',
                             },
+                            enableActivityAutoSync: {
+                                state: 'dismissed',
+                                dismissedAt: 1_777_210_000_000,
+                                source: 'activity-auto-sync',
+                            },
                         },
                     },
                 },
@@ -316,6 +321,11 @@ describe('AppUserUtilities', () => {
                     state: 'dismissed',
                     dismissedAt: 1_777_200_000_000,
                     source: 'activity-service-connection',
+                },
+                enableActivityAutoSync: {
+                    state: 'dismissed',
+                    dismissedAt: 1_777_210_000_000,
+                    source: 'activity-auto-sync',
                 },
             });
         });

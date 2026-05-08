@@ -32,6 +32,13 @@ describe('DashboardActionPromptsComponent', () => {
   let component: DashboardActionPromptsComponent;
 
   const prompts: DashboardActionPromptViewModel[] = [{
+    id: 'enableActivityAutoSync',
+    icon: 'published_with_changes',
+    title: 'Send new activities to Suunto',
+    description: 'Enable Garmin -> Suunto auto-sync.',
+    primaryAction: { id: 'enableActivityAutoSync', label: 'Enable auto-sync' },
+    secondaryAction: { id: 'dismissEnableActivityAutoSync', label: 'Not now' },
+  }, {
     id: 'connectActivityService',
     icon: 'sync',
     title: 'Connect a service',
@@ -73,10 +80,11 @@ describe('DashboardActionPromptsComponent', () => {
   it('renders prompts in deterministic order with unit setup first', () => {
     const cards = fixture.nativeElement.querySelectorAll('app-dashboard-action-prompt');
 
-    expect(cards.length).toBe(3);
+    expect(cards.length).toBe(4);
     expect(cards[0].textContent).toContain('Default units');
     expect(cards[1].textContent).toContain('Upload your first activities');
     expect(cards[2].textContent).toContain('Connect a service');
+    expect(cards[3].textContent).toContain('Send new activities to Suunto');
   });
 
   it('uses a responsive grid so prompt cards can form columns when they fit', () => {

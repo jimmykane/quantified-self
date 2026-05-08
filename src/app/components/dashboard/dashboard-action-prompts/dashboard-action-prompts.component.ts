@@ -48,6 +48,7 @@ export class DashboardActionPromptsComponent {
     unitSetup: 0,
     firstActivityUpload: 1,
     connectActivityService: 2,
+    enableActivityAutoSync: 3,
   };
 
   private syncOrderedPrompts(): void {

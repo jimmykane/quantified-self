@@ -94,6 +94,9 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('manual uploads remain available from the header and upload tools');
     expect(gettingStartedSection?.content).toContain('**Connect a service** action prompt');
     expect(gettingStartedSection?.content).toContain('dismissing it hides the prompt permanently');
+    expect(gettingStartedSection?.content).toContain('**Send new activities to Suunto** action prompt');
+    expect(gettingStartedSection?.content).toContain('Enabling it turns on future Garmin/COROS -> Suunto imports only');
+    expect(gettingStartedSection?.content).toContain('existing activities can still be queued from **Services** with Manual Catch-up');
     expect(gettingStartedSection?.content).toContain('Advanced settings');
     expect(gettingStartedSection?.content).toContain('kilometers or miles');
     expect(gettingStartedSection?.content).toContain('Settings -> Units');
@@ -174,6 +177,7 @@ describe('help.content', () => {
     expect(serviceConnectionsSection?.content).toContain('convenience tool for queuing a period on demand');
     expect(serviceConnectionsSection?.content).toContain('stored original files already attached to existing Quantified Self events');
     expect(serviceConnectionsSection?.content).toContain('can run even when the Garmin -> Suunto auto-sync toggle is off');
+    expect(serviceConnectionsSection?.content).toContain('dashboard may offer a one-time action prompt to enable Garmin -> Suunto auto-sync');
     expect(serviceConnectionsSection?.content).toContain('Disconnecting Garmin, COROS, or Suunto automatically disables related route auto-sync settings');
     expect(serviceConnectionsSection?.content).toContain('Sleep sync is server-owned health data');
     expect(serviceConnectionsSection?.content).toContain('14d, 30d, 90d, and 1y range control');
@@ -187,5 +191,6 @@ describe('help.content', () => {
     expect(serviceConnectionsSection?.content).toContain('Automatic sync runs only for newly imported COROS activities');
     expect(serviceConnectionsSection?.content).toContain('Manual catch-up is available in COROS Services');
     expect(serviceConnectionsSection?.content).toContain('can run even when the COROS -> Suunto auto-sync toggle is off');
+    expect(serviceConnectionsSection?.content).toContain('dashboard may offer a one-time action prompt to enable COROS -> Suunto auto-sync');
   });
 });

@@ -12,6 +12,7 @@ import { of, firstValueFrom, take, from, filter, throwError, defer } from 'rxjs'
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { DataAltitude, DataCadence, DataGradeAdjustedSpeed, DataHeartRate, DataPace, DataPower, DataSpeed, DynamicDataLoader, ServiceNames } from '@sports-alliance/sports-lib';
 import { LoggerService } from './logger.service';
+import { ACTIVITY_SYNC_ROUTE_IDS } from '@shared/activity-sync-routes';
 
 vi.mock('app/firebase/auth', async (importOriginal) => {
     const actual: any = await importOriginal();
@@ -697,6 +698,22 @@ describe('AppUserService', () => {
             expect(collectionData).not.toHaveBeenCalled();
         });
 
+        it('watchActivityServiceConnectionState should emit per-service connection state', async () => {
+            const user = { uid: 'u10' } as any;
+            (collectionData as any)
+                .mockReturnValueOnce(of([{ accessToken: 'garmin-token' }]))
+                .mockReturnValueOnce(of([{ accessToken: 'suunto-token' }]))
+                .mockReturnValueOnce(of([]));
+
+            const result = await firstValueFrom(service.watchActivityServiceConnectionState(user));
+
+            expect(result).toEqual({
+                [ServiceNames.GarminAPI]: true,
+                [ServiceNames.SuuntoApp]: true,
+                [ServiceNames.COROSAPI]: false,
+            });
+        });
+
         it('watchHasAnyActivityServiceConnection should emit false when activity service token streams are empty', async () => {
             const user = { uid: 'u7' } as any;
             (collectionData as any)
@@ -734,6 +751,65 @@ describe('AppUserService', () => {
             const result = await firstValueFrom(service.watchHasAnyActivityServiceConnection(user));
 
             expect(result).toBe(false);
+        });
+
+        it('updateActivitySyncRouteSettings should write only route settings and preserve local settings', async () => {
+            const user = {
+                uid: 'u11',
+                settings: {
+                    appSettings: { theme: 'dark' },
+                    dashboardSettings: { tiles: [{ name: 'Existing' }] },
+                    serviceSyncSettings: {
+                        activitySyncRoutes: {
+                            [ACTIVITY_SYNC_ROUTE_IDS.COROSAPI_to_SuuntoApp]: { enabled: true },
+                        },
+                    },
+                },
+            } as any;
+
+            await service.updateActivitySyncRouteSettings(user, {
+                [ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp]: true,
+            });
+
+            expect(setDoc).toHaveBeenCalledWith(expect.anything(), {
+                serviceSyncSettings: {
+                    activitySyncRoutes: {
+                        [ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp]: {
+                            enabled: true,
+                        },
+                    },
+                },
+            }, { merge: true });
+            expect(user.settings.appSettings.theme).toBe('dark');
+            expect(user.settings.dashboardSettings.tiles).toEqual([{ name: 'Existing' }]);
+            expect(user.settings.serviceSyncSettings.activitySyncRoutes).toEqual({
+                [ACTIVITY_SYNC_ROUTE_IDS.COROSAPI_to_SuuntoApp]: { enabled: true },
+                [ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp]: { enabled: true },
+            });
+        });
+
+        it('updateActivitySyncRouteSettings should fail without local mutation when profile reads are incomplete', async () => {
+            const user = {
+                uid: 'u12',
+                settings: {
+                    appSettings: { theme: 'dark' },
+                    serviceSyncSettings: {
+                        activitySyncRoutes: {
+                            [ACTIVITY_SYNC_ROUTE_IDS.COROSAPI_to_SuuntoApp]: { enabled: false },
+                        },
+                    },
+                },
+            } as any;
+            (service as any).usersWithIncompleteProfileReads.add('u12');
+
+            await expect(service.updateActivitySyncRouteSettings(user, {
+                [ACTIVITY_SYNC_ROUTE_IDS.COROSAPI_to_SuuntoApp]: true,
+            })).rejects.toThrow('Cannot update activity sync route settings until user settings finish loading.');
+
+            expect(setDoc).not.toHaveBeenCalled();
+            expect(user.settings.serviceSyncSettings.activitySyncRoutes).toEqual({
+                [ACTIVITY_SYNC_ROUTE_IDS.COROSAPI_to_SuuntoApp]: { enabled: false },
+            });
         });
     });
 

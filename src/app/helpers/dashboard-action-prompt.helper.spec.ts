@@ -1,16 +1,21 @@
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import {
+  buildActivityAutoSyncEnabledSnackbarMessage,
   buildDashboardActionPromptViewModels,
+  DASHBOARD_ACTION_PROMPT_ACTIVITY_AUTO_SYNC_SOURCE,
   DASHBOARD_ACTION_PROMPT_CONNECT_ACTIVITY_SERVICE_ID,
   DASHBOARD_ACTION_PROMPT_CONNECT_ACTIVITY_SERVICE_SOURCE,
+  DASHBOARD_ACTION_PROMPT_ENABLE_ACTIVITY_AUTO_SYNC_ID,
   DASHBOARD_ACTION_PROMPT_FIRST_ACTIVITY_UPLOAD_ID,
   DASHBOARD_ACTION_PROMPT_FIRST_ACTIVITY_UPLOAD_SOURCE,
   DASHBOARD_ACTION_PROMPT_UNIT_SETUP_ID,
   isDashboardActionPromptDismissed,
   markDashboardActionPromptDismissed,
   normalizeDashboardActionPrompts,
+  resolveDashboardActivityAutoSyncRouteIds,
 } from './dashboard-action-prompt.helper';
 import { AppAppSettingsInterface } from '../models/app-user.interface';
+import { ACTIVITY_SYNC_ROUTE_IDS } from '@shared/activity-sync-routes';
 
 describe('dashboard-action-prompt.helper', () => {
   it('normalizes dismissed prompt states and drops invalid states', () => {
@@ -100,12 +105,20 @@ describe('dashboard-action-prompt.helper', () => {
       showConnectActivityServicePrompt: true,
       connectActivityServiceBusy: true,
       connectActivityServiceError: 'Could not save.',
+      showEnableActivityAutoSyncPrompt: true,
+      enableActivityAutoSyncBusy: false,
+      enableActivityAutoSyncError: null,
+      enableActivityAutoSyncRouteIds: [
+        ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp,
+        ACTIVITY_SYNC_ROUTE_IDS.COROSAPI_to_SuuntoApp,
+      ],
     });
 
     expect(prompts.map(prompt => prompt.id)).toEqual([
       DASHBOARD_ACTION_PROMPT_UNIT_SETUP_ID,
       DASHBOARD_ACTION_PROMPT_FIRST_ACTIVITY_UPLOAD_ID,
       DASHBOARD_ACTION_PROMPT_CONNECT_ACTIVITY_SERVICE_ID,
+      DASHBOARD_ACTION_PROMPT_ENABLE_ACTIVITY_AUTO_SYNC_ID,
     ]);
     expect(prompts[0].primaryAction?.id).toBe('applyUnitSetup');
     expect(prompts[0].menuActions?.[0]?.id).toBe('openUnitSettings');
@@ -138,6 +151,19 @@ describe('dashboard-action-prompt.helper', () => {
       ServiceNames.SuuntoApp,
       ServiceNames.COROSAPI,
     ]);
+    expect(prompts[3]).toMatchObject({
+      id: DASHBOARD_ACTION_PROMPT_ENABLE_ACTIVITY_AUTO_SYNC_ID,
+      title: 'Send new activities to Suunto',
+      description: 'Enable Garmin and COROS -> Suunto auto-sync for new imported activities. Existing activities can be queued from Services with Manual Catch-up.',
+      primaryAction: {
+        id: 'enableActivityAutoSync',
+        label: 'Enable auto-sync',
+      },
+      secondaryAction: {
+        id: 'dismissEnableActivityAutoSync',
+        label: 'Not now',
+      },
+    });
   });
 
   it('marks the first activity prompt dismissed with its own source', () => {
@@ -159,5 +185,89 @@ describe('dashboard-action-prompt.helper', () => {
       appSettings,
       DASHBOARD_ACTION_PROMPT_FIRST_ACTIVITY_UPLOAD_ID,
     )).toBe(true);
+  });
+
+  it('marks the activity auto-sync prompt dismissed with its own source', () => {
+    const appSettings = {} as AppAppSettingsInterface;
+
+    const dismissedState = markDashboardActionPromptDismissed(
+      appSettings,
+      DASHBOARD_ACTION_PROMPT_ENABLE_ACTIVITY_AUTO_SYNC_ID,
+      DASHBOARD_ACTION_PROMPT_ACTIVITY_AUTO_SYNC_SOURCE,
+      40,
+    );
+
+    expect(dismissedState).toEqual({
+      state: 'dismissed',
+      dismissedAt: 40,
+      source: DASHBOARD_ACTION_PROMPT_ACTIVITY_AUTO_SYNC_SOURCE,
+    });
+    expect(isDashboardActionPromptDismissed(
+      appSettings,
+      DASHBOARD_ACTION_PROMPT_ENABLE_ACTIVITY_AUTO_SYNC_ID,
+    )).toBe(true);
+  });
+
+  it('resolves eligible disabled dashboard activity auto-sync routes', () => {
+    const routeSettings = {
+      [ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp]: { enabled: false },
+      [ACTIVITY_SYNC_ROUTE_IDS.COROSAPI_to_SuuntoApp]: { enabled: false },
+    };
+    const userID = 'user-1';
+
+    expect(resolveDashboardActivityAutoSyncRouteIds({
+      userID,
+      routeSettings,
+      connectionState: {
+        [ServiceNames.GarminAPI]: true,
+        [ServiceNames.SuuntoApp]: true,
+        [ServiceNames.COROSAPI]: true,
+      },
+    })).toEqual([
+      ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp,
+      ACTIVITY_SYNC_ROUTE_IDS.COROSAPI_to_SuuntoApp,
+    ]);
+
+    expect(resolveDashboardActivityAutoSyncRouteIds({
+      userID,
+      routeSettings: {
+        ...routeSettings,
+        [ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp]: { enabled: true },
+      },
+      connectionState: {
+        [ServiceNames.GarminAPI]: true,
+        [ServiceNames.SuuntoApp]: true,
+        [ServiceNames.COROSAPI]: true,
+      },
+    })).toEqual([
+      ACTIVITY_SYNC_ROUTE_IDS.COROSAPI_to_SuuntoApp,
+    ]);
+
+    expect(resolveDashboardActivityAutoSyncRouteIds({
+      userID,
+      routeSettings,
+      connectionState: {
+        [ServiceNames.GarminAPI]: true,
+        [ServiceNames.SuuntoApp]: false,
+        [ServiceNames.COROSAPI]: true,
+      },
+    })).toEqual([]);
+
+    expect(resolveDashboardActivityAutoSyncRouteIds({
+      userID,
+      routeSettings,
+      connectionState: {
+        [ServiceNames.GarminAPI]: false,
+        [ServiceNames.SuuntoApp]: true,
+        [ServiceNames.COROSAPI]: false,
+      },
+    })).toEqual([]);
+  });
+
+  it('formats grouped activity auto-sync success copy', () => {
+    expect(buildActivityAutoSyncEnabledSnackbarMessage([
+      ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp,
+      ACTIVITY_SYNC_ROUTE_IDS.COROSAPI_to_SuuntoApp,
+    ])).toBe('Auto-sync enabled for Garmin and COROS -> Suunto.');
   });
 });

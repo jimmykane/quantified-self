@@ -120,6 +120,7 @@ export const HELP_SECTIONS: HelpSection[] = [
 - New users can choose a kilometers or miles preset from the dashboard **Default units** action prompt; choose **Advanced settings** there, or open **Settings -> Units**, to fine-tune individual unit preferences later.
 - Users without Pro access and no uploaded activities may see an **Upload your first activities** action prompt with options to upload FIT, GPX, TCX, JSON, or SML files, or upgrade to Pro for automatic activity sync. Dismissing it hides the prompt; manual uploads remain available from the header and upload tools.
 - Pro users without a connected activity service may see a one-time **Connect a service** action prompt; dismissing it hides the prompt permanently, and services can still be connected later from **Services**.
+- Pro users with Suunto plus Garmin and/or COROS connected may see a **Send new activities to Suunto** action prompt when an eligible auto-sync route is still disabled. Enabling it turns on future Garmin/COROS -> Suunto imports only; existing activities can still be queued from **Services** with Manual Catch-up. Dismissing it hides the prompt permanently.
 - Distance values in dashboards, event charts, activity chips, and CSV exports follow your kilometers or miles preference from **Settings -> Units**; jump distances display in feet when miles are selected.
 - **Map** tiles use their own tile date-range and activity filters, independent from the event table search.
 - Curated, KPI, form, recovery, sleep, and other derived tiles stay independent from event table filters and custom/map tile filters.
@@ -485,6 +486,8 @@ Manual catch-up is a convenience tool for queuing a period on demand. It uses st
 
 Manual catch-up can run even when the Garmin -> Suunto auto-sync toggle is off, and it does not enable auto-sync for future imports.
 
+When Garmin and Suunto are connected, the dashboard may offer a one-time action prompt to enable Garmin -> Suunto auto-sync. Dismissing the prompt hides it permanently; Manual catch-up remains available in Services.
+
 ## COROS
 
 COROS history import is limited to the last **3 months** because of API restrictions.
@@ -507,6 +510,8 @@ Automatic sync runs only for newly imported COROS activities and uses the stored
 Manual catch-up is available in COROS Services: choose a date range to queue COROS -> Suunto sync jobs for events already imported into Quantified Self.
 
 Manual catch-up can run even when the COROS -> Suunto auto-sync toggle is off, and it does not enable auto-sync for future imports.
+
+When COROS and Suunto are connected, the dashboard may offer a one-time action prompt to enable COROS -> Suunto auto-sync. Dismissing the prompt hides it permanently; Manual catch-up remains available in Services.
 
 ## Queue behavior
 

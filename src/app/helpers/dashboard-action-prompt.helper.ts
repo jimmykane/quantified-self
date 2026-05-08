@@ -4,13 +4,27 @@ import {
   AppDashboardActionPromptId,
   AppDashboardActionPromptState,
   AppDashboardActionPrompts,
+  ActivitySyncRouteSettingsInterface,
 } from '../models/app-user.interface';
+import {
+  ACTIVITY_SYNC_ROUTE_IDS,
+  ACTIVITY_SYNC_ROUTES,
+  ActivitySyncRouteId,
+} from '@shared/activity-sync-routes';
+import { isActivitySyncRouteUIDAllowlisted } from '@shared/activity-sync-rollout';
 
 export const DASHBOARD_ACTION_PROMPT_UNIT_SETUP_ID: AppDashboardActionPromptId = 'unitSetup';
 export const DASHBOARD_ACTION_PROMPT_FIRST_ACTIVITY_UPLOAD_ID: AppDashboardActionPromptId = 'firstActivityUpload';
 export const DASHBOARD_ACTION_PROMPT_CONNECT_ACTIVITY_SERVICE_ID: AppDashboardActionPromptId = 'connectActivityService';
+export const DASHBOARD_ACTION_PROMPT_ENABLE_ACTIVITY_AUTO_SYNC_ID: AppDashboardActionPromptId = 'enableActivityAutoSync';
 export const DASHBOARD_ACTION_PROMPT_FIRST_ACTIVITY_UPLOAD_SOURCE = 'first-activity-upload';
 export const DASHBOARD_ACTION_PROMPT_CONNECT_ACTIVITY_SERVICE_SOURCE = 'activity-service-connection';
+export const DASHBOARD_ACTION_PROMPT_ACTIVITY_AUTO_SYNC_SOURCE = 'activity-auto-sync';
+
+export const DASHBOARD_ACTIVITY_AUTO_SYNC_ROUTE_IDS: readonly ActivitySyncRouteId[] = [
+  ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp,
+  ACTIVITY_SYNC_ROUTE_IDS.COROSAPI_to_SuuntoApp,
+];
 
 export type DashboardActionPromptActionId =
   | 'applyUnitSetup'
@@ -19,7 +33,9 @@ export type DashboardActionPromptActionId =
   | 'upgradeToPro'
   | 'dismissFirstActivityUpload'
   | 'connectActivityService'
-  | 'dismissConnectActivityService';
+  | 'dismissConnectActivityService'
+  | 'enableActivityAutoSync'
+  | 'dismissEnableActivityAutoSync';
 
 export type DashboardActionPromptMenuActionId =
   | 'openUnitSettings'
@@ -79,6 +95,16 @@ export interface DashboardActionPromptBuildOptions {
   showConnectActivityServicePrompt: boolean;
   connectActivityServiceBusy: boolean;
   connectActivityServiceError: string | null;
+  showEnableActivityAutoSyncPrompt: boolean;
+  enableActivityAutoSyncBusy: boolean;
+  enableActivityAutoSyncError: string | null;
+  enableActivityAutoSyncRouteIds: readonly ActivitySyncRouteId[];
+}
+
+export interface ResolveDashboardActivityAutoSyncRouteIdsOptions {
+  userID: string | null | undefined;
+  connectionState: Partial<Record<ServiceNames, boolean>> | null | undefined;
+  routeSettings: Partial<Record<ActivitySyncRouteId, ActivitySyncRouteSettingsInterface>> | null | undefined;
 }
 
 export function normalizeDashboardActionPrompts(value: unknown): AppDashboardActionPrompts {
@@ -119,6 +145,27 @@ export function markDashboardActionPromptDismissed(
     [id]: state,
   };
   return state;
+}
+
+export function resolveDashboardActivityAutoSyncRouteIds(
+  options: ResolveDashboardActivityAutoSyncRouteIdsOptions,
+): ActivitySyncRouteId[] {
+  const userID = `${options.userID || ''}`.trim();
+  const connectionState = options.connectionState;
+  if (!userID || !connectionState?.[ServiceNames.SuuntoApp]) {
+    return [];
+  }
+
+  return DASHBOARD_ACTIVITY_AUTO_SYNC_ROUTE_IDS.filter(routeID => {
+    const route = ACTIVITY_SYNC_ROUTES[routeID];
+    return connectionState[route.sourceServiceName] === true
+      && options.routeSettings?.[routeID]?.enabled !== true
+      && isActivitySyncRouteUIDAllowlisted(routeID, userID);
+  });
+}
+
+export function buildActivityAutoSyncEnabledSnackbarMessage(routeIds: readonly ActivitySyncRouteId[]): string {
+  return `Auto-sync enabled for ${formatActivityAutoSyncRouteSourceLabel(routeIds)} -> Suunto.`;
 }
 
 export function buildDashboardActionPromptViewModels(
@@ -208,7 +255,61 @@ export function buildDashboardActionPromptViewModels(
     });
   }
 
+  if (options.showEnableActivityAutoSyncPrompt && options.enableActivityAutoSyncRouteIds.length > 0) {
+    prompts.push({
+      id: DASHBOARD_ACTION_PROMPT_ENABLE_ACTIVITY_AUTO_SYNC_ID,
+      icon: 'published_with_changes',
+      title: 'Send new activities to Suunto',
+      description: `Enable ${formatActivityAutoSyncRouteSourceLabel(options.enableActivityAutoSyncRouteIds)} -> Suunto auto-sync for new imported activities. Existing activities can be queued from Services with Manual Catch-up.`,
+      busy: options.enableActivityAutoSyncBusy,
+      error: options.enableActivityAutoSyncError,
+      primaryAction: {
+        id: 'enableActivityAutoSync',
+        label: 'Enable auto-sync',
+        loadingLabel: 'Enabling...',
+        icon: 'sync',
+      },
+      secondaryAction: {
+        id: 'dismissEnableActivityAutoSync',
+        label: 'Not now',
+      },
+    });
+  }
+
   return prompts;
+}
+
+function formatActivityAutoSyncRouteSourceLabel(routeIds: readonly ActivitySyncRouteId[]): string {
+  const sourceLabels = routeIds
+    .map(routeId => ACTIVITY_SYNC_ROUTES[routeId]?.sourceServiceName)
+    .filter((serviceName): serviceName is ServiceNames => !!serviceName)
+    .map(getActivityServiceDisplayName);
+
+  return formatList(sourceLabels.length ? sourceLabels : ['Garmin', 'COROS']);
+}
+
+function getActivityServiceDisplayName(serviceName: ServiceNames): string {
+  switch (serviceName) {
+    case ServiceNames.GarminAPI:
+      return 'Garmin';
+    case ServiceNames.COROSAPI:
+      return 'COROS';
+    case ServiceNames.SuuntoApp:
+      return 'Suunto';
+    default:
+      return `${serviceName}`;
+  }
+}
+
+function formatList(labels: readonly string[]): string {
+  const uniqueLabels = labels.filter((label, index) => labels.indexOf(label) === index);
+  if (uniqueLabels.length <= 1) {
+    return uniqueLabels[0] || '';
+  }
+  if (uniqueLabels.length === 2) {
+    return `${uniqueLabels[0]} and ${uniqueLabels[1]}`;
+  }
+  return `${uniqueLabels.slice(0, -1).join(', ')}, and ${uniqueLabels[uniqueLabels.length - 1]}`;
 }
 
 function normalizeDashboardActionPromptState(value: unknown): AppDashboardActionPromptState | null {

@@ -180,23 +180,9 @@ export class ServicesGarminComponent extends ServicesAbstractComponentDirective 
 
     this.isSavingSyncRoute = true;
     try {
-      await this.userService.updateUserProperties(this.user as any, {
-        settings: {
-          serviceSyncSettings: {
-            activitySyncRoutes: {
-              [this.garminToSuuntoRouteID]: {
-                enabled,
-              },
-            },
-          },
-        },
+      await this.userService.updateActivitySyncRouteSettings(this.user, {
+        [this.garminToSuuntoRouteID]: enabled,
       });
-
-      const settings: any = this.user.settings || {};
-      settings.serviceSyncSettings = settings.serviceSyncSettings || {};
-      settings.serviceSyncSettings.activitySyncRoutes = settings.serviceSyncSettings.activitySyncRoutes || {};
-      settings.serviceSyncSettings.activitySyncRoutes[this.garminToSuuntoRouteID] = { enabled };
-      this.user.settings = settings;
 
       this.analyticsService.logActivitySyncRouteToggle(this.garminToSuuntoRouteID, enabled);
       this.snackBar.open(enabled ? 'Garmin to Suunto auto-sync enabled.' : 'Garmin to Suunto auto-sync disabled.', undefined, { duration: 3000 });
