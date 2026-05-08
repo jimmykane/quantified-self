@@ -37,8 +37,10 @@ import type {
   DashboardAcwrContext,
   DashboardEasyPercentContext,
   DashboardEfficiencyDelta4wContext,
+  DashboardFreshnessForecastContext,
   DashboardFatigueAtlContext,
   DashboardFitnessCtlContext,
+  DashboardIntensityDistributionContext,
   DashboardMonotonyStrainContext,
   DashboardFormNowContext,
   DashboardFormPlus7dContext,
@@ -50,12 +52,17 @@ import {
   DASHBOARD_EASY_PERCENT_KPI_CHART_TYPE,
   DASHBOARD_EFFICIENCY_DELTA_4W_KPI_CHART_TYPE,
   DASHBOARD_FATIGUE_ATL_KPI_CHART_TYPE,
+  DASHBOARD_FATIGUE_TREND_KPI_CHART_TYPE,
   DASHBOARD_FITNESS_CTL_KPI_CHART_TYPE,
+  DASHBOARD_FITNESS_TREND_KPI_CHART_TYPE,
   DASHBOARD_FORM_NOW_KPI_CHART_TYPE,
   DASHBOARD_FORM_PLUS_7D_KPI_CHART_TYPE,
   DASHBOARD_HARD_PERCENT_KPI_CHART_TYPE,
+  DASHBOARD_LOAD_STATUS_KPI_CHART_TYPE,
   DASHBOARD_MONOTONY_STRAIN_KPI_CHART_TYPE,
   DASHBOARD_RAMP_RATE_KPI_CHART_TYPE,
+  DASHBOARD_RECOVERY_DEBT_KPI_CHART_TYPE,
+  DASHBOARD_TRAINING_BALANCE_KPI_CHART_TYPE,
   type DashboardKpiChartType,
 } from '../../../helpers/dashboard-special-chart-types';
 import { AppHapticsService } from '../../../services/app.haptics.service';
@@ -67,6 +74,7 @@ type ChartOption = Parameters<EChartsType['setOption']>[0];
 interface KpiPresentation {
   title: string;
   primaryValue: number | null;
+  primaryValueText?: string;
   primaryLabel: string;
   secondaryLabel: string;
   primarySuffix?: string;
@@ -106,6 +114,8 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
   @Input() easyPercent?: DashboardEasyPercentContext | null;
   @Input() hardPercent?: DashboardHardPercentContext | null;
   @Input() efficiencyDelta4w?: DashboardEfficiencyDelta4wContext | null;
+  @Input() freshnessForecast?: DashboardFreshnessForecastContext | null;
+  @Input() intensityDistribution?: DashboardIntensityDistributionContext | null;
   @Input() acwrStatus?: DashboardDerivedMetricStatus | null;
   @Input() rampRateStatus?: DashboardDerivedMetricStatus | null;
   @Input() monotonyStrainStatus?: DashboardDerivedMetricStatus | null;
@@ -116,6 +126,8 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
   @Input() easyPercentStatus?: DashboardDerivedMetricStatus | null;
   @Input() hardPercentStatus?: DashboardDerivedMetricStatus | null;
   @Input() efficiencyDelta4wStatus?: DashboardDerivedMetricStatus | null;
+  @Input() freshnessForecastStatus?: DashboardDerivedMetricStatus | null;
+  @Input() intensityDistributionStatus?: DashboardDerivedMetricStatus | null;
 
   @ViewChild('chartDiv', { static: true }) chartDiv!: ElementRef<HTMLDivElement>;
   @ViewChild(MatTooltip) infoTooltipDirective?: MatTooltip;
@@ -171,6 +183,8 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
       || changes.easyPercent
       || changes.hardPercent
       || changes.efficiencyDelta4w
+      || changes.freshnessForecast
+      || changes.intensityDistribution
       || changes.acwrStatus
       || changes.rampRateStatus
       || changes.monotonyStrainStatus
@@ -181,6 +195,8 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
       || changes.easyPercentStatus
       || changes.hardPercentStatus
       || changes.efficiencyDelta4wStatus
+      || changes.freshnessForecastStatus
+      || changes.intensityDistributionStatus
       || changes.compactRow
     );
 
@@ -240,13 +256,13 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
     this.titleDisplay = this.resolveDisplayTitle();
     this.primaryLabel = presentation.primaryLabel;
     this.secondaryLabel = presentation.secondaryLabel;
-    this.primaryValueText = this.formatPrimaryValue(presentation.primaryValue, {
+    this.primaryValueText = presentation.primaryValueText || this.formatPrimaryValue(presentation.primaryValue, {
       suffix: presentation.primarySuffix || '',
       signed: presentation.primarySigned === true,
     });
     this.secondaryValueText = presentation.secondaryValueText || '';
 
-    const hasRenderableValue = presentation.primaryValue !== null;
+    const hasRenderableValue = presentation.primaryValue !== null || !!presentation.primaryValueText;
     this.showNoDataError = !hasRenderableValue;
     this.noDataErrorMessage = 'No KPI data yet';
     this.noDataErrorHint = 'Upload activities with training load to calculate this metric.';
@@ -264,6 +280,10 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
   }
 
   private resolvePresentation(): KpiPresentation {
+    if (this.chartType === DASHBOARD_LOAD_STATUS_KPI_CHART_TYPE) {
+      return this.resolveLoadStatusPresentation();
+    }
+
     if (this.chartType === DASHBOARD_FORM_NOW_KPI_CHART_TYPE) {
       const context = this.formNow || null;
       return {
@@ -298,6 +318,18 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
       };
     }
 
+    if (this.chartType === DASHBOARD_FITNESS_TREND_KPI_CHART_TYPE) {
+      return this.resolveFitnessTrendPresentation();
+    }
+
+    if (this.chartType === DASHBOARD_FATIGUE_TREND_KPI_CHART_TYPE) {
+      return this.resolveFatigueTrendPresentation();
+    }
+
+    if (this.chartType === DASHBOARD_RECOVERY_DEBT_KPI_CHART_TYPE) {
+      return this.resolveRecoveryDebtPresentation();
+    }
+
     if (this.chartType === DASHBOARD_FORM_PLUS_7D_KPI_CHART_TYPE) {
       const context = this.formPlus7d || null;
       return {
@@ -308,6 +340,10 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
         primarySigned: true,
         trend: (context?.trend8Weeks || []).map(point => ({ time: point.time, value: point.value })),
       };
+    }
+
+    if (this.chartType === DASHBOARD_TRAINING_BALANCE_KPI_CHART_TYPE) {
+      return this.resolveTrainingBalancePresentation();
     }
 
     if (this.chartType === DASHBOARD_EASY_PERCENT_KPI_CHART_TYPE) {
@@ -394,7 +430,255 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
     };
   }
 
+  private resolveLoadStatusPresentation(): KpiPresentation {
+    const form = this.toFiniteNumber(this.formNow?.value);
+    const rampRate = this.toFiniteNumber(this.rampRate?.rampRate);
+    const fitness = this.toFiniteNumber(this.fitnessCtl?.value);
+    const fatigue = this.toFiniteNumber(this.fatigueAtl?.value);
+    const status = this.resolveLoadStatusLabel(form, rampRate, fitness, fatigue);
+    const detailParts = [
+      form !== null ? `TSB ${this.formatPrimaryValue(form, { signed: true })}` : '',
+      rampRate !== null ? `Ramp ${this.formatPrimaryValue(rampRate, { signed: true })}` : '',
+    ].filter(Boolean);
+
+    return {
+      title: 'Load Status',
+      primaryValue: null,
+      primaryValueText: status.label,
+      primaryLabel: status.caption || 'Current state',
+      secondaryLabel: detailParts.length ? 'Load signals' : 'Form and ramp summary',
+      secondaryValueText: detailParts.join(' / '),
+      trend: (this.formNow?.trend8Weeks || []).map(point => ({ time: point.time, value: point.value })),
+    };
+  }
+
+  private resolveFitnessTrendPresentation(): KpiPresentation {
+    const context = this.fitnessCtl || null;
+    const trendDelta = this.resolveTrendDelta(context?.trend8Weeks || [], 4);
+    const currentFitnessText = context?.value !== null && context?.value !== undefined
+      ? this.formatPrimaryValue(context.value)
+      : '';
+
+    return {
+      title: 'Fitness Trend',
+      primaryValue: trendDelta,
+      primaryLabel: 'CTL delta (4w)',
+      secondaryLabel: currentFitnessText ? 'CTL now' : 'Recent CTL direction',
+      secondaryValueText: currentFitnessText,
+      primarySigned: true,
+      trend: (context?.trend8Weeks || []).map(point => ({ time: point.time, value: point.value })),
+    };
+  }
+
+  private resolveFatigueTrendPresentation(): KpiPresentation {
+    const context = this.fatigueAtl || null;
+    const trendDelta = this.resolveTrendDelta(context?.trend8Weeks || [], 1);
+    const currentFatigueText = context?.value !== null && context?.value !== undefined
+      ? this.formatPrimaryValue(context.value)
+      : '';
+
+    return {
+      title: 'Fatigue Trend',
+      primaryValue: trendDelta,
+      primaryLabel: 'ATL delta (1w)',
+      secondaryLabel: currentFatigueText ? 'ATL now' : 'Short-term fatigue direction',
+      secondaryValueText: currentFatigueText,
+      primarySigned: true,
+      trend: (context?.trend8Weeks || []).map(point => ({ time: point.time, value: point.value })),
+    };
+  }
+
+  private resolveRecoveryDebtPresentation(): KpiPresentation {
+    const debt = this.resolveRecoveryDebt();
+    const formNowText = this.formNow?.value !== null && this.formNow?.value !== undefined
+      ? this.formatPrimaryValue(this.formNow.value, { signed: true })
+      : '';
+
+    return {
+      title: 'Recovery Debt',
+      primaryValue: debt.days,
+      primaryValueText: debt.label,
+      primaryLabel: 'Zero-load days',
+      secondaryLabel: formNowText ? 'TSB now' : 'Estimated days to neutral',
+      secondaryValueText: formNowText,
+      trend: (this.formNow?.trend8Weeks || []).map(point => ({ time: point.time, value: point.value })),
+    };
+  }
+
+  private resolveTrainingBalancePresentation(): KpiPresentation {
+    const easyPercent = this.toFiniteNumber(this.intensityDistribution?.latestEasyPercent ?? this.easyPercent?.value);
+    const moderatePercent = this.toFiniteNumber(this.intensityDistribution?.latestModeratePercent);
+    const hardPercent = this.toFiniteNumber(this.intensityDistribution?.latestHardPercent ?? this.hardPercent?.value);
+    const label = this.resolveTrainingBalanceLabel(easyPercent, moderatePercent, hardPercent);
+    const secondaryParts = [
+      easyPercent !== null ? `Easy ${this.formatPrimaryValue(easyPercent)}%` : '',
+      moderatePercent !== null ? `Moderate ${this.formatPrimaryValue(moderatePercent)}%` : '',
+      hardPercent !== null ? `Hard ${this.formatPrimaryValue(hardPercent)}%` : '',
+    ].filter(Boolean);
+
+    return {
+      title: 'Training Balance',
+      primaryValue: null,
+      primaryValueText: label,
+      primaryLabel: 'Latest week',
+      secondaryLabel: secondaryParts.length ? 'Intensity mix' : 'Easy/moderate/hard split',
+      secondaryValueText: secondaryParts.join(' / '),
+      trend: (this.hardPercent?.trend8Weeks || this.easyPercent?.trend8Weeks || [])
+        .map(point => ({ time: point.time, value: point.value })),
+    };
+  }
+
+  private resolveLoadStatusLabel(
+    form: number | null,
+    rampRate: number | null,
+    fitness: number | null,
+    fatigue: number | null,
+  ): { label?: string; caption?: string } {
+    if (form === null && rampRate === null && fitness === null && fatigue === null) {
+      return {};
+    }
+
+    if (fitness !== null && fitness < 5 && fatigue !== null && fatigue < 10) {
+      return { label: 'Starting', caption: 'Low training history' };
+    }
+
+    if (
+      form !== null
+      && (form <= -30 || (form <= -20 && fatigue !== null && fitness !== null && fatigue > fitness * 1.25))
+    ) {
+      return { label: 'Overload', caption: 'Back off soon' };
+    }
+
+    if (form !== null && form <= -10) {
+      return { label: 'Fatigued', caption: 'Absorb the load' };
+    }
+
+    if (rampRate !== null && rampRate >= 1 && (form === null || form < 6)) {
+      return { label: 'Building', caption: 'Productive load' };
+    }
+
+    if (form !== null && form >= 8 && (rampRate === null || rampRate <= 0)) {
+      return { label: 'Fresh', caption: 'Ready to train' };
+    }
+
+    if (rampRate !== null && rampRate <= -3 && (form === null || form > -8)) {
+      return { label: 'Detraining', caption: 'Load is falling' };
+    }
+
+    return { label: 'Balanced', caption: 'Stable load' };
+  }
+
+  private resolveTrainingBalanceLabel(
+    easyPercent: number | null,
+    moderatePercent: number | null,
+    hardPercent: number | null,
+  ): string | undefined {
+    if (easyPercent === null && moderatePercent === null && hardPercent === null) {
+      return undefined;
+    }
+
+    if (hardPercent !== null && hardPercent >= 25) {
+      return 'Hard-heavy';
+    }
+    if (easyPercent !== null && easyPercent >= 75 && (hardPercent === null || hardPercent <= 12)) {
+      return 'Easy-heavy';
+    }
+    if (
+      moderatePercent !== null
+      && moderatePercent >= 45
+      && (hardPercent === null || hardPercent < 20)
+    ) {
+      return 'Moderate';
+    }
+    if (
+      easyPercent !== null
+      && easyPercent >= 55
+      && easyPercent <= 80
+      && (hardPercent === null || hardPercent <= 20)
+    ) {
+      return 'Balanced';
+    }
+    return 'Mixed';
+  }
+
+  private resolveRecoveryDebt(): { days: number | null; label?: string } {
+    const formNow = this.toFiniteNumber(this.formNow?.value);
+    if (formNow === null) {
+      return { days: null };
+    }
+    if (formNow >= 0) {
+      return { days: 0, label: '0 d' };
+    }
+
+    const latestDayMs = this.toFiniteNumber(this.formNow?.latestDayMs);
+    const forecastPoints = [...(this.freshnessForecast?.points || [])]
+      .filter(point => Number.isFinite(point.dayMs))
+      .sort((left, right) => left.dayMs - right.dayMs);
+    const neutralForecastPoint = forecastPoints.find((point) => {
+      const forecastForm = this.toFiniteNumber(point.formSameDay);
+      return forecastForm !== null
+        && forecastForm >= 0
+        && (latestDayMs === null || point.dayMs >= latestDayMs);
+    });
+
+    if (neutralForecastPoint && latestDayMs !== null) {
+      const days = Math.max(0, Math.ceil((neutralForecastPoint.dayMs - latestDayMs) / 86_400_000));
+      return { days, label: `${days} d` };
+    }
+
+    const projected = this.toFiniteNumber(this.formPlus7d?.value);
+    if (projected !== null && projected > formNow) {
+      const estimatedDays = Math.ceil(Math.abs(formNow) / (projected - formNow) * 7);
+      if (estimatedDays <= 7) {
+        return { days: estimatedDays, label: `${estimatedDays} d` };
+      }
+    }
+
+    return { days: 7, label: '7+ d' };
+  }
+
+  private resolveTrendDelta(
+    trend: ReadonlyArray<{ value: number | null | undefined }>,
+    preferredPointsAgo: number,
+  ): number | null {
+    const numericValues = trend
+      .map(point => this.toFiniteNumber(point.value))
+      .filter((value): value is number => value !== null);
+    if (numericValues.length < 2) {
+      return null;
+    }
+    const latest = numericValues[numericValues.length - 1];
+    const comparisonIndex = Math.max(0, numericValues.length - 1 - preferredPointsAgo);
+    return latest - numericValues[comparisonIndex];
+  }
+
+  private resolveCombinedStatus(
+    statuses: ReadonlyArray<DashboardDerivedMetricStatus | null | undefined>,
+  ): DashboardDerivedMetricStatus | null {
+    const normalizedStatuses = statuses.filter((status): status is DashboardDerivedMetricStatus => !!status);
+    return normalizedStatuses.find(status => isDerivedMetricPendingStatus(status))
+      || normalizedStatuses.find(status => status === 'ready')
+      || normalizedStatuses[0]
+      || null;
+  }
+
+  private toFiniteNumber(value: unknown): number | null {
+    if (value === null || value === undefined || value === '') {
+      return null;
+    }
+    const numericValue = Number(value);
+    return Number.isFinite(numericValue) ? numericValue : null;
+  }
+
   private resolveActiveStatus(): DashboardDerivedMetricStatus | null {
+    if (this.chartType === DASHBOARD_LOAD_STATUS_KPI_CHART_TYPE) {
+      return this.resolveCombinedStatus([
+        this.formNowStatus,
+        this.rampRateStatus,
+        this.fitnessCtlStatus,
+        this.fatigueAtlStatus,
+      ]);
+    }
     if (this.chartType === DASHBOARD_FORM_NOW_KPI_CHART_TYPE) {
       return this.formNowStatus || null;
     }
@@ -404,8 +688,28 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
     if (this.chartType === DASHBOARD_FATIGUE_ATL_KPI_CHART_TYPE) {
       return this.fatigueAtlStatus || null;
     }
+    if (this.chartType === DASHBOARD_FITNESS_TREND_KPI_CHART_TYPE) {
+      return this.fitnessCtlStatus || null;
+    }
+    if (this.chartType === DASHBOARD_FATIGUE_TREND_KPI_CHART_TYPE) {
+      return this.fatigueAtlStatus || null;
+    }
+    if (this.chartType === DASHBOARD_RECOVERY_DEBT_KPI_CHART_TYPE) {
+      return this.resolveCombinedStatus([
+        this.freshnessForecastStatus,
+        this.formNowStatus,
+        this.formPlus7dStatus,
+      ]);
+    }
     if (this.chartType === DASHBOARD_FORM_PLUS_7D_KPI_CHART_TYPE) {
       return this.formPlus7dStatus || null;
+    }
+    if (this.chartType === DASHBOARD_TRAINING_BALANCE_KPI_CHART_TYPE) {
+      return this.resolveCombinedStatus([
+        this.intensityDistributionStatus,
+        this.easyPercentStatus,
+        this.hardPercentStatus,
+      ]);
     }
     if (this.chartType === DASHBOARD_EASY_PERCENT_KPI_CHART_TYPE) {
       return this.easyPercentStatus || null;
@@ -441,11 +745,26 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
     if (this.chartType === DASHBOARD_EFFICIENCY_DELTA_4W_KPI_CHART_TYPE) {
       return 'Eff Δ';
     }
+    if (this.chartType === DASHBOARD_LOAD_STATUS_KPI_CHART_TYPE) {
+      return 'Status';
+    }
     if (this.chartType === DASHBOARD_FITNESS_CTL_KPI_CHART_TYPE) {
       return 'Fitness';
     }
     if (this.chartType === DASHBOARD_FATIGUE_ATL_KPI_CHART_TYPE) {
       return 'Fatigue';
+    }
+    if (this.chartType === DASHBOARD_FITNESS_TREND_KPI_CHART_TYPE) {
+      return 'Fit Δ';
+    }
+    if (this.chartType === DASHBOARD_FATIGUE_TREND_KPI_CHART_TYPE) {
+      return 'Fatigue Δ';
+    }
+    if (this.chartType === DASHBOARD_RECOVERY_DEBT_KPI_CHART_TYPE) {
+      return 'Rec Debt';
+    }
+    if (this.chartType === DASHBOARD_TRAINING_BALANCE_KPI_CHART_TYPE) {
+      return 'Balance';
     }
     return this.title;
   }
@@ -670,10 +989,13 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
     if (
       this.chartType === DASHBOARD_FORM_NOW_KPI_CHART_TYPE
       || this.chartType === DASHBOARD_FORM_PLUS_7D_KPI_CHART_TYPE
+      || this.chartType === DASHBOARD_RECOVERY_DEBT_KPI_CHART_TYPE
     ) {
       const readinessValue = this.chartType === DASHBOARD_FORM_NOW_KPI_CHART_TYPE
         ? this.formNow?.value ?? null
-        : this.formPlus7d?.value ?? null;
+        : this.chartType === DASHBOARD_FORM_PLUS_7D_KPI_CHART_TYPE
+          ? this.formPlus7d?.value ?? null
+          : this.formNow?.value ?? null;
       return {
         lineColor: this.resolveDirectionalColor(readinessValue, {
           positiveColor,
@@ -686,7 +1008,10 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
       };
     }
 
-    if (this.chartType === DASHBOARD_EASY_PERCENT_KPI_CHART_TYPE) {
+    if (
+      this.chartType === DASHBOARD_EASY_PERCENT_KPI_CHART_TYPE
+      || this.chartType === DASHBOARD_TRAINING_BALANCE_KPI_CHART_TYPE
+    ) {
       return {
         lineColor: positiveColor,
         areaColor: positiveColor,
@@ -726,6 +1051,47 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
         }),
         areaColor: neutralColor,
         areaOpacity: 0.14,
+      };
+    }
+
+    if (this.chartType === DASHBOARD_LOAD_STATUS_KPI_CHART_TYPE) {
+      return {
+        lineColor: this.resolveDirectionalColor(this.formNow?.value ?? null, {
+          positiveColor,
+          negativeColor,
+          neutralColor,
+          neutralThreshold: 5,
+        }),
+        areaColor: neutralColor,
+        areaOpacity: 0.14,
+      };
+    }
+
+    if (this.chartType === DASHBOARD_FITNESS_TREND_KPI_CHART_TYPE) {
+      const fitnessDelta = this.resolveTrendDelta(this.fitnessCtl?.trend8Weeks || [], 4);
+      return {
+        lineColor: this.resolveDirectionalColor(fitnessDelta, {
+          positiveColor,
+          negativeColor,
+          neutralColor,
+          neutralThreshold: 0.5,
+        }),
+        areaColor: neutralColor,
+        areaOpacity: 0.14,
+      };
+    }
+
+    if (this.chartType === DASHBOARD_FATIGUE_TREND_KPI_CHART_TYPE) {
+      const fatigueDelta = this.resolveTrendDelta(this.fatigueAtl?.trend8Weeks || [], 1);
+      return {
+        lineColor: this.resolveDirectionalColor(fatigueDelta, {
+          positiveColor: hardLoadColor,
+          negativeColor: positiveColor,
+          neutralColor,
+          neutralThreshold: 0.5,
+        }),
+        areaColor: hardLoadColor,
+        areaOpacity: 0.12,
       };
     }
 

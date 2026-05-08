@@ -464,6 +464,31 @@
 
     .mobile-settings-tabs {
         display: flex;
+        align-self: center;
+        width: fit-content;
+        max-width: 100%;
+        margin-inline: auto;
+    }
+
+    .settings-tab-label {
+        flex-direction: column;
+        justify-content: center;
+        gap: 2px;
+        text-align: center;
+        white-space: normal;
+        font-size: 0.72rem;
+        line-height: 1.1;
+    }
+
+    .settings-tab-label mat-icon {
+        width: 20px;
+        height: 20px;
+        font-size: 20px;
+    }
+
+    .settings-tab-label > span:last-child {
+        display: block;
+        line-height: 1.1;
     }
 
     .settings-panel-header h1 {

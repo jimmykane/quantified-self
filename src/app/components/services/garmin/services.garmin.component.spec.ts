@@ -16,9 +16,9 @@ import { MatInputModule } from '@angular/material/input';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { MatButtonModule } from '@angular/material/button';
-import { MatListModule } from '@angular/material/list';
 import { MatDividerModule } from '@angular/material/divider';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
+import { MatTabsModule } from '@angular/material/tabs';
 import { MatDialog } from '@angular/material/dialog';
 import { AppFileService } from '../../../services/app.file.service';
 import { Analytics } from 'app/firebase/analytics';
@@ -76,6 +76,7 @@ describe('ServicesGarminComponent', () => {
             getServiceToken: vi.fn().mockReturnValue(of([])),
             getUserMetaForService: vi.fn().mockReturnValue(of(undefined)),
             updateUserProperties: vi.fn().mockResolvedValue(undefined),
+            updateActivitySyncRouteSettings: vi.fn().mockResolvedValue(undefined),
             backfillActivitySyncRouteForCurrentUser: vi.fn().mockResolvedValue({ scanned: 0, queued: 0, skippedByReason: {}, failedCount: 0, failedEvents: [] }),
             deauthorizeService: vi.fn().mockResolvedValue(undefined),
         };
@@ -96,9 +97,9 @@ describe('ServicesGarminComponent', () => {
                 MatFormFieldModule,
                 MatSlideToggleModule,
                 MatButtonModule,
-                MatListModule,
                 MatDividerModule,
                 MatProgressBarModule,
+                MatTabsModule,
             ],
             providers: [
                 { provide: AppFileService, useValue: {} },
@@ -134,13 +135,41 @@ describe('ServicesGarminComponent', () => {
 
         const connectionStatus = fixture.nativeElement.querySelector('.service-connection-status');
         const providerToolTabs = fixture.nativeElement.querySelector('.provider-tools-tabs');
-        const providerTabs = fixture.nativeElement.querySelectorAll('mat-tab');
+        const providerToolPanel = fixture.nativeElement.querySelector('.provider-tools-panel');
+        const providerTabs = fixture.nativeElement.querySelectorAll('a[mat-tab-link]');
 
         expect(connectionStatus).toBeTruthy();
         expect(connectionStatus.textContent).toContain('Garmin connection');
-        expect(providerToolTabs.hasAttribute('ng-reflect-dynamic-height')).toBe(false);
+        expect(providerToolTabs.tagName.toLowerCase()).toBe('nav');
+        expect(fixture.nativeElement.querySelector('mat-tab-group')).toBeFalsy();
+        expect(providerToolPanel).toBeTruthy();
         expect(providerTabs.length).toBe(1);
-        expect(fixture.nativeElement.querySelector('mat-tab .service-connection-status')).toBeFalsy();
+        expect(fixture.nativeElement.querySelector('.provider-tools-panel .service-connection-status')).toBeFalsy();
+    });
+
+    it('hides the auto-sync panel until the auto-sync tab is selected', () => {
+        component.user = { uid: ACTIVITY_SYNC_ALLOWLISTED_UID, settings: {} } as any;
+        component.hasProAccess = true;
+        component.serviceTokens = [{ accessToken: 'token', userID: 'garmin-user', permissions: [] } as any];
+        fixture.detectChanges();
+
+        const tabs = fixture.nativeElement.querySelectorAll('a[mat-tab-link]');
+        const panels = fixture.nativeElement.querySelectorAll('.provider-tool-panel');
+
+        expect(tabs.length).toBe(2);
+        expect(panels.length).toBe(2);
+        expect(panels[0].hidden).toBe(false);
+        expect(panels[1].hidden).toBe(true);
+        expect(getComputedStyle(panels[1]).display).toBe('none');
+        expect(panels[1].textContent).toContain('Garmin -> Suunto Sync');
+
+        tabs[1].dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+        fixture.detectChanges();
+
+        expect(component.activeProviderTool).toBe('auto-sync');
+        expect(panels[0].hidden).toBe(true);
+        expect(getComputedStyle(panels[0]).display).toBe('none');
+        expect(panels[1].hidden).toBe(false);
     });
 
     it('renders disconnect beside the connected account details', () => {
@@ -157,6 +186,10 @@ describe('ServicesGarminComponent', () => {
 
         expect(accountRow).toBeTruthy();
         expect(accountRow.textContent).toContain('garmin-user');
+        expect(accountRow.querySelector('.connected-account-list')).toBeTruthy();
+        expect(accountRow.querySelector('.connected-account-title')?.textContent).toContain('garmin-user');
+        expect(accountRow.querySelector('.connected-account-line')?.textContent).toContain('Connected:');
+        expect(accountRow.querySelector('mat-list')).toBeFalsy();
         expect(accountRow.querySelector('.connection-disconnect-button')?.textContent).toContain('Disconnect');
         expect(fixture.nativeElement.querySelector('.service-connection-status__actions .connection-disconnect-button')).toBeFalsy();
     });
@@ -228,8 +261,8 @@ describe('ServicesGarminComponent', () => {
             const syncingText = fixture.nativeElement.textContent;
             expect(syncingText).toContain('Syncing connection details...');
 
-            // Should NOT show the account circle icon (part of the connected list)
-            const accountIcon = fixture.nativeElement.querySelector('mat-icon[matListItemIcon]');
+            // Should NOT show the account circle icon (part of the connected account row)
+            const accountIcon = fixture.nativeElement.querySelector('.connected-account-icon');
             expect(accountIcon).toBeFalsy();
         });
 
@@ -247,8 +280,8 @@ describe('ServicesGarminComponent', () => {
             const syncingText = fixture.nativeElement.textContent;
             expect(syncingText).toContain('Syncing connection details...');
 
-            // Verify connected list is NOT shown
-            const accountIcon = fixture.nativeElement.querySelector('mat-icon[matListItemIcon]');
+            // Verify connected account row is NOT shown
+            const accountIcon = fixture.nativeElement.querySelector('.connected-account-icon');
             expect(accountIcon).toBeFalsy();
         });
 
@@ -389,16 +422,8 @@ describe('ServicesGarminComponent', () => {
 
             await component.onGarminToSuuntoRouteToggle(true);
 
-            expect(mockUserService.updateUserProperties).toHaveBeenCalledWith(component.user, {
-                settings: {
-                    serviceSyncSettings: {
-                        activitySyncRoutes: {
-                            [ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp]: {
-                                enabled: true
-                            }
-                        }
-                    }
-                }
+            expect(mockUserService.updateActivitySyncRouteSettings).toHaveBeenCalledWith(component.user, {
+                [ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp]: true
             });
             expect(mockAnalyticsService.logActivitySyncRouteToggle).toHaveBeenCalledWith(
                 ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp,
@@ -416,7 +441,7 @@ describe('ServicesGarminComponent', () => {
 
             await component.onGarminToSuuntoRouteToggle(true);
 
-            expect(mockUserService.updateUserProperties).not.toHaveBeenCalled();
+            expect(mockUserService.updateActivitySyncRouteSettings).not.toHaveBeenCalled();
             expect(snackBarSpy).toHaveBeenCalledWith(
                 'Connect both Garmin and Suunto accounts before enabling sync.',
                 undefined,
@@ -441,16 +466,8 @@ describe('ServicesGarminComponent', () => {
 
             await component.onGarminToSuuntoRouteToggle(false);
 
-            expect(mockUserService.updateUserProperties).toHaveBeenCalledWith(component.user, {
-                settings: {
-                    serviceSyncSettings: {
-                        activitySyncRoutes: {
-                            [ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp]: {
-                                enabled: false
-                            }
-                        }
-                    }
-                }
+            expect(mockUserService.updateActivitySyncRouteSettings).toHaveBeenCalledWith(component.user, {
+                [ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp]: false
             });
             expect(mockAnalyticsService.logActivitySyncRouteToggle).toHaveBeenCalledWith(
                 ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp,

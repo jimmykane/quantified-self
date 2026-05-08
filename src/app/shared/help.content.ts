@@ -105,8 +105,8 @@ export const HELP_SECTIONS: HelpSection[] = [
 - **Curated Recovery** remains a fixed insight and does not react to event table or custom tile date ranges.
 - **Curated Form/TSS** computes from full history and does not react to event table or custom tile date ranges.
 - New curated charts: **Freshness Forecast**, **Intensity Distribution**, and **Efficiency Trend**.
-- The default KPI rows are the core derived training-metrics set: **Form Now**, **Fitness (CTL)**, **Fatigue (ATL)**, and **Ramp Rate**.
-- Additional KPI rows such as **ACWR**, **Monotony / Strain**, **Form +7d**, **Easy %**, **Hard %**, and **Efficiency Δ (4w)** remain available from Dashboard manager.
+- The default KPI rows are the current-state set: **Load Status**, **Form Now**, **Fitness Trend**, **Fatigue Trend**, **Recovery Debt**, and **Training Balance**.
+- Additional KPI rows such as **Fitness (CTL)**, **Fatigue (ATL)**, **ACWR**, **Ramp Rate**, **Monotony / Strain**, **Form +7d**, **Easy %**, **Hard %**, and **Efficiency Δ (4w)** remain available from Dashboard manager.
 - KPI rows are shown in the compact **Today** section above the main dashboard grid.
 - The **Today** header can show **Uploaded activities**, which counts current uploaded activity events.
 - On mobile, Today rows stay compact while the chart/map grid stays unchanged below.
@@ -120,6 +120,7 @@ export const HELP_SECTIONS: HelpSection[] = [
 - New users can choose a kilometers or miles preset from the dashboard **Default units** action prompt; choose **Advanced settings** there, or open **Settings -> Units**, to fine-tune individual unit preferences later.
 - Users without Pro access and no uploaded activities may see an **Upload your first activities** action prompt with options to upload FIT, GPX, TCX, JSON, or SML files, or upgrade to Pro for automatic activity sync. Dismissing it hides the prompt; manual uploads remain available from the header and upload tools.
 - Pro users without a connected activity service may see a one-time **Connect a service** action prompt; dismissing it hides the prompt permanently, and services can still be connected later from **Services**.
+- Pro users with Suunto plus Garmin and/or COROS connected may see a **Send new activities to Suunto** action prompt when an eligible auto-sync route is still disabled. Enabling it turns on future Garmin/COROS -> Suunto imports only; existing activities can still be queued from **Services** with Manual Catch-up. Dismissing it hides the prompt permanently.
 - Distance values in dashboards, event charts, activity chips, and CSV exports follow your kilometers or miles preference from **Settings -> Units**; jump distances display in feet when miles are selected.
 - **Map** tiles use their own tile date-range and activity filters, independent from the event table search.
 - Curated, KPI, form, recovery, sleep, and other derived tiles stay independent from event table filters and custom/map tile filters.
@@ -178,10 +179,15 @@ export const HELP_SECTIONS: HelpSection[] = [
 - **ACWR** uses acute 7-day load versus chronic 28-day load/4 and shows an 8-week sparkline.
 - **Ramp Rate** uses CTL(today) - CTL(today-7d) with an 8-week sparkline.
 - **Monotony / Strain** uses 7-day load mean/stddev for monotony, and load * monotony for strain.
+- **Load Status** summarizes current training state from same-day Form, ramp rate, Fitness, and Fatigue.
 - **Form Now** uses same-day TSB readiness from the latest derived load state.
 - **Fitness (CTL)** uses the derived Form model's current 42-day chronic training load.
 - **Fatigue (ATL)** uses the derived Form model's current 7-day acute training load.
+- **Fitness Trend** shows recent CTL direction from the derived Form model.
+- **Fatigue Trend** shows recent ATL direction from the derived Form model.
+- **Recovery Debt** estimates zero-load days until same-day Form returns to neutral.
 - **Form +7d** projects same-day TSB at day +7 assuming zero load.
+- **Training Balance** summarizes the latest weekly Easy/Moderate/Hard intensity mix.
 - **Easy %** and **Hard %** use the latest weekly intensity distribution bucket.
 - **Efficiency Δ (4w)** shows current efficiency versus the prior 4-week baseline as absolute + percent delta.
 - **Freshness Forecast** projects 7 future days with zero load from the latest derived day.
@@ -485,6 +491,8 @@ Manual catch-up is a convenience tool for queuing a period on demand. It uses st
 
 Manual catch-up can run even when the Garmin -> Suunto auto-sync toggle is off, and it does not enable auto-sync for future imports.
 
+When Garmin and Suunto are connected, the dashboard may offer a one-time action prompt to enable Garmin -> Suunto auto-sync. Dismissing the prompt hides it permanently; Manual catch-up remains available in Services.
+
 ## COROS
 
 COROS history import is limited to the last **3 months** because of API restrictions.
@@ -507,6 +515,8 @@ Automatic sync runs only for newly imported COROS activities and uses the stored
 Manual catch-up is available in COROS Services: choose a date range to queue COROS -> Suunto sync jobs for events already imported into Quantified Self.
 
 Manual catch-up can run even when the COROS -> Suunto auto-sync toggle is off, and it does not enable auto-sync for future imports.
+
+When COROS and Suunto are connected, the dashboard may offer a one-time action prompt to enable COROS -> Suunto auto-sync. Dismissing the prompt hides it permanently; Manual catch-up remains available in Services.
 
 ## Queue behavior
 

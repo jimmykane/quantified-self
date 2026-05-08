@@ -34,10 +34,18 @@ mat-icon {
 
 .service-container {
     max-width: 760px;
+    min-width: 0;
 }
 
 .provider-tools-tabs {
     width: 100%;
+    min-width: 0;
+    max-width: 100%;
+}
+
+.provider-tools-panel {
+    display: block;
+    min-width: 0;
 }
 
 .provider-tab-label {
@@ -63,6 +71,10 @@ mat-icon {
     padding: 16px 0 0;
 }
 
+.provider-tool-panel[hidden] {
+    display: none;
+}
+
 .provider-tool-panel button,
 .tool-subsection button {
     margin-right: 0;
@@ -83,6 +95,8 @@ mat-icon {
     display: flex;
     flex-direction: column;
     gap: 10px;
+    min-width: 0;
+    max-width: 100%;
 }
 
 .connection-account-row {
@@ -90,11 +104,13 @@ mat-icon {
     align-items: center;
     gap: 12px;
     min-width: 0;
+    max-width: 100%;
 }
 
 .connection-account-info {
     flex: 1 1 auto;
     min-width: 0;
+    max-width: 100%;
 }
 
 .connection-disconnect-button {
@@ -103,15 +119,52 @@ mat-icon {
     white-space: nowrap;
 }
 
-.connected-list {
+.connected-account-list {
+    display: grid;
+    gap: 14px;
     width: 100%;
-    padding: 0;
+    min-width: 0;
+    max-width: 100%;
 }
 
-.connected-list mat-list-item {
-    height: auto;
-    min-height: 44px;
-    padding: 4px 0;
+.connected-account-item {
+    display: grid;
+    grid-template-columns: 28px minmax(0, 1fr);
+    align-items: center;
+    gap: 12px;
+    min-width: 0;
+    max-width: 100%;
+}
+
+.connected-account-icon {
+    width: 24px;
+    height: 24px;
+    color: var(--mat-sys-on-surface-variant);
+    font-size: 24px;
+}
+
+.connected-account-copy {
+    display: grid;
+    gap: 2px;
+    min-width: 0;
+    max-width: 100%;
+}
+
+.connected-account-title {
+    display: block;
+    min-width: 0;
+    max-width: 100%;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+
+.connected-account-line {
+    display: block;
+    min-width: 0;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .tool-actions {
@@ -251,6 +304,33 @@ mat-icon {
 }
 
 @media (max-width: 640px) {
+    .provider-tools-tabs {
+        width: fit-content;
+        max-width: 100%;
+        margin-inline: auto;
+    }
+
+    .provider-tab-label {
+        flex-direction: column;
+        justify-content: center;
+        gap: 2px;
+        text-align: center;
+        white-space: normal;
+        font-size: 0.76rem;
+        line-height: 1.1;
+    }
+
+    .provider-tab-label mat-icon {
+        width: 20px;
+        height: 20px;
+        font-size: 20px;
+    }
+
+    .provider-tab-label > span:last-child {
+        display: block;
+        line-height: 1.1;
+    }
+
     .connection-account-row {
         align-items: stretch;
         flex-direction: column;

@@ -21,17 +21,22 @@ import {
   DASHBOARD_EFFICIENCY_DELTA_4W_KPI_CHART_TYPE,
   DASHBOARD_EFFICIENCY_TREND_CHART_TYPE,
   DASHBOARD_FATIGUE_ATL_KPI_CHART_TYPE,
+  DASHBOARD_FATIGUE_TREND_KPI_CHART_TYPE,
   DASHBOARD_FITNESS_CTL_KPI_CHART_TYPE,
+  DASHBOARD_FITNESS_TREND_KPI_CHART_TYPE,
   DASHBOARD_FRESHNESS_FORECAST_CHART_TYPE,
   DASHBOARD_FORM_CHART_TYPE,
   DASHBOARD_FORM_NOW_KPI_CHART_TYPE,
   DASHBOARD_FORM_PLUS_7D_KPI_CHART_TYPE,
   DASHBOARD_HARD_PERCENT_KPI_CHART_TYPE,
   DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE,
+  DASHBOARD_LOAD_STATUS_KPI_CHART_TYPE,
   DASHBOARD_MONOTONY_STRAIN_KPI_CHART_TYPE,
   DASHBOARD_RAMP_RATE_KPI_CHART_TYPE,
+  DASHBOARD_RECOVERY_DEBT_KPI_CHART_TYPE,
   DASHBOARD_RECOVERY_NOW_CHART_TYPE,
   DASHBOARD_SLEEP_TREND_CHART_TYPE,
+  DASHBOARD_TRAINING_BALANCE_KPI_CHART_TYPE,
 } from './dashboard-special-chart-types';
 import type { EventStatAggregationResult } from '@shared/event-stat-aggregation.types';
 
@@ -884,6 +889,124 @@ describe('dashboard-tile-view-model.helper', () => {
     expect((viewModels[0] as any).acwr?.ratio).toBe(1.11);
     expect((viewModels[0] as any).timeInterval).toBe(TimeIntervals.Weekly);
     expect((viewModels[0] as any).data).toEqual([]);
+  });
+
+  it('should compose current-state KPI chart tiles from derived metric contexts', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(Date.UTC(2026, 0, 8, 12)));
+
+    const freshnessForecast = {
+      generatedAtMs: Date.UTC(2026, 0, 8),
+      points: [
+        {
+          dayMs: Date.UTC(2026, 0, 10),
+          trainingStressScore: 0,
+          ctl: 40,
+          atl: 38,
+          formSameDay: 2,
+          formPriorDay: -1,
+          isForecast: true,
+        },
+      ],
+    };
+    const intensityDistribution = {
+      weeks: [],
+      latestWeekStartMs: Date.UTC(2026, 0, 5),
+      latestEasyPercent: 68,
+      latestModeratePercent: 18,
+      latestHardPercent: 14,
+    };
+
+    const viewModels = buildDashboardTileViewModels({
+      tiles: [
+        {
+          type: TileTypes.Chart,
+          order: 0,
+          chartType: DASHBOARD_LOAD_STATUS_KPI_CHART_TYPE as any,
+          dataType: 'Training Stress Score',
+          dataValueType: ChartDataValueTypes.Total,
+          dataCategoryType: ChartDataCategoryTypes.DateType,
+          dataTimeInterval: TimeIntervals.Weekly,
+          size: { columns: 1, rows: 1 },
+        },
+        {
+          type: TileTypes.Chart,
+          order: 1,
+          chartType: DASHBOARD_FITNESS_TREND_KPI_CHART_TYPE as any,
+          dataType: 'Training Stress Score',
+          dataValueType: ChartDataValueTypes.Total,
+          dataCategoryType: ChartDataCategoryTypes.DateType,
+          dataTimeInterval: TimeIntervals.Weekly,
+          size: { columns: 1, rows: 1 },
+        },
+        {
+          type: TileTypes.Chart,
+          order: 2,
+          chartType: DASHBOARD_FATIGUE_TREND_KPI_CHART_TYPE as any,
+          dataType: 'Training Stress Score',
+          dataValueType: ChartDataValueTypes.Total,
+          dataCategoryType: ChartDataCategoryTypes.DateType,
+          dataTimeInterval: TimeIntervals.Weekly,
+          size: { columns: 1, rows: 1 },
+        },
+        {
+          type: TileTypes.Chart,
+          order: 3,
+          chartType: DASHBOARD_RECOVERY_DEBT_KPI_CHART_TYPE as any,
+          dataType: 'Training Stress Score',
+          dataValueType: ChartDataValueTypes.Total,
+          dataCategoryType: ChartDataCategoryTypes.DateType,
+          dataTimeInterval: TimeIntervals.Weekly,
+          size: { columns: 1, rows: 1 },
+        },
+        {
+          type: TileTypes.Chart,
+          order: 4,
+          chartType: DASHBOARD_TRAINING_BALANCE_KPI_CHART_TYPE as any,
+          dataType: 'Training Stress Score',
+          dataValueType: ChartDataValueTypes.Total,
+          dataCategoryType: ChartDataCategoryTypes.DateType,
+          dataTimeInterval: TimeIntervals.Weekly,
+          size: { columns: 1, rows: 1 },
+        },
+      ] as any,
+      events: [],
+      derivedMetrics: {
+        formPoints: [
+          {
+            time: Date.UTC(2026, 0, 6),
+            trainingStressScore: 84,
+            ctl: 42,
+            atl: 50,
+            formSameDay: -8,
+            formPriorDay: -4,
+          },
+        ] as any,
+        formNow: { latestDayMs: Date.UTC(2026, 0, 8), value: -6, trend8Weeks: [] } as any,
+        rampRate: { rampRate: 1.6, trend8Weeks: [] } as any,
+        formPlus7d: { value: 4, trend8Weeks: [] } as any,
+        easyPercent: { value: 68, trend8Weeks: [] } as any,
+        hardPercent: { value: 14, trend8Weeks: [] } as any,
+        freshnessForecast: freshnessForecast as any,
+        intensityDistribution: intensityDistribution as any,
+      },
+    });
+
+    expect((viewModels[0] as any).chartType).toBe(DASHBOARD_LOAD_STATUS_KPI_CHART_TYPE);
+    expect((viewModels[0] as any).formNow?.value).toBe(-6);
+    expect((viewModels[0] as any).rampRate?.rampRate).toBe(1.6);
+    expect((viewModels[0] as any).fitnessCtl?.value).toBeCloseTo(40.0238, 4);
+    expect((viewModels[0] as any).fatigueAtl?.value).toBeCloseTo(36.7347, 4);
+    expect((viewModels[1] as any).fitnessCtl?.value).toBeCloseTo(40.0238, 4);
+    expect((viewModels[2] as any).fatigueAtl?.value).toBeCloseTo(36.7347, 4);
+    expect((viewModels[3] as any).formNow?.value).toBe(-6);
+    expect((viewModels[3] as any).formPlus7d?.value).toBe(4);
+    expect((viewModels[3] as any).freshnessForecast).toEqual(freshnessForecast);
+    expect((viewModels[4] as any).easyPercent?.value).toBe(68);
+    expect((viewModels[4] as any).hardPercent?.value).toBe(14);
+    expect((viewModels[4] as any).intensityDistribution).toEqual(intensityDistribution);
+
+    vi.useRealTimers();
   });
 
   it('should map derived KPI and curated contexts to dedicated special chart tiles', () => {

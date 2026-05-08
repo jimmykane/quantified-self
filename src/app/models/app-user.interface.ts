@@ -48,10 +48,15 @@ export type AppDashboardAutoTileId =
     | 'kpiAcwr'
     | 'kpiRampRate'
     | 'kpiMonotonyStrain'
+    | 'kpiLoadStatus'
     | 'kpiFormNow'
     | 'kpiFitnessCtl'
     | 'kpiFatigueAtl'
+    | 'kpiFitnessTrend'
+    | 'kpiFatigueTrend'
+    | 'kpiRecoveryDebt'
     | 'kpiFormPlus7d'
+    | 'kpiTrainingBalance'
     | 'kpiEasyPercent'
     | 'kpiHardPercent'
     | 'kpiEfficiencyDelta4w';
@@ -68,7 +73,11 @@ export interface AppDashboardAutoTileState {
 export type AppDashboardAutoTiles = Partial<Record<AppDashboardAutoTileId, AppDashboardAutoTileState>>
     & Record<string, AppDashboardAutoTileState | undefined>;
 
-export type AppDashboardActionPromptId = 'unitSetup' | 'firstActivityUpload' | 'connectActivityService';
+export type AppDashboardActionPromptId =
+    | 'unitSetup'
+    | 'firstActivityUpload'
+    | 'connectActivityService'
+    | 'enableActivityAutoSync';
 export type AppDashboardActionPromptStateValue = 'dismissed';
 
 export interface AppDashboardActionPromptState {

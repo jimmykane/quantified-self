@@ -9,10 +9,15 @@ export const DASHBOARD_SLEEP_TREND_CHART_TYPE = 'SleepTrend' as const;
 export const DASHBOARD_ACWR_KPI_CHART_TYPE = 'KpiAcwr' as const;
 export const DASHBOARD_RAMP_RATE_KPI_CHART_TYPE = 'KpiRampRate' as const;
 export const DASHBOARD_MONOTONY_STRAIN_KPI_CHART_TYPE = 'KpiMonotonyStrain' as const;
+export const DASHBOARD_LOAD_STATUS_KPI_CHART_TYPE = 'KpiLoadStatus' as const;
 export const DASHBOARD_FORM_NOW_KPI_CHART_TYPE = 'KpiFormNow' as const;
 export const DASHBOARD_FITNESS_CTL_KPI_CHART_TYPE = 'KpiFitnessCtl' as const;
 export const DASHBOARD_FATIGUE_ATL_KPI_CHART_TYPE = 'KpiFatigueAtl' as const;
+export const DASHBOARD_FITNESS_TREND_KPI_CHART_TYPE = 'KpiFitnessTrend' as const;
+export const DASHBOARD_FATIGUE_TREND_KPI_CHART_TYPE = 'KpiFatigueTrend' as const;
+export const DASHBOARD_RECOVERY_DEBT_KPI_CHART_TYPE = 'KpiRecoveryDebt' as const;
 export const DASHBOARD_FORM_PLUS_7D_KPI_CHART_TYPE = 'KpiFormPlus7d' as const;
+export const DASHBOARD_TRAINING_BALANCE_KPI_CHART_TYPE = 'KpiTrainingBalance' as const;
 export const DASHBOARD_EASY_PERCENT_KPI_CHART_TYPE = 'KpiEasyPercent' as const;
 export const DASHBOARD_HARD_PERCENT_KPI_CHART_TYPE = 'KpiHardPercent' as const;
 export const DASHBOARD_EFFICIENCY_DELTA_4W_KPI_CHART_TYPE = 'KpiEfficiencyDelta4w' as const;
@@ -26,10 +31,15 @@ export type DashboardSleepTrendChartType = typeof DASHBOARD_SLEEP_TREND_CHART_TY
 export type DashboardKpiAcwrChartType = typeof DASHBOARD_ACWR_KPI_CHART_TYPE;
 export type DashboardKpiRampRateChartType = typeof DASHBOARD_RAMP_RATE_KPI_CHART_TYPE;
 export type DashboardKpiMonotonyStrainChartType = typeof DASHBOARD_MONOTONY_STRAIN_KPI_CHART_TYPE;
+export type DashboardKpiLoadStatusChartType = typeof DASHBOARD_LOAD_STATUS_KPI_CHART_TYPE;
 export type DashboardKpiFormNowChartType = typeof DASHBOARD_FORM_NOW_KPI_CHART_TYPE;
 export type DashboardKpiFitnessCtlChartType = typeof DASHBOARD_FITNESS_CTL_KPI_CHART_TYPE;
 export type DashboardKpiFatigueAtlChartType = typeof DASHBOARD_FATIGUE_ATL_KPI_CHART_TYPE;
+export type DashboardKpiFitnessTrendChartType = typeof DASHBOARD_FITNESS_TREND_KPI_CHART_TYPE;
+export type DashboardKpiFatigueTrendChartType = typeof DASHBOARD_FATIGUE_TREND_KPI_CHART_TYPE;
+export type DashboardKpiRecoveryDebtChartType = typeof DASHBOARD_RECOVERY_DEBT_KPI_CHART_TYPE;
 export type DashboardKpiFormPlus7dChartType = typeof DASHBOARD_FORM_PLUS_7D_KPI_CHART_TYPE;
+export type DashboardKpiTrainingBalanceChartType = typeof DASHBOARD_TRAINING_BALANCE_KPI_CHART_TYPE;
 export type DashboardKpiEasyPercentChartType = typeof DASHBOARD_EASY_PERCENT_KPI_CHART_TYPE;
 export type DashboardKpiHardPercentChartType = typeof DASHBOARD_HARD_PERCENT_KPI_CHART_TYPE;
 export type DashboardKpiEfficiencyDelta4wChartType = typeof DASHBOARD_EFFICIENCY_DELTA_4W_KPI_CHART_TYPE;
@@ -46,10 +56,15 @@ export type DashboardKpiChartType =
   | DashboardKpiAcwrChartType
   | DashboardKpiRampRateChartType
   | DashboardKpiMonotonyStrainChartType
+  | DashboardKpiLoadStatusChartType
   | DashboardKpiFormNowChartType
   | DashboardKpiFitnessCtlChartType
   | DashboardKpiFatigueAtlChartType
+  | DashboardKpiFitnessTrendChartType
+  | DashboardKpiFatigueTrendChartType
+  | DashboardKpiRecoveryDebtChartType
   | DashboardKpiFormPlus7dChartType
+  | DashboardKpiTrainingBalanceChartType
   | DashboardKpiEasyPercentChartType
   | DashboardKpiHardPercentChartType
   | DashboardKpiEfficiencyDelta4wChartType;
@@ -114,6 +129,11 @@ const DASHBOARD_KPI_CHART_DEFINITIONS: DashboardKpiChartDefinition[] = [
     group: 'load',
   },
   {
+    chartType: DASHBOARD_LOAD_STATUS_KPI_CHART_TYPE,
+    label: 'Load Status',
+    group: 'readiness',
+  },
+  {
     chartType: DASHBOARD_FORM_NOW_KPI_CHART_TYPE,
     label: 'Form Now',
     group: 'readiness',
@@ -129,9 +149,29 @@ const DASHBOARD_KPI_CHART_DEFINITIONS: DashboardKpiChartDefinition[] = [
     group: 'readiness',
   },
   {
+    chartType: DASHBOARD_FITNESS_TREND_KPI_CHART_TYPE,
+    label: 'Fitness Trend',
+    group: 'load',
+  },
+  {
+    chartType: DASHBOARD_FATIGUE_TREND_KPI_CHART_TYPE,
+    label: 'Fatigue Trend',
+    group: 'load',
+  },
+  {
+    chartType: DASHBOARD_RECOVERY_DEBT_KPI_CHART_TYPE,
+    label: 'Recovery Debt',
+    group: 'readiness',
+  },
+  {
     chartType: DASHBOARD_FORM_PLUS_7D_KPI_CHART_TYPE,
     label: 'Form +7d',
     group: 'readiness',
+  },
+  {
+    chartType: DASHBOARD_TRAINING_BALANCE_KPI_CHART_TYPE,
+    label: 'Training Balance',
+    group: 'execution',
   },
   {
     chartType: DASHBOARD_EASY_PERCENT_KPI_CHART_TYPE,
@@ -151,10 +191,12 @@ const DASHBOARD_KPI_CHART_DEFINITIONS: DashboardKpiChartDefinition[] = [
 ];
 
 const DASHBOARD_DEFAULT_KPI_CHART_TYPES: DashboardKpiChartType[] = [
+  DASHBOARD_LOAD_STATUS_KPI_CHART_TYPE,
   DASHBOARD_FORM_NOW_KPI_CHART_TYPE,
-  DASHBOARD_FITNESS_CTL_KPI_CHART_TYPE,
-  DASHBOARD_FATIGUE_ATL_KPI_CHART_TYPE,
-  DASHBOARD_RAMP_RATE_KPI_CHART_TYPE,
+  DASHBOARD_FITNESS_TREND_KPI_CHART_TYPE,
+  DASHBOARD_FATIGUE_TREND_KPI_CHART_TYPE,
+  DASHBOARD_RECOVERY_DEBT_KPI_CHART_TYPE,
+  DASHBOARD_TRAINING_BALANCE_KPI_CHART_TYPE,
 ];
 
 export function isDashboardRecoveryNowChartType(chartType: unknown): chartType is DashboardRecoveryNowChartType {
@@ -202,6 +244,10 @@ export function isDashboardMonotonyStrainKpiChartType(chartType: unknown): chart
   return `${chartType}` === DASHBOARD_MONOTONY_STRAIN_KPI_CHART_TYPE;
 }
 
+export function isDashboardLoadStatusKpiChartType(chartType: unknown): chartType is DashboardKpiLoadStatusChartType {
+  return `${chartType}` === DASHBOARD_LOAD_STATUS_KPI_CHART_TYPE;
+}
+
 export function isDashboardFormNowKpiChartType(chartType: unknown): chartType is DashboardKpiFormNowChartType {
   return `${chartType}` === DASHBOARD_FORM_NOW_KPI_CHART_TYPE;
 }
@@ -214,8 +260,24 @@ export function isDashboardFatigueAtlKpiChartType(chartType: unknown): chartType
   return `${chartType}` === DASHBOARD_FATIGUE_ATL_KPI_CHART_TYPE;
 }
 
+export function isDashboardFitnessTrendKpiChartType(chartType: unknown): chartType is DashboardKpiFitnessTrendChartType {
+  return `${chartType}` === DASHBOARD_FITNESS_TREND_KPI_CHART_TYPE;
+}
+
+export function isDashboardFatigueTrendKpiChartType(chartType: unknown): chartType is DashboardKpiFatigueTrendChartType {
+  return `${chartType}` === DASHBOARD_FATIGUE_TREND_KPI_CHART_TYPE;
+}
+
+export function isDashboardRecoveryDebtKpiChartType(chartType: unknown): chartType is DashboardKpiRecoveryDebtChartType {
+  return `${chartType}` === DASHBOARD_RECOVERY_DEBT_KPI_CHART_TYPE;
+}
+
 export function isDashboardFormPlus7dKpiChartType(chartType: unknown): chartType is DashboardKpiFormPlus7dChartType {
   return `${chartType}` === DASHBOARD_FORM_PLUS_7D_KPI_CHART_TYPE;
+}
+
+export function isDashboardTrainingBalanceKpiChartType(chartType: unknown): chartType is DashboardKpiTrainingBalanceChartType {
+  return `${chartType}` === DASHBOARD_TRAINING_BALANCE_KPI_CHART_TYPE;
 }
 
 export function isDashboardEasyPercentKpiChartType(chartType: unknown): chartType is DashboardKpiEasyPercentChartType {
@@ -234,10 +296,15 @@ export function isDashboardKpiChartType(chartType: unknown): chartType is Dashbo
   return isDashboardAcwrKpiChartType(chartType)
     || isDashboardRampRateKpiChartType(chartType)
     || isDashboardMonotonyStrainKpiChartType(chartType)
+    || isDashboardLoadStatusKpiChartType(chartType)
     || isDashboardFormNowKpiChartType(chartType)
     || isDashboardFitnessCtlKpiChartType(chartType)
     || isDashboardFatigueAtlKpiChartType(chartType)
+    || isDashboardFitnessTrendKpiChartType(chartType)
+    || isDashboardFatigueTrendKpiChartType(chartType)
+    || isDashboardRecoveryDebtKpiChartType(chartType)
     || isDashboardFormPlus7dKpiChartType(chartType)
+    || isDashboardTrainingBalanceKpiChartType(chartType)
     || isDashboardEasyPercentKpiChartType(chartType)
     || isDashboardHardPercentKpiChartType(chartType)
     || isDashboardEfficiencyDelta4wKpiChartType(chartType);

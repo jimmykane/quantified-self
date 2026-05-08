@@ -46,6 +46,7 @@ export abstract class ServicesAbstractComponentDirective implements OnInit, OnDe
   public serviceTokens: Auth2ServiceTokenInterface[] | Auth1ServiceTokenInterface[] | undefined;
   public serviceMeta: UserServiceMetaInterface | undefined;
   public selectedTabIndex = 0;
+  public activeProviderTool = 'history';
   public serviceNames = ServiceNames;
   public isConnecting = false;
   public isDisconnecting = false;
@@ -143,6 +144,10 @@ export abstract class ServicesAbstractComponentDirective implements OnInit, OnDe
   }
 
   async ngOnInit() {
+  }
+
+  selectProviderTool(tool: string): void {
+    this.activeProviderTool = tool;
   }
 
   async connectWithService(event) {

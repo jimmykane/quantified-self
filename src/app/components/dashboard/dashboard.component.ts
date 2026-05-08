@@ -37,8 +37,11 @@ import {
 } from '../../helpers/dashboard-tile-event-filters.helper';
 import {
   buildDashboardActionPromptViewModels,
+  buildActivityAutoSyncEnabledSnackbarMessage,
+  DASHBOARD_ACTION_PROMPT_ACTIVITY_AUTO_SYNC_SOURCE,
   DASHBOARD_ACTION_PROMPT_CONNECT_ACTIVITY_SERVICE_ID,
   DASHBOARD_ACTION_PROMPT_CONNECT_ACTIVITY_SERVICE_SOURCE,
+  DASHBOARD_ACTION_PROMPT_ENABLE_ACTIVITY_AUTO_SYNC_ID,
   DASHBOARD_ACTION_PROMPT_FIRST_ACTIVITY_UPLOAD_ID,
   DASHBOARD_ACTION_PROMPT_FIRST_ACTIVITY_UPLOAD_SOURCE,
   DASHBOARD_ACTION_PROMPT_UNIT_SETUP_ID,
@@ -48,7 +51,10 @@ import {
   DashboardActionPromptViewModel,
   isDashboardActionPromptDismissed,
   markDashboardActionPromptDismissed,
+  resolveDashboardActivityAutoSyncRouteIds,
 } from '../../helpers/dashboard-action-prompt.helper';
+import { ActivitySyncRouteId } from '@shared/activity-sync-routes';
+import { ActivityServiceConnectionState } from '../../services/app.user.service';
 
 
 @Component({
@@ -80,6 +86,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
   public firstActivityUploadPromptError: string | null = null;
   public isDismissingConnectActivityServicePrompt = false;
   public connectActivityServicePromptError: string | null = null;
+  public isEnablingActivityAutoSyncPrompt = false;
+  public activityAutoSyncPromptError: string | null = null;
+  public isDismissingActivityAutoSyncPrompt = false;
 
   private shouldSearch: boolean;
   private manualSearchTrigger$ = new Subject<{ user: AppUserInterface | null; refreshToken: number }>();
@@ -90,6 +99,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   private eventTableFiltersCacheSignature: string | null = null;
   private eventTableFiltersCache: AppDashboardEventTableFiltersInterface | null = null;
   private hasActivityServiceConnection: boolean | null = null;
+  private activityServiceConnectionState: ActivityServiceConnectionState | null = null;
   private uploadedActivityCount: number | null = null;
   private analyticsService = inject(AppAnalyticsService);
   private logger = inject(LoggerService);
@@ -381,6 +391,15 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
     if (event.promptId === DASHBOARD_ACTION_PROMPT_FIRST_ACTIVITY_UPLOAD_ID && event.action.id === 'upgradeToPro') {
       void this.openSubscriptions();
+      return;
+    }
+
+    if (
+      event.promptId === DASHBOARD_ACTION_PROMPT_ENABLE_ACTIVITY_AUTO_SYNC_ID
+      && event.action.id === 'enableActivityAutoSync'
+    ) {
+      void this.enableActivityAutoSyncPrompt();
+      return;
     }
   }
 
@@ -403,6 +422,14 @@ export class DashboardComponent implements OnInit, OnDestroy {
       && event.action.id === 'dismissConnectActivityService'
     ) {
       void this.dismissConnectActivityServicePrompt();
+      return;
+    }
+
+    if (
+      event.promptId === DASHBOARD_ACTION_PROMPT_ENABLE_ACTIVITY_AUTO_SYNC_ID
+      && event.action.id === 'dismissEnableActivityAutoSync'
+    ) {
+      void this.dismissActivityAutoSyncPrompt();
     }
   }
 
@@ -598,6 +625,82 @@ export class DashboardComponent implements OnInit, OnDestroy {
     }
   }
 
+  async enableActivityAutoSyncPrompt(): Promise<void> {
+    if (!this.user || this.isEnablingActivityAutoSyncPrompt) {
+      return;
+    }
+
+    const routeIds = this.getEligibleActivityAutoSyncRouteIds();
+    if (!routeIds.length) {
+      this.syncDashboardActionPromptState();
+      return;
+    }
+
+    this.isEnablingActivityAutoSyncPrompt = true;
+    this.activityAutoSyncPromptError = null;
+    this.syncDashboardActionPromptState();
+
+    try {
+      const routeUpdates = routeIds.reduce<Partial<Record<ActivitySyncRouteId, boolean>>>((updates, routeID) => {
+        updates[routeID] = true;
+        return updates;
+      }, {});
+
+      await this.userService.updateActivitySyncRouteSettings(this.user, routeUpdates);
+      routeIds.forEach(routeID => this.analyticsService.logActivitySyncRouteToggle(routeID, true));
+      this.snackBar.open(buildActivityAutoSyncEnabledSnackbarMessage(routeIds), undefined, { duration: 3000 });
+    } catch (error) {
+      this.activityAutoSyncPromptError = 'Could not enable auto-sync.';
+      this.logger.error('[DashboardComponent] Failed to enable activity auto-sync prompt routes', error);
+    } finally {
+      this.isEnablingActivityAutoSyncPrompt = false;
+      this.syncDashboardActionPromptState();
+    }
+  }
+
+  async dismissActivityAutoSyncPrompt(): Promise<void> {
+    if (!this.user) {
+      return;
+    }
+
+    this.isDismissingActivityAutoSyncPrompt = true;
+    this.activityAutoSyncPromptError = null;
+    this.syncDashboardActionPromptState();
+
+    try {
+      this.user.settings = this.user.settings || {} as any;
+      const nextAppSettings = {
+        ...(this.user.settings.appSettings || {}),
+      } as AppAppSettingsInterface;
+      const dismissedState = markDashboardActionPromptDismissed(
+        nextAppSettings,
+        DASHBOARD_ACTION_PROMPT_ENABLE_ACTIVITY_AUTO_SYNC_ID,
+        DASHBOARD_ACTION_PROMPT_ACTIVITY_AUTO_SYNC_SOURCE,
+        Date.now(),
+      );
+
+      await this.userService.updateUserProperties(this.user, {
+        settings: {
+          appSettings: {
+            dashboardActionPrompts: {
+              [DASHBOARD_ACTION_PROMPT_ENABLE_ACTIVITY_AUTO_SYNC_ID]: dismissedState,
+            },
+          },
+        },
+      });
+      this.user.settings.appSettings = nextAppSettings;
+      this.analyticsService.logEvent('dashboard_action_prompt_dismiss', {
+        prompt_id: DASHBOARD_ACTION_PROMPT_ENABLE_ACTIVITY_AUTO_SYNC_ID,
+      });
+    } catch (error) {
+      this.activityAutoSyncPromptError = 'Could not save this choice.';
+      this.logger.error('[DashboardComponent] Failed to dismiss activity auto-sync prompt', error);
+    } finally {
+      this.isDismissingActivityAutoSyncPrompt = false;
+      this.syncDashboardActionPromptState();
+    }
+  }
+
   ngOnDestroy(): void {
     this.manualSearchTrigger$.complete();
   }
@@ -627,6 +730,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
       showConnectActivityServicePrompt: this.shouldShowConnectActivityServicePrompt(),
       connectActivityServiceBusy: this.isDismissingConnectActivityServicePrompt,
       connectActivityServiceError: this.connectActivityServicePromptError,
+      showEnableActivityAutoSyncPrompt: this.shouldShowActivityAutoSyncPrompt(),
+      enableActivityAutoSyncBusy: this.isEnablingActivityAutoSyncPrompt || this.isDismissingActivityAutoSyncPrompt,
+      enableActivityAutoSyncError: this.activityAutoSyncPromptError,
+      enableActivityAutoSyncRouteIds: this.getEligibleActivityAutoSyncRouteIds(),
     });
   }
 
@@ -659,15 +766,22 @@ export class DashboardComponent implements OnInit, OnDestroy {
   private watchActivityServiceConnectionPromptState(): void {
     this.authService.user$.pipe(
       switchMap((user: AppUserInterface | null) => {
-        if (!this.shouldEvaluateActivityServiceConnectionPrompt(user)) {
+        this.hasActivityServiceConnection = null;
+        this.activityServiceConnectionState = null;
+        this.syncDashboardActionPromptState();
+
+        if (!this.shouldEvaluateActivityServicePrompts(user)) {
           return of(null);
         }
 
-        return this.userService.watchHasAnyActivityServiceConnection(user);
+        return this.userService.watchActivityServiceConnectionState(user);
       }),
       takeUntilDestroyed(this.destroyRef),
-    ).subscribe((hasConnection) => {
-      this.hasActivityServiceConnection = hasConnection;
+    ).subscribe((connectionState) => {
+      this.activityServiceConnectionState = connectionState;
+      this.hasActivityServiceConnection = connectionState
+        ? Object.values(connectionState).some(isConnected => isConnected === true)
+        : null;
       this.syncDashboardActionPromptState();
     });
   }
@@ -716,6 +830,43 @@ export class DashboardComponent implements OnInit, OnDestroy {
     }
 
     return this.shouldEvaluateActivityServiceConnectionPrompt(this.user);
+  }
+
+  private shouldEvaluateActivityAutoSyncPrompt(user: AppUserInterface | null | undefined): user is AppUserInterface {
+    if (!user || !this.isOwnerDashboard(user)) {
+      return false;
+    }
+
+    if (!AppUserUtilities.hasProAccess(user, user.admin === true)) {
+      return false;
+    }
+
+    return !isDashboardActionPromptDismissed(
+      user.settings?.appSettings,
+      DASHBOARD_ACTION_PROMPT_ENABLE_ACTIVITY_AUTO_SYNC_ID,
+    );
+  }
+
+  private shouldShowActivityAutoSyncPrompt(): boolean {
+    if (!this.user || !this.activityServiceConnectionState) {
+      return false;
+    }
+
+    return this.shouldEvaluateActivityAutoSyncPrompt(this.user)
+      && this.getEligibleActivityAutoSyncRouteIds().length > 0;
+  }
+
+  private shouldEvaluateActivityServicePrompts(user: AppUserInterface | null | undefined): user is AppUserInterface {
+    return this.shouldEvaluateActivityServiceConnectionPrompt(user)
+      || this.shouldEvaluateActivityAutoSyncPrompt(user);
+  }
+
+  private getEligibleActivityAutoSyncRouteIds(): ActivitySyncRouteId[] {
+    return resolveDashboardActivityAutoSyncRouteIds({
+      userID: this.user?.uid,
+      connectionState: this.activityServiceConnectionState,
+      routeSettings: this.user?.settings?.serviceSyncSettings?.activitySyncRoutes,
+    });
   }
 
   private isOwnerDashboard(user: AppUserInterface): boolean {

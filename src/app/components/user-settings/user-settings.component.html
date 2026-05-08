@@ -78,7 +78,7 @@
               </header>
               <mat-divider></mat-divider>
               <div class="settings-panel-body">
-                <mat-form-field appearance="outline">
+                <mat-form-field appearance="outline" subscriptSizing="dynamic">
                   <mat-label>Interface Theme</mat-label>
                   <mat-select formControlName="appTheme">
                     @for (appTheme of appThemeOptions; track appTheme.value) {
@@ -116,7 +116,7 @@
               </header>
               <mat-divider></mat-divider>
               <div class="settings-panel-body">
-                <mat-form-field appearance="outline">
+                <mat-form-field appearance="outline" subscriptSizing="dynamic">
                   <mat-label>Start of the Week</mat-label>
                   <mat-select formControlName="startOfTheWeek">
                     <mat-option [value]="0">Sunday</mat-option>
@@ -130,7 +130,7 @@
                   <mat-hint>Week starts on this day in your calendars</mat-hint>
                 </mat-form-field>
 
-                <mat-form-field appearance="outline">
+                <mat-form-field appearance="outline" subscriptSizing="dynamic">
                   <mat-label>Activities per Page</mat-label>
                   <mat-select formControlName="eventsPerPage">
                     @for (option of eventsPerPage; track option) {
@@ -140,7 +140,7 @@
                   <mat-hint>Adjust how many records are loaded at once for better performance.</mat-hint>
                 </mat-form-field>
 
-                <mat-form-field appearance="outline">
+                <mat-form-field appearance="outline" subscriptSizing="dynamic">
                   <mat-label>Exclude Ascent for Sport Types</mat-label>
                   <mat-select formControlName="removeAscentForActivitiesSummaries" multiple>
                     @for (type of activityTypes; track type) {
@@ -150,7 +150,7 @@
                   <mat-hint>Ascent data will be hidden for these activities in summaries.</mat-hint>
                 </mat-form-field>
 
-                <mat-form-field appearance="outline">
+                <mat-form-field appearance="outline" subscriptSizing="dynamic">
                   <mat-label>Exclude Descent for Sport Types</mat-label>
                   <mat-select formControlName="removeDescentForActivitiesSummaries" multiple>
                     @for (type of activityTypes; track type) {
@@ -171,7 +171,7 @@
               </header>
               <mat-divider></mat-divider>
               <div class="settings-panel-body">
-                <mat-form-field appearance="outline">
+                <mat-form-field appearance="outline" subscriptSizing="dynamic">
                   <mat-label>Map Layer (Default)</mat-label>
                   <mat-select formControlName="mapType">
                     @for (type of mapTypes | keyvalue; track type) {
@@ -180,7 +180,7 @@
                   </mat-select>
                 </mat-form-field>
 
-                <mat-form-field appearance="outline">
+                <mat-form-field appearance="outline" subscriptSizing="dynamic">
                   <mat-label>Lap Markers</mat-label>
                   <mat-select formControlName="mapLapTypes" multiple>
                     @for (lapType of lapTypes; track lapType) {
@@ -213,7 +213,7 @@
               </header>
               <mat-divider></mat-divider>
               <div class="settings-panel-body">
-                <mat-form-field appearance="outline">
+                <mat-form-field appearance="outline" subscriptSizing="dynamic">
                   <mat-label>Data Scaling (X-Axis)</mat-label>
                   <mat-select formControlName="xAxisType">
                     @for (x of xAxisTypes | keyvalue; track x) {
@@ -222,7 +222,7 @@
                   </mat-select>
                 </mat-form-field>
 
-                <mat-form-field appearance="outline">
+                <mat-form-field appearance="outline" subscriptSizing="dynamic">
                   <mat-label>Visible Metrics</mat-label>
                   <mat-select formControlName="dataTypesToUse" multiple>
                     @for (group of dataGroups; track group.name) {
@@ -296,7 +296,7 @@
                 </div>
 
                 <div class="settings-field-list settings-field-list--units">
-                  <mat-form-field appearance="outline">
+                  <mat-form-field appearance="outline" subscriptSizing="dynamic">
                     <mat-label>Distance</mat-label>
                     <mat-select formControlName="distanceUnitsToUse">
                       @for (unit of distanceUnitOptions; track unit.value) {
@@ -306,7 +306,7 @@
                     <mat-hint>Dashboard and activity distances.</mat-hint>
                   </mat-form-field>
 
-                  <mat-form-field appearance="outline">
+                  <mat-form-field appearance="outline" subscriptSizing="dynamic">
                     <mat-label>Speed</mat-label>
                     <mat-select formControlName="speedUnitsToUse" multiple>
                       @for (unit of speedUnits | keyvalue; track unit.key) {
@@ -316,7 +316,7 @@
                     <mat-hint>Running, cycling, and activity speed.</mat-hint>
                   </mat-form-field>
 
-                  <mat-form-field appearance="outline">
+                  <mat-form-field appearance="outline" subscriptSizing="dynamic">
                     <mat-label>Pace</mat-label>
                     <mat-select formControlName="paceUnitsToUse" multiple>
                       @for (unit of paceUnits | keyvalue; track unit.key) {
@@ -326,7 +326,7 @@
                     <mat-hint>Time per kilometer or mile.</mat-hint>
                   </mat-form-field>
 
-                  <mat-form-field appearance="outline">
+                  <mat-form-field appearance="outline" subscriptSizing="dynamic">
                     <mat-label>Swim pace</mat-label>
                     <mat-select formControlName="swimPaceUnitsToUse" multiple>
                       @for (unit of swimPaceUnits | keyvalue; track unit.key) {
@@ -336,7 +336,7 @@
                     <mat-hint>Pool and swim segment pace.</mat-hint>
                   </mat-form-field>
 
-                  <mat-form-field appearance="outline">
+                  <mat-form-field appearance="outline" subscriptSizing="dynamic">
                     <mat-label>Vertical speed</mat-label>
                     <mat-select formControlName="verticalSpeedUnitsToUse" multiple>
                       @for (unit of verticalSpeedUnits | keyvalue; track unit.key) {
@@ -426,13 +426,13 @@
                   </div>
                 </section>
 
-                <mat-form-field appearance="outline">
+                <mat-form-field appearance="outline" subscriptSizing="dynamic">
                   <mat-label>Name</mat-label>
                   <input matInput formControlName="displayName">
                   <mat-hint>The name shown on your profile.</mat-hint>
                 </mat-form-field>
 
-                <mat-form-field appearance="outline">
+                <mat-form-field appearance="outline" subscriptSizing="dynamic">
                   <mat-label>Watermark Brand Text</mat-label>
                   <input
                     matInput

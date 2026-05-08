@@ -15,9 +15,9 @@ import { MatInputModule } from '@angular/material/input';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { MatButtonModule } from '@angular/material/button';
-import { MatListModule } from '@angular/material/list';
 import { MatDividerModule } from '@angular/material/divider';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
+import { MatTabsModule } from '@angular/material/tabs';
 import { MatDialog } from '@angular/material/dialog';
 import { AppFileService } from '../../../services/app.file.service';
 import { Analytics } from 'app/firebase/analytics';
@@ -57,6 +57,7 @@ describe('ServicesCorosComponent', () => {
             getServiceToken: vi.fn().mockReturnValue(of([])),
             getUserMetaForService: vi.fn().mockReturnValue(of(undefined)),
             updateUserProperties: vi.fn().mockResolvedValue(undefined),
+            updateActivitySyncRouteSettings: vi.fn().mockResolvedValue(undefined),
             backfillActivitySyncRouteForCurrentUser: vi.fn().mockResolvedValue({ scanned: 0, queued: 0, skippedByReason: {}, failedCount: 0, failedEvents: [] }),
             deauthorizeService: vi.fn().mockResolvedValue(undefined),
         };
@@ -77,9 +78,9 @@ describe('ServicesCorosComponent', () => {
                 MatFormFieldModule,
                 MatSlideToggleModule,
                 MatButtonModule,
-                MatListModule,
                 MatDividerModule,
                 MatProgressBarModule,
+                MatTabsModule,
             ],
             providers: [
                 { provide: AppFileService, useValue: {} },
@@ -111,13 +112,16 @@ describe('ServicesCorosComponent', () => {
 
         const connectionStatus = fixture.nativeElement.querySelector('.service-connection-status');
         const providerToolTabs = fixture.nativeElement.querySelector('.provider-tools-tabs');
-        const providerTabs = fixture.nativeElement.querySelectorAll('mat-tab');
+        const providerToolPanel = fixture.nativeElement.querySelector('.provider-tools-panel');
+        const providerTabs = fixture.nativeElement.querySelectorAll('a[mat-tab-link]');
 
         expect(connectionStatus).toBeTruthy();
         expect(connectionStatus.textContent).toContain('COROS connection');
-        expect(providerToolTabs.hasAttribute('ng-reflect-dynamic-height')).toBe(false);
+        expect(providerToolTabs.tagName.toLowerCase()).toBe('nav');
+        expect(fixture.nativeElement.querySelector('mat-tab-group')).toBeFalsy();
+        expect(providerToolPanel).toBeTruthy();
         expect(providerTabs.length).toBe(1);
-        expect(fixture.nativeElement.querySelector('mat-tab .service-connection-status')).toBeFalsy();
+        expect(fixture.nativeElement.querySelector('.provider-tools-panel .service-connection-status')).toBeFalsy();
     });
 
     it('renders disconnect beside the connected account details', () => {
@@ -133,6 +137,10 @@ describe('ServicesCorosComponent', () => {
 
         expect(accountRow).toBeTruthy();
         expect(accountRow.textContent).toContain('coros-user');
+        expect(accountRow.querySelector('.connected-account-list')).toBeTruthy();
+        expect(accountRow.querySelector('.connected-account-title')?.textContent).toContain('coros-user');
+        expect(accountRow.querySelector('.connected-account-line')?.textContent).toContain('Connected:');
+        expect(accountRow.querySelector('mat-list')).toBeFalsy();
         expect(accountRow.querySelector('.connection-disconnect-button')?.textContent).toContain('Disconnect');
         expect(fixture.nativeElement.querySelector('.service-connection-status__actions .connection-disconnect-button')).toBeFalsy();
     });
@@ -146,7 +154,7 @@ describe('ServicesCorosComponent', () => {
         const syncingText = fixture.nativeElement.textContent;
         expect(syncingText).toContain('Syncing connection details...');
 
-        const accountIcon = fixture.nativeElement.querySelector('mat-icon[matListItemIcon]');
+        const accountIcon = fixture.nativeElement.querySelector('.connected-account-icon');
         expect(accountIcon).toBeFalsy();
     });
 
@@ -208,16 +216,8 @@ describe('ServicesCorosComponent', () => {
 
             await component.onCorosToSuuntoRouteToggle(true);
 
-            expect(mockUserService.updateUserProperties).toHaveBeenCalledWith(component.user, {
-                settings: {
-                    serviceSyncSettings: {
-                        activitySyncRoutes: {
-                            [ACTIVITY_SYNC_ROUTE_IDS.COROSAPI_to_SuuntoApp]: {
-                                enabled: true
-                            }
-                        }
-                    }
-                }
+            expect(mockUserService.updateActivitySyncRouteSettings).toHaveBeenCalledWith(component.user, {
+                [ACTIVITY_SYNC_ROUTE_IDS.COROSAPI_to_SuuntoApp]: true
             });
             expect(mockAnalyticsService.logActivitySyncRouteToggle).toHaveBeenCalledWith(
                 ACTIVITY_SYNC_ROUTE_IDS.COROSAPI_to_SuuntoApp,
@@ -235,7 +235,7 @@ describe('ServicesCorosComponent', () => {
 
             await component.onCorosToSuuntoRouteToggle(true);
 
-            expect(mockUserService.updateUserProperties).not.toHaveBeenCalled();
+            expect(mockUserService.updateActivitySyncRouteSettings).not.toHaveBeenCalled();
             expect(snackBarSpy).toHaveBeenCalledWith(
                 'Connect both COROS and Suunto accounts before enabling sync.',
                 undefined,
@@ -260,16 +260,8 @@ describe('ServicesCorosComponent', () => {
 
             await component.onCorosToSuuntoRouteToggle(false);
 
-            expect(mockUserService.updateUserProperties).toHaveBeenCalledWith(component.user, {
-                settings: {
-                    serviceSyncSettings: {
-                        activitySyncRoutes: {
-                            [ACTIVITY_SYNC_ROUTE_IDS.COROSAPI_to_SuuntoApp]: {
-                                enabled: false
-                            }
-                        }
-                    }
-                }
+            expect(mockUserService.updateActivitySyncRouteSettings).toHaveBeenCalledWith(component.user, {
+                [ACTIVITY_SYNC_ROUTE_IDS.COROSAPI_to_SuuntoApp]: false
             });
             expect(mockAnalyticsService.logActivitySyncRouteToggle).toHaveBeenCalledWith(
                 ACTIVITY_SYNC_ROUTE_IDS.COROSAPI_to_SuuntoApp,

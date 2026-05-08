@@ -2,14 +2,7 @@
 
 .settings-container {
     display: block;
-    min-height: calc(100vh - var(--qs-effective-top-offset, 0px));
     position: relative;
-}
-
-@supports (height: 100dvh) {
-    .settings-container {
-        min-height: calc(100dvh - var(--qs-effective-top-offset, 0px));
-    }
 }
 
 .settings-content {
@@ -119,6 +112,30 @@
 
     .mobile-section-tabs {
         display: flex;
+        align-self: center;
+        width: fit-content;
+        max-width: 100%;
+        margin-inline: auto;
+    }
+
+    .section-tab-label {
+        flex-direction: column;
+        justify-content: center;
+        gap: 2px;
+        text-align: center;
+        white-space: normal;
+        font-size: 0.76rem;
+        line-height: 1.1;
+    }
+
+    .section-tab-label mat-icon {
+        width: 24px;
+        height: 24px;
+    }
+
+    .section-tab-label > span:last-child {
+        display: block;
+        line-height: 1.1;
     }
 
     .service-detail-header {

@@ -60,32 +60,42 @@ import {
   DASHBOARD_EFFICIENCY_DELTA_4W_KPI_CHART_TYPE,
   DASHBOARD_EFFICIENCY_TREND_CHART_TYPE,
   DASHBOARD_FATIGUE_ATL_KPI_CHART_TYPE,
+  DASHBOARD_FATIGUE_TREND_KPI_CHART_TYPE,
   DASHBOARD_FITNESS_CTL_KPI_CHART_TYPE,
+  DASHBOARD_FITNESS_TREND_KPI_CHART_TYPE,
   DASHBOARD_FRESHNESS_FORECAST_CHART_TYPE,
   DASHBOARD_FORM_NOW_KPI_CHART_TYPE,
   DASHBOARD_FORM_PLUS_7D_KPI_CHART_TYPE,
   DASHBOARD_HARD_PERCENT_KPI_CHART_TYPE,
+  DASHBOARD_LOAD_STATUS_KPI_CHART_TYPE,
   DASHBOARD_MONOTONY_STRAIN_KPI_CHART_TYPE,
   DASHBOARD_RAMP_RATE_KPI_CHART_TYPE,
+  DASHBOARD_RECOVERY_DEBT_KPI_CHART_TYPE,
   DASHBOARD_RECOVERY_NOW_CHART_TYPE,
   DASHBOARD_SLEEP_TREND_CHART_TYPE,
+  DASHBOARD_TRAINING_BALANCE_KPI_CHART_TYPE,
   DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE,
   isDashboardAcwrKpiChartType,
   isDashboardEasyPercentKpiChartType,
   isDashboardEfficiencyDelta4wKpiChartType,
   isDashboardEfficiencyTrendChartType,
   isDashboardFatigueAtlKpiChartType,
+  isDashboardFatigueTrendKpiChartType,
   isDashboardFitnessCtlKpiChartType,
+  isDashboardFitnessTrendKpiChartType,
   isDashboardFreshnessForecastChartType,
   isDashboardFormChartType,
   isDashboardFormNowKpiChartType,
   isDashboardFormPlus7dKpiChartType,
   isDashboardHardPercentKpiChartType,
   isDashboardIntensityDistributionChartType,
+  isDashboardLoadStatusKpiChartType,
   isDashboardMonotonyStrainKpiChartType,
   isDashboardRampRateKpiChartType,
+  isDashboardRecoveryDebtKpiChartType,
   isDashboardRecoveryNowChartType,
   isDashboardSleepTrendChartType,
+  isDashboardTrainingBalanceKpiChartType,
 } from './dashboard-special-chart-types';
 import type { SleepSession } from '@shared/sleep';
 
@@ -367,6 +377,20 @@ export function buildDashboardTileViewModels(
       return viewModels;
     }
 
+    if (isDashboardLoadStatusKpiChartType(chartTile.chartType)) {
+      viewModels.push({
+        ...chartTile,
+        chartType: DASHBOARD_LOAD_STATUS_KPI_CHART_TYPE as unknown as ChartTypes,
+        timeInterval: TimeIntervals.Weekly,
+        data: [],
+        formNow: derivedFormNowContext,
+        rampRate: derivedRampRateContext,
+        fitnessCtl: derivedFitnessCtlContext,
+        fatigueAtl: derivedFatigueAtlContext,
+      });
+      return viewModels;
+    }
+
     if (isDashboardFormNowKpiChartType(chartTile.chartType)) {
       viewModels.push({
         ...chartTile,
@@ -400,6 +424,41 @@ export function buildDashboardTileViewModels(
       return viewModels;
     }
 
+    if (isDashboardFitnessTrendKpiChartType(chartTile.chartType)) {
+      viewModels.push({
+        ...chartTile,
+        chartType: DASHBOARD_FITNESS_TREND_KPI_CHART_TYPE as unknown as ChartTypes,
+        timeInterval: TimeIntervals.Weekly,
+        data: [],
+        fitnessCtl: derivedFitnessCtlContext,
+      });
+      return viewModels;
+    }
+
+    if (isDashboardFatigueTrendKpiChartType(chartTile.chartType)) {
+      viewModels.push({
+        ...chartTile,
+        chartType: DASHBOARD_FATIGUE_TREND_KPI_CHART_TYPE as unknown as ChartTypes,
+        timeInterval: TimeIntervals.Weekly,
+        data: [],
+        fatigueAtl: derivedFatigueAtlContext,
+      });
+      return viewModels;
+    }
+
+    if (isDashboardRecoveryDebtKpiChartType(chartTile.chartType)) {
+      viewModels.push({
+        ...chartTile,
+        chartType: DASHBOARD_RECOVERY_DEBT_KPI_CHART_TYPE as unknown as ChartTypes,
+        timeInterval: TimeIntervals.Weekly,
+        data: [],
+        formNow: derivedFormNowContext,
+        formPlus7d: derivedFormPlus7dContext,
+        freshnessForecast: derivedFreshnessForecastContext,
+      });
+      return viewModels;
+    }
+
     if (isDashboardFormPlus7dKpiChartType(chartTile.chartType)) {
       viewModels.push({
         ...chartTile,
@@ -407,6 +466,19 @@ export function buildDashboardTileViewModels(
         timeInterval: TimeIntervals.Weekly,
         data: [],
         formPlus7d: derivedFormPlus7dContext,
+      });
+      return viewModels;
+    }
+
+    if (isDashboardTrainingBalanceKpiChartType(chartTile.chartType)) {
+      viewModels.push({
+        ...chartTile,
+        chartType: DASHBOARD_TRAINING_BALANCE_KPI_CHART_TYPE as unknown as ChartTypes,
+        timeInterval: TimeIntervals.Weekly,
+        data: [],
+        easyPercent: derivedEasyPercentContext,
+        hardPercent: derivedHardPercentContext,
+        intensityDistribution: derivedIntensityDistributionContext,
       });
       return viewModels;
     }

@@ -1,4 +1,6 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { MatChipsModule } from '@angular/material/chips';
 import { MatDividerModule } from '@angular/material/divider';
 import { MatIconModule } from '@angular/material/icon';
@@ -56,5 +58,25 @@ describe('ServiceConnectionStatusComponent', () => {
         expect(fixture.nativeElement.textContent).toContain('PRO');
         expect(fixture.nativeElement.querySelector('mat-progress-bar')).toBeTruthy();
         expect(fixture.nativeElement.querySelector('mat-divider')).toBeTruthy();
+    });
+
+    it('does not make status layout wrappers nested scroll containers', () => {
+        const styles = readFileSync(
+            resolve(process.cwd(), 'src/app/components/services/service-connection-status/service-connection-status.component.scss'),
+            'utf8'
+        );
+        const wrappers = [
+            '.service-connection-status__content',
+            '.service-connection-status__details',
+        ];
+
+        for (const wrapper of wrappers) {
+            const escapedWrapper = wrapper.replace('.', '\\.');
+            const rule = styles.match(new RegExp(`${escapedWrapper}\\s*\\{[^}]*\\}`))?.[0] ?? '';
+
+            expect(rule).not.toContain('overflow-x');
+            expect(rule).not.toContain('overflow-y');
+            expect(rule).not.toContain('overflow: auto');
+        }
     });
 });

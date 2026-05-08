@@ -586,6 +586,9 @@ describe('EChartsLoaderService', () => {
     expect(surfacePointerMoveHandler).toBeTypeOf('function');
     expect(surfacePointerUpHandler).toBeTypeOf('function');
 
+    surfaceClickHandler?.({ offsetX: 10, offsetY: 10 });
+    expect(hapticsMock.selection).not.toHaveBeenCalled();
+
     surfacePointerMoveHandler?.({ offsetX: 40, offsetY: 10 });
     expect(hapticsMock.selection).not.toHaveBeenCalled();
 

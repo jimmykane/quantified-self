@@ -1,5 +1,7 @@
 
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { ServicesComponent } from './services.component';
 import { AppUserService } from '../../services/app.user.service';
@@ -166,5 +168,41 @@ describe('ServicesComponent', () => {
 
         expect(fixture.nativeElement.querySelector('#service-suunto-title').closest('.service-detail').hidden).toBe(true);
         expect(fixture.nativeElement.querySelector('#service-coros-title').closest('.service-detail').hidden).toBe(false);
+    });
+
+    it('lets the services route grow with content instead of forcing viewport height', () => {
+        const styles = readFileSync(
+            resolve(process.cwd(), 'src/app/components/services/services.component.scss'),
+            'utf8'
+        );
+        const settingsContainerRule = styles.match(/\.settings-container\s*\{[^}]*\}/)?.[0] ?? '';
+
+        expect(settingsContainerRule).not.toContain('min-height');
+        expect(styles).not.toMatch(/@supports\s*\(height:\s*100dvh\)\s*\{\s*\.settings-container/);
+    });
+
+    it('keeps service content wrappers from becoming nested scroll containers', () => {
+        const styles = readFileSync(
+            resolve(process.cwd(), 'src/app/components/services/services-abstract-component.directive.scss'),
+            'utf8'
+        );
+        const wrappers = [
+            '.service-container',
+            '.connection-details',
+            '.connection-account-info',
+            '.connected-account-list',
+            '.connected-account-copy',
+        ];
+
+        for (const wrapper of wrappers) {
+            const escapedWrapper = wrapper.replace('.', '\\.');
+            const rule = styles.match(new RegExp(`${escapedWrapper}\\s*\\{[^}]*\\}`))?.[0] ?? '';
+
+            expect(rule).not.toContain('overflow-x');
+            expect(rule).not.toContain('overflow-y');
+            expect(rule).not.toContain('overflow: auto');
+        }
+
+        expect(styles.match(/\.connected-account-title\s*\{[^}]*\}/)?.[0]).toContain('overflow-wrap: anywhere');
     });
 });
