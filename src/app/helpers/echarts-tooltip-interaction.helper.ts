@@ -21,7 +21,7 @@ export interface EChartsMobileTapFeedbackOptions {
 export const DASHBOARD_ECHARTS_MOBILE_TAP_FEEDBACK_OPTIONS: EChartsMobileTapFeedbackOptions = {
   axisPointerFeedback: 'always',
   clickFeedback: true,
-  surfaceClickFeedback: true,
+  surfaceClickFeedback: false,
   surfaceDragFeedback: true,
 };
 
