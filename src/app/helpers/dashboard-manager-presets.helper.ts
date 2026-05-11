@@ -44,6 +44,7 @@ import {
   type DashboardKpiChartType,
 } from './dashboard-special-chart-types';
 import { DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE } from './dashboard-form.helper';
+import { getDefaultDashboardChartTileDisplaySettingsForChartType } from './dashboard-chart-display-settings.helper';
 import type {
   AppDashboardChartTileSettingsInterface,
   AppDashboardMapTileSettingsInterface,
@@ -240,7 +241,7 @@ const DASHBOARD_MANAGER_PRESET_DEFINITIONS: DashboardManagerPresetDefinition[] =
     id: DASHBOARD_MANAGER_PRESET_IDS.KPI_FORM_NOW,
     label: 'KPI: Form Now',
     tileName: 'Form Now',
-    description: 'Same-day TSB readiness KPI with mini trend.',
+    description: 'Current TSB readiness KPI with mini trend.',
     icon: 'self_improvement',
     category: 'kpi',
     kpiChartType: DASHBOARD_FORM_NOW_KPI_CHART_TYPE,
@@ -484,7 +485,7 @@ export function buildDashboardManagerPresetTile(
 
   if (definition.category === 'curated') {
     if (definition.curatedChartType === DASHBOARD_FORM_CHART_TYPE) {
-      const formTile: TileChartSettingsInterface = {
+      const formTile: AppDashboardChartTileSettingsInterface = {
         name: definition.tileName,
         type: TileTypes.Chart,
         order: input.order,
@@ -494,6 +495,7 @@ export function buildDashboardManagerPresetTile(
         dataValueType: ChartDataValueTypes.Total,
         dataCategoryType: ChartDataCategoryTypes.DateType,
         dataTimeInterval: TimeIntervals.Daily,
+        displaySettings: getDefaultDashboardChartTileDisplaySettingsForChartType(DASHBOARD_FORM_CHART_TYPE),
       };
       return formTile;
     }
@@ -513,7 +515,8 @@ export function buildDashboardManagerPresetTile(
       return sleepTile;
     }
 
-    const curatedTile: TileChartSettingsInterface = {
+    const displaySettings = getDefaultDashboardChartTileDisplaySettingsForChartType(definition.curatedChartType);
+    const curatedTile: AppDashboardChartTileSettingsInterface = {
       name: definition.tileName,
       type: TileTypes.Chart,
       order: input.order,
@@ -527,6 +530,7 @@ export function buildDashboardManagerPresetTile(
       dataTimeInterval: definition.curatedChartType === DASHBOARD_RECOVERY_NOW_CHART_TYPE
         ? TimeIntervals.Auto
         : TimeIntervals.Weekly,
+      ...(displaySettings ? { displaySettings } : {}),
     };
     return curatedTile;
   }

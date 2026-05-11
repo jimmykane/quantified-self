@@ -49,13 +49,13 @@ import {
   type DashboardDerivedMetricStatus,
   isDerivedMetricPendingStatus,
 } from '../../../helpers/derived-metric-status.helper';
+import type { AppDashboardFormTimelineWindow as DashboardFormTimelineWindow } from '../../../models/app-user.interface';
 
 type ChartOption = Parameters<EChartsType['setOption']>[0];
 type EChartsTooltipPositionSize = {
   contentSize?: [number, number];
   viewSize?: [number, number];
 };
-export type DashboardFormTimelineWindow = 'w' | 'm' | 'y';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const WEEK_VIEW_SPAN_MS = 84 * DAY_MS;

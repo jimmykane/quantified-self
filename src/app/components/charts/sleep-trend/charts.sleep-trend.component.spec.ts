@@ -240,6 +240,63 @@ describe('ChartsSleepTrendComponent', () => {
     expect(option.series.some((series: any) => series.name === 'HRV')).toBe(false);
   });
 
+  it('keeps empty sleep dates on the x-axis without connecting HRV across the gap', async () => {
+    const firstPoint = buildSleepPoint();
+    const missingPoint = buildSleepPoint({
+      id: 'sleep-placeholder:2026-04-29',
+      sleepDate: '2026-04-29',
+      provider: null,
+      providerLabel: '',
+      categoryLabel: 'Wed, Apr 29',
+      startTimeMs: 0,
+      endTimeMs: 0,
+      totalSeconds: 0,
+      deepSeconds: 0,
+      lightSeconds: 0,
+      remSeconds: 0,
+      awakeSeconds: 0,
+      unknownSeconds: 0,
+      score: null,
+      averageHeartRateBpm: null,
+      averageHrvMs: null,
+      maxSpo2Percent: null,
+      isPlaceholder: true,
+    });
+    const lastPoint = buildSleepPoint({
+      id: 'suunto-sleep-3',
+      sleepDate: '2026-04-30',
+      categoryLabel: 'Thu, Apr 30',
+      startTimeMs: Date.UTC(2026, 3, 29, 22),
+      endTimeMs: Date.UTC(2026, 3, 30, 6),
+      averageHrvMs: 42,
+    });
+    component.sleepTrend = {
+      points: [firstPoint, missingPoint, lastPoint],
+      latestPoint: lastPoint,
+      hasRealPoints: true,
+    };
+
+    fixture.detectChanges();
+    await fixture.whenStable();
+    await vi.waitFor(() => {
+      expect(mockLoader.setOption).toHaveBeenCalled();
+    });
+
+    const setOptionCall = mockLoader.setOption.mock.calls.at(-1) || [];
+    const optionCandidate = setOptionCall[1] || setOptionCall[0];
+    const option = optionCandidate as Record<string, any>;
+    const deepSeries = option.series.find((series: any) => series.name === 'Deep');
+    const hrvSeries = option.series.find((series: any) => series.name === 'HRV');
+    const tooltipHtml = option.tooltip.formatter([{ dataIndex: 1 }]);
+
+    expect(option.xAxis.data).toEqual(['Apr 28\nSuunto', 'Wed, Apr 29', 'Thu, Apr 30']);
+    expect(deepSeries.data[1]).toBe(0);
+    expect(hrvSeries.data).toEqual([62, null, 42]);
+    expect(hrvSeries.connectNulls).toBe(false);
+    expect(tooltipHtml).toContain('No sleep data');
+    expect(component.showNoDataError).toBe(false);
+  });
+
   it('enables the draggable x-axis tooltip handle on mobile viewport', async () => {
     const originalMatchMedia = window.matchMedia;
     const matchMediaSpy = vi.fn().mockImplementation(() => ({

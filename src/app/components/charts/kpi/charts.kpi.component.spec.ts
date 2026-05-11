@@ -143,7 +143,8 @@ describe('ChartsKpiComponent', () => {
 
     expect(component.title).toBe('Ramp Rate');
     expect(component.primaryValueText).toBe('4');
-    expect(component.secondaryLabel).toBe('CTL today');
+    expect(component.primaryLabel).toBe('7d CTL change');
+    expect(component.secondaryLabel).toBe('Current CTL');
     expect(component.secondaryValueText).toBe('65');
   });
 
@@ -306,7 +307,7 @@ describe('ChartsKpiComponent', () => {
     fixture.detectChanges();
     await fixture.whenStable();
     expect(component.title).toBe('Form Now');
-    expect(component.primaryLabel).toBe('Same-day TSB');
+    expect(component.primaryLabel).toBe('Current TSB');
     expect(component.primaryValueText).toBe('-2.4');
   });
 
@@ -322,7 +323,7 @@ describe('ChartsKpiComponent', () => {
     await fixture.whenStable();
 
     expect(component.title).toBe('Fitness (CTL)');
-    expect(component.primaryLabel).toBe('CTL');
+    expect(component.primaryLabel).toBe('Current CTL');
     expect(component.secondaryLabel).toBe('42-day TSS load');
     expect(component.primaryValueText).toBe('58.4');
   });
@@ -339,7 +340,7 @@ describe('ChartsKpiComponent', () => {
     await fixture.whenStable();
 
     expect(component.title).toBe('Fatigue (ATL)');
-    expect(component.primaryLabel).toBe('ATL');
+    expect(component.primaryLabel).toBe('Current ATL');
     expect(component.secondaryLabel).toBe('7-day TSS load');
     expect(component.primaryValueText).toBe('71.4');
   });
@@ -374,6 +375,7 @@ describe('ChartsKpiComponent', () => {
 
     expect(component.title).toBe('Load Status');
     expect(component.primaryValueText).toBe('Building');
+    expect(component.primaryValueIsText).toBe(true);
     expect(component.primaryLabel).toBe('Productive load');
     expect(component.secondaryValueText).toContain('TSB -4');
     expect(component.secondaryValueText).toContain('Ramp +4');
@@ -397,8 +399,9 @@ describe('ChartsKpiComponent', () => {
     await fixture.whenStable();
 
     expect(component.title).toBe('Fitness Trend');
-    expect(component.primaryLabel).toBe('CTL delta (4w)');
+    expect(component.primaryLabel).toBe('4w CTL change');
     expect(component.primaryValueText).toBe('+8');
+    expect(component.secondaryLabel).toBe('Current CTL');
     expect(component.secondaryValueText).toBe('58');
   });
 
@@ -417,8 +420,9 @@ describe('ChartsKpiComponent', () => {
     await fixture.whenStable();
 
     expect(component.title).toBe('Fatigue Trend');
-    expect(component.primaryLabel).toBe('ATL delta (1w)');
+    expect(component.primaryLabel).toBe('1w ATL change');
     expect(component.primaryValueText).toBe('+6');
+    expect(component.secondaryLabel).toBe('Current ATL');
     expect(component.secondaryValueText).toBe('72');
   });
 
@@ -443,7 +447,8 @@ describe('ChartsKpiComponent', () => {
 
     expect(component.title).toBe('Recovery Debt');
     expect(component.primaryValueText).toBe('2 d');
-    expect(component.secondaryLabel).toBe('TSB now');
+    expect(component.primaryValueIsText).toBe(false);
+    expect(component.secondaryLabel).toBe('Current TSB');
     expect(component.secondaryValueText).toBe('-12');
   });
 
@@ -464,10 +469,13 @@ describe('ChartsKpiComponent', () => {
 
     fixture.detectChanges();
     await fixture.whenStable();
+    fixture.detectChanges();
 
     expect(component.title).toBe('Training Balance');
     expect(component.primaryValueText).toBe('Balanced');
+    expect(component.primaryValueIsText).toBe(true);
     expect(component.secondaryValueText).toBe('Easy 64% / Moderate 22% / Hard 14%');
+    expect((fixture.nativeElement as HTMLElement).querySelector('.kpi-value')?.classList.contains('kpi-value-text')).toBe(true);
   });
 
   it('renders Form +7d readiness KPI presentation', async () => {
@@ -481,7 +489,7 @@ describe('ChartsKpiComponent', () => {
     fixture.detectChanges();
     await fixture.whenStable();
     expect(component.title).toBe('Form +7d');
-    expect(component.primaryLabel).toBe('Projected same-day TSB');
+    expect(component.primaryLabel).toBe('Projected TSB');
     expect(component.primaryValueText).toBe('+3.2');
   });
 

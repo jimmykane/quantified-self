@@ -781,6 +781,7 @@ describe('TileChartComponent', () => {
   it('should route intensity distribution chart type to dedicated renderer', () => {
     component.chartType = DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE as any;
     component.showActions = true;
+    component.derivedChartRange = '12w';
     component.intensityDistribution = { weeks: [] } as any;
     component.intensityDistributionStatus = 'processing' as any;
     fixture.detectChanges();
@@ -788,10 +789,10 @@ describe('TileChartComponent', () => {
     const rangeSelector = getRangeSelectorComponents()[0];
 
     expect(fixture.nativeElement.querySelector('.tile-header-controls .tile-local-range-selector')).toBeTruthy();
-    expect(rangeSelector.value).toBe('1y');
+    expect(rangeSelector.value).toBe('12w');
     expect(rangeSelector.options.map(option => option.value)).toEqual(['8w', '12w', '6m', '1y', 'all']);
     expect(intensityDistribution.distribution).toEqual(component.intensityDistribution);
-    expect(intensityDistribution.range).toBe('1y');
+    expect(intensityDistribution.range).toBe('12w');
     expect(intensityDistribution.reserveTitleActionSpace).toBe(true);
   });
 
@@ -814,6 +815,8 @@ describe('TileChartComponent', () => {
   it('should update derived chart range through the shared tile header selector', () => {
     component.chartType = DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE as any;
     component.showActions = true;
+    const ranges: string[] = [];
+    component.derivedChartRangeChange.subscribe(range => ranges.push(range));
     fixture.detectChanges();
 
     const rangeSelector = getRangeSelectorComponents()[0];
@@ -821,16 +824,20 @@ describe('TileChartComponent', () => {
     fixture.detectChanges();
 
     expect(component.derivedChartRange).toBe('8w');
+    expect(ranges).toEqual(['8w']);
     expect(getIntensityDistributionComponent().range).toBe('8w');
   });
 
   it('should route form chart window selection through the shared tile header selector', () => {
     component.chartType = DASHBOARD_FORM_CHART_TYPE as any;
     component.showActions = true;
+    component.formTimelineWindow = 'y';
+    const windows: string[] = [];
+    component.formTimelineWindowChange.subscribe(window => windows.push(window));
     fixture.detectChanges();
 
     const rangeSelector = getRangeSelectorComponents()[0];
-    expect(rangeSelector.value).toBe('w');
+    expect(rangeSelector.value).toBe('y');
     expect(rangeSelector.options.map(option => option.value)).toEqual(['w', 'm', 'y']);
 
     rangeSelector.valueChange.emit('m');
@@ -838,6 +845,7 @@ describe('TileChartComponent', () => {
 
     const form = getFormComponent();
     expect(component.formTimelineWindow).toBe('m');
+    expect(windows).toEqual(['m']);
     expect(form.timelineWindow).toBe('m');
     expect(form.reserveTitleActionSpace).toBe(true);
   });

@@ -78,6 +78,8 @@
           [freshnessForecast]="getChartTile(tile).freshnessForecast" [freshnessForecastStatus]="getFreshnessForecastStatusForTile(tile)"
           [intensityDistribution]="getChartTile(tile).intensityDistribution" [intensityDistributionStatus]="getIntensityDistributionStatusForTile(tile)"
           [efficiencyTrend]="getChartTile(tile).efficiencyTrend" [efficiencyTrendStatus]="getEfficiencyTrendStatusForTile(tile)"
+          [derivedChartRange]="getChartTile(tile).displaySettings?.derivedChartRange"
+          [formTimelineWindow]="getChartTile(tile).displaySettings?.formTimelineWindow"
           [sleepTrend]="getChartTile(tile).sleepTrend" [sleepTrendRange]="sleepTrendRange"
           [sleepTrendWindowLabel]="sleepTrendWindowLabel" [sleepTrendCanNavigateOlder]="sleepTrendCanNavigateOlder"
           [sleepTrendCanNavigateNewer]="sleepTrendCanNavigateNewer"
@@ -87,6 +89,8 @@
           (eventFilterRangeChange)="onTileEventFilterRangeChange(tile.order, $event)"
           (eventFilterActivityTypesChange)="onTileEventFilterActivityTypesChange(tile.order, $event)"
           (eventFilterNavigate)="onTileEventFilterNavigate(tile.order, $event)"
+          (derivedChartRangeChange)="onTileDerivedChartRangeChange(tile.order, $event)"
+          (formTimelineWindowChange)="onTileFormTimelineWindowChange(tile.order, $event)"
           (sleepTrendRangeChange)="onSleepTrendRangeChange($event)"
           (sleepTrendNavigate)="onSleepTrendNavigate($event)"></app-tile-chart>
       </div>
@@ -136,6 +140,8 @@
         [freshnessForecast]="getChartTile(tile).freshnessForecast" [freshnessForecastStatus]="getFreshnessForecastStatusForTile(tile)"
         [intensityDistribution]="getChartTile(tile).intensityDistribution" [intensityDistributionStatus]="getIntensityDistributionStatusForTile(tile)"
         [efficiencyTrend]="getChartTile(tile).efficiencyTrend" [efficiencyTrendStatus]="getEfficiencyTrendStatusForTile(tile)"
+        [derivedChartRange]="getChartTile(tile).displaySettings?.derivedChartRange"
+        [formTimelineWindow]="getChartTile(tile).displaySettings?.formTimelineWindow"
         [sleepTrend]="getChartTile(tile).sleepTrend" [sleepTrendRange]="sleepTrendRange"
         [sleepTrendWindowLabel]="sleepTrendWindowLabel" [sleepTrendCanNavigateOlder]="sleepTrendCanNavigateOlder"
         [sleepTrendCanNavigateNewer]="sleepTrendCanNavigateNewer"
@@ -145,6 +151,8 @@
         (eventFilterRangeChange)="onTileEventFilterRangeChange(tile.order, $event)"
         (eventFilterActivityTypesChange)="onTileEventFilterActivityTypesChange(tile.order, $event)"
         (eventFilterNavigate)="onTileEventFilterNavigate(tile.order, $event)"
+        (derivedChartRangeChange)="onTileDerivedChartRangeChange(tile.order, $event)"
+        (formTimelineWindowChange)="onTileFormTimelineWindowChange(tile.order, $event)"
         (sleepTrendRangeChange)="onSleepTrendRangeChange($event)"
         (sleepTrendNavigate)="onSleepTrendNavigate($event)"></app-tile-chart>
       }

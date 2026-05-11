@@ -218,15 +218,24 @@ describe('AppUserUtilities', () => {
             expect(curatedTiles.find(tile => tile.chartType === DASHBOARD_FORM_CHART_TYPE)).toMatchObject({
                 dataType: DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE,
                 dataTimeInterval: TimeIntervals.Daily,
+                displaySettings: { formTimelineWindow: 'w' },
             });
             [
                 DASHBOARD_FRESHNESS_FORECAST_CHART_TYPE,
+            ].forEach((chartType) => {
+                expect(curatedTiles.find(tile => tile.chartType === chartType)).toMatchObject({
+                    dataType: DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE,
+                    dataTimeInterval: TimeIntervals.Weekly,
+                });
+            });
+            [
                 DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE,
                 DASHBOARD_EFFICIENCY_TREND_CHART_TYPE,
             ].forEach((chartType) => {
                 expect(curatedTiles.find(tile => tile.chartType === chartType)).toMatchObject({
                     dataType: DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE,
                     dataTimeInterval: TimeIntervals.Weekly,
+                    displaySettings: { derivedChartRange: '1y' },
                 });
             });
         });
@@ -545,6 +554,72 @@ describe('AppUserUtilities', () => {
             const settings = AppUserUtilities.fillMissingAppSettings(user);
 
             expect((settings.dashboardSettings?.tiles?.[0] as any).eventFilters).toBeUndefined();
+        });
+
+        it('should normalize display ranges for supported curated chart tiles', () => {
+            const user = {
+                settings: {
+                    dashboardSettings: {
+                        tiles: [
+                            {
+                                type: TileTypes.Chart,
+                                chartType: DASHBOARD_FORM_CHART_TYPE,
+                                dataType: DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE,
+                                dataValueType: ChartDataValueTypes.Total,
+                                dataCategoryType: ChartDataCategoryTypes.DateType,
+                                dataTimeInterval: TimeIntervals.Daily,
+                                name: 'Form',
+                                order: 0,
+                                size: { columns: 1, rows: 1 },
+                                displaySettings: { formTimelineWindow: 'y', derivedChartRange: 'all' }
+                            },
+                            {
+                                type: TileTypes.Chart,
+                                chartType: DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE,
+                                dataType: DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE,
+                                dataValueType: ChartDataValueTypes.Total,
+                                dataCategoryType: ChartDataCategoryTypes.DateType,
+                                dataTimeInterval: TimeIntervals.Weekly,
+                                name: 'Intensity Distribution',
+                                order: 1,
+                                size: { columns: 1, rows: 1 },
+                                displaySettings: { derivedChartRange: 'bad-range', formTimelineWindow: 'm' }
+                            },
+                            {
+                                type: TileTypes.Chart,
+                                chartType: DASHBOARD_EFFICIENCY_TREND_CHART_TYPE,
+                                dataType: DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE,
+                                dataValueType: ChartDataValueTypes.Total,
+                                dataCategoryType: ChartDataCategoryTypes.DateType,
+                                dataTimeInterval: TimeIntervals.Weekly,
+                                name: 'Efficiency Trend',
+                                order: 2,
+                                size: { columns: 1, rows: 1 }
+                            },
+                            {
+                                type: TileTypes.Chart,
+                                chartType: ChartTypes.ColumnsHorizontal,
+                                dataType: DataDistance.type,
+                                dataValueType: ChartDataValueTypes.Total,
+                                dataCategoryType: ChartDataCategoryTypes.ActivityType,
+                                dataTimeInterval: TimeIntervals.Auto,
+                                name: 'Distance',
+                                order: 3,
+                                size: { columns: 1, rows: 1 },
+                                displaySettings: { derivedChartRange: '8w' }
+                            }
+                        ]
+                    }
+                }
+            } as unknown as User;
+
+            const settings = AppUserUtilities.fillMissingAppSettings(user);
+            const [formTile, intensityTile, efficiencyTile, customTile] = settings.dashboardSettings?.tiles || [];
+
+            expect((formTile as any).displaySettings).toEqual({ formTimelineWindow: 'y' });
+            expect((intensityTile as any).displaySettings).toEqual({ derivedChartRange: '1y' });
+            expect((efficiencyTile as any).displaySettings).toEqual({ derivedChartRange: '1y' });
+            expect((customTile as any).displaySettings).toBeUndefined();
         });
 
         it('should preserve existing settings', () => {

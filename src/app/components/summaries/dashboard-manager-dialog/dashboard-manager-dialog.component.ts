@@ -44,6 +44,7 @@ import { AppUserService } from '../../../services/app.user.service';
 import { AppUserInterface } from '../../../models/app-user.interface';
 import type {
   AppDashboardAutoTileState,
+  AppDashboardChartTileDisplaySettingsInterface,
   AppDashboardChartTileSettingsInterface,
   AppDashboardMapTileSettingsInterface,
   AppDashboardSettingsInterface,
@@ -102,6 +103,10 @@ import {
   DASHBOARD_TILE_EVENT_DEFAULT_RANGE,
   normalizeDashboardTileEventFilters,
 } from '../../../helpers/dashboard-tile-event-filters.helper';
+import {
+  cloneDashboardChartTileDisplaySettingsForChartType,
+  normalizeDashboardChartTileDisplaySettingsForChartType,
+} from '../../../helpers/dashboard-chart-display-settings.helper';
 import { ConfirmationDialogComponent } from '../../confirmation-dialog/confirmation-dialog.component';
 import { firstValueFrom, Subscription } from 'rxjs';
 import { take } from 'rxjs/operators';
@@ -315,16 +320,16 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
   };
   public readonly kpiChartDescriptionByType: Record<DashboardKpiChartType, string> = {
     [DASHBOARD_ACWR_KPI_CHART_TYPE]: 'Acute/chronic workload ratio with 8-week sparkline.',
-    [DASHBOARD_RAMP_RATE_KPI_CHART_TYPE]: 'CTL delta over 7 days with 8-week sparkline.',
+    [DASHBOARD_RAMP_RATE_KPI_CHART_TYPE]: '7-day CTL change with 8-week sparkline.',
     [DASHBOARD_MONOTONY_STRAIN_KPI_CHART_TYPE]: 'Weekly strain KPI with monotony context and sparkline.',
     [DASHBOARD_LOAD_STATUS_KPI_CHART_TYPE]: 'Current training state from Form, ramp, fitness, and fatigue.',
-    [DASHBOARD_FORM_NOW_KPI_CHART_TYPE]: 'Same-day TSB readiness from derived load state.',
+    [DASHBOARD_FORM_NOW_KPI_CHART_TYPE]: 'Current TSB readiness from derived load state.',
     [DASHBOARD_FITNESS_CTL_KPI_CHART_TYPE]: 'Current CTL from the derived Form model with 8-week sparkline.',
     [DASHBOARD_FATIGUE_ATL_KPI_CHART_TYPE]: 'Current ATL from the derived Form model with 8-week sparkline.',
     [DASHBOARD_FITNESS_TREND_KPI_CHART_TYPE]: 'Recent CTL direction from the derived Form model.',
     [DASHBOARD_FATIGUE_TREND_KPI_CHART_TYPE]: 'Recent ATL direction from the derived Form model.',
-    [DASHBOARD_RECOVERY_DEBT_KPI_CHART_TYPE]: 'Estimated zero-load days until neutral same-day Form.',
-    [DASHBOARD_FORM_PLUS_7D_KPI_CHART_TYPE]: 'Same-day TSB projection at +7d with zero load.',
+    [DASHBOARD_RECOVERY_DEBT_KPI_CHART_TYPE]: 'Estimated zero-load days until neutral current TSB.',
+    [DASHBOARD_FORM_PLUS_7D_KPI_CHART_TYPE]: 'Current TSB projection at +7d with zero load.',
     [DASHBOARD_TRAINING_BALANCE_KPI_CHART_TYPE]: 'Latest weekly Easy/Moderate/Hard intensity balance.',
     [DASHBOARD_EASY_PERCENT_KPI_CHART_TYPE]: 'Latest weekly Easy (Z1-2) intensity share.',
     [DASHBOARD_HARD_PERCENT_KPI_CHART_TYPE]: 'Latest weekly Hard (Z5-7) intensity share.',
@@ -786,7 +791,7 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
         }
 
         const replacement = this.activeWorkflowTab === 'presets'
-          ? this.buildPresetTileForMode(editTile.order, editTile.size || { columns: 1, rows: 1 })
+          ? this.buildPresetTileForMode(editTile.order, editTile.size || { columns: 1, rows: 1 }, editTile)
           : this.buildTileForMode(editTile.order, editTile.size || { columns: 1, rows: 1 }, editTile);
         if (!replacement) {
           this.stopSaving();
@@ -973,7 +978,10 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
       const clonedTile = {
         ...tile,
         size: tile.size ? { ...tile.size } : tile.size,
-      } as TileSettingsInterface & { eventFilters?: AppDashboardTileEventFiltersInterface };
+      } as TileSettingsInterface & {
+        eventFilters?: AppDashboardTileEventFiltersInterface;
+        displaySettings?: AppDashboardChartTileDisplaySettingsInterface;
+      };
       const eventFilters = cloneDashboardTileEventFilters(
         (tile as AppDashboardChartTileSettingsInterface | AppDashboardMapTileSettingsInterface).eventFilters,
       );
@@ -981,6 +989,18 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
         clonedTile.eventFilters = eventFilters;
       } else {
         delete clonedTile.eventFilters;
+      }
+      if (tile.type === TileTypes.Chart) {
+        const chartTile = tile as AppDashboardChartTileSettingsInterface;
+        const displaySettings = cloneDashboardChartTileDisplaySettingsForChartType(
+          chartTile.chartType,
+          chartTile.displaySettings,
+        );
+        if (displaySettings) {
+          clonedTile.displaySettings = displaySettings;
+        } else {
+          delete clonedTile.displaySettings;
+        }
       }
       return clonedTile as TileSettingsInterface;
     });
@@ -1139,7 +1159,7 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
         this.saveError = 'This curated chart already exists.';
         return null;
       }
-      return this.buildCuratedTile(this.curatedChartType, order, size);
+      return this.buildCuratedTile(this.curatedChartType, order, size, existingTile);
     }
 
     if (this.category === 'kpi') {
@@ -1156,6 +1176,7 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
   private buildPresetTileForMode(
     order: number,
     size: { columns: number; rows: number },
+    existingTile: TileSettingsInterface | null = null,
   ): TileSettingsInterface | null {
     const selectedPreset = this.selectedPresetDefinition;
     if (!selectedPreset) {
@@ -1169,23 +1190,28 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
       return null;
     }
 
-    return buildDashboardManagerPresetTile({
+    const tile = buildDashboardManagerPresetTile({
       presetId: selectedPreset.id,
       order,
       size,
     });
+    return this.mergeExistingDisplaySettingsForSameChart(tile, existingTile);
   }
 
   private buildCuratedTile(
     chartType: DashboardCuratedChartType,
     order: number,
     size: { columns: number; rows: number },
+    existingTile: TileSettingsInterface | null,
   ): TileChartSettingsInterface {
+    let tile: TileChartSettingsInterface;
     if (chartType === DASHBOARD_SLEEP_TREND_CHART_TYPE) {
-      return buildDashboardSleepTrendAutoTile(order, size);
+      tile = buildDashboardSleepTrendAutoTile(order, size);
+    } else {
+      tile = buildDashboardCuratedAutoTile(chartType as DashboardDefaultCuratedChartType, order, size);
     }
 
-    return buildDashboardCuratedAutoTile(chartType as DashboardDefaultCuratedChartType, order, size);
+    return this.mergeExistingDisplaySettingsForSameChart(tile, existingTile) as TileChartSettingsInterface;
   }
 
   private buildKpiTile(
@@ -1194,6 +1220,41 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
     size: { columns: number; rows: number },
   ): TileChartSettingsInterface {
     return buildDashboardKpiAutoTile(chartType, order, size);
+  }
+
+  private mergeExistingDisplaySettingsForSameChart(
+    tile: TileSettingsInterface | null,
+    existingTile: TileSettingsInterface | null,
+  ): TileSettingsInterface | null {
+    if (!tile || tile.type !== TileTypes.Chart || existingTile?.type !== TileTypes.Chart) {
+      return tile;
+    }
+    const nextChartTile = tile as AppDashboardChartTileSettingsInterface;
+    const existingChartTile = existingTile as AppDashboardChartTileSettingsInterface;
+    if (`${nextChartTile.chartType}` !== `${existingChartTile.chartType}`) {
+      return tile;
+    }
+
+    const defaultDisplaySettings = normalizeDashboardChartTileDisplaySettingsForChartType(
+      nextChartTile.chartType,
+      nextChartTile.displaySettings,
+      true,
+    );
+    const existingDisplaySettings = normalizeDashboardChartTileDisplaySettingsForChartType(
+      nextChartTile.chartType,
+      existingChartTile.displaySettings,
+      false,
+    );
+    const mergedDisplaySettings = {
+      ...(defaultDisplaySettings || {}),
+      ...(existingDisplaySettings || {}),
+    };
+    if (Object.keys(mergedDisplaySettings).length > 0) {
+      nextChartTile.displaySettings = mergedDisplaySettings;
+    } else {
+      delete nextChartTile.displaySettings;
+    }
+    return nextChartTile;
   }
 
   private buildMapTile(

@@ -103,7 +103,7 @@ export const HELP_SECTIONS: HelpSection[] = [
 - You can choose between **Curated**, **KPI**, **Custom**, and **Map** categories.
 - **Presets** provide quick-start tile templates and can be applied in both **Add** and **Edit** modes.
 - **Curated Recovery** remains a fixed insight and does not react to event table or custom tile date ranges.
-- **Curated Form/TSS** computes from full history and does not react to event table or custom tile date ranges.
+- **Curated Form/TSS** computes from full history and does not react to event table or custom tile date ranges. Its **W / M / Y** view setting is saved on that dashboard tile.
 - New curated charts: **Freshness Forecast**, **Intensity Distribution**, and **Efficiency Trend**.
 - The default KPI rows are the current-state set: **Load Status**, **Form Now**, **Fitness Trend**, **Fatigue Trend**, **Recovery Debt**, and **Training Balance**.
 - Additional KPI rows such as **Fitness (CTL)**, **Fatigue (ATL)**, **ACWR**, **Ramp Rate**, **Monotony / Strain**, **Form +7d**, **Easy %**, **Hard %**, and **Efficiency Δ (4w)** remain available from Dashboard manager.
@@ -154,13 +154,13 @@ export const HELP_SECTIONS: HelpSection[] = [
 
 - The tile derives daily load from **Training Stress Score**.
 - Legacy **Power Training Stress Score** is used automatically when current TSS is missing.
-- It shows three headline stats: **Fitness (CTL)**, **Fatigue (ATL)**, and **Form (TSB)**.
-- **Form (TSB)** is shown as **same-day readiness** using same-day CTL - ATL.
+- It shows current-day headline stats: **Current CTL**, **Current ATL**, and **Current TSB**.
+- **Current TSB** is same-day readiness using same-day CTL - ATL.
 - Form and RecoveryNow tiles use precomputed derived snapshots from your full history (UTC day buckets).
 - Form/TSS trend lines keep full history and are explored with compact **W / M / Y** timeline buttons.
 - The chart does not use slider or reload/reset toolbar controls.
 - Form trend lines continue to **today** with zero-load decay after your latest workout.
-- Headline **Fitness / Fatigue / Form** values reflect the current-day decayed state; **Latest TSS** stays anchored to your latest real workout.
+- Headline **Current CTL / Current ATL / Current TSB** values reflect the current-day decayed state; **Latest workout TSS** stays anchored to your latest real workout.
 - Form/TSS uses adaptive render granularity by view: **W = daily points**, **M = weekly points**, **Y = monthly points**.
 - While derived metrics are refreshing, the tile shows a training-metrics **updating** message instead of generic no-data text.
 - When snapshots are missing or stale, they rebuild asynchronously; refresh usually follows within a few minutes.
@@ -179,14 +179,14 @@ export const HELP_SECTIONS: HelpSection[] = [
 - **ACWR** uses acute 7-day load versus chronic 28-day load/4 and shows an 8-week sparkline.
 - **Ramp Rate** uses CTL(today) - CTL(today-7d) with an 8-week sparkline.
 - **Monotony / Strain** uses 7-day load mean/stddev for monotony, and load * monotony for strain.
-- **Load Status** summarizes current training state from same-day Form, ramp rate, Fitness, and Fatigue.
-- **Form Now** uses same-day TSB readiness from the latest derived load state.
-- **Fitness (CTL)** uses the derived Form model's current 42-day chronic training load.
-- **Fatigue (ATL)** uses the derived Form model's current 7-day acute training load.
+- **Load Status** summarizes current training state from current TSB, CTL ramp, current CTL, and current ATL.
+- **Form Now** uses current TSB readiness from the latest derived load state.
+- **Fitness (CTL)** uses current 42-day chronic training load from the derived Form model.
+- **Fatigue (ATL)** uses current 7-day acute training load from the derived Form model.
 - **Fitness Trend** shows recent CTL direction from the derived Form model.
 - **Fatigue Trend** shows recent ATL direction from the derived Form model.
-- **Recovery Debt** estimates zero-load days until same-day Form returns to neutral.
-- **Form +7d** projects same-day TSB at day +7 assuming zero load.
+- **Recovery Debt** estimates zero-load days until current TSB returns to neutral.
+- **Form +7d** projects current TSB at day +7 assuming zero load.
 - **Training Balance** summarizes the latest weekly Easy/Moderate/Hard intensity mix.
 - **Easy %** and **Hard %** use the latest weekly intensity distribution bucket.
 - **Efficiency Δ (4w)** shows current efficiency versus the prior 4-week baseline as absolute + percent delta.
@@ -194,7 +194,7 @@ export const HELP_SECTIONS: HelpSection[] = [
 - **Intensity Distribution** uses power zones when available, otherwise heart-rate zones, grouped to Easy/Moderate/Hard by week.
 - Intensity Distribution headline percentages are labeled as **Current week**; when no current-week bucket exists they are labeled **Latest week**.
 - **Efficiency Trend** uses weekly duration-weighted average of avgPower/avgHeartRate.
-- Intensity Distribution and Efficiency Trend include compact **8w / 12w / 6m / 1y / All** range selectors that only change the visible derived weekly history.
+- Intensity Distribution and Efficiency Trend include compact **8w / 12w / 6m / 1y / All** range selectors that only change the visible derived weekly history and are saved per dashboard tile.
 - Training-derived tiles do not fall back to currently loaded dashboard events.
 
 ### Merge events

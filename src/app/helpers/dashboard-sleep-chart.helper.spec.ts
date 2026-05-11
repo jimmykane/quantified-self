@@ -129,6 +129,78 @@ describe('dashboard-sleep-chart.helper', () => {
     expect(context.latestPoint?.id).toBe('garmin-later-sleep');
   });
 
+  it('fills missing sleep dates inside the selected sleep window with empty points', () => {
+    const endMs = Date.UTC(2026, 0, 5, 12);
+    const context = buildDashboardSleepTrendContext([
+      {
+        id: 'suunto-sleep-jan-3',
+        startTimeMs: Date.UTC(2026, 0, 2, 22),
+        endTimeMs: Date.UTC(2026, 0, 3, 6),
+        sleepDate: '2026-01-03',
+        durationSeconds: 8 * 3600,
+        source: { provider: 'SuuntoApp', sourceSessionKey: 'suunto-source-jan-3' },
+      },
+      {
+        id: 'suunto-sleep-jan-5',
+        startTimeMs: Date.UTC(2026, 0, 4, 22),
+        endTimeMs: Date.UTC(2026, 0, 5, 6),
+        sleepDate: '2026-01-05',
+        durationSeconds: 8 * 3600,
+        source: { provider: 'SuuntoApp', sourceSessionKey: 'suunto-source-jan-5' },
+      },
+    ] as any[], {
+      sleepWindow: {
+        range: '14d',
+        startMs: endMs - (14 * 24 * 60 * 60 * 1000),
+        endMs,
+      },
+    });
+
+    const missingDate = context.points.find(point => point.sleepDate === '2026-01-04');
+
+    expect(context.points).toHaveLength(14);
+    expect(missingDate).toMatchObject({
+      id: 'sleep-placeholder:2026-01-04',
+      provider: null,
+      providerLabel: '',
+      categoryLabel: expectedSleepDateLabel('2026-01-04'),
+      totalSeconds: 0,
+      averageHrvMs: null,
+      isPlaceholder: true,
+    });
+    expect(context.points.filter(point => !point.isPlaceholder).map(point => point.id)).toEqual([
+      'suunto-sleep-jan-3',
+      'suunto-sleep-jan-5',
+    ]);
+    expect(context.latestPoint?.id).toBe('suunto-sleep-jan-5');
+    expect(context.hasRealPoints).toBe(true);
+  });
+
+  it('does not synthesize an empty point for the current day when sleep is missing', () => {
+    const nowMs = Date.UTC(2026, 0, 5, 12);
+    const context = buildDashboardSleepTrendContext([
+      {
+        id: 'suunto-sleep-jan-4',
+        startTimeMs: Date.UTC(2026, 0, 3, 22),
+        endTimeMs: Date.UTC(2026, 0, 4, 6),
+        sleepDate: '2026-01-04',
+        durationSeconds: 8 * 3600,
+        source: { provider: 'SuuntoApp', sourceSessionKey: 'suunto-source-jan-4' },
+      },
+    ] as any[], {
+      sleepWindow: {
+        range: '14d',
+        startMs: nowMs - (14 * 24 * 60 * 60 * 1000),
+        endMs: nowMs,
+      },
+      nowMs,
+    });
+
+    expect(context.points.some(point => point.sleepDate === '2026-01-05')).toBe(false);
+    expect(context.points).toHaveLength(13);
+    expect(context.latestPoint?.id).toBe('suunto-sleep-jan-4');
+  });
+
   it('formats durations for chart headers and tooltips', () => {
     expect(formatSleepDuration(0)).toBe('--');
     expect(formatSleepDuration(42 * 60)).toBe('42m');
