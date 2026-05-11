@@ -24,6 +24,7 @@ import {
   DataStrydDistance,
   EventInterface,
   LapTypes,
+  type StreamInterface,
   User,
   XAxisTypes,
 } from '@sports-alliance/sports-lib';
@@ -832,8 +833,9 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
   }
 
   private resolveDistanceCursorTime(activity: ActivityInterface, targetDistance: number): number | null {
-    const distanceStream = activity.getStream(DataDistance.type) || activity.getStream(DataStrydDistance.type);
-    const timeStream = activity.getStream(XAxisTypes.Time);
+    const distanceStream = this.getActivityStream(activity, DataDistance.type)
+      || this.getActivityStream(activity, DataStrydDistance.type);
+    const timeStream = this.getActivityStream(activity, XAxisTypes.Time);
     const distanceValues = this.toNumericArray(distanceStream?.getData());
     const timeValues = this.toNumericArray(timeStream?.getData());
 
@@ -859,6 +861,26 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
     }
 
     return activity.startDate.getTime() + seconds * 1000;
+  }
+
+  private getActivityStream(activity: ActivityInterface, streamType: string): StreamInterface | null {
+    if (!activity || !streamType) {
+      return null;
+    }
+
+    if (typeof activity.getStream === 'function') {
+      try {
+        const stream = activity.getStream(streamType);
+        if (stream) {
+          return stream;
+        }
+      } catch {
+        // Some providers throw when optional streams are unavailable.
+      }
+    }
+
+    const streams = activity.getAllStreams?.() || [];
+    return streams.find((stream) => stream?.type === streamType) || null;
   }
 
   private toNumericArray(value: unknown): number[] {
