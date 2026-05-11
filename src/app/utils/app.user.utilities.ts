@@ -88,6 +88,9 @@ import {
     type DashboardDefaultCuratedChartType,
 } from '../helpers/dashboard-auto-tile.helper';
 import { normalizeDashboardActionPrompts } from '../helpers/dashboard-action-prompt.helper';
+import {
+    normalizeDashboardChartTileDisplaySettingsForChartType,
+} from '../helpers/dashboard-chart-display-settings.helper';
 import { ACTIVITY_SYNC_ROUTES, ActivitySyncRouteId } from '@shared/activity-sync-routes';
 import { normalizeDistanceUnits } from '@shared/unit-aware-display';
 
@@ -246,12 +249,22 @@ export class AppUserUtilities {
     private static normalizeRecoveryDashboardChartTile(tile: TileChartSettingsInterface): TileChartSettingsInterface {
         const tileWithoutEventFilters = { ...(tile as AppDashboardChartTileSettingsInterface) };
         delete tileWithoutEventFilters.eventFilters;
+        delete tileWithoutEventFilters.displaySettings;
         return {
             ...tileWithoutEventFilters,
             ...AppUserUtilities.getDefaultUserDashboardRecoveryTile(tile.order),
             order: Number.isFinite(Number(tile.order)) ? Number(tile.order) : 0,
             size: tile.size || { columns: 1, rows: 1 },
         };
+    }
+
+    private static normalizeDashboardChartTileDisplaySettings(tile: AppDashboardChartTileSettingsInterface): void {
+        const normalizedDisplaySettings = normalizeDashboardChartTileDisplaySettingsForChartType(tile.chartType, tile.displaySettings, true);
+        if (normalizedDisplaySettings) {
+            tile.displaySettings = normalizedDisplaySettings;
+            return;
+        }
+        delete tile.displaySettings;
     }
 
     static getDefaultMapLapTypes(): LapTypes[] {
@@ -564,7 +577,9 @@ export class AppUserUtilities {
                         return null;
                     }
                     hasNormalizedRecoveryDashboardTile = true;
-                    return AppUserUtilities.normalizeRecoveryDashboardChartTile(chartTile);
+                    const normalizedRecoveryTile = AppUserUtilities.normalizeRecoveryDashboardChartTile(chartTile);
+                    AppUserUtilities.normalizeDashboardChartTileDisplaySettings(normalizedRecoveryTile as AppDashboardChartTileSettingsInterface);
+                    return normalizedRecoveryTile;
                 }
                 if (!isDashboardSpecialChartType(chartTile.chartType)) {
                     chartTile.eventFilters = normalizeDashboardTileEventFilters(
@@ -575,6 +590,7 @@ export class AppUserUtilities {
                 } else {
                     delete chartTile.eventFilters;
                 }
+                AppUserUtilities.normalizeDashboardChartTileDisplaySettings(chartTile);
                 return chartTile;
             }
 

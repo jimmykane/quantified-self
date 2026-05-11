@@ -120,13 +120,14 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('Form tile (CTL / ATL / TSB)');
     expect(gettingStartedSection?.content).toContain('Training Stress Score');
     expect(gettingStartedSection?.content).toContain('Power Training Stress Score');
-    expect(gettingStartedSection?.content).toContain('Form (TSB)');
+    expect(gettingStartedSection?.content).toContain('Current TSB');
     expect(gettingStartedSection?.content).toContain('same-day readiness');
     expect(gettingStartedSection?.content).toContain('full history');
     expect(gettingStartedSection?.content).toContain('W / M / Y');
+    expect(gettingStartedSection?.content).toContain('saved on that dashboard tile');
     expect(gettingStartedSection?.content).toContain('continue to **today** with zero-load decay');
     expect(gettingStartedSection?.content).toContain('does not use slider or reload/reset toolbar controls');
-    expect(gettingStartedSection?.content).toContain('Latest TSS');
+    expect(gettingStartedSection?.content).toContain('Latest workout TSS');
     expect(gettingStartedSection?.content).toContain('weekly');
     expect(gettingStartedSection?.content).toContain('asynchronously');
     expect(gettingStartedSection?.content).toContain('status notice');
@@ -138,6 +139,7 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('Freshness Forecast');
     expect(gettingStartedSection?.content).toContain('Intensity Distribution');
     expect(gettingStartedSection?.content).toContain('Efficiency Trend');
+    expect(gettingStartedSection?.content).toContain('saved per dashboard tile');
     expect(gettingStartedSection?.content).not.toContain('**Sleep** shows connected-source sleep duration');
     expect(gettingStartedSection?.content).toContain('ACWR');
     expect(gettingStartedSection?.content).toContain('Ramp Rate');

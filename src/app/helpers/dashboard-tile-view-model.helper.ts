@@ -49,6 +49,7 @@ import {
 import {
   buildDashboardSleepTrendContext,
   type DashboardSleepTrendContext,
+  type DashboardSleepTrendWindow,
 } from './dashboard-sleep-chart.helper';
 import {
   filterDashboardTileEventsByActivityTypes,
@@ -98,8 +99,9 @@ import {
   isDashboardTrainingBalanceKpiChartType,
 } from './dashboard-special-chart-types';
 import type { SleepSession } from '@shared/sleep';
+import type { AppDashboardChartTileSettingsInterface } from '../models/app-user.interface';
 
-export interface DashboardChartTileViewModel extends TileChartSettingsInterface {
+export interface DashboardChartTileViewModel extends AppDashboardChartTileSettingsInterface {
   timeInterval: TimeIntervals;
   data: AggregatedChartRow[] | EventInterface[] | DashboardFormPoint[];
   recoveryNow?: DashboardRecoveryNowContext;
@@ -135,6 +137,7 @@ interface BuildDashboardTileViewModelsInput {
   events?: EventInterface[] | null;
   tileEventsByOrder?: Record<number, EventInterface[] | undefined> | null;
   sleepSessions?: SleepSession[] | null;
+  sleepTrendWindow?: DashboardSleepTrendWindow | null;
   preferences?: EventStatAggregationPreferences;
   logger?: EventStatAggregationLogger;
   derivedMetrics?: {
@@ -312,7 +315,9 @@ export function buildDashboardTileViewModels(
   const derivedFreshnessForecastContext = input.derivedMetrics?.freshnessForecast || null;
   const derivedIntensityDistributionContext = input.derivedMetrics?.intensityDistribution || null;
   const derivedEfficiencyTrendContext = input.derivedMetrics?.efficiencyTrend || null;
-  const sleepTrendContext = buildDashboardSleepTrendContext(input.sleepSessions || []);
+  const sleepTrendContext = buildDashboardSleepTrendContext(input.sleepSessions || [], {
+    sleepWindow: input.sleepTrendWindow || null,
+  });
 
   return (input.tiles || []).reduce<DashboardTileViewModel[]>((viewModels, tile) => {
     if (tile.type === TileTypes.Map) {

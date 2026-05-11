@@ -36,6 +36,7 @@ import {
   type DashboardTileViewModel,
   isDashboardChartTileViewModel,
 } from '../../helpers/dashboard-tile-view-model.helper';
+import type { DashboardSleepTrendWindow } from '../../helpers/dashboard-sleep-chart.helper';
 import { AppUserService } from '../../services/app.user.service';
 import { DashboardDerivedMetricsService } from '../../services/dashboard-derived-metrics.service';
 import { AppSleepService } from '../../services/app.sleep.service';
@@ -82,7 +83,10 @@ import { DashboardManagerDialogComponent } from './dashboard-manager-dialog/dash
 import { ConfirmationDialogComponent } from '../confirmation-dialog/confirmation-dialog.component';
 import type { SleepSession } from '@shared/sleep';
 import type {
+  AppDashboardChartTileDisplaySettingsInterface,
   AppDashboardChartTileSettingsInterface,
+  AppDashboardDerivedChartRange,
+  AppDashboardFormTimelineWindow,
   AppDashboardMapTileSettingsInterface,
   AppDashboardSettingsInterface,
   AppDashboardSleepTrendRange,
@@ -104,6 +108,12 @@ import {
   resolveDashboardTileEventWindow,
   type DashboardTileEventNavigationDirection,
 } from '../../helpers/dashboard-tile-event-filters.helper';
+import {
+  cloneDashboardChartTileDisplaySettingsForChartType,
+  normalizeDashboardChartTileDisplaySettingsForChartType,
+  normalizeDashboardFormTimelineWindow,
+} from '../../helpers/dashboard-chart-display-settings.helper';
+import { normalizeDashboardDerivedChartRange } from '../../helpers/dashboard-derived-chart-range.helper';
 import { getTrailingDashboardGridPlaceholderCount } from '../../helpers/dashboard-grid-layout.helper';
 import { AppEventService } from '../../services/app.event.service';
 import { DashboardAutoTileService } from '../../services/dashboard-auto-tile.service';
@@ -170,6 +180,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   private logger: LoggerService;
   private dashboardTileSettingsSnapshot: TileSettingsInterface[] = [];
   private sleepSessions: SleepSession[] = [];
+  private sleepTrendWindow: DashboardSleepTrendWindow | null = null;
   private derivedFormPoints: DashboardFormPoint[] | null = null;
   private derivedRecoveryNowContext: DashboardRecoveryNowContext | null = null;
   private derivedAcwrContext: DashboardAcwrContext | null = null;
@@ -397,6 +408,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       events: [],
       tileEventsByOrder: this.tileEventsByOrder,
       sleepSessions: this.sleepSessions,
+      sleepTrendWindow: this.sleepTrendWindow,
       preferences: this.getAggregationPreferences(),
       logger: this.logger,
       derivedMetrics: {
@@ -809,6 +821,24 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     this.changeDetector.markForCheck();
   }
 
+  public async onTileDerivedChartRangeChange(
+    order: number,
+    range: AppDashboardDerivedChartRange,
+  ): Promise<void> {
+    await this.updateTileDisplaySettings(order, {
+      derivedChartRange: normalizeDashboardDerivedChartRange(range) as AppDashboardDerivedChartRange,
+    });
+  }
+
+  public async onTileFormTimelineWindowChange(
+    order: number,
+    timelineWindow: AppDashboardFormTimelineWindow,
+  ): Promise<void> {
+    await this.updateTileDisplaySettings(order, {
+      formTimelineWindow: normalizeDashboardFormTimelineWindow(timelineWindow),
+    });
+  }
+
   private syncTileEventSubscriptions(): void {
     const eventUser = (this.eventUser || this.user) as User | null;
     const uid = `${eventUser?.uid || ''}`.trim();
@@ -941,8 +971,55 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     }
   }
 
+  private async updateTileDisplaySettings(
+    order: number,
+    patch: Partial<AppDashboardChartTileDisplaySettingsInterface>,
+  ): Promise<void> {
+    if (!this.user?.settings?.dashboardSettings?.tiles) {
+      return;
+    }
+
+    const dashboardSettings = (this.user as AppUserInterface).settings.dashboardSettings as AppDashboardSettingsInterface;
+    const previousTiles = this.cloneDashboardTiles(dashboardSettings.tiles);
+    const tile = dashboardSettings.tiles.find(candidate => candidate.order === order);
+    if (!tile || !this.isDisplaySettingsChartTile(tile)) {
+      return;
+    }
+
+    const previousDisplaySettings = this.getSettingsTileDisplaySettings(tile);
+    const nextDisplaySettings = this.getSettingsTileDisplaySettings(tile, {
+      ...previousDisplaySettings,
+      ...patch,
+    });
+    if (equal(previousDisplaySettings, nextDisplaySettings)) {
+      return;
+    }
+
+    tile.displaySettings = nextDisplaySettings;
+    await this.rebuildTilesFromCurrentState();
+    this.changeDetector.markForCheck();
+
+    try {
+      await this.persistDashboardSettings({
+        tiles: dashboardSettings.tiles,
+      });
+    } catch (error) {
+      dashboardSettings.tiles = previousTiles;
+      await this.rebuildTilesFromCurrentState();
+      this.changeDetector.markForCheck();
+      this.logger.error('[SummariesComponent] Failed to persist dashboard tile display settings', error);
+    }
+  }
+
   private getSettingsTileEventFilters(tile: TileSettingsInterface): AppDashboardTileEventFiltersInterface {
     return normalizeDashboardTileEventFilters((tile as (AppDashboardChartTileSettingsInterface | AppDashboardMapTileSettingsInterface)).eventFilters);
+  }
+
+  private getSettingsTileDisplaySettings(
+    tile: AppDashboardChartTileSettingsInterface,
+    value: unknown = tile.displaySettings,
+  ): AppDashboardChartTileDisplaySettingsInterface {
+    return normalizeDashboardChartTileDisplaySettingsForChartType(tile.chartType, value, true) || {};
   }
 
   private isEventDataTile(tile: DashboardTileViewModel): boolean {
@@ -957,6 +1034,16 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       return true;
     }
     return tile.type === TileTypes.Chart && !isDashboardSpecialChartType((tile as TileChartSettingsInterface).chartType);
+  }
+
+  private isDisplaySettingsChartTile(tile: TileSettingsInterface): tile is AppDashboardChartTileSettingsInterface {
+    if (tile.type !== TileTypes.Chart) {
+      return false;
+    }
+    const chartType = (tile as TileChartSettingsInterface).chartType;
+    return isDashboardFormChartType(chartType)
+      || isDashboardIntensityDistributionChartType(chartType)
+      || isDashboardEfficiencyTrendChartType(chartType);
   }
 
   private cloneDashboardTiles(tiles: TileSettingsInterface[]): TileSettingsInterface[] {
@@ -1005,6 +1092,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   }
 
   private updateSleepTrendWindowState(window: { range: AppDashboardSleepTrendRange; startMs: number; endMs: number }): void {
+    this.sleepTrendWindow = window;
     this.sleepTrendRange = window.range;
     this.sleepTrendCanNavigateOlder = true;
     this.sleepTrendCanNavigateNewer = this.sleepTrendAnchorEndMs !== null;
@@ -1081,7 +1169,10 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     const clonedTile = {
       ...tile,
       size: tile.size ? { ...tile.size } : tile.size,
-    } as TileSettingsInterface & { eventFilters?: AppDashboardTileEventFiltersInterface };
+    } as TileSettingsInterface & {
+      eventFilters?: AppDashboardTileEventFiltersInterface;
+      displaySettings?: AppDashboardChartTileDisplaySettingsInterface;
+    };
     const eventFilters = cloneDashboardTileEventFilters(
       (tile as AppDashboardChartTileSettingsInterface | AppDashboardMapTileSettingsInterface).eventFilters,
     );
@@ -1089,6 +1180,18 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       clonedTile.eventFilters = eventFilters;
     } else {
       delete clonedTile.eventFilters;
+    }
+    if (tile.type === TileTypes.Chart) {
+      const chartTile = tile as AppDashboardChartTileSettingsInterface;
+      const displaySettings = cloneDashboardChartTileDisplaySettingsForChartType(
+        chartTile.chartType,
+        chartTile.displaySettings,
+      );
+      if (displaySettings) {
+        clonedTile.displaySettings = displaySettings;
+      } else {
+        delete clonedTile.displaySettings;
+      }
     }
     return clonedTile as TileSettingsInterface;
   }
@@ -1120,10 +1223,25 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   }
 
   private cloneDashboardViewModels(tiles: DashboardTileViewModel[]): DashboardTileViewModel[] {
-    return tiles.map((tile: DashboardTileViewModel) => ({
-      ...tile,
-      size: tile.size ? { ...tile.size } : tile.size
-    })) as DashboardTileViewModel[];
+    return tiles.map((tile: DashboardTileViewModel) => {
+      const clonedTile = {
+        ...tile,
+        size: tile.size ? { ...tile.size } : tile.size,
+      } as DashboardTileViewModel & { displaySettings?: AppDashboardChartTileDisplaySettingsInterface };
+      if (isDashboardChartTileViewModel(tile)) {
+        const chartTile = tile as AppDashboardChartTileSettingsInterface;
+        const displaySettings = cloneDashboardChartTileDisplaySettingsForChartType(
+          chartTile.chartType,
+          chartTile.displaySettings,
+        );
+        if (displaySettings) {
+          clonedTile.displaySettings = displaySettings;
+        } else {
+          delete clonedTile.displaySettings;
+        }
+      }
+      return clonedTile;
+    }) as DashboardTileViewModel[];
   }
 
   private withSequentialOrder<T extends { order: number }>(tiles: T[]): T[] {

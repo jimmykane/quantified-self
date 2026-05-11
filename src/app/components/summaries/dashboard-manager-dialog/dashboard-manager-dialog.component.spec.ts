@@ -1108,6 +1108,31 @@ describe('DashboardManagerDialogComponent', () => {
     expect(userServiceMock.updateUserProperties).toHaveBeenCalledTimes(1);
   });
 
+  it('preserves persisted display settings when editing the same curated chart', async () => {
+    dialogData.user.settings.dashboardSettings.tiles[0] = {
+      type: TileTypes.Chart,
+      order: 0,
+      name: 'Form',
+      chartType: DASHBOARD_FORM_CHART_TYPE,
+      dataType: DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE,
+      dataValueType: ChartDataValueTypes.Total,
+      dataCategoryType: ChartDataCategoryTypes.DateType,
+      dataTimeInterval: TimeIntervals.Daily,
+      size: { columns: 1, rows: 1 },
+      displaySettings: { formTimelineWindow: 'y', derivedChartRange: 'all' },
+    };
+    component.mode = 'edit';
+    component.editTileOrder = 0;
+    component.category = 'curated';
+    component.curatedChartType = DASHBOARD_FORM_CHART_TYPE;
+
+    await component.save();
+
+    expect(dialogData.user.settings.dashboardSettings.tiles[0].displaySettings).toEqual({
+      formTimelineWindow: 'y',
+    });
+  });
+
   it('edits an existing map tile and updates map settings', async () => {
     dialogData.user.settings.dashboardSettings.tiles = [{
       type: TileTypes.Map,

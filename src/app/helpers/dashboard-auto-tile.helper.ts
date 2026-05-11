@@ -11,6 +11,7 @@ import {
 import {
   AppDashboardAutoTileId,
   AppDashboardAutoTileState,
+  AppDashboardChartTileSettingsInterface,
   AppDashboardSettingsInterface,
 } from '../models/app-user.interface';
 import {
@@ -40,6 +41,7 @@ import {
   getDashboardKpiChartDefinitions,
 } from './dashboard-special-chart-types';
 import { DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE } from './dashboard-form.helper';
+import { getDefaultDashboardChartTileDisplaySettingsForChartType } from './dashboard-chart-display-settings.helper';
 
 export const DASHBOARD_AUTO_TILE_SLEEP_TREND_ID: AppDashboardAutoTileId = 'sleepTrend';
 export const DASHBOARD_AUTO_TILE_SLEEP_TREND_SOURCE = 'sleep-sync';
@@ -101,7 +103,7 @@ export function buildDashboardCuratedAutoTile(
   chartType: DashboardDefaultCuratedChartType,
   order: number,
   size: { columns: number; rows: number } = { columns: 1, rows: 1 },
-): TileChartSettingsInterface {
+): AppDashboardChartTileSettingsInterface {
   if (chartType === DASHBOARD_RECOVERY_NOW_CHART_TYPE) {
     return {
       name: 'Recovery',
@@ -127,6 +129,7 @@ export function buildDashboardCuratedAutoTile(
       dataValueType: ChartDataValueTypes.Total,
       dataCategoryType: ChartDataCategoryTypes.DateType,
       dataTimeInterval: TimeIntervals.Daily,
+      displaySettings: getDefaultDashboardChartTileDisplaySettingsForChartType(DASHBOARD_FORM_CHART_TYPE),
     };
   }
 
@@ -138,6 +141,7 @@ export function buildDashboardCuratedAutoTile(
     [DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE]: 'Intensity Distribution',
     [DASHBOARD_EFFICIENCY_TREND_CHART_TYPE]: 'Efficiency Trend',
   };
+  const displaySettings = getDefaultDashboardChartTileDisplaySettingsForChartType(chartType);
 
   return {
     name: chartNameByType[chartType],
@@ -149,6 +153,7 @@ export function buildDashboardCuratedAutoTile(
     dataValueType: ChartDataValueTypes.Total,
     dataCategoryType: ChartDataCategoryTypes.DateType,
     dataTimeInterval: TimeIntervals.Weekly,
+    ...(displaySettings ? { displaySettings } : {}),
   };
 }
 

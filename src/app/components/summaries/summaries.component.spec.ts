@@ -25,7 +25,9 @@ import { DashboardAutoTileService } from '../../services/dashboard-auto-tile.ser
 import * as dashboardTileViewModelHelper from '../../helpers/dashboard-tile-view-model.helper';
 import {
   DASHBOARD_ACWR_KPI_CHART_TYPE,
+  DASHBOARD_EFFICIENCY_TREND_CHART_TYPE,
   DASHBOARD_FORM_CHART_TYPE,
+  DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE,
   DASHBOARD_RECOVERY_NOW_CHART_TYPE,
   DASHBOARD_SLEEP_TREND_CHART_TYPE,
 } from '../../helpers/dashboard-special-chart-types';
@@ -386,6 +388,11 @@ describe('SummariesComponent', () => {
         removeDescentForEventTypes: [ActivityTypes.Cycling],
       },
       sleepSessions: [],
+      sleepTrendWindow: expect.objectContaining({
+        range: '14d',
+        startMs: expect.any(Number),
+        endMs: expect.any(Number),
+      }),
       logger: mockLogger,
       derivedMetrics: {
         formPoints: null,
@@ -952,6 +959,98 @@ describe('SummariesComponent', () => {
       tiles: component.user.settings.dashboardSettings.tiles,
     });
     expect(mockEventService.getEventsBy).toHaveBeenLastCalledWith(component.user, [], 'startDate', false, 0);
+  });
+
+  it('should persist derived chart range changes on the owning tile', async () => {
+    buildDashboardTileViewModelsSpy.mockReturnValue([]);
+    component.user = {
+      uid: 'user-1',
+      settings: {
+        dashboardSettings: {
+          tiles: [{
+            type: TileTypes.Chart,
+            order: 0,
+            chartType: DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE,
+            dataType: 'Training Stress Score',
+            dataValueType: ChartDataValueTypes.Total,
+            dataCategoryType: ChartDataCategoryTypes.DateType,
+            size: { columns: 1, rows: 1 },
+            displaySettings: { derivedChartRange: '1y' },
+          }],
+        },
+      },
+    } as any;
+
+    await component.onTileDerivedChartRangeChange(0, '12w');
+
+    expect(component.user.settings.dashboardSettings.tiles[0].displaySettings).toEqual({
+      derivedChartRange: '12w',
+    });
+    expectDashboardSettingsWrite(component.user, {
+      tiles: component.user.settings.dashboardSettings.tiles,
+    });
+  });
+
+  it('should persist Form/TSS timeline window changes on the owning tile', async () => {
+    buildDashboardTileViewModelsSpy.mockReturnValue([]);
+    component.user = {
+      uid: 'user-1',
+      settings: {
+        dashboardSettings: {
+          tiles: [{
+            type: TileTypes.Chart,
+            order: 0,
+            chartType: DASHBOARD_FORM_CHART_TYPE,
+            dataType: 'Training Stress Score',
+            dataValueType: ChartDataValueTypes.Total,
+            dataCategoryType: ChartDataCategoryTypes.DateType,
+            size: { columns: 1, rows: 1 },
+            displaySettings: { formTimelineWindow: 'w' },
+          }],
+        },
+      },
+    } as any;
+
+    await component.onTileFormTimelineWindowChange(0, 'm');
+
+    expect(component.user.settings.dashboardSettings.tiles[0].displaySettings).toEqual({
+      formTimelineWindow: 'm',
+    });
+    expectDashboardSettingsWrite(component.user, {
+      tiles: component.user.settings.dashboardSettings.tiles,
+    });
+  });
+
+  it('should rollback tile display settings when persistence fails', async () => {
+    buildDashboardTileViewModelsSpy.mockReturnValue([]);
+    mockUserService.updateUserProperties.mockRejectedValueOnce(new Error('persist failed'));
+    component.user = {
+      uid: 'user-1',
+      settings: {
+        dashboardSettings: {
+          tiles: [{
+            type: TileTypes.Chart,
+            order: 0,
+            chartType: DASHBOARD_EFFICIENCY_TREND_CHART_TYPE,
+            dataType: 'Training Stress Score',
+            dataValueType: ChartDataValueTypes.Total,
+            dataCategoryType: ChartDataCategoryTypes.DateType,
+            size: { columns: 1, rows: 1 },
+            displaySettings: { derivedChartRange: '8w' },
+          }],
+        },
+      },
+    } as any;
+
+    await component.onTileDerivedChartRangeChange(0, 'all');
+
+    expect(component.user.settings.dashboardSettings.tiles[0].displaySettings).toEqual({
+      derivedChartRange: '8w',
+    });
+    expect(mockLogger.error).toHaveBeenCalledWith(
+      '[SummariesComponent] Failed to persist dashboard tile display settings',
+      expect.any(Error),
+    );
   });
 
   it('should keep sleep listening independent from dashboard event date filters', async () => {

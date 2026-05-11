@@ -215,7 +215,7 @@ describe('ChartsFormComponent', () => {
     expect(mockChart.on).not.toHaveBeenCalledWith('restore', expect.any(Function));
   });
 
-  it('should expose current-day readiness stats while keeping Latest TSS from latest real point', async () => {
+  it('should expose current-day readiness stats while keeping latest workout TSS from latest real point', async () => {
     component.absoluteLatestPoint = {
       time: Date.UTC(2024, 1, 5),
       trainingStressScore: 18,
@@ -228,6 +228,15 @@ describe('ChartsFormComponent', () => {
     fixture.detectChanges();
     await waitForChartStabilization();
 
+    const labels = Array.from(
+      fixture.nativeElement.querySelectorAll('.form-stat-label')
+    ).map((element: Element) => element.textContent?.trim());
+    expect(labels).toEqual([
+      'Current CTL',
+      'Current ATL',
+      'Current TSB',
+      'Latest workout TSS',
+    ]);
     expect(component.status().title).toBe('Maintaining fitness');
     expect(component.headlineStats()).toEqual({
       fitness: {

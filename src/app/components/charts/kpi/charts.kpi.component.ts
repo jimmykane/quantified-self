@@ -138,6 +138,7 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
   public title = 'ACWR';
   public titleDisplay = 'ACWR';
   public primaryValueText = '--';
+  public primaryValueIsText = false;
   public primaryLabel = 'Ratio';
   public secondaryLabel = 'Acute / chronic load';
   public secondaryValueText = '';
@@ -260,6 +261,9 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
       suffix: presentation.primarySuffix || '',
       signed: presentation.primarySigned === true,
     });
+    this.primaryValueIsText = presentation.primaryValue === null
+      && typeof presentation.primaryValueText === 'string'
+      && presentation.primaryValueText.trim().length > 0;
     this.secondaryValueText = presentation.secondaryValueText || '';
 
     const hasRenderableValue = presentation.primaryValue !== null || !!presentation.primaryValueText;
@@ -289,8 +293,8 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
       return {
         title: 'Form Now',
         primaryValue: context?.value ?? null,
-        primaryLabel: 'Same-day TSB',
-        secondaryLabel: 'Current readiness state',
+        primaryLabel: 'Current TSB',
+        secondaryLabel: 'Current readiness',
         primarySigned: true,
         trend: (context?.trend8Weeks || []).map(point => ({ time: point.time, value: point.value })),
       };
@@ -301,7 +305,7 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
       return {
         title: 'Fitness (CTL)',
         primaryValue: context?.value ?? null,
-        primaryLabel: 'CTL',
+        primaryLabel: 'Current CTL',
         secondaryLabel: '42-day TSS load',
         trend: (context?.trend8Weeks || []).map(point => ({ time: point.time, value: point.value })),
       };
@@ -312,7 +316,7 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
       return {
         title: 'Fatigue (ATL)',
         primaryValue: context?.value ?? null,
-        primaryLabel: 'ATL',
+        primaryLabel: 'Current ATL',
         secondaryLabel: '7-day TSS load',
         trend: (context?.trend8Weeks || []).map(point => ({ time: point.time, value: point.value })),
       };
@@ -335,7 +339,7 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
       return {
         title: 'Form +7d',
         primaryValue: context?.value ?? null,
-        primaryLabel: 'Projected same-day TSB',
+        primaryLabel: 'Projected TSB',
         secondaryLabel: 'Zero-load forecast',
         primarySigned: true,
         trend: (context?.trend8Weeks || []).map(point => ({ time: point.time, value: point.value })),
@@ -394,8 +398,8 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
       return {
         title: 'Ramp Rate',
         primaryValue: context?.rampRate ?? null,
-        primaryLabel: 'CTL delta (7d)',
-        secondaryLabel: ctlTodayText ? 'CTL today' : 'Fitness acceleration over the last 7 days',
+        primaryLabel: '7d CTL change',
+        secondaryLabel: ctlTodayText ? 'Current CTL' : 'Fitness acceleration over the last 7 days',
         secondaryValueText: ctlTodayText,
         trend: (context?.trend8Weeks || []).map(point => ({ time: point.time, value: point.value })),
       };
@@ -446,7 +450,7 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
       primaryValue: null,
       primaryValueText: status.label,
       primaryLabel: status.caption || 'Current state',
-      secondaryLabel: detailParts.length ? 'Load signals' : 'Form and ramp summary',
+      secondaryLabel: detailParts.length ? 'Current signals' : 'Current form and ramp',
       secondaryValueText: detailParts.join(' / '),
       trend: (this.formNow?.trend8Weeks || []).map(point => ({ time: point.time, value: point.value })),
     };
@@ -462,8 +466,8 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
     return {
       title: 'Fitness Trend',
       primaryValue: trendDelta,
-      primaryLabel: 'CTL delta (4w)',
-      secondaryLabel: currentFitnessText ? 'CTL now' : 'Recent CTL direction',
+      primaryLabel: '4w CTL change',
+      secondaryLabel: currentFitnessText ? 'Current CTL' : 'Recent CTL direction',
       secondaryValueText: currentFitnessText,
       primarySigned: true,
       trend: (context?.trend8Weeks || []).map(point => ({ time: point.time, value: point.value })),
@@ -480,8 +484,8 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
     return {
       title: 'Fatigue Trend',
       primaryValue: trendDelta,
-      primaryLabel: 'ATL delta (1w)',
-      secondaryLabel: currentFatigueText ? 'ATL now' : 'Short-term fatigue direction',
+      primaryLabel: '1w ATL change',
+      secondaryLabel: currentFatigueText ? 'Current ATL' : 'Short-term fatigue direction',
       secondaryValueText: currentFatigueText,
       primarySigned: true,
       trend: (context?.trend8Weeks || []).map(point => ({ time: point.time, value: point.value })),
@@ -499,7 +503,7 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
       primaryValue: debt.days,
       primaryValueText: debt.label,
       primaryLabel: 'Zero-load days',
-      secondaryLabel: formNowText ? 'TSB now' : 'Estimated days to neutral',
+      secondaryLabel: formNowText ? 'Current TSB' : 'Estimated days to neutral',
       secondaryValueText: formNowText,
       trend: (this.formNow?.trend8Weeks || []).map(point => ({ time: point.time, value: point.value })),
     };

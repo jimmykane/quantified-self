@@ -115,8 +115,17 @@ export interface AppDashboardTileEventFiltersInterface {
     activityTypes?: ActivityTypes[];
 }
 
+export type AppDashboardDerivedChartRange = '8w' | '12w' | '6m' | '1y' | 'all';
+export type AppDashboardFormTimelineWindow = 'w' | 'm' | 'y';
+
+export interface AppDashboardChartTileDisplaySettingsInterface {
+    derivedChartRange?: AppDashboardDerivedChartRange;
+    formTimelineWindow?: AppDashboardFormTimelineWindow;
+}
+
 export interface AppDashboardChartTileSettingsInterface extends TileChartSettingsInterface {
     eventFilters?: AppDashboardTileEventFiltersInterface;
+    displaySettings?: AppDashboardChartTileDisplaySettingsInterface;
 }
 
 export interface AppDashboardMapTileSettingsInterface extends TileMapSettingsInterface {

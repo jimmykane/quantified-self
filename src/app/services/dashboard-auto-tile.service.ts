@@ -2,10 +2,12 @@ import { Injectable, inject } from '@angular/core';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import {
   TileSettingsInterface,
+  TileTypes,
 } from '@sports-alliance/sports-lib';
 import { Subscription, take } from 'rxjs';
 import {
   AppDashboardAutoTileState,
+  AppDashboardChartTileDisplaySettingsInterface,
   AppDashboardChartTileSettingsInterface,
   AppDashboardMapTileSettingsInterface,
   AppDashboardSettingsInterface,
@@ -38,6 +40,7 @@ import {
   getDashboardCuratedChartDefinitions,
 } from '../helpers/dashboard-special-chart-types';
 import { cloneDashboardTileEventFilters } from '../helpers/dashboard-tile-event-filters.helper';
+import { cloneDashboardChartTileDisplaySettingsForChartType } from '../helpers/dashboard-chart-display-settings.helper';
 import { AppSleepService } from './app.sleep.service';
 import { AppUserService } from './app.user.service';
 import { LoggerService } from './logger.service';
@@ -334,7 +337,10 @@ export class DashboardAutoTileService {
       const clonedTile = {
         ...tile,
         size: tile.size ? { ...tile.size } : tile.size,
-      } as TileSettingsInterface & { eventFilters?: AppDashboardTileEventFiltersInterface };
+      } as TileSettingsInterface & {
+        eventFilters?: AppDashboardTileEventFiltersInterface;
+        displaySettings?: AppDashboardChartTileDisplaySettingsInterface;
+      };
       const eventFilters = cloneDashboardTileEventFilters(
         (tile as AppDashboardChartTileSettingsInterface | AppDashboardMapTileSettingsInterface).eventFilters,
       );
@@ -342,6 +348,18 @@ export class DashboardAutoTileService {
         clonedTile.eventFilters = eventFilters;
       } else {
         delete clonedTile.eventFilters;
+      }
+      if (tile.type === TileTypes.Chart) {
+        const chartTile = tile as AppDashboardChartTileSettingsInterface;
+        const displaySettings = cloneDashboardChartTileDisplaySettingsForChartType(
+          chartTile.chartType,
+          chartTile.displaySettings,
+        );
+        if (displaySettings) {
+          clonedTile.displaySettings = displaySettings;
+        } else {
+          delete clonedTile.displaySettings;
+        }
       }
       return clonedTile as TileSettingsInterface;
     });

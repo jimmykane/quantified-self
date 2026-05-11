@@ -407,6 +407,28 @@ describe('dashboard-tile-view-model.helper', () => {
     expect((viewModels[0] as any).absoluteLatestFormPoint).toEqual(derivedPoints[1]);
   });
 
+  it('should preserve persisted display settings on derived curated chart view models', () => {
+    const viewModels = buildDashboardTileViewModels({
+      tiles: [{
+        type: TileTypes.Chart,
+        order: 0,
+        chartType: DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE as any,
+        dataType: 'Training Stress Score',
+        dataValueType: ChartDataValueTypes.Total,
+        dataCategoryType: ChartDataCategoryTypes.DateType,
+        dataTimeInterval: TimeIntervals.Weekly,
+        size: { columns: 1, rows: 1 },
+        displaySettings: { derivedChartRange: '12w' },
+      } as any],
+      events: [],
+      derivedMetrics: {
+        intensityDistribution: { weeks: [] } as any,
+      },
+    });
+
+    expect((viewModels[0] as any).displaySettings).toEqual({ derivedChartRange: '12w' });
+  });
+
   it('should not synthesize zero-load form decay points', () => {
     const derivedPoints = [
       {

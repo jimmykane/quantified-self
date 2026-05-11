@@ -56,12 +56,19 @@ import {
   DASHBOARD_DERIVED_CHART_DEFAULT_RANGE,
   DASHBOARD_DERIVED_CHART_RANGE_OPTIONS,
   normalizeDashboardDerivedChartRange,
-  type DashboardDerivedChartRange,
 } from '../../../helpers/dashboard-derived-chart-range.helper';
+import {
+  DASHBOARD_FORM_TIMELINE_DEFAULT_WINDOW,
+  normalizeDashboardFormTimelineWindow,
+} from '../../../helpers/dashboard-chart-display-settings.helper';
 import { resolveDashboardChartInfoTooltip } from '../../../helpers/dashboard-chart-info.helper';
 import type { DerivedMetricSnapshotStatus } from '@shared/derived-metrics';
 import type { DashboardDerivedMetricStatus } from '../../../helpers/derived-metric-status.helper';
-import type { AppDashboardSleepTrendRange } from '../../../models/app-user.interface';
+import type {
+  AppDashboardDerivedChartRange,
+  AppDashboardFormTimelineWindow,
+  AppDashboardSleepTrendRange,
+} from '../../../models/app-user.interface';
 import {
   DASHBOARD_SLEEP_TREND_RANGE_OPTIONS,
   normalizeDashboardSleepTrendRange,
@@ -72,7 +79,6 @@ import type {
 } from '../../../models/app-user.interface';
 import type { DashboardTileEventNavigationDirection } from '../../../helpers/dashboard-tile-event-filters.helper';
 import type { ChartRangeSelectorOption } from '../../charts/shared/chart-range-selector/chart-range-selector.component';
-import type { DashboardFormTimelineWindow } from '../../charts/form/charts.form.component';
 import { DASHBOARD_ECHARTS_MOBILE_TAP_FEEDBACK_OPTIONS } from '../../../helpers/echarts-tooltip-interaction.helper';
 
 type DashboardRecoveryNowSnapshotStatus = DerivedMetricSnapshotStatus | 'missing' | 'queued' | 'processing';
@@ -133,7 +139,23 @@ export class TileChartComponent extends TileAbstractDirective {
   @Input() intensityDistributionStatus?: DashboardDerivedMetricStatus | null;
   @Input() efficiencyTrendStatus?: DashboardDerivedMetricStatus | null;
   @Input() absoluteLatestFormPoint?: DashboardFormPoint | null;
+  @Input()
+  set derivedChartRange(value: AppDashboardDerivedChartRange | null | undefined) {
+    this.selectedDerivedChartRange = normalizeDashboardDerivedChartRange(value) as AppDashboardDerivedChartRange;
+  }
+  get derivedChartRange(): AppDashboardDerivedChartRange {
+    return this.selectedDerivedChartRange;
+  }
+  @Input()
+  set formTimelineWindow(value: AppDashboardFormTimelineWindow | null | undefined) {
+    this.selectedFormTimelineWindow = normalizeDashboardFormTimelineWindow(value);
+  }
+  get formTimelineWindow(): AppDashboardFormTimelineWindow {
+    return this.selectedFormTimelineWindow;
+  }
   @Output() editInDashboardManager = new EventEmitter<number>();
+  @Output() derivedChartRangeChange = new EventEmitter<AppDashboardDerivedChartRange>();
+  @Output() formTimelineWindowChange = new EventEmitter<AppDashboardFormTimelineWindow>();
   @Output() sleepTrendRangeChange = new EventEmitter<AppDashboardSleepTrendRange>();
   @Output() sleepTrendNavigate = new EventEmitter<DashboardSleepTrendNavigationDirection>();
   @Output() eventFilterRangeChange = new EventEmitter<AppDashboardTileEventFilterRange>();
@@ -163,8 +185,8 @@ export class TileChartComponent extends TileAbstractDirective {
   public efficiencyTrendChartType = DASHBOARD_EFFICIENCY_TREND_CHART_TYPE;
   public sleepTrendChartType = DASHBOARD_SLEEP_TREND_CHART_TYPE;
   public isTileActionSaving = false;
-  public derivedChartRange: DashboardDerivedChartRange = DASHBOARD_DERIVED_CHART_DEFAULT_RANGE;
-  public formTimelineWindow: DashboardFormTimelineWindow = 'w';
+  private selectedDerivedChartRange: AppDashboardDerivedChartRange = DASHBOARD_DERIVED_CHART_DEFAULT_RANGE as AppDashboardDerivedChartRange;
+  private selectedFormTimelineWindow: AppDashboardFormTimelineWindow = DASHBOARD_FORM_TIMELINE_DEFAULT_WINDOW;
   public readonly derivedRangeSelectorOptions: ReadonlyArray<ChartRangeSelectorOption> = DASHBOARD_DERIVED_CHART_RANGE_OPTIONS.map(option => ({
     value: option.range,
     label: option.label,
@@ -213,14 +235,21 @@ export class TileChartComponent extends TileAbstractDirective {
   }
 
   onDerivedRangeSelection(value: unknown): void {
-    this.derivedChartRange = normalizeDashboardDerivedChartRange(value);
+    const nextRange = normalizeDashboardDerivedChartRange(value) as AppDashboardDerivedChartRange;
+    if (nextRange === this.selectedDerivedChartRange) {
+      return;
+    }
+    this.selectedDerivedChartRange = nextRange;
+    this.derivedChartRangeChange.emit(nextRange);
   }
 
   onFormTimelineWindowSelection(value: unknown): void {
-    if (value !== 'w' && value !== 'm' && value !== 'y') {
+    const nextWindow = normalizeDashboardFormTimelineWindow(value);
+    if (nextWindow === this.selectedFormTimelineWindow) {
       return;
     }
-    this.formTimelineWindow = value;
+    this.selectedFormTimelineWindow = nextWindow;
+    this.formTimelineWindowChange.emit(nextWindow);
   }
 
   onSleepRangeSelection(value: unknown): void {

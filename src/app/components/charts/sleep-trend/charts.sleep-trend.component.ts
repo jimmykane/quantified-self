@@ -153,13 +153,22 @@ export class ChartsSleepTrendComponent implements AfterViewInit, OnChanges, OnDe
   }
 
   private updateHeaderAndErrorState(points: DashboardSleepTrendPoint[] = this.getPoints()): void {
-    const latest = this.sleepTrend?.latestPoint || points[points.length - 1] || null;
+    const latest = this.sleepTrend?.latestPoint || this.getLatestRealPoint(points);
     const latestHrvMs = this.toFiniteMetric(latest?.averageHrvMs);
     this.latestDurationText = latest ? formatSleepDuration(latest.totalSeconds) : '--';
     this.latestScoreText = latest?.score !== null && latest?.score !== undefined ? `${Math.round(latest.score)}` : '--';
     this.latestHrvText = latestHrvMs !== null ? `${Math.round(latestHrvMs)}` : '--';
     this.latestContextText = latest ? `${latest.providerLabel} · ${this.formatDateTime(latest.endTimeMs)}` : 'Latest sleep';
-    this.showNoDataError = points.length === 0;
+    this.showNoDataError = this.sleepTrend?.hasRealPoints === false || points.every(point => point.isPlaceholder);
+  }
+
+  private getLatestRealPoint(points: DashboardSleepTrendPoint[]): DashboardSleepTrendPoint | null {
+    for (let index = points.length - 1; index >= 0; index -= 1) {
+      if (!points[index].isPlaceholder) {
+        return points[index];
+      }
+    }
+    return null;
   }
 
   private buildOption(points: DashboardSleepTrendPoint[]): ChartOption {
@@ -349,6 +358,13 @@ export class ChartsSleepTrendComponent implements AfterViewInit, OnChanges, OnDe
     const point = Number.isFinite(dataIndex) ? points[dataIndex] : null;
     if (!point) {
       return '';
+    }
+    if (point.isPlaceholder) {
+      return renderDashboardEChartsTooltipCard(style, {
+        title: point.categoryLabel,
+        subtitle: 'No sleep data',
+        rows: [],
+      });
     }
     const averageHrvMs = this.toFiniteMetric(point.averageHrvMs);
 

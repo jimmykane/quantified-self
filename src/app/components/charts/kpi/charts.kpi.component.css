@@ -159,6 +159,18 @@
   white-space: nowrap;
 }
 
+.kpi-layout-row .kpi-value.kpi-value-text {
+  font-size: 1.06rem;
+  hyphens: auto;
+  line-height: 0.92;
+  max-width: 96px;
+  overflow: visible;
+  overflow-wrap: normal;
+  text-overflow: clip;
+  text-wrap: balance;
+  white-space: normal;
+}
+
 .kpi-primary-label {
   margin-top: 2px;
   font-size: 0.68rem;
@@ -259,6 +271,12 @@
   .kpi-layout-row .kpi-value {
     font-size: 1.28rem;
     max-width: 82px;
+  }
+
+  .kpi-layout-row .kpi-value.kpi-value-text {
+    font-size: 1rem;
+    line-height: 0.94;
+    max-width: 76px;
   }
 
   .kpi-layout-row .kpi-subtitle-row {

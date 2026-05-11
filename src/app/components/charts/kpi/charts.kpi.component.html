@@ -26,7 +26,9 @@
         </div>
       </div>
       <div class="kpi-value-block">
-        <div class="kpi-value">{{ primaryValueText }}</div>
+        <div class="kpi-value" [class.kpi-value-text]="primaryValueIsText">
+          {{ primaryValueText }}
+        </div>
       </div>
       } @else {
       <div class="title-row">
@@ -39,7 +41,9 @@
         }
       </div>
       <div class="kpi-value-block">
-        <div class="kpi-value">{{ primaryValueText }}</div>
+        <div class="kpi-value" [class.kpi-value-text]="primaryValueIsText">
+          {{ primaryValueText }}
+        </div>
         <div class="kpi-primary-label">{{ primaryLabel }}</div>
       </div>
       <div class="kpi-meta">
