@@ -1175,6 +1175,61 @@ describe('SummariesComponent', () => {
     );
   });
 
+  it('should rebuild sleep tiles when paging to a window with the same session array', async () => {
+    const nowMs = Date.UTC(2026, 3, 30, 12, 0, 0);
+    const fourteenDaysMs = 14 * 24 * 60 * 60 * 1000;
+    const sleepStreams: Array<Subject<any[]>> = [];
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(nowMs));
+    buildDashboardTileViewModelsSpy.mockReturnValue([]);
+    mockSleepService.watchForDashboard.mockImplementation(() => {
+      const stream = new Subject<any[]>();
+      sleepStreams.push(stream);
+      return stream.asObservable();
+    });
+    component.user = {
+      uid: 'user-1',
+      settings: {
+        dashboardSettings: {
+          sleepTrend: { range: '14d' },
+          tiles: [{
+            type: TileTypes.Chart,
+            order: 0,
+            chartType: 'SleepTrend',
+            dataType: 'SleepDuration',
+            dataValueType: ChartDataValueTypes.Total,
+            dataCategoryType: ChartDataCategoryTypes.DateType,
+            size: { columns: 2, rows: 1 },
+          }],
+        },
+      },
+    } as any;
+
+    await component.ngOnChanges({
+      user: {
+        currentValue: component.user,
+        previousValue: null,
+        firstChange: true,
+        isFirstChange: () => true,
+      } as any,
+    });
+    buildDashboardTileViewModelsSpy.mockClear();
+
+    component.onSleepTrendNavigate('older');
+    sleepStreams[1].next([]);
+    await Promise.resolve();
+
+    expect(buildDashboardTileViewModelsSpy).toHaveBeenCalledTimes(1);
+    expect(buildDashboardTileViewModelsSpy).toHaveBeenCalledWith(expect.objectContaining({
+      sleepSessions: [],
+      sleepTrendWindow: {
+        range: '14d',
+        startMs: nowMs - (2 * fourteenDaysMs),
+        endMs: nowMs - fourteenDaysMs,
+      },
+    }));
+  });
+
   it('should treat the 1y sleep range as a bounded pageable window', async () => {
     const nowMs = Date.UTC(2026, 3, 30, 12, 0, 0);
     const yearMs = 365 * 24 * 60 * 60 * 1000;
