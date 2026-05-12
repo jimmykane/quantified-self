@@ -4,6 +4,7 @@ import {
   ActivityTypes,
   ChartDataCategoryTypes,
   ChartDataValueTypes,
+  DataAscent,
   DataDistance,
   DataPaceAvg,
   DistanceUnits,
@@ -342,6 +343,37 @@ describe('ChartsColumnsComponent', () => {
     expect(option.xAxis.axisLabel.formatter(200000)).toBe('200 km');
     expect(option.xAxis.axisLabel.formatter(100000)).not.toContain('.00');
     expect(option.xAxis.axisLabel.formatter(100000)).not.toContain('Km');
+  });
+
+  it('should keep vertical ascent axis and value labels on the correct thousands scale', async () => {
+    component.vertical = true;
+    component.type = 'pyramids';
+    component.chartDataType = DataAscent.type;
+    component.chartDataValueType = ChartDataValueTypes.Total;
+    component.chartDataCategoryType = ChartDataCategoryTypes.DateType;
+    component.chartDataTimeInterval = TimeIntervals.Monthly;
+    component.data = [
+      { time: Date.UTC(2026, 1, 1), [ChartDataValueTypes.Total]: 2053, count: 1 },
+      { time: Date.UTC(2026, 2, 1), [ChartDataValueTypes.Total]: 6353, count: 1 },
+      { time: Date.UTC(2026, 3, 1), [ChartDataValueTypes.Total]: 7304, count: 1 },
+    ];
+
+    fixture.detectChanges();
+    await waitForChartStabilization();
+
+    const option = getLastOption();
+    expect(option.yAxis.axisLabel.formatter(1500)).toBe('1.5k m');
+    expect(option.yAxis.axisLabel.formatter(9000)).toBe('9k m');
+    expect(option.yAxis.axisLabel.formatter(1500)).not.toBe('1.5 m');
+    const totalLabelSeries = option.series.find((seriesEntry: { name?: string }) => (
+      seriesEntry.name === '__date_activity_totals__'
+    ));
+    const renderedLabel = totalLabelSeries.renderItem({}, {
+      value: (dimension: number) => totalLabelSeries.data[1][dimension],
+      coord: () => [100, 100],
+    });
+    expect(renderedLabel.style.text).toBe('6.4k m');
+    expect(renderedLabel.style.text).not.toBe('6.353 m');
   });
 
   it('should fill missing daily date buckets with zero-valued bars', async () => {

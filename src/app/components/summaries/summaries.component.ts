@@ -633,19 +633,25 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       return;
     }
 
+    const hadPreviousSleepListener = this.sleepListenerKey !== null;
     if (this.sleepSubscription) {
       this.sleepSubscription.unsubscribe();
       this.sleepSubscription = null;
     }
 
+    let shouldRebuildForWindowChange = hadPreviousSleepListener;
     this.sleepListenerKey = listenerKey;
     this.sleepSubscription = this.sleepService
       .watchForDashboard(uid, window.startMs, window.endMs)
       .subscribe((sessions) => {
-        if (equal(this.sleepSessions, sessions)) {
+        const sessionsChanged = !equal(this.sleepSessions, sessions);
+        if (!sessionsChanged && !shouldRebuildForWindowChange) {
           return;
         }
-        this.sleepSessions = sessions;
+        if (sessionsChanged) {
+          this.sleepSessions = sessions;
+        }
+        shouldRebuildForWindowChange = false;
         void this.rebuildTilesFromCurrentState();
       });
   }

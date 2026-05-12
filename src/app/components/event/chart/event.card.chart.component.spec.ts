@@ -529,6 +529,54 @@ describe('EventCardChartComponent', () => {
     });
   });
 
+  it('falls back to Stryd distance when Distance lookup throws while syncing cursor to map', async () => {
+    chartSettingsSignal.set({
+      ...chartSettingsSignal(),
+      xAxisType: XAxisTypes.Distance,
+    });
+
+    const strydDistanceStream = { type: DataStrydDistance.type, getData: () => [0, 100, 200] };
+    const timeStream = { type: XAxisTypes.Time, getData: () => [0, 10, 20] };
+    const getStream = vi.fn((type: string) => {
+      if (type === DataDistance.type) {
+        throw new Error(`No stream found with type ${DataDistance.type}`);
+      }
+      if (type === DataStrydDistance.type) {
+        return strydDistanceStream;
+      }
+      if (type === XAxisTypes.Time) {
+        return timeStream;
+      }
+      return null;
+    });
+    const activity = {
+      startDate: new Date('2024-01-01T00:00:00.000Z'),
+      getID: () => 'a1',
+      getAllStreams: () => [strydDistanceStream, timeStream],
+      getStream,
+    } as any;
+
+    component.selectedActivities = [activity];
+    component.event = {
+      isMultiSport: () => false,
+      getActivities: () => [activity],
+    } as any;
+
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    component.onPanelCursorPositionChange(120);
+    await new Promise((resolve) => setTimeout(resolve, 300));
+
+    expect(getStream).toHaveBeenCalledWith(DataDistance.type);
+    expect(getStream).toHaveBeenCalledWith(DataStrydDistance.type);
+    expect(mockActivityCursorService.setCursor).toHaveBeenCalledWith({
+      activityID: 'a1',
+      time: activity.startDate.getTime() + 10 * 1000,
+      byChart: true,
+    });
+  });
+
   it('restores persisted datatype visibility when ids are valid', async () => {
     mockChartSettingsStorage.getDataTypeIDsToShow.mockReturnValue(['speed']);
     vi.spyOn(eventDataHelper, 'buildEventChartPanels').mockReturnValue([

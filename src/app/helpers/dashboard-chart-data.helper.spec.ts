@@ -1,6 +1,8 @@
 import {
   ChartDataCategoryTypes,
   ChartDataValueTypes,
+  DataAscent,
+  DataDescent,
   DataDistance,
   DataDuration,
   DataPaceAvg,
@@ -200,6 +202,32 @@ describe('dashboard-chart-data.helper', () => {
       normalizeUserUnitSettings({ distanceUnits: DistanceUnits.Miles }),
       20000,
     )).toBe('6.22 mi');
+  });
+
+  it('should format ascent and descent axis values without misreading grouped meters as decimals', () => {
+    const unitSettings = normalizeUserUnitSettings({});
+
+    expect(formatDashboardAxisNumericValue(
+      DataAscent.type,
+      1500,
+      undefined,
+      unitSettings,
+      9000,
+    )).toBe('1.5k m');
+    expect(formatDashboardAxisNumericValue(
+      DataDescent.type,
+      9000,
+      undefined,
+      unitSettings,
+      9000,
+    )).toBe('9k m');
+    expect(formatDashboardAxisNumericValue(
+      DataAscent.type,
+      900,
+      undefined,
+      unitSettings,
+      9000,
+    )).toBe('900 m');
   });
 
   it('should sort activity rows by their selected aggregate value', () => {

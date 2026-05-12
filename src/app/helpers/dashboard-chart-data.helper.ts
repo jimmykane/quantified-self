@@ -1,6 +1,8 @@
 import {
   ChartDataCategoryTypes,
   ChartDataValueTypes,
+  DataAscent,
+  DataDescent,
   DataDistance,
   DataDuration,
   DataInterface,
@@ -391,6 +393,14 @@ export function formatDashboardAxisNumericValue(
     }
 
     return `${formatCompactAxisNumber(numericValue)} m`;
+  }
+
+  if (chartDataType === DataAscent.type || chartDataType === DataDescent.type) {
+    const display = resolveUnitAwareDisplayFromValue(chartDataType, numericValue, unitSettings, {
+      compactAscentDescent: true,
+      stripRepeatedUnit: true,
+    });
+    return formatCompactAxisDisplay(display) || formatDashboardNumericValue(chartDataType, numericValue, logger, unitSettings);
   }
 
   const display = resolveUnitAwareDisplayFromValue(chartDataType, numericValue, unitSettings, {
