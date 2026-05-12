@@ -15,6 +15,8 @@ import {
   ActivityTypesHelper,
   ChartDataCategoryTypes,
   ChartDataValueTypes,
+  DataAscent,
+  DataDescent,
   TimeIntervals,
   type UserUnitSettingsInterface,
 } from '@sports-alliance/sports-lib';
@@ -501,7 +503,7 @@ export class ChartsColumnsComponent implements AfterViewInit, OnChanges, OnDestr
       x: coord[0] + offsetX,
       y: coord[1] + offsetY,
       style: {
-        text: this.formatValue(total),
+        text: this.formatDataLabelValue(total),
         fill: textColor,
         fontFamily: "'Barlow Condensed', sans-serif",
         fontSize: isCompactLayout ? 11 : 12,
@@ -642,7 +644,7 @@ export class ChartsColumnsComponent implements AfterViewInit, OnChanges, OnDestr
           if (!point || !Number.isFinite(point.value)) {
             return '';
           }
-          return this.formatValue(point.value);
+          return this.formatDataLabelValue(point.value);
         }
       },
       emphasis: {
@@ -723,6 +725,19 @@ export class ChartsColumnsComponent implements AfterViewInit, OnChanges, OnDestr
       this.getNormalizedUnitSettings(),
       axisMax,
     );
+  }
+
+  private formatDataLabelValue(value: number | null): string {
+    if (this.chartDataType === DataAscent.type || this.chartDataType === DataDescent.type) {
+      return formatDashboardAxisNumericValue(
+        this.chartDataType,
+        value,
+        this.logger,
+        this.getNormalizedUnitSettings(),
+        Math.abs(Number(value) || 0),
+      );
+    }
+    return this.formatValue(value);
   }
 
   private formatTooltip(
