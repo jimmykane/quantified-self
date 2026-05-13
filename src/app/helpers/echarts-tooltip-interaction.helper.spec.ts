@@ -21,10 +21,10 @@ describe('echarts-tooltip-interaction.helper', () => {
     expect(resolveEChartsTooltipTriggerOn(true, false)).toBe('mousemove|click');
   });
 
-  it('enables dashboard data tap and drag haptics without blank-surface click feedback', () => {
+  it('arms dashboard tap haptics after first interaction while keeping drag haptics enabled', () => {
     expect(DASHBOARD_ECHARTS_MOBILE_TAP_FEEDBACK_OPTIONS).toEqual({
-      axisPointerFeedback: 'always',
-      clickFeedback: true,
+      axisPointerFeedback: 'afterFirstInteraction',
+      clickFeedback: 'afterFirstInteraction',
       surfaceClickFeedback: false,
       surfaceDragFeedback: true,
     });

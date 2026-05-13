@@ -225,7 +225,6 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
     if (target?.closest('.title-info-button')) {
       return;
     }
-    this.hapticsService.selection();
     this.showInfoTooltip();
   }
 
