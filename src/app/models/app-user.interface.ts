@@ -145,6 +145,7 @@ export interface AppChartSettingsInterface extends Omit<UserChartSettingsInterfa
     theme?: ChartThemes;
     fillOpacityVersion?: number;
     syncChartHoverToMap?: boolean;
+    eventChartOverlayDataTypeByPrimary?: Record<string, string>;
 }
 
 export interface AppAppSettingsInterface extends UserAppSettingsInterface {

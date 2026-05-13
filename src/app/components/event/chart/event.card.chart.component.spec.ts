@@ -28,7 +28,7 @@ describe('EventCardChartComponent', () => {
   let fixture: ComponentFixture<EventCardChartComponent>;
   let component: EventCardChartComponent;
 
-  const chartSettingsSignal = signal({
+  const defaultChartSettings = {
     showAllData: false,
     showLaps: true,
     syncChartHoverToMap: false,
@@ -38,6 +38,11 @@ describe('EventCardChartComponent', () => {
     gainAndLossThreshold: 1,
     fillOpacity: 0.4,
     useAnimations: false,
+    eventChartOverlayDataTypeByPrimary: {},
+  } as any;
+
+  const chartSettingsSignal = signal({
+    ...defaultChartSettings,
   } as any);
 
   const mockUserSettingsQuery = {
@@ -75,6 +80,9 @@ describe('EventCardChartComponent', () => {
   };
 
   beforeEach(async () => {
+    chartSettingsSignal.set({
+      ...defaultChartSettings,
+    });
     mockUserSettingsQuery.updateChartSettings.mockResolvedValue(undefined);
     mockActivityCursorService.setCursor.mockReset();
     mockChartSettingsStorage.getDataTypeIDsToShow.mockReturnValue([]);
@@ -122,6 +130,16 @@ describe('EventCardChartComponent', () => {
     vi.useRealTimers();
     vi.restoreAllMocks();
   });
+
+  async function flushOverlayPersistQueue(): Promise<void> {
+    await ((component as any).eventChartOverlayPersistQueue as Promise<void>).catch(() => undefined);
+  }
+
+  async function flushMicrotasks(iterations = 4): Promise<void> {
+    for (let index = 0; index < iterations; index += 1) {
+      await Promise.resolve();
+    }
+  }
 
   it('should create and rebuild chart panels', async () => {
     const buildPanelsSpy = vi.spyOn(eventDataHelper, 'buildEventChartPanels').mockReturnValue([
@@ -665,6 +683,185 @@ describe('EventCardChartComponent', () => {
 
     expect(component.chartPanels.map((panel) => panel.dataType)).toEqual(['power']);
     expect(mockChartSettingsStorage.setDataTypeIDsToShow).toHaveBeenCalledWith(component.event, ['power']);
+  });
+
+  it('builds panel overlay views from all available metrics including hidden panels', async () => {
+    chartSettingsSignal.set({
+      ...chartSettingsSignal(),
+      eventChartOverlayDataTypeByPrimary: {
+        power: 'speed',
+      },
+    });
+    mockChartSettingsStorage.getDataTypeIDsToShow.mockReturnValue(['power']);
+    vi.spyOn(eventDataHelper, 'buildEventChartPanels').mockReturnValue([
+      {
+        dataType: 'power',
+        displayName: 'Power',
+        unit: 'W',
+        colorGroupKey: 'Power',
+        minX: 0,
+        maxX: 100,
+        series: [],
+      },
+      {
+        dataType: 'speed',
+        displayName: 'Speed',
+        unit: 'km/h',
+        colorGroupKey: 'Speed',
+        minX: 0,
+        maxX: 100,
+        series: [],
+      },
+      {
+        dataType: 'heart-rate',
+        displayName: 'Heart Rate',
+        unit: 'bpm',
+        colorGroupKey: 'Heart Rate',
+        minX: 0,
+        maxX: 100,
+        series: [],
+      },
+    ] as any);
+
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(component.chartPanels.map((panel) => panel.dataType)).toEqual(['power']);
+    expect(component.chartPanelViews).toHaveLength(1);
+    expect(component.chartPanelViews[0].overlayOptions.map((option) => option.dataType)).toEqual(['speed', 'heart-rate']);
+    expect(component.chartPanelViews[0].selectedOverlayDataType).toBe('speed');
+    expect(component.chartPanelViews[0].overlayPanel?.dataType).toBe('speed');
+  });
+
+  it('ignores unavailable saved overlays without deleting the global setting', async () => {
+    chartSettingsSignal.set({
+      ...chartSettingsSignal(),
+      eventChartOverlayDataTypeByPrimary: {
+        power: 'altitude',
+      },
+    });
+    vi.spyOn(eventDataHelper, 'buildEventChartPanels').mockReturnValue([
+      {
+        dataType: 'power',
+        displayName: 'Power',
+        unit: 'W',
+        colorGroupKey: 'Power',
+        minX: 0,
+        maxX: 100,
+        series: [],
+      },
+    ] as any);
+
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(component.chartPanelViews[0].overlayPanel).toBeNull();
+    expect(component.chartPanelViews[0].selectedOverlayDataType).toBeNull();
+    expect(mockUserSettingsQuery.updateChartSettings).not.toHaveBeenCalledWith(expect.objectContaining({
+      eventChartOverlayDataTypeByPrimary: expect.anything(),
+    }));
+  });
+
+  it('persists directional overlay choices and preserves other primary mappings', async () => {
+    chartSettingsSignal.set({
+      ...chartSettingsSignal(),
+      eventChartOverlayDataTypeByPrimary: {
+        speed: 'power',
+      },
+    });
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    component.onPanelOverlayDataTypeChange('power', 'speed');
+    await flushOverlayPersistQueue();
+
+    expect(mockUserSettingsQuery.updateChartSettings).toHaveBeenCalledWith({
+      eventChartOverlayDataTypeByPrimary: {
+        speed: 'power',
+        power: 'speed',
+      },
+    });
+    expect((component as any).eventChartOverlayDataTypeByPrimaryOverride).toEqual({
+      speed: 'power',
+      power: 'speed',
+    });
+  });
+
+  it('removes one directional overlay mapping when No overlay is selected', async () => {
+    chartSettingsSignal.set({
+      ...chartSettingsSignal(),
+      eventChartOverlayDataTypeByPrimary: {
+        power: 'speed',
+        speed: 'power',
+      },
+    });
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    component.onPanelOverlayDataTypeChange('power', null);
+    await flushOverlayPersistQueue();
+
+    expect(mockUserSettingsQuery.updateChartSettings).toHaveBeenCalledWith({
+      eventChartOverlayDataTypeByPrimary: {
+        speed: 'power',
+      },
+    });
+  });
+
+  it('keeps the latest optimistic overlay choice when an older persist request fails later', async () => {
+    const firstError = new Error('first failed');
+    let rejectFirst: ((error: Error) => void) | null = null;
+    mockUserSettingsQuery.updateChartSettings
+      .mockImplementationOnce(() => new Promise((_resolve, reject) => {
+        rejectFirst = reject;
+      }))
+      .mockResolvedValueOnce(undefined);
+
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    component.onPanelOverlayDataTypeChange('power', 'speed');
+    component.onPanelOverlayDataTypeChange('power', 'heart-rate');
+    await flushMicrotasks();
+    rejectFirst?.(firstError);
+    await flushOverlayPersistQueue();
+
+    expect((component as any).eventChartOverlayDataTypeByPrimaryOverride).toEqual({
+      power: 'heart-rate',
+    });
+    expect(mockLogger.error).toHaveBeenCalledWith('[EventCardChart] Failed to persist event chart overlay setting', firstError);
+  });
+
+  it('serializes overlay persistence so rapid changes are written in user order', async () => {
+    const writeOrder: Array<Record<string, string>> = [];
+    let resolveFirst: (() => void) | null = null;
+    mockUserSettingsQuery.updateChartSettings
+      .mockImplementationOnce((settings: any) => {
+        writeOrder.push(settings.eventChartOverlayDataTypeByPrimary);
+        return new Promise<void>((resolve) => {
+          resolveFirst = resolve;
+        });
+      })
+      .mockImplementationOnce((settings: any) => {
+        writeOrder.push(settings.eventChartOverlayDataTypeByPrimary);
+        return Promise.resolve();
+      });
+
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    component.onPanelOverlayDataTypeChange('power', 'speed');
+    component.onPanelOverlayDataTypeChange('power', 'heart-rate');
+    await flushMicrotasks();
+
+    expect(writeOrder).toHaveLength(1);
+    expect(writeOrder[0]).toEqual({ power: 'speed' });
+
+    resolveFirst?.();
+    await flushOverlayPersistQueue();
+
+    expect(writeOrder).toHaveLength(2);
+    expect(writeOrder[1]).toEqual({ power: 'heart-rate' });
   });
 
   it('skips panel rebuild when non-material settings change', async () => {

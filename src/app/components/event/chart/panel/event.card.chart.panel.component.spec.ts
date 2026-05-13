@@ -1,7 +1,9 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { NO_ERRORS_SCHEMA, SimpleChange } from '@angular/core';
+import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import {
+  DataAltitude,
   ChartCursorBehaviours,
   DataDistance,
   DataHeartRate,
@@ -20,6 +22,7 @@ import { EChartsLoaderService } from '../../../../services/echarts-loader.servic
 import { LoggerService } from '../../../../services/logger.service';
 import { getOrCreateEChartsTooltipHost } from '../../../../helpers/echarts-tooltip-host.helper';
 import { getViewportConstrainedTooltipPosition } from '../../../../helpers/echarts-tooltip-position.helper';
+import { MaterialModule } from '../../../../modules/material.module';
 
 describe('EventCardChartPanelComponent', () => {
   let fixture: ComponentFixture<EventCardChartPanelComponent>;
@@ -124,6 +127,7 @@ describe('EventCardChartPanelComponent', () => {
     });
 
     await TestBed.configureTestingModule({
+      imports: [MaterialModule, NoopAnimationsModule],
       declarations: [EventCardChartPanelComponent],
       providers: [
         { provide: EChartsLoaderService, useValue: eChartsLoaderMock },
@@ -340,6 +344,51 @@ describe('EventCardChartPanelComponent', () => {
       [1, null],
       [2, 41],
     ]);
+  });
+
+  it('renders an overlay panel on a secondary y-axis with dashed no-fill series', async () => {
+    component.overlayPanel = {
+      dataType: DataAltitude.type,
+      displayName: 'Altitude',
+      unit: 'm',
+      colorGroupKey: 'Altitude',
+      minX: 0,
+      maxX: 100,
+      series: [
+        {
+          id: 'a1::altitude',
+          activityID: 'a1',
+          activityName: 'Garmin',
+          color: '#0066cc',
+          streamType: DataAltitude.type,
+          displayName: 'Altitude',
+          unit: 'm',
+          points: [
+            { x: 0, y: 10, time: 0 },
+            { x: 10, y: 20, time: 10 },
+          ],
+        }
+      ],
+    } as any;
+
+    await renderComponent();
+
+    const option = getRenderedOption();
+    expect(option?.yAxis).toHaveLength(2);
+    expect(option?.yAxis?.[0]?.position).toBe('left');
+    expect(option?.yAxis?.[1]?.position).toBe('right');
+    expect(option?.yAxis?.[1]?.splitLine?.show).toBe(false);
+    expect(option?.series).toHaveLength(2);
+    expect(option?.series?.[0]?.yAxisIndex).toBe(0);
+    expect(option?.series?.[1]).toEqual(expect.objectContaining({
+      id: 'overlay::a1::altitude',
+      yAxisIndex: 1,
+    }));
+    expect(option?.series?.[1]?.areaStyle).toBeUndefined();
+    expect(option?.series?.[1]?.lineStyle).toEqual(expect.objectContaining({
+      type: 'dashed',
+      color: '#0066cc',
+    }));
   });
 
   it('keeps mobile panel interactions disabled until first tap, then enables them', async () => {
@@ -1425,6 +1474,57 @@ describe('EventCardChartPanelComponent', () => {
     getDataInstanceSpy.mockRestore();
   });
 
+  it('computes range stats for primary and overlay metrics grouped by activity', async () => {
+    component.overlayPanel = {
+      dataType: DataAltitude.type,
+      displayName: 'Altitude',
+      unit: 'm',
+      colorGroupKey: 'Altitude',
+      minX: 0,
+      maxX: 10,
+      series: [
+        {
+          id: 'a1::altitude',
+          activityID: 'a1',
+          activityName: 'Garmin',
+          color: '#0066cc',
+          streamType: DataAltitude.type,
+          displayName: 'Altitude',
+          unit: 'm',
+          points: [
+            { x: 0, y: 10, time: 0 },
+            { x: 10, y: 20, time: 10 },
+          ],
+        }
+      ],
+    } as any;
+    const getDataInstanceSpy = vi.spyOn(DynamicDataLoader, 'getDataInstanceFromDataType').mockImplementation((_type: string, value: number) => ({
+      getDisplayValue: () => value.toFixed(0),
+      getDisplayUnit: () => 'u',
+    } as any));
+
+    await renderComponent();
+
+    component.selectedRange = { start: 0, end: 10 };
+    component.ngOnChanges({
+      selectedRange: new SimpleChange(null, component.selectedRange, false),
+    });
+
+    expect(component.rangeStats).toHaveLength(1);
+    expect(component.rangeStats[0].entries.map((entry) => entry.label)).toEqual([
+      'Power Min',
+      'Power Avg',
+      'Power Max',
+      'Altitude Min',
+      'Altitude Avg',
+      'Altitude Max',
+      'Altitude Gain',
+      'Altitude Loss',
+    ]);
+
+    getDataInstanceSpy.mockRestore();
+  });
+
   it('exposes selection start/end/span labels for the compact range readout', () => {
     component.xAxisType = XAxisTypes.Duration;
     component.selectedRange = { start: 65, end: 140 };
@@ -1795,6 +1895,46 @@ describe('EventCardChartPanelComponent', () => {
     ]);
 
     expect(tooltipHtml).toContain('Garmin:');
+  });
+
+  it('labels primary and overlay metric rows in the main tooltip', async () => {
+    component.overlayPanel = {
+      dataType: DataAltitude.type,
+      displayName: 'Altitude',
+      unit: 'm',
+      colorGroupKey: 'Altitude',
+      minX: 0,
+      maxX: 10,
+      series: [
+        {
+          id: 'a1::altitude',
+          activityID: 'a1',
+          activityName: 'Garmin',
+          color: '#0066cc',
+          streamType: DataAltitude.type,
+          displayName: 'Altitude',
+          unit: 'm',
+          points: [
+            { x: 0, y: 10, time: 0 },
+            { x: 10, y: 20, time: 10 },
+          ],
+        }
+      ],
+    } as any;
+
+    await renderComponent();
+
+    const tooltipHtml = (component as any).formatTooltip([
+      {
+        seriesId: 'a1::power',
+        seriesName: 'Garmin',
+        color: '#ff0000',
+        value: [10, 120],
+      }
+    ]);
+
+    expect(tooltipHtml).toContain('Power:');
+    expect(tooltipHtml).toContain('Altitude:');
   });
 
   it('skips synced tooltip rows whose series value is null', async () => {

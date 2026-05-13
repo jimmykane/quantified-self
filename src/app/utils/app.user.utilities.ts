@@ -88,6 +88,7 @@ import {
     type DashboardDefaultCuratedChartType,
 } from '../helpers/dashboard-auto-tile.helper';
 import { normalizeDashboardActionPrompts } from '../helpers/dashboard-action-prompt.helper';
+import { normalizeEventChartOverlayDataTypeByPrimary } from '../helpers/event-chart-overlay.helper';
 import {
     normalizeDashboardChartTileDisplaySettingsForChartType,
 } from '../helpers/dashboard-chart-display-settings.helper';
@@ -502,6 +503,9 @@ export class AppUserUtilities {
         settings.chartSettings.lapTypes = Array.isArray(settings.chartSettings.lapTypes) ? settings.chartSettings.lapTypes : AppUserUtilities.getDefaultChartLapTypes();
         settings.chartSettings.showLaps = settings.chartSettings.showLaps !== false;
         (settings.chartSettings as AppChartSettingsInterface).syncChartHoverToMap = (settings.chartSettings as AppChartSettingsInterface).syncChartHoverToMap === true;
+        (settings.chartSettings as AppChartSettingsInterface).eventChartOverlayDataTypeByPrimary = normalizeEventChartOverlayDataTypeByPrimary(
+            (settings.chartSettings as AppChartSettingsInterface).eventChartOverlayDataTypeByPrimary,
+        );
         settings.chartSettings.showGrid = settings.chartSettings.showGrid !== false;
         settings.chartSettings.stackYAxes = false;
         settings.chartSettings.disableGrouping = settings.chartSettings.disableGrouping === true;
