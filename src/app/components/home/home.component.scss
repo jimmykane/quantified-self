@@ -669,7 +669,7 @@
 
     .analysis-grid {
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(450px, 1fr));
+        grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
         gap: 2.5rem;
 
         @include bp.xsmall {
@@ -693,6 +693,13 @@
             gap: 1.5rem;
         }
 
+        .analysis-card-copy {
+            margin: 0;
+            color: var(--mat-sys-on-surface-variant);
+            font-size: 1rem;
+            line-height: 1.6;
+        }
+
         .analysis-icon-container {
             @include icon-container-base;
             background-color: var(--mat-sys-secondary-container);
@@ -700,7 +707,7 @@
         }
 
         .visual-box {
-            height: 320px;
+            height: 300px;
             background: var(--mat-sys-surface);
             border-radius: 16px;
             position: relative;
@@ -712,6 +719,78 @@
 
             &.map-preview {
                 padding: 0;
+            }
+
+            &.quality-preview {
+                align-items: stretch;
+                justify-content: flex-start;
+                flex-direction: column;
+                padding: 1.25rem;
+                gap: 1rem;
+            }
+        }
+
+        .quality-verdict {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            padding: 1rem;
+            border-radius: 12px;
+            background: var(--mat-sys-surface-container-low);
+            border: 1px solid var(--mat-sys-outline-variant);
+
+            mat-icon {
+                width: 32px;
+                height: 32px;
+                font-size: 32px;
+                color: var(--mat-sys-primary);
+            }
+
+            div {
+                display: flex;
+                flex-direction: column;
+                gap: 0.25rem;
+            }
+
+            strong {
+                font-size: 1.2rem;
+                line-height: 1.2;
+            }
+
+            span {
+                color: var(--mat-sys-on-surface-variant);
+                font-size: 0.9rem;
+            }
+        }
+
+        .quality-rows {
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+        }
+
+        .quality-row {
+            display: flex;
+            justify-content: space-between;
+            gap: 1rem;
+            padding: 0.85rem 1rem;
+            border-radius: 12px;
+            background: var(--mat-sys-surface-container-lowest);
+            border: 1px solid var(--mat-sys-outline-variant);
+
+            span {
+                color: var(--mat-sys-on-surface-variant);
+                font-size: 0.9rem;
+            }
+
+            strong {
+                color: var(--mat-sys-on-surface);
+                font-size: 0.95rem;
+                text-align: right;
+            }
+
+            &.warning strong {
+                color: var(--mat-sys-primary);
             }
         }
 
@@ -855,6 +934,7 @@
 
         .stat-preview {
             display: flex;
+            flex-wrap: wrap;
             gap: 1.5rem;
             padding: 1rem;
             background: var(--mat-sys-surface-container-low);

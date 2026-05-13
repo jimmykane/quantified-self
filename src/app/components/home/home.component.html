@@ -11,13 +11,12 @@
       <h1 class="hero-title">
         <p>Quantify. Analyze. Improve.</p>
         <mat-divider></mat-divider>
-        <p class="highlight-text">Measure Performance. Get AI Insights.</p>
+        <p class="highlight-text">One Dashboard. Every Activity.</p>
       </h1>
 
       <p class="hero-subtitle">
-        Turn questions into chart-backed answers with AI Insights.<br>
-        Ask focused training questions grounded in your stored activity data.<br>
-        Seamlessly upload activities and sync routes across Garmin, COROS, and Suunto. Full history imports supported.
+        Bring Garmin, Suunto, and COROS activity data into one private training dashboard.<br>
+        Upload files, analyze performance, and keep Garmin or COROS activities syncing to Suunto.
       </p>
 
       <div class="hero-actions">
@@ -331,20 +330,7 @@
         </mat-card-content>
       </mat-card>
 
-      <!-- Feature 3: Form + Load Model -->
-      <mat-card class="feature-card glass-panel animate-on-scroll" appearance="outlined">
-        <mat-card-header>
-          <div mat-card-avatar class="feature-icon-container">
-            <mat-icon>monitor_heart</mat-icon>
-          </div>
-          <mat-card-title>Form Model (CTL / ATL / TSB)</mat-card-title>
-        </mat-card-header>
-        <mat-card-content>
-          <p>Track Fitness (CTL), Fatigue (ATL), and same-day readiness Form (TSB) with adaptive W / M / Y trend views.</p>
-        </mat-card-content>
-      </mat-card>
-
-      <!-- Feature 4: Dashboard Manager -->
+      <!-- Feature 3: Dashboard Manager -->
       <mat-card class="feature-card glass-panel animate-on-scroll" appearance="outlined">
         <mat-card-header>
           <div mat-card-avatar class="feature-icon-container">
@@ -407,7 +393,7 @@
         </mat-card-content>
       </mat-card>
 
-      <!-- Feature 5: Deep Analysis -->
+      <!-- Feature 4: Deep Analysis -->
       <mat-card class="feature-card glass-panel animate-on-scroll" appearance="outlined">
         <mat-card-header>
           <div mat-card-avatar class="feature-icon-container">
@@ -420,16 +406,16 @@
         </mat-card-content>
       </mat-card>
 
-      <!-- Feature 6: Connected Data + AI -->
+      <!-- Feature 5: Connected Training Data -->
       <mat-card class="feature-card glass-panel animate-on-scroll" appearance="outlined">
         <mat-card-header>
           <div mat-card-avatar class="feature-icon-container">
             <mat-icon>insights</mat-icon>
           </div>
-          <mat-card-title>Connected Data + AI Insights</mat-card-title>
+          <mat-card-title>Connected Training Data</mat-card-title>
         </mat-card-header>
         <mat-card-content>
-          <p>Import and sync across Garmin, Suunto, and COROS, then ask focused AI questions grounded in your full stored history.</p>
+          <p>Import and sync across Garmin, Suunto, and COROS, then analyze your complete activity dataset from one dashboard.</p>
         </mat-card-content>
       </mat-card>
     </div>
@@ -437,6 +423,13 @@
 
   <!-- 4. AI Insights Launch Section -->
   <section class="features-section ai-insights-section">
+    <div class="ai-insights-header animate-on-scroll">
+      <h2 class="section-title">AI Insights</h2>
+      <p class="section-subtitle">
+        Turn focused training questions into chart-backed answers grounded in your stored activity data.
+      </p>
+    </div>
+
     <div class="features-grid">
       <mat-card class="feature-card glass-panel animate-on-scroll" appearance="outlined">
         <mat-card-header>
@@ -524,19 +517,26 @@
   <section class="analysis-section container">
     <div class="analysis-header animate-on-scroll">
       <h2 class="section-title">Hardware-Grade Precision</h2>
-      <p class="section-subtitle">Benchmark your devices with high-fidelity trace comparison.</p>
+      <p class="section-subtitle">
+        Merge same-session recordings, choose a reference device, and compare hardware across GNSS accuracy, sensor
+        agreement, stat deltas, and data-quality artifacts.
+      </p>
     </div>
 
     <div class="analysis-grid">
-      <!-- Effort Comparison -->
+      <!-- Benchmark Merge Workflow -->
       <mat-card class="analysis-card glass-panel animate-on-scroll" appearance="outlined">
         <mat-card-header>
           <div mat-card-avatar class="analysis-icon-container">
-            <mat-icon>analytics</mat-icon>
+            <mat-icon>merge_type</mat-icon>
           </div>
-          <mat-card-title>Sensor Data Alignment</mat-card-title>
+          <mat-card-title>Benchmark Merge Workflow</mat-card-title>
         </mat-card-header>
         <mat-card-content>
+          <p class="analysis-card-copy">
+            Combine recordings from multiple devices into a benchmark event, keep it out of normal training totals, then
+            pick reference and test activities for a clean device-to-device report.
+          </p>
           <div class="visual-box chart-preview">
             <svg class="chart-svg" viewBox="0 -80 1000 560" preserveAspectRatio="xMidYMid meet">
               <defs>
@@ -564,12 +564,16 @@
           </div>
           <div class="stat-preview">
             <div class="stat-item">
-              <span class="stat-label">Sync Quality</span>
-              <span class="stat-value success">99.2%</span>
+              <span class="stat-label">Merge Type</span>
+              <span class="stat-value">Benchmark</span>
             </div>
             <div class="stat-item">
-              <span class="stat-label">Sampling</span>
-              <span class="stat-value">1Hz / 1Hz</span>
+              <span class="stat-label">Roles</span>
+              <span class="stat-value">Ref / Test</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-label">Auto Align</span>
+              <span class="stat-value success">+/-15s</span>
             </div>
           </div>
         </mat-card-content>
@@ -584,6 +588,10 @@
           <mat-card-title>GNSS Trace Comparison</mat-card-title>
         </mat-card-header>
         <mat-card-content>
+          <p class="analysis-card-copy">
+            Compare GPS tracks point by point and quantify trace disagreement with CEP50, CEP95, RMSE, max deviation, and
+            total distance difference.
+          </p>
           <div class="visual-box map-preview">
             <div class="map-tile-bg"></div>
             <svg class="map-svg" viewBox="-100 -50 1000 700" preserveAspectRatio="xMidYMid meet">
@@ -604,8 +612,65 @@
               <span class="stat-value">0.8m</span>
             </div>
             <div class="stat-item">
-              <span class="stat-label">Stability</span>
-              <span class="stat-value warning">ULTRA</span>
+              <span class="stat-label">CEP (95%)</span>
+              <span class="stat-value">2.4m</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-label">RMSE</span>
+              <span class="stat-value warning">1.1m</span>
+            </div>
+          </div>
+        </mat-card-content>
+      </mat-card>
+
+      <!-- Sensor Agreement + Quality -->
+      <mat-card class="analysis-card glass-panel animate-on-scroll" appearance="outlined">
+        <mat-card-header>
+          <div mat-card-avatar class="analysis-icon-container">
+            <mat-icon>sensors</mat-icon>
+          </div>
+          <mat-card-title>Sensor Quality Reports</mat-card-title>
+        </mat-card-header>
+        <mat-card-content>
+          <p class="analysis-card-copy">
+            Grade shared streams with correlation, MAE, and RMSE, then surface dropouts, stuck values, and cadence-lock
+            warnings before a device shapes your decisions.
+          </p>
+          <div class="visual-box quality-preview">
+            <div class="quality-verdict">
+              <mat-icon>verified</mat-icon>
+              <div>
+                <strong>Good Agreement</strong>
+                <span>Saved benchmark report</span>
+              </div>
+            </div>
+            <div class="quality-rows">
+              <div class="quality-row">
+                <span>Heart Rate</span>
+                <strong>98.7% correlation</strong>
+              </div>
+              <div class="quality-row">
+                <span>Power</span>
+                <strong>MAE 4.2w</strong>
+              </div>
+              <div class="quality-row warning">
+                <span>Data Quality</span>
+                <strong>Dropouts grouped</strong>
+              </div>
+            </div>
+          </div>
+          <div class="stat-preview">
+            <div class="stat-item">
+              <span class="stat-label">Streams</span>
+              <span class="stat-value">Corr / MAE</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-label">Artifacts</span>
+              <span class="stat-value warning">Detected</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-label">Reports</span>
+              <span class="stat-value success">Save / Share</span>
             </div>
           </div>
         </mat-card-content>
