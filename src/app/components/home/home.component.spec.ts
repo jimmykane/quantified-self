@@ -72,6 +72,49 @@ describe('HomeComponent', () => {
         expect(text).not.toContain('New Feature');
     });
 
+    it('should render home sections in the requested narrative order', () => {
+        const sectionOrder = Array.from(
+            fixture.nativeElement.querySelectorAll('.landing-page > section, .landing-page > footer')
+        ).map((section: Element) => {
+            if (section.classList.contains('hero-section')) {
+                return 'hero';
+            }
+            if (section.classList.contains('integrations-section')) {
+                return 'integrations';
+            }
+            if (section.classList.contains('features-section') && !section.classList.contains('ai-insights-section')) {
+                return 'performance';
+            }
+            if (section.classList.contains('ai-insights-section')) {
+                return 'ai-insights';
+            }
+            if (section.classList.contains('footprint-section')) {
+                return 'footprint';
+            }
+            if (section.classList.contains('sovereignty-section')) {
+                return 'sovereignty';
+            }
+            if (section.classList.contains('analysis-section')) {
+                return 'hardware';
+            }
+            if (section.classList.contains('app-footer')) {
+                return 'footer';
+            }
+            return 'unknown';
+        });
+
+        expect(sectionOrder).toEqual([
+            'hero',
+            'integrations',
+            'performance',
+            'ai-insights',
+            'footprint',
+            'sovereignty',
+            'hardware',
+            'footer',
+        ]);
+    });
+
     it('should render expanded integration capability cards without dedicated CTA promotion', () => {
         const text = fixture.nativeElement.textContent as string;
         const integrationCards = fixture.nativeElement.querySelectorAll('.integration-followup-grid .feature-card');
@@ -97,23 +140,41 @@ describe('HomeComponent', () => {
         const metricChipInfoIcons = fixture.nativeElement.querySelectorAll('.metric-chip .metric-chip-info');
 
         expect(performanceCards.length).toBe(6);
-        expect(metricChips.length).toBe(11);
-        expect(metricChipInfoIcons.length).toBe(11);
+        expect(metricChips.length).toBe(27);
+        expect(metricChipInfoIcons.length).toBe(27);
         expect(text).toContain('Engineered for Performance');
         expect(text).toContain('Reliable and instant analytics');
         expect(text).toContain('KPI Lane for Fast Decisions');
+        expect(text).toContain('Load Status');
         expect(text).toContain('ACWR');
         expect(text).toContain('Ramp Rate');
         expect(text).toContain('Monotony / Strain');
         expect(text).toContain('Form Now');
+        expect(text).toContain('Fitness Trend');
+        expect(text).toContain('Fatigue Trend');
+        expect(text).toContain('Recovery Debt');
         expect(text).toContain('Form +7d');
+        expect(text).toContain('Fitness (CTL)');
+        expect(text).toContain('Fatigue (ATL)');
+        expect(text).toContain('Training Balance');
         expect(text).toContain('Easy %');
         expect(text).toContain('Hard %');
         expect(text).toContain('Efficiency Δ (4w)');
+        expect(text).toContain('Recovery');
+        expect(text).toContain('Form (TSS)');
         expect(text).toContain('Freshness Forecast');
         expect(text).toContain('Intensity Distribution');
         expect(text).toContain('Efficiency Trend');
+        expect(text).toContain('Sleep');
         expect(text).toContain('Form Model (CTL / ATL / TSB)');
+        expect(text).toContain('Dashboard Manager by Category');
+        expect(text).toContain('Manual');
+        expect(text).toContain('Presets');
+        expect(text).toContain('Curated');
+        expect(text).toContain('KPI');
+        expect(text).toContain('Custom');
+        expect(text).toContain('Map');
+        expect(text).toContain('clustered heatmaps');
     });
 
     it('should render the shared typed prompt rotator in the examples area', () => {

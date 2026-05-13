@@ -58,9 +58,7 @@ describe('AppRoutingModule routes', () => {
     expect(homeRoute?.data).toMatchObject({
       animation: 'Home',
     });
-    expect(homeRoute?.data?.['description']).toContain('Garmin -> Suunto');
-    expect(homeRoute?.data?.['description']).toContain('COROS -> Suunto');
-    expect(homeRoute?.data?.['description']).toContain('catch-up sync');
+    expect(homeRoute?.data?.['description']).toBe('Quantified Self brings Garmin, Suunto, and COROS activity data into one private training dashboard with AI Insights and automatic sync from Garmin or COROS to Suunto.');
     expect(homeRoute?.data?.['keywords']).toContain('garmin to suunto sync');
     expect(homeRoute?.data?.['keywords']).toContain('coros to suunto sync');
     expect(homeRoute?.data?.['keywords']).toContain('ai insights');

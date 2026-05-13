@@ -41,57 +41,7 @@
     </div>
   </section>
 
-  <!-- 1.5 AI Insights Launch Section -->
-  <section class="features-section ai-insights-section">
-    <div class="features-grid">
-      <mat-card class="feature-card glass-panel animate-on-scroll" appearance="outlined">
-        <mat-card-header>
-          <div mat-card-avatar class="feature-icon-container">
-            <mat-icon>chat</mat-icon>
-          </div>
-          <mat-card-title>Ask Focused Questions</mat-card-title>
-        </mat-card-header>
-        <mat-card-content>
-          <p>Specify a metric, activity type, and date range to keep each answer precise and directly usable in training decisions.</p>
-        </mat-card-content>
-      </mat-card>
-
-      <mat-card class="feature-card glass-panel animate-on-scroll" appearance="outlined">
-        <mat-card-header>
-          <div mat-card-avatar class="feature-icon-container">
-            <mat-icon>auto_graph</mat-icon>
-          </div>
-          <mat-card-title>Get the Right Result Mode</mat-card-title>
-        </mat-card-header>
-        <mat-card-content>
-          <p>Receive aggregate trends, multi-metric summaries, activity lookups, or latest-activity answers that match your prompt intent.</p>
-        </mat-card-content>
-      </mat-card>
-
-      <mat-card class="feature-card glass-panel animate-on-scroll" appearance="outlined">
-        <mat-card-header>
-          <div mat-card-avatar class="feature-icon-container">
-            <mat-icon>tips_and_updates</mat-icon>
-          </div>
-          <mat-card-title>Refine Prompts Faster</mat-card-title>
-        </mat-card-header>
-        <mat-card-content>
-          <p>If a request is unsupported, AI Insights suggests better prompt paths so you can quickly land on a supported query.</p>
-        </mat-card-content>
-      </mat-card>
-    </div>
-
-    <div class="ai-insights-examples animate-on-scroll">
-      <p class="examples-label">What you can ask</p>
-      <div class="example-prompts">
-        <app-typed-prompt-rotator [prompts]="aiPromptExamples"></app-typed-prompt-rotator>
-      </div>
-    </div>
-
-    <p class="ai-insights-cta-note animate-on-scroll">Your activity questions, chart-backed answers.</p>
-  </section>
-
-  <!-- 1.6 Integration / Ecosystem Ticker -->
+  <!-- 2. Integration / Ecosystem Ticker -->
   <section class="integrations-section animate-on-scroll">
     <p class="section-label">Seamless Integration With</p>
     <div class="logos-container">
@@ -197,6 +147,14 @@
             <span
               class="metric-chip"
               tabindex="0"
+              matTooltip="Current training state from Form, ramp, fitness, and fatigue."
+              matTooltipPosition="above">
+              Load Status
+              <mat-icon class="metric-chip-info">info</mat-icon>
+            </span>
+            <span
+              class="metric-chip"
+              tabindex="0"
               matTooltip="Acute 7-day load versus chronic 28-day load to spot risk from sudden load spikes."
               matTooltipPosition="above">
               ACWR
@@ -229,9 +187,57 @@
             <span
               class="metric-chip"
               tabindex="0"
+              matTooltip="Recent CTL direction from your derived Form model."
+              matTooltipPosition="above">
+              Fitness Trend
+              <mat-icon class="metric-chip-info">info</mat-icon>
+            </span>
+            <span
+              class="metric-chip"
+              tabindex="0"
+              matTooltip="Recent ATL direction from your derived Form model."
+              matTooltipPosition="above">
+              Fatigue Trend
+              <mat-icon class="metric-chip-info">info</mat-icon>
+            </span>
+            <span
+              class="metric-chip"
+              tabindex="0"
+              matTooltip="Estimated zero-load days until your current Form returns to neutral."
+              matTooltipPosition="above">
+              Recovery Debt
+              <mat-icon class="metric-chip-info">info</mat-icon>
+            </span>
+            <span
+              class="metric-chip"
+              tabindex="0"
               matTooltip="Projected readiness in 7 days assuming zero additional training load."
               matTooltipPosition="above">
               Form +7d
+              <mat-icon class="metric-chip-info">info</mat-icon>
+            </span>
+            <span
+              class="metric-chip"
+              tabindex="0"
+              matTooltip="Current 42-day chronic training load from your derived Form model."
+              matTooltipPosition="above">
+              Fitness (CTL)
+              <mat-icon class="metric-chip-info">info</mat-icon>
+            </span>
+            <span
+              class="metric-chip"
+              tabindex="0"
+              matTooltip="Current 7-day acute training load from your derived Form model."
+              matTooltipPosition="above">
+              Fatigue (ATL)
+              <mat-icon class="metric-chip-info">info</mat-icon>
+            </span>
+            <span
+              class="metric-chip"
+              tabindex="0"
+              matTooltip="Latest weekly Easy/Moderate/Hard intensity balance."
+              matTooltipPosition="above">
+              Training Balance
               <mat-icon class="metric-chip-info">info</mat-icon>
             </span>
             <span
@@ -271,8 +277,24 @@
           <mat-card-title>Derived Curated Charts</mat-card-title>
         </mat-card-header>
         <mat-card-content>
-          <p>Use projected readiness and execution views computed from your full training history.</p>
+          <p>Use recovery, readiness, execution, and sleep views computed from your stored training history.</p>
           <div class="metric-chip-list" aria-label="Derived curated charts">
+            <span
+              class="metric-chip"
+              tabindex="0"
+              matTooltip="Recovery left versus elapsed recovery."
+              matTooltipPosition="above">
+              Recovery
+              <mat-icon class="metric-chip-info">info</mat-icon>
+            </span>
+            <span
+              class="metric-chip"
+              tabindex="0"
+              matTooltip="Fitness, fatigue, and form trend from derived training stress."
+              matTooltipPosition="above">
+              Form (TSS)
+              <mat-icon class="metric-chip-info">info</mat-icon>
+            </span>
             <span
               class="metric-chip"
               tabindex="0"
@@ -297,6 +319,14 @@
               Efficiency Trend
               <mat-icon class="metric-chip-info">info</mat-icon>
             </span>
+            <span
+              class="metric-chip"
+              tabindex="0"
+              matTooltip="Sleep duration, stages, and HRV by connected source."
+              matTooltipPosition="above">
+              Sleep
+              <mat-icon class="metric-chip-info">info</mat-icon>
+            </span>
           </div>
         </mat-card-content>
       </mat-card>
@@ -314,16 +344,66 @@
         </mat-card-content>
       </mat-card>
 
-      <!-- Feature 4: Dashboard Builder -->
+      <!-- Feature 4: Dashboard Manager -->
       <mat-card class="feature-card glass-panel animate-on-scroll" appearance="outlined">
         <mat-card-header>
           <div mat-card-avatar class="feature-icon-container">
             <mat-icon>dashboard_customize</mat-icon>
           </div>
-          <mat-card-title>Dashboard Builder by Category</mat-card-title>
+          <mat-card-title>Dashboard Manager by Category</mat-card-title>
         </mat-card-header>
         <mat-card-content>
-          <p>Compose views from Curated, KPI, Custom, and Map tiles. KPI metrics are grouped as Load, Readiness, and Execution for faster setup.</p>
+          <p>Build manually or start from presets across Curated, KPI, Custom, and Map tiles. Tune tile filters, map style, and clustered heatmaps per tile.</p>
+          <div class="metric-chip-list" aria-label="Dashboard manager workflows and categories">
+            <span
+              class="metric-chip"
+              tabindex="0"
+              matTooltip="Configure tile settings field by field."
+              matTooltipPosition="above">
+              Manual
+              <mat-icon class="metric-chip-info">info</mat-icon>
+            </span>
+            <span
+              class="metric-chip"
+              tabindex="0"
+              matTooltip="Apply quick-start dashboard tile templates."
+              matTooltipPosition="above">
+              Presets
+              <mat-icon class="metric-chip-info">info</mat-icon>
+            </span>
+            <span
+              class="metric-chip"
+              tabindex="0"
+              matTooltip="Fixed derived tiles such as Recovery, Form, Freshness, Intensity, Efficiency, and Sleep."
+              matTooltipPosition="above">
+              Curated
+              <mat-icon class="metric-chip-info">info</mat-icon>
+            </span>
+            <span
+              class="metric-chip"
+              tabindex="0"
+              matTooltip="Compact Today rows grouped as Load, Readiness, and Execution."
+              matTooltipPosition="above">
+              KPI
+              <mat-icon class="metric-chip-info">info</mat-icon>
+            </span>
+            <span
+              class="metric-chip"
+              tabindex="0"
+              matTooltip="Configurable charts with their own date range and activity filters."
+              matTooltipPosition="above">
+              Custom
+              <mat-icon class="metric-chip-info">info</mat-icon>
+            </span>
+            <span
+              class="metric-chip"
+              tabindex="0"
+              matTooltip="Map tile with its own date range, activity filters, map style, markers, and heatmap."
+              matTooltipPosition="above">
+              Map
+              <mat-icon class="metric-chip-info">info</mat-icon>
+            </span>
+          </div>
         </mat-card-content>
       </mat-card>
 
@@ -355,7 +435,92 @@
     </div>
   </section>
 
-  <!-- 3.1 Hardware Benchmark Section (Precise Analysis) -->
+  <!-- 4. AI Insights Launch Section -->
+  <section class="features-section ai-insights-section">
+    <div class="features-grid">
+      <mat-card class="feature-card glass-panel animate-on-scroll" appearance="outlined">
+        <mat-card-header>
+          <div mat-card-avatar class="feature-icon-container">
+            <mat-icon>chat</mat-icon>
+          </div>
+          <mat-card-title>Ask Focused Questions</mat-card-title>
+        </mat-card-header>
+        <mat-card-content>
+          <p>Specify a metric, activity type, and date range to keep each answer precise and directly usable in training decisions.</p>
+        </mat-card-content>
+      </mat-card>
+
+      <mat-card class="feature-card glass-panel animate-on-scroll" appearance="outlined">
+        <mat-card-header>
+          <div mat-card-avatar class="feature-icon-container">
+            <mat-icon>auto_graph</mat-icon>
+          </div>
+          <mat-card-title>Get the Right Result Mode</mat-card-title>
+        </mat-card-header>
+        <mat-card-content>
+          <p>Receive aggregate trends, multi-metric summaries, activity lookups, or latest-activity answers that match your prompt intent.</p>
+        </mat-card-content>
+      </mat-card>
+
+      <mat-card class="feature-card glass-panel animate-on-scroll" appearance="outlined">
+        <mat-card-header>
+          <div mat-card-avatar class="feature-icon-container">
+            <mat-icon>tips_and_updates</mat-icon>
+          </div>
+          <mat-card-title>Refine Prompts Faster</mat-card-title>
+        </mat-card-header>
+        <mat-card-content>
+          <p>If a request is unsupported, AI Insights suggests better prompt paths so you can quickly land on a supported query.</p>
+        </mat-card-content>
+      </mat-card>
+    </div>
+
+    <div class="ai-insights-examples animate-on-scroll">
+      <p class="examples-label">What you can ask</p>
+      <div class="example-prompts">
+        <app-typed-prompt-rotator [prompts]="aiPromptExamples"></app-typed-prompt-rotator>
+      </div>
+    </div>
+
+    <p class="ai-insights-cta-note animate-on-scroll">Your activity questions, chart-backed answers.</p>
+  </section>
+
+  <!-- 5. See Your Footprint (MyTracks Highlight) -->
+  <section class="footprint-section animate-on-scroll">
+    <div class="footprint-content">
+      <div class="footprint-text">
+        <mat-icon class="footprint-icon">map</mat-icon>
+        <h2>See Your Footprint</h2>
+        <p>
+          Every run, ride, and hike — visualized on a single map.
+          Explore your entire athletic history.
+        </p>
+        <button mat-stroked-button (click)="navigateToDashboardOrLogin()">
+          Explore MyTracks
+          <mat-icon iconPositionEnd>explore</mat-icon>
+        </button>
+      </div>
+    </div>
+  </section>
+
+  <!-- 6. Data Sovereignty (Full Width) -->
+  <section class="sovereignty-section">
+    <div class="content-wrapper">
+      <div class="text-content">
+        <mat-icon class="large-icon">security</mat-icon>
+        <h2>Your Data, Your Rules</h2>
+        <p>
+          We believe athletes should own their performance data. Export your original files anytime.
+          No hidden mining, no lock-in, just pure analytics.
+        </p>
+        <button mat-stroked-button (click)="navigateToDashboardOrLogin()">
+          Start Analyzing Now
+        </button>
+      </div>
+    </div>
+  </section>
+
+  <!-- 7. Hardware Benchmark Section (Precise Analysis) -->
   <section class="analysis-section container">
     <div class="analysis-header animate-on-scroll">
       <h2 class="section-title">Hardware-Grade Precision</h2>
@@ -448,42 +613,7 @@
     </div>
   </section>
 
-  <!-- 3.5 See Your Footprint (MyTracks Highlight) -->
-  <section class="footprint-section animate-on-scroll">
-    <div class="footprint-content">
-      <div class="footprint-text">
-        <mat-icon class="footprint-icon">map</mat-icon>
-        <h2>See Your Footprint</h2>
-        <p>
-          Every run, ride, and hike — visualized on a single map.
-          Explore your entire athletic history.
-        </p>
-        <button mat-stroked-button (click)="navigateToDashboardOrLogin()">
-          Explore MyTracks
-          <mat-icon iconPositionEnd>explore</mat-icon>
-        </button>
-      </div>
-    </div>
-  </section>
-
-  <!-- 4. Data Sovereignty (Full Width) -->
-  <section class="sovereignty-section">
-    <div class="content-wrapper">
-      <div class="text-content">
-        <mat-icon class="large-icon">security</mat-icon>
-        <h2>Your Data, Your Rules</h2>
-        <p>
-          We believe athletes should own their performance data. Export your original files anytime.
-          No hidden mining, no lock-in, just pure analytics.
-        </p>
-        <button mat-stroked-button (click)="navigateToDashboardOrLogin()">
-          Start Analyzing Now
-        </button>
-      </div>
-    </div>
-  </section>
-
-  <!-- 5. Modern Footer -->
+  <!-- 8. Modern Footer -->
   <footer class="app-footer">
     <div class="footer-content">
       <div class="maker-info">
