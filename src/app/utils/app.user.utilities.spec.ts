@@ -280,6 +280,7 @@ describe('AppUserUtilities', () => {
             expect((settings.appSettings as any)?.dashboardActionPrompts).toEqual({});
             expect(settings.chartSettings?.stackYAxes).toBe(false);
             expect(settings.chartSettings?.syncChartHoverToMap).toBe(false);
+            expect(settings.chartSettings?.eventChartOverlayDataTypeByPrimary).toEqual({});
             expect(settings.dashboardSettings?.dateRange).toBe(DateRanges.all);
             expect(settings.dashboardSettings?.includeMergedEvents).toBe(true);
             expect(settings.dashboardSettings?.eventTableFilters).toEqual({
@@ -873,6 +874,11 @@ describe('AppUserUtilities', () => {
                         dataTypeSettings: {
                             Altitude: { enabled: false },
                             Speed: { enabled: false }
+                        },
+                        eventChartOverlayDataTypeByPrimary: {
+                            Power: ' Power ',
+                            ' Heart Rate ': ' Altitude ',
+                            Cadence: 42
                         }
                     },
                     unitSettings: {
@@ -899,6 +905,9 @@ describe('AppUserUtilities', () => {
             expect(settings.unitSettings.swimPaceUnits).toEqual(AppUserUtilities.getDefaultSwimPaceUnits());
             expect(settings.unitSettings.verticalSpeedUnits).toEqual(AppUserUtilities.getDefaultVerticalSpeedUnits());
             expect(settings.unitSettings.distanceUnits).toBe(DistanceUnits.Kilometers);
+            expect(settings.chartSettings.eventChartOverlayDataTypeByPrimary).toEqual({
+                'Heart Rate': 'Altitude'
+            });
             expect(settings.dashboardSettings.tableSettings.active).toBe('Start Date');
             expect(settings.dashboardSettings.tableSettings.direction).toBe('desc');
             expect(settings.dashboardSettings.tableSettings.eventsPerPage).toBe(10);

@@ -11,6 +11,19 @@
           }
         </div>
 
+        <div class="event-chart-panel__actions">
+        @if (canSelectOverlay) {
+        <span [matTooltip]="overlayTooltip">
+          <button mat-icon-button type="button"
+            class="qs-action-menu-icon-button event-chart-panel__overlay-button"
+            [matMenuTriggerFor]="overlayMenu"
+            [disabled]="overlayPickerDisabled"
+            aria-label="Choose overlay metric">
+            <mat-icon>add_chart</mat-icon>
+          </button>
+        </span>
+        }
+
         @if (canToggleFullscreen) {
         <button mat-icon-button type="button"
           class="qs-action-menu-icon-button event-chart-panel__fullscreen-button"
@@ -20,6 +33,7 @@
           <mat-icon>{{ fullscreenIcon }}</mat-icon>
         </button>
         }
+        </div>
       </div>
 
       @if (seriesLegendItems.length > 0) {
@@ -78,3 +92,23 @@
   </section>
   }
 </section>
+
+<mat-menu #overlayMenu="matMenu" xPosition="before" class="qs-menu-panel event-chart-panel__overlay-menu">
+  <button mat-menu-item type="button" (click)="onOverlayDataTypeSelect(null)">
+    <mat-icon>{{ selectedOverlayDataType ? 'radio_button_unchecked' : 'radio_button_checked' }}</mat-icon>
+    <span>No overlay</span>
+  </button>
+
+  @for (option of overlayOptions; track option.dataType) {
+  <button mat-menu-item type="button" (click)="onOverlayDataTypeSelect(option.dataType)">
+    <mat-icon>{{ selectedOverlayDataType === option.dataType ? 'radio_button_checked' : 'radio_button_unchecked' }}</mat-icon>
+    <span class="event-chart-panel__overlay-option">
+      <span class="event-chart-panel__overlay-swatch" [style.background]="option.color"></span>
+      <span>{{ option.label }}</span>
+      @if (option.unit) {
+      <span class="event-chart-panel__overlay-unit">({{ option.unit }})</span>
+      }
+    </span>
+  </button>
+  }
+</mat-menu>

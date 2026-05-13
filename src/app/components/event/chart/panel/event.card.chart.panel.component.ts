@@ -47,6 +47,7 @@ import {
 import { buildEventEChartsVisualTokens } from '../../../../helpers/event-echarts-common.helper';
 import { ECHARTS_GLOBAL_FONT_FAMILY, resolveEChartsThemeName } from '../../../../helpers/echarts-theme.helper';
 import { DynamicDataLoader } from '@sports-alliance/sports-lib';
+import type { EventChartOverlayOption } from '../../../../helpers/event-chart-overlay.helper';
 import type {
   EventChartPoint,
   EventChartZoneColorPiece,
@@ -94,6 +95,11 @@ type BrushEventParams = {
   $from?: string;
   areas?: BrushAreaPayload[];
 };
+type TooltipResolvedPoint = {
+  panel: EventChartPanelModel;
+  series: PanelSeriesModel;
+  point: EventChartPoint;
+};
 
 const PROGRESSIVE_THRESHOLD = 6000;
 const PROGRESSIVE_STEP = 900;
@@ -136,6 +142,10 @@ const TOOLTIP_MAX_DISTANCE_METERS = 500;
 })
 export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, OnDestroy {
   @Input() panel: EventChartPanelModel | null = null;
+  @Input() overlayPanel: EventChartPanelModel | null = null;
+  @Input() overlayOptions: EventChartOverlayOption[] = [];
+  @Input() selectedOverlayDataType: string | null = null;
+  @Input() overlayPickerDisabled = false;
   @Input() xAxisType: XAxisTypes = XAxisTypes.Duration;
   @Input() darkTheme = false;
   @Input() useAnimations = false;
@@ -162,6 +172,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
   @Output() previewRangeChange = new EventEmitter<EventChartRange | null>();
   @Output() selectedRangeChange = new EventEmitter<EventChartRange | null>();
   @Output() zoomRangeChange = new EventEmitter<EventChartRange | null>();
+  @Output() overlayDataTypeChange = new EventEmitter<string | null>();
 
   @ViewChild('chartDiv', { static: true }) chartDiv!: ElementRef<HTMLDivElement>;
   @ViewChild('panelRoot', { static: true }) panelRoot!: ElementRef<HTMLElement>;
@@ -296,6 +307,23 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     return this.isFullscreen ? 'Exit fullscreen' : 'Open panel fullscreen';
   }
 
+  public get canSelectOverlay(): boolean {
+    return !!this.panel && !this.showZoomBar && this.overlayOptions.length > 0;
+  }
+
+  public get overlayTooltip(): string {
+    if (this.overlayPickerDisabled) {
+      return 'Sign in to choose chart overlay';
+    }
+
+    const selectedOption = this.overlayOptions.find((option) => option.dataType === this.selectedOverlayDataType);
+    if (selectedOption) {
+      return `Overlay: ${selectedOption.label}`;
+    }
+
+    return 'Choose overlay metric';
+  }
+
   public get selectedRangeStartLabel(): string {
     const normalizedRange = this.getActiveSelectionRange();
     if (!normalizedRange) {
@@ -362,6 +390,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
 
     if (
       changes.panel
+      || changes.overlayPanel
       || changes.xAxisType
       || changes.darkTheme
       || changes.useAnimations
@@ -435,6 +464,10 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     } catch (error) {
       this.logger.error('[EventCardChartPanelComponent] Failed to toggle fullscreen', error);
     }
+  }
+
+  public onOverlayDataTypeSelect(dataType: string | null): void {
+    this.overlayDataTypeChange.emit(dataType);
   }
 
   private queueChartRefresh(source: string): void {
@@ -521,10 +554,17 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     const domain = this.getActiveDomain();
     const restoredZoomRange = this.getStoredZoomRange();
     const visibleRange = restoredZoomRange ?? this.getVisibleXAxisRange();
+    const overlayPanel = this.getActiveOverlayPanel();
     const yAxisConfig = buildEventPanelYAxisConfig({
       panel,
       visibleRange,
     });
+    const overlayYAxisConfig = overlayPanel
+      ? buildEventPanelYAxisConfig({
+        panel: overlayPanel,
+        visibleRange,
+      })
+      : null;
     const resolvedStrokeWidth = Number(this.strokeWidth);
     const seriesStrokeWidth = Number.isFinite(resolvedStrokeWidth) && resolvedStrokeWidth > 0
       ? resolvedStrokeWidth
@@ -533,7 +573,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     const seriesFillOpacity = Number.isFinite(resolvedFillOpacity)
       ? Math.min(1, Math.max(0, resolvedFillOpacity))
       : AppUserUtilities.getDefaultChartFillOpacity();
-    const areaFillOrigin: 'start' | 'end' = yAxisConfig.inverse ? 'end' : 'start';
+    const primaryAreaFillOrigin: 'start' | 'end' = yAxisConfig.inverse ? 'end' : 'start';
     const tooltipSurfaceConfig = this.buildTooltipSurfaceConfig();
     const tooltipTriggerOn = resolveEChartsTooltipTriggerOn(hoverTooltipEnabled && interactionArmed, this.isMobile);
 
@@ -544,6 +584,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
         id: series.id,
         name: series.activityName,
         type: 'line',
+        yAxisIndex: 0,
         smooth: false,
         showSymbol: false,
         symbolSize: 5,
@@ -564,7 +605,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
         areaStyle: {
           ...(!useZoneColors ? { color: series.color } : {}),
           opacity: seriesFillOpacity,
-          origin: areaFillOrigin,
+          origin: primaryAreaFillOrigin,
         },
         emphasis: {
           disabled: true,
@@ -577,7 +618,32 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       seriesOptions[0].markLine = this.buildLapMarkLine(chartStyle);
     }
 
+    if (overlayPanel) {
+      seriesOptions.push(...this.buildOverlaySeriesOptions(overlayPanel, seriesStrokeWidth));
+    }
+
     const zoneVisualMaps = this.buildZoneVisualMapOptions(panel);
+    const primaryYAxisOption = this.buildValueYAxisOption(panel, yAxisConfig, {
+      axisColor,
+      axisLabelColor,
+      axisLabelFontSize,
+      gridColor,
+      position: 'left',
+      showSplitLine: true,
+    });
+    const yAxisOption = overlayPanel && overlayYAxisConfig
+      ? [
+        primaryYAxisOption,
+        this.buildValueYAxisOption(overlayPanel, overlayYAxisConfig, {
+          axisColor,
+          axisLabelColor,
+          axisLabelFontSize,
+          gridColor,
+          position: 'right',
+          showSplitLine: false,
+        })
+      ]
+      : primaryYAxisOption;
 
     return {
       animation: this.useAnimations === true,
@@ -654,33 +720,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
           )
         }
       },
-      yAxis: {
-        type: 'value',
-        inverse: yAxisConfig.inverse,
-        min: yAxisConfig.min,
-        max: yAxisConfig.max,
-        interval: yAxisConfig.interval,
-        axisLine: {
-          lineStyle: { color: axisColor }
-        },
-        axisTick: {
-          show: false,
-        },
-        splitLine: {
-          show: true,
-          lineStyle: {
-            color: gridColor,
-            width: 1,
-          }
-        },
-        axisLabel: {
-          color: axisLabelColor,
-          fontFamily: ECHARTS_GLOBAL_FONT_FAMILY,
-          fontSize: axisLabelFontSize,
-          margin: this.isMobile ? 8 : 10,
-          formatter: (value: number) => this.formatDataValue(panel.dataType, value, false)
-        }
-      },
+      yAxis: yAxisOption,
       graphic: this.buildWatermarkGraphic(chartStyle),
       dataZoom: [
         {
@@ -712,6 +752,91 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       ...(zoneVisualMaps.length > 0 ? { visualMap: zoneVisualMaps } : {}),
       series: seriesOptions
     } as ChartOption;
+  }
+
+  private getActiveOverlayPanel(): EventChartPanelModel | null {
+    if (!this.panel || !this.overlayPanel || this.overlayPanel.dataType === this.panel.dataType) {
+      return null;
+    }
+
+    return this.overlayPanel.series?.length ? this.overlayPanel : null;
+  }
+
+  private buildValueYAxisOption(
+    panel: EventChartPanelModel,
+    yAxisConfig: ReturnType<typeof buildEventPanelYAxisConfig>,
+    options: {
+      axisColor: string;
+      axisLabelColor: string;
+      axisLabelFontSize: number;
+      gridColor: string;
+      position: 'left' | 'right';
+      showSplitLine: boolean;
+    }
+  ): Record<string, unknown> {
+    return {
+      type: 'value',
+      position: options.position,
+      inverse: yAxisConfig.inverse,
+      min: yAxisConfig.min,
+      max: yAxisConfig.max,
+      interval: yAxisConfig.interval,
+      axisLine: {
+        lineStyle: { color: options.axisColor }
+      },
+      axisTick: {
+        show: false,
+      },
+      splitLine: {
+        show: options.showSplitLine,
+        lineStyle: {
+          color: options.gridColor,
+          width: 1,
+        }
+      },
+      axisLabel: {
+        color: options.axisLabelColor,
+        fontFamily: ECHARTS_GLOBAL_FONT_FAMILY,
+        fontSize: options.axisLabelFontSize,
+        margin: this.isMobile ? 8 : 10,
+        formatter: (value: number) => this.formatDataValue(panel.dataType, value, false)
+      }
+    };
+  }
+
+  private buildOverlaySeriesOptions(
+    overlayPanel: EventChartPanelModel,
+    primaryStrokeWidth: number
+  ): ChartLineSeriesOption[] {
+    const overlayStrokeWidth = Math.max(1, primaryStrokeWidth - 0.5);
+    return overlayPanel.series.map((series) => ({
+      id: `overlay::${series.id}`,
+      name: series.activityName,
+      type: 'line',
+      yAxisIndex: 1,
+      smooth: false,
+      showSymbol: false,
+      symbolSize: 5,
+      connectNulls: this.isBatteryStreamType(series.streamType),
+      progressive: series.points.length >= PROGRESSIVE_THRESHOLD ? PROGRESSIVE_STEP : 0,
+      progressiveThreshold: PROGRESSIVE_THRESHOLD,
+      progressiveChunkMode: 'mod',
+      animation: this.useAnimations === true,
+      lineStyle: {
+        width: overlayStrokeWidth,
+        type: 'dashed',
+        color: series.color,
+        opacity: 0.82,
+      },
+      itemStyle: {
+        color: series.color,
+        opacity: 0.82,
+      },
+      emphasis: {
+        disabled: true,
+      },
+      data: this.getSeriesLineData(series.points),
+    }));
   }
 
   private buildZoneVisualMapOptions(panel: EventChartPanelModel): Record<string, unknown>[] {
@@ -1244,13 +1369,14 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     );
     const tooltipLines: string[] = [];
     const resolvedPoints = this.resolveTooltipPointsAtX(xValue);
+    const hasOverlay = !!this.getActiveOverlayPanel();
     for (let index = 0; index < resolvedPoints.length; index += 1) {
       const resolvedPoint = resolvedPoints[index];
       const formatted = this.formatDataValue(resolvedPoint.series.streamType || '', resolvedPoint.point.y as number);
-      const label = this.showActivityNamesInTooltip ? `${resolvedPoint.series.activityName}: ` : '';
+      const label = this.buildTooltipRowLabel(resolvedPoint, hasOverlay);
       const markerColor = this.resolveSeriesPointColor(resolvedPoint.series, resolvedPoint.point.y);
       tooltipLines.push(
-        `<div><span style="display:inline-block;margin-right:6px;border-radius:50%;width:8px;height:8px;background:${markerColor};"></span>${label}${formatted}</div>`
+        `<div><span style="display:inline-block;margin-right:6px;border-radius:50%;width:8px;height:8px;background:${markerColor};"></span>${label ? `${label}: ` : ''}${formatted}</div>`
       );
     }
 
@@ -1259,6 +1385,20 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     }
 
     return `<div style="font-weight:600;margin-bottom:4px;">${header}</div>${tooltipLines.join('')}`;
+  }
+
+  private buildTooltipRowLabel(resolvedPoint: TooltipResolvedPoint, hasOverlay: boolean): string {
+    const activityName = `${resolvedPoint.series.activityName || ''}`.trim();
+    const metricName = `${resolvedPoint.panel.displayName || resolvedPoint.series.displayName || ''}`.trim();
+
+    if (hasOverlay) {
+      return [
+        metricName,
+        this.showActivityNamesInTooltip ? activityName : '',
+      ].filter((part) => part.length > 0).join(' · ');
+    }
+
+    return this.showActivityNamesInTooltip ? activityName : '';
   }
 
   private resolveSeriesPointColor(series: PanelSeriesModel, value: number | null): string {
@@ -1293,30 +1433,38 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     return Number.NaN;
   }
 
-  private resolveTooltipPointsAtX(xValue: number): Array<{ series: PanelSeriesModel; point: EventChartPoint }> {
+  private resolveTooltipPointsAtX(xValue: number): TooltipResolvedPoint[] {
     if (!this.panel) {
       return [];
     }
 
     const pixelTolerance = this.getTooltipMaxXDistance();
-    const resolvedPoints: Array<{ series: PanelSeriesModel; point: EventChartPoint }> = [];
+    const panels = [
+      this.panel,
+      this.getActiveOverlayPanel(),
+    ].filter((panel): panel is EventChartPanelModel => !!panel);
+    const resolvedPoints: TooltipResolvedPoint[] = [];
 
-    for (let index = 0; index < this.panel.series.length; index += 1) {
-      const series = this.panel.series[index];
-      const nearestPoint = this.findNearestTooltipPoint(series.points, xValue);
-      if (!nearestPoint || !Number.isFinite(nearestPoint.point.y)) {
-        continue;
+    for (let panelIndex = 0; panelIndex < panels.length; panelIndex += 1) {
+      const panel = panels[panelIndex];
+      for (let seriesIndex = 0; seriesIndex < panel.series.length; seriesIndex += 1) {
+        const series = panel.series[seriesIndex];
+        const nearestPoint = this.findNearestTooltipPoint(series.points, xValue);
+        if (!nearestPoint || !Number.isFinite(nearestPoint.point.y)) {
+          continue;
+        }
+
+        const maxAcceptedDistance = this.getTooltipAcceptedXDistance(series.points, nearestPoint.index, pixelTolerance);
+        if (nearestPoint.distance > maxAcceptedDistance) {
+          continue;
+        }
+
+        resolvedPoints.push({
+          panel,
+          series,
+          point: nearestPoint.point,
+        });
       }
-
-      const maxAcceptedDistance = this.getTooltipAcceptedXDistance(series.points, nearestPoint.index, pixelTolerance);
-      if (nearestPoint.distance > maxAcceptedDistance) {
-        continue;
-      }
-
-      resolvedPoints.push({
-        series,
-        point: nearestPoint.point,
-      });
     }
 
     return resolvedPoints;
@@ -1544,19 +1692,43 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     }
 
     const scaleOptions = buildEventCanonicalXAxisScaleOptions(this.xAxisType, this.getVisibleXAxisRange(), this.isMobile);
+    const visibleRange = this.getVisibleXAxisRange();
+    const overlayPanel = this.getActiveOverlayPanel();
     const yAxisConfig = buildEventPanelYAxisConfig({
       panel: this.panel,
-      visibleRange: this.getVisibleXAxisRange(),
+      visibleRange,
     });
-
-    this.chartHost.setOption({
-      ...(scaleOptions ? { xAxis: scaleOptions } : {}),
-      yAxis: {
+    const overlayYAxisConfig = overlayPanel
+      ? buildEventPanelYAxisConfig({
+        panel: overlayPanel,
+        visibleRange,
+      })
+      : null;
+    const yAxisUpdate = overlayPanel && overlayYAxisConfig
+      ? [
+        {
+          inverse: yAxisConfig.inverse,
+          min: yAxisConfig.min,
+          max: yAxisConfig.max,
+          interval: yAxisConfig.interval,
+        },
+        {
+          inverse: overlayYAxisConfig.inverse,
+          min: overlayYAxisConfig.min,
+          max: overlayYAxisConfig.max,
+          interval: overlayYAxisConfig.interval,
+        }
+      ]
+      : {
         inverse: yAxisConfig.inverse,
         min: yAxisConfig.min,
         max: yAxisConfig.max,
         interval: yAxisConfig.interval,
-      },
+      };
+
+    this.chartHost.setOption({
+      ...(scaleOptions ? { xAxis: scaleOptions } : {}),
+      yAxis: yAxisUpdate,
     }, {
       notMerge: false,
       lazyUpdate: true,
@@ -1723,12 +1895,69 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       return;
     }
 
-    this.rangeStats = computeEventPanelRangeStats({
+    const primaryStats = computeEventPanelRangeStats({
       panel: this.panel,
       range,
       xAxisType: this.xAxisType,
       gainAndLossThreshold: this.gainAndLossThreshold,
     });
+    const overlayPanel = this.getActiveOverlayPanel();
+
+    if (!overlayPanel) {
+      this.rangeStats = primaryStats;
+      return;
+    }
+
+    const overlayStats = computeEventPanelRangeStats({
+      panel: overlayPanel,
+      range,
+      xAxisType: this.xAxisType,
+      gainAndLossThreshold: this.gainAndLossThreshold,
+    });
+
+    this.rangeStats = this.mergeRangeStatsByActivity([
+      ...this.prefixRangeStats(primaryStats, this.panel.displayName),
+      ...this.prefixRangeStats(overlayStats, overlayPanel.displayName),
+    ]);
+  }
+
+  private prefixRangeStats(stats: EventPanelRangeStat[], metricLabel: string): EventPanelRangeStat[] {
+    const normalizedMetricLabel = `${metricLabel || ''}`.trim();
+    if (!normalizedMetricLabel) {
+      return stats;
+    }
+
+    return stats.map((stat) => ({
+      ...stat,
+      entries: stat.entries.map((entry) => ({
+        ...entry,
+        label: `${normalizedMetricLabel} ${entry.label}`,
+      })),
+    }));
+  }
+
+  private mergeRangeStatsByActivity(stats: EventPanelRangeStat[]): EventPanelRangeStat[] {
+    const mergedStats: EventPanelRangeStat[] = [];
+    const mergedByActivity = new Map<string, EventPanelRangeStat>();
+
+    for (let index = 0; index < stats.length; index += 1) {
+      const stat = stats[index];
+      const key = `${stat.activityID || ''}|${stat.activityName || ''}`;
+      const existing = mergedByActivity.get(key);
+      if (existing) {
+        existing.entries = existing.entries.concat(stat.entries);
+        continue;
+      }
+
+      const nextStat = {
+        ...stat,
+        entries: [...stat.entries],
+      };
+      mergedByActivity.set(key, nextStat);
+      mergedStats.push(nextStat);
+    }
+
+    return mergedStats;
   }
 
   private clearSelectionOverlay(): void {

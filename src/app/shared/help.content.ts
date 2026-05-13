@@ -223,6 +223,7 @@ export const HELP_SECTIONS: HelpSection[] = [
 
 - In Event details, if selected indoor activities do not include distance data, the chart automatically falls back to a **Duration** x-axis.
 - In that case, the **Distance** x-axis option stays visible but is disabled until a compatible activity selection is active.
+- Each event chart panel can use the **Overlay** button to compare one other available metric on a right-side y-axis; overlay choices are saved globally by primary metric, so **Heart Rate** can always request **Altitude** when both streams exist.
 - When provider heart-rate or power zone boundaries are available on non-merged events, the **Heart Rate** and **Power** charts color their lines and visible fill by zone.`,
     links: [
       { label: 'Login', icon: 'login', kind: 'route', target: '/login' },
