@@ -10,6 +10,8 @@ import { loggedInGuard } from './authentication/logged-in.guard';
 import { pricingRedirectGuard } from './authentication/pricing-redirect.guard';
 import { releasesResolver } from './resolvers/releases.resolver';
 
+const HOME_SEO_DESCRIPTION = 'Quantified Self brings Garmin, Suunto, and COROS activity data into one private training dashboard with AI Insights and automatic sync from Garmin or COROS to Suunto.';
+
 export const routes: Routes = [
   {
     path: 'login',
@@ -175,18 +177,17 @@ export const routes: Routes = [
     loadChildren: () => import('./modules/home.module').then(module => module.HomeModule),
     data: {
       animation: 'Home',
-      description: 'Quantified Self delivers reliable and instant performance analytics with AI Insights, full history imports, and automatic Garmin -> Suunto plus COROS -> Suunto sync for newly imported activities, plus catch-up sync for events already stored in Quantified Self.',
-      keywords: 'quantified self, ai insights, performance analytics, training analytics, garmin connect sync, suunto app, garmin to suunto sync, coros to suunto sync, automatic sync between services, catch-up sync, history import',
+      description: HOME_SEO_DESCRIPTION,
+      keywords: 'quantified self, ai insights, performance analytics, training analytics, garmin connect sync, suunto app, garmin to suunto sync, coros to suunto sync, automatic sync between services, catch-up sync',
       jsonLd: {
         "@context": "https://schema.org",
         "@type": "SoftwareApplication",
         "name": "Quantified Self",
         "applicationCategory": "HealthApplication",
         "operatingSystem": "Web",
-        "description": "Reliable and instant performance analytics with AI Insights, full history imports, and automatic Garmin -> Suunto plus COROS -> Suunto sync for newly imported activities, plus catch-up sync for events already stored in Quantified Self.",
+        "description": HOME_SEO_DESCRIPTION,
         "featureList": [
           "AI Insights with chart-backed answers",
-          "Full history imports for Garmin, Suunto, and COROS",
           "Automatic Garmin -> Suunto sync for newly imported Garmin activities",
           "Automatic COROS -> Suunto sync for newly imported COROS activities",
           "Manual catch-up sync for events already stored in Quantified Self"
