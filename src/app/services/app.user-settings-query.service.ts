@@ -5,7 +5,6 @@ import { map, distinctUntilChanged } from 'rxjs/operators';
 import { AppAuthService } from '../authentication/app.auth.service';
 import { AppUserService } from './app.user.service';
 import {
-    UserMyTracksSettingsInterface,
     UserSummariesSettingsInterface,
     AppThemes
 } from '@sports-alliance/sports-lib';
@@ -74,10 +73,10 @@ export class AppUserSettingsQueryService {
      */
     public readonly myTracksSettings = toSignal(
         this.user$.pipe(
-            map(user => user?.settings?.myTracksSettings ?? {} as UserMyTracksSettingsInterface),
+            map(user => user?.settings?.myTracksSettings ?? {} as AppMyTracksSettings),
             distinctUntilChanged((prev, curr) => equal(prev, curr))
         ),
-        { initialValue: {} as UserMyTracksSettingsInterface }
+        { initialValue: {} as AppMyTracksSettings }
     );
 
     /**

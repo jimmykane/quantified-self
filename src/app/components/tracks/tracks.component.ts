@@ -7,7 +7,7 @@ import { take, filter } from 'rxjs/operators';
 import { AppUserInterface } from '../../models/app-user.interface';
 import { AppEventColorService } from '../../services/color/app.event.color.service';
 import { Subject, Subscription, firstValueFrom } from 'rxjs';
-import { DateRanges, ActivityTypes, DataPaceAvg, DataSpeedAvg, DataSwimPaceAvg } from '@sports-alliance/sports-lib';
+import { DateRanges, ActivityTypes, DataPaceAvg, DataSpeedAvg, DataSwimPaceAvg, DaysOfTheWeek } from '@sports-alliance/sports-lib';
 import { DataStartPosition } from '@sports-alliance/sports-lib';
 import { DataPositionInterface } from '@sports-alliance/sports-lib';
 import { DataJumpEvent } from '@sports-alliance/sports-lib';
@@ -173,6 +173,7 @@ export class TracksComponent implements OnInit, OnDestroy {
     DateRanges.lastThirtyDays,
     DateRanges.thisYear,
     DateRanges.lastYear,
+    DateRanges.custom,
     DateRanges.all
   ]
   bufferProgress = new Subject<number>();
@@ -206,6 +207,9 @@ export class TracksComponent implements OnInit, OnDestroy {
   private tripDetectionService = inject(MyTracksTripDetectionService);
   private tripLocationLabelService = inject(TripLocationLabelService);
   private myTracksPolylineCacheService = inject(MyTracksPolylineCacheService);
+  public readonly myTracksSettings = computed(() => this.userSettingsQuery.myTracksSettings() as AppMyTracksSettings);
+  public readonly selectedMyTracksStartDate = computed(() => this.dateFromTimestamp(this.myTracksSettings()?.startDate));
+  public readonly selectedMyTracksEndDate = computed(() => this.dateFromTimestamp(this.myTracksSettings()?.endDate));
 
   public isLoading: WritableSignal<boolean> = signal(false);
   public detectedTrips: WritableSignal<DetectedTripViewModel[]> = signal([]);
@@ -264,7 +268,7 @@ export class TracksComponent implements OnInit, OnDestroy {
     this.searchPeekExpanded.set(this.searchPeekDefaultExpanded());
 
     // Track last settings to prevent redundant data fetching
-    let lastLoadedDataSettings: { dateRange: DateRanges, activityTypes?: ActivityTypes[] } | null = null;
+    let lastLoadedDataSettings: { dateRange: DateRanges, startDate: number | null, endDate: number | null, activityTypes?: ActivityTypes[] } | null = null;
     let isFirstRun = true;
 
     // Unified Reactive State: Combines Settings and Theme
@@ -301,16 +305,29 @@ export class TracksComponent implements OnInit, OnDestroy {
 
       // 4. Data Loading
       // Check if data-impacting settings changed
-      const currentSnapshot = { dateRange: myTracksSettings.dateRange, activityTypes: myTracksSettings.activityTypes };
+      const currentSnapshot = {
+        dateRange: myTracksSettings.dateRange,
+        startDate: this.getActiveMyTracksStartTimestamp(myTracksSettings),
+        endDate: this.getActiveMyTracksEndTimestamp(myTracksSettings),
+        activityTypes: myTracksSettings.activityTypes,
+      };
 
       const dataChanged = !lastLoadedDataSettings ||
         lastLoadedDataSettings.dateRange !== currentSnapshot.dateRange ||
+        lastLoadedDataSettings.startDate !== currentSnapshot.startDate ||
+        lastLoadedDataSettings.endDate !== currentSnapshot.endDate ||
         JSON.stringify(lastLoadedDataSettings.activityTypes) !== JSON.stringify(currentSnapshot.activityTypes);
 
       if (dataChanged) {
         lastLoadedDataSettings = currentSnapshot;
         this.isLoading.set(true);
-        this.loadTracksMapForUserByDateRange(user, myTracksSettings.dateRange, myTracksSettings.activityTypes)
+        this.loadTracksMapForUserByDateRange(
+          user,
+          myTracksSettings.dateRange,
+          myTracksSettings.activityTypes,
+          currentSnapshot.startDate,
+          currentSnapshot.endDate,
+        )
           .catch(err => this.logger.error('Error loading tracks', err))
           .finally(() => this.isLoading.set(false));
       }
@@ -465,6 +482,8 @@ export class TracksComponent implements OnInit, OnDestroy {
     // AppUserSettingsQueryService handles persistence to backend.
     this.userSettingsQuery.updateMyTracksSettings({
       dateRange: event.dateRange,
+      startDate: event.dateRange === DateRanges.custom ? event.startDate?.getTime() ?? null : null,
+      endDate: event.dateRange === DateRanges.custom ? event.endDate?.getTime() ?? null : null,
       activityTypes: event.activityTypes
     });
 
@@ -596,7 +615,13 @@ export class TracksComponent implements OnInit, OnDestroy {
     return events || [];
   }
 
-  private async loadTracksMapForUserByDateRange(user: AppUserInterface | undefined, dateRange: DateRanges, activityTypes?: ActivityTypes[]) {
+  private async loadTracksMapForUserByDateRange(
+    user: AppUserInterface | undefined,
+    dateRange: DateRanges,
+    activityTypes?: ActivityTypes[],
+    customStartTimestamp: number | null = null,
+    customEndTimestamp: number | null = null,
+  ) {
     if (!user) {
       this.logger.warn('[TracksComponent] Skipping track load because user is undefined.');
       return;
@@ -647,7 +672,12 @@ export class TracksComponent implements OnInit, OnDestroy {
     this.tracksMapManager.clearAllTracks();
     this.tracksMapManager.clearJumpHeatmap();
     this.clearProgressAndOpenBottomSheet();
-    const dates = getDatesForDateRange(dateRange, user.settings?.unitSettings?.startOfTheWeek || 1);
+    const dates = this.resolveMyTracksLoadDates(
+      dateRange,
+      user.settings?.unitSettings?.startOfTheWeek || DaysOfTheWeek.Monday,
+      customStartTimestamp,
+      customEndTimestamp,
+    );
     const where = this.buildStartDateWhereClauses(
       dates.startDate?.getTime() ?? null,
       dates.endDate?.getTime() ?? null,
@@ -1960,6 +1990,59 @@ export class TracksComponent implements OnInit, OnDestroy {
     }
 
     return where;
+  }
+
+  private resolveMyTracksLoadDates(
+    dateRange: DateRanges,
+    startOfTheWeek: DaysOfTheWeek,
+    customStartTimestamp: number | null,
+    customEndTimestamp: number | null,
+  ): { startDate: Date | null; endDate: Date | null } {
+    if (dateRange === DateRanges.custom) {
+      const startDate = this.dateFromTimestamp(customStartTimestamp);
+      const endDate = this.dateFromTimestamp(customEndTimestamp);
+      if (startDate && endDate) {
+        return { startDate, endDate };
+      }
+
+      this.logger.warn('[TracksComponent] Custom date range missing bounds; falling back to default MyTracks date range.');
+      const fallbackRange = getDatesForDateRange(DateRanges.lastThirtyDays, startOfTheWeek);
+      return {
+        startDate: fallbackRange.startDate ?? null,
+        endDate: fallbackRange.endDate ?? null,
+      };
+    }
+
+    const range = getDatesForDateRange(dateRange, startOfTheWeek);
+    return {
+      startDate: range.startDate ?? null,
+      endDate: range.endDate ?? null,
+    };
+  }
+
+  private getActiveMyTracksStartTimestamp(settings: AppMyTracksSettings | undefined): number | null {
+    if (settings?.dateRange !== DateRanges.custom) {
+      return null;
+    }
+
+    return this.normalizeTimestamp(settings?.startDate);
+  }
+
+  private getActiveMyTracksEndTimestamp(settings: AppMyTracksSettings | undefined): number | null {
+    if (settings?.dateRange !== DateRanges.custom) {
+      return null;
+    }
+
+    return this.normalizeTimestamp(settings?.endDate);
+  }
+
+  private dateFromTimestamp(timestamp: number | null | undefined): Date | null {
+    const normalizedTimestamp = this.normalizeTimestamp(timestamp);
+    return normalizedTimestamp === null ? null : new Date(normalizedTimestamp);
+  }
+
+  private normalizeTimestamp(timestamp: number | null | undefined): number | null {
+    return Number.isFinite(timestamp) ? timestamp as number : null;
   }
 
   private async getHomeInferenceCandidatesForCurrentLoad(

@@ -33,13 +33,20 @@ export class PaymentSuccessComponent implements OnInit {
       return;
     }
 
+    if (this.resolveCheckoutMode() === 'payment') {
+      this.logger.log('PaymentSuccess: Payment-mode checkout succeeded. Logging purchase without waiting for stripeRole.');
+      this.logPurchaseAnalytics(null);
+      this.isRefreshing = false;
+      return;
+    }
+
     const maxAttempts = 10;
     let attempt = 0;
-    let hasPremiumClaim = false;
+    let hasPaidClaim = false;
 
     this.logger.log('PaymentSuccess: Starting claim polling...');
 
-    while (!hasPremiumClaim && attempt < maxAttempts) {
+    while (!hasPaidClaim && attempt < maxAttempts) {
       attempt++;
       try {
         this.logger.log(`PaymentSuccess: Polling attempt ${attempt}/${maxAttempts}...`);
@@ -49,13 +56,13 @@ export class PaymentSuccessComponent implements OnInit {
 
         this.logger.log('PaymentSuccess: Claims:', tokenResult.claims);
 
-        if (role) {
-          this.logger.log(`PaymentSuccess: Found stripeRole '${role}' on attempt ${attempt}!`);
-          hasPremiumClaim = true;
+        if (this.isPaidRole(role)) {
+          this.logger.log(`PaymentSuccess: Found paid stripeRole '${role}' on attempt ${attempt}!`);
+          hasPaidClaim = true;
           this.assignedRole = role;
           this.logPurchaseAnalytics(role);
         } else {
-          this.logger.warn(`PaymentSuccess: stripeRole not found on attempt ${attempt}. Waiting...`);
+          this.logger.warn(`PaymentSuccess: paid stripeRole not found on attempt ${attempt}. Waiting...`);
           // Wait 2 seconds before next try
           await new Promise(resolve => setTimeout(resolve, 2000));
         }
@@ -66,15 +73,16 @@ export class PaymentSuccessComponent implements OnInit {
       }
     }
 
-    if (!hasPremiumClaim) {
-      this.logger.error('PaymentSuccess: Timeout waiting for stripeRole. User might need to re-login or wait longer.');
+    if (!hasPaidClaim) {
+      this.logger.error('PaymentSuccess: Timeout waiting for paid stripeRole. User might need to re-login or wait longer.');
     }
 
     this.isRefreshing = false;
   }
 
-  private logPurchaseAnalytics(role: string): void {
-    const sessionId = this.route.snapshot.queryParamMap.get('session_id');
+  private logPurchaseAnalytics(role: string | null): void {
+    const queryParamMap = this.route.snapshot.queryParamMap;
+    const sessionId = queryParamMap.get('session_id');
     if (!sessionId) {
       this.logger.warn('PaymentSuccess: Missing checkout session id; skipping purchase analytics.');
       return;
@@ -82,7 +90,29 @@ export class PaymentSuccessComponent implements OnInit {
 
     this.analyticsService.logPurchaseOnce({
       transactionId: sessionId,
-      role
+      role,
+      contextId: queryParamMap.get('purchase_context_id'),
+      isTrialCheckout: this.resolveTrialCheckoutParam(queryParamMap.get('trial_checkout'))
     });
+  }
+
+  private isPaidRole(role: unknown): role is 'basic' | 'pro' {
+    return role === 'basic' || role === 'pro';
+  }
+
+  private resolveTrialCheckoutParam(value: string | null): boolean | undefined {
+    if (value === '1') {
+      return true;
+    }
+
+    if (value === '0') {
+      return false;
+    }
+
+    return undefined;
+  }
+
+  private resolveCheckoutMode(): 'payment' | 'subscription' {
+    return this.route.snapshot.queryParamMap.get('checkout_mode') === 'payment' ? 'payment' : 'subscription';
   }
 }

@@ -111,7 +111,7 @@ describe('PricingComponent', () => {
                     useValue: {
                         logEvent: vi.fn(),
                         logBeginCheckout: vi.fn(),
-                        storePendingPurchaseContext: vi.fn(),
+                        storePendingPurchaseContext: vi.fn().mockReturnValue('purchase_ctx_123'),
                         logManageSubscription: vi.fn(),
                         logSelectFreeTier: vi.fn(),
                         logRestorePurchases: vi.fn()
@@ -691,8 +691,10 @@ describe('PricingComponent', () => {
 
     it('should log begin_checkout event on subscribe', async () => {
         const analyticsService = TestBed.inject(AppAnalyticsService);
+        const paymentService = TestBed.inject(AppPaymentService);
         const logSpy = vi.spyOn(analyticsService, 'logBeginCheckout');
         const pendingPurchaseSpy = vi.spyOn(analyticsService, 'storePendingPurchaseContext');
+        const checkoutSpy = vi.spyOn(paymentService, 'appendCheckoutSession');
         const price = { id: 'price_123', currency: 'USD', unit_amount: 1000 };
 
         authServiceMock.user$ = of(acceptedPoliciesUser as any);
@@ -705,6 +707,10 @@ describe('PricingComponent', () => {
             mode: 'subscription',
             currency: 'USD',
             value: 10,
+            isTrialCheckout: false,
+        });
+        expect(checkoutSpy).toHaveBeenCalledWith(price, undefined, undefined, {
+            purchaseContextId: 'purchase_ctx_123',
             isTrialCheckout: false,
         });
     });

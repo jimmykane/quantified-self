@@ -454,14 +454,18 @@ export class PricingComponent implements OnInit, OnDestroy {
                 checkoutCurrency,
                 checkoutValue
             );
-            this.analyticsService.storePendingPurchaseContext({
+            const isTrialCheckout = this.isTrialCheckout(price);
+            const purchaseContextId = this.analyticsService.storePendingPurchaseContext({
                 priceId,
                 mode: typeof price !== 'string' && price.type === 'one_time' ? 'payment' : 'subscription',
                 currency: checkoutCurrency,
                 value: checkoutValue,
-                isTrialCheckout: this.isTrialCheckout(price)
+                isTrialCheckout
             });
-            await this.paymentService.appendCheckoutSession(price);
+            await this.paymentService.appendCheckoutSession(price, undefined, undefined, {
+                purchaseContextId,
+                isTrialCheckout
+            });
         } catch (error) {
             const errorMessage = (error as Error).message || '';
             if (errorMessage === 'User cancelled redirection to portal.') {

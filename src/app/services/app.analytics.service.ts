@@ -22,6 +22,7 @@ export interface PurchaseAnalyticsContext {
 export interface PurchaseAnalyticsParams extends Partial<PurchaseAnalyticsContext> {
     transactionId: string;
     role?: string | null;
+    contextId?: string | null;
 }
 
 @Injectable({ providedIn: 'root' })
@@ -31,7 +32,7 @@ export class AppAnalyticsService {
     private logger = inject(LoggerService);
     private windowService = inject(AppWindowService);
     private hasConsent = false;
-    private readonly pendingPurchaseStorageKey = 'app.analytics.pending_purchase';
+    private readonly pendingPurchaseStorageKeyPrefix = 'app.analytics.pending_purchase.';
     private readonly loggedPurchaseStorageKeyPrefix = 'app.analytics.purchase_logged.';
 
     constructor() {
@@ -70,7 +71,8 @@ export class AppAnalyticsService {
         }
     }
 
-    storePendingPurchaseContext(context: PurchaseAnalyticsContext): void {
+    storePendingPurchaseContext(context: PurchaseAnalyticsContext): string {
+        const contextId = this.createPurchaseContextId();
         const normalizedContext: PurchaseAnalyticsContext & { createdAt: number } = {
             priceId: context.priceId,
             mode: context.mode,
@@ -89,10 +91,11 @@ export class AppAnalyticsService {
             normalizedContext.isTrialCheckout = true;
         }
 
-        this.setStorageItem(this.pendingPurchaseStorageKey, JSON.stringify(normalizedContext));
+        this.setStorageItem(this.getPendingPurchaseStorageKey(contextId), JSON.stringify(normalizedContext));
+        return contextId;
     }
 
-    logPurchaseOnce(params: Pick<PurchaseAnalyticsParams, 'transactionId' | 'role'>): void {
+    logPurchaseOnce(params: Pick<PurchaseAnalyticsParams, 'transactionId' | 'role' | 'contextId' | 'isTrialCheckout'>): void {
         const transactionId = params.transactionId.trim();
         if (!transactionId) {
             return;
@@ -103,23 +106,39 @@ export class AppAnalyticsService {
             return;
         }
 
-        const pendingContext = this.getPendingPurchaseContext();
-        if (!pendingContext) {
+        const contextId = typeof params.contextId === 'string' && params.contextId.trim()
+            ? params.contextId.trim()
+            : null;
+        const pendingContext = contextId ? this.getPendingPurchaseContext(contextId) : null;
+        const isTrialCheckout = pendingContext?.isTrialCheckout === true || params.isTrialCheckout === true;
+
+        if (isTrialCheckout) {
+            if (contextId) {
+                this.removeStorageItem(this.getPendingPurchaseStorageKey(contextId));
+            }
             return;
         }
 
-        if (pendingContext.isTrialCheckout) {
-            this.removeStorageItem(this.pendingPurchaseStorageKey);
+        if (!pendingContext && params.isTrialCheckout !== false) {
             return;
         }
 
-        this.logPurchase({
-            ...pendingContext,
-            transactionId,
-            role: params.role,
-        });
+        const purchaseParams: PurchaseAnalyticsParams = pendingContext
+            ? {
+                ...pendingContext,
+                transactionId,
+                role: params.role,
+            }
+            : {
+                transactionId,
+                role: params.role,
+            };
+
+        this.logPurchase(purchaseParams);
         this.setStorageItem(loggedStorageKey, new Date().toISOString());
-        this.removeStorageItem(this.pendingPurchaseStorageKey);
+        if (contextId) {
+            this.removeStorageItem(this.getPendingPurchaseStorageKey(contextId));
+        }
     }
 
     logPurchase(params: PurchaseAnalyticsParams): void {
@@ -164,8 +183,8 @@ export class AppAnalyticsService {
         return item;
     }
 
-    private getPendingPurchaseContext(): PurchaseAnalyticsContext | null {
-        const rawContext = this.getStorageItem(this.pendingPurchaseStorageKey);
+    private getPendingPurchaseContext(contextId: string): PurchaseAnalyticsContext | null {
+        const rawContext = this.getStorageItem(this.getPendingPurchaseStorageKey(contextId));
         if (!rawContext) {
             return null;
         }
@@ -259,6 +278,28 @@ export class AppAnalyticsService {
 
     private isFiniteNumber(value: unknown): value is number {
         return typeof value === 'number' && Number.isFinite(value);
+    }
+
+    private getPendingPurchaseStorageKey(contextId: string): string {
+        return `${this.pendingPurchaseStorageKeyPrefix}${contextId}`;
+    }
+
+    private createPurchaseContextId(): string {
+        const crypto = this.getCrypto();
+        if (crypto && typeof crypto.randomUUID === 'function') {
+            return crypto.randomUUID();
+        }
+
+        const randomPart = Math.random().toString(36).slice(2, 12);
+        return `${Date.now().toString(36)}-${randomPart}`;
+    }
+
+    private getCrypto(): Crypto | null {
+        try {
+            return this.windowService.windowRef.crypto ?? null;
+        } catch {
+            return null;
+        }
     }
 
     // ─────────────────────────────────────────────────────────────────────────────

@@ -299,6 +299,8 @@ describe('AppUserUtilities', () => {
             ))).toBe(false);
             expect(settings.unitSettings?.distanceUnits).toBe(DistanceUnits.Kilometers);
             expect(settings.unitSettings?.startOfTheWeek).toBe(1); // Monday
+            expect((settings.myTracksSettings as any)?.startDate).toBeNull();
+            expect((settings.myTracksSettings as any)?.endDate).toBeNull();
             expect((settings.myTracksSettings as any)?.showJumpHeatmap).toBe(true);
             expect(settings.serviceSyncSettings?.activitySyncRoutes?.[ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp]?.enabled).toBe(false);
             expect(settings.serviceSyncSettings?.activitySyncRoutes?.[ACTIVITY_SYNC_ROUTE_IDS.COROSAPI_to_SuuntoApp]?.enabled).toBe(false);
@@ -680,6 +682,40 @@ describe('AppUserUtilities', () => {
 
             const settings = AppUserUtilities.fillMissingAppSettings(user);
             expect((settings.myTracksSettings as any)?.showJumpHeatmap).toBe(false);
+        });
+
+        it('should preserve valid custom MyTracks date boundaries', () => {
+            const startDate = Date.parse('2025-02-01T00:00:00.000Z');
+            const endDate = Date.parse('2025-02-10T23:59:59.999Z');
+            const user = {
+                settings: {
+                    myTracksSettings: {
+                        dateRange: DateRanges.custom,
+                        startDate,
+                        endDate
+                    }
+                }
+            } as any;
+
+            const settings = AppUserUtilities.fillMissingAppSettings(user);
+            expect(settings.myTracksSettings?.dateRange).toBe(DateRanges.custom);
+            expect((settings.myTracksSettings as any)?.startDate).toBe(startDate);
+            expect((settings.myTracksSettings as any)?.endDate).toBe(endDate);
+        });
+
+        it('should fall back from custom MyTracks range when a boundary is missing', () => {
+            const user = {
+                settings: {
+                    myTracksSettings: {
+                        dateRange: DateRanges.custom,
+                        startDate: Date.parse('2025-02-01T00:00:00.000Z')
+                    }
+                }
+            } as any;
+
+            const settings = AppUserUtilities.fillMissingAppSettings(user);
+            expect(settings.myTracksSettings?.dateRange).toBe(AppUserUtilities.getDefaultMyTracksDateRange());
+            expect((settings.myTracksSettings as any)?.endDate).toBeNull();
         });
 
         it('should remove legacy mapSettings.showPoints', () => {

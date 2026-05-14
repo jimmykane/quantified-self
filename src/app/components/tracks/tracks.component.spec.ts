@@ -1059,6 +1059,41 @@ describe('TracksComponent', () => {
       expect(mockUserSettingsQuery.updateMyTracksSettings).toHaveBeenCalledWith({ showJumpHeatmap: false });
     });
 
+    it('should persist custom MyTracks date boundaries from search', async () => {
+      const startDate = new Date('2025-02-01T00:00:00.000Z');
+      const endDate = new Date('2025-02-10T23:59:59.999Z');
+
+      await component.search({
+        dateRange: DateRanges.custom,
+        startDate,
+        endDate,
+        activityTypes: [ActivityTypes.Running],
+      });
+
+      expect(mockUserSettingsQuery.updateMyTracksSettings).toHaveBeenCalledWith({
+        dateRange: DateRanges.custom,
+        startDate: startDate.getTime(),
+        endDate: endDate.getTime(),
+        activityTypes: [ActivityTypes.Running],
+      });
+    });
+
+    it('should clear custom MyTracks date boundaries for preset searches', async () => {
+      await component.search({
+        dateRange: DateRanges.lastThirtyDays,
+        startDate: new Date('2025-02-01T00:00:00.000Z'),
+        endDate: new Date('2025-02-10T23:59:59.999Z'),
+        activityTypes: [ActivityTypes.Cycling],
+      });
+
+      expect(mockUserSettingsQuery.updateMyTracksSettings).toHaveBeenCalledWith({
+        dateRange: DateRanges.lastThirtyDays,
+        startDate: null,
+        endDate: null,
+        activityTypes: [ActivityTypes.Cycling],
+      });
+    });
+
     it('should always expose jump heatmap toggle in map layers control updates', async () => {
       await component.ngOnInit();
       mockMapLayersControlHandle.updateInputs.mockClear();
@@ -1180,6 +1215,31 @@ describe('TracksComponent', () => {
           lat: 40.64
         })
       ]);
+    });
+
+    it('should query MyTracks events by custom date boundaries', async () => {
+      const startDate = new Date('2025-02-01T00:00:00.000Z');
+      const endDate = new Date('2025-02-10T23:59:59.999Z');
+
+      await (component as any).loadTracksMapForUserByDateRange(
+        mockUser,
+        DateRanges.custom,
+        [ActivityTypes.Running],
+        startDate.getTime(),
+        endDate.getTime(),
+      );
+
+      expect(mockEventService.getEventsOnceBy).toHaveBeenCalledWith(
+        mockUser,
+        [
+          { fieldPath: 'startDate', opStr: '>=', value: startDate.getTime() },
+          { fieldPath: 'startDate', opStr: '<=', value: endDate.getTime() },
+        ],
+        'startDate',
+        true,
+        0,
+        { preferCache: false },
+      );
     });
 
     it('should show cache-backed activity start points before committing polylines', async () => {
@@ -1942,11 +2002,17 @@ describe('TracksComponent', () => {
       component.user = mockUser as any;
       fixture.detectChanges();
 
+      const eventSearchDebug = fixture.debugElement.query(By.css(
+        'app-peek-panel.tracks-search-peek app-event-search.compact-filter-layout'
+      ));
       const eventSearch = fixture.nativeElement.querySelector(
         'app-peek-panel.tracks-search-peek app-event-search.compact-filter-layout'
       ) as HTMLElement;
 
       expect(eventSearch).not.toBeNull();
+      expect(eventSearchDebug.properties['showDatePicker']).toBe(true);
+      expect(eventSearchDebug.properties['showActivityTypePicker']).toBe(true);
+      expect(eventSearchDebug.properties['dateRangesToShow']).toContain(DateRanges.custom);
     });
 
     it('hides trips peek panel when no trips and no home area are detected', () => {

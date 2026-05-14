@@ -30,6 +30,8 @@ export interface AppMyTracksSettings extends UserMyTracksSettingsInterface {
     activityTypes?: ActivityTypes[];
     mapStyle?: 'default' | 'satellite' | 'outdoors';
     showJumpHeatmap?: boolean;
+    startDate?: number | null;
+    endDate?: number | null;
 }
 
 export type AppDashboardSleepTrendRange = '14d' | '30d' | '90d' | '1y';

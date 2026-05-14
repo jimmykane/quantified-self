@@ -64,6 +64,7 @@ import {
     AppDashboardSettingsInterface,
     AppDashboardTileEventFiltersInterface,
     AppMapSettingsInterface,
+    AppMyTracksSettings,
     AppUserInterface,
     AppUserSettingsInterface
 } from '../models/app-user.interface';
@@ -655,6 +656,12 @@ export class AppUserUtilities {
         settings.myTracksSettings.dateRange = isNumber(settings.myTracksSettings.dateRange)
             ? settings.myTracksSettings.dateRange
             : AppUserUtilities.getDefaultMyTracksDateRange();
+        const myTracksSettings = settings.myTracksSettings as AppMyTracksSettings;
+        myTracksSettings.startDate = Number.isFinite(myTracksSettings.startDate) ? myTracksSettings.startDate : null;
+        myTracksSettings.endDate = Number.isFinite(myTracksSettings.endDate) ? myTracksSettings.endDate : null;
+        if (myTracksSettings.dateRange === DateRanges.custom && (myTracksSettings.startDate === null || myTracksSettings.endDate === null)) {
+            myTracksSettings.dateRange = AppUserUtilities.getDefaultMyTracksDateRange();
+        }
         (settings.myTracksSettings as any).showJumpHeatmap = (settings.myTracksSettings as any).showJumpHeatmap !== false;
 
         // Export to CSV

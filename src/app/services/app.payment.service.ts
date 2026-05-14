@@ -78,6 +78,12 @@ interface CheckoutSessionDocumentData {
     error?: string | { message?: string };
 }
 
+interface CheckoutAnalyticsContext {
+    purchaseContextId?: string | null;
+    isTrialCheckout?: boolean;
+    mode?: CheckoutMode;
+}
+
 @Injectable({
     providedIn: 'root'
 })
@@ -290,15 +296,43 @@ export class AppPaymentService {
     /**
      * Creates a checkout session and redirects the user to Stripe.
      */
-    async appendCheckoutSession(price: string | StripePrice, successUrl?: string, cancelUrl?: string): Promise<void> {
+    async appendCheckoutSession(
+        price: string | StripePrice,
+        successUrl?: string,
+        cancelUrl?: string,
+        analyticsContext?: CheckoutAnalyticsContext
+    ): Promise<void> {
         const user = this.auth.currentUser;
         if (!user) {
             throw new Error('User must be authenticated to create a checkout session.');
         }
 
-        const success = successUrl || `${this.windowService.currentDomain}/payment/success?session_id={CHECKOUT_SESSION_ID}`;
+        const checkoutInput = this.resolveCheckoutInput(price);
+        const success = successUrl || this.buildPaymentSuccessUrl({
+            ...analyticsContext,
+            mode: checkoutInput.mode,
+        });
         const cancel = cancelUrl || `${this.windowService.currentDomain}/payment/cancel`;
         await this.appendCheckoutSessionWithAttempt(price, user.uid, success, cancel, user, 0);
+    }
+
+    private buildPaymentSuccessUrl(analyticsContext?: CheckoutAnalyticsContext): string {
+        const queryParts = ['session_id={CHECKOUT_SESSION_ID}'];
+        const purchaseContextId = analyticsContext?.purchaseContextId?.trim();
+
+        if (purchaseContextId) {
+            queryParts.push(`purchase_context_id=${encodeURIComponent(purchaseContextId)}`);
+        }
+
+        if (typeof analyticsContext?.isTrialCheckout === 'boolean') {
+            queryParts.push(`trial_checkout=${analyticsContext.isTrialCheckout ? '1' : '0'}`);
+        }
+
+        if (analyticsContext?.mode) {
+            queryParts.push(`checkout_mode=${analyticsContext.mode}`);
+        }
+
+        return `${this.windowService.currentDomain}/payment/success?${queryParts.join('&')}`;
     }
 
     private async appendCheckoutSessionWithAttempt(

@@ -23,9 +23,13 @@ describe('PaymentSuccessComponent', () => {
                 {
                     provide: ActivatedRoute,
                     useValue: {
-                        queryParams: of({ session_id: 'cs_test_123' }),
+                        queryParams: of({ session_id: 'cs_test_123', purchase_context_id: 'purchase_ctx_123', trial_checkout: '0' }),
                         snapshot: {
-                            queryParamMap: convertToParamMap({ session_id: 'cs_test_123' })
+                            queryParamMap: convertToParamMap({
+                                session_id: 'cs_test_123',
+                                purchase_context_id: 'purchase_ctx_123',
+                                trial_checkout: '0'
+                            })
                         }
                     }
                 },
@@ -64,7 +68,72 @@ describe('PaymentSuccessComponent', () => {
     it('should log purchase analytics with the Stripe Checkout session id', () => {
         expect(analyticsServiceMock.logPurchaseOnce).toHaveBeenCalledWith({
             transactionId: 'cs_test_123',
-            role: 'pro'
+            role: 'pro',
+            contextId: 'purchase_ctx_123',
+            isTrialCheckout: false
+        });
+    });
+
+    it('should not treat a free role as paid payment success', () => {
+        expect((component as any).isPaidRole('free')).toBe(false);
+        expect((component as any).isPaidRole('basic')).toBe(true);
+    });
+});
+
+describe('PaymentSuccessComponent payment-mode checkout', () => {
+    it('should log purchase analytics without waiting for stripeRole', async () => {
+        const analyticsServiceMock = {
+            logPurchaseOnce: vi.fn()
+        };
+        const getIdTokenResult = vi.fn().mockResolvedValue({ claims: {} });
+
+        TestBed.resetTestingModule();
+        await TestBed.configureTestingModule({
+            imports: [PaymentSuccessComponent],
+            providers: [
+                {
+                    provide: ActivatedRoute,
+                    useValue: {
+                        queryParams: of({
+                            session_id: 'cs_one_time_123',
+                            purchase_context_id: 'purchase_ctx_one_time',
+                            trial_checkout: '0',
+                            checkout_mode: 'payment'
+                        }),
+                        snapshot: {
+                            queryParamMap: convertToParamMap({
+                                session_id: 'cs_one_time_123',
+                                purchase_context_id: 'purchase_ctx_one_time',
+                                trial_checkout: '0',
+                                checkout_mode: 'payment'
+                            })
+                        }
+                    }
+                },
+                {
+                    provide: Auth,
+                    useValue: {
+                        currentUser: {
+                            uid: 'test-uid',
+                            getIdTokenResult
+                        }
+                    }
+                },
+                { provide: AppAnalyticsService, useValue: analyticsServiceMock },
+                { provide: LoggerService, useValue: { log: vi.fn(), warn: vi.fn(), error: vi.fn() } }
+            ]
+        }).compileComponents();
+
+        const fixture = TestBed.createComponent(PaymentSuccessComponent);
+        fixture.detectChanges();
+        await fixture.whenStable();
+
+        expect(getIdTokenResult).not.toHaveBeenCalled();
+        expect(analyticsServiceMock.logPurchaseOnce).toHaveBeenCalledWith({
+            transactionId: 'cs_one_time_123',
+            role: null,
+            contextId: 'purchase_ctx_one_time',
+            isTrialCheckout: false
         });
     });
 });
