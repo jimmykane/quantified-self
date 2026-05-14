@@ -8,12 +8,6 @@
   <div class="activity-types-filter-list" (click)="$event.stopPropagation()">
     <div class="activity-types-filter-header">
       <div class="activity-types-filter-label">Activities</div>
-      <button mat-button type="button" class="activity-types-filter-clear-button"
-        [disabled]="disabled || !selectedActivityTypes.length" aria-label="Clear activity filters"
-        (click)="$event.stopPropagation(); clearActivityTypes()">
-        <mat-icon>filter_alt_off</mat-icon>
-        <span>Clear</span>
-      </button>
     </div>
 
     <button mat-menu-item type="button" class="activity-types-filter-option"

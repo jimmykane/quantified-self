@@ -70,7 +70,8 @@ describe('PaymentSuccessComponent', () => {
             transactionId: 'cs_test_123',
             role: 'pro',
             contextId: 'purchase_ctx_123',
-            isTrialCheckout: false
+            isTrialCheckout: false,
+            mode: 'subscription'
         });
     });
 
@@ -133,7 +134,8 @@ describe('PaymentSuccessComponent payment-mode checkout', () => {
             transactionId: 'cs_one_time_123',
             role: null,
             contextId: 'purchase_ctx_one_time',
-            isTrialCheckout: false
+            isTrialCheckout: false,
+            mode: 'payment'
         });
     });
 });

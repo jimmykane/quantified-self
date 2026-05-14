@@ -92,7 +92,8 @@ export class PaymentSuccessComponent implements OnInit {
       transactionId: sessionId,
       role,
       contextId: queryParamMap.get('purchase_context_id'),
-      isTrialCheckout: this.resolveTrialCheckoutParam(queryParamMap.get('trial_checkout'))
+      isTrialCheckout: this.resolveTrialCheckoutParam(queryParamMap.get('trial_checkout')),
+      mode: this.resolveCheckoutMode()
     });
   }
 

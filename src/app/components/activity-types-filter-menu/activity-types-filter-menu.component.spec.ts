@@ -86,4 +86,15 @@ describe('ActivityTypesFilterMenuComponent', () => {
     expect(template).toContain('[attr.aria-label]="activityFilterAriaLabel"');
     expect(template).not.toContain('matTooltip');
   });
+
+  it('uses the all-activities row as the only visible clear action', () => {
+    const template = readFileSync(
+      join(process.cwd(), 'src/app/components/activity-types-filter-menu/activity-types-filter-menu.component.html'),
+      'utf8'
+    );
+
+    expect(template).toContain('All activities');
+    expect(template).not.toContain('activity-types-filter-clear-button');
+    expect(template).not.toContain('Clear activity filters');
+  });
 });

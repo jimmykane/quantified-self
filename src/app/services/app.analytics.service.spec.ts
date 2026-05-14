@@ -233,6 +233,7 @@ describe('AppAnalyticsService', () => {
             role: 'basic',
             contextId: 'missing_context',
             isTrialCheckout: false,
+            mode: 'subscription',
         });
 
         expect(logEvent).toHaveBeenCalledWith(expect.anything(), 'purchase', {
@@ -242,6 +243,28 @@ describe('AppAnalyticsService', () => {
                 item_name: 'basic subscription',
                 item_category: 'subscription',
                 item_variant: 'basic',
+                quantity: 1,
+            }]
+        });
+    });
+
+    it('should preserve payment mode when context storage is missing', () => {
+        userSubject.next({ acceptedTrackingPolicy: true } as User);
+
+        service.logPurchaseOnce({
+            transactionId: 'cs_missing_payment_context',
+            role: null,
+            contextId: 'missing_payment_context',
+            isTrialCheckout: false,
+            mode: 'payment',
+        });
+
+        expect(logEvent).toHaveBeenCalledWith(expect.anything(), 'purchase', {
+            transaction_id: 'cs_missing_payment_context',
+            items: [{
+                item_id: 'cs_missing_payment_context',
+                item_name: 'Subscription',
+                item_category: 'payment',
                 quantity: 1,
             }]
         });

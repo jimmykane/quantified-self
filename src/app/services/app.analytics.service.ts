@@ -95,7 +95,7 @@ export class AppAnalyticsService {
         return contextId;
     }
 
-    logPurchaseOnce(params: Pick<PurchaseAnalyticsParams, 'transactionId' | 'role' | 'contextId' | 'isTrialCheckout'>): void {
+    logPurchaseOnce(params: Pick<PurchaseAnalyticsParams, 'transactionId' | 'role' | 'contextId' | 'isTrialCheckout' | 'mode'>): void {
         const transactionId = params.transactionId.trim();
         if (!transactionId) {
             return;
@@ -132,6 +132,7 @@ export class AppAnalyticsService {
             : {
                 transactionId,
                 role: params.role,
+                mode: params.mode,
             };
 
         this.logPurchase(purchaseParams);
