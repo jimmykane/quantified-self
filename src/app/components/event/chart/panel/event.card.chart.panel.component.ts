@@ -132,6 +132,7 @@ export const ENABLE_LIVE_SELECTION_PREVIEW_STATS = false;
 const TOOLTIP_MAX_DURATION_DISTANCE_SECONDS = 120;
 const TOOLTIP_MAX_TIME_DISTANCE_MS = TOOLTIP_MAX_DURATION_DISTANCE_SECONDS * 1000;
 const TOOLTIP_MAX_DISTANCE_METERS = 500;
+const OVERLAY_LINE_OPACITY = 0.82;
 
 @Component({
   selector: 'app-event-card-chart-panel',
@@ -262,25 +263,49 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       return [];
     }
 
+    const legendItems = this.buildSeriesLegendItems(this.panel, {
+      scope: 'primary',
+      includeMetricName: false,
+    });
+    const overlayPanel = this.getActiveOverlayPanel();
+    if (!overlayPanel) {
+      return legendItems;
+    }
+
+    return legendItems.concat(this.buildSeriesLegendItems(overlayPanel, {
+      scope: 'overlay',
+      includeMetricName: true,
+    }));
+  }
+
+  private buildSeriesLegendItems(
+    panel: EventChartPanelModel,
+    options: {
+      scope: string;
+      includeMetricName: boolean;
+    }
+  ): PanelSeriesLegendItem[] {
     const legendItems: PanelSeriesLegendItem[] = [];
     const seenKeys = new Set<string>();
-    for (let index = 0; index < this.panel.series.length; index += 1) {
-      const series = this.panel.series[index];
+    const metricLabel = `${panel.displayName || ''}`.trim();
+    for (let index = 0; index < panel.series.length; index += 1) {
+      const series = panel.series[index];
       const activityID = `${series.activityID || ''}`.trim();
-      const label = `${series.activityName || 'Activity'}`.trim() || 'Activity';
-      const key = activityID || label;
-      if (seenKeys.has(key)) {
+      const activityLabel = `${series.activityName || 'Activity'}`.trim() || 'Activity';
+      const activityKey = activityID || activityLabel;
+      if (seenKeys.has(activityKey)) {
         continue;
       }
 
-      seenKeys.add(key);
+      seenKeys.add(activityKey);
       legendItems.push({
-        key,
-        label,
+        key: `${options.scope}::${activityKey}`,
+        label: options.includeMetricName && metricLabel
+          ? `${metricLabel} · ${activityLabel}`
+          : activityLabel,
         color: series.color,
       });
     }
-
     return legendItems;
   }
 
@@ -824,13 +849,12 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       animation: this.useAnimations === true,
       lineStyle: {
         width: overlayStrokeWidth,
-        type: 'dashed',
         color: series.color,
-        opacity: 0.82,
+        opacity: OVERLAY_LINE_OPACITY,
       },
       itemStyle: {
         color: series.color,
-        opacity: 0.82,
+        opacity: OVERLAY_LINE_OPACITY,
       },
       emphasis: {
         disabled: true,
@@ -1942,7 +1966,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
 
     for (let index = 0; index < stats.length; index += 1) {
       const stat = stats[index];
-      const key = `${stat.activityID || ''}|${stat.activityName || ''}`;
+      const key = this.buildActivityStatKey(stat.activityID, stat.activityName);
       const existing = mergedByActivity.get(key);
       if (existing) {
         existing.entries = existing.entries.concat(stat.entries);
@@ -1958,6 +1982,10 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     }
 
     return mergedStats;
+  }
+
+  private buildActivityStatKey(activityID: string, activityName: string): string {
+    return `${activityID || ''}|${activityName || ''}`;
   }
 
   private clearSelectionOverlay(): void {

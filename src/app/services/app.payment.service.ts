@@ -296,7 +296,7 @@ export class AppPaymentService {
             throw new Error('User must be authenticated to create a checkout session.');
         }
 
-        const success = successUrl || `${this.windowService.currentDomain}/payment/success`;
+        const success = successUrl || `${this.windowService.currentDomain}/payment/success?session_id={CHECKOUT_SESSION_ID}`;
         const cancel = cancelUrl || `${this.windowService.currentDomain}/payment/cancel`;
         await this.appendCheckoutSessionWithAttempt(price, user.uid, success, cancel, user, 0);
     }

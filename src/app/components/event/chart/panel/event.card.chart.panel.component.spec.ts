@@ -346,7 +346,8 @@ describe('EventCardChartPanelComponent', () => {
     ]);
   });
 
-  it('renders an overlay panel on a secondary y-axis with dashed no-fill series', async () => {
+  it('renders an overlay panel on a secondary y-axis with solid no-fill series', async () => {
+    component.fillOpacity = 0.4;
     component.overlayPanel = {
       dataType: DataAltitude.type,
       displayName: 'Altitude',
@@ -380,15 +381,84 @@ describe('EventCardChartPanelComponent', () => {
     expect(option?.yAxis?.[1]?.splitLine?.show).toBe(false);
     expect(option?.series).toHaveLength(2);
     expect(option?.series?.[0]?.yAxisIndex).toBe(0);
+    expect(option?.series?.[0]?.z).toBeUndefined();
+    expect(option?.series?.[0]?.areaStyle?.opacity).toBe(0.4);
+    expect(option?.series?.[0]?.lineStyle?.shadowBlur).toBeUndefined();
     expect(option?.series?.[1]).toEqual(expect.objectContaining({
       id: 'overlay::a1::altitude',
       yAxisIndex: 1,
     }));
+    expect(option?.series?.[1]?.z).toBeUndefined();
     expect(option?.series?.[1]?.areaStyle).toBeUndefined();
     expect(option?.series?.[1]?.lineStyle).toEqual(expect.objectContaining({
-      type: 'dashed',
       color: '#0066cc',
+      opacity: 0.82,
     }));
+    expect(option?.series?.[1]?.itemStyle).toEqual(expect.objectContaining({
+      color: '#0066cc',
+      opacity: 0.82,
+    }));
+    expect(option?.series?.[1]?.lineStyle?.width).toBeLessThanOrEqual(option?.series?.[0]?.lineStyle?.width);
+    expect(option?.series?.[1]?.lineStyle?.type).toBeUndefined();
+    expect(option?.series?.[1]?.lineStyle?.shadowBlur).toBeUndefined();
+  });
+
+  it('keeps primary styling unchanged when the overlay is missing or the same metric', async () => {
+    component.fillOpacity = 0.4;
+    component.overlayPanel = {
+      ...(component.panel as any),
+      dataType: (component.panel as any).dataType,
+    };
+
+    await renderComponent();
+
+    const option = getRenderedOption();
+    expect(option?.series).toHaveLength(1);
+    expect(option?.series?.[0]?.lineStyle?.shadowBlur).toBeUndefined();
+    expect(option?.series?.[0]?.lineStyle?.shadowColor).toBeUndefined();
+    expect(option?.series?.[0]?.areaStyle?.opacity).toBe(0.4);
+  });
+
+  it('uses the overlay series color even when it matches a primary series color', async () => {
+    component.overlayPanel = {
+      dataType: DataAltitude.type,
+      displayName: 'Altitude',
+      unit: 'm',
+      colorGroupKey: 'Altitude',
+      minX: 0,
+      maxX: 100,
+      series: [
+        {
+          id: 'a1::altitude',
+          activityID: 'a1',
+          activityName: 'Garmin',
+          color: '#ff0000',
+          streamType: DataAltitude.type,
+          displayName: 'Altitude',
+          unit: 'm',
+          points: [
+            { x: 0, y: 10, time: 0 },
+            { x: 10, y: 20, time: 10 },
+          ],
+        }
+      ],
+    } as any;
+
+    await renderComponent();
+
+    const option = getRenderedOption();
+    expect(option?.series?.[1]?.lineStyle?.color).toBe('#ff0000');
+    expect(option?.series?.[1]?.itemStyle?.color).toBe('#ff0000');
+
+    const tooltipHtml = (component as any).formatTooltip([
+      {
+        seriesId: 'a1::power',
+        seriesName: 'Garmin',
+        color: '#ff0000',
+        value: [10, 120],
+      }
+    ]);
+    expect(tooltipHtml).toContain('background:#ff0000;');
   });
 
   it('keeps mobile panel interactions disabled until first tap, then enables them', async () => {
@@ -617,6 +687,81 @@ describe('EventCardChartPanelComponent', () => {
     expect(legendItems).toHaveLength(2);
     expect(fixture.nativeElement.textContent).toContain('Garmin');
     expect(fixture.nativeElement.textContent).toContain('Wahoo');
+  });
+
+  it('renders overlay metric legend entries for merged multi-activity panels', async () => {
+    component.showActivityNamesInTooltip = true;
+    component.panel = {
+      ...(component.panel as any),
+      series: [
+        {
+          ...(component.panel as any).series[0],
+        },
+        {
+          id: 'a2::power',
+          activityID: 'a2',
+          activityName: 'Wahoo',
+          color: '#00ff00',
+          streamType: 'power',
+          displayName: 'Power',
+          unit: 'W',
+          points: [
+            { x: 0, y: 101, time: 0 },
+            { x: 10, y: 121, time: 10 },
+          ],
+        }
+      ],
+    } as any;
+    component.overlayPanel = {
+      dataType: DataAltitude.type,
+      displayName: 'Altitude',
+      unit: 'm',
+      colorGroupKey: 'Altitude',
+      minX: 0,
+      maxX: 100,
+      series: [
+        {
+          id: 'a1::altitude',
+          activityID: 'a1',
+          activityName: 'Garmin',
+          color: '#ff0000',
+          streamType: DataAltitude.type,
+          displayName: 'Altitude',
+          unit: 'm',
+          points: [
+            { x: 0, y: 10, time: 0 },
+            { x: 10, y: 20, time: 10 },
+          ],
+        },
+        {
+          id: 'a2::altitude',
+          activityID: 'a2',
+          activityName: 'Wahoo',
+          color: '#00ff00',
+          streamType: DataAltitude.type,
+          displayName: 'Altitude',
+          unit: 'm',
+          points: [
+            { x: 0, y: 12, time: 0 },
+            { x: 10, y: 22, time: 10 },
+          ],
+        }
+      ],
+    } as any;
+
+    await renderComponent();
+
+    const legendLabels = [...fixture.nativeElement.querySelectorAll('.event-chart-panel__series-legend-label')]
+      .map((element: Element) => element.textContent?.trim());
+    expect(legendLabels).toEqual([
+      'Garmin',
+      'Wahoo',
+      'Altitude · Garmin',
+      'Altitude · Wahoo',
+    ]);
+    const legendDots = fixture.nativeElement.querySelectorAll('.event-chart-panel__series-legend-dot');
+    expect(legendDots).toHaveLength(4);
+    expect(fixture.nativeElement.querySelectorAll('.event-chart-panel__series-legend-dot--dashed')).toHaveLength(0);
   });
 
   it('serializes queued chart refresh requests', async () => {
@@ -1521,6 +1666,49 @@ describe('EventCardChartPanelComponent', () => {
       'Altitude Gain',
       'Altitude Loss',
     ]);
+
+    getDataInstanceSpy.mockRestore();
+  });
+
+  it('uses the overlay series color for overlay-only selection stats in merged panels', async () => {
+    component.overlayPanel = {
+      dataType: DataAltitude.type,
+      displayName: 'Altitude',
+      unit: 'm',
+      colorGroupKey: 'Altitude',
+      minX: 0,
+      maxX: 10,
+      series: [
+        {
+          id: 'a2::altitude',
+          activityID: 'a2',
+          activityName: 'Wahoo',
+          color: '#ff0000',
+          streamType: DataAltitude.type,
+          displayName: 'Altitude',
+          unit: 'm',
+          points: [
+            { x: 0, y: 10, time: 0 },
+            { x: 10, y: 20, time: 10 },
+          ],
+        }
+      ],
+    } as any;
+    const getDataInstanceSpy = vi.spyOn(DynamicDataLoader, 'getDataInstanceFromDataType').mockImplementation((_type: string, value: number) => ({
+      getDisplayValue: () => value.toFixed(0),
+      getDisplayUnit: () => 'u',
+    } as any));
+
+    await renderComponent();
+
+    component.selectedRange = { start: 0, end: 10 };
+    component.ngOnChanges({
+      selectedRange: new SimpleChange(null, component.selectedRange, false),
+    });
+
+    expect(component.rangeStats).toHaveLength(2);
+    expect(component.rangeStats[1].activityName).toBe('Wahoo');
+    expect(component.rangeStats[1].color).toBe('#ff0000');
 
     getDataInstanceSpy.mockRestore();
   });

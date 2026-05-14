@@ -35,6 +35,7 @@ describe('AppAnalyticsService', () => {
 
     beforeEach(() => {
         vi.clearAllMocks();
+        localStorage.clear();
         userSubject = new BehaviorSubject<User | null>(null);
         mockAuthService = {
             user$: userSubject.asObservable()
@@ -58,6 +59,7 @@ describe('AppAnalyticsService', () => {
 
     afterEach(() => {
         userSubject.complete();
+        localStorage.clear();
         (environment as any).forceAnalyticsCollection = false;
     });
 
@@ -133,6 +135,53 @@ describe('AppAnalyticsService', () => {
             enabled: true,
             action: 'enable',
         });
+    });
+
+    it('should log the official GA4 purchase event once with pending checkout context', () => {
+        userSubject.next({ acceptedTrackingPolicy: true } as User);
+
+        service.storePendingPurchaseContext({
+            priceId: 'price_pro_monthly',
+            mode: 'subscription',
+            currency: 'eur',
+            value: 9.99,
+        });
+
+        service.logPurchaseOnce({ transactionId: 'cs_test_123', role: 'pro' });
+        service.logPurchaseOnce({ transactionId: 'cs_test_123', role: 'pro' });
+
+        expect(logEvent).toHaveBeenCalledTimes(1);
+        expect(logEvent).toHaveBeenCalledWith(expect.anything(), 'purchase', {
+            transaction_id: 'cs_test_123',
+            currency: 'EUR',
+            value: 9.99,
+            items: [{
+                item_id: 'price_pro_monthly',
+                item_name: 'pro subscription',
+                item_category: 'subscription',
+                item_variant: 'pro',
+                quantity: 1,
+                price: 9.99,
+            }]
+        });
+        expect(localStorage.getItem('app.analytics.pending_purchase')).toBeNull();
+    });
+
+    it('should not log purchase for no-card trial checkout success', () => {
+        userSubject.next({ acceptedTrackingPolicy: true } as User);
+
+        service.storePendingPurchaseContext({
+            priceId: 'price_pro_trial',
+            mode: 'subscription',
+            currency: 'EUR',
+            value: 9.99,
+            isTrialCheckout: true,
+        });
+
+        service.logPurchaseOnce({ transactionId: 'cs_trial_123', role: 'pro' });
+
+        expect(logEvent).not.toHaveBeenCalled();
+        expect(localStorage.getItem('app.analytics.pending_purchase')).toBeNull();
     });
 
     it('should log summary metadata when running an activity sync route backfill', () => {

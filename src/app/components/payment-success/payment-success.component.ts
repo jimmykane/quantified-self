@@ -3,9 +3,10 @@ import { CommonModule } from '@angular/common';
 import { MatCardModule } from '@angular/material/card';
 import { MatButtonModule } from '@angular/material/button';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
-import { RouterModule } from '@angular/router';
+import { ActivatedRoute, RouterModule } from '@angular/router';
 import { Auth } from 'app/firebase/auth';
 import { LoggerService } from '../../services/logger.service';
+import { AppAnalyticsService } from '../../services/app.analytics.service';
 
 @Component({
   selector: 'app-payment-success',
@@ -16,7 +17,9 @@ import { LoggerService } from '../../services/logger.service';
 })
 export class PaymentSuccessComponent implements OnInit {
   private auth = inject(Auth);
+  private route = inject(ActivatedRoute);
   private logger = inject(LoggerService);
+  private analyticsService = inject(AppAnalyticsService);
   isRefreshing = true;
   assignedRole: string | null = null;
 
@@ -50,6 +53,7 @@ export class PaymentSuccessComponent implements OnInit {
           this.logger.log(`PaymentSuccess: Found stripeRole '${role}' on attempt ${attempt}!`);
           hasPremiumClaim = true;
           this.assignedRole = role;
+          this.logPurchaseAnalytics(role);
         } else {
           this.logger.warn(`PaymentSuccess: stripeRole not found on attempt ${attempt}. Waiting...`);
           // Wait 2 seconds before next try
@@ -67,5 +71,18 @@ export class PaymentSuccessComponent implements OnInit {
     }
 
     this.isRefreshing = false;
+  }
+
+  private logPurchaseAnalytics(role: string): void {
+    const sessionId = this.route.snapshot.queryParamMap.get('session_id');
+    if (!sessionId) {
+      this.logger.warn('PaymentSuccess: Missing checkout session id; skipping purchase analytics.');
+      return;
+    }
+
+    this.analyticsService.logPurchaseOnce({
+      transactionId: sessionId,
+      role
+    });
   }
 }

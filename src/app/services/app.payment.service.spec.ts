@@ -159,6 +159,7 @@ describe('AppPaymentService', () => {
             expect(payload.metadata).toEqual({
                 firebaseUID: 'test_user_uid'
             });
+            expect(payload.success_url).toBe('http://localhost:4200/payment/success?session_id={CHECKOUT_SESSION_ID}');
 
             // CHECK 2: Automatic Tax
             expect(payload.automatic_tax).toEqual({ enabled: true });

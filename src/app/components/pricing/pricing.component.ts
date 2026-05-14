@@ -444,11 +444,23 @@ export class PricingComponent implements OnInit, OnDestroy {
         this.setLoadingState(true);
 
         try {
+            const checkoutCurrency = typeof price !== 'string' ? price.currency : undefined;
+            const checkoutValue = typeof price !== 'string' && typeof price.unit_amount === 'number'
+                ? price.unit_amount / 100
+                : undefined;
+
             this.analyticsService.logBeginCheckout(
                 priceId,
-                typeof price !== 'string' ? price.currency : undefined,
-                typeof price !== 'string' ? price.unit_amount / 100 : undefined
+                checkoutCurrency,
+                checkoutValue
             );
+            this.analyticsService.storePendingPurchaseContext({
+                priceId,
+                mode: typeof price !== 'string' && price.type === 'one_time' ? 'payment' : 'subscription',
+                currency: checkoutCurrency,
+                value: checkoutValue,
+                isTrialCheckout: this.isTrialCheckout(price)
+            });
             await this.paymentService.appendCheckoutSession(price);
         } catch (error) {
             const errorMessage = (error as Error).message || '';
@@ -464,6 +476,22 @@ export class PricingComponent implements OnInit, OnDestroy {
             this.setLoadingState(false);
             this.loadingPriceId = null;
         }
+    }
+
+    private isTrialCheckout(price: string | StripePrice): boolean {
+        if (typeof price === 'string' || price.type !== 'recurring') {
+            return false;
+        }
+
+        if (!!this.currentRole && this.currentRole !== 'free') {
+            return false;
+        }
+
+        if (this.hasPaidSubscriptionHistory !== false) {
+            return false;
+        }
+
+        return this.resolveMetadataTrialDays(price.metadata?.trial_days) !== null;
     }
 
     async manageSubscription() {

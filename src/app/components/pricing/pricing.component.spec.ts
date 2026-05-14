@@ -111,6 +111,7 @@ describe('PricingComponent', () => {
                     useValue: {
                         logEvent: vi.fn(),
                         logBeginCheckout: vi.fn(),
+                        storePendingPurchaseContext: vi.fn(),
                         logManageSubscription: vi.fn(),
                         logSelectFreeTier: vi.fn(),
                         logRestorePurchases: vi.fn()
@@ -691,6 +692,7 @@ describe('PricingComponent', () => {
     it('should log begin_checkout event on subscribe', async () => {
         const analyticsService = TestBed.inject(AppAnalyticsService);
         const logSpy = vi.spyOn(analyticsService, 'logBeginCheckout');
+        const pendingPurchaseSpy = vi.spyOn(analyticsService, 'storePendingPurchaseContext');
         const price = { id: 'price_123', currency: 'USD', unit_amount: 1000 };
 
         authServiceMock.user$ = of(acceptedPoliciesUser as any);
@@ -698,6 +700,13 @@ describe('PricingComponent', () => {
         await component.subscribe(price);
 
         expect(logSpy).toHaveBeenCalledWith('price_123', 'USD', 10);
+        expect(pendingPurchaseSpy).toHaveBeenCalledWith({
+            priceId: 'price_123',
+            mode: 'subscription',
+            currency: 'USD',
+            value: 10,
+            isTrialCheckout: false,
+        });
     });
 
     it('should log select_freetier event on selectFreeTier', async () => {
