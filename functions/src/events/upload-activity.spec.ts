@@ -973,7 +973,7 @@ describe('uploadActivity', () => {
 
   it('should return 400 when gzip payload expands beyond decompression safety limit', async () => {
     const response = makeResponse();
-    const compressedBomb = gzipSync(Buffer.alloc((150 * 1024 * 1024) + 1, 0x00));
+    const compressedBomb = gzipSync(Buffer.alloc((300 * 1024 * 1024) + 1, 0x00));
 
     await invokeUploadActivity(makeRequest({
       headers: {
@@ -985,7 +985,9 @@ describe('uploadActivity', () => {
     }), response);
 
     expect(response.status).toHaveBeenCalledWith(400);
-    expect(response.json).toHaveBeenCalledWith({ error: 'Could not decompress uploaded payload.' });
+    expect(response.json).toHaveBeenCalledWith({
+      error: 'File is too large after decompression. Maximum decompressed size is 300MB.',
+    });
     expect(hoisted.mockFITImporter.getFromArrayBuffer).not.toHaveBeenCalled();
   });
 
