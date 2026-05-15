@@ -25,8 +25,8 @@ import { sportsLibVersionToCode } from '../reparse/sports-lib-reparse.service';
 import { USAGE_LIMITS } from '../../../shared/limits';
 import { FUNCTIONS_MANIFEST } from '../../../shared/functions-manifest';
 
-const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
-// Protect against gzip zip-bombs: input is capped at 10MB, but decompressed output
+const MAX_UPLOAD_BYTES = 20 * 1024 * 1024;
+// Protect against gzip zip-bombs: input is capped at 20MB, but decompressed output
 // could otherwise expand to hundreds of MB/GB and OOM the function instance.
 const MAX_DECOMPRESSED_UPLOAD_BYTES = 150 * 1024 * 1024;
 const SUPPORTED_BASE_EXTENSIONS = new Set(['fit', 'gpx', 'tcx', 'json', 'sml']);
@@ -339,7 +339,7 @@ export const uploadActivity = onRequest({
     }
 
     if (rawBody.length > MAX_UPLOAD_BYTES) {
-      throw new HttpStatusError(400, `File is too large (${(rawBody.length / 1024 / 1024).toFixed(1)}MB). Maximum size is 10MB.`);
+      throw new HttpStatusError(400, `File is too large (${(rawBody.length / 1024 / 1024).toFixed(1)}MB). Maximum size is 20MB.`);
     }
 
     const payloadForParsing = maybeDecompressPayloadForParsing(rawBody, resolvedExtension);
