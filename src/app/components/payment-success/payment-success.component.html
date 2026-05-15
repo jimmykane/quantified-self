@@ -1,7 +1,7 @@
 <div class="container">
   <mat-card appearance="outlined" class="success-card qs-glass-card-panel">
     <mat-card-header>
-      <mat-card-title>Payment Successful!</mat-card-title>
+      <mat-card-title>{{ verificationFailed ? 'Payment Verification Failed' : 'Payment Successful!' }}</mat-card-title>
     </mat-card-header>
 
     <mat-card-content>
@@ -11,6 +11,12 @@
             <mat-spinner diameter="60"></mat-spinner>
             <p>Activating your subscription...</p>
           </div>
+        } @else if (verificationFailed) {
+          <div class="verification-failed-icon" aria-hidden="true">!</div>
+          <h2 class="welcome-text">Payment could not be verified</h2>
+          <p class="description">
+            We could not confirm this checkout session. No purchase was recorded.
+          </p>
         } @else {
           <div class="checkmark-wrapper">
             <svg class="checkmark" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 52 52">
@@ -52,8 +58,8 @@
     </mat-card-content>
 
     <mat-card-actions>
-      <button mat-flat-button class="qs-mat-primary" routerLink="/dashboard" [disabled]="isRefreshing">
-        Go to Dashboard
+      <button mat-flat-button class="qs-mat-primary" [routerLink]="verificationFailed ? '/pricing' : '/dashboard'" [disabled]="isRefreshing">
+        {{ verificationFailed ? 'Back to Pricing' : 'Go to Dashboard' }}
       </button>
     </mat-card-actions>
   </mat-card>

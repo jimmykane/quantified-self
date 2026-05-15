@@ -147,8 +147,8 @@ describe('AppAnalyticsService', () => {
             value: 9.99,
         });
 
-        service.logPurchaseOnce({ transactionId: 'cs_test_123', role: 'pro', contextId, isTrialCheckout: false });
-        service.logPurchaseOnce({ transactionId: 'cs_test_123', role: 'pro', contextId, isTrialCheckout: false });
+        service.logPurchaseOnce({ transactionId: 'cs_test_123', role: 'pro', contextId, isTrialCheckout: false, isVerifiedCheckout: true });
+        service.logPurchaseOnce({ transactionId: 'cs_test_123', role: 'pro', contextId, isTrialCheckout: false, isVerifiedCheckout: true });
 
         expect(logEvent).toHaveBeenCalledTimes(1);
         expect(logEvent).toHaveBeenCalledWith(expect.anything(), 'purchase', {
@@ -188,6 +188,7 @@ describe('AppAnalyticsService', () => {
             role: 'basic',
             contextId: firstContextId,
             isTrialCheckout: false,
+            isVerifiedCheckout: true,
         });
 
         expect(logEvent).toHaveBeenCalledTimes(1);
@@ -219,13 +220,28 @@ describe('AppAnalyticsService', () => {
             isTrialCheckout: true,
         });
 
-        service.logPurchaseOnce({ transactionId: 'cs_trial_123', role: 'pro', contextId, isTrialCheckout: true });
+        service.logPurchaseOnce({ transactionId: 'cs_trial_123', role: 'pro', contextId, isTrialCheckout: true, isVerifiedCheckout: true });
 
         expect(logEvent).not.toHaveBeenCalled();
         expect(localStorage.getItem(`app.analytics.pending_purchase.${contextId}`)).toBeNull();
     });
 
-    it('should log a minimal purchase when context storage is missing but redirect confirms it was not a trial', () => {
+    it('should reject purchase logging when checkout was not server verified', () => {
+        userSubject.next({ acceptedTrackingPolicy: true } as User);
+
+        service.logPurchaseOnce({
+            transactionId: 'cs_forged_success_url',
+            role: 'basic',
+            contextId: 'missing_or_forged_context',
+            isTrialCheckout: false,
+            mode: 'subscription',
+        });
+
+        expect(logEvent).not.toHaveBeenCalled();
+        expect(localStorage.getItem('app.analytics.purchase_logged.cs_forged_success_url')).toBeNull();
+    });
+
+    it('should log a minimal purchase when context storage is missing but checkout was server verified', () => {
         userSubject.next({ acceptedTrackingPolicy: true } as User);
 
         service.logPurchaseOnce({
@@ -234,6 +250,7 @@ describe('AppAnalyticsService', () => {
             contextId: 'missing_context',
             isTrialCheckout: false,
             mode: 'subscription',
+            isVerifiedCheckout: true,
         });
 
         expect(logEvent).toHaveBeenCalledWith(expect.anything(), 'purchase', {
@@ -257,6 +274,7 @@ describe('AppAnalyticsService', () => {
             contextId: 'missing_payment_context',
             isTrialCheckout: false,
             mode: 'payment',
+            isVerifiedCheckout: true,
         });
 
         expect(logEvent).toHaveBeenCalledWith(expect.anything(), 'purchase', {

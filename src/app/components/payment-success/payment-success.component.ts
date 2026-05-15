@@ -7,6 +7,11 @@ import { ActivatedRoute, RouterModule } from '@angular/router';
 import { Auth } from 'app/firebase/auth';
 import { LoggerService } from '../../services/logger.service';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
+import { AppFunctionsService } from '../../services/app.functions.service';
+import type {
+  VerifyCheckoutSessionRequest,
+  VerifyCheckoutSessionResult
+} from '@shared/stripe-checkout-session';
 
 @Component({
   selector: 'app-payment-success',
@@ -20,22 +25,34 @@ export class PaymentSuccessComponent implements OnInit {
   private route = inject(ActivatedRoute);
   private logger = inject(LoggerService);
   private analyticsService = inject(AppAnalyticsService);
+  private functionsService = inject(AppFunctionsService);
   isRefreshing = true;
+  verificationFailed = false;
   assignedRole: string | null = null;
 
   async ngOnInit(): Promise<void> {
     this.isRefreshing = true;
+    this.verificationFailed = false;
     const user = this.auth.currentUser;
 
     if (!user) {
       this.logger.error('PaymentSuccess: No current user found!');
+      this.verificationFailed = true;
       this.isRefreshing = false;
       return;
     }
 
-    if (this.resolveCheckoutMode() === 'payment') {
-      this.logger.log('PaymentSuccess: Payment-mode checkout succeeded. Logging purchase without waiting for stripeRole.');
-      this.logPurchaseAnalytics(null);
+    const verifiedCheckout = await this.verifyCheckoutSessionFromUrl();
+    if (!verifiedCheckout) {
+      this.verificationFailed = true;
+      this.isRefreshing = false;
+      return;
+    }
+
+    this.logPurchaseAnalytics(null, verifiedCheckout);
+
+    if (verifiedCheckout.mode === 'payment') {
+      this.logger.log('PaymentSuccess: Payment-mode checkout verified without waiting for stripeRole.');
       this.isRefreshing = false;
       return;
     }
@@ -60,7 +77,6 @@ export class PaymentSuccessComponent implements OnInit {
           this.logger.log(`PaymentSuccess: Found paid stripeRole '${role}' on attempt ${attempt}!`);
           hasPaidClaim = true;
           this.assignedRole = role;
-          this.logPurchaseAnalytics(role);
         } else {
           this.logger.warn(`PaymentSuccess: paid stripeRole not found on attempt ${attempt}. Waiting...`);
           // Wait 2 seconds before next try
@@ -80,40 +96,42 @@ export class PaymentSuccessComponent implements OnInit {
     this.isRefreshing = false;
   }
 
-  private logPurchaseAnalytics(role: string | null): void {
+  private async verifyCheckoutSessionFromUrl(): Promise<VerifyCheckoutSessionResult | null> {
     const queryParamMap = this.route.snapshot.queryParamMap;
     const sessionId = queryParamMap.get('session_id');
     if (!sessionId) {
       this.logger.warn('PaymentSuccess: Missing checkout session id; skipping purchase analytics.');
-      return;
+      return null;
     }
 
+    try {
+      const result = await this.functionsService.call<VerifyCheckoutSessionRequest, VerifyCheckoutSessionResult>(
+        'verifyCheckoutSession',
+        { sessionId }
+      );
+      return result.data;
+    } catch (error) {
+      this.logger.warn('PaymentSuccess: Checkout session verification failed; skipping purchase analytics.', error);
+      return null;
+    }
+  }
+
+  private logPurchaseAnalytics(role: string | null, verifiedCheckout: VerifyCheckoutSessionResult): void {
+    const queryParamMap = this.route.snapshot.queryParamMap;
     this.analyticsService.logPurchaseOnce({
-      transactionId: sessionId,
-      role,
+      transactionId: verifiedCheckout.transactionId,
+      role: role ?? verifiedCheckout.role ?? null,
       contextId: queryParamMap.get('purchase_context_id'),
-      isTrialCheckout: this.resolveTrialCheckoutParam(queryParamMap.get('trial_checkout')),
-      mode: this.resolveCheckoutMode()
+      isTrialCheckout: verifiedCheckout.isTrialCheckout,
+      mode: verifiedCheckout.mode,
+      priceId: verifiedCheckout.priceId,
+      currency: verifiedCheckout.currency,
+      value: verifiedCheckout.value,
+      isVerifiedCheckout: true
     });
   }
 
   private isPaidRole(role: unknown): role is 'basic' | 'pro' {
     return role === 'basic' || role === 'pro';
-  }
-
-  private resolveTrialCheckoutParam(value: string | null): boolean | undefined {
-    if (value === '1') {
-      return true;
-    }
-
-    if (value === '0') {
-      return false;
-    }
-
-    return undefined;
-  }
-
-  private resolveCheckoutMode(): 'payment' | 'subscription' {
-    return this.route.snapshot.queryParamMap.get('checkout_mode') === 'payment' ? 'payment' : 'subscription';
   }
 }

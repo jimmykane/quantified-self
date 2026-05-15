@@ -23,6 +23,7 @@ export interface PurchaseAnalyticsParams extends Partial<PurchaseAnalyticsContex
     transactionId: string;
     role?: string | null;
     contextId?: string | null;
+    isVerifiedCheckout?: boolean;
 }
 
 @Injectable({ providedIn: 'root' })
@@ -95,9 +96,13 @@ export class AppAnalyticsService {
         return contextId;
     }
 
-    logPurchaseOnce(params: Pick<PurchaseAnalyticsParams, 'transactionId' | 'role' | 'contextId' | 'isTrialCheckout' | 'mode'>): void {
+    logPurchaseOnce(params: Pick<PurchaseAnalyticsParams, 'transactionId' | 'role' | 'contextId' | 'isTrialCheckout' | 'mode' | 'priceId' | 'currency' | 'value' | 'isVerifiedCheckout'>): void {
         const transactionId = params.transactionId.trim();
         if (!transactionId) {
+            return;
+        }
+
+        if (params.isVerifiedCheckout !== true) {
             return;
         }
 
@@ -110,7 +115,7 @@ export class AppAnalyticsService {
             ? params.contextId.trim()
             : null;
         const pendingContext = contextId ? this.getPendingPurchaseContext(contextId) : null;
-        const isTrialCheckout = pendingContext?.isTrialCheckout === true || params.isTrialCheckout === true;
+        const isTrialCheckout = params.isTrialCheckout === true;
 
         if (isTrialCheckout) {
             if (contextId) {
@@ -119,21 +124,15 @@ export class AppAnalyticsService {
             return;
         }
 
-        if (!pendingContext && params.isTrialCheckout !== false) {
-            return;
-        }
-
-        const purchaseParams: PurchaseAnalyticsParams = pendingContext
-            ? {
-                ...pendingContext,
-                transactionId,
-                role: params.role,
-            }
-            : {
-                transactionId,
-                role: params.role,
-                mode: params.mode,
-            };
+        const purchaseParams: PurchaseAnalyticsParams = {
+            ...pendingContext,
+            transactionId,
+            role: params.role,
+            priceId: params.priceId ?? pendingContext?.priceId,
+            mode: params.mode ?? pendingContext?.mode,
+            currency: params.currency ?? pendingContext?.currency,
+            value: params.value ?? pendingContext?.value,
+        };
 
         this.logPurchase(purchaseParams);
         this.setStorageItem(loggedStorageKey, new Date().toISOString());
