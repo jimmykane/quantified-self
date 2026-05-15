@@ -22,7 +22,7 @@ import {
 } from '@sports-alliance/sports-lib';
 import * as requestPromise from './request-helper';
 import { config } from './config';
-import { getTokenData } from './tokens';
+import { getTokenData, TerminalServiceAuthError } from './tokens';
 import { EventImporterFIT } from '@sports-alliance/sports-lib';
 import { COROSAPIEventMetaData, SuuntoAppEventMetaData } from '@sports-alliance/sports-lib';
 import { uploadDebugFile } from './debug-utils';
@@ -57,6 +57,19 @@ function toArrayBuffer(payload: Uint8Array): ArrayBuffer {
   const copy = new Uint8Array(payload.byteLength);
   copy.set(payload);
   return copy.buffer;
+}
+
+function selectPreferredTerminalAuthError(
+  current: TerminalServiceAuthError | null,
+  candidate: TerminalServiceAuthError,
+): TerminalServiceAuthError {
+  if (!current) {
+    return candidate;
+  }
+  if (candidate.dlqContext === 'INVALID_GRANT' && current.dlqContext !== 'INVALID_GRANT') {
+    return candidate;
+  }
+  return current;
 }
 
 
@@ -281,6 +294,8 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
   let oneSuccess = false;
   let retryIncrement = 1;
   let lastError = new Error(QueueErrors.ALL_TOKENS_FAILED);
+  let terminalAuthError: TerminalServiceAuthError | null = null;
+  let sawRetryableFailure = false;
 
   for (const tokenQueryDocumentSnapshot of tokenQuerySnapshots.docs) {
     let serviceToken;
@@ -288,9 +303,16 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
     try {
       serviceToken = await getTokenData(tokenQueryDocumentSnapshot, serviceName);
     } catch (e: any) {
+      if (e instanceof TerminalServiceAuthError) {
+        logger.warn(`Terminal auth failure for ${serviceName} token ${tokenQueryDocumentSnapshot.id} while processing ${queueItem.id}; trying any remaining matching tokens before DLQ.`);
+        terminalAuthError = selectPreferredTerminalAuthError(terminalAuthError, e);
+        continue;
+      }
       const statusCode = e.statusCode || (e.output && e.output.statusCode);
       const errorDescription = e.message || (e.error && (e.error.error_description || e.error.error));
       const isTransientError = statusCode === 500 || statusCode === 502 || (statusCode === 406 && String(errorDescription).toLowerCase().includes('json compatible'));
+      sawRetryableFailure = true;
+      lastError = e instanceof Error ? e : new Error(`${e}`);
 
       if (isTransientError) {
         logger.warn(`Refreshing token failed with transient error (${statusCode}), skipping this token with id ${tokenQueryDocumentSnapshot.id}`);
@@ -336,6 +358,13 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
           }
           result = normalizedPayload.data;
         } catch (retryError: any) {
+          if (retryError instanceof TerminalServiceAuthError) {
+            logger.warn(`Terminal auth failure during forced refresh for ${serviceName} token ${tokenQueryDocumentSnapshot.id} while processing ${queueItem.id}; trying any remaining matching tokens before DLQ.`);
+            terminalAuthError = selectPreferredTerminalAuthError(terminalAuthError, retryError);
+            continue;
+          }
+          sawRetryableFailure = true;
+          lastError = retryError instanceof Error ? retryError : new Error(`${retryError}`);
           logger.error(new Error(`Could not get workout for ${queueItem.id} even after force refresh: ${retryError.message}`));
           // Continue to next token
           continue;
@@ -345,19 +374,24 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
         logger.error(new Error(`Could not get workout for ${queueItem.id} due to 403, increasing retry by 20`));
         retryIncrement = 20;
         lastError = e;
+        sawRetryableFailure = true;
         continue;
       } else if (e.statusCode === 500) {
         logger.warn(`Partner service internal error (500) for ${queueItem.id}, will retry soon.`);
         retryIncrement = 1;
         lastError = e;
+        sawRetryableFailure = true;
         continue;
       } else if (e.statusCode === 502) {
         logger.warn(`Partner service unavailable (502) for ${queueItem.id}, will retry soon.`);
         retryIncrement = 1;
         lastError = e;
+        sawRetryableFailure = true;
         continue;
       } else {
         logger.error(new Error(`Could not get workout for ${queueItem.id}. Trying to refresh token and update retry count from ${queueItem.retryCount} to ${queueItem.retryCount + 1} -> ${e.message}`));
+        sawRetryableFailure = true;
+        lastError = e instanceof Error ? e : new Error(`${e}`);
         continue;
       }
 
@@ -427,6 +461,8 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
       }
 
       logger.error(new Error(`Could not save event for ${queueItem.id} trying to update retry count from ${queueItem.retryCount} and token user ${serviceToken.openId || serviceToken.userName} to ${queueItem.retryCount + 1} due to ${e.message}`));
+      sawRetryableFailure = true;
+      lastError = e instanceof Error ? e : new Error(`${e}`);
       continue;
     }
   }
@@ -435,6 +471,11 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
     // If we made it here, the workout was processed successfully for at least one token.
     // We can stop and mark as processed.
     return updateToProcessed(queueItem, bulkWriter);
+  }
+
+  if (terminalAuthError) {
+    logger.warn(`At least one matching ${serviceName} token for ${queueItem.id} failed with terminal auth and none succeeded; moving queue item to DLQ with ${terminalAuthError.dlqContext}`);
+    return moveToDeadLetterQueue(queueItem, terminalAuthError, bulkWriter, terminalAuthError.dlqContext);
   }
 
   // If we finished the loop without returning, it means every token attempt failed.

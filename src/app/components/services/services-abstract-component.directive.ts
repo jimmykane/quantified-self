@@ -19,7 +19,6 @@ import { combineLatest, firstValueFrom, of, Subscription } from 'rxjs';
 import { EventImporterFIT } from '@sports-alliance/sports-lib';
 import { ActivatedRoute, ParamMap, Router } from '@angular/router';
 import { switchMap, take, tap } from 'rxjs/operators';
-import { UserServiceMetaInterface } from '@sports-alliance/sports-lib';
 import { Auth2ServiceTokenInterface } from '@sports-alliance/sports-lib';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { Auth1ServiceTokenInterface } from '@sports-alliance/sports-lib';
@@ -29,7 +28,7 @@ import { AppUserService } from '../../services/app.user.service';
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { AppEventService } from '../../services/app.event.service';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
-import { AppUserInterface } from '../../models/app-user.interface';
+import { AppUserInterface, AppUserServiceMetaInterface } from '../../models/app-user.interface';
 import { ACTIVITY_SYNC_ROUTES, ActivitySyncRoute } from '@shared/activity-sync-routes';
 import { ConfirmationDialogComponent, ConfirmationDialogData } from '../confirmation-dialog/confirmation-dialog.component';
 
@@ -44,7 +43,7 @@ export abstract class ServicesAbstractComponentDirective implements OnInit, OnDe
   @Input() isAdmin: boolean = false;
   public isLoading = false;
   public serviceTokens: Auth2ServiceTokenInterface[] | Auth1ServiceTokenInterface[] | undefined;
-  public serviceMeta: UserServiceMetaInterface | undefined;
+  public serviceMeta: AppUserServiceMetaInterface | undefined;
   public selectedTabIndex = 0;
   public activeProviderTool = 'history';
   public serviceNames = ServiceNames;

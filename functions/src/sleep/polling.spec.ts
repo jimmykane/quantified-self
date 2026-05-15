@@ -6,6 +6,7 @@ const hoisted = vi.hoisted(() => ({
     collectionGroup: vi.fn(),
     collection: vi.fn(),
     collectionGroupGet: vi.fn(),
+    metaDocGet: vi.fn(),
 }));
 
 vi.mock('firebase-functions/v2/scheduler', () => ({
@@ -35,6 +36,7 @@ import { addSleepSyncQueueItem } from './queue';
 describe('sleep polling', () => {
     afterEach(() => {
         vi.clearAllMocks();
+        hoisted.metaDocGet.mockResolvedValue({ exists: false, data: () => undefined });
     });
 
     function createTokenDoc(userID: string, data: Record<string, unknown>) {
@@ -55,6 +57,20 @@ describe('sleep polling', () => {
         hoisted.collectionGroup.mockReturnValue({
             where: vi.fn().mockReturnThis(),
             get: hoisted.collectionGroupGet,
+        });
+        hoisted.collection.mockImplementation((name: string) => {
+            if (name !== 'users') {
+                return undefined;
+            }
+            return {
+                doc: vi.fn(() => ({
+                    collection: vi.fn(() => ({
+                        doc: vi.fn(() => ({
+                            get: hoisted.metaDocGet,
+                        })),
+                    })),
+                })),
+            };
         });
     }
 
@@ -102,12 +118,37 @@ describe('sleep polling', () => {
 
         expect(queued).toBe(1);
         expect(hoisted.collectionGroup).toHaveBeenCalledWith('tokens');
-        expect(hoisted.collection).not.toHaveBeenCalled();
+        expect(hoisted.collection).toHaveBeenCalledWith('users');
         expect(addSleepSyncQueueItem).toHaveBeenCalledWith(expect.objectContaining({
             type: 'suunto_poll',
             provider: SLEEP_PROVIDERS.SuuntoApp,
             userID,
             providerUserId: 'suunto-user-1',
         }));
+    });
+
+    it('skips users marked reconnect_required in service meta', async () => {
+        const userID = 'suunto-user-id';
+        const nowMs = Date.UTC(2026, 3, 28);
+        installCollectionGroupTokenMock([
+            createTokenDoc(userID, {
+                serviceName: ServiceNames.SuuntoApp,
+                userName: 'suunto-user-1',
+            }),
+        ]);
+        hoisted.metaDocGet.mockResolvedValue({
+            exists: true,
+            data: () => ({ connectionState: 'reconnect_required' }),
+        });
+
+        const queued = await sleepPollingTestInternals.enqueueProviderPolls(
+            SLEEP_PROVIDERS.SuuntoApp,
+            ServiceNames.SuuntoApp,
+            28,
+            nowMs,
+        );
+
+        expect(queued).toBe(0);
+        expect(addSleepSyncQueueItem).not.toHaveBeenCalled();
     });
 });

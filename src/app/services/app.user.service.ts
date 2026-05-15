@@ -32,12 +32,11 @@ import {
 } from '@sports-alliance/sports-lib';
 import { Auth, authState, user } from 'app/firebase/auth';
 import { HttpClient } from '@angular/common/http';
-import { UserServiceMetaInterface } from '@sports-alliance/sports-lib';
 import {
   DateRanges,
   TableSettings
 } from '@sports-alliance/sports-lib';
-import { AppUserInterface, AppUserSettingsInterface } from '../models/app-user.interface';
+import { AppUserInterface, AppUserServiceMetaInterface, AppUserSettingsInterface } from '../models/app-user.interface';
 import {
   ChartDataCategoryTypes,
   ChartDataValueTypes,
@@ -86,6 +85,7 @@ import { AppFunctionsService } from './app.functions.service';
 import { FunctionName } from '@shared/functions-manifest';
 import { SleepBackfillQueueResponse } from '@shared/sleep-backfill';
 import { ActivitySyncRouteId } from '@shared/activity-sync-routes';
+import { buildSuuntoServiceConnectionViewModel, SuuntoServiceConnectionViewModel } from '../helpers/suunto-service-connection.helper';
 
 export const ACTIVITY_SERVICE_CONNECTION_NAMES = [
   ServiceNames.GarminAPI,
@@ -654,11 +654,46 @@ export class AppUserService implements OnDestroy {
     this.applyActivitySyncRouteSettingsToUser(user, activitySyncRoutes);
   }
 
-  public getUserMetaForService(user: User, serviceName: string): Observable<UserServiceMetaInterface> {
+  public getUserMetaForService(user: User, serviceName: string): Observable<AppUserServiceMetaInterface | undefined> {
     const metaDoc = doc(this.firestore, 'users', user.uid, 'meta', serviceName);
     return docData(metaDoc).pipe(map((d) => {
-      return <UserServiceMetaInterface>d;
+      return d as AppUserServiceMetaInterface | undefined;
     }));
+  }
+
+  public watchSuuntoServiceConnectionView(user: User | null | undefined): Observable<SuuntoServiceConnectionViewModel> {
+    const uid = `${user?.uid || ''}`.trim();
+    if (!uid || !user) {
+      return of(buildSuuntoServiceConnectionViewModel({
+        hasToken: false,
+        serviceMeta: null,
+      }));
+    }
+
+    return combineLatest([
+      this.getServiceToken(user, ServiceNames.SuuntoApp).pipe(
+        catchError(error => {
+          this.logger.warn('[AppUserService] Failed to read Suunto tokens for connection view', {
+            userID: uid,
+          }, error);
+          return of([]);
+        }),
+      ),
+      this.getUserMetaForService(user, ServiceNames.SuuntoApp).pipe(
+        catchError(error => {
+          this.logger.warn('[AppUserService] Failed to read Suunto service meta for connection view', {
+            userID: uid,
+          }, error);
+          return of(undefined);
+        }),
+      ),
+    ]).pipe(
+      map(([tokens, serviceMeta]) => buildSuuntoServiceConnectionViewModel({
+        hasToken: Array.isArray(tokens) && tokens.length > 0,
+        serviceMeta: serviceMeta || null,
+      })),
+      distinctUntilChanged((previous, current) => JSON.stringify(previous) === JSON.stringify(current)),
+    );
   }
 
 

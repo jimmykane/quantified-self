@@ -9,8 +9,15 @@ import {
 
 
 import { getTokenData } from './tokens';
-import { TokenNotFoundError } from './utils';
 import { getServiceAdapter } from './auth/factory';
+import { markServiceConnected } from './service-connection-meta';
+import {
+  cleanupServiceConnectionForUser,
+  cleanupServiceTokenById,
+  MissingTokensBehavior,
+  SERVICE_AUTH_CLEANUP_REASONS,
+} from './service-auth-lifecycle';
+export { deleteLocalServiceToken } from './service-token-store';
 
 
 export async function removeDuplicateConnections(currentUserID: string, serviceName: ServiceNames, externalUserId: string) {
@@ -35,8 +42,7 @@ export async function removeDuplicateConnections(currentUserID: string, serviceN
 
     if (otherUserId && otherUserId !== currentUserID) {
       logger.warn(`Found duplicate connection for ${serviceName} account ${externalUserId}. Connected to User ${otherUserId}, but now User ${currentUserID} is connecting. Deleting old token ${doc.id} for User ${otherUserId}.`);
-      // Use deleteLocalServiceToken to also clean up parent document if this was the last token
-      await deleteLocalServiceToken(otherUserId, serviceName, doc.id);
+      await cleanupServiceTokenById(otherUserId, serviceName, doc.id, SERVICE_AUTH_CLEANUP_REASONS.DuplicateConnectionCleanup);
       deleteCount++;
     }
   }
@@ -148,6 +154,8 @@ export async function getAndSetServiceOAuth2AccessTokenForUser(userID: string, s
       .doc(uniqueId || 'default')
       .set(tokenData);
 
+    await markServiceConnected(userID, serviceName);
+
     // Remove any OTHER users connected to this same external account
     if (uniqueId) {
       try {
@@ -174,75 +182,33 @@ export async function getAndSetServiceOAuth2AccessTokenForUser(userID: string, s
   }
 }
 
-export async function deauthorizeServiceForUser(userID: string, serviceName: ServiceNames) {
-  const adapter = getServiceAdapter(serviceName);
-  const userDocRef = admin.firestore().collection(adapter.tokenCollectionName).doc(userID);
-  const tokenQuerySnapshots = await userDocRef.collection('tokens').get();
-
-
-  if (tokenQuerySnapshots.empty) {
-    logger.warn(`No tokens found for user ${userID} in ${adapter.tokenCollectionName}. Cleaning up abandoned data.`);
-    await admin.firestore().recursiveDelete(userDocRef);
-    throw new TokenNotFoundError('No tokens found');
-  }
-
-  logger.info(`Found ${tokenQuerySnapshots.size} tokens for user ${userID}`);
-
-  // Deauthorize tokens individually.
-  // We delete successful ones and preserve those that fail with 500.
-  for (const tokenQueryDocumentSnapshot of tokenQuerySnapshots.docs) {
-    let serviceToken;
-    let shouldDeleteToken = true;
-
-    try {
-      serviceToken = await getTokenData(tokenQueryDocumentSnapshot, serviceName, false);
-    } catch (e: any) {
-      const statusCode = e.statusCode || (e.output && e.output.statusCode);
-      if (statusCode === 500 || statusCode === 502) {
-        logger.error(`Refreshing token failed with ${statusCode} for ${tokenQueryDocumentSnapshot.id}. Preserving local token.`);
-        shouldDeleteToken = false;
-      } else {
-        logger.warn(`Refreshing token failed for ${tokenQueryDocumentSnapshot.id} (${statusCode || 'unknown error'}). Proceeding with local cleanup.`);
-      }
-    }
-
-    if (shouldDeleteToken && serviceToken) {
-      try {
-        await adapter.deauthorize(serviceToken);
-        logger.info(`Deauthorized ${serviceName} token ${tokenQueryDocumentSnapshot.id} for ${userID}`);
-      } catch (apiError: any) {
-        const statusCode = apiError.statusCode || (apiError.output && apiError.output.statusCode);
-        if (statusCode === 500 || statusCode === 502) {
-          logger.error(`${serviceName} API deauthorization failed with ${statusCode} for ${userID}. Preserving local token.`);
-          shouldDeleteToken = false;
-        } else {
-          logger.warn(`Failed to deauthorize on ${serviceName} API for ${userID}: ${apiError.message}. Proceeding with local cleanup.`);
-        }
-      }
-    }
-
-    if (shouldDeleteToken) {
-      try {
-        await deleteLocalServiceToken(userID, serviceName, tokenQueryDocumentSnapshot.id);
-      } catch (deleteError: any) {
-        logger.error(`Failed to delete local token ${tokenQueryDocumentSnapshot.id}: ${deleteError.message}`);
-      }
-    }
-  }
+interface DeauthorizeServiceForUserOptions {
+  missingTokensBehavior?: MissingTokensBehavior;
 }
 
-export async function deleteLocalServiceToken(userID: string, serviceName: ServiceNames, tokenID: string) {
-  logger.info(`Starting delete for local token ${tokenID} for ${userID} and serviceName ${serviceName}`);
-  const adapter = getServiceAdapter(serviceName);
-  const userDocRef = admin.firestore().collection(adapter.tokenCollectionName).doc(userID);
-
-  await userDocRef.collection('tokens').doc(tokenID).delete();
-  // Check if any tokens remain
-  const remainingTokens = await userDocRef.collection('tokens').limit(1).get();
-  logger.info(`Remaining tokens for ${userID}: ${remainingTokens.size}`);
-  if (remainingTokens.empty) {
-    logger.info(`No remaining tokens for ${userID}. Deleting parent document and all descendant data (surgical).`);
-    await admin.firestore().recursiveDelete(userDocRef);
-  }
+export async function deauthorizeServiceForUser(
+  userID: string,
+  serviceName: ServiceNames,
+  options: DeauthorizeServiceForUserOptions = {},
+) {
+  return cleanupServiceConnectionForUser(
+    userID,
+    serviceName,
+    SERVICE_AUTH_CLEANUP_REASONS.UserDisconnect,
+    {
+      missingTokensBehavior: options.missingTokensBehavior || 'throw',
+      tokenResolver: (doc) => getTokenData(doc, serviceName, false, {
+        recoverTerminalAuthFailure: false,
+      }),
+    },
+  );
 }
 
+export async function disconnectServiceForUser(
+  userID: string,
+  serviceName: ServiceNames,
+) {
+  return deauthorizeServiceForUser(userID, serviceName, {
+    missingTokensBehavior: 'ignore',
+  });
+}

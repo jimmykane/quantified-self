@@ -17,6 +17,8 @@ import { StripeRole } from './stripe-role.model';
 import { AppThemePreference } from './app-theme-preference.type';
 import { AppDateValue } from './app-date-value.type';
 import { ActivitySyncRouteId } from '@shared/activity-sync-routes';
+import { ServiceConnectionMetaFields } from '@shared/service-connection';
+import { UserServiceMetaInterface } from '@sports-alliance/sports-lib';
 
 export type AppMapStyleName = 'default' | 'satellite' | 'outdoors';
 
@@ -79,7 +81,8 @@ export type AppDashboardActionPromptId =
     | 'unitSetup'
     | 'firstActivityUpload'
     | 'connectActivityService'
-    | 'enableActivityAutoSync';
+    | 'enableActivityAutoSync'
+    | 'reconnectSuuntoService';
 export type AppDashboardActionPromptStateValue = 'dismissed';
 
 export interface AppDashboardActionPromptState {
@@ -164,6 +167,8 @@ export interface ActivitySyncRouteSettingsInterface {
 export interface ServiceSyncSettingsInterface {
     activitySyncRoutes?: Partial<Record<ActivitySyncRouteId, ActivitySyncRouteSettingsInterface>>;
 }
+
+export interface AppUserServiceMetaInterface extends UserServiceMetaInterface, ServiceConnectionMetaFields {}
 
 export interface AppUserSettingsInterface extends UserSettingsInterface {
     myTracksSettings?: AppMyTracksSettings;

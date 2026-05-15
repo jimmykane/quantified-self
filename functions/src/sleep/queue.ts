@@ -21,7 +21,7 @@ import {
     mapSuuntoSleepSample,
 } from './provider-mappers';
 import { markSleepSyncError, updateSleepSyncState, upsertSleepSessions } from './writer';
-import { getTokenData } from '../tokens';
+import { getTokenData, TerminalServiceAuthError } from '../tokens';
 import * as requestPromise from '../request-helper';
 import { config } from '../config';
 import { toSuuntoAuthorizationHeader } from '../suunto/authorization-header';
@@ -508,6 +508,15 @@ export async function processSleepSyncQueueItem(queueItem: SleepSyncQueueItemInt
             }
             logger.warn(`[SleepSync] Queue item ${queueItem.id} has no connected ${error.provider} token for ${error.providerUserId}; moving to DLQ`);
             return moveToDeadLetterQueue(queueItem, error, undefined, 'NO_TOKEN_FOUND');
+        }
+        if (error instanceof TerminalServiceAuthError) {
+            if (error.firebaseUserID) {
+                await markSleepSyncError(error.firebaseUserID, queueItem.provider, error);
+            } else if (queueItem.userID) {
+                await markSleepSyncError(queueItem.userID, queueItem.provider, error);
+            }
+            logger.warn(`[SleepSync] Queue item ${queueItem.id} hit terminal auth failure for ${queueItem.provider}; moving to DLQ with ${error.dlqContext}`);
+            return moveToDeadLetterQueue(queueItem, error, undefined, error.dlqContext);
         }
         if (queueItem.userID) {
             await markSleepSyncError(queueItem.userID, queueItem.provider, error);

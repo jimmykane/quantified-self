@@ -8,12 +8,16 @@ import {
   getServiceOAuth2CodeRedirectAndSaveStateToUser,
   getAndSetServiceOAuth2AccessTokenForUser,
   deauthorizeServiceForUser,
-  deleteLocalServiceToken,
+  disconnectServiceForUser,
   validateOAuth2State
 } from '../../OAuth2';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { FUNCTIONS_MANIFEST } from '../../../../shared/functions-manifest';
 import * as admin from 'firebase-admin';
+import {
+  cleanupServiceTokenById,
+  SERVICE_AUTH_CLEANUP_REASONS,
+} from '../../service-auth-lifecycle';
 
 const SERVICE_NAME = ServiceNames.GarminAPI;
 
@@ -147,15 +151,11 @@ export const deauthorizeGarminAPI = functions.region(FUNCTIONS_MANIFEST.deauthor
   const userID = context.auth.uid;
 
   try {
-    await deauthorizeServiceForUser(userID, SERVICE_NAME);
+    await disconnectServiceForUser(userID, SERVICE_NAME);
     return { success: true };
   } catch (e: any) {
-    if (e.name === 'TokenNotFoundError') {
-      throw new functions.https.HttpsError('not-found', 'Token not found');
-    } else {
-      logger.error('Error deauthorizing Garmin:', e);
-      throw new functions.https.HttpsError('internal', 'Bad request or internal error');
-    }
+    logger.error('Error deauthorizing Garmin:', e);
+    throw new functions.https.HttpsError('internal', 'Bad request or internal error');
   }
 });
 
@@ -206,7 +206,12 @@ export const receiveGarminAPIDeregistration = functions.region(FUNCTIONS_MANIFES
         if (firebaseUserID) {
           logger.info(`Processing deregistration for Firebase User ${firebaseUserID} (Garmin ID: ${garminUserId})`);
           try {
-            await deleteLocalServiceToken(firebaseUserID, ServiceNames.GarminAPI, tokenDoc.id);
+            await cleanupServiceTokenById(
+              firebaseUserID,
+              ServiceNames.GarminAPI,
+              tokenDoc.id,
+              SERVICE_AUTH_CLEANUP_REASONS.PartnerDisconnect,
+            );
             successCount++;
           } catch (e) {
             logger.error(`Failed to process deregistration for Firebase User ${firebaseUserID} (Garmin ID: ${garminUserId})`, e);

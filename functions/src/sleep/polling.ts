@@ -15,6 +15,7 @@ import {
     isSleepSyncUserAllowed,
     SLEEP_SYNC_DISABLED_PROVIDERS,
 } from './provider-flags';
+import { isServiceReconnectRequiredForUser } from '../service-connection-meta';
 
 interface PollWindow {
     startMs: number;
@@ -94,11 +95,22 @@ async function enqueueProviderPolls(
 
     const windows = chunkRecentWindow(nowMs, SLEEP_SYNC_RECENT_WINDOW_DAYS, maxWindowDays);
     const tokenSnapshots = await getProviderTokenSnapshots(provider, serviceName);
+    const reconnectRequiredCache = new Map<string, Promise<boolean>>();
     let queued = 0;
     for (const tokenSnapshot of tokenSnapshots) {
         const userID = getFirebaseUserID(tokenSnapshot);
         const providerUserId = getProviderUserId(provider, tokenSnapshot.data());
         if (!userID || !providerUserId || !isSleepSyncUserAllowed(userID)) {
+            continue;
+        }
+        const cacheKey = `${userID}:${serviceName}`;
+        let pendingReconnectRequired = reconnectRequiredCache.get(cacheKey);
+        if (!pendingReconnectRequired) {
+            pendingReconnectRequired = isServiceReconnectRequiredForUser(userID, serviceName);
+            reconnectRequiredCache.set(cacheKey, pendingReconnectRequired);
+        }
+        if (await pendingReconnectRequired) {
+            logger.info(`[SleepSync][${provider}] Skipping user ${userID} because ${serviceName} is marked reconnect_required`);
             continue;
         }
         for (const window of windows) {

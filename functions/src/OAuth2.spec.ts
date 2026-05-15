@@ -120,6 +120,11 @@ vi.mock('./request-helper', () => ({
     delete: vi.fn(() => Promise.resolve({})),
 }));
 
+vi.mock('./service-connection-meta', () => ({
+    markServiceConnected: vi.fn().mockResolvedValue(undefined),
+    clearServiceConnectionState: vi.fn().mockResolvedValue(undefined),
+}));
+
 import * as requestPromise from './request-helper';
 
 // Mock simple-oauth2
@@ -150,6 +155,7 @@ import {
 import { TokenNotFoundError } from './utils';
 import * as admin from 'firebase-admin';
 import { getTokenData } from './tokens';
+import { clearServiceConnectionState } from './service-connection-meta';
 
 describe('OAuth2', () => {
     describe('getServiceConfig', () => {
@@ -333,6 +339,7 @@ describe('OAuth2', () => {
 
             mockDelete.mockResolvedValue({});
             mockRecursiveDelete.mockResolvedValue({});
+            (clearServiceConnectionState as Mock).mockReset().mockResolvedValue(undefined);
 
             (getTokenData as Mock).mockResolvedValue({ accessToken: 'mock-access' });
             (requestPromise.get as Mock).mockResolvedValue({});
@@ -486,6 +493,94 @@ describe('OAuth2', () => {
             expect(mockRecursiveDelete).toHaveBeenCalledTimes(1);
         });
 
+        it('should clear service connection state after explicit disconnect when no tokens remain', async () => {
+            const mockTokenDoc = {
+                id: 'token-doc-id',
+                ref: {
+                    delete: mockDelete,
+                },
+            };
+            mockGet.mockReset();
+            mockGet
+                .mockResolvedValueOnce({
+                    empty: false,
+                    size: 1,
+                    docs: [mockTokenDoc],
+                } as unknown as admin.firestore.QuerySnapshot)
+                .mockResolvedValueOnce({
+                    empty: true,
+                    size: 0,
+                    docs: [],
+                } as unknown as admin.firestore.QuerySnapshot)
+                .mockResolvedValueOnce({
+                    empty: true,
+                    size: 0,
+                    docs: [],
+                } as unknown as admin.firestore.QuerySnapshot);
+
+            await deauthorizeServiceForUser(userID, serviceName, {
+            });
+
+            expect(clearServiceConnectionState).toHaveBeenCalledWith(userID, serviceName);
+        });
+
+        it('should not fail explicit disconnect if clearing service connection state fails after cleanup', async () => {
+            const mockTokenDoc = {
+                id: 'token-doc-id',
+                ref: {
+                    delete: mockDelete,
+                },
+            };
+            mockGet.mockReset();
+            mockGet
+                .mockResolvedValueOnce({
+                    empty: false,
+                    size: 1,
+                    docs: [mockTokenDoc],
+                } as unknown as admin.firestore.QuerySnapshot)
+                .mockResolvedValueOnce({
+                    empty: true,
+                    size: 0,
+                    docs: [],
+                } as unknown as admin.firestore.QuerySnapshot)
+                .mockResolvedValueOnce({
+                    empty: true,
+                    size: 0,
+                    docs: [],
+                } as unknown as admin.firestore.QuerySnapshot);
+            (clearServiceConnectionState as Mock).mockRejectedValueOnce(new Error('meta write failed'));
+
+            await expect(deauthorizeServiceForUser(userID, serviceName, {
+            })).resolves.not.toThrow();
+
+            expect(mockRecursiveDelete).toHaveBeenCalledTimes(1);
+            expect(clearServiceConnectionState).toHaveBeenCalledWith(userID, serviceName);
+        });
+
+        it('should clear service connection state when explicit disconnect finds no token docs', async () => {
+            mockGet.mockReset();
+            mockGet.mockImplementation(() => Promise.resolve({ empty: true, size: 0, docs: [] } as unknown as admin.firestore.QuerySnapshot));
+
+            await expect(deauthorizeServiceForUser(userID, serviceName, {
+                missingTokensBehavior: 'ignore',
+            })).resolves.not.toThrow();
+
+            expect(clearServiceConnectionState).toHaveBeenCalledWith(userID, serviceName);
+        });
+
+        it('should not fail orphaned cleanup if clearing service connection state fails', async () => {
+            mockGet.mockReset();
+            mockGet.mockImplementation(() => Promise.resolve({ empty: true, size: 0, docs: [] } as unknown as admin.firestore.QuerySnapshot));
+            (clearServiceConnectionState as Mock).mockRejectedValueOnce(new Error('meta write failed'));
+
+            await expect(deauthorizeServiceForUser(userID, serviceName, {
+                missingTokensBehavior: 'ignore',
+            })).resolves.not.toThrow();
+
+            expect(mockRecursiveDelete).toHaveBeenCalledTimes(1);
+            expect(clearServiceConnectionState).toHaveBeenCalledWith(userID, serviceName);
+        });
+
 
 
     });
@@ -539,6 +634,14 @@ describe('OAuth2', () => {
             expect(tokenDeleteSpy).toHaveBeenCalled();
             expect(mockRecursiveDelete).not.toHaveBeenCalled();
             expect(mockCollection).not.toHaveBeenCalledWith('users');
+        });
+
+        it('should keep local token cleanup low-level and not touch service connection state', async () => {
+            await expect(deleteLocalServiceToken(userID, serviceName, tokenID)).resolves.not.toThrow();
+
+            expect(tokenDeleteSpy).toHaveBeenCalled();
+            expect(mockRecursiveDelete).toHaveBeenCalled();
+            expect(clearServiceConnectionState).not.toHaveBeenCalled();
         });
     });
 

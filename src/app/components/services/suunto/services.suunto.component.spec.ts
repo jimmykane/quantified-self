@@ -162,6 +162,26 @@ describe('ServicesSuuntoComponent', () => {
         expect(fixture.nativeElement.querySelector('.service-connection-status__actions .connection-disconnect-button')).toBeFalsy();
     });
 
+    it('renders reconnect-required state when Suunto must be reconnected', () => {
+        component.hasProAccess = true;
+        component.serviceTokens = [];
+        component.serviceMeta = {
+            connectionState: 'reconnect_required',
+            lastAuthFailureMessage: 'User no longer active/connected with the partner',
+        } as any;
+        fixture.detectChanges();
+
+        const content = fixture.nativeElement.textContent;
+        const banner = fixture.nativeElement.querySelector('.reconnect-required-banner');
+
+        expect(content).toContain('Reconnect required');
+        expect(content).toContain('Suunto needs to be reconnected');
+        expect(content).toContain('User no longer active/connected with the partner');
+        expect(fixture.nativeElement.querySelector('.service-connection-status--attention')).toBeTruthy();
+        expect(banner).toBeTruthy();
+        expect(fixture.nativeElement.querySelector('.qs-mat-primary')?.textContent).toContain('Reconnect');
+    });
+
     describe('History Import Tab', () => {
         it('should be unlocked/available if user has pro access AND is connected', () => {
             component.hasProAccess = true;

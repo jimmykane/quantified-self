@@ -1,6 +1,7 @@
 <section
   class="service-connection-status"
   [class.service-connection-status--connected]="connected"
+  [class.service-connection-status--attention]="statusTone === 'attention'"
   [class.service-connection-status--locked]="locked"
   [attr.aria-label]="serviceLabel + ' connection status'">
   <div class="service-connection-status__content">
