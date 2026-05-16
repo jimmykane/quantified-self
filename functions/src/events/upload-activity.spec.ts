@@ -262,10 +262,10 @@ describe('uploadActivity', () => {
 
   it('should register with memory and concurrency limits to avoid upload OOM', () => {
     expect(hoisted.capturedOnRequestOptions.value).toEqual(expect.objectContaining({
-      memory: '2GiB',
+      memory: '8GiB',
       cpu: 2,
       concurrency: 1,
-      timeoutSeconds: 540,
+      timeoutSeconds: 3600,
     }));
   });
 
@@ -974,7 +974,7 @@ describe('uploadActivity', () => {
 
   it('should return 400 when gzip payload expands beyond decompression safety limit', async () => {
     const response = makeResponse();
-    const compressedBomb = gzipSync(Buffer.alloc((300 * 1024 * 1024) + 1, 0x00));
+    const compressedBomb = gzipSync(Buffer.alloc((512 * 1024 * 1024) + 1, 0x00));
 
     await invokeUploadActivity(makeRequest({
       headers: {
@@ -987,7 +987,7 @@ describe('uploadActivity', () => {
 
     expect(response.status).toHaveBeenCalledWith(400);
     expect(response.json).toHaveBeenCalledWith({
-      error: 'File is too large after decompression. Maximum decompressed size is 300MB.',
+      error: 'File is too large after decompression. Maximum decompressed size is 512MB.',
     });
     expect(hoisted.mockFITImporter.getFromArrayBuffer).not.toHaveBeenCalled();
   });

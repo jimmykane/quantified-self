@@ -28,7 +28,7 @@ import { FUNCTIONS_MANIFEST } from '../../../shared/functions-manifest';
 const MAX_UPLOAD_BYTES = 20 * 1024 * 1024;
 // Protect against gzip zip-bombs: input is capped at 20MB, but decompressed output
 // could otherwise expand to hundreds of MB/GB and OOM the function instance.
-const MAX_DECOMPRESSED_UPLOAD_BYTES = 300 * 1024 * 1024;
+const MAX_DECOMPRESSED_UPLOAD_BYTES = 512 * 1024 * 1024;
 const SUPPORTED_BASE_EXTENSIONS = new Set(['fit', 'gpx', 'tcx', 'json', 'sml']);
 
 class HttpStatusError extends Error {
@@ -134,7 +134,7 @@ function maybeDecompressPayloadForParsing(payload: Buffer, resolvedExtension: st
       resolvedExtension,
     });
     if ((error as { code?: unknown } | undefined)?.code === 'ERR_BUFFER_TOO_LARGE') {
-      throw new HttpStatusError(400, 'File is too large after decompression. Maximum decompressed size is 300MB.');
+      throw new HttpStatusError(400, 'File is too large after decompression. Maximum decompressed size is 512MB.');
     }
     throw new HttpStatusError(400, 'Could not decompress uploaded payload.');
   }
@@ -318,10 +318,10 @@ async function persistProcessingMetadata(userID: string, eventID: string): Promi
 
 export const uploadActivity = onRequest({
   region: FUNCTIONS_MANIFEST.uploadActivity.region,
-  memory: '2GiB',
+  memory: '8GiB',
   cpu: 2,
   concurrency: 1,
-  timeoutSeconds: 540,
+  timeoutSeconds: 3600,
   maxInstances: 20,
   cors: ALLOWED_CORS_ORIGINS,
 }, async (request, response) => {
