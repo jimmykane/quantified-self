@@ -78,12 +78,6 @@ interface CheckoutSessionDocumentData {
     error?: string | { message?: string };
 }
 
-interface CheckoutAnalyticsContext {
-    purchaseContextId?: string | null;
-    isTrialCheckout?: boolean;
-    mode?: CheckoutMode;
-}
-
 @Injectable({
     providedIn: 'root'
 })
@@ -299,8 +293,7 @@ export class AppPaymentService {
     async appendCheckoutSession(
         price: string | StripePrice,
         successUrl?: string,
-        cancelUrl?: string,
-        analyticsContext?: CheckoutAnalyticsContext
+        cancelUrl?: string
     ): Promise<void> {
         const user = this.auth.currentUser;
         if (!user) {
@@ -308,31 +301,13 @@ export class AppPaymentService {
         }
 
         const checkoutInput = this.resolveCheckoutInput(price);
-        const success = successUrl || this.buildPaymentSuccessUrl({
-            ...analyticsContext,
-            mode: checkoutInput.mode,
-        });
+        const success = successUrl || this.buildPaymentSuccessUrl(checkoutInput.mode);
         const cancel = cancelUrl || `${this.windowService.currentDomain}/payment/cancel`;
         await this.appendCheckoutSessionWithAttempt(price, user.uid, success, cancel, user, 0);
     }
 
-    private buildPaymentSuccessUrl(analyticsContext?: CheckoutAnalyticsContext): string {
-        const queryParts = ['session_id={CHECKOUT_SESSION_ID}'];
-        const purchaseContextId = analyticsContext?.purchaseContextId?.trim();
-
-        if (purchaseContextId) {
-            queryParts.push(`purchase_context_id=${encodeURIComponent(purchaseContextId)}`);
-        }
-
-        if (typeof analyticsContext?.isTrialCheckout === 'boolean') {
-            queryParts.push(`trial_checkout=${analyticsContext.isTrialCheckout ? '1' : '0'}`);
-        }
-
-        if (analyticsContext?.mode) {
-            queryParts.push(`checkout_mode=${analyticsContext.mode}`);
-        }
-
-        return `${this.windowService.currentDomain}/payment/success?${queryParts.join('&')}`;
+    private buildPaymentSuccessUrl(mode: CheckoutMode): string {
+        return `${this.windowService.currentDomain}/payment/success?session_id={CHECKOUT_SESSION_ID}&checkout_mode=${mode}`;
     }
 
     private async appendCheckoutSessionWithAttempt(

@@ -113,8 +113,12 @@ describe('dashboard-tile-event-filters.helper', () => {
     expect(eventMatchesDashboardActivityTypes(makeEvent([ActivityTypes.Running]), [])).toBe(true);
   });
 
-  it('normalizes invalid event table date ranges to all', () => {
-    expect(normalizeDashboardEventTableFilters({ dateRange: 999 }).dateRange).toBe(DateRanges.all);
+  it('normalizes invalid event table date ranges to this week by default', () => {
+    expect(normalizeDashboardEventTableFilters({ dateRange: 999 }).dateRange).toBe(DateRanges.thisWeek);
+  });
+
+  it('preserves explicit legacy event table all range', () => {
+    expect(normalizeDashboardEventTableFilters(null, { dateRange: DateRanges.all }).dateRange).toBe(DateRanges.all);
   });
 
   it('clones tile event filter activity arrays', () => {

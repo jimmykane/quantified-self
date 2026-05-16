@@ -111,7 +111,6 @@ describe('PricingComponent', () => {
                     useValue: {
                         logEvent: vi.fn(),
                         logBeginCheckout: vi.fn(),
-                        storePendingPurchaseContext: vi.fn().mockReturnValue('purchase_ctx_123'),
                         logManageSubscription: vi.fn(),
                         logSelectFreeTier: vi.fn(),
                         logRestorePurchases: vi.fn()
@@ -693,7 +692,6 @@ describe('PricingComponent', () => {
         const analyticsService = TestBed.inject(AppAnalyticsService);
         const paymentService = TestBed.inject(AppPaymentService);
         const logSpy = vi.spyOn(analyticsService, 'logBeginCheckout');
-        const pendingPurchaseSpy = vi.spyOn(analyticsService, 'storePendingPurchaseContext');
         const checkoutSpy = vi.spyOn(paymentService, 'appendCheckoutSession');
         const price = { id: 'price_123', currency: 'USD', unit_amount: 1000 };
 
@@ -702,17 +700,7 @@ describe('PricingComponent', () => {
         await component.subscribe(price);
 
         expect(logSpy).toHaveBeenCalledWith('price_123', 'USD', 10);
-        expect(pendingPurchaseSpy).toHaveBeenCalledWith({
-            priceId: 'price_123',
-            mode: 'subscription',
-            currency: 'USD',
-            value: 10,
-            isTrialCheckout: false,
-        });
-        expect(checkoutSpy).toHaveBeenCalledWith(price, undefined, undefined, {
-            purchaseContextId: 'purchase_ctx_123',
-            isTrialCheckout: false,
-        });
+        expect(checkoutSpy).toHaveBeenCalledWith(price);
     });
 
     it('should log select_freetier event on selectFreeTier', async () => {

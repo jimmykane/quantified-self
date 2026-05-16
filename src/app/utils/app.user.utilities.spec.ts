@@ -285,7 +285,7 @@ describe('AppUserUtilities', () => {
             expect(settings.dashboardSettings?.includeMergedEvents).toBe(true);
             expect(settings.dashboardSettings?.eventTableFilters).toEqual({
                 searchTerm: null,
-                dateRange: DateRanges.all,
+                dateRange: DateRanges.thisWeek,
                 startDate: null,
                 endDate: null,
                 activityTypes: [],

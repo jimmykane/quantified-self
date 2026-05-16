@@ -78,6 +78,7 @@ import {
 } from '../helpers/dashboard-special-chart-types';
 import { normalizeDashboardSleepTrendRange } from '../helpers/dashboard-sleep-range.helper';
 import {
+    DASHBOARD_EVENT_TABLE_DEFAULT_DATE_RANGE,
     DASHBOARD_TILE_EVENT_DEFAULT_RANGE,
     normalizeDashboardEventTableFilters,
     normalizeDashboardTileEventFilters,
@@ -537,7 +538,10 @@ export class AppUserUtilities {
 
         // Dashboard
         settings.dashboardSettings = settings.dashboardSettings || <AppDashboardSettingsInterface>{};
-        settings.dashboardSettings.dateRange = isNumber(settings.dashboardSettings.dateRange) ? settings.dashboardSettings.dateRange : AppUserUtilities.getDefaultDateRange();
+        const legacyDashboardDateRange = isNumber(settings.dashboardSettings.dateRange)
+            ? settings.dashboardSettings.dateRange
+            : null;
+        settings.dashboardSettings.dateRange = legacyDashboardDateRange ?? AppUserUtilities.getDefaultDateRange();
         settings.dashboardSettings.startDate = settings.dashboardSettings.startDate || null;
         settings.dashboardSettings.endDate = settings.dashboardSettings.endDate || null;
         settings.dashboardSettings.activityTypes = settings.dashboardSettings.activityTypes || [];
@@ -545,7 +549,7 @@ export class AppUserUtilities {
         settings.dashboardSettings.eventTableFilters = normalizeDashboardEventTableFilters(
             settings.dashboardSettings.eventTableFilters,
             {
-                dateRange: settings.dashboardSettings.dateRange,
+                dateRange: legacyDashboardDateRange ?? DASHBOARD_EVENT_TABLE_DEFAULT_DATE_RANGE,
                 startDate: settings.dashboardSettings.startDate,
                 endDate: settings.dashboardSettings.endDate,
                 activityTypes: settings.dashboardSettings.activityTypes,

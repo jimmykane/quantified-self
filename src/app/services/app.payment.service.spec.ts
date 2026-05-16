@@ -205,17 +205,6 @@ describe('AppPaymentService', () => {
             expect(payload).not.toHaveProperty('payment_method_types');
         });
 
-        it('should include checkout analytics context in the default success URL', async () => {
-            await service.appendCheckoutSession('price_123', undefined, undefined, {
-                purchaseContextId: 'ctx 123',
-                isTrialCheckout: false,
-            });
-
-            const payload = mockAddDoc.mock.calls[0][1];
-
-            expect(payload.success_url).toBe('http://localhost:4200/payment/success?session_id={CHECKOUT_SESSION_ID}&purchase_context_id=ctx%20123&trial_checkout=0&checkout_mode=subscription');
-        });
-
         it('should set trial_period_days for eligible first-time recurring checkout', async () => {
             const recurringPriceWithTrial = {
                 id: 'price_recurring_trial',

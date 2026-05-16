@@ -454,18 +454,7 @@ export class PricingComponent implements OnInit, OnDestroy {
                 checkoutCurrency,
                 checkoutValue
             );
-            const isTrialCheckout = this.isTrialCheckout(price);
-            const purchaseContextId = this.analyticsService.storePendingPurchaseContext({
-                priceId,
-                mode: typeof price !== 'string' && price.type === 'one_time' ? 'payment' : 'subscription',
-                currency: checkoutCurrency,
-                value: checkoutValue,
-                isTrialCheckout
-            });
-            await this.paymentService.appendCheckoutSession(price, undefined, undefined, {
-                purchaseContextId,
-                isTrialCheckout
-            });
+            await this.paymentService.appendCheckoutSession(price);
         } catch (error) {
             const errorMessage = (error as Error).message || '';
             if (errorMessage === 'User cancelled redirection to portal.') {
@@ -480,22 +469,6 @@ export class PricingComponent implements OnInit, OnDestroy {
             this.setLoadingState(false);
             this.loadingPriceId = null;
         }
-    }
-
-    private isTrialCheckout(price: string | StripePrice): boolean {
-        if (typeof price === 'string' || price.type !== 'recurring') {
-            return false;
-        }
-
-        if (!!this.currentRole && this.currentRole !== 'free') {
-            return false;
-        }
-
-        if (this.hasPaidSubscriptionHistory !== false) {
-            return false;
-        }
-
-        return this.resolveMetadataTrialDays(price.metadata?.trial_days) !== null;
     }
 
     async manageSubscription() {

@@ -24,6 +24,7 @@ export type DashboardTileEventNavigationDirection = 'older' | 'newer';
 
 export const DASHBOARD_TILE_EVENT_DEFAULT_RANGE: AppDashboardTileEventFilterRange = '90d';
 export const DASHBOARD_TILE_EVENT_LEGACY_ALL_RANGE: AppDashboardTileEventFilterRange = '1y';
+export const DASHBOARD_EVENT_TABLE_DEFAULT_DATE_RANGE = DateRanges.thisWeek;
 
 export const DASHBOARD_TILE_EVENT_RANGE_OPTIONS: ReadonlyArray<DashboardTileEventRangeOption> = [
   { range: 'thisWeek', label: 'This week', buttonLabel: 'Week', shortLabel: 'W' },
@@ -79,7 +80,7 @@ export function normalizeDashboardEventTableFilters(
   const filters = (value || {}) as Partial<AppDashboardEventTableFiltersInterface>;
   const dateRange = normalizeDashboardEventTableDateRange(
     filters.dateRange,
-    normalizeDashboardEventTableDateRange(legacyFilters.dateRange, DateRanges.all),
+    normalizeDashboardEventTableDateRange(legacyFilters.dateRange, DASHBOARD_EVENT_TABLE_DEFAULT_DATE_RANGE),
   );
   return {
     searchTerm: typeof filters.searchTerm === 'string'
@@ -97,7 +98,7 @@ export function normalizeDashboardEventTableFilters(
 
 export function normalizeDashboardEventTableDateRange(
   value: unknown,
-  fallback: DateRanges = DateRanges.all,
+  fallback: DateRanges = DASHBOARD_EVENT_TABLE_DEFAULT_DATE_RANGE,
 ): DateRanges {
   return typeof value === 'number' && VALID_EVENT_TABLE_DATE_RANGES.has(value)
     ? value as DateRanges

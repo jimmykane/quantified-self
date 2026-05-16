@@ -137,18 +137,17 @@ describe('AppAnalyticsService', () => {
         });
     });
 
-    it('should log the official GA4 purchase event once with pending checkout context', () => {
+    it('should log the official GA4 purchase event with checkout metadata', () => {
         userSubject.next({ acceptedTrackingPolicy: true } as User);
 
-        const contextId = service.storePendingPurchaseContext({
-            priceId: 'price_pro_monthly',
+        service.logPurchase({
+            transactionId: 'cs_test_123',
+            role: 'pro',
             mode: 'subscription',
+            priceId: 'price_pro_monthly',
             currency: 'eur',
             value: 9.99,
         });
-
-        service.logPurchaseOnce({ transactionId: 'cs_test_123', role: 'pro', contextId, isTrialCheckout: false, isVerifiedCheckout: true });
-        service.logPurchaseOnce({ transactionId: 'cs_test_123', role: 'pro', contextId, isTrialCheckout: false, isVerifiedCheckout: true });
 
         expect(logEvent).toHaveBeenCalledTimes(1);
         expect(logEvent).toHaveBeenCalledWith(expect.anything(), 'purchase', {
@@ -164,128 +163,31 @@ describe('AppAnalyticsService', () => {
                 price: 9.99,
             }]
         });
-        expect(localStorage.getItem(`app.analytics.pending_purchase.${contextId}`)).toBeNull();
     });
 
-    it('should keep purchase context isolated for overlapping checkout attempts', () => {
+    it('should preserve payment mode for one-time checkout purchases', () => {
         userSubject.next({ acceptedTrackingPolicy: true } as User);
 
-        const firstContextId = service.storePendingPurchaseContext({
-            priceId: 'price_basic_monthly',
-            mode: 'subscription',
-            currency: 'eur',
-            value: 2,
-        });
-        const secondContextId = service.storePendingPurchaseContext({
-            priceId: 'price_pro_yearly',
-            mode: 'subscription',
-            currency: 'usd',
-            value: 99,
-        });
-
-        service.logPurchaseOnce({
-            transactionId: 'cs_first_checkout',
-            role: 'basic',
-            contextId: firstContextId,
-            isTrialCheckout: false,
-            isVerifiedCheckout: true,
-        });
+        service.logPurchase({ transactionId: 'cs_one_time_123', role: null, mode: 'payment' });
 
         expect(logEvent).toHaveBeenCalledTimes(1);
         expect(logEvent).toHaveBeenCalledWith(expect.anything(), 'purchase', {
-            transaction_id: 'cs_first_checkout',
-            currency: 'EUR',
-            value: 2,
+            transaction_id: 'cs_one_time_123',
             items: [{
-                item_id: 'price_basic_monthly',
-                item_name: 'basic subscription',
-                item_category: 'subscription',
-                item_variant: 'basic',
-                quantity: 1,
-                price: 2,
-            }]
-        });
-        expect(localStorage.getItem(`app.analytics.pending_purchase.${firstContextId}`)).toBeNull();
-        expect(localStorage.getItem(`app.analytics.pending_purchase.${secondContextId}`)).toBeTruthy();
-    });
-
-    it('should not log purchase for no-card trial checkout success', () => {
-        userSubject.next({ acceptedTrackingPolicy: true } as User);
-
-        const contextId = service.storePendingPurchaseContext({
-            priceId: 'price_pro_trial',
-            mode: 'subscription',
-            currency: 'EUR',
-            value: 9.99,
-            isTrialCheckout: true,
-        });
-
-        service.logPurchaseOnce({ transactionId: 'cs_trial_123', role: 'pro', contextId, isTrialCheckout: true, isVerifiedCheckout: true });
-
-        expect(logEvent).not.toHaveBeenCalled();
-        expect(localStorage.getItem(`app.analytics.pending_purchase.${contextId}`)).toBeNull();
-    });
-
-    it('should reject purchase logging when checkout was not server verified', () => {
-        userSubject.next({ acceptedTrackingPolicy: true } as User);
-
-        service.logPurchaseOnce({
-            transactionId: 'cs_forged_success_url',
-            role: 'basic',
-            contextId: 'missing_or_forged_context',
-            isTrialCheckout: false,
-            mode: 'subscription',
-        });
-
-        expect(logEvent).not.toHaveBeenCalled();
-        expect(localStorage.getItem('app.analytics.purchase_logged.cs_forged_success_url')).toBeNull();
-    });
-
-    it('should log a minimal purchase when context storage is missing but checkout was server verified', () => {
-        userSubject.next({ acceptedTrackingPolicy: true } as User);
-
-        service.logPurchaseOnce({
-            transactionId: 'cs_missing_context',
-            role: 'basic',
-            contextId: 'missing_context',
-            isTrialCheckout: false,
-            mode: 'subscription',
-            isVerifiedCheckout: true,
-        });
-
-        expect(logEvent).toHaveBeenCalledWith(expect.anything(), 'purchase', {
-            transaction_id: 'cs_missing_context',
-            items: [{
-                item_id: 'basic',
-                item_name: 'basic subscription',
-                item_category: 'subscription',
-                item_variant: 'basic',
-                quantity: 1,
-            }]
-        });
-    });
-
-    it('should preserve payment mode when context storage is missing', () => {
-        userSubject.next({ acceptedTrackingPolicy: true } as User);
-
-        service.logPurchaseOnce({
-            transactionId: 'cs_missing_payment_context',
-            role: null,
-            contextId: 'missing_payment_context',
-            isTrialCheckout: false,
-            mode: 'payment',
-            isVerifiedCheckout: true,
-        });
-
-        expect(logEvent).toHaveBeenCalledWith(expect.anything(), 'purchase', {
-            transaction_id: 'cs_missing_payment_context',
-            items: [{
-                item_id: 'cs_missing_payment_context',
+                item_id: 'cs_one_time_123',
                 item_name: 'Subscription',
                 item_category: 'payment',
                 quantity: 1,
             }]
         });
+    });
+
+    it('should not log purchase when transaction id is empty', () => {
+        userSubject.next({ acceptedTrackingPolicy: true } as User);
+
+        service.logPurchase({ transactionId: '   ', role: 'pro', mode: 'subscription' });
+
+        expect(logEvent).not.toHaveBeenCalled();
     });
 
     it('should log summary metadata when running an activity sync route backfill', () => {

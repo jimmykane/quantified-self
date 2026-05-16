@@ -7,52 +7,199 @@ import { ActivatedRoute, RouterModule } from '@angular/router';
 import { Auth } from 'app/firebase/auth';
 import { LoggerService } from '../../services/logger.service';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
-import { AppFunctionsService } from '../../services/app.functions.service';
-import type {
-  VerifyCheckoutSessionRequest,
-  VerifyCheckoutSessionResult
-} from '@shared/stripe-checkout-session';
 
 @Component({
   selector: 'app-payment-success',
   standalone: true,
   imports: [CommonModule, MatCardModule, MatButtonModule, MatProgressSpinnerModule, RouterModule],
-  templateUrl: './payment-success.component.html',
-  styleUrls: ['./payment-success.component.scss']
+  template: `
+    <div class="container">
+      <mat-card class="success-card">
+        <mat-card-header>
+          <mat-card-title>Payment Successful!</mat-card-title>
+        </mat-card-header>
+
+        <mat-card-content>
+          <div class="content-wrapper">
+            @if (isRefreshing) {
+              <div class="loader-container">
+                <mat-spinner diameter="60"></mat-spinner>
+                <p>Activating your subscription...</p>
+              </div>
+            } @else {
+              <div class="checkmark-wrapper">
+                <svg class="checkmark" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 52 52">
+                  <circle class="checkmark__circle" cx="26" cy="26" r="25" fill="none"/>
+                  <path class="checkmark__check" fill="none" d="M14.1 27.2l7.1 7.2 16.7-16.8"/>
+                </svg>
+              </div>
+
+              @switch (assignedRole) {
+                @case ('pro') {
+                  <h2 class="welcome-text">Welcome to Pro!</h2>
+                  <p class="description">
+                    Thank you for your purchase. Your subscription is now active.
+                    You now have full access to all pro features and performance analytics.
+                  </p>
+                }
+                @case ('basic') {
+                  <h2 class="welcome-text">Welcome to Basic!</h2>
+                  <p class="description">
+                    Thank you for your purchase. Your plan is now active.
+                    You have access to core features of the platform.
+                  </p>
+                }
+                @case ('free') {
+                   <h2 class="welcome-text">Welcome!</h2>
+                   <p class="description">
+                     Your account setup is complete. You are currently on the free plan.
+                   </p>
+                }
+                @default {
+                  <h2 class="welcome-text">Purchase Successful!</h2>
+                  <p class="description">
+                    Thank you for your purchase. Your account has been updated.
+                  </p>
+                }
+              }
+
+            }
+          </div>
+        </mat-card-content>
+
+        <mat-card-actions>
+          <button mat-flat-button class="qs-mat-primary" routerLink="/dashboard" [disabled]="isRefreshing">
+            Go to Dashboard
+          </button>
+        </mat-card-actions>
+      </mat-card>
+    </div>
+  `,
+  styles: [`
+    :host {
+      display: block;
+      height: 100vh;
+      width: 100%;
+    }
+
+    .container {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100%;
+      padding: 20px;
+    }
+
+    .success-card {
+      max-width: 450px;
+      width: 100%;
+      text-align: center;
+      padding: 24px;
+    }
+
+    mat-card-header {
+      justify-content: center;
+      margin-bottom: 16px;
+    }
+
+    .content-wrapper {
+      padding: 16px 0;
+    }
+
+    .loader-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 16px;
+    }
+
+    /* Simple Checkmark Animation */
+    .checkmark-wrapper {
+      width: 60px;
+      height: 60px;
+      margin: 0 auto 20px;
+    }
+
+    .checkmark {
+      width: 60px;
+      height: 60px;
+      border-radius: 50%;
+      display: block;
+      stroke-width: 3;
+      stroke: #4caf50;
+      stroke-miterlimit: 10;
+      animation: fill .4s ease-in-out .4s forwards;
+    }
+
+    .checkmark__circle {
+      stroke-dasharray: 166;
+      stroke-dashoffset: 166;
+      stroke-width: 3;
+      stroke-miterlimit: 10;
+      stroke: #4caf50;
+      fill: none;
+      animation: stroke 0.6s cubic-bezier(0.65, 0, 0.45, 1) forwards;
+    }
+
+    .checkmark__check {
+      transform-origin: 50% 50%;
+      stroke-dasharray: 48;
+      stroke-dashoffset: 48;
+      animation: stroke 0.3s cubic-bezier(0.65, 0, 0.45, 1) 0.8s forwards;
+    }
+
+    @keyframes stroke {
+      100% { stroke-dashoffset: 0; }
+    }
+
+    @keyframes fill {
+      100% { box-shadow: inset 0px 0px 0px 30px rgba(76, 175, 80, 0.1); }
+    }
+
+    .welcome-text {
+      margin: 0 0 12px;
+      font-weight: 500;
+    }
+
+    .description {
+      color: var(--mat-sys-on-surface-variant);
+      line-height: 1.5;
+      margin-bottom: 24px;
+    }
+
+    mat-card-actions {
+      justify-content: center;
+    }
+
+    button {
+      padding: 0 32px !important;
+      height: 44px !important;
+      border-radius: 22px !important;
+    }
+  `]
 })
 export class PaymentSuccessComponent implements OnInit {
   private auth = inject(Auth);
   private route = inject(ActivatedRoute);
   private logger = inject(LoggerService);
   private analyticsService = inject(AppAnalyticsService);
-  private functionsService = inject(AppFunctionsService);
   isRefreshing = true;
-  verificationFailed = false;
   assignedRole: string | null = null;
 
   async ngOnInit(): Promise<void> {
     this.isRefreshing = true;
-    this.verificationFailed = false;
     const user = this.auth.currentUser;
 
     if (!user) {
       this.logger.error('PaymentSuccess: No current user found!');
-      this.verificationFailed = true;
       this.isRefreshing = false;
       return;
     }
 
-    const verifiedCheckout = await this.verifyCheckoutSessionFromUrl();
-    if (!verifiedCheckout) {
-      this.verificationFailed = true;
-      this.isRefreshing = false;
-      return;
-    }
-
-    this.logPurchaseAnalytics(null, verifiedCheckout);
-
-    if (verifiedCheckout.mode === 'payment') {
-      this.logger.log('PaymentSuccess: Payment-mode checkout verified without waiting for stripeRole.');
+    const checkoutMode = this.resolveCheckoutMode();
+    if (checkoutMode === 'payment') {
+      this.logPurchaseAnalytics(null, checkoutMode);
+      this.logger.log('PaymentSuccess: Payment-mode checkout completed without waiting for stripeRole.');
       this.isRefreshing = false;
       return;
     }
@@ -77,6 +224,7 @@ export class PaymentSuccessComponent implements OnInit {
           this.logger.log(`PaymentSuccess: Found paid stripeRole '${role}' on attempt ${attempt}!`);
           hasPaidClaim = true;
           this.assignedRole = role;
+          this.logPurchaseAnalytics(role, checkoutMode);
         } else {
           this.logger.warn(`PaymentSuccess: paid stripeRole not found on attempt ${attempt}. Waiting...`);
           // Wait 2 seconds before next try
@@ -96,39 +244,24 @@ export class PaymentSuccessComponent implements OnInit {
     this.isRefreshing = false;
   }
 
-  private async verifyCheckoutSessionFromUrl(): Promise<VerifyCheckoutSessionResult | null> {
-    const queryParamMap = this.route.snapshot.queryParamMap;
-    const sessionId = queryParamMap.get('session_id');
+  private logPurchaseAnalytics(role: string | null, mode: 'payment' | 'subscription'): void {
+    const sessionId = this.route.snapshot.queryParamMap.get('session_id');
     if (!sessionId) {
       this.logger.warn('PaymentSuccess: Missing checkout session id; skipping purchase analytics.');
-      return null;
+      return;
     }
 
-    try {
-      const result = await this.functionsService.call<VerifyCheckoutSessionRequest, VerifyCheckoutSessionResult>(
-        'verifyCheckoutSession',
-        { sessionId }
-      );
-      return result.data;
-    } catch (error) {
-      this.logger.warn('PaymentSuccess: Checkout session verification failed; skipping purchase analytics.', error);
-      return null;
-    }
+    this.analyticsService.logPurchase({
+      transactionId: sessionId,
+      role,
+      mode,
+    });
   }
 
-  private logPurchaseAnalytics(role: string | null, verifiedCheckout: VerifyCheckoutSessionResult): void {
-    const queryParamMap = this.route.snapshot.queryParamMap;
-    this.analyticsService.logPurchaseOnce({
-      transactionId: verifiedCheckout.transactionId,
-      role: role ?? verifiedCheckout.role ?? null,
-      contextId: queryParamMap.get('purchase_context_id'),
-      isTrialCheckout: verifiedCheckout.isTrialCheckout,
-      mode: verifiedCheckout.mode,
-      priceId: verifiedCheckout.priceId,
-      currency: verifiedCheckout.currency,
-      value: verifiedCheckout.value,
-      isVerifiedCheckout: true
-    });
+  private resolveCheckoutMode(): 'payment' | 'subscription' {
+    return this.route.snapshot.queryParamMap.get('checkout_mode') === 'payment'
+      ? 'payment'
+      : 'subscription';
   }
 
   private isPaidRole(role: unknown): role is 'basic' | 'pro' {
