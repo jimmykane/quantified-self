@@ -1242,18 +1242,36 @@ function findClosestLinearIndex(values: number[], target: number): number {
 }
 
 function enrichPanelDomain(panel: EventChartPanelModel): EventChartPanelModel {
-  const allPoints = panel.series.flatMap((series) => series.points);
-  if (!allPoints.length) {
+  let minX = Number.POSITIVE_INFINITY;
+  let maxX = Number.NEGATIVE_INFINITY;
+  let hasPoints = false;
+
+  for (let seriesIndex = 0; seriesIndex < panel.series.length; seriesIndex += 1) {
+    const points = panel.series[seriesIndex]?.points || [];
+    for (let pointIndex = 0; pointIndex < points.length; pointIndex += 1) {
+      const x = points[pointIndex]?.x;
+      if (!Number.isFinite(x)) {
+        continue;
+      }
+
+      hasPoints = true;
+      if (x < minX) {
+        minX = x;
+      }
+      if (x > maxX) {
+        maxX = x;
+      }
+    }
+  }
+
+  if (!hasPoints) {
     return {
       ...panel,
       ...EMPTY_PANEL_DOMAIN,
     };
   }
 
-  const minX = Math.min(...allPoints.map((point) => point.x));
-  const maxX = Math.max(...allPoints.map((point) => point.x));
-
-  if (!Number.isFinite(minX) || !Number.isFinite(maxX) || minX === maxX) {
+  if (minX === maxX) {
     return {
       ...panel,
       minX,

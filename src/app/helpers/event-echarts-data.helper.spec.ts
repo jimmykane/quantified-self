@@ -134,6 +134,44 @@ describe('event-echarts-data.helper', () => {
     expect(panels[0].series[0].color).toBe((AppDataColors as any).Power);
   });
 
+  it('computes panel domains for large point sets without spreading arrays into Math.min or Math.max', () => {
+    mockEventChartStreamDependencies('Power', 'W');
+
+    const pointCount = 160_000;
+    const stream = {
+      type: DataPower.type,
+      getData: () => Array.from({ length: pointCount }, (_, index) => 100 + (index % 200)),
+    } as any;
+    const timeStream = {
+      type: XAxisTypes.Time,
+      getData: () => Array.from({ length: pointCount }, (_, index) => index),
+    } as any;
+
+    const activity = {
+      startDate: new Date('2024-01-01T00:00:00.000Z'),
+      creator: { name: 'Garmin' },
+      type: 'Running',
+      getID: () => 'large-activity',
+      getAllStreams: () => [stream],
+      getStream: (type: string) => (type === XAxisTypes.Time ? timeStream : null),
+    } as any;
+
+    const panels = buildEventChartPanels({
+      selectedActivities: [activity],
+      allActivities: [activity],
+      xAxisType: XAxisTypes.Duration,
+      showAllData: false,
+      dataTypesToUse: [DataPower.type],
+      userUnitSettings: {} as any,
+      eventColorService: {
+        getActivityColor: () => '#ff0000'
+      } as any,
+    });
+
+    expect(panels[0].minX).toBe(0);
+    expect(panels[0].maxX).toBe(pointCount - 1);
+  });
+
   it('adds heart-rate zone color pieces from provider intensity-zone boundaries when enabled', () => {
     mockEventChartStreamDependencies();
     const getColorForZoneHex = vi.fn((zone: string) => `color-${zone}`);
