@@ -158,13 +158,37 @@ vi.mock('./utils', () => ({
 import * as utils from './utils';
 import requestHelper from './request-helper';
 
-vi.mock('./tokens', () => ({
-    getTokenData: vi.fn().mockResolvedValue({
-        accessToken: 'mock-access-token',
-        userName: 'mock-user',
-        openId: 'mock-openid'
-    }),
-}));
+vi.mock('./tokens', () => {
+    class MockTerminalServiceAuthError extends Error {
+        readonly name = 'TerminalServiceAuthError';
+        readonly dlqContext: 'INVALID_GRANT' | 'AUTH_RECONNECT_REQUIRED';
+
+        constructor(
+            public readonly serviceName: ServiceNames,
+            public readonly firebaseUserID: string | null,
+            public readonly providerUserId: string,
+            public readonly statusCode: number | null,
+            public readonly providerErrorCode: string | null,
+            public readonly providerErrorMessage: string | null,
+            public readonly originalError: unknown,
+        ) {
+            super(`${serviceName} connection requires reconnect`);
+            const errorHint = `${providerErrorCode || ''} ${providerErrorMessage || ''}`.toLowerCase();
+            this.dlqContext = errorHint.includes('invalid_grant')
+                ? 'INVALID_GRANT'
+                : 'AUTH_RECONNECT_REQUIRED';
+        }
+    }
+
+    return {
+        getTokenData: vi.fn().mockResolvedValue({
+            accessToken: 'mock-access-token',
+            userName: 'mock-user',
+            openId: 'mock-openid'
+        }),
+        TerminalServiceAuthError: MockTerminalServiceAuthError,
+    };
+});
 
 vi.mock('./garmin/queue', () => ({
     processGarminAPIActivityQueueItem: vi.fn().mockResolvedValue('PROCESSED'),
@@ -203,7 +227,7 @@ import {
     parseWorkoutQueueItemForServiceName,
 } from './queue';
 import { QueueItemInterface, SuuntoAppWorkoutQueueItemInterface, COROSAPIWorkoutQueueItemInterface } from './queue/queue-item.interface';
-import { getTokenData } from './tokens';
+import { getTokenData, TerminalServiceAuthError } from './tokens';
 import { processGarminAPIActivityQueueItem } from './garmin/queue';
 import { QueueResult, increaseRetryCountForQueueItem, updateToProcessed, moveToDeadLetterQueue } from './queue-utils';
 
@@ -964,6 +988,198 @@ describe('queue', () => {
             expect(mockBatch.delete).toHaveBeenCalledWith(mockRef);
         });
 
+        it('should move to DLQ immediately when token refresh returns terminal invalid_grant', async () => {
+            vi.mocked(getTokenData).mockRejectedValueOnce(new TerminalServiceAuthError(
+                ServiceNames.SuuntoApp,
+                'mock-user-id',
+                'suuntoUser',
+                400,
+                'invalid_grant',
+                'User no longer active/connected with the partner',
+                new Error('400 invalid_grant'),
+            ));
+
+            const result = await parseWorkoutQueueItemForServiceName(ServiceNames.SuuntoApp, suuntoQueueItem);
+
+            expect(result).toBe(QueueResult.MovedToDLQ);
+            expect(mockBatch.set).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+                context: 'INVALID_GRANT',
+                originalCollection: 'suuntoAppWorkoutQueue',
+            }));
+            expect(mockBatch.delete).toHaveBeenCalledWith(mockRef);
+            expect(mockRef.update).not.toHaveBeenCalledWith(expect.objectContaining({
+                retryCount: expect.any(Number),
+            }));
+        });
+
+        it('should prefer INVALID_GRANT when multiple terminal auth failures disagree on DLQ context', async () => {
+            const admin = await import('firebase-admin');
+            vi.spyOn(admin.firestore().collectionGroup('tokens'), 'get').mockResolvedValueOnce({
+                size: 2,
+                docs: [{
+                    id: 'generic-terminal-token',
+                    ref: {
+                        id: 'generic-terminal-token',
+                        parent: {
+                            id: 'tokens',
+                            parent: { id: 'generic-user-id' },
+                        },
+                    },
+                    data: vi.fn(() => ({})),
+                }, {
+                    id: 'invalid-grant-token',
+                    ref: {
+                        id: 'invalid-grant-token',
+                        parent: {
+                            id: 'tokens',
+                            parent: { id: 'invalid-grant-user-id' },
+                        },
+                    },
+                    data: vi.fn(() => ({})),
+                }],
+                empty: false,
+            } as any);
+            vi.mocked(getTokenData)
+                .mockRejectedValueOnce(new TerminalServiceAuthError(
+                    ServiceNames.SuuntoApp,
+                    'generic-user-id',
+                    'suuntoUser',
+                    401,
+                    null,
+                    'Unauthorized',
+                    new Error('401 unauthorized'),
+                ))
+                .mockRejectedValueOnce(new TerminalServiceAuthError(
+                    ServiceNames.SuuntoApp,
+                    'invalid-grant-user-id',
+                    'suuntoUser',
+                    400,
+                    'invalid_grant',
+                    'User no longer active/connected with the partner',
+                    new Error('400 invalid_grant'),
+                ));
+
+            const result = await parseWorkoutQueueItemForServiceName(ServiceNames.SuuntoApp, suuntoQueueItem);
+
+            expect(result).toBe(QueueResult.MovedToDLQ);
+            expect(mockBatch.set).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+                context: 'INVALID_GRANT',
+                originalCollection: 'suuntoAppWorkoutQueue',
+            }));
+        });
+
+        it('should retry when a terminal auth failure is mixed with retryable token failures', async () => {
+            const admin = await import('firebase-admin');
+            vi.spyOn(admin.firestore().collectionGroup('tokens'), 'get').mockResolvedValueOnce({
+                size: 2,
+                docs: [{
+                    id: 'retryable-token',
+                    ref: {
+                        id: 'retryable-token',
+                        parent: {
+                            id: 'tokens',
+                            parent: { id: 'retryable-user-id' },
+                        },
+                    },
+                    data: vi.fn(() => ({})),
+                }, {
+                    id: 'invalid-grant-token',
+                    ref: {
+                        id: 'invalid-grant-token',
+                        parent: {
+                            id: 'tokens',
+                            parent: { id: 'invalid-grant-user-id' },
+                        },
+                    },
+                    data: vi.fn(() => ({})),
+                }],
+                empty: false,
+            } as any);
+            vi.mocked(getTokenData)
+                .mockRejectedValueOnce(Object.assign(new Error('temporary provider failure'), { statusCode: 500 }))
+                .mockRejectedValueOnce(new TerminalServiceAuthError(
+                    ServiceNames.SuuntoApp,
+                    'invalid-grant-user-id',
+                    'suuntoUser',
+                    400,
+                    'invalid_grant',
+                    'User no longer active/connected with the partner',
+                    new Error('400 invalid_grant'),
+                ));
+
+            const result = await parseWorkoutQueueItemForServiceName(ServiceNames.SuuntoApp, suuntoQueueItem);
+
+            expect(result).toBe(QueueResult.RetryIncremented);
+            expect(mockBatch.set).not.toHaveBeenCalled();
+            expect(mockBatch.delete).not.toHaveBeenCalledWith(mockRef);
+            expect(mockRef.update).toHaveBeenCalledWith(expect.objectContaining({
+                retryCount: 1,
+                errors: expect.arrayContaining([
+                    expect.objectContaining({ error: 'temporary provider failure' }),
+                ]),
+            }));
+        });
+
+        it('should continue to later matching tokens when an earlier token hits terminal invalid_grant', async () => {
+            const admin = await import('firebase-admin');
+            vi.spyOn(admin.firestore().collectionGroup('tokens'), 'get').mockResolvedValueOnce({
+                size: 2,
+                docs: [{
+                    id: 'stale-token-doc',
+                    ref: {
+                        id: 'stale-token-doc',
+                        parent: {
+                            id: 'tokens',
+                            parent: { id: 'stale-user-id' },
+                        },
+                    },
+                    data: vi.fn(() => ({})),
+                }, {
+                    id: 'healthy-token-doc',
+                    ref: {
+                        id: 'healthy-token-doc',
+                        parent: {
+                            id: 'tokens',
+                            parent: { id: 'healthy-user-id' },
+                        },
+                    },
+                    data: vi.fn(() => ({})),
+                }],
+                empty: false,
+            } as any);
+            vi.mocked(getTokenData)
+                .mockRejectedValueOnce(new TerminalServiceAuthError(
+                    ServiceNames.SuuntoApp,
+                    'stale-user-id',
+                    'suuntoUser',
+                    400,
+                    'invalid_grant',
+                    'User no longer active/connected with the partner',
+                    new Error('400 invalid_grant'),
+                ))
+                .mockResolvedValueOnce({
+                    accessToken: 'healthy-token',
+                    userName: 'suuntoUser',
+                } as any);
+
+            const result = await parseWorkoutQueueItemForServiceName(ServiceNames.SuuntoApp, suuntoQueueItem);
+
+            expect(result).toBe(QueueResult.Processed);
+            expect(vi.mocked(utils.setEvent)).toHaveBeenCalledWith(
+                'healthy-user-id',
+                'standardized-event-id',
+                expect.any(Object),
+                expect.any(Object),
+                expect.any(Object),
+                undefined,
+                undefined,
+                undefined
+            );
+            expect(mockBatch.set).not.toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+                context: 'INVALID_GRANT',
+            }));
+        });
+
         it('should handle COROSAPI item successfully', async () => {
             const corosItem: COROSAPIWorkoutQueueItemInterface = {
                 id: 'test-coros-item',
@@ -1006,6 +1222,34 @@ describe('queue', () => {
 
             expect(result).toBe(QueueResult.Processed);
             expect(getTokenData).toHaveBeenCalledTimes(2); // Initial + Force Refresh
+        });
+
+        it('should move to DLQ when forced refresh after download 401 returns terminal invalid_grant', async () => {
+            vi.mocked(requestHelper.get).mockRejectedValueOnce({ statusCode: 401 });
+            vi.mocked(getTokenData)
+                .mockResolvedValueOnce({
+                    accessToken: 'stale-token',
+                    userName: 'suuntoUser',
+                } as any)
+                .mockRejectedValueOnce(new TerminalServiceAuthError(
+                    ServiceNames.SuuntoApp,
+                    'mock-user-id',
+                    'suuntoUser',
+                    400,
+                    'invalid_grant',
+                    'User no longer active/connected with the partner',
+                    new Error('400 invalid_grant'),
+                ));
+
+            const result = await parseWorkoutQueueItemForServiceName(ServiceNames.SuuntoApp, suuntoQueueItem);
+
+            expect(result).toBe(QueueResult.MovedToDLQ);
+            expect(getTokenData).toHaveBeenCalledTimes(2);
+            expect(mockBatch.set).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+                context: 'INVALID_GRANT',
+                originalCollection: 'suuntoAppWorkoutQueue',
+            }));
+            expect(mockBatch.delete).toHaveBeenCalledWith(mockRef);
         });
 
         it('should handle 403 Forbidden by increasing retry count significantly', async () => {

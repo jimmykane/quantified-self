@@ -70,6 +70,7 @@ const {
 
 vi.mock('./tokens', () => ({
     getTokenData: mockGetTokenData,
+    TerminalServiceAuthError: class TerminalServiceAuthError extends Error {},
 }));
 
 vi.mock('./queue-utils', async (importOriginal) => {
@@ -113,6 +114,9 @@ import * as requestHelper from './request-helper';
 describe('Queue Integration Logic', () => {
     beforeEach(() => {
         vi.clearAllMocks();
+        mockGetTokenData.mockReset();
+        mockMoveToDeadLetterQueue.mockReset();
+        (requestHelper.get as any).mockReset();
     });
 
     it('should move to Dead Letter Queue (fail fast) if no tokens are found', async () => {
@@ -233,7 +237,7 @@ describe('Queue Integration Logic', () => {
         expect(mockUpdate).toHaveBeenCalledWith(expect.objectContaining({
             retryCount: 1,
             errors: expect.arrayContaining([
-                expect.objectContaining({ error: 'All token processing attempts failed' })
+                expect.objectContaining({ error: 'All Refresh failed' })
             ])
         }));
     });

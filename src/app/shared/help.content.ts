@@ -122,6 +122,7 @@ export const HELP_SECTIONS: HelpSection[] = [
 - Users without Pro access and no uploaded activities may see an **Upload your first activities** action prompt with options to upload FIT, GPX, TCX, JSON, or SML files, or upgrade to Pro for automatic activity sync. Dismissing it hides the prompt; manual uploads remain available from the header and upload tools.
 - Pro users without a connected activity service may see a one-time **Connect a service** action prompt; dismissing it hides the prompt permanently, and services can still be connected later from **Services**.
 - Pro users with Suunto plus Garmin and/or COROS connected may see a **Send new activities to Suunto** action prompt when an eligible auto-sync route is still disabled. Enabling it turns on future Garmin/COROS -> Suunto imports only; existing activities can still be queued from **Services** with Manual Catch-up. Dismissing it hides the prompt permanently.
+- If Suunto disconnects server-side or stops accepting the stored token, the dashboard can show a **Reconnect Suunto** action prompt. Reconnecting restarts sleep sync, history imports, and upload tools. Garmin/COROS -> Suunto auto-sync routes stay disabled until you enable them again in **Services**; dismissing the card only hides the reminder.
 - Distance values in dashboards, event charts, activity chips, and CSV exports follow your kilometers or miles preference from **Settings -> Units**; jump distances display in feet when miles are selected.
 - **Map** tiles use their own tile date-range and activity filters, independent from the event table search.
 - Curated, KPI, form, recovery, sleep, and other derived tiles stay independent from event table filters and custom/map tile filters.
@@ -486,6 +487,8 @@ Garmin -> Suunto activity sync is route-based:
 
 Disconnecting Garmin, COROS, or Suunto automatically disables related route auto-sync settings. After reconnecting, re-enable the route toggle if you want automatic sync to resume.
 
+If a provider revokes access or rejects the stored refresh token, Quantified Self marks that connection as **Reconnect required** in Services and may also show a dashboard reconnect prompt. Reconnecting creates a fresh token chain; dismissing the prompt does not reconnect automatically.
+
 Automatic sync runs only for newly imported Garmin activities and uses the stored original activity file from your event.
 
 Manual catch-up is available in Garmin Services: choose a date range to queue Garmin -> Suunto sync jobs for events already imported into Quantified Self.
@@ -593,6 +596,7 @@ This action cannot be undone.
 - Garmin backfills can arrive gradually.
 - Suunto and COROS imports are queue-based and can take hours or days.
 - Check cooldowns and connection status before retrying.
+- If Services shows **Reconnect required**, reconnect that provider before retrying imports or sleep sync.
 
 ## Merge and benchmark checks
 

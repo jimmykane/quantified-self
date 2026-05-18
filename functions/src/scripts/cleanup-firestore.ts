@@ -32,7 +32,7 @@ const COLLECTION_GROUPS = [
     "failed_jobs"
 ];
 
-const DEAUTH_CONFIG: Record<string, { service: ServiceNames | null, fn: (uid: string, service?: any) => Promise<void> }> = {
+const DEAUTH_CONFIG: Record<string, { service: ServiceNames | null, fn: (uid: string, service?: any) => Promise<unknown> }> = {
     'suuntoAppAccessTokens': { service: ServiceNames.SuuntoApp, fn: deauthorizeServiceForUser },
     'COROSAPIAccessTokens': { service: ServiceNames.COROSAPI, fn: deauthorizeServiceForUser },
     [GARMIN_API_TOKENS_COLLECTION_NAME]: { service: ServiceNames.GarminAPI, fn: deauthorizeServiceForUser }

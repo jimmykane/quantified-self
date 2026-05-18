@@ -7,8 +7,10 @@ import { AppEventService } from '../../../services/app.event.service';
 import { AppAuthService } from '../../../authentication/app.auth.service';
 import { AppUserService } from '../../../services/app.user.service';
 import { AppWindowService } from '../../../services/app.window.service';
-import { ServiceNames, Auth2ServiceTokenInterface, Auth1ServiceTokenInterface, UserServiceMetaInterface } from '@sports-alliance/sports-lib';
+import { ServiceNames, Auth2ServiceTokenInterface, Auth1ServiceTokenInterface } from '@sports-alliance/sports-lib';
 import { ServicesAbstractComponentDirective } from '../services-abstract-component.directive';
+import { AppUserServiceMetaInterface } from '../../../models/app-user.interface';
+import { buildSuuntoServiceConnectionViewModel } from '../../../helpers/suunto-service-connection.helper';
 
 
 @Component({
@@ -21,8 +23,32 @@ export class ServicesSuuntoComponent extends ServicesAbstractComponentDirective 
   public serviceName = ServiceNames.SuuntoApp;
   clicks = 0;
 
-  get suuntoServiceMeta(): UserServiceMetaInterface & { uploadedActivitiesCount?: number } | undefined {
+  get suuntoServiceMeta(): AppUserServiceMetaInterface & { uploadedActivitiesCount?: number } | undefined {
     return this.serviceMeta;
+  }
+
+  get isReconnectRequired(): boolean {
+    return this.connectionView.reconnectRequired;
+  }
+
+  get connectionDescription(): string {
+    return this.connectionView.description;
+  }
+
+  get reconnectFailureMessage(): string | null {
+    return this.connectionView.failureMessage;
+  }
+
+  get connectButtonLabel(): string {
+    return this.connectionView.connectButtonLabel;
+  }
+
+  get connectionView() {
+    return buildSuuntoServiceConnectionViewModel({
+      hasToken: (!!this.serviceTokens && !!this.serviceTokens.length),
+      forceConnected: this.forceConnected,
+      serviceMeta: this.serviceMeta,
+    });
   }
 
   constructor(protected http: HttpClient,

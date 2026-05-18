@@ -1,8 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ServiceNames } from '@sports-alliance/sports-lib';
-import { getTokenData, refreshTokens, refreshStaleTokens } from './tokens';
+import { getTokenData, refreshTokens, refreshStaleTokens, TerminalServiceAuthError } from './tokens';
 
-// Mock firebase-functions (unchanged)
 vi.mock('firebase-functions', () => ({
     config: () => ({
         suuntoapp: { client_id: 'id', client_secret: 'secret' },
@@ -18,13 +17,10 @@ vi.mock('firebase-functions', () => ({
     }),
 }));
 
-// CONSTANTS for mocks
 const firestoreMock = {
     collectionGroup: vi.fn(),
 };
 
-// Mock firebase-admin (Enhanced)
-// Mock firebase-admin (Enhanced)
 vi.mock('firebase-admin', () => {
     const firestoreFn = () => firestoreMock;
     (firestoreFn as any).QueryDocumentSnapshot = class { };
@@ -38,34 +34,118 @@ vi.mock('firebase-admin', () => {
     };
 });
 
-// ... (Rest of mocks unchanged)
 vi.mock('simple-oauth2', () => ({
     AuthorizationCode: class { },
 }));
 
-vi.mock('./OAuth2', () => ({
-    getServiceConfig: vi.fn(),
-    deleteLocalServiceToken: vi.fn().mockResolvedValue(undefined),
+vi.mock('./auth/factory', () => ({
+    getServiceAdapter: vi.fn(),
 }));
 
-import { getServiceConfig, deleteLocalServiceToken } from './OAuth2';
-import * as admin from 'firebase-admin'; // needed for types/access
+vi.mock('./service-auth-lifecycle', () => {
+    class MockTerminalServiceAuthError extends Error {
+        readonly name = 'TerminalServiceAuthError';
+        readonly dlqContext: 'INVALID_GRANT' | 'AUTH_RECONNECT_REQUIRED';
+
+        constructor(
+            public readonly serviceName: ServiceNames,
+            public readonly firebaseUserID: string | null,
+            public readonly providerUserId: string,
+            public readonly statusCode: number | null,
+            public readonly providerErrorCode: string | null,
+            public readonly providerErrorMessage: string | null,
+            public readonly originalError: unknown,
+        ) {
+            super(`${serviceName} connection requires reconnect`);
+            this.dlqContext = `${providerErrorCode || ''} ${providerErrorMessage || ''}`.toLowerCase().includes('invalid_grant')
+                ? 'INVALID_GRANT'
+                : 'AUTH_RECONNECT_REQUIRED';
+        }
+    }
+
+    const normalize = (value: unknown): string | null => {
+        if (typeof value !== 'string') {
+            return null;
+        }
+        const trimmed = value.trim();
+        return trimmed.length ? trimmed : null;
+    };
+
+    return {
+        TerminalServiceAuthError: MockTerminalServiceAuthError,
+        extractRefreshFailureDetails: vi.fn((error: any) => {
+            const statusCode = error?.statusCode || error?.output?.statusCode || null;
+            const providerErrorCode = normalize(
+                error?.data?.payload?.error
+                || error?.data?.error
+                || error?.error?.error,
+            );
+            const providerErrorMessage = normalize(
+                error?.data?.payload?.error_description
+                || error?.data?.payload?.message
+                || error?.data?.error_description
+                || error?.error?.error_description
+                || error?.message
+                || providerErrorCode,
+            );
+            const fragments = [providerErrorCode, providerErrorMessage, normalize(error?.message)]
+                .filter((value): value is string => !!value)
+                .map((value) => value.toLowerCase());
+            const isInvalidGrant = fragments.some((value) => value.includes('invalid_grant'));
+            return {
+                statusCode,
+                providerErrorCode,
+                providerErrorMessage,
+                isInvalidGrant,
+                isTerminalAuthFailure: statusCode === 401 || isInvalidGrant,
+                isTransientError: statusCode === 400
+                    || statusCode === 401
+                    || statusCode === 500
+                    || statusCode === 502
+                    || (statusCode === 406 && fragments.some((value) => value.includes('json compatible'))),
+                logMessage: providerErrorMessage || providerErrorCode || 'Unknown token refresh failure',
+            };
+        }),
+        handleTerminalServiceAuthFailure: vi.fn(async (doc: any, serviceName: ServiceNames, serviceTokenData: any, failure: any, originalError: unknown) => ({
+            kind: 'terminal_error',
+            error: new MockTerminalServiceAuthError(
+                serviceName,
+                doc.ref.parent.parent?.id || null,
+                serviceTokenData.userName || serviceTokenData.openId || serviceTokenData.userID || doc.id,
+                failure.statusCode,
+                failure.providerErrorCode,
+                failure.providerErrorMessage,
+                originalError,
+            ),
+        })),
+    };
+});
+
+import { getServiceAdapter } from './auth/factory';
+import { handleTerminalServiceAuthFailure } from './service-auth-lifecycle';
 
 describe('tokens', () => {
-    // ... (Setup unchanged)
     let mockDoc: any;
     let mockToken: any;
     let mockOAuthClient: any;
 
     beforeEach(() => {
         vi.clearAllMocks();
-
-        // Reset the firestore mock behavior defaults
         firestoreMock.collectionGroup.mockReset();
-        (deleteLocalServiceToken as any).mockReset().mockResolvedValue(undefined);
+        (handleTerminalServiceAuthFailure as any).mockReset().mockImplementation(async (doc: any, serviceName: ServiceNames, serviceTokenData: any, failure: any, originalError: unknown) => ({
+            kind: 'terminal_error',
+            error: new TerminalServiceAuthError(
+                serviceName,
+                doc.ref.parent.parent?.id || null,
+                serviceTokenData.userName || serviceTokenData.openId || serviceTokenData.userID || doc.id,
+                failure.statusCode,
+                failure.providerErrorCode,
+                failure.providerErrorMessage,
+                originalError,
+            ),
+        }));
 
         mockDoc = {
-            // ... (unchanged)
             id: 'user-123',
             data: vi.fn().mockReturnValue({
                 accessToken: 'old-access',
@@ -84,7 +164,6 @@ describe('tokens', () => {
         };
 
         mockToken = {
-            // ... (unchanged)
             expired: vi.fn().mockReturnValue(false),
             refresh: vi.fn().mockResolvedValue({
                 token: {
@@ -97,8 +176,7 @@ describe('tokens', () => {
                 }
             }),
             token: {
-                // ... (unchanged)
-                access_token: 'new-access', // ...
+                access_token: 'new-access',
             },
         };
 
@@ -106,15 +184,12 @@ describe('tokens', () => {
             createToken: vi.fn().mockReturnValue(mockToken),
         };
 
-        (getServiceConfig as any).mockReturnValue({
-            oauth2Client: mockOAuthClient,
+        (getServiceAdapter as any).mockReturnValue({
+            getOAuth2Client: vi.fn().mockReturnValue(mockOAuthClient),
             tokenCollectionName: 'test-collection',
         });
     });
 
-    // ... (Existing tests for getTokenData and refreshTokens unchanged)
-
-    // NEW TESTS
     describe('refreshStaleTokens', () => {
         it('should query for stale and missing date tokens and refresh them', async () => {
             const mockSnapshot = {
@@ -122,37 +197,21 @@ describe('tokens', () => {
                 docs: [mockDoc],
             };
 
-            // Mock the chain: collectionGroup -> where -> where -> limit -> get
             const getMock = vi.fn().mockResolvedValue(mockSnapshot);
             const limitMock = vi.fn().mockReturnValue({ get: getMock });
             const whereMock = vi.fn();
-            whereMock.mockReturnValue({ where: whereMock, limit: limitMock }); // Recursive
+            whereMock.mockReturnValue({ where: whereMock, limit: limitMock });
 
             firestoreMock.collectionGroup.mockReturnValue({ where: whereMock });
-
-            // We need to spy on refreshTokens if we can, OR just verify the outcome (calls to getServiceConfig/token refresh)
-            // Since refreshTokens is in the same module, we can't easily spy on it unless we modify the module structure.
-            // However, we can verify that `getTokenData` (proxied by `getServiceConfig` mock) is called X times.
-            // If we get 2 queries returning 1 doc each, we expect 2 refresh calls.
-
-            // Assume calls will succeed
             mockToken.expired.mockReturnValue(true);
 
             await refreshStaleTokens(ServiceNames.SuuntoApp, 123456);
 
-            // Verify Queries
             expect(firestoreMock.collectionGroup).toHaveBeenCalledWith('tokens');
-            // We expect 2 separate query instructions.
-            // Since we mocked where to always return itself, we can just check the calls to the spy.
-
-            expect(whereMock).toHaveBeenCalledTimes(4); // 2 per query
+            expect(whereMock).toHaveBeenCalledTimes(4);
             expect(whereMock).toHaveBeenCalledWith('serviceName', '==', ServiceNames.SuuntoApp);
             expect(whereMock).toHaveBeenCalledWith('dateRefreshed', '<=', 123456);
             expect(whereMock).toHaveBeenCalledWith('dateRefreshed', '==', null);
-
-            // Verify execution
-            // We expect 2 docs total processed (1 from each query result)
-            // expect(getServiceConfig).toHaveBeenCalledTimes(2);
         });
     });
 
@@ -206,7 +265,7 @@ describe('tokens', () => {
         });
 
         it('should apply 600s buffer to expiresAt for Suunto tokens', async () => {
-            const mockExpiresAt = new Date(Date.now() + 86400000); // 24h from now
+            const mockExpiresAt = new Date(Date.now() + 86400000);
             mockToken.expired.mockReturnValue(true);
             mockToken.refresh.mockResolvedValue({
                 token: {
@@ -221,8 +280,6 @@ describe('tokens', () => {
 
             await getTokenData(mockDoc, ServiceNames.SuuntoApp, false);
 
-            // Verify the update was called with expiresAt reduced by 600000ms (600 seconds)
-            expect(mockDoc.ref.update).toHaveBeenCalled();
             const updateArg = mockDoc.ref.update.mock.calls[0][0];
             expect(updateArg.expiresAt).toBe(mockExpiresAt.getTime() - 600000);
         });
@@ -238,7 +295,7 @@ describe('tokens', () => {
                 dateRefreshed: 1000,
             });
 
-            const mockExpiresAt = new Date(Date.now() + 86400000); // 24h from now
+            const mockExpiresAt = new Date(Date.now() + 86400000);
             mockToken.expired.mockReturnValue(true);
             mockToken.refresh.mockResolvedValue({
                 token: {
@@ -252,8 +309,6 @@ describe('tokens', () => {
 
             await getTokenData(mockDoc, ServiceNames.GarminAPI, false);
 
-            // Verify the update was called with expiresAt reduced by 600000ms (600 seconds)
-            expect(mockDoc.ref.update).toHaveBeenCalled();
             const updateArg = mockDoc.ref.update.mock.calls[0][0];
             expect(updateArg.expiresAt).toBe(mockExpiresAt.getTime() - 600000);
         });
@@ -266,7 +321,7 @@ describe('tokens', () => {
                 expiresAt: Date.now() + 3600000,
                 serviceName: ServiceNames.GarminAPI,
                 userID: 'garmin-user-id',
-                permissions: permissions,
+                permissions,
                 dateCreated: 1000,
                 dateRefreshed: 1000,
             });
@@ -287,7 +342,6 @@ describe('tokens', () => {
             });
 
             mockToken.expired.mockReturnValue(true);
-            // COROS check: if message exists and != OK, it throws
             mockToken.refresh.mockResolvedValue({
                 token: {
                     access_token: 'new-coros',
@@ -295,60 +349,123 @@ describe('tokens', () => {
                 },
             });
 
-            // For COROS, the update logic uses the old data merged with new expiry
             const result = await getTokenData(mockDoc, ServiceNames.COROSAPI, false);
 
-            expect(result.accessToken).toBe('old-coros'); // Implementation quirk: COROS case reuses serviceTokenData structure but updates expiry/refreshed
-            // Wait, let's check implementation again.
-            // Case ServiceNames.COROSAPI: newToken = <COROS...>serviceTokenData; newToken.expiresAt = ...
-            // But it doesn't seem to update access token from response?
-            // Looking at line 123: newToken = <COROSAPIAuth2ServiceTokenInterface>serviceTokenData
-            // It seems it DOES NOT update the access token from the refresh response for COROS??
-            // That looks like a bug or specific behavior.
-            // Ah, for COROS the refresh endpoint might just extend validity of existing token?
-            // Or maybe the implementation is indeed buggy. I will assert based on CURRENT implementation.
-            // Current impl: copies serviceTokenData (old data), updates expiresAt/dateRefreshed.
-
+            expect(result.accessToken).toBe('old-coros');
             expect(mockDoc.ref.update).toHaveBeenCalled();
         });
 
-        it('should delete token on 401 Boom error', async () => {
+        it('should delegate 401 Boom errors to the terminal auth lifecycle', async () => {
             mockToken.expired.mockReturnValue(true);
             const error: any = new Error('Unauthorized');
             error.output = { statusCode: 401 };
             mockToken.refresh.mockRejectedValue(error);
 
             await expect(getTokenData(mockDoc, ServiceNames.SuuntoApp, false))
-                .rejects.toThrow('Unauthorized');
+                .rejects.toBeInstanceOf(TerminalServiceAuthError);
 
-            expect(deleteLocalServiceToken).toHaveBeenCalledWith('firebase-user-123', ServiceNames.SuuntoApp, 'user-123');
+            expect(handleTerminalServiceAuthFailure).toHaveBeenCalled();
         });
 
-        it('should delete token on standard 401 error', async () => {
+        it('should delegate standard 401 errors to the terminal auth lifecycle', async () => {
             mockToken.expired.mockReturnValue(true);
             const error: any = new Error('Unauthorized');
             error.statusCode = 401;
             mockToken.refresh.mockRejectedValue(error);
 
             await expect(getTokenData(mockDoc, ServiceNames.SuuntoApp, false))
-                .rejects.toThrow('Unauthorized');
+                .rejects.toBeInstanceOf(TerminalServiceAuthError);
 
-            expect(deleteLocalServiceToken).toHaveBeenCalledWith('firebase-user-123', ServiceNames.SuuntoApp, 'user-123');
+            expect(handleTerminalServiceAuthFailure).toHaveBeenCalled();
         });
 
-        it('should delete token on 400 invalid_grant error', async () => {
+        it('should delegate invalid_grant errors to the terminal auth lifecycle', async () => {
             mockToken.expired.mockReturnValue(true);
             const error: any = new Error('invalid_grant');
             error.statusCode = 400;
             mockToken.refresh.mockRejectedValue(error);
 
             await expect(getTokenData(mockDoc, ServiceNames.SuuntoApp, false))
-                .rejects.toThrow('invalid_grant');
+                .rejects.toMatchObject({
+                    name: 'TerminalServiceAuthError',
+                    dlqContext: 'INVALID_GRANT',
+                });
 
-            expect(deleteLocalServiceToken).toHaveBeenCalledWith('firebase-user-123', ServiceNames.SuuntoApp, 'user-123');
+            expect(handleTerminalServiceAuthFailure).toHaveBeenCalled();
         });
 
-        it('should NOT delete token on generic 500 error', async () => {
+        it('should retry once with a newer stored snapshot when terminal auth cleanup reports the token was superseded', async () => {
+            mockToken.expired.mockReturnValue(true);
+            const error: any = new Error('invalid_grant');
+            error.statusCode = 400;
+
+            const replacementDoc = {
+                id: 'user-123',
+                data: vi.fn().mockReturnValue({
+                    accessToken: 'replacement-access',
+                    refreshToken: 'replacement-refresh',
+                    expiresAt: Date.now() + 3600000,
+                    serviceName: ServiceNames.SuuntoApp,
+                    userName: 'suunto-user',
+                    dateCreated: 1000,
+                    dateRefreshed: 2000,
+                }),
+                ref: {
+                    update: vi.fn(() => Promise.resolve()),
+                    delete: vi.fn(() => Promise.resolve()),
+                    parent: { parent: { id: 'firebase-user-123' } },
+                },
+            };
+
+            mockToken.refresh
+                .mockRejectedValueOnce(error)
+                .mockResolvedValueOnce({
+                    token: {
+                        access_token: 'recovered-access',
+                        refresh_token: 'recovered-refresh',
+                        expires_at: new Date(Date.now() + 3600000),
+                        user: 'suunto-user',
+                        token_type: 'Bearer',
+                        scope: 'workout',
+                    },
+                });
+            (handleTerminalServiceAuthFailure as any).mockResolvedValueOnce({
+                kind: 'retry_with_latest_snapshot',
+                latestSnapshot: replacementDoc,
+            });
+
+            const result = await getTokenData(mockDoc, ServiceNames.SuuntoApp, false);
+
+            expect(handleTerminalServiceAuthFailure).toHaveBeenCalledTimes(1);
+            expect(mockToken.refresh).toHaveBeenCalledTimes(2);
+            expect(result.accessToken).toBe('recovered-access');
+            expect(replacementDoc.ref.update).toHaveBeenCalled();
+        });
+
+        it('should detect invalid_grant from nested provider payloads', async () => {
+            mockToken.expired.mockReturnValue(true);
+            const error: any = new Error('Response Error: 400 Bad Request');
+            error.statusCode = 400;
+            error.data = {
+                payload: {
+                    error: 'invalid_grant',
+                    error_description: 'User no longer active/connected with the partner',
+                },
+            };
+            mockToken.refresh.mockRejectedValue(error);
+
+            await expect(getTokenData(mockDoc, ServiceNames.SuuntoApp, false))
+                .rejects.toMatchObject({
+                    name: 'TerminalServiceAuthError',
+                    providerErrorCode: 'invalid_grant',
+                    providerErrorMessage: 'User no longer active/connected with the partner',
+                    dlqContext: 'INVALID_GRANT',
+                });
+
+            expect(handleTerminalServiceAuthFailure).toHaveBeenCalled();
+        });
+
+        it('should NOT trigger terminal cleanup on generic 500 error', async () => {
             mockToken.expired.mockReturnValue(true);
             const error: any = new Error('Server Error');
             error.statusCode = 500;
@@ -358,9 +475,10 @@ describe('tokens', () => {
                 .rejects.toThrow('Server Error');
 
             expect(mockDoc.ref.delete).not.toHaveBeenCalled();
+            expect(handleTerminalServiceAuthFailure).not.toHaveBeenCalled();
         });
 
-        it('should NOT delete token on 406 error with JSON compatible message', async () => {
+        it('should NOT trigger terminal cleanup on 406 JSON compatibility errors', async () => {
             mockToken.expired.mockReturnValue(true);
             const error: any = new Error('The content-type is not JSON compatible');
             error.statusCode = 406;
@@ -370,7 +488,7 @@ describe('tokens', () => {
                 .rejects.toThrow('The content-type is not JSON compatible');
 
             expect(mockDoc.ref.delete).not.toHaveBeenCalled();
-            expect(deleteLocalServiceToken).not.toHaveBeenCalled();
+            expect(handleTerminalServiceAuthFailure).not.toHaveBeenCalled();
         });
     });
 
@@ -381,13 +499,6 @@ describe('tokens', () => {
                 docs: [mockDoc, { ...mockDoc, id: 'user-456' }],
             };
 
-            // We need to allow getServiceConfig to return valid mock for multiple calls
-            (getServiceConfig as any).mockReturnValue({
-                oauth2Client: mockOAuthClient,
-                tokenCollectionName: 'test-collection',
-            });
-
-            // Assume getTokenData works without throwing
             mockToken.expired.mockReturnValue(true);
             mockToken.refresh.mockResolvedValue({
                 token: { access_token: 'new', expires_at: new Date() },
@@ -402,13 +513,13 @@ describe('tokens', () => {
             const mixedDocs = [
                 {
                     id: 'suunto-doc',
-                    data: () => ({ serviceName: ServiceNames.SuuntoApp }),
-                    ref: { update: vi.fn() }, // Mock ref
+                    data: () => ({ serviceName: ServiceNames.SuuntoApp, accessToken: 'a', refreshToken: 'b', expiresAt: Date.now() - 1 }),
+                    ref: { update: vi.fn(), parent: { parent: { id: 'user-a' } } },
                 },
                 {
                     id: 'other-doc',
-                    data: () => ({ serviceName: 'OtherService' }),
-                    ref: { update: vi.fn() }, // Mock ref
+                    data: () => ({ serviceName: 'OtherService', accessToken: 'a', refreshToken: 'b', expiresAt: Date.now() - 1 }),
+                    ref: { update: vi.fn(), parent: { parent: { id: 'user-b' } } },
                 },
             ];
 
@@ -417,9 +528,14 @@ describe('tokens', () => {
                 docs: mixedDocs,
             };
 
+            mockToken.expired.mockReturnValue(true);
+            mockToken.refresh.mockResolvedValue({
+                token: { access_token: 'new', refresh_token: 'next', expires_at: new Date(), user: 'u', token_type: 'Bearer', scope: 'workout' },
+            });
+
             await refreshTokens(mockQuerySnapshot as any, ServiceNames.SuuntoApp);
 
-            expect(getServiceConfig).toHaveBeenCalledTimes(2);
+            expect(getServiceAdapter).toHaveBeenCalledTimes(2);
         });
     });
 });

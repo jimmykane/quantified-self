@@ -44,6 +44,11 @@
     background: var(--mat-sys-primary-container);
 }
 
+.service-connection-status--attention .service-connection-status__indicator {
+    color: var(--mat-sys-on-error-container);
+    background: var(--mat-sys-error-container);
+}
+
 .service-connection-status__indicator mat-icon {
     font-size: 22px;
     width: 22px;

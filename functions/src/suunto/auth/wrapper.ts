@@ -5,7 +5,7 @@ import * as logger from 'firebase-functions/logger';
 import { hasProAccess, PRO_REQUIRED_MESSAGE, ALLOWED_CORS_ORIGINS, enforceAppCheck } from '../../utils';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import {
-  deauthorizeServiceForUser,
+  disconnectServiceForUser,
   getAndSetServiceOAuth2AccessTokenForUser,
   getServiceOAuth2CodeRedirectAndSaveStateToUser,
   validateOAuth2State,
@@ -132,7 +132,7 @@ export const deauthorizeSuuntoApp = onCall({
   const userID = request.auth.uid;
 
   try {
-    await deauthorizeServiceForUser(userID, SERVICE_NAME);
+    await disconnectServiceForUser(userID, SERVICE_NAME);
   } catch (e: any) {
     logger.error(e);
     throw new HttpsError('internal', 'Deauthorization Error');

@@ -14,12 +14,21 @@ export class ServiceConnectionStatusComponent {
     @Input() locked = false;
     @Input() proRequired = false;
     @Input() showDetails = false;
+    @Input() statusLabelOverride: string | null = null;
+    @Input() statusIconOverride: string | null = null;
+    @Input() statusTone: 'default' | 'attention' = 'default';
 
     get statusLabel(): string {
+        if (this.statusLabelOverride) {
+            return this.statusLabelOverride;
+        }
         return this.connected ? 'Connected' : 'Not connected';
     }
 
     get statusIcon(): string {
+        if (this.statusIconOverride) {
+            return this.statusIconOverride;
+        }
         return this.connected ? 'check_circle' : 'link_off';
     }
 }
