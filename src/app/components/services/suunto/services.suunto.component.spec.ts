@@ -205,6 +205,22 @@ describe('ServicesSuuntoComponent', () => {
             expect(historyForm).toBeFalsy();
             expect(content).toContain('before importing history');
         });
+
+        it('should keep history import locked when reconnect is required even if a stale token remains', () => {
+            component.hasProAccess = true;
+            component.serviceTokens = [{ accessToken: 'stale-token' } as any];
+            component.serviceMeta = {
+                connectionState: 'reconnect_required',
+                lastAuthFailureMessage: 'Reconnect before importing history.',
+            } as any;
+            fixture.detectChanges();
+
+            const historyForm = fixture.nativeElement.querySelector('app-history-import-form');
+            const content = fixture.nativeElement.textContent;
+
+            expect(historyForm).toBeFalsy();
+            expect(content).toContain('before importing history');
+        });
     });
 
     describe('Uploads Tab', () => {
@@ -228,6 +244,23 @@ describe('ServicesSuuntoComponent', () => {
 
             expect(fixture.nativeElement.querySelector('app-upload-activity-to-service')).toBeTruthy();
             expect(fixture.nativeElement.querySelector('app-upload-route-to-service')).toBeTruthy();
+        });
+
+        it('should hide upload actions when reconnect is required even if a stale token remains', () => {
+            component.hasProAccess = true;
+            component.serviceTokens = [{ accessToken: 'stale-token' } as any];
+            component.serviceMeta = {
+                connectionState: 'reconnect_required',
+                lastAuthFailureMessage: 'Reconnect before uploading.',
+            } as any;
+            fixture.detectChanges();
+
+            const content = fixture.nativeElement.textContent;
+
+            expect(fixture.nativeElement.querySelector('app-upload-activity-to-service')).toBeFalsy();
+            expect(fixture.nativeElement.querySelector('app-upload-route-to-service')).toBeFalsy();
+            expect(content).toContain('before uploading activities');
+            expect(content).toContain('before uploading routes');
         });
     });
 

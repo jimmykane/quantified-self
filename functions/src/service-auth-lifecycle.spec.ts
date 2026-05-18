@@ -88,6 +88,19 @@ import {
   SERVICE_AUTH_CLEANUP_REASONS,
 } from './service-auth-lifecycle';
 
+function makeTimestamp(seconds: number, nanoseconds: number) {
+  return {
+    seconds,
+    nanoseconds,
+    toMillis: () => Math.trunc((seconds * 1000) + (nanoseconds / 1_000_000)),
+    isEqual(other: { seconds?: number; nanoseconds?: number } | null | undefined) {
+      return !!other
+        && other.seconds === seconds
+        && other.nanoseconds === nanoseconds;
+    },
+  };
+}
+
 describe('service-auth-lifecycle terminal auth handling', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -101,17 +114,13 @@ describe('service-auth-lifecycle terminal auth handling', () => {
   it('returns a retry resolution when a newer token snapshot already replaced the failing one', async () => {
     const staleTokenSnapshot: any = {
       id: 'suunto-user',
-      updateTime: {
-        toMillis: () => 1000,
-      },
+      updateTime: makeTimestamp(1, 100_000),
       ref: tokenRef,
     };
     const latestTokenSnapshot: any = {
       exists: true,
       id: 'suunto-user',
-      updateTime: {
-        toMillis: () => 2000,
-      },
+      updateTime: makeTimestamp(2, 200_000),
       ref: tokenRef,
       data: () => ({
         accessToken: 'replacement-access',
@@ -152,13 +161,64 @@ describe('service-auth-lifecycle terminal auth handling', () => {
     expect(mockMarkServiceReconnectRequired).not.toHaveBeenCalled();
   });
 
+  it('treats a newer token snapshot with the same millisecond value as replaced', async () => {
+    const staleTokenSnapshot: any = {
+      id: 'suunto-user',
+      updateTime: makeTimestamp(1, 100_000),
+      ref: tokenRef,
+    };
+    const latestTokenSnapshot: any = {
+      exists: true,
+      id: 'suunto-user',
+      updateTime: makeTimestamp(1, 900_000),
+      ref: tokenRef,
+      data: () => ({
+        accessToken: 'replacement-access',
+      }),
+    };
+    const transactionDelete = vi.fn();
+
+    mockRunTransaction.mockImplementationOnce(async (callback: any) => callback({
+      get: vi.fn(async () => latestTokenSnapshot),
+      delete: transactionDelete,
+    }));
+
+    const resolution = await handleTerminalServiceAuthFailure(
+      staleTokenSnapshot,
+      ServiceNames.SuuntoApp,
+      {
+        serviceName: ServiceNames.SuuntoApp,
+        accessToken: 'stale-access',
+        refreshToken: 'stale-refresh',
+        expiresAt: 0,
+        userName: 'suunto-user',
+      } as any,
+      {
+        statusCode: 400,
+        providerErrorCode: 'invalid_grant',
+        providerErrorMessage: 'User no longer active/connected with the partner',
+        isInvalidGrant: true,
+        isTerminalAuthFailure: true,
+        isTransientError: true,
+        logMessage: 'invalid_grant',
+      },
+      new Error('400 invalid_grant'),
+    );
+
+    expect(staleTokenSnapshot.updateTime.toMillis()).toBe(latestTokenSnapshot.updateTime.toMillis());
+    expect(resolution).toMatchObject({
+      kind: 'retry_with_latest_snapshot',
+      latestSnapshot: latestTokenSnapshot,
+    });
+    expect(transactionDelete).not.toHaveBeenCalled();
+    expect(mockMarkServiceReconnectRequired).not.toHaveBeenCalled();
+  });
+
   it('deletes the last stale token version and marks reconnect required without querying the whole provider root', async () => {
     const currentTokenSnapshot: any = {
       exists: true,
       id: 'suunto-user',
-      updateTime: {
-        toMillis: () => 1000,
-      },
+      updateTime: makeTimestamp(1, 100_000),
       ref: tokenRef,
       data: () => ({
         accessToken: 'stale-access',
@@ -182,9 +242,7 @@ describe('service-auth-lifecycle terminal auth handling', () => {
     const resolution = await handleTerminalServiceAuthFailure(
       {
         id: 'suunto-user',
-        updateTime: {
-          toMillis: () => 1000,
-        },
+        updateTime: makeTimestamp(1, 100_000),
         ref: tokenRef,
       } as any,
       ServiceNames.SuuntoApp,
@@ -224,6 +282,88 @@ describe('service-auth-lifecycle terminal auth handling', () => {
       connectionStateUpdate: 'reconnect_required',
       tokenCount: 1,
       preservedTokenCount: 0,
+    });
+  });
+
+  it('recursively deletes the orphaned token doc when the Firebase user root cannot be resolved', async () => {
+    const orphanRef = { id: 'orphan-token', parent: { parent: null } };
+
+    const resolution = await handleTerminalServiceAuthFailure(
+      {
+        id: 'orphan-token',
+        ref: orphanRef,
+      } as any,
+      ServiceNames.SuuntoApp,
+      {
+        serviceName: ServiceNames.SuuntoApp,
+        accessToken: 'stale-access',
+        refreshToken: 'stale-refresh',
+        expiresAt: 0,
+        userName: 'suunto-user',
+      } as any,
+      {
+        statusCode: 400,
+        providerErrorCode: 'invalid_grant',
+        providerErrorMessage: 'User no longer active/connected with the partner',
+        isInvalidGrant: true,
+        isTerminalAuthFailure: true,
+        isTransientError: true,
+        logMessage: 'invalid_grant',
+      },
+      new Error('400 invalid_grant'),
+    );
+
+    expect(mockRecursiveDelete).toHaveBeenCalledWith(orphanRef);
+    expect(resolution.kind).toBe('terminal_error');
+    if (resolution.kind !== 'terminal_error') {
+      throw new Error('Expected terminal_error resolution');
+    }
+    expect(resolution.error.cleanupOutcome).toMatchObject({
+      deletedTokenCount: 1,
+      localCleanupStatus: 'completed',
+      connectionStateUpdate: 'unchanged',
+    });
+    expect(mockMarkServiceReconnectRequired).not.toHaveBeenCalled();
+  });
+
+  it('marks orphaned token cleanup as partial when recursive delete fails', async () => {
+    const orphanRef = { id: 'orphan-token', parent: { parent: null } };
+    mockRecursiveDelete.mockRejectedValueOnce(new Error('recursive delete failed'));
+
+    const resolution = await handleTerminalServiceAuthFailure(
+      {
+        id: 'orphan-token',
+        ref: orphanRef,
+      } as any,
+      ServiceNames.SuuntoApp,
+      {
+        serviceName: ServiceNames.SuuntoApp,
+        accessToken: 'stale-access',
+        refreshToken: 'stale-refresh',
+        expiresAt: 0,
+        userName: 'suunto-user',
+      } as any,
+      {
+        statusCode: 400,
+        providerErrorCode: 'invalid_grant',
+        providerErrorMessage: 'User no longer active/connected with the partner',
+        isInvalidGrant: true,
+        isTerminalAuthFailure: true,
+        isTransientError: true,
+        logMessage: 'invalid_grant',
+      },
+      new Error('400 invalid_grant'),
+    );
+
+    expect(mockRecursiveDelete).toHaveBeenCalledWith(orphanRef);
+    expect(resolution.kind).toBe('terminal_error');
+    if (resolution.kind !== 'terminal_error') {
+      throw new Error('Expected terminal_error resolution');
+    }
+    expect(resolution.error.cleanupOutcome).toMatchObject({
+      deletedTokenCount: 0,
+      localCleanupStatus: 'partial',
+      connectionStateUpdate: 'unchanged',
     });
   });
 

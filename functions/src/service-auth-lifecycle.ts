@@ -137,8 +137,41 @@ function normalizeErrorString(value: unknown): string | null {
   if (typeof value !== 'string') {
     return null;
   }
+
   const trimmed = value.trim();
   return trimmed.length ? trimmed : null;
+}
+
+function areFirestoreTimestampsEqual(
+  left: admin.firestore.Timestamp | null | undefined,
+  right: admin.firestore.Timestamp | null | undefined,
+): boolean {
+  if (!left || !right) {
+    return left === right;
+  }
+
+  if (typeof left.isEqual === 'function') {
+    return left.isEqual(right);
+  }
+
+  const leftSeconds = typeof (left as { seconds?: unknown }).seconds === 'number'
+    ? (left as { seconds: number }).seconds
+    : null;
+  const rightSeconds = typeof (right as { seconds?: unknown }).seconds === 'number'
+    ? (right as { seconds: number }).seconds
+    : null;
+  const leftNanoseconds = typeof (left as { nanoseconds?: unknown }).nanoseconds === 'number'
+    ? (left as { nanoseconds: number }).nanoseconds
+    : null;
+  const rightNanoseconds = typeof (right as { nanoseconds?: unknown }).nanoseconds === 'number'
+    ? (right as { nanoseconds: number }).nanoseconds
+    : null;
+
+  if (leftSeconds !== null && rightSeconds !== null && leftNanoseconds !== null && rightNanoseconds !== null) {
+    return leftSeconds === rightSeconds && leftNanoseconds === rightNanoseconds;
+  }
+
+  return left.toMillis() === right.toMillis();
 }
 
 export function extractRefreshFailureDetails(error: any): RefreshFailureDetails {
@@ -350,7 +383,7 @@ async function deleteCurrentTerminalAuthToken(
     }
 
     if (expectedUpdateTime && currentTokenSnapshot.updateTime
-      && currentTokenSnapshot.updateTime.toMillis() !== expectedUpdateTime.toMillis()) {
+      && !areFirestoreTimestampsEqual(currentTokenSnapshot.updateTime, expectedUpdateTime)) {
       return {
         latestSnapshot: currentTokenSnapshot,
         remainingTokenCount: 1,
@@ -645,10 +678,14 @@ export async function handleTerminalServiceAuthFailure(
   const providerUserId = resolveProviderUserId(serviceName, serviceTokenData, doc.id);
 
   if (!firebaseUserID) {
+    let localCleanupStatus: ServiceAuthCleanupOutcome['localCleanupStatus'] = 'completed';
+    let deletedTokenCount = 1;
     try {
-      await doc.ref.delete();
-      logger.warn(`Deleted token ${doc.id} directly after terminal auth failure because the user root could not be resolved.`);
+      await admin.firestore().recursiveDelete(doc.ref);
+      logger.warn(`Recursively deleted token ${doc.id} after terminal auth failure because the user root could not be resolved.`);
     } catch (deleteError) {
+      localCleanupStatus = 'partial';
+      deletedTokenCount = 0;
       logger.error(`Could not delete token ${doc.id} after terminal auth failure`, deleteError);
     }
 
@@ -665,11 +702,11 @@ export async function handleTerminalServiceAuthFailure(
         {
           reason: SERVICE_AUTH_CLEANUP_REASONS.TerminalAuthFailure,
           tokenCount: 1,
-          deletedTokenCount: 1,
+          deletedTokenCount,
           preservedTokenCount: 0,
           partnerDeauthorizeAttempted: 0,
           partnerDeauthorizeFailed: 0,
-          localCleanupStatus: 'completed',
+          localCleanupStatus,
           connectionStateUpdate: 'unchanged',
           fallbackTokenRootCleanupPerformed: false,
         },
