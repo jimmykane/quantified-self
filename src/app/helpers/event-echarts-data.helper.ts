@@ -153,6 +153,12 @@ interface LapDistanceLookup {
   isMonotonic: boolean;
 }
 
+interface EventChartSeriesPointResult {
+  points: EventChartPoint[];
+  minX: number;
+  maxX: number;
+}
+
 export function buildEventChartPanels(input: BuildEventChartPanelsInput): EventChartPanelModel[] {
   const selectedActivities = Array.isArray(input.selectedActivities) ? input.selectedActivities : [];
   if (!selectedActivities.length) {
@@ -178,7 +184,8 @@ export function buildEventChartPanels(input: BuildEventChartPanelsInput): EventC
     });
 
     allowedStreams.forEach((stream) => {
-      const points = toSeriesPoints(activity, stream, input.xAxisType, activityCache);
+      const pointResult = toSeriesPoints(activity, stream, input.xAxisType, activityCache);
+      const points = pointResult.points;
       if (!points.length) {
         return;
       }
@@ -197,11 +204,14 @@ export function buildEventChartPanels(input: BuildEventChartPanelsInput): EventC
           unit,
           colorGroupKey: resolveEventColorGroupKey(stream.type),
           series: [],
-          ...EMPTY_PANEL_DOMAIN
+          minX: pointResult.minX,
+          maxX: pointResult.maxX,
         });
       }
 
       const panel = panelsMap.get(stream.type) as EventChartPanelModel;
+      panel.minX = Math.min(panel.minX, pointResult.minX);
+      panel.maxX = Math.max(panel.maxX, pointResult.maxX);
       const activityID = activity.getID() || '';
       const zoneColorPieces = input.colorIntensityZoneLines === true
         ? buildIntensityZoneColorPieces(activity, stream.type, input.eventColorService)
@@ -766,10 +776,10 @@ function toSeriesPoints(
   stream: StreamInterface,
   xAxisType: XAxisTypes,
   activityCache: ActivityNumericCache
-): EventChartPoint[] {
+): EventChartSeriesPointResult {
   const streamValues = getStreamNumericValues(stream, activityCache);
   if (!streamValues.length) {
-    return [];
+    return createEmptySeriesPointResult();
   }
 
   const shouldTreatAsPace = isEventPaceStreamType(stream.type);
@@ -783,6 +793,8 @@ function toSeriesPoints(
     const length = Math.min(streamValues.length, distanceValues.length, absoluteTimes.length);
 
     const points: EventChartPoint[] = [];
+    let minX = Number.POSITIVE_INFINITY;
+    let maxX = Number.NEGATIVE_INFINITY;
     for (let index = 0; index < length; index += 1) {
       const y = shouldTreatAsPace
         ? getRenderablePaceValue(streamValues[index], speedValues, index)
@@ -797,14 +809,22 @@ function toSeriesPoints(
         y,
         time
       });
+      if (x < minX) {
+        minX = x;
+      }
+      if (x > maxX) {
+        maxX = x;
+      }
     }
-    return points;
+    return normalizeSeriesPointResult(points, minX, maxX);
   }
 
   const timeValues = getActivityTimeValues(activity, activityCache);
   const absoluteTimes = getActivityAbsoluteTimes(activity, activityCache);
   const length = Math.min(streamValues.length, timeValues.length, absoluteTimes.length);
   const points: EventChartPoint[] = [];
+  let minX = Number.POSITIVE_INFINITY;
+  let maxX = Number.NEGATIVE_INFINITY;
 
   for (let index = 0; index < length; index += 1) {
     const y = shouldTreatAsPace
@@ -819,15 +839,47 @@ function toSeriesPoints(
     const x = xAxisType === XAxisTypes.Time
       ? time
       : seconds;
+    if (!Number.isFinite(x)) {
+      continue;
+    }
 
     points.push({
       x,
       y,
       time
     });
+    if (x < minX) {
+      minX = x;
+    }
+    if (x > maxX) {
+      maxX = x;
+    }
   }
 
-  return points;
+  return normalizeSeriesPointResult(points, minX, maxX);
+}
+
+function createEmptySeriesPointResult(): EventChartSeriesPointResult {
+  return {
+    points: [],
+    ...EMPTY_PANEL_DOMAIN,
+  };
+}
+
+function normalizeSeriesPointResult(
+  points: EventChartPoint[],
+  minX: number,
+  maxX: number
+): EventChartSeriesPointResult {
+  if (!points.length || !Number.isFinite(minX) || !Number.isFinite(maxX)) {
+    return createEmptySeriesPointResult();
+  }
+
+  return {
+    points,
+    minX,
+    maxX,
+  };
 }
 
 function getRenderablePaceValue(
@@ -1242,18 +1294,17 @@ function findClosestLinearIndex(values: number[], target: number): number {
 }
 
 function enrichPanelDomain(panel: EventChartPanelModel): EventChartPanelModel {
-  const allPoints = panel.series.flatMap((series) => series.points);
-  if (!allPoints.length) {
+  const minX = Number(panel.minX);
+  const maxX = Number(panel.maxX);
+
+  if (!panel.series.length || !Number.isFinite(minX) || !Number.isFinite(maxX)) {
     return {
       ...panel,
       ...EMPTY_PANEL_DOMAIN,
     };
   }
 
-  const minX = Math.min(...allPoints.map((point) => point.x));
-  const maxX = Math.max(...allPoints.map((point) => point.x));
-
-  if (!Number.isFinite(minX) || !Number.isFinite(maxX) || minX === maxX) {
+  if (maxX <= minX) {
     return {
       ...panel,
       minX,
