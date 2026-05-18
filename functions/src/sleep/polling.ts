@@ -82,6 +82,20 @@ function getProviderUserId(provider: SleepProvider, tokenData: admin.firestore.D
     }
 }
 
+function getReconnectRequiredStateBestEffort(
+    provider: SleepProvider,
+    userID: string,
+    serviceName: ServiceNames,
+): Promise<boolean> {
+    return isServiceReconnectRequiredForUser(userID, serviceName).catch((error: unknown) => {
+        logger.warn(
+            `[SleepSync][${provider}] Failed to read reconnect state for user ${userID} and service ${serviceName}; continuing sleep polling.`,
+            error,
+        );
+        return false;
+    });
+}
+
 async function enqueueProviderPolls(
     provider: SleepProvider,
     serviceName: ServiceNames,
@@ -106,7 +120,7 @@ async function enqueueProviderPolls(
         const cacheKey = `${userID}:${serviceName}`;
         let pendingReconnectRequired = reconnectRequiredCache.get(cacheKey);
         if (!pendingReconnectRequired) {
-            pendingReconnectRequired = isServiceReconnectRequiredForUser(userID, serviceName);
+            pendingReconnectRequired = getReconnectRequiredStateBestEffort(provider, userID, serviceName);
             reconnectRequiredCache.set(cacheKey, pendingReconnectRequired);
         }
         if (await pendingReconnectRequired) {
