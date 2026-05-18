@@ -64,6 +64,7 @@ import {
     AppDashboardSettingsInterface,
     AppDashboardTileEventFiltersInterface,
     AppMapSettingsInterface,
+    AppMyTracksSettings,
     AppUserInterface,
     AppUserSettingsInterface
 } from '../models/app-user.interface';
@@ -77,6 +78,7 @@ import {
 } from '../helpers/dashboard-special-chart-types';
 import { normalizeDashboardSleepTrendRange } from '../helpers/dashboard-sleep-range.helper';
 import {
+    DASHBOARD_EVENT_TABLE_DEFAULT_DATE_RANGE,
     DASHBOARD_TILE_EVENT_DEFAULT_RANGE,
     normalizeDashboardEventTableFilters,
     normalizeDashboardTileEventFilters,
@@ -88,6 +90,7 @@ import {
     type DashboardDefaultCuratedChartType,
 } from '../helpers/dashboard-auto-tile.helper';
 import { normalizeDashboardActionPrompts } from '../helpers/dashboard-action-prompt.helper';
+import { normalizeEventChartOverlayDataTypeByPrimary } from '../helpers/event-chart-overlay.helper';
 import {
     normalizeDashboardChartTileDisplaySettingsForChartType,
 } from '../helpers/dashboard-chart-display-settings.helper';
@@ -502,6 +505,9 @@ export class AppUserUtilities {
         settings.chartSettings.lapTypes = Array.isArray(settings.chartSettings.lapTypes) ? settings.chartSettings.lapTypes : AppUserUtilities.getDefaultChartLapTypes();
         settings.chartSettings.showLaps = settings.chartSettings.showLaps !== false;
         (settings.chartSettings as AppChartSettingsInterface).syncChartHoverToMap = (settings.chartSettings as AppChartSettingsInterface).syncChartHoverToMap === true;
+        (settings.chartSettings as AppChartSettingsInterface).eventChartOverlayDataTypeByPrimary = normalizeEventChartOverlayDataTypeByPrimary(
+            (settings.chartSettings as AppChartSettingsInterface).eventChartOverlayDataTypeByPrimary,
+        );
         settings.chartSettings.showGrid = settings.chartSettings.showGrid !== false;
         settings.chartSettings.stackYAxes = false;
         settings.chartSettings.disableGrouping = settings.chartSettings.disableGrouping === true;
@@ -532,7 +538,10 @@ export class AppUserUtilities {
 
         // Dashboard
         settings.dashboardSettings = settings.dashboardSettings || <AppDashboardSettingsInterface>{};
-        settings.dashboardSettings.dateRange = isNumber(settings.dashboardSettings.dateRange) ? settings.dashboardSettings.dateRange : AppUserUtilities.getDefaultDateRange();
+        const legacyDashboardDateRange = isNumber(settings.dashboardSettings.dateRange)
+            ? settings.dashboardSettings.dateRange
+            : null;
+        settings.dashboardSettings.dateRange = legacyDashboardDateRange ?? AppUserUtilities.getDefaultDateRange();
         settings.dashboardSettings.startDate = settings.dashboardSettings.startDate || null;
         settings.dashboardSettings.endDate = settings.dashboardSettings.endDate || null;
         settings.dashboardSettings.activityTypes = settings.dashboardSettings.activityTypes || [];
@@ -540,7 +549,7 @@ export class AppUserUtilities {
         settings.dashboardSettings.eventTableFilters = normalizeDashboardEventTableFilters(
             settings.dashboardSettings.eventTableFilters,
             {
-                dateRange: settings.dashboardSettings.dateRange,
+                dateRange: legacyDashboardDateRange ?? DASHBOARD_EVENT_TABLE_DEFAULT_DATE_RANGE,
                 startDate: settings.dashboardSettings.startDate,
                 endDate: settings.dashboardSettings.endDate,
                 activityTypes: settings.dashboardSettings.activityTypes,
@@ -651,6 +660,12 @@ export class AppUserUtilities {
         settings.myTracksSettings.dateRange = isNumber(settings.myTracksSettings.dateRange)
             ? settings.myTracksSettings.dateRange
             : AppUserUtilities.getDefaultMyTracksDateRange();
+        const myTracksSettings = settings.myTracksSettings as AppMyTracksSettings;
+        myTracksSettings.startDate = Number.isFinite(myTracksSettings.startDate) ? myTracksSettings.startDate : null;
+        myTracksSettings.endDate = Number.isFinite(myTracksSettings.endDate) ? myTracksSettings.endDate : null;
+        if (myTracksSettings.dateRange === DateRanges.custom && (myTracksSettings.startDate === null || myTracksSettings.endDate === null)) {
+            myTracksSettings.dateRange = AppUserUtilities.getDefaultMyTracksDateRange();
+        }
         (settings.myTracksSettings as any).showJumpHeatmap = (settings.myTracksSettings as any).showJumpHeatmap !== false;
 
         // Export to CSV

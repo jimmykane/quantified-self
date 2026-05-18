@@ -684,7 +684,7 @@ describe('ChartsKpiComponent', () => {
     expect(tooltipHtml).not.toContain('Week of Apr 6');
   });
 
-  it('shows the info tooltip when clicking the KPI layout', () => {
+  it('shows the info tooltip without broad row haptics when clicking the KPI layout', () => {
     vi.useFakeTimers();
     const tooltip = {
       show: vi.fn(),
@@ -696,7 +696,7 @@ describe('ChartsKpiComponent', () => {
     component.onKpiLayoutClick(new MouseEvent('click'));
 
     expect((tooltip.show as any)).toHaveBeenCalledWith(0);
-    expect(hapticsMock.selection).toHaveBeenCalledTimes(1);
+    expect(hapticsMock.selection).not.toHaveBeenCalled();
     vi.advanceTimersByTime(2200);
     expect((tooltip.hide as any)).toHaveBeenCalledWith(0);
     vi.useRealTimers();

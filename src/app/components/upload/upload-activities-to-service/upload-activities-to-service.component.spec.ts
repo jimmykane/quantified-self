@@ -68,6 +68,9 @@ describe('UploadActivitiesToServiceComponent', () => {
         mockProcessingService.updateJob.mockReset();
         mockProcessingService.completeJob.mockReset();
         mockProcessingService.failJob.mockReset();
+        mockFunctionsService.call.mockReset();
+        mockFunctionsService.call.mockResolvedValue({ data: { status: 'OK' } });
+        mockSnackBar.open.mockReset();
     });
 
     it('should create', () => {
@@ -146,6 +149,34 @@ describe('UploadActivitiesToServiceComponent', () => {
         } catch (e) {
             expect(e).toBe('Unknown file type');
         }
+    });
+
+    it('should reject fit files larger than 20MB before calling the service function', async () => {
+        const oversizedPayload = new ArrayBuffer((20 * 1024 * 1024) + 1);
+        const mockFileReader = {
+            result: oversizedPayload,
+            onload: null as (() => void) | null,
+            onerror: null as (() => void) | null,
+            readAsArrayBuffer: vi.fn(function (this: { onload: (() => void) | null }) {
+                this.onload?.();
+            }),
+        };
+        const fileReaderSpy = vi.spyOn(globalThis as any, 'FileReader').mockImplementation(() => mockFileReader);
+        const file = {
+            file: new File(['fit'], 'large.fit'),
+            filename: 'large',
+            extension: 'fit',
+            data: null,
+            id: '1',
+            name: 'large.fit',
+            status: UPLOAD_STATUS.PROCESSING,
+            jobId: '1'
+        };
+
+        await expect(component.processAndUploadFile(file)).rejects.toThrow('Cannot upload activity because the size is greater than 20MB');
+
+        expect(mockFunctionsService.call).not.toHaveBeenCalled();
+        fileReaderSpy.mockRestore();
     });
 
     it('should handle ALREADY_EXISTS response', async () => {

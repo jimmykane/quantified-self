@@ -30,6 +30,8 @@ export interface AppMyTracksSettings extends UserMyTracksSettingsInterface {
     activityTypes?: ActivityTypes[];
     mapStyle?: 'default' | 'satellite' | 'outdoors';
     showJumpHeatmap?: boolean;
+    startDate?: number | null;
+    endDate?: number | null;
 }
 
 export type AppDashboardSleepTrendRange = '14d' | '30d' | '90d' | '1y';
@@ -145,6 +147,7 @@ export interface AppChartSettingsInterface extends Omit<UserChartSettingsInterfa
     theme?: ChartThemes;
     fillOpacityVersion?: number;
     syncChartHoverToMap?: boolean;
+    eventChartOverlayDataTypeByPrimary?: Record<string, string>;
 }
 
 export interface AppAppSettingsInterface extends UserAppSettingsInterface {

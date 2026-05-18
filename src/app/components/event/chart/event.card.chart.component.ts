@@ -53,12 +53,24 @@ import {
   resolveEventChartXAxisType,
 } from '../../../helpers/event-echarts-xaxis.helper';
 import { isMergeOrBenchmarkEvent } from '../../../helpers/event-visibility.helper';
+import {
+  areEventChartOverlayMapsEqual,
+  normalizeEventChartOverlayDataTypeByPrimary,
+} from '../../../helpers/event-chart-overlay.helper';
+import type { EventChartOverlayOption } from '../../../helpers/event-chart-overlay.helper';
 
 interface EventDataTypeLegendItem {
   dataType: string;
   label: string;
   color: string;
   visible: boolean;
+}
+
+interface EventChartPanelViewModel {
+  panel: EventChartPanelModel;
+  overlayPanel: EventChartPanelModel | null;
+  overlayOptions: EventChartOverlayOption[];
+  selectedOverlayDataType: string | null;
 }
 
 const LEGEND_MUTED_DOT_COLOR = 'var(--mat-sys-outline)';
@@ -84,6 +96,7 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
   public isLoading = false;
   public allChartPanels: EventChartPanelModel[] = [];
   public chartPanels: EventChartPanelModel[] = [];
+  public chartPanelViews: EventChartPanelViewModel[] = [];
   public dataTypeLegendItems: EventDataTypeLegendItem[] = [];
   public lapMarkers: EventChartLapMarker[] = [];
   public xDomain: EventChartRange | null = null;
@@ -282,6 +295,9 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
   private cursorBehaviourOverride: ChartCursorBehaviours | null = null;
   private syncChartHoverToMapOverride: boolean | null = null;
   private fillOpacityOverride: number | null = null;
+  private eventChartOverlayDataTypeByPrimaryOverride: Record<string, string> | null = null;
+  private eventChartOverlayPersistRequestID = 0;
+  private eventChartOverlayPersistQueue: Promise<void> = Promise.resolve();
   private fillOpacityPersistTimer: ReturnType<typeof setTimeout> | null = null;
   private pendingRebuild = false;
   private visibleDataTypeIDs = new Set<string>();
@@ -295,6 +311,15 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
     effect(() => {
       const chartSettings = this.userSettingsQuery.chartSettings();
       this.userSettingsQuery.unitSettings();
+      if (
+        this.eventChartOverlayDataTypeByPrimaryOverride !== null
+        && areEventChartOverlayMapsEqual(
+          this.eventChartOverlayDataTypeByPrimaryOverride,
+          chartSettings?.eventChartOverlayDataTypeByPrimary
+        )
+      ) {
+        this.eventChartOverlayDataTypeByPrimaryOverride = null;
+      }
       if (
         this.fillOpacityOverride !== null
         && Math.abs(AppUserUtilities.getResolvedChartFillOpacity(chartSettings) - this.fillOpacityOverride) < 0.0001
@@ -363,6 +388,35 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
     this.visibleDataTypeIDs = new Set(this.allChartPanels.map((panel) => panel.dataType));
     this.applyDataTypeVisibility();
     this.persistVisibleDataTypes();
+  }
+
+  public onPanelOverlayDataTypeChange(primaryDataType: string, overlayDataType: string | null): void {
+    const primary = `${primaryDataType || ''}`.trim();
+    const overlay = typeof overlayDataType === 'string' ? overlayDataType.trim() : '';
+    if (!primary || !this.user) {
+      return;
+    }
+
+    const nextOverlayMap = {
+      ...this.getEventChartOverlayDataTypeByPrimary(),
+    };
+
+    if (overlay && overlay !== primary) {
+      nextOverlayMap[primary] = overlay;
+    } else {
+      delete nextOverlayMap[primary];
+    }
+
+    const normalizedOverlayMap = normalizeEventChartOverlayDataTypeByPrimary(nextOverlayMap);
+    if (areEventChartOverlayMapsEqual(normalizedOverlayMap, this.getEventChartOverlayDataTypeByPrimary())) {
+      return;
+    }
+
+    this.eventChartOverlayDataTypeByPrimaryOverride = normalizedOverlayMap;
+    this.applyDataTypeVisibility();
+    this.cdr.markForCheck();
+
+    this.queueEventChartOverlayPersist(normalizedOverlayMap);
   }
 
   public onSelectedRangeChange(range: EventChartRange | null): void {
@@ -478,6 +532,7 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
     this.zoomRangeOwnerEventID = nextEventID;
 
     if (!shouldRebuildPanels && !shouldRebuildLaps) {
+      this.applyDataTypeVisibility();
       this.cdr.markForCheck();
       return;
     }
@@ -528,6 +583,7 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
       this.logger.error('[EventCardChart] Failed to rebuild chart panels', error);
       this.allChartPanels = [];
       this.chartPanels = [];
+      this.chartPanelViews = [];
       this.dataTypeLegendItems = [];
       this.lapMarkers = [];
       this.xDomain = null;
@@ -643,7 +699,67 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
         : LEGEND_MUTED_DOT_COLOR,
       visible: visibleDataTypeIDs.has(panel.dataType),
     }));
+    this.chartPanelViews = this.buildChartPanelViews();
     this.updateZoomBarOverviewData();
+  }
+
+  private buildChartPanelViews(): EventChartPanelViewModel[] {
+    const panelByDataType = new Map(this.allChartPanels.map((panel) => [panel.dataType, panel]));
+    const overlayMap = this.getEventChartOverlayDataTypeByPrimary();
+
+    return this.chartPanels.map((panel) => {
+      const overlayOptions = this.buildOverlayOptions(panel);
+      const selectedOverlayDataType = overlayMap[panel.dataType] || null;
+      const overlayPanel = selectedOverlayDataType && selectedOverlayDataType !== panel.dataType
+        ? panelByDataType.get(selectedOverlayDataType) ?? null
+        : null;
+
+      return {
+        panel,
+        overlayPanel,
+        overlayOptions,
+        selectedOverlayDataType: overlayPanel ? selectedOverlayDataType : null,
+      };
+    });
+  }
+
+  private buildOverlayOptions(panel: EventChartPanelModel): EventChartOverlayOption[] {
+    return this.allChartPanels
+      .filter((candidate) => candidate.dataType !== panel.dataType)
+      .map((candidate) => ({
+        dataType: candidate.dataType,
+        label: candidate.displayName,
+        unit: candidate.unit,
+        color: resolveEventSeriesColor(candidate.colorGroupKey, 0, 1),
+      }));
+  }
+
+  private getEventChartOverlayDataTypeByPrimary(): Record<string, string> {
+    return normalizeEventChartOverlayDataTypeByPrimary(
+      this.eventChartOverlayDataTypeByPrimaryOverride
+        ?? this.userSettingsQuery.chartSettings()?.eventChartOverlayDataTypeByPrimary
+    );
+  }
+
+  private queueEventChartOverlayPersist(overlayMap: Record<string, string>): void {
+    const requestID = ++this.eventChartOverlayPersistRequestID;
+    this.eventChartOverlayPersistQueue = this.eventChartOverlayPersistQueue
+      .catch(() => undefined)
+      .then(() => this.userSettingsQuery.updateChartSettings({
+        eventChartOverlayDataTypeByPrimary: overlayMap,
+      }))
+      .catch((error) => {
+        this.logger.error('[EventCardChart] Failed to persist event chart overlay setting', error);
+        if (
+          requestID !== this.eventChartOverlayPersistRequestID
+          || !areEventChartOverlayMapsEqual(this.eventChartOverlayDataTypeByPrimaryOverride, overlayMap)
+        ) {
+          return;
+        }
+        this.eventChartOverlayDataTypeByPrimaryOverride = null;
+        this.applyDataTypeVisibility();
+        this.cdr.markForCheck();
+      });
   }
 
   private updateZoomBarOverviewData(domain: EventChartRange | null = this.xDomain ?? this.resolveGlobalDomain(this.allChartPanels)): void {

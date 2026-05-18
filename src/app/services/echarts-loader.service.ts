@@ -2,7 +2,10 @@ import { Inject, Injectable, NgZone, PLATFORM_ID } from '@angular/core';
 import { isPlatformBrowser } from '@angular/common';
 import type { EChartsType } from 'echarts/core';
 import { AppHapticsService } from './app.haptics.service';
-import type { EChartsMobileTapFeedbackOptions } from '../helpers/echarts-tooltip-interaction.helper';
+import type {
+  EChartsClickHapticFeedback,
+  EChartsMobileTapFeedbackOptions
+} from '../helpers/echarts-tooltip-interaction.helper';
 
 type EChartsCoreModule = typeof import('echarts/core');
 type EChartsOption = Parameters<EChartsType['setOption']>[0];
@@ -171,7 +174,7 @@ export class EChartsLoaderService {
     }
 
     const axisPointerFeedback = options.axisPointerFeedback || 'always';
-    const clickFeedback = options.clickFeedback !== false;
+    const clickFeedback = this.resolveClickFeedbackMode(options.clickFeedback);
     const surfaceClickFeedback = options.surfaceClickFeedback === true;
     const surfaceDragFeedback = options.surfaceDragFeedback === true;
     const surfaceDragThresholdPx = this.resolvePositiveNumber(
@@ -183,6 +186,7 @@ export class EChartsLoaderService {
       DEFAULT_SURFACE_DRAG_BUCKET_PX
     );
     let axisPointerHapticsArmed = axisPointerFeedback === 'always';
+    let clickHapticsArmed = clickFeedback === 'always';
     let suppressAxisPointerHapticUntilMs = 0;
     let suppressChartClickHapticUntilMs = 0;
     let suppressSurfaceClickHapticUntilMs = 0;
@@ -202,6 +206,13 @@ export class EChartsLoaderService {
           Date.now() + CLICK_AXIS_POINTER_HAPTIC_SUPPRESSION_MS
         );
       }
+    };
+    const armClickHaptics = () => {
+      if (clickFeedback !== 'afterFirstInteraction') {
+        return;
+      }
+
+      clickHapticsArmed = true;
     };
     const suppressAxisPointerEcho = () => {
       if (axisPointerFeedback !== 'afterFirstInteraction') {
@@ -236,7 +247,7 @@ export class EChartsLoaderService {
       );
     };
     const triggerChartClickFeedback = () => {
-      if (!clickFeedback || Date.now() <= suppressChartClickHapticUntilMs) {
+      if (clickFeedback === 'off' || !clickHapticsArmed || Date.now() <= suppressChartClickHapticUntilMs) {
         return;
       }
       suppressSurfaceClickEcho();
@@ -244,7 +255,7 @@ export class EChartsLoaderService {
       this.hapticsService.selection();
     };
     const triggerSurfaceClickFeedback = () => {
-      if (!clickFeedback || Date.now() <= suppressSurfaceClickHapticUntilMs) {
+      if (clickFeedback === 'off' || !clickHapticsArmed || Date.now() <= suppressSurfaceClickHapticUntilMs) {
         return;
       }
       suppressChartClickEcho();
@@ -258,6 +269,7 @@ export class EChartsLoaderService {
       }
       triggerChartClickFeedback();
       armAxisPointerHaptics(true);
+      armClickHaptics();
     };
     const onDataZoom = (params: unknown) => {
       if (!this.isHapticEligibleDataZoomEvent(params)) {
@@ -265,6 +277,7 @@ export class EChartsLoaderService {
       }
       this.hapticsService.selection();
       armAxisPointerHaptics();
+      armClickHaptics();
     };
     const onBrushEnd = (params: unknown) => {
       if (!this.isHapticEligibleBrushEndEvent(params)) {
@@ -272,6 +285,7 @@ export class EChartsLoaderService {
       }
       this.hapticsService.selection();
       armAxisPointerHaptics();
+      armClickHaptics();
     };
     let lastAxisPointerHapticKey: string | null = null;
     const onAxisPointerUpdate = (params: unknown) => {
@@ -325,6 +339,7 @@ export class EChartsLoaderService {
       suppressAllClickEcho();
       this.hapticsService.selection();
       armAxisPointerHaptics();
+      armClickHaptics();
     };
     const onSurfacePointerUp = () => {
       surfacePointerActive = false;
@@ -342,6 +357,7 @@ export class EChartsLoaderService {
 
       triggerSurfaceClickFeedback();
       armAxisPointerHaptics(true);
+      armClickHaptics();
     };
 
     const zRender = surfaceClickFeedback || surfaceDragFeedback
@@ -541,6 +557,18 @@ export class EChartsLoaderService {
   private resolvePositiveNumber(value: unknown, fallback: number): number {
     const numberValue = Number(value);
     return Number.isFinite(numberValue) && numberValue > 0 ? numberValue : fallback;
+  }
+
+  private resolveClickFeedbackMode(value: EChartsClickHapticFeedback | undefined): 'always' | 'afterFirstInteraction' | 'off' {
+    if (value === false || value === 'off') {
+      return 'off';
+    }
+
+    if (value === 'afterFirstInteraction') {
+      return 'afterFirstInteraction';
+    }
+
+    return 'always';
   }
 
   private isSuppressedHapticSource(params: unknown): boolean {

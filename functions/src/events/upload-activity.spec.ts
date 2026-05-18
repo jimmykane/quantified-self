@@ -262,9 +262,10 @@ describe('uploadActivity', () => {
 
   it('should register with memory and concurrency limits to avoid upload OOM', () => {
     expect(hoisted.capturedOnRequestOptions.value).toEqual(expect.objectContaining({
-      memory: '1GiB',
+      memory: '8GiB',
+      cpu: 2,
       concurrency: 1,
-      timeoutSeconds: 540,
+      timeoutSeconds: 3600,
     }));
   });
 
@@ -545,11 +546,11 @@ describe('uploadActivity', () => {
     expect(response.status).toHaveBeenCalledWith(400);
   });
 
-  it('should reject payloads larger than 10MB', async () => {
+  it('should reject payloads larger than 20MB', async () => {
     const response = makeResponse();
     await invokeUploadActivity(makeRequest({
       headers: { Authorization: 'Bearer token', 'X-Firebase-AppCheck': 'app-check' },
-      rawBody: Buffer.alloc((10 * 1024 * 1024) + 1),
+      rawBody: Buffer.alloc((20 * 1024 * 1024) + 1),
     }), response);
 
     expect(response.status).toHaveBeenCalledWith(400);
@@ -973,7 +974,7 @@ describe('uploadActivity', () => {
 
   it('should return 400 when gzip payload expands beyond decompression safety limit', async () => {
     const response = makeResponse();
-    const compressedBomb = gzipSync(Buffer.alloc((150 * 1024 * 1024) + 1, 0x00));
+    const compressedBomb = gzipSync(Buffer.alloc((512 * 1024 * 1024) + 1, 0x00));
 
     await invokeUploadActivity(makeRequest({
       headers: {
@@ -985,7 +986,9 @@ describe('uploadActivity', () => {
     }), response);
 
     expect(response.status).toHaveBeenCalledWith(400);
-    expect(response.json).toHaveBeenCalledWith({ error: 'Could not decompress uploaded payload.' });
+    expect(response.json).toHaveBeenCalledWith({
+      error: 'File is too large after decompression. Maximum decompressed size is 512MB.',
+    });
     expect(hoisted.mockFITImporter.getFromArrayBuffer).not.toHaveBeenCalled();
   });
 

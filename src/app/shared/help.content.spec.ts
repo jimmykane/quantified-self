@@ -110,6 +110,13 @@ describe('help.content', () => {
 
     expect(gettingStartedSection?.content).toContain('provider heart-rate or power zone boundaries');
     expect(gettingStartedSection?.content).toContain('non-merged events');
+    expect(gettingStartedSection?.content).toContain('Each event chart panel can use the **Overlay** button');
+    expect(gettingStartedSection?.content).toContain('right-side y-axis');
+    expect(gettingStartedSection?.content).toContain('saved globally by primary metric');
+    expect(gettingStartedSection?.content).toContain('primary metric keeps its normal line and fill');
+    expect(gettingStartedSection?.content).toContain('plain solid no-fill line using the overlay metric');
+    expect(gettingStartedSection?.content).toContain('merged and benchmark events');
+    expect(gettingStartedSection?.content).toContain('both metric and activity labels');
     expect(gettingStartedSection?.content).toContain('**Heart Rate** and **Power** charts color their lines and visible fill');
     expect(gettingStartedSection?.content).not.toContain('lightly tints the chart grid by zone');
   });

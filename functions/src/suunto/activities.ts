@@ -22,6 +22,7 @@ import { ALLOWED_CORS_ORIGINS, enforceAppCheck } from '../utils';
 const SUUNTO_ALWAYS_TRANSIENT_STATUS_CODES = new Set([502, 503, 504]);
 const SUUNTO_MAX_TRANSIENT_RETRIES = 2;
 const SUUNTO_TRANSIENT_BACKOFF_MS = 1000;
+const MAX_ACTIVITY_UPLOAD_BYTES = 20 * 1024 * 1024;
 const SUUNTO_PERMANENT_500_MESSAGE_PATTERNS = [
   'unsupported',
   'invalid',
@@ -367,6 +368,10 @@ export const importActivityToSuuntoApp = onCall({
   if (size === 0) {
     logger.error('File content is empty');
     throw new HttpsError('invalid-argument', 'File content is empty');
+  }
+
+  if (size > MAX_ACTIVITY_UPLOAD_BYTES) {
+    throw new HttpsError('invalid-argument', 'Cannot upload activity because the size is greater than 20MB');
   }
 
   return uploadActivityFileToSuunto(userID, fileBuffer);

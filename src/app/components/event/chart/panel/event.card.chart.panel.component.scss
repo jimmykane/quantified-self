@@ -54,10 +54,37 @@
   line-height: 1;
 }
 
-.event-chart-panel__fullscreen-button {
+.event-chart-panel__actions {
   margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex: 0 0 auto;
+}
+
+.event-chart-panel__overlay-button,
+.event-chart-panel__fullscreen-button {
   align-self: center;
   flex: 0 0 auto;
+}
+
+.event-chart-panel__overlay-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.event-chart-panel__overlay-swatch {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  flex: 0 0 auto;
+}
+
+.event-chart-panel__overlay-unit {
+  opacity: 0.72;
 }
 
 .event-chart-panel__series-legend {

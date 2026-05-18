@@ -7,10 +7,11 @@
     borderMode="none" [expandedSizePx]="332" [collapsedSizePx]="28" ariaLabelExpand="Expand filters"
     ariaLabelCollapse="Collapse filters">
     <app-event-search class="compact-filter-layout" [compact]="true"
-      [startOfTheWeek]="user.settings.unitSettings.startOfTheWeek" [showDatePicker]="false"
-      [showActivityTypePicker]="false" [dateRangesToShow]="dateRangesToShow"
-      [selectedActivityTypes]="user.settings.myTracksSettings?.activityTypes"
-      [selectedDateRange]="user.settings.myTracksSettings?.dateRange" [includeMergedEvents]="false"
+      [startOfTheWeek]="user.settings.unitSettings.startOfTheWeek" [showDatePicker]="true"
+      [showActivityTypePicker]="true" [dateRangesToShow]="dateRangesToShow"
+      [selectedActivityTypes]="myTracksSettings().activityTypes"
+      [selectedDateRange]="myTracksSettings().dateRange" [selectedStartDate]="selectedMyTracksStartDate()"
+      [selectedEndDate]="selectedMyTracksEndDate()" [includeMergedEvents]="false"
       (searchChange)="search($event)">
     </app-event-search>
   </app-peek-panel>

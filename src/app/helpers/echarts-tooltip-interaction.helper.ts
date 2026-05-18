@@ -4,6 +4,7 @@ import { getViewportConstrainedTooltipPosition } from './echarts-tooltip-positio
 
 export type EChartsTooltipTriggerOn = 'none' | 'click' | 'mousemove|click';
 export type EChartsAxisPointerHapticFeedback = 'always' | 'afterFirstInteraction' | 'off';
+export type EChartsClickHapticFeedback = boolean | 'always' | 'afterFirstInteraction' | 'off';
 export interface EChartsTooltipSurfaceConfig {
   appendTo?: typeof getOrCreateEChartsTooltipHost;
   confine: boolean;
@@ -11,7 +12,7 @@ export interface EChartsTooltipSurfaceConfig {
 }
 export interface EChartsMobileTapFeedbackOptions {
   axisPointerFeedback?: EChartsAxisPointerHapticFeedback;
-  clickFeedback?: boolean;
+  clickFeedback?: EChartsClickHapticFeedback;
   surfaceClickFeedback?: boolean;
   surfaceDragFeedback?: boolean;
   surfaceDragThresholdPx?: number;
@@ -19,8 +20,8 @@ export interface EChartsMobileTapFeedbackOptions {
 }
 
 export const DASHBOARD_ECHARTS_MOBILE_TAP_FEEDBACK_OPTIONS: EChartsMobileTapFeedbackOptions = {
-  axisPointerFeedback: 'always',
-  clickFeedback: true,
+  axisPointerFeedback: 'afterFirstInteraction',
+  clickFeedback: 'afterFirstInteraction',
   surfaceClickFeedback: false,
   surfaceDragFeedback: true,
 };
