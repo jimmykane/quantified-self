@@ -234,6 +234,12 @@ describe('service-auth-lifecycle terminal auth handling', () => {
         if (ref === tokenCollectionRef) {
           return { docs: [currentTokenSnapshot] };
         }
+        if (ref === tokenRootRef) {
+          return {
+            exists: true,
+            data: () => ({}),
+          };
+        }
         throw new Error('Unexpected transaction get target');
       }),
       delete: transactionDelete,
@@ -271,6 +277,86 @@ describe('service-auth-lifecycle terminal auth handling', () => {
     }
     expect(transactionDelete).toHaveBeenCalledWith(tokenRef);
     expect(transactionDelete).toHaveBeenCalledWith(tokenRootRef);
+    expect(mockMarkServiceReconnectRequired).toHaveBeenCalledWith(
+      'firebase-user-123',
+      ServiceNames.SuuntoApp,
+      'invalid_grant',
+      'User no longer active/connected with the partner',
+    );
+    expect(resolution.error.cleanupOutcome).toMatchObject({
+      deletedTokenCount: 1,
+      connectionStateUpdate: 'reconnect_required',
+      tokenCount: 1,
+      preservedTokenCount: 0,
+    });
+  });
+
+  it('preserves the token root when reconnect state is already stored on it', async () => {
+    const currentTokenSnapshot: any = {
+      exists: true,
+      id: 'suunto-user',
+      updateTime: makeTimestamp(1, 100_000),
+      ref: tokenRef,
+      data: () => ({
+        accessToken: 'stale-access',
+      }),
+    };
+    const transactionDelete = vi.fn();
+
+    mockRunTransaction.mockImplementationOnce(async (callback: any) => callback({
+      get: vi.fn(async (ref: unknown) => {
+        if (ref === tokenRef) {
+          return currentTokenSnapshot;
+        }
+        if (ref === tokenCollectionRef) {
+          return { docs: [currentTokenSnapshot] };
+        }
+        if (ref === tokenRootRef) {
+          return {
+            exists: true,
+            data: () => ({
+              state: 'oauth-state',
+              codeVerifier: 'pkce-verifier',
+            }),
+          };
+        }
+        throw new Error('Unexpected transaction get target');
+      }),
+      delete: transactionDelete,
+    }));
+
+    const resolution = await handleTerminalServiceAuthFailure(
+      {
+        id: 'suunto-user',
+        updateTime: makeTimestamp(1, 100_000),
+        ref: tokenRef,
+      } as any,
+      ServiceNames.SuuntoApp,
+      {
+        serviceName: ServiceNames.SuuntoApp,
+        accessToken: 'stale-access',
+        refreshToken: 'stale-refresh',
+        expiresAt: 0,
+        userName: 'suunto-user',
+      } as any,
+      {
+        statusCode: 400,
+        providerErrorCode: 'invalid_grant',
+        providerErrorMessage: 'User no longer active/connected with the partner',
+        isInvalidGrant: true,
+        isTerminalAuthFailure: true,
+        isTransientError: true,
+        logMessage: 'invalid_grant',
+      },
+      new Error('400 invalid_grant'),
+    );
+
+    expect(resolution.kind).toBe('terminal_error');
+    if (resolution.kind !== 'terminal_error') {
+      throw new Error('Expected terminal_error resolution');
+    }
+    expect(transactionDelete).toHaveBeenCalledWith(tokenRef);
+    expect(transactionDelete).not.toHaveBeenCalledWith(tokenRootRef);
     expect(mockMarkServiceReconnectRequired).toHaveBeenCalledWith(
       'firebase-user-123',
       ServiceNames.SuuntoApp,

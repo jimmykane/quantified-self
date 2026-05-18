@@ -354,7 +354,19 @@ interface DeleteCurrentTerminalAuthTokenResult {
   remainingTokenCount: number;
   skippedBecauseTokenChanged: boolean;
   tokenRootDeleted: boolean;
+  tokenRootPreservedForOAuthFlow: boolean;
   tokenDeleted: boolean;
+}
+
+function hasPendingOAuthFlowContext(snapshot: DocumentSnapshot): boolean {
+  if (!snapshot.exists) {
+    return false;
+  }
+
+  const data = snapshot.data() as Record<string, unknown> | undefined;
+  const state = typeof data?.state === 'string' ? data.state.trim() : '';
+  const codeVerifier = typeof data?.codeVerifier === 'string' ? data.codeVerifier.trim() : '';
+  return state.length > 0 || codeVerifier.length > 0;
 }
 
 async function deleteCurrentTerminalAuthToken(
@@ -378,6 +390,7 @@ async function deleteCurrentTerminalAuthToken(
         remainingTokenCount: 0,
         skippedBecauseTokenChanged: true,
         tokenRootDeleted: false,
+        tokenRootPreservedForOAuthFlow: false,
         tokenDeleted: false,
       };
     }
@@ -389,17 +402,20 @@ async function deleteCurrentTerminalAuthToken(
         remainingTokenCount: 1,
         skippedBecauseTokenChanged: true,
         tokenRootDeleted: false,
+        tokenRootPreservedForOAuthFlow: false,
         tokenDeleted: false,
       };
     }
 
     const tokenQuerySnapshot = await transaction.get(tokenCollectionRef);
     const remainingTokenCount = tokenQuerySnapshot.docs.filter((doc) => doc.id !== tokenSnapshot.id).length;
+    const tokenRootSnapshot = await transaction.get(tokenRootRef);
+    const preserveTokenRootForOAuthFlow = remainingTokenCount === 0 && hasPendingOAuthFlowContext(tokenRootSnapshot);
 
     transaction.delete(tokenSnapshot.ref);
-    if (remainingTokenCount === 0) {
+    if (remainingTokenCount === 0 && !preserveTokenRootForOAuthFlow) {
       // Service token roots only store fields on the root document plus the `tokens` subcollection.
-      // After deleting the final token doc inside this transaction, the root has no remaining descendants.
+      // If no reconnect flow is in progress, deleting the final token doc leaves no descendant data to preserve.
       transaction.delete(tokenRootRef);
     }
 
@@ -407,7 +423,8 @@ async function deleteCurrentTerminalAuthToken(
       latestSnapshot: currentTokenSnapshot,
       remainingTokenCount,
       skippedBecauseTokenChanged: false,
-      tokenRootDeleted: remainingTokenCount === 0,
+      tokenRootDeleted: remainingTokenCount === 0 && !preserveTokenRootForOAuthFlow,
+      tokenRootPreservedForOAuthFlow: preserveTokenRootForOAuthFlow,
       tokenDeleted: true,
     };
   });
@@ -485,7 +502,7 @@ async function cleanupTerminalAuthToken(
     outcome.tokenCount = 1 + deleteResult.remainingTokenCount;
     outcome.preservedTokenCount = deleteResult.remainingTokenCount;
 
-    if (deleteResult.tokenRootDeleted) {
+    if (deleteResult.remainingTokenCount === 0) {
       try {
         await markServiceReconnectRequired(
           userID,
