@@ -32,4 +32,11 @@ describe('PaymentSuccessComponent', () => {
     it('should create', () => {
         expect(component).toBeTruthy();
     });
+
+    it('should use shared glass card styling conventions', () => {
+        const card = fixture.nativeElement.querySelector('mat-card');
+        expect(card).toBeTruthy();
+        expect(card.classList.contains('qs-glass-card-panel')).toBe(true);
+        expect(card.getAttribute('appearance')).toBe('outlined');
+    });
 });

@@ -1,8 +1,8 @@
-import { Injectable, inject, Injector, runInInjectionContext } from '@angular/core';
+import { Injectable, inject } from '@angular/core';
 import { MatDialog } from '@angular/material/dialog';
 import { ConfirmationDialogComponent } from '../components/confirmation-dialog/confirmation-dialog.component';
 import { environment } from '../../environments/environment';
-import { Firestore, collection, collectionData, addDoc, doc, docData, getDoc, getDocs, getDocsFromServer, limit, query, where } from 'app/firebase/firestore';
+import { Firestore, collection, collectionData, addDoc, doc, docData, getDocs, getDocsFromServer, limit, query, where } from 'app/firebase/firestore';
 
 // ... (other imports)
 
@@ -12,6 +12,7 @@ import { Observable, from, switchMap, filter, take, map, timeout, firstValueFrom
 import { AppWindowService } from './app.window.service';
 import { LoggerService } from './logger.service';
 import { AppFunctionsService } from './app.functions.service';
+import { UpcomingRenewalAmountResult } from '@shared/stripe-renewal';
 
 export interface StripeProduct {
     id: string;
@@ -49,6 +50,7 @@ export interface StripeSubscription {
     current_period_end: any;
     current_period_start: any;
     cancel_at_period_end: boolean;
+    created?: any;
 }
 
 type CheckoutMode = 'subscription' | 'payment';
@@ -56,7 +58,6 @@ type CheckoutMode = 'subscription' | 'payment';
 interface CheckoutInput {
     priceId: string;
     mode: CheckoutMode;
-    productId: string | null;
 }
 
 interface CheckoutSessionPayload {
@@ -67,8 +68,9 @@ interface CheckoutSessionPayload {
     mode: CheckoutMode;
     automatic_tax: { enabled: true };
     metadata: { firebaseUID: string };
+    payment_method_collection?: 'if_required';
+    trial_period_days?: number;
     promotion_code?: string;
-    subscription_data?: { metadata: { firebaseUID: string } };
 }
 
 interface CheckoutSessionDocumentData {
@@ -84,7 +86,6 @@ export class AppPaymentService {
     private auth = inject(Auth);
     private functionsService = inject(AppFunctionsService);
     private dialog = inject(MatDialog);
-    private injector = inject(Injector);
     private readonly userCancelledPortalMessage = 'User cancelled redirection to portal.';
     private readonly maxCheckoutRetryAttempts = 1;
     private readonly subscriptionStatuses: StripeSubscription['status'][] = ['active', 'trialing', 'canceled', 'incomplete', 'incomplete_expired', 'past_due', 'unpaid'];
@@ -102,7 +103,7 @@ export class AppPaymentService {
     private async getProductsFromServer(): Promise<StripeProduct[]> {
         const productsRef = collection(this.firestore, 'products');
         const activeProductsQuery = query(productsRef, where('active', '==', true));
-        const productsSnapshot = await runInInjectionContext(this.injector, () => getDocsFromServer(activeProductsQuery));
+        const productsSnapshot = await getDocsFromServer(activeProductsQuery);
         const products = productsSnapshot.docs.map((productDoc) => ({
             id: productDoc.id,
             ...(productDoc.data() as Omit<StripeProduct, 'id'>)
@@ -116,7 +117,7 @@ export class AppPaymentService {
         const pricesRef = collection(this.firestore, `products/${product.id}/prices`);
         const activePricesQuery = query(pricesRef, where('active', '==', true));
 
-        const pricesSnapshot = await runInInjectionContext(this.injector, () => getDocsFromServer(activePricesQuery));
+        const pricesSnapshot = await getDocsFromServer(activePricesQuery);
         const prices = pricesSnapshot.docs.map((priceDoc) => ({
             id: priceDoc.id,
             ...(priceDoc.data() as Omit<StripePrice, 'id'>)
@@ -134,11 +135,13 @@ export class AppPaymentService {
         for (const product of products) {
             this.logger.log(`Processing product ${product.id}`, product);
 
+            const paidRecurringPrices = (product.prices ?? []).filter((price) => this.isPaidRecurringPrice(price));
+
             // Check if this product has prices with 'firebaseRole' metadata
             const getRole = (p: StripePrice) => p.metadata?.firebaseRole?.toLowerCase();
 
-            const basicPrices = product.prices?.filter(p => getRole(p) === 'basic');
-            const proPrices = product.prices?.filter(p => getRole(p) === 'pro');
+            const basicPrices = paidRecurringPrices.filter(p => getRole(p) === 'basic');
+            const proPrices = paidRecurringPrices.filter(p => getRole(p) === 'pro');
 
             this.logger.log(`Product ${product.id} prices split:`, { basicPrices, proPrices });
 
@@ -174,21 +177,114 @@ export class AppPaymentService {
                 }
 
                 // Ignore strictly free products if we are killing the free tier?
-                if (product.metadata?.role !== 'free') {
-                    virtualProducts.push(product);
+                if (product.metadata?.role !== 'free' && paidRecurringPrices.length > 0) {
+                    virtualProducts.push({
+                        ...product,
+                        prices: paidRecurringPrices
+                    });
                 }
             }
         }
 
-        this.logger.log('getProducts virtual output:', virtualProducts);
+        const mergedRoleProducts = this.mergeRecurringProductsByRole(virtualProducts);
+        this.logger.log('getProducts virtual output:', mergedRoleProducts);
 
         // Sort: Basic first, then Pro
         const roleOrder: Record<string, number> = { 'basic': 1, 'pro': 2 };
-        return virtualProducts.sort((a, b) => {
+        return mergedRoleProducts.sort((a, b) => {
             const rA = (a.role || a.metadata?.role || '') as string;
             const rB = (b.role || b.metadata?.role || '') as string;
             return (roleOrder[rA] || 99) - (roleOrder[rB] || 99);
         });
+    }
+
+    private mergeRecurringProductsByRole(products: StripeProduct[]): StripeProduct[] {
+        const mergedByRole = new Map<'basic' | 'pro', StripeProduct>();
+        const passthroughProducts: StripeProduct[] = [];
+
+        for (const product of products) {
+            const normalizedRole = this.normalizePlanRole(product.role ?? product.metadata?.role ?? null);
+            if (!normalizedRole) {
+                passthroughProducts.push(product);
+                continue;
+            }
+
+            const existingProduct = mergedByRole.get(normalizedRole);
+            if (!existingProduct) {
+                mergedByRole.set(normalizedRole, {
+                    ...product,
+                    role: normalizedRole,
+                    metadata: { ...product.metadata, role: normalizedRole },
+                    prices: this.sortRecurringPrices(product.prices ?? [])
+                });
+                continue;
+            }
+
+            existingProduct.prices = this.sortRecurringPrices([
+                ...(existingProduct.prices ?? []),
+                ...(product.prices ?? [])
+            ]);
+        }
+
+        return [...mergedByRole.values(), ...passthroughProducts];
+    }
+
+    private normalizePlanRole(role: string | null | undefined): 'basic' | 'pro' | null {
+        if (typeof role !== 'string') {
+            return null;
+        }
+
+        const normalizedRole = role.toLowerCase();
+        if (normalizedRole === 'basic' || normalizedRole === 'pro') {
+            return normalizedRole;
+        }
+
+        return null;
+    }
+
+    private sortRecurringPrices(prices: StripePrice[]): StripePrice[] {
+        const seenPriceIds = new Set<string>();
+        const recurringIntervalOrder: Record<string, number> = { month: 1, year: 2 };
+
+        return prices
+            .filter((price) => {
+                if (!price?.id || seenPriceIds.has(price.id)) {
+                    return false;
+                }
+                seenPriceIds.add(price.id);
+                return true;
+            })
+            .sort((leftPrice, rightPrice) => {
+                const leftInterval = leftPrice.recurring?.interval ?? leftPrice.interval ?? '';
+                const rightInterval = rightPrice.recurring?.interval ?? rightPrice.interval ?? '';
+                const intervalDelta = (recurringIntervalOrder[leftInterval] ?? 99) - (recurringIntervalOrder[rightInterval] ?? 99);
+                if (intervalDelta !== 0) {
+                    return intervalDelta;
+                }
+
+                const leftIntervalCount = leftPrice.recurring?.interval_count ?? leftPrice.interval_count ?? 1;
+                const rightIntervalCount = rightPrice.recurring?.interval_count ?? rightPrice.interval_count ?? 1;
+                if (leftIntervalCount !== rightIntervalCount) {
+                    return leftIntervalCount - rightIntervalCount;
+                }
+
+                const leftAmount = typeof leftPrice.unit_amount === 'number' ? leftPrice.unit_amount : Number.MAX_SAFE_INTEGER;
+                const rightAmount = typeof rightPrice.unit_amount === 'number' ? rightPrice.unit_amount : Number.MAX_SAFE_INTEGER;
+                if (leftAmount !== rightAmount) {
+                    return leftAmount - rightAmount;
+                }
+
+                return leftPrice.id.localeCompare(rightPrice.id);
+            });
+    }
+
+    private isPaidRecurringPrice(price: StripePrice): boolean {
+        if (price.type !== 'recurring') {
+            return false;
+        }
+
+        const interval = price.recurring?.interval ?? price.interval;
+        return interval === 'month' || interval === 'year';
     }
 
     /**
@@ -214,9 +310,7 @@ export class AppPaymentService {
         attempt: number
     ): Promise<void> {
         const checkoutInput = this.resolveCheckoutInput(price);
-        const resolvedPromotionCodeId = await this.resolvePromotionCodeIdForCheckout(price, checkoutInput);
-        const hasPaidHistory = resolvedPromotionCodeId ? await this.hasPaidSubscriptionHistory() : false;
-        const promotionCodeId = hasPaidHistory ? null : resolvedPromotionCodeId;
+        const trialPeriodDays = await this.resolveTrialPeriodDaysForCheckout(price);
 
         await this.runPreCheckoutLinkCheck(user);
 
@@ -227,11 +321,11 @@ export class AppPaymentService {
 
         this.logger.log('Creating checkout session for price:', checkoutInput.priceId, 'mode:', checkoutInput.mode);
         const checkoutSessionsRef = collection(this.firestore, `customers/${userId}/checkout_sessions`);
-        const sessionPayload = this.buildCheckoutSessionPayload(checkoutInput, userId, successUrl, cancelUrl, promotionCodeId);
+        const sessionPayload = this.buildCheckoutSessionPayload(checkoutInput, userId, successUrl, cancelUrl, trialPeriodDays);
 
         let checkoutSessionDocId = '';
         try {
-            const sessionDoc = await runInInjectionContext(this.injector, () => addDoc(checkoutSessionsRef, sessionPayload));
+            const sessionDoc = await addDoc(checkoutSessionsRef, sessionPayload);
             checkoutSessionDocId = sessionDoc.id;
             this.logger.log('Checkout session created with ID:', checkoutSessionDocId);
         } catch (error) {
@@ -282,27 +376,48 @@ export class AppPaymentService {
             return {
                 priceId: price,
                 mode: 'subscription',
-                productId: null
             };
         }
 
         return {
             priceId: price.id,
             mode: price.type === 'recurring' ? 'subscription' : 'payment',
-            productId: price.product ?? null
         };
     }
 
-    private async resolvePromotionCodeIdForCheckout(
-        price: string | StripePrice,
-        checkoutInput: CheckoutInput
-    ): Promise<string | null> {
-        const promotionCodeId = this.resolvePromotionCodeId(price);
-        if (promotionCodeId || typeof price === 'string') {
-            return promotionCodeId;
+    private async resolveTrialPeriodDaysForCheckout(price: string | StripePrice): Promise<number | null> {
+        if (typeof price === 'string') {
+            return null;
         }
 
-        return this.resolvePromotionCodeIdFromFirestoreDocument(checkoutInput.priceId, checkoutInput.productId);
+        if (price.type !== 'recurring') {
+            return null;
+        }
+
+        const trialPeriodDays = this.resolveMetadataTrialDays(price.metadata?.trial_days);
+        if (trialPeriodDays === null) {
+            return null;
+        }
+
+        const hasPaidHistory = await this.hasPaidSubscriptionHistoryForCheckoutEligibility();
+        if (hasPaidHistory) {
+            return null;
+        }
+
+        return trialPeriodDays;
+    }
+
+    private resolveMetadataTrialDays(metadataTrialDays: string | undefined): number | null {
+        if (typeof metadataTrialDays !== 'string') {
+            return null;
+        }
+
+        const normalizedTrialDays = metadataTrialDays.trim();
+        if (!/^[1-9]\d*$/.test(normalizedTrialDays)) {
+            return null;
+        }
+
+        return Number.parseInt(normalizedTrialDays, 10);
     }
 
     private async runPreCheckoutLinkCheck(user: { getIdToken: (forceRefresh?: boolean) => Promise<string> }): Promise<void> {
@@ -329,7 +444,7 @@ export class AppPaymentService {
 
         try {
             const activeSubs = await firstValueFrom(
-                runInInjectionContext(this.injector, () => collectionData(activeQuery).pipe(take(1)))
+                collectionData(activeQuery).pipe(take(1))
             );
 
             if (!activeSubs.length) {
@@ -368,26 +483,23 @@ export class AppPaymentService {
         userId: string,
         successUrl: string,
         cancelUrl: string,
-        promotionCodeId: string | null
+        trialPeriodDays: number | null
     ): CheckoutSessionPayload {
         const payload: CheckoutSessionPayload = {
             price: checkoutInput.priceId,
             success_url: successUrl,
             cancel_url: cancelUrl,
-            allow_promotion_codes: !promotionCodeId,
+            allow_promotion_codes: true,
             mode: checkoutInput.mode,
             automatic_tax: { enabled: true },
             metadata: { firebaseUID: userId }
         };
 
-        if (promotionCodeId) {
-            payload.promotion_code = promotionCodeId;
-        }
-
         if (checkoutInput.mode === 'subscription') {
-            payload.subscription_data = {
-                metadata: { firebaseUID: userId }
-            };
+            payload.payment_method_collection = 'if_required';
+            if (trialPeriodDays) {
+                payload.trial_period_days = trialPeriodDays;
+            }
         }
 
         return payload;
@@ -396,7 +508,7 @@ export class AppPaymentService {
     private async waitForCheckoutSessionUpdate(userId: string, checkoutSessionDocId: string): Promise<CheckoutSessionDocumentData> {
         const sessionRef = doc(this.firestore, `customers/${userId}/checkout_sessions/${checkoutSessionDocId}`);
         const session = await firstValueFrom(
-            runInInjectionContext(this.injector, () => docData(sessionRef)).pipe(
+            docData(sessionRef).pipe(
                 filter((sessionData): sessionData is CheckoutSessionDocumentData => {
                     const data = sessionData as CheckoutSessionDocumentData | null | undefined;
                     return !!data && (!!data.url || !!data.error);
@@ -424,81 +536,6 @@ export class AppPaymentService {
         return 'Unknown payment error.';
     }
 
-    private resolvePromotionCodeId(price: string | StripePrice): string | null {
-        if (typeof price === 'string') {
-            return null;
-        }
-
-        const prefixedMetadataValue = price.stripe_metadata_promotion_code_id ?? null;
-        const strictMetadataValue = price.metadata?.promotion_code_id ?? null;
-        const rawValue = strictMetadataValue ?? prefixedMetadataValue;
-        if (!rawValue) {
-            return null;
-        }
-
-        const promotionCodeId = rawValue.trim();
-        if (!promotionCodeId) {
-            return null;
-        }
-
-        if (promotionCodeId.startsWith('promo_')) {
-            return promotionCodeId;
-        }
-
-        const sourceKey = strictMetadataValue ? 'promotion_code_id' : 'stripe_metadata_promotion_code_id';
-        this.logger.warn(`[appendCheckoutSession] Ignoring metadata '${sourceKey}' because '${promotionCodeId}' is not a Stripe promotion code ID (expected prefix: promo_).`);
-        return null;
-    }
-
-    private async resolvePromotionCodeIdFromFirestoreDocument(priceId: string, productId: string | null): Promise<string | null> {
-        const candidatePaths: string[] = [];
-        if (productId) {
-            candidatePaths.push(`products/${productId}/prices/${priceId}`);
-        }
-
-        try {
-            if (!candidatePaths.length) {
-                const productsRef = collection(this.firestore, 'products');
-                const activeProductsQuery = query(productsRef, where('active', '==', true));
-                const productsSnapshot = await runInInjectionContext(this.injector, () => getDocs(activeProductsQuery));
-                for (const productDoc of productsSnapshot.docs) {
-                    candidatePaths.push(`products/${productDoc.id}/prices/${priceId}`);
-                }
-            }
-
-            for (const path of candidatePaths) {
-                const priceRef = doc(this.firestore, path);
-                const priceSnapshot = await runInInjectionContext(this.injector, () => getDoc(priceRef));
-                if (!priceSnapshot.exists()) {
-                    continue;
-                }
-
-                const data = priceSnapshot.data() as {
-                    metadata?: { [key: string]: string };
-                    stripe_metadata_promotion_code_id?: string;
-                };
-                const strictMetadataValue = data.metadata?.promotion_code_id ?? null;
-                const prefixedMetadataValue = data.stripe_metadata_promotion_code_id ?? null;
-                const rawValue = strictMetadataValue ?? prefixedMetadataValue;
-
-                if (!rawValue) {
-                    return null;
-                }
-
-                const promotionCodeId = rawValue.trim();
-                if (!promotionCodeId.startsWith('promo_')) {
-                    return null;
-                }
-
-                return promotionCodeId;
-            }
-        } catch {
-            // If fallback lookup fails, continue without a promotion code.
-        }
-
-        return null;
-    }
-
     /**
      * Gets the current user's active subscriptions with product role metadata.
      */
@@ -511,7 +548,7 @@ export class AppPaymentService {
         const subscriptionsRef = collection(this.firestore, `customers/${user.uid}/subscriptions`);
         const activeQuery = query(subscriptionsRef, where('status', 'in', ['active', 'trialing']));
 
-        return runInInjectionContext(this.injector, () => collectionData(activeQuery, { idField: 'id' })).pipe(
+        return collectionData(activeQuery, { idField: 'id' }).pipe(
             map(docs => docs as StripeSubscription[]),
             switchMap((subscriptions: StripeSubscription[]) => {
                 if (subscriptions.length === 0) return from([[]]);
@@ -547,6 +584,14 @@ export class AppPaymentService {
     }
 
     async hasPaidSubscriptionHistory(): Promise<boolean> {
+        return this.checkPaidSubscriptionHistory('fail-open');
+    }
+
+    private async hasPaidSubscriptionHistoryForCheckoutEligibility(): Promise<boolean> {
+        return this.checkPaidSubscriptionHistory('fail-closed');
+    }
+
+    private async checkPaidSubscriptionHistory(onError: 'fail-open' | 'fail-closed'): Promise<boolean> {
         const user = this.auth.currentUser;
         if (!user) {
             return false;
@@ -560,12 +605,62 @@ export class AppPaymentService {
         );
 
         try {
-            const snapshot = await runInInjectionContext(this.injector, () => getDocs(historyQuery));
+            const snapshot = await getDocs(historyQuery);
             return snapshot.docs.length > 0;
         } catch (error) {
-            this.logger.warn('Could not verify subscription history. Hiding trial messaging by default.', error);
-            return true;
+            if (onError === 'fail-closed') {
+                this.logger.warn('Could not verify subscription history for checkout gating. Blocking trial eligibility (fail-closed).', error);
+                return true;
+            }
+
+            this.logger.warn('Could not verify subscription history. Proceeding with trial messaging (fail-open).', error);
+            return false;
         }
+    }
+
+    async getUpcomingRenewalAmount(): Promise<UpcomingRenewalAmountResult> {
+        if (!this.auth.currentUser) {
+            return { status: 'unavailable' };
+        }
+
+        try {
+            const result = await this.functionsService.call<void, unknown>('getUpcomingRenewalAmount');
+            return this.normalizeUpcomingRenewalAmountResult(result.data);
+        } catch (error) {
+            this.logger.warn('Could not fetch upcoming renewal amount. Falling back to unavailable state.', error);
+            return { status: 'unavailable' };
+        }
+    }
+
+    private normalizeUpcomingRenewalAmountResult(raw: unknown): UpcomingRenewalAmountResult {
+        if (!raw || typeof raw !== 'object') {
+            return { status: 'unavailable' };
+        }
+
+        const status = (raw as { status?: unknown }).status;
+        if (status === 'no_upcoming_charge') {
+            return { status: 'no_upcoming_charge' };
+        }
+
+        if (status === 'unavailable') {
+            return { status: 'unavailable' };
+        }
+
+        if (status !== 'ready') {
+            return { status: 'unavailable' };
+        }
+
+        const amountMinor = (raw as { amountMinor?: unknown }).amountMinor;
+        const currency = (raw as { currency?: unknown }).currency;
+        if (typeof amountMinor !== 'number' || !Number.isFinite(amountMinor) || typeof currency !== 'string' || !currency.trim()) {
+            return { status: 'unavailable' };
+        }
+
+        return {
+            status: 'ready',
+            amountMinor: Math.round(amountMinor),
+            currency: currency.toUpperCase(),
+        };
     }
 
     /**

@@ -159,6 +159,7 @@ export { aiInsights, getAiInsightsQuotaStatus } from './ai/insights/callable';
 export { ensureDerivedMetrics } from './derived-metrics/ensure-derived-metrics';
 export { onDashboardDerivedMetricsEventWrite } from './derived-metrics/derived-metrics.trigger';
 export { restoreUserClaims, linkExistingStripeCustomer } from './stripe/claims';
+export { getUpcomingRenewalAmount } from './stripe/get-upcoming-renewal-amount';
 export { onSubscriptionUpdated } from './stripe/subscriptions';
 export { enforceSubscriptionLimits } from './schedule/enforce-subscription-limits';
 export { checkSubscriptionNotifications } from './schedule/notifications';

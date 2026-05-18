@@ -9,10 +9,16 @@
 
   @if (currentRole === 'pro' || currentRole === 'basic') {
   <div class="manage-subscription-container">
-    <mat-card class="product-card" [class.pro-card]="currentRole === 'pro'" [class.basic-card]="currentRole === 'basic'">
+    <mat-card class="product-card subscription-card qs-glass-card-panel" [class.pro-card]="currentRole === 'pro'" [class.basic-card]="currentRole === 'basic'">
       <div class="manage-header">
         <div class="manage-heading">
-          <div class="manage-title">{{ currentRole === 'pro' ? 'Pro Membership' : 'Basic Membership' }}</div>
+          <div class="manage-kicker">Membership overview</div>
+          <div class="manage-title">
+            {{ currentRole === 'pro' ? 'Pro Membership' : 'Basic Membership' }}
+            @if (subscriptionSummary$ | async; as summary) {
+            <span class="manage-title-cadence">{{ summary.billingCadenceDisplay }}</span>
+            }
+          </div>
           <div class="manage-subtitle">{{ currentRole === 'pro' ? 'Full access plan' : 'Essential access plan' }}</div>
         </div>
         @if (subscriptionSummary$ | async; as summary) {
@@ -28,15 +34,24 @@
       </div>
       <mat-card-content class="manage-content">
         @if (currentRole === 'pro') {
-        <p class="manage-description">Your Pro membership does more than unlock features. It helps fund faster updates and keeps Quantified Self a strong alternative to big-tech platforms.</p>
+        <div class="manage-description">
+          <p class="manage-description-main">Your Pro membership does more than unlock features. It helps fund faster updates and keeps Quantified Self a strong alternative to big-tech platforms.</p>
+          <p class="manage-description-help">Use the billing portal to change your payment method, update your plan, or cancel anytime.</p>
+        </div>
         } @else {
-        <p class="manage-description">Your Basic membership gives you room to upload and check your analysis while supporting independent, privacy-first development.</p>
+        <div class="manage-description">
+          <p class="manage-description-main">Your Basic membership gives you room to upload and check your analysis while supporting independent, privacy-first development.</p>
+          <p class="manage-description-help">Need more headroom? You can upgrade to Pro instantly from this page or in the billing portal.</p>
+        </div>
         }
 
         @if (subscriptionSummary$ | async; as summary) {
         <div class="subscription-meta-grid">
           <div class="meta-item">
-            <div class="meta-label">{{ summary.cancelAtPeriodEnd ? 'Ends on' : 'Renews on' }}</div>
+            <div class="meta-label">
+              <mat-icon>event</mat-icon>
+              {{ summary.cancelAtPeriodEnd ? 'Ends on' : 'Renews on' }}
+            </div>
             <div class="meta-value">
               @if (summary.currentPeriodEnd) {
               {{ summary.currentPeriodEnd | date:'mediumDate' }}
@@ -46,8 +61,19 @@
             </div>
           </div>
           <div class="meta-item">
-            <div class="meta-label">Cancellation</div>
+            <div class="meta-label">
+              <mat-icon>sync_alt</mat-icon>
+              Cancellation
+            </div>
             <div class="meta-value">{{ summary.cancelAtPeriodEnd ? 'Will end at period end' : 'Renews automatically' }}</div>
+          </div>
+          <div class="meta-item meta-item-highlight">
+            <div class="meta-label">
+              <mat-icon>payments</mat-icon>
+              Next renewal
+            </div>
+            <div class="meta-value">{{ summary.renewalAmountDisplay }}</div>
+            <div class="meta-helper">Based on your Stripe billing setup.</div>
           </div>
         </div>
         } @else {
@@ -55,26 +81,22 @@
         }
 
         <div class="price-section manage-actions">
+          <p class="manage-actions-help">Manage billing securely to update your payment method, invoices, and subscription status.</p>
+          <p class="manage-switch-hint">Switch between Basic and Pro, and change monthly or yearly billing from the billing portal.</p>
           @if (currentRole === 'basic') {
-          <p class="upgrade-hint">Unlock unlimited activities and watch auto-sync with Pro.</p>
-          <div class="manage-actions-buttons">
-            <button mat-stroked-button (click)="manageSubscription()" [disabled]="isLoading">
-              Manage Billing
-            </button>
-            <button mat-flat-button class="qs-mat-primary" (click)="upgradeToPro()" [disabled]="isLoading">
-              @if (isLoading) {
-              <mat-spinner diameter="20"></mat-spinner>
-              } @else {
-              Upgrade to Pro
-              }
-            </button>
-          </div>
+          <button mat-flat-button class="qs-mat-primary" (click)="changePlanAndBilling()" [disabled]="isLoading">
+            @if (isLoading) {
+            <mat-spinner diameter="20"></mat-spinner>
+            } @else {
+            Manage & Change Plan
+            }
+          </button>
           } @else {
           <button mat-flat-button class="qs-mat-primary" (click)="manageSubscription()" [disabled]="isLoading">
             @if (isLoading) {
             <mat-spinner diameter="20"></mat-spinner>
             } @else {
-            Manage Subscription
+            Manage & Change Plan
             }
           </button>
           }
@@ -119,17 +141,21 @@
             <li><mat-icon style="color: grey">check</mat-icon> {{ getActivityLimitLabel(product.metadata['role']) }}</li>
             <li><mat-icon style="color: grey">check</mat-icon> Manual uploads</li>
             <li><mat-icon style="color: grey">check</mat-icon> Core analysis tools</li>
+            <li><mat-icon style="color: grey">check</mat-icon> {{ getAiInsightsLimitLabel(product.metadata['role']) }}</li>
           </ul>
           } @else if (product.metadata['role'] === 'basic') {
           <ul>
             <li><mat-icon class="qs-color-accent">check</mat-icon> {{ getActivityLimitLabel(product.metadata['role']) }}</li>
             <li><mat-icon class="qs-color-accent">check</mat-icon> Manual uploads</li>
+            <li><mat-icon class="qs-color-accent">check</mat-icon> {{ getAiInsightsLimitLabel(product.metadata['role']) }}</li>
             <li><mat-icon class="qs-color-primary">favorite</mat-icon> Supports independent, privacy-first development</li>
           </ul>
           } @else if (product.metadata['role'] === 'pro') {
           <ul>
             <li><mat-icon class="qs-color-primary">check_circle</mat-icon> {{ getActivityLimitLabel(product.metadata['role']) }}</li>
             <li><mat-icon class="qs-color-primary">check_circle</mat-icon> Auto-sync from your watch</li>
+            <li><mat-icon class="qs-color-primary">check_circle</mat-icon> Cross-device sync</li>
+            <li><mat-icon class="qs-color-primary">check_circle</mat-icon> {{ getAiInsightsLimitLabel(product.metadata['role']) }}</li>
             <li><mat-icon class="qs-color-warn">favorite</mat-icon> Helps fund faster feature releases</li>
           </ul>
           }
@@ -138,19 +164,25 @@
 
         <div class="card-spacer"></div>
         <!-- Since we split into virtual products, each product has exactly 1 price usually -->
-        <div *ngFor="let price of product.prices" class="price-section">
+        <div *ngFor="let price of product.prices; let isFirst = first" class="price-section plan-price-section">
+          @let trialDays = getEligibleTrialDays(product, price);
+          @let yearlySavingsLabel = getYearlySavingsLabel(product, price);
           <h3 class="price">
             @if (price.unit_amount === 0) {
             $0
             } @else {
             {{ (price.unit_amount || 0) / 100 | currency: price.currency.toUpperCase() : 'symbol' : ((price.unit_amount || 0) % 100 === 0 ? '1.0-0' : '1.2-2') }}
             }
-            <span *ngIf="price.recurring" class="interval">/ {{ price.recurring?.interval }}</span>
+            <span *ngIf="price.type === 'recurring'" class="interval">/ {{ getPriceIntervalLabel(price) }}</span>
           </h3>
 
-          @if (shouldShowFirstMonthFreeCopy(product, price)) {
+          @if (yearlySavingsLabel) {
+          <p class="yearly-savings-label">{{ yearlySavingsLabel }}</p>
+          }
+
+          @if (trialDays !== null) {
           <p class="trial-offer-copy">
-            Start with confidence: your first month is free for new members. Applied automatically at checkout.
+            {{ trialDays }}-day free trial for new members. No card needed.
           </p>
           }
 
@@ -175,6 +207,14 @@
           @if (currentRole) {
           <!-- Paid user looking at free -->
           <button mat-stroked-button disabled>Included</button>
+          } @else if (shouldShowOnboardingFreeContinue(product) && isFirst) {
+          <button mat-stroked-button type="button" class="continue-free-button" (click)="selectFreeTier()" [disabled]="isLoading">
+            @if (isLoading) {
+            <mat-spinner diameter="20"></mat-spinner>
+            } @else {
+            Continue for Free
+            }
+          </button>
           } @else if (!shouldShowOnboardingFreeContinue(product)) {
           <!-- New User (Role is null) choosing Free -->
           <button mat-stroked-button (click)="selectFreeTier()" [disabled]="isLoading">
@@ -188,25 +228,18 @@
             @if (loadingPriceId === price.id) {
             <mat-spinner diameter="20"></mat-spinner>
             } @else {
-            {{ price.recurring ? 'Choose ' + (product.metadata['role'] | titlecase) : 'Buy Now' }}
+            {{ getSubscribeButtonLabel(price) }}
             }
           </button>
+          @if (shouldShowYearlySwitchHint(product, price)) {
+          <p class="trial-cta-note">
+            Switch to yearly anytime.
+          </p>
+          }
           }
           }
 
         </div>
-
-        @if (shouldShowOnboardingFreeContinue(product)) {
-        <div class="price-section">
-          <button mat-stroked-button type="button" class="continue-free-button" (click)="selectFreeTier()" [disabled]="isLoading">
-            @if (isLoading) {
-            <mat-spinner diameter="20"></mat-spinner>
-            } @else {
-            Continue for Free
-            }
-          </button>
-        </div>
-        }
       </mat-card-content>
     </mat-card>
     }

@@ -13,22 +13,26 @@ import { AppUserService } from '../../services/app.user.service';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { Auth } from 'app/firebase/auth';
 import { LoggerService } from '../../services/logger.service';
-import { Observable, firstValueFrom, map, take } from 'rxjs';
+import { BehaviorSubject, Observable, Subscription, firstValueFrom, map, take } from 'rxjs';
 import { StripeRole } from '../../models/stripe-role.model';
 import { Router } from '@angular/router';
+import { User } from '@sports-alliance/sports-lib';
+import { UpcomingRenewalAmountResult } from '@shared/stripe-renewal';
 
 import { environment } from '../../../environments/environment';
 
 import { MatDialog } from '@angular/material/dialog';
 import { ConfirmationDialogComponent } from '../confirmation-dialog/confirmation-dialog.component';
 import { POLICY_CONTENT } from '../../shared/policies.content';
-import { getUsageLimitForRole } from '@shared/limits';
+import { getAiInsightsRequestLimitForRole, getUsageLimitForRole } from '@shared/limits';
 
 interface SubscriptionSummary {
     status: StripeSubscription['status'];
     cancelAtPeriodEnd: boolean;
     currentPeriodEnd: Date | null;
     isTrialing: boolean;
+    billingCadenceDisplay: string;
+    renewalAmountDisplay: string;
 }
 
 @Component({
@@ -40,6 +44,7 @@ interface SubscriptionSummary {
 })
 export class PricingComponent implements OnInit, OnDestroy {
     @Input() isOnboarding = false;
+    @Input() onboardingUser: User | null = null;
     @Output() planSelected = new EventEmitter<void>();
     @Output() loadingStateChange = new EventEmitter<boolean>();
 
@@ -48,9 +53,12 @@ export class PricingComponent implements OnInit, OnDestroy {
     isLoading = false;
     loadingPriceId: string | null = null;
     activeSubscriptions$: Observable<StripeSubscription[]> | null = null;
-    subscriptionSummary$: Observable<SubscriptionSummary | null> | null = null;
+    private readonly subscriptionSummarySubject = new BehaviorSubject<SubscriptionSummary | null>(null);
+    subscriptionSummary$: Observable<SubscriptionSummary | null> = this.subscriptionSummarySubject.asObservable();
     hasPaidSubscriptionHistory: boolean | null = null;
     private readonly requiredPolicies = POLICY_CONTENT.filter((policy) => !!policy.checkboxLabel && !policy.isOptional);
+    private subscriptionsListener: Subscription | null = null;
+    private renewalSummarySequence = 0;
 
     private platformId = inject(PLATFORM_ID);
     private authService = inject(AppAuthService);
@@ -92,7 +100,7 @@ export class PricingComponent implements OnInit, OnDestroy {
         };
 
         this.products$ = this.paymentService.getProducts().pipe(
-            map(products => [freeProduct, ...products])
+            map((products) => [freeProduct, ...products])
         );
 
         // Initial load
@@ -123,9 +131,10 @@ export class PricingComponent implements OnInit, OnDestroy {
         );
 
         this.activeSubscriptions$ = subscriptions$;
-        this.subscriptionSummary$ = subscriptions$.pipe(
-            map(subs => this.buildSubscriptionSummary(subs))
-        );
+        this.subscriptionsListener?.unsubscribe();
+        this.subscriptionsListener = subscriptions$.subscribe((subs) => {
+            void this.refreshSubscriptionSummary(subs);
+        });
 
         // Reset loading state if user returns to the tab (e.g. from Stripe Checkout via back button)
         if (isPlatformBrowser(this.platformId)) {
@@ -134,6 +143,8 @@ export class PricingComponent implements OnInit, OnDestroy {
     }
 
     ngOnDestroy() {
+        this.renewalSummarySequence++;
+        this.subscriptionsListener?.unsubscribe();
         if (isPlatformBrowser(this.platformId)) {
             document.removeEventListener('visibilitychange', this.handleVisibilityChange);
         }
@@ -152,21 +163,216 @@ export class PricingComponent implements OnInit, OnDestroy {
         this.loadingStateChange.emit(isLoading);
     }
 
-    shouldShowFirstMonthFreeCopy(product: StripeProduct, price: StripePrice): boolean {
-        if (this.hasPaidSubscriptionHistory !== false) {
-            return false;
+    private isYearlyRecurringPrice(price: StripePrice): boolean {
+        const cadence = this.getRecurringCadence(price);
+        return cadence?.interval === 'year';
+    }
+
+    getSubscribeButtonLabel(price: StripePrice): string {
+        if (price.type !== 'recurring') {
+            return 'Buy Now';
         }
 
+        const cadence = this.getRecurringCadence(price);
+        if (!cadence) {
+            return 'Choose Plan';
+        }
+
+        if (cadence.intervalCount === 1) {
+            if (cadence.interval === 'year') {
+                return 'Choose Yearly';
+            }
+            if (cadence.interval === 'month') {
+                return 'Choose Monthly';
+            }
+            if (cadence.interval === 'week') {
+                return 'Choose Weekly';
+            }
+            return 'Choose Daily';
+        }
+
+        const intervalUnit = this.getIntervalUnit(cadence.interval, cadence.intervalCount);
+        return `Choose Every ${cadence.intervalCount} ${this.capitalize(intervalUnit)}`;
+    }
+
+    getPriceIntervalLabel(price: StripePrice): string {
+        const recurringInterval = (price.recurring?.interval as string | undefined) ?? null;
+        if (recurringInterval === 'forever') {
+            return 'forever';
+        }
+
+        const cadence = this.getRecurringCadence(price);
+        if (!cadence) {
+            return 'billing period';
+        }
+
+        if (cadence.intervalCount === 1) {
+            return cadence.interval;
+        }
+
+        return `${cadence.intervalCount} ${this.getIntervalUnit(cadence.interval, cadence.intervalCount)}`;
+    }
+
+    getYearlySavingsLabel(product: StripeProduct, price: StripePrice): string | null {
+        if (!this.isYearlyRecurringPrice(price)) {
+            return null;
+        }
+
+        const yearlyAnnualizedAmount = this.getAnnualizedAmount(price);
+        if (yearlyAnnualizedAmount === null) {
+            return null;
+        }
+
+        const monthlyCandidates = (product.prices ?? []).filter((candidatePrice) => {
+            if (candidatePrice.id === price.id || candidatePrice.type !== 'recurring') {
+                return false;
+            }
+
+            const candidateInterval = candidatePrice.recurring?.interval ?? candidatePrice.interval;
+            if (candidateInterval !== 'month') {
+                return false;
+            }
+
+            if (candidatePrice.currency?.toLowerCase() !== price.currency?.toLowerCase()) {
+                return false;
+            }
+
+            return this.getAnnualizedAmount(candidatePrice) !== null;
+        });
+        const monthlyPrice = monthlyCandidates.find((candidatePrice) => this.getRecurringIntervalCount(candidatePrice) === 1)
+            ?? monthlyCandidates[0];
+        const monthlyAnnualizedAmount = monthlyPrice ? this.getAnnualizedAmount(monthlyPrice) : null;
+
+        if (monthlyAnnualizedAmount === null) {
+            return null;
+        }
+
+        const savingsMinor = monthlyAnnualizedAmount - yearlyAnnualizedAmount;
+        if (savingsMinor <= 0) {
+            return null;
+        }
+
+        const savingsPercent = Math.round((savingsMinor / monthlyAnnualizedAmount) * 100);
+        if (savingsPercent <= 0) {
+            return null;
+        }
+
+        return `Save ${savingsPercent}% vs monthly`;
+    }
+
+    private getAnnualizedAmount(price: StripePrice): number | null {
+        if (typeof price.unit_amount !== 'number' || price.unit_amount <= 0) {
+            return null;
+        }
+
+        const cadence = this.getRecurringCadence(price);
+        if (!cadence) {
+            return null;
+        }
+
+        if (cadence.interval === 'month') {
+            return price.unit_amount * (12 / cadence.intervalCount);
+        }
+
+        if (cadence.interval === 'year') {
+            return price.unit_amount / cadence.intervalCount;
+        }
+
+        return null;
+    }
+
+    private getRecurringCadence(price: StripePrice): { interval: 'day' | 'week' | 'month' | 'year'; intervalCount: number } | null {
+        if (price.type !== 'recurring') {
+            return null;
+        }
+
+        const interval = this.normalizeRecurringInterval(price.recurring?.interval) ?? this.normalizeRecurringInterval(price.interval);
+        const intervalCount = this.getRecurringIntervalCount(price);
+        if (!interval || !intervalCount) {
+            return null;
+        }
+
+        return { interval, intervalCount };
+    }
+
+    private getRecurringIntervalCount(price: StripePrice): number | null {
+        const intervalCount = price.recurring?.interval_count ?? price.interval_count ?? 1;
+        if (!Number.isInteger(intervalCount) || intervalCount <= 0) {
+            return null;
+        }
+        return intervalCount;
+    }
+
+    private getIntervalUnit(interval: 'day' | 'week' | 'month' | 'year', intervalCount: number): string {
+        const plural = intervalCount === 1 ? '' : 's';
+        return `${interval}${plural}`;
+    }
+
+    private capitalize(value: string): string {
+        return value.length > 0 ? value[0].toUpperCase() + value.slice(1) : value;
+    }
+
+    private normalizeRecurringInterval(interval: string | null | undefined): 'day' | 'week' | 'month' | 'year' | null {
+        if (interval === 'day' || interval === 'week' || interval === 'month' || interval === 'year') {
+            return interval;
+        }
+        return null;
+    }
+
+    shouldShowYearlySwitchHint(product: StripeProduct, price: StripePrice): boolean {
         const role = product.metadata?.['role'];
         if (role !== 'basic' && role !== 'pro') {
             return false;
         }
 
-        if (!price.recurring) {
+        if (price.type !== 'recurring') {
             return false;
         }
 
-        return !this.currentRole || this.currentRole === 'free';
+        const cadence = this.getRecurringCadence(price);
+        if (!cadence || cadence.interval !== 'month') {
+            return false;
+        }
+
+        return (product.prices ?? []).some((candidatePrice) => this.isYearlyRecurringPrice(candidatePrice));
+    }
+
+    shouldShowFirstMonthFreeCopy(product: StripeProduct, price: StripePrice): boolean {
+        return this.getEligibleTrialDays(product, price) !== null;
+    }
+
+    getEligibleTrialDays(product: StripeProduct, price: StripePrice): number | null {
+        if (this.hasPaidSubscriptionHistory !== false) {
+            return null;
+        }
+
+        const role = product.metadata?.['role'];
+        if (role !== 'basic' && role !== 'pro') {
+            return null;
+        }
+
+        if (!price.recurring) {
+            return null;
+        }
+
+        if (!!this.currentRole && this.currentRole !== 'free') {
+            return null;
+        }
+
+        return this.resolveMetadataTrialDays(price.metadata?.trial_days);
+    }
+
+    private resolveMetadataTrialDays(metadataTrialDays: string | undefined): number | null {
+        if (typeof metadataTrialDays !== 'string') {
+            return null;
+        }
+
+        const normalizedTrialDays = metadataTrialDays.trim();
+        if (!/^[1-9]\d*$/.test(normalizedTrialDays)) {
+            return null;
+        }
+
+        return Number.parseInt(normalizedTrialDays, 10);
     }
 
     shouldShowOnboardingFreeContinue(product: StripeProduct): boolean {
@@ -187,6 +393,24 @@ export class PricingComponent implements OnInit, OnDestroy {
         } catch (error) {
             this.logger.error(`Unsupported pricing role '${resolvedRole}' in pricing UI`, error);
             return 'Activity limits unavailable';
+        }
+    }
+
+    getAiInsightsLimitLabel(role: string | null | undefined): string {
+        const resolvedRole = role ?? 'free';
+
+        try {
+            const limit = getAiInsightsRequestLimitForRole(resolvedRole);
+            if (limit <= 0) {
+                return 'AI Insights not included';
+            }
+            if (resolvedRole === 'free') {
+                return `AI Insights up to ${limit} requests per calendar month`;
+            }
+            return `AI Insights up to ${limit} requests per billing period`;
+        } catch (error) {
+            this.logger.error(`Unsupported pricing role '${resolvedRole}' in AI insights pricing UI`, error);
+            return 'AI Insights limits unavailable';
         }
     }
 
@@ -247,8 +471,8 @@ export class PricingComponent implements OnInit, OnDestroy {
             const isPro = this.currentRole === 'pro';
             const message = `You will be redirected to our secure billing portal where you can manage your plan and payment methods.<br><br>` +
                 `<span style="color: var(--mat-sys-error); font-weight: bold;">Important:</span> If you decide to downgrade your plan, you will keep your features for a 30-day grace period. ` +
-                (isPro ? `After that, your device sync will be disconnected, and any activities exceeding your new plan's limit will be permanently deleted.` :
-                    `After that, any activities exceeding your new plan's limit will be permanently deleted.`);
+                (isPro ? `After that, your device sync will be disconnected, and your new plan limits will apply to future uploads. Existing activities are not automatically deleted.` :
+                    `After that, your new plan limits will apply to future uploads. Existing activities are not automatically deleted.`);
 
             const confirmed = await firstValueFrom(
                 this.dialog.open(ConfirmationDialogComponent, {
@@ -276,18 +500,22 @@ export class PricingComponent implements OnInit, OnDestroy {
         }
     }
 
-    async upgradeToPro() {
-        if (this.currentRole !== 'basic') {
+    async changePlanAndBilling() {
+        if (this.currentRole !== 'basic' && this.currentRole !== 'pro') {
             await this.manageSubscription();
             return;
         }
 
+        const changeDescription = this.currentRole === 'basic'
+            ? 'switch from Basic to Pro, keep Basic, and choose monthly or yearly billing'
+            : 'switch between Pro and Basic and choose monthly or yearly billing';
+
         const confirmed = await firstValueFrom(
             this.dialog.open(ConfirmationDialogComponent, {
                 data: {
-                    title: 'Upgrade to Pro',
-                    message: 'You will be redirected to our secure billing portal to switch from Basic to Pro.',
-                    confirmText: 'Upgrade to Pro',
+                    title: 'Change Plan & Billing',
+                    message: `You will be redirected to our secure billing portal where you can ${changeDescription}.`,
+                    confirmText: 'Open Billing Portal',
                     cancelText: 'Cancel'
                 }
             }).afterClosed()
@@ -302,7 +530,7 @@ export class PricingComponent implements OnInit, OnDestroy {
         try {
             await this.paymentService.manageSubscriptions();
         } catch (error) {
-            this.logger.error('Error redirecting to upgrade flow:', error);
+            this.logger.error('Error redirecting to plan/billing change flow:', error);
             alert('Failed to open billing portal. Please try again.');
             this.setLoadingState(false);
         }
@@ -387,6 +615,10 @@ export class PricingComponent implements OnInit, OnDestroy {
             return null;
         }
 
+        if (this.isOnboarding && this.onboardingUser?.uid) {
+            return user;
+        }
+
         const termsAccepted = this.requiredPolicies.every((policy) => {
             const userProperty = this.mapFormControlNameToUserProperty(policy.formControlName || '');
             return (user as any)[userProperty] === true;
@@ -407,6 +639,10 @@ export class PricingComponent implements OnInit, OnDestroy {
     }
 
     private async getCurrentAppUser() {
+        if (this.isOnboarding && this.onboardingUser?.uid) {
+            return this.onboardingUser as any;
+        }
+
         const user = await firstValueFrom(this.authService.user$.pipe(take(1)));
         return user;
     }
@@ -418,28 +654,203 @@ export class PricingComponent implements OnInit, OnDestroy {
         return formControlName.replace(/^accept/, 'accepted');
     }
 
-    private buildSubscriptionSummary(subscriptions: StripeSubscription[]): SubscriptionSummary | null {
+    private buildBaseSubscriptionSummary(
+        subscriptions: StripeSubscription[]
+    ): Omit<SubscriptionSummary, 'renewalAmountDisplay'> | null {
         if (!subscriptions.length) {
             return null;
         }
 
-        const withPeriodEnd = subscriptions.map(sub => ({
+        const withSortKeys = subscriptions.map(sub => ({
             sub,
+            createdAt: this.normalizeToDate(sub.created),
             periodEnd: this.normalizeToDate(sub.current_period_end)
         }));
 
-        const primary = withPeriodEnd.sort((a, b) => {
-            const aTime = a.periodEnd ? a.periodEnd.getTime() : 0;
-            const bTime = b.periodEnd ? b.periodEnd.getTime() : 0;
-            return bTime - aTime;
+        const primary = withSortKeys.sort((a, b) => {
+            const aCreated = a.createdAt ? a.createdAt.getTime() : Number.NEGATIVE_INFINITY;
+            const bCreated = b.createdAt ? b.createdAt.getTime() : Number.NEGATIVE_INFINITY;
+            if (aCreated !== bCreated) {
+                return bCreated - aCreated;
+            }
+
+            const aPeriodEnd = a.periodEnd ? a.periodEnd.getTime() : 0;
+            const bPeriodEnd = b.periodEnd ? b.periodEnd.getTime() : 0;
+            if (aPeriodEnd !== bPeriodEnd) {
+                return bPeriodEnd - aPeriodEnd;
+            }
+
+            return b.sub.id.localeCompare(a.sub.id);
         })[0];
 
         return {
             status: primary.sub.status,
             cancelAtPeriodEnd: !!primary.sub.cancel_at_period_end,
             currentPeriodEnd: primary.periodEnd,
-            isTrialing: primary.sub.status === 'trialing'
+            isTrialing: primary.sub.status === 'trialing',
+            billingCadenceDisplay: this.getSubscriptionBillingCadenceDisplay(primary.sub)
         };
+    }
+
+    private async refreshSubscriptionSummary(subscriptions: StripeSubscription[]): Promise<void> {
+        const requestId = ++this.renewalSummarySequence;
+        const baseSummary = this.buildBaseSubscriptionSummary(subscriptions);
+        if (!baseSummary) {
+            this.subscriptionSummarySubject.next(null);
+            return;
+        }
+
+        this.subscriptionSummarySubject.next({
+            ...baseSummary,
+            renewalAmountDisplay: 'Calculating…'
+        });
+
+        const renewalAmountResult = await this.paymentService.getUpcomingRenewalAmount();
+        if (requestId !== this.renewalSummarySequence) {
+            return;
+        }
+
+        this.subscriptionSummarySubject.next({
+            ...baseSummary,
+            renewalAmountDisplay: this.mapRenewalAmountDisplay(renewalAmountResult)
+        });
+    }
+
+    private mapRenewalAmountDisplay(result: UpcomingRenewalAmountResult): string {
+        if (result.status === 'ready') {
+            return this.formatCurrencyFromMinor(result.amountMinor, result.currency);
+        }
+
+        if (result.status === 'no_upcoming_charge') {
+            return 'No upcoming charge';
+        }
+
+        return 'Amount unavailable';
+    }
+
+    private formatCurrencyFromMinor(amountMinor: number, currencyCode: string): string {
+        const amountMajor = amountMinor / 100;
+        const hasNoCents = amountMinor % 100 === 0;
+        const formatter = new Intl.NumberFormat(undefined, {
+            style: 'currency',
+            currency: currencyCode,
+            minimumFractionDigits: hasNoCents ? 0 : 2,
+            maximumFractionDigits: 2
+        });
+
+        return formatter.format(amountMajor);
+    }
+
+    private getSubscriptionBillingCadenceDisplay(subscription: StripeSubscription): string {
+        const cadence = this.resolveSubscriptionCadence(subscription);
+        if (!cadence) {
+            return 'Not available';
+        }
+
+        if (cadence.intervalCount === 1) {
+            if (cadence.interval === 'month') {
+                return 'Monthly';
+            }
+            if (cadence.interval === 'year') {
+                return 'Yearly';
+            }
+            if (cadence.interval === 'week') {
+                return 'Weekly';
+            }
+            return 'Daily';
+        }
+
+        return `Every ${cadence.intervalCount} ${this.getIntervalUnit(cadence.interval, cadence.intervalCount)}`;
+    }
+
+    private resolveSubscriptionCadence(subscription: StripeSubscription): { interval: 'day' | 'week' | 'month' | 'year'; intervalCount: number } | null {
+        const topLevelPriceCadence = this.extractCadenceFromPriceLike((subscription as { price?: unknown }).price);
+        if (topLevelPriceCadence) {
+            return topLevelPriceCadence;
+        }
+
+        const topLevelPrices = (subscription as { prices?: unknown }).prices;
+        if (Array.isArray(topLevelPrices)) {
+            for (const candidatePrice of topLevelPrices) {
+                const cadence = this.extractCadenceFromPriceLike(candidatePrice);
+                if (cadence) {
+                    return cadence;
+                }
+            }
+        }
+
+        const subscriptionItems = this.getSubscriptionItems(subscription);
+        for (const item of subscriptionItems) {
+            if (!item || typeof item !== 'object') {
+                continue;
+            }
+
+            const itemObject = item as { price?: unknown; plan?: unknown };
+            const priceCadence = this.extractCadenceFromPriceLike(itemObject.price);
+            if (priceCadence) {
+                return priceCadence;
+            }
+
+            const legacyPlanCadence = this.extractCadenceFromPriceLike(itemObject.plan);
+            if (legacyPlanCadence) {
+                return legacyPlanCadence;
+            }
+        }
+
+        return null;
+    }
+
+    private getSubscriptionItems(subscription: StripeSubscription): unknown[] {
+        const rawItems = (subscription as { items?: unknown }).items;
+        if (!rawItems) {
+            return [];
+        }
+
+        if (Array.isArray(rawItems)) {
+            return rawItems;
+        }
+
+        if (typeof rawItems === 'object') {
+            const listItems = (rawItems as { data?: unknown }).data;
+            if (Array.isArray(listItems)) {
+                return listItems;
+            }
+        }
+
+        return [];
+    }
+
+    private extractCadenceFromPriceLike(priceLike: unknown): { interval: 'day' | 'week' | 'month' | 'year'; intervalCount: number } | null {
+        if (!priceLike || typeof priceLike !== 'object') {
+            return null;
+        }
+
+        const recurringSource = (priceLike as { recurring?: { interval?: unknown; interval_count?: unknown } }).recurring;
+        const rawInterval = recurringSource?.interval ?? (priceLike as { interval?: unknown }).interval;
+        const interval = this.normalizeRecurringInterval(typeof rawInterval === 'string' ? rawInterval : null);
+        if (!interval) {
+            return null;
+        }
+
+        const rawIntervalCount = recurringSource?.interval_count ?? (priceLike as { interval_count?: unknown }).interval_count ?? 1;
+        const intervalCount = this.normalizePositiveInteger(rawIntervalCount);
+        if (!intervalCount) {
+            return null;
+        }
+
+        return { interval, intervalCount };
+    }
+
+    private normalizePositiveInteger(value: unknown): number | null {
+        if (typeof value === 'number') {
+            return Number.isInteger(value) && value > 0 ? value : null;
+        }
+
+        if (typeof value === 'string' && /^[1-9]\d*$/.test(value)) {
+            return Number.parseInt(value, 10);
+        }
+
+        return null;
     }
 
     private normalizeToDate(value: unknown): Date | null {

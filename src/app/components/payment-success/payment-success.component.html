@@ -1,0 +1,60 @@
+<div class="container">
+  <mat-card appearance="outlined" class="success-card qs-glass-card-panel">
+    <mat-card-header>
+      <mat-card-title>Payment Successful!</mat-card-title>
+    </mat-card-header>
+
+    <mat-card-content>
+      <div class="content-wrapper">
+        @if (isRefreshing) {
+          <div class="loader-container">
+            <mat-spinner diameter="60"></mat-spinner>
+            <p>Activating your subscription...</p>
+          </div>
+        } @else {
+          <div class="checkmark-wrapper">
+            <svg class="checkmark" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 52 52">
+              <circle class="checkmark__circle" cx="26" cy="26" r="25" fill="none" />
+              <path class="checkmark__check" fill="none" d="M14.1 27.2l7.1 7.2 16.7-16.8" />
+            </svg>
+          </div>
+
+          @switch (assignedRole) {
+            @case ('pro') {
+              <h2 class="welcome-text">Welcome to Pro!</h2>
+              <p class="description">
+                Thank you for your purchase. Your subscription is now active.
+                You now have full access to all pro features and performance analytics.
+              </p>
+            }
+            @case ('basic') {
+              <h2 class="welcome-text">Welcome to Basic!</h2>
+              <p class="description">
+                Thank you for your purchase. Your plan is now active.
+                You have access to core features of the platform.
+              </p>
+            }
+            @case ('free') {
+              <h2 class="welcome-text">Welcome!</h2>
+              <p class="description">
+                Your account setup is complete. You are currently on the free plan.
+              </p>
+            }
+            @default {
+              <h2 class="welcome-text">Purchase Successful!</h2>
+              <p class="description">
+                Thank you for your purchase. Your account has been updated.
+              </p>
+            }
+          }
+        }
+      </div>
+    </mat-card-content>
+
+    <mat-card-actions>
+      <button mat-flat-button class="qs-mat-primary" routerLink="/dashboard" [disabled]="isRefreshing">
+        Go to Dashboard
+      </button>
+    </mat-card-actions>
+  </mat-card>
+</div>
