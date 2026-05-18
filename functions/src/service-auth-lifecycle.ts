@@ -105,6 +105,20 @@ export class ServiceTokenCleanupError extends Error {
   }
 }
 
+export class ServiceConnectionCleanupError extends Error {
+  public readonly name = 'ServiceConnectionCleanupError';
+
+  constructor(
+    public readonly userID: string,
+    public readonly serviceName: ServiceNames,
+    public readonly reason: ServiceAuthCleanupReason,
+    public readonly cleanupOutcome: ServiceAuthCleanupOutcome,
+    public readonly originalErrors: readonly unknown[],
+  ) {
+    super(`Failed to fully clean up ${serviceName} connection for user ${userID}`);
+  }
+}
+
 interface ServiceAuthCleanupPolicy {
   attemptPartnerDeauthorize: boolean;
   clearConnectionStateWhenNoTokensRemain: boolean;
@@ -593,6 +607,10 @@ export async function cleanupServiceConnectionForUser(
       await fallbackRecursiveDeleteTokenRoot(userID, serviceName, outcome);
       knownNoTokensRemain = true;
     }
+  }
+
+  if (reason === SERVICE_AUTH_CLEANUP_REASONS.UserDisconnect && outcome.localCleanupStatus === 'partial') {
+    throw new ServiceConnectionCleanupError(userID, serviceName, reason, outcome, cleanupErrors);
   }
 
   await applyPostCleanupConnectionState(userID, serviceName, reason, outcome, knownNoTokensRemain);

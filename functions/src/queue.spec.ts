@@ -1068,7 +1068,7 @@ describe('queue', () => {
             }));
         });
 
-        it('should still move to DLQ when a terminal auth failure is mixed with retryable token failures', async () => {
+        it('should retry when a terminal auth failure is mixed with retryable token failures', async () => {
             const admin = await import('firebase-admin');
             vi.spyOn(admin.firestore().collectionGroup('tokens'), 'get').mockResolvedValueOnce({
                 size: 2,
@@ -1109,13 +1109,14 @@ describe('queue', () => {
 
             const result = await parseWorkoutQueueItemForServiceName(ServiceNames.SuuntoApp, suuntoQueueItem);
 
-            expect(result).toBe(QueueResult.MovedToDLQ);
-            expect(mockBatch.set).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
-                context: 'INVALID_GRANT',
-                originalCollection: 'suuntoAppWorkoutQueue',
-            }));
-            expect(mockRef.update).not.toHaveBeenCalledWith(expect.objectContaining({
-                retryCount: expect.any(Number),
+            expect(result).toBe(QueueResult.RetryIncremented);
+            expect(mockBatch.set).not.toHaveBeenCalled();
+            expect(mockBatch.delete).not.toHaveBeenCalledWith(mockRef);
+            expect(mockRef.update).toHaveBeenCalledWith(expect.objectContaining({
+                retryCount: 1,
+                errors: expect.arrayContaining([
+                    expect.objectContaining({ error: 'temporary provider failure' }),
+                ]),
             }));
         });
 

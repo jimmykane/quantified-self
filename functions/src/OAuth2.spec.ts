@@ -356,6 +356,16 @@ describe('OAuth2', () => {
             expect(mockRecursiveDelete).toHaveBeenCalled(); // For user doc cleanup
         });
 
+        it('should fail explicit disconnect when local token cleanup fails', async () => {
+            mockDelete.mockRejectedValueOnce(new Error('firestore delete failed'));
+
+            await expect(deauthorizeServiceForUser(userID, serviceName)).rejects.toThrow(
+                'Failed to fully clean up suuntoApp connection for user test-user-id',
+            );
+
+            expect(clearServiceConnectionState).not.toHaveBeenCalled();
+        });
+
         it('should make correct Suunto API call for deauthorization', async () => {
             await deauthorizeServiceForUser(userID, serviceName);
 
@@ -981,7 +991,7 @@ describe('OAuth2', () => {
             expect(mockDelete).toHaveBeenCalled();
         });
 
-        it('should handle delete token failure gracefully', async () => {
+        it('should fail explicit disconnect when deleting the local token fails', async () => {
             const mockTokenDoc = {
                 id: 'token-doc-id',
                 ref: { delete: mockDelete },
@@ -1003,9 +1013,8 @@ describe('OAuth2', () => {
             // Simulate delete failure
             mockDelete.mockRejectedValue(new Error('Delete failed'));
 
-            // Should not throw
             await expect(deauthorizeServiceForUser(userID, ServiceNames.SuuntoApp))
-                .resolves.not.toThrow();
+                .rejects.toThrow('Failed to fully clean up suuntoApp connection for user test-user-id');
         });
     });
 

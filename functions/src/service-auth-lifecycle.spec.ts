@@ -19,6 +19,7 @@ const {
   };
 
   const tokenCollectionRef = {
+    get: vi.fn(),
     limit: vi.fn(),
   };
 
@@ -81,6 +82,7 @@ vi.mock('./auth/factory', () => ({
 }));
 
 import {
+  cleanupServiceConnectionForUser,
   cleanupServiceTokenById,
   handleTerminalServiceAuthFailure,
   SERVICE_AUTH_CLEANUP_REASONS,
@@ -90,6 +92,10 @@ describe('service-auth-lifecycle terminal auth handling', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockDeleteLocalServiceToken.mockReset();
+    tokenCollectionRef.get.mockReset();
+    tokenCollectionRef.limit.mockReset().mockReturnValue({
+      get: vi.fn().mockResolvedValue({ empty: false }),
+    });
   });
 
   it('returns a retry resolution when a newer token snapshot already replaced the failing one', async () => {
@@ -241,5 +247,51 @@ describe('service-auth-lifecycle terminal auth handling', () => {
         deletedTokenCount: 0,
       }),
     });
+  });
+
+  it('throws when user disconnect local cleanup is partial', async () => {
+    tokenCollectionRef.get.mockResolvedValueOnce({
+      empty: false,
+      size: 1,
+      docs: [
+        {
+          id: 'garmin-token-id',
+          data: () => ({
+            serviceName: ServiceNames.GarminAPI,
+            accessToken: 'access-token',
+            refreshToken: 'refresh-token',
+            expiresAt: Date.now() + 60_000,
+          }),
+        },
+      ],
+    });
+    mockDeleteLocalServiceToken.mockRejectedValueOnce(new Error('firestore delete failed'));
+
+    await expect(
+      cleanupServiceConnectionForUser(
+        'firebase-user-123',
+        ServiceNames.GarminAPI,
+        SERVICE_AUTH_CLEANUP_REASONS.UserDisconnect,
+        {
+          tokenResolver: async () => ({
+            serviceName: ServiceNames.GarminAPI,
+            accessToken: 'access-token',
+            refreshToken: 'refresh-token',
+            expiresAt: Date.now() + 60_000,
+          } as any),
+        },
+      ),
+    ).rejects.toMatchObject({
+      name: 'ServiceConnectionCleanupError',
+      userID: 'firebase-user-123',
+      serviceName: ServiceNames.GarminAPI,
+      reason: SERVICE_AUTH_CLEANUP_REASONS.UserDisconnect,
+      cleanupOutcome: expect.objectContaining({
+        localCleanupStatus: 'partial',
+        connectionStateUpdate: 'unchanged',
+      }),
+    });
+
+    expect(mockClearServiceConnectionState).not.toHaveBeenCalled();
   });
 });
