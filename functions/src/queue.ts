@@ -295,7 +295,6 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
   let retryIncrement = 1;
   let lastError = new Error(QueueErrors.ALL_TOKENS_FAILED);
   let terminalAuthError: TerminalServiceAuthError | null = null;
-  let sawRetryableFailure = false;
 
   for (const tokenQueryDocumentSnapshot of tokenQuerySnapshots.docs) {
     let serviceToken;
@@ -311,7 +310,6 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
       const statusCode = e.statusCode || (e.output && e.output.statusCode);
       const errorDescription = e.message || (e.error && (e.error.error_description || e.error.error));
       const isTransientError = statusCode === 500 || statusCode === 502 || (statusCode === 406 && String(errorDescription).toLowerCase().includes('json compatible'));
-      sawRetryableFailure = true;
       lastError = e instanceof Error ? e : new Error(`${e}`);
 
       if (isTransientError) {
@@ -363,7 +361,6 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
             terminalAuthError = selectPreferredTerminalAuthError(terminalAuthError, retryError);
             continue;
           }
-          sawRetryableFailure = true;
           lastError = retryError instanceof Error ? retryError : new Error(`${retryError}`);
           logger.error(new Error(`Could not get workout for ${queueItem.id} even after force refresh: ${retryError.message}`));
           // Continue to next token
@@ -374,23 +371,19 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
         logger.error(new Error(`Could not get workout for ${queueItem.id} due to 403, increasing retry by 20`));
         retryIncrement = 20;
         lastError = e;
-        sawRetryableFailure = true;
         continue;
       } else if (e.statusCode === 500) {
         logger.warn(`Partner service internal error (500) for ${queueItem.id}, will retry soon.`);
         retryIncrement = 1;
         lastError = e;
-        sawRetryableFailure = true;
         continue;
       } else if (e.statusCode === 502) {
         logger.warn(`Partner service unavailable (502) for ${queueItem.id}, will retry soon.`);
         retryIncrement = 1;
         lastError = e;
-        sawRetryableFailure = true;
         continue;
       } else {
         logger.error(new Error(`Could not get workout for ${queueItem.id}. Trying to refresh token and update retry count from ${queueItem.retryCount} to ${queueItem.retryCount + 1} -> ${e.message}`));
-        sawRetryableFailure = true;
         lastError = e instanceof Error ? e : new Error(`${e}`);
         continue;
       }
@@ -461,7 +454,6 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
       }
 
       logger.error(new Error(`Could not save event for ${queueItem.id} trying to update retry count from ${queueItem.retryCount} and token user ${serviceToken.openId || serviceToken.userName} to ${queueItem.retryCount + 1} due to ${e.message}`));
-      sawRetryableFailure = true;
       lastError = e instanceof Error ? e : new Error(`${e}`);
       continue;
     }

@@ -7,7 +7,6 @@ import {
 import {
   getServiceOAuth2CodeRedirectAndSaveStateToUser,
   getAndSetServiceOAuth2AccessTokenForUser,
-  deauthorizeServiceForUser,
   disconnectServiceForUser,
   validateOAuth2State
 } from '../../OAuth2';

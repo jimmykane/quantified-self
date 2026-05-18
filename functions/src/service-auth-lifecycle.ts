@@ -65,7 +65,7 @@ export type TerminalServiceAuthFailureResolution =
   }
   | {
     kind: 'retry_with_latest_snapshot';
-    latestSnapshot: QueryDocumentSnapshot;
+    latestSnapshot: DocumentSnapshot;
   };
 
 export class TerminalServiceAuthError extends Error {
@@ -289,7 +289,7 @@ async function fallbackRecursiveDeleteTokenRoot(
 }
 
 interface DeleteCurrentTerminalAuthTokenResult {
-  latestSnapshot: QueryDocumentSnapshot | null;
+  latestSnapshot: DocumentSnapshot | null;
   remainingTokenCount: number;
   skippedBecauseTokenChanged: boolean;
   tokenRootDeleted: boolean;
@@ -324,7 +324,7 @@ async function deleteCurrentTerminalAuthToken(
     if (expectedUpdateTime && currentTokenSnapshot.updateTime
       && currentTokenSnapshot.updateTime.toMillis() !== expectedUpdateTime.toMillis()) {
       return {
-        latestSnapshot: currentTokenSnapshot as QueryDocumentSnapshot,
+        latestSnapshot: currentTokenSnapshot,
         remainingTokenCount: 1,
         skippedBecauseTokenChanged: true,
         tokenRootDeleted: false,
@@ -343,7 +343,7 @@ async function deleteCurrentTerminalAuthToken(
     }
 
     return {
-      latestSnapshot: currentTokenSnapshot as QueryDocumentSnapshot,
+      latestSnapshot: currentTokenSnapshot,
       remainingTokenCount,
       skippedBecauseTokenChanged: false,
       tokenRootDeleted: remainingTokenCount === 0,
@@ -383,11 +383,11 @@ export async function cleanupServiceTokenById(
 }
 
 async function cleanupTerminalAuthToken(
-  tokenSnapshot: QueryDocumentSnapshot,
+  tokenSnapshot: DocumentSnapshot,
   serviceName: ServiceNames,
   terminalAuthFailure: TerminalAuthFailureInput,
 ): Promise<{
-  latestSnapshot: QueryDocumentSnapshot | null;
+  latestSnapshot: DocumentSnapshot | null;
   outcome: ServiceAuthCleanupOutcome;
   skippedBecauseTokenChanged: boolean;
 }> {
@@ -602,7 +602,7 @@ function resolveProviderUserId(
 }
 
 export async function handleTerminalServiceAuthFailure(
-  doc: QueryDocumentSnapshot,
+  doc: DocumentSnapshot,
   serviceName: ServiceNames,
   serviceTokenData: Auth2ServiceTokenInterface,
   failure: RefreshFailureDetails,
@@ -645,7 +645,7 @@ export async function handleTerminalServiceAuthFailure(
   }
 
   let cleanupOutcome: ServiceAuthCleanupOutcome;
-  let latestSnapshot: QueryDocumentSnapshot | null = null;
+  let latestSnapshot: DocumentSnapshot | null = null;
   try {
     const cleanupResult = await cleanupTerminalAuthToken(
       doc,

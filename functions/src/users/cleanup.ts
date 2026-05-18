@@ -91,7 +91,7 @@ async function archiveRemainingTokens(collectionName: string, uid: string, servi
 // Define cleanup configuration for services
 interface ServiceCleanupConfig {
     name: string;
-    deauthFn: (uid: string) => Promise<void>;
+    deauthFn: (uid: string) => Promise<unknown>;
     collectionName: string;
     serviceName: ServiceNames;
 }
