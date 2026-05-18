@@ -47,10 +47,6 @@ const EMAIL_TESTS: EmailTestConfig[] = [
         data: { role: 'pro', expiration_date: 'December 31, 2025', free_limit: '100' }
     },
     {
-        templateName: 'grace_period_ending',
-        data: { expiration_date: 'January 30, 2026', free_limit: '100' }
-    },
-    {
         templateName: 'development_update',
         data: { first_name: 'Alex', last_name: 'Example', free_limit: '100', basic_limit: '1000' }
     }
