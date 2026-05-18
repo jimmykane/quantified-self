@@ -15,6 +15,7 @@ import { ServiceNames } from '@sports-alliance/sports-lib';
 import { getSize } from '@sports-alliance/sports-lib';
 import { AppFunctionsService } from '../../../services/app.functions.service';
 
+const MAX_ACTIVITY_UPLOAD_TO_SERVICE_BYTES = 20 * 1024 * 1024;
 
 @Component({
   selector: 'app-upload-activity-to-service',
@@ -60,8 +61,8 @@ export class UploadActivitiesToServiceComponent extends UploadAbstractDirective 
         }
         const idToken = await getIdToken(this.auth.currentUser, true);
         try {
-          if (getSize(fileReader.result) > 10485760) {
-            throw new Error('Cannot upload activity because the size is greater than 10MB');
+          if (getSize(fileReader.result) > MAX_ACTIVITY_UPLOAD_TO_SERVICE_BYTES) {
+            throw new Error('Cannot upload activity because the size is greater than 20MB');
           }
 
           // Convert ArrayBuffer to Base64

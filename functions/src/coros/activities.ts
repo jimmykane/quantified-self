@@ -16,6 +16,7 @@ const COROS_UPLOAD_SUCCESS_CODE = '0000';
 const COROS_UPLOAD_DUPLICATE_CODE = '5082';
 const COROS_AUTH_ERROR_CODES = new Set(['5006', '5010', '30009']);
 const COROS_INVALID_ARGUMENT_CODES = new Set(['1008', '1031', '5096']);
+const MAX_ACTIVITY_UPLOAD_BYTES = 20 * 1024 * 1024;
 
 function getCOROSBaseUrl(): string {
   return USE_STAGING ? STAGING_URL : PRODUCTION_URL;
@@ -269,6 +270,10 @@ export const importActivityToCOROSAPI = onCall({
   const fileBuffer = Buffer.from(base64File, 'base64');
   if (fileBuffer.length === 0) {
     throw new HttpsError('invalid-argument', 'File content is empty');
+  }
+
+  if (fileBuffer.length > MAX_ACTIVITY_UPLOAD_BYTES) {
+    throw new HttpsError('invalid-argument', 'Cannot upload activity because the size is greater than 20MB');
   }
 
   return uploadActivityFileToCOROS(userID, fileBuffer);
