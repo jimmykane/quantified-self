@@ -1,13 +1,27 @@
 import * as admin from 'firebase-admin';
+import * as logger from 'firebase-functions/logger';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import {
   isReconnectRequiredServiceConnection,
   ServiceConnectionMetaFields,
   SERVICE_CONNECTION_STATES,
 } from '../../shared/service-connection';
+import { getUserDeletionGuardState } from './shared/user-deletion-guard';
 
 function serviceMetaRef(userID: string, serviceName: ServiceNames): admin.firestore.DocumentReference {
   return admin.firestore().collection('users').doc(userID).collection('meta').doc(serviceName);
+}
+
+async function shouldSkipServiceMetaWrite(userID: string, serviceName: ServiceNames): Promise<boolean> {
+  const deletionGuard = await getUserDeletionGuardState(admin.firestore(), userID);
+  if (!deletionGuard.shouldSkip) {
+    return false;
+  }
+
+  logger.warn(
+    `[ServiceConnectionMeta] Skipping ${serviceName} meta write for user ${userID} because the user is missing or deletion is in progress.`,
+  );
+  return true;
 }
 
 export async function markServiceReconnectRequired(
@@ -17,6 +31,9 @@ export async function markServiceReconnectRequired(
   failureMessage: string | null | undefined,
   nowMs = Date.now(),
 ): Promise<void> {
+  if (await shouldSkipServiceMetaWrite(userID, serviceName)) {
+    return;
+  }
   await serviceMetaRef(userID, serviceName).set({
     connectionState: SERVICE_CONNECTION_STATES.ReconnectRequired,
     lastAuthFailureCode: failureCode || null,
@@ -26,6 +43,9 @@ export async function markServiceReconnectRequired(
 }
 
 export async function markServiceConnected(userID: string, serviceName: ServiceNames): Promise<void> {
+  if (await shouldSkipServiceMetaWrite(userID, serviceName)) {
+    return;
+  }
   await serviceMetaRef(userID, serviceName).set({
     connectionState: SERVICE_CONNECTION_STATES.Connected,
     lastAuthFailureCode: admin.firestore.FieldValue.delete(),
@@ -35,6 +55,9 @@ export async function markServiceConnected(userID: string, serviceName: ServiceN
 }
 
 export async function clearServiceConnectionState(userID: string, serviceName: ServiceNames): Promise<void> {
+  if (await shouldSkipServiceMetaWrite(userID, serviceName)) {
+    return;
+  }
   await serviceMetaRef(userID, serviceName).set({
     connectionState: admin.firestore.FieldValue.delete(),
     lastAuthFailureCode: admin.firestore.FieldValue.delete(),

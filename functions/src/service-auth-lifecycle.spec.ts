@@ -6,6 +6,7 @@ const {
   mockClearServiceConnectionState,
   mockRunTransaction,
   mockRecursiveDelete,
+  mockDeleteLocalServiceToken,
   tokenRef,
   tokenCollectionRef,
   tokenRootRef,
@@ -36,6 +37,7 @@ const {
     mockClearServiceConnectionState: vi.fn().mockResolvedValue(undefined),
     mockRunTransaction: vi.fn(),
     mockRecursiveDelete: vi.fn().mockResolvedValue(undefined),
+    mockDeleteLocalServiceToken: vi.fn(),
     tokenRef,
     tokenCollectionRef,
     tokenRootRef,
@@ -66,7 +68,7 @@ vi.mock('./service-connection-meta', () => ({
 }));
 
 vi.mock('./service-token-store', () => ({
-  deleteLocalServiceToken: vi.fn(),
+  deleteLocalServiceToken: mockDeleteLocalServiceToken,
   getServiceTokenCollectionRef: vi.fn(() => tokenCollectionRef),
   getServiceTokenRootDocumentRef: vi.fn(() => tokenRootRef),
 }));
@@ -78,11 +80,16 @@ vi.mock('./auth/factory', () => ({
   })),
 }));
 
-import { handleTerminalServiceAuthFailure } from './service-auth-lifecycle';
+import {
+  cleanupServiceTokenById,
+  handleTerminalServiceAuthFailure,
+  SERVICE_AUTH_CLEANUP_REASONS,
+} from './service-auth-lifecycle';
 
 describe('service-auth-lifecycle terminal auth handling', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockDeleteLocalServiceToken.mockReset();
   });
 
   it('returns a retry resolution when a newer token snapshot already replaced the failing one', async () => {
@@ -211,6 +218,28 @@ describe('service-auth-lifecycle terminal auth handling', () => {
       connectionStateUpdate: 'reconnect_required',
       tokenCount: 1,
       preservedTokenCount: 0,
+    });
+  });
+
+  it('throws a cleanup error when targeted local token deletion fails', async () => {
+    mockDeleteLocalServiceToken.mockRejectedValueOnce(new Error('firestore delete failed'));
+
+    await expect(
+      cleanupServiceTokenById(
+        'firebase-user-123',
+        ServiceNames.GarminAPI,
+        'garmin-token-id',
+        SERVICE_AUTH_CLEANUP_REASONS.PartnerDisconnect,
+      ),
+    ).rejects.toMatchObject({
+      name: 'ServiceTokenCleanupError',
+      userID: 'firebase-user-123',
+      serviceName: ServiceNames.GarminAPI,
+      tokenID: 'garmin-token-id',
+      cleanupOutcome: expect.objectContaining({
+        localCleanupStatus: 'partial',
+        deletedTokenCount: 0,
+      }),
     });
   });
 });

@@ -1205,6 +1205,29 @@ describe('OAuth2', () => {
             expect(mockDelete).toHaveBeenCalled();
         });
 
+        it('should propagate duplicate cleanup failure when local token deletion fails', async () => {
+            const docWithOtherUser = {
+                id: 'token-id-other-user',
+                ref: {
+                    parent: {
+                        parent: { id: otherUserID },
+                    },
+                },
+                data: () => ({ serviceName: ServiceNames.SuuntoApp }),
+            };
+
+            mockGet.mockResolvedValue({
+                empty: false,
+                docs: [docWithOtherUser],
+                data: () => ({}),
+            } as any);
+            mockDelete.mockRejectedValueOnce(new Error('firestore delete failed'));
+
+            await expect(
+                removeDuplicateConnections(currentUserID, ServiceNames.SuuntoApp, externalUserId),
+            ).rejects.toThrow('Failed to delete local suuntoApp token token-id-other-user for user other-user-id');
+        });
+
         it('should query openId field for COROS', async () => {
             mockGet.mockResolvedValue({ docs: [] });
 

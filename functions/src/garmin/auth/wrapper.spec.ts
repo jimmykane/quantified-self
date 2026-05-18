@@ -58,6 +58,12 @@ vi.mock('firebase-functions/v1', async () => {
     };
 });
 
+vi.mock('firebase-functions/logger', () => ({
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+}));
+
 vi.mock('../../utils', () => ({
     isCorsAllowed: vi.fn(),
     setAccessControlHeadersOnResponse: vi.fn().mockImplementation((req, res) => res),
@@ -91,6 +97,7 @@ import {
 } from './wrapper';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import * as serviceAuthLifecycle from '../../service-auth-lifecycle';
+import * as logger from 'firebase-functions/logger';
 
 describe('Garmin Auth Wrapper', () => {
     let context: any;
@@ -241,6 +248,45 @@ describe('Garmin Auth Wrapper', () => {
             );
             expect(OAuth2.deauthorizeServiceForUser).not.toHaveBeenCalled();
 
+            expect(res.status).toHaveBeenCalledWith(200);
+        });
+
+        it('should count lifecycle cleanup failures as failed deregistrations', async () => {
+            req.body = { deregistrations: [{ userId: 'garminUser123' }] };
+
+            const mockTokenDoc = {
+                id: 'tokenDoc123',
+                ref: {
+                    parent: {
+                        parent: {
+                            id: 'firebaseUserXYZ'
+                        }
+                    }
+                }
+            };
+
+            const mockQuerySnapshot = {
+                empty: false,
+                docs: [mockTokenDoc]
+            };
+
+            const mockWhere = vi.fn().mockReturnThis();
+            mockCollectionGroup.mockReturnValue({
+                where: mockWhere,
+                get: vi.fn().mockResolvedValue(mockQuerySnapshot)
+            });
+            mockWhere.mockReturnValue({ where: mockWhere, get: vi.fn().mockResolvedValue(mockQuerySnapshot) });
+            vi.mocked(serviceAuthLifecycle.cleanupServiceTokenById).mockRejectedValueOnce(new Error('delete failed'));
+
+            await receiveGarminAPIDeregistration(req, res);
+
+            expect(logger.error).toHaveBeenCalledWith(
+                'Failed to process deregistration for Firebase User firebaseUserXYZ (Garmin ID: garminUser123)',
+                expect.any(Error),
+            );
+            expect(logger.info).toHaveBeenCalledWith(
+                'Garmin deregistration batch complete. Summary: 0 processed, 1 failed, 0 skipped/not found.',
+            );
             expect(res.status).toHaveBeenCalledWith(200);
         });
 

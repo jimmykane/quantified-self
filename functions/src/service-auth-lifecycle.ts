@@ -91,6 +91,20 @@ export class TerminalServiceAuthError extends Error {
   }
 }
 
+export class ServiceTokenCleanupError extends Error {
+  public readonly name = 'ServiceTokenCleanupError';
+
+  constructor(
+    public readonly userID: string,
+    public readonly serviceName: ServiceNames,
+    public readonly tokenID: string,
+    public readonly cleanupOutcome: ServiceAuthCleanupOutcome,
+    public readonly originalError: unknown,
+  ) {
+    super(`Failed to delete local ${serviceName} token ${tokenID} for user ${userID}`);
+  }
+}
+
 interface ServiceAuthCleanupPolicy {
   attemptPartnerDeauthorize: boolean;
   clearConnectionStateWhenNoTokensRemain: boolean;
@@ -377,6 +391,7 @@ export async function cleanupServiceTokenById(
   } catch (error) {
     logger.error(`Failed to delete token ${tokenID} for ${serviceName} user ${userID}`, error);
     outcome.localCleanupStatus = 'partial';
+    throw new ServiceTokenCleanupError(userID, serviceName, tokenID, outcome, error);
   }
 
   return outcome;
