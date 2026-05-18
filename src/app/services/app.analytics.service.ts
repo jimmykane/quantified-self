@@ -8,17 +8,6 @@ import { ACTIVITY_SYNC_ROUTES, ActivitySyncRouteId } from '@shared/activity-sync
 
 import { environment } from '../../environments/environment';
 
-type PurchaseMode = 'payment' | 'subscription';
-
-export interface PurchaseAnalyticsParams {
-    transactionId: string;
-    role?: string | null;
-    mode?: PurchaseMode;
-    priceId?: string;
-    currency?: string;
-    value?: number;
-}
-
 @Injectable({ providedIn: 'root' })
 export class AppAnalyticsService {
     private analytics = inject(Analytics, { optional: true });
@@ -60,52 +49,6 @@ export class AppAnalyticsService {
                 this.logger.warn('Analytics logEvent error:', error);
             }
         }
-    }
-
-    logPurchase(params: PurchaseAnalyticsParams): void {
-        const transactionId = params.transactionId.trim();
-        if (!transactionId) {
-            return;
-        }
-
-        const eventParams: Record<string, any> = {
-            transaction_id: transactionId,
-            items: [this.buildPurchaseItem(params)]
-        };
-
-        if (params.currency) {
-            eventParams.currency = params.currency.toUpperCase();
-        }
-
-        if (this.isFiniteNumber(params.value)) {
-            eventParams.value = params.value;
-        }
-
-        this.logEvent('purchase', eventParams);
-    }
-
-    private buildPurchaseItem(params: PurchaseAnalyticsParams): Record<string, any> {
-        const role = typeof params.role === 'string' && params.role.trim() ? params.role.trim() : null;
-        const item: Record<string, any> = {
-            item_id: params.priceId || role || params.transactionId,
-            item_name: role ? `${role} subscription` : 'Subscription',
-            item_category: params.mode || 'subscription',
-            quantity: 1
-        };
-
-        if (role) {
-            item.item_variant = role;
-        }
-
-        if (this.isFiniteNumber(params.value)) {
-            item.price = params.value;
-        }
-
-        return item;
-    }
-
-    private isFiniteNumber(value: unknown): value is number {
-        return typeof value === 'number' && Number.isFinite(value);
     }
 
     // ─────────────────────────────────────────────────────────────────────────────

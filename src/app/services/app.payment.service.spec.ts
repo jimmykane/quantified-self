@@ -136,7 +136,7 @@ describe('AppPaymentService', () => {
     });
 
     describe('appendCheckoutSession', () => {
-        it('should add subscription checkout metadata and if_required payment collection when mode is subscription', async () => {
+        it('should add metadata.firebaseUID to the session payload and subscription_data when mode is subscription', async () => {
             const priceId = 'price_123';
             // Force mode to be subscription for this test by passing a price object with recurring type
             // or just rely on the string -> mode logic.
@@ -159,16 +159,15 @@ describe('AppPaymentService', () => {
             expect(payload.metadata).toEqual({
                 firebaseUID: 'test_user_uid'
             });
-            expect(payload.success_url).toBe('http://localhost:4200/payment/success?session_id={CHECKOUT_SESSION_ID}&checkout_mode=subscription');
 
             // CHECK 2: Automatic Tax
             expect(payload.automatic_tax).toEqual({ enabled: true });
-            expect(payload.payment_method_collection).toBe('if_required');
 
-            // CHECK 3: Extension-compatible trial field remains top-level
-            expect(payload.subscription_data).toBeUndefined();
-            expect(payload.trial_period_days).toBeUndefined();
-            expect(payload).not.toHaveProperty('payment_method_types');
+            // CHECK 3: Subscription data metadata
+            expect(payload.subscription_data).toBeDefined();
+            expect(payload.subscription_data.metadata).toEqual({
+                firebaseUID: 'test_user_uid'
+            });
         });
 
         it('should add metadata.firebaseUID to the session payload but NOT subscription_data when mode is payment', async () => {
@@ -194,54 +193,47 @@ describe('AppPaymentService', () => {
             expect(payload.metadata).toEqual({
                 firebaseUID: 'test_user_uid'
             });
-            expect(payload.success_url).toBe('http://localhost:4200/payment/success?session_id={CHECKOUT_SESSION_ID}&checkout_mode=payment');
 
             // CHECK 2: Automatic Tax
             expect(payload.automatic_tax).toEqual({ enabled: true });
 
             // CHECK 3: Subscription data must NOT be present
             expect(payload.subscription_data).toBeUndefined();
-            expect(payload.payment_method_collection).toBeUndefined();
-            expect(payload).not.toHaveProperty('payment_method_types');
         });
 
-        it('should set trial_period_days for eligible first-time recurring checkout', async () => {
-            const recurringPriceWithTrial = {
-                id: 'price_recurring_trial',
+        it('should set promotion_code and disable manual promotion codes when price metadata contains a valid promotion code ID', async () => {
+            const recurringPriceWithPromo = {
+                id: 'price_recurring_promo',
                 type: 'recurring',
                 active: true,
                 currency: 'usd',
                 unit_amount: 1000,
-                description: 'Monthly with trial',
-                trial_period_days: null,
+                description: 'Monthly with promo',
                 metadata: {
-                    trial_days: '14'
+                    promotion_code_id: 'promo_123456789'
                 }
             } as any;
 
-            await service.appendCheckoutSession(recurringPriceWithTrial);
+            await service.appendCheckoutSession(recurringPriceWithPromo);
 
             expect(mockAddDoc).toHaveBeenCalled();
             const args = mockAddDoc.mock.calls[0];
             const payload = args[1];
 
-            expect(payload.trial_period_days).toBe(14);
-            expect(payload.promotion_code).toBeUndefined();
-            expect(payload.allow_promotion_codes).toBe(true);
-            expect(mockGetDocs).toHaveBeenCalledTimes(1);
+            expect(payload.promotion_code).toBe('promo_123456789');
+            expect(payload.allow_promotion_codes).toBe(false);
         });
 
-        it('should not set trial_period_days when user has paid subscription history', async () => {
-            const recurringPriceWithTrial = {
-                id: 'price_recurring_trial_history',
+        it('should not set promotion_code when user has paid subscription history', async () => {
+            const recurringPriceWithPromo = {
+                id: 'price_recurring_promo_history',
                 type: 'recurring',
                 active: true,
                 currency: 'usd',
                 unit_amount: 1000,
-                description: 'Monthly with trial for returning customer',
-                trial_period_days: null,
+                description: 'Monthly with promo for returning customer',
                 metadata: {
-                    trial_days: '14'
+                    promotion_code_id: 'promo_123456789'
                 }
             } as any;
 
@@ -249,92 +241,81 @@ describe('AppPaymentService', () => {
                 docs: [{ id: 'sub_existing' }]
             });
 
-            await service.appendCheckoutSession(recurringPriceWithTrial);
+            await service.appendCheckoutSession(recurringPriceWithPromo);
 
             expect(mockAddDoc).toHaveBeenCalled();
             const args = mockAddDoc.mock.calls[0];
             const payload = args[1];
 
-            expect(payload.trial_period_days).toBeUndefined();
             expect(payload.promotion_code).toBeUndefined();
             expect(payload.allow_promotion_codes).toBe(true);
         });
 
-        it('should not set trial_period_days when history lookup fails during checkout gating (fail-closed)', async () => {
-            const recurringPriceWithTrial = {
-                id: 'price_recurring_trial_history_error',
+        it('should ignore non-ID promotion code metadata and keep manual promotion codes enabled', async () => {
+            const recurringPriceWithInvalidPromo = {
+                id: 'price_recurring_invalid_promo',
                 type: 'recurring',
                 active: true,
                 currency: 'usd',
                 unit_amount: 1000,
-                description: 'Monthly with trial when history lookup fails',
-                trial_period_days: null,
+                description: 'Monthly with invalid promo',
                 metadata: {
-                    trial_days: '14'
+                    promotion_code_id: 'SAVE10'
                 }
             } as any;
 
-            mockGetDocs.mockRejectedValueOnce(new Error('Firestore unavailable'));
-
-            await service.appendCheckoutSession(recurringPriceWithTrial);
+            await service.appendCheckoutSession(recurringPriceWithInvalidPromo);
 
             expect(mockAddDoc).toHaveBeenCalled();
             const args = mockAddDoc.mock.calls[0];
             const payload = args[1];
 
-            expect(payload.trial_period_days).toBeUndefined();
             expect(payload.promotion_code).toBeUndefined();
             expect(payload.allow_promotion_codes).toBe(true);
         });
 
-        it('should not set trial_period_days when recurring price has no valid trial days', async () => {
-            const recurringPriceWithoutTrial = {
-                id: 'price_recurring_no_trial',
+        it('should ignore legacy promotion code metadata keys and keep manual promotion codes enabled', async () => {
+            const recurringPriceWithLegacyPromoKey = {
+                id: 'price_recurring_legacy_promo',
                 type: 'recurring',
                 active: true,
                 currency: 'usd',
                 unit_amount: 1000,
-                description: 'Monthly without trial',
-                trial_period_days: null,
-                metadata: {}
-            } as any;
-
-            await service.appendCheckoutSession(recurringPriceWithoutTrial);
-
-            expect(mockAddDoc).toHaveBeenCalled();
-            const args = mockAddDoc.mock.calls[0];
-            const payload = args[1];
-
-            expect(payload.trial_period_days).toBeUndefined();
-            expect(payload.promotion_code).toBeUndefined();
-            expect(payload.allow_promotion_codes).toBe(true);
-            expect(mockGetDocs).not.toHaveBeenCalled();
-        });
-
-        it('should not set trial_period_days when metadata.trial_days is invalid', async () => {
-            const recurringPriceWithInvalidTrialMetadata = {
-                id: 'price_recurring_invalid_trial_metadata',
-                type: 'recurring',
-                active: true,
-                currency: 'usd',
-                unit_amount: 1000,
-                description: 'Monthly with invalid metadata trial value',
-                trial_period_days: null,
+                description: 'Monthly with legacy promo key',
                 metadata: {
-                    trial_days: '30days'
+                    promotionCodeId: 'promo_111111111'
                 }
             } as any;
 
-            await service.appendCheckoutSession(recurringPriceWithInvalidTrialMetadata);
+            await service.appendCheckoutSession(recurringPriceWithLegacyPromoKey);
 
             expect(mockAddDoc).toHaveBeenCalled();
             const args = mockAddDoc.mock.calls[0];
             const payload = args[1];
 
-            expect(payload.trial_period_days).toBeUndefined();
             expect(payload.promotion_code).toBeUndefined();
             expect(payload.allow_promotion_codes).toBe(true);
-            expect(mockGetDocs).not.toHaveBeenCalled();
+        });
+
+        it('should apply promotion code from stripe_metadata_promotion_code_id fallback field', async () => {
+            const recurringPriceWithPrefixedPromo = {
+                id: 'price_recurring_prefixed_promo',
+                type: 'recurring',
+                active: true,
+                currency: 'usd',
+                unit_amount: 1000,
+                description: 'Monthly with prefixed promo metadata',
+                stripe_metadata_promotion_code_id: 'promo_987654321'
+            } as any;
+
+            await service.appendCheckoutSession(recurringPriceWithPrefixedPromo);
+
+            expect(mockAddDoc).toHaveBeenCalled();
+            const args = mockAddDoc.mock.calls[0];
+            const payload = args[1];
+
+            expect(payload.promotion_code).toBe('promo_987654321');
+            expect(payload.allow_promotion_codes).toBe(false);
         });
 
         it('should restore and short-circuit checkout when an existing subscription is linked', async () => {
@@ -403,72 +384,68 @@ describe('AppPaymentService', () => {
             alertSpy.mockRestore();
         });
 
-    });
+        it('should apply promotion code from Firestore price document metadata fallback', async () => {
+            const recurringPriceWithoutPromoMetadata = {
+                id: 'price_firestore_fallback',
+                product: 'prod_123',
+                type: 'recurring',
+                active: true,
+                currency: 'usd',
+                unit_amount: 1000,
+                description: 'Monthly without inline promo metadata',
+                metadata: {}
+            } as any;
 
-    describe('getUpcomingRenewalAmount', () => {
-        it('should call getUpcomingRenewalAmount callable and return ready state', async () => {
-            mockFunctionsService.call.mockResolvedValueOnce({
-                data: {
-                    status: 'ready',
-                    amountMinor: 2499,
-                    currency: 'eur'
-                }
+            mockGetDoc.mockResolvedValueOnce({
+                exists: () => true,
+                data: () => ({
+                    metadata: {
+                        promotion_code_id: 'promo_firestore_123'
+                    }
+                })
             });
 
-            const result = await service.getUpcomingRenewalAmount();
+            await service.appendCheckoutSession(recurringPriceWithoutPromoMetadata);
 
-            expect(mockFunctionsService.call).toHaveBeenCalledWith('getUpcomingRenewalAmount');
-            expect(result).toEqual({
-                status: 'ready',
-                amountMinor: 2499,
-                currency: 'EUR'
+            expect(mockAddDoc).toHaveBeenCalled();
+            const args = mockAddDoc.mock.calls[0];
+            const payload = args[1];
+            expect(payload.promotion_code).toBe('promo_firestore_123');
+            expect(payload.allow_promotion_codes).toBe(false);
+            expect(mockGetDocs).toHaveBeenCalledTimes(1);
+        });
+
+        it('should apply promotion code from active-product scan when product ID is not present on price object', async () => {
+            const recurringPriceWithoutProduct = {
+                id: 'price_firestore_scan_fallback',
+                type: 'recurring',
+                active: true,
+                currency: 'usd',
+                unit_amount: 1000,
+                description: 'Monthly without product',
+                metadata: {}
+            } as any;
+
+            mockGetDocs.mockResolvedValueOnce({
+                docs: [{ id: 'prod_from_scan' }]
             });
-        });
-
-        it('should return no_upcoming_charge state from callable result', async () => {
-            mockFunctionsService.call.mockResolvedValueOnce({
-                data: {
-                    status: 'no_upcoming_charge'
-                }
+            mockGetDoc.mockResolvedValueOnce({
+                exists: () => true,
+                data: () => ({
+                    stripe_metadata_promotion_code_id: 'promo_firestore_scan'
+                })
             });
 
-            const result = await service.getUpcomingRenewalAmount();
+            await service.appendCheckoutSession(recurringPriceWithoutProduct);
 
-            expect(result).toEqual({ status: 'no_upcoming_charge' });
-        });
-
-        it('should return unavailable for malformed callable result', async () => {
-            mockFunctionsService.call.mockResolvedValueOnce({
-                data: {
-                    status: 'ready',
-                    amountMinor: 'invalid',
-                    currency: 123
-                }
-            });
-
-            const result = await service.getUpcomingRenewalAmount();
-
-            expect(result).toEqual({ status: 'unavailable' });
-        });
-
-        it('should return unavailable when callable fails', async () => {
-            mockFunctionsService.call.mockRejectedValueOnce(new Error('network failed'));
-
-            const result = await service.getUpcomingRenewalAmount();
-
-            expect(result).toEqual({ status: 'unavailable' });
-        });
-
-        it('should return unavailable and skip callable when user is not authenticated', async () => {
-            mockAuth.currentUser = null;
-
-            const result = await service.getUpcomingRenewalAmount();
-
-            expect(result).toEqual({ status: 'unavailable' });
-            expect(mockFunctionsService.call).not.toHaveBeenCalled();
+            expect(mockAddDoc).toHaveBeenCalled();
+            const args = mockAddDoc.mock.calls[0];
+            const payload = args[1];
+            expect(payload.promotion_code).toBe('promo_firestore_scan');
+            expect(payload.allow_promotion_codes).toBe(false);
+            expect(mockGetDocs).toHaveBeenCalledTimes(2);
         });
     });
-
     describe('restorePurchases', () => {
         it('should return the role from the cloud function response', async () => {
             // Mock the callable function to return specific data
@@ -503,158 +480,12 @@ describe('AppPaymentService', () => {
             expect(mockLimit).toHaveBeenCalledWith(1);
         });
 
-        it('should return false when the history query fails (fail-open for trial messaging)', async () => {
+        it('should return true when the history query fails (fail-closed for trial messaging)', async () => {
             mockGetDocs.mockRejectedValueOnce(new Error('Firestore unavailable'));
 
             const hasHistory = await service.hasPaidSubscriptionHistory();
 
-            expect(hasHistory).toBe(false);
-        });
-    });
-
-    describe('transformProductsForPricing', () => {
-        it('should keep monthly and yearly recurring prices for role-split products', () => {
-            const result = (service as any).transformProductsForPricing([
-                {
-                    id: 'prod_role_split',
-                    metadata: {},
-                    prices: [
-                        {
-                            id: 'price_basic_monthly',
-                            type: 'recurring',
-                            interval: 'month',
-                            metadata: { firebaseRole: 'basic' }
-                        },
-                        {
-                            id: 'price_basic_yearly',
-                            type: 'recurring',
-                            interval: 'year',
-                            metadata: { firebaseRole: 'basic' }
-                        },
-                        {
-                            id: 'price_pro_monthly',
-                            type: 'recurring',
-                            interval: 'month',
-                            metadata: { firebaseRole: 'pro' }
-                        },
-                        {
-                            id: 'price_pro_yearly',
-                            type: 'recurring',
-                            interval: 'year',
-                            metadata: { firebaseRole: 'pro' }
-                        }
-                    ]
-                }
-            ]);
-
-            expect(result).toHaveLength(2);
-            expect(result[0].role).toBe('basic');
-            expect(result[0].prices).toEqual([
-                expect.objectContaining({ id: 'price_basic_monthly' }),
-                expect.objectContaining({ id: 'price_basic_yearly' })
-            ]);
-            expect(result[1].role).toBe('pro');
-            expect(result[1].prices).toEqual([
-                expect.objectContaining({ id: 'price_pro_monthly' }),
-                expect.objectContaining({ id: 'price_pro_yearly' })
-            ]);
-        });
-
-        it('should keep fallback products when they only have yearly prices', () => {
-            const result = (service as any).transformProductsForPricing([
-                {
-                    id: 'prod_legacy_yearly_only',
-                    metadata: { role: 'basic' },
-                    prices: [
-                        {
-                            id: 'price_yearly_only',
-                            type: 'recurring',
-                            interval: 'year',
-                            metadata: {}
-                        }
-                    ]
-                },
-                {
-                    id: 'prod_legacy_monthly',
-                    metadata: { role: 'pro' },
-                    prices: [
-                        {
-                            id: 'price_monthly_only',
-                            type: 'recurring',
-                            interval: 'month',
-                            metadata: {}
-                        }
-                    ]
-                }
-            ]);
-
-            expect(result).toHaveLength(2);
-            expect(result[0].id).toBe('prod_legacy_yearly_only');
-            expect(result[0].prices).toEqual([
-                expect.objectContaining({ id: 'price_yearly_only' })
-            ]);
-            expect(result[1].id).toBe('prod_legacy_monthly');
-            expect(result[1].prices).toEqual([
-                expect.objectContaining({ id: 'price_monthly_only' })
-            ]);
-        });
-
-        it('should merge same-role recurring prices across separate Stripe products into one pricing card', () => {
-            const result = (service as any).transformProductsForPricing([
-                {
-                    id: 'prod_basic_monthly',
-                    metadata: { role: 'basic' },
-                    prices: [
-                        {
-                            id: 'price_basic_monthly',
-                            type: 'recurring',
-                            interval: 'month',
-                            interval_count: 1,
-                            unit_amount: 99,
-                            metadata: {}
-                        }
-                    ]
-                },
-                {
-                    id: 'prod_basic_yearly',
-                    metadata: { role: 'basic' },
-                    prices: [
-                        {
-                            id: 'price_basic_yearly',
-                            type: 'recurring',
-                            interval: 'year',
-                            interval_count: 1,
-                            unit_amount: 1999,
-                            metadata: {}
-                        }
-                    ]
-                },
-                {
-                    id: 'prod_pro_monthly',
-                    metadata: { role: 'pro' },
-                    prices: [
-                        {
-                            id: 'price_pro_monthly',
-                            type: 'recurring',
-                            interval: 'month',
-                            interval_count: 1,
-                            unit_amount: 399,
-                            metadata: {}
-                        }
-                    ]
-                }
-            ]);
-
-            expect(result).toHaveLength(2);
-            expect(result[0].role).toBe('basic');
-            expect(result[0].prices).toEqual([
-                expect.objectContaining({ id: 'price_basic_monthly' }),
-                expect.objectContaining({ id: 'price_basic_yearly' })
-            ]);
-            expect(result[1].role).toBe('pro');
-            expect(result[1].prices).toEqual([
-                expect.objectContaining({ id: 'price_pro_monthly' })
-            ]);
+            expect(hasHistory).toBe(true);
         });
     });
 });

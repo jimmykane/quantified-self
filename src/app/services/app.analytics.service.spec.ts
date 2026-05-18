@@ -35,7 +35,6 @@ describe('AppAnalyticsService', () => {
 
     beforeEach(() => {
         vi.clearAllMocks();
-        localStorage.clear();
         userSubject = new BehaviorSubject<User | null>(null);
         mockAuthService = {
             user$: userSubject.asObservable()
@@ -59,7 +58,6 @@ describe('AppAnalyticsService', () => {
 
     afterEach(() => {
         userSubject.complete();
-        localStorage.clear();
         (environment as any).forceAnalyticsCollection = false;
     });
 
@@ -135,59 +133,6 @@ describe('AppAnalyticsService', () => {
             enabled: true,
             action: 'enable',
         });
-    });
-
-    it('should log the official GA4 purchase event with checkout metadata', () => {
-        userSubject.next({ acceptedTrackingPolicy: true } as User);
-
-        service.logPurchase({
-            transactionId: 'cs_test_123',
-            role: 'pro',
-            mode: 'subscription',
-            priceId: 'price_pro_monthly',
-            currency: 'eur',
-            value: 9.99,
-        });
-
-        expect(logEvent).toHaveBeenCalledTimes(1);
-        expect(logEvent).toHaveBeenCalledWith(expect.anything(), 'purchase', {
-            transaction_id: 'cs_test_123',
-            currency: 'EUR',
-            value: 9.99,
-            items: [{
-                item_id: 'price_pro_monthly',
-                item_name: 'pro subscription',
-                item_category: 'subscription',
-                item_variant: 'pro',
-                quantity: 1,
-                price: 9.99,
-            }]
-        });
-    });
-
-    it('should preserve payment mode for one-time checkout purchases', () => {
-        userSubject.next({ acceptedTrackingPolicy: true } as User);
-
-        service.logPurchase({ transactionId: 'cs_one_time_123', role: null, mode: 'payment' });
-
-        expect(logEvent).toHaveBeenCalledTimes(1);
-        expect(logEvent).toHaveBeenCalledWith(expect.anything(), 'purchase', {
-            transaction_id: 'cs_one_time_123',
-            items: [{
-                item_id: 'cs_one_time_123',
-                item_name: 'Subscription',
-                item_category: 'payment',
-                quantity: 1,
-            }]
-        });
-    });
-
-    it('should not log purchase when transaction id is empty', () => {
-        userSubject.next({ acceptedTrackingPolicy: true } as User);
-
-        service.logPurchase({ transactionId: '   ', role: 'pro', mode: 'subscription' });
-
-        expect(logEvent).not.toHaveBeenCalled();
     });
 
     it('should log summary metadata when running an activity sync route backfill', () => {

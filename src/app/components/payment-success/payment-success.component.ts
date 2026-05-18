@@ -3,10 +3,9 @@ import { CommonModule } from '@angular/common';
 import { MatCardModule } from '@angular/material/card';
 import { MatButtonModule } from '@angular/material/button';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
-import { ActivatedRoute, RouterModule } from '@angular/router';
+import { Router, RouterModule } from '@angular/router';
 import { Auth } from 'app/firebase/auth';
 import { LoggerService } from '../../services/logger.service';
-import { AppAnalyticsService } from '../../services/app.analytics.service';
 
 @Component({
   selector: 'app-payment-success',
@@ -180,9 +179,7 @@ import { AppAnalyticsService } from '../../services/app.analytics.service';
 })
 export class PaymentSuccessComponent implements OnInit {
   private auth = inject(Auth);
-  private route = inject(ActivatedRoute);
   private logger = inject(LoggerService);
-  private analyticsService = inject(AppAnalyticsService);
   isRefreshing = true;
   assignedRole: string | null = null;
 
@@ -196,21 +193,13 @@ export class PaymentSuccessComponent implements OnInit {
       return;
     }
 
-    const checkoutMode = this.resolveCheckoutMode();
-    if (checkoutMode === 'payment') {
-      this.logPurchaseAnalytics(null, checkoutMode);
-      this.logger.log('PaymentSuccess: Payment-mode checkout completed without waiting for stripeRole.');
-      this.isRefreshing = false;
-      return;
-    }
-
     const maxAttempts = 10;
     let attempt = 0;
-    let hasPaidClaim = false;
+    let hasPremiumClaim = false;
 
     this.logger.log('PaymentSuccess: Starting claim polling...');
 
-    while (!hasPaidClaim && attempt < maxAttempts) {
+    while (!hasPremiumClaim && attempt < maxAttempts) {
       attempt++;
       try {
         this.logger.log(`PaymentSuccess: Polling attempt ${attempt}/${maxAttempts}...`);
@@ -220,13 +209,12 @@ export class PaymentSuccessComponent implements OnInit {
 
         this.logger.log('PaymentSuccess: Claims:', tokenResult.claims);
 
-        if (this.isPaidRole(role)) {
-          this.logger.log(`PaymentSuccess: Found paid stripeRole '${role}' on attempt ${attempt}!`);
-          hasPaidClaim = true;
+        if (role) {
+          this.logger.log(`PaymentSuccess: Found stripeRole '${role}' on attempt ${attempt}!`);
+          hasPremiumClaim = true;
           this.assignedRole = role;
-          this.logPurchaseAnalytics(role, checkoutMode);
         } else {
-          this.logger.warn(`PaymentSuccess: paid stripeRole not found on attempt ${attempt}. Waiting...`);
+          this.logger.warn(`PaymentSuccess: stripeRole not found on attempt ${attempt}. Waiting...`);
           // Wait 2 seconds before next try
           await new Promise(resolve => setTimeout(resolve, 2000));
         }
@@ -237,34 +225,10 @@ export class PaymentSuccessComponent implements OnInit {
       }
     }
 
-    if (!hasPaidClaim) {
-      this.logger.error('PaymentSuccess: Timeout waiting for paid stripeRole. User might need to re-login or wait longer.');
+    if (!hasPremiumClaim) {
+      this.logger.error('PaymentSuccess: Timeout waiting for stripeRole. User might need to re-login or wait longer.');
     }
 
     this.isRefreshing = false;
-  }
-
-  private logPurchaseAnalytics(role: string | null, mode: 'payment' | 'subscription'): void {
-    const sessionId = this.route.snapshot.queryParamMap.get('session_id');
-    if (!sessionId) {
-      this.logger.warn('PaymentSuccess: Missing checkout session id; skipping purchase analytics.');
-      return;
-    }
-
-    this.analyticsService.logPurchase({
-      transactionId: sessionId,
-      role,
-      mode,
-    });
-  }
-
-  private resolveCheckoutMode(): 'payment' | 'subscription' {
-    return this.route.snapshot.queryParamMap.get('checkout_mode') === 'payment'
-      ? 'payment'
-      : 'subscription';
-  }
-
-  private isPaidRole(role: unknown): role is 'basic' | 'pro' {
-    return role === 'basic' || role === 'pro';
   }
 }
