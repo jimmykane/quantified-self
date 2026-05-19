@@ -21,18 +21,21 @@ import {
     mapSuuntoSleepSample,
 } from './provider-mappers';
 import { markSleepSyncError, updateSleepSyncState, upsertSleepSessions } from './writer';
-import { getTokenData, TerminalServiceAuthError } from '../tokens';
+import { getTokenData, TerminalServiceAuthError, TokenRefreshSkippedForDeletedUserError } from '../tokens';
 import * as requestPromise from '../request-helper';
 import { config } from '../config';
 import { toSuuntoAuthorizationHeader } from '../suunto/authorization-header';
 import {
     increaseRetryCountForQueueItem,
+    markQueueItemSkipped,
     moveToDeadLetterQueue,
+    QUEUE_SKIPPED_REASONS,
     QueueResult,
     updateToProcessed,
 } from '../queue-utils';
 import { isSleepProviderEnabled, isSleepSyncUserAllowed, SLEEP_SYNC_DISABLED_PROVIDERS } from './provider-flags';
 import { assertTrustedGarminCallbackURL, InvalidGarminCallbackUrlError } from './garmin-callback-url';
+import { shouldSkipQueueWorkForDeletedUser } from '../queue/user-deletion-skip';
 
 type TokenSnapshot = admin.firestore.QueryDocumentSnapshot;
 
@@ -437,6 +440,18 @@ export async function processSleepSyncQueueItem(queueItem: SleepSyncQueueItemInt
                 sessionsSkipped: 0,
             });
         }
+        if (queueItem.userID && await shouldSkipQueueWorkForDeletedUser(
+            queueItem.userID,
+            serviceNameForProvider(queueItem.provider),
+            queueItem.id,
+            'before_sleep_token_resolution',
+        )) {
+            return markQueueItemSkipped(queueItem, undefined, QUEUE_SKIPPED_REASONS.UserDeletedOrDeleting, {
+                skippedContext: 'USER_DELETION_GUARD',
+                sessionsWritten: 0,
+                sessionsSkipped: 0,
+            });
+        }
 
         if (queueItem.provider === SLEEP_PROVIDERS.GarminAPI && queueItem.type === 'garmin_ping') {
             assertTrustedGarminCallbackURL(queueItem.callbackURL);
@@ -451,6 +466,18 @@ export async function processSleepSyncQueueItem(queueItem: SleepSyncQueueItemInt
             return updateToProcessed(queueItem, undefined, {
                 resultStatus: 'user_not_allowed',
                 userAllowed: false,
+                sessionsWritten: 0,
+                sessionsSkipped: 0,
+            });
+        }
+        if (await shouldSkipQueueWorkForDeletedUser(
+            firebaseUserID,
+            serviceNameForProvider(queueItem.provider),
+            queueItem.id,
+            'before_sleep_provider_sync',
+        )) {
+            return markQueueItemSkipped(queueItem, undefined, QUEUE_SKIPPED_REASONS.UserDeletedOrDeleting, {
+                skippedContext: 'USER_DELETION_GUARD',
                 sessionsWritten: 0,
                 sessionsSkipped: 0,
             });
@@ -517,6 +544,14 @@ export async function processSleepSyncQueueItem(queueItem: SleepSyncQueueItemInt
             }
             logger.warn(`[SleepSync] Queue item ${queueItem.id} hit terminal auth failure for ${queueItem.provider}; moving to DLQ with ${error.dlqContext}`);
             return moveToDeadLetterQueue(queueItem, error, undefined, error.dlqContext);
+        }
+        if (error instanceof TokenRefreshSkippedForDeletedUserError) {
+            logger.warn(`[SleepSync] Queue item ${queueItem.id} skipped token refresh because user ${error.firebaseUserID} is missing or deletion is in progress.`);
+            return markQueueItemSkipped(queueItem, undefined, QUEUE_SKIPPED_REASONS.UserDeletedOrDeleting, {
+                skippedContext: 'USER_DELETION_GUARD',
+                sessionsWritten: 0,
+                sessionsSkipped: 0,
+            });
         }
         if (queueItem.userID) {
             await markSleepSyncError(queueItem.userID, queueItem.provider, error);

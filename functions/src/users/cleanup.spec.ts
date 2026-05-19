@@ -480,6 +480,51 @@ describe('cleanupUserAccounts', () => {
         // No batch commit since no emails
         expect(batchMock.commit).not.toHaveBeenCalled();
     });
+
+    it('should recursively delete top-level queue and failed-job state for the deleted user', async () => {
+        const wrapped = cleanupUserAccounts;
+        const user = testEnv.auth.makeUserRecord({ uid: 'testUser123', email: 'test@example.com' });
+
+        tokensGetMock.mockResolvedValue({
+            empty: false,
+            size: 1,
+            docs: [
+                {
+                    id: 'service-token-1',
+                    data: () => ({
+                        userName: 'suunto-provider-user',
+                        openId: 'coros-provider-user',
+                        userID: 'garmin-provider-user',
+                    })
+                }
+            ]
+        });
+        whereMock.mockImplementation((field: string, _operator: string, value: string) => ({
+            get: vi.fn().mockResolvedValue(
+                field === 'providerUserId' && value === 'suunto-provider-user'
+                    ? { docs: [{ id: 'sleep-job-1', ref: { path: 'sleepSyncQueue/sleep-job-1' }, data: () => ({}) }] }
+                    : field === 'userID' && value === 'testUser123'
+                        ? { docs: [{ id: 'activity-job-1', ref: { path: 'activitySyncQueue/activity-job-1' }, data: () => ({}) }] }
+                        : { docs: [] }
+            )
+        }));
+
+        await wrapped(user, { eventId: 'eventId' } as unknown as functions.EventContext);
+
+        expect(firestoreMock().collection).toHaveBeenCalledWith('activitySyncQueue');
+        expect(firestoreMock().collection).toHaveBeenCalledWith('sleepSyncQueue');
+        expect(firestoreMock().collection).toHaveBeenCalledWith('garminAPIActivityQueue');
+        expect(firestoreMock().collection).toHaveBeenCalledWith('suuntoAppWorkoutQueue');
+        expect(firestoreMock().collection).toHaveBeenCalledWith('COROSAPIWorkoutQueue');
+        expect(firestoreMock().collection).toHaveBeenCalledWith('failed_jobs');
+        expect(whereMock).toHaveBeenCalledWith('providerUserId', '==', 'suunto-provider-user');
+        expect(whereMock).toHaveBeenCalledWith('userName', '==', 'suunto-provider-user');
+        expect(whereMock).toHaveBeenCalledWith('openId', '==', 'coros-provider-user');
+        expect(whereMock).toHaveBeenCalledWith('userID', '==', 'garmin-provider-user');
+        expect(recursiveDeleteMock).toHaveBeenCalledWith(expect.objectContaining({ path: 'sleepSyncQueue/sleep-job-1' }));
+        expect(recursiveDeleteMock).toHaveBeenCalledWith(expect.objectContaining({ path: 'activitySyncQueue/activity-job-1' }));
+    });
+
     it('should handle archiving with non-standard error and empty token data', async () => {
         const wrapped = cleanupUserAccounts;
         const user = testEnv.auth.makeUserRecord({ uid: 'testUser123' });

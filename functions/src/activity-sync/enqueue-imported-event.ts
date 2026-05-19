@@ -5,6 +5,7 @@ import { enqueueActivitySyncQueueItem } from './queue';
 import { setActivitySyncQueuedMetadata, setActivitySyncRequeuedMetadata, setActivitySyncSkippedMetadata } from './metadata';
 import { ActivitySyncOriginalFileMetadata } from '../queue/queue-item.interface';
 import { getActivitySyncRouteAllowlistConfigError, isActivitySyncRouteUserAllowlisted } from './allowlist';
+import { shouldSkipQueueWorkForDeletedUser } from '../queue/user-deletion-skip';
 
 export interface EnqueueActivitySyncJobsForImportedEventParams {
     userID: string;
@@ -98,6 +99,20 @@ export async function enqueueActivitySyncJobsForImportedEvent(
     let queued = 0;
     const respectRouteEnabled = params.respectRouteEnabled !== false;
     const originalFiles = Array.isArray(params.originalFiles) ? params.originalFiles : [];
+
+    if (routes.length > 0 && await shouldSkipQueueWorkForDeletedUser(
+        params.userID,
+        params.sourceServiceName,
+        `${params.eventID}:activity-sync`,
+        'before_activity_sync_enqueue',
+    )) {
+        return {
+            queued: 0,
+            skippedByReason: {
+                user_deleted_or_deleting: routes.length,
+            },
+        };
+    }
 
     for (const route of routes) {
         const allowlistConfigError = getActivitySyncRouteAllowlistConfigError(route.id);

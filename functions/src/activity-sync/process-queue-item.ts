@@ -1,7 +1,14 @@
 import * as admin from 'firebase-admin';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { ActivitySyncQueueItemInterface } from '../queue/queue-item.interface';
-import { QueueResult, increaseRetryCountForQueueItem, moveToDeadLetterQueue, updateToProcessed } from '../queue-utils';
+import {
+    QueueResult,
+    QUEUE_SKIPPED_REASONS,
+    increaseRetryCountForQueueItem,
+    markQueueItemSkipped,
+    moveToDeadLetterQueue,
+    updateToProcessed,
+} from '../queue-utils';
 import { ACTIVITY_SYNC_ROUTES } from '../../../shared/activity-sync-routes';
 import { isActivitySyncRouteEnabledForUser } from './settings';
 import { isServiceReconnectRequiredForUser } from '../service-connection-meta';
@@ -17,6 +24,7 @@ import { uploadActivityFileToSuunto } from '../suunto/activities';
 import { SUUNTOAPP_ACCESS_TOKENS_COLLECTION_NAME } from '../suunto/constants';
 import { hasProAccess } from '../utils';
 import { getActivitySyncRouteAllowlistConfigError, isActivitySyncRouteUserAllowlisted } from './allowlist';
+import { shouldSkipQueueWorkForDeletedUser } from '../queue/user-deletion-skip';
 
 function toExtension(path?: string, extension?: string): string {
     if (extension && typeof extension === 'string' && extension.trim().length > 0) {
@@ -201,6 +209,17 @@ export async function processActivitySyncQueueItem(
     let duringDestinationUpload = false;
 
     try {
+        if (await shouldSkipQueueWorkForDeletedUser(
+            queueItem.userID,
+            queueItem.destinationServiceName,
+            queueItem.id,
+            'before_activity_sync_processing',
+        )) {
+            return markQueueItemSkipped(queueItem, bulkWriter, QUEUE_SKIPPED_REASONS.UserDeletedOrDeleting, {
+                skippedContext: 'USER_DELETION_GUARD',
+            });
+        }
+
         const route = ACTIVITY_SYNC_ROUTES[queueItem.routeId];
         if (!route) {
             const error = new Error(`Unknown activity sync route ${queueItem.routeId}`) as Error & { dlqContext?: string };
@@ -284,6 +303,17 @@ export async function processActivitySyncQueueItem(
             return updateToProcessed(queueItem, bulkWriter, {
                 skippedReason: 'unsupported_original_file',
                 resultStatus: 'skipped',
+            });
+        }
+
+        if (await shouldSkipQueueWorkForDeletedUser(
+            queueItem.userID,
+            queueItem.destinationServiceName,
+            queueItem.id,
+            'before_activity_sync_upload',
+        )) {
+            return markQueueItemSkipped(queueItem, bulkWriter, QUEUE_SKIPPED_REASONS.UserDeletedOrDeleting, {
+                skippedContext: 'USER_DELETION_GUARD',
             });
         }
 

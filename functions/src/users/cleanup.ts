@@ -2,11 +2,15 @@ import * as functions from 'firebase-functions/v1';
 import * as logger from 'firebase-functions/logger';
 import * as admin from 'firebase-admin';
 import { deauthorizeServiceForUser, getServiceConfig } from '../OAuth2';
-import { GARMIN_API_TOKENS_COLLECTION_NAME } from '../garmin/constants';
+import { GARMIN_API_TOKENS_COLLECTION_NAME, GARMIN_API_WORKOUT_QUEUE_COLLECTION_NAME } from '../garmin/constants';
 
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { DERIVED_METRICS_COLLECTION_ID } from '../../../shared/derived-metrics';
 import { getExpireAtTimestamp, TTL_CONFIG } from '../shared/ttl-config';
+import { ACTIVITY_SYNC_QUEUE_COLLECTION_NAME } from '../activity-sync/constants';
+import { SLEEP_SYNC_QUEUE_COLLECTION_NAME } from '../sleep/constants';
+import { SUUNTOAPP_WORKOUT_QUEUE_COLLECTION_NAME } from '../suunto/constants';
+import { COROSAPI_WORKOUT_QUEUE_COLLECTION_NAME } from '../coros/constants';
 
 export const ORPHANED_SERVICE_TOKENS_COLLECTION_NAME = 'orphaned_service_tokens';
 
@@ -96,6 +100,64 @@ interface ServiceCleanupConfig {
     serviceName: ServiceNames;
 }
 
+interface UserProviderIdentifiers {
+    suuntoUserNames: Set<string>;
+    corosOpenIds: Set<string>;
+    garminUserIDs: Set<string>;
+}
+
+function asNonEmptyString(value: unknown): string | null {
+    const normalized = `${value || ''}`.trim();
+    return normalized.length > 0 ? normalized : null;
+}
+
+async function collectProviderIdentifiersForUser(uid: string, services: readonly ServiceCleanupConfig[]): Promise<UserProviderIdentifiers> {
+    const identifiers: UserProviderIdentifiers = {
+        suuntoUserNames: new Set<string>(),
+        corosOpenIds: new Set<string>(),
+        garminUserIDs: new Set<string>(),
+    };
+    const db = admin.firestore();
+
+    for (const service of services) {
+        try {
+            const snapshot = await db.collection(service.collectionName).doc(uid).collection('tokens').get();
+            snapshot.docs.forEach((doc) => {
+                const tokenData = doc.data() || {};
+                switch (service.serviceName) {
+                    case ServiceNames.SuuntoApp: {
+                        const userName = asNonEmptyString(tokenData.userName);
+                        if (userName) {
+                            identifiers.suuntoUserNames.add(userName);
+                        }
+                        break;
+                    }
+                    case ServiceNames.COROSAPI: {
+                        const openId = asNonEmptyString(tokenData.openId);
+                        if (openId) {
+                            identifiers.corosOpenIds.add(openId);
+                        }
+                        break;
+                    }
+                    case ServiceNames.GarminAPI: {
+                        const garminUserID = asNonEmptyString((tokenData as Record<string, unknown>).userID);
+                        if (garminUserID) {
+                            identifiers.garminUserIDs.add(garminUserID);
+                        }
+                        break;
+                    }
+                    default:
+                        break;
+                }
+            });
+        } catch (error) {
+            logger.error(`[Cleanup] Failed to collect provider identifiers for ${service.name} user ${uid}`, error);
+        }
+    }
+
+    return identifiers;
+}
+
 /**
  * Orchestrates the cleanup process:
  * 1. Attempt best-effort deauthorization (api call)
@@ -147,6 +209,70 @@ async function cleanupUserScopedGeneratedState(uid: string): Promise<void> {
     }
 }
 
+function getSnapshotDocs(snapshot: unknown): admin.firestore.QueryDocumentSnapshot[] {
+    const docs = (snapshot as { docs?: unknown })?.docs;
+    return Array.isArray(docs) ? docs as admin.firestore.QueryDocumentSnapshot[] : [];
+}
+
+function getRefDeduplicationKey(ref: admin.firestore.DocumentReference): string {
+    return `${ref.path || ref.id || Math.random()}`;
+}
+
+async function recursiveDeleteQueryResults(
+    db: admin.firestore.Firestore,
+    uid: string,
+    label: string,
+    collectionName: string,
+    fieldName: string,
+    values: Iterable<string>,
+    deletedRefKeys: Set<string>,
+): Promise<void> {
+    for (const value of new Set([...values].map((candidate) => `${candidate || ''}`.trim()).filter(Boolean))) {
+        try {
+            const snapshot = await db.collection(collectionName).where(fieldName, '==', value).get();
+            const docs = getSnapshotDocs(snapshot);
+            for (const doc of docs) {
+                const refKey = getRefDeduplicationKey(doc.ref);
+                if (deletedRefKeys.has(refKey)) {
+                    continue;
+                }
+                deletedRefKeys.add(refKey);
+                await db.recursiveDelete(doc.ref);
+            }
+            if (docs.length > 0) {
+                logger.info(`[Cleanup] Recursively deleted ${docs.length} ${label} docs for user ${uid} from ${collectionName} where ${fieldName} == ${value}`);
+            }
+        } catch (error) {
+            logger.error(`[Cleanup] Failed to recursively delete ${label} docs for user ${uid} from ${collectionName} where ${fieldName} == ${value}`, error);
+        }
+    }
+}
+
+async function cleanupTopLevelQueueState(uid: string, identifiers: UserProviderIdentifiers): Promise<void> {
+    const db = admin.firestore();
+    const deletedRefKeys = new Set<string>();
+    const firebaseUIDValues = [uid];
+    const suuntoValues = [uid, ...identifiers.suuntoUserNames];
+    const corosValues = [uid, ...identifiers.corosOpenIds];
+    const garminValues = [uid, ...identifiers.garminUserIDs];
+    const providerValues = [...suuntoValues, ...corosValues, ...garminValues];
+
+    await recursiveDeleteQueryResults(db, uid, 'activity sync queue', ACTIVITY_SYNC_QUEUE_COLLECTION_NAME, 'userID', firebaseUIDValues, deletedRefKeys);
+    await recursiveDeleteQueryResults(db, uid, 'sleep sync queue', SLEEP_SYNC_QUEUE_COLLECTION_NAME, 'userID', firebaseUIDValues, deletedRefKeys);
+    await recursiveDeleteQueryResults(db, uid, 'sleep sync queue', SLEEP_SYNC_QUEUE_COLLECTION_NAME, 'providerUserId', providerValues, deletedRefKeys);
+    await recursiveDeleteQueryResults(db, uid, 'Suunto workout queue', SUUNTOAPP_WORKOUT_QUEUE_COLLECTION_NAME, 'userName', suuntoValues, deletedRefKeys);
+    await recursiveDeleteQueryResults(db, uid, 'COROS workout queue', COROSAPI_WORKOUT_QUEUE_COLLECTION_NAME, 'openId', corosValues, deletedRefKeys);
+    await recursiveDeleteQueryResults(db, uid, 'Garmin workout queue', GARMIN_API_WORKOUT_QUEUE_COLLECTION_NAME, 'userID', garminValues, deletedRefKeys);
+    await recursiveDeleteQueryResults(db, uid, 'failed job', 'failed_jobs', 'userID', [...firebaseUIDValues, ...providerValues], deletedRefKeys);
+    await recursiveDeleteQueryResults(db, uid, 'failed job', 'failed_jobs', 'firebaseUserID', firebaseUIDValues, deletedRefKeys);
+    await recursiveDeleteQueryResults(db, uid, 'failed job', 'failed_jobs', 'uid', firebaseUIDValues, deletedRefKeys);
+    await recursiveDeleteQueryResults(db, uid, 'failed job', 'failed_jobs', 'providerUserId', providerValues, deletedRefKeys);
+    await recursiveDeleteQueryResults(db, uid, 'failed job', 'failed_jobs', 'userName', suuntoValues, deletedRefKeys);
+    await recursiveDeleteQueryResults(db, uid, 'failed job', 'failed_jobs', 'openId', corosValues, deletedRefKeys);
+
+    logger.info(`[Cleanup] Completed top-level queue state cleanup for user ${uid}`);
+}
+
 export const cleanupUserAccounts = functions.region('europe-west2').auth.user().onDelete(async (user) => {
     const uid = user.uid;
     logger.info(`[Cleanup] User ${uid} deleted. Starting service deauthorization cleanup.`);
@@ -177,6 +303,7 @@ export const cleanupUserAccounts = functions.region('europe-west2').auth.user().
             serviceName: ServiceNames.GarminAPI
         }
     ];
+    const providerIdentifiers = await collectProviderIdentifiersForUser(uid, services);
 
     // Run sequantially to avoid race conditions or overwhelming logs, though parallel is also an option.
     // Sequential is safer for clarity.
@@ -239,5 +366,7 @@ export const cleanupUserAccounts = functions.region('europe-west2').auth.user().
     } catch (e) {
         logger.error(`[Cleanup] Error deleting emails for ${uid}`, e);
     }
+
+    await cleanupTopLevelQueueState(uid, providerIdentifiers);
 
 });

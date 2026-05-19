@@ -5,6 +5,7 @@ import { enqueueActivitySyncTask, generateIDFromParts } from '../utils';
 import { ACTIVITY_SYNC_QUEUE_COLLECTION_NAME } from './constants';
 import { ActivitySyncOriginalFileMetadata, ActivitySyncQueueItemInterface } from '../queue/queue-item.interface';
 import { getExpireAtTimestamp, TTL_CONFIG } from '../shared/ttl-config';
+import { getUserDeletionGuardStateInTransaction } from '../shared/user-deletion-guard';
 
 export interface EnqueueActivitySyncQueueItemParams {
     routeId: ActivitySyncRouteId;
@@ -20,14 +21,14 @@ export interface EnqueueActivitySyncQueueItemParams {
 export interface EnqueueActivitySyncQueueItemResult {
     enqueued: boolean;
     queueItemId: string;
-    reason?: 'already_pending' | 'already_processed';
+    reason?: 'already_pending' | 'already_processed' | 'user_deleted_or_deleting';
     redispatched?: boolean;
 }
 
 interface QueueInsertDecision {
     enqueued: boolean;
     queueItemId: string;
-    reason?: 'already_pending' | 'already_processed';
+    reason?: 'already_pending' | 'already_processed' | 'user_deleted_or_deleting';
     dateCreated?: number;
     shouldDispatchExisting?: boolean;
 }
@@ -44,9 +45,19 @@ export async function enqueueActivitySyncQueueItem(
     params: EnqueueActivitySyncQueueItemParams,
 ): Promise<EnqueueActivitySyncQueueItemResult> {
     const queueItemId = await buildActivitySyncQueueItemId(params.routeId, params.userID, params.eventID);
-    const queueDocRef = admin.firestore().collection(ACTIVITY_SYNC_QUEUE_COLLECTION_NAME).doc(queueItemId);
-    const decision = await admin.firestore().runTransaction(async (transaction): Promise<QueueInsertDecision> => {
+    const db = admin.firestore();
+    const queueDocRef = db.collection(ACTIVITY_SYNC_QUEUE_COLLECTION_NAME).doc(queueItemId);
+    const decision = await db.runTransaction(async (transaction): Promise<QueueInsertDecision> => {
         const existingSnapshot = await transaction.get(queueDocRef);
+        const deletionGuard = await getUserDeletionGuardStateInTransaction(db, transaction, params.userID);
+        if (deletionGuard.shouldSkip) {
+            return {
+                enqueued: false,
+                queueItemId,
+                reason: 'user_deleted_or_deleting',
+            };
+        }
+
         if (existingSnapshot.exists) {
             const existingData = existingSnapshot.data() as Partial<ActivitySyncQueueItemInterface>;
             if (!existingData.processed) {

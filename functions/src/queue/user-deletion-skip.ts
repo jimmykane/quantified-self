@@ -6,7 +6,11 @@ import { getUserDeletionGuardState } from '../shared/user-deletion-guard';
 export type QueueUserDeletionGuardPhase =
     | 'before_token_refresh'
     | 'before_event_write'
-    | 'before_activity_sync_enqueue';
+    | 'before_activity_sync_enqueue'
+    | 'before_activity_sync_processing'
+    | 'before_activity_sync_upload'
+    | 'before_sleep_token_resolution'
+    | 'before_sleep_provider_sync';
 
 export async function shouldSkipQueueWorkForDeletedUser(
     userID: string,

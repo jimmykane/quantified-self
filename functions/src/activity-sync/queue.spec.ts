@@ -14,6 +14,7 @@ const {
   mockEnqueueActivitySyncTask,
   mockGenerateIDFromParts,
   mockGetExpireAtTimestamp,
+  mockGetUserDeletionGuardStateInTransaction,
 } = vi.hoisted(() => {
   const mockGet = vi.fn();
   const mockSet = vi.fn().mockResolvedValue(undefined);
@@ -47,6 +48,7 @@ const {
     mockEnqueueActivitySyncTask: vi.fn().mockResolvedValue(true),
     mockGenerateIDFromParts: vi.fn(async (parts: string[]) => parts.join('__')),
     mockGetExpireAtTimestamp: vi.fn(() => new Date('2026-01-01T00:00:00.000Z')),
+    mockGetUserDeletionGuardStateInTransaction: vi.fn(),
   };
 });
 
@@ -69,6 +71,10 @@ vi.mock('../shared/ttl-config', () => ({
   },
 }));
 
+vi.mock('../shared/user-deletion-guard', () => ({
+  getUserDeletionGuardStateInTransaction: mockGetUserDeletionGuardStateInTransaction,
+}));
+
 import { buildActivitySyncQueueItemId, enqueueActivitySyncQueueItem } from './queue';
 
 describe('activity-sync/queue', () => {
@@ -82,6 +88,11 @@ describe('activity-sync/queue', () => {
       get: mockTransactionGet,
       set: mockTransactionSet,
     }));
+    mockGetUserDeletionGuardStateInTransaction.mockResolvedValue({
+      userExists: true,
+      deletionInProgress: false,
+      shouldSkip: false,
+    });
   });
 
   it('builds deterministic queue item IDs', async () => {
@@ -249,6 +260,34 @@ describe('activity-sync/queue', () => {
       'activitySync__GarminAPI_to_SuuntoApp__user-1__event-1',
       expect.any(Number),
     );
+    expect(mockUpdate).not.toHaveBeenCalled();
+  });
+
+  it('does not write or dispatch queue items when user deletion is active inside the transaction', async () => {
+    mockTransactionGet.mockResolvedValueOnce({ exists: false });
+    mockGetUserDeletionGuardStateInTransaction.mockResolvedValueOnce({
+      userExists: true,
+      deletionInProgress: true,
+      shouldSkip: true,
+    });
+
+    const result = await enqueueActivitySyncQueueItem({
+      routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp,
+      sourceServiceName: ServiceNames.GarminAPI,
+      destinationServiceName: ServiceNames.SuuntoApp,
+      userID: 'user-1',
+      eventID: 'event-1',
+      originalFile: { path: 'p.fit', extension: 'fit' },
+      manual: false,
+    });
+
+    expect(result).toEqual({
+      enqueued: false,
+      queueItemId: 'activitySync__GarminAPI_to_SuuntoApp__user-1__event-1',
+      reason: 'user_deleted_or_deleting',
+    });
+    expect(mockTransactionSet).not.toHaveBeenCalled();
+    expect(mockEnqueueActivitySyncTask).not.toHaveBeenCalled();
     expect(mockUpdate).not.toHaveBeenCalled();
   });
 

@@ -23,6 +23,7 @@ const hoisted = vi.hoisted(() => ({
     updateSleepSyncState: vi.fn(),
     upsertSleepSessions: vi.fn(),
     enqueueSleepSyncTask: vi.fn(),
+    shouldSkipQueueWorkForDeletedUser: vi.fn(),
 }));
 
 vi.mock('firebase-functions/logger', () => ({
@@ -123,9 +124,23 @@ vi.mock('../tokens', () => {
         }
     }
 
+    class MockTokenRefreshSkippedForDeletedUserError extends Error {
+        readonly name = 'TokenRefreshSkippedForDeletedUserError';
+
+        constructor(
+            public readonly firebaseUserID = 'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+            public readonly serviceName = ServiceNames.SuuntoApp,
+            public readonly tokenDocumentID = 'token-1',
+            public readonly phase = 'before_refresh',
+        ) {
+            super(`Skipping ${serviceName} token refresh for ${tokenDocumentID}`);
+        }
+    }
+
     return {
         getTokenData: hoisted.getTokenData,
         TerminalServiceAuthError: MockTerminalServiceAuthError,
+        TokenRefreshSkippedForDeletedUserError: MockTokenRefreshSkippedForDeletedUserError,
     };
 });
 
@@ -141,8 +156,12 @@ vi.mock('../utils', async () => {
     };
 });
 
+vi.mock('../queue/user-deletion-skip', () => ({
+    shouldSkipQueueWorkForDeletedUser: hoisted.shouldSkipQueueWorkForDeletedUser,
+}));
+
 import { addSleepSyncQueueItem, processSleepSyncQueueItem } from './queue';
-import { TerminalServiceAuthError } from '../tokens';
+import { TerminalServiceAuthError, TokenRefreshSkippedForDeletedUserError } from '../tokens';
 
 describe('sleep queue', () => {
     beforeEach(() => {
@@ -163,6 +182,7 @@ describe('sleep queue', () => {
         hoisted.updateSleepSyncState.mockResolvedValue(undefined);
         hoisted.upsertSleepSessions.mockResolvedValue({ written: 0, skipped: 0 });
         hoisted.enqueueSleepSyncTask.mockResolvedValue(true);
+        hoisted.shouldSkipQueueWorkForDeletedUser.mockResolvedValue(false);
     });
 
     it('uses deterministic queue ids for duplicated webhook or poll payloads', async () => {
@@ -597,6 +617,139 @@ describe('sleep queue', () => {
         }));
         expect(hoisted.batchDelete).toHaveBeenCalledWith(queueRef);
         expect(hoisted.docUpdate).not.toHaveBeenCalled();
+    });
+
+    it('skips user-scoped queue items before token resolution when account deletion is active', async () => {
+        hoisted.shouldSkipQueueWorkForDeletedUser.mockResolvedValue(true);
+        const update = vi.fn().mockResolvedValue(undefined);
+
+        const result = await processSleepSyncQueueItem({
+            id: 'suunto-sleep-deleted-user',
+            dateCreated: 1_700_000_000_000,
+            dispatchedToCloudTask: 1_700_000_000_500,
+            processed: false,
+            provider: 'SuuntoApp',
+            userID: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+            providerUserId: 'suunto-user-1',
+            retryCount: 0,
+            type: 'suunto_webhook',
+            payload: { samples: [{ SleepId: 123 }] },
+            ref: {
+                update,
+            } as any,
+        });
+
+        expect(result).toBe(QueueResult.Processed);
+        expect(update).toHaveBeenCalledWith(expect.objectContaining({
+            processed: true,
+            resultStatus: 'skipped',
+            skippedReason: 'user_deleted_or_deleting',
+            sessionsWritten: 0,
+            sessionsSkipped: 0,
+        }));
+        expect(hoisted.tokenRootGet).not.toHaveBeenCalled();
+        expect(hoisted.collectionGroupGet).not.toHaveBeenCalled();
+        expect(hoisted.getTokenData).not.toHaveBeenCalled();
+        expect(hoisted.requestGet).not.toHaveBeenCalled();
+    });
+
+    it('skips all-user queue items after token resolution but before provider sync when account deletion is active', async () => {
+        hoisted.allowedUserIDs.splice(0, hoisted.allowedUserIDs.length);
+        hoisted.shouldSkipQueueWorkForDeletedUser.mockResolvedValue(true);
+        hoisted.collectionGroupGet.mockResolvedValue({
+            docs: [{
+                id: 'suunto-token-1',
+                data: () => ({
+                    userName: 'suunto-user-1',
+                    serviceName: 'SuuntoApp',
+                }),
+                ref: {
+                    parent: {
+                        parent: {
+                            id: 'deleted-user-id',
+                        },
+                    },
+                },
+            }],
+            empty: false,
+        });
+        const update = vi.fn().mockResolvedValue(undefined);
+
+        const result = await processSleepSyncQueueItem({
+            id: 'suunto-sleep-deleted-user-all',
+            dateCreated: 1_700_000_000_000,
+            dispatchedToCloudTask: 1_700_000_000_500,
+            processed: false,
+            provider: 'SuuntoApp',
+            providerUserId: 'suunto-user-1',
+            retryCount: 0,
+            type: 'suunto_webhook',
+            payload: { samples: [{ SleepId: 123 }] },
+            ref: {
+                update,
+            } as any,
+        });
+
+        expect(result).toBe(QueueResult.Processed);
+        expect(hoisted.collectionGroupGet).toHaveBeenCalled();
+        expect(hoisted.getTokenData).not.toHaveBeenCalled();
+        expect(hoisted.requestGet).not.toHaveBeenCalled();
+        expect(hoisted.upsertSleepSessions).not.toHaveBeenCalled();
+        expect(update).toHaveBeenCalledWith(expect.objectContaining({
+            resultStatus: 'skipped',
+            skippedReason: 'user_deleted_or_deleting',
+        }));
+    });
+
+    it('marks TokenRefreshSkippedForDeletedUserError as skipped instead of retrying', async () => {
+        hoisted.tokenRootGet.mockResolvedValue({
+            docs: [{
+                id: 'suunto-token-1',
+                data: () => ({
+                    userName: 'suunto-user-1',
+                    serviceName: 'SuuntoApp',
+                }),
+                ref: {
+                    parent: {
+                        parent: {
+                            id: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+                        },
+                    },
+                },
+            }],
+            empty: false,
+        });
+        hoisted.getTokenData.mockRejectedValueOnce(new TokenRefreshSkippedForDeletedUserError(
+            'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+            ServiceNames.SuuntoApp,
+            'suunto-token-1',
+            'before_refresh' as any,
+        ));
+        const update = vi.fn().mockResolvedValue(undefined);
+
+        const result = await processSleepSyncQueueItem({
+            id: 'suunto-sleep-refresh-deleted-user',
+            dateCreated: 1_700_000_000_000,
+            dispatchedToCloudTask: 1_700_000_000_500,
+            processed: false,
+            provider: 'SuuntoApp',
+            userID: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+            providerUserId: 'suunto-user-1',
+            retryCount: 0,
+            type: 'suunto_poll',
+            rangeStartMs: 1_777_392_000_000,
+            rangeEndMs: 1_777_478_400_000,
+            ref: {
+                update,
+            } as any,
+        });
+
+        expect(result).toBe(QueueResult.Processed);
+        expect(hoisted.markSleepSyncError).not.toHaveBeenCalled();
+        expect(update).toHaveBeenCalledWith(expect.objectContaining({
+            resultStatus: 'skipped',
+            skippedReason: 'user_deleted_or_deleting',
+        }));
     });
 
     it('resolves all-user Suunto queue items with an indexed userName and serviceName token query', async () => {

@@ -21,6 +21,8 @@ const {
   mockUploadActivityFileToSuunto,
   mockHasProAccess,
   mockIsServiceReconnectRequiredForUser,
+  mockShouldSkipQueueWorkForDeletedUser,
+  mockMarkQueueItemSkipped,
 } = vi.hoisted(() => {
   const mockTokenGet = vi.fn();
   const mockDownload = vi.fn();
@@ -47,6 +49,8 @@ const {
     mockUploadActivityFileToSuunto: vi.fn(),
     mockHasProAccess: vi.fn(),
     mockIsServiceReconnectRequiredForUser: vi.fn(),
+    mockShouldSkipQueueWorkForDeletedUser: vi.fn(),
+    mockMarkQueueItemSkipped: vi.fn(),
   };
 });
 
@@ -80,8 +84,13 @@ vi.mock('../queue-utils', () => ({
     Failed: 'FAILED',
   },
   updateToProcessed: mockUpdateToProcessed,
+  markQueueItemSkipped: mockMarkQueueItemSkipped,
   increaseRetryCountForQueueItem: mockIncreaseRetryCountForQueueItem,
   moveToDeadLetterQueue: mockMoveToDeadLetterQueue,
+  QUEUE_SKIPPED_REASONS: {
+    UserDeletedOrDeleting: 'user_deleted_or_deleting',
+    WorkerReturnedSkipped: 'worker_returned_skipped',
+  },
 }));
 
 vi.mock('./settings', () => ({
@@ -116,6 +125,10 @@ vi.mock('../utils', async (importOriginal) => {
 
 vi.mock('../service-connection-meta', () => ({
   isServiceReconnectRequiredForUser: mockIsServiceReconnectRequiredForUser,
+}));
+
+vi.mock('../queue/user-deletion-skip', () => ({
+  shouldSkipQueueWorkForDeletedUser: mockShouldSkipQueueWorkForDeletedUser,
 }));
 
 import { processActivitySyncQueueItem } from './process-queue-item';
@@ -159,8 +172,10 @@ describe('activity-sync/process-queue-item', () => {
       workoutKey: 'workout-1',
     });
     mockUpdateToProcessed.mockResolvedValue(QueueResult.Processed);
+    mockMarkQueueItemSkipped.mockResolvedValue(QueueResult.Processed);
     mockIncreaseRetryCountForQueueItem.mockResolvedValue(QueueResult.RetryIncremented);
     mockMoveToDeadLetterQueue.mockResolvedValue(QueueResult.MovedToDLQ);
+    mockShouldSkipQueueWorkForDeletedUser.mockResolvedValue(false);
   });
 
   it('marks queue item processed and writes success metadata when upload succeeds', async () => {
@@ -180,6 +195,45 @@ describe('activity-sync/process-queue-item', () => {
       resultStatus: 'success',
       successProcessedAt: expect.any(Number),
     }));
+  });
+
+  it('marks queue item skipped without metadata or upload when account deletion is active', async () => {
+    mockShouldSkipQueueWorkForDeletedUser.mockResolvedValue(true);
+
+    const result = await processActivitySyncQueueItem(baseQueueItem);
+
+    expect(result).toBe(QueueResult.Processed);
+    expect(mockMarkQueueItemSkipped).toHaveBeenCalledWith(
+      baseQueueItem,
+      undefined,
+      'user_deleted_or_deleting',
+      expect.objectContaining({
+        skippedContext: 'USER_DELETION_GUARD',
+      }),
+    );
+    expect(mockSetActivitySyncProcessingMetadata).not.toHaveBeenCalled();
+    expect(mockSetActivitySyncSkippedMetadata).not.toHaveBeenCalled();
+    expect(mockUploadActivityFileToSuunto).not.toHaveBeenCalled();
+  });
+
+  it('rechecks account deletion before upload and skips queued work if deletion starts mid-run', async () => {
+    mockShouldSkipQueueWorkForDeletedUser
+      .mockResolvedValueOnce(false)
+      .mockResolvedValueOnce(true);
+
+    const result = await processActivitySyncQueueItem(baseQueueItem);
+
+    expect(result).toBe(QueueResult.Processed);
+    expect(mockMarkQueueItemSkipped).toHaveBeenCalledWith(
+      baseQueueItem,
+      undefined,
+      'user_deleted_or_deleting',
+      expect.objectContaining({
+        skippedContext: 'USER_DELETION_GUARD',
+      }),
+    );
+    expect(mockDownload).not.toHaveBeenCalled();
+    expect(mockUploadActivityFileToSuunto).not.toHaveBeenCalled();
   });
 
   it('skips and marks processed when user is not allowlisted for route', async () => {
