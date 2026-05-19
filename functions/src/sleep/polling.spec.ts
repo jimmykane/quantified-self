@@ -283,4 +283,42 @@ describe('sleep polling', () => {
             expect.any(Error),
         );
     });
+
+    it('stops queueing windows for a user when deletion starts after a queue write', async () => {
+        const nowMs = Date.UTC(2026, 3, 28);
+        installCollectionGroupTokenMock([
+            createTokenDoc('suunto-user-id-1', {
+                serviceName: ServiceNames.SuuntoApp,
+                userName: 'suunto-user-1',
+            }),
+            createTokenDoc('suunto-user-id-2', {
+                serviceName: ServiceNames.SuuntoApp,
+                userName: 'suunto-user-2',
+            }),
+        ]);
+        vi.mocked(addSleepSyncQueueItem)
+            .mockRejectedValueOnce(Object.assign(new Error('deleted mid-enqueue'), {
+                name: 'ProviderQueueUserDeletedOrDeletingError',
+            }))
+            .mockResolvedValue({} as any);
+
+        const queued = await sleepPollingTestInternals.enqueueProviderPolls(
+            SLEEP_PROVIDERS.SuuntoApp,
+            ServiceNames.SuuntoApp,
+            28,
+            nowMs,
+        );
+
+        expect(queued).toBe(1);
+        expect(addSleepSyncQueueItem).toHaveBeenCalledTimes(2);
+        expect(addSleepSyncQueueItem).toHaveBeenNthCalledWith(1, expect.objectContaining({
+            userID: 'suunto-user-id-1',
+        }));
+        expect(addSleepSyncQueueItem).toHaveBeenNthCalledWith(2, expect.objectContaining({
+            userID: 'suunto-user-id-2',
+        }));
+        expect(logger.info).toHaveBeenCalledWith(
+            '[SleepSync][SuuntoApp] Stopped queueing polls for user suunto-user-id-1 because deletion started during queue creation.',
+        );
+    });
 });

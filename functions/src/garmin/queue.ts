@@ -7,7 +7,7 @@ import { isProviderQueueSkippedWithoutRetryError } from '../queue/provider-queue
 import { increaseRetryCountForQueueItem, markQueueItemSkipped, QUEUE_SKIPPED_REASONS, updateToProcessed, moveToDeadLetterQueue, QueueResult } from '../queue-utils';
 
 import { EventImporterFIT } from '@sports-alliance/sports-lib';
-import { generateEventID, setEvent, UsageLimitExceededError, UserNotFoundError } from '../utils';
+import { EventWriteSkippedForDeletedUserError, generateEventID, setEvent, UsageLimitExceededError, UserNotFoundError } from '../utils';
 import * as requestPromise from '../request-helper';
 import {
   GarminAPIActivityQueueItemInterface,
@@ -32,6 +32,11 @@ interface RequestError extends Error {
 function isTokenRefreshSkippedForDeletedUserError(error: unknown): error is TokenRefreshSkippedForDeletedUserError {
   return error instanceof TokenRefreshSkippedForDeletedUserError
     || (error instanceof Error && error.name === 'TokenRefreshSkippedForDeletedUserError');
+}
+
+function isEventWriteSkippedForDeletedUserError(error: unknown): error is EventWriteSkippedForDeletedUserError {
+  return error instanceof EventWriteSkippedForDeletedUserError
+    || (error instanceof Error && error.name === 'EventWriteSkippedForDeletedUserError');
 }
 
 function markGarminQueueItemSkippedForDeletedUser(
@@ -272,7 +277,10 @@ export async function processGarminAPIActivityQueueItem(queueItem: GarminAPIActi
     return updateToProcessed(queueItem, bulkWriter);
   } catch (e: unknown) {
     logger.error(e);
-    if (e instanceof UsageLimitExceededError) {
+    if (isEventWriteSkippedForDeletedUserError(e)) {
+      logger.warn(`Skipping Garmin queue item ${queueItem.id} because event write detected user ${e.userID} is missing or deletion is in progress.`);
+      return markGarminQueueItemSkippedForDeletedUser(queueItem, bulkWriter);
+    } else if (e instanceof UsageLimitExceededError) {
       logger.error(new Error(`Usage limit exceeded for ${queueItem.id}. Aborting retries. ${e.message}`));
       await increaseRetryCountForQueueItem(queueItem, e, 20, bulkWriter);
       return QueueResult.RetryIncremented;

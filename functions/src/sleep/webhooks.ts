@@ -17,6 +17,7 @@ import {
     SLEEP_SYNC_DISABLED_PROVIDERS,
 } from './provider-flags';
 import { normalizeTrustedGarminCallbackURL } from './garmin-callback-url';
+import { isProviderQueueSkippedWithoutRetryError } from '../queue/provider-queue-errors';
 
 type ExternalRecord = Record<string, unknown>;
 
@@ -174,10 +175,32 @@ export const receiveGarminAPISleepData = functions.region('europe-west2').runWit
                 dispatchImmediately: true,
             });
         }
-        const refs = await Promise.all(queueItems.map((queueItem) => addSleepSyncQueueItem(queueItem)));
-        logger.info(`[SleepSync][Garmin] Queued ${refs.length} sleep payloads`);
+        const queueResults = await Promise.allSettled(queueItems.map(async (queueItem) => {
+            try {
+                await addSleepSyncQueueItem(queueItem);
+                return 'queued' as const;
+            } catch (error) {
+                if (isProviderQueueSkippedWithoutRetryError(error)) {
+                    logger.info('[SleepSync][Garmin] Ignoring sleep payload because the provider user is not connected or is being deleted', error);
+                    return 'skipped' as const;
+                }
+                throw error;
+            }
+        }));
+        const failedResult = queueResults.find((result): result is PromiseRejectedResult => result.status === 'rejected');
+        if (failedResult) {
+            throw failedResult.reason;
+        }
+        const queuedCount = queueResults.filter((result) => result.status === 'fulfilled' && result.value === 'queued').length;
+        const skippedCount = queueResults.filter((result) => result.status === 'fulfilled' && result.value === 'skipped').length;
+        logger.info(`[SleepSync][Garmin] Queued ${queuedCount} sleep payloads and skipped ${skippedCount}`);
         res.status(200).send();
     } catch (error) {
+        if (isProviderQueueSkippedWithoutRetryError(error)) {
+            logger.info('[SleepSync][Garmin] Ignoring sleep payload because the provider user is not connected or is being deleted', error);
+            res.status(200).send();
+            return;
+        }
         logger.error('[SleepSync][Garmin] Failed to queue sleep payload', error);
         res.status(500).send();
     }
@@ -234,6 +257,11 @@ export const receiveSuuntoAppSleepData = functions.region('europe-west2').runWit
         logger.info(`[SleepSync][Suunto] Queued ${samples.length} sleep samples for ${providerUserId}`);
         res.status(200).send();
     } catch (error) {
+        if (isProviderQueueSkippedWithoutRetryError(error)) {
+            logger.info('[SleepSync][Suunto] Ignoring sleep payload because the provider user is not connected or is being deleted', error);
+            res.status(200).send();
+            return;
+        }
         logger.error('[SleepSync][Suunto] Failed to queue sleep payload', error);
         res.status(500).send();
     }

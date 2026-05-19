@@ -36,6 +36,15 @@ import {
 import { isSleepProviderEnabled, isSleepSyncUserAllowed, SLEEP_SYNC_DISABLED_PROVIDERS } from './provider-flags';
 import { assertTrustedGarminCallbackURL, InvalidGarminCallbackUrlError } from './garmin-callback-url';
 import { shouldSkipQueueWorkForDeletedUser } from '../queue/user-deletion-skip';
+import { getUserDeletionGuardState, UserDeletionGuardReadError } from '../shared/user-deletion-guard';
+import {
+    ProviderQueueUserDeletedOrDeletingError,
+    ProviderQueueUserNotConnectedError,
+} from '../queue/provider-queue-errors';
+import {
+    markQueueItemDispatchedIfUserActive,
+    QueueDispatchMarkerResult,
+} from '../queue/dispatch-marker';
 
 type TokenSnapshot = admin.firestore.QueryDocumentSnapshot;
 
@@ -69,6 +78,31 @@ function providerUserIdTokenField(provider: SleepProvider): string | null {
     }
 }
 
+const SLEEP_SYNC_QUEUE_ITEM_TYPES = new Set<SleepSyncQueueItemType>([
+    'garmin_ping',
+    'garmin_push',
+    'suunto_webhook',
+    'suunto_poll',
+    'coros_poll',
+]);
+
+function isValidSleepProvider(value: unknown): value is SleepProvider {
+    return Object.values(SLEEP_PROVIDERS).includes(value as SleepProvider);
+}
+
+function getMalformedSleepQueueItemReason(queueItem: SleepSyncQueueItemInterface): string | null {
+    if (!SLEEP_SYNC_QUEUE_ITEM_TYPES.has(queueItem.type)) {
+        return `invalid type ${queueItem.type || 'missing'}`;
+    }
+    if (!isValidSleepProvider(queueItem.provider)) {
+        return `invalid provider ${queueItem.provider || 'missing'}`;
+    }
+    if (typeof queueItem.providerUserId !== 'string' || queueItem.providerUserId.trim().length === 0) {
+        return 'missing providerUserId';
+    }
+    return null;
+}
+
 function compactQueuePayload(input: AddSleepSyncQueueItemInput): Partial<SleepSyncQueueItemInterface> {
     const payload: Partial<SleepSyncQueueItemInterface> = {
         type: input.type,
@@ -83,6 +117,69 @@ function compactQueuePayload(input: AddSleepSyncQueueItemInput): Partial<SleepSy
     return JSON.parse(JSON.stringify(payload)) as Partial<SleepSyncQueueItemInterface>;
 }
 
+function firebaseUserIdFromSleepTokenSnapshotOrNull(tokenSnapshot: TokenSnapshot | null): string | null {
+    return tokenSnapshot?.ref.parent.parent?.id || null;
+}
+
+async function resolveFirebaseUserIDForSleepQueueInput(
+    input: AddSleepSyncQueueItemInput,
+    queueId: string,
+): Promise<string> {
+    if (input.userID) {
+        return input.userID;
+    }
+
+    const tokenSnapshot = await findSleepTokenByProviderUserId(input.provider, input.providerUserId);
+    const firebaseUserID = firebaseUserIdFromSleepTokenSnapshotOrNull(tokenSnapshot);
+    if (!firebaseUserID) {
+        throw new ProviderQueueUserNotConnectedError(
+            serviceNameForProvider(input.provider),
+            input.providerUserId,
+            queueId,
+        );
+    }
+    return firebaseUserID;
+}
+
+async function assertSleepQueueUserCanReceiveWork(
+    input: AddSleepSyncQueueItemInput,
+    userID: string,
+    queueId: string,
+    phase: string,
+): Promise<void> {
+    let deletionGuard;
+    try {
+        deletionGuard = await getUserDeletionGuardState(admin.firestore(), userID);
+    } catch (error) {
+        throw new UserDeletionGuardReadError(userID, phase, error);
+    }
+
+    if (!deletionGuard.shouldSkip) {
+        return;
+    }
+
+    logger.warn(`[SleepSync] Skipping queue item ${queueId} for ${input.provider} because user ${userID} is missing or deletion is in progress.`);
+    throw new ProviderQueueUserDeletedOrDeletingError(
+        serviceNameForProvider(input.provider),
+        userID,
+        input.providerUserId,
+        queueId,
+    );
+}
+
+async function deleteSleepQueueDocAfterDeletionGuard(
+    docRef: admin.firestore.DocumentReference,
+    queueId: string,
+    userID: string,
+): Promise<void> {
+    try {
+        await admin.firestore().recursiveDelete(docRef);
+        logger.info(`[SleepSync] Deleted queue item ${queueId} for deleting user ${userID} before Cloud Task dispatch.`);
+    } catch (error) {
+        logger.error(`[SleepSync] Failed to delete queue item ${queueId} after deletion guard tripped for user ${userID}`, error);
+    }
+}
+
 export async function addSleepSyncQueueItem(input: AddSleepSyncQueueItemInput): Promise<admin.firestore.DocumentReference> {
     const nowMs = Date.now();
     const queueId = await generateIDFromParts([
@@ -91,6 +188,12 @@ export async function addSleepSyncQueueItem(input: AddSleepSyncQueueItemInput): 
         input.providerUserId,
         input.dedupeKey || input.callbackURL || `${input.rangeStartMs || ''}:${input.rangeEndMs || ''}:${nowMs}`,
     ]);
+    const userID = await resolveFirebaseUserIDForSleepQueueInput(input, queueId);
+    await assertSleepQueueUserCanReceiveWork(input, userID, queueId, `sleep_sync_queue_before_write:${input.provider}`);
+    const queuePayloadInput: AddSleepSyncQueueItemInput = {
+        ...input,
+        userID,
+    };
     const docRef = queueCollection().doc(queueId);
     await docRef.set({
         id: queueId,
@@ -99,12 +202,30 @@ export async function addSleepSyncQueueItem(input: AddSleepSyncQueueItemInput): 
         processed: false,
         dispatchedToCloudTask: null,
         expireAt: getExpireAtTimestamp(TTL_CONFIG.QUEUE_ITEM_IN_DAYS),
-        ...compactQueuePayload(input),
+        ...compactQueuePayload(queuePayloadInput),
     }, { merge: false });
+
+    try {
+        await assertSleepQueueUserCanReceiveWork(input, userID, queueId, `sleep_sync_queue_after_write:${input.provider}`);
+    } catch (error) {
+        if (error instanceof ProviderQueueUserDeletedOrDeletingError) {
+            await deleteSleepQueueDocAfterDeletionGuard(docRef, queueId, userID);
+        }
+        throw error;
+    }
+
     if (input.dispatchImmediately) {
         const wasTaskEnqueued = await enqueueSleepSyncTask(queueId, nowMs);
         if (wasTaskEnqueued) {
-            await markSleepQueueItemDispatched(docRef, queueId, nowMs);
+            const didMarkDispatched = await markSleepQueueItemDispatched(docRef, queueId, userID, nowMs);
+            if (!didMarkDispatched) {
+                throw new ProviderQueueUserDeletedOrDeletingError(
+                    serviceNameForProvider(input.provider),
+                    userID,
+                    input.providerUserId,
+                    queueId,
+                );
+            }
         }
     }
     return docRef;
@@ -119,10 +240,19 @@ function isFirestoreNotFoundError(error: unknown): boolean {
 async function markSleepQueueItemDispatched(
     queueItemDocument: admin.firestore.DocumentReference,
     queueItemId: string,
+    userID: string,
     dispatchedAtMs: number,
-): Promise<void> {
+): Promise<boolean> {
     try {
-        await queueItemDocument.update({ dispatchedToCloudTask: dispatchedAtMs });
+        const result = await markQueueItemDispatchedIfUserActive({
+            queueItemDocument,
+            queueItemId,
+            userID,
+            phase: 'sleep_sync_queue_dispatch_marker',
+            dispatchedAtMs,
+            logPrefix: 'SleepSync',
+        });
+        return result === QueueDispatchMarkerResult.Marked;
     } catch (error) {
         if (!isFirestoreNotFoundError(error)) {
             throw error;
@@ -132,7 +262,7 @@ async function markSleepQueueItemDispatched(
         const failedJob = failedJobSnapshot.exists ? failedJobSnapshot.data() as { originalCollection?: unknown } : null;
         if (failedJob?.originalCollection === SLEEP_SYNC_QUEUE_COLLECTION_NAME) {
             logger.info(`[SleepSync] Queue item ${queueItemId} was already moved to failed_jobs before dispatch timestamp update.`);
-            return;
+            return true;
         }
 
         throw error;
@@ -158,7 +288,7 @@ export async function findSleepTokenByProviderUserId(provider: SleepProvider, pr
         return null;
     }
     const snapshot = await admin.firestore().collectionGroup('tokens')
-        .where('serviceName', '==', provider)
+        .where('serviceName', '==', serviceNameForProvider(provider))
         .where(tokenField, '==', providerUserId)
         .limit(1)
         .get();
@@ -420,34 +550,44 @@ function isWebhookQueueItemType(type: SleepSyncQueueItemType): boolean {
 
 export async function processSleepSyncQueueItem(queueItem: SleepSyncQueueItemInterface): Promise<QueueResult> {
     logger.info(`[SleepSync] Processing queue item ${queueItem.id}`);
-    if (!isSleepProviderEnabled(queueItem.provider)) {
-        logger.info(`[SleepSync] Provider ${queueItem.provider} disabled by SLEEP_SYNC_DISABLED_PROVIDERS=${SLEEP_SYNC_DISABLED_PROVIDERS.join(',')}; marking queue item ${queueItem.id} processed`);
-        return updateToProcessed(queueItem, undefined, {
-            resultStatus: 'provider_disabled',
-            providerDisabled: true,
-            sessionsWritten: 0,
-            sessionsSkipped: 0,
-        });
-    }
 
     try {
-        if (queueItem.userID && !isSleepSyncUserAllowed(queueItem.userID)) {
-            logger.info(`[SleepSync] User ${queueItem.userID} outside SLEEP_SYNC_ALLOWED_USER_IDS; marking queue item ${queueItem.id} processed`);
-            return updateToProcessed(queueItem, undefined, {
-                resultStatus: 'user_not_allowed',
-                userAllowed: false,
-                sessionsWritten: 0,
-                sessionsSkipped: 0,
-            });
-        }
-        if (queueItem.userID && await shouldSkipQueueWorkForDeletedUser(
+        const providerForDeletionGuard = isValidSleepProvider(queueItem.provider) ? queueItem.provider : null;
+        if (queueItem.userID && providerForDeletionGuard && await shouldSkipQueueWorkForDeletedUser(
             queueItem.userID,
-            serviceNameForProvider(queueItem.provider),
+            serviceNameForProvider(providerForDeletionGuard),
             queueItem.id,
             'before_sleep_token_resolution',
         )) {
             return markQueueItemSkipped(queueItem, undefined, QUEUE_SKIPPED_REASONS.UserDeletedOrDeleting, {
                 skippedContext: 'USER_DELETION_GUARD',
+                sessionsWritten: 0,
+                sessionsSkipped: 0,
+            });
+        }
+
+        const malformedReason = getMalformedSleepQueueItemReason(queueItem);
+        if (malformedReason) {
+            const error = new Error(`Malformed sleep sync queue item ${queueItem.id}: ${malformedReason}`);
+            logger.warn(`[SleepSync] Queue item ${queueItem.id} is malformed (${malformedReason}); moving to DLQ`);
+            return moveToDeadLetterQueue(queueItem, error, undefined, 'INVALID_SLEEP_QUEUE_ITEM');
+        }
+
+        if (!isSleepProviderEnabled(queueItem.provider)) {
+            logger.info(`[SleepSync] Provider ${queueItem.provider} disabled by SLEEP_SYNC_DISABLED_PROVIDERS=${SLEEP_SYNC_DISABLED_PROVIDERS.join(',')}; marking queue item ${queueItem.id} processed`);
+            return updateToProcessed(queueItem, undefined, {
+                resultStatus: 'provider_disabled',
+                providerDisabled: true,
+                sessionsWritten: 0,
+                sessionsSkipped: 0,
+            });
+        }
+
+        if (queueItem.userID && !isSleepSyncUserAllowed(queueItem.userID)) {
+            logger.info(`[SleepSync] User ${queueItem.userID} outside SLEEP_SYNC_ALLOWED_USER_IDS; marking queue item ${queueItem.id} processed`);
+            return updateToProcessed(queueItem, undefined, {
+                resultStatus: 'user_not_allowed',
+                userAllowed: false,
                 sessionsWritten: 0,
                 sessionsSkipped: 0,
             });

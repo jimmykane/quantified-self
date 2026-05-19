@@ -5,15 +5,17 @@ const {
   mockOnDocumentDeleted,
   mockCollection,
   mockSettingsSet,
-  mockGetUserDeletionGuardState,
+  mockGetUserDeletionGuardStateInTransaction,
+  mockRunTransaction,
 } = vi.hoisted(() => {
   const mockOnDocumentDeleted = vi.fn((_options: unknown, handler: unknown) => handler);
   const mockSettingsSet = vi.fn().mockResolvedValue(undefined);
-  const mockGetUserDeletionGuardState = vi.fn().mockResolvedValue({
+  const mockGetUserDeletionGuardStateInTransaction = vi.fn().mockResolvedValue({
     userExists: true,
     deletionInProgress: false,
     shouldSkip: false,
   });
+  const mockRunTransaction = vi.fn();
 
   const mockCollection = vi.fn((collectionName: string) => {
     if (collectionName !== 'users') {
@@ -47,7 +49,8 @@ const {
     mockOnDocumentDeleted,
     mockCollection,
     mockSettingsSet,
-    mockGetUserDeletionGuardState,
+    mockGetUserDeletionGuardStateInTransaction,
+    mockRunTransaction,
   };
 });
 
@@ -59,6 +62,7 @@ vi.mock('firebase-admin', () => ({
   firestore: Object.assign(
     () => ({
       collection: mockCollection,
+      runTransaction: mockRunTransaction,
     }),
     {
       FieldValue: {},
@@ -67,7 +71,20 @@ vi.mock('firebase-admin', () => ({
 }));
 
 vi.mock('../shared/user-deletion-guard', () => ({
-  getUserDeletionGuardState: mockGetUserDeletionGuardState,
+  getUserDeletionGuardStateInTransaction: mockGetUserDeletionGuardStateInTransaction,
+  UserDeletionGuardReadError: class UserDeletionGuardReadError extends Error {
+    readonly name = 'UserDeletionGuardReadError';
+    readonly code = 'unavailable';
+    readonly statusCode = 503;
+
+    constructor(
+      public readonly uid: string,
+      public readonly phase: string,
+      public readonly originalError: unknown,
+    ) {
+      super(`Could not read deletion guard for user ${uid} during ${phase}.`);
+    }
+  },
 }));
 
 import {
@@ -79,7 +96,12 @@ import {
 describe('activity-sync/disconnect-routes', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockGetUserDeletionGuardState.mockResolvedValue({
+    mockRunTransaction.mockImplementation(async (runner: (transaction: {
+      set: typeof mockSettingsSet;
+    }) => unknown) => runner({
+      set: mockSettingsSet,
+    }));
+    mockGetUserDeletionGuardStateInTransaction.mockResolvedValue({
       userExists: true,
       deletionInProgress: false,
       shouldSkip: false,
@@ -91,7 +113,7 @@ describe('activity-sync/disconnect-routes', () => {
       params: { uid: 'user-1' },
     });
 
-    expect(mockSettingsSet).toHaveBeenCalledWith({
+    expect(mockSettingsSet).toHaveBeenCalledWith(expect.any(Object), {
       serviceSyncSettings: {
         activitySyncRoutes: {
           [ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp]: {
@@ -107,7 +129,7 @@ describe('activity-sync/disconnect-routes', () => {
       params: { uid: 'user-1' },
     });
 
-    expect(mockSettingsSet).toHaveBeenCalledWith({
+    expect(mockSettingsSet).toHaveBeenCalledWith(expect.any(Object), {
       serviceSyncSettings: {
         activitySyncRoutes: {
           [ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp]: {
@@ -126,7 +148,7 @@ describe('activity-sync/disconnect-routes', () => {
       params: { uid: 'user-1' },
     });
 
-    expect(mockSettingsSet).toHaveBeenCalledWith({
+    expect(mockSettingsSet).toHaveBeenCalledWith(expect.any(Object), {
       serviceSyncSettings: {
         activitySyncRoutes: {
           [ACTIVITY_SYNC_ROUTE_IDS.COROSAPI_to_SuuntoApp]: {
@@ -138,7 +160,7 @@ describe('activity-sync/disconnect-routes', () => {
   });
 
   it('does not write route settings when user root does not exist', async () => {
-    mockGetUserDeletionGuardState.mockResolvedValueOnce({
+    mockGetUserDeletionGuardStateInTransaction.mockResolvedValueOnce({
       userExists: false,
       deletionInProgress: false,
       shouldSkip: true,
@@ -158,7 +180,7 @@ describe('activity-sync/disconnect-routes', () => {
     await (disableActivitySyncRoutesOnGarminTokenRootDelete as unknown as (event: unknown) => Promise<void>)(event);
 
     expect(mockSettingsSet).toHaveBeenCalledTimes(2);
-    expect(mockSettingsSet).toHaveBeenNthCalledWith(1, {
+    expect(mockSettingsSet).toHaveBeenNthCalledWith(1, expect.any(Object), {
       serviceSyncSettings: {
         activitySyncRoutes: {
           [ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp]: {
@@ -167,7 +189,7 @@ describe('activity-sync/disconnect-routes', () => {
         },
       },
     }, { merge: true });
-    expect(mockSettingsSet).toHaveBeenNthCalledWith(2, {
+    expect(mockSettingsSet).toHaveBeenNthCalledWith(2, expect.any(Object), {
       serviceSyncSettings: {
         activitySyncRoutes: {
           [ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp]: {

@@ -530,6 +530,125 @@ describe('cleanupUserAccounts', () => {
         expect(recursiveDeleteMock).toHaveBeenCalledWith(expect.objectContaining({ path: 'suuntoAppWorkoutQueue/provider-job-1' }));
     });
 
+    it('should recover provider identifiers from archived orphan tokens when current token docs are already gone', async () => {
+        const wrapped = cleanupUserAccounts;
+        const user = testEnv.auth.makeUserRecord({ uid: 'testUser123' });
+
+        tokensGetMock.mockResolvedValue({ empty: true, size: 0, docs: [] });
+        whereMock.mockImplementation((field: string, _operator: string, value: string) => ({
+            get: vi.fn().mockResolvedValue(
+                field === 'uid' && value === 'testUser123'
+                    ? {
+                        docs: [{
+                            id: 'archived-garmin-token',
+                            ref: { path: `${ORPHANED_SERVICE_TOKENS_COLLECTION_NAME}/archived-garmin-token` },
+                            data: () => ({
+                                serviceName: ServiceNames.GarminAPI,
+                                token: { userID: 'archived-garmin-user' },
+                            }),
+                        }],
+                    }
+                    : field === 'userID' && value === 'archived-garmin-user'
+                        ? {
+                            docs: [{
+                                id: 'legacy-garmin-job',
+                                ref: { path: 'garminAPIActivityQueue/legacy-garmin-job' },
+                                data: () => ({}),
+                            }],
+                        }
+                        : { docs: [] }
+            )
+        }));
+
+        await wrapped(user, { eventId: 'eventId' } as unknown as functions.EventContext);
+
+        expect(whereMock).toHaveBeenCalledWith('uid', '==', 'testUser123');
+        expect(whereMock).toHaveBeenCalledWith('userID', '==', 'archived-garmin-user');
+        expect(recursiveDeleteMock).toHaveBeenCalledWith(expect.objectContaining({
+            path: 'garminAPIActivityQueue/legacy-garmin-job',
+        }));
+    });
+
+    it('should recover provider identifiers from uid-keyed queue docs when token docs are already gone', async () => {
+        const wrapped = cleanupUserAccounts;
+        const user = testEnv.auth.makeUserRecord({ uid: 'testUser123' });
+
+        tokensGetMock.mockResolvedValue({ empty: true, size: 0, docs: [] });
+        whereMock.mockImplementation((field: string, _operator: string, value: string) => ({
+            get: vi.fn().mockResolvedValue(
+                field === 'userID' && value === 'testUser123'
+                    ? {
+                        docs: [{
+                            id: 'uid-keyed-sleep-job',
+                            ref: { path: 'sleepSyncQueue/uid-keyed-sleep-job' },
+                            data: () => ({
+                                provider: 'SuuntoApp',
+                                providerUserId: 'suunto-provider-from-queue',
+                            }),
+                        }],
+                    }
+                    : field === 'providerUserId' && value === 'suunto-provider-from-queue'
+                        ? {
+                            docs: [{
+                                id: 'provider-only-sleep-job',
+                                ref: { path: 'sleepSyncQueue/provider-only-sleep-job' },
+                                data: () => ({}),
+                            }],
+                        }
+                        : { docs: [] }
+            )
+        }));
+
+        await wrapped(user, { eventId: 'eventId' } as unknown as functions.EventContext);
+
+        expect(whereMock).toHaveBeenCalledWith('userID', '==', 'testUser123');
+        expect(whereMock).toHaveBeenCalledWith('providerUserId', '==', 'suunto-provider-from-queue');
+        expect(recursiveDeleteMock).toHaveBeenCalledWith(expect.objectContaining({
+            path: 'sleepSyncQueue/provider-only-sleep-job',
+        }));
+    });
+
+    it('should recover Garmin provider identifiers from legacy failed jobs without originalCollection', async () => {
+        const wrapped = cleanupUserAccounts;
+        const user = testEnv.auth.makeUserRecord({ uid: 'testUser123' });
+
+        tokensGetMock.mockResolvedValue({ empty: true, size: 0, docs: [] });
+        whereMock.mockImplementation((field: string, _operator: string, value: string) => ({
+            get: vi.fn().mockResolvedValue(
+                field === 'firebaseUserID' && value === 'testUser123'
+                    ? {
+                        docs: [{
+                            id: 'legacy-garmin-failed-job',
+                            ref: { path: 'failed_jobs/legacy-garmin-failed-job' },
+                            data: () => ({
+                                firebaseUserID: 'testUser123',
+                                userID: 'legacy-garmin-provider-user',
+                                activityFileID: 'activity-file-1',
+                                activityFileType: 'FIT',
+                            }),
+                        }],
+                    }
+                    : field === 'userID' && value === 'legacy-garmin-provider-user'
+                        ? {
+                            docs: [{
+                                id: 'legacy-garmin-queue-job',
+                                ref: { path: 'garminAPIActivityQueue/legacy-garmin-queue-job' },
+                                data: () => ({}),
+                            }],
+                        }
+                        : { docs: [] }
+            )
+        }));
+
+        await wrapped(user, { eventId: 'eventId' } as unknown as functions.EventContext);
+
+        expect(whereMock).toHaveBeenCalledWith('firebaseUserID', '==', 'testUser123');
+        expect(whereMock).toHaveBeenCalledWith('userID', '==', 'legacy-garmin-provider-user');
+        expect(recursiveDeleteMock).toHaveBeenCalledWith(expect.objectContaining({
+            path: 'garminAPIActivityQueue/legacy-garmin-queue-job',
+        }));
+    });
+
     it('should handle archiving with non-standard error and empty token data', async () => {
         const wrapped = cleanupUserAccounts;
         const user = testEnv.auth.makeUserRecord({ uid: 'testUser123' });

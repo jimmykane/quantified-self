@@ -10,10 +10,13 @@ const {
   mockCollection,
   mockTransactionGet,
   mockTransactionSet,
+  mockTransactionUpdate,
   mockRunTransaction,
   mockEnqueueActivitySyncTask,
   mockGenerateIDFromParts,
   mockGetExpireAtTimestamp,
+  mockRecursiveDelete,
+  mockGetUserDeletionGuardState,
   mockGetUserDeletionGuardStateInTransaction,
 } = vi.hoisted(() => {
   const mockGet = vi.fn();
@@ -21,12 +24,15 @@ const {
   const mockUpdate = vi.fn().mockResolvedValue(undefined);
   const mockTransactionGet = vi.fn();
   const mockTransactionSet = vi.fn();
+  const mockTransactionUpdate = vi.fn((ref: { update?: (data: unknown) => Promise<void> }, data: unknown) => ref.update?.(data));
   const mockRunTransaction = vi.fn(async (runner: (transaction: {
     get: typeof mockTransactionGet;
     set: typeof mockTransactionSet;
+    update: typeof mockTransactionUpdate;
   }) => unknown) => runner({
     get: mockTransactionGet,
     set: mockTransactionSet,
+    update: mockTransactionUpdate,
   }));
   const mockDoc = vi.fn(() => ({
     get: mockGet,
@@ -44,10 +50,13 @@ const {
     mockCollection,
     mockTransactionGet,
     mockTransactionSet,
+    mockTransactionUpdate,
     mockRunTransaction,
     mockEnqueueActivitySyncTask: vi.fn().mockResolvedValue(true),
     mockGenerateIDFromParts: vi.fn(async (parts: string[]) => parts.join('__')),
     mockGetExpireAtTimestamp: vi.fn(() => new Date('2026-01-01T00:00:00.000Z')),
+    mockRecursiveDelete: vi.fn().mockResolvedValue(undefined),
+    mockGetUserDeletionGuardState: vi.fn(),
     mockGetUserDeletionGuardStateInTransaction: vi.fn(),
   };
 });
@@ -56,6 +65,7 @@ vi.mock('firebase-admin', () => ({
   firestore: () => ({
     collection: mockCollection,
     runTransaction: mockRunTransaction,
+    recursiveDelete: mockRecursiveDelete,
   }),
 }));
 
@@ -72,7 +82,21 @@ vi.mock('../shared/ttl-config', () => ({
 }));
 
 vi.mock('../shared/user-deletion-guard', () => ({
+  getUserDeletionGuardState: mockGetUserDeletionGuardState,
   getUserDeletionGuardStateInTransaction: mockGetUserDeletionGuardStateInTransaction,
+  UserDeletionGuardReadError: class UserDeletionGuardReadError extends Error {
+    readonly name = 'UserDeletionGuardReadError';
+    readonly code = 'unavailable';
+    readonly statusCode = 503;
+
+    constructor(
+      public readonly uid: string,
+      public readonly phase: string,
+      public readonly originalError: unknown,
+    ) {
+      super(`Could not read deletion guard for user ${uid} during ${phase}.`);
+    }
+  },
 }));
 
 import { buildActivitySyncQueueItemId, enqueueActivitySyncQueueItem } from './queue';
@@ -84,15 +108,23 @@ describe('activity-sync/queue', () => {
     mockRunTransaction.mockImplementation(async (runner: (transaction: {
       get: typeof mockTransactionGet;
       set: typeof mockTransactionSet;
+      update: typeof mockTransactionUpdate;
     }) => unknown) => runner({
       get: mockTransactionGet,
       set: mockTransactionSet,
+      update: mockTransactionUpdate,
     }));
     mockGetUserDeletionGuardStateInTransaction.mockResolvedValue({
       userExists: true,
       deletionInProgress: false,
       shouldSkip: false,
     });
+    mockGetUserDeletionGuardState.mockResolvedValue({
+      userExists: true,
+      deletionInProgress: false,
+      shouldSkip: false,
+    });
+    mockTransactionUpdate.mockClear();
   });
 
   it('builds deterministic queue item IDs', async () => {
@@ -287,6 +319,132 @@ describe('activity-sync/queue', () => {
       reason: 'user_deleted_or_deleting',
     });
     expect(mockTransactionSet).not.toHaveBeenCalled();
+    expect(mockEnqueueActivitySyncTask).not.toHaveBeenCalled();
+    expect(mockUpdate).not.toHaveBeenCalled();
+  });
+
+  it('deletes a newly written item and skips dispatch when deletion starts after the transaction', async () => {
+    mockTransactionGet.mockResolvedValueOnce({ exists: false });
+    mockGetUserDeletionGuardState.mockResolvedValueOnce({
+      userExists: true,
+      deletionInProgress: true,
+      shouldSkip: true,
+    });
+
+    const result = await enqueueActivitySyncQueueItem({
+      routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp,
+      sourceServiceName: ServiceNames.GarminAPI,
+      destinationServiceName: ServiceNames.SuuntoApp,
+      userID: 'user-1',
+      eventID: 'event-1',
+      originalFile: { path: 'p.fit', extension: 'fit' },
+      manual: false,
+    });
+
+    expect(result).toEqual({
+      enqueued: false,
+      queueItemId: 'activitySync__GarminAPI_to_SuuntoApp__user-1__event-1',
+      reason: 'user_deleted_or_deleting',
+    });
+    expect(mockTransactionSet).toHaveBeenCalled();
+    expect(mockRecursiveDelete).toHaveBeenCalledWith(expect.any(Object));
+    expect(mockEnqueueActivitySyncTask).not.toHaveBeenCalled();
+    expect(mockUpdate).not.toHaveBeenCalled();
+  });
+
+  it('does not write the dispatch marker when deletion starts after Cloud Task enqueue', async () => {
+    mockTransactionGet.mockResolvedValueOnce({ exists: false });
+    mockGetUserDeletionGuardState.mockResolvedValue({
+      userExists: true,
+      deletionInProgress: false,
+      shouldSkip: false,
+    });
+    mockGetUserDeletionGuardStateInTransaction
+      .mockResolvedValueOnce({
+        userExists: true,
+        deletionInProgress: false,
+        shouldSkip: false,
+      })
+      .mockResolvedValueOnce({
+        userExists: true,
+        deletionInProgress: true,
+        shouldSkip: true,
+      });
+
+    const result = await enqueueActivitySyncQueueItem({
+      routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp,
+      sourceServiceName: ServiceNames.GarminAPI,
+      destinationServiceName: ServiceNames.SuuntoApp,
+      userID: 'user-1',
+      eventID: 'event-1',
+      originalFile: { path: 'p.fit', extension: 'fit' },
+      manual: false,
+    });
+
+    expect(result).toEqual({
+      enqueued: false,
+      queueItemId: 'activitySync__GarminAPI_to_SuuntoApp__user-1__event-1',
+      reason: 'user_deleted_or_deleting',
+    });
+    expect(mockTransactionSet).toHaveBeenCalled();
+    expect(mockEnqueueActivitySyncTask).toHaveBeenCalledWith(
+      'activitySync__GarminAPI_to_SuuntoApp__user-1__event-1',
+      expect.any(Number),
+    );
+    expect(mockRecursiveDelete).toHaveBeenCalledWith(expect.any(Object));
+    expect(mockUpdate).not.toHaveBeenCalled();
+  });
+
+  it('deletes and skips redispatching an existing pending item when deletion starts after the transaction', async () => {
+    mockTransactionGet.mockResolvedValueOnce({
+      exists: true,
+      data: () => ({ processed: false, dispatchedToCloudTask: null, dateCreated: 1700000000000 }),
+    });
+    mockGetUserDeletionGuardState.mockResolvedValueOnce({
+      userExists: false,
+      deletionInProgress: false,
+      shouldSkip: true,
+    });
+
+    const result = await enqueueActivitySyncQueueItem({
+      routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp,
+      sourceServiceName: ServiceNames.GarminAPI,
+      destinationServiceName: ServiceNames.SuuntoApp,
+      userID: 'user-1',
+      eventID: 'event-1',
+      originalFile: { path: 'p.fit', extension: 'fit' },
+      manual: false,
+    });
+
+    expect(result).toEqual({
+      enqueued: false,
+      queueItemId: 'activitySync__GarminAPI_to_SuuntoApp__user-1__event-1',
+      reason: 'user_deleted_or_deleting',
+    });
+    expect(mockRecursiveDelete).toHaveBeenCalledWith(expect.any(Object));
+    expect(mockEnqueueActivitySyncTask).not.toHaveBeenCalled();
+    expect(mockUpdate).not.toHaveBeenCalled();
+  });
+
+  it('fails retryably without dispatch when the post-transaction deletion guard cannot be read', async () => {
+    mockTransactionGet.mockResolvedValueOnce({ exists: false });
+    mockGetUserDeletionGuardState.mockRejectedValueOnce(new Error('guard unavailable'));
+
+    await expect(enqueueActivitySyncQueueItem({
+      routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp,
+      sourceServiceName: ServiceNames.GarminAPI,
+      destinationServiceName: ServiceNames.SuuntoApp,
+      userID: 'user-1',
+      eventID: 'event-1',
+      originalFile: { path: 'p.fit', extension: 'fit' },
+      manual: false,
+    })).rejects.toMatchObject({
+      name: 'UserDeletionGuardReadError',
+      code: 'unavailable',
+    });
+
+    expect(mockTransactionSet).toHaveBeenCalled();
+    expect(mockRecursiveDelete).not.toHaveBeenCalled();
     expect(mockEnqueueActivitySyncTask).not.toHaveBeenCalled();
     expect(mockUpdate).not.toHaveBeenCalled();
   });

@@ -10,18 +10,26 @@ import {
     SLEEP_SYNC_STATE_COLLECTION_ID,
     SLEEP_SYNC_STATUSES,
 } from '../../../shared/sleep';
-import { getUserDeletionGuardState } from '../shared/user-deletion-guard';
+import {
+    getUserDeletionGuardState,
+    getUserDeletionGuardStateInTransaction,
+    UserDeletionGuardReadError,
+} from '../shared/user-deletion-guard';
 import { generateIDFromParts } from '../utils';
 
-function userSleepSessionsRef(userID: string): admin.firestore.CollectionReference {
-    return admin.firestore()
+function userSleepSessionsRef(db: admin.firestore.Firestore, userID: string): admin.firestore.CollectionReference {
+    return db
         .collection('users')
         .doc(userID)
         .collection(SLEEP_SESSIONS_COLLECTION_ID);
 }
 
-function userSleepSyncStateRef(userID: string, provider: SleepProvider): admin.firestore.DocumentReference {
-    return admin.firestore()
+function userSleepSyncStateRef(
+    db: admin.firestore.Firestore,
+    userID: string,
+    provider: SleepProvider,
+): admin.firestore.DocumentReference {
+    return db
         .collection('users')
         .doc(userID)
         .collection(SLEEP_SYNC_STATE_COLLECTION_ID)
@@ -34,6 +42,30 @@ function cleanUndefined<T>(value: T): T {
 
 async function shouldSkipSleepUserWrite(userID: string, provider: SleepProvider, target: 'session' | 'state'): Promise<boolean> {
     const deletionGuard = await getUserDeletionGuardState(admin.firestore(), userID);
+    if (!deletionGuard.shouldSkip) {
+        return false;
+    }
+
+    logger.warn(
+        `[SleepSync] Skipping ${provider} sleep sync ${target} write for user ${userID} because the user is missing or deletion is in progress.`,
+    );
+    return true;
+}
+
+async function shouldSkipSleepUserWriteInTransaction(
+    db: admin.firestore.Firestore,
+    transaction: admin.firestore.Transaction,
+    userID: string,
+    provider: SleepProvider,
+    target: 'session' | 'state',
+): Promise<boolean> {
+    let deletionGuard;
+    try {
+        deletionGuard = await getUserDeletionGuardStateInTransaction(db, transaction, userID);
+    } catch (error) {
+        throw new UserDeletionGuardReadError(userID, `sleep_sync_${target}_write`, error);
+    }
+
     if (!deletionGuard.shouldSkip) {
         return false;
     }
@@ -80,45 +112,48 @@ export async function upsertSleepSession(
     mapperResult: SleepMapperResult,
     nowMs = Date.now(),
 ): Promise<{ id: string; session: SleepSession; written: boolean }> {
+    const provider = mapperResult.session.source.provider;
     const id = await buildSleepSessionDocumentId(
         userID,
-        mapperResult.session.source.provider,
+        provider,
         mapperResult.sourceSessionKey,
     );
-    if (await shouldSkipSleepUserWrite(userID, mapperResult.session.source.provider, 'session')) {
-        return {
-            id,
-            session: {
-                ...mapperResult.session,
-                id,
-                userID,
-                createdAtMs: nowMs,
-                updatedAtMs: nowMs,
-            },
-            written: false,
-        };
-    }
-    const docRef = userSleepSessionsRef(userID).doc(id);
-    const existing = await docRef.get();
-    const existingSession = existing.exists ? existing.data() as SleepSession : null;
-    if (existingSession && shouldKeepExistingSleepSession(existingSession, mapperResult.session)) {
-        logger.info(`[SleepSync] Preserved fuller ${mapperResult.session.source.provider} sleep session ${id} for ${userID}`);
-        return { id, session: existingSession, written: false };
-    }
-
-    const createdAtMs = existingSession && typeof existingSession.createdAtMs === 'number'
-        ? existingSession.createdAtMs
-        : nowMs;
-    const session: SleepSession = {
+    const skippedSession: SleepSession = {
         ...mapperResult.session,
         id,
         userID,
-        createdAtMs,
+        createdAtMs: nowMs,
         updatedAtMs: nowMs,
     };
-    await docRef.set(cleanUndefined(session), { merge: true });
-    logger.info(`[SleepSync] Upserted ${mapperResult.session.source.provider} sleep session ${id} for ${userID}`);
-    return { id, session, written: true };
+
+    const db = admin.firestore();
+    const docRef = userSleepSessionsRef(db, userID).doc(id);
+    return db.runTransaction(async (transaction) => {
+        if (await shouldSkipSleepUserWriteInTransaction(db, transaction, userID, provider, 'session')) {
+            return { id, session: skippedSession, written: false };
+        }
+
+        const existing = await transaction.get(docRef);
+        const existingSession = existing.exists ? existing.data() as SleepSession : null;
+        if (existingSession && shouldKeepExistingSleepSession(existingSession, mapperResult.session)) {
+            logger.info(`[SleepSync] Preserved fuller ${provider} sleep session ${id} for ${userID}`);
+            return { id, session: existingSession, written: false };
+        }
+
+        const createdAtMs = existingSession && typeof existingSession.createdAtMs === 'number'
+            ? existingSession.createdAtMs
+            : nowMs;
+        const session: SleepSession = {
+            ...mapperResult.session,
+            id,
+            userID,
+            createdAtMs,
+            updatedAtMs: nowMs,
+        };
+        transaction.set(docRef, cleanUndefined(session), { merge: true });
+        logger.info(`[SleepSync] Upserted ${provider} sleep session ${id} for ${userID}`);
+        return { id, session, written: true };
+    });
 }
 
 export async function upsertSleepSessions(
@@ -169,15 +204,19 @@ export async function updateSleepSyncState(
     }>,
     nowMs = Date.now(),
 ): Promise<void> {
-    if (await shouldSkipSleepUserWrite(userID, provider, 'state')) {
-        return;
-    }
-    await userSleepSyncStateRef(userID, provider).set(cleanUndefined({
-        provider,
-        status: update.status || SLEEP_SYNC_STATUSES.Ready,
-        ...update,
-        updatedAtMs: nowMs,
-    }), { merge: true });
+    const db = admin.firestore();
+    const stateRef = userSleepSyncStateRef(db, userID, provider);
+    await db.runTransaction(async (transaction) => {
+        if (await shouldSkipSleepUserWriteInTransaction(db, transaction, userID, provider, 'state')) {
+            return;
+        }
+        transaction.set(stateRef, cleanUndefined({
+            provider,
+            status: update.status || SLEEP_SYNC_STATUSES.Ready,
+            ...update,
+            updatedAtMs: nowMs,
+        }), { merge: true });
+    });
 }
 
 export async function markSleepSyncError(

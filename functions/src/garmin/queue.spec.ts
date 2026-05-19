@@ -170,6 +170,7 @@ import { processGarminAPIActivityQueueItem, insertGarminAPIActivityFileToQueue }
 import { addToQueueForGarmin } from '../queue';
 import { getTokenData, TerminalServiceAuthError, TokenRefreshSkippedForDeletedUserError } from '../tokens';
 import { updateToProcessed } from '../queue-utils';
+import { EventWriteSkippedForDeletedUserError } from '../utils';
 
 describe('Garmin Queue', () => { // Grouping for cleaner output
 
@@ -495,6 +496,30 @@ describe('Garmin Queue', () => { // Grouping for cleaner output
             expect(getTokenData).toHaveBeenCalled();
             expect(mockRequestGet).toHaveBeenCalled();
             expect(mockSetEvent).not.toHaveBeenCalled();
+            expect(mockIncreaseRetryCountForQueueItem).not.toHaveBeenCalled();
+            expect(mockMoveToDeadLetterQueue).not.toHaveBeenCalled();
+            expect(mockUpdateToProcessed).not.toHaveBeenCalled();
+            expect(mockMarkQueueItemSkipped).toHaveBeenCalledWith(
+                queueItem,
+                undefined,
+                'user_deleted_or_deleting',
+                { skippedContext: 'USER_DELETION_GUARD' },
+            );
+        });
+
+        it('should skip without retrying when setEvent detects account deletion mid-write', async () => {
+            mockShouldSkipQueueWorkForDeletedUser
+                .mockResolvedValueOnce(false)
+                .mockResolvedValueOnce(false);
+            mockSetEvent.mockRejectedValueOnce(
+                new EventWriteSkippedForDeletedUserError(firebaseUserID, 'event_writer:users/firebase-user-id/events/event-id'),
+            );
+
+            const result = await processGarminAPIActivityQueueItem(queueItem);
+
+            expect(result).toBe('PROCESSED');
+            expect(mockRequestGet).toHaveBeenCalled();
+            expect(mockSetEvent).toHaveBeenCalled();
             expect(mockIncreaseRetryCountForQueueItem).not.toHaveBeenCalled();
             expect(mockMoveToDeadLetterQueue).not.toHaveBeenCalled();
             expect(mockUpdateToProcessed).not.toHaveBeenCalled();

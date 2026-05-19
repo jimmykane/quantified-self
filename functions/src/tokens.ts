@@ -28,9 +28,9 @@ export class TokenRefreshSkippedForDeletedUserError extends Error {
     public readonly firebaseUserID: string,
     public readonly serviceName: ServiceNames,
     public readonly tokenDocumentID: string,
-    public readonly phase: 'before_refresh' | 'before_persist',
+    public readonly phase: 'before_return' | 'before_refresh' | 'before_persist',
   ) {
-    super(`Skipping ${serviceName} token refresh for ${tokenDocumentID} because user ${firebaseUserID} is missing or deletion is in progress.`);
+    super(`Skipping ${serviceName} token use for ${tokenDocumentID} because user ${firebaseUserID} is missing or deletion is in progress.`);
   }
 }
 
@@ -58,10 +58,10 @@ function getFirebaseUserIDForTokenDocument(doc: QueryDocumentSnapshot | Document
   return doc.ref.parent.parent?.id || null;
 }
 
-async function assertTokenRefreshCanPersistForUser(
+async function assertTokenUseAllowedForUser(
   doc: QueryDocumentSnapshot | DocumentSnapshot,
   serviceName: ServiceNames,
-  phase: 'before_refresh' | 'before_persist',
+  phase: 'before_return' | 'before_refresh' | 'before_persist',
 ): Promise<void> {
   const firebaseUserID = getFirebaseUserIDForTokenDocument(doc);
   if (!firebaseUserID) {
@@ -99,6 +99,7 @@ export async function getTokenData(
   });
 
   if (!token.expired() && !forceRefreshAndSave) {
+    await assertTokenUseAllowedForUser(doc, serviceName, 'before_return');
     logger.info(`Token is not expired won't refresh ${doc.id}`);
     switch (serviceName) {
       default:
@@ -150,7 +151,7 @@ export async function getTokenData(
 
   let responseToken;
   const date = new Date();
-  await assertTokenRefreshCanPersistForUser(doc, serviceName, 'before_refresh');
+  await assertTokenUseAllowedForUser(doc, serviceName, 'before_refresh');
   try {
     responseToken = await token.refresh();
     // COROS Exception for response
@@ -242,7 +243,7 @@ export async function getTokenData(
       break;
   }
 
-  await assertTokenRefreshCanPersistForUser(doc, serviceName, 'before_persist');
+  await assertTokenUseAllowedForUser(doc, serviceName, 'before_persist');
   await doc.ref.update(newToken as any);
   logger.info(`Successfully saved refreshed token ${doc.id}`);
   return newToken;

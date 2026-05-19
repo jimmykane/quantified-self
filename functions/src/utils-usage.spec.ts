@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { UsageLimitExceededError, checkEventUsageLimit, hasBasicAccess, hasProAccess, getUserRoleAndGracePeriod, setEvent, determineRedirectURI, setAccessControlHeadersOnResponse } from './utils';
+import { UsageLimitExceededError, checkEventUsageLimit, hasBasicAccess, hasProAccess, getUserRoleAndGracePeriod, setEvent, determineRedirectURI, setAccessControlHeadersOnResponse, EventWriteSkippedForDeletedUserError } from './utils';
 import { HttpsError } from 'firebase-functions/v2/https';
 import { SPORTS_LIB_VERSION } from './shared/sports-lib-version.node';
 import { USAGE_LIMITS } from '../../shared/limits';
@@ -47,6 +47,14 @@ const hoisted = vi.hoisted(() => {
     let countValue = 0;
     const setCount = (v: number) => { countValue = v; };
     const serverTimestamp = vi.fn().mockReturnValue('SERVER_TIMESTAMP');
+    const getUserDeletionGuardState = vi.fn();
+    const getUserDeletionGuardStateInTransaction = vi.fn();
+    const transactionSet = vi.fn();
+    const transactionGet = vi.fn();
+    const runTransaction = vi.fn(async (callback: any) => callback({
+        get: transactionGet,
+        set: transactionSet,
+    }));
 
     const makeCollection = (name: string) => ({
         _name: name,
@@ -67,6 +75,7 @@ const hoisted = vi.hoisted(() => {
         collection: (name: string) => makeCollection(name),
         doc: (id: string) => makeDoc(id),
         batch: vi.fn(),
+        runTransaction,
     });
     (firestore as any).FieldValue = { serverTimestamp };
 
@@ -90,7 +99,20 @@ const hoisted = vi.hoisted(() => {
         createCustomToken,
     });
 
-    return { firestore, storage, auth, getUser, setCount, bucketSave, serverTimestamp };
+    return {
+        firestore,
+        storage,
+        auth,
+        getUser,
+        setCount,
+        bucketSave,
+        serverTimestamp,
+        getUserDeletionGuardState,
+        getUserDeletionGuardStateInTransaction,
+        transactionSet,
+        transactionGet,
+        runTransaction,
+    };
 });
 
 vi.mock('firebase-admin', () => ({
@@ -104,10 +126,41 @@ vi.mock('firebase-admin', () => ({
     auth: hoisted.auth,
 }));
 
+vi.mock('./shared/user-deletion-guard', () => ({
+    getUserDeletionGuardState: hoisted.getUserDeletionGuardState,
+    getUserDeletionGuardStateInTransaction: hoisted.getUserDeletionGuardStateInTransaction,
+    UserDeletionGuardReadError: class UserDeletionGuardReadError extends Error {
+        readonly name = 'UserDeletionGuardReadError';
+        readonly code = 'unavailable';
+        readonly statusCode = 503;
+
+        constructor(
+            public readonly uid: string,
+            public readonly phase: string,
+            public readonly originalError: unknown,
+        ) {
+            super(`Could not read deletion guard for user ${uid} during ${phase}.`);
+        }
+    },
+}));
+
 describe('utils higher-level helpers', () => {
     beforeEach(() => {
         vi.clearAllMocks();
         hoisted.setCount(0);
+        hoisted.getUserDeletionGuardState.mockResolvedValue({
+            userExists: true,
+            deletionInProgress: false,
+            shouldSkip: false,
+        });
+        hoisted.getUserDeletionGuardStateInTransaction.mockResolvedValue({
+            userExists: true,
+            deletionInProgress: false,
+            shouldSkip: false,
+        });
+        hoisted.transactionSet.mockClear();
+        hoisted.transactionGet.mockClear();
+        hoisted.runTransaction.mockClear();
     });
 
     describe('checkEventUsageLimit', () => {
@@ -189,7 +242,7 @@ describe('utils higher-level helpers', () => {
     });
 
     describe('setEvent', () => {
-        it('writes activities, meta data, and uses bulkWriter when provided', async () => {
+        it('writes activities and metadata through deletion-guarded transactions even when bulkWriter is provided', async () => {
             hoisted.getUser.mockResolvedValue({ customClaims: { stripeRole: 'pro' } });
             const bulkWriter = { set: vi.fn() };
             let assignedEventID: string | null = null;
@@ -218,9 +271,9 @@ describe('utils higher-level helpers', () => {
             const result = await setEvent('user-1', 'event-1', event as any, metaData, originalFile as any, bulkWriter as any);
 
             expect(writeAllEventDataMock).toHaveBeenCalled();
-            expect(bulkWriter.set).toHaveBeenCalled(); // called at least for metaData/processing
+            expect(bulkWriter.set).not.toHaveBeenCalled();
 
-            const processingCall = (bulkWriter.set as any).mock.calls.find((call: any[]) => call[1]?.sportsLibVersion);
+            const processingCall = hoisted.transactionSet.mock.calls.find((call: any[]) => call[1]?.sportsLibVersion);
             expect(processingCall).toBeTruthy();
             expect(processingCall[1]).toEqual(expect.objectContaining({
                 sportsLibVersion: SPORTS_LIB_VERSION,
@@ -231,6 +284,31 @@ describe('utils higher-level helpers', () => {
                 eventID: 'event-1',
                 savedOriginalFiles: mockSavedOriginalFiles,
             });
+        });
+
+        it('does not write event data when account deletion is active', async () => {
+            hoisted.getUserDeletionGuardState.mockResolvedValueOnce({
+                userExists: true,
+                deletionInProgress: true,
+                shouldSkip: true,
+            });
+            hoisted.getUser.mockResolvedValue({ customClaims: { stripeRole: 'pro' } });
+            const bulkWriter = { set: vi.fn() };
+            const event = {
+                getID: () => 'event-1',
+                setID: vi.fn(),
+                getActivities: () => [],
+            };
+            const metaData = {
+                serviceName: 'GARMINAPI',
+                toJSON: () => ({ meta: true }),
+            } as any;
+
+            await expect(setEvent('user-1', 'event-1', event as any, metaData, undefined, bulkWriter as any))
+                .rejects.toBeInstanceOf(EventWriteSkippedForDeletedUserError);
+
+            expect(writeAllEventDataMock).not.toHaveBeenCalled();
+            expect(bulkWriter.set).not.toHaveBeenCalled();
         });
     });
 

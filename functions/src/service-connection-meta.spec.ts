@@ -4,11 +4,12 @@ import { ServiceNames } from '@sports-alliance/sports-lib';
 const hoisted = vi.hoisted(() => ({
   metaSet: vi.fn().mockResolvedValue(undefined),
   disableActivitySyncRoutesForDisconnectedService: vi.fn().mockResolvedValue(undefined),
-  getUserDeletionGuardState: vi.fn().mockResolvedValue({
+  getUserDeletionGuardStateInTransaction: vi.fn().mockResolvedValue({
     userExists: true,
     deletionInProgress: false,
     shouldSkip: false,
   }),
+  runTransaction: vi.fn(),
 }));
 
 vi.mock('firebase-functions/logger', () => ({
@@ -18,7 +19,20 @@ vi.mock('firebase-functions/logger', () => ({
 }));
 
 vi.mock('./shared/user-deletion-guard', () => ({
-  getUserDeletionGuardState: hoisted.getUserDeletionGuardState,
+  getUserDeletionGuardStateInTransaction: hoisted.getUserDeletionGuardStateInTransaction,
+  UserDeletionGuardReadError: class UserDeletionGuardReadError extends Error {
+    readonly name = 'UserDeletionGuardReadError';
+    readonly code = 'unavailable';
+    readonly statusCode = 503;
+
+    constructor(
+      public readonly uid: string,
+      public readonly phase: string,
+      public readonly originalError: unknown,
+    ) {
+      super(`Could not read deletion guard for user ${uid} during ${phase}.`);
+    }
+  },
 }));
 
 vi.mock('./activity-sync/route-cleanup', () => ({
@@ -31,11 +45,13 @@ vi.mock('firebase-admin', () => {
       doc: vi.fn(() => ({
         collection: vi.fn(() => ({
           doc: vi.fn(() => ({
+            get: vi.fn().mockResolvedValue({ exists: false, data: () => undefined }),
             set: hoisted.metaSet,
           })),
         })),
       })),
     })),
+    runTransaction: hoisted.runTransaction,
   }), {
     FieldValue: {
       delete: vi.fn(() => 'delete-sentinel'),
@@ -58,7 +74,12 @@ import {
 describe('service-connection-meta', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    hoisted.getUserDeletionGuardState.mockResolvedValue({
+    hoisted.runTransaction.mockImplementation(async (runner: (transaction: {
+      set: typeof hoisted.metaSet;
+    }) => unknown) => runner({
+      set: hoisted.metaSet,
+    }));
+    hoisted.getUserDeletionGuardStateInTransaction.mockResolvedValue({
       userExists: true,
       deletionInProgress: false,
       shouldSkip: false,
@@ -68,8 +89,8 @@ describe('service-connection-meta', () => {
   it('writes reconnect-required state when the user deletion guard allows it', async () => {
     await markServiceReconnectRequired('user-1', ServiceNames.SuuntoApp, 'invalid_grant', 'Reconnect required', 123);
 
-    expect(hoisted.getUserDeletionGuardState).toHaveBeenCalled();
-    expect(hoisted.metaSet).toHaveBeenCalledWith({
+    expect(hoisted.getUserDeletionGuardStateInTransaction).toHaveBeenCalled();
+    expect(hoisted.metaSet).toHaveBeenCalledWith(expect.any(Object), {
       connectionState: 'reconnect_required',
       lastAuthFailureCode: 'invalid_grant',
       lastAuthFailureMessage: 'Reconnect required',
@@ -95,7 +116,7 @@ describe('service-connection-meta', () => {
   });
 
   it('skips reconnect-required writes when user deletion is in progress', async () => {
-    hoisted.getUserDeletionGuardState.mockResolvedValue({
+    hoisted.getUserDeletionGuardStateInTransaction.mockResolvedValue({
       userExists: true,
       deletionInProgress: true,
       shouldSkip: true,
@@ -111,7 +132,7 @@ describe('service-connection-meta', () => {
   });
 
   it('skips connected-state writes when the user document is missing', async () => {
-    hoisted.getUserDeletionGuardState.mockResolvedValue({
+    hoisted.getUserDeletionGuardStateInTransaction.mockResolvedValue({
       userExists: false,
       deletionInProgress: false,
       shouldSkip: true,
@@ -123,7 +144,7 @@ describe('service-connection-meta', () => {
   });
 
   it('skips clear-state writes when user deletion is in progress', async () => {
-    hoisted.getUserDeletionGuardState.mockResolvedValue({
+    hoisted.getUserDeletionGuardStateInTransaction.mockResolvedValue({
       userExists: true,
       deletionInProgress: true,
       shouldSkip: true,

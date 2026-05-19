@@ -9,6 +9,7 @@ export type QueueUserDeletionGuardPhase =
     | 'before_activity_sync_enqueue'
     | 'before_activity_sync_processing'
     | 'before_activity_sync_upload'
+    | 'before_activity_sync_destination_upload'
     | 'before_sleep_token_resolution'
     | 'before_sleep_provider_sync';
 

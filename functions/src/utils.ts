@@ -17,6 +17,11 @@ import { SPORTS_LIB_VERSION } from './shared/sports-lib-version.node';
 import { ProcessingMetaData } from './shared/processing-metadata.interface';
 import { sportsLibVersionToCode } from './reparse/sports-lib-reparse.service';
 import { OriginalFileMetaData } from '../../shared/app-event.interface';
+import {
+  getUserDeletionGuardState,
+  getUserDeletionGuardStateInTransaction,
+  UserDeletionGuardReadError,
+} from './shared/user-deletion-guard';
 
 
 export function generateIDFromPartsOld(parts: string[]): string {
@@ -148,7 +153,61 @@ export interface SetEventResult {
   savedOriginalFiles: OriginalFileMetaData[];
 }
 
-export async function setEvent(userID: string, eventID: string, event: EventInterface, metaData: SuuntoAppEventMetaData | GarminAPIEventMetaData | COROSAPIEventMetaData, originalFile?: OriginalFile, bulkWriter?: admin.firestore.BulkWriter, usageCache?: Map<string, Promise<{ role: string, limit: number, currentCount: number }>>, pendingWrites?: Map<string, number>): Promise<SetEventResult> {
+export class EventWriteSkippedForDeletedUserError extends Error {
+  public readonly name = 'EventWriteSkippedForDeletedUserError';
+  public readonly code = 'user_deleted_or_deleting';
+
+  constructor(
+    public readonly userID: string,
+    public readonly phase: string,
+  ) {
+    super(`Skipping event write for user ${userID} during ${phase} because the user is missing or deletion is in progress.`);
+  }
+}
+
+async function assertEventWriteUserActive(userID: string, phase: string): Promise<void> {
+  let deletionGuard;
+  try {
+    deletionGuard = await getUserDeletionGuardState(admin.firestore(), userID);
+  } catch (error) {
+    throw new UserDeletionGuardReadError(userID, phase, error);
+  }
+
+  if (!deletionGuard.shouldSkip) {
+    return;
+  }
+
+  logger.warn(`[EventWrite] Skipping write for user ${userID} during ${phase} because the user is missing or deletion is in progress.`);
+  throw new EventWriteSkippedForDeletedUserError(userID, phase);
+}
+
+async function setEventDocumentIfUserActive(
+  userID: string,
+  phase: string,
+  docRef: admin.firestore.DocumentReference,
+  data: unknown,
+): Promise<void> {
+  const db = admin.firestore();
+  await db.runTransaction(async (transaction) => {
+    let deletionGuard;
+    try {
+      deletionGuard = await getUserDeletionGuardStateInTransaction(db, transaction, userID);
+    } catch (error) {
+      throw new UserDeletionGuardReadError(userID, phase, error);
+    }
+
+    if (deletionGuard.shouldSkip) {
+      logger.warn(`[EventWrite] Skipping transactional write for user ${userID} during ${phase} because the user is missing or deletion is in progress.`);
+      throw new EventWriteSkippedForDeletedUserError(userID, phase);
+    }
+
+    transaction.set(docRef, data);
+  });
+}
+
+export async function setEvent(userID: string, eventID: string, event: EventInterface, metaData: SuuntoAppEventMetaData | GarminAPIEventMetaData | COROSAPIEventMetaData, originalFile?: OriginalFile, _bulkWriter?: admin.firestore.BulkWriter, usageCache?: Map<string, Promise<{ role: string, limit: number, currentCount: number }>>, pendingWrites?: Map<string, number>): Promise<SetEventResult> {
+  await assertEventWriteUserActive(userID, 'event_write_start');
+
   // Enforce Usage Limit
   await checkEventUsageLimit(userID, usageCache, pendingWrites);
 
@@ -188,11 +247,7 @@ export async function setEvent(userID: string, eventID: string, event: EventInte
       for (let i = 2; i < path.length; i += 2) {
         docRef = docRef.collection(path[i]).doc(path[i + 1]);
       }
-      if (bulkWriter) {
-        void bulkWriter.set(docRef, data);
-      } else {
-        await docRef.set(data);
-      }
+      await setEventDocumentIfUserActive(userID, `event_writer:${path.join('/')}`, docRef, data);
     },
     createBlob: (data: Uint8Array) => {
       return Buffer.from(data);
@@ -204,6 +259,7 @@ export async function setEvent(userID: string, eventID: string, event: EventInte
 
   const storageAdapter: StorageAdapter = {
     uploadFile: async (path: string, data: any) => {
+      await assertEventWriteUserActive(userID, `event_original_file_upload:${path}`);
       const bucket = admin.storage().bucket();
       const file = bucket.file(path);
       await file.save(data);
@@ -237,11 +293,7 @@ export async function setEvent(userID: string, eventID: string, event: EventInte
     .collection('metaData')
     .doc('processing');
 
-  if (bulkWriter) {
-    void bulkWriter.set(processingMetaRef, processingMetaData);
-  } else {
-    await processingMetaRef.set(processingMetaData);
-  }
+  await setEventDocumentIfUserActive(userID, 'event_processing_metadata', processingMetaRef, processingMetaData);
 
   // Write Metadata (not handled by EventWriter)
   const metaRef = admin.firestore()
@@ -252,11 +304,7 @@ export async function setEvent(userID: string, eventID: string, event: EventInte
     .collection('metaData')
     .doc(metaData.serviceName);
 
-  if (bulkWriter) {
-    void bulkWriter.set(metaRef, metaData.toJSON());
-  } else {
-    await metaRef.set(metaData.toJSON());
-  }
+  await setEventDocumentIfUserActive(userID, `event_service_metadata:${metaData.serviceName}`, metaRef, metaData.toJSON());
 
   return {
     eventID: <string>event.getID(),

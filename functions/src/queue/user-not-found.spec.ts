@@ -77,6 +77,10 @@ const mockFirestore = {
         };
         return queryBuilder;
     }),
+    getAll: vi.fn(() => Promise.resolve([
+        { exists: true, data: () => ({}) },
+        { exists: false, data: () => undefined },
+    ])),
     batch: vi.fn(() => mockBatch),
     bulkWriter: vi.fn(() => ({
         set: vi.fn(),

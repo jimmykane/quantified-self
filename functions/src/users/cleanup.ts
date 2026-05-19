@@ -11,6 +11,7 @@ import { ACTIVITY_SYNC_QUEUE_COLLECTION_NAME } from '../activity-sync/constants'
 import { SLEEP_SYNC_QUEUE_COLLECTION_NAME } from '../sleep/constants';
 import { SUUNTOAPP_WORKOUT_QUEUE_COLLECTION_NAME } from '../suunto/constants';
 import { COROSAPI_WORKOUT_QUEUE_COLLECTION_NAME } from '../coros/constants';
+import { SLEEP_PROVIDERS } from '../../../shared/sleep';
 
 export const ORPHANED_SERVICE_TOKENS_COLLECTION_NAME = 'orphaned_service_tokens';
 
@@ -111,6 +112,69 @@ function asNonEmptyString(value: unknown): string | null {
     return normalized.length > 0 ? normalized : null;
 }
 
+function addProviderIdentifier(
+    identifiers: UserProviderIdentifiers,
+    serviceName: unknown,
+    providerUserID: unknown,
+): void {
+    const serviceNameValue = asNonEmptyString(serviceName);
+    const providerUserIDValue = asNonEmptyString(providerUserID);
+    if (!serviceNameValue || !providerUserIDValue) {
+        return;
+    }
+
+    switch (serviceNameValue) {
+        case ServiceNames.SuuntoApp:
+            identifiers.suuntoUserNames.add(providerUserIDValue);
+            break;
+        case ServiceNames.COROSAPI:
+            identifiers.corosOpenIds.add(providerUserIDValue);
+            break;
+        case ServiceNames.GarminAPI:
+            identifiers.garminUserIDs.add(providerUserIDValue);
+            break;
+        default:
+            break;
+    }
+}
+
+function addProviderIdentifiersFromTokenData(
+    identifiers: UserProviderIdentifiers,
+    serviceName: ServiceNames,
+    tokenData: Record<string, unknown>,
+): void {
+    switch (serviceName) {
+        case ServiceNames.SuuntoApp:
+            addProviderIdentifier(identifiers, serviceName, tokenData.userName);
+            break;
+        case ServiceNames.COROSAPI:
+            addProviderIdentifier(identifiers, serviceName, tokenData.openId);
+            break;
+        case ServiceNames.GarminAPI:
+            addProviderIdentifier(identifiers, serviceName, tokenData.userID);
+            break;
+        default:
+            break;
+    }
+}
+
+function serviceNameFromSleepProvider(provider: unknown): ServiceNames | null {
+    const providerValue = asNonEmptyString(provider);
+    switch (providerValue) {
+        case SLEEP_PROVIDERS.SuuntoApp:
+        case ServiceNames.SuuntoApp:
+            return ServiceNames.SuuntoApp;
+        case SLEEP_PROVIDERS.COROSAPI:
+        case ServiceNames.COROSAPI:
+            return ServiceNames.COROSAPI;
+        case SLEEP_PROVIDERS.GarminAPI:
+        case ServiceNames.GarminAPI:
+            return ServiceNames.GarminAPI;
+        default:
+            return null;
+    }
+}
+
 async function collectProviderIdentifiersForUser(uid: string, services: readonly ServiceCleanupConfig[]): Promise<UserProviderIdentifiers> {
     const identifiers: UserProviderIdentifiers = {
         suuntoUserNames: new Set<string>(),
@@ -124,31 +188,7 @@ async function collectProviderIdentifiersForUser(uid: string, services: readonly
             const snapshot = await db.collection(service.collectionName).doc(uid).collection('tokens').get();
             snapshot.docs.forEach((doc) => {
                 const tokenData = doc.data() || {};
-                switch (service.serviceName) {
-                    case ServiceNames.SuuntoApp: {
-                        const userName = asNonEmptyString(tokenData.userName);
-                        if (userName) {
-                            identifiers.suuntoUserNames.add(userName);
-                        }
-                        break;
-                    }
-                    case ServiceNames.COROSAPI: {
-                        const openId = asNonEmptyString(tokenData.openId);
-                        if (openId) {
-                            identifiers.corosOpenIds.add(openId);
-                        }
-                        break;
-                    }
-                    case ServiceNames.GarminAPI: {
-                        const garminUserID = asNonEmptyString((tokenData as Record<string, unknown>).userID);
-                        if (garminUserID) {
-                            identifiers.garminUserIDs.add(garminUserID);
-                        }
-                        break;
-                    }
-                    default:
-                        break;
-                }
+                addProviderIdentifiersFromTokenData(identifiers, service.serviceName, tokenData);
             });
         } catch (error) {
             logger.error(`[Cleanup] Failed to collect provider identifiers for ${service.name} user ${uid}`, error);
@@ -156,6 +196,25 @@ async function collectProviderIdentifiersForUser(uid: string, services: readonly
     }
 
     return identifiers;
+}
+
+async function collectArchivedProviderIdentifiersForUser(uid: string, identifiers: UserProviderIdentifiers): Promise<void> {
+    try {
+        const snapshot = await admin.firestore()
+            .collection(ORPHANED_SERVICE_TOKENS_COLLECTION_NAME)
+            .where('uid', '==', uid)
+            .get();
+        getSnapshotDocs(snapshot).forEach((doc) => {
+            const data = doc.data() as Record<string, unknown>;
+            const serviceName = data.serviceName as ServiceNames;
+            const tokenData = data.token && typeof data.token === 'object'
+                ? data.token as Record<string, unknown>
+                : {};
+            addProviderIdentifiersFromTokenData(identifiers, serviceName, tokenData);
+        });
+    } catch (error) {
+        logger.error(`[Cleanup] Failed to collect archived provider identifiers for user ${uid}`, error);
+    }
 }
 
 /**
@@ -248,10 +307,146 @@ async function recursiveDeleteQueryResults(
     }
 }
 
+function addProviderIdentifiersFromSleepQueueData(identifiers: UserProviderIdentifiers, data: Record<string, unknown>): void {
+    const serviceName = serviceNameFromSleepProvider(data.provider);
+    if (!serviceName) {
+        return;
+    }
+    addProviderIdentifier(identifiers, serviceName, data.providerUserId);
+}
+
+function looksLikeLegacyGarminWorkoutQueueData(data: Record<string, unknown>): boolean {
+    return Boolean(
+        asNonEmptyString(data.activityFileID)
+        || asNonEmptyString(data.activityFileType)
+        || asNonEmptyString(data.callbackURL)
+        || asNonEmptyString(data.userAccessToken)
+    );
+}
+
+function addProviderIdentifiersFromFailedJobData(identifiers: UserProviderIdentifiers, data: Record<string, unknown>): void {
+    const originalCollection = asNonEmptyString(data.originalCollection);
+    switch (originalCollection) {
+        case SLEEP_SYNC_QUEUE_COLLECTION_NAME:
+            addProviderIdentifiersFromSleepQueueData(identifiers, data);
+            return;
+        case SUUNTOAPP_WORKOUT_QUEUE_COLLECTION_NAME:
+            addProviderIdentifier(identifiers, ServiceNames.SuuntoApp, data.userName);
+            return;
+        case COROSAPI_WORKOUT_QUEUE_COLLECTION_NAME:
+            addProviderIdentifier(identifiers, ServiceNames.COROSAPI, data.openId);
+            return;
+        case GARMIN_API_WORKOUT_QUEUE_COLLECTION_NAME:
+            addProviderIdentifier(identifiers, ServiceNames.GarminAPI, data.userID);
+            return;
+        default:
+            break;
+    }
+
+    addProviderIdentifiersFromSleepQueueData(identifiers, data);
+    addProviderIdentifier(identifiers, ServiceNames.SuuntoApp, data.userName);
+    addProviderIdentifier(identifiers, ServiceNames.COROSAPI, data.openId);
+    if (looksLikeLegacyGarminWorkoutQueueData(data)) {
+        addProviderIdentifier(identifiers, ServiceNames.GarminAPI, data.userID);
+    }
+}
+
+async function collectProviderIdentifiersFromQueueQuery(
+    db: admin.firestore.Firestore,
+    uid: string,
+    collectionName: string,
+    fieldName: string,
+    values: Iterable<string>,
+    addIdentifiersFromData: (data: Record<string, unknown>) => void,
+): Promise<void> {
+    for (const value of new Set([...values].map((candidate) => `${candidate || ''}`.trim()).filter(Boolean))) {
+        try {
+            const snapshot = await db.collection(collectionName).where(fieldName, '==', value).get();
+            getSnapshotDocs(snapshot).forEach((doc) => addIdentifiersFromData(doc.data() as Record<string, unknown>));
+        } catch (error) {
+            logger.error(`[Cleanup] Failed to collect provider identifiers for user ${uid} from ${collectionName} where ${fieldName} == ${value}`, error);
+        }
+    }
+}
+
+async function collectProviderIdentifiersFromUidKeyedQueueState(
+    db: admin.firestore.Firestore,
+    uid: string,
+    identifiers: UserProviderIdentifiers,
+): Promise<void> {
+    const firebaseUIDValues = [uid];
+
+    await collectProviderIdentifiersFromQueueQuery(
+        db,
+        uid,
+        SLEEP_SYNC_QUEUE_COLLECTION_NAME,
+        'userID',
+        firebaseUIDValues,
+        (data) => addProviderIdentifiersFromSleepQueueData(identifiers, data),
+    );
+    await collectProviderIdentifiersFromQueueQuery(
+        db,
+        uid,
+        SLEEP_SYNC_QUEUE_COLLECTION_NAME,
+        'firebaseUserID',
+        firebaseUIDValues,
+        (data) => addProviderIdentifiersFromSleepQueueData(identifiers, data),
+    );
+    await collectProviderIdentifiersFromQueueQuery(
+        db,
+        uid,
+        SUUNTOAPP_WORKOUT_QUEUE_COLLECTION_NAME,
+        'firebaseUserID',
+        firebaseUIDValues,
+        (data) => addProviderIdentifier(identifiers, ServiceNames.SuuntoApp, data.userName),
+    );
+    await collectProviderIdentifiersFromQueueQuery(
+        db,
+        uid,
+        COROSAPI_WORKOUT_QUEUE_COLLECTION_NAME,
+        'firebaseUserID',
+        firebaseUIDValues,
+        (data) => addProviderIdentifier(identifiers, ServiceNames.COROSAPI, data.openId),
+    );
+    await collectProviderIdentifiersFromQueueQuery(
+        db,
+        uid,
+        GARMIN_API_WORKOUT_QUEUE_COLLECTION_NAME,
+        'firebaseUserID',
+        firebaseUIDValues,
+        (data) => addProviderIdentifier(identifiers, ServiceNames.GarminAPI, data.userID),
+    );
+    await collectProviderIdentifiersFromQueueQuery(
+        db,
+        uid,
+        'failed_jobs',
+        'userID',
+        firebaseUIDValues,
+        (data) => addProviderIdentifiersFromFailedJobData(identifiers, data),
+    );
+    await collectProviderIdentifiersFromQueueQuery(
+        db,
+        uid,
+        'failed_jobs',
+        'firebaseUserID',
+        firebaseUIDValues,
+        (data) => addProviderIdentifiersFromFailedJobData(identifiers, data),
+    );
+    await collectProviderIdentifiersFromQueueQuery(
+        db,
+        uid,
+        'failed_jobs',
+        'uid',
+        firebaseUIDValues,
+        (data) => addProviderIdentifiersFromFailedJobData(identifiers, data),
+    );
+}
+
 async function cleanupTopLevelQueueState(uid: string, identifiers: UserProviderIdentifiers): Promise<void> {
     const db = admin.firestore();
     const deletedRefKeys = new Set<string>();
     const firebaseUIDValues = [uid];
+    await collectProviderIdentifiersFromUidKeyedQueueState(db, uid, identifiers);
     const suuntoValues = [uid, ...identifiers.suuntoUserNames];
     const corosValues = [uid, ...identifiers.corosOpenIds];
     const garminValues = [uid, ...identifiers.garminUserIDs];
@@ -372,6 +567,7 @@ export const cleanupUserAccounts = functions.region('europe-west2').auth.user().
         logger.error(`[Cleanup] Error deleting emails for ${uid}`, e);
     }
 
+    await collectArchivedProviderIdentifiersForUser(uid, providerIdentifiers);
     await cleanupTopLevelQueueState(uid, providerIdentifiers);
 
 });

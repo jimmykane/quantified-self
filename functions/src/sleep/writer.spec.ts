@@ -6,6 +6,8 @@ const hoisted = vi.hoisted(() => ({
     docSet: vi.fn(),
     docIds: [] as string[],
     mockGetUserDeletionGuardState: vi.fn(),
+    mockGetUserDeletionGuardStateInTransaction: vi.fn(),
+    mockRunTransaction: vi.fn(),
 }));
 
 vi.mock('firebase-functions/logger', () => ({
@@ -20,6 +22,20 @@ vi.mock('../utils', () => ({
 
 vi.mock('../shared/user-deletion-guard', () => ({
     getUserDeletionGuardState: hoisted.mockGetUserDeletionGuardState,
+    getUserDeletionGuardStateInTransaction: hoisted.mockGetUserDeletionGuardStateInTransaction,
+    UserDeletionGuardReadError: class UserDeletionGuardReadError extends Error {
+        readonly name = 'UserDeletionGuardReadError';
+        readonly code = 'unavailable';
+        readonly statusCode = 503;
+
+        constructor(
+            public readonly uid: string,
+            public readonly phase: string,
+            public readonly originalError: unknown,
+        ) {
+            super(`Could not read deletion guard for user ${uid} during ${phase}.`);
+        }
+    },
 }));
 
 vi.mock('firebase-admin', () => {
@@ -38,6 +54,7 @@ vi.mock('firebase-admin', () => {
     return {
         firestore: vi.fn(() => ({
             collection: vi.fn(() => collectionRef),
+            runTransaction: hoisted.mockRunTransaction,
         })),
     };
 });
@@ -105,7 +122,19 @@ describe('sleep writer', () => {
         hoisted.docIds.length = 0;
         hoisted.docGet.mockResolvedValue({ exists: false, data: () => undefined });
         hoisted.docSet.mockResolvedValue(undefined);
+        hoisted.mockRunTransaction.mockImplementation(async (runner: (transaction: {
+            get: typeof hoisted.docGet;
+            set: typeof hoisted.docSet;
+        }) => unknown) => runner({
+            get: hoisted.docGet,
+            set: hoisted.docSet,
+        }));
         hoisted.mockGetUserDeletionGuardState.mockResolvedValue({
+            userExists: true,
+            deletionInProgress: false,
+            shouldSkip: false,
+        });
+        hoisted.mockGetUserDeletionGuardStateInTransaction.mockResolvedValue({
             userExists: true,
             deletionInProgress: false,
             shouldSkip: false,
@@ -177,7 +206,7 @@ describe('sleep writer', () => {
         }], 3000);
 
         expect(result).toEqual({ written: 1, skipped: 0 });
-        expect(hoisted.docSet).toHaveBeenCalledWith(expect.objectContaining({
+        expect(hoisted.docSet).toHaveBeenCalledWith(expect.any(Object), expect.objectContaining({
             durationSeconds: 33300,
             inBedDurationSeconds: 34260,
             isNap: false,
@@ -200,8 +229,27 @@ describe('sleep writer', () => {
         expect(hoisted.docSet).not.toHaveBeenCalled();
     });
 
-    it('does not recreate a sleep session when the user document is missing', async () => {
+    it('does not recreate sleep sessions when deletion starts inside the write transaction', async () => {
         hoisted.mockGetUserDeletionGuardState.mockResolvedValueOnce({
+            userExists: true,
+            deletionInProgress: false,
+            shouldSkip: false,
+        });
+        hoisted.mockGetUserDeletionGuardStateInTransaction.mockResolvedValueOnce({
+            userExists: true,
+            deletionInProgress: true,
+            shouldSkip: true,
+        });
+
+        const result = await upsertSleepSessions('user-1', [buildMapperResult()], 3000);
+
+        expect(result).toEqual({ written: 0, skipped: 1 });
+        expect(hoisted.docGet).not.toHaveBeenCalled();
+        expect(hoisted.docSet).not.toHaveBeenCalled();
+    });
+
+    it('does not recreate a sleep session when the user document is missing', async () => {
+        hoisted.mockGetUserDeletionGuardStateInTransaction.mockResolvedValueOnce({
             userExists: false,
             deletionInProgress: false,
             shouldSkip: true,
@@ -215,7 +263,7 @@ describe('sleep writer', () => {
     });
 
     it('does not recreate sleep sync state when user deletion is in progress', async () => {
-        hoisted.mockGetUserDeletionGuardState.mockResolvedValueOnce({
+        hoisted.mockGetUserDeletionGuardStateInTransaction.mockResolvedValueOnce({
             userExists: true,
             deletionInProgress: true,
             shouldSkip: true,
@@ -229,7 +277,7 @@ describe('sleep writer', () => {
     });
 
     it('does not recreate sleep sync error state for a missing user', async () => {
-        hoisted.mockGetUserDeletionGuardState.mockResolvedValueOnce({
+        hoisted.mockGetUserDeletionGuardStateInTransaction.mockResolvedValueOnce({
             userExists: false,
             deletionInProgress: false,
             shouldSkip: true,

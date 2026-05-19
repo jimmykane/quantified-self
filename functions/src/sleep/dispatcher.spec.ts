@@ -4,6 +4,7 @@ import { MAX_PENDING_TASKS } from '../shared/queue-config';
 const {
     mockLoggerError,
     mockLoggerInfo,
+    mockLoggerWarn,
     mockGetCloudTaskQueueDepthForQueue,
     mockEnqueueSleepSyncTask,
     mockQueueCollection,
@@ -13,9 +14,18 @@ const {
     mockQueueStartAfter,
     mockQueueWhere,
     mockFirestore,
+    mockRunTransaction,
+    mockRecursiveDelete,
+    mockGetUserDeletionGuardState,
+    mockGetUserDeletionGuardStateInTransaction,
+    mockTokenCollectionGroup,
+    mockTokenWhere,
+    mockTokenLimit,
+    mockTokenGet,
 } = vi.hoisted(() => {
     const mockLoggerError = vi.fn();
     const mockLoggerInfo = vi.fn();
+    const mockLoggerWarn = vi.fn();
     const mockGetCloudTaskQueueDepthForQueue = vi.fn();
     const mockEnqueueSleepSyncTask = vi.fn();
     const mockQueueCollection = vi.fn();
@@ -24,11 +34,27 @@ const {
     const mockQueueOrderBy = vi.fn();
     const mockQueueStartAfter = vi.fn();
     const mockQueueWhere = vi.fn();
-    const mockFirestore = vi.fn(() => ({ collection: mockQueueCollection }));
+    const mockRecursiveDelete = vi.fn();
+    const mockGetUserDeletionGuardState = vi.fn();
+    const mockGetUserDeletionGuardStateInTransaction = vi.fn();
+    const mockRunTransaction = vi.fn(async (runner: (transaction: { update: (ref: { update?: (data: unknown) => Promise<void> }, data: unknown) => Promise<void> | void }) => unknown) => runner({
+        update: (ref, data) => ref.update?.(data),
+    }));
+    const mockTokenCollectionGroup = vi.fn();
+    const mockTokenWhere = vi.fn();
+    const mockTokenLimit = vi.fn();
+    const mockTokenGet = vi.fn();
+    const mockFirestore = vi.fn(() => ({
+        collection: mockQueueCollection,
+        collectionGroup: mockTokenCollectionGroup,
+        recursiveDelete: mockRecursiveDelete,
+        runTransaction: mockRunTransaction,
+    }));
 
     return {
         mockLoggerError,
         mockLoggerInfo,
+        mockLoggerWarn,
         mockGetCloudTaskQueueDepthForQueue,
         mockEnqueueSleepSyncTask,
         mockQueueCollection,
@@ -38,6 +64,14 @@ const {
         mockQueueStartAfter,
         mockQueueWhere,
         mockFirestore,
+        mockRunTransaction,
+        mockRecursiveDelete,
+        mockGetUserDeletionGuardState,
+        mockGetUserDeletionGuardStateInTransaction,
+        mockTokenCollectionGroup,
+        mockTokenWhere,
+        mockTokenLimit,
+        mockTokenGet,
     };
 });
 
@@ -56,6 +90,7 @@ vi.mock('firebase-functions/v1', () => ({
 vi.mock('firebase-functions/logger', () => ({
     error: mockLoggerError,
     info: mockLoggerInfo,
+    warn: mockLoggerWarn,
 }));
 
 vi.mock('firebase-admin', () => ({
@@ -75,6 +110,24 @@ vi.mock('../utils', () => ({
     getCloudTaskQueueDepthForQueue: mockGetCloudTaskQueueDepthForQueue,
 }));
 
+vi.mock('../shared/user-deletion-guard', () => ({
+    getUserDeletionGuardState: mockGetUserDeletionGuardState,
+    getUserDeletionGuardStateInTransaction: mockGetUserDeletionGuardStateInTransaction,
+    UserDeletionGuardReadError: class UserDeletionGuardReadError extends Error {
+        readonly name = 'UserDeletionGuardReadError';
+        readonly code = 'unavailable';
+        readonly statusCode = 503;
+
+        constructor(
+            public readonly uid: string,
+            public readonly phase: string,
+            public readonly originalError: unknown,
+        ) {
+            super(`Could not read deletion guard for user ${uid} during ${phase}.`);
+        }
+    },
+}));
+
 import { reconcileSleepSyncQueueDispatches } from './dispatcher';
 
 describe('sleep/dispatcher', () => {
@@ -82,6 +135,17 @@ describe('sleep/dispatcher', () => {
         vi.clearAllMocks();
         mockGetCloudTaskQueueDepthForQueue.mockResolvedValue(0);
         mockEnqueueSleepSyncTask.mockResolvedValue(true);
+        mockRecursiveDelete.mockResolvedValue(undefined);
+        mockGetUserDeletionGuardState.mockResolvedValue({
+            userExists: true,
+            deletionInProgress: false,
+            shouldSkip: false,
+        });
+        mockGetUserDeletionGuardStateInTransaction.mockResolvedValue({
+            userExists: true,
+            deletionInProgress: false,
+            shouldSkip: false,
+        });
 
         const queryChain: any = {
             get: mockQueueGet,
@@ -98,6 +162,20 @@ describe('sleep/dispatcher', () => {
         mockQueueGet.mockResolvedValue({
             empty: true,
             docs: [],
+        });
+
+        const tokenQueryChain: any = {
+            get: mockTokenGet,
+            limit: mockTokenLimit,
+            where: mockTokenWhere,
+        };
+        mockTokenCollectionGroup.mockReturnValue(tokenQueryChain);
+        mockTokenWhere.mockReturnValue(tokenQueryChain);
+        mockTokenLimit.mockReturnValue(tokenQueryChain);
+        mockTokenGet.mockResolvedValue({
+            empty: true,
+            docs: [],
+            size: 0,
         });
     });
 
@@ -125,17 +203,29 @@ describe('sleep/dispatcher', () => {
             docs: [
                 {
                     id: 'recent-item',
-                    data: () => ({ dispatchedToCloudTask: nowMs - (10 * 60 * 1000), dateCreated: 100 }),
+                    data: () => ({ dispatchedToCloudTask: nowMs - (10 * 60 * 1000), dateCreated: 100, userID: 'recent-user' }),
                     ref: { update: updateRecent },
                 },
                 {
                     id: 'undispatched-item',
-                    data: () => ({ dispatchedToCloudTask: null, dateCreated: 101 }),
+                    data: () => ({
+                        dispatchedToCloudTask: null,
+                        dateCreated: 101,
+                        userID: 'undispatched-user',
+                        provider: 'SuuntoApp',
+                        providerUserId: 'suunto-user-1',
+                    }),
                     ref: { update: updateUndispatched },
                 },
                 {
                     id: 'stale-item',
-                    data: () => ({ dispatchedToCloudTask: nowMs - (3 * 60 * 60 * 1000), dateCreated: 102 }),
+                    data: () => ({
+                        dispatchedToCloudTask: nowMs - (3 * 60 * 60 * 1000),
+                        dateCreated: 102,
+                        userID: 'stale-user',
+                        provider: 'SuuntoApp',
+                        providerUserId: 'suunto-user-2',
+                    }),
                     ref: { update: updateStale },
                 },
             ],
@@ -160,13 +250,19 @@ describe('sleep/dispatcher', () => {
         const recentDispatchedAt = nowMs - (10 * 60 * 1000);
         const firstPageRecentDocs = Array.from({ length: 100 }, (_, index) => ({
             id: `recent-item-${index}`,
-            data: () => ({ dispatchedToCloudTask: recentDispatchedAt, dateCreated: index }),
+            data: () => ({ dispatchedToCloudTask: recentDispatchedAt, dateCreated: index, userID: `recent-user-${index}` }),
             ref: { update: vi.fn().mockResolvedValue(undefined) },
         }));
         const updateUndispatched = vi.fn().mockResolvedValue(undefined);
         const undispatchedDoc = {
             id: 'older-undispatched-item',
-            data: () => ({ dispatchedToCloudTask: null, dateCreated: 999 }),
+            data: () => ({
+                dispatchedToCloudTask: null,
+                dateCreated: 999,
+                userID: 'older-undispatched-user',
+                provider: 'SuuntoApp',
+                providerUserId: 'suunto-user-older',
+            }),
             ref: { update: updateUndispatched },
         };
 
@@ -203,7 +299,13 @@ describe('sleep/dispatcher', () => {
             docs: [
                 {
                     id: 'undispatched-item',
-                    data: () => ({ dispatchedToCloudTask: null, dateCreated: 301 }),
+                    data: () => ({
+                        dispatchedToCloudTask: null,
+                        dateCreated: 301,
+                        userID: 'undispatched-user',
+                        provider: 'SuuntoApp',
+                        providerUserId: 'suunto-user-3',
+                    }),
                     ref: { update: updateUndispatched },
                 },
             ],
@@ -219,5 +321,290 @@ describe('sleep/dispatcher', () => {
         expect(mockEnqueueSleepSyncTask).toHaveBeenCalledWith('undispatched-item', 301);
         expect(updateUndispatched).not.toHaveBeenCalled();
         expect(mockLoggerInfo).toHaveBeenCalledWith(expect.stringContaining('Task not enqueued'));
+    });
+
+    it('does not write the dispatch marker when deletion starts after Cloud Task enqueue', async () => {
+        const nowMs = 1_700_000_000_000;
+        const updateUndispatched = vi.fn().mockResolvedValue(undefined);
+        const itemRef = { update: updateUndispatched, path: 'sleepSyncQueue/undispatched-item' };
+        mockGetUserDeletionGuardState
+            .mockResolvedValueOnce({
+                userExists: true,
+                deletionInProgress: false,
+                shouldSkip: false,
+            });
+        mockGetUserDeletionGuardStateInTransaction
+            .mockResolvedValueOnce({
+                userExists: true,
+                deletionInProgress: true,
+                shouldSkip: true,
+            });
+        mockQueueGet.mockResolvedValue({
+            empty: false,
+            docs: [
+                {
+                    id: 'undispatched-item',
+                    data: () => ({
+                        dispatchedToCloudTask: null,
+                        dateCreated: 301,
+                        userID: 'undispatched-user',
+                        provider: 'SuuntoApp',
+                        providerUserId: 'suunto-user-3',
+                    }),
+                    ref: itemRef,
+                },
+            ],
+        });
+
+        const result = await reconcileSleepSyncQueueDispatches(nowMs);
+
+        expect(result).toEqual({
+            inspected: 1,
+            dispatched: 0,
+            skippedRecent: 0,
+        });
+        expect(mockEnqueueSleepSyncTask).toHaveBeenCalledWith('undispatched-item', 301);
+        expect(mockRecursiveDelete).toHaveBeenCalledWith(itemRef);
+        expect(updateUndispatched).not.toHaveBeenCalled();
+    });
+
+    it('deletes user-owned queue items instead of dispatching when account deletion is active', async () => {
+        const nowMs = 1_700_000_000_000;
+        const updateDeleted = vi.fn().mockResolvedValue(undefined);
+        const deletedRef = { update: updateDeleted, path: 'sleepSyncQueue/deleted-user-item' };
+        mockGetUserDeletionGuardState.mockResolvedValueOnce({
+            userExists: true,
+            deletionInProgress: true,
+            shouldSkip: true,
+        });
+        mockQueueGet.mockResolvedValue({
+            empty: false,
+            docs: [
+                {
+                    id: 'deleted-user-item',
+                    data: () => ({
+                        dispatchedToCloudTask: null,
+                        dateCreated: 401,
+                        userID: 'deleted-user-id',
+                        provider: 'SuuntoApp',
+                        providerUserId: 'suunto-deleted-user',
+                    }),
+                    ref: deletedRef,
+                },
+            ],
+        });
+
+        const result = await reconcileSleepSyncQueueDispatches(nowMs);
+
+        expect(result).toEqual({
+            inspected: 1,
+            dispatched: 0,
+            skippedRecent: 0,
+        });
+        expect(mockGetUserDeletionGuardState).toHaveBeenCalledWith(expect.anything(), 'deleted-user-id');
+        expect(mockRecursiveDelete).toHaveBeenCalledWith(deletedRef);
+        expect(mockEnqueueSleepSyncTask).not.toHaveBeenCalled();
+        expect(updateDeleted).not.toHaveBeenCalled();
+    });
+
+    it('deletes malformed queue items without user or provider identity instead of dispatching', async () => {
+        const nowMs = 1_700_000_000_000;
+        const updateMalformed = vi.fn().mockResolvedValue(undefined);
+        const malformedRef = { update: updateMalformed, path: 'sleepSyncQueue/malformed-item' };
+        mockQueueGet.mockResolvedValue({
+            empty: false,
+            docs: [
+                {
+                    id: 'malformed-item',
+                    data: () => ({ dispatchedToCloudTask: null, dateCreated: 501 }),
+                    ref: malformedRef,
+                },
+            ],
+        });
+
+        const result = await reconcileSleepSyncQueueDispatches(nowMs);
+
+        expect(result).toEqual({
+            inspected: 1,
+            dispatched: 0,
+            skippedRecent: 0,
+        });
+        expect(mockGetUserDeletionGuardState).not.toHaveBeenCalled();
+        expect(mockTokenCollectionGroup).not.toHaveBeenCalled();
+        expect(mockRecursiveDelete).toHaveBeenCalledWith(malformedRef);
+        expect(mockEnqueueSleepSyncTask).not.toHaveBeenCalled();
+        expect(updateMalformed).not.toHaveBeenCalled();
+    });
+
+    it('deletes malformed user-owned queue items without provider identity instead of dispatching', async () => {
+        const nowMs = 1_700_000_000_000;
+        const updateMalformed = vi.fn().mockResolvedValue(undefined);
+        const malformedRef = { update: updateMalformed, path: 'sleepSyncQueue/malformed-user-item' };
+        mockQueueGet.mockResolvedValue({
+            empty: false,
+            docs: [
+                {
+                    id: 'malformed-user-item',
+                    data: () => ({ dispatchedToCloudTask: null, dateCreated: 551, userID: 'user-with-malformed-sleep-job' }),
+                    ref: malformedRef,
+                },
+            ],
+        });
+
+        const result = await reconcileSleepSyncQueueDispatches(nowMs);
+
+        expect(result).toEqual({
+            inspected: 1,
+            dispatched: 0,
+            skippedRecent: 0,
+        });
+        expect(mockGetUserDeletionGuardState).not.toHaveBeenCalled();
+        expect(mockTokenCollectionGroup).not.toHaveBeenCalled();
+        expect(mockRecursiveDelete).toHaveBeenCalledWith(malformedRef);
+        expect(mockEnqueueSleepSyncTask).not.toHaveBeenCalled();
+        expect(updateMalformed).not.toHaveBeenCalled();
+    });
+
+    it('resolves legacy provider-keyed queue items before dispatching', async () => {
+        const nowMs = 1_700_000_000_000;
+        const updateLegacy = vi.fn().mockResolvedValue(undefined);
+        const legacyRef = { update: updateLegacy, path: 'sleepSyncQueue/legacy-provider-item' };
+        const tokenLookupResult = {
+            empty: false,
+            size: 1,
+            docs: [
+                {
+                    id: 'token-1',
+                    ref: {
+                        parent: {
+                            parent: { id: 'resolved-user-id' },
+                        },
+                    },
+                },
+            ],
+        };
+        mockTokenGet
+            .mockResolvedValueOnce(tokenLookupResult)
+            .mockResolvedValueOnce(tokenLookupResult);
+        mockQueueGet.mockResolvedValue({
+            empty: false,
+            docs: [
+                {
+                    id: 'legacy-provider-item',
+                    data: () => ({
+                        dispatchedToCloudTask: null,
+                        dateCreated: 601,
+                        provider: 'GarminAPI',
+                        providerUserId: 'garmin-provider-user',
+                    }),
+                    ref: legacyRef,
+                },
+            ],
+        });
+
+        const result = await reconcileSleepSyncQueueDispatches(nowMs);
+
+        expect(result).toEqual({
+            inspected: 1,
+            dispatched: 1,
+            skippedRecent: 0,
+        });
+        expect(mockTokenCollectionGroup).toHaveBeenCalledWith('tokens');
+        expect(mockTokenWhere).toHaveBeenCalledWith('serviceName', '==', 'garminAPI');
+        expect(mockTokenWhere).toHaveBeenCalledWith('userID', '==', 'garmin-provider-user');
+        expect(mockGetUserDeletionGuardState).toHaveBeenCalledWith(expect.anything(), 'resolved-user-id');
+        expect(mockEnqueueSleepSyncTask).toHaveBeenCalledWith('legacy-provider-item', 601);
+        expect(updateLegacy).toHaveBeenCalledWith({ dispatchedToCloudTask: nowMs });
+    });
+
+    it('deletes legacy provider-keyed queue items when no local token resolves', async () => {
+        const nowMs = 1_700_000_000_000;
+        const updateLegacy = vi.fn().mockResolvedValue(undefined);
+        const legacyRef = { update: updateLegacy, path: 'sleepSyncQueue/orphan-provider-item' };
+        mockQueueGet.mockResolvedValue({
+            empty: false,
+            docs: [
+                {
+                    id: 'orphan-provider-item',
+                    data: () => ({
+                        dispatchedToCloudTask: null,
+                        dateCreated: 701,
+                        provider: 'SuuntoApp',
+                        providerUserId: 'orphan-suunto-user',
+                    }),
+                    ref: legacyRef,
+                },
+            ],
+        });
+
+        const result = await reconcileSleepSyncQueueDispatches(nowMs);
+
+        expect(result).toEqual({
+            inspected: 1,
+            dispatched: 0,
+            skippedRecent: 0,
+        });
+        expect(mockTokenWhere).toHaveBeenCalledWith('serviceName', '==', 'suuntoApp');
+        expect(mockTokenWhere).toHaveBeenCalledWith('userName', '==', 'orphan-suunto-user');
+        expect(mockGetUserDeletionGuardState).not.toHaveBeenCalled();
+        expect(mockRecursiveDelete).toHaveBeenCalledWith(legacyRef);
+        expect(mockEnqueueSleepSyncTask).not.toHaveBeenCalled();
+        expect(updateLegacy).not.toHaveBeenCalled();
+    });
+
+    it('leaves an item undispatched when deletion guard lookup fails and continues with other candidates', async () => {
+        const nowMs = 1_700_000_000_000;
+        const updateGuardFailure = vi.fn().mockResolvedValue(undefined);
+        const updateHealthy = vi.fn().mockResolvedValue(undefined);
+        mockGetUserDeletionGuardState
+            .mockRejectedValueOnce(new Error('guard unavailable'))
+            .mockResolvedValueOnce({
+                userExists: true,
+                deletionInProgress: false,
+                shouldSkip: false,
+            });
+        mockQueueGet.mockResolvedValue({
+            empty: false,
+            docs: [
+                {
+                    id: 'guard-failure-item',
+                    data: () => ({
+                        dispatchedToCloudTask: null,
+                        dateCreated: 801,
+                        userID: 'guard-failure-user',
+                        provider: 'SuuntoApp',
+                        providerUserId: 'suunto-guard-failure',
+                    }),
+                    ref: { update: updateGuardFailure },
+                },
+                {
+                    id: 'healthy-item',
+                    data: () => ({
+                        dispatchedToCloudTask: null,
+                        dateCreated: 802,
+                        userID: 'healthy-user',
+                        provider: 'SuuntoApp',
+                        providerUserId: 'suunto-healthy',
+                    }),
+                    ref: { update: updateHealthy },
+                },
+            ],
+        });
+
+        const result = await reconcileSleepSyncQueueDispatches(nowMs);
+
+        expect(result).toEqual({
+            inspected: 2,
+            dispatched: 1,
+            skippedRecent: 0,
+        });
+        expect(mockEnqueueSleepSyncTask).toHaveBeenCalledTimes(1);
+        expect(mockEnqueueSleepSyncTask).toHaveBeenCalledWith('healthy-item', 802);
+        expect(updateGuardFailure).not.toHaveBeenCalled();
+        expect(updateHealthy).toHaveBeenCalledWith({ dispatchedToCloudTask: nowMs });
+        expect(mockLoggerError).toHaveBeenCalledWith(
+            '[SleepSyncDispatcher] Failed to check deletion guard for queue item guard-failure-item and user guard-failure-user; leaving item undispatched for a future run.',
+            expect.any(Error),
+        );
     });
 });

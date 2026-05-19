@@ -47,6 +47,29 @@ vi.mock('../tokens', () => ({
     getTokenData: (...args: any[]) => tokensMocks.getTokenData(...args),
 }));
 
+const deletionGuardMocks = {
+    getUserDeletionGuardState: vi.fn(),
+    getUserDeletionGuardStateInTransaction: vi.fn(),
+};
+
+vi.mock('../shared/user-deletion-guard', () => ({
+    getUserDeletionGuardState: (...args: any[]) => deletionGuardMocks.getUserDeletionGuardState(...args),
+    getUserDeletionGuardStateInTransaction: (...args: any[]) => deletionGuardMocks.getUserDeletionGuardStateInTransaction(...args),
+    UserDeletionGuardReadError: class UserDeletionGuardReadError extends Error {
+        readonly name = 'UserDeletionGuardReadError';
+        readonly code = 'unavailable';
+        readonly statusCode = 503;
+
+        constructor(
+            public readonly uid: string,
+            public readonly phase: string,
+            public readonly originalError: unknown,
+        ) {
+            super(`Could not read deletion guard for user ${uid} during ${phase}.`);
+        }
+    },
+}));
+
 // Mock firebase-functions/v2/https
 vi.mock('firebase-functions/v2/https', () => {
     return {
@@ -68,6 +91,7 @@ vi.mock('firebase-functions/v2/https', () => {
 vi.mock('firebase-admin', () => {
     const getMock = vi.fn();
     const setMock = vi.fn();
+    const runTransactionMock = vi.fn();
 
     // Create a recursive mock structure
     const collectionMock: any = vi.fn();
@@ -88,6 +112,7 @@ vi.mock('firebase-admin', () => {
 
     const firestoreMock = {
         collection: collectionMock,
+        runTransaction: runTransactionMock,
     };
 
     return {
@@ -101,7 +126,7 @@ vi.mock('firebase-admin', () => {
 });
 
 // Import the function under test
-import { importActivityToSuuntoApp } from './activities';
+import { importActivityToSuuntoApp, uploadActivityFileToSuunto } from './activities';
 
 // Helper to create mock request
 function createMockRequest(overrides: Partial<{
@@ -122,11 +147,43 @@ function createStatusCodeError(message: string, statusCode: number) {
     return error;
 }
 
+const activeUserGuard = {
+    userExists: true,
+    deletionInProgress: false,
+    shouldSkip: false,
+};
+
+const deletedUserGuard = {
+    userExists: true,
+    deletionInProgress: true,
+    shouldSkip: true,
+};
+
 describe('importActivityToSuuntoApp', () => {
-    beforeEach(() => {
+    beforeEach(async () => {
         vi.clearAllMocks();
         // Default happy path
         utilsMocks.hasProAccess.mockResolvedValue(true);
+        deletionGuardMocks.getUserDeletionGuardState.mockResolvedValue({
+            userExists: true,
+            deletionInProgress: false,
+            shouldSkip: false,
+        });
+        deletionGuardMocks.getUserDeletionGuardStateInTransaction.mockResolvedValue({
+            userExists: true,
+            deletionInProgress: false,
+            shouldSkip: false,
+        });
+        const admin = await import('firebase-admin');
+        const setMock = (admin.firestore() as any)
+            .collection('users')
+            .doc('test-user-id')
+            .collection('meta')
+            .doc('SuuntoApp')
+            .set;
+        (admin.firestore() as any).runTransaction.mockImplementation(
+            async (runner: (transaction: { set: (...args: any[]) => unknown }) => unknown) => runner({ set: setMock }),
+        );
     });
 
     it('should successfully upload an activity', async () => {
@@ -696,8 +753,145 @@ describe('importActivityToSuuntoApp', () => {
         // Verification of Firestore call
         const admin = await import('firebase-admin');
         const setMock = admin.firestore().collection('users').doc('test-user-id').collection('meta').doc('SuuntoApp').set;
-        expect(setMock).toHaveBeenCalledWith(expect.objectContaining({
+        expect(setMock).toHaveBeenCalledWith(expect.any(Object), expect.objectContaining({
             uploadedActivitiesCount: expect.any(Object)
         }), expect.objectContaining({ merge: true }));
     }, 30000);
+
+    it('should not increment uploadedActivitiesCount when deletion starts after upload success', async () => {
+        tokensMocks.getTokenData.mockResolvedValue({ accessToken: 'fake-access-token' });
+        requestMocks.post.mockResolvedValue({
+            id: 'test-upload-id',
+            url: 'https://storage.suunto.com/upload-url',
+            headers: {}
+        });
+        requestMocks.put.mockResolvedValue({});
+        requestMocks.get.mockResolvedValue({ status: 'PROCESSED', workoutKey: 'test-workout-key' });
+        deletionGuardMocks.getUserDeletionGuardState.mockResolvedValue(activeUserGuard);
+        deletionGuardMocks.getUserDeletionGuardStateInTransaction.mockResolvedValueOnce(deletedUserGuard);
+
+        const result = await uploadActivityFileToSuunto('test-user-id', Buffer.from('data'));
+
+        expect(result).toEqual(expect.objectContaining({
+            status: 'success',
+            workoutKey: 'test-workout-key',
+        }));
+        const admin = await import('firebase-admin');
+        const setMock = admin.firestore().collection('users').doc('test-user-id').collection('meta').doc('SuuntoApp').set;
+        expect(setMock).not.toHaveBeenCalled();
+    }, 30000);
+
+    it('should skip Suunto upload before token lookup when account deletion is active', async () => {
+        deletionGuardMocks.getUserDeletionGuardState.mockResolvedValueOnce(deletedUserGuard);
+
+        await expect(uploadActivityFileToSuunto('test-user-id', Buffer.from('data')))
+            .rejects.toMatchObject({
+                name: 'SuuntoActivityUploadSkippedForDeletedUserError',
+                code: 'user_deleted_or_deleting',
+                phase: 'before_token_lookup',
+            });
+
+        expect(tokensMocks.getTokenData).not.toHaveBeenCalled();
+        expect(requestMocks.post).not.toHaveBeenCalled();
+        expect(requestMocks.put).not.toHaveBeenCalled();
+        expect(requestMocks.get).not.toHaveBeenCalled();
+    });
+
+    it('should skip Suunto upload before remote initialization when account deletion starts after token lookup', async () => {
+        tokensMocks.getTokenData.mockResolvedValue({ accessToken: 'fake-access-token' });
+        deletionGuardMocks.getUserDeletionGuardState
+            .mockResolvedValueOnce(activeUserGuard)
+            .mockResolvedValueOnce(deletedUserGuard);
+
+        await expect(uploadActivityFileToSuunto('test-user-id', Buffer.from('data')))
+            .rejects.toMatchObject({
+                name: 'SuuntoActivityUploadSkippedForDeletedUserError',
+                phase: 'before_init_upload',
+            });
+
+        expect(tokensMocks.getTokenData).toHaveBeenCalled();
+        expect(requestMocks.post).not.toHaveBeenCalled();
+        expect(requestMocks.put).not.toHaveBeenCalled();
+        expect(requestMocks.get).not.toHaveBeenCalled();
+    });
+
+    it('should preserve deletion guard read failures as retryable errors during upload', async () => {
+        tokensMocks.getTokenData.mockResolvedValue({ accessToken: 'fake-access-token' });
+        deletionGuardMocks.getUserDeletionGuardState
+            .mockResolvedValueOnce(activeUserGuard)
+            .mockRejectedValueOnce(new Error('guard unavailable'));
+
+        await expect(uploadActivityFileToSuunto('test-user-id', Buffer.from('data')))
+            .rejects.toMatchObject({
+                name: 'UserDeletionGuardReadError',
+                code: 'unavailable',
+                statusCode: 503,
+            });
+
+        expect(tokensMocks.getTokenData).toHaveBeenCalled();
+        expect(requestMocks.post).not.toHaveBeenCalled();
+        expect(requestMocks.put).not.toHaveBeenCalled();
+        expect(requestMocks.get).not.toHaveBeenCalled();
+    });
+
+    it('should skip Suunto upload before blob upload when account deletion starts after init', async () => {
+        tokensMocks.getTokenData.mockResolvedValue({ accessToken: 'fake-access-token' });
+        requestMocks.post.mockResolvedValue({
+            id: 'test-upload-id',
+            url: 'https://storage.suunto.com/upload-url',
+            headers: {}
+        });
+        deletionGuardMocks.getUserDeletionGuardState
+            .mockResolvedValueOnce(activeUserGuard)
+            .mockResolvedValueOnce(activeUserGuard)
+            .mockResolvedValueOnce(deletedUserGuard);
+
+        await expect(uploadActivityFileToSuunto('test-user-id', Buffer.from('data')))
+            .rejects.toMatchObject({
+                name: 'SuuntoActivityUploadSkippedForDeletedUserError',
+                phase: 'before_blob_upload',
+            });
+
+        expect(requestMocks.post).toHaveBeenCalled();
+        expect(requestMocks.put).not.toHaveBeenCalled();
+        expect(requestMocks.get).not.toHaveBeenCalled();
+    }, 30000);
+
+    it('should skip Suunto upload before status polling when account deletion starts after blob upload', async () => {
+        tokensMocks.getTokenData.mockResolvedValue({ accessToken: 'fake-access-token' });
+        requestMocks.post.mockResolvedValue({
+            id: 'test-upload-id',
+            url: 'https://storage.suunto.com/upload-url',
+            headers: {}
+        });
+        requestMocks.put.mockResolvedValue({});
+        deletionGuardMocks.getUserDeletionGuardState
+            .mockResolvedValueOnce(activeUserGuard)
+            .mockResolvedValueOnce(activeUserGuard)
+            .mockResolvedValueOnce(activeUserGuard)
+            .mockResolvedValueOnce(deletedUserGuard);
+
+        await expect(uploadActivityFileToSuunto('test-user-id', Buffer.from('data')))
+            .rejects.toMatchObject({
+                name: 'SuuntoActivityUploadSkippedForDeletedUserError',
+                phase: 'before_status_poll',
+            });
+
+        expect(requestMocks.post).toHaveBeenCalled();
+        expect(requestMocks.put).toHaveBeenCalled();
+        expect(requestMocks.get).not.toHaveBeenCalled();
+    }, 30000);
+
+    it('should propagate account-deletion token refresh skips from destination upload', async () => {
+        tokensMocks.getTokenData.mockRejectedValueOnce(Object.assign(new Error('deleted'), {
+            name: 'TokenRefreshSkippedForDeletedUserError',
+        }));
+
+        await expect(uploadActivityFileToSuunto('test-user-id', Buffer.from('data')))
+            .rejects.toMatchObject({
+                name: 'TokenRefreshSkippedForDeletedUserError',
+            });
+
+        expect(requestMocks.post).not.toHaveBeenCalled();
+    });
 });

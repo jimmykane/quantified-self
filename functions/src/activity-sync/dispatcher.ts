@@ -6,6 +6,11 @@ import { ActivitySyncQueueItemInterface } from '../queue/queue-item.interface';
 import { ACTIVITY_SYNC_QUEUE_COLLECTION_NAME } from './constants';
 import { config } from '../config';
 import { enqueueActivitySyncTask, getCloudTaskQueueDepthForQueue } from '../utils';
+import { getUserDeletionGuardState } from '../shared/user-deletion-guard';
+import {
+    markQueueItemDispatchedIfUserActive,
+    QueueDispatchMarkerResult,
+} from '../queue/dispatch-marker';
 
 const ACTIVITY_SYNC_REDISPATCH_STALE_MS = 2 * 60 * 60 * 1000;
 const MAX_ACTIVITY_SYNC_QUEUE_SCAN = 500;
@@ -19,6 +24,46 @@ function toDispatchTimestamp(value: unknown): number | null {
 function toDateCreatedTimestamp(value: unknown): number {
     const timestamp = Number(value);
     return Number.isFinite(timestamp) && timestamp >= 0 ? timestamp : 0;
+}
+
+function toUserID(value: unknown): string | null {
+    const userID = `${value || ''}`.trim();
+    return userID.length > 0 ? userID : null;
+}
+
+async function deleteActivitySyncCandidateBeforeDispatch(
+    doc: admin.firestore.QueryDocumentSnapshot,
+    reason: string,
+): Promise<void> {
+    try {
+        await admin.firestore().recursiveDelete(doc.ref);
+        logger.info(`[ActivitySyncDispatcher] Deleted queue item ${doc.id} instead of dispatching: ${reason}.`);
+    } catch (error) {
+        logger.error(`[ActivitySyncDispatcher] Failed to delete queue item ${doc.id} before dispatch after ${reason}`, error);
+    }
+}
+
+async function shouldDispatchActivitySyncCandidate(
+    doc: admin.firestore.QueryDocumentSnapshot,
+    userID: string | null,
+): Promise<boolean> {
+    if (!userID) {
+        await deleteActivitySyncCandidateBeforeDispatch(doc, 'missing userID');
+        return false;
+    }
+
+    try {
+        const deletionGuard = await getUserDeletionGuardState(admin.firestore(), userID);
+        if (!deletionGuard.shouldSkip) {
+            return true;
+        }
+
+        await deleteActivitySyncCandidateBeforeDispatch(doc, `user ${userID} is missing or deletion is in progress`);
+        return false;
+    } catch (error) {
+        logger.error(`[ActivitySyncDispatcher] Failed to check deletion guard for queue item ${doc.id} and user ${userID}; leaving item undispatched for a future run.`, error);
+        return false;
+    }
 }
 
 export async function reconcileActivitySyncQueueDispatches(nowMs = Date.now()): Promise<{
@@ -98,6 +143,7 @@ export async function reconcileActivitySyncQueueDispatches(nowMs = Date.now()): 
                 isStale,
                 dispatchedToCloudTask,
                 dateCreated: toDateCreatedTimestamp(data.dateCreated),
+                userID: toUserID(data.userID),
             };
         })
         .sort((left, right) => {
@@ -125,12 +171,29 @@ export async function reconcileActivitySyncQueueDispatches(nowMs = Date.now()): 
         }
 
         try {
+            if (!(await shouldDispatchActivitySyncCandidate(candidate.doc, candidate.userID))) {
+                continue;
+            }
+
             const wasTaskEnqueued = await enqueueActivitySyncTask(candidate.doc.id, candidate.dateCreated);
             if (!wasTaskEnqueued) {
                 logger.info(`[ActivitySyncDispatcher] Task not enqueued for ${candidate.doc.id}; leaving dispatch marker unchanged.`);
                 continue;
             }
-            await candidate.doc.ref.update({ dispatchedToCloudTask: nowMs });
+            if (!candidate.userID) {
+                continue;
+            }
+            const markerResult = await markQueueItemDispatchedIfUserActive({
+                queueItemDocument: candidate.doc.ref,
+                queueItemId: candidate.doc.id,
+                userID: candidate.userID,
+                phase: 'activity_sync_dispatch_marker',
+                dispatchedAtMs: nowMs,
+                logPrefix: 'ActivitySyncDispatcher',
+            });
+            if (markerResult !== QueueDispatchMarkerResult.Marked) {
+                continue;
+            }
             dispatched += 1;
         } catch (error) {
             logger.error(`[ActivitySyncDispatcher] Failed to dispatch queue item ${candidate.doc.id}`, error);

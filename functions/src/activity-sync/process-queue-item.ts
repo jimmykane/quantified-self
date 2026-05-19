@@ -127,6 +127,14 @@ function isSkippableAuthenticationError(error: unknown): boolean {
     return httpsCode === 'unauthenticated' || httpsCode === 'permission-denied';
 }
 
+function isAccountDeletionSkipError(error: unknown): boolean {
+    return error instanceof Error
+        && (
+            error.name === 'TokenRefreshSkippedForDeletedUserError'
+            || error.name === 'SuuntoActivityUploadSkippedForDeletedUserError'
+        );
+}
+
 async function isDestinationConnected(userID: string, destinationServiceName: ServiceNames): Promise<boolean> {
     switch (destinationServiceName) {
         case ServiceNames.SuuntoApp: {
@@ -318,6 +326,17 @@ export async function processActivitySyncQueueItem(
         }
 
         const fileBuffer = await downloadOriginalFile(queueItem);
+        if (await shouldSkipQueueWorkForDeletedUser(
+            queueItem.userID,
+            queueItem.destinationServiceName,
+            queueItem.id,
+            'before_activity_sync_destination_upload',
+        )) {
+            return markQueueItemSkipped(queueItem, bulkWriter, QUEUE_SKIPPED_REASONS.UserDeletedOrDeleting, {
+                skippedContext: 'USER_DELETION_GUARD',
+            });
+        }
+
         duringDestinationUpload = true;
         const uploadResult = await uploadToDestination(queueItem, fileBuffer);
         duringDestinationUpload = false;
@@ -347,6 +366,12 @@ export async function processActivitySyncQueueItem(
             return updateToProcessed(queueItem, bulkWriter, {
                 skippedReason: 'destination_auth_failed',
                 resultStatus: 'skipped',
+            });
+        }
+
+        if (isAccountDeletionSkipError(error)) {
+            return markQueueItemSkipped(queueItem, bulkWriter, QUEUE_SKIPPED_REASONS.UserDeletedOrDeleting, {
+                skippedContext: 'USER_DELETION_GUARD',
             });
         }
 

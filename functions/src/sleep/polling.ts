@@ -17,6 +17,7 @@ import {
 } from './provider-flags';
 import { isServiceReconnectRequiredForUser } from '../service-connection-meta';
 import { getUserDeletionGuardState } from '../shared/user-deletion-guard';
+import { isProviderQueueUserDeletedOrDeletingError } from '../queue/provider-queue-errors';
 
 interface PollWindow {
     startMs: number;
@@ -158,16 +159,24 @@ async function enqueueProviderPolls(
             continue;
         }
         for (const window of windows) {
-            await addSleepSyncQueueItem({
-                type: provider === SLEEP_PROVIDERS.SuuntoApp ? 'suunto_poll' : 'coros_poll',
-                provider,
-                userID,
-                providerUserId,
-                rangeStartMs: window.startMs,
-                rangeEndMs: window.endMs,
-                dedupeKey: `${userID}:${window.startMs}:${window.endMs}`,
-            });
-            queued += 1;
+            try {
+                await addSleepSyncQueueItem({
+                    type: provider === SLEEP_PROVIDERS.SuuntoApp ? 'suunto_poll' : 'coros_poll',
+                    provider,
+                    userID,
+                    providerUserId,
+                    rangeStartMs: window.startMs,
+                    rangeEndMs: window.endMs,
+                    dedupeKey: `${userID}:${window.startMs}:${window.endMs}`,
+                });
+                queued += 1;
+            } catch (error) {
+                if (isProviderQueueUserDeletedOrDeletingError(error)) {
+                    logger.info(`[SleepSync][${provider}] Stopped queueing polls for user ${userID} because deletion started during queue creation.`);
+                    break;
+                }
+                throw error;
+            }
         }
     }
     return queued;

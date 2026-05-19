@@ -13,7 +13,7 @@ import {
   GarminAPIActivityQueueItemInterface,
   SuuntoAppWorkoutQueueItemInterface,
 } from './queue/queue-item.interface';
-import { generateIDFromParts, generateEventID, setEvent, UsageLimitExceededError, enqueueWorkoutTask, UserNotFoundError, getCloudTaskQueueDepth } from './utils';
+import { generateIDFromParts, generateEventID, setEvent, UsageLimitExceededError, enqueueWorkoutTask, UserNotFoundError, getCloudTaskQueueDepth, EventWriteSkippedForDeletedUserError } from './utils';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { getServiceWorkoutQueueName } from './shared/queue-names';
 import {
@@ -32,6 +32,12 @@ import { enqueueActivitySyncJobsForImportedEvent } from './activity-sync/enqueue
 import { shouldSkipQueueWorkForDeletedUser } from './queue/user-deletion-skip';
 import { ProviderQueueUserDeletedOrDeletingError, ProviderQueueUserNotConnectedError } from './queue/provider-queue-errors';
 import { getUserDeletionGuardState, UserDeletionGuardReadError } from './shared/user-deletion-guard';
+import {
+  QueueItemUserGuardedUpdateResult,
+  markQueueItemDispatchedIfUserActive,
+  QueueDispatchMarkerResult,
+  updateQueueItemIfUserActive,
+} from './queue/dispatch-marker';
 
 export {
   ProviderQueueUserDeletedOrDeletingError,
@@ -100,6 +106,26 @@ function selectPreferredTerminalAuthError(
 function isTokenRefreshSkippedForDeletedUserError(error: unknown): error is TokenRefreshSkippedForDeletedUserError {
   return error instanceof TokenRefreshSkippedForDeletedUserError
     || (error instanceof Error && error.name === 'TokenRefreshSkippedForDeletedUserError');
+}
+
+function isEventWriteSkippedForDeletedUserError(error: unknown): error is EventWriteSkippedForDeletedUserError {
+  return error instanceof EventWriteSkippedForDeletedUserError
+    || (error instanceof Error && error.name === 'EventWriteSkippedForDeletedUserError');
+}
+
+function isUserDeletionGuardReadError(error: unknown): boolean {
+  return error instanceof Error && error.name === 'UserDeletionGuardReadError';
+}
+
+interface WorkoutQueueDispatchContext {
+  firebaseUserID: string;
+  providerUserID: string;
+}
+
+enum WorkoutQueueFirebaseUserIDBackfillResult {
+  Updated = 'updated',
+  SkippedDeletedUser = 'skipped_deleted_user',
+  AlreadyMovedToFailedJobs = 'already_moved_to_failed_jobs',
 }
 
 function getProviderUserIDForQueueItem(
@@ -210,9 +236,62 @@ export async function dispatchQueueItemTasks(serviceName: ServiceNames) {
       return;
     }
 
-    await enqueueWorkoutTask(serviceName, doc.id, data.dateCreated, delay);
-    // Mark as dispatched prevents re-queueing
-    return markWorkoutQueueItemDispatched(doc.ref, doc.id, serviceName);
+    try {
+      await assertWorkoutQueueCanDispatch(
+        doc.ref,
+        Object.assign({}, data, { id: doc.id }) as SuuntoAppWorkoutQueueItemInterface | GarminAPIActivityQueueItemInterface | COROSAPIWorkoutQueueItemInterface,
+        serviceName,
+        `workout_queue_scheduled_dispatch:${serviceName}`,
+      );
+    } catch (error) {
+      if (error instanceof ProviderQueueUserDeletedOrDeletingError) {
+        logger.info(`Skipped ${serviceName} queue item ${doc.id} dispatch because the owning user is missing or deletion is in progress.`);
+        return;
+      }
+      if (error instanceof ProviderQueueUserNotConnectedError) {
+        logger.info(`Skipped ${serviceName} queue item ${doc.id} dispatch because the provider user no longer resolves to a local token.`);
+        return;
+      }
+      if (isUserDeletionGuardReadError(error)) {
+        logger.error(`Could not check deletion guard for ${serviceName} queue item ${doc.id}; leaving item undispatched for a future run.`, error);
+        return;
+      }
+      throw error;
+    }
+
+    try {
+      await enqueueWorkoutTask(serviceName, doc.id, data.dateCreated, delay);
+      const markerContext = await assertWorkoutQueueCanDispatch(
+        doc.ref,
+        Object.assign({}, data, { id: doc.id }) as SuuntoAppWorkoutQueueItemInterface | GarminAPIActivityQueueItemInterface | COROSAPIWorkoutQueueItemInterface,
+        serviceName,
+        `workout_queue_scheduled_mark_dispatched:${serviceName}`,
+      );
+      const didMarkDispatched = await markWorkoutQueueItemDispatched(
+        doc.ref,
+        doc.id,
+        serviceName,
+        markerContext.firebaseUserID,
+      );
+      if (!didMarkDispatched) {
+        logger.info(`Skipped ${serviceName} queue item ${doc.id} dispatch marker because the owning user is missing or deletion is in progress.`);
+        return;
+      }
+    } catch (error) {
+      if (error instanceof ProviderQueueUserDeletedOrDeletingError) {
+        logger.info(`Skipped ${serviceName} queue item ${doc.id} dispatch marker because the owning user is missing or deletion is in progress.`);
+        return;
+      }
+      if (error instanceof ProviderQueueUserNotConnectedError) {
+        logger.info(`Skipped ${serviceName} queue item ${doc.id} dispatch marker because the provider user no longer resolves to a local token.`);
+        return;
+      }
+      if (isUserDeletionGuardReadError(error)) {
+        logger.error(`Could not re-check deletion guard for ${serviceName} queue item ${doc.id}; leaving dispatch marker untouched for a future run.`, error);
+        return;
+      }
+      throw error;
+    }
   });
 
   await Promise.all(promises);
@@ -564,7 +643,11 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
     } catch (e: any) {
       // @todo should delete event  or separate catch
       logger.error(e);
-      if (e instanceof UsageLimitExceededError) {
+      if (isEventWriteSkippedForDeletedUserError(e)) {
+        sawUserDeletionSkip = true;
+        logger.warn(`Skipping ${serviceName} queue item ${queueItem.id} because event write detected user ${e.userID} is missing or deletion is in progress.`);
+        continue;
+      } else if (e instanceof UsageLimitExceededError) {
         logger.error(new Error(`Usage limit exceeded for ${queueItem.id}. Aborting retries. ${e.message}`));
         retryIncrement = 20;
         lastError = e;
@@ -643,9 +726,18 @@ async function markWorkoutQueueItemDispatched(
   queueItemDocument: admin.firestore.DocumentReference,
   queueItemId: string,
   serviceName: ServiceNames,
-): Promise<void> {
+  firebaseUserID: string,
+): Promise<boolean> {
   try {
-    await queueItemDocument.update({ dispatchedToCloudTask: Date.now() });
+    const result = await markQueueItemDispatchedIfUserActive({
+      queueItemDocument,
+      queueItemId,
+      userID: firebaseUserID,
+      phase: `workout_queue_dispatch_marker:${serviceName}`,
+      dispatchedAtMs: Date.now(),
+      logPrefix: 'WorkoutQueue',
+    });
+    return result === QueueDispatchMarkerResult.Marked;
   } catch (error) {
     if (!isFirestoreNotFoundError(error)) {
       throw error;
@@ -653,11 +745,118 @@ async function markWorkoutQueueItemDispatched(
 
     if (await wasQueueItemMovedToFailedJobs(queueItemId, serviceName)) {
       logger.info(`Queue item ${queueItemId} for ${serviceName} was already moved to failed_jobs before dispatch timestamp update.`);
-      return;
+      return true;
     }
 
     throw error;
   }
+}
+
+async function backfillWorkoutQueueFirebaseUserID(
+  queueItemDocument: admin.firestore.DocumentReference,
+  queueItemId: string,
+  serviceName: ServiceNames,
+  firebaseUserID: string,
+): Promise<WorkoutQueueFirebaseUserIDBackfillResult> {
+  try {
+    const result = await updateQueueItemIfUserActive({
+      queueItemDocument,
+      queueItemId,
+      userID: firebaseUserID,
+      phase: `workout_queue_duplicate_uid_backfill:${serviceName}`,
+      updateData: { firebaseUserID },
+      logPrefix: 'WorkoutQueue',
+      actionDescription: 'duplicate Firebase uid backfill',
+    });
+    return result === QueueItemUserGuardedUpdateResult.Updated
+      ? WorkoutQueueFirebaseUserIDBackfillResult.Updated
+      : WorkoutQueueFirebaseUserIDBackfillResult.SkippedDeletedUser;
+  } catch (error) {
+    if (!isFirestoreNotFoundError(error)) {
+      throw error;
+    }
+
+    if (await wasQueueItemMovedToFailedJobs(queueItemId, serviceName)) {
+      logger.info(`Queue item ${queueItemId} for ${serviceName} was already moved to failed_jobs before duplicate uid backfill.`);
+      return WorkoutQueueFirebaseUserIDBackfillResult.AlreadyMovedToFailedJobs;
+    }
+
+    throw error;
+  }
+}
+
+async function deleteWorkoutQueueDocBeforeDispatch(
+  queueItemDocument: admin.firestore.DocumentReference,
+  queueItemId: string,
+  serviceName: ServiceNames,
+  reason: string,
+): Promise<void> {
+  try {
+    await admin.firestore().recursiveDelete(queueItemDocument);
+    logger.info(`Deleted ${serviceName} queue item ${queueItemId} before Cloud Task dispatch: ${reason}.`);
+  } catch (error) {
+    logger.error(`Failed to delete ${serviceName} queue item ${queueItemId} before dispatch after ${reason}`, error);
+  }
+}
+
+async function assertWorkoutQueueCanDispatch(
+  queueItemDocument: admin.firestore.DocumentReference,
+  queueItem: SuuntoAppWorkoutQueueItemInterface | GarminAPIActivityQueueItemInterface | COROSAPIWorkoutQueueItemInterface,
+  serviceName: ServiceNames,
+  phase: string,
+): Promise<WorkoutQueueDispatchContext> {
+  const providerUserID = getProviderUserIDForQueueItem(serviceName, queueItem)?.value.trim() || 'unknown';
+  let firebaseUserID: string | null | undefined = (queueItem as QueueItemInterface).firebaseUserID;
+  if (!firebaseUserID) {
+    if (providerUserID === 'unknown') {
+      logger.warn(`Skipping ${serviceName} queue item ${queueItem.id} dispatch because it has neither firebaseUserID nor provider user id.`);
+      await deleteWorkoutQueueDocBeforeDispatch(
+        queueItemDocument,
+        queueItem.id,
+        serviceName,
+        'missing firebaseUserID and provider user id',
+      );
+      throw new ProviderQueueUserNotConnectedError(serviceName, providerUserID, queueItem.id);
+    }
+    try {
+      firebaseUserID = await resolveFirebaseUserIDForQueueItem(serviceName, queueItem);
+    } catch (error) {
+      throw new UserDeletionGuardReadError(providerUserID, `${phase}:resolve_legacy_firebase_uid`, error);
+    }
+    if (!firebaseUserID) {
+      logger.warn(`Skipping ${serviceName} queue item ${queueItem.id} dispatch because provider user ${providerUserID} no longer resolves to a local token.`);
+      await deleteWorkoutQueueDocBeforeDispatch(
+        queueItemDocument,
+        queueItem.id,
+        serviceName,
+        `provider user ${providerUserID} no longer resolves to a local token`,
+      );
+      throw new ProviderQueueUserNotConnectedError(serviceName, providerUserID, queueItem.id);
+    }
+  }
+
+  let deletionGuard;
+  try {
+    deletionGuard = await getUserDeletionGuardState(admin.firestore(), firebaseUserID);
+  } catch (error) {
+    throw new UserDeletionGuardReadError(firebaseUserID, phase, error);
+  }
+
+  if (!deletionGuard.shouldSkip) {
+    return {
+      firebaseUserID,
+      providerUserID,
+    };
+  }
+
+  logger.warn(`Skipping ${serviceName} queue item ${queueItem.id} dispatch because Firebase user ${firebaseUserID} is missing or deletion is in progress.`);
+  await deleteWorkoutQueueDocBeforeDispatch(
+    queueItemDocument,
+    queueItem.id,
+    serviceName,
+    `Firebase user ${firebaseUserID} is missing or deletion is in progress`,
+  );
+  throw new ProviderQueueUserDeletedOrDeletingError(serviceName, firebaseUserID, providerUserID, queueItem.id);
 }
 
 async function addToWorkoutQueue(queueItem: SuuntoAppWorkoutQueueItemInterface | GarminAPIActivityQueueItemInterface | COROSAPIWorkoutQueueItemInterface, serviceName: ServiceNames, deferDispatch: boolean = false, createOnly: boolean = false): Promise<admin.firestore.DocumentReference> {
@@ -679,25 +878,48 @@ async function addToWorkoutQueue(queueItem: SuuntoAppWorkoutQueueItemInterface |
           return queueItemDocument;
         }
 
-        const firebaseUserID = (queuePayload as QueueItemInterface).firebaseUserID;
-        if (firebaseUserID && existingQueueItem && (existingQueueItem as QueueItemInterface).firebaseUserID !== firebaseUserID) {
-          try {
-            await queueItemDocument.update({ firebaseUserID });
-          } catch (updateError) {
-            if (isFirestoreNotFoundError(updateError) && await wasQueueItemMovedToFailedJobs(queueItem.id, serviceName)) {
-              logger.info(`Queue item ${queueItem.id} for ${serviceName} was already moved to failed_jobs before duplicate uid backfill.`);
-              return queueItemDocument;
-            }
-            throw updateError;
-          }
-        }
-
         const dateCreated = typeof existingQueueItem?.dateCreated === 'number'
           ? existingQueueItem.dateCreated
           : queueItem.dateCreated;
         logger.info(`Queue item ${queueItem.id} already exists for ${serviceName}; ensuring duplicate webhook is dispatched.`);
+        const duplicateDispatchContext = await assertWorkoutQueueCanDispatch(queueItemDocument, queuePayload, serviceName, `workout_queue_duplicate_dispatch:${serviceName}`);
+
+        const firebaseUserID = (queuePayload as QueueItemInterface).firebaseUserID;
+        if (firebaseUserID && existingQueueItem && (existingQueueItem as QueueItemInterface).firebaseUserID !== firebaseUserID) {
+          const backfillFirebaseUserIDResult = await backfillWorkoutQueueFirebaseUserID(
+            queueItemDocument,
+            queueItem.id,
+            serviceName,
+            firebaseUserID,
+          );
+          if (backfillFirebaseUserIDResult === WorkoutQueueFirebaseUserIDBackfillResult.AlreadyMovedToFailedJobs) {
+            return queueItemDocument;
+          }
+          if (backfillFirebaseUserIDResult === WorkoutQueueFirebaseUserIDBackfillResult.SkippedDeletedUser) {
+            throw new ProviderQueueUserDeletedOrDeletingError(
+              serviceName,
+              duplicateDispatchContext.firebaseUserID,
+              duplicateDispatchContext.providerUserID,
+              queueItem.id,
+            );
+          }
+        }
+
         await enqueueWorkoutTask(serviceName, queueItem.id, dateCreated);
-        await markWorkoutQueueItemDispatched(queueItemDocument, queueItem.id, serviceName);
+        const didMarkDuplicateDispatched = await markWorkoutQueueItemDispatched(
+          queueItemDocument,
+          queueItem.id,
+          serviceName,
+          duplicateDispatchContext.firebaseUserID,
+        );
+        if (!didMarkDuplicateDispatched) {
+          throw new ProviderQueueUserDeletedOrDeletingError(
+            serviceName,
+            duplicateDispatchContext.firebaseUserID,
+            duplicateDispatchContext.providerUserID,
+            queueItem.id,
+          );
+        }
         return queueItemDocument;
       }
       throw error;
@@ -706,10 +928,25 @@ async function addToWorkoutQueue(queueItem: SuuntoAppWorkoutQueueItemInterface |
     await queueItemDocument.set(queuePayload);
   }
 
+  const dispatchContext = await assertWorkoutQueueCanDispatch(queueItemDocument, queuePayload, serviceName, `workout_queue_after_write:${serviceName}`);
+
   if (!deferDispatch) {
     // Dispatch a Cloud Task for immediate processing
     await enqueueWorkoutTask(serviceName, queueItem.id, queueItem.dateCreated);
-    await markWorkoutQueueItemDispatched(queueItemDocument, queueItem.id, serviceName);
+    const didMarkDispatched = await markWorkoutQueueItemDispatched(
+      queueItemDocument,
+      queueItem.id,
+      serviceName,
+      dispatchContext.firebaseUserID,
+    );
+    if (!didMarkDispatched) {
+      throw new ProviderQueueUserDeletedOrDeletingError(
+        serviceName,
+        dispatchContext.firebaseUserID,
+        dispatchContext.providerUserID,
+        queueItem.id,
+      );
+    }
   }
   return queueItemDocument;
 }

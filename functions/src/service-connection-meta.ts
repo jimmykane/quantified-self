@@ -6,23 +6,46 @@ import {
   ServiceConnectionMetaFields,
   SERVICE_CONNECTION_STATES,
 } from '../../shared/service-connection';
-import { getUserDeletionGuardState } from './shared/user-deletion-guard';
+import {
+  getUserDeletionGuardStateInTransaction,
+  UserDeletionGuardReadError,
+} from './shared/user-deletion-guard';
 import { disableActivitySyncRoutesForDisconnectedService } from './activity-sync/route-cleanup';
 
-function serviceMetaRef(userID: string, serviceName: ServiceNames): admin.firestore.DocumentReference {
-  return admin.firestore().collection('users').doc(userID).collection('meta').doc(serviceName);
+function serviceMetaRef(
+  db: admin.firestore.Firestore,
+  userID: string,
+  serviceName: ServiceNames,
+): admin.firestore.DocumentReference {
+  return db.collection('users').doc(userID).collection('meta').doc(serviceName);
 }
 
-async function shouldSkipServiceMetaWrite(userID: string, serviceName: ServiceNames): Promise<boolean> {
-  const deletionGuard = await getUserDeletionGuardState(admin.firestore(), userID);
-  if (!deletionGuard.shouldSkip) {
-    return false;
-  }
+async function setServiceMetaIfUserActive(
+  userID: string,
+  serviceName: ServiceNames,
+  payload: Record<string, unknown>,
+): Promise<boolean> {
+  const db = admin.firestore();
+  const ref = serviceMetaRef(db, userID, serviceName);
 
-  logger.warn(
-    `[ServiceConnectionMeta] Skipping ${serviceName} meta write for user ${userID} because the user is missing or deletion is in progress.`,
-  );
-  return true;
+  return db.runTransaction(async (transaction) => {
+    let deletionGuard;
+    try {
+      deletionGuard = await getUserDeletionGuardStateInTransaction(db, transaction, userID);
+    } catch (error) {
+      throw new UserDeletionGuardReadError(userID, `service_connection_meta:${serviceName}`, error);
+    }
+
+    if (deletionGuard.shouldSkip) {
+      logger.warn(
+        `[ServiceConnectionMeta] Skipping ${serviceName} meta write for user ${userID} because the user is missing or deletion is in progress.`,
+      );
+      return false;
+    }
+
+    transaction.set(ref, payload, { merge: true });
+    return true;
+  });
 }
 
 export async function markServiceReconnectRequired(
@@ -32,15 +55,15 @@ export async function markServiceReconnectRequired(
   failureMessage: string | null | undefined,
   nowMs = Date.now(),
 ): Promise<void> {
-  if (await shouldSkipServiceMetaWrite(userID, serviceName)) {
-    return;
-  }
-  await serviceMetaRef(userID, serviceName).set({
+  const didWrite = await setServiceMetaIfUserActive(userID, serviceName, {
     connectionState: SERVICE_CONNECTION_STATES.ReconnectRequired,
     lastAuthFailureCode: failureCode || null,
     lastAuthFailureMessage: failureMessage || null,
     lastDisconnectedAt: nowMs,
-  }, { merge: true });
+  });
+  if (!didWrite) {
+    return;
+  }
 
   try {
     await disableActivitySyncRoutesForDisconnectedService(userID, serviceName);
@@ -53,34 +76,28 @@ export async function markServiceReconnectRequired(
 }
 
 export async function markServiceConnected(userID: string, serviceName: ServiceNames): Promise<void> {
-  if (await shouldSkipServiceMetaWrite(userID, serviceName)) {
-    return;
-  }
-  await serviceMetaRef(userID, serviceName).set({
+  await setServiceMetaIfUserActive(userID, serviceName, {
     connectionState: SERVICE_CONNECTION_STATES.Connected,
     lastAuthFailureCode: admin.firestore.FieldValue.delete(),
     lastAuthFailureMessage: admin.firestore.FieldValue.delete(),
     lastDisconnectedAt: admin.firestore.FieldValue.delete(),
-  }, { merge: true });
+  });
 }
 
 export async function clearServiceConnectionState(userID: string, serviceName: ServiceNames): Promise<void> {
-  if (await shouldSkipServiceMetaWrite(userID, serviceName)) {
-    return;
-  }
-  await serviceMetaRef(userID, serviceName).set({
+  await setServiceMetaIfUserActive(userID, serviceName, {
     connectionState: admin.firestore.FieldValue.delete(),
     lastAuthFailureCode: admin.firestore.FieldValue.delete(),
     lastAuthFailureMessage: admin.firestore.FieldValue.delete(),
     lastDisconnectedAt: admin.firestore.FieldValue.delete(),
-  }, { merge: true });
+  });
 }
 
 export async function getServiceConnectionMeta(
   userID: string,
   serviceName: ServiceNames,
 ): Promise<ServiceConnectionMetaFields | null> {
-  const snapshot = await serviceMetaRef(userID, serviceName).get();
+  const snapshot = await serviceMetaRef(admin.firestore(), userID, serviceName).get();
   return snapshot.exists ? snapshot.data() as ServiceConnectionMetaFields : null;
 }
 

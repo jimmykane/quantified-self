@@ -242,6 +242,24 @@ describe('tokens', () => {
             expect(mockToken.refresh).not.toHaveBeenCalled();
         });
 
+        it('should not return an existing valid token when user deletion is in progress', async () => {
+            mockToken.expired.mockReturnValue(false);
+            hoisted.getUserDeletionGuardState.mockResolvedValueOnce({
+                userExists: true,
+                deletionInProgress: true,
+                shouldSkip: true,
+            });
+
+            await expect(getTokenData(mockDoc, ServiceNames.SuuntoApp, false))
+                .rejects.toMatchObject({
+                    name: 'TokenRefreshSkippedForDeletedUserError',
+                    phase: 'before_return',
+                });
+
+            expect(mockToken.refresh).not.toHaveBeenCalled();
+            expect(mockDoc.ref.update).not.toHaveBeenCalled();
+        });
+
         it('should refresh token if forced', async () => {
             mockToken.expired.mockReturnValue(false);
             mockToken.refresh.mockResolvedValue({
