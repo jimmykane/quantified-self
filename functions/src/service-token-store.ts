@@ -3,6 +3,17 @@ import * as logger from 'firebase-functions/logger';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { getServiceAdapter } from './auth/factory';
 
+function hasPendingOAuthFlowContext(snapshot: admin.firestore.DocumentSnapshot): boolean {
+  if (!snapshot.exists) {
+    return false;
+  }
+
+  const data = snapshot.data() as Record<string, unknown> | undefined;
+  const state = typeof data?.state === 'string' ? data.state.trim() : '';
+  const codeVerifier = typeof data?.codeVerifier === 'string' ? data.codeVerifier.trim() : '';
+  return state.length > 0 || codeVerifier.length > 0;
+}
+
 export function getServiceTokenRootDocumentRef(
   userID: string,
   serviceName: ServiceNames,
@@ -22,22 +33,36 @@ export async function deleteLocalServiceToken(
   userID: string,
   serviceName: ServiceNames,
   tokenID: string,
-): Promise<{ tokenRootDeleted: boolean; remainingTokenCount: number }> {
+): Promise<{ tokenRootDeleted: boolean; tokenRootPreservedForOAuthFlow: boolean; remainingTokenCount: number }> {
   logger.info(`Starting delete for local token ${tokenID} for ${userID} and serviceName ${serviceName}`);
 
   const userDocRef = getServiceTokenRootDocumentRef(userID, serviceName);
-  await userDocRef.collection('tokens').doc(tokenID).delete();
+  const tokenCollectionRef = userDocRef.collection('tokens');
+  const tokenDocRef = tokenCollectionRef.doc(tokenID);
 
-  const remainingTokens = await userDocRef.collection('tokens').limit(1).get();
-  logger.info(`Remaining tokens for ${userID}: ${remainingTokens.size}`);
+  return admin.firestore().runTransaction(async (transaction) => {
+    const tokenRootSnapshot = await transaction.get(userDocRef);
+    const tokenQuerySnapshot = await transaction.get(tokenCollectionRef);
+    const remainingTokenCount = tokenQuerySnapshot.docs.filter((doc) => doc.id !== tokenID).length;
+    const tokenRootPreservedForOAuthFlow = remainingTokenCount === 0 && hasPendingOAuthFlowContext(tokenRootSnapshot);
 
-  if (remainingTokens.empty) {
-    logger.info(`No remaining tokens for ${userID}. Deleting parent document and all descendant data (surgical).`);
-    await admin.firestore().recursiveDelete(userDocRef);
-  }
+    transaction.delete(tokenDocRef);
 
-  return {
-    tokenRootDeleted: remainingTokens.empty,
-    remainingTokenCount: remainingTokens.size,
-  };
+    if (remainingTokenCount === 0 && !tokenRootPreservedForOAuthFlow) {
+      // Service token roots only store root fields plus the `tokens` subcollection.
+      // After deleting the final token doc in this transaction, no descendants remain on the root.
+      transaction.delete(userDocRef);
+    }
+
+    logger.info(`Remaining tokens for ${userID}: ${remainingTokenCount}`);
+    if (tokenRootPreservedForOAuthFlow) {
+      logger.info(`Preserving ${serviceName} token root for ${userID} because an OAuth reconnect flow is already in progress.`);
+    }
+
+    return {
+      tokenRootDeleted: remainingTokenCount === 0 && !tokenRootPreservedForOAuthFlow,
+      tokenRootPreservedForOAuthFlow,
+      remainingTokenCount,
+    };
+  });
 }

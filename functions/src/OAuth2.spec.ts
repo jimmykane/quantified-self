@@ -19,6 +19,7 @@ const mockBatchDelete = vi.fn();
 const mockAdd = vi.fn().mockResolvedValue({ id: 'new-doc-id' });
 const mockBatchCommit = vi.fn().mockResolvedValue({});
 const mockRecursiveDelete = vi.fn().mockResolvedValue({});
+const mockRunTransaction = vi.fn();
 
 const mockDocInstance = {
     delete: mockDelete,
@@ -39,6 +40,41 @@ const mockCollectionInstance = {
 // Setup nesting
 mockDoc.mockReturnValue(mockDocInstance);
 mockCollection.mockReturnValue(mockCollectionInstance);
+function installDefaultRunTransactionMock() {
+    mockRunTransaction.mockImplementation(async (callback: any) => {
+        const pendingDeletes: any[] = [];
+        const result = await callback({
+            get: vi.fn(async (target: any) => {
+                if (target === mockDocInstance) {
+                    return {
+                        exists: true,
+                        data: () => ({}),
+                    };
+                }
+                if (target === mockCollectionInstance) {
+                    return await mockGet();
+                }
+                if (target && typeof target.get === 'function') {
+                    return await target.get();
+                }
+                throw new Error('Unexpected transaction get target');
+            }),
+            delete: vi.fn((target: any) => {
+                pendingDeletes.push(target);
+            }),
+        });
+
+        for (const target of pendingDeletes) {
+            if (target && typeof target.delete === 'function') {
+                await target.delete();
+            }
+        }
+
+        return result;
+    });
+}
+
+installDefaultRunTransactionMock();
 
 // Mock firebase-functions
 vi.mock('firebase-functions', () => ({
@@ -78,6 +114,7 @@ vi.mock('firebase-admin', () => {
         collectionGroup: mockCollection,
         batch: batch,
         recursiveDelete: mockRecursiveDelete,
+        runTransaction: mockRunTransaction,
     }), {
         FieldValue: {
             delete: vi.fn().mockReturnValue('delete-sentinel'),
@@ -352,8 +389,7 @@ describe('OAuth2', () => {
 
             expect(getTokenData).toHaveBeenCalled();
             expect(requestPromise.get).toHaveBeenCalled();
-            expect(mockDelete).toHaveBeenCalled(); // For token
-            expect(mockRecursiveDelete).toHaveBeenCalled(); // For user doc cleanup
+            expect(mockDelete).toHaveBeenCalledTimes(2); // token + root cleanup
         });
 
         it('should fail explicit disconnect when local token cleanup fails', async () => {
@@ -411,8 +447,7 @@ describe('OAuth2', () => {
             await deauthorizeServiceForUser(userID, serviceName);
 
             // Should still delete token and parent doc even if API fails
-            expect(mockDelete).toHaveBeenCalled();
-            expect(mockRecursiveDelete).toHaveBeenCalled();
+            expect(mockDelete).toHaveBeenCalledTimes(2);
         });
 
         /*
@@ -486,9 +521,8 @@ describe('OAuth2', () => {
 
             await deauthorizeServiceForUser(userID, serviceName);
 
-            // Expect 2 normal deletes (tokens) and 1 recursive delete (parent user doc)
-            expect(mockDelete).toHaveBeenCalledTimes(2);
-            expect(mockRecursiveDelete).toHaveBeenCalledTimes(1);
+            // Expect 2 token deletes plus the final root delete.
+            expect(mockDelete).toHaveBeenCalledTimes(3);
         });
 
         it('should clean up ORPHANED documents (existing parent but no tokens) using recursiveDelete', async () => {
@@ -563,7 +597,7 @@ describe('OAuth2', () => {
             await expect(deauthorizeServiceForUser(userID, serviceName, {
             })).resolves.not.toThrow();
 
-            expect(mockRecursiveDelete).toHaveBeenCalledTimes(1);
+            expect(mockDelete).toHaveBeenCalledTimes(2);
             expect(clearServiceConnectionState).toHaveBeenCalledWith(userID, serviceName);
         });
 
@@ -599,58 +633,117 @@ describe('OAuth2', () => {
         const userID = 'user123';
         const serviceName = ServiceNames.GarminAPI;
         const tokenID = 'token-123';
-        const tokenDeleteSpy = vi.fn().mockResolvedValue({});
-        const parentDeleteSpy = vi.fn().mockResolvedValue({});
+        const transactionDeleteSpy = vi.fn();
+        let tokenDocRef: any;
+        let tokenCollectionRef: any;
+        let userDocRef: any;
+        let tokenQueryDocs: any[];
+        let rootDocData: Record<string, unknown>;
 
         beforeEach(() => {
             vi.clearAllMocks();
-            mockGet.mockResolvedValue({ empty: true });
+            transactionDeleteSpy.mockReset();
+            tokenDocRef = { id: tokenID };
+            tokenCollectionRef = {
+                doc: vi.fn((id: string) => {
+                    if (id === tokenID) {
+                        return tokenDocRef;
+                    }
+                    return { id };
+                }),
+            };
+            userDocRef = {
+                id: userID,
+                collection: vi.fn((name: string) => {
+                    if (name !== 'tokens') {
+                        throw new Error(`Unexpected subcollection ${name}`);
+                    }
+                    return tokenCollectionRef;
+                }),
+            };
+            tokenQueryDocs = [{ id: tokenID }];
+            rootDocData = {};
 
             mockDoc.mockImplementation((path) => {
-                if (path === tokenID) {
-                    return { delete: tokenDeleteSpy };
-                }
                 if (path === userID) {
-                    return {
-                        delete: parentDeleteSpy,
-                        collection: mockCollection,
-                        set: vi.fn(),
-                        get: mockGet
-                    };
+                    return userDocRef;
                 }
                 return mockDocInstance;
             });
+
+            mockRunTransaction.mockImplementation(async (callback: any) => callback({
+                get: vi.fn(async (target: unknown) => {
+                    if (target === userDocRef) {
+                        return {
+                            exists: true,
+                            data: () => rootDocData,
+                        };
+                    }
+                    if (target === tokenCollectionRef) {
+                        return { docs: tokenQueryDocs };
+                    }
+                    throw new Error('Unexpected transaction get target');
+                }),
+                delete: transactionDeleteSpy,
+            }));
         });
 
         afterEach(() => {
             mockDoc.mockReturnValue(mockDocInstance);
+            installDefaultRunTransactionMock();
         });
 
         it('should delete the specific token', async () => {
             await deleteLocalServiceToken(userID, serviceName, tokenID);
-            expect(tokenDeleteSpy).toHaveBeenCalled();
+            expect(transactionDeleteSpy).toHaveBeenCalledWith(tokenDocRef);
         });
 
         it('should delete parent document if no tokens remain', async () => {
-            await deleteLocalServiceToken(userID, serviceName, tokenID);
-            expect(tokenDeleteSpy).toHaveBeenCalled();
-            expect(mockRecursiveDelete).toHaveBeenCalled();
+            const result = await deleteLocalServiceToken(userID, serviceName, tokenID);
+            expect(transactionDeleteSpy).toHaveBeenCalledWith(tokenDocRef);
+            expect(transactionDeleteSpy).toHaveBeenCalledWith(userDocRef);
             expect(mockCollection).not.toHaveBeenCalledWith('users');
+            expect(result).toEqual({
+                tokenRootDeleted: true,
+                tokenRootPreservedForOAuthFlow: false,
+                remainingTokenCount: 0,
+            });
         });
 
         it('should NOT delete parent document if tokens remain', async () => {
-            mockGet.mockResolvedValue({ empty: false });
-            await deleteLocalServiceToken(userID, serviceName, tokenID);
-            expect(tokenDeleteSpy).toHaveBeenCalled();
-            expect(mockRecursiveDelete).not.toHaveBeenCalled();
+            tokenQueryDocs = [{ id: tokenID }, { id: 'token-456' }];
+            const result = await deleteLocalServiceToken(userID, serviceName, tokenID);
+            expect(transactionDeleteSpy).toHaveBeenCalledWith(tokenDocRef);
+            expect(transactionDeleteSpy).not.toHaveBeenCalledWith(userDocRef);
             expect(mockCollection).not.toHaveBeenCalledWith('users');
+            expect(result).toEqual({
+                tokenRootDeleted: false,
+                tokenRootPreservedForOAuthFlow: false,
+                remainingTokenCount: 1,
+            });
+        });
+
+        it('should preserve the token root when an OAuth reconnect flow is already in progress', async () => {
+            rootDocData = {
+                state: 'pending-state',
+                codeVerifier: 'pending-verifier',
+            };
+
+            const result = await deleteLocalServiceToken(userID, serviceName, tokenID);
+
+            expect(transactionDeleteSpy).toHaveBeenCalledWith(tokenDocRef);
+            expect(transactionDeleteSpy).not.toHaveBeenCalledWith(userDocRef);
+            expect(result).toEqual({
+                tokenRootDeleted: false,
+                tokenRootPreservedForOAuthFlow: true,
+                remainingTokenCount: 0,
+            });
         });
 
         it('should keep local token cleanup low-level and not touch service connection state', async () => {
             await expect(deleteLocalServiceToken(userID, serviceName, tokenID)).resolves.not.toThrow();
 
-            expect(tokenDeleteSpy).toHaveBeenCalled();
-            expect(mockRecursiveDelete).toHaveBeenCalled();
+            expect(transactionDeleteSpy).toHaveBeenCalledWith(tokenDocRef);
             expect(clearServiceConnectionState).not.toHaveBeenCalled();
         });
     });
@@ -861,6 +954,10 @@ describe('OAuth2', () => {
             vi.clearAllMocks();
             mockGet.mockClear();
             mockDelete.mockClear();
+            mockDelete.mockResolvedValue({});
+            (requestPromise.get as ReturnType<typeof vi.fn>).mockResolvedValue({});
+            (requestPromise.post as ReturnType<typeof vi.fn>).mockResolvedValue({});
+            (requestPromise.delete as ReturnType<typeof vi.fn>).mockResolvedValue({});
             (getTokenData as ReturnType<typeof vi.fn>).mockClear();
         });
 
@@ -1114,6 +1211,10 @@ describe('OAuth2', () => {
             vi.clearAllMocks();
             mockGet.mockClear();
             mockDelete.mockClear();
+            mockDelete.mockResolvedValue({});
+            (requestPromise.get as ReturnType<typeof vi.fn>).mockResolvedValue({});
+            (requestPromise.post as ReturnType<typeof vi.fn>).mockResolvedValue({});
+            (requestPromise.delete as ReturnType<typeof vi.fn>).mockResolvedValue({});
             (getTokenData as ReturnType<typeof vi.fn>).mockClear();
         });
 
@@ -1182,6 +1283,10 @@ describe('OAuth2', () => {
 
         beforeEach(() => {
             vi.clearAllMocks();
+            mockDelete.mockResolvedValue({});
+            (requestPromise.get as ReturnType<typeof vi.fn>).mockResolvedValue({});
+            (requestPromise.post as ReturnType<typeof vi.fn>).mockResolvedValue({});
+            (requestPromise.delete as ReturnType<typeof vi.fn>).mockResolvedValue({});
         });
         it('should throw error for unsupported service name', async () => {
             const UnsupportedService = 'UnsupportedService' as any;
