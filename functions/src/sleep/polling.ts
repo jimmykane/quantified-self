@@ -16,6 +16,7 @@ import {
     SLEEP_SYNC_DISABLED_PROVIDERS,
 } from './provider-flags';
 import { isServiceReconnectRequiredForUser } from '../service-connection-meta';
+import { getUserDeletionGuardState } from '../shared/user-deletion-guard';
 
 interface PollWindow {
     startMs: number;
@@ -96,6 +97,26 @@ function getReconnectRequiredStateBestEffort(
     });
 }
 
+function getUserDeletionSkipStateBestEffort(
+    provider: SleepProvider,
+    userID: string,
+): Promise<boolean> {
+    return getUserDeletionGuardState(admin.firestore(), userID)
+        .then((deletionGuard) => {
+            if (deletionGuard.shouldSkip) {
+                logger.info(`[SleepSync][${provider}] Skipping user ${userID} because the user is missing or deletion is in progress`);
+            }
+            return deletionGuard.shouldSkip;
+        })
+        .catch((error: unknown) => {
+            logger.warn(
+                `[SleepSync][${provider}] Failed to read deletion guard for user ${userID}; skipping sleep polling for this user.`,
+                error,
+            );
+            return true;
+        });
+}
+
 async function enqueueProviderPolls(
     provider: SleepProvider,
     serviceName: ServiceNames,
@@ -109,12 +130,21 @@ async function enqueueProviderPolls(
 
     const windows = chunkRecentWindow(nowMs, SLEEP_SYNC_RECENT_WINDOW_DAYS, maxWindowDays);
     const tokenSnapshots = await getProviderTokenSnapshots(provider, serviceName);
+    const deletionGuardCache = new Map<string, Promise<boolean>>();
     const reconnectRequiredCache = new Map<string, Promise<boolean>>();
     let queued = 0;
     for (const tokenSnapshot of tokenSnapshots) {
         const userID = getFirebaseUserID(tokenSnapshot);
         const providerUserId = getProviderUserId(provider, tokenSnapshot.data());
         if (!userID || !providerUserId || !isSleepSyncUserAllowed(userID)) {
+            continue;
+        }
+        let pendingDeletionSkip = deletionGuardCache.get(userID);
+        if (!pendingDeletionSkip) {
+            pendingDeletionSkip = getUserDeletionSkipStateBestEffort(provider, userID);
+            deletionGuardCache.set(userID, pendingDeletionSkip);
+        }
+        if (await pendingDeletionSkip) {
             continue;
         }
         const cacheKey = `${userID}:${serviceName}`;

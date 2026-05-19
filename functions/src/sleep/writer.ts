@@ -32,14 +32,14 @@ function cleanUndefined<T>(value: T): T {
     return JSON.parse(JSON.stringify(value)) as T;
 }
 
-async function shouldSkipSleepSyncStateWrite(userID: string, provider: SleepProvider): Promise<boolean> {
+async function shouldSkipSleepUserWrite(userID: string, provider: SleepProvider, target: 'session' | 'state'): Promise<boolean> {
     const deletionGuard = await getUserDeletionGuardState(admin.firestore(), userID);
     if (!deletionGuard.shouldSkip) {
         return false;
     }
 
     logger.warn(
-        `[SleepSync] Skipping ${provider} sleep sync state write for user ${userID} because the user is missing or deletion is in progress.`,
+        `[SleepSync] Skipping ${provider} sleep sync ${target} write for user ${userID} because the user is missing or deletion is in progress.`,
     );
     return true;
 }
@@ -85,6 +85,19 @@ export async function upsertSleepSession(
         mapperResult.session.source.provider,
         mapperResult.sourceSessionKey,
     );
+    if (await shouldSkipSleepUserWrite(userID, mapperResult.session.source.provider, 'session')) {
+        return {
+            id,
+            session: {
+                ...mapperResult.session,
+                id,
+                userID,
+                createdAtMs: nowMs,
+                updatedAtMs: nowMs,
+            },
+            written: false,
+        };
+    }
     const docRef = userSleepSessionsRef(userID).doc(id);
     const existing = await docRef.get();
     const existingSession = existing.exists ? existing.data() as SleepSession : null;
@@ -113,6 +126,14 @@ export async function upsertSleepSessions(
     mapperResults: readonly SleepMapperResult[],
     nowMs = Date.now(),
 ): Promise<{ written: number; skipped: number }> {
+    const provider = mapperResults.find((mapperResult) => mapperResult?.session?.source?.provider)?.session.source.provider;
+    if (provider && await shouldSkipSleepUserWrite(userID, provider, 'session')) {
+        return {
+            written: 0,
+            skipped: mapperResults.length,
+        };
+    }
+
     let written = 0;
     let skipped = 0;
     for (const mapperResult of mapperResults) {
@@ -148,7 +169,7 @@ export async function updateSleepSyncState(
     }>,
     nowMs = Date.now(),
 ): Promise<void> {
-    if (await shouldSkipSleepSyncStateWrite(userID, provider)) {
+    if (await shouldSkipSleepUserWrite(userID, provider, 'state')) {
         return;
     }
     await userSleepSyncStateRef(userID, provider).set(cleanUndefined({

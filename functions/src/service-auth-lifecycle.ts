@@ -449,7 +449,9 @@ export async function cleanupServiceTokenById(
   };
 
   try {
-    const deleteResult = await deleteLocalServiceToken(userID, serviceName, tokenID);
+    const deleteResult = await deleteLocalServiceToken(userID, serviceName, tokenID, {
+      preserveOAuthFlowContext: reason !== SERVICE_AUTH_CLEANUP_REASONS.UserDisconnect,
+    });
     outcome.deletedTokenCount = 1;
     await applyPostCleanupConnectionState(userID, serviceName, reason, outcome, deleteResult.tokenRootDeleted);
   } catch (error) {
@@ -642,7 +644,9 @@ export async function cleanupServiceConnectionForUser(
     }
 
     try {
-      const deleteResult = await deleteLocalServiceToken(userID, serviceName, tokenQueryDocumentSnapshot.id);
+      const deleteResult = await deleteLocalServiceToken(userID, serviceName, tokenQueryDocumentSnapshot.id, {
+        preserveOAuthFlowContext: reason !== SERVICE_AUTH_CLEANUP_REASONS.UserDisconnect,
+      });
       outcome.deletedTokenCount += 1;
       knownNoTokensRemain = deleteResult.tokenRootDeleted;
     } catch (deleteError: any) {

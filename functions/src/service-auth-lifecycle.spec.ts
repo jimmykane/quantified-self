@@ -475,6 +475,72 @@ describe('service-auth-lifecycle terminal auth handling', () => {
     });
   });
 
+  it('preserves pending OAuth context for background token cleanup', async () => {
+    mockDeleteLocalServiceToken.mockResolvedValueOnce({
+      tokenRootDeleted: false,
+      tokenRootPreservedForOAuthFlow: true,
+      remainingTokenCount: 0,
+    });
+
+    await cleanupServiceTokenById(
+      'firebase-user-123',
+      ServiceNames.GarminAPI,
+      'garmin-token-id',
+      SERVICE_AUTH_CLEANUP_REASONS.PartnerDisconnect,
+    );
+
+    expect(mockDeleteLocalServiceToken).toHaveBeenCalledWith(
+      'firebase-user-123',
+      ServiceNames.GarminAPI,
+      'garmin-token-id',
+      { preserveOAuthFlowContext: true },
+    );
+  });
+
+  it('cancels pending OAuth context during explicit user disconnect cleanup', async () => {
+    tokenCollectionRef.get.mockResolvedValueOnce({
+      empty: false,
+      size: 1,
+      docs: [
+        {
+          id: 'garmin-token-id',
+          data: () => ({
+            serviceName: ServiceNames.GarminAPI,
+            accessToken: 'access-token',
+            refreshToken: 'refresh-token',
+            expiresAt: Date.now() + 60_000,
+          }),
+        },
+      ],
+    });
+    mockDeleteLocalServiceToken.mockResolvedValueOnce({
+      tokenRootDeleted: true,
+      tokenRootPreservedForOAuthFlow: false,
+      remainingTokenCount: 0,
+    });
+
+    await cleanupServiceConnectionForUser(
+      'firebase-user-123',
+      ServiceNames.GarminAPI,
+      SERVICE_AUTH_CLEANUP_REASONS.UserDisconnect,
+      {
+        tokenResolver: async () => ({
+          serviceName: ServiceNames.GarminAPI,
+          accessToken: 'access-token',
+          refreshToken: 'refresh-token',
+          expiresAt: Date.now() + 60_000,
+        } as any),
+      },
+    );
+
+    expect(mockDeleteLocalServiceToken).toHaveBeenCalledWith(
+      'firebase-user-123',
+      ServiceNames.GarminAPI,
+      'garmin-token-id',
+      { preserveOAuthFlowContext: false },
+    );
+  });
+
   it('throws when user disconnect local cleanup is partial', async () => {
     tokenCollectionRef.get.mockResolvedValueOnce({
       empty: false,

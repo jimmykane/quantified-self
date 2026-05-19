@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { SLEEP_PROVIDERS } from '../../../shared/sleep';
 
@@ -7,6 +7,7 @@ const hoisted = vi.hoisted(() => ({
     collection: vi.fn(),
     collectionGroupGet: vi.fn(),
     metaDocGet: vi.fn(),
+    mockGetUserDeletionGuardState: vi.fn(),
 }));
 
 vi.mock('firebase-functions/v2/scheduler', () => ({
@@ -30,14 +31,23 @@ vi.mock('./queue', () => ({
     addSleepSyncQueueItem: vi.fn(),
 }));
 
+vi.mock('../shared/user-deletion-guard', () => ({
+    getUserDeletionGuardState: hoisted.mockGetUserDeletionGuardState,
+}));
+
 import { sleepPollingTestInternals } from './polling';
 import { addSleepSyncQueueItem } from './queue';
 import * as logger from 'firebase-functions/logger';
 
 describe('sleep polling', () => {
-    afterEach(() => {
+    beforeEach(() => {
         vi.clearAllMocks();
         hoisted.metaDocGet.mockResolvedValue({ exists: false, data: () => undefined });
+        hoisted.mockGetUserDeletionGuardState.mockResolvedValue({
+            userExists: true,
+            deletionInProgress: false,
+            shouldSkip: false,
+        });
     });
 
     function createTokenDoc(userID: string, data: Record<string, unknown>) {
@@ -151,6 +161,96 @@ describe('sleep polling', () => {
 
         expect(queued).toBe(0);
         expect(addSleepSyncQueueItem).not.toHaveBeenCalled();
+    });
+
+    it('skips polling when user deletion is in progress', async () => {
+        const userID = 'suunto-user-id';
+        const nowMs = Date.UTC(2026, 3, 28);
+        installCollectionGroupTokenMock([
+            createTokenDoc(userID, {
+                serviceName: ServiceNames.SuuntoApp,
+                userName: 'suunto-user-1',
+            }),
+        ]);
+        hoisted.mockGetUserDeletionGuardState.mockResolvedValueOnce({
+            userExists: true,
+            deletionInProgress: true,
+            shouldSkip: true,
+        });
+
+        const queued = await sleepPollingTestInternals.enqueueProviderPolls(
+            SLEEP_PROVIDERS.SuuntoApp,
+            ServiceNames.SuuntoApp,
+            28,
+            nowMs,
+        );
+
+        expect(queued).toBe(0);
+        expect(addSleepSyncQueueItem).not.toHaveBeenCalled();
+    });
+
+    it('skips polling when the user document is missing', async () => {
+        const userID = 'suunto-user-id';
+        const nowMs = Date.UTC(2026, 3, 28);
+        installCollectionGroupTokenMock([
+            createTokenDoc(userID, {
+                serviceName: ServiceNames.SuuntoApp,
+                userName: 'suunto-user-1',
+            }),
+        ]);
+        hoisted.mockGetUserDeletionGuardState.mockResolvedValueOnce({
+            userExists: false,
+            deletionInProgress: false,
+            shouldSkip: true,
+        });
+
+        const queued = await sleepPollingTestInternals.enqueueProviderPolls(
+            SLEEP_PROVIDERS.SuuntoApp,
+            ServiceNames.SuuntoApp,
+            28,
+            nowMs,
+        );
+
+        expect(queued).toBe(0);
+        expect(addSleepSyncQueueItem).not.toHaveBeenCalled();
+    });
+
+    it('continues polling other users when deletion guard lookup fails for one user', async () => {
+        const nowMs = Date.UTC(2026, 3, 28);
+        installCollectionGroupTokenMock([
+            createTokenDoc('suunto-user-id-1', {
+                serviceName: ServiceNames.SuuntoApp,
+                userName: 'suunto-user-1',
+            }),
+            createTokenDoc('suunto-user-id-2', {
+                serviceName: ServiceNames.SuuntoApp,
+                userName: 'suunto-user-2',
+            }),
+        ]);
+        hoisted.mockGetUserDeletionGuardState
+            .mockRejectedValueOnce(new Error('guard read failed'))
+            .mockResolvedValueOnce({
+                userExists: true,
+                deletionInProgress: false,
+                shouldSkip: false,
+            });
+
+        const queued = await sleepPollingTestInternals.enqueueProviderPolls(
+            SLEEP_PROVIDERS.SuuntoApp,
+            ServiceNames.SuuntoApp,
+            28,
+            nowMs,
+        );
+
+        expect(queued).toBe(1);
+        expect(addSleepSyncQueueItem).toHaveBeenCalledTimes(1);
+        expect(addSleepSyncQueueItem).toHaveBeenCalledWith(expect.objectContaining({
+            userID: 'suunto-user-id-2',
+        }));
+        expect(logger.warn).toHaveBeenCalledWith(
+            '[SleepSync][SuuntoApp] Failed to read deletion guard for user suunto-user-id-1; skipping sleep polling for this user.',
+            expect.any(Error),
+        );
     });
 
     it('continues polling when reconnect state lookup fails for one user', async () => {

@@ -14,6 +14,10 @@ function hasPendingOAuthFlowContext(snapshot: admin.firestore.DocumentSnapshot):
   return state.length > 0 || codeVerifier.length > 0;
 }
 
+export interface DeleteLocalServiceTokenOptions {
+  preserveOAuthFlowContext?: boolean;
+}
+
 export function getServiceTokenRootDocumentRef(
   userID: string,
   serviceName: ServiceNames,
@@ -33,6 +37,7 @@ export async function deleteLocalServiceToken(
   userID: string,
   serviceName: ServiceNames,
   tokenID: string,
+  options: DeleteLocalServiceTokenOptions = {},
 ): Promise<{ tokenRootDeleted: boolean; tokenRootPreservedForOAuthFlow: boolean; remainingTokenCount: number }> {
   logger.info(`Starting delete for local token ${tokenID} for ${userID} and serviceName ${serviceName}`);
 
@@ -44,7 +49,10 @@ export async function deleteLocalServiceToken(
     const tokenRootSnapshot = await transaction.get(userDocRef);
     const tokenQuerySnapshot = await transaction.get(tokenCollectionRef);
     const remainingTokenCount = tokenQuerySnapshot.docs.filter((doc) => doc.id !== tokenID).length;
-    const tokenRootPreservedForOAuthFlow = remainingTokenCount === 0 && hasPendingOAuthFlowContext(tokenRootSnapshot);
+    const shouldPreserveOAuthFlowContext = options.preserveOAuthFlowContext !== false;
+    const tokenRootPreservedForOAuthFlow = shouldPreserveOAuthFlowContext
+      && remainingTokenCount === 0
+      && hasPendingOAuthFlowContext(tokenRootSnapshot);
 
     transaction.delete(tokenDocRef);
 

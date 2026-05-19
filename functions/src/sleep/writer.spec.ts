@@ -42,7 +42,34 @@ vi.mock('firebase-admin', () => {
     };
 });
 
-import { markSleepSyncError, updateSleepSyncState, upsertSleepSessions } from './writer';
+import { markSleepSyncError, updateSleepSyncState, upsertSleepSession, upsertSleepSessions } from './writer';
+
+function buildMapperResult(overrides: Partial<SleepSession> = {}) {
+    return {
+        sourceSessionKey: 'sleep-1',
+        session: {
+            source: {
+                provider: SLEEP_PROVIDERS.SuuntoApp,
+                providerUserId: 'suunto-user-1',
+                sourceSessionKey: 'sleep-1',
+            },
+            sleepDate: '2026-04-29',
+            startTimeMs: Date.UTC(2026, 3, 28, 18, 51),
+            endTimeMs: Date.UTC(2026, 3, 29, 4, 22),
+            durationSeconds: 33300,
+            inBedDurationSeconds: 34260,
+            isNap: false,
+            stages: [],
+            stageDurationsSeconds: {
+                [SLEEP_STAGES.Deep]: 6210,
+                [SLEEP_STAGES.Light]: 20070,
+                [SLEEP_STAGES.Rem]: 7020,
+                [SLEEP_STAGES.Awake]: 960,
+            },
+            ...overrides,
+        },
+    };
+}
 
 function buildExistingSuuntoSession(overrides: Partial<SleepSession> = {}): SleepSession {
     return {
@@ -157,6 +184,34 @@ describe('sleep writer', () => {
             createdAtMs: 1000,
             updatedAtMs: 3000,
         }), { merge: true });
+    });
+
+    it('does not recreate sleep sessions when user deletion is in progress', async () => {
+        hoisted.mockGetUserDeletionGuardState.mockResolvedValueOnce({
+            userExists: true,
+            deletionInProgress: true,
+            shouldSkip: true,
+        });
+
+        const result = await upsertSleepSessions('user-1', [buildMapperResult()], 3000);
+
+        expect(result).toEqual({ written: 0, skipped: 1 });
+        expect(hoisted.docGet).not.toHaveBeenCalled();
+        expect(hoisted.docSet).not.toHaveBeenCalled();
+    });
+
+    it('does not recreate a sleep session when the user document is missing', async () => {
+        hoisted.mockGetUserDeletionGuardState.mockResolvedValueOnce({
+            userExists: false,
+            deletionInProgress: false,
+            shouldSkip: true,
+        });
+
+        const result = await upsertSleepSession('user-1', buildMapperResult(), 3000);
+
+        expect(result.written).toBe(false);
+        expect(hoisted.docGet).not.toHaveBeenCalled();
+        expect(hoisted.docSet).not.toHaveBeenCalled();
     });
 
     it('does not recreate sleep sync state when user deletion is in progress', async () => {

@@ -740,6 +740,25 @@ describe('OAuth2', () => {
             });
         });
 
+        it('should delete the token root with pending OAuth state when preservation is disabled', async () => {
+            rootDocData = {
+                state: 'pending-state',
+                codeVerifier: 'pending-verifier',
+            };
+
+            const result = await deleteLocalServiceToken(userID, serviceName, tokenID, {
+                preserveOAuthFlowContext: false,
+            });
+
+            expect(transactionDeleteSpy).toHaveBeenCalledWith(tokenDocRef);
+            expect(transactionDeleteSpy).toHaveBeenCalledWith(userDocRef);
+            expect(result).toEqual({
+                tokenRootDeleted: true,
+                tokenRootPreservedForOAuthFlow: false,
+                remainingTokenCount: 0,
+            });
+        });
+
         it('should keep local token cleanup low-level and not touch service connection state', async () => {
             await expect(deleteLocalServiceToken(userID, serviceName, tokenID)).resolves.not.toThrow();
 
