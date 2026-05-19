@@ -15,6 +15,7 @@ export interface QueueItemInterface {
   processedAt?: number,
   expireAt?: admin.firestore.Timestamp | Date,
   dispatchedToCloudTask: number | null,
+  firebaseUserID?: string,
 }
 
 export interface SuuntoAppWorkoutQueueItemInterface extends QueueItemInterface {

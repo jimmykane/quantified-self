@@ -197,6 +197,32 @@ describe('activity-sync/process-queue-item', () => {
     }));
   });
 
+  it('retries instead of DLQ when the deletion guard cannot be read', async () => {
+    mockShouldSkipQueueWorkForDeletedUser.mockRejectedValueOnce(Object.assign(
+      new Error('guard read failed'),
+      {
+        name: 'UserDeletionGuardReadError',
+        code: 'unavailable',
+        statusCode: 503,
+      },
+    ));
+
+    const result = await processActivitySyncQueueItem(baseQueueItem);
+
+    expect(result).toBe(QueueResult.RetryIncremented);
+    expect(mockIncreaseRetryCountForQueueItem).toHaveBeenCalledWith(
+      baseQueueItem,
+      expect.objectContaining({
+        name: 'UserDeletionGuardReadError',
+        code: 'unavailable',
+      }),
+      1,
+      undefined,
+    );
+    expect(mockMoveToDeadLetterQueue).not.toHaveBeenCalled();
+    expect(mockUploadActivityFileToSuunto).not.toHaveBeenCalled();
+  });
+
   it('marks queue item skipped without metadata or upload when account deletion is active', async () => {
     mockShouldSkipQueueWorkForDeletedUser.mockResolvedValue(true);
 

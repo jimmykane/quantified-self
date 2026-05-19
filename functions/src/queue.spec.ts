@@ -809,6 +809,7 @@ describe('queue', () => {
                 id: 'user1-work1',
                 userName: 'user1',
                 workoutID: 'work1',
+                firebaseUserID: 'mock-user-id',
                 dispatchedToCloudTask: null
             }));
             expect(doc.set).not.toHaveBeenCalled();
@@ -905,7 +906,8 @@ describe('queue', () => {
             const doc = admin.firestore().collection('COROSAPIWorkoutQueue').doc('coros1');
             expect(doc.set).toHaveBeenCalledWith(expect.objectContaining({
                 id: 'coros1',
-                openId: 'oid1'
+                openId: 'oid1',
+                firebaseUserID: 'mock-user-id',
             }));
         });
 
@@ -926,7 +928,8 @@ describe('queue', () => {
             const doc = admin.firestore().collection('garminAPIActivityQueue').doc('u1-file123');
             expect(doc.set).toHaveBeenCalledWith(expect.objectContaining({
                 id: 'u1-file123',
-                activityFileID: 'file123'
+                activityFileID: 'file123',
+                firebaseUserID: 'mock-user-id',
             }));
         });
     });

@@ -5,7 +5,7 @@ import { enqueueActivitySyncTask, generateIDFromParts } from '../utils';
 import { ACTIVITY_SYNC_QUEUE_COLLECTION_NAME } from './constants';
 import { ActivitySyncOriginalFileMetadata, ActivitySyncQueueItemInterface } from '../queue/queue-item.interface';
 import { getExpireAtTimestamp, TTL_CONFIG } from '../shared/ttl-config';
-import { getUserDeletionGuardStateInTransaction } from '../shared/user-deletion-guard';
+import { getUserDeletionGuardStateInTransaction, UserDeletionGuardReadError } from '../shared/user-deletion-guard';
 
 export interface EnqueueActivitySyncQueueItemParams {
     routeId: ActivitySyncRouteId;
@@ -49,7 +49,13 @@ export async function enqueueActivitySyncQueueItem(
     const queueDocRef = db.collection(ACTIVITY_SYNC_QUEUE_COLLECTION_NAME).doc(queueItemId);
     const decision = await db.runTransaction(async (transaction): Promise<QueueInsertDecision> => {
         const existingSnapshot = await transaction.get(queueDocRef);
-        const deletionGuard = await getUserDeletionGuardStateInTransaction(db, transaction, params.userID);
+        let deletionGuard;
+        try {
+            deletionGuard = await getUserDeletionGuardStateInTransaction(db, transaction, params.userID);
+        } catch (error) {
+            throw new UserDeletionGuardReadError(params.userID, 'activity_sync_queue_transaction', error);
+        }
+
         if (deletionGuard.shouldSkip) {
             return {
                 enqueued: false,

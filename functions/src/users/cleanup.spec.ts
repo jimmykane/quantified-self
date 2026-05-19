@@ -501,6 +501,9 @@ describe('cleanupUserAccounts', () => {
         });
         whereMock.mockImplementation((field: string, _operator: string, value: string) => ({
             get: vi.fn().mockResolvedValue(
+                field === 'firebaseUserID' && value === 'testUser123'
+                    ? { docs: [{ id: 'provider-job-1', ref: { path: 'suuntoAppWorkoutQueue/provider-job-1' }, data: () => ({}) }] }
+                    :
                 field === 'providerUserId' && value === 'suunto-provider-user'
                     ? { docs: [{ id: 'sleep-job-1', ref: { path: 'sleepSyncQueue/sleep-job-1' }, data: () => ({}) }] }
                     : field === 'userID' && value === 'testUser123'
@@ -517,12 +520,14 @@ describe('cleanupUserAccounts', () => {
         expect(firestoreMock().collection).toHaveBeenCalledWith('suuntoAppWorkoutQueue');
         expect(firestoreMock().collection).toHaveBeenCalledWith('COROSAPIWorkoutQueue');
         expect(firestoreMock().collection).toHaveBeenCalledWith('failed_jobs');
+        expect(whereMock).toHaveBeenCalledWith('firebaseUserID', '==', 'testUser123');
         expect(whereMock).toHaveBeenCalledWith('providerUserId', '==', 'suunto-provider-user');
         expect(whereMock).toHaveBeenCalledWith('userName', '==', 'suunto-provider-user');
         expect(whereMock).toHaveBeenCalledWith('openId', '==', 'coros-provider-user');
         expect(whereMock).toHaveBeenCalledWith('userID', '==', 'garmin-provider-user');
         expect(recursiveDeleteMock).toHaveBeenCalledWith(expect.objectContaining({ path: 'sleepSyncQueue/sleep-job-1' }));
         expect(recursiveDeleteMock).toHaveBeenCalledWith(expect.objectContaining({ path: 'activitySyncQueue/activity-job-1' }));
+        expect(recursiveDeleteMock).toHaveBeenCalledWith(expect.objectContaining({ path: 'suuntoAppWorkoutQueue/provider-job-1' }));
     });
 
     it('should handle archiving with non-standard error and empty token data', async () => {

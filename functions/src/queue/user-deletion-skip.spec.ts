@@ -15,6 +15,19 @@ vi.mock('firebase-functions/logger', () => ({
 
 vi.mock('../shared/user-deletion-guard', () => ({
     getUserDeletionGuardState: hoisted.getUserDeletionGuardState,
+    UserDeletionGuardReadError: class UserDeletionGuardReadError extends Error {
+        readonly name = 'UserDeletionGuardReadError';
+        readonly code = 'unavailable';
+        readonly statusCode = 503;
+
+        constructor(
+            public readonly uid: string,
+            public readonly phase: string,
+            public readonly originalError: unknown,
+        ) {
+            super(`Could not read deletion guard for user ${uid} during ${phase}.`);
+        }
+    },
 }));
 
 import { shouldSkipQueueWorkForDeletedUser } from './user-deletion-skip';
@@ -51,5 +64,22 @@ describe('queue/user-deletion-skip', () => {
             'queue-1',
             'before_event_write',
         )).resolves.toBe(true);
+    });
+
+    it('wraps deletion guard read failures as retryable unavailable errors', async () => {
+        hoisted.getUserDeletionGuardState.mockRejectedValueOnce(new Error('Firestore unavailable'));
+
+        await expect(shouldSkipQueueWorkForDeletedUser(
+            'user-1',
+            ServiceNames.SuuntoApp,
+            'queue-1',
+            'before_event_write',
+        )).rejects.toMatchObject({
+            name: 'UserDeletionGuardReadError',
+            code: 'unavailable',
+            statusCode: 503,
+            uid: 'user-1',
+            phase: 'before_event_write',
+        });
     });
 });

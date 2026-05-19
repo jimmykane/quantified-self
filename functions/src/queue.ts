@@ -92,6 +92,63 @@ function isTokenRefreshSkippedForDeletedUserError(error: unknown): error is Toke
     || (error instanceof Error && error.name === 'TokenRefreshSkippedForDeletedUserError');
 }
 
+function getProviderUserIDForQueueItem(
+  serviceName: ServiceNames,
+  queueItem: SuuntoAppWorkoutQueueItemInterface | GarminAPIActivityQueueItemInterface | COROSAPIWorkoutQueueItemInterface,
+): { fieldName: 'userName' | 'openId' | 'userID'; value: string } | null {
+  switch (serviceName) {
+    case ServiceNames.SuuntoApp:
+      return { fieldName: 'userName', value: `${(queueItem as SuuntoAppWorkoutQueueItemInterface).userName || ''}` };
+    case ServiceNames.COROSAPI:
+      return { fieldName: 'openId', value: `${(queueItem as COROSAPIWorkoutQueueItemInterface).openId || ''}` };
+    case ServiceNames.GarminAPI:
+      return { fieldName: 'userID', value: `${(queueItem as GarminAPIActivityQueueItemInterface).userID || ''}` };
+    default:
+      return null;
+  }
+}
+
+async function resolveFirebaseUserIDForQueueItem(
+  serviceName: ServiceNames,
+  queueItem: SuuntoAppWorkoutQueueItemInterface | GarminAPIActivityQueueItemInterface | COROSAPIWorkoutQueueItemInterface,
+): Promise<string | null> {
+  if (queueItem.firebaseUserID) {
+    return queueItem.firebaseUserID;
+  }
+
+  const providerUserID = getProviderUserIDForQueueItem(serviceName, queueItem);
+  if (!providerUserID || providerUserID.value.trim().length === 0) {
+    return null;
+  }
+
+  try {
+    const tokenSnapshot = await admin.firestore()
+      .collectionGroup('tokens')
+      .where(providerUserID.fieldName, '==', providerUserID.value.trim())
+      .where('serviceName', '==', serviceName)
+      .limit(1)
+      .get();
+    return tokenSnapshot.docs[0]?.ref.parent.parent?.id || null;
+  } catch (error) {
+    logger.warn(`Could not resolve Firebase uid for ${serviceName} queue item ${queueItem.id}; enqueue will continue without cleanup back-reference.`, error);
+    return null;
+  }
+}
+
+async function attachFirebaseUserIDToQueueItem<T extends SuuntoAppWorkoutQueueItemInterface | GarminAPIActivityQueueItemInterface | COROSAPIWorkoutQueueItemInterface>(
+  queueItem: T,
+  serviceName: ServiceNames,
+): Promise<T> {
+  const firebaseUserID = await resolveFirebaseUserIDForQueueItem(serviceName, queueItem);
+  if (!firebaseUserID) {
+    return queueItem;
+  }
+  return {
+    ...queueItem,
+    firebaseUserID,
+  };
+}
+
 
 export async function dispatchQueueItemTasks(serviceName: ServiceNames) {
   // Check queue depth
@@ -178,7 +235,7 @@ export const parseSuuntoAppActivityQueue = functions.region('europe-west2').runW
  */
 export async function addToQueueForSuunto(queueItem: { userName: string, workoutID: string }): Promise<admin.firestore.DocumentReference> {
   logger.info(`Inserting to queue ${queueItem.userName} ${queueItem.workoutID}`);
-  return addToWorkoutQueue({
+  return addToWorkoutQueue(await attachFirebaseUserIDToQueueItem({
     id: await generateIDFromParts([queueItem.userName, queueItem.workoutID]),
     dateCreated: new Date().getTime(),
     userName: queueItem.userName,
@@ -186,7 +243,7 @@ export async function addToQueueForSuunto(queueItem: { userName: string, workout
     retryCount: 0,
     processed: false,
     dispatchedToCloudTask: null,
-  }, ServiceNames.SuuntoApp, false, true);
+  }, ServiceNames.SuuntoApp), ServiceNames.SuuntoApp, false, true);
 }
 
 /**
@@ -196,7 +253,7 @@ export async function addToQueueForSuunto(queueItem: { userName: string, workout
 export async function addToQueueForGarmin(queueItem: { userID: string, startTimeInSeconds: number, manual: boolean, activityFileID: string, activityFileType: 'FIT' | 'TCX' | 'GPX', token: string, userAccessToken: string, callbackURL: string }): Promise<admin.firestore.DocumentReference> {
   const queueID = await generateIDFromParts([queueItem.userID, queueItem.activityFileID]);
   logger.info(`Inserting to queue ${queueID} for ${queueItem.userID} fileID ${queueItem.activityFileID}`);
-  return addToWorkoutQueue({
+  return addToWorkoutQueue(await attachFirebaseUserIDToQueueItem({
     id: queueID,
     dateCreated: new Date().getTime(),
     userID: queueItem.userID,
@@ -210,7 +267,7 @@ export async function addToQueueForGarmin(queueItem: { userID: string, startTime
     userAccessToken: queueItem.userAccessToken,
     callbackURL: queueItem.callbackURL,
     dispatchedToCloudTask: null,
-  }, ServiceNames.GarminAPI, queueItem.manual);
+  }, ServiceNames.GarminAPI), ServiceNames.GarminAPI, queueItem.manual);
 }
 
 /**
@@ -219,7 +276,7 @@ export async function addToQueueForGarmin(queueItem: { userID: string, startTime
  */
 export async function addToQueueForCOROS(queueItem: COROSAPIWorkoutQueueItemInterface): Promise<admin.firestore.DocumentReference> {
   logger.info(`Inserting to queue ${queueItem.openId} ${queueItem.workoutID}`);
-  return addToWorkoutQueue(queueItem, ServiceNames.COROSAPI);
+  return addToWorkoutQueue(await attachFirebaseUserIDToQueueItem(queueItem, ServiceNames.COROSAPI), ServiceNames.COROSAPI);
 }
 
 export function getWorkoutForService(
@@ -593,6 +650,11 @@ async function addToWorkoutQueue(queueItem: SuuntoAppWorkoutQueueItemInterface |
         if (existingQueueItem?.processed === true) {
           logger.info(`Queue item ${queueItem.id} already processed for ${serviceName}; skipping duplicate enqueue.`);
           return queueItemDocument;
+        }
+
+        const firebaseUserID = (queuePayload as QueueItemInterface).firebaseUserID;
+        if (firebaseUserID && existingQueueItem && (existingQueueItem as QueueItemInterface).firebaseUserID !== firebaseUserID) {
+          await queueItemDocument.update({ firebaseUserID });
         }
 
         const dateCreated = typeof existingQueueItem?.dateCreated === 'number'
