@@ -4,12 +4,16 @@ import { ACTIVITY_SYNC_ROUTE_IDS } from '../../../shared/activity-sync-routes';
 const {
   mockOnDocumentDeleted,
   mockCollection,
-  mockUsersDocGet,
   mockSettingsSet,
+  mockGetUserDeletionGuardState,
 } = vi.hoisted(() => {
   const mockOnDocumentDeleted = vi.fn((_options: unknown, handler: unknown) => handler);
-  const mockUsersDocGet = vi.fn();
   const mockSettingsSet = vi.fn().mockResolvedValue(undefined);
+  const mockGetUserDeletionGuardState = vi.fn().mockResolvedValue({
+    userExists: true,
+    deletionInProgress: false,
+    shouldSkip: false,
+  });
 
   const mockCollection = vi.fn((collectionName: string) => {
     if (collectionName !== 'users') {
@@ -18,7 +22,6 @@ const {
 
     return {
       doc: vi.fn(() => ({
-        get: mockUsersDocGet,
         collection: vi.fn((subcollectionName: string) => {
           if (subcollectionName !== 'config') {
             throw new Error(`Unexpected subcollection: ${subcollectionName}`);
@@ -43,8 +46,8 @@ const {
   return {
     mockOnDocumentDeleted,
     mockCollection,
-    mockUsersDocGet,
     mockSettingsSet,
+    mockGetUserDeletionGuardState,
   };
 });
 
@@ -63,6 +66,10 @@ vi.mock('firebase-admin', () => ({
   ),
 }));
 
+vi.mock('../shared/user-deletion-guard', () => ({
+  getUserDeletionGuardState: mockGetUserDeletionGuardState,
+}));
+
 import {
   disableActivitySyncRoutesOnCOROSTokenRootDelete,
   disableActivitySyncRoutesOnGarminTokenRootDelete,
@@ -72,7 +79,11 @@ import {
 describe('activity-sync/disconnect-routes', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockUsersDocGet.mockResolvedValue({ exists: true });
+    mockGetUserDeletionGuardState.mockResolvedValue({
+      userExists: true,
+      deletionInProgress: false,
+      shouldSkip: false,
+    });
   });
 
   it('disables Garmin -> Suunto route when Garmin token root is deleted', async () => {
@@ -127,7 +138,11 @@ describe('activity-sync/disconnect-routes', () => {
   });
 
   it('does not write route settings when user root does not exist', async () => {
-    mockUsersDocGet.mockResolvedValueOnce({ exists: false });
+    mockGetUserDeletionGuardState.mockResolvedValueOnce({
+      userExists: false,
+      deletionInProgress: false,
+      shouldSkip: true,
+    });
 
     await (disableActivitySyncRoutesOnGarminTokenRootDelete as unknown as (event: unknown) => Promise<void>)({
       params: { uid: 'missing-user' },

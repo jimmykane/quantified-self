@@ -20,6 +20,7 @@ const {
   mockToActivitySyncMetadataError,
   mockUploadActivityFileToSuunto,
   mockHasProAccess,
+  mockIsServiceReconnectRequiredForUser,
 } = vi.hoisted(() => {
   const mockTokenGet = vi.fn();
   const mockDownload = vi.fn();
@@ -45,6 +46,7 @@ const {
     })),
     mockUploadActivityFileToSuunto: vi.fn(),
     mockHasProAccess: vi.fn(),
+    mockIsServiceReconnectRequiredForUser: vi.fn(),
   };
 });
 
@@ -111,6 +113,10 @@ vi.mock('../utils', async (importOriginal) => {
   };
 });
 
+vi.mock('../service-connection-meta', () => ({
+  isServiceReconnectRequiredForUser: mockIsServiceReconnectRequiredForUser,
+}));
+
 import { processActivitySyncQueueItem } from './process-queue-item';
 import { QueueResult } from '../queue-utils';
 
@@ -142,6 +148,7 @@ describe('activity-sync/process-queue-item', () => {
     mockIsActivitySyncRouteUserAllowlisted.mockReturnValue(true);
     mockHasProAccess.mockResolvedValue(true);
     mockIsActivitySyncRouteEnabledForUser.mockResolvedValue(true);
+    mockIsServiceReconnectRequiredForUser.mockResolvedValue(false);
     mockTokenGet.mockResolvedValue({ size: 1 });
     mockDownload.mockResolvedValue([Buffer.from('FITDATA')]);
     mockUploadActivityFileToSuunto.mockResolvedValue({
@@ -247,6 +254,24 @@ describe('activity-sync/process-queue-item', () => {
     expect(result).toBe(QueueResult.Processed);
     expect(mockSetActivitySyncSkippedMetadata).toHaveBeenCalledWith(expect.objectContaining({
       skippedReason: 'route_disabled',
+    }));
+    expect(mockUploadActivityFileToSuunto).not.toHaveBeenCalled();
+  });
+
+  it('skips and marks processed when destination service requires reconnect even if a token remains', async () => {
+    mockIsServiceReconnectRequiredForUser.mockResolvedValue(true);
+
+    const result = await processActivitySyncQueueItem(baseQueueItem);
+
+    expect(result).toBe(QueueResult.Processed);
+    expect(mockTokenGet).not.toHaveBeenCalled();
+    expect(mockSetActivitySyncSkippedMetadata).toHaveBeenCalledWith(expect.objectContaining({
+      skippedReason: 'destination_not_connected',
+      detail: 'Destination account is not connected.',
+    }));
+    expect(mockUpdateToProcessed).toHaveBeenCalledWith(expect.any(Object), undefined, expect.objectContaining({
+      skippedReason: 'destination_not_connected',
+      resultStatus: 'skipped',
     }));
     expect(mockUploadActivityFileToSuunto).not.toHaveBeenCalled();
   });

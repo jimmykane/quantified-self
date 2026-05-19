@@ -1027,6 +1027,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
     return resolveDashboardActivityAutoSyncRouteIds({
       userID: this.user?.uid,
       connectionState: this.activityServiceConnectionState,
+      reconnectRequiredServices: {
+        [ServiceNames.SuuntoApp]: this.suuntoConnectionView.reconnectRequired,
+      },
       routeSettings: this.user?.settings?.serviceSyncSettings?.activitySyncRoutes,
     });
   }

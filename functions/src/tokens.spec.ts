@@ -1,6 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ServiceNames } from '@sports-alliance/sports-lib';
-import { getTokenData, refreshTokens, refreshStaleTokens, TerminalServiceAuthError } from './tokens';
+import { getTokenData, refreshTokens, refreshStaleTokens, TerminalServiceAuthError, TokenRefreshSkippedForDeletedUserError } from './tokens';
+
+const hoisted = vi.hoisted(() => ({
+    getUserDeletionGuardState: vi.fn().mockResolvedValue({
+        userExists: true,
+        deletionInProgress: false,
+        shouldSkip: false,
+    }),
+}));
 
 vi.mock('firebase-functions', () => ({
     config: () => ({
@@ -121,6 +129,10 @@ vi.mock('./service-auth-lifecycle', () => {
     };
 });
 
+vi.mock('./shared/user-deletion-guard', () => ({
+    getUserDeletionGuardState: hoisted.getUserDeletionGuardState,
+}));
+
 import { getServiceAdapter } from './auth/factory';
 import { handleTerminalServiceAuthFailure } from './service-auth-lifecycle';
 
@@ -132,6 +144,11 @@ describe('tokens', () => {
     beforeEach(() => {
         vi.clearAllMocks();
         firestoreMock.collectionGroup.mockReset();
+        hoisted.getUserDeletionGuardState.mockResolvedValue({
+            userExists: true,
+            deletionInProgress: false,
+            shouldSkip: false,
+        });
         (handleTerminalServiceAuthFailure as any).mockReset().mockImplementation(async (doc: any, serviceName: ServiceNames, serviceTokenData: any, failure: any, originalError: unknown) => ({
             kind: 'terminal_error',
             error: new TerminalServiceAuthError(
@@ -243,6 +260,56 @@ describe('tokens', () => {
             expect(mockToken.refresh).toHaveBeenCalled();
             expect(result.accessToken).toBe('new-access');
             expect(mockDoc.ref.update).toHaveBeenCalled();
+            expect(hoisted.getUserDeletionGuardState).toHaveBeenCalledTimes(2);
+        });
+
+        it('should not call provider refresh when user deletion is in progress before refresh', async () => {
+            mockToken.expired.mockReturnValue(true);
+            hoisted.getUserDeletionGuardState.mockResolvedValueOnce({
+                userExists: true,
+                deletionInProgress: true,
+                shouldSkip: true,
+            });
+
+            await expect(getTokenData(mockDoc, ServiceNames.SuuntoApp, false))
+                .rejects.toBeInstanceOf(TokenRefreshSkippedForDeletedUserError);
+
+            expect(mockToken.refresh).not.toHaveBeenCalled();
+            expect(mockDoc.ref.update).not.toHaveBeenCalled();
+        });
+
+        it('should not persist a refreshed token when user deletion starts before save', async () => {
+            mockToken.expired.mockReturnValue(true);
+            hoisted.getUserDeletionGuardState
+                .mockResolvedValueOnce({
+                    userExists: true,
+                    deletionInProgress: false,
+                    shouldSkip: false,
+                })
+                .mockResolvedValueOnce({
+                    userExists: true,
+                    deletionInProgress: true,
+                    shouldSkip: true,
+                });
+            mockToken.refresh.mockResolvedValue({
+                token: {
+                    access_token: 'new-access',
+                    refresh_token: 'new-refresh',
+                    expires_at: new Date(Date.now() + 3600000),
+                    user: 'suunto-user',
+                    token_type: 'Bearer',
+                    scope: 'workout',
+                },
+            });
+
+            await expect(getTokenData(mockDoc, ServiceNames.SuuntoApp, false))
+                .rejects.toMatchObject({
+                    name: 'TokenRefreshSkippedForDeletedUserError',
+                    phase: 'before_persist',
+                });
+
+            expect(mockToken.refresh).toHaveBeenCalled();
+            expect(mockDoc.ref.update).not.toHaveBeenCalled();
         });
 
         it('should refresh token if expired', async () => {

@@ -7,6 +7,7 @@ import {
   SERVICE_CONNECTION_STATES,
 } from '../../shared/service-connection';
 import { getUserDeletionGuardState } from './shared/user-deletion-guard';
+import { disableActivitySyncRoutesForDisconnectedService } from './activity-sync/route-cleanup';
 
 function serviceMetaRef(userID: string, serviceName: ServiceNames): admin.firestore.DocumentReference {
   return admin.firestore().collection('users').doc(userID).collection('meta').doc(serviceName);
@@ -40,6 +41,15 @@ export async function markServiceReconnectRequired(
     lastAuthFailureMessage: failureMessage || null,
     lastDisconnectedAt: nowMs,
   }, { merge: true });
+
+  try {
+    await disableActivitySyncRoutesForDisconnectedService(userID, serviceName);
+  } catch (error) {
+    logger.error(
+      `[ServiceConnectionMeta] Failed to disable activity sync routes for reconnect-required ${serviceName} user ${userID}.`,
+      error,
+    );
+  }
 }
 
 export async function markServiceConnected(userID: string, serviceName: ServiceNames): Promise<void> {

@@ -111,6 +111,7 @@ export interface DashboardActionPromptBuildOptions {
 export interface ResolveDashboardActivityAutoSyncRouteIdsOptions {
   userID: string | null | undefined;
   connectionState: Partial<Record<ServiceNames, boolean>> | null | undefined;
+  reconnectRequiredServices?: Partial<Record<ServiceNames, boolean>> | null | undefined;
   routeSettings: Partial<Record<ActivitySyncRouteId, ActivitySyncRouteSettingsInterface>> | null | undefined;
 }
 
@@ -171,13 +172,20 @@ export function resolveDashboardActivityAutoSyncRouteIds(
 ): ActivitySyncRouteId[] {
   const userID = `${options.userID || ''}`.trim();
   const connectionState = options.connectionState;
-  if (!userID || !connectionState?.[ServiceNames.SuuntoApp]) {
+  const reconnectRequiredServices = options.reconnectRequiredServices || {};
+  if (
+    !userID ||
+    !connectionState?.[ServiceNames.SuuntoApp] ||
+    reconnectRequiredServices[ServiceNames.SuuntoApp] === true
+  ) {
     return [];
   }
 
   return DASHBOARD_ACTIVITY_AUTO_SYNC_ROUTE_IDS.filter(routeID => {
     const route = ACTIVITY_SYNC_ROUTES[routeID];
     return connectionState[route.sourceServiceName] === true
+      && reconnectRequiredServices[route.sourceServiceName] !== true
+      && reconnectRequiredServices[route.destinationServiceName] !== true
       && options.routeSettings?.[routeID]?.enabled !== true
       && isActivitySyncRouteUIDAllowlisted(routeID, userID);
   });

@@ -12,7 +12,7 @@ import {
   GarminAPIActivityQueueItemInterface,
 } from '../queue/queue-item.interface';
 import { ServiceNames } from '@sports-alliance/sports-lib';
-import { getTokenData } from '../tokens';
+import { getTokenData, TerminalServiceAuthError } from '../tokens';
 import { EventImporterGPX } from '@sports-alliance/sports-lib';
 import { EventImporterTCX } from '@sports-alliance/sports-lib';
 import * as xmldom from 'xmldom';
@@ -112,6 +112,16 @@ export async function processGarminAPIActivityQueueItem(queueItem: GarminAPIActi
   try {
     serviceToken = await getTokenData(tokenQuerySnapshots.docs[0], ServiceNames.GarminAPI);
   } catch (e: any) {
+    if (e instanceof TerminalServiceAuthError) {
+      logger.warn(`Garmin token for queue item ${queueItem.id} requires reconnect; moving item to DLQ with ${e.dlqContext}.`, {
+        queueItemID: queueItem.id,
+        userID: queueItem.userID,
+        firebaseUserID: e.firebaseUserID,
+        providerUserId: e.providerUserId,
+        dlqContext: e.dlqContext,
+      });
+      return moveToDeadLetterQueue(queueItem, e, bulkWriter, e.dlqContext);
+    }
     logger.error(`Failed to get/refresh token for ${queueItem.id}: ${e.message}`);
     return increaseRetryCountForQueueItem(queueItem, e, 1, bulkWriter);
   }

@@ -324,6 +324,19 @@ describe('dashboard-action-prompt.helper', () => {
         [ServiceNames.COROSAPI]: false,
       },
     })).toEqual([]);
+
+    expect(resolveDashboardActivityAutoSyncRouteIds({
+      userID,
+      routeSettings,
+      reconnectRequiredServices: {
+        [ServiceNames.SuuntoApp]: true,
+      },
+      connectionState: {
+        [ServiceNames.GarminAPI]: true,
+        [ServiceNames.SuuntoApp]: true,
+        [ServiceNames.COROSAPI]: true,
+      },
+    })).toEqual([]);
   });
 
   it('formats grouped activity auto-sync success copy', () => {

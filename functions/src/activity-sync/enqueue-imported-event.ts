@@ -1,6 +1,6 @@
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { ACTIVITY_SYNC_ROUTES, ActivitySyncRoute, ActivitySyncRouteId } from '../../../shared/activity-sync-routes';
-import { isActivitySyncRouteEnabledForUser } from './settings';
+import { isActivitySyncRouteBlockedByReconnectRequiredForUser, isActivitySyncRouteEnabledForUser } from './settings';
 import { enqueueActivitySyncQueueItem } from './queue';
 import { setActivitySyncQueuedMetadata, setActivitySyncRequeuedMetadata, setActivitySyncSkippedMetadata } from './metadata';
 import { ActivitySyncOriginalFileMetadata } from '../queue/queue-item.interface';
@@ -127,6 +127,21 @@ export async function enqueueActivitySyncJobsForImportedEvent(
                 manual: params.manual === true,
                 skippedReason: 'user_not_allowlisted',
                 detail: 'User is not allowlisted for this activity sync route.',
+            });
+            continue;
+        }
+
+        if (await isActivitySyncRouteBlockedByReconnectRequiredForUser(params.userID, route.id)) {
+            incrementSkippedReason(skippedByReason, 'service_reconnect_required');
+            await setActivitySyncSkippedMetadata({
+                routeId: route.id,
+                userID: params.userID,
+                eventID: params.eventID,
+                sourceServiceName: route.sourceServiceName,
+                destinationServiceName: route.destinationServiceName,
+                manual: params.manual === true,
+                skippedReason: 'service_reconnect_required',
+                detail: 'A service in this activity sync route requires reconnect.',
             });
             continue;
         }

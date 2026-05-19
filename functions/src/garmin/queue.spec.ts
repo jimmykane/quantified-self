@@ -18,7 +18,15 @@ const {
     mockUploadDebugFile,
     mockCreateParsingOptions,
     mockEnqueueActivitySyncJobsForImportedEvent,
+    MockTerminalServiceAuthError,
 } = vi.hoisted(() => {
+    class MockTerminalServiceAuthError extends Error {
+        readonly name = 'TerminalServiceAuthError';
+        readonly dlqContext = 'INVALID_GRANT';
+        readonly firebaseUserID = 'firebase-user-123';
+        readonly providerUserId = 'garmin-user-id';
+    }
+
     return {
         mockSetEvent: vi.fn(),
         mockGet: vi.fn(),
@@ -33,11 +41,13 @@ const {
         mockUploadDebugFile: vi.fn(),
         mockCreateParsingOptions: vi.fn(() => ({ generateUnitStreams: false, deviceInfoMode: 'changes' })),
         mockEnqueueActivitySyncJobsForImportedEvent: vi.fn().mockResolvedValue({ queued: 1, skippedByReason: {} }),
+        MockTerminalServiceAuthError,
     };
 });
 
 vi.mock('../tokens', () => ({
     getTokenData: mockGetTokenData,
+    TerminalServiceAuthError: MockTerminalServiceAuthError,
 }));
 
 // Mock @sports-alliance/sports-lib components
@@ -139,7 +149,7 @@ vi.mock('firebase-admin', () => ({
 // Import SUT
 import { processGarminAPIActivityQueueItem, insertGarminAPIActivityFileToQueue } from './queue';
 import { addToQueueForGarmin } from '../queue';
-import { getTokenData } from '../tokens';
+import { getTokenData, TerminalServiceAuthError } from '../tokens';
 import { updateToProcessed } from '../queue-utils';
 
 describe('Garmin Queue', () => { // Grouping for cleaner output
@@ -400,6 +410,32 @@ describe('Garmin Queue', () => { // Grouping for cleaner output
                 1,
                 undefined
             );
+        });
+
+        it('should move to DLQ without retrying when getTokenData returns terminal auth', async () => {
+            vi.mocked(getTokenData).mockRejectedValue(new TerminalServiceAuthError(
+                ServiceNames.GarminAPI,
+                firebaseUserID,
+                'garmin-user-id',
+                400,
+                'invalid_grant',
+                'refresh token revoked',
+                new Error('400 invalid_grant'),
+            ));
+
+            const result = await processGarminAPIActivityQueueItem(queueItem);
+
+            expect(result).toBe('MOVED_TO_DLQ');
+            expect(mockMoveToDeadLetterQueue).toHaveBeenCalledWith(
+                queueItem,
+                expect.objectContaining({
+                    name: 'TerminalServiceAuthError',
+                    dlqContext: 'INVALID_GRANT',
+                }),
+                undefined,
+                'INVALID_GRANT',
+            );
+            expect(mockIncreaseRetryCountForQueueItem).not.toHaveBeenCalled();
         });
 
         it('should handle 400 download error by increasing retry count by 20', async () => {

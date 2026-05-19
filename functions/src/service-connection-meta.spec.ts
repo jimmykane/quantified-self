@@ -3,6 +3,7 @@ import { ServiceNames } from '@sports-alliance/sports-lib';
 
 const hoisted = vi.hoisted(() => ({
   metaSet: vi.fn().mockResolvedValue(undefined),
+  disableActivitySyncRoutesForDisconnectedService: vi.fn().mockResolvedValue(undefined),
   getUserDeletionGuardState: vi.fn().mockResolvedValue({
     userExists: true,
     deletionInProgress: false,
@@ -18,6 +19,10 @@ vi.mock('firebase-functions/logger', () => ({
 
 vi.mock('./shared/user-deletion-guard', () => ({
   getUserDeletionGuardState: hoisted.getUserDeletionGuardState,
+}));
+
+vi.mock('./activity-sync/route-cleanup', () => ({
+  disableActivitySyncRoutesForDisconnectedService: hoisted.disableActivitySyncRoutesForDisconnectedService,
 }));
 
 vi.mock('firebase-admin', () => {
@@ -70,6 +75,23 @@ describe('service-connection-meta', () => {
       lastAuthFailureMessage: 'Reconnect required',
       lastDisconnectedAt: 123,
     }, { merge: true });
+    expect(hoisted.disableActivitySyncRoutesForDisconnectedService).toHaveBeenCalledWith(
+      'user-1',
+      ServiceNames.SuuntoApp,
+    );
+  });
+
+  it('does not fail reconnect-required writes when activity sync route disable fails', async () => {
+    hoisted.disableActivitySyncRoutesForDisconnectedService.mockRejectedValueOnce(new Error('settings write failed'));
+
+    await expect(markServiceReconnectRequired('user-1', ServiceNames.SuuntoApp, 'invalid_grant', 'Reconnect required', 123))
+      .resolves.toBeUndefined();
+
+    expect(hoisted.metaSet).toHaveBeenCalled();
+    expect(logger.error).toHaveBeenCalledWith(
+      '[ServiceConnectionMeta] Failed to disable activity sync routes for reconnect-required suuntoApp user user-1.',
+      expect.any(Error),
+    );
   });
 
   it('skips reconnect-required writes when user deletion is in progress', async () => {
@@ -82,6 +104,7 @@ describe('service-connection-meta', () => {
     await markServiceReconnectRequired('user-1', ServiceNames.SuuntoApp, 'invalid_grant', 'Reconnect required');
 
     expect(hoisted.metaSet).not.toHaveBeenCalled();
+    expect(hoisted.disableActivitySyncRoutesForDisconnectedService).not.toHaveBeenCalled();
     expect(logger.warn).toHaveBeenCalledWith(
       '[ServiceConnectionMeta] Skipping suuntoApp meta write for user user-1 because the user is missing or deletion is in progress.',
     );

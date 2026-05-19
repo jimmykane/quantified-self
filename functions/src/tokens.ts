@@ -14,11 +14,25 @@ import {
   TerminalServiceAuthError,
   TerminalServiceAuthFailureResolution,
 } from './service-auth-lifecycle';
+import { getUserDeletionGuardState } from './shared/user-deletion-guard';
 import QueryDocumentSnapshot = admin.firestore.QueryDocumentSnapshot;
 import DocumentSnapshot = admin.firestore.DocumentSnapshot;
 import QuerySnapshot = admin.firestore.QuerySnapshot;
 
 export { TerminalServiceAuthError } from './service-auth-lifecycle';
+
+export class TokenRefreshSkippedForDeletedUserError extends Error {
+  public readonly name = 'TokenRefreshSkippedForDeletedUserError';
+
+  constructor(
+    public readonly firebaseUserID: string,
+    public readonly serviceName: ServiceNames,
+    public readonly tokenDocumentID: string,
+    public readonly phase: 'before_refresh' | 'before_persist',
+  ) {
+    super(`Skipping ${serviceName} token refresh for ${tokenDocumentID} because user ${firebaseUserID} is missing or deletion is in progress.`);
+  }
+}
 
 //
 export async function refreshTokens(querySnapshot: QuerySnapshot, serviceName: ServiceNames) {
@@ -38,6 +52,32 @@ export async function refreshTokens(querySnapshot: QuerySnapshot, serviceName: S
 interface GetTokenDataOptions {
   recoverTerminalAuthFailure?: boolean;
   allowSupersededSnapshotRetry?: boolean;
+}
+
+function getFirebaseUserIDForTokenDocument(doc: QueryDocumentSnapshot | DocumentSnapshot): string | null {
+  return doc.ref.parent.parent?.id || null;
+}
+
+async function assertTokenRefreshCanPersistForUser(
+  doc: QueryDocumentSnapshot | DocumentSnapshot,
+  serviceName: ServiceNames,
+  phase: 'before_refresh' | 'before_persist',
+): Promise<void> {
+  const firebaseUserID = getFirebaseUserIDForTokenDocument(doc);
+  if (!firebaseUserID) {
+    logger.warn(`Skipping deletion guard for ${serviceName} token ${doc.id} during ${phase}; token document has no Firebase user root.`);
+    return;
+  }
+
+  const deletionGuard = await getUserDeletionGuardState(admin.firestore(), firebaseUserID);
+  if (!deletionGuard.shouldSkip) {
+    return;
+  }
+
+  logger.warn(
+    `Skipping ${serviceName} token refresh for ${doc.id} during ${phase} because user ${firebaseUserID} is missing or deletion is in progress.`,
+  );
+  throw new TokenRefreshSkippedForDeletedUserError(firebaseUserID, serviceName, doc.id, phase);
 }
 
 export async function getTokenData(
@@ -110,6 +150,7 @@ export async function getTokenData(
 
   let responseToken;
   const date = new Date();
+  await assertTokenRefreshCanPersistForUser(doc, serviceName, 'before_refresh');
   try {
     responseToken = await token.refresh();
     // COROS Exception for response
@@ -152,7 +193,7 @@ export async function getTokenData(
       }
       throw new TerminalServiceAuthError(
         serviceName,
-        doc.ref.parent.parent?.id || null,
+        getFirebaseUserIDForTokenDocument(doc),
         doc.id,
         failure.statusCode,
         failure.providerErrorCode,
@@ -201,6 +242,7 @@ export async function getTokenData(
       break;
   }
 
+  await assertTokenRefreshCanPersistForUser(doc, serviceName, 'before_persist');
   await doc.ref.update(newToken as any);
   logger.info(`Successfully saved refreshed token ${doc.id}`);
   return newToken;

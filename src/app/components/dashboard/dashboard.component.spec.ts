@@ -398,6 +398,34 @@ describe('DashboardComponent', () => {
             .toContain('Enable Garmin -> Suunto auto-sync');
     });
 
+    it('does not show activity auto-sync prompt when Suunto requires reconnect despite a remaining token', async () => {
+        mockUser.stripeRole = 'pro';
+        mockUser.settings.appSettings = {};
+        mockUser.settings.serviceSyncSettings = {
+            activitySyncRoutes: {
+                [ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp]: { enabled: false },
+            },
+        };
+        mockUserService.watchActivityServiceConnectionState.mockReturnValue(of({
+            [ServiceNames.GarminAPI]: true,
+            [ServiceNames.SuuntoApp]: true,
+            [ServiceNames.COROSAPI]: false,
+        }));
+        mockUserService.watchSuuntoServiceConnectionView.mockReturnValue(of(buildSuuntoServiceConnectionViewModel({
+            hasToken: true,
+            serviceMeta: {
+                connectionState: 'reconnect_required',
+                lastAuthFailureMessage: 'invalid_grant',
+            } as any,
+        })));
+
+        fixture.detectChanges();
+        await fixture.whenStable();
+
+        expect(component.dashboardActionPrompts.some(prompt => prompt.id === 'enableActivityAutoSync')).toBe(false);
+        expect(component.dashboardActionPrompts.some(prompt => prompt.id === 'reconnectSuuntoService')).toBe(true);
+    });
+
     it('shows activity auto-sync prompt for only the missing disabled route', async () => {
         mockUser.stripeRole = 'pro';
         mockUser.settings.appSettings = {};
