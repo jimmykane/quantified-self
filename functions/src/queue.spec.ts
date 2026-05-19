@@ -233,6 +233,7 @@ import {
     addToQueueForGarmin,
     addToQueueForCOROS,
     parseWorkoutQueueItemForServiceName,
+    ProviderQueueUserNotConnectedError,
 } from './queue';
 import { QueueItemInterface, SuuntoAppWorkoutQueueItemInterface, COROSAPIWorkoutQueueItemInterface } from './queue/queue-item.interface';
 import { getTokenData, TerminalServiceAuthError, TokenRefreshSkippedForDeletedUserError } from './tokens';
@@ -817,6 +818,19 @@ describe('queue', () => {
             expect(doc.update).toHaveBeenCalledWith({ dispatchedToCloudTask: expect.any(Number) });
         });
 
+        it('addToQueueForSuunto should not create provider-only queue docs when no local token resolves', async () => {
+            mockCollection.get.mockResolvedValueOnce({
+                docs: [],
+                size: 0,
+            });
+
+            await expect(addToQueueForSuunto({ userName: 'orphan-provider-user', workoutID: 'work1' }))
+                .rejects.toBeInstanceOf(ProviderQueueUserNotConnectedError);
+
+            expect(mockDocRef.create).not.toHaveBeenCalled();
+            expect(utils.enqueueWorkoutTask).not.toHaveBeenCalled();
+        });
+
         it('addToQueueForSuunto should treat missing dispatch marker doc as success when the worker already moved it to failed_jobs', async () => {
             const notFoundError: any = new Error('No document to update');
             notFoundError.code = 5;
@@ -833,6 +847,38 @@ describe('queue', () => {
             expect(result.id).toBe('mock-doc-id');
             expect(utils.enqueueWorkoutTask).toHaveBeenCalledWith(ServiceNames.SuuntoApp, 'user1-work1', expect.any(Number));
             expect(mockDocRef.get).toHaveBeenCalled();
+        });
+
+        it('addToQueueForSuunto should treat duplicate uid backfill not-found as success when the item already moved to failed_jobs', async () => {
+            const alreadyExistsError: any = new Error('ALREADY_EXISTS');
+            alreadyExistsError.code = 6;
+            const notFoundError: any = new Error('No document to update');
+            notFoundError.code = 5;
+            mockDocRef.create.mockRejectedValueOnce(alreadyExistsError);
+            mockDocRef.get
+                .mockResolvedValueOnce({
+                    exists: true,
+                    data: () => ({
+                        id: 'user1-work1',
+                        dateCreated: 123456,
+                        processed: false,
+                        retryCount: 0,
+                        dispatchedToCloudTask: Date.now(),
+                    }),
+                })
+                .mockResolvedValueOnce({
+                    exists: true,
+                    data: () => ({
+                        originalCollection: 'suuntoAppWorkoutQueue',
+                    }),
+                });
+            mockDocRef.update.mockRejectedValueOnce(notFoundError);
+
+            const result = await addToQueueForSuunto({ userName: 'user1', workoutID: 'work1' });
+
+            expect(result.id).toBe('mock-doc-id');
+            expect(mockDocRef.update).toHaveBeenCalledWith({ firebaseUserID: 'mock-user-id' });
+            expect(utils.enqueueWorkoutTask).not.toHaveBeenCalled();
         });
 
         it('addToQueueForSuunto should rethrow missing dispatch marker doc errors when failed_jobs does not contain the item', async () => {

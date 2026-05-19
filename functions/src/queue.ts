@@ -30,6 +30,9 @@ import { createParsingOptions } from '../../shared/parsing-options';
 import { normalizeDownloadedFitPayload } from './shared/fit-payload';
 import { enqueueActivitySyncJobsForImportedEvent } from './activity-sync/enqueue-imported-event';
 import { shouldSkipQueueWorkForDeletedUser } from './queue/user-deletion-skip';
+import { ProviderQueueUserNotConnectedError } from './queue/provider-queue-errors';
+
+export { ProviderQueueUserNotConnectedError, isProviderQueueUserNotConnectedError } from './queue/provider-queue-errors';
 
 async function enqueueActivitySyncBestEffort(
   parentID: string,
@@ -130,8 +133,8 @@ async function resolveFirebaseUserIDForQueueItem(
       .get();
     return tokenSnapshot.docs[0]?.ref.parent.parent?.id || null;
   } catch (error) {
-    logger.warn(`Could not resolve Firebase uid for ${serviceName} queue item ${queueItem.id}; enqueue will continue without cleanup back-reference.`, error);
-    return null;
+    logger.error(`Could not resolve Firebase uid for ${serviceName} queue item ${queueItem.id}; rejecting enqueue so provider can retry instead of creating an orphan queue document.`, error);
+    throw error;
   }
 }
 
@@ -141,7 +144,8 @@ async function attachFirebaseUserIDToQueueItem<T extends SuuntoAppWorkoutQueueIt
 ): Promise<T> {
   const firebaseUserID = await resolveFirebaseUserIDForQueueItem(serviceName, queueItem);
   if (!firebaseUserID) {
-    return queueItem;
+    const providerUserID = getProviderUserIDForQueueItem(serviceName, queueItem)?.value.trim() || 'unknown';
+    throw new ProviderQueueUserNotConnectedError(serviceName, providerUserID, queueItem.id);
   }
   return {
     ...queueItem,
@@ -608,6 +612,16 @@ function isFirestoreNotFoundError(error: unknown): boolean {
   return code === 5 || code === 'not-found' || code === 'NOT_FOUND' || message.includes('NOT_FOUND') || message.includes('No document to update');
 }
 
+async function wasQueueItemMovedToFailedJobs(
+  queueItemId: string,
+  serviceName: ServiceNames,
+): Promise<boolean> {
+  const failedJobSnapshot = await admin.firestore().collection('failed_jobs').doc(queueItemId).get();
+  const failedJob = failedJobSnapshot.exists ? failedJobSnapshot.data() as { originalCollection?: unknown } : null;
+  const originalCollection = typeof failedJob?.originalCollection === 'string' ? failedJob.originalCollection : null;
+  return originalCollection === getServiceWorkoutQueueName(serviceName);
+}
+
 async function markWorkoutQueueItemDispatched(
   queueItemDocument: admin.firestore.DocumentReference,
   queueItemId: string,
@@ -620,11 +634,7 @@ async function markWorkoutQueueItemDispatched(
       throw error;
     }
 
-    const failedJobSnapshot = await admin.firestore().collection('failed_jobs').doc(queueItemId).get();
-    const failedJob = failedJobSnapshot.exists ? failedJobSnapshot.data() as { originalCollection?: unknown } : null;
-    const originalCollection = typeof failedJob?.originalCollection === 'string' ? failedJob.originalCollection : null;
-    const expectedCollection = getServiceWorkoutQueueName(serviceName);
-    if (originalCollection === expectedCollection) {
+    if (await wasQueueItemMovedToFailedJobs(queueItemId, serviceName)) {
       logger.info(`Queue item ${queueItemId} for ${serviceName} was already moved to failed_jobs before dispatch timestamp update.`);
       return;
     }
@@ -654,7 +664,15 @@ async function addToWorkoutQueue(queueItem: SuuntoAppWorkoutQueueItemInterface |
 
         const firebaseUserID = (queuePayload as QueueItemInterface).firebaseUserID;
         if (firebaseUserID && existingQueueItem && (existingQueueItem as QueueItemInterface).firebaseUserID !== firebaseUserID) {
-          await queueItemDocument.update({ firebaseUserID });
+          try {
+            await queueItemDocument.update({ firebaseUserID });
+          } catch (updateError) {
+            if (isFirestoreNotFoundError(updateError) && await wasQueueItemMovedToFailedJobs(queueItem.id, serviceName)) {
+              logger.info(`Queue item ${queueItem.id} for ${serviceName} was already moved to failed_jobs before duplicate uid backfill.`);
+              return queueItemDocument;
+            }
+            throw updateError;
+          }
         }
 
         const dateCreated = typeof existingQueueItem?.dateCreated === 'number'

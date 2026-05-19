@@ -1,5 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
+const {
+    mockAddToQueueForCOROS,
+} = vi.hoisted(() => ({
+    mockAddToQueueForCOROS: vi.fn(),
+}));
+
 // Mock firebase-functions first (needed by auth modules at load time)
 vi.mock('firebase-functions', () => ({
     config: () => ({
@@ -41,6 +47,16 @@ vi.mock('simple-oauth2', () => ({
     },
 }));
 
+vi.mock('firebase-functions/logger', () => ({
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+}));
+
+vi.mock('../queue', () => ({
+    addToQueueForCOROS: mockAddToQueueForCOROS,
+}));
+
 // Mock the utils module for generateIDFromParts
 vi.mock('../utils', () => ({
     generateIDFromParts: vi.fn((parts: string[]) => Promise.resolve(parts.join('-'))),
@@ -50,9 +66,17 @@ vi.mock('../utils', () => ({
 import {
     convertCOROSWorkoutsToQueueItems,
     getCOROSQueueItemFromWorkout,
+    insertCOROSAPIWorkoutDataToQueue,
 } from './queue';
 
 describe('coros/queue', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        process.env.COROSAPI_CLIENT_ID = 'test-coros-client-id';
+        process.env.COROSAPI_CLIENT_SECRET = 'test-coros-client-secret';
+        mockAddToQueueForCOROS.mockResolvedValue({ id: 'queue-id' });
+    });
+
     describe('getCOROSQueueItemFromWorkout', () => {
         it('should create a queue item with correct structure', async () => {
             const result = await getCOROSQueueItemFromWorkout(
@@ -198,6 +222,46 @@ describe('coros/queue', () => {
         it('should handle empty workouts array', async () => {
             const result = await convertCOROSWorkoutsToQueueItems([]);
             expect(result).toHaveLength(0);
+        });
+    });
+
+    describe('insertCOROSAPIWorkoutDataToQueue', () => {
+        function createResponse() {
+            return {
+                status: vi.fn().mockReturnThis(),
+                send: vi.fn().mockReturnThis(),
+            };
+        }
+
+        function createRequest(body: unknown) {
+            const headers: Record<string, string> = {
+                client: 'test-coros-client-id',
+                secret: 'test-coros-client-secret',
+            };
+            return {
+                body,
+                method: 'POST',
+                get: vi.fn((headerName: string) => headers[headerName.toLowerCase()]),
+            };
+        }
+
+        it('acknowledges workout notifications when no local COROS token is connected', async () => {
+            mockAddToQueueForCOROS.mockRejectedValueOnce(Object.assign(new Error('not connected'), {
+                name: 'ProviderQueueUserNotConnectedError',
+            }));
+            const response = createResponse();
+            const request = createRequest({
+                sportDataList: [{
+                    openId: 'orphan-open-id',
+                    labelId: 'workout-1',
+                    fitUrl: 'https://coros.com/fit/1.fit',
+                }],
+            });
+
+            await insertCOROSAPIWorkoutDataToQueue(request as any, response as any);
+
+            expect(response.status).toHaveBeenCalledWith(200);
+            expect(mockAddToQueueForCOROS).toHaveBeenCalledTimes(1);
         });
     });
 });

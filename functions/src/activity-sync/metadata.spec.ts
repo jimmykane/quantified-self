@@ -1,30 +1,36 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const {
-  mockSet,
+  mockTransactionSet,
+  mockRunTransaction,
   mockServerTimestamp,
   mockDelete,
   mockIncrement,
-  mockGetUserDeletionGuardState,
-} = vi.hoisted(() => ({
-  mockSet: vi.fn().mockResolvedValue(undefined),
-  mockServerTimestamp: vi.fn(() => '__server_timestamp__'),
-  mockDelete: vi.fn(() => '__delete__'),
-  mockIncrement: vi.fn((value: number) => `__increment_${value}__`),
-  mockGetUserDeletionGuardState: vi.fn(),
-}));
+  mockGetUserDeletionGuardStateInTransaction,
+} = vi.hoisted(() => {
+  const transactionSet = vi.fn();
+  return {
+    mockTransactionSet: transactionSet,
+    mockRunTransaction: vi.fn(async (callback: (transaction: unknown) => unknown) => callback({
+      set: transactionSet,
+    })),
+    mockServerTimestamp: vi.fn(() => '__server_timestamp__'),
+    mockDelete: vi.fn(() => '__delete__'),
+    mockIncrement: vi.fn((value: number) => `__increment_${value}__`),
+    mockGetUserDeletionGuardStateInTransaction: vi.fn(),
+  };
+});
 
 vi.mock('firebase-admin', () => ({
   firestore: Object.assign(
     () => ({
+      runTransaction: mockRunTransaction,
       collection: vi.fn(() => ({
         doc: vi.fn(() => ({
           collection: vi.fn(() => ({
             doc: vi.fn(() => ({
               collection: vi.fn(() => ({
-                doc: vi.fn(() => ({
-                  set: mockSet,
-                })),
+                doc: vi.fn(() => ({})),
               })),
             })),
           })),
@@ -69,7 +75,7 @@ vi.mock('../shared/user-deletion-guard', () => {
   }
 
   return {
-    getUserDeletionGuardState: mockGetUserDeletionGuardState,
+    getUserDeletionGuardStateInTransaction: mockGetUserDeletionGuardStateInTransaction,
     UserDeletionGuardReadError: MockUserDeletionGuardReadError,
   };
 });
@@ -86,7 +92,7 @@ import { ServiceNames } from '@sports-alliance/sports-lib';
 describe('activity-sync/metadata', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockGetUserDeletionGuardState.mockResolvedValue({
+    mockGetUserDeletionGuardStateInTransaction.mockResolvedValue({
       userExists: true,
       deletionInProgress: false,
       shouldSkip: false,
@@ -106,7 +112,7 @@ describe('activity-sync/metadata', () => {
       infoCode: 'ALREADY_EXISTS',
     });
 
-    expect(mockSet).toHaveBeenCalledWith(expect.objectContaining({
+    expect(mockTransactionSet).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
       status: 'success',
       lastError: '__delete__',
       skippedReason: '__delete__',
@@ -129,7 +135,7 @@ describe('activity-sync/metadata', () => {
       detail: 'No FIT file found.',
     });
 
-    expect(mockSet).toHaveBeenCalledWith(expect.objectContaining({
+    expect(mockTransactionSet).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
       status: 'skipped',
       skippedReason: 'unsupported_original_file',
       detail: 'No FIT file found.',
@@ -147,7 +153,7 @@ describe('activity-sync/metadata', () => {
       manual: true,
     });
 
-    expect(mockSet).toHaveBeenCalledWith(expect.objectContaining({
+    expect(mockTransactionSet).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
       status: 'queued',
       lastError: '__delete__',
       skippedReason: '__delete__',
@@ -156,7 +162,7 @@ describe('activity-sync/metadata', () => {
   });
 
   it('does not write metadata when the user is missing or deletion is active', async () => {
-    mockGetUserDeletionGuardState.mockResolvedValueOnce({
+    mockGetUserDeletionGuardStateInTransaction.mockResolvedValueOnce({
       userExists: false,
       deletionInProgress: false,
       shouldSkip: true,
@@ -171,11 +177,11 @@ describe('activity-sync/metadata', () => {
       manual: false,
     });
 
-    expect(mockSet).not.toHaveBeenCalled();
+    expect(mockTransactionSet).not.toHaveBeenCalled();
   });
 
   it('surfaces deletion-guard read failures as retryable unavailable errors', async () => {
-    mockGetUserDeletionGuardState.mockRejectedValueOnce(new Error('read failed'));
+    mockGetUserDeletionGuardStateInTransaction.mockRejectedValueOnce(new Error('read failed'));
 
     await expect(setActivitySyncProcessingMetadata({
       routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp,

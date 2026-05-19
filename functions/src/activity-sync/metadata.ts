@@ -4,7 +4,7 @@ import * as logger from 'firebase-functions/logger';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { ActivitySyncRouteId } from '../../../shared/activity-sync-routes';
 import { ACTIVITY_SYNC_METADATA_DOC_PREFIX } from './constants';
-import { getUserDeletionGuardState, UserDeletionGuardReadError } from '../shared/user-deletion-guard';
+import { getUserDeletionGuardStateInTransaction, UserDeletionGuardReadError } from '../shared/user-deletion-guard';
 
 export type ActivitySyncStatus = 'queued' | 'processing' | 'success' | 'skipped' | 'retrying' | 'failed';
 
@@ -70,8 +70,13 @@ export function getActivitySyncMetadataDocId(routeId: ActivitySyncRouteId): stri
     return `${ACTIVITY_SYNC_METADATA_DOC_PREFIX}${routeId}`;
 }
 
-function getActivitySyncMetadataRef(userID: string, eventID: string, routeId: ActivitySyncRouteId) {
-    return admin.firestore()
+function getActivitySyncMetadataRef(
+    db: admin.firestore.Firestore,
+    userID: string,
+    eventID: string,
+    routeId: ActivitySyncRouteId,
+) {
+    return db
         .collection('users')
         .doc(userID)
         .collection('events')
@@ -80,35 +85,29 @@ function getActivitySyncMetadataRef(userID: string, eventID: string, routeId: Ac
         .doc(getActivitySyncMetadataDocId(routeId));
 }
 
-async function shouldSkipActivitySyncMetadataWrite(
-    userID: string,
-    eventID: string,
-    routeId: ActivitySyncRouteId,
-    status: ActivitySyncStatus,
-): Promise<boolean> {
-    try {
-        const deletionGuard = await getUserDeletionGuardState(admin.firestore(), userID);
-        if (!deletionGuard.shouldSkip) {
-            return false;
-        }
-        logger.warn(`[ActivitySyncMetadata] Skipping ${status} metadata for user ${userID}, event ${eventID}, route ${routeId} because the user is missing or deletion is in progress.`);
-        return true;
-    } catch (error) {
-        throw new UserDeletionGuardReadError(userID, `activity_sync_metadata:${status}`, error);
-    }
-}
-
 async function setActivitySyncMetadata(
     params: BaseMetadataParams,
     status: ActivitySyncStatus,
     payload: Record<string, unknown>,
 ): Promise<void> {
-    if (await shouldSkipActivitySyncMetadataWrite(params.userID, params.eventID, params.routeId, status)) {
-        return;
-    }
+    const db = admin.firestore();
+    const ref = getActivitySyncMetadataRef(db, params.userID, params.eventID, params.routeId);
 
-    const ref = getActivitySyncMetadataRef(params.userID, params.eventID, params.routeId);
-    await ref.set(payload, { merge: true });
+    await db.runTransaction(async (transaction) => {
+        let deletionGuard;
+        try {
+            deletionGuard = await getUserDeletionGuardStateInTransaction(db, transaction, params.userID);
+        } catch (error) {
+            throw new UserDeletionGuardReadError(params.userID, `activity_sync_metadata:${status}`, error);
+        }
+
+        if (deletionGuard.shouldSkip) {
+            logger.warn(`[ActivitySyncMetadata] Skipping ${status} metadata for user ${params.userID}, event ${params.eventID}, route ${params.routeId} because the user is missing or deletion is in progress.`);
+            return;
+        }
+
+        transaction.set(ref, payload, { merge: true });
+    });
 }
 
 interface BaseMetadataParams {

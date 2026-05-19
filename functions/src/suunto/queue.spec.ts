@@ -222,4 +222,23 @@ describe('insertSuuntoAppActivityToQueue', () => {
 
     expect(response.status).toHaveBeenCalledWith(500);
   });
+
+  it('acknowledges JSON workout notifications without queueing retries when no local token is connected', async () => {
+    const notConnectedError = Object.assign(new Error('not connected'), {
+      name: 'ProviderQueueUserNotConnectedError',
+    });
+    hoisted.addToQueueForSuunto.mockRejectedValueOnce(notConnectedError);
+    const response = createResponse();
+    const request = createSignedJsonRequest({
+      type: 'WORKOUT_CREATED',
+      username: 'orphan-user',
+      workout: {
+        workoutKey: '67604889401b942184624cb8',
+      },
+    });
+
+    await insertSuuntoAppActivityToQueue(request as any, response as any);
+
+    expect(response.status).toHaveBeenCalledWith(200);
+  });
 });

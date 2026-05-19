@@ -3,6 +3,7 @@ import * as logger from 'firebase-functions/logger';
 import * as admin from 'firebase-admin';
 import { QueueErrors, QueueLogs } from '../shared/constants';
 import { addToQueueForGarmin } from '../queue';
+import { isProviderQueueUserNotConnectedError } from '../queue/provider-queue-errors';
 import { increaseRetryCountForQueueItem, markQueueItemSkipped, QUEUE_SKIPPED_REASONS, updateToProcessed, moveToDeadLetterQueue, QueueResult } from '../queue-utils';
 
 import { EventImporterFIT } from '@sports-alliance/sports-lib';
@@ -69,9 +70,13 @@ export const insertGarminAPIActivityFileToQueue = functions.region('europe-west2
           token: activityFileToken || 'No token',
           userAccessToken: activityFile.userAccessToken,
           callbackURL: activityFile.callbackURL,
-        });
+      });
       queueItemRefs.push(queueItemDocumentReference);
     } catch (e: unknown) {
+      if (isProviderQueueUserNotConnectedError(e)) {
+        logger.warn(`Skipping Garmin activity file webhook for ${activityFile.userId} because no local token/user is connected.`);
+        continue;
+      }
       logger.error(e);
       res.status(500).send();
       return;

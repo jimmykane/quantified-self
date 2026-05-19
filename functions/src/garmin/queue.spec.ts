@@ -267,6 +267,16 @@ describe('Garmin Queue', () => { // Grouping for cleaner output
             await insertGarminAPIActivityFileToQueue(req, res);
             expect(res.status).toHaveBeenCalledWith(500);
         });
+
+        it('should acknowledge activity file notifications when no local Garmin token is connected', async () => {
+            vi.mocked(addToQueueForGarmin).mockRejectedValue(Object.assign(new Error('not connected'), {
+                name: 'ProviderQueueUserNotConnectedError',
+            }));
+
+            await insertGarminAPIActivityFileToQueue(req, res);
+
+            expect(res.status).toHaveBeenCalledWith(200);
+        });
     });
 
     describe('processGarminAPIActivityQueueItem', () => {
