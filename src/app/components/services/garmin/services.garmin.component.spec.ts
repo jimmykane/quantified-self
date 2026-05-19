@@ -34,6 +34,7 @@ import { CUSTOM_ELEMENTS_SCHEMA } from '@angular/core';
 import { of } from 'rxjs';
 import { ACTIVITY_SYNC_ROUTE_IDS } from '@shared/activity-sync-routes';
 import { ServiceConnectionStatusComponent } from '../service-connection-status/service-connection-status.component';
+import { buildSuuntoServiceConnectionViewModel } from '../../../helpers/suunto-service-connection.helper';
 
 const ACTIVITY_SYNC_ALLOWLISTED_UID = 'xcsAolLDDTWTgtRN9eYF3lW2YKL2';
 
@@ -74,6 +75,10 @@ describe('ServicesGarminComponent', () => {
             requestAndSetCurrentUserGarminAPIAccessToken: vi.fn(),
             getCurrentUserServiceTokenAndRedirectURI: vi.fn(),
             getServiceToken: vi.fn().mockReturnValue(of([])),
+            watchSuuntoServiceConnectionView: vi.fn().mockReturnValue(of(buildSuuntoServiceConnectionViewModel({
+                hasToken: false,
+                serviceMeta: null,
+            }))),
             getUserMetaForService: vi.fn().mockReturnValue(of(undefined)),
             updateUserProperties: vi.fn().mockResolvedValue(undefined),
             updateActivitySyncRouteSettings: vi.fn().mockResolvedValue(undefined),
@@ -403,9 +408,11 @@ describe('ServicesGarminComponent', () => {
         it('should show route toggle when Garmin and Suunto are connected', async () => {
             component.hasProAccess = true;
             component.user = { uid: ACTIVITY_SYNC_ALLOWLISTED_UID, settings: {} } as any;
-            mockUserService.getServiceToken
-                .mockReturnValueOnce(of([{ accessToken: 'garmin-token', permissions: [] }]))
-                .mockReturnValueOnce(of([{ accessToken: 'suunto-token' }]));
+            mockUserService.getServiceToken.mockReturnValueOnce(of([{ accessToken: 'garmin-token', permissions: [] }]));
+            mockUserService.watchSuuntoServiceConnectionView.mockReturnValueOnce(of(buildSuuntoServiceConnectionViewModel({
+                hasToken: true,
+                serviceMeta: null,
+            })));
 
             await component.ngOnChanges();
             fixture.detectChanges();
@@ -418,7 +425,7 @@ describe('ServicesGarminComponent', () => {
             component.hasProAccess = true;
             component.user = { uid: ACTIVITY_SYNC_ALLOWLISTED_UID, settings: {} } as any;
             component.serviceTokens = [{ accessToken: 'garmin-token', permissions: [] }] as any;
-            (component as any).suuntoTokens = [{ accessToken: 'suunto-token' }];
+            component.suuntoConnectionView = buildSuuntoServiceConnectionViewModel({ hasToken: true, serviceMeta: null });
 
             await component.onGarminToSuuntoRouteToggle(true);
 
@@ -437,13 +444,34 @@ describe('ServicesGarminComponent', () => {
             component.hasProAccess = true;
             component.user = { uid: ACTIVITY_SYNC_ALLOWLISTED_UID, settings: {} } as any;
             component.serviceTokens = [] as any;
-            (component as any).suuntoTokens = [{ accessToken: 'suunto-token' }];
+            component.suuntoConnectionView = buildSuuntoServiceConnectionViewModel({ hasToken: true, serviceMeta: null });
 
             await component.onGarminToSuuntoRouteToggle(true);
 
             expect(mockUserService.updateActivitySyncRouteSettings).not.toHaveBeenCalled();
             expect(snackBarSpy).toHaveBeenCalledWith(
                 'Connect both Garmin and Suunto accounts before enabling sync.',
+                undefined,
+                { duration: 4000 }
+            );
+        });
+
+        it('should block enabling Garmin->Suunto route when Suunto requires reconnect despite a token', async () => {
+            const snackBar = TestBed.inject(MatSnackBar);
+            const snackBarSpy = vi.spyOn(snackBar, 'open');
+            component.hasProAccess = true;
+            component.user = { uid: ACTIVITY_SYNC_ALLOWLISTED_UID, settings: {} } as any;
+            component.serviceTokens = [{ accessToken: 'garmin-token', permissions: [] }] as any;
+            component.suuntoConnectionView = buildSuuntoServiceConnectionViewModel({
+                hasToken: true,
+                serviceMeta: { connectionState: 'reconnect_required' } as any,
+            });
+
+            await component.onGarminToSuuntoRouteToggle(true);
+
+            expect(mockUserService.updateActivitySyncRouteSettings).not.toHaveBeenCalled();
+            expect(snackBarSpy).toHaveBeenCalledWith(
+                'Reconnect Suunto before enabling sync.',
                 undefined,
                 { duration: 4000 }
             );
@@ -462,7 +490,7 @@ describe('ServicesGarminComponent', () => {
                 }
             } as any;
             component.serviceTokens = [] as any;
-            (component as any).suuntoTokens = [] as any;
+            component.suuntoConnectionView = buildSuuntoServiceConnectionViewModel({ hasToken: false, serviceMeta: null });
 
             await component.onGarminToSuuntoRouteToggle(false);
 
@@ -479,7 +507,7 @@ describe('ServicesGarminComponent', () => {
             component.hasProAccess = true;
             component.user = { uid: ACTIVITY_SYNC_ALLOWLISTED_UID, settings: {} } as any;
             component.serviceTokens = [{ accessToken: 'garmin-token', permissions: [] }] as any;
-            (component as any).suuntoTokens = [{ accessToken: 'suunto-token' }];
+            component.suuntoConnectionView = buildSuuntoServiceConnectionViewModel({ hasToken: true, serviceMeta: null });
             component.isBackfillingSync = false;
             component.backfillStartDate = new Date('2026-01-01T00:00:00.000Z');
             component.backfillEndDate = new Date('2026-01-31T00:00:00.000Z');
@@ -494,6 +522,21 @@ describe('ServicesGarminComponent', () => {
             expect(queueButton?.disabled).toBe(false);
         });
 
+        it('should show reconnect-required copy instead of route controls when Suunto requires reconnect', () => {
+            component.hasProAccess = true;
+            component.user = { uid: ACTIVITY_SYNC_ALLOWLISTED_UID, settings: {} } as any;
+            component.serviceTokens = [{ accessToken: 'garmin-token', permissions: [] }] as any;
+            component.suuntoConnectionView = buildSuuntoServiceConnectionViewModel({
+                hasToken: true,
+                serviceMeta: { connectionState: 'reconnect_required' } as any,
+            });
+
+            fixture.detectChanges();
+
+            expect(fixture.nativeElement.textContent).toContain('Suunto needs to be reconnected before Garmin -> Suunto sync can run.');
+            expect(fixture.nativeElement.querySelector('mat-slide-toggle')).toBeFalsy();
+        });
+
         it('should show activity sync card for users outside the old rollout UID list', () => {
             component.hasProAccess = true;
             component.user = { uid: 'non-allowlisted-user', settings: {} } as any;
@@ -506,7 +549,7 @@ describe('ServicesGarminComponent', () => {
             component.hasProAccess = true;
             component.user = { uid: ACTIVITY_SYNC_ALLOWLISTED_UID, settings: {} } as any;
             component.serviceTokens = [{ accessToken: 'garmin-token', permissions: [] }] as any;
-            (component as any).suuntoTokens = [{ accessToken: 'suunto-token' }];
+            component.suuntoConnectionView = buildSuuntoServiceConnectionViewModel({ hasToken: true, serviceMeta: null });
             component.backfillSummary = {
                 scanned: 10,
                 queued: 8,
@@ -533,7 +576,7 @@ describe('ServicesGarminComponent', () => {
             component.hasProAccess = true;
             component.user = { uid: ACTIVITY_SYNC_ALLOWLISTED_UID, settings: {} } as any;
             component.serviceTokens = [{ accessToken: 'garmin-token', permissions: [] }] as any;
-            (component as any).suuntoTokens = [{ accessToken: 'suunto-token' }];
+            component.suuntoConnectionView = buildSuuntoServiceConnectionViewModel({ hasToken: true, serviceMeta: null });
 
             fixture.detectChanges();
 
@@ -550,7 +593,7 @@ describe('ServicesGarminComponent', () => {
             component.hasProAccess = true;
             component.user = { uid: ACTIVITY_SYNC_ALLOWLISTED_UID, settings: {} } as any;
             component.serviceTokens = [{ accessToken: 'garmin-token', permissions: [] }] as any;
-            (component as any).suuntoTokens = [{ accessToken: 'suunto-token' }];
+            component.suuntoConnectionView = buildSuuntoServiceConnectionViewModel({ hasToken: true, serviceMeta: null });
             mockUserService.backfillActivitySyncRouteForCurrentUser.mockResolvedValueOnce({
                 scanned: 20,
                 queued: 17,
@@ -584,7 +627,7 @@ describe('ServicesGarminComponent', () => {
                 }
             } as any;
             component.serviceTokens = [{ accessToken: 'garmin-token', permissions: [] }] as any;
-            (component as any).suuntoTokens = [{ accessToken: 'suunto-token' }];
+            component.suuntoConnectionView = buildSuuntoServiceConnectionViewModel({ hasToken: true, serviceMeta: null });
 
             fixture.detectChanges();
 
@@ -606,7 +649,7 @@ describe('ServicesGarminComponent', () => {
                 }
             } as any;
             component.serviceTokens = [{ accessToken: 'garmin-token', permissions: [] }] as any;
-            (component as any).suuntoTokens = [{ accessToken: 'suunto-token' }];
+            component.suuntoConnectionView = buildSuuntoServiceConnectionViewModel({ hasToken: true, serviceMeta: null });
             mockDialog.open.mockReturnValueOnce({
                 afterClosed: () => of(false),
             });
@@ -639,7 +682,7 @@ describe('ServicesGarminComponent', () => {
                 }
             } as any;
             component.serviceTokens = [{ accessToken: 'garmin-token', permissions: [] }] as any;
-            (component as any).suuntoTokens = [{ accessToken: 'suunto-token' }];
+            component.suuntoConnectionView = buildSuuntoServiceConnectionViewModel({ hasToken: true, serviceMeta: null });
 
             await component.deauthorizeService(new MouseEvent('click'));
 

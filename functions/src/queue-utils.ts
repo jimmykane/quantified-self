@@ -8,10 +8,18 @@ import { getExpireAtTimestamp, TTL_CONFIG } from './shared/ttl-config';
 
 export enum QueueResult {
     Processed = 'PROCESSED',
+    Skipped = 'SKIPPED',
     MovedToDLQ = 'MOVED_TO_DLQ',
     RetryIncremented = 'RETRY_INCREMENTED',
     Failed = 'FAILED',
 }
+
+export const QUEUE_SKIPPED_REASONS = {
+    UserDeletedOrDeleting: 'user_deleted_or_deleting',
+    WorkerReturnedSkipped: 'worker_returned_skipped',
+} as const;
+
+export type QueueSkippedReason = typeof QUEUE_SKIPPED_REASONS[keyof typeof QUEUE_SKIPPED_REASONS] | string;
 
 export async function moveToDeadLetterQueue(queueItem: QueueItemInterface, error: Error, bulkWriter?: admin.firestore.BulkWriter, context?: string): Promise<QueueResult.MovedToDLQ | QueueResult.Failed> {
 
@@ -120,3 +128,15 @@ export async function updateToProcessed(queueItem: QueueItemInterface, bulkWrite
     }
 }
 
+export async function markQueueItemSkipped(
+    queueItem: QueueItemInterface,
+    bulkWriter: admin.firestore.BulkWriter | undefined,
+    skippedReason: QueueSkippedReason,
+    additionalData: Record<string, unknown> = {},
+): Promise<QueueResult.Processed | QueueResult.Failed> {
+    return updateToProcessed(queueItem, bulkWriter, {
+        ...additionalData,
+        resultStatus: 'skipped',
+        skippedReason,
+    });
+}

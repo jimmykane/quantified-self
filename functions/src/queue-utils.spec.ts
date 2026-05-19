@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { moveToDeadLetterQueue, increaseRetryCountForQueueItem, updateToProcessed, QueueResult } from './queue-utils';
+import { moveToDeadLetterQueue, increaseRetryCountForQueueItem, markQueueItemSkipped, QUEUE_SKIPPED_REASONS, updateToProcessed, QueueResult } from './queue-utils';
 
 // Hoisted Firestore mocks
 const hoisted = vi.hoisted(() => {
@@ -114,6 +114,34 @@ describe('queue-utils', () => {
 
         it('throws when ref missing', async () => {
             await expect(updateToProcessed({ id: 'no-ref' } as any)).rejects.toThrow(/No document reference supplied/);
+        });
+    });
+
+    describe('markQueueItemSkipped', () => {
+        it('marks queue item processed with a skipped result status and reason', async () => {
+            const queueItem: any = {
+                id: 'q5',
+                ref: { id: 'ref' },
+            };
+
+            const bulkWriter = { update: vi.fn() };
+            const res = await markQueueItemSkipped(
+                queueItem,
+                bulkWriter as any,
+                QUEUE_SKIPPED_REASONS.UserDeletedOrDeleting,
+                { skippedContext: 'USER_DELETION_GUARD' },
+            );
+
+            expect(res).toBe(QueueResult.Processed);
+            expect(bulkWriter.update).toHaveBeenCalledWith(
+                { id: 'ref' },
+                expect.objectContaining({
+                    processed: true,
+                    resultStatus: 'skipped',
+                    skippedReason: QUEUE_SKIPPED_REASONS.UserDeletedOrDeleting,
+                    skippedContext: 'USER_DELETION_GUARD',
+                }),
+            );
         });
     });
 });

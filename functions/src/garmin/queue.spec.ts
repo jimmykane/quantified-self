@@ -12,6 +12,7 @@ const {
     mockCollectionGroup,
     mockRequestGet,
     mockIncreaseRetryCountForQueueItem,
+    mockMarkQueueItemSkipped,
     mockMoveToDeadLetterQueue,
     mockUpdateToProcessed,
     mockGetTokenData,
@@ -19,12 +20,17 @@ const {
     mockCreateParsingOptions,
     mockEnqueueActivitySyncJobsForImportedEvent,
     MockTerminalServiceAuthError,
+    MockTokenRefreshSkippedForDeletedUserError,
+    mockShouldSkipQueueWorkForDeletedUser,
 } = vi.hoisted(() => {
     class MockTerminalServiceAuthError extends Error {
         readonly name = 'TerminalServiceAuthError';
         readonly dlqContext = 'INVALID_GRANT';
         readonly firebaseUserID = 'firebase-user-123';
         readonly providerUserId = 'garmin-user-id';
+    }
+    class MockTokenRefreshSkippedForDeletedUserError extends Error {
+        readonly name = 'TokenRefreshSkippedForDeletedUserError';
     }
 
     return {
@@ -35,6 +41,7 @@ const {
         mockCollectionGroup: vi.fn(),
         mockRequestGet: vi.fn(),
         mockIncreaseRetryCountForQueueItem: vi.fn(),
+        mockMarkQueueItemSkipped: vi.fn(),
         mockMoveToDeadLetterQueue: vi.fn(),
         mockUpdateToProcessed: vi.fn(),
         mockGetTokenData: vi.fn(),
@@ -42,12 +49,19 @@ const {
         mockCreateParsingOptions: vi.fn(() => ({ generateUnitStreams: false, deviceInfoMode: 'changes' })),
         mockEnqueueActivitySyncJobsForImportedEvent: vi.fn().mockResolvedValue({ queued: 1, skippedByReason: {} }),
         MockTerminalServiceAuthError,
+        MockTokenRefreshSkippedForDeletedUserError,
+        mockShouldSkipQueueWorkForDeletedUser: vi.fn().mockResolvedValue(false),
     };
 });
 
 vi.mock('../tokens', () => ({
     getTokenData: mockGetTokenData,
     TerminalServiceAuthError: MockTerminalServiceAuthError,
+    TokenRefreshSkippedForDeletedUserError: MockTokenRefreshSkippedForDeletedUserError,
+}));
+
+vi.mock('../queue/user-deletion-skip', () => ({
+    shouldSkipQueueWorkForDeletedUser: mockShouldSkipQueueWorkForDeletedUser,
 }));
 
 // Mock @sports-alliance/sports-lib components
@@ -110,10 +124,15 @@ vi.mock('../activity-sync/enqueue-imported-event', () => ({
 // Mock queue utilities
 vi.mock('../queue-utils', () => ({
     increaseRetryCountForQueueItem: mockIncreaseRetryCountForQueueItem,
+    markQueueItemSkipped: mockMarkQueueItemSkipped,
+    QUEUE_SKIPPED_REASONS: {
+        UserDeletedOrDeleting: 'user_deleted_or_deleting',
+    },
     updateToProcessed: mockUpdateToProcessed,
     moveToDeadLetterQueue: mockMoveToDeadLetterQueue,
     QueueResult: {
         Processed: 'PROCESSED',
+        Skipped: 'SKIPPED',
         MovedToDLQ: 'MOVED_TO_DLQ',
         RetryIncremented: 'RETRY_INCREMENTED',
         Failed: 'FAILED',
@@ -149,7 +168,7 @@ vi.mock('firebase-admin', () => ({
 // Import SUT
 import { processGarminAPIActivityQueueItem, insertGarminAPIActivityFileToQueue } from './queue';
 import { addToQueueForGarmin } from '../queue';
-import { getTokenData, TerminalServiceAuthError } from '../tokens';
+import { getTokenData, TerminalServiceAuthError, TokenRefreshSkippedForDeletedUserError } from '../tokens';
 import { updateToProcessed } from '../queue-utils';
 
 describe('Garmin Queue', () => { // Grouping for cleaner output
@@ -158,6 +177,7 @@ describe('Garmin Queue', () => { // Grouping for cleaner output
     const setupMocks = () => {
         // Reset call history but keep implementations if needed, OR re-implement
         vi.clearAllMocks();
+        mockShouldSkipQueueWorkForDeletedUser.mockResolvedValue(false);
 
         // Default: Mock Where returning Get
         mockWhere.mockReturnValue({ get: mockGet, limit: vi.fn().mockReturnValue({ get: mockGet }) });
@@ -297,6 +317,7 @@ describe('Garmin Queue', () => { // Grouping for cleaner output
                 savedOriginalFiles: [{ path: 'users/firebase-user-id/events/saved-event-id/original.fit' }],
             });
             mockIncreaseRetryCountForQueueItem.mockResolvedValue('RETRY_INCREMENTED');
+            mockMarkQueueItemSkipped.mockResolvedValue('PROCESSED');
             mockMoveToDeadLetterQueue.mockResolvedValue('MOVED_TO_DLQ');
             vi.mocked(updateToProcessed).mockResolvedValue('PROCESSED' as any);
         });
@@ -410,6 +431,87 @@ describe('Garmin Queue', () => { // Grouping for cleaner output
                 1,
                 undefined
             );
+        });
+
+        it('should skip without retrying or writing when token owner is being deleted before token refresh', async () => {
+            mockShouldSkipQueueWorkForDeletedUser.mockResolvedValueOnce(true);
+
+            const result = await processGarminAPIActivityQueueItem(queueItem);
+
+            expect(result).toBe('PROCESSED');
+            expect(getTokenData).not.toHaveBeenCalled();
+            expect(mockRequestGet).not.toHaveBeenCalled();
+            expect(mockSetEvent).not.toHaveBeenCalled();
+            expect(mockIncreaseRetryCountForQueueItem).not.toHaveBeenCalled();
+            expect(mockMoveToDeadLetterQueue).not.toHaveBeenCalled();
+            expect(mockUpdateToProcessed).not.toHaveBeenCalled();
+            expect(mockMarkQueueItemSkipped).toHaveBeenCalledWith(
+                queueItem,
+                undefined,
+                'user_deleted_or_deleting',
+                { skippedContext: 'USER_DELETION_GUARD' },
+            );
+        });
+
+        it('should skip without retrying when token refresh reports account deletion', async () => {
+            vi.mocked(getTokenData).mockRejectedValue(new TokenRefreshSkippedForDeletedUserError());
+
+            const result = await processGarminAPIActivityQueueItem(queueItem);
+
+            expect(result).toBe('PROCESSED');
+            expect(mockRequestGet).not.toHaveBeenCalled();
+            expect(mockSetEvent).not.toHaveBeenCalled();
+            expect(mockIncreaseRetryCountForQueueItem).not.toHaveBeenCalled();
+            expect(mockMoveToDeadLetterQueue).not.toHaveBeenCalled();
+            expect(mockMarkQueueItemSkipped).toHaveBeenCalledWith(
+                queueItem,
+                undefined,
+                'user_deleted_or_deleting',
+                { skippedContext: 'USER_DELETION_GUARD' },
+            );
+        });
+
+        it('should skip without retrying when account deletion starts before event write', async () => {
+            mockShouldSkipQueueWorkForDeletedUser
+                .mockResolvedValueOnce(false)
+                .mockResolvedValueOnce(true);
+
+            const result = await processGarminAPIActivityQueueItem(queueItem);
+
+            expect(result).toBe('PROCESSED');
+            expect(getTokenData).toHaveBeenCalled();
+            expect(mockRequestGet).toHaveBeenCalled();
+            expect(mockSetEvent).not.toHaveBeenCalled();
+            expect(mockIncreaseRetryCountForQueueItem).not.toHaveBeenCalled();
+            expect(mockMoveToDeadLetterQueue).not.toHaveBeenCalled();
+            expect(mockUpdateToProcessed).not.toHaveBeenCalled();
+            expect(mockMarkQueueItemSkipped).toHaveBeenCalledWith(
+                queueItem,
+                undefined,
+                'user_deleted_or_deleting',
+                { skippedContext: 'USER_DELETION_GUARD' },
+            );
+        });
+
+        it('should retry when the deletion guard read fails before activity sync enqueue', async () => {
+            mockShouldSkipQueueWorkForDeletedUser
+                .mockResolvedValueOnce(false)
+                .mockResolvedValueOnce(false)
+                .mockRejectedValueOnce(new Error('deletion guard unavailable'));
+
+            const result = await processGarminAPIActivityQueueItem(queueItem);
+
+            expect(result).toBe('RETRY_INCREMENTED');
+            expect(mockSetEvent).toHaveBeenCalled();
+            expect(mockEnqueueActivitySyncJobsForImportedEvent).not.toHaveBeenCalled();
+            expect(mockIncreaseRetryCountForQueueItem).toHaveBeenCalledWith(
+                queueItem,
+                expect.any(Error),
+                1,
+                undefined,
+            );
+            expect(mockMarkQueueItemSkipped).not.toHaveBeenCalled();
+            expect(mockUpdateToProcessed).not.toHaveBeenCalled();
         });
 
         it('should move to DLQ without retrying when getTokenData returns terminal auth', async () => {

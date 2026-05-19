@@ -42,6 +42,7 @@ vi.mock('../activity-sync/process-queue-item', () => ({
 vi.mock('../queue-utils', () => ({
   QueueResult: {
     Processed: 'PROCESSED',
+    Skipped: 'SKIPPED',
     RetryIncremented: 'RETRY_INCREMENTED',
     MovedToDLQ: 'MOVED_TO_DLQ',
     Failed: 'FAILED',

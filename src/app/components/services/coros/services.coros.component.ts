@@ -14,6 +14,10 @@ import { ACTIVITY_SYNC_ROUTE_IDS } from '@shared/activity-sync-routes';
 import { isActivitySyncRouteUIDAllowlisted } from '@shared/activity-sync-rollout';
 import dayjs from 'dayjs';
 import { Subscription } from 'rxjs';
+import {
+  buildSuuntoServiceConnectionViewModel,
+  SuuntoServiceConnectionViewModel,
+} from '../../../helpers/suunto-service-connection.helper';
 
 
 @Component({
@@ -34,8 +38,11 @@ export class ServicesCorosComponent extends ServicesAbstractComponentDirective {
   public backfillEndDate: Date = new Date();
   public backfillSummary: ActivitySyncBackfillSummary | null = null;
 
-  private suuntoTokensSubscription: Subscription | null = null;
-  private suuntoTokens: Auth2ServiceTokenInterface[] | undefined;
+  private suuntoConnectionSubscription: Subscription | null = null;
+  public suuntoConnectionView: SuuntoServiceConnectionViewModel = buildSuuntoServiceConnectionViewModel({
+    hasToken: false,
+    serviceMeta: null,
+  });
 
   constructor(protected http: HttpClient,
     protected fileService: AppFileService,
@@ -67,8 +74,8 @@ export class ServicesCorosComponent extends ServicesAbstractComponentDirective {
 
   override ngOnDestroy(): void {
     super.ngOnDestroy();
-    this.suuntoTokensSubscription?.unsubscribe();
-    this.suuntoTokensSubscription = null;
+    this.suuntoConnectionSubscription?.unsubscribe();
+    this.suuntoConnectionSubscription = null;
   }
 
   isConnectedToService = () => (!!this.serviceTokens && !!this.serviceTokens.length) || this.forceConnected;
@@ -86,21 +93,28 @@ export class ServicesCorosComponent extends ServicesAbstractComponentDirective {
   }
 
   private watchSuuntoConnectionState(): void {
-    this.suuntoTokensSubscription?.unsubscribe();
-    this.suuntoTokensSubscription = null;
+    this.suuntoConnectionSubscription?.unsubscribe();
+    this.suuntoConnectionSubscription = null;
 
     if (!this.user) {
-      this.suuntoTokens = undefined;
+      this.suuntoConnectionView = buildSuuntoServiceConnectionViewModel({
+        hasToken: false,
+        serviceMeta: null,
+      });
       return;
     }
 
-    this.suuntoTokensSubscription = this.userService.getServiceToken(this.user, ServiceNames.SuuntoApp).subscribe((tokens) => {
-      this.suuntoTokens = tokens as Auth2ServiceTokenInterface[];
+    this.suuntoConnectionSubscription = this.userService.watchSuuntoServiceConnectionView(this.user).subscribe((connectionView) => {
+      this.suuntoConnectionView = connectionView;
     });
   }
 
   get isSuuntoConnected(): boolean {
-    return !!this.suuntoTokens?.length && !!this.suuntoTokens?.[0]?.accessToken;
+    return this.suuntoConnectionView.connected && !this.suuntoConnectionView.reconnectRequired;
+  }
+
+  get isSuuntoReconnectRequired(): boolean {
+    return this.suuntoConnectionView.reconnectRequired;
   }
 
   get isCorosToSuuntoRouteEnabled(): boolean {
@@ -123,6 +137,11 @@ export class ServicesCorosComponent extends ServicesAbstractComponentDirective {
 
     if (!this.isCorosToSuuntoRouteAvailableForUser) {
       this.snackBar.open('This activity sync route is not available for this account.', undefined, { duration: 4000 });
+      return;
+    }
+
+    if (enabled && this.isSuuntoReconnectRequired) {
+      this.snackBar.open('Reconnect Suunto before enabling sync.', undefined, { duration: 4000 });
       return;
     }
 
@@ -156,6 +175,16 @@ export class ServicesCorosComponent extends ServicesAbstractComponentDirective {
 
     if (!this.isCorosToSuuntoRouteAvailableForUser) {
       this.snackBar.open('This activity sync route is not available for this account.', undefined, { duration: 4000 });
+      return;
+    }
+
+    if (this.isSuuntoReconnectRequired) {
+      this.snackBar.open('Reconnect Suunto before running COROS to Suunto catch-up.', undefined, { duration: 4000 });
+      return;
+    }
+
+    if (!this.isConnectedToService() || !this.isSuuntoConnected) {
+      this.snackBar.open('Connect both COROS and Suunto accounts before running catch-up.', undefined, { duration: 4000 });
       return;
     }
 

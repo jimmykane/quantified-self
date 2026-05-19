@@ -31,6 +31,7 @@ import { CUSTOM_ELEMENTS_SCHEMA } from '@angular/core';
 import { of } from 'rxjs';
 import { ACTIVITY_SYNC_ROUTE_IDS } from '@shared/activity-sync-routes';
 import { ServiceConnectionStatusComponent } from '../service-connection-status/service-connection-status.component';
+import { buildSuuntoServiceConnectionViewModel } from '../../../helpers/suunto-service-connection.helper';
 
 describe('ServicesCorosComponent', () => {
     let component: ServicesCorosComponent;
@@ -55,6 +56,10 @@ describe('ServicesCorosComponent', () => {
             requestAndSetCurrentUserCOROSAPIAccessToken: vi.fn(),
             getCurrentUserServiceTokenAndRedirectURI: vi.fn(),
             getServiceToken: vi.fn().mockReturnValue(of([])),
+            watchSuuntoServiceConnectionView: vi.fn().mockReturnValue(of(buildSuuntoServiceConnectionViewModel({
+                hasToken: false,
+                serviceMeta: null,
+            }))),
             getUserMetaForService: vi.fn().mockReturnValue(of(undefined)),
             updateUserProperties: vi.fn().mockResolvedValue(undefined),
             updateActivitySyncRouteSettings: vi.fn().mockResolvedValue(undefined),
@@ -201,7 +206,7 @@ describe('ServicesCorosComponent', () => {
             component.hasProAccess = true;
             component.user = { uid: 'user-1', settings: {} } as any;
             component.serviceTokens = [{ accessToken: 'coros-token' }] as any;
-            (component as any).suuntoTokens = [{ accessToken: 'suunto-token' }];
+            component.suuntoConnectionView = buildSuuntoServiceConnectionViewModel({ hasToken: true, serviceMeta: null });
             fixture.detectChanges();
 
             const routeToggle = fixture.nativeElement.querySelector('mat-slide-toggle');
@@ -212,7 +217,7 @@ describe('ServicesCorosComponent', () => {
             component.hasProAccess = true;
             component.user = { uid: 'user-1', settings: {} } as any;
             component.serviceTokens = [{ accessToken: 'coros-token' }] as any;
-            (component as any).suuntoTokens = [{ accessToken: 'suunto-token' }];
+            component.suuntoConnectionView = buildSuuntoServiceConnectionViewModel({ hasToken: true, serviceMeta: null });
 
             await component.onCorosToSuuntoRouteToggle(true);
 
@@ -231,13 +236,34 @@ describe('ServicesCorosComponent', () => {
             component.hasProAccess = true;
             component.user = { uid: 'user-1', settings: {} } as any;
             component.serviceTokens = [] as any;
-            (component as any).suuntoTokens = [{ accessToken: 'suunto-token' }];
+            component.suuntoConnectionView = buildSuuntoServiceConnectionViewModel({ hasToken: true, serviceMeta: null });
 
             await component.onCorosToSuuntoRouteToggle(true);
 
             expect(mockUserService.updateActivitySyncRouteSettings).not.toHaveBeenCalled();
             expect(snackBarSpy).toHaveBeenCalledWith(
                 'Connect both COROS and Suunto accounts before enabling sync.',
+                undefined,
+                { duration: 4000 }
+            );
+        });
+
+        it('should block enabling COROS->Suunto route when Suunto requires reconnect despite a token', async () => {
+            const snackBar = TestBed.inject(MatSnackBar);
+            const snackBarSpy = vi.spyOn(snackBar, 'open');
+            component.hasProAccess = true;
+            component.user = { uid: 'user-1', settings: {} } as any;
+            component.serviceTokens = [{ accessToken: 'coros-token' }] as any;
+            component.suuntoConnectionView = buildSuuntoServiceConnectionViewModel({
+                hasToken: true,
+                serviceMeta: { connectionState: 'reconnect_required' } as any,
+            });
+
+            await component.onCorosToSuuntoRouteToggle(true);
+
+            expect(mockUserService.updateActivitySyncRouteSettings).not.toHaveBeenCalled();
+            expect(snackBarSpy).toHaveBeenCalledWith(
+                'Reconnect Suunto before enabling sync.',
                 undefined,
                 { duration: 4000 }
             );
@@ -256,7 +282,7 @@ describe('ServicesCorosComponent', () => {
                 }
             } as any;
             component.serviceTokens = [] as any;
-            (component as any).suuntoTokens = [] as any;
+            component.suuntoConnectionView = buildSuuntoServiceConnectionViewModel({ hasToken: false, serviceMeta: null });
 
             await component.onCorosToSuuntoRouteToggle(false);
 
@@ -273,7 +299,7 @@ describe('ServicesCorosComponent', () => {
             component.hasProAccess = true;
             component.user = { uid: 'user-1', settings: {} } as any;
             component.serviceTokens = [{ accessToken: 'coros-token' }] as any;
-            (component as any).suuntoTokens = [{ accessToken: 'suunto-token' }];
+            component.suuntoConnectionView = buildSuuntoServiceConnectionViewModel({ hasToken: true, serviceMeta: null });
             component.isBackfillingSync = false;
             component.backfillStartDate = new Date('2026-01-01T00:00:00.000Z');
             component.backfillEndDate = new Date('2026-01-31T00:00:00.000Z');
@@ -288,6 +314,21 @@ describe('ServicesCorosComponent', () => {
             expect(queueButton?.disabled).toBe(false);
         });
 
+        it('should show reconnect-required copy instead of route controls when Suunto requires reconnect', () => {
+            component.hasProAccess = true;
+            component.user = { uid: 'user-1', settings: {} } as any;
+            component.serviceTokens = [{ accessToken: 'coros-token' }] as any;
+            component.suuntoConnectionView = buildSuuntoServiceConnectionViewModel({
+                hasToken: true,
+                serviceMeta: { connectionState: 'reconnect_required' } as any,
+            });
+
+            fixture.detectChanges();
+
+            expect(fixture.nativeElement.textContent).toContain('Suunto needs to be reconnected before COROS -> Suunto sync can run.');
+            expect(fixture.nativeElement.querySelector('mat-slide-toggle')).toBeFalsy();
+        });
+
         it('should show activity sync card for users outside the old rollout UID list', () => {
             component.hasProAccess = true;
             component.user = { uid: 'non-allowlisted-user', settings: {} } as any;
@@ -300,7 +341,7 @@ describe('ServicesCorosComponent', () => {
             component.hasProAccess = true;
             component.user = { uid: 'user-1', settings: {} } as any;
             component.serviceTokens = [{ accessToken: 'coros-token' }] as any;
-            (component as any).suuntoTokens = [{ accessToken: 'suunto-token' }];
+            component.suuntoConnectionView = buildSuuntoServiceConnectionViewModel({ hasToken: true, serviceMeta: null });
             component.backfillSummary = {
                 scanned: 10,
                 queued: 8,
@@ -327,7 +368,7 @@ describe('ServicesCorosComponent', () => {
             component.hasProAccess = true;
             component.user = { uid: 'user-1', settings: {} } as any;
             component.serviceTokens = [{ accessToken: 'coros-token' }] as any;
-            (component as any).suuntoTokens = [{ accessToken: 'suunto-token' }];
+            component.suuntoConnectionView = buildSuuntoServiceConnectionViewModel({ hasToken: true, serviceMeta: null });
 
             fixture.detectChanges();
 
@@ -344,7 +385,7 @@ describe('ServicesCorosComponent', () => {
             component.hasProAccess = true;
             component.user = { uid: 'user-1', settings: {} } as any;
             component.serviceTokens = [{ accessToken: 'coros-token' }] as any;
-            (component as any).suuntoTokens = [{ accessToken: 'suunto-token' }];
+            component.suuntoConnectionView = buildSuuntoServiceConnectionViewModel({ hasToken: true, serviceMeta: null });
             mockUserService.backfillActivitySyncRouteForCurrentUser.mockResolvedValueOnce({
                 scanned: 20,
                 queued: 17,
@@ -379,7 +420,7 @@ describe('ServicesCorosComponent', () => {
             }
         } as any;
         component.serviceTokens = [{ accessToken: 'coros-token' }] as any;
-        (component as any).suuntoTokens = [{ accessToken: 'suunto-token' }];
+        component.suuntoConnectionView = buildSuuntoServiceConnectionViewModel({ hasToken: true, serviceMeta: null });
         fixture.detectChanges();
 
         const warningPill = fixture.nativeElement.querySelector('.active-sync-warning-pill');
@@ -400,7 +441,7 @@ describe('ServicesCorosComponent', () => {
             }
         } as any;
         component.serviceTokens = [{ accessToken: 'coros-token' }] as any;
-        (component as any).suuntoTokens = [{ accessToken: 'suunto-token' }];
+        component.suuntoConnectionView = buildSuuntoServiceConnectionViewModel({ hasToken: true, serviceMeta: null });
         mockDialog.open.mockReturnValueOnce({
             afterClosed: () => of(false),
         });

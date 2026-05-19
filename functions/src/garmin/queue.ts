@@ -3,7 +3,7 @@ import * as logger from 'firebase-functions/logger';
 import * as admin from 'firebase-admin';
 import { QueueErrors, QueueLogs } from '../shared/constants';
 import { addToQueueForGarmin } from '../queue';
-import { increaseRetryCountForQueueItem, updateToProcessed, moveToDeadLetterQueue, QueueResult } from '../queue-utils';
+import { increaseRetryCountForQueueItem, markQueueItemSkipped, QUEUE_SKIPPED_REASONS, updateToProcessed, moveToDeadLetterQueue, QueueResult } from '../queue-utils';
 
 import { EventImporterFIT } from '@sports-alliance/sports-lib';
 import { generateEventID, setEvent, UsageLimitExceededError, UserNotFoundError } from '../utils';
@@ -12,7 +12,7 @@ import {
   GarminAPIActivityQueueItemInterface,
 } from '../queue/queue-item.interface';
 import { ServiceNames } from '@sports-alliance/sports-lib';
-import { getTokenData, TerminalServiceAuthError } from '../tokens';
+import { getTokenData, TerminalServiceAuthError, TokenRefreshSkippedForDeletedUserError } from '../tokens';
 import { EventImporterGPX } from '@sports-alliance/sports-lib';
 import { EventImporterTCX } from '@sports-alliance/sports-lib';
 import * as xmldom from 'xmldom';
@@ -22,9 +22,24 @@ import {
 import { uploadDebugFile } from '../debug-utils';
 import { createParsingOptions } from '../../../shared/parsing-options';
 import { enqueueActivitySyncJobsForImportedEvent } from '../activity-sync/enqueue-imported-event';
+import { shouldSkipQueueWorkForDeletedUser } from '../queue/user-deletion-skip';
 
 interface RequestError extends Error {
   statusCode?: number;
+}
+
+function isTokenRefreshSkippedForDeletedUserError(error: unknown): error is TokenRefreshSkippedForDeletedUserError {
+  return error instanceof TokenRefreshSkippedForDeletedUserError
+    || (error instanceof Error && error.name === 'TokenRefreshSkippedForDeletedUserError');
+}
+
+function markGarminQueueItemSkippedForDeletedUser(
+  queueItem: GarminAPIActivityQueueItemInterface,
+  bulkWriter?: admin.firestore.BulkWriter,
+): Promise<QueueResult.Processed | QueueResult.Failed> {
+  return markQueueItemSkipped(queueItem, bulkWriter, QUEUE_SKIPPED_REASONS.UserDeletedOrDeleting, {
+    skippedContext: 'USER_DELETION_GUARD',
+  });
 }
 
 
@@ -107,11 +122,21 @@ export async function processGarminAPIActivityQueueItem(queueItem: GarminAPIActi
     return moveToDeadLetterQueue(queueItem, new Error(QueueErrors.NO_TOKEN_FOUND), bulkWriter, 'NO_TOKEN_FOUND');
   }
 
+  // The parent of the token document is the 'tokens' collection, and its parent is the User document.
+  const firebaseUserID = tokenQuerySnapshots.docs[0].ref.parent.parent!.id;
+  if (await shouldSkipQueueWorkForDeletedUser(firebaseUserID, ServiceNames.GarminAPI, queueItem.id, 'before_token_refresh')) {
+    return markGarminQueueItemSkippedForDeletedUser(queueItem, bulkWriter);
+  }
+
   // Use getTokenData (Shared) to handle auto-refresh if needed
   let serviceToken;
   try {
     serviceToken = await getTokenData(tokenQuerySnapshots.docs[0], ServiceNames.GarminAPI);
   } catch (e: any) {
+    if (isTokenRefreshSkippedForDeletedUserError(e)) {
+      logger.warn(`Skipping Garmin queue item ${queueItem.id} because user ${firebaseUserID} is missing or deletion is in progress.`);
+      return markGarminQueueItemSkippedForDeletedUser(queueItem, bulkWriter);
+    }
     if (e instanceof TerminalServiceAuthError) {
       logger.warn(`Garmin token for queue item ${queueItem.id} requires reconnect; moving item to DLQ with ${e.dlqContext}.`, {
         queueItemID: queueItem.id,
@@ -125,9 +150,6 @@ export async function processGarminAPIActivityQueueItem(queueItem: GarminAPIActi
     logger.error(`Failed to get/refresh token for ${queueItem.id}: ${e.message}`);
     return increaseRetryCountForQueueItem(queueItem, e, 1, bulkWriter);
   }
-
-  // The parent of the token document is the 'tokens' collection, and its parent is the User document.
-  const firebaseUserID = tokenQuerySnapshots.docs[0].ref.parent.parent!.id;
 
   let result;
   // Use the ORIGINAL callback URL directly, do not reconstruct it
@@ -217,8 +239,15 @@ export async function processGarminAPIActivityQueueItem(queueItem: GarminAPIActi
       queueItem.startTimeInSeconds || 0, // 0 is ok here I suppose
       new Date());
     const eventID = await generateEventID(firebaseUserID, event.startDate);
+    if (await shouldSkipQueueWorkForDeletedUser(firebaseUserID, ServiceNames.GarminAPI, queueItem.id, 'before_event_write')) {
+      return markGarminQueueItemSkippedForDeletedUser(queueItem, bulkWriter);
+    }
     const setEventResult = await setEvent(firebaseUserID, eventID, event, metaData, { data: result, extension: queueItem.activityFileType.toLowerCase(), startDate: event.startDate }, bulkWriter, usageCache, pendingWrites);
     if (!bulkWriter) {
+      if (await shouldSkipQueueWorkForDeletedUser(firebaseUserID, ServiceNames.GarminAPI, queueItem.id, 'before_activity_sync_enqueue')) {
+        return markGarminQueueItemSkippedForDeletedUser(queueItem, bulkWriter);
+      }
+
       try {
         const activitySyncEventID = `${(setEventResult as any)?.eventID || eventID}`;
         const activitySyncOriginalFiles = Array.isArray((setEventResult as any)?.savedOriginalFiles) ? (setEventResult as any).savedOriginalFiles : [];

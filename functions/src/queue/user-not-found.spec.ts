@@ -117,6 +117,10 @@ vi.mock('../tokens', () => ({
     getTokenData: vi.fn().mockResolvedValue({ accessToken: 'valid' })
 }));
 
+vi.mock('../queue/user-deletion-skip', () => ({
+    shouldSkipQueueWorkForDeletedUser: vi.fn().mockResolvedValue(false),
+}));
+
 vi.mock('../request-helper', () => ({
     default: { get: vi.fn().mockResolvedValue(new ArrayBuffer(10)) },
     get: vi.fn().mockResolvedValue(new ArrayBuffer(10)),

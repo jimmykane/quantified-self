@@ -5,7 +5,7 @@ import { QueueErrors, QueueLogs } from './shared/constants';
 import * as admin from 'firebase-admin';
 import * as logger from 'firebase-functions/logger';
 
-import { increaseRetryCountForQueueItem, updateToProcessed, moveToDeadLetterQueue, QueueResult } from './queue-utils';
+import { increaseRetryCountForQueueItem, markQueueItemSkipped, QUEUE_SKIPPED_REASONS, updateToProcessed, moveToDeadLetterQueue, QueueResult } from './queue-utils';
 import { processGarminAPIActivityQueueItem } from './garmin/queue';
 import {
   QueueItemInterface,
@@ -22,13 +22,14 @@ import {
 } from '@sports-alliance/sports-lib';
 import * as requestPromise from './request-helper';
 import { config } from './config';
-import { getTokenData, TerminalServiceAuthError } from './tokens';
+import { getTokenData, TerminalServiceAuthError, TokenRefreshSkippedForDeletedUserError } from './tokens';
 import { EventImporterFIT } from '@sports-alliance/sports-lib';
 import { COROSAPIEventMetaData, SuuntoAppEventMetaData } from '@sports-alliance/sports-lib';
 import { uploadDebugFile } from './debug-utils';
 import { createParsingOptions } from '../../shared/parsing-options';
 import { normalizeDownloadedFitPayload } from './shared/fit-payload';
 import { enqueueActivitySyncJobsForImportedEvent } from './activity-sync/enqueue-imported-event';
+import { shouldSkipQueueWorkForDeletedUser } from './queue/user-deletion-skip';
 
 async function enqueueActivitySyncBestEffort(
   parentID: string,
@@ -36,7 +37,11 @@ async function enqueueActivitySyncBestEffort(
   sourceServiceName: ServiceNames,
   sourceActivityID: string,
   setEventResult: unknown
-): Promise<void> {
+): Promise<boolean> {
+  if (await shouldSkipQueueWorkForDeletedUser(parentID, sourceServiceName, eventID, 'before_activity_sync_enqueue')) {
+    return true;
+  }
+
   try {
     const activitySyncEventID = `${(setEventResult as any)?.eventID || eventID}`;
     const activitySyncOriginalFiles = Array.isArray((setEventResult as any)?.savedOriginalFiles) ? (setEventResult as any).savedOriginalFiles : [];
@@ -50,6 +55,16 @@ async function enqueueActivitySyncBestEffort(
   } catch (activitySyncError) {
     logger.error(`[ActivitySync] Failed to enqueue post-import sync for ${sourceServiceName} event ${eventID} and user ${parentID}. Import remains successful.`, activitySyncError);
   }
+  return false;
+}
+
+function markWorkoutQueueItemSkippedForDeletedUser(
+  queueItem: QueueItemInterface,
+  bulkWriter?: admin.firestore.BulkWriter,
+): Promise<QueueResult.Processed | QueueResult.Failed> {
+  return markQueueItemSkipped(queueItem, bulkWriter, QUEUE_SKIPPED_REASONS.UserDeletedOrDeleting, {
+    skippedContext: 'USER_DELETION_GUARD',
+  });
 }
 
 
@@ -70,6 +85,11 @@ function selectPreferredTerminalAuthError(
     return candidate;
   }
   return current;
+}
+
+function isTokenRefreshSkippedForDeletedUserError(error: unknown): error is TokenRefreshSkippedForDeletedUserError {
+  return error instanceof TokenRefreshSkippedForDeletedUserError
+    || (error instanceof Error && error.name === 'TokenRefreshSkippedForDeletedUserError');
 }
 
 
@@ -296,13 +316,29 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
   let lastError = new Error(QueueErrors.ALL_TOKENS_FAILED);
   let terminalAuthError: TerminalServiceAuthError | null = null;
   let sawRetryableFailure = false;
+  let sawUserDeletionSkip = false;
 
   for (const tokenQueryDocumentSnapshot of tokenQuerySnapshots.docs) {
     let serviceToken;
+    const parent1 = tokenQueryDocumentSnapshot.ref.parent;
+    if (!parent1) {
+      throw new Error(`No parent found for ${tokenQueryDocumentSnapshot.id}`);
+    }
+    const parentID = parent1.parent!.id;
+
+    if (await shouldSkipQueueWorkForDeletedUser(parentID, serviceName, queueItem.id, 'before_token_refresh')) {
+      sawUserDeletionSkip = true;
+      continue;
+    }
 
     try {
       serviceToken = await getTokenData(tokenQueryDocumentSnapshot, serviceName);
     } catch (e: any) {
+      if (isTokenRefreshSkippedForDeletedUserError(e)) {
+        sawUserDeletionSkip = true;
+        logger.warn(`Skipping ${serviceName} queue item ${queueItem.id} for token ${tokenQueryDocumentSnapshot.id} because the owning user is missing or deletion is in progress.`);
+        continue;
+      }
       if (e instanceof TerminalServiceAuthError) {
         logger.warn(`Terminal auth failure for ${serviceName} token ${tokenQueryDocumentSnapshot.id} while processing ${queueItem.id}; trying any remaining matching tokens before DLQ.`);
         terminalAuthError = selectPreferredTerminalAuthError(terminalAuthError, e);
@@ -322,12 +358,6 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
       }
       continue;
     }
-
-    const parent1 = tokenQueryDocumentSnapshot.ref.parent;
-    if (!parent1) {
-      throw new Error(`No parent found for ${tokenQueryDocumentSnapshot.id}`);
-    }
-    const parentID = parent1.parent!.id;
 
     logger.info(`Found user id ${parentID} for queue item ${queueItem.id}`);
 
@@ -358,6 +388,11 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
           }
           result = normalizedPayload.data;
         } catch (retryError: any) {
+          if (isTokenRefreshSkippedForDeletedUserError(retryError)) {
+            sawUserDeletionSkip = true;
+            logger.warn(`Skipping ${serviceName} queue item ${queueItem.id} during forced refresh because user ${parentID} is missing or deletion is in progress.`);
+            continue;
+          }
           if (retryError instanceof TerminalServiceAuthError) {
             logger.warn(`Terminal auth failure during forced refresh for ${serviceName} token ${tokenQueryDocumentSnapshot.id} while processing ${queueItem.id}; trying any remaining matching tokens before DLQ.`);
             terminalAuthError = selectPreferredTerminalAuthError(terminalAuthError, retryError);
@@ -398,6 +433,7 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
     }
     if (!result) {
       logger.error(new Error(`No FIT payload downloaded for ${queueItem.id}; skipping token.`));
+      sawRetryableFailure = true;
       continue;
     }
     logger.info('Ending timer: DownloadFit');
@@ -409,6 +445,10 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
       event.name = event.startDate.toJSON(); // @todo improve
       logger.info(`Created Event from FIT file of ${queueItem.id}`);
       logger.info('Starting timer: InsertEvent');
+      if (await shouldSkipQueueWorkForDeletedUser(parentID, serviceName, queueItem.id, 'before_event_write')) {
+        sawUserDeletionSkip = true;
+        continue;
+      }
       switch (serviceName) {
         default:
           throw new Error('Not Implemented');
@@ -418,7 +458,10 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
           const deterministicID = await generateEventID(parentID, event.startDate);
           const setEventResult = await setEvent(parentID, deterministicID, event, corosMetaData, { data: result, extension: 'fit', startDate: event.startDate }, bulkWriter, usageCache, pendingWrites);
           if (!bulkWriter) {
-            await enqueueActivitySyncBestEffort(parentID, deterministicID, ServiceNames.COROSAPI, corosWorkoutQueueItem.workoutID, setEventResult);
+            const skippedAfterDeletionStarted = await enqueueActivitySyncBestEffort(parentID, deterministicID, ServiceNames.COROSAPI, corosWorkoutQueueItem.workoutID, setEventResult);
+            if (skippedAfterDeletionStarted) {
+              return markWorkoutQueueItemSkippedForDeletedUser(queueItem, bulkWriter);
+            }
           }
           break;
         }
@@ -428,7 +471,10 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
           const deterministicID = await generateEventID(parentID, event.startDate);
           const setEventResult = await setEvent(parentID, deterministicID, event, suuntoMetaData, { data: result, extension: 'fit', startDate: event.startDate }, bulkWriter, usageCache, pendingWrites);
           if (!bulkWriter) {
-            await enqueueActivitySyncBestEffort(parentID, deterministicID, ServiceNames.SuuntoApp, suuntoWorkoutQueueItem.workoutID, setEventResult);
+            const skippedAfterDeletionStarted = await enqueueActivitySyncBestEffort(parentID, deterministicID, ServiceNames.SuuntoApp, suuntoWorkoutQueueItem.workoutID, setEventResult);
+            if (skippedAfterDeletionStarted) {
+              return markWorkoutQueueItemSkippedForDeletedUser(queueItem, bulkWriter);
+            }
           }
         }
       }
@@ -481,6 +527,11 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
 
   if (terminalAuthError) {
     logger.warn(`At least one matching ${serviceName} token for ${queueItem.id} failed with terminal auth, but another matching token only failed retryably. Keeping the queue item retryable.`);
+  }
+
+  if (sawUserDeletionSkip && !sawRetryableFailure) {
+    logger.warn(`Skipping ${serviceName} queue item ${queueItem.id} without retry because every usable token owner is missing or deletion is in progress.`);
+    return markWorkoutQueueItemSkippedForDeletedUser(queueItem, bulkWriter);
   }
 
   // If we finished the loop without returning, it means every token attempt failed.

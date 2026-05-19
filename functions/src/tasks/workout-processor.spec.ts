@@ -13,6 +13,7 @@ const { mockCollection, mockDoc, mockGet } = vi.hoisted(() => {
     const mockGet = vi.fn();
     const mockDoc = {
         get: mockGet,
+        update: vi.fn(),
     };
     const mockCollection = {
         doc: vi.fn().mockReturnValue(mockDoc),
@@ -68,7 +69,15 @@ describe('processWorkoutTask', () => {
         // Since we mocked onTaskDispatched to return the handler, processWorkoutTask IS the handler
         await (processWorkoutTask as any)(request);
 
-        expect(mockParseWorkoutQueueItemForServiceName).toHaveBeenCalledWith(serviceName, queueData);
+        expect(mockParseWorkoutQueueItemForServiceName).toHaveBeenCalledWith(
+            serviceName,
+            expect.objectContaining({
+                id: queueItemId,
+                ref: mockDoc,
+                processed: false,
+                some: 'data',
+            }),
+        );
     });
 
     it('should skip if item already processed', async () => {
@@ -236,6 +245,30 @@ describe('processWorkoutTask', () => {
         await expect((processWorkoutTask as any)(request)).resolves.toBeUndefined();
     });
 
+    it('should mark skipped queue result processed instead of acking without a queue transition', async () => {
+        const queueItemId = 'test-id';
+        const serviceName = ServiceNames.GarminAPI;
+        const queueData = { processed: false };
+
+        mockGet.mockResolvedValue({
+            exists: true,
+            data: () => queueData,
+        });
+
+        mockParseWorkoutQueueItemForServiceName.mockResolvedValue(QueueResult.Skipped);
+
+        const request = {
+            data: { queueItemId, serviceName }
+        };
+
+        await expect((processWorkoutTask as any)(request)).resolves.toBeUndefined();
+        expect(mockDoc.update).toHaveBeenCalledWith(expect.objectContaining({
+            processed: true,
+            resultStatus: 'skipped',
+            skippedReason: 'worker_returned_skipped',
+        }));
+    });
+
     it('should throw error for unexpected QueueResult', async () => {
         const queueItemId = 'test-id';
         const serviceName = ServiceNames.GarminAPI;
@@ -256,4 +289,3 @@ describe('processWorkoutTask', () => {
         await expect((processWorkoutTask as any)(request)).rejects.toThrow(`Unexpected result for ${queueItemId}: UNKNOWN_RESULT`);
     });
 });
-

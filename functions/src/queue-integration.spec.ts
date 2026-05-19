@@ -63,14 +63,23 @@ vi.mock('firebase-admin', () => {
 const {
     mockMoveToDeadLetterQueue,
     mockGetTokenData,
+    mockShouldSkipQueueWorkForDeletedUser,
 } = vi.hoisted(() => ({
     mockMoveToDeadLetterQueue: vi.fn(),
     mockGetTokenData: vi.fn(),
+    mockShouldSkipQueueWorkForDeletedUser: vi.fn(),
 }));
 
 vi.mock('./tokens', () => ({
     getTokenData: mockGetTokenData,
+    TokenRefreshSkippedForDeletedUserError: class TokenRefreshSkippedForDeletedUserError extends Error {
+        readonly name = 'TokenRefreshSkippedForDeletedUserError';
+    },
     TerminalServiceAuthError: class TerminalServiceAuthError extends Error {},
+}));
+
+vi.mock('./queue/user-deletion-skip', () => ({
+    shouldSkipQueueWorkForDeletedUser: mockShouldSkipQueueWorkForDeletedUser,
 }));
 
 vi.mock('./queue-utils', async (importOriginal) => {
@@ -116,6 +125,8 @@ describe('Queue Integration Logic', () => {
         vi.clearAllMocks();
         mockGetTokenData.mockReset();
         mockMoveToDeadLetterQueue.mockReset();
+        mockShouldSkipQueueWorkForDeletedUser.mockReset();
+        mockShouldSkipQueueWorkForDeletedUser.mockResolvedValue(false);
         (requestHelper.get as any).mockReset();
     });
 

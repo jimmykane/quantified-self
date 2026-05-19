@@ -5,7 +5,7 @@ import { ServiceNames } from '@sports-alliance/sports-lib';
 import { parseWorkoutQueueItemForServiceName } from '../queue';
 import { getServiceWorkoutQueueName } from '../shared/queue-names';
 import { CLOUD_TASK_RETRY_CONFIG } from '../shared/queue-config';
-import { QueueResult } from '../queue-utils';
+import { markQueueItemSkipped, QUEUE_SKIPPED_REASONS, QueueResult } from '../queue-utils';
 
 /**
  * Task worker that processes a single workout queue item.
@@ -51,14 +51,21 @@ export const processWorkoutTask = onTaskDispatched({
         // Process the individual item reusing the core logic
         // We pass null for caches/pendingWrites as this worker focuses on a single item
         // and Cloud Tasks handles the concurrency at the queue level.
-        const result = await parseWorkoutQueueItemForServiceName(serviceName, Object.assign({
-            id: queueDoc.id,
-            ref: queueDoc.ref,
-        }, queueItem) as any);
+        const queueItemForProcessing = Object.assign({
+            id: queueItemId,
+            ref: queueRef,
+        }, queueItem) as any;
+        const result = await parseWorkoutQueueItemForServiceName(serviceName, queueItemForProcessing);
 
         switch (result) {
             case QueueResult.Processed:
                 logger.info(`[TaskWorker] Successfully processed ${serviceName} item: ${queueItemId}`);
+                break;
+            case QueueResult.Skipped:
+                logger.warn(`[TaskWorker] Skipped ${serviceName} item ${queueItemId} because the owning user is missing or deletion is in progress.`);
+                if ((await markQueueItemSkipped(queueItemForProcessing, undefined, QUEUE_SKIPPED_REASONS.WorkerReturnedSkipped)) === QueueResult.Failed) {
+                    throw new Error(`Fatal failure updating skipped state for ${serviceName} item: ${queueItemId}`);
+                }
                 break;
             case QueueResult.MovedToDLQ:
                 logger.warn(`[TaskWorker] Item ${queueItemId} for ${serviceName} was moved to DLQ (failed_jobs).`);

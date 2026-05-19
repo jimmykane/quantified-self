@@ -29,7 +29,7 @@ vi.mock('firebase-functions', () => ({
     }),
 }));
 
-const { mockDocRef, mockBatch, mockDocSnapshot, mockCollection } = vi.hoisted(() => {
+const { mockDocRef, mockBatch, mockDocSnapshot, mockCollection, mockShouldSkipQueueWorkForDeletedUser } = vi.hoisted(() => {
     const docRef = {
         update: vi.fn(() => Promise.resolve()),
         set: vi.fn(() => Promise.resolve()),
@@ -80,6 +80,7 @@ const { mockDocRef, mockBatch, mockDocSnapshot, mockCollection } = vi.hoisted(()
         mockBatch: batch,
         mockDocSnapshot: docSnapshot,
         mockCollection: collection,
+        mockShouldSkipQueueWorkForDeletedUser: vi.fn().mockResolvedValue(false),
     };
 });
 
@@ -187,8 +188,15 @@ vi.mock('./tokens', () => {
             openId: 'mock-openid'
         }),
         TerminalServiceAuthError: MockTerminalServiceAuthError,
+        TokenRefreshSkippedForDeletedUserError: class TokenRefreshSkippedForDeletedUserError extends Error {
+            readonly name = 'TokenRefreshSkippedForDeletedUserError';
+        },
     };
 });
+
+vi.mock('./queue/user-deletion-skip', () => ({
+    shouldSkipQueueWorkForDeletedUser: mockShouldSkipQueueWorkForDeletedUser,
+}));
 
 vi.mock('./garmin/queue', () => ({
     processGarminAPIActivityQueueItem: vi.fn().mockResolvedValue('PROCESSED'),
@@ -227,13 +235,14 @@ import {
     parseWorkoutQueueItemForServiceName,
 } from './queue';
 import { QueueItemInterface, SuuntoAppWorkoutQueueItemInterface, COROSAPIWorkoutQueueItemInterface } from './queue/queue-item.interface';
-import { getTokenData, TerminalServiceAuthError } from './tokens';
+import { getTokenData, TerminalServiceAuthError, TokenRefreshSkippedForDeletedUserError } from './tokens';
 import { processGarminAPIActivityQueueItem } from './garmin/queue';
-import { QueueResult, increaseRetryCountForQueueItem, updateToProcessed, moveToDeadLetterQueue } from './queue-utils';
+import { QUEUE_SKIPPED_REASONS, QueueResult, increaseRetryCountForQueueItem, updateToProcessed, moveToDeadLetterQueue } from './queue-utils';
 
 describe('queue', () => {
     beforeEach(async () => {
         vi.clearAllMocks();
+        mockShouldSkipQueueWorkForDeletedUser.mockResolvedValue(false);
         const admin = await import('firebase-admin');
         const mockCollection = admin.firestore().collectionGroup('tokens') as any;
         mockCollection.get.mockResolvedValue({
@@ -973,6 +982,81 @@ describe('queue', () => {
                 undefined,
                 undefined
             );
+        });
+
+        it('should mark processed as skipped without retrying or writing user data when token owner is being deleted before token refresh', async () => {
+            mockShouldSkipQueueWorkForDeletedUser.mockResolvedValueOnce(true);
+
+            const result = await parseWorkoutQueueItemForServiceName(ServiceNames.SuuntoApp, suuntoQueueItem);
+
+            expect(result).toBe(QueueResult.Processed);
+            expect(getTokenData).not.toHaveBeenCalled();
+            expect(vi.mocked(utils.setEvent)).not.toHaveBeenCalled();
+            expect(mockRef.update).toHaveBeenCalledWith(expect.objectContaining({
+                processed: true,
+                resultStatus: 'skipped',
+                skippedReason: QUEUE_SKIPPED_REASONS.UserDeletedOrDeleting,
+                skippedContext: 'USER_DELETION_GUARD',
+            }));
+            expect(mockBatch.set).not.toHaveBeenCalled();
+            expect(mockBatch.delete).not.toHaveBeenCalledWith(mockRef);
+        });
+
+        it('should mark processed as skipped without retrying when token refresh reports account deletion', async () => {
+            vi.mocked(getTokenData).mockRejectedValueOnce(new TokenRefreshSkippedForDeletedUserError());
+
+            const result = await parseWorkoutQueueItemForServiceName(ServiceNames.SuuntoApp, suuntoQueueItem);
+
+            expect(result).toBe(QueueResult.Processed);
+            expect(vi.mocked(utils.setEvent)).not.toHaveBeenCalled();
+            expect(mockRef.update).toHaveBeenCalledWith(expect.objectContaining({
+                processed: true,
+                resultStatus: 'skipped',
+                skippedReason: QUEUE_SKIPPED_REASONS.UserDeletedOrDeleting,
+            }));
+            expect(mockBatch.set).not.toHaveBeenCalled();
+        });
+
+        it('should mark processed as skipped without retrying when account deletion starts before event write', async () => {
+            mockShouldSkipQueueWorkForDeletedUser
+                .mockResolvedValueOnce(false)
+                .mockResolvedValueOnce(true);
+
+            const result = await parseWorkoutQueueItemForServiceName(ServiceNames.SuuntoApp, suuntoQueueItem);
+
+            expect(result).toBe(QueueResult.Processed);
+            expect(getTokenData).toHaveBeenCalled();
+            expect(vi.mocked(utils.setEvent)).not.toHaveBeenCalled();
+            expect(mockRef.update).toHaveBeenCalledWith(expect.objectContaining({
+                processed: true,
+                resultStatus: 'skipped',
+                skippedReason: QUEUE_SKIPPED_REASONS.UserDeletedOrDeleting,
+            }));
+            expect(mockBatch.set).not.toHaveBeenCalled();
+        });
+
+        it('should retry when the deletion guard read fails before activity sync enqueue', async () => {
+            mockShouldSkipQueueWorkForDeletedUser
+                .mockResolvedValueOnce(false)
+                .mockResolvedValueOnce(false)
+                .mockRejectedValueOnce(new Error('deletion guard unavailable'));
+            vi.mocked(utils.setEvent).mockResolvedValueOnce({
+                eventID: 'standardized-event-id',
+                savedOriginalFiles: [],
+            } as any);
+
+            const result = await parseWorkoutQueueItemForServiceName(ServiceNames.SuuntoApp, suuntoQueueItem);
+
+            expect(result).toBe(QueueResult.RetryIncremented);
+            expect(vi.mocked(utils.setEvent)).toHaveBeenCalled();
+            expect(mockRef.update).toHaveBeenCalledWith(expect.objectContaining({
+                retryCount: 1,
+                dispatchedToCloudTask: null,
+            }));
+            expect(mockRef.update).not.toHaveBeenCalledWith(expect.objectContaining({
+                processed: true,
+                resultStatus: 'skipped',
+            }));
         });
 
         it('should move to DLQ if no token found', async () => {
