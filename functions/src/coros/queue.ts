@@ -1,7 +1,7 @@
 import * as functions from 'firebase-functions/v1';
 import * as logger from 'firebase-functions/logger';
 import { addToQueueForCOROS } from '../queue';
-import { isProviderQueueUserNotConnectedError } from '../queue/provider-queue-errors';
+import { isProviderQueueSkippedWithoutRetryError } from '../queue/provider-queue-errors';
 
 import { COROSAPIWorkoutQueueItemInterface } from '../queue/queue-item.interface';
 import { generateIDFromParts } from '../utils';
@@ -47,8 +47,8 @@ export const insertCOROSAPIWorkoutDataToQueue = functions.region('europe-west2')
     try {
       await addToQueueForCOROS(workout);
     } catch (e: any) {
-      if (isProviderQueueUserNotConnectedError(e)) {
-        logger.warn(`Skipping COROS workout webhook ${workout.workoutID} for ${workout.openId} because no local token/user is connected.`);
+      if (isProviderQueueSkippedWithoutRetryError(e)) {
+        logger.warn(`Skipping COROS workout webhook ${workout.workoutID} for ${workout.openId} because no local token/user is connected or the user is being deleted.`);
         continue;
       }
       logger.error(e);

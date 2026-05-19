@@ -223,9 +223,12 @@ describe('insertSuuntoAppActivityToQueue', () => {
     expect(response.status).toHaveBeenCalledWith(500);
   });
 
-  it('acknowledges JSON workout notifications without queueing retries when no local token is connected', async () => {
+  it.each([
+    'ProviderQueueUserNotConnectedError',
+    'ProviderQueueUserDeletedOrDeletingError',
+  ])('acknowledges JSON workout notifications without queueing retries for %s', async (errorName) => {
     const notConnectedError = Object.assign(new Error('not connected'), {
-      name: 'ProviderQueueUserNotConnectedError',
+      name: errorName,
     });
     hoisted.addToQueueForSuunto.mockRejectedValueOnce(notConnectedError);
     const response = createResponse();

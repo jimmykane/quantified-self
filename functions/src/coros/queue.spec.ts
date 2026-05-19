@@ -245,9 +245,12 @@ describe('coros/queue', () => {
             };
         }
 
-        it('acknowledges workout notifications when no local COROS token is connected', async () => {
+        it.each([
+            'ProviderQueueUserNotConnectedError',
+            'ProviderQueueUserDeletedOrDeletingError',
+        ])('acknowledges workout notifications for %s', async (errorName) => {
             mockAddToQueueForCOROS.mockRejectedValueOnce(Object.assign(new Error('not connected'), {
-                name: 'ProviderQueueUserNotConnectedError',
+                name: errorName,
             }));
             const response = createResponse();
             const request = createRequest({

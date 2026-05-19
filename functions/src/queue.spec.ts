@@ -29,7 +29,7 @@ vi.mock('firebase-functions', () => ({
     }),
 }));
 
-const { mockDocRef, mockBatch, mockDocSnapshot, mockCollection, mockShouldSkipQueueWorkForDeletedUser } = vi.hoisted(() => {
+const { mockDocRef, mockBatch, mockDocSnapshot, mockCollection, mockShouldSkipQueueWorkForDeletedUser, mockGetUserDeletionGuardState } = vi.hoisted(() => {
     const docRef = {
         update: vi.fn(() => Promise.resolve()),
         set: vi.fn(() => Promise.resolve()),
@@ -81,6 +81,11 @@ const { mockDocRef, mockBatch, mockDocSnapshot, mockCollection, mockShouldSkipQu
         mockDocSnapshot: docSnapshot,
         mockCollection: collection,
         mockShouldSkipQueueWorkForDeletedUser: vi.fn().mockResolvedValue(false),
+        mockGetUserDeletionGuardState: vi.fn().mockResolvedValue({
+            userExists: true,
+            deletionInProgress: false,
+            shouldSkip: false,
+        }),
     };
 });
 
@@ -198,6 +203,27 @@ vi.mock('./queue/user-deletion-skip', () => ({
     shouldSkipQueueWorkForDeletedUser: mockShouldSkipQueueWorkForDeletedUser,
 }));
 
+vi.mock('./shared/user-deletion-guard', () => {
+    class MockUserDeletionGuardReadError extends Error {
+        readonly name = 'UserDeletionGuardReadError';
+        readonly code = 'unavailable';
+        readonly statusCode = 503;
+
+        constructor(
+            public readonly uid: string,
+            public readonly phase: string,
+            public readonly originalError: unknown,
+        ) {
+            super(`Could not read deletion guard for user ${uid} during ${phase}.`);
+        }
+    }
+
+    return {
+        getUserDeletionGuardState: mockGetUserDeletionGuardState,
+        UserDeletionGuardReadError: MockUserDeletionGuardReadError,
+    };
+});
+
 vi.mock('./garmin/queue', () => ({
     processGarminAPIActivityQueueItem: vi.fn().mockResolvedValue('PROCESSED'),
 }));
@@ -233,6 +259,7 @@ import {
     addToQueueForGarmin,
     addToQueueForCOROS,
     parseWorkoutQueueItemForServiceName,
+    ProviderQueueUserDeletedOrDeletingError,
     ProviderQueueUserNotConnectedError,
 } from './queue';
 import { QueueItemInterface, SuuntoAppWorkoutQueueItemInterface, COROSAPIWorkoutQueueItemInterface } from './queue/queue-item.interface';
@@ -244,6 +271,11 @@ describe('queue', () => {
     beforeEach(async () => {
         vi.clearAllMocks();
         mockShouldSkipQueueWorkForDeletedUser.mockResolvedValue(false);
+        mockGetUserDeletionGuardState.mockResolvedValue({
+            userExists: true,
+            deletionInProgress: false,
+            shouldSkip: false,
+        });
         const admin = await import('firebase-admin');
         const mockCollection = admin.firestore().collectionGroup('tokens') as any;
         mockCollection.get.mockResolvedValue({
@@ -826,6 +858,35 @@ describe('queue', () => {
 
             await expect(addToQueueForSuunto({ userName: 'orphan-provider-user', workoutID: 'work1' }))
                 .rejects.toBeInstanceOf(ProviderQueueUserNotConnectedError);
+
+            expect(mockDocRef.create).not.toHaveBeenCalled();
+            expect(utils.enqueueWorkoutTask).not.toHaveBeenCalled();
+        });
+
+        it('addToQueueForSuunto should not create queue docs when the resolved Firebase user is being deleted', async () => {
+            mockGetUserDeletionGuardState.mockResolvedValueOnce({
+                userExists: true,
+                deletionInProgress: true,
+                shouldSkip: true,
+            });
+
+            await expect(addToQueueForSuunto({ userName: 'user1', workoutID: 'work1' }))
+                .rejects.toBeInstanceOf(ProviderQueueUserDeletedOrDeletingError);
+
+            expect(mockGetUserDeletionGuardState).toHaveBeenCalledWith(expect.anything(), 'mock-user-id');
+            expect(mockDocRef.create).not.toHaveBeenCalled();
+            expect(utils.enqueueWorkoutTask).not.toHaveBeenCalled();
+        });
+
+        it('addToQueueForSuunto should fail retryably when the provider enqueue deletion guard cannot be read', async () => {
+            mockGetUserDeletionGuardState.mockRejectedValueOnce(new Error('guard unavailable'));
+
+            await expect(addToQueueForSuunto({ userName: 'user1', workoutID: 'work1' }))
+                .rejects.toMatchObject({
+                    name: 'UserDeletionGuardReadError',
+                    code: 'unavailable',
+                    statusCode: 503,
+                });
 
             expect(mockDocRef.create).not.toHaveBeenCalled();
             expect(utils.enqueueWorkoutTask).not.toHaveBeenCalled();

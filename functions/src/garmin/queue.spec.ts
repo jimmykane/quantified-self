@@ -268,9 +268,12 @@ describe('Garmin Queue', () => { // Grouping for cleaner output
             expect(res.status).toHaveBeenCalledWith(500);
         });
 
-        it('should acknowledge activity file notifications when no local Garmin token is connected', async () => {
+        it.each([
+            'ProviderQueueUserNotConnectedError',
+            'ProviderQueueUserDeletedOrDeletingError',
+        ])('should acknowledge activity file notifications for %s', async (errorName) => {
             vi.mocked(addToQueueForGarmin).mockRejectedValue(Object.assign(new Error('not connected'), {
-                name: 'ProviderQueueUserNotConnectedError',
+                name: errorName,
             }));
 
             await insertGarminAPIActivityFileToQueue(req, res);

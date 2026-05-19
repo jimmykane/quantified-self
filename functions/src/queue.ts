@@ -30,9 +30,16 @@ import { createParsingOptions } from '../../shared/parsing-options';
 import { normalizeDownloadedFitPayload } from './shared/fit-payload';
 import { enqueueActivitySyncJobsForImportedEvent } from './activity-sync/enqueue-imported-event';
 import { shouldSkipQueueWorkForDeletedUser } from './queue/user-deletion-skip';
-import { ProviderQueueUserNotConnectedError } from './queue/provider-queue-errors';
+import { ProviderQueueUserDeletedOrDeletingError, ProviderQueueUserNotConnectedError } from './queue/provider-queue-errors';
+import { getUserDeletionGuardState, UserDeletionGuardReadError } from './shared/user-deletion-guard';
 
-export { ProviderQueueUserNotConnectedError, isProviderQueueUserNotConnectedError } from './queue/provider-queue-errors';
+export {
+  ProviderQueueUserDeletedOrDeletingError,
+  ProviderQueueUserNotConnectedError,
+  isProviderQueueSkippedWithoutRetryError,
+  isProviderQueueUserDeletedOrDeletingError,
+  isProviderQueueUserNotConnectedError,
+} from './queue/provider-queue-errors';
 
 async function enqueueActivitySyncBestEffort(
   parentID: string,
@@ -143,9 +150,19 @@ async function attachFirebaseUserIDToQueueItem<T extends SuuntoAppWorkoutQueueIt
   serviceName: ServiceNames,
 ): Promise<T> {
   const firebaseUserID = await resolveFirebaseUserIDForQueueItem(serviceName, queueItem);
+  const providerUserID = getProviderUserIDForQueueItem(serviceName, queueItem)?.value.trim() || 'unknown';
   if (!firebaseUserID) {
-    const providerUserID = getProviderUserIDForQueueItem(serviceName, queueItem)?.value.trim() || 'unknown';
     throw new ProviderQueueUserNotConnectedError(serviceName, providerUserID, queueItem.id);
+  }
+  let deletionGuard;
+  try {
+    deletionGuard = await getUserDeletionGuardState(admin.firestore(), firebaseUserID);
+  } catch (error) {
+    throw new UserDeletionGuardReadError(firebaseUserID, `provider_workout_queue:${serviceName}`, error);
+  }
+  if (deletionGuard.shouldSkip) {
+    logger.warn(`Skipping ${serviceName} queue item ${queueItem.id} for provider user ${providerUserID} because Firebase user ${firebaseUserID} is missing or deletion is in progress.`);
+    throw new ProviderQueueUserDeletedOrDeletingError(serviceName, firebaseUserID, providerUserID, queueItem.id);
   }
   return {
     ...queueItem,
