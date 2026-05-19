@@ -6,6 +6,7 @@ const hoisted = vi.hoisted(() => ({
     collectionGroup: vi.fn(),
     collection: vi.fn(),
     collectionGroupGet: vi.fn(),
+    metaDocGet: vi.fn(),
 }));
 
 vi.mock('firebase-functions/v2/scheduler', () => ({
@@ -31,10 +32,12 @@ vi.mock('./queue', () => ({
 
 import { sleepPollingTestInternals } from './polling';
 import { addSleepSyncQueueItem } from './queue';
+import * as logger from 'firebase-functions/logger';
 
 describe('sleep polling', () => {
     afterEach(() => {
         vi.clearAllMocks();
+        hoisted.metaDocGet.mockResolvedValue({ exists: false, data: () => undefined });
     });
 
     function createTokenDoc(userID: string, data: Record<string, unknown>) {
@@ -55,6 +58,20 @@ describe('sleep polling', () => {
         hoisted.collectionGroup.mockReturnValue({
             where: vi.fn().mockReturnThis(),
             get: hoisted.collectionGroupGet,
+        });
+        hoisted.collection.mockImplementation((name: string) => {
+            if (name !== 'users') {
+                return undefined;
+            }
+            return {
+                doc: vi.fn(() => ({
+                    collection: vi.fn(() => ({
+                        doc: vi.fn(() => ({
+                            get: hoisted.metaDocGet,
+                        })),
+                    })),
+                })),
+            };
         });
     }
 
@@ -102,12 +119,68 @@ describe('sleep polling', () => {
 
         expect(queued).toBe(1);
         expect(hoisted.collectionGroup).toHaveBeenCalledWith('tokens');
-        expect(hoisted.collection).not.toHaveBeenCalled();
+        expect(hoisted.collection).toHaveBeenCalledWith('users');
         expect(addSleepSyncQueueItem).toHaveBeenCalledWith(expect.objectContaining({
             type: 'suunto_poll',
             provider: SLEEP_PROVIDERS.SuuntoApp,
             userID,
             providerUserId: 'suunto-user-1',
         }));
+    });
+
+    it('skips users marked reconnect_required in service meta', async () => {
+        const userID = 'suunto-user-id';
+        const nowMs = Date.UTC(2026, 3, 28);
+        installCollectionGroupTokenMock([
+            createTokenDoc(userID, {
+                serviceName: ServiceNames.SuuntoApp,
+                userName: 'suunto-user-1',
+            }),
+        ]);
+        hoisted.metaDocGet.mockResolvedValue({
+            exists: true,
+            data: () => ({ connectionState: 'reconnect_required' }),
+        });
+
+        const queued = await sleepPollingTestInternals.enqueueProviderPolls(
+            SLEEP_PROVIDERS.SuuntoApp,
+            ServiceNames.SuuntoApp,
+            28,
+            nowMs,
+        );
+
+        expect(queued).toBe(0);
+        expect(addSleepSyncQueueItem).not.toHaveBeenCalled();
+    });
+
+    it('continues polling when reconnect state lookup fails for one user', async () => {
+        const nowMs = Date.UTC(2026, 3, 28);
+        installCollectionGroupTokenMock([
+            createTokenDoc('suunto-user-id-1', {
+                serviceName: ServiceNames.SuuntoApp,
+                userName: 'suunto-user-1',
+            }),
+            createTokenDoc('suunto-user-id-2', {
+                serviceName: ServiceNames.SuuntoApp,
+                userName: 'suunto-user-2',
+            }),
+        ]);
+        hoisted.metaDocGet
+            .mockRejectedValueOnce(new Error('meta read failed'))
+            .mockResolvedValueOnce({ exists: false, data: () => undefined });
+
+        const queued = await sleepPollingTestInternals.enqueueProviderPolls(
+            SLEEP_PROVIDERS.SuuntoApp,
+            ServiceNames.SuuntoApp,
+            28,
+            nowMs,
+        );
+
+        expect(queued).toBe(2);
+        expect(addSleepSyncQueueItem).toHaveBeenCalledTimes(2);
+        expect(logger.warn).toHaveBeenCalledWith(
+            '[SleepSync][SuuntoApp] Failed to read reconnect state for user suunto-user-id-1 and service suuntoApp; continuing sleep polling.',
+            expect.any(Error),
+        );
     });
 });

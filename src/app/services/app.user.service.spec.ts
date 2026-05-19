@@ -403,6 +403,28 @@ describe('AppUserService', () => {
         expect(service.getUserChartDataTypesToUse(user)).toEqual(expectedOrderedDataTypes);
     });
 
+    it('builds the shared Suunto connection view from tokens and service meta', async () => {
+        service = TestBed.inject(AppUserService);
+        const user = { uid: 'u1' } as any;
+
+        (collectionData as any).mockReturnValueOnce(of([{ accessToken: 'token' }]));
+        (docData as any).mockReturnValueOnce(of({
+            connectionState: 'reconnect_required',
+            lastDisconnectedAt: 123,
+            lastAuthFailureMessage: 'invalid_grant',
+        }));
+
+        const result = await firstValueFrom(service.watchSuuntoServiceConnectionView(user).pipe(take(1)));
+
+        expect(result).toMatchObject({
+            connected: true,
+            reconnectRequired: true,
+            failureMessage: 'invalid_grant',
+            connectButtonLabel: 'Reconnect',
+            reconnectPromptSource: 'suunto-reconnect-required:123',
+        });
+    });
+
     describe('createOrUpdateUser policy flow', () => {
         beforeEach(() => {
             service = TestBed.inject(AppUserService);

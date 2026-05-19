@@ -4,7 +4,7 @@ import * as functions from 'firebase-functions/v1';
 import * as logger from 'firebase-functions/logger';
 import { hasProAccess, PRO_REQUIRED_MESSAGE } from '../../utils';
 import {
-  deauthorizeServiceForUser,
+  disconnectServiceForUser,
   getAndSetServiceOAuth2AccessTokenForUser,
   getServiceOAuth2CodeRedirectAndSaveStateToUser,
   validateOAuth2State,
@@ -130,7 +130,7 @@ export const deauthorizeCOROSAPI = functions
     const userID = context.auth.uid;
 
     try {
-      await deauthorizeServiceForUser(userID, SERVICE_NAME);
+      await disconnectServiceForUser(userID, SERVICE_NAME);
     } catch (e: any) {
       logger.error(e);
       throw new functions.https.HttpsError('internal', 'Deauthorization Error');

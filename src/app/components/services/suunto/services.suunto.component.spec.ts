@@ -162,6 +162,26 @@ describe('ServicesSuuntoComponent', () => {
         expect(fixture.nativeElement.querySelector('.service-connection-status__actions .connection-disconnect-button')).toBeFalsy();
     });
 
+    it('renders reconnect-required state when Suunto must be reconnected', () => {
+        component.hasProAccess = true;
+        component.serviceTokens = [];
+        component.serviceMeta = {
+            connectionState: 'reconnect_required',
+            lastAuthFailureMessage: 'User no longer active/connected with the partner',
+        } as any;
+        fixture.detectChanges();
+
+        const content = fixture.nativeElement.textContent;
+        const banner = fixture.nativeElement.querySelector('.reconnect-required-banner');
+
+        expect(content).toContain('Reconnect required');
+        expect(content).toContain('Suunto needs to be reconnected');
+        expect(content).toContain('User no longer active/connected with the partner');
+        expect(fixture.nativeElement.querySelector('.service-connection-status--attention')).toBeTruthy();
+        expect(banner).toBeTruthy();
+        expect(fixture.nativeElement.querySelector('.qs-mat-primary')?.textContent).toContain('Reconnect');
+    });
+
     describe('History Import Tab', () => {
         it('should be unlocked/available if user has pro access AND is connected', () => {
             component.hasProAccess = true;
@@ -177,6 +197,22 @@ describe('ServicesSuuntoComponent', () => {
         it('should show connect message if user has pro access but is NOT connected', () => {
             component.hasProAccess = true;
             component.serviceTokens = []; // Not connected
+            fixture.detectChanges();
+
+            const historyForm = fixture.nativeElement.querySelector('app-history-import-form');
+            const content = fixture.nativeElement.textContent;
+
+            expect(historyForm).toBeFalsy();
+            expect(content).toContain('before importing history');
+        });
+
+        it('should keep history import locked when reconnect is required even if a stale token remains', () => {
+            component.hasProAccess = true;
+            component.serviceTokens = [{ accessToken: 'stale-token' } as any];
+            component.serviceMeta = {
+                connectionState: 'reconnect_required',
+                lastAuthFailureMessage: 'Reconnect before importing history.',
+            } as any;
             fixture.detectChanges();
 
             const historyForm = fixture.nativeElement.querySelector('app-history-import-form');
@@ -208,6 +244,23 @@ describe('ServicesSuuntoComponent', () => {
 
             expect(fixture.nativeElement.querySelector('app-upload-activity-to-service')).toBeTruthy();
             expect(fixture.nativeElement.querySelector('app-upload-route-to-service')).toBeTruthy();
+        });
+
+        it('should hide upload actions when reconnect is required even if a stale token remains', () => {
+            component.hasProAccess = true;
+            component.serviceTokens = [{ accessToken: 'stale-token' } as any];
+            component.serviceMeta = {
+                connectionState: 'reconnect_required',
+                lastAuthFailureMessage: 'Reconnect before uploading.',
+            } as any;
+            fixture.detectChanges();
+
+            const content = fixture.nativeElement.textContent;
+
+            expect(fixture.nativeElement.querySelector('app-upload-activity-to-service')).toBeFalsy();
+            expect(fixture.nativeElement.querySelector('app-upload-route-to-service')).toBeFalsy();
+            expect(content).toContain('before uploading activities');
+            expect(content).toContain('before uploading routes');
         });
     });
 

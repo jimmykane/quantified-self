@@ -31,7 +31,7 @@ vi.mock('../../utils', async (importOriginal) => {
 });
 
 vi.mock('../../OAuth2', () => ({
-    deauthorizeServiceForUser: vi.fn().mockResolvedValue({}),
+    disconnectServiceForUser: vi.fn().mockResolvedValue({}),
     getAndSetServiceOAuth2AccessTokenForUser: vi.fn().mockResolvedValue({}),
     getServiceOAuth2CodeRedirectAndSaveStateToUser: vi.fn().mockResolvedValue('https://mock-redirect.com'),
     validateOAuth2State: vi.fn().mockResolvedValue(true)
@@ -175,7 +175,7 @@ describe('Suunto Auth Wrapper', () => {
 
             const result = await deauthorizeSuuntoApp(request as any);
 
-            expect(oauth2.deauthorizeServiceForUser).toHaveBeenCalledWith('testUserID', ServiceNames.SuuntoApp);
+            expect(oauth2.disconnectServiceForUser).toHaveBeenCalledWith('testUserID', ServiceNames.SuuntoApp);
             expect(result).toEqual({ result: 'Deauthorized' });
         });
 
@@ -190,7 +190,7 @@ describe('Suunto Auth Wrapper', () => {
         });
 
         it('should throw error on deauthorization failure', async () => {
-            (oauth2.deauthorizeServiceForUser as any).mockRejectedValue(new Error('API Error'));
+            (oauth2.disconnectServiceForUser as any).mockRejectedValue(new Error('API Error'));
             const request = createMockRequest({
                 data: {}
             });

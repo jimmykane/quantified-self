@@ -101,9 +101,33 @@ vi.mock('./writer', () => ({
     upsertSleepSessions: hoisted.upsertSleepSessions,
 }));
 
-vi.mock('../tokens', () => ({
-    getTokenData: hoisted.getTokenData,
-}));
+vi.mock('../tokens', () => {
+    class MockTerminalServiceAuthError extends Error {
+        readonly name = 'TerminalServiceAuthError';
+        readonly dlqContext: 'INVALID_GRANT' | 'AUTH_RECONNECT_REQUIRED';
+
+        constructor(
+            public readonly serviceName: ServiceNames,
+            public readonly firebaseUserID: string | null,
+            public readonly providerUserId: string,
+            public readonly statusCode: number | null,
+            public readonly providerErrorCode: string | null,
+            public readonly providerErrorMessage: string | null,
+            public readonly originalError: unknown,
+        ) {
+            super(`${serviceName} connection requires reconnect`);
+            const errorHint = `${providerErrorCode || ''} ${providerErrorMessage || ''}`.toLowerCase();
+            this.dlqContext = errorHint.includes('invalid_grant')
+                ? 'INVALID_GRANT'
+                : 'AUTH_RECONNECT_REQUIRED';
+        }
+    }
+
+    return {
+        getTokenData: hoisted.getTokenData,
+        TerminalServiceAuthError: MockTerminalServiceAuthError,
+    };
+});
 
 vi.mock('../request-helper', () => ({
     get: hoisted.requestGet,
@@ -118,6 +142,7 @@ vi.mock('../utils', async () => {
 });
 
 import { addSleepSyncQueueItem, processSleepSyncQueueItem } from './queue';
+import { TerminalServiceAuthError } from '../tokens';
 
 describe('sleep queue', () => {
     beforeEach(() => {
@@ -633,6 +658,71 @@ describe('sleep queue', () => {
             sessionsWritten: 1,
         }));
         expect(hoisted.batchSet).not.toHaveBeenCalled();
+    });
+
+    it('moves Suunto queue items to DLQ immediately on terminal invalid_grant without retrying', async () => {
+        hoisted.tokenRootGet.mockResolvedValue({
+            docs: [{
+                id: 'suunto-token-1',
+                data: () => ({
+                    userName: 'suunto-user-1',
+                    serviceName: 'SuuntoApp',
+                }),
+                ref: {
+                    parent: {
+                        parent: {
+                            id: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+                        },
+                    },
+                },
+            }],
+            empty: false,
+        });
+        hoisted.getTokenData.mockRejectedValueOnce(new TerminalServiceAuthError(
+            ServiceNames.SuuntoApp,
+            'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+            'suunto-user-1',
+            400,
+            'invalid_grant',
+            'User no longer active/connected with the partner',
+            new Error('400 invalid_grant'),
+        ));
+        const queueRef = {
+            parent: { id: 'sleepSyncQueue' },
+            update: vi.fn(),
+        };
+
+        const result = await processSleepSyncQueueItem({
+            id: 'suunto-sleep-invalid-grant',
+            dateCreated: 1_700_000_000_000,
+            dispatchedToCloudTask: 1_700_000_000_500,
+            processed: false,
+            provider: 'SuuntoApp',
+            userID: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+            providerUserId: 'suunto-user-1',
+            retryCount: 0,
+            type: 'suunto_poll',
+            rangeStartMs: 1_777_392_000_000,
+            rangeEndMs: 1_777_478_400_000,
+            ref: queueRef as any,
+        });
+
+        expect(result).toBe(QueueResult.MovedToDLQ);
+        expect(hoisted.markSleepSyncError).toHaveBeenCalledWith(
+            'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+            'SuuntoApp',
+            expect.objectContaining({
+                dlqContext: 'INVALID_GRANT',
+            }),
+        );
+        expect(hoisted.batchSet).toHaveBeenCalledWith(expect.objectContaining({
+            id: 'suunto-sleep-invalid-grant',
+        }), expect.objectContaining({
+            originalCollection: 'sleepSyncQueue',
+            context: 'INVALID_GRANT',
+        }));
+        expect(hoisted.batchDelete).toHaveBeenCalledWith(queueRef);
+        expect(queueRef.update).not.toHaveBeenCalled();
     });
 
     it('does not resolve another users token when an allowed queue item has mismatched provider user id', async () => {

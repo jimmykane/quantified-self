@@ -33,7 +33,7 @@ vi.mock('../../utils', () => ({
 }));
 
 vi.mock('../../OAuth2', () => ({
-    deauthorizeServiceForUser: vi.fn().mockResolvedValue({}),
+    disconnectServiceForUser: vi.fn().mockResolvedValue({}),
     getAndSetServiceOAuth2AccessTokenForUser: vi.fn().mockResolvedValue({}),
     getServiceOAuth2CodeRedirectAndSaveStateToUser: vi.fn().mockResolvedValue('https://mock-redirect.com'),
     validateOAuth2State: vi.fn().mockResolvedValue(true)
@@ -138,7 +138,7 @@ describe('COROS Auth Wrapper', () => {
         it('should call deauthorize and return result', async () => {
             const result = await deauthorizeCOROSAPI({}, context);
 
-            expect(oauth2.deauthorizeServiceForUser).toHaveBeenCalledWith('testUserID', SERVICE_NAME);
+            expect(oauth2.disconnectServiceForUser).toHaveBeenCalledWith('testUserID', SERVICE_NAME);
             expect(result).toEqual({ result: 'Deauthorized' });
         });
 
@@ -150,7 +150,7 @@ describe('COROS Auth Wrapper', () => {
         });
 
         it('should throw error on deauthorization failure', async () => {
-            (oauth2.deauthorizeServiceForUser as any).mockRejectedValue(new Error('API Error'));
+            (oauth2.disconnectServiceForUser as any).mockRejectedValue(new Error('API Error'));
 
             await expect(deauthorizeCOROSAPI({}, context))
                 .rejects.toThrow('Deauthorization Error');

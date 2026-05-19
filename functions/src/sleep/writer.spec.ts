@@ -5,6 +5,7 @@ const hoisted = vi.hoisted(() => ({
     docGet: vi.fn(),
     docSet: vi.fn(),
     docIds: [] as string[],
+    mockGetUserDeletionGuardState: vi.fn(),
 }));
 
 vi.mock('firebase-functions/logger', () => ({
@@ -15,6 +16,10 @@ vi.mock('firebase-functions/logger', () => ({
 
 vi.mock('../utils', () => ({
     generateIDFromParts: vi.fn(async (parts: string[]) => parts.join(':')),
+}));
+
+vi.mock('../shared/user-deletion-guard', () => ({
+    getUserDeletionGuardState: hoisted.mockGetUserDeletionGuardState,
 }));
 
 vi.mock('firebase-admin', () => {
@@ -37,7 +42,7 @@ vi.mock('firebase-admin', () => {
     };
 });
 
-import { upsertSleepSessions } from './writer';
+import { markSleepSyncError, updateSleepSyncState, upsertSleepSessions } from './writer';
 
 function buildExistingSuuntoSession(overrides: Partial<SleepSession> = {}): SleepSession {
     return {
@@ -73,6 +78,11 @@ describe('sleep writer', () => {
         hoisted.docIds.length = 0;
         hoisted.docGet.mockResolvedValue({ exists: false, data: () => undefined });
         hoisted.docSet.mockResolvedValue(undefined);
+        hoisted.mockGetUserDeletionGuardState.mockResolvedValue({
+            userExists: true,
+            deletionInProgress: false,
+            shouldSkip: false,
+        });
     });
 
     it('does not let a partial Suunto nap overwrite an existing fuller staged session', async () => {
@@ -147,5 +157,31 @@ describe('sleep writer', () => {
             createdAtMs: 1000,
             updatedAtMs: 3000,
         }), { merge: true });
+    });
+
+    it('does not recreate sleep sync state when user deletion is in progress', async () => {
+        hoisted.mockGetUserDeletionGuardState.mockResolvedValueOnce({
+            userExists: true,
+            deletionInProgress: true,
+            shouldSkip: true,
+        });
+
+        await updateSleepSyncState('user-1', SLEEP_PROVIDERS.SuuntoApp, {
+            lastError: 'ignored',
+        }, 3000);
+
+        expect(hoisted.docSet).not.toHaveBeenCalled();
+    });
+
+    it('does not recreate sleep sync error state for a missing user', async () => {
+        hoisted.mockGetUserDeletionGuardState.mockResolvedValueOnce({
+            userExists: false,
+            deletionInProgress: false,
+            shouldSkip: true,
+        });
+
+        await markSleepSyncError('user-1', SLEEP_PROVIDERS.SuuntoApp, new Error('should skip'), 3000);
+
+        expect(hoisted.docSet).not.toHaveBeenCalled();
     });
 });

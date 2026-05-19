@@ -10,6 +10,7 @@ import {
     SLEEP_SYNC_STATE_COLLECTION_ID,
     SLEEP_SYNC_STATUSES,
 } from '../../../shared/sleep';
+import { getUserDeletionGuardState } from '../shared/user-deletion-guard';
 import { generateIDFromParts } from '../utils';
 
 function userSleepSessionsRef(userID: string): admin.firestore.CollectionReference {
@@ -29,6 +30,18 @@ function userSleepSyncStateRef(userID: string, provider: SleepProvider): admin.f
 
 function cleanUndefined<T>(value: T): T {
     return JSON.parse(JSON.stringify(value)) as T;
+}
+
+async function shouldSkipSleepSyncStateWrite(userID: string, provider: SleepProvider): Promise<boolean> {
+    const deletionGuard = await getUserDeletionGuardState(admin.firestore(), userID);
+    if (!deletionGuard.shouldSkip) {
+        return false;
+    }
+
+    logger.warn(
+        `[SleepSync] Skipping ${provider} sleep sync state write for user ${userID} because the user is missing or deletion is in progress.`,
+    );
+    return true;
 }
 
 export async function buildSleepSessionDocumentId(userID: string, provider: SleepProvider, sourceSessionKey: string): Promise<string> {
@@ -135,6 +148,9 @@ export async function updateSleepSyncState(
     }>,
     nowMs = Date.now(),
 ): Promise<void> {
+    if (await shouldSkipSleepSyncStateWrite(userID, provider)) {
+        return;
+    }
     await userSleepSyncStateRef(userID, provider).set(cleanUndefined({
         provider,
         status: update.status || SLEEP_SYNC_STATUSES.Ready,

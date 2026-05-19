@@ -27,6 +27,8 @@ import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { BehaviorSubject } from 'rxjs';
 import { LoggerService } from '../../services/logger.service';
 import { ACTIVITY_SYNC_ROUTE_IDS } from '@shared/activity-sync-routes';
+import { AppWindowService } from '../../services/app.window.service';
+import { buildSuuntoServiceConnectionViewModel } from '../../helpers/suunto-service-connection.helper';
 
 describe('DashboardComponent', () => {
     let component: DashboardComponent;
@@ -78,6 +80,12 @@ describe('DashboardComponent', () => {
             shouldShowPromo: vi.fn().mockReturnValue(false),
             updateUserProperties: vi.fn().mockReturnValue(Promise.resolve()),
             updateActivitySyncRouteSettings: vi.fn().mockReturnValue(Promise.resolve()),
+            getCurrentUserServiceTokenAndRedirectURI: vi.fn().mockResolvedValue({ redirect_uri: 'https://suunto.example/connect' }),
+            getUserMetaForService: vi.fn().mockReturnValue(of(undefined)),
+            watchSuuntoServiceConnectionView: vi.fn().mockReturnValue(of(buildSuuntoServiceConnectionViewModel({
+                hasToken: false,
+                serviceMeta: null,
+            }))),
             watchHasAnyActivityServiceConnection: vi.fn().mockReturnValue(of(false)),
             watchActivityServiceConnectionState: vi.fn().mockReturnValue(of({
                 [ServiceNames.GarminAPI]: false,
@@ -116,7 +124,8 @@ describe('DashboardComponent', () => {
                 { provide: MatDialog, useValue: mockDialog },
                 { provide: MatSnackBar, useValue: mockSnackBar },
                 { provide: Analytics, useValue: null },
-                { provide: LoggerService, useValue: mockLogger }
+                { provide: LoggerService, useValue: mockLogger },
+                { provide: AppWindowService, useValue: { windowRef: { location: { href: '' } } } },
             ],
             schemas: [NO_ERRORS_SCHEMA]
         })
@@ -736,6 +745,92 @@ describe('DashboardComponent', () => {
             },
         );
         expect(component.dashboardActionPrompts.some(prompt => prompt.id === 'connectActivityService')).toBe(false);
+    });
+
+    it('shows the Suunto reconnect prompt when service meta requires reconnect', async () => {
+        mockUser.stripeRole = 'pro';
+        mockUser.settings.appSettings = {};
+        mockUserService.watchSuuntoServiceConnectionView.mockReturnValue(of(buildSuuntoServiceConnectionViewModel({
+            hasToken: false,
+            serviceMeta: {
+                connectionState: 'reconnect_required',
+                lastAuthFailureMessage: 'invalid_grant',
+            } as any,
+        })));
+
+        fixture.detectChanges();
+        await fixture.whenStable();
+
+        const prompt = component.dashboardActionPrompts.find(item => item.id === 'reconnectSuuntoService');
+        expect(prompt).toBeTruthy();
+        expect(prompt?.title).toContain('Reconnect Suunto');
+        expect(prompt?.primaryAction?.id).toBe('reconnectSuuntoService');
+    });
+
+    it('dismisses Suunto reconnect prompt and persists action prompt state', async () => {
+        mockUser.stripeRole = 'pro';
+        mockUser.settings.appSettings = {};
+        component.user = mockUser;
+        (component as any).suuntoConnectionView = buildSuuntoServiceConnectionViewModel({
+            hasToken: false,
+            serviceMeta: { connectionState: 'reconnect_required' } as any,
+        });
+        (component as any).syncDashboardActionPromptState();
+
+        await component.dismissReconnectSuuntoServicePrompt();
+
+        expect(mockUserService.updateUserProperties).toHaveBeenCalledWith(
+            mockUser,
+            {
+                settings: {
+                    appSettings: {
+                        dashboardActionPrompts: {
+                            reconnectSuuntoService: expect.objectContaining({
+                                state: 'dismissed',
+                                source: 'suunto-reconnect-required:unknown',
+                            }),
+                        },
+                    },
+                },
+            },
+        );
+        expect(component.dashboardActionPrompts.some(prompt => prompt.id === 'reconnectSuuntoService')).toBe(false);
+    });
+
+    it('shows the Suunto reconnect prompt again when a later disconnect incident has a new source timestamp', async () => {
+        mockUser.stripeRole = 'pro';
+        mockUser.settings.appSettings = {
+            dashboardActionPrompts: {
+                reconnectSuuntoService: {
+                    state: 'dismissed',
+                    source: 'suunto-reconnect-required:100',
+                },
+            },
+        } as any;
+        mockUserService.watchSuuntoServiceConnectionView.mockReturnValue(of(buildSuuntoServiceConnectionViewModel({
+            hasToken: false,
+            serviceMeta: {
+                connectionState: 'reconnect_required',
+                lastDisconnectedAt: 200,
+                lastAuthFailureMessage: 'invalid_grant',
+            } as any,
+        })));
+
+        fixture.detectChanges();
+        await fixture.whenStable();
+
+        expect(component.dashboardActionPrompts.some(prompt => prompt.id === 'reconnectSuuntoService')).toBe(true);
+    });
+
+    it('starts the Suunto reconnect flow from the dashboard prompt', async () => {
+        mockUser.stripeRole = 'pro';
+        component.user = mockUser;
+        const windowService = TestBed.inject(AppWindowService) as any;
+
+        await component.reconnectSuuntoServicePrompt();
+
+        expect(mockUserService.getCurrentUserServiceTokenAndRedirectURI).toHaveBeenCalledWith(ServiceNames.SuuntoApp);
+        expect(windowService.windowRef.location.href).toBe('https://suunto.example/connect');
     });
 
     it('should attach initial live query when resolver already returned user data', async () => {
