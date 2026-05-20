@@ -153,6 +153,8 @@ interface ProviderQueueLookup {
     providerUserID: string;
 }
 
+type OperationalDocDeleteFilter = (doc: admin.firestore.QueryDocumentSnapshot) => Promise<boolean>;
+
 function asNonEmptyString(value: unknown): string | null {
     const normalized = `${value || ''}`.trim();
     return normalized.length > 0 ? normalized : null;
@@ -344,6 +346,7 @@ async function recursiveDeleteQueryResults(
     fieldName: string,
     values: Iterable<string>,
     deletedRefKeys: Set<string>,
+    shouldDeleteDoc?: OperationalDocDeleteFilter,
 ): Promise<void> {
     for (const value of new Set([...values].map((candidate) => `${candidate || ''}`.trim()).filter(Boolean))) {
         try {
@@ -352,6 +355,9 @@ async function recursiveDeleteQueryResults(
             for (const doc of docs) {
                 const refKey = getRefDeduplicationKey(doc.ref);
                 if (deletedRefKeys.has(refKey)) {
+                    continue;
+                }
+                if (shouldDeleteDoc && !(await shouldDeleteDoc(doc))) {
                     continue;
                 }
                 deletedRefKeys.add(refKey);
@@ -480,32 +486,52 @@ function providerQueueLookupFromLegacyFailedJobData(data: Record<string, unknown
             : null);
 }
 
-function hasFirebaseUidAssociation(collectionName: string, data: Record<string, unknown>): boolean {
-    if (asNonEmptyString(data.firebaseUserID) || asNonEmptyString(data.uid)) {
-        return true;
+function getExplicitFirebaseUidAssociation(collectionName: string, data: Record<string, unknown>): string | null {
+    const firebaseUserID = asNonEmptyString(data.firebaseUserID);
+    if (firebaseUserID) {
+        return firebaseUserID;
+    }
+
+    const uid = asNonEmptyString(data.uid);
+    if (uid) {
+        return uid;
     }
 
     if (collectionName === ACTIVITY_SYNC_QUEUE_COLLECTION_NAME || collectionName === SLEEP_SYNC_QUEUE_COLLECTION_NAME) {
-        return Boolean(asNonEmptyString(data.userID));
+        return asNonEmptyString(data.userID);
     }
 
     if (collectionName !== 'failed_jobs') {
-        return false;
+        return null;
     }
 
     const originalCollection = asNonEmptyString(data.originalCollection);
     if (originalCollection === ACTIVITY_SYNC_QUEUE_COLLECTION_NAME || originalCollection === SLEEP_SYNC_QUEUE_COLLECTION_NAME) {
-        return Boolean(asNonEmptyString(data.userID));
+        return asNonEmptyString(data.userID);
     }
 
-    return false;
+    return null;
 }
 
-async function hasConnectedTokenForProviderLookup(db: admin.firestore.Firestore, lookup: ProviderQueueLookup): Promise<boolean> {
+function hasFirebaseUidAssociation(collectionName: string, data: Record<string, unknown>): boolean {
+    return getExplicitFirebaseUidAssociation(collectionName, data) !== null;
+}
+
+async function hasConnectedTokenForProviderLookup(
+    db: admin.firestore.Firestore,
+    lookup: ProviderQueueLookup,
+    excludedUid?: string,
+): Promise<boolean> {
     const snapshot = await db.collectionGroup('tokens')
         .where(lookup.tokenField, '==', lookup.providerUserID)
         .get();
-    return getSnapshotDocs(snapshot).some((doc) => tokenSnapshotBelongsToService(doc, lookup.serviceName));
+    return getSnapshotDocs(snapshot).some((doc) => {
+        if (!tokenSnapshotBelongsToService(doc, lookup.serviceName)) {
+            return false;
+        }
+        const tokenOwnerUid = doc.ref.parent.parent?.id;
+        return !excludedUid || tokenOwnerUid !== excludedUid;
+    });
 }
 
 function serviceTokenCollectionNameForService(serviceName: ServiceNames): string {
@@ -523,8 +549,42 @@ function tokenSnapshotBelongsToService(doc: admin.firestore.QueryDocumentSnapsho
     return tokenRootCollectionName === serviceTokenCollectionNameForService(serviceName);
 }
 
+function providerLookupBelongsToUserIdentifiers(lookup: ProviderQueueLookup, identifiers: UserProviderIdentifiers): boolean {
+    switch (lookup.serviceName) {
+        case ServiceNames.SuuntoApp:
+            return identifiers.suuntoUserNames.has(lookup.providerUserID);
+        case ServiceNames.COROSAPI:
+            return identifiers.corosOpenIds.has(lookup.providerUserID);
+        case ServiceNames.GarminAPI:
+            return identifiers.garminUserIDs.has(lookup.providerUserID);
+        default:
+            return false;
+    }
+}
+
+async function shouldDeleteProviderKeyedOperationalDoc(
+    db: admin.firestore.Firestore,
+    uid: string,
+    collectionName: string,
+    doc: admin.firestore.QueryDocumentSnapshot,
+): Promise<boolean> {
+    const data = doc.data() as Record<string, unknown>;
+    const explicitUid = getExplicitFirebaseUidAssociation(collectionName, data);
+    if (explicitUid) {
+        return explicitUid === uid;
+    }
+
+    const lookup = providerQueueLookupFromCollectionData(collectionName, data);
+    if (!lookup) {
+        return false;
+    }
+
+    return !(await hasConnectedTokenForProviderLookup(db, lookup, uid));
+}
+
 async function cleanupLegacyProviderKeyedQueueOrphans(
     uid: string,
+    identifiers: UserProviderIdentifiers,
     deletedRefKeys: Set<string>,
 ): Promise<void> {
     const db = admin.firestore();
@@ -553,7 +613,11 @@ async function cleanupLegacyProviderKeyedQueueOrphans(
                 }
 
                 const lookup = providerQueueLookupFromCollectionData(collectionName, data);
-                if (!lookup || await hasConnectedTokenForProviderLookup(db, lookup)) {
+                if (
+                    !lookup
+                    || !providerLookupBelongsToUserIdentifiers(lookup, identifiers)
+                    || await hasConnectedTokenForProviderLookup(db, lookup, uid)
+                ) {
                     continue;
                 }
 
@@ -685,7 +749,11 @@ async function collectProviderIdentifiersFromUidKeyedQueueState(
         'failed_jobs',
         'userID',
         firebaseUIDValues,
-        (data) => addProviderIdentifiersFromFailedJobData(identifiers, data),
+        (data) => {
+            if (getExplicitFirebaseUidAssociation('failed_jobs', data) === uid) {
+                addProviderIdentifiersFromFailedJobData(identifiers, data);
+            }
+        },
     );
     await collectProviderIdentifiersFromQueueQuery(
         db,
@@ -710,29 +778,32 @@ async function cleanupTopLevelQueueState(uid: string, identifiers: UserProviderI
     const deletedRefKeys = new Set<string>();
     const firebaseUIDValues = [uid];
     await collectProviderIdentifiersFromUidKeyedQueueState(db, uid, identifiers);
-    const suuntoValues = [uid, ...identifiers.suuntoUserNames];
-    const corosValues = [uid, ...identifiers.corosOpenIds];
-    const garminValues = [uid, ...identifiers.garminUserIDs];
+    const suuntoValues = [...identifiers.suuntoUserNames];
+    const corosValues = [...identifiers.corosOpenIds];
+    const garminValues = [...identifiers.garminUserIDs];
     const providerValues = [...suuntoValues, ...corosValues, ...garminValues];
+    const providerKeyedDeleteFilter = (collectionName: string): OperationalDocDeleteFilter =>
+        (doc) => shouldDeleteProviderKeyedOperationalDoc(db, uid, collectionName, doc);
 
     await recursiveDeleteQueryResults(db, uid, 'activity sync queue', ACTIVITY_SYNC_QUEUE_COLLECTION_NAME, 'userID', firebaseUIDValues, deletedRefKeys);
     await recursiveDeleteQueryResults(db, uid, 'activity sync queue', ACTIVITY_SYNC_QUEUE_COLLECTION_NAME, 'firebaseUserID', firebaseUIDValues, deletedRefKeys);
     await recursiveDeleteQueryResults(db, uid, 'sleep sync queue', SLEEP_SYNC_QUEUE_COLLECTION_NAME, 'userID', firebaseUIDValues, deletedRefKeys);
     await recursiveDeleteQueryResults(db, uid, 'sleep sync queue', SLEEP_SYNC_QUEUE_COLLECTION_NAME, 'firebaseUserID', firebaseUIDValues, deletedRefKeys);
-    await recursiveDeleteQueryResults(db, uid, 'sleep sync queue', SLEEP_SYNC_QUEUE_COLLECTION_NAME, 'providerUserId', providerValues, deletedRefKeys);
+    await recursiveDeleteQueryResults(db, uid, 'sleep sync queue', SLEEP_SYNC_QUEUE_COLLECTION_NAME, 'providerUserId', providerValues, deletedRefKeys, providerKeyedDeleteFilter(SLEEP_SYNC_QUEUE_COLLECTION_NAME));
     await recursiveDeleteQueryResults(db, uid, 'Suunto workout queue', SUUNTOAPP_WORKOUT_QUEUE_COLLECTION_NAME, 'firebaseUserID', firebaseUIDValues, deletedRefKeys);
-    await recursiveDeleteQueryResults(db, uid, 'Suunto workout queue', SUUNTOAPP_WORKOUT_QUEUE_COLLECTION_NAME, 'userName', suuntoValues, deletedRefKeys);
+    await recursiveDeleteQueryResults(db, uid, 'Suunto workout queue', SUUNTOAPP_WORKOUT_QUEUE_COLLECTION_NAME, 'userName', suuntoValues, deletedRefKeys, providerKeyedDeleteFilter(SUUNTOAPP_WORKOUT_QUEUE_COLLECTION_NAME));
     await recursiveDeleteQueryResults(db, uid, 'COROS workout queue', COROSAPI_WORKOUT_QUEUE_COLLECTION_NAME, 'firebaseUserID', firebaseUIDValues, deletedRefKeys);
-    await recursiveDeleteQueryResults(db, uid, 'COROS workout queue', COROSAPI_WORKOUT_QUEUE_COLLECTION_NAME, 'openId', corosValues, deletedRefKeys);
+    await recursiveDeleteQueryResults(db, uid, 'COROS workout queue', COROSAPI_WORKOUT_QUEUE_COLLECTION_NAME, 'openId', corosValues, deletedRefKeys, providerKeyedDeleteFilter(COROSAPI_WORKOUT_QUEUE_COLLECTION_NAME));
     await recursiveDeleteQueryResults(db, uid, 'Garmin workout queue', GARMIN_API_WORKOUT_QUEUE_COLLECTION_NAME, 'firebaseUserID', firebaseUIDValues, deletedRefKeys);
-    await recursiveDeleteQueryResults(db, uid, 'Garmin workout queue', GARMIN_API_WORKOUT_QUEUE_COLLECTION_NAME, 'userID', garminValues, deletedRefKeys);
-    await recursiveDeleteQueryResults(db, uid, 'failed job', 'failed_jobs', 'userID', [...firebaseUIDValues, ...providerValues], deletedRefKeys);
+    await recursiveDeleteQueryResults(db, uid, 'Garmin workout queue', GARMIN_API_WORKOUT_QUEUE_COLLECTION_NAME, 'userID', garminValues, deletedRefKeys, providerKeyedDeleteFilter(GARMIN_API_WORKOUT_QUEUE_COLLECTION_NAME));
+    await recursiveDeleteQueryResults(db, uid, 'failed job', 'failed_jobs', 'userID', firebaseUIDValues, deletedRefKeys, providerKeyedDeleteFilter('failed_jobs'));
+    await recursiveDeleteQueryResults(db, uid, 'failed job', 'failed_jobs', 'userID', garminValues, deletedRefKeys, providerKeyedDeleteFilter('failed_jobs'));
     await recursiveDeleteQueryResults(db, uid, 'failed job', 'failed_jobs', 'firebaseUserID', firebaseUIDValues, deletedRefKeys);
     await recursiveDeleteQueryResults(db, uid, 'failed job', 'failed_jobs', 'uid', firebaseUIDValues, deletedRefKeys);
-    await recursiveDeleteQueryResults(db, uid, 'failed job', 'failed_jobs', 'providerUserId', providerValues, deletedRefKeys);
-    await recursiveDeleteQueryResults(db, uid, 'failed job', 'failed_jobs', 'userName', suuntoValues, deletedRefKeys);
-    await recursiveDeleteQueryResults(db, uid, 'failed job', 'failed_jobs', 'openId', corosValues, deletedRefKeys);
-    await cleanupLegacyProviderKeyedQueueOrphans(uid, deletedRefKeys);
+    await recursiveDeleteQueryResults(db, uid, 'failed job', 'failed_jobs', 'providerUserId', providerValues, deletedRefKeys, providerKeyedDeleteFilter('failed_jobs'));
+    await recursiveDeleteQueryResults(db, uid, 'failed job', 'failed_jobs', 'userName', suuntoValues, deletedRefKeys, providerKeyedDeleteFilter('failed_jobs'));
+    await recursiveDeleteQueryResults(db, uid, 'failed job', 'failed_jobs', 'openId', corosValues, deletedRefKeys, providerKeyedDeleteFilter('failed_jobs'));
+    await cleanupLegacyProviderKeyedQueueOrphans(uid, identifiers, deletedRefKeys);
 
     logger.info(`[Cleanup] Completed top-level queue state cleanup for user ${uid}`);
 }

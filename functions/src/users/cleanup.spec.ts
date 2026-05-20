@@ -730,7 +730,16 @@ describe('cleanupUserAccounts', () => {
                     ? { docs: [{ id: 'provider-job-1', ref: { path: 'suuntoAppWorkoutQueue/provider-job-1' }, data: () => ({}) }] }
                     :
                 field === 'providerUserId' && value === 'suunto-provider-user'
-                    ? { docs: [{ id: 'sleep-job-1', ref: { path: 'sleepSyncQueue/sleep-job-1' }, data: () => ({}) }] }
+                    ? {
+                        docs: [{
+                            id: 'sleep-job-1',
+                            ref: { path: 'sleepSyncQueue/sleep-job-1' },
+                            data: () => ({
+                                provider: 'SuuntoApp',
+                                providerUserId: 'suunto-provider-user',
+                            }),
+                        }]
+                    }
                     : field === 'userID' && value === 'testUser123'
                         ? { docs: [{ id: 'activity-job-1', ref: { path: 'activitySyncQueue/activity-job-1' }, data: () => ({}) }] }
                         : { docs: [] }
@@ -788,7 +797,9 @@ describe('cleanupUserAccounts', () => {
                             docs: [{
                                 id: 'legacy-garmin-job',
                                 ref: { path: 'garminAPIActivityQueue/legacy-garmin-job' },
-                                data: () => ({}),
+                                data: () => ({
+                                    userID: 'archived-garmin-user',
+                                }),
                             }],
                         }
                         : { docs: [] }
@@ -827,7 +838,10 @@ describe('cleanupUserAccounts', () => {
                             docs: [{
                                 id: 'provider-only-sleep-job',
                                 ref: { path: 'sleepSyncQueue/provider-only-sleep-job' },
-                                data: () => ({}),
+                                data: () => ({
+                                    provider: 'SuuntoApp',
+                                    providerUserId: 'suunto-provider-from-queue',
+                                }),
                             }],
                         }
                         : { docs: [] }
@@ -843,12 +857,27 @@ describe('cleanupUserAccounts', () => {
         }));
     });
 
-    it('should remove legacy provider-keyed orphan queue and DLQ docs even when token docs are already gone', async () => {
+    it('should remove legacy provider-keyed orphan queue and DLQ docs for recovered provider identifiers', async () => {
         const wrapped = cleanupUserAccounts;
         const user = testEnv.auth.makeUserRecord({ uid: 'testUser123' });
 
         tokensGetMock.mockResolvedValue({ empty: true, size: 0, docs: [] });
-        whereMock.mockReturnValue({ get: vi.fn().mockResolvedValue({ docs: [] }) });
+        whereMock.mockImplementation((field: string, _operator: string, value: string) => ({
+            get: vi.fn().mockResolvedValue(
+                field === 'uid' && value === 'testUser123'
+                    ? {
+                        docs: [{
+                            id: 'archived-suunto-token',
+                            ref: { path: `${ORPHANED_SERVICE_TOKENS_COLLECTION_NAME}/archived-suunto-token` },
+                            data: () => ({
+                                serviceName: ServiceNames.SuuntoApp,
+                                token: { userName: 'legacy-suunto-provider' },
+                            }),
+                        }],
+                    }
+                    : { docs: [] }
+            )
+        }));
         limitGetMock
             .mockResolvedValueOnce({
                 docs: [{
@@ -897,6 +926,148 @@ describe('cleanupUserAccounts', () => {
         );
     });
 
+    it('should not remove unassociated provider-keyed orphan queue docs during another user cleanup', async () => {
+        const wrapped = cleanupUserAccounts;
+        const user = testEnv.auth.makeUserRecord({ uid: 'testUser123' });
+
+        tokensGetMock.mockResolvedValue({ empty: true, size: 0, docs: [] });
+        whereMock.mockReturnValue({ get: vi.fn().mockResolvedValue({ docs: [] }) });
+        limitGetMock
+            .mockResolvedValueOnce({
+                docs: [{
+                    id: 'unassociated-provider-only-sleep',
+                    ref: { path: 'sleepSyncQueue/unassociated-provider-only-sleep' },
+                    data: () => ({
+                        provider: 'SuuntoApp',
+                        providerUserId: 'other-users-provider-id',
+                    }),
+                }],
+            })
+            .mockResolvedValue({ docs: [] });
+
+        await wrapped(user, { eventId: 'eventId' } as unknown as functions.EventContext);
+
+        expect(collectionGroupMock).not.toHaveBeenCalled();
+        expect(recursiveDeleteMock).not.toHaveBeenCalledWith(expect.objectContaining({
+            path: 'sleepSyncQueue/unassociated-provider-only-sleep',
+        }));
+        expect(markQueueItemDeletedForUserCleanupMock).not.toHaveBeenCalledWith(
+            'sleepSyncQueue',
+            'unassociated-provider-only-sleep',
+            'account_deletion_cleanup',
+        );
+    });
+
+    it('should not treat the Firebase uid as a provider identifier fallback', async () => {
+        const wrapped = cleanupUserAccounts;
+        const user = testEnv.auth.makeUserRecord({ uid: 'testUser123' });
+
+        tokensGetMock.mockResolvedValue({ empty: true, size: 0, docs: [] });
+        whereMock.mockImplementation((field: string, _operator: string, value: string) => ({
+            get: vi.fn().mockResolvedValue(
+                field === 'userName' && value === 'testUser123'
+                    ? {
+                        docs: [{
+                            id: 'provider-id-equals-firebase-uid',
+                            ref: { path: 'suuntoAppWorkoutQueue/provider-id-equals-firebase-uid' },
+                            data: () => ({
+                                userName: 'testUser123',
+                            }),
+                        }],
+                    }
+                    : { docs: [] }
+            )
+        }));
+
+        await wrapped(user, { eventId: 'eventId' } as unknown as functions.EventContext);
+
+        expect(whereMock).not.toHaveBeenCalledWith('userName', '==', 'testUser123');
+        expect(whereMock).not.toHaveBeenCalledWith('openId', '==', 'testUser123');
+        expect(recursiveDeleteMock).not.toHaveBeenCalledWith(expect.objectContaining({
+            path: 'suuntoAppWorkoutQueue/provider-id-equals-firebase-uid',
+        }));
+    });
+
+    it('should not recover Garmin provider identifiers from failed_jobs userID collisions', async () => {
+        const wrapped = cleanupUserAccounts;
+        const user = testEnv.auth.makeUserRecord({ uid: 'testUser123' });
+        let userIdUidQueryCount = 0;
+
+        tokensGetMock.mockResolvedValue({ empty: true, size: 0, docs: [] });
+        whereMock.mockImplementation((field: string, _operator: string, value: string) => ({
+            get: vi.fn().mockResolvedValue(
+                field === 'userID' && value === 'testUser123' && ++userIdUidQueryCount === 2
+                    ? {
+                        docs: [{
+                            id: 'garmin-provider-id-equals-firebase-uid',
+                            ref: { path: 'failed_jobs/garmin-provider-id-equals-firebase-uid' },
+                            data: () => ({
+                                originalCollection: 'garminAPIActivityQueue',
+                                userID: 'testUser123',
+                                activityFileID: 'activity-file-1',
+                            }),
+                        }],
+                    }
+                    : { docs: [] }
+            )
+        }));
+
+        await wrapped(user, { eventId: 'eventId' } as unknown as functions.EventContext);
+
+        expect(whereMock.mock.calls.filter(([field, _operator, value]) => (
+            field === 'userID' && value === 'testUser123'
+        ))).toHaveLength(5);
+        expect(recursiveDeleteMock).not.toHaveBeenCalledWith(expect.objectContaining({
+            path: 'garminAPIActivityQueue/garmin-provider-id-equals-firebase-uid',
+        }));
+    });
+
+    it('should not remove provider-keyed queue docs explicitly owned by another Firebase user', async () => {
+        const wrapped = cleanupUserAccounts;
+        const user = testEnv.auth.makeUserRecord({ uid: 'testUser123' });
+
+        tokensGetMock.mockResolvedValue({ empty: true, size: 0, docs: [] });
+        whereMock.mockImplementation((field: string, _operator: string, value: string) => ({
+            get: vi.fn().mockResolvedValue(
+                field === 'uid' && value === 'testUser123'
+                    ? {
+                        docs: [{
+                            id: 'archived-suunto-token',
+                            ref: { path: `${ORPHANED_SERVICE_TOKENS_COLLECTION_NAME}/archived-suunto-token` },
+                            data: () => ({
+                                serviceName: ServiceNames.SuuntoApp,
+                                token: { userName: 'shared-suunto-provider' },
+                            }),
+                        }],
+                    }
+                    : field === 'userName' && value === 'shared-suunto-provider'
+                        ? {
+                            docs: [{
+                                id: 'other-user-provider-job',
+                                ref: { path: 'suuntoAppWorkoutQueue/other-user-provider-job' },
+                                data: () => ({
+                                    userName: 'shared-suunto-provider',
+                                    firebaseUserID: 'other-user-id',
+                                }),
+                            }],
+                        }
+                        : { docs: [] }
+            )
+        }));
+
+        await wrapped(user, { eventId: 'eventId' } as unknown as functions.EventContext);
+
+        expect(collectionGroupMock).not.toHaveBeenCalled();
+        expect(recursiveDeleteMock).not.toHaveBeenCalledWith(expect.objectContaining({
+            path: 'suuntoAppWorkoutQueue/other-user-provider-job',
+        }));
+        expect(markQueueItemDeletedForUserCleanupMock).not.toHaveBeenCalledWith(
+            'suuntoAppWorkoutQueue',
+            'other-user-provider-job',
+            'account_deletion_cleanup',
+        );
+    });
+
     it('should not remove provider-keyed queue docs that still resolve to an active token', async () => {
         const wrapped = cleanupUserAccounts;
         const user = testEnv.auth.makeUserRecord({ uid: 'testUser123' });
@@ -908,6 +1079,7 @@ describe('cleanupUserAccounts', () => {
                 ref: {
                     parent: {
                         parent: {
+                            id: 'other-user-id',
                             parent: { id: 'mockCollection' },
                         },
                     },
@@ -917,7 +1089,32 @@ describe('cleanupUserAccounts', () => {
         const activeTokenLimit = vi.fn().mockReturnValue({ get: activeTokenGet });
 
         tokensGetMock.mockResolvedValue({ empty: true, size: 0, docs: [] });
-        whereMock.mockReturnValue({ get: vi.fn().mockResolvedValue({ docs: [] }) });
+        whereMock.mockImplementation((field: string, _operator: string, value: string) => ({
+            get: vi.fn().mockResolvedValue(
+                field === 'uid' && value === 'testUser123'
+                    ? {
+                        docs: [{
+                            id: 'archived-active-suunto-token',
+                            ref: { path: `${ORPHANED_SERVICE_TOKENS_COLLECTION_NAME}/archived-active-suunto-token` },
+                            data: () => ({
+                                serviceName: ServiceNames.SuuntoApp,
+                                token: { userName: 'active-suunto-provider' },
+                            }),
+                        }],
+                    }
+                    : field === 'userName' && value === 'active-suunto-provider'
+                        ? {
+                            docs: [{
+                                id: 'active-provider-workout',
+                                ref: { path: 'suuntoAppWorkoutQueue/active-provider-workout' },
+                                data: () => ({
+                                    userName: 'active-suunto-provider',
+                                }),
+                            }],
+                        }
+                    : { docs: [] }
+            )
+        }));
         collectionGroupWhereMock.mockImplementation(() => ({
             where: collectionGroupWhereMock,
             limit: activeTokenLimit,
@@ -944,6 +1141,9 @@ describe('cleanupUserAccounts', () => {
         await wrapped(user, { eventId: 'eventId' } as unknown as functions.EventContext);
 
         expect(activeTokenGet).toHaveBeenCalled();
+        expect(recursiveDeleteMock).not.toHaveBeenCalledWith(expect.objectContaining({
+            path: 'suuntoAppWorkoutQueue/active-provider-workout',
+        }));
         expect(recursiveDeleteMock).not.toHaveBeenCalledWith(expect.objectContaining({
             path: 'sleepSyncQueue/active-provider-sleep',
         }));
@@ -979,7 +1179,9 @@ describe('cleanupUserAccounts', () => {
                             docs: [{
                                 id: 'legacy-garmin-queue-job',
                                 ref: { path: 'garminAPIActivityQueue/legacy-garmin-queue-job' },
-                                data: () => ({}),
+                                data: () => ({
+                                    userID: 'legacy-garmin-provider-user',
+                                }),
                             }],
                         }
                         : { docs: [] }
