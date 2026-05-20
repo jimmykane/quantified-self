@@ -122,7 +122,7 @@ describe('processActivitySyncTask', () => {
       .toThrow('[ActivitySyncTaskWorker] Queue item queue-item-1 not found in activitySyncQueue');
   });
 
-  it('stops retries when queue item was deleted during account cleanup', async () => {
+  it('stops retries when queue item was deleted during queue cleanup', async () => {
     mockQueueGet.mockResolvedValueOnce({ exists: false });
     mockFailedJobsGet.mockResolvedValueOnce({ exists: false });
     mockIsQueueItemDeletedForUserCleanup.mockResolvedValueOnce(true);

@@ -31,7 +31,7 @@ export const processActivitySyncTask = onTaskDispatched({
             return;
         }
         if (await isQueueItemDeletedForUserCleanup(ACTIVITY_SYNC_QUEUE_COLLECTION_NAME, queueItemId)) {
-            logger.warn(`[ActivitySyncTaskWorker] Queue item ${queueItemId} was deleted during account cleanup. Stopping retry.`);
+            logger.warn(`[ActivitySyncTaskWorker] Queue item ${queueItemId} was deleted during queue cleanup. Stopping retry.`);
             return;
         }
 

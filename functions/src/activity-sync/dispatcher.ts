@@ -11,6 +11,10 @@ import {
     markQueueItemDispatchedIfUserActive,
     QueueDispatchMarkerResult,
 } from '../queue/dispatch-marker';
+import {
+    markQueueItemDeletedForUserCleanup,
+    QUEUE_CLEANUP_TOMBSTONE_REASONS,
+} from '../queue/cleanup-tombstone';
 
 const ACTIVITY_SYNC_REDISPATCH_STALE_MS = 2 * 60 * 60 * 1000;
 const MAX_ACTIVITY_SYNC_QUEUE_SCAN = 500;
@@ -36,6 +40,15 @@ async function deleteActivitySyncCandidateBeforeDispatch(
     reason: string,
 ): Promise<void> {
     try {
+        const tombstoneWritten = await markQueueItemDeletedForUserCleanup(
+            ACTIVITY_SYNC_QUEUE_COLLECTION_NAME,
+            doc.id,
+            QUEUE_CLEANUP_TOMBSTONE_REASONS.DispatcherCleanup,
+        );
+        if (!tombstoneWritten) {
+            logger.error(`[ActivitySyncDispatcher] Failed to write cleanup tombstone for ${doc.id}; leaving queue item in place to avoid missing-doc Cloud Task retries.`);
+            return;
+        }
         await admin.firestore().recursiveDelete(doc.ref);
         logger.info(`[ActivitySyncDispatcher] Deleted queue item ${doc.id} instead of dispatching: ${reason}.`);
     } catch (error) {

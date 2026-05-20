@@ -18,6 +18,7 @@ const {
   mockRecursiveDelete,
   mockGetUserDeletionGuardState,
   mockGetUserDeletionGuardStateInTransaction,
+  mockMarkQueueItemDeletedForUserCleanup,
 } = vi.hoisted(() => {
   const mockLoggerInfo = vi.fn();
   const mockLoggerError = vi.fn();
@@ -31,6 +32,7 @@ const {
   const mockQueueLimit = vi.fn();
   const mockQueueCollection = vi.fn();
   const mockRecursiveDelete = vi.fn();
+  const mockMarkQueueItemDeletedForUserCleanup = vi.fn();
   const mockRunTransaction = vi.fn(async (runner: (transaction: { update: (ref: { update?: (data: unknown) => Promise<void> }, data: unknown) => Promise<void> | void }) => unknown) => runner({
     update: (ref, data) => ref.update?.(data),
   }));
@@ -59,6 +61,7 @@ const {
     mockRecursiveDelete,
     mockGetUserDeletionGuardState,
     mockGetUserDeletionGuardStateInTransaction,
+    mockMarkQueueItemDeletedForUserCleanup,
   };
 });
 
@@ -115,6 +118,14 @@ vi.mock('../shared/user-deletion-guard', () => ({
   },
 }));
 
+vi.mock('../queue/cleanup-tombstone', () => ({
+  markQueueItemDeletedForUserCleanup: mockMarkQueueItemDeletedForUserCleanup,
+  QUEUE_CLEANUP_TOMBSTONE_REASONS: {
+    DispatcherCleanup: 'dispatcher_cleanup',
+    UserDeletionGuard: 'user_deletion_guard',
+  },
+}));
+
 import { reconcileActivitySyncQueueDispatches } from './dispatcher';
 
 describe('activity-sync/dispatcher', () => {
@@ -123,6 +134,7 @@ describe('activity-sync/dispatcher', () => {
     mockGetCloudTaskQueueDepthForQueue.mockResolvedValue(0);
     mockEnqueueActivitySyncTask.mockResolvedValue(true);
     mockRecursiveDelete.mockResolvedValue(undefined);
+    mockMarkQueueItemDeletedForUserCleanup.mockResolvedValue(true);
     mockGetUserDeletionGuardState.mockResolvedValue({
       userExists: true,
       deletionInProgress: false,
@@ -373,6 +385,11 @@ describe('activity-sync/dispatcher', () => {
       skippedRecent: 0,
     });
     expect(mockGetUserDeletionGuardState).toHaveBeenCalledWith(expect.anything(), 'deleted-user-id');
+    expect(mockMarkQueueItemDeletedForUserCleanup).toHaveBeenCalledWith(
+      'activitySyncQueue',
+      'deleted-user-item',
+      'dispatcher_cleanup',
+    );
     expect(mockRecursiveDelete).toHaveBeenCalledWith(deletedRef);
     expect(mockEnqueueActivitySyncTask).not.toHaveBeenCalled();
     expect(updateDeleted).not.toHaveBeenCalled();
@@ -401,9 +418,50 @@ describe('activity-sync/dispatcher', () => {
       skippedRecent: 0,
     });
     expect(mockGetUserDeletionGuardState).not.toHaveBeenCalled();
+    expect(mockMarkQueueItemDeletedForUserCleanup).toHaveBeenCalledWith(
+      'activitySyncQueue',
+      'malformed-item',
+      'dispatcher_cleanup',
+    );
     expect(mockRecursiveDelete).toHaveBeenCalledWith(malformedRef);
     expect(mockEnqueueActivitySyncTask).not.toHaveBeenCalled();
     expect(updateMalformed).not.toHaveBeenCalled();
+  });
+
+  it('leaves an item in place when dispatcher cleanup tombstone write fails', async () => {
+    const nowMs = 1_700_000_000_000;
+    const updateMalformed = vi.fn().mockResolvedValue(undefined);
+    const malformedRef = { update: updateMalformed, path: 'activitySyncQueue/tombstone-write-failed' };
+    mockMarkQueueItemDeletedForUserCleanup.mockResolvedValueOnce(false);
+    mockQueueGet.mockResolvedValue({
+      empty: false,
+      docs: [
+        {
+          id: 'tombstone-write-failed',
+          data: () => ({ dispatchedToCloudTask: null, dateCreated: 602 }),
+          ref: malformedRef,
+        },
+      ],
+    });
+
+    const result = await reconcileActivitySyncQueueDispatches(nowMs);
+
+    expect(result).toEqual({
+      inspected: 1,
+      dispatched: 0,
+      skippedRecent: 0,
+    });
+    expect(mockMarkQueueItemDeletedForUserCleanup).toHaveBeenCalledWith(
+      'activitySyncQueue',
+      'tombstone-write-failed',
+      'dispatcher_cleanup',
+    );
+    expect(mockRecursiveDelete).not.toHaveBeenCalled();
+    expect(mockEnqueueActivitySyncTask).not.toHaveBeenCalled();
+    expect(updateMalformed).not.toHaveBeenCalled();
+    expect(mockLoggerError).toHaveBeenCalledWith(
+      '[ActivitySyncDispatcher] Failed to write cleanup tombstone for tombstone-write-failed; leaving queue item in place to avoid missing-doc Cloud Task retries.',
+    );
   });
 
   it('leaves an item undispatched when deletion guard lookup fails and continues with other candidates', async () => {
