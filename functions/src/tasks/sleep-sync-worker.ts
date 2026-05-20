@@ -31,7 +31,7 @@ export const processSleepSyncTask = onTaskDispatched({
             return;
         }
         if (await isQueueItemDeletedForUserCleanup(SLEEP_SYNC_QUEUE_COLLECTION_NAME, queueItemId)) {
-            logger.warn(`[SleepSyncTaskWorker] Queue item ${queueItemId} was deleted during account cleanup. Stopping retry.`);
+            logger.warn(`[SleepSyncTaskWorker] Queue item ${queueItemId} was deleted during queue cleanup. Stopping retry.`);
             return;
         }
         throw new Error(`[SleepSyncTaskWorker] Queue item ${queueItemId} not found in ${SLEEP_SYNC_QUEUE_COLLECTION_NAME}`);
