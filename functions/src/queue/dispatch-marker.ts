@@ -4,6 +4,10 @@ import {
     getUserDeletionGuardStateInTransaction,
     UserDeletionGuardReadError,
 } from '../shared/user-deletion-guard';
+import {
+    markQueueItemDeletedForUserCleanup,
+    QUEUE_CLEANUP_TOMBSTONE_REASONS,
+} from './cleanup-tombstone';
 
 export enum QueueDispatchMarkerResult {
     Marked = 'marked',
@@ -79,6 +83,14 @@ export async function updateQueueItemIfUserActive(
 
     if (result === QueueItemUserGuardedUpdateResult.SkippedDeletedUser) {
         try {
+            const collectionName = params.queueItemDocument.parent?.id;
+            if (collectionName) {
+                await markQueueItemDeletedForUserCleanup(
+                    collectionName,
+                    params.queueItemId,
+                    QUEUE_CLEANUP_TOMBSTONE_REASONS.UserDeletionGuard,
+                );
+            }
             await db.recursiveDelete(params.queueItemDocument);
             logger.info(
                 `[${params.logPrefix}] Deleted queue item ${params.queueItemId} after deletion guard tripped before ${params.actionDescription}.`,

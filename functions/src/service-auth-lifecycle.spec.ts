@@ -7,6 +7,10 @@ const {
   mockRunTransaction,
   mockRecursiveDelete,
   mockDeleteLocalServiceToken,
+  mockAdapterDeauthorize,
+  mockGetOAuth2Client,
+  mockCreateOAuthToken,
+  mockRefreshOAuthToken,
   tokenRef,
   tokenCollectionRef,
   tokenRootRef,
@@ -39,6 +43,10 @@ const {
     mockRunTransaction: vi.fn(),
     mockRecursiveDelete: vi.fn().mockResolvedValue(undefined),
     mockDeleteLocalServiceToken: vi.fn(),
+    mockAdapterDeauthorize: vi.fn().mockResolvedValue(undefined),
+    mockGetOAuth2Client: vi.fn(),
+    mockCreateOAuthToken: vi.fn(),
+    mockRefreshOAuthToken: vi.fn(),
     tokenRef,
     tokenCollectionRef,
     tokenRootRef,
@@ -76,7 +84,8 @@ vi.mock('./service-token-store', () => ({
 
 vi.mock('./auth/factory', () => ({
   getServiceAdapter: vi.fn(() => ({
-    deauthorize: vi.fn(),
+    deauthorize: mockAdapterDeauthorize,
+    getOAuth2Client: mockGetOAuth2Client,
     tokenCollectionName: 'suuntoAppAccessTokens',
   })),
 }));
@@ -105,6 +114,10 @@ describe('service-auth-lifecycle terminal auth handling', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockDeleteLocalServiceToken.mockReset();
+    mockAdapterDeauthorize.mockReset().mockResolvedValue(undefined);
+    mockRefreshOAuthToken.mockReset();
+    mockCreateOAuthToken.mockReset().mockReturnValue({ refresh: mockRefreshOAuthToken });
+    mockGetOAuth2Client.mockReset().mockReturnValue({ createToken: mockCreateOAuthToken });
     tokenCollectionRef.get.mockReset();
     tokenCollectionRef.limit.mockReset().mockReturnValue({
       get: vi.fn().mockResolvedValue({ empty: false }),
@@ -497,6 +510,28 @@ describe('service-auth-lifecycle terminal auth handling', () => {
     );
   });
 
+  it('cancels pending OAuth context for targeted account-deletion token cleanup', async () => {
+    mockDeleteLocalServiceToken.mockResolvedValueOnce({
+      tokenRootDeleted: true,
+      tokenRootPreservedForOAuthFlow: false,
+      remainingTokenCount: 0,
+    });
+
+    await cleanupServiceTokenById(
+      'firebase-user-123',
+      ServiceNames.GarminAPI,
+      'garmin-token-id',
+      SERVICE_AUTH_CLEANUP_REASONS.AccountDeletion,
+    );
+
+    expect(mockDeleteLocalServiceToken).toHaveBeenCalledWith(
+      'firebase-user-123',
+      ServiceNames.GarminAPI,
+      'garmin-token-id',
+      { preserveOAuthFlowContext: false },
+    );
+  });
+
   it('cancels pending OAuth context during explicit user disconnect cleanup', async () => {
     tokenCollectionRef.get.mockResolvedValueOnce({
       empty: false,
@@ -585,5 +620,421 @@ describe('service-auth-lifecycle terminal auth handling', () => {
     });
 
     expect(mockClearServiceConnectionState).not.toHaveBeenCalled();
+  });
+
+  it('account deletion deauthorizes with the stored token snapshot and cancels pending OAuth context', async () => {
+    tokenCollectionRef.get.mockResolvedValueOnce({
+      empty: false,
+      size: 1,
+      docs: [
+        {
+          id: 'suunto-token-id',
+          data: () => ({
+            serviceName: ServiceNames.SuuntoApp,
+            accessToken: 'stored-access-token',
+            refreshToken: 'stored-refresh-token',
+            expiresAt: Date.now() + 120_000,
+            scope: 'workout',
+            tokenType: 'bearer',
+            userName: 'suunto-user-id',
+            dateCreated: 1,
+            dateRefreshed: 2,
+          }),
+        },
+      ],
+    });
+    mockDeleteLocalServiceToken.mockResolvedValueOnce({
+      tokenRootDeleted: true,
+      tokenRootPreservedForOAuthFlow: false,
+      remainingTokenCount: 0,
+    });
+
+    await cleanupServiceConnectionForUser(
+      'firebase-user-123',
+      ServiceNames.SuuntoApp,
+      SERVICE_AUTH_CLEANUP_REASONS.AccountDeletion,
+    );
+
+    expect(mockAdapterDeauthorize).toHaveBeenCalledWith(expect.objectContaining({
+      serviceName: ServiceNames.SuuntoApp,
+      accessToken: 'stored-access-token',
+      refreshToken: 'stored-refresh-token',
+      userName: 'suunto-user-id',
+    }));
+    expect(mockDeleteLocalServiceToken).toHaveBeenCalledWith(
+      'firebase-user-123',
+      ServiceNames.SuuntoApp,
+      'suunto-token-id',
+      { preserveOAuthFlowContext: false },
+    );
+    expect(mockClearServiceConnectionState).not.toHaveBeenCalled();
+  });
+
+  it('refreshes expired account-deletion tokens in memory before partner deauthorization without persisting them', async () => {
+    const expiredAt = Date.now() - 1_000;
+    const refreshedExpiresAt = new Date(Date.now() + 3_600_000);
+    tokenCollectionRef.get.mockResolvedValueOnce({
+      empty: false,
+      size: 1,
+      docs: [
+        {
+          id: 'suunto-token-id',
+          data: () => ({
+            serviceName: ServiceNames.SuuntoApp,
+            accessToken: 'expired-access-token',
+            refreshToken: 'stored-refresh-token',
+            expiresAt: expiredAt,
+            scope: 'workout',
+            tokenType: 'bearer',
+            userName: 'suunto-user-id',
+            dateCreated: 1,
+            dateRefreshed: 2,
+          }),
+        },
+      ],
+    });
+    mockRefreshOAuthToken.mockResolvedValueOnce({
+      token: {
+        access_token: 'fresh-access-token',
+        refresh_token: 'fresh-refresh-token',
+        expires_at: refreshedExpiresAt,
+        scope: 'workout',
+        token_type: 'bearer',
+      },
+    });
+    mockDeleteLocalServiceToken.mockResolvedValueOnce({
+      tokenRootDeleted: true,
+      tokenRootPreservedForOAuthFlow: false,
+      remainingTokenCount: 0,
+    });
+
+    await cleanupServiceConnectionForUser(
+      'firebase-user-123',
+      ServiceNames.SuuntoApp,
+      SERVICE_AUTH_CLEANUP_REASONS.AccountDeletion,
+    );
+
+    expect(mockGetOAuth2Client).toHaveBeenCalledWith(true);
+    expect(mockCreateOAuthToken).toHaveBeenCalledWith({
+      access_token: 'expired-access-token',
+      refresh_token: 'stored-refresh-token',
+      expires_at: new Date(expiredAt),
+    });
+    expect(mockAdapterDeauthorize).toHaveBeenCalledWith(expect.objectContaining({
+      accessToken: 'fresh-access-token',
+      refreshToken: 'fresh-refresh-token',
+      expiresAt: refreshedExpiresAt.getTime(),
+      userName: 'suunto-user-id',
+    }));
+    expect(mockDeleteLocalServiceToken).toHaveBeenCalledWith(
+      'firebase-user-123',
+      ServiceNames.SuuntoApp,
+      'suunto-token-id',
+      { preserveOAuthFlowContext: false },
+    );
+  });
+
+  it('returns refreshed account-deletion token material for archival when partner deauthorization fails after refresh', async () => {
+    const expiredAt = Date.now() - 1_000;
+    const refreshedExpiresAt = new Date(Date.now() + 3_600_000);
+    tokenCollectionRef.get.mockResolvedValueOnce({
+      empty: false,
+      size: 1,
+      docs: [
+        {
+          id: 'suunto-token-id',
+          data: () => ({
+            serviceName: ServiceNames.SuuntoApp,
+            accessToken: 'expired-access-token',
+            refreshToken: 'stored-refresh-token',
+            expiresAt: expiredAt,
+            scope: 'workout',
+            tokenType: 'bearer',
+            userName: 'suunto-user-id',
+            dateCreated: 1,
+            dateRefreshed: 2,
+          }),
+        },
+      ],
+    });
+    mockRefreshOAuthToken.mockResolvedValueOnce({
+      token: {
+        access_token: 'fresh-access-token',
+        refresh_token: 'fresh-refresh-token',
+        expires_at: refreshedExpiresAt,
+        scope: 'workout',
+        token_type: 'bearer',
+      },
+    });
+    mockAdapterDeauthorize.mockRejectedValueOnce(Object.assign(new Error('partner unavailable'), {
+      statusCode: 500,
+    }));
+    mockDeleteLocalServiceToken.mockResolvedValueOnce({
+      tokenRootDeleted: true,
+      tokenRootPreservedForOAuthFlow: false,
+      remainingTokenCount: 0,
+    });
+
+    const outcome = await cleanupServiceConnectionForUser(
+      'firebase-user-123',
+      ServiceNames.SuuntoApp,
+      SERVICE_AUTH_CLEANUP_REASONS.AccountDeletion,
+    );
+
+    expect(outcome.partnerDeauthorizeFailed).toBe(1);
+    expect(outcome.preservedTokenCount).toBe(0);
+    expect(outcome.deletedTokenCount).toBe(1);
+    expect(outcome.tokensToArchive).toEqual([
+      expect.objectContaining({
+        tokenID: 'suunto-token-id',
+        errorMessage: 'partner unavailable',
+        tokenData: expect.objectContaining({
+          accessToken: 'fresh-access-token',
+          refreshToken: 'fresh-refresh-token',
+          expiresAt: refreshedExpiresAt.getTime(),
+          userName: 'suunto-user-id',
+        }),
+      }),
+    ]);
+    expect(mockDeleteLocalServiceToken).toHaveBeenCalledWith(
+      'firebase-user-123',
+      ServiceNames.SuuntoApp,
+      'suunto-token-id',
+      { preserveOAuthFlowContext: false },
+    );
+  });
+
+  it('archives refreshed account-deletion token material when deauthorization fails without an HTTP status', async () => {
+    const expiredAt = Date.now() - 1_000;
+    tokenCollectionRef.get.mockResolvedValueOnce({
+      empty: false,
+      size: 1,
+      docs: [
+        {
+          id: 'suunto-token-id',
+          data: () => ({
+            serviceName: ServiceNames.SuuntoApp,
+            accessToken: 'expired-access-token',
+            refreshToken: 'stored-refresh-token',
+            expiresAt: expiredAt,
+            scope: 'workout',
+            tokenType: 'bearer',
+            userName: 'suunto-user-id',
+            dateCreated: 1,
+            dateRefreshed: 2,
+          }),
+        },
+      ],
+    });
+    mockRefreshOAuthToken.mockResolvedValueOnce({
+      token: {
+        access_token: 'fresh-access-token',
+        refresh_token: 'fresh-refresh-token',
+        expires_in: 3600,
+        scope: 'workout',
+        token_type: 'bearer',
+      },
+    });
+    mockAdapterDeauthorize.mockRejectedValueOnce(new Error('network reset'));
+    mockDeleteLocalServiceToken.mockResolvedValueOnce({
+      tokenRootDeleted: true,
+      tokenRootPreservedForOAuthFlow: false,
+      remainingTokenCount: 0,
+    });
+
+    const outcome = await cleanupServiceConnectionForUser(
+      'firebase-user-123',
+      ServiceNames.SuuntoApp,
+      SERVICE_AUTH_CLEANUP_REASONS.AccountDeletion,
+    );
+
+    expect(outcome.partnerDeauthorizeFailed).toBe(1);
+    expect(outcome.tokensToArchive).toEqual([
+      expect.objectContaining({
+        tokenID: 'suunto-token-id',
+        errorMessage: 'network reset',
+        tokenData: expect.objectContaining({
+          accessToken: 'fresh-access-token',
+          refreshToken: 'fresh-refresh-token',
+          userName: 'suunto-user-id',
+        }),
+      }),
+    ]);
+    expect(mockDeleteLocalServiceToken).toHaveBeenCalledWith(
+      'firebase-user-123',
+      ServiceNames.SuuntoApp,
+      'suunto-token-id',
+      { preserveOAuthFlowContext: false },
+    );
+  });
+
+  it('does not archive refreshed account-deletion token material for permanent partner deauthorization failures', async () => {
+    const expiredAt = Date.now() - 1_000;
+    tokenCollectionRef.get.mockResolvedValueOnce({
+      empty: false,
+      size: 1,
+      docs: [
+        {
+          id: 'suunto-token-id',
+          data: () => ({
+            serviceName: ServiceNames.SuuntoApp,
+            accessToken: 'expired-access-token',
+            refreshToken: 'stored-refresh-token',
+            expiresAt: expiredAt,
+            scope: 'workout',
+            tokenType: 'bearer',
+            userName: 'suunto-user-id',
+            dateCreated: 1,
+            dateRefreshed: 2,
+          }),
+        },
+      ],
+    });
+    mockRefreshOAuthToken.mockResolvedValueOnce({
+      token: {
+        access_token: 'fresh-access-token',
+        refresh_token: 'fresh-refresh-token',
+        expires_in: 3600,
+        scope: 'workout',
+        token_type: 'bearer',
+      },
+    });
+    mockAdapterDeauthorize.mockRejectedValueOnce(Object.assign(new Error('registration not found'), {
+      statusCode: 404,
+    }));
+    mockDeleteLocalServiceToken.mockResolvedValueOnce({
+      tokenRootDeleted: true,
+      tokenRootPreservedForOAuthFlow: false,
+      remainingTokenCount: 0,
+    });
+
+    const outcome = await cleanupServiceConnectionForUser(
+      'firebase-user-123',
+      ServiceNames.SuuntoApp,
+      SERVICE_AUTH_CLEANUP_REASONS.AccountDeletion,
+    );
+
+    expect(outcome.partnerDeauthorizeFailed).toBe(1);
+    expect(outcome.tokensToArchive).toBeUndefined();
+    expect(outcome.preservedTokenCount).toBe(0);
+    expect(outcome.deletedTokenCount).toBe(1);
+    expect(mockDeleteLocalServiceToken).toHaveBeenCalledWith(
+      'firebase-user-123',
+      ServiceNames.SuuntoApp,
+      'suunto-token-id',
+      { preserveOAuthFlowContext: false },
+    );
+  });
+
+  it('archives stored account-deletion token material when partner deauthorization fails without a status before refresh', async () => {
+    tokenCollectionRef.get.mockResolvedValueOnce({
+      empty: false,
+      size: 1,
+      docs: [
+        {
+          id: 'suunto-token-id',
+          data: () => ({
+            serviceName: ServiceNames.SuuntoApp,
+            accessToken: 'valid-access-token',
+            refreshToken: 'stored-refresh-token',
+            expiresAt: Date.now() + 120_000,
+            scope: 'workout',
+            tokenType: 'bearer',
+            userName: 'suunto-user-id',
+            dateCreated: 1,
+            dateRefreshed: 2,
+          }),
+        },
+      ],
+    });
+    mockAdapterDeauthorize.mockRejectedValueOnce(new Error('network reset'));
+    mockDeleteLocalServiceToken.mockResolvedValueOnce({
+      tokenRootDeleted: true,
+      tokenRootPreservedForOAuthFlow: false,
+      remainingTokenCount: 0,
+    });
+
+    const outcome = await cleanupServiceConnectionForUser(
+      'firebase-user-123',
+      ServiceNames.SuuntoApp,
+      SERVICE_AUTH_CLEANUP_REASONS.AccountDeletion,
+    );
+
+    expect(outcome.partnerDeauthorizeFailed).toBe(1);
+    expect(outcome.preservedTokenCount).toBe(0);
+    expect(outcome.deletedTokenCount).toBe(1);
+    expect(outcome.tokensToArchive).toEqual([
+      expect.objectContaining({
+        tokenID: 'suunto-token-id',
+        errorMessage: 'network reset',
+        tokenData: expect.objectContaining({
+          accessToken: 'valid-access-token',
+          refreshToken: 'stored-refresh-token',
+          userName: 'suunto-user-id',
+        }),
+      }),
+    ]);
+    expect(mockDeleteLocalServiceToken).toHaveBeenCalledWith(
+      'firebase-user-123',
+      ServiceNames.SuuntoApp,
+      'suunto-token-id',
+      { preserveOAuthFlowContext: false },
+    );
+  });
+
+  it('archives stored account-deletion token material when in-memory refresh fails transiently', async () => {
+    const expiredAt = Date.now() - 1_000;
+    tokenCollectionRef.get.mockResolvedValueOnce({
+      empty: false,
+      size: 1,
+      docs: [
+        {
+          id: 'suunto-token-id',
+          data: () => ({
+            serviceName: ServiceNames.SuuntoApp,
+            accessToken: 'expired-access-token',
+            refreshToken: 'stored-refresh-token',
+            expiresAt: expiredAt,
+            scope: 'workout',
+            tokenType: 'bearer',
+            userName: 'suunto-user-id',
+            dateCreated: 1,
+            dateRefreshed: 2,
+          }),
+        },
+      ],
+    });
+    mockRefreshOAuthToken.mockRejectedValueOnce(new Error('refresh network reset'));
+    mockDeleteLocalServiceToken.mockResolvedValueOnce({
+      tokenRootDeleted: true,
+      tokenRootPreservedForOAuthFlow: false,
+      remainingTokenCount: 0,
+    });
+
+    const outcome = await cleanupServiceConnectionForUser(
+      'firebase-user-123',
+      ServiceNames.SuuntoApp,
+      SERVICE_AUTH_CLEANUP_REASONS.AccountDeletion,
+    );
+
+    expect(mockAdapterDeauthorize).not.toHaveBeenCalled();
+    expect(outcome.partnerDeauthorizeAttempted).toBe(0);
+    expect(outcome.tokensToArchive).toEqual([
+      expect.objectContaining({
+        tokenID: 'suunto-token-id',
+        errorMessage: 'refresh network reset',
+        tokenData: expect.objectContaining({
+          accessToken: 'expired-access-token',
+          refreshToken: 'stored-refresh-token',
+          userName: 'suunto-user-id',
+        }),
+      }),
+    ]);
+    expect(mockDeleteLocalServiceToken).toHaveBeenCalledWith(
+      'firebase-user-123',
+      ServiceNames.SuuntoApp,
+      'suunto-token-id',
+      { preserveOAuthFlowContext: false },
+    );
   });
 });

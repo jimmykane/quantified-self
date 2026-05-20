@@ -18,8 +18,11 @@ type StoredServiceToken = Auth2ServiceTokenInterface | GarminAPIAuth2ServiceToke
 type QueryDocumentSnapshot = admin.firestore.QueryDocumentSnapshot;
 type DocumentSnapshot = admin.firestore.DocumentSnapshot;
 
+const ACCOUNT_DELETION_DEAUTH_REFRESH_BUFFER_MS = 60_000;
+
 export const SERVICE_AUTH_CLEANUP_REASONS = {
   UserDisconnect: 'user_disconnect',
+  AccountDeletion: 'account_deletion',
   TerminalAuthFailure: 'terminal_auth_failure',
   PartnerDisconnect: 'partner_disconnect',
   DuplicateConnectionCleanup: 'duplicate_connection_cleanup',
@@ -56,6 +59,13 @@ export interface ServiceAuthCleanupOutcome {
   localCleanupStatus: 'completed' | 'partial' | 'no_tokens_found';
   connectionStateUpdate: 'reconnect_required' | 'cleared' | 'unchanged';
   fallbackTokenRootCleanupPerformed: boolean;
+  tokensToArchive?: ServiceAuthCleanupArchiveToken[];
+}
+
+export interface ServiceAuthCleanupArchiveToken {
+  tokenID: string;
+  tokenData: Record<string, unknown>;
+  errorMessage: string;
 }
 
 export type TerminalServiceAuthFailureResolution =
@@ -133,6 +143,11 @@ interface CleanupServiceConnectionOptions {
   terminalAuthFailure?: TerminalAuthFailureInput;
 }
 
+interface CleanupServiceTokenResolution {
+  serviceToken: StoredServiceToken;
+  refreshedTokenData?: Auth2ServiceTokenInterface;
+}
+
 function normalizeErrorString(value: unknown): string | null {
   if (typeof value !== 'string') {
     return null;
@@ -140,6 +155,43 @@ function normalizeErrorString(value: unknown): string | null {
 
   const trimmed = value.trim();
   return trimmed.length ? trimmed : null;
+}
+
+function getErrorStatusCode(error: any): number | null {
+  const rawStatusCode = error?.statusCode || error?.output?.statusCode;
+  if (typeof rawStatusCode === 'number' && Number.isFinite(rawStatusCode)) {
+    return rawStatusCode;
+  }
+  if (typeof rawStatusCode === 'string' && rawStatusCode.trim().length > 0) {
+    const parsed = Number(rawStatusCode);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function isLegacyProviderUnavailableStatus(statusCode: number | null): boolean {
+  return statusCode === 500 || statusCode === 502;
+}
+
+function isRetryableAccountDeletionPartnerFailure(statusCode: number | null): boolean {
+  return statusCode === null
+    || statusCode === 408
+    || statusCode === 429
+    || (statusCode >= 500 && statusCode <= 599);
+}
+
+function addAccountDeletionTokenArchive(
+  outcome: ServiceAuthCleanupOutcome,
+  tokenID: string,
+  tokenData: Record<string, unknown>,
+  errorMessage: string,
+): void {
+  outcome.tokensToArchive = outcome.tokensToArchive || [];
+  outcome.tokensToArchive.push({
+    tokenID,
+    tokenData,
+    errorMessage,
+  });
 }
 
 function areFirestoreTimestampsEqual(
@@ -262,12 +314,83 @@ function buildStoredServiceToken(
   }
 }
 
+function getResponseTokenExpiryMillis(responseTokenData: Record<string, any>, fallbackExpiresAt: number | undefined): number | undefined {
+  const expiresAt = responseTokenData.expires_at;
+  if (expiresAt instanceof Date && Number.isFinite(expiresAt.getTime())) {
+    return expiresAt.getTime();
+  }
+  if (expiresAt && typeof expiresAt.toDate === 'function') {
+    const date = expiresAt.toDate();
+    return date instanceof Date && Number.isFinite(date.getTime()) ? date.getTime() : fallbackExpiresAt;
+  }
+  if (typeof responseTokenData.expires_in === 'number' && Number.isFinite(responseTokenData.expires_in)) {
+    return Date.now() + (responseTokenData.expires_in * 1000);
+  }
+  return fallbackExpiresAt;
+}
+
+function shouldRefreshBeforeAccountDeletionDeauth(tokenData: Auth2ServiceTokenInterface): boolean {
+  return Boolean(
+    tokenData.refreshToken
+    && Number.isFinite(tokenData.expiresAt)
+    && tokenData.expiresAt <= Date.now() + ACCOUNT_DELETION_DEAUTH_REFRESH_BUFFER_MS,
+  );
+}
+
+async function buildServiceTokenForCleanup(
+  serviceName: ServiceNames,
+  tokenData: Auth2ServiceTokenInterface,
+  reason: ServiceAuthCleanupReason,
+): Promise<CleanupServiceTokenResolution> {
+  if (reason !== SERVICE_AUTH_CLEANUP_REASONS.AccountDeletion || !shouldRefreshBeforeAccountDeletionDeauth(tokenData)) {
+    return {
+      serviceToken: buildStoredServiceToken(serviceName, tokenData),
+    };
+  }
+
+  const adapter = getServiceAdapter(serviceName, true);
+  const token = adapter.getOAuth2Client(true).createToken({
+    access_token: tokenData.accessToken,
+    refresh_token: tokenData.refreshToken,
+    expires_at: new Date(tokenData.expiresAt),
+  });
+  const responseToken = await token.refresh();
+  const responseTokenData = responseToken.token as Record<string, any>;
+  if (responseTokenData.message && responseTokenData.message !== 'OK') {
+    throw new Error(`${serviceName} account-deletion token refresh failed: ${responseTokenData.message}`);
+  }
+
+  logger.info(`Refreshed ${serviceName} token in memory for account-deletion deauthorization. Refreshed token will not be persisted.`);
+  const refreshedTokenData = {
+    ...tokenData,
+    accessToken: responseTokenData.access_token || tokenData.accessToken,
+    refreshToken: responseTokenData.refresh_token || tokenData.refreshToken,
+    expiresAt: getResponseTokenExpiryMillis(responseTokenData, tokenData.expiresAt),
+    scope: responseTokenData.scope || tokenData.scope,
+    tokenType: responseTokenData.token_type || tokenData.tokenType,
+    dateRefreshed: Date.now(),
+  } as Auth2ServiceTokenInterface;
+
+  return {
+    serviceToken: buildStoredServiceToken(serviceName, refreshedTokenData),
+    refreshedTokenData,
+  };
+}
+
 function resolveCleanupPolicy(reason: ServiceAuthCleanupReason): ServiceAuthCleanupPolicy {
   switch (reason) {
     case SERVICE_AUTH_CLEANUP_REASONS.UserDisconnect:
       return {
         attemptPartnerDeauthorize: true,
         clearConnectionStateWhenNoTokensRemain: true,
+        preserveLocalTokenOnPartnerFailure: true,
+        persistReconnectRequired: false,
+        guaranteeLocalCleanup: false,
+      };
+    case SERVICE_AUTH_CLEANUP_REASONS.AccountDeletion:
+      return {
+        attemptPartnerDeauthorize: true,
+        clearConnectionStateWhenNoTokensRemain: false,
         preserveLocalTokenOnPartnerFailure: true,
         persistReconnectRequired: false,
         guaranteeLocalCleanup: false,
@@ -450,7 +573,8 @@ export async function cleanupServiceTokenById(
 
   try {
     const deleteResult = await deleteLocalServiceToken(userID, serviceName, tokenID, {
-      preserveOAuthFlowContext: reason !== SERVICE_AUTH_CLEANUP_REASONS.UserDisconnect,
+      preserveOAuthFlowContext: reason !== SERVICE_AUTH_CLEANUP_REASONS.UserDisconnect
+        && reason !== SERVICE_AUTH_CLEANUP_REASONS.AccountDeletion,
     });
     outcome.deletedTokenCount = 1;
     await applyPostCleanupConnectionState(userID, serviceName, reason, outcome, deleteResult.tokenRootDeleted);
@@ -601,16 +725,30 @@ export async function cleanupServiceConnectionForUser(
   for (const tokenQueryDocumentSnapshot of tokenQuerySnapshots.docs) {
     let shouldDeleteToken = true;
     let serviceToken: StoredServiceToken | null = null;
+    let tokenResolution: CleanupServiceTokenResolution | null = null;
 
     if (policy.attemptPartnerDeauthorize) {
       try {
-        serviceToken = options.tokenResolver
-          ? await options.tokenResolver(tokenQueryDocumentSnapshot)
-          : buildStoredServiceToken(serviceName, tokenQueryDocumentSnapshot.data() as Auth2ServiceTokenInterface);
+        tokenResolution = options.tokenResolver
+          ? { serviceToken: await options.tokenResolver(tokenQueryDocumentSnapshot) }
+          : await buildServiceTokenForCleanup(
+            serviceName,
+            tokenQueryDocumentSnapshot.data() as Auth2ServiceTokenInterface,
+            reason,
+          );
+        serviceToken = tokenResolution.serviceToken;
       } catch (error: any) {
-        const statusCode = error?.statusCode || error?.output?.statusCode;
-        if ((statusCode === 500 || statusCode === 502) && policy.preserveLocalTokenOnPartnerFailure) {
-          logger.error(`Refreshing token failed with ${statusCode} for ${tokenQueryDocumentSnapshot.id}. Preserving local token.`);
+        const statusCode = getErrorStatusCode(error);
+        if (reason === SERVICE_AUTH_CLEANUP_REASONS.AccountDeletion && isRetryableAccountDeletionPartnerFailure(statusCode)) {
+          addAccountDeletionTokenArchive(
+            outcome,
+            tokenQueryDocumentSnapshot.id,
+            tokenQueryDocumentSnapshot.data() as Record<string, unknown>,
+            error?.message || `${serviceName} account-deletion token refresh failed with ${statusCode || 'unknown status'}`,
+          );
+          logger.error(`Refreshing token failed with ${statusCode || 'unknown status'} for ${tokenQueryDocumentSnapshot.id}. Archiving stored token material and proceeding with local cleanup.`);
+        } else if (isLegacyProviderUnavailableStatus(statusCode) && policy.preserveLocalTokenOnPartnerFailure) {
+          logger.error(`Refreshing token failed with ${statusCode || 'unknown status'} for ${tokenQueryDocumentSnapshot.id}. Preserving local token.`);
           shouldDeleteToken = false;
         } else {
           logger.warn(`Refreshing token failed for ${tokenQueryDocumentSnapshot.id} (${statusCode || 'unknown error'}). Proceeding with local cleanup.`);
@@ -623,15 +761,32 @@ export async function cleanupServiceConnectionForUser(
           await adapter.deauthorize(serviceToken);
           logger.info(`Deauthorized ${serviceName} token ${tokenQueryDocumentSnapshot.id} for ${userID}`);
         } catch (apiError: any) {
-          const statusCode = apiError?.statusCode || apiError?.output?.statusCode;
-          if ((statusCode === 500 || statusCode === 502) && policy.preserveLocalTokenOnPartnerFailure) {
-            logger.error(`${serviceName} API deauthorization failed with ${statusCode} for ${userID}. Preserving local token.`);
-            outcome.partnerDeauthorizeFailed += 1;
+          const statusCode = getErrorStatusCode(apiError);
+          const shouldRetainTokenForAccountDeletionRetry = reason === SERVICE_AUTH_CLEANUP_REASONS.AccountDeletion
+            && isRetryableAccountDeletionPartnerFailure(statusCode);
+          outcome.partnerDeauthorizeFailed += 1;
+          if (shouldRetainTokenForAccountDeletionRetry && tokenResolution?.refreshedTokenData) {
+            addAccountDeletionTokenArchive(
+              outcome,
+              tokenQueryDocumentSnapshot.id,
+              tokenResolution.refreshedTokenData as unknown as Record<string, unknown>,
+              apiError?.message || `${serviceName} API deauthorization failed with ${statusCode || 'unknown status'}`,
+            );
+            logger.error(`${serviceName} API deauthorization failed with ${statusCode || 'unknown status'} for ${userID} after in-memory refresh. Archiving refreshed token material and deleting the stale local token root.`);
+          } else if (shouldRetainTokenForAccountDeletionRetry) {
+            addAccountDeletionTokenArchive(
+              outcome,
+              tokenQueryDocumentSnapshot.id,
+              tokenQueryDocumentSnapshot.data() as Record<string, unknown>,
+              apiError?.message || `${serviceName} API deauthorization failed with ${statusCode || 'unknown status'}`,
+            );
+            logger.error(`${serviceName} API deauthorization failed with ${statusCode || 'unknown status'} for ${userID}. Archiving stored token material and proceeding with local cleanup.`);
+          } else if (policy.preserveLocalTokenOnPartnerFailure && (
+            isLegacyProviderUnavailableStatus(statusCode)
+          )) {
+            logger.error(`${serviceName} API deauthorization failed with ${statusCode || 'unknown status'} for ${userID}. Preserving local token.`);
             shouldDeleteToken = false;
           } else {
-            if (statusCode === 500 || statusCode === 502) {
-              outcome.partnerDeauthorizeFailed += 1;
-            }
             logger.warn(`Failed to deauthorize on ${serviceName} API for ${userID}: ${apiError?.message}. Proceeding with local cleanup.`);
           }
         }
@@ -645,7 +800,8 @@ export async function cleanupServiceConnectionForUser(
 
     try {
       const deleteResult = await deleteLocalServiceToken(userID, serviceName, tokenQueryDocumentSnapshot.id, {
-        preserveOAuthFlowContext: reason !== SERVICE_AUTH_CLEANUP_REASONS.UserDisconnect,
+        preserveOAuthFlowContext: reason !== SERVICE_AUTH_CLEANUP_REASONS.UserDisconnect
+          && reason !== SERVICE_AUTH_CLEANUP_REASONS.AccountDeletion,
       });
       outcome.deletedTokenCount += 1;
       knownNoTokensRemain = deleteResult.tokenRootDeleted;

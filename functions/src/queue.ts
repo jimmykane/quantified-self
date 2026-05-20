@@ -38,6 +38,10 @@ import {
   QueueDispatchMarkerResult,
   updateQueueItemIfUserActive,
 } from './queue/dispatch-marker';
+import {
+  markQueueItemDeletedForUserCleanup,
+  QUEUE_CLEANUP_TOMBSTONE_REASONS,
+} from './queue/cleanup-tombstone';
 
 export {
   ProviderQueueUserDeletedOrDeletingError,
@@ -792,6 +796,11 @@ async function deleteWorkoutQueueDocBeforeDispatch(
   reason: string,
 ): Promise<void> {
   try {
+    await markQueueItemDeletedForUserCleanup(
+      getServiceWorkoutQueueName(serviceName),
+      queueItemId,
+      QUEUE_CLEANUP_TOMBSTONE_REASONS.UserDeletionGuard,
+    );
     await admin.firestore().recursiveDelete(queueItemDocument);
     logger.info(`Deleted ${serviceName} queue item ${queueItemId} before Cloud Task dispatch: ${reason}.`);
   } catch (error) {

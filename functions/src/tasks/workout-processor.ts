@@ -6,6 +6,7 @@ import { parseWorkoutQueueItemForServiceName } from '../queue';
 import { getServiceWorkoutQueueName } from '../shared/queue-names';
 import { CLOUD_TASK_RETRY_CONFIG } from '../shared/queue-config';
 import { markQueueItemSkipped, QUEUE_SKIPPED_REASONS, QueueResult } from '../queue-utils';
+import { isQueueItemDeletedForUserCleanup } from '../queue/cleanup-tombstone';
 
 /**
  * Task worker that processes a single workout queue item.
@@ -33,6 +34,10 @@ export const processWorkoutTask = onTaskDispatched({
 
         if (failedJobDoc.exists) {
             logger.warn(`[TaskWorker] Queue item ${queueItemId} not found in ${collectionName} but exists in failed_jobs. Stopping retry.`);
+            return;
+        }
+        if (await isQueueItemDeletedForUserCleanup(collectionName, queueItemId)) {
+            logger.warn(`[TaskWorker] Queue item ${queueItemId} in ${collectionName} was deleted during account cleanup. Stopping retry.`);
             return;
         }
 

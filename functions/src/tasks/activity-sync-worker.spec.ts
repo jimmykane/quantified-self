@@ -12,10 +12,12 @@ type TaskCallableMock = (request: TaskRequestMock) => Promise<void>;
 const {
   mockQueueGet,
   mockFailedJobsGet,
+  mockIsQueueItemDeletedForUserCleanup,
   mockProcessActivitySyncQueueItem,
 } = vi.hoisted(() => ({
   mockQueueGet: vi.fn(),
   mockFailedJobsGet: vi.fn(),
+  mockIsQueueItemDeletedForUserCleanup: vi.fn(),
   mockProcessActivitySyncQueueItem: vi.fn(),
 }));
 
@@ -37,6 +39,10 @@ vi.mock('firebase-admin', () => ({
 
 vi.mock('../activity-sync/process-queue-item', () => ({
   processActivitySyncQueueItem: mockProcessActivitySyncQueueItem,
+}));
+
+vi.mock('../queue/cleanup-tombstone', () => ({
+  isQueueItemDeletedForUserCleanup: mockIsQueueItemDeletedForUserCleanup,
 }));
 
 vi.mock('../queue-utils', () => ({
@@ -63,6 +69,7 @@ const invokeWorker = (request: TaskRequestMock): Promise<void> =>
 describe('processActivitySyncTask', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockIsQueueItemDeletedForUserCleanup.mockResolvedValue(false);
   });
 
   it('processes a valid queue item', async () => {
@@ -113,6 +120,17 @@ describe('processActivitySyncTask', () => {
     await expect(invokeWorker({ data: { queueItemId: 'queue-item-1' } }))
       .rejects
       .toThrow('[ActivitySyncTaskWorker] Queue item queue-item-1 not found in activitySyncQueue');
+  });
+
+  it('stops retries when queue item was deleted during account cleanup', async () => {
+    mockQueueGet.mockResolvedValueOnce({ exists: false });
+    mockFailedJobsGet.mockResolvedValueOnce({ exists: false });
+    mockIsQueueItemDeletedForUserCleanup.mockResolvedValueOnce(true);
+
+    await expect(invokeWorker({ data: { queueItemId: 'queue-item-1' } })).resolves.toBeUndefined();
+
+    expect(mockIsQueueItemDeletedForUserCleanup).toHaveBeenCalledWith('activitySyncQueue', 'queue-item-1');
+    expect(mockProcessActivitySyncQueueItem).not.toHaveBeenCalled();
   });
 
   it('rethrows when processing signals retry', async () => {

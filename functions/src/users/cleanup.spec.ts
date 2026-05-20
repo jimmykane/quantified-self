@@ -4,7 +4,23 @@ import * as functions from 'firebase-functions/v1';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 
 // Hoist mocks
-const { authBuilderMock, deauthorizeServiceMock, firestoreMock, getServiceConfigMock, batchMock, whereMock, recursiveDeleteMock, tokensGetMock, setMock } = vi.hoisted(() => {
+const {
+    authBuilderMock,
+    deauthorizeServiceMock,
+    cleanupServiceConnectionForUserMock,
+    firestoreMock,
+    getServiceConfigMock,
+    batchMock,
+    whereMock,
+    recursiveDeleteMock,
+    tokensGetMock,
+    setMock,
+    limitMock,
+    limitGetMock,
+    collectionGroupMock,
+    collectionGroupWhereMock,
+    markQueueItemDeletedForUserCleanupMock,
+} = vi.hoisted(() => {
     const onDeleteMock = vi.fn((handler) => handler);
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const userMock = vi.fn((_id?: string) => ({ onDelete: onDeleteMock }));
@@ -39,16 +55,34 @@ const { authBuilderMock, deauthorizeServiceMock, firestoreMock, getServiceConfig
         get: vi.fn().mockResolvedValue(querySnapshotMock)
     });
 
+    const limitGetMock = vi.fn().mockResolvedValue({ empty: true, docs: [] });
+    const limitMock = vi.fn().mockReturnValue({ get: limitGetMock });
+
+    const collectionGroupLimitGetMock = vi.fn().mockResolvedValue({ empty: true, docs: [] });
+    const collectionGroupLimitMock = vi.fn().mockReturnValue({ get: collectionGroupLimitGetMock });
+    const collectionGroupWhereMock: any = vi.fn(() => ({
+        where: collectionGroupWhereMock,
+        limit: collectionGroupLimitMock,
+        get: collectionGroupLimitGetMock,
+    }));
+    const collectionGroupMock = vi.fn(() => ({
+        where: collectionGroupWhereMock,
+        limit: collectionGroupLimitMock,
+        get: collectionGroupLimitGetMock,
+    }));
+
     const collectionMock = vi.fn((collectionName) => {
         if (collectionName === 'mail') {
             return {
                 where: whereMock,
-                doc: docMock
+                doc: docMock,
+                limit: limitMock
             };
         }
         return {
             doc: docMock,
-            where: whereMock
+            where: whereMock,
+            limit: limitMock
         };
     });
 
@@ -66,6 +100,7 @@ const { authBuilderMock, deauthorizeServiceMock, firestoreMock, getServiceConfig
 
     const firestore = Object.assign(vi.fn(() => ({
         collection: collectionMock,
+        collectionGroup: collectionGroupMock,
         batch: vi.fn(() => batchMock),
         recursiveDelete: recursiveDeleteMock
     })), {
@@ -76,9 +111,13 @@ const { authBuilderMock, deauthorizeServiceMock, firestoreMock, getServiceConfig
         }
     });
 
+    const deauthorizeServiceMock = vi.fn();
+    const cleanupServiceConnectionForUserMock = vi.fn((uid: string, serviceName: ServiceNames) => deauthorizeServiceMock(uid, serviceName));
+
     return {
         authBuilderMock: { user: userMock },
-        deauthorizeServiceMock: vi.fn(),
+        deauthorizeServiceMock,
+        cleanupServiceConnectionForUserMock,
 
         firestoreMock: firestore,
         getServiceConfigMock: vi.fn(),
@@ -86,7 +125,12 @@ const { authBuilderMock, deauthorizeServiceMock, firestoreMock, getServiceConfig
         whereMock,
         recursiveDeleteMock,
         tokensGetMock,
-        setMock
+        setMock,
+        limitMock,
+        limitGetMock,
+        collectionGroupMock,
+        collectionGroupWhereMock,
+        markQueueItemDeletedForUserCleanupMock: vi.fn().mockResolvedValue(true)
     };
 });
 
@@ -105,8 +149,22 @@ vi.mock('firebase-admin', () => ({
 
 // Mock oauth wrappers
 vi.mock('../OAuth2', () => ({
-    deauthorizeServiceForUser: deauthorizeServiceMock,
     getServiceConfig: getServiceConfigMock
+}));
+
+vi.mock('../service-auth-lifecycle', () => ({
+    cleanupServiceConnectionForUser: cleanupServiceConnectionForUserMock,
+    SERVICE_AUTH_CLEANUP_REASONS: {
+        AccountDeletion: 'account_deletion',
+    },
+}));
+
+vi.mock('../queue/cleanup-tombstone', () => ({
+    markQueueItemDeletedForUserCleanup: markQueueItemDeletedForUserCleanupMock,
+    QUEUE_CLEANUP_TOMBSTONE_REASONS: {
+        AccountDeletionCleanup: 'account_deletion_cleanup',
+        UserDeletionGuard: 'user_deletion_guard',
+    },
 }));
 
 
@@ -124,6 +182,26 @@ describe('cleanupUserAccounts', () => {
 
         // Setup default mocks
         getServiceConfigMock.mockReturnValue({ tokenCollectionName: 'mockCollection' });
+        deauthorizeServiceMock.mockReset().mockResolvedValue(undefined);
+        cleanupServiceConnectionForUserMock
+            .mockReset()
+            .mockImplementation((uid: string, serviceName: ServiceNames) => deauthorizeServiceMock(uid, serviceName));
+        tokensGetMock.mockReset().mockResolvedValue({ empty: true, size: 0, docs: [] });
+        setMock.mockReset().mockResolvedValue({});
+        whereMock.mockReset().mockReturnValue({ get: vi.fn().mockResolvedValue({ docs: [] }) });
+        limitGetMock.mockReset().mockResolvedValue({ empty: true, docs: [] });
+        limitMock.mockReset().mockReturnValue({ get: limitGetMock });
+        collectionGroupWhereMock.mockReset().mockImplementation(() => ({
+            where: collectionGroupWhereMock,
+            limit: vi.fn().mockReturnValue({ get: vi.fn().mockResolvedValue({ empty: true, docs: [] }) }),
+            get: vi.fn().mockResolvedValue({ empty: true, docs: [] }),
+        }));
+        collectionGroupMock.mockReset().mockImplementation(() => ({
+            where: collectionGroupWhereMock,
+            limit: vi.fn().mockReturnValue({ get: vi.fn().mockResolvedValue({ empty: true, docs: [] }) }),
+            get: vi.fn().mockResolvedValue({ empty: true, docs: [] }),
+        }));
+        markQueueItemDeletedForUserCleanupMock.mockReset().mockResolvedValue(true);
 
         // Reset batch/where mocks specific behavior if needed
         batchMock.commit.mockResolvedValue({});
@@ -152,6 +230,24 @@ describe('cleanupUserAccounts', () => {
 
         // Verify Garmin
         expect(deauthorizeServiceMock).toHaveBeenCalledWith('testUser123', ServiceNames.GarminAPI);
+        expect(cleanupServiceConnectionForUserMock).toHaveBeenCalledWith(
+            'testUser123',
+            ServiceNames.SuuntoApp,
+            'account_deletion',
+            { missingTokensBehavior: 'ignore' },
+        );
+        expect(cleanupServiceConnectionForUserMock).toHaveBeenCalledWith(
+            'testUser123',
+            ServiceNames.COROSAPI,
+            'account_deletion',
+            { missingTokensBehavior: 'ignore' },
+        );
+        expect(cleanupServiceConnectionForUserMock).toHaveBeenCalledWith(
+            'testUser123',
+            ServiceNames.GarminAPI,
+            'account_deletion',
+            { missingTokensBehavior: 'ignore' },
+        );
     });
 
     it('should force delete Suunto tokens even if deauthorization fails', async () => {
@@ -417,6 +513,122 @@ describe('cleanupUserAccounts', () => {
         }));
     });
 
+    it('should archive refreshed lifecycle token material when account deletion deauth fails after in-memory refresh', async () => {
+        const wrapped = cleanupUserAccounts;
+        const user = testEnv.auth.makeUserRecord({ uid: 'testUser123' });
+
+        cleanupServiceConnectionForUserMock.mockImplementation(async (uid: string, serviceName: ServiceNames) => {
+            await deauthorizeServiceMock(uid, serviceName);
+            if (serviceName !== ServiceNames.SuuntoApp) {
+                return undefined;
+            }
+
+            return {
+                reason: 'account_deletion',
+                tokenCount: 1,
+                deletedTokenCount: 1,
+                preservedTokenCount: 0,
+                partnerDeauthorizeAttempted: 1,
+                partnerDeauthorizeFailed: 1,
+                localCleanupStatus: 'completed',
+                connectionStateUpdate: 'unchanged',
+                fallbackTokenRootCleanupPerformed: false,
+                tokensToArchive: [{
+                    tokenID: 'suunto-token-id',
+                    tokenData: {
+                        serviceName: ServiceNames.SuuntoApp,
+                        accessToken: 'fresh-access-token',
+                        refreshToken: 'fresh-refresh-token',
+                        userName: 'suunto-user-id',
+                    },
+                    errorMessage: 'partner unavailable',
+                }],
+            };
+        });
+
+        await wrapped(user, { eventId: 'eventId' } as unknown as functions.EventContext);
+
+        expect(setMock).toHaveBeenCalledWith(expect.objectContaining({
+            serviceName: ServiceNames.SuuntoApp,
+            uid: 'testUser123',
+            originalTokenId: 'suunto-token-id',
+            token: expect.objectContaining({
+                accessToken: 'fresh-access-token',
+                refreshToken: 'fresh-refresh-token',
+                userName: 'suunto-user-id',
+            }),
+            lastError: 'partner unavailable',
+        }));
+    });
+
+    it('should let refreshed lifecycle token archival override stale remaining local token archival', async () => {
+        const wrapped = cleanupUserAccounts;
+        const user = testEnv.auth.makeUserRecord({ uid: 'testUser123' });
+        const emptyTokensSnapshot = { empty: true, size: 0, docs: [] };
+
+        cleanupServiceConnectionForUserMock.mockImplementation(async (uid: string, serviceName: ServiceNames) => {
+            await deauthorizeServiceMock(uid, serviceName);
+            if (serviceName !== ServiceNames.SuuntoApp) {
+                return undefined;
+            }
+
+            return {
+                reason: 'account_deletion',
+                tokenCount: 1,
+                deletedTokenCount: 0,
+                preservedTokenCount: 0,
+                partnerDeauthorizeAttempted: 1,
+                partnerDeauthorizeFailed: 1,
+                localCleanupStatus: 'partial',
+                connectionStateUpdate: 'unchanged',
+                fallbackTokenRootCleanupPerformed: false,
+                tokensToArchive: [{
+                    tokenID: 'suunto-token-id',
+                    tokenData: {
+                        serviceName: ServiceNames.SuuntoApp,
+                        accessToken: 'fresh-access-token',
+                        refreshToken: 'fresh-refresh-token',
+                        userName: 'suunto-user-id',
+                    },
+                    errorMessage: 'partner unavailable after refresh',
+                }],
+            };
+        });
+        tokensGetMock
+            .mockResolvedValue(emptyTokensSnapshot)
+            .mockResolvedValueOnce(emptyTokensSnapshot)
+            .mockResolvedValueOnce(emptyTokensSnapshot)
+            .mockResolvedValueOnce(emptyTokensSnapshot)
+            .mockResolvedValueOnce({
+                empty: false,
+                size: 1,
+                docs: [{
+                    id: 'suunto-token-id',
+                    data: () => ({
+                        accessToken: 'stale-access-token',
+                        refreshToken: 'stale-refresh-token',
+                        userName: 'suunto-user-id',
+                    }),
+                }],
+            });
+
+        await wrapped(user, { eventId: 'eventId' } as unknown as functions.EventContext);
+
+        const suuntoArchiveCalls = setMock.mock.calls
+            .map(([data]) => data)
+            .filter((data) => data?.serviceName === ServiceNames.SuuntoApp && data?.originalTokenId === 'suunto-token-id');
+        expect(suuntoArchiveCalls).toHaveLength(2);
+        expect(suuntoArchiveCalls[0].token).toEqual(expect.objectContaining({
+            accessToken: 'stale-access-token',
+            refreshToken: 'stale-refresh-token',
+        }));
+        expect(suuntoArchiveCalls[1].token).toEqual(expect.objectContaining({
+            accessToken: 'fresh-access-token',
+            refreshToken: 'fresh-refresh-token',
+        }));
+        expect(suuntoArchiveCalls[1].lastError).toBe('partner unavailable after refresh');
+    });
+
     it('should handle archive failure gracefully and continue cleanup', async () => {
         const wrapped = cleanupUserAccounts;
         const user = testEnv.auth.makeUserRecord({ uid: 'testUser123' });
@@ -438,6 +650,19 @@ describe('cleanupUserAccounts', () => {
 
         // Should still call recursiveDelete
         expect(recursiveDeleteMock).toHaveBeenCalled();
+    });
+
+    it('should still force delete token roots when reading remaining tokens for archival fails', async () => {
+        const wrapped = cleanupUserAccounts;
+        const user = testEnv.auth.makeUserRecord({ uid: 'testUser123' });
+
+        tokensGetMock.mockRejectedValue(new Error('Firestore read failed'));
+
+        await expect(wrapped(user, { eventId: 'eventId' } as unknown as functions.EventContext)).resolves.not.toThrow();
+
+        const tokenRootDeleteCalls = recursiveDeleteMock.mock.calls
+            .filter(([ref]) => ref?.path === 'doc/testUser123');
+        expect(tokenRootDeleteCalls).toHaveLength(3);
     });
 
     it('should skip archiving when no tokens remain', async () => {
@@ -528,6 +753,16 @@ describe('cleanupUserAccounts', () => {
         expect(recursiveDeleteMock).toHaveBeenCalledWith(expect.objectContaining({ path: 'sleepSyncQueue/sleep-job-1' }));
         expect(recursiveDeleteMock).toHaveBeenCalledWith(expect.objectContaining({ path: 'activitySyncQueue/activity-job-1' }));
         expect(recursiveDeleteMock).toHaveBeenCalledWith(expect.objectContaining({ path: 'suuntoAppWorkoutQueue/provider-job-1' }));
+        expect(markQueueItemDeletedForUserCleanupMock).toHaveBeenCalledWith(
+            'sleepSyncQueue',
+            'sleep-job-1',
+            'account_deletion_cleanup',
+        );
+        expect(markQueueItemDeletedForUserCleanupMock).toHaveBeenCalledWith(
+            'activitySyncQueue',
+            'activity-job-1',
+            'account_deletion_cleanup',
+        );
     });
 
     it('should recover provider identifiers from archived orphan tokens when current token docs are already gone', async () => {
@@ -606,6 +841,117 @@ describe('cleanupUserAccounts', () => {
         expect(recursiveDeleteMock).toHaveBeenCalledWith(expect.objectContaining({
             path: 'sleepSyncQueue/provider-only-sleep-job',
         }));
+    });
+
+    it('should remove legacy provider-keyed orphan queue and DLQ docs even when token docs are already gone', async () => {
+        const wrapped = cleanupUserAccounts;
+        const user = testEnv.auth.makeUserRecord({ uid: 'testUser123' });
+
+        tokensGetMock.mockResolvedValue({ empty: true, size: 0, docs: [] });
+        whereMock.mockReturnValue({ get: vi.fn().mockResolvedValue({ docs: [] }) });
+        limitGetMock
+            .mockResolvedValueOnce({
+                docs: [{
+                    id: 'legacy-provider-only-sleep',
+                    ref: { path: 'sleepSyncQueue/legacy-provider-only-sleep' },
+                    data: () => ({
+                        provider: 'SuuntoApp',
+                        providerUserId: 'legacy-suunto-provider',
+                    }),
+                }],
+            })
+            .mockResolvedValueOnce({ docs: [] })
+            .mockResolvedValueOnce({ docs: [] })
+            .mockResolvedValueOnce({ docs: [] })
+            .mockResolvedValueOnce({
+                docs: [{
+                    id: 'legacy-provider-only-dlq',
+                    ref: { path: 'failed_jobs/legacy-provider-only-dlq' },
+                    data: () => ({
+                        originalCollection: 'suuntoAppWorkoutQueue',
+                        userName: 'legacy-suunto-provider',
+                    }),
+                }],
+            });
+
+        await wrapped(user, { eventId: 'eventId' } as unknown as functions.EventContext);
+
+        expect(collectionGroupMock).toHaveBeenCalledWith('tokens');
+        expect(collectionGroupWhereMock).toHaveBeenCalledWith('userName', '==', 'legacy-suunto-provider');
+        expect(collectionGroupWhereMock).not.toHaveBeenCalledWith('serviceName', '==', ServiceNames.SuuntoApp);
+        expect(recursiveDeleteMock).toHaveBeenCalledWith(expect.objectContaining({
+            path: 'sleepSyncQueue/legacy-provider-only-sleep',
+        }));
+        expect(recursiveDeleteMock).toHaveBeenCalledWith(expect.objectContaining({
+            path: 'failed_jobs/legacy-provider-only-dlq',
+        }));
+        expect(markQueueItemDeletedForUserCleanupMock).toHaveBeenCalledWith(
+            'sleepSyncQueue',
+            'legacy-provider-only-sleep',
+            'account_deletion_cleanup',
+        );
+        expect(markQueueItemDeletedForUserCleanupMock).toHaveBeenCalledWith(
+            'suuntoAppWorkoutQueue',
+            'legacy-provider-only-dlq',
+            'account_deletion_cleanup',
+        );
+    });
+
+    it('should not remove provider-keyed queue docs that still resolve to an active token', async () => {
+        const wrapped = cleanupUserAccounts;
+        const user = testEnv.auth.makeUserRecord({ uid: 'testUser123' });
+        const activeTokenGet = vi.fn().mockResolvedValue({
+            empty: false,
+            docs: [{
+                id: 'active-token',
+                data: () => ({}),
+                ref: {
+                    parent: {
+                        parent: {
+                            parent: { id: 'mockCollection' },
+                        },
+                    },
+                },
+            }],
+        });
+        const activeTokenLimit = vi.fn().mockReturnValue({ get: activeTokenGet });
+
+        tokensGetMock.mockResolvedValue({ empty: true, size: 0, docs: [] });
+        whereMock.mockReturnValue({ get: vi.fn().mockResolvedValue({ docs: [] }) });
+        collectionGroupWhereMock.mockImplementation(() => ({
+            where: collectionGroupWhereMock,
+            limit: activeTokenLimit,
+            get: activeTokenGet,
+        }));
+        collectionGroupMock.mockImplementation(() => ({
+            where: collectionGroupWhereMock,
+            limit: activeTokenLimit,
+            get: activeTokenGet,
+        }));
+        limitGetMock
+            .mockResolvedValueOnce({
+                docs: [{
+                    id: 'active-provider-sleep',
+                    ref: { path: 'sleepSyncQueue/active-provider-sleep' },
+                    data: () => ({
+                        provider: 'SuuntoApp',
+                        providerUserId: 'active-suunto-provider',
+                    }),
+                }],
+            })
+            .mockResolvedValue({ docs: [] });
+
+        await wrapped(user, { eventId: 'eventId' } as unknown as functions.EventContext);
+
+        expect(activeTokenGet).toHaveBeenCalled();
+        expect(recursiveDeleteMock).not.toHaveBeenCalledWith(expect.objectContaining({
+            path: 'sleepSyncQueue/active-provider-sleep',
+        }));
+        expect(markQueueItemDeletedForUserCleanupMock).not.toHaveBeenCalledWith(
+            'sleepSyncQueue',
+            'active-provider-sleep',
+            'account_deletion_cleanup',
+        );
     });
 
     it('should recover Garmin provider identifiers from legacy failed jobs without originalCollection', async () => {

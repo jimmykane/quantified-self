@@ -45,6 +45,10 @@ import {
     markQueueItemDispatchedIfUserActive,
     QueueDispatchMarkerResult,
 } from '../queue/dispatch-marker';
+import {
+    markQueueItemDeletedForUserCleanup,
+    QUEUE_CLEANUP_TOMBSTONE_REASONS,
+} from '../queue/cleanup-tombstone';
 
 type TokenSnapshot = admin.firestore.QueryDocumentSnapshot;
 
@@ -173,6 +177,11 @@ async function deleteSleepQueueDocAfterDeletionGuard(
     userID: string,
 ): Promise<void> {
     try {
+        await markQueueItemDeletedForUserCleanup(
+            SLEEP_SYNC_QUEUE_COLLECTION_NAME,
+            queueId,
+            QUEUE_CLEANUP_TOMBSTONE_REASONS.UserDeletionGuard,
+        );
         await admin.firestore().recursiveDelete(docRef);
         logger.info(`[SleepSync] Deleted queue item ${queueId} for deleting user ${userID} before Cloud Task dispatch.`);
     } catch (error) {

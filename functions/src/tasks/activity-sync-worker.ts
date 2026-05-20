@@ -6,6 +6,7 @@ import { QueueResult } from '../queue-utils';
 import { ACTIVITY_SYNC_QUEUE_COLLECTION_NAME } from '../activity-sync/constants';
 import { ActivitySyncQueueItemInterface } from '../queue/queue-item.interface';
 import { processActivitySyncQueueItem } from '../activity-sync/process-queue-item';
+import { isQueueItemDeletedForUserCleanup } from '../queue/cleanup-tombstone';
 
 interface ActivitySyncTaskPayload {
     queueItemId: string;
@@ -27,6 +28,10 @@ export const processActivitySyncTask = onTaskDispatched({
         const failedJobDoc = await admin.firestore().collection('failed_jobs').doc(queueItemId).get();
         if (failedJobDoc.exists) {
             logger.warn(`[ActivitySyncTaskWorker] Queue item ${queueItemId} not found in ${ACTIVITY_SYNC_QUEUE_COLLECTION_NAME} but exists in failed_jobs. Stopping retry.`);
+            return;
+        }
+        if (await isQueueItemDeletedForUserCleanup(ACTIVITY_SYNC_QUEUE_COLLECTION_NAME, queueItemId)) {
+            logger.warn(`[ActivitySyncTaskWorker] Queue item ${queueItemId} was deleted during account cleanup. Stopping retry.`);
             return;
         }
 

@@ -32,12 +32,17 @@ vi.mock('firebase-admin', () => ({
 }));
 
 // Mock queue dependencies
-const { mockParseWorkoutQueueItemForServiceName } = vi.hoisted(() => ({
+const { mockParseWorkoutQueueItemForServiceName, mockIsQueueItemDeletedForUserCleanup } = vi.hoisted(() => ({
     mockParseWorkoutQueueItemForServiceName: vi.fn(),
+    mockIsQueueItemDeletedForUserCleanup: vi.fn(),
 }));
 
 vi.mock('../queue', () => ({
     parseWorkoutQueueItemForServiceName: mockParseWorkoutQueueItemForServiceName,
+}));
+
+vi.mock('../queue/cleanup-tombstone', () => ({
+    isQueueItemDeletedForUserCleanup: mockIsQueueItemDeletedForUserCleanup,
 }));
 
 // Import AFTER mocks
@@ -46,6 +51,7 @@ import { processWorkoutTask } from './workout-processor';
 describe('processWorkoutTask', () => {
     beforeEach(() => {
         vi.clearAllMocks();
+        mockIsQueueItemDeletedForUserCleanup.mockResolvedValue(false);
         // Reset doc chain
         mockCollection.doc.mockReturnValue(mockDoc);
     });
@@ -147,6 +153,23 @@ describe('processWorkoutTask', () => {
         await expect((processWorkoutTask as any)(request)).rejects.toThrow(
             '[TaskWorker] Queue item test-id not found in garminAPIActivityQueue'
         );
+        expect(mockParseWorkoutQueueItemForServiceName).not.toHaveBeenCalled();
+    });
+
+    it('should NOT throw if item was deleted during account cleanup', async () => {
+        const queueItemId = 'test-id';
+        const serviceName = ServiceNames.GarminAPI;
+
+        mockGet
+            .mockResolvedValueOnce({ exists: false })
+            .mockResolvedValueOnce({ exists: false });
+        mockIsQueueItemDeletedForUserCleanup.mockResolvedValueOnce(true);
+
+        await expect((processWorkoutTask as any)({
+            data: { queueItemId, serviceName }
+        })).resolves.toBeUndefined();
+
+        expect(mockIsQueueItemDeletedForUserCleanup).toHaveBeenCalledWith('garminAPIActivityQueue', queueItemId);
         expect(mockParseWorkoutQueueItemForServiceName).not.toHaveBeenCalled();
     });
 

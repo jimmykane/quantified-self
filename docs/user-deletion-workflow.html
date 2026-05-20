@@ -180,7 +180,7 @@
                 Firestore["🔥 Firestore Recursive Delete"]
                 Storage["📂 Storage Bucket Delete"]
 
-                Firestore -->|"paths: users/{uid}, customers/{uid}, privileges"| Firestore
+                Firestore -->|"paths: users/{uid}, customers/{uid}"| Firestore
                 end
                 end
 
@@ -221,10 +221,16 @@
                     </tr>
                     <tr>
                         <td><strong>Access Tokens</strong></td>
-                        <td><code>suuntoAppAccessTokens/{uid}</code><br><code>COROSAPIAccessTokens/{uid}</code><br><code>garminHealthAPITokens/{uid}</code>
+                        <td><code>suuntoAppAccessTokens/{uid}</code><br><code>COROSAPIAccessTokens/{uid}</code><br><code>garminAPITokens/{uid}</code>
                         </td>
                         <td><code>cleanupUserAccounts</code></td>
-                        <td>Includes deauthorization API calls</td>
+                        <td>Attempts partner deauthorization first; if the provider is unavailable, archives token material for follow-up, then guarantees local token-root cleanup</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Operational Queues</strong></td>
+                        <td><code>activitySyncQueue/*</code><br><code>sleepSyncQueue/*</code><br><code>suuntoAppWorkoutQueue/*</code><br><code>COROSAPIWorkoutQueue/*</code><br><code>garminAPIActivityQueue/*</code><br><code>failed_jobs/*</code></td>
+                        <td><code>cleanupUserAccounts</code></td>
+                        <td>Top-level queue docs are outside the extension paths, so cleanup queries by Firebase UID and known provider ids, writes short-lived cleanup tombstones, then recursively deletes queue roots</td>
                     </tr>
                     <tr>
                         <td><strong>Email Logs</strong></td>

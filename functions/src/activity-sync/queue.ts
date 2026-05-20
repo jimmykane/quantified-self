@@ -15,6 +15,10 @@ import {
     markQueueItemDispatchedIfUserActive,
     QueueDispatchMarkerResult,
 } from '../queue/dispatch-marker';
+import {
+    markQueueItemDeletedForUserCleanup,
+    QUEUE_CLEANUP_TOMBSTONE_REASONS,
+} from '../queue/cleanup-tombstone';
 
 export interface EnqueueActivitySyncQueueItemParams {
     routeId: ActivitySyncRouteId;
@@ -49,6 +53,11 @@ async function deleteQueueDocAfterDeletionGuard(
     userID: string,
 ): Promise<void> {
     try {
+        await markQueueItemDeletedForUserCleanup(
+            ACTIVITY_SYNC_QUEUE_COLLECTION_NAME,
+            queueItemId,
+            QUEUE_CLEANUP_TOMBSTONE_REASONS.UserDeletionGuard,
+        );
         await db.recursiveDelete(queueDocRef);
         logger.info(`[ActivitySync] Deleted queue item ${queueItemId} for deleting user ${userID} before Cloud Task dispatch.`);
     } catch (error) {
