@@ -7,10 +7,12 @@ const {
   mockRunTransaction,
   mockRecursiveDelete,
   mockDeleteLocalServiceToken,
+  mockCleanupProviderOperationalDocsForServiceToken,
   mockAdapterDeauthorize,
   mockGetOAuth2Client,
   mockCreateOAuthToken,
   mockRefreshOAuthToken,
+  tokenDocumentGet,
   tokenRef,
   tokenCollectionRef,
   tokenRootRef,
@@ -22,7 +24,18 @@ const {
     },
   };
 
+  const tokenDocumentGet = vi.fn().mockResolvedValue({
+    exists: true,
+    data: () => ({
+      serviceName: 'suuntoApp',
+      userName: 'suunto-user',
+    }),
+  });
+
   const tokenCollectionRef = {
+    doc: vi.fn(() => ({
+      get: tokenDocumentGet,
+    })),
     get: vi.fn(),
     limit: vi.fn(),
   };
@@ -43,10 +56,16 @@ const {
     mockRunTransaction: vi.fn(),
     mockRecursiveDelete: vi.fn().mockResolvedValue(undefined),
     mockDeleteLocalServiceToken: vi.fn(),
+    mockCleanupProviderOperationalDocsForServiceToken: vi.fn().mockResolvedValue({
+      providerUserId: 'suunto-user',
+      deletedDocCount: 0,
+      skippedForActiveConnection: false,
+    }),
     mockAdapterDeauthorize: vi.fn().mockResolvedValue(undefined),
     mockGetOAuth2Client: vi.fn(),
     mockCreateOAuthToken: vi.fn(),
     mockRefreshOAuthToken: vi.fn(),
+    tokenDocumentGet,
     tokenRef,
     tokenCollectionRef,
     tokenRootRef,
@@ -82,6 +101,10 @@ vi.mock('./service-token-store', () => ({
   getServiceTokenRootDocumentRef: vi.fn(() => tokenRootRef),
 }));
 
+vi.mock('./service-operational-cleanup', () => ({
+  cleanupProviderOperationalDocsForServiceToken: mockCleanupProviderOperationalDocsForServiceToken,
+}));
+
 vi.mock('./auth/factory', () => ({
   getServiceAdapter: vi.fn(() => ({
     deauthorize: mockAdapterDeauthorize,
@@ -114,10 +137,22 @@ describe('service-auth-lifecycle terminal auth handling', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockDeleteLocalServiceToken.mockReset();
+    mockCleanupProviderOperationalDocsForServiceToken.mockReset().mockResolvedValue({
+      providerUserId: 'suunto-user',
+      deletedDocCount: 0,
+      skippedForActiveConnection: false,
+    });
     mockAdapterDeauthorize.mockReset().mockResolvedValue(undefined);
     mockRefreshOAuthToken.mockReset();
     mockCreateOAuthToken.mockReset().mockReturnValue({ refresh: mockRefreshOAuthToken });
     mockGetOAuth2Client.mockReset().mockReturnValue({ createToken: mockCreateOAuthToken });
+    tokenDocumentGet.mockReset().mockResolvedValue({
+      exists: true,
+      data: () => ({
+        serviceName: 'suuntoApp',
+        userName: 'suunto-user',
+      }),
+    });
     tokenCollectionRef.get.mockReset();
     tokenCollectionRef.limit.mockReset().mockReturnValue({
       get: vi.fn().mockResolvedValue({ empty: false }),
@@ -508,6 +543,38 @@ describe('service-auth-lifecycle terminal auth handling', () => {
       'garmin-token-id',
       { preserveOAuthFlowContext: true },
     );
+  });
+
+  it('cleans provider-keyed operational docs after targeted token deletion using captured token data', async () => {
+    tokenDocumentGet.mockResolvedValueOnce({
+      exists: true,
+      data: () => ({
+        serviceName: ServiceNames.GarminAPI,
+        userID: 'garmin-provider-user',
+      }),
+    });
+    mockDeleteLocalServiceToken.mockResolvedValueOnce({
+      tokenRootDeleted: true,
+      tokenRootPreservedForOAuthFlow: false,
+      remainingTokenCount: 0,
+    });
+
+    await cleanupServiceTokenById(
+      'firebase-user-123',
+      ServiceNames.GarminAPI,
+      'garmin-token-id',
+      SERVICE_AUTH_CLEANUP_REASONS.PartnerDisconnect,
+    );
+
+    expect(mockCleanupProviderOperationalDocsForServiceToken).toHaveBeenCalledWith(
+      'firebase-user-123',
+      ServiceNames.GarminAPI,
+      expect.objectContaining({
+        userID: 'garmin-provider-user',
+      }),
+    );
+    expect(mockDeleteLocalServiceToken.mock.invocationCallOrder[0])
+      .toBeLessThan(mockCleanupProviderOperationalDocsForServiceToken.mock.invocationCallOrder[0]);
   });
 
   it('cancels pending OAuth context for targeted account-deletion token cleanup', async () => {

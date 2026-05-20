@@ -17,7 +17,171 @@ import {
   MissingTokensBehavior,
   SERVICE_AUTH_CLEANUP_REASONS,
 } from './service-auth-lifecycle';
+import {
+  getUserDeletionGuardState,
+  getUserDeletionGuardStateInTransaction,
+  UserDeletionGuardReadError,
+} from './shared/user-deletion-guard';
+import { archiveOrphanedServiceToken } from './orphaned-service-tokens';
 export { deleteLocalServiceToken } from './service-token-store';
+
+class OAuthServiceConnectionSkippedForDeletedUserError extends Error {
+  public readonly name = 'OAuthServiceConnectionSkippedForDeletedUserError';
+  public readonly code = 'failed-precondition';
+  public readonly statusCode = 412;
+
+  constructor(
+    public readonly userID: string,
+    public readonly serviceName: ServiceNames,
+    public readonly phase: string,
+  ) {
+    super(`Skipping ${serviceName} OAuth write for user ${userID} during ${phase} because the user is missing or deletion is in progress.`);
+  }
+}
+
+async function assertOAuthUserCanWriteServiceState(
+  userID: string,
+  serviceName: ServiceNames,
+  phase: string,
+): Promise<void> {
+  let deletionGuard;
+  try {
+    deletionGuard = await getUserDeletionGuardState(admin.firestore(), userID);
+  } catch (error) {
+    throw new UserDeletionGuardReadError(userID, phase, error);
+  }
+
+  if (deletionGuard.shouldSkip) {
+    logger.warn(`Skipping ${serviceName} OAuth state write for user ${userID} during ${phase} because the user is missing or deletion is in progress.`);
+    throw new OAuthServiceConnectionSkippedForDeletedUserError(userID, serviceName, phase);
+  }
+}
+
+async function setOAuthStateIfUserActive(
+  userID: string,
+  serviceName: ServiceNames,
+  tokenCollectionName: string,
+  tokenData: Record<string, unknown>,
+): Promise<void> {
+  const db = admin.firestore();
+  const tokenRootRef = db.collection(tokenCollectionName).doc(userID);
+  await db.runTransaction(async (transaction) => {
+    let deletionGuard;
+    try {
+      deletionGuard = await getUserDeletionGuardStateInTransaction(db, transaction, userID);
+    } catch (error) {
+      throw new UserDeletionGuardReadError(userID, `oauth_state_write:${serviceName}`, error);
+    }
+    if (deletionGuard.shouldSkip) {
+      logger.warn(`Skipping ${serviceName} OAuth state write for user ${userID} because the user is missing or deletion is in progress.`);
+      throw new OAuthServiceConnectionSkippedForDeletedUserError(userID, serviceName, `oauth_state_write:${serviceName}`);
+    }
+    transaction.set(tokenRootRef, tokenData, { merge: true });
+  });
+}
+
+async function setOAuthTokenIfUserActive(
+  userID: string,
+  serviceName: ServiceNames,
+  tokenCollectionName: string,
+  tokenID: string,
+  tokenData: Record<string, unknown>,
+): Promise<void> {
+  const db = admin.firestore();
+  const tokenDocRef = db.collection(tokenCollectionName).doc(userID).collection('tokens').doc(tokenID);
+  await db.runTransaction(async (transaction) => {
+    let deletionGuard;
+    try {
+      deletionGuard = await getUserDeletionGuardStateInTransaction(db, transaction, userID);
+    } catch (error) {
+      throw new UserDeletionGuardReadError(userID, `oauth_token_write:${serviceName}`, error);
+    }
+    if (deletionGuard.shouldSkip) {
+      logger.warn(`Skipping ${serviceName} OAuth token write for user ${userID} because the user is missing or deletion is in progress.`);
+      throw new OAuthServiceConnectionSkippedForDeletedUserError(userID, serviceName, `oauth_token_write:${serviceName}`);
+    }
+    transaction.set(tokenDocRef, tokenData);
+  });
+}
+
+async function cleanupOAuthFlowContext(
+  userID: string,
+  serviceName: ServiceNames,
+  tokenCollectionName: string,
+  tokenPersisted: boolean,
+): Promise<void> {
+  const db = admin.firestore();
+  const tokenRootRef = db.collection(tokenCollectionName).doc(userID);
+  try {
+    const deletionGuard = await getUserDeletionGuardState(db, userID);
+    if (deletionGuard.shouldSkip) {
+      if (tokenPersisted) {
+        logger.info(`Preserving ${serviceName} OAuth token root for deleting user ${userID} because a token was already persisted for account-deletion deauthorization.`);
+        return;
+      }
+      await db.recursiveDelete(tokenRootRef);
+      logger.info(`Deleted ${serviceName} OAuth token root for deleting user ${userID} while cleaning temporary OAuth data.`);
+      return;
+    }
+  } catch (error) {
+    logger.warn(`Failed to read deletion guard before cleaning temporary OAuth2 data for user ${userID}`, error);
+  }
+
+  await tokenRootRef.update({
+    state: admin.firestore.FieldValue.delete(),
+    codeVerifier: admin.firestore.FieldValue.delete(),
+  });
+}
+
+function buildUnpersistedServiceToken(response: AccessToken, serviceName: ServiceNames): Auth2ServiceTokenInterface {
+  const currentDate = Date.now();
+  const expiresIn = typeof response.token.expires_in === 'number'
+    ? response.token.expires_in * 1000
+    : 0;
+
+  return {
+    serviceName,
+    accessToken: response.token.access_token as string,
+    refreshToken: response.token.refresh_token as string,
+    tokenType: (response.token.token_type as string) || 'bearer',
+    expiresAt: currentDate + expiresIn,
+    scope: response.token.scope as string,
+    dateCreated: currentDate,
+    dateRefreshed: currentDate,
+  } as Auth2ServiceTokenInterface;
+}
+
+async function deauthorizeUnpersistedOAuthToken(
+  adapter: ReturnType<typeof getServiceAdapter>,
+  userID: string,
+  serviceName: ServiceNames,
+  response: AccessToken,
+): Promise<void> {
+  if (!response?.token?.access_token) {
+    return;
+  }
+
+  const serviceToken = buildUnpersistedServiceToken(response, serviceName);
+  const tokenArchiveId = `unpersisted-oauth-${crypto
+    .createHash('sha256')
+    .update(serviceToken.accessToken)
+    .digest('hex')
+    .slice(0, 16)}`;
+
+  try {
+    await adapter.deauthorize(serviceToken);
+    logger.info(`Deauthorized unpersisted ${serviceName} OAuth token for deleting user ${userID}`);
+  } catch (error) {
+    logger.error(`Failed to deauthorize unpersisted ${serviceName} OAuth token for user ${userID}`, error);
+    await archiveOrphanedServiceToken(
+      userID,
+      serviceName,
+      tokenArchiveId,
+      serviceToken as unknown as Record<string, unknown>,
+      error,
+    );
+  }
+}
 
 
 export async function removeDuplicateConnections(currentUserID: string, serviceName: ServiceNames, externalUserId: string) {
@@ -88,7 +252,8 @@ export async function getServiceOAuth2CodeRedirectAndSaveStateToUser(userID: str
     ...(context || {}),
   };
 
-  await admin.firestore().collection(adapter.tokenCollectionName).doc(userID).set(tokenData, { merge: true });
+  await assertOAuthUserCanWriteServiceState(userID, serviceName, `oauth_state_prepare:${serviceName}`);
+  await setOAuthStateIfUserActive(userID, serviceName, adapter.tokenCollectionName, tokenData);
 
   return serviceRedirectURI;
 }
@@ -126,6 +291,7 @@ export function convertAccessTokenResponseToServiceToken(response: AccessToken, 
  */
 export async function getAndSetServiceOAuth2AccessTokenForUser(userID: string, serviceName: ServiceNames, redirectUri: string, code: string) {
   const adapter = getServiceAdapter(serviceName);
+  let tokenPersisted = false;
 
   // Retrieve stored flow context (state, PKCE verifier, etc)
   const tokensDocumentSnapshot = await admin.firestore().collection(adapter.tokenCollectionName).doc(userID).get();
@@ -133,6 +299,8 @@ export async function getAndSetServiceOAuth2AccessTokenForUser(userID: string, s
 
   try {
     const tokenConfig = adapter.getTokenRequestConfig(redirectUri, code, tokensDocumentSnapshotData);
+
+    await assertOAuthUserCanWriteServiceState(userID, serviceName, `oauth_token_exchange:${serviceName}`);
 
     const oauth2Client = adapter.getOAuth2Client();
     const results: AccessToken = await oauth2Client.getToken(tokenConfig);
@@ -142,17 +310,30 @@ export async function getAndSetServiceOAuth2AccessTokenForUser(userID: string, s
       throw new Error(`No results when geting token for userID: ${userID}, serviceName: ${serviceName}`);
     }
 
-    // Use adapter to process post-token logic (fetch uniqueId, permissions, etc)
-    const processedTokenData = await adapter.processNewToken(results, userID);
-    const { uniqueId } = processedTokenData;
+    let uniqueId: string | undefined;
+    try {
+      await assertOAuthUserCanWriteServiceState(userID, serviceName, `oauth_token_process:${serviceName}`);
 
-    const tokenData = adapter.convertTokenResponse(results, uniqueId, processedTokenData);
+      // Use adapter to process post-token logic (fetch uniqueId, permissions, etc)
+      const processedTokenData = await adapter.processNewToken(results, userID);
+      uniqueId = processedTokenData.uniqueId;
 
-    await admin.firestore()
-      .collection(adapter.tokenCollectionName)
-      .doc(userID).collection('tokens')
-      .doc(uniqueId || 'default')
-      .set(tokenData);
+      const tokenData = adapter.convertTokenResponse(results, uniqueId, processedTokenData);
+
+      await setOAuthTokenIfUserActive(
+        userID,
+        serviceName,
+        adapter.tokenCollectionName,
+        uniqueId || 'default',
+        tokenData,
+      );
+      tokenPersisted = true;
+    } catch (error) {
+      if (!tokenPersisted) {
+        await deauthorizeUnpersistedOAuthToken(adapter, userID, serviceName, results);
+      }
+      throw error;
+    }
 
     await markServiceConnected(userID, serviceName);
 
@@ -170,10 +351,7 @@ export async function getAndSetServiceOAuth2AccessTokenForUser(userID: string, s
   } finally {
     // Cleanup temporary fields (state, PKCE verifier)
     try {
-      await admin.firestore().collection(adapter.tokenCollectionName).doc(userID).update({
-        state: admin.firestore.FieldValue.delete(),
-        codeVerifier: admin.firestore.FieldValue.delete(),
-      });
+      await cleanupOAuthFlowContext(userID, serviceName, adapter.tokenCollectionName, tokenPersisted);
       logger.info(`Cleaned up temporary OAuth2 data for User ${userID} and ${serviceName}`);
     } catch (e) {
       // Don't fail if cleanup fails, but log it

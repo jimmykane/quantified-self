@@ -6,7 +6,6 @@ import { GARMIN_API_TOKENS_COLLECTION_NAME, GARMIN_API_WORKOUT_QUEUE_COLLECTION_
 
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { DERIVED_METRICS_COLLECTION_ID } from '../../../shared/derived-metrics';
-import { getExpireAtTimestamp, TTL_CONFIG } from '../shared/ttl-config';
 import { ACTIVITY_SYNC_QUEUE_COLLECTION_NAME } from '../activity-sync/constants';
 import { SLEEP_SYNC_QUEUE_COLLECTION_NAME } from '../sleep/constants';
 import { SUUNTOAPP_WORKOUT_QUEUE_COLLECTION_NAME } from '../suunto/constants';
@@ -21,8 +20,12 @@ import {
     markQueueItemDeletedForUserCleanup,
     QUEUE_CLEANUP_TOMBSTONE_REASONS,
 } from '../queue/cleanup-tombstone';
+import {
+    archiveOrphanedServiceToken,
+    ORPHANED_SERVICE_TOKENS_COLLECTION_NAME,
+} from '../orphaned-service-tokens';
 
-export const ORPHANED_SERVICE_TOKENS_COLLECTION_NAME = 'orphaned_service_tokens';
+export { ORPHANED_SERVICE_TOKENS_COLLECTION_NAME } from '../orphaned-service-tokens';
 
 /**
  * Helper to delete a token document and its subcollections.
@@ -36,42 +39,6 @@ async function deleteTokenDocumentWithSubcollections(collectionName: string, uid
     // Using recursiveDelete to delete the parent document and all its subcollections (e.g. 'tokens')
     await admin.firestore().recursiveDelete(userDocRef);
     logger.info(`[Cleanup] Recursively deleted parent doc and all subcollections for ${collectionName}/${uid}`);
-}
-
-/**
- * Archives a token that couldn't be cleanly deauthorized due to service unavailability.
- * This allows the local user deletion to proceed while keeping a record for later retry.
- */
-async function archiveOrphanedToken(
-    uid: string,
-    serviceName: ServiceNames,
-    originalTokenId: string,
-    tokenData: any,
-    error: any
-): Promise<void> {
-    const db = admin.firestore();
-    // Composite ID to prevent duplicates
-    const docId = `${serviceName}_${uid}_${originalTokenId}`;
-
-    const now = admin.firestore.Timestamp.now();
-    const errorString = error?.message || error?.toString() || 'Unknown Error';
-
-    const archiveData = {
-        serviceName,
-        uid,
-        originalTokenId,
-        token: tokenData || {}, // Ensure we save something even if tokenData is partial
-        archivedAt: now,
-        expireAt: getExpireAtTimestamp(TTL_CONFIG.ORPHANED_TOKEN_IN_DAYS),
-        lastError: errorString
-    };
-
-    try {
-        await db.collection(ORPHANED_SERVICE_TOKENS_COLLECTION_NAME).doc(docId).set(archiveData);
-        logger.info(`[Cleanup] Archived orphaned token ${originalTokenId} for ${serviceName} user ${uid} due to error: ${errorString}`);
-    } catch (archiveError) {
-        logger.error(`[Cleanup] Failed to archive orphaned token ${originalTokenId} for ${uid}`, archiveError);
-    }
 }
 
 /**
@@ -95,7 +62,7 @@ async function archiveRemainingTokens(collectionName: string, uid: string, servi
         // Construct a synthesized error to indicate why we are archiving, unless we have the original error
         const errorReason = originalError || new Error('Cleanup: Token remained after deauthorization attempts (likely API unavailable or 500/502).');
 
-        return archiveOrphanedToken(uid, serviceName, tokenId, tokenData, errorReason);
+        return archiveOrphanedServiceToken(uid, serviceName, tokenId, tokenData, errorReason);
     });
 
     await Promise.all(archivePromises);
@@ -111,7 +78,7 @@ async function archiveLifecycleTokens(
         return;
     }
 
-    await Promise.all(tokensToArchive.map((token) => archiveOrphanedToken(
+    await Promise.all(tokensToArchive.map((token) => archiveOrphanedServiceToken(
         uid,
         serviceName,
         token.tokenID,

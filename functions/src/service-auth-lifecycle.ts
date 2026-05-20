@@ -13,6 +13,7 @@ import {
   getServiceTokenCollectionRef,
   getServiceTokenRootDocumentRef,
 } from './service-token-store';
+import { cleanupProviderOperationalDocsForServiceToken } from './service-operational-cleanup';
 
 type StoredServiceToken = Auth2ServiceTokenInterface | GarminAPIAuth2ServiceTokenInterface;
 type QueryDocumentSnapshot = admin.firestore.QueryDocumentSnapshot;
@@ -192,6 +193,17 @@ function addAccountDeletionTokenArchive(
     tokenData,
     errorMessage,
   });
+}
+
+function getSnapshotDataForOperationalCleanup(snapshot: DocumentSnapshot | QueryDocumentSnapshot): Record<string, unknown> | null {
+  if (typeof snapshot.data !== 'function') {
+    return null;
+  }
+
+  const data = snapshot.data();
+  return data && typeof data === 'object'
+    ? data as Record<string, unknown>
+    : null;
 }
 
 function areFirestoreTimestampsEqual(
@@ -572,11 +584,26 @@ export async function cleanupServiceTokenById(
   };
 
   try {
+    const tokenSnapshot = await getServiceTokenCollectionRef(userID, serviceName).doc(tokenID).get();
+    const tokenDataForOperationalCleanup = tokenSnapshot.exists
+      ? getSnapshotDataForOperationalCleanup(tokenSnapshot)
+      : null;
     const deleteResult = await deleteLocalServiceToken(userID, serviceName, tokenID, {
       preserveOAuthFlowContext: reason !== SERVICE_AUTH_CLEANUP_REASONS.UserDisconnect
         && reason !== SERVICE_AUTH_CLEANUP_REASONS.AccountDeletion,
     });
     outcome.deletedTokenCount = 1;
+    if (tokenDataForOperationalCleanup) {
+      try {
+        await cleanupProviderOperationalDocsForServiceToken(
+          userID,
+          serviceName,
+          tokenDataForOperationalCleanup,
+        );
+      } catch (operationalCleanupError) {
+        logger.error(`Failed to clean provider-keyed operational docs for ${serviceName} token ${tokenID} and user ${userID}`, operationalCleanupError);
+      }
+    }
     await applyPostCleanupConnectionState(userID, serviceName, reason, outcome, deleteResult.tokenRootDeleted);
   } catch (error) {
     logger.error(`Failed to delete token ${tokenID} for ${serviceName} user ${userID}`, error);
@@ -627,6 +654,21 @@ async function cleanupTerminalAuthToken(
     outcome.deletedTokenCount = deleteResult.tokenDeleted ? 1 : 0;
     outcome.tokenCount = 1 + deleteResult.remainingTokenCount;
     outcome.preservedTokenCount = deleteResult.remainingTokenCount;
+
+    const tokenDataForOperationalCleanup = deleteResult.latestSnapshot?.exists
+      ? getSnapshotDataForOperationalCleanup(deleteResult.latestSnapshot)
+      : null;
+    if (tokenDataForOperationalCleanup) {
+      try {
+        await cleanupProviderOperationalDocsForServiceToken(
+          userID,
+          serviceName,
+          tokenDataForOperationalCleanup,
+        );
+      } catch (operationalCleanupError) {
+        logger.error(`Failed to clean provider-keyed operational docs after terminal auth cleanup for ${serviceName} user ${userID}`, operationalCleanupError);
+      }
+    }
 
     if (deleteResult.remainingTokenCount === 0) {
       try {
@@ -799,12 +841,24 @@ export async function cleanupServiceConnectionForUser(
     }
 
     try {
+      const tokenDataForOperationalCleanup = getSnapshotDataForOperationalCleanup(tokenQueryDocumentSnapshot);
       const deleteResult = await deleteLocalServiceToken(userID, serviceName, tokenQueryDocumentSnapshot.id, {
         preserveOAuthFlowContext: reason !== SERVICE_AUTH_CLEANUP_REASONS.UserDisconnect
           && reason !== SERVICE_AUTH_CLEANUP_REASONS.AccountDeletion,
       });
       outcome.deletedTokenCount += 1;
       knownNoTokensRemain = deleteResult.tokenRootDeleted;
+      if (tokenDataForOperationalCleanup) {
+        try {
+          await cleanupProviderOperationalDocsForServiceToken(
+            userID,
+            serviceName,
+            tokenDataForOperationalCleanup,
+          );
+        } catch (operationalCleanupError) {
+          logger.error(`Failed to clean provider-keyed operational docs for ${serviceName} token ${tokenQueryDocumentSnapshot.id} and user ${userID}`, operationalCleanupError);
+        }
+      }
     } catch (deleteError: any) {
       cleanupErrors.push(deleteError);
       logger.error(`Failed to delete local token ${tokenQueryDocumentSnapshot.id}: ${deleteError?.message || deleteError}`);

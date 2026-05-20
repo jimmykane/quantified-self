@@ -6,6 +6,7 @@ export const QUEUE_CLEANUP_TOMBSTONES_COLLECTION_NAME = 'queueCleanupTombstones'
 
 export const QUEUE_CLEANUP_TOMBSTONE_REASONS = {
     AccountDeletionCleanup: 'account_deletion_cleanup',
+    ServiceDisconnectCleanup: 'service_disconnect_cleanup',
     UserDeletionGuard: 'user_deletion_guard',
 } as const;
 
