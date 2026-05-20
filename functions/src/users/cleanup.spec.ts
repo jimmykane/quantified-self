@@ -996,7 +996,7 @@ describe('cleanupUserAccounts', () => {
         tokensGetMock.mockResolvedValue({ empty: true, size: 0, docs: [] });
         whereMock.mockImplementation((field: string, _operator: string, value: string) => ({
             get: vi.fn().mockResolvedValue(
-                field === 'userID' && value === 'testUser123' && ++userIdUidQueryCount === 2
+                field === 'userID' && value === 'testUser123' && ++userIdUidQueryCount === 5
                     ? {
                         docs: [{
                             id: 'garmin-provider-id-equals-firebase-uid',
@@ -1020,6 +1020,46 @@ describe('cleanupUserAccounts', () => {
         expect(recursiveDeleteMock).not.toHaveBeenCalledWith(expect.objectContaining({
             path: 'garminAPIActivityQueue/garmin-provider-id-equals-firebase-uid',
         }));
+        expect(recursiveDeleteMock).not.toHaveBeenCalledWith(expect.objectContaining({
+            path: 'failed_jobs/garmin-provider-id-equals-firebase-uid',
+        }));
+    });
+
+    it('should delete failed_jobs userID docs when originalCollection makes userID a Firebase uid', async () => {
+        const wrapped = cleanupUserAccounts;
+        const user = testEnv.auth.makeUserRecord({ uid: 'testUser123' });
+        let userIdUidQueryCount = 0;
+
+        tokensGetMock.mockResolvedValue({ empty: true, size: 0, docs: [] });
+        whereMock.mockImplementation((field: string, _operator: string, value: string) => ({
+            get: vi.fn().mockResolvedValue(
+                field === 'userID' && value === 'testUser123' && ++userIdUidQueryCount === 5
+                    ? {
+                        docs: [{
+                            id: 'sleep-failed-job-for-user',
+                            ref: { path: 'failed_jobs/sleep-failed-job-for-user' },
+                            data: () => ({
+                                originalCollection: 'sleepSyncQueue',
+                                userID: 'testUser123',
+                                provider: 'SuuntoApp',
+                                providerUserId: 'suunto-provider-user',
+                            }),
+                        }],
+                    }
+                    : { docs: [] }
+            )
+        }));
+
+        await wrapped(user, { eventId: 'eventId' } as unknown as functions.EventContext);
+
+        expect(recursiveDeleteMock).toHaveBeenCalledWith(expect.objectContaining({
+            path: 'failed_jobs/sleep-failed-job-for-user',
+        }));
+        expect(markQueueItemDeletedForUserCleanupMock).toHaveBeenCalledWith(
+            'sleepSyncQueue',
+            'sleep-failed-job-for-user',
+            'account_deletion_cleanup',
+        );
     });
 
     it('should not remove provider-keyed queue docs explicitly owned by another Firebase user', async () => {
