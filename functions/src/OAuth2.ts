@@ -20,6 +20,7 @@ import {
 import {
   getUserDeletionGuardState,
   getUserDeletionGuardStateInTransaction,
+  UserDeletionGuardState,
   UserDeletionGuardReadError,
 } from './shared/user-deletion-guard';
 import { archiveOrphanedServiceToken } from './orphaned-service-tokens';
@@ -112,19 +113,22 @@ async function cleanupOAuthFlowContext(
 ): Promise<void> {
   const db = admin.firestore();
   const tokenRootRef = db.collection(tokenCollectionName).doc(userID);
+  let deletionGuard: UserDeletionGuardState;
+
   try {
-    const deletionGuard = await getUserDeletionGuardState(db, userID);
-    if (deletionGuard.shouldSkip) {
-      if (tokenPersisted) {
-        logger.info(`Preserving ${serviceName} OAuth token root for deleting user ${userID} because a token was already persisted for account-deletion deauthorization.`);
-        return;
-      }
-      await db.recursiveDelete(tokenRootRef);
-      logger.info(`Deleted ${serviceName} OAuth token root for deleting user ${userID} while cleaning temporary OAuth data.`);
+    deletionGuard = await getUserDeletionGuardState(db, userID);
+  } catch (error) {
+    throw new UserDeletionGuardReadError(userID, `oauth_context_cleanup:${serviceName}`, error);
+  }
+
+  if (deletionGuard.shouldSkip) {
+    if (tokenPersisted) {
+      logger.info(`Preserving ${serviceName} OAuth token root for deleting user ${userID} because a token was already persisted for account-deletion deauthorization.`);
       return;
     }
-  } catch (error) {
-    logger.warn(`Failed to read deletion guard before cleaning temporary OAuth2 data for user ${userID}`, error);
+    await db.recursiveDelete(tokenRootRef);
+    logger.info(`Deleted ${serviceName} OAuth token root for deleting user ${userID} while cleaning temporary OAuth data.`);
+    return;
   }
 
   await tokenRootRef.update({

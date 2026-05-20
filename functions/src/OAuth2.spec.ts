@@ -23,6 +23,7 @@ const mockRunTransaction = vi.fn();
 const {
     mockGetUserDeletionGuardState,
     mockGetUserDeletionGuardStateInTransaction,
+    mockArchiveOrphanedServiceToken,
 } = vi.hoisted(() => ({
     mockGetUserDeletionGuardState: vi.fn().mockResolvedValue({
         userExists: true,
@@ -34,6 +35,7 @@ const {
         deletionInProgress: false,
         shouldSkip: false,
     }),
+    mockArchiveOrphanedServiceToken: vi.fn().mockResolvedValue(undefined),
 }));
 
 const mockDocInstance = {
@@ -200,6 +202,11 @@ vi.mock('./shared/user-deletion-guard', () => ({
     },
 }));
 
+vi.mock('./orphaned-service-tokens', () => ({
+    archiveOrphanedServiceToken: mockArchiveOrphanedServiceToken,
+    ORPHANED_SERVICE_TOKENS_COLLECTION_NAME: 'orphaned_service_tokens',
+}));
+
 import * as requestPromise from './request-helper';
 
 // Mock simple-oauth2
@@ -245,6 +252,7 @@ describe('OAuth2', () => {
             shouldSkip: false,
         });
         installDefaultRunTransactionMock();
+        mockArchiveOrphanedServiceToken.mockReset().mockResolvedValue(undefined);
     });
 
     describe('getServiceConfig', () => {
@@ -1325,6 +1333,37 @@ describe('OAuth2', () => {
             expect(mockRecursiveDelete).toHaveBeenCalledWith(mockDocInstance);
         });
 
+        it('should not update OAuth root if deletion-active cleanup recursive delete fails', async () => {
+            const MockAuthCode = (await import('simple-oauth2')).AuthorizationCode;
+            const getTokenSpy = vi.spyOn(MockAuthCode.prototype, 'getToken').mockResolvedValue({
+                token: { user: 'test-external-user', access_token: 'mock-token' },
+                expired: () => false,
+            } as any);
+            mockRecursiveDelete.mockRejectedValueOnce(new Error('recursive delete failed'));
+            mockGetUserDeletionGuardState
+                .mockResolvedValueOnce({
+                    userExists: true,
+                    deletionInProgress: true,
+                    shouldSkip: true,
+                })
+                .mockResolvedValueOnce({
+                    userExists: true,
+                    deletionInProgress: true,
+                    shouldSkip: true,
+                });
+
+            await expect(getAndSetServiceOAuth2AccessTokenForUser(userID, ServiceNames.SuuntoApp, redirectUri, code))
+                .rejects.toMatchObject({
+                    name: 'OAuthServiceConnectionSkippedForDeletedUserError',
+                    userID,
+                    serviceName: ServiceNames.SuuntoApp,
+                });
+
+            expect(getTokenSpy).not.toHaveBeenCalled();
+            expect(mockRecursiveDelete).toHaveBeenCalledWith(mockDocInstance);
+            expect(mockUpdate).not.toHaveBeenCalled();
+        });
+
         it('should deauthorize exchanged OAuth token when account deletion starts before token persistence', async () => {
             const MockAuthCode = (await import('simple-oauth2')).AuthorizationCode;
             vi.spyOn(MockAuthCode.prototype, 'getToken').mockResolvedValue({
@@ -1369,6 +1408,62 @@ describe('OAuth2', () => {
                 url: expect.stringContaining('/oauth/deauthorize'),
             }));
             expect(mockRecursiveDelete).toHaveBeenCalledWith(mockDocInstance);
+        });
+
+        it('should archive exchanged OAuth token when unpersisted deauthorization fails', async () => {
+            const MockAuthCode = (await import('simple-oauth2')).AuthorizationCode;
+            vi.spyOn(MockAuthCode.prototype, 'getToken').mockResolvedValue({
+                token: {
+                    user: 'test-external-user',
+                    access_token: 'mock-token',
+                    refresh_token: 'mock-refresh-token',
+                    expires_in: 3600,
+                    token_type: 'bearer',
+                    scope: 'workout',
+                },
+                expired: () => false,
+            } as any);
+            (requestPromise.get as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error('deauth unavailable'));
+            mockGetUserDeletionGuardStateInTransaction.mockResolvedValueOnce({
+                userExists: true,
+                deletionInProgress: true,
+                shouldSkip: true,
+            });
+            mockGetUserDeletionGuardState
+                .mockResolvedValueOnce({
+                    userExists: true,
+                    deletionInProgress: false,
+                    shouldSkip: false,
+                })
+                .mockResolvedValueOnce({
+                    userExists: true,
+                    deletionInProgress: false,
+                    shouldSkip: false,
+                })
+                .mockResolvedValueOnce({
+                    userExists: true,
+                    deletionInProgress: true,
+                    shouldSkip: true,
+                });
+
+            await expect(getAndSetServiceOAuth2AccessTokenForUser(userID, ServiceNames.SuuntoApp, redirectUri, code))
+                .rejects.toMatchObject({
+                    name: 'OAuthServiceConnectionSkippedForDeletedUserError',
+                    userID,
+                    serviceName: ServiceNames.SuuntoApp,
+                });
+
+            expect(mockArchiveOrphanedServiceToken).toHaveBeenCalledWith(
+                userID,
+                ServiceNames.SuuntoApp,
+                expect.stringMatching(/^unpersisted-oauth-/),
+                expect.objectContaining({
+                    serviceName: ServiceNames.SuuntoApp,
+                    accessToken: 'mock-token',
+                    refreshToken: 'mock-refresh-token',
+                }),
+                expect.any(Error),
+            );
         });
 
         it('should preserve persisted service token root when account deletion starts before OAuth context cleanup', async () => {
