@@ -24,6 +24,7 @@ const {
     mockGetUserDeletionGuardState,
     mockGetUserDeletionGuardStateInTransaction,
     mockArchiveOrphanedServiceToken,
+    mockMarkServiceConnected,
 } = vi.hoisted(() => ({
     mockGetUserDeletionGuardState: vi.fn().mockResolvedValue({
         userExists: true,
@@ -36,6 +37,7 @@ const {
         shouldSkip: false,
     }),
     mockArchiveOrphanedServiceToken: vi.fn().mockResolvedValue(undefined),
+    mockMarkServiceConnected: vi.fn().mockResolvedValue(true),
 }));
 
 const mockDocInstance = {
@@ -185,7 +187,7 @@ vi.mock('./request-helper', () => ({
 }));
 
 vi.mock('./service-connection-meta', () => ({
-    markServiceConnected: vi.fn().mockResolvedValue(undefined),
+    markServiceConnected: mockMarkServiceConnected,
     clearServiceConnectionState: vi.fn().mockResolvedValue(undefined),
 }));
 
@@ -253,6 +255,7 @@ describe('OAuth2', () => {
         });
         installDefaultRunTransactionMock();
         mockArchiveOrphanedServiceToken.mockReset().mockResolvedValue(undefined);
+        mockMarkServiceConnected.mockReset().mockResolvedValue(true);
     });
 
     describe('getServiceConfig', () => {
@@ -1492,6 +1495,44 @@ describe('OAuth2', () => {
             await getAndSetServiceOAuth2AccessTokenForUser(userID, ServiceNames.SuuntoApp, redirectUri, code);
 
             expect(mockDocInstance.set).toHaveBeenCalled();
+            expect(mockRecursiveDelete).not.toHaveBeenCalled();
+            expect(mockUpdate).not.toHaveBeenCalled();
+        });
+
+        it('should not remove duplicate connections if account deletion blocks connected-state write after token persistence', async () => {
+            const MockAuthCode = (await import('simple-oauth2')).AuthorizationCode;
+            vi.spyOn(MockAuthCode.prototype, 'getToken').mockResolvedValue({
+                token: { user: 'test-external-user', access_token: 'mock-token' },
+                expired: () => false,
+            } as any);
+            mockMarkServiceConnected.mockResolvedValueOnce(false);
+            mockGetUserDeletionGuardState
+                .mockResolvedValueOnce({
+                    userExists: true,
+                    deletionInProgress: false,
+                    shouldSkip: false,
+                })
+                .mockResolvedValueOnce({
+                    userExists: true,
+                    deletionInProgress: false,
+                    shouldSkip: false,
+                })
+                .mockResolvedValueOnce({
+                    userExists: true,
+                    deletionInProgress: true,
+                    shouldSkip: true,
+                });
+
+            await expect(getAndSetServiceOAuth2AccessTokenForUser(userID, ServiceNames.SuuntoApp, redirectUri, code))
+                .rejects.toMatchObject({
+                    name: 'OAuthServiceConnectionSkippedForDeletedUserError',
+                    userID,
+                    serviceName: ServiceNames.SuuntoApp,
+                    phase: `oauth_mark_connected:${ServiceNames.SuuntoApp}`,
+                });
+
+            expect(mockDocInstance.set).toHaveBeenCalled();
+            expect(mockWhere).not.toHaveBeenCalled();
             expect(mockRecursiveDelete).not.toHaveBeenCalled();
             expect(mockUpdate).not.toHaveBeenCalled();
         });

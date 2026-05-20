@@ -75,8 +75,8 @@ export async function markServiceReconnectRequired(
   }
 }
 
-export async function markServiceConnected(userID: string, serviceName: ServiceNames): Promise<void> {
-  await setServiceMetaIfUserActive(userID, serviceName, {
+export async function markServiceConnected(userID: string, serviceName: ServiceNames): Promise<boolean> {
+  return setServiceMetaIfUserActive(userID, serviceName, {
     connectionState: SERVICE_CONNECTION_STATES.Connected,
     lastAuthFailureCode: admin.firestore.FieldValue.delete(),
     lastAuthFailureMessage: admin.firestore.FieldValue.delete(),

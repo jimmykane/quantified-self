@@ -339,7 +339,11 @@ export async function getAndSetServiceOAuth2AccessTokenForUser(userID: string, s
       throw error;
     }
 
-    await markServiceConnected(userID, serviceName);
+    const didMarkConnected = await markServiceConnected(userID, serviceName);
+    if (!didMarkConnected) {
+      logger.warn(`Skipping duplicate cleanup for ${serviceName} OAuth callback for user ${userID} because the user is missing or deletion is in progress after token persistence.`);
+      throw new OAuthServiceConnectionSkippedForDeletedUserError(userID, serviceName, `oauth_mark_connected:${serviceName}`);
+    }
 
     // Remove any OTHER users connected to this same external account
     if (uniqueId) {

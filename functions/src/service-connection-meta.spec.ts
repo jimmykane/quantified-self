@@ -138,9 +138,20 @@ describe('service-connection-meta', () => {
       shouldSkip: true,
     });
 
-    await markServiceConnected('user-1', ServiceNames.SuuntoApp);
+    await expect(markServiceConnected('user-1', ServiceNames.SuuntoApp)).resolves.toBe(false);
 
     expect(hoisted.metaSet).not.toHaveBeenCalled();
+  });
+
+  it('returns true when connected-state write succeeds', async () => {
+    await expect(markServiceConnected('user-1', ServiceNames.SuuntoApp)).resolves.toBe(true);
+
+    expect(hoisted.metaSet).toHaveBeenCalledWith(expect.any(Object), {
+      connectionState: 'connected',
+      lastAuthFailureCode: 'delete-sentinel',
+      lastAuthFailureMessage: 'delete-sentinel',
+      lastDisconnectedAt: 'delete-sentinel',
+    }, { merge: true });
   });
 
   it('skips clear-state writes when user deletion is in progress', async () => {
