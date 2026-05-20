@@ -774,6 +774,37 @@ describe('cleanupUserAccounts', () => {
         );
     });
 
+    it('should preserve queue state when cleanup tombstone write fails during account deletion', async () => {
+        const wrapped = cleanupUserAccounts;
+        const user = testEnv.auth.makeUserRecord({ uid: 'testUser123', email: 'test@example.com' });
+        markQueueItemDeletedForUserCleanupMock.mockResolvedValue(false);
+        tokensGetMock.mockResolvedValue({ empty: true, size: 0, docs: [] });
+        whereMock.mockImplementation((field: string, _operator: string, value: string) => ({
+            get: vi.fn().mockResolvedValue(
+                field === 'userID' && value === 'testUser123'
+                    ? {
+                        docs: [{
+                            id: 'activity-job-no-tombstone',
+                            ref: { path: 'activitySyncQueue/activity-job-no-tombstone' },
+                            data: () => ({ userID: 'testUser123' }),
+                        }],
+                    }
+                    : { docs: [] }
+            )
+        }));
+
+        await wrapped(user, { eventId: 'eventId' } as unknown as functions.EventContext);
+
+        expect(markQueueItemDeletedForUserCleanupMock).toHaveBeenCalledWith(
+            'activitySyncQueue',
+            'activity-job-no-tombstone',
+            'account_deletion_cleanup',
+        );
+        expect(recursiveDeleteMock).not.toHaveBeenCalledWith(expect.objectContaining({
+            path: 'activitySyncQueue/activity-job-no-tombstone',
+        }));
+    });
+
     it('should recover provider identifiers from archived orphan tokens when current token docs are already gone', async () => {
         const wrapped = cleanupUserAccounts;
         const user = testEnv.auth.makeUserRecord({ uid: 'testUser123' });
@@ -1060,6 +1091,59 @@ describe('cleanupUserAccounts', () => {
             'sleep-failed-job-for-user',
             'account_deletion_cleanup',
         );
+    });
+
+    it('should write fallback tombstones before deleting failed_jobs docs without a recoverable source collection', async () => {
+        const wrapped = cleanupUserAccounts;
+        const user = testEnv.auth.makeUserRecord({ uid: 'testUser123' });
+
+        tokensGetMock.mockResolvedValue({ empty: true, size: 0, docs: [] });
+        whereMock.mockImplementation((field: string, _operator: string, value: string) => ({
+            get: vi.fn().mockResolvedValue(
+                field === 'uid' && value === 'testUser123'
+                    ? {
+                        docs: [{
+                            id: 'failed-job-without-source',
+                            ref: { path: 'failed_jobs/failed-job-without-source' },
+                            data: () => ({
+                                uid: 'testUser123',
+                            }),
+                        }],
+                    }
+                    : { docs: [] }
+            )
+        }));
+
+        await wrapped(user, { eventId: 'eventId' } as unknown as functions.EventContext);
+
+        expect(markQueueItemDeletedForUserCleanupMock).toHaveBeenCalledWith(
+            'activitySyncQueue',
+            'failed-job-without-source',
+            'account_deletion_cleanup',
+        );
+        expect(markQueueItemDeletedForUserCleanupMock).toHaveBeenCalledWith(
+            'sleepSyncQueue',
+            'failed-job-without-source',
+            'account_deletion_cleanup',
+        );
+        expect(markQueueItemDeletedForUserCleanupMock).toHaveBeenCalledWith(
+            'suuntoAppWorkoutQueue',
+            'failed-job-without-source',
+            'account_deletion_cleanup',
+        );
+        expect(markQueueItemDeletedForUserCleanupMock).toHaveBeenCalledWith(
+            'COROSAPIWorkoutQueue',
+            'failed-job-without-source',
+            'account_deletion_cleanup',
+        );
+        expect(markQueueItemDeletedForUserCleanupMock).toHaveBeenCalledWith(
+            'garminAPIActivityQueue',
+            'failed-job-without-source',
+            'account_deletion_cleanup',
+        );
+        expect(recursiveDeleteMock).toHaveBeenCalledWith(expect.objectContaining({
+            path: 'failed_jobs/failed-job-without-source',
+        }));
     });
 
     it('should not remove provider-keyed queue docs explicitly owned by another Firebase user', async () => {

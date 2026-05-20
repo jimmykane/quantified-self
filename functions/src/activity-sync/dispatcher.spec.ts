@@ -282,7 +282,7 @@ describe('activity-sync/dispatcher', () => {
   it('does not write the dispatch marker when deletion starts after Cloud Task enqueue', async () => {
     const nowMs = 1_700_000_000_000;
     const updateUndispatched = vi.fn().mockResolvedValue(undefined);
-    const itemRef = { update: updateUndispatched, path: 'activitySyncQueue/undispatched-item' };
+    const itemRef = { update: updateUndispatched, path: 'activitySyncQueue/undispatched-item', parent: { id: 'activitySyncQueue' } };
     mockGetUserDeletionGuardState
       .mockResolvedValueOnce({
         userExists: true,

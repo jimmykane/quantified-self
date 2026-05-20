@@ -337,7 +337,7 @@ describe('sleep/dispatcher', () => {
     it('does not write the dispatch marker when deletion starts after Cloud Task enqueue', async () => {
         const nowMs = 1_700_000_000_000;
         const updateUndispatched = vi.fn().mockResolvedValue(undefined);
-        const itemRef = { update: updateUndispatched, path: 'sleepSyncQueue/undispatched-item' };
+        const itemRef = { update: updateUndispatched, path: 'sleepSyncQueue/undispatched-item', parent: { id: 'sleepSyncQueue' } };
         mockGetUserDeletionGuardState
             .mockResolvedValueOnce({
                 userExists: true,

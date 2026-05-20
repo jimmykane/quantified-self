@@ -84,12 +84,22 @@ export async function updateQueueItemIfUserActive(
     if (result === QueueItemUserGuardedUpdateResult.SkippedDeletedUser) {
         try {
             const collectionName = params.queueItemDocument.parent?.id;
-            if (collectionName) {
-                await markQueueItemDeletedForUserCleanup(
-                    collectionName,
-                    params.queueItemId,
-                    QUEUE_CLEANUP_TOMBSTONE_REASONS.UserDeletionGuard,
+            if (!collectionName) {
+                logger.error(
+                    `[${params.logPrefix}] Cannot determine queue collection for item ${params.queueItemId}; leaving item in place to avoid missing-doc Cloud Task retries.`,
                 );
+                return result;
+            }
+            const tombstoneWritten = await markQueueItemDeletedForUserCleanup(
+                collectionName,
+                params.queueItemId,
+                QUEUE_CLEANUP_TOMBSTONE_REASONS.UserDeletionGuard,
+            );
+            if (!tombstoneWritten) {
+                logger.error(
+                    `[${params.logPrefix}] Failed to write cleanup tombstone for queue item ${params.queueItemId}; leaving item in place to avoid missing-doc Cloud Task retries.`,
+                );
+                return result;
             }
             await db.recursiveDelete(params.queueItemDocument);
             logger.info(

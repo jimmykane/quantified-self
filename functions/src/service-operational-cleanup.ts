@@ -286,11 +286,17 @@ async function deleteProviderOperationalDocsForQuery(
       continue;
     }
     if (sourceCollectionName) {
-      await markQueueItemDeletedForUserCleanup(
+      const tombstoneWritten = await markQueueItemDeletedForUserCleanup(
         sourceCollectionName,
         doc.id,
         QUEUE_CLEANUP_TOMBSTONE_REASONS.ServiceDisconnectCleanup,
       );
+      if (!tombstoneWritten) {
+        logger.error(
+          `[ServiceOperationalCleanup] Failed to write cleanup tombstone for ${query.collectionName}/${doc.id}; preserving document to avoid missing-doc Cloud Task retries.`,
+        );
+        continue;
+      }
     }
     await db.recursiveDelete(doc.ref);
     deletedRefKeys.add(refKey);

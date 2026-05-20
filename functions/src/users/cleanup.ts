@@ -319,6 +319,7 @@ async function recursiveDeleteQueryResults(
         try {
             const snapshot = await db.collection(collectionName).where(fieldName, '==', value).get();
             const docs = getSnapshotDocs(snapshot);
+            let deletedDocCount = 0;
             for (const doc of docs) {
                 const refKey = getRefDeduplicationKey(doc.ref);
                 if (deletedRefKeys.has(refKey)) {
@@ -327,12 +328,16 @@ async function recursiveDeleteQueryResults(
                 if (shouldDeleteDoc && !(await shouldDeleteDoc(doc))) {
                     continue;
                 }
-                deletedRefKeys.add(refKey);
-                await markQueueCleanupTombstoneForDeletedOperationalDoc(collectionName, doc);
+                if (!(await markQueueCleanupTombstoneForDeletedOperationalDoc(collectionName, doc))) {
+                    logger.error(`[Cleanup] Preserving ${collectionName}/${doc.id} because cleanup tombstone could not be written.`);
+                    continue;
+                }
                 await db.recursiveDelete(doc.ref);
+                deletedRefKeys.add(refKey);
+                deletedDocCount += 1;
             }
-            if (docs.length > 0) {
-                logger.info(`[Cleanup] Recursively deleted ${docs.length} ${label} docs for user ${uid} from ${collectionName} where ${fieldName} == ${value}`);
+            if (deletedDocCount > 0) {
+                logger.info(`[Cleanup] Recursively deleted ${deletedDocCount} ${label} docs for user ${uid} from ${collectionName} where ${fieldName} == ${value}`);
             }
         } catch (error) {
             logger.error(`[Cleanup] Failed to recursively delete ${label} docs for user ${uid} from ${collectionName} where ${fieldName} == ${value}`, error);
@@ -365,18 +370,29 @@ function sourceQueueCollectionFromFailedJobData(data: Record<string, unknown>): 
 async function markQueueCleanupTombstoneForDeletedOperationalDoc(
     collectionName: string,
     doc: admin.firestore.QueryDocumentSnapshot,
-): Promise<void> {
+): Promise<boolean> {
     const sourceQueueCollectionName = CLOUD_TASK_SOURCE_QUEUE_COLLECTIONS.has(collectionName)
         ? collectionName
         : collectionName === 'failed_jobs'
             ? sourceQueueCollectionFromFailedJobData(doc.data() as Record<string, unknown>)
             : null;
 
-    if (!sourceQueueCollectionName) {
-        return;
+    if (!sourceQueueCollectionName && collectionName !== 'failed_jobs') {
+        return true;
     }
 
-    await markQueueItemDeletedForUserCleanup(
+    if (!sourceQueueCollectionName) {
+        const tombstoneResults = await Promise.all([...CLOUD_TASK_SOURCE_QUEUE_COLLECTIONS].map((sourceCollectionName) =>
+            markQueueItemDeletedForUserCleanup(
+                sourceCollectionName,
+                doc.id,
+                QUEUE_CLEANUP_TOMBSTONE_REASONS.AccountDeletionCleanup,
+            )
+        ));
+        return tombstoneResults.every(Boolean);
+    }
+
+    return markQueueItemDeletedForUserCleanup(
         sourceQueueCollectionName,
         doc.id,
         QUEUE_CLEANUP_TOMBSTONE_REASONS.AccountDeletionCleanup,
@@ -588,9 +604,12 @@ async function cleanupLegacyProviderKeyedQueueOrphans(
                     continue;
                 }
 
-                deletedRefKeys.add(refKey);
-                await markQueueCleanupTombstoneForDeletedOperationalDoc(collectionName, doc);
+                if (!(await markQueueCleanupTombstoneForDeletedOperationalDoc(collectionName, doc))) {
+                    logger.error(`[Cleanup] Preserving legacy provider-keyed orphan doc ${collectionName}/${doc.id} because cleanup tombstone could not be written.`);
+                    continue;
+                }
                 await db.recursiveDelete(doc.ref);
+                deletedRefKeys.add(refKey);
                 logger.info(
                     `[Cleanup] Recursively deleted legacy provider-keyed orphan doc ${collectionName}/${doc.id} while cleaning user ${uid}.`,
                 );

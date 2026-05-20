@@ -219,4 +219,32 @@ describe('cleanupProviderOperationalDocsForServiceToken', () => {
       'service_disconnect_cleanup',
     );
   });
+
+  it('preserves provider-keyed operational docs when cleanup tombstone write fails', async () => {
+    mockMarkQueueItemDeletedForUserCleanup.mockResolvedValueOnce(false);
+    setQueryDocs('suuntoAppWorkoutQueue', 'userName', 'suunto-user', [
+      makeDoc('suuntoAppWorkoutQueue/workout-1', { userName: 'suunto-user' }),
+    ]);
+
+    const result = await cleanupProviderOperationalDocsForServiceToken(
+      'firebase-user-123',
+      ServiceNames.SuuntoApp,
+      {
+        serviceName: ServiceNames.SuuntoApp,
+        userName: 'suunto-user',
+      },
+    );
+
+    expect(result).toMatchObject({
+      providerUserId: 'suunto-user',
+      deletedDocCount: 0,
+      skippedForActiveConnection: false,
+    });
+    expect(mockMarkQueueItemDeletedForUserCleanup).toHaveBeenCalledWith(
+      'suuntoAppWorkoutQueue',
+      'workout-1',
+      'service_disconnect_cleanup',
+    );
+    expect(mockRecursiveDelete).not.toHaveBeenCalled();
+  });
 });

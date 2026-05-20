@@ -177,11 +177,15 @@ async function deleteSleepQueueDocAfterDeletionGuard(
     userID: string,
 ): Promise<void> {
     try {
-        await markQueueItemDeletedForUserCleanup(
+        const tombstoneWritten = await markQueueItemDeletedForUserCleanup(
             SLEEP_SYNC_QUEUE_COLLECTION_NAME,
             queueId,
             QUEUE_CLEANUP_TOMBSTONE_REASONS.UserDeletionGuard,
         );
+        if (!tombstoneWritten) {
+            logger.error(`[SleepSync] Failed to write cleanup tombstone for queue item ${queueId}; leaving item in place to avoid missing-doc Cloud Task retries.`);
+            return;
+        }
         await admin.firestore().recursiveDelete(docRef);
         logger.info(`[SleepSync] Deleted queue item ${queueId} for deleting user ${userID} before Cloud Task dispatch.`);
     } catch (error) {

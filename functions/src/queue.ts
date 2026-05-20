@@ -796,11 +796,15 @@ async function deleteWorkoutQueueDocBeforeDispatch(
   reason: string,
 ): Promise<void> {
   try {
-    await markQueueItemDeletedForUserCleanup(
+    const tombstoneWritten = await markQueueItemDeletedForUserCleanup(
       getServiceWorkoutQueueName(serviceName),
       queueItemId,
       QUEUE_CLEANUP_TOMBSTONE_REASONS.UserDeletionGuard,
     );
+    if (!tombstoneWritten) {
+      logger.error(`Failed to write cleanup tombstone for ${serviceName} queue item ${queueItemId}; leaving item in place to avoid missing-doc Cloud Task retries.`);
+      return;
+    }
     await admin.firestore().recursiveDelete(queueItemDocument);
     logger.info(`Deleted ${serviceName} queue item ${queueItemId} before Cloud Task dispatch: ${reason}.`);
   } catch (error) {

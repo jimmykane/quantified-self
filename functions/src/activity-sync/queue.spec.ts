@@ -18,6 +18,7 @@ const {
   mockRecursiveDelete,
   mockGetUserDeletionGuardState,
   mockGetUserDeletionGuardStateInTransaction,
+  mockMarkQueueItemDeletedForUserCleanup,
 } = vi.hoisted(() => {
   const mockGet = vi.fn();
   const mockSet = vi.fn().mockResolvedValue(undefined);
@@ -35,6 +36,7 @@ const {
     update: mockTransactionUpdate,
   }));
   const mockDoc = vi.fn(() => ({
+    parent: { id: 'activitySyncQueue' },
     get: mockGet,
     set: mockSet,
     update: mockUpdate,
@@ -58,6 +60,7 @@ const {
     mockRecursiveDelete: vi.fn().mockResolvedValue(undefined),
     mockGetUserDeletionGuardState: vi.fn(),
     mockGetUserDeletionGuardStateInTransaction: vi.fn(),
+    mockMarkQueueItemDeletedForUserCleanup: vi.fn(),
   };
 });
 
@@ -99,12 +102,19 @@ vi.mock('../shared/user-deletion-guard', () => ({
   },
 }));
 
+vi.mock('../queue/cleanup-tombstone', () => ({
+  markQueueItemDeletedForUserCleanup: mockMarkQueueItemDeletedForUserCleanup,
+  QUEUE_CLEANUP_TOMBSTONE_REASONS: {
+    UserDeletionGuard: 'user_deletion_guard',
+  },
+}));
+
 import { buildActivitySyncQueueItemId, enqueueActivitySyncQueueItem } from './queue';
 
 describe('activity-sync/queue', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockDoc.mockReturnValue({ get: mockGet, set: mockSet, update: mockUpdate });
+    mockDoc.mockReturnValue({ parent: { id: 'activitySyncQueue' }, get: mockGet, set: mockSet, update: mockUpdate });
     mockRunTransaction.mockImplementation(async (runner: (transaction: {
       get: typeof mockTransactionGet;
       set: typeof mockTransactionSet;
@@ -124,6 +134,7 @@ describe('activity-sync/queue', () => {
       deletionInProgress: false,
       shouldSkip: false,
     });
+    mockMarkQueueItemDeletedForUserCleanup.mockResolvedValue(true);
     mockTransactionUpdate.mockClear();
   });
 
@@ -348,6 +359,36 @@ describe('activity-sync/queue', () => {
     });
     expect(mockTransactionSet).toHaveBeenCalled();
     expect(mockRecursiveDelete).toHaveBeenCalledWith(expect.any(Object));
+    expect(mockEnqueueActivitySyncTask).not.toHaveBeenCalled();
+    expect(mockUpdate).not.toHaveBeenCalled();
+  });
+
+  it('preserves a newly written item when deletion starts after the transaction but tombstone write fails', async () => {
+    mockTransactionGet.mockResolvedValueOnce({ exists: false });
+    mockGetUserDeletionGuardState.mockResolvedValueOnce({
+      userExists: true,
+      deletionInProgress: true,
+      shouldSkip: true,
+    });
+    mockMarkQueueItemDeletedForUserCleanup.mockResolvedValueOnce(false);
+
+    const result = await enqueueActivitySyncQueueItem({
+      routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp,
+      sourceServiceName: ServiceNames.GarminAPI,
+      destinationServiceName: ServiceNames.SuuntoApp,
+      userID: 'user-1',
+      eventID: 'event-1',
+      originalFile: { path: 'p.fit', extension: 'fit' },
+      manual: false,
+    });
+
+    expect(result).toEqual({
+      enqueued: false,
+      queueItemId: 'activitySync__GarminAPI_to_SuuntoApp__user-1__event-1',
+      reason: 'user_deleted_or_deleting',
+    });
+    expect(mockTransactionSet).toHaveBeenCalled();
+    expect(mockRecursiveDelete).not.toHaveBeenCalled();
     expect(mockEnqueueActivitySyncTask).not.toHaveBeenCalled();
     expect(mockUpdate).not.toHaveBeenCalled();
   });

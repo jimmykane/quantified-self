@@ -37,7 +37,7 @@ export async function markQueueItemDeletedForUserCleanup(
         return true;
     } catch (error) {
         logger.error(
-            `[QueueCleanup] Failed to write cleanup tombstone for ${collectionName}/${queueItemId}. Continuing with cleanup.`,
+            `[QueueCleanup] Failed to write cleanup tombstone for ${collectionName}/${queueItemId}. Queue document must be preserved to avoid missing-doc task retries.`,
             error,
         );
         return false;

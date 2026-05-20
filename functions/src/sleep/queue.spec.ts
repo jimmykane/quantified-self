@@ -26,6 +26,7 @@ const hoisted = vi.hoisted(() => ({
     shouldSkipQueueWorkForDeletedUser: vi.fn(),
     getUserDeletionGuardState: vi.fn(),
     getUserDeletionGuardStateInTransaction: vi.fn(),
+    markQueueItemDeletedForUserCleanup: vi.fn(),
     transactionUpdate: vi.fn((ref: { update?: (data: unknown) => Promise<void> }, data: unknown) => ref.update?.(data)),
     runTransaction: vi.fn(),
     recursiveDelete: vi.fn(),
@@ -191,6 +192,13 @@ vi.mock('../shared/user-deletion-guard', () => ({
     },
 }));
 
+vi.mock('../queue/cleanup-tombstone', () => ({
+    markQueueItemDeletedForUserCleanup: hoisted.markQueueItemDeletedForUserCleanup,
+    QUEUE_CLEANUP_TOMBSTONE_REASONS: {
+        UserDeletionGuard: 'user_deletion_guard',
+    },
+}));
+
 import { addSleepSyncQueueItem, processSleepSyncQueueItem } from './queue';
 import { TerminalServiceAuthError, TokenRefreshSkippedForDeletedUserError } from '../tokens';
 import { ProviderQueueUserDeletedOrDeletingError, ProviderQueueUserNotConnectedError } from '../queue/provider-queue-errors';
@@ -225,6 +233,7 @@ describe('sleep queue', () => {
             deletionInProgress: false,
             shouldSkip: false,
         });
+        hoisted.markQueueItemDeletedForUserCleanup.mockResolvedValue(true);
         hoisted.transactionUpdate.mockClear();
         hoisted.runTransaction.mockClear();
         hoisted.recursiveDelete.mockResolvedValue(undefined);
@@ -404,6 +413,36 @@ describe('sleep queue', () => {
         expect(hoisted.recursiveDelete).toHaveBeenCalledWith(expect.objectContaining({
             id: hoisted.docIdValues[0],
         }));
+        expect(hoisted.enqueueSleepSyncTask).not.toHaveBeenCalled();
+        expect(hoisted.docUpdate).not.toHaveBeenCalled();
+    });
+
+    it('preserves a written queue doc when deletion starts after write but tombstone write fails', async () => {
+        hoisted.getUserDeletionGuardState
+            .mockResolvedValueOnce({
+                userExists: true,
+                deletionInProgress: false,
+                shouldSkip: false,
+            })
+            .mockResolvedValueOnce({
+                userExists: true,
+                deletionInProgress: true,
+                shouldSkip: true,
+            });
+        hoisted.markQueueItemDeletedForUserCleanup.mockResolvedValueOnce(false);
+
+        await expect(addSleepSyncQueueItem({
+            type: 'suunto_webhook',
+            provider: 'SuuntoApp',
+            userID: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+            providerUserId: 'suunto-user-1',
+            payload: { samples: [{ SleepId: 123 }] },
+            dedupeKey: 'suunto-user-1:123',
+            dispatchImmediately: true,
+        })).rejects.toBeInstanceOf(ProviderQueueUserDeletedOrDeletingError);
+
+        expect(hoisted.docSet).toHaveBeenCalled();
+        expect(hoisted.recursiveDelete).not.toHaveBeenCalled();
         expect(hoisted.enqueueSleepSyncTask).not.toHaveBeenCalled();
         expect(hoisted.docUpdate).not.toHaveBeenCalled();
     });

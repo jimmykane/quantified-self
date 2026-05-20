@@ -53,11 +53,15 @@ async function deleteQueueDocAfterDeletionGuard(
     userID: string,
 ): Promise<void> {
     try {
-        await markQueueItemDeletedForUserCleanup(
+        const tombstoneWritten = await markQueueItemDeletedForUserCleanup(
             ACTIVITY_SYNC_QUEUE_COLLECTION_NAME,
             queueItemId,
             QUEUE_CLEANUP_TOMBSTONE_REASONS.UserDeletionGuard,
         );
+        if (!tombstoneWritten) {
+            logger.error(`[ActivitySync] Failed to write cleanup tombstone for queue item ${queueItemId}; leaving item in place to avoid missing-doc Cloud Task retries.`);
+            return;
+        }
         await db.recursiveDelete(queueDocRef);
         logger.info(`[ActivitySync] Deleted queue item ${queueItemId} for deleting user ${userID} before Cloud Task dispatch.`);
     } catch (error) {
