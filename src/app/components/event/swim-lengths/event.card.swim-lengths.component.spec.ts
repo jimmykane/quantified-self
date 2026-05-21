@@ -202,6 +202,10 @@ describe('EventCardSwimLengthsComponent', () => {
     expect(template).toContain('class="swim-length-group-panel mat-elevation-z0 qs-overlay-flat"');
     expect(template).toContain('collapsedHeight="auto"');
     expect(template).toContain('group.restDuration');
+    expect(template).toContain("@if (column.name !== '#')");
+    expect(template).toContain('class="swim-length-table-value"');
+    expect(template).toContain("[class.swim-length-index-cell]=\"column.name === '#'");
+    expect(template).toContain("[class.swim-length-lap-cell]=\"column.name === 'Lap'");
     expect(template).toContain('[class.swim-length-number]="column.numeric"');
     expect(template).not.toContain('mat-chip');
     expect(template).not.toContain('getDataSource(');

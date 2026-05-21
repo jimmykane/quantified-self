@@ -51,11 +51,17 @@
         <table mat-table [dataSource]="group.rows">
           @for (column of group.columns; track column.name) {
           <ng-container [matColumnDef]="column.name" [sticky]="column.sticky">
-            <mat-header-cell *matHeaderCellDef>
+            <mat-header-cell *matHeaderCellDef [class.swim-length-index-cell]="column.name === '#'"
+              [class.swim-length-lap-cell]="column.name === 'Lap'">
+              @if (column.name !== '#') {
               <app-data-type-icon [dataType]="column.name"></app-data-type-icon>
+              }
             </mat-header-cell>
-            <mat-cell *matCellDef="let row">
-              <span [class.swim-length-number]="column.numeric">{{ row[column.name] }}</span>
+            <mat-cell *matCellDef="let row" [class.swim-length-index-cell]="column.name === '#'"
+              [class.swim-length-lap-cell]="column.name === 'Lap'">
+              <span class="swim-length-table-value" [class.swim-length-number]="column.numeric">
+                {{ row[column.name] }}
+              </span>
             </mat-cell>
           </ng-container>
           }

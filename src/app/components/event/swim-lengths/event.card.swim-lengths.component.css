@@ -60,6 +60,22 @@
   white-space: nowrap;
 }
 
+.swim-length-table-value {
+  font-family: 'Barlow Condensed', 'Inter', sans-serif;
+}
+
+.swim-length-index-cell {
+  flex: 0 0 48px;
+  width: 48px;
+  max-width: 48px;
+}
+
+.swim-length-lap-cell {
+  flex: 0 0 64px;
+  width: 64px;
+  max-width: 64px;
+}
+
 .swim-length-number {
   font-family: 'Barlow Condensed', 'Inter', sans-serif;
   font-variant-numeric: tabular-nums;
