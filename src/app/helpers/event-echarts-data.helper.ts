@@ -1,6 +1,7 @@
 import {
   ActivityInterface,
   ActivityUtilities,
+  convertSpeedToSwimPace,
   DataAscent,
   DataCadenceAvg,
   DataDistance,
@@ -1277,7 +1278,7 @@ function getSwimLengthPace(swimLength: AppSwimLength): DataSwimPace | null {
     return null;
   }
 
-  return new DataSwimPace(100 / speedValue);
+  return new DataSwimPace(convertSpeedToSwimPace(speedValue));
 }
 
 function formatNullableInteger(value: number | null | undefined): string {
