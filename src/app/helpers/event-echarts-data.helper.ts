@@ -1272,12 +1272,12 @@ function normalizeDisplayUnitText(value: string): string {
 }
 
 function getSwimLengthPace(swimLength: AppSwimLength): DataSwimPace | null {
-  const paceValue = swimLength.avgSpeed?.getValue?.(DataSwimPace.type);
-  if (typeof paceValue !== 'number' || !Number.isFinite(paceValue) || paceValue <= 0) {
+  const speedValue = swimLength.avgSpeed?.getValue?.();
+  if (typeof speedValue !== 'number' || !Number.isFinite(speedValue) || speedValue <= 0) {
     return null;
   }
 
-  return new DataSwimPace(paceValue);
+  return new DataSwimPace(100 / speedValue);
 }
 
 function formatNullableInteger(value: number | null | undefined): string {

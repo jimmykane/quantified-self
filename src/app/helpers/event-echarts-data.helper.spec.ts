@@ -10,6 +10,7 @@ import {
   DataPace,
   DataPower,
   DataSpeed,
+  DataSwimPace,
   DistanceUnits,
   DynamicDataLoader,
   LapTypes,
@@ -1438,6 +1439,7 @@ describe('event-echarts-data.helper', () => {
   });
 
   it('formats swim length pace with preferred 100-yard units', () => {
+    const speedGetValueSpy = vi.spyOn(DataSpeed.prototype, 'getValue');
     const activity = {
       startDate: new Date('2024-01-01T00:00:00.000Z'),
       creator: { name: 'Garmin' },
@@ -1468,5 +1470,6 @@ describe('event-echarts-data.helper', () => {
     const swimPace = markers[0].tooltipDetails.find((detail) => detail.label === 'Swim Pace')?.value;
     expect(swimPace).toContain('01:31');
     expect(swimPace).toContain('/100yd');
+    expect(speedGetValueSpy).not.toHaveBeenCalledWith(DataSwimPace.type);
   });
 });
