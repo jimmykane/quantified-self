@@ -1,25 +1,23 @@
-@if (activitiesWithSwimLengths.length > 0) {
+@if (swimLengthViews.length > 0) {
 <app-event-section-header icon="pool" title="Swim Lengths"></app-event-section-header>
 <mat-tab-group [dynamicHeight]="true" [preserveContent]="true">
-  @for (activity of activitiesWithSwimLengths; track activity; let i = $index) {
-  <mat-tab [label]="getActivityTabLabel(activity, i)">
-    @if (getDataSource(activity)) {
+  @for (view of swimLengthViews; track view.key) {
+  <mat-tab [label]="view.label">
     <section class="table-container">
-      <table mat-table [dataSource]="getDataSource(activity)">
-        @for (column of getColumns(activity); track column) {
-        <ng-container [matColumnDef]="column" [sticky]="isSticky(column)">
+      <table mat-table [dataSource]="view.dataSource">
+        @for (column of view.columns; track column.name) {
+        <ng-container [matColumnDef]="column.name" [sticky]="column.sticky">
           <mat-header-cell *matHeaderCellDef>
-            <app-data-type-icon [dataType]="column"></app-data-type-icon>
+            <app-data-type-icon [dataType]="column.name"></app-data-type-icon>
           </mat-header-cell>
-          <mat-cell *matCellDef="let row">{{ row[column] }}</mat-cell>
+          <mat-cell *matCellDef="let row">{{ row[column.name] }}</mat-cell>
         </ng-container>
         }
 
-        <mat-header-row *matHeaderRowDef="getColumns(activity)"></mat-header-row>
-        <mat-row *matRowDef="let row; columns: getColumns(activity);"></mat-row>
+        <mat-header-row *matHeaderRowDef="view.columnNames"></mat-header-row>
+        <mat-row *matRowDef="let row; columns: view.columnNames;"></mat-row>
       </table>
     </section>
-    }
   </mat-tab>
   }
 </mat-tab-group>

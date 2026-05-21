@@ -91,7 +91,7 @@ export class EventCardComponent implements OnInit {
   );
 
   public hasSwimLengthsFlag = computed(() =>
-    hasVisibleSwimLengths(this.event()?.getActivities() ?? [])
+    hasVisibleSwimLengths(this.selectedActivitiesInstant())
   );
 
   public hasIntensityZonesFlag = computed(() =>

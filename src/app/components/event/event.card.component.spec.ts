@@ -416,6 +416,24 @@ describe('EventCardComponent', () => {
             expect(component.hasSwimLengthsFlag()).toBe(true);
         });
 
+        it('should compute hasSwimLengthsFlag from selected activities only', () => {
+            const activityWithoutSwimLengths = {
+                ...activityWithData,
+                getID: () => 'act-without-swim-lengths',
+                getSwimLengths: () => [],
+            } as unknown as ActivityInterface;
+            component.event.set({
+                ...eventWithData,
+                getActivities: () => [activityWithData, activityWithoutSwimLengths],
+            } as unknown as EventInterface);
+            component.selectedActivitiesInstant.set([activityWithoutSwimLengths]);
+
+            fixture.detectChanges();
+
+            expect(component.hasSwimLengthsFlag()).toBe(false);
+            expect(fixture.nativeElement.querySelector('app-event-card-swim-lengths')).toBeNull();
+        });
+
         it('should compute hasLapsFlag as false when only session end laps exist', () => {
             const sessionEndOnlyActivity = {
                 ...activityWithData,

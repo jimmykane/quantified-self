@@ -1,6 +1,8 @@
 import { ChangeDetectorRef, NO_ERRORS_SCHEMA } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { ActivityInterface, EventInterface, SwimPaceUnits, UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { vi } from 'vitest';
 import { EventCardSwimLengthsComponent } from './event.card.swim-lengths.component';
 
@@ -64,9 +66,12 @@ describe('EventCardSwimLengthsComponent', () => {
     component.ngOnChanges();
 
     expect(component.activitiesWithSwimLengths).toEqual([activity]);
-    expect(component.getDataSource(activity)?.data).toHaveLength(1);
-    expect(component.getColumns(activity)).toContain('Swim Pace');
-    expect(component.getColumns(activity)).toContain('Stroke');
+    expect(component.swimLengthViews).toHaveLength(1);
+    expect(component.swimLengthViews[0].activity).toBe(activity);
+    expect(component.swimLengthViews[0].dataSource.data).toHaveLength(1);
+    expect(component.swimLengthViews[0].columnNames).toContain('Swim Pace');
+    expect(component.swimLengthViews[0].columnNames).toContain('Stroke');
+    expect(component.swimLengthViews[0].columns.find(column => column.name === '#')?.sticky).toBe(true);
   });
 
   it('should format swim pace with selected 100-yard units', () => {
@@ -98,7 +103,7 @@ describe('EventCardSwimLengthsComponent', () => {
     component.selectedActivities = [activity];
     component.ngOnChanges();
 
-    expect(component.getDataSource(activity)?.data[0]['Swim Pace']).toContain('min/100yrd');
+    expect(component.swimLengthViews[0].dataSource.data[0]['Swim Pace']).toContain('min/100yrd');
   });
 
   it('should hide the section when no selected activity has swim lengths', () => {
@@ -108,6 +113,22 @@ describe('EventCardSwimLengthsComponent', () => {
     fixture.detectChanges();
 
     expect(component.activitiesWithSwimLengths).toEqual([]);
+    expect(component.swimLengthViews).toEqual([]);
     expect(fixture.nativeElement.querySelector('app-event-section-header')).toBeNull();
+  });
+
+  it('should bind precomputed view fields in the template', () => {
+    const template = readFileSync(
+      resolve(process.cwd(), 'src/app/components/event/swim-lengths/event.card.swim-lengths.component.html'),
+      'utf8',
+    );
+
+    expect(template).toContain('@for (view of swimLengthViews; track view.key)');
+    expect(template).toContain('[dataSource]="view.dataSource"');
+    expect(template).toContain('*matHeaderRowDef="view.columnNames"');
+    expect(template).not.toContain('getDataSource(');
+    expect(template).not.toContain('getColumns(');
+    expect(template).not.toContain('getActivityTabLabel(');
+    expect(template).not.toContain('isSticky(');
   });
 });

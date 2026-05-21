@@ -26,6 +26,24 @@ interface SwimLengthTableRow {
   Energy: string;
 }
 
+interface SwimLengthTableColumn {
+  name: string;
+  sticky: boolean;
+}
+
+interface SwimLengthActivityView {
+  key: string;
+  activity: ActivityInterface;
+  label: string;
+  dataSource: MatTableDataSource<SwimLengthTableRow>;
+  columns: SwimLengthTableColumn[];
+  columnNames: string[];
+}
+
+interface PendingSwimLengthActivityView extends Omit<SwimLengthActivityView, 'label'> {
+  baseLabel: string;
+}
+
 @Component({
   selector: 'app-event-card-swim-lengths',
   templateUrl: './event.card.swim-lengths.component.html',
@@ -39,10 +57,7 @@ export class EventCardSwimLengthsComponent implements OnChanges {
   @Input() unitSettings!: UserUnitSettingsInterface;
 
   public activitiesWithSwimLengths: ActivityInterface[] = [];
-  public dataSourcesMap = new Map<string, MatTableDataSource<SwimLengthTableRow>>();
-  public columnsMap = new Map<string, string[]>();
-
-  private activityKeys = new WeakMap<ActivityInterface, string>();
+  public swimLengthViews: SwimLengthActivityView[] = [];
 
   constructor(private changeDetectorRef: ChangeDetectorRef) {}
 
@@ -50,37 +65,16 @@ export class EventCardSwimLengthsComponent implements OnChanges {
     this.updateData();
   }
 
-  getDataSource(activity: ActivityInterface): MatTableDataSource<SwimLengthTableRow> | undefined {
-    return this.dataSourcesMap.get(this.getKey(activity));
-  }
-
-  getColumns(activity: ActivityInterface): string[] {
-    return this.columnsMap.get(this.getKey(activity)) || [];
-  }
-
-  getActivityTabLabel(activity: ActivityInterface, index: number): string {
-    const baseLabel = this.resolveActivityLabel(activity);
-    if (this.activitiesWithSwimLengths.length <= 1) {
-      return baseLabel;
-    }
-
-    return `${baseLabel} ${index + 1}`;
-  }
-
-  isSticky(column: string): boolean {
-    return column === '#';
-  }
-
   private updateData(): void {
-    this.dataSourcesMap.clear();
-    this.columnsMap.clear();
-    this.activityKeys = new WeakMap<ActivityInterface, string>();
     this.activitiesWithSwimLengths = [];
+    this.swimLengthViews = [];
 
     if (!Array.isArray(this.selectedActivities) || this.selectedActivities.length === 0) {
       this.changeDetectorRef.markForCheck();
       return;
     }
+
+    const pendingViews: PendingSwimLengthActivityView[] = [];
 
     this.selectedActivities.forEach((activity, index) => {
       const rows = this.generateSwimLengthData(activity);
@@ -89,10 +83,24 @@ export class EventCardSwimLengthsComponent implements OnChanges {
       }
 
       const key = this.buildActivityKey(activity, index);
-      this.activityKeys.set(activity, key);
       this.activitiesWithSwimLengths.push(activity);
-      this.dataSourcesMap.set(key, new MatTableDataSource(rows));
-      this.columnsMap.set(key, this.calculateColumns(rows));
+      const columns = this.buildColumns(rows);
+      pendingViews.push({
+        key,
+        activity,
+        baseLabel: this.resolveActivityLabel(activity),
+        dataSource: new MatTableDataSource(rows),
+        columns,
+        columnNames: columns.map(column => column.name),
+      });
+    });
+
+    this.swimLengthViews = pendingViews.map((view, index) => {
+      const { baseLabel, ...rest } = view;
+      return {
+        ...rest,
+        label: pendingViews.length <= 1 ? baseLabel : `${baseLabel} ${index + 1}`,
+      };
     });
 
     this.changeDetectorRef.markForCheck();
@@ -101,10 +109,6 @@ export class EventCardSwimLengthsComponent implements OnChanges {
   private buildActivityKey(activity: ActivityInterface, index: number): string {
     const activityID = `${activity?.getID?.() || ''}`.trim() || `activity-${index + 1}`;
     return `${activityID}-${index}`;
-  }
-
-  private getKey(activity: ActivityInterface): string {
-    return this.activityKeys.get(activity) || '';
   }
 
   private generateSwimLengthData(activity: ActivityInterface): SwimLengthTableRow[] {
@@ -243,7 +247,14 @@ export class EventCardSwimLengthsComponent implements OnChanges {
     }
   }
 
-  private calculateColumns(rows: SwimLengthTableRow[]): string[] {
+  private buildColumns(rows: SwimLengthTableRow[]): SwimLengthTableColumn[] {
+    return this.calculateColumnNames(rows).map(name => ({
+      name,
+      sticky: name === '#',
+    }));
+  }
+
+  private calculateColumnNames(rows: SwimLengthTableRow[]): string[] {
     return this.getColumnsToDisplay().filter((column) => {
       if (column === '#') {
         return true;
