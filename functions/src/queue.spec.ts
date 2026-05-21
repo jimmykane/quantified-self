@@ -29,7 +29,7 @@ vi.mock('firebase-functions', () => ({
     }),
 }));
 
-const { mockDocRef, mockBatch, mockDocSnapshot, mockCollection } = vi.hoisted(() => {
+const { mockDocRef, mockBatch, mockDocSnapshot, mockCollection, mockRecursiveDelete, mockShouldSkipQueueWorkForDeletedUser, mockGetUserDeletionGuardState, mockGetUserDeletionGuardStateInTransaction, mockRunTransaction, mockMarkQueueItemDeletedForUserCleanup } = vi.hoisted(() => {
     const docRef = {
         update: vi.fn(() => Promise.resolve()),
         set: vi.fn(() => Promise.resolve()),
@@ -80,6 +80,22 @@ const { mockDocRef, mockBatch, mockDocSnapshot, mockCollection } = vi.hoisted(()
         mockBatch: batch,
         mockDocSnapshot: docSnapshot,
         mockCollection: collection,
+        mockRecursiveDelete: vi.fn().mockResolvedValue(undefined),
+        mockShouldSkipQueueWorkForDeletedUser: vi.fn().mockResolvedValue(false),
+        mockGetUserDeletionGuardState: vi.fn().mockResolvedValue({
+            userExists: true,
+            deletionInProgress: false,
+            shouldSkip: false,
+        }),
+        mockGetUserDeletionGuardStateInTransaction: vi.fn().mockResolvedValue({
+            userExists: true,
+            deletionInProgress: false,
+            shouldSkip: false,
+        }),
+        mockRunTransaction: vi.fn(async (runner: (transaction: { update: (ref: { update?: (data: unknown) => Promise<void> }, data: unknown) => Promise<void> | void }) => unknown) => runner({
+            update: (ref, data) => ref.update?.(data),
+        })),
+        mockMarkQueueItemDeletedForUserCleanup: vi.fn().mockResolvedValue(true),
     };
 });
 
@@ -89,6 +105,8 @@ vi.mock('firebase-admin', () => {
         collection: vi.fn(() => mockCollection),
         collectionGroup: vi.fn(() => mockCollection),
         batch: vi.fn(() => mockBatch),
+        runTransaction: mockRunTransaction,
+        recursiveDelete: mockRecursiveDelete,
         bulkWriter: vi.fn(() => ({
             update: vi.fn(),
             set: vi.fn(),
@@ -149,6 +167,16 @@ vi.mock('./utils', () => ({
     generateIDFromParts: vi.fn((parts) => parts.join('-')),
     setEvent: vi.fn(),
     UsageLimitExceededError: class extends Error { },
+    EventWriteSkippedForDeletedUserError: class EventWriteSkippedForDeletedUserError extends Error {
+        readonly name = 'EventWriteSkippedForDeletedUserError';
+
+        constructor(
+            public readonly userID = 'mock-user-id',
+            public readonly phase = 'event_write_start',
+        ) {
+            super(`Skipping event write for user ${userID}`);
+        }
+    },
     UserNotFoundError: class extends Error { },
     enqueueWorkoutTask: vi.fn(),
     getCloudTaskQueueDepth: vi.fn().mockResolvedValue(0),
@@ -158,12 +186,75 @@ vi.mock('./utils', () => ({
 import * as utils from './utils';
 import requestHelper from './request-helper';
 
-vi.mock('./tokens', () => ({
-    getTokenData: vi.fn().mockResolvedValue({
-        accessToken: 'mock-access-token',
-        userName: 'mock-user',
-        openId: 'mock-openid'
-    }),
+vi.mock('./tokens', () => {
+    class MockTerminalServiceAuthError extends Error {
+        readonly name = 'TerminalServiceAuthError';
+        readonly dlqContext: 'INVALID_GRANT' | 'AUTH_RECONNECT_REQUIRED';
+
+        constructor(
+            public readonly serviceName: ServiceNames,
+            public readonly firebaseUserID: string | null,
+            public readonly providerUserId: string,
+            public readonly statusCode: number | null,
+            public readonly providerErrorCode: string | null,
+            public readonly providerErrorMessage: string | null,
+            public readonly originalError: unknown,
+        ) {
+            super(`${serviceName} connection requires reconnect`);
+            const errorHint = `${providerErrorCode || ''} ${providerErrorMessage || ''}`.toLowerCase();
+            this.dlqContext = errorHint.includes('invalid_grant')
+                ? 'INVALID_GRANT'
+                : 'AUTH_RECONNECT_REQUIRED';
+        }
+    }
+
+    return {
+        getTokenData: vi.fn().mockResolvedValue({
+            accessToken: 'mock-access-token',
+            userName: 'mock-user',
+            openId: 'mock-openid'
+        }),
+        TerminalServiceAuthError: MockTerminalServiceAuthError,
+        TokenRefreshSkippedForDeletedUserError: class TokenRefreshSkippedForDeletedUserError extends Error {
+            readonly name = 'TokenRefreshSkippedForDeletedUserError';
+        },
+    };
+});
+
+vi.mock('./queue/user-deletion-skip', () => ({
+    shouldSkipQueueWorkForDeletedUser: mockShouldSkipQueueWorkForDeletedUser,
+}));
+
+vi.mock('./shared/user-deletion-guard', () => {
+    class MockUserDeletionGuardReadError extends Error {
+        readonly name = 'UserDeletionGuardReadError';
+        readonly code = 'unavailable';
+        readonly statusCode = 503;
+
+        constructor(
+            public readonly uid: string,
+            public readonly phase: string,
+            public readonly originalError: unknown,
+        ) {
+            super(`Could not read deletion guard for user ${uid} during ${phase}.`);
+        }
+    }
+
+    return {
+        getUserDeletionGuardState: mockGetUserDeletionGuardState,
+        getUserDeletionGuardStateInTransaction: mockGetUserDeletionGuardStateInTransaction,
+        UserDeletionGuardReadError: MockUserDeletionGuardReadError,
+    };
+});
+
+vi.mock('./queue/cleanup-tombstone', () => ({
+    markQueueItemDeletedForUserCleanup: mockMarkQueueItemDeletedForUserCleanup,
+    QUEUE_CLEANUP_TOMBSTONE_REASONS: {
+        AccountDeletionCleanup: 'account_deletion_cleanup',
+        ServiceDisconnectCleanup: 'service_disconnect_cleanup',
+        DispatcherCleanup: 'dispatcher_cleanup',
+        UserDeletionGuard: 'user_deletion_guard',
+    },
 }));
 
 vi.mock('./garmin/queue', () => ({
@@ -201,15 +292,47 @@ import {
     addToQueueForGarmin,
     addToQueueForCOROS,
     parseWorkoutQueueItemForServiceName,
+    ProviderQueueUserDeletedOrDeletingError,
+    ProviderQueueUserNotConnectedError,
 } from './queue';
 import { QueueItemInterface, SuuntoAppWorkoutQueueItemInterface, COROSAPIWorkoutQueueItemInterface } from './queue/queue-item.interface';
-import { getTokenData } from './tokens';
+import { getTokenData, TerminalServiceAuthError, TokenRefreshSkippedForDeletedUserError } from './tokens';
 import { processGarminAPIActivityQueueItem } from './garmin/queue';
-import { QueueResult, increaseRetryCountForQueueItem, updateToProcessed, moveToDeadLetterQueue } from './queue-utils';
+import { QUEUE_SKIPPED_REASONS, QueueResult, increaseRetryCountForQueueItem, updateToProcessed, moveToDeadLetterQueue } from './queue-utils';
 
 describe('queue', () => {
     beforeEach(async () => {
         vi.clearAllMocks();
+        mockDocRef.update.mockResolvedValue(undefined);
+        mockDocRef.set.mockResolvedValue(undefined);
+        mockDocRef.create.mockResolvedValue(undefined);
+        mockDocRef.delete.mockResolvedValue(undefined);
+        mockDocRef.get.mockResolvedValue({
+            exists: true,
+            data: () => ({
+                id: 'user1-work1',
+                dateCreated: 123456,
+                processed: false,
+                retryCount: 0,
+                dispatchedToCloudTask: null,
+            }),
+        });
+        mockShouldSkipQueueWorkForDeletedUser.mockResolvedValue(false);
+        mockGetUserDeletionGuardState.mockResolvedValue({
+            userExists: true,
+            deletionInProgress: false,
+            shouldSkip: false,
+        });
+        mockGetUserDeletionGuardStateInTransaction.mockResolvedValue({
+            userExists: true,
+            deletionInProgress: false,
+            shouldSkip: false,
+        });
+        mockMarkQueueItemDeletedForUserCleanup.mockResolvedValue(true);
+        mockRunTransaction.mockImplementation(async (runner: (transaction: { update: (ref: { update?: (data: unknown) => Promise<void> }, data: unknown) => Promise<void> | void }) => unknown) => runner({
+            update: (ref, data) => ref.update?.(data),
+        }));
+        mockRecursiveDelete.mockResolvedValue(undefined);
         const admin = await import('firebase-admin');
         const mockCollection = admin.firestore().collectionGroup('tokens') as any;
         mockCollection.get.mockResolvedValue({
@@ -446,8 +569,8 @@ describe('queue', () => {
             const admin = await import('firebase-admin');
 
             // Mock query results
-            const mockDoc1 = { id: 'doc1', ref: { update: vi.fn(), parent: { id: 'col' }, id: 'doc1' }, data: () => ({ dateCreated: Date.now() }) };
-            const mockDoc2 = { id: 'doc2', ref: { update: vi.fn(), parent: { id: 'col' }, id: 'doc2' }, data: () => ({ dateCreated: Date.now() }) };
+            const mockDoc1 = { id: 'doc1', ref: { update: vi.fn(), parent: { id: 'col' }, id: 'doc1' }, data: () => ({ dateCreated: Date.now(), firebaseUserID: 'firebase-doc1', userID: 'garmin-doc1' }) };
+            const mockDoc2 = { id: 'doc2', ref: { update: vi.fn(), parent: { id: 'col' }, id: 'doc2' }, data: () => ({ dateCreated: Date.now(), firebaseUserID: 'firebase-doc2', userID: 'garmin-doc2' }) };
 
             const firestore = admin.firestore();
             const collection = firestore.collection('any');
@@ -488,9 +611,9 @@ describe('queue', () => {
             const admin = await import('firebase-admin');
 
             const mockDocs = [
-                { id: '1', ref: { update: vi.fn() }, data: () => ({ dateCreated: Date.now() }) },
-                { id: '2', ref: { update: vi.fn() }, data: () => ({ dateCreated: Date.now() }) },
-                { id: '3', ref: { update: vi.fn() }, data: () => ({ dateCreated: Date.now() }) }
+                { id: '1', ref: { update: vi.fn() }, data: () => ({ dateCreated: Date.now(), firebaseUserID: 'firebase-1', userID: 'garmin-1' }) },
+                { id: '2', ref: { update: vi.fn() }, data: () => ({ dateCreated: Date.now(), firebaseUserID: 'firebase-2', userID: 'garmin-2' }) },
+                { id: '3', ref: { update: vi.fn() }, data: () => ({ dateCreated: Date.now(), firebaseUserID: 'firebase-3', userID: 'garmin-3' }) }
             ];
 
             const firestore = admin.firestore();
@@ -513,6 +636,259 @@ describe('queue', () => {
             expect(utils.enqueueWorkoutTask).toHaveBeenNthCalledWith(3, ServiceNames.GarminAPI, '3', expect.any(Number), delayPerItem * 2);
         });
 
+        it('should delete user-owned queue docs instead of dispatching when account deletion is active', async () => {
+            const utils = await import('./utils');
+            vi.mocked(utils.getCloudTaskQueueDepth).mockResolvedValue(0);
+            mockGetUserDeletionGuardState.mockResolvedValueOnce({
+                userExists: true,
+                deletionInProgress: true,
+                shouldSkip: true,
+            });
+            const { dispatchQueueItemTasks } = await import('./queue');
+            const admin = await import('firebase-admin');
+
+            const updateDeleted = vi.fn().mockResolvedValue(undefined);
+            const deletedRef = { update: updateDeleted, path: 'suuntoAppWorkoutQueue/deleted-doc' };
+            const mockDoc = {
+                id: 'deleted-doc',
+                ref: deletedRef,
+                data: () => ({
+                    dateCreated: Date.now(),
+                    firebaseUserID: 'deleted-user-id',
+                    userName: 'suunto-provider-user',
+                    dispatchedToCloudTask: null,
+                }),
+            };
+
+            vi.mocked(admin.firestore().collection('any').get).mockResolvedValue({
+                docs: [mockDoc] as any,
+                size: 1,
+                empty: false,
+                isEqual: vi.fn(),
+            } as any);
+
+            await dispatchQueueItemTasks(ServiceNames.SuuntoApp);
+
+            expect(mockGetUserDeletionGuardState).toHaveBeenCalledWith(expect.anything(), 'deleted-user-id');
+            expect(mockRecursiveDelete).toHaveBeenCalledWith(deletedRef);
+            expect(utils.enqueueWorkoutTask).not.toHaveBeenCalled();
+            expect(updateDeleted).not.toHaveBeenCalled();
+        });
+
+        it('should delete malformed queue docs without Firebase or provider user ids before dispatch', async () => {
+            const utils = await import('./utils');
+            vi.mocked(utils.getCloudTaskQueueDepth).mockResolvedValue(0);
+            const { dispatchQueueItemTasks } = await import('./queue');
+            const admin = await import('firebase-admin');
+
+            const updateMalformed = vi.fn().mockResolvedValue(undefined);
+            const malformedRef = { update: updateMalformed, path: 'suuntoAppWorkoutQueue/malformed-doc' };
+            const mockDoc = {
+                id: 'malformed-doc',
+                ref: malformedRef,
+                data: () => ({
+                    dateCreated: Date.now(),
+                    dispatchedToCloudTask: null,
+                }),
+            };
+
+            vi.mocked(admin.firestore().collection('any').get).mockResolvedValue({
+                docs: [mockDoc] as any,
+                size: 1,
+                empty: false,
+                isEqual: vi.fn(),
+            } as any);
+
+            await dispatchQueueItemTasks(ServiceNames.SuuntoApp);
+
+            expect(mockGetUserDeletionGuardState).not.toHaveBeenCalled();
+            expect(mockRecursiveDelete).toHaveBeenCalledWith(malformedRef);
+            expect(utils.enqueueWorkoutTask).not.toHaveBeenCalled();
+            expect(updateMalformed).not.toHaveBeenCalled();
+        });
+
+        it('should resolve legacy provider-keyed queue docs before dispatch and delete them when the resolved user is deleting', async () => {
+            const utils = await import('./utils');
+            vi.mocked(utils.getCloudTaskQueueDepth).mockResolvedValue(0);
+            mockGetUserDeletionGuardState.mockResolvedValueOnce({
+                userExists: true,
+                deletionInProgress: true,
+                shouldSkip: true,
+            });
+            const { dispatchQueueItemTasks } = await import('./queue');
+
+            const updateDeleted = vi.fn().mockResolvedValue(undefined);
+            const legacyRef = { update: updateDeleted, path: 'suuntoAppWorkoutQueue/legacy-provider-doc' };
+            const legacyDoc = {
+                id: 'legacy-provider-doc',
+                ref: legacyRef,
+                data: () => ({
+                    dateCreated: Date.now(),
+                    userName: 'legacy-suunto-provider-user',
+                    dispatchedToCloudTask: null,
+                }),
+            };
+            const resolvedTokenDoc = {
+                id: 'token-1',
+                ref: {
+                    parent: {
+                        parent: { id: 'resolved-deleting-user-id' },
+                    },
+                },
+            };
+            mockCollection.get
+                .mockResolvedValueOnce({
+                    docs: [legacyDoc] as any,
+                    size: 1,
+                    empty: false,
+                    isEqual: vi.fn(),
+                } as any)
+                .mockResolvedValueOnce({
+                    docs: [resolvedTokenDoc] as any,
+                    size: 1,
+                    empty: false,
+                    isEqual: vi.fn(),
+                } as any);
+
+            await dispatchQueueItemTasks(ServiceNames.SuuntoApp);
+
+            expect(mockGetUserDeletionGuardState).toHaveBeenCalledWith(expect.anything(), 'resolved-deleting-user-id');
+            expect(mockRecursiveDelete).toHaveBeenCalledWith(legacyRef);
+            expect(utils.enqueueWorkoutTask).not.toHaveBeenCalled();
+            expect(updateDeleted).not.toHaveBeenCalled();
+        });
+
+        it('should delete legacy provider-keyed queue docs instead of dispatching when no local token resolves', async () => {
+            const utils = await import('./utils');
+            vi.mocked(utils.getCloudTaskQueueDepth).mockResolvedValue(0);
+            const { dispatchQueueItemTasks } = await import('./queue');
+
+            const updateOrphan = vi.fn().mockResolvedValue(undefined);
+            const orphanRef = { update: updateOrphan, path: 'suuntoAppWorkoutQueue/orphan-provider-doc' };
+            const orphanDoc = {
+                id: 'orphan-provider-doc',
+                ref: orphanRef,
+                data: () => ({
+                    dateCreated: Date.now(),
+                    userName: 'orphan-suunto-provider-user',
+                    dispatchedToCloudTask: null,
+                }),
+            };
+            mockCollection.get
+                .mockResolvedValueOnce({
+                    docs: [orphanDoc] as any,
+                    size: 1,
+                    empty: false,
+                    isEqual: vi.fn(),
+                } as any)
+                .mockResolvedValueOnce({
+                    docs: [],
+                    size: 0,
+                    empty: true,
+                    isEqual: vi.fn(),
+                } as any);
+
+            await dispatchQueueItemTasks(ServiceNames.SuuntoApp);
+
+            expect(mockGetUserDeletionGuardState).not.toHaveBeenCalled();
+            expect(mockRecursiveDelete).toHaveBeenCalledWith(orphanRef);
+            expect(utils.enqueueWorkoutTask).not.toHaveBeenCalled();
+            expect(updateOrphan).not.toHaveBeenCalled();
+        });
+
+        it('should leave dispatch marker untouched when deletion guard lookup fails and continue other queue docs', async () => {
+            const utils = await import('./utils');
+            vi.mocked(utils.getCloudTaskQueueDepth).mockResolvedValue(0);
+            mockGetUserDeletionGuardState
+                .mockRejectedValueOnce(new Error('guard unavailable'))
+                .mockResolvedValueOnce({
+                    userExists: true,
+                    deletionInProgress: false,
+                    shouldSkip: false,
+                });
+            const { dispatchQueueItemTasks } = await import('./queue');
+            const admin = await import('firebase-admin');
+
+            const updateGuardFailure = vi.fn().mockResolvedValue(undefined);
+            const updateHealthy = vi.fn().mockResolvedValue(undefined);
+            const mockDocs = [
+                {
+                    id: 'guard-failure-doc',
+                    ref: { update: updateGuardFailure, path: 'suuntoAppWorkoutQueue/guard-failure-doc' },
+                    data: () => ({
+                        dateCreated: Date.now(),
+                        firebaseUserID: 'guard-failure-user',
+                        userName: 'suunto-provider-user-1',
+                    }),
+                },
+                {
+                    id: 'healthy-doc',
+                    ref: { update: updateHealthy, path: 'suuntoAppWorkoutQueue/healthy-doc' },
+                    data: () => ({
+                        dateCreated: Date.now(),
+                        firebaseUserID: 'healthy-user',
+                        userName: 'suunto-provider-user-2',
+                    }),
+                },
+            ];
+
+            vi.mocked(admin.firestore().collection('any').get).mockResolvedValue({
+                docs: mockDocs as any,
+                size: 2,
+                empty: false,
+                isEqual: vi.fn(),
+            } as any);
+
+            await dispatchQueueItemTasks(ServiceNames.SuuntoApp);
+
+            expect(utils.enqueueWorkoutTask).toHaveBeenCalledTimes(1);
+            expect(utils.enqueueWorkoutTask).toHaveBeenCalledWith(ServiceNames.SuuntoApp, 'healthy-doc', expect.any(Number), expect.any(Number));
+            expect(updateGuardFailure).not.toHaveBeenCalled();
+            expect(updateHealthy).toHaveBeenCalledWith({ dispatchedToCloudTask: expect.any(Number) });
+        });
+
+        it('should not write the dispatch marker when deletion starts after Cloud Task enqueue', async () => {
+            const utils = await import('./utils');
+            vi.mocked(utils.getCloudTaskQueueDepth).mockResolvedValue(0);
+            mockGetUserDeletionGuardState
+                .mockResolvedValueOnce({
+                    userExists: true,
+                    deletionInProgress: false,
+                    shouldSkip: false,
+                });
+            mockGetUserDeletionGuardStateInTransaction
+                .mockResolvedValueOnce({
+                    userExists: true,
+                    deletionInProgress: true,
+                    shouldSkip: true,
+                });
+            const { dispatchQueueItemTasks } = await import('./queue');
+            const admin = await import('firebase-admin');
+
+            const updateRaced = vi.fn().mockResolvedValue(undefined);
+            const racedRef = { update: updateRaced, path: 'suuntoAppWorkoutQueue/raced-doc', parent: { id: 'suuntoAppWorkoutQueue' } };
+            vi.mocked(admin.firestore().collection('any').get).mockResolvedValue({
+                docs: [{
+                    id: 'raced-doc',
+                    ref: racedRef,
+                    data: () => ({
+                        dateCreated: Date.now(),
+                        firebaseUserID: 'raced-user',
+                        userName: 'suunto-provider-user-raced',
+                    }),
+                }] as any,
+                size: 1,
+                empty: false,
+                isEqual: vi.fn(),
+            } as any);
+
+            await dispatchQueueItemTasks(ServiceNames.SuuntoApp);
+
+            expect(utils.enqueueWorkoutTask).toHaveBeenCalledWith(ServiceNames.SuuntoApp, 'raced-doc', expect.any(Number), 0);
+            expect(mockRecursiveDelete).toHaveBeenCalledWith(racedRef);
+            expect(updateRaced).not.toHaveBeenCalled();
+        });
+
         it('should treat missing dispatch marker docs as success when scheduled dispatch races with DLQ move', async () => {
             const utils = await import('./utils');
             vi.mocked(utils.getCloudTaskQueueDepth).mockResolvedValue(0);
@@ -524,7 +900,7 @@ describe('queue', () => {
             const mockDoc = {
                 id: 'doc-moved-to-dlq',
                 ref: { update: vi.fn().mockRejectedValueOnce(notFoundError) },
-                data: () => ({ dateCreated: Date.now() }),
+                data: () => ({ dateCreated: Date.now(), firebaseUserID: 'firebase-dlq', userName: 'suunto-provider-dlq' }),
             };
 
             const firestore = admin.firestore();
@@ -587,7 +963,7 @@ describe('queue', () => {
                     parent: { id: 'col' },
                     id: 'stuck-doc',
                 },
-                data: () => ({ dateCreated: Date.now(), dispatchedToCloudTask: persistedDispatchedAt }),
+                data: () => ({ dateCreated: Date.now(), dispatchedToCloudTask: persistedDispatchedAt, firebaseUserID: 'firebase-stuck', userID: 'garmin-stuck' }),
             };
 
             const firestore = admin.firestore();
@@ -656,6 +1032,40 @@ describe('queue', () => {
             expect(utils.enqueueWorkoutTask).not.toHaveBeenCalled();
         });
 
+        it('should delete deferred queue docs when deletion starts after write', async () => {
+            const utils = await import('./utils');
+            vi.mocked(utils.enqueueWorkoutTask).mockClear();
+            mockGetUserDeletionGuardState
+                .mockResolvedValueOnce({
+                    userExists: true,
+                    deletionInProgress: false,
+                    shouldSkip: false,
+                })
+                .mockResolvedValueOnce({
+                    userExists: true,
+                    deletionInProgress: true,
+                    shouldSkip: true,
+                });
+
+            const { addToQueueForGarmin } = await import('./queue');
+
+            await expect(addToQueueForGarmin({
+                userID: 'u1',
+                startTimeInSeconds: 123,
+                manual: true,
+                activityFileID: 'f1',
+                activityFileType: 'FIT',
+                token: 't1',
+                userAccessToken: 'at1',
+                callbackURL: 'cb1'
+            })).rejects.toBeInstanceOf(ProviderQueueUserDeletedOrDeletingError);
+
+            expect(mockDocRef.set).toHaveBeenCalled();
+            expect(mockRecursiveDelete).toHaveBeenCalledWith(mockDocRef);
+            expect(utils.enqueueWorkoutTask).not.toHaveBeenCalled();
+            expect(mockDocRef.update).not.toHaveBeenCalledWith({ dispatchedToCloudTask: expect.any(Number) });
+        });
+
         it('should immediate dispatch for normal items', async () => {
             const utils = await import('./utils');
             vi.mocked(utils.enqueueWorkoutTask).mockClear();
@@ -675,6 +1085,45 @@ describe('queue', () => {
 
             // Should call enqueue
             expect(utils.enqueueWorkoutTask).toHaveBeenCalled();
+        });
+
+        it('should not write the dispatch marker when deletion starts after immediate Cloud Task enqueue', async () => {
+            const utils = await import('./utils');
+            vi.mocked(utils.enqueueWorkoutTask).mockClear();
+            mockGetUserDeletionGuardState
+                .mockResolvedValueOnce({
+                    userExists: true,
+                    deletionInProgress: false,
+                    shouldSkip: false,
+                })
+                .mockResolvedValueOnce({
+                    userExists: true,
+                    deletionInProgress: false,
+                    shouldSkip: false,
+                });
+            mockGetUserDeletionGuardStateInTransaction
+                .mockResolvedValueOnce({
+                    userExists: true,
+                    deletionInProgress: true,
+                    shouldSkip: true,
+                });
+
+            const { addToQueueForGarmin } = await import('./queue');
+
+            await expect(addToQueueForGarmin({
+                userID: 'u1',
+                startTimeInSeconds: 123,
+                manual: false,
+                activityFileID: 'f1',
+                activityFileType: 'FIT',
+                token: 't1',
+                userAccessToken: 'at1',
+                callbackURL: 'cb1'
+            })).rejects.toBeInstanceOf(ProviderQueueUserDeletedOrDeletingError);
+
+            expect(utils.enqueueWorkoutTask).toHaveBeenCalled();
+            expect(mockRecursiveDelete).toHaveBeenCalledWith(mockDocRef);
+            expect(mockDocRef.update).not.toHaveBeenCalledWith({ dispatchedToCloudTask: expect.any(Number) });
         });
     });
 
@@ -776,11 +1225,120 @@ describe('queue', () => {
                 id: 'user1-work1',
                 userName: 'user1',
                 workoutID: 'work1',
+                firebaseUserID: 'mock-user-id',
                 dispatchedToCloudTask: null
             }));
             expect(doc.set).not.toHaveBeenCalled();
             expect(utils.enqueueWorkoutTask).toHaveBeenCalledWith(ServiceNames.SuuntoApp, 'user1-work1', expect.any(Number));
             expect(doc.update).toHaveBeenCalledWith({ dispatchedToCloudTask: expect.any(Number) });
+        });
+
+        it('addToQueueForSuunto should not create provider-only queue docs when no local token resolves', async () => {
+            mockCollection.get.mockResolvedValueOnce({
+                docs: [],
+                size: 0,
+            });
+
+            await expect(addToQueueForSuunto({ userName: 'orphan-provider-user', workoutID: 'work1' }))
+                .rejects.toBeInstanceOf(ProviderQueueUserNotConnectedError);
+
+            expect(mockDocRef.create).not.toHaveBeenCalled();
+            expect(utils.enqueueWorkoutTask).not.toHaveBeenCalled();
+        });
+
+        it('addToQueueForSuunto should not create queue docs when the resolved Firebase user is being deleted', async () => {
+            mockGetUserDeletionGuardState.mockResolvedValueOnce({
+                userExists: true,
+                deletionInProgress: true,
+                shouldSkip: true,
+            });
+
+            await expect(addToQueueForSuunto({ userName: 'user1', workoutID: 'work1' }))
+                .rejects.toBeInstanceOf(ProviderQueueUserDeletedOrDeletingError);
+
+            expect(mockGetUserDeletionGuardState).toHaveBeenCalledWith(expect.anything(), 'mock-user-id');
+            expect(mockDocRef.create).not.toHaveBeenCalled();
+            expect(utils.enqueueWorkoutTask).not.toHaveBeenCalled();
+        });
+
+        it('addToQueueForSuunto should delete the queue doc and skip dispatch when deletion starts after create', async () => {
+            mockGetUserDeletionGuardState
+                .mockResolvedValueOnce({
+                    userExists: true,
+                    deletionInProgress: false,
+                    shouldSkip: false,
+                })
+                .mockResolvedValueOnce({
+                    userExists: true,
+                    deletionInProgress: true,
+                    shouldSkip: true,
+                });
+
+            await expect(addToQueueForSuunto({ userName: 'user1', workoutID: 'work1' }))
+                .rejects.toBeInstanceOf(ProviderQueueUserDeletedOrDeletingError);
+
+            expect(mockDocRef.create).toHaveBeenCalled();
+            expect(mockRecursiveDelete).toHaveBeenCalledWith(mockDocRef);
+            expect(utils.enqueueWorkoutTask).not.toHaveBeenCalled();
+            expect(mockDocRef.update).not.toHaveBeenCalledWith({ dispatchedToCloudTask: expect.any(Number) });
+        });
+
+        it('addToQueueForSuunto should preserve the queue doc when deletion starts after create but tombstone write fails', async () => {
+            mockGetUserDeletionGuardState
+                .mockResolvedValueOnce({
+                    userExists: true,
+                    deletionInProgress: false,
+                    shouldSkip: false,
+                })
+                .mockResolvedValueOnce({
+                    userExists: true,
+                    deletionInProgress: true,
+                    shouldSkip: true,
+                });
+            mockMarkQueueItemDeletedForUserCleanup.mockResolvedValueOnce(false);
+
+            await expect(addToQueueForSuunto({ userName: 'user1', workoutID: 'work1' }))
+                .rejects.toBeInstanceOf(ProviderQueueUserDeletedOrDeletingError);
+
+            expect(mockDocRef.create).toHaveBeenCalled();
+            expect(mockRecursiveDelete).not.toHaveBeenCalledWith(mockDocRef);
+            expect(utils.enqueueWorkoutTask).not.toHaveBeenCalled();
+            expect(mockDocRef.update).not.toHaveBeenCalledWith({ dispatchedToCloudTask: expect.any(Number) });
+        });
+
+        it('addToQueueForSuunto should fail retryably without dispatch when the post-create deletion guard cannot be read', async () => {
+            mockGetUserDeletionGuardState
+                .mockResolvedValueOnce({
+                    userExists: true,
+                    deletionInProgress: false,
+                    shouldSkip: false,
+                })
+                .mockRejectedValueOnce(new Error('guard unavailable after create'));
+
+            await expect(addToQueueForSuunto({ userName: 'user1', workoutID: 'work1' }))
+                .rejects.toMatchObject({
+                    name: 'UserDeletionGuardReadError',
+                    code: 'unavailable',
+                    statusCode: 503,
+                });
+
+            expect(mockDocRef.create).toHaveBeenCalled();
+            expect(mockRecursiveDelete).not.toHaveBeenCalled();
+            expect(utils.enqueueWorkoutTask).not.toHaveBeenCalled();
+        });
+
+        it('addToQueueForSuunto should fail retryably when the provider enqueue deletion guard cannot be read', async () => {
+            mockGetUserDeletionGuardState.mockRejectedValueOnce(new Error('guard unavailable'));
+
+            await expect(addToQueueForSuunto({ userName: 'user1', workoutID: 'work1' }))
+                .rejects.toMatchObject({
+                    name: 'UserDeletionGuardReadError',
+                    code: 'unavailable',
+                    statusCode: 503,
+                });
+
+            expect(mockDocRef.create).not.toHaveBeenCalled();
+            expect(utils.enqueueWorkoutTask).not.toHaveBeenCalled();
         });
 
         it('addToQueueForSuunto should treat missing dispatch marker doc as success when the worker already moved it to failed_jobs', async () => {
@@ -799,6 +1357,38 @@ describe('queue', () => {
             expect(result.id).toBe('mock-doc-id');
             expect(utils.enqueueWorkoutTask).toHaveBeenCalledWith(ServiceNames.SuuntoApp, 'user1-work1', expect.any(Number));
             expect(mockDocRef.get).toHaveBeenCalled();
+        });
+
+        it('addToQueueForSuunto should treat duplicate uid backfill not-found as success when the item already moved to failed_jobs', async () => {
+            const alreadyExistsError: any = new Error('ALREADY_EXISTS');
+            alreadyExistsError.code = 6;
+            const notFoundError: any = new Error('No document to update');
+            notFoundError.code = 5;
+            mockDocRef.create.mockRejectedValueOnce(alreadyExistsError);
+            mockDocRef.get
+                .mockResolvedValueOnce({
+                    exists: true,
+                    data: () => ({
+                        id: 'user1-work1',
+                        dateCreated: 123456,
+                        processed: false,
+                        retryCount: 0,
+                        dispatchedToCloudTask: Date.now(),
+                    }),
+                })
+                .mockResolvedValueOnce({
+                    exists: true,
+                    data: () => ({
+                        originalCollection: 'suuntoAppWorkoutQueue',
+                    }),
+                });
+            mockDocRef.update.mockRejectedValueOnce(notFoundError);
+
+            const result = await addToQueueForSuunto({ userName: 'user1', workoutID: 'work1' });
+
+            expect(result.id).toBe('mock-doc-id');
+            expect(mockDocRef.update).toHaveBeenCalledWith({ firebaseUserID: 'mock-user-id' });
+            expect(utils.enqueueWorkoutTask).not.toHaveBeenCalled();
         });
 
         it('addToQueueForSuunto should rethrow missing dispatch marker doc errors when failed_jobs does not contain the item', async () => {
@@ -841,6 +1431,107 @@ describe('queue', () => {
             expect(mockDocRef.update).toHaveBeenCalledWith({ dispatchedToCloudTask: expect.any(Number) });
         });
 
+        it('addToQueueForSuunto should delete duplicate queue docs and skip redispatch when deletion starts after duplicate lookup', async () => {
+            const alreadyExistsError: any = new Error('ALREADY_EXISTS');
+            alreadyExistsError.code = 6;
+            mockDocRef.create.mockRejectedValueOnce(alreadyExistsError);
+            mockDocRef.get.mockResolvedValueOnce({
+                exists: true,
+                data: () => ({
+                    id: 'user1-work1',
+                    dateCreated: 123456,
+                    processed: false,
+                    retryCount: 0,
+                    dispatchedToCloudTask: Date.now(),
+                    firebaseUserID: 'mock-user-id',
+                }),
+            });
+            mockGetUserDeletionGuardState
+                .mockResolvedValueOnce({
+                    userExists: true,
+                    deletionInProgress: false,
+                    shouldSkip: false,
+                })
+                .mockResolvedValueOnce({
+                    userExists: false,
+                    deletionInProgress: false,
+                    shouldSkip: true,
+                });
+
+            await expect(addToQueueForSuunto({ userName: 'user1', workoutID: 'work1' }))
+                .rejects.toBeInstanceOf(ProviderQueueUserDeletedOrDeletingError);
+
+            expect(mockRecursiveDelete).toHaveBeenCalledWith(mockDocRef);
+            expect(utils.enqueueWorkoutTask).not.toHaveBeenCalled();
+        });
+
+        it('addToQueueForSuunto should not backfill duplicate uid when deletion starts before duplicate redispatch', async () => {
+            const alreadyExistsError: any = new Error('ALREADY_EXISTS');
+            alreadyExistsError.code = 6;
+            mockDocRef.create.mockRejectedValueOnce(alreadyExistsError);
+            mockDocRef.get.mockResolvedValueOnce({
+                exists: true,
+                data: () => ({
+                    id: 'user1-work1',
+                    dateCreated: 123456,
+                    processed: false,
+                    retryCount: 0,
+                    dispatchedToCloudTask: Date.now(),
+                }),
+            });
+            mockGetUserDeletionGuardState
+                .mockResolvedValueOnce({
+                    userExists: true,
+                    deletionInProgress: false,
+                    shouldSkip: false,
+                })
+                .mockResolvedValueOnce({
+                    userExists: false,
+                    deletionInProgress: false,
+                    shouldSkip: true,
+                });
+
+            await expect(addToQueueForSuunto({ userName: 'user1', workoutID: 'work1' }))
+                .rejects.toBeInstanceOf(ProviderQueueUserDeletedOrDeletingError);
+
+            expect(mockRecursiveDelete).toHaveBeenCalledWith(mockDocRef);
+            expect(mockDocRef.update).not.toHaveBeenCalledWith({ firebaseUserID: 'mock-user-id' });
+            expect(utils.enqueueWorkoutTask).not.toHaveBeenCalled();
+        });
+
+        it('addToQueueForSuunto should not backfill duplicate uid when deletion starts inside the backfill transaction', async () => {
+            const alreadyExistsError: any = new Error('ALREADY_EXISTS');
+            alreadyExistsError.code = 6;
+            mockDocRef.create.mockRejectedValueOnce(alreadyExistsError);
+            mockDocRef.get.mockResolvedValueOnce({
+                exists: true,
+                data: () => ({
+                    id: 'user1-work1',
+                    dateCreated: 123456,
+                    processed: false,
+                    retryCount: 0,
+                    dispatchedToCloudTask: Date.now(),
+                }),
+            });
+            mockGetUserDeletionGuardState.mockResolvedValue({
+                userExists: true,
+                deletionInProgress: false,
+                shouldSkip: false,
+            });
+            mockGetUserDeletionGuardStateInTransaction.mockResolvedValueOnce({
+                userExists: false,
+                deletionInProgress: false,
+                shouldSkip: true,
+            });
+
+            await expect(addToQueueForSuunto({ userName: 'user1', workoutID: 'work1' }))
+                .rejects.toBeInstanceOf(ProviderQueueUserDeletedOrDeletingError);
+
+            expect(mockRecursiveDelete).toHaveBeenCalledWith(mockDocRef);
+            expect(mockDocRef.update).not.toHaveBeenCalledWith({ firebaseUserID: 'mock-user-id' });
+            expect(utils.enqueueWorkoutTask).not.toHaveBeenCalled();
+        });
+
         it('addToQueueForSuunto should skip duplicate queue items that are already processed', async () => {
             const alreadyExistsError: any = new Error('ALREADY_EXISTS');
             alreadyExistsError.code = 6;
@@ -872,7 +1563,8 @@ describe('queue', () => {
             const doc = admin.firestore().collection('COROSAPIWorkoutQueue').doc('coros1');
             expect(doc.set).toHaveBeenCalledWith(expect.objectContaining({
                 id: 'coros1',
-                openId: 'oid1'
+                openId: 'oid1',
+                firebaseUserID: 'mock-user-id',
             }));
         });
 
@@ -893,7 +1585,8 @@ describe('queue', () => {
             const doc = admin.firestore().collection('garminAPIActivityQueue').doc('u1-file123');
             expect(doc.set).toHaveBeenCalledWith(expect.objectContaining({
                 id: 'u1-file123',
-                activityFileID: 'file123'
+                activityFileID: 'file123',
+                firebaseUserID: 'mock-user-id',
             }));
         });
     });
@@ -951,6 +1644,101 @@ describe('queue', () => {
             );
         });
 
+        it('should mark processed as skipped without retrying or writing user data when token owner is being deleted before token refresh', async () => {
+            mockShouldSkipQueueWorkForDeletedUser.mockResolvedValueOnce(true);
+
+            const result = await parseWorkoutQueueItemForServiceName(ServiceNames.SuuntoApp, suuntoQueueItem);
+
+            expect(result).toBe(QueueResult.Processed);
+            expect(getTokenData).not.toHaveBeenCalled();
+            expect(vi.mocked(utils.setEvent)).not.toHaveBeenCalled();
+            expect(mockRef.update).toHaveBeenCalledWith(expect.objectContaining({
+                processed: true,
+                resultStatus: 'skipped',
+                skippedReason: QUEUE_SKIPPED_REASONS.UserDeletedOrDeleting,
+                skippedContext: 'USER_DELETION_GUARD',
+            }));
+            expect(mockBatch.set).not.toHaveBeenCalled();
+            expect(mockBatch.delete).not.toHaveBeenCalledWith(mockRef);
+        });
+
+        it('should mark processed as skipped without retrying when token refresh reports account deletion', async () => {
+            vi.mocked(getTokenData).mockRejectedValueOnce(new TokenRefreshSkippedForDeletedUserError());
+
+            const result = await parseWorkoutQueueItemForServiceName(ServiceNames.SuuntoApp, suuntoQueueItem);
+
+            expect(result).toBe(QueueResult.Processed);
+            expect(vi.mocked(utils.setEvent)).not.toHaveBeenCalled();
+            expect(mockRef.update).toHaveBeenCalledWith(expect.objectContaining({
+                processed: true,
+                resultStatus: 'skipped',
+                skippedReason: QUEUE_SKIPPED_REASONS.UserDeletedOrDeleting,
+            }));
+            expect(mockBatch.set).not.toHaveBeenCalled();
+        });
+
+        it('should mark processed as skipped without retrying when account deletion starts before event write', async () => {
+            mockShouldSkipQueueWorkForDeletedUser
+                .mockResolvedValueOnce(false)
+                .mockResolvedValueOnce(true);
+
+            const result = await parseWorkoutQueueItemForServiceName(ServiceNames.SuuntoApp, suuntoQueueItem);
+
+            expect(result).toBe(QueueResult.Processed);
+            expect(getTokenData).toHaveBeenCalled();
+            expect(vi.mocked(utils.setEvent)).not.toHaveBeenCalled();
+            expect(mockRef.update).toHaveBeenCalledWith(expect.objectContaining({
+                processed: true,
+                resultStatus: 'skipped',
+                skippedReason: QUEUE_SKIPPED_REASONS.UserDeletedOrDeleting,
+            }));
+            expect(mockBatch.set).not.toHaveBeenCalled();
+        });
+
+        it('should mark processed as skipped when setEvent detects account deletion mid-write', async () => {
+            mockShouldSkipQueueWorkForDeletedUser
+                .mockResolvedValueOnce(false)
+                .mockResolvedValueOnce(false);
+            vi.mocked(utils.setEvent).mockRejectedValueOnce(
+                new utils.EventWriteSkippedForDeletedUserError('mock-user-id', 'event_writer:users/mock-user-id/events/standardized-event-id'),
+            );
+
+            const result = await parseWorkoutQueueItemForServiceName(ServiceNames.SuuntoApp, suuntoQueueItem);
+
+            expect(result).toBe(QueueResult.Processed);
+            expect(vi.mocked(utils.setEvent)).toHaveBeenCalled();
+            expect(mockRef.update).toHaveBeenCalledWith(expect.objectContaining({
+                processed: true,
+                resultStatus: 'skipped',
+                skippedReason: QUEUE_SKIPPED_REASONS.UserDeletedOrDeleting,
+            }));
+            expect(mockBatch.set).not.toHaveBeenCalled();
+        });
+
+        it('should retry when the deletion guard read fails before activity sync enqueue', async () => {
+            mockShouldSkipQueueWorkForDeletedUser
+                .mockResolvedValueOnce(false)
+                .mockResolvedValueOnce(false)
+                .mockRejectedValueOnce(new Error('deletion guard unavailable'));
+            vi.mocked(utils.setEvent).mockResolvedValueOnce({
+                eventID: 'standardized-event-id',
+                savedOriginalFiles: [],
+            } as any);
+
+            const result = await parseWorkoutQueueItemForServiceName(ServiceNames.SuuntoApp, suuntoQueueItem);
+
+            expect(result).toBe(QueueResult.RetryIncremented);
+            expect(vi.mocked(utils.setEvent)).toHaveBeenCalled();
+            expect(mockRef.update).toHaveBeenCalledWith(expect.objectContaining({
+                retryCount: 1,
+                dispatchedToCloudTask: null,
+            }));
+            expect(mockRef.update).not.toHaveBeenCalledWith(expect.objectContaining({
+                processed: true,
+                resultStatus: 'skipped',
+            }));
+        });
+
         it('should move to DLQ if no token found', async () => {
             const admin = await import('firebase-admin');
             vi.spyOn(admin.firestore().collectionGroup('tokens'), 'get').mockResolvedValueOnce({
@@ -962,6 +1750,198 @@ describe('queue', () => {
             const result = await parseWorkoutQueueItemForServiceName(ServiceNames.SuuntoApp, suuntoQueueItem);
             expect(result).toBe(QueueResult.MovedToDLQ);
             expect(mockBatch.delete).toHaveBeenCalledWith(mockRef);
+        });
+
+        it('should move to DLQ immediately when token refresh returns terminal invalid_grant', async () => {
+            vi.mocked(getTokenData).mockRejectedValueOnce(new TerminalServiceAuthError(
+                ServiceNames.SuuntoApp,
+                'mock-user-id',
+                'suuntoUser',
+                400,
+                'invalid_grant',
+                'User no longer active/connected with the partner',
+                new Error('400 invalid_grant'),
+            ));
+
+            const result = await parseWorkoutQueueItemForServiceName(ServiceNames.SuuntoApp, suuntoQueueItem);
+
+            expect(result).toBe(QueueResult.MovedToDLQ);
+            expect(mockBatch.set).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+                context: 'INVALID_GRANT',
+                originalCollection: 'suuntoAppWorkoutQueue',
+            }));
+            expect(mockBatch.delete).toHaveBeenCalledWith(mockRef);
+            expect(mockRef.update).not.toHaveBeenCalledWith(expect.objectContaining({
+                retryCount: expect.any(Number),
+            }));
+        });
+
+        it('should prefer INVALID_GRANT when multiple terminal auth failures disagree on DLQ context', async () => {
+            const admin = await import('firebase-admin');
+            vi.spyOn(admin.firestore().collectionGroup('tokens'), 'get').mockResolvedValueOnce({
+                size: 2,
+                docs: [{
+                    id: 'generic-terminal-token',
+                    ref: {
+                        id: 'generic-terminal-token',
+                        parent: {
+                            id: 'tokens',
+                            parent: { id: 'generic-user-id' },
+                        },
+                    },
+                    data: vi.fn(() => ({})),
+                }, {
+                    id: 'invalid-grant-token',
+                    ref: {
+                        id: 'invalid-grant-token',
+                        parent: {
+                            id: 'tokens',
+                            parent: { id: 'invalid-grant-user-id' },
+                        },
+                    },
+                    data: vi.fn(() => ({})),
+                }],
+                empty: false,
+            } as any);
+            vi.mocked(getTokenData)
+                .mockRejectedValueOnce(new TerminalServiceAuthError(
+                    ServiceNames.SuuntoApp,
+                    'generic-user-id',
+                    'suuntoUser',
+                    401,
+                    null,
+                    'Unauthorized',
+                    new Error('401 unauthorized'),
+                ))
+                .mockRejectedValueOnce(new TerminalServiceAuthError(
+                    ServiceNames.SuuntoApp,
+                    'invalid-grant-user-id',
+                    'suuntoUser',
+                    400,
+                    'invalid_grant',
+                    'User no longer active/connected with the partner',
+                    new Error('400 invalid_grant'),
+                ));
+
+            const result = await parseWorkoutQueueItemForServiceName(ServiceNames.SuuntoApp, suuntoQueueItem);
+
+            expect(result).toBe(QueueResult.MovedToDLQ);
+            expect(mockBatch.set).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+                context: 'INVALID_GRANT',
+                originalCollection: 'suuntoAppWorkoutQueue',
+            }));
+        });
+
+        it('should retry when a terminal auth failure is mixed with retryable token failures', async () => {
+            const admin = await import('firebase-admin');
+            vi.spyOn(admin.firestore().collectionGroup('tokens'), 'get').mockResolvedValueOnce({
+                size: 2,
+                docs: [{
+                    id: 'retryable-token',
+                    ref: {
+                        id: 'retryable-token',
+                        parent: {
+                            id: 'tokens',
+                            parent: { id: 'retryable-user-id' },
+                        },
+                    },
+                    data: vi.fn(() => ({})),
+                }, {
+                    id: 'invalid-grant-token',
+                    ref: {
+                        id: 'invalid-grant-token',
+                        parent: {
+                            id: 'tokens',
+                            parent: { id: 'invalid-grant-user-id' },
+                        },
+                    },
+                    data: vi.fn(() => ({})),
+                }],
+                empty: false,
+            } as any);
+            vi.mocked(getTokenData)
+                .mockRejectedValueOnce(Object.assign(new Error('temporary provider failure'), { statusCode: 500 }))
+                .mockRejectedValueOnce(new TerminalServiceAuthError(
+                    ServiceNames.SuuntoApp,
+                    'invalid-grant-user-id',
+                    'suuntoUser',
+                    400,
+                    'invalid_grant',
+                    'User no longer active/connected with the partner',
+                    new Error('400 invalid_grant'),
+                ));
+
+            const result = await parseWorkoutQueueItemForServiceName(ServiceNames.SuuntoApp, suuntoQueueItem);
+
+            expect(result).toBe(QueueResult.RetryIncremented);
+            expect(mockBatch.set).not.toHaveBeenCalled();
+            expect(mockBatch.delete).not.toHaveBeenCalledWith(mockRef);
+            expect(mockRef.update).toHaveBeenCalledWith(expect.objectContaining({
+                retryCount: 1,
+                errors: expect.arrayContaining([
+                    expect.objectContaining({ error: 'temporary provider failure' }),
+                ]),
+            }));
+        });
+
+        it('should continue to later matching tokens when an earlier token hits terminal invalid_grant', async () => {
+            const admin = await import('firebase-admin');
+            vi.spyOn(admin.firestore().collectionGroup('tokens'), 'get').mockResolvedValueOnce({
+                size: 2,
+                docs: [{
+                    id: 'stale-token-doc',
+                    ref: {
+                        id: 'stale-token-doc',
+                        parent: {
+                            id: 'tokens',
+                            parent: { id: 'stale-user-id' },
+                        },
+                    },
+                    data: vi.fn(() => ({})),
+                }, {
+                    id: 'healthy-token-doc',
+                    ref: {
+                        id: 'healthy-token-doc',
+                        parent: {
+                            id: 'tokens',
+                            parent: { id: 'healthy-user-id' },
+                        },
+                    },
+                    data: vi.fn(() => ({})),
+                }],
+                empty: false,
+            } as any);
+            vi.mocked(getTokenData)
+                .mockRejectedValueOnce(new TerminalServiceAuthError(
+                    ServiceNames.SuuntoApp,
+                    'stale-user-id',
+                    'suuntoUser',
+                    400,
+                    'invalid_grant',
+                    'User no longer active/connected with the partner',
+                    new Error('400 invalid_grant'),
+                ))
+                .mockResolvedValueOnce({
+                    accessToken: 'healthy-token',
+                    userName: 'suuntoUser',
+                } as any);
+
+            const result = await parseWorkoutQueueItemForServiceName(ServiceNames.SuuntoApp, suuntoQueueItem);
+
+            expect(result).toBe(QueueResult.Processed);
+            expect(vi.mocked(utils.setEvent)).toHaveBeenCalledWith(
+                'healthy-user-id',
+                'standardized-event-id',
+                expect.any(Object),
+                expect.any(Object),
+                expect.any(Object),
+                undefined,
+                undefined,
+                undefined
+            );
+            expect(mockBatch.set).not.toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+                context: 'INVALID_GRANT',
+            }));
         });
 
         it('should handle COROSAPI item successfully', async () => {
@@ -1006,6 +1986,34 @@ describe('queue', () => {
 
             expect(result).toBe(QueueResult.Processed);
             expect(getTokenData).toHaveBeenCalledTimes(2); // Initial + Force Refresh
+        });
+
+        it('should move to DLQ when forced refresh after download 401 returns terminal invalid_grant', async () => {
+            vi.mocked(requestHelper.get).mockRejectedValueOnce({ statusCode: 401 });
+            vi.mocked(getTokenData)
+                .mockResolvedValueOnce({
+                    accessToken: 'stale-token',
+                    userName: 'suuntoUser',
+                } as any)
+                .mockRejectedValueOnce(new TerminalServiceAuthError(
+                    ServiceNames.SuuntoApp,
+                    'mock-user-id',
+                    'suuntoUser',
+                    400,
+                    'invalid_grant',
+                    'User no longer active/connected with the partner',
+                    new Error('400 invalid_grant'),
+                ));
+
+            const result = await parseWorkoutQueueItemForServiceName(ServiceNames.SuuntoApp, suuntoQueueItem);
+
+            expect(result).toBe(QueueResult.MovedToDLQ);
+            expect(getTokenData).toHaveBeenCalledTimes(2);
+            expect(mockBatch.set).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+                context: 'INVALID_GRANT',
+                originalCollection: 'suuntoAppWorkoutQueue',
+            }));
+            expect(mockBatch.delete).toHaveBeenCalledWith(mockRef);
         });
 
         it('should handle 403 Forbidden by increasing retry count significantly', async () => {

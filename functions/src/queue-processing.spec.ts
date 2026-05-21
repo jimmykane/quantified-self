@@ -16,6 +16,7 @@ const {
     mockFirestore,
     mockIncreaseRetryCountForQueueItem,
     mockCreateParsingOptions,
+    mockShouldSkipQueueWorkForDeletedUser,
 } = vi.hoisted(() => {
     const mockIncreaseRetryCountForQueueItem = vi.fn(async (queueItem: any, error: any, incrementBy = 1) => {
         queueItem.retryCount = (queueItem.retryCount || 0) + incrementBy;
@@ -60,6 +61,7 @@ const {
         mockBatch,
         mockIncreaseRetryCountForQueueItem,
         mockCreateParsingOptions: vi.fn(() => ({ generateUnitStreams: false, deviceInfoMode: 'changes' })),
+        mockShouldSkipQueueWorkForDeletedUser: vi.fn().mockResolvedValue(false),
     };
 });
 
@@ -106,6 +108,13 @@ vi.mock('./utils', async (importOriginal) => {
 
 vi.mock('./tokens', () => ({
     getTokenData: mockGetTokenData,
+    TokenRefreshSkippedForDeletedUserError: class TokenRefreshSkippedForDeletedUserError extends Error {
+        readonly name = 'TokenRefreshSkippedForDeletedUserError';
+    },
+}));
+
+vi.mock('./queue/user-deletion-skip', () => ({
+    shouldSkipQueueWorkForDeletedUser: mockShouldSkipQueueWorkForDeletedUser,
 }));
 
 vi.mock('./queue-utils', () => ({
@@ -114,6 +123,7 @@ vi.mock('./queue-utils', () => ({
     moveToDeadLetterQueue: vi.fn(),
     QueueResult: {
         Processed: 'PROCESSED',
+        Skipped: 'SKIPPED',
         MovedToDLQ: 'MOVED_TO_DLQ',
         RetryIncremented: 'RETRY_INCREMENTED',
         Failed: 'FAILED',
@@ -151,6 +161,7 @@ describe('parseWorkoutQueueItemForServiceName', () => {
         // Reset default mock implementations if needed
         mockWhere.mockReturnValue({ get: mockGet });
         mockCollectionGroup.mockReturnValue({ where: mockWhere });
+        mockShouldSkipQueueWorkForDeletedUser.mockResolvedValue(false);
     });
 
     it('should abort retries if UsageLimitExceededError is thrown by setEvent', async () => {

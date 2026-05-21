@@ -155,6 +155,58 @@ describe('sleep webhooks', () => {
         expect(hoisted.addSleepSyncQueueItem.mock.calls[0][0]).not.toHaveProperty('payload');
     });
 
+    it('acknowledges Garmin sleep webhooks when queueing skips a deleted or disconnected provider user', async () => {
+        hoisted.garminEnabled = true;
+        hoisted.addSleepSyncQueueItem.mockRejectedValueOnce(Object.assign(new Error('deleted'), {
+            name: 'ProviderQueueUserDeletedOrDeletingError',
+        }));
+        const response = createResponse();
+        const callbackURL = 'https://apis.garmin.com/wellness-api/rest/sleeps?uploadStartTimeInSeconds=1760000000&token=garmin-token';
+
+        await receiveGarminAPISleepData({
+            body: {
+                sleeps: [
+                    { userId: 'garmin-user-1', callbackURL },
+                ],
+            },
+        } as any, response as any);
+
+        expect(response.status).toHaveBeenCalledWith(200);
+        expect(response.send).toHaveBeenCalled();
+    });
+
+    it('queues valid Garmin sleep payloads when another payload in the same batch is skipped', async () => {
+        hoisted.garminEnabled = true;
+        hoisted.addSleepSyncQueueItem
+            .mockRejectedValueOnce(Object.assign(new Error('deleted'), {
+                name: 'ProviderQueueUserDeletedOrDeletingError',
+            }))
+            .mockResolvedValueOnce({ id: 'queued-valid-payload' });
+        const response = createResponse();
+        const skippedCallbackURL = 'https://apis.garmin.com/wellness-api/rest/sleeps?uploadStartTimeInSeconds=1760000000&token=deleted-token';
+        const validCallbackURL = 'https://apis.garmin.com/wellness-api/rest/sleeps?uploadStartTimeInSeconds=1760000100&token=valid-token';
+
+        await receiveGarminAPISleepData({
+            body: {
+                sleeps: [
+                    { userId: 'deleted-garmin-user', callbackURL: skippedCallbackURL },
+                    { userId: 'valid-garmin-user', callbackURL: validCallbackURL },
+                ],
+            },
+        } as any, response as any);
+
+        expect(response.status).toHaveBeenCalledWith(200);
+        expect(hoisted.addSleepSyncQueueItem).toHaveBeenCalledTimes(2);
+        expect(hoisted.addSleepSyncQueueItem).toHaveBeenNthCalledWith(1, expect.objectContaining({
+            providerUserId: 'deleted-garmin-user',
+            callbackURL: skippedCallbackURL,
+        }));
+        expect(hoisted.addSleepSyncQueueItem).toHaveBeenNthCalledWith(2, expect.objectContaining({
+            providerUserId: 'valid-garmin-user',
+            callbackURL: validCallbackURL,
+        }));
+    });
+
     it('rejects Garmin push summary payloads without timestamp fallback dedupe', async () => {
         hoisted.garminEnabled = true;
         const response = createResponse();
@@ -231,6 +283,30 @@ describe('sleep webhooks', () => {
             payload: { samples: [{ SleepId: 123, StartTime: 1760000000000 }] },
             dedupeKey: 'suunto-user-1:123',
         }));
+    });
+
+    it('acknowledges Suunto sleep webhooks when queueing skips a deleted or disconnected provider user', async () => {
+        hoisted.addSleepSyncQueueItem.mockRejectedValueOnce(Object.assign(new Error('not connected'), {
+            name: 'ProviderQueueUserNotConnectedError',
+        }));
+        const rawBody = Buffer.from(JSON.stringify({ type: 'SUUNTO_247_SLEEP_CREATED' }));
+        const signature = createHmac('sha256', process.env.SUUNTOAPP_NOTIFICATION_SECRET || '')
+            .update(rawBody)
+            .digest('hex');
+        const response = createResponse();
+
+        await receiveSuuntoAppSleepData({
+            rawBody,
+            body: {
+                type: 'SUUNTO_247_SLEEP_CREATED',
+                username: 'suunto-user-1',
+                samples: [{ SleepId: 123, StartTime: 1760000000000 }],
+            },
+            get: vi.fn((header: string) => header === 'X-HMAC-SHA256-Signature' ? signature : undefined),
+        } as any, response as any);
+
+        expect(response.status).toHaveBeenCalledWith(200);
+        expect(response.send).toHaveBeenCalled();
     });
 
     it('acknowledges scoped Suunto sleep webhooks without queueing when username is not allowed', async () => {

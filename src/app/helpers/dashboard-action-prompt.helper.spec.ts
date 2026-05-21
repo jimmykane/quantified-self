@@ -1,6 +1,7 @@
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import {
   buildActivityAutoSyncEnabledSnackbarMessage,
+  buildReconnectSuuntoServicePromptSource,
   buildDashboardActionPromptViewModels,
   DASHBOARD_ACTION_PROMPT_ACTIVITY_AUTO_SYNC_SOURCE,
   DASHBOARD_ACTION_PROMPT_CONNECT_ACTIVITY_SERVICE_ID,
@@ -94,6 +95,28 @@ describe('dashboard-action-prompt.helper', () => {
     expect(isDashboardActionPromptDismissed(null, DASHBOARD_ACTION_PROMPT_CONNECT_ACTIVITY_SERVICE_ID)).toBe(false);
   });
 
+  it('checks dismissal state by prompt id and source when provided', () => {
+    const sourceA = buildReconnectSuuntoServicePromptSource(100);
+    const sourceB = buildReconnectSuuntoServicePromptSource(200);
+
+    expect(isDashboardActionPromptDismissed({
+      dashboardActionPrompts: {
+        reconnectSuuntoService: {
+          state: 'dismissed',
+          source: sourceA,
+        },
+      },
+    } as AppAppSettingsInterface, 'reconnectSuuntoService', sourceA)).toBe(true);
+    expect(isDashboardActionPromptDismissed({
+      dashboardActionPrompts: {
+        reconnectSuuntoService: {
+          state: 'dismissed',
+          source: sourceA,
+        },
+      },
+    } as AppAppSettingsInterface, 'reconnectSuuntoService', sourceB)).toBe(false);
+  });
+
   it('builds the standard unit and service prompt view models', () => {
     const prompts = buildDashboardActionPromptViewModels({
       showUnitSetupPrompt: true,
@@ -112,6 +135,9 @@ describe('dashboard-action-prompt.helper', () => {
         ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp,
         ACTIVITY_SYNC_ROUTE_IDS.COROSAPI_to_SuuntoApp,
       ],
+      showReconnectSuuntoServicePrompt: false,
+      reconnectSuuntoServiceBusy: false,
+      reconnectSuuntoServiceError: null,
     });
 
     expect(prompts.map(prompt => prompt.id)).toEqual([
@@ -162,6 +188,42 @@ describe('dashboard-action-prompt.helper', () => {
       secondaryAction: {
         id: 'dismissEnableActivityAutoSync',
         label: 'Not now',
+      },
+    });
+  });
+
+  it('builds the Suunto reconnect prompt view model', () => {
+    const prompts = buildDashboardActionPromptViewModels({
+      showUnitSetupPrompt: false,
+      unitSetupBusy: false,
+      unitSetupError: null,
+      showFirstActivityUploadPrompt: false,
+      firstActivityUploadBusy: false,
+      firstActivityUploadError: null,
+      showConnectActivityServicePrompt: false,
+      connectActivityServiceBusy: false,
+      connectActivityServiceError: null,
+      showEnableActivityAutoSyncPrompt: false,
+      enableActivityAutoSyncBusy: false,
+      enableActivityAutoSyncError: null,
+      enableActivityAutoSyncRouteIds: [],
+      showReconnectSuuntoServicePrompt: true,
+      reconnectSuuntoServiceBusy: true,
+      reconnectSuuntoServiceError: 'Reconnect failed.',
+    });
+
+    expect(prompts).toHaveLength(1);
+    expect(prompts[0]).toMatchObject({
+      id: 'reconnectSuuntoService',
+      title: 'Reconnect Suunto',
+      description: 'Suunto stopped accepting the previous connection. Reconnect to resume sleep sync, history imports, and uploads. Garmin/COROS -> Suunto auto-sync routes stay off until you enable them again.',
+      busy: true,
+      error: 'Reconnect failed.',
+      primaryAction: {
+        id: 'reconnectSuuntoService',
+      },
+      secondaryAction: {
+        id: 'dismissReconnectSuuntoService',
       },
     });
   });
@@ -260,6 +322,19 @@ describe('dashboard-action-prompt.helper', () => {
         [ServiceNames.GarminAPI]: false,
         [ServiceNames.SuuntoApp]: true,
         [ServiceNames.COROSAPI]: false,
+      },
+    })).toEqual([]);
+
+    expect(resolveDashboardActivityAutoSyncRouteIds({
+      userID,
+      routeSettings,
+      reconnectRequiredServices: {
+        [ServiceNames.SuuntoApp]: true,
+      },
+      connectionState: {
+        [ServiceNames.GarminAPI]: true,
+        [ServiceNames.SuuntoApp]: true,
+        [ServiceNames.COROSAPI]: true,
       },
     })).toEqual([]);
   });

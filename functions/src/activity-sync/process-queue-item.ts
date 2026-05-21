@@ -1,9 +1,17 @@
 import * as admin from 'firebase-admin';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { ActivitySyncQueueItemInterface } from '../queue/queue-item.interface';
-import { QueueResult, increaseRetryCountForQueueItem, moveToDeadLetterQueue, updateToProcessed } from '../queue-utils';
+import {
+    QueueResult,
+    QUEUE_SKIPPED_REASONS,
+    increaseRetryCountForQueueItem,
+    markQueueItemSkipped,
+    moveToDeadLetterQueue,
+    updateToProcessed,
+} from '../queue-utils';
 import { ACTIVITY_SYNC_ROUTES } from '../../../shared/activity-sync-routes';
 import { isActivitySyncRouteEnabledForUser } from './settings';
+import { isServiceReconnectRequiredForUser } from '../service-connection-meta';
 import {
     setActivitySyncFailedMetadata,
     setActivitySyncProcessingMetadata,
@@ -16,6 +24,7 @@ import { uploadActivityFileToSuunto } from '../suunto/activities';
 import { SUUNTOAPP_ACCESS_TOKENS_COLLECTION_NAME } from '../suunto/constants';
 import { hasProAccess } from '../utils';
 import { getActivitySyncRouteAllowlistConfigError, isActivitySyncRouteUserAllowlisted } from './allowlist';
+import { shouldSkipQueueWorkForDeletedUser } from '../queue/user-deletion-skip';
 
 function toExtension(path?: string, extension?: string): string {
     if (extension && typeof extension === 'string' && extension.trim().length > 0) {
@@ -118,9 +127,20 @@ function isSkippableAuthenticationError(error: unknown): boolean {
     return httpsCode === 'unauthenticated' || httpsCode === 'permission-denied';
 }
 
+function isAccountDeletionSkipError(error: unknown): boolean {
+    return error instanceof Error
+        && (
+            error.name === 'TokenRefreshSkippedForDeletedUserError'
+            || error.name === 'SuuntoActivityUploadSkippedForDeletedUserError'
+        );
+}
+
 async function isDestinationConnected(userID: string, destinationServiceName: ServiceNames): Promise<boolean> {
     switch (destinationServiceName) {
         case ServiceNames.SuuntoApp: {
+            if (await isServiceReconnectRequiredForUser(userID, destinationServiceName)) {
+                return false;
+            }
             const snapshot = await admin.firestore()
                 .collection(SUUNTOAPP_ACCESS_TOKENS_COLLECTION_NAME)
                 .doc(userID)
@@ -197,6 +217,17 @@ export async function processActivitySyncQueueItem(
     let duringDestinationUpload = false;
 
     try {
+        if (await shouldSkipQueueWorkForDeletedUser(
+            queueItem.userID,
+            queueItem.destinationServiceName,
+            queueItem.id,
+            'before_activity_sync_processing',
+        )) {
+            return markQueueItemSkipped(queueItem, bulkWriter, QUEUE_SKIPPED_REASONS.UserDeletedOrDeleting, {
+                skippedContext: 'USER_DELETION_GUARD',
+            });
+        }
+
         const route = ACTIVITY_SYNC_ROUTES[queueItem.routeId];
         if (!route) {
             const error = new Error(`Unknown activity sync route ${queueItem.routeId}`) as Error & { dlqContext?: string };
@@ -283,7 +314,29 @@ export async function processActivitySyncQueueItem(
             });
         }
 
+        if (await shouldSkipQueueWorkForDeletedUser(
+            queueItem.userID,
+            queueItem.destinationServiceName,
+            queueItem.id,
+            'before_activity_sync_upload',
+        )) {
+            return markQueueItemSkipped(queueItem, bulkWriter, QUEUE_SKIPPED_REASONS.UserDeletedOrDeleting, {
+                skippedContext: 'USER_DELETION_GUARD',
+            });
+        }
+
         const fileBuffer = await downloadOriginalFile(queueItem);
+        if (await shouldSkipQueueWorkForDeletedUser(
+            queueItem.userID,
+            queueItem.destinationServiceName,
+            queueItem.id,
+            'before_activity_sync_destination_upload',
+        )) {
+            return markQueueItemSkipped(queueItem, bulkWriter, QUEUE_SKIPPED_REASONS.UserDeletedOrDeleting, {
+                skippedContext: 'USER_DELETION_GUARD',
+            });
+        }
+
         duringDestinationUpload = true;
         const uploadResult = await uploadToDestination(queueItem, fileBuffer);
         duringDestinationUpload = false;
@@ -313,6 +366,12 @@ export async function processActivitySyncQueueItem(
             return updateToProcessed(queueItem, bulkWriter, {
                 skippedReason: 'destination_auth_failed',
                 resultStatus: 'skipped',
+            });
+        }
+
+        if (isAccountDeletionSkipError(error)) {
+            return markQueueItemSkipped(queueItem, bulkWriter, QUEUE_SKIPPED_REASONS.UserDeletedOrDeleting, {
+                skippedContext: 'USER_DELETION_GUARD',
             });
         }
 

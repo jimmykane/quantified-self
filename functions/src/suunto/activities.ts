@@ -6,8 +6,13 @@ import * as admin from 'firebase-admin';
 import { FieldValue } from 'firebase-admin/firestore';
 import * as requestPromise from '../request-helper';
 import { executeWithTokenRetry } from './retry-helper';
+import {
+  getUserDeletionGuardState,
+  getUserDeletionGuardStateInTransaction,
+  UserDeletionGuardReadError,
+} from '../shared/user-deletion-guard';
 import { hasProAccess, PRO_REQUIRED_MESSAGE } from '../utils';
-import { SUUNTOAPP_ACCESS_TOKENS_COLLECTION_NAME } from './constants';
+import { SERVICE_NAME, SUUNTOAPP_ACCESS_TOKENS_COLLECTION_NAME } from './constants';
 import { toSuuntoAuthorizationHeader } from './authorization-header';
 
 
@@ -85,6 +90,71 @@ function isRetryableSuuntoTransientError(error: unknown, retryOnInternalServerEr
   return statusCode === 500 && retryOnInternalServerError && !isLikelyPermanentSuunto500(error);
 }
 
+function isTokenRefreshSkippedForDeletedUserError(error: unknown): boolean {
+  return error instanceof Error && error.name === 'TokenRefreshSkippedForDeletedUserError';
+}
+
+function isUserDeletionGuardReadError(error: unknown): boolean {
+  return error instanceof Error && error.name === 'UserDeletionGuardReadError';
+}
+
+export class SuuntoActivityUploadSkippedForDeletedUserError extends Error {
+  public readonly name = 'SuuntoActivityUploadSkippedForDeletedUserError';
+  public readonly code = 'user_deleted_or_deleting';
+
+  constructor(
+    public readonly userID: string,
+    public readonly phase: string,
+  ) {
+    super(`Skipping Suunto activity upload for user ${userID} during ${phase} because the user is missing or deletion is in progress.`);
+  }
+}
+
+function isAccountDeletionSkipError(error: unknown): boolean {
+  return isTokenRefreshSkippedForDeletedUserError(error)
+    || (error instanceof Error && error.name === 'SuuntoActivityUploadSkippedForDeletedUserError');
+}
+
+async function assertSuuntoActivityUploadUserActive(userID: string, phase: string): Promise<void> {
+  let deletionGuard;
+  try {
+    deletionGuard = await getUserDeletionGuardState(admin.firestore(), userID);
+  } catch (error) {
+    throw new UserDeletionGuardReadError(userID, `suunto_activity_upload:${phase}`, error);
+  }
+
+  if (!deletionGuard.shouldSkip) {
+    return;
+  }
+
+  logger.warn(`Skipping Suunto activity upload for user ${userID} during ${phase} because the user is missing or deletion is in progress.`);
+  throw new SuuntoActivityUploadSkippedForDeletedUserError(userID, phase);
+}
+
+async function incrementUploadedActivitiesCountIfUserActive(userID: string): Promise<boolean> {
+  const db = admin.firestore();
+  const userServiceMetaDocumentSnapshot = db.collection('users').doc(userID).collection('meta').doc(SERVICE_NAME);
+
+  return db.runTransaction(async (transaction) => {
+    let deletionGuard;
+    try {
+      deletionGuard = await getUserDeletionGuardStateInTransaction(db, transaction, userID);
+    } catch (error) {
+      throw new UserDeletionGuardReadError(userID, 'suunto_activity_upload_meta', error);
+    }
+
+    if (deletionGuard.shouldSkip) {
+      logger.warn(`Skipping Suunto uploadedActivitiesCount update because user ${userID} is missing or deletion is in progress.`);
+      return false;
+    }
+
+    transaction.set(userServiceMetaDocumentSnapshot, {
+      uploadedActivitiesCount: FieldValue.increment(1),
+    }, { merge: true });
+    return true;
+  });
+}
+
 async function sleep(ms: number): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -127,6 +197,8 @@ export interface SuuntoActivityUploadResult {
 }
 
 export async function uploadActivityFileToSuunto(userID: string, fileBuffer: Buffer): Promise<SuuntoActivityUploadResult> {
+  await assertSuuntoActivityUploadUserActive(userID, 'before_token_lookup');
+
   const tokenQuerySnapshots = await admin.firestore().collection(SUUNTOAPP_ACCESS_TOKENS_COLLECTION_NAME).doc(userID).collection('tokens').get();
   logger.info(`Found ${tokenQuerySnapshots.size} tokens for user ${userID}`);
 
@@ -139,6 +211,7 @@ export async function uploadActivityFileToSuunto(userID: string, fileBuffer: Buf
       const result = await executeWithTokenRetry(
         tokenQueryDocumentSnapshot,
         async (accessToken) => {
+          await assertSuuntoActivityUploadUserActive(userID, 'before_init_upload');
           // Initialize the upload
           let result: any;
           try {
@@ -174,6 +247,7 @@ export async function uploadActivityFileToSuunto(userID: string, fileBuffer: Buf
           const blobHeaders = { ...(result.headers || {}) };
           logger.info(`Init response for user ${userID}: url=${url}, id=${uploadId}, headers=${JSON.stringify(result.headers)}`);
 
+          await assertSuuntoActivityUploadUserActive(userID, 'before_blob_upload');
           try {
             result = await withSuuntoTransientRetry(
               `Upload activity blob for token ${tokenQueryDocumentSnapshot.id} for user ${userID}`,
@@ -198,6 +272,7 @@ export async function uploadActivityFileToSuunto(userID: string, fileBuffer: Buf
 
           while (statusRequestAttempts < maxStatusRequestAttempts) {
             await sleep(2000);
+            await assertSuuntoActivityUploadUserActive(userID, 'before_status_poll');
 
             try {
               const remainingStatusRequestAttempts = maxStatusRequestAttempts - statusRequestAttempts;
@@ -281,11 +356,7 @@ export async function uploadActivityFileToSuunto(userID: string, fileBuffer: Buf
       if (result) {
         if (result.status === 'success') {
           try {
-            const SERVICE_NAME = (await import('./constants')).SERVICE_NAME;
-            const userServiceMetaDocumentSnapshot = admin.firestore().collection('users').doc(userID).collection('meta').doc(SERVICE_NAME);
-            await userServiceMetaDocumentSnapshot.set({
-              uploadedActivitiesCount: FieldValue.increment(1),
-            }, { merge: true });
+            await incrementUploadedActivitiesCountIfUserActive(userID);
           } catch (e: unknown) {
             logger.error('Could not update uploadedActivities count', e);
           }
@@ -293,6 +364,10 @@ export async function uploadActivityFileToSuunto(userID: string, fileBuffer: Buf
         return result as SuuntoActivityUploadResult;
       }
     } catch (e: unknown) {
+      if (isAccountDeletionSkipError(e) || isUserDeletionGuardReadError(e)) {
+        throw e;
+      }
+
       const isHttpsError = e instanceof HttpsError;
       const code = isHttpsError ? e.code : 'internal';
       const statusCode = typeof (e as any)?.statusCode === 'number' ? (e as any).statusCode : undefined;

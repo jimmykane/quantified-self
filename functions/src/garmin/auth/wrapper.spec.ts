@@ -58,6 +58,12 @@ vi.mock('firebase-functions/v1', async () => {
     };
 });
 
+vi.mock('firebase-functions/logger', () => ({
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+}));
+
 vi.mock('../../utils', () => ({
     isCorsAllowed: vi.fn(),
     setAccessControlHeadersOnResponse: vi.fn().mockImplementation((req, res) => res),
@@ -71,8 +77,15 @@ vi.mock('../../OAuth2', () => ({
     getServiceOAuth2CodeRedirectAndSaveStateToUser: vi.fn(),
     getAndSetServiceOAuth2AccessTokenForUser: vi.fn(),
     deauthorizeServiceForUser: vi.fn(),
-    deleteLocalServiceToken: vi.fn(),
+    disconnectServiceForUser: vi.fn(),
     validateOAuth2State: vi.fn(),
+}));
+
+vi.mock('../../service-auth-lifecycle', () => ({
+    cleanupServiceTokenById: vi.fn().mockResolvedValue({}),
+    SERVICE_AUTH_CLEANUP_REASONS: {
+        PartnerDisconnect: 'partner_disconnect',
+    },
 }));
 
 import {
@@ -83,6 +96,8 @@ import {
     receiveGarminAPIUserPermissions,
 } from './wrapper';
 import { ServiceNames } from '@sports-alliance/sports-lib';
+import * as serviceAuthLifecycle from '../../service-auth-lifecycle';
+import * as logger from 'firebase-functions/logger';
 
 describe('Garmin Auth Wrapper', () => {
     let context: any;
@@ -157,17 +172,16 @@ describe('Garmin Auth Wrapper', () => {
             const data = {};
             const result = await (deauthorizeGarminAPI as any)(data, context);
 
-            expect(OAuth2.deauthorizeServiceForUser).toHaveBeenCalledWith('testUserID', ServiceNames.GarminAPI);
+            expect(OAuth2.disconnectServiceForUser).toHaveBeenCalledWith('testUserID', ServiceNames.GarminAPI);
             expect(result).toEqual({ success: true });
         });
 
-        it('should throw not-found if token not found', async () => {
+        it('should surface unexpected deauthorize failures as internal errors', async () => {
             const data = {};
-            const error = new Error('Token not found');
-            error.name = 'TokenNotFoundError';
-            vi.mocked(OAuth2.deauthorizeServiceForUser).mockRejectedValue(error);
+            const error = new Error('Partner unavailable');
+            vi.mocked(OAuth2.disconnectServiceForUser).mockRejectedValue(error);
 
-            await expect((deauthorizeGarminAPI as any)(data, context)).rejects.toThrow('Token not found');
+            await expect((deauthorizeGarminAPI as any)(data, context)).rejects.toThrow('Bad request or internal error');
         });
     });
 
@@ -192,7 +206,7 @@ describe('Garmin Auth Wrapper', () => {
             };
         });
 
-        it('should deauthorize users by reverse lookup using deleteLocalServiceToken', async () => {
+        it('should clean up users by reverse lookup using the shared lifecycle cleanup', async () => {
             req.body = { deregistrations: [{ userId: 'garminUser123' }] };
 
             // Mock Collection Group Query
@@ -226,10 +240,53 @@ describe('Garmin Auth Wrapper', () => {
             expect(mockWhere).toHaveBeenCalledWith('userID', '==', 'garminUser123');
             expect(mockWhere).toHaveBeenCalledWith('serviceName', '==', ServiceNames.GarminAPI);
 
-            // Should call deleteLocalServiceToken instead of deauthorizeServiceForUser
-            expect(OAuth2.deleteLocalServiceToken).toHaveBeenCalledWith('firebaseUserXYZ', ServiceNames.GarminAPI, 'tokenDoc123');
+            expect(serviceAuthLifecycle.cleanupServiceTokenById).toHaveBeenCalledWith(
+                'firebaseUserXYZ',
+                ServiceNames.GarminAPI,
+                'tokenDoc123',
+                'partner_disconnect',
+            );
             expect(OAuth2.deauthorizeServiceForUser).not.toHaveBeenCalled();
 
+            expect(res.status).toHaveBeenCalledWith(200);
+        });
+
+        it('should count lifecycle cleanup failures as failed deregistrations', async () => {
+            req.body = { deregistrations: [{ userId: 'garminUser123' }] };
+
+            const mockTokenDoc = {
+                id: 'tokenDoc123',
+                ref: {
+                    parent: {
+                        parent: {
+                            id: 'firebaseUserXYZ'
+                        }
+                    }
+                }
+            };
+
+            const mockQuerySnapshot = {
+                empty: false,
+                docs: [mockTokenDoc]
+            };
+
+            const mockWhere = vi.fn().mockReturnThis();
+            mockCollectionGroup.mockReturnValue({
+                where: mockWhere,
+                get: vi.fn().mockResolvedValue(mockQuerySnapshot)
+            });
+            mockWhere.mockReturnValue({ where: mockWhere, get: vi.fn().mockResolvedValue(mockQuerySnapshot) });
+            vi.mocked(serviceAuthLifecycle.cleanupServiceTokenById).mockRejectedValueOnce(new Error('delete failed'));
+
+            await receiveGarminAPIDeregistration(req, res);
+
+            expect(logger.error).toHaveBeenCalledWith(
+                'Failed to process deregistration for Firebase User firebaseUserXYZ (Garmin ID: garminUser123)',
+                expect.any(Error),
+            );
+            expect(logger.info).toHaveBeenCalledWith(
+                'Garmin deregistration batch complete. Summary: 0 processed, 1 failed, 0 skipped/not found.',
+            );
             expect(res.status).toHaveBeenCalledWith(200);
         });
 
@@ -253,9 +310,9 @@ describe('Garmin Auth Wrapper', () => {
 
             await receiveGarminAPIDeregistration(req, res);
 
-            expect(OAuth2.deleteLocalServiceToken).toHaveBeenCalledTimes(2);
-            expect(OAuth2.deleteLocalServiceToken).toHaveBeenCalledWith('userA', ServiceNames.GarminAPI, 'doc1');
-            expect(OAuth2.deleteLocalServiceToken).toHaveBeenCalledWith('userB', ServiceNames.GarminAPI, 'doc2');
+            expect(serviceAuthLifecycle.cleanupServiceTokenById).toHaveBeenCalledTimes(2);
+            expect(serviceAuthLifecycle.cleanupServiceTokenById).toHaveBeenCalledWith('userA', ServiceNames.GarminAPI, 'doc1', 'partner_disconnect');
+            expect(serviceAuthLifecycle.cleanupServiceTokenById).toHaveBeenCalledWith('userB', ServiceNames.GarminAPI, 'doc2', 'partner_disconnect');
             expect(res.status).toHaveBeenCalledWith(200);
         });
 
@@ -282,9 +339,9 @@ describe('Garmin Auth Wrapper', () => {
 
             await receiveGarminAPIDeregistration(req, res);
 
-            expect(OAuth2.deleteLocalServiceToken).toHaveBeenCalledTimes(2);
-            expect(OAuth2.deleteLocalServiceToken).toHaveBeenCalledWith('fb1', ServiceNames.GarminAPI, 'doc1');
-            expect(OAuth2.deleteLocalServiceToken).toHaveBeenCalledWith('fb2', ServiceNames.GarminAPI, 'doc2');
+            expect(serviceAuthLifecycle.cleanupServiceTokenById).toHaveBeenCalledTimes(2);
+            expect(serviceAuthLifecycle.cleanupServiceTokenById).toHaveBeenCalledWith('fb1', ServiceNames.GarminAPI, 'doc1', 'partner_disconnect');
+            expect(serviceAuthLifecycle.cleanupServiceTokenById).toHaveBeenCalledWith('fb2', ServiceNames.GarminAPI, 'doc2', 'partner_disconnect');
             expect(res.status).toHaveBeenCalledWith(200);
         });
 
@@ -309,13 +366,13 @@ describe('Garmin Auth Wrapper', () => {
                 get: mockGet
             });
 
-            vi.mocked(OAuth2.deleteLocalServiceToken)
+            vi.mocked(serviceAuthLifecycle.cleanupServiceTokenById)
                 .mockRejectedValueOnce(new Error('Firestore error'))
-                .mockResolvedValueOnce(undefined);
+                .mockResolvedValueOnce({});
 
             await receiveGarminAPIDeregistration(req, res);
 
-            expect(OAuth2.deleteLocalServiceToken).toHaveBeenCalledTimes(2);
+            expect(serviceAuthLifecycle.cleanupServiceTokenById).toHaveBeenCalledTimes(2);
             expect(res.status).toHaveBeenCalledWith(200);
         });
 
@@ -334,7 +391,7 @@ describe('Garmin Auth Wrapper', () => {
 
             await receiveGarminAPIDeregistration(req, res);
 
-            expect(OAuth2.deauthorizeServiceForUser).not.toHaveBeenCalled();
+            expect(serviceAuthLifecycle.cleanupServiceTokenById).not.toHaveBeenCalled();
             expect(res.status).toHaveBeenCalledWith(200);
         });
     });

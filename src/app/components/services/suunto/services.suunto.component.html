@@ -6,14 +6,28 @@
 <div class="service-container">
   <app-service-connection-status
     serviceLabel="Suunto App"
-    description="Required for history imports and FIT activity uploads."
+    [description]="connectionDescription"
     [connected]="isConnectedToService()"
     [loading]="isLoading"
     [locked]="!hasProAccess && !isConnectedToService()"
     [proRequired]="!hasProAccess && !isConnectedToService()"
-    [showDetails]="isConnectedToService()"
+    [showDetails]="isConnectedToService() || isReconnectRequired"
+    [statusLabelOverride]="isReconnectRequired ? 'Reconnect required' : null"
+    [statusIconOverride]="isReconnectRequired ? 'sync_problem' : null"
+    [statusTone]="isReconnectRequired ? 'attention' : 'default'"
     (click)="!hasProAccess && !isConnectedToService() && triggerUpsell()">
     <div connection-body class="connection-details">
+    @if (isReconnectRequired) {
+    <div class="reconnect-required-banner" role="alert">
+      <mat-icon>sync_problem</mat-icon>
+      <div class="reconnect-required-banner__copy">
+        <div class="reconnect-required-banner__title">Suunto needs to be reconnected</div>
+        <div class="reconnect-required-banner__message">
+          {{ reconnectFailureMessage || 'The previous connection is no longer accepted by Suunto. Reconnect to resume imports and sleep sync.' }}
+        </div>
+      </div>
+    </div>
+    }
     @if (isConnectedToService()) {
     <div class="connection-account-row">
       <div class="connection-account-info">
@@ -58,7 +72,7 @@
         <span>{{ activeSyncRouteWarningLabel }}</span>
       </div>
       }
-      @if (!isConnectedToService() || clicks > 10) {
+      @if (!isConnectedToService() || isReconnectRequired || clicks > 10) {
       <button mat-flat-button class="qs-mat-primary"
         [disabled]="!user || isLoading || isConnecting || !hasProAccess" (click)="connectWithService($event)">
         @if (isConnecting) {
@@ -68,7 +82,7 @@
         </ng-container>
         } @else {
         <ng-container>
-          <mat-icon>link</mat-icon> Connect
+          <mat-icon>{{ isReconnectRequired ? 'sync' : 'link' }}</mat-icon> {{ connectButtonLabel }}
         </ng-container>
         }
       </button>
@@ -119,7 +133,7 @@
         <mat-icon>lock</mat-icon>
         <span>History import is a Pro feature.</span>
       </div>
-      } @else if (isConnectedToService()) {
+      } @else if (!isReconnectRequired && isConnectedToService()) {
       <app-history-import-form [serviceName]="serviceName" [userMetaForService]="serviceMeta"
         [isLoadingParent]="isLoading" (importInitiated)="onHistoryImportInitiated()"></app-history-import-form>
       } @else {
@@ -146,7 +160,7 @@
           <mat-icon>lock</mat-icon>
           <span>Upload activity is a Pro feature.</span>
         </div>
-        } @else if (isConnectedToService()) {
+        } @else if (!isReconnectRequired && isConnectedToService()) {
         <app-upload-activity-to-service [user]="user" [hasProAccess]="hasProAccess"></app-upload-activity-to-service>
         } @else {
         <app-status-info type="info" title="Connect Account First">
@@ -170,7 +184,7 @@
           <mat-icon>lock</mat-icon>
           <span>Upload route is a Pro feature.</span>
         </div>
-        } @else if (isConnectedToService()) {
+        } @else if (!isReconnectRequired && isConnectedToService()) {
         <app-upload-route-to-service [user]="user" [hasProAccess]="hasProAccess"></app-upload-route-to-service>
         } @else {
         <app-status-info type="info" title="Connect Account First">

@@ -20,6 +20,9 @@ const {
   mockToActivitySyncMetadataError,
   mockUploadActivityFileToSuunto,
   mockHasProAccess,
+  mockIsServiceReconnectRequiredForUser,
+  mockShouldSkipQueueWorkForDeletedUser,
+  mockMarkQueueItemSkipped,
 } = vi.hoisted(() => {
   const mockTokenGet = vi.fn();
   const mockDownload = vi.fn();
@@ -45,6 +48,9 @@ const {
     })),
     mockUploadActivityFileToSuunto: vi.fn(),
     mockHasProAccess: vi.fn(),
+    mockIsServiceReconnectRequiredForUser: vi.fn(),
+    mockShouldSkipQueueWorkForDeletedUser: vi.fn(),
+    mockMarkQueueItemSkipped: vi.fn(),
   };
 });
 
@@ -72,13 +78,19 @@ vi.mock('firebase-admin', () => ({
 vi.mock('../queue-utils', () => ({
   QueueResult: {
     Processed: 'PROCESSED',
+    Skipped: 'SKIPPED',
     RetryIncremented: 'RETRY_INCREMENTED',
     MovedToDLQ: 'MOVED_TO_DLQ',
     Failed: 'FAILED',
   },
   updateToProcessed: mockUpdateToProcessed,
+  markQueueItemSkipped: mockMarkQueueItemSkipped,
   increaseRetryCountForQueueItem: mockIncreaseRetryCountForQueueItem,
   moveToDeadLetterQueue: mockMoveToDeadLetterQueue,
+  QUEUE_SKIPPED_REASONS: {
+    UserDeletedOrDeleting: 'user_deleted_or_deleting',
+    WorkerReturnedSkipped: 'worker_returned_skipped',
+  },
 }));
 
 vi.mock('./settings', () => ({
@@ -111,6 +123,14 @@ vi.mock('../utils', async (importOriginal) => {
   };
 });
 
+vi.mock('../service-connection-meta', () => ({
+  isServiceReconnectRequiredForUser: mockIsServiceReconnectRequiredForUser,
+}));
+
+vi.mock('../queue/user-deletion-skip', () => ({
+  shouldSkipQueueWorkForDeletedUser: mockShouldSkipQueueWorkForDeletedUser,
+}));
+
 import { processActivitySyncQueueItem } from './process-queue-item';
 import { QueueResult } from '../queue-utils';
 
@@ -142,6 +162,7 @@ describe('activity-sync/process-queue-item', () => {
     mockIsActivitySyncRouteUserAllowlisted.mockReturnValue(true);
     mockHasProAccess.mockResolvedValue(true);
     mockIsActivitySyncRouteEnabledForUser.mockResolvedValue(true);
+    mockIsServiceReconnectRequiredForUser.mockResolvedValue(false);
     mockTokenGet.mockResolvedValue({ size: 1 });
     mockDownload.mockResolvedValue([Buffer.from('FITDATA')]);
     mockUploadActivityFileToSuunto.mockResolvedValue({
@@ -151,8 +172,10 @@ describe('activity-sync/process-queue-item', () => {
       workoutKey: 'workout-1',
     });
     mockUpdateToProcessed.mockResolvedValue(QueueResult.Processed);
+    mockMarkQueueItemSkipped.mockResolvedValue(QueueResult.Processed);
     mockIncreaseRetryCountForQueueItem.mockResolvedValue(QueueResult.RetryIncremented);
     mockMoveToDeadLetterQueue.mockResolvedValue(QueueResult.MovedToDLQ);
+    mockShouldSkipQueueWorkForDeletedUser.mockResolvedValue(false);
   });
 
   it('marks queue item processed and writes success metadata when upload succeeds', async () => {
@@ -172,6 +195,92 @@ describe('activity-sync/process-queue-item', () => {
       resultStatus: 'success',
       successProcessedAt: expect.any(Number),
     }));
+  });
+
+  it('retries instead of DLQ when the deletion guard cannot be read', async () => {
+    mockShouldSkipQueueWorkForDeletedUser.mockRejectedValueOnce(Object.assign(
+      new Error('guard read failed'),
+      {
+        name: 'UserDeletionGuardReadError',
+        code: 'unavailable',
+        statusCode: 503,
+      },
+    ));
+
+    const result = await processActivitySyncQueueItem(baseQueueItem);
+
+    expect(result).toBe(QueueResult.RetryIncremented);
+    expect(mockIncreaseRetryCountForQueueItem).toHaveBeenCalledWith(
+      baseQueueItem,
+      expect.objectContaining({
+        name: 'UserDeletionGuardReadError',
+        code: 'unavailable',
+      }),
+      1,
+      undefined,
+    );
+    expect(mockMoveToDeadLetterQueue).not.toHaveBeenCalled();
+    expect(mockUploadActivityFileToSuunto).not.toHaveBeenCalled();
+  });
+
+  it('marks queue item skipped without metadata or upload when account deletion is active', async () => {
+    mockShouldSkipQueueWorkForDeletedUser.mockResolvedValue(true);
+
+    const result = await processActivitySyncQueueItem(baseQueueItem);
+
+    expect(result).toBe(QueueResult.Processed);
+    expect(mockMarkQueueItemSkipped).toHaveBeenCalledWith(
+      baseQueueItem,
+      undefined,
+      'user_deleted_or_deleting',
+      expect.objectContaining({
+        skippedContext: 'USER_DELETION_GUARD',
+      }),
+    );
+    expect(mockSetActivitySyncProcessingMetadata).not.toHaveBeenCalled();
+    expect(mockSetActivitySyncSkippedMetadata).not.toHaveBeenCalled();
+    expect(mockUploadActivityFileToSuunto).not.toHaveBeenCalled();
+  });
+
+  it('rechecks account deletion before upload and skips queued work if deletion starts mid-run', async () => {
+    mockShouldSkipQueueWorkForDeletedUser
+      .mockResolvedValueOnce(false)
+      .mockResolvedValueOnce(true);
+
+    const result = await processActivitySyncQueueItem(baseQueueItem);
+
+    expect(result).toBe(QueueResult.Processed);
+    expect(mockMarkQueueItemSkipped).toHaveBeenCalledWith(
+      baseQueueItem,
+      undefined,
+      'user_deleted_or_deleting',
+      expect.objectContaining({
+        skippedContext: 'USER_DELETION_GUARD',
+      }),
+    );
+    expect(mockDownload).not.toHaveBeenCalled();
+    expect(mockUploadActivityFileToSuunto).not.toHaveBeenCalled();
+  });
+
+  it('rechecks account deletion after downloading and before destination upload', async () => {
+    mockShouldSkipQueueWorkForDeletedUser
+      .mockResolvedValueOnce(false)
+      .mockResolvedValueOnce(false)
+      .mockResolvedValueOnce(true);
+
+    const result = await processActivitySyncQueueItem(baseQueueItem);
+
+    expect(result).toBe(QueueResult.Processed);
+    expect(mockDownload).toHaveBeenCalled();
+    expect(mockMarkQueueItemSkipped).toHaveBeenCalledWith(
+      baseQueueItem,
+      undefined,
+      'user_deleted_or_deleting',
+      expect.objectContaining({
+        skippedContext: 'USER_DELETION_GUARD',
+      }),
+    );
+    expect(mockUploadActivityFileToSuunto).not.toHaveBeenCalled();
   });
 
   it('skips and marks processed when user is not allowlisted for route', async () => {
@@ -251,6 +360,24 @@ describe('activity-sync/process-queue-item', () => {
     expect(mockUploadActivityFileToSuunto).not.toHaveBeenCalled();
   });
 
+  it('skips and marks processed when destination service requires reconnect even if a token remains', async () => {
+    mockIsServiceReconnectRequiredForUser.mockResolvedValue(true);
+
+    const result = await processActivitySyncQueueItem(baseQueueItem);
+
+    expect(result).toBe(QueueResult.Processed);
+    expect(mockTokenGet).not.toHaveBeenCalled();
+    expect(mockSetActivitySyncSkippedMetadata).toHaveBeenCalledWith(expect.objectContaining({
+      skippedReason: 'destination_not_connected',
+      detail: 'Destination account is not connected.',
+    }));
+    expect(mockUpdateToProcessed).toHaveBeenCalledWith(expect.any(Object), undefined, expect.objectContaining({
+      skippedReason: 'destination_not_connected',
+      resultStatus: 'skipped',
+    }));
+    expect(mockUploadActivityFileToSuunto).not.toHaveBeenCalled();
+  });
+
   it('processes manual queue items when route is disabled at worker time', async () => {
     mockIsActivitySyncRouteEnabledForUser.mockResolvedValue(false);
     const manualQueueItem: ActivitySyncQueueItemInterface = {
@@ -276,6 +403,49 @@ describe('activity-sync/process-queue-item', () => {
     expect(result).toBe(QueueResult.RetryIncremented);
     expect(mockSetActivitySyncRetryingMetadata).toHaveBeenCalled();
     expect(mockIncreaseRetryCountForQueueItem).toHaveBeenCalled();
+  });
+
+  it('marks processed as skipped when destination upload detects account deletion during token refresh', async () => {
+    mockUploadActivityFileToSuunto.mockRejectedValueOnce(Object.assign(new Error('deleted'), {
+      name: 'TokenRefreshSkippedForDeletedUserError',
+    }));
+
+    const result = await processActivitySyncQueueItem(baseQueueItem);
+
+    expect(result).toBe(QueueResult.Processed);
+    expect(mockSetActivitySyncFailedMetadata).not.toHaveBeenCalled();
+    expect(mockMoveToDeadLetterQueue).not.toHaveBeenCalled();
+    expect(mockIncreaseRetryCountForQueueItem).not.toHaveBeenCalled();
+    expect(mockMarkQueueItemSkipped).toHaveBeenCalledWith(
+      baseQueueItem,
+      undefined,
+      'user_deleted_or_deleting',
+      expect.objectContaining({
+        skippedContext: 'USER_DELETION_GUARD',
+      }),
+    );
+  });
+
+  it('marks processed as skipped when destination upload detects deletion before remote Suunto calls', async () => {
+    mockUploadActivityFileToSuunto.mockRejectedValueOnce(Object.assign(new Error('deleted before upload'), {
+      name: 'SuuntoActivityUploadSkippedForDeletedUserError',
+      code: 'user_deleted_or_deleting',
+    }));
+
+    const result = await processActivitySyncQueueItem(baseQueueItem);
+
+    expect(result).toBe(QueueResult.Processed);
+    expect(mockSetActivitySyncFailedMetadata).not.toHaveBeenCalled();
+    expect(mockMoveToDeadLetterQueue).not.toHaveBeenCalled();
+    expect(mockIncreaseRetryCountForQueueItem).not.toHaveBeenCalled();
+    expect(mockMarkQueueItemSkipped).toHaveBeenCalledWith(
+      baseQueueItem,
+      undefined,
+      'user_deleted_or_deleting',
+      expect.objectContaining({
+        skippedContext: 'USER_DELETION_GUARD',
+      }),
+    );
   });
 
   it('increments retry for transient upload failures with numeric gRPC code', async () => {

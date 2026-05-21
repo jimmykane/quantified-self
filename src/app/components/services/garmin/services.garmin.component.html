@@ -175,6 +175,10 @@
           <mat-icon>lock</mat-icon>
           <span>Garmin -> Suunto sync is a Pro feature.</span>
         </div>
+        } @else if (isSuuntoReconnectRequired) {
+        <app-status-info type="info" title="Reconnect Suunto Required">
+          Suunto needs to be reconnected before Garmin -> Suunto sync can run.
+        </app-status-info>
         } @else if (!isConnectedToService() || !isSuuntoConnected) {
         <app-status-info type="info" title="Connect Garmin + Suunto First">
           Garmin and Suunto must both be connected before route sync can run.

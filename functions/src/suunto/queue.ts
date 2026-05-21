@@ -1,6 +1,7 @@
 import * as functions from 'firebase-functions/v1';
 import * as logger from 'firebase-functions/logger';
 import { addToQueueForSuunto } from '../queue';
+import { isProviderQueueSkippedWithoutRetryError } from '../queue/provider-queue-errors';
 
 import { config } from '../config';
 import { verifySuuntoWebhookSignature } from './webhook-signature';
@@ -58,6 +59,11 @@ async function enqueueSuuntoWorkout(userName: string, workoutID: string, res: fu
     logger.info(`Inserted to queue ${queueItemDocumentReference.id} for workoutID ${workoutID} and userName ${userName}`);
     res.status(200).send();
   } catch (e: any) {
+    if (isProviderQueueSkippedWithoutRetryError(e)) {
+      logger.warn(`Skipping Suunto workout webhook ${workoutID} for ${userName} because no local token/user is connected or the user is being deleted.`);
+      res.status(200).send();
+      return;
+    }
     logger.error(e);
     res.status(500).send();
   }

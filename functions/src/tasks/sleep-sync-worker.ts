@@ -6,6 +6,7 @@ import { QueueResult } from '../queue-utils';
 import { SLEEP_SYNC_QUEUE_COLLECTION_NAME } from '../sleep/constants';
 import { SleepSyncQueueItemInterface } from '../queue/queue-item.interface';
 import { processSleepSyncQueueItem } from '../sleep/queue';
+import { isQueueItemDeletedForUserCleanup } from '../queue/cleanup-tombstone';
 
 interface SleepSyncTaskPayload {
     queueItemId: string;
@@ -27,6 +28,10 @@ export const processSleepSyncTask = onTaskDispatched({
         const failedJobDoc = await admin.firestore().collection('failed_jobs').doc(queueItemId).get();
         if (failedJobDoc.exists) {
             logger.warn(`[SleepSyncTaskWorker] Queue item ${queueItemId} not found but exists in failed_jobs. Stopping retry.`);
+            return;
+        }
+        if (await isQueueItemDeletedForUserCleanup(SLEEP_SYNC_QUEUE_COLLECTION_NAME, queueItemId)) {
+            logger.warn(`[SleepSyncTaskWorker] Queue item ${queueItemId} was deleted during queue cleanup. Stopping retry.`);
             return;
         }
         throw new Error(`[SleepSyncTaskWorker] Queue item ${queueItemId} not found in ${SLEEP_SYNC_QUEUE_COLLECTION_NAME}`);

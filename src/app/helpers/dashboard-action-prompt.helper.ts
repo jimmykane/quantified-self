@@ -17,9 +17,11 @@ export const DASHBOARD_ACTION_PROMPT_UNIT_SETUP_ID: AppDashboardActionPromptId =
 export const DASHBOARD_ACTION_PROMPT_FIRST_ACTIVITY_UPLOAD_ID: AppDashboardActionPromptId = 'firstActivityUpload';
 export const DASHBOARD_ACTION_PROMPT_CONNECT_ACTIVITY_SERVICE_ID: AppDashboardActionPromptId = 'connectActivityService';
 export const DASHBOARD_ACTION_PROMPT_ENABLE_ACTIVITY_AUTO_SYNC_ID: AppDashboardActionPromptId = 'enableActivityAutoSync';
+export const DASHBOARD_ACTION_PROMPT_RECONNECT_SUUNTO_SERVICE_ID: AppDashboardActionPromptId = 'reconnectSuuntoService';
 export const DASHBOARD_ACTION_PROMPT_FIRST_ACTIVITY_UPLOAD_SOURCE = 'first-activity-upload';
 export const DASHBOARD_ACTION_PROMPT_CONNECT_ACTIVITY_SERVICE_SOURCE = 'activity-service-connection';
 export const DASHBOARD_ACTION_PROMPT_ACTIVITY_AUTO_SYNC_SOURCE = 'activity-auto-sync';
+export const DASHBOARD_ACTION_PROMPT_RECONNECT_SUUNTO_SERVICE_SOURCE = 'suunto-reconnect-required';
 
 export const DASHBOARD_ACTIVITY_AUTO_SYNC_ROUTE_IDS: readonly ActivitySyncRouteId[] = [
   ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp,
@@ -35,7 +37,9 @@ export type DashboardActionPromptActionId =
   | 'connectActivityService'
   | 'dismissConnectActivityService'
   | 'enableActivityAutoSync'
-  | 'dismissEnableActivityAutoSync';
+  | 'dismissEnableActivityAutoSync'
+  | 'reconnectSuuntoService'
+  | 'dismissReconnectSuuntoService';
 
 export type DashboardActionPromptMenuActionId =
   | 'openUnitSettings'
@@ -99,11 +103,15 @@ export interface DashboardActionPromptBuildOptions {
   enableActivityAutoSyncBusy: boolean;
   enableActivityAutoSyncError: string | null;
   enableActivityAutoSyncRouteIds: readonly ActivitySyncRouteId[];
+  showReconnectSuuntoServicePrompt: boolean;
+  reconnectSuuntoServiceBusy: boolean;
+  reconnectSuuntoServiceError: string | null;
 }
 
 export interface ResolveDashboardActivityAutoSyncRouteIdsOptions {
   userID: string | null | undefined;
   connectionState: Partial<Record<ServiceNames, boolean>> | null | undefined;
+  reconnectRequiredServices?: Partial<Record<ServiceNames, boolean>> | null | undefined;
   routeSettings: Partial<Record<ActivitySyncRouteId, ActivitySyncRouteSettingsInterface>> | null | undefined;
 }
 
@@ -125,8 +133,16 @@ export function normalizeDashboardActionPrompts(value: unknown): AppDashboardAct
 export function isDashboardActionPromptDismissed(
   appSettings: AppAppSettingsInterface | null | undefined,
   id: AppDashboardActionPromptId,
+  source?: string | null,
 ): boolean {
-  return appSettings?.dashboardActionPrompts?.[id]?.state === 'dismissed';
+  const promptState = appSettings?.dashboardActionPrompts?.[id];
+  if (promptState?.state !== 'dismissed') {
+    return false;
+  }
+  if (!source) {
+    return true;
+  }
+  return promptState.source === source;
 }
 
 export function markDashboardActionPromptDismissed(
@@ -147,18 +163,29 @@ export function markDashboardActionPromptDismissed(
   return state;
 }
 
+export function buildReconnectSuuntoServicePromptSource(lastDisconnectedAt: number | null | undefined): string {
+  return `${DASHBOARD_ACTION_PROMPT_RECONNECT_SUUNTO_SERVICE_SOURCE}:${Number.isFinite(lastDisconnectedAt) ? lastDisconnectedAt : 'unknown'}`;
+}
+
 export function resolveDashboardActivityAutoSyncRouteIds(
   options: ResolveDashboardActivityAutoSyncRouteIdsOptions,
 ): ActivitySyncRouteId[] {
   const userID = `${options.userID || ''}`.trim();
   const connectionState = options.connectionState;
-  if (!userID || !connectionState?.[ServiceNames.SuuntoApp]) {
+  const reconnectRequiredServices = options.reconnectRequiredServices || {};
+  if (
+    !userID ||
+    !connectionState?.[ServiceNames.SuuntoApp] ||
+    reconnectRequiredServices[ServiceNames.SuuntoApp] === true
+  ) {
     return [];
   }
 
   return DASHBOARD_ACTIVITY_AUTO_SYNC_ROUTE_IDS.filter(routeID => {
     const route = ACTIVITY_SYNC_ROUTES[routeID];
     return connectionState[route.sourceServiceName] === true
+      && reconnectRequiredServices[route.sourceServiceName] !== true
+      && reconnectRequiredServices[route.destinationServiceName] !== true
       && options.routeSettings?.[routeID]?.enabled !== true
       && isActivitySyncRouteUIDAllowlisted(routeID, userID);
   });
@@ -271,6 +298,27 @@ export function buildDashboardActionPromptViewModels(
       },
       secondaryAction: {
         id: 'dismissEnableActivityAutoSync',
+        label: 'Not now',
+      },
+    });
+  }
+
+  if (options.showReconnectSuuntoServicePrompt) {
+    prompts.push({
+      id: DASHBOARD_ACTION_PROMPT_RECONNECT_SUUNTO_SERVICE_ID,
+      icon: 'sync_problem',
+      title: 'Reconnect Suunto',
+      description: 'Suunto stopped accepting the previous connection. Reconnect to resume sleep sync, history imports, and uploads. Garmin/COROS -> Suunto auto-sync routes stay off until you enable them again.',
+      busy: options.reconnectSuuntoServiceBusy,
+      error: options.reconnectSuuntoServiceError,
+      primaryAction: {
+        id: 'reconnectSuuntoService',
+        label: 'Reconnect',
+        icon: 'sync',
+        loadingLabel: 'Redirecting...',
+      },
+      secondaryAction: {
+        id: 'dismissReconnectSuuntoService',
         label: 'Not now',
       },
     });

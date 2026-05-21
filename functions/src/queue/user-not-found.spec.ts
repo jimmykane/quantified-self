@@ -77,6 +77,10 @@ const mockFirestore = {
         };
         return queryBuilder;
     }),
+    getAll: vi.fn(() => Promise.resolve([
+        { exists: true, data: () => ({}) },
+        { exists: false, data: () => undefined },
+    ])),
     batch: vi.fn(() => mockBatch),
     bulkWriter: vi.fn(() => ({
         set: vi.fn(),
@@ -115,6 +119,10 @@ import { processGarminAPIActivityQueueItem } from '../garmin/queue';
 // We need to mock some internals to force flow
 vi.mock('../tokens', () => ({
     getTokenData: vi.fn().mockResolvedValue({ accessToken: 'valid' })
+}));
+
+vi.mock('../queue/user-deletion-skip', () => ({
+    shouldSkipQueueWorkForDeletedUser: vi.fn().mockResolvedValue(false),
 }));
 
 vi.mock('../request-helper', () => ({

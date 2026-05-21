@@ -1,5 +1,6 @@
 import * as admin from 'firebase-admin';
-import { ActivitySyncRouteId } from '../../../shared/activity-sync-routes';
+import { ACTIVITY_SYNC_ROUTES, ActivitySyncRouteId } from '../../../shared/activity-sync-routes';
+import { isServiceReconnectRequiredForUser } from '../service-connection-meta';
 
 function asRecord(value: unknown): Record<string, unknown> | null {
     return value && typeof value === 'object' ? value as Record<string, unknown> : null;
@@ -18,4 +19,23 @@ export async function isActivitySyncRouteEnabledForUser(userID: string, routeId:
     const activitySyncRoutes = asRecord(serviceSyncSettings?.activitySyncRoutes);
     const routeSettings = asRecord(activitySyncRoutes?.[routeId]);
     return routeSettings?.enabled === true;
+}
+
+export async function isActivitySyncRouteBlockedByReconnectRequiredForUser(
+    userID: string,
+    routeId: ActivitySyncRouteId,
+): Promise<boolean> {
+    const route = ACTIVITY_SYNC_ROUTES[routeId];
+    if (!route) {
+        return false;
+    }
+
+    const serviceNames = Array.from(new Set([
+        route.sourceServiceName,
+        route.destinationServiceName,
+    ]));
+    const reconnectRequiredChecks = await Promise.all(
+        serviceNames.map((serviceName) => isServiceReconnectRequiredForUser(userID, serviceName)),
+    );
+    return reconnectRequiredChecks.some((reconnectRequired) => reconnectRequired);
 }

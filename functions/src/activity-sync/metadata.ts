@@ -1,8 +1,10 @@
 import * as admin from 'firebase-admin';
 import { FieldValue } from 'firebase-admin/firestore';
+import * as logger from 'firebase-functions/logger';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { ActivitySyncRouteId } from '../../../shared/activity-sync-routes';
 import { ACTIVITY_SYNC_METADATA_DOC_PREFIX } from './constants';
+import { getUserDeletionGuardStateInTransaction, UserDeletionGuardReadError } from '../shared/user-deletion-guard';
 
 export type ActivitySyncStatus = 'queued' | 'processing' | 'success' | 'skipped' | 'retrying' | 'failed';
 
@@ -68,14 +70,44 @@ export function getActivitySyncMetadataDocId(routeId: ActivitySyncRouteId): stri
     return `${ACTIVITY_SYNC_METADATA_DOC_PREFIX}${routeId}`;
 }
 
-function getActivitySyncMetadataRef(userID: string, eventID: string, routeId: ActivitySyncRouteId) {
-    return admin.firestore()
+function getActivitySyncMetadataRef(
+    db: admin.firestore.Firestore,
+    userID: string,
+    eventID: string,
+    routeId: ActivitySyncRouteId,
+) {
+    return db
         .collection('users')
         .doc(userID)
         .collection('events')
         .doc(eventID)
         .collection('metaData')
         .doc(getActivitySyncMetadataDocId(routeId));
+}
+
+async function setActivitySyncMetadata(
+    params: BaseMetadataParams,
+    status: ActivitySyncStatus,
+    payload: Record<string, unknown>,
+): Promise<void> {
+    const db = admin.firestore();
+    const ref = getActivitySyncMetadataRef(db, params.userID, params.eventID, params.routeId);
+
+    await db.runTransaction(async (transaction) => {
+        let deletionGuard;
+        try {
+            deletionGuard = await getUserDeletionGuardStateInTransaction(db, transaction, params.userID);
+        } catch (error) {
+            throw new UserDeletionGuardReadError(params.userID, `activity_sync_metadata:${status}`, error);
+        }
+
+        if (deletionGuard.shouldSkip) {
+            logger.warn(`[ActivitySyncMetadata] Skipping ${status} metadata for user ${params.userID}, event ${params.eventID}, route ${params.routeId} because the user is missing or deletion is in progress.`);
+            return;
+        }
+
+        transaction.set(ref, payload, { merge: true });
+    });
 }
 
 interface BaseMetadataParams {
@@ -88,8 +120,7 @@ interface BaseMetadataParams {
 }
 
 export async function setActivitySyncQueuedMetadata(params: BaseMetadataParams): Promise<void> {
-    const ref = getActivitySyncMetadataRef(params.userID, params.eventID, params.routeId);
-    await ref.set({
+    await setActivitySyncMetadata(params, 'queued', {
         routeId: params.routeId,
         sourceServiceName: params.sourceServiceName,
         destinationServiceName: params.destinationServiceName,
@@ -98,12 +129,11 @@ export async function setActivitySyncQueuedMetadata(params: BaseMetadataParams):
         attempts: 0,
         queuedAt: FieldValue.serverTimestamp(),
         updatedAt: FieldValue.serverTimestamp(),
-    }, { merge: true });
+    });
 }
 
 export async function setActivitySyncRequeuedMetadata(params: BaseMetadataParams): Promise<void> {
-    const ref = getActivitySyncMetadataRef(params.userID, params.eventID, params.routeId);
-    await ref.set({
+    await setActivitySyncMetadata(params, 'queued', {
         routeId: params.routeId,
         sourceServiceName: params.sourceServiceName,
         destinationServiceName: params.destinationServiceName,
@@ -114,12 +144,11 @@ export async function setActivitySyncRequeuedMetadata(params: BaseMetadataParams
         lastError: FieldValue.delete(),
         skippedReason: FieldValue.delete(),
         detail: FieldValue.delete(),
-    }, { merge: true });
+    });
 }
 
 export async function setActivitySyncProcessingMetadata(params: BaseMetadataParams): Promise<void> {
-    const ref = getActivitySyncMetadataRef(params.userID, params.eventID, params.routeId);
-    await ref.set({
+    await setActivitySyncMetadata(params, 'processing', {
         routeId: params.routeId,
         sourceServiceName: params.sourceServiceName,
         destinationServiceName: params.destinationServiceName,
@@ -128,7 +157,7 @@ export async function setActivitySyncProcessingMetadata(params: BaseMetadataPara
         attempts: FieldValue.increment(1),
         lastAttemptAt: FieldValue.serverTimestamp(),
         updatedAt: FieldValue.serverTimestamp(),
-    }, { merge: true });
+    });
 }
 
 interface SuccessMetadataParams extends BaseMetadataParams {
@@ -138,8 +167,7 @@ interface SuccessMetadataParams extends BaseMetadataParams {
 }
 
 export async function setActivitySyncSuccessMetadata(params: SuccessMetadataParams): Promise<void> {
-    const ref = getActivitySyncMetadataRef(params.userID, params.eventID, params.routeId);
-    await ref.set({
+    await setActivitySyncMetadata(params, 'success', {
         routeId: params.routeId,
         sourceServiceName: params.sourceServiceName,
         destinationServiceName: params.destinationServiceName,
@@ -153,7 +181,7 @@ export async function setActivitySyncSuccessMetadata(params: SuccessMetadataPara
         lastError: FieldValue.delete(),
         skippedReason: FieldValue.delete(),
         detail: FieldValue.delete(),
-    }, { merge: true });
+    });
 }
 
 interface SkippedMetadataParams extends BaseMetadataParams {
@@ -162,8 +190,7 @@ interface SkippedMetadataParams extends BaseMetadataParams {
 }
 
 export async function setActivitySyncSkippedMetadata(params: SkippedMetadataParams): Promise<void> {
-    const ref = getActivitySyncMetadataRef(params.userID, params.eventID, params.routeId);
-    await ref.set({
+    await setActivitySyncMetadata(params, 'skipped', {
         routeId: params.routeId,
         sourceServiceName: params.sourceServiceName,
         destinationServiceName: params.destinationServiceName,
@@ -174,7 +201,7 @@ export async function setActivitySyncSkippedMetadata(params: SkippedMetadataPara
         completedAt: FieldValue.serverTimestamp(),
         updatedAt: FieldValue.serverTimestamp(),
         lastError: FieldValue.delete(),
-    }, { merge: true });
+    });
 }
 
 interface ErrorMetadataParams extends BaseMetadataParams {
@@ -182,8 +209,7 @@ interface ErrorMetadataParams extends BaseMetadataParams {
 }
 
 export async function setActivitySyncRetryingMetadata(params: ErrorMetadataParams): Promise<void> {
-    const ref = getActivitySyncMetadataRef(params.userID, params.eventID, params.routeId);
-    await ref.set({
+    await setActivitySyncMetadata(params, 'retrying', {
         routeId: params.routeId,
         sourceServiceName: params.sourceServiceName,
         destinationServiceName: params.destinationServiceName,
@@ -191,12 +217,11 @@ export async function setActivitySyncRetryingMetadata(params: ErrorMetadataParam
         status: 'retrying' satisfies ActivitySyncStatus,
         lastError: params.error,
         updatedAt: FieldValue.serverTimestamp(),
-    }, { merge: true });
+    });
 }
 
 export async function setActivitySyncFailedMetadata(params: ErrorMetadataParams): Promise<void> {
-    const ref = getActivitySyncMetadataRef(params.userID, params.eventID, params.routeId);
-    await ref.set({
+    await setActivitySyncMetadata(params, 'failed', {
         routeId: params.routeId,
         sourceServiceName: params.sourceServiceName,
         destinationServiceName: params.destinationServiceName,
@@ -205,5 +230,5 @@ export async function setActivitySyncFailedMetadata(params: ErrorMetadataParams)
         lastError: params.error,
         completedAt: FieldValue.serverTimestamp(),
         updatedAt: FieldValue.serverTimestamp(),
-    }, { merge: true });
+    });
 }

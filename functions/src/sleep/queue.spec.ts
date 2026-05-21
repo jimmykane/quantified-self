@@ -23,6 +23,13 @@ const hoisted = vi.hoisted(() => ({
     updateSleepSyncState: vi.fn(),
     upsertSleepSessions: vi.fn(),
     enqueueSleepSyncTask: vi.fn(),
+    shouldSkipQueueWorkForDeletedUser: vi.fn(),
+    getUserDeletionGuardState: vi.fn(),
+    getUserDeletionGuardStateInTransaction: vi.fn(),
+    markQueueItemDeletedForUserCleanup: vi.fn(),
+    transactionUpdate: vi.fn((ref: { update?: (data: unknown) => Promise<void> }, data: unknown) => ref.update?.(data)),
+    runTransaction: vi.fn(),
+    recursiveDelete: vi.fn(),
 }));
 
 vi.mock('firebase-functions/logger', () => ({
@@ -54,6 +61,12 @@ vi.mock('firebase-admin', () => {
     hoisted.collectionGroupWhere.mockReturnValue(collectionGroupQuery);
     hoisted.collectionGroupLimit.mockReturnValue(collectionGroupQuery);
 
+    hoisted.runTransaction.mockImplementation(async (runner: (transaction: {
+        update: typeof hoisted.transactionUpdate;
+    }) => unknown) => runner({
+        update: hoisted.transactionUpdate,
+    }));
+
     const firestoreFn = vi.fn(() => ({
         collection: vi.fn((name: string) => ({
             id: name,
@@ -74,6 +87,8 @@ vi.mock('firebase-admin', () => {
             delete: hoisted.batchDelete,
             commit: hoisted.batchCommit,
         })),
+        runTransaction: hoisted.runTransaction,
+        recursiveDelete: hoisted.recursiveDelete,
     }));
     Object.assign(firestoreFn, {
         Timestamp: {
@@ -101,9 +116,47 @@ vi.mock('./writer', () => ({
     upsertSleepSessions: hoisted.upsertSleepSessions,
 }));
 
-vi.mock('../tokens', () => ({
-    getTokenData: hoisted.getTokenData,
-}));
+vi.mock('../tokens', () => {
+    class MockTerminalServiceAuthError extends Error {
+        readonly name = 'TerminalServiceAuthError';
+        readonly dlqContext: 'INVALID_GRANT' | 'AUTH_RECONNECT_REQUIRED';
+
+        constructor(
+            public readonly serviceName: ServiceNames,
+            public readonly firebaseUserID: string | null,
+            public readonly providerUserId: string,
+            public readonly statusCode: number | null,
+            public readonly providerErrorCode: string | null,
+            public readonly providerErrorMessage: string | null,
+            public readonly originalError: unknown,
+        ) {
+            super(`${serviceName} connection requires reconnect`);
+            const errorHint = `${providerErrorCode || ''} ${providerErrorMessage || ''}`.toLowerCase();
+            this.dlqContext = errorHint.includes('invalid_grant')
+                ? 'INVALID_GRANT'
+                : 'AUTH_RECONNECT_REQUIRED';
+        }
+    }
+
+    class MockTokenRefreshSkippedForDeletedUserError extends Error {
+        readonly name = 'TokenRefreshSkippedForDeletedUserError';
+
+        constructor(
+            public readonly firebaseUserID = 'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+            public readonly serviceName = ServiceNames.SuuntoApp,
+            public readonly tokenDocumentID = 'token-1',
+            public readonly phase = 'before_refresh',
+        ) {
+            super(`Skipping ${serviceName} token refresh for ${tokenDocumentID}`);
+        }
+    }
+
+    return {
+        getTokenData: hoisted.getTokenData,
+        TerminalServiceAuthError: MockTerminalServiceAuthError,
+        TokenRefreshSkippedForDeletedUserError: MockTokenRefreshSkippedForDeletedUserError,
+    };
+});
 
 vi.mock('../request-helper', () => ({
     get: hoisted.requestGet,
@@ -117,7 +170,38 @@ vi.mock('../utils', async () => {
     };
 });
 
+vi.mock('../queue/user-deletion-skip', () => ({
+    shouldSkipQueueWorkForDeletedUser: hoisted.shouldSkipQueueWorkForDeletedUser,
+}));
+
+vi.mock('../shared/user-deletion-guard', () => ({
+    getUserDeletionGuardState: hoisted.getUserDeletionGuardState,
+    getUserDeletionGuardStateInTransaction: hoisted.getUserDeletionGuardStateInTransaction,
+    UserDeletionGuardReadError: class UserDeletionGuardReadError extends Error {
+        readonly name = 'UserDeletionGuardReadError';
+        readonly code = 'unavailable';
+        readonly statusCode = 503;
+
+        constructor(
+            public readonly uid: string,
+            public readonly phase: string,
+            public readonly originalError: unknown,
+        ) {
+            super(`Could not read deletion guard for user ${uid} during ${phase}.`);
+        }
+    },
+}));
+
+vi.mock('../queue/cleanup-tombstone', () => ({
+    markQueueItemDeletedForUserCleanup: hoisted.markQueueItemDeletedForUserCleanup,
+    QUEUE_CLEANUP_TOMBSTONE_REASONS: {
+        UserDeletionGuard: 'user_deletion_guard',
+    },
+}));
+
 import { addSleepSyncQueueItem, processSleepSyncQueueItem } from './queue';
+import { TerminalServiceAuthError, TokenRefreshSkippedForDeletedUserError } from '../tokens';
+import { ProviderQueueUserDeletedOrDeletingError, ProviderQueueUserNotConnectedError } from '../queue/provider-queue-errors';
 
 describe('sleep queue', () => {
     beforeEach(() => {
@@ -138,12 +222,28 @@ describe('sleep queue', () => {
         hoisted.updateSleepSyncState.mockResolvedValue(undefined);
         hoisted.upsertSleepSessions.mockResolvedValue({ written: 0, skipped: 0 });
         hoisted.enqueueSleepSyncTask.mockResolvedValue(true);
+        hoisted.shouldSkipQueueWorkForDeletedUser.mockResolvedValue(false);
+        hoisted.getUserDeletionGuardState.mockResolvedValue({
+            userExists: true,
+            deletionInProgress: false,
+            shouldSkip: false,
+        });
+        hoisted.getUserDeletionGuardStateInTransaction.mockResolvedValue({
+            userExists: true,
+            deletionInProgress: false,
+            shouldSkip: false,
+        });
+        hoisted.markQueueItemDeletedForUserCleanup.mockResolvedValue(true);
+        hoisted.transactionUpdate.mockClear();
+        hoisted.runTransaction.mockClear();
+        hoisted.recursiveDelete.mockResolvedValue(undefined);
     });
 
     it('uses deterministic queue ids for duplicated webhook or poll payloads', async () => {
         const input = {
             type: 'suunto_webhook' as const,
             provider: 'SuuntoApp' as const,
+            userID: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
             providerUserId: 'suunto-user-1',
             payload: { samples: [{ SleepId: 123 }] },
             dedupeKey: 'suunto-user-1:123',
@@ -172,6 +272,7 @@ describe('sleep queue', () => {
             await addSleepSyncQueueItem({
                 type: 'suunto_webhook',
                 provider: 'SuuntoApp',
+                userID: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
                 providerUserId: 'suunto-user-1',
                 payload: { samples: [{ SleepId: 123 }] },
                 dedupeKey: 'suunto-user-1:123',
@@ -192,6 +293,249 @@ describe('sleep queue', () => {
         } finally {
             vi.useRealTimers();
         }
+    });
+
+    it('rejects provider-only enqueue without creating a queue doc when no local token resolves', async () => {
+        hoisted.collectionGroupGet.mockResolvedValueOnce({
+            docs: [],
+            empty: true,
+        });
+
+        await expect(addSleepSyncQueueItem({
+            type: 'suunto_webhook',
+            provider: 'SuuntoApp',
+            providerUserId: 'unknown-suunto-user',
+            payload: { samples: [{ SleepId: 123 }] },
+            dedupeKey: 'unknown-suunto-user:123',
+            dispatchImmediately: true,
+        })).rejects.toBeInstanceOf(ProviderQueueUserNotConnectedError);
+
+        expect(hoisted.docSet).not.toHaveBeenCalled();
+        expect(hoisted.enqueueSleepSyncTask).not.toHaveBeenCalled();
+    });
+
+    it.each([
+        {
+            provider: 'GarminAPI' as const,
+            serviceName: ServiceNames.GarminAPI,
+            tokenField: 'userID',
+            type: 'garmin_ping' as const,
+            extraInput: { callbackURL: 'https://apis.garmin.com/wellness-api/rest/sleeps?uploadStartTimeInSeconds=1777424400' },
+        },
+        {
+            provider: 'COROSAPI' as const,
+            serviceName: ServiceNames.COROSAPI,
+            tokenField: 'openId',
+            type: 'coros_poll' as const,
+            extraInput: { rangeStartMs: 1_777_392_000_000, rangeEndMs: 1_777_478_400_000 },
+        },
+    ])('resolves provider-only $provider queue items using canonical serviceName token docs', async ({ provider, serviceName, tokenField, type, extraInput }) => {
+        hoisted.collectionGroupGet.mockResolvedValueOnce({
+            docs: [{
+                id: 'provider-token-1',
+                ref: {
+                    parent: {
+                        parent: {
+                            id: 'resolved-firebase-user',
+                        },
+                    },
+                },
+                data: () => ({
+                    serviceName,
+                    [tokenField]: 'provider-user-1',
+                }),
+            }],
+            empty: false,
+        });
+
+        await addSleepSyncQueueItem({
+            type,
+            provider,
+            providerUserId: 'provider-user-1',
+            dedupeKey: `${provider}:provider-user-1`,
+            ...extraInput,
+        });
+
+        expect(hoisted.collectionGroupWhere).toHaveBeenCalledWith('serviceName', '==', serviceName);
+        expect(hoisted.collectionGroupWhere).toHaveBeenCalledWith(tokenField, '==', 'provider-user-1');
+        expect(hoisted.docSet).toHaveBeenCalledWith(expect.objectContaining({
+            provider,
+            providerUserId: 'provider-user-1',
+            userID: 'resolved-firebase-user',
+        }), { merge: false });
+    });
+
+    it('rejects enqueue without creating a queue doc when deletion is active before write', async () => {
+        hoisted.getUserDeletionGuardState.mockResolvedValueOnce({
+            userExists: true,
+            deletionInProgress: true,
+            shouldSkip: true,
+        });
+
+        await expect(addSleepSyncQueueItem({
+            type: 'suunto_webhook',
+            provider: 'SuuntoApp',
+            userID: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+            providerUserId: 'suunto-user-1',
+            payload: { samples: [{ SleepId: 123 }] },
+            dedupeKey: 'suunto-user-1:123',
+            dispatchImmediately: true,
+        })).rejects.toBeInstanceOf(ProviderQueueUserDeletedOrDeletingError);
+
+        expect(hoisted.docSet).not.toHaveBeenCalled();
+        expect(hoisted.enqueueSleepSyncTask).not.toHaveBeenCalled();
+    });
+
+    it('deletes a written queue doc and skips dispatch when deletion starts after write', async () => {
+        hoisted.getUserDeletionGuardState
+            .mockResolvedValueOnce({
+                userExists: true,
+                deletionInProgress: false,
+                shouldSkip: false,
+            })
+            .mockResolvedValueOnce({
+                userExists: true,
+                deletionInProgress: true,
+                shouldSkip: true,
+            });
+
+        await expect(addSleepSyncQueueItem({
+            type: 'suunto_webhook',
+            provider: 'SuuntoApp',
+            userID: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+            providerUserId: 'suunto-user-1',
+            payload: { samples: [{ SleepId: 123 }] },
+            dedupeKey: 'suunto-user-1:123',
+            dispatchImmediately: true,
+        })).rejects.toBeInstanceOf(ProviderQueueUserDeletedOrDeletingError);
+
+        expect(hoisted.docSet).toHaveBeenCalled();
+        expect(hoisted.recursiveDelete).toHaveBeenCalledWith(expect.objectContaining({
+            id: hoisted.docIdValues[0],
+        }));
+        expect(hoisted.enqueueSleepSyncTask).not.toHaveBeenCalled();
+        expect(hoisted.docUpdate).not.toHaveBeenCalled();
+    });
+
+    it('preserves a written queue doc when deletion starts after write but tombstone write fails', async () => {
+        hoisted.getUserDeletionGuardState
+            .mockResolvedValueOnce({
+                userExists: true,
+                deletionInProgress: false,
+                shouldSkip: false,
+            })
+            .mockResolvedValueOnce({
+                userExists: true,
+                deletionInProgress: true,
+                shouldSkip: true,
+            });
+        hoisted.markQueueItemDeletedForUserCleanup.mockResolvedValueOnce(false);
+
+        await expect(addSleepSyncQueueItem({
+            type: 'suunto_webhook',
+            provider: 'SuuntoApp',
+            userID: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+            providerUserId: 'suunto-user-1',
+            payload: { samples: [{ SleepId: 123 }] },
+            dedupeKey: 'suunto-user-1:123',
+            dispatchImmediately: true,
+        })).rejects.toBeInstanceOf(ProviderQueueUserDeletedOrDeletingError);
+
+        expect(hoisted.docSet).toHaveBeenCalled();
+        expect(hoisted.recursiveDelete).not.toHaveBeenCalled();
+        expect(hoisted.enqueueSleepSyncTask).not.toHaveBeenCalled();
+        expect(hoisted.docUpdate).not.toHaveBeenCalled();
+    });
+
+    it('does not write the dispatch marker when deletion starts after Cloud Task enqueue', async () => {
+        hoisted.getUserDeletionGuardState
+            .mockResolvedValueOnce({
+                userExists: true,
+                deletionInProgress: false,
+                shouldSkip: false,
+            })
+            .mockResolvedValueOnce({
+                userExists: true,
+                deletionInProgress: false,
+                shouldSkip: false,
+            });
+        hoisted.getUserDeletionGuardStateInTransaction
+            .mockResolvedValueOnce({
+                userExists: true,
+                deletionInProgress: true,
+                shouldSkip: true,
+            });
+
+        await expect(addSleepSyncQueueItem({
+            type: 'suunto_webhook',
+            provider: 'SuuntoApp',
+            userID: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+            providerUserId: 'suunto-user-1',
+            payload: { samples: [{ SleepId: 123 }] },
+            dedupeKey: 'suunto-user-1:123',
+            dispatchImmediately: true,
+        })).rejects.toBeInstanceOf(ProviderQueueUserDeletedOrDeletingError);
+
+        expect(hoisted.docSet).toHaveBeenCalled();
+        expect(hoisted.enqueueSleepSyncTask).toHaveBeenCalledWith(
+            hoisted.docIdValues[0],
+            expect.any(Number),
+        );
+        expect(hoisted.recursiveDelete).toHaveBeenCalledWith(expect.objectContaining({
+            id: hoisted.docIdValues[0],
+        }));
+        expect(hoisted.docUpdate).not.toHaveBeenCalled();
+    });
+
+    it('deletes a non-dispatched queue doc when deletion starts after write', async () => {
+        hoisted.getUserDeletionGuardState
+            .mockResolvedValueOnce({
+                userExists: true,
+                deletionInProgress: false,
+                shouldSkip: false,
+            })
+            .mockResolvedValueOnce({
+                userExists: true,
+                deletionInProgress: true,
+                shouldSkip: true,
+            });
+
+        await expect(addSleepSyncQueueItem({
+            type: 'suunto_poll',
+            provider: 'SuuntoApp',
+            userID: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+            providerUserId: 'suunto-user-1',
+            rangeStartMs: 1_777_392_000_000,
+            rangeEndMs: 1_777_478_400_000,
+            dedupeKey: 'suunto-user-1:poll',
+        })).rejects.toBeInstanceOf(ProviderQueueUserDeletedOrDeletingError);
+
+        expect(hoisted.docSet).toHaveBeenCalled();
+        expect(hoisted.recursiveDelete).toHaveBeenCalledWith(expect.objectContaining({
+            id: hoisted.docIdValues[0],
+        }));
+        expect(hoisted.enqueueSleepSyncTask).not.toHaveBeenCalled();
+        expect(hoisted.docUpdate).not.toHaveBeenCalled();
+    });
+
+    it('fails retryably without queue write when the enqueue deletion guard cannot be read', async () => {
+        hoisted.getUserDeletionGuardState.mockRejectedValueOnce(new Error('guard unavailable'));
+
+        await expect(addSleepSyncQueueItem({
+            type: 'suunto_webhook',
+            provider: 'SuuntoApp',
+            userID: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+            providerUserId: 'suunto-user-1',
+            payload: { samples: [{ SleepId: 123 }] },
+            dedupeKey: 'suunto-user-1:123',
+            dispatchImmediately: true,
+        })).rejects.toMatchObject({
+            name: 'UserDeletionGuardReadError',
+            code: 'unavailable',
+        });
+
+        expect(hoisted.docSet).not.toHaveBeenCalled();
+        expect(hoisted.enqueueSleepSyncTask).not.toHaveBeenCalled();
     });
 
     it('marks disabled provider queue items processed without resolving tokens', async () => {
@@ -574,6 +918,211 @@ describe('sleep queue', () => {
         expect(hoisted.docUpdate).not.toHaveBeenCalled();
     });
 
+    it('moves malformed queue items to DLQ without writing sleep state', async () => {
+        hoisted.allowedUserIDs.splice(0, hoisted.allowedUserIDs.length);
+        const queueRef = {
+            parent: { id: 'sleepSyncQueue' },
+        };
+
+        const result = await processSleepSyncQueueItem({
+            id: 'malformed-sleep-item',
+            dateCreated: 1_700_000_000_000,
+            dispatchedToCloudTask: 1_700_000_000_500,
+            processed: false,
+            provider: undefined,
+            providerUserId: undefined,
+            retryCount: 0,
+            type: 'suunto_webhook',
+            userID: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+            ref: queueRef as any,
+        } as any);
+
+        expect(result).toBe(QueueResult.MovedToDLQ);
+        expect(hoisted.batchSet).toHaveBeenCalledWith(expect.objectContaining({
+            id: 'malformed-sleep-item',
+        }), expect.objectContaining({
+            originalCollection: 'sleepSyncQueue',
+            context: 'INVALID_SLEEP_QUEUE_ITEM',
+            error: 'Malformed sleep sync queue item malformed-sleep-item: invalid provider missing',
+        }));
+        expect(hoisted.batchDelete).toHaveBeenCalledWith(queueRef);
+        expect(hoisted.shouldSkipQueueWorkForDeletedUser).not.toHaveBeenCalled();
+        expect(hoisted.markSleepSyncError).not.toHaveBeenCalled();
+        expect(hoisted.updateSleepSyncState).not.toHaveBeenCalled();
+        expect(hoisted.upsertSleepSessions).not.toHaveBeenCalled();
+    });
+
+    it('skips malformed user-scoped queue items before DLQ when account deletion is active', async () => {
+        hoisted.allowedUserIDs.splice(0, hoisted.allowedUserIDs.length);
+        hoisted.shouldSkipQueueWorkForDeletedUser.mockResolvedValue(true);
+        const update = vi.fn().mockResolvedValue(undefined);
+
+        const result = await processSleepSyncQueueItem({
+            id: 'malformed-sleep-deleted-user',
+            dateCreated: 1_700_000_000_000,
+            dispatchedToCloudTask: 1_700_000_000_500,
+            processed: false,
+            provider: 'SuuntoApp',
+            providerUserId: 'suunto-user-1',
+            retryCount: 0,
+            type: 'not_a_sleep_type',
+            userID: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+            ref: {
+                update,
+            } as any,
+        } as any);
+
+        expect(result).toBe(QueueResult.Processed);
+        expect(hoisted.shouldSkipQueueWorkForDeletedUser).toHaveBeenCalledWith(
+            'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+            'suuntoApp',
+            'malformed-sleep-deleted-user',
+            'before_sleep_token_resolution',
+        );
+        expect(update).toHaveBeenCalledWith(expect.objectContaining({
+            processed: true,
+            resultStatus: 'skipped',
+            skippedReason: 'user_deleted_or_deleting',
+        }));
+        expect(hoisted.batchSet).not.toHaveBeenCalled();
+        expect(hoisted.markSleepSyncError).not.toHaveBeenCalled();
+        expect(hoisted.updateSleepSyncState).not.toHaveBeenCalled();
+        expect(hoisted.upsertSleepSessions).not.toHaveBeenCalled();
+    });
+
+    it('skips user-scoped queue items before token resolution when account deletion is active', async () => {
+        hoisted.shouldSkipQueueWorkForDeletedUser.mockResolvedValue(true);
+        const update = vi.fn().mockResolvedValue(undefined);
+
+        const result = await processSleepSyncQueueItem({
+            id: 'suunto-sleep-deleted-user',
+            dateCreated: 1_700_000_000_000,
+            dispatchedToCloudTask: 1_700_000_000_500,
+            processed: false,
+            provider: 'SuuntoApp',
+            userID: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+            providerUserId: 'suunto-user-1',
+            retryCount: 0,
+            type: 'suunto_webhook',
+            payload: { samples: [{ SleepId: 123 }] },
+            ref: {
+                update,
+            } as any,
+        });
+
+        expect(result).toBe(QueueResult.Processed);
+        expect(update).toHaveBeenCalledWith(expect.objectContaining({
+            processed: true,
+            resultStatus: 'skipped',
+            skippedReason: 'user_deleted_or_deleting',
+            sessionsWritten: 0,
+            sessionsSkipped: 0,
+        }));
+        expect(hoisted.tokenRootGet).not.toHaveBeenCalled();
+        expect(hoisted.collectionGroupGet).not.toHaveBeenCalled();
+        expect(hoisted.getTokenData).not.toHaveBeenCalled();
+        expect(hoisted.requestGet).not.toHaveBeenCalled();
+    });
+
+    it('skips all-user queue items after token resolution but before provider sync when account deletion is active', async () => {
+        hoisted.allowedUserIDs.splice(0, hoisted.allowedUserIDs.length);
+        hoisted.shouldSkipQueueWorkForDeletedUser.mockResolvedValue(true);
+        hoisted.collectionGroupGet.mockResolvedValue({
+            docs: [{
+                id: 'suunto-token-1',
+                data: () => ({
+                    userName: 'suunto-user-1',
+                    serviceName: 'SuuntoApp',
+                }),
+                ref: {
+                    parent: {
+                        parent: {
+                            id: 'deleted-user-id',
+                        },
+                    },
+                },
+            }],
+            empty: false,
+        });
+        const update = vi.fn().mockResolvedValue(undefined);
+
+        const result = await processSleepSyncQueueItem({
+            id: 'suunto-sleep-deleted-user-all',
+            dateCreated: 1_700_000_000_000,
+            dispatchedToCloudTask: 1_700_000_000_500,
+            processed: false,
+            provider: 'SuuntoApp',
+            providerUserId: 'suunto-user-1',
+            retryCount: 0,
+            type: 'suunto_webhook',
+            payload: { samples: [{ SleepId: 123 }] },
+            ref: {
+                update,
+            } as any,
+        });
+
+        expect(result).toBe(QueueResult.Processed);
+        expect(hoisted.collectionGroupGet).toHaveBeenCalled();
+        expect(hoisted.getTokenData).not.toHaveBeenCalled();
+        expect(hoisted.requestGet).not.toHaveBeenCalled();
+        expect(hoisted.upsertSleepSessions).not.toHaveBeenCalled();
+        expect(update).toHaveBeenCalledWith(expect.objectContaining({
+            resultStatus: 'skipped',
+            skippedReason: 'user_deleted_or_deleting',
+        }));
+    });
+
+    it('marks TokenRefreshSkippedForDeletedUserError as skipped instead of retrying', async () => {
+        hoisted.tokenRootGet.mockResolvedValue({
+            docs: [{
+                id: 'suunto-token-1',
+                data: () => ({
+                    userName: 'suunto-user-1',
+                    serviceName: 'SuuntoApp',
+                }),
+                ref: {
+                    parent: {
+                        parent: {
+                            id: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+                        },
+                    },
+                },
+            }],
+            empty: false,
+        });
+        hoisted.getTokenData.mockRejectedValueOnce(new TokenRefreshSkippedForDeletedUserError(
+            'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+            ServiceNames.SuuntoApp,
+            'suunto-token-1',
+            'before_refresh' as any,
+        ));
+        const update = vi.fn().mockResolvedValue(undefined);
+
+        const result = await processSleepSyncQueueItem({
+            id: 'suunto-sleep-refresh-deleted-user',
+            dateCreated: 1_700_000_000_000,
+            dispatchedToCloudTask: 1_700_000_000_500,
+            processed: false,
+            provider: 'SuuntoApp',
+            userID: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+            providerUserId: 'suunto-user-1',
+            retryCount: 0,
+            type: 'suunto_poll',
+            rangeStartMs: 1_777_392_000_000,
+            rangeEndMs: 1_777_478_400_000,
+            ref: {
+                update,
+            } as any,
+        });
+
+        expect(result).toBe(QueueResult.Processed);
+        expect(hoisted.markSleepSyncError).not.toHaveBeenCalled();
+        expect(update).toHaveBeenCalledWith(expect.objectContaining({
+            resultStatus: 'skipped',
+            skippedReason: 'user_deleted_or_deleting',
+        }));
+    });
+
     it('resolves all-user Suunto queue items with an indexed userName and serviceName token query', async () => {
         hoisted.allowedUserIDs.splice(0, hoisted.allowedUserIDs.length);
         hoisted.collectionGroupGet.mockResolvedValue({
@@ -633,6 +1182,71 @@ describe('sleep queue', () => {
             sessionsWritten: 1,
         }));
         expect(hoisted.batchSet).not.toHaveBeenCalled();
+    });
+
+    it('moves Suunto queue items to DLQ immediately on terminal invalid_grant without retrying', async () => {
+        hoisted.tokenRootGet.mockResolvedValue({
+            docs: [{
+                id: 'suunto-token-1',
+                data: () => ({
+                    userName: 'suunto-user-1',
+                    serviceName: 'SuuntoApp',
+                }),
+                ref: {
+                    parent: {
+                        parent: {
+                            id: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+                        },
+                    },
+                },
+            }],
+            empty: false,
+        });
+        hoisted.getTokenData.mockRejectedValueOnce(new TerminalServiceAuthError(
+            ServiceNames.SuuntoApp,
+            'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+            'suunto-user-1',
+            400,
+            'invalid_grant',
+            'User no longer active/connected with the partner',
+            new Error('400 invalid_grant'),
+        ));
+        const queueRef = {
+            parent: { id: 'sleepSyncQueue' },
+            update: vi.fn(),
+        };
+
+        const result = await processSleepSyncQueueItem({
+            id: 'suunto-sleep-invalid-grant',
+            dateCreated: 1_700_000_000_000,
+            dispatchedToCloudTask: 1_700_000_000_500,
+            processed: false,
+            provider: 'SuuntoApp',
+            userID: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+            providerUserId: 'suunto-user-1',
+            retryCount: 0,
+            type: 'suunto_poll',
+            rangeStartMs: 1_777_392_000_000,
+            rangeEndMs: 1_777_478_400_000,
+            ref: queueRef as any,
+        });
+
+        expect(result).toBe(QueueResult.MovedToDLQ);
+        expect(hoisted.markSleepSyncError).toHaveBeenCalledWith(
+            'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+            'SuuntoApp',
+            expect.objectContaining({
+                dlqContext: 'INVALID_GRANT',
+            }),
+        );
+        expect(hoisted.batchSet).toHaveBeenCalledWith(expect.objectContaining({
+            id: 'suunto-sleep-invalid-grant',
+        }), expect.objectContaining({
+            originalCollection: 'sleepSyncQueue',
+            context: 'INVALID_GRANT',
+        }));
+        expect(hoisted.batchDelete).toHaveBeenCalledWith(queueRef);
+        expect(queueRef.update).not.toHaveBeenCalled();
     });
 
     it('does not resolve another users token when an allowed queue item has mismatched provider user id', async () => {

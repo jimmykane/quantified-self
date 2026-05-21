@@ -5,7 +5,7 @@ import { QueueErrors, QueueLogs } from './shared/constants';
 import * as admin from 'firebase-admin';
 import * as logger from 'firebase-functions/logger';
 
-import { increaseRetryCountForQueueItem, updateToProcessed, moveToDeadLetterQueue, QueueResult } from './queue-utils';
+import { increaseRetryCountForQueueItem, markQueueItemSkipped, QUEUE_SKIPPED_REASONS, updateToProcessed, moveToDeadLetterQueue, QueueResult } from './queue-utils';
 import { processGarminAPIActivityQueueItem } from './garmin/queue';
 import {
   QueueItemInterface,
@@ -13,7 +13,7 @@ import {
   GarminAPIActivityQueueItemInterface,
   SuuntoAppWorkoutQueueItemInterface,
 } from './queue/queue-item.interface';
-import { generateIDFromParts, generateEventID, setEvent, UsageLimitExceededError, enqueueWorkoutTask, UserNotFoundError, getCloudTaskQueueDepth } from './utils';
+import { generateIDFromParts, generateEventID, setEvent, UsageLimitExceededError, enqueueWorkoutTask, UserNotFoundError, getCloudTaskQueueDepth, EventWriteSkippedForDeletedUserError } from './utils';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { getServiceWorkoutQueueName } from './shared/queue-names';
 import {
@@ -22,13 +22,34 @@ import {
 } from '@sports-alliance/sports-lib';
 import * as requestPromise from './request-helper';
 import { config } from './config';
-import { getTokenData } from './tokens';
+import { getTokenData, TerminalServiceAuthError, TokenRefreshSkippedForDeletedUserError } from './tokens';
 import { EventImporterFIT } from '@sports-alliance/sports-lib';
 import { COROSAPIEventMetaData, SuuntoAppEventMetaData } from '@sports-alliance/sports-lib';
 import { uploadDebugFile } from './debug-utils';
 import { createParsingOptions } from '../../shared/parsing-options';
 import { normalizeDownloadedFitPayload } from './shared/fit-payload';
 import { enqueueActivitySyncJobsForImportedEvent } from './activity-sync/enqueue-imported-event';
+import { shouldSkipQueueWorkForDeletedUser } from './queue/user-deletion-skip';
+import { ProviderQueueUserDeletedOrDeletingError, ProviderQueueUserNotConnectedError } from './queue/provider-queue-errors';
+import { getUserDeletionGuardState, UserDeletionGuardReadError } from './shared/user-deletion-guard';
+import {
+  QueueItemUserGuardedUpdateResult,
+  markQueueItemDispatchedIfUserActive,
+  QueueDispatchMarkerResult,
+  updateQueueItemIfUserActive,
+} from './queue/dispatch-marker';
+import {
+  markQueueItemDeletedForUserCleanup,
+  QUEUE_CLEANUP_TOMBSTONE_REASONS,
+} from './queue/cleanup-tombstone';
+
+export {
+  ProviderQueueUserDeletedOrDeletingError,
+  ProviderQueueUserNotConnectedError,
+  isProviderQueueSkippedWithoutRetryError,
+  isProviderQueueUserDeletedOrDeletingError,
+  isProviderQueueUserNotConnectedError,
+} from './queue/provider-queue-errors';
 
 async function enqueueActivitySyncBestEffort(
   parentID: string,
@@ -36,7 +57,11 @@ async function enqueueActivitySyncBestEffort(
   sourceServiceName: ServiceNames,
   sourceActivityID: string,
   setEventResult: unknown
-): Promise<void> {
+): Promise<boolean> {
+  if (await shouldSkipQueueWorkForDeletedUser(parentID, sourceServiceName, eventID, 'before_activity_sync_enqueue')) {
+    return true;
+  }
+
   try {
     const activitySyncEventID = `${(setEventResult as any)?.eventID || eventID}`;
     const activitySyncOriginalFiles = Array.isArray((setEventResult as any)?.savedOriginalFiles) ? (setEventResult as any).savedOriginalFiles : [];
@@ -50,6 +75,16 @@ async function enqueueActivitySyncBestEffort(
   } catch (activitySyncError) {
     logger.error(`[ActivitySync] Failed to enqueue post-import sync for ${sourceServiceName} event ${eventID} and user ${parentID}. Import remains successful.`, activitySyncError);
   }
+  return false;
+}
+
+function markWorkoutQueueItemSkippedForDeletedUser(
+  queueItem: QueueItemInterface,
+  bulkWriter?: admin.firestore.BulkWriter,
+): Promise<QueueResult.Processed | QueueResult.Failed> {
+  return markQueueItemSkipped(queueItem, bulkWriter, QUEUE_SKIPPED_REASONS.UserDeletedOrDeleting, {
+    skippedContext: 'USER_DELETION_GUARD',
+  });
 }
 
 
@@ -57,6 +92,112 @@ function toArrayBuffer(payload: Uint8Array): ArrayBuffer {
   const copy = new Uint8Array(payload.byteLength);
   copy.set(payload);
   return copy.buffer;
+}
+
+function selectPreferredTerminalAuthError(
+  current: TerminalServiceAuthError | null,
+  candidate: TerminalServiceAuthError,
+): TerminalServiceAuthError {
+  if (!current) {
+    return candidate;
+  }
+  if (candidate.dlqContext === 'INVALID_GRANT' && current.dlqContext !== 'INVALID_GRANT') {
+    return candidate;
+  }
+  return current;
+}
+
+function isTokenRefreshSkippedForDeletedUserError(error: unknown): error is TokenRefreshSkippedForDeletedUserError {
+  return error instanceof TokenRefreshSkippedForDeletedUserError
+    || (error instanceof Error && error.name === 'TokenRefreshSkippedForDeletedUserError');
+}
+
+function isEventWriteSkippedForDeletedUserError(error: unknown): error is EventWriteSkippedForDeletedUserError {
+  return error instanceof EventWriteSkippedForDeletedUserError
+    || (error instanceof Error && error.name === 'EventWriteSkippedForDeletedUserError');
+}
+
+function isUserDeletionGuardReadError(error: unknown): boolean {
+  return error instanceof Error && error.name === 'UserDeletionGuardReadError';
+}
+
+interface WorkoutQueueDispatchContext {
+  firebaseUserID: string;
+  providerUserID: string;
+}
+
+enum WorkoutQueueFirebaseUserIDBackfillResult {
+  Updated = 'updated',
+  SkippedDeletedUser = 'skipped_deleted_user',
+  AlreadyMovedToFailedJobs = 'already_moved_to_failed_jobs',
+}
+
+function getProviderUserIDForQueueItem(
+  serviceName: ServiceNames,
+  queueItem: SuuntoAppWorkoutQueueItemInterface | GarminAPIActivityQueueItemInterface | COROSAPIWorkoutQueueItemInterface,
+): { fieldName: 'userName' | 'openId' | 'userID'; value: string } | null {
+  switch (serviceName) {
+    case ServiceNames.SuuntoApp:
+      return { fieldName: 'userName', value: `${(queueItem as SuuntoAppWorkoutQueueItemInterface).userName || ''}` };
+    case ServiceNames.COROSAPI:
+      return { fieldName: 'openId', value: `${(queueItem as COROSAPIWorkoutQueueItemInterface).openId || ''}` };
+    case ServiceNames.GarminAPI:
+      return { fieldName: 'userID', value: `${(queueItem as GarminAPIActivityQueueItemInterface).userID || ''}` };
+    default:
+      return null;
+  }
+}
+
+async function resolveFirebaseUserIDForQueueItem(
+  serviceName: ServiceNames,
+  queueItem: SuuntoAppWorkoutQueueItemInterface | GarminAPIActivityQueueItemInterface | COROSAPIWorkoutQueueItemInterface,
+): Promise<string | null> {
+  if (queueItem.firebaseUserID) {
+    return queueItem.firebaseUserID;
+  }
+
+  const providerUserID = getProviderUserIDForQueueItem(serviceName, queueItem);
+  if (!providerUserID || providerUserID.value.trim().length === 0) {
+    return null;
+  }
+
+  try {
+    const tokenSnapshot = await admin.firestore()
+      .collectionGroup('tokens')
+      .where(providerUserID.fieldName, '==', providerUserID.value.trim())
+      .where('serviceName', '==', serviceName)
+      .limit(1)
+      .get();
+    return tokenSnapshot.docs[0]?.ref.parent.parent?.id || null;
+  } catch (error) {
+    logger.error(`Could not resolve Firebase uid for ${serviceName} queue item ${queueItem.id}; rejecting enqueue so provider can retry instead of creating an orphan queue document.`, error);
+    throw error;
+  }
+}
+
+async function attachFirebaseUserIDToQueueItem<T extends SuuntoAppWorkoutQueueItemInterface | GarminAPIActivityQueueItemInterface | COROSAPIWorkoutQueueItemInterface>(
+  queueItem: T,
+  serviceName: ServiceNames,
+): Promise<T> {
+  const firebaseUserID = await resolveFirebaseUserIDForQueueItem(serviceName, queueItem);
+  const providerUserID = getProviderUserIDForQueueItem(serviceName, queueItem)?.value.trim() || 'unknown';
+  if (!firebaseUserID) {
+    throw new ProviderQueueUserNotConnectedError(serviceName, providerUserID, queueItem.id);
+  }
+  let deletionGuard;
+  try {
+    deletionGuard = await getUserDeletionGuardState(admin.firestore(), firebaseUserID);
+  } catch (error) {
+    throw new UserDeletionGuardReadError(firebaseUserID, `provider_workout_queue:${serviceName}`, error);
+  }
+  if (deletionGuard.shouldSkip) {
+    logger.warn(`Skipping ${serviceName} queue item ${queueItem.id} for provider user ${providerUserID} because Firebase user ${firebaseUserID} is missing or deletion is in progress.`);
+    throw new ProviderQueueUserDeletedOrDeletingError(serviceName, firebaseUserID, providerUserID, queueItem.id);
+  }
+  return {
+    ...queueItem,
+    firebaseUserID,
+  };
 }
 
 
@@ -99,9 +240,62 @@ export async function dispatchQueueItemTasks(serviceName: ServiceNames) {
       return;
     }
 
-    await enqueueWorkoutTask(serviceName, doc.id, data.dateCreated, delay);
-    // Mark as dispatched prevents re-queueing
-    return markWorkoutQueueItemDispatched(doc.ref, doc.id, serviceName);
+    try {
+      await assertWorkoutQueueCanDispatch(
+        doc.ref,
+        Object.assign({}, data, { id: doc.id }) as SuuntoAppWorkoutQueueItemInterface | GarminAPIActivityQueueItemInterface | COROSAPIWorkoutQueueItemInterface,
+        serviceName,
+        `workout_queue_scheduled_dispatch:${serviceName}`,
+      );
+    } catch (error) {
+      if (error instanceof ProviderQueueUserDeletedOrDeletingError) {
+        logger.info(`Skipped ${serviceName} queue item ${doc.id} dispatch because the owning user is missing or deletion is in progress.`);
+        return;
+      }
+      if (error instanceof ProviderQueueUserNotConnectedError) {
+        logger.info(`Skipped ${serviceName} queue item ${doc.id} dispatch because the provider user no longer resolves to a local token.`);
+        return;
+      }
+      if (isUserDeletionGuardReadError(error)) {
+        logger.error(`Could not check deletion guard for ${serviceName} queue item ${doc.id}; leaving item undispatched for a future run.`, error);
+        return;
+      }
+      throw error;
+    }
+
+    try {
+      await enqueueWorkoutTask(serviceName, doc.id, data.dateCreated, delay);
+      const markerContext = await assertWorkoutQueueCanDispatch(
+        doc.ref,
+        Object.assign({}, data, { id: doc.id }) as SuuntoAppWorkoutQueueItemInterface | GarminAPIActivityQueueItemInterface | COROSAPIWorkoutQueueItemInterface,
+        serviceName,
+        `workout_queue_scheduled_mark_dispatched:${serviceName}`,
+      );
+      const didMarkDispatched = await markWorkoutQueueItemDispatched(
+        doc.ref,
+        doc.id,
+        serviceName,
+        markerContext.firebaseUserID,
+      );
+      if (!didMarkDispatched) {
+        logger.info(`Skipped ${serviceName} queue item ${doc.id} dispatch marker because the owning user is missing or deletion is in progress.`);
+        return;
+      }
+    } catch (error) {
+      if (error instanceof ProviderQueueUserDeletedOrDeletingError) {
+        logger.info(`Skipped ${serviceName} queue item ${doc.id} dispatch marker because the owning user is missing or deletion is in progress.`);
+        return;
+      }
+      if (error instanceof ProviderQueueUserNotConnectedError) {
+        logger.info(`Skipped ${serviceName} queue item ${doc.id} dispatch marker because the provider user no longer resolves to a local token.`);
+        return;
+      }
+      if (isUserDeletionGuardReadError(error)) {
+        logger.error(`Could not re-check deletion guard for ${serviceName} queue item ${doc.id}; leaving dispatch marker untouched for a future run.`, error);
+        return;
+      }
+      throw error;
+    }
   });
 
   await Promise.all(promises);
@@ -145,7 +339,7 @@ export const parseSuuntoAppActivityQueue = functions.region('europe-west2').runW
  */
 export async function addToQueueForSuunto(queueItem: { userName: string, workoutID: string }): Promise<admin.firestore.DocumentReference> {
   logger.info(`Inserting to queue ${queueItem.userName} ${queueItem.workoutID}`);
-  return addToWorkoutQueue({
+  return addToWorkoutQueue(await attachFirebaseUserIDToQueueItem({
     id: await generateIDFromParts([queueItem.userName, queueItem.workoutID]),
     dateCreated: new Date().getTime(),
     userName: queueItem.userName,
@@ -153,7 +347,7 @@ export async function addToQueueForSuunto(queueItem: { userName: string, workout
     retryCount: 0,
     processed: false,
     dispatchedToCloudTask: null,
-  }, ServiceNames.SuuntoApp, false, true);
+  }, ServiceNames.SuuntoApp), ServiceNames.SuuntoApp, false, true);
 }
 
 /**
@@ -163,7 +357,7 @@ export async function addToQueueForSuunto(queueItem: { userName: string, workout
 export async function addToQueueForGarmin(queueItem: { userID: string, startTimeInSeconds: number, manual: boolean, activityFileID: string, activityFileType: 'FIT' | 'TCX' | 'GPX', token: string, userAccessToken: string, callbackURL: string }): Promise<admin.firestore.DocumentReference> {
   const queueID = await generateIDFromParts([queueItem.userID, queueItem.activityFileID]);
   logger.info(`Inserting to queue ${queueID} for ${queueItem.userID} fileID ${queueItem.activityFileID}`);
-  return addToWorkoutQueue({
+  return addToWorkoutQueue(await attachFirebaseUserIDToQueueItem({
     id: queueID,
     dateCreated: new Date().getTime(),
     userID: queueItem.userID,
@@ -177,7 +371,7 @@ export async function addToQueueForGarmin(queueItem: { userID: string, startTime
     userAccessToken: queueItem.userAccessToken,
     callbackURL: queueItem.callbackURL,
     dispatchedToCloudTask: null,
-  }, ServiceNames.GarminAPI, queueItem.manual);
+  }, ServiceNames.GarminAPI), ServiceNames.GarminAPI, queueItem.manual);
 }
 
 /**
@@ -186,7 +380,7 @@ export async function addToQueueForGarmin(queueItem: { userID: string, startTime
  */
 export async function addToQueueForCOROS(queueItem: COROSAPIWorkoutQueueItemInterface): Promise<admin.firestore.DocumentReference> {
   logger.info(`Inserting to queue ${queueItem.openId} ${queueItem.workoutID}`);
-  return addToWorkoutQueue(queueItem, ServiceNames.COROSAPI);
+  return addToWorkoutQueue(await attachFirebaseUserIDToQueueItem(queueItem, ServiceNames.COROSAPI), ServiceNames.COROSAPI);
 }
 
 export function getWorkoutForService(
@@ -281,16 +475,41 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
   let oneSuccess = false;
   let retryIncrement = 1;
   let lastError = new Error(QueueErrors.ALL_TOKENS_FAILED);
+  let terminalAuthError: TerminalServiceAuthError | null = null;
+  let sawRetryableFailure = false;
+  let sawUserDeletionSkip = false;
 
   for (const tokenQueryDocumentSnapshot of tokenQuerySnapshots.docs) {
     let serviceToken;
+    const parent1 = tokenQueryDocumentSnapshot.ref.parent;
+    if (!parent1) {
+      throw new Error(`No parent found for ${tokenQueryDocumentSnapshot.id}`);
+    }
+    const parentID = parent1.parent!.id;
+
+    if (await shouldSkipQueueWorkForDeletedUser(parentID, serviceName, queueItem.id, 'before_token_refresh')) {
+      sawUserDeletionSkip = true;
+      continue;
+    }
 
     try {
       serviceToken = await getTokenData(tokenQueryDocumentSnapshot, serviceName);
     } catch (e: any) {
+      if (isTokenRefreshSkippedForDeletedUserError(e)) {
+        sawUserDeletionSkip = true;
+        logger.warn(`Skipping ${serviceName} queue item ${queueItem.id} for token ${tokenQueryDocumentSnapshot.id} because the owning user is missing or deletion is in progress.`);
+        continue;
+      }
+      if (e instanceof TerminalServiceAuthError) {
+        logger.warn(`Terminal auth failure for ${serviceName} token ${tokenQueryDocumentSnapshot.id} while processing ${queueItem.id}; trying any remaining matching tokens before DLQ.`);
+        terminalAuthError = selectPreferredTerminalAuthError(terminalAuthError, e);
+        continue;
+      }
       const statusCode = e.statusCode || (e.output && e.output.statusCode);
       const errorDescription = e.message || (e.error && (e.error.error_description || e.error.error));
       const isTransientError = statusCode === 500 || statusCode === 502 || (statusCode === 406 && String(errorDescription).toLowerCase().includes('json compatible'));
+      lastError = e instanceof Error ? e : new Error(`${e}`);
+      sawRetryableFailure = true;
 
       if (isTransientError) {
         logger.warn(`Refreshing token failed with transient error (${statusCode}), skipping this token with id ${tokenQueryDocumentSnapshot.id}`);
@@ -300,12 +519,6 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
       }
       continue;
     }
-
-    const parent1 = tokenQueryDocumentSnapshot.ref.parent;
-    if (!parent1) {
-      throw new Error(`No parent found for ${tokenQueryDocumentSnapshot.id}`);
-    }
-    const parentID = parent1.parent!.id;
 
     logger.info(`Found user id ${parentID} for queue item ${queueItem.id}`);
 
@@ -336,6 +549,18 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
           }
           result = normalizedPayload.data;
         } catch (retryError: any) {
+          if (isTokenRefreshSkippedForDeletedUserError(retryError)) {
+            sawUserDeletionSkip = true;
+            logger.warn(`Skipping ${serviceName} queue item ${queueItem.id} during forced refresh because user ${parentID} is missing or deletion is in progress.`);
+            continue;
+          }
+          if (retryError instanceof TerminalServiceAuthError) {
+            logger.warn(`Terminal auth failure during forced refresh for ${serviceName} token ${tokenQueryDocumentSnapshot.id} while processing ${queueItem.id}; trying any remaining matching tokens before DLQ.`);
+            terminalAuthError = selectPreferredTerminalAuthError(terminalAuthError, retryError);
+            continue;
+          }
+          lastError = retryError instanceof Error ? retryError : new Error(`${retryError}`);
+          sawRetryableFailure = true;
           logger.error(new Error(`Could not get workout for ${queueItem.id} even after force refresh: ${retryError.message}`));
           // Continue to next token
           continue;
@@ -345,25 +570,31 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
         logger.error(new Error(`Could not get workout for ${queueItem.id} due to 403, increasing retry by 20`));
         retryIncrement = 20;
         lastError = e;
+        sawRetryableFailure = true;
         continue;
       } else if (e.statusCode === 500) {
         logger.warn(`Partner service internal error (500) for ${queueItem.id}, will retry soon.`);
         retryIncrement = 1;
         lastError = e;
+        sawRetryableFailure = true;
         continue;
       } else if (e.statusCode === 502) {
         logger.warn(`Partner service unavailable (502) for ${queueItem.id}, will retry soon.`);
         retryIncrement = 1;
         lastError = e;
+        sawRetryableFailure = true;
         continue;
       } else {
         logger.error(new Error(`Could not get workout for ${queueItem.id}. Trying to refresh token and update retry count from ${queueItem.retryCount} to ${queueItem.retryCount + 1} -> ${e.message}`));
+        lastError = e instanceof Error ? e : new Error(`${e}`);
+        sawRetryableFailure = true;
         continue;
       }
 
     }
     if (!result) {
       logger.error(new Error(`No FIT payload downloaded for ${queueItem.id}; skipping token.`));
+      sawRetryableFailure = true;
       continue;
     }
     logger.info('Ending timer: DownloadFit');
@@ -375,6 +606,10 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
       event.name = event.startDate.toJSON(); // @todo improve
       logger.info(`Created Event from FIT file of ${queueItem.id}`);
       logger.info('Starting timer: InsertEvent');
+      if (await shouldSkipQueueWorkForDeletedUser(parentID, serviceName, queueItem.id, 'before_event_write')) {
+        sawUserDeletionSkip = true;
+        continue;
+      }
       switch (serviceName) {
         default:
           throw new Error('Not Implemented');
@@ -384,7 +619,10 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
           const deterministicID = await generateEventID(parentID, event.startDate);
           const setEventResult = await setEvent(parentID, deterministicID, event, corosMetaData, { data: result, extension: 'fit', startDate: event.startDate }, bulkWriter, usageCache, pendingWrites);
           if (!bulkWriter) {
-            await enqueueActivitySyncBestEffort(parentID, deterministicID, ServiceNames.COROSAPI, corosWorkoutQueueItem.workoutID, setEventResult);
+            const skippedAfterDeletionStarted = await enqueueActivitySyncBestEffort(parentID, deterministicID, ServiceNames.COROSAPI, corosWorkoutQueueItem.workoutID, setEventResult);
+            if (skippedAfterDeletionStarted) {
+              return markWorkoutQueueItemSkippedForDeletedUser(queueItem, bulkWriter);
+            }
           }
           break;
         }
@@ -394,7 +632,10 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
           const deterministicID = await generateEventID(parentID, event.startDate);
           const setEventResult = await setEvent(parentID, deterministicID, event, suuntoMetaData, { data: result, extension: 'fit', startDate: event.startDate }, bulkWriter, usageCache, pendingWrites);
           if (!bulkWriter) {
-            await enqueueActivitySyncBestEffort(parentID, deterministicID, ServiceNames.SuuntoApp, suuntoWorkoutQueueItem.workoutID, setEventResult);
+            const skippedAfterDeletionStarted = await enqueueActivitySyncBestEffort(parentID, deterministicID, ServiceNames.SuuntoApp, suuntoWorkoutQueueItem.workoutID, setEventResult);
+            if (skippedAfterDeletionStarted) {
+              return markWorkoutQueueItemSkippedForDeletedUser(queueItem, bulkWriter);
+            }
           }
         }
       }
@@ -406,10 +647,15 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
     } catch (e: any) {
       // @todo should delete event  or separate catch
       logger.error(e);
-      if (e instanceof UsageLimitExceededError) {
+      if (isEventWriteSkippedForDeletedUserError(e)) {
+        sawUserDeletionSkip = true;
+        logger.warn(`Skipping ${serviceName} queue item ${queueItem.id} because event write detected user ${e.userID} is missing or deletion is in progress.`);
+        continue;
+      } else if (e instanceof UsageLimitExceededError) {
         logger.error(new Error(`Usage limit exceeded for ${queueItem.id}. Aborting retries. ${e.message}`));
         retryIncrement = 20;
         lastError = e;
+        sawRetryableFailure = true;
         break; // Stop checking other tokens if usage limit exceeded
       } else if (e instanceof UserNotFoundError) {
         logger.error(new Error(`User for queue item ${queueItem.id} not found. Aborting retries. ${e.message}`));
@@ -427,6 +673,8 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
       }
 
       logger.error(new Error(`Could not save event for ${queueItem.id} trying to update retry count from ${queueItem.retryCount} and token user ${serviceToken.openId || serviceToken.userName} to ${queueItem.retryCount + 1} due to ${e.message}`));
+      lastError = e instanceof Error ? e : new Error(`${e}`);
+      sawRetryableFailure = true;
       continue;
     }
   }
@@ -435,6 +683,20 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
     // If we made it here, the workout was processed successfully for at least one token.
     // We can stop and mark as processed.
     return updateToProcessed(queueItem, bulkWriter);
+  }
+
+  if (terminalAuthError && !sawRetryableFailure) {
+    logger.warn(`At least one matching ${serviceName} token for ${queueItem.id} failed with terminal auth and none succeeded; moving queue item to DLQ with ${terminalAuthError.dlqContext}`);
+    return moveToDeadLetterQueue(queueItem, terminalAuthError, bulkWriter, terminalAuthError.dlqContext);
+  }
+
+  if (terminalAuthError) {
+    logger.warn(`At least one matching ${serviceName} token for ${queueItem.id} failed with terminal auth, but another matching token only failed retryably. Keeping the queue item retryable.`);
+  }
+
+  if (sawUserDeletionSkip && !sawRetryableFailure) {
+    logger.warn(`Skipping ${serviceName} queue item ${queueItem.id} without retry because every usable token owner is missing or deletion is in progress.`);
+    return markWorkoutQueueItemSkippedForDeletedUser(queueItem, bulkWriter);
   }
 
   // If we finished the loop without returning, it means every token attempt failed.
@@ -454,29 +716,160 @@ function isFirestoreNotFoundError(error: unknown): boolean {
   return code === 5 || code === 'not-found' || code === 'NOT_FOUND' || message.includes('NOT_FOUND') || message.includes('No document to update');
 }
 
+async function wasQueueItemMovedToFailedJobs(
+  queueItemId: string,
+  serviceName: ServiceNames,
+): Promise<boolean> {
+  const failedJobSnapshot = await admin.firestore().collection('failed_jobs').doc(queueItemId).get();
+  const failedJob = failedJobSnapshot.exists ? failedJobSnapshot.data() as { originalCollection?: unknown } : null;
+  const originalCollection = typeof failedJob?.originalCollection === 'string' ? failedJob.originalCollection : null;
+  return originalCollection === getServiceWorkoutQueueName(serviceName);
+}
+
 async function markWorkoutQueueItemDispatched(
   queueItemDocument: admin.firestore.DocumentReference,
   queueItemId: string,
   serviceName: ServiceNames,
-): Promise<void> {
+  firebaseUserID: string,
+): Promise<boolean> {
   try {
-    await queueItemDocument.update({ dispatchedToCloudTask: Date.now() });
+    const result = await markQueueItemDispatchedIfUserActive({
+      queueItemDocument,
+      queueItemId,
+      userID: firebaseUserID,
+      phase: `workout_queue_dispatch_marker:${serviceName}`,
+      dispatchedAtMs: Date.now(),
+      logPrefix: 'WorkoutQueue',
+    });
+    return result === QueueDispatchMarkerResult.Marked;
   } catch (error) {
     if (!isFirestoreNotFoundError(error)) {
       throw error;
     }
 
-    const failedJobSnapshot = await admin.firestore().collection('failed_jobs').doc(queueItemId).get();
-    const failedJob = failedJobSnapshot.exists ? failedJobSnapshot.data() as { originalCollection?: unknown } : null;
-    const originalCollection = typeof failedJob?.originalCollection === 'string' ? failedJob.originalCollection : null;
-    const expectedCollection = getServiceWorkoutQueueName(serviceName);
-    if (originalCollection === expectedCollection) {
+    if (await wasQueueItemMovedToFailedJobs(queueItemId, serviceName)) {
       logger.info(`Queue item ${queueItemId} for ${serviceName} was already moved to failed_jobs before dispatch timestamp update.`);
-      return;
+      return true;
     }
 
     throw error;
   }
+}
+
+async function backfillWorkoutQueueFirebaseUserID(
+  queueItemDocument: admin.firestore.DocumentReference,
+  queueItemId: string,
+  serviceName: ServiceNames,
+  firebaseUserID: string,
+): Promise<WorkoutQueueFirebaseUserIDBackfillResult> {
+  try {
+    const result = await updateQueueItemIfUserActive({
+      queueItemDocument,
+      queueItemId,
+      userID: firebaseUserID,
+      phase: `workout_queue_duplicate_uid_backfill:${serviceName}`,
+      updateData: { firebaseUserID },
+      logPrefix: 'WorkoutQueue',
+      actionDescription: 'duplicate Firebase uid backfill',
+    });
+    return result === QueueItemUserGuardedUpdateResult.Updated
+      ? WorkoutQueueFirebaseUserIDBackfillResult.Updated
+      : WorkoutQueueFirebaseUserIDBackfillResult.SkippedDeletedUser;
+  } catch (error) {
+    if (!isFirestoreNotFoundError(error)) {
+      throw error;
+    }
+
+    if (await wasQueueItemMovedToFailedJobs(queueItemId, serviceName)) {
+      logger.info(`Queue item ${queueItemId} for ${serviceName} was already moved to failed_jobs before duplicate uid backfill.`);
+      return WorkoutQueueFirebaseUserIDBackfillResult.AlreadyMovedToFailedJobs;
+    }
+
+    throw error;
+  }
+}
+
+async function deleteWorkoutQueueDocBeforeDispatch(
+  queueItemDocument: admin.firestore.DocumentReference,
+  queueItemId: string,
+  serviceName: ServiceNames,
+  reason: string,
+): Promise<void> {
+  try {
+    const tombstoneWritten = await markQueueItemDeletedForUserCleanup(
+      getServiceWorkoutQueueName(serviceName),
+      queueItemId,
+      QUEUE_CLEANUP_TOMBSTONE_REASONS.UserDeletionGuard,
+    );
+    if (!tombstoneWritten) {
+      logger.error(`Failed to write cleanup tombstone for ${serviceName} queue item ${queueItemId}; leaving item in place to avoid missing-doc Cloud Task retries.`);
+      return;
+    }
+    await admin.firestore().recursiveDelete(queueItemDocument);
+    logger.info(`Deleted ${serviceName} queue item ${queueItemId} before Cloud Task dispatch: ${reason}.`);
+  } catch (error) {
+    logger.error(`Failed to delete ${serviceName} queue item ${queueItemId} before dispatch after ${reason}`, error);
+  }
+}
+
+async function assertWorkoutQueueCanDispatch(
+  queueItemDocument: admin.firestore.DocumentReference,
+  queueItem: SuuntoAppWorkoutQueueItemInterface | GarminAPIActivityQueueItemInterface | COROSAPIWorkoutQueueItemInterface,
+  serviceName: ServiceNames,
+  phase: string,
+): Promise<WorkoutQueueDispatchContext> {
+  const providerUserID = getProviderUserIDForQueueItem(serviceName, queueItem)?.value.trim() || 'unknown';
+  let firebaseUserID: string | null | undefined = (queueItem as QueueItemInterface).firebaseUserID;
+  if (!firebaseUserID) {
+    if (providerUserID === 'unknown') {
+      logger.warn(`Skipping ${serviceName} queue item ${queueItem.id} dispatch because it has neither firebaseUserID nor provider user id.`);
+      await deleteWorkoutQueueDocBeforeDispatch(
+        queueItemDocument,
+        queueItem.id,
+        serviceName,
+        'missing firebaseUserID and provider user id',
+      );
+      throw new ProviderQueueUserNotConnectedError(serviceName, providerUserID, queueItem.id);
+    }
+    try {
+      firebaseUserID = await resolveFirebaseUserIDForQueueItem(serviceName, queueItem);
+    } catch (error) {
+      throw new UserDeletionGuardReadError(providerUserID, `${phase}:resolve_legacy_firebase_uid`, error);
+    }
+    if (!firebaseUserID) {
+      logger.warn(`Skipping ${serviceName} queue item ${queueItem.id} dispatch because provider user ${providerUserID} no longer resolves to a local token.`);
+      await deleteWorkoutQueueDocBeforeDispatch(
+        queueItemDocument,
+        queueItem.id,
+        serviceName,
+        `provider user ${providerUserID} no longer resolves to a local token`,
+      );
+      throw new ProviderQueueUserNotConnectedError(serviceName, providerUserID, queueItem.id);
+    }
+  }
+
+  let deletionGuard;
+  try {
+    deletionGuard = await getUserDeletionGuardState(admin.firestore(), firebaseUserID);
+  } catch (error) {
+    throw new UserDeletionGuardReadError(firebaseUserID, phase, error);
+  }
+
+  if (!deletionGuard.shouldSkip) {
+    return {
+      firebaseUserID,
+      providerUserID,
+    };
+  }
+
+  logger.warn(`Skipping ${serviceName} queue item ${queueItem.id} dispatch because Firebase user ${firebaseUserID} is missing or deletion is in progress.`);
+  await deleteWorkoutQueueDocBeforeDispatch(
+    queueItemDocument,
+    queueItem.id,
+    serviceName,
+    `Firebase user ${firebaseUserID} is missing or deletion is in progress`,
+  );
+  throw new ProviderQueueUserDeletedOrDeletingError(serviceName, firebaseUserID, providerUserID, queueItem.id);
 }
 
 async function addToWorkoutQueue(queueItem: SuuntoAppWorkoutQueueItemInterface | GarminAPIActivityQueueItemInterface | COROSAPIWorkoutQueueItemInterface, serviceName: ServiceNames, deferDispatch: boolean = false, createOnly: boolean = false): Promise<admin.firestore.DocumentReference> {
@@ -502,8 +895,44 @@ async function addToWorkoutQueue(queueItem: SuuntoAppWorkoutQueueItemInterface |
           ? existingQueueItem.dateCreated
           : queueItem.dateCreated;
         logger.info(`Queue item ${queueItem.id} already exists for ${serviceName}; ensuring duplicate webhook is dispatched.`);
+        const duplicateDispatchContext = await assertWorkoutQueueCanDispatch(queueItemDocument, queuePayload, serviceName, `workout_queue_duplicate_dispatch:${serviceName}`);
+
+        const firebaseUserID = (queuePayload as QueueItemInterface).firebaseUserID;
+        if (firebaseUserID && existingQueueItem && (existingQueueItem as QueueItemInterface).firebaseUserID !== firebaseUserID) {
+          const backfillFirebaseUserIDResult = await backfillWorkoutQueueFirebaseUserID(
+            queueItemDocument,
+            queueItem.id,
+            serviceName,
+            firebaseUserID,
+          );
+          if (backfillFirebaseUserIDResult === WorkoutQueueFirebaseUserIDBackfillResult.AlreadyMovedToFailedJobs) {
+            return queueItemDocument;
+          }
+          if (backfillFirebaseUserIDResult === WorkoutQueueFirebaseUserIDBackfillResult.SkippedDeletedUser) {
+            throw new ProviderQueueUserDeletedOrDeletingError(
+              serviceName,
+              duplicateDispatchContext.firebaseUserID,
+              duplicateDispatchContext.providerUserID,
+              queueItem.id,
+            );
+          }
+        }
+
         await enqueueWorkoutTask(serviceName, queueItem.id, dateCreated);
-        await markWorkoutQueueItemDispatched(queueItemDocument, queueItem.id, serviceName);
+        const didMarkDuplicateDispatched = await markWorkoutQueueItemDispatched(
+          queueItemDocument,
+          queueItem.id,
+          serviceName,
+          duplicateDispatchContext.firebaseUserID,
+        );
+        if (!didMarkDuplicateDispatched) {
+          throw new ProviderQueueUserDeletedOrDeletingError(
+            serviceName,
+            duplicateDispatchContext.firebaseUserID,
+            duplicateDispatchContext.providerUserID,
+            queueItem.id,
+          );
+        }
         return queueItemDocument;
       }
       throw error;
@@ -512,10 +941,25 @@ async function addToWorkoutQueue(queueItem: SuuntoAppWorkoutQueueItemInterface |
     await queueItemDocument.set(queuePayload);
   }
 
+  const dispatchContext = await assertWorkoutQueueCanDispatch(queueItemDocument, queuePayload, serviceName, `workout_queue_after_write:${serviceName}`);
+
   if (!deferDispatch) {
     // Dispatch a Cloud Task for immediate processing
     await enqueueWorkoutTask(serviceName, queueItem.id, queueItem.dateCreated);
-    await markWorkoutQueueItemDispatched(queueItemDocument, queueItem.id, serviceName);
+    const didMarkDispatched = await markWorkoutQueueItemDispatched(
+      queueItemDocument,
+      queueItem.id,
+      serviceName,
+      dispatchContext.firebaseUserID,
+    );
+    if (!didMarkDispatched) {
+      throw new ProviderQueueUserDeletedOrDeletingError(
+        serviceName,
+        dispatchContext.firebaseUserID,
+        dispatchContext.providerUserID,
+        queueItem.id,
+      );
+    }
   }
   return queueItemDocument;
 }

@@ -93,6 +93,11 @@ function isFirestoreUndefinedValueError(error: Error): boolean {
     return hasCannotUseUndefined || hasInvalidDocumentUndefinedPattern;
 }
 
+function isControlFlowWriteAbort(error: Error): boolean {
+    return error.name === 'EventWriteSkippedForDeletedUserError'
+        || error.name === 'UserDeletionGuardReadError';
+}
+
 export class EventWriter {
     private logger: LogAdapter;
 
@@ -260,6 +265,9 @@ export class EventWriter {
             return persistedOriginalFiles;
         } catch (e) {
             const error = e as Error;
+            if (isControlFlowWriteAbort(error)) {
+                throw error;
+            }
             this.logger.error(error);
             throw new Error('Could not write event data: ' + error.message);
         }
@@ -270,6 +278,9 @@ export class EventWriter {
             await this.adapter.setDoc(path, data);
         } catch (e) {
             const error = e as Error;
+            if (isControlFlowWriteAbort(error)) {
+                throw error;
+            }
             const documentPath = path.join('/');
             const undefinedPaths = collectUndefinedPaths(data);
             const hasUndefinedValueWriteError = undefinedPaths.length > 0 && isFirestoreUndefinedValueError(error);

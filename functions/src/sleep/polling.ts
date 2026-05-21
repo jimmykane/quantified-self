@@ -15,6 +15,9 @@ import {
     isSleepSyncUserAllowed,
     SLEEP_SYNC_DISABLED_PROVIDERS,
 } from './provider-flags';
+import { isServiceReconnectRequiredForUser } from '../service-connection-meta';
+import { getUserDeletionGuardState } from '../shared/user-deletion-guard';
+import { isProviderQueueUserDeletedOrDeletingError } from '../queue/provider-queue-errors';
 
 interface PollWindow {
     startMs: number;
@@ -81,6 +84,40 @@ function getProviderUserId(provider: SleepProvider, tokenData: admin.firestore.D
     }
 }
 
+function getReconnectRequiredStateBestEffort(
+    provider: SleepProvider,
+    userID: string,
+    serviceName: ServiceNames,
+): Promise<boolean> {
+    return isServiceReconnectRequiredForUser(userID, serviceName).catch((error: unknown) => {
+        logger.warn(
+            `[SleepSync][${provider}] Failed to read reconnect state for user ${userID} and service ${serviceName}; continuing sleep polling.`,
+            error,
+        );
+        return false;
+    });
+}
+
+function getUserDeletionSkipStateBestEffort(
+    provider: SleepProvider,
+    userID: string,
+): Promise<boolean> {
+    return getUserDeletionGuardState(admin.firestore(), userID)
+        .then((deletionGuard) => {
+            if (deletionGuard.shouldSkip) {
+                logger.info(`[SleepSync][${provider}] Skipping user ${userID} because the user is missing or deletion is in progress`);
+            }
+            return deletionGuard.shouldSkip;
+        })
+        .catch((error: unknown) => {
+            logger.warn(
+                `[SleepSync][${provider}] Failed to read deletion guard for user ${userID}; skipping sleep polling for this user.`,
+                error,
+            );
+            return true;
+        });
+}
+
 async function enqueueProviderPolls(
     provider: SleepProvider,
     serviceName: ServiceNames,
@@ -94,6 +131,8 @@ async function enqueueProviderPolls(
 
     const windows = chunkRecentWindow(nowMs, SLEEP_SYNC_RECENT_WINDOW_DAYS, maxWindowDays);
     const tokenSnapshots = await getProviderTokenSnapshots(provider, serviceName);
+    const deletionGuardCache = new Map<string, Promise<boolean>>();
+    const reconnectRequiredCache = new Map<string, Promise<boolean>>();
     let queued = 0;
     for (const tokenSnapshot of tokenSnapshots) {
         const userID = getFirebaseUserID(tokenSnapshot);
@@ -101,17 +140,43 @@ async function enqueueProviderPolls(
         if (!userID || !providerUserId || !isSleepSyncUserAllowed(userID)) {
             continue;
         }
+        let pendingDeletionSkip = deletionGuardCache.get(userID);
+        if (!pendingDeletionSkip) {
+            pendingDeletionSkip = getUserDeletionSkipStateBestEffort(provider, userID);
+            deletionGuardCache.set(userID, pendingDeletionSkip);
+        }
+        if (await pendingDeletionSkip) {
+            continue;
+        }
+        const cacheKey = `${userID}:${serviceName}`;
+        let pendingReconnectRequired = reconnectRequiredCache.get(cacheKey);
+        if (!pendingReconnectRequired) {
+            pendingReconnectRequired = getReconnectRequiredStateBestEffort(provider, userID, serviceName);
+            reconnectRequiredCache.set(cacheKey, pendingReconnectRequired);
+        }
+        if (await pendingReconnectRequired) {
+            logger.info(`[SleepSync][${provider}] Skipping user ${userID} because ${serviceName} is marked reconnect_required`);
+            continue;
+        }
         for (const window of windows) {
-            await addSleepSyncQueueItem({
-                type: provider === SLEEP_PROVIDERS.SuuntoApp ? 'suunto_poll' : 'coros_poll',
-                provider,
-                userID,
-                providerUserId,
-                rangeStartMs: window.startMs,
-                rangeEndMs: window.endMs,
-                dedupeKey: `${userID}:${window.startMs}:${window.endMs}`,
-            });
-            queued += 1;
+            try {
+                await addSleepSyncQueueItem({
+                    type: provider === SLEEP_PROVIDERS.SuuntoApp ? 'suunto_poll' : 'coros_poll',
+                    provider,
+                    userID,
+                    providerUserId,
+                    rangeStartMs: window.startMs,
+                    rangeEndMs: window.endMs,
+                    dedupeKey: `${userID}:${window.startMs}:${window.endMs}`,
+                });
+                queued += 1;
+            } catch (error) {
+                if (isProviderQueueUserDeletedOrDeletingError(error)) {
+                    logger.info(`[SleepSync][${provider}] Stopped queueing polls for user ${userID} because deletion started during queue creation.`);
+                    break;
+                }
+                throw error;
+            }
         }
     }
     return queued;

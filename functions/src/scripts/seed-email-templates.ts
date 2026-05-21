@@ -20,7 +20,6 @@ const TEMPLATE_SUBJECTS: { [key: string]: string } = {
     'subscription_expiring_soon': "Action Required: Your subscription is ending soon",
     'welcome_email': "Welcome to Quantified Self Pro!",
     'account_deleted_confirmation': "Your Quantified Self account has been deleted",
-    'grace_period_ending': "⚠️ FINAL WARNING: Your data will be deleted in 5 days",
     'development_update': "Quantified Self is back! Important updates inside."
 };
 

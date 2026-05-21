@@ -63,13 +63,23 @@ vi.mock('firebase-admin', () => {
 const {
     mockMoveToDeadLetterQueue,
     mockGetTokenData,
+    mockShouldSkipQueueWorkForDeletedUser,
 } = vi.hoisted(() => ({
     mockMoveToDeadLetterQueue: vi.fn(),
     mockGetTokenData: vi.fn(),
+    mockShouldSkipQueueWorkForDeletedUser: vi.fn(),
 }));
 
 vi.mock('./tokens', () => ({
     getTokenData: mockGetTokenData,
+    TokenRefreshSkippedForDeletedUserError: class TokenRefreshSkippedForDeletedUserError extends Error {
+        readonly name = 'TokenRefreshSkippedForDeletedUserError';
+    },
+    TerminalServiceAuthError: class TerminalServiceAuthError extends Error {},
+}));
+
+vi.mock('./queue/user-deletion-skip', () => ({
+    shouldSkipQueueWorkForDeletedUser: mockShouldSkipQueueWorkForDeletedUser,
 }));
 
 vi.mock('./queue-utils', async (importOriginal) => {
@@ -113,6 +123,11 @@ import * as requestHelper from './request-helper';
 describe('Queue Integration Logic', () => {
     beforeEach(() => {
         vi.clearAllMocks();
+        mockGetTokenData.mockReset();
+        mockMoveToDeadLetterQueue.mockReset();
+        mockShouldSkipQueueWorkForDeletedUser.mockReset();
+        mockShouldSkipQueueWorkForDeletedUser.mockResolvedValue(false);
+        (requestHelper.get as any).mockReset();
     });
 
     it('should move to Dead Letter Queue (fail fast) if no tokens are found', async () => {
@@ -233,7 +248,7 @@ describe('Queue Integration Logic', () => {
         expect(mockUpdate).toHaveBeenCalledWith(expect.objectContaining({
             retryCount: 1,
             errors: expect.arrayContaining([
-                expect.objectContaining({ error: 'All token processing attempts failed' })
+                expect.objectContaining({ error: 'All Refresh failed' })
             ])
         }));
     });

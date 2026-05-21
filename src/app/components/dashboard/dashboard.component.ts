@@ -44,6 +44,7 @@ import {
   DASHBOARD_ACTION_PROMPT_ENABLE_ACTIVITY_AUTO_SYNC_ID,
   DASHBOARD_ACTION_PROMPT_FIRST_ACTIVITY_UPLOAD_ID,
   DASHBOARD_ACTION_PROMPT_FIRST_ACTIVITY_UPLOAD_SOURCE,
+  DASHBOARD_ACTION_PROMPT_RECONNECT_SUUNTO_SERVICE_ID,
   DASHBOARD_ACTION_PROMPT_UNIT_SETUP_ID,
   DashboardActionPromptControlChange,
   DashboardActionPromptEvent,
@@ -55,6 +56,11 @@ import {
 } from '../../helpers/dashboard-action-prompt.helper';
 import { ActivitySyncRouteId } from '@shared/activity-sync-routes';
 import { ActivityServiceConnectionState } from '../../services/app.user.service';
+import { AppWindowService } from '../../services/app.window.service';
+import {
+  buildSuuntoServiceConnectionViewModel,
+  SuuntoServiceConnectionViewModel,
+} from '../../helpers/suunto-service-connection.helper';
 
 
 @Component({
@@ -89,6 +95,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
   public isEnablingActivityAutoSyncPrompt = false;
   public activityAutoSyncPromptError: string | null = null;
   public isDismissingActivityAutoSyncPrompt = false;
+  public isReconnectingSuuntoServicePrompt = false;
+  public isDismissingReconnectSuuntoServicePrompt = false;
+  public reconnectSuuntoServicePromptError: string | null = null;
 
   private shouldSearch: boolean;
   private manualSearchTrigger$ = new Subject<{ user: AppUserInterface | null; refreshToken: number }>();
@@ -101,9 +110,14 @@ export class DashboardComponent implements OnInit, OnDestroy {
   private hasActivityServiceConnection: boolean | null = null;
   private activityServiceConnectionState: ActivityServiceConnectionState | null = null;
   private uploadedActivityCount: number | null = null;
+  private suuntoConnectionView: SuuntoServiceConnectionViewModel = buildSuuntoServiceConnectionViewModel({
+    hasToken: false,
+    serviceMeta: null,
+  });
   private analyticsService = inject(AppAnalyticsService);
   private logger = inject(LoggerService);
   private destroyRef = inject(DestroyRef);
+  private windowService = inject(AppWindowService);
 
 
   constructor(public authService: AppAuthService,
@@ -169,6 +183,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     }
     this.watchFirstActivityUploadPromptState();
     this.watchActivityServiceConnectionPromptState();
+    this.watchSuuntoReconnectPromptState();
     merge(
       this.authService.user$.pipe(
         map((user: AppUserInterface | null) => ({ user, refreshToken: 0 }))
@@ -401,6 +416,14 @@ export class DashboardComponent implements OnInit, OnDestroy {
       void this.enableActivityAutoSyncPrompt();
       return;
     }
+
+    if (
+      event.promptId === DASHBOARD_ACTION_PROMPT_RECONNECT_SUUNTO_SERVICE_ID
+      && event.action.id === 'reconnectSuuntoService'
+    ) {
+      void this.reconnectSuuntoServicePrompt();
+      return;
+    }
   }
 
   onDashboardActionPromptSecondary(event: DashboardActionPromptEvent): void {
@@ -430,6 +453,14 @@ export class DashboardComponent implements OnInit, OnDestroy {
       && event.action.id === 'dismissEnableActivityAutoSync'
     ) {
       void this.dismissActivityAutoSyncPrompt();
+      return;
+    }
+
+    if (
+      event.promptId === DASHBOARD_ACTION_PROMPT_RECONNECT_SUUNTO_SERVICE_ID
+      && event.action.id === 'dismissReconnectSuuntoService'
+    ) {
+      void this.dismissReconnectSuuntoServicePrompt();
     }
   }
 
@@ -701,6 +732,73 @@ export class DashboardComponent implements OnInit, OnDestroy {
     }
   }
 
+  async reconnectSuuntoServicePrompt(): Promise<void> {
+    if (!this.user || this.isReconnectingSuuntoServicePrompt) {
+      return;
+    }
+
+    this.isReconnectingSuuntoServicePrompt = true;
+    this.reconnectSuuntoServicePromptError = null;
+    this.syncDashboardActionPromptState();
+
+    try {
+      const tokenAndURI = await this.userService.getCurrentUserServiceTokenAndRedirectURI(ServiceNames.SuuntoApp);
+      this.analyticsService.logEvent('dashboard_action_prompt_reconnect_service', {
+        prompt_id: DASHBOARD_ACTION_PROMPT_RECONNECT_SUUNTO_SERVICE_ID,
+        service_name: ServiceNames.SuuntoApp,
+      });
+      this.windowService.windowRef.location.href = tokenAndURI.redirect_uri;
+    } catch (error: any) {
+      this.reconnectSuuntoServicePromptError = 'Could not start Suunto reconnect.';
+      this.logger.error('[DashboardComponent] Failed to start Suunto reconnect prompt flow', error);
+      this.isReconnectingSuuntoServicePrompt = false;
+      this.syncDashboardActionPromptState();
+    }
+  }
+
+  async dismissReconnectSuuntoServicePrompt(): Promise<void> {
+    if (!this.user) {
+      return;
+    }
+
+    this.isDismissingReconnectSuuntoServicePrompt = true;
+    this.reconnectSuuntoServicePromptError = null;
+    this.syncDashboardActionPromptState();
+
+    try {
+      this.user.settings = this.user.settings || {} as any;
+      const nextAppSettings = {
+        ...(this.user.settings.appSettings || {}),
+      } as AppAppSettingsInterface;
+      const dismissedState = markDashboardActionPromptDismissed(
+        nextAppSettings,
+        DASHBOARD_ACTION_PROMPT_RECONNECT_SUUNTO_SERVICE_ID,
+        this.getReconnectSuuntoServicePromptSource(),
+        Date.now(),
+      );
+
+      await this.userService.updateUserProperties(this.user, {
+        settings: {
+          appSettings: {
+            dashboardActionPrompts: {
+              [DASHBOARD_ACTION_PROMPT_RECONNECT_SUUNTO_SERVICE_ID]: dismissedState,
+            },
+          },
+        },
+      });
+      this.user.settings.appSettings = nextAppSettings;
+      this.analyticsService.logEvent('dashboard_action_prompt_dismiss', {
+        prompt_id: DASHBOARD_ACTION_PROMPT_RECONNECT_SUUNTO_SERVICE_ID,
+      });
+    } catch (error) {
+      this.reconnectSuuntoServicePromptError = 'Could not save this choice.';
+      this.logger.error('[DashboardComponent] Failed to dismiss Suunto reconnect prompt', error);
+    } finally {
+      this.isDismissingReconnectSuuntoServicePrompt = false;
+      this.syncDashboardActionPromptState();
+    }
+  }
+
   ngOnDestroy(): void {
     this.manualSearchTrigger$.complete();
   }
@@ -734,6 +832,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
       enableActivityAutoSyncBusy: this.isEnablingActivityAutoSyncPrompt || this.isDismissingActivityAutoSyncPrompt,
       enableActivityAutoSyncError: this.activityAutoSyncPromptError,
       enableActivityAutoSyncRouteIds: this.getEligibleActivityAutoSyncRouteIds(),
+      showReconnectSuuntoServicePrompt: this.shouldShowReconnectSuuntoServicePrompt(),
+      reconnectSuuntoServiceBusy: this.isReconnectingSuuntoServicePrompt || this.isDismissingReconnectSuuntoServicePrompt,
+      reconnectSuuntoServiceError: this.reconnectSuuntoServicePromptError,
     });
   }
 
@@ -782,6 +883,38 @@ export class DashboardComponent implements OnInit, OnDestroy {
       this.hasActivityServiceConnection = connectionState
         ? Object.values(connectionState).some(isConnected => isConnected === true)
         : null;
+      this.syncDashboardActionPromptState();
+    });
+  }
+
+  private watchSuuntoReconnectPromptState(): void {
+    this.authService.user$.pipe(
+      switchMap((user: AppUserInterface | null) => {
+        this.suuntoConnectionView = buildSuuntoServiceConnectionViewModel({
+          hasToken: false,
+          serviceMeta: null,
+        });
+        this.syncDashboardActionPromptState();
+
+        if (!this.shouldEvaluateReconnectSuuntoServicePrompt(user)) {
+          return of(this.suuntoConnectionView);
+        }
+
+        return this.userService.watchSuuntoServiceConnectionView(user).pipe(
+          catchError(error => {
+            this.logger.warn('[DashboardComponent] Failed to read Suunto connection view for reconnect prompt', {
+              userID: user.uid,
+            }, error);
+            return of(buildSuuntoServiceConnectionViewModel({
+              hasToken: false,
+              serviceMeta: null,
+            }));
+          }),
+        );
+      }),
+      takeUntilDestroyed(this.destroyRef),
+    ).subscribe((connectionView) => {
+      this.suuntoConnectionView = connectionView;
       this.syncDashboardActionPromptState();
     });
   }
@@ -856,6 +989,35 @@ export class DashboardComponent implements OnInit, OnDestroy {
       && this.getEligibleActivityAutoSyncRouteIds().length > 0;
   }
 
+  private shouldEvaluateReconnectSuuntoServicePrompt(user: AppUserInterface | null | undefined): user is AppUserInterface {
+    if (!user || !this.isOwnerDashboard(user)) {
+      return false;
+    }
+
+    if (!AppUserUtilities.hasProAccess(user, user.admin === true)) {
+      return false;
+    }
+
+    return !isDashboardActionPromptDismissed(
+      user.settings?.appSettings,
+      DASHBOARD_ACTION_PROMPT_RECONNECT_SUUNTO_SERVICE_ID,
+      this.getReconnectSuuntoServicePromptSource(),
+    );
+  }
+
+  private shouldShowReconnectSuuntoServicePrompt(): boolean {
+    if (!this.user) {
+      return false;
+    }
+
+    return this.shouldEvaluateReconnectSuuntoServicePrompt(this.user)
+      && this.suuntoConnectionView.reconnectRequired;
+  }
+
+  private getReconnectSuuntoServicePromptSource(): string {
+    return this.suuntoConnectionView.reconnectPromptSource;
+  }
+
   private shouldEvaluateActivityServicePrompts(user: AppUserInterface | null | undefined): user is AppUserInterface {
     return this.shouldEvaluateActivityServiceConnectionPrompt(user)
       || this.shouldEvaluateActivityAutoSyncPrompt(user);
@@ -865,6 +1027,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
     return resolveDashboardActivityAutoSyncRouteIds({
       userID: this.user?.uid,
       connectionState: this.activityServiceConnectionState,
+      reconnectRequiredServices: {
+        [ServiceNames.SuuntoApp]: this.suuntoConnectionView.reconnectRequired,
+      },
       routeSettings: this.user?.settings?.serviceSyncSettings?.activitySyncRoutes,
     });
   }

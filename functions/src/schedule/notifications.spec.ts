@@ -93,33 +93,16 @@ describe('checkSubscriptionNotifications', () => {
         }));
     });
 
-    it('should queue emails for grace period ending', async () => {
-        // Mock Subscriptions results (empty)
-        // Mock System results (1 found)
-        const mockSystemDocs = [
-            {
-                id: 'status',
-                data: () => ({
-                    gracePeriodUntil: {
-                        toDate: () => new Date('2025-12-30T10:00:00Z'),
-                        toMillis: () => new Date('2025-12-30T10:00:00Z').getTime(),
-                        toISOString: () => '2025-12-30T10:00:00Z'
-                    }
-                }),
-                ref: { parent: { parent: { id: 'user2' } } }
-            }
-        ];
-
+    it('should not query grace periods or queue grace period warning emails', async () => {
         collectionGroupSpy.mockImplementation((collectionName) => {
             if (collectionName === 'subscriptions') {
                 return { where: vi.fn().mockReturnThis(), get: vi.fn().mockResolvedValue({ size: 0, docs: [] }) };
             }
             if (collectionName === 'system') {
-                return { where: vi.fn().mockReturnThis(), get: vi.fn().mockResolvedValue({ size: 1, docs: mockSystemDocs }) };
+                throw new Error('Grace period notifications should not query system docs');
             }
             return { where: vi.fn().mockReturnThis(), get: vi.fn().mockResolvedValue({ size: 0, docs: [] }) };
         });
-
 
         const mailDocRef = {
             get: vi.fn().mockResolvedValue({ exists: false }),
@@ -137,11 +120,9 @@ describe('checkSubscriptionNotifications', () => {
 
         await wrapped({});
 
-        expect(collectionGroupSpy).toHaveBeenCalledWith('system');
-        expect(mailDocRef.set).toHaveBeenCalledWith(expect.objectContaining({
-            toUids: ['user2'],
-            template: expect.objectContaining({ name: 'grace_period_ending' }),
-            expireAt: expect.any(Object)
+        expect(collectionGroupSpy).not.toHaveBeenCalledWith('system');
+        expect(mailDocRef.set).not.toHaveBeenCalledWith(expect.objectContaining({
+            template: expect.objectContaining({ name: 'grace_period_ending' })
         }));
     });
 

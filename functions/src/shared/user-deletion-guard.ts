@@ -8,6 +8,20 @@ export interface UserDeletionGuardState {
     shouldSkip: boolean;
 }
 
+export class UserDeletionGuardReadError extends Error {
+    public readonly name = 'UserDeletionGuardReadError';
+    public readonly code = 'unavailable';
+    public readonly statusCode = 503;
+
+    constructor(
+        public readonly uid: string,
+        public readonly phase: string,
+        public readonly originalError: unknown,
+    ) {
+        super(`Could not read deletion guard for user ${uid} during ${phase}.`);
+    }
+}
+
 function getTimestampMillis(value: unknown): number | null {
     if (!value) {
         return null;

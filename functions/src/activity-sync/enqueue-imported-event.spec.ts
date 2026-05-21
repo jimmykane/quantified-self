@@ -10,23 +10,28 @@ const fitOriginalFile = (path: string): OriginalFileMetaData => ({
 
 const {
   mockGetActivitySyncRouteAllowlistConfigError,
+  mockIsActivitySyncRouteBlockedByReconnectRequiredForUser,
   mockIsActivitySyncRouteEnabledForUser,
   mockIsActivitySyncRouteUserAllowlisted,
   mockEnqueueActivitySyncQueueItem,
   mockSetActivitySyncQueuedMetadata,
   mockSetActivitySyncRequeuedMetadata,
   mockSetActivitySyncSkippedMetadata,
+  mockShouldSkipQueueWorkForDeletedUser,
 } = vi.hoisted(() => ({
   mockGetActivitySyncRouteAllowlistConfigError: vi.fn(),
+  mockIsActivitySyncRouteBlockedByReconnectRequiredForUser: vi.fn(),
   mockIsActivitySyncRouteEnabledForUser: vi.fn(),
   mockIsActivitySyncRouteUserAllowlisted: vi.fn(),
   mockEnqueueActivitySyncQueueItem: vi.fn(),
   mockSetActivitySyncQueuedMetadata: vi.fn().mockResolvedValue(undefined),
   mockSetActivitySyncRequeuedMetadata: vi.fn().mockResolvedValue(undefined),
   mockSetActivitySyncSkippedMetadata: vi.fn().mockResolvedValue(undefined),
+  mockShouldSkipQueueWorkForDeletedUser: vi.fn(),
 }));
 
 vi.mock('./settings', () => ({
+  isActivitySyncRouteBlockedByReconnectRequiredForUser: mockIsActivitySyncRouteBlockedByReconnectRequiredForUser,
   isActivitySyncRouteEnabledForUser: mockIsActivitySyncRouteEnabledForUser,
 }));
 
@@ -45,6 +50,10 @@ vi.mock('./metadata', () => ({
   setActivitySyncSkippedMetadata: mockSetActivitySyncSkippedMetadata,
 }));
 
+vi.mock('../queue/user-deletion-skip', () => ({
+  shouldSkipQueueWorkForDeletedUser: mockShouldSkipQueueWorkForDeletedUser,
+}));
+
 import { enqueueActivitySyncJobsForImportedEvent } from './enqueue-imported-event';
 
 describe('activity-sync/enqueue-imported-event', () => {
@@ -52,11 +61,13 @@ describe('activity-sync/enqueue-imported-event', () => {
     vi.clearAllMocks();
     mockGetActivitySyncRouteAllowlistConfigError.mockReturnValue(null);
     mockIsActivitySyncRouteUserAllowlisted.mockReturnValue(true);
+    mockIsActivitySyncRouteBlockedByReconnectRequiredForUser.mockResolvedValue(false);
     mockIsActivitySyncRouteEnabledForUser.mockResolvedValue(true);
     mockEnqueueActivitySyncQueueItem.mockResolvedValue({
       enqueued: true,
       queueItemId: 'activitySyncQueueItem1',
     });
+    mockShouldSkipQueueWorkForDeletedUser.mockResolvedValue(false);
   });
 
   it('queues Garmin->Suunto route when user enabled route and FIT original exists', async () => {
@@ -155,6 +166,28 @@ describe('activity-sync/enqueue-imported-event', () => {
     }));
   });
 
+  it('does not write route metadata or enqueue work when account deletion is active', async () => {
+    mockShouldSkipQueueWorkForDeletedUser.mockResolvedValue(true);
+
+    const result = await enqueueActivitySyncJobsForImportedEvent({
+      userID: 'user-1',
+      eventID: 'event-1',
+      sourceServiceName: ServiceNames.GarminAPI,
+      routeIdFilter: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp,
+      originalFiles: [fitOriginalFile('users/user-1/events/event-1/original.fit')],
+    });
+
+    expect(result).toEqual({
+      queued: 0,
+      skippedByReason: {
+        user_deleted_or_deleting: 1,
+      },
+    });
+    expect(mockEnqueueActivitySyncQueueItem).not.toHaveBeenCalled();
+    expect(mockSetActivitySyncQueuedMetadata).not.toHaveBeenCalled();
+    expect(mockSetActivitySyncSkippedMetadata).not.toHaveBeenCalled();
+  });
+
   it('marks route as skipped when allowlist configuration is invalid', async () => {
     mockGetActivitySyncRouteAllowlistConfigError.mockReturnValue('allowlist misconfigured');
 
@@ -200,6 +233,31 @@ describe('activity-sync/enqueue-imported-event', () => {
     expect(mockSetActivitySyncSkippedMetadata).toHaveBeenCalledWith(expect.objectContaining({
       routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp,
       skippedReason: 'route_disabled',
+    }));
+  });
+
+  it('marks route as skipped when a route service requires reconnect', async () => {
+    mockIsActivitySyncRouteBlockedByReconnectRequiredForUser.mockResolvedValue(true);
+
+    const result = await enqueueActivitySyncJobsForImportedEvent({
+      userID: 'user-1',
+      eventID: 'event-1',
+      sourceServiceName: ServiceNames.GarminAPI,
+      routeIdFilter: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp,
+      originalFiles: [fitOriginalFile('users/user-1/events/event-1/original.fit')],
+    });
+
+    expect(result).toEqual({
+      queued: 0,
+      skippedByReason: {
+        service_reconnect_required: 1,
+      },
+    });
+    expect(mockIsActivitySyncRouteEnabledForUser).not.toHaveBeenCalled();
+    expect(mockEnqueueActivitySyncQueueItem).not.toHaveBeenCalled();
+    expect(mockSetActivitySyncSkippedMetadata).toHaveBeenCalledWith(expect.objectContaining({
+      routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp,
+      skippedReason: 'service_reconnect_required',
     }));
   });
 
