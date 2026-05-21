@@ -126,6 +126,11 @@ async function cleanupOAuthFlowContext(
       logger.info(`Preserving ${serviceName} OAuth token root for deleting user ${userID} because a token was already persisted for account-deletion deauthorization.`);
       return;
     }
+    const existingTokenSnapshot = await tokenRootRef.collection('tokens').limit(1).get();
+    if (!existingTokenSnapshot.empty) {
+      logger.info(`Preserving ${serviceName} OAuth token root unchanged for deleting user ${userID} because existing tokens remain for account-deletion deauthorization.`);
+      return;
+    }
     await db.recursiveDelete(tokenRootRef);
     logger.info(`Deleted ${serviceName} OAuth token root for deleting user ${userID} while cleaning temporary OAuth data.`);
     return;
@@ -360,7 +365,7 @@ export async function getAndSetServiceOAuth2AccessTokenForUser(userID: string, s
     // Cleanup temporary fields (state, PKCE verifier)
     try {
       await cleanupOAuthFlowContext(userID, serviceName, adapter.tokenCollectionName, tokenPersisted);
-      logger.info(`Cleaned up temporary OAuth2 data for User ${userID} and ${serviceName}`);
+      logger.info(`Finished temporary OAuth2 cleanup for User ${userID} and ${serviceName}`);
     } catch (e) {
       // Don't fail if cleanup fails, but log it
       logger.warn(`Failed to cleanup temporary OAuth2 data for user ${userID}`, e);
