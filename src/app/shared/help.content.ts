@@ -221,11 +221,19 @@ export const HELP_SECTIONS: HelpSection[] = [
 - The jump table appears in activity tabs and only shows columns with available data.
 - Jump metrics use your preferred units from **Settings** when unit conversion is supported.
 
+### Event swim length tables
+
+- Event details include a **Swim Lengths** table when selected swim activities contain per-length pool data.
+- Swim lengths are grouped into collapsed sets through the next idle/rest length; expand a set to inspect each individual length row.
+- Swim lengths appear in activity tabs and show lap index, duration, distance, length type, stroke, strokes, swim pace, cadence, heart rate, SWOLF, and energy when available.
+- Swim distance, pace, and energy values follow your preferred units from **Settings**.
+
 ### Event chart x-axis fallback
 
 - In Event details, if selected indoor activities do not include distance data, the chart automatically falls back to a **Duration** x-axis.
 - In that case, the **Distance** x-axis option stays visible but is disabled until a compatible activity selection is active.
 - Each event chart panel can use the **Overlay** button to compare one other available metric on a right-side y-axis; overlay choices are saved globally by primary metric, so **Heart Rate** can always request **Altitude** when both streams exist.
+- Swim activities with per-length pool data show a **Show Swim Lengths** chart option that overlays swim length end boundaries on the chart; active and idle/rest lengths are both included.
 - When an overlay is active, the primary metric keeps its normal line and fill, while the overlay renders as a plain solid no-fill line using the overlay metric's series color. On merged and benchmark events, overlay legend and tooltip rows include both metric and activity labels.
 - When provider heart-rate or power zone boundaries are available on non-merged events, the **Heart Rate** and **Power** charts color their lines and visible fill by zone.`,
     links: [

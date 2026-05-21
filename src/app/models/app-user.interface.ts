@@ -151,6 +151,7 @@ export interface AppChartSettingsInterface extends Omit<UserChartSettingsInterfa
     fillOpacityVersion?: number;
     syncChartHoverToMap?: boolean;
     eventChartOverlayDataTypeByPrimary?: Record<string, string>;
+    showSwimLengths: boolean;
 }
 
 export interface AppAppSettingsInterface extends UserAppSettingsInterface {

@@ -46,6 +46,7 @@ import { hasEventChartableData } from '../../helpers/event-echarts-data.helper';
 import { resolveEventChartXAxisType } from '../../helpers/event-echarts-xaxis.helper';
 import { hasVisibleEventLaps } from '../../helpers/event-lap-type.helper';
 import { hasVisibleEventJumps } from '../../helpers/event-jump-type.helper';
+import { hasVisibleSwimLengths } from '../../helpers/event-swim-length.helper';
 @Component({
   selector: 'app-event-card',
   templateUrl: './event.card.component.html',
@@ -87,6 +88,10 @@ export class EventCardComponent implements OnInit {
 
   public hasJumpsFlag = computed(() =>
     hasVisibleEventJumps(this.event()?.getActivities() ?? [])
+  );
+
+  public hasSwimLengthsFlag = computed(() =>
+    hasVisibleSwimLengths(this.selectedActivitiesInstant())
   );
 
   public hasIntensityZonesFlag = computed(() =>

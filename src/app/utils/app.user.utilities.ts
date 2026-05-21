@@ -475,6 +475,7 @@ export class AppUserUtilities {
 
         // Chart
         settings.chartSettings = settings.chartSettings || <UserChartSettingsInterface>{};
+        const appChartSettings = settings.chartSettings as unknown as AppChartSettingsInterface;
         const existingDataTypeSettings = settings.chartSettings.dataTypeSettings || AppUserUtilities.getDefaultUserChartSettingsDataTypeSettings();
         const normalizedDataTypeSettings: DataTypeSettings = {};
         let hasEnabledDataType = false;
@@ -504,9 +505,10 @@ export class AppUserUtilities {
         settings.chartSettings.fillOpacity = isNumber(settings.chartSettings.fillOpacity) ? settings.chartSettings.fillOpacity : AppUserUtilities.getDefaultChartFillOpacity();
         settings.chartSettings.lapTypes = Array.isArray(settings.chartSettings.lapTypes) ? settings.chartSettings.lapTypes : AppUserUtilities.getDefaultChartLapTypes();
         settings.chartSettings.showLaps = settings.chartSettings.showLaps !== false;
-        (settings.chartSettings as AppChartSettingsInterface).syncChartHoverToMap = (settings.chartSettings as AppChartSettingsInterface).syncChartHoverToMap === true;
-        (settings.chartSettings as AppChartSettingsInterface).eventChartOverlayDataTypeByPrimary = normalizeEventChartOverlayDataTypeByPrimary(
-            (settings.chartSettings as AppChartSettingsInterface).eventChartOverlayDataTypeByPrimary,
+        appChartSettings.showSwimLengths = appChartSettings.showSwimLengths !== false;
+        appChartSettings.syncChartHoverToMap = appChartSettings.syncChartHoverToMap === true;
+        appChartSettings.eventChartOverlayDataTypeByPrimary = normalizeEventChartOverlayDataTypeByPrimary(
+            appChartSettings.eventChartOverlayDataTypeByPrimary,
         );
         settings.chartSettings.showGrid = settings.chartSettings.showGrid !== false;
         settings.chartSettings.stackYAxes = false;

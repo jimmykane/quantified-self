@@ -7,6 +7,8 @@ import {
     LapTypes,
     UserUnitSettingsInterface
 } from '@sports-alliance/sports-lib';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { vi } from 'vitest';
 import { EventCardLapsComponent } from './event.card.laps.component';
 import { AppEventColorService } from '../../../services/color/app.event.color.service';
@@ -79,5 +81,17 @@ describe('EventCardLapsComponent', () => {
         expect(component.getDataSource(activity, LapTypes.session_end)).toBeUndefined();
         fixture.detectChanges();
         expect(fixture.nativeElement.querySelector('app-event-section-header')).toBeNull();
+    });
+
+    it('should not render the index column header icon', () => {
+        const template = readFileSync(
+            resolve(process.cwd(), 'src/app/components/event/laps/event.card.laps.component.html'),
+            'utf8',
+        );
+
+        expect(template).toContain("@if (column !== '#')");
+        expect(template).toContain('<app-data-type-icon [dataType]="column"></app-data-type-icon>');
+        expect(template).toContain("[class.lap-index-cell]=\"column === '#'");
+        expect(template).toContain("[class.lap-duration-cell]=\"column === 'Duration'");
     });
 });

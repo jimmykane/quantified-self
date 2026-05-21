@@ -134,9 +134,14 @@ export class DataTypeIconComponent {
       case DataDistance.type:
       case DataDistanceMiles.type:
       case DataDistanceFeet.type:
+      case 'Pool Length':
         return 'route';
       case DataDuration.type:
         return 'timer';
+      case '#':
+        return 'tag';
+      case 'Lap':
+        return 'linear_scale';
       case 'Start Date':
         return 'date_range';
       case DataDeviceNames.type:
@@ -312,7 +317,14 @@ export class DataTypeIconComponent {
         return 'metabolism';
       case DataSwimPaceAvg.type:
       case DataSwimPaceAvgMinutesPer100Yard.type:
+      case 'Swim Pace':
         return 'pool';
+      case 'Stroke':
+        return 'pool';
+      case 'Strokes':
+        return 'front_hand';
+      case 'SWOLF':
+        return 'scoreboard';
       case DataAerobicTrainingEffect.type:
       case 'Anaerobic Training Effect':
         return 'cardio_load';

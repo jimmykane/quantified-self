@@ -291,4 +291,16 @@ describe('DataTypeIconComponent', () => {
     expect(component.getColumnHeaderIcon('Fitness Age')).toBe('cake');
     expect(component.getColumnHeaderIcon('Age')).toBe('cake');
   });
+
+  it('should provide icon mappings for swim length table columns', () => {
+    const component = new DataTypeIconComponent();
+
+    expect(component.getColumnHeaderIcon('#')).toBe('tag');
+    expect(component.getColumnHeaderIcon('Lap')).toBe('linear_scale');
+    expect(component.getColumnHeaderIcon('Pool Length')).toBe('route');
+    expect(component.getColumnHeaderIcon('Swim Pace')).toBe('pool');
+    expect(component.getColumnHeaderIcon('Stroke')).toBe('pool');
+    expect(component.getColumnHeaderIcon('Strokes')).toBe('front_hand');
+    expect(component.getColumnHeaderIcon('SWOLF')).toBe('scoreboard');
+  });
 });

@@ -21,10 +21,14 @@
         <table mat-table [dataSource]="getDataSource(activity, availableLapType)">
           @for (column of getColumns(activity, availableLapType); track column) {
           <ng-container [matColumnDef]="column" [sticky]="isSticky(column)">
-            <mat-header-cell *matHeaderCellDef>
+            <mat-header-cell *matHeaderCellDef [class.lap-index-cell]="column === '#'"
+              [class.lap-duration-cell]="column === 'Duration'">
+              @if (column !== '#') {
               <app-data-type-icon [dataType]="column"></app-data-type-icon>
+              }
             </mat-header-cell>
-            <mat-cell *matCellDef="let row">{{ row[column] }}</mat-cell>
+            <mat-cell *matCellDef="let row" [class.lap-index-cell]="column === '#'"
+              [class.lap-duration-cell]="column === 'Duration'">{{ row[column] }}</mat-cell>
           </ng-container>
           }
           <mat-header-row *matHeaderRowDef="getColumns(activity, availableLapType)"></mat-header-row>

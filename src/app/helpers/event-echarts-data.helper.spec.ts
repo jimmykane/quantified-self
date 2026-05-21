@@ -13,12 +13,14 @@ import {
   DistanceUnits,
   DynamicDataLoader,
   LapTypes,
+  SwimPaceUnits,
   XAxisTypes
 } from '@sports-alliance/sports-lib';
 import {
   buildEventChartPanels,
   hasEventChartableData,
   buildEventLapMarkers,
+  buildEventSwimLengthMarkers,
   buildEventLegendItems,
   buildEventZoomOverviewData,
   normalizeEventLapType
@@ -1295,5 +1297,176 @@ describe('event-echarts-data.helper', () => {
     expect(markers).toHaveLength(1);
     expect(markers[0].lapType).toBe(LapTypes.Manual);
     expect(markers[0].xValue).toBe(250);
+  });
+
+  it('builds swim length chart markers for active and idle lengths including the final row', () => {
+    const activity = {
+      startDate: new Date('2024-01-01T00:00:00.000Z'),
+      creator: { name: 'Garmin' },
+      getID: () => 'swim-1',
+      getSwimLengths: () => [
+        {
+          index: 1,
+          lapIndex: 0,
+          startDate: new Date('2024-01-01T00:00:00.000Z'),
+          endDate: new Date('2024-01-01T00:00:25.000Z'),
+          type: 'active',
+          stroke: 'freestyle',
+          strokes: 9,
+          timerTime: 25,
+          distance: 25,
+          avgSpeed: 1,
+          avgCadence: 22,
+          avgHeartRate: 140,
+          swolf: 34,
+          calories: 4,
+        },
+        {
+          index: 2,
+          lapIndex: 0,
+          startDate: new Date('2024-01-01T00:00:25.000Z'),
+          endDate: new Date('2024-01-01T00:00:35.000Z'),
+          type: 'idle',
+          stroke: null,
+          elapsedTime: 10,
+        },
+      ],
+    } as any;
+    const unselectedActivity = {
+      ...activity,
+      getID: () => 'swim-2',
+      getSwimLengths: () => [
+        {
+          index: 1,
+          startDate: new Date('2024-01-01T00:00:00.000Z'),
+          endDate: new Date('2024-01-01T00:00:25.000Z'),
+          type: 'active',
+        },
+      ],
+    } as any;
+
+    const markers = buildEventSwimLengthMarkers({
+      selectedActivities: [activity],
+      allActivities: [activity, unselectedActivity],
+      xAxisType: XAxisTypes.Duration,
+      eventColorService: {
+        getActivityColor: () => '#00aaff',
+      } as any,
+    });
+
+    expect(markers).toHaveLength(2);
+    expect(markers.map((marker) => marker.xValue)).toEqual([25, 35]);
+    expect(markers[0]).toEqual(expect.objectContaining({
+      markerType: 'swimLength',
+      label: 'Length 1',
+      swimLengthIndex: 1,
+      swimLengthType: 'active',
+      isIdle: false,
+      activityID: 'swim-1',
+      activityName: 'Garmin',
+      color: '#00aaff',
+      tooltipTitle: 'Length 1 (Active)',
+    }));
+    expect(markers[0].tooltipDetails).toEqual(expect.arrayContaining([
+      { label: 'Lap', value: '0' },
+      { label: 'Duration', value: '00:25' },
+      { label: 'Distance', value: '25.0m' },
+      { label: 'Type', value: 'Active' },
+      { label: 'Stroke', value: 'Freestyle' },
+      { label: 'Strokes', value: '9' },
+      { label: 'Swim Pace', value: '01:40min/100m' },
+      { label: 'Avg Cadence', value: '22rpm' },
+      { label: 'Avg Heart Rate', value: '140bpm' },
+      { label: 'SWOLF', value: '34' },
+      { label: 'Energy', value: '4KCal' },
+    ]));
+    expect(markers[1]).toEqual(expect.objectContaining({
+      label: 'Length 2',
+      swimLengthType: 'idle',
+      isIdle: true,
+      tooltipTitle: 'Length 2 (Idle)',
+    }));
+  });
+
+  it('places swim length markers on the nearest distance point for distance charts', () => {
+    const timeStream = {
+      getData: () => [0, 10, 20, 30, 40],
+    } as any;
+    const distanceStream = {
+      getData: () => [0, 25, 50, 75, 100],
+    } as any;
+    const activity = {
+      startDate: new Date('2024-01-01T00:00:00.000Z'),
+      creator: { name: 'Garmin' },
+      getID: () => 'swim-1',
+      getSwimLengths: () => [
+        {
+          index: 1,
+          startDate: new Date('2024-01-01T00:00:00.000Z'),
+          endDate: new Date('2024-01-01T00:00:26.000Z'),
+          type: 'active',
+        },
+        {
+          index: 2,
+          startDate: new Date('2024-01-01T00:00:26.000Z'),
+          endDate: 'not-a-date',
+          type: 'active',
+        },
+      ],
+      getStream: (type: string) => {
+        if (type === XAxisTypes.Time) {
+          return timeStream;
+        }
+        if (type === DataDistance.type) {
+          return distanceStream;
+        }
+        return null;
+      },
+    } as any;
+
+    const markers = buildEventSwimLengthMarkers({
+      selectedActivities: [activity],
+      allActivities: [activity],
+      xAxisType: XAxisTypes.Distance,
+      eventColorService: {
+        getActivityColor: () => '#00aaff',
+      } as any,
+    });
+
+    expect(markers).toHaveLength(1);
+    expect(markers[0].xValue).toBe(75);
+  });
+
+  it('formats swim length pace with preferred 100-yard units', () => {
+    const activity = {
+      startDate: new Date('2024-01-01T00:00:00.000Z'),
+      creator: { name: 'Garmin' },
+      getID: () => 'swim-1',
+      getSwimLengths: () => [
+        {
+          index: 1,
+          startDate: new Date('2024-01-01T00:00:00.000Z'),
+          endDate: new Date('2024-01-01T00:00:25.000Z'),
+          type: 'active',
+          avgSpeed: 1,
+        },
+      ],
+    } as any;
+
+    const markers = buildEventSwimLengthMarkers({
+      selectedActivities: [activity],
+      allActivities: [activity],
+      xAxisType: XAxisTypes.Duration,
+      eventColorService: {
+        getActivityColor: () => '#00aaff',
+      } as any,
+      userUnitSettings: {
+        swimPaceUnits: [SwimPaceUnits.MinutesPer100Yard],
+      } as any,
+    });
+
+    const swimPace = markers[0].tooltipDetails.find((detail) => detail.label === 'Swim Pace')?.value;
+    expect(swimPace).toContain('01:31');
+    expect(swimPace).toContain('/100yd');
   });
 });

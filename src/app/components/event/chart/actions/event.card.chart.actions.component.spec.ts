@@ -53,6 +53,8 @@ describe('EventCardChartActionsComponent', () => {
     component.cursorBehaviour = ChartCursorBehaviours.ZoomX;
     component.showAllData = false;
     component.showLaps = false;
+    component.showSwimLengths = false;
+    component.showSwimLengthsToggle = false;
     component.syncChartHoverToMap = false;
     fixture.detectChanges();
     vi.clearAllMocks();
@@ -133,6 +135,23 @@ describe('EventCardChartActionsComponent', () => {
 
     expect(emitSpy).toHaveBeenCalledWith(true);
     expect(analyticsServiceMock.logEvent).toHaveBeenCalledWith('event_chart_settings_change', { property: 'showLaps' });
+  });
+
+  it('should emit showSwimLengths changes and log analytics', async () => {
+    const emitSpy = vi.spyOn(component.showSwimLengthsChange, 'emit');
+
+    await component.onShowSwimLengthsToggle(true);
+
+    expect(emitSpy).toHaveBeenCalledWith(true);
+    expect(analyticsServiceMock.logEvent).toHaveBeenCalledWith('event_chart_settings_change', { property: 'showSwimLengths' });
+  });
+
+  it('should only render the swim length toggle when swim lengths are available', () => {
+    const templatePath = resolve(process.cwd(), 'src/app/components/event/chart/actions/event.card.chart.actions.component.html');
+    const template = readFileSync(templatePath, 'utf8');
+
+    expect(template).toContain('@if (showSwimLengthsToggle)');
+    expect(template).toContain('Show Swim Lengths');
   });
 
   it('should emit fillOpacity changes and log analytics', async () => {

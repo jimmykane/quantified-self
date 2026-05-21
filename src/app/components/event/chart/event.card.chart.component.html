@@ -1,8 +1,10 @@
 <app-event-section-header icon="show_chart">
   <app-event-card-chart-actions [xAxisType]="displayedXAxisType" [(showAllData)]="showAllData" [(showLaps)]="showLaps"
+    [(showSwimLengths)]="showSwimLengths"
     [(cursorBehaviour)]="cursorBehaviour" [(syncChartHoverToMap)]="syncChartHoverToMap" [(fillOpacity)]="fillOpacity"
     [event]="event" [user]="user"
     [canSelectDistanceXAxis]="canSelectDistanceXAxis"
+    [showSwimLengthsToggle]="hasSelectedSwimLengths"
     [showResetChartState]="hasResettableChartState"
     [showSeriesMenu]="dataTypeLegendItems.length > 0"
     [seriesMenuSummary]="seriesMenuSummary"
@@ -21,7 +23,7 @@
       <app-event-card-chart-panel class="event-chart-shell__zoom-bar" [xAxisType]="renderedXAxisType"
         [darkTheme]="darkTheme" [useAnimations]="false" [showZoomBar]="true"
         [xDomain]="xDomain" [showDateOnTimeAxis]="showDateOnTimeAxis" [showLaps]="showLaps" [lapTypes]="lapTypes"
-        [lapMarkers]="lapMarkers"
+        [lapMarkers]="lapMarkers" [showSwimLengths]="showSwimLengths" [swimLengthMarkers]="swimLengthMarkers"
         [userUnitSettings]="userUnitSettings"
         [strokeWidth]="strokeWidth" [zoomBarOverviewData]="zoomBarOverviewData" [sharedZoomRange]="zoomRange"
         (zoomRangeChange)="onZoomRangeChange($event)">
@@ -38,6 +40,7 @@
           [cursorBehaviour]="cursorBehaviour" [previewRange]="previewSelectedRange" [selectedRange]="selectedRange"
           [showDateOnTimeAxis]="showDateOnTimeAxis"
           [showLaps]="showLaps" [lapTypes]="lapTypes" [lapMarkers]="lapMarkers"
+          [showSwimLengths]="showSwimLengths" [swimLengthMarkers]="swimLengthMarkers"
           [gainAndLossThreshold]="gainAndLossThreshold"
           [strokeWidth]="strokeWidth" [fillOpacity]="fillOpacity"
           [userUnitSettings]="userUnitSettings"

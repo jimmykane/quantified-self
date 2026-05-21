@@ -8,3 +8,15 @@
 .table-container .mat-mdc-cell {
   font-family: 'Barlow Condensed', 'Inter', sans-serif;
 }
+
+.lap-index-cell {
+  flex: 0 0 48px;
+  width: 48px;
+  max-width: 48px;
+}
+
+.lap-duration-cell {
+  flex: 0 0 104px;
+  width: 104px;
+  max-width: 104px;
+}

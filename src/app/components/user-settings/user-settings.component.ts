@@ -258,6 +258,7 @@ export class UserSettingsComponent implements OnChanges, OnDestroy, OnInit {
     }
 
     const settings = AppUserUtilities.fillMissingAppSettings(this.user as unknown as User);
+    const chartSettings = settings.chartSettings as unknown as AppChartSettingsInterface;
 
     // Initialize the user settings and get the enabled ones
     const dataTypesToUse = Object.keys(settings.chartSettings.dataTypeSettings).filter((dataTypeSettingKey) =>
@@ -299,11 +300,12 @@ export class UserSettingsComponent implements OnChanges, OnDestroy, OnInit {
       chartStrokeOpacity: new UntypedFormControl(settings.chartSettings.strokeOpacity, [
         Validators.required,
       ]),
-      chartFillOpacity: new UntypedFormControl(AppUserUtilities.getResolvedChartFillOpacity(settings.chartSettings as AppChartSettingsInterface), [
+      chartFillOpacity: new UntypedFormControl(AppUserUtilities.getResolvedChartFillOpacity(chartSettings), [
         Validators.required,
       ]),
       chartLapTypes: new UntypedFormControl(settings.chartSettings.lapTypes, []),
       showChartLaps: new UntypedFormControl(settings.chartSettings.showLaps, []),
+      showChartSwimLengths: new UntypedFormControl(chartSettings.showSwimLengths !== false, []),
       showChartGrid: new UntypedFormControl(settings.chartSettings.showGrid, []),
       xAxisType: new UntypedFormControl(settings.chartSettings.xAxisType, [
         Validators.required,
@@ -444,6 +446,7 @@ export class UserSettingsComponent implements OnChanges, OnDestroy, OnInit {
         fillOpacityVersion: 1,
         lapTypes: this.userSettingsFormGroup.get('chartLapTypes').value,
         showLaps: this.userSettingsFormGroup.get('showChartLaps').value,
+        showSwimLengths: this.userSettingsFormGroup.get('showChartSwimLengths').value,
         showGrid: this.userSettingsFormGroup.get('showChartGrid').value,
         stackYAxes: false,
         disableGrouping: this.userSettingsFormGroup.get('chartDisableGrouping').value,
