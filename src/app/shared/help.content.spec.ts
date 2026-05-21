@@ -120,6 +120,9 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('provider heart-rate or power zone boundaries');
     expect(gettingStartedSection?.content).toContain('non-merged events');
     expect(gettingStartedSection?.content).toContain('Each event chart panel can use the **Overlay** button');
+    expect(gettingStartedSection?.content).toContain('**Show Swim Lengths** chart option');
+    expect(gettingStartedSection?.content).toContain('swim length end boundaries');
+    expect(gettingStartedSection?.content).toContain('active and idle/rest lengths are both included');
     expect(gettingStartedSection?.content).toContain('right-side y-axis');
     expect(gettingStartedSection?.content).toContain('saved globally by primary metric');
     expect(gettingStartedSection?.content).toContain('primary metric keeps its normal line and fill');

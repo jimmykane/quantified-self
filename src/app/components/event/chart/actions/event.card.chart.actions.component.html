@@ -94,6 +94,15 @@
     </mat-slide-toggle>
   </section>
 
+  @if (showSwimLengthsToggle) {
+  <section mat-menu-item>
+    <mat-slide-toggle [checked]="showSwimLengths" [disabled]="!user"
+      (click)="$event.stopPropagation()" (change)="onShowSwimLengthsToggle($event.checked)">
+      Show Swim Lengths
+    </mat-slide-toggle>
+  </section>
+  }
+
   <section mat-menu-item>
     <mat-slide-toggle [checked]="syncChartHoverToMap" [disabled]="!user"
       (click)="$event.stopPropagation()" (change)="onSyncChartHoverToMapToggle($event.checked)">

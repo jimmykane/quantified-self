@@ -38,11 +38,13 @@ import { AppUserUtilities } from '../../../utils/app.user.utilities';
 import {
   buildEventChartPanels,
   buildEventLapMarkers,
+  buildEventSwimLengthMarkers,
   buildEventZoomOverviewData,
   EVENT_CHART_INTENSITY_ZONE_LINE_DATA_TYPES,
   EVENT_CHART_INTENSITY_ZONE_LOWER_LIMIT_KEYS,
   EventChartLapMarker,
   EventChartPanelModel,
+  EventChartSwimLengthMarker,
 } from '../../../helpers/event-echarts-data.helper';
 import { resolveEventSeriesColor } from '../../../helpers/event-echarts-style.helper';
 import {
@@ -58,6 +60,7 @@ import {
   normalizeEventChartOverlayDataTypeByPrimary,
 } from '../../../helpers/event-chart-overlay.helper';
 import type { EventChartOverlayOption } from '../../../helpers/event-chart-overlay.helper';
+import { hasVisibleSwimLengths } from '../../../helpers/event-swim-length.helper';
 
 interface EventDataTypeLegendItem {
   dataType: string;
@@ -99,6 +102,8 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
   public chartPanelViews: EventChartPanelViewModel[] = [];
   public dataTypeLegendItems: EventDataTypeLegendItem[] = [];
   public lapMarkers: EventChartLapMarker[] = [];
+  public swimLengthMarkers: EventChartSwimLengthMarker[] = [];
+  public hasSelectedSwimLengths = false;
   public xDomain: EventChartRange | null = null;
   public zoomBarOverviewData: Array<[number, number]> = [];
   public renderedXAxisType: XAxisTypes = XAxisTypes.Duration;
@@ -122,6 +127,15 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
       void this.userSettingsQuery.updateChartSettings({ showLaps: value })
         .then(() => this.queueRebuild('showLaps'))
         .catch((error) => this.logger.error('[EventCardChart] Failed to persist showLaps', error));
+    }
+  }
+
+  public get showSwimLengths() { return this.userSettingsQuery.chartSettings()?.showSwimLengths ?? true; }
+  public set showSwimLengths(value: boolean) {
+    if (value !== this.showSwimLengths) {
+      void this.userSettingsQuery.updateChartSettings({ showSwimLengths: value })
+        .then(() => this.queueRebuild('showSwimLengths'))
+        .catch((error) => this.logger.error('[EventCardChart] Failed to persist showSwimLengths', error));
     }
   }
 
@@ -304,6 +318,7 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
   private visibilityEventID: string | null = null;
   private lastPanelRebuildKey: string | null = null;
   private lastLapMarkersKey: string | null = null;
+  private lastSwimLengthMarkersKey: string | null = null;
   private lastPersistedVisibleDataTypeKey: string | null = null;
   private zoomRangeOwnerEventID: string | null = null;
 
@@ -522,16 +537,25 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
     const selectedActivities = this.selectedActivities || [];
     const effectiveXAxisType = resolveEventChartXAxisType(this.event, this.xAxisType, selectedActivities);
     const nextEventID = this.event?.getID?.() || null;
+    const hasSelectedSwimLengths = hasVisibleSwimLengths(selectedActivities);
     const panelRebuildKey = this.buildPanelRebuildKey(selectedActivities, allActivities, effectiveXAxisType);
     const lapMarkersKey = this.buildLapMarkersRebuildKey(selectedActivities, allActivities, effectiveXAxisType);
+    const swimLengthMarkersKey = this.buildSwimLengthMarkersRebuildKey(
+      selectedActivities,
+      allActivities,
+      effectiveXAxisType,
+      hasSelectedSwimLengths
+    );
     const shouldRebuildPanels = this.lastPanelRebuildKey !== panelRebuildKey;
     const shouldRebuildLaps = this.lastLapMarkersKey !== lapMarkersKey;
+    const shouldRebuildSwimLengths = this.lastSwimLengthMarkersKey !== swimLengthMarkersKey;
 
     const previousZoomRangeOwnerEventID = this.zoomRangeOwnerEventID;
+    this.hasSelectedSwimLengths = hasSelectedSwimLengths;
     this.renderedXAxisType = effectiveXAxisType;
     this.zoomRangeOwnerEventID = nextEventID;
 
-    if (!shouldRebuildPanels && !shouldRebuildLaps) {
+    if (!shouldRebuildPanels && !shouldRebuildLaps && !shouldRebuildSwimLengths) {
       this.applyDataTypeVisibility();
       this.cdr.markForCheck();
       return;
@@ -572,6 +596,19 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
         this.lastLapMarkersKey = lapMarkersKey;
       }
 
+      if (shouldRebuildSwimLengths) {
+        this.swimLengthMarkers = this.showSwimLengths && hasSelectedSwimLengths
+          ? buildEventSwimLengthMarkers({
+            selectedActivities,
+            allActivities,
+            xAxisType: effectiveXAxisType,
+            eventColorService: this.eventColorService,
+            userUnitSettings: this.userUnitSettings,
+          })
+          : [];
+        this.lastSwimLengthMarkersKey = swimLengthMarkersKey;
+      }
+
       const globalDomain = this.resolveGlobalDomain(this.allChartPanels);
       this.xDomain = globalDomain;
       this.zoomRange = previousZoomRangeOwnerEventID !== this.zoomRangeOwnerEventID
@@ -586,6 +623,8 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
       this.chartPanelViews = [];
       this.dataTypeLegendItems = [];
       this.lapMarkers = [];
+      this.swimLengthMarkers = [];
+      this.hasSelectedSwimLengths = false;
       this.xDomain = null;
       this.zoomRange = null;
       this.zoomBarOverviewData = [];
@@ -594,6 +633,7 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
       this.zoomRangeOwnerEventID = this.event?.getID?.() || null;
       this.lastPanelRebuildKey = null;
       this.lastLapMarkersKey = null;
+      this.lastSwimLengthMarkersKey = null;
       this.lastPersistedVisibleDataTypeKey = null;
     } finally {
       this.loaded();
@@ -844,6 +884,30 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
       selectedActivityKey,
       allActivitiesKey,
       lapTypesKey,
+      unitSettingsKey,
+    ].join('|');
+  }
+
+  private buildSwimLengthMarkersRebuildKey(
+    selectedActivities: ActivityInterface[],
+    allActivities: ActivityInterface[],
+    xAxisType: XAxisTypes,
+    hasSelectedSwimLengths: boolean
+  ): string {
+    const eventID = this.event?.getID?.() || '';
+    if (!this.showSwimLengths || !hasSelectedSwimLengths) {
+      return `${eventID}|hidden`;
+    }
+
+    const selectedActivityKey = this.buildActivitiesKey(selectedActivities);
+    const allActivitiesKey = this.buildActivitiesKey(allActivities);
+    const unitSettingsKey = this.buildUnitSettingsKey(this.userUnitSettings);
+
+    return [
+      eventID,
+      `${xAxisType}`,
+      selectedActivityKey,
+      allActivitiesKey,
       unitSettingsKey,
     ].join('|');
   }

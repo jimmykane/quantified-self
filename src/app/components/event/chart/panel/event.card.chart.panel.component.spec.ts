@@ -1281,6 +1281,7 @@ describe('EventCardChartPanelComponent', () => {
     component.lapTypes = [LapTypes.AutoLap];
     component.lapMarkers = [
       {
+        markerType: 'lap',
         xValue: 60,
         label: 'Lap 1',
         color: '#00ff00',
@@ -1836,6 +1837,7 @@ describe('EventCardChartPanelComponent', () => {
     component.lapTypes = [LapTypes.AutoLap];
     component.lapMarkers = [
       {
+        markerType: 'lap',
         xValue: 5,
         label: 'Lap 1',
         color: '#00ff00',
@@ -1863,12 +1865,85 @@ describe('EventCardChartPanelComponent', () => {
     expect(option?.series?.[0]?.markLine?.tooltip).toEqual({ show: false });
   });
 
+  it('renders lap and swim length markers together with swim idle styling', async () => {
+    component.showZoomBar = false;
+    component.showLaps = true;
+    component.showSwimLengths = true;
+    component.lapTypes = [LapTypes.AutoLap];
+    component.lapMarkers = [
+      {
+        markerType: 'lap',
+        xValue: 5,
+        label: 'Lap 1',
+        color: '#00ff00',
+        lapType: 'auto',
+        lapNumber: 1,
+        activityID: 'a1',
+        activityName: 'Garmin',
+        tooltipTitle: 'Lap 1',
+        tooltipDetails: [],
+      }
+    ];
+    component.swimLengthMarkers = [
+      {
+        markerType: 'swimLength',
+        xValue: 10,
+        label: 'Length 1',
+        color: '#00aaff',
+        swimLengthIndex: 1,
+        swimLengthType: 'active',
+        isIdle: false,
+        activityID: 'a1',
+        activityName: 'Garmin',
+        tooltipTitle: 'Length 1 (Active)',
+        tooltipDetails: [],
+      },
+      {
+        markerType: 'swimLength',
+        xValue: 12,
+        label: 'Length 2',
+        color: '#00aaff',
+        swimLengthIndex: 2,
+        swimLengthType: 'idle',
+        isIdle: true,
+        activityID: 'a1',
+        activityName: 'Garmin',
+        tooltipTitle: 'Length 2 (Idle)',
+        tooltipDetails: [],
+      }
+    ];
+    await renderComponent();
+
+    const option = getRenderedOption();
+    expect(option?.series?.[0]?.markLine?.data).toEqual([
+      expect.objectContaining({
+        markerType: 'lap',
+        xAxis: 5,
+        name: 'Lap 1',
+        lineStyle: expect.objectContaining({ type: 'dashed', opacity: 0.45 }),
+      }),
+      expect.objectContaining({
+        markerType: 'swimLength',
+        xAxis: 10,
+        name: 'Length 1',
+        lineStyle: expect.objectContaining({ type: 'solid', opacity: 0.38 }),
+      }),
+      expect.objectContaining({
+        markerType: 'swimLength',
+        xAxis: 12,
+        name: 'Length 2',
+        lineStyle: expect.objectContaining({ type: 'dotted', opacity: 0.24 }),
+      })
+    ]);
+  });
+
   it('filters session end lap markers from the chart even when configured', async () => {
     component.showZoomBar = false;
     component.showLaps = true;
     component.lapTypes = [LapTypes.session_end];
     component.lapMarkers = [
       {
+        markerType: 'lap',
         xValue: 5,
         label: 'Lap 1',
         color: '#00ff00',
@@ -1891,6 +1966,7 @@ describe('EventCardChartPanelComponent', () => {
     component.showLaps = true;
     component.lapMarkers = [
       {
+        markerType: 'lap',
         xValue: 5,
         label: 'Lap 1',
         color: '#00ff00',
@@ -1918,12 +1994,47 @@ describe('EventCardChartPanelComponent', () => {
     expect(option?.series?.[0]?.markLine?.data).toEqual([]);
   });
 
+  it('clears swim length markers when showSwimLengths is toggled off', async () => {
+    component.showZoomBar = false;
+    component.showSwimLengths = true;
+    component.swimLengthMarkers = [
+      {
+        markerType: 'swimLength',
+        xValue: 25,
+        label: 'Length 1',
+        color: '#00aaff',
+        swimLengthIndex: 1,
+        swimLengthType: 'active',
+        isIdle: false,
+        activityID: 'a1',
+        activityName: 'Garmin',
+        tooltipTitle: 'Length 1 (Active)',
+        tooltipDetails: [],
+      }
+    ];
+    await renderComponent();
+
+    let option = getRenderedOption();
+    expect(option?.series?.[0]?.markLine?.data).toHaveLength(1);
+
+    eChartsLoaderMock.setOption.mockClear();
+    component.showSwimLengths = false;
+    component.ngOnChanges({
+      showSwimLengths: new SimpleChange(true, false, false),
+    });
+    await flushQueuedChartRefreshes();
+
+    option = eChartsLoaderMock.setOption.mock.calls.findLast(([, candidate]) => candidate?.series)?.[1] as any;
+    expect(option?.series?.[0]?.markLine?.data).toEqual([]);
+  });
+
   it('formats lap marker tooltip content from markLine data', async () => {
     component.showZoomBar = false;
     component.showLaps = true;
     component.lapTypes = [LapTypes.AutoLap];
     component.lapMarkers = [
       {
+        markerType: 'lap',
         xValue: 5,
         label: 'Lap 1',
         color: '#00ff00',
@@ -1960,6 +2071,41 @@ describe('EventCardChartPanelComponent', () => {
     expect(tooltipHtml).toContain('Ascent: 10m');
     expect(tooltipHtml).toContain('Descent: 4m');
     expect(tooltipHtml).toContain('Avg Cadence: 172spm');
+  });
+
+  it('formats swim length marker tooltip content from markLine data', async () => {
+    component.showZoomBar = false;
+    component.showSwimLengths = true;
+    component.swimLengthMarkers = [
+      {
+        markerType: 'swimLength',
+        xValue: 25,
+        label: 'Length 1',
+        color: '#00aaff',
+        swimLengthIndex: 1,
+        swimLengthType: 'active',
+        isIdle: false,
+        activityID: 'a1',
+        activityName: 'Garmin',
+        tooltipTitle: 'Length 1 (Active)',
+        tooltipDetails: [
+          { label: 'Duration', value: '00:25' },
+          { label: 'Distance', value: '25m' },
+          { label: 'Swim Pace', value: '01:31 /100yd' },
+        ],
+      }
+    ];
+    await renderComponent();
+
+    const tooltipHtml = (component as any).formatLapMarkerTooltip({
+      data: component.swimLengthMarkers[0],
+      name: 'Length 1',
+    });
+
+    expect(tooltipHtml).toContain('Length 1 (Active)');
+    expect(tooltipHtml).toContain('Duration: 00:25');
+    expect(tooltipHtml).toContain('Distance: 25m');
+    expect(tooltipHtml).toContain('Swim Pace: 01:31 /100yd');
   });
 
   it('omits activity names from the main tooltip when disabled', async () => {
@@ -2300,6 +2446,7 @@ describe('EventCardChartPanelComponent', () => {
     component.showLaps = true;
     component.lapMarkers = [
       {
+        markerType: 'lap',
         xValue: 5,
         label: 'Lap 1',
         color: '#00ff00',
@@ -2341,6 +2488,7 @@ describe('EventCardChartPanelComponent', () => {
     component.showLaps = true;
     component.lapMarkers = [
       {
+        markerType: 'lap',
         xValue: 5,
         label: 'Lap 1',
         color: '#00ff00',
@@ -2390,6 +2538,7 @@ describe('EventCardChartPanelComponent', () => {
     component.showLaps = true;
     component.lapMarkers = [
       {
+        markerType: 'lap',
         xValue: 5,
         label: 'Lap 1',
         color: '#00ff00',
