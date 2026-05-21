@@ -1,24 +1,70 @@
 @if (swimLengthViews.length > 0) {
 <app-event-section-header icon="pool" title="Swim Lengths"></app-event-section-header>
+@if (swimLengthViews.length === 1) {
+@if (swimLengthViews[0]; as view) {
+<ng-container *ngTemplateOutlet="swimLengthGroups; context: { $implicit: view }"></ng-container>
+}
+} @else {
 <mat-tab-group [dynamicHeight]="true" [preserveContent]="true">
   @for (view of swimLengthViews; track view.key) {
   <mat-tab [label]="view.label">
-    <section class="table-container">
-      <table mat-table [dataSource]="view.dataSource">
-        @for (column of view.columns; track column.name) {
-        <ng-container [matColumnDef]="column.name" [sticky]="column.sticky">
-          <mat-header-cell *matHeaderCellDef>
-            <app-data-type-icon [dataType]="column.name"></app-data-type-icon>
-          </mat-header-cell>
-          <mat-cell *matCellDef="let row">{{ row[column.name] }}</mat-cell>
-        </ng-container>
-        }
-
-        <mat-header-row *matHeaderRowDef="view.columnNames"></mat-header-row>
-        <mat-row *matRowDef="let row; columns: view.columnNames;"></mat-row>
-      </table>
-    </section>
+    <ng-container *ngTemplateOutlet="swimLengthGroups; context: { $implicit: view }"></ng-container>
   </mat-tab>
   }
 </mat-tab-group>
 }
+}
+
+<ng-template #swimLengthGroups let-view>
+  <mat-accordion class="swim-length-groups" displayMode="flat" multi>
+    @for (group of view.groups; track group.key) {
+    <mat-expansion-panel class="swim-length-group-panel mat-elevation-z0 qs-overlay-flat"
+      [expanded]="group.expanded" (opened)="group.expanded = true"
+      (closed)="group.expanded = false">
+      <mat-expansion-panel-header class="swim-length-group-header" collapsedHeight="auto" expandedHeight="auto">
+        <mat-panel-title>
+          <span class="swim-length-header-content">
+            <span class="swim-length-header-title mat-label-large">{{ group.label }}</span>
+            <span class="swim-length-summary mat-label-medium">
+              <span>{{ group.summaryRow.Type }}</span>
+              <span>
+                <span class="swim-length-number">{{ group.rows.length }}</span>
+                {{ group.rows.length === 1 ? 'length' : 'lengths' }}
+              </span>
+              @if (group.summaryRow.Distance) {
+              <span class="swim-length-number">{{ group.summaryRow.Distance }}</span>
+              }
+              @if (group.summaryRow.Duration) {
+              <span class="swim-length-number">{{ group.summaryRow.Duration }}</span>
+              }
+              @if (group.restDuration) {
+              <span>
+                Rest <span class="swim-length-number">{{ group.restDuration }}</span>
+              </span>
+              }
+            </span>
+          </span>
+        </mat-panel-title>
+      </mat-expansion-panel-header>
+
+      <section class="table-container">
+        <table mat-table [dataSource]="group.rows">
+          @for (column of group.columns; track column.name) {
+          <ng-container [matColumnDef]="column.name" [sticky]="column.sticky">
+            <mat-header-cell *matHeaderCellDef>
+              <app-data-type-icon [dataType]="column.name"></app-data-type-icon>
+            </mat-header-cell>
+            <mat-cell *matCellDef="let row">
+              <span [class.swim-length-number]="column.numeric">{{ row[column.name] }}</span>
+            </mat-cell>
+          </ng-container>
+          }
+
+          <mat-header-row *matHeaderRowDef="group.columnNames"></mat-header-row>
+          <mat-row *matRowDef="let row; columns: group.columnNames;"></mat-row>
+        </table>
+      </section>
+    </mat-expansion-panel>
+    }
+  </mat-accordion>
+</ng-template>

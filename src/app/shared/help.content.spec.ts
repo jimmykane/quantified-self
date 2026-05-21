@@ -111,6 +111,7 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('Event swim length tables');
     expect(gettingStartedSection?.content).toContain('**Swim Lengths** table');
     expect(gettingStartedSection?.content).toContain('per-length pool data');
+    expect(gettingStartedSection?.content).toContain('grouped into collapsed sets through the next idle/rest length');
     expect(gettingStartedSection?.content).toContain('lap index, duration, distance, length type, stroke, strokes, swim pace, cadence, heart rate, SWOLF, and energy');
   });
 

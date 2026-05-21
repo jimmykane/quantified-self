@@ -224,6 +224,7 @@ export const HELP_SECTIONS: HelpSection[] = [
 ### Event swim length tables
 
 - Event details include a **Swim Lengths** table when selected swim activities contain per-length pool data.
+- Swim lengths are grouped into collapsed sets through the next idle/rest length; expand a set to inspect each individual length row.
 - Swim lengths appear in activity tabs and show lap index, duration, distance, length type, stroke, strokes, swim pace, cadence, heart rate, SWOLF, and energy when available.
 - Swim distance, pace, and energy values follow your preferred units from **Settings**.
 

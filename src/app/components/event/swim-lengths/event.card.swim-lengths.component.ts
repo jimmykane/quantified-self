@@ -1,7 +1,11 @@
 import { ChangeDetectionStrategy, ChangeDetectorRef, Component, Input, OnChanges } from '@angular/core';
-import { MatTableDataSource } from '@angular/material/table';
 import {
   ActivityInterface,
+  DataCadence,
+  DataDistance,
+  DataDuration,
+  DataEnergy,
+  DataHeartRate,
   DataInterface,
   DataSwimPace,
   DynamicDataLoader,
@@ -29,15 +33,30 @@ interface SwimLengthTableRow {
 interface SwimLengthTableColumn {
   name: string;
   sticky: boolean;
+  numeric: boolean;
+}
+
+interface SwimLengthRowView {
+  swimLength: AppSwimLength;
+  row: SwimLengthTableRow;
+}
+
+interface SwimLengthGroupView {
+  key: string;
+  label: string;
+  summaryRow: SwimLengthTableRow;
+  restDuration: string;
+  rows: SwimLengthTableRow[];
+  columns: SwimLengthTableColumn[];
+  columnNames: string[];
+  expanded: boolean;
 }
 
 interface SwimLengthActivityView {
   key: string;
   activity: ActivityInterface;
   label: string;
-  dataSource: MatTableDataSource<SwimLengthTableRow>;
-  columns: SwimLengthTableColumn[];
-  columnNames: string[];
+  groups: SwimLengthGroupView[];
 }
 
 interface PendingSwimLengthActivityView extends Omit<SwimLengthActivityView, 'label'> {
@@ -77,21 +96,18 @@ export class EventCardSwimLengthsComponent implements OnChanges {
     const pendingViews: PendingSwimLengthActivityView[] = [];
 
     this.selectedActivities.forEach((activity, index) => {
-      const rows = this.generateSwimLengthData(activity);
-      if (!rows.length) {
+      const rowViews = this.generateSwimLengthRowViews(activity);
+      if (!rowViews.length) {
         return;
       }
 
       const key = this.buildActivityKey(activity, index);
       this.activitiesWithSwimLengths.push(activity);
-      const columns = this.buildColumns(rows);
       pendingViews.push({
         key,
         activity,
         baseLabel: this.resolveActivityLabel(activity),
-        dataSource: new MatTableDataSource(rows),
-        columns,
-        columnNames: columns.map(column => column.name),
+        groups: this.buildSwimLengthGroups(key, rowViews),
       });
     });
 
@@ -111,8 +127,15 @@ export class EventCardSwimLengthsComponent implements OnChanges {
     return `${activityID}-${index}`;
   }
 
-  private generateSwimLengthData(activity: ActivityInterface): SwimLengthTableRow[] {
+  private generateSwimLengthRowViews(activity: ActivityInterface): SwimLengthRowView[] {
     return getActivitySwimLengths(activity).map((swimLength) => ({
+      swimLength,
+      row: this.buildSwimLengthRow(swimLength),
+    }));
+  }
+
+  private buildSwimLengthRow(swimLength: AppSwimLength): SwimLengthTableRow {
+    return {
       '#': swimLength.index,
       Lap: this.formatOptionalInteger(swimLength.lapIndex),
       Duration: this.formatDuration(swimLength),
@@ -125,7 +148,86 @@ export class EventCardSwimLengthsComponent implements OnChanges {
       'Average Heart Rate': this.formatHeartRate(swimLength.avgHeartRate),
       SWOLF: this.formatDecimal(swimLength.swolf),
       Energy: this.formatEnergy(swimLength.calories),
-    }));
+    };
+  }
+
+  private buildSwimLengthGroups(activityKey: string, rowViews: SwimLengthRowView[]): SwimLengthGroupView[] {
+    const groupedRows: SwimLengthRowView[][] = [];
+    let currentGroup: SwimLengthRowView[] = [];
+
+    rowViews.forEach((rowView) => {
+      currentGroup.push(rowView);
+
+      if (this.isIdleOrRestSwimLength(rowView.swimLength)) {
+        groupedRows.push(currentGroup);
+        currentGroup = [];
+      }
+    });
+
+    if (currentGroup.length > 0) {
+      groupedRows.push(currentGroup);
+    }
+
+    return groupedRows.map((groupRows, index) => this.buildSwimLengthGroupView(activityKey, index, groupRows));
+  }
+
+  private buildSwimLengthGroupView(
+    activityKey: string,
+    index: number,
+    rowViews: SwimLengthRowView[],
+  ): SwimLengthGroupView {
+    const rows = rowViews.map(rowView => rowView.row);
+    const firstIndex = rowViews[0]?.swimLength.index ?? index + 1;
+    const lastIndex = rowViews[rowViews.length - 1]?.swimLength.index ?? firstIndex;
+    const columns = this.buildColumns(rows);
+
+    return {
+      key: `${activityKey}-group-${index + 1}-${firstIndex}-${lastIndex}`,
+      label: firstIndex === lastIndex ? `Length ${firstIndex}` : `Lengths ${firstIndex}-${lastIndex}`,
+      summaryRow: this.buildGroupSummaryRow(rowViews),
+      restDuration: this.formatGroupRestDuration(rowViews),
+      rows,
+      columns,
+      columnNames: columns.map(column => column.name),
+      expanded: false,
+    };
+  }
+
+  private buildGroupSummaryRow(rowViews: SwimLengthRowView[]): SwimLengthTableRow {
+    const swimLengths = rowViews.map(rowView => rowView.swimLength);
+    const firstIndex = swimLengths[0]?.index ?? 0;
+    const lastSwimLength = swimLengths[swimLengths.length - 1];
+    const totalDuration = this.sumDataValues(swimLengths, swimLength => swimLength.timerTime ?? swimLength.elapsedTime);
+    const totalDistance = this.sumDataValues(swimLengths, swimLength => swimLength.distance);
+    const totalEnergy = this.sumDataValues(swimLengths, swimLength => swimLength.calories);
+    const totalStrokes = this.sumNumericValues(swimLengths, swimLength => swimLength.strokes);
+    const avgCadence = this.averageDataValues(swimLengths, swimLength => swimLength.avgCadence);
+    const avgHeartRate = this.averageDataValues(swimLengths, swimLength => swimLength.avgHeartRate);
+    const avgSwolf = this.averageNumericValues(swimLengths, swimLength => swimLength.swolf);
+
+    return {
+      '#': firstIndex,
+      Lap: this.formatLapRange(swimLengths),
+      Duration: totalDuration === null ? '' : new DataDuration(totalDuration).getDisplayValue(false, true, true),
+      Distance: totalDistance === null ? '' : this.formatUnitAwareStat(new DataDistance(totalDistance)),
+      Type: this.isIdleOrRestSwimLength(lastSwimLength) ? 'Set + Rest' : 'Set',
+      Stroke: this.getGroupStrokeLabel(swimLengths),
+      Strokes: this.formatOptionalInteger(totalStrokes),
+      'Swim Pace': this.formatGroupSwimPace(totalDuration, totalDistance),
+      'Average Cadence': avgCadence === null ? '' : this.formatCadence(new DataCadence(avgCadence)),
+      'Average Heart Rate': avgHeartRate === null ? '' : this.formatHeartRate(new DataHeartRate(avgHeartRate)),
+      SWOLF: this.formatDecimal(avgSwolf),
+      Energy: totalEnergy === null ? '' : this.formatUnitAwareStat(new DataEnergy(totalEnergy)),
+    };
+  }
+
+  private formatGroupRestDuration(rowViews: SwimLengthRowView[]): string {
+    const restSwimLengths = rowViews
+      .map(rowView => rowView.swimLength)
+      .filter(swimLength => this.isIdleOrRestSwimLength(swimLength));
+    const restDuration = this.sumDataValues(restSwimLengths, swimLength => swimLength.timerTime ?? swimLength.elapsedTime);
+
+    return restDuration === null ? '' : new DataDuration(restDuration).getDisplayValue(false, true, true);
   }
 
   private resolveActivityLabel(activity: ActivityInterface): string {
@@ -165,6 +267,14 @@ export class EventCardSwimLengthsComponent implements OnChanges {
     return this.formatUnitAwareStat(new DataSwimPace(avgSpeed.getValue(DataSwimPace.type) as number));
   }
 
+  private formatGroupSwimPace(totalDuration: number | null, totalDistance: number | null): string {
+    if (totalDuration === null || totalDistance === null || totalDuration <= 0 || totalDistance <= 0) {
+      return '';
+    }
+
+    return this.formatUnitAwareStat(new DataSwimPace((totalDuration / totalDistance) * 100));
+  }
+
   private formatCadence(cadence: AppSwimLength['avgCadence']): string {
     if (cadence === null) {
       return '';
@@ -191,6 +301,22 @@ export class EventCardSwimLengthsComponent implements OnChanges {
 
   private formatOptionalInteger(value: number | null): string {
     return value === null ? '' : `${Math.round(value)}`;
+  }
+
+  private formatLapRange(swimLengths: AppSwimLength[]): string {
+    const lapIndexes = swimLengths
+      .map(swimLength => swimLength.lapIndex)
+      .filter((lapIndex): lapIndex is number => typeof lapIndex === 'number' && Number.isFinite(lapIndex));
+
+    if (lapIndexes.length === 0) {
+      return '';
+    }
+
+    const firstLap = lapIndexes[0];
+    const lastLap = lapIndexes[lapIndexes.length - 1];
+    return firstLap === lastLap
+      ? this.formatOptionalInteger(firstLap)
+      : `${this.formatOptionalInteger(firstLap)}-${this.formatOptionalInteger(lastLap)}`;
   }
 
   private formatLabel(value: string | null): string {
@@ -247,11 +373,106 @@ export class EventCardSwimLengthsComponent implements OnChanges {
     }
   }
 
+  private getGroupStrokeLabel(swimLengths: AppSwimLength[]): string {
+    const activeStrokes = swimLengths
+      .filter(swimLength => !this.isIdleOrRestSwimLength(swimLength))
+      .map(swimLength => swimLength.stroke)
+      .filter((stroke): stroke is string => !!stroke && stroke.trim().length > 0);
+
+    const strokeLabels = new Map<string, string>();
+    activeStrokes.forEach((stroke) => {
+      const normalizedStroke = stroke.trim().toLowerCase();
+      if (!strokeLabels.has(normalizedStroke)) {
+        strokeLabels.set(normalizedStroke, this.formatLabel(stroke));
+      }
+    });
+
+    if (strokeLabels.size === 0) {
+      return '';
+    }
+
+    if (strokeLabels.size === 1) {
+      return [...strokeLabels.values()][0];
+    }
+
+    return 'Mixed';
+  }
+
+  private isIdleOrRestSwimLength(swimLength: AppSwimLength | null | undefined): boolean {
+    const normalizedType = `${swimLength?.type || ''}`.trim().toLowerCase();
+    return normalizedType === 'idle' || normalizedType === 'rest';
+  }
+
+  private sumDataValues(
+    swimLengths: AppSwimLength[],
+    getStat: (swimLength: AppSwimLength) => DataInterface | null,
+  ): number | null {
+    return this.sumNumericValues(swimLengths, swimLength => this.getFiniteDataValue(getStat(swimLength)));
+  }
+
+  private averageDataValues(
+    swimLengths: AppSwimLength[],
+    getStat: (swimLength: AppSwimLength) => DataInterface | null,
+  ): number | null {
+    return this.averageNumericValues(swimLengths, swimLength => this.getFiniteDataValue(getStat(swimLength)));
+  }
+
+  private sumNumericValues(
+    swimLengths: AppSwimLength[],
+    getValue: (swimLength: AppSwimLength) => number | null,
+  ): number | null {
+    let total = 0;
+    let count = 0;
+
+    swimLengths.forEach((swimLength) => {
+      const value = getValue(swimLength);
+      if (typeof value !== 'number' || !Number.isFinite(value)) {
+        return;
+      }
+
+      total += value;
+      count++;
+    });
+
+    return count > 0 ? total : null;
+  }
+
+  private averageNumericValues(
+    swimLengths: AppSwimLength[],
+    getValue: (swimLength: AppSwimLength) => number | null,
+  ): number | null {
+    const total = this.sumNumericValues(swimLengths, getValue);
+    if (total === null) {
+      return null;
+    }
+
+    const count = swimLengths.filter((swimLength) => {
+      const value = getValue(swimLength);
+      return typeof value === 'number' && Number.isFinite(value);
+    }).length;
+
+    return count > 0 ? total / count : null;
+  }
+
+  private getFiniteDataValue(stat: DataInterface | null): number | null {
+    try {
+      const value = stat?.getValue();
+      return typeof value === 'number' && Number.isFinite(value) ? value : null;
+    } catch {
+      return null;
+    }
+  }
+
   private buildColumns(rows: SwimLengthTableRow[]): SwimLengthTableColumn[] {
     return this.calculateColumnNames(rows).map(name => ({
       name,
       sticky: name === '#',
+      numeric: this.isNumericColumn(name),
     }));
+  }
+
+  private isNumericColumn(columnName: string): boolean {
+    return columnName !== 'Type' && columnName !== 'Stroke';
   }
 
   private calculateColumnNames(rows: SwimLengthTableRow[]): string[] {
