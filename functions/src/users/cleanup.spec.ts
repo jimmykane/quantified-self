@@ -16,6 +16,7 @@ const {
     tokensGetMock,
     setMock,
     limitMock,
+    startAfterMock,
     limitGetMock,
     collectionGroupMock,
     collectionGroupWhereMock,
@@ -56,7 +57,8 @@ const {
     });
 
     const limitGetMock = vi.fn().mockResolvedValue({ empty: true, docs: [] });
-    const limitMock = vi.fn().mockReturnValue({ get: limitGetMock });
+    const startAfterMock = vi.fn().mockReturnValue({ get: limitGetMock });
+    const limitMock = vi.fn().mockReturnValue({ get: limitGetMock, startAfter: startAfterMock });
 
     const collectionGroupLimitGetMock = vi.fn().mockResolvedValue({ empty: true, docs: [] });
     const collectionGroupLimitMock = vi.fn().mockReturnValue({ get: collectionGroupLimitGetMock });
@@ -127,6 +129,7 @@ const {
         tokensGetMock,
         setMock,
         limitMock,
+        startAfterMock,
         limitGetMock,
         collectionGroupMock,
         collectionGroupWhereMock,
@@ -190,7 +193,8 @@ describe('cleanupUserAccounts', () => {
         setMock.mockReset().mockResolvedValue({});
         whereMock.mockReset().mockReturnValue({ get: vi.fn().mockResolvedValue({ docs: [] }) });
         limitGetMock.mockReset().mockResolvedValue({ empty: true, docs: [] });
-        limitMock.mockReset().mockReturnValue({ get: limitGetMock });
+        startAfterMock.mockReset().mockReturnValue({ get: limitGetMock });
+        limitMock.mockReset().mockReturnValue({ get: limitGetMock, startAfter: startAfterMock });
         collectionGroupWhereMock.mockReset().mockImplementation(() => ({
             where: collectionGroupWhereMock,
             limit: vi.fn().mockReturnValue({ get: vi.fn().mockResolvedValue({ empty: true, docs: [] }) }),
@@ -955,6 +959,76 @@ describe('cleanupUserAccounts', () => {
             'legacy-provider-only-dlq',
             'account_deletion_cleanup',
         );
+    });
+
+    it('should paginate legacy provider-keyed orphan sweeps beyond the first page', async () => {
+        const wrapped = cleanupUserAccounts;
+        const user = testEnv.auth.makeUserRecord({ uid: 'testUser123' });
+        const firstPageDocs = Array.from({ length: 500 }, (_, index) => ({
+            id: `first-page-sleep-${index}`,
+            ref: { path: `sleepSyncQueue/first-page-sleep-${index}` },
+            data: () => ({
+                provider: 'SuuntoApp',
+                providerUserId: `other-provider-${index}`,
+            }),
+        }));
+
+        tokensGetMock.mockResolvedValue({ empty: true, size: 0, docs: [] });
+        whereMock.mockImplementation((field: string, _operator: string, value: string) => ({
+            get: vi.fn().mockResolvedValue(
+                field === 'uid' && value === 'testUser123'
+                    ? {
+                        docs: [{
+                            id: 'archived-suunto-token',
+                            ref: { path: `${ORPHANED_SERVICE_TOKENS_COLLECTION_NAME}/archived-suunto-token` },
+                            data: () => ({
+                                serviceName: ServiceNames.SuuntoApp,
+                                token: { userName: 'paged-legacy-suunto-provider' },
+                            }),
+                        }],
+                    }
+                    : { docs: [] }
+            )
+        }));
+        limitGetMock
+            .mockResolvedValueOnce({ docs: firstPageDocs })
+            .mockResolvedValueOnce({
+                docs: [{
+                    id: 'second-page-provider-only-sleep',
+                    ref: { path: 'sleepSyncQueue/second-page-provider-only-sleep' },
+                    data: () => ({
+                        provider: 'SuuntoApp',
+                        providerUserId: 'paged-legacy-suunto-provider',
+                    }),
+                }],
+            })
+            .mockResolvedValue({ docs: [] });
+
+        await wrapped(user, { eventId: 'eventId' } as unknown as functions.EventContext);
+
+        expect(startAfterMock).toHaveBeenCalledWith(firstPageDocs[firstPageDocs.length - 1]);
+        expect(recursiveDeleteMock).toHaveBeenCalledWith(expect.objectContaining({
+            path: 'sleepSyncQueue/second-page-provider-only-sleep',
+        }));
+        expect(markQueueItemDeletedForUserCleanupMock).toHaveBeenCalledWith(
+            'sleepSyncQueue',
+            'second-page-provider-only-sleep',
+            'account_deletion_cleanup',
+        );
+    });
+
+    it('should skip legacy provider-keyed orphan sweeps when no provider identifiers were recovered', async () => {
+        const wrapped = cleanupUserAccounts;
+        const user = testEnv.auth.makeUserRecord({ uid: 'testUser123' });
+
+        tokensGetMock.mockResolvedValue({ empty: true, size: 0, docs: [] });
+        whereMock.mockReturnValue({ get: vi.fn().mockResolvedValue({ docs: [] }) });
+
+        await wrapped(user, { eventId: 'eventId' } as unknown as functions.EventContext);
+
+        expect(limitMock).not.toHaveBeenCalled();
+        expect(limitGetMock).not.toHaveBeenCalled();
+        expect(startAfterMock).not.toHaveBeenCalled();
     });
 
     it('should not remove unassociated provider-keyed orphan queue docs during another user cleanup', async () => {

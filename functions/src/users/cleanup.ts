@@ -545,6 +545,12 @@ function providerLookupBelongsToUserIdentifiers(lookup: ProviderQueueLookup, ide
     }
 }
 
+function hasAnyProviderIdentifier(identifiers: UserProviderIdentifiers): boolean {
+    return identifiers.suuntoUserNames.size > 0
+        || identifiers.corosOpenIds.size > 0
+        || identifiers.garminUserIDs.size > 0;
+}
+
 async function shouldDeleteProviderKeyedOperationalDoc(
     db: admin.firestore.Firestore,
     uid: string,
@@ -570,6 +576,10 @@ async function cleanupLegacyProviderKeyedQueueOrphans(
     identifiers: UserProviderIdentifiers,
     deletedRefKeys: Set<string>,
 ): Promise<void> {
+    if (!hasAnyProviderIdentifier(identifiers)) {
+        return;
+    }
+
     const db = admin.firestore();
     const collectionNames = [
         SLEEP_SYNC_QUEUE_COLLECTION_NAME,
@@ -581,38 +591,54 @@ async function cleanupLegacyProviderKeyedQueueOrphans(
 
     for (const collectionName of collectionNames) {
         try {
-            const snapshot = await db.collection(collectionName)
-                .limit(LEGACY_PROVIDER_QUEUE_ORPHAN_SWEEP_LIMIT)
-                .get();
-            for (const doc of getSnapshotDocs(snapshot)) {
-                const refKey = getRefDeduplicationKey(doc.ref);
-                if (deletedRefKeys.has(refKey)) {
-                    continue;
+            let lastDoc: admin.firestore.QueryDocumentSnapshot | null = null;
+            while (true) {
+                let query = db.collection(collectionName).limit(LEGACY_PROVIDER_QUEUE_ORPHAN_SWEEP_LIMIT);
+                if (lastDoc) {
+                    query = query.startAfter(lastDoc);
                 }
 
-                const data = doc.data() as Record<string, unknown>;
-                if (hasFirebaseUidAssociation(collectionName, data)) {
-                    continue;
+                const snapshot = await query.get();
+                const docs = getSnapshotDocs(snapshot);
+                if (docs.length === 0) {
+                    break;
                 }
 
-                const lookup = providerQueueLookupFromCollectionData(collectionName, data);
-                if (
-                    !lookup
-                    || !providerLookupBelongsToUserIdentifiers(lookup, identifiers)
-                    || await hasConnectedTokenForProviderLookup(db, lookup, uid)
-                ) {
-                    continue;
+                for (const doc of docs) {
+                    const refKey = getRefDeduplicationKey(doc.ref);
+                    if (deletedRefKeys.has(refKey)) {
+                        continue;
+                    }
+
+                    const data = doc.data() as Record<string, unknown>;
+                    if (hasFirebaseUidAssociation(collectionName, data)) {
+                        continue;
+                    }
+
+                    const lookup = providerQueueLookupFromCollectionData(collectionName, data);
+                    if (
+                        !lookup
+                        || !providerLookupBelongsToUserIdentifiers(lookup, identifiers)
+                        || await hasConnectedTokenForProviderLookup(db, lookup, uid)
+                    ) {
+                        continue;
+                    }
+
+                    if (!(await markQueueCleanupTombstoneForDeletedOperationalDoc(collectionName, doc))) {
+                        logger.error(`[Cleanup] Preserving legacy provider-keyed orphan doc ${collectionName}/${doc.id} because cleanup tombstone could not be written.`);
+                        continue;
+                    }
+                    await db.recursiveDelete(doc.ref);
+                    deletedRefKeys.add(refKey);
+                    logger.info(
+                        `[Cleanup] Recursively deleted legacy provider-keyed orphan doc ${collectionName}/${doc.id} while cleaning user ${uid}.`,
+                    );
                 }
 
-                if (!(await markQueueCleanupTombstoneForDeletedOperationalDoc(collectionName, doc))) {
-                    logger.error(`[Cleanup] Preserving legacy provider-keyed orphan doc ${collectionName}/${doc.id} because cleanup tombstone could not be written.`);
-                    continue;
+                lastDoc = docs[docs.length - 1];
+                if (docs.length < LEGACY_PROVIDER_QUEUE_ORPHAN_SWEEP_LIMIT) {
+                    break;
                 }
-                await db.recursiveDelete(doc.ref);
-                deletedRefKeys.add(refKey);
-                logger.info(
-                    `[Cleanup] Recursively deleted legacy provider-keyed orphan doc ${collectionName}/${doc.id} while cleaning user ${uid}.`,
-                );
             }
         } catch (error) {
             logger.error(`[Cleanup] Failed legacy provider-keyed orphan sweep for ${collectionName} while cleaning user ${uid}`, error);
