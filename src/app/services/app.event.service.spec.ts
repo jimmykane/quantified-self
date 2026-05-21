@@ -720,6 +720,57 @@ describe('AppEventService', () => {
         );
     });
 
+    it('should pass Firestore swim length rows through to the JSON importer', async () => {
+        const userId = 'user1';
+        const eventId = 'event1';
+        const user = { uid: userId } as any;
+        const activityId = 'activity-1';
+        const rawSwimLength = {
+            index: 1,
+            lapIndex: 1,
+            startDate: 1778945229000,
+            endDate: 1778945254000,
+            type: 'active',
+            stroke: 'freestyle',
+            strokes: 8,
+            elapsedTime: 25,
+            timerTime: 25,
+            distance: 25,
+            poolLength: 25,
+            avgSpeed: 1,
+            avgCadence: 20,
+            avgHeartRate: 140,
+            maxHeartRate: 150,
+            swolf: 39,
+            calories: 4,
+        };
+        const importedActivity = {
+            setID: vi.fn().mockReturnThis(),
+            toJSON: vi.fn().mockReturnValue({}),
+        };
+        const mockActivityData = {
+            id: activityId,
+            eventID: eventId,
+            stats: {},
+            laps: [],
+            streams: [],
+            intensityZones: [],
+            events: [],
+            swimLengths: [rawSwimLength],
+        };
+
+        (collection as Mock).mockReturnValue({});
+        (collectionData as Mock).mockReturnValue(of([mockActivityData]));
+        mocks.getActivityFromJSON.mockReturnValue(importedActivity);
+
+        const activities = await firstValueFrom(service.getActivities(user, eventId));
+
+        expect(activities).toHaveLength(1);
+        expect(mocks.getActivityFromJSON).toHaveBeenCalledWith(expect.objectContaining({
+            swimLengths: [rawSwimLength],
+        }));
+    });
+
     it('should get activities once by event without subscribing to live updates', async () => {
         const userId = 'user1';
         const eventId = 'event-once-1';

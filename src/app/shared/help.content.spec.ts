@@ -105,6 +105,15 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('jump distances display in feet when miles are selected');
   });
 
+  it('should document event swim length tables', () => {
+    const gettingStartedSection = HELP_SECTIONS.find(section => section.id === 'getting-started');
+
+    expect(gettingStartedSection?.content).toContain('Event swim length tables');
+    expect(gettingStartedSection?.content).toContain('**Swim Lengths** table');
+    expect(gettingStartedSection?.content).toContain('per-length pool data');
+    expect(gettingStartedSection?.content).toContain('lap index, duration, distance, length type, stroke, strokes, swim pace, cadence, heart rate, SWOLF, and energy');
+  });
+
   it('should document non-merged event heart-rate and power zone line and fill coloring', () => {
     const gettingStartedSection = HELP_SECTIONS.find(section => section.id === 'getting-started');
 

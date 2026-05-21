@@ -221,6 +221,12 @@ export const HELP_SECTIONS: HelpSection[] = [
 - The jump table appears in activity tabs and only shows columns with available data.
 - Jump metrics use your preferred units from **Settings** when unit conversion is supported.
 
+### Event swim length tables
+
+- Event details include a **Swim Lengths** table when selected swim activities contain per-length pool data.
+- Swim lengths appear in activity tabs and show lap index, duration, distance, length type, stroke, strokes, swim pace, cadence, heart rate, SWOLF, and energy when available.
+- Swim distance, pace, and energy values follow your preferred units from **Settings**.
+
 ### Event chart x-axis fallback
 
 - In Event details, if selected indoor activities do not include distance data, the chart automatically falls back to a **Duration** x-axis.
