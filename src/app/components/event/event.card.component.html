@@ -55,6 +55,13 @@
         }
         }
 
+        @if (hasSwimLengthsFlag()) {
+        <mat-divider></mat-divider>
+        <app-event-card-swim-lengths [selectedActivities]="selectedActivitiesInstant()"
+          [unitSettings]="userUnitSettings()" [event]="activeEvent">
+        </app-event-card-swim-lengths>
+        }
+
         <!-- Laps Section -->
         @if (hasLapsFlag()) {
         <mat-divider></mat-divider>

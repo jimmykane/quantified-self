@@ -317,6 +317,10 @@ describe('EventCardComponent', () => {
         expect(component.hasJumpsFlag()).toBe(false);
     });
 
+    it('should compute hasSwimLengthsFlag as false when no swim lengths', () => {
+        expect(component.hasSwimLengthsFlag()).toBe(false);
+    });
+
     it('should compute hasIntensityZonesFlag as false when no zones', () => {
         expect(component.hasIntensityZonesFlag()).toBe(false);
     });
@@ -363,6 +367,14 @@ describe('EventCardComponent', () => {
         const activityWithData = {
             getID: () => 'act2',
             getLaps: () => [{ type: 'Manual' }],
+            getSwimLengths: () => [{
+                index: 1,
+                lapIndex: 1,
+                startDate: new Date('2024-01-01T00:00:00.000Z'),
+                endDate: new Date('2024-01-01T00:00:25.000Z'),
+                type: 'active',
+                distance: 25,
+            }],
             getAllEvents: () => [{ timestamp: 75, jumpData: { distance: { getDisplayValue: () => '12', getDisplayUnit: () => 'm' } } }],
             intensityZones: [{ zone: 1 }],
             creator: { devices: [{ name: 'HRM' }], name: 'Device', swInfo: '' },
@@ -398,6 +410,28 @@ describe('EventCardComponent', () => {
 
         it('should compute hasJumpsFlag as true when jumps exist', () => {
             expect(component.hasJumpsFlag()).toBe(true);
+        });
+
+        it('should compute hasSwimLengthsFlag as true when swim lengths exist', () => {
+            expect(component.hasSwimLengthsFlag()).toBe(true);
+        });
+
+        it('should compute hasSwimLengthsFlag from selected activities only', () => {
+            const activityWithoutSwimLengths = {
+                ...activityWithData,
+                getID: () => 'act-without-swim-lengths',
+                getSwimLengths: () => [],
+            } as unknown as ActivityInterface;
+            component.event.set({
+                ...eventWithData,
+                getActivities: () => [activityWithData, activityWithoutSwimLengths],
+            } as unknown as EventInterface);
+            component.selectedActivitiesInstant.set([activityWithoutSwimLengths]);
+
+            fixture.detectChanges();
+
+            expect(component.hasSwimLengthsFlag()).toBe(false);
+            expect(fixture.nativeElement.querySelector('app-event-card-swim-lengths')).toBeNull();
         });
 
         it('should compute hasLapsFlag as false when only session end laps exist', () => {

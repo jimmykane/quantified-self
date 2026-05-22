@@ -29,6 +29,8 @@ import {
 import {
   EventChartLapMarker,
   EventChartPanelModel,
+  EventChartSwimLengthMarker,
+  EventChartTimelineMarker,
 } from '../../../../helpers/event-echarts-data.helper';
 import { isEventLapTypeAllowed } from '../../../../helpers/event-lap-type.helper';
 import {
@@ -159,6 +161,8 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
   @Input() showLaps = true;
   @Input() lapTypes: LapTypes[] = [];
   @Input() lapMarkers: EventChartLapMarker[] = [];
+  @Input() showSwimLengths = true;
+  @Input() swimLengthMarkers: EventChartSwimLengthMarker[] = [];
   @Input() emitAxisPointerCursor = false;
   @Input() gainAndLossThreshold = AppUserUtilities.getDefaultGainAndLossThreshold();
   @Input() strokeWidth = AppUserUtilities.getDefaultChartStrokeWidth();
@@ -193,7 +197,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
   private seriesByID = new Map<string, PanelSeriesModel>();
   private seriesDataCache = new WeakMap<EventChartPoint[], Array<[number, number | null]>>();
   private formattedValueCache = new Map<string, string>();
-  private activeLapTooltipKey: string | null = null;
+  private activeMarkerTooltipKey: string | null = null;
   private applyingSharedSelectionRange = false;
   private applyingSharedZoomRange = false;
   private selectionBrushActive = false;
@@ -423,6 +427,8 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       || changes.xDomain
       || changes.showLaps
       || changes.lapMarkers
+      || changes.showSwimLengths
+      || changes.swimLengthMarkers
       || changes.emitAxisPointerCursor
       || changes.strokeWidth
       || changes.fillOpacity
@@ -640,7 +646,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     });
 
     if (seriesOptions[0]) {
-      seriesOptions[0].markLine = this.buildLapMarkLine(chartStyle);
+      seriesOptions[0].markLine = this.buildMarkerMarkLine(chartStyle);
     }
 
     if (overlayPanel) {
@@ -921,10 +927,13 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     ];
   }
 
-  private buildLapMarkLine(chartStyle: ReturnType<typeof buildEventEChartsVisualTokens>): Record<string, unknown> {
+  private buildMarkerMarkLine(chartStyle: ReturnType<typeof buildEventEChartsVisualTokens>): Record<string, unknown> {
     const visibleLapMarkers = this.showLaps
       ? this.lapMarkers.filter((marker) => this.shouldDisplayLapMarker(marker))
       : [];
+    const visibleSwimLengthMarkers = this.showSwimLengths ? this.swimLengthMarkers : [];
+    const visibleMarkers = [...visibleLapMarkers, ...visibleSwimLengthMarkers]
+      .sort((left, right) => left.xValue - right.xValue);
 
     return {
       symbol: 'none',
@@ -941,25 +950,31 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
         width: 1,
         color: chartStyle.lapLineColor,
       },
-      data: this.showLaps
-        ? visibleLapMarkers
-          .map((marker) => ({
-            xAxis: marker.xValue,
-            xValue: marker.xValue,
-            name: marker.label,
-            value: marker.xValue,
-            lapNumber: marker.lapNumber,
-            lapType: marker.lapType,
-            tooltipTitle: marker.tooltipTitle,
-            tooltipDetails: marker.tooltipDetails,
-            lineStyle: {
-              color: marker.color,
-              type: 'dashed',
-              width: 1,
-              opacity: 0.45,
-            },
-          }))
-        : []
+      data: visibleMarkers.map((marker) => ({
+        ...marker,
+        xAxis: marker.xValue,
+        name: marker.label,
+        value: marker.xValue,
+        lineStyle: this.buildMarkerLineStyle(marker),
+      }))
+    };
+  }
+
+  private buildMarkerLineStyle(marker: EventChartTimelineMarker): Record<string, unknown> {
+    if (marker.markerType === 'swimLength') {
+      return {
+        color: marker.color,
+        type: marker.isIdle ? 'dotted' : 'solid',
+        width: 1,
+        opacity: marker.isIdle ? 0.24 : 0.38,
+      };
+    }
+
+    return {
+      color: marker.color,
+      type: 'dashed',
+      width: 1,
+      opacity: 0.45,
     };
   }
 
@@ -1369,7 +1384,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
             opacity: 0,
           },
           data: overviewData,
-          markLine: this.buildLapMarkLine(chartStyle),
+          markLine: this.buildMarkerMarkLine(chartStyle),
         } satisfies ChartLineSeriesOption
       ]
     } as ChartOption;
@@ -1610,13 +1625,16 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
   }
 
   private formatLapMarkerTooltip(params: any): string {
-    const marker = params?.data as EventChartLapMarker | undefined;
+    const marker = params?.data as EventChartTimelineMarker | undefined;
     if (!marker && !params) {
       return '';
     }
 
-    const lapTitle = `${marker?.tooltipTitle || params?.name || marker?.label || `Lap ${marker?.lapNumber || ''}`}`.trim();
-    const lines = [`<div style="font-weight:600;margin-bottom:4px;">${lapTitle}</div>`];
+    const fallbackTitle = marker?.markerType === 'swimLength'
+      ? `Length ${marker.swimLengthIndex || ''}`
+      : (marker?.markerType === 'lap' ? `Lap ${marker.lapNumber || ''}` : '');
+    const markerTitle = `${marker?.tooltipTitle || params?.name || marker?.label || fallbackTitle}`.trim();
+    const lines = [`<div style="font-weight:600;margin-bottom:4px;">${markerTitle}</div>`];
     const detailRows = Array.isArray(marker?.tooltipDetails) ? marker.tooltipDetails : [];
 
     for (let index = 0; index < detailRows.length; index += 1) {
@@ -1637,15 +1655,15 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     }
 
     const chart = this.chartHost.getChart();
-    const marker = params?.data as EventChartLapMarker | undefined;
+    const marker = params?.data as EventChartTimelineMarker | undefined;
     const offsetX = Number(params?.event?.offsetX);
     const offsetY = Number(params?.event?.offsetY);
     if (!chart || !marker || !Number.isFinite(offsetX) || !Number.isFinite(offsetY)) {
       return;
     }
 
-    const tooltipKey = `${marker.lapNumber}|${marker.xValue}`;
-    this.activeLapTooltipKey = tooltipKey;
+    const tooltipKey = `${marker.markerType}|${marker.activityID}|${marker.label}|${marker.xValue}`;
+    this.activeMarkerTooltipKey = tooltipKey;
 
     const chartStyle = buildEventEChartsVisualTokens(this.darkTheme, this.isMobile);
     const tooltipHtml = this.formatLapMarkerTooltip({ data: marker, name: marker.label });
@@ -1676,12 +1694,12 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
   }
 
   private hideLocalLapTooltip(): void {
-    if (!this.activeLapTooltipKey) {
+    if (!this.activeMarkerTooltipKey) {
       return;
     }
 
     const chart = this.chartHost.getChart();
-    this.activeLapTooltipKey = null;
+    this.activeMarkerTooltipKey = null;
     if (!chart) {
       return;
     }

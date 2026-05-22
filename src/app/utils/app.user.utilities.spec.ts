@@ -279,6 +279,7 @@ describe('AppUserUtilities', () => {
             expect((settings.appSettings as any)?.unitSetupCompleted).toBeUndefined();
             expect((settings.appSettings as any)?.dashboardActionPrompts).toEqual({});
             expect(settings.chartSettings?.stackYAxes).toBe(false);
+            expect(settings.chartSettings?.showSwimLengths).toBe(true);
             expect(settings.chartSettings?.syncChartHoverToMap).toBe(false);
             expect(settings.chartSettings?.eventChartOverlayDataTypeByPrimary).toEqual({});
             expect(settings.dashboardSettings?.dateRange).toBe(DateRanges.all);

@@ -18,6 +18,7 @@ import {
   DataDescent,
   DataSpeed,
   DataStrydDistance,
+  DataSwimPace,
   DynamicDataLoader,
   LapTypes,
   LapInterface,
@@ -36,6 +37,7 @@ import {
 import { EventChartRange, normalizeEventRange } from './event-echarts-xaxis.helper';
 import { normalizeUnitDerivedTypeLabel } from './stat-label.helper';
 import { resolveUnitAwareDisplayStat } from '@shared/unit-aware-display';
+import { AppSwimLength, getActivitySwimLengths } from './event-swim-length.helper';
 
 export { normalizeEventLapType } from './event-lap-type.helper';
 
@@ -80,20 +82,38 @@ export interface EventLegendItem {
   color: string;
 }
 
-export interface EventChartLapMarker {
+export type EventChartMarkerType = 'lap' | 'swimLength';
+
+export interface EventChartMarkerTooltipDetail {
+  label: string;
+  value: string;
+}
+
+export interface EventChartMarkerBase {
+  markerType: EventChartMarkerType;
   xValue: number;
   label: string;
   color: string;
-  lapType: string;
-  lapNumber: number;
   activityID: string;
   activityName: string;
   tooltipTitle: string;
-  tooltipDetails: Array<{
-    label: string;
-    value: string;
-  }>;
+  tooltipDetails: EventChartMarkerTooltipDetail[];
 }
+
+export interface EventChartLapMarker extends EventChartMarkerBase {
+  markerType: 'lap';
+  lapType: string;
+  lapNumber: number;
+}
+
+export interface EventChartSwimLengthMarker extends EventChartMarkerBase {
+  markerType: 'swimLength';
+  swimLengthIndex: number;
+  swimLengthType: string;
+  isIdle: boolean;
+}
+
+export type EventChartTimelineMarker = EventChartLapMarker | EventChartSwimLengthMarker;
 
 export interface BuildEventChartPanelsInput {
   selectedActivities: ActivityInterface[];
@@ -458,6 +478,7 @@ export function buildEventLapMarkers(input: {
       }
 
       markers.push({
+        markerType: 'lap',
         xValue,
         label: `Lap ${index + 1}`,
         color: input.eventColorService.getActivityColor(input.allActivities, activity),
@@ -467,6 +488,54 @@ export function buildEventLapMarkers(input: {
         activityName: activity.creator?.name || 'Activity',
         tooltipTitle: `Lap ${index + 1}`,
         tooltipDetails: buildLapTooltipDetails(lap, input.userUnitSettings),
+      });
+    });
+  });
+
+  return markers.sort((left, right) => left.xValue - right.xValue);
+}
+
+export function buildEventSwimLengthMarkers(input: {
+  selectedActivities: ActivityInterface[];
+  allActivities: ActivityInterface[];
+  xAxisType: XAxisTypes;
+  eventColorService: AppEventColorService;
+  userUnitSettings?: UserUnitSettingsInterface | null;
+}): EventChartSwimLengthMarker[] {
+  const markers: EventChartSwimLengthMarker[] = [];
+
+  input.selectedActivities.forEach((activity) => {
+    const swimLengths = getActivitySwimLengths(activity);
+    if (!swimLengths.length) {
+      return;
+    }
+
+    const activityCache = createActivityNumericCache(activity);
+    const distanceLookup = input.xAxisType === XAxisTypes.Distance
+      ? createLapDistanceLookup(activity, activityCache)
+      : null;
+    const activityColor = input.eventColorService.getActivityColor(input.allActivities, activity);
+
+    swimLengths.forEach((swimLength) => {
+      const xValue = resolveSwimLengthAxisValue(activity, swimLength, input.xAxisType, activityCache, distanceLookup);
+      if (!Number.isFinite(xValue)) {
+        return;
+      }
+
+      const typeLabel = formatSwimLengthLabel(swimLength.type);
+      const label = `Length ${swimLength.index}`;
+      markers.push({
+        markerType: 'swimLength',
+        xValue,
+        label,
+        color: activityColor,
+        swimLengthIndex: swimLength.index,
+        swimLengthType: swimLength.type,
+        isIdle: isIdleSwimLength(swimLength),
+        activityID: activity.getID() || '',
+        activityName: activity.creator?.name || 'Activity',
+        tooltipTitle: typeLabel ? `${label} (${typeLabel})` : label,
+        tooltipDetails: buildSwimLengthTooltipDetails(swimLength, input.userUnitSettings),
       });
     });
   });
@@ -962,6 +1031,38 @@ function resolveLapAxisValue(
   return lookup.distanceValues[closestIndex];
 }
 
+function resolveSwimLengthAxisValue(
+  activity: ActivityInterface,
+  swimLength: AppSwimLength,
+  xAxisType: XAxisTypes,
+  activityCache: ActivityNumericCache,
+  distanceLookup: LapDistanceLookup | null = null
+): number {
+  const endTimeMs = swimLength.endDate?.getTime();
+  if (!Number.isFinite(endTimeMs)) {
+    return Number.NaN;
+  }
+
+  if (xAxisType === XAxisTypes.Time) {
+    return endTimeMs as number;
+  }
+
+  if (xAxisType === XAxisTypes.Duration) {
+    return ((endTimeMs as number) - activity.startDate.getTime()) / 1000;
+  }
+
+  const lookup = distanceLookup ?? createLapDistanceLookup(activity, activityCache);
+  if (!lookup || !lookup.absoluteTimes.length) {
+    return Number.NaN;
+  }
+
+  const closestIndex = lookup.isMonotonic
+    ? findClosestMonotonicIndex(lookup.absoluteTimes, endTimeMs as number)
+    : findClosestLinearIndex(lookup.absoluteTimes, endTimeMs as number);
+
+  return lookup.distanceValues[closestIndex];
+}
+
 function resolveLapEndIndex(activity: ActivityInterface, lap: LapInterface): number | null {
   if (typeof lap.getEndIndex !== 'function') {
     return null;
@@ -1046,8 +1147,8 @@ function createActivityNumericCache(
 function buildLapTooltipDetails(
   lap: LapInterface,
   unitSettings?: UserUnitSettingsInterface | null
-): Array<{ label: string; value: string }> {
-  const details: Array<{ label: string; value: string }> = [];
+): EventChartMarkerTooltipDetail[] {
+  const details: EventChartMarkerTooltipDetail[] = [];
 
   const duration = lap.getDuration?.();
   const durationValue = formatLapDataValue(duration, { compactDuration: true });
@@ -1078,13 +1179,48 @@ function buildLapTooltipDetails(
   return details;
 }
 
-function appendLapDetail(
-  details: Array<{ label: string; value: string }>,
-  label: string,
-  data: DataInterface | void,
+function buildSwimLengthTooltipDetails(
+  swimLength: AppSwimLength,
   unitSettings?: UserUnitSettingsInterface | null
+): EventChartMarkerTooltipDetail[] {
+  const details: EventChartMarkerTooltipDetail[] = [];
+
+  appendTextDetail(details, 'Lap', formatNullableInteger(swimLength.lapIndex));
+  appendLapDetail(details, 'Duration', swimLength.timerTime ?? swimLength.elapsedTime, unitSettings, { compactDuration: true });
+  appendLapDetail(details, 'Distance', swimLength.distance ?? undefined, unitSettings);
+  appendTextDetail(details, 'Type', formatSwimLengthLabel(swimLength.type));
+  appendTextDetail(details, 'Stroke', formatSwimLengthLabel(swimLength.stroke));
+  appendTextDetail(details, 'Strokes', formatNullableInteger(swimLength.strokes));
+  appendLapDetail(details, 'Swim Pace', getSwimLengthPace(swimLength), unitSettings);
+  appendLapDetail(details, 'Avg Cadence', swimLength.avgCadence ?? undefined, unitSettings);
+  appendLapDetail(details, 'Avg Heart Rate', swimLength.avgHeartRate ?? undefined, unitSettings);
+  appendLapDetail(details, 'Max Heart Rate', swimLength.maxHeartRate ?? undefined, unitSettings);
+  appendTextDetail(details, 'SWOLF', formatNullableNumber(swimLength.swolf));
+  appendLapDetail(details, 'Energy', swimLength.calories ?? undefined, unitSettings);
+
+  return details;
+}
+
+function appendLapDetail(
+  details: EventChartMarkerTooltipDetail[],
+  label: string,
+  data: DataInterface | null | void,
+  unitSettings?: UserUnitSettingsInterface | null,
+  options?: { compactDuration?: boolean }
 ): void {
-  const value = formatLapDataValue(data, undefined, unitSettings);
+  const value = formatLapDataValue(data, options, unitSettings);
+  if (!value) {
+    return;
+  }
+
+  details.push({ label, value });
+}
+
+function appendTextDetail(
+  details: EventChartMarkerTooltipDetail[],
+  label: string,
+  value: string
+): void {
   if (!value) {
     return;
   }
@@ -1093,7 +1229,7 @@ function appendLapDetail(
 }
 
 function formatLapDataValue(
-  data: DataInterface | void,
+  data: DataInterface | null | void,
   options?: { compactDuration?: boolean },
   unitSettings?: UserUnitSettingsInterface | null
 ): string {
@@ -1116,7 +1252,7 @@ function formatLapDataValue(
       stripRepeatedUnit: true,
     })?.text;
     if (unitAwareValue) {
-      return unitAwareValue;
+      return normalizeDisplayUnitText(unitAwareValue);
     }
   }
 
@@ -1125,7 +1261,52 @@ function formatLapDataValue(
     return '';
   }
 
-  return `${displayValue}${data.getDisplayUnit?.() ?? ''}`.trim();
+  return normalizeDisplayUnitText(`${displayValue}${data.getDisplayUnit?.() ?? ''}`.trim());
+}
+
+function normalizeDisplayUnitText(value: string): string {
+  return value
+    .replace(/\/100\s*yards?/gi, '/100yd')
+    .replace(/\/100yrd/gi, '/100yd')
+    .replace(/\byrds?\b/gi, 'yd');
+}
+
+function getSwimLengthPace(swimLength: AppSwimLength): DataSwimPace | null {
+  const speedValue = swimLength.avgSpeed?.getValue?.();
+  if (typeof speedValue !== 'number' || !Number.isFinite(speedValue) || speedValue <= 0) {
+    return null;
+  }
+
+  return new DataSwimPace(100 / speedValue);
+}
+
+function formatNullableInteger(value: number | null | undefined): string {
+  return typeof value === 'number' && Number.isFinite(value) ? `${Math.round(value)}` : '';
+}
+
+function formatNullableNumber(value: number | null | undefined): string {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return '';
+  }
+
+  return Number.isInteger(value) ? `${value}` : value.toFixed(1);
+}
+
+function formatSwimLengthLabel(value: string | null | undefined): string {
+  if (!value) {
+    return '';
+  }
+
+  return `${value}`
+    .replace(/[_-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/\b\w/g, match => match.toUpperCase());
+}
+
+function isIdleSwimLength(swimLength: AppSwimLength): boolean {
+  const type = `${swimLength.type || ''}`.toLowerCase();
+  return type.includes('idle') || type.includes('rest');
 }
 
 function getStreamNumericValues(stream: StreamInterface, cache: ActivityNumericCache): number[] {

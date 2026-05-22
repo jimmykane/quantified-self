@@ -60,6 +60,31 @@ describe('firestore-write-sanitizer', () => {
     expect(hasStreamsKey(sourcePayload)).toBe(true);
   });
 
+  it('sanitizeActivityFirestoreWritePayload preserves swim lengths while stripping nested streams', () => {
+    const payload = sanitizeActivityFirestoreWritePayload({
+      name: 'Swim',
+      swimLengths: [
+        {
+          index: 1,
+          lapIndex: 1,
+          type: 'active',
+          distance: 25,
+          streams: [{ type: 'Speed', values: [1.2] }],
+        },
+      ],
+    });
+
+    expect(payload.swimLengths).toEqual([
+      {
+        index: 1,
+        lapIndex: 1,
+        type: 'active',
+        distance: 25,
+      },
+    ]);
+    expect(hasStreamsKey(payload)).toBe(false);
+  });
+
   it('sanitizeActivityFirestoreWritePayload does not mutate nested source references', () => {
     const sourcePayload = {
       segments: [

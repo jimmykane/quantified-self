@@ -55,6 +55,7 @@ describe('UserSettingsComponent', () => {
                 fillOpacity: 1,
                 lapTypes: [],
                 showLaps: true,
+                showSwimLengths: true,
                 showGrid: true,
                 stackYAxes: true,
                 xAxisType: 'time',

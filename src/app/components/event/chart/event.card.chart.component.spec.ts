@@ -31,6 +31,7 @@ describe('EventCardChartComponent', () => {
   const defaultChartSettings = {
     showAllData: false,
     showLaps: true,
+    showSwimLengths: true,
     syncChartHoverToMap: false,
     lapTypes: [],
     xAxisType: XAxisTypes.Duration,
@@ -96,6 +97,7 @@ describe('EventCardChartComponent', () => {
 
     vi.spyOn(eventDataHelper, 'buildEventChartPanels').mockReturnValue([]);
     vi.spyOn(eventDataHelper, 'buildEventLapMarkers').mockReturnValue([]);
+    vi.spyOn(eventDataHelper, 'buildEventSwimLengthMarkers').mockReturnValue([]);
 
     await TestBed.configureTestingModule({
       imports: [MaterialModule, NoopAnimationsModule],
@@ -177,6 +179,76 @@ describe('EventCardChartComponent', () => {
 
     expect(buildPanelsSpy).toHaveBeenCalledWith(expect.objectContaining({
       colorIntensityZoneLines: true,
+    }));
+  });
+
+  it('does not build swim length markers when selected activities have none', async () => {
+    const buildSwimLengthMarkersSpy = vi.spyOn(eventDataHelper, 'buildEventSwimLengthMarkers').mockReturnValue([]);
+    const activity = {
+      getID: () => 'run-1',
+      getSwimLengths: () => [],
+    } as any;
+    component.selectedActivities = [activity];
+    component.event = {
+      isMultiSport: () => false,
+      getActivities: () => [activity],
+      getID: () => 'event-1',
+    } as any;
+
+    fixture.detectChanges();
+    await fixture.whenStable();
+    await flushMicrotasks();
+
+    expect(component.hasSelectedSwimLengths).toBe(false);
+    expect(component.swimLengthMarkers).toEqual([]);
+    expect(buildSwimLengthMarkersSpy).not.toHaveBeenCalled();
+  });
+
+  it('builds swim length markers when selected activities have swim lengths', async () => {
+    const marker = {
+      markerType: 'swimLength',
+      xValue: 25,
+      label: 'Length 1',
+      color: '#00aaff',
+      swimLengthIndex: 1,
+      swimLengthType: 'active',
+      isIdle: false,
+      activityID: 'swim-1',
+      activityName: 'Garmin',
+      tooltipTitle: 'Length 1 (Active)',
+      tooltipDetails: [],
+    } as any;
+    const buildSwimLengthMarkersSpy = vi.spyOn(eventDataHelper, 'buildEventSwimLengthMarkers').mockReturnValue([marker]);
+    const activity = {
+      startDate: new Date('2024-01-01T00:00:00.000Z'),
+      creator: { name: 'Garmin' },
+      getID: () => 'swim-1',
+      getSwimLengths: () => [
+        {
+          index: 1,
+          startDate: new Date('2024-01-01T00:00:00.000Z'),
+          endDate: new Date('2024-01-01T00:00:25.000Z'),
+          type: 'active',
+        },
+      ],
+    } as any;
+    component.selectedActivities = [activity];
+    component.event = {
+      isMultiSport: () => false,
+      getActivities: () => [activity],
+      getID: () => 'event-1',
+    } as any;
+
+    fixture.detectChanges();
+    await fixture.whenStable();
+    await flushMicrotasks();
+
+    expect(component.hasSelectedSwimLengths).toBe(true);
+    expect(component.swimLengthMarkers).toEqual([marker]);
+    expect(buildSwimLengthMarkersSpy).toHaveBeenCalledWith(expect.objectContaining({
+      selectedActivities: [activity],
+      allActivities: [activity],
+      xAxisType: XAxisTypes.Duration,
     }));
   });
 
@@ -349,6 +421,15 @@ describe('EventCardChartComponent', () => {
     component.showAllData = true;
 
     expect(mockUserSettingsQuery.updateChartSettings).toHaveBeenCalledWith({ showAllData: true });
+  });
+
+  it('should persist showSwimLengths changes independently of showLaps', async () => {
+    fixture.detectChanges();
+
+    component.showSwimLengths = false;
+
+    expect(mockUserSettingsQuery.updateChartSettings).toHaveBeenCalledWith({ showSwimLengths: false });
+    expect(mockUserSettingsQuery.updateChartSettings).not.toHaveBeenCalledWith({ showLaps: false });
   });
 
   it('should persist xAxisType changes', async () => {

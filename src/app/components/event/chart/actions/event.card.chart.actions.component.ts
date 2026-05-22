@@ -28,6 +28,8 @@ export class EventCardChartActionsComponent implements OnChanges {
   @Input() canSelectDistanceXAxis = true;
   @Input() showAllData: boolean;
   @Input() showLaps: boolean;
+  @Input() showSwimLengths: boolean;
+  @Input() showSwimLengthsToggle = false;
   @Input() cursorBehaviour: ChartCursorBehaviours = ChartCursorBehaviours.ZoomX;
   @Input() syncChartHoverToMap = false;
   @Input() fillOpacity = 0;
@@ -37,6 +39,7 @@ export class EventCardChartActionsComponent implements OnChanges {
   @Input() showResetChartState = false;
   @Output() showAllDataChange: EventEmitter<boolean> = new EventEmitter<boolean>();
   @Output() showLapsChange: EventEmitter<boolean> = new EventEmitter<boolean>();
+  @Output() showSwimLengthsChange: EventEmitter<boolean> = new EventEmitter<boolean>();
   @Output() xAxisTypeChange: EventEmitter<XAxisTypes> = new EventEmitter<XAxisTypes>();
   @Output() fillOpacityChange = new EventEmitter<number>();
   @Output() cursorBehaviourChange = new EventEmitter<ChartCursorBehaviours>();
@@ -97,6 +100,11 @@ export class EventCardChartActionsComponent implements OnChanges {
     await this.somethingChanged('showLaps');
   }
 
+  async onShowSwimLengthsToggle(checked: boolean) {
+    this.showSwimLengths = checked;
+    await this.somethingChanged('showSwimLengths');
+  }
+
   async onShowAllDataToggle(checked: boolean) {
     this.showAllData = checked;
     await this.somethingChanged('showAllData');
@@ -152,6 +160,8 @@ export class EventCardChartActionsComponent implements OnChanges {
       this.showAllDataChange.emit(this.showAllData);
     } else if (prop === 'showLaps') {
       this.showLapsChange.emit(this.showLaps);
+    } else if (prop === 'showSwimLengths') {
+      this.showSwimLengthsChange.emit(this.showSwimLengths);
     } else {
       // Fallback for safety if called without prop
       this.xAxisTypeChange.emit(this.xAxisType);
@@ -160,6 +170,7 @@ export class EventCardChartActionsComponent implements OnChanges {
       this.syncChartHoverToMapChange.emit(this.syncChartHoverToMap);
       this.showAllDataChange.emit(this.showAllData);
       this.showLapsChange.emit(this.showLaps);
+      this.showSwimLengthsChange.emit(this.showSwimLengths);
     }
 
     this.analyticsService.logEvent('event_chart_settings_change', { property: prop });
