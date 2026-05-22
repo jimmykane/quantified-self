@@ -10,7 +10,16 @@ import { AppUserService } from '../../services/app.user.service';
 import { AppFileService } from '../../services/app.file.service';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { LoggerService } from '../../services/logger.service';
-import { DataDistance, DistanceUnits } from '@sports-alliance/sports-lib';
+import {
+  ActivityTypes,
+  DataActivityTypes,
+  DataDistance,
+  DataSpeed,
+  DataSpeedAvg,
+  DataSwimPace,
+  DistanceUnits,
+  SwimPaceUnits
+} from '@sports-alliance/sports-lib';
 
 describe('EventsExportFormComponent', () => {
   let fixture: ComponentFixture<EventsExportFormComponent>;
@@ -149,5 +158,46 @@ describe('EventsExportFormComponent', () => {
 
     const blob = mockFileService.downloadFile.mock.calls[0][0] as Blob;
     await expect(readBlobText(blob)).resolves.toContain('"6.22 mi"');
+  });
+
+  it('exports swim pace fallback with 100-yard units through sports-lib speed conversion', async () => {
+    const speedGetValueSpy = vi.spyOn(DataSpeed.prototype, 'getValue');
+    const activityTypes = new DataActivityTypes([ActivityTypes.swimming]);
+    const speedAvg = new DataSpeedAvg(1);
+
+    component.user.settings.unitSettings = {
+      swimPaceUnits: [SwimPaceUnits.MinutesPer100Yard],
+    } as any;
+    component.exportFromGroup.get('averageSwimPace')?.setValue(true);
+    component.events = [{
+      startDate: new Date('2024-01-01T08:00:00Z'),
+      endDate: new Date('2024-01-01T09:00:00Z'),
+      name: 'Swim Event',
+      description: '',
+      getStat: vi.fn((type: string) => {
+        if (type === DataActivityTypes.type) {
+          return activityTypes;
+        }
+        if (type === DataSpeedAvg.type) {
+          return speedAvg;
+        }
+        return null;
+      }),
+      getDistance: vi.fn(() => new DataDistance(1000)),
+      getDuration: vi.fn(),
+      getID: vi.fn().mockReturnValue('event-swim-1'),
+    } as any];
+
+    await component.onSubmit({
+      preventDefault: vi.fn(),
+      stopPropagation: vi.fn(),
+    });
+
+    const blob = mockFileService.downloadFile.mock.calls[0][0] as Blob;
+    const csv = await readBlobText(blob);
+    expect(csv).toContain('Average Swim Pace');
+    expect(csv).toContain('"01:31 min/100yrd"');
+    expect(speedGetValueSpy).not.toHaveBeenCalledWith(DataSwimPace.type);
+    speedGetValueSpy.mockRestore();
   });
 });

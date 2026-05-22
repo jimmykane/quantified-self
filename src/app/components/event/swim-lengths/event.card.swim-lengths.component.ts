@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, ChangeDetectorRef, Component, Input, OnChanges } from '@angular/core';
 import {
   ActivityInterface,
+  convertSpeedToSwimPace,
   DataCadence,
   DataDistance,
   DataDuration,
@@ -264,7 +265,7 @@ export class EventCardSwimLengthsComponent implements OnChanges {
       return '';
     }
 
-    return this.formatUnitAwareStat(new DataSwimPace(avgSpeed.getValue(DataSwimPace.type) as number));
+    return this.formatUnitAwareStat(new DataSwimPace(convertSpeedToSwimPace(speed)));
   }
 
   private formatGroupSwimPace(totalDuration: number | null, totalDistance: number | null): string {
@@ -272,7 +273,7 @@ export class EventCardSwimLengthsComponent implements OnChanges {
       return '';
     }
 
-    return this.formatUnitAwareStat(new DataSwimPace((totalDuration / totalDistance) * 100));
+    return this.formatUnitAwareStat(new DataSwimPace(convertSpeedToSwimPace(totalDistance / totalDuration)));
   }
 
   private formatCadence(cadence: AppSwimLength['avgCadence']): string {

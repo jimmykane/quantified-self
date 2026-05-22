@@ -1,7 +1,14 @@
 import { ChangeDetectorRef, NO_ERRORS_SCHEMA } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { ActivityInterface, EventInterface, SwimPaceUnits, UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
+import {
+  ActivityInterface,
+  DataSpeed,
+  DataSwimPace,
+  EventInterface,
+  SwimPaceUnits,
+  UserUnitSettingsInterface
+} from '@sports-alliance/sports-lib';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { vi } from 'vitest';
@@ -99,6 +106,7 @@ describe('EventCardSwimLengthsComponent', () => {
   });
 
   it('should format swim pace with selected 100-yard units', () => {
+    const speedGetValueSpy = vi.spyOn(DataSpeed.prototype, 'getValue');
     const activity = createActivity([
       createSwimLength(),
     ]);
@@ -109,8 +117,12 @@ describe('EventCardSwimLengthsComponent', () => {
     component.selectedActivities = [activity];
     component.ngOnChanges();
 
+    expect(component.swimLengthViews[0].groups[0].rows[0]['Swim Pace']).toContain('01:31');
     expect(component.swimLengthViews[0].groups[0].rows[0]['Swim Pace']).toContain('min/100yrd');
+    expect(component.swimLengthViews[0].groups[0].summaryRow['Swim Pace']).toContain('01:31');
     expect(component.swimLengthViews[0].groups[0].summaryRow['Swim Pace']).toContain('min/100yrd');
+    expect(speedGetValueSpy).not.toHaveBeenCalledWith(DataSwimPace.type);
+    speedGetValueSpy.mockRestore();
   });
 
   it('should group active rows through the following idle row and keep a final active group', () => {
