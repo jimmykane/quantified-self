@@ -14,9 +14,26 @@ export const ACTIVITY_PROCESSING_HTTPS_RUNTIME_OPTIONS = {
   timeoutSeconds: 3600,
 } as const;
 
+export const REPARSE_PROCESSING_RUNTIME_BASE_OPTIONS = {
+  memory: '1GiB',
+  cpu: 2,
+  concurrency: 1,
+} as const;
+
+export const REPARSE_PROCESSING_HTTPS_RUNTIME_OPTIONS = {
+  ...REPARSE_PROCESSING_RUNTIME_BASE_OPTIONS,
+  maxInstances: 20,
+  timeoutSeconds: 3600,
+} as const;
+
 // Cloud Tasks functions cannot use the 3600s HTTPS/callable maximum; their
 // documented maximum is 1800s.
 export const ACTIVITY_PROCESSING_TASK_RUNTIME_OPTIONS = {
   ...ACTIVITY_PROCESSING_RUNTIME_BASE_OPTIONS,
+  timeoutSeconds: 1800,
+} as const;
+
+export const REPARSE_PROCESSING_TASK_RUNTIME_OPTIONS = {
+  ...REPARSE_PROCESSING_RUNTIME_BASE_OPTIONS,
   timeoutSeconds: 1800,
 } as const;

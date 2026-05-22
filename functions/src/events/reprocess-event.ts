@@ -5,7 +5,7 @@ import * as logger from 'firebase-functions/logger';
 import { ALLOWED_CORS_ORIGINS, enforceAppCheck } from '../utils';
 import { reparseEventFromOriginalFiles } from '../reparse/sports-lib-reparse.service';
 import { FUNCTIONS_MANIFEST } from '../../../shared/functions-manifest';
-import { ACTIVITY_PROCESSING_HTTPS_RUNTIME_OPTIONS } from '../shared/activity-processing-config';
+import { REPARSE_PROCESSING_HTTPS_RUNTIME_OPTIONS } from '../shared/activity-processing-config';
 
 type ReprocessMode = 'reimport' | 'regenerate';
 
@@ -16,7 +16,7 @@ interface ReprocessEventRequest {
 
 export const reprocessEvent = onCall({
   region: FUNCTIONS_MANIFEST.reprocessEvent.region,
-  ...ACTIVITY_PROCESSING_HTTPS_RUNTIME_OPTIONS,
+  ...REPARSE_PROCESSING_HTTPS_RUNTIME_OPTIONS,
   cors: ALLOWED_CORS_ORIGINS,
 }, async (request) => {
   if (!request.auth) {
