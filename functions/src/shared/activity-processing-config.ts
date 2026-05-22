@@ -3,7 +3,7 @@ export const MAX_ACTIVITY_DECOMPRESSED_BYTES = 512 * 1024 * 1024;
 export const MAX_ACTIVITY_DECOMPRESSED_BYTES_LABEL = '512MB';
 
 export const ACTIVITY_PROCESSING_RUNTIME_BASE_OPTIONS = {
-  memory: '4GiB',
+  memory: '2GiB',
   cpu: 2,
   concurrency: 1,
 } as const;

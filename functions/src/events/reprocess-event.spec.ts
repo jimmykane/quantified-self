@@ -66,7 +66,7 @@ describe('reprocessEvent', () => {
 
     it('should register with shared activity processing runtime limits', () => {
         expect(hoisted.getOnCallOptions()).toMatchObject({
-            memory: '4GiB',
+            memory: '2GiB',
             cpu: 2,
             concurrency: 1,
             timeoutSeconds: 3600,
