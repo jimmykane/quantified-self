@@ -23,6 +23,10 @@ import { generateActivityIDFromSourceKey } from '../shared/id-generator';
 import { ProcessingMetaData } from '../shared/processing-metadata.interface';
 import { SPORTS_LIB_VERSION } from '../shared/sports-lib-version.node';
 import { SPORTS_LIB_REPARSE_TARGET_VERSION } from './sports-lib-reparse.config';
+import {
+    MAX_ACTIVITY_DECOMPRESSED_BYTES,
+    MAX_ACTIVITY_DECOMPRESSED_BYTES_LABEL,
+} from '../shared/activity-processing-config';
 
 export const SPORTS_LIB_REPARSE_CHECKPOINT_PATH = 'systemJobs/sportsLibReparse';
 export const SPORTS_LIB_REPARSE_JOBS_COLLECTION = 'sportsLibReparseJobs';
@@ -167,6 +171,23 @@ function bufferToArrayBuffer(buffer: Buffer): ArrayBuffer {
 
 function decodeText(buffer: Buffer): string {
     return new TextDecoder().decode(bufferToArrayBuffer(buffer));
+}
+
+function maybeDecompressOriginalFile(path: string, rawBytes: Buffer): Buffer {
+    if (!isGzip(path)) {
+        return rawBytes;
+    }
+
+    try {
+        return gunzipSync(rawBytes, { maxOutputLength: MAX_ACTIVITY_DECOMPRESSED_BYTES });
+    } catch (error) {
+        if ((error as { code?: unknown } | undefined)?.code === 'ERR_BUFFER_TOO_LARGE') {
+            throw new Error(
+                `Original file is too large after decompression. Maximum decompressed size is ${MAX_ACTIVITY_DECOMPRESSED_BYTES_LABEL}.`,
+            );
+        }
+        throw error;
+    }
 }
 
 function normalizeBucketName(bucketName?: string): string | null {
@@ -424,7 +445,7 @@ export async function parseFromOriginalFilesStrict(sourceFiles: SourceFileMeta[]
                 });
             }
             const rawBytes = downloadResult.rawBytes;
-            const fileBytes = isGzip(sourceFile.path) ? gunzipSync(rawBytes) : rawBytes;
+            const fileBytes = maybeDecompressOriginalFile(sourceFile.path, rawBytes);
             const sourceContentHash = createHash('sha256').update(fileBytes).digest('hex');
             sourceContentHashes.push(sourceContentHash);
             const extension = normalizeExtension(sourceFile.path);

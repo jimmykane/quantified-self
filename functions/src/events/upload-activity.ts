@@ -24,11 +24,13 @@ import { SPORTS_LIB_VERSION } from '../shared/sports-lib-version.node';
 import { sportsLibVersionToCode } from '../reparse/sports-lib-reparse.service';
 import { USAGE_LIMITS } from '../../../shared/limits';
 import { FUNCTIONS_MANIFEST } from '../../../shared/functions-manifest';
+import {
+  ACTIVITY_PROCESSING_HTTPS_RUNTIME_OPTIONS,
+  MAX_ACTIVITY_DECOMPRESSED_BYTES,
+  MAX_ACTIVITY_DECOMPRESSED_BYTES_LABEL,
+  MAX_ACTIVITY_UPLOAD_BYTES,
+} from '../shared/activity-processing-config';
 
-const MAX_UPLOAD_BYTES = 20 * 1024 * 1024;
-// Protect against gzip zip-bombs: input is capped at 20MB, but decompressed output
-// could otherwise expand to hundreds of MB/GB and OOM the function instance.
-const MAX_DECOMPRESSED_UPLOAD_BYTES = 512 * 1024 * 1024;
 const SUPPORTED_BASE_EXTENSIONS = new Set(['fit', 'gpx', 'tcx', 'json', 'sml']);
 
 class HttpStatusError extends Error {
@@ -125,16 +127,19 @@ function maybeDecompressPayloadForParsing(payload: Buffer, resolvedExtension: st
   }
 
   try {
-    return gunzipSync(payload, { maxOutputLength: MAX_DECOMPRESSED_UPLOAD_BYTES });
+    return gunzipSync(payload, { maxOutputLength: MAX_ACTIVITY_DECOMPRESSED_BYTES });
   } catch (error) {
     logger.warn('[uploadActivity] Gzip decompression failed', {
       error,
       compressedBytes: payload.length,
-      maxDecompressedBytes: MAX_DECOMPRESSED_UPLOAD_BYTES,
+      maxDecompressedBytes: MAX_ACTIVITY_DECOMPRESSED_BYTES,
       resolvedExtension,
     });
     if ((error as { code?: unknown } | undefined)?.code === 'ERR_BUFFER_TOO_LARGE') {
-      throw new HttpStatusError(400, 'File is too large after decompression. Maximum decompressed size is 512MB.');
+      throw new HttpStatusError(
+        400,
+        `File is too large after decompression. Maximum decompressed size is ${MAX_ACTIVITY_DECOMPRESSED_BYTES_LABEL}.`,
+      );
     }
     throw new HttpStatusError(400, 'Could not decompress uploaded payload.');
   }
@@ -318,11 +323,7 @@ async function persistProcessingMetadata(userID: string, eventID: string): Promi
 
 export const uploadActivity = onRequest({
   region: FUNCTIONS_MANIFEST.uploadActivity.region,
-  memory: '8GiB',
-  cpu: 2,
-  concurrency: 1,
-  timeoutSeconds: 3600,
-  maxInstances: 20,
+  ...ACTIVITY_PROCESSING_HTTPS_RUNTIME_OPTIONS,
   cors: ALLOWED_CORS_ORIGINS,
 }, async (request, response) => {
   if (request.method !== 'POST') {
@@ -347,7 +348,7 @@ export const uploadActivity = onRequest({
       throw new HttpStatusError(400, 'File payload is empty.');
     }
 
-    if (rawBody.length > MAX_UPLOAD_BYTES) {
+    if (rawBody.length > MAX_ACTIVITY_UPLOAD_BYTES) {
       throw new HttpStatusError(400, `File is too large (${(rawBody.length / 1024 / 1024).toFixed(1)}MB). Maximum size is 20MB.`);
     }
 

@@ -7,6 +7,7 @@ const LOWER_SPORTS_LIB_VERSION = '0.0.0';
 const HIGHER_SPORTS_LIB_VERSION = '9999.0.0';
 
 const hoisted = vi.hoisted(() => {
+    const mockGunzipSync = vi.fn();
     const mockGetUser = vi.fn();
     const mockCollection = vi.fn();
     const mockDoc = vi.fn();
@@ -47,6 +48,7 @@ const hoisted = vi.hoisted(() => {
     const deleteField = vi.fn(() => 'DELETE_FIELD');
 
     return {
+        mockGunzipSync,
         mockGetUser,
         mockCollection,
         mockDoc,
@@ -72,6 +74,15 @@ const hoisted = vi.hoisted(() => {
         mockLoggerError,
         serverTimestamp,
         deleteField,
+    };
+});
+
+vi.mock('node:zlib', async () => {
+    const actual = await vi.importActual<typeof import('node:zlib')>('node:zlib');
+    hoisted.mockGunzipSync.mockImplementation((...args: unknown[]) => (actual.gunzipSync as any)(...args));
+    return {
+        ...actual,
+        gunzipSync: hoisted.mockGunzipSync,
     };
 });
 
@@ -325,7 +336,22 @@ describe('sports-lib-reparse.service', () => {
         ]);
 
         expect(result.sourceFilesCount).toBe(1);
+        expect(hoisted.mockGunzipSync).toHaveBeenCalledWith(gz, { maxOutputLength: 512 * 1024 * 1024 });
         expect(hoisted.fitImporter.getFromArrayBuffer).toHaveBeenCalledTimes(1);
+    });
+
+    it('parseFromOriginalFilesStrict should fail when gzip output exceeds the shared decompression limit', async () => {
+        const error = new Error('too large') as Error & { code: string };
+        error.code = 'ERR_BUFFER_TOO_LARGE';
+        hoisted.mockGunzipSync.mockImplementationOnce(() => {
+            throw error;
+        });
+        hoisted.mockDownload.mockResolvedValue([Buffer.from('compressed-source')]);
+
+        await expect(parseFromOriginalFilesStrict([
+            { path: 'users/u1/events/e1/original.fit.gz' },
+        ])).rejects.toThrow('Original file is too large after decompression. Maximum decompressed size is 512MB.');
+        expect(hoisted.fitImporter.getFromArrayBuffer).not.toHaveBeenCalled();
     });
 
     it('parseFromOriginalFilesStrict should fallback to default bucket when metadata bucket object is missing', async () => {

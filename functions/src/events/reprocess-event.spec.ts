@@ -64,9 +64,13 @@ describe('reprocessEvent', () => {
         });
     });
 
-    it('should register with 1GiB memory', () => {
+    it('should register with shared activity processing runtime limits', () => {
         expect(hoisted.getOnCallOptions()).toMatchObject({
-            memory: '1GiB',
+            memory: '8GiB',
+            cpu: 2,
+            concurrency: 1,
+            timeoutSeconds: 3600,
+            maxInstances: 20,
         });
     });
 

@@ -11,6 +11,7 @@ import {
 } from '../reparse/sports-lib-reparse.service';
 import { CLOUD_TASK_RETRY_CONFIG } from '../shared/queue-config';
 import { FUNCTIONS_MANIFEST } from '../../../shared/functions-manifest';
+import { ACTIVITY_PROCESSING_TASK_RUNTIME_OPTIONS } from '../shared/activity-processing-config';
 
 interface SportsLibReparseTaskPayload {
     jobId: string;
@@ -38,10 +39,7 @@ function isTerminalReparseFailure(errorMessage: string): boolean {
 
 export const processSportsLibReparseTask = onTaskDispatched({
     retryConfig: CLOUD_TASK_RETRY_CONFIG,
-    cpu: 2,
-    concurrency: 1,
-    memory: '1GiB',
-    timeoutSeconds: 540,
+    ...ACTIVITY_PROCESSING_TASK_RUNTIME_OPTIONS,
     region: FUNCTIONS_MANIFEST.processSportsLibReparseTask.region,
 }, async (request) => {
     const startedAtMs = Date.now();

@@ -5,6 +5,7 @@ import * as logger from 'firebase-functions/logger';
 import { ALLOWED_CORS_ORIGINS, enforceAppCheck } from '../utils';
 import { reparseEventFromOriginalFiles } from '../reparse/sports-lib-reparse.service';
 import { FUNCTIONS_MANIFEST } from '../../../shared/functions-manifest';
+import { ACTIVITY_PROCESSING_HTTPS_RUNTIME_OPTIONS } from '../shared/activity-processing-config';
 
 type ReprocessMode = 'reimport' | 'regenerate';
 
@@ -15,10 +16,8 @@ interface ReprocessEventRequest {
 
 export const reprocessEvent = onCall({
   region: FUNCTIONS_MANIFEST.reprocessEvent.region,
-  memory: '1GiB',
+  ...ACTIVITY_PROCESSING_HTTPS_RUNTIME_OPTIONS,
   cors: ALLOWED_CORS_ORIGINS,
-  timeoutSeconds: 540,
-  maxInstances: 20,
 }, async (request) => {
   if (!request.auth) {
     throw new HttpsError('unauthenticated', 'The function must be called while authenticated.');

@@ -1,10 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('firebase-functions/v2/tasks', () => ({
-    onTaskDispatched: (_opts: unknown, handler: any) => handler,
-}));
-
 const hoisted = vi.hoisted(() => {
+    const capturedTaskOptions = { value: undefined as unknown };
     const reparseEventFromOriginalFiles = vi.fn();
     const writeReparseStatus = vi.fn();
     const resolveTargetSportsLibVersion = vi.fn(() => '9.0.99');
@@ -24,6 +21,7 @@ const hoisted = vi.hoisted(() => {
     const deleteField = vi.fn(() => 'DELETE_FIELD');
 
     return {
+        capturedTaskOptions,
         reparseEventFromOriginalFiles,
         writeReparseStatus,
         resolveTargetSportsLibVersion,
@@ -35,6 +33,13 @@ const hoisted = vi.hoisted(() => {
         deleteField,
     };
 });
+
+vi.mock('firebase-functions/v2/tasks', () => ({
+    onTaskDispatched: (opts: unknown, handler: any) => {
+        hoisted.capturedTaskOptions.value = opts;
+        return handler;
+    },
+}));
 
 vi.mock('../reparse/sports-lib-reparse.service', () => ({
     SPORTS_LIB_REPARSE_JOBS_COLLECTION: 'sportsLibReparseJobs',
@@ -72,6 +77,16 @@ describe('processSportsLibReparseTask', () => {
             sourceFilesCount: 1,
             parsedActivitiesCount: 1,
             staleActivitiesDeleted: 0,
+        });
+    });
+
+    it('should register with shared activity processing runtime limits', () => {
+        expect(hoisted.capturedTaskOptions.value).toMatchObject({
+            memory: '8GiB',
+            cpu: 2,
+            concurrency: 1,
+            timeoutSeconds: 1800,
+            maxInstances: 20,
         });
     });
 
