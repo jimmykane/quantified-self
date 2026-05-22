@@ -22,9 +22,9 @@ import { DataPowerMax } from '@sports-alliance/sports-lib';
 import { DataVO2Max } from '@sports-alliance/sports-lib';
 import { DataActivityTypes } from '@sports-alliance/sports-lib';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
-import { DataPace } from '@sports-alliance/sports-lib';
 import { DynamicDataLoader } from '@sports-alliance/sports-lib';
-import { DataSwimPace } from '@sports-alliance/sports-lib';
+import { convertSpeedToPace } from '@sports-alliance/sports-lib';
+import { convertSpeedToSwimPace } from '@sports-alliance/sports-lib';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { LoggerService } from '../../services/logger.service';
 import { resolveUnitAwareDisplayStat } from '@shared/unit-aware-display';
@@ -271,7 +271,10 @@ export class EventsExportFormComponent extends FormsAbstract {
 
       if (this.user.settings.exportToCSVSettings.averagePace) {
         const speedAvg = event.getStat(DataSpeedAvg.type);
-        const stat = event.getStat(DataPaceAvg.type) || (speedAvg && new DataPaceAvg(<number>speedAvg.getValue(DataPace.type)));
+        const speedValue = speedAvg ? speedAvg.getValue() : null;
+        const stat = event.getStat(DataPaceAvg.type) || (typeof speedValue === 'number' && Number.isFinite(speedValue) && speedValue > 0
+          ? new DataPaceAvg(convertSpeedToPace(speedValue))
+          : null);
         if (!stat || !isRunning) {
           row.push('""');
         } else {
@@ -285,7 +288,10 @@ export class EventsExportFormComponent extends FormsAbstract {
 
       if (this.user.settings.exportToCSVSettings.averageSwimPace) {
         const speedAvg = event.getStat(DataSpeedAvg.type);
-        const stat = event.getStat(DataSwimPaceAvg.type) || (speedAvg && new DataSwimPaceAvg(<number>speedAvg.getValue(DataSwimPace.type)));
+        const speedValue = speedAvg ? speedAvg.getValue() : null;
+        const stat = event.getStat(DataSwimPaceAvg.type) || (typeof speedValue === 'number' && Number.isFinite(speedValue) && speedValue > 0
+          ? new DataSwimPaceAvg(convertSpeedToSwimPace(speedValue))
+          : null);
         if (!stat || !isSwimming) {
           row.push('""');
         } else {
@@ -299,7 +305,10 @@ export class EventsExportFormComponent extends FormsAbstract {
 
       if (this.user.settings.exportToCSVSettings.averageGradeAdjustedPace) {
         const speedAvg = event.getStat(DataSpeedAvg.type);
-        const stat = event.getStat(DataGradeAdjustedPaceAvg.type) || (speedAvg && new DataGradeAdjustedPaceAvg(<number>speedAvg.getValue(DataGradeAdjustedPaceAvg.type)));
+        const speedValue = speedAvg ? speedAvg.getValue() : null;
+        const stat = event.getStat(DataGradeAdjustedPaceAvg.type) || (typeof speedValue === 'number' && Number.isFinite(speedValue) && speedValue > 0
+          ? new DataGradeAdjustedPaceAvg(convertSpeedToPace(speedValue))
+          : null);
         if (!stat) {
           row.push('""');
         } else {
