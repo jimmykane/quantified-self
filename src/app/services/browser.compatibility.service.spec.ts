@@ -8,6 +8,7 @@ import { AppWindowService } from './app.window.service';
 describe('BrowserCompatibilityService', () => {
     let service: BrowserCompatibilityService;
     let dialog: MatDialog;
+    const originalClipboardItem = globalThis.ClipboardItem;
 
     const mockDialog = {
         open: vi.fn()
@@ -19,6 +20,7 @@ describe('BrowserCompatibilityService', () => {
     };
 
     beforeEach(() => {
+        mockWindowService.windowRef.navigator = {};
         TestBed.configureTestingModule({
             imports: [MatDialogModule],
             providers: [
@@ -32,6 +34,11 @@ describe('BrowserCompatibilityService', () => {
     });
 
     afterEach(() => {
+        if (originalClipboardItem) {
+            globalThis.ClipboardItem = originalClipboardItem;
+        } else {
+            delete (globalThis as { ClipboardItem?: unknown }).ClipboardItem;
+        }
         vi.clearAllMocks();
     });
 
@@ -101,6 +108,39 @@ describe('BrowserCompatibilityService', () => {
         it('should return false when navigator.vibrate is not supported', () => {
             mockWindowService.windowRef.navigator.vibrate = undefined;
             expect(service.checkVibrationSupport()).toBe(false);
+        });
+    });
+
+    describe('checkClipboardImageWriteSupport', () => {
+        it('should return true when ClipboardItem and rich clipboard write are supported', () => {
+            globalThis.ClipboardItem = class ClipboardItemMock { } as typeof ClipboardItem;
+            mockWindowService.windowRef.navigator = {
+                clipboard: {
+                    write: vi.fn()
+                }
+            };
+
+            expect(service.checkClipboardImageWriteSupport()).toBe(true);
+        });
+
+        it('should return false when ClipboardItem is missing', () => {
+            delete (globalThis as { ClipboardItem?: unknown }).ClipboardItem;
+            mockWindowService.windowRef.navigator = {
+                clipboard: {
+                    write: vi.fn()
+                }
+            };
+
+            expect(service.checkClipboardImageWriteSupport()).toBe(false);
+        });
+
+        it('should return false when rich clipboard write is missing', () => {
+            globalThis.ClipboardItem = class ClipboardItemMock { } as typeof ClipboardItem;
+            mockWindowService.windowRef.navigator = {
+                clipboard: {}
+            };
+
+            expect(service.checkClipboardImageWriteSupport()).toBe(false);
         });
     });
 });

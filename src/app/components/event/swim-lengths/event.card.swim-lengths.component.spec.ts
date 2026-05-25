@@ -5,6 +5,7 @@ import {
   ActivityInterface,
   DataSpeed,
   DataSwimPace,
+  DataSwimPaceMinutesPer100Yard,
   EventInterface,
   SwimPaceUnits,
   UserUnitSettingsInterface
@@ -119,9 +120,11 @@ describe('EventCardSwimLengthsComponent', () => {
     component.ngOnChanges();
 
     expect(component.swimLengthViews[0].groups[0].rows[0]['Swim Pace']).toContain('01:31');
-    expect(component.swimLengthViews[0].groups[0].rows[0]['Swim Pace']).toContain('min/100yrd');
+    expect(component.swimLengthViews[0].groups[0].rows[0]['Swim Pace'])
+      .toContain(DataSwimPaceMinutesPer100Yard.unit);
     expect(component.swimLengthViews[0].groups[0].summaryRow['Swim Pace']).toContain('01:31');
-    expect(component.swimLengthViews[0].groups[0].summaryRow['Swim Pace']).toContain('min/100yrd');
+    expect(component.swimLengthViews[0].groups[0].summaryRow['Swim Pace'])
+      .toContain(DataSwimPaceMinutesPer100Yard.unit);
     expect(speedGetValueSpy).not.toHaveBeenCalledWith(DataSwimPace.type);
     speedGetValueSpy.mockRestore();
   });

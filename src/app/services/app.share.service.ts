@@ -1,5 +1,6 @@
 import { Injectable, NgZone } from '@angular/core';
 import { snapdom } from '@zumer/snapdom';
+import { BrowserCompatibilityService } from './browser.compatibility.service';
 
 export interface ShareBenchmarkOptions {
   watermark?: { brand: string; timestamp: string; url?: string; logoUrl?: string };
@@ -10,13 +11,77 @@ export interface ShareBenchmarkOptions {
   renderTimeoutMs?: number;
 }
 
+export interface ShareElementImageOptions {
+  scale?: number;
+  width?: number;
+  embedFonts?: boolean;
+  fast?: boolean;
+  renderTimeoutMs?: number;
+  exportClassName?: string;
+  backgroundColor?: string;
+}
+
 const TRANSPARENT_PIXEL_DATA_URL = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGMAAQAABQABDQottAAAAABJRU5ErkJggg==';
 
 @Injectable({
   providedIn: 'root'
 })
 export class AppShareService {
-  constructor(private zone: NgZone) { }
+  constructor(
+    private zone: NgZone,
+    private browserCompatibilityService: BrowserCompatibilityService,
+  ) { }
+
+  async copyElementImageToClipboard(element: HTMLElement, options: ShareElementImageOptions = {}): Promise<void> {
+    return this.zone.runOutsideAngular(async () => {
+      if (!this.browserCompatibilityService.checkClipboardImageWriteSupport()) {
+        throw new Error('Image clipboard copy is not supported by this browser.');
+      }
+
+      const imageBlobPromise = this.renderElementAsImageBlob(element, options);
+      const item = new ClipboardItem({
+        'image/png': imageBlobPromise,
+      });
+
+      await navigator.clipboard.write([item]);
+    });
+  }
+
+  async renderElementAsImageBlob(element: HTMLElement, options: ShareElementImageOptions = {}): Promise<Blob> {
+    return this.zone.runOutsideAngular(async () => {
+      const scale = options.scale ?? 2;
+      const embedFonts = options.embedFonts ?? true;
+      const fast = options.fast ?? false;
+      const renderTimeoutMs = options.renderTimeoutMs ?? 15000;
+      const exportWidth = options.width ?? element.offsetWidth;
+      const clone = element.cloneNode(true) as HTMLElement;
+      if (options.exportClassName) {
+        clone.classList.add(options.exportClassName);
+      }
+      if (options.backgroundColor) {
+        clone.style.backgroundColor = options.backgroundColor;
+      }
+      clone.style.width = `${exportWidth}px`;
+      clone.style.maxWidth = `${exportWidth}px`;
+      clone.style.willChange = 'transform';
+      this.copyCanvasContent(element, clone);
+
+      const wrapper = this.attachExportClone(clone, exportWidth);
+
+      try {
+        return await this.renderCloneToBlob(clone, {
+          scale,
+          width: options.width,
+          embedFonts,
+          fast,
+          renderTimeoutMs,
+          backgroundColor: options.backgroundColor ?? 'transparent',
+        });
+      } finally {
+        this.removeExportWrapper(wrapper);
+      }
+    });
+  }
 
   async shareBenchmarkAsImage(element: HTMLElement, options: ShareBenchmarkOptions = {}): Promise<string> {
     return this.zone.runOutsideAngular(async () => {
@@ -36,6 +101,7 @@ export class AppShareService {
       if (exportContainer) {
         exportContainer.classList.add('benchmark-export');
       }
+      this.copyCanvasContent(sourceNode, clone);
 
       if (options.watermark) {
         let logoUrl: string | undefined;
@@ -60,15 +126,7 @@ export class AppShareService {
         clone.appendChild(watermark);
       }
 
-      const wrapper = document.createElement('div');
-      wrapper.style.position = 'fixed';
-      wrapper.style.left = '-10000px';
-      wrapper.style.top = '0';
-      wrapper.style.width = `${exportWidth}px`;
-      wrapper.style.pointerEvents = 'none';
-      wrapper.style.zIndex = '-1';
-      wrapper.appendChild(clone);
-      document.body.appendChild(wrapper);
+      const wrapper = this.attachExportClone(clone, exportWidth);
 
       try {
         const primaryDataUrl = await this.renderCloneToDataUrl(clone, {
@@ -99,9 +157,7 @@ export class AppShareService {
           renderTimeoutMs,
         });
       } finally {
-        if (wrapper.parentNode) {
-          wrapper.parentNode.removeChild(wrapper);
-        }
+        this.removeExportWrapper(wrapper);
       }
     });
   }
@@ -116,23 +172,40 @@ export class AppShareService {
       renderTimeoutMs: number;
     }
   ): Promise<string> {
+    const imageBlob = await this.renderCloneToBlob(clone, {
+      ...options,
+      backgroundColor: 'transparent',
+    });
+
+    return this.blobToDataUrl(imageBlob);
+  }
+
+  private async renderCloneToBlob(
+    clone: HTMLElement,
+    options: {
+      scale: number;
+      width?: number;
+      embedFonts: boolean;
+      fast: boolean;
+      renderTimeoutMs: number;
+      backgroundColor: string;
+    }
+  ): Promise<Blob> {
     await this.waitForIdle();
 
-    const imageBlob = await this.withTimeout(
+    return this.withTimeout(
       snapdom.toBlob(clone, {
         scale: options.scale,
         width: options.width,
-        backgroundColor: 'transparent',
+        backgroundColor: options.backgroundColor,
         embedFonts: options.embedFonts,
         fast: options.fast,
         type: 'png',
         fallbackURL: TRANSPARENT_PIXEL_DATA_URL,
       }),
       options.renderTimeoutMs,
-      `Benchmark image rendering timed out after ${options.renderTimeoutMs}ms.`
+      `Image rendering timed out after ${options.renderTimeoutMs}ms.`
     );
-
-    return this.blobToDataUrl(imageBlob);
   }
 
   private async waitForIdle(): Promise<void> {
@@ -241,6 +314,61 @@ export class AppShareService {
       };
       img.src = src;
     });
+  }
+
+  private attachExportClone(clone: HTMLElement, exportWidth: number): HTMLElement {
+    const wrapper = document.createElement('div');
+    wrapper.style.position = 'fixed';
+    wrapper.style.left = '-10000px';
+    wrapper.style.top = '0';
+    wrapper.style.width = `${exportWidth}px`;
+    wrapper.style.pointerEvents = 'none';
+    wrapper.style.zIndex = '-1';
+    wrapper.appendChild(clone);
+    document.body.appendChild(wrapper);
+    return wrapper;
+  }
+
+  private removeExportWrapper(wrapper: HTMLElement): void {
+    if (wrapper.parentNode) {
+      wrapper.parentNode.removeChild(wrapper);
+    }
+  }
+
+  private copyCanvasContent(sourceNode: HTMLElement, cloneNode: HTMLElement): void {
+    const sourceCanvases = this.collectCanvases(sourceNode);
+    const cloneCanvases = this.collectCanvases(cloneNode);
+
+    sourceCanvases.forEach((sourceCanvas, index) => {
+      const cloneCanvas = cloneCanvases[index];
+      if (!cloneCanvas) {
+        return;
+      }
+
+      cloneCanvas.width = sourceCanvas.width;
+      cloneCanvas.height = sourceCanvas.height;
+      cloneCanvas.style.width = sourceCanvas.style.width || `${sourceCanvas.offsetWidth}px`;
+      cloneCanvas.style.height = sourceCanvas.style.height || `${sourceCanvas.offsetHeight}px`;
+
+      const context = cloneCanvas.getContext('2d');
+      if (!context) {
+        return;
+      }
+
+      try {
+        context.drawImage(sourceCanvas, 0, 0);
+      } catch {
+        // If a canvas is tainted, let the DOM renderer attempt its own fallback.
+      }
+    });
+  }
+
+  private collectCanvases(element: HTMLElement): HTMLCanvasElement[] {
+    const canvases = Array.from(element.querySelectorAll('canvas'));
+    if (element instanceof HTMLCanvasElement) {
+      return [element, ...canvases];
+    }
+    return canvases;
   }
 
   private applyAngularContentAttr(scopeEl: HTMLElement, targetEl: HTMLElement): void {

@@ -17,6 +17,7 @@ import {
   DataSpeed,
   DataSpeedAvg,
   DataSwimPace,
+  DataSwimPaceMinutesPer100Yard,
   DistanceUnits,
   SwimPaceUnits
 } from '@sports-alliance/sports-lib';
@@ -196,7 +197,7 @@ describe('EventsExportFormComponent', () => {
     const blob = mockFileService.downloadFile.mock.calls[0][0] as Blob;
     const csv = await readBlobText(blob);
     expect(csv).toContain('Average Swim Pace');
-    expect(csv).toContain('"01:31 min/100yrd"');
+    expect(csv).toContain(`"01:31 ${DataSwimPaceMinutesPer100Yard.unit}"`);
     expect(speedGetValueSpy).not.toHaveBeenCalledWith(DataSwimPace.type);
     speedGetValueSpy.mockRestore();
   });

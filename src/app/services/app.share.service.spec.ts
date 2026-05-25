@@ -1,6 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { AppShareService } from './app.share.service';
+import { BrowserCompatibilityService } from './browser.compatibility.service';
 
 const mocks = vi.hoisted(() => {
   const toBlob = vi.fn();
@@ -16,16 +17,27 @@ describe('AppShareService', () => {
   let service: AppShareService;
   let originalRaf: typeof requestAnimationFrame | undefined;
   let originalRic: ((callback: IdleRequestCallback, options?: IdleRequestOptions) => number) | undefined;
+  let originalClipboardItem: typeof ClipboardItem | undefined;
+  let originalClipboardDescriptor: PropertyDescriptor | undefined;
+  const compatibilityServiceMock = {
+    checkClipboardImageWriteSupport: vi.fn(() => true),
+  };
 
   beforeEach(() => {
     TestBed.configureTestingModule({
-      providers: [AppShareService],
+      providers: [
+        AppShareService,
+        { provide: BrowserCompatibilityService, useValue: compatibilityServiceMock },
+      ],
     });
     service = TestBed.inject(AppShareService);
     vi.clearAllMocks();
 
     originalRaf = globalThis.requestAnimationFrame;
     originalRic = (window as any).requestIdleCallback;
+    originalClipboardItem = globalThis.ClipboardItem;
+    originalClipboardDescriptor = Object.getOwnPropertyDescriptor(Navigator.prototype, 'clipboard')
+      ?? Object.getOwnPropertyDescriptor(navigator, 'clipboard');
     globalThis.requestAnimationFrame = (cb: FrameRequestCallback) => {
       cb(0);
       return 0;
@@ -44,6 +56,16 @@ describe('AppShareService', () => {
       (window as any).requestIdleCallback = originalRic;
     } else {
       delete (window as any).requestIdleCallback;
+    }
+    if (originalClipboardItem) {
+      globalThis.ClipboardItem = originalClipboardItem;
+    } else {
+      delete (globalThis as { ClipboardItem?: unknown }).ClipboardItem;
+    }
+    if (originalClipboardDescriptor) {
+      Object.defineProperty(navigator, 'clipboard', originalClipboardDescriptor);
+    } else {
+      delete (navigator as { clipboard?: unknown }).clipboard;
     }
     vi.restoreAllMocks();
   });
@@ -113,5 +135,47 @@ describe('AppShareService', () => {
 
     expect(result).toContain('data:image/png;base64,');
     expect(mocks.toBlob).toHaveBeenCalledTimes(2);
+  });
+
+  it('copies a rendered element image blob to the clipboard', async () => {
+    const source = document.createElement('div');
+    source.style.width = '400px';
+    mocks.toBlob.mockResolvedValue(new Blob(['abc'], { type: 'image/png' }));
+    const clipboardWrite = vi.fn(async (items: Array<{ items: Record<string, Promise<Blob>> }>) => {
+      await items[0].items['image/png'];
+    });
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { write: clipboardWrite },
+    });
+    globalThis.ClipboardItem = vi.fn(function (this: { items: Record<string, Promise<Blob>> }, items: Record<string, Promise<Blob>>) {
+      this.items = items;
+    }) as unknown as typeof ClipboardItem;
+
+    await service.copyElementImageToClipboard(source, {
+      width: 640,
+      exportClassName: 'chart-export',
+      backgroundColor: '#ffffff',
+    });
+
+    expect(compatibilityServiceMock.checkClipboardImageWriteSupport).toHaveBeenCalled();
+    const clipboardItemPayload = (globalThis.ClipboardItem as unknown as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(typeof clipboardItemPayload['image/png']?.then).toBe('function');
+    expect(clipboardWrite).toHaveBeenCalledTimes(1);
+    expect(mocks.toBlob).toHaveBeenCalledWith(
+      expect.objectContaining({
+        classList: expect.objectContaining({
+          contains: expect.any(Function),
+        }),
+      }),
+      expect.objectContaining({
+        width: 640,
+        backgroundColor: '#ffffff',
+        type: 'png',
+      }),
+    );
+    const renderedClone = mocks.toBlob.mock.calls[0][0] as HTMLElement;
+    expect(renderedClone.classList.contains('chart-export')).toBe(true);
+    expect(renderedClone.style.backgroundColor).toBe('rgb(255, 255, 255)');
   });
 });

@@ -1,4 +1,12 @@
-import { DataCadence, DataEffortPace, DataHeartRate, DataPace, DataPower } from '@sports-alliance/sports-lib';
+import {
+  DataCadence,
+  DataEffortPace,
+  DataHeartRate,
+  DataPace,
+  DataPotentialStamina,
+  DataPower,
+  DataStamina,
+} from '@sports-alliance/sports-lib';
 import { describe, expect, it } from 'vitest';
 import {
   buildEventPanelYAxisConfig,
@@ -134,5 +142,28 @@ describe('event-echarts-yaxis.helper', () => {
     );
 
     expect(interval).toBe(0.1);
+  });
+
+  it('caps stamina axes at 100 percent instead of snapping to 105 percent', () => {
+    const config = buildEventPanelYAxisConfig({
+      panel: buildPanel(DataStamina.type, [65, 78, 92, 100]),
+      visibleRange: null,
+    });
+
+    expect(config.inverse).toBe(false);
+    expect(config.max).toBe(100);
+    expect(config.min).toBeGreaterThanOrEqual(0);
+    expect(config.interval).toBeDefined();
+  });
+
+  it('applies the same 100 percent cap to potential stamina axes', () => {
+    const config = buildEventPanelYAxisConfig({
+      panel: buildPanel(DataPotentialStamina.type, [67, 83, 96, 99]),
+      visibleRange: null,
+    });
+
+    expect(config.inverse).toBe(false);
+    expect(config.max).toBe(100);
+    expect(config.min).toBeGreaterThanOrEqual(0);
   });
 });

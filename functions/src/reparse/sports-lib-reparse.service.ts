@@ -1,4 +1,5 @@
 import * as admin from 'firebase-admin';
+import { FieldValue } from 'firebase-admin/firestore';
 import * as logger from 'firebase-functions/logger';
 import { gunzipSync } from 'node:zlib';
 import { createHash } from 'node:crypto';
@@ -1310,7 +1311,7 @@ export async function persistReparsedEvent(
     const processingMetaData: ProcessingMetaData = {
         sportsLibVersion: targetSportsLibVersion,
         sportsLibVersionCode: sportsLibVersionToCode(targetSportsLibVersion),
-        processedAt: admin.firestore.FieldValue.serverTimestamp(),
+        processedAt: FieldValue.serverTimestamp(),
     };
     await admin.firestore().doc(`users/${uid}/events/${eventId}/metaData/processing`).set(processingMetaData, { merge: true });
 
