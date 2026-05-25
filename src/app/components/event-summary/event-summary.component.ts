@@ -209,7 +209,7 @@ export class EventSummaryComponent implements OnChanges {
   get heroSummaryMetrics(): SummaryPrimaryInfoMetric[] {
     this.ensureTemplateState();
     return this.heroStatsValue.map((statType) =>
-      buildHeroMetric(statType, this.event?.getStat(statType), this.unitSettings)
+      buildHeroMetric(statType, this.event?.getStat(statType), this.unitSettings, [this.mainActivityTypeValue])
     );
   }
 
@@ -229,7 +229,7 @@ export class EventSummaryComponent implements OnChanges {
       return cachedStat.value;
     }
     const stat = this.event?.getStat(statType);
-    const unitAware = resolvePrimaryUnitAwareDisplayStat(stat, this.unitSettings, statType);
+    const unitAware = resolvePrimaryUnitAwareDisplayStat(stat, this.unitSettings, statType, [this.mainActivityTypeValue]);
     return unitAware ? unitAware.value : '--';
   }
 
@@ -240,7 +240,7 @@ export class EventSummaryComponent implements OnChanges {
       return cachedStat.unit;
     }
     const stat = this.event?.getStat(statType);
-    const unitAware = resolvePrimaryUnitAwareDisplayStat(stat, this.unitSettings, statType);
+    const unitAware = resolvePrimaryUnitAwareDisplayStat(stat, this.unitSettings, statType, [this.mainActivityTypeValue]);
     return unitAware ? unitAware.unit : '';
   }
 
@@ -321,7 +321,7 @@ export class EventSummaryComponent implements OnChanges {
     const lookup = new Map<string, { value: string; unit: string }>();
     this.heroStatsValue.forEach((statType) => {
       const stat = this.event?.getStat(statType);
-      const unitAware = resolvePrimaryUnitAwareDisplayStat(stat, this.unitSettings, statType);
+      const unitAware = resolvePrimaryUnitAwareDisplayStat(stat, this.unitSettings, statType, [this.mainActivityTypeValue]);
       lookup.set(statType, {
         value: unitAware ? unitAware.value : '--',
         unit: unitAware ? unitAware.unit : '',

@@ -15,6 +15,7 @@ import {
   DataPaceAvg,
   DataPower,
   DataPowerAvg,
+  DataPoolLength,
   DataSpeedAvg,
   DataDescent,
   DataSpeed,
@@ -1186,7 +1187,7 @@ function buildSwimLengthTooltipDetails(
 
   appendTextDetail(details, 'Lap', formatNullableInteger(swimLength.lapIndex));
   appendLapDetail(details, 'Duration', swimLength.timerTime ?? swimLength.elapsedTime, unitSettings, { compactDuration: true });
-  appendLapDetail(details, 'Distance', swimLength.distance ?? undefined, unitSettings);
+  appendLapDetail(details, 'Distance', getSwimLengthDistance(swimLength), unitSettings);
   appendTextDetail(details, 'Type', formatSwimLengthLabel(swimLength.type));
   appendTextDetail(details, 'Stroke', formatSwimLengthLabel(swimLength.stroke));
   appendTextDetail(details, 'Strokes', formatNullableInteger(swimLength.strokes));
@@ -1277,6 +1278,15 @@ function getSwimLengthPace(swimLength: AppSwimLength): DataSwimPace | null {
   }
 
   return new DataSwimPace(convertSpeedToSwimPace(speedValue));
+}
+
+function getSwimLengthDistance(swimLength: AppSwimLength): DataPoolLength | null {
+  const distanceValue = swimLength.distance?.getValue?.();
+  if (typeof distanceValue !== 'number' || !Number.isFinite(distanceValue)) {
+    return null;
+  }
+
+  return new DataPoolLength(distanceValue);
 }
 
 function formatNullableInteger(value: number | null | undefined): string {

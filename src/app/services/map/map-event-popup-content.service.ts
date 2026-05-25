@@ -49,10 +49,16 @@ export class MapEventPopupContentService {
 
   private buildMetricsFromEvent(event: EventInterface): SummaryPrimaryInfoMetric[] {
     const unitSettings = this.resolveUnitSettings();
+    const activityTypes = event.getActivityTypesAsArray?.() || [];
     return [
-      buildHeroMetric(DataDuration.type, this.getEventSummaryStat(event, DataDuration.type), unitSettings),
-      this.resolveSummaryMetricFromEvent(event, DataDistance.type),
-      this.resolveEffortMetricFromEvent(event),
+      buildHeroMetric(
+        DataDuration.type,
+        this.getEventSummaryStat(event, DataDuration.type),
+        unitSettings,
+        activityTypes,
+      ),
+      this.resolveSummaryMetricFromEvent(event, DataDistance.type, activityTypes),
+      this.resolveEffortMetricFromEvent(event, activityTypes),
     ];
   }
 
@@ -107,8 +113,11 @@ export class MapEventPopupContentService {
     return 'Other';
   }
 
-  private resolveEffortMetricFromEvent(event: EventInterface): SummaryPrimaryInfoMetric {
-    const primaryActivityType = (event.getActivityTypesAsArray?.() || [])[0];
+  private resolveEffortMetricFromEvent(
+    event: EventInterface,
+    activityTypes = event.getActivityTypesAsArray?.() || [],
+  ): SummaryPrimaryInfoMetric {
+    const primaryActivityType = activityTypes[0];
     const preferredType = resolvePreferredSpeedDerivedAverageTypeForActivity(primaryActivityType as any);
     const candidateTypes = [
       preferredType,
@@ -120,7 +129,7 @@ export class MapEventPopupContentService {
     const orderedTypes = [...new Set(candidateTypes).values()];
 
     for (const statType of orderedTypes) {
-      const metric = this.resolveSummaryMetricFromEvent(event, statType);
+      const metric = this.resolveSummaryMetricFromEvent(event, statType, activityTypes);
       if (metric.value !== '--') {
         return metric;
       }
@@ -129,9 +138,13 @@ export class MapEventPopupContentService {
     return { value: '--', label: '' };
   }
 
-  private resolveSummaryMetricFromEvent(event: EventInterface, statType: string): SummaryPrimaryInfoMetric {
+  private resolveSummaryMetricFromEvent(
+    event: EventInterface,
+    statType: string,
+    activityTypes = event.getActivityTypesAsArray?.() || [],
+  ): SummaryPrimaryInfoMetric {
     const stat = this.getEventSummaryStat(event, statType);
-    const display = resolvePrimaryUnitAwareDisplayStat(stat, this.resolveUnitSettings(), statType);
+    const display = resolvePrimaryUnitAwareDisplayStat(stat, this.resolveUnitSettings(), statType, activityTypes);
     const convertedValue = this.toDisplayString(display?.value);
     const convertedUnit = this.toDisplayString(display?.unit);
     if (this.hasMeaningfulDisplayValue(convertedValue)) {

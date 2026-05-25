@@ -1,6 +1,8 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { NO_ERRORS_SCHEMA, SimpleChange } from '@angular/core';
 import {
+  ActivityTypes,
+  DataDistance,
   DataHeartRateAvg,
   DataHeartRateMax,
   DataHeartRateMin,
@@ -8,6 +10,7 @@ import {
   DataPowerMax,
   DataPowerMin,
   DataSpeedAvgKilometersPerHour,
+  DistanceUnits,
   DynamicDataLoader,
 } from '@sports-alliance/sports-lib';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -35,6 +38,7 @@ describe('HeaderStatsComponent', () => {
       showDiff: new SimpleChange(null, componentToUpdate.showDiff, true),
       diffByType: new SimpleChange(null, componentToUpdate.diffByType, true),
       singleValueTypes: new SimpleChange(null, componentToUpdate.singleValueTypes, true),
+      activityTypes: new SimpleChange(null, componentToUpdate.activityTypes, true),
     });
     fixture.detectChanges();
   };
@@ -215,6 +219,25 @@ describe('HeaderStatsComponent', () => {
     expect(component.getCompositeDeltaDisplay('10 W', 'W')).toBe('10');
     expect(component.getCompositeDeltaDisplay('10w', 'W')).toBe('10');
     expect(component.getCompositeDeltaDisplay('10', 'W')).toBe('10');
+  });
+
+  it('should keep swimming distance summary cards in meters with miles distance preference', () => {
+    component.layout = 'grid';
+    component.activityTypes = [ActivityTypes.Swimming];
+    component.unitSettings = { distanceUnits: DistanceUnits.Miles } as any;
+    component.statsToShow = [DataDistance.type];
+    component.stats = [new DataDistance(1500)];
+
+    applyChanges(component);
+
+    expect(component.displayedStatCards).toHaveLength(1);
+    expect(component.displayedStatCards[0].label).toBe(DataDistance.type);
+    expect(component.displayedStatCards[0].valueItems[0]).toEqual(expect.objectContaining({
+      type: DataDistance.type,
+      displayType: DataDistance.type,
+      displayValue: '1500',
+      displayUnit: 'm',
+    }));
   });
 
 });

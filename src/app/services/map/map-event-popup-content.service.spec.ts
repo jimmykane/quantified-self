@@ -1,6 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { describe, expect, it, beforeEach, vi } from 'vitest';
-import { ActivityTypes, DataDistance, DataDuration, DataPaceAvg, DataSpeedAvg, EventInterface } from '@sports-alliance/sports-lib';
+import { ActivityTypes, DataDistance, DataDuration, DataPaceAvg, DataSpeedAvg, DistanceUnits, EventInterface } from '@sports-alliance/sports-lib';
 import { AppUserSettingsQueryService } from '../app.user-settings-query.service';
 import { MapEventPopupContentService } from './map-event-popup-content.service';
 
@@ -74,6 +74,24 @@ describe('MapEventPopupContentService', () => {
 
     const content = service.buildFromEvent(event);
     expect(content.metrics[2]).toEqual({ value: '4:30', label: 'min/km' });
+  });
+
+  it('keeps swimming popup distance in meters with miles distance preference', () => {
+    const userSettingsQuery = TestBed.inject(AppUserSettingsQueryService) as any;
+    userSettingsQuery.unitSettings.mockReturnValue({ distanceUnits: DistanceUnits.Miles });
+
+    const event = {
+      startDate: new Date('2025-01-01T10:00:00Z'),
+      getActivityTypesAsArray: () => [ActivityTypes.Swimming],
+      getActivityTypesAsString: () => 'Swimming',
+      getDuration: () => ({ getType: () => DataDuration.type, getDisplayValue: () => '00:30:00', getDisplayUnit: () => '' }),
+      getDistance: () => new DataDistance(1500),
+      getStat: () => null,
+    } as unknown as EventInterface;
+
+    const content = service.buildFromEvent(event);
+
+    expect(content.metrics[1]).toEqual({ value: '1500', label: 'm' });
   });
 
   it('returns placeholder effort when event effort stats are missing', () => {

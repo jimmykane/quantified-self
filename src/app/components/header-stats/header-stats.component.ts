@@ -4,6 +4,7 @@ import { UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
 import { DynamicDataLoader } from '@sports-alliance/sports-lib';
 import { buildHeaderStatCards, HeaderStatCard } from '../../helpers/header-stats-composite.helper';
 import { normalizeUnitDerivedStatLabel } from '../../helpers/stat-label.helper';
+import { resolveSummaryDisplayStat } from '../../helpers/summary-display.helper';
 
 @Component({
   selector: 'app-header-stats',
@@ -17,6 +18,7 @@ export class HeaderStatsComponent implements OnChanges {
   @Input() stats: DataInterface[] = [];
   @Input() singleValueTypes: string[] = [];
   @Input() unitSettings?: UserUnitSettingsInterface;
+  @Input() activityTypes: string[] = [];
   @Input() layout: 'grid' | 'condensed' = 'grid';
   @Input() showDiff = false;
   @Input() diffByType?: Map<string, { display: string; percent: number; color: string }>;
@@ -39,6 +41,7 @@ export class HeaderStatsComponent implements OnChanges {
       || !!changes['statsToShow']
       || !!changes['stats']
       || !!changes['unitSettings']
+      || !!changes['activityTypes']
       || !!changes['singleValueTypes'];
 
     if (shouldRebuildStats) {
@@ -139,7 +142,7 @@ export class HeaderStatsComponent implements OnChanges {
     // Expand all available stats once so tab-local families can pull avg/min/max siblings.
     const expandedStatsMap = new Map<string, DataInterface>();
     this.stats.forEach((stat) => {
-      const expanded = DynamicDataLoader.getUnitBasedDataFromDataInstance(stat, this.unitSettings);
+      const expanded = this.getSummaryDisplayStats(stat);
       expanded.forEach((expandedStat) => expandedStatsMap.set(expandedStat.getType(), expandedStat));
     });
 
@@ -150,7 +153,7 @@ export class HeaderStatsComponent implements OnChanges {
         return;
       }
       // Expand each requested stat into unit-aware variants (for example speed and pace).
-      const unitBasedStats = DynamicDataLoader.getUnitBasedDataFromDataInstance(stat, this.unitSettings);
+      const unitBasedStats = this.getSummaryDisplayStats(stat);
       enrichedStats.push(...unitBasedStats);
     });
 
@@ -162,6 +165,11 @@ export class HeaderStatsComponent implements OnChanges {
         valueItems: card.valueItems.filter((valueItem) => !this.isInvalidDisplayToken(valueItem.displayValue)),
       }))
       .filter((card) => card.valueItems.length > 0);
+  }
+
+  private getSummaryDisplayStats(stat: DataInterface): DataInterface[] {
+    const displayStat = resolveSummaryDisplayStat(stat, stat.getType(), this.activityTypes);
+    return DynamicDataLoader.getUnitBasedDataFromDataInstance(displayStat ?? stat, this.unitSettings);
   }
 
   private rebuildCompositeCardCaches(): void {

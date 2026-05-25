@@ -428,6 +428,33 @@ describe('EventCardStatsGridComponent', () => {
         expect(component.stats.map((stat) => stat.getType())).toEqual([DataPowerAvg.type]);
     });
 
+    it('should expose selected activity types for summary display formatting', () => {
+        const activity = {
+            type: ActivityTypes.Swimming,
+            getStats: () => new Map([[DataDuration.type, createStat(DataDuration.type)]]),
+            getStat: () => null,
+            getStatsAsArray: () => [createStat(DataDuration.type)],
+        } as any;
+        const mockEvent = {
+            isMerge: false,
+            getActivities: () => [activity],
+            getActivityTypesAsArray: () => [ActivityTypes.Swimming],
+            getStats: () => new Map(),
+        } as any;
+
+        component.event = mockEvent;
+        component.selectedActivities = [activity];
+        component.statsToShow = [DataDuration.type];
+
+        component.ngOnChanges({
+            event: new SimpleChange(null, mockEvent, true),
+            selectedActivities: new SimpleChange(null, component.selectedActivities, true),
+            statsToShow: new SimpleChange(null, component.statsToShow, true),
+        });
+
+        expect(component.activityTypes).toEqual([ActivityTypes.Swimming]);
+    });
+
     it('should include composite family min/max in diff map when avg is requested', () => {
         const powerAvgStat = {
             getType: () => DataPowerAvg.type,

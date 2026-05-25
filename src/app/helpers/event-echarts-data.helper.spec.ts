@@ -1425,7 +1425,7 @@ describe('event-echarts-data.helper', () => {
     expect(markers[0].tooltipDetails).toEqual(expect.arrayContaining([
       { label: 'Lap', value: '0' },
       { label: 'Duration', value: '00:25' },
-      { label: 'Distance', value: '25.0m' },
+      { label: 'Distance', value: '25m' },
       { label: 'Type', value: 'Active' },
       { label: 'Stroke', value: 'Freestyle' },
       { label: 'Strokes', value: '9' },
@@ -1490,6 +1490,37 @@ describe('event-echarts-data.helper', () => {
 
     expect(markers).toHaveLength(1);
     expect(markers[0].xValue).toBe(75);
+  });
+
+  it('formats swim length marker distances in meters regardless of distance unit preference', () => {
+    const activity = {
+      startDate: new Date('2024-01-01T00:00:00.000Z'),
+      creator: { name: 'Garmin' },
+      getID: () => 'swim-1',
+      getSwimLengths: () => [
+        {
+          index: 1,
+          startDate: new Date('2024-01-01T00:00:00.000Z'),
+          endDate: new Date('2024-01-01T00:30:00.000Z'),
+          type: 'active',
+          distance: 1500,
+        },
+      ],
+    } as any;
+
+    const markers = buildEventSwimLengthMarkers({
+      selectedActivities: [activity],
+      allActivities: [activity],
+      xAxisType: XAxisTypes.Duration,
+      eventColorService: {
+        getActivityColor: () => '#00aaff',
+      } as any,
+      userUnitSettings: {
+        distanceUnits: DistanceUnits.Miles,
+      } as any,
+    });
+
+    expect(markers[0].tooltipDetails.find((detail) => detail.label === 'Distance')?.value).toBe('1500 m');
   });
 
   it('formats swim length pace with preferred 100-yard units', () => {

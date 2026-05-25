@@ -6,6 +6,7 @@ import {
   DataSpeed,
   DataSwimPace,
   DataSwimPaceMinutesPer100Yard,
+  DistanceUnits,
   EventInterface,
   SwimPaceUnits,
   UserUnitSettingsInterface
@@ -172,7 +173,7 @@ describe('EventCardSwimLengthsComponent', () => {
     component.ngOnChanges();
 
     const rows = component.swimLengthViews[0].groups[0].rows;
-    expect(rows.map(row => row.Split)).toEqual(['25.0 m', '50.0 m', '75.0 m', '100.0 m', 'Rest']);
+    expect(rows.map(row => row.Split)).toEqual(['25 m', '50 m', '75 m', '100 m', 'Rest']);
     expect(component.swimLengthViews[0].groups[0].columnNames).toContain('Split');
   });
 
@@ -185,7 +186,24 @@ describe('EventCardSwimLengthsComponent', () => {
     component.selectedActivities = [activity];
     component.ngOnChanges();
 
-    expect(component.swimLengthViews[0].groups[0].rows.map(row => row.Split)).toEqual(['25.0 m', '50.0 m']);
+    expect(component.swimLengthViews[0].groups[0].rows.map(row => row.Split)).toEqual(['25 m', '50 m']);
+  });
+
+  it('should format swim distances in meters regardless of distance unit preference', () => {
+    const activity = createActivity([
+      createSwimLength({ index: 1, distance: 1500, timerTime: 1800, elapsedTime: 1800 }),
+    ]);
+
+    component.unitSettings = {
+      distanceUnits: DistanceUnits.Miles,
+    } as UserUnitSettingsInterface;
+    component.selectedActivities = [activity];
+    component.ngOnChanges();
+
+    const group = component.swimLengthViews[0].groups[0];
+    expect(group.rows[0].Distance).toBe('1500 m');
+    expect(group.rows[0].Split).toBe('1500 m');
+    expect(group.summaryRow.Distance).toBe('1500 m');
   });
 
   it('should create rest-only groups for consecutive idle rows', () => {

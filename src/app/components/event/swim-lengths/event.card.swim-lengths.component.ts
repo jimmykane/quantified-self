@@ -3,11 +3,11 @@ import {
   ActivityInterface,
   convertSpeedToSwimPace,
   DataCadence,
-  DataDistance,
   DataDuration,
   DataEnergy,
   DataHeartRate,
   DataInterface,
+  DataPoolLength,
   DataSwimPace,
   DynamicDataLoader,
   EventInterface,
@@ -213,7 +213,7 @@ export class EventCardSwimLengthsComponent implements OnChanges {
       const splitDistance = this.getSwimLengthSplitDistance(swimLength);
       if (splitDistance !== null) {
         cumulativeDistance += splitDistance;
-        row.Split = this.formatUnitAwareStat(new DataDistance(cumulativeDistance));
+        row.Split = this.formatSwimDistanceValue(cumulativeDistance);
         return row;
       }
 
@@ -239,7 +239,7 @@ export class EventCardSwimLengthsComponent implements OnChanges {
       Lap: this.formatLapRange(swimLengths),
       Split: '',
       Duration: totalDuration === null ? '' : new DataDuration(totalDuration).getDisplayValue(false, true, true),
-      Distance: totalDistance === null ? '' : this.formatUnitAwareStat(new DataDistance(totalDistance)),
+      Distance: this.formatSwimDistanceValue(totalDistance),
       Type: this.isIdleOrRestSwimLength(lastSwimLength) ? 'Set + Rest' : 'Set',
       Stroke: this.getGroupStrokeLabel(swimLengths),
       Strokes: this.formatOptionalInteger(totalStrokes),
@@ -281,7 +281,11 @@ export class EventCardSwimLengthsComponent implements OnChanges {
   }
 
   private formatDistance(distance: AppSwimLength['distance']): string {
-    return distance === null ? '' : this.formatUnitAwareStat(distance);
+    return this.formatSwimDistanceValue(this.getFiniteDataValue(distance));
+  }
+
+  private formatSwimDistanceValue(distance: number | null): string {
+    return distance === null ? '' : this.formatUnitAwareStat(new DataPoolLength(distance));
   }
 
   private formatEnergy(calories: AppSwimLength['calories']): string {
