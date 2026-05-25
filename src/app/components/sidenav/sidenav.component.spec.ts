@@ -4,10 +4,8 @@ import { AppAuthService } from '../../authentication/app.auth.service';
 import { AppUserService } from '../../services/app.user.service';
 import { AppSideNavService } from '../../services/side-nav/app-side-nav.service';
 import { AppThemeService } from '../../services/app.theme.service';
-import { AppWindowService } from '../../services/app.window.service';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import { Router } from '@angular/router';
 import { AppHapticsService } from '../../services/app.haptics.service';
 import { of } from 'rxjs';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
@@ -28,8 +26,6 @@ describe('SideNavComponent', () => {
     let mockSideNavService: any;
     let mockAnalyticsService: any;
     let mockHapticsService: any;
-    let mockRouter: any;
-    let mockWindowService: any;
     let mockSnackBar: any;
 
     beforeEach(async () => {
@@ -55,16 +51,6 @@ describe('SideNavComponent', () => {
         mockHapticsService = {
             selection: vi.fn(),
         };
-        mockRouter = {
-            navigate: vi.fn().mockResolvedValue(true),
-        };
-        mockWindowService = {
-            windowRef: {
-                location: {
-                    reload: vi.fn(),
-                },
-            },
-        };
         mockSnackBar = {
             open: vi.fn(),
         };
@@ -76,10 +62,8 @@ describe('SideNavComponent', () => {
                 { provide: AppUserService, useValue: mockUserService },
                 { provide: AppSideNavService, useValue: mockSideNavService },
                 { provide: AppThemeService, useValue: mockThemeService },
-                { provide: AppWindowService, useValue: mockWindowService },
                 { provide: AppAnalyticsService, useValue: mockAnalyticsService },
                 { provide: MatSnackBar, useValue: mockSnackBar },
-                { provide: Router, useValue: mockRouter },
                 { provide: AppHapticsService, useValue: mockHapticsService },
                 { provide: AppWhatsNewService, useValue: { unreadCount: signal(0) } },
             ],
@@ -153,9 +137,20 @@ describe('SideNavComponent', () => {
         await component.logout();
 
         expect(mockHapticsService.selection).toHaveBeenCalledTimes(1);
-        expect(mockRouter.navigate).toHaveBeenCalledWith(['/']);
         expect(mockAuthService.signOut).toHaveBeenCalledTimes(1);
-        expect(mockWindowService.windowRef.location.reload).toHaveBeenCalledTimes(1);
+        expect(mockSnackBar.open).not.toHaveBeenCalled();
+    });
+
+    it('should show an error snackbar when logging out fails', async () => {
+        mockAuthService.signOut.mockRejectedValueOnce(new Error('sign out failed'));
+
+        await component.logout();
+
+        expect(mockHapticsService.selection).toHaveBeenCalledTimes(1);
+        expect(mockAuthService.signOut).toHaveBeenCalledTimes(1);
+        expect(mockSnackBar.open).toHaveBeenCalledWith('Could not sign out', undefined, {
+            duration: 2000,
+        });
     });
 
     it('isProUser should be false for basic role', () => {

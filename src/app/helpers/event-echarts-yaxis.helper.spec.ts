@@ -1,23 +1,29 @@
 import {
+  DataAirPower,
+  DataAltitude,
   DataCadence,
   DataEffortPace,
   DataHeartRate,
   DataPace,
   DataPotentialStamina,
   DataPower,
+  DataPowerLeft,
+  DataPowerRight,
   DataStamina,
 } from '@sports-alliance/sports-lib';
 import { describe, expect, it } from 'vitest';
 import {
   buildEventPanelYAxisConfig,
+  canShareEventPanelYAxis,
+  resolveEventPanelYAxisCompatibilityFamily,
   selectPreferredAxisInterval,
 } from './event-echarts-yaxis.helper';
 
-function buildPanel(streamType: string, values: number[]) {
+function buildPanel(streamType: string, values: number[], unit = '') {
   return {
     dataType: streamType,
     displayName: streamType,
-    unit: '',
+    unit,
     colorGroupKey: streamType,
     minX: 0,
     maxX: Math.max(1, values.length - 1),
@@ -29,7 +35,7 @@ function buildPanel(streamType: string, values: number[]) {
         color: '#000000',
         streamType,
         displayName: streamType,
-        unit: '',
+        unit,
         points: values.map((value, index) => ({
           x: index,
           y: value,
@@ -41,6 +47,45 @@ function buildPanel(streamType: string, values: number[]) {
 }
 
 describe('event-echarts-yaxis.helper', () => {
+  it('shares y-axis families for stamina and potential stamina panels', () => {
+    const staminaPanel = buildPanel(DataStamina.type, [65, 78], '%');
+    const potentialStaminaPanel = buildPanel(DataPotentialStamina.type, [80, 95], '%');
+
+    expect(resolveEventPanelYAxisCompatibilityFamily(staminaPanel)).toBe('stamina-percent');
+    expect(resolveEventPanelYAxisCompatibilityFamily(potentialStaminaPanel)).toBe('stamina-percent');
+    expect(canShareEventPanelYAxis(staminaPanel, potentialStaminaPanel)).toBe(true);
+  });
+
+  it('shares y-axis families for explicit power variants', () => {
+    const powerPanel = buildPanel(DataPower.type, [100, 200], 'W');
+    const compatiblePowerPanels = [
+      buildPanel(DataAirPower.type, [95, 190], 'W'),
+      buildPanel(DataPowerLeft.type, [50, 110], 'W'),
+      buildPanel(DataPowerRight.type, [50, 110], 'W'),
+    ];
+
+    expect(resolveEventPanelYAxisCompatibilityFamily(powerPanel)).toBe('power-watts');
+    compatiblePowerPanels.forEach((panel) => {
+      expect(resolveEventPanelYAxisCompatibilityFamily(panel)).toBe('power-watts');
+      expect(canShareEventPanelYAxis(powerPanel, panel)).toBe(true);
+    });
+  });
+
+  it('does not share axes for mixed families or unrelated same-unit metrics', () => {
+    expect(canShareEventPanelYAxis(
+      buildPanel(DataStamina.type, [65, 78], '%'),
+      buildPanel('Battery Charge', [70, 90], '%')
+    )).toBe(false);
+    expect(canShareEventPanelYAxis(
+      buildPanel(DataStamina.type, [65, 78], '%'),
+      buildPanel(DataAltitude.type, [20, 25], 'm')
+    )).toBe(false);
+    expect(canShareEventPanelYAxis(
+      buildPanel(DataStamina.type, [65, 78], '%'),
+      buildPanel(DataPower.type, [100, 200], 'W')
+    )).toBe(false);
+  });
+
   it('builds padded y-range for non-pace panels', () => {
     const config = buildEventPanelYAxisConfig({
       panel: buildPanel(DataPower.type, [100, 200]),

@@ -1,6 +1,5 @@
 import { Component, inject } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
-import { Router } from '@angular/router';
 import { EventInterface } from '@sports-alliance/sports-lib';
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { AppSideNavService } from '../../services/side-nav/app-side-nav.service';
@@ -8,7 +7,6 @@ import { AppThemes } from '@sports-alliance/sports-lib';
 import { User } from '@sports-alliance/sports-lib';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
-import { AppWindowService } from '../../services/app.window.service';
 import { AppThemeService } from '../../services/app.theme.service';
 import { AppUserService } from '../../services/app.user.service';
 import { AppWhatsNewService } from '../../services/app.whats-new.service';
@@ -40,9 +38,7 @@ export class SideNavComponent {
     public userService: AppUserService,
     public sideNav: AppSideNavService,
     public whatsNewService: AppWhatsNewService,
-    private windowService: AppWindowService,
-    private snackBar: MatSnackBar,
-    private router: Router) {
+    private snackBar: MatSnackBar) {
   }
 
 
@@ -110,13 +106,7 @@ export class SideNavComponent {
     this.analyticsService.logEvent('logout', {});
     this.hapticsService.selection();
     try {
-      await this.router.navigate(['/']);
       await this.authService.signOut();
-      localStorage.clear();
-      this.windowService.windowRef.location.reload();
-      this.snackBar.open('Signed out', undefined, {
-        duration: 2000,
-      });
     } catch {
       this.snackBar.open('Could not sign out', undefined, {
         duration: 2000,

@@ -45,9 +45,54 @@ export interface EventPanelYAxisConfig {
   interval?: number;
 }
 
+export type EventPanelYAxisCompatibilityFamily = 'power-watts' | 'stamina-percent';
+
 export interface BuildEventPanelYAxisConfigInput {
   panel: EventChartPanelModel;
   visibleRange: EventChartRange | null;
+}
+
+export function resolveEventPanelYAxisCompatibilityFamily(
+  panel: EventChartPanelModel | null | undefined
+): EventPanelYAxisCompatibilityFamily | null {
+  if (!panel) {
+    return null;
+  }
+
+  const streamTypes = new Set<string>();
+  if (panel.dataType) {
+    streamTypes.add(panel.dataType);
+  }
+  panel.series.forEach((series) => {
+    if (series.streamType) {
+      streamTypes.add(series.streamType);
+    }
+  });
+
+  let resolvedFamily: EventPanelYAxisCompatibilityFamily | null = null;
+  for (const streamType of streamTypes) {
+    const family = resolveEventStreamYAxisCompatibilityFamily(streamType);
+    if (!family) {
+      return null;
+    }
+    if (resolvedFamily && resolvedFamily !== family) {
+      return null;
+    }
+
+    resolvedFamily = family;
+  }
+
+  return resolvedFamily;
+}
+
+export function canShareEventPanelYAxis(
+  primaryPanel: EventChartPanelModel | null | undefined,
+  overlayPanel: EventChartPanelModel | null | undefined
+): boolean {
+  const primaryFamily = resolveEventPanelYAxisCompatibilityFamily(primaryPanel);
+  const overlayFamily = resolveEventPanelYAxisCompatibilityFamily(overlayPanel);
+
+  return !!primaryFamily && primaryFamily === overlayFamily;
 }
 
 export function buildEventPanelYAxisConfig(input: BuildEventPanelYAxisConfigInput): EventPanelYAxisConfig {
@@ -89,6 +134,18 @@ export function buildEventPanelYAxisConfig(input: BuildEventPanelYAxisConfigInpu
 
   const hasPowerStream = streamTypes.some((streamType) => POWER_STREAM_TYPES.has(streamType));
   return buildDefaultAxis(visibleExtrema, hasPowerStream);
+}
+
+function resolveEventStreamYAxisCompatibilityFamily(streamType: string): EventPanelYAxisCompatibilityFamily | null {
+  if (STAMINA_STREAM_TYPES.has(streamType)) {
+    return 'stamina-percent';
+  }
+
+  if (POWER_STREAM_TYPES.has(streamType)) {
+    return 'power-watts';
+  }
+
+  return null;
 }
 
 interface VisibleExtrema {

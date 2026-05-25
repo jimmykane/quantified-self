@@ -43,7 +43,10 @@ import {
   formatDurationSeconds,
   normalizeEventRange,
 } from '../../../../helpers/event-echarts-xaxis.helper';
-import { buildEventPanelYAxisConfig } from '../../../../helpers/event-echarts-yaxis.helper';
+import {
+  buildEventPanelYAxisConfig,
+  canShareEventPanelYAxis
+} from '../../../../helpers/event-echarts-yaxis.helper';
 import {
   computeEventPanelRangeStats,
   EventPanelRangeStat,
@@ -604,11 +607,15 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     const restoredZoomRange = this.getStoredZoomRange();
     const visibleRange = restoredZoomRange ?? this.getVisibleXAxisRange();
     const overlayPanel = this.getActiveOverlayPanel();
+    const shareOverlayYAxis = canShareEventPanelYAxis(panel, overlayPanel);
+    const primaryYAxisPanel = shareOverlayYAxis && overlayPanel
+      ? this.buildSharedYAxisPanel(panel, overlayPanel)
+      : panel;
     const yAxisConfig = buildEventPanelYAxisConfig({
-      panel,
+      panel: primaryYAxisPanel,
       visibleRange,
     });
-    const overlayYAxisConfig = overlayPanel
+    const overlayYAxisConfig = overlayPanel && !shareOverlayYAxis
       ? buildEventPanelYAxisConfig({
         panel: overlayPanel,
         visibleRange,
@@ -668,7 +675,11 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     }
 
     if (overlayPanel) {
-      seriesOptions.push(...this.buildOverlaySeriesOptions(overlayPanel, seriesStrokeWidth));
+      seriesOptions.push(...this.buildOverlaySeriesOptions(
+        overlayPanel,
+        seriesStrokeWidth,
+        shareOverlayYAxis ? 0 : 1
+      ));
     }
 
     const zoneVisualMaps = this.buildZoneVisualMapOptions(panel);
@@ -811,6 +822,21 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     return this.overlayPanel.series?.length ? this.overlayPanel : null;
   }
 
+  private buildSharedYAxisPanel(
+    primaryPanel: EventChartPanelModel,
+    overlayPanel: EventChartPanelModel
+  ): EventChartPanelModel {
+    return {
+      ...primaryPanel,
+      series: [
+        ...primaryPanel.series,
+        ...overlayPanel.series,
+      ],
+      minX: Math.min(primaryPanel.minX, overlayPanel.minX),
+      maxX: Math.max(primaryPanel.maxX, overlayPanel.maxX),
+    };
+  }
+
   private buildValueYAxisOption(
     panel: EventChartPanelModel,
     yAxisConfig: ReturnType<typeof buildEventPanelYAxisConfig>,
@@ -855,14 +881,15 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
 
   private buildOverlaySeriesOptions(
     overlayPanel: EventChartPanelModel,
-    primaryStrokeWidth: number
+    primaryStrokeWidth: number,
+    yAxisIndex = 1
   ): ChartLineSeriesOption[] {
     const overlayStrokeWidth = Math.max(1, primaryStrokeWidth - 0.5);
     return overlayPanel.series.map((series) => ({
       id: `overlay::${series.id}`,
       name: series.activityName,
       type: 'line',
-      yAxisIndex: 1,
+      yAxisIndex,
       smooth: false,
       showSymbol: false,
       symbolSize: 5,
@@ -1754,11 +1781,15 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     const scaleOptions = buildEventCanonicalXAxisScaleOptions(this.xAxisType, this.getVisibleXAxisRange(), this.isMobile);
     const visibleRange = this.getVisibleXAxisRange();
     const overlayPanel = this.getActiveOverlayPanel();
+    const shareOverlayYAxis = canShareEventPanelYAxis(this.panel, overlayPanel);
+    const primaryYAxisPanel = shareOverlayYAxis && overlayPanel
+      ? this.buildSharedYAxisPanel(this.panel, overlayPanel)
+      : this.panel;
     const yAxisConfig = buildEventPanelYAxisConfig({
-      panel: this.panel,
+      panel: primaryYAxisPanel,
       visibleRange,
     });
-    const overlayYAxisConfig = overlayPanel
+    const overlayYAxisConfig = overlayPanel && !shareOverlayYAxis
       ? buildEventPanelYAxisConfig({
         panel: overlayPanel,
         visibleRange,

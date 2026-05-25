@@ -4,10 +4,12 @@ import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import {
+  DataAirPower,
   DataAltitude,
   ChartCursorBehaviours,
   DataDistance,
   DataHeartRate,
+  DataPotentialStamina,
   DataPower,
   DataStamina,
   DistanceUnits,
@@ -240,6 +242,55 @@ describe('EventCardChartPanelComponent', () => {
     return eChartsLoaderMock.setOption.mock.calls.findLast(([, option]) => option?.series)?.[1] as any;
   }
 
+  function buildTestPanel(
+    dataType: string,
+    values: Array<number | { x: number; y: number; time?: number }>,
+    options: {
+      displayName?: string;
+      unit?: string;
+      color?: string;
+      activityName?: string;
+      activityID?: string;
+    } = {}
+  ): any {
+    const displayName = options.displayName || dataType;
+    const unit = options.unit || '';
+    const activityID = options.activityID || 'a1';
+    const points = values.map((value, index) => {
+      if (typeof value === 'number') {
+        const x = index * 10;
+        return { x, y: value, time: x };
+      }
+
+      return {
+        x: value.x,
+        y: value.y,
+        time: value.time ?? value.x,
+      };
+    });
+
+    return {
+      dataType,
+      displayName,
+      unit,
+      colorGroupKey: dataType,
+      minX: Math.min(...points.map((point) => point.x)),
+      maxX: Math.max(...points.map((point) => point.x)),
+      series: [
+        {
+          id: `${activityID}::${dataType}`,
+          activityID,
+          activityName: options.activityName || 'Garmin',
+          color: options.color || '#ff0000',
+          streamType: dataType,
+          displayName,
+          unit,
+          points,
+        }
+      ],
+    };
+  }
+
   it('initializes chart host and renders panel option', async () => {
     component.showZoomBar = true;
     await renderComponent();
@@ -445,6 +496,78 @@ describe('EventCardChartPanelComponent', () => {
     expect(option?.series?.[1]?.lineStyle?.width).toBeLessThanOrEqual(option?.series?.[0]?.lineStyle?.width);
     expect(option?.series?.[1]?.lineStyle?.type).toBeUndefined();
     expect(option?.series?.[1]?.lineStyle?.shadowBlur).toBeUndefined();
+  });
+
+  it('shares one y-axis for stamina and potential stamina overlays', async () => {
+    component.panel = buildTestPanel(
+      DataStamina.type,
+      [65, 92, 100],
+      { unit: '%', displayName: DataStamina.type }
+    );
+    component.overlayPanel = buildTestPanel(
+      DataPotentialStamina.type,
+      [70, 94, 99],
+      { unit: '%', displayName: DataPotentialStamina.type, color: '#0066cc' }
+    );
+
+    await renderComponent();
+
+    const option = getRenderedOption();
+    expect(Array.isArray(option?.yAxis)).toBe(false);
+    expect(option?.yAxis?.position).toBe('left');
+    expect(option?.yAxis?.max).toBe(100);
+    expect(option?.series).toHaveLength(2);
+    expect(option?.series?.[0]?.yAxisIndex).toBe(0);
+    expect(option?.series?.[1]).toEqual(expect.objectContaining({
+      id: `overlay::a1::${DataPotentialStamina.type}`,
+      yAxisIndex: 0,
+    }));
+  });
+
+  it('shares one y-axis when potential stamina overlays stamina in reverse', async () => {
+    component.panel = buildTestPanel(
+      DataPotentialStamina.type,
+      [70, 94, 99],
+      { unit: '%', displayName: DataPotentialStamina.type }
+    );
+    component.overlayPanel = buildTestPanel(
+      DataStamina.type,
+      [65, 92, 100],
+      { unit: '%', displayName: DataStamina.type, color: '#0066cc' }
+    );
+
+    await renderComponent();
+
+    const option = getRenderedOption();
+    expect(Array.isArray(option?.yAxis)).toBe(false);
+    expect(option?.yAxis?.max).toBe(100);
+    expect(option?.series?.[1]).toEqual(expect.objectContaining({
+      id: `overlay::a1::${DataStamina.type}`,
+      yAxisIndex: 0,
+    }));
+  });
+
+  it('shares one y-axis for explicit power variant overlays', async () => {
+    component.panel = buildTestPanel(
+      DataPower.type,
+      [100, 120],
+      { unit: 'W', displayName: DataPower.type }
+    );
+    component.overlayPanel = buildTestPanel(
+      DataAirPower.type,
+      [180, 220],
+      { unit: 'W', displayName: DataAirPower.type, color: '#0066cc' }
+    );
+
+    await renderComponent();
+
+    const option = getRenderedOption();
+    expect(Array.isArray(option?.yAxis)).toBe(false);
+    expect(option?.yAxis?.max).toBeGreaterThanOrEqual(220);
+    expect(option?.series?.[1]).toEqual(expect.objectContaining({
+      id: `overlay::a1::${DataAirPower.type}`,
+      yAxisIndex: 0,
+    }));
   });
 
   it('keeps primary styling unchanged when the overlay is missing or the same metric', async () => {
@@ -875,6 +998,70 @@ describe('EventCardChartPanelComponent', () => {
           interval: 5,
           min: 95,
           max: 125,
+        }
+      },
+      {
+        notMerge: false,
+        lazyUpdate: true,
+        silent: true,
+      }
+    );
+  });
+
+  it('recomputes shared overlay y-axis scale from the combined zoomed visible range', async () => {
+    component.xDomain = { start: 0, end: 3600 };
+    component.panel = buildTestPanel(
+      DataStamina.type,
+      [
+        { x: 0, y: 80 },
+        { x: 200, y: 85 },
+        { x: 600, y: 95 },
+      ],
+      { unit: '%', displayName: DataStamina.type }
+    );
+    component.overlayPanel = buildTestPanel(
+      DataPotentialStamina.type,
+      [
+        { x: 0, y: 40 },
+        { x: 200, y: 45 },
+        { x: 600, y: 100 },
+      ],
+      { unit: '%', displayName: DataPotentialStamina.type, color: '#0066cc' }
+    );
+    chart.getOption.mockReturnValue({
+      dataZoom: [
+        {
+          startValue: 0,
+          endValue: 300,
+        }
+      ]
+    });
+
+    await renderComponent();
+
+    const dataZoomHandler = chart.on.mock.calls.find(([eventName]) => eventName === 'datazoom')?.[1] as (() => void);
+    expect(dataZoomHandler).toBeTypeOf('function');
+
+    eChartsLoaderMock.setOption.mockClear();
+    dataZoomHandler();
+    await new Promise<void>((resolve) => setTimeout(resolve, 20));
+
+    expect(eChartsLoaderMock.setOption).toHaveBeenCalledTimes(1);
+    expect(eChartsLoaderMock.setOption).toHaveBeenNthCalledWith(
+      1,
+      chart,
+      {
+        xAxis: {
+          interval: 60,
+          minInterval: 60,
+          maxInterval: 60,
+          splitNumber: 6,
+        },
+        yAxis: {
+          inverse: false,
+          interval: 5,
+          min: 35,
+          max: 90,
         }
       },
       {
