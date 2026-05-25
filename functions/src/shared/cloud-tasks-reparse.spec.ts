@@ -63,6 +63,7 @@ describe('enqueueSportsLibReparseTask', () => {
             parent: 'projects/p/locations/l/queues/q',
             task: expect.objectContaining({
                 name: 'projects/p/locations/l/queues/q/tasks/reparse-job-abc-123',
+                dispatchDeadline: { seconds: 1800 },
                 httpRequest: expect.objectContaining({
                     url: 'https://test-location-test-project.cloudfunctions.net/processSportsLibReparseTask',
                     body: expect.any(String),
