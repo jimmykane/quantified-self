@@ -3,7 +3,9 @@ import {
   DataStore,
   DataAscent,
   DataCadenceMin,
+  DataBeginningPotentialStamina,
   DataDescent,
+  DataEndingPotentialStamina,
   DataFeeling,
   DataGradeAdjustedPaceAvg,
   DataGradeAdjustedSpeedAvg,
@@ -15,10 +17,14 @@ import {
   DataJumpScoreAvg,
   DataJumpSpeedMax,
   DataPaceAvg,
+  DataPotentialStaminaAvg,
+  DataPotentialStaminaMin,
   DataPowerMax,
   DataPowerTrainingStressScore,
   DataRPE,
   DataSpeedAvg,
+  DataStaminaAvg,
+  DataStaminaMin,
   DataTemperatureMax,
 } from '@sports-alliance/sports-lib';
 import { describe, expect, it } from 'vitest';
@@ -59,6 +65,12 @@ describe('getDefaultSummaryStatTypes', () => {
     expect(stats).toContain(DataStore.DataGender.type);
     expect(stats).toContain(DataStore.DataHeight.type);
     expect(stats).toContain(DataStore.DataWeight.type);
+    expect(stats).toContain(DataStaminaAvg.type);
+    expect(stats).toContain(DataStaminaMin.type);
+    expect(stats).toContain(DataPotentialStaminaAvg.type);
+    expect(stats).toContain(DataPotentialStaminaMin.type);
+    expect(stats).toContain(DataBeginningPotentialStamina.type);
+    expect(stats).toContain(DataEndingPotentialStamina.type);
   });
 
   it('should keep speed derivation behavior by activity type', () => {

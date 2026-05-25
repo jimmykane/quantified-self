@@ -39,6 +39,7 @@ import { EventChartRange, normalizeEventRange } from './event-echarts-xaxis.help
 import { normalizeUnitDerivedTypeLabel } from './stat-label.helper';
 import { resolveUnitAwareDisplayStat } from '@shared/unit-aware-display';
 import { AppSwimLength, getActivitySwimLengths } from './event-swim-length.helper';
+import { getAppCanonicalChartDataTypes } from './app-chart-data-types.helper';
 
 export { normalizeEventLapType } from './event-lap-type.helper';
 
@@ -785,10 +786,7 @@ function buildPreferredDataTypeOrder(
   userUnitSettings: UserUnitSettingsInterface
 ): Map<string, number> {
   const order = new Map<string, number>();
-  const canonicalDataTypes = [
-    ...DynamicDataLoader.basicDataTypes,
-    ...DynamicDataLoader.advancedDataTypes.filter((dataType) => !DynamicDataLoader.basicDataTypes.includes(dataType)),
-  ];
+  const canonicalDataTypes = getAppCanonicalChartDataTypes();
   const selectedDataTypeSet = new Set(dataTypesToUse || []);
   const canonicalSelectedDataTypes = canonicalDataTypes
     .filter((dataType) => selectedDataTypeSet.has(dataType))

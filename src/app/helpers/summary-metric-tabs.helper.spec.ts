@@ -2,6 +2,7 @@ import {
   DataAbsolutePressure,
   DataAvgFlow,
   DataAirPower,
+  DataBeginningPotentialStamina,
   DataJumpCount,
   DataJumpDistance,
   DataJumpDistanceAvg,
@@ -32,10 +33,15 @@ import {
   DataHeartRateMin,
   DataPaceAvg,
   DataPowerAvg,
+  DataPotentialStaminaAvg,
+  DataPotentialStaminaMin,
   DataPowerTrainingStressScore,
   DataRecoveryTime,
+  DataEndingPotentialStamina,
   DataRPE,
   DataSpeedAvg,
+  DataStaminaAvg,
+  DataStaminaMin,
   DataSwimPaceAvg,
   DataVerticalSpeedMax,
   DataVO2Max,
@@ -385,6 +391,35 @@ describe('buildSummaryMetricTabs', () => {
       DataStore.DataAvgRespirationRate.type,
       DataStore.DataMinRespirationRate.type,
       DataStore.DataMaxRespirationRate.type,
+    ]);
+  });
+
+  it('should map stamina metrics to overall and physiological tabs', () => {
+    const tabs = buildSummaryMetricTabs([
+      DataEndingPotentialStamina.type,
+      DataPotentialStaminaMin.type,
+      DataStaminaMin.type,
+      DataPotentialStaminaAvg.type,
+      DataStaminaAvg.type,
+      DataBeginningPotentialStamina.type,
+    ]);
+
+    expect(tabs.map((tab) => tab.id)).toEqual(['overall', 'physiological']);
+
+    const overallTab = tabs.find((tab) => tab.id === 'overall');
+    expect(overallTab?.metricTypes).toEqual([
+      DataStaminaAvg.type,
+      DataPotentialStaminaAvg.type,
+    ]);
+
+    const physiologicalTab = tabs.find((tab) => tab.id === 'physiological');
+    expect(physiologicalTab?.metricTypes).toEqual([
+      DataStaminaAvg.type,
+      DataStaminaMin.type,
+      DataPotentialStaminaAvg.type,
+      DataPotentialStaminaMin.type,
+      DataBeginningPotentialStamina.type,
+      DataEndingPotentialStamina.type,
     ]);
   });
 

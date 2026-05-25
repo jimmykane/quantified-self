@@ -115,6 +115,18 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('lap index, duration, distance, length type, stroke, strokes, swim pace, cadence, heart rate, SWOLF, and energy');
   });
 
+  it('should document event stamina metrics', () => {
+    const gettingStartedSection = HELP_SECTIONS.find(section => section.id === 'getting-started');
+
+    expect(gettingStartedSection?.content).toContain('Event stamina metrics');
+    expect(gettingStartedSection?.content).toContain('**Stamina** and **Potential Stamina**');
+    expect(gettingStartedSection?.content).toContain('Detailed Statistics');
+    expect(gettingStartedSection?.content).toContain('event summary metric tabs');
+    expect(gettingStartedSection?.content).toContain('selectable chart metrics');
+    expect(gettingStartedSection?.content).toContain('**Beginning Potential Stamina**');
+    expect(gettingStartedSection?.content).toContain('**Ending Potential Stamina**');
+  });
+
   it('should document non-merged event heart-rate and power zone line and fill coloring', () => {
     const gettingStartedSection = HELP_SECTIONS.find(section => section.id === 'getting-started');
 

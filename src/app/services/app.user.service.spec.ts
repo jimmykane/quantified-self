@@ -10,9 +10,10 @@ import { AppUserInterface } from '../models/app-user.interface';
 import { AppUserUtilities } from '../utils/app.user.utilities';
 import { of, firstValueFrom, take, from, filter, throwError, defer } from 'rxjs';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { DataAltitude, DataCadence, DataGradeAdjustedSpeed, DataHeartRate, DataPace, DataPower, DataSpeed, DynamicDataLoader, ServiceNames } from '@sports-alliance/sports-lib';
+import { DataAltitude, DataCadence, DataGradeAdjustedSpeed, DataHeartRate, DataPace, DataPotentialStamina, DataPower, DataSpeed, DataStamina, ServiceNames } from '@sports-alliance/sports-lib';
 import { LoggerService } from './logger.service';
 import { ACTIVITY_SYNC_ROUTE_IDS } from '@shared/activity-sync-routes';
+import { getAppCanonicalChartDataTypes } from '../helpers/app-chart-data-types.helper';
 
 vi.mock('app/firebase/auth', async (importOriginal) => {
     const actual: any = await importOriginal();
@@ -359,7 +360,9 @@ describe('AppUserService', () => {
                         [DataGradeAdjustedSpeed.type]: { enabled: true },
                         [DataHeartRate.type]: { enabled: true },
                         [DataPace.type]: { enabled: true },
+                        [DataPotentialStamina.type]: { enabled: true },
                         [DataSpeed.type]: { enabled: true },
+                        [DataStamina.type]: { enabled: true },
                         [DataPower.type]: { enabled: true },
                         customType: { enabled: true },
                     }
@@ -367,18 +370,17 @@ describe('AppUserService', () => {
             }
         } as any;
 
-        const canonicalChartDataTypes = [
-            ...DynamicDataLoader.basicDataTypes,
-            ...DynamicDataLoader.advancedDataTypes.filter((dataType) => !DynamicDataLoader.basicDataTypes.includes(dataType)),
-        ];
+        const canonicalChartDataTypes = getAppCanonicalChartDataTypes();
         const enabledDataTypes = [
             DataAltitude.type,
             DataCadence.type,
             DataGradeAdjustedSpeed.type,
             DataHeartRate.type,
             DataPace.type,
+            DataPotentialStamina.type,
             DataPower.type,
             DataSpeed.type,
+            DataStamina.type,
             'customType'
         ];
         const canonicalEnabledDataTypes = canonicalChartDataTypes.filter((dataType) => enabledDataTypes.includes(dataType));

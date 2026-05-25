@@ -8,14 +8,14 @@ import {
     DataLongitudeDegrees,
     DataSpeed,
     DataGradeAdjustedSpeed,
-    DataDistance,
-    DynamicDataLoader
+    DataDistance
 } from '@sports-alliance/sports-lib';
 import { map, switchMap, catchError, take } from 'rxjs/operators';
 import { of, EMPTY, Observable } from 'rxjs';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { AppAuthService } from '../authentication/app.auth.service';
 import { LoggerService } from '../services/logger.service';
+import { getAppNonUnitBasedChartDataTypes } from '../helpers/app-chart-data-types.helper';
 
 export interface EventResolverData {
     event: EventInterface;
@@ -54,7 +54,10 @@ export const eventResolver: ResolveFn<EventResolverData> = (
 
             if (user) {
                 const userChartDataTypes = userService.getUserChartDataTypesToUse(user);
-                const nonUnitBasedDataTypes = DynamicDataLoader.getNonUnitBasedDataTypes(user.settings.chartSettings.showAllData, userChartDataTypes);
+                const nonUnitBasedDataTypes = getAppNonUnitBasedChartDataTypes(
+                    user.settings.chartSettings.showAllData,
+                    userChartDataTypes
+                );
                 nonUnitBasedDataTypes.forEach(t => {
                     if (!dataTypes.includes(t)) {
                         dataTypes.push(t);

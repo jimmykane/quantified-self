@@ -16,7 +16,6 @@ import {
   DataTypeSettings,
   XAxisTypes
 } from '@sports-alliance/sports-lib';
-import { DynamicDataLoader } from '@sports-alliance/sports-lib';
 import { UserSettingsInterface } from '@sports-alliance/sports-lib';
 import {
   DaysOfTheWeek,
@@ -67,6 +66,7 @@ import { ServiceNames } from '@sports-alliance/sports-lib';
 import { AppWindowService } from './app.window.service';
 import { LoggerService } from './logger.service';
 import { applyEventChartCanonicalOrderOverride } from '../helpers/event-chart-order.helper';
+import { getAppCanonicalChartDataTypes } from '../helpers/app-chart-data-types.helper';
 import { UserMyTracksSettingsInterface } from '@sports-alliance/sports-lib';
 import { DataDescription } from '@sports-alliance/sports-lib';
 import { DataActivityTypes } from '@sports-alliance/sports-lib';
@@ -1043,10 +1043,7 @@ export class AppUserService implements OnDestroy {
         return user.settings.chartSettings.dataTypeSettings[dataTypeSettingKey].enabled === true;
       })
     );
-    const canonicalDataTypes = [
-      ...DynamicDataLoader.basicDataTypes,
-      ...DynamicDataLoader.advancedDataTypes.filter((dataType) => !DynamicDataLoader.basicDataTypes.includes(dataType)),
-    ];
+    const canonicalDataTypes = getAppCanonicalChartDataTypes();
     const orderedDataTypes = applyEventChartCanonicalOrderOverride(
       canonicalDataTypes.filter((dataType) => enabledDataTypeSet.has(dataType))
     );

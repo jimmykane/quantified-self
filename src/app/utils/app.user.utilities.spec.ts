@@ -8,9 +8,11 @@ import {
     ChartDataCategoryTypes,
     ChartDataValueTypes,
     ChartTypes,
+    DataPotentialStamina,
     DataRecoveryTime,
     DataDistance,
     DataHeartRateAvg,
+    DataStamina,
     DistanceUnits,
     TileTypes,
     TimeIntervals
@@ -937,6 +939,8 @@ describe('AppUserUtilities', () => {
                 .map(([key]) => key);
 
             expect(enabledDataTypes).toEqual(expect.arrayContaining(AppUserUtilities.getDefaultChartDataTypesToShowOnLoad()));
+            expect(settings.chartSettings.dataTypeSettings[DataStamina.type]).toEqual({ enabled: false });
+            expect(settings.chartSettings.dataTypeSettings[DataPotentialStamina.type]).toEqual({ enabled: false });
             expect(settings.unitSettings.speedUnits).toEqual(AppUserUtilities.getDefaultSpeedUnits());
             expect(settings.unitSettings.paceUnits).toEqual(AppUserUtilities.getDefaultPaceUnits());
             expect(settings.unitSettings.swimPaceUnits).toEqual(AppUserUtilities.getDefaultSwimPaceUnits());

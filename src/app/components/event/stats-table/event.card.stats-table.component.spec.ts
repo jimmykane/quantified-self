@@ -7,12 +7,15 @@ import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import {
     ActivityInterface,
+    DataBeginningPotentialStamina,
     DataPace,
     DataPaceAvg,
     DataPaceMax,
     DataPaceMin,
+    DataPotentialStaminaAvg,
     DataSpeedAvgKilometersPerHour,
     DataSpeedAvgMilesPerHour,
+    DataStaminaMin,
     EventInterface,
     UserUnitSettingsInterface
 } from '@sports-alliance/sports-lib';
@@ -394,5 +397,48 @@ describe('EventCardStatsTableComponent', () => {
         expect(rowTypes).toContain(DataPaceAvg.type);
         expect(rowTypes).toContain(DataPaceMin.type);
         expect(rowTypes).toContain(DataPaceMax.type);
+    });
+
+    it('should include Garmin stamina stats in detailed statistics', () => {
+        const staminaStats = [
+            {
+                getType: () => DataStaminaMin.type,
+                getDisplayType: () => DataStaminaMin.type,
+                getDisplayValue: () => 34,
+                getDisplayUnit: () => '%',
+                getValue: () => 34
+            },
+            {
+                getType: () => DataPotentialStaminaAvg.type,
+                getDisplayType: () => DataPotentialStaminaAvg.type,
+                getDisplayValue: () => 79.8,
+                getDisplayUnit: () => '%',
+                getValue: () => 79.8
+            },
+            {
+                getType: () => DataBeginningPotentialStamina.type,
+                getDisplayType: () => DataBeginningPotentialStamina.type,
+                getDisplayValue: () => 95,
+                getDisplayUnit: () => '%',
+                getValue: () => 95
+            }
+        ];
+
+        const activity = {
+            ...mockActivity,
+            creator: { name: 'Garmin' },
+            getStatsAsArray: () => staminaStats,
+            getStat: (type: string) => staminaStats.find((stat) => stat.getType() === type) || null,
+            getID: () => 'act1'
+        } as unknown as ActivityInterface;
+
+        component.event = { ...mockEvent, isMerge: false } as EventInterface;
+        component.selectedActivities = [activity];
+        component.ngOnChanges({});
+
+        const rowTypes = component.data.data.map((row: any) => row['__statType']);
+        expect(rowTypes).toContain(DataStaminaMin.type);
+        expect(rowTypes).toContain(DataPotentialStaminaAvg.type);
+        expect(rowTypes).toContain(DataBeginningPotentialStamina.type);
     });
 });

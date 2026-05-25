@@ -24,6 +24,7 @@ import {
   DataBatteryConsumption,
   DataBatteryCurrent,
   DataBatteryVoltage,
+  DataBeginningPotentialStamina,
   DataCadenceAvg,
   DataCadenceMax,
   DataCadenceMin,
@@ -38,6 +39,7 @@ import {
   DataEHPEMax,
   DataEHPEMin,
   DataEnergy,
+  DataEndingPotentialStamina,
   DataEPOC,
   DataEVPE,
   DataEVPEAvg,
@@ -102,6 +104,10 @@ import {
   DataNumberOfSatellitesMin,
   DataPaceAvg,
   DataPeakEPOC,
+  DataPotentialStamina,
+  DataPotentialStaminaAvg,
+  DataPotentialStaminaMax,
+  DataPotentialStaminaMin,
   DataPower,
   DataPowerAvg,
   DataPowerIntensityFactor,
@@ -128,6 +134,10 @@ import {
   DataStanceTime,
   DataStanceTimeBalanceLeft,
   DataStanceTimeBalanceRight,
+  DataStamina,
+  DataStaminaAvg,
+  DataStaminaMax,
+  DataStaminaMin,
   DataStrydDistance,
   DataSwimPaceAvg,
   DataTargetPowerZone,
@@ -197,6 +207,19 @@ const PHYSIOLOGICAL_EXTRA_TYPE_STRINGS: string[] = [
   DataGender.type,
   DataFitnessAge.type,
   DataAge.type,
+];
+
+const PHYSIOLOGICAL_STAMINA_TYPE_STRINGS: string[] = [
+  DataStamina.type,
+  DataStaminaAvg.type,
+  DataStaminaMin.type,
+  DataStaminaMax.type,
+  DataPotentialStamina.type,
+  DataPotentialStaminaAvg.type,
+  DataPotentialStaminaMin.type,
+  DataPotentialStaminaMax.type,
+  DataBeginningPotentialStamina.type,
+  DataEndingPotentialStamina.type,
 ];
 
 const PERFORMANCE_EXTRA_TYPE_STRINGS: string[] = [
@@ -326,6 +349,8 @@ export const EVENT_SUMMARY_METRIC_GROUPS: EventSummaryMetricGroupConfig[] = [
       DataAscent.type,
       DataDescent.type,
       DataPowerAvg.type,
+      DataStaminaAvg.type,
+      DataPotentialStaminaAvg.type,
       DataPowerNormalized.type,
       DataPowerTrainingStressScore.type,
       DataCadenceAvg.type,
@@ -411,6 +436,7 @@ export const EVENT_SUMMARY_METRIC_GROUPS: EventSummaryMetricGroupConfig[] = [
       DataFeeling.type,
       DataRPE.type,
       ...PHYSIOLOGICAL_EXTRA_TYPE_STRINGS,
+      ...PHYSIOLOGICAL_STAMINA_TYPE_STRINGS,
     ],
   },
   {
@@ -477,4 +503,5 @@ export const EVENT_SUMMARY_DEFAULT_STAT_TYPES: string[] = [
   DataFeeling.type,
   DataRPE.type,
   ...PHYSIOLOGICAL_EXTRA_TYPE_STRINGS,
+  ...PHYSIOLOGICAL_STAMINA_TYPE_STRINGS,
 ];

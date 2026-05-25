@@ -3,16 +3,22 @@ import {
   DataAltitudeAvg,
   DataAltitudeMax,
   DataAltitudeMin,
+  DataBeginningPotentialStamina,
   DataCadenceMax,
   DataCadenceMin,
   DataDescent,
   DataDistance,
   DataDistanceFeet,
   DataDistanceMiles,
+  DataEndingPotentialStamina,
   DataEnergy,
   DataFeeling,
   DataGradeAdjustedPaceAvg,
   DataPaceAvg,
+  DataPotentialStamina,
+  DataPotentialStaminaAvg,
+  DataPotentialStaminaMax,
+  DataPotentialStaminaMin,
   DataPowerMax,
   DataPowerMin,
   DataJumpCount,
@@ -54,6 +60,10 @@ import {
   DataJumpSpeedMinMetersPerMinute,
   DataJumpSpeedMinMilesPerHour,
   DataRPE,
+  DataStamina,
+  DataStaminaAvg,
+  DataStaminaMax,
+  DataStaminaMin,
   DataTemperatureMax,
   DataTemperatureMin,
   DataVerticalSpeedAvg,
@@ -290,6 +300,21 @@ describe('DataTypeIconComponent', () => {
     expect(component.getColumnHeaderIcon('Gender')).toBe('wc');
     expect(component.getColumnHeaderIcon('Fitness Age')).toBe('cake');
     expect(component.getColumnHeaderIcon('Age')).toBe('cake');
+  });
+
+  it('should provide icon mappings for stamina metrics', () => {
+    const component = new DataTypeIconComponent();
+
+    expect(component.getColumnHeaderIcon(DataStamina.type)).toBe('battery_full');
+    expect(component.getColumnHeaderIcon(DataStaminaAvg.type)).toBe('battery_full');
+    expect(component.getColumnHeaderIcon(DataStaminaMin.type)).toBe('battery_full');
+    expect(component.getColumnHeaderIcon(DataStaminaMax.type)).toBe('battery_full');
+    expect(component.getColumnHeaderIcon(DataPotentialStamina.type)).toBe('battery_charging_full');
+    expect(component.getColumnHeaderIcon(DataPotentialStaminaAvg.type)).toBe('battery_charging_full');
+    expect(component.getColumnHeaderIcon(DataPotentialStaminaMin.type)).toBe('battery_charging_full');
+    expect(component.getColumnHeaderIcon(DataPotentialStaminaMax.type)).toBe('battery_charging_full');
+    expect(component.getColumnHeaderIcon(DataBeginningPotentialStamina.type)).toBe('battery_charging_full');
+    expect(component.getColumnHeaderIcon(DataEndingPotentialStamina.type)).toBe('battery_charging_full');
   });
 
   it('should provide icon mappings for swim length table columns', () => {

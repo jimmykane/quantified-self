@@ -16,7 +16,9 @@ import {
     ActivityInterface,
     AppThemes,
     XAxisTypes,
+    DataPotentialStamina,
     DataSpeed,
+    DataStamina,
     LapTypes
 } from '@sports-alliance/sports-lib';
 import { LoggerService } from '../../services/logger.service';
@@ -110,6 +112,7 @@ describe('EventCardComponent', () => {
     const mockEvent = createEvent('evt1', [mockActivity], 'Initial Event');
 
     beforeEach(async () => {
+        mockUser.settings.chartSettings.showAllData = false;
         mockedShouldRenderIntensityZonesChart.mockReturnValue(false);
         routeData$ = new BehaviorSubject({ event: mockEvent });
         routeUserID = 'testUser';
@@ -239,6 +242,21 @@ describe('EventCardComponent', () => {
 
         expect(mockEventService.getEventActivitiesAndSomeStreams).toHaveBeenCalledTimes(1);
         expect(component.event()).toBe(refreshedEvent);
+    });
+
+    it('should request stamina streams during full refresh when show all chart data is enabled', async () => {
+        mockUser.settings.chartSettings.showAllData = true;
+        const liveMismatchedEvent = createEvent('evt1', [createActivity('act2')], 'Live Mismatch Event');
+        const refreshedEvent = createEvent('evt1', [createActivity('act1')], 'Refreshed Event');
+        mockEventService.getEventActivitiesAndSomeStreams.mockReturnValue(of(refreshedEvent));
+
+        liveEventDetailsByRouteKey.get('testUser:evt1')?.next(liveMismatchedEvent);
+        await Promise.resolve();
+        await Promise.resolve();
+
+        const streamTypes = mockEventService.getEventActivitiesAndSomeStreams.mock.calls[0][2];
+        expect(streamTypes).toContain(DataStamina.type);
+        expect(streamTypes).toContain(DataPotentialStamina.type);
     });
 
     it('should preserve selected activity IDs on live updates', () => {

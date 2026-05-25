@@ -228,6 +228,12 @@ export const HELP_SECTIONS: HelpSection[] = [
 - Swim lengths appear in activity tabs and show lap index, duration, distance, length type, stroke, strokes, swim pace, cadence, heart rate, SWOLF, and energy when available.
 - Swim distance, pace, and energy values follow your preferred units from **Settings**.
 
+### Event stamina metrics
+
+- Event details can show **Stamina** and **Potential Stamina** when Garmin FIT or compatible Suunto imports include them.
+- Stamina metrics appear in Detailed Statistics, in event summary metric tabs, and as selectable chart metrics from **Settings -> Charts**.
+- Garmin session-level stamina values such as **Minimum Stamina**, **Beginning Potential Stamina**, and **Ending Potential Stamina** are shown when present.
+
 ### Event chart x-axis fallback
 
 - In Event details, if selected indoor activities do not include distance data, the chart automatically falls back to a **Duration** x-axis.

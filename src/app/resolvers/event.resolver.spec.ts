@@ -1,6 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { ResolveFn, Router, ActivatedRouteSnapshot, RouterStateSnapshot } from '@angular/router';
-import { EventInterface, User } from '@sports-alliance/sports-lib';
+import { DataPotentialStamina, DataStamina, EventInterface, User } from '@sports-alliance/sports-lib';
 import { of, throwError, EMPTY } from 'rxjs';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { AppEventService } from '../services/app.event.service';
@@ -22,12 +22,12 @@ describe('eventResolver', () => {
     let snackBarSpy: any;
 
     const mockUser = new User('testUser');
-    mockUser.settings = {
-        chartSettings: { showAllData: false },
-        unitSettings: {}
-    } as any;
 
     beforeEach(() => {
+        mockUser.settings = {
+            chartSettings: { showAllData: false },
+            unitSettings: {}
+        } as any;
         eventServiceSpy = { getEventActivitiesAndSomeStreams: vi.fn() };
         userServiceSpy = { getUserChartDataTypesToUse: vi.fn() };
         authServiceSpy = { user$: of(mockUser) };
@@ -68,6 +68,29 @@ describe('eventResolver', () => {
             expect(result.event).toEqual(mockEvent);
             expect(result.user).toEqual(mockUser);
             expect(eventServiceSpy.getEventActivitiesAndSomeStreams).toHaveBeenCalled();
+            done();
+        });
+    }));
+
+    it('should request stamina streams when show all chart data is enabled', () => new Promise<void>(done => {
+        const mockEvent = { id: 'testEvent' } as any;
+        eventServiceSpy.getEventActivitiesAndSomeStreams.mockReturnValue(of(mockEvent));
+        userServiceSpy.getUserChartDataTypesToUse.mockReturnValue([]);
+        mockUser.settings.chartSettings.showAllData = true;
+
+        const route = new ActivatedRouteSnapshot();
+        vi.spyOn(route.paramMap, 'get').mockImplementation((key) => {
+            if (key === 'eventID') return '123';
+            if (key === 'userID') return '456';
+            return null;
+        });
+
+        const state = {} as RouterStateSnapshot;
+
+        (executeResolver(route, state) as any).subscribe(() => {
+            const streamTypes = eventServiceSpy.getEventActivitiesAndSomeStreams.mock.calls[0][2];
+            expect(streamTypes).toContain(DataStamina.type);
+            expect(streamTypes).toContain(DataPotentialStamina.type);
             done();
         });
     }));
