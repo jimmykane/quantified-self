@@ -107,6 +107,18 @@ import { DataVerticalOscillation } from '@sports-alliance/sports-lib';
 import { DataVerticalOscillationAvg } from '@sports-alliance/sports-lib';
 import { DataVerticalOscillationMax } from '@sports-alliance/sports-lib';
 import { DataVerticalOscillationMin } from '@sports-alliance/sports-lib';
+import {
+  DataBeginningPotentialStamina,
+  DataEndingPotentialStamina,
+  DataPotentialStamina,
+  DataPotentialStaminaAvg,
+  DataPotentialStaminaMax,
+  DataPotentialStaminaMin,
+  DataStamina,
+  DataStaminaAvg,
+  DataStaminaMax,
+  DataStaminaMin,
+} from '@sports-alliance/sports-lib';
 
 @Component({
   selector: 'app-data-type-icon',
@@ -141,6 +153,7 @@ export class DataTypeIconComponent {
       case '#':
         return 'tag';
       case 'Lap':
+      case 'Split':
         return 'linear_scale';
       case 'Start Date':
         return 'date_range';
@@ -185,6 +198,18 @@ export class DataTypeIconComponent {
       case 'PowerWattsPerKg':
         return 'monitor_weight';
       case 'WPrime':
+        return 'battery_charging_full';
+      case DataStamina.type:
+      case DataStaminaAvg.type:
+      case DataStaminaMin.type:
+      case DataStaminaMax.type:
+        return 'battery_full';
+      case DataPotentialStamina.type:
+      case DataPotentialStaminaAvg.type:
+      case DataPotentialStaminaMin.type:
+      case DataPotentialStaminaMax.type:
+      case DataBeginningPotentialStamina.type:
+      case DataEndingPotentialStamina.type:
         return 'battery_charging_full';
       case 'Power Pod':
         return 'sensors';

@@ -112,7 +112,20 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('**Swim Lengths** table');
     expect(gettingStartedSection?.content).toContain('per-length pool data');
     expect(gettingStartedSection?.content).toContain('grouped into collapsed sets through the next idle/rest length');
-    expect(gettingStartedSection?.content).toContain('lap index, duration, distance, length type, stroke, strokes, swim pace, cadence, heart rate, SWOLF, and energy');
+    expect(gettingStartedSection?.content).toContain('lap index, split progress, duration, distance, length type, stroke, strokes, swim pace, cadence, heart rate, SWOLF, and energy');
+    expect(gettingStartedSection?.content).toContain('25 m, 50 m, 75 m, and 100 m splits before the rest row');
+  });
+
+  it('should document event stamina metrics', () => {
+    const gettingStartedSection = HELP_SECTIONS.find(section => section.id === 'getting-started');
+
+    expect(gettingStartedSection?.content).toContain('Event stamina metrics');
+    expect(gettingStartedSection?.content).toContain('**Stamina** and **Potential Stamina**');
+    expect(gettingStartedSection?.content).toContain('Detailed Statistics');
+    expect(gettingStartedSection?.content).toContain('event summary metric tabs');
+    expect(gettingStartedSection?.content).toContain('selectable chart metrics');
+    expect(gettingStartedSection?.content).toContain('**Beginning Potential Stamina**');
+    expect(gettingStartedSection?.content).toContain('**Ending Potential Stamina**');
   });
 
   it('should document non-merged event heart-rate and power zone line and fill coloring', () => {
@@ -121,9 +134,11 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('provider heart-rate or power zone boundaries');
     expect(gettingStartedSection?.content).toContain('non-merged events');
     expect(gettingStartedSection?.content).toContain('Each event chart panel can use the **Overlay** button');
+    expect(gettingStartedSection?.content).toContain('Right-clicking an event chart copies a themed image of the full chart panel');
     expect(gettingStartedSection?.content).toContain('**Show Swim Lengths** chart option');
     expect(gettingStartedSection?.content).toContain('swim length end boundaries');
     expect(gettingStartedSection?.content).toContain('active and idle/rest lengths are both included');
+    expect(gettingStartedSection?.content).toContain('shared y-axis');
     expect(gettingStartedSection?.content).toContain('right-side y-axis');
     expect(gettingStartedSection?.content).toContain('saved globally by primary metric');
     expect(gettingStartedSection?.content).toContain('primary metric keeps its normal line and fill');

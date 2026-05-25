@@ -119,6 +119,13 @@ vi.mock('firebase-admin', () => {
     };
 });
 
+vi.mock('firebase-admin/firestore', () => ({
+    FieldValue: {
+        serverTimestamp: hoisted.serverTimestamp,
+        delete: hoisted.deleteField,
+    },
+}));
+
 vi.mock('@sports-alliance/sports-lib', () => ({
     ActivityParsingOptions: class ActivityParsingOptions {
         constructor(public opts: unknown) { }
@@ -176,6 +183,7 @@ import {
     SPORTS_LIB_LEGACY_APPSPOT_BUCKET,
     applyAutoHealedSourceBucketMetadata,
 } from './sports-lib-reparse.service';
+import * as admin from 'firebase-admin';
 
 function makeCollectionQuery(docs: any[] = []) {
     return {
@@ -1111,6 +1119,44 @@ describe('sports-lib-reparse.service', () => {
         }));
         expect(mergeMetadataCall?.options).toEqual({ merge: true });
         expect(hoisted.mockWriteAllEventData).toHaveBeenCalled();
+    });
+
+    it('persistReparsedEvent should not depend on admin.firestore.FieldValue', async () => {
+        const firestoreFn = admin.firestore as typeof admin.firestore & { FieldValue?: unknown };
+        const originalFieldValue = firestoreFn.FieldValue;
+        firestoreFn.FieldValue = undefined;
+
+        try {
+            const setCalls: Array<{ path: string; payload?: Record<string, unknown> }> = [];
+            hoisted.mockDoc.mockImplementation((path: string) => ({
+                path,
+                set: vi.fn(async (payload: Record<string, unknown>) => {
+                    setCalls.push({ path, payload });
+                }),
+                get: vi.fn().mockResolvedValue({ exists: true, data: () => ({}) }),
+            }));
+
+            const parsedEvent = {
+                setID: vi.fn(),
+                getActivities: vi.fn(() => [{ getID: () => 'a1' }]),
+            } as any;
+
+            await persistReparsedEvent(
+                'u1',
+                'e1',
+                parsedEvent,
+                {},
+                [{ id: 'a1', data: () => ({}) } as any],
+                TARGET_SPORTS_LIB_VERSION,
+            );
+
+            const processingCall = setCalls.find(call => call.path.includes('/metaData/processing'));
+            expect(processingCall?.payload).toEqual(expect.objectContaining({
+                processedAt: 'SERVER_TIMESTAMP',
+            }));
+        } finally {
+            firestoreFn.FieldValue = originalFieldValue;
+        }
     });
 
     it('persistReparsedEvent should avoid batch delete when there are no stale activities', async () => {

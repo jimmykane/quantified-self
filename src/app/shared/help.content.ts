@@ -225,14 +225,22 @@ export const HELP_SECTIONS: HelpSection[] = [
 
 - Event details include a **Swim Lengths** table when selected swim activities contain per-length pool data.
 - Swim lengths are grouped into collapsed sets through the next idle/rest length; expand a set to inspect each individual length row.
-- Swim lengths appear in activity tabs and show lap index, duration, distance, length type, stroke, strokes, swim pace, cadence, heart rate, SWOLF, and energy when available.
+- Swim lengths appear in activity tabs and show lap index, split progress, duration, distance, length type, stroke, strokes, swim pace, cadence, heart rate, SWOLF, and energy when available.
+- Active split progress is shown inside each expanded set, so a 25 m pool with a 100 m set displays 25 m, 50 m, 75 m, and 100 m splits before the rest row.
 - Swim distance, pace, and energy values follow your preferred units from **Settings**.
+
+### Event stamina metrics
+
+- Event details can show **Stamina** and **Potential Stamina** when Garmin FIT or compatible Suunto imports include them.
+- Stamina metrics appear in Detailed Statistics, in event summary metric tabs, and as selectable chart metrics from **Settings -> Charts**.
+- Garmin session-level stamina values such as **Minimum Stamina**, **Beginning Potential Stamina**, and **Ending Potential Stamina** are shown when present.
 
 ### Event chart x-axis fallback
 
 - In Event details, if selected indoor activities do not include distance data, the chart automatically falls back to a **Duration** x-axis.
 - In that case, the **Distance** x-axis option stays visible but is disabled until a compatible activity selection is active.
-- Each event chart panel can use the **Overlay** button to compare one other available metric on a right-side y-axis; overlay choices are saved globally by primary metric, so **Heart Rate** can always request **Altitude** when both streams exist.
+- Each event chart panel can use the **Overlay** button to compare one other available metric on a shared y-axis when metrics are compatible, otherwise on a right-side y-axis; overlay choices are saved globally by primary metric, so **Heart Rate** can always request **Altitude** when both streams exist.
+- Right-clicking an event chart copies a themed image of the full chart panel, including the chart title, legend, and range statistics.
 - Swim activities with per-length pool data show a **Show Swim Lengths** chart option that overlays swim length end boundaries on the chart; active and idle/rest lengths are both included.
 - When an overlay is active, the primary metric keeps its normal line and fill, while the overlay renders as a plain solid no-fill line using the overlay metric's series color. On merged and benchmark events, overlay legend and tooltip rows include both metric and activity labels.
 - When provider heart-rate or power zone boundaries are available on non-merged events, the **Heart Rate** and **Power** charts color their lines and visible fill by zone.`,

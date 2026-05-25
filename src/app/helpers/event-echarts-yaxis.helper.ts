@@ -2,9 +2,11 @@ import {
   DataAirPower,
   DataCadence,
   DataHeartRate,
+  DataPotentialStamina,
   DataPower,
   DataPowerLeft,
   DataPowerRight,
+  DataStamina,
 } from '@sports-alliance/sports-lib';
 import { EventChartPanelModel } from './event-echarts-data.helper';
 import { isEventPaceStreamType } from './event-echarts-style.helper';
@@ -16,6 +18,8 @@ const EVENT_PACE_EXTRA_MAX = 0;
 const DEFAULT_NON_PACE_TARGET_TICK_COUNT = 6;
 const NICE_INTERVAL_FACTORS = [1, 1.5, 2, 2.5, 3, 5, 7.5, 10];
 const AXIS_INTERVAL_DIVISIBILITY_EPSILON = 1e-9;
+const STAMINA_AXIS_MIN = 0;
+const STAMINA_AXIS_MAX = 100;
 
 const POWER_STREAM_TYPES = new Set<string>([
   DataPower.type,
@@ -29,6 +33,10 @@ const CADENCE_STREAM_TYPES = new Set<string>([
 const HEART_RATE_STREAM_TYPES = new Set<string>([
   DataHeartRate.type,
 ]);
+const STAMINA_STREAM_TYPES = new Set<string>([
+  DataStamina.type,
+  DataPotentialStamina.type,
+]);
 
 export interface EventPanelYAxisConfig {
   inverse: boolean;
@@ -37,9 +45,54 @@ export interface EventPanelYAxisConfig {
   interval?: number;
 }
 
+export type EventPanelYAxisCompatibilityFamily = 'power-watts' | 'stamina-percent';
+
 export interface BuildEventPanelYAxisConfigInput {
   panel: EventChartPanelModel;
   visibleRange: EventChartRange | null;
+}
+
+export function resolveEventPanelYAxisCompatibilityFamily(
+  panel: EventChartPanelModel | null | undefined
+): EventPanelYAxisCompatibilityFamily | null {
+  if (!panel) {
+    return null;
+  }
+
+  const streamTypes = new Set<string>();
+  if (panel.dataType) {
+    streamTypes.add(panel.dataType);
+  }
+  panel.series.forEach((series) => {
+    if (series.streamType) {
+      streamTypes.add(series.streamType);
+    }
+  });
+
+  let resolvedFamily: EventPanelYAxisCompatibilityFamily | null = null;
+  for (const streamType of streamTypes) {
+    const family = resolveEventStreamYAxisCompatibilityFamily(streamType);
+    if (!family) {
+      return null;
+    }
+    if (resolvedFamily && resolvedFamily !== family) {
+      return null;
+    }
+
+    resolvedFamily = family;
+  }
+
+  return resolvedFamily;
+}
+
+export function canShareEventPanelYAxis(
+  primaryPanel: EventChartPanelModel | null | undefined,
+  overlayPanel: EventChartPanelModel | null | undefined
+): boolean {
+  const primaryFamily = resolveEventPanelYAxisCompatibilityFamily(primaryPanel);
+  const overlayFamily = resolveEventPanelYAxisCompatibilityFamily(overlayPanel);
+
+  return !!primaryFamily && primaryFamily === overlayFamily;
 }
 
 export function buildEventPanelYAxisConfig(input: BuildEventPanelYAxisConfigInput): EventPanelYAxisConfig {
@@ -74,8 +127,25 @@ export function buildEventPanelYAxisConfig(input: BuildEventPanelYAxisConfigInpu
     });
   }
 
+  const hasStaminaStream = streamTypes.some((streamType) => STAMINA_STREAM_TYPES.has(streamType));
+  if (hasStaminaStream) {
+    return buildBoundedPercentAxis(visibleExtrema);
+  }
+
   const hasPowerStream = streamTypes.some((streamType) => POWER_STREAM_TYPES.has(streamType));
   return buildDefaultAxis(visibleExtrema, hasPowerStream);
+}
+
+function resolveEventStreamYAxisCompatibilityFamily(streamType: string): EventPanelYAxisCompatibilityFamily | null {
+  if (STAMINA_STREAM_TYPES.has(streamType)) {
+    return 'stamina-percent';
+  }
+
+  if (POWER_STREAM_TYPES.has(streamType)) {
+    return 'power-watts';
+  }
+
+  return null;
 }
 
 interface VisibleExtrema {
@@ -197,6 +267,7 @@ function buildStepBasedAxis(
     candidateIntervals: number[];
     targetTickCount: number;
     minFloor?: number;
+    maxCeiling?: number;
   }
 ): EventPanelYAxisConfig {
   if (!extrema) {
@@ -210,8 +281,9 @@ function buildStepBasedAxis(
 
   const baseStep = Math.max(1, options.baseStep);
   const minFloor = Number.isFinite(options.minFloor) ? (options.minFloor as number) : Number.NEGATIVE_INFINITY;
+  const maxCeiling = Number.isFinite(options.maxCeiling) ? (options.maxCeiling as number) : Number.POSITIVE_INFINITY;
   const snappedMin = Math.max(minFloor, Math.floor(min / baseStep) * baseStep);
-  const snappedMax = Math.ceil(max / baseStep) * baseStep;
+  const snappedMax = Math.min(maxCeiling, Math.ceil(max / baseStep) * baseStep);
   const range = Math.max(baseStep, snappedMax - snappedMin);
   const interval = selectPreferredAxisInterval(
     range,
@@ -220,7 +292,10 @@ function buildStepBasedAxis(
     baseStep
   );
   const intervalAlignedMin = Math.max(minFloor, Math.floor(snappedMin / interval) * interval);
-  const intervalAlignedMax = Math.max(intervalAlignedMin + interval, Math.ceil(snappedMax / interval) * interval);
+  const intervalAlignedMax = Math.min(
+    maxCeiling,
+    Math.max(intervalAlignedMin + interval, Math.ceil(snappedMax / interval) * interval)
+  );
 
   return {
     inverse: false,
@@ -228,6 +303,39 @@ function buildStepBasedAxis(
     max: sanitizeSnappedAxisNumber(intervalAlignedMax),
     interval: sanitizeSnappedAxisNumber(interval),
   };
+}
+
+function buildBoundedPercentAxis(extrema: VisibleExtrema | null): EventPanelYAxisConfig {
+  if (!extrema) {
+    return {
+      inverse: false,
+      min: STAMINA_AXIS_MIN,
+      max: STAMINA_AXIS_MAX,
+      interval: 20,
+    };
+  }
+
+  const { min, max } = extrema;
+  const span = max > min ? max - min : Math.max(Math.abs(max) * 0.05, 1);
+  const paddedMin = Math.max(STAMINA_AXIS_MIN, min - (span * 0.02));
+  const paddedMax = Math.min(STAMINA_AXIS_MAX, max + (span * DEFAULT_NON_POWER_EXTRA_MAX));
+  const safeMax = paddedMax > paddedMin
+    ? paddedMax
+    : Math.min(STAMINA_AXIS_MAX, paddedMin + Math.max(1, span));
+
+  return buildStepBasedAxis(
+    {
+      min: paddedMin,
+      max: safeMax,
+    },
+    {
+      baseStep: 5,
+      candidateIntervals: [5, 10, 20, 25],
+      targetTickCount: 6,
+      minFloor: STAMINA_AXIS_MIN,
+      maxCeiling: STAMINA_AXIS_MAX,
+    }
+  );
 }
 
 function buildSingleValueRange(value: number, inverse: boolean): EventPanelYAxisConfig {

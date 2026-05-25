@@ -12,11 +12,13 @@ import {
   SimpleChanges,
   ViewChild
 } from '@angular/core';
+import { MatSnackBar } from '@angular/material/snack-bar';
 import { ChartCursorBehaviours, LapTypes, UserUnitSettingsInterface, XAxisTypes } from '@sports-alliance/sports-lib';
 import type { ECElementEvent, EChartsType } from 'echarts/core';
 import { AppBreakpoints } from '../../../../constants/breakpoints';
 import { EChartsLoaderService } from '../../../../services/echarts-loader.service';
 import { LoggerService } from '../../../../services/logger.service';
+import { AppShareService } from '../../../../services/app.share.service';
 import {
   ECHARTS_INTERACTIVE_CARTESIAN_MERGE_UPDATE_SETTINGS,
   EChartsHostController
@@ -41,7 +43,10 @@ import {
   formatDurationSeconds,
   normalizeEventRange,
 } from '../../../../helpers/event-echarts-xaxis.helper';
-import { buildEventPanelYAxisConfig } from '../../../../helpers/event-echarts-yaxis.helper';
+import {
+  buildEventPanelYAxisConfig,
+  canShareEventPanelYAxis
+} from '../../../../helpers/event-echarts-yaxis.helper';
 import {
   computeEventPanelRangeStats,
   EventPanelRangeStat,
@@ -135,6 +140,9 @@ const TOOLTIP_MAX_DURATION_DISTANCE_SECONDS = 120;
 const TOOLTIP_MAX_TIME_DISTANCE_MS = TOOLTIP_MAX_DURATION_DISTANCE_SECONDS * 1000;
 const TOOLTIP_MAX_DISTANCE_METERS = 500;
 const OVERLAY_LINE_OPACITY = 0.82;
+const EVENT_CHART_IMAGE_EXPORT_CLASS = 'event-chart-panel--image-export';
+const EVENT_CHART_IMAGE_EXPORT_PADDING_LEFT_PX = 12;
+const EVENT_CHART_IMAGE_EXPORT_PADDING_RIGHT_PX = 24;
 
 @Component({
   selector: 'app-event-card-chart-panel',
@@ -208,6 +216,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
   private pendingFullscreenZoomRange: EventChartRange | null | undefined = undefined;
   private axisPointerCursorBoundChart: EChartsType | null = null;
   private mobileArmBoundChart: EChartsType | null = null;
+  private copyingPanelImage = false;
   private readonly axisPointerCursorHandler = (params: AxisPointerEvent) => {
     const value = Number(params?.axesInfo?.[0]?.value);
     if (Number.isFinite(value)) {
@@ -219,6 +228,16 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
   };
   private readonly nonPrimaryMouseButtonGuard = (event: Event) => {
     if (!this.isNonPrimaryMouseButtonEvent(event)) {
+      return;
+    }
+
+    if (event.type === 'contextmenu') {
+      event.preventDefault();
+      event.stopPropagation();
+      if (typeof (event as Event & { stopImmediatePropagation?: () => void }).stopImmediatePropagation === 'function') {
+        (event as Event & { stopImmediatePropagation: () => void }).stopImmediatePropagation();
+      }
+      void this.copyPanelImageToClipboard();
       return;
     }
 
@@ -243,6 +262,8 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     private eChartsLoader: EChartsLoaderService,
     private logger: LoggerService,
     private cdr: ChangeDetectorRef,
+    private shareService: AppShareService,
+    private snackBar: MatSnackBar,
   ) {
     this.chartHost = new EChartsHostController({
       eChartsLoader: this.eChartsLoader,
@@ -586,11 +607,15 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     const restoredZoomRange = this.getStoredZoomRange();
     const visibleRange = restoredZoomRange ?? this.getVisibleXAxisRange();
     const overlayPanel = this.getActiveOverlayPanel();
+    const shareOverlayYAxis = canShareEventPanelYAxis(panel, overlayPanel);
+    const primaryYAxisPanel = shareOverlayYAxis && overlayPanel
+      ? this.buildSharedYAxisPanel(panel, overlayPanel)
+      : panel;
     const yAxisConfig = buildEventPanelYAxisConfig({
-      panel,
+      panel: primaryYAxisPanel,
       visibleRange,
     });
-    const overlayYAxisConfig = overlayPanel
+    const overlayYAxisConfig = overlayPanel && !shareOverlayYAxis
       ? buildEventPanelYAxisConfig({
         panel: overlayPanel,
         visibleRange,
@@ -650,7 +675,11 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     }
 
     if (overlayPanel) {
-      seriesOptions.push(...this.buildOverlaySeriesOptions(overlayPanel, seriesStrokeWidth));
+      seriesOptions.push(...this.buildOverlaySeriesOptions(
+        overlayPanel,
+        seriesStrokeWidth,
+        shareOverlayYAxis ? 0 : 1
+      ));
     }
 
     const zoneVisualMaps = this.buildZoneVisualMapOptions(panel);
@@ -793,6 +822,21 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     return this.overlayPanel.series?.length ? this.overlayPanel : null;
   }
 
+  private buildSharedYAxisPanel(
+    primaryPanel: EventChartPanelModel,
+    overlayPanel: EventChartPanelModel
+  ): EventChartPanelModel {
+    return {
+      ...primaryPanel,
+      series: [
+        ...primaryPanel.series,
+        ...overlayPanel.series,
+      ],
+      minX: Math.min(primaryPanel.minX, overlayPanel.minX),
+      maxX: Math.max(primaryPanel.maxX, overlayPanel.maxX),
+    };
+  }
+
   private buildValueYAxisOption(
     panel: EventChartPanelModel,
     yAxisConfig: ReturnType<typeof buildEventPanelYAxisConfig>,
@@ -837,14 +881,15 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
 
   private buildOverlaySeriesOptions(
     overlayPanel: EventChartPanelModel,
-    primaryStrokeWidth: number
+    primaryStrokeWidth: number,
+    yAxisIndex = 1
   ): ChartLineSeriesOption[] {
     const overlayStrokeWidth = Math.max(1, primaryStrokeWidth - 0.5);
     return overlayPanel.series.map((series) => ({
       id: `overlay::${series.id}`,
       name: series.activityName,
       type: 'line',
-      yAxisIndex: 1,
+      yAxisIndex,
       smooth: false,
       showSymbol: false,
       symbolSize: 5,
@@ -1736,11 +1781,15 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     const scaleOptions = buildEventCanonicalXAxisScaleOptions(this.xAxisType, this.getVisibleXAxisRange(), this.isMobile);
     const visibleRange = this.getVisibleXAxisRange();
     const overlayPanel = this.getActiveOverlayPanel();
+    const shareOverlayYAxis = canShareEventPanelYAxis(this.panel, overlayPanel);
+    const primaryYAxisPanel = shareOverlayYAxis && overlayPanel
+      ? this.buildSharedYAxisPanel(this.panel, overlayPanel)
+      : this.panel;
     const yAxisConfig = buildEventPanelYAxisConfig({
-      panel: this.panel,
+      panel: primaryYAxisPanel,
       visibleRange,
     });
-    const overlayYAxisConfig = overlayPanel
+    const overlayYAxisConfig = overlayPanel && !shareOverlayYAxis
       ? buildEventPanelYAxisConfig({
         panel: overlayPanel,
         visibleRange,
@@ -2470,12 +2519,36 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
   }
 
   private shouldPreventDefaultForNonPrimaryMouseButtonEvent(event: Event): boolean {
-    if (event.type === 'contextmenu') {
-      return false;
-    }
-
     const eventWithButton = event as Event & { button?: unknown };
     return Number(eventWithButton.button) !== 2;
+  }
+
+  private async copyPanelImageToClipboard(): Promise<void> {
+    const panelElement = this.panelRoot?.nativeElement;
+    if (!panelElement || this.copyingPanelImage) {
+      return;
+    }
+
+    this.copyingPanelImage = true;
+    try {
+      const panelWidth = Math.ceil(panelElement.getBoundingClientRect().width || panelElement.offsetWidth);
+      const exportWidth = panelWidth + EVENT_CHART_IMAGE_EXPORT_PADDING_LEFT_PX + EVENT_CHART_IMAGE_EXPORT_PADDING_RIGHT_PX;
+      await this.shareService.copyElementImageToClipboard(panelElement, {
+        scale: this.isMobile ? 1.5 : 2,
+        width: exportWidth,
+        embedFonts: true,
+        fast: this.isMobile,
+        renderTimeoutMs: this.isMobile ? 10000 : 15000,
+        exportClassName: EVENT_CHART_IMAGE_EXPORT_CLASS,
+        backgroundColor: this.darkTheme ? '#121212' : '#ffffff',
+      });
+      this.snackBar.open('Chart image copied', 'Dismiss', { duration: 2500 });
+    } catch (error) {
+      this.logger.error('[EventCardChartPanelComponent] Failed to copy chart image', error);
+      this.snackBar.open('Could not copy chart image', 'Dismiss', { duration: 3500 });
+    } finally {
+      this.copyingPanelImage = false;
+    }
   }
 
   private isInteractionArmed(): boolean {

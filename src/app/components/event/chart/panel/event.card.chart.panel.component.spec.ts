@@ -1,13 +1,17 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { NO_ERRORS_SCHEMA, SimpleChange } from '@angular/core';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
+import { MatSnackBar } from '@angular/material/snack-bar';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import {
+  DataAirPower,
   DataAltitude,
   ChartCursorBehaviours,
   DataDistance,
   DataHeartRate,
+  DataPotentialStamina,
   DataPower,
+  DataStamina,
   DistanceUnits,
   DynamicDataLoader,
   LapTypes,
@@ -20,6 +24,7 @@ import {
 } from './event.card.chart.panel.component';
 import { EChartsLoaderService } from '../../../../services/echarts-loader.service';
 import { LoggerService } from '../../../../services/logger.service';
+import { AppShareService } from '../../../../services/app.share.service';
 import { getOrCreateEChartsTooltipHost } from '../../../../helpers/echarts-tooltip-host.helper';
 import { getViewportConstrainedTooltipPosition } from '../../../../helpers/echarts-tooltip-position.helper';
 import { MaterialModule } from '../../../../modules/material.module';
@@ -66,6 +71,12 @@ describe('EventCardChartPanelComponent', () => {
     dispose: vi.fn(),
     subscribeToViewportResize: vi.fn(() => () => { }),
     attachMobileSeriesTapFeedback: vi.fn(() => () => { }),
+  };
+  const shareServiceMock = {
+    copyElementImageToClipboard: vi.fn().mockResolvedValue(undefined),
+  };
+  const snackBarMock = {
+    open: vi.fn(),
   };
 
   beforeEach(async () => {
@@ -132,6 +143,8 @@ describe('EventCardChartPanelComponent', () => {
       providers: [
         { provide: EChartsLoaderService, useValue: eChartsLoaderMock },
         { provide: LoggerService, useValue: { error: vi.fn(), warn: vi.fn(), info: vi.fn(), log: vi.fn() } },
+        { provide: AppShareService, useValue: shareServiceMock },
+        { provide: MatSnackBar, useValue: snackBarMock },
       ],
       schemas: [NO_ERRORS_SCHEMA],
     }).compileComponents();
@@ -229,6 +242,55 @@ describe('EventCardChartPanelComponent', () => {
     return eChartsLoaderMock.setOption.mock.calls.findLast(([, option]) => option?.series)?.[1] as any;
   }
 
+  function buildTestPanel(
+    dataType: string,
+    values: Array<number | { x: number; y: number; time?: number }>,
+    options: {
+      displayName?: string;
+      unit?: string;
+      color?: string;
+      activityName?: string;
+      activityID?: string;
+    } = {}
+  ): any {
+    const displayName = options.displayName || dataType;
+    const unit = options.unit || '';
+    const activityID = options.activityID || 'a1';
+    const points = values.map((value, index) => {
+      if (typeof value === 'number') {
+        const x = index * 10;
+        return { x, y: value, time: x };
+      }
+
+      return {
+        x: value.x,
+        y: value.y,
+        time: value.time ?? value.x,
+      };
+    });
+
+    return {
+      dataType,
+      displayName,
+      unit,
+      colorGroupKey: dataType,
+      minX: Math.min(...points.map((point) => point.x)),
+      maxX: Math.max(...points.map((point) => point.x)),
+      series: [
+        {
+          id: `${activityID}::${dataType}`,
+          activityID,
+          activityName: options.activityName || 'Garmin',
+          color: options.color || '#ff0000',
+          streamType: dataType,
+          displayName,
+          unit,
+          points,
+        }
+      ],
+    };
+  }
+
   it('initializes chart host and renders panel option', async () => {
     component.showZoomBar = true;
     await renderComponent();
@@ -258,6 +320,39 @@ describe('EventCardChartPanelComponent', () => {
     expect(option?.dataZoom?.[0]?.moveOnMouseWheel).toBe(false);
     expect(option?.dataZoom?.[1]?.show).toBe(true);
     expect(option?.dataZoom?.[1]?.filterMode).toBe('filter');
+  });
+
+  it('caps stamina chart y-axis at 100 percent', async () => {
+    component.panel = {
+      dataType: DataStamina.type,
+      displayName: DataStamina.type,
+      unit: '%',
+      colorGroupKey: DataStamina.type,
+      minX: 0,
+      maxX: 10,
+      series: [
+        {
+          id: `a1::${DataStamina.type}`,
+          activityID: 'a1',
+          activityName: 'Garmin',
+          color: '#ff0000',
+          streamType: DataStamina.type,
+          displayName: DataStamina.type,
+          unit: '%',
+          points: [
+            { x: 0, y: 65, time: 0 },
+            { x: 5, y: 92, time: 5 },
+            { x: 10, y: 100, time: 10 },
+          ],
+        }
+      ]
+    };
+
+    await renderComponent();
+
+    const option = getRenderedOption();
+    expect(option?.yAxis?.max).toBe(100);
+    expect(option?.yAxis?.axisLabel?.formatter(100)).toBe('100');
   });
 
   it('uses native confined tooltip placement on mobile panels', async () => {
@@ -401,6 +496,78 @@ describe('EventCardChartPanelComponent', () => {
     expect(option?.series?.[1]?.lineStyle?.width).toBeLessThanOrEqual(option?.series?.[0]?.lineStyle?.width);
     expect(option?.series?.[1]?.lineStyle?.type).toBeUndefined();
     expect(option?.series?.[1]?.lineStyle?.shadowBlur).toBeUndefined();
+  });
+
+  it('shares one y-axis for stamina and potential stamina overlays', async () => {
+    component.panel = buildTestPanel(
+      DataStamina.type,
+      [65, 92, 100],
+      { unit: '%', displayName: DataStamina.type }
+    );
+    component.overlayPanel = buildTestPanel(
+      DataPotentialStamina.type,
+      [70, 94, 99],
+      { unit: '%', displayName: DataPotentialStamina.type, color: '#0066cc' }
+    );
+
+    await renderComponent();
+
+    const option = getRenderedOption();
+    expect(Array.isArray(option?.yAxis)).toBe(false);
+    expect(option?.yAxis?.position).toBe('left');
+    expect(option?.yAxis?.max).toBe(100);
+    expect(option?.series).toHaveLength(2);
+    expect(option?.series?.[0]?.yAxisIndex).toBe(0);
+    expect(option?.series?.[1]).toEqual(expect.objectContaining({
+      id: `overlay::a1::${DataPotentialStamina.type}`,
+      yAxisIndex: 0,
+    }));
+  });
+
+  it('shares one y-axis when potential stamina overlays stamina in reverse', async () => {
+    component.panel = buildTestPanel(
+      DataPotentialStamina.type,
+      [70, 94, 99],
+      { unit: '%', displayName: DataPotentialStamina.type }
+    );
+    component.overlayPanel = buildTestPanel(
+      DataStamina.type,
+      [65, 92, 100],
+      { unit: '%', displayName: DataStamina.type, color: '#0066cc' }
+    );
+
+    await renderComponent();
+
+    const option = getRenderedOption();
+    expect(Array.isArray(option?.yAxis)).toBe(false);
+    expect(option?.yAxis?.max).toBe(100);
+    expect(option?.series?.[1]).toEqual(expect.objectContaining({
+      id: `overlay::a1::${DataStamina.type}`,
+      yAxisIndex: 0,
+    }));
+  });
+
+  it('shares one y-axis for explicit power variant overlays', async () => {
+    component.panel = buildTestPanel(
+      DataPower.type,
+      [100, 120],
+      { unit: 'W', displayName: DataPower.type }
+    );
+    component.overlayPanel = buildTestPanel(
+      DataAirPower.type,
+      [180, 220],
+      { unit: 'W', displayName: DataAirPower.type, color: '#0066cc' }
+    );
+
+    await renderComponent();
+
+    const option = getRenderedOption();
+    expect(Array.isArray(option?.yAxis)).toBe(false);
+    expect(option?.yAxis?.max).toBeGreaterThanOrEqual(220);
+    expect(option?.series?.[1]).toEqual(expect.objectContaining({
+      id: `overlay::a1::${DataAirPower.type}`,
+      yAxisIndex: 0,
+    }));
   });
 
   it('keeps primary styling unchanged when the overlay is missing or the same metric', async () => {
@@ -831,6 +998,70 @@ describe('EventCardChartPanelComponent', () => {
           interval: 5,
           min: 95,
           max: 125,
+        }
+      },
+      {
+        notMerge: false,
+        lazyUpdate: true,
+        silent: true,
+      }
+    );
+  });
+
+  it('recomputes shared overlay y-axis scale from the combined zoomed visible range', async () => {
+    component.xDomain = { start: 0, end: 3600 };
+    component.panel = buildTestPanel(
+      DataStamina.type,
+      [
+        { x: 0, y: 80 },
+        { x: 200, y: 85 },
+        { x: 600, y: 95 },
+      ],
+      { unit: '%', displayName: DataStamina.type }
+    );
+    component.overlayPanel = buildTestPanel(
+      DataPotentialStamina.type,
+      [
+        { x: 0, y: 40 },
+        { x: 200, y: 45 },
+        { x: 600, y: 100 },
+      ],
+      { unit: '%', displayName: DataPotentialStamina.type, color: '#0066cc' }
+    );
+    chart.getOption.mockReturnValue({
+      dataZoom: [
+        {
+          startValue: 0,
+          endValue: 300,
+        }
+      ]
+    });
+
+    await renderComponent();
+
+    const dataZoomHandler = chart.on.mock.calls.find(([eventName]) => eventName === 'datazoom')?.[1] as (() => void);
+    expect(dataZoomHandler).toBeTypeOf('function');
+
+    eChartsLoaderMock.setOption.mockClear();
+    dataZoomHandler();
+    await new Promise<void>((resolve) => setTimeout(resolve, 20));
+
+    expect(eChartsLoaderMock.setOption).toHaveBeenCalledTimes(1);
+    expect(eChartsLoaderMock.setOption).toHaveBeenNthCalledWith(
+      1,
+      chart,
+      {
+        xAxis: {
+          interval: 60,
+          minInterval: 60,
+          maxInterval: 60,
+          splitNumber: 6,
+        },
+        yAxis: {
+          inverse: false,
+          interval: 5,
+          min: 35,
+          max: 90,
         }
       },
       {
@@ -2625,11 +2856,22 @@ describe('EventCardChartPanelComponent', () => {
     expect(bubbleWheelSpy).not.toHaveBeenCalled();
   });
 
-  it('preserves the browser context menu for right click while suppressing middle click', async () => {
+  it('copies a themed panel image on right click while suppressing native canvas copy', async () => {
     await renderComponent();
 
     const hostElement = fixture.nativeElement as HTMLElement;
     const chartDiv = component.chartDiv.nativeElement;
+    vi.spyOn(component.panelRoot.nativeElement, 'getBoundingClientRect').mockReturnValue({
+      width: 640,
+      height: 420,
+      top: 0,
+      right: 640,
+      bottom: 420,
+      left: 0,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    } as DOMRect);
     const bubbleContextMenuSpy = vi.fn();
     const bubbleClickSpy = vi.fn();
     hostElement.addEventListener('contextmenu', bubbleContextMenuSpy);
@@ -2643,9 +2885,20 @@ describe('EventCardChartPanelComponent', () => {
     expect(chartDiv.dispatchEvent(rightMouseDown)).toBe(true);
     expect(rightMouseDown.defaultPrevented).toBe(false);
 
-    expect(chartDiv.dispatchEvent(rightContextMenu)).toBe(true);
-    expect(rightContextMenu.defaultPrevented).toBe(false);
+    expect(chartDiv.dispatchEvent(rightContextMenu)).toBe(false);
+    expect(rightContextMenu.defaultPrevented).toBe(true);
     expect(bubbleContextMenuSpy).not.toHaveBeenCalled();
+    await waitForChartStabilization(2);
+    expect(shareServiceMock.copyElementImageToClipboard).toHaveBeenCalledWith(
+      component.panelRoot.nativeElement,
+      expect.objectContaining({
+        embedFonts: true,
+        exportClassName: 'event-chart-panel--image-export',
+        backgroundColor: '#ffffff',
+        width: 676,
+      }),
+    );
+    expect(snackBarMock.open).toHaveBeenCalledWith('Chart image copied', 'Dismiss', { duration: 2500 });
 
     expect(chartDiv.dispatchEvent(middleClick)).toBe(false);
     expect(middleClick.defaultPrevented).toBe(true);
@@ -2653,5 +2906,34 @@ describe('EventCardChartPanelComponent', () => {
 
     expect(chartDiv.dispatchEvent(leftMouseDown)).toBe(true);
     expect(leftMouseDown.defaultPrevented).toBe(false);
+  });
+
+  it('uses an opaque dark export background for dark themed chart copies', async () => {
+    component.darkTheme = true;
+    await renderComponent();
+
+    vi.spyOn(component.panelRoot.nativeElement, 'getBoundingClientRect').mockReturnValue({
+      width: 500,
+      height: 420,
+      top: 0,
+      right: 500,
+      bottom: 420,
+      left: 0,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    } as DOMRect);
+
+    const rightContextMenu = new MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 });
+    expect(component.chartDiv.nativeElement.dispatchEvent(rightContextMenu)).toBe(false);
+    await waitForChartStabilization(2);
+
+    expect(shareServiceMock.copyElementImageToClipboard).toHaveBeenCalledWith(
+      component.panelRoot.nativeElement,
+      expect.objectContaining({
+        backgroundColor: '#121212',
+        width: 536,
+      }),
+    );
   });
 });

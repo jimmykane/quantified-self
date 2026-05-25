@@ -8,8 +8,10 @@ import {
   DataGradeAdjustedSpeed,
   DataHeartRate,
   DataPace,
+  DataPotentialStamina,
   DataPower,
   DataSpeed,
+  DataStamina,
   DataSwimPace,
   DistanceUnits,
   DynamicDataLoader,
@@ -135,6 +137,58 @@ describe('event-echarts-data.helper', () => {
     expect(panels[0].series[0].points).toHaveLength(5);
     expect(panels[0].series[0].points.map((point) => point.x)).toEqual([0, 1, 2, 3, 4]);
     expect(panels[0].series[0].color).toBe((AppDataColors as any).Power);
+  });
+
+  it('builds stamina panels when stamina streams are selected', () => {
+    vi.spyOn(ActivityUtilities, 'createUnitStreamsFromStreams').mockReturnValue([] as any);
+    vi.spyOn(DynamicDataLoader, 'getUnitBasedDataTypesFromDataTypes').mockImplementation((types: any) => types as any);
+    vi.spyOn(DynamicDataLoader, 'getUnitBasedDataTypesFromDataType').mockImplementation((type: any) => [type] as any);
+    vi.spyOn(DynamicDataLoader, 'getNonUnitBasedDataTypes').mockReturnValue([DataDistance.type]);
+    vi.spyOn(DynamicDataLoader, 'getDataClassFromDataType').mockImplementation((type: string) => ({
+      displayType: type,
+      type,
+      unit: '%'
+    } as any));
+
+    const staminaStream = {
+      type: DataStamina.type,
+      getData: () => [95, 80, 66],
+    } as any;
+    const potentialStaminaStream = {
+      type: DataPotentialStamina.type,
+      getData: () => [95, 92, 66],
+    } as any;
+    const timeStream = {
+      type: XAxisTypes.Time,
+      getData: () => [0, 1, 2],
+    } as any;
+    const activity = {
+      startDate: new Date('2024-01-01T00:00:00.000Z'),
+      creator: { name: 'Garmin' },
+      type: 'Running',
+      getID: () => 'a-stamina',
+      getAllStreams: () => [staminaStream, potentialStaminaStream],
+      getStream: (type: string) => (type === XAxisTypes.Time ? timeStream : null),
+    } as any;
+
+    const panels = buildEventChartPanels({
+      selectedActivities: [activity],
+      allActivities: [activity],
+      xAxisType: XAxisTypes.Duration,
+      showAllData: false,
+      dataTypesToUse: [DataStamina.type, DataPotentialStamina.type],
+      userUnitSettings: {} as any,
+      eventColorService: {
+        getActivityColor: () => '#ff0000'
+      } as any,
+    });
+
+    expect(panels.map((panel) => panel.dataType)).toEqual([
+      DataStamina.type,
+      DataPotentialStamina.type,
+    ]);
+    expect(panels[0].series[0].points.map((point) => point.y)).toEqual([95, 80, 66]);
+    expect(panels[1].series[0].points.map((point) => point.y)).toEqual([95, 92, 66]);
   });
 
   it('computes panel domains for large point sets without spreading arrays into Math.min or Math.max', () => {
@@ -1371,7 +1425,7 @@ describe('event-echarts-data.helper', () => {
     expect(markers[0].tooltipDetails).toEqual(expect.arrayContaining([
       { label: 'Lap', value: '0' },
       { label: 'Duration', value: '00:25' },
-      { label: 'Distance', value: '25.0m' },
+      { label: 'Distance', value: '25m' },
       { label: 'Type', value: 'Active' },
       { label: 'Stroke', value: 'Freestyle' },
       { label: 'Strokes', value: '9' },
@@ -1436,6 +1490,37 @@ describe('event-echarts-data.helper', () => {
 
     expect(markers).toHaveLength(1);
     expect(markers[0].xValue).toBe(75);
+  });
+
+  it('formats swim length marker distances in meters regardless of distance unit preference', () => {
+    const activity = {
+      startDate: new Date('2024-01-01T00:00:00.000Z'),
+      creator: { name: 'Garmin' },
+      getID: () => 'swim-1',
+      getSwimLengths: () => [
+        {
+          index: 1,
+          startDate: new Date('2024-01-01T00:00:00.000Z'),
+          endDate: new Date('2024-01-01T00:30:00.000Z'),
+          type: 'active',
+          distance: 1500,
+        },
+      ],
+    } as any;
+
+    const markers = buildEventSwimLengthMarkers({
+      selectedActivities: [activity],
+      allActivities: [activity],
+      xAxisType: XAxisTypes.Duration,
+      eventColorService: {
+        getActivityColor: () => '#00aaff',
+      } as any,
+      userUnitSettings: {
+        distanceUnits: DistanceUnits.Miles,
+      } as any,
+    });
+
+    expect(markers[0].tooltipDetails.find((detail) => detail.label === 'Distance')?.value).toBe('1500 m');
   });
 
   it('formats swim length pace with preferred 100-yard units', () => {

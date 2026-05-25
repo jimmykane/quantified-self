@@ -15,6 +15,7 @@ import {
   DataPaceAvg,
   DataPower,
   DataPowerAvg,
+  DataPoolLength,
   DataSpeedAvg,
   DataDescent,
   DataSpeed,
@@ -39,6 +40,7 @@ import { EventChartRange, normalizeEventRange } from './event-echarts-xaxis.help
 import { normalizeUnitDerivedTypeLabel } from './stat-label.helper';
 import { resolveUnitAwareDisplayStat } from '@shared/unit-aware-display';
 import { AppSwimLength, getActivitySwimLengths } from './event-swim-length.helper';
+import { getAppCanonicalChartDataTypes } from './app-chart-data-types.helper';
 
 export { normalizeEventLapType } from './event-lap-type.helper';
 
@@ -785,10 +787,7 @@ function buildPreferredDataTypeOrder(
   userUnitSettings: UserUnitSettingsInterface
 ): Map<string, number> {
   const order = new Map<string, number>();
-  const canonicalDataTypes = [
-    ...DynamicDataLoader.basicDataTypes,
-    ...DynamicDataLoader.advancedDataTypes.filter((dataType) => !DynamicDataLoader.basicDataTypes.includes(dataType)),
-  ];
+  const canonicalDataTypes = getAppCanonicalChartDataTypes();
   const selectedDataTypeSet = new Set(dataTypesToUse || []);
   const canonicalSelectedDataTypes = canonicalDataTypes
     .filter((dataType) => selectedDataTypeSet.has(dataType))
@@ -1188,7 +1187,7 @@ function buildSwimLengthTooltipDetails(
 
   appendTextDetail(details, 'Lap', formatNullableInteger(swimLength.lapIndex));
   appendLapDetail(details, 'Duration', swimLength.timerTime ?? swimLength.elapsedTime, unitSettings, { compactDuration: true });
-  appendLapDetail(details, 'Distance', swimLength.distance ?? undefined, unitSettings);
+  appendLapDetail(details, 'Distance', getSwimLengthDistance(swimLength), unitSettings);
   appendTextDetail(details, 'Type', formatSwimLengthLabel(swimLength.type));
   appendTextDetail(details, 'Stroke', formatSwimLengthLabel(swimLength.stroke));
   appendTextDetail(details, 'Strokes', formatNullableInteger(swimLength.strokes));
@@ -1279,6 +1278,15 @@ function getSwimLengthPace(swimLength: AppSwimLength): DataSwimPace | null {
   }
 
   return new DataSwimPace(convertSpeedToSwimPace(speedValue));
+}
+
+function getSwimLengthDistance(swimLength: AppSwimLength): DataPoolLength | null {
+  const distanceValue = swimLength.distance?.getValue?.();
+  if (typeof distanceValue !== 'number' || !Number.isFinite(distanceValue)) {
+    return null;
+  }
+
+  return new DataPoolLength(distanceValue);
 }
 
 function formatNullableInteger(value: number | null | undefined): string {

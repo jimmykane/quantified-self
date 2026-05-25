@@ -22,7 +22,9 @@ import {
     ACTIVITIES_EXCLUDED_FROM_DESCENT,
     DistanceUnits,
     PaceUnits,
+    DataPotentialStamina,
     SpeedUnits,
+    DataStamina,
     SwimPaceUnits,
     User,
     VerticalSpeedUnits
@@ -712,6 +714,13 @@ describe('UserSettingsComponent', () => {
                 })
             })
         );
+    });
+
+    it('should expose stamina metrics as selectable chart metrics', () => {
+        const advancedGroup = component.dataGroups.find((group) => group.name === 'Advanced Data');
+
+        expect(advancedGroup?.data).toContain(DataStamina.type);
+        expect(advancedGroup?.data).toContain(DataPotentialStamina.type);
     });
 
     it('should initialize removeAscentForActivitiesSummaries with mandatory exclusions merged with user settings', () => {

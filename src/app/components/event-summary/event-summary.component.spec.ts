@@ -10,6 +10,7 @@ import {
     DataFeeling,
     DataPaceAvg,
     DataSpeedAvg,
+    DistanceUnits,
     DynamicDataLoader,
     EventInterface,
     Feelings,
@@ -154,6 +155,26 @@ describe('EventSummaryComponent', () => {
             expect(component.getStatUnit(DataPaceAvg.type)).toBe('min/km');
             expect(dynamicSpy).toHaveBeenCalled();
             dynamicSpy.mockRestore();
+        });
+
+        it('should keep swimming summary distance in meters with miles distance preference', () => {
+            component.unitSettings = { distanceUnits: DistanceUnits.Miles } as any;
+            component.event = {
+                ...mockEvent,
+                getActivities: () => [{ type: ActivityTypes.Swimming }],
+                getStat: (type: string) => {
+                    if (type === DataDistance.type) {
+                        return new DataDistance(1500);
+                    }
+                    return null;
+                },
+            } as any;
+
+            fixture.detectChanges();
+
+            expect(component.getStatValue(DataDistance.type)).toBe('1500');
+            expect(component.getStatUnit(DataDistance.type)).toBe('m');
+            expect(component.heroSummaryMetrics[1]).toEqual({ value: '1500', label: 'm' });
         });
 
         it('should expose single selected device name in the summary chip', () => {

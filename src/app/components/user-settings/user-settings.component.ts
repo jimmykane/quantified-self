@@ -18,7 +18,6 @@ import {
   XAxisTypes,
 } from '@sports-alliance/sports-lib';
 import { AppThemes, UserAppSettingsInterface } from '@sports-alliance/sports-lib';
-import { DynamicDataLoader } from '@sports-alliance/sports-lib';
 import {
   DistanceUnits,
   PaceUnits,
@@ -42,6 +41,11 @@ import {
   UNIT_SETUP_PRESET_OPTIONS,
   UnitSetupPreset,
 } from '../../helpers/unit-setup-preset.helper';
+import {
+  getAppAdvancedChartDataTypes,
+  getAppBasicChartDataTypes,
+  getAppCanonicalChartDataTypes,
+} from '../../helpers/app-chart-data-types.helper';
 
 type SettingsSectionId = 'profile' | 'app' | 'dashboard' | 'map' | 'charts' | 'units' | 'delete-account';
 
@@ -132,11 +136,11 @@ export class UserSettingsComponent implements OnChanges, OnDestroy, OnInit {
   public dataGroups = [
     {
       name: 'Basic Data',
-      data: DynamicDataLoader.basicDataTypes
+      data: getAppBasicChartDataTypes()
     },
     {
       name: 'Advanced Data',
-      data: DynamicDataLoader.advancedDataTypes.filter(type => !DynamicDataLoader.basicDataTypes.includes(type))
+      data: getAppAdvancedChartDataTypes()
     },
   ];
 
@@ -424,7 +428,7 @@ export class UserSettingsComponent implements OnChanges, OnDestroy, OnInit {
       const dataTypesToUseValue = this.userSettingsFormGroup.get('dataTypesToUse').value as string[];
 
       // Get all available data types from both groups
-      const allDataTypes = [...DynamicDataLoader.basicDataTypes, ...DynamicDataLoader.advancedDataTypes];
+      const allDataTypes = getAppCanonicalChartDataTypes();
       // Create a Set for O(1) lookup of selected types
       const selectedTypesSet = new Set(dataTypesToUseValue);
 

@@ -9,7 +9,6 @@ import {
     DateRanges,
     DaysOfTheWeek,
     DistanceUnits,
-    DynamicDataLoader,
     GradeAdjustedPaceUnits,
     GradeAdjustedSpeedUnits,
     LapTypes,
@@ -94,6 +93,7 @@ import { normalizeEventChartOverlayDataTypeByPrimary } from '../helpers/event-ch
 import {
     normalizeDashboardChartTileDisplaySettingsForChartType,
 } from '../helpers/dashboard-chart-display-settings.helper';
+import { getAppBasicChartDataTypes, getAppCanonicalChartDataTypes } from '../helpers/app-chart-data-types.helper';
 import { ACTIVITY_SYNC_ROUTES, ActivitySyncRouteId } from '@shared/activity-sync-routes';
 import { normalizeDistanceUnits } from '@shared/unit-aware-display';
 
@@ -127,7 +127,7 @@ export class AppUserUtilities {
     }
 
     static getDefaultUserChartSettingsDataTypeSettings(): DataTypeSettings {
-        return DynamicDataLoader.basicDataTypes.reduce((dataTypeSettings: DataTypeSettings, dataTypeToUse: string) => {
+        return getAppBasicChartDataTypes().reduce((dataTypeSettings: DataTypeSettings, dataTypeToUse: string) => {
             dataTypeSettings[dataTypeToUse] = { enabled: true };
             return dataTypeSettings
         }, {})
@@ -464,7 +464,7 @@ export class AppUserUtilities {
     public static fillMissingAppSettings(user: User): AppUserSettingsInterface {
         const settings: AppUserSettingsInterface = user.settings || {};
         const defaultTableSettings = AppUserUtilities.getDefaultTableSettings();
-        const allDataTypes = [...DynamicDataLoader.basicDataTypes, ...DynamicDataLoader.advancedDataTypes];
+        const allDataTypes = getAppCanonicalChartDataTypes();
 
         // App
         settings.appSettings = settings.appSettings || <UserAppSettingsInterface>{};

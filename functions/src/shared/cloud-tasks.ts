@@ -11,9 +11,12 @@ import { v2beta3 } from '@google-cloud/tasks';
 import * as logger from 'firebase-functions/logger';
 import { config } from '../config';
 import { ServiceNames } from '@sports-alliance/sports-lib';
+import { REPARSE_PROCESSING_TASK_RUNTIME_OPTIONS } from './activity-processing-config';
 
 // Lazy-initialized singleton client for performance
 let _cloudTasksClient: v2beta3.CloudTasksClient | null = null;
+
+const SPORTS_LIB_REPARSE_TASK_DISPATCH_DEADLINE_SECONDS = REPARSE_PROCESSING_TASK_RUNTIME_OPTIONS.timeoutSeconds;
 
 function getCloudTasksClient(): v2beta3.CloudTasksClient {
     if (!_cloudTasksClient) {
@@ -218,6 +221,7 @@ export async function enqueueSportsLibReparseTask(jobId: string, scheduleDelaySe
         serviceAccountEmail,
         url,
         scheduleDelaySeconds,
+        dispatchDeadlineSeconds: SPORTS_LIB_REPARSE_TASK_DISPATCH_DEADLINE_SECONDS,
         alreadyExistsLogMessage: `[ReparseDispatcher] Task already exists for job ${jobId}, skipping`,
         failedLogPrefix: `[ReparseDispatcher] Failed to enqueue task for job ${jobId}:`,
     });
@@ -318,6 +322,7 @@ interface EnqueueTaskParams {
     url: string;
     scheduleDelaySeconds?: number;
     scheduleAtEpochSeconds?: number;
+    dispatchDeadlineSeconds?: number;
     alreadyExistsLogMessage: string;
     failedLogPrefix: string;
 }
@@ -331,6 +336,7 @@ async function enqueueTaskWithRetry(params: EnqueueTaskParams): Promise<boolean>
         url,
         scheduleDelaySeconds,
         scheduleAtEpochSeconds,
+        dispatchDeadlineSeconds,
         alreadyExistsLogMessage,
         failedLogPrefix,
     } = params;
@@ -349,6 +355,12 @@ async function enqueueTaskWithRetry(params: EnqueueTaskParams): Promise<boolean>
             },
         },
     };
+
+    if (Number.isFinite(dispatchDeadlineSeconds)) {
+        task.dispatchDeadline = {
+            seconds: Math.max(1, Math.floor(dispatchDeadlineSeconds as number)),
+        };
+    }
 
     if (Number.isFinite(scheduleAtEpochSeconds)) {
         task.scheduleTime = {

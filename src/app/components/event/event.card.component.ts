@@ -27,8 +27,7 @@ import {
   DataGradeAdjustedSpeed,
   DataLatitudeDegrees,
   DataLongitudeDegrees,
-  DataSpeed,
-  DynamicDataLoader
+  DataSpeed
 } from '@sports-alliance/sports-lib';
 import { AppThemeService } from '../../services/app.theme.service';
 import { AppThemes } from '@sports-alliance/sports-lib';
@@ -47,6 +46,8 @@ import { resolveEventChartXAxisType } from '../../helpers/event-echarts-xaxis.he
 import { hasVisibleEventLaps } from '../../helpers/event-lap-type.helper';
 import { hasVisibleEventJumps } from '../../helpers/event-jump-type.helper';
 import { hasVisibleSwimLengths } from '../../helpers/event-swim-length.helper';
+import { getAppNonUnitBasedChartDataTypes } from '../../helpers/app-chart-data-types.helper';
+
 @Component({
   selector: 'app-event-card',
   templateUrl: './event.card.component.html',
@@ -439,7 +440,7 @@ export class EventCardComponent implements OnInit {
     const user = this.currentUser();
     if (user) {
       const userChartDataTypes = this.userService.getUserChartDataTypesToUse(user);
-      const nonUnitBasedDataTypes = DynamicDataLoader.getNonUnitBasedDataTypes(
+      const nonUnitBasedDataTypes = getAppNonUnitBasedChartDataTypes(
         user.settings.chartSettings.showAllData,
         userChartDataTypes,
       );

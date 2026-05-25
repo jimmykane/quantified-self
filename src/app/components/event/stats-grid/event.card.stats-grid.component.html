@@ -11,7 +11,8 @@
             </span>
         </ng-template>
         <app-header-stats [statsToShow]="tab.metricTypes" [layout]="layout" [stats]="stats" [unitSettings]="unitSettings"
-            [showDiff]="showDiff" [diffByType]="diffByType" [singleValueTypes]="getSingleValueTypesForTab(tab)">
+            [activityTypes]="activityTypes" [showDiff]="showDiff" [diffByType]="diffByType"
+            [singleValueTypes]="getSingleValueTypesForTab(tab)">
         </app-header-stats>
     </mat-tab>
     }

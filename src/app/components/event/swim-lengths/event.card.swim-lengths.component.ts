@@ -3,11 +3,11 @@ import {
   ActivityInterface,
   convertSpeedToSwimPace,
   DataCadence,
-  DataDistance,
   DataDuration,
   DataEnergy,
   DataHeartRate,
   DataInterface,
+  DataPoolLength,
   DataSwimPace,
   DynamicDataLoader,
   EventInterface,
@@ -19,6 +19,7 @@ import { isMergeOrBenchmarkEvent } from '../../../helpers/event-visibility.helpe
 interface SwimLengthTableRow {
   '#': number;
   Lap: string;
+  Split: string;
   Duration: string;
   Distance: string;
   Type: string;
@@ -139,6 +140,7 @@ export class EventCardSwimLengthsComponent implements OnChanges {
     return {
       '#': swimLength.index,
       Lap: this.formatOptionalInteger(swimLength.lapIndex),
+      Split: '',
       Duration: this.formatDuration(swimLength),
       Distance: this.formatDistance(swimLength.distance),
       Type: this.formatLabel(swimLength.type),
@@ -177,7 +179,7 @@ export class EventCardSwimLengthsComponent implements OnChanges {
     index: number,
     rowViews: SwimLengthRowView[],
   ): SwimLengthGroupView {
-    const rows = rowViews.map(rowView => rowView.row);
+    const rows = this.buildGroupRows(rowViews);
     const firstIndex = rowViews[0]?.swimLength.index ?? index + 1;
     const lastIndex = rowViews[rowViews.length - 1]?.swimLength.index ?? firstIndex;
     const columns = this.buildColumns(rows);
@@ -192,6 +194,32 @@ export class EventCardSwimLengthsComponent implements OnChanges {
       columnNames: columns.map(column => column.name),
       expanded: false,
     };
+  }
+
+  private buildGroupRows(rowViews: SwimLengthRowView[]): SwimLengthTableRow[] {
+    let activeSplitIndex = 0;
+    let cumulativeDistance = 0;
+
+    return rowViews.map((rowView) => {
+      const row = { ...rowView.row };
+      const swimLength = rowView.swimLength;
+
+      if (this.isIdleOrRestSwimLength(swimLength)) {
+        row.Split = 'Rest';
+        return row;
+      }
+
+      activeSplitIndex++;
+      const splitDistance = this.getSwimLengthSplitDistance(swimLength);
+      if (splitDistance !== null) {
+        cumulativeDistance += splitDistance;
+        row.Split = this.formatSwimDistanceValue(cumulativeDistance);
+        return row;
+      }
+
+      row.Split = this.formatOptionalInteger(activeSplitIndex);
+      return row;
+    });
   }
 
   private buildGroupSummaryRow(rowViews: SwimLengthRowView[]): SwimLengthTableRow {
@@ -209,8 +237,9 @@ export class EventCardSwimLengthsComponent implements OnChanges {
     return {
       '#': firstIndex,
       Lap: this.formatLapRange(swimLengths),
+      Split: '',
       Duration: totalDuration === null ? '' : new DataDuration(totalDuration).getDisplayValue(false, true, true),
-      Distance: totalDistance === null ? '' : this.formatUnitAwareStat(new DataDistance(totalDistance)),
+      Distance: this.formatSwimDistanceValue(totalDistance),
       Type: this.isIdleOrRestSwimLength(lastSwimLength) ? 'Set + Rest' : 'Set',
       Stroke: this.getGroupStrokeLabel(swimLengths),
       Strokes: this.formatOptionalInteger(totalStrokes),
@@ -252,7 +281,11 @@ export class EventCardSwimLengthsComponent implements OnChanges {
   }
 
   private formatDistance(distance: AppSwimLength['distance']): string {
-    return distance === null ? '' : this.formatUnitAwareStat(distance);
+    return this.formatSwimDistanceValue(this.getFiniteDataValue(distance));
+  }
+
+  private formatSwimDistanceValue(distance: number | null): string {
+    return distance === null ? '' : this.formatUnitAwareStat(new DataPoolLength(distance));
   }
 
   private formatEnergy(calories: AppSwimLength['calories']): string {
@@ -302,6 +335,10 @@ export class EventCardSwimLengthsComponent implements OnChanges {
 
   private formatOptionalInteger(value: number | null): string {
     return value === null ? '' : `${Math.round(value)}`;
+  }
+
+  private getSwimLengthSplitDistance(swimLength: AppSwimLength): number | null {
+    return this.getFiniteDataValue(swimLength.distance) ?? this.getFiniteDataValue(swimLength.poolLength);
   }
 
   private formatLapRange(swimLengths: AppSwimLength[]): string {
@@ -502,6 +539,7 @@ export class EventCardSwimLengthsComponent implements OnChanges {
     return [
       '#',
       'Lap',
+      'Split',
       'Duration',
       'Distance',
       'Type',

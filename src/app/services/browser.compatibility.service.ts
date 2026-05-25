@@ -36,4 +36,13 @@ export class BrowserCompatibilityService {
             return false;
         }
     }
+
+    public checkClipboardImageWriteSupport(): boolean {
+        try {
+            return typeof ClipboardItem !== 'undefined'
+                && typeof this.windowService.windowRef.navigator?.clipboard?.write === 'function';
+        } catch {
+            return false;
+        }
+    }
 }

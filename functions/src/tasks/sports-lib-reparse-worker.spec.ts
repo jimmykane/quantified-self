@@ -80,14 +80,14 @@ describe('processSportsLibReparseTask', () => {
         });
     });
 
-    it('should register with shared activity processing runtime limits', () => {
+    it('should register with reparse runtime limits', () => {
         expect(hoisted.capturedTaskOptions.value).toMatchObject({
-            memory: '8GiB',
+            memory: '1GiB',
             cpu: 2,
             concurrency: 1,
             timeoutSeconds: 1800,
-            maxInstances: 20,
         });
+        expect(hoisted.capturedTaskOptions.value).not.toHaveProperty('maxInstances');
     });
 
     it('should skip when job is already completed', async () => {

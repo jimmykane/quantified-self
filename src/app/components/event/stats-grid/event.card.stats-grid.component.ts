@@ -63,6 +63,7 @@ export class EventCardStatsGridComponent implements OnChanges, AfterViewInit, On
 
   public displayedStatsToShow: string[] = [];
   public stats: DataInterface[] = [];
+  public activityTypes: ActivityTypes[] = [];
   public metricTabs: SummaryMetricTab[] = [];
   public selectedTabIndex = 0;
   public tabAnimationDuration = `${SUMMARY_TAB_SWITCH_ANIMATION_DURATION_MS}ms`;
@@ -128,6 +129,7 @@ export class EventCardStatsGridComponent implements OnChanges, AfterViewInit, On
     if (!this.selectedActivities.length) {
       this.displayedStatsToShow = [];
       this.stats = [];
+      this.activityTypes = [];
       this.metricTabs = [];
       this.selectedTabIndex = 0;
       this.showDiff = false;
@@ -159,7 +161,7 @@ export class EventCardStatsGridComponent implements OnChanges, AfterViewInit, On
       });
     }
 
-    const activityTypes = (this.selectedActivities || []).map((activity: ActivityInterface) => activity.type).filter(type => !!type) as ActivityTypes[];
+    this.activityTypes = (this.selectedActivities || []).map((activity: ActivityInterface) => activity.type).filter(type => !!type) as ActivityTypes[];
 
     if (this.statsToShow) {
       this.displayedStatsToShow = this.statsToShow;
@@ -173,10 +175,10 @@ export class EventCardStatsGridComponent implements OnChanges, AfterViewInit, On
 
     // the order here is important
     const summaryTypesStart = this.getPerfStart();
-    this.displayedStatsToShow = getDefaultSummaryStatTypes(activityTypes, this.summariesSettings);
+    this.displayedStatsToShow = getDefaultSummaryStatTypes(this.activityTypes, this.summariesSettings);
     if (STATS_GRID_PERF_LOGS_ENABLED) {
       this.logPerf('build_default_summary_stat_types', summaryTypesStart, {
-        activityTypes: activityTypes.length,
+        activityTypes: this.activityTypes.length,
         displayedStats: this.displayedStatsToShow.length,
         eventId: this.event?.getID?.(),
       });

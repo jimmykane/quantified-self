@@ -4,7 +4,7 @@ import { AppUserSettingsQueryService } from '../../../services/app.user-settings
 import { ElementRef, signal, NO_ERRORS_SCHEMA } from '@angular/core';
 import { ActivityTypes, UserSummariesSettingsInterface, UserUnitSettingsInterface, ActivityUtilities, DynamicDataLoader, DistanceUnits } from '@sports-alliance/sports-lib';
 import { SimpleChange } from '@angular/core';
-import { DataAscent, DataDescent, DataDuration, DataPaceAvg, DataPowerAvg, DataPowerMax, DataPowerMin, DataTemperatureMax } from '@sports-alliance/sports-lib';
+import { DataAscent, DataBeginningPotentialStamina, DataDescent, DataDuration, DataPaceAvg, DataPotentialStaminaAvg, DataPowerAvg, DataPowerMax, DataPowerMin, DataStaminaAvg, DataStaminaMin, DataTemperatureMax } from '@sports-alliance/sports-lib';
 import { AppEventColorService } from '../../../services/color/app.event.color.service';
 import { AppEventSummaryTabsLocalStorageService } from '../../../services/storage/app.event-summary-tabs.local.storage.service';
 import { afterEach, vi } from 'vitest';
@@ -428,6 +428,33 @@ describe('EventCardStatsGridComponent', () => {
         expect(component.stats.map((stat) => stat.getType())).toEqual([DataPowerAvg.type]);
     });
 
+    it('should expose selected activity types for summary display formatting', () => {
+        const activity = {
+            type: ActivityTypes.Swimming,
+            getStats: () => new Map([[DataDuration.type, createStat(DataDuration.type)]]),
+            getStat: () => null,
+            getStatsAsArray: () => [createStat(DataDuration.type)],
+        } as any;
+        const mockEvent = {
+            isMerge: false,
+            getActivities: () => [activity],
+            getActivityTypesAsArray: () => [ActivityTypes.Swimming],
+            getStats: () => new Map(),
+        } as any;
+
+        component.event = mockEvent;
+        component.selectedActivities = [activity];
+        component.statsToShow = [DataDuration.type];
+
+        component.ngOnChanges({
+            event: new SimpleChange(null, mockEvent, true),
+            selectedActivities: new SimpleChange(null, component.selectedActivities, true),
+            statsToShow: new SimpleChange(null, component.statsToShow, true),
+        });
+
+        expect(component.activityTypes).toEqual([ActivityTypes.Swimming]);
+    });
+
     it('should include composite family min/max in diff map when avg is requested', () => {
         const powerAvgStat = {
             getType: () => DataPowerAvg.type,
@@ -627,6 +654,48 @@ describe('EventCardStatsGridComponent', () => {
 
         expect(component.metricTabs.map(tab => tab.label)).toEqual(['Overall', 'Performance']);
         expect(component.selectedTabIndex).toBe(0);
+    });
+
+    it('should surface stamina stats in event detail summary tabs', () => {
+        const staminaAvgStat = createStat(DataStaminaAvg.type);
+        const staminaMinStat = createStat(DataStaminaMin.type);
+        const potentialAvgStat = createStat(DataPotentialStaminaAvg.type);
+        const beginningPotentialStat = createStat(DataBeginningPotentialStamina.type);
+        const activity = {
+            type: ActivityTypes.Running,
+            getStats: () => new Map([
+                [DataStaminaAvg.type, staminaAvgStat],
+                [DataStaminaMin.type, staminaMinStat],
+                [DataPotentialStaminaAvg.type, potentialAvgStat],
+                [DataBeginningPotentialStamina.type, beginningPotentialStat],
+            ]),
+        } as any;
+        const mockEvent = {
+            isMerge: false,
+            getActivities: () => [activity],
+            getStats: () => new Map(),
+        } as any;
+
+        component.event = mockEvent;
+        component.selectedActivities = [activity];
+        component.statsToShow = undefined;
+
+        component.ngOnChanges({
+            event: new SimpleChange(null, mockEvent, true),
+            selectedActivities: new SimpleChange(null, component.selectedActivities, true),
+        });
+
+        expect(component.metricTabs.map(tab => tab.id)).toEqual(['overall', 'physiological']);
+        expect(component.metricTabs.find(tab => tab.id === 'overall')?.metricTypes).toEqual([
+            DataStaminaAvg.type,
+            DataPotentialStaminaAvg.type,
+        ]);
+        expect(component.metricTabs.find(tab => tab.id === 'physiological')?.metricTypes).toEqual([
+            DataStaminaAvg.type,
+            DataStaminaMin.type,
+            DataPotentialStaminaAvg.type,
+            DataBeginningPotentialStamina.type,
+        ]);
     });
 
     it('should fallback to first visible tab when Overall is not available', () => {

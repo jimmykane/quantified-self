@@ -9,8 +9,14 @@ import {
   DataPowerAvg,
   DataPowerMax,
   DataPowerMin,
+  DataPotentialStaminaAvg,
+  DataPotentialStaminaMax,
+  DataPotentialStaminaMin,
   DataSpeedAvg,
   DataSpeedAvgKilometersPerHour,
+  DataStaminaAvg,
+  DataStaminaMax,
+  DataStaminaMin,
   DataTemperatureAvg
 } from '@sports-alliance/sports-lib';
 import { describe, expect, it } from 'vitest';
@@ -40,6 +46,8 @@ describe('header-stats-composite.helper', () => {
       resolveMetricFamilyTypes(DataPaceAvgMinutesPerMile.type),
       resolveMetricFamilyTypes('Average Ground Contact Time'),
       resolveMetricFamilyTypes(DataJumpHeightAvg.type),
+      resolveMetricFamilyTypes(DataStaminaAvg.type),
+      resolveMetricFamilyTypes(DataPotentialStaminaAvg.type),
     ];
 
     families.forEach((family) => {
@@ -88,6 +96,24 @@ describe('header-stats-composite.helper', () => {
     expect(expanded).toContain(DataJumpHeightAvg.type);
     expect(expanded).toContain(DataJumpHeightMin.type);
     expect(expanded).toContain(DataJumpHeightMax.type);
+  });
+
+  it('should resolve stamina families with avg/min/max triplets', () => {
+    const staminaFamily = resolveMetricFamilyTypes(DataStaminaAvg.type);
+    const potentialFamily = resolveMetricFamilyTypes(DataPotentialStaminaAvg.type);
+
+    expect(staminaFamily).toMatchObject({
+      familyType: 'Stamina',
+      avgType: DataStaminaAvg.type,
+      minType: DataStaminaMin.type,
+      maxType: DataStaminaMax.type,
+    });
+    expect(potentialFamily).toMatchObject({
+      familyType: 'Potential Stamina',
+      avgType: DataPotentialStaminaAvg.type,
+      minType: DataPotentialStaminaMin.type,
+      maxType: DataPotentialStaminaMax.type,
+    });
   });
 
   it('should force single card by family when avg type is configured as single-value', () => {

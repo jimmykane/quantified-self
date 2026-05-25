@@ -5,6 +5,8 @@ import {
   ActivityInterface,
   DataSpeed,
   DataSwimPace,
+  DataSwimPaceMinutesPer100Yard,
+  DistanceUnits,
   EventInterface,
   SwimPaceUnits,
   UserUnitSettingsInterface
@@ -88,6 +90,7 @@ describe('EventCardSwimLengthsComponent', () => {
     expect(component.swimLengthViews[0].activity).toBe(activity);
     expect(component.swimLengthViews[0].groups).toHaveLength(1);
     expect(component.swimLengthViews[0].groups[0].rows).toHaveLength(1);
+    expect(component.swimLengthViews[0].groups[0].columnNames).toContain('Split');
     expect(component.swimLengthViews[0].groups[0].columnNames).toContain('Swim Pace');
     expect(component.swimLengthViews[0].groups[0].columnNames).toContain('Stroke');
     expect(component.swimLengthViews[0].groups[0].columns.find(column => column.name === '#')?.sticky).toBe(true);
@@ -118,9 +121,11 @@ describe('EventCardSwimLengthsComponent', () => {
     component.ngOnChanges();
 
     expect(component.swimLengthViews[0].groups[0].rows[0]['Swim Pace']).toContain('01:31');
-    expect(component.swimLengthViews[0].groups[0].rows[0]['Swim Pace']).toContain('min/100yrd');
+    expect(component.swimLengthViews[0].groups[0].rows[0]['Swim Pace'])
+      .toContain(DataSwimPaceMinutesPer100Yard.unit);
     expect(component.swimLengthViews[0].groups[0].summaryRow['Swim Pace']).toContain('01:31');
-    expect(component.swimLengthViews[0].groups[0].summaryRow['Swim Pace']).toContain('min/100yrd');
+    expect(component.swimLengthViews[0].groups[0].summaryRow['Swim Pace'])
+      .toContain(DataSwimPaceMinutesPer100Yard.unit);
     expect(speedGetValueSpy).not.toHaveBeenCalledWith(DataSwimPace.type);
     speedGetValueSpy.mockRestore();
   });
@@ -153,6 +158,52 @@ describe('EventCardSwimLengthsComponent', () => {
     expect(groups[1].summaryRow.Type).toBe('Set');
     expect(groups[1].restDuration).toBe('');
     expect(groups[1].expanded).toBe(false);
+  });
+
+  it('should display active length split progress and keep rest rows out of the split count', () => {
+    const activity = createActivity([
+      createSwimLength({ index: 1, distance: 25, timerTime: 24.4, elapsedTime: 24.4 }),
+      createSwimLength({ index: 2, distance: 25, timerTime: 26.4, elapsedTime: 26.4 }),
+      createSwimLength({ index: 3, distance: 25, timerTime: 27.6, elapsedTime: 27.6 }),
+      createSwimLength({ index: 4, distance: 25, timerTime: 32, elapsedTime: 32 }),
+      createSwimLength({ index: 5, type: 'idle', stroke: null, distance: null, timerTime: 33, elapsedTime: 33 }),
+    ]);
+
+    component.selectedActivities = [activity];
+    component.ngOnChanges();
+
+    const rows = component.swimLengthViews[0].groups[0].rows;
+    expect(rows.map(row => row.Split)).toEqual(['25 m', '50 m', '75 m', '100 m', 'Rest']);
+    expect(component.swimLengthViews[0].groups[0].columnNames).toContain('Split');
+  });
+
+  it('should fall back to pool length when computing active split progress', () => {
+    const activity = createActivity([
+      createSwimLength({ index: 1, distance: null, poolLength: 25 }),
+      createSwimLength({ index: 2, distance: null, poolLength: 25 }),
+    ]);
+
+    component.selectedActivities = [activity];
+    component.ngOnChanges();
+
+    expect(component.swimLengthViews[0].groups[0].rows.map(row => row.Split)).toEqual(['25 m', '50 m']);
+  });
+
+  it('should format swim distances in meters regardless of distance unit preference', () => {
+    const activity = createActivity([
+      createSwimLength({ index: 1, distance: 1500, timerTime: 1800, elapsedTime: 1800 }),
+    ]);
+
+    component.unitSettings = {
+      distanceUnits: DistanceUnits.Miles,
+    } as UserUnitSettingsInterface;
+    component.selectedActivities = [activity];
+    component.ngOnChanges();
+
+    const group = component.swimLengthViews[0].groups[0];
+    expect(group.rows[0].Distance).toBe('1500 m');
+    expect(group.rows[0].Split).toBe('1500 m');
+    expect(group.summaryRow.Distance).toBe('1500 m');
   });
 
   it('should create rest-only groups for consecutive idle rows', () => {
@@ -218,6 +269,7 @@ describe('EventCardSwimLengthsComponent', () => {
     expect(template).toContain('class="swim-length-table-value"');
     expect(template).toContain("[class.swim-length-index-cell]=\"column.name === '#'");
     expect(template).toContain("[class.swim-length-lap-cell]=\"column.name === 'Lap'");
+    expect(template).toContain("[class.swim-length-split-cell]=\"column.name === 'Split'");
     expect(template).toContain('[class.swim-length-number]="column.numeric"');
     expect(template).not.toContain('mat-chip');
     expect(template).not.toContain('getDataSource(');
