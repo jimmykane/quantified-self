@@ -76,6 +76,12 @@
   max-width: 64px;
 }
 
+.swim-length-split-cell {
+  flex: 0 0 82px;
+  width: 82px;
+  max-width: 82px;
+}
+
 .swim-length-number {
   font-family: 'Barlow Condensed', 'Inter', sans-serif;
   font-variant-numeric: tabular-nums;

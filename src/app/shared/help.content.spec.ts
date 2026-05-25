@@ -112,7 +112,8 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('**Swim Lengths** table');
     expect(gettingStartedSection?.content).toContain('per-length pool data');
     expect(gettingStartedSection?.content).toContain('grouped into collapsed sets through the next idle/rest length');
-    expect(gettingStartedSection?.content).toContain('lap index, duration, distance, length type, stroke, strokes, swim pace, cadence, heart rate, SWOLF, and energy');
+    expect(gettingStartedSection?.content).toContain('lap index, split progress, duration, distance, length type, stroke, strokes, swim pace, cadence, heart rate, SWOLF, and energy');
+    expect(gettingStartedSection?.content).toContain('25 m, 50 m, 75 m, and 100 m splits before the rest row');
   });
 
   it('should document event stamina metrics', () => {

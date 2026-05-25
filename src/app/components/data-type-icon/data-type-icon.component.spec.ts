@@ -322,6 +322,7 @@ describe('DataTypeIconComponent', () => {
 
     expect(component.getColumnHeaderIcon('#')).toBe('tag');
     expect(component.getColumnHeaderIcon('Lap')).toBe('linear_scale');
+    expect(component.getColumnHeaderIcon('Split')).toBe('linear_scale');
     expect(component.getColumnHeaderIcon('Pool Length')).toBe('route');
     expect(component.getColumnHeaderIcon('Swim Pace')).toBe('pool');
     expect(component.getColumnHeaderIcon('Stroke')).toBe('pool');

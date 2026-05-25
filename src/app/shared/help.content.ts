@@ -225,7 +225,8 @@ export const HELP_SECTIONS: HelpSection[] = [
 
 - Event details include a **Swim Lengths** table when selected swim activities contain per-length pool data.
 - Swim lengths are grouped into collapsed sets through the next idle/rest length; expand a set to inspect each individual length row.
-- Swim lengths appear in activity tabs and show lap index, duration, distance, length type, stroke, strokes, swim pace, cadence, heart rate, SWOLF, and energy when available.
+- Swim lengths appear in activity tabs and show lap index, split progress, duration, distance, length type, stroke, strokes, swim pace, cadence, heart rate, SWOLF, and energy when available.
+- Active split progress is shown inside each expanded set, so a 25 m pool with a 100 m set displays 25 m, 50 m, 75 m, and 100 m splits before the rest row.
 - Swim distance, pace, and energy values follow your preferred units from **Settings**.
 
 ### Event stamina metrics

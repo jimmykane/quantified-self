@@ -153,6 +153,7 @@ export class DataTypeIconComponent {
       case '#':
         return 'tag';
       case 'Lap':
+      case 'Split':
         return 'linear_scale';
       case 'Start Date':
         return 'date_range';
