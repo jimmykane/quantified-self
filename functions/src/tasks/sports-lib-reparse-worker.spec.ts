@@ -4,6 +4,8 @@ const hoisted = vi.hoisted(() => {
     const capturedTaskOptions: unknown[] = [];
     const reparseEventFromOriginalFiles = vi.fn();
     const writeReparseStatus = vi.fn();
+    const isReparsePersistenceSkippedForUserDeletionError = vi.fn((error: unknown) =>
+        error instanceof Error && error.name === 'EventWriteSkippedForDeletedUserError');
     const resolveTargetSportsLibVersion = vi.fn(() => '9.0.99');
     const getSportsLibReparseEventDurationMs = vi.fn(() => null);
     const isSportsLibReparseDurationHeavy = vi.fn((durationMs: number | null | undefined) =>
@@ -35,6 +37,7 @@ const hoisted = vi.hoisted(() => {
         capturedTaskOptions,
         reparseEventFromOriginalFiles,
         writeReparseStatus,
+        isReparsePersistenceSkippedForUserDeletionError,
         resolveTargetSportsLibVersion,
         getSportsLibReparseEventDurationMs,
         isSportsLibReparseDurationHeavy,
@@ -67,6 +70,7 @@ vi.mock('../reparse/sports-lib-reparse.service', () => ({
     getSportsLibReparseEventDurationMs: hoisted.getSportsLibReparseEventDurationMs,
     isSportsLibReparseDurationHeavy: hoisted.isSportsLibReparseDurationHeavy,
     reparseEventFromOriginalFiles: hoisted.reparseEventFromOriginalFiles,
+    isReparsePersistenceSkippedForUserDeletionError: hoisted.isReparsePersistenceSkippedForUserDeletionError,
     writeReparseStatus: hoisted.writeReparseStatus,
     resolveTargetSportsLibVersion: hoisted.resolveTargetSportsLibVersion,
 }));
@@ -600,6 +604,60 @@ describe('processSportsLibReparseTask', () => {
         expect(hoisted.jobSet).toHaveBeenCalledWith(expect.objectContaining({
             status: 'failed',
             lastError: 'parse failed',
+        }), { merge: true });
+    });
+
+    it('should stop without completing when guarded completed status write skips for account deletion', async () => {
+        const deletionSkipError = new Error('Skipping event write for deleted user.');
+        deletionSkipError.name = 'EventWriteSkippedForDeletedUserError';
+        hoisted.writeReparseStatus.mockRejectedValueOnce(deletionSkipError);
+        hoisted.jobGet.mockResolvedValue({
+            exists: true,
+            data: () => ({
+                uid: 'u1',
+                eventId: 'e1',
+                status: 'pending',
+                attemptCount: 0,
+                targetSportsLibVersion: '9.0.99',
+            }),
+        });
+
+        await (processSportsLibReparseTask as any)({ data: { jobId: 'job-1' } });
+
+        expect(hoisted.writeReparseStatus).toHaveBeenCalledWith('u1', 'e1', expect.objectContaining({
+            status: 'completed',
+        }));
+        expect(hoisted.jobSet).toHaveBeenCalledTimes(1);
+        expect(hoisted.jobSet).toHaveBeenNthCalledWith(1, expect.objectContaining({
+            status: 'processing',
+        }), { merge: true });
+    });
+
+    it('should mark failed before rethrowing deletion guard read errors from failure status writes', async () => {
+        const guardReadError = new Error('Could not read deletion guard for user u1 during sports_lib_reparse_status.');
+        guardReadError.name = 'UserDeletionGuardReadError';
+        hoisted.jobGet.mockResolvedValue({
+            exists: true,
+            data: () => ({
+                uid: 'u1',
+                eventId: 'e1',
+                status: 'pending',
+                attemptCount: 0,
+                targetSportsLibVersion: '9.0.99',
+            }),
+        });
+        hoisted.reparseEventFromOriginalFiles.mockRejectedValue(new Error('parse failed'));
+        hoisted.writeReparseStatus.mockRejectedValueOnce(guardReadError);
+
+        await expect((processSportsLibReparseTask as any)({ data: { jobId: 'job-1' } }))
+            .rejects.toThrow('Could not read deletion guard for user u1 during sports_lib_reparse_status.');
+
+        expect(hoisted.jobSet).toHaveBeenNthCalledWith(1, expect.objectContaining({
+            status: 'processing',
+        }), { merge: true });
+        expect(hoisted.jobSet).toHaveBeenNthCalledWith(2, expect.objectContaining({
+            status: 'failed',
+            lastError: 'Could not read deletion guard for user u1 during sports_lib_reparse_status.',
         }), { merge: true });
     });
 

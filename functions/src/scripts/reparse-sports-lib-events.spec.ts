@@ -17,6 +17,8 @@ const hoisted = vi.hoisted(() => {
         return values.length ? new Set(values) : null;
     });
     const writeReparseStatus = vi.fn();
+    const isReparsePersistenceSkippedForUserDeletionError = vi.fn((error: unknown) =>
+        error instanceof Error && error.name === 'EventWriteSkippedForDeletedUserError');
     const parseUidAndEventIdFromEventPath = vi.fn((path: string) => {
         const parts = path.split('/');
         if (parts.length !== 4 || parts[0] !== 'users' || parts[2] !== 'events') {
@@ -170,6 +172,7 @@ const hoisted = vi.hoisted(() => {
         sportsLibVersionToCode,
         parseUIDAllowlist,
         writeReparseStatus,
+        isReparsePersistenceSkippedForUserDeletionError,
         parseUidAndEventIdFromEventPath,
         runtimeDefaults,
         userEventsByUID,
@@ -201,6 +204,7 @@ vi.mock('../reparse/sports-lib-reparse.service', () => ({
     sportsLibVersionToCode: hoisted.sportsLibVersionToCode,
     parseUIDAllowlist: hoisted.parseUIDAllowlist,
     writeReparseStatus: hoisted.writeReparseStatus,
+    isReparsePersistenceSkippedForUserDeletionError: hoisted.isReparsePersistenceSkippedForUserDeletionError,
     parseUidAndEventIdFromEventPath: hoisted.parseUidAndEventIdFromEventPath,
 }));
 
@@ -687,6 +691,27 @@ describe('reparse-sports-lib-events script', () => {
         }));
     });
 
+    it('should not fail when guarded missing-source status write skips for account deletion', async () => {
+        const deletionSkipError = new Error('Skipping event write for deleted user.');
+        deletionSkipError.name = 'EventWriteSkippedForDeletedUserError';
+        const eventRef = createEventRef('u1', 'e1', {});
+        hoisted.processingDocs.push(createProcessingDoc(eventRef, {
+            sportsLibVersion: '9.0.0',
+            sportsLibVersionCode: 9_000_000,
+        }));
+        hoisted.extractSourceFiles.mockReturnValue([]);
+        hoisted.writeReparseStatus.mockRejectedValueOnce(deletionSkipError);
+
+        const summary = await runSportsLibReparseScript(['--execute']);
+
+        expect(summary.skippedNoSourceFiles).toBe(1);
+        expect(summary.failed).toBe(0);
+        expect(hoisted.writeReparseStatus).toHaveBeenCalledWith('u1', 'e1', expect.objectContaining({
+            status: 'skipped',
+            reason: 'NO_ORIGINAL_FILES',
+        }));
+    });
+
     it('should keep skippedNoAccess at zero', async () => {
         const eventRef = createEventRef('u1', 'e1', { originalFile: { path: 'x.fit' } });
         hoisted.processingDocs.push(createProcessingDoc(eventRef, {
@@ -720,6 +745,31 @@ describe('reparse-sports-lib-events script', () => {
             status: 'skipped',
             reason: 'NO_ORIGINAL_FILES',
         }));
+    });
+
+    it('should not count account-deletion persistence skips as reparse failures', async () => {
+        const deletionSkipError = new Error('Skipping event write for deleted user.');
+        deletionSkipError.name = 'EventWriteSkippedForDeletedUserError';
+        const eventRef = createEventRef('u1', 'e1', { originalFile: { path: 'x.fit' } });
+        hoisted.processingDocs.push(createProcessingDoc(eventRef, {
+            sportsLibVersion: '9.0.0',
+            sportsLibVersionCode: 9_000_000,
+        }));
+        hoisted.reparseEventFromOriginalFiles.mockRejectedValueOnce(deletionSkipError);
+
+        const summary = await runSportsLibReparseScript(['--execute']);
+
+        expect(summary.parsedEvents).toBe(1);
+        expect(summary.failed).toBe(0);
+        expect(hoisted.writeReparseStatus).not.toHaveBeenCalled();
+        expect(hoisted.loggerInfo).toHaveBeenCalledWith(
+            '[sports-lib-reparse-script] Progress',
+            expect.objectContaining({
+                uid: 'u1',
+                eventId: 'e1',
+                outcome: 'skipped_user_deletion',
+            }),
+        );
     });
 
     it('should handle execute path when reparse throws and include firestore index URL in logs', async () => {

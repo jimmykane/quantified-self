@@ -7,10 +7,12 @@ import {
     SPORTS_LIB_REPARSE_RUNTIME_DEFAULTS,
     SPORTS_LIB_REPARSE_SKIP_REASON_NO_ORIGINAL_FILES,
     SPORTS_LIB_REPARSE_STATUS_DOC_ID,
+    ReparseStatusWrite,
     SportsLibReparseCheckpoint,
     SportsLibReparseJob,
     buildSportsLibReparseJobId,
     extractSourceFiles,
+    isReparsePersistenceSkippedForUserDeletionError,
     parseUidAndEventIdFromEventPath,
     resolveSportsLibReparseRoutingDecision,
     resolveTargetSportsLibVersion,
@@ -96,6 +98,28 @@ async function shouldSkipForUserDeletion(
         return true;
     } catch (error) {
         throw new UserDeletionGuardReadError(uid, `sports_lib_reparse_scheduler:${phase}`, error);
+    }
+}
+
+async function writeReparseStatusUnlessUserDeleted(
+    uid: string,
+    eventId: string,
+    payload: ReparseStatusWrite,
+    phase: string,
+): Promise<boolean> {
+    try {
+        await writeReparseStatus(uid, eventId, payload);
+        return true;
+    } catch (error) {
+        if (isReparsePersistenceSkippedForUserDeletionError(error)) {
+            logger.info('[sports-lib-reparse] Skipping status write because user is missing or deletion is in progress.', {
+                uid,
+                eventId,
+                phase,
+            });
+            return false;
+        }
+        throw error;
     }
 }
 
@@ -259,12 +283,12 @@ export const scheduleSportsLibReparseScan = onSchedule({
                     return;
                 }
 
-                await writeReparseStatus(uid, eventId, {
+                await writeReparseStatusUnlessUserDeleted(uid, eventId, {
                     status: 'skipped',
                     reason: SPORTS_LIB_REPARSE_SKIP_REASON_NO_ORIGINAL_FILES,
                     targetSportsLibVersion,
                     checkedAt: admin.firestore.FieldValue.serverTimestamp(),
-                });
+                }, 'no_source_files');
                 return;
             }
 

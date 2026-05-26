@@ -3,7 +3,9 @@ import * as logger from 'firebase-functions/logger';
 import {
     SPORTS_LIB_REPARSE_RUNTIME_DEFAULTS,
     SPORTS_LIB_REPARSE_SKIP_REASON_NO_ORIGINAL_FILES,
+    ReparseStatusWrite,
     extractSourceFiles,
+    isReparsePersistenceSkippedForUserDeletionError,
     parseUIDAllowlist,
     parseUidAndEventIdFromEventPath,
     reparseEventFromOriginalFiles,
@@ -51,6 +53,28 @@ function writeRealtimeProgressLine(payload: Record<string, unknown>): void {
 function extractFirestoreIndexUrl(errorMessage: string): string | undefined {
     const match = errorMessage.match(/https:\/\/console\.firebase\.google\.com\/\S+/);
     return match?.[0];
+}
+
+async function writeReparseStatusUnlessUserDeleted(
+    uid: string,
+    eventId: string,
+    payload: ReparseStatusWrite,
+    phase: string,
+): Promise<boolean> {
+    try {
+        await writeReparseStatus(uid, eventId, payload);
+        return true;
+    } catch (error) {
+        if (isReparsePersistenceSkippedForUserDeletionError(error)) {
+            logger.info('[sports-lib-reparse-script] Skipping status write because user is missing or deletion is in progress.', {
+                uid,
+                eventId,
+                phase,
+            });
+            return false;
+        }
+        throw error;
+    }
 }
 
 function parseIntArg(value: string | undefined, fallback: number): number {
@@ -221,12 +245,12 @@ export async function runSportsLibReparseScript(argv: string[]): Promise<ScriptS
         if (sourceFiles.length === 0) {
             summary.skippedNoSourceFiles++;
             if (options.execute) {
-                await writeReparseStatus(uid, eventId, {
+                await writeReparseStatusUnlessUserDeleted(uid, eventId, {
                     status: 'skipped',
                     reason: SPORTS_LIB_REPARSE_SKIP_REASON_NO_ORIGINAL_FILES,
                     targetSportsLibVersion,
                     checkedAt: admin.firestore.FieldValue.serverTimestamp(),
-                });
+                }, 'no_source_files');
             }
             return;
         }
@@ -236,7 +260,7 @@ export async function runSportsLibReparseScript(argv: string[]): Promise<ScriptS
             return;
         }
 
-        let progressOutcome: 'completed' | 'skipped_no_source_files' | 'failed' = 'failed';
+        let progressOutcome: 'completed' | 'skipped_no_source_files' | 'failed' | 'skipped_user_deletion' = 'failed';
         summary.parsedEvents++;
 
         try {
@@ -247,24 +271,32 @@ export async function runSportsLibReparseScript(argv: string[]): Promise<ScriptS
             if (result.status === 'skipped' && result.reason === SPORTS_LIB_REPARSE_SKIP_REASON_NO_ORIGINAL_FILES) {
                 progressOutcome = 'skipped_no_source_files';
                 summary.skippedNoSourceFiles++;
-                await writeReparseStatus(uid, eventId, {
+                await writeReparseStatusUnlessUserDeleted(uid, eventId, {
                     status: 'skipped',
                     reason: SPORTS_LIB_REPARSE_SKIP_REASON_NO_ORIGINAL_FILES,
                     targetSportsLibVersion,
                     checkedAt: admin.firestore.FieldValue.serverTimestamp(),
-                });
+                }, 'reparse_skipped_no_source_files');
             } else {
                 progressOutcome = 'completed';
                 summary.completed++;
-                await writeReparseStatus(uid, eventId, {
+                await writeReparseStatusUnlessUserDeleted(uid, eventId, {
                     status: 'completed',
                     targetSportsLibVersion,
                     checkedAt: admin.firestore.FieldValue.serverTimestamp(),
                     processedAt: admin.firestore.FieldValue.serverTimestamp(),
                     lastError: '',
-                });
+                }, 'reparse_completed');
             }
         } catch (error) {
+            if (isReparsePersistenceSkippedForUserDeletionError(error)) {
+                progressOutcome = 'skipped_user_deletion';
+                logger.info('[sports-lib-reparse-script] Skipping candidate because user is missing or deletion is in progress.', {
+                    uid,
+                    eventId,
+                });
+                return;
+            }
             summary.failed++;
             const errorMessage = (error as Error)?.message || `${error}`;
             const firestoreIndexUrl = extractFirestoreIndexUrl(errorMessage);
@@ -274,13 +306,13 @@ export async function runSportsLibReparseScript(argv: string[]): Promise<ScriptS
                 errorMessage,
                 ...(firestoreIndexUrl ? { firestoreIndexUrl } : {}),
             });
-            await writeReparseStatus(uid, eventId, {
+            await writeReparseStatusUnlessUserDeleted(uid, eventId, {
                 status: 'failed',
                 reason: 'REPARSE_FAILED',
                 targetSportsLibVersion,
                 checkedAt: admin.firestore.FieldValue.serverTimestamp(),
                 lastError: errorMessage,
-            });
+            }, 'reparse_failed');
         } finally {
             const progressPayload = {
                 uid,

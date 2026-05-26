@@ -6,8 +6,10 @@ import {
     SPORTS_LIB_REPARSE_JOBS_COLLECTION,
     SPORTS_LIB_REPARSE_PROCESSING_TIERS,
     SPORTS_LIB_REPARSE_SKIP_REASON_NO_ORIGINAL_FILES,
+    ReparseStatusWrite,
     SportsLibReparseJob,
     getSportsLibReparseEventDurationMs,
+    isReparsePersistenceSkippedForUserDeletionError,
     isSportsLibReparseDurationHeavy,
     reparseEventFromOriginalFiles,
     resolveTargetSportsLibVersion,
@@ -61,6 +63,11 @@ function isTerminalReparseFailure(errorMessage: string): boolean {
     return TERMINAL_REPARSE_ERROR_PATTERNS.some((pattern) => pattern.test(errorMessage));
 }
 
+function isUserDeletionGuardReadError(error: unknown): error is UserDeletionGuardReadError {
+    return error instanceof UserDeletionGuardReadError
+        || (error instanceof Error && error.name === 'UserDeletionGuardReadError');
+}
+
 async function markJobFailed(
     jobRef: admin.firestore.DocumentReference,
     errorMessage: string,
@@ -73,6 +80,27 @@ async function markJobFailed(
         lastError: errorMessage,
         ...(options?.clearEnqueuedAt ? { enqueuedAt: admin.firestore.FieldValue.delete() } : {}),
     }, { merge: true });
+}
+
+async function writeWorkerReparseStatus(
+    job: SportsLibReparseJob,
+    jobId: string,
+    payload: ReparseStatusWrite,
+): Promise<boolean> {
+    try {
+        await writeReparseStatus(job.uid, job.eventId, payload);
+        return true;
+    } catch (error) {
+        if (isReparsePersistenceSkippedForUserDeletionError(error)) {
+            logger.info('[sports-lib-reparse-worker] Skipping status write because user is missing or deletion is in progress.', {
+                jobId,
+                uid: job.uid,
+                eventId: job.eventId,
+            });
+            return false;
+        }
+        throw error;
+    }
 }
 
 async function resolveJobEventDurationMs(job: SportsLibReparseJob): Promise<number | null> {
@@ -136,7 +164,7 @@ async function requeueHeavyFromNormalWorker(
             return;
         }
     } catch (error) {
-        if (error instanceof UserDeletionGuardReadError) {
+        if (isUserDeletionGuardReadError(error)) {
             await markJobFailed(jobRef, getErrorMessage(error));
         }
         throw error;
@@ -201,7 +229,7 @@ async function processSportsLibReparseTaskRequest(
             return;
         }
     } catch (error) {
-        if (error instanceof UserDeletionGuardReadError) {
+        if (isUserDeletionGuardReadError(error)) {
             await markJobFailed(jobRef, getErrorMessage(error));
         }
         throw error;
@@ -248,20 +276,26 @@ async function processSportsLibReparseTaskRequest(
         }
 
         if (reparseResult.status === 'skipped' && reparseResult.reason === SPORTS_LIB_REPARSE_SKIP_REASON_NO_ORIGINAL_FILES) {
-            await writeReparseStatus(job.uid, job.eventId, {
+            const statusWritten = await writeWorkerReparseStatus(job, jobId, {
                 status: 'skipped',
                 reason: SPORTS_LIB_REPARSE_SKIP_REASON_NO_ORIGINAL_FILES,
                 targetSportsLibVersion,
                 checkedAt: admin.firestore.FieldValue.serverTimestamp(),
             });
+            if (!statusWritten) {
+                return;
+            }
         } else {
-            await writeReparseStatus(job.uid, job.eventId, {
+            const statusWritten = await writeWorkerReparseStatus(job, jobId, {
                 status: 'completed',
                 targetSportsLibVersion,
                 checkedAt: admin.firestore.FieldValue.serverTimestamp(),
                 processedAt: admin.firestore.FieldValue.serverTimestamp(),
                 lastError: '',
             });
+            if (!statusWritten) {
+                return;
+            }
         }
 
         await jobRef.set({
@@ -287,7 +321,7 @@ async function processSportsLibReparseTaskRequest(
         if (error instanceof SportsLibReparseSkippedForUserDeletionError) {
             return;
         }
-        if (error instanceof UserDeletionGuardReadError) {
+        if (isUserDeletionGuardReadError(error)) {
             await markJobFailed(jobRef, getErrorMessage(error));
             throw error;
         }
@@ -296,20 +330,30 @@ async function processSportsLibReparseTaskRequest(
                 return;
             }
         } catch (guardError) {
-            if (guardError instanceof UserDeletionGuardReadError) {
+            if (isUserDeletionGuardReadError(guardError)) {
                 await markJobFailed(jobRef, getErrorMessage(guardError));
             }
             throw guardError;
         }
 
         const errorMessage = getErrorMessage(error);
-        await writeReparseStatus(job.uid, job.eventId, {
-            status: 'failed',
-            reason: 'REPARSE_FAILED',
-            targetSportsLibVersion,
-            checkedAt: admin.firestore.FieldValue.serverTimestamp(),
-            lastError: errorMessage,
-        });
+        try {
+            const statusWritten = await writeWorkerReparseStatus(job, jobId, {
+                status: 'failed',
+                reason: 'REPARSE_FAILED',
+                targetSportsLibVersion,
+                checkedAt: admin.firestore.FieldValue.serverTimestamp(),
+                lastError: errorMessage,
+            });
+            if (!statusWritten) {
+                return;
+            }
+        } catch (statusWriteError) {
+            if (isUserDeletionGuardReadError(statusWriteError)) {
+                await markJobFailed(jobRef, getErrorMessage(statusWriteError));
+            }
+            throw statusWriteError;
+        }
 
         await markJobFailed(jobRef, errorMessage);
 

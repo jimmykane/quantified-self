@@ -14,6 +14,8 @@ const hoisted = vi.hoisted(() => {
     const resolveSportsLibReparseRoutingDecision = vi.fn();
     const buildSportsLibReparseJobId = vi.fn();
     const writeReparseStatus = vi.fn();
+    const isReparsePersistenceSkippedForUserDeletionError = vi.fn((error: unknown) =>
+        error instanceof Error && error.name === 'EventWriteSkippedForDeletedUserError');
     const resolveTargetSportsLibVersion = vi.fn();
     const resolveTargetSportsLibVersionCode = vi.fn();
     const sportsLibVersionToCode = vi.fn();
@@ -192,6 +194,7 @@ const hoisted = vi.hoisted(() => {
         resolveSportsLibReparseRoutingDecision,
         buildSportsLibReparseJobId,
         writeReparseStatus,
+        isReparsePersistenceSkippedForUserDeletionError,
         resolveTargetSportsLibVersion,
         resolveTargetSportsLibVersionCode,
         sportsLibVersionToCode,
@@ -231,6 +234,7 @@ vi.mock('../reparse/sports-lib-reparse.service', () => ({
     resolveSportsLibReparseRoutingDecision: hoisted.resolveSportsLibReparseRoutingDecision,
     buildSportsLibReparseJobId: hoisted.buildSportsLibReparseJobId,
     writeReparseStatus: hoisted.writeReparseStatus,
+    isReparsePersistenceSkippedForUserDeletionError: hoisted.isReparsePersistenceSkippedForUserDeletionError,
     resolveTargetSportsLibVersion: hoisted.resolveTargetSportsLibVersion,
     resolveTargetSportsLibVersionCode: hoisted.resolveTargetSportsLibVersionCode,
     sportsLibVersionToCode: hoisted.sportsLibVersionToCode,
@@ -757,6 +761,27 @@ describe('scheduleSportsLibReparseScan', () => {
             status: 'skipped',
             reason: 'NO_ORIGINAL_FILES',
         }));
+        expect(hoisted.enqueueSportsLibReparseTask).not.toHaveBeenCalled();
+    });
+
+    it('should skip missing-source status writes when guarded persistence detects account deletion', async () => {
+        const deletionSkipError = new Error('Skipping event write for deleted user.');
+        deletionSkipError.name = 'EventWriteSkippedForDeletedUserError';
+        const eventRef = createEventRef('u1', 'e1', {});
+        hoisted.processingDocs.push(createProcessingDoc(eventRef, {
+            sportsLibVersion: '9.0.0',
+            sportsLibVersionCode: 9_000_000,
+        }));
+        hoisted.extractSourceFiles.mockReturnValue([]);
+        hoisted.writeReparseStatus.mockRejectedValueOnce(deletionSkipError);
+
+        await (scheduleSportsLibReparseScan as any)({});
+
+        expect(hoisted.writeReparseStatus).toHaveBeenCalledWith('u1', 'e1', expect.objectContaining({
+            status: 'skipped',
+            reason: 'NO_ORIGINAL_FILES',
+        }));
+        expect(hoisted.jobSet).not.toHaveBeenCalled();
         expect(hoisted.enqueueSportsLibReparseTask).not.toHaveBeenCalled();
     });
 

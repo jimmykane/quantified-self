@@ -69,6 +69,10 @@ class ReparsePersistenceSkippedForDeletedUserError extends Error {
     }
 }
 
+export function isReparsePersistenceSkippedForUserDeletionError(error: unknown): boolean {
+    return error instanceof Error && error.name === 'EventWriteSkippedForDeletedUserError';
+}
+
 export interface SportsLibReparseCheckpoint {
     cursorEventPath?: string | null;
     cursorProcessingDocPath?: string | null;
