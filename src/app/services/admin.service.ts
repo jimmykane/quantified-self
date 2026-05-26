@@ -172,6 +172,9 @@ export interface ReparseFailurePreview {
     lastError: string;
     updatedAt: unknown;
     targetSportsLibVersion: string;
+    processingTier?: string;
+    heavyReason?: string;
+    eventDurationMs?: number | null;
 }
 
 export interface ReparseStats {
@@ -221,6 +224,10 @@ export interface QueueStats {
                 pending: number;
             };
             sportsLibReparse?: {
+                queueId: string;
+                pending: number;
+            };
+            sportsLibReparseHeavy?: {
                 queueId: string;
                 pending: number;
             };
@@ -306,6 +313,12 @@ export interface FinancialStats {
     };
 }
 
+export interface RetrySportsLibReparseHeavyJobResponse {
+    success: boolean;
+    jobId: string;
+    taskCreated: boolean;
+}
+
 @Injectable({
     providedIn: 'root'
 })
@@ -329,6 +342,15 @@ export class AdminService {
 
     getQueueStats(includeAnalysis = true): Observable<QueueStats> {
         return from(this.functionsService.call<{ includeAnalysis?: boolean }, QueueStats>('getQueueStats', { includeAnalysis })).pipe(
+            map(result => result.data)
+        );
+    }
+
+    retrySportsLibReparseHeavyJob(jobId: string): Observable<RetrySportsLibReparseHeavyJobResponse> {
+        return from(this.functionsService.call<{ jobId: string }, RetrySportsLibReparseHeavyJobResponse>(
+            'retrySportsLibReparseHeavyJob',
+            { jobId }
+        )).pipe(
             map(result => result.data)
         );
     }

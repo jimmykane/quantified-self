@@ -1,18 +1,21 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { AdminQueueStatsComponent } from './admin-queue-stats.component';
-import { QueueStats } from '../../../services/admin.service';
+import { AdminService, QueueStats } from '../../../services/admin.service';
 import { AppThemeService } from '../../../services/app.theme.service';
 import { of } from 'rxjs';
 import { AppThemes } from '@sports-alliance/sports-lib';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { SimpleChange } from '@angular/core';
 import { EChartsLoaderService } from '../../../services/echarts-loader.service';
+import { MatSnackBar } from '@angular/material/snack-bar';
 
 describe('AdminQueueStatsComponent', () => {
     let component: AdminQueueStatsComponent;
     let fixture: ComponentFixture<AdminQueueStatsComponent>;
     let mockThemeService: any;
     let mockEchartsService: any;
+    let mockAdminService: any;
+    let mockSnackBar: any;
 
     if (!(global as any).requestAnimationFrame) {
         (global as any).requestAnimationFrame = (cb: FrameRequestCallback) => setTimeout(cb, 0);
@@ -39,11 +42,25 @@ describe('AdminQueueStatsComponent', () => {
             attachMobileSeriesTapFeedback: vi.fn(() => () => { }),
         };
 
+        mockAdminService = {
+            retrySportsLibReparseHeavyJob: vi.fn().mockReturnValue(of({
+                success: true,
+                jobId: 'job1',
+                taskCreated: true
+            }))
+        };
+
+        mockSnackBar = {
+            open: vi.fn()
+        };
+
         await TestBed.configureTestingModule({
             imports: [AdminQueueStatsComponent],
             providers: [
                 { provide: AppThemeService, useValue: mockThemeService },
-                { provide: EChartsLoaderService, useValue: mockEchartsService }
+                { provide: EChartsLoaderService, useValue: mockEchartsService },
+                { provide: AdminService, useValue: mockAdminService },
+                { provide: MatSnackBar, useValue: mockSnackBar }
             ]
         }).compileComponents();
 
@@ -292,7 +309,7 @@ describe('AdminQueueStatsComponent', () => {
     });
 
     describe('Cloud Tasks Queue Breakdown', () => {
-        it('should render workout, activity sync, sleep sync, reparse, and derived queue pending values', () => {
+        it('should render workout, activity sync, sleep sync, normal reparse, heavy reparse, and derived queue pending values', () => {
             component.loading = false;
             component.stats = {
                 pending: 1,
@@ -306,6 +323,7 @@ describe('AdminQueueStatsComponent', () => {
                         activitySync: { queueId: 'processActivitySyncTask', pending: 4 },
                         sleepSync: { queueId: 'processSleepSyncTask', pending: 3 },
                         sportsLibReparse: { queueId: 'processSportsLibReparseTask', pending: 8 },
+                        sportsLibReparseHeavy: { queueId: 'processSportsLibReparseHeavyTask', pending: 2 },
                         derivedMetrics: { queueId: 'processDerivedMetricsTask', pending: 6 }
                     }
                 },
@@ -320,13 +338,15 @@ describe('AdminQueueStatsComponent', () => {
             expect(host.textContent).toContain('Cloud Tasks (Workout)');
             expect(host.textContent).toContain('Cloud Tasks (Activity Sync)');
             expect(host.textContent).toContain('Cloud Tasks (Sleep Sync)');
-            expect(host.textContent).toContain('Cloud Tasks (Reparse)');
+            expect(host.textContent).toContain('Cloud Tasks (Reparse Normal)');
+            expect(host.textContent).toContain('Cloud Tasks (Reparse Heavy)');
             expect(host.textContent).toContain('Cloud Tasks (Derived Metrics)');
             expect(host.textContent).not.toContain('Cloud Tasks (All Queues)');
             expect(host.textContent).toContain('42');
             expect(host.textContent).toContain('4');
             expect(host.textContent).toContain('3');
             expect(host.textContent).toContain('8');
+            expect(host.textContent).toContain('2');
             expect(host.textContent).toContain('6');
         });
 
@@ -357,7 +377,8 @@ describe('AdminQueueStatsComponent', () => {
             expect(readCardValue('Cloud Tasks (Workout)')).toBe('0');
             expect(readCardValue('Cloud Tasks (Activity Sync)')).toBe('0');
             expect(readCardValue('Cloud Tasks (Sleep Sync)')).toBe('0');
-            expect(readCardValue('Cloud Tasks (Reparse)')).toBe('0');
+            expect(readCardValue('Cloud Tasks (Reparse Normal)')).toBe('0');
+            expect(readCardValue('Cloud Tasks (Reparse Heavy)')).toBe('0');
             expect(readCardValue('Cloud Tasks (Derived Metrics)')).toBe('0');
         });
     });
@@ -557,7 +578,8 @@ describe('AdminQueueStatsComponent', () => {
                     pending: 3,
                     queues: {
                         workout: { queueId: 'processWorkoutTask', pending: 1 },
-                        sportsLibReparse: { queueId: 'processSportsLibReparseTask', pending: 2 }
+                        sportsLibReparse: { queueId: 'processSportsLibReparseTask', pending: 2 },
+                        sportsLibReparseHeavy: { queueId: 'processSportsLibReparseHeavyTask', pending: 1 }
                     }
                 },
                 reparse: {
@@ -586,6 +608,8 @@ describe('AdminQueueStatsComponent', () => {
             fixture.detectChanges();
             const host: HTMLElement = fixture.nativeElement;
             expect(host.textContent).toContain('Sports-lib Reparse');
+            expect(host.textContent).toContain('Cloud Tasks (Reparse Normal)');
+            expect(host.textContent).toContain('Cloud Tasks (Reparse Heavy)');
             expect(host.textContent).toContain('Reparse Jobs (Pending)');
             expect(host.textContent).toContain('Reparse Jobs (Processing)');
             expect(host.textContent).toContain('Reparse Jobs (Completed)');
@@ -606,7 +630,8 @@ describe('AdminQueueStatsComponent', () => {
                     pending: 2,
                     queues: {
                         workout: { queueId: 'processWorkoutTask', pending: 1 },
-                        sportsLibReparse: { queueId: 'processSportsLibReparseTask', pending: 1 }
+                        sportsLibReparse: { queueId: 'processSportsLibReparseTask', pending: 1 },
+                        sportsLibReparseHeavy: { queueId: 'processSportsLibReparseHeavyTask', pending: 0 }
                     }
                 },
                 reparse: {
@@ -636,7 +661,10 @@ describe('AdminQueueStatsComponent', () => {
                             attemptCount: 2,
                             lastError: 'Parse failed',
                             updatedAt: new Date('2026-02-20T14:30:00Z'),
-                            targetSportsLibVersion: '9.1.4'
+                            targetSportsLibVersion: '9.1.4',
+                            processingTier: 'heavy',
+                            heavyReason: 'duration_gt_32h',
+                            eventDurationMs: 33 * 60 * 60 * 1000
                         }
                     ]
                 }
@@ -647,7 +675,65 @@ describe('AdminQueueStatsComponent', () => {
             expect(host.textContent).toContain('Recent Reparse Failures');
             expect(host.textContent).toContain('uid-1');
             expect(host.textContent).toContain('event-1');
+            expect(host.textContent).toContain('Heavy');
+            expect(host.textContent).toContain('Duration > 32h');
+            expect(host.textContent).toContain('33h 0m');
             expect(host.textContent).toContain('Parse failed');
+        });
+
+        it('should retry a failed reparse job on the heavy queue', () => {
+            component.loading = false;
+            component.stats = {
+                pending: 1,
+                succeeded: 1,
+                stuck: 0,
+                providers: [],
+                cloudTasks: { pending: 0 },
+                reparse: {
+                    queuePending: 0,
+                    targetSportsLibVersion: '9.1.4',
+                    jobs: {
+                        total: 1,
+                        pending: 0,
+                        processing: 0,
+                        completed: 0,
+                        failed: 1
+                    },
+                    checkpoint: {
+                        cursorEventPath: null,
+                        lastScanAt: null,
+                        lastPassStartedAt: null,
+                        lastPassCompletedAt: null,
+                        lastScanCount: 0,
+                        lastEnqueuedCount: 0,
+                        overrideUsersInProgress: 0
+                    },
+                    recentFailures: [
+                        {
+                            jobId: 'job1',
+                            uid: 'uid-1',
+                            eventId: 'event-1',
+                            attemptCount: 2,
+                            lastError: 'Parse failed',
+                            updatedAt: null,
+                            targetSportsLibVersion: '9.1.4',
+                            processingTier: 'normal',
+                            eventDurationMs: null
+                        }
+                    ]
+                }
+            };
+            const emitSpy = vi.fn();
+            component.retryHeavyCompleted.subscribe(emitSpy);
+
+            fixture.detectChanges();
+            const host: HTMLElement = fixture.nativeElement;
+            const retryButton = host.querySelector('button[aria-label="Retry failed reparse job on heavy queue"]') as HTMLButtonElement;
+            retryButton.click();
+            fixture.detectChanges();
+
+            expect(mockAdminService.retrySportsLibReparseHeavyJob).toHaveBeenCalledWith('job1');
+            expect(emitSpy).toHaveBeenCalled();
         });
     });
 

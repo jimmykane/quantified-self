@@ -11,12 +11,22 @@ import { v2beta3 } from '@google-cloud/tasks';
 import * as logger from 'firebase-functions/logger';
 import { config } from '../config';
 import { ServiceNames } from '@sports-alliance/sports-lib';
-import { REPARSE_PROCESSING_TASK_RUNTIME_OPTIONS } from './activity-processing-config';
+import {
+    REPARSE_PROCESSING_HEAVY_TASK_RUNTIME_OPTIONS,
+    REPARSE_PROCESSING_TASK_RUNTIME_OPTIONS,
+} from './activity-processing-config';
+import { SPORTS_LIB_REPARSE_HEAVY_TASK_FUNCTION_NAME } from '../../../shared/functions-manifest';
 
 // Lazy-initialized singleton client for performance
 let _cloudTasksClient: v2beta3.CloudTasksClient | null = null;
 
 const SPORTS_LIB_REPARSE_TASK_DISPATCH_DEADLINE_SECONDS = REPARSE_PROCESSING_TASK_RUNTIME_OPTIONS.timeoutSeconds;
+const SPORTS_LIB_REPARSE_HEAVY_TASK_DISPATCH_DEADLINE_SECONDS = REPARSE_PROCESSING_HEAVY_TASK_RUNTIME_OPTIONS.timeoutSeconds;
+
+interface EnqueueSportsLibReparseHeavyTaskOptions {
+    scheduleDelaySeconds?: number;
+    taskNameSuffix?: string;
+}
 
 function getCloudTasksClient(): v2beta3.CloudTasksClient {
     if (!_cloudTasksClient) {
@@ -224,6 +234,44 @@ export async function enqueueSportsLibReparseTask(jobId: string, scheduleDelaySe
         dispatchDeadlineSeconds: SPORTS_LIB_REPARSE_TASK_DISPATCH_DEADLINE_SECONDS,
         alreadyExistsLogMessage: `[ReparseDispatcher] Task already exists for job ${jobId}, skipping`,
         failedLogPrefix: `[ReparseDispatcher] Failed to enqueue task for job ${jobId}:`,
+    });
+}
+
+/**
+ * Enqueue a single heavy sports-lib reparse job task.
+ */
+export async function enqueueSportsLibReparseHeavyTask(
+    jobId: string,
+    optionsOrScheduleDelaySeconds?: EnqueueSportsLibReparseHeavyTaskOptions | number,
+): Promise<boolean> {
+    const client = getCloudTasksClient();
+    const { projectId, location, sportsLibReparseHeavyQueue, serviceAccountEmail } = config.cloudtasks;
+    if (!projectId) {
+        throw new Error('Project ID is not defined in config');
+    }
+
+    const options = typeof optionsOrScheduleDelaySeconds === 'number'
+        ? { scheduleDelaySeconds: optionsOrScheduleDelaySeconds }
+        : (optionsOrScheduleDelaySeconds || {});
+    const parent = client.queuePath(projectId, location, sportsLibReparseHeavyQueue);
+    const url = `https://${location}-${projectId}.cloudfunctions.net/${SPORTS_LIB_REPARSE_HEAVY_TASK_FUNCTION_NAME}`;
+    const safeJobId = jobId.replace(/[^a-zA-Z0-9-_]/g, '-');
+    const safeTaskNameSuffix = options.taskNameSuffix
+        ? `-${options.taskNameSuffix.replace(/[^a-zA-Z0-9-_]/g, '-')}`
+        : '';
+    const taskName = `${parent}/tasks/reparse-heavy-${safeJobId}${safeTaskNameSuffix}`;
+    const payload = { data: { jobId } };
+
+    return enqueueTaskWithRetry({
+        parent,
+        taskName,
+        payload,
+        serviceAccountEmail,
+        url,
+        scheduleDelaySeconds: options.scheduleDelaySeconds,
+        dispatchDeadlineSeconds: SPORTS_LIB_REPARSE_HEAVY_TASK_DISPATCH_DEADLINE_SECONDS,
+        alreadyExistsLogMessage: `[ReparseHeavyDispatcher] Task already exists for job ${jobId}, skipping`,
+        failedLogPrefix: `[ReparseHeavyDispatcher] Failed to enqueue task for job ${jobId}:`,
     });
 }
 

@@ -1,4 +1,4 @@
-import { AfterViewInit, Component, ElementRef, Input, OnChanges, OnDestroy, OnInit, SimpleChanges, ViewChild } from '@angular/core';
+import { AfterViewInit, Component, ElementRef, EventEmitter, Input, OnChanges, OnDestroy, OnInit, Output, SimpleChanges, ViewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
@@ -6,12 +6,13 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatTableModule } from '@angular/material/table';
 import { MatCardModule } from '@angular/material/card';
+import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 
-import { QueueStats, ReparseFailurePreview } from '../../../services/admin.service';
+import { AdminService, QueueStats, ReparseFailurePreview } from '../../../services/admin.service';
 import { AppThemeService } from '../../../services/app.theme.service';
 import { AppThemes } from '@sports-alliance/sports-lib';
 import { Subject } from 'rxjs';
-import { takeUntil } from 'rxjs/operators';
+import { finalize, takeUntil } from 'rxjs/operators';
 import { EChartsLoaderService } from '../../../services/echarts-loader.service';
 import {
     ECHARTS_CARTESIAN_MERGE_UPDATE_SETTINGS,
@@ -33,16 +34,19 @@ export type AdminQueueStatsView = 'all' | 'workout' | 'activity-sync' | 'sleep-s
         MatButtonModule,
         MatTooltipModule,
         MatTableModule,
-        MatCardModule
+        MatCardModule,
+        MatSnackBarModule
     ]
 })
 export class AdminQueueStatsComponent implements OnInit, OnChanges, OnDestroy, AfterViewInit {
     @Input() stats: QueueStats | null = null;
     @Input() loading = false;
     @Input() queueView: AdminQueueStatsView = 'all';
+    @Output() retryHeavyCompleted = new EventEmitter<void>();
     hasRetryData = false;
-    readonly reparseFailureColumns = ['uid', 'eventId', 'attemptCount', 'updatedAt', 'lastError'];
+    readonly reparseFailureColumns = ['uid', 'eventId', 'attemptCount', 'processingTier', 'heavyReason', 'eventDurationMs', 'updatedAt', 'lastError', 'actions'];
     readonly derivedFailureColumns = ['uid', 'generation', 'dirtyMetricKinds', 'updatedAtMs', 'lastError'];
+    readonly retryingHeavyJobIds = new Set<string>();
 
     @ViewChild('retryChart')
     set retryChartRef(ref: ElementRef<HTMLDivElement> | undefined) {
@@ -68,7 +72,9 @@ export class AdminQueueStatsComponent implements OnInit, OnChanges, OnDestroy, A
 
     constructor(
         private appThemeService: AppThemeService,
-        private eChartsLoader: EChartsLoaderService
+        private eChartsLoader: EChartsLoaderService,
+        private adminService: AdminService,
+        private snackBar: MatSnackBar
     ) {
         this.chartHost = new EChartsHostController({
             eChartsLoader: this.eChartsLoader,
@@ -258,6 +264,57 @@ export class AdminQueueStatsComponent implements OnInit, OnChanges, OnDestroy, A
         return this.stats?.reparse?.recentFailures || [];
     }
 
+    getReparseTierLabel(row: ReparseFailurePreview): string {
+        return row.processingTier === 'heavy' ? 'Heavy' : 'Normal';
+    }
+
+    getReparseReasonLabel(row: ReparseFailurePreview): string {
+        if (row.heavyReason === 'duration_gt_32h') {
+            return 'Duration > 32h';
+        }
+        if (row.heavyReason === 'duration_gt_24h') {
+            return 'Duration > 24h';
+        }
+        if (row.heavyReason === 'manual_admin') {
+            return 'Manual admin';
+        }
+        return row.heavyReason || 'N/A';
+    }
+
+    formatOptionalDuration(ms: number | null | undefined): string {
+        return typeof ms === 'number' && Number.isFinite(ms) && ms > 0
+            ? this.formatDuration(ms)
+            : 'N/A';
+    }
+
+    isRetryHeavyDisabled(row: ReparseFailurePreview): boolean {
+        return !row.jobId || this.retryingHeavyJobIds.has(row.jobId);
+    }
+
+    retryHeavy(row: ReparseFailurePreview): void {
+        const jobId = `${row.jobId || ''}`.trim();
+        if (!jobId || this.retryingHeavyJobIds.has(jobId)) {
+            return;
+        }
+
+        this.retryingHeavyJobIds.add(jobId);
+        this.adminService.retrySportsLibReparseHeavyJob(jobId)
+            .pipe(
+                takeUntil(this.destroy$),
+                finalize(() => this.retryingHeavyJobIds.delete(jobId))
+            )
+            .subscribe({
+                next: (response) => {
+                    const action = response.taskCreated ? 'created' : 'already exists';
+                    this.snackBar.open(`Heavy reparse task ${action}.`, 'Dismiss', { duration: 4000 });
+                    this.retryHeavyCompleted.emit();
+                },
+                error: (error) => {
+                    this.snackBar.open(this.getRetryHeavyErrorMessage(error), 'Dismiss', { duration: 6000 });
+                },
+            });
+    }
+
     getDerivedMetricsFailureRows(): {
         uid: string;
         generation: number;
@@ -271,6 +328,12 @@ export class AdminQueueStatsComponent implements OnInit, OnChanges, OnDestroy, A
     getSleepDisabledProvidersLabel(): string {
         const providers = this.stats?.sleepSync?.disabledProviders || [];
         return providers.length ? providers.join(', ') : 'None';
+    }
+
+    private getRetryHeavyErrorMessage(error: unknown): string {
+        const rawMessage = (error as { message?: unknown } | undefined)?.message;
+        const message = typeof rawMessage === 'string' ? rawMessage.trim() : '';
+        return message || 'Failed to enqueue heavy reparse task.';
     }
 
     get showWorkoutSection(): boolean {

@@ -31,6 +31,10 @@
         </button>
     </div>
 
-    <app-admin-queue-stats [stats]="queueStats" [loading]="isLoadingStats" [queueView]="queueView">
+    <app-admin-queue-stats
+        [stats]="queueStats"
+        [loading]="isLoadingStats"
+        [queueView]="queueView"
+        (retryHeavyCompleted)="fetchQueueStats()">
     </app-admin-queue-stats>
 </div>

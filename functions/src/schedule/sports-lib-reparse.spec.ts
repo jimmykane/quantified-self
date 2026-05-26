@@ -11,6 +11,7 @@ vi.mock('firebase-functions/v2/scheduler', () => ({
 const hoisted = vi.hoisted(() => {
     const shouldEventBeReparsed = vi.fn();
     const extractSourceFiles = vi.fn();
+    const resolveSportsLibReparseRoutingDecision = vi.fn();
     const buildSportsLibReparseJobId = vi.fn();
     const writeReparseStatus = vi.fn();
     const resolveTargetSportsLibVersion = vi.fn();
@@ -31,6 +32,7 @@ const hoisted = vi.hoisted(() => {
     };
 
     const enqueueSportsLibReparseTask = vi.fn();
+    const enqueueSportsLibReparseHeavyTask = vi.fn();
     const getExpireAtTimestamp = vi.fn(() => 'EXPIRE_TS');
 
     const loggerInfo = vi.fn();
@@ -182,6 +184,7 @@ const hoisted = vi.hoisted(() => {
     return {
         shouldEventBeReparsed,
         extractSourceFiles,
+        resolveSportsLibReparseRoutingDecision,
         buildSportsLibReparseJobId,
         writeReparseStatus,
         resolveTargetSportsLibVersion,
@@ -190,6 +193,7 @@ const hoisted = vi.hoisted(() => {
         parseUidAndEventIdFromEventPath,
         runtimeDefaults,
         enqueueSportsLibReparseTask,
+        enqueueSportsLibReparseHeavyTask,
         getExpireAtTimestamp,
         loggerInfo,
         loggerWarn,
@@ -218,6 +222,7 @@ vi.mock('../reparse/sports-lib-reparse.service', () => ({
     SPORTS_LIB_REPARSE_STATUS_DOC_ID: 'reparseStatus',
     shouldEventBeReparsed: hoisted.shouldEventBeReparsed,
     extractSourceFiles: hoisted.extractSourceFiles,
+    resolveSportsLibReparseRoutingDecision: hoisted.resolveSportsLibReparseRoutingDecision,
     buildSportsLibReparseJobId: hoisted.buildSportsLibReparseJobId,
     writeReparseStatus: hoisted.writeReparseStatus,
     resolveTargetSportsLibVersion: hoisted.resolveTargetSportsLibVersion,
@@ -228,6 +233,7 @@ vi.mock('../reparse/sports-lib-reparse.service', () => ({
 
 vi.mock('../shared/cloud-tasks', () => ({
     enqueueSportsLibReparseTask: hoisted.enqueueSportsLibReparseTask,
+    enqueueSportsLibReparseHeavyTask: hoisted.enqueueSportsLibReparseHeavyTask,
 }));
 
 vi.mock('../shared/ttl-config', () => ({
@@ -349,7 +355,12 @@ describe('scheduleSportsLibReparseScan', () => {
         hoisted.buildSportsLibReparseJobId.mockReturnValue('job-1');
         hoisted.shouldEventBeReparsed.mockResolvedValue(true);
         hoisted.extractSourceFiles.mockReturnValue([{ path: 'users/u1/events/e1/original.fit' }]);
+        hoisted.resolveSportsLibReparseRoutingDecision.mockReturnValue({
+            processingTier: 'normal',
+            eventDurationMs: null,
+        });
         hoisted.enqueueSportsLibReparseTask.mockResolvedValue(true);
+        hoisted.enqueueSportsLibReparseHeavyTask.mockResolvedValue(true);
     });
 
     it('should short-circuit when runtime flag is disabled', async () => {
@@ -370,6 +381,52 @@ describe('scheduleSportsLibReparseScan', () => {
         expect(hoisted.collectionGroup).toHaveBeenCalledWith('metaData');
         expect(hoisted.shouldEventBeReparsed).not.toHaveBeenCalled();
         expect(hoisted.enqueueSportsLibReparseTask).toHaveBeenCalledWith('job-1');
+    });
+
+    it('should route duration-heavy candidates to the heavy reparse queue', async () => {
+        const eventRef = createEventRef('u1', 'e1', { originalFile: { path: 'x.fit' } });
+        hoisted.resolveSportsLibReparseRoutingDecision.mockReturnValueOnce({
+            processingTier: 'heavy',
+            heavyReason: 'duration_gt_32h',
+            eventDurationMs: 33 * 60 * 60 * 1000,
+        });
+        hoisted.processingDocs.push(createProcessingDoc(eventRef, {
+            sportsLibVersion: '9.0.0',
+            sportsLibVersionCode: 9_000_000,
+        }));
+
+        await (scheduleSportsLibReparseScan as any)({});
+
+        expect(hoisted.enqueueSportsLibReparseTask).not.toHaveBeenCalled();
+        expect(hoisted.enqueueSportsLibReparseHeavyTask).toHaveBeenCalledWith('job-1');
+        const pendingWriteCall = hoisted.jobSet.mock.calls.find((call: any[]) => call[0] === 'job-1');
+        expect(pendingWriteCall?.[1]).toEqual(expect.objectContaining({
+            processingTier: 'heavy',
+            heavyReason: 'duration_gt_32h',
+            eventDurationMs: 33 * 60 * 60 * 1000,
+        }));
+    });
+
+    it('should route missing duration candidates to the normal reparse queue', async () => {
+        const eventRef = createEventRef('u1', 'e1', { originalFile: { path: 'x.fit' } });
+        hoisted.resolveSportsLibReparseRoutingDecision.mockReturnValueOnce({
+            processingTier: 'normal',
+            eventDurationMs: null,
+        });
+        hoisted.processingDocs.push(createProcessingDoc(eventRef, {
+            sportsLibVersion: '9.0.0',
+            sportsLibVersionCode: 9_000_000,
+        }));
+
+        await (scheduleSportsLibReparseScan as any)({});
+
+        expect(hoisted.enqueueSportsLibReparseTask).toHaveBeenCalledWith('job-1');
+        expect(hoisted.enqueueSportsLibReparseHeavyTask).not.toHaveBeenCalled();
+        const pendingWriteCall = hoisted.jobSet.mock.calls.find((call: any[]) => call[0] === 'job-1');
+        expect(pendingWriteCall?.[1]).toEqual(expect.objectContaining({
+            processingTier: 'normal',
+            eventDurationMs: 'DELETE_FIELD',
+        }));
     });
 
     it('should spread enqueue schedule delays across multiple sequential override enqueues', async () => {

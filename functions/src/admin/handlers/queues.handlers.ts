@@ -1,6 +1,7 @@
 import { HttpsError } from 'firebase-functions/v2/https';
 import * as logger from 'firebase-functions/logger';
 import * as admin from 'firebase-admin';
+import { randomUUID } from 'node:crypto';
 import { onAdminCall } from '../../shared/auth';
 import { getCloudTaskQueueDepthForQueue } from '../../utils';
 import { GARMIN_API_WORKOUT_QUEUE_COLLECTION_NAME } from '../../garmin/constants';
@@ -8,7 +9,11 @@ import { SUUNTOAPP_WORKOUT_QUEUE_COLLECTION_NAME } from '../../suunto/constants'
 import { COROSAPI_WORKOUT_QUEUE_COLLECTION_NAME } from '../../coros/constants';
 import { FUNCTIONS_MANIFEST } from '../../../../shared/functions-manifest';
 import { config } from '../../config';
-import { SPORTS_LIB_REPARSE_TARGET_VERSION } from '../../reparse/sports-lib-reparse.config';
+import {
+    SPORTS_LIB_REPARSE_HEAVY_REASONS,
+    SPORTS_LIB_REPARSE_PROCESSING_TIERS,
+    SPORTS_LIB_REPARSE_TARGET_VERSION,
+} from '../../reparse/sports-lib-reparse.config';
 import {
     DERIVED_METRICS_COLLECTION_ID,
     DERIVED_METRICS_ENTRY_TYPES,
@@ -22,12 +27,15 @@ import {
     DerivedMetricsFailurePreview,
     GetQueueStatsRequest,
     QueueStatsResponse,
+    RetrySportsLibReparseHeavyJobRequest,
+    RetrySportsLibReparseHeavyJobResponse,
     SportsLibReparseJobDocData,
 } from '../shared/types';
 import { ACTIVITY_SYNC_QUEUE_COLLECTION_NAME } from '../../activity-sync/constants';
 import { SLEEP_SYNC_QUEUE_COLLECTION_NAME } from '../../sleep/constants';
 import { getDisabledSleepProviders } from '../../sleep/provider-flags';
 import { SLEEP_PROVIDERS, SleepProvider } from '../../../../shared/sleep';
+import { enqueueSportsLibReparseHeavyTask } from '../../shared/cloud-tasks';
 
 const SPORTS_LIB_REPARSE_JOBS_COLLECTION = 'sportsLibReparseJobs';
 const SPORTS_LIB_REPARSE_CHECKPOINT_DOC_PATH = 'systemJobs/sportsLibReparse';
@@ -43,6 +51,7 @@ const SLEEP_PROVIDER_LABELS: Record<SleepProvider, string> = {
     [SLEEP_PROVIDERS.SuuntoApp]: 'Suunto',
     [SLEEP_PROVIDERS.COROSAPI]: 'COROS',
 };
+const SPORTS_LIB_REPARSE_MANUAL_HEAVY_RETRY_TASK_SUFFIX_PREFIX = 'manual';
 
 const DERIVED_METRICS_COORDINATOR_STATUSES = ['idle', 'queued', 'processing', 'failed'] as const;
 type DerivedMetricsCoordinatorStatus = typeof DERIVED_METRICS_COORDINATOR_STATUSES[number];
@@ -63,6 +72,11 @@ function toFiniteEpochMs(value: unknown): number | null {
     return numericValue;
 }
 
+function toFiniteNumberOrNull(value: unknown): number | null {
+    const numericValue = Number(value);
+    return Number.isFinite(numericValue) ? numericValue : null;
+}
+
 /**
  * Gets aggregated statistics for all workout queues.
  * Uses efficient Firestore count() queries.
@@ -80,8 +94,22 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
 
     try {
         const db = admin.firestore();
-        const { workoutQueue, activitySyncQueue, sleepSyncQueue, sportsLibReparseQueue, derivedMetricsQueue } = config.cloudtasks;
-        const [workoutCloudTaskDepth, activitySyncCloudTaskDepth, sleepSyncCloudTaskDepth, sportsLibReparseCloudTaskDepth, derivedMetricsCloudTaskDepth] = await Promise.all([
+        const {
+            workoutQueue,
+            activitySyncQueue,
+            sleepSyncQueue,
+            sportsLibReparseQueue,
+            sportsLibReparseHeavyQueue,
+            derivedMetricsQueue,
+        } = config.cloudtasks;
+        const [
+            workoutCloudTaskDepth,
+            activitySyncCloudTaskDepth,
+            sleepSyncCloudTaskDepth,
+            sportsLibReparseCloudTaskDepth,
+            sportsLibReparseHeavyCloudTaskDepth,
+            derivedMetricsCloudTaskDepth,
+        ] = await Promise.all([
             getCloudTaskQueueDepthForQueue(workoutQueue).catch(e => {
                 logger.error(`Error getting Cloud Task depth for queue ${workoutQueue}:`, e);
                 return 0;
@@ -98,12 +126,17 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
                 logger.error(`Error getting Cloud Task depth for queue ${sportsLibReparseQueue}:`, e);
                 return 0;
             }),
+            getCloudTaskQueueDepthForQueue(sportsLibReparseHeavyQueue).catch(e => {
+                logger.error(`Error getting Cloud Task depth for queue ${sportsLibReparseHeavyQueue}:`, e);
+                return 0;
+            }),
             getCloudTaskQueueDepthForQueue(derivedMetricsQueue).catch(e => {
                 logger.error(`Error getting Cloud Task depth for queue ${derivedMetricsQueue}:`, e);
                 return 0;
             }),
         ]);
-        const totalCloudTaskDepth = workoutCloudTaskDepth + activitySyncCloudTaskDepth + sleepSyncCloudTaskDepth + sportsLibReparseCloudTaskDepth + derivedMetricsCloudTaskDepth;
+        const reparseCloudTaskDepth = sportsLibReparseCloudTaskDepth + sportsLibReparseHeavyCloudTaskDepth;
+        const totalCloudTaskDepth = workoutCloudTaskDepth + activitySyncCloudTaskDepth + sleepSyncCloudTaskDepth + reparseCloudTaskDepth + derivedMetricsCloudTaskDepth;
         const reparseJobsCollection = db.collection(SPORTS_LIB_REPARSE_JOBS_COLLECTION);
 
         const [
@@ -247,6 +280,9 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
                 lastError: '',
                 updatedAt: null as unknown,
                 targetSportsLibVersion: '',
+                processingTier: '',
+                heavyReason: '',
+                eventDurationMs: null as number | null,
             }))
             .map(entry => ({
                 jobId: entry.jobId,
@@ -256,6 +292,9 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
                 lastError: `${entry.data.lastError || ''}`,
                 updatedAt: entry.data.updatedAt || null,
                 targetSportsLibVersion: `${entry.data.targetSportsLibVersion || ''}`,
+                processingTier: `${entry.data.processingTier || ''}`,
+                heavyReason: `${entry.data.heavyReason || ''}`,
+                eventDurationMs: toFiniteNumberOrNull(entry.data.eventDurationMs),
             }));
 
         let totalPending = 0;
@@ -674,6 +713,10 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
                         queueId: sportsLibReparseQueue,
                         pending: sportsLibReparseCloudTaskDepth,
                     },
+                    sportsLibReparseHeavy: {
+                        queueId: sportsLibReparseHeavyQueue,
+                        pending: sportsLibReparseHeavyCloudTaskDepth,
+                    },
                     derivedMetrics: {
                         queueId: derivedMetricsQueue,
                         pending: derivedMetricsCloudTaskDepth,
@@ -681,7 +724,7 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
                 },
             },
             reparse: {
-                queuePending: sportsLibReparseCloudTaskDepth,
+                queuePending: reparseCloudTaskDepth,
                 targetSportsLibVersion: `${checkpointData?.targetSportsLibVersion || SPORTS_LIB_REPARSE_TARGET_VERSION}`,
                 jobs: {
                     total: reparseTotalJobs?.data().count || 0,
@@ -746,6 +789,71 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
     } catch (error: unknown) {
         logger.error('Error getting queue stats:', error);
         const errorMessage = error instanceof Error ? error.message : 'Failed to get queue statistics';
+        throw new HttpsError('internal', errorMessage);
+    }
+});
+
+export const retrySportsLibReparseHeavyJob = onAdminCall<
+    RetrySportsLibReparseHeavyJobRequest,
+    RetrySportsLibReparseHeavyJobResponse
+>({
+    region: FUNCTIONS_MANIFEST.retrySportsLibReparseHeavyJob.region,
+    memory: '256MiB',
+}, async (request) => {
+    const jobId = `${request.data?.jobId || ''}`.trim();
+    if (!jobId) {
+        throw new HttpsError('invalid-argument', 'jobId is required.');
+    }
+
+    const jobRef = admin.firestore().collection(SPORTS_LIB_REPARSE_JOBS_COLLECTION).doc(jobId);
+    const snapshot = await jobRef.get();
+    if (!snapshot.exists) {
+        throw new HttpsError('not-found', `Reparse job ${jobId} was not found.`);
+    }
+
+    const jobData = snapshot.data() as SportsLibReparseJobDocData;
+    if (jobData.status !== 'failed') {
+        throw new HttpsError('failed-precondition', `Reparse job ${jobId} must be failed before heavy retry.`);
+    }
+
+    await jobRef.set({
+        status: 'pending',
+        processingTier: SPORTS_LIB_REPARSE_PROCESSING_TIERS.Heavy,
+        heavyReason: SPORTS_LIB_REPARSE_HEAVY_REASONS.ManualAdmin,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        enqueuedAt: admin.firestore.FieldValue.serverTimestamp(),
+        processedAt: admin.firestore.FieldValue.delete(),
+        lastError: admin.firestore.FieldValue.delete(),
+    }, { merge: true });
+
+    try {
+        const taskCreated = await enqueueSportsLibReparseHeavyTask(jobId, {
+            taskNameSuffix: `${SPORTS_LIB_REPARSE_MANUAL_HEAVY_RETRY_TASK_SUFFIX_PREFIX}-${Date.now()}-${randomUUID()}`,
+        });
+        if (!taskCreated) {
+            throw new Error(`Manual heavy reparse retry task already exists for job ${jobId}.`);
+        }
+        logger.info('[admin/retrySportsLibReparseHeavyJob] Enqueued heavy reparse retry.', {
+            jobId,
+            taskCreated,
+        });
+        return {
+            success: true,
+            jobId,
+            taskCreated,
+        };
+    } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : `${error}`;
+        await jobRef.set({
+            status: 'failed',
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            lastError: errorMessage,
+            enqueuedAt: admin.firestore.FieldValue.delete(),
+        }, { merge: true });
+        logger.error('[admin/retrySportsLibReparseHeavyJob] Failed to enqueue heavy retry.', {
+            jobId,
+            error: errorMessage,
+        });
         throw new HttpsError('internal', errorMessage);
     }
 });
