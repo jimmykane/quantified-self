@@ -284,6 +284,47 @@ describe('processSportsLibReparseTask', () => {
         }), { merge: true });
     });
 
+    it('should mark job failed before rethrowing deletion guard read errors during reparse', async () => {
+        hoisted.getUserDeletionGuardState
+            .mockResolvedValueOnce({
+                userExists: true,
+                deletionInProgress: false,
+                shouldSkip: false,
+            })
+            .mockRejectedValueOnce(new Error('guard read failed'));
+        hoisted.jobGet.mockResolvedValue({
+            exists: true,
+            data: () => ({
+                uid: 'u1',
+                eventId: 'e1',
+                status: 'pending',
+                attemptCount: 0,
+                targetSportsLibVersion: '9.0.99',
+            }),
+        });
+        hoisted.reparseEventFromOriginalFiles.mockImplementation(async (_uid, _eventId, options) => {
+            await options.beforePersist();
+            return {
+                status: 'completed',
+                sourceFilesCount: 1,
+                parsedActivitiesCount: 1,
+                staleActivitiesDeleted: 0,
+            };
+        });
+
+        await expect((processSportsLibReparseTask as any)({ data: { jobId: 'job-1' } }))
+            .rejects.toThrow('Could not read deletion guard for user u1 during sports_lib_reparse_worker.');
+
+        expect(hoisted.writeReparseStatus).not.toHaveBeenCalled();
+        expect(hoisted.jobSet).toHaveBeenNthCalledWith(1, expect.objectContaining({
+            status: 'processing',
+        }), { merge: true });
+        expect(hoisted.jobSet).toHaveBeenNthCalledWith(2, expect.objectContaining({
+            status: 'failed',
+            lastError: 'Could not read deletion guard for user u1 during sports_lib_reparse_worker.',
+        }), { merge: true });
+    });
+
     it('should no-op before writing reparse status when deletion starts after parsing', async () => {
         hoisted.getUserDeletionGuardState
             .mockResolvedValueOnce({
@@ -342,7 +383,7 @@ describe('processSportsLibReparseTask', () => {
         }), { merge: true });
     });
 
-    it('should fail duration-heavy requeue when no heavy task is created', async () => {
+    it('should leave duration-heavy jobs pending when the heavy task already exists', async () => {
         hoisted.enqueueSportsLibReparseHeavyTask.mockResolvedValueOnce(false);
         hoisted.jobGet.mockResolvedValue({
             exists: true,
@@ -357,21 +398,80 @@ describe('processSportsLibReparseTask', () => {
             }),
         });
 
-        await expect((processSportsLibReparseTask as any)({ data: { jobId: 'job-1' } }))
-            .rejects.toThrow('Heavy reparse task already exists for job job-1.');
+        await (processSportsLibReparseTask as any)({ data: { jobId: 'job-1' } });
 
         expect(hoisted.reparseEventFromOriginalFiles).not.toHaveBeenCalled();
         expect(hoisted.enqueueSportsLibReparseHeavyTask).toHaveBeenCalledWith('job-1');
-        expect(hoisted.jobSet).toHaveBeenNthCalledWith(1, expect.objectContaining({
+        expect(hoisted.jobSet).toHaveBeenCalledTimes(1);
+        expect(hoisted.jobSet).toHaveBeenCalledWith(expect.objectContaining({
             status: 'pending',
             processingTier: 'heavy',
             heavyReason: 'duration_gt_32h',
             eventDurationMs: 33 * 60 * 60 * 1000,
         }), { merge: true });
-        expect(hoisted.jobSet).toHaveBeenNthCalledWith(2, expect.objectContaining({
+    });
+
+    it('should no-op before heavy requeue writes when deletion starts after the start check', async () => {
+        hoisted.getUserDeletionGuardState
+            .mockResolvedValueOnce({
+                userExists: true,
+                deletionInProgress: false,
+                shouldSkip: false,
+            })
+            .mockResolvedValueOnce({
+                userExists: true,
+                deletionInProgress: true,
+                shouldSkip: true,
+            });
+        hoisted.jobGet.mockResolvedValue({
+            exists: true,
+            data: () => ({
+                uid: 'deleting-user',
+                eventId: 'e1',
+                eventPath: 'users/deleting-user/events/e1',
+                status: 'pending',
+                attemptCount: 0,
+                targetSportsLibVersion: '9.0.99',
+                eventDurationMs: 33 * 60 * 60 * 1000,
+            }),
+        });
+
+        await (processSportsLibReparseTask as any)({ data: { jobId: 'job-1' } });
+
+        expect(hoisted.reparseEventFromOriginalFiles).not.toHaveBeenCalled();
+        expect(hoisted.enqueueSportsLibReparseHeavyTask).not.toHaveBeenCalled();
+        expect(hoisted.jobSet).not.toHaveBeenCalled();
+    });
+
+    it('should mark job failed when the deletion guard cannot be read before heavy requeue', async () => {
+        hoisted.getUserDeletionGuardState
+            .mockResolvedValueOnce({
+                userExists: true,
+                deletionInProgress: false,
+                shouldSkip: false,
+            })
+            .mockRejectedValueOnce(new Error('guard read failed'));
+        hoisted.jobGet.mockResolvedValue({
+            exists: true,
+            data: () => ({
+                uid: 'u1',
+                eventId: 'e1',
+                eventPath: 'users/u1/events/e1',
+                status: 'pending',
+                attemptCount: 0,
+                targetSportsLibVersion: '9.0.99',
+                eventDurationMs: 33 * 60 * 60 * 1000,
+            }),
+        });
+
+        await expect((processSportsLibReparseTask as any)({ data: { jobId: 'job-1' } }))
+            .rejects.toThrow('Could not read deletion guard for user u1 during sports_lib_reparse_worker.');
+
+        expect(hoisted.reparseEventFromOriginalFiles).not.toHaveBeenCalled();
+        expect(hoisted.enqueueSportsLibReparseHeavyTask).not.toHaveBeenCalled();
+        expect(hoisted.jobSet).toHaveBeenCalledWith(expect.objectContaining({
             status: 'failed',
-            lastError: 'Heavy reparse task already exists for job job-1.',
-            enqueuedAt: 'DELETE_FIELD',
+            lastError: 'Could not read deletion guard for user u1 during sports_lib_reparse_worker.',
         }), { merge: true });
     });
 

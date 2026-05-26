@@ -61,6 +61,20 @@ function isTerminalReparseFailure(errorMessage: string): boolean {
     return TERMINAL_REPARSE_ERROR_PATTERNS.some((pattern) => pattern.test(errorMessage));
 }
 
+async function markJobFailed(
+    jobRef: admin.firestore.DocumentReference,
+    errorMessage: string,
+    options?: { clearEnqueuedAt?: boolean },
+): Promise<void> {
+    await jobRef.set({
+        status: 'failed',
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        processedAt: admin.firestore.FieldValue.serverTimestamp(),
+        lastError: errorMessage,
+        ...(options?.clearEnqueuedAt ? { enqueuedAt: admin.firestore.FieldValue.delete() } : {}),
+    }, { merge: true });
+}
+
 async function resolveJobEventDurationMs(job: SportsLibReparseJob): Promise<number | null> {
     if (typeof job.eventDurationMs === 'number' && Number.isFinite(job.eventDurationMs)) {
         return job.eventDurationMs;
@@ -117,6 +131,17 @@ async function requeueHeavyFromNormalWorker(
     job: SportsLibReparseJob,
     eventDurationMs: number,
 ): Promise<void> {
+    try {
+        if (await shouldSkipForUserDeletion(job, jobId, 'before_heavy_requeue')) {
+            return;
+        }
+    } catch (error) {
+        if (error instanceof UserDeletionGuardReadError) {
+            await markJobFailed(jobRef, getErrorMessage(error));
+        }
+        throw error;
+    }
+
     await jobRef.set({
         status: 'pending',
         processingTier: SPORTS_LIB_REPARSE_PROCESSING_TIERS.Heavy,
@@ -128,20 +153,12 @@ async function requeueHeavyFromNormalWorker(
         lastError: admin.firestore.FieldValue.delete(),
     }, { merge: true });
 
+    let taskCreated = false;
     try {
-        const taskCreated = await enqueueSportsLibReparseHeavyTask(jobId);
-        if (!taskCreated) {
-            throw new Error(`Heavy reparse task already exists for job ${jobId}.`);
-        }
+        taskCreated = await enqueueSportsLibReparseHeavyTask(jobId);
     } catch (error) {
         const errorMessage = getErrorMessage(error);
-        await jobRef.set({
-            status: 'failed',
-            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-            processedAt: admin.firestore.FieldValue.serverTimestamp(),
-            lastError: errorMessage,
-            enqueuedAt: admin.firestore.FieldValue.delete(),
-        }, { merge: true });
+        await markJobFailed(jobRef, errorMessage, { clearEnqueuedAt: true });
         throw error;
     }
 
@@ -150,6 +167,7 @@ async function requeueHeavyFromNormalWorker(
         uid: job.uid,
         eventId: job.eventId,
         eventDurationMs,
+        taskCreated,
     });
 }
 
@@ -178,8 +196,15 @@ async function processSportsLibReparseTaskRequest(
         return;
     }
 
-    if (await shouldSkipForUserDeletion(job, jobId, 'start')) {
-        return;
+    try {
+        if (await shouldSkipForUserDeletion(job, jobId, 'start')) {
+            return;
+        }
+    } catch (error) {
+        if (error instanceof UserDeletionGuardReadError) {
+            await markJobFailed(jobRef, getErrorMessage(error));
+        }
+        throw error;
     }
 
     if (workerTier === 'normal') {
@@ -263,10 +288,18 @@ async function processSportsLibReparseTaskRequest(
             return;
         }
         if (error instanceof UserDeletionGuardReadError) {
+            await markJobFailed(jobRef, getErrorMessage(error));
             throw error;
         }
-        if (await shouldSkipForUserDeletion(job, jobId, 'before_failure_status_write')) {
-            return;
+        try {
+            if (await shouldSkipForUserDeletion(job, jobId, 'before_failure_status_write')) {
+                return;
+            }
+        } catch (guardError) {
+            if (guardError instanceof UserDeletionGuardReadError) {
+                await markJobFailed(jobRef, getErrorMessage(guardError));
+            }
+            throw guardError;
         }
 
         const errorMessage = getErrorMessage(error);
@@ -278,12 +311,7 @@ async function processSportsLibReparseTaskRequest(
             lastError: errorMessage,
         });
 
-        await jobRef.set({
-            status: 'failed',
-            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-            processedAt: admin.firestore.FieldValue.serverTimestamp(),
-            lastError: errorMessage,
-        }, { merge: true });
+        await markJobFailed(jobRef, errorMessage);
 
         logger.error('[sports-lib-reparse-worker] Job failed.', {
             jobId,

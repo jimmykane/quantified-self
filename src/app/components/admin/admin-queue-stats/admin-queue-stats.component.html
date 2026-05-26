@@ -678,8 +678,8 @@
 
         <mat-card class="table-container" style="margin-bottom: 0;">
             <h3 class="card-title">Recent Reparse Failures</h3>
-            <div class="table-wrapper" *ngIf="getReparseFailureRows().length > 0; else noReparseFailuresTemplate">
-                <table mat-table [dataSource]="getReparseFailureRows()">
+            <div class="table-wrapper" *ngIf="reparseFailureRows.length > 0; else noReparseFailuresTemplate">
+                <table mat-table [dataSource]="reparseFailureRows">
                     <ng-container matColumnDef="uid">
                         <th mat-header-cell *matHeaderCellDef> UID </th>
                         <td mat-cell *matCellDef="let row"><span class="mono-cell">{{ row.uid }}</span></td>
@@ -697,22 +697,22 @@
 
                     <ng-container matColumnDef="processingTier">
                         <th mat-header-cell *matHeaderCellDef> Tier </th>
-                        <td mat-cell *matCellDef="let row"> {{ getReparseTierLabel(row) }} </td>
+                        <td mat-cell *matCellDef="let row"> {{ row.tierLabel }} </td>
                     </ng-container>
 
                     <ng-container matColumnDef="heavyReason">
                         <th mat-header-cell *matHeaderCellDef> Reason </th>
-                        <td mat-cell *matCellDef="let row"> {{ getReparseReasonLabel(row) }} </td>
+                        <td mat-cell *matCellDef="let row"> {{ row.reasonLabel }} </td>
                     </ng-container>
 
                     <ng-container matColumnDef="eventDurationMs">
                         <th mat-header-cell *matHeaderCellDef> Duration </th>
-                        <td mat-cell *matCellDef="let row"> {{ formatOptionalDuration(row.eventDurationMs) }} </td>
+                        <td mat-cell *matCellDef="let row"> {{ row.durationLabel }} </td>
                     </ng-container>
 
                     <ng-container matColumnDef="updatedAt">
                         <th mat-header-cell *matHeaderCellDef> Updated </th>
-                        <td mat-cell *matCellDef="let row"> {{ formatTimestamp(row.updatedAt) }} </td>
+                        <td mat-cell *matCellDef="let row"> {{ row.updatedAtLabel }} </td>
                     </ng-container>
 
                     <ng-container matColumnDef="lastError">
@@ -730,10 +730,10 @@
                                 type="button"
                                 aria-label="Retry failed reparse job on heavy queue"
                                 matTooltip="Retry this failed reparse job on the heavy queue"
-                                [disabled]="isRetryHeavyDisabled(row)"
+                                [disabled]="row.retryHeavyDisabled"
                                 (click)="retryHeavy(row)">
-                                <mat-spinner *ngIf="retryingHeavyJobIds.has(row.jobId)" diameter="16"></mat-spinner>
-                                <mat-icon *ngIf="!retryingHeavyJobIds.has(row.jobId)">rocket_launch</mat-icon>
+                                <mat-spinner *ngIf="row.retryingHeavy" diameter="16"></mat-spinner>
+                                <mat-icon *ngIf="!row.retryingHeavy">rocket_launch</mat-icon>
                                 <span>Heavy</span>
                             </button>
                         </td>

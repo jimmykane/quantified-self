@@ -22,6 +22,15 @@ import { buildOfficialEChartsThemeTokens, ECHARTS_GLOBAL_FONT_FAMILY, resolveECh
 
 export type AdminQueueStatsView = 'all' | 'workout' | 'activity-sync' | 'sleep-sync' | 'reparse' | 'derived';
 
+type ReparseFailureRowView = ReparseFailurePreview & {
+    tierLabel: string;
+    reasonLabel: string;
+    durationLabel: string;
+    updatedAtLabel: string;
+    retryHeavyDisabled: boolean;
+    retryingHeavy: boolean;
+};
+
 @Component({
     selector: 'app-admin-queue-stats',
     templateUrl: './admin-queue-stats.component.html',
@@ -39,7 +48,18 @@ export type AdminQueueStatsView = 'all' | 'workout' | 'activity-sync' | 'sleep-s
     ]
 })
 export class AdminQueueStatsComponent implements OnInit, OnChanges, OnDestroy, AfterViewInit {
-    @Input() stats: QueueStats | null = null;
+    private _stats: QueueStats | null = null;
+
+    @Input()
+    get stats(): QueueStats | null {
+        return this._stats;
+    }
+
+    set stats(value: QueueStats | null) {
+        this._stats = value;
+        this.updateReparseFailureRows();
+    }
+
     @Input() loading = false;
     @Input() queueView: AdminQueueStatsView = 'all';
     @Output() retryHeavyCompleted = new EventEmitter<void>();
@@ -47,6 +67,7 @@ export class AdminQueueStatsComponent implements OnInit, OnChanges, OnDestroy, A
     readonly reparseFailureColumns = ['uid', 'eventId', 'attemptCount', 'processingTier', 'heavyReason', 'eventDurationMs', 'updatedAt', 'lastError', 'actions'];
     readonly derivedFailureColumns = ['uid', 'generation', 'dirtyMetricKinds', 'updatedAtMs', 'lastError'];
     readonly retryingHeavyJobIds = new Set<string>();
+    reparseFailureRows: ReparseFailureRowView[] = [];
 
     @ViewChild('retryChart')
     set retryChartRef(ref: ElementRef<HTMLDivElement> | undefined) {
@@ -95,6 +116,9 @@ export class AdminQueueStatsComponent implements OnInit, OnChanges, OnDestroy, A
     }
 
     ngOnChanges(changes: SimpleChanges): void {
+        if (changes['stats']) {
+            this.updateReparseFailureRows();
+        }
         if (changes['stats'] || changes['loading']) {
             void this.tryInitializeChartAndRender();
         }
@@ -260,15 +284,27 @@ export class AdminQueueStatsComponent implements OnInit, OnChanges, OnDestroy, A
         }
     }
 
-    getReparseFailureRows(): ReparseFailurePreview[] {
-        return this.stats?.reparse?.recentFailures || [];
+    private updateReparseFailureRows(): void {
+        this.reparseFailureRows = (this.stats?.reparse?.recentFailures || []).map(row => {
+            const jobId = `${row.jobId || ''}`.trim();
+            const retryingHeavy = !!jobId && this.retryingHeavyJobIds.has(jobId);
+            return {
+                ...row,
+                tierLabel: this.getReparseTierLabel(row),
+                reasonLabel: this.getReparseReasonLabel(row),
+                durationLabel: this.formatOptionalDuration(row.eventDurationMs),
+                updatedAtLabel: this.formatTimestamp(row.updatedAt),
+                retryHeavyDisabled: !jobId || retryingHeavy,
+                retryingHeavy,
+            };
+        });
     }
 
-    getReparseTierLabel(row: ReparseFailurePreview): string {
+    private getReparseTierLabel(row: ReparseFailurePreview): string {
         return row.processingTier === 'heavy' ? 'Heavy' : 'Normal';
     }
 
-    getReparseReasonLabel(row: ReparseFailurePreview): string {
+    private getReparseReasonLabel(row: ReparseFailurePreview): string {
         if (row.heavyReason === 'duration_gt_32h') {
             return 'Duration > 32h';
         }
@@ -281,14 +317,10 @@ export class AdminQueueStatsComponent implements OnInit, OnChanges, OnDestroy, A
         return row.heavyReason || 'N/A';
     }
 
-    formatOptionalDuration(ms: number | null | undefined): string {
+    private formatOptionalDuration(ms: number | null | undefined): string {
         return typeof ms === 'number' && Number.isFinite(ms) && ms > 0
             ? this.formatDuration(ms)
             : 'N/A';
-    }
-
-    isRetryHeavyDisabled(row: ReparseFailurePreview): boolean {
-        return !row.jobId || this.retryingHeavyJobIds.has(row.jobId);
     }
 
     retryHeavy(row: ReparseFailurePreview): void {
@@ -298,10 +330,14 @@ export class AdminQueueStatsComponent implements OnInit, OnChanges, OnDestroy, A
         }
 
         this.retryingHeavyJobIds.add(jobId);
+        this.updateReparseFailureRows();
         this.adminService.retrySportsLibReparseHeavyJob(jobId)
             .pipe(
                 takeUntil(this.destroy$),
-                finalize(() => this.retryingHeavyJobIds.delete(jobId))
+                finalize(() => {
+                    this.retryingHeavyJobIds.delete(jobId);
+                    this.updateReparseFailureRows();
+                })
             )
             .subscribe({
                 next: (response) => {
