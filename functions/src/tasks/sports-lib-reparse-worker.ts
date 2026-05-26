@@ -11,6 +11,7 @@ import {
     getSportsLibReparseEventDurationMs,
     isReparsePersistenceSkippedForUserDeletionError,
     isSportsLibReparseDurationHeavy,
+    isSportsLibReparseTerminalFailureMessage,
     reparseEventFromOriginalFiles,
     resolveTargetSportsLibVersion,
     writeReparseStatus,
@@ -28,11 +29,6 @@ import { getUserDeletionGuardState, UserDeletionGuardReadError } from '../shared
 interface SportsLibReparseTaskPayload {
     jobId: string;
 }
-
-const TERMINAL_REPARSE_ERROR_PATTERNS = [
-    /^\[sports-lib-reparse\] Reparse target sports-lib version ".*" does not match runtime sports-lib version ".*"$/,
-    /^Event .* was not found for user .*$/,
-] as const;
 
 type SportsLibReparseWorkerTier = 'normal' | 'heavy';
 
@@ -59,8 +55,8 @@ function getErrorMessage(error: unknown): string {
     return `${error}`;
 }
 
-function isTerminalReparseFailure(errorMessage: string): boolean {
-    return TERMINAL_REPARSE_ERROR_PATTERNS.some((pattern) => pattern.test(errorMessage));
+function getJobLastError(job: SportsLibReparseJob): string {
+    return `${job.lastError || ''}`;
 }
 
 function isUserDeletionGuardReadError(error: unknown): error is UserDeletionGuardReadError {
@@ -71,13 +67,18 @@ function isUserDeletionGuardReadError(error: unknown): error is UserDeletionGuar
 async function markJobFailed(
     jobRef: admin.firestore.DocumentReference,
     errorMessage: string,
-    options?: { clearEnqueuedAt?: boolean },
+    options?: { clearEnqueuedAt?: boolean; terminalFailure?: boolean },
 ): Promise<void> {
+    const isTerminalFailure = options?.terminalFailure === true;
     await jobRef.set({
         status: 'failed',
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
         processedAt: admin.firestore.FieldValue.serverTimestamp(),
         lastError: errorMessage,
+        terminalFailure: isTerminalFailure ? true : admin.firestore.FieldValue.delete(),
+        terminalFailureAt: isTerminalFailure
+            ? admin.firestore.FieldValue.serverTimestamp()
+            : admin.firestore.FieldValue.delete(),
         ...(options?.clearEnqueuedAt ? { enqueuedAt: admin.firestore.FieldValue.delete() } : {}),
     }, { merge: true });
 }
@@ -197,6 +198,8 @@ async function requeueHeavyFromNormalWorker(
         enqueuedAt: admin.firestore.FieldValue.serverTimestamp(),
         processedAt: admin.firestore.FieldValue.delete(),
         lastError: admin.firestore.FieldValue.delete(),
+        terminalFailure: admin.firestore.FieldValue.delete(),
+        terminalFailureAt: admin.firestore.FieldValue.delete(),
     }, { merge: true });
 
     let taskCreated = false;
@@ -270,6 +273,16 @@ async function processSportsLibReparseTaskRequest(
         logger.info(`[sports-lib-reparse-worker] Job ${jobId} already completed. Skipping.`);
         return;
     }
+    if (job.status === 'failed'
+        && (job.terminalFailure === true || isSportsLibReparseTerminalFailureMessage(getJobLastError(job)))) {
+        logger.info('[sports-lib-reparse-worker] Job already has a terminal failure. Skipping.', {
+            jobId,
+            uid: job.uid,
+            eventId: job.eventId,
+            lastError: getJobLastError(job),
+        });
+        return;
+    }
 
     try {
         if (await shouldSkipForUserDeletion(job, jobId, 'start')) {
@@ -310,6 +323,8 @@ async function processSportsLibReparseTaskRequest(
             : (job.processingTier || SPORTS_LIB_REPARSE_PROCESSING_TIERS.Normal),
         attemptCount: nextAttemptCount,
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        terminalFailure: admin.firestore.FieldValue.delete(),
+        terminalFailureAt: admin.firestore.FieldValue.delete(),
     }, { merge: true });
 
     try {
@@ -330,6 +345,8 @@ async function processSportsLibReparseTaskRequest(
                 reason: SPORTS_LIB_REPARSE_SKIP_REASON_NO_ORIGINAL_FILES,
                 targetSportsLibVersion,
                 checkedAt: admin.firestore.FieldValue.serverTimestamp(),
+                terminalFailure: admin.firestore.FieldValue.delete(),
+                terminalFailureAt: admin.firestore.FieldValue.delete(),
             });
             if (!statusWritten) {
                 await deleteForUserDeletion('status_write_skipped');
@@ -342,6 +359,8 @@ async function processSportsLibReparseTaskRequest(
                 checkedAt: admin.firestore.FieldValue.serverTimestamp(),
                 processedAt: admin.firestore.FieldValue.serverTimestamp(),
                 lastError: '',
+                terminalFailure: admin.firestore.FieldValue.delete(),
+                terminalFailureAt: admin.firestore.FieldValue.delete(),
             });
             if (!statusWritten) {
                 await deleteForUserDeletion('status_write_skipped');
@@ -354,6 +373,8 @@ async function processSportsLibReparseTaskRequest(
             processedAt: admin.firestore.FieldValue.serverTimestamp(),
             updatedAt: admin.firestore.FieldValue.serverTimestamp(),
             lastError: admin.firestore.FieldValue.delete(),
+            terminalFailure: admin.firestore.FieldValue.delete(),
+            terminalFailureAt: admin.firestore.FieldValue.delete(),
         }, { merge: true });
 
         logger.info('[sports-lib-reparse-worker] Job completed.', {
@@ -390,6 +411,7 @@ async function processSportsLibReparseTaskRequest(
         }
 
         const errorMessage = getErrorMessage(error);
+        const terminalFailure = isSportsLibReparseTerminalFailureMessage(errorMessage);
         try {
             const statusWritten = await writeWorkerReparseStatus(job, jobId, {
                 status: 'failed',
@@ -397,6 +419,10 @@ async function processSportsLibReparseTaskRequest(
                 targetSportsLibVersion,
                 checkedAt: admin.firestore.FieldValue.serverTimestamp(),
                 lastError: errorMessage,
+                terminalFailure: terminalFailure ? true : admin.firestore.FieldValue.delete(),
+                terminalFailureAt: terminalFailure
+                    ? admin.firestore.FieldValue.serverTimestamp()
+                    : admin.firestore.FieldValue.delete(),
             });
             if (!statusWritten) {
                 await deleteForUserDeletion('failure_status_write_skipped');
@@ -409,7 +435,7 @@ async function processSportsLibReparseTaskRequest(
             throw statusWriteError;
         }
 
-        await markJobFailed(jobRef, errorMessage);
+        await markJobFailed(jobRef, errorMessage, { terminalFailure });
 
         logger.error('[sports-lib-reparse-worker] Job failed.', {
             jobId,
@@ -420,7 +446,7 @@ async function processSportsLibReparseTaskRequest(
             error: errorMessage,
         });
 
-        if (isTerminalReparseFailure(errorMessage)) {
+        if (terminalFailure) {
             logger.warn('[sports-lib-reparse-worker] Suppressing retry for terminal job failure.', {
                 jobId,
                 uid: job.uid,

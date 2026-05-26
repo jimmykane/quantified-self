@@ -13,6 +13,7 @@ import {
     buildSportsLibReparseJobId,
     extractSourceFiles,
     isReparsePersistenceSkippedForUserDeletionError,
+    isSportsLibReparseTerminalFailureMessage,
     parseUidAndEventIdFromEventPath,
     resolveSportsLibReparseRoutingDecision,
     resolveTargetSportsLibVersion,
@@ -150,6 +151,31 @@ function shouldSkipBecauseNoOriginalFilesForTarget(
     return statusDocData.status === 'skipped'
         && statusDocData.reason === SPORTS_LIB_REPARSE_SKIP_REASON_NO_ORIGINAL_FILES
         && statusDocData.targetSportsLibVersion === targetSportsLibVersion;
+}
+
+function shouldSkipBecauseTerminalFailureForTarget(
+    statusDocData: Record<string, unknown> | undefined,
+    targetSportsLibVersion: string,
+): boolean {
+    if (!statusDocData
+        || statusDocData.status !== 'failed'
+        || statusDocData.targetSportsLibVersion !== targetSportsLibVersion) {
+        return false;
+    }
+    if (statusDocData.terminalFailure === true) {
+        return true;
+    }
+    return isSportsLibReparseTerminalFailureMessage(toSafeString(statusDocData.lastError));
+}
+
+function isTerminalFailedReparseJob(jobData: Record<string, unknown> | undefined): boolean {
+    if (!jobData || jobData.status !== 'failed') {
+        return false;
+    }
+    if (jobData.terminalFailure === true) {
+        return true;
+    }
+    return isSportsLibReparseTerminalFailureMessage(toSafeString(jobData.lastError));
 }
 
 function getProcessingVersionCode(value: unknown): number | null {
@@ -290,7 +316,16 @@ export const scheduleSportsLibReparseScan = onSchedule({
             }
 
             const statusSnapshot = await eventRef.collection('metaData').doc(SPORTS_LIB_REPARSE_STATUS_DOC_ID).get();
-            if (shouldSkipBecauseNoOriginalFilesForTarget(statusSnapshot.data() as Record<string, unknown> | undefined, targetSportsLibVersion)) {
+            const reparseStatusData = statusSnapshot.data() as Record<string, unknown> | undefined;
+            if (shouldSkipBecauseNoOriginalFilesForTarget(reparseStatusData, targetSportsLibVersion)) {
+                return;
+            }
+            if (shouldSkipBecauseTerminalFailureForTarget(reparseStatusData, targetSportsLibVersion)) {
+                logger.info('[sports-lib-reparse] Skipping terminal failed reparse status.', {
+                    uid,
+                    eventId,
+                    lastError: toSafeString(reparseStatusData?.lastError),
+                });
                 return;
             }
 
@@ -305,6 +340,8 @@ export const scheduleSportsLibReparseScan = onSchedule({
                     reason: SPORTS_LIB_REPARSE_SKIP_REASON_NO_ORIGINAL_FILES,
                     targetSportsLibVersion,
                     checkedAt: admin.firestore.FieldValue.serverTimestamp(),
+                    terminalFailure: admin.firestore.FieldValue.delete(),
+                    terminalFailureAt: admin.firestore.FieldValue.delete(),
                 }, 'no_source_files');
                 return;
             }
@@ -312,9 +349,19 @@ export const scheduleSportsLibReparseScan = onSchedule({
             const jobId = buildSportsLibReparseJobId(uid, eventId, targetSportsLibVersion);
             const jobRef = db.collection(SPORTS_LIB_REPARSE_JOBS_COLLECTION).doc(jobId);
             const existingJob = await jobRef.get();
-            const existingStatus = toSafeString(existingJob.data()?.status);
+            const existingJobData = existingJob.data() as Record<string, unknown> | undefined;
+            const existingStatus = toSafeString(existingJobData?.status);
 
             if (existingJob.exists && (existingStatus === 'pending' || existingStatus === 'processing' || existingStatus === 'completed')) {
+                return;
+            }
+            if (existingJob.exists && isTerminalFailedReparseJob(existingJobData)) {
+                logger.info('[sports-lib-reparse] Skipping terminal failed reparse job.', {
+                    jobId,
+                    uid,
+                    eventId,
+                    lastError: toSafeString(existingJobData?.lastError),
+                });
                 return;
             }
 
@@ -329,8 +376,8 @@ export const scheduleSportsLibReparseScan = onSchedule({
                 processingTier: routingDecision.processingTier,
                 ...(routingDecision.heavyReason ? { heavyReason: routingDecision.heavyReason } : {}),
                 ...(routingDecision.eventDurationMs !== null ? { eventDurationMs: routingDecision.eventDurationMs } : {}),
-                attemptCount: existingJob.data()?.attemptCount || 0,
-                createdAt: existingJob.exists ? existingJob.data()?.createdAt : admin.firestore.FieldValue.serverTimestamp(),
+                attemptCount: typeof existingJobData?.attemptCount === 'number' ? existingJobData.attemptCount : 0,
+                createdAt: existingJob.exists ? existingJobData?.createdAt : admin.firestore.FieldValue.serverTimestamp(),
                 updatedAt: admin.firestore.FieldValue.serverTimestamp(),
                 enqueuedAt: admin.firestore.FieldValue.serverTimestamp(),
                 expireAt: getExpireAtTimestamp(TTL_CONFIG.SPORTS_LIB_REPARSE_JOBS_IN_DAYS),
@@ -345,6 +392,8 @@ export const scheduleSportsLibReparseScan = onSchedule({
                 ...(routingDecision.heavyReason ? {} : { heavyReason: admin.firestore.FieldValue.delete() }),
                 ...(routingDecision.eventDurationMs !== null ? {} : { eventDurationMs: admin.firestore.FieldValue.delete() }),
                 lastError: admin.firestore.FieldValue.delete(),
+                terminalFailure: admin.firestore.FieldValue.delete(),
+                terminalFailureAt: admin.firestore.FieldValue.delete(),
                 processedAt: admin.firestore.FieldValue.delete(),
             }, { merge: true });
 

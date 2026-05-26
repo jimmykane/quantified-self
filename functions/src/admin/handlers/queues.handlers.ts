@@ -853,9 +853,15 @@ export const retrySportsLibReparseHeavyJob = onAdminCall<
             enqueuedAt: admin.firestore.FieldValue.serverTimestamp(),
             processedAt: admin.firestore.FieldValue.delete(),
             lastError: admin.firestore.FieldValue.delete(),
+            terminalFailure: admin.firestore.FieldValue.delete(),
+            terminalFailureAt: admin.firestore.FieldValue.delete(),
         }, { merge: true });
 
-        return { uid };
+        return {
+            uid,
+            terminalFailure: jobData.terminalFailure === true,
+            terminalFailureAt: jobData.terminalFailureAt,
+        };
     });
 
     const restoreFailedRetryClaim = async (errorMessage: string): Promise<void> => {
@@ -864,6 +870,10 @@ export const retrySportsLibReparseHeavyJob = onAdminCall<
             updatedAt: admin.firestore.FieldValue.serverTimestamp(),
             lastError: errorMessage,
             enqueuedAt: admin.firestore.FieldValue.delete(),
+            terminalFailure: claimedRetry.terminalFailure ? true : admin.firestore.FieldValue.delete(),
+            terminalFailureAt: claimedRetry.terminalFailure
+                ? (claimedRetry.terminalFailureAt || admin.firestore.FieldValue.serverTimestamp())
+                : admin.firestore.FieldValue.delete(),
         }, { merge: true });
     };
 

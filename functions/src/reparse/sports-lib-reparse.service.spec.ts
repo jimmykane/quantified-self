@@ -208,6 +208,7 @@ import {
     shouldEventBeReparsed,
     writeReparseStatus,
     buildSportsLibReparseJobId,
+    isSportsLibReparseTerminalFailureMessage,
     getEventAndActivitiesForReparse,
     reparseEventFromOriginalFiles,
     SPORTS_LIB_REPARSE_SKIP_REASON_NO_ORIGINAL_FILES,
@@ -1464,6 +1465,14 @@ describe('sports-lib-reparse.service', () => {
 
         expect(first).toBe(second);
         expect(first).not.toBe(differentVersion);
+    });
+
+    it('isSportsLibReparseTerminalFailureMessage should classify scheduler-suppressed terminal failures', () => {
+        expect(isSportsLibReparseTerminalFailureMessage(
+            '[sports-lib-reparse] Reparse target sports-lib version "11.0.2" does not match runtime sports-lib version "11.0.3"',
+        )).toBe(true);
+        expect(isSportsLibReparseTerminalFailureMessage('Event e1 was not found for user u1')).toBe(true);
+        expect(isSportsLibReparseTerminalFailureMessage('parse failed')).toBe(false);
     });
 
     it('applyAutoHealedSourceBucketMetadata should skip invalid resolved entries and only rewrite mapped paths', () => {

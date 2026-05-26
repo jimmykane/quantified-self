@@ -6,6 +6,7 @@ import {
     ReparseStatusWrite,
     extractSourceFiles,
     isReparsePersistenceSkippedForUserDeletionError,
+    isSportsLibReparseTerminalFailureMessage,
     parseUIDAllowlist,
     parseUidAndEventIdFromEventPath,
     reparseEventFromOriginalFiles,
@@ -297,6 +298,8 @@ export async function runSportsLibReparseScript(argv: string[]): Promise<ScriptS
                     reason: SPORTS_LIB_REPARSE_SKIP_REASON_NO_ORIGINAL_FILES,
                     targetSportsLibVersion,
                     checkedAt: admin.firestore.FieldValue.serverTimestamp(),
+                    terminalFailure: admin.firestore.FieldValue.delete(),
+                    terminalFailureAt: admin.firestore.FieldValue.delete(),
                 }, 'no_source_files');
             }
             return;
@@ -328,6 +331,8 @@ export async function runSportsLibReparseScript(argv: string[]): Promise<ScriptS
                     reason: SPORTS_LIB_REPARSE_SKIP_REASON_NO_ORIGINAL_FILES,
                     targetSportsLibVersion,
                     checkedAt: admin.firestore.FieldValue.serverTimestamp(),
+                    terminalFailure: admin.firestore.FieldValue.delete(),
+                    terminalFailureAt: admin.firestore.FieldValue.delete(),
                 }, 'reparse_skipped_no_source_files');
             } else {
                 progressOutcome = 'completed';
@@ -338,6 +343,8 @@ export async function runSportsLibReparseScript(argv: string[]): Promise<ScriptS
                     checkedAt: admin.firestore.FieldValue.serverTimestamp(),
                     processedAt: admin.firestore.FieldValue.serverTimestamp(),
                     lastError: '',
+                    terminalFailure: admin.firestore.FieldValue.delete(),
+                    terminalFailureAt: admin.firestore.FieldValue.delete(),
                 }, 'reparse_completed');
             }
         } catch (error) {
@@ -359,12 +366,17 @@ export async function runSportsLibReparseScript(argv: string[]): Promise<ScriptS
                 errorMessage,
                 ...(firestoreIndexUrl ? { firestoreIndexUrl } : {}),
             });
+            const terminalFailure = isSportsLibReparseTerminalFailureMessage(errorMessage);
             await writeReparseStatusUnlessUserDeleted(uid, eventId, {
                 status: 'failed',
                 reason: 'REPARSE_FAILED',
                 targetSportsLibVersion,
                 checkedAt: admin.firestore.FieldValue.serverTimestamp(),
                 lastError: errorMessage,
+                terminalFailure: terminalFailure ? true : admin.firestore.FieldValue.delete(),
+                terminalFailureAt: terminalFailure
+                    ? admin.firestore.FieldValue.serverTimestamp()
+                    : admin.firestore.FieldValue.delete(),
             }, 'reparse_failed');
         } finally {
             const progressPayload = {

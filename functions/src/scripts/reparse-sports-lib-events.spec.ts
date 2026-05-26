@@ -19,6 +19,9 @@ const hoisted = vi.hoisted(() => {
     const writeReparseStatus = vi.fn();
     const isReparsePersistenceSkippedForUserDeletionError = vi.fn((error: unknown) =>
         error instanceof Error && error.name === 'EventWriteSkippedForDeletedUserError');
+    const isSportsLibReparseTerminalFailureMessage = vi.fn((errorMessage: string) =>
+        errorMessage.startsWith('[sports-lib-reparse] Reparse target sports-lib version ')
+        || /^Event .* was not found for user .*$/.test(errorMessage));
     const getUserDeletionGuardState = vi.fn().mockResolvedValue({
         userExists: true,
         deletionInProgress: false,
@@ -167,6 +170,7 @@ const hoisted = vi.hoisted(() => {
     const loggerError = vi.fn();
 
     const serverTimestamp = vi.fn(() => 'SERVER_TIMESTAMP');
+    const deleteField = vi.fn(() => 'DELETE_FIELD');
 
     return {
         shouldEventBeReparsed,
@@ -178,6 +182,7 @@ const hoisted = vi.hoisted(() => {
         parseUIDAllowlist,
         writeReparseStatus,
         isReparsePersistenceSkippedForUserDeletionError,
+        isSportsLibReparseTerminalFailureMessage,
         getUserDeletionGuardState,
         parseUidAndEventIdFromEventPath,
         runtimeDefaults,
@@ -196,6 +201,7 @@ const hoisted = vi.hoisted(() => {
         loggerWarn,
         loggerError,
         serverTimestamp,
+        deleteField,
     };
 });
 
@@ -211,6 +217,7 @@ vi.mock('../reparse/sports-lib-reparse.service', () => ({
     parseUIDAllowlist: hoisted.parseUIDAllowlist,
     writeReparseStatus: hoisted.writeReparseStatus,
     isReparsePersistenceSkippedForUserDeletionError: hoisted.isReparsePersistenceSkippedForUserDeletionError,
+    isSportsLibReparseTerminalFailureMessage: hoisted.isSportsLibReparseTerminalFailureMessage,
     parseUidAndEventIdFromEventPath: hoisted.parseUidAndEventIdFromEventPath,
 }));
 
@@ -235,6 +242,7 @@ vi.mock('firebase-admin', () => {
     Object.assign(firestoreFn, {
         FieldValue: {
             serverTimestamp: hoisted.serverTimestamp,
+            delete: hoisted.deleteField,
         },
         FieldPath: {
             documentId: () => '__name__',
@@ -305,6 +313,9 @@ describe('reparse-sports-lib-events script', () => {
         hoisted.runtimeDefaults.uidAllowlist = null;
         hoisted.resolveTargetSportsLibVersion.mockReturnValue(TARGET_SPORTS_LIB_VERSION);
         hoisted.resolveTargetSportsLibVersionCode.mockReturnValue(TARGET_SPORTS_LIB_VERSION_CODE);
+        hoisted.isSportsLibReparseTerminalFailureMessage.mockImplementation((errorMessage: string) =>
+            errorMessage.startsWith('[sports-lib-reparse] Reparse target sports-lib version ')
+            || /^Event .* was not found for user .*$/.test(errorMessage));
         hoisted.sportsLibVersionToCode.mockImplementation((version: string) => {
             if (version === '9.0.0') return 9_000_000;
             if (version === '9.0.1') return 9_000_001;
@@ -710,6 +721,8 @@ describe('reparse-sports-lib-events script', () => {
         expect(hoisted.writeReparseStatus).toHaveBeenCalledWith('u1', 'e1', expect.objectContaining({
             status: 'skipped',
             reason: 'NO_ORIGINAL_FILES',
+            terminalFailure: 'DELETE_FIELD',
+            terminalFailureAt: 'DELETE_FIELD',
         }));
     });
 
@@ -731,6 +744,8 @@ describe('reparse-sports-lib-events script', () => {
         expect(hoisted.writeReparseStatus).toHaveBeenCalledWith('u1', 'e1', expect.objectContaining({
             status: 'skipped',
             reason: 'NO_ORIGINAL_FILES',
+            terminalFailure: 'DELETE_FIELD',
+            terminalFailureAt: 'DELETE_FIELD',
         }));
     });
 
@@ -766,6 +781,25 @@ describe('reparse-sports-lib-events script', () => {
         expect(hoisted.writeReparseStatus).toHaveBeenCalledWith('u1', 'e1', expect.objectContaining({
             status: 'skipped',
             reason: 'NO_ORIGINAL_FILES',
+            terminalFailure: 'DELETE_FIELD',
+            terminalFailureAt: 'DELETE_FIELD',
+        }));
+    });
+
+    it('should clear terminal marker when execute path completes successfully', async () => {
+        const eventRef = createEventRef('u1', 'e1', { originalFile: { path: 'x.fit' } });
+        hoisted.processingDocs.push(createProcessingDoc(eventRef, {
+            sportsLibVersion: '9.0.0',
+            sportsLibVersionCode: 9_000_000,
+        }));
+
+        const summary = await runSportsLibReparseScript(['--execute']);
+
+        expect(summary.completed).toBe(1);
+        expect(hoisted.writeReparseStatus).toHaveBeenCalledWith('u1', 'e1', expect.objectContaining({
+            status: 'completed',
+            terminalFailure: 'DELETE_FIELD',
+            terminalFailureAt: 'DELETE_FIELD',
         }));
     });
 
@@ -874,6 +908,8 @@ describe('reparse-sports-lib-events script', () => {
         expect(hoisted.writeReparseStatus).toHaveBeenCalledWith('u1', 'e1', expect.objectContaining({
             status: 'failed',
             reason: 'REPARSE_FAILED',
+            terminalFailure: 'DELETE_FIELD',
+            terminalFailureAt: 'DELETE_FIELD',
         }));
         expect(hoisted.loggerInfo).toHaveBeenCalledWith(
             '[sports-lib-reparse-script] Progress',
@@ -892,6 +928,26 @@ describe('reparse-sports-lib-events script', () => {
                 firestoreIndexUrl: 'https://console.firebase.google.com/project/test/firestore/indexes?create_composite=abc',
             }),
         );
+    });
+
+    it('should mark terminal failures from execute path', async () => {
+        const eventRef = createEventRef('u1', 'e1', { originalFile: { path: 'x.fit' } });
+        hoisted.processingDocs.push(createProcessingDoc(eventRef, {
+            sportsLibVersion: '9.0.0',
+            sportsLibVersionCode: 9_000_000,
+        }));
+        hoisted.reparseEventFromOriginalFiles.mockRejectedValueOnce(new Error('Event e1 was not found for user u1'));
+
+        const summary = await runSportsLibReparseScript(['--execute']);
+
+        expect(summary.failed).toBe(1);
+        expect(hoisted.writeReparseStatus).toHaveBeenCalledWith('u1', 'e1', expect.objectContaining({
+            status: 'failed',
+            reason: 'REPARSE_FAILED',
+            lastError: 'Event e1 was not found for user u1',
+            terminalFailure: true,
+            terminalFailureAt: 'SERVER_TIMESTAMP',
+        }));
     });
 
     it('should process candidates without entitlement filtering', async () => {

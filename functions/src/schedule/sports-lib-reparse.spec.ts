@@ -16,6 +16,9 @@ const hoisted = vi.hoisted(() => {
     const writeReparseStatus = vi.fn();
     const isReparsePersistenceSkippedForUserDeletionError = vi.fn((error: unknown) =>
         error instanceof Error && error.name === 'EventWriteSkippedForDeletedUserError');
+    const isSportsLibReparseTerminalFailureMessage = vi.fn((errorMessage: string) =>
+        errorMessage.startsWith('[sports-lib-reparse] Reparse target sports-lib version ')
+        || /^Event .* was not found for user .*$/.test(errorMessage));
     const resolveTargetSportsLibVersion = vi.fn();
     const resolveTargetSportsLibVersionCode = vi.fn();
     const sportsLibVersionToCode = vi.fn();
@@ -197,6 +200,7 @@ const hoisted = vi.hoisted(() => {
         buildSportsLibReparseJobId,
         writeReparseStatus,
         isReparsePersistenceSkippedForUserDeletionError,
+        isSportsLibReparseTerminalFailureMessage,
         resolveTargetSportsLibVersion,
         resolveTargetSportsLibVersionCode,
         sportsLibVersionToCode,
@@ -238,6 +242,7 @@ vi.mock('../reparse/sports-lib-reparse.service', () => ({
     buildSportsLibReparseJobId: hoisted.buildSportsLibReparseJobId,
     writeReparseStatus: hoisted.writeReparseStatus,
     isReparsePersistenceSkippedForUserDeletionError: hoisted.isReparsePersistenceSkippedForUserDeletionError,
+    isSportsLibReparseTerminalFailureMessage: hoisted.isSportsLibReparseTerminalFailureMessage,
     resolveTargetSportsLibVersion: hoisted.resolveTargetSportsLibVersion,
     resolveTargetSportsLibVersionCode: hoisted.resolveTargetSportsLibVersionCode,
     sportsLibVersionToCode: hoisted.sportsLibVersionToCode,
@@ -370,6 +375,9 @@ describe('scheduleSportsLibReparseScan', () => {
 
         hoisted.resolveTargetSportsLibVersion.mockReturnValue(TARGET_SPORTS_LIB_VERSION);
         hoisted.resolveTargetSportsLibVersionCode.mockReturnValue(TARGET_SPORTS_LIB_VERSION_CODE);
+        hoisted.isSportsLibReparseTerminalFailureMessage.mockImplementation((errorMessage: string) =>
+            errorMessage.startsWith('[sports-lib-reparse] Reparse target sports-lib version ')
+            || /^Event .* was not found for user .*$/.test(errorMessage));
         hoisted.sportsLibVersionToCode.mockImplementation((version: string) => {
             if (version === '9.0.0') return 9_000_000;
             if (version === '9.0.1') return 9_000_001;
@@ -629,6 +637,26 @@ describe('scheduleSportsLibReparseScan', () => {
         expect(hoisted.enqueueSportsLibReparseTask).not.toHaveBeenCalled();
     });
 
+    it('should skip override candidate when reparseStatus has a terminal failure for current target', async () => {
+        hoisted.runtimeDefaults.uidAllowlist = ['u1'];
+        hoisted.userEventsByUID.set('u1', [createEventDoc(
+            'u1',
+            'e1',
+            { originalFile: { path: 'x.fit' } },
+            {
+                status: 'failed',
+                targetSportsLibVersion: TARGET_SPORTS_LIB_VERSION,
+                lastError: 'Event e1 was not found for user u1',
+            },
+        )]);
+
+        await (scheduleSportsLibReparseScan as any)({});
+
+        expect(hoisted.isSportsLibReparseTerminalFailureMessage).toHaveBeenCalledWith('Event e1 was not found for user u1');
+        expect(hoisted.jobSet).not.toHaveBeenCalled();
+        expect(hoisted.enqueueSportsLibReparseTask).not.toHaveBeenCalled();
+    });
+
     it('should requeue failed existing jobs and preserve createdAt from existing record', async () => {
         hoisted.runtimeDefaults.uidAllowlist = ['u1'];
         hoisted.existingJobsById.set('job-1', {
@@ -646,6 +674,39 @@ describe('scheduleSportsLibReparseScan', () => {
             attemptCount: 5,
         }));
         expect(hoisted.enqueueSportsLibReparseTask).toHaveBeenCalledWith('job-1');
+    });
+
+    it('should not requeue terminal failed existing jobs', async () => {
+        hoisted.runtimeDefaults.uidAllowlist = ['u1'];
+        hoisted.existingJobsById.set('job-1', {
+            status: 'failed',
+            terminalFailure: true,
+            lastError: 'Event e1 was not found for user u1',
+        });
+        hoisted.userEventsByUID.set('u1', [createEventDoc('u1', 'e1', { originalFile: { path: 'x.fit' } })]);
+
+        await (scheduleSportsLibReparseScan as any)({});
+
+        expect(hoisted.jobSet).not.toHaveBeenCalledWith(
+            'job-1',
+            expect.objectContaining({ status: 'pending' }),
+            { merge: true },
+        );
+        expect(hoisted.enqueueSportsLibReparseTask).not.toHaveBeenCalled();
+    });
+
+    it('should not requeue legacy terminal failed jobs without the terminal marker', async () => {
+        hoisted.runtimeDefaults.uidAllowlist = ['u1'];
+        hoisted.existingJobsById.set('job-1', {
+            status: 'failed',
+            lastError: 'Event e1 was not found for user u1',
+        });
+        hoisted.userEventsByUID.set('u1', [createEventDoc('u1', 'e1', { originalFile: { path: 'x.fit' } })]);
+
+        await (scheduleSportsLibReparseScan as any)({});
+
+        expect(hoisted.isSportsLibReparseTerminalFailureMessage).toHaveBeenCalledWith('Event e1 was not found for user u1');
+        expect(hoisted.enqueueSportsLibReparseTask).not.toHaveBeenCalled();
     });
 
     it('should keep previous override cursor when enqueue limit is already reached at UID loop start', async () => {

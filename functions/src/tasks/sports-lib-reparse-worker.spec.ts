@@ -6,6 +6,9 @@ const hoisted = vi.hoisted(() => {
     const writeReparseStatus = vi.fn();
     const isReparsePersistenceSkippedForUserDeletionError = vi.fn((error: unknown) =>
         error instanceof Error && error.name === 'EventWriteSkippedForDeletedUserError');
+    const isSportsLibReparseTerminalFailureMessage = vi.fn((errorMessage: string) =>
+        errorMessage.startsWith('[sports-lib-reparse] Reparse target sports-lib version ')
+        || /^Event .* was not found for user .*$/.test(errorMessage));
     const resolveTargetSportsLibVersion = vi.fn(() => '9.0.99');
     const getSportsLibReparseEventDurationMs = vi.fn(() => null);
     const isSportsLibReparseDurationHeavy = vi.fn((durationMs: number | null | undefined) =>
@@ -44,6 +47,7 @@ const hoisted = vi.hoisted(() => {
         reparseEventFromOriginalFiles,
         writeReparseStatus,
         isReparsePersistenceSkippedForUserDeletionError,
+        isSportsLibReparseTerminalFailureMessage,
         resolveTargetSportsLibVersion,
         getSportsLibReparseEventDurationMs,
         isSportsLibReparseDurationHeavy,
@@ -78,6 +82,7 @@ vi.mock('../reparse/sports-lib-reparse.service', () => ({
     isSportsLibReparseDurationHeavy: hoisted.isSportsLibReparseDurationHeavy,
     reparseEventFromOriginalFiles: hoisted.reparseEventFromOriginalFiles,
     isReparsePersistenceSkippedForUserDeletionError: hoisted.isReparsePersistenceSkippedForUserDeletionError,
+    isSportsLibReparseTerminalFailureMessage: hoisted.isSportsLibReparseTerminalFailureMessage,
     writeReparseStatus: hoisted.writeReparseStatus,
     resolveTargetSportsLibVersion: hoisted.resolveTargetSportsLibVersion,
 }));
@@ -125,6 +130,9 @@ describe('processSportsLibReparseTask', () => {
         hoisted.getSportsLibReparseEventDurationMs.mockReturnValue(null);
         hoisted.isSportsLibReparseDurationHeavy.mockImplementation((durationMs: number | null | undefined) =>
             typeof durationMs === 'number' && durationMs > 32 * 60 * 60 * 1000);
+        hoisted.isSportsLibReparseTerminalFailureMessage.mockImplementation((errorMessage: string) =>
+            errorMessage.startsWith('[sports-lib-reparse] Reparse target sports-lib version ')
+            || /^Event .* was not found for user .*$/.test(errorMessage));
         hoisted.enqueueSportsLibReparseHeavyTask.mockResolvedValue(true);
         hoisted.getUserDeletionGuardState.mockResolvedValue({
             userExists: true,
@@ -173,6 +181,25 @@ describe('processSportsLibReparseTask', () => {
                 uid: 'u1',
                 eventId: 'e1',
                 status: 'completed',
+                attemptCount: 1,
+            }),
+        });
+
+        await (processSportsLibReparseTask as any)({ data: { jobId: 'job-1' } });
+
+        expect(hoisted.reparseEventFromOriginalFiles).not.toHaveBeenCalled();
+        expect(hoisted.jobSet).not.toHaveBeenCalled();
+    });
+
+    it('should skip when job already has a terminal failure', async () => {
+        hoisted.jobGet.mockResolvedValue({
+            exists: true,
+            data: () => ({
+                uid: 'u1',
+                eventId: 'e1',
+                status: 'failed',
+                terminalFailure: true,
+                lastError: 'Event e1 was not found for user u1',
                 attemptCount: 1,
             }),
         });
@@ -719,10 +746,14 @@ describe('processSportsLibReparseTask', () => {
         expect(hoisted.writeReparseStatus).toHaveBeenCalledWith('u1', 'e1', expect.objectContaining({
             status: 'failed',
             lastError: 'parse failed',
+            terminalFailure: 'DELETE_FIELD',
+            terminalFailureAt: 'DELETE_FIELD',
         }));
         expect(hoisted.jobSet).toHaveBeenCalledWith(expect.objectContaining({
             status: 'failed',
             lastError: 'parse failed',
+            terminalFailure: 'DELETE_FIELD',
+            terminalFailureAt: 'DELETE_FIELD',
         }), { merge: true });
     });
 
@@ -839,10 +870,14 @@ describe('processSportsLibReparseTask', () => {
         expect(hoisted.writeReparseStatus).toHaveBeenCalledWith('u1', 'e1', expect.objectContaining({
             status: 'failed',
             lastError: '[sports-lib-reparse] Reparse target sports-lib version "11.0.2" does not match runtime sports-lib version "11.0.3"',
+            terminalFailure: true,
+            terminalFailureAt: 'SERVER_TIMESTAMP',
         }));
         expect(hoisted.jobSet).toHaveBeenCalledWith(expect.objectContaining({
             status: 'failed',
             lastError: '[sports-lib-reparse] Reparse target sports-lib version "11.0.2" does not match runtime sports-lib version "11.0.3"',
+            terminalFailure: true,
+            terminalFailureAt: 'SERVER_TIMESTAMP',
         }), { merge: true });
     });
 
@@ -866,10 +901,14 @@ describe('processSportsLibReparseTask', () => {
         expect(hoisted.writeReparseStatus).toHaveBeenCalledWith('u1', 'e1', expect.objectContaining({
             status: 'failed',
             lastError: 'Event e1 was not found for user u1',
+            terminalFailure: true,
+            terminalFailureAt: 'SERVER_TIMESTAMP',
         }));
         expect(hoisted.jobSet).toHaveBeenCalledWith(expect.objectContaining({
             status: 'failed',
             lastError: 'Event e1 was not found for user u1',
+            terminalFailure: true,
+            terminalFailureAt: 'SERVER_TIMESTAMP',
         }), { merge: true });
     });
 

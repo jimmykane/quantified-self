@@ -57,6 +57,15 @@ export {
 
 export type SportsLibReparseJobStatus = 'pending' | 'processing' | 'completed' | 'failed';
 
+const SPORTS_LIB_REPARSE_TERMINAL_ERROR_PATTERNS = [
+    /^\[sports-lib-reparse\] Reparse target sports-lib version ".*" does not match runtime sports-lib version ".*"$/,
+    /^Event .* was not found for user .*$/,
+] as const;
+
+export function isSportsLibReparseTerminalFailureMessage(errorMessage: string): boolean {
+    return SPORTS_LIB_REPARSE_TERMINAL_ERROR_PATTERNS.some((pattern) => pattern.test(errorMessage));
+}
+
 class ReparsePersistenceSkippedForDeletedUserError extends Error {
     readonly name = 'EventWriteSkippedForDeletedUserError';
     readonly code = 'user_deleted_or_deleting';
@@ -101,6 +110,8 @@ export interface SportsLibReparseJob {
     eventDurationMs?: number;
     attemptCount: number;
     lastError?: string;
+    terminalFailure?: boolean;
+    terminalFailureAt?: unknown;
     createdAt: unknown;
     updatedAt: unknown;
     enqueuedAt?: unknown;
@@ -115,6 +126,8 @@ export interface ReparseStatusWrite {
     checkedAt: unknown;
     processedAt?: unknown;
     lastError?: string;
+    terminalFailure?: unknown;
+    terminalFailureAt?: unknown;
 }
 
 export interface SourceFileMeta {

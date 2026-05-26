@@ -961,6 +961,8 @@ describe('getQueueStats Cloud Function', () => {
             processingTier: 'heavy',
             heavyReason: 'manual_admin',
             lastError: 'mock-delete',
+            terminalFailure: 'mock-delete',
+            terminalFailureAt: 'mock-delete',
         }), { merge: true });
         expect(mockEnqueueSportsLibReparseHeavyTask).toHaveBeenCalledWith('job-1', {
             taskNameSuffix: expect.stringMatching(/^manual-\d+-[0-9a-f-]+$/),
@@ -1171,6 +1173,50 @@ describe('getQueueStats Cloud Function', () => {
             status: 'failed',
             lastError: expect.stringContaining('Manual heavy reparse retry task already exists'),
             enqueuedAt: 'mock-delete',
+            terminalFailure: 'mock-delete',
+            terminalFailureAt: 'mock-delete',
+        }), { merge: true });
+    });
+
+    it('should restore terminal marker when manual heavy retry enqueue fails for a terminal job', async () => {
+        const jobSet = vi.fn().mockResolvedValue(undefined);
+        mockCollection.mockImplementation((collectionName: string) => {
+            const guardCollection = createUserDeletionGuardCollectionMock(collectionName);
+            if (guardCollection) {
+                return guardCollection;
+            }
+            if (collectionName === 'sportsLibReparseJobs') {
+                return {
+                    doc: vi.fn(() => ({
+                        get: vi.fn().mockResolvedValue({
+                            exists: true,
+                            data: () => ({
+                                status: 'failed',
+                                uid: 'uid-1',
+                                terminalFailure: true,
+                                terminalFailureAt: 'terminal-ts',
+                            }),
+                        }),
+                        set: jobSet,
+                    })),
+                };
+            }
+            throw new Error(`Unexpected collection ${collectionName}`);
+        });
+        mockEnqueueSportsLibReparseHeavyTask.mockResolvedValueOnce(false);
+
+        await expect((retrySportsLibReparseHeavyJob as any)(getAdminRequest({ jobId: 'job-1' })))
+            .rejects.toThrow('Manual heavy reparse retry task already exists');
+
+        expect(jobSet).toHaveBeenNthCalledWith(1, expect.objectContaining({
+            status: 'pending',
+            terminalFailure: 'mock-delete',
+            terminalFailureAt: 'mock-delete',
+        }), { merge: true });
+        expect(jobSet).toHaveBeenNthCalledWith(2, expect.objectContaining({
+            status: 'failed',
+            terminalFailure: true,
+            terminalFailureAt: 'terminal-ts',
         }), { merge: true });
     });
 

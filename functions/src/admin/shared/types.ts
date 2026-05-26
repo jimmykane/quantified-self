@@ -130,6 +130,8 @@ export interface SportsLibReparseJobDocData {
     status?: string;
     attemptCount?: number;
     lastError?: string;
+    terminalFailure?: boolean;
+    terminalFailureAt?: unknown;
     updatedAt?: unknown;
     targetSportsLibVersion?: string;
     processingTier?: string;
