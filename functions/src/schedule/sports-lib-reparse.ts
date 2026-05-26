@@ -123,6 +123,23 @@ async function writeReparseStatusUnlessUserDeleted(
     }
 }
 
+async function deleteReparseJobForUserDeletion(
+    db: admin.firestore.Firestore,
+    jobRef: admin.firestore.DocumentReference,
+    jobId: string,
+    uid: string,
+    eventId: string,
+    phase: string,
+): Promise<void> {
+    await db.recursiveDelete(jobRef);
+    logger.info('[sports-lib-reparse] Deleted pending job because user is missing or deletion is in progress.', {
+        jobId,
+        uid,
+        eventId,
+        phase,
+    });
+}
+
 function shouldSkipBecauseNoOriginalFilesForTarget(
     statusDocData: Record<string, unknown> | undefined,
     targetSportsLibVersion: string,
@@ -333,6 +350,7 @@ export const scheduleSportsLibReparseScan = onSchedule({
 
             try {
                 if (await shouldSkipForUserDeletion(db, uid, eventId, 'before_task_enqueue')) {
+                    await deleteReparseJobForUserDeletion(db, jobRef, jobId, uid, eventId, 'before_task_enqueue');
                     return;
                 }
 
@@ -354,6 +372,7 @@ export const scheduleSportsLibReparseScan = onSchedule({
             } catch (error) {
                 const errorMessage = toErrorMessage(error);
                 if (await shouldSkipForUserDeletion(db, uid, eventId, 'before_enqueue_failure_write')) {
+                    await deleteReparseJobForUserDeletion(db, jobRef, jobId, uid, eventId, 'before_enqueue_failure_write');
                     return;
                 }
                 await jobRef.set({

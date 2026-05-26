@@ -51,6 +51,7 @@ const hoisted = vi.hoisted(() => {
 
     const existingJobsById = new Map<string, Record<string, unknown>>();
     const jobSet = vi.fn().mockResolvedValue(undefined);
+    const recursiveDelete = vi.fn().mockResolvedValue(undefined);
 
     const processingDocs: any[] = [];
     const userEventsByUID = new Map<string, any[]>();
@@ -132,6 +133,7 @@ const hoisted = vi.hoisted(() => {
         if (path === 'sportsLibReparseJobs') {
             return {
                 doc: vi.fn((jobId: string) => ({
+                    path: `${path}/${jobId}`,
                     get: vi.fn(async () => {
                         const existing = existingJobsById.get(jobId);
                         return {
@@ -211,6 +213,7 @@ const hoisted = vi.hoisted(() => {
         checkpointGet,
         existingJobsById,
         jobSet,
+        recursiveDelete,
         processingDocs,
         userEventsByUID,
         eventRefsByPath,
@@ -273,6 +276,7 @@ vi.mock('firebase-admin', () => {
         collectionGroup: hoisted.collectionGroup,
         collection: hoisted.collection,
         doc: hoisted.firestoreDoc,
+        recursiveDelete: hoisted.recursiveDelete,
     }));
     Object.assign(firestoreFn, {
         FieldValue: {
@@ -849,6 +853,9 @@ describe('scheduleSportsLibReparseScan', () => {
             expect.objectContaining({ status: 'pending' }),
             { merge: true },
         );
+        expect(hoisted.recursiveDelete).toHaveBeenCalledWith(expect.objectContaining({
+            path: 'sportsLibReparseJobs/job-1',
+        }));
         expect(hoisted.enqueueSportsLibReparseTask).not.toHaveBeenCalled();
     });
 
@@ -1051,6 +1058,43 @@ describe('scheduleSportsLibReparseScan', () => {
             }),
             { merge: true },
         );
+    });
+
+    it('should delete pending job when deletion starts after enqueue failure', async () => {
+        const eventRef = createEventRef('u1', 'e1', { originalFile: { path: 'x.fit' } });
+        hoisted.processingDocs.push(createProcessingDoc(eventRef, {
+            sportsLibVersion: '9.0.0',
+            sportsLibVersionCode: 9_000_000,
+        }));
+        hoisted.enqueueSportsLibReparseTask.mockRejectedValueOnce(new Error('enqueue-failed'));
+        hoisted.getUserDeletionGuardState
+            .mockResolvedValueOnce({
+                userExists: true,
+                deletionInProgress: false,
+                shouldSkip: false,
+            })
+            .mockResolvedValueOnce({
+                userExists: true,
+                deletionInProgress: false,
+                shouldSkip: false,
+            })
+            .mockResolvedValueOnce({
+                userExists: true,
+                deletionInProgress: true,
+                shouldSkip: true,
+            });
+
+        await (scheduleSportsLibReparseScan as any)({});
+
+        expect(hoisted.jobSet).toHaveBeenCalledTimes(1);
+        expect(hoisted.jobSet).toHaveBeenCalledWith(
+            'job-1',
+            expect.objectContaining({ status: 'pending' }),
+            { merge: true },
+        );
+        expect(hoisted.recursiveDelete).toHaveBeenCalledWith(expect.objectContaining({
+            path: 'sportsLibReparseJobs/job-1',
+        }));
     });
 
     it('should not advance processing cursor past docs skipped due enqueue limit cap', async () => {
