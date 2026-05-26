@@ -4,6 +4,12 @@
 import * as admin from 'firebase-admin';
 import * as logger from 'firebase-functions/logger';
 import { resolveServiceAccountPath } from './firebase-admin-config';
+import {
+  RETRY_SPORTS_LIB_REPARSE_HEAVY_JOB_FUNCTION_NAME,
+  SPORTS_LIB_REPARSE_HEAVY_TASK_FUNCTION_NAME,
+} from '../../shared/functions-manifest';
+import { retrySportsLibReparseHeavyJob as retrySportsLibReparseHeavyJobFunction } from './admin';
+import { processSportsLibReparseHeavyTask as processSportsLibReparseHeavyTaskFunction } from './tasks/sports-lib-reparse-worker';
 
 const PRIMARY_STORAGE_BUCKET = 'quantified-self-io';
 let firebaseConfigStorageBucket: string | null = null;
@@ -178,3 +184,6 @@ export { processDerivedMetricsIngressTask } from './tasks/derived-metrics-ingres
 
 // Stripe Cleanup
 export { cleanupStripeCustomer } from './stripe/cleanup';
+
+exports[SPORTS_LIB_REPARSE_HEAVY_TASK_FUNCTION_NAME] = processSportsLibReparseHeavyTaskFunction;
+exports[RETRY_SPORTS_LIB_REPARSE_HEAVY_JOB_FUNCTION_NAME] = retrySportsLibReparseHeavyJobFunction;

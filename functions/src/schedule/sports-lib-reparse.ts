@@ -12,13 +12,14 @@ import {
     buildSportsLibReparseJobId,
     extractSourceFiles,
     parseUidAndEventIdFromEventPath,
+    resolveSportsLibReparseRoutingDecision,
     resolveTargetSportsLibVersion,
     resolveTargetSportsLibVersionCode,
     sportsLibVersionToCode,
     shouldEventBeReparsed,
     writeReparseStatus,
 } from '../reparse/sports-lib-reparse.service';
-import { enqueueSportsLibReparseTask } from '../shared/cloud-tasks';
+import { enqueueSportsLibReparseHeavyTask, enqueueSportsLibReparseTask } from '../shared/cloud-tasks';
 import { getExpireAtTimestamp, TTL_CONFIG } from '../shared/ttl-config';
 import { FUNCTIONS_MANIFEST } from '../../../shared/functions-manifest';
 
@@ -246,12 +247,17 @@ export const scheduleSportsLibReparseScan = onSchedule({
                 return;
             }
 
+            const routingDecision = resolveSportsLibReparseRoutingDecision(eventData);
+
             const basePayload: SportsLibReparseJob = {
                 uid,
                 eventId,
                 eventPath: eventRef.path,
                 targetSportsLibVersion,
                 status: 'pending',
+                processingTier: routingDecision.processingTier,
+                ...(routingDecision.heavyReason ? { heavyReason: routingDecision.heavyReason } : {}),
+                ...(routingDecision.eventDurationMs !== null ? { eventDurationMs: routingDecision.eventDurationMs } : {}),
                 attemptCount: existingJob.data()?.attemptCount || 0,
                 createdAt: existingJob.exists ? existingJob.data()?.createdAt : admin.firestore.FieldValue.serverTimestamp(),
                 updatedAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -261,6 +267,8 @@ export const scheduleSportsLibReparseScan = onSchedule({
 
             await jobRef.set({
                 ...basePayload,
+                ...(routingDecision.heavyReason ? {} : { heavyReason: admin.firestore.FieldValue.delete() }),
+                ...(routingDecision.eventDurationMs !== null ? {} : { eventDurationMs: admin.firestore.FieldValue.delete() }),
                 lastError: admin.firestore.FieldValue.delete(),
                 processedAt: admin.firestore.FieldValue.delete(),
             }, { merge: true });
@@ -272,9 +280,12 @@ export const scheduleSportsLibReparseScan = onSchedule({
                     enqueueSpreadSeconds,
                 );
                 enqueueAttemptSequence++;
+                const enqueueTask = routingDecision.processingTier === 'heavy'
+                    ? enqueueSportsLibReparseHeavyTask
+                    : enqueueSportsLibReparseTask;
                 const taskCreated = enqueueDelaySeconds > 1
-                    ? await enqueueSportsLibReparseTask(jobId, enqueueDelaySeconds)
-                    : await enqueueSportsLibReparseTask(jobId);
+                    ? await enqueueTask(jobId, enqueueDelaySeconds)
+                    : await enqueueTask(jobId);
                 if (taskCreated) {
                     enqueuedCount++;
                 }

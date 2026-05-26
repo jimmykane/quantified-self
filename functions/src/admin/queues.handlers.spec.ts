@@ -1,11 +1,24 @@
 import { vi, describe, it, expect, beforeEach } from 'vitest';
+import type { CallableRequest } from 'firebase-functions/v2/https';
 import {
     getAdminRequest,
     getQueueStats,
+    retrySportsLibReparseHeavyJob,
     mockCollection,
     mockDoc,
+    mockEnqueueSportsLibReparseHeavyTask,
+    mockGetAll,
     mockGetCloudTaskQueueDepthForQueue,
 } from './test-utils/admin-test-harness';
+
+function createUserDeletionGuardCollectionMock(collectionName: string) {
+    if (collectionName === 'users' || collectionName === 'userDeletionTombstones') {
+        return {
+            doc: vi.fn((id: string) => ({ path: `${collectionName}/${id}` })),
+        };
+    }
+    return null;
+}
 
 describe('getQueueStats Cloud Function', () => {
     let request: any;
@@ -87,6 +100,10 @@ describe('getQueueStats Cloud Function', () => {
                 })
             })
         });
+        mockGetAll.mockResolvedValue([
+            { exists: true, data: () => ({}) },
+            { exists: false, data: () => undefined },
+        ]);
         request = {
             auth: {
                 uid: 'admin-uid',
@@ -238,7 +255,7 @@ describe('getQueueStats Cloud Function', () => {
 
         // Check Cloud Tasks stats
         expect(result.cloudTasks).toEqual({
-            pending: 59,
+            pending: 61,
             queues: {
                 workout: {
                     queueId: 'processWorkoutTask',
@@ -255,6 +272,10 @@ describe('getQueueStats Cloud Function', () => {
                 sportsLibReparse: {
                     queueId: 'processSportsLibReparseTask',
                     pending: 8,
+                },
+                sportsLibReparseHeavy: {
+                    queueId: 'processSportsLibReparseHeavyTask',
+                    pending: 2,
                 },
                 derivedMetrics: {
                     queueId: 'processDerivedMetricsTask',
@@ -293,7 +314,7 @@ describe('getQueueStats Cloud Function', () => {
             },
         });
         expect(result.reparse).toEqual(expect.objectContaining({
-            queuePending: 8,
+            queuePending: 10,
             targetSportsLibVersion: '9.1.4',
             jobs: {
                 total: 5,
@@ -454,10 +475,11 @@ describe('getQueueStats Cloud Function', () => {
             .mockRejectedValueOnce(new Error('Queue depth error'))
             .mockResolvedValueOnce(3)
             .mockResolvedValueOnce(8)
+            .mockResolvedValueOnce(2)
             .mockResolvedValueOnce(6);
         const result = await (getQueueStats as any)(request);
         expect(result.cloudTasks).toEqual({
-            pending: 59,
+            pending: 61,
             queues: {
                 workout: {
                     queueId: 'processWorkoutTask',
@@ -474,6 +496,10 @@ describe('getQueueStats Cloud Function', () => {
                 sportsLibReparse: {
                     queueId: 'processSportsLibReparseTask',
                     pending: 8,
+                },
+                sportsLibReparseHeavy: {
+                    queueId: 'processSportsLibReparseHeavyTask',
+                    pending: 2,
                 },
                 derivedMetrics: {
                     queueId: 'processDerivedMetricsTask',
@@ -877,5 +903,147 @@ describe('getQueueStats Cloud Function', () => {
             app: { appId: 'mock-app-id' }
         } as unknown as CallableRequest<any>;
         await expect((getQueueStats as any)(request)).rejects.toThrow('Only admins can call this function.');
+    });
+
+    it('should retry failed reparse job on heavy queue', async () => {
+        const jobSet = vi.fn().mockResolvedValue(undefined);
+        mockCollection.mockImplementation((collectionName: string) => {
+            const guardCollection = createUserDeletionGuardCollectionMock(collectionName);
+            if (guardCollection) {
+                return guardCollection;
+            }
+            if (collectionName === 'sportsLibReparseJobs') {
+                return {
+                    doc: vi.fn(() => ({
+                        get: vi.fn().mockResolvedValue({
+                            exists: true,
+                            data: () => ({ status: 'failed', uid: 'uid-1' }),
+                        }),
+                        set: jobSet,
+                    })),
+                };
+            }
+            throw new Error(`Unexpected collection ${collectionName}`);
+        });
+        mockEnqueueSportsLibReparseHeavyTask.mockResolvedValueOnce(true);
+
+        const result = await (retrySportsLibReparseHeavyJob as any)(getAdminRequest({ jobId: 'job-1' }));
+
+        expect(jobSet).toHaveBeenCalledWith(expect.objectContaining({
+            status: 'pending',
+            processingTier: 'heavy',
+            heavyReason: 'manual_admin',
+            lastError: 'mock-delete',
+        }), { merge: true });
+        expect(mockEnqueueSportsLibReparseHeavyTask).toHaveBeenCalledWith('job-1', {
+            taskNameSuffix: expect.stringMatching(/^manual-\d+-[0-9a-f-]+$/),
+        });
+        expect(result).toEqual({
+            success: true,
+            jobId: 'job-1',
+            taskCreated: true,
+        });
+    });
+
+    it('should restore failed status when manual heavy retry task is not created', async () => {
+        const jobSet = vi.fn().mockResolvedValue(undefined);
+        mockCollection.mockImplementation((collectionName: string) => {
+            const guardCollection = createUserDeletionGuardCollectionMock(collectionName);
+            if (guardCollection) {
+                return guardCollection;
+            }
+            if (collectionName === 'sportsLibReparseJobs') {
+                return {
+                    doc: vi.fn(() => ({
+                        get: vi.fn().mockResolvedValue({
+                            exists: true,
+                            data: () => ({ status: 'failed', uid: 'uid-1' }),
+                        }),
+                        set: jobSet,
+                    })),
+                };
+            }
+            throw new Error(`Unexpected collection ${collectionName}`);
+        });
+        mockEnqueueSportsLibReparseHeavyTask.mockResolvedValueOnce(false);
+
+        await expect((retrySportsLibReparseHeavyJob as any)(getAdminRequest({ jobId: 'job-1' })))
+            .rejects.toThrow('Manual heavy reparse retry task already exists');
+
+        expect(jobSet).toHaveBeenNthCalledWith(1, expect.objectContaining({
+            status: 'pending',
+            processingTier: 'heavy',
+            heavyReason: 'manual_admin',
+        }), { merge: true });
+        expect(jobSet).toHaveBeenNthCalledWith(2, expect.objectContaining({
+            status: 'failed',
+            lastError: expect.stringContaining('Manual heavy reparse retry task already exists'),
+            enqueuedAt: 'mock-delete',
+        }), { merge: true });
+    });
+
+    it('should not enqueue heavy retry when user is missing or deletion is in progress', async () => {
+        const jobSet = vi.fn().mockResolvedValue(undefined);
+        mockCollection.mockImplementation((collectionName: string) => {
+            const guardCollection = createUserDeletionGuardCollectionMock(collectionName);
+            if (guardCollection) {
+                return guardCollection;
+            }
+            if (collectionName === 'sportsLibReparseJobs') {
+                return {
+                    doc: vi.fn(() => ({
+                        get: vi.fn().mockResolvedValue({
+                            exists: true,
+                            data: () => ({ status: 'failed', uid: 'deleted-user' }),
+                        }),
+                        set: jobSet,
+                    })),
+                };
+            }
+            throw new Error(`Unexpected collection ${collectionName}`);
+        });
+        mockGetAll.mockResolvedValueOnce([
+            { exists: false, data: () => undefined },
+            { exists: false, data: () => undefined },
+        ]);
+
+        await expect((retrySportsLibReparseHeavyJob as any)(getAdminRequest({ jobId: 'job-1' })))
+            .rejects.toThrow('User deleted-user is missing or deletion is in progress');
+
+        expect(jobSet).not.toHaveBeenCalled();
+        expect(mockEnqueueSportsLibReparseHeavyTask).not.toHaveBeenCalled();
+    });
+
+    it('should reject heavy retry when job is not failed', async () => {
+        mockCollection.mockImplementation((collectionName: string) => {
+            if (collectionName === 'sportsLibReparseJobs') {
+                return {
+                    doc: vi.fn(() => ({
+                        get: vi.fn().mockResolvedValue({
+                            exists: true,
+                            data: () => ({ status: 'processing' }),
+                        }),
+                        set: vi.fn(),
+                    })),
+                };
+            }
+            throw new Error(`Unexpected collection ${collectionName}`);
+        });
+
+        await expect((retrySportsLibReparseHeavyJob as any)(getAdminRequest({ jobId: 'job-1' })))
+            .rejects.toThrow('must be failed before heavy retry');
+        expect(mockEnqueueSportsLibReparseHeavyTask).not.toHaveBeenCalled();
+    });
+
+    it('should require admin auth for heavy retry', async () => {
+        const request = {
+            data: { jobId: 'job-1' },
+            auth: { uid: 'user1', token: { admin: false } },
+            app: { appId: 'mock-app-id' },
+        } as unknown as CallableRequest<any>;
+
+        await expect((retrySportsLibReparseHeavyJob as any)(request))
+            .rejects.toThrow('Only admins can call this function.');
+        expect(mockEnqueueSportsLibReparseHeavyTask).not.toHaveBeenCalled();
     });
 });

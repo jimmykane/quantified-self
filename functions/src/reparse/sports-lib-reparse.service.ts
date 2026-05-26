@@ -23,7 +23,14 @@ import { FirestoreAdapter, LogAdapter, EventWriter } from '../shared/event-write
 import { generateActivityIDFromSourceKey } from '../shared/id-generator';
 import { ProcessingMetaData } from '../shared/processing-metadata.interface';
 import { SPORTS_LIB_VERSION } from '../shared/sports-lib-version.node';
-import { SPORTS_LIB_REPARSE_TARGET_VERSION } from './sports-lib-reparse.config';
+import {
+    SPORTS_LIB_REPARSE_HEAVY_DURATION_THRESHOLD_MS,
+    SPORTS_LIB_REPARSE_HEAVY_REASONS,
+    SPORTS_LIB_REPARSE_PROCESSING_TIERS,
+    SPORTS_LIB_REPARSE_TARGET_VERSION,
+    SportsLibReparseHeavyReason,
+    SportsLibReparseProcessingTier,
+} from './sports-lib-reparse.config';
 import {
     MAX_ACTIVITY_DECOMPRESSED_BYTES,
     MAX_ACTIVITY_DECOMPRESSED_BYTES_LABEL,
@@ -37,6 +44,9 @@ export const SPORTS_LIB_PRIMARY_BUCKET = 'quantified-self-io';
 export const SPORTS_LIB_LEGACY_APPSPOT_BUCKET = 'quantified-self-io.appspot.com';
 const MERGE_TYPE_VALUES = new Set(['benchmark', 'multi']);
 export {
+    SPORTS_LIB_REPARSE_HEAVY_DURATION_THRESHOLD_MS,
+    SPORTS_LIB_REPARSE_HEAVY_REASONS,
+    SPORTS_LIB_REPARSE_PROCESSING_TIERS,
     SPORTS_LIB_REPARSE_RUNTIME_DEFAULTS,
     SPORTS_LIB_REPARSE_TARGET_VERSION,
 } from './sports-lib-reparse.config';
@@ -66,6 +76,9 @@ export interface SportsLibReparseJob {
     eventPath: string;
     targetSportsLibVersion: string;
     status: SportsLibReparseJobStatus;
+    processingTier?: SportsLibReparseProcessingTier;
+    heavyReason?: SportsLibReparseHeavyReason;
+    eventDurationMs?: number;
     attemptCount: number;
     lastError?: string;
     createdAt: unknown;
@@ -122,6 +135,12 @@ export interface ReparseExecutionResult {
 
 type MergeType = 'benchmark' | 'multi';
 export type ReparseMode = 'reimport' | 'regenerate';
+
+export interface SportsLibReparseRoutingDecision {
+    processingTier: SportsLibReparseProcessingTier;
+    heavyReason?: SportsLibReparseHeavyReason;
+    eventDurationMs: number | null;
+}
 
 function toErrorMessage(error: unknown): string {
     if (error instanceof Error) {
@@ -189,6 +208,39 @@ function maybeDecompressOriginalFile(path: string, rawBytes: Buffer): Buffer {
         }
         throw error;
     }
+}
+
+export function getSportsLibReparseEventDurationMs(eventData: FirestoreEventJSON | Record<string, unknown>): number | null {
+    const eventAny = eventData as { startDate?: unknown; endDate?: unknown };
+    const startMs = toDateOrUndefined(eventAny.startDate)?.getTime();
+    const endMs = toDateOrUndefined(eventAny.endDate)?.getTime();
+
+    if (typeof startMs !== 'number' || typeof endMs !== 'number') {
+        return null;
+    }
+
+    const durationMs = endMs - startMs;
+    return Number.isFinite(durationMs) && durationMs > 0 ? durationMs : null;
+}
+
+export function isSportsLibReparseDurationHeavy(eventDurationMs: number | null | undefined): boolean {
+    return typeof eventDurationMs === 'number'
+        && Number.isFinite(eventDurationMs)
+        && eventDurationMs > SPORTS_LIB_REPARSE_HEAVY_DURATION_THRESHOLD_MS;
+}
+
+export function resolveSportsLibReparseRoutingDecision(
+    eventData: FirestoreEventJSON | Record<string, unknown>,
+): SportsLibReparseRoutingDecision {
+    const eventDurationMs = getSportsLibReparseEventDurationMs(eventData);
+    const isHeavy = isSportsLibReparseDurationHeavy(eventDurationMs);
+    return {
+        processingTier: isHeavy
+            ? SPORTS_LIB_REPARSE_PROCESSING_TIERS.Heavy
+            : SPORTS_LIB_REPARSE_PROCESSING_TIERS.Normal,
+        ...(isHeavy ? { heavyReason: SPORTS_LIB_REPARSE_HEAVY_REASONS.Duration } : {}),
+        eventDurationMs,
+    };
 }
 
 function normalizeBucketName(bucketName?: string): string | null {
@@ -1414,6 +1466,7 @@ export async function reparseEventFromOriginalFiles(
         targetSportsLibVersion?: string;
         eventData?: FirestoreEventJSON | Record<string, unknown>;
         activityDocs?: admin.firestore.QueryDocumentSnapshot[];
+        beforePersist?: () => Promise<void>;
     },
 ): Promise<ReparseExecutionResult> {
     const startedAtMs = Date.now();
@@ -1531,6 +1584,10 @@ export async function reparseEventFromOriginalFiles(
         EventUtilities.reGenerateStatsForEvent(reparsedEvent);
         const transformDurationMs = Date.now() - transformStartedAtMs;
 
+        if (options?.beforePersist) {
+            stage = 'before_persist_guard';
+            await options.beforePersist();
+        }
         stage = 'persist_reparsed_event';
         const persistStartedAtMs = Date.now();
         const persistResult = await persistReparsedEvent(

@@ -551,16 +551,28 @@
 
         <div class="stats-grid">
             <mat-card class="app-stat-card status-info"
-                matTooltip="Tasks currently in flight or scheduled in the sports-lib reparse Cloud Tasks queue.">
+                matTooltip="Tasks currently in flight or scheduled in the normal sports-lib reparse Cloud Tasks queue.">
                 <div class="app-stat-header">
                     <mat-icon>autorenew</mat-icon>
-                    <span>Cloud Tasks (Reparse)</span>
+                    <span>Cloud Tasks (Reparse Normal)</span>
                 </div>
                 <div class="app-stat-value" *ngIf="!loading">{{ stats?.cloudTasks?.queues?.sportsLibReparse?.pending ?? 0 }}</div>
                 <div class="app-spinner-mini" *ngIf="loading">
                     <mat-spinner diameter="24"></mat-spinner>
                 </div>
-                <span class="stat-subtitle" style="font-size: 0.75rem; opacity: 0.8;">queue: reparse</span>
+                <span class="stat-subtitle" style="font-size: 0.75rem; opacity: 0.8;">queue: normal reparse</span>
+            </mat-card>
+            <mat-card class="app-stat-card status-info"
+                matTooltip="Tasks currently in flight or scheduled in the heavy sports-lib reparse Cloud Tasks queue.">
+                <div class="app-stat-header">
+                    <mat-icon>rocket_launch</mat-icon>
+                    <span>Cloud Tasks (Reparse Heavy)</span>
+                </div>
+                <div class="app-stat-value" *ngIf="!loading">{{ stats?.cloudTasks?.queues?.sportsLibReparseHeavy?.pending ?? 0 }}</div>
+                <div class="app-spinner-mini" *ngIf="loading">
+                    <mat-spinner diameter="24"></mat-spinner>
+                </div>
+                <span class="stat-subtitle" style="font-size: 0.75rem; opacity: 0.8;">queue: heavy reparse</span>
             </mat-card>
             <mat-card class="app-stat-card status-pending">
                 <div class="app-stat-header">
@@ -666,8 +678,8 @@
 
         <mat-card class="table-container" style="margin-bottom: 0;">
             <h3 class="card-title">Recent Reparse Failures</h3>
-            <div class="table-wrapper" *ngIf="getReparseFailureRows().length > 0; else noReparseFailuresTemplate">
-                <table mat-table [dataSource]="getReparseFailureRows()">
+            <div class="table-wrapper" *ngIf="reparseFailureRows.length > 0; else noReparseFailuresTemplate">
+                <table mat-table [dataSource]="reparseFailureRows">
                     <ng-container matColumnDef="uid">
                         <th mat-header-cell *matHeaderCellDef> UID </th>
                         <td mat-cell *matCellDef="let row"><span class="mono-cell">{{ row.uid }}</span></td>
@@ -683,15 +695,47 @@
                         <td mat-cell *matCellDef="let row"> {{ row.attemptCount }} </td>
                     </ng-container>
 
+                    <ng-container matColumnDef="processingTier">
+                        <th mat-header-cell *matHeaderCellDef> Tier </th>
+                        <td mat-cell *matCellDef="let row"> {{ row.tierLabel }} </td>
+                    </ng-container>
+
+                    <ng-container matColumnDef="heavyReason">
+                        <th mat-header-cell *matHeaderCellDef> Reason </th>
+                        <td mat-cell *matCellDef="let row"> {{ row.reasonLabel }} </td>
+                    </ng-container>
+
+                    <ng-container matColumnDef="eventDurationMs">
+                        <th mat-header-cell *matHeaderCellDef> Duration </th>
+                        <td mat-cell *matCellDef="let row"> {{ row.durationLabel }} </td>
+                    </ng-container>
+
                     <ng-container matColumnDef="updatedAt">
                         <th mat-header-cell *matHeaderCellDef> Updated </th>
-                        <td mat-cell *matCellDef="let row"> {{ formatTimestamp(row.updatedAt) }} </td>
+                        <td mat-cell *matCellDef="let row"> {{ row.updatedAtLabel }} </td>
                     </ng-container>
 
                     <ng-container matColumnDef="lastError">
                         <th mat-header-cell *matHeaderCellDef> Last Error </th>
                         <td mat-cell *matCellDef="let row">
                             <span class="analysis-error-text" [matTooltip]="row.lastError">{{ row.lastError || 'N/A' }}</span>
+                        </td>
+                    </ng-container>
+
+                    <ng-container matColumnDef="actions">
+                        <th mat-header-cell *matHeaderCellDef> Actions </th>
+                        <td mat-cell *matCellDef="let row">
+                            <button mat-stroked-button
+                                class="qs-mat-primary retry-heavy-button"
+                                type="button"
+                                aria-label="Retry failed reparse job on heavy queue"
+                                matTooltip="Retry this failed reparse job on the heavy queue"
+                                [disabled]="row.retryHeavyDisabled"
+                                (click)="retryHeavy(row)">
+                                <mat-spinner *ngIf="row.retryingHeavy" diameter="16"></mat-spinner>
+                                <mat-icon *ngIf="!row.retryingHeavy">rocket_launch</mat-icon>
+                                <span>Heavy</span>
+                            </button>
                         </td>
                     </ng-container>
 
