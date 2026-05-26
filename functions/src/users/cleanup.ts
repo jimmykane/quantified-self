@@ -27,6 +27,8 @@ import {
 
 export { ORPHANED_SERVICE_TOKENS_COLLECTION_NAME } from '../orphaned-service-tokens';
 
+const SPORTS_LIB_REPARSE_JOBS_COLLECTION = 'sportsLibReparseJobs';
+
 /**
  * Helper to delete a token document and its subcollections.
  * Firestore doesn't automatically delete subcollections when you delete a parent document,
@@ -817,6 +819,7 @@ async function cleanupTopLevelQueueState(uid: string, identifiers: UserProviderI
     await recursiveDeleteQueryResults(db, uid, 'failed job', 'failed_jobs', 'providerUserId', providerValues, deletedRefKeys, providerKeyedDeleteFilter('failed_jobs'));
     await recursiveDeleteQueryResults(db, uid, 'failed job', 'failed_jobs', 'userName', suuntoValues, deletedRefKeys, providerKeyedDeleteFilter('failed_jobs'));
     await recursiveDeleteQueryResults(db, uid, 'failed job', 'failed_jobs', 'openId', corosValues, deletedRefKeys, providerKeyedDeleteFilter('failed_jobs'));
+    await recursiveDeleteQueryResults(db, uid, 'sports-lib reparse job', SPORTS_LIB_REPARSE_JOBS_COLLECTION, 'uid', firebaseUIDValues, deletedRefKeys);
     await cleanupLegacyProviderKeyedQueueOrphans(uid, identifiers, deletedRefKeys);
 
     logger.info(`[Cleanup] Completed top-level queue state cleanup for user ${uid}`);

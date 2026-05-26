@@ -746,6 +746,8 @@ describe('cleanupUserAccounts', () => {
                     }
                     : field === 'userID' && value === 'testUser123'
                         ? { docs: [{ id: 'activity-job-1', ref: { path: 'activitySyncQueue/activity-job-1' }, data: () => ({}) }] }
+                        : field === 'uid' && value === 'testUser123'
+                            ? { docs: [{ id: 'reparse-job-1', ref: { path: 'sportsLibReparseJobs/reparse-job-1' }, data: () => ({}) }] }
                         : { docs: [] }
             )
         }));
@@ -757,8 +759,10 @@ describe('cleanupUserAccounts', () => {
         expect(firestoreMock().collection).toHaveBeenCalledWith('garminAPIActivityQueue');
         expect(firestoreMock().collection).toHaveBeenCalledWith('suuntoAppWorkoutQueue');
         expect(firestoreMock().collection).toHaveBeenCalledWith('COROSAPIWorkoutQueue');
+        expect(firestoreMock().collection).toHaveBeenCalledWith('sportsLibReparseJobs');
         expect(firestoreMock().collection).toHaveBeenCalledWith('failed_jobs');
         expect(whereMock).toHaveBeenCalledWith('firebaseUserID', '==', 'testUser123');
+        expect(whereMock).toHaveBeenCalledWith('uid', '==', 'testUser123');
         expect(whereMock).toHaveBeenCalledWith('providerUserId', '==', 'suunto-provider-user');
         expect(whereMock).toHaveBeenCalledWith('userName', '==', 'suunto-provider-user');
         expect(whereMock).toHaveBeenCalledWith('openId', '==', 'coros-provider-user');
@@ -766,6 +770,7 @@ describe('cleanupUserAccounts', () => {
         expect(recursiveDeleteMock).toHaveBeenCalledWith(expect.objectContaining({ path: 'sleepSyncQueue/sleep-job-1' }));
         expect(recursiveDeleteMock).toHaveBeenCalledWith(expect.objectContaining({ path: 'activitySyncQueue/activity-job-1' }));
         expect(recursiveDeleteMock).toHaveBeenCalledWith(expect.objectContaining({ path: 'suuntoAppWorkoutQueue/provider-job-1' }));
+        expect(recursiveDeleteMock).toHaveBeenCalledWith(expect.objectContaining({ path: 'sportsLibReparseJobs/reparse-job-1' }));
         expect(markQueueItemDeletedForUserCleanupMock).toHaveBeenCalledWith(
             'sleepSyncQueue',
             'sleep-job-1',

@@ -36,7 +36,7 @@ import { SLEEP_SYNC_QUEUE_COLLECTION_NAME } from '../../sleep/constants';
 import { getDisabledSleepProviders } from '../../sleep/provider-flags';
 import { SLEEP_PROVIDERS, SleepProvider } from '../../../../shared/sleep';
 import { enqueueSportsLibReparseHeavyTask } from '../../shared/cloud-tasks';
-import { getUserDeletionGuardState } from '../../shared/user-deletion-guard';
+import { getUserDeletionGuardState, getUserDeletionGuardStateInTransaction } from '../../shared/user-deletion-guard';
 
 const SPORTS_LIB_REPARSE_JOBS_COLLECTION = 'sportsLibReparseJobs';
 const SPORTS_LIB_REPARSE_CHECKPOINT_DOC_PATH = 'systemJobs/sportsLibReparse';
@@ -806,52 +806,57 @@ export const retrySportsLibReparseHeavyJob = onAdminCall<
         throw new HttpsError('invalid-argument', 'jobId is required.');
     }
 
-    const jobRef = admin.firestore().collection(SPORTS_LIB_REPARSE_JOBS_COLLECTION).doc(jobId);
-    const snapshot = await jobRef.get();
-    if (!snapshot.exists) {
-        throw new HttpsError('not-found', `Reparse job ${jobId} was not found.`);
-    }
+    const db = admin.firestore();
+    const jobRef = db.collection(SPORTS_LIB_REPARSE_JOBS_COLLECTION).doc(jobId);
+    const claimedRetry = await db.runTransaction(async (transaction) => {
+        const snapshot = await transaction.get(jobRef);
+        if (!snapshot.exists) {
+            throw new HttpsError('not-found', `Reparse job ${jobId} was not found.`);
+        }
 
-    const jobData = snapshot.data() as SportsLibReparseJobDocData;
-    if (jobData.status !== 'failed') {
-        throw new HttpsError('failed-precondition', `Reparse job ${jobId} must be failed before heavy retry.`);
-    }
+        const jobData = snapshot.data() as SportsLibReparseJobDocData;
+        if (jobData.status !== 'failed') {
+            throw new HttpsError('failed-precondition', `Reparse job ${jobId} must be failed before heavy retry.`);
+        }
 
-    const uid = `${jobData.uid || ''}`.trim();
-    if (!uid) {
-        throw new HttpsError('failed-precondition', `Reparse job ${jobId} is missing uid.`);
-    }
+        const uid = `${jobData.uid || ''}`.trim();
+        if (!uid) {
+            throw new HttpsError('failed-precondition', `Reparse job ${jobId} is missing uid.`);
+        }
 
-    let deletionGuard;
-    try {
-        deletionGuard = await getUserDeletionGuardState(admin.firestore(), uid);
-    } catch (error) {
-        logger.error('[admin/retrySportsLibReparseHeavyJob] Failed to read user deletion guard.', {
-            jobId,
-            uid,
-            error: error instanceof Error ? error.message : `${error}`,
-        });
-        throw new HttpsError('unavailable', `Could not verify user deletion state for ${uid}.`);
-    }
-    if (deletionGuard.shouldSkip) {
-        logger.info('[admin/retrySportsLibReparseHeavyJob] Skipping heavy retry because user is missing or deletion is in progress.', {
-            jobId,
-            uid,
-            userExists: deletionGuard.userExists,
-            deletionInProgress: deletionGuard.deletionInProgress,
-        });
-        throw new HttpsError('failed-precondition', `User ${uid} is missing or deletion is in progress.`);
-    }
+        let deletionGuard;
+        try {
+            deletionGuard = await getUserDeletionGuardStateInTransaction(db, transaction, uid);
+        } catch (error) {
+            logger.error('[admin/retrySportsLibReparseHeavyJob] Failed to read user deletion guard.', {
+                jobId,
+                uid,
+                error: error instanceof Error ? error.message : `${error}`,
+            });
+            throw new HttpsError('unavailable', `Could not verify user deletion state for ${uid}.`);
+        }
+        if (deletionGuard.shouldSkip) {
+            logger.info('[admin/retrySportsLibReparseHeavyJob] Skipping heavy retry because user is missing or deletion is in progress.', {
+                jobId,
+                uid,
+                userExists: deletionGuard.userExists,
+                deletionInProgress: deletionGuard.deletionInProgress,
+            });
+            throw new HttpsError('failed-precondition', `User ${uid} is missing or deletion is in progress.`);
+        }
 
-    await jobRef.set({
-        status: 'pending',
-        processingTier: SPORTS_LIB_REPARSE_PROCESSING_TIERS.Heavy,
-        heavyReason: SPORTS_LIB_REPARSE_HEAVY_REASONS.ManualAdmin,
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-        enqueuedAt: admin.firestore.FieldValue.serverTimestamp(),
-        processedAt: admin.firestore.FieldValue.delete(),
-        lastError: admin.firestore.FieldValue.delete(),
-    }, { merge: true });
+        transaction.set(jobRef, {
+            status: 'pending',
+            processingTier: SPORTS_LIB_REPARSE_PROCESSING_TIERS.Heavy,
+            heavyReason: SPORTS_LIB_REPARSE_HEAVY_REASONS.ManualAdmin,
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            enqueuedAt: admin.firestore.FieldValue.serverTimestamp(),
+            processedAt: admin.firestore.FieldValue.delete(),
+            lastError: admin.firestore.FieldValue.delete(),
+        }, { merge: true });
+
+        return { uid };
+    });
 
     try {
         const taskCreated = await enqueueSportsLibReparseHeavyTask(jobId, {
@@ -871,6 +876,26 @@ export const retrySportsLibReparseHeavyJob = onAdminCall<
         };
     } catch (error) {
         const errorMessage = error instanceof Error ? error.message : `${error}`;
+        let deletionGuard;
+        try {
+            deletionGuard = await getUserDeletionGuardState(db, claimedRetry.uid);
+        } catch (guardError) {
+            logger.error('[admin/retrySportsLibReparseHeavyJob] Failed to read user deletion guard before restoring failed status.', {
+                jobId,
+                uid: claimedRetry.uid,
+                error: guardError instanceof Error ? guardError.message : `${guardError}`,
+            });
+            throw new HttpsError('unavailable', `Could not verify user deletion state for ${claimedRetry.uid}.`);
+        }
+        if (deletionGuard.shouldSkip) {
+            logger.info('[admin/retrySportsLibReparseHeavyJob] Skipping failed-status restore because user is missing or deletion is in progress.', {
+                jobId,
+                uid: claimedRetry.uid,
+                userExists: deletionGuard.userExists,
+                deletionInProgress: deletionGuard.deletionInProgress,
+            });
+            throw new HttpsError('failed-precondition', `User ${claimedRetry.uid} is missing or deletion is in progress.`);
+        }
         await jobRef.set({
             status: 'failed',
             updatedAt: admin.firestore.FieldValue.serverTimestamp(),

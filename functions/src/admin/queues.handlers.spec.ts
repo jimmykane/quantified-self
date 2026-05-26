@@ -9,6 +9,9 @@ import {
     mockEnqueueSportsLibReparseHeavyTask,
     mockGetAll,
     mockGetCloudTaskQueueDepthForQueue,
+    mockRunTransaction,
+    mockTransactionGet,
+    mockTransactionSet,
 } from './test-utils/admin-test-harness';
 
 function createUserDeletionGuardCollectionMock(collectionName: string) {
@@ -104,6 +107,29 @@ describe('getQueueStats Cloud Function', () => {
             { exists: true, data: () => ({}) },
             { exists: false, data: () => undefined },
         ]);
+        mockTransactionGet.mockImplementation(async (ref: any) => {
+            if (typeof ref?.get === 'function') {
+                return ref.get();
+            }
+            const path = `${ref?.path || ''}`;
+            if (path.startsWith('users/')) {
+                return { exists: true, data: () => ({}) };
+            }
+            if (path.startsWith('userDeletionTombstones/')) {
+                return { exists: false, data: () => undefined };
+            }
+            return { exists: false, data: () => undefined };
+        });
+        mockTransactionSet.mockImplementation(async (ref: any, payload: Record<string, unknown>, options?: Record<string, unknown>) => {
+            if (typeof ref?.set === 'function') {
+                return ref.set(payload, options);
+            }
+            return undefined;
+        });
+        mockRunTransaction.mockImplementation(async (callback: any) => callback({
+            get: mockTransactionGet,
+            set: mockTransactionSet,
+        }));
         request = {
             auth: {
                 uid: 'admin-uid',
@@ -945,6 +971,47 @@ describe('getQueueStats Cloud Function', () => {
         });
     });
 
+    it('should atomically reject duplicate heavy retry claims once the job is pending', async () => {
+        const jobSet = vi.fn().mockResolvedValue(undefined);
+        const jobGet = vi.fn()
+            .mockResolvedValueOnce({
+                exists: true,
+                data: () => ({ status: 'failed', uid: 'uid-1' }),
+            })
+            .mockResolvedValueOnce({
+                exists: true,
+                data: () => ({ status: 'pending', uid: 'uid-1' }),
+            });
+        mockCollection.mockImplementation((collectionName: string) => {
+            const guardCollection = createUserDeletionGuardCollectionMock(collectionName);
+            if (guardCollection) {
+                return guardCollection;
+            }
+            if (collectionName === 'sportsLibReparseJobs') {
+                return {
+                    doc: vi.fn(() => ({
+                        get: jobGet,
+                        set: jobSet,
+                    })),
+                };
+            }
+            throw new Error(`Unexpected collection ${collectionName}`);
+        });
+        mockEnqueueSportsLibReparseHeavyTask.mockResolvedValue(true);
+
+        await expect((retrySportsLibReparseHeavyJob as any)(getAdminRequest({ jobId: 'job-1' })))
+            .resolves.toEqual({
+                success: true,
+                jobId: 'job-1',
+                taskCreated: true,
+            });
+        await expect((retrySportsLibReparseHeavyJob as any)(getAdminRequest({ jobId: 'job-1' })))
+            .rejects.toThrow('must be failed before heavy retry');
+
+        expect(jobSet).toHaveBeenCalledTimes(1);
+        expect(mockEnqueueSportsLibReparseHeavyTask).toHaveBeenCalledTimes(1);
+    });
+
     it('should restore failed status when manual heavy retry task is not created', async () => {
         const jobSet = vi.fn().mockResolvedValue(undefined);
         mockCollection.mockImplementation((collectionName: string) => {
@@ -1002,10 +1069,19 @@ describe('getQueueStats Cloud Function', () => {
             }
             throw new Error(`Unexpected collection ${collectionName}`);
         });
-        mockGetAll.mockResolvedValueOnce([
-            { exists: false, data: () => undefined },
-            { exists: false, data: () => undefined },
-        ]);
+        mockTransactionGet.mockImplementation(async (ref: any) => {
+            if (typeof ref?.get === 'function') {
+                return ref.get();
+            }
+            const path = `${ref?.path || ''}`;
+            if (path === 'users/deleted-user') {
+                return { exists: false, data: () => undefined };
+            }
+            if (path === 'userDeletionTombstones/deleted-user') {
+                return { exists: false, data: () => undefined };
+            }
+            return { exists: true, data: () => ({}) };
+        });
 
         await expect((retrySportsLibReparseHeavyJob as any)(getAdminRequest({ jobId: 'job-1' })))
             .rejects.toThrow('User deleted-user is missing or deletion is in progress');

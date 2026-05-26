@@ -20,7 +20,10 @@ const {
     mockGetCloudTaskQueueDepth,
     mockGetCloudTaskQueueDepthForQueue,
     mockEnqueueSportsLibReparseHeavyTask,
-    mockGetAll
+    mockGetAll,
+    mockRunTransaction,
+    mockTransactionGet,
+    mockTransactionSet,
 } = vi.hoisted(() => {
     const mockListUsers = vi.fn();
     const mockCreateCustomToken = vi.fn();
@@ -31,11 +34,35 @@ const {
     const mockCollection = vi.fn() as any;
     const mockDoc = vi.fn();
     const mockGetAll = vi.fn();
+    const mockTransactionGet = vi.fn(async (ref: any) => {
+        if (typeof ref?.get === 'function') {
+            return ref.get();
+        }
+        const path = `${ref?.path || ''}`;
+        if (path.startsWith('users/')) {
+            return { exists: true, data: () => ({}) };
+        }
+        if (path.startsWith('userDeletionTombstones/')) {
+            return { exists: false, data: () => undefined };
+        }
+        return { exists: false, data: () => undefined };
+    });
+    const mockTransactionSet = vi.fn(async (ref: any, payload: Record<string, unknown>, options?: Record<string, unknown>) => {
+        if (typeof ref?.set === 'function') {
+            return ref.set(payload, options);
+        }
+        return undefined;
+    });
+    const mockRunTransaction = vi.fn(async (callback: any) => callback({
+        get: mockTransactionGet,
+        set: mockTransactionSet,
+    }));
     const mockFirestore = vi.fn(() => ({
         collection: mockCollection,
         collectionGroup: mockCollection,
         doc: mockDoc,
         getAll: mockGetAll,
+        runTransaction: mockRunTransaction,
     }));
 
     const mockRemoteConfig = vi.fn(() => ({
@@ -99,6 +126,9 @@ const {
         mockGetCloudTaskQueueDepthForQueue,
         mockEnqueueSportsLibReparseHeavyTask,
         mockGetAll,
+        mockRunTransaction,
+        mockTransactionGet,
+        mockTransactionSet,
     };
 });
 
@@ -207,6 +237,9 @@ export {
     mockGetCloudTaskQueueDepthForQueue,
     mockEnqueueSportsLibReparseHeavyTask,
     mockGetAll,
+    mockRunTransaction,
+    mockTransactionGet,
+    mockTransactionSet,
 };
 
 const adminHandlers = await import('../index');
