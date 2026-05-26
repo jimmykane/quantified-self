@@ -75,6 +75,15 @@ async function markJobFailed(
     }, { merge: true });
 }
 
+async function markJobSkippedForUserDeletion(jobRef: admin.firestore.DocumentReference): Promise<void> {
+    await jobRef.set({
+        status: 'completed',
+        processedAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        lastError: admin.firestore.FieldValue.delete(),
+    }, { merge: true });
+}
+
 async function resolveJobEventDurationMs(job: SportsLibReparseJob): Promise<number | null> {
     if (typeof job.eventDurationMs === 'number' && Number.isFinite(job.eventDurationMs)) {
         return job.eventDurationMs;
@@ -244,6 +253,7 @@ async function processSportsLibReparseTaskRequest(
         });
 
         if (await shouldSkipForUserDeletion(job, jobId, 'before_status_write')) {
+            await markJobSkippedForUserDeletion(jobRef);
             return;
         }
 
@@ -285,6 +295,7 @@ async function processSportsLibReparseTaskRequest(
         });
     } catch (error) {
         if (error instanceof SportsLibReparseSkippedForUserDeletionError) {
+            await markJobSkippedForUserDeletion(jobRef);
             return;
         }
         if (error instanceof UserDeletionGuardReadError) {
@@ -293,6 +304,7 @@ async function processSportsLibReparseTaskRequest(
         }
         try {
             if (await shouldSkipForUserDeletion(job, jobId, 'before_failure_status_write')) {
+                await markJobSkippedForUserDeletion(jobRef);
                 return;
             }
         } catch (guardError) {

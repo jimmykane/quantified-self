@@ -278,9 +278,13 @@ describe('processSportsLibReparseTask', () => {
         await (processSportsLibReparseTask as any)({ data: { jobId: 'job-1' } });
 
         expect(hoisted.writeReparseStatus).not.toHaveBeenCalled();
-        expect(hoisted.jobSet).toHaveBeenCalledTimes(1);
-        expect(hoisted.jobSet).toHaveBeenCalledWith(expect.objectContaining({
+        expect(hoisted.jobSet).toHaveBeenCalledTimes(2);
+        expect(hoisted.jobSet).toHaveBeenNthCalledWith(1, expect.objectContaining({
             status: 'processing',
+        }), { merge: true });
+        expect(hoisted.jobSet).toHaveBeenNthCalledWith(2, expect.objectContaining({
+            status: 'completed',
+            lastError: 'DELETE_FIELD',
         }), { merge: true });
     });
 
@@ -351,9 +355,13 @@ describe('processSportsLibReparseTask', () => {
         await (processSportsLibReparseTask as any)({ data: { jobId: 'job-1' } });
 
         expect(hoisted.writeReparseStatus).not.toHaveBeenCalled();
-        expect(hoisted.jobSet).toHaveBeenCalledTimes(1);
-        expect(hoisted.jobSet).toHaveBeenCalledWith(expect.objectContaining({
+        expect(hoisted.jobSet).toHaveBeenCalledTimes(2);
+        expect(hoisted.jobSet).toHaveBeenNthCalledWith(1, expect.objectContaining({
             status: 'processing',
+        }), { merge: true });
+        expect(hoisted.jobSet).toHaveBeenNthCalledWith(2, expect.objectContaining({
+            status: 'completed',
+            lastError: 'DELETE_FIELD',
         }), { merge: true });
     });
 
@@ -600,6 +608,42 @@ describe('processSportsLibReparseTask', () => {
         expect(hoisted.jobSet).toHaveBeenCalledWith(expect.objectContaining({
             status: 'failed',
             lastError: 'parse failed',
+        }), { merge: true });
+    });
+
+    it('should mark job completed without failure status write when deletion starts after reparse failure', async () => {
+        hoisted.getUserDeletionGuardState
+            .mockResolvedValueOnce({
+                userExists: true,
+                deletionInProgress: false,
+                shouldSkip: false,
+            })
+            .mockResolvedValueOnce({
+                userExists: true,
+                deletionInProgress: true,
+                shouldSkip: true,
+            });
+        hoisted.jobGet.mockResolvedValue({
+            exists: true,
+            data: () => ({
+                uid: 'u1',
+                eventId: 'e1',
+                status: 'pending',
+                attemptCount: 0,
+                targetSportsLibVersion: '9.0.99',
+            }),
+        });
+        hoisted.reparseEventFromOriginalFiles.mockRejectedValue(new Error('parse failed'));
+
+        await (processSportsLibReparseTask as any)({ data: { jobId: 'job-1' } });
+
+        expect(hoisted.writeReparseStatus).not.toHaveBeenCalled();
+        expect(hoisted.jobSet).toHaveBeenNthCalledWith(1, expect.objectContaining({
+            status: 'processing',
+        }), { merge: true });
+        expect(hoisted.jobSet).toHaveBeenNthCalledWith(2, expect.objectContaining({
+            status: 'completed',
+            lastError: 'DELETE_FIELD',
         }), { merge: true });
     });
 
