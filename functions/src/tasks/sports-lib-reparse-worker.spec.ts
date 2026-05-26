@@ -342,6 +342,39 @@ describe('processSportsLibReparseTask', () => {
         }), { merge: true });
     });
 
+    it('should fail duration-heavy requeue when no heavy task is created', async () => {
+        hoisted.enqueueSportsLibReparseHeavyTask.mockResolvedValueOnce(false);
+        hoisted.jobGet.mockResolvedValue({
+            exists: true,
+            data: () => ({
+                uid: 'u1',
+                eventId: 'e1',
+                eventPath: 'users/u1/events/e1',
+                status: 'pending',
+                attemptCount: 0,
+                targetSportsLibVersion: '9.0.99',
+                eventDurationMs: 33 * 60 * 60 * 1000,
+            }),
+        });
+
+        await expect((processSportsLibReparseTask as any)({ data: { jobId: 'job-1' } }))
+            .rejects.toThrow('Heavy reparse task already exists for job job-1.');
+
+        expect(hoisted.reparseEventFromOriginalFiles).not.toHaveBeenCalled();
+        expect(hoisted.enqueueSportsLibReparseHeavyTask).toHaveBeenCalledWith('job-1');
+        expect(hoisted.jobSet).toHaveBeenNthCalledWith(1, expect.objectContaining({
+            status: 'pending',
+            processingTier: 'heavy',
+            heavyReason: 'duration_gt_32h',
+            eventDurationMs: 33 * 60 * 60 * 1000,
+        }), { merge: true });
+        expect(hoisted.jobSet).toHaveBeenNthCalledWith(2, expect.objectContaining({
+            status: 'failed',
+            lastError: 'Heavy reparse task already exists for job job-1.',
+            enqueuedAt: 'DELETE_FIELD',
+        }), { merge: true });
+    });
+
     it('should skip jobs already marked heavy when a normal retry task fires', async () => {
         hoisted.jobGet.mockResolvedValue({
             exists: true,

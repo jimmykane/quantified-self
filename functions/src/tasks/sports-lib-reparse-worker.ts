@@ -129,7 +129,10 @@ async function requeueHeavyFromNormalWorker(
     }, { merge: true });
 
     try {
-        await enqueueSportsLibReparseHeavyTask(jobId);
+        const taskCreated = await enqueueSportsLibReparseHeavyTask(jobId);
+        if (!taskCreated) {
+            throw new Error(`Heavy reparse task already exists for job ${jobId}.`);
+        }
     } catch (error) {
         const errorMessage = getErrorMessage(error);
         await jobRef.set({
