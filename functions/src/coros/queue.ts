@@ -1,5 +1,6 @@
 import * as functions from 'firebase-functions/v1';
 import * as logger from 'firebase-functions/logger';
+import * as crypto from 'crypto';
 import { addToQueueForCOROS } from '../queue';
 import { isProviderQueueSkippedWithoutRetryError } from '../queue/provider-queue-errors';
 
@@ -11,6 +12,23 @@ const SUCCESS_RESPONSE = {
   'message': 'ok',
   'result': '0000',
 };
+
+function redactProviderUserId(value: unknown): string | null {
+  if (typeof value !== 'string' || value.trim().length === 0) {
+    return null;
+  }
+  const trimmed = value.trim();
+  return `sha256:${crypto.createHash('sha256').update(trimmed).digest('hex').slice(0, 12)}`;
+}
+
+function countMissingFitUrls(workouts: any[]): number {
+  return workouts.reduce((total, workout) => {
+    if (Array.isArray(workout?.triathlonItemList)) {
+      return total + workout.triathlonItemList.filter((item: any) => !item?.fitUrl).length;
+    }
+    return total + (workout?.fitUrl ? 0 : 1);
+  }, 0);
+}
 
 /**
  * We return 200 with no body if there is no sportList
@@ -34,21 +52,38 @@ export const insertCOROSAPIWorkoutDataToQueue = functions.region('europe-west2')
   }
 
   const body = JSON.parse(JSON.stringify(req.body));
+  const sportDataList = Array.isArray(body.sportDataList) ? body.sportDataList : [];
 
-  logger.info(JSON.stringify(req.body));
+  logger.info('COROS workout webhook received', {
+    provider: 'COROS',
+    sportDataCount: sportDataList.length,
+    providerUserIds: Array.from(new Set(sportDataList
+      .map((workout: any) => redactProviderUserId(workout?.openId))
+      .filter((openId: string | null): openId is string => !!openId))),
+  });
 
-  if (!body.sportDataList || !body.sportDataList.length) {
+  if (!sportDataList.length) {
     logger.error('No sport data list');
     res.status(200).send(SUCCESS_RESPONSE);
     return;
   }
 
-  for (const workout of await convertCOROSWorkoutsToQueueItems(body.sportDataList)) {
+  const queueItems = await convertCOROSWorkoutsToQueueItems(sportDataList);
+  let queuedCount = 0;
+  let skippedCount = 0;
+  for (const workout of queueItems) {
     try {
       await addToQueueForCOROS(workout);
+      queuedCount++;
     } catch (e: any) {
       if (isProviderQueueSkippedWithoutRetryError(e)) {
-        logger.warn(`Skipping COROS workout webhook ${workout.workoutID} for ${workout.openId} because no local token/user is connected or the user is being deleted.`);
+        skippedCount++;
+        logger.warn('Skipping COROS workout webhook because no local token/user is connected or the user is being deleted.', {
+          provider: 'COROS',
+          reason: e.code,
+          workoutID: workout.workoutID,
+          providerUserId: redactProviderUserId(workout.openId),
+        });
         continue;
       }
       logger.error(e);
@@ -57,7 +92,13 @@ export const insertCOROSAPIWorkoutDataToQueue = functions.region('europe-west2')
     }
   }
   // All ok
-  logger.info('Insert to Queue for COROS success responding with ok');
+  logger.info('Insert to Queue for COROS success responding with ok', {
+    provider: 'COROS',
+    queuedCount,
+    skippedCount,
+    convertedQueueItemCount: queueItems.length,
+    missingFitUrlCount: countMissingFitUrls(sportDataList),
+  });
   res.status(200).send(SUCCESS_RESPONSE);
 });
 
@@ -77,7 +118,11 @@ export async function convertCOROSWorkoutsToQueueItems(workouts: any[], openId?:
 
   return [...triathlonItems, ...nonTriathlon].filter((workout) => {
     if (!workout.FITFileURI) {
-      logger.error(`No fit url skipping workout for user ${workout.openId}, id ${workout.workoutID}`);
+      logger.error('No fit url skipping COROS workout', {
+        provider: 'COROS',
+        providerUserId: redactProviderUserId(workout.openId),
+        workoutID: workout.workoutID,
+      });
       return false;
     }
     return true;

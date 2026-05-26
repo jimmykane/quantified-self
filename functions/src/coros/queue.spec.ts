@@ -68,6 +68,7 @@ import {
     getCOROSQueueItemFromWorkout,
     insertCOROSAPIWorkoutDataToQueue,
 } from './queue';
+import * as logger from 'firebase-functions/logger';
 
 describe('coros/queue', () => {
     beforeEach(() => {
@@ -265,6 +266,46 @@ describe('coros/queue', () => {
 
             expect(response.status).toHaveBeenCalledWith(200);
             expect(mockAddToQueueForCOROS).toHaveBeenCalledTimes(1);
+        });
+
+        it('logs safe metadata instead of the raw COROS webhook payload', async () => {
+            const response = createResponse();
+            const requestBody = {
+                sportDataList: [{
+                    openId: 'open-id-sensitive-value',
+                    labelId: 'workout-1',
+                    fitUrl: 'https://coros.com/fit/sensitive.fit',
+                }, {
+                    openId: 'open-id-sensitive-value',
+                    labelId: 'workout-2',
+                    fitUrl: undefined,
+                }],
+            };
+            const request = createRequest(requestBody);
+
+            await insertCOROSAPIWorkoutDataToQueue(request as any, response as any);
+
+            expect(response.status).toHaveBeenCalledWith(200);
+            expect(logger.info).not.toHaveBeenCalledWith(JSON.stringify(requestBody));
+            expect(logger.info).toHaveBeenCalledWith('COROS workout webhook received', expect.objectContaining({
+                provider: 'COROS',
+                sportDataCount: 2,
+                providerUserIds: [expect.stringMatching(/^sha256:[a-f0-9]{12}$/)],
+            }));
+            expect(logger.info).toHaveBeenCalledWith('Insert to Queue for COROS success responding with ok', expect.objectContaining({
+                provider: 'COROS',
+                queuedCount: 1,
+                skippedCount: 0,
+                convertedQueueItemCount: 1,
+                missingFitUrlCount: 1,
+            }));
+            const serializedLogs = [
+                ...vi.mocked(logger.info).mock.calls,
+                ...vi.mocked(logger.warn).mock.calls,
+                ...vi.mocked(logger.error).mock.calls,
+            ].map((call) => JSON.stringify(call)).join('\n');
+            expect(serializedLogs).not.toContain('https://coros.com/fit/sensitive.fit');
+            expect(serializedLogs).not.toContain('open-id-sensitive-value');
         });
     });
 });
