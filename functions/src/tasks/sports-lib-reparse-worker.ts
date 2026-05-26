@@ -16,10 +16,12 @@ import {
 import { CLOUD_TASK_RETRY_CONFIG, REPARSE_HEAVY_TASK_RETRY_CONFIG } from '../shared/queue-config';
 import { FUNCTIONS_MANIFEST } from '../../../shared/functions-manifest';
 import {
+    REPARSE_PROCESSING_HEAVY_TASK_RATE_LIMITS,
     REPARSE_PROCESSING_HEAVY_TASK_RUNTIME_OPTIONS,
     REPARSE_PROCESSING_TASK_RUNTIME_OPTIONS,
 } from '../shared/activity-processing-config';
 import { enqueueSportsLibReparseHeavyTask } from '../shared/cloud-tasks';
+import { getUserDeletionGuardState, UserDeletionGuardReadError } from '../shared/user-deletion-guard';
 
 interface SportsLibReparseTaskPayload {
     jobId: string;
@@ -31,6 +33,18 @@ const TERMINAL_REPARSE_ERROR_PATTERNS = [
 ] as const;
 
 type SportsLibReparseWorkerTier = 'normal' | 'heavy';
+
+class SportsLibReparseSkippedForUserDeletionError extends Error {
+    readonly name = 'SportsLibReparseSkippedForUserDeletionError';
+
+    constructor(
+        readonly jobId: string,
+        readonly uid: string,
+        readonly phase: string,
+    ) {
+        super(`Skipping sports-lib reparse job ${jobId} for deleted/deleting user ${uid} during ${phase}.`);
+    }
+}
 
 function getJobRef(jobId: string): admin.firestore.DocumentReference {
     return admin.firestore().collection(SPORTS_LIB_REPARSE_JOBS_COLLECTION).doc(jobId);
@@ -59,6 +73,42 @@ async function resolveJobEventDurationMs(job: SportsLibReparseJob): Promise<numb
     }
 
     return getSportsLibReparseEventDurationMs(eventSnapshot.data() as Record<string, unknown>);
+}
+
+async function assertUserDeletionAllowed(job: SportsLibReparseJob, jobId: string, phase: string): Promise<void> {
+    try {
+        const deletionGuard = await getUserDeletionGuardState(admin.firestore(), job.uid);
+        if (!deletionGuard.shouldSkip) {
+            return;
+        }
+
+        logger.info('[sports-lib-reparse-worker] Skipping job because user is missing or deletion is in progress.', {
+            jobId,
+            uid: job.uid,
+            eventId: job.eventId,
+            phase,
+            userExists: deletionGuard.userExists,
+            deletionInProgress: deletionGuard.deletionInProgress,
+        });
+        throw new SportsLibReparseSkippedForUserDeletionError(jobId, job.uid, phase);
+    } catch (error) {
+        if (error instanceof SportsLibReparseSkippedForUserDeletionError) {
+            throw error;
+        }
+        throw new UserDeletionGuardReadError(job.uid, 'sports_lib_reparse_worker', error);
+    }
+}
+
+async function shouldSkipForUserDeletion(job: SportsLibReparseJob, jobId: string, phase: string): Promise<boolean> {
+    try {
+        await assertUserDeletionAllowed(job, jobId, phase);
+        return false;
+    } catch (error) {
+        if (error instanceof SportsLibReparseSkippedForUserDeletionError) {
+            return true;
+        }
+        throw error;
+    }
 }
 
 async function requeueHeavyFromNormalWorker(
@@ -125,7 +175,21 @@ async function processSportsLibReparseTaskRequest(
         return;
     }
 
+    if (await shouldSkipForUserDeletion(job, jobId, 'start')) {
+        return;
+    }
+
     if (workerTier === 'normal') {
+        if (job.processingTier === SPORTS_LIB_REPARSE_PROCESSING_TIERS.Heavy) {
+            logger.info('[sports-lib-reparse-worker] Normal worker skipping job already marked for heavy processing.', {
+                jobId,
+                uid: job.uid,
+                eventId: job.eventId,
+                heavyReason: job.heavyReason || null,
+            });
+            return;
+        }
+
         const eventDurationMs = await resolveJobEventDurationMs(job);
         if (isSportsLibReparseDurationHeavy(eventDurationMs)) {
             await requeueHeavyFromNormalWorker(jobRef, jobId, job, eventDurationMs as number);
@@ -148,7 +212,12 @@ async function processSportsLibReparseTaskRequest(
         const reparseResult = await reparseEventFromOriginalFiles(job.uid, job.eventId, {
             mode: 'reimport',
             targetSportsLibVersion,
+            beforePersist: () => assertUserDeletionAllowed(job, jobId, 'before_persist'),
         });
+
+        if (await shouldSkipForUserDeletion(job, jobId, 'before_status_write')) {
+            return;
+        }
 
         if (reparseResult.status === 'skipped' && reparseResult.reason === SPORTS_LIB_REPARSE_SKIP_REASON_NO_ORIGINAL_FILES) {
             await writeReparseStatus(job.uid, job.eventId, {
@@ -187,6 +256,16 @@ async function processSportsLibReparseTaskRequest(
             staleActivitiesDeleted: reparseResult.staleActivitiesDeleted,
         });
     } catch (error) {
+        if (error instanceof SportsLibReparseSkippedForUserDeletionError) {
+            return;
+        }
+        if (error instanceof UserDeletionGuardReadError) {
+            throw error;
+        }
+        if (await shouldSkipForUserDeletion(job, jobId, 'before_failure_status_write')) {
+            return;
+        }
+
         const errorMessage = getErrorMessage(error);
         await writeReparseStatus(job.uid, job.eventId, {
             status: 'failed',
@@ -234,6 +313,7 @@ export const processSportsLibReparseTask = onTaskDispatched({
 
 export const processSportsLibReparseHeavyTask = onTaskDispatched({
     retryConfig: REPARSE_HEAVY_TASK_RETRY_CONFIG,
+    rateLimits: REPARSE_PROCESSING_HEAVY_TASK_RATE_LIMITS,
     ...REPARSE_PROCESSING_HEAVY_TASK_RUNTIME_OPTIONS,
     region: FUNCTIONS_MANIFEST.processSportsLibReparseHeavyTask.region,
 }, async (request) => processSportsLibReparseTaskRequest(request, 'heavy'));

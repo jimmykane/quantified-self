@@ -1507,6 +1507,28 @@ describe('sports-lib-reparse.service', () => {
         expect(persistedEvent.feeling).toBe(2);
     });
 
+    it('reparseEventFromOriginalFiles should run beforePersist before event/activity writes', async () => {
+        const parsedEvent = makeEvent();
+        hoisted.fitImporter.getFromArrayBuffer.mockResolvedValue(parsedEvent);
+        const beforePersist = vi.fn().mockRejectedValue(new Error('deletion started'));
+
+        await expect(reparseEventFromOriginalFiles('u1', 'e1', {
+            eventData: {
+                originalFile: { path: 'users/u1/events/e1/original.fit' },
+            },
+            activityDocs: [
+                { id: 'a-old-1', data: () => ({ creator: { name: 'creator-1' } }) } as any,
+            ],
+            targetSportsLibVersion: TARGET_SPORTS_LIB_VERSION,
+            beforePersist,
+        })).rejects.toThrow('deletion started');
+
+        expect(beforePersist).toHaveBeenCalledTimes(1);
+        expect(hoisted.mockWriteAllEventData).not.toHaveBeenCalled();
+        expect(hoisted.mockBatchDelete).not.toHaveBeenCalled();
+        expect(hoisted.mockBatchCommit).not.toHaveBeenCalled();
+    });
+
     it('reparseEventFromOriginalFiles should skip creator carryover and warn when matches are ambiguous', async () => {
         const sharedStart = new Date('2026-01-01T10:00:00.000Z');
         const parsedActivityOne = {

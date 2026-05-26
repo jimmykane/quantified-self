@@ -1466,6 +1466,7 @@ export async function reparseEventFromOriginalFiles(
         targetSportsLibVersion?: string;
         eventData?: FirestoreEventJSON | Record<string, unknown>;
         activityDocs?: admin.firestore.QueryDocumentSnapshot[];
+        beforePersist?: () => Promise<void>;
     },
 ): Promise<ReparseExecutionResult> {
     const startedAtMs = Date.now();
@@ -1583,6 +1584,10 @@ export async function reparseEventFromOriginalFiles(
         EventUtilities.reGenerateStatsForEvent(reparsedEvent);
         const transformDurationMs = Date.now() - transformStartedAtMs;
 
+        if (options?.beforePersist) {
+            stage = 'before_persist_guard';
+            await options.beforePersist();
+        }
         stage = 'persist_reparsed_event';
         const persistStartedAtMs = Date.now();
         const persistResult = await persistReparsedEvent(

@@ -9,6 +9,11 @@ const hoisted = vi.hoisted(() => {
     const isSportsLibReparseDurationHeavy = vi.fn((durationMs: number | null | undefined) =>
         typeof durationMs === 'number' && durationMs > 32 * 60 * 60 * 1000);
     const enqueueSportsLibReparseHeavyTask = vi.fn().mockResolvedValue(true);
+    const getUserDeletionGuardState = vi.fn().mockResolvedValue({
+        userExists: true,
+        deletionInProgress: false,
+        shouldSkip: false,
+    });
     const runtimeDefaults = {
         enabled: false,
         scanLimit: 200,
@@ -34,6 +39,7 @@ const hoisted = vi.hoisted(() => {
         getSportsLibReparseEventDurationMs,
         isSportsLibReparseDurationHeavy,
         enqueueSportsLibReparseHeavyTask,
+        getUserDeletionGuardState,
         runtimeDefaults,
         jobGet,
         jobSet,
@@ -69,6 +75,17 @@ vi.mock('../shared/cloud-tasks', () => ({
     enqueueSportsLibReparseHeavyTask: hoisted.enqueueSportsLibReparseHeavyTask,
 }));
 
+vi.mock('../shared/user-deletion-guard', () => ({
+    getUserDeletionGuardState: hoisted.getUserDeletionGuardState,
+    UserDeletionGuardReadError: class UserDeletionGuardReadError extends Error {
+        readonly name = 'UserDeletionGuardReadError';
+        constructor(uid: string, phase: string, originalError: unknown) {
+            super(`Could not read deletion guard for user ${uid} during ${phase}.`);
+            this.cause = originalError;
+        }
+    },
+}));
+
 vi.mock('firebase-admin', () => {
     const firestoreFn = vi.fn(() => ({
         collection: hoisted.collection,
@@ -97,6 +114,11 @@ describe('processSportsLibReparseTask', () => {
         hoisted.isSportsLibReparseDurationHeavy.mockImplementation((durationMs: number | null | undefined) =>
             typeof durationMs === 'number' && durationMs > 32 * 60 * 60 * 1000);
         hoisted.enqueueSportsLibReparseHeavyTask.mockResolvedValue(true);
+        hoisted.getUserDeletionGuardState.mockResolvedValue({
+            userExists: true,
+            deletionInProgress: false,
+            shouldSkip: false,
+        });
         hoisted.reparseEventFromOriginalFiles.mockResolvedValue({
             status: 'completed',
             sourceFilesCount: 1,
@@ -125,6 +147,10 @@ describe('processSportsLibReparseTask', () => {
             retryConfig: expect.objectContaining({
                 maxAttempts: 2,
             }),
+            rateLimits: {
+                maxConcurrentDispatches: 1,
+                maxDispatchesPerSecond: 1,
+            },
         });
     });
 
@@ -179,16 +205,114 @@ describe('processSportsLibReparseTask', () => {
 
         await (processSportsLibReparseTask as any)({ data: { jobId: 'job-1' } });
 
-        expect(hoisted.reparseEventFromOriginalFiles).toHaveBeenCalledWith('u1', 'e1', {
+        expect(hoisted.reparseEventFromOriginalFiles).toHaveBeenCalledWith('u1', 'e1', expect.objectContaining({
             mode: 'reimport',
             targetSportsLibVersion: '9.0.99',
-        });
+            beforePersist: expect.any(Function),
+        }));
         expect(hoisted.writeReparseStatus).toHaveBeenCalledWith('u1', 'e1', expect.objectContaining({
             status: 'completed',
             targetSportsLibVersion: '9.0.99',
         }));
         expect(hoisted.jobSet).toHaveBeenCalledWith(expect.objectContaining({
             status: 'completed',
+        }), { merge: true });
+    });
+
+    it('should no-op before reparse writes when the user is missing or deletion is active', async () => {
+        hoisted.getUserDeletionGuardState.mockResolvedValueOnce({
+            userExists: false,
+            deletionInProgress: false,
+            shouldSkip: true,
+        });
+        hoisted.jobGet.mockResolvedValue({
+            exists: true,
+            data: () => ({
+                uid: 'deleted-user',
+                eventId: 'e1',
+                status: 'pending',
+                attemptCount: 0,
+                targetSportsLibVersion: '9.0.99',
+            }),
+        });
+
+        await (processSportsLibReparseTask as any)({ data: { jobId: 'job-1' } });
+
+        expect(hoisted.reparseEventFromOriginalFiles).not.toHaveBeenCalled();
+        expect(hoisted.writeReparseStatus).not.toHaveBeenCalled();
+        expect(hoisted.jobSet).not.toHaveBeenCalled();
+    });
+
+    it('should no-op before persisting reparsed event data when deletion starts mid-run', async () => {
+        hoisted.getUserDeletionGuardState
+            .mockResolvedValueOnce({
+                userExists: true,
+                deletionInProgress: false,
+                shouldSkip: false,
+            })
+            .mockResolvedValueOnce({
+                userExists: false,
+                deletionInProgress: false,
+                shouldSkip: true,
+            });
+        hoisted.jobGet.mockResolvedValue({
+            exists: true,
+            data: () => ({
+                uid: 'deleted-user',
+                eventId: 'e1',
+                status: 'pending',
+                attemptCount: 0,
+                targetSportsLibVersion: '9.0.99',
+            }),
+        });
+        hoisted.reparseEventFromOriginalFiles.mockImplementation(async (_uid, _eventId, options) => {
+            await options.beforePersist();
+            return {
+                status: 'completed',
+                sourceFilesCount: 1,
+                parsedActivitiesCount: 1,
+                staleActivitiesDeleted: 0,
+            };
+        });
+
+        await (processSportsLibReparseTask as any)({ data: { jobId: 'job-1' } });
+
+        expect(hoisted.writeReparseStatus).not.toHaveBeenCalled();
+        expect(hoisted.jobSet).toHaveBeenCalledTimes(1);
+        expect(hoisted.jobSet).toHaveBeenCalledWith(expect.objectContaining({
+            status: 'processing',
+        }), { merge: true });
+    });
+
+    it('should no-op before writing reparse status when deletion starts after parsing', async () => {
+        hoisted.getUserDeletionGuardState
+            .mockResolvedValueOnce({
+                userExists: true,
+                deletionInProgress: false,
+                shouldSkip: false,
+            })
+            .mockResolvedValueOnce({
+                userExists: false,
+                deletionInProgress: false,
+                shouldSkip: true,
+            });
+        hoisted.jobGet.mockResolvedValue({
+            exists: true,
+            data: () => ({
+                uid: 'deleted-user',
+                eventId: 'e1',
+                status: 'pending',
+                attemptCount: 0,
+                targetSportsLibVersion: '9.0.99',
+            }),
+        });
+
+        await (processSportsLibReparseTask as any)({ data: { jobId: 'job-1' } });
+
+        expect(hoisted.writeReparseStatus).not.toHaveBeenCalled();
+        expect(hoisted.jobSet).toHaveBeenCalledTimes(1);
+        expect(hoisted.jobSet).toHaveBeenCalledWith(expect.objectContaining({
+            status: 'processing',
         }), { merge: true });
     });
 
@@ -218,6 +342,29 @@ describe('processSportsLibReparseTask', () => {
         }), { merge: true });
     });
 
+    it('should skip jobs already marked heavy when a normal retry task fires', async () => {
+        hoisted.jobGet.mockResolvedValue({
+            exists: true,
+            data: () => ({
+                uid: 'u1',
+                eventId: 'e1',
+                eventPath: 'users/u1/events/e1',
+                status: 'pending',
+                processingTier: 'heavy',
+                heavyReason: 'manual_admin',
+                attemptCount: 1,
+                targetSportsLibVersion: '9.0.99',
+            }),
+        });
+
+        await (processSportsLibReparseTask as any)({ data: { jobId: 'job-1' } });
+
+        expect(hoisted.reparseEventFromOriginalFiles).not.toHaveBeenCalled();
+        expect(hoisted.writeReparseStatus).not.toHaveBeenCalled();
+        expect(hoisted.enqueueSportsLibReparseHeavyTask).not.toHaveBeenCalled();
+        expect(hoisted.jobSet).not.toHaveBeenCalled();
+    });
+
     it('should process duration-heavy jobs on the heavy worker', async () => {
         hoisted.jobGet.mockResolvedValue({
             exists: true,
@@ -235,10 +382,11 @@ describe('processSportsLibReparseTask', () => {
         await (processSportsLibReparseHeavyTask as any)({ data: { jobId: 'job-1' } });
 
         expect(hoisted.enqueueSportsLibReparseHeavyTask).not.toHaveBeenCalled();
-        expect(hoisted.reparseEventFromOriginalFiles).toHaveBeenCalledWith('u1', 'e1', {
+        expect(hoisted.reparseEventFromOriginalFiles).toHaveBeenCalledWith('u1', 'e1', expect.objectContaining({
             mode: 'reimport',
             targetSportsLibVersion: '9.0.99',
-        });
+            beforePersist: expect.any(Function),
+        }));
         expect(hoisted.jobSet).toHaveBeenCalledWith(expect.objectContaining({
             status: 'processing',
             processingTier: 'heavy',
@@ -259,10 +407,11 @@ describe('processSportsLibReparseTask', () => {
 
         await (processSportsLibReparseTask as any)({ data: { jobId: 'job-1' } });
 
-        expect(hoisted.reparseEventFromOriginalFiles).toHaveBeenCalledWith('u1', 'e1', {
+        expect(hoisted.reparseEventFromOriginalFiles).toHaveBeenCalledWith('u1', 'e1', expect.objectContaining({
             mode: 'reimport',
             targetSportsLibVersion: '9.1.4',
-        });
+            beforePersist: expect.any(Function),
+        }));
     });
 
     it('should persist skipped status when strict reparse returns NO_ORIGINAL_FILES', async () => {
@@ -389,9 +538,10 @@ describe('processSportsLibReparseTask', () => {
 
         await (processSportsLibReparseTask as any)({ data: { jobId: 'job-1' } });
 
-        expect(hoisted.reparseEventFromOriginalFiles).toHaveBeenCalledWith('u1', 'e1', {
+        expect(hoisted.reparseEventFromOriginalFiles).toHaveBeenCalledWith('u1', 'e1', expect.objectContaining({
             mode: 'reimport',
             targetSportsLibVersion: '9.0.99',
-        });
+            beforePersist: expect.any(Function),
+        }));
     });
 });

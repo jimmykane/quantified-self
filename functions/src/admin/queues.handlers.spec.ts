@@ -7,8 +7,18 @@ import {
     mockCollection,
     mockDoc,
     mockEnqueueSportsLibReparseHeavyTask,
+    mockGetAll,
     mockGetCloudTaskQueueDepthForQueue,
 } from './test-utils/admin-test-harness';
+
+function createUserDeletionGuardCollectionMock(collectionName: string) {
+    if (collectionName === 'users' || collectionName === 'userDeletionTombstones') {
+        return {
+            doc: vi.fn((id: string) => ({ path: `${collectionName}/${id}` })),
+        };
+    }
+    return null;
+}
 
 describe('getQueueStats Cloud Function', () => {
     let request: any;
@@ -90,6 +100,10 @@ describe('getQueueStats Cloud Function', () => {
                 })
             })
         });
+        mockGetAll.mockResolvedValue([
+            { exists: true, data: () => ({}) },
+            { exists: false, data: () => undefined },
+        ]);
         request = {
             auth: {
                 uid: 'admin-uid',
@@ -894,12 +908,16 @@ describe('getQueueStats Cloud Function', () => {
     it('should retry failed reparse job on heavy queue', async () => {
         const jobSet = vi.fn().mockResolvedValue(undefined);
         mockCollection.mockImplementation((collectionName: string) => {
+            const guardCollection = createUserDeletionGuardCollectionMock(collectionName);
+            if (guardCollection) {
+                return guardCollection;
+            }
             if (collectionName === 'sportsLibReparseJobs') {
                 return {
                     doc: vi.fn(() => ({
                         get: vi.fn().mockResolvedValue({
                             exists: true,
-                            data: () => ({ status: 'failed' }),
+                            data: () => ({ status: 'failed', uid: 'uid-1' }),
                         }),
                         set: jobSet,
                     })),
@@ -930,12 +948,16 @@ describe('getQueueStats Cloud Function', () => {
     it('should restore failed status when manual heavy retry task is not created', async () => {
         const jobSet = vi.fn().mockResolvedValue(undefined);
         mockCollection.mockImplementation((collectionName: string) => {
+            const guardCollection = createUserDeletionGuardCollectionMock(collectionName);
+            if (guardCollection) {
+                return guardCollection;
+            }
             if (collectionName === 'sportsLibReparseJobs') {
                 return {
                     doc: vi.fn(() => ({
                         get: vi.fn().mockResolvedValue({
                             exists: true,
-                            data: () => ({ status: 'failed' }),
+                            data: () => ({ status: 'failed', uid: 'uid-1' }),
                         }),
                         set: jobSet,
                     })),
@@ -958,6 +980,38 @@ describe('getQueueStats Cloud Function', () => {
             lastError: expect.stringContaining('Manual heavy reparse retry task already exists'),
             enqueuedAt: 'mock-delete',
         }), { merge: true });
+    });
+
+    it('should not enqueue heavy retry when user is missing or deletion is in progress', async () => {
+        const jobSet = vi.fn().mockResolvedValue(undefined);
+        mockCollection.mockImplementation((collectionName: string) => {
+            const guardCollection = createUserDeletionGuardCollectionMock(collectionName);
+            if (guardCollection) {
+                return guardCollection;
+            }
+            if (collectionName === 'sportsLibReparseJobs') {
+                return {
+                    doc: vi.fn(() => ({
+                        get: vi.fn().mockResolvedValue({
+                            exists: true,
+                            data: () => ({ status: 'failed', uid: 'deleted-user' }),
+                        }),
+                        set: jobSet,
+                    })),
+                };
+            }
+            throw new Error(`Unexpected collection ${collectionName}`);
+        });
+        mockGetAll.mockResolvedValueOnce([
+            { exists: false, data: () => undefined },
+            { exists: false, data: () => undefined },
+        ]);
+
+        await expect((retrySportsLibReparseHeavyJob as any)(getAdminRequest({ jobId: 'job-1' })))
+            .rejects.toThrow('User deleted-user is missing or deletion is in progress');
+
+        expect(jobSet).not.toHaveBeenCalled();
+        expect(mockEnqueueSportsLibReparseHeavyTask).not.toHaveBeenCalled();
     });
 
     it('should reject heavy retry when job is not failed', async () => {
