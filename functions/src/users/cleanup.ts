@@ -511,7 +511,7 @@ async function hasConnectedTokenForProviderLookup(
         .where(lookup.tokenField, '==', lookup.providerUserID)
         .get();
     return getSnapshotDocs(snapshot).some((doc) => {
-        if (!tokenSnapshotBelongsToService(doc, lookup.serviceName)) {
+        if (!tokenSnapshotHasServiceName(doc, lookup.serviceName)) {
             return false;
         }
         const tokenOwnerUid = doc.ref.parent.parent?.id;
@@ -519,19 +519,9 @@ async function hasConnectedTokenForProviderLookup(
     });
 }
 
-function serviceTokenCollectionNameForService(serviceName: ServiceNames): string {
-    return getServiceConfig(serviceName).tokenCollectionName;
-}
-
-function tokenSnapshotBelongsToService(doc: admin.firestore.QueryDocumentSnapshot, serviceName: ServiceNames): boolean {
+function tokenSnapshotHasServiceName(doc: admin.firestore.QueryDocumentSnapshot, serviceName: ServiceNames): boolean {
     const data = doc.data() as Record<string, unknown>;
-    const tokenServiceName = asNonEmptyString(data.serviceName);
-    if (tokenServiceName) {
-        return tokenServiceName === serviceName;
-    }
-
-    const tokenRootCollectionName = doc.ref?.parent?.parent?.parent?.id;
-    return tokenRootCollectionName === serviceTokenCollectionNameForService(serviceName);
+    return asNonEmptyString(data.serviceName) === serviceName;
 }
 
 function providerLookupBelongsToUserIdentifiers(lookup: ProviderQueueLookup, identifiers: UserProviderIdentifiers): boolean {

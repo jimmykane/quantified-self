@@ -66,16 +66,6 @@ vi.mock('./queue/cleanup-tombstone', () => ({
   },
 }));
 
-vi.mock('./auth/factory', () => ({
-  getServiceAdapter: vi.fn((serviceName: ServiceNames) => ({
-    tokenCollectionName: serviceName === ServiceNames.SuuntoApp
-      ? 'suuntoAppAccessTokens'
-      : serviceName === ServiceNames.COROSAPI
-        ? 'COROSAPIAccessTokens'
-        : 'garminAPITokens',
-  })),
-}));
-
 import { cleanupProviderOperationalDocsForServiceToken } from './service-operational-cleanup';
 
 function makeDoc(path: string, data: Record<string, unknown>) {
@@ -184,6 +174,42 @@ describe('cleanupProviderOperationalDocsForServiceToken', () => {
     }));
     expect(mockRecursiveDelete).not.toHaveBeenCalledWith(expect.objectContaining({
       path: 'suuntoAppWorkoutQueue/other-user-workout',
+    }));
+  });
+
+  it('does not preserve provider-only docs for token snapshots without serviceName', async () => {
+    activeTokenDocs.push({
+      id: 'token-without-service-name',
+      data: () => ({}),
+      ref: {
+        parent: {
+          parent: {
+            id: 'other-firebase-user',
+            parent: { id: 'suuntoAppAccessTokens' },
+          },
+        },
+      },
+    });
+    setQueryDocs('suuntoAppWorkoutQueue', 'userName', 'suunto-user', [
+      makeDoc('suuntoAppWorkoutQueue/provider-only-workout', { userName: 'suunto-user' }),
+    ]);
+
+    const result = await cleanupProviderOperationalDocsForServiceToken(
+      'firebase-user-123',
+      ServiceNames.SuuntoApp,
+      {
+        serviceName: ServiceNames.SuuntoApp,
+        userName: 'suunto-user',
+      },
+    );
+
+    expect(result).toMatchObject({
+      providerUserId: 'suunto-user',
+      deletedDocCount: 1,
+      skippedForActiveConnection: false,
+    });
+    expect(mockRecursiveDelete).toHaveBeenCalledWith(expect.objectContaining({
+      path: 'suuntoAppWorkoutQueue/provider-only-workout',
     }));
   });
 

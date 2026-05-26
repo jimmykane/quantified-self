@@ -1278,7 +1278,7 @@ describe('cleanupUserAccounts', () => {
             empty: false,
             docs: [{
                 id: 'active-token',
-                data: () => ({}),
+                data: () => ({ serviceName: ServiceNames.SuuntoApp }),
                 ref: {
                     parent: {
                         parent: {
