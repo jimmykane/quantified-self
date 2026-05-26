@@ -695,7 +695,7 @@ describe('scheduleSportsLibReparseScan', () => {
         expect(hoisted.enqueueSportsLibReparseTask).not.toHaveBeenCalled();
     });
 
-    it('should not requeue legacy terminal failed jobs without the terminal marker', async () => {
+    it('should not requeue pre-marker terminal failed jobs without the terminal marker', async () => {
         hoisted.runtimeDefaults.uidAllowlist = ['u1'];
         hoisted.existingJobsById.set('job-1', {
             status: 'failed',
