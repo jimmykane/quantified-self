@@ -15,6 +15,7 @@ import {
     shouldEventBeReparsed,
     writeReparseStatus,
 } from '../reparse/sports-lib-reparse.service';
+import { getUserDeletionGuardState, UserDeletionGuardReadError } from '../shared/user-deletion-guard';
 
 interface ScriptOptions {
     execute: boolean;
@@ -34,6 +35,18 @@ export interface ScriptSummary {
     skippedNoSourceFiles: number;
     completed: number;
     failed: number;
+}
+
+class SportsLibReparseScriptSkippedForUserDeletionError extends Error {
+    readonly name = 'SportsLibReparseScriptSkippedForUserDeletionError';
+
+    constructor(
+        readonly uid: string,
+        readonly eventId: string,
+        readonly phase: string,
+    ) {
+        super(`Skipping sports-lib reparse script candidate ${uid}/${eventId} because the user is missing or deletion is in progress during ${phase}.`);
+    }
 }
 
 function configureFirestoreIgnoreUndefinedProperties(): void {
@@ -72,6 +85,40 @@ async function writeReparseStatusUnlessUserDeleted(
                 phase,
             });
             return false;
+        }
+        throw error;
+    }
+}
+
+async function assertUserDeletionAllowed(uid: string, eventId: string, phase: string): Promise<void> {
+    let deletionGuard;
+    try {
+        deletionGuard = await getUserDeletionGuardState(admin.firestore(), uid);
+    } catch (error) {
+        throw new UserDeletionGuardReadError(uid, `sports_lib_reparse_script:${phase}`, error);
+    }
+
+    if (!deletionGuard.shouldSkip) {
+        return;
+    }
+
+    logger.info('[sports-lib-reparse-script] Skipping candidate because user is missing or deletion is in progress.', {
+        uid,
+        eventId,
+        phase,
+        userExists: deletionGuard.userExists,
+        deletionInProgress: deletionGuard.deletionInProgress,
+    });
+    throw new SportsLibReparseScriptSkippedForUserDeletionError(uid, eventId, phase);
+}
+
+async function shouldSkipForUserDeletion(uid: string, eventId: string, phase: string): Promise<boolean> {
+    try {
+        await assertUserDeletionAllowed(uid, eventId, phase);
+        return false;
+    } catch (error) {
+        if (error instanceof SportsLibReparseScriptSkippedForUserDeletionError) {
+            return true;
         }
         throw error;
     }
@@ -260,6 +307,10 @@ export async function runSportsLibReparseScript(argv: string[]): Promise<ScriptS
             return;
         }
 
+        if (await shouldSkipForUserDeletion(uid, eventId, 'before_execute')) {
+            return;
+        }
+
         let progressOutcome: 'completed' | 'skipped_no_source_files' | 'failed' | 'skipped_user_deletion' = 'failed';
         summary.parsedEvents++;
 
@@ -267,6 +318,7 @@ export async function runSportsLibReparseScript(argv: string[]): Promise<ScriptS
             const result = await reparseEventFromOriginalFiles(uid, eventId, {
                 mode: 'reimport',
                 targetSportsLibVersion,
+                beforePersist: () => assertUserDeletionAllowed(uid, eventId, 'before_persist'),
             });
             if (result.status === 'skipped' && result.reason === SPORTS_LIB_REPARSE_SKIP_REASON_NO_ORIGINAL_FILES) {
                 progressOutcome = 'skipped_no_source_files';
@@ -289,7 +341,8 @@ export async function runSportsLibReparseScript(argv: string[]): Promise<ScriptS
                 }, 'reparse_completed');
             }
         } catch (error) {
-            if (isReparsePersistenceSkippedForUserDeletionError(error)) {
+            if (error instanceof SportsLibReparseScriptSkippedForUserDeletionError
+                || isReparsePersistenceSkippedForUserDeletionError(error)) {
                 progressOutcome = 'skipped_user_deletion';
                 logger.info('[sports-lib-reparse-script] Skipping candidate because user is missing or deletion is in progress.', {
                     uid,

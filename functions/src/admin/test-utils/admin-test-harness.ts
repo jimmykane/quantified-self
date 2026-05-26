@@ -21,6 +21,7 @@ const {
     mockGetCloudTaskQueueDepthForQueue,
     mockEnqueueSportsLibReparseHeavyTask,
     mockGetAll,
+    mockRecursiveDelete,
     mockRunTransaction,
     mockTransactionGet,
     mockTransactionSet,
@@ -34,6 +35,7 @@ const {
     const mockCollection = vi.fn() as any;
     const mockDoc = vi.fn();
     const mockGetAll = vi.fn();
+    const mockRecursiveDelete = vi.fn().mockResolvedValue(undefined);
     const mockTransactionGet = vi.fn(async (ref: any) => {
         if (typeof ref?.get === 'function') {
             return ref.get();
@@ -62,6 +64,7 @@ const {
         collectionGroup: mockCollection,
         doc: mockDoc,
         getAll: mockGetAll,
+        recursiveDelete: mockRecursiveDelete,
         runTransaction: mockRunTransaction,
     }));
 
@@ -126,6 +129,7 @@ const {
         mockGetCloudTaskQueueDepthForQueue,
         mockEnqueueSportsLibReparseHeavyTask,
         mockGetAll,
+        mockRecursiveDelete,
         mockRunTransaction,
         mockTransactionGet,
         mockTransactionSet,
@@ -237,6 +241,7 @@ export {
     mockGetCloudTaskQueueDepthForQueue,
     mockEnqueueSportsLibReparseHeavyTask,
     mockGetAll,
+    mockRecursiveDelete,
     mockRunTransaction,
     mockTransactionGet,
     mockTransactionSet,

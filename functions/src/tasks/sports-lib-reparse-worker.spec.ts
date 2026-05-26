@@ -25,8 +25,14 @@ const hoisted = vi.hoisted(() => {
 
     const jobGet = vi.fn();
     const jobSet = vi.fn().mockResolvedValue(undefined);
-    const jobDoc = { get: jobGet, set: jobSet };
-    const collection = vi.fn(() => ({ doc: vi.fn(() => jobDoc) }));
+    const recursiveDelete = vi.fn().mockResolvedValue(undefined);
+    const collection = vi.fn((collectionName: string) => ({
+        doc: vi.fn((id: string) => ({
+            path: `${collectionName}/${id}`,
+            get: jobGet,
+            set: jobSet,
+        })),
+    }));
     const eventDocGet = vi.fn().mockResolvedValue({ exists: false, data: () => ({}) });
     const doc = vi.fn(() => ({ get: eventDocGet }));
 
@@ -46,6 +52,7 @@ const hoisted = vi.hoisted(() => {
         runtimeDefaults,
         jobGet,
         jobSet,
+        recursiveDelete,
         collection,
         eventDocGet,
         doc,
@@ -94,6 +101,7 @@ vi.mock('firebase-admin', () => {
     const firestoreFn = vi.fn(() => ({
         collection: hoisted.collection,
         doc: hoisted.doc,
+        recursiveDelete: hoisted.recursiveDelete,
     }));
     Object.assign(firestoreFn, {
         FieldValue: {
@@ -245,6 +253,9 @@ describe('processSportsLibReparseTask', () => {
         expect(hoisted.reparseEventFromOriginalFiles).not.toHaveBeenCalled();
         expect(hoisted.writeReparseStatus).not.toHaveBeenCalled();
         expect(hoisted.jobSet).not.toHaveBeenCalled();
+        expect(hoisted.recursiveDelete).toHaveBeenCalledWith(expect.objectContaining({
+            path: 'sportsLibReparseJobs/job-1',
+        }));
     });
 
     it('should no-op before persisting reparsed event data when deletion starts mid-run', async () => {
@@ -286,6 +297,9 @@ describe('processSportsLibReparseTask', () => {
         expect(hoisted.jobSet).toHaveBeenNthCalledWith(1, expect.objectContaining({
             status: 'processing',
         }), { merge: true });
+        expect(hoisted.recursiveDelete).toHaveBeenCalledWith(expect.objectContaining({
+            path: 'sportsLibReparseJobs/job-1',
+        }));
     });
 
     it('should mark job failed before rethrowing deletion guard read errors during reparse', async () => {
@@ -359,6 +373,9 @@ describe('processSportsLibReparseTask', () => {
         expect(hoisted.jobSet).toHaveBeenNthCalledWith(1, expect.objectContaining({
             status: 'processing',
         }), { merge: true });
+        expect(hoisted.recursiveDelete).toHaveBeenCalledWith(expect.objectContaining({
+            path: 'sportsLibReparseJobs/job-1',
+        }));
     });
 
     it('should requeue duration-heavy jobs to the heavy worker without parsing on normal worker', async () => {
@@ -415,6 +432,50 @@ describe('processSportsLibReparseTask', () => {
         }), { merge: true });
     });
 
+    it('should delete duration-heavy jobs when deletion starts before heavy task enqueue', async () => {
+        hoisted.getUserDeletionGuardState
+            .mockResolvedValueOnce({
+                userExists: true,
+                deletionInProgress: false,
+                shouldSkip: false,
+            })
+            .mockResolvedValueOnce({
+                userExists: true,
+                deletionInProgress: false,
+                shouldSkip: false,
+            })
+            .mockResolvedValueOnce({
+                userExists: true,
+                deletionInProgress: true,
+                shouldSkip: true,
+            });
+        hoisted.jobGet.mockResolvedValue({
+            exists: true,
+            data: () => ({
+                uid: 'u1',
+                eventId: 'e1',
+                eventPath: 'users/u1/events/e1',
+                status: 'pending',
+                attemptCount: 0,
+                targetSportsLibVersion: '9.0.99',
+                eventDurationMs: 33 * 60 * 60 * 1000,
+            }),
+        });
+
+        await (processSportsLibReparseTask as any)({ data: { jobId: 'job-1' } });
+
+        expect(hoisted.reparseEventFromOriginalFiles).not.toHaveBeenCalled();
+        expect(hoisted.enqueueSportsLibReparseHeavyTask).not.toHaveBeenCalled();
+        expect(hoisted.jobSet).toHaveBeenCalledWith(expect.objectContaining({
+            status: 'pending',
+            processingTier: 'heavy',
+            heavyReason: 'duration_gt_32h',
+        }), { merge: true });
+        expect(hoisted.recursiveDelete).toHaveBeenCalledWith(expect.objectContaining({
+            path: 'sportsLibReparseJobs/job-1',
+        }));
+    });
+
     it('should no-op before heavy requeue writes when deletion starts after the start check', async () => {
         hoisted.getUserDeletionGuardState
             .mockResolvedValueOnce({
@@ -445,6 +506,9 @@ describe('processSportsLibReparseTask', () => {
         expect(hoisted.reparseEventFromOriginalFiles).not.toHaveBeenCalled();
         expect(hoisted.enqueueSportsLibReparseHeavyTask).not.toHaveBeenCalled();
         expect(hoisted.jobSet).not.toHaveBeenCalled();
+        expect(hoisted.recursiveDelete).toHaveBeenCalledWith(expect.objectContaining({
+            path: 'sportsLibReparseJobs/job-1',
+        }));
     });
 
     it('should mark job failed when the deletion guard cannot be read before heavy requeue', async () => {
@@ -631,6 +695,9 @@ describe('processSportsLibReparseTask', () => {
         expect(hoisted.jobSet).toHaveBeenNthCalledWith(1, expect.objectContaining({
             status: 'processing',
         }), { merge: true });
+        expect(hoisted.recursiveDelete).toHaveBeenCalledWith(expect.objectContaining({
+            path: 'sportsLibReparseJobs/job-1',
+        }));
     });
 
     it('should mark failed before rethrowing deletion guard read errors from failure status writes', async () => {
@@ -692,6 +759,9 @@ describe('processSportsLibReparseTask', () => {
         expect(hoisted.jobSet).toHaveBeenNthCalledWith(1, expect.objectContaining({
             status: 'processing',
         }), { merge: true });
+        expect(hoisted.recursiveDelete).toHaveBeenCalledWith(expect.objectContaining({
+            path: 'sportsLibReparseJobs/job-1',
+        }));
     });
 
     it('should mark failed and suppress retry on target/runtime version mismatch', async () => {

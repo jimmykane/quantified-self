@@ -858,6 +858,39 @@ export const retrySportsLibReparseHeavyJob = onAdminCall<
         return { uid };
     });
 
+    const restoreFailedRetryClaim = async (errorMessage: string): Promise<void> => {
+        await jobRef.set({
+            status: 'failed',
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            lastError: errorMessage,
+            enqueuedAt: admin.firestore.FieldValue.delete(),
+        }, { merge: true });
+    };
+
+    let deletionGuardBeforeEnqueue;
+    try {
+        deletionGuardBeforeEnqueue = await getUserDeletionGuardState(db, claimedRetry.uid);
+    } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : `${error}`;
+        logger.error('[admin/retrySportsLibReparseHeavyJob] Failed to read user deletion guard before enqueue.', {
+            jobId,
+            uid: claimedRetry.uid,
+            error: errorMessage,
+        });
+        await restoreFailedRetryClaim(`Could not verify user deletion state before enqueue: ${errorMessage}`);
+        throw new HttpsError('unavailable', `Could not verify user deletion state for ${claimedRetry.uid}.`);
+    }
+    if (deletionGuardBeforeEnqueue.shouldSkip) {
+        logger.info('[admin/retrySportsLibReparseHeavyJob] Skipping heavy retry enqueue because user is missing or deletion is in progress.', {
+            jobId,
+            uid: claimedRetry.uid,
+            userExists: deletionGuardBeforeEnqueue.userExists,
+            deletionInProgress: deletionGuardBeforeEnqueue.deletionInProgress,
+        });
+        await db.recursiveDelete(jobRef);
+        throw new HttpsError('failed-precondition', `User ${claimedRetry.uid} is missing or deletion is in progress.`);
+    }
+
     try {
         const taskCreated = await enqueueSportsLibReparseHeavyTask(jobId, {
             taskNameSuffix: `${SPORTS_LIB_REPARSE_MANUAL_HEAVY_RETRY_TASK_SUFFIX_PREFIX}-${Date.now()}-${randomUUID()}`,
@@ -880,11 +913,13 @@ export const retrySportsLibReparseHeavyJob = onAdminCall<
         try {
             deletionGuard = await getUserDeletionGuardState(db, claimedRetry.uid);
         } catch (guardError) {
+            const guardErrorMessage = guardError instanceof Error ? guardError.message : `${guardError}`;
             logger.error('[admin/retrySportsLibReparseHeavyJob] Failed to read user deletion guard before restoring failed status.', {
                 jobId,
                 uid: claimedRetry.uid,
-                error: guardError instanceof Error ? guardError.message : `${guardError}`,
+                error: guardErrorMessage,
             });
+            await restoreFailedRetryClaim(`Could not verify user deletion state before restoring failed status: ${guardErrorMessage}`);
             throw new HttpsError('unavailable', `Could not verify user deletion state for ${claimedRetry.uid}.`);
         }
         if (deletionGuard.shouldSkip) {
@@ -894,14 +929,10 @@ export const retrySportsLibReparseHeavyJob = onAdminCall<
                 userExists: deletionGuard.userExists,
                 deletionInProgress: deletionGuard.deletionInProgress,
             });
+            await db.recursiveDelete(jobRef);
             throw new HttpsError('failed-precondition', `User ${claimedRetry.uid} is missing or deletion is in progress.`);
         }
-        await jobRef.set({
-            status: 'failed',
-            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-            lastError: errorMessage,
-            enqueuedAt: admin.firestore.FieldValue.delete(),
-        }, { merge: true });
+        await restoreFailedRetryClaim(errorMessage);
         logger.error('[admin/retrySportsLibReparseHeavyJob] Failed to enqueue heavy retry.', {
             jobId,
             error: errorMessage,

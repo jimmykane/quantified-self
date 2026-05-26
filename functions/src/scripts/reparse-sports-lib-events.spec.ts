@@ -19,6 +19,11 @@ const hoisted = vi.hoisted(() => {
     const writeReparseStatus = vi.fn();
     const isReparsePersistenceSkippedForUserDeletionError = vi.fn((error: unknown) =>
         error instanceof Error && error.name === 'EventWriteSkippedForDeletedUserError');
+    const getUserDeletionGuardState = vi.fn().mockResolvedValue({
+        userExists: true,
+        deletionInProgress: false,
+        shouldSkip: false,
+    });
     const parseUidAndEventIdFromEventPath = vi.fn((path: string) => {
         const parts = path.split('/');
         if (parts.length !== 4 || parts[0] !== 'users' || parts[2] !== 'events') {
@@ -173,6 +178,7 @@ const hoisted = vi.hoisted(() => {
         parseUIDAllowlist,
         writeReparseStatus,
         isReparsePersistenceSkippedForUserDeletionError,
+        getUserDeletionGuardState,
         parseUidAndEventIdFromEventPath,
         runtimeDefaults,
         userEventsByUID,
@@ -206,6 +212,17 @@ vi.mock('../reparse/sports-lib-reparse.service', () => ({
     writeReparseStatus: hoisted.writeReparseStatus,
     isReparsePersistenceSkippedForUserDeletionError: hoisted.isReparsePersistenceSkippedForUserDeletionError,
     parseUidAndEventIdFromEventPath: hoisted.parseUidAndEventIdFromEventPath,
+}));
+
+vi.mock('../shared/user-deletion-guard', () => ({
+    getUserDeletionGuardState: hoisted.getUserDeletionGuardState,
+    UserDeletionGuardReadError: class UserDeletionGuardReadError extends Error {
+        readonly name = 'UserDeletionGuardReadError';
+        constructor(uid: string, phase: string, originalError: unknown) {
+            super(`Could not read deletion guard for user ${uid} during ${phase}.`);
+            this.cause = originalError;
+        }
+    },
 }));
 
 vi.mock('firebase-admin', () => {
@@ -297,6 +314,11 @@ describe('reparse-sports-lib-events script', () => {
 
         hoisted.shouldEventBeReparsed.mockResolvedValue(true);
         hoisted.extractSourceFiles.mockReturnValue([{ path: 'users/u1/events/e1/original.fit' }]);
+        hoisted.getUserDeletionGuardState.mockResolvedValue({
+            userExists: true,
+            deletionInProgress: false,
+            shouldSkip: false,
+        });
         hoisted.reparseEventFromOriginalFiles.mockResolvedValue({
             status: 'completed',
             sourceFilesCount: 1,
@@ -747,6 +769,27 @@ describe('reparse-sports-lib-events script', () => {
         }));
     });
 
+    it('should skip execute parsing when account deletion is active before execution', async () => {
+        const eventRef = createEventRef('u1', 'e1', { originalFile: { path: 'x.fit' } });
+        hoisted.processingDocs.push(createProcessingDoc(eventRef, {
+            sportsLibVersion: '9.0.0',
+            sportsLibVersionCode: 9_000_000,
+        }));
+        hoisted.getUserDeletionGuardState.mockResolvedValueOnce({
+            userExists: true,
+            deletionInProgress: true,
+            shouldSkip: true,
+        });
+
+        const summary = await runSportsLibReparseScript(['--execute']);
+
+        expect(summary.candidates).toBe(1);
+        expect(summary.parsedEvents).toBe(0);
+        expect(summary.failed).toBe(0);
+        expect(hoisted.reparseEventFromOriginalFiles).not.toHaveBeenCalled();
+        expect(hoisted.writeReparseStatus).not.toHaveBeenCalled();
+    });
+
     it('should not count account-deletion persistence skips as reparse failures', async () => {
         const deletionSkipError = new Error('Skipping event write for deleted user.');
         deletionSkipError.name = 'EventWriteSkippedForDeletedUserError';
@@ -760,6 +803,49 @@ describe('reparse-sports-lib-events script', () => {
         const summary = await runSportsLibReparseScript(['--execute']);
 
         expect(summary.parsedEvents).toBe(1);
+        expect(summary.failed).toBe(0);
+        expect(hoisted.writeReparseStatus).not.toHaveBeenCalled();
+        expect(hoisted.loggerInfo).toHaveBeenCalledWith(
+            '[sports-lib-reparse-script] Progress',
+            expect.objectContaining({
+                uid: 'u1',
+                eventId: 'e1',
+                outcome: 'skipped_user_deletion',
+            }),
+        );
+    });
+
+    it('should pass a deletion guard before persisting reparsed data', async () => {
+        const eventRef = createEventRef('u1', 'e1', { originalFile: { path: 'x.fit' } });
+        hoisted.processingDocs.push(createProcessingDoc(eventRef, {
+            sportsLibVersion: '9.0.0',
+            sportsLibVersionCode: 9_000_000,
+        }));
+        hoisted.getUserDeletionGuardState
+            .mockResolvedValueOnce({
+                userExists: true,
+                deletionInProgress: false,
+                shouldSkip: false,
+            })
+            .mockResolvedValueOnce({
+                userExists: false,
+                deletionInProgress: false,
+                shouldSkip: true,
+            });
+        hoisted.reparseEventFromOriginalFiles.mockImplementationOnce(async (_uid, _eventId, options) => {
+            await options.beforePersist();
+            return {
+                status: 'completed',
+                sourceFilesCount: 1,
+                parsedActivitiesCount: 1,
+                staleActivitiesDeleted: 0,
+            };
+        });
+
+        const summary = await runSportsLibReparseScript(['--execute']);
+
+        expect(summary.parsedEvents).toBe(1);
+        expect(summary.completed).toBe(0);
         expect(summary.failed).toBe(0);
         expect(hoisted.writeReparseStatus).not.toHaveBeenCalled();
         expect(hoisted.loggerInfo).toHaveBeenCalledWith(
@@ -817,10 +903,11 @@ describe('reparse-sports-lib-events script', () => {
 
         const summary = await runSportsLibReparseScript(['--execute']);
         expect(summary.completed).toBe(1);
-        expect(hoisted.reparseEventFromOriginalFiles).toHaveBeenCalledWith('u1', 'e1', {
+        expect(hoisted.reparseEventFromOriginalFiles).toHaveBeenCalledWith('u1', 'e1', expect.objectContaining({
             mode: 'reimport',
             targetSportsLibVersion: TARGET_SPORTS_LIB_VERSION,
-        });
+            beforePersist: expect.any(Function),
+        }));
     });
 
     it('should not initialize firebase app when one already exists', async () => {
