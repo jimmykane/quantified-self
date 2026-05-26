@@ -34,6 +34,11 @@ const hoisted = vi.hoisted(() => {
     const enqueueSportsLibReparseTask = vi.fn();
     const enqueueSportsLibReparseHeavyTask = vi.fn();
     const getExpireAtTimestamp = vi.fn(() => 'EXPIRE_TS');
+    const getUserDeletionGuardState = vi.fn().mockResolvedValue({
+        userExists: true,
+        deletionInProgress: false,
+        shouldSkip: false,
+    });
 
     const loggerInfo = vi.fn();
     const loggerWarn = vi.fn();
@@ -195,6 +200,7 @@ const hoisted = vi.hoisted(() => {
         enqueueSportsLibReparseTask,
         enqueueSportsLibReparseHeavyTask,
         getExpireAtTimestamp,
+        getUserDeletionGuardState,
         loggerInfo,
         loggerWarn,
         loggerError,
@@ -239,6 +245,17 @@ vi.mock('../shared/cloud-tasks', () => ({
 vi.mock('../shared/ttl-config', () => ({
     TTL_CONFIG: { SPORTS_LIB_REPARSE_JOBS_IN_DAYS: 30 },
     getExpireAtTimestamp: hoisted.getExpireAtTimestamp,
+}));
+
+vi.mock('../shared/user-deletion-guard', () => ({
+    getUserDeletionGuardState: hoisted.getUserDeletionGuardState,
+    UserDeletionGuardReadError: class UserDeletionGuardReadError extends Error {
+        readonly name = 'UserDeletionGuardReadError';
+        constructor(uid: string, phase: string, originalError: unknown) {
+            super(`Could not read deletion guard for user ${uid} during ${phase}.`);
+            this.cause = originalError;
+        }
+    },
 }));
 
 vi.mock('firebase-functions/logger', () => ({
@@ -361,6 +378,11 @@ describe('scheduleSportsLibReparseScan', () => {
         });
         hoisted.enqueueSportsLibReparseTask.mockResolvedValue(true);
         hoisted.enqueueSportsLibReparseHeavyTask.mockResolvedValue(true);
+        hoisted.getUserDeletionGuardState.mockResolvedValue({
+            userExists: true,
+            deletionInProgress: false,
+            shouldSkip: false,
+        });
     });
 
     it('should short-circuit when runtime flag is disabled', async () => {
@@ -735,6 +757,73 @@ describe('scheduleSportsLibReparseScan', () => {
             status: 'skipped',
             reason: 'NO_ORIGINAL_FILES',
         }));
+        expect(hoisted.enqueueSportsLibReparseTask).not.toHaveBeenCalled();
+    });
+
+    it('should skip missing-source status writes when account deletion is active', async () => {
+        const eventRef = createEventRef('u1', 'e1', {});
+        hoisted.processingDocs.push(createProcessingDoc(eventRef, {
+            sportsLibVersion: '9.0.0',
+            sportsLibVersionCode: 9_000_000,
+        }));
+        hoisted.extractSourceFiles.mockReturnValue([]);
+        hoisted.getUserDeletionGuardState.mockResolvedValueOnce({
+            userExists: true,
+            deletionInProgress: true,
+            shouldSkip: true,
+        });
+
+        await (scheduleSportsLibReparseScan as any)({});
+
+        expect(hoisted.writeReparseStatus).not.toHaveBeenCalled();
+        expect(hoisted.jobSet).not.toHaveBeenCalled();
+        expect(hoisted.enqueueSportsLibReparseTask).not.toHaveBeenCalled();
+    });
+
+    it('should skip job writes and task enqueue when account deletion is active before job creation', async () => {
+        const eventRef = createEventRef('u1', 'e1', { originalFile: { path: 'x.fit' } });
+        hoisted.processingDocs.push(createProcessingDoc(eventRef, {
+            sportsLibVersion: '9.0.0',
+            sportsLibVersionCode: 9_000_000,
+        }));
+        hoisted.getUserDeletionGuardState.mockResolvedValueOnce({
+            userExists: false,
+            deletionInProgress: false,
+            shouldSkip: true,
+        });
+
+        await (scheduleSportsLibReparseScan as any)({});
+
+        expect(hoisted.writeReparseStatus).not.toHaveBeenCalled();
+        expect(hoisted.jobSet).not.toHaveBeenCalled();
+        expect(hoisted.enqueueSportsLibReparseTask).not.toHaveBeenCalled();
+    });
+
+    it('should skip task enqueue when account deletion starts after the job write', async () => {
+        const eventRef = createEventRef('u1', 'e1', { originalFile: { path: 'x.fit' } });
+        hoisted.processingDocs.push(createProcessingDoc(eventRef, {
+            sportsLibVersion: '9.0.0',
+            sportsLibVersionCode: 9_000_000,
+        }));
+        hoisted.getUserDeletionGuardState
+            .mockResolvedValueOnce({
+                userExists: true,
+                deletionInProgress: false,
+                shouldSkip: false,
+            })
+            .mockResolvedValueOnce({
+                userExists: true,
+                deletionInProgress: true,
+                shouldSkip: true,
+            });
+
+        await (scheduleSportsLibReparseScan as any)({});
+
+        expect(hoisted.jobSet).toHaveBeenCalledWith(
+            'job-1',
+            expect.objectContaining({ status: 'pending' }),
+            { merge: true },
+        );
         expect(hoisted.enqueueSportsLibReparseTask).not.toHaveBeenCalled();
     });
 

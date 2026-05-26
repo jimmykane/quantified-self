@@ -278,13 +278,9 @@ describe('processSportsLibReparseTask', () => {
         await (processSportsLibReparseTask as any)({ data: { jobId: 'job-1' } });
 
         expect(hoisted.writeReparseStatus).not.toHaveBeenCalled();
-        expect(hoisted.jobSet).toHaveBeenCalledTimes(2);
+        expect(hoisted.jobSet).toHaveBeenCalledTimes(1);
         expect(hoisted.jobSet).toHaveBeenNthCalledWith(1, expect.objectContaining({
             status: 'processing',
-        }), { merge: true });
-        expect(hoisted.jobSet).toHaveBeenNthCalledWith(2, expect.objectContaining({
-            status: 'completed',
-            lastError: 'DELETE_FIELD',
         }), { merge: true });
     });
 
@@ -355,13 +351,9 @@ describe('processSportsLibReparseTask', () => {
         await (processSportsLibReparseTask as any)({ data: { jobId: 'job-1' } });
 
         expect(hoisted.writeReparseStatus).not.toHaveBeenCalled();
-        expect(hoisted.jobSet).toHaveBeenCalledTimes(2);
+        expect(hoisted.jobSet).toHaveBeenCalledTimes(1);
         expect(hoisted.jobSet).toHaveBeenNthCalledWith(1, expect.objectContaining({
             status: 'processing',
-        }), { merge: true });
-        expect(hoisted.jobSet).toHaveBeenNthCalledWith(2, expect.objectContaining({
-            status: 'completed',
-            lastError: 'DELETE_FIELD',
         }), { merge: true });
     });
 
@@ -638,12 +630,9 @@ describe('processSportsLibReparseTask', () => {
         await (processSportsLibReparseTask as any)({ data: { jobId: 'job-1' } });
 
         expect(hoisted.writeReparseStatus).not.toHaveBeenCalled();
+        expect(hoisted.jobSet).toHaveBeenCalledTimes(1);
         expect(hoisted.jobSet).toHaveBeenNthCalledWith(1, expect.objectContaining({
             status: 'processing',
-        }), { merge: true });
-        expect(hoisted.jobSet).toHaveBeenNthCalledWith(2, expect.objectContaining({
-            status: 'completed',
-            lastError: 'DELETE_FIELD',
         }), { merge: true });
     });
 

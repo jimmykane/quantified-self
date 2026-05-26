@@ -22,6 +22,7 @@ import {
 import { enqueueSportsLibReparseHeavyTask, enqueueSportsLibReparseTask } from '../shared/cloud-tasks';
 import { getExpireAtTimestamp, TTL_CONFIG } from '../shared/ttl-config';
 import { FUNCTIONS_MANIFEST } from '../../../shared/functions-manifest';
+import { getUserDeletionGuardState, UserDeletionGuardReadError } from '../shared/user-deletion-guard';
 
 const SPORTS_LIB_REPARSE_SCAN_CONCURRENCY = 25;
 const SPORTS_LIB_REPARSE_TARGET_ENQUEUE_RPS = 12;
@@ -71,6 +72,31 @@ function toErrorMessage(error: unknown): string {
         return error.message;
     }
     return `${error}`;
+}
+
+async function shouldSkipForUserDeletion(
+    db: admin.firestore.Firestore,
+    uid: string,
+    eventId: string,
+    phase: string,
+): Promise<boolean> {
+    try {
+        const deletionGuard = await getUserDeletionGuardState(db, uid);
+        if (!deletionGuard.shouldSkip) {
+            return false;
+        }
+
+        logger.info('[sports-lib-reparse] Skipping candidate because user is missing or deletion is in progress.', {
+            uid,
+            eventId,
+            phase,
+            userExists: deletionGuard.userExists,
+            deletionInProgress: deletionGuard.deletionInProgress,
+        });
+        return true;
+    } catch (error) {
+        throw new UserDeletionGuardReadError(uid, `sports_lib_reparse_scheduler:${phase}`, error);
+    }
 }
 
 function shouldSkipBecauseNoOriginalFilesForTarget(
@@ -229,6 +255,10 @@ export const scheduleSportsLibReparseScan = onSchedule({
 
             const sourceFiles = extractSourceFiles(eventData);
             if (sourceFiles.length === 0) {
+                if (await shouldSkipForUserDeletion(db, uid, eventId, 'before_no_source_status_write')) {
+                    return;
+                }
+
                 await writeReparseStatus(uid, eventId, {
                     status: 'skipped',
                     reason: SPORTS_LIB_REPARSE_SKIP_REASON_NO_ORIGINAL_FILES,
@@ -265,6 +295,10 @@ export const scheduleSportsLibReparseScan = onSchedule({
                 expireAt: getExpireAtTimestamp(TTL_CONFIG.SPORTS_LIB_REPARSE_JOBS_IN_DAYS),
             };
 
+            if (await shouldSkipForUserDeletion(db, uid, eventId, 'before_job_write')) {
+                return;
+            }
+
             await jobRef.set({
                 ...basePayload,
                 ...(routingDecision.heavyReason ? {} : { heavyReason: admin.firestore.FieldValue.delete() }),
@@ -274,6 +308,10 @@ export const scheduleSportsLibReparseScan = onSchedule({
             }, { merge: true });
 
             try {
+                if (await shouldSkipForUserDeletion(db, uid, eventId, 'before_task_enqueue')) {
+                    return;
+                }
+
                 const enqueueDelaySeconds = calculateEnqueueDelaySeconds(
                     enqueueAttemptSequence,
                     settings.enqueueLimit,
@@ -291,6 +329,9 @@ export const scheduleSportsLibReparseScan = onSchedule({
                 }
             } catch (error) {
                 const errorMessage = toErrorMessage(error);
+                if (await shouldSkipForUserDeletion(db, uid, eventId, 'before_enqueue_failure_write')) {
+                    return;
+                }
                 await jobRef.set({
                     status: 'failed',
                     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
