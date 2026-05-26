@@ -17,6 +17,22 @@ const hoisted = vi.hoisted(() => {
         delete: mockBatchDelete,
         commit: mockBatchCommit,
     }));
+    const mockTransactionSet = vi.fn(async (ref: any, payload: Record<string, unknown>, options?: Record<string, unknown>) => {
+        if (typeof ref?.set === 'function') {
+            await ref.set(payload, options);
+        }
+    });
+    const mockTransactionDelete = vi.fn();
+    const mockRunTransaction = vi.fn(async (callback: any) => callback({
+        set: mockTransactionSet,
+        delete: mockTransactionDelete,
+        get: vi.fn().mockResolvedValue({ exists: true, data: () => ({}) }),
+    }));
+    const mockGetUserDeletionGuardStateInTransaction = vi.fn().mockResolvedValue({
+        userExists: true,
+        deletionInProgress: false,
+        shouldSkip: false,
+    });
 
     const mockDownload = vi.fn();
     const mockFile = vi.fn(() => ({ download: mockDownload }));
@@ -55,6 +71,10 @@ const hoisted = vi.hoisted(() => {
         mockBatch,
         mockBatchDelete,
         mockBatchCommit,
+        mockTransactionSet,
+        mockTransactionDelete,
+        mockRunTransaction,
+        mockGetUserDeletionGuardStateInTransaction,
         mockDownload,
         mockFile,
         mockBucket,
@@ -97,6 +117,7 @@ vi.mock('firebase-admin', () => {
         collection: hoisted.mockCollection,
         doc: hoisted.mockDoc,
         batch: hoisted.mockBatch,
+        runTransaction: hoisted.mockRunTransaction,
     }));
     Object.assign(firestoreFn, {
         FieldValue: {
@@ -153,6 +174,17 @@ vi.mock('../shared/event-writer', () => ({
             writeAllEventData: (...args: any[]) => hoisted.mockWriteAllEventData(...args),
         };
     }),
+}));
+
+vi.mock('../shared/user-deletion-guard', () => ({
+    getUserDeletionGuardStateInTransaction: hoisted.mockGetUserDeletionGuardStateInTransaction,
+    UserDeletionGuardReadError: class UserDeletionGuardReadError extends Error {
+        readonly name = 'UserDeletionGuardReadError';
+        constructor(uid: string, phase: string, originalError: unknown) {
+            super(`Could not read deletion guard for user ${uid} during ${phase}.`);
+            this.cause = originalError;
+        }
+    },
 }));
 
 vi.mock('../shared/id-generator', () => ({
@@ -219,6 +251,21 @@ describe('sports-lib-reparse.service', () => {
     beforeEach(() => {
         vi.clearAllMocks();
         hoisted.eventWriterCtorArgs.length = 0;
+        hoisted.mockGetUserDeletionGuardStateInTransaction.mockResolvedValue({
+            userExists: true,
+            deletionInProgress: false,
+            shouldSkip: false,
+        });
+        hoisted.mockRunTransaction.mockImplementation(async (callback: any) => callback({
+            set: hoisted.mockTransactionSet,
+            delete: hoisted.mockTransactionDelete,
+            get: vi.fn().mockResolvedValue({ exists: true, data: () => ({}) }),
+        }));
+        hoisted.mockTransactionSet.mockImplementation(async (ref: any, payload: Record<string, unknown>, options?: Record<string, unknown>) => {
+            if (typeof ref?.set === 'function') {
+                await ref.set(payload, options);
+            }
+        });
 
         hoisted.mockDoc.mockImplementation(() => ({
             get: vi.fn().mockResolvedValue({ exists: true, data: () => ({}) }),
@@ -1103,8 +1150,10 @@ describe('sports-lib-reparse.service', () => {
         );
 
         expect(result.staleActivitiesDeleted).toBe(1);
-        expect(hoisted.mockBatchDelete).toHaveBeenCalledTimes(1);
-        expect(hoisted.mockBatchCommit).toHaveBeenCalledTimes(1);
+        expect(hoisted.mockTransactionDelete).toHaveBeenCalledTimes(1);
+        expect(hoisted.mockTransactionDelete).toHaveBeenCalledWith(expect.objectContaining({
+            path: 'users/u1/activities/a2',
+        }));
         const processingCall = setCalls.find(call => call.path.includes('/metaData/processing'));
         expect(processingCall).toBeTruthy();
         expect(processingCall?.payload).toEqual(expect.objectContaining({
@@ -1177,6 +1226,7 @@ describe('sports-lib-reparse.service', () => {
         expect(result.staleActivitiesDeleted).toBe(0);
         expect(hoisted.mockBatchDelete).not.toHaveBeenCalled();
         expect(hoisted.mockBatchCommit).not.toHaveBeenCalled();
+        expect(hoisted.mockTransactionDelete).not.toHaveBeenCalled();
     });
 
     it('persistReparsedEvent should wire working firestore/log adapters into EventWriter', async () => {
@@ -1230,6 +1280,97 @@ describe('sports-lib-reparse.service', () => {
         );
 
         expect(hoisted.mockDoc).toHaveBeenCalledWith('users/u1/events/e1');
+        expect(hoisted.mockGetUserDeletionGuardStateInTransaction).toHaveBeenCalled();
+        expect(hoisted.mockTransactionSet).toHaveBeenCalledWith(
+            expect.objectContaining({ path: 'users/u1/events/e1' }),
+            { probe: true },
+            undefined,
+        );
+    });
+
+    it('persistReparsedEvent should skip adapter writes when account deletion starts inside persistence', async () => {
+        hoisted.mockDoc.mockImplementation((path: string) => ({
+            path,
+            set: vi.fn().mockResolvedValue(undefined),
+            get: vi.fn().mockResolvedValue({ exists: true, data: () => ({}) }),
+        }));
+        hoisted.mockGetUserDeletionGuardStateInTransaction.mockResolvedValueOnce({
+            userExists: true,
+            deletionInProgress: true,
+            shouldSkip: true,
+        });
+        hoisted.mockWriteAllEventData.mockImplementationOnce(async () => {
+            const ctorArgs = hoisted.eventWriterCtorArgs.at(-1);
+            await ctorArgs!.adapter.setDoc(['users', 'u1', 'events', 'e1'], { probe: true });
+        });
+
+        await expect(persistReparsedEvent(
+            'u1',
+            'e1',
+            {
+                setID: vi.fn(),
+                getActivities: vi.fn(() => [{ getID: () => 'a1' }]),
+            } as any,
+            {},
+            [{ id: 'a1', data: () => ({}) } as any],
+            TARGET_SPORTS_LIB_VERSION,
+        )).rejects.toMatchObject({
+            name: 'EventWriteSkippedForDeletedUserError',
+        });
+
+        expect(hoisted.mockTransactionSet).not.toHaveBeenCalled();
+        expect(hoisted.mockTransactionDelete).not.toHaveBeenCalled();
+    });
+
+    it('persistReparsedEvent should skip stale activity deletes when account deletion starts before cleanup', async () => {
+        hoisted.mockGetUserDeletionGuardStateInTransaction.mockResolvedValueOnce({
+            userExists: false,
+            deletionInProgress: false,
+            shouldSkip: true,
+        });
+
+        await expect(persistReparsedEvent(
+            'u1',
+            'e1',
+            {
+                setID: vi.fn(),
+                getActivities: vi.fn(() => [{ getID: () => 'a1' }]),
+            } as any,
+            {},
+            [
+                { id: 'a1', data: () => ({}) } as any,
+                { id: 'a2', data: () => ({}) } as any,
+            ],
+            TARGET_SPORTS_LIB_VERSION,
+        )).rejects.toMatchObject({
+            name: 'EventWriteSkippedForDeletedUserError',
+        });
+
+        expect(hoisted.mockTransactionDelete).not.toHaveBeenCalled();
+    });
+
+    it('persistReparsedEvent should skip processing metadata when account deletion starts after activity cleanup', async () => {
+        hoisted.mockGetUserDeletionGuardStateInTransaction.mockResolvedValueOnce({
+            userExists: true,
+            deletionInProgress: true,
+            shouldSkip: true,
+        });
+
+        await expect(persistReparsedEvent(
+            'u1',
+            'e1',
+            {
+                setID: vi.fn(),
+                getActivities: vi.fn(() => [{ getID: () => 'a1' }]),
+            } as any,
+            {},
+            [{ id: 'a1', data: () => ({}) } as any],
+            TARGET_SPORTS_LIB_VERSION,
+        )).rejects.toMatchObject({
+            name: 'EventWriteSkippedForDeletedUserError',
+        });
+
+        expect(hoisted.mockTransactionSet).not.toHaveBeenCalled();
     });
 
     it('shouldEventBeReparsed should apply semver-based candidate logic', async () => {
