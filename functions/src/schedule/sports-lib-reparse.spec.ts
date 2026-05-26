@@ -1060,6 +1060,71 @@ describe('scheduleSportsLibReparseScan', () => {
         );
     });
 
+    it('should mark job as failed when task creation returns false', async () => {
+        const eventRef = createEventRef('u1', 'e1', { originalFile: { path: 'x.fit' } });
+        hoisted.processingDocs.push(createProcessingDoc(eventRef, {
+            sportsLibVersion: '9.0.0',
+            sportsLibVersionCode: 9_000_000,
+        }));
+        hoisted.enqueueSportsLibReparseTask.mockResolvedValueOnce(false);
+
+        await (scheduleSportsLibReparseScan as any)({});
+
+        expect(hoisted.jobSet).toHaveBeenNthCalledWith(
+            1,
+            'job-1',
+            expect.objectContaining({ status: 'pending' }),
+            { merge: true },
+        );
+        expect(hoisted.jobSet).toHaveBeenNthCalledWith(
+            2,
+            'job-1',
+            expect.objectContaining({
+                status: 'failed',
+                lastError: 'Cloud Task was not created because a task name already exists for job job-1.',
+                enqueuedAt: 'DELETE_FIELD',
+            }),
+            { merge: true },
+        );
+    });
+
+    it('should delete pending job when deletion starts after task creation returns false', async () => {
+        const eventRef = createEventRef('u1', 'e1', { originalFile: { path: 'x.fit' } });
+        hoisted.processingDocs.push(createProcessingDoc(eventRef, {
+            sportsLibVersion: '9.0.0',
+            sportsLibVersionCode: 9_000_000,
+        }));
+        hoisted.enqueueSportsLibReparseTask.mockResolvedValueOnce(false);
+        hoisted.getUserDeletionGuardState
+            .mockResolvedValueOnce({
+                userExists: true,
+                deletionInProgress: false,
+                shouldSkip: false,
+            })
+            .mockResolvedValueOnce({
+                userExists: true,
+                deletionInProgress: false,
+                shouldSkip: false,
+            })
+            .mockResolvedValueOnce({
+                userExists: true,
+                deletionInProgress: true,
+                shouldSkip: true,
+            });
+
+        await (scheduleSportsLibReparseScan as any)({});
+
+        expect(hoisted.jobSet).toHaveBeenCalledTimes(1);
+        expect(hoisted.jobSet).toHaveBeenCalledWith(
+            'job-1',
+            expect.objectContaining({ status: 'pending' }),
+            { merge: true },
+        );
+        expect(hoisted.recursiveDelete).toHaveBeenCalledWith(expect.objectContaining({
+            path: 'sportsLibReparseJobs/job-1',
+        }));
+    });
+
     it('should delete pending job when deletion starts after enqueue failure', async () => {
         const eventRef = createEventRef('u1', 'e1', { originalFile: { path: 'x.fit' } });
         hoisted.processingDocs.push(createProcessingDoc(eventRef, {

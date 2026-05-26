@@ -404,8 +404,61 @@ describe('processSportsLibReparseTask', () => {
         }), { merge: true });
     });
 
-    it('should leave duration-heavy jobs pending when the heavy task already exists', async () => {
+    it('should mark duration-heavy jobs failed when the heavy task is not created', async () => {
         hoisted.enqueueSportsLibReparseHeavyTask.mockResolvedValueOnce(false);
+        hoisted.jobGet.mockResolvedValue({
+            exists: true,
+            data: () => ({
+                uid: 'u1',
+                eventId: 'e1',
+                eventPath: 'users/u1/events/e1',
+                status: 'pending',
+                attemptCount: 0,
+                targetSportsLibVersion: '9.0.99',
+                eventDurationMs: 33 * 60 * 60 * 1000,
+            }),
+        });
+
+        await (processSportsLibReparseTask as any)({ data: { jobId: 'job-1' } });
+
+        expect(hoisted.reparseEventFromOriginalFiles).not.toHaveBeenCalled();
+        expect(hoisted.enqueueSportsLibReparseHeavyTask).toHaveBeenCalledWith('job-1');
+        expect(hoisted.jobSet).toHaveBeenNthCalledWith(1, expect.objectContaining({
+            status: 'pending',
+            processingTier: 'heavy',
+            heavyReason: 'duration_gt_32h',
+            eventDurationMs: 33 * 60 * 60 * 1000,
+        }), { merge: true });
+        expect(hoisted.jobSet).toHaveBeenNthCalledWith(2, expect.objectContaining({
+            status: 'failed',
+            lastError: 'Heavy reparse task was not created because a task name already exists for job job-1.',
+            enqueuedAt: 'DELETE_FIELD',
+        }), { merge: true });
+    });
+
+    it('should delete duration-heavy jobs when deletion starts after heavy task is not created', async () => {
+        hoisted.enqueueSportsLibReparseHeavyTask.mockResolvedValueOnce(false);
+        hoisted.getUserDeletionGuardState
+            .mockResolvedValueOnce({
+                userExists: true,
+                deletionInProgress: false,
+                shouldSkip: false,
+            })
+            .mockResolvedValueOnce({
+                userExists: true,
+                deletionInProgress: false,
+                shouldSkip: false,
+            })
+            .mockResolvedValueOnce({
+                userExists: true,
+                deletionInProgress: false,
+                shouldSkip: false,
+            })
+            .mockResolvedValueOnce({
+                userExists: true,
+                deletionInProgress: true,
+                shouldSkip: true,
+            });
         hoisted.jobGet.mockResolvedValue({
             exists: true,
             data: () => ({
@@ -428,8 +481,10 @@ describe('processSportsLibReparseTask', () => {
             status: 'pending',
             processingTier: 'heavy',
             heavyReason: 'duration_gt_32h',
-            eventDurationMs: 33 * 60 * 60 * 1000,
         }), { merge: true });
+        expect(hoisted.recursiveDelete).toHaveBeenCalledWith(expect.objectContaining({
+            path: 'sportsLibReparseJobs/job-1',
+        }));
     });
 
     it('should delete duration-heavy jobs when deletion starts before heavy task enqueue', async () => {

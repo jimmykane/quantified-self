@@ -368,6 +368,25 @@ export const scheduleSportsLibReparseScan = onSchedule({
                     : await enqueueTask(jobId);
                 if (taskCreated) {
                     enqueuedCount++;
+                } else {
+                    const errorMessage = `Cloud Task was not created because a task name already exists for job ${jobId}.`;
+                    if (await shouldSkipForUserDeletion(db, uid, eventId, 'before_task_not_created_write')) {
+                        await deleteReparseJobForUserDeletion(db, jobRef, jobId, uid, eventId, 'before_task_not_created_write');
+                        return;
+                    }
+                    await jobRef.set({
+                        status: 'failed',
+                        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+                        lastError: errorMessage,
+                        enqueuedAt: admin.firestore.FieldValue.delete(),
+                    }, { merge: true });
+                    logger.warn('[sports-lib-reparse] Marked job failed because task creation returned false.', {
+                        jobId,
+                        uid,
+                        eventId,
+                        processingTier: routingDecision.processingTier,
+                        error: errorMessage,
+                    });
                 }
             } catch (error) {
                 const errorMessage = toErrorMessage(error);

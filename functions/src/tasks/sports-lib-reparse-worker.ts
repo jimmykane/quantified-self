@@ -212,6 +212,30 @@ async function requeueHeavyFromNormalWorker(
         throw error;
     }
 
+    if (!taskCreated) {
+        const errorMessage = `Heavy reparse task was not created because a task name already exists for job ${jobId}.`;
+        try {
+            if (await shouldSkipForUserDeletion(job, jobId, 'before_heavy_task_not_created_write')) {
+                await deleteForUserDeletion('before_heavy_task_not_created_write');
+                return;
+            }
+        } catch (error) {
+            if (isUserDeletionGuardReadError(error)) {
+                await markJobFailed(jobRef, getErrorMessage(error), { clearEnqueuedAt: true });
+            }
+            throw error;
+        }
+        await markJobFailed(jobRef, errorMessage, { clearEnqueuedAt: true });
+        logger.warn('[sports-lib-reparse-worker] Marked heavy-routed job failed because task creation returned false.', {
+            jobId,
+            uid: job.uid,
+            eventId: job.eventId,
+            eventDurationMs,
+            error: errorMessage,
+        });
+        return;
+    }
+
     logger.info('[sports-lib-reparse-worker] Requeued long-duration job to heavy worker.', {
         jobId,
         uid: job.uid,
