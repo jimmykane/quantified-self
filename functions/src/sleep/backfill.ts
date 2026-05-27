@@ -24,6 +24,10 @@ import { addSleepSyncQueueItem } from './queue';
 import { updateSleepSyncState } from './writer';
 import * as requestPromise from '../request-helper';
 import { GARMIN_API_TOKENS_COLLECTION_NAME } from '../garmin/constants';
+import {
+    getUserDeletionGuardStateInTransaction,
+    UserDeletionGuardReadError,
+} from '../shared/user-deletion-guard';
 
 const GARMIN_SLEEP_BACKFILL_URI = 'https://apis.garmin.com/wellness-api/rest/backfill/sleeps';
 
@@ -181,9 +185,24 @@ async function claimSleepBackfillCooldown(
     startMs: number,
     endMs: number,
     nextAllowedAtMs: number,
-): Promise<void> {
-    const stateRef = sleepSyncStateRef(userID, provider);
-    await admin.firestore().runTransaction(async (transaction) => {
+): Promise<boolean> {
+    const db = admin.firestore();
+    const stateRef = db.collection('users')
+        .doc(userID)
+        .collection(SLEEP_SYNC_STATE_COLLECTION_ID)
+        .doc(provider);
+    return db.runTransaction(async (transaction) => {
+        let deletionGuard;
+        try {
+            deletionGuard = await getUserDeletionGuardStateInTransaction(db, transaction, userID);
+        } catch (error) {
+            throw new UserDeletionGuardReadError(userID, 'sleep_backfill_cooldown_claim', error);
+        }
+        if (deletionGuard.shouldSkip) {
+            logger.warn(`[SleepBackfill] Skipping ${provider} sleep backfill cooldown claim for ${userID} because the user is missing or deletion is in progress.`);
+            return false;
+        }
+
         const stateSnapshot = await transaction.get(stateRef);
         const state = stateSnapshot.exists ? stateSnapshot.data() as SleepSyncState : null;
         const existingNextAllowedAtMs = Number(state?.nextBackfillAllowedAtMs);
@@ -202,6 +221,7 @@ async function claimSleepBackfillCooldown(
             lastError: null,
             updatedAtMs: endMs,
         }, { merge: true });
+        return true;
     });
 }
 
@@ -229,6 +249,94 @@ function getConfiguredSleepBackfillCooldownMs(provider: SleepProvider, providerL
     return cooldownMs;
 }
 
+function valueToEpochMs(value: unknown): number | null {
+    if (typeof value === 'number' && Number.isFinite(value)) {
+        return value > 10_000_000_000 ? Math.floor(value) : Math.floor(value * 1000);
+    }
+
+    if (typeof value !== 'string') {
+        return null;
+    }
+
+    const trimmed = value.trim();
+    if (!trimmed) {
+        return null;
+    }
+
+    if (/^\d{10,13}$/.test(trimmed)) {
+        const numericValue = Number(trimmed);
+        return numericValue > 10_000_000_000 ? numericValue : numericValue * 1000;
+    }
+
+    const parsedMs = Date.parse(trimmed);
+    return Number.isFinite(parsedMs) ? parsedMs : null;
+}
+
+function findNestedValue(
+    record: unknown,
+    fieldNames: readonly string[],
+    visited = new Set<object>(),
+    depth = 0,
+): unknown {
+    if (!record || typeof record !== 'object' || depth > 8) {
+        return undefined;
+    }
+    if (visited.has(record)) {
+        return undefined;
+    }
+    visited.add(record);
+
+    const objectRecord = record as Record<string, unknown>;
+    for (const fieldName of fieldNames) {
+        if (objectRecord[fieldName] !== undefined) {
+            return objectRecord[fieldName];
+        }
+    }
+
+    for (const value of Object.values(objectRecord)) {
+        const nestedValue = findNestedValue(value, fieldNames, visited, depth + 1);
+        if (nestedValue !== undefined) {
+            return nestedValue;
+        }
+    }
+
+    return undefined;
+}
+
+function extractGarminMinStartTimeMs(error: unknown): number | null {
+    const structuredValue = findNestedValue(error, [
+        'minStartTimeInSeconds',
+        'minimumStartTimeInSeconds',
+        'earliestStartTimeInSeconds',
+        'minStartTime',
+        'minimumStartTime',
+        'earliestStartTime',
+    ]);
+    const structuredMs = valueToEpochMs(structuredValue);
+    if (structuredMs !== null) {
+        return structuredMs;
+    }
+
+    let serializedError = '';
+    try {
+        serializedError = JSON.stringify(error) || '';
+    } catch (_) {
+        serializedError = '';
+    }
+    const message = [
+        error instanceof Error ? error.message : '',
+        serializedError,
+    ].filter(Boolean).join(' ');
+    const numericMatch = message.match(/(?:min(?:imum)? start time|earliest start time)[^\d]*(\d{10,13})/i);
+    const numericMs = valueToEpochMs(numericMatch?.[1]);
+    if (numericMs !== null) {
+        return numericMs;
+    }
+
+    const isoMatch = message.match(/(?:min(?:imum)? start time|earliest start time)[^0-9]*(\d{4}-\d{2}-\d{2}(?:[T ][0-9:.+-Z]*)?)/i);
+    return valueToEpochMs(isoMatch?.[1]);
+}
+
 async function requestGarminSleepBackfillWindow(
     token: GarminSleepBackfillToken,
     window: SleepBackfillWindow,
@@ -243,6 +351,17 @@ async function requestGarminSleepBackfillWindow(
         return true;
     } catch (error: any) {
         if (error?.statusCode === 400 && `${error?.error?.error?.errorMessage || ''}`.includes('before min start time')) {
+            const minStartMs = extractGarminMinStartTimeMs(error);
+            if (minStartMs !== null && minStartMs > window.startMs && minStartMs < window.endMs) {
+                logger.warn(`[SleepBackfill] Retrying Garmin sleep backfill window from provider min start time ${new Date(minStartMs).toISOString()}: ${error.error.error.errorMessage}`);
+                await requestPromise.get({
+                    headers: {
+                        Authorization: `Bearer ${token.accessToken}`,
+                    },
+                    url: `${GARMIN_SLEEP_BACKFILL_URI}?summaryStartTimeInSeconds=${Math.floor(minStartMs / 1000)}&summaryEndTimeInSeconds=${Math.floor(window.endMs / 1000)}`,
+                });
+                return true;
+            }
             logger.warn(`[SleepBackfill] Skipping Garmin sleep backfill window before min start time: ${error.error.error.errorMessage}`);
             return false;
         }
@@ -290,7 +409,10 @@ export const backfillSuuntoAppSleep = onCall({
 
     const windows = chunkSleepBackfillRange(startMs, nowMs, windowDays);
     const nextAllowedAtMs = nowMs + getConfiguredSleepBackfillCooldownMs(SLEEP_PROVIDERS.SuuntoApp, 'Suunto');
-    await claimSleepBackfillCooldown(userID, SLEEP_PROVIDERS.SuuntoApp, startMs, nowMs, nextAllowedAtMs);
+    const cooldownClaimed = await claimSleepBackfillCooldown(userID, SLEEP_PROVIDERS.SuuntoApp, startMs, nowMs, nextAllowedAtMs);
+    if (!cooldownClaimed) {
+        throw new HttpsError('failed-precondition', 'Sleep backfill is not available while account deletion is in progress.');
+    }
 
     let queued = 0;
     try {
@@ -311,6 +433,7 @@ export const backfillSuuntoAppSleep = onCall({
         logger.error(`[SleepBackfill] Failed after queueing ${queued} Suunto sleep windows for ${userID}`, error);
         await updateSleepSyncState(userID, SLEEP_PROVIDERS.SuuntoApp, {
             status: SLEEP_SYNC_STATUSES.Failed,
+            lastBackfillQueuedAtMs: null,
             lastBackfillQueueItems: queued,
             nextBackfillAllowedAtMs: null,
             lastError: message,
@@ -373,7 +496,10 @@ export const backfillGarminAPISleep = onCall({
     const windowDays = getConfiguredSleepBackfillWindowDays(SLEEP_PROVIDERS.GarminAPI, 'Garmin');
     const windows = chunkSleepBackfillRange(startMs, nowMs, windowDays);
     const nextAllowedAtMs = nowMs + getConfiguredSleepBackfillCooldownMs(SLEEP_PROVIDERS.GarminAPI, 'Garmin');
-    await claimSleepBackfillCooldown(userID, SLEEP_PROVIDERS.GarminAPI, startMs, nowMs, nextAllowedAtMs);
+    const cooldownClaimed = await claimSleepBackfillCooldown(userID, SLEEP_PROVIDERS.GarminAPI, startMs, nowMs, nextAllowedAtMs);
+    if (!cooldownClaimed) {
+        throw new HttpsError('failed-precondition', 'Sleep backfill is not available while account deletion is in progress.');
+    }
 
     let requested = 0;
     try {
@@ -387,6 +513,7 @@ export const backfillGarminAPISleep = onCall({
         logger.error(`[SleepBackfill] Failed after requesting ${requested} Garmin sleep windows for ${userID}`, error);
         await updateSleepSyncState(userID, SLEEP_PROVIDERS.GarminAPI, {
             status: SLEEP_SYNC_STATUSES.Failed,
+            lastBackfillQueuedAtMs: null,
             lastBackfillQueueItems: requested,
             nextBackfillAllowedAtMs: null,
             lastError: message,

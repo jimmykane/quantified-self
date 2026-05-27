@@ -11,6 +11,10 @@ const hoisted = vi.hoisted(() => ({
     tokenDocs: [] as Array<{ id: string; data: () => Record<string, unknown> }>,
     stateData: null as Record<string, unknown> | null,
     transactionStateData: undefined as Record<string, unknown> | null | undefined,
+    userExists: true,
+    transactionUserExists: undefined as boolean | undefined,
+    tombstoneData: null as Record<string, unknown> | null,
+    transactionTombstoneData: undefined as Record<string, unknown> | null | undefined,
     transactionSet: vi.fn(),
     hasProAccess: vi.fn(),
     getTokenData: vi.fn(),
@@ -42,18 +46,53 @@ vi.mock('firebase-functions/v2/https', () => ({
 
 vi.mock('firebase-admin', () => ({
     firestore: () => ({
-        runTransaction: vi.fn(async (handler: (transaction: unknown) => Promise<unknown>) => handler({
-            get: vi.fn().mockResolvedValue({
-                exists: hoisted.transactionStateData !== undefined
-                    ? hoisted.transactionStateData !== null
-                    : hoisted.stateData !== null,
-                data: () => hoisted.transactionStateData !== undefined
-                    ? hoisted.transactionStateData
-                    : hoisted.stateData,
-            }),
-            set: hoisted.transactionSet,
-        })),
+        runTransaction: vi.fn(async (handler: (transaction: unknown) => Promise<unknown>) => {
+            const snapshotForPath = (path: string) => {
+                if (path.startsWith('users/') && !path.includes('/sleepSyncState/')) {
+                    const userExists = hoisted.transactionUserExists === undefined
+                        ? hoisted.userExists
+                        : hoisted.transactionUserExists;
+                    return {
+                        exists: userExists,
+                        data: () => userExists ? { uid: path.split('/')[1] } : null,
+                    };
+                }
+                if (path.startsWith('userDeletionTombstones/')) {
+                    const tombstoneData = hoisted.transactionTombstoneData === undefined
+                        ? hoisted.tombstoneData
+                        : hoisted.transactionTombstoneData;
+                    return {
+                        exists: tombstoneData !== null,
+                        data: () => tombstoneData,
+                    };
+                }
+                return {
+                    exists: hoisted.transactionStateData !== undefined
+                        ? hoisted.transactionStateData !== null
+                        : hoisted.stateData !== null,
+                    data: () => hoisted.transactionStateData !== undefined
+                        ? hoisted.transactionStateData
+                        : hoisted.stateData,
+                };
+            };
+            return handler({
+                get: vi.fn(async (ref: { path?: string }) => snapshotForPath(ref?.path || '')),
+                set: hoisted.transactionSet,
+            });
+        }),
         collection: (name: string) => {
+            const createDocRef = (path: string): any => ({
+                path,
+                id: path.split('/').pop(),
+                get: vi.fn().mockResolvedValue({
+                    exists: path.includes('/sleepSyncState/') ? hoisted.stateData !== null : hoisted.userExists,
+                    data: () => path.includes('/sleepSyncState/') ? hoisted.stateData : { uid: path.split('/')[1] },
+                }),
+                collection: (collectionName: string) => ({
+                    doc: (docId: string) => createDocRef(`${path}/${collectionName}/${docId}`),
+                }),
+            });
+
             if (name === 'suuntoAppAccessTokens') {
                 return {
                     doc: () => ({
@@ -83,16 +122,13 @@ vi.mock('firebase-admin', () => ({
 
             if (name === 'users') {
                 return {
-                    doc: () => ({
-                        collection: () => ({
-                            doc: () => ({
-                                get: vi.fn().mockResolvedValue({
-                                    exists: hoisted.stateData !== null,
-                                    data: () => hoisted.stateData,
-                                }),
-                            }),
-                        }),
-                    }),
+                    doc: (docId: string) => createDocRef(`users/${docId}`),
+                };
+            }
+
+            if (name === 'userDeletionTombstones') {
+                return {
+                    doc: (docId: string) => createDocRef(`userDeletionTombstones/${docId}`),
                 };
             }
 
@@ -176,6 +212,10 @@ describe('backfillSuuntoAppSleep', () => {
         hoisted.tokenDocs.length = 0;
         hoisted.stateData = null;
         hoisted.transactionStateData = undefined;
+        hoisted.userExists = true;
+        hoisted.transactionUserExists = undefined;
+        hoisted.tombstoneData = null;
+        hoisted.transactionTombstoneData = undefined;
         hoisted.hasProAccess.mockResolvedValue(true);
         hoisted.getTokenData.mockResolvedValue({ userName: 'suunto-user-1' });
         hoisted.isSleepProviderEnabled.mockReturnValue(true);
@@ -318,6 +358,7 @@ describe('backfillSuuntoAppSleep', () => {
         expect(hoisted.addSleepSyncQueueItem).toHaveBeenCalledTimes(2);
         expect(hoisted.updateSleepSyncState).toHaveBeenCalledWith('user-1', SLEEP_PROVIDERS.SuuntoApp, {
             status: 'failed',
+            lastBackfillQueuedAtMs: null,
             lastBackfillQueueItems: 1,
             nextBackfillAllowedAtMs: null,
             lastError: 'queue write failed',
@@ -338,6 +379,17 @@ describe('backfillSuuntoAppSleep', () => {
         expect(hoisted.transactionSet).not.toHaveBeenCalled();
         expect(hoisted.addSleepSyncQueueItem).not.toHaveBeenCalled();
     });
+
+    it('does not claim cooldown or enqueue Suunto windows when account deletion starts before the transaction', async () => {
+        seedSuuntoToken();
+        hoisted.transactionTombstoneData = {};
+
+        await expect(backfillSuuntoAppSleep(createRequest() as any))
+            .rejects.toMatchObject({ code: 'failed-precondition' });
+
+        expect(hoisted.transactionSet).not.toHaveBeenCalled();
+        expect(hoisted.addSleepSyncQueueItem).not.toHaveBeenCalled();
+    });
 });
 
 describe('backfillGarminAPISleep', () => {
@@ -353,6 +405,10 @@ describe('backfillGarminAPISleep', () => {
         hoisted.tokenDocs.length = 0;
         hoisted.stateData = null;
         hoisted.transactionStateData = undefined;
+        hoisted.userExists = true;
+        hoisted.transactionUserExists = undefined;
+        hoisted.tombstoneData = null;
+        hoisted.transactionTombstoneData = undefined;
         hoisted.hasProAccess.mockResolvedValue(true);
         hoisted.getTokenData.mockResolvedValue({
             accessToken: 'garmin-access-token',
@@ -533,13 +589,70 @@ describe('backfillGarminAPISleep', () => {
         expect(hoisted.requestGet).toHaveBeenCalledTimes(2);
         expect(hoisted.updateSleepSyncState).toHaveBeenCalledWith('user-1', SLEEP_PROVIDERS.GarminAPI, {
             status: 'failed',
+            lastBackfillQueuedAtMs: null,
             lastBackfillQueueItems: 1,
             nextBackfillAllowedAtMs: null,
             lastError: 'garmin unavailable',
         }, nowMs);
     });
 
-    it('skips Garmin windows before the provider min start time without failing the backfill request', async () => {
+    it('clears the dashboard prompt suppression marker when Garmin request submission fails', async () => {
+        seedGarminToken();
+        hoisted.requestGet.mockRejectedValueOnce(new Error('garmin unavailable'));
+
+        await expect(backfillGarminAPISleep(createRequest() as any))
+            .rejects.toMatchObject({ code: 'internal' });
+
+        expect(hoisted.updateSleepSyncState).toHaveBeenCalledWith('user-1', SLEEP_PROVIDERS.GarminAPI, expect.objectContaining({
+            status: 'failed',
+            lastBackfillQueuedAtMs: null,
+            nextBackfillAllowedAtMs: null,
+        }), nowMs);
+    });
+
+    it('does not claim cooldown or request Garmin windows when account deletion starts before the transaction', async () => {
+        seedGarminToken();
+        hoisted.transactionTombstoneData = {};
+
+        await expect(backfillGarminAPISleep(createRequest() as any))
+            .rejects.toMatchObject({ code: 'failed-precondition' });
+
+        expect(hoisted.transactionSet).not.toHaveBeenCalled();
+        expect(hoisted.requestGet).not.toHaveBeenCalled();
+    });
+
+    it('retries a Garmin window clipped to the provider min start time when Garmin returns one', async () => {
+        seedGarminToken();
+        const expectedWindows = chunkSleepBackfillRange(startMs, nowMs, windowDays);
+        const clippedStartMs = expectedWindows[0].startMs + (10 * 24 * 60 * 60 * 1000);
+        hoisted.requestGet
+            .mockRejectedValueOnce({
+                statusCode: 400,
+                error: {
+                    error: {
+                        errorMessage: `start date before min start time ${Math.floor(clippedStartMs / 1000)}`,
+                    },
+                },
+            })
+            .mockResolvedValue(undefined);
+
+        const result = await backfillGarminAPISleep(createRequest() as any);
+
+        expect(result.queued).toBe(expectedWindows.length);
+        expect(hoisted.requestGet).toHaveBeenNthCalledWith(2, {
+            headers: {
+                Authorization: 'Bearer garmin-access-token',
+            },
+            url: `https://apis.garmin.com/wellness-api/rest/backfill/sleeps?summaryStartTimeInSeconds=${Math.floor(clippedStartMs / 1000)}&summaryEndTimeInSeconds=${Math.floor(expectedWindows[0].endMs / 1000)}`,
+        });
+        expect(hoisted.updateSleepSyncState).toHaveBeenCalledWith('user-1', SLEEP_PROVIDERS.GarminAPI, expect.objectContaining({
+            status: 'ready',
+            lastBackfillQueueItems: expectedWindows.length,
+            nextBackfillAllowedAtMs: nowMs + cooldownMs,
+        }), nowMs);
+    });
+
+    it('skips Garmin windows before the provider min start time when Garmin does not return a usable min start', async () => {
         seedGarminToken();
         hoisted.requestGet
             .mockRejectedValueOnce({
