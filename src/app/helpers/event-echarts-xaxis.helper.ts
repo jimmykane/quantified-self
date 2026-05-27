@@ -10,11 +10,11 @@ import {
 import { getBrowserLocale } from '../shared/adapters/date-locale.config';
 import { isIndoorActivityType } from '@shared/activity-type-group.metadata';
 import { formatUnitAwareDataValue } from '@shared/unit-aware-display';
+import { normalizeEventRange } from './event-chart-range.helper';
+import type { EventChartRange } from './event-chart-range.helper';
 
-export interface EventChartRange {
-  start: number;
-  end: number;
-}
+export { normalizeEventRange } from './event-chart-range.helper';
+export type { EventChartRange } from './event-chart-range.helper';
 
 export interface EventXAxisFormatOptions {
   includeDateForTime?: boolean;
@@ -179,23 +179,6 @@ export function getCanonicalEventXAxisInterval(
     default:
       return null;
   }
-}
-
-export function normalizeEventRange(range: EventChartRange | null | undefined): EventChartRange | null {
-  if (!range) {
-    return null;
-  }
-
-  const start = Number(range.start);
-  const end = Number(range.end);
-  if (!Number.isFinite(start) || !Number.isFinite(end)) {
-    return null;
-  }
-
-  return {
-    start: Math.min(start, end),
-    end: Math.max(start, end)
-  };
 }
 
 export function clampEventRange(range: EventChartRange | null | undefined, domainStart: number, domainEnd: number): EventChartRange | null {

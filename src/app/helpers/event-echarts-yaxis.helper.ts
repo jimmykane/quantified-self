@@ -16,7 +16,7 @@ import {
   getEventChartSeriesY,
 } from './event-echarts-data.helper';
 import { isEventPaceStreamType } from './event-echarts-style.helper';
-import { EventChartRange, normalizeEventRange } from './event-echarts-xaxis.helper';
+import { EventChartRange, normalizeEventRange } from './event-chart-range.helper';
 
 const DEFAULT_NON_POWER_EXTRA_MAX = 0.1;
 const EVENT_POWER_EXTRA_MAX = 0;
