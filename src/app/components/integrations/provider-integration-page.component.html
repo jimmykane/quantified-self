@@ -1,0 +1,136 @@
+<main class="provider-integration-page">
+  <section class="hero-section" aria-labelledby="provider-integration-title">
+    <p class="eyebrow">Integrations</p>
+
+    <div class="provider-strip" aria-label="Supported providers">
+      @for (provider of page.providerSources; track provider.serviceName) {
+      <span class="provider-chip">
+        <app-service-source-icon
+          [sourceServiceName]="provider.serviceName"
+          [showTooltip]="false">
+        </app-service-source-icon>
+        <span>{{ provider.label }}</span>
+      </span>
+      }
+    </div>
+
+    <h1 id="provider-integration-title">{{ page.h1 }}</h1>
+    <p class="hero-copy">{{ page.heroCopy }}</p>
+
+    <div class="hero-actions" aria-label="Primary actions">
+      <a mat-flat-button class="qs-mat-primary" routerLink="/login">
+        Get Started Free
+        <mat-icon iconPositionEnd>arrow_forward</mat-icon>
+      </a>
+      <a mat-stroked-button routerLink="/pricing">
+        View Membership
+      </a>
+      <a mat-stroked-button [routerLink]="['/help']" fragment="service-connections">
+        Troubleshooting
+      </a>
+    </div>
+  </section>
+
+  <section class="content-section" aria-labelledby="sync-title">
+    <div class="section-heading">
+      <p class="eyebrow">{{ page.syncEyebrow }}</p>
+      <h2 id="sync-title">{{ page.syncTitle }}</h2>
+      <p>{{ page.syncCopy }}</p>
+    </div>
+
+    <div class="card-grid">
+      @for (flow of page.syncFlows; track flow.title) {
+      <mat-card appearance="outlined" class="integration-card">
+        <mat-card-header>
+          <div mat-card-avatar class="card-icon">
+            <mat-icon>{{ flow.icon }}</mat-icon>
+          </div>
+          <mat-card-title>{{ flow.title }}</mat-card-title>
+        </mat-card-header>
+        <mat-card-content>
+          <p>{{ flow.copy }}</p>
+        </mat-card-content>
+      </mat-card>
+      }
+    </div>
+  </section>
+
+  <section class="content-section split-section" aria-labelledby="provider-tools-title">
+    <div class="section-heading">
+      <p class="eyebrow">{{ page.toolsEyebrow }}</p>
+      <h2 id="provider-tools-title">{{ page.toolsTitle }}</h2>
+      <p>{{ page.toolsCopy }}</p>
+    </div>
+
+    <div class="tool-list">
+      @for (tool of page.tools; track tool.title) {
+      <article class="tool-row">
+        <mat-icon>{{ tool.icon }}</mat-icon>
+        <div>
+          <h3>{{ tool.title }}</h3>
+          <p>{{ tool.copy }}</p>
+        </div>
+      </article>
+      }
+    </div>
+  </section>
+
+  <section class="content-section" aria-labelledby="dashboard-title">
+    <div class="section-heading">
+      <p class="eyebrow">{{ page.dashboardEyebrow }}</p>
+      <h2 id="dashboard-title">{{ page.dashboardTitle }}</h2>
+      <p>{{ page.dashboardCopy }}</p>
+    </div>
+
+    <div class="card-grid">
+      @for (point of page.dashboardPoints; track point.title) {
+      <mat-card appearance="outlined" class="integration-card">
+        <mat-card-header>
+          <div mat-card-avatar class="card-icon">
+            <mat-icon>{{ point.icon }}</mat-icon>
+          </div>
+          <mat-card-title>{{ point.title }}</mat-card-title>
+        </mat-card-header>
+        <mat-card-content>
+          <p>{{ point.copy }}</p>
+        </mat-card-content>
+      </mat-card>
+      }
+    </div>
+  </section>
+
+  <section class="content-section faq-section" aria-labelledby="provider-faq-title">
+    <div class="section-heading">
+      <p class="eyebrow">FAQ</p>
+      <h2 id="provider-faq-title">Integration FAQ</h2>
+    </div>
+
+    <div class="faq-list">
+      @for (item of page.faqItems; track item.question) {
+      <article class="faq-item">
+        <h3>{{ item.question }}</h3>
+        <p>{{ item.answer }}</p>
+      </article>
+      }
+    </div>
+  </section>
+
+  <section class="content-section closing-section" aria-labelledby="next-title">
+    <div>
+      <p class="eyebrow">Next Step</p>
+      <h2 id="next-title">{{ page.closingTitle }}</h2>
+      <p>{{ page.closingCopy }}</p>
+    </div>
+    <div class="closing-actions">
+      <a mat-flat-button class="qs-mat-primary" routerLink="/login">
+        Start Setup
+      </a>
+      <a mat-stroked-button routerLink="/integrations">
+        All Integrations
+      </a>
+      <a mat-stroked-button [routerLink]="['/help']" fragment="service-connections">
+        Read Support Details
+      </a>
+    </div>
+  </section>
+</main>

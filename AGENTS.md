@@ -11,6 +11,7 @@ Always-on rules:
 - `.agent/rules/verify-changes-with-tests.md`
 - `.agent/rules/firestore-write-sanitization.md` for any frontend/functions write path that persists event or activity data
 - When building a feature, review the app help page and update or add help content when needed.
+- When adding a new provider/service integration, add or update a focused public `/integrations/<provider>` page when it has a clear product or search purpose. Keep integration routes intentional, and update route metadata, sitemap/robots, internal links, help content, and tests alongside the page.
 - Never deploy, publish, push, or otherwise mutate production/cloud infrastructure as part of an implementation task. Prepare and verify changes locally, then report the exact manual command or ask for a separate explicit approval for that specific action.
 
 Layer entry points:

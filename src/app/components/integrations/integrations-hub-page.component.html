@@ -1,0 +1,60 @@
+<main class="integrations-hub-page">
+  <section class="hero-section" aria-labelledby="integrations-hub-title">
+    <p class="eyebrow">Integrations</p>
+    <h1 id="integrations-hub-title">Integrations for Garmin, Suunto, and COROS</h1>
+    <p class="hero-copy">
+      Connect your providers, centralize Garmin Suunto and COROS workout data, and use Quantified Self as a private
+      training dashboard for sync, history, uploads, exports, and AI insights.
+    </p>
+    <div class="hero-actions" aria-label="Primary actions">
+      <a mat-flat-button class="qs-mat-primary" routerLink="/login">
+        Get Started Free
+        <mat-icon iconPositionEnd>arrow_forward</mat-icon>
+      </a>
+      <a mat-stroked-button [routerLink]="['/help']" fragment="service-connections">
+        Support Details
+      </a>
+    </div>
+  </section>
+
+  <section class="content-section" aria-labelledby="provider-title">
+    <div class="section-heading">
+      <p class="eyebrow">Provider Pages</p>
+      <h2 id="provider-title">Choose the integration you want to set up</h2>
+      <p>
+        Each integration page explains the source provider, sync destinations, manual catch-up options, and how the
+        workflow fits into the private training dashboard.
+      </p>
+    </div>
+
+    <div class="integration-grid">
+      @for (card of integrationCards; track card.slug) {
+      <mat-card appearance="outlined" class="integration-card">
+        <mat-card-header>
+          <div mat-card-avatar class="provider-avatar">
+            <app-service-source-icon
+              [sourceServiceName]="card.serviceName"
+              [showTooltip]="false">
+            </app-service-source-icon>
+          </div>
+          <mat-card-title>{{ card.label }} Integration</mat-card-title>
+          <mat-card-subtitle>{{ card.h1 }}</mat-card-subtitle>
+        </mat-card-header>
+        <mat-card-content>
+          <p>{{ card.summary }}</p>
+          <ul>
+            @for (highlight of card.highlights; track highlight) {
+            <li>{{ highlight }}</li>
+            }
+          </ul>
+        </mat-card-content>
+        <mat-card-actions>
+          <a mat-stroked-button [routerLink]="['/integrations', card.slug]">
+            View {{ card.label }} Integration
+          </a>
+        </mat-card-actions>
+      </mat-card>
+      }
+    </div>
+  </section>
+</main>

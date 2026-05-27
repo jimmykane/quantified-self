@@ -217,6 +217,11 @@ describe('help.content', () => {
   it('should document Garmin/COROS to Suunto route-based activity sync and manual catch-up', () => {
     const serviceConnectionsSection = HELP_SECTIONS.find(section => section.id === 'service-connections');
 
+    expect(serviceConnectionsSection?.content).toContain('Integrations hub');
+    expect(serviceConnectionsSection?.content).toContain('/integrations');
+    expect(serviceConnectionsSection?.content).toContain('[Garmin Integration](/integrations/garmin)');
+    expect(serviceConnectionsSection?.content).toContain('[COROS Integration](/integrations/coros)');
+    expect(serviceConnectionsSection?.content).toContain('/integrations/suunto');
     expect(serviceConnectionsSection?.content).toContain('Garmin -> Suunto activity sync is route-based');
     expect(serviceConnectionsSection?.content).toContain('ACTIVITY_EXPORT');
     expect(serviceConnectionsSection?.content).toContain('Manual catch-up is available in Garmin Services');
@@ -238,5 +243,29 @@ describe('help.content', () => {
     expect(serviceConnectionsSection?.content).toContain('Manual catch-up is available in COROS Services');
     expect(serviceConnectionsSection?.content).toContain('can run even when the COROS -> Suunto auto-sync toggle is off');
     expect(serviceConnectionsSection?.content).toContain('dashboard may offer a one-time action prompt to enable COROS -> Suunto auto-sync');
+    expect(serviceConnectionsSection?.links).toContainEqual({
+      label: 'Integrations',
+      icon: 'hub',
+      kind: 'route',
+      target: '/integrations',
+    });
+    expect(serviceConnectionsSection?.links).toContainEqual({
+      label: 'Garmin Integration',
+      icon: 'sync_alt',
+      kind: 'route',
+      target: '/integrations/garmin',
+    });
+    expect(serviceConnectionsSection?.links).toContainEqual({
+      label: 'Suunto Integration',
+      icon: 'published_with_changes',
+      kind: 'route',
+      target: '/integrations/suunto',
+    });
+    expect(serviceConnectionsSection?.links).toContainEqual({
+      label: 'COROS Integration',
+      icon: 'sync',
+      kind: 'route',
+      target: '/integrations/coros',
+    });
   });
 });

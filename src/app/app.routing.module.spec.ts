@@ -25,7 +25,8 @@ describe('AppRoutingModule routes', () => {
         inLanguage: 'en',
       },
     });
-    const helpAbout = (helpRoute?.data?.['jsonLd'] as any)?.about as string[] | undefined;
+    const helpJsonLd = helpRoute?.data?.['jsonLd'] as Record<string, unknown> | undefined;
+    const helpAbout = helpJsonLd?.['about'] as string[] | undefined;
     expect(helpAbout).toContain('Garmin -> Suunto sync');
     expect(helpAbout).toContain('COROS -> Suunto sync');
     expect(helpAbout).toContain('Catch-up sync');
@@ -49,6 +50,51 @@ describe('AppRoutingModule routes', () => {
       preload: true,
       animation: 'AIInsights',
     });
+  });
+
+  it('should define a public integrations hub route with collection metadata', () => {
+    const integrationsRoute = routes.find(route => route.path === 'integrations');
+
+    expect(integrationsRoute).toBeTruthy();
+    expect(integrationsRoute?.canMatch).toBeUndefined();
+    expect(integrationsRoute?.loadComponent).toBeTypeOf('function');
+    expect(integrationsRoute?.data).toMatchObject({
+      title: 'Integrations',
+      preload: true,
+      animation: 'Integrations',
+      jsonLd: {
+        '@context': 'https://schema.org',
+        '@type': 'CollectionPage',
+        name: 'Quantified Self Integrations',
+        url: 'https://quantified-self.io/integrations',
+        inLanguage: 'en',
+      },
+    });
+    expect(integrationsRoute?.data?.['description']).toContain('Garmin, Suunto, and COROS integrations');
+  });
+
+  it('should define public Garmin, Suunto, and COROS provider integration routes', () => {
+    const expectedRoutes = [
+      { path: 'integrations/garmin', provider: 'garmin', keyword: 'best private training dashboard for Garmin data' },
+      { path: 'integrations/suunto', provider: 'suunto', keyword: 'sync Garmin data to Suunto automatically' },
+      { path: 'integrations/coros', provider: 'coros', keyword: 'COROS to Suunto sync' },
+    ];
+
+    for (const expectedRoute of expectedRoutes) {
+      const route = routes.find(candidate => candidate.path === expectedRoute.path);
+      const jsonLd = route?.data?.['jsonLd'] as Record<string, unknown> | undefined;
+
+      expect(route).toBeTruthy();
+      expect(route?.canMatch).toBeUndefined();
+      expect(route?.loadComponent).toBeTypeOf('function');
+      expect(route?.data?.['integrationProvider']).toBe(expectedRoute.provider);
+      expect(route?.data?.['keywords']).toContain(expectedRoute.keyword);
+      expect(jsonLd?.['@type']).toBe('WebPage');
+      expect(jsonLd?.['url']).toBe(`https://quantified-self.io/${expectedRoute.path}`);
+    }
+
+    const garminRoute = routes.find(candidate => candidate.path === 'integrations/garmin');
+    expect(garminRoute?.data?.['title']).toBe('Private Garmin Training Dashboard');
   });
 
   it('should include sync-focused metadata on the public home route', () => {
