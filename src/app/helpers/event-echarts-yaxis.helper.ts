@@ -8,7 +8,13 @@ import {
   DataPowerRight,
   DataStamina,
 } from '@sports-alliance/sports-lib';
-import { EventChartPanelModel } from './event-echarts-data.helper';
+import {
+  EventChartPanelModel,
+  findFirstEventChartSeriesPointAfter,
+  findFirstEventChartSeriesPointAtOrAfter,
+  getEventChartSeriesPointCount,
+  getEventChartSeriesY,
+} from './event-echarts-data.helper';
 import { isEventPaceStreamType } from './event-echarts-style.helper';
 import { EventChartRange, normalizeEventRange } from './event-echarts-xaxis.helper';
 
@@ -160,20 +166,21 @@ function getVisibleExtrema(panel: EventChartPanelModel, visibleRange: EventChart
   let foundValue = false;
 
   for (let seriesIndex = 0; seriesIndex < panel.series.length; seriesIndex += 1) {
-    const points = panel.series[seriesIndex]?.points || [];
-    if (!points.length) {
+    const series = panel.series[seriesIndex];
+    const pointCount = getEventChartSeriesPointCount(series);
+    if (!pointCount) {
       continue;
     }
 
     const startIndex = normalizedRange
-      ? findFirstPointAtOrAfter(points, normalizedRange.start)
+      ? findFirstEventChartSeriesPointAtOrAfter(series, normalizedRange.start)
       : 0;
     const endExclusive = normalizedRange
-      ? findFirstPointAfter(points, normalizedRange.end)
-      : points.length;
+      ? findFirstEventChartSeriesPointAfter(series, normalizedRange.end)
+      : pointCount;
 
     for (let pointIndex = startIndex; pointIndex < endExclusive; pointIndex += 1) {
-      const y = points[pointIndex]?.y;
+      const y = getEventChartSeriesY(series, pointIndex);
       if (typeof y !== 'number' || !Number.isFinite(y)) {
         continue;
       }
@@ -192,38 +199,6 @@ function getVisibleExtrema(panel: EventChartPanelModel, visibleRange: EventChart
   }
 
   return { min, max };
-}
-
-function findFirstPointAtOrAfter(points: EventChartPanelModel['series'][number]['points'], xValue: number): number {
-  let low = 0;
-  let high = points.length;
-
-  while (low < high) {
-    const mid = Math.floor((low + high) / 2);
-    if (points[mid].x < xValue) {
-      low = mid + 1;
-    } else {
-      high = mid;
-    }
-  }
-
-  return low;
-}
-
-function findFirstPointAfter(points: EventChartPanelModel['series'][number]['points'], xValue: number): number {
-  let low = 0;
-  let high = points.length;
-
-  while (low < high) {
-    const mid = Math.floor((low + high) / 2);
-    if (points[mid].x <= xValue) {
-      low = mid + 1;
-    } else {
-      high = mid;
-    }
-  }
-
-  return low;
 }
 
 function buildDefaultAxis(

@@ -5,6 +5,7 @@ import {
   DataCadence,
   DataDistance,
   DataDuration,
+  DataGradeAdjustedPace,
   DataGradeAdjustedSpeed,
   DataHeartRate,
   DataPace,
@@ -26,6 +27,9 @@ import {
   buildEventSwimLengthMarkers,
   buildEventLegendItems,
   buildEventZoomOverviewData,
+  buildEventChartPanelsFromSnapshot,
+  createEventChartPanelBuildSnapshot,
+  eventChartSeriesToPoints,
   normalizeEventLapType
 } from './event-echarts-data.helper';
 import { AppDataColors } from '../services/color/app.data.colors';
@@ -134,8 +138,11 @@ describe('event-echarts-data.helper', () => {
     expect(panels).toHaveLength(1);
     expect(panels[0].colorGroupKey).toBe('Power');
     expect(panels[0].series).toHaveLength(1);
-    expect(panels[0].series[0].points).toHaveLength(5);
-    expect(panels[0].series[0].points.map((point) => point.x)).toEqual([0, 1, 2, 3, 4]);
+    expect(panels[0].series[0].points).toBeUndefined();
+    expect(panels[0].series[0].lineValues).toBeInstanceOf(Float64Array);
+    expect(panels[0].series[0].pointCount).toBe(5);
+    expect(eventChartSeriesToPoints(panels[0].series[0])).toHaveLength(5);
+    expect(eventChartSeriesToPoints(panels[0].series[0]).map((point) => point.x)).toEqual([0, 1, 2, 3, 4]);
     expect(panels[0].series[0].color).toBe((AppDataColors as any).Power);
   });
 
@@ -187,8 +194,8 @@ describe('event-echarts-data.helper', () => {
       DataStamina.type,
       DataPotentialStamina.type,
     ]);
-    expect(panels[0].series[0].points.map((point) => point.y)).toEqual([95, 80, 66]);
-    expect(panels[1].series[0].points.map((point) => point.y)).toEqual([95, 92, 66]);
+    expect(eventChartSeriesToPoints(panels[0].series[0]).map((point) => point.y)).toEqual([95, 80, 66]);
+    expect(eventChartSeriesToPoints(panels[1].series[0]).map((point) => point.y)).toEqual([95, 92, 66]);
   });
 
   it('computes panel domains for large point sets without spreading arrays into Math.min or Math.max', () => {
@@ -598,8 +605,9 @@ describe('event-echarts-data.helper', () => {
     });
 
     expect(withShowAllData).toHaveLength(1);
-    expect(withShowAllData[0].series[0].points).toHaveLength(3);
-    expect(withShowAllData[0].series[0].points[0].time).toBe(activity.startDate.getTime());
+    const showAllDataPoints = eventChartSeriesToPoints(withShowAllData[0].series[0]);
+    expect(showAllDataPoints).toHaveLength(3);
+    expect(showAllDataPoints[0].time).toBe(activity.startDate.getTime());
   });
 
   it('skips distance-axis chart building when missing distance streams throw from provider', () => {
@@ -885,8 +893,9 @@ describe('event-echarts-data.helper', () => {
     });
 
     expect(panels).toHaveLength(1);
-    expect(panels[0].series[0].points.map((point) => point.x)).toEqual([0, 1, 2, 5]);
-    expect(panels[0].series[0].points.map((point) => point.y)).toEqual([100, 101, 102, 105]);
+    const points = eventChartSeriesToPoints(panels[0].series[0]);
+    expect(points.map((point) => point.x)).toEqual([0, 1, 2, 5]);
+    expect(points.map((point) => point.y)).toEqual([100, 101, 102, 105]);
   });
 
   it('introduces gaps for pace points when movement is effectively stopped', () => {
@@ -943,7 +952,7 @@ describe('event-echarts-data.helper', () => {
     });
 
     expect(panels).toHaveLength(1);
-    expect(panels[0].series[0].points.map((point) => point.y)).toEqual([300, null, 340, null]);
+    expect(eventChartSeriesToPoints(panels[0].series[0]).map((point) => point.y)).toEqual([300, null, 340, null]);
   });
 
   it('prefers the highest-quality duplicate stream per type', () => {
@@ -993,7 +1002,300 @@ describe('event-echarts-data.helper', () => {
 
     expect(panels).toHaveLength(1);
     expect(panels[0].series).toHaveLength(1);
-    expect(panels[0].series[0].points.map((point) => point.y)).toEqual([100, 110, 120, 130, 140, 150]);
+    expect(eventChartSeriesToPoints(panels[0].series[0]).map((point) => point.y)).toEqual([100, 110, 120, 130, 140, 150]);
+  });
+
+  it('preserves duplicate raw streams in worker snapshots for quality dedupe', () => {
+    vi.spyOn(ActivityUtilities, 'createUnitStreamsFromStreams').mockReturnValue([] as any);
+    vi.spyOn(DynamicDataLoader, 'getUnitBasedDataTypesFromDataTypes').mockImplementation((types: any) => types as any);
+    vi.spyOn(DynamicDataLoader, 'getUnitBasedDataTypesFromDataType').mockImplementation((type: any) => [type] as any);
+    vi.spyOn(DynamicDataLoader, 'getNonUnitBasedDataTypes').mockReturnValue([DataDistance.type]);
+    vi.spyOn(DynamicDataLoader, 'getDataClassFromDataType').mockReturnValue({
+      displayType: 'Power',
+      type: 'Power',
+      unit: 'W'
+    } as any);
+
+    const sparsePowerStream = {
+      type: DataPower.type,
+      getData: () => [100, Number.NaN, 120, Number.NaN, 140, Number.NaN],
+    } as any;
+    const completePowerStream = {
+      type: DataPower.type,
+      getData: () => [100, 110, 120, 130, 140, 150],
+    } as any;
+    const timeStream = {
+      type: XAxisTypes.Time,
+      getData: () => [0, 1, 2, 3, 4, 5],
+    } as any;
+
+    const activity = {
+      startDate: new Date('2024-01-01T00:00:00.000Z'),
+      creator: { name: 'Garmin' },
+      type: 'Running',
+      getID: () => 'a-worker-dedupe',
+      getAllStreams: () => [sparsePowerStream, completePowerStream],
+      getStream: (type: string) => (type === XAxisTypes.Time ? timeStream : null),
+    } as any;
+
+    const snapshot = createEventChartPanelBuildSnapshot({
+      selectedActivities: [activity],
+      allActivities: [activity],
+      xAxisType: XAxisTypes.Duration,
+      showAllData: false,
+      dataTypesToUse: [DataPower.type],
+      userUnitSettings: {} as any,
+      eventColorService: {
+        getActivityColor: () => '#ff0000'
+      } as any,
+    });
+
+    expect(snapshot.selectedActivities[0].streams.filter((stream) => stream.type === DataPower.type)).toHaveLength(2);
+
+    const panels = buildEventChartPanelsFromSnapshot(snapshot);
+
+    expect(panels).toHaveLength(1);
+    expect(panels[0].series).toHaveLength(1);
+    expect(eventChartSeriesToPoints(panels[0].series[0]).map((point) => point.y)).toEqual([100, 110, 120, 130, 140, 150]);
+  });
+
+  it('snapshots only selected streams and chart dependencies when showAllData is off', () => {
+    const powerStream = {
+      type: DataPower.type,
+      getData: () => [100, 110],
+    } as any;
+    const heartRateStream = {
+      type: DataHeartRate.type,
+      getData: () => [140, 142],
+    } as any;
+    const cadenceStream = {
+      type: DataCadence.type,
+      getData: () => [80, 82],
+    } as any;
+    const timeStream = {
+      type: XAxisTypes.Time,
+      getData: () => [0, 1],
+    } as any;
+    const activity = {
+      startDate: new Date('2024-01-01T00:00:00.000Z'),
+      creator: { name: 'Garmin' },
+      type: 'Running',
+      getID: () => 'a-snapshot-filter',
+      getAllStreams: () => [powerStream, heartRateStream, cadenceStream],
+      getStream: (type: string) => (type === XAxisTypes.Time ? timeStream : null),
+    } as any;
+
+    const snapshot = createEventChartPanelBuildSnapshot({
+      selectedActivities: [activity],
+      allActivities: [activity],
+      xAxisType: XAxisTypes.Duration,
+      showAllData: false,
+      dataTypesToUse: [DataPower.type],
+      userUnitSettings: {} as any,
+      eventColorService: {
+        getActivityColor: () => '#ff0000'
+      } as any,
+    });
+
+    expect(snapshot.selectedActivities[0].streams.map((stream) => stream.type)).toEqual([
+      DataPower.type,
+      XAxisTypes.Time,
+    ]);
+  });
+
+  it('keeps all raw streams in worker snapshots when showAllData is on', () => {
+    const powerStream = {
+      type: DataPower.type,
+      getData: () => [100, 110],
+    } as any;
+    const heartRateStream = {
+      type: DataHeartRate.type,
+      getData: () => [140, 142],
+    } as any;
+    const cadenceStream = {
+      type: DataCadence.type,
+      getData: () => [80, 82],
+    } as any;
+    const timeStream = {
+      type: XAxisTypes.Time,
+      getData: () => [0, 1],
+    } as any;
+    const activity = {
+      startDate: new Date('2024-01-01T00:00:00.000Z'),
+      creator: { name: 'Garmin' },
+      type: 'Running',
+      getID: () => 'a-snapshot-show-all',
+      getAllStreams: () => [powerStream, heartRateStream, cadenceStream],
+      getStream: (type: string) => (type === XAxisTypes.Time ? timeStream : null),
+    } as any;
+
+    const snapshot = createEventChartPanelBuildSnapshot({
+      selectedActivities: [activity],
+      allActivities: [activity],
+      xAxisType: XAxisTypes.Duration,
+      showAllData: true,
+      dataTypesToUse: [DataPower.type],
+      userUnitSettings: {} as any,
+      eventColorService: {
+        getActivityColor: () => '#ff0000'
+      } as any,
+    });
+
+    expect(snapshot.selectedActivities[0].streams.map((stream) => stream.type)).toEqual([
+      DataPower.type,
+      DataHeartRate.type,
+      DataCadence.type,
+      XAxisTypes.Time,
+    ]);
+  });
+
+  it('includes speed in selected worker snapshots when pace must be derived', () => {
+    const speedStream = {
+      type: DataSpeed.type,
+      getData: () => [3, 4],
+    } as any;
+    const heartRateStream = {
+      type: DataHeartRate.type,
+      getData: () => [140, 142],
+    } as any;
+    const timeStream = {
+      type: XAxisTypes.Time,
+      getData: () => [0, 1],
+    } as any;
+    const activity = {
+      startDate: new Date('2024-01-01T00:00:00.000Z'),
+      creator: { name: 'Garmin' },
+      type: 'Running',
+      getID: () => 'a-snapshot-pace',
+      getAllStreams: () => [speedStream, heartRateStream],
+      getStream: (type: string) => (type === XAxisTypes.Time ? timeStream : null),
+    } as any;
+
+    const snapshot = createEventChartPanelBuildSnapshot({
+      selectedActivities: [activity],
+      allActivities: [activity],
+      xAxisType: XAxisTypes.Duration,
+      showAllData: false,
+      dataTypesToUse: [DataPace.type],
+      userUnitSettings: {} as any,
+      eventColorService: {
+        getActivityColor: () => '#ff0000'
+      } as any,
+    });
+
+    expect(snapshot.selectedActivities[0].streams.map((stream) => stream.type)).toEqual([
+      DataSpeed.type,
+      XAxisTypes.Time,
+    ]);
+  });
+
+  it('includes grade-adjusted speed in selected worker snapshots when grade-adjusted pace must be derived', () => {
+    const gradeAdjustedSpeedStream = {
+      type: DataGradeAdjustedSpeed.type,
+      getData: () => [3, 4],
+    } as any;
+    const speedStream = {
+      type: DataSpeed.type,
+      getData: () => [3, 4],
+    } as any;
+    const heartRateStream = {
+      type: DataHeartRate.type,
+      getData: () => [140, 142],
+    } as any;
+    const timeStream = {
+      type: XAxisTypes.Time,
+      getData: () => [0, 1],
+    } as any;
+    const activity = {
+      startDate: new Date('2024-01-01T00:00:00.000Z'),
+      creator: { name: 'Garmin' },
+      type: 'Running',
+      getID: () => 'a-snapshot-gap',
+      getAllStreams: () => [gradeAdjustedSpeedStream, speedStream, heartRateStream],
+      getStream: (type: string) => (type === XAxisTypes.Time ? timeStream : null),
+    } as any;
+
+    const snapshot = createEventChartPanelBuildSnapshot({
+      selectedActivities: [activity],
+      allActivities: [activity],
+      xAxisType: XAxisTypes.Duration,
+      showAllData: false,
+      dataTypesToUse: [DataGradeAdjustedPace.type],
+      userUnitSettings: {} as any,
+      eventColorService: {
+        getActivityColor: () => '#ff0000'
+      } as any,
+    });
+
+    expect(snapshot.selectedActivities[0].streams.map((stream) => stream.type)).toEqual([
+      DataGradeAdjustedSpeed.type,
+      DataSpeed.type,
+      XAxisTypes.Time,
+    ]);
+  });
+
+  it('preserves missing samples through worker snapshot unit stream derivation', () => {
+    const rawType = 'Raw Worker Metric';
+    const convertedType = 'Converted Worker Metric';
+    vi.spyOn(ActivityUtilities, 'createUnitStreamsFromStreams').mockImplementation((streams: any[]) => {
+      const rawStream = streams.find((stream) => stream.type === rawType);
+      const rawValues = rawStream?.getData?.() || [];
+      return [
+        {
+          type: convertedType,
+          getData: () => rawValues.map((value: unknown) => (
+            typeof value === 'number' && Number.isFinite(value)
+              ? value * 10
+              : null
+          )),
+        },
+      ] as any;
+    });
+    vi.spyOn(DynamicDataLoader, 'getUnitBasedDataTypesFromDataTypes').mockImplementation((types: string[]) => {
+      return types.includes(rawType) ? [convertedType] : types as any;
+    });
+    vi.spyOn(DynamicDataLoader, 'getUnitBasedDataTypesFromDataType').mockImplementation((type: any) => [type] as any);
+    vi.spyOn(DynamicDataLoader, 'getNonUnitBasedDataTypes').mockReturnValue([DataDistance.type]);
+    vi.spyOn(DynamicDataLoader, 'getDataClassFromDataType').mockImplementation((type: string) => ({
+      displayType: type,
+      type,
+      unit: 'u',
+    } as any));
+
+    const rawStream = {
+      type: rawType,
+      getData: () => [1, null, 3],
+    } as any;
+    const timeStream = {
+      type: XAxisTypes.Time,
+      getData: () => [0, 1, 2],
+    } as any;
+    const activity = {
+      startDate: new Date('2024-01-01T00:00:00.000Z'),
+      creator: { name: 'Garmin' },
+      type: 'Running',
+      getID: () => 'a-worker-null-derived',
+      getAllStreams: () => [rawStream],
+      getStream: (type: string) => (type === XAxisTypes.Time ? timeStream : null),
+    } as any;
+
+    const snapshot = createEventChartPanelBuildSnapshot({
+      selectedActivities: [activity],
+      allActivities: [activity],
+      xAxisType: XAxisTypes.Duration,
+      showAllData: false,
+      dataTypesToUse: [rawType],
+      userUnitSettings: {} as any,
+      eventColorService: {
+        getActivityColor: () => '#ff0000'
+      } as any,
+    });
+
+    const panels = buildEventChartPanelsFromSnapshot(snapshot);
+
+    const derivedPanel = panels.find((panel) => panel.dataType === convertedType);
+    expect(derivedPanel).toBeDefined();
+    expect(eventChartSeriesToPoints(derivedPanel!.series[0]).map((point) => point.y)).toEqual([10, null, 30]);
   });
 
   it('orders panels by canonical datatype order with event priority overrides', () => {
