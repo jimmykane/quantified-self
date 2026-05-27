@@ -58,6 +58,7 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
   @Input() minDate: Date | null = null;
   @Input() missingPermissions: string[] = [];
   @Input() isLoadingParent = false;
+  @Input() providerConnected = false;
   @Output() importInitiated = new EventEmitter<void>();
 
 
@@ -366,7 +367,7 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
   get isSleepBackfillVisible(): boolean {
     return !!this.sleepBackfillProvider
       && this.isPro
-      && !!this.userMetaForService;
+      && this.providerConnected;
   }
 
   get sleepBackfillResultVerb(): string {

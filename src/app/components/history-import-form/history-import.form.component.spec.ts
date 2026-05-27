@@ -143,6 +143,7 @@ describe('HistoryImportFormComponent', () => {
         await fixture.whenStable();
         component.serviceName = ServiceNames.SuuntoApp;
         component.userMetaForService = {} as UserServiceMetaInterface;
+        component.providerConnected = true;
         component.isPro = true;
         (component as any).processChanges();
         fixture.detectChanges();
@@ -157,6 +158,7 @@ describe('HistoryImportFormComponent', () => {
         await fixture.whenStable();
         component.serviceName = ServiceNames.GarminAPI;
         component.userMetaForService = {} as UserServiceMetaInterface;
+        component.providerConnected = true;
         component.missingPermissions = [];
         component.isPro = true;
         (component as any).processChanges();
@@ -169,10 +171,43 @@ describe('HistoryImportFormComponent', () => {
         expect(text).toContain('once every 30 days');
     });
 
+    it('should render Garmin sleep backfill for newly connected users without activity history meta', async () => {
+        await fixture.whenStable();
+        component.serviceName = ServiceNames.GarminAPI;
+        component.userMetaForService = undefined as any;
+        component.providerConnected = true;
+        component.missingPermissions = [];
+        component.isPro = true;
+        (component as any).processChanges();
+        fixture.detectChanges();
+
+        const text = fixture.nativeElement.textContent;
+        const buttons = Array.from(fixture.nativeElement.querySelectorAll('button')) as HTMLButtonElement[];
+        const sleepButton = buttons.find(button => button.textContent?.includes('Backfill Sleep History'));
+
+        expect(text).toContain('Backfill Sleep History');
+        expect(text).toContain('Requests Garmin sleep');
+        expect(sleepButton?.disabled).toBe(false);
+    });
+
+    it('should not render sleep backfill when the parent provider is disconnected', async () => {
+        await fixture.whenStable();
+        component.serviceName = ServiceNames.GarminAPI;
+        component.userMetaForService = {} as UserServiceMetaInterface;
+        component.providerConnected = false;
+        component.missingPermissions = [];
+        component.isPro = true;
+        (component as any).processChanges();
+        fixture.detectChanges();
+
+        expect(fixture.nativeElement.textContent).not.toContain('Backfill Sleep History');
+    });
+
     it('should not render sleep backfill button for unsupported providers', async () => {
         await fixture.whenStable();
         component.serviceName = ServiceNames.COROSAPI;
         component.userMetaForService = {} as UserServiceMetaInterface;
+        component.providerConnected = true;
         component.isPro = true;
         (component as any).processChanges();
         fixture.detectChanges();
@@ -190,6 +225,7 @@ describe('HistoryImportFormComponent', () => {
         }));
         component.serviceName = ServiceNames.SuuntoApp;
         component.userMetaForService = {} as UserServiceMetaInterface;
+        component.providerConnected = true;
         component.isPro = true;
         (component as any).processChanges();
         fixture.detectChanges();
@@ -204,6 +240,7 @@ describe('HistoryImportFormComponent', () => {
         await fixture.whenStable();
         component.serviceName = ServiceNames.SuuntoApp;
         component.userMetaForService = {} as UserServiceMetaInterface;
+        component.providerConnected = true;
         component.isPro = true;
         (component as any).processChanges();
 
@@ -224,6 +261,7 @@ describe('HistoryImportFormComponent', () => {
         await fixture.whenStable();
         component.serviceName = ServiceNames.GarminAPI;
         component.userMetaForService = {} as UserServiceMetaInterface;
+        component.providerConnected = true;
         component.missingPermissions = [];
         component.isPro = true;
         (component as any).processChanges();
@@ -245,6 +283,7 @@ describe('HistoryImportFormComponent', () => {
         await fixture.whenStable();
         component.serviceName = ServiceNames.GarminAPI;
         component.userMetaForService = {} as UserServiceMetaInterface;
+        component.providerConnected = true;
         component.missingPermissions = ['HEALTH_EXPORT'];
         component.isPro = true;
         (component as any).processChanges();
@@ -260,6 +299,7 @@ describe('HistoryImportFormComponent', () => {
         await fixture.whenStable();
         component.serviceName = ServiceNames.SuuntoApp;
         component.userMetaForService = {} as UserServiceMetaInterface;
+        component.providerConnected = true;
         component.isPro = true;
         mockAnalyticsService.logEvent.mockImplementationOnce(() => {
             throw new Error('analytics unavailable');
