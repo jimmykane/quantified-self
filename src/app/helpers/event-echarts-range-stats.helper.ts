@@ -12,7 +12,7 @@ import {
   getEventChartSeriesPointCount,
   getEventChartSeriesY,
 } from './event-echarts-data.helper';
-import { EventChartRange, normalizeEventRange } from './event-echarts-xaxis.helper';
+import { EventChartRange, normalizeEventRange } from './event-chart-range.helper';
 
 export interface EventPanelRangeStat {
   activityID: string;

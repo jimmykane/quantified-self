@@ -66,7 +66,7 @@ describe('reprocessEvent', () => {
 
     it('should register with reparse runtime limits', () => {
         expect(hoisted.getOnCallOptions()).toMatchObject({
-            memory: '1GiB',
+            memory: '4GiB',
             cpu: 2,
             concurrency: 1,
             timeoutSeconds: 3600,

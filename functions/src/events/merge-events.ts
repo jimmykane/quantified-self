@@ -23,6 +23,7 @@ import {
   stripStreamsRecursivelyInPlace,
 } from '../../../shared/firestore-write-sanitizer';
 import { FUNCTIONS_MANIFEST } from '../../../shared/functions-manifest';
+import { ACTIVITY_PROCESSING_HTTPS_RUNTIME_OPTIONS } from '../shared/activity-processing-config';
 
 type MergeType = 'benchmark' | 'multi';
 
@@ -538,10 +539,8 @@ async function downloadOriginalFilesForMerge(sourceFiles: SourceFileMeta[]): Pro
 
 export const mergeEvents = onCall({
   region: FUNCTIONS_MANIFEST.mergeEvents.region,
-  memory: '1GiB',
+  ...ACTIVITY_PROCESSING_HTTPS_RUNTIME_OPTIONS,
   cors: ALLOWED_CORS_ORIGINS,
-  timeoutSeconds: 540,
-  maxInstances: 20,
 }, async (request) => {
   if (!request.auth) {
     throw new HttpsError('unauthenticated', 'The function must be called while authenticated.');

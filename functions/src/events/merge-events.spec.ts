@@ -3,6 +3,7 @@ import { gzipSync } from 'node:zlib';
 import { USAGE_LIMITS } from '../../../shared/limits';
 
 const hoisted = vi.hoisted(() => {
+  let onCallOptions: unknown = null;
   const state = {
     eventCount: 0,
     eventDocs: new Map<string, Record<string, unknown>>(),
@@ -97,11 +98,18 @@ const hoisted = vi.hoisted(() => {
       mockEventImporterJSON,
       mockMergeEvents,
       makeEvent,
+      getOnCallOptions: () => onCallOptions,
+      setOnCallOptions: (options: unknown) => {
+        onCallOptions = options;
+      },
     };
 });
 
 vi.mock('firebase-functions/v2/https', () => ({
-  onCall: (_options: unknown, handler: unknown) => handler,
+  onCall: (options: unknown, handler: unknown) => {
+    hoisted.setOnCallOptions(options);
+    return handler;
+  },
   HttpsError: class HttpsError extends Error {
     code: string;
     constructor(code: string, message: string) {
@@ -351,6 +359,16 @@ describe('mergeEvents', () => {
     hoisted.mockStorageSave.mockResolvedValue(undefined);
 
     seedTwoEvents();
+  });
+
+  it('should register with activity processing runtime limits', () => {
+    expect(hoisted.getOnCallOptions()).toMatchObject({
+      memory: '4GiB',
+      cpu: 2,
+      concurrency: 1,
+      timeoutSeconds: 3600,
+      maxInstances: 20,
+    });
   });
 
   it('should reject unauthenticated requests', async () => {

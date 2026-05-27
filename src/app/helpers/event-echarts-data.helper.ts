@@ -38,7 +38,7 @@ import {
   resolveEventColorGroupKey,
   resolveEventSeriesColor
 } from './event-echarts-style.helper';
-import { EventChartRange, normalizeEventRange } from './event-echarts-xaxis.helper';
+import { EventChartRange, normalizeEventRange } from './event-chart-range.helper';
 import { normalizeUnitDerivedTypeLabel } from './stat-label.helper';
 import { resolveUnitAwareDisplayStat } from '@shared/unit-aware-display';
 import { AppSwimLength, getActivitySwimLengths } from './event-swim-length.helper';
