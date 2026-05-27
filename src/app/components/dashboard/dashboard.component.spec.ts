@@ -29,6 +29,8 @@ import { LoggerService } from '../../services/logger.service';
 import { ACTIVITY_SYNC_ROUTE_IDS } from '@shared/activity-sync-routes';
 import { AppWindowService } from '../../services/app.window.service';
 import { buildSuuntoServiceConnectionViewModel } from '../../helpers/suunto-service-connection.helper';
+import { AppSleepService } from '../../services/app.sleep.service';
+import { SLEEP_PROVIDERS } from '@shared/sleep';
 
 describe('DashboardComponent', () => {
     let component: DashboardComponent;
@@ -42,6 +44,7 @@ describe('DashboardComponent', () => {
     let mockDialog: any;
     let mockSnackBar: any;
     let mockLogger: any;
+    let mockSleepService: any;
 
     const mockUser = new User('testUser') as AppUserInterface;
 
@@ -80,8 +83,17 @@ describe('DashboardComponent', () => {
             shouldShowPromo: vi.fn().mockReturnValue(false),
             updateUserProperties: vi.fn().mockReturnValue(Promise.resolve()),
             updateActivitySyncRouteSettings: vi.fn().mockReturnValue(Promise.resolve()),
+            backfillGarminSleepForCurrentUser: vi.fn().mockResolvedValue({
+                queued: 43,
+                startDate: '2016-01-01T00:00:00.000Z',
+                endDate: '2026-04-30T12:00:00.000Z',
+                nextAllowedAtMs: 1_780_231_200_000,
+            }),
             getCurrentUserServiceTokenAndRedirectURI: vi.fn().mockResolvedValue({ redirect_uri: 'https://suunto.example/connect' }),
             getUserMetaForService: vi.fn().mockReturnValue(of(undefined)),
+            getServiceToken: vi.fn().mockReturnValue(of([{
+                permissions: ['HISTORICAL_DATA_EXPORT', 'HEALTH_EXPORT'],
+            }])),
             watchSuuntoServiceConnectionView: vi.fn().mockReturnValue(of(buildSuuntoServiceConnectionViewModel({
                 hasToken: false,
                 serviceMeta: null,
@@ -92,6 +104,9 @@ describe('DashboardComponent', () => {
                 [ServiceNames.SuuntoApp]: false,
                 [ServiceNames.COROSAPI]: false,
             }))
+        };
+        mockSleepService = {
+            watchSyncState: vi.fn().mockReturnValue(of(null)),
         };
 
         mockRouter = { navigate: vi.fn().mockResolvedValue(true) };
@@ -126,6 +141,7 @@ describe('DashboardComponent', () => {
                 { provide: Analytics, useValue: null },
                 { provide: LoggerService, useValue: mockLogger },
                 { provide: AppWindowService, useValue: { windowRef: { location: { href: '' } } } },
+                { provide: AppSleepService, useValue: mockSleepService },
             ],
             schemas: [NO_ERRORS_SCHEMA]
         })
@@ -624,6 +640,133 @@ describe('DashboardComponent', () => {
             },
         );
         expect(component.dashboardActionPrompts.some(prompt => prompt.id === 'enableActivityAutoSync')).toBe(false);
+    });
+
+    it('shows Garmin sleep backfill prompt for eligible connected Pro owner dashboards', async () => {
+        mockUser.stripeRole = 'pro';
+        mockUser.settings.appSettings = {};
+        mockUserService.watchActivityServiceConnectionState.mockReturnValue(of({
+            [ServiceNames.GarminAPI]: true,
+            [ServiceNames.SuuntoApp]: false,
+            [ServiceNames.COROSAPI]: false,
+        }));
+        mockSleepService.watchSyncState.mockReturnValue(of(null));
+
+        fixture.detectChanges();
+        await fixture.whenStable();
+
+        expect(mockSleepService.watchSyncState).toHaveBeenCalledWith(mockUser.uid, SLEEP_PROVIDERS.GarminAPI);
+        const prompt = component.dashboardActionPrompts.find(item => item.id === 'backfillGarminSleep');
+        expect(prompt).toBeTruthy();
+        expect(prompt?.title).toBe('Backfill Garmin sleep');
+        expect(prompt?.primaryAction?.id).toBe('backfillGarminSleep');
+    });
+
+    it('does not show Garmin sleep backfill prompt when required Garmin health permissions are missing', async () => {
+        mockUser.stripeRole = 'pro';
+        mockUser.settings.appSettings = {};
+        mockUserService.watchActivityServiceConnectionState.mockReturnValue(of({
+            [ServiceNames.GarminAPI]: true,
+            [ServiceNames.SuuntoApp]: false,
+            [ServiceNames.COROSAPI]: false,
+        }));
+        mockUserService.getServiceToken.mockReturnValue(of([{
+            permissions: ['HISTORICAL_DATA_EXPORT'],
+        }]));
+        mockSleepService.watchSyncState.mockReturnValue(of(null));
+
+        fixture.detectChanges();
+        await fixture.whenStable();
+
+        expect(mockUserService.getServiceToken).toHaveBeenCalledWith(mockUser, ServiceNames.GarminAPI);
+        expect(component.dashboardActionPrompts.some(prompt => prompt.id === 'backfillGarminSleep')).toBe(false);
+    });
+
+    it('does not show Garmin sleep backfill prompt after a previous backfill request', async () => {
+        mockUser.stripeRole = 'pro';
+        mockUser.settings.appSettings = {};
+        mockUserService.watchActivityServiceConnectionState.mockReturnValue(of({
+            [ServiceNames.GarminAPI]: true,
+            [ServiceNames.SuuntoApp]: false,
+            [ServiceNames.COROSAPI]: false,
+        }));
+        mockSleepService.watchSyncState.mockReturnValue(of({
+            provider: SLEEP_PROVIDERS.GarminAPI,
+            status: 'ready',
+            lastBackfillQueuedAtMs: 100,
+            updatedAtMs: 100,
+        }));
+
+        fixture.detectChanges();
+        await fixture.whenStable();
+
+        expect(component.dashboardActionPrompts.some(prompt => prompt.id === 'backfillGarminSleep')).toBe(false);
+    });
+
+    it('requests Garmin sleep backfill from the dashboard prompt and hides it after success', async () => {
+        mockUser.stripeRole = 'pro';
+        mockUser.settings.appSettings = {};
+        component.user = mockUser;
+        (component as any).activityServiceConnectionState = {
+            [ServiceNames.GarminAPI]: true,
+            [ServiceNames.SuuntoApp]: false,
+            [ServiceNames.COROSAPI]: false,
+        };
+        (component as any).garminSleepSyncStateLoaded = true;
+        (component as any).garminSleepBackfillPermissionsLoaded = true;
+        (component as any).hasGarminSleepBackfillPermissions = true;
+        (component as any).analyticsService.logEvent = vi.fn();
+        (component as any).syncDashboardActionPromptState();
+
+        expect(component.dashboardActionPrompts.some(prompt => prompt.id === 'backfillGarminSleep')).toBe(true);
+
+        await component.backfillGarminSleepPrompt();
+
+        expect(mockUserService.backfillGarminSleepForCurrentUser).toHaveBeenCalled();
+        expect((component as any).analyticsService.logEvent).toHaveBeenCalledWith('backfilled_sleep_history', {
+            method: ServiceNames.GarminAPI,
+            source: 'dashboard_prompt',
+        });
+        expect(mockSnackBar.open).toHaveBeenCalledWith(
+            'Garmin sleep backfill requested: 43 windows.',
+            undefined,
+            { duration: 3000 },
+        );
+        expect(component.dashboardActionPrompts.some(prompt => prompt.id === 'backfillGarminSleep')).toBe(false);
+    });
+
+    it('dismisses Garmin sleep backfill prompt and persists action prompt state', async () => {
+        mockUser.stripeRole = 'pro';
+        mockUser.settings.appSettings = {};
+        component.user = mockUser;
+        (component as any).activityServiceConnectionState = {
+            [ServiceNames.GarminAPI]: true,
+            [ServiceNames.SuuntoApp]: false,
+            [ServiceNames.COROSAPI]: false,
+        };
+        (component as any).garminSleepSyncStateLoaded = true;
+        (component as any).garminSleepBackfillPermissionsLoaded = true;
+        (component as any).hasGarminSleepBackfillPermissions = true;
+        (component as any).syncDashboardActionPromptState();
+
+        await component.dismissGarminSleepBackfillPrompt();
+
+        expect(mockUserService.updateUserProperties).toHaveBeenCalledWith(
+            mockUser,
+            {
+                settings: {
+                    appSettings: {
+                        dashboardActionPrompts: {
+                            backfillGarminSleep: expect.objectContaining({
+                                state: 'dismissed',
+                                source: 'garmin-sleep-backfill',
+                            }),
+                        },
+                    },
+                },
+            },
+        );
+        expect(component.dashboardActionPrompts.some(prompt => prompt.id === 'backfillGarminSleep')).toBe(false);
     });
 
     it('applies the miles unit setup preset and completes setup', async () => {

@@ -229,7 +229,10 @@ describe('help.content', () => {
     expect(serviceConnectionsSection?.content).toContain('overlays recorded sleep HRV with an average HRV reference line');
     expect(serviceConnectionsSection?.content).toContain('Backfill Sleep History');
     expect(serviceConnectionsSection?.content).toContain('Jan 1, 2016');
-    expect(serviceConnectionsSection?.content).toContain('7-day sleep backfill cooldown');
+    expect(serviceConnectionsSection?.content).toContain('7-day cooldown');
+    expect(serviceConnectionsSection?.content).toContain('30-day cooldown');
+    expect(serviceConnectionsSection?.content).toContain('one-time dashboard prompt');
+    expect(serviceConnectionsSection?.content).toContain('Garmin sleep history backfill is separate from activity history import');
     expect(serviceConnectionsSection?.content).toContain('COROS -> Suunto activity sync is route-based');
     expect(serviceConnectionsSection?.content).toContain('enable the route toggle in COROS Services');
     expect(serviceConnectionsSection?.content).toContain('Automatic sync runs only for newly imported COROS activities');

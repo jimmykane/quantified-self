@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
     SLEEP_BACKFILL_COOLDOWN_MS,
     SLEEP_BACKFILL_START_DATE_ISO,
+    getSleepBackfillCooldownMs,
     getSleepBackfillWindowDays,
 } from '../../../shared/sleep-backfill';
 import { SLEEP_PROVIDERS } from '../../../shared/sleep';
@@ -17,6 +18,7 @@ const hoisted = vi.hoisted(() => ({
     isSleepSyncUserAllowed: vi.fn(),
     addSleepSyncQueueItem: vi.fn(),
     updateSleepSyncState: vi.fn(),
+    requestGet: vi.fn(),
 }));
 
 vi.mock('firebase-functions/logger', () => ({
@@ -58,6 +60,21 @@ vi.mock('firebase-admin', () => ({
                         collection: () => ({
                             get: vi.fn().mockResolvedValue({
                                 docs: hoisted.tokenDocs,
+                            }),
+                        }),
+                    }),
+                };
+            }
+
+            if (name === 'garminAPITokens') {
+                return {
+                    doc: () => ({
+                        collection: () => ({
+                            limit: () => ({
+                                get: vi.fn().mockResolvedValue({
+                                    empty: hoisted.tokenDocs.length === 0,
+                                    docs: hoisted.tokenDocs,
+                                }),
                             }),
                         }),
                     }),
@@ -116,7 +133,11 @@ vi.mock('./writer', () => ({
     updateSleepSyncState: hoisted.updateSleepSyncState,
 }));
 
-import { backfillSuuntoAppSleep, chunkSleepBackfillRange } from './backfill';
+vi.mock('../request-helper', () => ({
+    get: hoisted.requestGet,
+}));
+
+import { backfillGarminAPISleep, backfillSuuntoAppSleep, chunkSleepBackfillRange } from './backfill';
 
 function createRequest(overrides: Partial<{
     app: object | null;
@@ -133,6 +154,13 @@ function seedSuuntoToken(serviceName: string | undefined = undefined) {
     hoisted.tokenDocs.push({
         id: 'suunto-token-1',
         data: () => serviceName ? { serviceName } : {},
+    });
+}
+
+function seedGarminToken() {
+    hoisted.tokenDocs.push({
+        id: 'garmin-user-1',
+        data: () => ({ serviceName: 'GarminAPI' }),
     });
 }
 
@@ -154,6 +182,7 @@ describe('backfillSuuntoAppSleep', () => {
         hoisted.isSleepSyncUserAllowed.mockReturnValue(true);
         hoisted.addSleepSyncQueueItem.mockResolvedValue({ id: 'queue-item' });
         hoisted.updateSleepSyncState.mockResolvedValue(undefined);
+        hoisted.requestGet.mockResolvedValue(undefined);
     });
 
     afterEach(() => {
@@ -308,5 +337,228 @@ describe('backfillSuuntoAppSleep', () => {
         expect(hoisted.getTokenData).toHaveBeenCalled();
         expect(hoisted.transactionSet).not.toHaveBeenCalled();
         expect(hoisted.addSleepSyncQueueItem).not.toHaveBeenCalled();
+    });
+});
+
+describe('backfillGarminAPISleep', () => {
+    const nowMs = Date.parse('2026-04-30T12:00:00.000Z');
+    const startMs = Date.parse(SLEEP_BACKFILL_START_DATE_ISO);
+    const windowDays = getSleepBackfillWindowDays(SLEEP_PROVIDERS.GarminAPI) || 0;
+    const cooldownMs = getSleepBackfillCooldownMs(SLEEP_PROVIDERS.GarminAPI) || 0;
+
+    beforeEach(() => {
+        vi.useFakeTimers();
+        vi.setSystemTime(nowMs);
+        vi.clearAllMocks();
+        hoisted.tokenDocs.length = 0;
+        hoisted.stateData = null;
+        hoisted.transactionStateData = undefined;
+        hoisted.hasProAccess.mockResolvedValue(true);
+        hoisted.getTokenData.mockResolvedValue({
+            accessToken: 'garmin-access-token',
+            userID: 'garmin-user-1',
+            permissions: ['HISTORICAL_DATA_EXPORT', 'HEALTH_EXPORT'],
+        });
+        hoisted.isSleepProviderEnabled.mockReturnValue(true);
+        hoisted.isSleepSyncUserAllowed.mockReturnValue(true);
+        hoisted.addSleepSyncQueueItem.mockResolvedValue({ id: 'queue-item' });
+        hoisted.updateSleepSyncState.mockResolvedValue(undefined);
+        hoisted.requestGet.mockResolvedValue(undefined);
+    });
+
+    afterEach(() => {
+        vi.useRealTimers();
+    });
+
+    it('requests Garmin sleep backfill windows from the shared start date to now', async () => {
+        seedGarminToken();
+        const expectedWindows = chunkSleepBackfillRange(startMs, nowMs, windowDays);
+
+        const result = await backfillGarminAPISleep(createRequest() as any);
+
+        expect(result).toEqual({
+            queued: expectedWindows.length,
+            startDate: SLEEP_BACKFILL_START_DATE_ISO,
+            endDate: new Date(nowMs).toISOString(),
+            nextAllowedAtMs: nowMs + cooldownMs,
+        });
+        expect(hoisted.addSleepSyncQueueItem).not.toHaveBeenCalled();
+        expect(hoisted.requestGet).toHaveBeenCalledTimes(expectedWindows.length);
+        expect(hoisted.transactionSet).toHaveBeenCalledWith(expect.anything(), {
+            provider: SLEEP_PROVIDERS.GarminAPI,
+            status: 'ready',
+            lastBackfillQueuedAtMs: nowMs,
+            lastBackfillStartMs: startMs,
+            lastBackfillEndMs: nowMs,
+            lastBackfillQueueItems: 0,
+            nextBackfillAllowedAtMs: nowMs + cooldownMs,
+            lastError: null,
+            updatedAtMs: nowMs,
+        }, { merge: true });
+        expect(hoisted.transactionSet.mock.invocationCallOrder[0])
+            .toBeLessThan(hoisted.requestGet.mock.invocationCallOrder[0]);
+        expect(hoisted.requestGet).toHaveBeenNthCalledWith(1, {
+            headers: {
+                Authorization: 'Bearer garmin-access-token',
+            },
+            url: `https://apis.garmin.com/wellness-api/rest/backfill/sleeps?summaryStartTimeInSeconds=${Math.floor(expectedWindows[0].startMs / 1000)}&summaryEndTimeInSeconds=${Math.floor(expectedWindows[0].endMs / 1000)}`,
+        });
+        expect(hoisted.updateSleepSyncState).toHaveBeenCalledWith('user-1', SLEEP_PROVIDERS.GarminAPI, {
+            status: 'ready',
+            lastBackfillQueuedAtMs: nowMs,
+            lastBackfillStartMs: startMs,
+            lastBackfillEndMs: nowMs,
+            lastBackfillQueueItems: expectedWindows.length,
+            nextBackfillAllowedAtMs: nowMs + cooldownMs,
+            lastError: null,
+        }, nowMs);
+    });
+
+    it('rejects Garmin requests without App Check', async () => {
+        seedGarminToken();
+
+        await expect(backfillGarminAPISleep(createRequest({ app: null }) as any))
+            .rejects.toMatchObject({ code: 'failed-precondition' });
+
+        expect(hoisted.requestGet).not.toHaveBeenCalled();
+    });
+
+    it('rejects unauthenticated Garmin requests', async () => {
+        seedGarminToken();
+
+        await expect(backfillGarminAPISleep(createRequest({ auth: null }) as any))
+            .rejects.toMatchObject({ code: 'unauthenticated' });
+
+        expect(hoisted.requestGet).not.toHaveBeenCalled();
+    });
+
+    it('rejects non-Pro Garmin users', async () => {
+        seedGarminToken();
+        hoisted.hasProAccess.mockResolvedValue(false);
+
+        await expect(backfillGarminAPISleep(createRequest() as any))
+            .rejects.toMatchObject({ code: 'permission-denied' });
+
+        expect(hoisted.requestGet).not.toHaveBeenCalled();
+    });
+
+    it('rejects when Garmin sleep sync is disabled', async () => {
+        seedGarminToken();
+        hoisted.isSleepProviderEnabled.mockReturnValue(false);
+
+        await expect(backfillGarminAPISleep(createRequest() as any))
+            .rejects.toMatchObject({ code: 'failed-precondition' });
+
+        expect(hoisted.requestGet).not.toHaveBeenCalled();
+    });
+
+    it('rejects Garmin users outside the sleep allowlist', async () => {
+        seedGarminToken();
+        hoisted.isSleepSyncUserAllowed.mockReturnValue(false);
+
+        await expect(backfillGarminAPISleep(createRequest() as any))
+            .rejects.toMatchObject({ code: 'permission-denied' });
+
+        expect(hoisted.requestGet).not.toHaveBeenCalled();
+    });
+
+    it('rejects Garmin users without a connected token', async () => {
+        await expect(backfillGarminAPISleep(createRequest() as any))
+            .rejects.toMatchObject({ code: 'failed-precondition' });
+
+        expect(hoisted.requestGet).not.toHaveBeenCalled();
+    });
+
+    it('rejects Garmin users missing health backfill permissions and updates sync state', async () => {
+        seedGarminToken();
+        hoisted.getTokenData.mockResolvedValue({
+            accessToken: 'garmin-access-token',
+            userID: 'garmin-user-1',
+            permissions: ['HISTORICAL_DATA_EXPORT'],
+        });
+
+        await expect(backfillGarminAPISleep(createRequest() as any))
+            .rejects.toMatchObject({ code: 'failed-precondition' });
+
+        expect(hoisted.updateSleepSyncState).toHaveBeenCalledWith('user-1', SLEEP_PROVIDERS.GarminAPI, {
+            status: 'permission_missing',
+            lastError: 'Missing required Garmin permissions: HEALTH_EXPORT',
+        });
+        expect(hoisted.requestGet).not.toHaveBeenCalled();
+    });
+
+    it('still rejects with the permission error when marking missing permissions fails', async () => {
+        seedGarminToken();
+        hoisted.getTokenData.mockResolvedValue({
+            accessToken: 'garmin-access-token',
+            userID: 'garmin-user-1',
+            permissions: ['HISTORICAL_DATA_EXPORT'],
+        });
+        hoisted.updateSleepSyncState.mockRejectedValueOnce(new Error('state write failed'));
+
+        await expect(backfillGarminAPISleep(createRequest() as any))
+            .rejects.toMatchObject({
+                code: 'failed-precondition',
+                message: 'Missing required Garmin permissions (Historical Data Export, Health Export). Please reconnect Garmin and grant health permissions.',
+            });
+
+        expect(hoisted.requestGet).not.toHaveBeenCalled();
+    });
+
+    it('rejects Garmin users while the provider sleep backfill cooldown is active', async () => {
+        seedGarminToken();
+        hoisted.stateData = {
+            nextBackfillAllowedAtMs: nowMs + 60_000,
+        };
+
+        await expect(backfillGarminAPISleep(createRequest() as any))
+            .rejects.toMatchObject({ code: 'resource-exhausted' });
+
+        expect(hoisted.getTokenData).not.toHaveBeenCalled();
+        expect(hoisted.requestGet).not.toHaveBeenCalled();
+    });
+
+    it('clears the claimed cooldown when Garmin request submission fails', async () => {
+        seedGarminToken();
+        hoisted.requestGet
+            .mockResolvedValueOnce(undefined)
+            .mockRejectedValueOnce(new Error('garmin unavailable'));
+
+        await expect(backfillGarminAPISleep(createRequest() as any))
+            .rejects.toMatchObject({ code: 'internal' });
+
+        expect(hoisted.transactionSet).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+            nextBackfillAllowedAtMs: nowMs + cooldownMs,
+        }), { merge: true });
+        expect(hoisted.requestGet).toHaveBeenCalledTimes(2);
+        expect(hoisted.updateSleepSyncState).toHaveBeenCalledWith('user-1', SLEEP_PROVIDERS.GarminAPI, {
+            status: 'failed',
+            lastBackfillQueueItems: 1,
+            nextBackfillAllowedAtMs: null,
+            lastError: 'garmin unavailable',
+        }, nowMs);
+    });
+
+    it('skips Garmin windows before the provider min start time without failing the backfill request', async () => {
+        seedGarminToken();
+        hoisted.requestGet
+            .mockRejectedValueOnce({
+                statusCode: 400,
+                error: {
+                    error: {
+                        errorMessage: 'start date before min start time',
+                    },
+                },
+            })
+            .mockResolvedValue(undefined);
+
+        const result = await backfillGarminAPISleep(createRequest() as any);
+
+        expect(result.queued).toBe(chunkSleepBackfillRange(startMs, nowMs, windowDays).length - 1);
+        expect(hoisted.updateSleepSyncState).toHaveBeenCalledWith('user-1', SLEEP_PROVIDERS.GarminAPI, expect.objectContaining({
+            status: 'ready',
+            lastBackfillQueueItems: result.queued,
+            nextBackfillAllowedAtMs: nowMs + cooldownMs,
+        }), nowMs);
     });
 });

@@ -20,8 +20,14 @@ import { UserServiceMetaInterface } from '@sports-alliance/sports-lib';
 import { Subscription } from 'rxjs';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { COROS_HISTORY_IMPORT_LIMIT_MONTHS, GARMIN_HISTORY_IMPORT_COOLDOWN_DAYS, HISTORY_IMPORT_ACTIVITIES_PER_DAY_LIMIT, HISTORY_IMPORT_PROCESSING_CAPACITY_PER_DAY_PER_USER_ESTIMATE } from '@shared/history-import.constants';
-import { SLEEP_BACKFILL_COOLDOWN_DAYS, SLEEP_BACKFILL_START_DATE_ISO, SleepBackfillQueueResponse } from '@shared/sleep-backfill';
-import { SLEEP_PROVIDERS, SleepSyncState } from '@shared/sleep';
+import {
+  GARMIN_SLEEP_BACKFILL_REQUIRED_PERMISSIONS,
+  getSleepBackfillCooldownDays,
+  SLEEP_BACKFILL_COOLDOWN_DAYS,
+  SLEEP_BACKFILL_START_DATE_ISO,
+  SleepBackfillQueueResponse,
+} from '@shared/sleep-backfill';
+import { SLEEP_PROVIDERS, SleepProvider, SleepSyncState } from '@shared/sleep';
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
 import { AppAuthService } from '../../authentication/app.auth.service';
@@ -65,7 +71,6 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
   public activitiesPerDayLimit = HISTORY_IMPORT_ACTIVITIES_PER_DAY_LIMIT;
   public processingCapacityPerDay = HISTORY_IMPORT_PROCESSING_CAPACITY_PER_DAY_PER_USER_ESTIMATE;
   public garminCooldownDays = GARMIN_HISTORY_IMPORT_COOLDOWN_DAYS;
-  public sleepBackfillCooldownDays = SLEEP_BACKFILL_COOLDOWN_DAYS;
   public sleepBackfillStartDate = new Date(SLEEP_BACKFILL_START_DATE_ISO);
   /** Optimistic UI flag - blocks re-submission immediately after success */
   public isHistoryImportPending = signal(false);
@@ -73,7 +78,7 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
   public pendingImportResult = signal<HistoryImportResult | null>(null);
   public isSleepBackfillSubmitting = signal(false);
   public pendingSleepBackfillResult = signal<SleepBackfillQueueResponse | null>(null);
-  public suuntoSleepSyncState = signal<SleepSyncState | null>(null);
+  public sleepBackfillSyncState = signal<SleepSyncState | null>(null);
   /** Max date for any import is today (using dayjs for datepicker compatibility) */
   public today = dayjs().endOf('day');
   /** Expose Math for template calculations */
@@ -339,16 +344,44 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
     return `Estimated to finish ${completionDate.fromNow()} (${completionDate.format('dddd')}).`;
   }
 
-  get isSuuntoSleepBackfillVisible(): boolean {
-    return this.serviceName === ServiceNames.SuuntoApp
+  get sleepBackfillProvider(): SleepProvider | null {
+    if (this.serviceName === ServiceNames.SuuntoApp) {
+      return SLEEP_PROVIDERS.SuuntoApp;
+    }
+    if (this.serviceName === ServiceNames.GarminAPI) {
+      return SLEEP_PROVIDERS.GarminAPI;
+    }
+    return null;
+  }
+
+  get sleepBackfillProviderLabel(): string {
+    return this.serviceName === ServiceNames.GarminAPI ? 'Garmin' : 'Suunto';
+  }
+
+  get sleepBackfillCooldownDays(): number {
+    const provider = this.sleepBackfillProvider;
+    return provider ? getSleepBackfillCooldownDays(provider) || SLEEP_BACKFILL_COOLDOWN_DAYS : SLEEP_BACKFILL_COOLDOWN_DAYS;
+  }
+
+  get isSleepBackfillVisible(): boolean {
+    return !!this.sleepBackfillProvider
       && this.isPro
       && !!this.userMetaForService;
+  }
+
+  get sleepBackfillResultVerb(): string {
+    return this.serviceName === ServiceNames.GarminAPI ? 'Requested' : 'Queued';
+  }
+
+  get isMissingGarminSleepBackfillPermissions(): boolean {
+    return this.serviceName === ServiceNames.GarminAPI
+      && GARMIN_SLEEP_BACKFILL_REQUIRED_PERMISSIONS.some(permission => this.missingPermissions.includes(permission));
   }
 
   get sleepBackfillNextAllowedAtMs(): number | null {
     const nextAllowedAtMs = Number(
       this.pendingSleepBackfillResult()?.nextAllowedAtMs
-      ?? this.suuntoSleepSyncState()?.nextBackfillAllowedAtMs
+      ?? this.sleepBackfillSyncState()?.nextBackfillAllowedAtMs
     );
     return Number.isFinite(nextAllowedAtMs) ? nextAllowedAtMs : null;
   }
@@ -358,18 +391,20 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
     return nextAllowedAtMs !== null && nextAllowedAtMs > Date.now();
   }
 
-  get canSubmitSuuntoSleepBackfill(): boolean {
-    return this.isSuuntoSleepBackfillVisible
+  get canSubmitSleepBackfill(): boolean {
+    return this.isSleepBackfillVisible
       && !this.isSubmitting
       && !this.isLoadingParent
       && !this.isSleepBackfillSubmitting()
-      && !this.isSleepBackfillCooldownActive;
+      && !this.isSleepBackfillCooldownActive
+      && !this.isMissingGarminSleepBackfillPermissions;
   }
 
-  async onSuuntoSleepBackfill(event: Event) {
+  async onSleepBackfill(event: Event) {
     event.preventDefault();
     event.stopPropagation();
-    if (!this.canSubmitSuuntoSleepBackfill) {
+    const provider = this.sleepBackfillProvider;
+    if (!provider || !this.canSubmitSleepBackfill) {
       return;
     }
 
@@ -377,15 +412,20 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
     this.changeDetectorRef.detectChanges();
 
     try {
-      this.analyticsService.logEvent('backfilled_sleep_history', { method: ServiceNames.SuuntoApp });
+      this.analyticsService.logEvent('backfilled_sleep_history', {
+        method: this.serviceName,
+        source: 'history_import',
+      });
     } catch (e) {
       this.logger.error(e);
     }
 
     try {
-      const result = await this.userService.backfillSuuntoSleepForCurrentUser();
+      const result = provider === SLEEP_PROVIDERS.GarminAPI
+        ? await this.userService.backfillGarminSleepForCurrentUser()
+        : await this.userService.backfillSuuntoSleepForCurrentUser();
       this.pendingSleepBackfillResult.set(result);
-      this.snackBar.open(`Sleep backfill queued: ${result.queued} windows.`, undefined, {
+      this.snackBar.open(`${this.sleepBackfillProviderLabel} sleep backfill ${this.sleepBackfillResultVerb.toLowerCase()}: ${result.queued} windows.`, undefined, {
         duration: 3000,
       });
     } catch (e: any) {
@@ -400,8 +440,9 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
   }
 
   private syncSleepBackfillStateSubscription(): void {
-    const key = this.serviceName === ServiceNames.SuuntoApp && this.currentUserID
-      ? `${this.currentUserID}:${SLEEP_PROVIDERS.SuuntoApp}`
+    const provider = this.sleepBackfillProvider;
+    const key = provider && this.currentUserID
+      ? `${this.currentUserID}:${provider}`
       : null;
     if (this.sleepSyncStateKey === key) {
       return;
@@ -410,22 +451,23 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
     this.sleepSyncStateSubscription?.unsubscribe();
     this.sleepSyncStateSubscription = null;
     this.sleepSyncStateKey = key;
-    this.suuntoSleepSyncState.set(null);
+    this.sleepBackfillSyncState.set(null);
+    this.pendingSleepBackfillResult.set(null);
 
-    if (!key || !this.currentUserID) {
+    if (!key || !this.currentUserID || !provider) {
       return;
     }
 
     this.sleepSyncStateSubscription = this.sleepService
-      .watchSyncState(this.currentUserID, SLEEP_PROVIDERS.SuuntoApp)
+      .watchSyncState(this.currentUserID, provider)
       .subscribe({
         next: (state) => {
-          this.suuntoSleepSyncState.set(state);
+          this.sleepBackfillSyncState.set(state);
           this.changeDetectorRef.markForCheck();
         },
         error: (error) => {
           this.logger.error(error);
-          this.suuntoSleepSyncState.set(null);
+          this.sleepBackfillSyncState.set(null);
           this.changeDetectorRef.markForCheck();
         },
       });

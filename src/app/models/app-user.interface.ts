@@ -82,6 +82,7 @@ export type AppDashboardActionPromptId =
     | 'firstActivityUpload'
     | 'connectActivityService'
     | 'enableActivityAutoSync'
+    | 'backfillGarminSleep'
     | 'reconnectSuuntoService';
 export type AppDashboardActionPromptStateValue = 'dismissed';
 

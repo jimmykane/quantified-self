@@ -471,7 +471,7 @@ Garmin, Suunto, and COROS connections are part of **Pro**.
 
 ## Sleep data
 
-Sleep sync is server-owned health data. When available, Garmin, Suunto, and COROS sleep sessions are imported as separate source records and shown by the dashboard **Sleep** tile. The sleep chart has its own 14d, 30d, 90d, and 1y range control with older/newer paging, independent from dashboard event filters. It stacks sleep stages and overlays recorded sleep HRV with an average HRV reference line when the provider includes it. Suunto Pro users can queue **Backfill Sleep History** from History Import; it requests Suunto sleep from Jan 1, 2016 to today and uses a 7-day sleep backfill cooldown.
+Sleep sync is server-owned health data. When available, Garmin, Suunto, and COROS sleep sessions are imported as separate source records and shown by the dashboard **Sleep** tile. The sleep chart has its own 14d, 30d, 90d, and 1y range control with older/newer paging, independent from dashboard event filters. It stacks sleep stages and overlays recorded sleep HRV with an average HRV reference line when the provider includes it. Suunto and Garmin Pro users can queue **Backfill Sleep History** from History Import; Garmin users may also see a one-time dashboard prompt. Suunto queues sleep from Jan 1, 2016 to today with a 7-day cooldown. Garmin requests sleep from Jan 1, 2016 to today, receives records asynchronously from Garmin, and uses a 30-day cooldown.
 
 ## Suunto
 
@@ -492,6 +492,8 @@ Garmin history import has two important limits:
 - and up to **5 years** of data per request.
 
 Garmin can deliver imported activities gradually over hours or days.
+
+Garmin sleep history backfill is separate from activity history import. It requests sleep through Garmin Health API and records appear later as Garmin sends sleep notifications.
 
 If Garmin permissions are missing, reconnect the app and grant the required export, history, and health permissions in Garmin Connect.
 
