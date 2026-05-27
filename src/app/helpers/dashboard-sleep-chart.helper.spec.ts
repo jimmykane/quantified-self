@@ -98,6 +98,92 @@ describe('dashboard-sleep-chart.helper', () => {
     expect(context.points.every(point => !point.categoryLabel.includes('\n'))).toBe(true);
   });
 
+  it('keys Suunto sleep by local wake date while keeping naps on the nap date', () => {
+    const context = buildDashboardSleepTrendContext([
+      {
+        id: 'suunto-previous-overnight',
+        startTimeMs: Date.UTC(2026, 4, 25, 18, 29),
+        endTimeMs: Date.UTC(2026, 4, 26, 1, 18),
+        sleepDate: '2026-05-25',
+        durationSeconds: 23580,
+        isNap: false,
+        vitals: {
+          averageHeartRateBpm: 65,
+          averageHrvMs: 31,
+        },
+        providerFields: {
+          suunto: {
+            timestamp: '2026-05-25T21:29:00.000+03:00',
+          },
+        },
+        source: { provider: 'SuuntoApp', sourceSessionKey: 'suunto-previous-overnight-source' },
+      },
+      {
+        id: 'suunto-nap',
+        startTimeMs: Date.UTC(2026, 4, 26, 2),
+        endTimeMs: Date.UTC(2026, 4, 26, 4, 52),
+        sleepDate: '2026-05-26',
+        durationSeconds: 10320,
+        isNap: true,
+        vitals: {
+          averageHeartRateBpm: 56,
+          averageHrvMs: 45,
+        },
+        providerFields: {
+          suunto: {
+            timestamp: '2026-05-26T05:00:00.000+03:00',
+          },
+        },
+        source: { provider: 'SuuntoApp', sourceSessionKey: 'suunto-nap-source' },
+      },
+      {
+        id: 'suunto-next-overnight',
+        startTimeMs: Date.UTC(2026, 4, 26, 18, 47),
+        endTimeMs: Date.UTC(2026, 4, 27, 4, 38),
+        sleepDate: '2026-05-26',
+        durationSeconds: 33300,
+        isNap: false,
+        vitals: {
+          averageHeartRateBpm: 64,
+          averageHrvMs: 32,
+        },
+        providerFields: {
+          suunto: {
+            timestamp: '2026-05-26T21:47:00.000+03:00',
+          },
+        },
+        source: { provider: 'SuuntoApp', sourceSessionKey: 'suunto-next-overnight-source' },
+      },
+    ] as any[]);
+
+    expect(context.points).toHaveLength(2);
+    expect(context.points[0]).toMatchObject({
+      categoryLabel: expectedSleepDateLabel('2026-05-26'),
+      sleepDate: '2026-05-26',
+      totalSeconds: 23580,
+      napSeconds: 10320,
+      napCount: 1,
+      napStartTimeMs: Date.UTC(2026, 4, 26, 2),
+      napEndTimeMs: Date.UTC(2026, 4, 26, 4, 52),
+      averageHeartRateBpm: 65,
+      averageHrvMs: 31,
+      napAverageHeartRateBpm: 56,
+      napAverageHrvMs: 45,
+      isNap: false,
+    });
+    expect(context.points[0].categoryLabel).not.toContain('Suunto');
+    expect(context.points[1]).toMatchObject({
+      categoryLabel: expectedSleepDateLabel('2026-05-27'),
+      sleepDate: '2026-05-27',
+      totalSeconds: 33300,
+      napSeconds: 0,
+      averageHeartRateBpm: 64,
+      averageHrvMs: 32,
+      isNap: false,
+    });
+    expect(context.latestPoint?.id).toBe('suunto-next-overnight');
+  });
+
   it('derives the latest sleep point by session time instead of provider display order', () => {
     const context = buildDashboardSleepTrendContext([
       {

@@ -260,6 +260,13 @@ describe('ChartsSleepTrendComponent', () => {
       averageHeartRateBpm: null,
       averageHrvMs: null,
       maxSpo2Percent: null,
+      isNap: false,
+      napSeconds: 0,
+      napCount: 0,
+      napAverageHrvMs: null,
+      napAverageHeartRateBpm: null,
+      napStartTimeMs: null,
+      napEndTimeMs: null,
       isPlaceholder: true,
     });
     const lastPoint = buildSleepPoint({
@@ -295,6 +302,72 @@ describe('ChartsSleepTrendComponent', () => {
     expect(hrvSeries.connectNulls).toBe(false);
     expect(tooltipHtml).toContain('No sleep data');
     expect(component.showNoDataError).toBe(false);
+  });
+
+  it('renders same-day naps as a segment in the stacked sleep bar', async () => {
+    const point = buildSleepPoint({
+      id: 'suunto-sleep-with-nap',
+      categoryLabel: 'Tue, May 26',
+      sleepDate: '2026-05-26',
+      startTimeMs: Date.UTC(2026, 4, 26, 18, 47),
+      endTimeMs: Date.UTC(2026, 4, 27, 4, 38),
+      totalSeconds: 33300,
+      deepSeconds: 5940,
+      lightSeconds: 23580,
+      remSeconds: 3780,
+      awakeSeconds: 2160,
+      unknownSeconds: 0,
+      score: 74,
+      averageHeartRateBpm: 64,
+      averageHrvMs: 32,
+      napSeconds: 10320,
+      napCount: 1,
+      napAverageHeartRateBpm: 56,
+      napAverageHrvMs: 45,
+      napStartTimeMs: Date.UTC(2026, 4, 26, 2),
+      napEndTimeMs: Date.UTC(2026, 4, 26, 4, 52),
+    });
+    component.sleepTrend = {
+      points: [point],
+      latestPoint: point,
+      hasRealPoints: true,
+    };
+
+    fixture.detectChanges();
+    await fixture.whenStable();
+    await vi.waitFor(() => {
+      expect(mockLoader.setOption).toHaveBeenCalled();
+    });
+
+    const setOptionCall = mockLoader.setOption.mock.calls.at(-1) || [];
+    const optionCandidate = setOptionCall[1] || setOptionCall[0];
+    const option = optionCandidate as Record<string, any>;
+    const tooltipHtml = option.tooltip.formatter([{ dataIndex: 0 }]);
+    const napSeries = option.series.find((series: any) => series.name === 'Nap');
+    const awakeSeries = option.series.find((series: any) => series.name === 'Awake');
+
+    expect(option.xAxis.data).toEqual(['Tue, May 26']);
+    expect(napSeries).toMatchObject({
+      name: 'Nap',
+      type: 'bar',
+      stack: 'sleep',
+      barMaxWidth: 32,
+    });
+    expect(napSeries.data).toEqual([
+      {
+        value: 2.87,
+        itemStyle: {
+          borderRadius: [3, 3, 0, 0],
+        },
+      },
+    ]);
+    expect(awakeSeries.data).toEqual([0.6]);
+    expect(tooltipHtml).toContain('Suunto · 2026-05-26');
+    expect(tooltipHtml).toContain('9h 15m');
+    expect(tooltipHtml).toContain('2h 52m');
+    expect(tooltipHtml).toContain('12h 07m');
+    expect(tooltipHtml).toContain('Nap HRV');
+    expect(tooltipHtml).toContain('45 ms');
   });
 
   it('enables the draggable x-axis tooltip handle on mobile viewport', async () => {
@@ -364,6 +437,13 @@ function buildSleepPoint(overrides: Partial<DashboardSleepTrendPoint> = {}): Das
     averageHeartRateBpm: 48,
     averageHrvMs: 62,
     maxSpo2Percent: 98,
+    isNap: false,
+    napSeconds: 0,
+    napCount: 0,
+    napAverageHrvMs: null,
+    napAverageHeartRateBpm: null,
+    napStartTimeMs: null,
+    napEndTimeMs: null,
     ...overrides,
   };
 }

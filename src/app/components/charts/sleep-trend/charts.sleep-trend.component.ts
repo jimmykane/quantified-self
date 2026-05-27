@@ -42,6 +42,7 @@ import { LoggerService } from '../../../services/logger.service';
 
 type ChartOption = Parameters<EChartsType['setOption']>[0];
 type AxisTooltipParam = { dataIndex?: number; seriesName?: string; value?: number };
+type SleepStackValueKey = 'deepSeconds' | 'lightSeconds' | 'remSeconds' | 'unknownSeconds' | 'awakeSeconds' | 'napSeconds';
 
 const STAGE_SERIES = [
   { key: 'deepSeconds', name: 'Deep', color: '#3F51B5' },
@@ -56,11 +57,17 @@ const HRV_SERIES = {
   color: AppColors.Green,
 } as const;
 
+const NAP_SERIES = {
+  name: 'Nap',
+  color: AppColors.LightBlue,
+} as const;
+
 const GRID_BOTTOM_WITH_LEGEND = 58;
 const GRID_BOTTOM_COMPACT = 34;
 const MIN_SINGLE_SOURCE_AXIS_LABEL_WIDTH = 58;
 const MIN_MULTI_SOURCE_AXIS_LABEL_WIDTH = 72;
 const FALLBACK_MAX_AXIS_LABELS = 8;
+const STACK_TOP_BORDER_RADIUS = [3, 3, 0, 0] as const;
 
 @Component({
   selector: 'app-sleep-trend-chart',
@@ -199,6 +206,12 @@ export class ChartsSleepTrendComponent implements AfterViewInit, OnChanges, OnDe
     const hrvData = points.map(point => this.toFiniteMetric(point.averageHrvMs));
     const hasHrvSeries = hrvData.some(value => value !== null);
     const averageHrvMs = this.averageMetric(hrvData);
+    const napData = points.map(point => this.secondsToHours(point.napSeconds));
+    const hasNapSeries = napData.some(value => value > 0);
+    const stackKeys: SleepStackValueKey[] = [
+      ...STAGE_SERIES.map(stage => stage.key),
+      ...(hasNapSeries ? ['napSeconds' as const] : []),
+    ];
     const sleepDurationAxis = {
       type: 'value',
       min: 0,
@@ -227,11 +240,24 @@ export class ChartsSleepTrendComponent implements AfterViewInit, OnChanges, OnDe
       yAxisIndex: 0,
       itemStyle: {
         color: stage.color,
-        borderRadius: stage.key === 'awakeSeconds' ? [3, 3, 0, 0] : 0,
+        borderRadius: 0,
       },
       emphasis: { focus: 'series' },
-      data: points.map(point => this.secondsToHours(point[stage.key])),
+      data: this.buildStackedBarData(points, stage.key, stackKeys),
     }));
+    const napSeries = hasNapSeries ? [{
+      name: NAP_SERIES.name,
+      type: 'bar',
+      stack: 'sleep',
+      barMaxWidth: 32,
+      yAxisIndex: 0,
+      itemStyle: {
+        color: NAP_SERIES.color,
+        borderRadius: 0,
+      },
+      emphasis: { focus: 'series' },
+      data: this.buildStackedBarData(points, 'napSeconds', stackKeys),
+    }] : [];
     const hrvSeries = hasHrvSeries ? [{
       name: HRV_SERIES.name,
       type: 'line',
@@ -341,6 +367,7 @@ export class ChartsSleepTrendComponent implements AfterViewInit, OnChanges, OnDe
       yAxis: hasHrvSeries ? [sleepDurationAxis, hrvAxis] : sleepDurationAxis,
       series: [
         ...stageSeries,
+        ...napSeries,
         ...hrvSeries,
       ],
     };
@@ -367,27 +394,69 @@ export class ChartsSleepTrendComponent implements AfterViewInit, OnChanges, OnDe
       });
     }
     const averageHrvMs = this.toFiniteMetric(point.averageHrvMs);
+    const napAverageHrvMs = this.toFiniteMetric(point.napAverageHrvMs);
+    const napAverageHeartRateBpm = this.toFiniteMetric(point.napAverageHeartRateBpm);
+    const hasSeparateNap = point.napSeconds > 0;
+    const totalWithNapSeconds = point.totalSeconds + point.napSeconds;
+    const napLabel = point.napCount > 1 ? 'Naps' : 'Nap';
 
     const rows = [
-      { label: 'Total', value: formatSleepDuration(point.totalSeconds) },
+      ...(hasSeparateNap
+        ? [
+          { label: 'Sleep', value: formatSleepDuration(point.totalSeconds) },
+          { label: napLabel, value: formatSleepDuration(point.napSeconds) },
+          { label: 'Total', value: formatSleepDuration(totalWithNapSeconds) },
+        ]
+        : [{ label: 'Total', value: formatSleepDuration(point.totalSeconds) }]),
       ...STAGE_SERIES
         .filter(stage => point[stage.key] > 0)
         .map(stage => ({ label: stage.name, value: formatSleepDuration(point[stage.key]) })),
       ...(point.score !== null ? [{ label: 'Score', value: `${Math.round(point.score)}` }] : []),
       ...(point.averageHeartRateBpm !== null ? [{ label: 'HR avg', value: `${Math.round(point.averageHeartRateBpm)} bpm` }] : []),
       ...(averageHrvMs !== null ? [{ label: 'HRV', value: `${Math.round(averageHrvMs)} ms` }] : []),
+      ...(napAverageHeartRateBpm !== null ? [{ label: `${napLabel} HR avg`, value: `${Math.round(napAverageHeartRateBpm)} bpm` }] : []),
+      ...(napAverageHrvMs !== null ? [{ label: `${napLabel} HRV`, value: `${Math.round(napAverageHrvMs)} ms` }] : []),
       ...(point.maxSpo2Percent !== null ? [{ label: 'SpO2 max', value: `${Math.round(point.maxSpo2Percent)}%` }] : []),
     ];
 
     return renderDashboardEChartsTooltipCard(style, {
-      title: `${point.providerLabel} · ${point.sleepDate}`,
-      subtitle: `${this.formatDateTime(point.startTimeMs)} - ${this.formatDateTime(point.endTimeMs)}`,
+      title: `${point.providerLabel}${point.isNap ? ' nap' : ''} · ${point.sleepDate}`,
+      subtitle: this.formatTooltipSubtitle(point),
       rows,
     });
   }
 
   private secondsToHours(seconds: number): number {
     return Math.round((seconds / 3600) * 100) / 100;
+  }
+
+  private buildStackedBarData(
+    points: DashboardSleepTrendPoint[],
+    key: SleepStackValueKey,
+    stackKeys: SleepStackValueKey[],
+  ): Array<number | { value: number; itemStyle: { borderRadius: readonly [number, number, number, number] } }> {
+    return points.map(point => {
+      const value = this.secondsToHours(point[key]);
+      if (value <= 0 || this.resolveTopStackKey(point, stackKeys) !== key) {
+        return value;
+      }
+      return {
+        value,
+        itemStyle: {
+          borderRadius: STACK_TOP_BORDER_RADIUS,
+        },
+      };
+    });
+  }
+
+  private resolveTopStackKey(point: DashboardSleepTrendPoint, stackKeys: SleepStackValueKey[]): SleepStackValueKey | null {
+    for (let index = stackKeys.length - 1; index >= 0; index -= 1) {
+      const key = stackKeys[index];
+      if (this.secondsToHours(point[key]) > 0) {
+        return key;
+      }
+    }
+    return null;
   }
 
   private toFiniteMetric(value: number | null | undefined): number | null {
@@ -442,5 +511,14 @@ export class ChartsSleepTrendComponent implements AfterViewInit, OnChanges, OnDe
       hour: 'numeric',
       minute: '2-digit',
     }).format(new Date(timestampMs));
+  }
+
+  private formatTooltipSubtitle(point: DashboardSleepTrendPoint): string {
+    const sleepWindow = `${this.formatDateTime(point.startTimeMs)} - ${this.formatDateTime(point.endTimeMs)}`;
+    if (!Number.isFinite(point.napStartTimeMs) || !Number.isFinite(point.napEndTimeMs)) {
+      return sleepWindow;
+    }
+    const napWindow = `${this.formatDateTime(point.napStartTimeMs)} - ${this.formatDateTime(point.napEndTimeMs)}`;
+    return `Sleep ${sleepWindow} · Nap ${napWindow}`;
   }
 }
