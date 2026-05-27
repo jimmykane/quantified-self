@@ -311,6 +311,7 @@ export class ChartsColumnsComponent implements AfterViewInit, OnChanges, OnDestr
     const categoryAxis = {
       type: 'category',
       data: categories,
+      containShape: true,
       inverse: !this.vertical,
       axisLine: {
         show: this.vertical,

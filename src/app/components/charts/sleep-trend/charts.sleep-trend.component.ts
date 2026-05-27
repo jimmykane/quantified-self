@@ -347,6 +347,7 @@ export class ChartsSleepTrendComponent implements AfterViewInit, OnChanges, OnDe
       xAxis: {
         type: 'category',
         data: categories,
+        containShape: true,
         axisPointer: {
           show: true,
           snap: true,

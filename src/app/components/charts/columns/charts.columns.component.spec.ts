@@ -166,6 +166,7 @@ describe('ChartsColumnsComponent', () => {
     expect(option.tooltip.position).toBe(getViewportConstrainedTooltipPosition);
     expect(option.series[0].type).toBe('bar');
     expect(option.xAxis.type).toBe('category');
+    expect(option.xAxis.containShape).toBe(true);
     expect(option.yAxis.type).toBe('value');
     expect(mockChart.dispatchAction).toHaveBeenCalledWith({ type: 'hideTip' });
     expect(mockLoader.setOption.mock.calls.at(-1)?.[2]).toEqual({
@@ -184,6 +185,7 @@ describe('ChartsColumnsComponent', () => {
     const option = getLastOption();
     expect(option.xAxis.type).toBe('value');
     expect(option.yAxis.type).toBe('category');
+    expect(option.yAxis.containShape).toBe(true);
     expect(option.yAxis.inverse).toBe(true);
     expect(option.yAxis.axisLine.show).toBe(false);
     expect(option.yAxis.axisLabel.hideOverlap).toBe(false);
