@@ -148,11 +148,46 @@ function localDateFromEpochSeconds(epochSeconds: number, offsetSeconds?: number 
     return date.toISOString().slice(0, 10);
 }
 
+function localDateFromMs(timestampMs: number | null, offsetSeconds?: number | null): string {
+    if (!timestampMs || !Number.isFinite(timestampMs)) {
+        return UNKNOWN_SLEEP_DATE;
+    }
+    return localDateFromEpochSeconds(Math.floor(timestampMs / 1000), offsetSeconds);
+}
+
 function isoDateFromMs(timestampMs: number | null): string {
     if (!timestampMs || !Number.isFinite(timestampMs)) {
         return UNKNOWN_SLEEP_DATE;
     }
     return new Date(timestampMs).toISOString().slice(0, 10);
+}
+
+function parseDateTimeOffsetSeconds(value: unknown): number | null {
+    const stringValue = asString(value);
+    if (!stringValue) {
+        return null;
+    }
+    const normalized = normalizeDateTimeSeparator(stringValue);
+    if (/z$/i.test(normalized)) {
+        return 0;
+    }
+    const match = /([+-])(\d{2}):?(\d{2})$/.exec(normalized);
+    if (!match) {
+        return null;
+    }
+    const [, sign, hours, minutes] = match;
+    const totalSeconds = ((Number(hours) * 60) + Number(minutes)) * 60;
+    return Number.isFinite(totalSeconds) ? (sign === '-' ? -totalSeconds : totalSeconds) : null;
+}
+
+function firstDateTimeOffsetSeconds(...values: unknown[]): number | null {
+    for (const value of values) {
+        const offsetSeconds = parseDateTimeOffsetSeconds(value);
+        if (offsetSeconds !== null) {
+            return offsetSeconds;
+        }
+    }
+    return null;
 }
 
 function mapStageName(stageName: string): SleepStage {
@@ -342,6 +377,14 @@ export function mapSuuntoSleepSample(
     }
 
     const resolvedEndTimeMs = endTimeMs || resolveSleepSessionEndTimeMs(startTimeMs, durationSeconds);
+    const isNap = entryData.IsNap === true;
+    const timezoneOffsetSeconds = firstDateTimeOffsetSeconds(
+        isNap ? entryData.BedtimeStart : entryData.BedtimeEnd,
+        entryData.BedtimeStart,
+        entryData.DateTime,
+        sample.timestamp,
+    );
+    const sleepDate = localDateFromMs(isNap ? startTimeMs : resolvedEndTimeMs, timezoneOffsetSeconds);
     const sourceSessionKey = asScalarString(entryData.SleepId)
         || asString(entryData.DateTime)
         || asString(sample.timestamp)
@@ -378,12 +421,13 @@ export function mapSuuntoSleepSample(
         sourceSessionKey,
         session: {
             source: buildSource(SLEEP_PROVIDERS.SuuntoApp, providerUserId, sourceSessionKey, receivedAtMs),
-            sleepDate: isoDateFromMs(startTimeMs),
+            sleepDate,
             startTimeMs,
             endTimeMs: resolvedEndTimeMs,
+            timezoneOffsetSeconds,
             durationSeconds: resolvedDurationSeconds,
             inBedDurationSeconds: resolvedInBedDurationSeconds,
-            isNap: entryData.IsNap === true,
+            isNap,
             validation: null,
             stages: [],
             stageDurationsSeconds,
