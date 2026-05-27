@@ -347,6 +347,7 @@ describe('ChartsSleepTrendComponent', () => {
     const awakeSeries = option.series.find((series: any) => series.name === 'Awake');
 
     expect(option.xAxis.data).toEqual(['Tue, May 26']);
+    expect(option.xAxis.containShape).toBe(true);
     expect(napSeries).toMatchObject({
       name: 'Nap',
       type: 'bar',
