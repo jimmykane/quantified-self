@@ -333,7 +333,7 @@ function extractGarminMinStartTimeMs(error: unknown): number | null {
         return numericMs;
     }
 
-    const isoMatch = message.match(/(?:min(?:imum)? start time|earliest start time)[^0-9]*(\d{4}-\d{2}-\d{2}(?:[T ][0-9:.+-Z]*)?)/i);
+    const isoMatch = message.match(/(?:min(?:imum)? start time|earliest start time)\D*(\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d{1,3})?)?(?:Z|[+-]\d{2}:?\d{2})?)?)/i);
     return valueToEpochMs(isoMatch?.[1]);
 }
 
