@@ -5,7 +5,13 @@ import {
   DynamicDataLoader,
   XAxisTypes
 } from '@sports-alliance/sports-lib';
-import { EventChartPanelModel } from './event-echarts-data.helper';
+import {
+  EventChartPanelModel,
+  findFirstEventChartSeriesPointAfter,
+  findFirstEventChartSeriesPointAtOrAfter,
+  getEventChartSeriesPointCount,
+  getEventChartSeriesY,
+} from './event-echarts-data.helper';
 import { EventChartRange, normalizeEventRange } from './event-echarts-xaxis.helper';
 
 export interface EventPanelRangeStat {
@@ -44,7 +50,7 @@ export function computeEventPanelRangeStats(input: ComputeEventPanelRangeStatsIn
   }
 
   return input.panel.series.reduce<EventPanelRangeStat[]>((stats, series) => {
-    const aggregates = computeSeriesRangeAggregates(series.points, boundedRange, supportsGainLoss(series.streamType), input.gainAndLossThreshold);
+    const aggregates = computeSeriesRangeAggregates(series, boundedRange, supportsGainLoss(series.streamType), input.gainAndLossThreshold);
     if (!aggregates) {
       return stats;
     }
@@ -100,17 +106,18 @@ export function computeEventPanelRangeStats(input: ComputeEventPanelRangeStatsIn
 }
 
 function computeSeriesRangeAggregates(
-  points: EventChartPanelModel['series'][number]['points'],
+  series: EventChartPanelModel['series'][number],
   range: EventChartRange,
   includeGainLoss: boolean,
   gainAndLossThreshold: number
 ): { min: number; max: number; sum: number; count: number; gain?: number; loss?: number } | null {
-  if (!points.length) {
+  const pointCount = getEventChartSeriesPointCount(series);
+  if (!pointCount) {
     return null;
   }
 
-  const startIndex = findFirstPointAtOrAfter(points, range.start);
-  const endExclusive = findFirstPointAfter(points, range.end);
+  const startIndex = findFirstEventChartSeriesPointAtOrAfter(series, range.start);
+  const endExclusive = findFirstEventChartSeriesPointAfter(series, range.end);
   if (startIndex >= endExclusive) {
     return null;
   }
@@ -124,7 +131,7 @@ function computeSeriesRangeAggregates(
   let previousValue: number | null = null;
 
   for (let index = startIndex; index < endExclusive; index += 1) {
-    const y = points[index]?.y;
+    const y = getEventChartSeriesY(series, index);
     if (typeof y !== 'number' || !Number.isFinite(y)) {
       continue;
     }
@@ -157,44 +164,6 @@ function computeSeriesRangeAggregates(
   return includeGainLoss
     ? { min, max, sum, count, gain, loss }
     : { min, max, sum, count };
-}
-
-function findFirstPointAtOrAfter(
-  points: EventChartPanelModel['series'][number]['points'],
-  xValue: number
-): number {
-  let low = 0;
-  let high = points.length;
-
-  while (low < high) {
-    const mid = Math.floor((low + high) / 2);
-    if (points[mid].x < xValue) {
-      low = mid + 1;
-    } else {
-      high = mid;
-    }
-  }
-
-  return low;
-}
-
-function findFirstPointAfter(
-  points: EventChartPanelModel['series'][number]['points'],
-  xValue: number
-): number {
-  let low = 0;
-  let high = points.length;
-
-  while (low < high) {
-    const mid = Math.floor((low + high) / 2);
-    if (points[mid].x <= xValue) {
-      low = mid + 1;
-    } else {
-      high = mid;
-    }
-  }
-
-  return low;
 }
 
 function supportsGainLoss(streamType: string): boolean {

@@ -40,6 +40,7 @@ import {
   buildEventLapMarkers,
   buildEventSwimLengthMarkers,
   buildEventZoomOverviewData,
+  createEventChartPanelBuildSnapshot,
   EVENT_CHART_INTENSITY_ZONE_LINE_DATA_TYPES,
   EVENT_CHART_INTENSITY_ZONE_LOWER_LIMIT_KEYS,
   EventChartLapMarker,
@@ -61,6 +62,7 @@ import {
 } from '../../../helpers/event-chart-overlay.helper';
 import type { EventChartOverlayOption } from '../../../helpers/event-chart-overlay.helper';
 import { hasVisibleSwimLengths } from '../../../helpers/event-swim-length.helper';
+import { EventChartPanelWorkerService } from '../../../services/event-chart-panel-worker.service';
 
 interface EventDataTypeLegendItem {
   dataType: string;
@@ -299,6 +301,7 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
   private activityCursorService = inject(AppActivityCursorService);
   private chartSettingsLocalStorageService = inject(AppChartSettingsLocalStorageService);
   private eventColorService = inject(AppEventColorService);
+  private eventChartPanelWorkerService = inject(EventChartPanelWorkerService);
   private logger = inject(LoggerService);
   private injector = inject(Injector);
   private cdr = inject(ChangeDetectorRef);
@@ -314,6 +317,7 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
   private eventChartOverlayPersistQueue: Promise<void> = Promise.resolve();
   private fillOpacityPersistTimer: ReturnType<typeof setTimeout> | null = null;
   private pendingRebuild = false;
+  private panelBuildRequestID = 0;
   private visibleDataTypeIDs = new Set<string>();
   private visibilityEventID: string | null = null;
   private lastPanelRebuildKey: string | null = null;
@@ -522,9 +526,9 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
 
     this.pendingRebuild = true;
     void Promise.resolve()
-      .then(() => {
+      .then(async () => {
         this.pendingRebuild = false;
-        this.rebuildPanels(source);
+        await this.rebuildPanels(source);
       })
       .catch((error) => {
         this.pendingRebuild = false;
@@ -532,7 +536,7 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
       });
   }
 
-  private rebuildPanels(source: string): void {
+  private async rebuildPanels(_source: string): Promise<void> {
     const allActivities = this.event?.getActivities?.() || this.selectedActivities || [];
     const selectedActivities = this.selectedActivities || [];
     const effectiveXAxisType = resolveEventChartXAxisType(this.event, this.xAxisType, selectedActivities);
@@ -561,11 +565,13 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
       return;
     }
 
+    const rebuildRequestID = this.panelBuildRequestID + 1;
+    this.panelBuildRequestID = rebuildRequestID;
     this.loading();
 
     try {
       if (shouldRebuildPanels) {
-        this.allChartPanels = buildEventChartPanels({
+        const panelBuildInput = {
           selectedActivities,
           allActivities,
           xAxisType: effectiveXAxisType,
@@ -574,7 +580,18 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
           userUnitSettings: this.userUnitSettings,
           eventColorService: this.eventColorService,
           colorIntensityZoneLines: this.shouldColorIntensityZoneLines(),
-        });
+        };
+        const nextChartPanels = this.eventChartPanelWorkerService.shouldUseWorker()
+          ? await this.eventChartPanelWorkerService.buildPanels(
+            createEventChartPanelBuildSnapshot(panelBuildInput),
+            () => buildEventChartPanels(panelBuildInput)
+          )
+          : buildEventChartPanels(panelBuildInput);
+        if (rebuildRequestID !== this.panelBuildRequestID) {
+          return;
+        }
+
+        this.allChartPanels = nextChartPanels;
         this.lastPanelRebuildKey = panelRebuildKey;
 
         this.syncVisibleDataTypes(this.allChartPanels);
@@ -617,6 +634,10 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
       this.updateZoomBarOverviewData(globalDomain);
       this.showDateOnTimeAxis = this.resolveShowDateOnTimeAxis(globalDomain, effectiveXAxisType);
     } catch (error) {
+      if (rebuildRequestID !== this.panelBuildRequestID) {
+        return;
+      }
+
       this.logger.error('[EventCardChart] Failed to rebuild chart panels', error);
       this.allChartPanels = [];
       this.chartPanels = [];
@@ -636,8 +657,10 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
       this.lastSwimLengthMarkersKey = null;
       this.lastPersistedVisibleDataTypeKey = null;
     } finally {
-      this.loaded();
-      this.cdr.markForCheck();
+      if (rebuildRequestID === this.panelBuildRequestID) {
+        this.loaded();
+        this.cdr.markForCheck();
+      }
     }
   }
 
