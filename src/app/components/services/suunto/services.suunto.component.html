@@ -135,6 +135,7 @@
       </div>
       } @else if (!isReconnectRequired && isConnectedToService()) {
       <app-history-import-form [serviceName]="serviceName" [userMetaForService]="serviceMeta"
+        [providerConnected]="true"
         [isLoadingParent]="isLoading" (importInitiated)="onHistoryImportInitiated()"></app-history-import-form>
       } @else {
       <app-status-info type="info" title="Connect Account First">

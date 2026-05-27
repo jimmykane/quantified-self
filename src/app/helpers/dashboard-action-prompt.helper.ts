@@ -17,10 +17,12 @@ export const DASHBOARD_ACTION_PROMPT_UNIT_SETUP_ID: AppDashboardActionPromptId =
 export const DASHBOARD_ACTION_PROMPT_FIRST_ACTIVITY_UPLOAD_ID: AppDashboardActionPromptId = 'firstActivityUpload';
 export const DASHBOARD_ACTION_PROMPT_CONNECT_ACTIVITY_SERVICE_ID: AppDashboardActionPromptId = 'connectActivityService';
 export const DASHBOARD_ACTION_PROMPT_ENABLE_ACTIVITY_AUTO_SYNC_ID: AppDashboardActionPromptId = 'enableActivityAutoSync';
+export const DASHBOARD_ACTION_PROMPT_BACKFILL_GARMIN_SLEEP_ID: AppDashboardActionPromptId = 'backfillGarminSleep';
 export const DASHBOARD_ACTION_PROMPT_RECONNECT_SUUNTO_SERVICE_ID: AppDashboardActionPromptId = 'reconnectSuuntoService';
 export const DASHBOARD_ACTION_PROMPT_FIRST_ACTIVITY_UPLOAD_SOURCE = 'first-activity-upload';
 export const DASHBOARD_ACTION_PROMPT_CONNECT_ACTIVITY_SERVICE_SOURCE = 'activity-service-connection';
 export const DASHBOARD_ACTION_PROMPT_ACTIVITY_AUTO_SYNC_SOURCE = 'activity-auto-sync';
+export const DASHBOARD_ACTION_PROMPT_BACKFILL_GARMIN_SLEEP_SOURCE = 'garmin-sleep-backfill';
 export const DASHBOARD_ACTION_PROMPT_RECONNECT_SUUNTO_SERVICE_SOURCE = 'suunto-reconnect-required';
 
 export const DASHBOARD_ACTIVITY_AUTO_SYNC_ROUTE_IDS: readonly ActivitySyncRouteId[] = [
@@ -38,6 +40,8 @@ export type DashboardActionPromptActionId =
   | 'dismissConnectActivityService'
   | 'enableActivityAutoSync'
   | 'dismissEnableActivityAutoSync'
+  | 'backfillGarminSleep'
+  | 'dismissBackfillGarminSleep'
   | 'reconnectSuuntoService'
   | 'dismissReconnectSuuntoService';
 
@@ -103,6 +107,9 @@ export interface DashboardActionPromptBuildOptions {
   enableActivityAutoSyncBusy: boolean;
   enableActivityAutoSyncError: string | null;
   enableActivityAutoSyncRouteIds: readonly ActivitySyncRouteId[];
+  showBackfillGarminSleepPrompt: boolean;
+  backfillGarminSleepBusy: boolean;
+  backfillGarminSleepError: string | null;
   showReconnectSuuntoServicePrompt: boolean;
   reconnectSuuntoServiceBusy: boolean;
   reconnectSuuntoServiceError: string | null;
@@ -298,6 +305,27 @@ export function buildDashboardActionPromptViewModels(
       },
       secondaryAction: {
         id: 'dismissEnableActivityAutoSync',
+        label: 'Not now',
+      },
+    });
+  }
+
+  if (options.showBackfillGarminSleepPrompt) {
+    prompts.push({
+      id: DASHBOARD_ACTION_PROMPT_BACKFILL_GARMIN_SLEEP_ID,
+      icon: 'bedtime',
+      title: 'Backfill Garmin sleep',
+      description: 'Request Garmin sleep history from Jan 1, 2016. Garmin sends sleep records asynchronously, and existing records update idempotently.',
+      busy: options.backfillGarminSleepBusy,
+      error: options.backfillGarminSleepError,
+      primaryAction: {
+        id: 'backfillGarminSleep',
+        label: 'Backfill sleep',
+        loadingLabel: 'Requesting...',
+        icon: 'bedtime',
+      },
+      secondaryAction: {
+        id: 'dismissBackfillGarminSleep',
         label: 'Not now',
       },
     });

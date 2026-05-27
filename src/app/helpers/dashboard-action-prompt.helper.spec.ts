@@ -1,6 +1,7 @@
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import {
   buildActivityAutoSyncEnabledSnackbarMessage,
+  DASHBOARD_ACTION_PROMPT_BACKFILL_GARMIN_SLEEP_ID,
   buildReconnectSuuntoServicePromptSource,
   buildDashboardActionPromptViewModels,
   DASHBOARD_ACTION_PROMPT_ACTIVITY_AUTO_SYNC_SOURCE,
@@ -135,6 +136,9 @@ describe('dashboard-action-prompt.helper', () => {
         ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp,
         ACTIVITY_SYNC_ROUTE_IDS.COROSAPI_to_SuuntoApp,
       ],
+      showBackfillGarminSleepPrompt: true,
+      backfillGarminSleepBusy: false,
+      backfillGarminSleepError: null,
       showReconnectSuuntoServicePrompt: false,
       reconnectSuuntoServiceBusy: false,
       reconnectSuuntoServiceError: null,
@@ -145,6 +149,7 @@ describe('dashboard-action-prompt.helper', () => {
       DASHBOARD_ACTION_PROMPT_FIRST_ACTIVITY_UPLOAD_ID,
       DASHBOARD_ACTION_PROMPT_CONNECT_ACTIVITY_SERVICE_ID,
       DASHBOARD_ACTION_PROMPT_ENABLE_ACTIVITY_AUTO_SYNC_ID,
+      DASHBOARD_ACTION_PROMPT_BACKFILL_GARMIN_SLEEP_ID,
     ]);
     expect(prompts[0].primaryAction?.id).toBe('applyUnitSetup');
     expect(prompts[0].menuActions?.[0]?.id).toBe('openUnitSettings');
@@ -190,6 +195,18 @@ describe('dashboard-action-prompt.helper', () => {
         label: 'Not now',
       },
     });
+    expect(prompts[4]).toMatchObject({
+      id: DASHBOARD_ACTION_PROMPT_BACKFILL_GARMIN_SLEEP_ID,
+      title: 'Backfill Garmin sleep',
+      primaryAction: {
+        id: 'backfillGarminSleep',
+        label: 'Backfill sleep',
+      },
+      secondaryAction: {
+        id: 'dismissBackfillGarminSleep',
+        label: 'Not now',
+      },
+    });
   });
 
   it('builds the Suunto reconnect prompt view model', () => {
@@ -207,6 +224,9 @@ describe('dashboard-action-prompt.helper', () => {
       enableActivityAutoSyncBusy: false,
       enableActivityAutoSyncError: null,
       enableActivityAutoSyncRouteIds: [],
+      showBackfillGarminSleepPrompt: false,
+      backfillGarminSleepBusy: false,
+      backfillGarminSleepError: null,
       showReconnectSuuntoServicePrompt: true,
       reconnectSuuntoServiceBusy: true,
       reconnectSuuntoServiceError: 'Reconnect failed.',

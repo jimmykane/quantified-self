@@ -67,6 +67,12 @@ describe('HistoryImportFormComponent', () => {
                 endDate: '2026-04-30T12:00:00.000Z',
                 nextAllowedAtMs: 1_778_244_000_000,
             }),
+            backfillGarminSleepForCurrentUser: vi.fn().mockResolvedValue({
+                queued: 43,
+                startDate: '2016-01-01T00:00:00.000Z',
+                endDate: '2026-04-30T12:00:00.000Z',
+                nextAllowedAtMs: 1_780_231_200_000,
+            }),
             user$: of({ uid: '123' }),
             hasPaidAccessSignal: vi.fn(() => true)
         };
@@ -137,6 +143,7 @@ describe('HistoryImportFormComponent', () => {
         await fixture.whenStable();
         component.serviceName = ServiceNames.SuuntoApp;
         component.userMetaForService = {} as UserServiceMetaInterface;
+        component.providerConnected = true;
         component.isPro = true;
         (component as any).processChanges();
         fixture.detectChanges();
@@ -147,10 +154,48 @@ describe('HistoryImportFormComponent', () => {
         expect(text).toContain('once every 7 days');
     });
 
-    it('should not render Suunto sleep backfill button for other providers', async () => {
+    it('should render Garmin sleep backfill button for connected Pro users', async () => {
         await fixture.whenStable();
-        component.serviceName = ServiceNames.COROSAPI;
+        component.serviceName = ServiceNames.GarminAPI;
         component.userMetaForService = {} as UserServiceMetaInterface;
+        component.providerConnected = true;
+        component.missingPermissions = [];
+        component.isPro = true;
+        (component as any).processChanges();
+        fixture.detectChanges();
+
+        const text = fixture.nativeElement.textContent;
+        expect(text).toContain('Backfill Sleep History');
+        expect(text).toContain('Requests Garmin sleep');
+        expect(text).toContain('Garmin sends records asynchronously');
+        expect(text).toContain('once every 30 days');
+    });
+
+    it('should render Garmin sleep backfill for newly connected users without activity history meta', async () => {
+        await fixture.whenStable();
+        component.serviceName = ServiceNames.GarminAPI;
+        component.userMetaForService = undefined as any;
+        component.providerConnected = true;
+        component.missingPermissions = [];
+        component.isPro = true;
+        (component as any).processChanges();
+        fixture.detectChanges();
+
+        const text = fixture.nativeElement.textContent;
+        const buttons = Array.from(fixture.nativeElement.querySelectorAll('button')) as HTMLButtonElement[];
+        const sleepButton = buttons.find(button => button.textContent?.includes('Backfill Sleep History'));
+
+        expect(text).toContain('Backfill Sleep History');
+        expect(text).toContain('Requests Garmin sleep');
+        expect(sleepButton?.disabled).toBe(false);
+    });
+
+    it('should not render sleep backfill when the parent provider is disconnected', async () => {
+        await fixture.whenStable();
+        component.serviceName = ServiceNames.GarminAPI;
+        component.userMetaForService = {} as UserServiceMetaInterface;
+        component.providerConnected = false;
+        component.missingPermissions = [];
         component.isPro = true;
         (component as any).processChanges();
         fixture.detectChanges();
@@ -158,7 +203,19 @@ describe('HistoryImportFormComponent', () => {
         expect(fixture.nativeElement.textContent).not.toContain('Backfill Sleep History');
     });
 
-    it('should disable Suunto sleep backfill during cooldown', async () => {
+    it('should not render sleep backfill button for unsupported providers', async () => {
+        await fixture.whenStable();
+        component.serviceName = ServiceNames.COROSAPI;
+        component.userMetaForService = {} as UserServiceMetaInterface;
+        component.providerConnected = true;
+        component.isPro = true;
+        (component as any).processChanges();
+        fixture.detectChanges();
+
+        expect(fixture.nativeElement.textContent).not.toContain('Backfill Sleep History');
+    });
+
+    it('should disable sleep backfill during the provider cooldown', async () => {
         await fixture.whenStable();
         mockSleepService.watchSyncState.mockReturnValueOnce(of({
             provider: 'SuuntoApp',
@@ -168,6 +225,7 @@ describe('HistoryImportFormComponent', () => {
         }));
         component.serviceName = ServiceNames.SuuntoApp;
         component.userMetaForService = {} as UserServiceMetaInterface;
+        component.providerConnected = true;
         component.isPro = true;
         (component as any).processChanges();
         fixture.detectChanges();
@@ -182,30 +240,73 @@ describe('HistoryImportFormComponent', () => {
         await fixture.whenStable();
         component.serviceName = ServiceNames.SuuntoApp;
         component.userMetaForService = {} as UserServiceMetaInterface;
+        component.providerConnected = true;
         component.isPro = true;
         (component as any).processChanges();
 
-        await component.onSuuntoSleepBackfill({
+        await component.onSleepBackfill({
             preventDefault: vi.fn(),
             stopPropagation: vi.fn(),
         } as any);
 
         expect(mockUserService.backfillSuuntoSleepForCurrentUser).toHaveBeenCalled();
-        expect(mockAnalyticsService.logEvent).toHaveBeenCalledWith('backfilled_sleep_history', { method: ServiceNames.SuuntoApp });
+        expect(mockAnalyticsService.logEvent).toHaveBeenCalledWith('backfilled_sleep_history', {
+            method: ServiceNames.SuuntoApp,
+            source: 'history_import',
+        });
         expect(component.pendingSleepBackfillResult()?.queued).toBe(135);
+    });
+
+    it('should request Garmin sleep backfill from the separate action', async () => {
+        await fixture.whenStable();
+        component.serviceName = ServiceNames.GarminAPI;
+        component.userMetaForService = {} as UserServiceMetaInterface;
+        component.providerConnected = true;
+        component.missingPermissions = [];
+        component.isPro = true;
+        (component as any).processChanges();
+
+        await component.onSleepBackfill({
+            preventDefault: vi.fn(),
+            stopPropagation: vi.fn(),
+        } as any);
+
+        expect(mockUserService.backfillGarminSleepForCurrentUser).toHaveBeenCalled();
+        expect(mockAnalyticsService.logEvent).toHaveBeenCalledWith('backfilled_sleep_history', {
+            method: ServiceNames.GarminAPI,
+            source: 'history_import',
+        });
+        expect(component.pendingSleepBackfillResult()?.queued).toBe(43);
+    });
+
+    it('should disable Garmin sleep backfill when health permissions are missing', async () => {
+        await fixture.whenStable();
+        component.serviceName = ServiceNames.GarminAPI;
+        component.userMetaForService = {} as UserServiceMetaInterface;
+        component.providerConnected = true;
+        component.missingPermissions = ['HEALTH_EXPORT'];
+        component.isPro = true;
+        (component as any).processChanges();
+        fixture.detectChanges();
+
+        const buttons = Array.from(fixture.nativeElement.querySelectorAll('button')) as HTMLButtonElement[];
+        const sleepButton = buttons.find(button => button.textContent?.includes('Backfill Sleep History'));
+        expect(sleepButton?.disabled).toBe(true);
+        expect(fixture.nativeElement.textContent).toContain('Reconnect Garmin');
     });
 
     it('should still queue Suunto sleep backfill when analytics logging fails', async () => {
         await fixture.whenStable();
         component.serviceName = ServiceNames.SuuntoApp;
         component.userMetaForService = {} as UserServiceMetaInterface;
+        component.providerConnected = true;
         component.isPro = true;
         mockAnalyticsService.logEvent.mockImplementationOnce(() => {
             throw new Error('analytics unavailable');
         });
         (component as any).processChanges();
 
-        await component.onSuuntoSleepBackfill({
+        await component.onSleepBackfill({
             preventDefault: vi.fn(),
             stopPropagation: vi.fn(),
         } as any);
