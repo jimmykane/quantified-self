@@ -56,7 +56,7 @@
     "idb-keyval": "^6.2.2",
     "jszip": "^3.10.1",
     "lodash-es": "^4.17.23",
-    "mapbox-gl": "^3.19.1",
+    "mapbox-gl": "^3.24.0",
     "marked": "^15.0.12",
     "rxjs": "^7.8.2",
     "vis-why": "^2.0.1",
