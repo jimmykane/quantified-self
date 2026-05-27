@@ -26,6 +26,13 @@ export interface DashboardSleepTrendPoint {
   averageHeartRateBpm: number | null;
   averageHrvMs: number | null;
   maxSpo2Percent: number | null;
+  isNap: boolean;
+  napSeconds: number;
+  napCount: number;
+  napAverageHrvMs: number | null;
+  napAverageHeartRateBpm: number | null;
+  napStartTimeMs: number | null;
+  napEndTimeMs: number | null;
   isPlaceholder?: boolean;
 }
 
@@ -75,6 +82,14 @@ function toMetric(value: unknown): number | null {
   return Number.isFinite(numberValue) ? numberValue : null;
 }
 
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function asString(value: unknown): string | null {
+  return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null;
+}
+
 function dateLabel(sleepDate: string): string {
   const parsed = Date.parse(`${sleepDate}T00:00:00.000Z`);
   if (!Number.isFinite(parsed)) {
@@ -85,6 +100,51 @@ function dateLabel(sleepDate: string): string {
     month: 'short',
     day: 'numeric',
   }).format(new Date(parsed));
+}
+
+function parseDateTimeOffsetSeconds(value: unknown): number | null {
+  const stringValue = asString(value);
+  if (!stringValue) {
+    return null;
+  }
+  if (/z$/i.test(stringValue)) {
+    return 0;
+  }
+  const match = /([+-])(\d{2}):?(\d{2})$/.exec(stringValue);
+  if (!match) {
+    return null;
+  }
+  const [, sign, hours, minutes] = match;
+  const totalSeconds = ((Number(hours) * 60) + Number(minutes)) * 60;
+  return Number.isFinite(totalSeconds) ? (sign === '-' ? -totalSeconds : totalSeconds) : null;
+}
+
+function localDateKeyFromMs(timestampMs: number, offsetSeconds: number | null): string | null {
+  if (!Number.isFinite(timestampMs)) {
+    return null;
+  }
+  const localMs = offsetSeconds === null ? timestampMs : timestampMs + (offsetSeconds * 1000);
+  return new Date(localMs).toISOString().slice(0, 10);
+}
+
+function resolveSessionTimezoneOffsetSeconds(session: SleepSession): number | null {
+  const explicitOffsetSeconds = Number(session.timezoneOffsetSeconds);
+  if (Number.isFinite(explicitOffsetSeconds)) {
+    return explicitOffsetSeconds;
+  }
+  const suuntoFields = asRecord(session.providerFields?.suunto);
+  return parseDateTimeOffsetSeconds(suuntoFields.timestamp);
+}
+
+function resolveDisplaySleepDate(session: SleepSession, startTimeMs: number, endTimeMs: number): string {
+  const provider = session.source?.provider;
+  const fallbackSleepDate = session.sleepDate || new Date(endTimeMs).toISOString().slice(0, 10);
+  if (provider !== SLEEP_PROVIDERS.SuuntoApp) {
+    return fallbackSleepDate;
+  }
+
+  const dateTimeMs = session.isNap === true ? startTimeMs : endTimeMs;
+  return localDateKeyFromMs(dateTimeMs, resolveSessionTimezoneOffsetSeconds(session)) || fallbackSleepDate;
 }
 
 function toLocalDateKey(timestampMs: number): string | null {
@@ -165,6 +225,13 @@ function buildPlaceholderPoint(sleepDate: string): DashboardSleepTrendPoint {
     averageHeartRateBpm: null,
     averageHrvMs: null,
     maxSpo2Percent: null,
+    isNap: false,
+    napSeconds: 0,
+    napCount: 0,
+    napAverageHrvMs: null,
+    napAverageHeartRateBpm: null,
+    napStartTimeMs: null,
+    napEndTimeMs: null,
     isPlaceholder: true,
   };
 }
@@ -190,7 +257,7 @@ function buildPoint(session: SleepSession): DashboardSleepTrendPoint | null {
   const displayedStageSeconds = deepSeconds + lightSeconds + remSeconds + awakeSeconds;
   const unknownSeconds = explicitUnknownSeconds || Math.max(0, totalSeconds - displayedStageSeconds);
   const label = providerLabel(provider);
-  const resolvedSleepDate = session.sleepDate || new Date(endTimeMs).toISOString().slice(0, 10);
+  const resolvedSleepDate = resolveDisplaySleepDate(session, startTimeMs, endTimeMs);
 
   return {
     id: session.id || `${provider}:${session.source?.sourceSessionKey || startTimeMs}`,
@@ -210,23 +277,50 @@ function buildPoint(session: SleepSession): DashboardSleepTrendPoint | null {
     averageHeartRateBpm: toMetric(session.vitals?.averageHeartRateBpm),
     averageHrvMs: toMetric(session.vitals?.averageHrvMs ?? session.vitals?.overnightHrvMs),
     maxSpo2Percent: toMetric(session.vitals?.maxSpo2Percent),
+    isNap: session.isNap === true,
+    napSeconds: 0,
+    napCount: 0,
+    napAverageHrvMs: null,
+    napAverageHeartRateBpm: null,
+    napStartTimeMs: null,
+    napEndTimeMs: null,
   };
 }
 
 function resolveCategoryLabels(points: DashboardSleepTrendPoint[]): DashboardSleepTrendPoint[] {
-  const providerCount = new Set(points
-    .filter(point => !point.isPlaceholder && point.provider)
-    .map(point => point.provider)).size;
-  if (providerCount <= 1) {
-    return points;
-  }
+  const realPoints = points.filter(point => !point.isPlaceholder && point.provider);
+  const providerCount = new Set(realPoints.map(point => point.provider)).size;
 
-  return points.map(point => point.isPlaceholder
-    ? { ...point, categoryLabel: dateLabel(point.sleepDate) }
-    : {
+  return points.map(point => {
+    const baseLabel = dateLabel(point.sleepDate);
+    if (point.isPlaceholder) {
+      return { ...point, categoryLabel: baseLabel };
+    }
+
+    if (providerCount <= 1) {
+      return { ...point, categoryLabel: baseLabel };
+    }
+
+    return {
       ...point,
-      categoryLabel: `${dateLabel(point.sleepDate)}\n${point.providerLabel}`,
-    });
+      categoryLabel: `${baseLabel}\n${point.providerLabel}`,
+    };
+  });
+}
+
+function aggregateFiniteMetrics(values: ReadonlyArray<number | null>): number | null {
+  const finiteValues = values.filter((value): value is number => Number.isFinite(value));
+  if (!finiteValues.length) {
+    return null;
+  }
+  return finiteValues.reduce((sum, value) => sum + value, 0) / finiteValues.length;
+}
+
+function sumPointSeconds(points: readonly DashboardSleepTrendPoint[], key: keyof Pick<
+  DashboardSleepTrendPoint,
+  'totalSeconds' | 'deepSeconds' | 'lightSeconds' | 'remSeconds' | 'awakeSeconds' | 'unknownSeconds'
+>): number {
+  return points.reduce((sum, point) => sum + finiteSeconds(point[key]), 0);
 }
 
 function compareSleepRecency(left: DashboardSleepTrendPoint, right: DashboardSleepTrendPoint): number {
@@ -234,6 +328,54 @@ function compareSleepRecency(left: DashboardSleepTrendPoint, right: DashboardSle
     return left.endTimeMs - right.endTimeMs;
   }
   return left.startTimeMs - right.startTimeMs;
+}
+
+function aggregatePointGroup(points: readonly DashboardSleepTrendPoint[]): DashboardSleepTrendPoint {
+  if (points.length <= 1) {
+    return points[0];
+  }
+
+  const sleepPoints = points.filter(point => !point.isNap);
+  const napPoints = points.filter(point => point.isNap);
+  const primaryPoints = sleepPoints.length ? sleepPoints : points;
+  const latestPrimaryPoint = primaryPoints.reduce((latest, point) => compareSleepRecency(latest, point) < 0 ? point : latest);
+  const sortedPrimaryPoints = [...primaryPoints].sort((left, right) => left.startTimeMs - right.startTimeMs);
+  const napSeconds = sumPointSeconds(napPoints, 'totalSeconds');
+
+  return {
+    ...latestPrimaryPoint,
+    id: points.map(point => point.id).join('|'),
+    startTimeMs: sortedPrimaryPoints[0]?.startTimeMs ?? latestPrimaryPoint.startTimeMs,
+    endTimeMs: Math.max(...primaryPoints.map(point => point.endTimeMs)),
+    totalSeconds: sumPointSeconds(primaryPoints, 'totalSeconds'),
+    deepSeconds: sumPointSeconds(primaryPoints, 'deepSeconds'),
+    lightSeconds: sumPointSeconds(primaryPoints, 'lightSeconds'),
+    remSeconds: sumPointSeconds(primaryPoints, 'remSeconds'),
+    awakeSeconds: sumPointSeconds(primaryPoints, 'awakeSeconds'),
+    unknownSeconds: sumPointSeconds(primaryPoints, 'unknownSeconds'),
+    averageHeartRateBpm: aggregateFiniteMetrics(primaryPoints.map(point => point.averageHeartRateBpm)),
+    averageHrvMs: aggregateFiniteMetrics(primaryPoints.map(point => point.averageHrvMs)),
+    maxSpo2Percent: aggregateFiniteMetrics(primaryPoints.map(point => point.maxSpo2Percent)),
+    isNap: sleepPoints.length === 0 && napPoints.length > 0,
+    napSeconds: sleepPoints.length ? napSeconds : 0,
+    napCount: sleepPoints.length ? napPoints.length : 0,
+    napAverageHrvMs: sleepPoints.length ? aggregateFiniteMetrics(napPoints.map(point => point.averageHrvMs)) : null,
+    napAverageHeartRateBpm: sleepPoints.length ? aggregateFiniteMetrics(napPoints.map(point => point.averageHeartRateBpm)) : null,
+    napStartTimeMs: sleepPoints.length && napPoints.length ? Math.min(...napPoints.map(point => point.startTimeMs)) : null,
+    napEndTimeMs: sleepPoints.length && napPoints.length ? Math.max(...napPoints.map(point => point.endTimeMs)) : null,
+  };
+}
+
+function aggregateSameProviderDatePoints(points: readonly DashboardSleepTrendPoint[]): DashboardSleepTrendPoint[] {
+  const groupedPoints = new Map<string, DashboardSleepTrendPoint[]>();
+  for (const point of points) {
+    const key = point.isPlaceholder ? point.id : `${point.sleepDate}:${point.provider}`;
+    const group = groupedPoints.get(key) || [];
+    group.push(point);
+    groupedPoints.set(key, group);
+  }
+
+  return [...groupedPoints.values()].map(aggregatePointGroup);
 }
 
 export function buildDashboardSleepTrendContext(
@@ -250,7 +392,7 @@ export function buildDashboardSleepTrendContext(
     .filter(sleepDate => !realSleepDates.has(sleepDate) && sleepDate !== todayDateKey)
     .map(buildPlaceholderPoint);
 
-  const points = resolveCategoryLabels([...realPoints, ...placeholderPoints]
+  const points = resolveCategoryLabels(aggregateSameProviderDatePoints([...realPoints, ...placeholderPoints])
     .sort((left, right) => {
       if (left.sleepDate !== right.sleepDate) {
         return left.sleepDate.localeCompare(right.sleepDate);

@@ -1752,6 +1752,57 @@ describe('queue', () => {
             expect(mockBatch.delete).toHaveBeenCalledWith(mockRef);
         });
 
+        it('service-scopes Suunto token lookups before processing', async () => {
+            const admin = await import('firebase-admin');
+            const tokenCollection = admin.firestore().collectionGroup('tokens') as any;
+            tokenCollection.where.mockClear();
+            tokenCollection.get.mockResolvedValueOnce({
+                size: 0,
+                docs: [],
+                empty: true,
+            } as any);
+
+            const result = await parseWorkoutQueueItemForServiceName(ServiceNames.SuuntoApp, suuntoQueueItem);
+
+            expect(result).toBe(QueueResult.MovedToDLQ);
+            expect(tokenCollection.where).toHaveBeenCalledWith('userName', '==', 'suuntoUser');
+            expect(tokenCollection.where).toHaveBeenCalledWith('serviceName', '==', ServiceNames.SuuntoApp);
+        });
+
+        it('service-scopes COROS token lookups when using the token cache', async () => {
+            const admin = await import('firebase-admin');
+            const tokenCollection = admin.firestore().collectionGroup('tokens') as any;
+            tokenCollection.where.mockClear();
+            tokenCollection.get.mockResolvedValueOnce({
+                size: 0,
+                docs: [],
+                empty: true,
+            } as any);
+
+            const corosItem: COROSAPIWorkoutQueueItemInterface = {
+                id: 'test-coros-item',
+                ref: {
+                    parent: { id: 'COROSAPIWorkoutQueue' },
+                    update: vi.fn(),
+                    delete: vi.fn(),
+                    id: 'test-coros-item',
+                } as any,
+                openId: 'corosOpenId',
+                workoutID: 'cw1',
+                FITFileURI: 'https://coros.com/fit',
+                retryCount: 0,
+                processed: false,
+                dateCreated: Date.now(),
+                dispatchedToCloudTask: null,
+            };
+
+            const result = await parseWorkoutQueueItemForServiceName(ServiceNames.COROSAPI, corosItem, undefined, new Map());
+
+            expect(result).toBe(QueueResult.MovedToDLQ);
+            expect(tokenCollection.where).toHaveBeenCalledWith('openId', '==', 'corosOpenId');
+            expect(tokenCollection.where).toHaveBeenCalledWith('serviceName', '==', ServiceNames.COROSAPI);
+        });
+
         it('should move to DLQ immediately when token refresh returns terminal invalid_grant', async () => {
             vi.mocked(getTokenData).mockRejectedValueOnce(new TerminalServiceAuthError(
                 ServiceNames.SuuntoApp,

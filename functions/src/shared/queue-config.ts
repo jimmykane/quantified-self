@@ -19,6 +19,13 @@ export const CLOUD_TASK_RETRY_CONFIG = {
     maxDoublings: 4,
 } as const;
 
+export const REPARSE_HEAVY_TASK_RETRY_CONFIG = {
+    maxAttempts: 2,
+    minBackoffSeconds: 900,    // 15 minutes
+    maxBackoffSeconds: 14400,  // 4 hours
+    maxDoublings: 4,
+} as const;
+
 /** Max pending Cloud Tasks before skipping dispatch to preserve finding quota permissions */
 export const MAX_PENDING_TASKS = 1000;
 

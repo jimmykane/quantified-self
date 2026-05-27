@@ -409,6 +409,24 @@ export function getWorkoutForService(
   }
 }
 
+function getTokenQueryForWorkoutQueueItem(
+  serviceName: ServiceNames,
+  queueItem: COROSAPIWorkoutQueueItemInterface | SuuntoAppWorkoutQueueItemInterface,
+): admin.firestore.Query {
+  switch (serviceName) {
+    default:
+      throw new Error('Not Implemented');
+    case ServiceNames.COROSAPI:
+      return admin.firestore().collectionGroup('tokens')
+        .where('openId', '==', (queueItem as COROSAPIWorkoutQueueItemInterface).openId)
+        .where('serviceName', '==', ServiceNames.COROSAPI);
+    case ServiceNames.SuuntoApp:
+      return admin.firestore().collectionGroup('tokens')
+        .where('userName', '==', (queueItem as SuuntoAppWorkoutQueueItemInterface).userName)
+        .where('serviceName', '==', ServiceNames.SuuntoApp);
+  }
+}
+
 
 export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNames, queueItem: COROSAPIWorkoutQueueItemInterface | SuuntoAppWorkoutQueueItemInterface | GarminAPIActivityQueueItemInterface, bulkWriter?: admin.firestore.BulkWriter, tokenCache?: Map<string, Promise<admin.firestore.QuerySnapshot>>, usageCache?: Map<string, Promise<{ role: string, limit: number, currentCount: number }>>, pendingWrites?: Map<string, number>): Promise<QueueResult> {
   if (serviceName === ServiceNames.GarminAPI) {
@@ -423,16 +441,7 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
   if (tokenCache) {
     let tokenPromise = tokenCache.get(userKey);
     if (!tokenPromise) {
-      tokenPromise = (async () => {
-        switch (serviceName) {
-          default:
-            throw new Error('Not Implemented');
-          case ServiceNames.COROSAPI:
-            return admin.firestore().collectionGroup('tokens').where('openId', '==', (queueItem as COROSAPIWorkoutQueueItemInterface).openId).get();
-          case ServiceNames.SuuntoApp:
-            return admin.firestore().collectionGroup('tokens').where('userName', '==', (queueItem as SuuntoAppWorkoutQueueItemInterface).userName).get();
-        }
-      })();
+      tokenPromise = getTokenQueryForWorkoutQueueItem(serviceName, queueItem as COROSAPIWorkoutQueueItemInterface | SuuntoAppWorkoutQueueItemInterface).get();
       tokenCache.set(userKey, tokenPromise);
     }
     try {
@@ -447,16 +456,7 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
 
   } else {
     try {
-      switch (serviceName) {
-        default:
-          throw new Error('Not Implemented');
-        case ServiceNames.COROSAPI:
-          tokenQuerySnapshots = await admin.firestore().collectionGroup('tokens').where('openId', '==', (queueItem as COROSAPIWorkoutQueueItemInterface).openId).get();
-          break;
-        case ServiceNames.SuuntoApp:
-          tokenQuerySnapshots = await admin.firestore().collectionGroup('tokens').where('userName', '==', (queueItem as SuuntoAppWorkoutQueueItemInterface).userName).get();
-          break;
-      }
+      tokenQuerySnapshots = await getTokenQueryForWorkoutQueueItem(serviceName, queueItem as COROSAPIWorkoutQueueItemInterface | SuuntoAppWorkoutQueueItemInterface).get();
     } catch (e: unknown) {
       const error = e as Error;
       logger.error(error);

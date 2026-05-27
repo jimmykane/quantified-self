@@ -11,7 +11,6 @@ import {
 import { ACTIVITY_SYNC_QUEUE_COLLECTION_NAME } from './activity-sync/constants';
 import { SLEEP_SYNC_QUEUE_COLLECTION_NAME } from './sleep/constants';
 import { SUUNTOAPP_WORKOUT_QUEUE_COLLECTION_NAME } from './suunto/constants';
-import { getServiceAdapter } from './auth/factory';
 
 type ProviderIdentifierField = 'userName' | 'openId' | 'userID';
 
@@ -185,15 +184,9 @@ function failedJobSourceCollection(data: Record<string, unknown>): string | null
   return null;
 }
 
-function tokenSnapshotBelongsToService(doc: admin.firestore.QueryDocumentSnapshot, serviceName: ServiceNames): boolean {
+function tokenSnapshotHasServiceName(doc: admin.firestore.QueryDocumentSnapshot, serviceName: ServiceNames): boolean {
   const data = doc.data() as Record<string, unknown>;
-  const tokenServiceName = asNonEmptyString(data.serviceName);
-  if (tokenServiceName) {
-    return tokenServiceName === serviceName;
-  }
-
-  const tokenRootCollectionName = doc.ref?.parent?.parent?.parent?.id;
-  return tokenRootCollectionName === getServiceAdapter(serviceName).tokenCollectionName;
+  return asNonEmptyString(data.serviceName) === serviceName;
 }
 
 async function hasConnectedTokenForProviderUser(
@@ -204,7 +197,7 @@ async function hasConnectedTokenForProviderUser(
     .where(config.providerUserIdField, '==', config.providerUserId)
     .get();
 
-  return snapshot.docs.some((doc) => tokenSnapshotBelongsToService(doc, config.serviceName));
+  return snapshot.docs.some((doc) => tokenSnapshotHasServiceName(doc, config.serviceName));
 }
 
 function shouldDeleteOperationalDoc(

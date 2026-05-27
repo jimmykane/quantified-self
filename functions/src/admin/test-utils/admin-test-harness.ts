@@ -19,7 +19,12 @@ const {
     mockBigQueryQuery,
     mockGetCloudTaskQueueDepth,
     mockGetCloudTaskQueueDepthForQueue,
-    mockGetAll
+    mockEnqueueSportsLibReparseHeavyTask,
+    mockGetAll,
+    mockRecursiveDelete,
+    mockRunTransaction,
+    mockTransactionGet,
+    mockTransactionSet,
 } = vi.hoisted(() => {
     const mockListUsers = vi.fn();
     const mockCreateCustomToken = vi.fn();
@@ -30,11 +35,37 @@ const {
     const mockCollection = vi.fn() as any;
     const mockDoc = vi.fn();
     const mockGetAll = vi.fn();
+    const mockRecursiveDelete = vi.fn().mockResolvedValue(undefined);
+    const mockTransactionGet = vi.fn(async (ref: any) => {
+        if (typeof ref?.get === 'function') {
+            return ref.get();
+        }
+        const path = `${ref?.path || ''}`;
+        if (path.startsWith('users/')) {
+            return { exists: true, data: () => ({}) };
+        }
+        if (path.startsWith('userDeletionTombstones/')) {
+            return { exists: false, data: () => undefined };
+        }
+        return { exists: false, data: () => undefined };
+    });
+    const mockTransactionSet = vi.fn(async (ref: any, payload: Record<string, unknown>, options?: Record<string, unknown>) => {
+        if (typeof ref?.set === 'function') {
+            return ref.set(payload, options);
+        }
+        return undefined;
+    });
+    const mockRunTransaction = vi.fn(async (callback: any) => callback({
+        get: mockTransactionGet,
+        set: mockTransactionSet,
+    }));
     const mockFirestore = vi.fn(() => ({
         collection: mockCollection,
         collectionGroup: mockCollection,
         doc: mockDoc,
         getAll: mockGetAll,
+        recursiveDelete: mockRecursiveDelete,
+        runTransaction: mockRunTransaction,
     }));
 
     const mockRemoteConfig = vi.fn(() => ({
@@ -55,6 +86,7 @@ const {
     const mockGetTables = vi.fn();
     const mockBigQueryQuery = vi.fn();
     const mockGetCloudTaskQueueDepth = vi.fn().mockResolvedValue(42);
+    const mockEnqueueSportsLibReparseHeavyTask = vi.fn().mockResolvedValue(true);
     const mockGetCloudTaskQueueDepthForQueue = vi.fn(async (queueId: string) => {
         if (queueId === 'processWorkoutTask') {
             return 42;
@@ -67,6 +99,9 @@ const {
         }
         if (queueId === 'processSportsLibReparseTask') {
             return 8;
+        }
+        if (queueId === 'processSportsLibReparseHeavyTask') {
+            return 2;
         }
         if (queueId === 'processDerivedMetricsTask') {
             return 6;
@@ -92,7 +127,12 @@ const {
         mockBigQueryQuery,
         mockGetCloudTaskQueueDepth,
         mockGetCloudTaskQueueDepthForQueue,
+        mockEnqueueSportsLibReparseHeavyTask,
         mockGetAll,
+        mockRecursiveDelete,
+        mockRunTransaction,
+        mockTransactionGet,
+        mockTransactionSet,
     };
 });
 
@@ -130,6 +170,7 @@ vi.mock('firebase-admin', () => {
     const firestoreMock: any = mockFirestore;
     firestoreMock.FieldValue = {
         serverTimestamp: vi.fn().mockReturnValue('mock-timestamp'),
+        delete: vi.fn().mockReturnValue('mock-delete'),
     };
     firestoreMock.FieldPath = {
         documentId: vi.fn(() => '__name__'),
@@ -162,6 +203,10 @@ vi.mock('../../utils', () => ({
     enforceAppCheck: vi.fn(),
 }));
 
+vi.mock('../../shared/cloud-tasks', () => ({
+    enqueueSportsLibReparseHeavyTask: mockEnqueueSportsLibReparseHeavyTask,
+}));
+
 vi.mock('../../config', () => ({
     config: {
         cloudtasks: {
@@ -169,6 +214,7 @@ vi.mock('../../config', () => ({
             activitySyncQueue: 'processActivitySyncTask',
             sleepSyncQueue: 'processSleepSyncTask',
             sportsLibReparseQueue: 'processSportsLibReparseTask',
+            sportsLibReparseHeavyQueue: 'processSportsLibReparseHeavyTask',
             derivedMetricsQueue: 'processDerivedMetricsTask',
             queue: 'processWorkoutTask',
         },
@@ -193,7 +239,12 @@ export {
     mockBigQueryQuery,
     mockGetCloudTaskQueueDepth,
     mockGetCloudTaskQueueDepthForQueue,
+    mockEnqueueSportsLibReparseHeavyTask,
     mockGetAll,
+    mockRecursiveDelete,
+    mockRunTransaction,
+    mockTransactionGet,
+    mockTransactionSet,
 };
 
 const adminHandlers = await import('../index');
@@ -201,6 +252,7 @@ const adminHandlers = await import('../index');
 export const {
     listUsers,
     getQueueStats,
+    retrySportsLibReparseHeavyJob,
     getUserCount,
     getSubscriptionHistoryTrend,
     getUserGrowthTrend,

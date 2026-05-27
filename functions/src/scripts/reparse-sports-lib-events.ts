@@ -3,7 +3,10 @@ import * as logger from 'firebase-functions/logger';
 import {
     SPORTS_LIB_REPARSE_RUNTIME_DEFAULTS,
     SPORTS_LIB_REPARSE_SKIP_REASON_NO_ORIGINAL_FILES,
+    ReparseStatusWrite,
     extractSourceFiles,
+    isReparsePersistenceSkippedForUserDeletionError,
+    isSportsLibReparseTerminalFailureMessage,
     parseUIDAllowlist,
     parseUidAndEventIdFromEventPath,
     reparseEventFromOriginalFiles,
@@ -13,6 +16,7 @@ import {
     shouldEventBeReparsed,
     writeReparseStatus,
 } from '../reparse/sports-lib-reparse.service';
+import { getUserDeletionGuardState, UserDeletionGuardReadError } from '../shared/user-deletion-guard';
 
 interface ScriptOptions {
     execute: boolean;
@@ -34,6 +38,18 @@ export interface ScriptSummary {
     failed: number;
 }
 
+class SportsLibReparseScriptSkippedForUserDeletionError extends Error {
+    readonly name = 'SportsLibReparseScriptSkippedForUserDeletionError';
+
+    constructor(
+        readonly uid: string,
+        readonly eventId: string,
+        readonly phase: string,
+    ) {
+        super(`Skipping sports-lib reparse script candidate ${uid}/${eventId} because the user is missing or deletion is in progress during ${phase}.`);
+    }
+}
+
 function configureFirestoreIgnoreUndefinedProperties(): void {
     try {
         admin.firestore().settings({ ignoreUndefinedProperties: true });
@@ -51,6 +67,62 @@ function writeRealtimeProgressLine(payload: Record<string, unknown>): void {
 function extractFirestoreIndexUrl(errorMessage: string): string | undefined {
     const match = errorMessage.match(/https:\/\/console\.firebase\.google\.com\/\S+/);
     return match?.[0];
+}
+
+async function writeReparseStatusUnlessUserDeleted(
+    uid: string,
+    eventId: string,
+    payload: ReparseStatusWrite,
+    phase: string,
+): Promise<boolean> {
+    try {
+        await writeReparseStatus(uid, eventId, payload);
+        return true;
+    } catch (error) {
+        if (isReparsePersistenceSkippedForUserDeletionError(error)) {
+            logger.info('[sports-lib-reparse-script] Skipping status write because user is missing or deletion is in progress.', {
+                uid,
+                eventId,
+                phase,
+            });
+            return false;
+        }
+        throw error;
+    }
+}
+
+async function assertUserDeletionAllowed(uid: string, eventId: string, phase: string): Promise<void> {
+    let deletionGuard;
+    try {
+        deletionGuard = await getUserDeletionGuardState(admin.firestore(), uid);
+    } catch (error) {
+        throw new UserDeletionGuardReadError(uid, `sports_lib_reparse_script:${phase}`, error);
+    }
+
+    if (!deletionGuard.shouldSkip) {
+        return;
+    }
+
+    logger.info('[sports-lib-reparse-script] Skipping candidate because user is missing or deletion is in progress.', {
+        uid,
+        eventId,
+        phase,
+        userExists: deletionGuard.userExists,
+        deletionInProgress: deletionGuard.deletionInProgress,
+    });
+    throw new SportsLibReparseScriptSkippedForUserDeletionError(uid, eventId, phase);
+}
+
+async function shouldSkipForUserDeletion(uid: string, eventId: string, phase: string): Promise<boolean> {
+    try {
+        await assertUserDeletionAllowed(uid, eventId, phase);
+        return false;
+    } catch (error) {
+        if (error instanceof SportsLibReparseScriptSkippedForUserDeletionError) {
+            return true;
+        }
+        throw error;
+    }
 }
 
 function parseIntArg(value: string | undefined, fallback: number): number {
@@ -221,12 +293,14 @@ export async function runSportsLibReparseScript(argv: string[]): Promise<ScriptS
         if (sourceFiles.length === 0) {
             summary.skippedNoSourceFiles++;
             if (options.execute) {
-                await writeReparseStatus(uid, eventId, {
+                await writeReparseStatusUnlessUserDeleted(uid, eventId, {
                     status: 'skipped',
                     reason: SPORTS_LIB_REPARSE_SKIP_REASON_NO_ORIGINAL_FILES,
                     targetSportsLibVersion,
                     checkedAt: admin.firestore.FieldValue.serverTimestamp(),
-                });
+                    terminalFailure: admin.firestore.FieldValue.delete(),
+                    terminalFailureAt: admin.firestore.FieldValue.delete(),
+                }, 'no_source_files');
             }
             return;
         }
@@ -236,35 +310,53 @@ export async function runSportsLibReparseScript(argv: string[]): Promise<ScriptS
             return;
         }
 
-        let progressOutcome: 'completed' | 'skipped_no_source_files' | 'failed' = 'failed';
+        if (await shouldSkipForUserDeletion(uid, eventId, 'before_execute')) {
+            return;
+        }
+
+        let progressOutcome: 'completed' | 'skipped_no_source_files' | 'failed' | 'skipped_user_deletion' = 'failed';
         summary.parsedEvents++;
 
         try {
             const result = await reparseEventFromOriginalFiles(uid, eventId, {
                 mode: 'reimport',
                 targetSportsLibVersion,
+                beforePersist: () => assertUserDeletionAllowed(uid, eventId, 'before_persist'),
             });
             if (result.status === 'skipped' && result.reason === SPORTS_LIB_REPARSE_SKIP_REASON_NO_ORIGINAL_FILES) {
                 progressOutcome = 'skipped_no_source_files';
                 summary.skippedNoSourceFiles++;
-                await writeReparseStatus(uid, eventId, {
+                await writeReparseStatusUnlessUserDeleted(uid, eventId, {
                     status: 'skipped',
                     reason: SPORTS_LIB_REPARSE_SKIP_REASON_NO_ORIGINAL_FILES,
                     targetSportsLibVersion,
                     checkedAt: admin.firestore.FieldValue.serverTimestamp(),
-                });
+                    terminalFailure: admin.firestore.FieldValue.delete(),
+                    terminalFailureAt: admin.firestore.FieldValue.delete(),
+                }, 'reparse_skipped_no_source_files');
             } else {
                 progressOutcome = 'completed';
                 summary.completed++;
-                await writeReparseStatus(uid, eventId, {
+                await writeReparseStatusUnlessUserDeleted(uid, eventId, {
                     status: 'completed',
                     targetSportsLibVersion,
                     checkedAt: admin.firestore.FieldValue.serverTimestamp(),
                     processedAt: admin.firestore.FieldValue.serverTimestamp(),
                     lastError: '',
-                });
+                    terminalFailure: admin.firestore.FieldValue.delete(),
+                    terminalFailureAt: admin.firestore.FieldValue.delete(),
+                }, 'reparse_completed');
             }
         } catch (error) {
+            if (error instanceof SportsLibReparseScriptSkippedForUserDeletionError
+                || isReparsePersistenceSkippedForUserDeletionError(error)) {
+                progressOutcome = 'skipped_user_deletion';
+                logger.info('[sports-lib-reparse-script] Skipping candidate because user is missing or deletion is in progress.', {
+                    uid,
+                    eventId,
+                });
+                return;
+            }
             summary.failed++;
             const errorMessage = (error as Error)?.message || `${error}`;
             const firestoreIndexUrl = extractFirestoreIndexUrl(errorMessage);
@@ -274,13 +366,18 @@ export async function runSportsLibReparseScript(argv: string[]): Promise<ScriptS
                 errorMessage,
                 ...(firestoreIndexUrl ? { firestoreIndexUrl } : {}),
             });
-            await writeReparseStatus(uid, eventId, {
+            const terminalFailure = isSportsLibReparseTerminalFailureMessage(errorMessage);
+            await writeReparseStatusUnlessUserDeleted(uid, eventId, {
                 status: 'failed',
                 reason: 'REPARSE_FAILED',
                 targetSportsLibVersion,
                 checkedAt: admin.firestore.FieldValue.serverTimestamp(),
                 lastError: errorMessage,
-            });
+                terminalFailure: terminalFailure ? true : admin.firestore.FieldValue.delete(),
+                terminalFailureAt: terminalFailure
+                    ? admin.firestore.FieldValue.serverTimestamp()
+                    : admin.firestore.FieldValue.delete(),
+            }, 'reparse_failed');
         } finally {
             const progressPayload = {
                 uid,

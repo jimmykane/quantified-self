@@ -27,6 +27,8 @@ import {
 
 export { ORPHANED_SERVICE_TOKENS_COLLECTION_NAME } from '../orphaned-service-tokens';
 
+const SPORTS_LIB_REPARSE_JOBS_COLLECTION = 'sportsLibReparseJobs';
+
 /**
  * Helper to delete a token document and its subcollections.
  * Firestore doesn't automatically delete subcollections when you delete a parent document,
@@ -509,7 +511,7 @@ async function hasConnectedTokenForProviderLookup(
         .where(lookup.tokenField, '==', lookup.providerUserID)
         .get();
     return getSnapshotDocs(snapshot).some((doc) => {
-        if (!tokenSnapshotBelongsToService(doc, lookup.serviceName)) {
+        if (!tokenSnapshotHasServiceName(doc, lookup.serviceName)) {
             return false;
         }
         const tokenOwnerUid = doc.ref.parent.parent?.id;
@@ -517,19 +519,9 @@ async function hasConnectedTokenForProviderLookup(
     });
 }
 
-function serviceTokenCollectionNameForService(serviceName: ServiceNames): string {
-    return getServiceConfig(serviceName).tokenCollectionName;
-}
-
-function tokenSnapshotBelongsToService(doc: admin.firestore.QueryDocumentSnapshot, serviceName: ServiceNames): boolean {
+function tokenSnapshotHasServiceName(doc: admin.firestore.QueryDocumentSnapshot, serviceName: ServiceNames): boolean {
     const data = doc.data() as Record<string, unknown>;
-    const tokenServiceName = asNonEmptyString(data.serviceName);
-    if (tokenServiceName) {
-        return tokenServiceName === serviceName;
-    }
-
-    const tokenRootCollectionName = doc.ref?.parent?.parent?.parent?.id;
-    return tokenRootCollectionName === serviceTokenCollectionNameForService(serviceName);
+    return asNonEmptyString(data.serviceName) === serviceName;
 }
 
 function providerLookupBelongsToUserIdentifiers(lookup: ProviderQueueLookup, identifiers: UserProviderIdentifiers): boolean {
@@ -817,6 +809,7 @@ async function cleanupTopLevelQueueState(uid: string, identifiers: UserProviderI
     await recursiveDeleteQueryResults(db, uid, 'failed job', 'failed_jobs', 'providerUserId', providerValues, deletedRefKeys, providerKeyedDeleteFilter('failed_jobs'));
     await recursiveDeleteQueryResults(db, uid, 'failed job', 'failed_jobs', 'userName', suuntoValues, deletedRefKeys, providerKeyedDeleteFilter('failed_jobs'));
     await recursiveDeleteQueryResults(db, uid, 'failed job', 'failed_jobs', 'openId', corosValues, deletedRefKeys, providerKeyedDeleteFilter('failed_jobs'));
+    await recursiveDeleteQueryResults(db, uid, 'sports-lib reparse job', SPORTS_LIB_REPARSE_JOBS_COLLECTION, 'uid', firebaseUIDValues, deletedRefKeys);
     await cleanupLegacyProviderKeyedQueueOrphans(uid, identifiers, deletedRefKeys);
 
     logger.info(`[Cleanup] Completed top-level queue state cleanup for user ${uid}`);

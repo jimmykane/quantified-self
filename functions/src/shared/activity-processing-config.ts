@@ -37,3 +37,16 @@ export const REPARSE_PROCESSING_TASK_RUNTIME_OPTIONS = {
   ...REPARSE_PROCESSING_RUNTIME_BASE_OPTIONS,
   timeoutSeconds: 1800,
 } as const;
+
+export const REPARSE_PROCESSING_HEAVY_TASK_RUNTIME_OPTIONS = {
+  memory: '8GiB',
+  cpu: 2,
+  concurrency: 1,
+  maxInstances: 1,
+  timeoutSeconds: 1800,
+} as const;
+
+export const REPARSE_PROCESSING_HEAVY_TASK_RATE_LIMITS = {
+  maxConcurrentDispatches: 1,
+  maxDispatchesPerSecond: 1,
+} as const;

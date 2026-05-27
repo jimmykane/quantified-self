@@ -33,6 +33,11 @@ import {
   EventChartPanelModel,
   EventChartSwimLengthMarker,
   EventChartTimelineMarker,
+  findFirstEventChartSeriesPointAtOrAfter,
+  getEventChartSeriesPoint,
+  getEventChartSeriesPointCount,
+  getEventChartSeriesPackedLineValues,
+  getEventChartSeriesX,
 } from '../../../../helpers/event-echarts-data.helper';
 import { isEventLapTypeAllowed } from '../../../../helpers/event-lap-type.helper';
 import {
@@ -56,6 +61,7 @@ import { ECHARTS_GLOBAL_FONT_FAMILY, resolveEChartsThemeName } from '../../../..
 import { DynamicDataLoader } from '@sports-alliance/sports-lib';
 import type { EventChartOverlayOption } from '../../../../helpers/event-chart-overlay.helper';
 import type {
+  EventChartPanelSeries,
   EventChartPoint,
   EventChartZoneColorPiece,
 } from '../../../../helpers/event-echarts-data.helper';
@@ -203,7 +209,6 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
   private zoomBarVisibleForViewport = true;
   private zoomSyncVisibleForViewport = true;
   private seriesByID = new Map<string, PanelSeriesModel>();
-  private seriesDataCache = new WeakMap<EventChartPoint[], Array<[number, number | null]>>();
   private formattedValueCache = new Map<string, string>();
   private activeMarkerTooltipKey: string | null = null;
   private applyingSharedSelectionRange = false;
@@ -645,7 +650,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
         showSymbol: false,
         symbolSize: 5,
         connectNulls: connectAcrossMissingValues,
-        progressive: series.points.length >= PROGRESSIVE_THRESHOLD ? PROGRESSIVE_STEP : 0,
+        progressive: getEventChartSeriesPointCount(series) >= PROGRESSIVE_THRESHOLD ? PROGRESSIVE_STEP : 0,
         progressiveThreshold: PROGRESSIVE_THRESHOLD,
         progressiveChunkMode: 'mod',
         animation: this.useAnimations === true,
@@ -666,7 +671,8 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
         emphasis: {
           disabled: true,
         },
-        data: this.getSeriesLineData(series.points),
+        dimensions: ['x', 'y'],
+        data: this.getSeriesLineData(series),
       };
     });
 
@@ -894,7 +900,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       showSymbol: false,
       symbolSize: 5,
       connectNulls: this.isBatteryStreamType(series.streamType),
-      progressive: series.points.length >= PROGRESSIVE_THRESHOLD ? PROGRESSIVE_STEP : 0,
+      progressive: getEventChartSeriesPointCount(series) >= PROGRESSIVE_THRESHOLD ? PROGRESSIVE_STEP : 0,
       progressiveThreshold: PROGRESSIVE_THRESHOLD,
       progressiveChunkMode: 'mod',
       animation: this.useAnimations === true,
@@ -910,7 +916,8 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       emphasis: {
         disabled: true,
       },
-      data: this.getSeriesLineData(series.points),
+      dimensions: ['x', 'y'],
+      data: this.getSeriesLineData(series),
     }));
   }
 
@@ -1509,12 +1516,18 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
   private getTooltipXAxisValue(params: TooltipFormatterParams[]): number {
     for (let index = 0; index < params.length; index += 1) {
       const point = params[index];
-      if (Array.isArray(point?.value) && Number.isFinite(Number(point.value[0]))) {
-        return Number(point.value[0]);
+      const value = point?.value;
+      if (this.isSeriesTupleValue(value) && Number.isFinite(Number(value[0]))) {
+        return Number(value[0]);
       }
     }
 
     return Number.NaN;
+  }
+
+  private isSeriesTupleValue(value: unknown): value is ArrayLike<unknown> {
+    return Array.isArray(value)
+      || (ArrayBuffer.isView(value) && typeof (value as unknown as ArrayLike<unknown>).length === 'number');
   }
 
   private resolveTooltipPointsAtX(xValue: number): TooltipResolvedPoint[] {
@@ -1533,12 +1546,12 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       const panel = panels[panelIndex];
       for (let seriesIndex = 0; seriesIndex < panel.series.length; seriesIndex += 1) {
         const series = panel.series[seriesIndex];
-        const nearestPoint = this.findNearestTooltipPoint(series.points, xValue);
-        if (!nearestPoint || !Number.isFinite(nearestPoint.point.y)) {
+        const nearestPoint = this.findNearestTooltipPoint(series, xValue);
+        if (!nearestPoint || typeof nearestPoint.point.y !== 'number' || !Number.isFinite(nearestPoint.point.y)) {
           continue;
         }
 
-        const maxAcceptedDistance = this.getTooltipAcceptedXDistance(series.points, nearestPoint.index, pixelTolerance);
+        const maxAcceptedDistance = this.getTooltipAcceptedXDistance(series, nearestPoint.index, pixelTolerance);
         if (nearestPoint.distance > maxAcceptedDistance) {
           continue;
         }
@@ -1570,39 +1583,28 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
   }
 
   private findNearestTooltipPoint(
-    points: EventChartPoint[],
+    series: EventChartPanelSeries,
     xValue: number
   ): { point: EventChartPoint; distance: number; index: number } | null {
-    if (!Array.isArray(points) || points.length === 0 || !Number.isFinite(xValue)) {
+    const pointCount = getEventChartSeriesPointCount(series);
+    if (!pointCount || !Number.isFinite(xValue)) {
       return null;
     }
 
-    let low = 0;
-    let high = points.length - 1;
-
-    while (low <= high) {
-      const middle = Math.floor((low + high) / 2);
-      const middleX = Number(points[middle]?.x);
-      if (!Number.isFinite(middleX)) {
-        return null;
-      }
-
-      if (middleX < xValue) {
-        low = middle + 1;
-      } else if (middleX > xValue) {
-        high = middle - 1;
-      } else {
-        return {
-          point: points[middle],
-          distance: 0,
-          index: middle,
-        };
-      }
+    const exactIndex = findFirstEventChartSeriesPointAtOrAfter(series, xValue);
+    if (exactIndex < pointCount && getEventChartSeriesX(series, exactIndex) === xValue) {
+      return {
+        point: getEventChartSeriesPoint(series, exactIndex) as EventChartPoint,
+        distance: 0,
+        index: exactIndex,
+      };
     }
 
+    const lowerIndex = Math.max(0, exactIndex - 1);
+    const upperIndex = Math.min(pointCount - 1, exactIndex);
     const candidates = [
-      { point: points[Math.max(0, high)], index: Math.max(0, high) },
-      { point: points[Math.min(points.length - 1, low)], index: Math.min(points.length - 1, low) }
+      { point: getEventChartSeriesPoint(series, lowerIndex), index: lowerIndex },
+      { point: getEventChartSeriesPoint(series, upperIndex), index: upperIndex }
     ].filter((candidate): candidate is { point: EventChartPoint; index: number } => !!candidate.point && Number.isFinite(candidate.point.x));
     if (!candidates.length) {
       return null;
@@ -1628,23 +1630,24 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
   }
 
   private getTooltipAcceptedXDistance(
-    points: EventChartPoint[],
+    series: EventChartPanelSeries,
     pointIndex: number,
     pixelTolerance: number
   ): number {
-    const localSpacingBound = this.getTooltipLocalSpacingBound(points, pointIndex);
+    const localSpacingBound = this.getTooltipLocalSpacingBound(series, pointIndex);
     const hardCap = this.getTooltipHardDistanceCap();
     return Math.min(pixelTolerance, localSpacingBound, hardCap);
   }
 
-  private getTooltipLocalSpacingBound(points: EventChartPoint[], pointIndex: number): number {
-    const point = points[pointIndex];
+  private getTooltipLocalSpacingBound(series: EventChartPanelSeries, pointIndex: number): number {
+    const point = getEventChartSeriesPoint(series, pointIndex);
     if (!point || !Number.isFinite(point.x)) {
       return 0;
     }
 
-    const previousPoint = pointIndex > 0 ? points[pointIndex - 1] : null;
-    const nextPoint = pointIndex < points.length - 1 ? points[pointIndex + 1] : null;
+    const pointCount = getEventChartSeriesPointCount(series);
+    const previousPoint = pointIndex > 0 ? getEventChartSeriesPoint(series, pointIndex - 1) : null;
+    const nextPoint = pointIndex < pointCount - 1 ? getEventChartSeriesPoint(series, pointIndex + 1) : null;
     const neighborDistances = [
       previousPoint && Number.isFinite(previousPoint.x) ? Math.abs(point.x - previousPoint.x) : Number.NaN,
       nextPoint && Number.isFinite(nextPoint.x) ? Math.abs(nextPoint.x - point.x) : Number.NaN,
@@ -2457,22 +2460,16 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     }
   }
 
-  private getSeriesLineData(points: EventChartPoint[]): Array<[number, number | null]> {
-    const pointsRef = points as EventChartPoint[];
-    const cachedData = this.seriesDataCache.get(pointsRef);
-    if (cachedData) {
-      return cachedData;
+  private getSeriesLineData(series: EventChartPanelSeries): ChartLineSeriesOption['data'] {
+    const packedLineValues = getEventChartSeriesPackedLineValues(series);
+    if (packedLineValues) {
+      return packedLineValues as unknown as ChartLineSeriesOption['data'];
     }
 
-    const data = new Array<[number, number | null]>(points.length);
-    for (let index = 0; index < points.length; index += 1) {
-      const point = points[index];
-      const y = point?.y;
-      data[index] = [point.x, typeof y === 'number' && Number.isFinite(y) ? y : null];
-    }
-
-    this.seriesDataCache.set(pointsRef, data);
-    return data;
+    return (series.points || []).map((point) => [
+      point.x,
+      typeof point.y === 'number' && Number.isFinite(point.y) ? point.y : null,
+    ]) as ChartLineSeriesOption['data'];
   }
 
   private requestFrame(callback: () => void): number {
@@ -2483,7 +2480,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     return globalThis.setTimeout(callback, 16) as unknown as number;
   }
 
-  private cancelPendingFrame(target: 'axisScale'): void {
+  private cancelPendingFrame(_target: 'axisScale'): void {
     const handle = this.pendingAxisScaleFrame;
     if (handle === null) {
       return;

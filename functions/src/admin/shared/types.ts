@@ -130,8 +130,13 @@ export interface SportsLibReparseJobDocData {
     status?: string;
     attemptCount?: number;
     lastError?: string;
+    terminalFailure?: boolean;
+    terminalFailureAt?: unknown;
     updatedAt?: unknown;
     targetSportsLibVersion?: string;
+    processingTier?: string;
+    heavyReason?: string;
+    eventDurationMs?: number;
 }
 
 export interface DerivedMetricsCoordinatorDocData {
@@ -182,6 +187,10 @@ export interface QueueStatsResponse {
                 queueId: string;
                 pending: number;
             };
+            sportsLibReparseHeavy: {
+                queueId: string;
+                pending: number;
+            };
             derivedMetrics: {
                 queueId: string;
                 pending: number;
@@ -219,6 +228,9 @@ export interface QueueStatsResponse {
             lastError: string;
             updatedAt: unknown;
             targetSportsLibVersion: string;
+            processingTier: string;
+            heavyReason: string;
+            eventDurationMs: number | null;
         }[];
     };
     derivedMetrics: {
@@ -300,6 +312,16 @@ export interface QueueStatsResponse {
             }[];
         };
     };
+}
+
+export interface RetrySportsLibReparseHeavyJobRequest {
+    jobId?: string;
+}
+
+export interface RetrySportsLibReparseHeavyJobResponse {
+    success: boolean;
+    jobId: string;
+    taskCreated: boolean;
 }
 
 export interface SetMaintenanceModeRequest {

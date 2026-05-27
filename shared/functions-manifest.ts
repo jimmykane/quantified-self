@@ -1,3 +1,6 @@
+export const SPORTS_LIB_REPARSE_HEAVY_TASK_FUNCTION_NAME = 'processSportsLibReparseHeavyTask';
+export const RETRY_SPORTS_LIB_REPARSE_HEAVY_JOB_FUNCTION_NAME = 'retrySportsLibReparseHeavyJob';
+
 export const FUNCTIONS_MANIFEST = {
     // Admin Functions (europe-west2)
     listUsers: { name: 'listUsers', region: 'europe-west2' },
@@ -49,10 +52,12 @@ export const FUNCTIONS_MANIFEST = {
     // Reparse Functions
     scheduleSportsLibReparseScan: { name: 'scheduleSportsLibReparseScan', region: 'europe-west2' },
     processSportsLibReparseTask: { name: 'processSportsLibReparseTask', region: 'europe-west2' },
+    processSportsLibReparseHeavyTask: { name: SPORTS_LIB_REPARSE_HEAVY_TASK_FUNCTION_NAME, region: 'europe-west2' },
 
     // Upload/Reprocess Functions
     uploadActivity: { name: 'uploadActivity', region: 'europe-west2' },
     reprocessEvent: { name: 'reprocessEvent', region: 'europe-west2' },
+    retrySportsLibReparseHeavyJob: { name: RETRY_SPORTS_LIB_REPARSE_HEAVY_JOB_FUNCTION_NAME, region: 'europe-west2' },
     mergeEvents: { name: 'mergeEvents', region: 'europe-west2' },
     aiInsights: { name: 'aiInsights', region: 'europe-west2' },
     getAiInsightsQuotaStatus: { name: 'getAiInsightsQuotaStatus', region: 'europe-west2' },

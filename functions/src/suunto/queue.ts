@@ -60,7 +60,11 @@ async function enqueueSuuntoWorkout(userName: string, workoutID: string, res: fu
     res.status(200).send();
   } catch (e: any) {
     if (isProviderQueueSkippedWithoutRetryError(e)) {
-      logger.warn(`Skipping Suunto workout webhook ${workoutID} for ${userName} because no local token/user is connected or the user is being deleted.`);
+      logger.warn('Skipping Suunto workout webhook because no local token/user is connected or the user is being deleted.', {
+        provider: 'Suunto',
+        reason: e.code,
+        workoutID,
+      });
       res.status(200).send();
       return;
     }

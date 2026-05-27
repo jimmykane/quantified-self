@@ -10,9 +10,11 @@ import {
   DataHeartRateAvg,
   DataInterface,
   DataGradeAdjustedSpeed,
+  DataGradeAdjustedPace,
   DataLatitudeDegrees,
   DataLongitudeDegrees,
   DataPaceAvg,
+  DataPace,
   DataPower,
   DataPowerAvg,
   DataPoolLength,
@@ -28,7 +30,7 @@ import {
   UserUnitSettingsInterface,
   XAxisTypes
 } from '@sports-alliance/sports-lib';
-import { AppEventColorService } from '../services/color/app.event.color.service';
+import type { AppEventColorService } from '../services/color/app.event.color.service';
 import { isEventLapTypeAllowed, normalizeEventLapType } from './event-lap-type.helper';
 import { applyEventChartCanonicalOrderOverride } from './event-chart-order.helper';
 import {
@@ -65,7 +67,10 @@ export interface EventChartPanelSeries {
   streamType: string;
   displayName: string;
   unit: string;
-  points: EventChartPoint[];
+  lineValues?: Float64Array;
+  timeValues?: Float64Array;
+  pointCount?: number;
+  points?: EventChartPoint[];
   zoneColorPieces?: EventChartZoneColorPiece[];
 }
 
@@ -129,6 +134,52 @@ export interface BuildEventChartPanelsInput {
   colorIntensityZoneLines?: boolean;
 }
 
+export interface EventChartStreamSnapshot {
+  type: string;
+  values: Float64Array;
+}
+
+export interface EventChartIntensityZoneSnapshot {
+  type?: string;
+  [key: string]: unknown;
+}
+
+export interface EventChartActivitySnapshot {
+  id: string;
+  activityName: string;
+  activityType: unknown;
+  startTimeMs: number;
+  intensityZones: EventChartIntensityZoneSnapshot[];
+  streams: EventChartStreamSnapshot[];
+}
+
+export interface EventChartPanelBuildSnapshotInput {
+  selectedActivities: EventChartActivitySnapshot[];
+  xAxisType: XAxisTypes;
+  showAllData: boolean;
+  dataTypesToUse: string[];
+  userUnitSettings: UserUnitSettingsInterface;
+  colorIntensityZoneLines?: boolean;
+  zoneColors: Record<string, string>;
+}
+
+export interface EventChartPanelWorkerRequest {
+  requestID: number;
+  input: EventChartPanelBuildSnapshotInput;
+}
+
+export interface EventChartPanelWorkerSuccessResponse {
+  requestID: number;
+  panels: EventChartPanelModel[];
+}
+
+export interface EventChartPanelWorkerErrorResponse {
+  requestID: number;
+  error: string;
+}
+
+export type EventChartPanelWorkerResponse = EventChartPanelWorkerSuccessResponse | EventChartPanelWorkerErrorResponse;
+
 const EMPTY_PANEL_DOMAIN = { minX: 0, maxX: 1 };
 const EVENT_ZOOM_OVERVIEW_BUCKET_COUNT = 96;
 const EVENT_ZOOM_OVERVIEW_MAX_SAMPLES_PER_SERIES = 720;
@@ -160,14 +211,15 @@ const EVENT_CHART_INTENSITY_ZONE_LINE_DATA_TYPE_SET = new Set<string>(EVENT_CHAR
 const MIN_INTENSITY_ZONE_LOWER_LIMIT_COUNT = 2;
 
 type ActivityIntensityZone = ActivityInterface['intensityZones'][number];
+export type EventChartNumericValues = number[] | Float64Array;
 
 interface ActivityNumericCache {
   startTimeMs: number;
   streamByType: Map<string, StreamInterface>;
-  streamValuesByType: Map<string, number[]>;
-  timeValues: number[] | null;
-  distanceValues: number[] | null;
-  absoluteTimeValues: number[] | null;
+  streamValuesByType: Map<string, EventChartNumericValues>;
+  timeValues: EventChartNumericValues | null;
+  distanceValues: EventChartNumericValues | null;
+  absoluteTimeValues: EventChartNumericValues | null;
 }
 
 interface LapDistanceLookup {
@@ -177,12 +229,67 @@ interface LapDistanceLookup {
 }
 
 interface EventChartSeriesPointResult {
-  points: EventChartPoint[];
+  lineValues: Float64Array;
+  timeValues: Float64Array;
+  pointCount: number;
   minX: number;
   maxX: number;
 }
 
+interface BuildEventChartPanelsCoreInput {
+  selectedActivities: ActivityInterface[];
+  xAxisType: XAxisTypes;
+  showAllData: boolean;
+  dataTypesToUse: string[];
+  userUnitSettings: UserUnitSettingsInterface;
+  colorIntensityZoneLines?: boolean;
+  zoneColors: Record<string, string>;
+}
+
 export function buildEventChartPanels(input: BuildEventChartPanelsInput): EventChartPanelModel[] {
+  return buildEventChartPanelsFromActivities({
+    selectedActivities: Array.isArray(input.selectedActivities) ? input.selectedActivities : [],
+    xAxisType: input.xAxisType,
+    showAllData: input.showAllData,
+    dataTypesToUse: input.dataTypesToUse,
+    userUnitSettings: input.userUnitSettings,
+    colorIntensityZoneLines: input.colorIntensityZoneLines,
+    zoneColors: input.colorIntensityZoneLines === true
+      ? buildEventChartZoneColorMap(input.eventColorService)
+      : {},
+  });
+}
+
+export function createEventChartPanelBuildSnapshot(input: BuildEventChartPanelsInput): EventChartPanelBuildSnapshotInput {
+  const selectedActivities = Array.isArray(input.selectedActivities) ? input.selectedActivities : [];
+  return {
+    selectedActivities: selectedActivities.map((activity) => snapshotEventChartActivity(activity, input)),
+    xAxisType: input.xAxisType,
+    showAllData: input.showAllData,
+    dataTypesToUse: input.dataTypesToUse,
+    userUnitSettings: input.userUnitSettings,
+    colorIntensityZoneLines: input.colorIntensityZoneLines,
+    zoneColors: input.colorIntensityZoneLines === true
+      ? buildEventChartZoneColorMap(input.eventColorService)
+      : {},
+  };
+}
+
+export function buildEventChartPanelsFromSnapshot(input: EventChartPanelBuildSnapshotInput): EventChartPanelModel[] {
+  return buildEventChartPanelsFromActivities({
+    selectedActivities: Array.isArray(input.selectedActivities)
+      ? input.selectedActivities.map((activitySnapshot) => createSnapshotActivity(activitySnapshot))
+      : [],
+    xAxisType: input.xAxisType,
+    showAllData: input.showAllData,
+    dataTypesToUse: input.dataTypesToUse,
+    userUnitSettings: input.userUnitSettings,
+    colorIntensityZoneLines: input.colorIntensityZoneLines,
+    zoneColors: input.zoneColors || {},
+  });
+}
+
+function buildEventChartPanelsFromActivities(input: BuildEventChartPanelsCoreInput): EventChartPanelModel[] {
   const selectedActivities = Array.isArray(input.selectedActivities) ? input.selectedActivities : [];
   if (!selectedActivities.length) {
     return [];
@@ -208,8 +315,7 @@ export function buildEventChartPanels(input: BuildEventChartPanelsInput): EventC
 
     allowedStreams.forEach((stream) => {
       const pointResult = toSeriesPoints(activity, stream, input.xAxisType, activityCache);
-      const points = pointResult.points;
-      if (!points.length) {
+      if (!pointResult.pointCount) {
         return;
       }
 
@@ -237,7 +343,7 @@ export function buildEventChartPanels(input: BuildEventChartPanelsInput): EventC
       panel.maxX = Math.max(panel.maxX, pointResult.maxX);
       const activityID = activity.getID() || '';
       const zoneColorPieces = input.colorIntensityZoneLines === true
-        ? buildIntensityZoneColorPieces(activity, stream.type, input.eventColorService)
+        ? buildIntensityZoneColorPieces(activity, stream.type, input.zoneColors)
         : [];
       panel.series.push({
         id: `${activityID}::${stream.type}`,
@@ -247,7 +353,9 @@ export function buildEventChartPanels(input: BuildEventChartPanelsInput): EventC
         streamType: stream.type,
         displayName,
         unit,
-        points,
+        lineValues: pointResult.lineValues,
+        timeValues: pointResult.timeValues,
+        pointCount: pointResult.pointCount,
         ...(zoneColorPieces.length > 0 ? { zoneColorPieces } : {}),
       });
     });
@@ -270,10 +378,150 @@ export function buildEventChartPanels(input: BuildEventChartPanelsInput): EventC
   return panels;
 }
 
+function buildEventChartZoneColorMap(eventColorService: Pick<AppEventColorService, 'getColorForZoneHex'>): Record<string, string> {
+  const colors: Record<string, string> = {};
+  if (typeof eventColorService?.getColorForZoneHex !== 'function') {
+    return colors;
+  }
+
+  for (let zoneNumber = 1; zoneNumber <= 7; zoneNumber += 1) {
+    const zone = `Zone ${zoneNumber}`;
+    colors[zone] = eventColorService.getColorForZoneHex(zone);
+  }
+  return colors;
+}
+
+function snapshotEventChartActivity(
+  activity: ActivityInterface,
+  input: Pick<BuildEventChartPanelsInput, 'showAllData' | 'dataTypesToUse' | 'userUnitSettings' | 'xAxisType'>
+): EventChartActivitySnapshot {
+  const streams: EventChartStreamSnapshot[] = [];
+  const streamTypes = new Set<string>();
+  const selectedStreamTypes = input.showAllData
+    ? null
+    : buildEventChartSnapshotStreamTypeSet(input);
+  const appendStream = (stream: StreamInterface | null | undefined, preserveDuplicateType: boolean) => {
+    const streamType = `${stream?.type || ''}`;
+    if (!streamType || (!preserveDuplicateType && streamTypes.has(streamType))) {
+      return;
+    }
+    streamTypes.add(streamType);
+    streams.push({
+      type: streamType,
+      values: toFloat64NumericArray(stream?.getData?.()),
+    });
+  };
+
+  const allStreams = activity.getAllStreams?.() || [];
+  allStreams.forEach((stream) => {
+    if (selectedStreamTypes === null || selectedStreamTypes.has(stream?.type || '')) {
+      appendStream(stream, true);
+    }
+  });
+
+  const supplementalStreamTypes = selectedStreamTypes === null
+    ? [XAxisTypes.Time, DataDistance.type, DataStrydDistance.type, DataSpeed.type]
+    : [...selectedStreamTypes];
+  supplementalStreamTypes.forEach((streamType) => {
+    appendStream(getActivityStreamByType(activity, streamType, allStreams), false);
+  });
+
+  return {
+    id: activity.getID?.() || '',
+    activityName: activity.creator?.name || 'Activity',
+    activityType: activity.type,
+    startTimeMs: activity.startDate?.getTime?.() ?? Number.NaN,
+    intensityZones: (activity.intensityZones || []).map((zone) => ({ ...(zone as unknown as Record<string, unknown>) })),
+    streams,
+  };
+}
+
+function buildEventChartSnapshotStreamTypeSet(
+  input: Pick<BuildEventChartPanelsInput, 'dataTypesToUse' | 'userUnitSettings' | 'xAxisType'>
+): Set<string> {
+  const streamTypes = new Set<string>();
+  const appendExpandedType = (streamType: string | null | undefined) => {
+    const normalizedType = `${streamType || ''}`;
+    if (!normalizedType) {
+      return;
+    }
+
+    streamTypes.add(normalizedType);
+    const unitBaseTypes = getUnitBaseDataTypes(normalizedType);
+    unitBaseTypes.forEach((baseType) => {
+      streamTypes.add(baseType);
+      getDerivedStreamDependencyTypes(baseType).forEach((dependencyType) => streamTypes.add(dependencyType));
+    });
+    getDerivedStreamDependencyTypes(normalizedType).forEach((dependencyType) => streamTypes.add(dependencyType));
+
+    if (isEventPaceStreamType(normalizedType)) {
+      streamTypes.add(DataSpeed.type);
+    }
+  };
+
+  streamTypes.add(XAxisTypes.Time);
+  if (input.xAxisType === XAxisTypes.Distance) {
+    streamTypes.add(DataDistance.type);
+    streamTypes.add(DataStrydDistance.type);
+  }
+
+  const selectedDataTypes = Array.isArray(input.dataTypesToUse) ? input.dataTypesToUse : [];
+  selectedDataTypes.forEach((streamType) => appendExpandedType(streamType));
+  DynamicDataLoader
+    .getUnitBasedDataTypesFromDataTypes(selectedDataTypes, input.userUnitSettings, { includeDerivedTypes: true })
+    .forEach((streamType) => appendExpandedType(streamType));
+
+  return streamTypes;
+}
+
+function getUnitBaseDataTypes(dataType: string): string[] {
+  const unitGroups = (DynamicDataLoader as unknown as {
+    dataTypeUnitGroups?: Record<string, Record<string, unknown>>;
+  }).dataTypeUnitGroups || {};
+  const baseTypes = Object.entries(unitGroups)
+    .filter(([baseType, unitGroup]) => baseType === dataType || Object.prototype.hasOwnProperty.call(unitGroup, dataType))
+    .map(([baseType]) => baseType);
+  return baseTypes.length > 0 ? baseTypes : [dataType];
+}
+
+function getDerivedStreamDependencyTypes(dataType: string): string[] {
+  switch (dataType) {
+    case DataPace.type:
+    case DataSwimPace.type:
+      return [DataSpeed.type];
+    case DataGradeAdjustedPace.type:
+      return [DataGradeAdjustedSpeed.type, DataSpeed.type];
+    default:
+      return [];
+  }
+}
+
+function createSnapshotActivity(snapshot: EventChartActivitySnapshot): ActivityInterface {
+  const streams = (snapshot.streams || []).map((stream) => createSnapshotStream(stream));
+  const streamsByType = new Map(streams.map((stream) => [stream.type, stream]));
+  return {
+    type: snapshot.activityType,
+    startDate: new Date(snapshot.startTimeMs),
+    creator: { name: snapshot.activityName },
+    intensityZones: snapshot.intensityZones || [],
+    getID: () => snapshot.id,
+    getAllStreams: () => streams,
+    getStream: (streamType: string) => streamsByType.get(streamType) || null,
+  } as unknown as ActivityInterface;
+}
+
+function createSnapshotStream(snapshot: EventChartStreamSnapshot): StreamInterface {
+  const values = toNullableNumberArray(snapshot.values);
+  return {
+    type: snapshot.type,
+    getData: () => values,
+  } as unknown as StreamInterface;
+}
+
 function buildIntensityZoneColorPieces(
   activity: ActivityInterface,
   streamType: string,
-  eventColorService: AppEventColorService
+  zoneColors: Record<string, string>
 ): EventChartZoneColorPiece[] {
   if (!EVENT_CHART_INTENSITY_ZONE_LINE_DATA_TYPE_SET.has(streamType)) {
     return [];
@@ -293,7 +541,7 @@ function buildIntensityZoneColorPieces(
   const pieces: EventChartZoneColorPiece[] = [
     {
       zone: 'Zone 1',
-      color: eventColorService.getColorForZoneHex('Zone 1'),
+      color: zoneColors['Zone 1'] || '',
       lt: lowerLimits[0],
     },
   ];
@@ -303,13 +551,200 @@ function buildIntensityZoneColorPieces(
     const nextLowerLimit = lowerLimits[index + 1];
     pieces.push({
       zone: `Zone ${zoneNumber}`,
-      color: eventColorService.getColorForZoneHex(`Zone ${zoneNumber}`),
+      color: zoneColors[`Zone ${zoneNumber}`] || '',
       gte: lowerLimits[index],
       ...(Number.isFinite(nextLowerLimit) ? { lt: nextLowerLimit } : {}),
     });
   }
 
   return pieces;
+}
+
+export function collectEventChartPanelBuildSnapshotTransferables(
+  input: EventChartPanelBuildSnapshotInput
+): Transferable[] {
+  const transferables: Transferable[] = [];
+
+  (input.selectedActivities || []).forEach((activity) => {
+    (activity.streams || []).forEach((stream) => {
+      appendFloat64ArrayTransferable(transferables, stream.values);
+    });
+  });
+
+  return transferables;
+}
+
+export function collectEventChartPanelTransferables(panels: EventChartPanelModel[]): Transferable[] {
+  const transferables: Transferable[] = [];
+
+  (panels || []).forEach((panel) => {
+    (panel.series || []).forEach((series) => {
+      appendFloat64ArrayTransferable(transferables, series.lineValues);
+      appendFloat64ArrayTransferable(transferables, series.timeValues);
+    });
+  });
+
+  return transferables;
+}
+
+function appendFloat64ArrayTransferable(transferables: Transferable[], values: Float64Array | null | undefined): void {
+  if (!values || values.byteLength <= 0) {
+    return;
+  }
+
+  transferables.push(values.buffer);
+}
+
+export function getEventChartSeriesPointCount(series: EventChartPanelSeries | null | undefined): number {
+  const declaredPointCount = Number(series?.pointCount ?? 0);
+  const packedPointCount = Math.floor((series?.lineValues?.length ?? 0) / 2);
+  const timePointCount = series?.timeValues?.length ?? 0;
+  if (!Number.isFinite(declaredPointCount) || declaredPointCount <= 0 || !packedPointCount || !timePointCount) {
+    return Array.isArray(series?.points) ? series.points.length : 0;
+  }
+
+  return Math.min(Math.trunc(declaredPointCount), packedPointCount, timePointCount);
+}
+
+function hasPackedEventChartSeriesData(series: EventChartPanelSeries | null | undefined): series is EventChartPanelSeries & {
+  lineValues: Float64Array;
+  timeValues: Float64Array;
+  pointCount: number;
+} {
+  const declaredPointCount = Number(series?.pointCount ?? 0);
+  const packedPointCount = Math.floor((series?.lineValues?.length ?? 0) / 2);
+  const timePointCount = series?.timeValues?.length ?? 0;
+  return !!series
+    && series.lineValues instanceof Float64Array
+    && series.timeValues instanceof Float64Array
+    && Number.isFinite(declaredPointCount)
+    && declaredPointCount > 0
+    && packedPointCount > 0
+    && timePointCount > 0;
+}
+
+export function getEventChartSeriesPackedLineValues(series: EventChartPanelSeries): Float64Array | null {
+  const pointCount = getEventChartSeriesPointCount(series);
+  if (!hasPackedEventChartSeriesData(series) || !pointCount) {
+    return null;
+  }
+
+  if (series.lineValues.length === pointCount * 2) {
+    return series.lineValues;
+  }
+
+  return series.lineValues.slice(0, pointCount * 2);
+}
+
+function getLegacyEventChartPoint(series: EventChartPanelSeries | null | undefined, index: number): EventChartPoint | null {
+  if (!Array.isArray(series?.points)) {
+    return null;
+  }
+
+  const point = series.points[Math.trunc(index)];
+  return point && Number.isFinite(point.x) ? point : null;
+}
+
+export function getEventChartSeriesX(series: EventChartPanelSeries, index: number): number {
+  if (!isEventChartSeriesIndexInRange(series, index)) {
+    return Number.NaN;
+  }
+
+  if (hasPackedEventChartSeriesData(series)) {
+    return series.lineValues[Math.trunc(index) * 2];
+  }
+
+  return getLegacyEventChartPoint(series, index)?.x ?? Number.NaN;
+}
+
+export function getEventChartSeriesY(series: EventChartPanelSeries, index: number): number | null {
+  if (!isEventChartSeriesIndexInRange(series, index)) {
+    return null;
+  }
+
+  if (!hasPackedEventChartSeriesData(series)) {
+    const value = getLegacyEventChartPoint(series, index)?.y;
+    return typeof value === 'number' && Number.isFinite(value) ? value : null;
+  }
+
+  const value = series.lineValues[(Math.trunc(index) * 2) + 1];
+  return Number.isFinite(value) ? value : null;
+}
+
+export function getEventChartSeriesTime(series: EventChartPanelSeries, index: number): number {
+  if (!isEventChartSeriesIndexInRange(series, index)) {
+    return Number.NaN;
+  }
+
+  if (hasPackedEventChartSeriesData(series)) {
+    return series.timeValues[Math.trunc(index)];
+  }
+
+  return getLegacyEventChartPoint(series, index)?.time ?? Number.NaN;
+}
+
+export function getEventChartSeriesPoint(series: EventChartPanelSeries, index: number): EventChartPoint | null {
+  if (!isEventChartSeriesIndexInRange(series, index)) {
+    return null;
+  }
+
+  const normalizedIndex = Math.trunc(index);
+  return {
+    x: getEventChartSeriesX(series, normalizedIndex),
+    y: getEventChartSeriesY(series, normalizedIndex),
+    time: getEventChartSeriesTime(series, normalizedIndex),
+  };
+}
+
+export function eventChartSeriesToPoints(series: EventChartPanelSeries): EventChartPoint[] {
+  const pointCount = getEventChartSeriesPointCount(series);
+  const points = new Array<EventChartPoint>(pointCount);
+  for (let index = 0; index < pointCount; index += 1) {
+    points[index] = getEventChartSeriesPoint(series, index) as EventChartPoint;
+  }
+  return points;
+}
+
+export function findFirstEventChartSeriesPointAtOrAfter(
+  series: EventChartPanelSeries,
+  xValue: number
+): number {
+  return findFirstEventChartSeriesPointByX(series, xValue, false);
+}
+
+export function findFirstEventChartSeriesPointAfter(
+  series: EventChartPanelSeries,
+  xValue: number
+): number {
+  return findFirstEventChartSeriesPointByX(series, xValue, true);
+}
+
+function findFirstEventChartSeriesPointByX(
+  series: EventChartPanelSeries,
+  xValue: number,
+  exclusive: boolean
+): number {
+  let low = 0;
+  let high = getEventChartSeriesPointCount(series);
+
+  while (low < high) {
+    const mid = Math.floor((low + high) / 2);
+    const midX = getEventChartSeriesX(series, mid);
+    if (exclusive ? midX <= xValue : midX < xValue) {
+      low = mid + 1;
+    } else {
+      high = mid;
+    }
+  }
+
+  return low;
+}
+
+function isEventChartSeriesIndexInRange(series: EventChartPanelSeries | null | undefined, index: number): boolean {
+  return !!series
+    && Number.isFinite(index)
+    && index >= 0
+    && Math.trunc(index) < getEventChartSeriesPointCount(series);
 }
 
 function readIntensityZoneLowerLimits(intensityZones: ActivityIntensityZone): number[] {
@@ -405,15 +840,15 @@ export function buildEventZoomOverviewData(
   for (let panelIndex = 0; panelIndex < panels.length; panelIndex += 1) {
     const panel = panels[panelIndex];
     for (let seriesIndex = 0; seriesIndex < panel.series.length; seriesIndex += 1) {
-      const points = panel.series[seriesIndex]?.points || [];
-      if (!points.length) {
+      const series = panel.series[seriesIndex];
+      const pointCount = getEventChartSeriesPointCount(series);
+      if (!pointCount) {
         continue;
       }
 
-      const stride = Math.max(1, Math.ceil(points.length / EVENT_ZOOM_OVERVIEW_MAX_SAMPLES_PER_SERIES));
-      for (let pointIndex = 0; pointIndex < points.length; pointIndex += stride) {
-        const point = points[pointIndex];
-        const xValue = Number(point?.x);
+      const stride = Math.max(1, Math.ceil(pointCount / EVENT_ZOOM_OVERVIEW_MAX_SAMPLES_PER_SERIES));
+      for (let pointIndex = 0; pointIndex < pointCount; pointIndex += stride) {
+        const xValue = getEventChartSeriesX(series, pointIndex);
         if (!Number.isFinite(xValue) || xValue < normalizedDomain.start || xValue > normalizedDomain.end) {
           continue;
         }
@@ -671,7 +1106,7 @@ function dedupeByType(streams: StreamInterface[]): StreamInterface[] {
 
 function getStreamQualityMetrics(stream: StreamInterface): { finiteCount: number; dataLength: number } {
   const rawData = stream?.getData?.();
-  if (!Array.isArray(rawData) || rawData.length === 0) {
+  if (!isNumericValueArrayLike(rawData) || rawData.length === 0) {
     return { finiteCount: 0, dataLength: 0 };
   }
 
@@ -861,7 +1296,9 @@ function toSeriesPoints(
     const absoluteTimes = getActivityAbsoluteTimes(activity, activityCache);
     const length = Math.min(streamValues.length, distanceValues.length, absoluteTimes.length);
 
-    const points: EventChartPoint[] = [];
+    const lineValues = new Float64Array(length * 2);
+    const pointTimes = new Float64Array(length);
+    let pointCount = 0;
     let minX = Number.POSITIVE_INFINITY;
     let maxX = Number.NEGATIVE_INFINITY;
     for (let index = 0; index < length; index += 1) {
@@ -873,11 +1310,11 @@ function toSeriesPoints(
       if (!Number.isFinite(x) || !Number.isFinite(time)) {
         continue;
       }
-      points.push({
-        x,
-        y,
-        time
-      });
+      const writeOffset = pointCount * 2;
+      lineValues[writeOffset] = x;
+      lineValues[writeOffset + 1] = typeof y === 'number' && Number.isFinite(y) ? y : Number.NaN;
+      pointTimes[pointCount] = time;
+      pointCount += 1;
       if (x < minX) {
         minX = x;
       }
@@ -885,13 +1322,15 @@ function toSeriesPoints(
         maxX = x;
       }
     }
-    return normalizeSeriesPointResult(points, minX, maxX);
+    return normalizeSeriesPointResult(lineValues, pointTimes, pointCount, minX, maxX);
   }
 
   const timeValues = getActivityTimeValues(activity, activityCache);
   const absoluteTimes = getActivityAbsoluteTimes(activity, activityCache);
   const length = Math.min(streamValues.length, timeValues.length, absoluteTimes.length);
-  const points: EventChartPoint[] = [];
+  const lineValues = new Float64Array(length * 2);
+  const pointTimes = new Float64Array(length);
+  let pointCount = 0;
   let minX = Number.POSITIVE_INFINITY;
   let maxX = Number.NEGATIVE_INFINITY;
 
@@ -912,11 +1351,11 @@ function toSeriesPoints(
       continue;
     }
 
-    points.push({
-      x,
-      y,
-      time
-    });
+    const writeOffset = pointCount * 2;
+    lineValues[writeOffset] = x;
+    lineValues[writeOffset + 1] = typeof y === 'number' && Number.isFinite(y) ? y : Number.NaN;
+    pointTimes[pointCount] = time;
+    pointCount += 1;
     if (x < minX) {
       minX = x;
     }
@@ -925,27 +1364,33 @@ function toSeriesPoints(
     }
   }
 
-  return normalizeSeriesPointResult(points, minX, maxX);
+  return normalizeSeriesPointResult(lineValues, pointTimes, pointCount, minX, maxX);
 }
 
 function createEmptySeriesPointResult(): EventChartSeriesPointResult {
   return {
-    points: [],
+    lineValues: new Float64Array(0),
+    timeValues: new Float64Array(0),
+    pointCount: 0,
     ...EMPTY_PANEL_DOMAIN,
   };
 }
 
 function normalizeSeriesPointResult(
-  points: EventChartPoint[],
+  lineValues: Float64Array,
+  timeValues: Float64Array,
+  pointCount: number,
   minX: number,
   maxX: number
 ): EventChartSeriesPointResult {
-  if (!points.length || !Number.isFinite(minX) || !Number.isFinite(maxX)) {
+  if (!pointCount || !Number.isFinite(minX) || !Number.isFinite(maxX)) {
     return createEmptySeriesPointResult();
   }
 
   return {
-    points,
+    lineValues: pointCount * 2 === lineValues.length ? lineValues : lineValues.slice(0, pointCount * 2),
+    timeValues: pointCount === timeValues.length ? timeValues : timeValues.slice(0, pointCount),
+    pointCount,
     minX,
     maxX,
   };
@@ -953,14 +1398,14 @@ function normalizeSeriesPointResult(
 
 function getRenderablePaceValue(
   rawPaceValue: number,
-  speedValues: number[] | null,
+  speedValues: EventChartNumericValues | null,
   index: number
 ): number | null {
   if (!Number.isFinite(rawPaceValue) || rawPaceValue <= 0 || rawPaceValue > PACE_MAX_DISPLAY_SECONDS) {
     return null;
   }
 
-  if (Array.isArray(speedValues) && index < speedValues.length) {
+  if (isNumericValueArrayLike(speedValues) && index < speedValues.length) {
     const speedValue = speedValues[index];
     if (!Number.isFinite(speedValue) || speedValue <= PACE_MIN_MOVING_SPEED_MPS) {
       return null;
@@ -970,12 +1415,58 @@ function getRenderablePaceValue(
   return rawPaceValue;
 }
 
-function toNumericArray(data: unknown): number[] {
-  if (!Array.isArray(data)) {
+function toNumericArray(data: unknown): EventChartNumericValues {
+  if (data instanceof Float64Array) {
+    return data;
+  }
+
+  if (!isNumericValueArrayLike(data)) {
     return [];
   }
 
-  return data.map((value) => toNumericValueOrNaN(value as unknown));
+  const values = new Array<number>(data.length);
+  for (let index = 0; index < data.length; index += 1) {
+    values[index] = toNumericValueOrNaN(data[index]);
+  }
+  return values;
+}
+
+function toFloat64NumericArray(data: unknown): Float64Array {
+  if (data instanceof Float64Array) {
+    return data.slice();
+  }
+
+  if (!isNumericValueArrayLike(data)) {
+    return new Float64Array(0);
+  }
+
+  const values = new Float64Array(data.length);
+  for (let index = 0; index < data.length; index += 1) {
+    values[index] = toNumericValueOrNaN(data[index]);
+  }
+  return values;
+}
+
+function toNullableNumberArray(values: Float64Array): Array<number | null> {
+  const normalizedValues = new Array<number | null>(values.length);
+  for (let index = 0; index < values.length; index += 1) {
+    const value = values[index];
+    normalizedValues[index] = Number.isFinite(value) ? value : null;
+  }
+  return normalizedValues;
+}
+
+function isNumericValueArrayLike(data: unknown): data is ArrayLike<unknown> {
+  if (!data || typeof data === 'string') {
+    return false;
+  }
+
+  if (Array.isArray(data)) {
+    return true;
+  }
+
+  return ArrayBuffer.isView(data)
+    && typeof (data as unknown as ArrayLike<unknown>).length === 'number';
 }
 
 function toNumericValueOrNaN(value: unknown): number {
@@ -1093,8 +1584,8 @@ function resolveLapAxisValueFromIndex(
   return getFiniteValueNearIndex(getActivityDistanceValues(activity, activityCache), lapEndIndex);
 }
 
-function getFiniteValueNearIndex(values: number[], index: number): number {
-  if (!Array.isArray(values) || values.length === 0 || !Number.isFinite(index)) {
+function getFiniteValueNearIndex(values: EventChartNumericValues, index: number): number {
+  if (!isNumericValueArrayLike(values) || values.length === 0 || !Number.isFinite(index)) {
     return Number.NaN;
   }
 
@@ -1137,7 +1628,7 @@ function createActivityNumericCache(
   return {
     startTimeMs: activity.startDate.getTime(),
     streamByType,
-    streamValuesByType: new Map<string, number[]>(),
+    streamValuesByType: new Map<string, EventChartNumericValues>(),
     timeValues: null,
     distanceValues: null,
     absoluteTimeValues: null,
@@ -1318,7 +1809,7 @@ function isIdleSwimLength(swimLength: AppSwimLength): boolean {
   return type.includes('idle') || type.includes('rest');
 }
 
-function getStreamNumericValues(stream: StreamInterface, cache: ActivityNumericCache): number[] {
+function getStreamNumericValues(stream: StreamInterface, cache: ActivityNumericCache): EventChartNumericValues {
   const streamType = `${stream?.type || ''}`;
   const cached = cache.streamValuesByType.get(streamType);
   if (cached) {
@@ -1334,7 +1825,7 @@ function getActivityStreamNumericValues(
   activity: ActivityInterface,
   streamType: string,
   cache: ActivityNumericCache
-): number[] {
+): EventChartNumericValues {
   const cached = cache.streamValuesByType.get(streamType);
   if (cached) {
     return cached;
@@ -1345,7 +1836,7 @@ function getActivityStreamNumericValues(
   return values;
 }
 
-function getActivityTimeValues(activity: ActivityInterface, cache: ActivityNumericCache): number[] {
+function getActivityTimeValues(activity: ActivityInterface, cache: ActivityNumericCache): EventChartNumericValues {
   if (cache.timeValues) {
     return cache.timeValues;
   }
@@ -1354,7 +1845,7 @@ function getActivityTimeValues(activity: ActivityInterface, cache: ActivityNumer
   return cache.timeValues;
 }
 
-function getActivityDistanceValues(activity: ActivityInterface, cache: ActivityNumericCache): number[] {
+function getActivityDistanceValues(activity: ActivityInterface, cache: ActivityNumericCache): EventChartNumericValues {
   if (cache.distanceValues) {
     return cache.distanceValues;
   }
@@ -1366,14 +1857,14 @@ function getActivityDistanceValues(activity: ActivityInterface, cache: ActivityN
   return cache.distanceValues;
 }
 
-function getActivityAbsoluteTimes(activity: ActivityInterface, cache: ActivityNumericCache): number[] {
+function getActivityAbsoluteTimes(activity: ActivityInterface, cache: ActivityNumericCache): EventChartNumericValues {
   if (cache.absoluteTimeValues) {
     return cache.absoluteTimeValues;
   }
 
   const startTimeMs = Number.isFinite(cache.startTimeMs) ? cache.startTimeMs : activity.startDate.getTime();
   const timeValues = getActivityTimeValues(activity, cache);
-  const absoluteTimes = new Array<number>(timeValues.length);
+  const absoluteTimes = new Float64Array(timeValues.length);
   for (let index = 0; index < timeValues.length; index += 1) {
     const seconds = timeValues[index];
     absoluteTimes[index] = Number.isFinite(seconds)

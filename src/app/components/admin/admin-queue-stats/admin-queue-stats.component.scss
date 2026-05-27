@@ -374,6 +374,18 @@ td.mat-cell {
     word-break: break-all;
 }
 
+.retry-heavy-button {
+    min-width: 92px;
+
+    mat-icon,
+    mat-spinner {
+        margin-right: 6px;
+        width: 18px;
+        height: 18px;
+        font-size: 18px;
+    }
+}
+
 .empty-table-state {
     padding: 1rem 1.5rem 1.5rem;
     color: #999;

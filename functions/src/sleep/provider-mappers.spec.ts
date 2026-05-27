@@ -70,12 +70,51 @@ describe('sleep provider mappers', () => {
 
         expect(result?.sourceSessionKey).toBe('12345');
         expect(result?.session.source.provider).toBe(SLEEP_PROVIDERS.SuuntoApp);
+        expect(result?.session.sleepDate).toBe('2026-04-28');
+        expect(result?.session.timezoneOffsetSeconds).toBe(0);
         expect(result?.session.durationSeconds).toBe(24000);
         expect(result?.session.inBedDurationSeconds).toBe(28800);
         expect(result?.session.stageDurationsSeconds[SLEEP_STAGES.Awake]).toBe(720);
         expect(result?.session.vitals?.averageHeartRateBpm).toBe(52);
         expect(result?.session.vitals?.maxSpo2Percent).toBe(97);
         expect(result?.session.score?.value).toBe(81);
+    });
+
+    it('keeps Suunto naps on the nap date and overnight sleep on the local wake date', () => {
+        const overnight = mapSuuntoSleepSample({
+            timestamp: '2026-05-26T21:47:00.000+03:00',
+            entryData: {
+                SleepId: 1779821220,
+                DateTime: '2026-05-26T21:47:00.000+03:00',
+                Duration: 35460,
+                DeepSleepDuration: 5940,
+                LightSleepDuration: 23580,
+                REMSleepDuration: 3780,
+                WakeAfterSleepOnsetDuration: 2160,
+                AvgHRV: 32,
+                IsNap: false,
+            },
+        }, 'suunto-user-1', 2000);
+        const nap = mapSuuntoSleepSample({
+            timestamp: '2026-05-26T05:00:00.000+03:00',
+            entryData: {
+                SleepId: 1779760800,
+                DateTime: '2026-05-26T05:00:00.000+03:00',
+                Duration: 10320,
+                LightSleepDuration: 10320,
+                AvgHRV: 45,
+                IsNap: true,
+            },
+        }, 'suunto-user-1', 2000);
+
+        expect(overnight?.session.startTimeMs).toBe(Date.UTC(2026, 4, 26, 18, 47));
+        expect(overnight?.session.endTimeMs).toBe(Date.UTC(2026, 4, 27, 4, 38));
+        expect(overnight?.session.sleepDate).toBe('2026-05-27');
+        expect(overnight?.session.timezoneOffsetSeconds).toBe(3 * 60 * 60);
+        expect(nap?.session.startTimeMs).toBe(Date.UTC(2026, 4, 26, 2));
+        expect(nap?.session.endTimeMs).toBe(Date.UTC(2026, 4, 26, 4, 52));
+        expect(nap?.session.sleepDate).toBe('2026-05-26');
+        expect(nap?.session.timezoneOffsetSeconds).toBe(3 * 60 * 60);
     });
 
     it('maps COROS daily sleep with unknown-stage duration and daily extras', () => {

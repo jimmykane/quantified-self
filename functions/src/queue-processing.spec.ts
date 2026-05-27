@@ -159,8 +159,12 @@ describe('parseWorkoutQueueItemForServiceName', () => {
     beforeEach(() => {
         vi.clearAllMocks();
         // Reset default mock implementations if needed
-        mockWhere.mockReturnValue({ get: mockGet });
-        mockCollectionGroup.mockReturnValue({ where: mockWhere });
+        const tokenQuery = {
+            where: mockWhere,
+            get: mockGet,
+        };
+        mockWhere.mockReturnValue(tokenQuery);
+        mockCollectionGroup.mockReturnValue(tokenQuery);
         mockShouldSkipQueueWorkForDeletedUser.mockResolvedValue(false);
     });
 

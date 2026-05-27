@@ -57,8 +57,9 @@ export const insertGarminAPIActivityFileToQueue = functions.region('europe-west2
   const queueItemRefs: admin.firestore.DocumentReference[] = [];
   for (const activityFile of activityFiles) {
     let queueItemDocumentReference;
+    let activityFileID: string | null = null;
     try {
-      const activityFileID = activityFile.summaryId || new URLSearchParams(activityFile.callbackURL.split('?')[1]).get('id');
+      activityFileID = activityFile.summaryId || new URLSearchParams(activityFile.callbackURL.split('?')[1]).get('id');
       const activityFileToken = new URLSearchParams(activityFile.callbackURL.split('?')[1]).get('token');
       if (!activityFileID) {
         res.status(500).send();
@@ -79,7 +80,11 @@ export const insertGarminAPIActivityFileToQueue = functions.region('europe-west2
       queueItemRefs.push(queueItemDocumentReference);
     } catch (e: unknown) {
       if (isProviderQueueSkippedWithoutRetryError(e)) {
-        logger.warn(`Skipping Garmin activity file webhook for ${activityFile.userId} because no local token/user is connected or the user is being deleted.`);
+        logger.warn('Skipping Garmin activity file webhook because no local token/user is connected or the user is being deleted.', {
+          provider: 'Garmin',
+          reason: e.code,
+          activityFileID,
+        });
         continue;
       }
       logger.error(e);

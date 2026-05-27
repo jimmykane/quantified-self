@@ -7,20 +7,25 @@ import {
     SPORTS_LIB_REPARSE_RUNTIME_DEFAULTS,
     SPORTS_LIB_REPARSE_SKIP_REASON_NO_ORIGINAL_FILES,
     SPORTS_LIB_REPARSE_STATUS_DOC_ID,
+    ReparseStatusWrite,
     SportsLibReparseCheckpoint,
     SportsLibReparseJob,
     buildSportsLibReparseJobId,
     extractSourceFiles,
+    isReparsePersistenceSkippedForUserDeletionError,
+    isSportsLibReparseTerminalFailureMessage,
     parseUidAndEventIdFromEventPath,
+    resolveSportsLibReparseRoutingDecision,
     resolveTargetSportsLibVersion,
     resolveTargetSportsLibVersionCode,
     sportsLibVersionToCode,
     shouldEventBeReparsed,
     writeReparseStatus,
 } from '../reparse/sports-lib-reparse.service';
-import { enqueueSportsLibReparseTask } from '../shared/cloud-tasks';
+import { enqueueSportsLibReparseHeavyTask, enqueueSportsLibReparseTask } from '../shared/cloud-tasks';
 import { getExpireAtTimestamp, TTL_CONFIG } from '../shared/ttl-config';
 import { FUNCTIONS_MANIFEST } from '../../../shared/functions-manifest';
+import { getUserDeletionGuardState, UserDeletionGuardReadError } from '../shared/user-deletion-guard';
 
 const SPORTS_LIB_REPARSE_SCAN_CONCURRENCY = 25;
 const SPORTS_LIB_REPARSE_TARGET_ENQUEUE_RPS = 12;
@@ -72,6 +77,70 @@ function toErrorMessage(error: unknown): string {
     return `${error}`;
 }
 
+async function shouldSkipForUserDeletion(
+    db: admin.firestore.Firestore,
+    uid: string,
+    eventId: string,
+    phase: string,
+): Promise<boolean> {
+    try {
+        const deletionGuard = await getUserDeletionGuardState(db, uid);
+        if (!deletionGuard.shouldSkip) {
+            return false;
+        }
+
+        logger.info('[sports-lib-reparse] Skipping candidate because user is missing or deletion is in progress.', {
+            uid,
+            eventId,
+            phase,
+            userExists: deletionGuard.userExists,
+            deletionInProgress: deletionGuard.deletionInProgress,
+        });
+        return true;
+    } catch (error) {
+        throw new UserDeletionGuardReadError(uid, `sports_lib_reparse_scheduler:${phase}`, error);
+    }
+}
+
+async function writeReparseStatusUnlessUserDeleted(
+    uid: string,
+    eventId: string,
+    payload: ReparseStatusWrite,
+    phase: string,
+): Promise<boolean> {
+    try {
+        await writeReparseStatus(uid, eventId, payload);
+        return true;
+    } catch (error) {
+        if (isReparsePersistenceSkippedForUserDeletionError(error)) {
+            logger.info('[sports-lib-reparse] Skipping status write because user is missing or deletion is in progress.', {
+                uid,
+                eventId,
+                phase,
+            });
+            return false;
+        }
+        throw error;
+    }
+}
+
+async function deleteReparseJobForUserDeletion(
+    db: admin.firestore.Firestore,
+    jobRef: admin.firestore.DocumentReference,
+    jobId: string,
+    uid: string,
+    eventId: string,
+    phase: string,
+): Promise<void> {
+    await db.recursiveDelete(jobRef);
+    logger.info('[sports-lib-reparse] Deleted pending job because user is missing or deletion is in progress.', {
+        jobId,
+        uid,
+        eventId,
+        phase,
+    });
+}
+
 function shouldSkipBecauseNoOriginalFilesForTarget(
     statusDocData: Record<string, unknown> | undefined,
     targetSportsLibVersion: string,
@@ -82,6 +151,31 @@ function shouldSkipBecauseNoOriginalFilesForTarget(
     return statusDocData.status === 'skipped'
         && statusDocData.reason === SPORTS_LIB_REPARSE_SKIP_REASON_NO_ORIGINAL_FILES
         && statusDocData.targetSportsLibVersion === targetSportsLibVersion;
+}
+
+function shouldSkipBecauseTerminalFailureForTarget(
+    statusDocData: Record<string, unknown> | undefined,
+    targetSportsLibVersion: string,
+): boolean {
+    if (!statusDocData
+        || statusDocData.status !== 'failed'
+        || statusDocData.targetSportsLibVersion !== targetSportsLibVersion) {
+        return false;
+    }
+    if (statusDocData.terminalFailure === true) {
+        return true;
+    }
+    return isSportsLibReparseTerminalFailureMessage(toSafeString(statusDocData.lastError));
+}
+
+function isTerminalFailedReparseJob(jobData: Record<string, unknown> | undefined): boolean {
+    if (!jobData || jobData.status !== 'failed') {
+        return false;
+    }
+    if (jobData.terminalFailure === true) {
+        return true;
+    }
+    return isSportsLibReparseTerminalFailureMessage(toSafeString(jobData.lastError));
 }
 
 function getProcessingVersionCode(value: unknown): number | null {
@@ -222,29 +316,56 @@ export const scheduleSportsLibReparseScan = onSchedule({
             }
 
             const statusSnapshot = await eventRef.collection('metaData').doc(SPORTS_LIB_REPARSE_STATUS_DOC_ID).get();
-            if (shouldSkipBecauseNoOriginalFilesForTarget(statusSnapshot.data() as Record<string, unknown> | undefined, targetSportsLibVersion)) {
+            const reparseStatusData = statusSnapshot.data() as Record<string, unknown> | undefined;
+            if (shouldSkipBecauseNoOriginalFilesForTarget(reparseStatusData, targetSportsLibVersion)) {
+                return;
+            }
+            if (shouldSkipBecauseTerminalFailureForTarget(reparseStatusData, targetSportsLibVersion)) {
+                logger.info('[sports-lib-reparse] Skipping terminal failed reparse status.', {
+                    uid,
+                    eventId,
+                    lastError: toSafeString(reparseStatusData?.lastError),
+                });
                 return;
             }
 
             const sourceFiles = extractSourceFiles(eventData);
             if (sourceFiles.length === 0) {
-                await writeReparseStatus(uid, eventId, {
+                if (await shouldSkipForUserDeletion(db, uid, eventId, 'before_no_source_status_write')) {
+                    return;
+                }
+
+                await writeReparseStatusUnlessUserDeleted(uid, eventId, {
                     status: 'skipped',
                     reason: SPORTS_LIB_REPARSE_SKIP_REASON_NO_ORIGINAL_FILES,
                     targetSportsLibVersion,
                     checkedAt: admin.firestore.FieldValue.serverTimestamp(),
-                });
+                    terminalFailure: admin.firestore.FieldValue.delete(),
+                    terminalFailureAt: admin.firestore.FieldValue.delete(),
+                }, 'no_source_files');
                 return;
             }
 
             const jobId = buildSportsLibReparseJobId(uid, eventId, targetSportsLibVersion);
             const jobRef = db.collection(SPORTS_LIB_REPARSE_JOBS_COLLECTION).doc(jobId);
             const existingJob = await jobRef.get();
-            const existingStatus = toSafeString(existingJob.data()?.status);
+            const existingJobData = existingJob.data() as Record<string, unknown> | undefined;
+            const existingStatus = toSafeString(existingJobData?.status);
 
             if (existingJob.exists && (existingStatus === 'pending' || existingStatus === 'processing' || existingStatus === 'completed')) {
                 return;
             }
+            if (existingJob.exists && isTerminalFailedReparseJob(existingJobData)) {
+                logger.info('[sports-lib-reparse] Skipping terminal failed reparse job.', {
+                    jobId,
+                    uid,
+                    eventId,
+                    lastError: toSafeString(existingJobData?.lastError),
+                });
+                return;
+            }
+
+            const routingDecision = resolveSportsLibReparseRoutingDecision(eventData);
 
             const basePayload: SportsLibReparseJob = {
                 uid,
@@ -252,34 +373,76 @@ export const scheduleSportsLibReparseScan = onSchedule({
                 eventPath: eventRef.path,
                 targetSportsLibVersion,
                 status: 'pending',
-                attemptCount: existingJob.data()?.attemptCount || 0,
-                createdAt: existingJob.exists ? existingJob.data()?.createdAt : admin.firestore.FieldValue.serverTimestamp(),
+                processingTier: routingDecision.processingTier,
+                ...(routingDecision.heavyReason ? { heavyReason: routingDecision.heavyReason } : {}),
+                ...(routingDecision.eventDurationMs !== null ? { eventDurationMs: routingDecision.eventDurationMs } : {}),
+                attemptCount: typeof existingJobData?.attemptCount === 'number' ? existingJobData.attemptCount : 0,
+                createdAt: existingJob.exists ? existingJobData?.createdAt : admin.firestore.FieldValue.serverTimestamp(),
                 updatedAt: admin.firestore.FieldValue.serverTimestamp(),
                 enqueuedAt: admin.firestore.FieldValue.serverTimestamp(),
                 expireAt: getExpireAtTimestamp(TTL_CONFIG.SPORTS_LIB_REPARSE_JOBS_IN_DAYS),
             };
 
+            if (await shouldSkipForUserDeletion(db, uid, eventId, 'before_job_write')) {
+                return;
+            }
+
             await jobRef.set({
                 ...basePayload,
+                ...(routingDecision.heavyReason ? {} : { heavyReason: admin.firestore.FieldValue.delete() }),
+                ...(routingDecision.eventDurationMs !== null ? {} : { eventDurationMs: admin.firestore.FieldValue.delete() }),
                 lastError: admin.firestore.FieldValue.delete(),
+                terminalFailure: admin.firestore.FieldValue.delete(),
+                terminalFailureAt: admin.firestore.FieldValue.delete(),
                 processedAt: admin.firestore.FieldValue.delete(),
             }, { merge: true });
 
             try {
+                if (await shouldSkipForUserDeletion(db, uid, eventId, 'before_task_enqueue')) {
+                    await deleteReparseJobForUserDeletion(db, jobRef, jobId, uid, eventId, 'before_task_enqueue');
+                    return;
+                }
+
                 const enqueueDelaySeconds = calculateEnqueueDelaySeconds(
                     enqueueAttemptSequence,
                     settings.enqueueLimit,
                     enqueueSpreadSeconds,
                 );
                 enqueueAttemptSequence++;
+                const enqueueTask = routingDecision.processingTier === 'heavy'
+                    ? enqueueSportsLibReparseHeavyTask
+                    : enqueueSportsLibReparseTask;
                 const taskCreated = enqueueDelaySeconds > 1
-                    ? await enqueueSportsLibReparseTask(jobId, enqueueDelaySeconds)
-                    : await enqueueSportsLibReparseTask(jobId);
+                    ? await enqueueTask(jobId, enqueueDelaySeconds)
+                    : await enqueueTask(jobId);
                 if (taskCreated) {
                     enqueuedCount++;
+                } else {
+                    const errorMessage = `Cloud Task was not created because a task name already exists for job ${jobId}.`;
+                    if (await shouldSkipForUserDeletion(db, uid, eventId, 'before_task_not_created_write')) {
+                        await deleteReparseJobForUserDeletion(db, jobRef, jobId, uid, eventId, 'before_task_not_created_write');
+                        return;
+                    }
+                    await jobRef.set({
+                        status: 'failed',
+                        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+                        lastError: errorMessage,
+                        enqueuedAt: admin.firestore.FieldValue.delete(),
+                    }, { merge: true });
+                    logger.warn('[sports-lib-reparse] Marked job failed because task creation returned false.', {
+                        jobId,
+                        uid,
+                        eventId,
+                        processingTier: routingDecision.processingTier,
+                        error: errorMessage,
+                    });
                 }
             } catch (error) {
                 const errorMessage = toErrorMessage(error);
+                if (await shouldSkipForUserDeletion(db, uid, eventId, 'before_enqueue_failure_write')) {
+                    await deleteReparseJobForUserDeletion(db, jobRef, jobId, uid, eventId, 'before_enqueue_failure_write');
+                    return;
+                }
                 await jobRef.set({
                     status: 'failed',
                     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
