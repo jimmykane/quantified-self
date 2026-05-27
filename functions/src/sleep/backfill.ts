@@ -25,6 +25,7 @@ import { updateSleepSyncState } from './writer';
 import * as requestPromise from '../request-helper';
 import { GARMIN_API_TOKENS_COLLECTION_NAME } from '../garmin/constants';
 import {
+    getUserDeletionGuardState,
     getUserDeletionGuardStateInTransaction,
     UserDeletionGuardReadError,
 } from '../shared/user-deletion-guard';
@@ -44,6 +45,8 @@ interface GarminSleepBackfillToken {
     accessToken: string;
     providerUserId: string;
 }
+
+type GarminSleepBackfillRequestResult = 'requested' | 'skipped' | 'aborted';
 
 function sleepSyncStateRef(userID: string, provider: SleepProvider): admin.firestore.DocumentReference {
     return admin.firestore()
@@ -113,49 +116,61 @@ async function getGarminSleepBackfillToken(userID: string): Promise<GarminSleepB
         .collection(GARMIN_API_TOKENS_COLLECTION_NAME)
         .doc(userID)
         .collection('tokens')
-        .limit(1)
         .get();
 
     if (tokenSnapshot.empty) {
         throw new HttpsError('failed-precondition', 'Connected Garmin token is required for sleep backfill.');
     }
 
-    try {
-        const tokenData = await getTokenData(tokenSnapshot.docs[0], ServiceNames.GarminAPI) as {
-            accessToken?: unknown;
-            userID?: unknown;
-            permissions?: unknown;
-        };
-        await assertGarminSleepBackfillPermissions(tokenData, userID);
-        const accessToken = `${tokenData.accessToken || ''}`.trim();
-        const providerUserId = `${tokenData.userID || tokenSnapshot.docs[0].id || ''}`.trim();
-        if (!accessToken || !providerUserId) {
-            throw new HttpsError('failed-precondition', 'Connected Garmin token is incomplete for sleep backfill.');
+    let bestMissingPermissions: string[] | null = null;
+    let foundIncompletePermittedToken = false;
+    for (const tokenDoc of tokenSnapshot.docs) {
+        try {
+            const tokenData = await getTokenData(tokenDoc, ServiceNames.GarminAPI) as {
+                accessToken?: unknown;
+                userID?: unknown;
+                permissions?: unknown;
+            };
+            const missingPermissions = getMissingGarminSleepBackfillPermissions(tokenData);
+            if (missingPermissions.length) {
+                if (!bestMissingPermissions || missingPermissions.length < bestMissingPermissions.length) {
+                    bestMissingPermissions = missingPermissions;
+                }
+                continue;
+            }
+
+            const accessToken = `${tokenData.accessToken || ''}`.trim();
+            const providerUserId = `${tokenData.userID || tokenDoc.id || ''}`.trim();
+            if (!accessToken || !providerUserId) {
+                foundIncompletePermittedToken = true;
+                logger.warn(`[SleepBackfill] Skipping incomplete Garmin token ${tokenDoc.id} for ${userID}`);
+                continue;
+            }
+            return {
+                accessToken,
+                providerUserId,
+            };
+        } catch (error) {
+            logger.warn(`[SleepBackfill] Could not use Garmin token ${tokenDoc.id} for ${userID}`, error);
         }
-        return {
-            accessToken,
-            providerUserId,
-        };
-    } catch (error) {
-        if (error instanceof HttpsError) {
-            throw error;
-        }
-        logger.error(`[SleepBackfill] Failed to use Garmin token for ${userID}`, error);
-        throw new HttpsError('failed-precondition', 'Connected Garmin token is required for sleep backfill.');
     }
+
+    if (bestMissingPermissions) {
+        await markGarminSleepBackfillPermissionsMissing(userID, bestMissingPermissions);
+    }
+    if (foundIncompletePermittedToken) {
+        throw new HttpsError('failed-precondition', 'Connected Garmin token is incomplete for sleep backfill.');
+    }
+    throw new HttpsError('failed-precondition', 'Connected Garmin token is required for sleep backfill.');
 }
 
-async function assertGarminSleepBackfillPermissions(
-    tokenData: { permissions?: unknown },
-    userID: string,
-): Promise<void> {
+function getMissingGarminSleepBackfillPermissions(tokenData: { permissions?: unknown }): string[] {
     const permissions = Array.isArray(tokenData.permissions) ? tokenData.permissions : [];
-    const missingPermissions = GARMIN_SLEEP_BACKFILL_REQUIRED_PERMISSIONS
+    return GARMIN_SLEEP_BACKFILL_REQUIRED_PERMISSIONS
         .filter(permission => !permissions.includes(permission));
-    if (!missingPermissions.length) {
-        return;
-    }
+}
 
+async function markGarminSleepBackfillPermissionsMissing(userID: string, missingPermissions: readonly string[]): Promise<never> {
     try {
         await updateSleepSyncState(userID, SLEEP_PROVIDERS.GarminAPI, {
             status: SLEEP_SYNC_STATUSES.PermissionMissing,
@@ -168,6 +183,20 @@ async function assertGarminSleepBackfillPermissions(
         'failed-precondition',
         'Missing required Garmin permissions (Historical Data Export, Health Export). Please reconnect Garmin and grant health permissions.',
     );
+}
+
+async function shouldAbortGarminSleepBackfillRequests(userID: string): Promise<boolean> {
+    let deletionGuard;
+    try {
+        deletionGuard = await getUserDeletionGuardState(admin.firestore(), userID);
+    } catch (error) {
+        throw new UserDeletionGuardReadError(userID, 'garmin_sleep_backfill_before_provider_request', error);
+    }
+    if (!deletionGuard.shouldSkip) {
+        return false;
+    }
+    logger.warn(`[SleepBackfill] Aborting Garmin sleep backfill requests for ${userID} because the user is missing or deletion is in progress.`);
+    return true;
 }
 
 async function assertSleepBackfillCooldownAllows(userID: string, provider: SleepProvider, nowMs: number): Promise<void> {
@@ -338,45 +367,58 @@ function extractGarminMinStartTimeMs(error: unknown): number | null {
 }
 
 async function requestGarminSleepBackfillWindow(
+    userID: string,
     token: GarminSleepBackfillToken,
     window: SleepBackfillWindow,
-): Promise<boolean> {
+): Promise<GarminSleepBackfillRequestResult> {
     try {
-        await requestGarminSleepBackfillRange(token, window.startMs, window.endMs);
-        return true;
+        return await requestGarminSleepBackfillRangeIfUserActive(userID, token, window.startMs, window.endMs);
     } catch (error: any) {
         if (error?.statusCode === 400 && `${error?.error?.error?.errorMessage || ''}`.includes('before min start time')) {
             const minStartMs = extractGarminMinStartTimeMs(error);
             if (minStartMs !== null && minStartMs > window.startMs && minStartMs < window.endMs) {
                 logger.warn(`[SleepBackfill] Retrying Garmin sleep backfill window from provider min start time ${new Date(minStartMs).toISOString()}: ${error.error.error.errorMessage}`);
-                return requestGarminSleepBackfillRangeWithAlreadyRequestedSkip(token, minStartMs, window.endMs);
+                return requestGarminSleepBackfillRangeWithAlreadyRequestedSkip(userID, token, minStartMs, window.endMs);
             }
             logger.warn(`[SleepBackfill] Skipping Garmin sleep backfill window before min start time: ${error.error.error.errorMessage}`);
-            return false;
+            return 'skipped';
         }
         if (isGarminSleepBackfillAlreadyRequestedError(error)) {
             logger.warn(`[SleepBackfill] Garmin sleep backfill window was already requested: ${new Date(window.startMs).toISOString()} - ${new Date(window.endMs).toISOString()}`);
-            return false;
+            return 'skipped';
         }
         throw error;
     }
 }
 
 async function requestGarminSleepBackfillRangeWithAlreadyRequestedSkip(
+    userID: string,
     token: GarminSleepBackfillToken,
     startMs: number,
     endMs: number,
-): Promise<boolean> {
+): Promise<GarminSleepBackfillRequestResult> {
     try {
-        await requestGarminSleepBackfillRange(token, startMs, endMs);
-        return true;
+        return await requestGarminSleepBackfillRangeIfUserActive(userID, token, startMs, endMs);
     } catch (error) {
         if (isGarminSleepBackfillAlreadyRequestedError(error)) {
             logger.warn(`[SleepBackfill] Garmin sleep backfill window was already requested: ${new Date(startMs).toISOString()} - ${new Date(endMs).toISOString()}`);
-            return false;
+            return 'skipped';
         }
         throw error;
     }
+}
+
+async function requestGarminSleepBackfillRangeIfUserActive(
+    userID: string,
+    token: GarminSleepBackfillToken,
+    startMs: number,
+    endMs: number,
+): Promise<GarminSleepBackfillRequestResult> {
+    if (await shouldAbortGarminSleepBackfillRequests(userID)) {
+        return 'aborted';
+    }
+    await requestGarminSleepBackfillRange(token, startMs, endMs);
+    return 'requested';
 }
 
 async function requestGarminSleepBackfillRange(
@@ -525,9 +567,15 @@ export const backfillGarminAPISleep = onCall({
     }
 
     let requested = 0;
+    let abortedForDeletion = false;
     try {
         for (const window of windows) {
-            if (await requestGarminSleepBackfillWindow(token, window)) {
+            const requestResult = await requestGarminSleepBackfillWindow(userID, token, window);
+            if (requestResult === 'aborted') {
+                abortedForDeletion = true;
+                break;
+            }
+            if (requestResult === 'requested') {
                 requested += 1;
             }
         }
@@ -542,6 +590,15 @@ export const backfillGarminAPISleep = onCall({
             lastError: message,
         }, Date.now());
         throw new HttpsError('internal', 'Could not request Garmin sleep backfill.');
+    }
+
+    if (abortedForDeletion) {
+        return {
+            queued: requested,
+            startDate: new Date(startMs).toISOString(),
+            endDate: new Date(nowMs).toISOString(),
+            nextAllowedAtMs,
+        };
     }
 
     await updateSleepSyncState(userID, SLEEP_PROVIDERS.GarminAPI, {

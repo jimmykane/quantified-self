@@ -45,53 +45,56 @@ vi.mock('firebase-functions/v2/https', () => ({
 }));
 
 vi.mock('firebase-admin', () => ({
-    firestore: () => ({
-        runTransaction: vi.fn(async (handler: (transaction: unknown) => Promise<unknown>) => {
-            const snapshotForPath = (path: string) => {
-                if (path.startsWith('users/') && !path.includes('/sleepSyncState/')) {
-                    const userExists = hoisted.transactionUserExists === undefined
-                        ? hoisted.userExists
-                        : hoisted.transactionUserExists;
-                    return {
-                        exists: userExists,
-                        data: () => userExists ? { uid: path.split('/')[1] } : null,
-                    };
-                }
-                if (path.startsWith('userDeletionTombstones/')) {
-                    const tombstoneData = hoisted.transactionTombstoneData === undefined
-                        ? hoisted.tombstoneData
-                        : hoisted.transactionTombstoneData;
-                    return {
-                        exists: tombstoneData !== null,
-                        data: () => tombstoneData,
-                    };
-                }
+    firestore: () => {
+        const snapshotForPath = (path: string, inTransaction = false) => {
+            if (path.startsWith('users/') && !path.includes('/sleepSyncState/')) {
+                const userExists = inTransaction && hoisted.transactionUserExists !== undefined
+                    ? hoisted.transactionUserExists
+                    : hoisted.userExists;
                 return {
-                    exists: hoisted.transactionStateData !== undefined
-                        ? hoisted.transactionStateData !== null
-                        : hoisted.stateData !== null,
-                    data: () => hoisted.transactionStateData !== undefined
-                        ? hoisted.transactionStateData
-                        : hoisted.stateData,
+                    exists: userExists,
+                    data: () => userExists ? { uid: path.split('/')[1] } : null,
                 };
+            }
+            if (path.startsWith('userDeletionTombstones/')) {
+                const tombstoneData = inTransaction && hoisted.transactionTombstoneData !== undefined
+                    ? hoisted.transactionTombstoneData
+                    : hoisted.tombstoneData;
+                return {
+                    exists: tombstoneData !== null,
+                    data: () => tombstoneData,
+                };
+            }
+            return {
+                exists: hoisted.transactionStateData !== undefined
+                    ? hoisted.transactionStateData !== null
+                    : hoisted.stateData !== null,
+                data: () => hoisted.transactionStateData !== undefined
+                    ? hoisted.transactionStateData
+                    : hoisted.stateData,
             };
-            return handler({
-                get: vi.fn(async (ref: { path?: string }) => snapshotForPath(ref?.path || '')),
-                set: hoisted.transactionSet,
-            });
-        }),
-        collection: (name: string) => {
-            const createDocRef = (path: string): any => ({
-                path,
-                id: path.split('/').pop(),
-                get: vi.fn().mockResolvedValue({
-                    exists: path.includes('/sleepSyncState/') ? hoisted.stateData !== null : hoisted.userExists,
-                    data: () => path.includes('/sleepSyncState/') ? hoisted.stateData : { uid: path.split('/')[1] },
-                }),
-                collection: (collectionName: string) => ({
-                    doc: (docId: string) => createDocRef(`${path}/${collectionName}/${docId}`),
-                }),
-            });
+        };
+
+        return {
+            getAll: vi.fn(async (...refs: Array<{ path?: string }>) => refs.map(ref => snapshotForPath(ref?.path || ''))),
+            runTransaction: vi.fn(async (handler: (transaction: unknown) => Promise<unknown>) => {
+                return handler({
+                    get: vi.fn(async (ref: { path?: string }) => snapshotForPath(ref?.path || '', true)),
+                    set: hoisted.transactionSet,
+                });
+            }),
+            collection: (name: string) => {
+                const createDocRef = (path: string): any => ({
+                    path,
+                    id: path.split('/').pop(),
+                    get: vi.fn().mockResolvedValue({
+                        exists: path.includes('/sleepSyncState/') ? hoisted.stateData !== null : hoisted.userExists,
+                        data: () => path.includes('/sleepSyncState/') ? hoisted.stateData : { uid: path.split('/')[1] },
+                    }),
+                    collection: (collectionName: string) => ({
+                        doc: (docId: string) => createDocRef(`${path}/${collectionName}/${docId}`),
+                    }),
+                });
 
             if (name === 'suuntoAppAccessTokens') {
                 return {
@@ -108,14 +111,21 @@ vi.mock('firebase-admin', () => ({
             if (name === 'garminAPITokens') {
                 return {
                     doc: () => ({
-                        collection: () => ({
-                            limit: () => ({
-                                get: vi.fn().mockResolvedValue({
-                                    empty: hoisted.tokenDocs.length === 0,
-                                    docs: hoisted.tokenDocs,
+                        collection: () => {
+                            const get = vi.fn().mockResolvedValue({
+                                empty: hoisted.tokenDocs.length === 0,
+                                docs: hoisted.tokenDocs,
+                            });
+                            return {
+                                get,
+                                limit: () => ({
+                                    get: vi.fn().mockResolvedValue({
+                                        empty: hoisted.tokenDocs.length === 0,
+                                        docs: hoisted.tokenDocs,
+                                    }),
                                 }),
-                            }),
-                        }),
+                            };
+                        },
                     }),
                 };
             }
@@ -136,7 +146,8 @@ vi.mock('firebase-admin', () => ({
                 doc: vi.fn(),
             };
         },
-    }),
+        };
+    },
 }));
 
 vi.mock('../utils', () => ({
@@ -193,9 +204,9 @@ function seedSuuntoToken(serviceName: string | undefined = undefined) {
     });
 }
 
-function seedGarminToken() {
+function seedGarminToken(id = 'garmin-user-1') {
     hoisted.tokenDocs.push({
-        id: 'garmin-user-1',
+        id,
         data: () => ({ serviceName: 'GarminAPI' }),
     });
 }
@@ -470,6 +481,40 @@ describe('backfillGarminAPISleep', () => {
         }, nowMs);
     });
 
+    it('uses a later Garmin token when the first token is missing sleep backfill permissions', async () => {
+        seedGarminToken('stale-garmin-user');
+        seedGarminToken('fresh-garmin-user');
+        const expectedWindows = chunkSleepBackfillRange(startMs, nowMs, windowDays);
+        hoisted.getTokenData.mockImplementation(async (tokenDoc: { id: string }) => {
+            if (tokenDoc.id === 'stale-garmin-user') {
+                return {
+                    accessToken: 'stale-access-token',
+                    userID: 'stale-garmin-user',
+                    permissions: ['HISTORICAL_DATA_EXPORT'],
+                };
+            }
+            return {
+                accessToken: 'fresh-access-token',
+                userID: 'fresh-garmin-user',
+                permissions: ['HISTORICAL_DATA_EXPORT', 'HEALTH_EXPORT'],
+            };
+        });
+
+        const result = await backfillGarminAPISleep(createRequest() as any);
+
+        expect(result.queued).toBe(expectedWindows.length);
+        expect(hoisted.getTokenData).toHaveBeenCalledTimes(2);
+        expect(hoisted.requestGet).toHaveBeenNthCalledWith(1, {
+            headers: {
+                Authorization: 'Bearer fresh-access-token',
+            },
+            url: `https://apis.garmin.com/wellness-api/rest/backfill/sleeps?summaryStartTimeInSeconds=${Math.floor(expectedWindows[0].startMs / 1000)}&summaryEndTimeInSeconds=${Math.floor(expectedWindows[0].endMs / 1000)}`,
+        });
+        expect(hoisted.updateSleepSyncState).not.toHaveBeenCalledWith('user-1', SLEEP_PROVIDERS.GarminAPI, expect.objectContaining({
+            status: 'permission_missing',
+        }));
+    });
+
     it('rejects Garmin requests without App Check', async () => {
         seedGarminToken();
 
@@ -619,6 +664,43 @@ describe('backfillGarminAPISleep', () => {
 
         expect(hoisted.transactionSet).not.toHaveBeenCalled();
         expect(hoisted.requestGet).not.toHaveBeenCalled();
+    });
+
+    it('aborts Garmin provider requests when account deletion starts between windows', async () => {
+        seedGarminToken();
+        hoisted.requestGet.mockImplementation(async () => {
+            hoisted.tombstoneData = {};
+            return undefined;
+        });
+
+        const result = await backfillGarminAPISleep(createRequest() as any);
+
+        expect(result.queued).toBe(1);
+        expect(hoisted.requestGet).toHaveBeenCalledTimes(1);
+        expect(hoisted.updateSleepSyncState).not.toHaveBeenCalled();
+    });
+
+    it('aborts a clipped Garmin retry when account deletion starts after the rejected request', async () => {
+        seedGarminToken();
+        const expectedWindows = chunkSleepBackfillRange(startMs, nowMs, windowDays);
+        const clippedStartMs = expectedWindows[0].startMs + (10 * 24 * 60 * 60 * 1000);
+        hoisted.requestGet.mockImplementationOnce(async () => {
+            hoisted.tombstoneData = {};
+            throw {
+                statusCode: 400,
+                error: {
+                    error: {
+                        errorMessage: `start date before min start time ${Math.floor(clippedStartMs / 1000)}`,
+                    },
+                },
+            };
+        });
+
+        const result = await backfillGarminAPISleep(createRequest() as any);
+
+        expect(result.queued).toBe(0);
+        expect(hoisted.requestGet).toHaveBeenCalledTimes(1);
+        expect(hoisted.updateSleepSyncState).not.toHaveBeenCalled();
     });
 
     it('retries a Garmin window clipped to the provider min start time when Garmin returns one', async () => {
