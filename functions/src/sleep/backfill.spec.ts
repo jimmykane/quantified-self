@@ -652,6 +652,38 @@ describe('backfillGarminAPISleep', () => {
         }), nowMs);
     });
 
+    it('skips a clipped Garmin min-start retry when that clipped window was already requested', async () => {
+        seedGarminToken();
+        const expectedWindows = chunkSleepBackfillRange(startMs, nowMs, windowDays);
+        const clippedStartMs = expectedWindows[0].startMs + (10 * 24 * 60 * 60 * 1000);
+        hoisted.requestGet
+            .mockRejectedValueOnce({
+                statusCode: 400,
+                error: {
+                    error: {
+                        errorMessage: `start date before min start time ${Math.floor(clippedStartMs / 1000)}`,
+                    },
+                },
+            })
+            .mockRejectedValueOnce({ statusCode: 409 })
+            .mockResolvedValue(undefined);
+
+        const result = await backfillGarminAPISleep(createRequest() as any);
+
+        expect(result.queued).toBe(expectedWindows.length - 1);
+        expect(hoisted.requestGet).toHaveBeenNthCalledWith(2, {
+            headers: {
+                Authorization: 'Bearer garmin-access-token',
+            },
+            url: `https://apis.garmin.com/wellness-api/rest/backfill/sleeps?summaryStartTimeInSeconds=${Math.floor(clippedStartMs / 1000)}&summaryEndTimeInSeconds=${Math.floor(expectedWindows[0].endMs / 1000)}`,
+        });
+        expect(hoisted.updateSleepSyncState).toHaveBeenCalledWith('user-1', SLEEP_PROVIDERS.GarminAPI, expect.objectContaining({
+            status: 'ready',
+            lastBackfillQueueItems: expectedWindows.length - 1,
+            nextBackfillAllowedAtMs: nowMs + cooldownMs,
+        }), nowMs);
+    });
+
     it('skips Garmin windows before the provider min start time when Garmin does not return a usable min start', async () => {
         seedGarminToken();
         hoisted.requestGet

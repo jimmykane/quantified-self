@@ -342,35 +342,58 @@ async function requestGarminSleepBackfillWindow(
     window: SleepBackfillWindow,
 ): Promise<boolean> {
     try {
-        await requestPromise.get({
-            headers: {
-                Authorization: `Bearer ${token.accessToken}`,
-            },
-            url: `${GARMIN_SLEEP_BACKFILL_URI}?summaryStartTimeInSeconds=${Math.floor(window.startMs / 1000)}&summaryEndTimeInSeconds=${Math.floor(window.endMs / 1000)}`,
-        });
+        await requestGarminSleepBackfillRange(token, window.startMs, window.endMs);
         return true;
     } catch (error: any) {
         if (error?.statusCode === 400 && `${error?.error?.error?.errorMessage || ''}`.includes('before min start time')) {
             const minStartMs = extractGarminMinStartTimeMs(error);
             if (minStartMs !== null && minStartMs > window.startMs && minStartMs < window.endMs) {
                 logger.warn(`[SleepBackfill] Retrying Garmin sleep backfill window from provider min start time ${new Date(minStartMs).toISOString()}: ${error.error.error.errorMessage}`);
-                await requestPromise.get({
-                    headers: {
-                        Authorization: `Bearer ${token.accessToken}`,
-                    },
-                    url: `${GARMIN_SLEEP_BACKFILL_URI}?summaryStartTimeInSeconds=${Math.floor(minStartMs / 1000)}&summaryEndTimeInSeconds=${Math.floor(window.endMs / 1000)}`,
-                });
-                return true;
+                return requestGarminSleepBackfillRangeWithAlreadyRequestedSkip(token, minStartMs, window.endMs);
             }
             logger.warn(`[SleepBackfill] Skipping Garmin sleep backfill window before min start time: ${error.error.error.errorMessage}`);
             return false;
         }
-        if (error?.statusCode === 409) {
+        if (isGarminSleepBackfillAlreadyRequestedError(error)) {
             logger.warn(`[SleepBackfill] Garmin sleep backfill window was already requested: ${new Date(window.startMs).toISOString()} - ${new Date(window.endMs).toISOString()}`);
             return false;
         }
         throw error;
     }
+}
+
+async function requestGarminSleepBackfillRangeWithAlreadyRequestedSkip(
+    token: GarminSleepBackfillToken,
+    startMs: number,
+    endMs: number,
+): Promise<boolean> {
+    try {
+        await requestGarminSleepBackfillRange(token, startMs, endMs);
+        return true;
+    } catch (error) {
+        if (isGarminSleepBackfillAlreadyRequestedError(error)) {
+            logger.warn(`[SleepBackfill] Garmin sleep backfill window was already requested: ${new Date(startMs).toISOString()} - ${new Date(endMs).toISOString()}`);
+            return false;
+        }
+        throw error;
+    }
+}
+
+async function requestGarminSleepBackfillRange(
+    token: GarminSleepBackfillToken,
+    startMs: number,
+    endMs: number,
+): Promise<void> {
+    await requestPromise.get({
+        headers: {
+            Authorization: `Bearer ${token.accessToken}`,
+        },
+        url: `${GARMIN_SLEEP_BACKFILL_URI}?summaryStartTimeInSeconds=${Math.floor(startMs / 1000)}&summaryEndTimeInSeconds=${Math.floor(endMs / 1000)}`,
+    });
+}
+
+function isGarminSleepBackfillAlreadyRequestedError(error: unknown): boolean {
+    return (error as { statusCode?: unknown } | null)?.statusCode === 409;
 }
 
 export const backfillSuuntoAppSleep = onCall({
