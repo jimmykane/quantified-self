@@ -78,6 +78,8 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('default curated chart set');
     expect(gettingStartedSection?.content).toContain('KPI row set automatically once');
     expect(gettingStartedSection?.content).toContain('removing an auto-added curated chart or KPI prevents that chart from being suggested again');
+    expect(gettingStartedSection?.content).toContain('bulk actions can add the recommended default dashboard');
+    expect(gettingStartedSection?.content).toContain('add every available preset tile');
     expect(gettingStartedSection?.content).toContain('**Uploaded activities**');
     expect(gettingStartedSection?.content).toContain('current-state set: **Load Status**, **Form Now**, **Fitness Trend**, **Fatigue Trend**, **Recovery Debt**, and **Training Balance**');
     expect(gettingStartedSection?.content).toContain('Additional KPI rows such as **Fitness (CTL)**, **Fatigue (ATL)**');

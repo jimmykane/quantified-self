@@ -132,7 +132,7 @@ export const HELP_SECTIONS: HelpSection[] = [
 - Map tiles are also unique: only one map tile can exist at a time.
 - Map style and cluster-marker settings are edited inside Dashboard manager.
 - Default manager sizes: dashboard tiles start at **1x1**.
-- Dashboard manager bulk actions can add every missing preset at once, or remove every dashboard chart/map tile and keep automatic suggestions dismissed.
+- Dashboard manager bulk actions can add the recommended default dashboard, add every available preset tile, or remove every dashboard chart/map tile and keep automatic suggestions dismissed.
 
 ### Reorder dashboard tiles
 
