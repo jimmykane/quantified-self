@@ -20,13 +20,16 @@ describe('NoopIconRegistry', () => {
         expect(registry.addSvgIconLiteralInNamespace()).toBe(registry);
     });
 
-    it('should return an observable that emits undefined for getNamedSvgIcon', async () => {
+    it('should return an observable that emits a blank SVG for getNamedSvgIcon', async () => {
         const result = await firstValueFrom(registry.getNamedSvgIcon());
-        expect(result).toBeUndefined();
+        expect(result.tagName.toLowerCase()).toBe('svg');
     });
 
     it('should return empty string or itself for font icon methods', () => {
         expect(registry.getDefaultFontIconClass()).toBe('');
+        expect(registry.getDefaultFontSetClass()).toEqual(['material-icons']);
+        expect(registry.classNameForFontAlias('custom-font')).toBe('custom-font');
         expect(registry.setDefaultFontIconClass()).toBe(registry);
+        expect(registry.setDefaultFontSetClass()).toBe(registry);
     });
 });

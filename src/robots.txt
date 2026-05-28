@@ -1,6 +1,7 @@
 User-agent: *
 Allow: /
 Allow: /help
+Allow: /integrations
 Allow: /releases
 Disallow: /user
 Disallow: /user/
