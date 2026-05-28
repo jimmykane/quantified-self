@@ -1,13 +1,17 @@
 import { Injectable, NgZone, Inject, PLATFORM_ID } from '@angular/core';
 import { isPlatformBrowser } from '@angular/common';
+import type { Map as MapboxMap, MapOptions } from 'mapbox-gl';
 import { environment } from '../../environments/environment';
+
+type MapboxGlRuntime = typeof import('mapbox-gl');
+type MapboxGlApi = MapboxGlRuntime['default'];
 
 @Injectable({
     providedIn: 'root'
 })
 export class MapboxLoaderService {
-    private mapboxgl: any | null = null;
-    private apiLoadingPromise: Promise<any> | null = null;
+    private mapboxgl: MapboxGlApi | null = null;
+    private apiLoadingPromise: Promise<MapboxGlApi> | null = null;
 
     constructor(
         private zone: NgZone,
@@ -18,7 +22,7 @@ export class MapboxLoaderService {
      * Loads the Mapbox GL JS library dynamically.
      * This ensures the library is only loaded in the browser and not during SSR.
      */
-    async loadMapbox(): Promise<any> {
+    async loadMapbox(): Promise<MapboxGlApi> {
         if (!isPlatformBrowser(this.platformId)) {
             throw new Error('Mapbox GL JS can only be loaded in the browser.');
         }
@@ -31,9 +35,12 @@ export class MapboxLoaderService {
             return this.apiLoadingPromise;
         }
 
-        this.apiLoadingPromise = import('mapbox-gl').then(module => {
-            const mapboxgl = module.default || module;
-            (mapboxgl as any).accessToken = environment.mapboxAccessToken;
+        // @ts-expect-error Mapbox exports this ESM subpath, but this project uses node module resolution.
+        const mapboxGlModulePromise = import('mapbox-gl/esm') as Promise<MapboxGlRuntime>;
+
+        this.apiLoadingPromise = mapboxGlModulePromise.then(module => {
+            const mapboxgl = module.default || (module as unknown as MapboxGlApi);
+            mapboxgl.accessToken = environment.mapboxAccessToken;
             this.mapboxgl = mapboxgl;
             return mapboxgl;
         });
@@ -45,7 +52,7 @@ export class MapboxLoaderService {
      * Creates a Mapbox GL map instance running outside of Angular's zone to prevent
      * excessive change detection cycles during map interactions.
      */
-    async createMap(container: HTMLElement, options?: Omit<mapboxgl.MapOptions, 'container'>): Promise<mapboxgl.Map> {
+    async createMap(container: HTMLElement, options?: Omit<MapOptions, 'container'>): Promise<MapboxMap> {
         const mapboxgl = await this.loadMapbox();
 
         return this.zone.runOutsideAngular(() => {
