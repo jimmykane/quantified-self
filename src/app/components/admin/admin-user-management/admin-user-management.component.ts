@@ -936,7 +936,6 @@ export class AdminUserManagementComponent implements OnInit, OnDestroy, AfterVie
             xAxis: {
                 type: 'category',
                 data: labels,
-                containShape: true,
                 axisLabel: {
                     color: textColor,
                     rotate: isMobileLayout ? 40 : 0,

@@ -246,7 +246,6 @@ export class ChartsIntensityDistributionComponent implements AfterViewInit, OnCh
       xAxis: {
         type: 'category',
         data: categories,
-        containShape: true,
         axisTick: { show: false },
         axisLine: { lineStyle: { color: style.axisColor } },
         splitLine: { show: false },

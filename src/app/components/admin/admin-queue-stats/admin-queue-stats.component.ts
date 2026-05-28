@@ -196,7 +196,6 @@ export class AdminQueueStatsComponent implements OnInit, OnChanges, OnDestroy, A
             xAxis: {
                 type: 'category',
                 data: ['0-3 Retries', '4-7 Retries', '8-9 Retries'],
-                containShape: true,
                 axisLabel: { color: textColor },
                 axisLine: { lineStyle: { color: gridColor } },
                 axisTick: { alignWithLabel: true }

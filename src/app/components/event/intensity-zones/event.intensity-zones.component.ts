@@ -200,7 +200,6 @@ export class EventIntensityZonesComponent implements AfterViewInit, OnChanges, O
     const categoryAxisConfig = {
       type: 'category',
       data: data.zones,
-      containShape: true,
       boundaryGap: true,
       axisTick: { show: false, alignWithLabel: false },
       axisLine: { show: false },

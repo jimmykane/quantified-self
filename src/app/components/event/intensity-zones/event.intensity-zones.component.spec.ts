@@ -317,7 +317,6 @@ describe('EventIntensityZonesComponent', () => {
 
     const option = getLastOption();
     expect(option.xAxis.type).toBe('category');
-    expect(option.xAxis.containShape).toBe(true);
     expect(option.yAxis.type).toBe('value');
     expect(option.xAxis.splitArea.interval).toBe(0);
     expect(option.xAxis.splitLine.interval).toBe(0);

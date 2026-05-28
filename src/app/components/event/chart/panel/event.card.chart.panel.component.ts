@@ -800,8 +800,6 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
           zoomOnMouseWheel: false,
           moveOnMouseMove: true,
           moveOnMouseWheel: false,
-          cursorGrab: 'grab',
-          cursorGrabbing: 'grabbing',
           preventDefaultMouseMove: false,
         },
         {
