@@ -1,8 +1,8 @@
 import type { EventInterface } from '@sports-alliance/sports-lib';
 import {
+  ChartDataCategoryTypes,
   ChartTypes,
   DataRecoveryTime,
-  TileChartSettingsInterface,
   TileMapSettingsInterface,
   TileSettingsInterface,
   TileTypes,
@@ -52,6 +52,8 @@ import {
   type DashboardSleepTrendWindow,
 } from './dashboard-sleep-chart.helper';
 import {
+  DASHBOARD_TILE_EVENT_DEFAULT_RANGE,
+  dashboardTileEventRangeDays,
   filterDashboardTileEventsByActivityTypes,
   normalizeDashboardTileEventFilters,
 } from './dashboard-tile-event-filters.helper';
@@ -131,6 +133,9 @@ export interface DashboardMapTileViewModel extends DashboardMapTileSettings {
 }
 
 export type DashboardTileViewModel = DashboardChartTileViewModel | DashboardMapTileViewModel;
+
+const DASHBOARD_CUSTOM_CHART_DAILY_AUTO_MAX_DAYS = 31;
+const DASHBOARD_CUSTOM_CHART_WEEKLY_AUTO_MAX_DAYS = 120;
 
 interface BuildDashboardTileViewModelsInput {
   tiles: TileSettingsInterface[];
@@ -296,6 +301,35 @@ function resolveEventsForTile(
   return filterDashboardTileEventsByActivityTypes(normalizedTileEvents, filters.activityTypes);
 }
 
+function resolveDashboardCustomChartRequestedTimeInterval(
+  chartTile: AppDashboardChartTileSettingsInterface,
+): TimeIntervals {
+  const requestedTimeInterval = chartTile.dataTimeInterval || TimeIntervals.Auto;
+  if (requestedTimeInterval !== TimeIntervals.Auto) {
+    return requestedTimeInterval;
+  }
+
+  if (chartTile.dataCategoryType !== ChartDataCategoryTypes.DateType) {
+    return requestedTimeInterval;
+  }
+
+  if (!chartTile.eventFilters) {
+    return requestedTimeInterval;
+  }
+
+  const filters = normalizeDashboardTileEventFilters(chartTile.eventFilters);
+  const rangeDays = dashboardTileEventRangeDays(filters.range || DASHBOARD_TILE_EVENT_DEFAULT_RANGE);
+  if (
+    rangeDays !== null
+    && rangeDays > DASHBOARD_CUSTOM_CHART_DAILY_AUTO_MAX_DAYS
+    && rangeDays <= DASHBOARD_CUSTOM_CHART_WEEKLY_AUTO_MAX_DAYS
+  ) {
+    return TimeIntervals.Weekly;
+  }
+
+  return requestedTimeInterval;
+}
+
 export function buildDashboardTileViewModels(
   input: BuildDashboardTileViewModelsInput,
 ): DashboardTileViewModel[] {
@@ -334,8 +368,8 @@ export function buildDashboardTileViewModels(
       throw new Error(`Not implemented for ${tile.type}`);
     }
 
-    const chartTile = tile as TileChartSettingsInterface;
-    const requestedTimeInterval = chartTile.dataTimeInterval || TimeIntervals.Auto;
+    const chartTile = tile as AppDashboardChartTileSettingsInterface;
+    const requestedTimeInterval = resolveDashboardCustomChartRequestedTimeInterval(chartTile);
     if (isDashboardFormChartType(chartTile.chartType)) {
       const fullFormPoints = derivedFormPoints || [];
       viewModels.push({

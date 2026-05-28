@@ -163,6 +163,74 @@ describe('dashboard-tile-view-model.helper', () => {
     expect(tile.dataTimeInterval).toBe(TimeIntervals.Auto);
   });
 
+  it('should resolve 90d auto date custom charts to weekly buckets', () => {
+    const tile = {
+      type: TileTypes.Chart,
+      order: 1,
+      chartType: ChartTypes.ColumnsVertical,
+      dataType: DataDistance.type,
+      dataValueType: ChartDataValueTypes.Total,
+      dataCategoryType: ChartDataCategoryTypes.DateType,
+      dataTimeInterval: TimeIntervals.Auto,
+      eventFilters: { range: '90d', activityTypes: [] },
+      size: { columns: 1, rows: 1 },
+    } as any;
+
+    const viewModels = buildDashboardTileViewModels({
+      tiles: [tile],
+      events: [
+        makeEvent({
+          id: 'run-jan',
+          startDate: '2024-01-01T10:00:00.000Z',
+          activityTypes: [ActivityTypes.Running],
+          stats: { [DataDistance.type]: 10 },
+        }),
+        makeEvent({
+          id: 'run-mar',
+          startDate: '2024-03-10T10:00:00.000Z',
+          activityTypes: [ActivityTypes.Running],
+          stats: { [DataDistance.type]: 20 },
+        }),
+      ],
+    });
+
+    expect((viewModels[0] as any).timeInterval).toBe(TimeIntervals.Weekly);
+  });
+
+  it('should preserve explicit monthly buckets for 90d custom charts', () => {
+    const tile = {
+      type: TileTypes.Chart,
+      order: 1,
+      chartType: ChartTypes.ColumnsVertical,
+      dataType: DataDistance.type,
+      dataValueType: ChartDataValueTypes.Total,
+      dataCategoryType: ChartDataCategoryTypes.DateType,
+      dataTimeInterval: TimeIntervals.Monthly,
+      eventFilters: { range: '90d', activityTypes: [] },
+      size: { columns: 1, rows: 1 },
+    } as any;
+
+    const viewModels = buildDashboardTileViewModels({
+      tiles: [tile],
+      events: [
+        makeEvent({
+          id: 'run-jan',
+          startDate: '2024-01-01T10:00:00.000Z',
+          activityTypes: [ActivityTypes.Running],
+          stats: { [DataDistance.type]: 10 },
+        }),
+        makeEvent({
+          id: 'run-mar',
+          startDate: '2024-03-10T10:00:00.000Z',
+          activityTypes: [ActivityTypes.Running],
+          stats: { [DataDistance.type]: 20 },
+        }),
+      ],
+    });
+
+    expect((viewModels[0] as any).timeInterval).toBe(TimeIntervals.Monthly);
+  });
+
   it('should keep intensity-zones tiles as raw sorted event passthrough', () => {
     const events = [
       makeEvent({
