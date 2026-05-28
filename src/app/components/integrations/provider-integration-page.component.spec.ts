@@ -46,9 +46,9 @@ describe('ProviderIntegrationPageComponent', () => {
     const text = fixture.nativeElement.textContent as string;
 
     expect(text).toContain('Garmin Integration and Private Training Dashboard');
-    expect(text).toContain('best private training dashboard for Garmin data');
+    expect(text).toContain('private training dashboard for Garmin data');
     expect(text).toContain('Garmin -> Suunto automatic sync');
-    expect(text).toContain('centralize Garmin Suunto and COROS workout data');
+    expect(text).toContain('centralize Garmin, Suunto, and COROS workout data');
   });
 
   it('should render Suunto integration content and sync workflows', () => {
@@ -68,7 +68,7 @@ describe('ProviderIntegrationPageComponent', () => {
     expect(text).toContain('COROS Integration for Suunto Sync and Centralized Training Data');
     expect(text).toContain('COROS -> Suunto automatic sync');
     expect(text).toContain('COROS history import');
-    expect(text).toContain('centralize Garmin Suunto and COROS workout data');
+    expect(text).toContain('centralize Garmin, Suunto, and COROS workout data');
   });
 
   it('should expose public CTAs, support links, and the integrations hub link', () => {

@@ -74,9 +74,9 @@ export const PROVIDER_INTEGRATION_PAGES: Record<IntegrationProviderKey, Provider
     label: 'Garmin',
     serviceName: ServiceNames.GarminAPI,
     h1: 'Garmin Integration and Private Training Dashboard',
-    heroCopy: 'Connect Garmin to Quantified Self to keep Garmin activities in a private training dashboard, sync Garmin activities to Suunto, and centralize Garmin Suunto and COROS workout data with AI insights.',
+    heroCopy: 'Connect Garmin to Quantified Self to keep Garmin activities in a private training dashboard, sync new Garmin activities to Suunto, and bring Garmin, Suunto, and COROS workouts into one view with AI insights.',
     providerSources: ALL_PROVIDER_SOURCES,
-    summary: 'Use Quantified Self as the best private training dashboard for Garmin data, with Garmin history imports, Garmin -> Suunto sync, AI insights, and multi-provider workout data.',
+    summary: 'Use Quantified Self as a private dashboard for Garmin data, with Garmin history imports, Garmin -> Suunto sync, AI insights, and multi-service workout history.',
     highlights: [
       'Private Garmin training dashboard',
       'Garmin -> Suunto automatic sync',
@@ -84,7 +84,7 @@ export const PROVIDER_INTEGRATION_PAGES: Record<IntegrationProviderKey, Provider
     ],
     syncEyebrow: 'Garmin Workflows',
     syncTitle: 'Garmin data, Suunto sync, and history import',
-    syncCopy: 'Connect Garmin once, keep permissions active, and decide which Garmin workflows should feed Suunto or the private Quantified Self dashboard.',
+    syncCopy: 'Connect Garmin once, keep permissions active, and decide which Garmin workflows should feed Suunto or your private Quantified Self dashboard.',
     syncFlows: [
       {
         icon: 'history',
@@ -123,13 +123,13 @@ export const PROVIDER_INTEGRATION_PAGES: Record<IntegrationProviderKey, Provider
       },
     ],
     dashboardEyebrow: 'Training Dashboard',
-    dashboardTitle: 'Best private training dashboard for Garmin data',
-    dashboardCopy: 'Quantified Self is designed for Garmin users who want private ownership, multi-provider context, and a dashboard that does not stop at one ecosystem.',
+    dashboardTitle: 'Private Garmin training dashboard',
+    dashboardCopy: 'Quantified Self is designed for Garmin users who want private data ownership, connected Suunto and COROS workouts, and training analysis that does not stop at one ecosystem.',
     dashboardPoints: [
       {
         icon: 'dashboard_customize',
         title: 'Centralized workout data',
-        copy: 'Centralize Garmin Suunto and COROS workout data in one dashboard, then review load, maps, routes, source files, and recovery context together.',
+        copy: 'Centralize Garmin, Suunto, and COROS workout data in one dashboard, then review load, maps, routes, source files, and recovery context together.',
       },
       {
         icon: 'security',
@@ -144,27 +144,27 @@ export const PROVIDER_INTEGRATION_PAGES: Record<IntegrationProviderKey, Provider
     ],
     faqItems: [
       {
-        question: 'What is the best private training dashboard for Garmin data?',
-        answer: 'Quantified Self is built for athletes who want a private Garmin training dashboard with original files, maps, load metrics, AI insights, exports, and optional Suunto or COROS context.',
+        question: 'What makes Quantified Self a private training dashboard for Garmin data?',
+        answer: 'Quantified Self is built for athletes who want a private Garmin training dashboard with original files, maps, load metrics, AI insights, exports, and optional Suunto or COROS workouts.',
       },
       {
         question: 'Can Garmin workouts sync to Suunto automatically?',
         answer: 'Yes. Connect Garmin and Suunto, enable the Garmin -> Suunto route toggle, and new Garmin activities can be sent to Suunto automatically when they arrive in Quantified Self.',
       },
       {
-        question: 'Can I centralize Garmin Suunto and COROS workout data?',
-        answer: 'Yes. Connect the services you use to centralize Garmin Suunto and COROS workout data, then review synced activities, uploads, routes, recovery context, and AI-backed summaries from one dashboard.',
+        question: 'Can I centralize Garmin, Suunto, and COROS workout data?',
+        answer: 'Yes. Connect the services you use to centralize Garmin, Suunto, and COROS workout data, then review synced activities, uploads, routes, recovery context, and AI-backed summaries from one dashboard.',
       },
     ],
     closingTitle: 'Connect Garmin, then keep every workout in context',
-    closingCopy: 'Start with Garmin, add Suunto or COROS when needed, and keep provider sync, history, and analysis workflows in one private training dashboard.',
+    closingCopy: 'Start with Garmin, add Suunto or COROS when needed, and keep sync, history, and analysis workflows in one private training dashboard.',
   },
   suunto: {
     slug: 'suunto',
     label: 'Suunto',
     serviceName: ServiceNames.SuuntoApp,
     h1: 'Suunto Integration for Garmin and COROS Sync',
-    heroCopy: 'Use Quantified Self as a private training dashboard for Garmin data, automatically sync Garmin and COROS activities to Suunto, and centralize Garmin Suunto and COROS workout data in one place.',
+    heroCopy: 'Use Quantified Self as a private training dashboard, automatically sync Garmin and COROS activities to Suunto, and keep Garmin, Suunto, and COROS workout data in one place.',
     providerSources: ALL_PROVIDER_SOURCES,
     summary: 'Sync Garmin and COROS workouts to Suunto, upload FIT activities and GPX routes, import Suunto history, and keep training data centralized.',
     highlights: [
@@ -174,7 +174,7 @@ export const PROVIDER_INTEGRATION_PAGES: Record<IntegrationProviderKey, Provider
     ],
     syncEyebrow: 'Automatic Sync',
     syncTitle: 'How to sync Garmin and COROS data to Suunto automatically',
-    syncCopy: 'Quantified Self keeps the sync route explicit: connect the source provider, connect Suunto, enable the route toggle, and keep the relevant provider permissions active.',
+    syncCopy: 'Quantified Self keeps the sync route explicit: connect the source service, connect Suunto, enable the route toggle, and keep the relevant service permissions active.',
     syncFlows: [
       {
         icon: 'sync_alt',
@@ -213,13 +213,13 @@ export const PROVIDER_INTEGRATION_PAGES: Record<IntegrationProviderKey, Provider
       },
     ],
     dashboardEyebrow: 'Training Dashboard',
-    dashboardTitle: 'Centralize Garmin Suunto and COROS workout data',
+    dashboardTitle: 'Centralize Garmin, Suunto, and COROS workout data',
     dashboardCopy: 'The Suunto integration works with the rest of Quantified Self, so Garmin files, Suunto history, COROS workouts, FIT uploads, GPX routes, metrics, AI insights, and export workflows stay connected in one private dashboard.',
     dashboardPoints: [
       {
         icon: 'dashboard_customize',
         title: 'Centralized workout data',
-        copy: 'Use Quantified Self to centralize Garmin Suunto and COROS workout data in one dashboard, then review load, readiness, maps, routes, and source files together.',
+        copy: 'Use Quantified Self to centralize Garmin, Suunto, and COROS workout data in one dashboard, then review load, readiness, maps, routes, and source files together.',
       },
       {
         icon: 'insights',
@@ -229,17 +229,17 @@ export const PROVIDER_INTEGRATION_PAGES: Record<IntegrationProviderKey, Provider
       {
         icon: 'security',
         title: 'Private by design',
-        copy: 'Quantified Self is built to be the best private training dashboard for Garmin data when your training also spans Suunto and COROS.',
+        copy: 'Quantified Self is built for athletes who want a private training dashboard when Garmin, Suunto, and COROS data all matter.',
       },
     ],
     faqItems: [
       {
-        question: 'Is Quantified Self the best private training dashboard for Garmin data?',
+        question: 'Is Quantified Self a private training dashboard for Garmin data?',
         answer: 'Quantified Self is built for athletes who want a private Garmin training dashboard that keeps original files, maps, load metrics, AI insights, and connected Suunto or COROS workflows under their own account.',
       },
       {
-        question: 'Can I centralize Garmin Suunto and COROS workout data?',
-        answer: 'Yes. Connect Garmin, Suunto, and COROS to centralize Garmin Suunto and COROS workout data, then review synced activities, uploads, routes, recovery context, and AI-backed summaries from one dashboard.',
+        question: 'Can I centralize Garmin, Suunto, and COROS workout data?',
+        answer: 'Yes. Connect Garmin, Suunto, and COROS to centralize Garmin, Suunto, and COROS workout data, then review synced activities, uploads, routes, recovery context, and AI-backed summaries from one dashboard.',
       },
     ],
     closingTitle: 'Connect once, then keep your services aligned',
@@ -250,9 +250,9 @@ export const PROVIDER_INTEGRATION_PAGES: Record<IntegrationProviderKey, Provider
     label: 'COROS',
     serviceName: ServiceNames.COROSAPI,
     h1: 'COROS Integration for Suunto Sync and Centralized Training Data',
-    heroCopy: 'Connect COROS to Quantified Self, sync COROS activities to Suunto, import recent COROS history, and centralize Garmin Suunto and COROS workout data in a private dashboard.',
+    heroCopy: 'Connect COROS to Quantified Self, sync COROS activities to Suunto, import recent COROS history, and centralize Garmin, Suunto, and COROS workout data in a private dashboard.',
     providerSources: ALL_PROVIDER_SOURCES,
-    summary: 'Connect COROS for recent history imports, COROS -> Suunto sync, sleep summaries, FIT uploads to COROS, and centralized multi-provider training analysis.',
+    summary: 'Connect COROS for recent history imports, COROS -> Suunto sync, sleep summaries, FIT uploads to COROS, and centralized multi-service training analysis.',
     highlights: [
       'COROS -> Suunto automatic sync',
       'Recent COROS history imports',
@@ -305,7 +305,7 @@ export const PROVIDER_INTEGRATION_PAGES: Record<IntegrationProviderKey, Provider
       {
         icon: 'dashboard_customize',
         title: 'Centralized workout data',
-        copy: 'Centralize Garmin Suunto and COROS workout data so COROS runs, rides, and recovery context are not isolated in one provider account.',
+        copy: 'Centralize Garmin, Suunto, and COROS workout data so COROS runs, rides, and recovery context are not isolated in one service account.',
       },
       {
         icon: 'insights',
@@ -315,7 +315,7 @@ export const PROVIDER_INTEGRATION_PAGES: Record<IntegrationProviderKey, Provider
       {
         icon: 'security',
         title: 'Private by design',
-        copy: 'Use Quantified Self as a private training dashboard for connected provider data, exports, and account-owned analysis workflows.',
+        copy: 'Use Quantified Self as a private training dashboard for connected service data, exports, and account-owned analysis workflows.',
       },
     ],
     faqItems: [
@@ -325,14 +325,14 @@ export const PROVIDER_INTEGRATION_PAGES: Record<IntegrationProviderKey, Provider
       },
       {
         question: 'Can I centralize COROS with Garmin and Suunto?',
-        answer: 'Yes. Quantified Self can centralize Garmin Suunto and COROS workout data so COROS activities, Garmin files, Suunto history, routes, and AI insights stay in one dashboard.',
+        answer: 'Yes. Quantified Self can centralize Garmin, Suunto, and COROS workout data so COROS activities, Garmin files, Suunto history, routes, and AI insights stay in one dashboard.',
       },
       {
         question: 'How much COROS history can I import?',
         answer: 'COROS history import is currently limited to the last 3 months because of provider API restrictions. The Help page documents queue behavior for larger import jobs.',
       },
     ],
-    closingTitle: 'Connect COROS, then keep provider data aligned',
+    closingTitle: 'Connect COROS, then keep service data aligned',
     closingCopy: 'Use COROS on its own or with Garmin and Suunto, then keep sync, catch-up, recovery, and analysis workflows in one private training dashboard.',
   },
 };
@@ -435,7 +435,7 @@ export const INTEGRATIONS_HUB_ROUTE_DATA: IntegrationRouteData = {
   preload: true,
   animation: 'Integrations',
   description: 'Explore Garmin, Suunto, and COROS integrations for private training dashboards, provider sync, history imports, uploads, and centralized workout data.',
-  keywords: 'Garmin integration, Suunto integration, COROS integration, centralize Garmin Suunto and COROS workout data, private training dashboard, Garmin to Suunto sync, COROS to Suunto sync',
+  keywords: 'Garmin integration, Suunto integration, COROS integration, centralize Garmin, Suunto, and COROS workout data, private training dashboard, Garmin to Suunto sync, COROS to Suunto sync',
   jsonLd: {
     '@context': 'https://schema.org',
     '@type': 'CollectionPage',
@@ -456,33 +456,33 @@ export const PROVIDER_INTEGRATION_ROUTE_DATA: Record<IntegrationProviderKey, Int
     title: 'Private Garmin Training Dashboard',
     preload: true,
     animation: 'Integrations',
-    description: 'Use Quantified Self as the best private training dashboard for Garmin data with Garmin history imports, Garmin -> Suunto sync, AI insights, and centralized workout data.',
-    keywords: 'Garmin integration, best private training dashboard for Garmin data, Garmin to Suunto sync, Garmin history import, private Garmin training dashboard, centralize Garmin Suunto and COROS workout data',
+    description: 'Use Quantified Self as a private training dashboard for Garmin data with Garmin history imports, Garmin -> Suunto sync, AI insights, and centralized workout data.',
+    keywords: 'Garmin integration, private Garmin training dashboard, Garmin to Suunto sync, Garmin history import, centralize Garmin, Suunto, and COROS workout data',
     jsonLd: providerWebPageJsonLd(
       PROVIDER_INTEGRATION_PAGES.garmin,
-      'Use Quantified Self as the best private training dashboard for Garmin data with Garmin history imports, Garmin -> Suunto sync, AI insights, and centralized workout data.'
+      'Use Quantified Self as a private training dashboard for Garmin data with Garmin history imports, Garmin -> Suunto sync, AI insights, and centralized workout data.'
     ),
   },
   suunto: {
     title: 'Suunto Integration',
     preload: true,
     animation: 'Integrations',
-    description: 'Sync Garmin and COROS activities to Suunto, upload FIT activities and GPX routes, and centralize Garmin Suunto and COROS workout data in one private training dashboard.',
-    keywords: 'Suunto integration, Garmin to Suunto sync, COROS to Suunto sync, sync Garmin data to Suunto automatically, centralize Garmin Suunto and COROS workout data, private Garmin training dashboard, AI insights endurance training',
+    description: 'Sync Garmin and COROS activities to Suunto, upload FIT activities and GPX routes, and centralize Garmin, Suunto, and COROS workout data in one private training dashboard.',
+    keywords: 'Suunto integration, Garmin to Suunto sync, COROS to Suunto sync, sync Garmin data to Suunto automatically, centralize Garmin, Suunto, and COROS workout data, private Garmin training dashboard, AI insights endurance training',
     jsonLd: providerWebPageJsonLd(
       PROVIDER_INTEGRATION_PAGES.suunto,
-      'Sync Garmin and COROS activities to Suunto, upload FIT activities and GPX routes, and centralize Garmin Suunto and COROS workout data in one private training dashboard.'
+      'Sync Garmin and COROS activities to Suunto, upload FIT activities and GPX routes, and centralize Garmin, Suunto, and COROS workout data in one private training dashboard.'
     ),
   },
   coros: {
     title: 'COROS Integration',
     preload: true,
     animation: 'Integrations',
-    description: 'Connect COROS to Quantified Self for COROS -> Suunto sync, recent history imports, sleep summaries, FIT uploads, and centralized Garmin Suunto and COROS workout data.',
-    keywords: 'COROS integration, COROS to Suunto sync, centralize Garmin Suunto and COROS workout data, COROS history import, COROS sleep summaries, private training dashboard',
+    description: 'Connect COROS to Quantified Self for COROS -> Suunto sync, recent history imports, sleep summaries, FIT uploads, and centralized Garmin, Suunto, and COROS workout data.',
+    keywords: 'COROS integration, COROS to Suunto sync, centralize Garmin, Suunto, and COROS workout data, COROS history import, COROS sleep summaries, private training dashboard',
     jsonLd: providerWebPageJsonLd(
       PROVIDER_INTEGRATION_PAGES.coros,
-      'Connect COROS to Quantified Self for COROS -> Suunto sync, recent history imports, sleep summaries, FIT uploads, and centralized Garmin Suunto and COROS workout data.'
+      'Connect COROS to Quantified Self for COROS -> Suunto sync, recent history imports, sleep summaries, FIT uploads, and centralized Garmin, Suunto, and COROS workout data.'
     ),
   },
 };
