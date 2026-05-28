@@ -4,6 +4,9 @@ import { Router, NavigationEnd, ActivatedRoute } from '@angular/router';
 import { filter, map, mergeMap } from 'rxjs/operators';
 import { DOCUMENT, isPlatformBrowser } from '@angular/common';
 import { Subscription } from 'rxjs';
+import { environment } from '../../environments/environment';
+
+const PRODUCTION_CANONICAL_ORIGIN = 'https://quantified-self.io';
 
 @Injectable({
     providedIn: 'root'
@@ -77,15 +80,13 @@ export class SeoService implements OnDestroy {
     }
 
     private updateOgUrl() {
-        if (isPlatformBrowser(this.platformId)) {
-            // Use the clean canonical URL for og:url as well to prevent duplicate content issues
-            const url = this.createCanonicalUrl();
-            this.metaService.updateTag({ property: 'og:url', content: url });
-        }
+        // Use the clean canonical URL for og:url as well to prevent duplicate content issues.
+        const url = this.createCanonicalUrl();
+        this.metaService.updateTag({ property: 'og:url', content: url });
     }
 
     private updateCanonicalTag() {
-        if (!isPlatformBrowser(this.platformId)) {
+        if (!this.doc?.head) {
             return;
         }
 
@@ -115,15 +116,34 @@ export class SeoService implements OnDestroy {
         // Serialize back to string
         const cleanPath = urlTree.toString();
 
-        // Ensure we have the full absolute URL
-        // We can use window.location.origin since we are in the browser (checked by isPlatformBrowser)
-        // or configure a BASE_URL injection token for SSR safety if needed later.
-        // For now, assuming browser or existing doc.location usage pattern.
-
-        // Use document.location.origin if available, otherwise hardcode or config
-        const origin = this.doc.location ? this.doc.location.origin : 'https://quantified-self.io';
+        const origin = isPlatformBrowser(this.platformId)
+            ? this.doc.location?.origin ?? this.getConfiguredCanonicalOrigin()
+            : this.getConfiguredCanonicalOrigin();
 
         return `${origin}${cleanPath}`;
+    }
+
+    private getConfiguredCanonicalOrigin(): string {
+        try {
+            const configuredOrigin = new URL(environment.appUrl).origin;
+            return this.isLocalCanonicalOrigin(configuredOrigin)
+                ? PRODUCTION_CANONICAL_ORIGIN
+                : configuredOrigin;
+        } catch {
+            return PRODUCTION_CANONICAL_ORIGIN;
+        }
+    }
+
+    private isLocalCanonicalOrigin(origin: string): boolean {
+        try {
+            const hostname = new URL(origin).hostname;
+            return hostname === 'localhost' ||
+                hostname === '127.0.0.1' ||
+                hostname === '[::1]' ||
+                hostname === '::1';
+        } catch {
+            return true;
+        }
     }
 
     private updateJsonLd(data: any) {
@@ -158,23 +178,27 @@ export class SeoService implements OnDestroy {
     }
 
     private setJsonLd(data: any) {
-        if (isPlatformBrowser(this.platformId)) {
-            let script = this.doc.querySelector('script[type="application/ld+json"]');
-            if (!script) {
-                script = this.doc.createElement('script');
-                script.setAttribute('type', 'application/ld+json');
-                this.doc.head.appendChild(script);
-            }
-            script.textContent = JSON.stringify(data);
+        if (!this.doc?.head) {
+            return;
         }
+
+        let script = this.doc.querySelector('script[type="application/ld+json"]');
+        if (!script) {
+            script = this.doc.createElement('script');
+            script.setAttribute('type', 'application/ld+json');
+            this.doc.head.appendChild(script);
+        }
+        script.textContent = JSON.stringify(data);
     }
 
     private removeJsonLd() {
-        if (isPlatformBrowser(this.platformId)) {
-            const script = this.doc.querySelector('script[type="application/ld+json"]');
-            if (script) {
-                this.doc.head.removeChild(script);
-            }
+        if (!this.doc?.head) {
+            return;
+        }
+
+        const script = this.doc.querySelector('script[type="application/ld+json"]');
+        if (script) {
+            this.doc.head.removeChild(script);
         }
     }
 }
