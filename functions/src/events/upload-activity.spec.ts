@@ -32,6 +32,7 @@ const hoisted = vi.hoisted(() => {
   const mockSuuntoSMLImporter = { getFromXML: vi.fn(), getFromJSONString: vi.fn() };
   const mockServerTimestamp = vi.fn(() => 'SERVER_TIMESTAMP');
   const mockSportsLibVersionToCode = vi.fn(() => 9001004);
+  const mockGunzipSync = vi.fn();
 
   return {
     capturedOnRequestOptions,
@@ -57,6 +58,17 @@ const hoisted = vi.hoisted(() => {
     mockSuuntoSMLImporter,
     mockServerTimestamp,
     mockSportsLibVersionToCode,
+    mockGunzipSync,
+  };
+});
+
+vi.mock('node:zlib', async () => {
+  const actual = await vi.importActual<typeof import('node:zlib')>('node:zlib');
+  hoisted.mockGunzipSync.mockImplementation(actual.gunzipSync as never);
+
+  return {
+    ...actual,
+    gunzipSync: (...args: Parameters<typeof actual.gunzipSync>) => hoisted.mockGunzipSync(...args),
   };
 });
 
@@ -974,7 +986,12 @@ describe('uploadActivity', () => {
 
   it('should return 400 when gzip payload expands beyond decompression safety limit', async () => {
     const response = makeResponse();
-    const compressedBomb = gzipSync(Buffer.alloc((512 * 1024 * 1024) + 1, 0x00));
+    const compressedBomb = gzipSync(Buffer.from('compressed payload'));
+    const tooLargeError = new Error('too large') as Error & { code: string };
+    tooLargeError.code = 'ERR_BUFFER_TOO_LARGE';
+    hoisted.mockGunzipSync.mockImplementationOnce(() => {
+      throw tooLargeError;
+    });
 
     await invokeUploadActivity(makeRequest({
       headers: {
@@ -988,6 +1005,9 @@ describe('uploadActivity', () => {
     expect(response.status).toHaveBeenCalledWith(400);
     expect(response.json).toHaveBeenCalledWith({
       error: 'File is too large after decompression. Maximum decompressed size is 512MB.',
+    });
+    expect(hoisted.mockGunzipSync).toHaveBeenCalledWith(compressedBomb, {
+      maxOutputLength: 512 * 1024 * 1024,
     });
     expect(hoisted.mockFITImporter.getFromArrayBuffer).not.toHaveBeenCalled();
   });
