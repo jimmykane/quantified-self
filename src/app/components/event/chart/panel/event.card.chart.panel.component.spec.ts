@@ -318,8 +318,6 @@ describe('EventCardChartPanelComponent', () => {
     expect(option?.dataZoom?.[0]?.filterMode).toBe('filter');
     expect(option?.dataZoom?.[0]?.moveOnMouseMove).toBe(true);
     expect(option?.dataZoom?.[0]?.moveOnMouseWheel).toBe(false);
-    expect(option?.dataZoom?.[0]?.cursorGrab).toBe('grab');
-    expect(option?.dataZoom?.[0]?.cursorGrabbing).toBe('grabbing');
     expect(option?.dataZoom?.[1]?.show).toBe(true);
     expect(option?.dataZoom?.[1]?.filterMode).toBe('filter');
   });

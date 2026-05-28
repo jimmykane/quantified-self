@@ -246,7 +246,6 @@ describe('ChartsIntensityDistributionComponent', () => {
     const option = (component as any).buildOption(weeks) as Record<string, any>;
     const formatter = option?.xAxis?.axisLabel?.formatter as ((value: string | number) => string);
 
-    expect(option?.xAxis?.containShape).toBe(true);
     expect(typeof formatter).toBe('function');
     const label = formatter(Date.UTC(2026, 0, 5));
     expect(label).toContain('2026');

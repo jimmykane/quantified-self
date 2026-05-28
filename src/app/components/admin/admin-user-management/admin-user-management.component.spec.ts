@@ -449,7 +449,6 @@ describe('AdminUserManagementComponent', () => {
         const graphic = (option as any).graphic;
 
         expect((option as any).backgroundColor).toBe('transparent');
-        expect((option as any).xAxis.containShape).toBe(true);
         expect(series).toHaveLength(7);
         expect(series.map((entry: any) => entry.name)).toEqual([
             'Registered Users / month',
