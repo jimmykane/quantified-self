@@ -515,6 +515,48 @@ describe('backfillGarminAPISleep', () => {
         }));
     });
 
+    it('reports a token read failure instead of treating unreadable Garmin tokens as disconnected', async () => {
+        seedGarminToken();
+        hoisted.getTokenData.mockRejectedValue(new Error('refresh unavailable'));
+
+        await expect(backfillGarminAPISleep(createRequest() as any))
+            .rejects.toMatchObject({
+                code: 'internal',
+                message: 'Could not read connected Garmin token for sleep backfill.',
+            });
+
+        expect(hoisted.transactionSet).not.toHaveBeenCalled();
+        expect(hoisted.updateSleepSyncState).not.toHaveBeenCalled();
+        expect(hoisted.requestGet).not.toHaveBeenCalled();
+    });
+
+    it('does not mark permissions missing when another Garmin token cannot be read', async () => {
+        seedGarminToken('missing-permission-token');
+        seedGarminToken('unreadable-token');
+        hoisted.getTokenData.mockImplementation(async (tokenDoc: { id: string }) => {
+            if (tokenDoc.id === 'missing-permission-token') {
+                return {
+                    accessToken: 'missing-permission-access-token',
+                    userID: 'missing-permission-garmin-user',
+                    permissions: ['HISTORICAL_DATA_EXPORT'],
+                };
+            }
+            throw new Error('refresh unavailable');
+        });
+
+        await expect(backfillGarminAPISleep(createRequest() as any))
+            .rejects.toMatchObject({
+                code: 'internal',
+                message: 'Could not read connected Garmin token for sleep backfill.',
+            });
+
+        expect(hoisted.updateSleepSyncState).not.toHaveBeenCalledWith('user-1', SLEEP_PROVIDERS.GarminAPI, expect.objectContaining({
+            status: 'permission_missing',
+        }));
+        expect(hoisted.transactionSet).not.toHaveBeenCalled();
+        expect(hoisted.requestGet).not.toHaveBeenCalled();
+    });
+
     it('rejects Garmin requests without App Check', async () => {
         seedGarminToken();
 
@@ -745,6 +787,56 @@ describe('backfillGarminAPISleep', () => {
                     error: {
                         errorMessage: `start date before min start time ${new Date(clippedStartMs).toISOString()}`,
                     },
+                },
+            })
+            .mockResolvedValue(undefined);
+
+        const result = await backfillGarminAPISleep(createRequest() as any);
+
+        expect(result.queued).toBe(expectedWindows.length);
+        expect(hoisted.requestGet).toHaveBeenNthCalledWith(2, {
+            headers: {
+                Authorization: 'Bearer garmin-access-token',
+            },
+            url: `https://apis.garmin.com/wellness-api/rest/backfill/sleeps?summaryStartTimeInSeconds=${Math.floor(clippedStartMs / 1000)}&summaryEndTimeInSeconds=${Math.floor(expectedWindows[0].endMs / 1000)}`,
+        });
+    });
+
+    it('retries a Garmin window when the provider uses minimum start time wording', async () => {
+        seedGarminToken();
+        const expectedWindows = chunkSleepBackfillRange(startMs, nowMs, windowDays);
+        const clippedStartMs = expectedWindows[0].startMs + (10 * 24 * 60 * 60 * 1000);
+        hoisted.requestGet
+            .mockRejectedValueOnce({
+                statusCode: 400,
+                error: {
+                    error: {
+                        errorMessage: `requested start is before the minimum start time ${new Date(clippedStartMs).toISOString()}`,
+                    },
+                },
+            })
+            .mockResolvedValue(undefined);
+
+        const result = await backfillGarminAPISleep(createRequest() as any);
+
+        expect(result.queued).toBe(expectedWindows.length);
+        expect(hoisted.requestGet).toHaveBeenNthCalledWith(2, {
+            headers: {
+                Authorization: 'Bearer garmin-access-token',
+            },
+            url: `https://apis.garmin.com/wellness-api/rest/backfill/sleeps?summaryStartTimeInSeconds=${Math.floor(clippedStartMs / 1000)}&summaryEndTimeInSeconds=${Math.floor(expectedWindows[0].endMs / 1000)}`,
+        });
+    });
+
+    it('retries a Garmin window when min start time is only present as a structured field', async () => {
+        seedGarminToken();
+        const expectedWindows = chunkSleepBackfillRange(startMs, nowMs, windowDays);
+        const clippedStartMs = expectedWindows[0].startMs + (10 * 24 * 60 * 60 * 1000);
+        hoisted.requestGet
+            .mockRejectedValueOnce({
+                statusCode: 400,
+                error: {
+                    minStartTimeInSeconds: Math.floor(clippedStartMs / 1000),
                 },
             })
             .mockResolvedValue(undefined);

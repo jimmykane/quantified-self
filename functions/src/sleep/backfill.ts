@@ -124,6 +124,7 @@ async function getGarminSleepBackfillToken(userID: string): Promise<GarminSleepB
 
     let bestMissingPermissions: string[] | null = null;
     let foundIncompletePermittedToken = false;
+    let lastTokenReadError: unknown = null;
     for (const tokenDoc of tokenSnapshot.docs) {
         try {
             const tokenData = await getTokenData(tokenDoc, ServiceNames.GarminAPI) as {
@@ -151,15 +152,19 @@ async function getGarminSleepBackfillToken(userID: string): Promise<GarminSleepB
                 providerUserId,
             };
         } catch (error) {
+            lastTokenReadError = error;
             logger.warn(`[SleepBackfill] Could not use Garmin token ${tokenDoc.id} for ${userID}`, error);
         }
     }
 
-    if (bestMissingPermissions) {
-        await markGarminSleepBackfillPermissionsMissing(userID, bestMissingPermissions);
-    }
     if (foundIncompletePermittedToken) {
         throw new HttpsError('failed-precondition', 'Connected Garmin token is incomplete for sleep backfill.');
+    }
+    if (lastTokenReadError) {
+        throw new HttpsError('internal', 'Could not read connected Garmin token for sleep backfill.');
+    }
+    if (bestMissingPermissions) {
+        await markGarminSleepBackfillPermissionsMissing(userID, bestMissingPermissions);
     }
     throw new HttpsError('failed-precondition', 'Connected Garmin token is required for sleep backfill.');
 }
@@ -346,16 +351,7 @@ function extractGarminMinStartTimeMs(error: unknown): number | null {
         return structuredMs;
     }
 
-    let serializedError = '';
-    try {
-        serializedError = JSON.stringify(error) || '';
-    } catch (_) {
-        serializedError = '';
-    }
-    const message = [
-        error instanceof Error ? error.message : '',
-        serializedError,
-    ].filter(Boolean).join(' ');
+    const message = getGarminBackfillErrorText(error);
     const numericMatch = message.match(/(?:min(?:imum)? start time|earliest start time)[^\d]*(\d{10,13})/i);
     const numericMs = valueToEpochMs(numericMatch?.[1]);
     if (numericMs !== null) {
@@ -366,6 +362,29 @@ function extractGarminMinStartTimeMs(error: unknown): number | null {
     return valueToEpochMs(isoMatch?.[1]);
 }
 
+function getGarminBackfillErrorText(error: unknown): string {
+    let serializedError = '';
+    try {
+        serializedError = JSON.stringify(error) || '';
+    } catch (_) {
+        serializedError = '';
+    }
+
+    return [
+        error instanceof Error ? error.message : '',
+        `${(error as { error?: { error?: { errorMessage?: unknown } } } | null)?.error?.error?.errorMessage || ''}`,
+        serializedError,
+    ].filter(Boolean).join(' ');
+}
+
+function isGarminSleepBackfillMinStartError(error: unknown): boolean {
+    if ((error as { statusCode?: unknown } | null)?.statusCode !== 400) {
+        return false;
+    }
+    return /(?:before|earlier than)[^.!?]*(?:min(?:imum)?|earliest) start time/i.test(getGarminBackfillErrorText(error))
+        || extractGarminMinStartTimeMs(error) !== null;
+}
+
 async function requestGarminSleepBackfillWindow(
     userID: string,
     token: GarminSleepBackfillToken,
@@ -374,13 +393,14 @@ async function requestGarminSleepBackfillWindow(
     try {
         return await requestGarminSleepBackfillRangeIfUserActive(userID, token, window.startMs, window.endMs);
     } catch (error: any) {
-        if (error?.statusCode === 400 && `${error?.error?.error?.errorMessage || ''}`.includes('before min start time')) {
+        if (isGarminSleepBackfillMinStartError(error)) {
+            const errorText = getGarminBackfillErrorText(error);
             const minStartMs = extractGarminMinStartTimeMs(error);
             if (minStartMs !== null && minStartMs > window.startMs && minStartMs < window.endMs) {
-                logger.warn(`[SleepBackfill] Retrying Garmin sleep backfill window from provider min start time ${new Date(minStartMs).toISOString()}: ${error.error.error.errorMessage}`);
+                logger.warn(`[SleepBackfill] Retrying Garmin sleep backfill window from provider min start time ${new Date(minStartMs).toISOString()}: ${errorText}`);
                 return requestGarminSleepBackfillRangeWithAlreadyRequestedSkip(userID, token, minStartMs, window.endMs);
             }
-            logger.warn(`[SleepBackfill] Skipping Garmin sleep backfill window before min start time: ${error.error.error.errorMessage}`);
+            logger.warn(`[SleepBackfill] Skipping Garmin sleep backfill window before min start time: ${errorText}`);
             return 'skipped';
         }
         if (isGarminSleepBackfillAlreadyRequestedError(error)) {

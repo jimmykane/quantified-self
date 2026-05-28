@@ -235,6 +235,72 @@ describe('ServicesGarminComponent', () => {
         });
     });
 
+    describe('Permission State', () => {
+        it('uses the best Garmin token for permission checks instead of only the first token', () => {
+            const freshConnectedAt = new Date('2026-05-03T10:00:00.000Z');
+            component.isLoading = false;
+            component.serviceTokens = [{
+                accessToken: 'stale-token',
+                userID: 'stale-garmin-user',
+                permissions: ['HISTORICAL_DATA_EXPORT', 'ACTIVITY_EXPORT'],
+                permissionsLastChangedAt: 100,
+                dateCreated: new Date('2026-04-01T10:00:00.000Z'),
+            }, {
+                accessToken: 'fresh-token',
+                userID: 'fresh-garmin-user',
+                permissions: ['HISTORICAL_DATA_EXPORT', 'ACTIVITY_EXPORT', 'HEALTH_EXPORT'],
+                permissionsLastChangedAt: 200,
+                dateCreated: freshConnectedAt,
+            }] as any;
+
+            expect(component.isConnectedToService()).toBe(true);
+            expect(component.hasPermissionsLoaded).toBe(true);
+            expect(component.missingPermissions).toEqual([]);
+            expect(component.garminUserID).toBe('fresh-garmin-user');
+            expect(component.connectedAt).toBe(freshConnectedAt);
+            expect(component.permissionsLastChangedAt).toBe(200);
+            expect(component.isHistoryImportLoading).toBe(false);
+        });
+
+        it('keeps history import loading while Garmin token permissions are not loaded', () => {
+            component.isLoading = false;
+            component.serviceTokens = [{
+                accessToken: 'garmin-token',
+                userID: 'garmin-user',
+            }] as any;
+
+            expect(component.isConnectedToService()).toBe(true);
+            expect(component.hasPermissionsLoaded).toBe(false);
+            expect(component.missingPermissions).toEqual([]);
+            expect(component.isHistoryImportLoading).toBe(true);
+        });
+
+        it('does not report sleep permissions missing when a later Garmin token can backfill sleep', () => {
+            component.serviceTokens = [{
+                accessToken: 'activity-token',
+                userID: 'activity-garmin-user',
+                permissions: ['HISTORICAL_DATA_EXPORT', 'ACTIVITY_EXPORT'],
+            }, {
+                accessToken: 'sleep-token',
+                userID: 'sleep-garmin-user',
+                permissions: ['HISTORICAL_DATA_EXPORT', 'HEALTH_EXPORT'],
+            }] as any;
+
+            expect(component.hasPermissionsLoaded).toBe(true);
+            expect(component.missingPermissions).toEqual([]);
+        });
+
+        it('reports only health missing when Garmin activity history permissions are present without sleep permissions', () => {
+            component.serviceTokens = [{
+                accessToken: 'activity-token',
+                userID: 'activity-garmin-user',
+                permissions: ['HISTORICAL_DATA_EXPORT', 'ACTIVITY_EXPORT'],
+            }] as any;
+
+            expect(component.missingPermissions).toEqual(['HEALTH_EXPORT']);
+        });
+    });
+
     describe('Connection Logic', () => {
         it('should display partner-specific message on 502 error', async () => {
             const snackBar = TestBed.inject(MatSnackBar);

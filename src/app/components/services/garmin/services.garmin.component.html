@@ -25,7 +25,7 @@
         <mat-icon class="connected-account-icon">account_circle</mat-icon>
         <div class="connected-account-copy">
           <div class="connected-account-title">{{ garminUserID }}</div>
-          <div class="connected-account-line">Connected: {{ serviceTokens?.[0]?.dateCreated | date:'short' }}</div>
+          <div class="connected-account-line">Connected: {{ connectedAt | date:'short' }}</div>
         </div>
       </div>
       <div *ngIf="permissionsLastChangedAt" class="connected-account-item" role="listitem">
@@ -151,7 +151,7 @@
       </div>
       } @else if (isConnectedToService()) {
       <app-history-import-form [serviceName]="serviceName" [userMetaForService]="serviceMeta"
-        [missingPermissions]="missingPermissions" [isLoadingParent]="isLoading"
+        [missingPermissions]="missingPermissions" [isLoadingParent]="isHistoryImportLoading"
         [providerConnected]="true"
         (importInitiated)="onHistoryImportInitiated()"></app-history-import-form>
       } @else {
