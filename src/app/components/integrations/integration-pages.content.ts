@@ -457,7 +457,7 @@ export const PROVIDER_INTEGRATION_ROUTE_DATA: Record<IntegrationProviderKey, Int
     preload: true,
     animation: 'Integrations',
     description: 'Use Quantified Self as a private training dashboard for Garmin data with Garmin history imports, Garmin -> Suunto sync, AI insights, and centralized workout data.',
-    keywords: 'Garmin integration, private Garmin training dashboard, Garmin to Suunto sync, Garmin history import, centralize Garmin, Suunto, and COROS workout data',
+    keywords: 'Garmin integration, best private training dashboard for Garmin data, private Garmin training dashboard, Garmin to Suunto sync, Garmin history import, centralize Garmin, Suunto, and COROS workout data',
     jsonLd: providerWebPageJsonLd(
       PROVIDER_INTEGRATION_PAGES.garmin,
       'Use Quantified Self as a private training dashboard for Garmin data with Garmin history imports, Garmin -> Suunto sync, AI insights, and centralized workout data.'

@@ -19,6 +19,10 @@ export class NetworkAwarePreloadingStrategy implements PreloadingStrategy {
     }
 
     private hasGoodConnection(): boolean {
+        if (typeof navigator === 'undefined') {
+            return false;
+        }
+
         const conn = (navigator as any).connection;
         if (conn) {
             if (conn.saveData) {

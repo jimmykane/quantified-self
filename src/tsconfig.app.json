@@ -2,14 +2,18 @@
   "extends": "../tsconfig.base.json",
   "compilerOptions": {
     "outDir": "../out-tsc/app",
-    "baseUrl": ""
+    "baseUrl": "",
+    "types": [
+      "node"
+    ]
   },
   "angularCompilerOptions": {
     "preserveWhitespaces": false,
     "strictTemplates": true
   },
   "files": [
-    "main.ts"
+    "main.ts",
+    "main.server.ts"
   ],
   "include": [
     "**/*.d.ts"
