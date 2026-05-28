@@ -4,12 +4,13 @@ import {
   DestroyRef,
   OnDestroy,
   OnInit,
+  PLATFORM_ID,
   ViewChild,
   afterNextRender,
   inject,
   signal,
 } from '@angular/core';
-import { DOCUMENT } from '@angular/common';
+import { DOCUMENT, isPlatformBrowser } from '@angular/common';
 import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { MatSidenav, MatSidenavContainer } from '@angular/material/sidenav';
 import { BreakpointObserver, Breakpoints } from '@angular/cdk/layout';
@@ -125,6 +126,8 @@ export class AppShellComponent implements OnInit, OnDestroy {
   public isAdminUser = false;
   public currentTheme$: Observable<AppThemes> = this.themeService.getAppTheme();
   private readonly headerHiddenSignal = signal(false);
+  private readonly platformId = inject(PLATFORM_ID);
+  private readonly isBrowser = isPlatformBrowser(this.platformId);
 
   // Circular reveal animation state
   private readonly themeOverlayActiveSignal = signal(false);
@@ -239,6 +242,12 @@ export class AppShellComponent implements OnInit, OnDestroy {
     // this.afa.setAnalyticsCollectionEnabled(true)
     this.iconService.registerIcons();
 
+    if (!this.isBrowser) {
+      this.authState = false;
+      this.showInitialLoader = false;
+      return;
+    }
+
     // Mark app as hydrated after Angular takes over (reveals SVG icons)
     afterNextRender(() => {
       document.body.classList.add('app-hydrated');
@@ -248,6 +257,11 @@ export class AppShellComponent implements OnInit, OnDestroy {
   async ngOnInit() {
     this.seoService.init(); // Initialize SEO service
     this.syncCurrentRouteState();
+
+    if (!this.isBrowser) {
+      this.onboardingCompleted = true;
+      return;
+    }
 
     this.authService.user$
       .pipe(takeUntilDestroyed(this.destroyRef))

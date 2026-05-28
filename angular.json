@@ -14,7 +14,6 @@
             "outputPath": "dist",
             "index": "src/index.html",
             "browser": "src/main.ts",
-            "prerender": false,
             "ssr": false,
             "tsConfig": "src/tsconfig.app.json",
             "polyfills": [
@@ -48,7 +47,8 @@
           },
           "configurations": {
             "production": {
-              "prerender": false,
+              "server": "src/main.server.ts",
+              "outputMode": "static",
               "budgets": [
                 {
                   "type": "initial",
@@ -83,7 +83,8 @@
               "serviceWorker": "ngsw-config.json"
             },
             "beta": {
-              "prerender": false,
+              "server": "src/main.server.ts",
+              "outputMode": "static",
               "budgets": [
                 {
                   "type": "initial",

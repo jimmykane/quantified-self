@@ -222,6 +222,88 @@ describe('SeoService', () => {
         expect(mockDocument.createElement).not.toHaveBeenCalled();
         expect(mockLink.setAttribute).toHaveBeenCalledWith('href', 'https://quantified-self.io/updated');
     });
+
+    it('should write canonical, og:url, and JSON-LD during server rendering', () => {
+        TestBed.resetTestingModule();
+
+        const canonicalOrigin = 'https://quantified-self.io';
+        routerEventsSubject = new Subject<any>();
+        mockRouter = {
+            events: routerEventsSubject.asObservable(),
+            url: '/integrations/garmin?utm_source=test',
+            parseUrl: vi.fn().mockImplementation(() => ({
+                queryParams: { utm_source: 'test' },
+                fragment: 'details',
+                toString: () => '/integrations/garmin'
+            }))
+        };
+        mockActivatedRoute = {
+            firstChild: null,
+            outlet: 'primary',
+            data: of({
+                title: 'Private Garmin Training Dashboard',
+                description: 'Use Quantified Self as a private training dashboard for Garmin data.',
+                jsonLd: {
+                    '@context': 'https://schema.org',
+                    '@type': 'WebPage',
+                    name: 'Private Garmin Training Dashboard',
+                }
+            })
+        };
+
+        const mockLink = { setAttribute: vi.fn() };
+        const mockScript = {
+            setAttribute: vi.fn(),
+            textContent: ''
+        };
+        mockDocument = {
+            createElement: vi.fn().mockImplementation((tagName: string) => tagName === 'link' ? mockLink : mockScript),
+            head: {
+                appendChild: vi.fn(),
+                removeChild: vi.fn()
+            },
+            querySelector: vi.fn().mockReturnValue(null),
+            location: {
+                href: 'https://prerender-worker.local/integrations/garmin?utm_source=test',
+                origin: 'https://prerender-worker.local'
+            }
+        };
+        titleServiceSpy = { setTitle: vi.fn() };
+        metaServiceSpy = { updateTag: vi.fn() };
+
+        TestBed.configureTestingModule({
+            providers: [
+                SeoService,
+                { provide: Title, useValue: titleServiceSpy },
+                { provide: Meta, useValue: metaServiceSpy },
+                { provide: Router, useValue: mockRouter },
+                { provide: ActivatedRoute, useValue: mockActivatedRoute },
+                { provide: DOCUMENT, useValue: mockDocument },
+                { provide: PLATFORM_ID, useValue: 'server' }
+            ]
+        });
+
+        service = TestBed.inject(SeoService);
+        service.init();
+        routerEventsSubject.next(new NavigationEnd(1, '/integrations/garmin', '/integrations/garmin'));
+
+        expect(mockDocument.createElement).toHaveBeenCalledWith('link');
+        expect(mockLink.setAttribute).toHaveBeenCalledWith('rel', 'canonical');
+        expect(mockLink.setAttribute).toHaveBeenCalledWith('href', `${canonicalOrigin}/integrations/garmin`);
+        expect(metaServiceSpy.updateTag).toHaveBeenCalledWith({
+            property: 'og:url',
+            content: `${canonicalOrigin}/integrations/garmin`
+        });
+        expect(metaServiceSpy.updateTag).not.toHaveBeenCalledWith({
+            property: 'og:url',
+            content: 'https://prerender-worker.local/integrations/garmin'
+        });
+        expect(mockDocument.createElement).toHaveBeenCalledWith('script');
+        expect(mockScript.setAttribute).toHaveBeenCalledWith('type', 'application/ld+json');
+        expect(mockScript.textContent).toContain('"@type":"WebPage"');
+        expect(mockScript.textContent).toContain('Private Garmin Training Dashboard');
+    });
+
     it('should inject custom JSON-LD from route data', () => {
         const customJsonLd = {
             "@context": "https://schema.org",

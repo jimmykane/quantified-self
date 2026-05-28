@@ -43,7 +43,11 @@ import {
   DASHBOARD_SLEEP_TREND_CHART_TYPE,
   DASHBOARD_TRAINING_BALANCE_KPI_CHART_TYPE,
 } from '../../../helpers/dashboard-special-chart-types';
-import { DASHBOARD_MANAGER_PRESET_IDS } from '../../../helpers/dashboard-manager-presets.helper';
+import {
+  buildDashboardManagerPresetTile,
+  DASHBOARD_MANAGER_PRESET_IDS,
+  getDashboardManagerPresetDefinitions,
+} from '../../../helpers/dashboard-manager-presets.helper';
 import { AppUserUtilities } from '../../../utils/app.user.utilities';
 import { AppUserService } from '../../../services/app.user.service';
 import { AppHapticsService } from '../../../services/app.haptics.service';
@@ -674,6 +678,7 @@ describe('DashboardManagerDialogComponent', () => {
     const template = readFileSync(templatePath, 'utf8');
     const styles = readFileSync(stylesPath, 'utf8');
 
+    expect(template).toContain('Add defaults');
     expect(template).toContain('Add all');
     expect(template).toContain('Remove all');
     expect(template).toContain('Preset category');
@@ -690,7 +695,7 @@ describe('DashboardManagerDialogComponent', () => {
   it('adds all missing new-user default dashboard tiles in one save', async () => {
     dialogData.user.settings.dashboardSettings.tiles = [];
 
-    await component.addAllTiles();
+    await component.addDefaultTiles();
 
     const tiles = dialogData.user.settings.dashboardSettings.tiles;
     const defaultTiles = AppUserUtilities.getDefaultUserDashboardTiles();
@@ -718,12 +723,69 @@ describe('DashboardManagerDialogComponent', () => {
     expectDashboardSettingsOnlyWrite(userServiceMock, dialogData);
     expect(hapticsMock.selection).toHaveBeenCalledTimes(1);
     expect(hapticsMock.success).toHaveBeenCalledTimes(1);
-    expect(component.isAddAllDisabled).toBe(true);
+    expect(component.isAddDefaultsDisabled).toBe(true);
+    expect(component.isAddAllDisabled).toBe(false);
     expect(component.isRemoveAllDisabled).toBe(false);
     expect(dialogRefMock.close).toHaveBeenCalledWith({ saved: true });
   });
 
-  it('shows an Add all loading state while bulk add is saving', async () => {
+  it('adds every available dashboard manager preset tile when adding all', async () => {
+    dialogData.user.settings.dashboardSettings.tiles = [];
+
+    await component.addAllTiles();
+
+    const tiles = dialogData.user.settings.dashboardSettings.tiles;
+    const presetTiles = getDashboardManagerPresetDefinitions()
+      .filter(definition => definition.id !== DASHBOARD_MANAGER_PRESET_IDS.CURATED_SLEEP)
+      .map((definition, index) => buildDashboardManagerPresetTile({
+        presetId: definition.id,
+        order: index,
+        size: { columns: 1, rows: 1 },
+      }));
+
+    expect(tiles).toHaveLength(presetTiles.length);
+    expect(tiles.map(dashboardTileSignature)).toEqual(presetTiles.map(dashboardTileSignature));
+    expect(tiles.filter((tile: any) => tile.type === TileTypes.Map)).toHaveLength(1);
+    expect(tiles.some((tile: any) => tile.chartType === DASHBOARD_ACWR_KPI_CHART_TYPE)).toBe(true);
+    expect(tiles.some((tile: any) => tile.chartType === DASHBOARD_RAMP_RATE_KPI_CHART_TYPE)).toBe(true);
+    expect(tiles.some((tile: any) => tile.chartType === DASHBOARD_FORM_PLUS_7D_KPI_CHART_TYPE)).toBe(true);
+    expect(tiles.some((tile: any) => tile.dataType === DataEnergy.type)).toBe(true);
+    expect(tiles.some((tile: any) => tile.dataType === DataHeartRateAvg.type)).toBe(true);
+    expect(tiles.some((tile: any) => tile.chartType === DASHBOARD_SLEEP_TREND_CHART_TYPE)).toBe(false);
+    expect(dialogData.user.settings.dashboardSettings.autoTiles.kpiAcwr).toMatchObject({
+      state: 'added',
+      source: 'default-kpi',
+    });
+    expect(userServiceMock.updateUserProperties).toHaveBeenCalledTimes(1);
+    expectDashboardSettingsOnlyWrite(userServiceMock, dialogData);
+    expect(dialogRefMock.close).toHaveBeenCalledWith({ saved: true });
+  });
+
+  it('shows an Add defaults loading state while bulk default add is saving', async () => {
+    dialogData.user.settings.dashboardSettings.tiles = [];
+    const saveDeferred = createDeferred<boolean>();
+    userServiceMock.updateUserProperties.mockReturnValueOnce(saveDeferred.promise);
+
+    const addDefaultsPromise = component.addDefaultTiles();
+    await Promise.resolve();
+    await Promise.resolve();
+    fixture.detectChanges();
+
+    const addDefaultsButton: HTMLElement = fixture.nativeElement.querySelector('[data-testid="dashboard-manager-add-defaults-button"]');
+    expect(component.isAddDefaultsSaving).toBe(true);
+    expect(component.savingAction).toBe('addDefaults');
+    expect(addDefaultsButton.getAttribute('aria-busy')).toBe('true');
+    expect(addDefaultsButton.textContent).toContain('Adding...');
+    expect(addDefaultsButton.querySelector('mat-spinner')).toBeTruthy();
+
+    saveDeferred.resolve(true);
+    await addDefaultsPromise;
+
+    expect(component.isSaving).toBe(false);
+    expect(component.savingAction).toBeNull();
+  });
+
+  it('shows an Add all loading state while bulk all add is saving', async () => {
     dialogData.user.settings.dashboardSettings.tiles = [];
     const saveDeferred = createDeferred<boolean>();
     userServiceMock.updateUserProperties.mockReturnValueOnce(saveDeferred.promise);
@@ -751,7 +813,7 @@ describe('DashboardManagerDialogComponent', () => {
     dialogData.user.settings.dashboardSettings.tiles = [];
     sleepEligibilitySubject.next(true);
 
-    await component.addAllTiles();
+    await component.addDefaultTiles();
 
     const defaultTiles = AppUserUtilities.getDefaultUserDashboardTiles();
     const tiles = dialogData.user.settings.dashboardSettings.tiles;
@@ -783,15 +845,15 @@ describe('DashboardManagerDialogComponent', () => {
     expect(sleepServiceMock.watchHasAnySleepSession).toHaveBeenCalledWith('user-1');
   });
 
-  it('does not duplicate existing default dashboard tiles when adding all', async () => {
+  it('does not duplicate existing default dashboard tiles when adding defaults', async () => {
     dialogData.user.settings.dashboardSettings.tiles = AppUserUtilities.getDefaultUserDashboardTiles();
-    await component.addAllTiles();
+    await component.addDefaultTiles();
 
     expect(userServiceMock.updateUserProperties).not.toHaveBeenCalled();
     expect(dialogRefMock.close).not.toHaveBeenCalledWith({ saved: true });
   });
 
-  it('treats a legacy recovery metric tile as the Recovery preset when adding all', async () => {
+  it('treats a legacy recovery metric tile as the Recovery preset when adding defaults', async () => {
     dialogData.user.settings.dashboardSettings.tiles = [{
       type: TileTypes.Chart,
       order: 0,
@@ -805,7 +867,7 @@ describe('DashboardManagerDialogComponent', () => {
     }];
     component.ngOnInit();
 
-    await component.addAllTiles();
+    await component.addDefaultTiles();
 
     const tiles = dialogData.user.settings.dashboardSettings.tiles;
     const recoveryLikeTiles = tiles.filter((tile: any) => (

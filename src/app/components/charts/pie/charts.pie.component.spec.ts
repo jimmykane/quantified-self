@@ -131,6 +131,15 @@ describe('ChartsPieComponent', () => {
     document.body.classList.remove('dark-theme');
   });
 
+  const waitForChartStabilization = async (): Promise<void> => {
+    await fixture.whenStable();
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+  };
+
+  const getLastOption = (): Record<string, any> => {
+    return mockLoader.setOption.mock.calls.at(-1)?.[1] as Record<string, any>;
+  };
+
   it('should initialize ECharts and render pie option', async () => {
     component.data = [
       { type: 'Running', [ChartDataValueTypes.Total]: 60, count: 2 },
@@ -496,6 +505,29 @@ describe('ChartsPieComponent', () => {
     expect(settings).toEqual({
       notMerge: true,
       lazyUpdate: false
+    });
+  });
+
+  it('should re-enable tooltips after rendering an empty state', async () => {
+    component.data = [];
+
+    fixture.detectChanges();
+    await waitForChartStabilization();
+    expect(getLastOption().tooltip.show).toBe(false);
+
+    component.data = [
+      { type: 'Running', [ChartDataValueTypes.Total]: 42, count: 1 },
+    ];
+    component.ngOnChanges({
+      data: new SimpleChange([], component.data, false),
+    });
+    await waitForChartStabilization();
+
+    expect(getLastOption().tooltip.show).toBe(true);
+    expect(mockLoader.setOption.mock.calls.at(-1)?.[2]).toEqual({
+      notMerge: false,
+      lazyUpdate: false,
+      replaceMerge: ['series'],
     });
   });
 

@@ -275,6 +275,22 @@ describe('dashboard-echarts-cartesian.helper', () => {
     expect(points[2].value).toBeNull();
   });
 
+  it('should not pad a single weekly date point with artificial zero buckets', () => {
+    const week = Date.UTC(2024, 0, 1);
+    const points = buildDashboardCartesianPoints({
+      data: [
+        { time: week, [ChartDataValueTypes.Total]: 10, count: 1 }
+      ],
+      chartDataValueType: ChartDataValueTypes.Total,
+      chartDataCategoryType: ChartDataCategoryTypes.DateType,
+      chartDataTimeInterval: TimeIntervals.Weekly,
+    });
+
+    expect(points).toHaveLength(1);
+    expect(points[0].time).toBe(week);
+    expect(points[0].value).toBe(10);
+  });
+
   it('should ignore non-finite values while preserving finite negatives', () => {
     const points = buildDashboardCartesianPoints({
       data: [

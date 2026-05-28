@@ -94,6 +94,26 @@ describe('NetworkAwarePreloadingStrategy', () => {
         expect(result).toBeNull();
     });
 
+    it('should NOT preload when navigator is unavailable during server rendering', () => {
+        const originalNavigator = Object.getOwnPropertyDescriptor(globalThis, 'navigator');
+        Object.defineProperty(globalThis, 'navigator', {
+            value: undefined,
+            configurable: true
+        });
+
+        try {
+            let result: any = undefined;
+            strategy.preload(preloadRoute, mockLoad).subscribe(r => result = r);
+
+            vi.advanceTimersByTime(5000);
+            expect(result).toBeNull();
+        } finally {
+            if (originalNavigator) {
+                Object.defineProperty(globalThis, 'navigator', originalNavigator);
+            }
+        }
+    });
+
     it('should preload after delay if connection is 4g and saveData is false', () => {
         Object.defineProperty(navigator, 'connection', {
             value: { saveData: false, effectiveType: '4g' },

@@ -1,7 +1,7 @@
 import { Component, DestroyRef, OnDestroy, OnInit, inject } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { AppEventService } from '../../services/app.event.service';
-import { from, merge, of, Subject } from 'rxjs';
+import { combineLatest, from, merge, of, Subject } from 'rxjs';
 import { EventInterface } from '@sports-alliance/sports-lib';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { ActivatedRoute, Router } from '@angular/router';
@@ -39,6 +39,8 @@ import {
   buildDashboardActionPromptViewModels,
   buildActivityAutoSyncEnabledSnackbarMessage,
   DASHBOARD_ACTION_PROMPT_ACTIVITY_AUTO_SYNC_SOURCE,
+  DASHBOARD_ACTION_PROMPT_BACKFILL_GARMIN_SLEEP_ID,
+  DASHBOARD_ACTION_PROMPT_BACKFILL_GARMIN_SLEEP_SOURCE,
   DASHBOARD_ACTION_PROMPT_CONNECT_ACTIVITY_SERVICE_ID,
   DASHBOARD_ACTION_PROMPT_CONNECT_ACTIVITY_SERVICE_SOURCE,
   DASHBOARD_ACTION_PROMPT_ENABLE_ACTIVITY_AUTO_SYNC_ID,
@@ -61,6 +63,9 @@ import {
   buildSuuntoServiceConnectionViewModel,
   SuuntoServiceConnectionViewModel,
 } from '../../helpers/suunto-service-connection.helper';
+import { AppSleepService } from '../../services/app.sleep.service';
+import { SLEEP_PROVIDERS, SleepSyncState } from '@shared/sleep';
+import { GARMIN_SLEEP_BACKFILL_REQUIRED_PERMISSIONS } from '@shared/sleep-backfill';
 
 
 @Component({
@@ -98,6 +103,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
   public isReconnectingSuuntoServicePrompt = false;
   public isDismissingReconnectSuuntoServicePrompt = false;
   public reconnectSuuntoServicePromptError: string | null = null;
+  public isBackfillingGarminSleepPrompt = false;
+  public isDismissingGarminSleepPrompt = false;
+  public garminSleepBackfillPromptError: string | null = null;
 
   private shouldSearch: boolean;
   private manualSearchTrigger$ = new Subject<{ user: AppUserInterface | null; refreshToken: number }>();
@@ -114,10 +122,15 @@ export class DashboardComponent implements OnInit, OnDestroy {
     hasToken: false,
     serviceMeta: null,
   });
+  private garminSleepSyncState: SleepSyncState | null = null;
+  private garminSleepSyncStateLoaded = false;
+  private garminSleepBackfillPermissionsLoaded = false;
+  private hasGarminSleepBackfillPermissions = false;
   private analyticsService = inject(AppAnalyticsService);
   private logger = inject(LoggerService);
   private destroyRef = inject(DestroyRef);
   private windowService = inject(AppWindowService);
+  private sleepService = inject(AppSleepService);
 
 
   constructor(public authService: AppAuthService,
@@ -184,6 +197,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.watchFirstActivityUploadPromptState();
     this.watchActivityServiceConnectionPromptState();
     this.watchSuuntoReconnectPromptState();
+    this.watchGarminSleepBackfillPromptState();
     merge(
       this.authService.user$.pipe(
         map((user: AppUserInterface | null) => ({ user, refreshToken: 0 }))
@@ -418,6 +432,14 @@ export class DashboardComponent implements OnInit, OnDestroy {
     }
 
     if (
+      event.promptId === DASHBOARD_ACTION_PROMPT_BACKFILL_GARMIN_SLEEP_ID
+      && event.action.id === 'backfillGarminSleep'
+    ) {
+      void this.backfillGarminSleepPrompt();
+      return;
+    }
+
+    if (
       event.promptId === DASHBOARD_ACTION_PROMPT_RECONNECT_SUUNTO_SERVICE_ID
       && event.action.id === 'reconnectSuuntoService'
     ) {
@@ -453,6 +475,14 @@ export class DashboardComponent implements OnInit, OnDestroy {
       && event.action.id === 'dismissEnableActivityAutoSync'
     ) {
       void this.dismissActivityAutoSyncPrompt();
+      return;
+    }
+
+    if (
+      event.promptId === DASHBOARD_ACTION_PROMPT_BACKFILL_GARMIN_SLEEP_ID
+      && event.action.id === 'dismissBackfillGarminSleep'
+    ) {
+      void this.dismissGarminSleepBackfillPrompt();
       return;
     }
 
@@ -732,6 +762,95 @@ export class DashboardComponent implements OnInit, OnDestroy {
     }
   }
 
+  async backfillGarminSleepPrompt(): Promise<void> {
+    if (!this.user || this.isBackfillingGarminSleepPrompt) {
+      return;
+    }
+
+    this.isBackfillingGarminSleepPrompt = true;
+    this.garminSleepBackfillPromptError = null;
+    this.syncDashboardActionPromptState();
+
+    try {
+      this.analyticsService.logEvent('backfilled_sleep_history', {
+        method: ServiceNames.GarminAPI,
+        source: 'dashboard_prompt',
+      });
+    } catch (error) {
+      this.logger.error(error);
+    }
+
+    try {
+      const result = await this.userService.backfillGarminSleepForCurrentUser();
+      const lastBackfillQueuedAtMs = Date.now();
+      this.garminSleepSyncState = {
+        ...(this.garminSleepSyncState || {
+          provider: SLEEP_PROVIDERS.GarminAPI,
+          status: 'ready',
+          updatedAtMs: lastBackfillQueuedAtMs,
+        }),
+        lastBackfillQueuedAtMs,
+        lastBackfillStartMs: new Date(result.startDate).getTime(),
+        lastBackfillEndMs: new Date(result.endDate).getTime(),
+        lastBackfillQueueItems: result.queued,
+        nextBackfillAllowedAtMs: result.nextAllowedAtMs,
+        lastError: null,
+        updatedAtMs: lastBackfillQueuedAtMs,
+      };
+      this.garminSleepSyncStateLoaded = true;
+      this.snackBar.open(`Garmin sleep backfill requested: ${result.queued} windows.`, undefined, { duration: 3000 });
+    } catch (error) {
+      this.garminSleepBackfillPromptError = 'Could not request Garmin sleep history.';
+      this.logger.error('[DashboardComponent] Failed to request Garmin sleep backfill from dashboard prompt', error);
+    } finally {
+      this.isBackfillingGarminSleepPrompt = false;
+      this.syncDashboardActionPromptState();
+    }
+  }
+
+  async dismissGarminSleepBackfillPrompt(): Promise<void> {
+    if (!this.user) {
+      return;
+    }
+
+    this.isDismissingGarminSleepPrompt = true;
+    this.garminSleepBackfillPromptError = null;
+    this.syncDashboardActionPromptState();
+
+    try {
+      this.user.settings = this.user.settings || {} as any;
+      const nextAppSettings = {
+        ...(this.user.settings.appSettings || {}),
+      } as AppAppSettingsInterface;
+      const dismissedState = markDashboardActionPromptDismissed(
+        nextAppSettings,
+        DASHBOARD_ACTION_PROMPT_BACKFILL_GARMIN_SLEEP_ID,
+        DASHBOARD_ACTION_PROMPT_BACKFILL_GARMIN_SLEEP_SOURCE,
+        Date.now(),
+      );
+
+      await this.userService.updateUserProperties(this.user, {
+        settings: {
+          appSettings: {
+            dashboardActionPrompts: {
+              [DASHBOARD_ACTION_PROMPT_BACKFILL_GARMIN_SLEEP_ID]: dismissedState,
+            },
+          },
+        },
+      });
+      this.user.settings.appSettings = nextAppSettings;
+      this.analyticsService.logEvent('dashboard_action_prompt_dismiss', {
+        prompt_id: DASHBOARD_ACTION_PROMPT_BACKFILL_GARMIN_SLEEP_ID,
+      });
+    } catch (error) {
+      this.garminSleepBackfillPromptError = 'Could not save this choice.';
+      this.logger.error('[DashboardComponent] Failed to dismiss Garmin sleep backfill prompt', error);
+    } finally {
+      this.isDismissingGarminSleepPrompt = false;
+      this.syncDashboardActionPromptState();
+    }
+  }
+
   async reconnectSuuntoServicePrompt(): Promise<void> {
     if (!this.user || this.isReconnectingSuuntoServicePrompt) {
       return;
@@ -832,6 +951,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
       enableActivityAutoSyncBusy: this.isEnablingActivityAutoSyncPrompt || this.isDismissingActivityAutoSyncPrompt,
       enableActivityAutoSyncError: this.activityAutoSyncPromptError,
       enableActivityAutoSyncRouteIds: this.getEligibleActivityAutoSyncRouteIds(),
+      showBackfillGarminSleepPrompt: this.shouldShowGarminSleepBackfillPrompt(),
+      backfillGarminSleepBusy: this.isBackfillingGarminSleepPrompt || this.isDismissingGarminSleepPrompt,
+      backfillGarminSleepError: this.garminSleepBackfillPromptError,
       showReconnectSuuntoServicePrompt: this.shouldShowReconnectSuuntoServicePrompt(),
       reconnectSuuntoServiceBusy: this.isReconnectingSuuntoServicePrompt || this.isDismissingReconnectSuuntoServicePrompt,
       reconnectSuuntoServiceError: this.reconnectSuuntoServicePromptError,
@@ -919,6 +1041,61 @@ export class DashboardComponent implements OnInit, OnDestroy {
     });
   }
 
+  private watchGarminSleepBackfillPromptState(): void {
+    this.authService.user$.pipe(
+      switchMap((user: AppUserInterface | null) => {
+        this.garminSleepSyncState = null;
+        this.garminSleepSyncStateLoaded = false;
+        this.garminSleepBackfillPermissionsLoaded = false;
+        this.hasGarminSleepBackfillPermissions = false;
+        this.syncDashboardActionPromptState();
+
+        if (!this.shouldEvaluateGarminSleepBackfillPrompt(user)) {
+          return of({
+            stateLoaded: false,
+            state: null as SleepSyncState | null,
+            permissionsLoaded: false,
+            hasPermissions: false,
+          });
+        }
+
+        return combineLatest([
+          this.sleepService.watchSyncState(user.uid, SLEEP_PROVIDERS.GarminAPI).pipe(
+            catchError(error => {
+              this.logger.warn('[DashboardComponent] Failed to read Garmin sleep sync state for dashboard prompt', {
+                userID: user.uid,
+              }, error);
+              return of(null as SleepSyncState | null);
+            }),
+          ),
+          this.userService.getServiceToken(user, ServiceNames.GarminAPI).pipe(
+            map(tokens => this.hasRequiredGarminSleepBackfillPermissions(tokens)),
+            catchError(error => {
+              this.logger.warn('[DashboardComponent] Failed to read Garmin permissions for sleep backfill prompt', {
+                userID: user.uid,
+              }, error);
+              return of(false);
+            }),
+          ),
+        ]).pipe(
+          map(([state, hasPermissions]) => ({
+            stateLoaded: true,
+            state,
+            permissionsLoaded: true,
+            hasPermissions,
+          })),
+        );
+      }),
+      takeUntilDestroyed(this.destroyRef),
+    ).subscribe(({ stateLoaded, state, permissionsLoaded, hasPermissions }) => {
+      this.garminSleepSyncStateLoaded = stateLoaded;
+      this.garminSleepSyncState = state;
+      this.garminSleepBackfillPermissionsLoaded = permissionsLoaded;
+      this.hasGarminSleepBackfillPermissions = hasPermissions;
+      this.syncDashboardActionPromptState();
+    });
+  }
+
   private shouldEvaluateFirstActivityUploadPrompt(user: AppUserInterface | null | undefined): user is AppUserInterface {
     if (!user || !this.isOwnerDashboard(user)) {
       return false;
@@ -989,6 +1166,60 @@ export class DashboardComponent implements OnInit, OnDestroy {
       && this.getEligibleActivityAutoSyncRouteIds().length > 0;
   }
 
+  private shouldEvaluateGarminSleepBackfillPrompt(user: AppUserInterface | null | undefined): user is AppUserInterface {
+    if (!user || !this.isOwnerDashboard(user)) {
+      return false;
+    }
+
+    if (!AppUserUtilities.hasProAccess(user, user.admin === true)) {
+      return false;
+    }
+
+    return !isDashboardActionPromptDismissed(
+      user.settings?.appSettings,
+      DASHBOARD_ACTION_PROMPT_BACKFILL_GARMIN_SLEEP_ID,
+      DASHBOARD_ACTION_PROMPT_BACKFILL_GARMIN_SLEEP_SOURCE,
+    );
+  }
+
+  private shouldShowGarminSleepBackfillPrompt(): boolean {
+    if (!this.user || !this.activityServiceConnectionState?.[ServiceNames.GarminAPI]) {
+      return false;
+    }
+
+    if (
+      !this.shouldEvaluateGarminSleepBackfillPrompt(this.user)
+      || !this.garminSleepSyncStateLoaded
+      || !this.garminSleepBackfillPermissionsLoaded
+      || !this.hasGarminSleepBackfillPermissions
+    ) {
+      return false;
+    }
+
+    const lastBackfillQueuedAtMs = Number(this.garminSleepSyncState?.lastBackfillQueuedAtMs);
+    if (Number.isFinite(lastBackfillQueuedAtMs) && lastBackfillQueuedAtMs > 0) {
+      return false;
+    }
+
+    const nextBackfillAllowedAtMs = Number(this.garminSleepSyncState?.nextBackfillAllowedAtMs);
+    return !Number.isFinite(nextBackfillAllowedAtMs) || nextBackfillAllowedAtMs <= Date.now();
+  }
+
+  private hasRequiredGarminSleepBackfillPermissions(tokens: unknown): boolean {
+    if (!Array.isArray(tokens)) {
+      return false;
+    }
+
+    return tokens.some((token) => {
+      const permissions = (token as { permissions?: unknown })?.permissions;
+      if (!Array.isArray(permissions)) {
+        return false;
+      }
+      const permissionSet = new Set(permissions.map(permission => `${permission}`));
+      return GARMIN_SLEEP_BACKFILL_REQUIRED_PERMISSIONS.every(permission => permissionSet.has(permission));
+    });
+  }
+
   private shouldEvaluateReconnectSuuntoServicePrompt(user: AppUserInterface | null | undefined): user is AppUserInterface {
     if (!user || !this.isOwnerDashboard(user)) {
       return false;
@@ -1020,7 +1251,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   private shouldEvaluateActivityServicePrompts(user: AppUserInterface | null | undefined): user is AppUserInterface {
     return this.shouldEvaluateActivityServiceConnectionPrompt(user)
-      || this.shouldEvaluateActivityAutoSyncPrompt(user);
+      || this.shouldEvaluateActivityAutoSyncPrompt(user)
+      || this.shouldEvaluateGarminSleepBackfillPrompt(user);
   }
 
   private getEligibleActivityAutoSyncRouteIds(): ActivitySyncRouteId[] {

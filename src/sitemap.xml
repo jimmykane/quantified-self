@@ -2,7 +2,7 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
     <loc>https://quantified-self.io/</loc>
-    <lastmod>2026-01-07</lastmod>
+    <lastmod>2026-05-28</lastmod>
     <priority>1.0</priority>
   </url>
   <url>
@@ -23,6 +23,26 @@
   <url>
     <loc>https://quantified-self.io/help</loc>
     <lastmod>2026-03-05</lastmod>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://quantified-self.io/integrations</loc>
+    <lastmod>2026-05-27</lastmod>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://quantified-self.io/integrations/garmin</loc>
+    <lastmod>2026-05-27</lastmod>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://quantified-self.io/integrations/suunto</loc>
+    <lastmod>2026-05-27</lastmod>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://quantified-self.io/integrations/coros</loc>
+    <lastmod>2026-05-27</lastmod>
     <priority>0.8</priority>
   </url>
   <url>

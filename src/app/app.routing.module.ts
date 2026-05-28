@@ -6,9 +6,9 @@ import { proGuard } from './authentication/pro.guard';
 import { aiInsightsGuard } from './authentication/ai-insights.guard';
 import { onboardingGuard } from './authentication/onboarding.guard';
 import { adminGuard } from './authentication/admin.guard';
-import { loggedInGuard } from './authentication/logged-in.guard';
 import { pricingRedirectGuard } from './authentication/pricing-redirect.guard';
 import { releasesResolver } from './resolvers/releases.resolver';
+import { INTEGRATIONS_HUB_ROUTE_DATA, PROVIDER_INTEGRATION_ROUTE_DATA } from './components/integrations/integration-pages.content';
 
 const HOME_SEO_DESCRIPTION = 'Quantified Self brings Garmin, Suunto, and COROS activity data into one private training dashboard with AI Insights and automatic sync from Garmin or COROS to Suunto.';
 
@@ -98,6 +98,35 @@ export const routes: Routes = [
           "Troubleshooting"
         ]
       }
+    }
+  },
+  {
+    path: 'integrations',
+    loadComponent: () => import('./components/integrations/integrations-hub-page.component').then(m => m.IntegrationsHubPageComponent),
+    data: INTEGRATIONS_HUB_ROUTE_DATA
+  },
+  {
+    path: 'integrations/garmin',
+    loadComponent: () => import('./components/integrations/provider-integration-page.component').then(m => m.ProviderIntegrationPageComponent),
+    data: {
+      ...PROVIDER_INTEGRATION_ROUTE_DATA.garmin,
+      integrationProvider: 'garmin'
+    }
+  },
+  {
+    path: 'integrations/suunto',
+    loadComponent: () => import('./components/integrations/provider-integration-page.component').then(m => m.ProviderIntegrationPageComponent),
+    data: {
+      ...PROVIDER_INTEGRATION_ROUTE_DATA.suunto,
+      integrationProvider: 'suunto'
+    }
+  },
+  {
+    path: 'integrations/coros',
+    loadComponent: () => import('./components/integrations/provider-integration-page.component').then(m => m.ProviderIntegrationPageComponent),
+    data: {
+      ...PROVIDER_INTEGRATION_ROUTE_DATA.coros,
+      integrationProvider: 'coros'
     }
   },
   {
@@ -200,7 +229,6 @@ export const routes: Routes = [
         "url": "https://www.quantified-self.io/"
       }
     },
-    canMatch: [loggedInGuard, onboardingGuard],
     pathMatch: 'full'
   },
   { path: '**', redirectTo: '/', pathMatch: 'full' },

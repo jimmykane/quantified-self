@@ -7,8 +7,10 @@ import { MatCardModule } from '@angular/material/card';
 import { MatButtonModule } from '@angular/material/button';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatDividerModule } from '@angular/material/divider';
+import { MatIconTestingModule } from '@angular/material/icon/testing';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
+import { BehaviorSubject } from 'rxjs';
 import { getAiInsightsHeroPrompts } from '@shared/ai-insights-prompts';
 import { TypedPromptRotatorComponent } from '../shared/typed-prompt-rotator/typed-prompt-rotator.component';
 
@@ -17,10 +19,13 @@ describe('HomeComponent', () => {
     let fixture: ComponentFixture<HomeComponent>;
     let mockAuthService: any;
     let mockRouter: any;
+    let userSubject: BehaviorSubject<any>;
 
     beforeEach(async () => {
+        userSubject = new BehaviorSubject<any>(null);
         mockAuthService = {
-            getUser: vi.fn().mockResolvedValue(null)
+            getUser: vi.fn().mockResolvedValue(null),
+            user$: userSubject.asObservable()
         };
 
         mockRouter = {
@@ -31,6 +36,7 @@ describe('HomeComponent', () => {
             declarations: [HomeComponent, TypedPromptRotatorComponent],
             imports: [
                 MatIconModule,
+                MatIconTestingModule,
                 MatCardModule,
                 MatButtonModule,
                 MatDividerModule,
@@ -52,6 +58,18 @@ describe('HomeComponent', () => {
 
     it('should create', () => {
         expect(component).toBeTruthy();
+    });
+
+    it('should redirect app-authenticated browser users from public home to dashboard', () => {
+        userSubject.next({ uid: '123' });
+
+        expect(mockRouter.navigate).toHaveBeenCalledWith(['/dashboard']);
+    });
+
+    it('should keep anonymous browser users on the public home page', () => {
+        userSubject.next(null);
+
+        expect(mockRouter.navigate).not.toHaveBeenCalled();
     });
 
     it('should render provider-focused hero messaging and a standalone AI Insights section', () => {
@@ -76,6 +94,7 @@ describe('HomeComponent', () => {
         expect(contactLink).toBeTruthy();
         expect(contactLink?.textContent).toContain('Contact');
         expect(contactLink?.getAttribute('href')).toBe('mailto:support@quantified-self.io');
+        expect(text).toContain('Integrations');
         expect(text).not.toContain('New Feature');
     });
 
@@ -122,9 +141,12 @@ describe('HomeComponent', () => {
         ]);
     });
 
-    it('should render expanded integration capability cards without dedicated CTA promotion', () => {
+    it('should render expanded integration capability cards with one integrations hub link', () => {
         const text = fixture.nativeElement.textContent as string;
         const integrationCards = fixture.nativeElement.querySelectorAll('.integration-followup-grid .feature-card');
+        const integrationLinks = fixture.nativeElement.querySelectorAll(
+            'a[href="/integrations"], a[routerlink="/integrations"], a[ng-reflect-router-link="/integrations"]'
+        );
 
         expect(integrationCards.length).toBe(5);
         expect(text).toContain('Garmin -> Suunto and COROS -> Suunto sync are built in');
@@ -133,6 +155,8 @@ describe('HomeComponent', () => {
         expect(text).toContain('Manual Route Uploads');
         expect(text).toContain('Manual Activity Uploads to Suunto');
         expect(text).toContain('reliable and instant sync');
+        expect(text).toContain('Explore Integrations');
+        expect(integrationLinks.length).toBeGreaterThanOrEqual(1);
         expect(text).not.toContain('Set up sync');
         expect(text).not.toContain('How it works');
         expect(fixture.nativeElement.querySelector('.garmin-suunto-launch')).toBeNull();

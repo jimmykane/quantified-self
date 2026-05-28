@@ -19,7 +19,9 @@ import {
   buildSuuntoServiceConnectionViewModel,
   SuuntoServiceConnectionViewModel,
 } from '../../../helpers/suunto-service-connection.helper';
+import { GARMIN_SLEEP_BACKFILL_REQUIRED_PERMISSIONS } from '@shared/sleep-backfill';
 
+const GARMIN_ACTIVITY_HISTORY_REQUIRED_PERMISSIONS = ['HISTORICAL_DATA_EXPORT', 'ACTIVITY_EXPORT'] as const;
 
 @Component({
   selector: 'app-services-garmin',
@@ -44,7 +46,7 @@ export class ServicesGarminComponent extends ServicesAbstractComponentDirective 
     'HISTORICAL_DATA_EXPORT': 'Without this, you cannot import your past activities from Garmin Connect.',
     'ACTIVITY_EXPORT': 'Without this, your new activities will not automatically sync to Quantified Self.',
     'WORKOUT_IMPORT': 'Coming soon: This will be used to sync training plans to your device.',
-    'HEALTH_EXPORT': 'Coming soon: This will be used for daily health statistics.',
+    'HEALTH_EXPORT': 'Required for Garmin sleep sync and sleep history backfill.',
     'COURSE_IMPORT': 'Coming soon: This will be used for route synchronization.',
     'MCT_EXPORT': 'Coming soon: This will be used for health tracking data.'
   };
@@ -83,7 +85,7 @@ export class ServicesGarminComponent extends ServicesAbstractComponentDirective 
   }
 
   isConnectedToService(): boolean {
-    return (!!this.serviceTokens?.length && !!this.serviceTokens[0]?.accessToken) || this.forceConnected;
+    return this.garminTokens.some(token => `${token.accessToken || ''}`.trim().length > 0) || this.forceConnected;
   }
 
   buildRedirectURIFromServiceToken(token: { redirect_uri: string }): string {
@@ -91,25 +93,46 @@ export class ServicesGarminComponent extends ServicesAbstractComponentDirective 
   }
 
   get garminUserID(): string | undefined {
-    return (this.serviceTokens as any[])?.[0]?.userID;
+    const token = this.preferredGarminToken;
+    const userID = `${token?.userID || ''}`.trim();
+    return userID || undefined;
+  }
+
+  get connectedAt(): string | number | Date | null {
+    const value = this.preferredGarminToken?.dateCreated;
+    return typeof value === 'string' || typeof value === 'number' || value instanceof Date ? value : null;
   }
 
   get permissionsLastChangedAt(): number | undefined {
-    return (this.serviceTokens as any[])?.[0]?.permissionsLastChangedAt;
+    const timestamps = this.permissionLoadedTokens
+      .map(token => Number(token.permissionsLastChangedAt))
+      .filter(timestamp => Number.isFinite(timestamp));
+    return timestamps.length ? Math.max(...timestamps) : undefined;
   }
 
   get missingPermissions(): string[] {
-    const token = (this.serviceTokens as any[])?.[0];
-    if (!token || !token.permissions) {
+    const tokens = this.permissionLoadedTokens;
+    if (!tokens.length) {
       return [];
     }
-    const requiredPermissions = GARMIN_REQUIRED_PERMISSIONS;
-    return requiredPermissions.filter(p => !token.permissions.includes(p));
+    const missingPermissions = new Set<string>();
+    if (!this.hasTokenWithPermissions(GARMIN_ACTIVITY_HISTORY_REQUIRED_PERMISSIONS)) {
+      this.bestMissingPermissionsFor(GARMIN_ACTIVITY_HISTORY_REQUIRED_PERMISSIONS)
+        .forEach(permission => missingPermissions.add(permission));
+    }
+    if (!this.hasTokenWithPermissions(GARMIN_SLEEP_BACKFILL_REQUIRED_PERMISSIONS)) {
+      this.bestMissingPermissionsFor(GARMIN_SLEEP_BACKFILL_REQUIRED_PERMISSIONS)
+        .forEach(permission => missingPermissions.add(permission));
+    }
+    return GARMIN_REQUIRED_PERMISSIONS.filter(permission => missingPermissions.has(permission));
   }
 
   get hasPermissionsLoaded(): boolean {
-    const token = (this.serviceTokens as any[])?.[0];
-    return !!token && Array.isArray(token.permissions);
+    return this.permissionLoadedTokens.length > 0;
+  }
+
+  get isHistoryImportLoading(): boolean {
+    return this.isLoading || !this.hasPermissionsLoaded;
   }
 
   getPermissionLabel(permission: string): string {
@@ -170,6 +193,46 @@ export class ServicesGarminComponent extends ServicesAbstractComponentDirective 
   get isGarminToSuuntoRouteAvailableForUser(): boolean {
     const userID = `${this.user?.uid || ''}`.trim();
     return isActivitySyncRouteUIDAllowlisted(this.garminToSuuntoRouteID, userID);
+  }
+
+  private get garminTokens(): Array<Record<string, unknown>> {
+    return Array.isArray(this.serviceTokens)
+      ? this.serviceTokens as unknown as Array<Record<string, unknown>>
+      : [];
+  }
+
+  private get permissionLoadedTokens(): Array<Record<string, unknown> & { permissions: unknown[] }> {
+    return this.garminTokens
+      .filter((token): token is Record<string, unknown> & { permissions: unknown[] } => Array.isArray(token.permissions));
+  }
+
+  private get preferredGarminToken(): Record<string, unknown> | null {
+    return this.bestPermissionLoadedToken
+      || this.garminTokens.find(token => `${token.userID || ''}`.trim().length > 0)
+      || this.garminTokens.find(token => `${token.accessToken || ''}`.trim().length > 0)
+      || null;
+  }
+
+  private get bestPermissionLoadedToken(): Record<string, unknown> | null {
+    return [...this.permissionLoadedTokens]
+      .sort((left, right) => this.missingPermissionsForToken(left, GARMIN_REQUIRED_PERMISSIONS).length - this.missingPermissionsForToken(right, GARMIN_REQUIRED_PERMISSIONS).length)[0]
+      || null;
+  }
+
+  private hasTokenWithPermissions(requiredPermissions: readonly string[]): boolean {
+    return this.permissionLoadedTokens
+      .some(token => this.missingPermissionsForToken(token, requiredPermissions).length === 0);
+  }
+
+  private bestMissingPermissionsFor(requiredPermissions: readonly string[]): string[] {
+    return this.permissionLoadedTokens
+      .map(token => this.missingPermissionsForToken(token, requiredPermissions))
+      .sort((left, right) => left.length - right.length)[0] || [...requiredPermissions];
+  }
+
+  private missingPermissionsForToken(token: { permissions: unknown[] }, requiredPermissions: readonly string[]): string[] {
+    const permissionSet = new Set(token.permissions.map(permission => `${permission}`));
+    return requiredPermissions.filter(permission => !permissionSet.has(permission));
   }
 
   get isBackfillDateRangeInvalid(): boolean {

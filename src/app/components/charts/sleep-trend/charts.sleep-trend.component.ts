@@ -17,6 +17,7 @@ import {
 import {
   buildDashboardEChartsTooltipChrome,
   buildDashboardEChartsStyleTokens,
+  type DashboardEChartsTooltipMetricRow,
   renderDashboardEChartsTooltipCard,
 } from '../../../helpers/dashboard-echarts-style.helper';
 import {
@@ -41,7 +42,13 @@ import { EChartsLoaderService } from '../../../services/echarts-loader.service';
 import { LoggerService } from '../../../services/logger.service';
 
 type ChartOption = Parameters<EChartsType['setOption']>[0];
+type ChartActionPayload = Parameters<EChartsType['dispatchAction']>[0];
 type AxisTooltipParam = { dataIndex?: number; seriesName?: string; value?: number };
+type AxisPointerEvent = {
+  axesInfo?: Array<{ axisDim?: string; axisIndex?: number; value?: number | string }>;
+  dataIndex?: number;
+  seriesData?: Array<{ dataIndex?: number }>;
+};
 type SleepStackValueKey = 'deepSeconds' | 'lightSeconds' | 'remSeconds' | 'unknownSeconds' | 'awakeSeconds' | 'napSeconds';
 
 const STAGE_SERIES = [
@@ -68,6 +75,7 @@ const MIN_SINGLE_SOURCE_AXIS_LABEL_WIDTH = 58;
 const MIN_MULTI_SOURCE_AXIS_LABEL_WIDTH = 72;
 const FALLBACK_MAX_AXIS_LABELS = 8;
 const STACK_TOP_BORDER_RADIUS = [3, 3, 0, 0] as const;
+const STACK_BAR_EMPHASIS = { focus: 'none' as const };
 
 @Component({
   selector: 'app-sleep-trend-chart',
@@ -98,6 +106,22 @@ export class ChartsSleepTrendComponent implements AfterViewInit, OnChanges, OnDe
 
   private readonly chartHost: EChartsHostController;
   private _sleepRange: AppDashboardSleepTrendRange = DASHBOARD_SLEEP_TREND_DEFAULT_RANGE;
+  private sleepStackSeriesNames: readonly string[] = STAGE_SERIES.map(stage => stage.name);
+  private sleepCategoryLabels: readonly string[] = [];
+  private sleepPointsCount = 0;
+  private highlightedSleepDataIndex: number | null = null;
+  private sleepHighlightBoundChart: EChartsType | null = null;
+  private readonly sleepAxisPointerHighlightHandler = (event: AxisPointerEvent): void => {
+    const dataIndex = this.resolveAxisPointerDataIndex(event);
+    if (dataIndex === null) {
+      this.clearSleepBarHighlight();
+      return;
+    }
+    this.highlightSleepBar(dataIndex);
+  };
+  private readonly sleepGlobalOutHandler = (): void => {
+    this.clearSleepBarHighlight();
+  };
 
   public latestDurationText = '--';
   public latestScoreText = '--';
@@ -135,6 +159,7 @@ export class ChartsSleepTrendComponent implements AfterViewInit, OnChanges, OnDe
   }
 
   ngOnDestroy(): void {
+    this.unbindSleepBarHighlight();
     this.chartHost.dispose();
   }
 
@@ -150,8 +175,10 @@ export class ChartsSleepTrendComponent implements AfterViewInit, OnChanges, OnDe
       return;
     }
 
+    this.clearSleepBarHighlight();
     this.chartHost.hideTooltip();
     this.chartHost.setOption(this.buildOption(points), ECHARTS_CARTESIAN_IMMEDIATE_UPDATE_SETTINGS);
+    this.bindSleepBarHighlight(chart);
     this.chartHost.scheduleResize();
   }
 
@@ -179,6 +206,8 @@ export class ChartsSleepTrendComponent implements AfterViewInit, OnChanges, OnDe
   }
 
   private buildOption(points: DashboardSleepTrendPoint[]): ChartOption {
+    this.sleepPointsCount = points.length;
+    this.sleepCategoryLabels = points.map(point => point.categoryLabel);
     if (!points.length) {
       return {
         animation: false,
@@ -201,13 +230,16 @@ export class ChartsSleepTrendComponent implements AfterViewInit, OnChanges, OnDe
         color: style.axisColor,
       }
       : { show: false };
-    const categories = points.map(point => point.categoryLabel);
     const xAxisLabelInterval = this.buildXAxisLabelInterval(points, chartWidth);
     const hrvData = points.map(point => this.toFiniteMetric(point.averageHrvMs));
     const hasHrvSeries = hrvData.some(value => value !== null);
     const averageHrvMs = this.averageMetric(hrvData);
     const napData = points.map(point => this.secondsToHours(point.napSeconds));
     const hasNapSeries = napData.some(value => value > 0);
+    this.sleepStackSeriesNames = [
+      ...STAGE_SERIES.map(stage => stage.name),
+      ...(hasNapSeries ? [NAP_SERIES.name] : []),
+    ];
     const stackKeys: SleepStackValueKey[] = [
       ...STAGE_SERIES.map(stage => stage.key),
       ...(hasNapSeries ? ['napSeconds' as const] : []),
@@ -242,7 +274,7 @@ export class ChartsSleepTrendComponent implements AfterViewInit, OnChanges, OnDe
         color: stage.color,
         borderRadius: 0,
       },
-      emphasis: { focus: 'series' },
+      emphasis: STACK_BAR_EMPHASIS,
       data: this.buildStackedBarData(points, stage.key, stackKeys),
     }));
     const napSeries = hasNapSeries ? [{
@@ -255,7 +287,7 @@ export class ChartsSleepTrendComponent implements AfterViewInit, OnChanges, OnDe
         color: NAP_SERIES.color,
         borderRadius: 0,
       },
-      emphasis: { focus: 'series' },
+      emphasis: STACK_BAR_EMPHASIS,
       data: this.buildStackedBarData(points, 'napSeconds', stackKeys),
     }] : [];
     const hrvSeries = hasHrvSeries ? [{
@@ -346,7 +378,8 @@ export class ChartsSleepTrendComponent implements AfterViewInit, OnChanges, OnDe
       },
       xAxis: {
         type: 'category',
-        data: categories,
+        data: this.sleepCategoryLabels,
+        containShape: true,
         axisPointer: {
           show: true,
           snap: true,
@@ -400,30 +433,152 @@ export class ChartsSleepTrendComponent implements AfterViewInit, OnChanges, OnDe
     const totalWithNapSeconds = point.totalSeconds + point.napSeconds;
     const napLabel = point.napCount > 1 ? 'Naps' : 'Nap';
 
-    const rows = [
-      ...(hasSeparateNap
-        ? [
-          { label: 'Sleep', value: formatSleepDuration(point.totalSeconds) },
-          { label: napLabel, value: formatSleepDuration(point.napSeconds) },
-          { label: 'Total', value: formatSleepDuration(totalWithNapSeconds) },
-        ]
-        : [{ label: 'Total', value: formatSleepDuration(point.totalSeconds) }]),
-      ...STAGE_SERIES
-        .filter(stage => point[stage.key] > 0)
-        .map(stage => ({ label: stage.name, value: formatSleepDuration(point[stage.key]) })),
-      ...(point.score !== null ? [{ label: 'Score', value: `${Math.round(point.score)}` }] : []),
-      ...(point.averageHeartRateBpm !== null ? [{ label: 'HR avg', value: `${Math.round(point.averageHeartRateBpm)} bpm` }] : []),
-      ...(averageHrvMs !== null ? [{ label: 'HRV', value: `${Math.round(averageHrvMs)} ms` }] : []),
-      ...(napAverageHeartRateBpm !== null ? [{ label: `${napLabel} HR avg`, value: `${Math.round(napAverageHeartRateBpm)} bpm` }] : []),
-      ...(napAverageHrvMs !== null ? [{ label: `${napLabel} HRV`, value: `${Math.round(napAverageHrvMs)} ms` }] : []),
-      ...(point.maxSpo2Percent !== null ? [{ label: 'SpO2 max', value: `${Math.round(point.maxSpo2Percent)}%` }] : []),
-    ];
+    const rows: DashboardEChartsTooltipMetricRow[] = [];
+    if (hasSeparateNap) {
+      rows.push(
+        { label: 'Sleep', value: formatSleepDuration(point.totalSeconds) },
+        { label: napLabel, value: formatSleepDuration(point.napSeconds), markerColor: NAP_SERIES.color },
+        { label: 'Total', value: formatSleepDuration(totalWithNapSeconds) },
+      );
+    } else {
+      rows.push({ label: 'Total', value: formatSleepDuration(point.totalSeconds) });
+    }
+    for (const stage of STAGE_SERIES) {
+      if (point[stage.key] > 0) {
+        rows.push({
+          label: stage.name,
+          value: formatSleepDuration(point[stage.key]),
+          markerColor: stage.color,
+        });
+      }
+    }
+    if (point.score !== null) {
+      rows.push({ label: 'Score', value: `${Math.round(point.score)}` });
+    }
+    if (point.averageHeartRateBpm !== null) {
+      rows.push({ label: 'HR avg', value: `${Math.round(point.averageHeartRateBpm)} bpm` });
+    }
+    if (averageHrvMs !== null) {
+      rows.push({ label: 'HRV', value: `${Math.round(averageHrvMs)} ms`, markerColor: HRV_SERIES.color });
+    }
+    if (napAverageHeartRateBpm !== null) {
+      rows.push({ label: `${napLabel} HR avg`, value: `${Math.round(napAverageHeartRateBpm)} bpm` });
+    }
+    if (napAverageHrvMs !== null) {
+      rows.push({ label: `${napLabel} HRV`, value: `${Math.round(napAverageHrvMs)} ms`, markerColor: HRV_SERIES.color });
+    }
+    if (point.maxSpo2Percent !== null) {
+      rows.push({ label: 'SpO2 max', value: `${Math.round(point.maxSpo2Percent)}%` });
+    }
 
     return renderDashboardEChartsTooltipCard(style, {
       title: `${point.providerLabel}${point.isNap ? ' nap' : ''} · ${point.sleepDate}`,
       subtitle: this.formatTooltipSubtitle(point),
       rows,
     });
+  }
+
+  private bindSleepBarHighlight(chart: EChartsType): void {
+    if (this.sleepHighlightBoundChart === chart) {
+      return;
+    }
+    this.unbindSleepBarHighlight();
+    chart.on('updateAxisPointer', this.sleepAxisPointerHighlightHandler);
+    chart.on('globalout', this.sleepGlobalOutHandler);
+    this.sleepHighlightBoundChart = chart;
+  }
+
+  private unbindSleepBarHighlight(): void {
+    const chart = this.sleepHighlightBoundChart;
+    if (!chart || chart.isDisposed()) {
+      this.sleepHighlightBoundChart = null;
+      this.highlightedSleepDataIndex = null;
+      return;
+    }
+    chart.off('updateAxisPointer', this.sleepAxisPointerHighlightHandler);
+    chart.off('globalout', this.sleepGlobalOutHandler);
+    this.clearSleepBarHighlight();
+    this.sleepHighlightBoundChart = null;
+  }
+
+  private resolveAxisPointerDataIndex(event: AxisPointerEvent): number | null {
+    const candidateValues = [
+      event.axesInfo?.find(axisInfo => axisInfo.axisDim === 'x')?.value,
+      event.axesInfo?.[0]?.value,
+      event.dataIndex,
+      event.seriesData?.find(seriesData => Number.isFinite(seriesData.dataIndex))?.dataIndex,
+    ];
+
+    for (const candidateValue of candidateValues) {
+      const dataIndex = this.resolveAxisPointerCandidateIndex(candidateValue);
+      if (dataIndex !== null) {
+        return dataIndex;
+      }
+    }
+    return null;
+  }
+
+  private resolveAxisPointerCandidateIndex(value: unknown): number | null {
+    if (value === null || value === undefined) {
+      return null;
+    }
+
+    if (typeof value === 'number') {
+      return Number.isInteger(value) && value >= 0 && value < this.sleepPointsCount ? value : null;
+    }
+
+    if (typeof value !== 'string') {
+      return null;
+    }
+
+    const trimmedValue = value.trim();
+    if (/^\d+$/.test(trimmedValue)) {
+      const dataIndex = Number(trimmedValue);
+      if (Number.isInteger(dataIndex) && dataIndex >= 0 && dataIndex < this.sleepPointsCount) {
+        return dataIndex;
+      }
+    }
+
+    const categoryIndex = this.sleepCategoryLabels.indexOf(value);
+    if (categoryIndex >= 0) {
+      return categoryIndex;
+    }
+
+    const trimmedCategoryIndex = this.sleepCategoryLabels.indexOf(trimmedValue);
+    return trimmedCategoryIndex >= 0 ? trimmedCategoryIndex : null;
+  }
+
+  private highlightSleepBar(dataIndex: number): void {
+    if (this.highlightedSleepDataIndex === dataIndex) {
+      return;
+    }
+    this.clearSleepBarHighlight();
+    this.highlightedSleepDataIndex = dataIndex;
+    this.dispatchSleepStackAction('highlight', dataIndex);
+  }
+
+  private clearSleepBarHighlight(): void {
+    if (this.highlightedSleepDataIndex === null) {
+      return;
+    }
+    const dataIndex = this.highlightedSleepDataIndex;
+    this.highlightedSleepDataIndex = null;
+    this.dispatchSleepStackAction('downplay', dataIndex);
+  }
+
+  private dispatchSleepStackAction(type: 'highlight' | 'downplay', dataIndex: number): void {
+    const chart = this.sleepHighlightBoundChart || this.chartHost.getChart();
+    if (!chart || chart.isDisposed()) {
+      return;
+    }
+    for (const seriesName of this.sleepStackSeriesNames) {
+      const payload: ChartActionPayload = {
+        type,
+        seriesName,
+        dataIndex,
+      };
+      chart.dispatchAction(payload);
+    }
   }
 
   private secondsToHours(seconds: number): number {

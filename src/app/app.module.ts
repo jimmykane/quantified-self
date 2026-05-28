@@ -1,12 +1,13 @@
-import { ErrorHandler, LOCALE_ID, NgModule, inject, provideAppInitializer } from '@angular/core';
+import { ErrorHandler, LOCALE_ID, NgModule, PLATFORM_ID, inject, provideAppInitializer } from '@angular/core';
 import { GlobalErrorHandler } from './services/global-error-handler.service';
-import { BrowserModule } from '@angular/platform-browser';
+import { BrowserModule, provideClientHydration, withEventReplay } from '@angular/platform-browser';
 import { AppComponent } from './app.component';
 import { AppShellComponent } from './app-shell.component';
 import { AppRoutingModule } from './app.routing.module';
 import { provideAnimations } from '@angular/platform-browser/animations';
 import { SideNavComponent } from './components/sidenav/sidenav.component';
 import { environment } from '../environments/environment';
+import { isPlatformBrowser } from '@angular/common';
 import { provideHttpClient, withInterceptorsFromDi } from '@angular/common/http';
 import { provideFirebaseApp, initializeApp } from 'app/firebase/app';
 import { provideAuth, getAuth } from 'app/firebase/auth';
@@ -43,6 +44,7 @@ import { FirebaseAnalyticsTrackingService } from './services/firebase-analytics-
 
 import { MAT_DATE_LOCALE_PROVIDER, getBrowserLocale } from './shared/adapters/date-locale.config';
 import { APP_STORAGE } from './services/storage/app.storage.token';
+import { MemoryStorage } from './services/storage/memory.storage';
 
 export const QS_MENU_DEFAULT_OPTIONS: MatMenuDefaultOptions = {
   overlayPanelClass: 'qs-menu-panel',
@@ -90,9 +92,14 @@ type FirestoreInitSettings = Parameters<typeof initializeFirestore>[1] & {
       provide: ErrorHandler,
       useClass: GlobalErrorHandler,
     },
+    provideClientHydration(withEventReplay()),
     provideHttpClient(withInterceptorsFromDi()),
     provideFirebaseApp(() => initializeApp(environment.firebase)),
     ...(enableAppCheck ? [provideAppCheck(() => {
+      if (!isPlatformBrowser(inject(PLATFORM_ID))) {
+        return null as unknown as ReturnType<typeof initializeAppCheck>;
+      }
+
       const provider = new ReCaptchaV3Provider(environment.firebase.recaptchaSiteKey);
       (window as any).FIREBASE_APPCHECK_DEBUG_TOKEN = !environment.production && !environment.beta;
       return initializeAppCheck(getApp(), { provider, isTokenAutoRefreshEnabled: true });
@@ -109,11 +116,15 @@ type FirestoreInitSettings = Parameters<typeof initializeFirestore>[1] & {
         ignoreUndefinedProperties: true,
         // Internal flag: keep as best-effort optimization, not as a contract we rely on.
         useFetchStreams: true,
-        localCache: persistentLocalCache({
+      };
+
+      if (isPlatformBrowser(inject(PLATFORM_ID))) {
+        firestoreSettings.localCache = persistentLocalCache({
           tabManager: persistentMultipleTabManager(),
           cacheSizeBytes: 1073741824 // 1 GB
-        }),
-      };
+        });
+      }
+
       return initializeFirestore(getApp(), firestoreSettings);
     }),
     provideStorage(() => getStorage()),
@@ -124,15 +135,33 @@ type FirestoreInitSettings = Parameters<typeof initializeFirestore>[1] & {
       }
       return functions;
     }),
-    providePerformance(() => getPerformance()),
-    provideAnalytics(() => initializeAnalytics(getApp(), {
-      config: {
-        app_name: environment.firebase.projectId,
-        app_version: environment.appVersion,
-        debug_mode: environment.localhost
+    providePerformance(() => {
+      if (!isPlatformBrowser(inject(PLATFORM_ID))) {
+        return null as unknown as ReturnType<typeof getPerformance>;
       }
-    })),
-    provideRemoteConfig(() => getRemoteConfig()),
+
+      return getPerformance();
+    }),
+    provideAnalytics(() => {
+      if (!isPlatformBrowser(inject(PLATFORM_ID))) {
+        return null as unknown as ReturnType<typeof initializeAnalytics>;
+      }
+
+      return initializeAnalytics(getApp(), {
+        config: {
+          app_name: environment.firebase.projectId,
+          app_version: environment.appVersion,
+          debug_mode: environment.localhost
+        }
+      });
+    }),
+    provideRemoteConfig(() => {
+      if (!isPlatformBrowser(inject(PLATFORM_ID))) {
+        return null as unknown as ReturnType<typeof getRemoteConfig>;
+      }
+
+      return getRemoteConfig();
+    }),
     { provide: OverlayContainer, useClass: FullscreenOverlayContainer },
     { provide: MAT_FORM_FIELD_DEFAULT_OPTIONS, useValue: { appearance: 'outline' } },
     { provide: MAT_ICON_DEFAULT_OPTIONS, useValue: { fontSet: 'material-symbols-rounded' } },
@@ -142,20 +171,24 @@ type FirestoreInitSettings = Parameters<typeof initializeFirestore>[1] & {
     { provide: LOCALE_ID, useFactory: getBrowserLocale },
     {
       provide: APP_STORAGE,
-      useFactory: () => localStorage
+      useFactory: () => {
+        if (isPlatformBrowser(inject(PLATFORM_ID)) && typeof localStorage !== 'undefined') {
+          return localStorage;
+        }
+
+        return new MemoryStorage();
+      }
     },
     provideAppInitializer(() => {
-      // Just inject to ensure initialization
+      if (!isPlatformBrowser(inject(PLATFORM_ID))) {
+        return;
+      }
+
+      // Just inject to ensure browser-only initialization
       inject(AppRemoteConfigService);
       inject(AppUpdateService); // Check if we can move this from constructor
       inject(FirebaseAnalyticsTrackingService);
     }),
   ]
 })
-export class AppModule {
-  // Services are not used, just to make sure they're instantiated
-  constructor(
-    private updateService: AppUpdateService
-  ) {
-  }
-}
+export class AppModule { }

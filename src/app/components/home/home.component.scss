@@ -365,6 +365,17 @@
         display: grid;
         grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
         gap: 2rem;
+
+        mat-card-content {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 1rem;
+        }
+
+        .feature-link {
+            margin-top: auto;
+        }
     }
 
     .feature-card {

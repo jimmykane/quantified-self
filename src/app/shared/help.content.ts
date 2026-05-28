@@ -132,7 +132,7 @@ export const HELP_SECTIONS: HelpSection[] = [
 - Map tiles are also unique: only one map tile can exist at a time.
 - Map style and cluster-marker settings are edited inside Dashboard manager.
 - Default manager sizes: dashboard tiles start at **1x1**.
-- Dashboard manager bulk actions can add every missing preset at once, or remove every dashboard chart/map tile and keep automatic suggestions dismissed.
+- Dashboard manager bulk actions can add the recommended default dashboard, add every available preset tile, or remove every dashboard chart/map tile and keep automatic suggestions dismissed.
 
 ### Reorder dashboard tiles
 
@@ -469,9 +469,13 @@ From an activity action menu you can also:
 
 Garmin, Suunto, and COROS connections are part of **Pro**.
 
+## Integration pages overview
+
+The public [Integrations hub](/integrations) links to focused [Garmin Integration](/integrations/garmin), [Suunto Integration](/integrations/suunto), and [COROS Integration](/integrations/coros) pages. They explain Garmin -> Suunto sync, COROS -> Suunto sync, manual catch-up, provider history imports, FIT activity uploads, GPX route uploads, and how those workflows connect to the private training dashboard.
+
 ## Sleep data
 
-Sleep sync is server-owned health data. When available, Garmin, Suunto, and COROS sleep sessions are imported as separate source records and shown by the dashboard **Sleep** tile. The sleep chart has its own 14d, 30d, 90d, and 1y range control with older/newer paging, independent from dashboard event filters. It stacks sleep stages and overlays recorded sleep HRV with an average HRV reference line when the provider includes it. Suunto Pro users can queue **Backfill Sleep History** from History Import; it requests Suunto sleep from Jan 1, 2016 to today and uses a 7-day sleep backfill cooldown.
+Sleep sync is server-owned health data. When available, Garmin, Suunto, and COROS sleep sessions are imported as separate source records and shown by the dashboard **Sleep** tile. The sleep chart has its own 14d, 30d, 90d, and 1y range control with older/newer paging, independent from dashboard event filters. It stacks sleep stages and overlays recorded sleep HRV with an average HRV reference line when the provider includes it. Suunto and Garmin Pro users can queue **Backfill Sleep History** from History Import; Garmin users may also see a one-time dashboard prompt. Suunto queues sleep from Jan 1, 2016 to today with a 7-day cooldown. Garmin requests sleep from Jan 1, 2016 to today, receives records asynchronously from Garmin, and uses a 30-day cooldown.
 
 ## Suunto
 
@@ -492,6 +496,8 @@ Garmin history import has two important limits:
 - and up to **5 years** of data per request.
 
 Garmin can deliver imported activities gradually over hours or days.
+
+Garmin sleep history backfill is separate from activity history import. It requests sleep through Garmin Health API and records appear later as Garmin sends sleep notifications.
 
 If Garmin permissions are missing, reconnect the app and grant the required export, history, and health permissions in Garmin Connect.
 
@@ -544,6 +550,10 @@ When COROS and Suunto are connected, the dashboard may offer a one-time action p
 
 Suunto and COROS history imports are queued jobs. Large ranges can take hours or days to finish, depending on volume and queue load.`,
     links: [
+      { label: 'Integrations', icon: 'hub', kind: 'route', target: '/integrations' },
+      { label: 'Garmin Integration', icon: 'sync_alt', kind: 'route', target: '/integrations/garmin' },
+      { label: 'Suunto Integration', icon: 'published_with_changes', kind: 'route', target: '/integrations/suunto' },
+      { label: 'COROS Integration', icon: 'sync', kind: 'route', target: '/integrations/coros' },
       { label: 'Services', icon: 'sync', kind: 'route', target: '/services' },
       { label: 'Subscription', icon: 'credit_card', kind: 'route', target: '/subscriptions' },
       { label: 'Email Support', icon: 'email', kind: 'external', target: SUPPORT_MAILTO },

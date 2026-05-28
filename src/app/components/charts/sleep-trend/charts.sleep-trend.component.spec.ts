@@ -13,6 +13,12 @@ import { LoggerService } from '../../../services/logger.service';
 describe('ChartsSleepTrendComponent', () => {
   let fixture: ComponentFixture<ChartsSleepTrendComponent>;
   let component: ChartsSleepTrendComponent;
+  let mockChart: {
+    isDisposed: ReturnType<typeof vi.fn>;
+    dispatchAction: ReturnType<typeof vi.fn>;
+    on: ReturnType<typeof vi.fn>;
+    off: ReturnType<typeof vi.fn>;
+  };
   let mockLoader: {
     init: ReturnType<typeof vi.fn>;
     setOption: ReturnType<typeof vi.fn>;
@@ -31,7 +37,7 @@ describe('ChartsSleepTrendComponent', () => {
     }
     globalThis.ResizeObserver = ResizeObserverMock as unknown as typeof ResizeObserver;
 
-    const mockChart = {
+    mockChart = {
       isDisposed: vi.fn().mockReturnValue(false),
       dispatchAction: vi.fn(),
       on: vi.fn(),
@@ -347,6 +353,7 @@ describe('ChartsSleepTrendComponent', () => {
     const awakeSeries = option.series.find((series: any) => series.name === 'Awake');
 
     expect(option.xAxis.data).toEqual(['Tue, May 26']);
+    expect(option.xAxis.containShape).toBe(true);
     expect(napSeries).toMatchObject({
       name: 'Nap',
       type: 'bar',
@@ -368,6 +375,109 @@ describe('ChartsSleepTrendComponent', () => {
     expect(tooltipHtml).toContain('12h 07m');
     expect(tooltipHtml).toContain('Nap HRV');
     expect(tooltipHtml).toContain('45 ms');
+  });
+
+  it('renders tooltip markers with sleep segment and HRV colors', async () => {
+    const point = buildSleepPoint({
+      id: 'suunto-sleep-with-nap',
+      categoryLabel: 'Tue, May 26',
+      sleepDate: '2026-05-26',
+      napSeconds: 3600,
+      napCount: 1,
+      napAverageHrvMs: 45,
+      napStartTimeMs: Date.UTC(2026, 4, 26, 2),
+      napEndTimeMs: Date.UTC(2026, 4, 26, 3),
+    });
+    component.sleepTrend = {
+      points: [point],
+      latestPoint: point,
+      hasRealPoints: true,
+    };
+
+    fixture.detectChanges();
+    await fixture.whenStable();
+    await vi.waitFor(() => {
+      expect(mockLoader.setOption).toHaveBeenCalled();
+    });
+
+    const setOptionCall = mockLoader.setOption.mock.calls.at(-1) || [];
+    const optionCandidate = setOptionCall[1] || setOptionCall[0];
+    const option = optionCandidate as Record<string, any>;
+    const tooltipHtml = option.tooltip.formatter([{ dataIndex: 0 }]);
+
+    expect(tooltipHtml).toContain('Deep');
+    expect(tooltipHtml).toContain('Light');
+    expect(tooltipHtml).toContain('REM');
+    expect(tooltipHtml).toContain('Unknown');
+    expect(tooltipHtml).toContain('Awake');
+    expect(tooltipHtml).toContain('Nap');
+    expect(tooltipHtml).toContain('HRV');
+    expect(tooltipHtml).toContain('background:#3F51B5;');
+    expect(tooltipHtml).toContain('background:#4DB6AC;');
+    expect(tooltipHtml).toContain('background:#AB47BC;');
+    expect(tooltipHtml).toContain('background:#90A4AE;');
+    expect(tooltipHtml).toContain('background:#F9A825;');
+    expect(tooltipHtml).toContain(`background:${AppColors.LightBlue};`);
+    expect(tooltipHtml).toContain(`background:${AppColors.Green};`);
+  });
+
+  it('highlights all stacked sleep bar segments from the x-axis pointer', async () => {
+    const point = buildSleepPoint({
+      napSeconds: 3600,
+      napCount: 1,
+    });
+    component.sleepTrend = {
+      points: [point],
+      latestPoint: point,
+      hasRealPoints: true,
+    };
+
+    fixture.detectChanges();
+    await fixture.whenStable();
+    await vi.waitFor(() => {
+      expect(mockLoader.setOption).toHaveBeenCalled();
+    });
+
+    const setOptionCall = mockLoader.setOption.mock.calls.at(-1) || [];
+    const optionCandidate = setOptionCall[1] || setOptionCall[0];
+    const option = optionCandidate as Record<string, any>;
+    const deepSeries = option.series.find((series: any) => series.name === 'Deep');
+    const napSeries = option.series.find((series: any) => series.name === 'Nap');
+    const axisPointerHandler = mockChart.on.mock.calls.find(([eventName]) => eventName === 'updateAxisPointer')?.[1] as ((event: any) => void);
+    const globalOutHandler = mockChart.on.mock.calls.find(([eventName]) => eventName === 'globalout')?.[1] as (() => void);
+
+    expect(deepSeries.emphasis).toEqual({ focus: 'none' });
+    expect(napSeries.emphasis).toEqual({ focus: 'none' });
+    expect(axisPointerHandler).toBeTypeOf('function');
+    expect(globalOutHandler).toBeTypeOf('function');
+
+    axisPointerHandler({ axesInfo: [{ axisDim: 'x', value: point.categoryLabel }] });
+    const highlightActions = mockChart.dispatchAction.mock.calls
+      .map(([payload]) => payload)
+      .filter((payload: any) => payload.type === 'highlight');
+
+    expect(highlightActions).toEqual([
+      { type: 'highlight', seriesName: 'Deep', dataIndex: 0 },
+      { type: 'highlight', seriesName: 'Light', dataIndex: 0 },
+      { type: 'highlight', seriesName: 'REM', dataIndex: 0 },
+      { type: 'highlight', seriesName: 'Unknown', dataIndex: 0 },
+      { type: 'highlight', seriesName: 'Awake', dataIndex: 0 },
+      { type: 'highlight', seriesName: 'Nap', dataIndex: 0 },
+    ]);
+
+    globalOutHandler();
+    const downplayActions = mockChart.dispatchAction.mock.calls
+      .map(([payload]) => payload)
+      .filter((payload: any) => payload.type === 'downplay');
+
+    expect(downplayActions).toEqual([
+      { type: 'downplay', seriesName: 'Deep', dataIndex: 0 },
+      { type: 'downplay', seriesName: 'Light', dataIndex: 0 },
+      { type: 'downplay', seriesName: 'REM', dataIndex: 0 },
+      { type: 'downplay', seriesName: 'Unknown', dataIndex: 0 },
+      { type: 'downplay', seriesName: 'Awake', dataIndex: 0 },
+      { type: 'downplay', seriesName: 'Nap', dataIndex: 0 },
+    ]);
   });
 
   it('enables the draggable x-axis tooltip handle on mobile viewport', async () => {

@@ -78,6 +78,8 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('default curated chart set');
     expect(gettingStartedSection?.content).toContain('KPI row set automatically once');
     expect(gettingStartedSection?.content).toContain('removing an auto-added curated chart or KPI prevents that chart from being suggested again');
+    expect(gettingStartedSection?.content).toContain('bulk actions can add the recommended default dashboard');
+    expect(gettingStartedSection?.content).toContain('add every available preset tile');
     expect(gettingStartedSection?.content).toContain('**Uploaded activities**');
     expect(gettingStartedSection?.content).toContain('current-state set: **Load Status**, **Form Now**, **Fitness Trend**, **Fatigue Trend**, **Recovery Debt**, and **Training Balance**');
     expect(gettingStartedSection?.content).toContain('Additional KPI rows such as **Fitness (CTL)**, **Fatigue (ATL)**');
@@ -215,6 +217,11 @@ describe('help.content', () => {
   it('should document Garmin/COROS to Suunto route-based activity sync and manual catch-up', () => {
     const serviceConnectionsSection = HELP_SECTIONS.find(section => section.id === 'service-connections');
 
+    expect(serviceConnectionsSection?.content).toContain('Integrations hub');
+    expect(serviceConnectionsSection?.content).toContain('/integrations');
+    expect(serviceConnectionsSection?.content).toContain('[Garmin Integration](/integrations/garmin)');
+    expect(serviceConnectionsSection?.content).toContain('[COROS Integration](/integrations/coros)');
+    expect(serviceConnectionsSection?.content).toContain('/integrations/suunto');
     expect(serviceConnectionsSection?.content).toContain('Garmin -> Suunto activity sync is route-based');
     expect(serviceConnectionsSection?.content).toContain('ACTIVITY_EXPORT');
     expect(serviceConnectionsSection?.content).toContain('Manual catch-up is available in Garmin Services');
@@ -229,12 +236,39 @@ describe('help.content', () => {
     expect(serviceConnectionsSection?.content).toContain('overlays recorded sleep HRV with an average HRV reference line');
     expect(serviceConnectionsSection?.content).toContain('Backfill Sleep History');
     expect(serviceConnectionsSection?.content).toContain('Jan 1, 2016');
-    expect(serviceConnectionsSection?.content).toContain('7-day sleep backfill cooldown');
+    expect(serviceConnectionsSection?.content).toContain('7-day cooldown');
+    expect(serviceConnectionsSection?.content).toContain('30-day cooldown');
+    expect(serviceConnectionsSection?.content).toContain('one-time dashboard prompt');
+    expect(serviceConnectionsSection?.content).toContain('Garmin sleep history backfill is separate from activity history import');
     expect(serviceConnectionsSection?.content).toContain('COROS -> Suunto activity sync is route-based');
     expect(serviceConnectionsSection?.content).toContain('enable the route toggle in COROS Services');
     expect(serviceConnectionsSection?.content).toContain('Automatic sync runs only for newly imported COROS activities');
     expect(serviceConnectionsSection?.content).toContain('Manual catch-up is available in COROS Services');
     expect(serviceConnectionsSection?.content).toContain('can run even when the COROS -> Suunto auto-sync toggle is off');
     expect(serviceConnectionsSection?.content).toContain('dashboard may offer a one-time action prompt to enable COROS -> Suunto auto-sync');
+    expect(serviceConnectionsSection?.links).toContainEqual({
+      label: 'Integrations',
+      icon: 'hub',
+      kind: 'route',
+      target: '/integrations',
+    });
+    expect(serviceConnectionsSection?.links).toContainEqual({
+      label: 'Garmin Integration',
+      icon: 'sync_alt',
+      kind: 'route',
+      target: '/integrations/garmin',
+    });
+    expect(serviceConnectionsSection?.links).toContainEqual({
+      label: 'Suunto Integration',
+      icon: 'published_with_changes',
+      kind: 'route',
+      target: '/integrations/suunto',
+    });
+    expect(serviceConnectionsSection?.links).toContainEqual({
+      label: 'COROS Integration',
+      icon: 'sync',
+      kind: 'route',
+      target: '/integrations/coros',
+    });
   });
 });

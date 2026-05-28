@@ -728,6 +728,11 @@ export class AppUserService implements OnDestroy {
     return result.data;
   }
 
+  async backfillGarminSleepForCurrentUser(): Promise<SleepBackfillQueueResponse> {
+    const result = await this.functionsService.call<undefined, SleepBackfillQueueResponse>('backfillGarminAPISleep');
+    return result.data;
+  }
+
   async backfillActivitySyncRouteForCurrentUser(
     sourceServiceName: ServiceNames,
     destinationServiceName: ServiceNames,

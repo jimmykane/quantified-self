@@ -1169,6 +1169,22 @@ describe('AppUserService', () => {
             });
         });
 
+        describe('backfillGarminSleepForCurrentUser', () => {
+            it('should call cloud function for Garmin sleep backfill', async () => {
+                const response = {
+                    queued: 43,
+                    startDate: '2016-01-01T00:00:00.000Z',
+                    endDate: '2026-04-30T12:00:00.000Z',
+                    nextAllowedAtMs: 1_780_231_200_000,
+                };
+                mockFunctionsService.call.mockResolvedValueOnce({ data: response });
+
+                await expect(service.backfillGarminSleepForCurrentUser()).resolves.toEqual(response);
+
+                expect(mockFunctionsService.call).toHaveBeenCalledWith('backfillGarminAPISleep');
+            });
+        });
+
         describe('backfillActivitySyncRouteForCurrentUser', () => {
             it('should call cloud function for activity sync route backfill', async () => {
                 const expectedStartDate = new Date(startDate.getTime());

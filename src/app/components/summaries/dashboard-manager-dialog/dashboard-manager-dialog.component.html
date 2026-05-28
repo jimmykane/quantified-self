@@ -7,6 +7,16 @@
   <section class="dashboard-manager-section">
     <div class="dashboard-manager-section-title">Bulk actions</div>
     <div class="dashboard-manager-bulk-actions">
+      <button mat-stroked-button type="button" class="qs-mat-primary" data-testid="dashboard-manager-add-defaults-button" (click)="addDefaultTiles()" [disabled]="isAddDefaultsDisabled" [attr.aria-busy]="isAddDefaultsSaving">
+        <span class="dashboard-manager-button-content">
+          @if (isAddDefaultsSaving) {
+          <mat-spinner class="qs-spinner-primary" diameter="18"></mat-spinner>
+          } @else {
+          <mat-icon>dashboard_customize</mat-icon>
+          }
+          <span>{{ isAddDefaultsSaving ? 'Adding...' : 'Add defaults' }}</span>
+        </span>
+      </button>
       <button mat-stroked-button type="button" class="qs-mat-primary" data-testid="dashboard-manager-add-all-button" (click)="addAllTiles()" [disabled]="isAddAllDisabled" [attr.aria-busy]="isAddAllSaving">
         <span class="dashboard-manager-button-content">
           @if (isAddAllSaving) {
@@ -29,7 +39,7 @@
       </button>
     </div>
     <p class="dashboard-manager-hint">
-      Add all inserts every missing default dashboard tile. Remove all clears the dashboard and prevents automatic suggestions from reappearing.
+      Add defaults inserts the recommended dashboard. Add all inserts every available curated, KPI, map, and preset tile. Remove all clears the dashboard and prevents automatic suggestions from reappearing.
     </p>
   </section>
 

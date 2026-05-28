@@ -1,4 +1,14 @@
+:host {
+    display: inline-flex;
+    align-items: center;
+    vertical-align: middle;
+    line-height: 1;
+}
+
 .service-logo {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     height: 20px;
     opacity: 0.8;
 }
