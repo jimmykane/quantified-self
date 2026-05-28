@@ -35,7 +35,10 @@ describe('IntegrationsHubPageComponent', () => {
     expect(text).toContain('Garmin Integration');
     expect(text).toContain('Suunto Integration');
     expect(text).toContain('COROS Integration');
-    expect(text).toContain('centralize Garmin Suunto and COROS workout data');
+    expect(text).toContain('centralize Garmin, Suunto, and COROS workout data');
+    expect(text).toContain('Private dashboard, history import, and Suunto sync');
+    expect(text).toContain('Sync destination, uploads, and Suunto history');
+    expect(text).toContain('Recent history import and Suunto sync');
   });
 
   it('should link to each provider integration page', () => {

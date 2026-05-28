@@ -44,6 +44,15 @@ export interface ProviderIntegrationPage {
   closingCopy: string;
 }
 
+export interface IntegrationHubCard {
+  slug: IntegrationProviderKey;
+  label: string;
+  serviceName: ServiceNames;
+  subtitle: string;
+  summary: string;
+  highlights: readonly string[];
+}
+
 export interface IntegrationRouteData {
   title: string;
   preload: boolean;
@@ -328,10 +337,43 @@ export const PROVIDER_INTEGRATION_PAGES: Record<IntegrationProviderKey, Provider
   },
 };
 
-export const INTEGRATION_HUB_CARDS: readonly ProviderIntegrationPage[] = [
-  PROVIDER_INTEGRATION_PAGES.garmin,
-  PROVIDER_INTEGRATION_PAGES.suunto,
-  PROVIDER_INTEGRATION_PAGES.coros,
+export const INTEGRATION_HUB_CARDS: readonly IntegrationHubCard[] = [
+  {
+    slug: 'garmin',
+    label: 'Garmin',
+    serviceName: ServiceNames.GarminAPI,
+    subtitle: 'Private dashboard, history import, and Suunto sync',
+    summary: 'Connect Garmin to import history, send new Garmin activities to Suunto, and analyze Garmin data beside Suunto and COROS in one private dashboard.',
+    highlights: [
+      'Import Garmin history',
+      'Sync Garmin -> Suunto automatically',
+      'Analyze Garmin with Suunto and COROS',
+    ],
+  },
+  {
+    slug: 'suunto',
+    label: 'Suunto',
+    serviceName: ServiceNames.SuuntoApp,
+    subtitle: 'Sync destination, uploads, and Suunto history',
+    summary: 'Connect Suunto to receive Garmin and COROS activities, upload FIT activities and GPX routes, and keep Suunto history in the same private dashboard.',
+    highlights: [
+      'Receive Garmin -> Suunto sync',
+      'Receive COROS -> Suunto sync',
+      'Upload FIT activities and GPX routes',
+    ],
+  },
+  {
+    slug: 'coros',
+    label: 'COROS',
+    serviceName: ServiceNames.COROSAPI,
+    subtitle: 'Recent history import and Suunto sync',
+    summary: 'Connect COROS to import recent history, send new COROS workouts to Suunto, and compare COROS data beside Garmin and Suunto in one private dashboard.',
+    highlights: [
+      'Import recent COROS history',
+      'Sync COROS -> Suunto automatically',
+      'Analyze COROS with Garmin and Suunto',
+    ],
+  },
 ];
 
 export function getProviderIntegrationPage(key: unknown): ProviderIntegrationPage {
@@ -403,7 +445,7 @@ export const INTEGRATIONS_HUB_ROUTE_DATA: IntegrationRouteData = {
     inLanguage: 'en',
     hasPart: INTEGRATION_HUB_CARDS.map(page => ({
       '@type': 'WebPage',
-      name: page.h1,
+      name: `${page.label} Integration`,
       url: `https://quantified-self.io/integrations/${page.slug}`,
     })),
   },

@@ -93,6 +93,12 @@ h3 {
   font-weight: 600;
 }
 
+.provider-chip > span {
+  display: inline-flex;
+  align-items: center;
+  line-height: 1;
+}
+
 .hero-actions,
 .closing-actions {
   display: flex;
