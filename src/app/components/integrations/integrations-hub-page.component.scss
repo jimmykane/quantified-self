@@ -87,8 +87,8 @@ h2 {
 }
 
 .integration-card {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
   height: 100%;
   border-radius: 8px;
   background: var(--mat-sys-surface-container-low);
@@ -106,12 +106,12 @@ h2 {
 
 .integration-card mat-card-content {
   display: grid;
-  flex: 1 1 auto;
+  align-content: start;
   gap: 0.75rem;
 }
 
 .integration-card mat-card-actions {
-  margin-top: auto;
+  align-self: end;
 }
 
 .integration-card p,
