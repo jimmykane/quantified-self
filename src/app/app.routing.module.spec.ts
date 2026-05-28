@@ -101,6 +101,8 @@ describe('AppRoutingModule routes', () => {
     const homeRoute = routes.find(route => route.path === '');
 
     expect(homeRoute).toBeTruthy();
+    expect(homeRoute?.canMatch).toBeUndefined();
+    expect(homeRoute?.pathMatch).toBe('full');
     expect(homeRoute?.data).toMatchObject({
       animation: 'Home',
     });
@@ -113,5 +115,13 @@ describe('AppRoutingModule routes', () => {
       '@type': 'SoftwareApplication',
       name: 'Quantified Self',
     });
+  });
+
+  it('should keep the dashboard as the authenticated app entry route', () => {
+    const dashboardRoute = routes.find(route => route.path === 'dashboard');
+
+    expect(dashboardRoute).toBeTruthy();
+    expect(dashboardRoute?.canMatch).toEqual([authGuard, onboardingGuard]);
+    expect(dashboardRoute?.loadChildren).toBeTypeOf('function');
   });
 });

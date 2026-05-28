@@ -6,7 +6,6 @@ import { proGuard } from './authentication/pro.guard';
 import { aiInsightsGuard } from './authentication/ai-insights.guard';
 import { onboardingGuard } from './authentication/onboarding.guard';
 import { adminGuard } from './authentication/admin.guard';
-import { loggedInGuard } from './authentication/logged-in.guard';
 import { pricingRedirectGuard } from './authentication/pricing-redirect.guard';
 import { releasesResolver } from './resolvers/releases.resolver';
 import { INTEGRATIONS_HUB_ROUTE_DATA, PROVIDER_INTEGRATION_ROUTE_DATA } from './components/integrations/integration-pages.content';
@@ -230,7 +229,6 @@ export const routes: Routes = [
         "url": "https://www.quantified-self.io/"
       }
     },
-    canMatch: [loggedInGuard, onboardingGuard],
     pathMatch: 'full'
   },
   { path: '**', redirectTo: '/', pathMatch: 'full' },

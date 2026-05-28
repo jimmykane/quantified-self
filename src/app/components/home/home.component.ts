@@ -1,4 +1,6 @@
-import { Component, AfterViewInit, OnDestroy, ElementRef } from '@angular/core';
+import { Component, AfterViewInit, OnDestroy, OnInit, ElementRef, DestroyRef, PLATFORM_ID, inject } from '@angular/core';
+import { isPlatformBrowser } from '@angular/common';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { Router } from '@angular/router';
 import { ServiceNames } from '@sports-alliance/sports-lib';
@@ -10,18 +12,35 @@ import { getAiInsightsHeroPrompts } from '@shared/ai-insights-prompts';
   styleUrls: ['./home.component.scss'],
   standalone: false
 })
-export class HomeComponent implements AfterViewInit, OnDestroy {
+export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
 
   public serviceNames = ServiceNames;
   public currentYear = new Date().getFullYear();
   private observer: IntersectionObserver | undefined;
   public readonly aiPromptExamples: readonly string[] = getAiInsightsHeroPrompts();
+  private readonly destroyRef = inject(DestroyRef);
+  private readonly platformId = inject(PLATFORM_ID);
+  private readonly isBrowser = isPlatformBrowser(this.platformId);
 
   constructor(
     public authService: AppAuthService,
     public router: Router,
     private elementRef: ElementRef
   ) { }
+
+  ngOnInit() {
+    if (!this.isBrowser) {
+      return;
+    }
+
+    this.authService.user$
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(user => {
+        if (user) {
+          void this.router.navigate(['/dashboard']);
+        }
+      });
+  }
 
   ngAfterViewInit() {
     if (typeof IntersectionObserver !== 'undefined') {

@@ -10,6 +10,7 @@ import { MatDividerModule } from '@angular/material/divider';
 import { MatIconTestingModule } from '@angular/material/icon/testing';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
+import { BehaviorSubject } from 'rxjs';
 import { getAiInsightsHeroPrompts } from '@shared/ai-insights-prompts';
 import { TypedPromptRotatorComponent } from '../shared/typed-prompt-rotator/typed-prompt-rotator.component';
 
@@ -18,10 +19,13 @@ describe('HomeComponent', () => {
     let fixture: ComponentFixture<HomeComponent>;
     let mockAuthService: any;
     let mockRouter: any;
+    let userSubject: BehaviorSubject<any>;
 
     beforeEach(async () => {
+        userSubject = new BehaviorSubject<any>(null);
         mockAuthService = {
-            getUser: vi.fn().mockResolvedValue(null)
+            getUser: vi.fn().mockResolvedValue(null),
+            user$: userSubject.asObservable()
         };
 
         mockRouter = {
@@ -54,6 +58,18 @@ describe('HomeComponent', () => {
 
     it('should create', () => {
         expect(component).toBeTruthy();
+    });
+
+    it('should redirect app-authenticated browser users from public home to dashboard', () => {
+        userSubject.next({ uid: '123' });
+
+        expect(mockRouter.navigate).toHaveBeenCalledWith(['/dashboard']);
+    });
+
+    it('should keep anonymous browser users on the public home page', () => {
+        userSubject.next(null);
+
+        expect(mockRouter.navigate).not.toHaveBeenCalled();
     });
 
     it('should render provider-focused hero messaging and a standalone AI Insights section', () => {

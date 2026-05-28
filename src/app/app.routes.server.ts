@@ -7,8 +7,13 @@ export const PRERENDERED_INTEGRATION_ROUTES = [
   'integrations/coros',
 ] as const;
 
+export const PRERENDERED_PUBLIC_ROUTES = [
+  '',
+  ...PRERENDERED_INTEGRATION_ROUTES,
+] as const;
+
 export const serverRoutes: ServerRoute[] = [
-  ...PRERENDERED_INTEGRATION_ROUTES.map(path => ({
+  ...PRERENDERED_PUBLIC_ROUTES.map(path => ({
     path,
     renderMode: RenderMode.Prerender,
   } as const)),
