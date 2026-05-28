@@ -78,6 +78,11 @@ describe('EventCardChartPanelComponent', () => {
   const snackBarMock = {
     open: vi.fn(),
   };
+  const altitudeGradeColors = {
+    moderate: '#F9A825',
+    hard: '#E64A19',
+    verySteep: '#7F1D1D',
+  };
 
   beforeEach(async () => {
     vi.clearAllMocks();
@@ -1246,6 +1251,65 @@ describe('EventCardChartPanelComponent', () => {
     ]);
   });
 
+  it('keeps heart-rate zone coloring mapped to y values on time-axis charts', async () => {
+    const startTime = Date.UTC(2024, 0, 1, 12, 0, 0);
+    component.xAxisType = XAxisTypes.Time;
+    component.panel = {
+      dataType: DataHeartRate.type,
+      displayName: 'Heart Rate',
+      unit: 'bpm',
+      colorGroupKey: 'Heart Rate',
+      minX: startTime,
+      maxX: startTime + 10_000,
+      series: [
+        {
+          id: 'a1::Heart Rate',
+          activityID: 'a1',
+          activityName: 'Garmin',
+          color: '#aa0000',
+          streamType: DataHeartRate.type,
+          displayName: 'Heart Rate',
+          unit: 'bpm',
+          points: [
+            { x: startTime, y: 110, time: startTime },
+            { x: startTime + 10_000, y: 130, time: startTime + 10_000 },
+          ],
+          zoneColorPieces: [
+            { zone: 'Zone 1', color: '#0099ff', lt: 120 },
+            { zone: 'Zone 2', color: '#00aa00', gte: 120, lt: 140 },
+            { zone: 'Zone 3', color: '#ffaa00', gte: 140 },
+          ],
+        }
+      ],
+    } as any;
+
+    await renderComponent();
+
+    const option = getRenderedOption();
+    expect(option?.xAxis?.type).toBe('time');
+    expect(option?.series?.[0]?.dimensions).toEqual(['x', 'y']);
+    expect(option?.series?.[0]?.data).toEqual([
+      [startTime, 110],
+      [startTime + 10_000, 130],
+    ]);
+    expect(option?.visualMap?.[0]).toEqual(
+      expect.objectContaining({
+        seriesIndex: 0,
+        dimension: 1,
+      })
+    );
+
+    const tooltipHtml = (component as any).formatTooltip([
+      {
+        seriesId: 'a1::Heart Rate',
+        seriesName: 'Garmin',
+        color: '#aa0000',
+        value: [startTime + 10_000, 130],
+      }
+    ]);
+    expect(tooltipHtml).toContain('background:#00aa00;');
+  });
+
   it('renders power zone visual maps without coloring the grid', async () => {
     component.fillOpacity = 0.35;
     component.panel = {
@@ -1313,6 +1377,174 @@ describe('EventCardChartPanelComponent', () => {
         },
       })
     ]);
+  });
+
+  it('renders altitude grade color segments without third-dimension visual maps', async () => {
+    component.fillOpacity = 0.3;
+    component.panel = {
+      dataType: DataAltitude.type,
+      displayName: 'Altitude',
+      unit: 'm',
+      colorGroupKey: 'Altitude',
+      minX: 0,
+      maxX: 20,
+      series: [
+        {
+          id: 'a1::Altitude',
+          activityID: 'a1',
+          activityName: 'Garmin',
+          color: '#00aa00',
+          streamType: DataAltitude.type,
+          displayName: 'Altitude',
+          unit: 'm',
+          points: [
+            { x: 0, y: 100, time: 0 },
+            { x: 10, y: 120, time: 10 },
+            { x: 20, y: 150, time: 20 },
+          ],
+          gradeColorValues: new Float64Array([1, 4, 13]),
+          gradeColorSourceType: 'Grade Smooth',
+        },
+        {
+          id: 'a2::Altitude',
+          activityID: 'a2',
+          activityName: 'Coros',
+          color: '#00bb00',
+          streamType: DataAltitude.type,
+          displayName: 'Altitude',
+          unit: 'm',
+          points: [
+            { x: 0, y: 80, time: 0 },
+            { x: 10, y: 90, time: 10 },
+            { x: 20, y: 110, time: 20 },
+          ],
+          gradeColorValues: new Float64Array([1, Number.NaN, 8]),
+          gradeColorSourceType: 'Grade Smooth',
+        }
+      ],
+    } as any;
+
+    await renderComponent();
+
+    const option = getRenderedOption();
+    expect(option?.visualMap).toBeUndefined();
+    expect(option?.series).toHaveLength(4);
+    expect(option?.series?.map((series: any) => series.dimensions)).toEqual([
+      ['x', 'y'],
+      ['x', 'y'],
+      ['x', 'y'],
+      ['x', 'y'],
+    ]);
+    expect(option?.series?.map((series: any) => series.lineStyle?.color)).toEqual([
+      altitudeGradeColors.moderate,
+      altitudeGradeColors.verySteep,
+      altitudeGradeColors.hard,
+      '#00bb00',
+    ]);
+    expect(option?.series?.[0]?.areaStyle).toEqual(
+      expect.objectContaining({
+        color: altitudeGradeColors.moderate,
+        opacity: 0.3,
+      })
+    );
+    expect(Array.from(option?.series?.[0]?.data)).toEqual([0, 100, 10, 120]);
+    expect(Array.from(option?.series?.[1]?.data)).toEqual([10, 120, 20, 150]);
+    expect(Array.from(option?.series?.[2]?.data)).toEqual([10, 90, 20, 110]);
+    expect(Array.from(option?.series?.[3]?.data)).toEqual([0, 80, 10, 90]);
+    expect(component.gradeLegendItems.map((item) => item.label)).toEqual([
+      'Downhill',
+      '0-3%',
+      '3-6%',
+      '6-9%',
+      '9-12%',
+      '12%+',
+    ]);
+  });
+
+  it('renders normal altitude styling when grade coloring is toggled off', async () => {
+    component.colorAltitudeByGrade = false;
+    component.panel = {
+      dataType: DataAltitude.type,
+      displayName: 'Altitude',
+      unit: 'm',
+      colorGroupKey: 'Altitude',
+      minX: 0,
+      maxX: 10,
+      series: [
+        {
+          id: 'a1::Altitude',
+          activityID: 'a1',
+          activityName: 'Garmin',
+          color: '#00aa00',
+          streamType: DataAltitude.type,
+          displayName: 'Altitude',
+          unit: 'm',
+          points: [
+            { x: 0, y: 100, time: 0 },
+            { x: 10, y: 120, time: 10 },
+          ],
+          gradeColorValues: new Float64Array([-2, 8]),
+          gradeColorSourceType: 'Grade Smooth',
+        }
+      ],
+    } as any;
+
+    await renderComponent();
+
+    const option = getRenderedOption();
+    expect(option?.series?.[0]?.dimensions).toEqual(['x', 'y']);
+    expect(option?.series?.[0]?.lineStyle).toEqual(
+      expect.objectContaining({
+        color: '#00aa00',
+      })
+    );
+    expect(option?.series?.[0]?.data).toEqual([
+      [0, 100],
+      [10, 120],
+    ]);
+    expect(option?.visualMap).toBeUndefined();
+    expect(component.gradeLegendItems).toEqual([]);
+  });
+
+  it('renders one-point altitude series normally even when grade values are available', async () => {
+    component.panel = {
+      dataType: DataAltitude.type,
+      displayName: 'Altitude',
+      unit: 'm',
+      colorGroupKey: 'Altitude',
+      minX: 0,
+      maxX: 0,
+      series: [
+        {
+          id: 'a1::Altitude',
+          activityID: 'a1',
+          activityName: 'Garmin',
+          color: '#00aa00',
+          streamType: DataAltitude.type,
+          displayName: 'Altitude',
+          unit: 'm',
+          points: [
+            { x: 0, y: 100, time: 0 },
+          ],
+          gradeColorValues: new Float64Array([8]),
+          gradeColorSourceType: 'Grade Smooth',
+        }
+      ],
+    } as any;
+
+    await renderComponent();
+
+    const option = getRenderedOption();
+    expect(option?.series).toHaveLength(1);
+    expect(option?.series?.[0]?.id).toBe('a1::Altitude');
+    expect(option?.series?.[0]?.lineStyle).toEqual(
+      expect.objectContaining({
+        color: '#00aa00',
+      })
+    );
+    expect(option?.series?.[0]?.data).toEqual([[0, 100]]);
+    expect(option?.visualMap).toBeUndefined();
+    expect(component.gradeLegendItems).toEqual([]);
   });
 
   it('switches to selection mode with native brush and disables inside zoom', async () => {
@@ -2444,6 +2676,49 @@ describe('EventCardChartPanelComponent', () => {
 
     expect(tooltipHtml).toContain('background:#ffaa00;');
     expect(tooltipHtml).not.toContain('background:#aa0000;');
+  });
+
+  it('uses altitude grade colors and labels in tooltip rows when grade coloring is active', async () => {
+    component.panel = {
+      dataType: DataAltitude.type,
+      displayName: 'Altitude',
+      unit: 'm',
+      colorGroupKey: 'Altitude',
+      minX: 0,
+      maxX: 10,
+      series: [
+        {
+          id: 'a1::Altitude',
+          activityID: 'a1',
+          activityName: 'Garmin',
+          color: '#00aa00',
+          streamType: DataAltitude.type,
+          displayName: 'Altitude',
+          unit: 'm',
+          points: [
+            { x: 0, y: 100, time: 0 },
+            { x: 10, y: 120, time: 10 },
+          ],
+          gradeColorValues: new Float64Array([2, 8]),
+          gradeColorSourceType: 'Grade Smooth',
+        }
+      ],
+    } as any;
+
+    await renderComponent();
+
+    const tooltipHtml = (component as any).formatTooltip([
+      {
+        seriesId: 'a1::Altitude',
+        seriesName: 'Garmin',
+        color: '#00aa00',
+        value: [10, 120, 8],
+      }
+    ]);
+
+    expect(tooltipHtml).toContain(`background:${altitudeGradeColors.hard};`);
+    expect(tooltipHtml).toContain('Grade 8%');
+    expect(tooltipHtml).not.toContain('background:#00aa00;');
   });
 
   it('shows activity names in the main tooltip when enabled', async () => {

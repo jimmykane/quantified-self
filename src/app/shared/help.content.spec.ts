@@ -147,6 +147,8 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('plain solid no-fill line using the overlay metric');
     expect(gettingStartedSection?.content).toContain('merged and benchmark events');
     expect(gettingStartedSection?.content).toContain('both metric and activity labels');
+    expect(gettingStartedSection?.content).toContain('**Altitude** charts can color the altitude line by grade');
+    expect(gettingStartedSection?.content).toContain('**Color Altitude by Grade**');
     expect(gettingStartedSection?.content).toContain('**Heart Rate** and **Power** charts color their lines and visible fill');
     expect(gettingStartedSection?.content).not.toContain('lightly tints the chart grid by zone');
   });

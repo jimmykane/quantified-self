@@ -35,10 +35,7 @@ export class MapboxLoaderService {
             return this.apiLoadingPromise;
         }
 
-        // @ts-expect-error Mapbox exports this ESM subpath, but this project uses node module resolution.
-        const mapboxGlModulePromise = import('mapbox-gl/esm') as Promise<MapboxGlRuntime>;
-
-        this.apiLoadingPromise = mapboxGlModulePromise.then(module => {
+        this.apiLoadingPromise = import('mapbox-gl').then(module => {
             const mapboxgl = module.default || (module as unknown as MapboxGlApi);
             mapboxgl.accessToken = environment.mapboxAccessToken;
             this.mapboxgl = mapboxgl;

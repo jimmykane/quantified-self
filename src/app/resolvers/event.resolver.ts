@@ -4,9 +4,14 @@ import { AppEventService } from '../services/app.event.service';
 import { AppUserService } from '../services/app.user.service';
 import { EventInterface, User } from '@sports-alliance/sports-lib';
 import {
+    DataAltitude,
+    DataGPSAltitude,
+    DataGrade,
+    DataGradeSmooth,
     DataLatitudeDegrees,
     DataLongitudeDegrees,
     DataSpeed,
+    DataStrydAltitude,
     DataGradeAdjustedSpeed,
     DataDistance
 } from '@sports-alliance/sports-lib';
@@ -63,6 +68,18 @@ export const eventResolver: ResolveFn<EventResolverData> = (
                         dataTypes.push(t);
                     }
                 })
+                const hasAltitudeChartType = nonUnitBasedDataTypes.some(t => [
+                    DataAltitude.type,
+                    DataGPSAltitude.type,
+                    DataStrydAltitude.type,
+                ].includes(t));
+                if (hasAltitudeChartType) {
+                    [DataGradeSmooth.type, DataGrade.type].forEach(t => {
+                        if (!dataTypes.includes(t)) {
+                            dataTypes.push(t);
+                        }
+                    });
+                }
             }
 
             return eventService.getEventActivitiesAndSomeStreams(

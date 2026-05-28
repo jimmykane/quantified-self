@@ -152,6 +152,7 @@ export interface AppChartSettingsInterface extends Omit<UserChartSettingsInterfa
     fillOpacityVersion?: number;
     syncChartHoverToMap?: boolean;
     eventChartOverlayDataTypeByPrimary?: Record<string, string>;
+    colorAltitudeByGrade?: boolean;
     showSwimLengths: boolean;
 }
 

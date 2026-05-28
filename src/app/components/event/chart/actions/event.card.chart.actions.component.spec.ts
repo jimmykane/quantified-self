@@ -172,6 +172,23 @@ describe('EventCardChartActionsComponent', () => {
     expect(analyticsServiceMock.logEvent).toHaveBeenCalledWith('event_chart_settings_change', { property: 'syncChartHoverToMap' });
   });
 
+  it('should emit colorAltitudeByGrade changes and log analytics', async () => {
+    const emitSpy = vi.spyOn(component.colorAltitudeByGradeChange, 'emit');
+
+    await component.onColorAltitudeByGradeToggle(false);
+
+    expect(emitSpy).toHaveBeenCalledWith(false);
+    expect(analyticsServiceMock.logEvent).toHaveBeenCalledWith('event_chart_settings_change', { property: 'colorAltitudeByGrade' });
+  });
+
+  it('should only render the altitude grade color toggle when grade-colored altitude is available', () => {
+    const templatePath = resolve(process.cwd(), 'src/app/components/event/chart/actions/event.card.chart.actions.component.html');
+    const template = readFileSync(templatePath, 'utf8');
+
+    expect(template).toContain('@if (showAltitudeGradeColorToggle)');
+    expect(template).toContain('Color Altitude by Grade');
+  });
+
   it('should emit series visibility toggle requests', () => {
     const emitSpy = vi.spyOn(component.seriesVisibilityToggle, 'emit');
 

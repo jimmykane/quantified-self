@@ -1,6 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { ResolveFn, Router, ActivatedRouteSnapshot, RouterStateSnapshot } from '@angular/router';
-import { DataPotentialStamina, DataStamina, EventInterface, User } from '@sports-alliance/sports-lib';
+import { DataAltitude, DataGrade, DataGradeSmooth, DataPotentialStamina, DataStamina, EventInterface, User } from '@sports-alliance/sports-lib';
 import { of, throwError, EMPTY } from 'rxjs';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { AppEventService } from '../services/app.event.service';
@@ -91,6 +91,29 @@ describe('eventResolver', () => {
             const streamTypes = eventServiceSpy.getEventActivitiesAndSomeStreams.mock.calls[0][2];
             expect(streamTypes).toContain(DataStamina.type);
             expect(streamTypes).toContain(DataPotentialStamina.type);
+            done();
+        });
+    }));
+
+    it('should request grade streams when altitude charts are enabled', () => new Promise<void>(done => {
+        const mockEvent = { id: 'testEvent' } as any;
+        eventServiceSpy.getEventActivitiesAndSomeStreams.mockReturnValue(of(mockEvent));
+        userServiceSpy.getUserChartDataTypesToUse.mockReturnValue([DataAltitude.type]);
+
+        const route = new ActivatedRouteSnapshot();
+        vi.spyOn(route.paramMap, 'get').mockImplementation((key) => {
+            if (key === 'eventID') return '123';
+            if (key === 'userID') return '456';
+            return null;
+        });
+
+        const state = {} as RouterStateSnapshot;
+
+        (executeResolver(route, state) as any).subscribe(() => {
+            const streamTypes = eventServiceSpy.getEventActivitiesAndSomeStreams.mock.calls[0][2];
+            expect(streamTypes).toContain(DataAltitude.type);
+            expect(streamTypes).toContain(DataGradeSmooth.type);
+            expect(streamTypes).toContain(DataGrade.type);
             done();
         });
     }));
