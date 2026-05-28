@@ -304,6 +304,7 @@ export class ChartsXYComponent implements AfterViewInit, OnChanges, OnDestroy {
         outerBoundsContain: 'axisLabel'
       },
       tooltip: {
+        show: true,
         trigger: 'item',
         triggerOn: resolveEChartsTooltipTriggerOn(true, isMobileTooltipViewport),
         renderMode: 'html',

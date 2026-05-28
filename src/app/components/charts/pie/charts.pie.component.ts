@@ -274,6 +274,7 @@ export class ChartsPieComponent implements AfterViewInit, OnChanges, OnDestroy {
         fontFamily: "'Barlow Condensed', sans-serif"
       },
       tooltip: {
+        show: true,
         trigger: 'item',
         triggerOn: resolveEChartsTooltipTriggerOn(true, isMobileTooltipViewport),
         renderMode: 'html',

@@ -38,6 +38,10 @@ function getMissingBucketValue(chartDataValueType: ChartDataValueTypes | undefin
   return chartDataValueType === ChartDataValueTypes.Total ? 0 : null;
 }
 
+function shouldPadSingleDatePoint(interval: TimeIntervals): boolean {
+  return interval === TimeIntervals.Daily;
+}
+
 function resolveDayBucketStart(date: Date): Date {
   const normalizedDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
   normalizedDate.setHours(0, 0, 0, 0);
@@ -402,7 +406,11 @@ export function buildDashboardCartesianPoints(
     }
   }
 
-  if (contiguousPoints.length === 1 && contiguousPoints[0].time !== null) {
+  if (
+    contiguousPoints.length === 1
+    && contiguousPoints[0].time !== null
+    && shouldPadSingleDatePoint(chartDataTimeInterval)
+  ) {
     const anchorTime = contiguousPoints[0].time as number;
     const anchorDate = resolveIntervalBucketStartDate(new Date(anchorTime), chartDataTimeInterval);
     const previousTime = getPreviousIntervalDate(anchorDate, chartDataTimeInterval).getTime();

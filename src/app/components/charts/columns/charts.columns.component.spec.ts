@@ -860,6 +860,29 @@ describe('ChartsColumnsComponent', () => {
     });
   });
 
+  it('should re-enable tooltips after rendering an empty state', async () => {
+    component.data = [];
+
+    fixture.detectChanges();
+    await waitForChartStabilization();
+    expect(getLastOption().tooltip.show).toBe(false);
+
+    component.data = [
+      { type: 'Running', [ChartDataValueTypes.Total]: 42, count: 1 },
+    ];
+    component.ngOnChanges({
+      data: new SimpleChange([], component.data, false),
+    });
+    await waitForChartStabilization();
+
+    expect(getLastOption().tooltip.show).toBe(true);
+    expect(mockLoader.setOption.mock.calls.at(-1)?.[2]).toEqual({
+      notMerge: false,
+      lazyUpdate: false,
+      replaceMerge: ['series', 'xAxis', 'yAxis'],
+    });
+  });
+
   it('should dispose chart on destroy', async () => {
     fixture.detectChanges();
     await waitForChartStabilization();

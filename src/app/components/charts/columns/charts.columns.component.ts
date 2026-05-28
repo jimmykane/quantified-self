@@ -366,6 +366,7 @@ export class ChartsColumnsComponent implements AfterViewInit, OnChanges, OnDestr
         outerBoundsContain: 'axisLabel'
       },
       tooltip: {
+        show: true,
         trigger: useDateActivitySegmentation ? 'axis' : 'item',
         triggerOn: resolveEChartsTooltipTriggerOn(true, isMobileTooltipViewport),
         axisPointer: useDateActivitySegmentation ? { type: 'shadow' } : undefined,
