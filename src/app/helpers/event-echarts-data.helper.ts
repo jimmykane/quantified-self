@@ -2,15 +2,19 @@ import {
   ActivityInterface,
   ActivityUtilities,
   convertSpeedToSwimPace,
+  DataAltitude,
   DataAscent,
   DataCadenceAvg,
   DataDistance,
   DataDuration,
+  DataGPSAltitude,
+  DataGrade,
   DataHeartRate,
   DataHeartRateAvg,
   DataInterface,
   DataGradeAdjustedSpeed,
   DataGradeAdjustedPace,
+  DataGradeSmooth,
   DataLatitudeDegrees,
   DataLongitudeDegrees,
   DataPaceAvg,
@@ -22,6 +26,7 @@ import {
   DataDescent,
   DataSpeed,
   DataStrydDistance,
+  DataStrydAltitude,
   DataSwimPace,
   DynamicDataLoader,
   LapTypes,
@@ -69,6 +74,8 @@ export interface EventChartPanelSeries {
   unit: string;
   lineValues?: Float64Array;
   timeValues?: Float64Array;
+  gradeColorValues?: Float64Array;
+  gradeColorSourceType?: string;
   pointCount?: number;
   points?: EventChartPoint[];
   zoneColorPieces?: EventChartZoneColorPiece[];
@@ -208,6 +215,15 @@ export const EVENT_CHART_INTENSITY_ZONE_LOWER_LIMIT_KEYS = [
   'zone7LowerLimit',
 ] as const;
 const EVENT_CHART_INTENSITY_ZONE_LINE_DATA_TYPE_SET = new Set<string>(EVENT_CHART_INTENSITY_ZONE_LINE_DATA_TYPES);
+export const EVENT_CHART_ALTITUDE_GRADE_COLOR_STREAM_TYPES = [
+  DataGradeSmooth.type,
+  DataGrade.type,
+] as const;
+const EVENT_CHART_ALTITUDE_STREAM_TYPE_SET = new Set<string>([
+  DataAltitude.type,
+  DataGPSAltitude.type,
+  DataStrydAltitude.type,
+]);
 const MIN_INTENSITY_ZONE_LOWER_LIMIT_COUNT = 2;
 
 type ActivityIntensityZone = ActivityInterface['intensityZones'][number];
@@ -345,6 +361,7 @@ function buildEventChartPanelsFromActivities(input: BuildEventChartPanelsCoreInp
       const zoneColorPieces = input.colorIntensityZoneLines === true
         ? buildIntensityZoneColorPieces(activity, stream.type, input.zoneColors)
         : [];
+      const gradeColorData = buildAltitudeGradeColorData(activity, stream, input.xAxisType, activityCache);
       panel.series.push({
         id: `${activityID}::${stream.type}`,
         activityID,
@@ -356,6 +373,10 @@ function buildEventChartPanelsFromActivities(input: BuildEventChartPanelsCoreInp
         lineValues: pointResult.lineValues,
         timeValues: pointResult.timeValues,
         pointCount: pointResult.pointCount,
+        ...(gradeColorData ? {
+          gradeColorValues: gradeColorData.values,
+          gradeColorSourceType: gradeColorData.sourceType,
+        } : {}),
         ...(zoneColorPieces.length > 0 ? { zoneColorPieces } : {}),
       });
     });
@@ -485,6 +506,10 @@ function getUnitBaseDataTypes(dataType: string): string[] {
 }
 
 function getDerivedStreamDependencyTypes(dataType: string): string[] {
+  if (EVENT_CHART_ALTITUDE_STREAM_TYPE_SET.has(dataType)) {
+    return [...EVENT_CHART_ALTITUDE_GRADE_COLOR_STREAM_TYPES];
+  }
+
   switch (dataType) {
     case DataPace.type:
     case DataSwimPace.type:
@@ -560,6 +585,114 @@ function buildIntensityZoneColorPieces(
   return pieces;
 }
 
+function buildAltitudeGradeColorData(
+  activity: ActivityInterface,
+  targetStream: StreamInterface,
+  xAxisType: XAxisTypes,
+  activityCache: ActivityNumericCache
+): { values: Float64Array; sourceType: string } | null {
+  if (!EVENT_CHART_ALTITUDE_STREAM_TYPE_SET.has(targetStream.type)) {
+    return null;
+  }
+
+  for (const sourceType of EVENT_CHART_ALTITUDE_GRADE_COLOR_STREAM_TYPES) {
+    const values = buildAlignedGradeColorValues(activity, targetStream, sourceType, xAxisType, activityCache);
+    if (values) {
+      return { values, sourceType };
+    }
+  }
+
+  return null;
+}
+
+function buildAlignedGradeColorValues(
+  activity: ActivityInterface,
+  targetStream: StreamInterface,
+  sourceType: string,
+  xAxisType: XAxisTypes,
+  activityCache: ActivityNumericCache
+): Float64Array | null {
+  const targetValues = getStreamNumericValues(targetStream, activityCache);
+  const sourceValues = getActivityStreamNumericValues(activity, sourceType, activityCache);
+  if (!targetValues.length || !sourceValues.length) {
+    return null;
+  }
+
+  if (xAxisType === XAxisTypes.Distance) {
+    return buildDistanceAlignedGradeColorValues(activity, targetValues, sourceValues, activityCache);
+  }
+
+  return buildTimeAlignedGradeColorValues(activity, targetValues, sourceValues, xAxisType, activityCache);
+}
+
+function buildDistanceAlignedGradeColorValues(
+  activity: ActivityInterface,
+  targetValues: EventChartNumericValues,
+  sourceValues: EventChartNumericValues,
+  activityCache: ActivityNumericCache
+): Float64Array | null {
+  const distanceValues = getActivityDistanceValues(activity, activityCache);
+  const absoluteTimes = getActivityAbsoluteTimes(activity, activityCache);
+  const length = Math.min(targetValues.length, distanceValues.length, absoluteTimes.length);
+  const gradeValues = new Float64Array(length);
+  let pointCount = 0;
+  let finiteSourceCount = 0;
+
+  for (let index = 0; index < length; index += 1) {
+    const x = distanceValues[index];
+    const time = absoluteTimes[index];
+    if (!Number.isFinite(x) || !Number.isFinite(time)) {
+      continue;
+    }
+
+    const sourceValue = sourceValues[index];
+    gradeValues[pointCount] = Number.isFinite(sourceValue) ? sourceValue : Number.NaN;
+    if (Number.isFinite(sourceValue)) {
+      finiteSourceCount += 1;
+    }
+    pointCount += 1;
+  }
+
+  return pointCount > 0 && finiteSourceCount > 0 ? gradeValues.slice(0, pointCount) : null;
+}
+
+function buildTimeAlignedGradeColorValues(
+  activity: ActivityInterface,
+  targetValues: EventChartNumericValues,
+  sourceValues: EventChartNumericValues,
+  xAxisType: XAxisTypes,
+  activityCache: ActivityNumericCache
+): Float64Array | null {
+  const timeValues = getActivityTimeValues(activity, activityCache);
+  const absoluteTimes = getActivityAbsoluteTimes(activity, activityCache);
+  const length = Math.min(targetValues.length, timeValues.length, absoluteTimes.length);
+  const gradeValues = new Float64Array(length);
+  let pointCount = 0;
+  let finiteSourceCount = 0;
+
+  for (let index = 0; index < length; index += 1) {
+    const seconds = timeValues[index];
+    const absoluteTime = absoluteTimes[index];
+    if (!Number.isFinite(seconds)) {
+      continue;
+    }
+
+    const x = xAxisType === XAxisTypes.Time ? absoluteTime : seconds;
+    if (!Number.isFinite(x)) {
+      continue;
+    }
+
+    const sourceValue = sourceValues[index];
+    gradeValues[pointCount] = Number.isFinite(sourceValue) ? sourceValue : Number.NaN;
+    if (Number.isFinite(sourceValue)) {
+      finiteSourceCount += 1;
+    }
+    pointCount += 1;
+  }
+
+  return pointCount > 0 && finiteSourceCount > 0 ? gradeValues.slice(0, pointCount) : null;
+}
+
 export function collectEventChartPanelBuildSnapshotTransferables(
   input: EventChartPanelBuildSnapshotInput
 ): Transferable[] {
@@ -581,6 +714,7 @@ export function collectEventChartPanelTransferables(panels: EventChartPanelModel
     (panel.series || []).forEach((series) => {
       appendFloat64ArrayTransferable(transferables, series.lineValues);
       appendFloat64ArrayTransferable(transferables, series.timeValues);
+      appendFloat64ArrayTransferable(transferables, series.gradeColorValues);
     });
   });
 
@@ -681,6 +815,15 @@ export function getEventChartSeriesTime(series: EventChartPanelSeries, index: nu
   }
 
   return getLegacyEventChartPoint(series, index)?.time ?? Number.NaN;
+}
+
+export function getEventChartSeriesGradeColorValue(series: EventChartPanelSeries, index: number): number | null {
+  if (!isEventChartSeriesIndexInRange(series, index)) {
+    return null;
+  }
+
+  const value = series.gradeColorValues?.[Math.trunc(index)];
+  return Number.isFinite(value) ? value as number : null;
 }
 
 export function getEventChartSeriesPoint(series: EventChartPanelSeries, index: number): EventChartPoint | null {

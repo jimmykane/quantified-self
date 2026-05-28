@@ -34,6 +34,7 @@ import {
   EventChartSwimLengthMarker,
   EventChartTimelineMarker,
   findFirstEventChartSeriesPointAtOrAfter,
+  getEventChartSeriesGradeColorValue,
   getEventChartSeriesPoint,
   getEventChartSeriesPointCount,
   getEventChartSeriesPackedLineValues,
@@ -95,6 +96,25 @@ type PanelSeriesLegendItem = {
   label: string;
   color: string;
 };
+type GradeLegendItem = {
+  key: string;
+  label: string;
+  color: string;
+};
+type EventChartGradeColorPiece = {
+  label: string;
+  color: string;
+  gte?: number;
+  lt?: number;
+};
+type AltitudeGradeLineGroup = {
+  key: string;
+  color: string;
+  piece: EventChartGradeColorPiece | null;
+  data: number[];
+  lastRightIndex: number;
+  segmentCount: number;
+};
 type AxisPointerEvent = {
   axesInfo?: Array<{
     value?: number | string;
@@ -112,10 +132,27 @@ type TooltipResolvedPoint = {
   panel: EventChartPanelModel;
   series: PanelSeriesModel;
   point: EventChartPoint;
+  index: number;
 };
 
 const PROGRESSIVE_THRESHOLD = 6000;
 const PROGRESSIVE_STEP = 900;
+const EVENT_CHART_ALTITUDE_GRADE_COLORS = {
+  downhill: '#1E88E5',
+  easy: '#43A047',
+  moderate: '#F9A825',
+  hard: '#E64A19',
+  steep: '#B71C1C',
+  verySteep: '#7F1D1D',
+} as const;
+const EVENT_CHART_ALTITUDE_GRADE_COLOR_PIECES: EventChartGradeColorPiece[] = [
+  { label: 'Downhill', color: EVENT_CHART_ALTITUDE_GRADE_COLORS.downhill, lt: 0 },
+  { label: '0-3%', color: EVENT_CHART_ALTITUDE_GRADE_COLORS.easy, gte: 0, lt: 3 },
+  { label: '3-6%', color: EVENT_CHART_ALTITUDE_GRADE_COLORS.moderate, gte: 3, lt: 6 },
+  { label: '6-9%', color: EVENT_CHART_ALTITUDE_GRADE_COLORS.hard, gte: 6, lt: 9 },
+  { label: '9-12%', color: EVENT_CHART_ALTITUDE_GRADE_COLORS.steep, gte: 9, lt: 12 },
+  { label: '12%+', color: EVENT_CHART_ALTITUDE_GRADE_COLORS.verySteep, gte: 12 },
+];
 const DATA_ZOOM_THROTTLE_MS = 60;
 const FORMATTED_VALUE_CACHE_LIMIT = 600;
 const TOOLTIP_VIEWPORT_THRESHOLD = 0.1;
@@ -181,6 +218,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
   @Input() gainAndLossThreshold = AppUserUtilities.getDefaultGainAndLossThreshold();
   @Input() strokeWidth = AppUserUtilities.getDefaultChartStrokeWidth();
   @Input() fillOpacity = AppUserUtilities.getDefaultChartFillOpacity();
+  @Input() colorAltitudeByGrade = true;
   @Input() waterMark = '';
   @Input() showActivityNamesInTooltip = false;
   @Input() zoomBarOverviewData: Array<[number, number]> = [];
@@ -305,6 +343,18 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     return legendItems.concat(this.buildSeriesLegendItems(overlayPanel, {
       scope: 'overlay',
       includeMetricName: true,
+    }));
+  }
+
+  public get gradeLegendItems(): GradeLegendItem[] {
+    if (!this.hasActiveAltitudeGradeColoring(this.panel)) {
+      return [];
+    }
+
+    return EVENT_CHART_ALTITUDE_GRADE_COLOR_PIECES.map((piece) => ({
+      key: piece.label,
+      label: piece.label,
+      color: piece.color,
     }));
   }
 
@@ -458,6 +508,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       || changes.emitAxisPointerCursor
       || changes.strokeWidth
       || changes.fillOpacity
+      || changes.colorAltitudeByGrade
       || changes.waterMark
       || changes.zoomBarOverviewData
       || changes.userUnitSettings
@@ -638,10 +689,23 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     const tooltipSurfaceConfig = this.buildTooltipSurfaceConfig();
     const tooltipTriggerOn = resolveEChartsTooltipTriggerOn(hoverTooltipEnabled && interactionArmed, this.isMobile);
 
-    const seriesOptions: ChartLineSeriesOption[] = panel.series.map((series) => {
+    const seriesOptions: ChartLineSeriesOption[] = [];
+    const seriesVisualMaps: Record<string, unknown>[] = [];
+    panel.series.forEach((series) => {
+      if (this.isAltitudeGradeColorSeries(series)) {
+        seriesOptions.push(...this.buildAltitudeGradeSeriesOptions(
+          series,
+          seriesStrokeWidth,
+          seriesFillOpacity,
+          primaryAreaFillOrigin
+        ));
+        return;
+      }
+
       const connectAcrossMissingValues = this.isBatteryStreamType(series.streamType);
       const useZoneColors = !!series.zoneColorPieces?.length;
-      return {
+      const seriesIndex = seriesOptions.length;
+      seriesOptions.push({
         id: series.id,
         name: series.activityName,
         type: 'line',
@@ -673,7 +737,11 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
         },
         dimensions: ['x', 'y'],
         data: this.getSeriesLineData(series),
-      };
+      });
+
+      if (useZoneColors) {
+        seriesVisualMaps.push(this.buildZoneVisualMapOption(series, seriesIndex));
+      }
     });
 
     if (seriesOptions[0]) {
@@ -688,7 +756,6 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       ));
     }
 
-    const zoneVisualMaps = this.buildZoneVisualMapOptions(panel);
     const primaryYAxisOption = this.buildValueYAxisOption(panel, yAxisConfig, {
       axisColor,
       axisLabelColor,
@@ -815,7 +882,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
           throttle: DATA_ZOOM_THROTTLE_MS,
         }
       ],
-      ...(zoneVisualMaps.length > 0 ? { visualMap: zoneVisualMaps } : {}),
+      ...(seriesVisualMaps.length > 0 ? { visualMap: seriesVisualMaps } : {}),
       series: seriesOptions
     } as ChartOption;
   }
@@ -921,29 +988,150 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     }));
   }
 
-  private buildZoneVisualMapOptions(panel: EventChartPanelModel): Record<string, unknown>[] {
-    const visualMaps: Record<string, unknown>[] = [];
+  private buildAltitudeGradeSeriesOptions(
+    series: PanelSeriesModel,
+    strokeWidth: number,
+    fillOpacity: number,
+    areaFillOrigin: 'start' | 'end'
+  ): ChartLineSeriesOption[] {
+    const pointCount = getEventChartSeriesPointCount(series);
+    if (pointCount < 2) {
+      return [];
+    }
 
-    for (let seriesIndex = 0; seriesIndex < panel.series.length; seriesIndex += 1) {
-      const series = panel.series[seriesIndex];
-      if (!series.zoneColorPieces?.length) {
+    const groups = this.buildAltitudeGradeLineGroups(series);
+    const progressive = pointCount >= PROGRESSIVE_THRESHOLD ? PROGRESSIVE_STEP : 0;
+    return groups
+      .filter((group) => group.segmentCount > 0)
+      .map((group) => ({
+        id: `${series.id}::grade-color::${group.key}`,
+        name: series.activityName,
+        type: 'line',
+        yAxisIndex: 0,
+        smooth: false,
+        showSymbol: false,
+        symbolSize: 5,
+        connectNulls: false,
+        progressive,
+        progressiveThreshold: PROGRESSIVE_THRESHOLD,
+        progressiveChunkMode: 'mod',
+        animation: this.useAnimations === true,
+        lineStyle: {
+          width: strokeWidth,
+          color: group.color,
+        },
+        itemStyle: {
+          color: group.color,
+        },
+        areaStyle: {
+          color: group.color,
+          opacity: fillOpacity,
+          origin: areaFillOrigin,
+        },
+        emphasis: {
+          disabled: true,
+        },
+        dimensions: ['x', 'y'],
+        data: new Float64Array(group.data) as unknown as ChartLineSeriesOption['data'],
+      }));
+  }
+
+  private buildAltitudeGradeLineGroups(series: PanelSeriesModel): AltitudeGradeLineGroup[] {
+    const groups = EVENT_CHART_ALTITUDE_GRADE_COLOR_PIECES.map((piece, index) => this.createAltitudeGradeLineGroup(
+      `grade-${index}`,
+      piece.color,
+      piece
+    ));
+    const ungradedGroupIndex = groups.length;
+    groups.push(this.createAltitudeGradeLineGroup('ungraded', series.color, null));
+
+    const pointCount = getEventChartSeriesPointCount(series);
+    let leftPoint = getEventChartSeriesPoint(series, 0);
+    for (let pointIndex = 1; pointIndex < pointCount; pointIndex += 1) {
+      const rightPoint = getEventChartSeriesPoint(series, pointIndex);
+      if (!this.isRenderableSegmentPoint(leftPoint) || !this.isRenderableSegmentPoint(rightPoint)) {
+        leftPoint = rightPoint;
         continue;
       }
 
-      visualMaps.push({
-        type: 'piecewise',
-        show: false,
-        hoverLink: false,
-        seriesIndex,
-        dimension: 1,
-        pieces: this.toZoneVisualMapPieces(series.zoneColorPieces),
-        outOfRange: {
-          color: series.color,
-        },
-      });
+      const gradeValue = getEventChartSeriesGradeColorValue(series, pointIndex);
+      const gradeGroupIndex = typeof gradeValue === 'number'
+        ? groups.findIndex((group) => group.piece && this.isValueInsideGradeColorPiece(gradeValue, group.piece))
+        : -1;
+      const group = groups[gradeGroupIndex >= 0 ? gradeGroupIndex : ungradedGroupIndex];
+      this.appendAltitudeGradeSegment(group, pointIndex - 1, pointIndex, leftPoint, rightPoint);
+      leftPoint = rightPoint;
     }
 
-    return visualMaps;
+    return groups;
+  }
+
+  private createAltitudeGradeLineGroup(
+    key: string,
+    color: string,
+    piece: EventChartGradeColorPiece | null
+  ): AltitudeGradeLineGroup {
+    return {
+      key,
+      color,
+      piece,
+      data: [],
+      lastRightIndex: -1,
+      segmentCount: 0,
+    };
+  }
+
+  private appendAltitudeGradeSegment(
+    group: AltitudeGradeLineGroup,
+    leftIndex: number,
+    rightIndex: number,
+    leftPoint: EventChartPoint & { y: number },
+    rightPoint: EventChartPoint & { y: number }
+  ): void {
+    if (group.segmentCount > 0 && group.lastRightIndex !== leftIndex) {
+      group.data.push(leftPoint.x, Number.NaN);
+    }
+
+    if (group.segmentCount > 0 && group.lastRightIndex === leftIndex) {
+      group.data.push(rightPoint.x, rightPoint.y);
+    } else {
+      group.data.push(leftPoint.x, leftPoint.y, rightPoint.x, rightPoint.y);
+    }
+
+    group.lastRightIndex = rightIndex;
+    group.segmentCount += 1;
+  }
+
+  private isRenderableSegmentPoint(point: EventChartPoint | null): point is EventChartPoint & { y: number } {
+    return !!point
+      && Number.isFinite(point.x)
+      && typeof point.y === 'number'
+      && Number.isFinite(point.y);
+  }
+
+  private buildZoneVisualMapOption(series: PanelSeriesModel, seriesIndex: number): Record<string, unknown> {
+    return {
+      type: 'piecewise',
+      show: false,
+      hoverLink: false,
+      seriesIndex,
+      dimension: 1,
+      pieces: this.toZoneVisualMapPieces(series.zoneColorPieces || []),
+      outOfRange: {
+        color: series.color,
+      },
+    };
+  }
+
+  private hasActiveAltitudeGradeColoring(panel: EventChartPanelModel | null | undefined): boolean {
+    return this.colorAltitudeByGrade === true
+      && !!panel?.series?.some((series) => this.isAltitudeGradeColorSeries(series));
+  }
+
+  private isAltitudeGradeColorSeries(series: PanelSeriesModel | null | undefined): boolean {
+    return this.colorAltitudeByGrade === true
+      && !!series?.gradeColorValues?.length
+      && getEventChartSeriesPointCount(series) > 1;
   }
 
   private toZoneVisualMapPieces(pieces: EventChartZoneColorPiece[]): Record<string, unknown>[] {
@@ -1465,9 +1653,10 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       const resolvedPoint = resolvedPoints[index];
       const formatted = this.formatDataValue(resolvedPoint.series.streamType || '', resolvedPoint.point.y as number);
       const label = this.buildTooltipRowLabel(resolvedPoint, hasOverlay);
-      const markerColor = this.resolveSeriesPointColor(resolvedPoint.series, resolvedPoint.point.y);
+      const markerColor = this.resolveSeriesPointColor(resolvedPoint.series, resolvedPoint.point.y, resolvedPoint.index);
+      const gradeLabel = this.buildTooltipGradeLabel(resolvedPoint.series, resolvedPoint.index);
       tooltipLines.push(
-        `<div><span style="display:inline-block;margin-right:6px;border-radius:50%;width:8px;height:8px;background:${markerColor};"></span>${label ? `${label}: ` : ''}${formatted}</div>`
+        `<div><span style="display:inline-block;margin-right:6px;border-radius:50%;width:8px;height:8px;background:${markerColor};"></span>${label ? `${label}: ` : ''}${formatted}${gradeLabel}</div>`
       );
     }
 
@@ -1492,7 +1681,29 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     return this.showActivityNamesInTooltip ? activityName : '';
   }
 
-  private resolveSeriesPointColor(series: PanelSeriesModel, value: number | null): string {
+  private buildTooltipGradeLabel(series: PanelSeriesModel, pointIndex: number): string {
+    if (!this.isAltitudeGradeColorSeries(series)) {
+      return '';
+    }
+
+    const gradeValue = getEventChartSeriesGradeColorValue(series, pointIndex);
+    if (typeof gradeValue !== 'number' || !Number.isFinite(gradeValue)) {
+      return '';
+    }
+
+    const formattedGrade = this.formatDataValue(series.gradeColorSourceType || 'Grade', gradeValue);
+    return ` <span style="opacity:0.72;">· Grade ${formattedGrade}</span>`;
+  }
+
+  private resolveSeriesPointColor(series: PanelSeriesModel, value: number | null, pointIndex?: number): string {
+    if (this.isAltitudeGradeColorSeries(series) && typeof pointIndex === 'number') {
+      const gradeValue = getEventChartSeriesGradeColorValue(series, pointIndex);
+      const gradePiece = typeof gradeValue === 'number'
+        ? EVENT_CHART_ALTITUDE_GRADE_COLOR_PIECES.find((piece) => this.isValueInsideGradeColorPiece(gradeValue, piece))
+        : null;
+      return gradePiece?.color || series.color;
+    }
+
     if (typeof value !== 'number' || !Number.isFinite(value) || !series.zoneColorPieces?.length) {
       return series.color;
     }
@@ -1502,6 +1713,18 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
   }
 
   private isValueInsideZoneColorPiece(value: number, piece: EventChartZoneColorPiece): boolean {
+    if (Number.isFinite(piece.gte) && value < (piece.gte as number)) {
+      return false;
+    }
+
+    if (Number.isFinite(piece.lt) && value >= (piece.lt as number)) {
+      return false;
+    }
+
+    return true;
+  }
+
+  private isValueInsideGradeColorPiece(value: number, piece: EventChartGradeColorPiece): boolean {
     if (Number.isFinite(piece.gte) && value < (piece.gte as number)) {
       return false;
     }
@@ -1560,6 +1783,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
           panel,
           series,
           point: nearestPoint.point,
+          index: nearestPoint.index,
         });
       }
     }

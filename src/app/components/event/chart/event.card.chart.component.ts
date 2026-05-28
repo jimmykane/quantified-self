@@ -226,6 +226,30 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
       });
   }
 
+  public get colorAltitudeByGrade(): boolean {
+    return this.colorAltitudeByGradeOverride
+      ?? (this.userSettingsQuery.chartSettings()?.colorAltitudeByGrade !== false);
+  }
+  public set colorAltitudeByGrade(value: boolean) {
+    if (value === this.colorAltitudeByGrade) {
+      return;
+    }
+
+    this.colorAltitudeByGradeOverride = value;
+    this.cdr.markForCheck();
+
+    void this.userSettingsQuery.updateChartSettings({ colorAltitudeByGrade: value })
+      .then(() => {
+        this.colorAltitudeByGradeOverride = null;
+        this.cdr.markForCheck();
+      })
+      .catch((error) => {
+        this.logger.error('[EventCardChart] Failed to persist colorAltitudeByGrade setting', error);
+        this.colorAltitudeByGradeOverride = null;
+        this.cdr.markForCheck();
+      });
+  }
+
   public get gainAndLossThreshold() {
     return this.userSettingsQuery.chartSettings()?.gainAndLossThreshold ?? AppUserUtilities.getDefaultGainAndLossThreshold();
   }
@@ -288,6 +312,12 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
     return this.waterMarkText.length > 0;
   }
 
+  public get hasAltitudeGradeColorData(): boolean {
+    return this.allChartPanels.some((panel) =>
+      panel.series.some((series) => !!series.gradeColorValues?.length)
+    );
+  }
+
   public get waterMarkText(): string {
     return `${this.waterMark || ''}`.trim();
   }
@@ -311,6 +341,7 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
   private xAxisTypeOverride: XAxisTypes | null = null;
   private cursorBehaviourOverride: ChartCursorBehaviours | null = null;
   private syncChartHoverToMapOverride: boolean | null = null;
+  private colorAltitudeByGradeOverride: boolean | null = null;
   private fillOpacityOverride: number | null = null;
   private eventChartOverlayDataTypeByPrimaryOverride: Record<string, string> | null = null;
   private eventChartOverlayPersistRequestID = 0;
@@ -344,6 +375,13 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
         && Math.abs(AppUserUtilities.getResolvedChartFillOpacity(chartSettings) - this.fillOpacityOverride) < 0.0001
       ) {
         this.fillOpacityOverride = null;
+        this.cdr.markForCheck();
+      }
+      if (
+        this.colorAltitudeByGradeOverride !== null
+        && (chartSettings?.colorAltitudeByGrade !== false) === this.colorAltitudeByGradeOverride
+      ) {
+        this.colorAltitudeByGradeOverride = null;
         this.cdr.markForCheck();
       }
       this.queueRebuild('settings-effect');

@@ -32,8 +32,10 @@ export class EventCardChartActionsComponent implements OnChanges {
   @Input() showSwimLengthsToggle = false;
   @Input() cursorBehaviour: ChartCursorBehaviours = ChartCursorBehaviours.ZoomX;
   @Input() syncChartHoverToMap = false;
+  @Input() colorAltitudeByGrade = true;
   @Input() fillOpacity = 0;
   @Input() showSeriesMenu = false;
+  @Input() showAltitudeGradeColorToggle = false;
   @Input() seriesMenuSummary = '';
   @Input() seriesMenuItems: ChartSeriesMenuItem[] = [];
   @Input() showResetChartState = false;
@@ -44,6 +46,7 @@ export class EventCardChartActionsComponent implements OnChanges {
   @Output() fillOpacityChange = new EventEmitter<number>();
   @Output() cursorBehaviourChange = new EventEmitter<ChartCursorBehaviours>();
   @Output() syncChartHoverToMapChange = new EventEmitter<boolean>();
+  @Output() colorAltitudeByGradeChange = new EventEmitter<boolean>();
   @Output() seriesVisibilityToggle = new EventEmitter<{ dataType: string; visible: boolean }>();
   @Output() showAllSeries = new EventEmitter<void>();
   @Output() resetChartState = new EventEmitter<void>();
@@ -147,6 +150,11 @@ export class EventCardChartActionsComponent implements OnChanges {
     await this.somethingChanged('syncChartHoverToMap');
   }
 
+  async onColorAltitudeByGradeToggle(checked: boolean) {
+    this.colorAltitudeByGrade = checked;
+    await this.somethingChanged('colorAltitudeByGrade');
+  }
+
   async somethingChanged(prop?: string) {
     if (prop === 'xAxisType') {
       this.xAxisTypeChange.emit(this.xAxisType);
@@ -156,6 +164,8 @@ export class EventCardChartActionsComponent implements OnChanges {
       this.cursorBehaviourChange.emit(this.cursorBehaviour);
     } else if (prop === 'syncChartHoverToMap') {
       this.syncChartHoverToMapChange.emit(this.syncChartHoverToMap);
+    } else if (prop === 'colorAltitudeByGrade') {
+      this.colorAltitudeByGradeChange.emit(this.colorAltitudeByGrade);
     } else if (prop === 'showAllData') {
       this.showAllDataChange.emit(this.showAllData);
     } else if (prop === 'showLaps') {
@@ -168,6 +178,7 @@ export class EventCardChartActionsComponent implements OnChanges {
       this.fillOpacityChange.emit(this.fillOpacity);
       this.cursorBehaviourChange.emit(this.cursorBehaviour);
       this.syncChartHoverToMapChange.emit(this.syncChartHoverToMap);
+      this.colorAltitudeByGradeChange.emit(this.colorAltitudeByGrade);
       this.showAllDataChange.emit(this.showAllData);
       this.showLapsChange.emit(this.showLaps);
       this.showSwimLengthsChange.emit(this.showSwimLengths);

@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   ActivityTypes,
   ChartCursorBehaviours,
+  DataAltitude,
   DataDistance,
   DataHeartRate,
   DataPower,
@@ -558,6 +559,46 @@ describe('EventCardChartComponent', () => {
     component.syncChartHoverToMap = true;
 
     expect(mockUserSettingsQuery.updateChartSettings).toHaveBeenCalledWith({ syncChartHoverToMap: true });
+  });
+
+  it('defaults altitude grade coloring on and persists toggle changes', async () => {
+    fixture.detectChanges();
+
+    expect(component.colorAltitudeByGrade).toBe(true);
+
+    component.colorAltitudeByGrade = false;
+
+    expect(component.colorAltitudeByGrade).toBe(false);
+    expect(mockUserSettingsQuery.updateChartSettings).toHaveBeenCalledWith({ colorAltitudeByGrade: false });
+  });
+
+  it('exposes altitude grade color availability from loaded panel series', () => {
+    component.allChartPanels = [
+      {
+        dataType: DataAltitude.type,
+        displayName: 'Altitude',
+        unit: 'm',
+        colorGroupKey: 'Altitude',
+        minX: 0,
+        maxX: 10,
+        series: [
+          {
+            id: 'a1::Altitude',
+            activityID: 'a1',
+            activityName: 'Activity',
+            color: '#00aa00',
+            streamType: DataAltitude.type,
+            displayName: 'Altitude',
+            unit: 'm',
+            points: [{ x: 0, y: 100, time: 0 }],
+            gradeColorValues: new Float64Array([4]),
+            gradeColorSourceType: 'Grade Smooth',
+          }
+        ],
+      }
+    ] as any;
+
+    expect(component.hasAltitudeGradeColorData).toBe(true);
   });
 
   it('debounces fill opacity persistence while exposing the local override immediately', async () => {

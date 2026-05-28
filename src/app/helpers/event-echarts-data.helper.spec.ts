@@ -5,8 +5,10 @@ import {
   DataCadence,
   DataDistance,
   DataDuration,
+  DataGrade,
   DataGradeAdjustedPace,
   DataGradeAdjustedSpeed,
+  DataGradeSmooth,
   DataHeartRate,
   DataPace,
   DataPotentialStamina,
@@ -144,6 +146,172 @@ describe('event-echarts-data.helper', () => {
     expect(eventChartSeriesToPoints(panels[0].series[0])).toHaveLength(5);
     expect(eventChartSeriesToPoints(panels[0].series[0]).map((point) => point.x)).toEqual([0, 1, 2, 3, 4]);
     expect(panels[0].series[0].color).toBe((AppDataColors as any).Power);
+  });
+
+  function mockAltitudeGradePanelDependencies(): void {
+    vi.spyOn(ActivityUtilities, 'createUnitStreamsFromStreams').mockReturnValue([] as any);
+    vi.spyOn(DynamicDataLoader, 'getUnitBasedDataTypesFromDataTypes').mockImplementation((types: any) => types as any);
+    vi.spyOn(DynamicDataLoader, 'getUnitBasedDataTypesFromDataType').mockImplementation((type: any) => [type] as any);
+    vi.spyOn(DynamicDataLoader, 'getNonUnitBasedDataTypes').mockReturnValue([DataAltitude.type]);
+    vi.spyOn(DynamicDataLoader, 'getDataClassFromDataType').mockImplementation((type: string) => ({
+      displayType: type,
+      type,
+      unit: type === DataAltitude.type ? 'm' : '%',
+    } as any));
+  }
+
+  function buildAltitudeGradeActivity(input: {
+    altitudeValues?: Array<number | null>;
+    gradeSmoothValues?: Array<number | null>;
+    gradeValues?: Array<number | null>;
+    timeValues?: number[];
+    distanceValues?: number[];
+  }) {
+    const altitudeStream = {
+      type: DataAltitude.type,
+      getData: () => input.altitudeValues ?? [100, 110, 120],
+    } as any;
+    const gradeSmoothStream = {
+      type: DataGradeSmooth.type,
+      getData: () => input.gradeSmoothValues ?? [1, 2, 3],
+    } as any;
+    const gradeStream = {
+      type: DataGrade.type,
+      getData: () => input.gradeValues ?? [8, 9, 10],
+    } as any;
+    const timeStream = {
+      type: XAxisTypes.Time,
+      getData: () => input.timeValues ?? [0, 1, 2],
+    } as any;
+    const distanceStream = {
+      type: DataDistance.type,
+      getData: () => input.distanceValues ?? [0, 10, 20],
+    } as any;
+    const streams = [altitudeStream, gradeSmoothStream, gradeStream, timeStream, distanceStream];
+
+    return {
+      startDate: new Date('2024-01-01T00:00:00.000Z'),
+      creator: { name: 'Garmin' },
+      type: 'Running',
+      getID: () => 'a-altitude-grade',
+      getAllStreams: () => streams,
+      getStream: (type: string) => streams.find((stream) => stream.type === type) ?? null,
+    } as any;
+  }
+
+  it('adds grade smooth values to altitude series for grade coloring', () => {
+    mockAltitudeGradePanelDependencies();
+    const activity = buildAltitudeGradeActivity({
+      gradeSmoothValues: [1.1, 2.2, 3.3],
+      gradeValues: [8, 9, 10],
+    });
+
+    const panels = buildEventChartPanels({
+      selectedActivities: [activity],
+      allActivities: [activity],
+      xAxisType: XAxisTypes.Duration,
+      showAllData: false,
+      dataTypesToUse: [DataAltitude.type],
+      userUnitSettings: {} as any,
+      eventColorService: { getActivityColor: () => '#ff0000' } as any,
+    });
+
+    expect(panels).toHaveLength(1);
+    expect(panels[0].dataType).toBe(DataAltitude.type);
+    expect(panels[0].series[0].gradeColorSourceType).toBe(DataGradeSmooth.type);
+    expect(Array.from(panels[0].series[0].gradeColorValues || [])).toEqual([1.1, 2.2, 3.3]);
+  });
+
+  it('falls back to raw grade when grade smooth is unavailable', () => {
+    mockAltitudeGradePanelDependencies();
+    const activity = buildAltitudeGradeActivity({
+      gradeSmoothValues: [],
+      gradeValues: [-2, 4, 9],
+    });
+
+    const panels = buildEventChartPanels({
+      selectedActivities: [activity],
+      allActivities: [activity],
+      xAxisType: XAxisTypes.Duration,
+      showAllData: false,
+      dataTypesToUse: [DataAltitude.type],
+      userUnitSettings: {} as any,
+      eventColorService: { getActivityColor: () => '#ff0000' } as any,
+    });
+
+    expect(panels[0].series[0].gradeColorSourceType).toBe(DataGrade.type);
+    expect(Array.from(panels[0].series[0].gradeColorValues || [])).toEqual([-2, 4, 9]);
+  });
+
+  it('aligns altitude grade color values to filtered distance-axis points', () => {
+    mockAltitudeGradePanelDependencies();
+    const activity = buildAltitudeGradeActivity({
+      altitudeValues: [100, 110, 120, 130],
+      gradeSmoothValues: [1, 2, 3, 4],
+      timeValues: [0, 1, 2, 3],
+      distanceValues: [0, 10, Number.NaN, 30],
+    });
+
+    const panels = buildEventChartPanels({
+      selectedActivities: [activity],
+      allActivities: [activity],
+      xAxisType: XAxisTypes.Distance,
+      showAllData: false,
+      dataTypesToUse: [DataAltitude.type],
+      userUnitSettings: {} as any,
+      eventColorService: { getActivityColor: () => '#ff0000' } as any,
+    });
+
+    expect(eventChartSeriesToPoints(panels[0].series[0]).map((point) => point.x)).toEqual([0, 10, 30]);
+    expect(Array.from(panels[0].series[0].gradeColorValues || [])).toEqual([1, 2, 4]);
+  });
+
+  it('aligns altitude grade color values to filtered absolute time-axis points', () => {
+    mockAltitudeGradePanelDependencies();
+    const activity = buildAltitudeGradeActivity({
+      altitudeValues: [100, 110, 120, 130],
+      gradeSmoothValues: [1, 2, 3, 4],
+      timeValues: [0, 10, Number.NaN, 30],
+    });
+    const startTime = activity.startDate.getTime();
+
+    const panels = buildEventChartPanels({
+      selectedActivities: [activity],
+      allActivities: [activity],
+      xAxisType: XAxisTypes.Time,
+      showAllData: false,
+      dataTypesToUse: [DataAltitude.type],
+      userUnitSettings: {} as any,
+      eventColorService: { getActivityColor: () => '#ff0000' } as any,
+    });
+
+    expect(eventChartSeriesToPoints(panels[0].series[0]).map((point) => point.x)).toEqual([
+      startTime,
+      startTime + 10_000,
+      startTime + 30_000,
+    ]);
+    expect(Array.from(panels[0].series[0].gradeColorValues || [])).toEqual([1, 2, 4]);
+  });
+
+  it('omits altitude grade coloring when grade streams have no finite values', () => {
+    mockAltitudeGradePanelDependencies();
+    const activity = buildAltitudeGradeActivity({
+      gradeSmoothValues: [Number.NaN, Number.NaN, Number.NaN],
+      gradeValues: [Number.NaN, Number.NaN, Number.NaN],
+    });
+
+    const panels = buildEventChartPanels({
+      selectedActivities: [activity],
+      allActivities: [activity],
+      xAxisType: XAxisTypes.Duration,
+      showAllData: false,
+      dataTypesToUse: [DataAltitude.type],
+      userUnitSettings: {} as any,
+      eventColorService: { getActivityColor: () => '#ff0000' } as any,
+    });
+
+    expect(panels[0].series[0].gradeColorValues).toBeUndefined();
+    expect(panels[0].series[0].gradeColorSourceType).toBeUndefined();
   });
 
   it('builds stamina panels when stamina streams are selected', () => {
@@ -1230,6 +1398,52 @@ describe('event-echarts-data.helper', () => {
     expect(snapshot.selectedActivities[0].streams.map((stream) => stream.type)).toEqual([
       DataGradeAdjustedSpeed.type,
       DataSpeed.type,
+      XAxisTypes.Time,
+    ]);
+  });
+
+  it('includes grade streams in selected worker snapshots when altitude can be grade-colored', () => {
+    const altitudeStream = {
+      type: DataAltitude.type,
+      getData: () => [100, 110],
+    } as any;
+    const gradeSmoothStream = {
+      type: DataGradeSmooth.type,
+      getData: () => [1, 2],
+    } as any;
+    const gradeStream = {
+      type: DataGrade.type,
+      getData: () => [3, 4],
+    } as any;
+    const timeStream = {
+      type: XAxisTypes.Time,
+      getData: () => [0, 1],
+    } as any;
+    const activity = {
+      startDate: new Date('2024-01-01T00:00:00.000Z'),
+      creator: { name: 'Garmin' },
+      type: 'Running',
+      getID: () => 'a-snapshot-altitude-grade',
+      getAllStreams: () => [altitudeStream, gradeSmoothStream, gradeStream],
+      getStream: (type: string) => (type === XAxisTypes.Time ? timeStream : null),
+    } as any;
+
+    const snapshot = createEventChartPanelBuildSnapshot({
+      selectedActivities: [activity],
+      allActivities: [activity],
+      xAxisType: XAxisTypes.Duration,
+      showAllData: false,
+      dataTypesToUse: [DataAltitude.type],
+      userUnitSettings: {} as any,
+      eventColorService: {
+        getActivityColor: () => '#ff0000'
+      } as any,
+    });
+
+    expect(snapshot.selectedActivities[0].streams.map((stream) => stream.type)).toEqual([
+      DataAltitude.type,
+      DataGradeSmooth.type,
+      DataGrade.type,
       XAxisTypes.Time,
     ]);
   });

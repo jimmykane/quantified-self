@@ -110,6 +110,15 @@
     </mat-slide-toggle>
   </section>
 
+  @if (showAltitudeGradeColorToggle) {
+  <section mat-menu-item>
+    <mat-slide-toggle [checked]="colorAltitudeByGrade" [disabled]="!user"
+      (click)="$event.stopPropagation()" (change)="onColorAltitudeByGradeToggle($event.checked)">
+      Color Altitude by Grade
+    </mat-slide-toggle>
+  </section>
+  }
+
   <section mat-menu-item>
     <mat-slide-toggle [checked]="showAllData" [disabled]="!user"
       (click)="$event.stopPropagation()" (change)="onShowAllDataToggle($event.checked)">

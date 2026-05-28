@@ -438,11 +438,13 @@ export class UserSettingsComponent implements OnChanges, OnDestroy, OnInit {
         dataTypeSettings[dataType] = { enabled: selectedTypesSet.has(dataType) };
       }
 
+      const currentChartSettings = (this.user?.settings?.chartSettings || {}) as unknown as AppChartSettingsInterface;
       const userChartSettings: AppChartSettingsInterface = {
         dataTypeSettings: dataTypeSettings,
         useAnimations: this.userSettingsFormGroup.get('useAnimations').value,
         xAxisType: this.userSettingsFormGroup.get('xAxisType').value,
         showAllData: this.userSettingsFormGroup.get('showAllData').value,
+        colorAltitudeByGrade: currentChartSettings.colorAltitudeByGrade !== false,
         chartCursorBehaviour: this.userSettingsFormGroup.get('chartCursorBehaviour').value ? ChartCursorBehaviours.SelectX : ChartCursorBehaviours.ZoomX,
         strokeWidth: this.userSettingsFormGroup.get('chartStrokeWidth').value,
         strokeOpacity: this.userSettingsFormGroup.get('chartStrokeOpacity').value,
