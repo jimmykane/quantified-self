@@ -58,7 +58,6 @@ export interface IntegrationRouteData {
   preload: boolean;
   animation: string;
   description: string;
-  keywords: string;
   jsonLd: Record<string, unknown>;
 }
 
@@ -435,7 +434,6 @@ export const INTEGRATIONS_HUB_ROUTE_DATA: IntegrationRouteData = {
   preload: true,
   animation: 'Integrations',
   description: 'Explore Garmin, Suunto, and COROS integrations for private training dashboards, provider sync, history imports, uploads, and centralized workout data.',
-  keywords: 'Garmin integration, Suunto integration, COROS integration, centralize Garmin, Suunto, and COROS workout data, private training dashboard, Garmin to Suunto sync, COROS to Suunto sync',
   jsonLd: {
     '@context': 'https://schema.org',
     '@type': 'CollectionPage',
@@ -457,7 +455,6 @@ export const PROVIDER_INTEGRATION_ROUTE_DATA: Record<IntegrationProviderKey, Int
     preload: true,
     animation: 'Integrations',
     description: 'Use Quantified Self as a private training dashboard for Garmin data with Garmin history imports, Garmin -> Suunto sync, AI insights, and centralized workout data.',
-    keywords: 'Garmin integration, best private training dashboard for Garmin data, private Garmin training dashboard, Garmin to Suunto sync, Garmin history import, centralize Garmin, Suunto, and COROS workout data',
     jsonLd: providerWebPageJsonLd(
       PROVIDER_INTEGRATION_PAGES.garmin,
       'Use Quantified Self as a private training dashboard for Garmin data with Garmin history imports, Garmin -> Suunto sync, AI insights, and centralized workout data.'
@@ -468,7 +465,6 @@ export const PROVIDER_INTEGRATION_ROUTE_DATA: Record<IntegrationProviderKey, Int
     preload: true,
     animation: 'Integrations',
     description: 'Sync Garmin and COROS activities to Suunto, upload FIT activities and GPX routes, and centralize Garmin, Suunto, and COROS workout data in one private training dashboard.',
-    keywords: 'Suunto integration, Garmin to Suunto sync, COROS to Suunto sync, sync Garmin data to Suunto automatically, centralize Garmin, Suunto, and COROS workout data, private Garmin training dashboard, AI insights endurance training',
     jsonLd: providerWebPageJsonLd(
       PROVIDER_INTEGRATION_PAGES.suunto,
       'Sync Garmin and COROS activities to Suunto, upload FIT activities and GPX routes, and centralize Garmin, Suunto, and COROS workout data in one private training dashboard.'
@@ -479,7 +475,6 @@ export const PROVIDER_INTEGRATION_ROUTE_DATA: Record<IntegrationProviderKey, Int
     preload: true,
     animation: 'Integrations',
     description: 'Connect COROS to Quantified Self for COROS -> Suunto sync, recent history imports, sleep summaries, FIT uploads, and centralized Garmin, Suunto, and COROS workout data.',
-    keywords: 'COROS integration, COROS to Suunto sync, centralize Garmin, Suunto, and COROS workout data, COROS history import, COROS sleep summaries, private training dashboard',
     jsonLd: providerWebPageJsonLd(
       PROVIDER_INTEGRATION_PAGES.coros,
       'Connect COROS to Quantified Self for COROS -> Suunto sync, recent history imports, sleep summaries, FIT uploads, and centralized Garmin, Suunto, and COROS workout data.'

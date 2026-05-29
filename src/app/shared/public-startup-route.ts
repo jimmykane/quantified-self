@@ -1,10 +1,19 @@
 const PUBLIC_STARTUP_PATHS = new Set([
   '/',
+  '/pricing',
+  '/help',
+  '/releases',
   '/integrations',
   '/integrations/garmin',
   '/integrations/suunto',
   '/integrations/coros',
   '/features/workout-data-comparison',
+  '/features/ai-insights',
+  '/features/workout-file-comparison',
+  '/features/sports-watch-benchmark',
+  '/guides/sync-garmin-to-suunto',
+  '/guides/sync-coros-to-suunto',
+  '/guides/centralize-garmin-suunto-coros-workout-data',
 ]);
 
 export function hasAngularServerContext(documentRef: Document | null | undefined): boolean {

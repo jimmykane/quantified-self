@@ -89,6 +89,8 @@ describe('HomeComponent', () => {
         expect(heroText).not.toContain('chart-backed answers');
         expect(aiSectionText).toContain('AI Insights');
         expect(aiSectionText).toContain('Turn focused training questions into chart-backed answers grounded in your stored activity data.');
+        expect(aiSectionText).toContain('Explore AI Insights');
+        expect(fixture.nativeElement.querySelector('a[routerlink="/features/ai-insights"], a[ng-reflect-router-link="/features/ai-insights"]')).toBeTruthy();
         expect(footerIcons.length).toBe(1);
         expect(firebaseIcon).toBeTruthy();
         expect(contactLink).toBeTruthy();
@@ -228,7 +230,9 @@ describe('HomeComponent', () => {
         expect(text).toContain('dropouts, stuck values, and cadence-lock');
         expect(text).toContain('Save / Share');
         expect(text).toContain('Compare Workout Data');
+        expect(text).toContain('Device Benchmarks');
         expect(fixture.nativeElement.querySelector('a[routerlink="/features/workout-data-comparison"], a[ng-reflect-router-link="/features/workout-data-comparison"]')).toBeTruthy();
+        expect(fixture.nativeElement.querySelector('a[routerlink="/features/sports-watch-benchmark"], a[ng-reflect-router-link="/features/sports-watch-benchmark"]')).toBeTruthy();
         expect(text).not.toContain('Benchmark your devices with high-fidelity trace comparison.');
         expect(text).not.toContain('Sync Quality');
     });

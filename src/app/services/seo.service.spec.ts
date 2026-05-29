@@ -97,7 +97,7 @@ describe('SeoService', () => {
 
         expect(titleServiceSpy.setTitle).toHaveBeenCalledWith('Test Page - Quantified Self');
         expect(metaServiceSpy.updateTag).toHaveBeenCalledWith({ name: 'description', content: 'Test Description' });
-        expect(metaServiceSpy.updateTag).toHaveBeenCalledWith({ name: 'keywords', content: 'test, seo' });
+        expect(metaServiceSpy.updateTag).not.toHaveBeenCalledWith({ name: 'keywords', content: 'test, seo' });
         expect(metaServiceSpy.updateTag).toHaveBeenCalledWith({ property: 'og:title', content: 'Test Page - Quantified Self' });
         expect(metaServiceSpy.updateTag).toHaveBeenCalledWith({ property: 'og:description', content: 'Test Description' });
     });
@@ -221,6 +221,29 @@ describe('SeoService', () => {
 
         expect(mockDocument.createElement).not.toHaveBeenCalled();
         expect(mockLink.setAttribute).toHaveBeenCalledWith('href', 'https://quantified-self.io/updated');
+    });
+
+    it('should canonicalize non-root paths without a trailing slash', () => {
+        mockActivatedRoute.data = of({ title: 'Slash Test' });
+
+        mockRouter.url = '/features/ai-insights/?utm_source=test';
+        mockRouter.parseUrl = vi.fn().mockReturnValue({
+            queryParams: { utm_source: 'test' },
+            fragment: null,
+            toString: () => '/features/ai-insights/'
+        });
+
+        const mockLink = { setAttribute: vi.fn() };
+        mockDocument.querySelector = vi.fn().mockReturnValue(mockLink);
+
+        service.init();
+        routerEventsSubject.next(new NavigationEnd(1, '/features/ai-insights/', '/features/ai-insights/'));
+
+        expect(mockLink.setAttribute).toHaveBeenCalledWith('href', 'https://quantified-self.io/features/ai-insights');
+        expect(metaServiceSpy.updateTag).toHaveBeenCalledWith({
+            property: 'og:url',
+            content: 'https://quantified-self.io/features/ai-insights'
+        });
     });
 
     it('should write canonical, og:url, and JSON-LD during server rendering', () => {

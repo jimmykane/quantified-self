@@ -157,7 +157,7 @@ describe('AppShellComponent', () => {
     });
 
     it('should keep prerendered public startup pages visible while browser auth resolves', () => {
-        window.history.pushState({}, '', '/integrations');
+        window.history.pushState({}, '', '/features/ai-insights');
 
         const publicFixture = TestBed.createComponent(AppShellComponent);
         const publicComponent = publicFixture.componentInstance;

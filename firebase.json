@@ -8,6 +8,7 @@
         "**/.*",
         "**/node_modules/**"
       ],
+      "trailingSlash": false,
       "rewrites": [
         {
           "source": "**",
@@ -23,6 +24,7 @@
         "**/.*",
         "**/node_modules/**"
       ],
+      "trailingSlash": false,
       "rewrites": [
         {
           "source": "**",

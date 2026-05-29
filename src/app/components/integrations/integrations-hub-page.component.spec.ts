@@ -38,6 +38,8 @@ describe('IntegrationsHubPageComponent', () => {
     expect(text).toContain('centralize Garmin, Suunto, and COROS workout data');
     expect(text).toContain('Compare workout data across devices');
     expect(text).toContain('benchmark reports, metric overlays, source files, and reviewer-ready exports');
+    expect(text).toContain('Set up the sync route you need');
+    expect(text).toContain('Garmin -> Suunto sync, COROS -> Suunto sync');
     expect(text).toContain('Private dashboard, history import, and Suunto sync');
     expect(text).toContain('Sync destination, uploads, and Suunto history');
     expect(text).toContain('Recent history import and Suunto sync');
@@ -51,6 +53,11 @@ describe('IntegrationsHubPageComponent', () => {
     expect(hrefs).toContain('/integrations/suunto');
     expect(hrefs).toContain('/integrations/coros');
     expect(hrefs).toContain('/features/workout-data-comparison');
+    expect(hrefs).toContain('/features/workout-file-comparison');
+    expect(hrefs).toContain('/features/sports-watch-benchmark');
+    expect(hrefs).toContain('/guides/sync-garmin-to-suunto');
+    expect(hrefs).toContain('/guides/sync-coros-to-suunto');
+    expect(hrefs).toContain('/guides/centralize-garmin-suunto-coros-workout-data');
     expect(hrefs).toContain('/login');
     expect(hrefs).toContain('/help#service-connections');
   });

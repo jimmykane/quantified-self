@@ -32,10 +32,16 @@
   "navigationUrls": [
     "/**",
     "!/",
+    "!/pricing",
+    "!/pricing/**",
+    "!/help",
+    "!/help/**",
+    "!/releases",
+    "!/releases/**",
     "!/integrations",
     "!/integrations/**",
-    "!/features/workout-data-comparison",
-    "!/features/workout-data-comparison/**",
+    "!/features/**",
+    "!/guides/**",
     "!/**/*.*",
     "!/**/*__*",
     "!/**/*__*/**"

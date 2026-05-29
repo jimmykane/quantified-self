@@ -9,8 +9,7 @@ const routes: Routes = [
     component: PoliciesComponent,
     data: {
       title: 'Privacy Policy & Terms',
-      description: 'Read our Privacy Policy, Terms of Service, and Data Protection information.',
-      keywords: 'privacy policy, terms of service, gdpr, data protection, security'
+      description: 'Read our Privacy Policy, Terms of Service, and Data Protection information.'
     }
   }
 ];

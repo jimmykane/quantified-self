@@ -148,6 +148,8 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('merged and benchmark events');
     expect(gettingStartedSection?.content).toContain('both metric and activity labels');
     expect(gettingStartedSection?.content).toContain('[Workout Data Comparison](/features/workout-data-comparison)');
+    expect(gettingStartedSection?.content).toContain('[Workout File Comparison](/features/workout-file-comparison)');
+    expect(gettingStartedSection?.content).toContain('[Sports Watch Benchmark](/features/sports-watch-benchmark)');
     expect(gettingStartedSection?.content).toContain('uploaded FIT/TCX/GPX/JSON/SML activity files');
     expect(gettingStartedSection?.content).toContain('reviewer workflows for device tests, YouTube videos, and blog posts');
     expect(gettingStartedSection?.content).toContain('available on the free plan for up to 100 activities');
@@ -228,6 +230,11 @@ describe('help.content', () => {
     expect(serviceConnectionsSection?.content).toContain('Integrations hub');
     expect(serviceConnectionsSection?.content).toContain('/integrations');
     expect(serviceConnectionsSection?.content).toContain('[Workout Data Comparison](/features/workout-data-comparison)');
+    expect(serviceConnectionsSection?.content).toContain('[Workout File Comparison](/features/workout-file-comparison)');
+    expect(serviceConnectionsSection?.content).toContain('[Sports Watch Benchmark](/features/sports-watch-benchmark)');
+    expect(serviceConnectionsSection?.content).toContain('[Garmin to Suunto sync guide](/guides/sync-garmin-to-suunto)');
+    expect(serviceConnectionsSection?.content).toContain('[COROS to Suunto sync guide](/guides/sync-coros-to-suunto)');
+    expect(serviceConnectionsSection?.content).toContain('[centralized workout data guide](/guides/centralize-garmin-suunto-coros-workout-data)');
     expect(serviceConnectionsSection?.content).toContain('uploaded FIT/TCX/GPX/JSON/SML activity files');
     expect(serviceConnectionsSection?.content).toContain('reviewer workflows for device tests, YouTube videos, and blog posts');
     expect(serviceConnectionsSection?.content).toContain('available on the free plan for up to 100 activities');
@@ -271,6 +278,24 @@ describe('help.content', () => {
       icon: 'compare_arrows',
       kind: 'route',
       target: '/features/workout-data-comparison',
+    });
+    expect(serviceConnectionsSection?.links).toContainEqual({
+      label: 'Garmin to Suunto Guide',
+      icon: 'sync_alt',
+      kind: 'route',
+      target: '/guides/sync-garmin-to-suunto',
+    });
+    expect(serviceConnectionsSection?.links).toContainEqual({
+      label: 'COROS to Suunto Guide',
+      icon: 'published_with_changes',
+      kind: 'route',
+      target: '/guides/sync-coros-to-suunto',
+    });
+    expect(serviceConnectionsSection?.links).toContainEqual({
+      label: 'Centralize Workout Data',
+      icon: 'hub',
+      kind: 'route',
+      target: '/guides/centralize-garmin-suunto-coros-workout-data',
     });
     expect(serviceConnectionsSection?.links).toContainEqual({
       label: 'Garmin Integration',

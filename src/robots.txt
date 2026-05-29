@@ -1,8 +1,17 @@
 User-agent: *
 Allow: /
+Allow: /pricing
 Allow: /help
 Allow: /integrations
+Allow: /features
 Allow: /features/workout-data-comparison
+Allow: /features/ai-insights
+Allow: /features/workout-file-comparison
+Allow: /features/sports-watch-benchmark
+Allow: /guides
+Allow: /guides/sync-garmin-to-suunto
+Allow: /guides/sync-coros-to-suunto
+Allow: /guides/centralize-garmin-suunto-coros-workout-data
 Allow: /releases
 Disallow: /user
 Disallow: /user/

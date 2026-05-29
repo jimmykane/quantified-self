@@ -10,6 +10,7 @@ import { pricingRedirectGuard } from './authentication/pricing-redirect.guard';
 import { releasesResolver } from './resolvers/releases.resolver';
 import { INTEGRATIONS_HUB_ROUTE_DATA, PROVIDER_INTEGRATION_ROUTE_DATA } from './components/integrations/integration-pages.content';
 import { WORKOUT_DATA_COMPARISON_ROUTE_DATA } from './components/features/workout-data-comparison-page.content';
+import { PUBLIC_FEATURE_PATHS, PUBLIC_GUIDE_PATHS, PUBLIC_SEO_ROUTE_DATA } from './components/public-seo/public-seo-pages.content';
 
 const HOME_SEO_DESCRIPTION = 'Quantified Self brings Garmin, Suunto, and COROS activity data into one private training dashboard with AI Insights and automatic sync from Garmin or COROS to Suunto.';
 
@@ -20,8 +21,7 @@ export const routes: Routes = [
     data: {
       title: 'Login',
       animation: 'Login',
-      description: 'Login to your Quantified Self account to access your dashboard and activity data.',
-      keywords: 'quantified self, login, dashboard, activity tracker, fitness data'
+      description: 'Login to your Quantified Self account to access your dashboard and activity data.'
     },
   },
   {
@@ -45,7 +45,42 @@ export const routes: Routes = [
       title: 'Membership',
       preload: true,
       description: 'Support the development of Quantified Self. Unlock unlimited activity history and seamless sync for Suunto, Garmin, and COROS while helping keep the project independent.',
-      keywords: 'support, membership, fitness analytics, suunto sync, garmin connect sync, coros integration, independent software'
+      jsonLd: {
+        "@context": "https://schema.org",
+        "@type": "WebPage",
+        "name": "Quantified Self Membership",
+        "description": "Support the development of Quantified Self. Unlock unlimited activity history and seamless sync for Suunto, Garmin, and COROS while helping keep the project independent.",
+        "url": "https://quantified-self.io/pricing",
+        "inLanguage": "en",
+        "isPartOf": {
+          "@type": "WebSite",
+          "name": "Quantified Self",
+          "url": "https://quantified-self.io"
+        },
+        "mainEntity": {
+          "@type": "OfferCatalog",
+          "name": "Quantified Self memberships",
+          "itemListElement": [
+            {
+              "@type": "Offer",
+              "name": "Starter",
+              "price": "0",
+              "priceCurrency": "USD",
+              "description": "Free plan with manual uploads and core analysis tools."
+            },
+            {
+              "@type": "Offer",
+              "name": "Basic",
+              "description": "Paid membership for higher activity limits and deeper tracking."
+            },
+            {
+              "@type": "Offer",
+              "name": "Pro",
+              "description": "Paid membership for service connections, cross-service sync, and unlimited tracking."
+            }
+          ]
+        }
+      }
     }
   },
   {
@@ -71,18 +106,17 @@ export const routes: Routes = [
       preload: true,
       animation: 'Help',
       description: 'Get help with Garmin -> Suunto and COROS -> Suunto sync routes, catch-up sync, AI Insights, account setup, uploads, billing, privacy, and troubleshooting in Quantified Self.',
-      keywords: 'help, support, faq, garmin to suunto sync, coros to suunto sync, catch-up sync, ai insights, uploads, billing, privacy, quantified self',
       jsonLd: {
         "@context": "https://schema.org",
         "@type": "WebPage",
         "name": "Quantified Self Help & Support",
         "description": "Get help with Garmin -> Suunto and COROS -> Suunto sync routes, catch-up sync, AI Insights, account setup, uploads, billing, privacy, and troubleshooting in Quantified Self.",
-        "url": "https://www.quantified-self.io/help",
+        "url": "https://quantified-self.io/help",
         "inLanguage": "en",
         "isPartOf": {
           "@type": "WebSite",
           "name": "Quantified Self",
-          "url": "https://www.quantified-self.io"
+          "url": "https://quantified-self.io"
         },
         "about": [
           "AI Insights",
@@ -136,6 +170,36 @@ export const routes: Routes = [
     data: WORKOUT_DATA_COMPARISON_ROUTE_DATA
   },
   {
+    path: PUBLIC_FEATURE_PATHS.aiInsights,
+    loadComponent: () => import('./components/public-seo/public-seo-page.component').then(m => m.PublicSeoPageComponent),
+    data: PUBLIC_SEO_ROUTE_DATA.aiInsights
+  },
+  {
+    path: PUBLIC_FEATURE_PATHS.workoutFileComparison,
+    loadComponent: () => import('./components/public-seo/public-seo-page.component').then(m => m.PublicSeoPageComponent),
+    data: PUBLIC_SEO_ROUTE_DATA.workoutFileComparison
+  },
+  {
+    path: PUBLIC_FEATURE_PATHS.sportsWatchBenchmark,
+    loadComponent: () => import('./components/public-seo/public-seo-page.component').then(m => m.PublicSeoPageComponent),
+    data: PUBLIC_SEO_ROUTE_DATA.sportsWatchBenchmark
+  },
+  {
+    path: PUBLIC_GUIDE_PATHS.syncGarminToSuunto,
+    loadComponent: () => import('./components/public-seo/public-seo-page.component').then(m => m.PublicSeoPageComponent),
+    data: PUBLIC_SEO_ROUTE_DATA.syncGarminToSuunto
+  },
+  {
+    path: PUBLIC_GUIDE_PATHS.syncCorosToSuunto,
+    loadComponent: () => import('./components/public-seo/public-seo-page.component').then(m => m.PublicSeoPageComponent),
+    data: PUBLIC_SEO_ROUTE_DATA.syncCorosToSuunto
+  },
+  {
+    path: PUBLIC_GUIDE_PATHS.centralizeWorkoutData,
+    loadComponent: () => import('./components/public-seo/public-seo-page.component').then(m => m.PublicSeoPageComponent),
+    data: PUBLIC_SEO_ROUTE_DATA.centralizeWorkoutData
+  },
+  {
     path: 'ai-insights',
     loadComponent: () => import('./components/ai-insights/ai-insights-page.component').then(m => m.AiInsightsPageComponent),
     canMatch: [authGuard, onboardingGuard, aiInsightsGuard],
@@ -144,7 +208,6 @@ export const routes: Routes = [
       preload: true,
       animation: 'AIInsights',
       description: 'Ask focused questions about your training data and get one AI summary with one chart built from your persisted event statistics.',
-      keywords: 'ai insights, fitness analytics, training insights, cadence trends, activity charts, quantified self',
     }
   },
   {
@@ -156,7 +219,6 @@ export const routes: Routes = [
       preload: true,
       animation: 'Releases',
       description: 'Stay up to date with the latest features, improvements, and bug fixes in Quantified Self.',
-      keywords: 'release notes, changelog, updates, new features, quantified self updates',
       jsonLd: {
         "@context": "https://schema.org",
         "@type": "ItemList",
@@ -213,7 +275,6 @@ export const routes: Routes = [
     data: {
       animation: 'Home',
       description: HOME_SEO_DESCRIPTION,
-      keywords: 'quantified self, ai insights, performance analytics, training analytics, garmin connect sync, suunto app, garmin to suunto sync, coros to suunto sync, automatic sync between services, catch-up sync',
       jsonLd: {
         "@context": "https://schema.org",
         "@type": "SoftwareApplication",
@@ -232,7 +293,7 @@ export const routes: Routes = [
           "price": "0",
           "priceCurrency": "USD"
         },
-        "url": "https://www.quantified-self.io/"
+        "url": "https://quantified-self.io/"
       }
     },
     pathMatch: 'full'

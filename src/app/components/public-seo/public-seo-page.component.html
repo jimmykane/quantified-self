@@ -1,0 +1,102 @@
+<main class="public-seo-page">
+  <section class="hero-section" aria-labelledby="public-seo-title">
+    <p class="eyebrow">{{ page.eyebrow }}</p>
+    <h1 id="public-seo-title">{{ page.h1 }}</h1>
+    <p class="hero-copy">{{ page.intro }}</p>
+
+    <div class="topic-strip" aria-label="Page topics">
+      @for (chip of page.chips; track chip) {
+      <span class="topic-chip">{{ chip }}</span>
+      }
+    </div>
+
+    <div class="action-row" aria-label="Primary actions">
+      @for (action of page.actions; track action.label) {
+      @if (action.variant === 'flat') {
+      <a mat-flat-button class="qs-mat-primary" [routerLink]="action.routerLink" [fragment]="action.fragment ?? null">
+        {{ action.label }}
+        @if (action.icon) {
+        <mat-icon iconPositionEnd>{{ action.icon }}</mat-icon>
+        }
+      </a>
+      } @else {
+      <a mat-stroked-button [routerLink]="action.routerLink" [fragment]="action.fragment ?? null">
+        {{ action.label }}
+        @if (action.icon) {
+        <mat-icon iconPositionEnd>{{ action.icon }}</mat-icon>
+        }
+      </a>
+      }
+      }
+    </div>
+  </section>
+
+  @for (section of page.sections; track section.title) {
+  <section class="content-section" [attr.aria-label]="section.title">
+    <div class="section-heading">
+      <p class="eyebrow">{{ section.eyebrow }}</p>
+      <h2>{{ section.title }}</h2>
+      <p>{{ section.copy }}</p>
+    </div>
+
+    <div class="card-grid">
+      @for (item of section.items; track item.title) {
+      <mat-card appearance="outlined" class="feature-card">
+        <mat-card-header>
+          <div mat-card-avatar class="card-icon">
+            <mat-icon>{{ item.icon }}</mat-icon>
+          </div>
+          <mat-card-title>{{ item.title }}</mat-card-title>
+        </mat-card-header>
+        <mat-card-content>
+          <p>{{ item.copy }}</p>
+        </mat-card-content>
+      </mat-card>
+      }
+    </div>
+  </section>
+  }
+
+  <section class="content-section faq-section" aria-labelledby="public-seo-faq-title">
+    <div class="section-heading">
+      <p class="eyebrow">FAQ</p>
+      <h2 id="public-seo-faq-title">{{ page.eyebrow }} FAQ</h2>
+    </div>
+
+    <div class="faq-list">
+      @for (item of page.faqItems; track item.question) {
+      <article class="faq-item">
+        <h3>{{ item.question }}</h3>
+        <p>{{ item.answer }}</p>
+      </article>
+      }
+    </div>
+  </section>
+
+  <section class="content-section closing-section" aria-labelledby="public-seo-next-title">
+    <div>
+      <p class="eyebrow">Next Step</p>
+      <h2 id="public-seo-next-title">{{ page.closingTitle }}</h2>
+      <p>{{ page.closingCopy }}</p>
+    </div>
+    <div class="action-row closing-actions" aria-label="Closing actions">
+      @for (action of page.closingActions; track action.label) {
+      @if (action.variant === 'flat') {
+      <a mat-flat-button class="qs-mat-primary" [routerLink]="action.routerLink" [fragment]="action.fragment ?? null">
+        {{ action.label }}
+        @if (action.icon) {
+        <mat-icon iconPositionEnd>{{ action.icon }}</mat-icon>
+        }
+      </a>
+      } @else {
+      <a mat-stroked-button [routerLink]="action.routerLink" [fragment]="action.fragment ?? null">
+        {{ action.label }}
+        @if (action.icon) {
+        <mat-icon iconPositionEnd>{{ action.icon }}</mat-icon>
+        }
+      </a>
+      }
+      }
+    </div>
+  </section>
+</main>

@@ -22,7 +22,6 @@ export interface ComparisonRouteData {
   preload: boolean;
   animation: string;
   description: string;
-  keywords: string;
   jsonLd: Record<string, unknown>;
 }
 
@@ -115,7 +114,6 @@ export const WORKOUT_DATA_COMPARISON_ROUTE_DATA: ComparisonRouteData = {
   preload: true,
   animation: 'Features',
   description: `Compare Garmin, Suunto, COROS, and custom FIT, TCX, or GPX workout data in one private training dashboard with free-plan manual uploads, benchmark reports, source files, and reviewer-ready device comparisons.`,
-  keywords: 'compare Garmin, Suunto, and COROS workout data, Garmin vs COROS data, COROS vs Garmin, compare FIT files workout data, free workout data comparison, TCX workout benchmark, custom workout file comparison, sports watch review benchmark, YouTube device review data, private Garmin training dashboard, sync Garmin data to Suunto automatically, centralize Garmin, Suunto, and COROS workout data, FIT file viewer',
   jsonLd: {
     '@context': 'https://schema.org',
     '@type': 'WebPage',

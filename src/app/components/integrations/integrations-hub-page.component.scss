@@ -113,6 +113,12 @@ h2 {
   line-height: 1.65;
 }
 
+.feature-callout-card mat-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
 .feature-callout-icon {
   display: inline-flex;
   align-items: center;

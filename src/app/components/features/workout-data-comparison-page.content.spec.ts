@@ -18,12 +18,7 @@ describe('workout-data-comparison-page.content', () => {
     expect(WORKOUT_DATA_COMPARISON_ROUTE_DATA.description).toContain('custom FIT, TCX, or GPX workout data');
     expect(WORKOUT_DATA_COMPARISON_ROUTE_DATA.description).toContain('free-plan manual uploads');
     expect(WORKOUT_DATA_COMPARISON_ROUTE_DATA.description).toContain('reviewer-ready device comparisons');
-    expect(WORKOUT_DATA_COMPARISON_ROUTE_DATA.keywords).toContain('Garmin vs COROS data');
-    expect(WORKOUT_DATA_COMPARISON_ROUTE_DATA.keywords).toContain('compare FIT files workout data');
-    expect(WORKOUT_DATA_COMPARISON_ROUTE_DATA.keywords).toContain('free workout data comparison');
-    expect(WORKOUT_DATA_COMPARISON_ROUTE_DATA.keywords).toContain('sports watch review benchmark');
-    expect(WORKOUT_DATA_COMPARISON_ROUTE_DATA.keywords).toContain('sync Garmin data to Suunto automatically');
-    expect(WORKOUT_DATA_COMPARISON_ROUTE_DATA.keywords).not.toContain('AI insights');
+    expect(WORKOUT_DATA_COMPARISON_ROUTE_DATA).not.toHaveProperty('keywords');
     expect(WORKOUT_DATA_COMPARISON_ROUTE_DATA.jsonLd).toMatchObject({
       '@context': 'https://schema.org',
       '@type': 'WebPage',
@@ -45,7 +40,6 @@ describe('workout-data-comparison-page.content', () => {
       ...COMPARISON_SEARCH_INTENT_ITEMS.flatMap(item => [item.title, item.copy]),
       ...COMPARISON_FAQ_ITEMS.flatMap(item => [item.question, item.answer]),
       WORKOUT_DATA_COMPARISON_ROUTE_DATA.description,
-      WORKOUT_DATA_COMPARISON_ROUTE_DATA.keywords,
     ].join(' ');
 
     expect(COMPARISON_PROVIDER_SOURCES.map(source => source.label)).toEqual(['Garmin', 'Suunto', 'COROS']);

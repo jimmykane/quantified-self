@@ -478,6 +478,12 @@
       </div>
     </div>
 
+    <div class="ai-insights-actions animate-on-scroll">
+      <a mat-stroked-button routerLink="/features/ai-insights">
+        Explore AI Insights
+      </a>
+    </div>
+
     <p class="ai-insights-cta-note animate-on-scroll">Your activity questions, chart-backed answers.</p>
   </section>
 
@@ -524,9 +530,14 @@
         Merge same-session recordings, choose a reference device, and compare hardware across GNSS accuracy, sensor
         agreement, stat deltas, and data-quality artifacts.
       </p>
-      <a mat-stroked-button class="analysis-link" routerLink="/features/workout-data-comparison">
-        Compare Workout Data
-      </a>
+      <div class="analysis-actions">
+        <a mat-stroked-button class="analysis-link" routerLink="/features/workout-data-comparison">
+          Compare Workout Data
+        </a>
+        <a mat-stroked-button class="analysis-link" routerLink="/features/sports-watch-benchmark">
+          Device Benchmarks
+        </a>
+      </div>
     </div>
 
     <div class="analysis-grid">
@@ -699,6 +710,9 @@
       <div class="legal-links">
         <a href="mailto:support@quantified-self.io">Contact</a>
         <a routerLink="/integrations">Integrations</a>
+        <a routerLink="/features/ai-insights">AI Insights</a>
+        <a routerLink="/features/workout-file-comparison">File Comparison</a>
+        <a routerLink="/features/sports-watch-benchmark">Benchmarks</a>
         <a routerLink="/policies">Privacy & Policies</a>
         <span class="copyright">&copy; {{ currentYear }} Quantified Self</span>
       </div>
