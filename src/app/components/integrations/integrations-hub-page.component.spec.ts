@@ -52,9 +52,11 @@ describe('IntegrationsHubPageComponent', () => {
     expect(hrefs).toContain('/integrations/garmin');
     expect(hrefs).toContain('/integrations/suunto');
     expect(hrefs).toContain('/integrations/coros');
+    expect(hrefs).toContain('/features');
     expect(hrefs).toContain('/features/workout-data-comparison');
     expect(hrefs).toContain('/features/workout-file-comparison');
     expect(hrefs).toContain('/features/sports-watch-benchmark');
+    expect(hrefs).toContain('/guides');
     expect(hrefs).toContain('/guides/sync-garmin-to-suunto');
     expect(hrefs).toContain('/guides/sync-coros-to-suunto');
     expect(hrefs).toContain('/guides/centralize-garmin-suunto-coros-workout-data');

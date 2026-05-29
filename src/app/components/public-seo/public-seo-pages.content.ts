@@ -1,9 +1,11 @@
 import { AI_INSIGHTS_REQUEST_LIMITS, USAGE_LIMITS } from '@shared/limits';
 
 export type PublicSeoPageKey =
+  | 'featuresHub'
   | 'aiInsights'
   | 'workoutFileComparison'
   | 'sportsWatchBenchmark'
+  | 'guidesHub'
   | 'syncGarminToSuunto'
   | 'syncCorosToSuunto'
   | 'centralizeWorkoutData';
@@ -62,12 +64,14 @@ export interface PublicSeoRouteData {
 }
 
 export const PUBLIC_FEATURE_PATHS = {
+  hub: 'features',
   aiInsights: 'features/ai-insights',
   workoutFileComparison: 'features/workout-file-comparison',
   sportsWatchBenchmark: 'features/sports-watch-benchmark',
 } as const;
 
 export const PUBLIC_GUIDE_PATHS = {
+  hub: 'guides',
   syncGarminToSuunto: 'guides/sync-garmin-to-suunto',
   syncCorosToSuunto: 'guides/sync-coros-to-suunto',
   centralizeWorkoutData: 'guides/centralize-garmin-suunto-coros-workout-data',
@@ -92,6 +96,88 @@ function routeAction(
 }
 
 export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
+  featuresHub: {
+    key: 'featuresHub',
+    path: PUBLIC_FEATURE_PATHS.hub,
+    eyebrow: 'Features',
+    title: 'Features for Endurance Training Data',
+    description: 'Explore Quantified Self features for endurance training data: AI Insights, workout file comparison, sports watch benchmark reports, and a private dashboard for Garmin, Suunto, COROS, and uploaded activity files.',
+    h1: 'Features for endurance training data',
+    intro: 'Use Quantified Self to centralize provider activities and uploaded files, compare recordings, benchmark devices, and ask chart-backed questions about your training history.',
+    chips: ['AI Insights', 'Workout comparison', 'FIT/TCX/GPX', 'Benchmarks', 'Free tools'],
+    actions: [
+      routeAction('AI Insights', '/features/ai-insights', 'flat', 'arrow_forward'),
+      routeAction('Workout Data Comparison', '/features/workout-data-comparison'),
+      routeAction('Compare Files', '/features/workout-file-comparison'),
+      routeAction('Device Benchmarks', '/features/sports-watch-benchmark'),
+    ],
+    sections: [
+      {
+        eyebrow: 'Analysis',
+        title: 'Turn scattered training data into usable analysis',
+        copy: 'The feature pages cover the workflows people search for after their data is spread across watches, services, and exported activity files.',
+        items: [
+          {
+            icon: 'query_stats',
+            title: 'AI Insights',
+            copy: `Ask focused questions about stored Garmin, Suunto, COROS, and uploaded activity data. Free accounts include ${FREE_AI_REQUEST_LIMIT} AI requests per calendar month.`,
+          },
+          {
+            icon: 'compare_arrows',
+            title: 'Workout data comparison',
+            copy: 'Compare provider activities and uploaded files with overlays, stat deltas, source context, and benchmark-ready reporting.',
+          },
+          {
+            icon: 'dashboard_customize',
+            title: 'Private training dashboard',
+            copy: 'Keep activities, files, maps, exports, derived charts, sleep context, and cross-service sync workflows in one private account.',
+          },
+        ],
+      },
+      {
+        eyebrow: 'Files and Devices',
+        title: 'Compare any service data, device recording, or exported file',
+        copy: 'Manual uploads make the comparison workflow useful even when a device, lab system, reviewer unit, or service is not directly connected.',
+        items: [
+          {
+            icon: 'upload_file',
+            title: 'FIT, TCX, GPX, JSON, and SML uploads',
+            copy: `Upload activity files, compare compatible streams, and keep manual uploads available on the free plan for up to ${STARTER_ACTIVITY_LIMIT} activities.`,
+          },
+          {
+            icon: 'rate_review',
+            title: 'Sports watch benchmark reports',
+            copy: 'Create repeatable evidence for device reviews, YouTube videos, blog posts, firmware tests, coaching notes, and sensor comparisons.',
+          },
+          {
+            icon: 'hub',
+            title: 'Provider data plus custom files',
+            copy: 'Put Garmin, Suunto, COROS, service exports, and one-off test files in the same comparison workflow without making one provider the source of truth.',
+          },
+        ],
+      },
+    ],
+    faqItems: [
+      {
+        question: 'What Quantified Self features should I start with?',
+        answer: 'Start with integrations when you need provider sync, workout file comparison when you have exported files, sports watch benchmarks when you need device evidence, and AI Insights when you want chart-backed answers from stored training data.',
+      },
+      {
+        question: 'Can I compare custom files and provider data?',
+        answer: 'Yes. Quantified Self can compare compatible Garmin, Suunto, COROS, and uploaded FIT, TCX, GPX, JSON, and SML activity data in the same private dashboard.',
+      },
+      {
+        question: 'Which features are available on the free plan?',
+        answer: `Manual uploads, core analysis, benchmark comparisons, and ${FREE_AI_REQUEST_LIMIT} AI Insight requests per calendar month are available on the free plan. Automatic provider sync and higher limits require a paid plan.`,
+      },
+    ],
+    closingTitle: 'Choose the feature that matches the data problem',
+    closingCopy: 'Use the hub when you are deciding between AI analysis, file comparison, device benchmarks, provider sync, and centralized workout history.',
+    closingActions: [
+      routeAction('Explore Integrations', '/integrations', 'flat', 'arrow_forward'),
+      routeAction('Training Guides', '/guides'),
+    ],
+  },
   aiInsights: {
     key: 'aiInsights',
     path: PUBLIC_FEATURE_PATHS.aiInsights,
@@ -333,6 +419,87 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     closingActions: [
       routeAction('Start Free', '/login', 'flat', 'arrow_forward'),
       routeAction('Compare Files', '/features/workout-file-comparison'),
+    ],
+  },
+  guidesHub: {
+    key: 'guidesHub',
+    path: PUBLIC_GUIDE_PATHS.hub,
+    eyebrow: 'Guides',
+    title: 'Training Data Sync Guides',
+    description: 'Step-by-step Quantified Self guides for Garmin -> Suunto sync, COROS -> Suunto sync, and centralizing Garmin, Suunto, and COROS workout data in one private dashboard.',
+    h1: 'Training data sync guides',
+    intro: 'Choose the guide that matches the workflow you need: Garmin to Suunto, COROS to Suunto, or a centralized Garmin, Suunto, and COROS workout archive.',
+    chips: ['Garmin to Suunto', 'COROS to Suunto', 'Centralized data', 'Catch-up sync', 'Provider setup'],
+    actions: [
+      routeAction('Garmin to Suunto', '/guides/sync-garmin-to-suunto', 'flat', 'arrow_forward'),
+      routeAction('COROS to Suunto', '/guides/sync-coros-to-suunto'),
+      routeAction('Centralize Data', '/guides/centralize-garmin-suunto-coros-workout-data'),
+    ],
+    sections: [
+      {
+        eyebrow: 'Sync Setup',
+        title: 'Use route-specific guides for cross-service sync',
+        copy: 'Each sync guide explains the provider connections, route toggles, and catch-up behavior before you start moving activities between services.',
+        items: [
+          {
+            icon: 'sync_alt',
+            title: 'Garmin -> Suunto',
+            copy: 'Connect Garmin and Suunto, enable the Garmin -> Suunto route, and use manual catch-up for existing Garmin activities.',
+          },
+          {
+            icon: 'published_with_changes',
+            title: 'COROS -> Suunto',
+            copy: 'Connect COROS and Suunto, enable the COROS -> Suunto route, and account for the provider-limited recent history window.',
+          },
+          {
+            icon: 'toggle_on',
+            title: 'Explicit route control',
+            copy: 'Automatic sync routes are opt-in, and manual catch-up can queue selected date ranges without changing future route settings.',
+          },
+        ],
+      },
+      {
+        eyebrow: 'Centralized Archive',
+        title: 'Plan the dashboard before you connect everything',
+        copy: 'The centralization guide explains how provider imports, manual uploads, source files, benchmark reports, exports, and AI Insights fit together.',
+        items: [
+          {
+            icon: 'hub',
+            title: 'Garmin, Suunto, and COROS together',
+            copy: 'Centralize Garmin, Suunto, and COROS workout data while preserving provider source context for each activity.',
+          },
+          {
+            icon: 'upload_file',
+            title: 'Files when services are not enough',
+            copy: 'Use FIT, TCX, GPX, JSON, and SML uploads for unsupported services, review units, lab tests, and custom exports.',
+          },
+          {
+            icon: 'compare_arrows',
+            title: 'Analysis after import',
+            copy: 'Once data is centralized, use comparison features, benchmark reports, exports, and chart-backed AI questions from the same archive.',
+          },
+        ],
+      },
+    ],
+    faqItems: [
+      {
+        question: 'Which guide should I use first?',
+        answer: 'Use the Garmin -> Suunto or COROS -> Suunto guide when your goal is cross-service sync. Use the centralization guide when you are planning a private dashboard across providers and uploaded files.',
+      },
+      {
+        question: 'Do automatic sync routes import old history?',
+        answer: 'No. Automatic routes handle newly imported activities. Existing workouts need provider history import and manual catch-up when you want them queued to another service.',
+      },
+      {
+        question: 'Where do I find provider-specific setup details?',
+        answer: 'Use the integration pages for provider-specific capabilities, permissions, imports, uploads, and troubleshooting, then use these guides for the workflow sequence.',
+      },
+    ],
+    closingTitle: 'Start with the workflow, then connect the services',
+    closingCopy: 'Pick the guide that matches the job to be done so provider setup, route toggles, catch-up sync, and analysis stay predictable.',
+    closingActions: [
+      routeAction('All Integrations', '/integrations', 'flat', 'arrow_forward'),
+      routeAction('Feature Hub', '/features'),
     ],
   },
   syncGarminToSuunto: {
@@ -673,9 +840,11 @@ function buildRouteData(page: PublicSeoPage): PublicSeoRouteData {
 }
 
 export const PUBLIC_SEO_ROUTE_DATA: Record<PublicSeoPageKey, PublicSeoRouteData> = {
+  featuresHub: buildRouteData(PUBLIC_SEO_PAGES.featuresHub),
   aiInsights: buildRouteData(PUBLIC_SEO_PAGES.aiInsights),
   workoutFileComparison: buildRouteData(PUBLIC_SEO_PAGES.workoutFileComparison),
   sportsWatchBenchmark: buildRouteData(PUBLIC_SEO_PAGES.sportsWatchBenchmark),
+  guidesHub: buildRouteData(PUBLIC_SEO_PAGES.guidesHub),
   syncGarminToSuunto: buildRouteData(PUBLIC_SEO_PAGES.syncGarminToSuunto),
   syncCorosToSuunto: buildRouteData(PUBLIC_SEO_PAGES.syncCorosToSuunto),
   centralizeWorkoutData: buildRouteData(PUBLIC_SEO_PAGES.centralizeWorkoutData),

@@ -97,6 +97,10 @@ describe('HomeComponent', () => {
         expect(contactLink?.textContent).toContain('Contact');
         expect(contactLink?.getAttribute('href')).toBe('mailto:support@quantified-self.io');
         expect(text).toContain('Integrations');
+        expect(text).toContain('Features');
+        expect(text).toContain('Guides');
+        expect(fixture.nativeElement.querySelector('a[routerlink="/features"], a[ng-reflect-router-link="/features"]')).toBeTruthy();
+        expect(fixture.nativeElement.querySelector('a[routerlink="/guides"], a[ng-reflect-router-link="/guides"]')).toBeTruthy();
         expect(text).not.toContain('New Feature');
     });
 

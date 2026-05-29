@@ -140,6 +140,12 @@ describe('AppRoutingModule routes', () => {
   it('should define public feature SEO routes with metadata and no guards', () => {
     const expectedRoutes = [
       {
+        path: PUBLIC_FEATURE_PATHS.hub,
+        title: 'Features for Endurance Training Data',
+        h1: 'Features for endurance training data',
+        descriptionText: 'sports watch benchmark reports',
+      },
+      {
         path: PUBLIC_FEATURE_PATHS.aiInsights,
         title: 'AI Insights for Endurance Training Data',
         h1: 'AI insights for endurance training data',
@@ -173,7 +179,30 @@ describe('AppRoutingModule routes', () => {
       expect(page?.['h1']).toBe(expectedRoute.h1);
       expect(jsonLd?.['@type']).toBe('WebPage');
       expect(jsonLd?.['url']).toBe(`https://quantified-self.io/${expectedRoute.path}`);
+
+      if (expectedRoute.path === PUBLIC_FEATURE_PATHS.hub) {
+        expect(route?.pathMatch).toBe('full');
+      }
     }
+  });
+
+  it('should define a public guides hub route without requiring auth', () => {
+    const route = routes.find(candidate => candidate.path === PUBLIC_GUIDE_PATHS.hub);
+    const jsonLd = route?.data?.['jsonLd'] as Record<string, unknown> | undefined;
+    const mainEntity = jsonLd?.['mainEntity'] as Record<string, unknown>[] | undefined;
+    const page = route?.data?.['publicSeoPage'] as Record<string, unknown> | undefined;
+
+    expect(route).toBeTruthy();
+    expect(route?.canMatch).toBeUndefined();
+    expect(route?.loadComponent).toBeTypeOf('function');
+    expect(route?.data?.['title']).toBe('Training Data Sync Guides');
+    expect(route?.data?.['description']).toContain('Garmin -> Suunto sync');
+    expect(route?.data?.['keywords']).toBeUndefined();
+    expect(route?.pathMatch).toBe('full');
+    expect(page?.['h1']).toBe('Training data sync guides');
+    expect(jsonLd?.['@type']).toBe('WebPage');
+    expect(jsonLd?.['url']).toBe('https://quantified-self.io/guides');
+    expect(mainEntity?.some(entity => entity['@type'] === 'HowTo')).toBe(false);
   });
 
   it('should define public guide SEO routes with HowTo JSON-LD', () => {

@@ -214,7 +214,7 @@ export const HELP_SECTIONS: HelpSection[] = [
 - If no benchmark exists yet, it opens the benchmark selection flow.
 - Benchmark comparison uses exactly two activities, supports role swap, and can auto-align time.
 - Benchmark reports can be rerun, shared, and saved as an image.
-- The public [Workout Data Comparison](/features/workout-data-comparison), [Workout File Comparison](/features/workout-file-comparison), and [Sports Watch Benchmark](/features/sports-watch-benchmark) pages explain how Garmin, Suunto, COROS, and uploaded FIT/TCX/GPX/JSON/SML activity files fit with benchmark reports, source files, overlays, and reviewer workflows for device tests, YouTube videos, and blog posts. Manual uploads and benchmark comparisons are available on the free plan for up to 100 activities; automatic provider sync and higher limits require a paid plan.
+- The public [Features hub](/features) links to [Workout Data Comparison](/features/workout-data-comparison), [Workout File Comparison](/features/workout-file-comparison), and [Sports Watch Benchmark](/features/sports-watch-benchmark) pages that explain how Garmin, Suunto, COROS, and uploaded FIT/TCX/GPX/JSON/SML activity files fit with benchmark reports, source files, overlays, and reviewer workflows for device tests, YouTube videos, and blog posts. Manual uploads and benchmark comparisons are available on the free plan for up to 100 activities; automatic provider sync and higher limits require a paid plan.
 
 ### Event jump tables
 
@@ -481,9 +481,9 @@ Garmin, Suunto, and COROS connections are part of **Pro**.
 
 The public [Integrations hub](/integrations) links to focused [Garmin Integration](/integrations/garmin), [Suunto Integration](/integrations/suunto), and [COROS Integration](/integrations/coros) pages. They explain Garmin -> Suunto sync, COROS -> Suunto sync, manual catch-up, provider history imports, FIT activity uploads, GPX route uploads, and how those workflows connect to the private training dashboard.
 
-The public [Garmin to Suunto sync guide](/guides/sync-garmin-to-suunto), [COROS to Suunto sync guide](/guides/sync-coros-to-suunto), and [centralized workout data guide](/guides/centralize-garmin-suunto-coros-workout-data) explain the same workflows in a step-by-step format.
+The public [Training Data Sync Guides](/guides) hub links to the [Garmin to Suunto sync guide](/guides/sync-garmin-to-suunto), [COROS to Suunto sync guide](/guides/sync-coros-to-suunto), and [centralized workout data guide](/guides/centralize-garmin-suunto-coros-workout-data) for step-by-step setup.
 
-The public [Workout Data Comparison](/features/workout-data-comparison), [Workout File Comparison](/features/workout-file-comparison), and [Sports Watch Benchmark](/features/sports-watch-benchmark) pages explain how centralized Garmin, Suunto, COROS, and uploaded FIT/TCX/GPX/JSON/SML activity files support benchmark reports, metric overlays, source-file workflows, and reviewer workflows for device tests, YouTube videos, and blog posts. Manual uploads and benchmark comparisons are available on the free plan for up to 100 activities; automatic provider sync and higher limits require a paid plan.
+The public [Features hub](/features) links to [Workout Data Comparison](/features/workout-data-comparison), [Workout File Comparison](/features/workout-file-comparison), and [Sports Watch Benchmark](/features/sports-watch-benchmark) pages that explain how centralized Garmin, Suunto, COROS, and uploaded FIT/TCX/GPX/JSON/SML activity files support benchmark reports, metric overlays, source-file workflows, and reviewer workflows for device tests, YouTube videos, and blog posts. Manual uploads and benchmark comparisons are available on the free plan for up to 100 activities; automatic provider sync and higher limits require a paid plan.
 
 ## Sleep data
 
@@ -563,6 +563,8 @@ When COROS and Suunto are connected, the dashboard may offer a one-time action p
 Suunto and COROS history imports are queued jobs. Large ranges can take hours or days to finish, depending on volume and queue load.`,
     links: [
       { label: 'Integrations', icon: 'hub', kind: 'route', target: '/integrations' },
+      { label: 'Features', icon: 'dashboard_customize', kind: 'route', target: '/features' },
+      { label: 'Training Guides', icon: 'menu_book', kind: 'route', target: '/guides' },
       { label: 'Workout Data Comparison', icon: 'compare_arrows', kind: 'route', target: '/features/workout-data-comparison' },
       { label: 'Garmin to Suunto Guide', icon: 'sync_alt', kind: 'route', target: '/guides/sync-garmin-to-suunto' },
       { label: 'COROS to Suunto Guide', icon: 'published_with_changes', kind: 'route', target: '/guides/sync-coros-to-suunto' },

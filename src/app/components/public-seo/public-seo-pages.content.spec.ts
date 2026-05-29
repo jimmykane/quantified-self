@@ -9,11 +9,13 @@ import {
 describe('public-seo-pages.content', () => {
   it('defines distinct public feature and guide paths', () => {
     expect(PUBLIC_FEATURE_PATHS).toEqual({
+      hub: 'features',
       aiInsights: 'features/ai-insights',
       workoutFileComparison: 'features/workout-file-comparison',
       sportsWatchBenchmark: 'features/sports-watch-benchmark',
     });
     expect(PUBLIC_GUIDE_PATHS).toEqual({
+      hub: 'guides',
       syncGarminToSuunto: 'guides/sync-garmin-to-suunto',
       syncCorosToSuunto: 'guides/sync-coros-to-suunto',
       centralizeWorkoutData: 'guides/centralize-garmin-suunto-coros-workout-data',
@@ -44,6 +46,10 @@ describe('public-seo-pages.content', () => {
   });
 
   it('keeps the new pages focused on separate search intents', () => {
+    expect(PUBLIC_SEO_PAGES.featuresHub.h1).toBe('Features for endurance training data');
+    expect(PUBLIC_SEO_PAGES.featuresHub.intro).toContain('compare recordings');
+    expect(PUBLIC_SEO_PAGES.featuresHub.description).toContain('sports watch benchmark reports');
+
     expect(PUBLIC_SEO_PAGES.aiInsights.h1).toBe('AI insights for endurance training data');
     expect(PUBLIC_SEO_PAGES.aiInsights.description).toContain('chart-backed AI insights');
     expect(PUBLIC_SEO_PAGES.aiInsights.description).toContain('Free accounts include');
@@ -56,10 +62,38 @@ describe('public-seo-pages.content', () => {
     expect(PUBLIC_SEO_PAGES.sportsWatchBenchmark.intro).toContain('YouTube videos');
     expect(PUBLIC_SEO_PAGES.sportsWatchBenchmark.intro).toContain('firmware QA');
 
+    expect(PUBLIC_SEO_PAGES.guidesHub.h1).toBe('Training data sync guides');
+    expect(PUBLIC_SEO_PAGES.guidesHub.description).toContain('Garmin -> Suunto sync');
+    expect(PUBLIC_SEO_PAGES.guidesHub.intro).toContain('centralized Garmin, Suunto, and COROS workout archive');
+
     expect(PUBLIC_SEO_PAGES.syncGarminToSuunto.h1).toBe('How to sync Garmin data to Suunto automatically');
     expect(PUBLIC_SEO_PAGES.syncGarminToSuunto.howToSteps).toHaveLength(4);
 
     expect(PUBLIC_SEO_PAGES.centralizeWorkoutData.h1).toBe('Centralize Garmin, Suunto, and COROS workout data');
     expect(PUBLIC_SEO_PAGES.centralizeWorkoutData.intro).not.toContain('centralize Garmin Suunto and COROS workout data');
+  });
+
+  it('links hub pages to the focused feature and guide pages they introduce', () => {
+    const featureHubLinks = [
+      ...PUBLIC_SEO_PAGES.featuresHub.actions,
+      ...PUBLIC_SEO_PAGES.featuresHub.closingActions,
+    ].map(action => action.routerLink);
+    const guideHubLinks = [
+      ...PUBLIC_SEO_PAGES.guidesHub.actions,
+      ...PUBLIC_SEO_PAGES.guidesHub.closingActions,
+    ].map(action => action.routerLink);
+
+    expect(featureHubLinks).toContain('/features/ai-insights');
+    expect(featureHubLinks).toContain('/features/workout-data-comparison');
+    expect(featureHubLinks).toContain('/features/workout-file-comparison');
+    expect(featureHubLinks).toContain('/features/sports-watch-benchmark');
+    expect(featureHubLinks).toContain('/integrations');
+    expect(featureHubLinks).toContain('/guides');
+
+    expect(guideHubLinks).toContain('/guides/sync-garmin-to-suunto');
+    expect(guideHubLinks).toContain('/guides/sync-coros-to-suunto');
+    expect(guideHubLinks).toContain('/guides/centralize-garmin-suunto-coros-workout-data');
+    expect(guideHubLinks).toContain('/features');
+    expect(guideHubLinks).toContain('/integrations');
   });
 });

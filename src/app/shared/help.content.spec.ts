@@ -147,6 +147,7 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('plain solid no-fill line using the overlay metric');
     expect(gettingStartedSection?.content).toContain('merged and benchmark events');
     expect(gettingStartedSection?.content).toContain('both metric and activity labels');
+    expect(gettingStartedSection?.content).toContain('[Features hub](/features)');
     expect(gettingStartedSection?.content).toContain('[Workout Data Comparison](/features/workout-data-comparison)');
     expect(gettingStartedSection?.content).toContain('[Workout File Comparison](/features/workout-file-comparison)');
     expect(gettingStartedSection?.content).toContain('[Sports Watch Benchmark](/features/sports-watch-benchmark)');
@@ -229,6 +230,8 @@ describe('help.content', () => {
 
     expect(serviceConnectionsSection?.content).toContain('Integrations hub');
     expect(serviceConnectionsSection?.content).toContain('/integrations');
+    expect(serviceConnectionsSection?.content).toContain('[Training Data Sync Guides](/guides)');
+    expect(serviceConnectionsSection?.content).toContain('[Features hub](/features)');
     expect(serviceConnectionsSection?.content).toContain('[Workout Data Comparison](/features/workout-data-comparison)');
     expect(serviceConnectionsSection?.content).toContain('[Workout File Comparison](/features/workout-file-comparison)');
     expect(serviceConnectionsSection?.content).toContain('[Sports Watch Benchmark](/features/sports-watch-benchmark)');
@@ -272,6 +275,18 @@ describe('help.content', () => {
       icon: 'hub',
       kind: 'route',
       target: '/integrations',
+    });
+    expect(serviceConnectionsSection?.links).toContainEqual({
+      label: 'Features',
+      icon: 'dashboard_customize',
+      kind: 'route',
+      target: '/features',
+    });
+    expect(serviceConnectionsSection?.links).toContainEqual({
+      label: 'Training Guides',
+      icon: 'menu_book',
+      kind: 'route',
+      target: '/guides',
     });
     expect(serviceConnectionsSection?.links).toContainEqual({
       label: 'Workout Data Comparison',

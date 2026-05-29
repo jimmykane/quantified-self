@@ -170,6 +170,12 @@ export const routes: Routes = [
     data: WORKOUT_DATA_COMPARISON_ROUTE_DATA
   },
   {
+    path: PUBLIC_FEATURE_PATHS.hub,
+    loadComponent: () => import('./components/public-seo/public-seo-page.component').then(m => m.PublicSeoPageComponent),
+    data: PUBLIC_SEO_ROUTE_DATA.featuresHub,
+    pathMatch: 'full'
+  },
+  {
     path: PUBLIC_FEATURE_PATHS.aiInsights,
     loadComponent: () => import('./components/public-seo/public-seo-page.component').then(m => m.PublicSeoPageComponent),
     data: PUBLIC_SEO_ROUTE_DATA.aiInsights
@@ -183,6 +189,12 @@ export const routes: Routes = [
     path: PUBLIC_FEATURE_PATHS.sportsWatchBenchmark,
     loadComponent: () => import('./components/public-seo/public-seo-page.component').then(m => m.PublicSeoPageComponent),
     data: PUBLIC_SEO_ROUTE_DATA.sportsWatchBenchmark
+  },
+  {
+    path: PUBLIC_GUIDE_PATHS.hub,
+    loadComponent: () => import('./components/public-seo/public-seo-page.component').then(m => m.PublicSeoPageComponent),
+    data: PUBLIC_SEO_ROUTE_DATA.guidesHub,
+    pathMatch: 'full'
   },
   {
     path: PUBLIC_GUIDE_PATHS.syncGarminToSuunto,

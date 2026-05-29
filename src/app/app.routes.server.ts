@@ -10,6 +10,7 @@ export const PRERENDERED_INTEGRATION_ROUTES = [
 ] as const;
 
 export const PRERENDERED_FEATURE_ROUTES = [
+  PUBLIC_FEATURE_PATHS.hub,
   WORKOUT_DATA_COMPARISON_PATH,
   PUBLIC_FEATURE_PATHS.aiInsights,
   PUBLIC_FEATURE_PATHS.workoutFileComparison,
@@ -17,6 +18,7 @@ export const PRERENDERED_FEATURE_ROUTES = [
 ] as const;
 
 export const PRERENDERED_GUIDE_ROUTES = [
+  PUBLIC_GUIDE_PATHS.hub,
   PUBLIC_GUIDE_PATHS.syncGarminToSuunto,
   PUBLIC_GUIDE_PATHS.syncCorosToSuunto,
   PUBLIC_GUIDE_PATHS.centralizeWorkoutData,
