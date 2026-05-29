@@ -97,6 +97,32 @@ describe('AppRoutingModule routes', () => {
     expect(garminRoute?.data?.['title']).toBe('Private Garmin Training Dashboard');
   });
 
+  it('should define a public workout data comparison feature route with SEO metadata', () => {
+    const route = routes.find(candidate => candidate.path === 'features/workout-data-comparison');
+    const jsonLd = route?.data?.['jsonLd'] as Record<string, unknown> | undefined;
+
+    expect(route).toBeTruthy();
+    expect(route?.canMatch).toBeUndefined();
+    expect(route?.loadComponent).toBeTypeOf('function');
+    expect(route?.data?.['title']).toBe('Workout Data Comparison');
+    expect(route?.data?.['description']).toContain('custom FIT, TCX, or GPX workout data');
+    expect(route?.data?.['description']).toContain('free-plan manual uploads');
+    expect(route?.data?.['description']).toContain('reviewer-ready device comparisons');
+    expect(route?.data?.['keywords']).toContain('Garmin vs COROS data');
+    expect(route?.data?.['keywords']).toContain('compare FIT files workout data');
+    expect(route?.data?.['keywords']).toContain('free workout data comparison');
+    expect(route?.data?.['keywords']).toContain('sports watch review benchmark');
+    expect(route?.data?.['keywords']).toContain('sync Garmin data to Suunto automatically');
+    expect(route?.data?.['keywords']).not.toContain('AI insights');
+    expect(jsonLd).toMatchObject({
+      '@context': 'https://schema.org',
+      '@type': 'WebPage',
+      name: 'Compare Garmin, Suunto, and COROS workout data',
+      url: 'https://quantified-self.io/features/workout-data-comparison',
+      inLanguage: 'en',
+    });
+  });
+
   it('should include sync-focused metadata on the public home route', () => {
     const homeRoute = routes.find(route => route.path === '');
 

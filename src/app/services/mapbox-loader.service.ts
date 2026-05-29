@@ -3,8 +3,14 @@ import { isPlatformBrowser } from '@angular/common';
 import type { Map as MapboxMap, MapOptions } from 'mapbox-gl';
 import { environment } from '../../environments/environment';
 
-type MapboxGlRuntime = typeof import('mapbox-gl');
+type MapboxGlRuntime = typeof import('mapbox-gl/dist/esm/mapbox-gl.js');
 type MapboxGlApi = MapboxGlRuntime['default'];
+
+export const MAPBOX_ESM_WORKER_ASSET_PATH = 'assets/mapbox-gl/esm/worker.js';
+
+export function resolveMapboxEsmWorkerUrl(baseUri: string): string {
+    return new URL(MAPBOX_ESM_WORKER_ASSET_PATH, baseUri).toString();
+}
 
 @Injectable({
     providedIn: 'root'
@@ -35,8 +41,9 @@ export class MapboxLoaderService {
             return this.apiLoadingPromise;
         }
 
-        this.apiLoadingPromise = import('mapbox-gl').then(module => {
+        this.apiLoadingPromise = import('mapbox-gl/dist/esm/mapbox-gl.js').then((module: MapboxGlRuntime) => {
             const mapboxgl = module.default || (module as unknown as MapboxGlApi);
+            mapboxgl.workerUrl = resolveMapboxEsmWorkerUrl(document.baseURI);
             mapboxgl.accessToken = environment.mapboxAccessToken;
             this.mapboxgl = mapboxgl;
             return mapboxgl;

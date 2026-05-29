@@ -1,7 +1,26 @@
-import { MapboxLoaderService } from './mapbox-loader.service';
+import {
+    MAPBOX_ESM_WORKER_ASSET_PATH,
+    MapboxLoaderService,
+    resolveMapboxEsmWorkerUrl
+} from './mapbox-loader.service';
 import { NgZone } from '@angular/core';
 import { ɵPLATFORM_BROWSER_ID as PLATFORM_BROWSER_ID, ɵPLATFORM_SERVER_ID as PLATFORM_SERVER_ID } from '@angular/common';
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
+import { environment } from '../../environments/environment';
+
+const mapboxEsmMock = vi.hoisted(() => ({
+    runtime: {
+        Map: class {
+            constructor(_options: unknown) { }
+        },
+        accessToken: '',
+        workerUrl: ''
+    }
+}));
+
+vi.mock('mapbox-gl/dist/esm/mapbox-gl.js', () => ({
+    default: mapboxEsmMock.runtime
+}));
 
 describe('MapboxLoaderService', () => {
     let service: MapboxLoaderService;
@@ -11,7 +30,8 @@ describe('MapboxLoaderService', () => {
         Map: class {
             constructor(_options: any) { }
         },
-        accessToken: ''
+        accessToken: '',
+        workerUrl: ''
     };
 
     beforeEach(() => {
@@ -21,6 +41,8 @@ describe('MapboxLoaderService', () => {
         } as any;
 
         service = new MapboxLoaderService(zone, PLATFORM_BROWSER_ID as any);
+        mapboxEsmMock.runtime.accessToken = '';
+        mapboxEsmMock.runtime.workerUrl = '';
 
         // Reset static/global mocks
         (window as any).mapboxgl = undefined;
@@ -39,6 +61,20 @@ describe('MapboxLoaderService', () => {
             (service as any).mapboxgl = mockMapbox;
             const result = await service.loadMapbox();
             expect(result).toBe(mockMapbox);
+        });
+
+        it('should resolve the ESM worker from the document base URI', () => {
+            expect(resolveMapboxEsmWorkerUrl('https://quantified-self.io/app/')).toBe(
+                `https://quantified-self.io/app/${MAPBOX_ESM_WORKER_ASSET_PATH}`
+            );
+        });
+
+        it('should load the ESM Mapbox runtime and configure the module worker', async () => {
+            const result = await service.loadMapbox();
+
+            expect(result).toBe(mapboxEsmMock.runtime);
+            expect(result.workerUrl).toBe(resolveMapboxEsmWorkerUrl(document.baseURI));
+            expect(result.accessToken).toBe(environment.mapboxAccessToken);
         });
     });
 

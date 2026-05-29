@@ -35,6 +35,7 @@ import { AppHapticsService } from './services/app.haptics.service';
 import { AppUserInterface } from './models/app-user.interface';
 import { AppUserUtilities } from './utils/app.user.utilities';
 import { ShellNavigationEffectsService } from './services/shell-navigation-effects.service';
+import { hasAngularServerContext, isPublicStartupDocument } from './shared/public-startup-route';
 
 export const APP_SHELL_HEADER_HEIGHT_PX = 64;
 const APP_SHELL_BANNER_HEIGHT_WOBBLE_TOLERANCE_PX = 2;
@@ -241,6 +242,11 @@ export class AppShellComponent implements OnInit, OnDestroy {
   constructor() {
     // this.afa.setAnalyticsCollectionEnabled(true)
     this.iconService.registerIcons();
+
+    if (this.isBrowser && this.shouldUsePublicStartupState()) {
+      this.authState = false;
+      this.showInitialLoader = false;
+    }
 
     if (!this.isBrowser) {
       this.authState = false;
@@ -608,6 +614,10 @@ export class AppShellComponent implements OnInit, OnDestroy {
     }
 
     return 950;
+  }
+
+  private shouldUsePublicStartupState(): boolean {
+    return hasAngularServerContext(this.documentRef) || isPublicStartupDocument(this.documentRef);
   }
 
   public openWhatsNew() {

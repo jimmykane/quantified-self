@@ -10,6 +10,7 @@ describe('RouteLoaderComponent', () => {
     let routerEvents$: Subject<RouterEvent>;
 
     beforeEach(async () => {
+        window.history.pushState({}, '', '/');
         routerEvents$ = new Subject<RouterEvent>();
 
         // Mock Router with an events Observable we can control
@@ -65,13 +66,43 @@ describe('RouteLoaderComponent', () => {
     });
 
     it('should initialize isLoading to true if getCurrentNavigation returns a value', () => {
+        window.history.pushState({}, '', '/dashboard');
+
         // Test constructor logic directly to avoid TestBed set up complexity for this specific case
         const mockRouter = {
             events: new Subject(),
             getCurrentNavigation: () => ({ id: 1, initialUrl: '/loading' })
         } as any;
 
-        const comp = new RouteLoaderComponent(mockRouter);
+        const comp = new RouteLoaderComponent(mockRouter, document);
+        expect(comp.isLoading).toBe(true);
+    });
+
+    it('should suppress an active startup navigation on public startup routes', () => {
+        window.history.pushState({}, '', '/integrations');
+        const mockRouter = {
+            events: new Subject(),
+            getCurrentNavigation: () => ({ id: 1, initialUrl: '/integrations' })
+        } as any;
+
+        const comp = new RouteLoaderComponent(mockRouter, document);
+
+        expect(comp.isLoading).toBe(false);
+    });
+
+    it('should suppress only the same-document startup navigation on public routes', () => {
+        window.history.pushState({}, '', '/integrations');
+        const events$ = new Subject<RouterEvent>();
+        const mockRouter = {
+            events: events$.asObservable(),
+            getCurrentNavigation: () => null
+        } as any;
+        const comp = new RouteLoaderComponent(mockRouter, document);
+
+        events$.next(new NavigationStart(1, '/integrations'));
+        expect(comp.isLoading).toBe(false);
+
+        events$.next(new NavigationStart(2, '/integrations/garmin'));
         expect(comp.isLoading).toBe(true);
     });
 });

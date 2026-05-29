@@ -1,0 +1,283 @@
+<main class="workout-comparison-page">
+  <section class="hero-section" aria-labelledby="workout-comparison-title">
+    <p class="eyebrow">Workout Data Comparison</p>
+
+    <div class="provider-strip" aria-label="Supported providers">
+      @for (provider of providerSources; track provider.serviceName) {
+      <span class="provider-chip">
+        <app-service-source-icon
+          [sourceServiceName]="provider.serviceName"
+          [showTooltip]="false">
+        </app-service-source-icon>
+        <span>{{ provider.label }}</span>
+      </span>
+      }
+    </div>
+
+    <h1 id="workout-comparison-title">Compare Garmin, Suunto, and COROS workout data</h1>
+    <p class="hero-copy">
+      Use Quantified Self as a private training dashboard for device comparison, benchmark reports, metric overlays,
+      source files, sync workflows, and reviewer-ready reports across provider data and custom FIT, TCX, GPX, JSON, or
+      SML imports.
+      Manual uploads and benchmark comparisons are available on the free plan; automatic provider sync and higher limits
+      are paid-plan features.
+    </p>
+
+    <div class="hero-actions" aria-label="Primary actions">
+      <a mat-flat-button class="qs-mat-primary" routerLink="/login">
+        Get Started Free
+        <mat-icon iconPositionEnd>arrow_forward</mat-icon>
+      </a>
+      <a mat-stroked-button routerLink="/integrations">
+        Explore Integrations
+      </a>
+    </div>
+  </section>
+
+  <section class="content-section comparison-panel-section" aria-labelledby="comparison-workflow-title">
+    <div class="section-heading">
+      <p class="eyebrow">Comparison Workflow</p>
+      <h2 id="comparison-workflow-title">Understand when devices disagree</h2>
+      <p>
+        Compare service source, original activity files, route traces, and training metrics from connected services,
+        exported workouts, manual uploads, or review test files without moving analysis into another public upload tool.
+        You can start with uploaded files on the free plan before connecting paid service sync.
+      </p>
+    </div>
+
+    <div class="benchmark-preview" aria-label="Example benchmark report preview">
+      <div class="benchmark-preview-header">
+        <span class="device-pill reference">
+          <mat-icon>star</mat-icon>
+          Garmin Fenix
+        </span>
+        <span class="vs-badge">VS</span>
+        <span class="device-pill test">
+          <mat-icon>watch</mat-icon>
+          COROS Pace
+        </span>
+        <span class="align-chip">
+          <mat-icon>history</mat-icon>
+          Offset +2s
+        </span>
+      </div>
+
+      <div class="verdict-preview">
+        <div class="grade-avatar">
+          <mat-icon>check_circle</mat-icon>
+        </div>
+        <div class="metric-copy">
+          <strong>Good Agreement</strong><br>
+          <span>Hardware Benchmark Analysis</span>
+        </div>
+      </div>
+      <div class="verdict-list-preview" aria-label="Sample benchmark insights">
+        <div>
+          <mat-icon inline>check_circle</mat-icon>
+          <span>GNSS accuracy is good</span>
+          <strong>1.2 m CEP50</strong>
+        </div>
+        <div>
+          <mat-icon inline>check_circle</mat-icon>
+          <span>Heart Rate agreement is excellent</span>
+          <strong>0.987 corr.</strong>
+        </div>
+      </div>
+
+      <div class="diff-section">
+        <span class="diff-title">Stat Differences</span>
+        <div class="diff-chip-list" aria-label="Sample stat differences">
+          <span class="diff-chip">
+            <span>Distance</span>
+            <strong>Δ 42 m</strong>
+            <em>0.8%</em>
+          </span>
+          <span class="diff-chip">
+            <span>Moving</span>
+            <strong>Δ 9 s</strong>
+            <em>0.4%</em>
+          </span>
+        </div>
+      </div>
+
+      <div class="benchmark-metric-card">
+        <div class="metric-card-heading">
+          <span class="metric-icon">
+            <mat-icon>route</mat-icon>
+          </span>
+          <div class="metric-copy">
+            <strong>GNSS Accuracy</strong><br>
+            <span>Positional Deviation</span>
+          </div>
+        </div>
+        <div class="stats-grid">
+          <span class="stat-item-preview" aria-label="CEP 50% 1.20 meters">
+            <small>CEP 50%</small><br>
+            <strong>1.20m</strong>
+          </span>
+          <span class="stat-item-preview" aria-label="CEP 95% 2.90 meters">
+            <small>CEP 95%</small><br>
+            <strong>2.90m</strong>
+          </span>
+          <span class="stat-item-preview" aria-label="RMSE 1.60 meters">
+            <small>RMSE</small><br>
+            <strong>1.60m</strong>
+          </span>
+          <span class="stat-item-preview" aria-label="Max deviation 5.8 meters">
+            <small>Max Dev</small><br>
+            <strong>5.8m</strong>
+          </span>
+        </div>
+      </div>
+
+      <div class="quality-preview-row">
+        <mat-icon>tune</mat-icon>
+        <div class="metric-copy">
+          <strong>Data Quality</strong><br>
+          <span>Auto-aligned by <strong>+2s</strong> to maximize correlation.</span>
+        </div>
+      </div>
+
+      <div class="stream-preview-grid" aria-label="Sample stream agreement">
+        <div class="stream-card">
+          <div class="stream-card-title">
+            <strong>Heart Rate</strong>
+            <span>Excellent Correlation</span>
+          </div>
+          <div class="correlation-bar">
+            <span class="correlation-fill heart-rate"></span>
+          </div>
+          <div class="mini-stats">
+            <span>0.987 Correlation</span>
+            <span>RMSE 2.4</span>
+            <span>MAE 1.8</span>
+          </div>
+        </div>
+        <div class="stream-card">
+          <div class="stream-card-title">
+            <strong>Power</strong>
+            <span>Good Correlation</span>
+          </div>
+          <div class="correlation-bar">
+            <span class="correlation-fill power"></span>
+          </div>
+          <div class="mini-stats">
+            <span>0.952 Correlation</span>
+            <span>RMSE 5.9</span>
+            <span>MAE 4.2</span>
+          </div>
+        </div>
+      </div>
+
+      <p class="comparison-note">Example values shown from a benchmark report layout; live reports use your selected services or uploaded files.</p>
+    </div>
+  </section>
+
+  <section class="content-section" aria-labelledby="capability-title">
+    <div class="section-heading">
+      <p class="eyebrow">Capabilities</p>
+      <h2 id="capability-title">Comparison tools for services, files, and review workflows</h2>
+      <p>
+        Quantified Self focuses on imported workouts you own, so device data stays tied to your dashboard, history,
+        exports, maps, service connections, and reviewer-ready benchmark reports.
+      </p>
+    </div>
+
+    <div class="card-grid">
+      @for (item of featureItems; track item.title) {
+      <mat-card appearance="outlined" class="feature-card">
+        <mat-card-header>
+          <div mat-card-avatar class="card-icon">
+            <mat-icon>{{ item.icon }}</mat-icon>
+          </div>
+          <mat-card-title>{{ item.title }}</mat-card-title>
+        </mat-card-header>
+        <mat-card-content>
+          <p>{{ item.copy }}</p>
+        </mat-card-content>
+      </mat-card>
+      }
+    </div>
+  </section>
+
+  <section class="content-section split-section" aria-labelledby="search-intent-title">
+    <div class="section-heading">
+      <p class="eyebrow">Training Data Hub</p>
+      <h2 id="search-intent-title">From sync to benchmark analysis</h2>
+      <p>
+        Centralize Garmin, Suunto, and COROS workout data, then use the same archive for provider sync, history review,
+        dashboard metrics, source-file workflows, and benchmark reports.
+      </p>
+    </div>
+
+    <div class="tool-list">
+      @for (item of searchIntentItems; track item.title) {
+      <article class="tool-row">
+        <mat-icon>{{ item.icon }}</mat-icon>
+        <div>
+          <h3>{{ item.title }}</h3>
+          <p>{{ item.copy }}</p>
+        </div>
+      </article>
+      }
+    </div>
+  </section>
+
+  <section class="content-section fit-section" aria-labelledby="fit-title">
+    <div>
+      <p class="eyebrow">Source Files</p>
+      <h2 id="fit-title">Compare custom FIT, TCX, GPX, JSON, and SML files</h2>
+      <p>
+        Quantified Self stores source context for provider imports and manual uploads, so original files from services,
+        review units, unsupported devices, and lab tests can support exports, reprocessing, benchmark workflows, and
+        Suunto sync jobs after the workout is in your account.
+      </p>
+    </div>
+    <div class="file-format-list" aria-label="Supported file context">
+      <span>FIT</span>
+      <span>TCX</span>
+      <span>GPX</span>
+      <span>JSON</span>
+      <span>SML</span>
+    </div>
+  </section>
+
+  <section class="content-section faq-section" aria-labelledby="comparison-faq-title">
+    <div class="section-heading">
+      <p class="eyebrow">FAQ</p>
+      <h2 id="comparison-faq-title">Workout data comparison FAQ</h2>
+    </div>
+
+    <div class="faq-list">
+      @for (item of faqItems; track item.question) {
+      <article class="faq-item">
+        <h3>{{ item.question }}</h3>
+        <p>{{ item.answer }}</p>
+      </article>
+      }
+    </div>
+  </section>
+
+  <section class="content-section closing-section" aria-labelledby="comparison-next-title">
+    <div>
+      <p class="eyebrow">Next Step</p>
+      <h2 id="comparison-next-title">Connect services or upload files, then compare the data</h2>
+      <p>
+        Start with the providers, exports, or review files you already have, import the workouts you care about, and keep
+        comparison, sync, and benchmark reporting in one private dashboard. Manual file uploads and benchmark comparisons are
+        free to try on the Starter plan.
+      </p>
+    </div>
+    <div class="closing-actions">
+      <a mat-flat-button class="qs-mat-primary" routerLink="/login">
+        Start Setup
+      </a>
+      <a mat-stroked-button routerLink="/integrations">
+        All Integrations
+      </a>
+      <a mat-stroked-button [routerLink]="['/help']" fragment="service-connections">
+        Read Support Details
+      </a>
+    </div>
+  </section>
+</main>

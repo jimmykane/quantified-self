@@ -21,6 +21,11 @@
             ],
             "assets": [
               "src/assets",
+              {
+                "glob": "{worker,shared}.js",
+                "input": "node_modules/mapbox-gl/dist/esm",
+                "output": "assets/mapbox-gl/esm"
+              },
               "src/favicon.ico",
               "src/manifest.json",
               "src/robots.txt",

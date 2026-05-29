@@ -147,6 +147,12 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('plain solid no-fill line using the overlay metric');
     expect(gettingStartedSection?.content).toContain('merged and benchmark events');
     expect(gettingStartedSection?.content).toContain('both metric and activity labels');
+    expect(gettingStartedSection?.content).toContain('[Workout Data Comparison](/features/workout-data-comparison)');
+    expect(gettingStartedSection?.content).toContain('uploaded FIT/TCX/GPX/JSON/SML activity files');
+    expect(gettingStartedSection?.content).toContain('reviewer workflows for device tests, YouTube videos, and blog posts');
+    expect(gettingStartedSection?.content).toContain('available on the free plan for up to 100 activities');
+    expect(gettingStartedSection?.content).toContain('automatic provider sync and higher limits require a paid plan');
+    expect(gettingStartedSection?.content).not.toContain('overlays, AI insights, and reviewer workflows');
     expect(gettingStartedSection?.content).toContain('**Altitude** charts can color the altitude line by grade');
     expect(gettingStartedSection?.content).toContain('**Color Altitude by Grade**');
     expect(gettingStartedSection?.content).toContain('**Heart Rate** and **Power** charts color their lines and visible fill');
@@ -221,6 +227,12 @@ describe('help.content', () => {
 
     expect(serviceConnectionsSection?.content).toContain('Integrations hub');
     expect(serviceConnectionsSection?.content).toContain('/integrations');
+    expect(serviceConnectionsSection?.content).toContain('[Workout Data Comparison](/features/workout-data-comparison)');
+    expect(serviceConnectionsSection?.content).toContain('uploaded FIT/TCX/GPX/JSON/SML activity files');
+    expect(serviceConnectionsSection?.content).toContain('reviewer workflows for device tests, YouTube videos, and blog posts');
+    expect(serviceConnectionsSection?.content).toContain('available on the free plan for up to 100 activities');
+    expect(serviceConnectionsSection?.content).toContain('automatic provider sync and higher limits require a paid plan');
+    expect(serviceConnectionsSection?.content).not.toContain('source-file workflows, AI insights, and reviewer workflows');
     expect(serviceConnectionsSection?.content).toContain('[Garmin Integration](/integrations/garmin)');
     expect(serviceConnectionsSection?.content).toContain('[COROS Integration](/integrations/coros)');
     expect(serviceConnectionsSection?.content).toContain('/integrations/suunto');
@@ -253,6 +265,12 @@ describe('help.content', () => {
       icon: 'hub',
       kind: 'route',
       target: '/integrations',
+    });
+    expect(serviceConnectionsSection?.links).toContainEqual({
+      label: 'Workout Data Comparison',
+      icon: 'compare_arrows',
+      kind: 'route',
+      target: '/features/workout-data-comparison',
     });
     expect(serviceConnectionsSection?.links).toContainEqual({
       label: 'Garmin Integration',

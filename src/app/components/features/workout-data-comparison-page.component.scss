@@ -1,0 +1,444 @@
+:host {
+  display: block;
+  color: var(--mat-sys-on-surface);
+  background: var(--mat-sys-surface);
+}
+
+.workout-comparison-page {
+  max-width: 72rem;
+  margin: 0 auto;
+  padding: 1.5rem 1rem 3rem;
+}
+
+.hero-section,
+.content-section {
+  padding: 2rem 0;
+}
+
+.hero-section {
+  display: grid;
+  gap: 1.25rem;
+}
+
+.eyebrow {
+  margin: 0;
+  color: var(--mat-sys-primary);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+h1,
+h2,
+h3,
+p {
+  margin-top: 0;
+}
+
+h1 {
+  max-width: 50rem;
+  margin-bottom: 0;
+  font-size: 4rem;
+  line-height: 1.02;
+  letter-spacing: 0;
+}
+
+h2 {
+  margin-bottom: 0.5rem;
+  font-size: 2.35rem;
+  line-height: 1.1;
+  letter-spacing: 0;
+}
+
+h3 {
+  margin-bottom: 0.25rem;
+  font-size: 1.05rem;
+  line-height: 1.25;
+  letter-spacing: 0;
+}
+
+.hero-copy,
+.section-heading p,
+.feature-card p,
+.tool-row p,
+.fit-section p,
+.closing-section p,
+.faq-item p {
+  color: var(--mat-sys-on-surface-variant);
+  line-height: 1.65;
+}
+
+.hero-copy {
+  max-width: 52rem;
+  margin-bottom: 0;
+  font-size: 1.12rem;
+}
+
+.provider-strip,
+.hero-actions,
+.closing-actions,
+.file-format-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.provider-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 2.25rem;
+  padding: 0 0.85rem;
+  border: 1px solid var(--mat-sys-outline-variant);
+  border-radius: 999px;
+  background: var(--mat-sys-surface-container-low);
+  color: var(--mat-sys-on-surface);
+  font-weight: 600;
+}
+
+.section-heading {
+  max-width: 46rem;
+  margin-bottom: 1.25rem;
+}
+
+.comparison-panel-section {
+  display: grid;
+  grid-template-columns: minmax(0, 0.85fr) minmax(18rem, 1fr);
+  gap: 2rem;
+  align-items: center;
+}
+
+.benchmark-preview {
+  display: grid;
+  gap: 0.85rem;
+  padding: 1rem;
+  border: 1px solid var(--mat-sys-outline-variant);
+  border-radius: 8px;
+  background: var(--mat-sys-surface-container-low);
+}
+
+.benchmark-preview-header,
+.metric-card-heading,
+.verdict-preview,
+.quality-preview-row,
+.stream-card-title,
+.mini-stats {
+  display: flex;
+  align-items: center;
+}
+
+.benchmark-preview-header {
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  justify-content: center;
+}
+
+.device-pill,
+.align-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-height: 2rem;
+  padding: 0 0.65rem;
+  border-radius: 8px;
+  font-size: 0.84rem;
+  font-weight: 700;
+}
+
+.device-pill.reference {
+  background: var(--mat-sys-primary);
+  color: var(--mat-sys-on-primary);
+}
+
+.device-pill.test {
+  background: var(--mat-sys-tertiary);
+  color: var(--mat-sys-on-tertiary);
+}
+
+.vs-badge {
+  color: var(--mat-sys-on-surface-variant);
+  font-weight: 800;
+}
+
+.align-chip {
+  background: var(--mat-sys-secondary-container);
+  color: var(--mat-sys-on-secondary-container);
+}
+
+.verdict-preview,
+.benchmark-metric-card,
+.quality-preview-row,
+.stream-card,
+.diff-chip {
+  border: 1px solid var(--mat-sys-outline-variant);
+  border-radius: 8px;
+  background: var(--mat-sys-surface);
+}
+
+.verdict-preview,
+.benchmark-metric-card,
+.quality-preview-row,
+.stream-card {
+  padding: 0.75rem;
+}
+
+.grade-avatar,
+.metric-icon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 2.15rem;
+  height: 2.15rem;
+  border-radius: 50%;
+}
+
+.grade-avatar {
+  background: var(--mat-sys-secondary-container);
+  color: var(--mat-sys-on-secondary-container);
+}
+
+.metric-icon {
+  background: var(--mat-sys-primary-container);
+  color: var(--mat-sys-on-primary-container);
+}
+
+.verdict-preview span,
+.metric-card-heading span,
+.stream-card-title span,
+.stats-grid small,
+.mini-stats,
+.comparison-note,
+.diff-title {
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.diff-section,
+.benchmark-metric-card,
+.stream-card {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.verdict-list-preview {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.verdict-list-preview div {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8rem;
+}
+
+.verdict-list-preview strong {
+  margin-left: auto;
+}
+
+.diff-title {
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.diff-chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.diff-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-height: 1.9rem;
+  padding: 0 0.65rem;
+  border-radius: 999px;
+  font-size: 0.76rem;
+}
+
+.diff-chip span {
+  color: var(--mat-sys-on-surface-variant);
+  font-size: 0.66rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.diff-chip em {
+  color: var(--mat-sys-tertiary);
+  font-style: normal;
+  font-weight: 700;
+}
+
+.metric-card-heading {
+  gap: 0.65rem;
+}
+
+.verdict-preview,
+.quality-preview-row {
+  gap: 0.75rem;
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.65rem;
+  text-align: center;
+}
+
+.stats-grid strong,
+.diff-chip strong,
+.mini-stats,
+.verdict-list-preview strong {
+  font-family: 'Barlow Condensed', sans-serif;
+}
+
+.quality-preview-row mat-icon {
+  color: var(--mat-sys-primary);
+}
+
+.stream-preview-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.65rem;
+}
+
+.stream-card-title,
+.mini-stats {
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.mini-stats {
+  flex-wrap: wrap;
+}
+
+.correlation-bar {
+  height: 0.5rem;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--mat-sys-surface-variant);
+}
+
+.correlation-fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--mat-sys-secondary);
+}
+
+.correlation-fill.heart-rate {
+  width: 98%;
+}
+
+.correlation-fill.power {
+  width: 95%;
+}
+
+.comparison-note {
+  margin-bottom: 0;
+}
+
+.card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+  gap: 1rem;
+}
+
+.feature-card {
+  height: 100%;
+}
+
+.split-section,
+.fit-section {
+  display: grid;
+  grid-template-columns: minmax(0, 0.8fr) minmax(0, 1fr);
+  gap: 2rem;
+  align-items: start;
+}
+
+.tool-list,
+.faq-list {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.tool-row,
+.faq-item {
+  padding: 1rem;
+  border: 1px solid var(--mat-sys-outline-variant);
+  border-radius: 8px;
+  background: var(--mat-sys-surface-container-low);
+}
+
+.tool-row {
+  display: grid;
+  grid-template-columns: 2.5rem minmax(0, 1fr);
+  gap: 0.85rem;
+}
+
+.tool-row > mat-icon {
+  color: var(--mat-sys-primary);
+}
+
+.file-format-list {
+  justify-content: flex-start;
+}
+
+.file-format-list span {
+  padding: 0.35rem 0.7rem;
+  border: 1px solid var(--mat-sys-outline-variant);
+  border-radius: 8px;
+  color: var(--mat-sys-on-surface-variant);
+  font-weight: 700;
+}
+
+.closing-section {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 1.25rem;
+  align-items: center;
+  border-top: 1px solid var(--mat-sys-outline-variant);
+}
+
+@media (max-width: 48rem) {
+  .workout-comparison-page {
+    padding: 1.25rem 0.875rem 2.5rem;
+  }
+
+  h1 {
+    font-size: 2.55rem;
+  }
+
+  h2 {
+    font-size: 1.85rem;
+  }
+
+  .hero-section,
+  .content-section {
+    padding: 1.5rem 0;
+  }
+
+  .comparison-panel-section,
+  .split-section,
+  .fit-section,
+  .closing-section {
+    grid-template-columns: 1fr;
+  }
+
+  .stats-grid,
+  .stream-preview-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .closing-actions {
+    align-items: stretch;
+  }
+
+  .closing-actions a,
+  .hero-actions a {
+    width: 100%;
+  }
+}

@@ -26,6 +26,7 @@ const SERVICES_TO_DEAUTHORIZE: ReadonlyArray<ServiceNames> = [
 export const enforceSubscriptionLimits = onSchedule({
     region: 'europe-west2',
     schedule: 'every 24 hours',
+    memory: '1GiB',
 }, async (_event) => {
     const connectedUserIds = await getConnectedUserIds();
     logger.info(`Found ${connectedUserIds.size} users with connected services.`);

@@ -227,6 +227,8 @@ describe('HomeComponent', () => {
         expect(text).toContain('correlation, MAE, and RMSE');
         expect(text).toContain('dropouts, stuck values, and cadence-lock');
         expect(text).toContain('Save / Share');
+        expect(text).toContain('Compare Workout Data');
+        expect(fixture.nativeElement.querySelector('a[routerlink="/features/workout-data-comparison"], a[ng-reflect-router-link="/features/workout-data-comparison"]')).toBeTruthy();
         expect(text).not.toContain('Benchmark your devices with high-fidelity trace comparison.');
         expect(text).not.toContain('Sync Quality');
     });

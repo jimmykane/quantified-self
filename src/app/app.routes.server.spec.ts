@@ -1,12 +1,13 @@
 import { RenderMode } from '@angular/ssr';
 import { describe, expect, it } from 'vitest';
-import { PRERENDERED_PUBLIC_ROUTES, serverRoutes } from './app.routes.server';
+import { PRERENDERED_FEATURE_ROUTES, PRERENDERED_PUBLIC_ROUTES, serverRoutes } from './app.routes.server';
 
 describe('serverRoutes', () => {
-  it('prerenders the public home page and integration SEO routes', () => {
+  it('prerenders the public home page, integration SEO routes, and selected feature routes', () => {
     const prerenderRoutes = serverRoutes.filter(route => route.renderMode === RenderMode.Prerender);
 
     expect(prerenderRoutes.map(route => route.path)).toEqual([...PRERENDERED_PUBLIC_ROUTES]);
+    expect(PRERENDERED_FEATURE_ROUTES).toEqual(['features/workout-data-comparison']);
   });
 
   it('keeps private app routes and non-selected public routes client-rendered', () => {
@@ -26,5 +27,7 @@ describe('serverRoutes', () => {
     expect(prerenderedPaths.has('help')).toBe(false);
     expect(prerenderedPaths.has('releases')).toBe(false);
     expect(prerenderedPaths.has('ai-insights')).toBe(false);
+    expect(prerenderedPaths.has('features/workout-data-comparison')).toBe(true);
+    expect(prerenderedPaths.has('features')).toBe(false);
   });
 });

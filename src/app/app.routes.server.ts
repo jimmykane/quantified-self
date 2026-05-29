@@ -7,9 +7,14 @@ export const PRERENDERED_INTEGRATION_ROUTES = [
   'integrations/coros',
 ] as const;
 
+export const PRERENDERED_FEATURE_ROUTES = [
+  'features/workout-data-comparison',
+] as const;
+
 export const PRERENDERED_PUBLIC_ROUTES = [
   '',
   ...PRERENDERED_INTEGRATION_ROUTES,
+  ...PRERENDERED_FEATURE_ROUTES,
 ] as const;
 
 export const serverRoutes: ServerRoute[] = [

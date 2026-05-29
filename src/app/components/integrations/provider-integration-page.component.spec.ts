@@ -79,6 +79,7 @@ describe('ProviderIntegrationPageComponent', () => {
     expect(hrefs).toContain('/login');
     expect(hrefs).toContain('/pricing');
     expect(hrefs).toContain('/integrations');
+    expect(hrefs).toContain('/features/workout-data-comparison');
     expect(hrefs).toContain('/help#service-connections');
   });
 });
