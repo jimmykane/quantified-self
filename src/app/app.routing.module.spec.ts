@@ -105,10 +105,15 @@ describe('AppRoutingModule routes', () => {
     expect(route?.canMatch).toBeUndefined();
     expect(route?.loadComponent).toBeTypeOf('function');
     expect(route?.data?.['title']).toBe('Workout Data Comparison');
-    expect(route?.data?.['description']).toContain('Compare Garmin, Suunto, and COROS workout data');
+    expect(route?.data?.['description']).toContain('custom FIT, TCX, or GPX workout data');
+    expect(route?.data?.['description']).toContain('free-plan manual uploads');
+    expect(route?.data?.['description']).toContain('reviewer-ready device comparisons');
     expect(route?.data?.['keywords']).toContain('Garmin vs COROS data');
+    expect(route?.data?.['keywords']).toContain('compare FIT files workout data');
+    expect(route?.data?.['keywords']).toContain('free workout data comparison');
+    expect(route?.data?.['keywords']).toContain('sports watch review benchmark');
     expect(route?.data?.['keywords']).toContain('sync Garmin data to Suunto automatically');
-    expect(route?.data?.['keywords']).toContain('AI insights for endurance training data');
+    expect(route?.data?.['keywords']).not.toContain('AI insights');
     expect(jsonLd).toMatchObject({
       '@context': 'https://schema.org',
       '@type': 'WebPage',
