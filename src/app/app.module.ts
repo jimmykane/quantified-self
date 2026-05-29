@@ -1,6 +1,6 @@
 import { ErrorHandler, LOCALE_ID, NgModule, PLATFORM_ID, inject, provideAppInitializer } from '@angular/core';
 import { GlobalErrorHandler } from './services/global-error-handler.service';
-import { BrowserModule, provideClientHydration, withEventReplay } from '@angular/platform-browser';
+import { BrowserModule } from '@angular/platform-browser';
 import { AppComponent } from './app.component';
 import { AppShellComponent } from './app-shell.component';
 import { AppRoutingModule } from './app.routing.module';
@@ -92,7 +92,6 @@ type FirestoreInitSettings = Parameters<typeof initializeFirestore>[1] & {
       provide: ErrorHandler,
       useClass: GlobalErrorHandler,
     },
-    provideClientHydration(withEventReplay()),
     provideHttpClient(withInterceptorsFromDi()),
     provideFirebaseApp(() => initializeApp(environment.firebase)),
     ...(enableAppCheck ? [provideAppCheck(() => {
