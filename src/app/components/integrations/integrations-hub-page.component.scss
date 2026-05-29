@@ -96,6 +96,31 @@ h2 {
   background: var(--mat-sys-surface-container-low);
 }
 
+.feature-callout-card {
+  border-radius: 8px;
+  background: var(--mat-sys-surface-container-low);
+}
+
+.feature-callout-card mat-card-header {
+  align-items: center;
+  padding-bottom: 0.5rem;
+}
+
+.feature-callout-card mat-card-content p {
+  max-width: 48rem;
+  margin-bottom: 0;
+  color: var(--mat-sys-on-surface-variant);
+  line-height: 1.65;
+}
+
+.feature-callout-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--mat-sys-primary-container);
+  color: var(--mat-sys-on-primary-container);
+}
+
 .integration-card mat-card-header {
   align-items: center;
   padding-bottom: 0.5rem;

@@ -9,6 +9,7 @@ import { adminGuard } from './authentication/admin.guard';
 import { pricingRedirectGuard } from './authentication/pricing-redirect.guard';
 import { releasesResolver } from './resolvers/releases.resolver';
 import { INTEGRATIONS_HUB_ROUTE_DATA, PROVIDER_INTEGRATION_ROUTE_DATA } from './components/integrations/integration-pages.content';
+import { WORKOUT_DATA_COMPARISON_ROUTE_DATA } from './components/features/workout-data-comparison-page.content';
 
 const HOME_SEO_DESCRIPTION = 'Quantified Self brings Garmin, Suunto, and COROS activity data into one private training dashboard with AI Insights and automatic sync from Garmin or COROS to Suunto.';
 
@@ -128,6 +129,11 @@ export const routes: Routes = [
       ...PROVIDER_INTEGRATION_ROUTE_DATA.coros,
       integrationProvider: 'coros'
     }
+  },
+  {
+    path: 'features/workout-data-comparison',
+    loadComponent: () => import('./components/features/workout-data-comparison-page.component').then(m => m.WorkoutDataComparisonPageComponent),
+    data: WORKOUT_DATA_COMPARISON_ROUTE_DATA
   },
   {
     path: 'ai-insights',
