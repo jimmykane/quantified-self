@@ -91,7 +91,9 @@ describe('AppShellComponent', () => {
 
 
     beforeEach(async () => {
+        window.history.pushState({}, '', '/');
         mockRouter.events = new Subject();
+        mockRouter.url = '/';
         mockThemeService.themeChange$ = new Subject();
         mockAppAuthService.user$ = of(null);
 
@@ -152,6 +154,30 @@ describe('AppShellComponent', () => {
 
     it('should initialize analytics service', () => {
         expect(component['analyticsService']).toBeTruthy();
+    });
+
+    it('should keep prerendered public startup pages visible while browser auth resolves', () => {
+        window.history.pushState({}, '', '/integrations');
+
+        const publicFixture = TestBed.createComponent(AppShellComponent);
+        const publicComponent = publicFixture.componentInstance;
+
+        expect(publicComponent.authState).toBe(false);
+        expect(publicComponent.showInitialLoader).toBe(false);
+
+        publicFixture.destroy();
+    });
+
+    it('should keep the initial loader behavior for private startup routes', () => {
+        window.history.pushState({}, '', '/dashboard');
+
+        const privateFixture = TestBed.createComponent(AppShellComponent);
+        const privateComponent = privateFixture.componentInstance;
+
+        expect(privateComponent.authState).toBeNull();
+        expect(privateComponent.showInitialLoader).toBe(true);
+
+        privateFixture.destroy();
     });
 
     it('should show navigation for free users on subscriptions page', () => {

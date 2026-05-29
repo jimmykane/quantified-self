@@ -1,6 +1,12 @@
-import { Component, OnDestroy } from '@angular/core';
+import { DOCUMENT } from '@angular/common';
+import { Component, Inject, OnDestroy } from '@angular/core';
 import { NavigationCancel, NavigationEnd, NavigationError, NavigationStart, Router } from '@angular/router';
 import { Subscription } from 'rxjs';
+import {
+    hasAngularServerContext,
+    isPublicStartupDocument,
+    isSameDocumentRoutePath,
+} from '../../shared/public-startup-route';
 
 @Component({
     selector: 'app-route-loader',
@@ -11,22 +17,37 @@ import { Subscription } from 'rxjs';
 export class RouteLoaderComponent implements OnDestroy {
     public isLoading = false;
     private routerSubscription: Subscription;
+    private suppressInitialSameDocumentNavigation: boolean;
 
-    constructor(private router: Router) {
+    constructor(
+        private router: Router,
+        @Inject(DOCUMENT) private documentRef: Document,
+    ) {
+        this.suppressInitialSameDocumentNavigation =
+            hasAngularServerContext(this.documentRef) || isPublicStartupDocument(this.documentRef);
+
         // Check if there's an active navigation already (e.g. on initial page load)
         if (this.router.getCurrentNavigation()) {
-            this.isLoading = true;
+            this.isLoading = !this.suppressInitialSameDocumentNavigation;
         }
 
         this.routerSubscription = this.router.events.subscribe((event) => {
             switch (true) {
                 case event instanceof NavigationStart: {
+                    if (this.shouldSuppressNavigation(event.url)) {
+                        this.suppressInitialSameDocumentNavigation = false;
+                        this.isLoading = false;
+                        break;
+                    }
+
+                    this.suppressInitialSameDocumentNavigation = false;
                     this.isLoading = true;
                     break;
                 }
                 case event instanceof NavigationEnd:
                 case event instanceof NavigationCancel:
                 case event instanceof NavigationError: {
+                    this.suppressInitialSameDocumentNavigation = false;
                     this.isLoading = false;
                     break;
                 }
@@ -41,5 +62,9 @@ export class RouteLoaderComponent implements OnDestroy {
         if (this.routerSubscription) {
             this.routerSubscription.unsubscribe();
         }
+    }
+
+    private shouldSuppressNavigation(url: string): boolean {
+        return this.suppressInitialSameDocumentNavigation && isSameDocumentRoutePath(this.documentRef, url);
     }
 }
