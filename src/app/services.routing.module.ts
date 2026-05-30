@@ -4,7 +4,7 @@ import { ServicesComponent } from './components/services/services.component';
 import { userResolver } from './resolvers/user.resolver';
 
 
-const routes: Routes = [
+export const servicesRoutes: Routes = [
   {
     path: '',
     component: ServicesComponent,
@@ -15,7 +15,7 @@ const routes: Routes = [
 ];
 
 @NgModule({
-  imports: [RouterModule.forChild(routes)],
+  imports: [RouterModule.forChild(servicesRoutes)],
   exports: [RouterModule]
 })
 export class ServicesRoutingModule { }

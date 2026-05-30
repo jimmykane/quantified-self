@@ -1,5 +1,5 @@
-import { Component, inject, OnInit } from '@angular/core';
-import { CommonModule } from '@angular/common';
+import { Component, inject, OnInit, PLATFORM_ID } from '@angular/core';
+import { CommonModule, isPlatformBrowser } from '@angular/common';
 import { AppWhatsNewService } from '../../services/app.whats-new.service';
 import { WhatsNewFeedComponent } from './whats-new-feed.component';
 
@@ -27,8 +27,13 @@ import { WhatsNewFeedComponent } from './whats-new-feed.component';
 })
 export class WhatsNewPageComponent implements OnInit {
     private whatsNewService = inject(AppWhatsNewService);
+    private isBrowser = isPlatformBrowser(inject(PLATFORM_ID));
 
     ngOnInit() {
+        if (!this.isBrowser) {
+            return;
+        }
+
         this.whatsNewService.markAsRead();
     }
 }

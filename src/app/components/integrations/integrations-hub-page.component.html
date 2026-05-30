@@ -74,8 +74,49 @@
         </p>
       </mat-card-content>
       <mat-card-actions>
+        <a mat-stroked-button routerLink="/features">
+          All Features
+        </a>
         <a mat-stroked-button routerLink="/features/workout-data-comparison">
           Compare Workout Data
+        </a>
+        <a mat-stroked-button routerLink="/features/workout-file-comparison">
+          Compare Files
+        </a>
+        <a mat-stroked-button routerLink="/features/sports-watch-benchmark">
+          Device Benchmarks
+        </a>
+      </mat-card-actions>
+    </mat-card>
+  </section>
+
+  <section class="content-section" aria-labelledby="sync-guide-title">
+    <mat-card appearance="outlined" class="feature-callout-card">
+      <mat-card-header>
+        <div mat-card-avatar class="feature-callout-icon">
+          <mat-icon>sync_alt</mat-icon>
+        </div>
+        <mat-card-title id="sync-guide-title">Set up the sync route you need</mat-card-title>
+        <mat-card-subtitle>Step-by-step Garmin, COROS, and centralized-data guides</mat-card-subtitle>
+      </mat-card-header>
+      <mat-card-content>
+        <p>
+          Use the guide pages when you want the shortest path to Garmin -> Suunto sync, COROS -> Suunto sync, or a
+          centralized Garmin, Suunto, and COROS workout archive.
+        </p>
+      </mat-card-content>
+      <mat-card-actions>
+        <a mat-stroked-button routerLink="/guides">
+          All Guides
+        </a>
+        <a mat-stroked-button routerLink="/guides/sync-garmin-to-suunto">
+          Garmin to Suunto
+        </a>
+        <a mat-stroked-button routerLink="/guides/sync-coros-to-suunto">
+          COROS to Suunto
+        </a>
+        <a mat-stroked-button routerLink="/guides/centralize-garmin-suunto-coros-workout-data">
+          Centralize Data
         </a>
       </mat-card-actions>
     </mat-card>

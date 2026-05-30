@@ -19,7 +19,10 @@ describe('SeoService', () => {
 
     beforeEach(() => {
         titleServiceSpy = { setTitle: vi.fn() };
-        metaServiceSpy = { updateTag: vi.fn() };
+        metaServiceSpy = {
+            updateTag: vi.fn(),
+            removeTag: vi.fn(),
+        };
         routerEventsSubject = new Subject<any>();
 
         // Mock Router
@@ -97,7 +100,7 @@ describe('SeoService', () => {
 
         expect(titleServiceSpy.setTitle).toHaveBeenCalledWith('Test Page - Quantified Self');
         expect(metaServiceSpy.updateTag).toHaveBeenCalledWith({ name: 'description', content: 'Test Description' });
-        expect(metaServiceSpy.updateTag).toHaveBeenCalledWith({ name: 'keywords', content: 'test, seo' });
+        expect(metaServiceSpy.updateTag).not.toHaveBeenCalledWith({ name: 'keywords', content: 'test, seo' });
         expect(metaServiceSpy.updateTag).toHaveBeenCalledWith({ property: 'og:title', content: 'Test Page - Quantified Self' });
         expect(metaServiceSpy.updateTag).toHaveBeenCalledWith({ property: 'og:description', content: 'Test Description' });
     });
@@ -223,6 +226,29 @@ describe('SeoService', () => {
         expect(mockLink.setAttribute).toHaveBeenCalledWith('href', 'https://quantified-self.io/updated');
     });
 
+    it('should canonicalize non-root paths without a trailing slash', () => {
+        mockActivatedRoute.data = of({ title: 'Slash Test' });
+
+        mockRouter.url = '/features/ai-insights/?utm_source=test';
+        mockRouter.parseUrl = vi.fn().mockReturnValue({
+            queryParams: { utm_source: 'test' },
+            fragment: null,
+            toString: () => '/features/ai-insights/'
+        });
+
+        const mockLink = { setAttribute: vi.fn() };
+        mockDocument.querySelector = vi.fn().mockReturnValue(mockLink);
+
+        service.init();
+        routerEventsSubject.next(new NavigationEnd(1, '/features/ai-insights/', '/features/ai-insights/'));
+
+        expect(mockLink.setAttribute).toHaveBeenCalledWith('href', 'https://quantified-self.io/features/ai-insights');
+        expect(metaServiceSpy.updateTag).toHaveBeenCalledWith({
+            property: 'og:url',
+            content: 'https://quantified-self.io/features/ai-insights'
+        });
+    });
+
     it('should write canonical, og:url, and JSON-LD during server rendering', () => {
         TestBed.resetTestingModule();
 
@@ -269,7 +295,10 @@ describe('SeoService', () => {
             }
         };
         titleServiceSpy = { setTitle: vi.fn() };
-        metaServiceSpy = { updateTag: vi.fn() };
+        metaServiceSpy = {
+            updateTag: vi.fn(),
+            removeTag: vi.fn(),
+        };
 
         TestBed.configureTestingModule({
             providers: [
@@ -302,6 +331,39 @@ describe('SeoService', () => {
         expect(mockScript.setAttribute).toHaveBeenCalledWith('type', 'application/ld+json');
         expect(mockScript.textContent).toContain('"@type":"WebPage"');
         expect(mockScript.textContent).toContain('Private Garmin Training Dashboard');
+    });
+
+    it('should set route-specific robots metadata and clear it when omitted', () => {
+        mockRouter.url = '/missing-page';
+        mockRouter.parseUrl = vi.fn().mockReturnValue({
+            queryParams: {},
+            fragment: null,
+            toString: () => '/missing-page'
+        });
+        mockActivatedRoute.data = of({
+            title: 'Page Not Found',
+            robots: 'noindex, follow'
+        });
+
+        service.init();
+        routerEventsSubject.next(new NavigationEnd(1, '/missing-page', '/missing-page'));
+
+        expect(metaServiceSpy.updateTag).toHaveBeenCalledWith({
+            name: 'robots',
+            content: 'noindex, follow'
+        });
+
+        mockActivatedRoute.data = of({ title: 'Home' });
+        mockRouter.url = '/';
+        mockRouter.parseUrl = vi.fn().mockReturnValue({
+            queryParams: {},
+            fragment: null,
+            toString: () => '/'
+        });
+
+        routerEventsSubject.next(new NavigationEnd(2, '/', '/'));
+
+        expect(metaServiceSpy.removeTag).toHaveBeenCalledWith("name='robots'");
     });
 
     it('should inject custom JSON-LD from route data', () => {

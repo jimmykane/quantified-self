@@ -22,11 +22,14 @@ describe('integration-pages.content', () => {
   });
 
   it('should keep Garmin and COROS SEO intent distinct from the Suunto sync page', () => {
-    expect(PROVIDER_INTEGRATION_ROUTE_DATA.garmin.keywords).toContain('private Garmin training dashboard');
     expect(PROVIDER_INTEGRATION_ROUTE_DATA.garmin.title).toBe('Private Garmin Training Dashboard');
+    expect(PROVIDER_INTEGRATION_ROUTE_DATA.garmin.description).toContain('private training dashboard for Garmin data');
     expect(PROVIDER_INTEGRATION_ROUTE_DATA.garmin.description).toContain('Garmin -> Suunto sync');
-    expect(PROVIDER_INTEGRATION_ROUTE_DATA.coros.keywords).toContain('COROS to Suunto sync');
+    expect(PROVIDER_INTEGRATION_ROUTE_DATA.garmin).not.toHaveProperty('keywords');
     expect(PROVIDER_INTEGRATION_ROUTE_DATA.coros.description).toContain('centralized Garmin, Suunto, and COROS workout data');
-    expect(PROVIDER_INTEGRATION_ROUTE_DATA.suunto.keywords).toContain('sync Garmin data to Suunto automatically');
+    expect(PROVIDER_INTEGRATION_ROUTE_DATA.coros.description).toContain('COROS -> Suunto sync');
+    expect(PROVIDER_INTEGRATION_ROUTE_DATA.coros).not.toHaveProperty('keywords');
+    expect(PROVIDER_INTEGRATION_ROUTE_DATA.suunto.description).toContain('Sync Garmin and COROS activities to Suunto');
+    expect(PROVIDER_INTEGRATION_ROUTE_DATA.suunto).not.toHaveProperty('keywords');
   });
 });

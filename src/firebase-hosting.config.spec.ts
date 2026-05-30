@@ -1,0 +1,168 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { describe, expect, it } from 'vitest';
+import {
+  CLIENT_RENDERED_APP_ROUTES,
+  PRERENDERED_PUBLIC_ROUTES,
+} from './app/app.routes.server';
+
+interface FirebaseHostingTarget {
+  target: string;
+  public: string;
+  headers?: Array<{
+    source: string;
+    headers: Array<{
+      key: string;
+      value: string;
+    }>;
+  }>;
+  rewrites?: Array<{
+    source: string;
+    destination: string;
+  }>;
+}
+
+interface FirebaseConfig {
+  hosting: FirebaseHostingTarget[];
+}
+
+interface AngularBuildOptions {
+  assets: Array<string | { glob: string; input: string; output: string }>;
+}
+
+interface AngularConfig {
+  projects: {
+    'track-tools': {
+      architect: {
+        build: {
+          options: AngularBuildOptions;
+        };
+      };
+    };
+  };
+}
+
+interface ServiceWorkerConfig {
+  navigationUrls: string[];
+}
+
+const firebaseConfig = JSON.parse(
+  readFileSync(resolve(__dirname, '../firebase.json'), 'utf8')
+) as FirebaseConfig;
+
+const angularConfig = JSON.parse(
+  readFileSync(resolve(__dirname, '../angular.json'), 'utf8')
+) as AngularConfig;
+
+const serviceWorkerConfig = JSON.parse(
+  readFileSync(resolve(__dirname, '../ngsw-config.json'), 'utf8')
+) as ServiceWorkerConfig;
+
+const static404Html = readFileSync(resolve(__dirname, '404.html'), 'utf8');
+
+const expectedCsrRewriteSources = CLIENT_RENDERED_APP_ROUTES.map(routePathToHostingSource);
+
+function routePathToHostingSource(path: string): string {
+  return `/${path.replace(/:[^/]+/g, '*')}`;
+}
+
+function matchesHostingSource(source: string, path: string): boolean {
+  if (source === path) {
+    return true;
+  }
+
+  const sourceSegments = source.split('/').filter(Boolean);
+  const pathSegments = path.split('/').filter(Boolean);
+
+  if (sourceSegments.length !== pathSegments.length) {
+    return false;
+  }
+
+  return sourceSegments.every((segment, index) => segment === '*' || segment === pathSegments[index]);
+}
+
+function matchesAnyHostingSource(sources: readonly string[], path: string): boolean {
+  return sources.some(source => matchesHostingSource(source, path));
+}
+
+describe('Firebase Hosting configuration', () => {
+  it('rewrites only known CSR app routes so unknown URLs can fall through to 404.html', () => {
+    for (const target of firebaseConfig.hosting) {
+      const rewrites = target.rewrites ?? [];
+      const sources = rewrites.map(rewrite => rewrite.source);
+
+      expect(target.public).toBe('dist/browser');
+      expect(sources).toEqual(expectedCsrRewriteSources);
+      expect(new Set(sources).size).toBe(sources.length);
+      expect(sources).not.toContain('**');
+      expect(sources).not.toContain('/**');
+      expect(sources.every(source => !source.includes('**'))).toBe(true);
+
+      for (const rewrite of rewrites) {
+        expect(rewrite.destination).toBe('/index.csr.html');
+      }
+    }
+  });
+
+  it('matches known CSR URLs without masking prerendered or unknown URLs', () => {
+    const sources = firebaseConfig.hosting[0]?.rewrites?.map(rewrite => rewrite.source) ?? [];
+
+    expect(matchesAnyHostingSource(sources, '/dashboard')).toBe(true);
+    expect(matchesAnyHostingSource(sources, '/admin/queues/workout')).toBe(true);
+    expect(matchesAnyHostingSource(sources, '/user/user-1/event/event-1')).toBe(true);
+
+    expect(matchesAnyHostingSource(sources, '/admin/missing')).toBe(false);
+    expect(matchesAnyHostingSource(sources, '/user/user-1/event/event-1/extra')).toBe(false);
+    expect(matchesAnyHostingSource(sources, '/definitely-missing')).toBe(false);
+    expect(matchesAnyHostingSource(sources, '/integrations/garmin')).toBe(false);
+    expect(matchesAnyHostingSource(sources, '/features/ai-insights')).toBe(false);
+    expect(matchesAnyHostingSource(sources, '/help')).toBe(false);
+  });
+
+  it('keeps all prerendered public routes out of Firebase and service-worker CSR fallbacks', () => {
+    const hostingSources = firebaseConfig.hosting[0]?.rewrites?.map(rewrite => rewrite.source) ?? [];
+    const positiveNavigationUrls = serviceWorkerConfig.navigationUrls.filter(url => !url.startsWith('!'));
+    const prerenderedPublicSources = PRERENDERED_PUBLIC_ROUTES.map(routePathToHostingSource);
+
+    for (const source of prerenderedPublicSources) {
+      expect(hostingSources).not.toContain(source);
+      expect(positiveNavigationUrls).not.toContain(source);
+    }
+  });
+
+  it('copies the static Firebase 404 page into the hosting output', () => {
+    const assets = angularConfig.projects['track-tools'].architect.build.options.assets;
+
+    expect(assets).toContain('src/404.html');
+  });
+
+  it('keeps the static Firebase 404 page noindexed and useful without JavaScript', () => {
+    expect(static404Html).toContain('<meta name="robots" content="noindex, follow">');
+    expect(static404Html).toContain('<h1>Page not found</h1>');
+    expect(static404Html).toContain('<a href="/">Go Home</a>');
+  });
+
+  it('keeps custom 404 responses on a short cache lifetime', () => {
+    for (const target of firebaseConfig.hosting) {
+      expect(target.headers).toContainEqual({
+        source: '404.html',
+        headers: [
+          {
+            key: 'Cache-Control',
+            value: 'public, max-age=300',
+          },
+        ],
+      });
+    }
+  });
+
+  it('keeps service-worker navigation fallback scoped to known CSR routes', () => {
+    const navigationUrls = serviceWorkerConfig.navigationUrls;
+    const positiveNavigationUrls = navigationUrls.filter(url => !url.startsWith('!'));
+
+    expect(positiveNavigationUrls).toEqual(expectedCsrRewriteSources);
+    expect(navigationUrls).not.toContain('/**');
+    expect(positiveNavigationUrls.every(url => !url.includes('**'))).toBe(true);
+    expect(navigationUrls).toContain('!/**/*.*');
+  });
+});

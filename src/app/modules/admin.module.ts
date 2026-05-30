@@ -9,7 +9,7 @@ import { RouterModule, Routes } from '@angular/router';
 import { adminGuard } from '../authentication/admin.guard';
 import { adminResolver } from '../resolvers/admin.resolver';
 
-const routes: Routes = [
+export const adminRoutes: Routes = [
     {
         path: '',
         component: AdminDashboardComponent,
@@ -78,7 +78,7 @@ const routes: Routes = [
 @NgModule({
     imports: [
         CommonModule,
-        RouterModule.forChild(routes),
+        RouterModule.forChild(adminRoutes),
         AdminDashboardComponent,
         AdminMaintenanceComponent,
         AdminUserManagementComponent,

@@ -8,7 +8,8 @@ import { AppAnalyticsService } from './services/app.analytics.service';
 import { AppRemoteConfigService } from './services/app.remote-config.service';
 import { AppThemeService } from './services/app.theme.service';
 import { AppUserService } from './services/app.user.service';
-import { AppWhatsNewService } from './services/app.whats-new.service';
+import { AppWhatsNewService, type ChangelogPost } from './services/app.whats-new.service';
+import { AppPaymentService, type StripeProduct, type StripeSubscription } from './services/app.payment.service';
 
 @Injectable()
 class ServerAuthService {
@@ -40,6 +41,10 @@ class ServerUserService {
 
   async isAdmin(): Promise<boolean> {
     return false;
+  }
+
+  async getSubscriptionRole(): Promise<null> {
+    return null;
   }
 
   hasIncompleteProfileReads(): boolean {
@@ -92,10 +97,39 @@ class ServerThemeService {
 
 @Injectable()
 class ServerWhatsNewService {
+  readonly changelogs$ = of<ChangelogPost[]>([]);
+  readonly changelogs = signal<ChangelogPost[]>([]).asReadonly();
   readonly unreadCount = signal(0).asReadonly();
+
+  isUnread(): boolean {
+    return false;
+  }
+
+  async markAsRead(): Promise<void> {
+    return undefined;
+  }
 
   setAdminMode(): void {
     return undefined;
+  }
+}
+
+@Injectable()
+class ServerPaymentService {
+  getProducts(): Observable<StripeProduct[]> {
+    return of([]);
+  }
+
+  getUserSubscriptions(): Observable<StripeSubscription[]> {
+    return of([]);
+  }
+
+  async hasPaidSubscriptionHistory(): Promise<boolean> {
+    return false;
+  }
+
+  async getUpcomingRenewalAmount(): Promise<{ status: 'unavailable' }> {
+    return { status: 'unavailable' };
   }
 }
 
@@ -137,4 +171,5 @@ export const SERVER_APP_PROVIDERS = [
   { provide: AppRemoteConfigService, useClass: ServerRemoteConfigService },
   { provide: AppThemeService, useClass: ServerThemeService },
   { provide: AppWhatsNewService, useClass: ServerWhatsNewService },
+  { provide: AppPaymentService, useClass: ServerPaymentService },
 ];

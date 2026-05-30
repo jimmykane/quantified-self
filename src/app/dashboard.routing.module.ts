@@ -4,7 +4,7 @@ import { DashboardComponent } from './components/dashboard/dashboard.component';
 import { dashboardResolver } from './resolvers/dashboard.resolver';
 
 
-const routes: Routes = [
+export const dashboardRoutes: Routes = [
   {
     path: '',
     component: DashboardComponent,
@@ -15,7 +15,7 @@ const routes: Routes = [
 ];
 
 @NgModule({
-  imports: [RouterModule.forChild(routes)],
+  imports: [RouterModule.forChild(dashboardRoutes)],
   exports: [RouterModule]
 })
 export class DashboardRoutingModule { }

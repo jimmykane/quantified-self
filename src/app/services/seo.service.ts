@@ -70,13 +70,19 @@ export class SeoService implements OnDestroy {
             this.metaService.updateTag({ name: 'twitter:description', content: data['description'] });
         }
 
-        // Keywords
-        if (data['keywords']) {
-            this.metaService.updateTag({ name: 'keywords', content: data['keywords'] });
-        }
+        this.updateRobotsTag(data['robots']);
 
         // URL
         this.updateOgUrl();
+    }
+
+    private updateRobotsTag(robots: unknown) {
+        if (typeof robots === 'string' && robots.trim()) {
+            this.metaService.updateTag({ name: 'robots', content: robots });
+            return;
+        }
+
+        this.metaService.removeTag("name='robots'");
     }
 
     private updateOgUrl() {
@@ -114,13 +120,19 @@ export class SeoService implements OnDestroy {
         urlTree.fragment = null; // Clear fragment
 
         // Serialize back to string
-        const cleanPath = urlTree.toString();
+        const cleanPath = this.normalizeCanonicalPath(urlTree.toString());
 
         const origin = isPlatformBrowser(this.platformId)
             ? this.doc.location?.origin ?? this.getConfiguredCanonicalOrigin()
             : this.getConfiguredCanonicalOrigin();
 
         return `${origin}${cleanPath}`;
+    }
+
+    private normalizeCanonicalPath(path: string): string {
+        const normalized = path.startsWith('/') ? path : `/${path}`;
+        const pathWithoutTrailingSlash = normalized === '/' ? normalized : normalized.replace(/\/+$/, '');
+        return pathWithoutTrailingSlash || '/';
     }
 
     private getConfiguredCanonicalOrigin(): string {

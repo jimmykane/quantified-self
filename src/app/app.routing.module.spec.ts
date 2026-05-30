@@ -3,6 +3,7 @@ import { routes } from './app.routing.module';
 import { authGuard } from './authentication/app.auth.guard';
 import { aiInsightsGuard } from './authentication/ai-insights.guard';
 import { onboardingGuard } from './authentication/onboarding.guard';
+import { PUBLIC_FEATURE_PATHS, PUBLIC_GUIDE_PATHS } from './components/public-seo/public-seo-pages.content';
 
 describe('AppRoutingModule routes', () => {
   it('should define a public help route with help metadata', () => {
@@ -14,14 +15,13 @@ describe('AppRoutingModule routes', () => {
     expect(helpRoute?.data).toMatchObject({
       title: 'Help & Support',
       description: 'Get help with Garmin -> Suunto and COROS -> Suunto sync routes, catch-up sync, AI Insights, account setup, uploads, billing, privacy, and troubleshooting in Quantified Self.',
-      keywords: 'help, support, faq, garmin to suunto sync, coros to suunto sync, catch-up sync, ai insights, uploads, billing, privacy, quantified self',
       animation: 'Help',
       preload: true,
       jsonLd: {
         '@context': 'https://schema.org',
         '@type': 'WebPage',
         name: 'Quantified Self Help & Support',
-        url: 'https://www.quantified-self.io/help',
+        url: 'https://quantified-self.io/help',
         inLanguage: 'en',
       },
     });
@@ -30,6 +30,24 @@ describe('AppRoutingModule routes', () => {
     expect(helpAbout).toContain('Garmin -> Suunto sync');
     expect(helpAbout).toContain('COROS -> Suunto sync');
     expect(helpAbout).toContain('Catch-up sync');
+  });
+
+  it('should define a public pricing route with membership JSON-LD', () => {
+    const pricingRoute = routes.find(route => route.path === 'pricing');
+    const jsonLd = pricingRoute?.data?.['jsonLd'] as Record<string, unknown> | undefined;
+
+    expect(pricingRoute).toBeTruthy();
+    expect(pricingRoute?.loadComponent).toBeTypeOf('function');
+    expect(pricingRoute?.data?.['title']).toBe('Membership');
+    expect(pricingRoute?.data?.['description']).toContain('Support the development of Quantified Self');
+    expect(pricingRoute?.data?.['keywords']).toBeUndefined();
+    expect(jsonLd).toMatchObject({
+      '@context': 'https://schema.org',
+      '@type': 'WebPage',
+      name: 'Quantified Self Membership',
+      url: 'https://quantified-self.io/pricing',
+      inLanguage: 'en',
+    });
   });
 
   it('should allow any authenticated onboarded user to access mytracks', () => {
@@ -75,9 +93,9 @@ describe('AppRoutingModule routes', () => {
 
   it('should define public Garmin, Suunto, and COROS provider integration routes', () => {
     const expectedRoutes = [
-      { path: 'integrations/garmin', provider: 'garmin', keyword: 'best private training dashboard for Garmin data' },
-      { path: 'integrations/suunto', provider: 'suunto', keyword: 'sync Garmin data to Suunto automatically' },
-      { path: 'integrations/coros', provider: 'coros', keyword: 'COROS to Suunto sync' },
+      { path: 'integrations/garmin', provider: 'garmin', descriptionText: 'private training dashboard for Garmin data' },
+      { path: 'integrations/suunto', provider: 'suunto', descriptionText: 'Sync Garmin and COROS activities to Suunto' },
+      { path: 'integrations/coros', provider: 'coros', descriptionText: 'COROS -> Suunto sync' },
     ];
 
     for (const expectedRoute of expectedRoutes) {
@@ -88,7 +106,8 @@ describe('AppRoutingModule routes', () => {
       expect(route?.canMatch).toBeUndefined();
       expect(route?.loadComponent).toBeTypeOf('function');
       expect(route?.data?.['integrationProvider']).toBe(expectedRoute.provider);
-      expect(route?.data?.['keywords']).toContain(expectedRoute.keyword);
+      expect(route?.data?.['keywords']).toBeUndefined();
+      expect(route?.data?.['description']).toContain(expectedRoute.descriptionText);
       expect(jsonLd?.['@type']).toBe('WebPage');
       expect(jsonLd?.['url']).toBe(`https://quantified-self.io/${expectedRoute.path}`);
     }
@@ -108,12 +127,7 @@ describe('AppRoutingModule routes', () => {
     expect(route?.data?.['description']).toContain('custom FIT, TCX, or GPX workout data');
     expect(route?.data?.['description']).toContain('free-plan manual uploads');
     expect(route?.data?.['description']).toContain('reviewer-ready device comparisons');
-    expect(route?.data?.['keywords']).toContain('Garmin vs COROS data');
-    expect(route?.data?.['keywords']).toContain('compare FIT files workout data');
-    expect(route?.data?.['keywords']).toContain('free workout data comparison');
-    expect(route?.data?.['keywords']).toContain('sports watch review benchmark');
-    expect(route?.data?.['keywords']).toContain('sync Garmin data to Suunto automatically');
-    expect(route?.data?.['keywords']).not.toContain('AI insights');
+    expect(route?.data?.['keywords']).toBeUndefined();
     expect(jsonLd).toMatchObject({
       '@context': 'https://schema.org',
       '@type': 'WebPage',
@@ -121,6 +135,106 @@ describe('AppRoutingModule routes', () => {
       url: 'https://quantified-self.io/features/workout-data-comparison',
       inLanguage: 'en',
     });
+  });
+
+  it('should define public feature SEO routes with metadata and no guards', () => {
+    const expectedRoutes = [
+      {
+        path: PUBLIC_FEATURE_PATHS.hub,
+        title: 'Features for Endurance Training Data',
+        h1: 'Features for endurance training data',
+        descriptionText: 'sports watch benchmark reports',
+      },
+      {
+        path: PUBLIC_FEATURE_PATHS.aiInsights,
+        title: 'AI Insights for Endurance Training Data',
+        h1: 'AI insights for endurance training data',
+        descriptionText: 'chart-backed AI insights',
+      },
+      {
+        path: PUBLIC_FEATURE_PATHS.workoutFileComparison,
+        title: 'FIT, TCX, GPX Workout File Comparison',
+        h1: 'Compare FIT, TCX, GPX, JSON, and SML workout files',
+        descriptionText: 'Compare FIT, TCX, GPX, JSON, and SML workout files',
+      },
+      {
+        path: PUBLIC_FEATURE_PATHS.sportsWatchBenchmark,
+        title: 'Sports Watch Benchmark Reports',
+        h1: 'Sports watch benchmark reports for reviewers and device tests',
+        descriptionText: 'sports watch benchmark reports',
+      },
+    ];
+
+    for (const expectedRoute of expectedRoutes) {
+      const route = routes.find(candidate => candidate.path === expectedRoute.path);
+      const jsonLd = route?.data?.['jsonLd'] as Record<string, unknown> | undefined;
+      const page = route?.data?.['publicSeoPage'] as Record<string, unknown> | undefined;
+
+      expect(route).toBeTruthy();
+      expect(route?.canMatch).toBeUndefined();
+      expect(route?.loadComponent).toBeTypeOf('function');
+      expect(route?.data?.['title']).toBe(expectedRoute.title);
+      expect(route?.data?.['description']).toContain(expectedRoute.descriptionText);
+      expect(route?.data?.['keywords']).toBeUndefined();
+      expect(page?.['h1']).toBe(expectedRoute.h1);
+      expect(jsonLd?.['@type']).toBe('WebPage');
+      expect(jsonLd?.['url']).toBe(`https://quantified-self.io/${expectedRoute.path}`);
+
+      if (expectedRoute.path === PUBLIC_FEATURE_PATHS.hub) {
+        expect(route?.pathMatch).toBe('full');
+      }
+    }
+  });
+
+  it('should define a public guides hub route without requiring auth', () => {
+    const route = routes.find(candidate => candidate.path === PUBLIC_GUIDE_PATHS.hub);
+    const jsonLd = route?.data?.['jsonLd'] as Record<string, unknown> | undefined;
+    const mainEntity = jsonLd?.['mainEntity'] as Record<string, unknown>[] | undefined;
+    const page = route?.data?.['publicSeoPage'] as Record<string, unknown> | undefined;
+
+    expect(route).toBeTruthy();
+    expect(route?.canMatch).toBeUndefined();
+    expect(route?.loadComponent).toBeTypeOf('function');
+    expect(route?.data?.['title']).toBe('Training Data Sync Guides');
+    expect(route?.data?.['description']).toContain('Garmin -> Suunto sync');
+    expect(route?.data?.['keywords']).toBeUndefined();
+    expect(route?.pathMatch).toBe('full');
+    expect(page?.['h1']).toBe('Training data sync guides');
+    expect(jsonLd?.['@type']).toBe('WebPage');
+    expect(jsonLd?.['url']).toBe('https://quantified-self.io/guides');
+    expect(mainEntity?.some(entity => entity['@type'] === 'HowTo')).toBe(false);
+  });
+
+  it('should define public guide SEO routes with HowTo JSON-LD', () => {
+    const expectedRoutes = [
+      {
+        path: PUBLIC_GUIDE_PATHS.syncGarminToSuunto,
+        h1: 'How to sync Garmin data to Suunto automatically',
+      },
+      {
+        path: PUBLIC_GUIDE_PATHS.syncCorosToSuunto,
+        h1: 'How to sync COROS workouts to Suunto automatically',
+      },
+      {
+        path: PUBLIC_GUIDE_PATHS.centralizeWorkoutData,
+        h1: 'Centralize Garmin, Suunto, and COROS workout data',
+      },
+    ];
+
+    for (const expectedRoute of expectedRoutes) {
+      const route = routes.find(candidate => candidate.path === expectedRoute.path);
+      const jsonLd = route?.data?.['jsonLd'] as Record<string, unknown> | undefined;
+      const mainEntity = jsonLd?.['mainEntity'] as Record<string, unknown>[] | undefined;
+      const page = route?.data?.['publicSeoPage'] as Record<string, unknown> | undefined;
+
+      expect(route).toBeTruthy();
+      expect(route?.canMatch).toBeUndefined();
+      expect(route?.loadComponent).toBeTypeOf('function');
+      expect(route?.data?.['keywords']).toBeUndefined();
+      expect(page?.['h1']).toBe(expectedRoute.h1);
+      expect(jsonLd?.['url']).toBe(`https://quantified-self.io/${expectedRoute.path}`);
+      expect(mainEntity?.some(entity => entity['@type'] === 'HowTo')).toBe(true);
+    }
   });
 
   it('should include sync-focused metadata on the public home route', () => {
@@ -133,9 +247,7 @@ describe('AppRoutingModule routes', () => {
       animation: 'Home',
     });
     expect(homeRoute?.data?.['description']).toBe('Quantified Self brings Garmin, Suunto, and COROS activity data into one private training dashboard with AI Insights and automatic sync from Garmin or COROS to Suunto.');
-    expect(homeRoute?.data?.['keywords']).toContain('garmin to suunto sync');
-    expect(homeRoute?.data?.['keywords']).toContain('coros to suunto sync');
-    expect(homeRoute?.data?.['keywords']).toContain('ai insights');
+    expect(homeRoute?.data?.['keywords']).toBeUndefined();
     expect(homeRoute?.data?.['jsonLd']).toMatchObject({
       '@context': 'https://schema.org',
       '@type': 'SoftwareApplication',
@@ -149,5 +261,18 @@ describe('AppRoutingModule routes', () => {
     expect(dashboardRoute).toBeTruthy();
     expect(dashboardRoute?.canMatch).toEqual([authGuard, onboardingGuard]);
     expect(dashboardRoute?.loadChildren).toBeTypeOf('function');
+  });
+
+  it('should render a noindex not-found page for unknown routes instead of redirecting to home', () => {
+    const wildcardRoute = routes.find(route => route.path === '**');
+
+    expect(wildcardRoute).toBeTruthy();
+    expect(wildcardRoute?.redirectTo).toBeUndefined();
+    expect(wildcardRoute?.loadComponent).toBeTypeOf('function');
+    expect(wildcardRoute?.data).toMatchObject({
+      title: 'Page Not Found',
+      description: 'The Quantified Self page you requested could not be found.',
+      robots: 'noindex, follow',
+    });
   });
 });

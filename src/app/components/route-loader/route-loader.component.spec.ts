@@ -79,10 +79,10 @@ describe('RouteLoaderComponent', () => {
     });
 
     it('should suppress an active startup navigation on public startup routes', () => {
-        window.history.pushState({}, '', '/integrations');
+        window.history.pushState({}, '', '/guides');
         const mockRouter = {
             events: new Subject(),
-            getCurrentNavigation: () => ({ id: 1, initialUrl: '/integrations' })
+            getCurrentNavigation: () => ({ id: 1, initialUrl: '/guides' })
         } as any;
 
         const comp = new RouteLoaderComponent(mockRouter, document);
@@ -91,7 +91,7 @@ describe('RouteLoaderComponent', () => {
     });
 
     it('should suppress only the same-document startup navigation on public routes', () => {
-        window.history.pushState({}, '', '/integrations');
+        window.history.pushState({}, '', '/features');
         const events$ = new Subject<RouterEvent>();
         const mockRouter = {
             events: events$.asObservable(),
@@ -99,10 +99,10 @@ describe('RouteLoaderComponent', () => {
         } as any;
         const comp = new RouteLoaderComponent(mockRouter, document);
 
-        events$.next(new NavigationStart(1, '/integrations'));
+        events$.next(new NavigationStart(1, '/features'));
         expect(comp.isLoading).toBe(false);
 
-        events$.next(new NavigationStart(2, '/integrations/garmin'));
+        events$.next(new NavigationStart(2, '/features/ai-insights'));
         expect(comp.isLoading).toBe(true);
     });
 });
