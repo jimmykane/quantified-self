@@ -50,9 +50,29 @@ describe('PublicSeoPageComponent', () => {
     expect(text).toContain('custom exports');
     expect(text).toContain('Provider data beside files');
     expect(text).toContain('Workout File Comparison FAQ');
+    expect(fixture.nativeElement.querySelector('.how-to-list')).toBeNull();
     expect(hrefs).toContain('/login');
     expect(hrefs).toContain('/features/workout-data-comparison');
     expect(hrefs).toContain('/help#uploads-and-imports');
     expect(hrefs).toContain('/features/sports-watch-benchmark');
+  });
+
+  it('renders visible HowTo steps when route data includes HowTo structured data', () => {
+    routeStub.snapshot.data.publicSeoPage = PUBLIC_SEO_PAGES.syncGarminToSuunto;
+
+    const guideFixture = TestBed.createComponent(PublicSeoPageComponent);
+    guideFixture.detectChanges();
+
+    const text = guideFixture.nativeElement.textContent as string;
+    const steps = Array.from(guideFixture.nativeElement.querySelectorAll('.how-to-list li')) as HTMLElement[];
+
+    expect(text).toContain('Step-by-step workflow');
+    expect(steps.length).toBe(PUBLIC_SEO_PAGES.syncGarminToSuunto.howToSteps?.length);
+
+    for (const step of PUBLIC_SEO_PAGES.syncGarminToSuunto.howToSteps ?? []) {
+      expect(text).toContain(step);
+    }
+
+    guideFixture.destroy();
   });
 });

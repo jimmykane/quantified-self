@@ -262,4 +262,17 @@ describe('AppRoutingModule routes', () => {
     expect(dashboardRoute?.canMatch).toEqual([authGuard, onboardingGuard]);
     expect(dashboardRoute?.loadChildren).toBeTypeOf('function');
   });
+
+  it('should render a noindex not-found page for unknown routes instead of redirecting to home', () => {
+    const wildcardRoute = routes.find(route => route.path === '**');
+
+    expect(wildcardRoute).toBeTruthy();
+    expect(wildcardRoute?.redirectTo).toBeUndefined();
+    expect(wildcardRoute?.loadComponent).toBeTypeOf('function');
+    expect(wildcardRoute?.data).toMatchObject({
+      title: 'Page Not Found',
+      description: 'The Quantified Self page you requested could not be found.',
+      robots: 'noindex, follow',
+    });
+  });
 });

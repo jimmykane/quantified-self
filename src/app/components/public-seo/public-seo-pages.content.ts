@@ -803,6 +803,7 @@ function buildJsonLd(page: PublicSeoPage): Record<string, unknown> {
         '@type': 'HowToStep',
         position: index + 1,
         name: step,
+        text: step,
       })),
     });
   }

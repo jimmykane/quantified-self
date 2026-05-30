@@ -96,4 +96,24 @@ describe('public-seo-pages.content', () => {
     expect(guideHubLinks).toContain('/features');
     expect(guideHubLinks).toContain('/integrations');
   });
+
+  it('keeps HowTo JSON-LD step text aligned with visible guide steps', () => {
+    const jsonLd = PUBLIC_SEO_ROUTE_DATA.syncGarminToSuunto.jsonLd;
+    const mainEntity = jsonLd['mainEntity'] as Record<string, unknown>[];
+    const howTo = mainEntity.find(entity => entity['@type'] === 'HowTo');
+    const steps = howTo?.['step'] as Record<string, unknown>[];
+
+    expect(steps).toHaveLength(PUBLIC_SEO_PAGES.syncGarminToSuunto.howToSteps?.length);
+
+    for (const [index, step] of steps.entries()) {
+      const expectedStep = PUBLIC_SEO_PAGES.syncGarminToSuunto.howToSteps?.[index];
+
+      expect(step).toMatchObject({
+        '@type': 'HowToStep',
+        position: index + 1,
+        name: expectedStep,
+        text: expectedStep,
+      });
+    }
+  });
 });

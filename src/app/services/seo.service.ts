@@ -70,8 +70,19 @@ export class SeoService implements OnDestroy {
             this.metaService.updateTag({ name: 'twitter:description', content: data['description'] });
         }
 
+        this.updateRobotsTag(data['robots']);
+
         // URL
         this.updateOgUrl();
+    }
+
+    private updateRobotsTag(robots: unknown) {
+        if (typeof robots === 'string' && robots.trim()) {
+            this.metaService.updateTag({ name: 'robots', content: robots });
+            return;
+        }
+
+        this.metaService.removeTag("name='robots'");
     }
 
     private updateOgUrl() {

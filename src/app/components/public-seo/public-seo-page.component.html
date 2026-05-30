@@ -57,6 +57,24 @@
   </section>
   }
 
+  @if (page.howToSteps?.length) {
+  <section class="content-section how-to-section" aria-labelledby="public-seo-how-to-title">
+    <div class="section-heading">
+      <p class="eyebrow">Steps</p>
+      <h2 id="public-seo-how-to-title">Step-by-step workflow</h2>
+    </div>
+
+    <ol class="how-to-list">
+      @for (step of page.howToSteps; track step; let index = $index) {
+      <li>
+        <span class="step-number">{{ index + 1 }}</span>
+        <span>{{ step }}</span>
+      </li>
+      }
+    </ol>
+  </section>
+  }
+
   <section class="content-section faq-section" aria-labelledby="public-seo-faq-title">
     <div class="section-heading">
       <p class="eyebrow">FAQ</p>

@@ -310,7 +310,15 @@ export const routes: Routes = [
     },
     pathMatch: 'full'
   },
-  { path: '**', redirectTo: '/', pathMatch: 'full' },
+  {
+    path: '**',
+    loadComponent: () => import('./components/not-found/not-found.component').then(m => m.NotFoundComponent),
+    data: {
+      title: 'Page Not Found',
+      description: 'The Quantified Self page you requested could not be found.',
+      robots: 'noindex, follow',
+    },
+  },
 ];
 
 @NgModule({

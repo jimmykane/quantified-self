@@ -38,13 +38,35 @@ export const PRERENDERED_PUBLIC_ROUTES = [
   ...PRERENDERED_GUIDE_ROUTES,
 ] as const;
 
+export const CLIENT_RENDERED_APP_ROUTES = [
+  'login',
+  'onboarding',
+  'admin',
+  'admin/**',
+  'subscriptions',
+  'payment/success',
+  'payment/cancel',
+  'services',
+  'dashboard',
+  'mytracks',
+  'settings',
+  'user/:userID/event/:eventID',
+  'policies',
+  'ai-insights',
+] as const;
+
 export const serverRoutes: ServerRoute[] = [
   ...PRERENDERED_PUBLIC_ROUTES.map(path => ({
     path,
     renderMode: RenderMode.Prerender,
   } as const)),
+  ...CLIENT_RENDERED_APP_ROUTES.map(path => ({
+    path,
+    renderMode: RenderMode.Client,
+  } as const)),
   {
     path: '**',
     renderMode: RenderMode.Client,
+    status: 404,
   },
 ];

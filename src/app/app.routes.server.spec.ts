@@ -1,6 +1,7 @@
 import { RenderMode } from '@angular/ssr';
 import { describe, expect, it } from 'vitest';
 import {
+  CLIENT_RENDERED_APP_ROUTES,
   PRERENDERED_FEATURE_ROUTES,
   PRERENDERED_GUIDE_ROUTES,
   PRERENDERED_PUBLIC_ROUTES,
@@ -29,15 +30,12 @@ describe('serverRoutes', () => {
     ]);
   });
 
-  it('keeps private app routes and unknown public paths client-rendered', () => {
+  it('keeps private and client-only app routes out of prerendering', () => {
     const prerenderedPaths = new Set(
       serverRoutes
         .filter(route => route.renderMode === RenderMode.Prerender)
         .map(route => route.path)
     );
-    const clientFallback = serverRoutes.find(route => route.path === '**');
-
-    expect(clientFallback?.renderMode).toBe(RenderMode.Client);
     expect(prerenderedPaths.has('')).toBe(true);
     expect(prerenderedPaths.has('dashboard')).toBe(false);
     expect(prerenderedPaths.has('settings')).toBe(false);
@@ -55,5 +53,21 @@ describe('serverRoutes', () => {
     expect(prerenderedPaths.has('guides/sync-garmin-to-suunto')).toBe(true);
     expect(prerenderedPaths.has('guides/sync-coros-to-suunto')).toBe(true);
     expect(prerenderedPaths.has('guides/centralize-garmin-suunto-coros-workout-data')).toBe(true);
+  });
+
+  it('declares known client-rendered routes before the 404 fallback', () => {
+    const clientRoutes = serverRoutes.filter(route => route.renderMode === RenderMode.Client);
+    const fallbackRoute = clientRoutes.at(-1);
+
+    expect(clientRoutes.slice(0, -1).map(route => route.path)).toEqual([...CLIENT_RENDERED_APP_ROUTES]);
+    expect(fallbackRoute).toMatchObject({
+      path: '**',
+      renderMode: RenderMode.Client,
+      status: 404,
+    });
+    expect(clientRoutes.find(route => route.path === 'dashboard')?.status).toBeUndefined();
+    expect(clientRoutes.find(route => route.path === 'settings')?.status).toBeUndefined();
+    expect(clientRoutes.find(route => route.path === 'mytracks')?.status).toBeUndefined();
+    expect(clientRoutes.find(route => route.path === 'user/:userID/event/:eventID')?.status).toBeUndefined();
   });
 });
