@@ -25,9 +25,7 @@ export const PRERENDERED_GUIDE_ROUTES = [
 ] as const;
 
 export const PRERENDERED_STATIC_PUBLIC_ROUTES = [
-  'pricing',
   'help',
-  'releases',
 ] as const;
 
 export const PRERENDERED_PUBLIC_ROUTES = [
@@ -43,9 +41,11 @@ export const CLIENT_RENDERED_APP_ROUTES = [
   'onboarding',
   'admin',
   'admin/**',
+  'pricing',
   'subscriptions',
   'payment/success',
   'payment/cancel',
+  'releases',
   'services',
   'dashboard',
   'mytracks',

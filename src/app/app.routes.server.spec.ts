@@ -10,11 +10,11 @@ import {
 } from './app.routes.server';
 
 describe('serverRoutes', () => {
-  it('prerenders the public home page, static public pages, integration routes, feature routes, and guide routes', () => {
+  it('prerenders the public home page, static help page, integration routes, feature routes, and guide routes', () => {
     const prerenderRoutes = serverRoutes.filter(route => route.renderMode === RenderMode.Prerender);
 
     expect(prerenderRoutes.map(route => route.path)).toEqual([...PRERENDERED_PUBLIC_ROUTES]);
-    expect(PRERENDERED_STATIC_PUBLIC_ROUTES).toEqual(['pricing', 'help', 'releases']);
+    expect(PRERENDERED_STATIC_PUBLIC_ROUTES).toEqual(['help']);
     expect(PRERENDERED_FEATURE_ROUTES).toEqual([
       'features',
       'features/workout-data-comparison',
@@ -40,9 +40,9 @@ describe('serverRoutes', () => {
     expect(prerenderedPaths.has('dashboard')).toBe(false);
     expect(prerenderedPaths.has('settings')).toBe(false);
     expect(prerenderedPaths.has('mytracks')).toBe(false);
-    expect(prerenderedPaths.has('pricing')).toBe(true);
+    expect(prerenderedPaths.has('pricing')).toBe(false);
     expect(prerenderedPaths.has('help')).toBe(true);
-    expect(prerenderedPaths.has('releases')).toBe(true);
+    expect(prerenderedPaths.has('releases')).toBe(false);
     expect(prerenderedPaths.has('ai-insights')).toBe(false);
     expect(prerenderedPaths.has('features')).toBe(true);
     expect(prerenderedPaths.has('features/workout-data-comparison')).toBe(true);
@@ -66,6 +66,8 @@ describe('serverRoutes', () => {
       status: 404,
     });
     expect(clientRoutes.find(route => route.path === 'dashboard')?.status).toBeUndefined();
+    expect(clientRoutes.find(route => route.path === 'pricing')?.status).toBeUndefined();
+    expect(clientRoutes.find(route => route.path === 'releases')?.status).toBeUndefined();
     expect(clientRoutes.find(route => route.path === 'settings')?.status).toBeUndefined();
     expect(clientRoutes.find(route => route.path === 'mytracks')?.status).toBeUndefined();
     expect(clientRoutes.find(route => route.path === 'user/:userID/event/:eventID')?.status).toBeUndefined();
