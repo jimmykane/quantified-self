@@ -28,6 +28,7 @@
               },
               "src/favicon.ico",
               "src/manifest.json",
+              "src/404.html",
               "src/robots.txt",
               "src/sitemap.xml"
             ],

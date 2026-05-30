@@ -1,5 +1,6 @@
 import { RenderMode } from '@angular/ssr';
 import { describe, expect, it } from 'vitest';
+import { routes as appRoutes } from './app.routing.module';
 import {
   CLIENT_RENDERED_APP_ROUTES,
   PRERENDERED_FEATURE_ROUTES,
@@ -8,6 +9,18 @@ import {
   PRERENDERED_STATIC_PUBLIC_ROUTES,
   serverRoutes,
 } from './app.routes.server';
+import { adminRoutes } from './modules/admin.module';
+
+function definedRoutePaths(routes: typeof appRoutes): string[] {
+  return routes
+    .map(route => route.path)
+    .filter((path): path is string => path !== undefined && path !== '**');
+}
+
+function fullAdminRoutePaths(): string[] {
+  return definedRoutePaths(adminRoutes)
+    .map(path => path ? `admin/${path}` : 'admin');
+}
 
 describe('serverRoutes', () => {
   it('prerenders the public home page, static help page, integration routes, feature routes, and guide routes', () => {
@@ -60,6 +73,7 @@ describe('serverRoutes', () => {
     const fallbackRoute = clientRoutes.at(-1);
 
     expect(clientRoutes.slice(0, -1).map(route => route.path)).toEqual([...CLIENT_RENDERED_APP_ROUTES]);
+    expect(CLIENT_RENDERED_APP_ROUTES.every(path => !path.includes('**'))).toBe(true);
     expect(fallbackRoute).toMatchObject({
       path: '**',
       renderMode: RenderMode.Client,
@@ -71,5 +85,40 @@ describe('serverRoutes', () => {
     expect(clientRoutes.find(route => route.path === 'settings')?.status).toBeUndefined();
     expect(clientRoutes.find(route => route.path === 'mytracks')?.status).toBeUndefined();
     expect(clientRoutes.find(route => route.path === 'user/:userID/event/:eventID')?.status).toBeUndefined();
+  });
+
+  it('keeps every top-level app route represented in the server render config', () => {
+    const serverRoutePaths = new Set([
+      ...PRERENDERED_PUBLIC_ROUTES,
+      ...CLIENT_RENDERED_APP_ROUTES,
+    ]);
+
+    const missingServerRoutes = definedRoutePaths(appRoutes)
+      .filter(path => !serverRoutePaths.has(path));
+
+    expect(missingServerRoutes).toEqual([]);
+  });
+
+  it('does not keep stale non-admin routes in the server render config', () => {
+    const topLevelAppPaths = new Set(definedRoutePaths(appRoutes));
+    const validServerPaths = new Set([
+      ...topLevelAppPaths,
+      ...fullAdminRoutePaths(),
+    ]);
+
+    const staleServerRoutes = [
+      ...PRERENDERED_PUBLIC_ROUTES,
+      ...CLIENT_RENDERED_APP_ROUTES,
+    ].filter(path => !validServerPaths.has(path));
+
+    expect(staleServerRoutes).toEqual([]);
+  });
+
+  it('keeps exact admin child routes mirrored as client-rendered server routes', () => {
+    const expectedAdminRoutes = fullAdminRoutePaths();
+    const serverAdminRoutes = CLIENT_RENDERED_APP_ROUTES
+      .filter(path => path === 'admin' || path.startsWith('admin/'));
+
+    expect(serverAdminRoutes).toEqual(expectedAdminRoutes);
   });
 });

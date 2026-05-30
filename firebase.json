@@ -8,10 +8,109 @@
         "**/.*",
         "**/node_modules/**"
       ],
+      "headers": [
+        {
+          "source": "404.html",
+          "headers": [
+            {
+              "key": "Cache-Control",
+              "value": "public, max-age=300"
+            }
+          ]
+        }
+      ],
       "trailingSlash": false,
       "rewrites": [
         {
-          "source": "**",
+          "source": "/login",
+          "destination": "/index.csr.html"
+        },
+        {
+          "source": "/onboarding",
+          "destination": "/index.csr.html"
+        },
+        {
+          "source": "/admin",
+          "destination": "/index.csr.html"
+        },
+        {
+          "source": "/admin/maintenance",
+          "destination": "/index.csr.html"
+        },
+        {
+          "source": "/admin/users",
+          "destination": "/index.csr.html"
+        },
+        {
+          "source": "/admin/changelog",
+          "destination": "/index.csr.html"
+        },
+        {
+          "source": "/admin/queues/workout",
+          "destination": "/index.csr.html"
+        },
+        {
+          "source": "/admin/queues/activity-sync",
+          "destination": "/index.csr.html"
+        },
+        {
+          "source": "/admin/queues/sleep-sync",
+          "destination": "/index.csr.html"
+        },
+        {
+          "source": "/admin/queues/reparse",
+          "destination": "/index.csr.html"
+        },
+        {
+          "source": "/admin/queues/derived-metrics",
+          "destination": "/index.csr.html"
+        },
+        {
+          "source": "/pricing",
+          "destination": "/index.csr.html"
+        },
+        {
+          "source": "/subscriptions",
+          "destination": "/index.csr.html"
+        },
+        {
+          "source": "/payment/success",
+          "destination": "/index.csr.html"
+        },
+        {
+          "source": "/payment/cancel",
+          "destination": "/index.csr.html"
+        },
+        {
+          "source": "/releases",
+          "destination": "/index.csr.html"
+        },
+        {
+          "source": "/services",
+          "destination": "/index.csr.html"
+        },
+        {
+          "source": "/dashboard",
+          "destination": "/index.csr.html"
+        },
+        {
+          "source": "/mytracks",
+          "destination": "/index.csr.html"
+        },
+        {
+          "source": "/settings",
+          "destination": "/index.csr.html"
+        },
+        {
+          "source": "/user/*/event/*",
+          "destination": "/index.csr.html"
+        },
+        {
+          "source": "/policies",
+          "destination": "/index.csr.html"
+        },
+        {
+          "source": "/ai-insights",
           "destination": "/index.csr.html"
         }
       ]
@@ -24,10 +123,109 @@
         "**/.*",
         "**/node_modules/**"
       ],
+      "headers": [
+        {
+          "source": "404.html",
+          "headers": [
+            {
+              "key": "Cache-Control",
+              "value": "public, max-age=300"
+            }
+          ]
+        }
+      ],
       "trailingSlash": false,
       "rewrites": [
         {
-          "source": "**",
+          "source": "/login",
+          "destination": "/index.csr.html"
+        },
+        {
+          "source": "/onboarding",
+          "destination": "/index.csr.html"
+        },
+        {
+          "source": "/admin",
+          "destination": "/index.csr.html"
+        },
+        {
+          "source": "/admin/maintenance",
+          "destination": "/index.csr.html"
+        },
+        {
+          "source": "/admin/users",
+          "destination": "/index.csr.html"
+        },
+        {
+          "source": "/admin/changelog",
+          "destination": "/index.csr.html"
+        },
+        {
+          "source": "/admin/queues/workout",
+          "destination": "/index.csr.html"
+        },
+        {
+          "source": "/admin/queues/activity-sync",
+          "destination": "/index.csr.html"
+        },
+        {
+          "source": "/admin/queues/sleep-sync",
+          "destination": "/index.csr.html"
+        },
+        {
+          "source": "/admin/queues/reparse",
+          "destination": "/index.csr.html"
+        },
+        {
+          "source": "/admin/queues/derived-metrics",
+          "destination": "/index.csr.html"
+        },
+        {
+          "source": "/pricing",
+          "destination": "/index.csr.html"
+        },
+        {
+          "source": "/subscriptions",
+          "destination": "/index.csr.html"
+        },
+        {
+          "source": "/payment/success",
+          "destination": "/index.csr.html"
+        },
+        {
+          "source": "/payment/cancel",
+          "destination": "/index.csr.html"
+        },
+        {
+          "source": "/releases",
+          "destination": "/index.csr.html"
+        },
+        {
+          "source": "/services",
+          "destination": "/index.csr.html"
+        },
+        {
+          "source": "/dashboard",
+          "destination": "/index.csr.html"
+        },
+        {
+          "source": "/mytracks",
+          "destination": "/index.csr.html"
+        },
+        {
+          "source": "/settings",
+          "destination": "/index.csr.html"
+        },
+        {
+          "source": "/user/*/event/*",
+          "destination": "/index.csr.html"
+        },
+        {
+          "source": "/policies",
+          "destination": "/index.csr.html"
+        },
+        {
+          "source": "/ai-insights",
           "destination": "/index.csr.html"
         }
       ]
