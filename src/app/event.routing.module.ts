@@ -4,7 +4,7 @@ import { EventCardComponent } from './components/event/event.card.component';
 import { eventResolver } from './resolvers/event.resolver';
 
 
-const routes: Routes = [
+export const eventRoutes: Routes = [
   {
     path: '',
     component: EventCardComponent,
@@ -15,7 +15,7 @@ const routes: Routes = [
 ];
 
 @NgModule({
-  imports: [RouterModule.forChild(routes)],
+  imports: [RouterModule.forChild(eventRoutes)],
   exports: [RouterModule]
 })
 export class EventRoutingModule { }

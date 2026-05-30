@@ -9,7 +9,15 @@ import {
   PRERENDERED_STATIC_PUBLIC_ROUTES,
   serverRoutes,
 } from './app.routes.server';
+import { dashboardRoutes } from './dashboard.routing.module';
+import { eventRoutes } from './event.routing.module';
+import { homeRoutes } from './home.routing.module';
+import { loginRoutes } from './login.routing.module';
 import { adminRoutes } from './modules/admin.module';
+import { myTracksRoutes } from './my-tracks.routing.module';
+import { policiesRoutes } from './policies.routing.module';
+import { servicesRoutes } from './services.routing.module';
+import { userRoutes } from './user.routing.module';
 
 function definedRoutePaths(routes: typeof appRoutes): string[] {
   return routes
@@ -21,6 +29,17 @@ function fullAdminRoutePaths(): string[] {
   return definedRoutePaths(adminRoutes)
     .map(path => path ? `admin/${path}` : 'admin');
 }
+
+const rootOnlyLazyRouteModules = [
+  ['dashboard', dashboardRoutes],
+  ['event', eventRoutes],
+  ['home', homeRoutes],
+  ['login', loginRoutes],
+  ['mytracks', myTracksRoutes],
+  ['policies', policiesRoutes],
+  ['services', servicesRoutes],
+  ['settings', userRoutes],
+] as const;
 
 describe('serverRoutes', () => {
   it('prerenders the public home page, static help page, integration routes, feature routes, and guide routes', () => {
@@ -120,5 +139,13 @@ describe('serverRoutes', () => {
       .filter(path => path === 'admin' || path.startsWith('admin/'));
 
     expect(serverAdminRoutes).toEqual(expectedAdminRoutes);
+  });
+
+  it('documents lazy modules that do not currently expose deep-link child routes', () => {
+    for (const [routeName, childRoutes] of rootOnlyLazyRouteModules) {
+      expect(childRoutes, routeName).toHaveLength(1);
+      expect(childRoutes[0]?.path, routeName).toBe('');
+      expect(childRoutes[0]?.matcher, routeName).toBeUndefined();
+    }
   });
 });
