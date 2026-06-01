@@ -186,6 +186,11 @@ export const routes: Routes = [
     data: PUBLIC_SEO_ROUTE_DATA.workoutFileComparison
   },
   {
+    path: PUBLIC_FEATURE_PATHS.fitGpxTcxFileAnalyzer,
+    loadComponent: () => import('./components/public-seo/public-seo-page.component').then(m => m.PublicSeoPageComponent),
+    data: PUBLIC_SEO_ROUTE_DATA.fitGpxTcxFileAnalyzer
+  },
+  {
     path: PUBLIC_FEATURE_PATHS.sportsWatchBenchmark,
     loadComponent: () => import('./components/public-seo/public-seo-page.component').then(m => m.PublicSeoPageComponent),
     data: PUBLIC_SEO_ROUTE_DATA.sportsWatchBenchmark

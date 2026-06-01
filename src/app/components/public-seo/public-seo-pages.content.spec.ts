@@ -12,6 +12,7 @@ describe('public-seo-pages.content', () => {
       hub: 'features',
       aiInsights: 'features/ai-insights',
       workoutFileComparison: 'features/workout-file-comparison',
+      fitGpxTcxFileAnalyzer: 'features/fit-gpx-tcx-file-analyzer',
       sportsWatchBenchmark: 'features/sports-watch-benchmark',
     });
     expect(PUBLIC_GUIDE_PATHS).toEqual({
@@ -58,6 +59,12 @@ describe('public-seo-pages.content', () => {
     expect(PUBLIC_SEO_PAGES.workoutFileComparison.intro).toContain('Manual uploads and benchmark comparisons are available on the free plan');
     expect(PUBLIC_SEO_PAGES.workoutFileComparison.intro).toContain('custom exports');
 
+    expect(PUBLIC_SEO_PAGES.fitGpxTcxFileAnalyzer.h1).toBe('Analyze FIT, GPX, and TCX workout files');
+    expect(PUBLIC_SEO_PAGES.fitGpxTcxFileAnalyzer.description).toContain('FIT file analyzer');
+    expect(PUBLIC_SEO_PAGES.fitGpxTcxFileAnalyzer.chips).toContain('GPX file analyzer');
+    expect(PUBLIC_SEO_PAGES.fitGpxTcxFileAnalyzer.intro).toContain('maps, charts, stats, exports');
+    expect(PUBLIC_SEO_PAGES.fitGpxTcxFileAnalyzer.faqItems.some(item => item.question === 'Can I analyze FIT files?')).toBe(true);
+
     expect(PUBLIC_SEO_PAGES.sportsWatchBenchmark.h1).toBe('Sports watch benchmark reports for reviewers and device tests');
     expect(PUBLIC_SEO_PAGES.sportsWatchBenchmark.intro).toContain('YouTube videos');
     expect(PUBLIC_SEO_PAGES.sportsWatchBenchmark.intro).toContain('firmware QA');
@@ -86,6 +93,7 @@ describe('public-seo-pages.content', () => {
     expect(featureHubLinks).toContain('/features/ai-insights');
     expect(featureHubLinks).toContain('/features/workout-data-comparison');
     expect(featureHubLinks).toContain('/features/workout-file-comparison');
+    expect(featureHubLinks).toContain('/features/fit-gpx-tcx-file-analyzer');
     expect(featureHubLinks).toContain('/features/sports-watch-benchmark');
     expect(featureHubLinks).toContain('/integrations');
     expect(featureHubLinks).toContain('/guides');

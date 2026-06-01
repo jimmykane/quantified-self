@@ -4,6 +4,7 @@ export type PublicSeoPageKey =
   | 'featuresHub'
   | 'aiInsights'
   | 'workoutFileComparison'
+  | 'fitGpxTcxFileAnalyzer'
   | 'sportsWatchBenchmark'
   | 'guidesHub'
   | 'syncGarminToSuunto'
@@ -67,6 +68,7 @@ export const PUBLIC_FEATURE_PATHS = {
   hub: 'features',
   aiInsights: 'features/ai-insights',
   workoutFileComparison: 'features/workout-file-comparison',
+  fitGpxTcxFileAnalyzer: 'features/fit-gpx-tcx-file-analyzer',
   sportsWatchBenchmark: 'features/sports-watch-benchmark',
 } as const;
 
@@ -101,7 +103,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     path: PUBLIC_FEATURE_PATHS.hub,
     eyebrow: 'Features',
     title: 'Features for Endurance Training Data',
-    description: 'Explore Quantified Self features for endurance training data: AI Insights, workout file comparison, sports watch benchmark reports, and a private dashboard for Garmin, Suunto, COROS, and uploaded activity files.',
+    description: 'Explore Quantified Self features for endurance training data: AI Insights, workout file comparison, FIT/GPX/TCX file analysis, sports watch benchmark reports, and a private dashboard for Garmin, Suunto, COROS, and uploaded activity files.',
     h1: 'Features for endurance training data',
     intro: 'Use Quantified Self to centralize provider activities and uploaded files, compare recordings, benchmark devices, and ask chart-backed questions about your training history.',
     chips: ['AI Insights', 'Workout comparison', 'FIT/TCX/GPX', 'Benchmarks', 'Free tools'],
@@ -109,6 +111,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
       routeAction('AI Insights', '/features/ai-insights', 'flat', 'arrow_forward'),
       routeAction('Workout Data Comparison', '/features/workout-data-comparison'),
       routeAction('Compare Files', '/features/workout-file-comparison'),
+      routeAction('Analyze Files', '/features/fit-gpx-tcx-file-analyzer'),
       routeAction('Device Benchmarks', '/features/sports-watch-benchmark'),
     ],
     sections: [
@@ -143,6 +146,11 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
             icon: 'upload_file',
             title: 'FIT, TCX, GPX, JSON, and SML uploads',
             copy: `Upload activity files, compare compatible streams, and keep manual uploads available on the free plan for up to ${STARTER_ACTIVITY_LIMIT} activities.`,
+          },
+          {
+            icon: 'analytics',
+            title: 'FIT, GPX, and TCX file analysis',
+            copy: 'Analyze uploaded workout files for maps, route context, charts, statistics, source files, exports, and reprocessing before using them in comparisons.',
           },
           {
             icon: 'rate_review',
@@ -337,7 +345,93 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     closingCopy: 'Start with the activity files you already have, then move to provider sync only when you need automatic imports or higher activity limits.',
     closingActions: [
       routeAction('Start Free', '/login', 'flat', 'arrow_forward'),
+      routeAction('Analyze Workout Files', '/features/fit-gpx-tcx-file-analyzer'),
       routeAction('Sports Watch Benchmarks', '/features/sports-watch-benchmark'),
+    ],
+  },
+  fitGpxTcxFileAnalyzer: {
+    key: 'fitGpxTcxFileAnalyzer',
+    path: PUBLIC_FEATURE_PATHS.fitGpxTcxFileAnalyzer,
+    eyebrow: 'Workout File Analyzer',
+    title: 'FIT, GPX, TCX File Analyzer',
+    description: `Use Quantified Self as a private FIT file analyzer, GPX file analyzer, and TCX workout file analyzer with maps, charts, source-file context, exports, reprocessing, and free-plan manual uploads for up to ${STARTER_ACTIVITY_LIMIT} activities.`,
+    h1: 'Analyze FIT, GPX, and TCX workout files',
+    intro: `Upload FIT, GPX, TCX, JSON, or SML activity files and turn them into private maps, charts, stats, exports, and source-file context. Manual uploads and core analysis are available on the free plan for up to ${STARTER_ACTIVITY_LIMIT} activities.`,
+    chips: ['FIT file analyzer', 'GPX file analyzer', 'TCX file analyzer', 'Maps', 'Charts', 'Free uploads'],
+    actions: [
+      routeAction('Start Free', '/login', 'flat', 'arrow_forward'),
+      routeAction('Compare Files', '/features/workout-file-comparison'),
+      routeAction('Upload Help', '/help', 'stroked', undefined, 'uploads-and-imports'),
+    ],
+    sections: [
+      {
+        eyebrow: 'File Analysis',
+        title: 'Turn activity files into readable workout context',
+        copy: 'Use the analyzer workflow when you want to inspect a workout export before comparing it, reprocessing it, or keeping it in your training archive.',
+        items: [
+          {
+            icon: 'map',
+            title: 'Route maps and source context',
+            copy: 'Review route context when files include position data, and keep each imported workout tied to its original source file.',
+          },
+          {
+            icon: 'query_stats',
+            title: 'Charts and activity statistics',
+            copy: 'Inspect available streams such as pace or speed, heart rate, power, cadence, elevation, distance, duration, and other compatible metrics.',
+          },
+          {
+            icon: 'file_download',
+            title: 'Exports and original files',
+            copy: 'Keep source files available for original-file download, GPX export when route data exists, CSV exports, and future reprocessing.',
+          },
+        ],
+      },
+      {
+        eyebrow: 'Supported Workflows',
+        title: 'Analyze files from services, devices, tests, and custom exports',
+        copy: 'The same private dashboard can hold provider imports and standalone files from unsupported tools or review workflows.',
+        items: [
+          {
+            icon: 'upload_file',
+            title: 'FIT, GPX, TCX, JSON, and SML uploads',
+            copy: 'Upload common workout file formats from services, watch exports, lab files, firmware tests, review units, and one-off recordings.',
+          },
+          {
+            icon: 'restart_alt',
+            title: 'Reprocess when parser support improves',
+            copy: 'Use stored original files for reimport and statistics regeneration workflows when you need a cleaner parse later.',
+          },
+          {
+            icon: 'compare_arrows',
+            title: 'Move from analysis to comparison',
+            copy: 'After a file is imported, compare compatible recordings with provider workouts, benchmark reports, and device-to-device analysis.',
+          },
+        ],
+      },
+    ],
+    faqItems: [
+      {
+        question: 'Can I analyze FIT files?',
+        answer: 'Yes. Upload a FIT activity file to Quantified Self to inspect available maps, charts, statistics, original-file context, exports, and reprocessing options in a private dashboard.',
+      },
+      {
+        question: 'Can I analyze GPX and TCX files too?',
+        answer: 'Yes. Quantified Self supports GPX and TCX activity uploads alongside FIT, JSON, and SML files when the file can be parsed as a workout activity.',
+      },
+      {
+        question: 'Is this a public FIT or GPX file viewer?',
+        answer: 'No. Quantified Self is a private training dashboard. Imported files are tied to your account so they can support analysis, exports, reprocessing, and comparisons without becoming a public upload.',
+      },
+      {
+        question: 'Is workout file analysis free?',
+        answer: `Manual uploads and core analysis are available on the free plan for up to ${STARTER_ACTIVITY_LIMIT} activities. Automatic provider sync and higher activity limits require a paid plan.`,
+      },
+    ],
+    closingTitle: 'Upload the file, inspect the workout, then decide what to compare',
+    closingCopy: 'Start with one exported workout file, verify the available route and stream data, then keep it for later dashboards, exports, reprocessing, or benchmark comparisons.',
+    closingActions: [
+      routeAction('Start Free', '/login', 'flat', 'arrow_forward'),
+      routeAction('Workout File Comparison', '/features/workout-file-comparison'),
     ],
   },
   sportsWatchBenchmark: {
@@ -844,6 +938,7 @@ export const PUBLIC_SEO_ROUTE_DATA: Record<PublicSeoPageKey, PublicSeoRouteData>
   featuresHub: buildRouteData(PUBLIC_SEO_PAGES.featuresHub),
   aiInsights: buildRouteData(PUBLIC_SEO_PAGES.aiInsights),
   workoutFileComparison: buildRouteData(PUBLIC_SEO_PAGES.workoutFileComparison),
+  fitGpxTcxFileAnalyzer: buildRouteData(PUBLIC_SEO_PAGES.fitGpxTcxFileAnalyzer),
   sportsWatchBenchmark: buildRouteData(PUBLIC_SEO_PAGES.sportsWatchBenchmark),
   guidesHub: buildRouteData(PUBLIC_SEO_PAGES.guidesHub),
   syncGarminToSuunto: buildRouteData(PUBLIC_SEO_PAGES.syncGarminToSuunto),

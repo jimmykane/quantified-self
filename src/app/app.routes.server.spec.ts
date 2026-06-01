@@ -52,6 +52,7 @@ describe('serverRoutes', () => {
       'features/workout-data-comparison',
       'features/ai-insights',
       'features/workout-file-comparison',
+      'features/fit-gpx-tcx-file-analyzer',
       'features/sports-watch-benchmark',
     ]);
     expect(PRERENDERED_GUIDE_ROUTES).toEqual([
@@ -80,6 +81,7 @@ describe('serverRoutes', () => {
     expect(prerenderedPaths.has('features/workout-data-comparison')).toBe(true);
     expect(prerenderedPaths.has('features/ai-insights')).toBe(true);
     expect(prerenderedPaths.has('features/workout-file-comparison')).toBe(true);
+    expect(prerenderedPaths.has('features/fit-gpx-tcx-file-analyzer')).toBe(true);
     expect(prerenderedPaths.has('features/sports-watch-benchmark')).toBe(true);
     expect(prerenderedPaths.has('guides')).toBe(true);
     expect(prerenderedPaths.has('guides/sync-garmin-to-suunto')).toBe(true);

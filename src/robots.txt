@@ -7,6 +7,7 @@ Allow: /features
 Allow: /features/workout-data-comparison
 Allow: /features/ai-insights
 Allow: /features/workout-file-comparison
+Allow: /features/fit-gpx-tcx-file-analyzer
 Allow: /features/sports-watch-benchmark
 Allow: /guides
 Allow: /guides/sync-garmin-to-suunto

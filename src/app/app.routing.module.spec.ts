@@ -158,6 +158,12 @@ describe('AppRoutingModule routes', () => {
         descriptionText: 'Compare FIT, TCX, GPX, JSON, and SML workout files',
       },
       {
+        path: PUBLIC_FEATURE_PATHS.fitGpxTcxFileAnalyzer,
+        title: 'FIT, GPX, TCX File Analyzer',
+        h1: 'Analyze FIT, GPX, and TCX workout files',
+        descriptionText: 'FIT file analyzer',
+      },
+      {
         path: PUBLIC_FEATURE_PATHS.sportsWatchBenchmark,
         title: 'Sports Watch Benchmark Reports',
         h1: 'Sports watch benchmark reports for reviewers and device tests',

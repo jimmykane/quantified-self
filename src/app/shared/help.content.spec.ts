@@ -150,10 +150,12 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('[Features hub](/features)');
     expect(gettingStartedSection?.content).toContain('[Workout Data Comparison](/features/workout-data-comparison)');
     expect(gettingStartedSection?.content).toContain('[Workout File Comparison](/features/workout-file-comparison)');
+    expect(gettingStartedSection?.content).toContain('[Workout File Analyzer](/features/fit-gpx-tcx-file-analyzer)');
     expect(gettingStartedSection?.content).toContain('[Sports Watch Benchmark](/features/sports-watch-benchmark)');
     expect(gettingStartedSection?.content).toContain('uploaded FIT/TCX/GPX/JSON/SML activity files');
+    expect(gettingStartedSection?.content).toContain('maps, charts');
     expect(gettingStartedSection?.content).toContain('reviewer workflows for device tests, YouTube videos, and blog posts');
-    expect(gettingStartedSection?.content).toContain('available on the free plan for up to 100 activities');
+    expect(gettingStartedSection?.content).toContain('Manual uploads, core analysis, and benchmark comparisons are available on the free plan for up to 100 activities');
     expect(gettingStartedSection?.content).toContain('automatic provider sync and higher limits require a paid plan');
     expect(gettingStartedSection?.content).not.toContain('overlays, AI insights, and reviewer workflows');
     expect(gettingStartedSection?.content).toContain('**Altitude** charts can color the altitude line by grade');
@@ -234,13 +236,14 @@ describe('help.content', () => {
     expect(serviceConnectionsSection?.content).toContain('[Features hub](/features)');
     expect(serviceConnectionsSection?.content).toContain('[Workout Data Comparison](/features/workout-data-comparison)');
     expect(serviceConnectionsSection?.content).toContain('[Workout File Comparison](/features/workout-file-comparison)');
+    expect(serviceConnectionsSection?.content).toContain('[Workout File Analyzer](/features/fit-gpx-tcx-file-analyzer)');
     expect(serviceConnectionsSection?.content).toContain('[Sports Watch Benchmark](/features/sports-watch-benchmark)');
     expect(serviceConnectionsSection?.content).toContain('[Garmin to Suunto sync guide](/guides/sync-garmin-to-suunto)');
     expect(serviceConnectionsSection?.content).toContain('[COROS to Suunto sync guide](/guides/sync-coros-to-suunto)');
     expect(serviceConnectionsSection?.content).toContain('[centralized workout data guide](/guides/centralize-garmin-suunto-coros-workout-data)');
     expect(serviceConnectionsSection?.content).toContain('uploaded FIT/TCX/GPX/JSON/SML activity files');
     expect(serviceConnectionsSection?.content).toContain('reviewer workflows for device tests, YouTube videos, and blog posts');
-    expect(serviceConnectionsSection?.content).toContain('available on the free plan for up to 100 activities');
+    expect(serviceConnectionsSection?.content).toContain('Manual uploads, core analysis, and benchmark comparisons are available on the free plan for up to 100 activities');
     expect(serviceConnectionsSection?.content).toContain('automatic provider sync and higher limits require a paid plan');
     expect(serviceConnectionsSection?.content).not.toContain('source-file workflows, AI insights, and reviewer workflows');
     expect(serviceConnectionsSection?.content).toContain('[Garmin Integration](/integrations/garmin)');
@@ -293,6 +296,12 @@ describe('help.content', () => {
       icon: 'compare_arrows',
       kind: 'route',
       target: '/features/workout-data-comparison',
+    });
+    expect(serviceConnectionsSection?.links).toContainEqual({
+      label: 'Workout File Analyzer',
+      icon: 'analytics',
+      kind: 'route',
+      target: '/features/fit-gpx-tcx-file-analyzer',
     });
     expect(serviceConnectionsSection?.links).toContainEqual({
       label: 'Garmin to Suunto Guide',

@@ -81,6 +81,7 @@ describe('WorkoutDataComparisonPageComponent', () => {
 
     expect(hrefs).toContain('/login');
     expect(hrefs).toContain('/integrations');
+    expect(hrefs).toContain('/features/fit-gpx-tcx-file-analyzer');
     expect(hrefs).toContain('/help#service-connections');
   });
 });

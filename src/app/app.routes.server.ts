@@ -14,6 +14,7 @@ export const PRERENDERED_FEATURE_ROUTES = [
   WORKOUT_DATA_COMPARISON_PATH,
   PUBLIC_FEATURE_PATHS.aiInsights,
   PUBLIC_FEATURE_PATHS.workoutFileComparison,
+  PUBLIC_FEATURE_PATHS.fitGpxTcxFileAnalyzer,
   PUBLIC_FEATURE_PATHS.sportsWatchBenchmark,
 ] as const;
 
