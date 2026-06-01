@@ -179,6 +179,95 @@ describe('AppBenchmarkFlowService', () => {
     expect(analyticsService.logEvent).not.toHaveBeenCalled();
   });
 
+  it('opens a saved benchmark report for an exact two-activity pair', async () => {
+    const event = createEvent();
+    const result = createResult();
+    const key = getBenchmarkPairKey(activityA.getID(), activityB.getID());
+    event.benchmarkResults = { [key]: result };
+    const onResult = vi.fn();
+    const openReportSpy = vi.spyOn(service, 'openBenchmarkReport').mockResolvedValueOnce(undefined);
+    const generateSpy = vi.spyOn(service, 'generateAndOpenReport').mockResolvedValueOnce(undefined);
+
+    await service.openBenchmarkEntry({ event, onResult });
+
+    expect(onResult).toHaveBeenCalledWith(result);
+    expect(openReportSpy).toHaveBeenCalledWith(expect.objectContaining({ event, result }));
+    expect(generateSpy).not.toHaveBeenCalled();
+  });
+
+  it('auto-generates a benchmark for an exact two-activity pair without a saved result', async () => {
+    const event = createEvent();
+    const generateSpy = vi.spyOn(service, 'generateAndOpenReport').mockResolvedValueOnce(undefined);
+    const selectionSpy = vi.spyOn(service, 'openBenchmarkSelectionDialog').mockResolvedValueOnce(undefined);
+
+    await service.openBenchmarkEntry({ event });
+
+    expect(generateSpy).toHaveBeenCalledWith(expect.objectContaining({
+      event,
+      ref: activityA,
+      test: activityB,
+      options: { autoAlignTime: true },
+    }));
+    expect(selectionSpy).not.toHaveBeenCalled();
+  });
+
+  it('hydrates all streams before generation when requested by an auto-open flow', async () => {
+    const originalEvent = createEvent();
+    const user = { uid: 'user-1' } as User;
+    const hydratedActivityA = { getID: () => 'a1' } as ActivityInterface;
+    const hydratedActivityB = { getID: () => 'b1' } as ActivityInterface;
+    const hydratedEvent = {
+      benchmarkResults: {},
+      getActivities: () => [hydratedActivityA, hydratedActivityB],
+      getID: () => 'event-1',
+    } as unknown as AppEventInterface;
+    const result = createResult();
+
+    eventService.getEventActivitiesAndAllStreams.mockReturnValueOnce(of(hydratedEvent));
+    benchmarkService.generateBenchmark.mockResolvedValueOnce(result);
+
+    await service.generateAndOpenReport({
+      event: originalEvent,
+      user,
+      ref: activityA,
+      test: activityB,
+      options: { autoAlignTime: true },
+      hydrateStreamsForGeneration: true,
+    });
+
+    expect(eventService.getEventActivitiesAndAllStreams).toHaveBeenCalledWith(user, 'event-1');
+    expect(benchmarkService.generateBenchmark).toHaveBeenCalledWith(
+      hydratedActivityA,
+      hydratedActivityB,
+      { autoAlignTime: true },
+    );
+    expect(originalEvent.benchmarkResults?.[getBenchmarkPairKey('a1', 'b1')]).toBe(result);
+    expect(hydratedEvent.benchmarkResults?.[getBenchmarkPairKey('a1', 'b1')]).toBe(result);
+    expect(bottomSheet.open).toHaveBeenCalledWith(
+      expect.any(Function),
+      expect.objectContaining({
+        data: expect.objectContaining({
+          event: hydratedEvent,
+          result,
+        }),
+      }),
+    );
+  });
+
+  it('opens selection when a benchmark event has more than two activities', async () => {
+    const activityC = { getID: () => 'c1' } as ActivityInterface;
+    const event = {
+      benchmarkResults: {},
+      getActivities: () => [activityA, activityB, activityC],
+      getID: () => 'event-1',
+    } as unknown as AppEventInterface;
+    const selectionSpy = vi.spyOn(service, 'openBenchmarkSelectionDialog').mockResolvedValueOnce(undefined);
+
+    await service.openBenchmarkEntry({ event });
+
+    expect(selectionSpy).toHaveBeenCalledWith(expect.objectContaining({ event }));
+  });
+
   it('generates, persists, and reopens report', async () => {
     const event = createEvent();
     const user = { uid: 'user-1' } as User;

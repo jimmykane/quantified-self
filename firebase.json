@@ -86,6 +86,10 @@
           "destination": "/index.csr.html"
         },
         {
+          "source": "/tools/compare/saved",
+          "destination": "/index.csr.html"
+        },
+        {
           "source": "/services",
           "destination": "/index.csr.html"
         },
@@ -198,6 +202,10 @@
         },
         {
           "source": "/releases",
+          "destination": "/index.csr.html"
+        },
+        {
+          "source": "/tools/compare/saved",
           "destination": "/index.csr.html"
         },
         {

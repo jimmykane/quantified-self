@@ -21,6 +21,7 @@ interface BenchmarkFlowConfig {
   result?: BenchmarkResult;
   initialSelection?: ActivityInterface[];
   onResult?: (result: BenchmarkResult) => void;
+  hydrateStreamsForGeneration?: boolean;
 }
 
 @Injectable({
@@ -126,6 +127,40 @@ export class AppBenchmarkFlowService {
     }
   }
 
+  async openBenchmarkEntry(config: BenchmarkFlowConfig): Promise<void> {
+    const activeEvent = await this.resolveEventWithActivities(config);
+    const nextConfig: BenchmarkFlowConfig = {
+      ...config,
+      event: activeEvent,
+      persistEvent: config.persistEvent ?? config.event,
+    };
+    const activities = activeEvent.getActivities?.() || [];
+
+    if (activities.length === 2) {
+      const referenceID = activities[0].getID();
+      const testID = activities[1].getID();
+      if (referenceID && testID) {
+        const key = getBenchmarkPairKey(referenceID, testID);
+        const savedResult = activeEvent.benchmarkResults?.[key] || nextConfig.persistEvent?.benchmarkResults?.[key];
+        if (savedResult) {
+          nextConfig.onResult?.(savedResult);
+          await this.openBenchmarkReport({ ...nextConfig, result: savedResult });
+          return;
+        }
+
+        await this.generateAndOpenReport({
+          ...nextConfig,
+          ref: activities[0],
+          test: activities[1],
+          options: { autoAlignTime: true },
+        });
+        return;
+      }
+    }
+
+    await this.openBenchmarkSelectionDialog(nextConfig);
+  }
+
   async generateAndOpenReport(config: BenchmarkFlowConfig & {
     ref: ActivityInterface;
     test: ActivityInterface;
@@ -134,22 +169,27 @@ export class AppBenchmarkFlowService {
     this.snackBar.open('Generating Benchmark...', undefined, { duration: 2000 });
 
     try {
+      const generationConfig = await this.resolveBenchmarkGenerationConfig(config);
       this.analyticsService.logEvent('benchmark_generate_start');
-      const benchmarkResult = await this.benchmarkService.generateBenchmark(config.ref, config.test, config.options);
-      const referenceID = config.ref.getID();
-      const testID = config.test.getID();
+      const benchmarkResult = await this.benchmarkService.generateBenchmark(
+        generationConfig.ref,
+        generationConfig.test,
+        generationConfig.options
+      );
+      const referenceID = generationConfig.ref.getID();
+      const testID = generationConfig.test.getID();
       if (!referenceID || !testID) {
         throw new Error('Benchmark activities are missing IDs');
       }
       const key = getBenchmarkPairKey(referenceID, testID);
 
-      const persistEvent = config.persistEvent ?? config.event;
+      const persistEvent = generationConfig.persistEvent ?? generationConfig.event;
       if (!persistEvent.benchmarkResults) persistEvent.benchmarkResults = {};
       persistEvent.benchmarkResults[key] = benchmarkResult;
 
-      if (persistEvent !== config.event) {
-        if (!config.event.benchmarkResults) config.event.benchmarkResults = {};
-        config.event.benchmarkResults[key] = benchmarkResult;
+      if (persistEvent !== generationConfig.event) {
+        if (!generationConfig.event.benchmarkResults) generationConfig.event.benchmarkResults = {};
+        generationConfig.event.benchmarkResults[key] = benchmarkResult;
       }
 
       const benchmarkDevices = this.buildBenchmarkDevices(persistEvent);
@@ -157,15 +197,15 @@ export class AppBenchmarkFlowService {
       persistEvent.hasBenchmark = true;
       persistEvent.benchmarkDevices = benchmarkDevices;
       persistEvent.benchmarkLatestAt = benchmarkLatestAt;
-      if (persistEvent !== config.event) {
-        config.event.hasBenchmark = true;
-        config.event.benchmarkDevices = benchmarkDevices;
-        config.event.benchmarkLatestAt = benchmarkLatestAt;
+      if (persistEvent !== generationConfig.event) {
+        generationConfig.event.hasBenchmark = true;
+        generationConfig.event.benchmarkDevices = benchmarkDevices;
+        generationConfig.event.benchmarkLatestAt = benchmarkLatestAt;
       }
 
       const persistEventID = persistEvent.getID();
-      if (config.user && persistEventID) {
-        await this.eventService.updateEventProperties(config.user, persistEventID, {
+      if (generationConfig.user && persistEventID) {
+        await this.eventService.updateEventProperties(generationConfig.user, persistEventID, {
           benchmarkResults: persistEvent.benchmarkResults,
           hasBenchmark: true,
           benchmarkDevices,
@@ -174,13 +214,56 @@ export class AppBenchmarkFlowService {
       }
 
       this.analyticsService.logEvent('benchmark_generate_success');
-      config.onResult?.(benchmarkResult);
-      this.openBenchmarkReport({ ...config, result: benchmarkResult });
+      generationConfig.onResult?.(benchmarkResult);
+      await this.openBenchmarkReport({ ...generationConfig, result: benchmarkResult });
       this.snackBar.open('Benchmark Generated & Saved!', undefined, { duration: 2000 });
     } catch (error) {
       this.analyticsService.logEvent('benchmark_generate_failure');
       this.snackBar.open('Benchmark failed: ' + error, 'Close');
       this.logger.error('Benchmark flow failed', error);
+    }
+  }
+
+  private async resolveBenchmarkGenerationConfig(config: BenchmarkFlowConfig & {
+    ref: ActivityInterface;
+    test: ActivityInterface;
+    options: BenchmarkOptions;
+  }): Promise<BenchmarkFlowConfig & {
+    ref: ActivityInterface;
+    test: ActivityInterface;
+    options: BenchmarkOptions;
+  }> {
+    if (!config.hydrateStreamsForGeneration) {
+      return config;
+    }
+
+    const eventID = config.event.getID?.();
+    const referenceID = config.ref.getID();
+    const testID = config.test.getID();
+    if (!config.user || !eventID || !referenceID || !testID) {
+      return config;
+    }
+
+    try {
+      const fullEvent = await firstValueFrom(this.eventService.getEventActivitiesAndAllStreams(config.user, eventID));
+      const activities = fullEvent?.getActivities?.() || [];
+      const hydratedReference = activities.find(activity => activity.getID() === referenceID);
+      const hydratedTest = activities.find(activity => activity.getID() === testID);
+
+      if (!fullEvent || !hydratedReference || !hydratedTest) {
+        return config;
+      }
+
+      return {
+        ...config,
+        event: fullEvent,
+        persistEvent: config.persistEvent ?? config.event,
+        ref: hydratedReference,
+        test: hydratedTest,
+      };
+    } catch (error) {
+      this.logger.error('Failed to load all streams for benchmark generation', error);
+      return config;
     }
   }
 

@@ -46,6 +46,7 @@ describe('EventSummaryComponent', () => {
         };
 
         mockBenchmarkFlowService = {
+            openBenchmarkEntry: vi.fn().mockResolvedValue(undefined),
             openBenchmarkSelectionDialog: vi.fn(),
             generateAndOpenReport: vi.fn().mockResolvedValue(undefined),
             openBenchmarkReport: vi.fn(),
@@ -91,6 +92,16 @@ describe('EventSummaryComponent', () => {
         it('openDevices should open bottom sheet', () => {
             component.openDevices();
             expect(mockBottomSheet.open).toHaveBeenCalled();
+        });
+
+        it('openBenchmark should delegate to the shared benchmark entry flow', async () => {
+            await component.openBenchmark();
+
+            expect(mockBenchmarkFlowService.openBenchmarkEntry).toHaveBeenCalledWith(expect.objectContaining({
+                event: component.event,
+                user: component.user,
+                initialSelection: component.selectedActivities,
+            }));
         });
     });
 

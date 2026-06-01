@@ -50,6 +50,11 @@
   </mat-list-item>
   }
 
+  <mat-list-item routerLinkActive="active" routerLink="/tools" (click)="closeSideNav()">
+    <mat-icon>construction</mat-icon>
+    <span>Tools</span>
+  </mat-list-item>
+
   @if (user) {
   <mat-list-item [routerLinkActive]="hasAiInsightsAccess ? 'active' : ''" [routerLinkActiveOptions]="{exact: true}" [routerLink]="aiInsightsRoute"
     (click)="closeSideNav()">

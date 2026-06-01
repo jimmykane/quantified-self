@@ -152,6 +152,8 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('[Workout File Comparison](/features/workout-file-comparison)');
     expect(gettingStartedSection?.content).toContain('[Workout File Analyzer](/features/fit-gpx-tcx-file-analyzer)');
     expect(gettingStartedSection?.content).toContain('[Sports Watch Benchmark](/features/sports-watch-benchmark)');
+    expect(gettingStartedSection?.content).toContain('[File Comparison Tool](/tools/compare)');
+    expect(gettingStartedSection?.content).toContain('[Tools -> Compare](/tools/compare/saved)');
     expect(gettingStartedSection?.content).toContain('uploaded FIT/TCX/GPX/JSON/SML activity files');
     expect(gettingStartedSection?.content).toContain('maps, charts');
     expect(gettingStartedSection?.content).toContain('reviewer workflows for device tests, YouTube videos, and blog posts');
@@ -233,6 +235,8 @@ describe('help.content', () => {
     expect(serviceConnectionsSection?.content).toContain('Integrations hub');
     expect(serviceConnectionsSection?.content).toContain('/integrations');
     expect(serviceConnectionsSection?.content).toContain('[Training Data Sync Guides](/guides)');
+    expect(serviceConnectionsSection?.content).toContain('[Tools hub](/tools)');
+    expect(serviceConnectionsSection?.content).toContain('[File Comparison Tool](/tools/compare)');
     expect(serviceConnectionsSection?.content).toContain('[Features hub](/features)');
     expect(serviceConnectionsSection?.content).toContain('[Workout Data Comparison](/features/workout-data-comparison)');
     expect(serviceConnectionsSection?.content).toContain('[Workout File Comparison](/features/workout-file-comparison)');
@@ -301,6 +305,12 @@ describe('help.content', () => {
       icon: 'compare_arrows',
       kind: 'route',
       target: '/features/workout-data-comparison',
+    });
+    expect(serviceConnectionsSection?.links).toContainEqual({
+      label: 'Compare Files Tool',
+      icon: 'compare_arrows',
+      kind: 'route',
+      target: '/tools/compare',
     });
     expect(serviceConnectionsSection?.links).toContainEqual({
       label: 'Workout File Analyzer',

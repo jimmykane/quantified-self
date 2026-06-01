@@ -2,6 +2,8 @@ User-agent: *
 Allow: /
 Allow: /pricing
 Allow: /help
+Allow: /tools
+Allow: /tools/compare
 Allow: /integrations
 Allow: /features
 Allow: /features/workout-data-comparison
@@ -18,6 +20,7 @@ Disallow: /user
 Disallow: /user/
 Disallow: /settings
 Disallow: /dashboard
+Disallow: /tools/compare/saved
 Disallow: /admin
 Disallow: /mytracks
 Disallow: /coaching

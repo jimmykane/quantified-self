@@ -46,6 +46,7 @@
     "/payment/success",
     "/payment/cancel",
     "/releases",
+    "/tools/compare/saved",
     "/services",
     "/dashboard",
     "/mytracks",

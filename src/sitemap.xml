@@ -26,6 +26,16 @@
     <priority>0.8</priority>
   </url>
   <url>
+    <loc>https://quantified-self.io/tools</loc>
+    <lastmod>2026-06-01</lastmod>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://quantified-self.io/tools/compare</loc>
+    <lastmod>2026-06-01</lastmod>
+    <priority>0.8</priority>
+  </url>
+  <url>
     <loc>https://quantified-self.io/integrations</loc>
     <lastmod>2026-05-29</lastmod>
     <priority>0.8</priority>
