@@ -249,6 +249,9 @@ describe('help.content', () => {
     expect(serviceConnectionsSection?.content).toContain('[Garmin Integration](/integrations/garmin)');
     expect(serviceConnectionsSection?.content).toContain('[COROS Integration](/integrations/coros)');
     expect(serviceConnectionsSection?.content).toContain('/integrations/suunto');
+    expect(serviceConnectionsSection?.content).toContain('Suunto FIT activity uploads in Services show a per-file queue');
+    expect(serviceConnectionsSection?.content).toContain('retry controls for failed files');
+    expect(serviceConnectionsSection?.content).toContain('processed one file at a time with short pauses');
     expect(serviceConnectionsSection?.content).toContain('Garmin -> Suunto activity sync is route-based');
     expect(serviceConnectionsSection?.content).toContain('ACTIVITY_EXPORT');
     expect(serviceConnectionsSection?.content).toContain('Manual catch-up is available in Garmin Services');
@@ -268,6 +271,8 @@ describe('help.content', () => {
     expect(serviceConnectionsSection?.content).toContain('one-time dashboard prompt');
     expect(serviceConnectionsSection?.content).toContain('Garmin sleep history backfill is separate from activity history import');
     expect(serviceConnectionsSection?.content).toContain('COROS -> Suunto activity sync is route-based');
+    expect(serviceConnectionsSection?.content).toContain('COROS FIT activity uploads in Services use the same per-file queue');
+    expect(serviceConnectionsSection?.content).toContain('short provider upload pacing');
     expect(serviceConnectionsSection?.content).toContain('enable the route toggle in COROS Services');
     expect(serviceConnectionsSection?.content).toContain('Automatic sync runs only for newly imported COROS activities');
     expect(serviceConnectionsSection?.content).toContain('Manual catch-up is available in COROS Services');

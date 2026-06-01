@@ -1,4 +1,10 @@
-section {
+.service-upload {
+  display: grid;
+  gap: 16px;
+  width: 100%;
+}
+
+.upload-dropzone {
   box-sizing: border-box;
   margin: 0;
   padding: 16px;
@@ -14,15 +20,144 @@ section {
   transition: background-color 0.2s, border-color 0.2s;
 }
 
-section.drag {
+.upload-dropzone.drag {
   border-color: var(--mat-sys-primary);
   background: var(--mat-sys-primary-container);
 }
 
-button {
-  vertical-align: middle;
+.upload-button-content {
+  align-items: center;
+  display: inline-flex;
+  gap: 8px;
+  justify-content: center;
+  min-height: 24px;
+}
+
+.upload-button-content mat-icon,
+.upload-button-content mat-spinner {
+  flex: 0 0 auto;
+}
+
+.file-input {
+  display: none;
+}
+
+.upload-table-toolbar {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.upload-table-heading {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.upload-table-title {
+  color: var(--mat-sys-on-surface);
+  font: var(--mat-sys-title-small);
+}
+
+.upload-table-summary {
+  color: var(--mat-sys-on-surface-variant);
+  font: var(--mat-sys-body-small);
+}
+
+.upload-table-actions {
+  align-items: center;
+  display: flex;
+  flex: 0 0 auto;
+  gap: 8px;
+}
+
+.upload-table-actions button {
+  align-items: center;
+}
+
+.upload-table-wrapper {
+  border: 1px solid var(--mat-sys-outline-variant);
+  border-radius: 8px;
+  overflow-x: auto;
+}
+
+.service-upload-table {
+  width: 100%;
+}
+
+.file-cell {
+  display: grid;
+  gap: 2px;
+  min-width: 180px;
+}
+
+.file-name {
+  color: var(--mat-sys-on-surface);
+  overflow-wrap: anywhere;
+}
+
+.file-meta,
+.message-cell {
+  color: var(--mat-sys-on-surface-variant);
+  font: var(--mat-sys-body-small);
+}
+
+.message-cell {
+  display: inline-block;
+  max-width: 360px;
+  overflow-wrap: anywhere;
+}
+
+.status-pill {
+  align-items: center;
+  border: 1px solid var(--mat-sys-outline-variant);
+  border-radius: 8px;
+  display: inline-flex;
+  gap: 6px;
+  min-height: 28px;
+  padding: 2px 8px;
+  white-space: nowrap;
+}
+
+.status-pill mat-icon,
+.status-spinner {
+  height: 18px;
+  width: 18px;
+}
+
+.status-success {
+  color: var(--mat-sys-primary);
+}
+
+.status-duplicate,
+.status-uploading {
+  color: var(--mat-sys-tertiary);
+}
+
+.status-failed {
+  color: var(--mat-sys-error);
+}
+
+.actions-cell {
+  text-align: right;
 }
 
 .full {
   width: 100%;
+}
+
+@media (max-width: 720px) {
+  .upload-table-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .upload-table-actions {
+    justify-content: space-between;
+  }
+
+  .message-cell {
+    max-width: 220px;
+  }
 }

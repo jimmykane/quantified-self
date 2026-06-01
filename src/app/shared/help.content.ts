@@ -501,6 +501,8 @@ Suunto tools currently include:
 - uploading FIT activities to Suunto,
 - uploading GPX routes to Suunto.
 
+Suunto FIT activity uploads in Services show a per-file queue with upload status, duplicate detection, failure messages, and retry controls for failed files. Large upload batches are processed one file at a time with short pauses between provider upload calls.
+
 ## Garmin
 
 Garmin history import has two important limits:
@@ -544,6 +546,8 @@ COROS tools currently include:
 - syncing recent sleep summaries,
 - importing history,
 - uploading FIT activities to COROS.
+
+COROS FIT activity uploads in Services use the same per-file queue, short provider upload pacing, and failed-file retry controls as Suunto uploads.
 
 COROS -> Suunto activity sync is route-based:
 
