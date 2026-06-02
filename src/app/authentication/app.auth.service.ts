@@ -28,6 +28,11 @@ export class AppAuthService {
   public authState$: Observable<FirebaseUserType | null>;
   // store the URL so we can redirect after logging in
   redirectUrl: string | null = null;
+  private static readonly emailLinkAccountLinkingErrorCodes = new Set([
+    'auth/credential-already-in-use',
+    'auth/account-exists-with-different-credential',
+    'auth/email-already-in-use',
+  ]);
 
   private firestore = inject(Firestore);
   private auth = inject(Auth);
@@ -149,6 +154,9 @@ export class AppAuthService {
       this.localStorageService.removeItem('emailForSignIn');
       return result;
     } catch (error: any) {
+      if (this.shouldClearEmailLinkReturnUrlAfterSignInError(error)) {
+        this.localStorageService.removeItem(EMAIL_LINK_RETURN_URL_STORAGE_KEY);
+      }
       this.handleError(error);
       throw error;
     }
@@ -291,5 +299,9 @@ export class AppAuthService {
     }
 
     return authDomain;
+  }
+
+  private shouldClearEmailLinkReturnUrlAfterSignInError(error: any): boolean {
+    return !AppAuthService.emailLinkAccountLinkingErrorCodes.has(error?.code);
   }
 }

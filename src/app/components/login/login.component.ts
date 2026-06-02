@@ -31,6 +31,7 @@ export class LoginComponent implements OnInit, OnDestroy {
   private userSubscription: Subscription | undefined;
   private postLoginNavigationInFlight = false;
   private hasCompletedPostLoginNavigation = false;
+  private isCompletingEmailLinkSignIn = false;
   // private auth = inject(Auth); // Removed as we use authService
 
 
@@ -61,7 +62,8 @@ export class LoginComponent implements OnInit, OnDestroy {
     this.isLoading = true;
 
     // Check for email link sign-in
-    if (this.authService.isSignInWithEmailLink(window.location.href)) {
+    this.isCompletingEmailLinkSignIn = this.authService.isSignInWithEmailLink(window.location.href);
+    if (this.isCompletingEmailLinkSignIn) {
       let email = this.authService.localStorageService.getItem('emailForSignIn');
       if (!email) {
         // User opened the link on a different device. To prevent session fixation, ask the user to provide the associated email again.
@@ -105,6 +107,7 @@ export class LoginComponent implements OnInit, OnDestroy {
 
             this.logger.error('Error signing in with email link', error);
             this.snackBar.open('Error signing in. The link might be invalid or expired.', 'Close');
+            this.isCompletingEmailLinkSignIn = false;
           });
       }
     }
@@ -377,10 +380,14 @@ export class LoginComponent implements OnInit, OnDestroy {
       return serviceRedirectUrl;
     }
 
-    const emailLinkRedirectUrl = sanitizeLocalAuthRedirectUrl(
-      this.authService.localStorageService.getItem(EMAIL_LINK_RETURN_URL_STORAGE_KEY),
-    );
-    return emailLinkRedirectUrl || '/dashboard';
+    if (this.isCompletingEmailLinkSignIn) {
+      const emailLinkRedirectUrl = sanitizeLocalAuthRedirectUrl(
+        this.authService.localStorageService.getItem(EMAIL_LINK_RETURN_URL_STORAGE_KEY),
+      );
+      return emailLinkRedirectUrl || '/dashboard';
+    }
+
+    return '/dashboard';
   }
 
   private getEmailLinkReturnUrl(): string | null {
