@@ -67,7 +67,9 @@ export class ToolsComparePageComponent implements OnInit {
   readonly comparisons = signal<AppEventInterface[]>([]);
   readonly isLoadingComparisons = signal(false);
   readonly deletingEventID = signal<string | null>(null);
-  readonly selectedTabIndex = signal(this.route.snapshot.data['defaultTab'] === 'saved' ? 1 : 0);
+  private readonly requestedTabIndex = signal(this.route.snapshot.data['defaultTab'] === 'saved' ? 1 : 0);
+  readonly savedComparisonsTabDisabled = computed(() => !this.currentUser());
+  readonly selectedTabIndex = computed(() => this.savedComparisonsTabDisabled() ? 0 : this.requestedTabIndex());
 
   readonly selectedFileItems = computed<SelectedFileItem[]>(() =>
     this.selectedFiles().map((file, index) => ({
@@ -90,7 +92,8 @@ export class ToolsComparePageComponent implements OnInit {
   });
 
   readonly canCreateComparison = computed(() =>
-    !this.isCreating()
+    !!this.currentUser()
+    && !this.isCreating()
     && this.selectedFiles().length >= 2
     && !this.validationMessage(),
   );
@@ -106,10 +109,21 @@ export class ToolsComparePageComponent implements OnInit {
       .pipe(
         takeUntilDestroyed(this.destroyRef),
         tap((user) => {
+          const previousUserID = this.currentUser()?.uid ?? null;
+          const nextUserID = user?.uid ?? null;
+          const authScopeChanged = previousUserID !== nextUserID;
+
           this.currentUser.set(user);
           this.isLoadingComparisons.set(!!user);
-          if (!user) {
+          if (authScopeChanged) {
             this.comparisons.set([]);
+          }
+          if (!user || (previousUserID && previousUserID !== nextUserID)) {
+            this.selectedFiles.set([]);
+            this.comparisonTitle.set('');
+          }
+          if (previousUserID && previousUserID !== nextUserID) {
+            this.requestedTabIndex.set(0);
           }
         }),
         switchMap((user) => {
@@ -130,11 +144,21 @@ export class ToolsComparePageComponent implements OnInit {
   }
 
   onTabIndexChange(index: number): void {
-    this.selectedTabIndex.set(index);
+    if (index === 1 && this.savedComparisonsTabDisabled()) {
+      this.requestedTabIndex.set(0);
+      return;
+    }
+
+    this.requestedTabIndex.set(index);
   }
 
   onFilesSelected(event: Event): void {
     const input = event.target as HTMLInputElement;
+    if (!this.currentUser()) {
+      input.value = '';
+      return;
+    }
+
     const files = Array.from(input.files || []);
     this.addFiles(files);
     input.value = '';
@@ -251,11 +275,11 @@ export class ToolsComparePageComponent implements OnInit {
 
   async signIn(redirectUrl = '/tools/compare'): Promise<void> {
     this.authService.redirectUrl = redirectUrl;
-    await this.router.navigate(['/login']);
+    await this.router.navigate(['/login'], { queryParams: { returnUrl: redirectUrl } });
   }
 
   private addFiles(files: File[]): void {
-    if (this.isCreating() || !files.length) {
+    if (this.isCreating() || !this.currentUser() || !files.length) {
       return;
     }
 

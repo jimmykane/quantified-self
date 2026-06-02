@@ -298,11 +298,35 @@ export class AppEventService implements OnDestroy {
     }
 
     // Preserve benchmark fields needed by event details UI.
-    if ((event as any).benchmarkResults) {
-      (clonedEvent as any).benchmarkResults = { ...(event as any).benchmarkResults };
+    if (event.benchmarkResults) {
+      clonedEvent.benchmarkResults = { ...event.benchmarkResults };
     }
-    if ((event as any).benchmarkResult) {
-      (clonedEvent as any).benchmarkResult = { ...(event as any).benchmarkResult };
+    if (event.benchmarkResult) {
+      clonedEvent.benchmarkResult = { ...event.benchmarkResult };
+    }
+    if (event.hasBenchmark !== undefined) {
+      clonedEvent.hasBenchmark = event.hasBenchmark;
+    }
+    if (event.benchmarkDevices) {
+      clonedEvent.benchmarkDevices = [...event.benchmarkDevices];
+    }
+    if (event.benchmarkLatestAt) {
+      clonedEvent.benchmarkLatestAt = new Date(event.benchmarkLatestAt);
+    }
+    if (event.mergeType) {
+      clonedEvent.mergeType = event.mergeType;
+    }
+    if (event.toolSource) {
+      clonedEvent.toolSource = event.toolSource;
+    }
+    if (event.comparisonTitle) {
+      clonedEvent.comparisonTitle = event.comparisonTitle;
+    }
+    if (typeof event.sourceFilesCount === 'number') {
+      clonedEvent.sourceFilesCount = event.sourceFilesCount;
+    }
+    if (typeof event.activitiesCount === 'number') {
+      clonedEvent.activitiesCount = event.activitiesCount;
     }
 
     if (typeof (clonedEvent as any).clearActivities === 'function' && typeof (clonedEvent as any).addActivities === 'function') {

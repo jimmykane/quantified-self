@@ -158,6 +158,47 @@ describe('AppBenchmarkFlowService', () => {
     expect(analyticsService.logEvent).not.toHaveBeenCalled();
   });
 
+  it('uses an exact two-activity initial selection for the selection dialog', async () => {
+    const event = createEvent();
+
+    await service.openBenchmarkSelectionDialog({
+      event,
+      initialSelection: [activityB, activityA],
+    });
+
+    expect(dialog.open).toHaveBeenCalledWith(
+      expect.any(Function),
+      expect.objectContaining({
+        data: expect.objectContaining({
+          initialSelection: [activityB, activityA],
+        }),
+      }),
+    );
+  });
+
+  it('falls back to the first two event activities when initial selection has more than two activities', async () => {
+    const activityC = { getID: () => 'c1' } as ActivityInterface;
+    const event = {
+      benchmarkResults: {},
+      getActivities: () => [activityA, activityB, activityC],
+      getID: () => 'event-1',
+    } as unknown as AppEventInterface;
+
+    await service.openBenchmarkSelectionDialog({
+      event,
+      initialSelection: [activityA, activityB, activityC],
+    });
+
+    expect(dialog.open).toHaveBeenCalledWith(
+      expect.any(Function),
+      expect.objectContaining({
+        data: expect.objectContaining({
+          initialSelection: [activityA, activityB],
+        }),
+      }),
+    );
+  });
+
   it('loads activities when missing and user provided', async () => {
     const emptyEvent = {
       benchmarkResults: {},

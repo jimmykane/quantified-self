@@ -290,7 +290,10 @@ describe('AppToolsComparisonService', () => {
 
     expect(eventServiceMock.getEventsBy).toHaveBeenCalledWith(
       user,
-      [{ fieldPath: 'mergeType', opStr: '==', value: 'benchmark' }],
+      [
+        { fieldPath: 'mergeType', opStr: '==', value: 'benchmark' },
+        { fieldPath: 'toolSource', opStr: '==', value: 'tools/compare' },
+      ],
       'startDate',
       false,
       100,

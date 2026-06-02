@@ -122,7 +122,6 @@ h2 {
 }
 
 .empty-selection,
-.auth-callout,
 .loading-state,
 .state-card mat-card-content {
   display: flex;
@@ -138,12 +137,30 @@ h2 {
   color: var(--mat-sys-on-surface-variant);
 }
 
-.auth-callout {
-  flex-wrap: wrap;
-  padding: 0.75rem 1rem;
+.auth-gate {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 1rem;
+  align-items: center;
+  padding: 1rem;
   border-radius: 8px;
   background: var(--mat-sys-secondary-container);
   color: var(--mat-sys-on-secondary-container);
+}
+
+.auth-gate h3,
+.auth-gate p {
+  margin: 0;
+}
+
+.auth-gate h3 {
+  font-size: 1.15rem;
+  line-height: 1.25;
+}
+
+.auth-gate p {
+  color: var(--mat-sys-on-secondary-container);
+  line-height: 1.5;
 }
 
 .validation-message {
@@ -219,8 +236,13 @@ h2 {
   }
 
   .upload-controls button,
+  .auth-gate button,
   .comparison-card mat-card-actions button:not([mat-icon-button]),
   .comparison-card mat-card-actions a {
     width: 100%;
+  }
+
+  .auth-gate {
+    grid-template-columns: 1fr;
   }
 }

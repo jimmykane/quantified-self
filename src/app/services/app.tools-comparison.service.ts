@@ -226,7 +226,10 @@ export class AppToolsComparisonService {
   ): Observable<AppEventInterface[]> {
     return this.eventService.getEventsBy(
       user,
-      [{ fieldPath: 'mergeType', opStr: '==', value: 'benchmark' }],
+      [
+        { fieldPath: 'mergeType', opStr: '==', value: 'benchmark' },
+        { fieldPath: 'toolSource', opStr: '==', value: 'tools/compare' },
+      ],
       'startDate',
       false,
       limitCount,

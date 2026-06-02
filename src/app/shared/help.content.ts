@@ -214,7 +214,7 @@ export const HELP_SECTIONS: HelpSection[] = [
 - If no benchmark exists yet, it opens the benchmark selection flow.
 - Benchmark comparison uses exactly two activities, supports role swap, and can auto-align time.
 - Benchmark reports can be rerun, shared, and saved as an image.
-- The [File Comparison Tool](/tools/compare) creates one saved benchmark event from multiple FIT, GPX, or TCX files and opens event details with the benchmark report flow.
+- The [File Comparison Tool](/tools/compare) requires sign-in before file selection, then creates one saved benchmark event from multiple FIT, GPX, or TCX files and opens event details with the benchmark report flow.
 - Saved file comparisons are listed from [Tools -> Compare](/tools/compare/saved) alongside draft comparisons that do not have a generated report yet.
 - The public [Features hub](/features) links to [Workout Data Comparison](/features/workout-data-comparison), [Workout File Comparison](/features/workout-file-comparison), [Workout File Analyzer](/features/fit-gpx-tcx-file-analyzer), and [Sports Watch Benchmark](/features/sports-watch-benchmark) pages that explain how Garmin, Suunto, COROS, and uploaded FIT/TCX/GPX/JSON/SML activity files fit with benchmark reports, source files, maps, charts, overlays, and reviewer workflows for device tests, YouTube videos, and blog posts. Manual uploads, core analysis, and benchmark comparisons are available on the free plan for up to 100 activities; automatic provider sync and higher limits require a paid plan.
 

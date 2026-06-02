@@ -1,7 +1,7 @@
 import { Component, HostListener, OnDestroy, OnInit, inject } from '@angular/core';
 import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import { Router } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { User } from '@sports-alliance/sports-lib';
 import { take, filter } from 'rxjs/operators';
@@ -28,8 +28,8 @@ export class LoginComponent implements OnInit, OnDestroy {
   signInProviders = SignInProviders;
   email: string = '';
   private userSubscription: Subscription | undefined;
-  private dashboardNavigationInFlight = false;
-  private hasNavigatedToDashboard = false;
+  private postLoginNavigationInFlight = false;
+  private hasCompletedPostLoginNavigation = false;
   // private auth = inject(Auth); // Removed as we use authService
 
 
@@ -45,6 +45,7 @@ export class LoginComponent implements OnInit, OnDestroy {
   constructor(
     public authService: AppAuthService,
     private router: Router,
+    private route: ActivatedRoute,
     private dialog: MatDialog,
     // Injected services
     private eventService: AppEventService = inject(AppEventService),
@@ -109,7 +110,7 @@ export class LoginComponent implements OnInit, OnDestroy {
 
     this.userSubscription = this.authService.user$.subscribe((user) => {
       if (user) {
-        void this.navigateToDashboardOnce();
+        void this.navigateAfterLoginOnce();
       }
     });
 
@@ -315,7 +316,7 @@ export class LoginComponent implements OnInit, OnDestroy {
       // `linkWithPopup` will open the provider popup and link it to the 'user'.
       await this.authService.linkWithPopup(user, provider as any);
       this.snackBar.open('Accounts successfully linked!', 'Close', { duration: 5000 });
-      await this.navigateToDashboardOnce();
+      await this.navigateAfterLoginOnce();
     } catch (e: any) {
       this.logger.error('Link pending provider failed', e);
       this.showErrorDialog('Account Linking Failed', e);
@@ -335,28 +336,59 @@ export class LoginComponent implements OnInit, OnDestroy {
         ).toPromise();
 
       this.analyticsService.logEvent('login', { method: loginServiceUser.credential ? loginServiceUser.credential.signInMethod : 'Guest' });
-      await this.navigateToDashboardOnce();
+      await this.navigateAfterLoginOnce();
     } catch (e) {
       this.logger.error(e);
       this.isLoading = false;
     }
   }
 
-  private async navigateToDashboardOnce() {
-    if (this.hasNavigatedToDashboard || this.dashboardNavigationInFlight) {
+  private async navigateAfterLoginOnce() {
+    if (this.hasCompletedPostLoginNavigation || this.postLoginNavigationInFlight) {
       return;
     }
 
-    this.dashboardNavigationInFlight = true;
+    this.postLoginNavigationInFlight = true;
     try {
-      const didNavigate = await this.router.navigate(['/dashboard']);
-      this.hasNavigatedToDashboard = didNavigate === true;
+      const targetUrl = this.getPostLoginRedirectUrl();
+      const didNavigate = await this.router.navigateByUrl(targetUrl);
+      this.hasCompletedPostLoginNavigation = didNavigate === true;
+      if (didNavigate === true) {
+        this.authService.redirectUrl = null;
+      }
     } catch (error) {
-      this.hasNavigatedToDashboard = false;
-      this.logger.error('Dashboard navigation failed', error);
+      this.hasCompletedPostLoginNavigation = false;
+      this.logger.error('Post-login navigation failed', error);
     } finally {
-      this.dashboardNavigationInFlight = false;
+      this.postLoginNavigationInFlight = false;
     }
+  }
+
+  private getPostLoginRedirectUrl(): string {
+    const returnUrlParam = this.route.snapshot.queryParamMap.get('returnUrl');
+    if (returnUrlParam !== null) {
+      return this.sanitizeLocalRedirectUrl(returnUrlParam) || '/dashboard';
+    }
+
+    const serviceRedirectUrl = this.sanitizeLocalRedirectUrl(this.authService.redirectUrl);
+    return serviceRedirectUrl || '/dashboard';
+  }
+
+  private sanitizeLocalRedirectUrl(value: unknown): string | null {
+    if (typeof value !== 'string') {
+      return null;
+    }
+
+    const trimmed = value.trim();
+    if (!trimmed || !trimmed.startsWith('/') || trimmed.startsWith('//')) {
+      return null;
+    }
+
+    if (/^\/login(?:[/?#]|$)/.test(trimmed)) {
+      return null;
+    }
+
+    return trimmed;
   }
 
 

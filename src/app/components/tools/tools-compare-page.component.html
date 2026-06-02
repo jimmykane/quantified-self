@@ -24,6 +24,19 @@
           </mat-card-header>
 
           <mat-card-content>
+            @if (!currentUser()) {
+            <div class="auth-gate">
+              <mat-icon>lock</mat-icon>
+              <div>
+                <h3>Sign in to compare files</h3>
+                <p>File selections are saved only for your signed-in session, and comparisons are stored as benchmark events.</p>
+              </div>
+              <button mat-flat-button class="qs-mat-primary" type="button" (click)="signIn('/tools/compare')">
+                <mat-icon>login</mat-icon>
+                Sign In
+              </button>
+            </div>
+            } @else {
             <div class="upload-controls">
               <input
                 #fileInput
@@ -82,16 +95,10 @@
             @if (validationMessage()) {
             <p class="validation-message">{{ validationMessage() }}</p>
             }
-
-            @if (!currentUser()) {
-            <div class="auth-callout">
-              <mat-icon>lock</mat-icon>
-              <span>Sign in to create and save comparisons.</span>
-              <button mat-button type="button" (click)="signIn('/tools/compare')">Sign In</button>
-            </div>
             }
           </mat-card-content>
 
+          @if (currentUser()) {
           <mat-card-actions align="end">
             <button
               mat-flat-button
@@ -102,31 +109,22 @@
               @if (isCreating()) {
               <mat-progress-spinner diameter="18" mode="indeterminate"></mat-progress-spinner>
               }
-              <span>{{ currentUser() ? 'Create Comparison' : 'Sign In to Compare' }}</span>
+              <span>Create Comparison</span>
             </button>
           </mat-card-actions>
+          }
         </mat-card>
       </section>
     </mat-tab>
 
-    <mat-tab label="Saved comparisons">
+    <mat-tab label="Saved comparisons" [disabled]="savedComparisonsTabDisabled()">
       <section class="tab-panel" aria-labelledby="saved-comparisons-title">
         <div class="section-heading">
           <p class="eyebrow">Benchmarks</p>
           <h2 id="saved-comparisons-title">Saved comparisons</h2>
         </div>
 
-        @if (!currentUser()) {
-        <mat-card appearance="outlined" class="state-card">
-          <mat-card-content>
-            <mat-icon>lock</mat-icon>
-            <span>Sign in to view saved comparisons.</span>
-          </mat-card-content>
-          <mat-card-actions align="end">
-            <button mat-stroked-button type="button" (click)="signIn('/tools/compare/saved')">Sign In</button>
-          </mat-card-actions>
-        </mat-card>
-        } @else if (isLoadingComparisons()) {
+        @if (isLoadingComparisons()) {
         <div class="loading-state">
           <mat-progress-spinner diameter="28" mode="indeterminate"></mat-progress-spinner>
           <span>Loading comparisons</span>

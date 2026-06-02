@@ -21,6 +21,12 @@ export class BenchmarkEventAdapter {
       return name.trim().replace(/\s+/g, ' ').toLowerCase();
     };
 
+    const getNonNegativeInteger = (value: unknown): number | null => {
+      return typeof value === 'number' && Number.isInteger(value) && value >= 0
+        ? value
+        : null;
+    };
+
     const applyResultDates = (result: BenchmarkResult): void => {
       if (result.timestamp) {
         result.timestamp = toDate(result.timestamp);
@@ -34,10 +40,29 @@ export class BenchmarkEventAdapter {
       }
     };
 
+    const cloneBenchmarkResult = (result: BenchmarkResult): BenchmarkResult => ({
+      ...result,
+      metrics: result.metrics
+        ? {
+          ...result.metrics,
+          gnss: result.metrics.gnss ? { ...result.metrics.gnss } : result.metrics.gnss,
+          streamMetrics: result.metrics.streamMetrics
+            ? Object.fromEntries(
+              Object.entries(result.metrics.streamMetrics)
+                .map(([streamType, metrics]) => [streamType, { ...metrics }]),
+            )
+            : result.metrics.streamMetrics,
+        }
+        : result.metrics,
+      qualityIssues: Array.isArray(result.qualityIssues)
+        ? result.qualityIssues.map((issue) => ({ ...issue }))
+        : result.qualityIssues,
+    });
+
     if (rawData.benchmarkResults) {
       event.benchmarkResults = {};
       for (const key of Object.keys(rawData.benchmarkResults)) {
-        const result = rawData.benchmarkResults[key] as BenchmarkResult;
+        const result = cloneBenchmarkResult(rawData.benchmarkResults[key] as BenchmarkResult);
         applyResultDates(result);
         event.benchmarkResults[key] = result;
       }
@@ -46,11 +71,29 @@ export class BenchmarkEventAdapter {
     if (rawData.hasBenchmark !== undefined) {
       event.hasBenchmark = rawData.hasBenchmark;
     }
-    if (rawData.benchmarkDevices) {
-      event.benchmarkDevices = rawData.benchmarkDevices;
+    if (Array.isArray(rawData.benchmarkDevices)) {
+      event.benchmarkDevices = [...rawData.benchmarkDevices];
     }
     if (rawData.benchmarkLatestAt) {
       event.benchmarkLatestAt = toDate(rawData.benchmarkLatestAt);
+    }
+    if (typeof rawData.mergeType === 'string') {
+      event.mergeType = rawData.mergeType;
+    }
+    if (typeof rawData.toolSource === 'string') {
+      event.toolSource = rawData.toolSource;
+    }
+    if (typeof rawData.comparisonTitle === 'string') {
+      event.comparisonTitle = rawData.comparisonTitle;
+    }
+
+    const sourceFilesCount = getNonNegativeInteger(rawData.sourceFilesCount);
+    if (sourceFilesCount !== null) {
+      event.sourceFilesCount = sourceFilesCount;
+    }
+    const activitiesCount = getNonNegativeInteger(rawData.activitiesCount);
+    if (activitiesCount !== null) {
+      event.activitiesCount = activitiesCount;
     }
 
     if (event.benchmarkResults && Object.keys(event.benchmarkResults).length > 0) {

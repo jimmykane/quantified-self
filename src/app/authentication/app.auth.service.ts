@@ -26,7 +26,7 @@ export class AppAuthService {
   public user$: Observable<AppUserInterface | null>;
   public authState$: Observable<FirebaseUserType | null>;
   // store the URL so we can redirect after logging in
-  redirectUrl: string = '';
+  redirectUrl: string | null = null;
 
   private firestore = inject(Firestore);
   private auth = inject(Auth);

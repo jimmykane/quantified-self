@@ -250,6 +250,59 @@ describe('AppEventService', () => {
         expect(service).toBeTruthy();
     });
 
+    it('should preserve saved tool comparison metadata when deserializing event docs', () => {
+        const importedEvent = createMockEvent({ name: 'Imported Event' });
+        mocks.getEventFromJSON.mockReturnValueOnce(importedEvent);
+        const eventDoc = createQueryDoc('comparison-event-1', {
+            name: 'Stored Event',
+            startDate: 1710000000000,
+            mergeType: 'benchmark',
+            toolSource: 'tools/compare',
+            comparisonTitle: 'Device comparison',
+            sourceFilesCount: 2,
+            activitiesCount: 5,
+        });
+
+        const event = (service as any).deserializeEventFromDoc(
+            eventDoc,
+            'Unknown Data Types in metadata test',
+        ) as AppEventInterface;
+
+        expect(event.getID()).toBe('comparison-event-1');
+        expect(event.mergeType).toBe('benchmark');
+        expect(event.toolSource).toBe('tools/compare');
+        expect(event.comparisonTitle).toBe('Device comparison');
+        expect(event.sourceFilesCount).toBe(2);
+        expect(event.activitiesCount).toBe(5);
+    });
+
+    it('should preserve saved tool comparison metadata when cloning event details with activities', () => {
+        const event = createMockEvent({ name: 'Imported Event' }) as AppEventInterface;
+        event.mergeType = 'benchmark';
+        event.toolSource = 'tools/compare';
+        event.comparisonTitle = 'Device comparison';
+        event.sourceFilesCount = 2;
+        event.activitiesCount = 5;
+        event.hasBenchmark = false;
+        event.benchmarkDevices = ['garmin forerunner 265'];
+        event.benchmarkLatestAt = new Date('2026-01-01T00:00:00.000Z');
+        const activity = { getID: () => 'activity-1' } as any;
+
+        const clonedEvent = (service as any).cloneEventWithActivities(event, [activity]) as AppEventInterface;
+
+        expect(clonedEvent).not.toBe(event);
+        expect(clonedEvent.mergeType).toBe('benchmark');
+        expect(clonedEvent.toolSource).toBe('tools/compare');
+        expect(clonedEvent.comparisonTitle).toBe('Device comparison');
+        expect(clonedEvent.sourceFilesCount).toBe(2);
+        expect(clonedEvent.activitiesCount).toBe(5);
+        expect(clonedEvent.hasBenchmark).toBe(false);
+        expect(clonedEvent.benchmarkDevices).toEqual(['garmin forerunner 265']);
+        expect(clonedEvent.benchmarkDevices).not.toBe(event.benchmarkDevices);
+        expect(clonedEvent.benchmarkLatestAt?.toISOString()).toBe(event.benchmarkLatestAt?.toISOString());
+        expect(clonedEvent.benchmarkLatestAt).not.toBe(event.benchmarkLatestAt);
+    });
+
     describe('getEventsOnceByIds', () => {
         it('should batch ID fetches with documentId in-queries and preserve requested order', async () => {
             const user = { uid: 'user-ids' } as any;

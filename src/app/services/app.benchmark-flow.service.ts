@@ -39,6 +39,16 @@ export class AppBenchmarkFlowService {
     private analyticsService: AppAnalyticsService
   ) { }
 
+  private resolveInitialBenchmarkSelection(
+    initialSelection: ActivityInterface[] | undefined,
+    fallbackActivities: ActivityInterface[],
+  ): ActivityInterface[] {
+    if (initialSelection?.length === 2) {
+      return initialSelection;
+    }
+    return fallbackActivities.slice(0, 2);
+  }
+
   async openBenchmarkReport(config: BenchmarkFlowConfig): Promise<void> {
     if (!config.result) return;
     const activeEvent = await this.resolveEventWithActivitiesOnly(config);
@@ -69,9 +79,7 @@ export class AppBenchmarkFlowService {
 
   async openBenchmarkSelectionDialog(config: BenchmarkFlowConfig): Promise<void> {
     const seededActivities = config.event.getActivities?.() || [];
-    const initialSelection = (config.initialSelection && config.initialSelection.length)
-      ? config.initialSelection
-      : seededActivities.slice(0, 2);
+    const initialSelection = this.resolveInitialBenchmarkSelection(config.initialSelection, seededActivities);
 
     (document.activeElement as HTMLElement)?.blur();
 
@@ -111,9 +119,7 @@ export class AppBenchmarkFlowService {
           resolvedEvent = activeEvent;
           if (closed) return;
           const activities = activeEvent.getActivities?.() || [];
-          const nextSelection = (config.initialSelection && config.initialSelection.length)
-            ? config.initialSelection
-            : activities.slice(0, 2);
+          const nextSelection = this.resolveInitialBenchmarkSelection(config.initialSelection, activities);
           dialogRef.componentInstance?.setActivities(activities, nextSelection);
         })
         .catch((error) => {

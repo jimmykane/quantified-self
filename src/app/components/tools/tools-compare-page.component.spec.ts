@@ -16,6 +16,10 @@ describe('ToolsComparePageComponent', () => {
   let component: ToolsComparePageComponent;
   let userSubject: BehaviorSubject<User | null>;
   let routerNavigateSpy: ReturnType<typeof vi.spyOn>;
+  let authServiceMock: {
+    user$: ReturnType<BehaviorSubject<User | null>['asObservable']>;
+    redirectUrl: string | null;
+  };
   let comparisonServiceMock: {
     validateFiles: ReturnType<typeof vi.fn>;
     createComparison: ReturnType<typeof vi.fn>;
@@ -24,6 +28,10 @@ describe('ToolsComparePageComponent', () => {
 
   beforeEach(async () => {
     userSubject = new BehaviorSubject<User | null>(null);
+    authServiceMock = {
+      user$: userSubject.asObservable(),
+      redirectUrl: null,
+    };
     comparisonServiceMock = {
       validateFiles: vi.fn().mockReturnValue(null),
       createComparison: vi.fn().mockResolvedValue({
@@ -42,10 +50,7 @@ describe('ToolsComparePageComponent', () => {
       providers: [
         {
           provide: AppAuthService,
-          useValue: {
-            user$: userSubject.asObservable(),
-            redirectUrl: '',
-          },
+          useValue: authServiceMock,
         },
         { provide: AppToolsComparisonService, useValue: comparisonServiceMock },
         { provide: AppEventService, useValue: { deleteAllEventData: vi.fn().mockResolvedValue(true) } },
@@ -64,8 +69,22 @@ describe('ToolsComparePageComponent', () => {
     const text = fixture.nativeElement.textContent;
 
     expect(text).toContain('Compare FIT, GPX, and TCX files');
-    expect(text).toContain('Sign in to create and save comparisons.');
+    expect(text).toContain('Sign in to compare files');
+    expect(text).toContain('File selections are saved only for your signed-in session');
+    expect(text).not.toContain('Select Files');
+    expect(text).not.toContain('No files selected');
+    expect(text).not.toContain('Sign in to view saved comparisons.');
+    expect(component.savedComparisonsTabDisabled()).toBe(true);
     expect(comparisonServiceMock.getBenchmarkComparisons).not.toHaveBeenCalled();
+  });
+
+  it('keeps the saved comparisons tab disabled for guests', () => {
+    component.onTabIndexChange(1);
+    fixture.detectChanges();
+
+    expect(component.savedComparisonsTabDisabled()).toBe(true);
+    expect(component.selectedTabIndex()).toBe(0);
+    expect(fixture.nativeElement.textContent).not.toContain('Sign in to view saved comparisons.');
   });
 
   it('loads saved benchmark comparisons for signed-in users', () => {
@@ -73,6 +92,7 @@ describe('ToolsComparePageComponent', () => {
     userSubject.next(user);
     fixture.detectChanges();
 
+    expect(component.savedComparisonsTabDisabled()).toBe(false);
     expect(comparisonServiceMock.getBenchmarkComparisons).toHaveBeenCalledWith(user);
   });
 
@@ -88,10 +108,63 @@ describe('ToolsComparePageComponent', () => {
     expect(component.isLoadingComparisons()).toBe(false);
   });
 
+  it('clears staged files and title when the user signs out', () => {
+    userSubject.next(new User('user-1'));
+    component.selectedFiles.set([
+      new File([new Uint8Array([1])], 'staged.fit'),
+      new File([new Uint8Array([2])], 'staged.gpx'),
+    ]);
+    component.comparisonTitle.set('Session files');
+
+    userSubject.next(null);
+
+    expect(component.selectedFiles()).toEqual([]);
+    expect(component.comparisonTitle()).toBe('');
+    expect(component.canCreateComparison()).toBe(false);
+  });
+
+  it('clears previous user comparison and file state when the signed-in user changes', () => {
+    userSubject.next(new User('user-1'));
+    component.comparisons.set([
+      {
+        getID: () => 'user-1-comparison',
+        name: 'User 1 comparison',
+        startDate: new Date('2026-01-01T00:00:00.000Z'),
+      } as any,
+    ]);
+    component.selectedFiles.set([
+      new File([new Uint8Array([1])], 'user-1.fit'),
+      new File([new Uint8Array([2])], 'user-1.gpx'),
+    ]);
+    component.comparisonTitle.set('User 1 files');
+
+    userSubject.next(new User('user-2'));
+
+    expect(component.comparisons()).toEqual([]);
+    expect(component.selectedFiles()).toEqual([]);
+    expect(component.comparisonTitle()).toBe('');
+  });
+
   it('sends guests to login when they try to create a comparison', async () => {
     await component.createComparison();
 
-    expect(routerNavigateSpy).toHaveBeenCalledWith(['/login']);
+    expect(authServiceMock.redirectUrl).toBe('/tools/compare');
+    expect(routerNavigateSpy).toHaveBeenCalledWith(['/login'], {
+      queryParams: { returnUrl: '/tools/compare' },
+    });
+  });
+
+  it('ignores guest file selection so uploads are not staged before sign-in', () => {
+    const inputTarget = {
+      files: [new File([new Uint8Array([1])], 'guest.fit')],
+      value: 'guest.fit',
+    };
+
+    component.onFilesSelected({ target: inputTarget } as unknown as Event);
+
+    expect(inputTarget.value).toBe('');
+    expect(component.selectedFiles()).toEqual([]);
+    expect(component.canCreateComparison()).toBe(false);
   });
 
   it('creates a comparison and opens event details with benchmark auto-open', async () => {
@@ -111,6 +184,8 @@ describe('ToolsComparePageComponent', () => {
   });
 
   it('caps staged files at the comparison upload limit', () => {
+    userSubject.next(new User('user-1'));
+
     const files = Array.from({ length: 12 }, (_value, index) =>
       new File([new Uint8Array([index])], `file-${index}.fit`),
     );
@@ -147,6 +222,8 @@ describe('ToolsComparePageComponent', () => {
   });
 
   it('keeps files with matching browser metadata so backend content validation can decide duplicates', () => {
+    userSubject.next(new User('user-1'));
+
     const files = [
       new File([new Uint8Array([1])], 'activity.fit', { lastModified: 1000 }),
       new File([new Uint8Array([2])], 'activity.fit', { lastModified: 1000 }),

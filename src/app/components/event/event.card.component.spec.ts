@@ -346,6 +346,23 @@ describe('EventCardComponent', () => {
         }));
     });
 
+    it('should not pass a 3+ activity initial selection when auto-opening benchmark flow', () => {
+        routeBenchmarkQuery = '1';
+        const comparisonEvent = createEvent('evt1', [
+            createActivity('act-a'),
+            createActivity('act-b'),
+            createActivity('act-c'),
+        ], 'Multi-activity Tool Comparison');
+
+        routeData$.next({ event: comparisonEvent });
+
+        expect(mockBenchmarkFlowService.openBenchmarkEntry).toHaveBeenCalledTimes(1);
+        const config = mockBenchmarkFlowService.openBenchmarkEntry.mock.calls[0][0];
+        expect(config).not.toHaveProperty('initialSelection');
+        expect(config.event).toBe(comparisonEvent);
+        expect(config.hydrateStreamsForGeneration).toBe(true);
+    });
+
     it('should set targetUserID signal from route', () => {
         expect(component.targetUserID()).toBe('testUser');
     });

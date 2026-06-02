@@ -484,13 +484,24 @@ export class EventCardComponent implements OnInit {
       return;
     }
 
-    this.benchmarkAutoOpenAttemptedForEventID = eventID;
-    void this.benchmarkFlow.openBenchmarkEntry({
+    const selectedActivities = this.selectedActivitiesInstant();
+    const initialSelection = selectedActivities.length === 2 ? selectedActivities : undefined;
+    const benchmarkConfig: {
+      event: AppEventInterface;
+      user: User;
+      initialSelection?: ActivityInterface[];
+      hydrateStreamsForGeneration: boolean;
+    } = {
       event,
       user,
-      initialSelection: this.selectedActivitiesInstant(),
       hydrateStreamsForGeneration: true,
-    });
+    };
+    if (initialSelection) {
+      benchmarkConfig.initialSelection = initialSelection;
+    }
+
+    this.benchmarkAutoOpenAttemptedForEventID = eventID;
+    void this.benchmarkFlow.openBenchmarkEntry(benchmarkConfig);
   }
 
 }
