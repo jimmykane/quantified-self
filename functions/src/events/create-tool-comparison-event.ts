@@ -13,7 +13,14 @@ import {
   EventUtilities,
 } from '@sports-alliance/sports-lib';
 
-import { ALLOWED_CORS_ORIGINS, ENFORCE_APP_CHECK, hasBasicAccess, hasProAccess } from '../utils';
+import {
+  ALLOWED_CORS_ORIGINS,
+  ENFORCE_APP_CHECK,
+  assertEventWriteUserActive,
+  hasBasicAccess,
+  hasProAccess,
+  setEventDocumentIfUserActive,
+} from '../utils';
 import { createParsingOptions } from '../../../shared/parsing-options';
 import { EventWriter, FirestoreAdapter, OriginalFile, StorageAdapter } from '../shared/event-writer';
 import { generateActivityID } from '../shared/id-generator';
@@ -65,6 +72,12 @@ interface ParsedComparisonFile {
   originalFile: OriginalFile;
 }
 
+interface MergedComparisonWriteData {
+  mergedEvent: EventInterface;
+  originalFiles: OriginalFile[];
+  activitiesCount: number;
+}
+
 interface PreparedComparisonFile {
   file: NormalizedComparisonFile;
   rawBytes: Buffer;
@@ -81,6 +94,7 @@ interface ExistingComparisonEventData {
   comparisonTitle: string | null;
   sourceFilesCount: number | null;
   activitiesCount: number | null;
+  benchmarkStatus: string | null;
   originalFilesCount: number;
   hasProcessingMetadata: boolean;
 }
@@ -482,6 +496,7 @@ async function getExistingComparisonEventData(
       comparisonTitle: null,
       sourceFilesCount: null,
       activitiesCount: null,
+      benchmarkStatus: null,
       originalFilesCount: 0,
       hasProcessingMetadata: false,
     };
@@ -505,6 +520,7 @@ async function getExistingComparisonEventData(
     comparisonTitle: getOptionalString(data?.comparisonTitle),
     sourceFilesCount: getNonNegativeInteger(data?.sourceFilesCount),
     activitiesCount: getNonNegativeInteger(data?.activitiesCount),
+    benchmarkStatus: getOptionalString(data?.benchmarkStatus),
     originalFilesCount: countUsableOriginalFileMetadata(data),
     hasProcessingMetadata: processingMetadataSnapshot.exists,
   };
@@ -541,19 +557,26 @@ async function parseUploadedEvent(payload: Buffer, resolvedExtension: string): P
   throw new HttpStatusError(400, `Unsupported file extension: ${baseExtension}.`);
 }
 
-function getFirestoreAdapter(): FirestoreAdapter {
+function getFirestoreAdapter(userID: string): FirestoreAdapter {
   return {
     setDoc: async (path: string[], data: unknown) => {
-      await admin.firestore().doc(path.join('/')).set(data as Record<string, unknown>);
+      const documentPath = path.join('/');
+      await setEventDocumentIfUserActive(
+        userID,
+        `tool_comparison_writer:${documentPath}`,
+        admin.firestore().doc(documentPath),
+        data,
+      );
     },
     createBlob: (data: Uint8Array) => Buffer.from(data),
     generateID: () => admin.firestore().collection('tmp').doc().id,
   };
 }
 
-function getStorageAdapter(): StorageAdapter {
+function getStorageAdapter(userID: string): StorageAdapter {
   return {
     uploadFile: async (path: string, data: unknown) => {
+      await assertEventWriteUserActive(userID, `tool_comparison_original_file_upload:${path}`);
       await admin.storage().bucket().file(path).save(data as Buffer);
     },
     getBucketName: () => admin.storage().bucket().name,
@@ -567,9 +590,13 @@ async function persistProcessingMetadata(userID: string, eventID: string): Promi
     processedAt: admin.firestore.FieldValue.serverTimestamp(),
   };
 
-  await admin.firestore()
-    .doc(`users/${userID}/events/${eventID}/metaData/processing`)
-    .set(processingPayload, { merge: true });
+  await setEventDocumentIfUserActive(
+    userID,
+    'tool_comparison_processing_metadata',
+    admin.firestore().doc(`users/${userID}/events/${eventID}/metaData/processing`),
+    processingPayload,
+    { merge: true },
+  );
 }
 
 function serializeError(error: unknown): Record<string, unknown> {
@@ -581,6 +608,14 @@ function serializeError(error: unknown): Record<string, unknown> {
     };
   }
   return { value: `${error}` };
+}
+
+function isEventWriteSkippedForDeletedUserError(error: unknown): error is Error {
+  return error instanceof Error && error.name === 'EventWriteSkippedForDeletedUserError';
+}
+
+function isUserDeletionGuardReadError(error: unknown): error is Error {
+  return error instanceof Error && error.name === 'UserDeletionGuardReadError';
 }
 
 function clearGeneratedMergeDescription(event: EventInterface): void {
@@ -728,6 +763,34 @@ async function parseComparisonFiles(
   return parsedFiles;
 }
 
+async function buildMergedComparisonWriteData(params: {
+  preparedFiles: PreparedComparisonFile[];
+  mergedEventID: string;
+  comparisonTitle: string;
+}): Promise<MergedComparisonWriteData> {
+  const parsedFiles = await parseComparisonFiles(params.preparedFiles);
+  const sourceEvents = parsedFiles.map(file => file.event);
+  const originalFiles = parsedFiles.map(file => file.originalFile);
+
+  const mergedEvent = EventUtilities.mergeEvents(sourceEvents);
+  mergedEvent.setID(params.mergedEventID);
+  mergedEvent.name = params.comparisonTitle;
+  (mergedEvent as { isMerge?: boolean; mergeType?: 'benchmark' }).isMerge = true;
+  (mergedEvent as { isMerge?: boolean; mergeType?: 'benchmark' }).mergeType = 'benchmark';
+  clearGeneratedMergeDescription(mergedEvent);
+
+  const activities = mergedEvent.getActivities();
+  for (let i = 0; i < activities.length; i++) {
+    activities[i].setID(await generateActivityID(params.mergedEventID, i));
+  }
+
+  return {
+    mergedEvent,
+    originalFiles,
+    activitiesCount: activities.length,
+  };
+}
+
 async function finalizeToolComparisonMetadata(params: {
   userID: string;
   eventID: string;
@@ -746,7 +809,13 @@ async function finalizeToolComparisonMetadata(params: {
   });
 
   const results = await Promise.allSettled([
-    admin.firestore().doc(`users/${params.userID}/events/${params.eventID}`).set(comparisonMetadataPayload, { merge: true }),
+    setEventDocumentIfUserActive(
+      params.userID,
+      'tool_comparison_metadata',
+      admin.firestore().doc(`users/${params.userID}/events/${params.eventID}`),
+      comparisonMetadataPayload,
+      { merge: true },
+    ),
     persistProcessingMetadata(params.userID, params.eventID),
   ]);
 
@@ -756,6 +825,13 @@ async function finalizeToolComparisonMetadata(params: {
 
   if (!failures.length) {
     return;
+  }
+
+  const controlFlowFailure = failures.find(({ result }) =>
+    isEventWriteSkippedForDeletedUserError(result.reason) || isUserDeletionGuardReadError(result.reason)
+  );
+  if (controlFlowFailure) {
+    throw controlFlowFailure.result.reason;
   }
 
   logger.error('[createToolComparisonEvent] Comparison event was written but metadata finalization failed; returning failure.', {
@@ -770,11 +846,30 @@ async function finalizeToolComparisonMetadata(params: {
   throw new HttpStatusError(500, 'Could not create comparison.');
 }
 
+function hasStoredExpectedActivityCountMarker(comparisonEvent: ExistingComparisonEventData): boolean {
+  return !!comparisonEvent.benchmarkStatus;
+}
+
+function canRepairWithoutExpectedActivityCount(
+  comparisonEvent: ExistingComparisonEventData,
+  sourceFilesCount: number,
+): boolean {
+  // Finalized/saved comparisons have a stored activity count we can validate
+  // against linked activity docs. Older partial metadata needs a parsed count.
+  return hasStoredExpectedActivityCountMarker(comparisonEvent)
+    && comparisonEvent.sourceFilesCount === sourceFilesCount
+    && comparisonEvent.activitiesCount !== null
+    && comparisonEvent.activitiesCount >= sourceFilesCount
+    && comparisonEvent.originalFilesCount >= sourceFilesCount
+    && !!comparisonEvent.comparisonTitle;
+}
+
 async function repairExistingComparisonMetadata(params: {
   userID: string;
   eventID: string;
   existingComparisonEvent: ExistingComparisonEventData;
   sourceFilesCount: number;
+  expectedActivitiesCount?: number;
   comparisonTitle: string;
 }): Promise<ExistingComparisonRepairResult> {
   const repairedComparisonEvent: ExistingComparisonEventData = {
@@ -807,19 +902,42 @@ async function repairExistingComparisonMetadata(params: {
   }
 
   const activitiesCount = await countActivitiesForEvent(params.userID, params.eventID);
-  if (activitiesCount < params.sourceFilesCount) {
+  if (params.expectedActivitiesCount !== undefined && activitiesCount !== params.expectedActivitiesCount) {
     return {
       comparisonEvent: repairedComparisonEvent,
       needsRewrite: true,
     };
   }
-  if (repairedComparisonEvent.activitiesCount !== activitiesCount) {
-    repairPayload.activitiesCount = activitiesCount;
-    repairedComparisonEvent.activitiesCount = activitiesCount;
+  if (
+    params.expectedActivitiesCount === undefined
+    && hasStoredExpectedActivityCountMarker(repairedComparisonEvent)
+    && repairedComparisonEvent.activitiesCount !== null
+    && activitiesCount !== repairedComparisonEvent.activitiesCount
+  ) {
+    return {
+      comparisonEvent: repairedComparisonEvent,
+      needsRewrite: true,
+    };
+  }
+  if (params.expectedActivitiesCount === undefined && activitiesCount < params.sourceFilesCount) {
+    return {
+      comparisonEvent: repairedComparisonEvent,
+      needsRewrite: true,
+    };
+  }
+
+  const resolvedActivitiesCount = params.expectedActivitiesCount ?? activitiesCount;
+  if (repairedComparisonEvent.activitiesCount !== resolvedActivitiesCount) {
+    repairPayload.activitiesCount = resolvedActivitiesCount;
+    repairedComparisonEvent.activitiesCount = resolvedActivitiesCount;
   }
   if (!repairedComparisonEvent.comparisonTitle) {
     repairPayload.comparisonTitle = params.comparisonTitle;
     repairedComparisonEvent.comparisonTitle = params.comparisonTitle;
+  }
+  if (params.expectedActivitiesCount !== undefined && !hasStoredExpectedActivityCountMarker(repairedComparisonEvent)) {
+    repairPayload.benchmarkStatus = 'draft';
+    repairedComparisonEvent.benchmarkStatus = 'draft';
   }
 
   if (Object.keys(repairPayload).length === 0) {
@@ -839,9 +957,13 @@ async function repairExistingComparisonMetadata(params: {
   }
 
   await Promise.all([
-    admin.firestore()
-      .doc(`users/${params.userID}/events/${params.eventID}`)
-      .set(sanitizeEventFirestoreWritePayload(repairPayload), { merge: true }),
+    setEventDocumentIfUserActive(
+      params.userID,
+      'tool_comparison_repair_metadata',
+      admin.firestore().doc(`users/${params.userID}/events/${params.eventID}`),
+      sanitizeEventFirestoreWritePayload(repairPayload),
+      { merge: true },
+    ),
     persistProcessingMetadata(params.userID, params.eventID),
   ]);
   repairedComparisonEvent.hasProcessingMetadata = true;
@@ -850,6 +972,24 @@ async function repairExistingComparisonMetadata(params: {
     comparisonEvent: repairedComparisonEvent,
     needsRewrite: false,
   };
+}
+
+async function deleteLinkedActivitiesBeforeComparisonRewrite(userID: string, eventID: string): Promise<void> {
+  await assertEventWriteUserActive(userID, `tool_comparison_rewrite_activity_cleanup:${eventID}`);
+  const activitySnapshot = await admin.firestore()
+    .collection('users')
+    .doc(userID)
+    .collection('activities')
+    .where('eventID', '==', eventID)
+    .get();
+
+  if (!activitySnapshot.docs.length) {
+    return;
+  }
+
+  await Promise.all(
+    activitySnapshot.docs.map((doc) => admin.firestore().recursiveDelete(doc.ref)),
+  );
 }
 
 export const createToolComparisonEvent = onRequest({
@@ -885,6 +1025,17 @@ export const createToolComparisonEvent = onRequest({
     const preparedFiles = prepareComparisonFilesForParsing(rawBody, normalizedFiles);
     const mergedEventID = generateComparisonEventID(userID, preparedFiles);
     const existingComparisonEvent = await getExistingComparisonEventData(userID, mergedEventID);
+    let mergedComparisonWriteData: MergedComparisonWriteData | null = null;
+    const getMergedComparisonWriteData = async (): Promise<MergedComparisonWriteData> => {
+      if (!mergedComparisonWriteData) {
+        mergedComparisonWriteData = await buildMergedComparisonWriteData({
+          preparedFiles,
+          mergedEventID,
+          comparisonTitle,
+        });
+      }
+      return mergedComparisonWriteData;
+    };
 
     const currentCount = await getEventCountForUser(userID);
     const uploadLimit = await resolveUploadLimitForUser(userID);
@@ -902,11 +1053,19 @@ export const createToolComparisonEvent = onRequest({
       }
 
       await assertComparisonWriteAllowedForUser(userID);
+      const needsExpectedActivitiesCount = !canRepairWithoutExpectedActivityCount(
+        existingComparisonEvent,
+        normalizedFiles.length,
+      );
+      const expectedActivitiesCount = needsExpectedActivitiesCount
+        ? (await getMergedComparisonWriteData()).activitiesCount
+        : undefined;
       const repairResult = await repairExistingComparisonMetadata({
         userID,
         eventID: mergedEventID,
         existingComparisonEvent,
         sourceFilesCount: normalizedFiles.length,
+        expectedActivitiesCount,
         comparisonTitle,
       });
 
@@ -927,40 +1086,27 @@ export const createToolComparisonEvent = onRequest({
         userID,
         eventID: mergedEventID,
       });
+      await deleteLinkedActivitiesBeforeComparisonRewrite(userID, mergedEventID);
     }
 
-    const parsedFiles = await parseComparisonFiles(preparedFiles);
-    const sourceEvents = parsedFiles.map(file => file.event);
-    const originalFiles = parsedFiles.map(file => file.originalFile);
-
-    const mergedEvent = EventUtilities.mergeEvents(sourceEvents);
-    mergedEvent.setID(mergedEventID);
-    mergedEvent.name = comparisonTitle;
-    (mergedEvent as { isMerge?: boolean; mergeType?: 'benchmark' }).isMerge = true;
-    (mergedEvent as { isMerge?: boolean; mergeType?: 'benchmark' }).mergeType = 'benchmark';
-    clearGeneratedMergeDescription(mergedEvent);
-
-    const activities = mergedEvent.getActivities();
-    for (let i = 0; i < activities.length; i++) {
-      activities[i].setID(await generateActivityID(mergedEventID, i));
-    }
+    const comparisonWriteData = await getMergedComparisonWriteData();
 
     await assertComparisonWriteAllowedForUser(userID);
-    const writer = new EventWriter(getFirestoreAdapter(), getStorageAdapter());
-    await writer.writeAllEventData(userID, mergedEvent as any, originalFiles);
+    const writer = new EventWriter(getFirestoreAdapter(userID), getStorageAdapter(userID));
+    await writer.writeAllEventData(userID, comparisonWriteData.mergedEvent as any, comparisonWriteData.originalFiles);
     await finalizeToolComparisonMetadata({
       userID,
       eventID: mergedEventID,
-      sourceFilesCount: originalFiles.length,
-      activitiesCount: activities.length,
+      sourceFilesCount: comparisonWriteData.originalFiles.length,
+      activitiesCount: comparisonWriteData.activitiesCount,
       comparisonTitle,
     });
 
     response.status(200).json({
       eventId: mergedEventID,
       mergeType: 'benchmark',
-      sourceFilesCount: originalFiles.length,
-      activitiesCount: activities.length,
+      sourceFilesCount: comparisonWriteData.originalFiles.length,
+      activitiesCount: comparisonWriteData.activitiesCount,
       uploadLimit,
       uploadCountAfterWrite: existingComparisonEvent.exists ? currentCount : currentCount + 1,
       alreadyExists: false,
@@ -968,6 +1114,22 @@ export const createToolComparisonEvent = onRequest({
   } catch (error) {
     if (error instanceof HttpStatusError) {
       response.status(error.status).json({ error: error.message });
+      return;
+    }
+
+    if (isEventWriteSkippedForDeletedUserError(error)) {
+      logger.warn('[createToolComparisonEvent] Comparison write skipped because account deletion started during persistence', {
+        error: serializeError(error),
+      });
+      response.status(409).json({ error: 'Account deletion is in progress. Please sign in again.' });
+      return;
+    }
+
+    if (isUserDeletionGuardReadError(error)) {
+      logger.error('[createToolComparisonEvent] Failed to read user deletion guard during guarded persistence', {
+        error: serializeError(error),
+      });
+      response.status(503).json({ error: 'Could not verify account state. Please try again shortly.' });
       return;
     }
 

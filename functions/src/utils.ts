@@ -165,7 +165,7 @@ export class EventWriteSkippedForDeletedUserError extends Error {
   }
 }
 
-async function assertEventWriteUserActive(userID: string, phase: string): Promise<void> {
+export async function assertEventWriteUserActive(userID: string, phase: string): Promise<void> {
   let deletionGuard;
   try {
     deletionGuard = await getUserDeletionGuardState(admin.firestore(), userID);
@@ -181,11 +181,12 @@ async function assertEventWriteUserActive(userID: string, phase: string): Promis
   throw new EventWriteSkippedForDeletedUserError(userID, phase);
 }
 
-async function setEventDocumentIfUserActive(
+export async function setEventDocumentIfUserActive(
   userID: string,
   phase: string,
   docRef: admin.firestore.DocumentReference,
   data: unknown,
+  options?: admin.firestore.SetOptions,
 ): Promise<void> {
   const db = admin.firestore();
   await db.runTransaction(async (transaction) => {
@@ -201,7 +202,12 @@ async function setEventDocumentIfUserActive(
       throw new EventWriteSkippedForDeletedUserError(userID, phase);
     }
 
-    transaction.set(docRef, data);
+    if (options) {
+      transaction.set(docRef, data as admin.firestore.DocumentData, options);
+      return;
+    }
+
+    transaction.set(docRef, data as admin.firestore.DocumentData);
   });
 }
 

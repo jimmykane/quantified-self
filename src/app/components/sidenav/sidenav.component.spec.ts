@@ -241,18 +241,19 @@ describe('SideNavComponent', () => {
         expect(myTracksItem?.nativeElement.textContent).not.toContain('BASIC');
     });
 
-    it('should expose the tools hub in navigation for guests and signed-in users', () => {
+    it('should promote file comparison in navigation for guests and signed-in users', () => {
         fixture.detectChanges();
 
-        let toolsItem = fixture.debugElement
+        let compareFilesItem = fixture.debugElement
             .queryAll(By.css('mat-list-item'))
-            .find(item => item.nativeElement.textContent.includes('Tools'));
+            .find(item => item.nativeElement.textContent.includes('Compare Files'));
 
-        expect(toolsItem).toBeTruthy();
+        expect(compareFilesItem).toBeTruthy();
         expect(
-            toolsItem?.nativeElement.getAttribute('routerlink')
-            ?? toolsItem?.nativeElement.getAttribute('routerLink')
-        ).toBe('/tools');
+            compareFilesItem?.nativeElement.getAttribute('routerlink')
+            ?? compareFilesItem?.nativeElement.getAttribute('routerLink')
+        ).toBe('/tools/compare');
+        expect(compareFilesItem?.nativeElement.textContent).toContain('New');
 
         mockUserService.user = vi.fn().mockReturnValue({
             uid: 'user-1',
@@ -261,11 +262,11 @@ describe('SideNavComponent', () => {
         });
         fixture.detectChanges();
 
-        toolsItem = fixture.debugElement
+        compareFilesItem = fixture.debugElement
             .queryAll(By.css('mat-list-item'))
-            .find(item => item.nativeElement.textContent.includes('Tools'));
+            .find(item => item.nativeElement.textContent.includes('Compare Files'));
 
-        expect(toolsItem).toBeTruthy();
+        expect(compareFilesItem).toBeTruthy();
     });
 
     it('should link AI Insights directly for basic users and mark it as beta', () => {
