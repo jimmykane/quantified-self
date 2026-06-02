@@ -432,6 +432,18 @@ async function getEventCountForUser(userID: string): Promise<number> {
   return countSnapshot.data().count;
 }
 
+async function resolveUploadQuotaStateForUser(userID: string): Promise<{
+  currentCount: number;
+  uploadLimit: number | null;
+}> {
+  const [currentCount, uploadLimit] = await Promise.all([
+    getEventCountForUser(userID),
+    resolveUploadLimitForUser(userID),
+  ]);
+
+  return { currentCount, uploadLimit };
+}
+
 function getNonNegativeInteger(value: unknown): number | null {
   return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : null;
 }
@@ -1022,6 +1034,12 @@ export const createToolComparisonEvent = onRequest({
     const manifest = parseFileManifest(getRequestHeader(request, FILE_MANIFEST_HEADER));
     const normalizedFiles = normalizeManifestFiles(manifest, rawBody.length);
     const comparisonTitle = resolveComparisonTitle(getRequestHeader(request, TITLE_HEADER), normalizedFiles);
+    // Keep quota enforcement ahead of gzip decompression and hashing to avoid expensive rejected uploads.
+    const { currentCount, uploadLimit } = await resolveUploadQuotaStateForUser(userID);
+    if (uploadLimit !== null && currentCount >= uploadLimit) {
+      throw new HttpStatusError(429, `Upload limit reached for your tier. You have ${currentCount} events. Limit is ${uploadLimit}.`);
+    }
+
     const preparedFiles = prepareComparisonFilesForParsing(rawBody, normalizedFiles);
     const mergedEventID = generateComparisonEventID(userID, preparedFiles);
     const existingComparisonEvent = await getExistingComparisonEventData(userID, mergedEventID);
@@ -1036,12 +1054,6 @@ export const createToolComparisonEvent = onRequest({
       }
       return mergedComparisonWriteData;
     };
-
-    const currentCount = await getEventCountForUser(userID);
-    const uploadLimit = await resolveUploadLimitForUser(userID);
-    if (uploadLimit !== null && currentCount >= uploadLimit && !existingComparisonEvent.exists) {
-      throw new HttpStatusError(429, `Upload limit reached for your tier. You have ${currentCount} events. Limit is ${uploadLimit}.`);
-    }
 
     if (existingComparisonEvent.exists) {
       if (!existingComparisonEvent.isBenchmarkComparison) {

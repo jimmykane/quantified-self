@@ -668,6 +668,26 @@ describe('createToolComparisonEvent', () => {
     expect(hoisted.mockWriteAllEventData).not.toHaveBeenCalled();
   });
 
+  it('enforces upload limits before decompressing or hashing gzip comparison files', async () => {
+    hoisted.mockEventsCountGet.mockResolvedValueOnce({ data: () => ({ count: USAGE_LIMITS.free }) });
+    const response = makeResponse();
+
+    await invokeCreateToolComparisonEvent(makeRequest({
+      files: [
+        { bytes: gzipSync(Buffer.alloc(40, 1)), extension: 'fit.gz', originalFilename: 'ref.fit.gz' },
+        { bytes: gzipSync(Buffer.alloc(40, 2)), extension: 'gpx.gz', originalFilename: 'test.gpx.gz' },
+      ],
+    }), response);
+
+    expect(response.status).toHaveBeenCalledWith(429);
+    expect(response.json).toHaveBeenCalledWith({
+      error: `Upload limit reached for your tier. You have ${USAGE_LIMITS.free} events. Limit is ${USAGE_LIMITS.free}.`,
+    });
+    expect(hoisted.mockEventDocGet).not.toHaveBeenCalled();
+    expect(hoisted.mockFITImporter.getFromArrayBuffer).not.toHaveBeenCalled();
+    expect(hoisted.mockWriteAllEventData).not.toHaveBeenCalled();
+  });
+
   it('treats pro users as unlimited', async () => {
     hoisted.mockHasProAccess.mockResolvedValueOnce(true);
     hoisted.mockEventsCountGet.mockResolvedValueOnce({ data: () => ({ count: 250 }) });
@@ -700,7 +720,7 @@ describe('createToolComparisonEvent', () => {
         },
       }),
     });
-    hoisted.mockEventsCountGet.mockResolvedValueOnce({ data: () => ({ count: USAGE_LIMITS.free }) });
+    hoisted.mockEventsCountGet.mockResolvedValueOnce({ data: () => ({ count: USAGE_LIMITS.free - 1 }) });
     const response = makeResponse();
 
     await invokeCreateToolComparisonEvent(makeRequest(), response);
@@ -713,7 +733,7 @@ describe('createToolComparisonEvent', () => {
     expect(response.json).toHaveBeenCalledWith(expect.objectContaining({
       sourceFilesCount: 2,
       activitiesCount: 2,
-      uploadCountAfterWrite: USAGE_LIMITS.free,
+      uploadCountAfterWrite: USAGE_LIMITS.free - 1,
       alreadyExists: true,
     }));
   });
