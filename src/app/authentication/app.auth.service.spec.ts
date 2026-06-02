@@ -463,13 +463,29 @@ describe('AppAuthService', () => {
 
             await expect(service.signInWithEmailLink(email, link)).rejects.toBe(authError);
 
-            expect(mockLocalStorageService.removeItem).not.toHaveBeenCalled();
+            expect(mockLocalStorageService.removeItem).toHaveBeenCalledWith(EMAIL_LINK_RETURN_URL_STORAGE_KEY);
             expect(loggerErrorSpy).toHaveBeenCalledWith(authError);
             expect(mockSnackBar.open).toHaveBeenCalledWith(
                 'Could not login due to error invalid-action-code ',
                 undefined,
                 { duration: 2000 }
             );
+        });
+
+        it('signInWithEmailLink should preserve cached return URL for account-linking failures', async () => {
+            const { signInWithEmailLink: signInWithEmailLinkFn } = await import('app/firebase/auth');
+            const email = 'test@example.com';
+            const link = 'https://quantified-self.io/login?mode=signIn&code=test';
+            const authError = {
+                code: 'auth/account-exists-with-different-credential',
+                message: 'Account exists with different credential',
+            };
+            vi.spyOn((service as any).logger, 'error').mockImplementation(() => { });
+            (signInWithEmailLinkFn as Mock).mockRejectedValueOnce(authError);
+
+            await expect(service.signInWithEmailLink(email, link)).rejects.toBe(authError);
+
+            expect(mockLocalStorageService.removeItem).not.toHaveBeenCalledWith(EMAIL_LINK_RETURN_URL_STORAGE_KEY);
         });
     });
 

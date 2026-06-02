@@ -107,8 +107,10 @@ export class LoginComponent implements OnInit, OnDestroy {
 
             this.logger.error('Error signing in with email link', error);
             this.snackBar.open('Error signing in. The link might be invalid or expired.', 'Close');
-            this.isCompletingEmailLinkSignIn = false;
+            this.finishEmailLinkCompletion(false);
           });
+      } else {
+        this.finishEmailLinkCompletion(false);
       }
     }
 
@@ -159,10 +161,10 @@ export class LoginComponent implements OnInit, OnDestroy {
 
   // .. existing sendEmailLink ...
 
-  async sendEmailLink(email: string) {
+  async sendEmailLink(email: string): Promise<boolean> {
     if (!email) {
       this.snackBar.open('Please enter a valid email address.', 'Close', { duration: 3000 });
-      return;
+      return false;
     }
     this.isLoading = true;
     const success = await this.authService.sendEmailLink(email, this.getEmailLinkReturnUrl());
@@ -170,11 +172,15 @@ export class LoginComponent implements OnInit, OnDestroy {
     if (success) {
       this.snackBar.open('Magic link sent! Check your inbox.', 'Close', { duration: 5000 });
     }
+    return success;
   }
 
 
   signInWithProvider(provider: SignInProviders) {
     this.isLoading = true;
+    if (!this.isCompletingEmailLinkSignIn) {
+      this.authService.localStorageService.removeItem(EMAIL_LINK_RETURN_URL_STORAGE_KEY);
+    }
 
     // Helper to handle login result
     const handleResult = async (result: any) => {
@@ -244,7 +250,8 @@ export class LoginComponent implements OnInit, OnDestroy {
               // User wants to link using Email Link (Send Magic Link)
               // This means we need to "park" the pending credential (if any) or just the intent.
               // 1. Send Link
-              await this.sendEmailLink(email);
+              const sentReplacementLink = await this.sendEmailLink(email);
+              this.finishEmailLinkCompletion(sentReplacementLink);
               // 2. Save intent. We want to link the *original* pending credential (e.g. GitHub)
               // to the account that will be signed in via email.
               if (pendingCredential) {
@@ -258,7 +265,10 @@ export class LoginComponent implements OnInit, OnDestroy {
             } else {
               // User chose an existing OAuth provider (e.g. Google) to sign in and link.
               const provider = this.authService.getProviderForId(selectedProvider);
-              if (!provider) return;
+              if (!provider) {
+                this.finishEmailLinkCompletion(false);
+                return;
+              }
 
               const result = await this.authService.signInWithPopup(provider as any);
               if (result.user) {
@@ -285,6 +295,7 @@ export class LoginComponent implements OnInit, OnDestroy {
         this.showErrorDialog('Account Linking Failed', linkError);
       }
     }
+    this.finishEmailLinkCompletion(false);
     this.isLoading = false;
   }
 
@@ -390,13 +401,35 @@ export class LoginComponent implements OnInit, OnDestroy {
     return '/dashboard';
   }
 
+  private finishEmailLinkCompletion(keepCachedReturnUrl: boolean): void {
+    if (!this.isCompletingEmailLinkSignIn) {
+      return;
+    }
+
+    this.isCompletingEmailLinkSignIn = false;
+    if (!keepCachedReturnUrl) {
+      this.authService.localStorageService.removeItem(EMAIL_LINK_RETURN_URL_STORAGE_KEY);
+    }
+  }
+
   private getEmailLinkReturnUrl(): string | null {
     const returnUrlParam = this.route.snapshot.queryParamMap.get('returnUrl');
     if (returnUrlParam !== null) {
       return sanitizeLocalAuthRedirectUrl(returnUrlParam);
     }
 
-    return sanitizeLocalAuthRedirectUrl(this.authService.redirectUrl);
+    const serviceRedirectUrl = sanitizeLocalAuthRedirectUrl(this.authService.redirectUrl);
+    if (serviceRedirectUrl) {
+      return serviceRedirectUrl;
+    }
+
+    if (this.isCompletingEmailLinkSignIn) {
+      return sanitizeLocalAuthRedirectUrl(
+        this.authService.localStorageService.getItem(EMAIL_LINK_RETURN_URL_STORAGE_KEY),
+      );
+    }
+
+    return null;
   }
 
 

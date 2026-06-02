@@ -481,6 +481,116 @@ describe('LoginComponent', () => {
         expect(mockAuthService.localStorageService.removeItem).toHaveBeenCalledWith(EMAIL_LINK_RETURN_URL_STORAGE_KEY);
     });
 
+    it('should clear cached email-link return URL when email confirmation is cancelled', async () => {
+        mockAuthService.isSignInWithEmailLink = vi.fn().mockReturnValue(true);
+        mockAuthService.localStorageService.getItem = vi.fn().mockImplementation((key) => {
+            if (key === EMAIL_LINK_RETURN_URL_STORAGE_KEY) return '/tools/compare';
+            return null;
+        });
+        const promptSpy = vi.spyOn(window, 'prompt').mockReturnValue('');
+
+        await component.ngOnInit();
+        await new Promise(resolve => setTimeout(resolve, 0));
+
+        (mockAuthService.user$ as BehaviorSubject<any>).next({ uid: 'later-user' });
+        await new Promise(resolve => setTimeout(resolve, 0));
+
+        expect(promptSpy).toHaveBeenCalled();
+        expect(mockAuthService.localStorageService.removeItem).toHaveBeenCalledWith(EMAIL_LINK_RETURN_URL_STORAGE_KEY);
+        expect(mockRouter.navigateByUrl).toHaveBeenCalledWith('/dashboard');
+
+        promptSpy.mockRestore();
+    });
+
+    it('should clear cached email-link return URL when account-linking is cancelled during email-link completion', async () => {
+        mockAuthService.isSignInWithEmailLink = vi.fn().mockReturnValue(true);
+        mockAuthService.localStorageService.getItem = vi.fn().mockImplementation((key) => {
+            if (key === 'emailForSignIn') return 'test@example.com';
+            if (key === EMAIL_LINK_RETURN_URL_STORAGE_KEY) return '/tools/compare';
+            return null;
+        });
+        mockAuthService.signInWithEmailLink = vi.fn().mockRejectedValue({
+            code: 'auth/account-exists-with-different-credential',
+            customData: { email: 'test@example.com' },
+        });
+        mockAuthService.fetchSignInMethods = vi.fn().mockResolvedValue(['google.com']);
+        (mockDialog as any).open = vi.fn().mockReturnValue({ afterClosed: () => of(null) });
+
+        await component.ngOnInit();
+        await new Promise(resolve => setTimeout(resolve, 10));
+
+        (mockAuthService.user$ as BehaviorSubject<any>).next({ uid: 'later-user' });
+        await new Promise(resolve => setTimeout(resolve, 0));
+
+        expect(mockAuthService.fetchSignInMethods).toHaveBeenCalledWith('test@example.com');
+        expect(mockAuthService.localStorageService.removeItem).toHaveBeenCalledWith(EMAIL_LINK_RETURN_URL_STORAGE_KEY);
+        expect(mockRouter.navigateByUrl).toHaveBeenCalledWith('/dashboard');
+    });
+
+    it('should preserve the active email-link return URL when sending a replacement magic link', async () => {
+        mockAuthService.isSignInWithEmailLink = vi.fn().mockReturnValue(true);
+        mockAuthService.localStorageService.getItem = vi.fn().mockImplementation((key) => {
+            if (key === 'emailForSignIn') return 'test@example.com';
+            if (key === EMAIL_LINK_RETURN_URL_STORAGE_KEY) return '/tools/compare';
+            return null;
+        });
+        mockAuthService.signInWithEmailLink = vi.fn().mockRejectedValue({
+            code: 'auth/account-exists-with-different-credential',
+            customData: { email: 'test@example.com' },
+        });
+        mockAuthService.fetchSignInMethods = vi.fn().mockResolvedValue(['password']);
+        (mockDialog as any).open = vi.fn().mockReturnValue({ afterClosed: () => of('emailLink') });
+
+        await component.ngOnInit();
+        await new Promise(resolve => setTimeout(resolve, 10));
+
+        expect(mockAuthService.sendEmailLink).toHaveBeenCalledWith('test@example.com', '/tools/compare');
+    });
+
+    it('should clear the active email-link return URL when replacement magic-link sending fails', async () => {
+        mockAuthService.isSignInWithEmailLink = vi.fn().mockReturnValue(true);
+        mockAuthService.localStorageService.getItem = vi.fn().mockImplementation((key) => {
+            if (key === 'emailForSignIn') return 'test@example.com';
+            if (key === EMAIL_LINK_RETURN_URL_STORAGE_KEY) return '/tools/compare';
+            return null;
+        });
+        mockAuthService.signInWithEmailLink = vi.fn().mockRejectedValue({
+            code: 'auth/account-exists-with-different-credential',
+            customData: { email: 'test@example.com' },
+        });
+        mockAuthService.fetchSignInMethods = vi.fn().mockResolvedValue(['password']);
+        mockAuthService.sendEmailLink = vi.fn().mockResolvedValue(false);
+        (mockDialog as any).open = vi.fn().mockReturnValue({ afterClosed: () => of('emailLink') });
+
+        await component.ngOnInit();
+        await new Promise(resolve => setTimeout(resolve, 10));
+
+        expect(mockAuthService.sendEmailLink).toHaveBeenCalledWith('test@example.com', '/tools/compare');
+        expect(mockAuthService.localStorageService.removeItem).toHaveBeenCalledWith(EMAIL_LINK_RETURN_URL_STORAGE_KEY);
+    });
+
+    it('should ignore a cached email-link return URL when the current login is not an email-link sign-in', async () => {
+        mockAuthService.localStorageService.getItem = vi.fn().mockImplementation((key) => {
+            if (key === EMAIL_LINK_RETURN_URL_STORAGE_KEY) return '/tools/compare';
+            return null;
+        });
+
+        component.ngOnInit();
+        await new Promise(resolve => setTimeout(resolve, 0));
+
+        (mockAuthService.user$ as BehaviorSubject<any>).next({ uid: 'oauth-user' });
+        await new Promise(resolve => setTimeout(resolve, 0));
+
+        expect(mockRouter.navigateByUrl).toHaveBeenCalledTimes(1);
+        expect(mockRouter.navigateByUrl).toHaveBeenCalledWith('/dashboard');
+    });
+
+    it('should clear a stale email-link return URL before starting non-email provider login', () => {
+        component.signInWithProvider(SignInProviders.Google);
+
+        expect(mockAuthService.localStorageService.removeItem).toHaveBeenCalledWith(EMAIL_LINK_RETURN_URL_STORAGE_KEY);
+    });
+
     it('should ignore unsafe returnUrl values and fall back to dashboard', async () => {
         mockAuthService.redirectUrl = '/tools/compare/saved';
         activatedRouteSnapshot.queryParamMap = convertToParamMap({ returnUrl: '//evil.example/path' });
