@@ -1145,12 +1145,19 @@ describe('AppEventService', () => {
         expect(hasStreamsKey(writtenPayload)).toBe(false);
     });
 
-    it('should strip server-owned original file metadata in updateEventProperties', async () => {
+    it('should strip server-owned event metadata in updateEventProperties', async () => {
         const user = { uid: 'user1' } as any;
         const payload = {
             name: 'Updated event name',
             originalFile: { path: 'users/u1/events/e1/original.fit' },
             originalFiles: [{ path: 'users/u1/events/e1/original.fit' }],
+            isMerge: true,
+            mergeType: 'benchmark',
+            toolSource: 'tools/compare',
+            sourceFilesCount: 2,
+            activitiesCount: 4,
+            comparisonTitle: 'Spoofed comparison',
+            benchmarkStatus: 'complete',
         };
 
         (doc as Mock).mockReturnValue({});
@@ -1163,6 +1170,13 @@ describe('AppEventService', () => {
         expect(writtenPayload.name).toBe('Updated event name');
         expect(writtenPayload.originalFile).toBeUndefined();
         expect(writtenPayload.originalFiles).toBeUndefined();
+        expect(writtenPayload.isMerge).toBeUndefined();
+        expect(writtenPayload.mergeType).toBeUndefined();
+        expect(writtenPayload.toolSource).toBeUndefined();
+        expect(writtenPayload.sourceFilesCount).toBeUndefined();
+        expect(writtenPayload.activitiesCount).toBeUndefined();
+        expect(writtenPayload.comparisonTitle).toBeUndefined();
+        expect(writtenPayload.benchmarkStatus).toBeUndefined();
     });
 
     it('should keep primitive update payloads unchanged in updateEventProperties', async () => {
@@ -1233,6 +1247,13 @@ describe('AppEventService', () => {
             activities: [{ id: 'activity-1' }],
             originalFile: { path: 'users/u1/events/e1/original.fit' },
             originalFiles: [{ path: 'users/u1/events/e1/original.fit' }],
+            isMerge: true,
+            mergeType: 'benchmark',
+            toolSource: 'tools/compare',
+            sourceFilesCount: 2,
+            activitiesCount: 4,
+            comparisonTitle: 'Spoofed comparison',
+            benchmarkStatus: 'complete',
         };
 
         (doc as Mock).mockReturnValue({});
@@ -1262,6 +1283,13 @@ describe('AppEventService', () => {
         expect(writtenEventPatch.activities).toBeUndefined();
         expect(writtenEventPatch.originalFile).toBeUndefined();
         expect(writtenEventPatch.originalFiles).toBeUndefined();
+        expect(writtenEventPatch.isMerge).toBeUndefined();
+        expect(writtenEventPatch.mergeType).toBeUndefined();
+        expect(writtenEventPatch.toolSource).toBeUndefined();
+        expect(writtenEventPatch.sourceFilesCount).toBeUndefined();
+        expect(writtenEventPatch.activitiesCount).toBeUndefined();
+        expect(writtenEventPatch.comparisonTitle).toBeUndefined();
+        expect(writtenEventPatch.benchmarkStatus).toBeUndefined();
         expect(hasStreamsKey(writtenEventPatch)).toBe(false);
         expect(mocks.batchCommit).toHaveBeenCalledTimes(1);
     });

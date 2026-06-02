@@ -65,11 +65,16 @@ h2 {
   margin-top: 0.5rem;
 }
 
+.guest-sign-in-panel {
+  margin-top: 0.5rem;
+}
+
 .tab-panel {
   padding: 1.5rem 0 0;
 }
 
 .comparison-tool-card,
+.guest-auth-card,
 .state-card,
 .comparison-card {
   border-radius: 8px;
@@ -77,11 +82,13 @@ h2 {
 }
 
 .comparison-tool-card mat-card-header,
+.guest-auth-card mat-card-header,
 .comparison-card mat-card-header {
   align-items: center;
 }
 
-.comparison-tool-card mat-card-content {
+.comparison-tool-card mat-card-content,
+.guest-auth-card mat-card-content {
   display: grid;
   gap: 1rem;
   padding-top: 1rem;
@@ -137,36 +144,18 @@ h2 {
   color: var(--mat-sys-on-surface-variant);
 }
 
-.auth-gate {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  gap: 1rem;
-  align-items: center;
-  padding: 1rem;
-  border-radius: 8px;
-  background: var(--mat-sys-secondary-container);
-  color: var(--mat-sys-on-secondary-container);
-}
-
-.auth-gate h3,
-.auth-gate p {
+.guest-auth-copy {
+  max-width: 42rem;
   margin: 0;
-}
-
-.auth-gate h3 {
-  font-size: 1.15rem;
-  line-height: 1.25;
-}
-
-.auth-gate p {
-  color: var(--mat-sys-on-secondary-container);
-  line-height: 1.5;
+  color: var(--mat-sys-on-surface-variant);
+  line-height: 1.6;
 }
 
 .validation-message {
   margin-bottom: 0;
 }
 
+.guest-auth-actions,
 .comparison-tool-card mat-card-actions,
 .comparison-card mat-card-actions {
   display: flex;
@@ -236,13 +225,9 @@ h2 {
   }
 
   .upload-controls button,
-  .auth-gate button,
+  .guest-auth-actions button,
   .comparison-card mat-card-actions button:not([mat-icon-button]),
   .comparison-card mat-card-actions a {
     width: 100%;
-  }
-
-  .auth-gate {
-    grid-template-columns: 1fr;
   }
 }

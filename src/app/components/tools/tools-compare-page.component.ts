@@ -67,9 +67,10 @@ export class ToolsComparePageComponent implements OnInit {
   readonly comparisons = signal<AppEventInterface[]>([]);
   readonly isLoadingComparisons = signal(false);
   readonly deletingEventID = signal<string | null>(null);
-  private readonly requestedTabIndex = signal(this.route.snapshot.data['defaultTab'] === 'saved' ? 1 : 0);
-  readonly savedComparisonsTabDisabled = computed(() => !this.currentUser());
-  readonly selectedTabIndex = computed(() => this.savedComparisonsTabDisabled() ? 0 : this.requestedTabIndex());
+  private readonly initialTabIndex = this.route.snapshot.data['defaultTab'] === 'saved' ? 1 : 0;
+  private readonly requestedTabIndex = signal(this.initialTabIndex);
+  readonly guestSignInRedirectUrl = this.initialTabIndex === 1 ? '/tools/compare/saved' : '/tools/compare';
+  readonly selectedTabIndex = computed(() => this.currentUser() ? this.requestedTabIndex() : 0);
 
   readonly selectedFileItems = computed<SelectedFileItem[]>(() =>
     this.selectedFiles().map((file, index) => ({
@@ -144,7 +145,7 @@ export class ToolsComparePageComponent implements OnInit {
   }
 
   onTabIndexChange(index: number): void {
-    if (index === 1 && this.savedComparisonsTabDisabled()) {
+    if (!this.currentUser()) {
       this.requestedTabIndex.set(0);
       return;
     }

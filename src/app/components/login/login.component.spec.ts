@@ -12,6 +12,7 @@ import { Analytics } from 'app/firebase/analytics';
 import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { of, throwError, BehaviorSubject } from 'rxjs';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
+import { EMAIL_LINK_RETURN_URL_STORAGE_KEY } from '../../authentication/auth-redirect-url';
 
 // Mock Firebase Auth functions
 vi.mock('app/firebase/auth', async () => {
@@ -187,9 +188,26 @@ describe('LoginComponent', () => {
         await new Promise(resolve => setTimeout(resolve, 0));
 
         expect((mockDialog as any).open).toHaveBeenCalled();
-        expect(mockAuthService.sendEmailLink).toHaveBeenCalledWith('test@example.com');
+        expect(mockAuthService.sendEmailLink).toHaveBeenCalledWith('test@example.com', null);
         // Check if persist was called. The mock collision error creates a credential.
         expect(mockAuthService.localStorageService.setItem).toHaveBeenCalledWith('pendingLinkProvider', 'github.com');
+    });
+
+    it('should pass a safe returnUrl query parameter when sending an email link', async () => {
+        activatedRouteSnapshot.queryParamMap = convertToParamMap({ returnUrl: '/tools/compare' });
+
+        await component.sendEmailLink('test@example.com');
+
+        expect(mockAuthService.sendEmailLink).toHaveBeenCalledWith('test@example.com', '/tools/compare');
+    });
+
+    it('should not fall back to a stale service redirect when email link returnUrl query parameter is unsafe', async () => {
+        mockAuthService.redirectUrl = '/tools/compare/saved';
+        activatedRouteSnapshot.queryParamMap = convertToParamMap({ returnUrl: '//evil.example/path' });
+
+        await component.sendEmailLink('test@example.com');
+
+        expect(mockAuthService.sendEmailLink).toHaveBeenCalledWith('test@example.com', null);
     });
 
     it('should handle pending link persistence in ngOnInit', async () => {
@@ -441,6 +459,26 @@ describe('LoginComponent', () => {
         expect(mockRouter.navigateByUrl).toHaveBeenCalledTimes(1);
         expect(mockRouter.navigateByUrl).toHaveBeenCalledWith('/tools/compare/saved');
         expect(mockAuthService.redirectUrl).toBeNull();
+    });
+
+    it('should use the cached email-link return URL after the magic-link reload', async () => {
+        mockAuthService.isSignInWithEmailLink = vi.fn().mockReturnValue(true);
+        mockAuthService.localStorageService.getItem = vi.fn().mockImplementation((key) => {
+            if (key === 'emailForSignIn') return 'test@example.com';
+            if (key === EMAIL_LINK_RETURN_URL_STORAGE_KEY) return '/tools/compare';
+            return null;
+        });
+        mockAuthService.signInWithEmailLink = vi.fn().mockResolvedValue({ user: { uid: 'email-link-user' } });
+
+        await component.ngOnInit();
+        (mockAuthService.user$ as BehaviorSubject<any>).next({ uid: 'email-link-user' });
+        await new Promise(resolve => setTimeout(resolve, 0));
+        await new Promise(resolve => setTimeout(resolve, 0));
+
+        expect(mockAuthService.signInWithEmailLink).toHaveBeenCalledWith('test@example.com', window.location.href);
+        expect(mockRouter.navigateByUrl).toHaveBeenCalledTimes(1);
+        expect(mockRouter.navigateByUrl).toHaveBeenCalledWith('/tools/compare');
+        expect(mockAuthService.localStorageService.removeItem).toHaveBeenCalledWith(EMAIL_LINK_RETURN_URL_STORAGE_KEY);
     });
 
     it('should ignore unsafe returnUrl values and fall back to dashboard', async () => {

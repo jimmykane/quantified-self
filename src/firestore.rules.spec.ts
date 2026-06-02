@@ -648,6 +648,29 @@ describe('Firestore Security Rules', () => {
                     mergeType: 'benchmark'
                 }));
             });
+
+            it('should deny owner updating tool comparison metadata', async () => {
+                const db = testEnv.authenticatedContext(userId).firestore();
+                await testEnv.withSecurityRulesDisabled(async (context) => {
+                    await context.firestore().doc(`users/${userId}/events/${eventId}`).set({
+                        name: 'Device comparison',
+                        privacy: 'private',
+                        toolSource: 'tools/compare',
+                        sourceFilesCount: 2,
+                        activitiesCount: 4,
+                        comparisonTitle: 'Device comparison',
+                        benchmarkStatus: 'draft'
+                    });
+                });
+
+                await assertFails(db.collection(`users/${userId}/events`).doc(eventId).update({
+                    toolSource: 'dashboard',
+                    sourceFilesCount: 99,
+                    activitiesCount: 99,
+                    comparisonTitle: 'Spoofed comparison',
+                    benchmarkStatus: 'complete'
+                }));
+            });
         });
 
         describe('System Status (users/{uid}/system/status)', () => {

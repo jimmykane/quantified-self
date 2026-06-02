@@ -7,6 +7,31 @@
     </p>
   </section>
 
+  @if (!currentUser()) {
+  <section class="guest-sign-in-panel" aria-labelledby="tools-compare-sign-in-title">
+    <mat-card appearance="outlined" class="guest-auth-card">
+      <mat-card-header>
+        <div mat-card-avatar class="tool-avatar">
+          <mat-icon>lock</mat-icon>
+        </div>
+        <mat-card-title id="tools-compare-sign-in-title">Sign in to compare files</mat-card-title>
+        <mat-card-subtitle>Benchmark comparisons are saved to your account</mat-card-subtitle>
+      </mat-card-header>
+
+      <mat-card-content>
+        <p class="guest-auth-copy">
+          Comparison files are handled after sign-in so saved events, reports, and source metadata stay attached to your account.
+        </p>
+        <div class="guest-auth-actions">
+          <button mat-flat-button class="qs-mat-primary" type="button" (click)="signIn(guestSignInRedirectUrl)">
+            <mat-icon>login</mat-icon>
+            Sign In
+          </button>
+        </div>
+      </mat-card-content>
+    </mat-card>
+  </section>
+  } @else {
   <mat-tab-group
     class="compare-tabs"
     [selectedIndex]="selectedTabIndex()"
@@ -24,19 +49,6 @@
           </mat-card-header>
 
           <mat-card-content>
-            @if (!currentUser()) {
-            <div class="auth-gate">
-              <mat-icon>lock</mat-icon>
-              <div>
-                <h3>Sign in to compare files</h3>
-                <p>File selections are saved only for your signed-in session, and comparisons are stored as benchmark events.</p>
-              </div>
-              <button mat-flat-button class="qs-mat-primary" type="button" (click)="signIn('/tools/compare')">
-                <mat-icon>login</mat-icon>
-                Sign In
-              </button>
-            </div>
-            } @else {
             <div class="upload-controls">
               <input
                 #fileInput
@@ -95,10 +107,8 @@
             @if (validationMessage()) {
             <p class="validation-message">{{ validationMessage() }}</p>
             }
-            }
           </mat-card-content>
 
-          @if (currentUser()) {
           <mat-card-actions align="end">
             <button
               mat-flat-button
@@ -112,12 +122,11 @@
               <span>Create Comparison</span>
             </button>
           </mat-card-actions>
-          }
         </mat-card>
       </section>
     </mat-tab>
 
-    <mat-tab label="Saved comparisons" [disabled]="savedComparisonsTabDisabled()">
+    <mat-tab label="Saved comparisons">
       <section class="tab-panel" aria-labelledby="saved-comparisons-title">
         <div class="section-heading">
           <p class="eyebrow">Benchmarks</p>
@@ -199,4 +208,5 @@
       </section>
     </mat-tab>
   </mat-tab-group>
+  }
 </main>

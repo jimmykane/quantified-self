@@ -26,6 +26,13 @@ export function hasAngularServerContext(documentRef: Document | null | undefined
   return !!documentRef?.querySelector('app-root[ng-server-context]');
 }
 
+export function shouldProvideClientHydrationForRuntime(
+  documentRef: Document | null | undefined,
+  hasBrowserWindow: boolean,
+): boolean {
+  return !hasBrowserWindow || hasAngularServerContext(documentRef);
+}
+
 export function documentRoutePath(documentRef: Document | null | undefined): string {
   const location = documentRef?.location;
   return normalizeRoutePath(location ? `${location.pathname}${location.search}${location.hash}` : '/');

@@ -14,6 +14,7 @@ import { AccountLinkingDialogComponent } from './account-linking-dialog/account-
 import { ErrorDialogComponent } from './error-dialog/error-dialog.component';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { AppEventService } from '../../services/app.event.service';
+import { EMAIL_LINK_RETURN_URL_STORAGE_KEY, sanitizeLocalAuthRedirectUrl } from '../../authentication/auth-redirect-url';
 
 
 @Component({
@@ -161,7 +162,7 @@ export class LoginComponent implements OnInit, OnDestroy {
       return;
     }
     this.isLoading = true;
-    const success = await this.authService.sendEmailLink(email);
+    const success = await this.authService.sendEmailLink(email, this.getEmailLinkReturnUrl());
     this.isLoading = false;
     if (success) {
       this.snackBar.open('Magic link sent! Check your inbox.', 'Close', { duration: 5000 });
@@ -355,6 +356,7 @@ export class LoginComponent implements OnInit, OnDestroy {
       this.hasCompletedPostLoginNavigation = didNavigate === true;
       if (didNavigate === true) {
         this.authService.redirectUrl = null;
+        this.authService.localStorageService.removeItem(EMAIL_LINK_RETURN_URL_STORAGE_KEY);
       }
     } catch (error) {
       this.hasCompletedPostLoginNavigation = false;
@@ -367,28 +369,27 @@ export class LoginComponent implements OnInit, OnDestroy {
   private getPostLoginRedirectUrl(): string {
     const returnUrlParam = this.route.snapshot.queryParamMap.get('returnUrl');
     if (returnUrlParam !== null) {
-      return this.sanitizeLocalRedirectUrl(returnUrlParam) || '/dashboard';
+      return sanitizeLocalAuthRedirectUrl(returnUrlParam) || '/dashboard';
     }
 
-    const serviceRedirectUrl = this.sanitizeLocalRedirectUrl(this.authService.redirectUrl);
-    return serviceRedirectUrl || '/dashboard';
+    const serviceRedirectUrl = sanitizeLocalAuthRedirectUrl(this.authService.redirectUrl);
+    if (serviceRedirectUrl) {
+      return serviceRedirectUrl;
+    }
+
+    const emailLinkRedirectUrl = sanitizeLocalAuthRedirectUrl(
+      this.authService.localStorageService.getItem(EMAIL_LINK_RETURN_URL_STORAGE_KEY),
+    );
+    return emailLinkRedirectUrl || '/dashboard';
   }
 
-  private sanitizeLocalRedirectUrl(value: unknown): string | null {
-    if (typeof value !== 'string') {
-      return null;
+  private getEmailLinkReturnUrl(): string | null {
+    const returnUrlParam = this.route.snapshot.queryParamMap.get('returnUrl');
+    if (returnUrlParam !== null) {
+      return sanitizeLocalAuthRedirectUrl(returnUrlParam);
     }
 
-    const trimmed = value.trim();
-    if (!trimmed || !trimmed.startsWith('/') || trimmed.startsWith('//')) {
-      return null;
-    }
-
-    if (/^\/login(?:[/?#]|$)/.test(trimmed)) {
-      return null;
-    }
-
-    return trimmed;
+    return sanitizeLocalAuthRedirectUrl(this.authService.redirectUrl);
   }
 
 

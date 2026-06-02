@@ -70,20 +70,23 @@ describe('ToolsComparePageComponent', () => {
 
     expect(text).toContain('Compare FIT, GPX, and TCX files');
     expect(text).toContain('Sign in to compare files');
-    expect(text).toContain('File selections are saved only for your signed-in session');
+    expect(text).toContain('Benchmark comparisons are saved to your account');
+    expect(text).toContain('Comparison files are handled after sign-in');
+    expect(text).not.toContain('New comparison');
+    expect(text).not.toContain('Saved comparisons');
     expect(text).not.toContain('Select Files');
     expect(text).not.toContain('No files selected');
     expect(text).not.toContain('Sign in to view saved comparisons.');
-    expect(component.savedComparisonsTabDisabled()).toBe(true);
+    expect(component.guestSignInRedirectUrl).toBe('/tools/compare');
     expect(comparisonServiceMock.getBenchmarkComparisons).not.toHaveBeenCalled();
   });
 
-  it('keeps the saved comparisons tab disabled for guests', () => {
+  it('does not render comparison tabs for guests', () => {
     component.onTabIndexChange(1);
     fixture.detectChanges();
 
-    expect(component.savedComparisonsTabDisabled()).toBe(true);
     expect(component.selectedTabIndex()).toBe(0);
+    expect(fixture.nativeElement.querySelector('mat-tab-group')).toBeNull();
     expect(fixture.nativeElement.textContent).not.toContain('Sign in to view saved comparisons.');
   });
 
@@ -92,7 +95,8 @@ describe('ToolsComparePageComponent', () => {
     userSubject.next(user);
     fixture.detectChanges();
 
-    expect(component.savedComparisonsTabDisabled()).toBe(false);
+    expect(fixture.nativeElement.textContent).toContain('New comparison');
+    expect(fixture.nativeElement.textContent).toContain('Saved comparisons');
     expect(comparisonServiceMock.getBenchmarkComparisons).toHaveBeenCalledWith(user);
   });
 
