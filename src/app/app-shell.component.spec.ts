@@ -168,6 +168,30 @@ describe('AppShellComponent', () => {
         publicFixture.destroy();
     });
 
+    it('should keep the workout file analyzer public startup page visible while browser auth resolves', () => {
+        window.history.pushState({}, '', '/features/fit-gpx-tcx-file-analyzer');
+
+        const publicFixture = TestBed.createComponent(AppShellComponent);
+        const publicComponent = publicFixture.componentInstance;
+
+        expect(publicComponent.authState).toBe(false);
+        expect(publicComponent.showInitialLoader).toBe(false);
+
+        publicFixture.destroy();
+    });
+
+    it('should keep the saved comparisons public startup page visible while browser auth resolves', () => {
+        window.history.pushState({}, '', '/tools/compare/saved');
+
+        const publicFixture = TestBed.createComponent(AppShellComponent);
+        const publicComponent = publicFixture.componentInstance;
+
+        expect(publicComponent.authState).toBe(false);
+        expect(publicComponent.showInitialLoader).toBe(false);
+
+        publicFixture.destroy();
+    });
+
     it('should keep the initial loader behavior for private startup routes', () => {
         window.history.pushState({}, '', '/dashboard');
 

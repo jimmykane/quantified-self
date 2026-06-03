@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, Input, OnChanges, SimpleChanges, ChangeDetectorRef } from '@angular/core';
-import { AppEventInterface, BenchmarkOptions, getBenchmarkPairKey } from '@shared/app-event.interface';
+import { AppEventInterface } from '@shared/app-event.interface';
 import {
   User,
   ActivityInterface,
@@ -132,66 +132,22 @@ export class EventSummaryComponent implements OnChanges {
   }
 
   async openBenchmark() {
-    const activities = this.event.getActivities();
-
-    // For 2 activities, check if we have a saved result for this pair
-    if (activities.length === 2) {
-      const referenceID = activities[0].getID();
-      const testID = activities[1].getID();
-      if (!referenceID || !testID) {
-        return;
+    await this.benchmarkFlow.openBenchmarkEntry({
+      event: this.event,
+      user: this.user,
+      initialSelection: this.selectedActivities,
+      onResult: (result) => {
+        this.benchmarkResult = result;
+        this.rebuildTemplateState();
+        this.cd.detectChanges();
       }
-      const key = getBenchmarkPairKey(referenceID, testID);
-      const savedResult = this.event.benchmarkResults?.[key];
-      if (savedResult) {
-        this.benchmarkResult = savedResult;
-        this.openBenchmarkReport();
-        return;
-      }
-      // No saved result, auto-run
-      await this.runBenchmark(activities[0], activities[1], { autoAlignTime: true });
-      return;
-    }
-
-    // For 3+ activities or to select different pair, open dialog
-    this.openBenchmarkDialog();
+    });
   }
 
   openBenchmarkDialog(): void {
     this.benchmarkFlow.openBenchmarkSelectionDialog({
       event: this.event,
       user: this.user,
-      initialSelection: this.selectedActivities,
-      onResult: (result) => {
-        this.benchmarkResult = result;
-        this.rebuildTemplateState();
-        this.cd.detectChanges();
-      }
-    });
-  }
-
-  private async runBenchmark(ref: ActivityInterface, test: ActivityInterface, options: BenchmarkOptions) {
-    await this.benchmarkFlow.generateAndOpenReport({
-      event: this.event,
-      user: this.user,
-      ref,
-      test,
-      options,
-      initialSelection: this.selectedActivities,
-      onResult: (result) => {
-        this.benchmarkResult = result;
-        this.rebuildTemplateState();
-        this.cd.detectChanges();
-      }
-    });
-  }
-
-  openBenchmarkReport() {
-    if (!this.benchmarkResult) return;
-    this.benchmarkFlow.openBenchmarkReport({
-      event: this.event,
-      user: this.user,
-      result: this.benchmarkResult,
       initialSelection: this.selectedActivities,
       onResult: (result) => {
         this.benchmarkResult = result;

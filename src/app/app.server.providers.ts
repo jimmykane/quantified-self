@@ -15,7 +15,7 @@ import { AppPaymentService, type StripeProduct, type StripeSubscription } from '
 class ServerAuthService {
   readonly user$: Observable<AppUserInterface | null> = of(null);
   readonly authState$ = of(null);
-  redirectUrl = '';
+  redirectUrl: string | null = null;
 
   get currentUser(): null {
     return null;

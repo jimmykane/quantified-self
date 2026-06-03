@@ -1,7 +1,7 @@
 import { Component, HostListener, OnDestroy, OnInit, inject } from '@angular/core';
 import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import { Router } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { User } from '@sports-alliance/sports-lib';
 import { take, filter } from 'rxjs/operators';
@@ -14,6 +14,7 @@ import { AccountLinkingDialogComponent } from './account-linking-dialog/account-
 import { ErrorDialogComponent } from './error-dialog/error-dialog.component';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { AppEventService } from '../../services/app.event.service';
+import { EMAIL_LINK_RETURN_URL_STORAGE_KEY, sanitizeLocalAuthRedirectUrl } from '../../authentication/auth-redirect-url';
 
 
 @Component({
@@ -28,8 +29,9 @@ export class LoginComponent implements OnInit, OnDestroy {
   signInProviders = SignInProviders;
   email: string = '';
   private userSubscription: Subscription | undefined;
-  private dashboardNavigationInFlight = false;
-  private hasNavigatedToDashboard = false;
+  private postLoginNavigationInFlight = false;
+  private hasCompletedPostLoginNavigation = false;
+  private isCompletingEmailLinkSignIn = false;
   // private auth = inject(Auth); // Removed as we use authService
 
 
@@ -45,6 +47,7 @@ export class LoginComponent implements OnInit, OnDestroy {
   constructor(
     public authService: AppAuthService,
     private router: Router,
+    private route: ActivatedRoute,
     private dialog: MatDialog,
     // Injected services
     private eventService: AppEventService = inject(AppEventService),
@@ -59,7 +62,8 @@ export class LoginComponent implements OnInit, OnDestroy {
     this.isLoading = true;
 
     // Check for email link sign-in
-    if (this.authService.isSignInWithEmailLink(window.location.href)) {
+    this.isCompletingEmailLinkSignIn = this.authService.isSignInWithEmailLink(window.location.href);
+    if (this.isCompletingEmailLinkSignIn) {
       let email = this.authService.localStorageService.getItem('emailForSignIn');
       if (!email) {
         // User opened the link on a different device. To prevent session fixation, ask the user to provide the associated email again.
@@ -103,13 +107,16 @@ export class LoginComponent implements OnInit, OnDestroy {
 
             this.logger.error('Error signing in with email link', error);
             this.snackBar.open('Error signing in. The link might be invalid or expired.', 'Close');
+            this.finishEmailLinkCompletion(false);
           });
+      } else {
+        this.finishEmailLinkCompletion(false);
       }
     }
 
     this.userSubscription = this.authService.user$.subscribe((user) => {
       if (user) {
-        void this.navigateToDashboardOnce();
+        void this.navigateAfterLoginOnce();
       }
     });
 
@@ -154,22 +161,26 @@ export class LoginComponent implements OnInit, OnDestroy {
 
   // .. existing sendEmailLink ...
 
-  async sendEmailLink(email: string) {
+  async sendEmailLink(email: string): Promise<boolean> {
     if (!email) {
       this.snackBar.open('Please enter a valid email address.', 'Close', { duration: 3000 });
-      return;
+      return false;
     }
     this.isLoading = true;
-    const success = await this.authService.sendEmailLink(email);
+    const success = await this.authService.sendEmailLink(email, this.getEmailLinkReturnUrl());
     this.isLoading = false;
     if (success) {
       this.snackBar.open('Magic link sent! Check your inbox.', 'Close', { duration: 5000 });
     }
+    return success;
   }
 
 
   signInWithProvider(provider: SignInProviders) {
     this.isLoading = true;
+    if (!this.isCompletingEmailLinkSignIn) {
+      this.authService.localStorageService.removeItem(EMAIL_LINK_RETURN_URL_STORAGE_KEY);
+    }
 
     // Helper to handle login result
     const handleResult = async (result: any) => {
@@ -239,7 +250,8 @@ export class LoginComponent implements OnInit, OnDestroy {
               // User wants to link using Email Link (Send Magic Link)
               // This means we need to "park" the pending credential (if any) or just the intent.
               // 1. Send Link
-              await this.sendEmailLink(email);
+              const sentReplacementLink = await this.sendEmailLink(email);
+              this.finishEmailLinkCompletion(sentReplacementLink);
               // 2. Save intent. We want to link the *original* pending credential (e.g. GitHub)
               // to the account that will be signed in via email.
               if (pendingCredential) {
@@ -253,7 +265,10 @@ export class LoginComponent implements OnInit, OnDestroy {
             } else {
               // User chose an existing OAuth provider (e.g. Google) to sign in and link.
               const provider = this.authService.getProviderForId(selectedProvider);
-              if (!provider) return;
+              if (!provider) {
+                this.finishEmailLinkCompletion(false);
+                return;
+              }
 
               const result = await this.authService.signInWithPopup(provider as any);
               if (result.user) {
@@ -280,6 +295,7 @@ export class LoginComponent implements OnInit, OnDestroy {
         this.showErrorDialog('Account Linking Failed', linkError);
       }
     }
+    this.finishEmailLinkCompletion(false);
     this.isLoading = false;
   }
 
@@ -315,7 +331,7 @@ export class LoginComponent implements OnInit, OnDestroy {
       // `linkWithPopup` will open the provider popup and link it to the 'user'.
       await this.authService.linkWithPopup(user, provider as any);
       this.snackBar.open('Accounts successfully linked!', 'Close', { duration: 5000 });
-      await this.navigateToDashboardOnce();
+      await this.navigateAfterLoginOnce();
     } catch (e: any) {
       this.logger.error('Link pending provider failed', e);
       this.showErrorDialog('Account Linking Failed', e);
@@ -335,28 +351,85 @@ export class LoginComponent implements OnInit, OnDestroy {
         ).toPromise();
 
       this.analyticsService.logEvent('login', { method: loginServiceUser.credential ? loginServiceUser.credential.signInMethod : 'Guest' });
-      await this.navigateToDashboardOnce();
+      await this.navigateAfterLoginOnce();
     } catch (e) {
       this.logger.error(e);
       this.isLoading = false;
     }
   }
 
-  private async navigateToDashboardOnce() {
-    if (this.hasNavigatedToDashboard || this.dashboardNavigationInFlight) {
+  private async navigateAfterLoginOnce() {
+    if (this.hasCompletedPostLoginNavigation || this.postLoginNavigationInFlight) {
       return;
     }
 
-    this.dashboardNavigationInFlight = true;
+    this.postLoginNavigationInFlight = true;
     try {
-      const didNavigate = await this.router.navigate(['/dashboard']);
-      this.hasNavigatedToDashboard = didNavigate === true;
+      const targetUrl = this.getPostLoginRedirectUrl();
+      const didNavigate = await this.router.navigateByUrl(targetUrl);
+      this.hasCompletedPostLoginNavigation = didNavigate === true;
+      if (didNavigate === true) {
+        this.authService.redirectUrl = null;
+        this.authService.localStorageService.removeItem(EMAIL_LINK_RETURN_URL_STORAGE_KEY);
+      }
     } catch (error) {
-      this.hasNavigatedToDashboard = false;
-      this.logger.error('Dashboard navigation failed', error);
+      this.hasCompletedPostLoginNavigation = false;
+      this.logger.error('Post-login navigation failed', error);
     } finally {
-      this.dashboardNavigationInFlight = false;
+      this.postLoginNavigationInFlight = false;
     }
+  }
+
+  private getPostLoginRedirectUrl(): string {
+    const returnUrlParam = this.route.snapshot.queryParamMap.get('returnUrl');
+    if (returnUrlParam !== null) {
+      return sanitizeLocalAuthRedirectUrl(returnUrlParam) || '/dashboard';
+    }
+
+    const serviceRedirectUrl = sanitizeLocalAuthRedirectUrl(this.authService.redirectUrl);
+    if (serviceRedirectUrl) {
+      return serviceRedirectUrl;
+    }
+
+    if (this.isCompletingEmailLinkSignIn) {
+      const emailLinkRedirectUrl = sanitizeLocalAuthRedirectUrl(
+        this.authService.localStorageService.getItem(EMAIL_LINK_RETURN_URL_STORAGE_KEY),
+      );
+      return emailLinkRedirectUrl || '/dashboard';
+    }
+
+    return '/dashboard';
+  }
+
+  private finishEmailLinkCompletion(keepCachedReturnUrl: boolean): void {
+    if (!this.isCompletingEmailLinkSignIn) {
+      return;
+    }
+
+    this.isCompletingEmailLinkSignIn = false;
+    if (!keepCachedReturnUrl) {
+      this.authService.localStorageService.removeItem(EMAIL_LINK_RETURN_URL_STORAGE_KEY);
+    }
+  }
+
+  private getEmailLinkReturnUrl(): string | null {
+    const returnUrlParam = this.route.snapshot.queryParamMap.get('returnUrl');
+    if (returnUrlParam !== null) {
+      return sanitizeLocalAuthRedirectUrl(returnUrlParam);
+    }
+
+    const serviceRedirectUrl = sanitizeLocalAuthRedirectUrl(this.authService.redirectUrl);
+    if (serviceRedirectUrl) {
+      return serviceRedirectUrl;
+    }
+
+    if (this.isCompletingEmailLinkSignIn) {
+      return sanitizeLocalAuthRedirectUrl(
+        this.authService.localStorageService.getItem(EMAIL_LINK_RETURN_URL_STORAGE_KEY),
+      );
+    }
+
+    return null;
   }
 
 

@@ -47,6 +47,8 @@ describe('BenchmarkEventAdapter', () => {
         })
       }
     };
+    const rawFirstResult = rawData.benchmarkResults['ref-1_test-1'];
+    const rawFirstIssue = rawFirstResult.qualityIssues?.[0];
 
     adapter.applyBenchmarkFieldsFromFirestore(event, rawData);
 
@@ -58,8 +60,11 @@ describe('BenchmarkEventAdapter', () => {
       'suunto 9 peak',
     ]);
     expect(event.benchmarkLatestAt?.toISOString()).toBe(ts2.toISOString());
+    expect(event.benchmarkResults?.['ref-1_test-1']).not.toBe(rawFirstResult);
     const hydratedIssue = event.benchmarkResults?.['ref-1_test-1']?.qualityIssues?.[0];
+    expect(hydratedIssue).not.toBe(rawFirstIssue);
     expect(hydratedIssue?.timestamp).toBeInstanceOf(Date);
+    expect(rawFirstIssue?.timestamp).not.toBeInstanceOf(Date);
   });
 
   it('respects provided index fields and does not override them', () => {
@@ -79,6 +84,7 @@ describe('BenchmarkEventAdapter', () => {
 
     expect(event.hasBenchmark).toBe(false);
     expect(event.benchmarkDevices).toEqual(['custom device']);
+    expect(event.benchmarkDevices).not.toBe(rawData.benchmarkDevices);
     expect(event.benchmarkLatestAt?.toISOString()).toBe(fixedDate.toISOString());
   });
 });

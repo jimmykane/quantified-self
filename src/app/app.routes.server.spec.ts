@@ -7,6 +7,7 @@ import {
   PRERENDERED_GUIDE_ROUTES,
   PRERENDERED_PUBLIC_ROUTES,
   PRERENDERED_STATIC_PUBLIC_ROUTES,
+  PRERENDERED_TOOLS_ROUTES,
   serverRoutes,
 } from './app.routes.server';
 import { dashboardRoutes } from './dashboard.routing.module';
@@ -47,6 +48,10 @@ describe('serverRoutes', () => {
 
     expect(prerenderRoutes.map(route => route.path)).toEqual([...PRERENDERED_PUBLIC_ROUTES]);
     expect(PRERENDERED_STATIC_PUBLIC_ROUTES).toEqual(['help']);
+    expect(PRERENDERED_TOOLS_ROUTES).toEqual([
+      'tools',
+      'tools/compare',
+    ]);
     expect(PRERENDERED_FEATURE_ROUTES).toEqual([
       'features',
       'features/workout-data-comparison',
@@ -77,6 +82,9 @@ describe('serverRoutes', () => {
     expect(prerenderedPaths.has('help')).toBe(true);
     expect(prerenderedPaths.has('releases')).toBe(false);
     expect(prerenderedPaths.has('ai-insights')).toBe(false);
+    expect(prerenderedPaths.has('tools')).toBe(true);
+    expect(prerenderedPaths.has('tools/compare')).toBe(true);
+    expect(prerenderedPaths.has('tools/compare/saved')).toBe(false);
     expect(prerenderedPaths.has('features')).toBe(true);
     expect(prerenderedPaths.has('features/workout-data-comparison')).toBe(true);
     expect(prerenderedPaths.has('features/ai-insights')).toBe(true);
@@ -103,6 +111,7 @@ describe('serverRoutes', () => {
     expect(clientRoutes.find(route => route.path === 'dashboard')?.status).toBeUndefined();
     expect(clientRoutes.find(route => route.path === 'pricing')?.status).toBeUndefined();
     expect(clientRoutes.find(route => route.path === 'releases')?.status).toBeUndefined();
+    expect(clientRoutes.find(route => route.path === 'tools/compare/saved')?.status).toBeUndefined();
     expect(clientRoutes.find(route => route.path === 'settings')?.status).toBeUndefined();
     expect(clientRoutes.find(route => route.path === 'mytracks')?.status).toBeUndefined();
     expect(clientRoutes.find(route => route.path === 'user/:userID/event/:eventID')?.status).toBeUndefined();

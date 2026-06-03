@@ -47,6 +47,7 @@ import { hasVisibleEventLaps } from '../../helpers/event-lap-type.helper';
 import { hasVisibleEventJumps } from '../../helpers/event-jump-type.helper';
 import { hasVisibleSwimLengths } from '../../helpers/event-swim-length.helper';
 import { getAppNonUnitBasedChartDataTypes } from '../../helpers/app-chart-data-types.helper';
+import { AppBenchmarkFlowService } from '../../services/app.benchmark-flow.service';
 
 @Component({
   selector: 'app-event-card',
@@ -70,6 +71,7 @@ export class EventCardComponent implements OnInit {
   private logger = inject(LoggerService);
   private eventService = inject(AppEventService);
   private performanceCurveDataService = inject(PerformanceCurveDataService);
+  private benchmarkFlow = inject(AppBenchmarkFlowService);
 
   // Signal-based state
   public event = signal<AppEventInterface | null>(null);
@@ -81,6 +83,7 @@ export class EventCardComponent implements OnInit {
   private liveSyncSubscription: Subscription | null = null;
   private liveSyncRouteKey: string | null = null;
   private liveReloadInProgress = false;
+  private benchmarkAutoOpenAttemptedForEventID: string | null = null;
 
   // Computed signals for template - replaces method calls
   public hasLapsFlag = computed(() =>
@@ -239,6 +242,7 @@ export class EventCardComponent implements OnInit {
           targetUserID: this.targetUserID(),
         });
         this.startEventDetailsLiveSync();
+        this.maybeOpenBenchmarkFromQuery();
       });
 
     // User auth subscription
@@ -246,6 +250,7 @@ export class EventCardComponent implements OnInit {
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe((user: User | null) => {
         this.currentUser.set(user);
+        this.maybeOpenBenchmarkFromQuery();
       });
   }
 
@@ -315,6 +320,7 @@ export class EventCardComponent implements OnInit {
 
     this.event.set(reconcileResult.reconciledEvent);
     this.applySelectedActivityIDs(reconcileResult.selectedActivityIDs, true);
+    this.maybeOpenBenchmarkFromQuery();
   }
 
   private async reloadEventDetailsWithStreams(): Promise<void> {
@@ -365,6 +371,7 @@ export class EventCardComponent implements OnInit {
       });
 
       this.applySelectedActivityIDs(nextSelectedIDs, true);
+      this.maybeOpenBenchmarkFromQuery();
     } catch (error) {
       this.logger.error('Could not refresh event details after live reconcile mismatch', error);
       this.snackBar.open('Could not refresh event details', undefined, { duration: 3000 });
@@ -453,6 +460,48 @@ export class EventCardComponent implements OnInit {
 
     this.logger.log('[EventCard] computed live stream types', { streamTypes });
     return streamTypes;
+  }
+
+  private maybeOpenBenchmarkFromQuery(): void {
+    const shouldOpenBenchmark = this.route.snapshot.queryParamMap?.get('benchmark') === '1';
+    if (!shouldOpenBenchmark) {
+      return;
+    }
+
+    const event = this.event();
+    const user = this.currentUser();
+    const eventID = event?.getID?.();
+    if (!event || !user || !eventID) {
+      return;
+    }
+
+    if (this.benchmarkAutoOpenAttemptedForEventID === eventID) {
+      return;
+    }
+
+    const activities = event.getActivities?.() || [];
+    if (activities.length < 2) {
+      return;
+    }
+
+    const selectedActivities = this.selectedActivitiesInstant();
+    const initialSelection = selectedActivities.length === 2 ? selectedActivities : undefined;
+    const benchmarkConfig: {
+      event: AppEventInterface;
+      user: User;
+      initialSelection?: ActivityInterface[];
+      hydrateStreamsForGeneration: boolean;
+    } = {
+      event,
+      user,
+      hydrateStreamsForGeneration: true,
+    };
+    if (initialSelection) {
+      benchmarkConfig.initialSelection = initialSelection;
+    }
+
+    this.benchmarkAutoOpenAttemptedForEventID = eventID;
+    void this.benchmarkFlow.openBenchmarkEntry(benchmarkConfig);
   }
 
 }

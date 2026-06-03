@@ -67,6 +67,18 @@ interface EventQuerySeed {
  */
 export type StreamHydrationMode = 'attach_streams_only' | 'replace_activities';
 
+const SERVER_OWNED_EVENT_UPDATE_FIELDS = [
+  'originalFile',
+  'originalFiles',
+  'isMerge',
+  'mergeType',
+  'toolSource',
+  'sourceFilesCount',
+  'activitiesCount',
+  'comparisonTitle',
+  'benchmarkStatus',
+] as const;
+
 
 @Injectable({
   providedIn: 'root',
@@ -209,16 +221,17 @@ export class AppEventService implements OnDestroy {
   }
 
   /**
-   * Firestore rules treat original source file location fields as server-owned.
+   * Firestore rules treat source-file and comparison classification fields as server-owned.
    * Frontend write paths must never send these keys, even if the in-memory event
    * instance has them hydrated for download/reparse UX.
    */
-  private stripServerOwnedEventFileMetadata(
+  private stripServerOwnedEventMetadata(
     payload: Record<string, unknown>,
   ): Record<string, unknown> {
     const sanitizedPayload = { ...payload };
-    delete sanitizedPayload.originalFile;
-    delete sanitizedPayload.originalFiles;
+    SERVER_OWNED_EVENT_UPDATE_FIELDS.forEach((field) => {
+      delete sanitizedPayload[field];
+    });
     return sanitizedPayload;
   }
 
@@ -298,11 +311,35 @@ export class AppEventService implements OnDestroy {
     }
 
     // Preserve benchmark fields needed by event details UI.
-    if ((event as any).benchmarkResults) {
-      (clonedEvent as any).benchmarkResults = { ...(event as any).benchmarkResults };
+    if (event.benchmarkResults) {
+      clonedEvent.benchmarkResults = { ...event.benchmarkResults };
     }
-    if ((event as any).benchmarkResult) {
-      (clonedEvent as any).benchmarkResult = { ...(event as any).benchmarkResult };
+    if (event.benchmarkResult) {
+      clonedEvent.benchmarkResult = { ...event.benchmarkResult };
+    }
+    if (event.hasBenchmark !== undefined) {
+      clonedEvent.hasBenchmark = event.hasBenchmark;
+    }
+    if (event.benchmarkDevices) {
+      clonedEvent.benchmarkDevices = [...event.benchmarkDevices];
+    }
+    if (event.benchmarkLatestAt) {
+      clonedEvent.benchmarkLatestAt = new Date(event.benchmarkLatestAt);
+    }
+    if (event.mergeType) {
+      clonedEvent.mergeType = event.mergeType;
+    }
+    if (event.toolSource) {
+      clonedEvent.toolSource = event.toolSource;
+    }
+    if (event.comparisonTitle) {
+      clonedEvent.comparisonTitle = event.comparisonTitle;
+    }
+    if (typeof event.sourceFilesCount === 'number') {
+      clonedEvent.sourceFilesCount = event.sourceFilesCount;
+    }
+    if (typeof event.activitiesCount === 'number') {
+      clonedEvent.activitiesCount = event.activitiesCount;
     }
 
     if (typeof (clonedEvent as any).clearActivities === 'function' && typeof (clonedEvent as any).addActivities === 'function') {
@@ -802,7 +839,7 @@ export class AppEventService implements OnDestroy {
 
     let sanitizedEventPatch = eventPatch;
     if (eventPatch && typeof eventPatch === 'object' && !Array.isArray(eventPatch)) {
-      sanitizedEventPatch = this.stripServerOwnedEventFileMetadata(
+      sanitizedEventPatch = this.stripServerOwnedEventMetadata(
         sanitizeEventFirestoreWritePayload(eventPatch as Record<string, unknown>)
       );
     }
@@ -833,7 +870,7 @@ export class AppEventService implements OnDestroy {
     // Mandatory shared write policy: sanitize ad-hoc event patch payloads before updateDoc.
     let sanitizedProperties = propertiesToUpdate;
     if (propertiesToUpdate && typeof propertiesToUpdate === 'object' && !Array.isArray(propertiesToUpdate)) {
-      sanitizedProperties = this.stripServerOwnedEventFileMetadata(
+      sanitizedProperties = this.stripServerOwnedEventMetadata(
         sanitizeEventFirestoreWritePayload(propertiesToUpdate as Record<string, unknown>)
       );
     }

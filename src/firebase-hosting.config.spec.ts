@@ -125,12 +125,15 @@ describe('Firebase Hosting configuration', () => {
     expect(matchesAnyHostingSource(sources, '/dashboard')).toBe(true);
     expect(matchesAnyHostingSource(sources, '/admin/queues/workout')).toBe(true);
     expect(matchesAnyHostingSource(sources, '/user/user-1/event/event-1')).toBe(true);
+    expect(matchesAnyHostingSource(sources, '/tools/compare/saved')).toBe(true);
 
     expect(matchesAnyHostingSource(sources, '/admin/missing')).toBe(false);
     expect(matchesAnyHostingSource(sources, '/user/user-1/event/event-1/extra')).toBe(false);
     expect(matchesAnyHostingSource(sources, '/definitely-missing')).toBe(false);
     expect(matchesAnyHostingSource(sources, '/integrations/garmin')).toBe(false);
     expect(matchesAnyHostingSource(sources, '/features/ai-insights')).toBe(false);
+    expect(matchesAnyHostingSource(sources, '/tools')).toBe(false);
+    expect(matchesAnyHostingSource(sources, '/tools/compare')).toBe(false);
     expect(matchesAnyHostingSource(sources, '/help')).toBe(false);
   });
 
@@ -153,6 +156,11 @@ describe('Firebase Hosting configuration', () => {
       expect(sitemapXml).toContain(`<loc>${url}</loc>`);
       expect(isAllowedByRobots(source)).toBe(true);
     }
+  });
+
+  it('keeps client-rendered saved comparison routes out of sitemap and disallowed by robots', () => {
+    expect(sitemapXml).not.toContain('<loc>https://quantified-self.io/tools/compare/saved</loc>');
+    expect(robotsTxt).toContain('Disallow: /tools/compare/saved');
   });
 
   it('copies the static Firebase 404 page into the hosting output', () => {

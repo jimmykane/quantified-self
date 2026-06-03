@@ -159,6 +159,7 @@ export { importActivityToCOROSAPI } from './coros/activities';
 // Events
 export { cleanupEventFile } from './events/cleanup';
 export { uploadActivity } from './events/upload-activity';
+export { createToolComparisonEvent } from './events/create-tool-comparison-event';
 export { reprocessEvent } from './events/reprocess-event';
 export { mergeEvents } from './events/merge-events';
 export { aiInsights, getAiInsightsQuotaStatus } from './ai/insights/callable';

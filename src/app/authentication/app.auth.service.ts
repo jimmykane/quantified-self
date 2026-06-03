@@ -16,6 +16,7 @@ import {
   canUseCustomAuthLinkDomain,
   normalizeUrlOrHost
 } from '../shared/adapters/firebase-auth-link.constants';
+import { EMAIL_LINK_RETURN_URL_STORAGE_KEY, sanitizeLocalAuthRedirectUrl } from './auth-redirect-url';
 
 import { AppUserInterface } from '../models/app-user.interface';
 
@@ -26,7 +27,12 @@ export class AppAuthService {
   public user$: Observable<AppUserInterface | null>;
   public authState$: Observable<FirebaseUserType | null>;
   // store the URL so we can redirect after logging in
-  redirectUrl: string = '';
+  redirectUrl: string | null = null;
+  private static readonly emailLinkAccountLinkingErrorCodes = new Set([
+    'auth/credential-already-in-use',
+    'auth/account-exists-with-different-credential',
+    'auth/email-already-in-use',
+  ]);
 
   private firestore = inject(Firestore);
   private auth = inject(Auth);
@@ -115,12 +121,19 @@ export class AppAuthService {
 
   //// Email Link Auth ////
 
-  async sendEmailLink(email: string) {
-    const actionCodeSettings = this.buildActionCodeSettings(true);
+  async sendEmailLink(email: string, returnUrl?: string | null) {
+    const redirectSource = returnUrl === undefined ? this.redirectUrl : returnUrl;
+    const sanitizedReturnUrl = sanitizeLocalAuthRedirectUrl(redirectSource);
+    const actionCodeSettings = this.buildActionCodeSettings(true, sanitizedReturnUrl);
 
     try {
       await sendSignInLinkToEmail(this.auth, email, actionCodeSettings);
       this.localStorageService.setItem('emailForSignIn', email);
+      if (sanitizedReturnUrl) {
+        this.localStorageService.setItem(EMAIL_LINK_RETURN_URL_STORAGE_KEY, sanitizedReturnUrl);
+      } else {
+        this.localStorageService.removeItem(EMAIL_LINK_RETURN_URL_STORAGE_KEY);
+      }
       this.snackBar.open(`Magic link sent to ${email} `, 'Close', {
         duration: 5000
       });
@@ -141,6 +154,9 @@ export class AppAuthService {
       this.localStorageService.removeItem('emailForSignIn');
       return result;
     } catch (error: any) {
+      if (this.shouldClearEmailLinkReturnUrlAfterSignInError(error)) {
+        this.localStorageService.removeItem(EMAIL_LINK_RETURN_URL_STORAGE_KEY);
+      }
       this.handleError(error);
       throw error;
     }
@@ -236,16 +252,24 @@ export class AppAuthService {
     window.location.href = APP_LOGIN_PATH;
   }
 
-  private getLoginActionUrl(): string {
+  private getLoginActionUrl(returnUrl?: string | null): string {
     const baseUrl = normalizeUrlOrHost(environment.appUrl) || window.location.origin;
-    return buildAppUrl(baseUrl, APP_LOGIN_PATH, {
+    const loginUrl = buildAppUrl(baseUrl, APP_LOGIN_PATH, {
       preferHttpsForLocalhost: environment.localhost
     });
+    const sanitizedReturnUrl = sanitizeLocalAuthRedirectUrl(returnUrl);
+    if (!sanitizedReturnUrl) {
+      return loginUrl;
+    }
+
+    const parsedLoginUrl = new URL(loginUrl);
+    parsedLoginUrl.searchParams.set('returnUrl', sanitizedReturnUrl);
+    return parsedLoginUrl.toString();
   }
 
-  private buildActionCodeSettings(handleCodeInApp: boolean): { url: string; handleCodeInApp?: boolean; linkDomain?: string } {
+  private buildActionCodeSettings(handleCodeInApp: boolean, returnUrl?: string | null): { url: string; handleCodeInApp?: boolean; linkDomain?: string } {
     const actionCodeSettings: { url: string; handleCodeInApp?: boolean; linkDomain?: string } = {
-      url: this.getLoginActionUrl()
+      url: this.getLoginActionUrl(returnUrl)
     };
 
     if (handleCodeInApp) {
@@ -275,5 +299,9 @@ export class AppAuthService {
     }
 
     return authDomain;
+  }
+
+  private shouldClearEmailLinkReturnUrlAfterSignInError(error: any): boolean {
+    return !AppAuthService.emailLinkAccountLinkingErrorCodes.has(error?.code);
   }
 }

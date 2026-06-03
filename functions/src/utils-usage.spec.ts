@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { UsageLimitExceededError, checkEventUsageLimit, hasBasicAccess, hasProAccess, getUserRoleAndGracePeriod, setEvent, determineRedirectURI, setAccessControlHeadersOnResponse, EventWriteSkippedForDeletedUserError } from './utils';
+import { UsageLimitExceededError, checkEventUsageLimit, hasBasicAccess, hasProAccess, getUserRoleAndGracePeriod, setEvent, setEventDocumentIfUserActive, determineRedirectURI, setAccessControlHeadersOnResponse, EventWriteSkippedForDeletedUserError } from './utils';
 import { HttpsError } from 'firebase-functions/v2/https';
 import { SPORTS_LIB_VERSION } from './shared/sports-lib-version.node';
 import { USAGE_LIMITS } from '../../shared/limits';
@@ -238,6 +238,31 @@ describe('utils higher-level helpers', () => {
             hoisted.getUser.mockRejectedValue(err);
 
             await expect(getUserRoleAndGracePeriod('missing')).rejects.toThrow('User missing not found in Auth');
+        });
+    });
+
+    describe('setEventDocumentIfUserActive', () => {
+        it('passes merge options through deletion-guarded document writes', async () => {
+            const docRef = hoisted.firestore().doc('users/user-1/events/event-1');
+            const payload = { comparison: { status: 'ready' } };
+
+            await setEventDocumentIfUserActive('user-1', 'comparison_metadata', docRef as any, payload, { merge: true });
+
+            expect(hoisted.transactionSet).toHaveBeenCalledWith(docRef, payload, { merge: true });
+        });
+
+        it('does not set guarded documents when account deletion is active', async () => {
+            hoisted.getUserDeletionGuardStateInTransaction.mockResolvedValueOnce({
+                userExists: true,
+                deletionInProgress: true,
+                shouldSkip: true,
+            });
+            const docRef = hoisted.firestore().doc('users/user-1/events/event-1');
+
+            await expect(setEventDocumentIfUserActive('user-1', 'comparison_metadata', docRef as any, { ready: true }))
+                .rejects.toBeInstanceOf(EventWriteSkippedForDeletedUserError);
+
+            expect(hoisted.transactionSet).not.toHaveBeenCalled();
         });
     });
 

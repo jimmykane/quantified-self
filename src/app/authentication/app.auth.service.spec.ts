@@ -95,6 +95,7 @@ import { of, BehaviorSubject } from 'rxjs';
 import { Privacy } from '@sports-alliance/sports-lib';
 import { APP_STORAGE } from '../services/storage/app.storage.token';
 import { environment } from '../../environments/environment';
+import { EMAIL_LINK_RETURN_URL_STORAGE_KEY } from './auth-redirect-url';
 
 import { signal } from '@angular/core';
 
@@ -360,6 +361,45 @@ describe('AppAuthService', () => {
             );
         });
 
+        it('sendEmailLink should encode and persist a safe local return URL', async () => {
+            const { sendSignInLinkToEmail } = await import('app/firebase/auth');
+            const email = 'tool@example.com';
+            (sendSignInLinkToEmail as Mock).mockResolvedValueOnce(undefined);
+
+            const result = await service.sendEmailLink(email, '/tools/compare/saved');
+
+            expect(result).toBe(true);
+            expect(sendSignInLinkToEmail).toHaveBeenCalledWith(
+                mockAuth,
+                email,
+                expect.objectContaining({
+                    url: 'https://localhost:4200/login?returnUrl=%2Ftools%2Fcompare%2Fsaved',
+                    handleCodeInApp: true,
+                })
+            );
+            expect(mockLocalStorageService.setItem).toHaveBeenCalledWith('emailForSignIn', email);
+            expect(mockLocalStorageService.setItem).toHaveBeenCalledWith(EMAIL_LINK_RETURN_URL_STORAGE_KEY, '/tools/compare/saved');
+        });
+
+        it('sendEmailLink should ignore unsafe return URLs and clear stale cached return URLs', async () => {
+            const { sendSignInLinkToEmail } = await import('app/firebase/auth');
+            const email = 'unsafe-return@example.com';
+            (sendSignInLinkToEmail as Mock).mockResolvedValueOnce(undefined);
+
+            const result = await service.sendEmailLink(email, '//evil.example/path');
+
+            expect(result).toBe(true);
+            expect(sendSignInLinkToEmail).toHaveBeenCalledWith(
+                mockAuth,
+                email,
+                expect.objectContaining({
+                    url: 'https://localhost:4200/login',
+                    handleCodeInApp: true,
+                })
+            );
+            expect(mockLocalStorageService.removeItem).toHaveBeenCalledWith(EMAIL_LINK_RETURN_URL_STORAGE_KEY);
+        });
+
         it('sendEmailLink should return false and show error snackbar when send fails', async () => {
             const { sendSignInLinkToEmail } = await import('app/firebase/auth');
             const email = 'test@example.com';
@@ -423,13 +463,29 @@ describe('AppAuthService', () => {
 
             await expect(service.signInWithEmailLink(email, link)).rejects.toBe(authError);
 
-            expect(mockLocalStorageService.removeItem).not.toHaveBeenCalled();
+            expect(mockLocalStorageService.removeItem).toHaveBeenCalledWith(EMAIL_LINK_RETURN_URL_STORAGE_KEY);
             expect(loggerErrorSpy).toHaveBeenCalledWith(authError);
             expect(mockSnackBar.open).toHaveBeenCalledWith(
                 'Could not login due to error invalid-action-code ',
                 undefined,
                 { duration: 2000 }
             );
+        });
+
+        it('signInWithEmailLink should preserve cached return URL for account-linking failures', async () => {
+            const { signInWithEmailLink: signInWithEmailLinkFn } = await import('app/firebase/auth');
+            const email = 'test@example.com';
+            const link = 'https://quantified-self.io/login?mode=signIn&code=test';
+            const authError = {
+                code: 'auth/account-exists-with-different-credential',
+                message: 'Account exists with different credential',
+            };
+            vi.spyOn((service as any).logger, 'error').mockImplementation(() => { });
+            (signInWithEmailLinkFn as Mock).mockRejectedValueOnce(authError);
+
+            await expect(service.signInWithEmailLink(email, link)).rejects.toBe(authError);
+
+            expect(mockLocalStorageService.removeItem).not.toHaveBeenCalledWith(EMAIL_LINK_RETURN_URL_STORAGE_KEY);
         });
     });
 

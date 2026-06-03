@@ -3,6 +3,9 @@ const PUBLIC_STARTUP_PATHS = new Set([
   '/pricing',
   '/help',
   '/releases',
+  '/tools',
+  '/tools/compare',
+  '/tools/compare/saved',
   '/integrations',
   '/integrations/garmin',
   '/integrations/suunto',
@@ -11,6 +14,7 @@ const PUBLIC_STARTUP_PATHS = new Set([
   '/features/workout-data-comparison',
   '/features/ai-insights',
   '/features/workout-file-comparison',
+  '/features/fit-gpx-tcx-file-analyzer',
   '/features/sports-watch-benchmark',
   '/guides',
   '/guides/sync-garmin-to-suunto',
@@ -20,6 +24,13 @@ const PUBLIC_STARTUP_PATHS = new Set([
 
 export function hasAngularServerContext(documentRef: Document | null | undefined): boolean {
   return !!documentRef?.querySelector('app-root[ng-server-context]');
+}
+
+export function shouldProvideClientHydrationForRuntime(
+  documentRef: Document | null | undefined,
+  hasBrowserWindow: boolean,
+): boolean {
+  return !hasBrowserWindow || hasAngularServerContext(documentRef);
 }
 
 export function documentRoutePath(documentRef: Document | null | undefined): string {

@@ -14,6 +14,15 @@ import {
     DataGradeAdjustedPace,
 } from '@sports-alliance/sports-lib';
 
+export const BENCHMARK_NO_OVERLAP_MESSAGE = 'Activities do not overlap in time.';
+
+export class BenchmarkNoOverlapError extends Error {
+    constructor() {
+        super(BENCHMARK_NO_OVERLAP_MESSAGE);
+        this.name = 'BenchmarkNoOverlapError';
+    }
+}
+
 @Injectable({
     providedIn: 'root'
 })
@@ -59,8 +68,8 @@ export class AppBenchmarkService {
         const sharedEnd = Math.min(endA, endB);
 
         if (sharedEnd <= sharedStart) {
-            console.error('AppBenchmarkService: No overlap found');
-            throw new Error('Activities do not overlap in time.');
+            console.info('AppBenchmarkService: No overlap found');
+            throw new BenchmarkNoOverlapError();
         }
 
         // Auto-Alignment
