@@ -308,7 +308,7 @@ h2 {
 
 .comparison-table {
   width: 100%;
-  min-width: 78rem;
+  min-width: 108rem;
 }
 
 .comparison-table th {
@@ -323,6 +323,16 @@ h2 {
   width: 14rem;
 }
 
+.comparison-table .mat-column-activityType {
+  width: 12rem;
+}
+
+.comparison-table .mat-column-distance,
+.comparison-table .mat-column-ascent,
+.comparison-table .mat-column-descent {
+  width: 7rem;
+}
+
 .comparison-table .mat-column-actions {
   width: 8.5rem;
   padding-right: 0.5rem;
@@ -332,6 +342,15 @@ h2 {
 .comparison-table td,
 .comparison-table th {
   padding-right: 0.75rem;
+}
+
+.comparison-table td {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 0.95rem;
+  line-height: 1.25rem;
+  padding-top: 0.55rem;
+  padding-bottom: 0.55rem;
+  vertical-align: middle;
 }
 
 .title-cell {
@@ -354,6 +373,71 @@ h2 {
 }
 
 .devices-placeholder {
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.summary-stack {
+  display: grid;
+  gap: 0.2rem;
+  min-height: 2.75rem;
+  align-content: center;
+  min-width: 0;
+  color: var(--mat-sys-on-surface);
+}
+
+.summary-line {
+  display: block;
+  min-height: 1.25rem;
+  overflow: hidden;
+  font-size: 0.92rem;
+  line-height: 1.25rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.summary-device {
+  font-weight: 500;
+}
+
+.summary-type-line {
+  display: flex;
+  gap: 0.25rem;
+  align-items: center;
+  min-width: 0;
+}
+
+.summary-type-device {
+  flex: 0 1 55%;
+  overflow: hidden;
+  min-width: 0;
+  color: var(--mat-sys-on-surface-variant);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.summary-type-value {
+  flex: 1 1 auto;
+  overflow: hidden;
+  min-width: 0;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.devices-summary-stack {
+  max-width: 13rem;
+}
+
+.type-summary-stack {
+  max-width: 11.5rem;
+}
+
+.metric-summary-stack {
+  max-width: 6.5rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.summary-placeholder {
   color: var(--mat-sys-on-surface-variant);
 }
 

@@ -4,7 +4,7 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { RouterTestingModule } from '@angular/router/testing';
 import { BehaviorSubject, of, Subject, throwError } from 'rxjs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { User } from '@sports-alliance/sports-lib';
+import { ActivityTypes, DataActivityTypes, DataAscent, DataDescent, DataDistance, User } from '@sports-alliance/sports-lib';
 import { AppEventInterface } from '@shared/app-event.interface';
 
 import { AppAuthService } from '../../authentication/app.auth.service';
@@ -18,7 +18,6 @@ function makeComparisonEvent(id: string, overrides: {
   description?: string;
   startDate?: Date;
   sourceFilesCount?: number;
-  activitiesCount?: number;
   benchmarkResults?: Record<string, unknown>;
   benchmarkDevices?: string[];
   activities?: unknown[];
@@ -29,11 +28,53 @@ function makeComparisonEvent(id: string, overrides: {
     description: overrides.description || '',
     startDate: overrides.startDate || new Date('2026-01-01T00:00:00.000Z'),
     sourceFilesCount: overrides.sourceFilesCount,
-    activitiesCount: overrides.activitiesCount,
     benchmarkResults: overrides.benchmarkResults,
     benchmarkDevices: overrides.benchmarkDevices,
     getActivities: () => overrides.activities || [],
   } as unknown as AppEventInterface;
+}
+
+function makeStat(type: string, value: number, displayValue: string, displayUnit: string) {
+  return {
+    getType: () => type,
+    getValue: () => value,
+    getDisplayValue: () => displayValue,
+    getDisplayUnit: () => displayUnit,
+  };
+}
+
+function makeActivity(id: string, options: {
+  deviceName: string;
+  swInfo?: string;
+  activityType: string;
+  distance?: number;
+  ascent?: number;
+  descent?: number;
+}) {
+  const stats = new Map<string, ReturnType<typeof makeStat>>();
+  if (typeof options.distance === 'number') {
+    stats.set(DataDistance.type, makeStat(DataDistance.type, options.distance, `${(options.distance / 1000).toFixed(2)}`, 'km'));
+  }
+  if (typeof options.ascent === 'number') {
+    stats.set(DataAscent.type, makeStat(DataAscent.type, options.ascent, `${Math.round(options.ascent)}`, 'm'));
+  }
+  if (typeof options.descent === 'number') {
+    stats.set(DataDescent.type, makeStat(DataDescent.type, options.descent, `${Math.round(options.descent)}`, 'm'));
+  }
+
+  return {
+    getID: () => id,
+    creator: {
+      name: options.deviceName,
+      swInfo: options.swInfo,
+    },
+    type: options.activityType,
+    getActivityTypesAsString: () => options.activityType,
+    getActivityTypesAsArray: () => [options.activityType],
+    getDistance: () => stats.get(DataDistance.type),
+    getStat: (type: string) => stats.get(type),
+    getStatsAsArray: () => Array.from(stats.values()),
+  };
 }
 
 describe('ToolsComparePageComponent', () => {
@@ -348,14 +389,12 @@ describe('ToolsComparePageComponent', () => {
         description: 'Lab test',
         startDate: new Date('2026-01-01T00:00:00.000Z'),
         sourceFilesCount: 2,
-        activitiesCount: 2,
       }),
       makeComparisonEvent('new-ready', {
         title: 'New ready',
         description: 'Race file',
         startDate: new Date('2026-01-03T00:00:00.000Z'),
         sourceFilesCount: 4,
-        activitiesCount: 5,
         benchmarkResults: { 'a_b': { score: 90 } },
       }),
       makeComparisonEvent('middle-ready', {
@@ -363,7 +402,6 @@ describe('ToolsComparePageComponent', () => {
         description: 'Review file',
         startDate: new Date('2026-01-02T00:00:00.000Z'),
         sourceFilesCount: 3,
-        activitiesCount: 4,
         benchmarkResults: { 'c_d': { score: 85 }, 'e_f': { score: 80 } },
       }),
     ]);
@@ -373,6 +411,11 @@ describe('ToolsComparePageComponent', () => {
       'middle-ready',
       'older-draft',
     ]);
+    expect(component.displayedComparisonColumns).not.toContain('activities');
+    const tableHeaders = Array.from((fixture.nativeElement as HTMLElement).querySelectorAll('th'))
+      .map(header => header.textContent?.replace(/\s+/g, ' ').trim())
+      .filter(Boolean);
+    expect(tableHeaders).not.toContain('Activities');
 
     component.onComparisonSortChange({ active: 'sourceFiles', direction: 'asc' });
     expect(component.sortedComparisonItems().map(item => item.id)).toEqual([
@@ -449,6 +492,168 @@ describe('ToolsComparePageComponent', () => {
     expect(component.filteredComparisonItems().map(item => item.id)).toEqual(['report-devices']);
   });
 
+  it('shows sortable per-device activity type, distance, ascent, and descent summaries', () => {
+    const user = new User('user-1');
+    (user as User & { settings: { unitSettings: null } }).settings = { unitSettings: null };
+    userSubject.next(user);
+    component.comparisons.set([
+      makeComparisonEvent('long-course', {
+        title: 'Long course',
+        activities: [
+          makeActivity('activity-1', {
+            deviceName: 'Garmin Edge',
+            swInfo: '3130',
+            activityType: 'Cycling',
+            distance: 10000,
+            ascent: 120,
+            descent: 118,
+          }),
+          makeActivity('activity-2', {
+            deviceName: 'Suunto Race',
+            activityType: 'Cycling',
+            distance: 10020,
+            ascent: 121,
+            descent: 117,
+          }),
+        ],
+      }),
+      makeComparisonEvent('short-course', {
+        title: 'Short course',
+        activities: [
+          makeActivity('activity-3', {
+            deviceName: 'Polar Vantage',
+            activityType: 'Running',
+            distance: 5000,
+            ascent: 30,
+            descent: 28,
+          }),
+        ],
+      }),
+      makeComparisonEvent('unknown-course', {
+        title: 'Unknown course metrics',
+        activities: [
+          makeActivity('activity-4', {
+            deviceName: 'Wahoo ELEMNT',
+            activityType: 'Cycling',
+          }),
+        ],
+      }),
+    ]);
+    fixture.detectChanges();
+
+    const longCourse = component.comparisonItems().find(item => item.id === 'long-course');
+    expect(longCourse?.activitySummaries.map(summary => summary.id)).toEqual(['activity-1-0', 'activity-2-1']);
+    expect(longCourse?.activityTypesLabel).toBe('Cycling');
+    expect(longCourse?.activitySummaries.map(summary => ({
+      deviceLabel: summary.deviceLabel,
+      activityTypeLabel: summary.activityTypeLabel,
+      distanceLabel: summary.distanceLabel,
+      ascentLabel: summary.ascentLabel,
+      descentLabel: summary.descentLabel,
+    }))).toEqual([
+      {
+        deviceLabel: 'Garmin Edge 3130',
+        activityTypeLabel: 'Cycling',
+        distanceLabel: '10.00 km',
+        ascentLabel: '120 m',
+        descentLabel: '118 m',
+      },
+      {
+        deviceLabel: 'Suunto Race',
+        activityTypeLabel: 'Cycling',
+        distanceLabel: '10.02 km',
+        ascentLabel: '121 m',
+        descentLabel: '117 m',
+      },
+    ]);
+
+    expect((fixture.nativeElement as HTMLElement).textContent).toContain('Distance');
+    expect((fixture.nativeElement as HTMLElement).textContent).toContain('Ascent');
+    expect((fixture.nativeElement as HTMLElement).textContent).toContain('Descent');
+    expect((fixture.nativeElement as HTMLElement).textContent).toContain('Garmin Edge 3130');
+    expect((fixture.nativeElement as HTMLElement).textContent).toContain('10.02 km');
+    const sportTypeLines = Array.from((fixture.nativeElement as HTMLElement).querySelectorAll('.summary-type-line'))
+      .map(line => ({
+        device: line.querySelector('.summary-type-device')?.textContent?.trim(),
+        type: line.querySelector('.summary-type-value')?.textContent?.trim(),
+      }));
+    expect(sportTypeLines).toContainEqual({ device: 'Garmin Edge 3130:', type: 'Cycling' });
+    expect(sportTypeLines).toContainEqual({ device: 'Suunto Race:', type: 'Cycling' });
+    expect(longCourse?.distanceTitle).toContain('Suunto Race: 10.02 km');
+
+    component.onComparisonSortChange({ active: 'distance', direction: 'asc' });
+    expect(component.sortedComparisonItems().map(item => item.id)).toEqual([
+      'short-course',
+      'long-course',
+      'unknown-course',
+    ]);
+
+    component.onComparisonSortChange({ active: 'distance', direction: 'desc' });
+    expect(component.sortedComparisonItems().map(item => item.id)).toEqual([
+      'long-course',
+      'short-course',
+      'unknown-course',
+    ]);
+
+    component.onComparisonSortChange({ active: 'ascent', direction: 'desc' });
+    expect(component.sortedComparisonItems().map(item => item.id)).toEqual([
+      'long-course',
+      'short-course',
+      'unknown-course',
+    ]);
+
+    component.updateComparisonFilter('cycling');
+    expect(component.filteredComparisonItems().map(item => item.id)).toEqual(['long-course', 'unknown-course']);
+  });
+
+  it('resolves per-device sport types from activity stats and raw activity type aliases', () => {
+    const user = new User('user-1');
+    userSubject.next(user);
+    const cyclingActivityTypes = new DataActivityTypes([ActivityTypes.Cycling]);
+
+    component.comparisons.set([
+      makeComparisonEvent('mixed-source-types', {
+        title: 'Mixed source types',
+        activities: [
+          {
+            getID: () => 'activity-stat-type',
+            creator: {
+              name: 'Garmin Edge',
+            },
+            getStat: (type: string) => type === DataActivityTypes.type ? cyclingActivityTypes : null,
+          },
+          {
+            getID: () => 'activity-raw-type',
+            creator: {
+              name: 'Suunto Race',
+            },
+            type: 'running_road',
+            getStat: () => null,
+          },
+        ],
+      }),
+    ]);
+    fixture.detectChanges();
+
+    const item = component.comparisonItems()[0];
+    expect(item.activityTypesLabel).toBe('Cycling, Running');
+    expect(item.activitySummaries.map(summary => ({
+      deviceLabel: summary.deviceLabel,
+      activityTypeLabel: summary.activityTypeLabel,
+    }))).toEqual([
+      { deviceLabel: 'Garmin Edge', activityTypeLabel: 'Cycling' },
+      { deviceLabel: 'Suunto Race', activityTypeLabel: 'Running' },
+    ]);
+
+    const sportTypeLines = Array.from((fixture.nativeElement as HTMLElement).querySelectorAll('.summary-type-line'))
+      .map(line => ({
+        device: line.querySelector('.summary-type-device')?.textContent?.trim(),
+        type: line.querySelector('.summary-type-value')?.textContent?.trim(),
+      }));
+    expect(sportTypeLines).toContainEqual({ device: 'Garmin Edge:', type: 'Cycling' });
+    expect(sportTypeLines).toContainEqual({ device: 'Suunto Race:', type: 'Running' });
+  });
+
   it('hydrates draft previous comparison devices from linked activities on visible rows', async () => {
     const user = new User('user-1');
     const activity = {
@@ -476,7 +681,7 @@ describe('ToolsComparePageComponent', () => {
     expect(component.comparisonItems()[0].devicesLabel).toBe('Garmin Edge Mtb 3130');
   });
 
-  it('does not repeatedly retry previous comparison device hydration after a failed activity read', async () => {
+  it('does not repeatedly retry previous comparison activity summary hydration after a failed activity read', async () => {
     const user = new User('user-1');
     const readError = new Error('activity read failed');
     eventServiceMock.getActivitiesOnceByEvent.mockImplementation(() => {
@@ -503,12 +708,12 @@ describe('ToolsComparePageComponent', () => {
 
     expect(eventServiceMock.getActivitiesOnceByEvent).toHaveBeenCalledTimes(1);
     expect(loggerMock.warn).toHaveBeenCalledWith(
-      '[ToolsComparePageComponent] Could not hydrate comparison devices.',
+      '[ToolsComparePageComponent] Could not hydrate comparison activity summaries.',
       { eventID: 'comparison-1', error: readError },
     );
   });
 
-  it('does not enqueue duplicate device hydration reads while a visible batch is pending', async () => {
+  it('does not enqueue duplicate activity summary hydration reads while a visible batch is pending', async () => {
     const user = new User('user-1');
     const firstActivities$ = new Subject<unknown[]>();
     const secondActivities$ = new Subject<unknown[]>();
@@ -663,7 +868,7 @@ describe('ToolsComparePageComponent', () => {
     expect(component.comparisonPage().pageIndex).toBe(0);
   });
 
-  it('uses source metadata count fallbacks instead of showing fake zeroes for saved benchmarks', () => {
+  it('uses source file metadata count fallbacks instead of showing fake zeroes for saved benchmarks', () => {
     component.comparisons.set([
       {
         getID: () => 'with-original-files',
@@ -682,15 +887,14 @@ describe('ToolsComparePageComponent', () => {
 
     expect(component.comparisonItems()[0]).toEqual(expect.objectContaining({
       sourceFilesCount: 1,
-      activitiesCount: 1,
       sourceFilesLabel: '1 file',
-      activitiesLabel: '1 activity',
     }));
     expect(component.comparisonItems()[1]).toEqual(expect.objectContaining({
       sourceFilesCount: null,
-      activitiesCount: null,
       sourceFilesLabel: 'Files unknown',
-      activitiesLabel: 'Activities unknown',
     }));
+
+    component.onComparisonSortChange({ active: 'sourceFiles', direction: 'asc' });
+    expect(component.sortedComparisonItems().map(item => item.id)).toEqual(['with-original-files', 'unknown-counts']);
   });
 });

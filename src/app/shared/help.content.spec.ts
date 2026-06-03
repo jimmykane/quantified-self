@@ -154,7 +154,7 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('[Sports Watch Benchmark](/features/sports-watch-benchmark)');
     expect(gettingStartedSection?.content).toContain('[File Comparison Tool](/tools/compare)');
     expect(gettingStartedSection?.content).toContain('[Tools -> Compare](/tools/compare/saved)');
-    expect(gettingStartedSection?.content).toContain('sortable, filterable, paginated table with quick description notes');
+    expect(gettingStartedSection?.content).toContain('sortable, filterable, paginated table with devices, activity type, distance, ascent, descent, and quick description notes');
     expect(gettingStartedSection?.content).toContain('uploaded FIT/TCX/GPX/JSON/SML activity files');
     expect(gettingStartedSection?.content).toContain('maps, charts');
     expect(gettingStartedSection?.content).toContain('reviewer workflows for device tests, YouTube videos, and blog posts');

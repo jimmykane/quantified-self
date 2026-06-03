@@ -5,8 +5,20 @@ import { MatDialog } from '@angular/material/dialog';
 import { PageEvent } from '@angular/material/paginator';
 import { Sort, SortDirection } from '@angular/material/sort';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import { ActivityInterface, User } from '@sports-alliance/sports-lib';
+import {
+  ActivityInterface,
+  ActivityTypes,
+  ActivityTypesHelper,
+  DataActivityTypes,
+  DataAscent,
+  DataDescent,
+  DataDistance,
+  DataInterface,
+  User,
+  UserUnitSettingsInterface,
+} from '@sports-alliance/sports-lib';
 import { AppEventInterface, BenchmarkResult } from '@shared/app-event.interface';
+import { resolveUnitAwareDisplayStat } from '@shared/unit-aware-display';
 import { catchError, firstValueFrom, of, switchMap, tap } from 'rxjs';
 
 import { AppAuthService } from '../../authentication/app.auth.service';
@@ -28,15 +40,22 @@ interface ComparisonListItem {
   title: string;
   date: Date | null;
   dateSortMs: number;
+  activitySummaries: ComparisonActivitySummary[];
   devicesLabel: string;
   devicesSort: string;
+  activityTypesLabel: string;
+  activityTypesSort: string;
+  activityTypesTitle: string;
+  distanceSort: number | null;
+  ascentSort: number | null;
+  descentSort: number | null;
+  distanceTitle: string;
+  ascentTitle: string;
+  descentTitle: string;
   description: string;
   sourceFilesCount: number | null;
-  activitiesCount: number | null;
-  sourceFilesSort: number;
-  activitiesSort: number;
+  sourceFilesSort: number | null;
   sourceFilesLabel: string;
-  activitiesLabel: string;
   hasReport: boolean;
   reportCount: number;
   reportLabel: string;
@@ -46,7 +65,31 @@ interface ComparisonListItem {
   event: AppEventInterface;
 }
 
-type ComparisonSortColumn = 'date' | 'title' | 'devices' | 'description' | 'sourceFiles' | 'activities' | 'status' | 'reports';
+interface ComparisonActivitySummary {
+  id: string;
+  deviceLabel: string;
+  activityTypeLabel: string;
+  distanceLabel: string;
+  ascentLabel: string;
+  descentLabel: string;
+  distanceSort: number | null;
+  ascentSort: number | null;
+  descentSort: number | null;
+  filterText: string;
+}
+
+type ComparisonSortColumn =
+  | 'date'
+  | 'title'
+  | 'devices'
+  | 'activityType'
+  | 'distance'
+  | 'ascent'
+  | 'descent'
+  | 'description'
+  | 'sourceFiles'
+  | 'status'
+  | 'reports';
 type ComparisonDeviceSource = 'report' | 'legacy-report' | 'metadata' | 'activity';
 
 interface ComparisonSortState {
@@ -61,7 +104,6 @@ interface ComparisonPageState {
 
 type ComparisonEventFields = AppEventInterface & {
   sourceFilesCount?: number;
-  activitiesCount?: number;
   comparisonTitle?: string;
   benchmarkResult?: unknown;
 };
@@ -110,9 +152,12 @@ export class ToolsComparePageComponent implements OnInit {
     'date',
     'title',
     'devices',
+    'activityType',
+    'distance',
+    'ascent',
+    'descent',
     'description',
     'sourceFiles',
-    'activities',
     'status',
     'reports',
     'actions',
@@ -120,8 +165,8 @@ export class ToolsComparePageComponent implements OnInit {
   private readonly initialTabIndex = this.route.snapshot.data['defaultTab'] === 'saved' ? 1 : 0;
   readonly guestSignInRedirectUrl = this.initialTabIndex === 1 ? '/tools/compare/saved' : '/tools/compare';
   readonly showSavedComparisonsFirst = this.initialTabIndex === 1;
-  private readonly hydratingDeviceEventIDs = new Set<string>();
-  private readonly hydratedDeviceEventIDs = new Set<string>();
+  private readonly hydratingActivitySummaryEventIDs = new Set<string>();
+  private readonly hydratedActivitySummaryEventIDs = new Set<string>();
 
   readonly selectedFileItems = computed<SelectedFileItem[]>(() =>
     this.selectedFiles().map((file, index) => ({
@@ -168,10 +213,9 @@ export class ToolsComparePageComponent implements OnInit {
 
   readonly sortedComparisonItems = computed<ComparisonListItem[]>(() => {
     const sort = this.comparisonSort();
-    const directionMultiplier = sort.direction === 'asc' ? 1 : -1;
 
     return [...this.filteredComparisonItems()].sort((first, second) =>
-      this.compareComparisonItems(first, second, sort.active) * directionMultiplier,
+      this.compareComparisonItems(first, second, sort.active, sort.direction),
     );
   });
 
@@ -181,19 +225,19 @@ export class ToolsComparePageComponent implements OnInit {
     return this.sortedComparisonItems().slice(start, start + page.pageSize);
   });
 
-  private readonly hydrateVisibleComparisonDevices = effect(() => {
+  private readonly hydrateVisibleComparisonActivitySummaries = effect(() => {
     const user = this.currentUser();
     if (!user) {
       return;
     }
 
     const eventIDs = this.paginatedComparisonItems()
-      .filter(item => this.shouldHydrateComparisonDeviceRow(item))
+      .filter(item => this.shouldHydrateComparisonActivitySummaryRow(item))
       .map(item => item.id)
-      .filter(eventID => !this.hydratedDeviceEventIDs.has(eventID) && !this.hydratingDeviceEventIDs.has(eventID));
+      .filter(eventID => !this.hydratedActivitySummaryEventIDs.has(eventID) && !this.hydratingActivitySummaryEventIDs.has(eventID));
 
     if (eventIDs.length > 0) {
-      void this.hydrateMissingDeviceRows(user, eventIDs);
+      void this.hydrateMissingActivitySummaryRows(user, eventIDs);
     }
   });
 
@@ -222,8 +266,8 @@ export class ToolsComparePageComponent implements OnInit {
             this.comparisons.set([]);
             this.descriptionDrafts.set({});
             this.editingDescriptionEventID.set(null);
-            this.hydratingDeviceEventIDs.clear();
-            this.hydratedDeviceEventIDs.clear();
+            this.hydratingActivitySummaryEventIDs.clear();
+            this.hydratedActivitySummaryEventIDs.clear();
             this.resetComparisonPage();
           }
           if (!user || (previousUserID && previousUserID !== nextUserID)) {
@@ -509,8 +553,8 @@ export class ToolsComparePageComponent implements OnInit {
     }
   }
 
-  private async hydrateMissingDeviceRows(user: User, eventIDs: string[]): Promise<void> {
-    eventIDs.forEach(eventID => this.hydratingDeviceEventIDs.add(eventID));
+  private async hydrateMissingActivitySummaryRows(user: User, eventIDs: string[]): Promise<void> {
+    eventIDs.forEach(eventID => this.hydratingActivitySummaryEventIDs.add(eventID));
 
     for (const eventID of eventIDs) {
       try {
@@ -526,16 +570,16 @@ export class ToolsComparePageComponent implements OnInit {
           return this.attachActivitiesToEvent(event, activities);
         }));
       } catch (error) {
-        this.logger.warn('[ToolsComparePageComponent] Could not hydrate comparison devices.', { eventID, error });
+        this.logger.warn('[ToolsComparePageComponent] Could not hydrate comparison activity summaries.', { eventID, error });
       } finally {
-        this.hydratedDeviceEventIDs.add(eventID);
-        this.hydratingDeviceEventIDs.delete(eventID);
+        this.hydratedActivitySummaryEventIDs.add(eventID);
+        this.hydratingActivitySummaryEventIDs.delete(eventID);
       }
     }
   }
 
-  private shouldHydrateComparisonDeviceRow(item: ComparisonListItem): boolean {
-    if (this.hydratedDeviceEventIDs.has(item.id) || this.hydratingDeviceEventIDs.has(item.id)) {
+  private shouldHydrateComparisonActivitySummaryRow(item: ComparisonListItem): boolean {
+    if (this.hydratedActivitySummaryEventIDs.has(item.id) || this.hydratingActivitySummaryEventIDs.has(item.id)) {
       return false;
     }
 
@@ -544,7 +588,7 @@ export class ToolsComparePageComponent implements OnInit {
       return false;
     }
 
-    return item.devicesLabel === 'Devices unknown' || !item.hasReport;
+    return item.activitySummaries.length === 0 || item.devicesLabel === 'Devices unknown' || !item.hasReport;
   }
 
   private attachActivitiesToEvent(event: AppEventInterface, activities: ActivityInterface[]): AppEventInterface {
@@ -588,26 +632,35 @@ export class ToolsComparePageComponent implements OnInit {
       ? comparisonEvent.sourceFilesCount
       : this.getOriginalFilesCount(event);
     const activities = event.getActivities?.() || [];
-    const activitiesCount = typeof comparisonEvent.activitiesCount === 'number'
-      ? comparisonEvent.activitiesCount
-      : (activities.length > 0 ? activities.length : null);
+    const activitySummaries = this.buildComparisonActivitySummaries(activities);
     const deviceNames = this.resolveComparisonDeviceNames(event, activities);
     const devicesLabel = deviceNames.length > 0 ? deviceNames.join(', ') : 'Devices unknown';
+    const activityTypeLabels = this.getDistinctLabels(activitySummaries.map(summary => summary.activityTypeLabel));
+    const activityTypesLabel = activityTypeLabels.length > 0
+      ? activityTypeLabels.join(', ')
+      : 'Types unknown';
 
     return {
       id: eventID,
       title: comparisonEvent.comparisonTitle || event.name || 'Benchmark comparison',
       date: event.startDate instanceof Date ? event.startDate : null,
       dateSortMs: event.startDate instanceof Date ? event.startDate.getTime() : 0,
+      activitySummaries,
       devicesLabel,
       devicesSort: deviceNames.length > 0 ? deviceNames.join(' ').toLowerCase() : '\uffff',
+      activityTypesLabel,
+      activityTypesSort: activityTypesLabel.toLowerCase(),
+      activityTypesTitle: this.formatSummaryTitle(activitySummaries, summary => summary.activityTypeLabel, 'Types unknown'),
+      distanceSort: this.getMetricSort(activitySummaries, 'distanceSort'),
+      ascentSort: this.getMetricSort(activitySummaries, 'ascentSort'),
+      descentSort: this.getMetricSort(activitySummaries, 'descentSort'),
+      distanceTitle: this.formatSummaryTitle(activitySummaries, summary => summary.distanceLabel, 'Distance unknown'),
+      ascentTitle: this.formatSummaryTitle(activitySummaries, summary => summary.ascentLabel, 'Ascent unknown'),
+      descentTitle: this.formatSummaryTitle(activitySummaries, summary => summary.descentLabel, 'Descent unknown'),
       description,
       sourceFilesCount,
-      activitiesCount,
-      sourceFilesSort: sourceFilesCount ?? -1,
-      activitiesSort: activitiesCount ?? -1,
+      sourceFilesSort: sourceFilesCount,
       sourceFilesLabel: this.formatCountLabel(sourceFilesCount, 'file', 'Files unknown'),
-      activitiesLabel: this.formatCountLabel(activitiesCount, 'activity', 'Activities unknown'),
       hasReport,
       reportCount,
       reportLabel,
@@ -616,10 +669,11 @@ export class ToolsComparePageComponent implements OnInit {
       filterText: [
         comparisonEvent.comparisonTitle || event.name || 'Benchmark comparison',
         devicesLabel,
+        activityTypesLabel,
+        activitySummaries.map(summary => summary.filterText).join(' '),
         description,
         event.startDate instanceof Date ? event.startDate.toISOString() : 'date unavailable',
         this.formatCountLabel(sourceFilesCount, 'file', 'Files unknown'),
-        this.formatCountLabel(activitiesCount, 'activity', 'Activities unknown'),
         statusLabel,
         reportLabel,
       ].join(' ').toLowerCase(),
@@ -627,31 +681,258 @@ export class ToolsComparePageComponent implements OnInit {
     };
   }
 
-  private compareComparisonItems(first: ComparisonListItem, second: ComparisonListItem, column: ComparisonSortColumn): number {
+  private compareComparisonItems(
+    first: ComparisonListItem,
+    second: ComparisonListItem,
+    column: ComparisonSortColumn,
+    direction: SortDirection,
+  ): number {
+    const directionMultiplier = direction === 'asc' ? 1 : -1;
+
     switch (column) {
       case 'date':
-        return first.dateSortMs - second.dateSortMs;
+        return (first.dateSortMs - second.dateSortMs) * directionMultiplier;
       case 'title':
-        return first.title.localeCompare(second.title);
+        return first.title.localeCompare(second.title) * directionMultiplier;
       case 'devices':
-        return first.devicesSort.localeCompare(second.devicesSort);
+        return first.devicesSort.localeCompare(second.devicesSort) * directionMultiplier;
+      case 'activityType':
+        return first.activityTypesSort.localeCompare(second.activityTypesSort) * directionMultiplier;
+      case 'distance':
+        return this.compareNullableNumbers(first.distanceSort, second.distanceSort, direction);
+      case 'ascent':
+        return this.compareNullableNumbers(first.ascentSort, second.ascentSort, direction);
+      case 'descent':
+        return this.compareNullableNumbers(first.descentSort, second.descentSort, direction);
       case 'description':
-        return first.description.localeCompare(second.description);
+        return first.description.localeCompare(second.description) * directionMultiplier;
       case 'sourceFiles':
-        return first.sourceFilesSort - second.sourceFilesSort;
-      case 'activities':
-        return first.activitiesSort - second.activitiesSort;
+        return this.compareNullableNumbers(first.sourceFilesSort, second.sourceFilesSort, direction);
       case 'status':
-        return first.statusRank - second.statusRank;
+        return (first.statusRank - second.statusRank) * directionMultiplier;
       case 'reports':
-        return first.reportCount - second.reportCount;
+        return (first.reportCount - second.reportCount) * directionMultiplier;
     }
 
     return 0;
   }
 
   private isComparisonSortColumn(value: string): value is ComparisonSortColumn {
-    return ['date', 'title', 'devices', 'description', 'sourceFiles', 'activities', 'status', 'reports'].includes(value);
+    return ['date', 'title', 'devices', 'activityType', 'distance', 'ascent', 'descent', 'description', 'sourceFiles', 'status', 'reports'].includes(value);
+  }
+
+  private compareNullableNumbers(first: number | null, second: number | null, direction: SortDirection): number {
+    if (first === null && second === null) {
+      return 0;
+    }
+    if (first === null) {
+      return 1;
+    }
+    if (second === null) {
+      return -1;
+    }
+
+    return direction === 'asc' ? first - second : second - first;
+  }
+
+  private buildComparisonActivitySummaries(activities: ActivityInterface[]): ComparisonActivitySummary[] {
+    const unitSettings = this.currentUser()?.settings?.unitSettings ?? null;
+
+    return activities.map((activity, index) => {
+      const deviceLabel = this.resolveActivityDeviceLabel(activity, index);
+      const activityTypeLabel = this.resolveActivityTypeLabel(activity);
+      const activityID = `${activity.getID?.() ?? ''}`.trim() || this.normalizeDeviceNameKey(deviceLabel) || 'activity';
+      const distanceStat = this.getActivityStat(activity, DataDistance.type) || activity.getDistance?.();
+      const ascentStat = this.getActivityStat(activity, DataAscent.type);
+      const descentStat = this.getActivityStat(activity, DataDescent.type);
+      const distanceLabel = this.formatActivityStat(distanceStat, unitSettings);
+      const ascentLabel = this.formatActivityStat(ascentStat, unitSettings);
+      const descentLabel = this.formatActivityStat(descentStat, unitSettings);
+
+      return {
+        id: `${activityID}-${index}`,
+        deviceLabel,
+        activityTypeLabel,
+        distanceLabel,
+        ascentLabel,
+        descentLabel,
+        distanceSort: this.getActivityStatNumericValue(distanceStat),
+        ascentSort: this.getActivityStatNumericValue(ascentStat),
+        descentSort: this.getActivityStatNumericValue(descentStat),
+        filterText: [
+          deviceLabel,
+          activityTypeLabel,
+          distanceLabel,
+          ascentLabel,
+          descentLabel,
+        ].join(' ').toLowerCase(),
+      };
+    });
+  }
+
+  private resolveActivityDeviceLabel(activity: ActivityInterface, index: number): string {
+    const name = `${activity.creator?.name ?? ''}`.trim().replace(/\s+/g, ' ');
+    const swInfo = `${activity.creator?.swInfo ?? ''}`.trim().replace(/\s+/g, ' ');
+    if (name && swInfo) {
+      return `${name} ${swInfo}`;
+    }
+    return name || `Device ${index + 1}`;
+  }
+
+  private resolveActivityTypeLabel(activity: ActivityInterface): string {
+    const labels = this.resolveActivityTypeLabels(activity);
+    return labels.length > 0 ? labels.join(', ') : 'Type unknown';
+  }
+
+  private resolveActivityTypeLabels(activity: ActivityInterface): string[] {
+    const labels: string[] = [];
+    const activityTypesString = (activity as { getActivityTypesAsString?: () => unknown }).getActivityTypesAsString?.();
+    this.addActivityTypeLabels(labels, activityTypesString);
+
+    const activityTypes = (activity as { getActivityTypesAsArray?: () => unknown }).getActivityTypesAsArray?.();
+    this.addActivityTypeLabels(labels, activityTypes);
+
+    const activityTypeStat = this.getActivityStat(activity, DataActivityTypes.type);
+    this.addActivityTypeLabels(labels, activityTypeStat?.getDisplayValue?.());
+    this.addActivityTypeLabels(labels, activityTypeStat?.getValue?.());
+
+    this.addActivityTypeLabels(labels, (activity as { type?: unknown }).type);
+    this.addActivityTypeLabels(labels, (activity as { activityType?: unknown }).activityType);
+    this.addActivityTypeLabels(labels, (activity as { sport?: unknown }).sport);
+
+    const distinctLabels = this.getDistinctLabels(labels);
+    const knownLabels = distinctLabels.filter(label => !this.isUnknownActivityTypeLabel(label));
+    return knownLabels.length > 0 ? knownLabels : distinctLabels;
+  }
+
+  private addActivityTypeLabels(labels: string[], value: unknown): void {
+    if (Array.isArray(value)) {
+      value.forEach(item => this.addActivityTypeLabels(labels, item));
+      return;
+    }
+
+    if (typeof value === 'string' && value.includes(',')) {
+      value.split(',').forEach(item => this.addActivityTypeLabels(labels, item));
+      return;
+    }
+
+    const label = this.formatActivityTypeName(value);
+    if (label) {
+      labels.push(label);
+    }
+  }
+
+  private formatActivityTypeName(type: unknown): string {
+    if (typeof type === 'number') {
+      const numericActivityType = (ActivityTypes as Record<string, string>)[String(type)];
+      return numericActivityType || `${type}`;
+    }
+
+    if (typeof type !== 'string') {
+      return '';
+    }
+
+    const raw = type.trim();
+    if (!raw) {
+      return '';
+    }
+
+    const resolvedActivityType = ActivityTypesHelper.resolveActivityType(raw);
+    if (resolvedActivityType) {
+      return resolvedActivityType;
+    }
+
+    const enumActivityType = (ActivityTypes as Record<string, string>)[raw];
+    if (enumActivityType) {
+      return enumActivityType;
+    }
+
+    if ((Object.values(ActivityTypes) as string[]).includes(raw)) {
+      return raw;
+    }
+
+    const normalized = type
+      .trim()
+      .replace(/[_-]+/g, ' ')
+      .replace(/([a-z])([A-Z])/g, '$1 $2')
+      .replace(/\s+/g, ' ');
+    return normalized ? normalized.charAt(0).toUpperCase() + normalized.slice(1) : '';
+  }
+
+  private isUnknownActivityTypeLabel(label: string): boolean {
+    return ['unknown sport', 'not specified sport', 'type unknown'].includes(label.trim().toLowerCase());
+  }
+
+  private getActivityStat(activity: ActivityInterface, statType: string): DataInterface | null {
+    const stat = (activity as { getStat?: (type: string) => DataInterface | null | undefined }).getStat?.(statType);
+    return stat || null;
+  }
+
+  private formatActivityStat(
+    stat: DataInterface | null | undefined,
+    unitSettings: UserUnitSettingsInterface | null | undefined,
+  ): string {
+    if (!stat) {
+      return '';
+    }
+
+    return resolveUnitAwareDisplayStat(stat, unitSettings ?? null, {
+      stripRepeatedUnit: true,
+      compactAscentDescent: true,
+    })?.text ?? this.formatActivityStatFallback(stat);
+  }
+
+  private formatActivityStatFallback(stat: DataInterface): string {
+    const displayValue = `${stat.getDisplayValue?.() ?? ''}`.trim();
+    const displayUnit = `${stat.getDisplayUnit?.() ?? ''}`.trim();
+    return displayUnit ? `${displayValue} ${displayUnit}`.trim() : displayValue;
+  }
+
+  private getActivityStatNumericValue(stat: DataInterface | null | undefined): number | null {
+    const value = Number(stat?.getValue?.());
+    return Number.isFinite(value) ? value : null;
+  }
+
+  private getMetricSort(
+    summaries: ComparisonActivitySummary[],
+    field: 'distanceSort' | 'ascentSort' | 'descentSort',
+  ): number | null {
+    const values = summaries
+      .map(summary => summary[field])
+      .filter((value): value is number => typeof value === 'number' && Number.isFinite(value));
+    return values.length > 0 ? Math.max(...values) : null;
+  }
+
+  private getDistinctLabels(labels: string[]): string[] {
+    const seen = new Set<string>();
+    const distinctLabels: string[] = [];
+
+    for (const label of labels) {
+      const normalized = label.trim();
+      const key = normalized.toLowerCase();
+      if (!normalized || seen.has(key)) {
+        continue;
+      }
+
+      seen.add(key);
+      distinctLabels.push(normalized);
+    }
+
+    return distinctLabels;
+  }
+
+  private formatSummaryTitle(
+    summaries: ComparisonActivitySummary[],
+    getValue: (summary: ComparisonActivitySummary) => string,
+    emptyLabel: string,
+  ): string {
+    if (summaries.length === 0) {
+      return emptyLabel;
+    }
+
+    return summaries
+      .map(summary => `${summary.deviceLabel}: ${getValue(summary) || '-'}`)
+      .join('\n');
   }
 
   private resolveComparisonDeviceNames(event: AppEventInterface, activities: ActivityInterface[]): string[] {
@@ -774,7 +1055,10 @@ export class ToolsComparePageComponent implements OnInit {
     if (count === null) {
       return emptyLabel;
     }
-    return `${count} ${singularLabel}${count === 1 ? '' : 's'}`;
+    const pluralLabel = singularLabel.endsWith('y')
+      ? `${singularLabel.slice(0, -1)}ies`
+      : `${singularLabel}s`;
+    return `${count} ${count === 1 ? singularLabel : pluralLabel}`;
   }
 
   private resolveExtensionFromFilename(filename: string): string {

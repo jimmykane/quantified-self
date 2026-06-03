@@ -215,6 +215,16 @@
           <ng-container matColumnDef="devices">
             <th mat-header-cell *matHeaderCellDef mat-sort-header="devices">Devices</th>
             <td mat-cell *matCellDef="let item">
+              @if (item.activitySummaries.length > 0) {
+              <div
+                class="summary-stack devices-summary-stack"
+                [matTooltip]="item.devicesLabel"
+                [attr.title]="item.devicesLabel">
+                @for (summary of item.activitySummaries; track summary.id) {
+                <span class="summary-line summary-device">{{ summary.deviceLabel }}</span>
+                }
+              </div>
+              } @else {
               <span
                 class="devices-cell"
                 [class.devices-placeholder]="item.devicesLabel === 'Devices unknown'"
@@ -222,6 +232,86 @@
                 [attr.title]="item.devicesLabel">
                 {{ item.devicesLabel }}
               </span>
+              }
+            </td>
+          </ng-container>
+
+          <ng-container matColumnDef="activityType">
+            <th mat-header-cell *matHeaderCellDef mat-sort-header="activityType">Type</th>
+            <td mat-cell *matCellDef="let item">
+              <div
+                class="summary-stack type-summary-stack"
+                [class.summary-placeholder]="item.activitySummaries.length === 0"
+                [matTooltip]="item.activityTypesTitle"
+                [attr.title]="item.activityTypesTitle">
+                @if (item.activitySummaries.length > 0) {
+                @for (summary of item.activitySummaries; track summary.id) {
+                <span class="summary-line summary-type-line">
+                  <span class="summary-type-device">{{ summary.deviceLabel }}:</span>
+                  <span class="summary-type-value">{{ summary.activityTypeLabel }}</span>
+                </span>
+                }
+                } @else {
+                <span class="summary-line">Types unknown</span>
+                }
+              </div>
+            </td>
+          </ng-container>
+
+          <ng-container matColumnDef="distance">
+            <th mat-header-cell *matHeaderCellDef mat-sort-header="distance">Distance</th>
+            <td mat-cell *matCellDef="let item">
+              <div
+                class="summary-stack metric-summary-stack"
+                [class.summary-placeholder]="item.activitySummaries.length === 0"
+                [matTooltip]="item.distanceTitle"
+                [attr.title]="item.distanceTitle">
+                @if (item.activitySummaries.length > 0) {
+                @for (summary of item.activitySummaries; track summary.id) {
+                <span class="summary-line">{{ summary.distanceLabel || '-' }}</span>
+                }
+                } @else {
+                <span class="summary-line">Distance unknown</span>
+                }
+              </div>
+            </td>
+          </ng-container>
+
+          <ng-container matColumnDef="ascent">
+            <th mat-header-cell *matHeaderCellDef mat-sort-header="ascent">Ascent</th>
+            <td mat-cell *matCellDef="let item">
+              <div
+                class="summary-stack metric-summary-stack"
+                [class.summary-placeholder]="item.activitySummaries.length === 0"
+                [matTooltip]="item.ascentTitle"
+                [attr.title]="item.ascentTitle">
+                @if (item.activitySummaries.length > 0) {
+                @for (summary of item.activitySummaries; track summary.id) {
+                <span class="summary-line">{{ summary.ascentLabel || '-' }}</span>
+                }
+                } @else {
+                <span class="summary-line">Ascent unknown</span>
+                }
+              </div>
+            </td>
+          </ng-container>
+
+          <ng-container matColumnDef="descent">
+            <th mat-header-cell *matHeaderCellDef mat-sort-header="descent">Descent</th>
+            <td mat-cell *matCellDef="let item">
+              <div
+                class="summary-stack metric-summary-stack"
+                [class.summary-placeholder]="item.activitySummaries.length === 0"
+                [matTooltip]="item.descentTitle"
+                [attr.title]="item.descentTitle">
+                @if (item.activitySummaries.length > 0) {
+                @for (summary of item.activitySummaries; track summary.id) {
+                <span class="summary-line">{{ summary.descentLabel || '-' }}</span>
+                }
+                } @else {
+                <span class="summary-line">Descent unknown</span>
+                }
+              </div>
             </td>
           </ng-container>
 
@@ -269,11 +359,6 @@
           <ng-container matColumnDef="sourceFiles">
             <th mat-header-cell *matHeaderCellDef mat-sort-header="sourceFiles">Files</th>
             <td mat-cell *matCellDef="let item">{{ item.sourceFilesLabel }}</td>
-          </ng-container>
-
-          <ng-container matColumnDef="activities">
-            <th mat-header-cell *matHeaderCellDef mat-sort-header="activities">Activities</th>
-            <td mat-cell *matCellDef="let item">{{ item.activitiesLabel }}</td>
           </ng-container>
 
           <ng-container matColumnDef="status">
