@@ -47,6 +47,7 @@ interface ComparisonListItem {
 }
 
 type ComparisonSortColumn = 'date' | 'title' | 'devices' | 'description' | 'sourceFiles' | 'activities' | 'status' | 'reports';
+type ComparisonDeviceSource = 'report' | 'legacy-report' | 'metadata' | 'activity';
 
 interface ComparisonSortState {
   active: ComparisonSortColumn;
@@ -187,7 +188,7 @@ export class ToolsComparePageComponent implements OnInit {
     }
 
     const eventIDs = this.paginatedComparisonItems()
-      .filter(item => item.devicesLabel === 'Devices unknown')
+      .filter(item => this.shouldHydrateComparisonDeviceRow(item))
       .map(item => item.id)
       .filter(eventID => !this.hydratedDeviceEventIDs.has(eventID) && !this.hydratingDeviceEventIDs.has(eventID));
 
@@ -509,11 +510,11 @@ export class ToolsComparePageComponent implements OnInit {
   }
 
   private async hydrateMissingDeviceRows(user: User, eventIDs: string[]): Promise<void> {
+    eventIDs.forEach(eventID => this.hydratingDeviceEventIDs.add(eventID));
+
     for (const eventID of eventIDs) {
-      this.hydratingDeviceEventIDs.add(eventID);
       try {
         const activities = await firstValueFrom(this.eventService.getActivitiesOnceByEvent(user, eventID));
-        this.hydratedDeviceEventIDs.add(eventID);
         if (!activities.length) {
           continue;
         }
@@ -527,9 +528,23 @@ export class ToolsComparePageComponent implements OnInit {
       } catch (error) {
         this.logger.warn('[ToolsComparePageComponent] Could not hydrate comparison devices.', { eventID, error });
       } finally {
+        this.hydratedDeviceEventIDs.add(eventID);
         this.hydratingDeviceEventIDs.delete(eventID);
       }
     }
+  }
+
+  private shouldHydrateComparisonDeviceRow(item: ComparisonListItem): boolean {
+    if (this.hydratedDeviceEventIDs.has(item.id) || this.hydratingDeviceEventIDs.has(item.id)) {
+      return false;
+    }
+
+    const activities = item.event.getActivities?.() || [];
+    if (activities.length > 0) {
+      return false;
+    }
+
+    return item.devicesLabel === 'Devices unknown' || !item.hasReport;
   }
 
   private attachActivitiesToEvent(event: AppEventInterface, activities: ActivityInterface[]): AppEventInterface {
@@ -640,33 +655,62 @@ export class ToolsComparePageComponent implements OnInit {
   }
 
   private resolveComparisonDeviceNames(event: AppEventInterface, activities: ActivityInterface[]): string[] {
-    const devices = new Map<string, string>();
-    const addDevice = (name: unknown, forceFormatted = false): void => {
+    const devices = new Map<string, { label: string; source: ComparisonDeviceSource }>();
+    const addDevice = (
+      name: unknown,
+      options: { forceFormatted?: boolean; source: ComparisonDeviceSource },
+    ): void => {
       const normalized = this.normalizeDeviceNameKey(name);
       if (!normalized || devices.has(normalized)) {
         return;
       }
-      devices.set(normalized, forceFormatted ? this.formatNormalizedDeviceName(normalized) : `${name}`.trim().replace(/\s+/g, ' '));
+
+      if (options.source === 'metadata') {
+        const moreSpecificActivityLabelExists = Array.from(devices.entries()).some(([deviceKey, device]) =>
+          device.source === 'activity' && deviceKey.startsWith(`${normalized} `),
+        );
+        if (moreSpecificActivityLabelExists) {
+          return;
+        }
+      }
+
+      if (options.source === 'activity') {
+        for (const [deviceKey, device] of devices.entries()) {
+          if (device.source === 'metadata' && deviceKey.startsWith(`${normalized} `)) {
+            return;
+          }
+          if (device.source === 'metadata' && normalized.startsWith(`${deviceKey} `)) {
+            devices.delete(deviceKey);
+          }
+        }
+      }
+
+      devices.set(normalized, {
+        label: options.forceFormatted ? this.formatNormalizedDeviceName(normalized) : `${name}`.trim().replace(/\s+/g, ' '),
+        source: options.source,
+      });
     };
 
     Object.values(event.benchmarkResults || {}).forEach((result) => {
-      addDevice(result.referenceName);
-      addDevice(result.testName);
+      addDevice(result.referenceName, { source: 'report' });
+      addDevice(result.testName, { source: 'report' });
     });
 
     const legacyBenchmarkResult = event.benchmarkResult as BenchmarkResult | undefined;
-    addDevice(legacyBenchmarkResult?.referenceName);
-    addDevice(legacyBenchmarkResult?.testName);
-
-    (event.benchmarkDevices || []).forEach(deviceName => addDevice(deviceName, true));
+    addDevice(legacyBenchmarkResult?.referenceName, { source: 'legacy-report' });
+    addDevice(legacyBenchmarkResult?.testName, { source: 'legacy-report' });
 
     activities.forEach((activity) => {
       const name = activity.creator?.name || '';
       const swInfo = activity.creator?.swInfo || '';
-      addDevice(swInfo ? `${name} ${swInfo}` : name);
+      addDevice(swInfo ? `${name} ${swInfo}` : name, { source: 'activity' });
     });
 
-    return Array.from(devices.values());
+    (event.benchmarkDevices || []).forEach(deviceName =>
+      addDevice(deviceName, { forceFormatted: true, source: 'metadata' }),
+    );
+
+    return Array.from(devices.values()).map(device => device.label);
   }
 
   private normalizeDeviceNameKey(name: unknown): string | null {

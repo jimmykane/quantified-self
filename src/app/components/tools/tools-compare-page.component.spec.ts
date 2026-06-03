@@ -449,7 +449,7 @@ describe('ToolsComparePageComponent', () => {
     expect(component.filteredComparisonItems().map(item => item.id)).toEqual(['report-devices']);
   });
 
-  it('hydrates missing previous comparison devices from linked activities on visible rows', async () => {
+  it('hydrates draft previous comparison devices from linked activities on visible rows', async () => {
     const user = new User('user-1');
     const activity = {
       getID: () => 'activity-1',
@@ -464,6 +464,7 @@ describe('ToolsComparePageComponent', () => {
     component.comparisons.set([
       makeComparisonEvent('comparison-1', {
         title: 'Activity-backed devices',
+        benchmarkDevices: ['garmin edge mtb'],
       }),
     ]);
     fixture.detectChanges();
@@ -473,6 +474,78 @@ describe('ToolsComparePageComponent', () => {
 
     expect(eventServiceMock.getActivitiesOnceByEvent).toHaveBeenCalledWith(user, 'comparison-1');
     expect(component.comparisonItems()[0].devicesLabel).toBe('Garmin Edge Mtb 3130');
+  });
+
+  it('does not repeatedly retry previous comparison device hydration after a failed activity read', async () => {
+    const user = new User('user-1');
+    const readError = new Error('activity read failed');
+    eventServiceMock.getActivitiesOnceByEvent.mockImplementation(() => {
+      throw readError;
+    });
+
+    userSubject.next(user);
+    component.comparisons.set([
+      makeComparisonEvent('comparison-1', {
+        title: 'Activity-backed devices',
+      }),
+    ]);
+    fixture.detectChanges();
+
+    await Promise.resolve();
+    await Promise.resolve();
+
+    component.updateComparisonFilter('activity');
+    fixture.detectChanges();
+    await Promise.resolve();
+    component.updateComparisonFilter('');
+    fixture.detectChanges();
+    await Promise.resolve();
+
+    expect(eventServiceMock.getActivitiesOnceByEvent).toHaveBeenCalledTimes(1);
+    expect(loggerMock.warn).toHaveBeenCalledWith(
+      '[ToolsComparePageComponent] Could not hydrate comparison devices.',
+      { eventID: 'comparison-1', error: readError },
+    );
+  });
+
+  it('does not enqueue duplicate device hydration reads while a visible batch is pending', async () => {
+    const user = new User('user-1');
+    const firstActivities$ = new Subject<unknown[]>();
+    const secondActivities$ = new Subject<unknown[]>();
+    eventServiceMock.getActivitiesOnceByEvent
+      .mockReturnValueOnce(firstActivities$)
+      .mockReturnValueOnce(secondActivities$);
+
+    userSubject.next(user);
+    component.comparisons.set([
+      makeComparisonEvent('comparison-1', {
+        title: 'First activity-backed devices',
+      }),
+      makeComparisonEvent('comparison-2', {
+        title: 'Second activity-backed devices',
+      }),
+    ]);
+    fixture.detectChanges();
+    await Promise.resolve();
+
+    expect(eventServiceMock.getActivitiesOnceByEvent).toHaveBeenCalledTimes(1);
+
+    component.updateComparisonFilter('activity');
+    fixture.detectChanges();
+    await Promise.resolve();
+
+    expect(eventServiceMock.getActivitiesOnceByEvent).toHaveBeenCalledTimes(1);
+
+    firstActivities$.next([]);
+    firstActivities$.complete();
+    await Promise.resolve();
+
+    expect(eventServiceMock.getActivitiesOnceByEvent).toHaveBeenCalledTimes(2);
+    expect(eventServiceMock.getActivitiesOnceByEvent).toHaveBeenLastCalledWith(user, 'comparison-2');
+
+    secondActivities$.next([]);
+    secondActivities$.complete();
+    await Promise.resolve();
   });
 
   it('renders previous comparison descriptions as compact text until editing', () => {
