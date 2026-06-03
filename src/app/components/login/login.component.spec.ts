@@ -4,7 +4,7 @@ import { AppAuthService } from '../../authentication/app.auth.service';
 import { AppUserService } from '../../services/app.user.service';
 import { AppEventService } from '../../services/app.event.service';
 import { LoggerService } from '../../services/logger.service';
-import { Router } from '@angular/router';
+import { ActivatedRoute, convertToParamMap, Router } from '@angular/router';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatDialog } from '@angular/material/dialog';
 import { Auth } from 'app/firebase/auth';
@@ -12,6 +12,7 @@ import { Analytics } from 'app/firebase/analytics';
 import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { of, throwError, BehaviorSubject } from 'rxjs';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
+import { EMAIL_LINK_RETURN_URL_STORAGE_KEY } from '../../authentication/auth-redirect-url';
 
 // Mock Firebase Auth functions
 vi.mock('app/firebase/auth', async () => {
@@ -32,13 +33,15 @@ describe('LoginComponent', () => {
     let component: LoginComponent;
 
     let mockAuthService: any;
+    let activatedRouteSnapshot: { queryParamMap: ReturnType<typeof convertToParamMap> };
 
     const mockUserService = {
         getUserByID: vi.fn().mockReturnValue(of({ displayName: 'Test User' }))
     };
 
     const mockRouter = {
-        navigate: vi.fn()
+        navigate: vi.fn(),
+        navigateByUrl: vi.fn()
     };
 
     const mockSnackBar = {
@@ -64,10 +67,13 @@ describe('LoginComponent', () => {
     beforeEach(() => {
         vi.clearAllMocks(); // Clear spies to prevent accumulation
         (mockRouter.navigate as any).mockResolvedValue(true);
+        (mockRouter.navigateByUrl as any).mockResolvedValue(true);
+        activatedRouteSnapshot = { queryParamMap: convertToParamMap({}) };
 
         mockAuthService = {
             user$: new BehaviorSubject(null),
             authState$: of(null),
+            redirectUrl: null,
             isSignInWithEmailLink: () => false,
             googleLogin: vi.fn().mockResolvedValue({ user: { uid: '123' } }),
             githubLogin: vi.fn().mockResolvedValue({ user: { uid: '123' } }),
@@ -92,6 +98,7 @@ describe('LoginComponent', () => {
                 { provide: AppUserService, useValue: mockUserService },
                 { provide: AppEventService, useValue: {} },
                 { provide: Router, useValue: mockRouter },
+                { provide: ActivatedRoute, useValue: { snapshot: activatedRouteSnapshot } },
                 { provide: MatSnackBar, useValue: mockSnackBar },
                 { provide: MatDialog, useValue: mockDialog },
                 { provide: LoggerService, useValue: mockLogger },
@@ -181,9 +188,26 @@ describe('LoginComponent', () => {
         await new Promise(resolve => setTimeout(resolve, 0));
 
         expect((mockDialog as any).open).toHaveBeenCalled();
-        expect(mockAuthService.sendEmailLink).toHaveBeenCalledWith('test@example.com');
+        expect(mockAuthService.sendEmailLink).toHaveBeenCalledWith('test@example.com', null);
         // Check if persist was called. The mock collision error creates a credential.
         expect(mockAuthService.localStorageService.setItem).toHaveBeenCalledWith('pendingLinkProvider', 'github.com');
+    });
+
+    it('should pass a safe returnUrl query parameter when sending an email link', async () => {
+        activatedRouteSnapshot.queryParamMap = convertToParamMap({ returnUrl: '/tools/compare' });
+
+        await component.sendEmailLink('test@example.com');
+
+        expect(mockAuthService.sendEmailLink).toHaveBeenCalledWith('test@example.com', '/tools/compare');
+    });
+
+    it('should not fall back to a stale service redirect when email link returnUrl query parameter is unsafe', async () => {
+        mockAuthService.redirectUrl = '/tools/compare/saved';
+        activatedRouteSnapshot.queryParamMap = convertToParamMap({ returnUrl: '//evil.example/path' });
+
+        await component.sendEmailLink('test@example.com');
+
+        expect(mockAuthService.sendEmailLink).toHaveBeenCalledWith('test@example.com', null);
     });
 
     it('should handle pending link persistence in ngOnInit', async () => {
@@ -352,8 +376,8 @@ describe('LoginComponent', () => {
         await new Promise(resolve => setTimeout(resolve, 0));
 
         expect(mockAuthService.getRedirectResult).toHaveBeenCalled();
-        expect(mockRouter.navigate).toHaveBeenCalledWith(['/dashboard']);
-        expect(mockRouter.navigate).toHaveBeenCalledTimes(1);
+        expect(mockRouter.navigateByUrl).toHaveBeenCalledWith('/dashboard');
+        expect(mockRouter.navigateByUrl).toHaveBeenCalledTimes(1);
     });
 
     it('should not navigate to dashboard until user$ emits after redirect result (race regression)', async () => {
@@ -367,15 +391,15 @@ describe('LoginComponent', () => {
         await new Promise(resolve => setTimeout(resolve, 0));
 
         // Before user$ emits, we should not have navigated yet.
-        expect(mockRouter.navigate).not.toHaveBeenCalledWith(['/dashboard']);
-        expect(mockRouter.navigate).not.toHaveBeenCalled();
+        expect(mockRouter.navigateByUrl).not.toHaveBeenCalledWith('/dashboard');
+        expect(mockRouter.navigateByUrl).not.toHaveBeenCalled();
 
         // Once user$ is populated, navigation is allowed.
         (mockAuthService.user$ as BehaviorSubject<any>).next({ uid: 'redirect-user' });
         await new Promise(resolve => setTimeout(resolve, 0));
 
-        expect(mockRouter.navigate).toHaveBeenCalledWith(['/dashboard']);
-        expect(mockRouter.navigate).toHaveBeenCalledTimes(1);
+        expect(mockRouter.navigateByUrl).toHaveBeenCalledWith('/dashboard');
+        expect(mockRouter.navigateByUrl).toHaveBeenCalledTimes(1);
     });
 
     it('should avoid duplicate dashboard navigation when user subscription and redirect flow resolve together', async () => {
@@ -390,14 +414,214 @@ describe('LoginComponent', () => {
         (mockAuthService.user$ as BehaviorSubject<any>).next({ uid: 'redirect-user' });
         await new Promise(resolve => setTimeout(resolve, 0));
 
-        expect(mockRouter.navigate).toHaveBeenCalledTimes(1);
-        expect(mockRouter.navigate).toHaveBeenCalledWith(['/dashboard']);
+        expect(mockRouter.navigateByUrl).toHaveBeenCalledTimes(1);
+        expect(mockRouter.navigateByUrl).toHaveBeenCalledWith('/dashboard');
+    });
+
+    it('should return to a safe local returnUrl query parameter after login', async () => {
+        activatedRouteSnapshot.queryParamMap = convertToParamMap({ returnUrl: '/tools/compare' });
+
+        component.ngOnInit();
+        await new Promise(resolve => setTimeout(resolve, 0));
+
+        (mockAuthService.user$ as BehaviorSubject<any>).next({ uid: 'return-user' });
+        await new Promise(resolve => setTimeout(resolve, 0));
+
+        expect(mockRouter.navigateByUrl).toHaveBeenCalledTimes(1);
+        expect(mockRouter.navigateByUrl).toHaveBeenCalledWith('/tools/compare');
+        expect(mockAuthService.redirectUrl).toBeNull();
+    });
+
+    it('should prefer the returnUrl query parameter over a stale auth service redirect', async () => {
+        mockAuthService.redirectUrl = '/tools/compare/saved';
+        activatedRouteSnapshot.queryParamMap = convertToParamMap({ returnUrl: '/subscriptions' });
+
+        component.ngOnInit();
+        await new Promise(resolve => setTimeout(resolve, 0));
+
+        (mockAuthService.user$ as BehaviorSubject<any>).next({ uid: 'redirect-user' });
+        await new Promise(resolve => setTimeout(resolve, 0));
+
+        expect(mockRouter.navigateByUrl).toHaveBeenCalledTimes(1);
+        expect(mockRouter.navigateByUrl).toHaveBeenCalledWith('/subscriptions');
+        expect(mockAuthService.redirectUrl).toBeNull();
+    });
+
+    it('should use the auth service redirect when no returnUrl query parameter exists', async () => {
+        mockAuthService.redirectUrl = '/tools/compare/saved';
+
+        component.ngOnInit();
+        await new Promise(resolve => setTimeout(resolve, 0));
+
+        (mockAuthService.user$ as BehaviorSubject<any>).next({ uid: 'guard-user' });
+        await new Promise(resolve => setTimeout(resolve, 0));
+
+        expect(mockRouter.navigateByUrl).toHaveBeenCalledTimes(1);
+        expect(mockRouter.navigateByUrl).toHaveBeenCalledWith('/tools/compare/saved');
+        expect(mockAuthService.redirectUrl).toBeNull();
+    });
+
+    it('should use the cached email-link return URL after the magic-link reload', async () => {
+        mockAuthService.isSignInWithEmailLink = vi.fn().mockReturnValue(true);
+        mockAuthService.localStorageService.getItem = vi.fn().mockImplementation((key) => {
+            if (key === 'emailForSignIn') return 'test@example.com';
+            if (key === EMAIL_LINK_RETURN_URL_STORAGE_KEY) return '/tools/compare';
+            return null;
+        });
+        mockAuthService.signInWithEmailLink = vi.fn().mockResolvedValue({ user: { uid: 'email-link-user' } });
+
+        await component.ngOnInit();
+        (mockAuthService.user$ as BehaviorSubject<any>).next({ uid: 'email-link-user' });
+        await new Promise(resolve => setTimeout(resolve, 0));
+        await new Promise(resolve => setTimeout(resolve, 0));
+
+        expect(mockAuthService.signInWithEmailLink).toHaveBeenCalledWith('test@example.com', window.location.href);
+        expect(mockRouter.navigateByUrl).toHaveBeenCalledTimes(1);
+        expect(mockRouter.navigateByUrl).toHaveBeenCalledWith('/tools/compare');
+        expect(mockAuthService.localStorageService.removeItem).toHaveBeenCalledWith(EMAIL_LINK_RETURN_URL_STORAGE_KEY);
+    });
+
+    it('should clear cached email-link return URL when email confirmation is cancelled', async () => {
+        mockAuthService.isSignInWithEmailLink = vi.fn().mockReturnValue(true);
+        mockAuthService.localStorageService.getItem = vi.fn().mockImplementation((key) => {
+            if (key === EMAIL_LINK_RETURN_URL_STORAGE_KEY) return '/tools/compare';
+            return null;
+        });
+        const promptSpy = vi.spyOn(window, 'prompt').mockReturnValue('');
+
+        await component.ngOnInit();
+        await new Promise(resolve => setTimeout(resolve, 0));
+
+        (mockAuthService.user$ as BehaviorSubject<any>).next({ uid: 'later-user' });
+        await new Promise(resolve => setTimeout(resolve, 0));
+
+        expect(promptSpy).toHaveBeenCalled();
+        expect(mockAuthService.localStorageService.removeItem).toHaveBeenCalledWith(EMAIL_LINK_RETURN_URL_STORAGE_KEY);
+        expect(mockRouter.navigateByUrl).toHaveBeenCalledWith('/dashboard');
+
+        promptSpy.mockRestore();
+    });
+
+    it('should clear cached email-link return URL when account-linking is cancelled during email-link completion', async () => {
+        mockAuthService.isSignInWithEmailLink = vi.fn().mockReturnValue(true);
+        mockAuthService.localStorageService.getItem = vi.fn().mockImplementation((key) => {
+            if (key === 'emailForSignIn') return 'test@example.com';
+            if (key === EMAIL_LINK_RETURN_URL_STORAGE_KEY) return '/tools/compare';
+            return null;
+        });
+        mockAuthService.signInWithEmailLink = vi.fn().mockRejectedValue({
+            code: 'auth/account-exists-with-different-credential',
+            customData: { email: 'test@example.com' },
+        });
+        mockAuthService.fetchSignInMethods = vi.fn().mockResolvedValue(['google.com']);
+        (mockDialog as any).open = vi.fn().mockReturnValue({ afterClosed: () => of(null) });
+
+        await component.ngOnInit();
+        await new Promise(resolve => setTimeout(resolve, 10));
+
+        (mockAuthService.user$ as BehaviorSubject<any>).next({ uid: 'later-user' });
+        await new Promise(resolve => setTimeout(resolve, 0));
+
+        expect(mockAuthService.fetchSignInMethods).toHaveBeenCalledWith('test@example.com');
+        expect(mockAuthService.localStorageService.removeItem).toHaveBeenCalledWith(EMAIL_LINK_RETURN_URL_STORAGE_KEY);
+        expect(mockRouter.navigateByUrl).toHaveBeenCalledWith('/dashboard');
+    });
+
+    it('should preserve the active email-link return URL when sending a replacement magic link', async () => {
+        mockAuthService.isSignInWithEmailLink = vi.fn().mockReturnValue(true);
+        mockAuthService.localStorageService.getItem = vi.fn().mockImplementation((key) => {
+            if (key === 'emailForSignIn') return 'test@example.com';
+            if (key === EMAIL_LINK_RETURN_URL_STORAGE_KEY) return '/tools/compare';
+            return null;
+        });
+        mockAuthService.signInWithEmailLink = vi.fn().mockRejectedValue({
+            code: 'auth/account-exists-with-different-credential',
+            customData: { email: 'test@example.com' },
+        });
+        mockAuthService.fetchSignInMethods = vi.fn().mockResolvedValue(['password']);
+        (mockDialog as any).open = vi.fn().mockReturnValue({ afterClosed: () => of('emailLink') });
+
+        await component.ngOnInit();
+        await new Promise(resolve => setTimeout(resolve, 10));
+
+        expect(mockAuthService.sendEmailLink).toHaveBeenCalledWith('test@example.com', '/tools/compare');
+    });
+
+    it('should clear the active email-link return URL when replacement magic-link sending fails', async () => {
+        mockAuthService.isSignInWithEmailLink = vi.fn().mockReturnValue(true);
+        mockAuthService.localStorageService.getItem = vi.fn().mockImplementation((key) => {
+            if (key === 'emailForSignIn') return 'test@example.com';
+            if (key === EMAIL_LINK_RETURN_URL_STORAGE_KEY) return '/tools/compare';
+            return null;
+        });
+        mockAuthService.signInWithEmailLink = vi.fn().mockRejectedValue({
+            code: 'auth/account-exists-with-different-credential',
+            customData: { email: 'test@example.com' },
+        });
+        mockAuthService.fetchSignInMethods = vi.fn().mockResolvedValue(['password']);
+        mockAuthService.sendEmailLink = vi.fn().mockResolvedValue(false);
+        (mockDialog as any).open = vi.fn().mockReturnValue({ afterClosed: () => of('emailLink') });
+
+        await component.ngOnInit();
+        await new Promise(resolve => setTimeout(resolve, 10));
+
+        expect(mockAuthService.sendEmailLink).toHaveBeenCalledWith('test@example.com', '/tools/compare');
+        expect(mockAuthService.localStorageService.removeItem).toHaveBeenCalledWith(EMAIL_LINK_RETURN_URL_STORAGE_KEY);
+    });
+
+    it('should ignore a cached email-link return URL when the current login is not an email-link sign-in', async () => {
+        mockAuthService.localStorageService.getItem = vi.fn().mockImplementation((key) => {
+            if (key === EMAIL_LINK_RETURN_URL_STORAGE_KEY) return '/tools/compare';
+            return null;
+        });
+
+        component.ngOnInit();
+        await new Promise(resolve => setTimeout(resolve, 0));
+
+        (mockAuthService.user$ as BehaviorSubject<any>).next({ uid: 'oauth-user' });
+        await new Promise(resolve => setTimeout(resolve, 0));
+
+        expect(mockRouter.navigateByUrl).toHaveBeenCalledTimes(1);
+        expect(mockRouter.navigateByUrl).toHaveBeenCalledWith('/dashboard');
+    });
+
+    it('should clear a stale email-link return URL before starting non-email provider login', () => {
+        component.signInWithProvider(SignInProviders.Google);
+
+        expect(mockAuthService.localStorageService.removeItem).toHaveBeenCalledWith(EMAIL_LINK_RETURN_URL_STORAGE_KEY);
+    });
+
+    it('should ignore unsafe returnUrl values and fall back to dashboard', async () => {
+        mockAuthService.redirectUrl = '/tools/compare/saved';
+        activatedRouteSnapshot.queryParamMap = convertToParamMap({ returnUrl: '//evil.example/path' });
+
+        component.ngOnInit();
+        await new Promise(resolve => setTimeout(resolve, 0));
+
+        (mockAuthService.user$ as BehaviorSubject<any>).next({ uid: 'safe-user' });
+        await new Promise(resolve => setTimeout(resolve, 0));
+
+        expect(mockRouter.navigateByUrl).toHaveBeenCalledTimes(1);
+        expect(mockRouter.navigateByUrl).toHaveBeenCalledWith('/dashboard');
+    });
+
+    it('should ignore login returnUrl values and fall back to dashboard', async () => {
+        activatedRouteSnapshot.queryParamMap = convertToParamMap({ returnUrl: '/login?returnUrl=/tools/compare' });
+
+        component.ngOnInit();
+        await new Promise(resolve => setTimeout(resolve, 0));
+
+        (mockAuthService.user$ as BehaviorSubject<any>).next({ uid: 'loop-user' });
+        await new Promise(resolve => setTimeout(resolve, 0));
+
+        expect(mockRouter.navigateByUrl).toHaveBeenCalledTimes(1);
+        expect(mockRouter.navigateByUrl).toHaveBeenCalledWith('/dashboard');
     });
 
     it('should retry dashboard navigation after a rejected navigation attempt', async () => {
         const mockRedirectResult = { user: { uid: 'retry-user' }, credential: { signInMethod: 'google.com' } };
         (mockAuthService.getRedirectResult as any).mockResolvedValue(mockRedirectResult);
-        (mockRouter.navigate as any)
+        (mockRouter.navigateByUrl as any)
             .mockRejectedValueOnce(new Error('guard failure'))
             .mockResolvedValueOnce(true);
 
@@ -409,9 +633,9 @@ describe('LoginComponent', () => {
         (mockAuthService.user$ as BehaviorSubject<any>).next({ uid: 'retry-user' });
         await new Promise(resolve => setTimeout(resolve, 0));
 
-        expect(mockRouter.navigate).toHaveBeenCalledTimes(2);
-        expect(mockRouter.navigate).toHaveBeenNthCalledWith(1, ['/dashboard']);
-        expect(mockRouter.navigate).toHaveBeenNthCalledWith(2, ['/dashboard']);
+        expect(mockRouter.navigateByUrl).toHaveBeenCalledTimes(2);
+        expect(mockRouter.navigateByUrl).toHaveBeenNthCalledWith(1, '/dashboard');
+        expect(mockRouter.navigateByUrl).toHaveBeenNthCalledWith(2, '/dashboard');
     });
 
     it('should handle failed redirect result on init', async () => {

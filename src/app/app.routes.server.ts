@@ -14,6 +14,7 @@ export const PRERENDERED_FEATURE_ROUTES = [
   WORKOUT_DATA_COMPARISON_PATH,
   PUBLIC_FEATURE_PATHS.aiInsights,
   PUBLIC_FEATURE_PATHS.workoutFileComparison,
+  PUBLIC_FEATURE_PATHS.fitGpxTcxFileAnalyzer,
   PUBLIC_FEATURE_PATHS.sportsWatchBenchmark,
 ] as const;
 
@@ -28,9 +29,15 @@ export const PRERENDERED_STATIC_PUBLIC_ROUTES = [
   'help',
 ] as const;
 
+export const PRERENDERED_TOOLS_ROUTES = [
+  'tools',
+  'tools/compare',
+] as const;
+
 export const PRERENDERED_PUBLIC_ROUTES = [
   '',
   ...PRERENDERED_STATIC_PUBLIC_ROUTES,
+  ...PRERENDERED_TOOLS_ROUTES,
   ...PRERENDERED_INTEGRATION_ROUTES,
   ...PRERENDERED_FEATURE_ROUTES,
   ...PRERENDERED_GUIDE_ROUTES,
@@ -53,6 +60,7 @@ export const CLIENT_RENDERED_APP_ROUTES = [
   'payment/success',
   'payment/cancel',
   'releases',
+  'tools/compare/saved',
   'services',
   'dashboard',
   'mytracks',

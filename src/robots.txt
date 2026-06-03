@@ -2,11 +2,14 @@ User-agent: *
 Allow: /
 Allow: /pricing
 Allow: /help
+Allow: /tools
+Allow: /tools/compare
 Allow: /integrations
 Allow: /features
 Allow: /features/workout-data-comparison
 Allow: /features/ai-insights
 Allow: /features/workout-file-comparison
+Allow: /features/fit-gpx-tcx-file-analyzer
 Allow: /features/sports-watch-benchmark
 Allow: /guides
 Allow: /guides/sync-garmin-to-suunto
@@ -17,6 +20,7 @@ Disallow: /user
 Disallow: /user/
 Disallow: /settings
 Disallow: /dashboard
+Disallow: /tools/compare/saved
 Disallow: /admin
 Disallow: /mytracks
 Disallow: /coaching

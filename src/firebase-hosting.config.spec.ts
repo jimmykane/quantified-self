@@ -59,8 +59,11 @@ const serviceWorkerConfig = JSON.parse(
 ) as ServiceWorkerConfig;
 
 const static404Html = readFileSync(resolve(__dirname, '404.html'), 'utf8');
+const robotsTxt = readFileSync(resolve(__dirname, 'robots.txt'), 'utf8');
+const sitemapXml = readFileSync(resolve(__dirname, 'sitemap.xml'), 'utf8');
 
 const expectedCsrRewriteSources = CLIENT_RENDERED_APP_ROUTES.map(routePathToHostingSource);
+const siteOrigin = 'https://quantified-self.io';
 
 function routePathToHostingSource(path: string): string {
   return `/${path.replace(/:[^/]+/g, '*')}`;
@@ -83,6 +86,18 @@ function matchesHostingSource(source: string, path: string): boolean {
 
 function matchesAnyHostingSource(sources: readonly string[], path: string): boolean {
   return sources.some(source => matchesHostingSource(source, path));
+}
+
+function isAllowedByRobots(source: string): boolean {
+  const allowSources = robotsTxt
+    .split('\n')
+    .map(line => line.trim())
+    .filter(line => line.startsWith('Allow: '))
+    .map(line => line.replace('Allow: ', ''));
+
+  return allowSources.some(allowSource => (
+    source === allowSource || (allowSource !== '/' && source.startsWith(`${allowSource}/`))
+  ));
 }
 
 describe('Firebase Hosting configuration', () => {
@@ -110,12 +125,15 @@ describe('Firebase Hosting configuration', () => {
     expect(matchesAnyHostingSource(sources, '/dashboard')).toBe(true);
     expect(matchesAnyHostingSource(sources, '/admin/queues/workout')).toBe(true);
     expect(matchesAnyHostingSource(sources, '/user/user-1/event/event-1')).toBe(true);
+    expect(matchesAnyHostingSource(sources, '/tools/compare/saved')).toBe(true);
 
     expect(matchesAnyHostingSource(sources, '/admin/missing')).toBe(false);
     expect(matchesAnyHostingSource(sources, '/user/user-1/event/event-1/extra')).toBe(false);
     expect(matchesAnyHostingSource(sources, '/definitely-missing')).toBe(false);
     expect(matchesAnyHostingSource(sources, '/integrations/garmin')).toBe(false);
     expect(matchesAnyHostingSource(sources, '/features/ai-insights')).toBe(false);
+    expect(matchesAnyHostingSource(sources, '/tools')).toBe(false);
+    expect(matchesAnyHostingSource(sources, '/tools/compare')).toBe(false);
     expect(matchesAnyHostingSource(sources, '/help')).toBe(false);
   });
 
@@ -128,6 +146,21 @@ describe('Firebase Hosting configuration', () => {
       expect(hostingSources).not.toContain(source);
       expect(positiveNavigationUrls).not.toContain(source);
     }
+  });
+
+  it('lists every prerendered public route in sitemap and keeps it allowed by robots', () => {
+    for (const path of PRERENDERED_PUBLIC_ROUTES) {
+      const source = routePathToHostingSource(path);
+      const url = `${siteOrigin}${source}`;
+
+      expect(sitemapXml).toContain(`<loc>${url}</loc>`);
+      expect(isAllowedByRobots(source)).toBe(true);
+    }
+  });
+
+  it('keeps client-rendered saved comparison routes out of sitemap and disallowed by robots', () => {
+    expect(sitemapXml).not.toContain('<loc>https://quantified-self.io/tools/compare/saved</loc>');
+    expect(robotsTxt).toContain('Disallow: /tools/compare/saved');
   });
 
   it('copies the static Firebase 404 page into the hosting output', () => {

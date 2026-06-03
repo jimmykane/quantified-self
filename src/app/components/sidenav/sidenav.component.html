@@ -50,11 +50,16 @@
   </mat-list-item>
   }
 
+  <mat-list-item routerLinkActive="active" routerLink="/tools/compare" (click)="closeSideNav()">
+    <mat-icon>compare_arrows</mat-icon>
+    <span>Compare Files <span class="nav-badge">New</span></span>
+  </mat-list-item>
+
   @if (user) {
   <mat-list-item [routerLinkActive]="hasAiInsightsAccess ? 'active' : ''" [routerLinkActiveOptions]="{exact: true}" [routerLink]="aiInsightsRoute"
     (click)="closeSideNav()">
     <mat-icon>insights</mat-icon>
-    <span>AI Insights <span class="beta-badge">Beta</span></span>
+    <span>AI Insights <span class="nav-badge">Beta</span></span>
     <span class="fill-space"></span>
     @if (!hasAiInsightsAccess) {
     <mat-icon class="lock-icon">lock</mat-icon>

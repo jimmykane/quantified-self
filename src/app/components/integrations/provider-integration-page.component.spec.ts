@@ -80,6 +80,7 @@ describe('ProviderIntegrationPageComponent', () => {
     expect(hrefs).toContain('/pricing');
     expect(hrefs).toContain('/integrations');
     expect(hrefs).toContain('/features/workout-data-comparison');
+    expect(hrefs).toContain('/features/fit-gpx-tcx-file-analyzer');
     expect(hrefs).toContain('/guides/centralize-garmin-suunto-coros-workout-data');
     expect(hrefs).toContain('/help#service-connections');
   });

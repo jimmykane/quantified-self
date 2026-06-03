@@ -45,6 +45,7 @@ import { FirebaseAnalyticsTrackingService } from './services/firebase-analytics-
 import { MAT_DATE_LOCALE_PROVIDER, getBrowserLocale } from './shared/adapters/date-locale.config';
 import { APP_STORAGE } from './services/storage/app.storage.token';
 import { MemoryStorage } from './services/storage/memory.storage';
+import { shouldProvideClientHydrationForRuntime } from './shared/public-startup-route';
 
 export const QS_MENU_DEFAULT_OPTIONS: MatMenuDefaultOptions = {
   overlayPanelClass: 'qs-menu-panel',
@@ -62,6 +63,10 @@ const enableAppCheck = environment.production || environment.beta || environment
 type FirestoreInitSettings = Parameters<typeof initializeFirestore>[1] & {
   useFetchStreams?: boolean;
 };
+const appDocument = typeof document === 'undefined' ? undefined : document;
+const hydrationProviders = shouldProvideClientHydrationForRuntime(appDocument, typeof window !== 'undefined')
+  ? [provideClientHydration(withNoHttpTransferCache())]
+  : [];
 
 @NgModule({
   declarations: [
@@ -87,7 +92,7 @@ type FirestoreInitSettings = Parameters<typeof initializeFirestore>[1] & {
     ImpersonationBannerComponent
   ],
   providers: [
-    provideClientHydration(withNoHttpTransferCache()),
+    ...hydrationProviders,
     provideAnimations(),
     {
       provide: ErrorHandler,

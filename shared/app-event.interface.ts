@@ -31,6 +31,16 @@ export interface AppEventInterface extends EventInterface {
     benchmarkDevices?: string[];
     /** Latest benchmark timestamp for querying/sorting */
     benchmarkLatestAt?: Date;
+    /** Merge classification for merged or benchmark comparison events. */
+    mergeType?: 'benchmark' | 'multi' | string;
+    /** Product/tool route that created this event when applicable. */
+    toolSource?: string;
+    /** User-facing title for tool-created comparison events. */
+    comparisonTitle?: string;
+    /** Number of source files used to create a comparison event. */
+    sourceFilesCount?: number;
+    /** Number of activities produced by a comparison event. */
+    activitiesCount?: number;
 }
 
 /**
@@ -130,4 +140,14 @@ export interface FirestoreEventJSON {
     benchmarkDevices?: string[];
     /** Latest benchmark timestamp for querying/sorting */
     benchmarkLatestAt?: Date;
+    /** Merge classification for merged or benchmark comparison events. */
+    mergeType?: 'benchmark' | 'multi' | string;
+    /** Product/tool route that created this event when applicable. */
+    toolSource?: string;
+    /** User-facing title for tool-created comparison events. */
+    comparisonTitle?: string;
+    /** Number of source files used to create a comparison event. */
+    sourceFilesCount?: number;
+    /** Number of activities produced by a comparison event. */
+    activitiesCount?: number;
 }

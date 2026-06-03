@@ -150,10 +150,15 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('[Features hub](/features)');
     expect(gettingStartedSection?.content).toContain('[Workout Data Comparison](/features/workout-data-comparison)');
     expect(gettingStartedSection?.content).toContain('[Workout File Comparison](/features/workout-file-comparison)');
+    expect(gettingStartedSection?.content).toContain('[Workout File Analyzer](/features/fit-gpx-tcx-file-analyzer)');
     expect(gettingStartedSection?.content).toContain('[Sports Watch Benchmark](/features/sports-watch-benchmark)');
+    expect(gettingStartedSection?.content).toContain('[File Comparison Tool](/tools/compare)');
+    expect(gettingStartedSection?.content).toContain('[Tools -> Compare](/tools/compare/saved)');
+    expect(gettingStartedSection?.content).toContain('sortable, filterable, paginated table with quick description notes');
     expect(gettingStartedSection?.content).toContain('uploaded FIT/TCX/GPX/JSON/SML activity files');
+    expect(gettingStartedSection?.content).toContain('maps, charts');
     expect(gettingStartedSection?.content).toContain('reviewer workflows for device tests, YouTube videos, and blog posts');
-    expect(gettingStartedSection?.content).toContain('available on the free plan for up to 100 activities');
+    expect(gettingStartedSection?.content).toContain('Manual uploads, core analysis, and benchmark comparisons are available on the free plan for up to 100 activities');
     expect(gettingStartedSection?.content).toContain('automatic provider sync and higher limits require a paid plan');
     expect(gettingStartedSection?.content).not.toContain('overlays, AI insights, and reviewer workflows');
     expect(gettingStartedSection?.content).toContain('**Altitude** charts can color the altitude line by grade');
@@ -225,27 +230,40 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('reduced-motion is enabled');
   });
 
+  it('should document selected-row GPX export options', () => {
+    const uploadsSection = HELP_SECTIONS.find(section => section.id === 'uploads-and-imports');
+
+    expect(uploadsSection?.content).toContain('CSV export, GPX export, and original-file download actions support your current multi-selection');
+    expect(uploadsSection?.content).toContain('multi-selected GPX exports download as a ZIP');
+  });
+
   it('should document Garmin/COROS to Suunto route-based activity sync and manual catch-up', () => {
     const serviceConnectionsSection = HELP_SECTIONS.find(section => section.id === 'service-connections');
 
     expect(serviceConnectionsSection?.content).toContain('Integrations hub');
     expect(serviceConnectionsSection?.content).toContain('/integrations');
     expect(serviceConnectionsSection?.content).toContain('[Training Data Sync Guides](/guides)');
+    expect(serviceConnectionsSection?.content).toContain('[Tools hub](/tools)');
+    expect(serviceConnectionsSection?.content).toContain('[File Comparison Tool](/tools/compare)');
     expect(serviceConnectionsSection?.content).toContain('[Features hub](/features)');
     expect(serviceConnectionsSection?.content).toContain('[Workout Data Comparison](/features/workout-data-comparison)');
     expect(serviceConnectionsSection?.content).toContain('[Workout File Comparison](/features/workout-file-comparison)');
+    expect(serviceConnectionsSection?.content).toContain('[Workout File Analyzer](/features/fit-gpx-tcx-file-analyzer)');
     expect(serviceConnectionsSection?.content).toContain('[Sports Watch Benchmark](/features/sports-watch-benchmark)');
     expect(serviceConnectionsSection?.content).toContain('[Garmin to Suunto sync guide](/guides/sync-garmin-to-suunto)');
     expect(serviceConnectionsSection?.content).toContain('[COROS to Suunto sync guide](/guides/sync-coros-to-suunto)');
     expect(serviceConnectionsSection?.content).toContain('[centralized workout data guide](/guides/centralize-garmin-suunto-coros-workout-data)');
     expect(serviceConnectionsSection?.content).toContain('uploaded FIT/TCX/GPX/JSON/SML activity files');
     expect(serviceConnectionsSection?.content).toContain('reviewer workflows for device tests, YouTube videos, and blog posts');
-    expect(serviceConnectionsSection?.content).toContain('available on the free plan for up to 100 activities');
+    expect(serviceConnectionsSection?.content).toContain('Manual uploads, core analysis, and benchmark comparisons are available on the free plan for up to 100 activities');
     expect(serviceConnectionsSection?.content).toContain('automatic provider sync and higher limits require a paid plan');
     expect(serviceConnectionsSection?.content).not.toContain('source-file workflows, AI insights, and reviewer workflows');
     expect(serviceConnectionsSection?.content).toContain('[Garmin Integration](/integrations/garmin)');
     expect(serviceConnectionsSection?.content).toContain('[COROS Integration](/integrations/coros)');
     expect(serviceConnectionsSection?.content).toContain('/integrations/suunto');
+    expect(serviceConnectionsSection?.content).toContain('Suunto FIT activity uploads in Services show a per-file queue');
+    expect(serviceConnectionsSection?.content).toContain('retry controls for failed files');
+    expect(serviceConnectionsSection?.content).toContain('processed one file at a time with short pauses');
     expect(serviceConnectionsSection?.content).toContain('Garmin -> Suunto activity sync is route-based');
     expect(serviceConnectionsSection?.content).toContain('ACTIVITY_EXPORT');
     expect(serviceConnectionsSection?.content).toContain('Manual catch-up is available in Garmin Services');
@@ -265,6 +283,8 @@ describe('help.content', () => {
     expect(serviceConnectionsSection?.content).toContain('one-time dashboard prompt');
     expect(serviceConnectionsSection?.content).toContain('Garmin sleep history backfill is separate from activity history import');
     expect(serviceConnectionsSection?.content).toContain('COROS -> Suunto activity sync is route-based');
+    expect(serviceConnectionsSection?.content).toContain('COROS FIT activity uploads in Services use the same per-file queue');
+    expect(serviceConnectionsSection?.content).toContain('short provider upload pacing');
     expect(serviceConnectionsSection?.content).toContain('enable the route toggle in COROS Services');
     expect(serviceConnectionsSection?.content).toContain('Automatic sync runs only for newly imported COROS activities');
     expect(serviceConnectionsSection?.content).toContain('Manual catch-up is available in COROS Services');
@@ -293,6 +313,18 @@ describe('help.content', () => {
       icon: 'compare_arrows',
       kind: 'route',
       target: '/features/workout-data-comparison',
+    });
+    expect(serviceConnectionsSection?.links).toContainEqual({
+      label: 'Compare Files Tool',
+      icon: 'compare_arrows',
+      kind: 'route',
+      target: '/tools/compare',
+    });
+    expect(serviceConnectionsSection?.links).toContainEqual({
+      label: 'Workout File Analyzer',
+      icon: 'analytics',
+      kind: 'route',
+      target: '/features/fit-gpx-tcx-file-analyzer',
     });
     expect(serviceConnectionsSection?.links).toContainEqual({
       label: 'Garmin to Suunto Guide',

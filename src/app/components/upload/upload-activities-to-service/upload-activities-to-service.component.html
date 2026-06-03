@@ -1,16 +1,99 @@
-<section class="mat-elevation-z0" (drop)="getFiles($event);"
-  ondragenter="event.stopPropagation(); event.preventDefault();"
-  ondragover="event.stopPropagation(); event.preventDefault();this.classList.add('drag');"
-  ondragleave="event.stopPropagation(); event.preventDefault();this.classList.remove('drag');">
-  <button mat-flat-button class="qs-mat-primary" (click)="inputFile.click()" [disabled]="!hasProAccess || isUploading">
-    @if (isUploading) {
-    <mat-spinner diameter="20" style="display:inline-block; vertical-align: middle; margin-right: 8px;"
-      class="qs-spinner-accent"></mat-spinner>
-    Uploading Activity...
-    } @else {
-    Open or drag and drop file
-    }
-  </button>
-  <input #inputFile type="file" accept=".fit" multiple style="display: none;" (change)="getFiles($event)"
-    [disabled]="!hasProAccess" />
-</section>
+<div class="service-upload">
+  <section class="upload-dropzone" (drop)="getFiles($event);"
+    ondragenter="event.stopPropagation(); event.preventDefault();"
+    ondragover="event.stopPropagation(); event.preventDefault();this.classList.add('drag');"
+    ondragleave="event.stopPropagation(); event.preventDefault();this.classList.remove('drag');">
+    <button mat-flat-button class="qs-mat-primary" (click)="inputFile.click()" [disabled]="!hasProAccess || isUploading">
+      <span class="upload-button-content">
+        @if (isUploading) {
+        <mat-spinner diameter="20" class="qs-spinner-accent"></mat-spinner>
+        <span>Uploading Activity...</span>
+        } @else {
+        <mat-icon>upload_file</mat-icon>
+        <span>Open or drag and drop FIT files</span>
+        }
+      </span>
+    </button>
+    <input #inputFile type="file" accept=".fit" multiple class="file-input" (change)="getFiles($event)"
+      [disabled]="!hasProAccess || isUploading" />
+  </section>
+
+  @if (hasRows()) {
+  <div class="upload-table-toolbar">
+    <div class="upload-table-heading">
+      <span class="upload-table-title">Upload Queue</span>
+      <span class="upload-table-summary">{{ uploadSummary() }}</span>
+    </div>
+
+    <div class="upload-table-actions">
+      @if (canRetryFailed()) {
+      <button mat-stroked-button type="button" (click)="retryFailedUploads()" [disabled]="isUploading">
+        <mat-icon>refresh</mat-icon>
+        <span>Retry failed</span>
+      </button>
+      }
+      <button mat-icon-button type="button" (click)="clearRows()" [disabled]="isUploading" matTooltip="Clear upload list"
+        aria-label="Clear upload list">
+        <mat-icon>playlist_remove</mat-icon>
+      </button>
+    </div>
+  </div>
+
+  <div class="upload-table-wrapper">
+    <table mat-table [dataSource]="uploadRows()" class="service-upload-table">
+      <ng-container matColumnDef="file">
+        <th mat-header-cell *matHeaderCellDef>File</th>
+        <td mat-cell *matCellDef="let row">
+          <div class="file-cell">
+            <span class="file-name">{{ row.name }}</span>
+            <span class="file-meta">{{ row.sizeLabel }}</span>
+          </div>
+        </td>
+      </ng-container>
+
+      <ng-container matColumnDef="status">
+        <th mat-header-cell *matHeaderCellDef>Status</th>
+        <td mat-cell *matCellDef="let row">
+          <span class="status-pill" [class.status-queued]="row.status === 'queued'"
+            [class.status-uploading]="row.status === 'uploading'" [class.status-success]="row.status === 'success'"
+            [class.status-duplicate]="row.status === 'duplicate'" [class.status-failed]="row.status === 'failed'">
+            @if (row.status === 'uploading') {
+            <mat-spinner diameter="18" class="status-spinner"></mat-spinner>
+            } @else {
+            <mat-icon>{{ statusIconMap[row.status] }}</mat-icon>
+            }
+            <span>{{ statusLabelMap[row.status] }}</span>
+          </span>
+        </td>
+      </ng-container>
+
+      <ng-container matColumnDef="attempts">
+        <th mat-header-cell *matHeaderCellDef>Attempts</th>
+        <td mat-cell *matCellDef="let row">{{ row.attempts }}</td>
+      </ng-container>
+
+      <ng-container matColumnDef="message">
+        <th mat-header-cell *matHeaderCellDef>Message</th>
+        <td mat-cell *matCellDef="let row">
+          <span class="message-cell">{{ row.message || 'Ready' }}</span>
+        </td>
+      </ng-container>
+
+      <ng-container matColumnDef="actions">
+        <th mat-header-cell *matHeaderCellDef aria-label="Actions"></th>
+        <td mat-cell *matCellDef="let row" class="actions-cell">
+          @if (row.status === 'failed' && row.extension === 'fit') {
+          <button mat-icon-button type="button" (click)="retryUpload(row)" [disabled]="isUploading" matTooltip="Retry upload"
+            aria-label="Retry upload">
+            <mat-icon>refresh</mat-icon>
+          </button>
+          }
+        </td>
+      </ng-container>
+
+      <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+      <tr mat-row *matRowDef="let row; columns: displayedColumns;"></tr>
+    </table>
+  </div>
+  }
+</div>

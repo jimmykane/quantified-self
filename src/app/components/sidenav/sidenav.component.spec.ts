@@ -35,7 +35,11 @@ describe('SideNavComponent', () => {
         };
         mockUserService = {
             isAdmin: vi.fn().mockResolvedValue(false),
+            user: vi.fn().mockReturnValue(null),
             hasProAccessSignal: vi.fn().mockReturnValue(false),
+            hasPaidAccessSignal: vi.fn().mockReturnValue(false),
+            isProSignal: vi.fn().mockReturnValue(false),
+            isBasicSignal: vi.fn().mockReturnValue(false),
         };
         mockThemeService = {
             getAppTheme: () => of(AppThemes.Normal),
@@ -235,6 +239,34 @@ describe('SideNavComponent', () => {
             ?? myTracksItem?.nativeElement.getAttribute('routerLink')
         ).toBe('/mytracks');
         expect(myTracksItem?.nativeElement.textContent).not.toContain('BASIC');
+    });
+
+    it('should promote file comparison in navigation for guests and signed-in users', () => {
+        fixture.detectChanges();
+
+        let compareFilesItem = fixture.debugElement
+            .queryAll(By.css('mat-list-item'))
+            .find(item => item.nativeElement.textContent.includes('Compare Files'));
+
+        expect(compareFilesItem).toBeTruthy();
+        expect(
+            compareFilesItem?.nativeElement.getAttribute('routerlink')
+            ?? compareFilesItem?.nativeElement.getAttribute('routerLink')
+        ).toBe('/tools/compare');
+        expect(compareFilesItem?.nativeElement.textContent).toContain('New');
+
+        mockUserService.user = vi.fn().mockReturnValue({
+            uid: 'user-1',
+            displayName: 'Signed In',
+            email: 'signed@example.com',
+        });
+        fixture.detectChanges();
+
+        compareFilesItem = fixture.debugElement
+            .queryAll(By.css('mat-list-item'))
+            .find(item => item.nativeElement.textContent.includes('Compare Files'));
+
+        expect(compareFilesItem).toBeTruthy();
     });
 
     it('should link AI Insights directly for basic users and mark it as beta', () => {

@@ -250,6 +250,59 @@ describe('AppEventService', () => {
         expect(service).toBeTruthy();
     });
 
+    it('should preserve saved tool comparison metadata when deserializing event docs', () => {
+        const importedEvent = createMockEvent({ name: 'Imported Event' });
+        mocks.getEventFromJSON.mockReturnValueOnce(importedEvent);
+        const eventDoc = createQueryDoc('comparison-event-1', {
+            name: 'Stored Event',
+            startDate: 1710000000000,
+            mergeType: 'benchmark',
+            toolSource: 'tools/compare',
+            comparisonTitle: 'Device comparison',
+            sourceFilesCount: 2,
+            activitiesCount: 5,
+        });
+
+        const event = (service as any).deserializeEventFromDoc(
+            eventDoc,
+            'Unknown Data Types in metadata test',
+        ) as AppEventInterface;
+
+        expect(event.getID()).toBe('comparison-event-1');
+        expect(event.mergeType).toBe('benchmark');
+        expect(event.toolSource).toBe('tools/compare');
+        expect(event.comparisonTitle).toBe('Device comparison');
+        expect(event.sourceFilesCount).toBe(2);
+        expect(event.activitiesCount).toBe(5);
+    });
+
+    it('should preserve saved tool comparison metadata when cloning event details with activities', () => {
+        const event = createMockEvent({ name: 'Imported Event' }) as AppEventInterface;
+        event.mergeType = 'benchmark';
+        event.toolSource = 'tools/compare';
+        event.comparisonTitle = 'Device comparison';
+        event.sourceFilesCount = 2;
+        event.activitiesCount = 5;
+        event.hasBenchmark = false;
+        event.benchmarkDevices = ['garmin forerunner 265'];
+        event.benchmarkLatestAt = new Date('2026-01-01T00:00:00.000Z');
+        const activity = { getID: () => 'activity-1' } as any;
+
+        const clonedEvent = (service as any).cloneEventWithActivities(event, [activity]) as AppEventInterface;
+
+        expect(clonedEvent).not.toBe(event);
+        expect(clonedEvent.mergeType).toBe('benchmark');
+        expect(clonedEvent.toolSource).toBe('tools/compare');
+        expect(clonedEvent.comparisonTitle).toBe('Device comparison');
+        expect(clonedEvent.sourceFilesCount).toBe(2);
+        expect(clonedEvent.activitiesCount).toBe(5);
+        expect(clonedEvent.hasBenchmark).toBe(false);
+        expect(clonedEvent.benchmarkDevices).toEqual(['garmin forerunner 265']);
+        expect(clonedEvent.benchmarkDevices).not.toBe(event.benchmarkDevices);
+        expect(clonedEvent.benchmarkLatestAt?.toISOString()).toBe(event.benchmarkLatestAt?.toISOString());
+        expect(clonedEvent.benchmarkLatestAt).not.toBe(event.benchmarkLatestAt);
+    });
+
     describe('getEventsOnceByIds', () => {
         it('should batch ID fetches with documentId in-queries and preserve requested order', async () => {
             const user = { uid: 'user-ids' } as any;
@@ -1092,12 +1145,19 @@ describe('AppEventService', () => {
         expect(hasStreamsKey(writtenPayload)).toBe(false);
     });
 
-    it('should strip server-owned original file metadata in updateEventProperties', async () => {
+    it('should strip server-owned event metadata in updateEventProperties', async () => {
         const user = { uid: 'user1' } as any;
         const payload = {
             name: 'Updated event name',
             originalFile: { path: 'users/u1/events/e1/original.fit' },
             originalFiles: [{ path: 'users/u1/events/e1/original.fit' }],
+            isMerge: true,
+            mergeType: 'benchmark',
+            toolSource: 'tools/compare',
+            sourceFilesCount: 2,
+            activitiesCount: 4,
+            comparisonTitle: 'Spoofed comparison',
+            benchmarkStatus: 'complete',
         };
 
         (doc as Mock).mockReturnValue({});
@@ -1110,6 +1170,13 @@ describe('AppEventService', () => {
         expect(writtenPayload.name).toBe('Updated event name');
         expect(writtenPayload.originalFile).toBeUndefined();
         expect(writtenPayload.originalFiles).toBeUndefined();
+        expect(writtenPayload.isMerge).toBeUndefined();
+        expect(writtenPayload.mergeType).toBeUndefined();
+        expect(writtenPayload.toolSource).toBeUndefined();
+        expect(writtenPayload.sourceFilesCount).toBeUndefined();
+        expect(writtenPayload.activitiesCount).toBeUndefined();
+        expect(writtenPayload.comparisonTitle).toBeUndefined();
+        expect(writtenPayload.benchmarkStatus).toBeUndefined();
     });
 
     it('should keep primitive update payloads unchanged in updateEventProperties', async () => {
@@ -1180,6 +1247,13 @@ describe('AppEventService', () => {
             activities: [{ id: 'activity-1' }],
             originalFile: { path: 'users/u1/events/e1/original.fit' },
             originalFiles: [{ path: 'users/u1/events/e1/original.fit' }],
+            isMerge: true,
+            mergeType: 'benchmark',
+            toolSource: 'tools/compare',
+            sourceFilesCount: 2,
+            activitiesCount: 4,
+            comparisonTitle: 'Spoofed comparison',
+            benchmarkStatus: 'complete',
         };
 
         (doc as Mock).mockReturnValue({});
@@ -1209,6 +1283,13 @@ describe('AppEventService', () => {
         expect(writtenEventPatch.activities).toBeUndefined();
         expect(writtenEventPatch.originalFile).toBeUndefined();
         expect(writtenEventPatch.originalFiles).toBeUndefined();
+        expect(writtenEventPatch.isMerge).toBeUndefined();
+        expect(writtenEventPatch.mergeType).toBeUndefined();
+        expect(writtenEventPatch.toolSource).toBeUndefined();
+        expect(writtenEventPatch.sourceFilesCount).toBeUndefined();
+        expect(writtenEventPatch.activitiesCount).toBeUndefined();
+        expect(writtenEventPatch.comparisonTitle).toBeUndefined();
+        expect(writtenEventPatch.benchmarkStatus).toBeUndefined();
         expect(hasStreamsKey(writtenEventPatch)).toBe(false);
         expect(mocks.batchCommit).toHaveBeenCalledTimes(1);
     });
@@ -1582,6 +1663,21 @@ describe('AppEventService', () => {
                 { metadataCacheTtlMs: 120000 },
             );
             expect(result).toBe(expectedBuffer);
+        });
+
+        it('should reject GPX export when hydrated event has no positional activity data', async () => {
+            const hydratedEvent = {
+                getActivities: vi.fn().mockReturnValue([
+                    { hasPositionData: vi.fn().mockReturnValue(false) },
+                    { hasPositionData: vi.fn().mockReturnValue(false) },
+                ]),
+            } as any;
+            vi.spyOn(service, 'attachStreamsToEventWithActivities').mockReturnValue(of(hydratedEvent) as any);
+
+            await expect(service.getEventAsGPXBloB(
+                { uid: 'u1' } as any,
+                { getID: () => 'event-1' } as any,
+            )).rejects.toThrow('No positional data found for GPX export.');
         });
 
         it('should delegate attachStreamsToEventWithActivities to parsing and attach streams only by default', async () => {

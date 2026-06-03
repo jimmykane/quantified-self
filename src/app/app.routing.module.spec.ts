@@ -116,6 +116,32 @@ describe('AppRoutingModule routes', () => {
     expect(garminRoute?.data?.['title']).toBe('Private Garmin Training Dashboard');
   });
 
+  it('should define public tools routes with compare workflow metadata', () => {
+    const toolsRoute = routes.find(candidate => candidate.path === 'tools');
+    const compareRoute = routes.find(candidate => candidate.path === 'tools/compare');
+    const savedRoute = routes.find(candidate => candidate.path === 'tools/compare/saved');
+
+    expect(toolsRoute).toBeTruthy();
+    expect(toolsRoute?.canMatch).toBeUndefined();
+    expect(toolsRoute?.loadComponent).toBeTypeOf('function');
+    expect(toolsRoute?.data?.['title']).toBe('Workout Data Tools');
+    expect(toolsRoute?.data?.['description']).toContain('compare FIT, GPX, and TCX files');
+
+    expect(compareRoute).toBeTruthy();
+    expect(compareRoute?.canMatch).toBeUndefined();
+    expect(compareRoute?.loadComponent).toBeTypeOf('function');
+    expect(compareRoute?.data?.['title']).toBe('FIT, GPX, TCX File Comparison Tool');
+    expect(compareRoute?.data?.['description']).toContain('one saved benchmark event');
+    expect(compareRoute?.data?.['jsonLd']).toMatchObject({
+      '@type': 'WebApplication',
+      url: 'https://quantified-self.io/tools/compare',
+    });
+
+    expect(savedRoute).toBeTruthy();
+    expect(savedRoute?.data?.['defaultTab']).toBe('saved');
+    expect(savedRoute?.data?.['robots']).toBe('noindex, follow');
+  });
+
   it('should define a public workout data comparison feature route with SEO metadata', () => {
     const route = routes.find(candidate => candidate.path === 'features/workout-data-comparison');
     const jsonLd = route?.data?.['jsonLd'] as Record<string, unknown> | undefined;
@@ -156,6 +182,12 @@ describe('AppRoutingModule routes', () => {
         title: 'FIT, TCX, GPX Workout File Comparison',
         h1: 'Compare FIT, TCX, GPX, JSON, and SML workout files',
         descriptionText: 'Compare FIT, TCX, GPX, JSON, and SML workout files',
+      },
+      {
+        path: PUBLIC_FEATURE_PATHS.fitGpxTcxFileAnalyzer,
+        title: 'FIT, GPX, TCX File Analyzer',
+        h1: 'Analyze FIT, GPX, and TCX workout files',
+        descriptionText: 'FIT file analyzer',
       },
       {
         path: PUBLIC_FEATURE_PATHS.sportsWatchBenchmark,

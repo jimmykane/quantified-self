@@ -113,6 +113,7 @@ describe('EventTableComponent', () => {
         mockEventService = {
             deleteAllEventData: vi.fn().mockReturnValue(Promise.resolve(true)),
             downloadFile: vi.fn().mockReturnValue(Promise.resolve(new ArrayBuffer(8))),
+            getEventAsGPXBloB: vi.fn().mockResolvedValue(new Blob(['<gpx></gpx>'], { type: 'application/gpx+xml' })),
             updateEventProperties: vi.fn().mockResolvedValue(undefined),
         };
         mockEventMergeService = {
@@ -295,7 +296,7 @@ describe('EventTableComponent', () => {
         expect(selectionToolbar.textContent).toContain('1 event selected');
         expect(mainRow.contains(selectionToolbar)).toBe(false);
         expect(mainRow.querySelector('.selection-actions')).toBeNull();
-        expect(actionButtons.length).toBe(5);
+        expect(actionButtons.length).toBe(6);
     });
 
     it('should keep selected-event actions accessible without hover tooltip overlays', () => {
@@ -311,6 +312,7 @@ describe('EventTableComponent', () => {
         expect(actionButtons.map((button) => button.getAttribute('aria-label'))).toEqual([
             'Merge 2 events',
             'Download CSV for 2 events',
+            'Download GPX for 2 events',
             'Download original files',
             'Delete 2 events',
             'Clear selection',
@@ -899,6 +901,147 @@ describe('EventTableComponent', () => {
         });
     });
 
+    describe('downloadGPXSelection', () => {
+        it('should show message when no events are selected', async () => {
+            component.selection.clear();
+
+            await component.downloadGPXSelection();
+
+            expect(mockSnackBar.open).toHaveBeenCalledWith('No events selected', undefined, { duration: 2000 });
+            expect(mockProcessingService.removeJob).toHaveBeenCalledWith('job-id');
+        });
+
+        it('should download a direct GPX file when one event is selected', async () => {
+            const e1 = new MockEvent('event1');
+            e1.startDate = new Date('2024-12-15T08:30:00');
+            const gpxBlob = new Blob(['<gpx>one</gpx>'], { type: 'application/gpx+xml' });
+            mockEventService.getEventAsGPXBloB.mockResolvedValue(gpxBlob);
+            component.selection.select({ 'Event': e1 } as any);
+
+            await component.downloadGPXSelection();
+
+            expect(mockEventService.getEventAsGPXBloB).toHaveBeenCalledWith(component.user, e1);
+            expect(mockFileService.downloadFile).toHaveBeenCalledWith(gpxBlob, '2024-12-15_08-30', 'gpx');
+            expect(mockFileService.downloadAsZip).not.toHaveBeenCalled();
+            expect(mockProcessingService.completeJob).toHaveBeenCalledWith('job-id', 'Downloaded 1 GPX file');
+            expect(mockAnalyticsService.logEvent).toHaveBeenCalledWith('downloaded_gpx_file', {
+                count: 1,
+                skipped: 0,
+                source: 'event_table_selection',
+            });
+            expect(mockSnackBar.open).toHaveBeenCalledWith('GPX file served', undefined, { duration: 2000 });
+        });
+
+        it('should zip generated GPX files when multiple events are selected', async () => {
+            const e1 = new MockEvent('event1');
+            e1.startDate = new Date('2024-12-01T10:00:00');
+            const e2 = new MockEvent('event2');
+            e2.startDate = new Date('2024-12-25T11:00:00');
+            const gpxBlob1 = new Blob(['<gpx>one</gpx>'], { type: 'application/gpx+xml' });
+            const gpxBlob2 = new Blob(['<gpx>two</gpx>'], { type: 'application/gpx+xml' });
+            mockEventService.getEventAsGPXBloB
+                .mockResolvedValueOnce(gpxBlob1)
+                .mockResolvedValueOnce(gpxBlob2);
+            component.selection.select({ 'Event': e1 } as any);
+            component.selection.select({ 'Event': e2 } as any);
+
+            await component.downloadGPXSelection();
+
+            expect(mockFileService.downloadFile).not.toHaveBeenCalled();
+            expect(mockFileService.downloadAsZip).toHaveBeenCalledWith(
+                expect.arrayContaining([
+                    expect.objectContaining({ data: gpxBlob1, fileName: expect.stringMatching(/_1\.gpx$/) }),
+                    expect.objectContaining({ data: gpxBlob2, fileName: expect.stringMatching(/_2\.gpx$/) }),
+                ]),
+                '2024-12-01_to_2024-12-25_gpx.zip',
+            );
+            expect(mockProcessingService.completeJob).toHaveBeenCalledWith('job-id', 'Downloaded 2 GPX files');
+            expect(mockSnackBar.open).toHaveBeenCalledWith('GPX files served', undefined, { duration: 2000 });
+        });
+
+        it('should download successful GPX files and report skipped failures', async () => {
+            const e1 = new MockEvent('event1');
+            e1.startDate = new Date('2024-12-01T10:00:00');
+            const e2 = new MockEvent('event2');
+            e2.startDate = new Date('2024-12-02T10:00:00');
+            const e3 = new MockEvent('event3');
+            e3.startDate = new Date('2024-12-03T10:00:00');
+            const gpxBlob1 = new Blob(['<gpx>one</gpx>'], { type: 'application/gpx+xml' });
+            const gpxBlob3 = new Blob(['<gpx>three</gpx>'], { type: 'application/gpx+xml' });
+            mockEventService.getEventAsGPXBloB
+                .mockResolvedValueOnce(gpxBlob1)
+                .mockRejectedValueOnce(new Error('no route'))
+                .mockResolvedValueOnce(gpxBlob3);
+            component.selection.select({ 'Event': e1 } as any);
+            component.selection.select({ 'Event': e2 } as any);
+            component.selection.select({ 'Event': e3 } as any);
+
+            await component.downloadGPXSelection();
+
+            expect(mockEventService.getEventAsGPXBloB).toHaveBeenCalledTimes(3);
+            expect(mockFileService.downloadAsZip).toHaveBeenCalledWith(
+                expect.arrayContaining([
+                    expect.objectContaining({ data: gpxBlob1 }),
+                    expect.objectContaining({ data: gpxBlob3 }),
+                ]),
+                '2024-12-01_to_2024-12-03_gpx.zip',
+            );
+            expect(mockProcessingService.completeJob).toHaveBeenCalledWith('job-id', 'Downloaded 2 GPX files');
+            expect(mockSnackBar.open).toHaveBeenCalledWith(
+                'Downloaded 2 GPX files. Skipped 1 event.',
+                undefined,
+                { duration: 4000 },
+            );
+        });
+
+        it('should zip the only successful GPX when multiple events are selected', async () => {
+            const e1 = new MockEvent('event1');
+            const e2 = new MockEvent('event2');
+            e2.startDate = new Date('2024-12-02T10:00:00');
+            const gpxBlob = new Blob(['<gpx>two</gpx>'], { type: 'application/gpx+xml' });
+            mockEventService.getEventAsGPXBloB
+                .mockRejectedValueOnce(new Error('no route'))
+                .mockResolvedValueOnce(gpxBlob);
+            component.selection.select({ 'Event': e1 } as any);
+            component.selection.select({ 'Event': e2 } as any);
+
+            await component.downloadGPXSelection();
+
+            expect(mockFileService.downloadFile).not.toHaveBeenCalled();
+            expect(mockFileService.downloadAsZip).toHaveBeenCalledWith(
+                [expect.objectContaining({ data: gpxBlob, fileName: expect.stringMatching(/\.gpx$/) })],
+                '2024-12-02_gpx.zip',
+            );
+            expect(mockProcessingService.completeJob).toHaveBeenCalledWith('job-id', 'Downloaded 1 GPX file');
+            expect(mockSnackBar.open).toHaveBeenCalledWith(
+                'Downloaded 1 GPX file. Skipped 1 event.',
+                undefined,
+                { duration: 4000 },
+            );
+        });
+
+        it('should not download anything when all selected GPX exports fail', async () => {
+            const e1 = new MockEvent('event1');
+            const e2 = new MockEvent('event2');
+            mockEventService.getEventAsGPXBloB
+                .mockRejectedValueOnce(new Error('no route'))
+                .mockRejectedValueOnce(new Error('no route'));
+            component.selection.select({ 'Event': e1 } as any);
+            component.selection.select({ 'Event': e2 } as any);
+
+            await component.downloadGPXSelection();
+
+            expect(mockFileService.downloadFile).not.toHaveBeenCalled();
+            expect(mockFileService.downloadAsZip).not.toHaveBeenCalled();
+            expect(mockProcessingService.failJob).toHaveBeenCalledWith('job-id', 'No GPX files exported');
+            expect(mockSnackBar.open).toHaveBeenCalledWith(
+                'Could not export GPX for selected events',
+                undefined,
+                { duration: 3000 },
+            );
+        });
+    });
+
     describe('downloadOriginals - Compression Handling', () => {
         it('should correctly name downloaded .gz files with base extension and download directly', async () => {
             const e1 = new MockEvent('event1');
@@ -1005,6 +1148,16 @@ describe('EventTableComponent', () => {
             component.downloadAsCSV(new Event('click'));
 
             expect(mockDialog.open).toHaveBeenCalled();
+        });
+
+        it('should allow downloadGPXSelection when more than 20 events are selected', async () => {
+            const events = Array.from({ length: 21 }, (_, i) => new MockEvent(`event${i}`));
+            events.forEach(e => component.selection.select({ 'Event': e } as any));
+
+            await component.downloadGPXSelection();
+
+            expect(mockProcessingService.addJob).toHaveBeenCalled();
+            expect(mockEventService.getEventAsGPXBloB).toHaveBeenCalledTimes(21);
         });
     });
 

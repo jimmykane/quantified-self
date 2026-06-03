@@ -55,6 +55,7 @@ describe('IntegrationsHubPageComponent', () => {
     expect(hrefs).toContain('/features');
     expect(hrefs).toContain('/features/workout-data-comparison');
     expect(hrefs).toContain('/features/workout-file-comparison');
+    expect(hrefs).toContain('/features/fit-gpx-tcx-file-analyzer');
     expect(hrefs).toContain('/features/sports-watch-benchmark');
     expect(hrefs).toContain('/guides');
     expect(hrefs).toContain('/guides/sync-garmin-to-suunto');

@@ -214,7 +214,9 @@ export const HELP_SECTIONS: HelpSection[] = [
 - If no benchmark exists yet, it opens the benchmark selection flow.
 - Benchmark comparison uses exactly two activities, supports role swap, and can auto-align time.
 - Benchmark reports can be rerun, shared, and saved as an image.
-- The public [Features hub](/features) links to [Workout Data Comparison](/features/workout-data-comparison), [Workout File Comparison](/features/workout-file-comparison), and [Sports Watch Benchmark](/features/sports-watch-benchmark) pages that explain how Garmin, Suunto, COROS, and uploaded FIT/TCX/GPX/JSON/SML activity files fit with benchmark reports, source files, overlays, and reviewer workflows for device tests, YouTube videos, and blog posts. Manual uploads and benchmark comparisons are available on the free plan for up to 100 activities; automatic provider sync and higher limits require a paid plan.
+- The [File Comparison Tool](/tools/compare) requires sign-in before file selection, then creates one saved benchmark event from multiple FIT, GPX, or TCX files and opens event details with the benchmark report flow.
+- Saved file comparisons are listed from [Tools -> Compare](/tools/compare/saved) in a sortable, filterable, paginated table with quick description notes alongside draft comparisons that do not have a generated report yet.
+- The public [Features hub](/features) links to [Workout Data Comparison](/features/workout-data-comparison), [Workout File Comparison](/features/workout-file-comparison), [Workout File Analyzer](/features/fit-gpx-tcx-file-analyzer), and [Sports Watch Benchmark](/features/sports-watch-benchmark) pages that explain how Garmin, Suunto, COROS, and uploaded FIT/TCX/GPX/JSON/SML activity files fit with benchmark reports, source files, maps, charts, overlays, and reviewer workflows for device tests, YouTube videos, and blog posts. Manual uploads, core analysis, and benchmark comparisons are available on the free plan for up to 100 activities; automatic provider sync and higher limits require a paid plan.
 
 ### Event jump tables
 
@@ -433,7 +435,7 @@ The app accepts these file types for manual activity upload:
 - \`.json\`
 - \`.sml\`
 
-The public [Workout File Comparison](/features/workout-file-comparison) page explains how FIT, TCX, GPX, JSON, and SML uploads can be compared with provider activities and benchmark reports.
+The public [Workout File Analyzer](/features/fit-gpx-tcx-file-analyzer) page explains how FIT, GPX, TCX, JSON, and SML uploads can be analyzed with maps, charts, statistics, exports, source-file context, and reprocessing. The public [Workout File Comparison](/features/workout-file-comparison) page explains how those files can be compared with provider activities and benchmark reports.
 
 ## Activity limits
 
@@ -450,8 +452,8 @@ The public [Workout File Comparison](/features/workout-file-comparison) page exp
 ## Export and backup options
 
 - You can export dashboard activity tables to CSV.
-- From selected dashboard rows, CSV export and original-file download actions support your current multi-selection.
-- If an activity has positional data, you can download **GPX**.
+- From selected dashboard rows, CSV export, GPX export, and original-file download actions support your current multi-selection.
+- If an activity has positional data, you can download **GPX** from its action menu or export selected dashboard rows to GPX; multi-selected GPX exports download as a ZIP.
 - If original source files are stored for an activity, you can download the original file or files.
 
 ## Reprocessing a single activity
@@ -462,6 +464,8 @@ From an activity action menu you can also:
 - **Reimport activity from file** when original source files are available`,
     links: [
       { label: 'Workout File Comparison', icon: 'upload_file', kind: 'route', target: '/features/workout-file-comparison' },
+      { label: 'Compare Files Tool', icon: 'compare_arrows', kind: 'route', target: '/tools/compare' },
+      { label: 'Workout File Analyzer', icon: 'analytics', kind: 'route', target: '/features/fit-gpx-tcx-file-analyzer' },
       { label: 'Sports Watch Benchmarks', icon: 'rate_review', kind: 'route', target: '/features/sports-watch-benchmark' },
       { label: 'Subscription', icon: 'credit_card', kind: 'route', target: '/subscriptions' },
       { label: 'Dashboard', icon: 'space_dashboard', kind: 'route', target: '/dashboard' },
@@ -483,7 +487,9 @@ The public [Integrations hub](/integrations) links to focused [Garmin Integratio
 
 The public [Training Data Sync Guides](/guides) hub links to the [Garmin to Suunto sync guide](/guides/sync-garmin-to-suunto), [COROS to Suunto sync guide](/guides/sync-coros-to-suunto), and [centralized workout data guide](/guides/centralize-garmin-suunto-coros-workout-data) for step-by-step setup.
 
-The public [Features hub](/features) links to [Workout Data Comparison](/features/workout-data-comparison), [Workout File Comparison](/features/workout-file-comparison), and [Sports Watch Benchmark](/features/sports-watch-benchmark) pages that explain how centralized Garmin, Suunto, COROS, and uploaded FIT/TCX/GPX/JSON/SML activity files support benchmark reports, metric overlays, source-file workflows, and reviewer workflows for device tests, YouTube videos, and blog posts. Manual uploads and benchmark comparisons are available on the free plan for up to 100 activities; automatic provider sync and higher limits require a paid plan.
+The public [Tools hub](/tools) links to the [File Comparison Tool](/tools/compare), which creates saved benchmark events directly from FIT, GPX, and TCX files.
+
+The public [Features hub](/features) links to [Workout Data Comparison](/features/workout-data-comparison), [Workout File Comparison](/features/workout-file-comparison), [Workout File Analyzer](/features/fit-gpx-tcx-file-analyzer), and [Sports Watch Benchmark](/features/sports-watch-benchmark) pages that explain how centralized Garmin, Suunto, COROS, and uploaded FIT/TCX/GPX/JSON/SML activity files support benchmark reports, metric overlays, maps, charts, source-file workflows, and reviewer workflows for device tests, YouTube videos, and blog posts. Manual uploads, core analysis, and benchmark comparisons are available on the free plan for up to 100 activities; automatic provider sync and higher limits require a paid plan.
 
 ## Sleep data
 
@@ -499,6 +505,8 @@ Suunto tools currently include:
 - importing history,
 - uploading FIT activities to Suunto,
 - uploading GPX routes to Suunto.
+
+Suunto FIT activity uploads in Services show a per-file queue with upload status, duplicate detection, failure messages, and retry controls for failed files. Large upload batches are processed one file at a time with short pauses between provider upload calls.
 
 ## Garmin
 
@@ -544,6 +552,8 @@ COROS tools currently include:
 - importing history,
 - uploading FIT activities to COROS.
 
+COROS FIT activity uploads in Services use the same per-file queue, short provider upload pacing, and failed-file retry controls as Suunto uploads.
+
 COROS -> Suunto activity sync is route-based:
 
 - you must connect both COROS and Suunto,
@@ -566,6 +576,8 @@ Suunto and COROS history imports are queued jobs. Large ranges can take hours or
       { label: 'Features', icon: 'dashboard_customize', kind: 'route', target: '/features' },
       { label: 'Training Guides', icon: 'menu_book', kind: 'route', target: '/guides' },
       { label: 'Workout Data Comparison', icon: 'compare_arrows', kind: 'route', target: '/features/workout-data-comparison' },
+      { label: 'Compare Files Tool', icon: 'compare_arrows', kind: 'route', target: '/tools/compare' },
+      { label: 'Workout File Analyzer', icon: 'analytics', kind: 'route', target: '/features/fit-gpx-tcx-file-analyzer' },
       { label: 'Garmin to Suunto Guide', icon: 'sync_alt', kind: 'route', target: '/guides/sync-garmin-to-suunto' },
       { label: 'COROS to Suunto Guide', icon: 'published_with_changes', kind: 'route', target: '/guides/sync-coros-to-suunto' },
       { label: 'Centralize Workout Data', icon: 'hub', kind: 'route', target: '/guides/centralize-garmin-suunto-coros-workout-data' },

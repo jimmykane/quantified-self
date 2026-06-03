@@ -26,6 +26,7 @@ import { MatBottomSheet } from '@angular/material/bottom-sheet';
 import { shouldRenderIntensityZonesChart } from '../../helpers/intensity-zones-chart-data-helper';
 import { AppEventService } from '../../services/app.event.service';
 import { PerformanceCurveDataService } from '../../services/performance-curve-data.service';
+import { AppBenchmarkFlowService } from '../../services/app.benchmark-flow.service';
 
 vi.mock('../../helpers/intensity-zones-chart-data-helper', () => ({
     shouldRenderIntensityZonesChart: vi.fn(),
@@ -46,9 +47,11 @@ describe('EventCardComponent', () => {
     let mockBottomSheet: any;
     let mockEventService: any;
     let mockPerformanceCurveDataService: any;
+    let mockBenchmarkFlowService: any;
     let routeData$: BehaviorSubject<{ event: EventInterface }>;
     let routeUserID: string;
     let routeEventID: string;
+    let routeBenchmarkQuery: string | null;
     let liveEventDetailsByRouteKey: Map<string, Subject<EventInterface | null>>;
     const mockedShouldRenderIntensityZonesChart = vi.mocked(shouldRenderIntensityZonesChart);
 
@@ -117,6 +120,7 @@ describe('EventCardComponent', () => {
         routeData$ = new BehaviorSubject({ event: mockEvent });
         routeUserID = 'testUser';
         routeEventID = 'evt1';
+        routeBenchmarkQuery = null;
         liveEventDetailsByRouteKey = new Map();
 
         mockActivatedRoute = {
@@ -126,6 +130,12 @@ describe('EventCardComponent', () => {
                     get: (key: string) => {
                         if (key === 'userID') return routeUserID;
                         if (key === 'eventID') return routeEventID;
+                        return null;
+                    }
+                },
+                queryParamMap: {
+                    get: (key: string) => {
+                        if (key === 'benchmark') return routeBenchmarkQuery;
                         return null;
                     }
                 }
@@ -182,6 +192,9 @@ describe('EventCardComponent', () => {
                 hasAny: false,
             }),
         };
+        mockBenchmarkFlowService = {
+            openBenchmarkEntry: vi.fn().mockResolvedValue(undefined),
+        };
 
         await TestBed.configureTestingModule({
             declarations: [EventCardComponent],
@@ -197,6 +210,7 @@ describe('EventCardComponent', () => {
                 { provide: LoggerService, useValue: mockLoggerService },
                 { provide: AppEventService, useValue: mockEventService },
                 { provide: PerformanceCurveDataService, useValue: mockPerformanceCurveDataService },
+                { provide: AppBenchmarkFlowService, useValue: mockBenchmarkFlowService },
             ],
             schemas: [NO_ERRORS_SCHEMA]
         })
@@ -312,6 +326,41 @@ describe('EventCardComponent', () => {
         routeData$.next({ event: duplicateEmissionEvent });
 
         expect(mockEventService.getEventDetailsLive).toHaveBeenCalledTimes(1);
+    });
+
+    it('should auto-open benchmark flow once when benchmark query param is present', () => {
+        routeBenchmarkQuery = '1';
+        const comparisonEvent = createEvent('evt1', [
+            createActivity('act-a'),
+            createActivity('act-b'),
+        ], 'Tool Comparison');
+
+        routeData$.next({ event: comparisonEvent });
+        routeData$.next({ event: comparisonEvent });
+
+        expect(mockBenchmarkFlowService.openBenchmarkEntry).toHaveBeenCalledTimes(1);
+        expect(mockBenchmarkFlowService.openBenchmarkEntry).toHaveBeenCalledWith(expect.objectContaining({
+            event: comparisonEvent,
+            user: mockUser,
+            hydrateStreamsForGeneration: true,
+        }));
+    });
+
+    it('should not pass a 3+ activity initial selection when auto-opening benchmark flow', () => {
+        routeBenchmarkQuery = '1';
+        const comparisonEvent = createEvent('evt1', [
+            createActivity('act-a'),
+            createActivity('act-b'),
+            createActivity('act-c'),
+        ], 'Multi-activity Tool Comparison');
+
+        routeData$.next({ event: comparisonEvent });
+
+        expect(mockBenchmarkFlowService.openBenchmarkEntry).toHaveBeenCalledTimes(1);
+        const config = mockBenchmarkFlowService.openBenchmarkEntry.mock.calls[0][0];
+        expect(config).not.toHaveProperty('initialSelection');
+        expect(config.event).toBe(comparisonEvent);
+        expect(config.hydrateStreamsForGeneration).toBe(true);
     });
 
     it('should set targetUserID signal from route', () => {

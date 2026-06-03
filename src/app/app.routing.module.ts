@@ -165,6 +165,55 @@ export const routes: Routes = [
     }
   },
   {
+    path: 'tools',
+    loadComponent: () => import('./components/tools/tools-hub-page.component').then(m => m.ToolsHubPageComponent),
+    data: {
+      title: 'Workout Data Tools',
+      preload: true,
+      animation: 'Tools',
+      description: 'Use Quantified Self tools to compare FIT, GPX, and TCX files and save benchmark events in a private training dashboard.',
+      jsonLd: {
+        '@context': 'https://schema.org',
+        '@type': 'CollectionPage',
+        name: 'Quantified Self Tools',
+        description: 'Workout data tools for comparing FIT, GPX, and TCX activity files.',
+        url: 'https://quantified-self.io/tools',
+        inLanguage: 'en',
+      },
+    },
+  },
+  {
+    path: 'tools/compare',
+    loadComponent: () => import('./components/tools/tools-compare-page.component').then(m => m.ToolsComparePageComponent),
+    data: {
+      title: 'FIT, GPX, TCX File Comparison Tool',
+      preload: true,
+      animation: 'ToolsCompare',
+      description: 'Compare FIT, GPX, and TCX workout files by creating one saved benchmark event and opening the existing event details comparison report.',
+      jsonLd: {
+        '@context': 'https://schema.org',
+        '@type': 'WebApplication',
+        name: 'FIT, GPX, TCX File Comparison Tool',
+        applicationCategory: 'HealthApplication',
+        description: 'Create saved benchmark comparisons from FIT, GPX, and TCX workout files.',
+        url: 'https://quantified-self.io/tools/compare',
+        inLanguage: 'en',
+      },
+    },
+  },
+  {
+    path: 'tools/compare/saved',
+    loadComponent: () => import('./components/tools/tools-compare-page.component').then(m => m.ToolsComparePageComponent),
+    data: {
+      title: 'Saved File Comparisons',
+      preload: true,
+      animation: 'ToolsCompare',
+      defaultTab: 'saved',
+      description: 'Open saved benchmark comparisons created from FIT, GPX, and TCX files.',
+      robots: 'noindex, follow',
+    },
+  },
+  {
     path: 'features/workout-data-comparison',
     loadComponent: () => import('./components/features/workout-data-comparison-page.component').then(m => m.WorkoutDataComparisonPageComponent),
     data: WORKOUT_DATA_COMPARISON_ROUTE_DATA
@@ -184,6 +233,11 @@ export const routes: Routes = [
     path: PUBLIC_FEATURE_PATHS.workoutFileComparison,
     loadComponent: () => import('./components/public-seo/public-seo-page.component').then(m => m.PublicSeoPageComponent),
     data: PUBLIC_SEO_ROUTE_DATA.workoutFileComparison
+  },
+  {
+    path: PUBLIC_FEATURE_PATHS.fitGpxTcxFileAnalyzer,
+    loadComponent: () => import('./components/public-seo/public-seo-page.component').then(m => m.PublicSeoPageComponent),
+    data: PUBLIC_SEO_ROUTE_DATA.fitGpxTcxFileAnalyzer
   },
   {
     path: PUBLIC_FEATURE_PATHS.sportsWatchBenchmark,

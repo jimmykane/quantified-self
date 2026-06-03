@@ -1,0 +1,47 @@
+<main class="tools-hub-page">
+  <section class="hero-section" aria-labelledby="tools-title">
+    <p class="eyebrow">Tools</p>
+    <h1 id="tools-title">Workout data tools</h1>
+    <p class="hero-copy">
+      Start file comparison directly, then keep benchmark results inside the same private activity archive.
+    </p>
+    <div class="hero-actions" aria-label="Primary actions">
+      <a mat-flat-button class="qs-mat-primary" routerLink="/tools/compare">
+        Compare Files
+        <mat-icon iconPositionEnd>arrow_forward</mat-icon>
+      </a>
+      <a mat-stroked-button routerLink="/dashboard">
+        Dashboard
+      </a>
+    </div>
+  </section>
+
+  <section class="content-section" aria-labelledby="tools-list-title">
+    <div class="section-heading">
+      <p class="eyebrow">Available tools</p>
+      <h2 id="tools-list-title">Choose a workflow</h2>
+    </div>
+
+    <div class="tools-grid">
+      @for (tool of tools; track tool.title) {
+      <mat-card appearance="outlined" class="tool-card">
+        <mat-card-header>
+          <div mat-card-avatar class="tool-icon">
+            <mat-icon>{{ tool.icon }}</mat-icon>
+          </div>
+          <mat-card-title>{{ tool.title }}</mat-card-title>
+          <mat-card-subtitle>{{ tool.status === 'available' ? 'Available' : 'Roadmap' }}</mat-card-subtitle>
+        </mat-card-header>
+        <mat-card-content>
+          <p>{{ tool.description }}</p>
+        </mat-card-content>
+        <mat-card-actions>
+          <a mat-stroked-button [routerLink]="tool.route">
+            {{ tool.status === 'available' ? 'Open' : 'Learn More' }}
+          </a>
+        </mat-card-actions>
+      </mat-card>
+      }
+    </div>
+  </section>
+</main>

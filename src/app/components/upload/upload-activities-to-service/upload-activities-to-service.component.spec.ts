@@ -12,7 +12,7 @@ import { AppProcessingService } from '../../../services/app.processing.service';
 import { AppFunctionsService } from '../../../services/app.functions.service';
 import { AppEventService } from '../../../services/app.event.service';
 import { AppUserService } from '../../../services/app.user.service';
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { afterEach, describe, it, expect, beforeEach, vi } from 'vitest';
 import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { ServiceNames } from '@sports-alliance/sports-lib';
@@ -36,7 +36,6 @@ describe('UploadActivitiesToServiceComponent', () => {
     const mockAuth = { currentUser: { getIdToken: () => Promise.resolve('token') } };
     const mockFunctionsService = { call: vi.fn().mockResolvedValue({ data: { status: 'OK' } }) };
     const mockEventService = {};
-    const mockUserService = {};
 
     beforeEach(async () => {
         await TestBed.configureTestingModule({
@@ -64,13 +63,19 @@ describe('UploadActivitiesToServiceComponent', () => {
     beforeEach(() => {
         fixture = TestBed.createComponent(UploadActivitiesToServiceComponent);
         component = fixture.componentInstance;
+        component.uploadDelayMs = 0;
         mockProcessingService.addJob.mockReset();
         mockProcessingService.updateJob.mockReset();
         mockProcessingService.completeJob.mockReset();
         mockProcessingService.failJob.mockReset();
         mockFunctionsService.call.mockReset();
+        mockProcessingService.addJob.mockReturnValue('job-id');
         mockFunctionsService.call.mockResolvedValue({ data: { status: 'OK' } });
         mockSnackBar.open.mockReset();
+    });
+
+    afterEach(() => {
+        vi.useRealTimers();
     });
 
     it('should create', () => {
@@ -143,12 +148,7 @@ describe('UploadActivitiesToServiceComponent', () => {
             status: UPLOAD_STATUS.PROCESSING,
             jobId: '1'
         };
-        try {
-            await component.processAndUploadFile(file);
-            expect.unreachable('Should have rejected');
-        } catch (e) {
-            expect(e).toBe('Unknown file type');
-        }
+        await expect(component.processAndUploadFile(file)).rejects.toThrow('Only FIT files are supported.');
     });
 
     it('should reject fit files larger than 20MB before calling the service function', async () => {
@@ -198,8 +198,39 @@ describe('UploadActivitiesToServiceComponent', () => {
             '1',
             expect.objectContaining({ status: 'duplicate' })
         );
-        // Snackbar is now shown by parent abstract directive, we just verify the result
-        expect(result).toEqual({ success: true, duplicate: true });
+        expect(result).toEqual({
+            success: true,
+            duplicate: true,
+            message: 'Activity already exists in Suunto'
+        });
+    });
+
+    it('getFiles should render one status row per selected FIT file', async () => {
+        const fileA = new File(['a'], 'first.fit', { type: 'application/octet-stream' });
+        const fileB = new File(['b'], 'second.fit', { type: 'application/octet-stream' });
+        const event: any = {
+            stopPropagation: vi.fn(),
+            preventDefault: vi.fn(),
+            target: {
+                files: [fileA, fileB],
+                value: 'pending-upload'
+            }
+        };
+
+        mockProcessingService.addJob
+            .mockReturnValueOnce('job-1')
+            .mockReturnValueOnce('job-2');
+
+        vi.spyOn(component, 'processAndUploadFile')
+            .mockResolvedValueOnce({ success: true, duplicate: false, message: 'Uploaded to Suunto' } as any)
+            .mockResolvedValueOnce({ success: true, duplicate: false, message: 'Uploaded to Suunto' } as any);
+
+        await component.getFiles(event);
+
+        expect(component.uploadRows()).toHaveLength(2);
+        expect(component.uploadRows().map(row => row.name)).toEqual(['first.fit', 'second.fit']);
+        expect(component.uploadRows().every(row => row.status === 'success')).toBe(true);
+        expect(component.uploadSummary()).toBe('2/2 done');
     });
 
     it('getFiles should aggregate success, duplicate, and failure results and clear drag payload', async () => {
@@ -210,9 +241,12 @@ describe('UploadActivitiesToServiceComponent', () => {
         const clearDataSpy = vi.fn();
         const stopPropagationSpy = vi.fn();
         const preventDefaultSpy = vi.fn();
+        const dropZone = document.createElement('section');
+        dropZone.classList.add('drag');
         const event: any = {
             stopPropagation: stopPropagationSpy,
             preventDefault: preventDefaultSpy,
+            currentTarget: dropZone,
             target: {
                 files: null,
                 value: 'pending-upload'
@@ -236,17 +270,21 @@ describe('UploadActivitiesToServiceComponent', () => {
 
         await component.getFiles(event);
 
-        expect(stopPropagationSpy).toHaveBeenCalledTimes(2);
+        expect(stopPropagationSpy).toHaveBeenCalledTimes(1);
         expect(preventDefaultSpy).toHaveBeenCalledTimes(1);
         expect(mockProcessingService.addJob).toHaveBeenCalledTimes(3);
         expect(mockProcessingService.updateJob).toHaveBeenCalledWith('job-1', { status: 'processing', progress: 0 });
         expect(mockProcessingService.updateJob).toHaveBeenCalledWith('job-2', { status: 'processing', progress: 0 });
         expect(mockProcessingService.updateJob).toHaveBeenCalledWith('job-3', { status: 'processing', progress: 0 });
-        expect(mockProcessingService.completeJob).toHaveBeenCalledTimes(2);
-        expect(mockProcessingService.completeJob).toHaveBeenCalledWith('job-1');
-        expect(mockProcessingService.completeJob).toHaveBeenCalledWith('job-2');
+        expect(mockProcessingService.completeJob).toHaveBeenCalledTimes(1);
+        expect(mockProcessingService.completeJob).toHaveBeenCalledWith('job-1', 'Uploaded to Suunto');
+        expect(mockProcessingService.updateJob).toHaveBeenCalledWith(
+            'job-2',
+            expect.objectContaining({ status: 'duplicate', progress: 100 })
+        );
         expect(mockProcessingService.failJob).toHaveBeenCalledTimes(1);
         expect(mockProcessingService.failJob).toHaveBeenCalledWith('job-3', 'Third upload failed');
+        expect(component.uploadRows().map(row => row.status)).toEqual(['success', 'duplicate', 'failed']);
         expect(mockSnackBar.open).toHaveBeenCalledWith(
             'Processed 3 files: 1 successful, 1 already exist, 1 failed',
             'OK',
@@ -255,7 +293,228 @@ describe('UploadActivitiesToServiceComponent', () => {
         expect(clearItemsSpy).toHaveBeenCalledTimes(1);
         expect(clearDataSpy).not.toHaveBeenCalled();
         expect(event.target.value).toBe('');
+        expect(dropZone.classList.contains('drag')).toBe(false);
         expect(component.isUploading).toBe(false);
+    });
+
+    it('getFiles should fall back to dropped files when the event target has an empty file list', async () => {
+        const droppedFile = new File(['a'], 'dropped.fit', { type: 'application/octet-stream' });
+        const event: any = {
+            stopPropagation: vi.fn(),
+            preventDefault: vi.fn(),
+            target: {
+                files: [],
+                value: 'pending-upload'
+            },
+            dataTransfer: {
+                files: [droppedFile],
+                clearData: vi.fn()
+            }
+        };
+
+        mockProcessingService.addJob.mockReturnValueOnce('job-1');
+        vi.spyOn(component, 'processAndUploadFile')
+            .mockResolvedValueOnce({ success: true, duplicate: false, message: 'Uploaded to Suunto' } as any);
+
+        await component.getFiles(event);
+
+        expect(component.uploadRows()).toHaveLength(1);
+        expect(component.uploadRows()[0].name).toBe('dropped.fit');
+        expect(mockProcessingService.completeJob).toHaveBeenCalledWith('job-1', 'Uploaded to Suunto');
+    });
+
+    it('getFiles should pace multi-file provider uploads with a shared inter-file delay', async () => {
+        vi.useFakeTimers();
+        component.uploadDelayMs = 2000;
+        const fileA = new File(['a'], 'first.fit', { type: 'application/octet-stream' });
+        const fileB = new File(['b'], 'second.fit', { type: 'application/octet-stream' });
+        const event: any = {
+            stopPropagation: vi.fn(),
+            preventDefault: vi.fn(),
+            target: {
+                files: [fileA, fileB],
+                value: 'pending-upload'
+            }
+        };
+
+        mockProcessingService.addJob
+            .mockReturnValueOnce('job-1')
+            .mockReturnValueOnce('job-2');
+
+        let resolveFirstUpload!: (value: any) => void;
+        const firstUpload = new Promise(resolve => {
+            resolveFirstUpload = resolve;
+        });
+        const uploadSpy = vi.spyOn(component, 'processAndUploadFile')
+            .mockReturnValueOnce(firstUpload as any)
+            .mockResolvedValueOnce({ success: true, duplicate: false, message: 'Uploaded to Suunto' } as any);
+
+        const uploadPromise = component.getFiles(event);
+        await Promise.resolve();
+
+        expect(uploadSpy).toHaveBeenCalledTimes(1);
+
+        resolveFirstUpload({ success: true, duplicate: false, message: 'Uploaded to Suunto' });
+        await Promise.resolve();
+        await Promise.resolve();
+
+        expect(uploadSpy).toHaveBeenCalledTimes(1);
+        expect(component.uploadRows()[1].message).toBe('Waiting before next upload...');
+
+        await vi.advanceTimersByTimeAsync(1999);
+        expect(uploadSpy).toHaveBeenCalledTimes(1);
+
+        await vi.advanceTimersByTimeAsync(1);
+        await uploadPromise;
+
+        expect(uploadSpy).toHaveBeenCalledTimes(2);
+        expect(component.uploadRows().map(row => row.status)).toEqual(['success', 'success']);
+        expect(event.target.value).toBe('');
+    });
+
+    it('getFiles should ignore new drops while an upload batch is active', async () => {
+        component.uploadDelayMs = 0;
+        const activeFile = new File(['a'], 'active.fit', { type: 'application/octet-stream' });
+        const ignoredFile = new File(['b'], 'ignored.fit', { type: 'application/octet-stream' });
+        const activeEvent: any = {
+            stopPropagation: vi.fn(),
+            preventDefault: vi.fn(),
+            target: {
+                files: [activeFile],
+                value: 'active-upload'
+            }
+        };
+        const ignoredDropZone = document.createElement('section');
+        ignoredDropZone.classList.add('drag');
+        const ignoredEvent: any = {
+            stopPropagation: vi.fn(),
+            preventDefault: vi.fn(),
+            currentTarget: ignoredDropZone,
+            target: {
+                files: [ignoredFile],
+                value: 'ignored-upload'
+            },
+            dataTransfer: {
+                files: [ignoredFile],
+                clearData: vi.fn()
+            }
+        };
+
+        let resolveActiveUpload!: (value: any) => void;
+        const activeUpload = new Promise(resolve => {
+            resolveActiveUpload = resolve;
+        });
+        const uploadSpy = vi.spyOn(component, 'processAndUploadFile')
+            .mockReturnValueOnce(activeUpload as any);
+
+        const activeUploadPromise = component.getFiles(activeEvent);
+        await Promise.resolve();
+
+        expect(component.isUploading).toBe(true);
+        expect(component.uploadRows()).toHaveLength(1);
+
+        await component.getFiles(ignoredEvent);
+
+        expect(uploadSpy).toHaveBeenCalledTimes(1);
+        expect(component.uploadRows()).toHaveLength(1);
+        expect(component.uploadRows()[0].name).toBe('active.fit');
+        expect(ignoredEvent.target.value).toBe('');
+        expect(ignoredEvent.dataTransfer.clearData).toHaveBeenCalledTimes(1);
+        expect(ignoredDropZone.classList.contains('drag')).toBe(false);
+
+        resolveActiveUpload({ success: true, duplicate: false, message: 'Uploaded to Suunto' });
+        await activeUploadPromise;
+    });
+
+    it('retryUpload should retry one failed row and increment attempts', async () => {
+        const fileA = new File(['a'], 'only.fit', { type: 'application/octet-stream' });
+        const event: any = {
+            stopPropagation: vi.fn(),
+            preventDefault: vi.fn(),
+            target: {
+                files: [fileA],
+                value: 'pending-upload'
+            }
+        };
+
+        mockProcessingService.addJob
+            .mockReturnValueOnce('job-1')
+            .mockReturnValueOnce('job-2');
+
+        const uploadSpy = vi.spyOn(component, 'processAndUploadFile')
+            .mockRejectedValueOnce(new Error('temporary failure'))
+            .mockResolvedValueOnce({ success: true, duplicate: false, message: 'Uploaded to Suunto' } as any);
+
+        await component.getFiles(event);
+
+        const failedRow = component.uploadRows()[0];
+        expect(failedRow.status).toBe('failed');
+        expect(failedRow.attempts).toBe(1);
+        expect(failedRow.message).toBe('temporary failure');
+
+        await component.retryUpload(failedRow);
+
+        const retriedRow = component.uploadRows()[0];
+        expect(uploadSpy).toHaveBeenCalledTimes(2);
+        expect(retriedRow.status).toBe('success');
+        expect(retriedRow.attempts).toBe(2);
+        expect(retriedRow.message).toBe('Uploaded to Suunto');
+        expect(mockProcessingService.completeJob).toHaveBeenCalledWith('job-2', 'Uploaded to Suunto');
+    });
+
+    it('retryFailedUploads should retry only failed rows', async () => {
+        const fileA = new File(['a'], 'failed.fit', { type: 'application/octet-stream' });
+        const fileB = new File(['b'], 'done.fit', { type: 'application/octet-stream' });
+        const event: any = {
+            stopPropagation: vi.fn(),
+            preventDefault: vi.fn(),
+            target: {
+                files: [fileA, fileB],
+                value: 'pending-upload'
+            }
+        };
+
+        mockProcessingService.addJob
+            .mockReturnValueOnce('job-1')
+            .mockReturnValueOnce('job-2')
+            .mockReturnValueOnce('job-3');
+
+        const uploadSpy = vi.spyOn(component, 'processAndUploadFile')
+            .mockRejectedValueOnce(new Error('temporary failure'))
+            .mockResolvedValueOnce({ success: true, duplicate: false, message: 'Uploaded to Suunto' } as any)
+            .mockResolvedValueOnce({ success: true, duplicate: false, message: 'Uploaded to Suunto' } as any);
+
+        await component.getFiles(event);
+        await component.retryFailedUploads();
+
+        expect(uploadSpy).toHaveBeenCalledTimes(3);
+        expect(component.uploadRows().map(row => row.status)).toEqual(['success', 'success']);
+        expect(component.uploadRows().map(row => row.attempts)).toEqual([2, 1]);
+        expect(mockProcessingService.completeJob).toHaveBeenCalledWith('job-3', 'Uploaded to Suunto');
+    });
+
+    it('getFiles should mark unsupported rows failed before calling the service function', async () => {
+        const fileA = new File(['a'], 'notes.txt', { type: 'text/plain' });
+        const event: any = {
+            stopPropagation: vi.fn(),
+            preventDefault: vi.fn(),
+            target: {
+                files: [fileA],
+                value: 'pending-upload'
+            }
+        };
+
+        await component.getFiles(event);
+
+        expect(component.uploadRows()[0].status).toBe('failed');
+        expect(component.uploadRows()[0].message).toBe('Only FIT files are supported.');
+        expect(mockProcessingService.addJob).not.toHaveBeenCalled();
+        expect(mockFunctionsService.call).not.toHaveBeenCalled();
+        expect(mockSnackBar.open).toHaveBeenCalledWith(
+            'Upload failed',
+            'OK',
+            { duration: 5000 }
+        );
     });
 
     it('getFiles should clear DataTransfer via clearData fallback after failure-only single upload', async () => {
