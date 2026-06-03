@@ -14,7 +14,6 @@ import {
 import { environment } from '../../environments/environment';
 import { AppCheckReadinessService } from './app-check-readiness.service';
 import { AppEventService } from './app.event.service';
-import { BrowserCompatibilityService } from './browser.compatibility.service';
 
 export interface ToolComparisonUploadResponse {
   eventId: string;
@@ -130,7 +129,6 @@ export class AppToolsComparisonService {
   private auth = inject(Auth);
   private appCheckReadiness = inject(AppCheckReadinessService);
   private eventService = inject(AppEventService);
-  private browserCompatibilityService = inject(BrowserCompatibilityService);
 
   validateFiles(files: File[]): string | null {
     if (files.length < MIN_COMPARISON_FILES) {
@@ -290,25 +288,11 @@ export class AppToolsComparisonService {
 
   private async resolvePayloadForComparisonHash(file: PreparedComparisonFile): Promise<Uint8Array | null> {
     const bytes = new Uint8Array(file.bytes);
-    const shouldDecompress = file.extension.toLowerCase().endsWith('.gz') || hasGzipMagic(bytes);
-    if (!shouldDecompress) {
-      return bytes;
-    }
-
-    if (!this.browserCompatibilityService.checkCompressionSupport(false)) {
+    if (file.extension.toLowerCase().endsWith('.gz') || hasGzipMagic(bytes)) {
       return null;
     }
 
-    try {
-      const stream = new Response(file.bytes).body?.pipeThrough(new DecompressionStream('gzip'));
-      if (!stream) {
-        return null;
-      }
-      const decompressed = await new Response(stream).arrayBuffer();
-      return new Uint8Array(decompressed);
-    } catch {
-      return null;
-    }
+    return bytes;
   }
 
   private async sha256Hex(parts: ReadonlyArray<string | Uint8Array>): Promise<string | null> {

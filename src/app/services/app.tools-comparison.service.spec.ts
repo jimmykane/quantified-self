@@ -8,7 +8,6 @@ import { FirebaseApp } from 'app/firebase/app';
 import { Auth } from 'app/firebase/auth';
 import { AppCheckReadinessService } from './app-check-readiness.service';
 import { AppEventService } from './app.event.service';
-import { BrowserCompatibilityService } from './browser.compatibility.service';
 import {
   TOOL_COMPARISON_EVENT_ID_HEADER,
   buildToolComparisonContentHashParts,
@@ -24,7 +23,6 @@ describe('AppToolsComparisonService', () => {
   let appMock: any;
   let appCheckReadinessMock: Pick<AppCheckReadinessService, 'getToken'>;
   let eventServiceMock: Pick<AppEventService, 'getEventsBy'>;
-  let browserCompatibilityMock: Pick<BrowserCompatibilityService, 'checkCompressionSupport'>;
   let fetchMock: any;
   let originalLocalhost: boolean;
   let originalUseFunctionsEmulator: boolean;
@@ -94,9 +92,6 @@ describe('AppToolsComparisonService', () => {
     eventServiceMock = {
       getEventsBy: vi.fn().mockReturnValue(of([])),
     };
-    browserCompatibilityMock = {
-      checkCompressionSupport: vi.fn().mockReturnValue(true),
-    };
 
     TestBed.configureTestingModule({
       providers: [
@@ -105,7 +100,6 @@ describe('AppToolsComparisonService', () => {
         { provide: FirebaseApp, useValue: appMock },
         { provide: AppCheckReadinessService, useValue: appCheckReadinessMock },
         { provide: AppEventService, useValue: eventServiceMock },
-        { provide: BrowserCompatibilityService, useValue: browserCompatibilityMock },
       ],
     });
 
@@ -211,6 +205,44 @@ describe('AppToolsComparisonService', () => {
 
     const headers = fetchMock.mock.calls[0][1].headers as Headers;
     expect(decodeURIComponent(headers.get('X-Tool-Comparison-Title-Encoded') || '')).toBe('A'.repeat(120));
+  });
+
+  it('skips deterministic event id hints for gzip comparison files', async () => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: vi.fn().mockResolvedValue({
+        eventId: 'event-1',
+        mergeType: 'benchmark',
+      }),
+    });
+
+    await service.createComparison([
+      makeFile('one.fit.gz', [0x1f, 0x8b, 0x08, 0x00]),
+      makeFile('two.gpx', [2]),
+    ]);
+
+    const headers = fetchMock.mock.calls[0][1].headers as Headers;
+    expect(headers.has(TOOL_COMPARISON_EVENT_ID_HEADER)).toBe(false);
+  });
+
+  it('skips deterministic event id hints when gzip magic bytes are disguised as an uncompressed extension', async () => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: vi.fn().mockResolvedValue({
+        eventId: 'event-1',
+        mergeType: 'benchmark',
+      }),
+    });
+
+    await service.createComparison([
+      makeFile('one.fit', [0x1f, 0x8b, 0x08, 0x00]),
+      makeFile('two.gpx', [2]),
+    ]);
+
+    const headers = fetchMock.mock.calls[0][1].headers as Headers;
+    expect(headers.has(TOOL_COMPARISON_EVENT_ID_HEADER)).toBe(false);
   });
 
   it('validates file count, extensions, and file sizes before upload', async () => {
