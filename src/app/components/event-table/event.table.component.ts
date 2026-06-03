@@ -529,6 +529,111 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     });
   }
 
+  public async downloadGPXSelection() {
+    const jobId = this.processingService.addJob('download', 'Preparing GPX export...');
+
+    try {
+      const selectedEvents = this.selection.selected.map(selected => selected.Event) as EventInterface[];
+      if (selectedEvents.length === 0) {
+        this.snackBar.open('No events selected', undefined, { duration: 2000 });
+        this.processingService.removeJob(jobId);
+        return;
+      }
+
+      this.processingService.updateJob(jobId, {
+        title: `Generating ${selectedEvents.length} GPX ${selectedEvents.length === 1 ? 'file' : 'files'}...`,
+        progress: 10,
+      });
+
+      const generatedFiles: { data: Blob, eventDate: Date | null, eventId: string | null }[] = [];
+      let minDate: Date | null = null;
+      let maxDate: Date | null = null;
+      let failedCount = 0;
+      let completed = 0;
+
+      for (const event of selectedEvents) {
+        const eventDate = this.fileService.toDate(event.startDate);
+        const eventId = event.getID ? event.getID() : null;
+
+        try {
+          const data = await this.eventService.getEventAsGPXBloB(this.user, event as any);
+          generatedFiles.push({ data, eventDate, eventId });
+          if (eventDate) {
+            if (!minDate || eventDate < minDate) minDate = eventDate;
+            if (!maxDate || eventDate > maxDate) maxDate = eventDate;
+          }
+        } catch (error) {
+          failedCount++;
+          this.logger.error('Failed to export GPX for selected event:', eventId, error);
+        }
+
+        completed++;
+        this.processingService.updateJob(jobId, {
+          progress: 10 + Math.round((completed / selectedEvents.length) * 70),
+          details: `Processed ${completed} of ${selectedEvents.length}`,
+        });
+      }
+
+      if (generatedFiles.length === 0) {
+        this.snackBar.open('Could not export GPX for selected events', undefined, { duration: 3000 });
+        this.processingService.failJob(jobId, 'No GPX files exported');
+        return;
+      }
+
+      const filesToDownload = generatedFiles.map((file, index) => ({
+        data: file.data,
+        fileName: this.fileService.generateDateBasedFilename(
+          file.eventDate,
+          'gpx',
+          index + 1,
+          generatedFiles.length,
+          file.eventId,
+        ),
+      }));
+
+      if (selectedEvents.length === 1) {
+        this.processingService.updateJob(jobId, { title: 'Preparing GPX file...', progress: 90 });
+        const file = filesToDownload[0];
+        const parts = file.fileName.split('.');
+        const extension = parts.length > 1 ? (parts.pop() || 'gpx') : 'gpx';
+        const baseNameWithoutExt = parts.join('.');
+        this.fileService.downloadFile(file.data, baseNameWithoutExt, extension);
+      } else {
+        this.processingService.updateJob(jobId, { title: 'Zipping GPX files...', progress: 90 });
+        const zipFileName = this.fileService.generateDateRangeZipFilename(minDate, maxDate, 'gpx');
+        await this.fileService.downloadAsZip(filesToDownload, zipFileName);
+      }
+
+      const downloadedCount = generatedFiles.length;
+      this.processingService.completeJob(
+        jobId,
+        `Downloaded ${downloadedCount} GPX ${downloadedCount === 1 ? 'file' : 'files'}`,
+      );
+      this.analyticsService.logEvent('downloaded_gpx_file', {
+        count: downloadedCount,
+        skipped: failedCount,
+        source: 'event_table_selection',
+      });
+
+      if (failedCount > 0) {
+        this.snackBar.open(
+          `Downloaded ${downloadedCount} GPX ${downloadedCount === 1 ? 'file' : 'files'}. Skipped ${failedCount} ${failedCount === 1 ? 'event' : 'events'}.`,
+          undefined,
+          { duration: 4000 },
+        );
+        return;
+      }
+
+      this.snackBar.open(selectedEvents.length === 1 ? 'GPX file served' : 'GPX files served', undefined, {
+        duration: 2000,
+      });
+    } catch (error) {
+      this.logger.error('Error exporting GPX files:', error);
+      this.processingService.failJob(jobId, 'GPX export failed');
+      this.snackBar.open('Error exporting GPX files', undefined, { duration: 3000 });
+    }
+  }
+
   public async downloadOriginals() {
     // Start background job instead of blocking UI
     const jobId = this.processingService.addJob('download', 'Preparing download...');

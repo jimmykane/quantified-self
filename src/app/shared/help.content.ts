@@ -452,8 +452,8 @@ The public [Workout File Analyzer](/features/fit-gpx-tcx-file-analyzer) page exp
 ## Export and backup options
 
 - You can export dashboard activity tables to CSV.
-- From selected dashboard rows, CSV export and original-file download actions support your current multi-selection.
-- If an activity has positional data, you can download **GPX**.
+- From selected dashboard rows, CSV export, GPX export, and original-file download actions support your current multi-selection.
+- If an activity has positional data, you can download **GPX** from its action menu or export selected dashboard rows to GPX; multi-selected GPX exports download as a ZIP.
 - If original source files are stored for an activity, you can download the original file or files.
 
 ## Reprocessing a single activity

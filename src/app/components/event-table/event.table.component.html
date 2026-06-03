@@ -48,6 +48,16 @@
 
           <button mat-button
             class="bulk-action-button"
+            [attr.aria-label]="'Download GPX for ' + selection.selected.length + ' ' + (selection.selected.length === 1 ? 'event' : 'events')"
+            (click)="$event.preventDefault(); $event.stopPropagation(); downloadGPXSelection()">
+            <span class="bulk-action-button-content">
+              <mat-icon>file_download</mat-icon>
+              <span class="bulk-action-label">GPX</span>
+            </span>
+          </button>
+
+          <button mat-button
+            class="bulk-action-button"
             aria-label="Download original files"
             (click)="$event.preventDefault(); $event.stopPropagation(); downloadOriginals()">
             <span class="bulk-action-button-content">

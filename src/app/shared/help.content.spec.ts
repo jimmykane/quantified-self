@@ -230,6 +230,13 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('reduced-motion is enabled');
   });
 
+  it('should document selected-row GPX export options', () => {
+    const uploadsSection = HELP_SECTIONS.find(section => section.id === 'uploads-and-imports');
+
+    expect(uploadsSection?.content).toContain('CSV export, GPX export, and original-file download actions support your current multi-selection');
+    expect(uploadsSection?.content).toContain('multi-selected GPX exports download as a ZIP');
+  });
+
   it('should document Garmin/COROS to Suunto route-based activity sync and manual catch-up', () => {
     const serviceConnectionsSection = HELP_SECTIONS.find(section => section.id === 'service-connections');
 
