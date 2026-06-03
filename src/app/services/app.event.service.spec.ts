@@ -1665,6 +1665,21 @@ describe('AppEventService', () => {
             expect(result).toBe(expectedBuffer);
         });
 
+        it('should reject GPX export when hydrated event has no positional activity data', async () => {
+            const hydratedEvent = {
+                getActivities: vi.fn().mockReturnValue([
+                    { hasPositionData: vi.fn().mockReturnValue(false) },
+                    { hasPositionData: vi.fn().mockReturnValue(false) },
+                ]),
+            } as any;
+            vi.spyOn(service, 'attachStreamsToEventWithActivities').mockReturnValue(of(hydratedEvent) as any);
+
+            await expect(service.getEventAsGPXBloB(
+                { uid: 'u1' } as any,
+                { getID: () => 'event-1' } as any,
+            )).rejects.toThrow('No positional data found for GPX export.');
+        });
+
         it('should delegate attachStreamsToEventWithActivities to parsing and attach streams only by default', async () => {
             const hydrationService = (service as any).originalFileHydrationService;
             const oldAscentStat = { getValue: () => 280.8 };

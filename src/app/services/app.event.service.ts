@@ -892,6 +892,16 @@ export class AppEventService implements OnDestroy {
 
   public async getEventAsGPXBloB(user: User, event: AppEventInterface): Promise<Blob> {
     const populatedEvent = await this.attachStreamsToEventWithActivities(user, event, undefined, false, true).pipe(take(1)).toPromise();
+    const hasPositionData = (populatedEvent?.getActivities?.() || []).some((activity) => {
+      try {
+        return activity?.hasPositionData?.() === true;
+      } catch {
+        return false;
+      }
+    });
+    if (!hasPositionData) {
+      throw new Error('No positional data found for GPX export.');
+    }
     const gpxString = await new EventExporterGPX().getAsString(populatedEvent);
     return (new Blob(
       [gpxString],
