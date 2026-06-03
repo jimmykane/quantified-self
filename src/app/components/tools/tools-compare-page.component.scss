@@ -171,13 +171,32 @@ h2 {
   pointer-events: none;
 }
 
-.title-field {
-  --mat-form-field-container-height: 42px;
-  --mat-form-field-container-text-size: 0.92rem;
-  --mat-form-field-container-vertical-padding: 8px;
-  --mat-form-field-outlined-label-text-size: 0.76rem;
+.upload-title-input {
+  box-sizing: border-box;
   width: 100%;
+  height: 42px;
   min-width: 0;
+  padding: 0 0.8rem;
+  border: 1px solid var(--mat-sys-outline-variant);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--mat-sys-on-surface);
+  font: inherit;
+  font-size: 0.92rem;
+  line-height: 42px;
+}
+
+.upload-title-input:focus {
+  border-color: var(--mat-sys-primary);
+  outline: none;
+}
+
+.upload-title-input::placeholder {
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.upload-title-input:disabled {
+  color: var(--mat-sys-on-surface-variant);
 }
 
 .selected-files {
@@ -233,9 +252,19 @@ h2 {
   gap: 0.5rem;
 }
 
-.comparison-tool-card button:not([mat-icon-button]) mat-progress-spinner {
+.button-content {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  line-height: 1;
+}
+
+.button-content mat-progress-spinner {
   display: inline-block;
-  margin-right: 0.4rem;
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
 }
 
 .row-actions button[mat-icon-button] mat-progress-spinner {

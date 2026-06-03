@@ -51,17 +51,15 @@
 
         <mat-card-content>
           <div class="upload-composer">
-            <mat-form-field appearance="outline" class="title-field" subscriptSizing="dynamic">
-              <mat-label>Title</mat-label>
-              <input
-                matInput
-                type="text"
-                maxlength="120"
-                placeholder="Optional"
-                [disabled]="isCreating()"
-                [value]="comparisonTitle()"
-                (input)="updateTitle($any($event.target).value)">
-            </mat-form-field>
+            <input
+              class="upload-title-input"
+              type="text"
+              maxlength="120"
+              aria-label="Comparison title"
+              placeholder="Title"
+              [disabled]="isCreating()"
+              [value]="comparisonTitle()"
+              (input)="updateTitle($any($event.target).value)">
 
             <div class="upload-controls">
               <input
@@ -92,10 +90,12 @@
                 type="button"
                 [disabled]="!canCreateComparison()"
                 (click)="createComparison()">
-                @if (isCreating()) {
-                <mat-progress-spinner diameter="18" mode="indeterminate"></mat-progress-spinner>
-                }
-                <span>Create</span>
+                <span class="button-content">
+                  @if (isCreating()) {
+                  <mat-progress-spinner diameter="18" mode="indeterminate"></mat-progress-spinner>
+                  }
+                  <span>Create</span>
+                </span>
               </button>
             </div>
           </div>

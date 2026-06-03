@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, DestroyRef, computed, inject, OnInit, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, computed, effect, inject, OnInit, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router } from '@angular/router';
 import { MatDialog } from '@angular/material/dialog';
@@ -119,6 +119,8 @@ export class ToolsComparePageComponent implements OnInit {
   private readonly initialTabIndex = this.route.snapshot.data['defaultTab'] === 'saved' ? 1 : 0;
   readonly guestSignInRedirectUrl = this.initialTabIndex === 1 ? '/tools/compare/saved' : '/tools/compare';
   readonly showSavedComparisonsFirst = this.initialTabIndex === 1;
+  private readonly hydratingDeviceEventIDs = new Set<string>();
+  private readonly hydratedDeviceEventIDs = new Set<string>();
 
   readonly selectedFileItems = computed<SelectedFileItem[]>(() =>
     this.selectedFiles().map((file, index) => ({
@@ -178,6 +180,22 @@ export class ToolsComparePageComponent implements OnInit {
     return this.sortedComparisonItems().slice(start, start + page.pageSize);
   });
 
+  private readonly hydrateVisibleComparisonDevices = effect(() => {
+    const user = this.currentUser();
+    if (!user) {
+      return;
+    }
+
+    const eventIDs = this.paginatedComparisonItems()
+      .filter(item => item.devicesLabel === 'Devices unknown')
+      .map(item => item.id)
+      .filter(eventID => !this.hydratedDeviceEventIDs.has(eventID) && !this.hydratingDeviceEventIDs.has(eventID));
+
+    if (eventIDs.length > 0) {
+      void this.hydrateMissingDeviceRows(user, eventIDs);
+    }
+  });
+
   readonly filteredComparisonCount = computed(() => this.filteredComparisonItems().length);
   readonly comparisonResultSummary = computed(() => {
     const total = this.comparisonItems().length;
@@ -203,6 +221,8 @@ export class ToolsComparePageComponent implements OnInit {
             this.comparisons.set([]);
             this.descriptionDrafts.set({});
             this.editingDescriptionEventID.set(null);
+            this.hydratingDeviceEventIDs.clear();
+            this.hydratedDeviceEventIDs.clear();
             this.resetComparisonPage();
           }
           if (!user || (previousUserID && previousUserID !== nextUserID)) {
@@ -486,6 +506,51 @@ export class ToolsComparePageComponent implements OnInit {
     } else if (rejectedNames.length > 0) {
       this.snackBar.open('Only FIT, GPX, and TCX files are supported.', undefined, { duration: 3000 });
     }
+  }
+
+  private async hydrateMissingDeviceRows(user: User, eventIDs: string[]): Promise<void> {
+    for (const eventID of eventIDs) {
+      this.hydratingDeviceEventIDs.add(eventID);
+      try {
+        const activities = await firstValueFrom(this.eventService.getActivitiesOnceByEvent(user, eventID));
+        this.hydratedDeviceEventIDs.add(eventID);
+        if (!activities.length) {
+          continue;
+        }
+
+        this.comparisons.update(events => events.map((event) => {
+          if (event.getID() !== eventID || (event.getActivities?.() || []).length > 0) {
+            return event;
+          }
+          return this.attachActivitiesToEvent(event, activities);
+        }));
+      } catch (error) {
+        this.logger.warn('[ToolsComparePageComponent] Could not hydrate comparison devices.', { eventID, error });
+      } finally {
+        this.hydratingDeviceEventIDs.delete(eventID);
+      }
+    }
+  }
+
+  private attachActivitiesToEvent(event: AppEventInterface, activities: ActivityInterface[]): AppEventInterface {
+    const mutableEvent = event as AppEventInterface & {
+      clearActivities?: () => unknown;
+      addActivities?: (activities: ActivityInterface[]) => unknown;
+      activities?: ActivityInterface[];
+      getActivities?: () => ActivityInterface[];
+    };
+
+    if (typeof mutableEvent.clearActivities === 'function') {
+      mutableEvent.clearActivities();
+    }
+    if (typeof mutableEvent.addActivities === 'function') {
+      mutableEvent.addActivities(activities);
+      return event;
+    }
+
+    mutableEvent.activities = activities;
+    mutableEvent.getActivities = () => mutableEvent.activities || [];
+    return event;
   }
 
   private toComparisonListItem(event: AppEventInterface): ComparisonListItem | null {

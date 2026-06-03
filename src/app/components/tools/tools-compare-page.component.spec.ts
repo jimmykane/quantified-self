@@ -43,6 +43,7 @@ describe('ToolsComparePageComponent', () => {
   let routerNavigateSpy: ReturnType<typeof vi.spyOn>;
   let eventServiceMock: {
     deleteAllEventData: ReturnType<typeof vi.fn>;
+    getActivitiesOnceByEvent: ReturnType<typeof vi.fn>;
     updateEventProperties: ReturnType<typeof vi.fn>;
   };
   let authServiceMock: {
@@ -78,6 +79,7 @@ describe('ToolsComparePageComponent', () => {
     };
     eventServiceMock = {
       deleteAllEventData: vi.fn().mockResolvedValue(true),
+      getActivitiesOnceByEvent: vi.fn().mockReturnValue(of([])),
       updateEventProperties: vi.fn().mockResolvedValue(undefined),
     };
     loggerMock = {
@@ -445,6 +447,32 @@ describe('ToolsComparePageComponent', () => {
 
     component.updateComparisonFilter('pace 3');
     expect(component.filteredComparisonItems().map(item => item.id)).toEqual(['report-devices']);
+  });
+
+  it('hydrates missing previous comparison devices from linked activities on visible rows', async () => {
+    const user = new User('user-1');
+    const activity = {
+      getID: () => 'activity-1',
+      creator: {
+        name: 'Garmin Edge Mtb',
+        swInfo: '3130',
+      },
+    };
+    eventServiceMock.getActivitiesOnceByEvent.mockReturnValueOnce(of([activity]));
+
+    userSubject.next(user);
+    component.comparisons.set([
+      makeComparisonEvent('comparison-1', {
+        title: 'Activity-backed devices',
+      }),
+    ]);
+    fixture.detectChanges();
+
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(eventServiceMock.getActivitiesOnceByEvent).toHaveBeenCalledWith(user, 'comparison-1');
+    expect(component.comparisonItems()[0].devicesLabel).toBe('Garmin Edge Mtb 3130');
   });
 
   it('renders previous comparison descriptions as compact text until editing', () => {
