@@ -1,4 +1,5 @@
 <main class="tools-compare-page">
+  @if (!currentUser()) {
   <section class="hero-section" aria-labelledby="tools-compare-title">
     <p class="eyebrow">Tools / Compare</p>
     <h1 id="tools-compare-title">Compare FIT, GPX, and TCX files</h1>
@@ -7,7 +8,6 @@
     </p>
   </section>
 
-  @if (!currentUser()) {
   <section class="guest-sign-in-panel" aria-labelledby="tools-compare-sign-in-title">
     <mat-card appearance="outlined" class="guest-auth-card">
       <mat-card-header>
@@ -32,181 +32,323 @@
     </mat-card>
   </section>
   } @else {
-  <mat-tab-group
-    class="compare-tabs"
-    [selectedIndex]="selectedTabIndex()"
-    (selectedIndexChange)="onTabIndexChange($event)"
-    animationDuration="150ms">
-    <mat-tab label="New comparison">
-      <section class="tab-panel" aria-labelledby="new-comparison-title">
-        <mat-card appearance="outlined" class="comparison-tool-card">
-          <mat-card-header>
-            <div mat-card-avatar class="tool-avatar">
-              <mat-icon>upload_file</mat-icon>
-            </div>
-            <mat-card-title id="new-comparison-title">New file comparison</mat-card-title>
-            <mat-card-subtitle>FIT, GPX, and TCX source files</mat-card-subtitle>
-          </mat-card-header>
+  <section class="signed-in-workspace">
+    <header class="workspace-header" aria-labelledby="tools-compare-workspace-title">
+      <p class="eyebrow">Tools / Compare</p>
+      <h1 id="tools-compare-workspace-title">{{ showSavedComparisonsFirst ? 'Saved comparisons' : 'Compare files' }}</h1>
+    </header>
 
-          <mat-card-content>
+    <ng-template #uploadPanelTemplate>
+    <section class="workspace-panel upload-panel" aria-labelledby="new-comparison-title">
+      <mat-card appearance="outlined" class="comparison-tool-card compact-upload-card">
+        <mat-card-header class="compact-upload-header">
+          <div mat-card-avatar class="tool-avatar">
+            <mat-icon>upload_file</mat-icon>
+          </div>
+          <mat-card-title id="new-comparison-title">New comparison</mat-card-title>
+          <mat-card-subtitle>FIT / GPX / TCX</mat-card-subtitle>
+        </mat-card-header>
+
+        <mat-card-content>
+          <div class="upload-composer">
+            <mat-form-field appearance="outline" class="title-field" subscriptSizing="dynamic">
+              <mat-label>Title</mat-label>
+              <input
+                matInput
+                type="text"
+                maxlength="120"
+                placeholder="Optional"
+                [disabled]="isCreating()"
+                [value]="comparisonTitle()"
+                (input)="updateTitle($any($event.target).value)">
+            </mat-form-field>
+
             <div class="upload-controls">
               <input
                 #fileInput
                 class="file-input"
                 type="file"
+                hidden
                 multiple
                 accept=".fit,.gpx,.tcx,.fit.gz,.gpx.gz,.tcx.gz"
                 [disabled]="isCreating()"
                 (change)="onFilesSelected($event)">
               <button mat-stroked-button type="button" [disabled]="isCreating()" (click)="fileInput.click()">
                 <mat-icon>attach_file</mat-icon>
-                Select Files
-              </button>
-              <button mat-button type="button" [disabled]="selectedFiles().length === 0 || isCreating()" (click)="clearFiles()">
-                Clear
-              </button>
-            </div>
-
-            <mat-form-field appearance="outline" class="title-field">
-              <mat-label>Comparison title</mat-label>
-              <input
-                matInput
-                type="text"
-                maxlength="120"
-                [disabled]="isCreating()"
-                [value]="comparisonTitle()"
-                (input)="updateTitle($any($event.target).value)">
-            </mat-form-field>
-
-            @if (selectedFileItems().length > 0) {
-            <mat-list class="selected-files" aria-label="Selected comparison files">
-              @for (item of selectedFileItems(); track item.index) {
-              <mat-list-item>
-                <mat-icon matListItemIcon>description</mat-icon>
-                <div matListItemTitle>{{ item.name }}</div>
-                <div matListItemLine>{{ item.extension }} · {{ item.sizeLabel }}</div>
-                <button
-                  mat-icon-button
-                  type="button"
-                  matListItemMeta
-                  [disabled]="isCreating()"
-                  (click)="removeFile(item.index)"
-                  aria-label="Remove selected file">
-                  <mat-icon>close</mat-icon>
-                </button>
-              </mat-list-item>
-              }
-            </mat-list>
-            } @else {
-            <div class="empty-selection">
-              <mat-icon>difference</mat-icon>
-              <span>No files selected</span>
-            </div>
-            }
-
-            @if (validationMessage()) {
-            <p class="validation-message">{{ validationMessage() }}</p>
-            }
-          </mat-card-content>
-
-          <mat-card-actions align="end">
-            <button
-              mat-flat-button
-              class="qs-mat-primary"
-              type="button"
-              [disabled]="!canCreateComparison()"
-              (click)="createComparison()">
-              @if (isCreating()) {
-              <mat-progress-spinner diameter="18" mode="indeterminate"></mat-progress-spinner>
-              }
-              <span>Create Comparison</span>
-            </button>
-          </mat-card-actions>
-        </mat-card>
-      </section>
-    </mat-tab>
-
-    <mat-tab label="Saved comparisons">
-      <section class="tab-panel" aria-labelledby="saved-comparisons-title">
-        <div class="section-heading">
-          <p class="eyebrow">Benchmarks</p>
-          <h2 id="saved-comparisons-title">Saved comparisons</h2>
-        </div>
-
-        @if (isLoadingComparisons()) {
-        <div class="loading-state">
-          <mat-progress-spinner diameter="28" mode="indeterminate"></mat-progress-spinner>
-          <span>Loading comparisons</span>
-        </div>
-        } @else if (comparisonItems().length === 0) {
-        <mat-card appearance="outlined" class="state-card">
-          <mat-card-content>
-            <mat-icon>compare_arrows</mat-icon>
-            <span>No saved comparisons yet</span>
-          </mat-card-content>
-        </mat-card>
-        } @else {
-        <div class="comparison-list">
-          @for (item of comparisonItems(); track item.id) {
-          <mat-card appearance="outlined" class="comparison-card">
-            <mat-card-header>
-              <div mat-card-avatar class="comparison-avatar">
-                <mat-icon>{{ item.hasReport ? 'analytics' : 'compare_arrows' }}</mat-icon>
-              </div>
-              <mat-card-title>{{ item.title }}</mat-card-title>
-              <mat-card-subtitle>
-                @if (item.date) {
-                {{ item.date | date:'mediumDate' }}
-                } @else {
-                Date unavailable
-                }
-              </mat-card-subtitle>
-            </mat-card-header>
-            <mat-card-content>
-              <div class="comparison-meta" aria-label="Comparison metadata">
-                <span>
-                  <mat-icon>description</mat-icon>
-                  {{ item.sourceFilesLabel }}
-                </span>
-                <span>
-                  <mat-icon>timeline</mat-icon>
-                  {{ item.activitiesLabel }}
-                </span>
-                <span>
-                  <mat-icon>{{ item.hasReport ? 'check_circle' : 'pending' }}</mat-icon>
-                  {{ item.hasReport ? item.reportCount + ' report' + (item.reportCount === 1 ? '' : 's') : 'Draft' }}
-                </span>
-              </div>
-            </mat-card-content>
-            <mat-card-actions align="end">
-              <button mat-button type="button" (click)="openComparison(item, false)">
-                <mat-icon>open_in_new</mat-icon>
-                Details
-              </button>
-              <button mat-stroked-button type="button" (click)="openComparison(item, true)">
-                <mat-icon>analytics</mat-icon>
-                {{ item.hasReport ? 'Open Report' : 'Run Report' }}
+                Add files
               </button>
               <button
                 mat-icon-button
                 type="button"
-                color="warn"
-                [disabled]="!!deletingEventID()"
-                (click)="deleteComparison(item)"
-                aria-label="Delete comparison">
-                @if (deletingEventID() === item.id) {
-                <mat-progress-spinner diameter="18" mode="indeterminate"></mat-progress-spinner>
-                } @else {
-                <mat-icon>delete</mat-icon>
-                }
+                [disabled]="selectedFiles().length === 0 || isCreating()"
+                matTooltip="Clear files"
+                aria-label="Clear selected files"
+                (click)="clearFiles()">
+                <mat-icon>close</mat-icon>
               </button>
-            </mat-card-actions>
-          </mat-card>
+              <button
+                mat-flat-button
+                class="qs-mat-primary"
+                type="button"
+                [disabled]="!canCreateComparison()"
+                (click)="createComparison()">
+                @if (isCreating()) {
+                <mat-progress-spinner diameter="18" mode="indeterminate"></mat-progress-spinner>
+                }
+                <span>Create</span>
+              </button>
+            </div>
+          </div>
+
+          @if (selectedFileItems().length > 0) {
+          <mat-list class="selected-files" aria-label="Selected comparison files">
+            @for (item of selectedFileItems(); track item.index) {
+            <mat-list-item>
+              <mat-icon matListItemIcon>description</mat-icon>
+              <div matListItemTitle>{{ item.name }}</div>
+              <div matListItemLine>{{ item.extension }} · {{ item.sizeLabel }}</div>
+              <button
+                mat-icon-button
+                type="button"
+                matListItemMeta
+                [disabled]="isCreating()"
+                (click)="removeFile(item.index)"
+                aria-label="Remove selected file">
+                <mat-icon>close</mat-icon>
+              </button>
+            </mat-list-item>
+            }
+          </mat-list>
+          } @else {
+          <div class="empty-selection">
+            <mat-icon>difference</mat-icon>
+            <span>No files selected</span>
+          </div>
           }
-        </div>
-        }
-      </section>
-    </mat-tab>
-  </mat-tab-group>
+
+          @if (validationMessage()) {
+          <p class="validation-message">{{ validationMessage() }}</p>
+          }
+        </mat-card-content>
+      </mat-card>
+    </section>
+    </ng-template>
+
+    <ng-template #savedComparisonsPanelTemplate>
+    <section class="workspace-panel saved-panel" aria-labelledby="saved-comparisons-title">
+      <div class="section-heading">
+        <p class="eyebrow">Benchmarks</p>
+        <h2 id="saved-comparisons-title">Previous comparisons</h2>
+      </div>
+
+      @if (isLoadingComparisons()) {
+      <div class="loading-state">
+        <mat-progress-spinner diameter="28" mode="indeterminate"></mat-progress-spinner>
+        <span>Loading comparisons</span>
+      </div>
+      } @else if (comparisonItems().length === 0) {
+      <mat-card appearance="outlined" class="state-card">
+        <mat-card-content>
+          <mat-icon>compare_arrows</mat-icon>
+          <span>No saved comparisons yet</span>
+        </mat-card-content>
+      </mat-card>
+      } @else {
+      <div class="comparison-table-controls">
+        <mat-form-field appearance="outline" class="filter-field" subscriptSizing="dynamic">
+          <mat-label>Filter comparisons</mat-label>
+          <input
+            matInput
+            type="search"
+            [value]="comparisonFilter()"
+            (input)="updateComparisonFilter($any($event.target).value)">
+          @if (comparisonFilter()) {
+          <button matSuffix mat-icon-button type="button" aria-label="Clear comparison filter" (click)="updateComparisonFilter('')">
+            <mat-icon>close</mat-icon>
+          </button>
+          }
+        </mat-form-field>
+        <span class="result-summary">{{ comparisonResultSummary() }}</span>
+      </div>
+
+      @if (filteredComparisonCount() === 0) {
+      <mat-card appearance="outlined" class="state-card">
+        <mat-card-content>
+          <mat-icon>search_off</mat-icon>
+          <span>No comparisons match this filter</span>
+        </mat-card-content>
+      </mat-card>
+      } @else {
+      <div class="comparison-table-shell">
+        <table
+          mat-table
+          matSort
+          class="comparison-table"
+          [dataSource]="paginatedComparisonItems()"
+          [trackBy]="trackComparisonRow"
+          [matSortActive]="comparisonSort().active"
+          [matSortDirection]="comparisonSort().direction"
+          (matSortChange)="onComparisonSortChange($event)">
+          <ng-container matColumnDef="date">
+            <th mat-header-cell *matHeaderCellDef mat-sort-header="date">Date</th>
+            <td mat-cell *matCellDef="let item">
+              @if (item.date) {
+              {{ item.date | date:'mediumDate' }}
+              } @else {
+              Date unavailable
+              }
+            </td>
+          </ng-container>
+
+          <ng-container matColumnDef="title">
+            <th mat-header-cell *matHeaderCellDef mat-sort-header="title">Title</th>
+            <td mat-cell *matCellDef="let item">
+              <span
+                class="title-cell"
+                [matTooltip]="item.title"
+                [attr.title]="item.title">
+                {{ item.title }}
+              </span>
+            </td>
+          </ng-container>
+
+          <ng-container matColumnDef="devices">
+            <th mat-header-cell *matHeaderCellDef mat-sort-header="devices">Devices</th>
+            <td mat-cell *matCellDef="let item">
+              <span
+                class="devices-cell"
+                [class.devices-placeholder]="item.devicesLabel === 'Devices unknown'"
+                [matTooltip]="item.devicesLabel"
+                [attr.title]="item.devicesLabel">
+                {{ item.devicesLabel }}
+              </span>
+            </td>
+          </ng-container>
+
+          <ng-container matColumnDef="description">
+            <th mat-header-cell *matHeaderCellDef mat-sort-header="description">Description</th>
+            <td mat-cell *matCellDef="let item">
+              @if (editingDescriptionEventID() !== item.id && savingDescriptionEventID() !== item.id) {
+              <div class="description-display">
+                <span
+                  class="description-text"
+                  [class.description-placeholder]="!item.description">
+                  {{ item.description || 'Add note' }}
+                </span>
+                <button
+                  mat-icon-button
+                  type="button"
+                  [attr.aria-label]="item.description ? 'Edit comparison description' : 'Add comparison description'"
+                  [matTooltip]="item.description ? 'Edit description' : 'Add description'"
+                  (click)="startDescriptionEdit(item)">
+                  <mat-icon>edit</mat-icon>
+                </button>
+              </div>
+              } @else {
+              <div class="description-editor">
+                <input
+                  autofocus
+                  class="description-inline-input"
+                  type="text"
+                  aria-label="Comparison description"
+                  placeholder="Add note"
+                  [disabled]="savingDescriptionEventID() === item.id"
+                  [value]="descriptionDrafts()[item.id] ?? item.description"
+                  (input)="updateDescriptionDraft(item, $any($event.target).value)"
+                  (blur)="saveDescription(item)"
+                  (keydown.escape)="cancelDescriptionEdit(item)"
+                  (keydown.enter)="$any($event.target).blur()">
+                @if (savingDescriptionEventID() === item.id) {
+                <mat-progress-spinner diameter="18" mode="indeterminate"></mat-progress-spinner>
+                }
+              </div>
+              }
+            </td>
+          </ng-container>
+
+          <ng-container matColumnDef="sourceFiles">
+            <th mat-header-cell *matHeaderCellDef mat-sort-header="sourceFiles">Files</th>
+            <td mat-cell *matCellDef="let item">{{ item.sourceFilesLabel }}</td>
+          </ng-container>
+
+          <ng-container matColumnDef="activities">
+            <th mat-header-cell *matHeaderCellDef mat-sort-header="activities">Activities</th>
+            <td mat-cell *matCellDef="let item">{{ item.activitiesLabel }}</td>
+          </ng-container>
+
+          <ng-container matColumnDef="status">
+            <th mat-header-cell *matHeaderCellDef mat-sort-header="status">Status</th>
+            <td mat-cell *matCellDef="let item">
+              <span class="status-cell">
+                <mat-icon>{{ item.hasReport ? 'check_circle' : 'pending' }}</mat-icon>
+                {{ item.statusLabel }}
+              </span>
+            </td>
+          </ng-container>
+
+          <ng-container matColumnDef="reports">
+            <th mat-header-cell *matHeaderCellDef mat-sort-header="reports">Reports</th>
+            <td mat-cell *matCellDef="let item">{{ item.reportLabel }}</td>
+          </ng-container>
+
+          <ng-container matColumnDef="actions">
+            <th mat-header-cell *matHeaderCellDef>Actions</th>
+            <td mat-cell *matCellDef="let item">
+              <div class="row-actions">
+                <button mat-icon-button type="button" matTooltip="Open details" (click)="openComparison(item, false)" aria-label="Open comparison details">
+                  <mat-icon>open_in_new</mat-icon>
+                </button>
+                <button
+                  mat-icon-button
+                  type="button"
+                  [matTooltip]="item.hasReport ? 'Open report' : 'Run report'"
+                  (click)="openComparison(item, true)"
+                  [attr.aria-label]="item.hasReport ? 'Open benchmark report' : 'Run benchmark report'">
+                  <mat-icon>analytics</mat-icon>
+                </button>
+                <button
+                  mat-icon-button
+                  type="button"
+                  color="warn"
+                  matTooltip="Delete comparison"
+                  [disabled]="!!deletingEventID()"
+                  (click)="deleteComparison(item)"
+                  aria-label="Delete comparison">
+                  @if (deletingEventID() === item.id) {
+                  <mat-progress-spinner diameter="18" mode="indeterminate"></mat-progress-spinner>
+                  } @else {
+                  <mat-icon>delete</mat-icon>
+                  }
+                </button>
+              </div>
+            </td>
+          </ng-container>
+
+          <tr mat-header-row *matHeaderRowDef="displayedComparisonColumns"></tr>
+          <tr mat-row *matRowDef="let row; columns: displayedComparisonColumns;"></tr>
+        </table>
+      </div>
+
+      <mat-paginator
+        [length]="filteredComparisonCount()"
+        [pageIndex]="comparisonPage().pageIndex"
+        [pageSize]="comparisonPage().pageSize"
+        [pageSizeOptions]="comparisonPageSizeOptions"
+        showFirstLastButtons
+        (page)="onComparisonPageChange($event)">
+      </mat-paginator>
+      }
+      }
+    </section>
+    </ng-template>
+
+    @if (showSavedComparisonsFirst) {
+    <ng-container *ngTemplateOutlet="savedComparisonsPanelTemplate"></ng-container>
+    <ng-container *ngTemplateOutlet="uploadPanelTemplate"></ng-container>
+    } @else {
+    <ng-container *ngTemplateOutlet="uploadPanelTemplate"></ng-container>
+    <ng-container *ngTemplateOutlet="savedComparisonsPanelTemplate"></ng-container>
+    }
+  </section>
   }
 </main>

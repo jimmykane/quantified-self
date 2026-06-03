@@ -5,7 +5,7 @@
 }
 
 .tools-compare-page {
-  max-width: 72rem;
+  max-width: 86rem;
   margin: 0 auto;
   padding: 1.5rem 1rem 3rem;
 }
@@ -39,6 +39,11 @@ h1 {
   letter-spacing: 0;
 }
 
+.workspace-header h1 {
+  font-size: 2rem;
+  line-height: 1.12;
+}
+
 h2 {
   margin-bottom: 0.5rem;
   font-size: 2.35rem;
@@ -48,7 +53,6 @@ h2 {
 
 .hero-copy,
 .validation-message,
-.comparison-meta,
 .state-card span,
 .loading-state span {
   color: var(--mat-sys-on-surface-variant);
@@ -61,30 +65,66 @@ h2 {
   font-size: 1.12rem;
 }
 
-.compare-tabs {
-  margin-top: 0.5rem;
-}
-
 .guest-sign-in-panel {
   margin-top: 0.5rem;
 }
 
-.tab-panel {
-  padding: 1.5rem 0 0;
+.signed-in-workspace {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.workspace-header {
+  display: grid;
+  gap: 0.35rem;
+  padding: 0.75rem 0 0.25rem;
+}
+
+.workspace-panel {
+  min-width: 0;
 }
 
 .comparison-tool-card,
 .guest-auth-card,
-.state-card,
-.comparison-card {
+.state-card {
   border-radius: 8px;
   background: var(--mat-sys-surface-container-low);
 }
 
 .comparison-tool-card mat-card-header,
-.guest-auth-card mat-card-header,
-.comparison-card mat-card-header {
+.guest-auth-card mat-card-header {
   align-items: center;
+}
+
+.compact-upload-card {
+  overflow: hidden;
+}
+
+.compact-upload-card .compact-upload-header {
+  padding: 0.75rem 1rem 0.25rem;
+}
+
+.compact-upload-card .compact-upload-header mat-card-title {
+  font-size: 1rem;
+  line-height: 1.25;
+  letter-spacing: 0;
+}
+
+.compact-upload-card .compact-upload-header mat-card-subtitle {
+  font-size: 0.82rem;
+  line-height: 1.25;
+}
+
+.compact-upload-card .tool-avatar {
+  width: 2rem;
+  height: 2rem;
+}
+
+.compact-upload-card .tool-avatar mat-icon {
+  width: 1.15rem;
+  height: 1.15rem;
+  font-size: 1.15rem;
 }
 
 .comparison-tool-card mat-card-content,
@@ -94,8 +134,12 @@ h2 {
   padding-top: 1rem;
 }
 
-.tool-avatar,
-.comparison-avatar {
+.compact-upload-card mat-card-content {
+  gap: 0.65rem;
+  padding: 0.5rem 1rem 0.9rem;
+}
+
+.tool-avatar {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -103,23 +147,37 @@ h2 {
   color: var(--mat-sys-on-primary-container);
 }
 
+.upload-composer {
+  display: grid;
+  grid-template-columns: minmax(14rem, 24rem) auto;
+  gap: 0.6rem;
+  align-items: center;
+}
+
 .upload-controls {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.75rem;
+  gap: 0.4rem;
   align-items: center;
 }
 
 .file-input {
   position: absolute;
-  width: 1px;
-  height: 1px;
+  width: 0;
+  height: 0;
   overflow: hidden;
   clip: rect(0, 0, 0, 0);
+  opacity: 0;
+  pointer-events: none;
 }
 
 .title-field {
-  width: min(100%, 32rem);
+  --mat-form-field-container-height: 42px;
+  --mat-form-field-container-text-size: 0.92rem;
+  --mat-form-field-container-vertical-padding: 8px;
+  --mat-form-field-outlined-label-text-size: 0.76rem;
+  width: 100%;
+  min-width: 0;
 }
 
 .selected-files {
@@ -137,11 +195,18 @@ h2 {
 }
 
 .empty-selection {
-  min-height: 4rem;
-  padding: 0 1rem;
+  min-height: 2.25rem;
+  padding: 0 0.75rem;
   border: 1px dashed var(--mat-sys-outline-variant);
   border-radius: 8px;
   color: var(--mat-sys-on-surface-variant);
+  font-size: 0.9rem;
+}
+
+.empty-selection mat-icon {
+  width: 1.1rem;
+  height: 1.1rem;
+  font-size: 1.1rem;
 }
 
 .guest-auth-copy {
@@ -155,21 +220,25 @@ h2 {
   margin-bottom: 0;
 }
 
+@media (max-width: 760px) {
+  .upload-composer {
+    grid-template-columns: 1fr;
+  }
+}
+
 .guest-auth-actions,
-.comparison-tool-card mat-card-actions,
-.comparison-card mat-card-actions {
+.comparison-tool-card mat-card-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
 }
 
-.comparison-tool-card button:not([mat-icon-button]) mat-progress-spinner,
-.comparison-card button:not([mat-icon-button]) mat-progress-spinner {
+.comparison-tool-card button:not([mat-icon-button]) mat-progress-spinner {
   display: inline-block;
   margin-right: 0.4rem;
 }
 
-.comparison-card button[mat-icon-button] mat-progress-spinner {
+.row-actions button[mat-icon-button] mat-progress-spinner {
   display: inline-block;
   margin: 0;
 }
@@ -183,32 +252,189 @@ h2 {
   min-height: 5rem;
 }
 
-.comparison-list {
-  display: grid;
-  gap: 1rem;
-}
-
-.comparison-card mat-card-content {
-  padding-top: 0.75rem;
-}
-
-.comparison-meta {
+.comparison-table-controls {
   display: flex;
   flex-wrap: wrap;
   gap: 0.75rem 1rem;
   align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.75rem;
 }
 
-.comparison-meta span {
+.filter-field {
+  width: min(100%, 28rem);
+}
+
+.result-summary {
+  color: var(--mat-sys-on-surface-variant);
+  font-size: 0.9rem;
+}
+
+.comparison-table-shell {
+  overflow-x: auto;
+  border: 1px solid var(--mat-sys-outline-variant);
+  border-radius: 8px;
+  background: var(--mat-sys-surface-container-lowest);
+}
+
+.comparison-table {
+  width: 100%;
+  min-width: 78rem;
+}
+
+.comparison-table th {
+  white-space: nowrap;
+}
+
+.comparison-table .mat-column-description {
+  width: 15rem;
+}
+
+.comparison-table .mat-column-devices {
+  width: 14rem;
+}
+
+.comparison-table .mat-column-actions {
+  width: 8.5rem;
+  padding-right: 0.5rem;
+  text-align: right;
+}
+
+.comparison-table td,
+.comparison-table th {
+  padding-right: 0.75rem;
+}
+
+.title-cell {
+  display: inline-block;
+  max-width: 14rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.devices-cell {
+  display: inline-block;
+  max-width: 13rem;
+  overflow: hidden;
+  color: var(--mat-sys-on-surface);
+  text-overflow: ellipsis;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.devices-placeholder {
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.description-display {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.25rem;
+  align-items: center;
+  max-width: 15rem;
+  min-height: 2rem;
+  min-width: 0;
+}
+
+.description-text {
+  overflow: hidden;
+  color: var(--mat-sys-on-surface);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.description-placeholder {
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.description-display button[mat-icon-button] {
   display: inline-flex;
   align-items: center;
-  gap: 0.35rem;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  color: var(--mat-sys-on-surface-variant);
+  line-height: 1;
 }
 
-.comparison-meta mat-icon {
+.description-display mat-icon {
+  display: block;
   width: 1.1rem;
   height: 1.1rem;
   font-size: 1.1rem;
+  line-height: 1.1rem;
+}
+
+.description-editor {
+  display: grid;
+  grid-template-columns: minmax(0, 12rem) auto;
+  gap: 0.5rem;
+  align-items: center;
+  min-height: 2rem;
+  min-width: 0;
+}
+
+.description-inline-input {
+  box-sizing: border-box;
+  width: min(100%, 12rem);
+  height: 2rem;
+  min-width: 0;
+  padding: 0 0.5rem;
+  border: 1px solid var(--mat-sys-outline-variant);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--mat-sys-on-surface);
+  font: inherit;
+  line-height: 2rem;
+}
+
+.description-inline-input:focus {
+  border-color: var(--mat-sys-primary);
+  outline: none;
+}
+
+.description-inline-input::placeholder {
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.description-inline-input:disabled {
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.description-editor mat-progress-spinner {
+  display: inline-block;
+}
+
+.status-cell,
+.row-actions {
+  display: inline-flex;
+  align-items: center;
+}
+
+.status-cell {
+  gap: 0.35rem;
+  white-space: nowrap;
+}
+
+.status-cell mat-icon {
+  width: 1.1rem;
+  height: 1.1rem;
+  font-size: 1.1rem;
+}
+
+.row-actions {
+  gap: 0.25rem;
+  justify-content: flex-end;
+  width: 100%;
+}
+
+mat-paginator {
+  border: 1px solid var(--mat-sys-outline-variant);
+  border-top: 0;
+  border-radius: 0 0 8px 8px;
 }
 
 @media (max-width: 48rem) {
@@ -224,10 +450,21 @@ h2 {
     font-size: 1.85rem;
   }
 
+  .workspace-header h1 {
+    font-size: 1.65rem;
+  }
+
   .upload-controls button,
-  .guest-auth-actions button,
-  .comparison-card mat-card-actions button:not([mat-icon-button]),
-  .comparison-card mat-card-actions a {
+  .guest-auth-actions button {
+    width: 100%;
+  }
+
+  .comparison-table-controls {
+    align-items: stretch;
+  }
+
+  .filter-field,
+  .result-summary {
     width: 100%;
   }
 }

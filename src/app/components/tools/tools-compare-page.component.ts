@@ -2,9 +2,11 @@ import { ChangeDetectionStrategy, Component, DestroyRef, computed, inject, OnIni
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router } from '@angular/router';
 import { MatDialog } from '@angular/material/dialog';
+import { PageEvent } from '@angular/material/paginator';
+import { Sort, SortDirection } from '@angular/material/sort';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import { User } from '@sports-alliance/sports-lib';
-import { AppEventInterface } from '@shared/app-event.interface';
+import { ActivityInterface, User } from '@sports-alliance/sports-lib';
+import { AppEventInterface, BenchmarkResult } from '@shared/app-event.interface';
 import { catchError, firstValueFrom, of, switchMap, tap } from 'rxjs';
 
 import { AppAuthService } from '../../authentication/app.auth.service';
@@ -12,6 +14,7 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../confirma
 import { SharedModule } from '../../modules/shared.module';
 import { AppEventService } from '../../services/app.event.service';
 import { AppToolsComparisonService } from '../../services/app.tools-comparison.service';
+import { LoggerService } from '../../services/logger.service';
 
 interface SelectedFileItem {
   index: number;
@@ -24,13 +27,35 @@ interface ComparisonListItem {
   id: string;
   title: string;
   date: Date | null;
+  dateSortMs: number;
+  devicesLabel: string;
+  devicesSort: string;
+  description: string;
   sourceFilesCount: number | null;
   activitiesCount: number | null;
+  sourceFilesSort: number;
+  activitiesSort: number;
   sourceFilesLabel: string;
   activitiesLabel: string;
   hasReport: boolean;
   reportCount: number;
+  reportLabel: string;
+  statusLabel: string;
+  statusRank: number;
+  filterText: string;
   event: AppEventInterface;
+}
+
+type ComparisonSortColumn = 'date' | 'title' | 'devices' | 'description' | 'sourceFiles' | 'activities' | 'status' | 'reports';
+
+interface ComparisonSortState {
+  active: ComparisonSortColumn;
+  direction: Exclude<SortDirection, ''>;
+}
+
+interface ComparisonPageState {
+  pageIndex: number;
+  pageSize: number;
 }
 
 type ComparisonEventFields = AppEventInterface & {
@@ -41,6 +66,8 @@ type ComparisonEventFields = AppEventInterface & {
 };
 
 const MAX_COMPARISON_FILES = 10;
+const DEFAULT_COMPARISON_PAGE_SIZE = 25;
+const COMPARISON_PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
 
 @Component({
   selector: 'app-tools-compare-page',
@@ -59,6 +86,7 @@ export class ToolsComparePageComponent implements OnInit {
   private authService = inject(AppAuthService);
   private eventService = inject(AppEventService);
   private comparisonService = inject(AppToolsComparisonService);
+  private logger = inject(LoggerService);
 
   readonly selectedFiles = signal<File[]>([]);
   readonly comparisonTitle = signal('');
@@ -67,10 +95,30 @@ export class ToolsComparePageComponent implements OnInit {
   readonly comparisons = signal<AppEventInterface[]>([]);
   readonly isLoadingComparisons = signal(false);
   readonly deletingEventID = signal<string | null>(null);
+  readonly savingDescriptionEventID = signal<string | null>(null);
+  readonly editingDescriptionEventID = signal<string | null>(null);
+  readonly descriptionDrafts = signal<Record<string, string>>({});
+  readonly comparisonFilter = signal('');
+  readonly comparisonSort = signal<ComparisonSortState>({ active: 'date', direction: 'desc' });
+  readonly comparisonPage = signal<ComparisonPageState>({
+    pageIndex: 0,
+    pageSize: DEFAULT_COMPARISON_PAGE_SIZE,
+  });
+  readonly comparisonPageSizeOptions = COMPARISON_PAGE_SIZE_OPTIONS;
+  readonly displayedComparisonColumns = [
+    'date',
+    'title',
+    'devices',
+    'description',
+    'sourceFiles',
+    'activities',
+    'status',
+    'reports',
+    'actions',
+  ];
   private readonly initialTabIndex = this.route.snapshot.data['defaultTab'] === 'saved' ? 1 : 0;
-  private readonly requestedTabIndex = signal(this.initialTabIndex);
   readonly guestSignInRedirectUrl = this.initialTabIndex === 1 ? '/tools/compare/saved' : '/tools/compare';
-  readonly selectedTabIndex = computed(() => this.currentUser() ? this.requestedTabIndex() : 0);
+  readonly showSavedComparisonsFirst = this.initialTabIndex === 1;
 
   readonly selectedFileItems = computed<SelectedFileItem[]>(() =>
     this.selectedFiles().map((file, index) => ({
@@ -105,6 +153,41 @@ export class ToolsComparePageComponent implements OnInit {
       .filter((item): item is ComparisonListItem => !!item),
   );
 
+  readonly filteredComparisonItems = computed<ComparisonListItem[]>(() => {
+    const filter = this.comparisonFilter().trim().toLowerCase();
+    const items = this.comparisonItems();
+    if (!filter) {
+      return items;
+    }
+
+    return items.filter(item => item.filterText.includes(filter));
+  });
+
+  readonly sortedComparisonItems = computed<ComparisonListItem[]>(() => {
+    const sort = this.comparisonSort();
+    const directionMultiplier = sort.direction === 'asc' ? 1 : -1;
+
+    return [...this.filteredComparisonItems()].sort((first, second) =>
+      this.compareComparisonItems(first, second, sort.active) * directionMultiplier,
+    );
+  });
+
+  readonly paginatedComparisonItems = computed<ComparisonListItem[]>(() => {
+    const page = this.comparisonPage();
+    const start = page.pageIndex * page.pageSize;
+    return this.sortedComparisonItems().slice(start, start + page.pageSize);
+  });
+
+  readonly filteredComparisonCount = computed(() => this.filteredComparisonItems().length);
+  readonly comparisonResultSummary = computed(() => {
+    const total = this.comparisonItems().length;
+    const filtered = this.filteredComparisonCount();
+    if (total === 0) {
+      return 'No comparisons';
+    }
+    return filtered === total ? `${total} comparison${total === 1 ? '' : 's'}` : `${filtered} of ${total} comparisons`;
+  });
+
   ngOnInit(): void {
     this.authService.user$
       .pipe(
@@ -118,13 +201,13 @@ export class ToolsComparePageComponent implements OnInit {
           this.isLoadingComparisons.set(!!user);
           if (authScopeChanged) {
             this.comparisons.set([]);
+            this.descriptionDrafts.set({});
+            this.editingDescriptionEventID.set(null);
+            this.resetComparisonPage();
           }
           if (!user || (previousUserID && previousUserID !== nextUserID)) {
             this.selectedFiles.set([]);
             this.comparisonTitle.set('');
-          }
-          if (previousUserID && previousUserID !== nextUserID) {
-            this.requestedTabIndex.set(0);
           }
         }),
         switchMap((user) => {
@@ -133,24 +216,19 @@ export class ToolsComparePageComponent implements OnInit {
           }
           return this.comparisonService.getBenchmarkComparisons(user).pipe(
             tap(() => this.isLoadingComparisons.set(false)),
-            catchError(() => {
+            catchError((error) => {
               this.isLoadingComparisons.set(false);
+              this.logger.warn('[ToolsComparePageComponent] Could not load saved comparisons.', error);
               this.snackBar.open('Could not load saved comparisons.', undefined, { duration: 3000 });
               return of([]);
             }),
           );
         }),
       )
-      .subscribe((events) => this.comparisons.set(events));
-  }
-
-  onTabIndexChange(index: number): void {
-    if (!this.currentUser()) {
-      this.requestedTabIndex.set(0);
-      return;
-    }
-
-    this.requestedTabIndex.set(index);
+      .subscribe((events) => {
+        this.comparisons.set(events);
+        this.resetComparisonPage();
+      });
   }
 
   onFilesSelected(event: Event): void {
@@ -187,6 +265,103 @@ export class ToolsComparePageComponent implements OnInit {
     }
 
     this.comparisonTitle.set(value);
+  }
+
+  updateComparisonFilter(value: string): void {
+    this.comparisonFilter.set(value);
+    this.resetComparisonPage();
+  }
+
+  onComparisonSortChange(sort: Sort): void {
+    const active = this.isComparisonSortColumn(sort.active) ? sort.active : 'date';
+    const direction = sort.direction || (active === 'date' ? 'desc' : 'asc');
+    this.comparisonSort.set({ active, direction });
+    this.resetComparisonPage();
+  }
+
+  onComparisonPageChange(event: PageEvent): void {
+    this.comparisonPage.set({
+      pageIndex: event.pageIndex,
+      pageSize: event.pageSize,
+    });
+  }
+
+  trackComparisonRow(_index: number, item: ComparisonListItem): string {
+    return item.id;
+  }
+
+  startDescriptionEdit(item: ComparisonListItem): void {
+    if (this.savingDescriptionEventID()) {
+      return;
+    }
+
+    this.editingDescriptionEventID.set(item.id);
+  }
+
+  cancelDescriptionEdit(item: ComparisonListItem): void {
+    if (this.savingDescriptionEventID() === item.id) {
+      return;
+    }
+
+    this.clearDescriptionDraft(item.id);
+    this.clearDescriptionEdit(item.id);
+  }
+
+  updateDescriptionDraft(item: ComparisonListItem, value: string): void {
+    if (this.savingDescriptionEventID() === item.id) {
+      return;
+    }
+
+    this.descriptionDrafts.update((drafts) => {
+      const nextDrafts = { ...drafts };
+      if (value === item.description) {
+        delete nextDrafts[item.id];
+      } else {
+        nextDrafts[item.id] = value;
+      }
+      return nextDrafts;
+    });
+  }
+
+  async saveDescription(item: ComparisonListItem): Promise<void> {
+    if (this.savingDescriptionEventID()) {
+      return;
+    }
+
+    const user = this.currentUser();
+    if (!user) {
+      this.clearDescriptionEdit(item.id);
+      return;
+    }
+
+    const nextDescription = this.descriptionDrafts()[item.id] ?? item.description;
+    if (nextDescription === item.description) {
+      this.clearDescriptionDraft(item.id);
+      this.clearDescriptionEdit(item.id);
+      return;
+    }
+
+    this.savingDescriptionEventID.set(item.id);
+    try {
+      await this.eventService.updateEventProperties(user, item.id, {
+        description: nextDescription,
+      });
+      this.comparisons.update(events => events.map((event) => {
+        if (event.getID() === item.id) {
+          event.description = nextDescription;
+        }
+        return event;
+      }));
+      this.clearDescriptionDraft(item.id);
+      this.clearDescriptionEdit(item.id);
+      this.snackBar.open('Description saved.', undefined, { duration: 2000 });
+    } catch (error) {
+      this.clearDescriptionDraft(item.id);
+      this.clearDescriptionEdit(item.id);
+      this.snackBar.open('Could not save description.', undefined, { duration: 3000 });
+    } finally {
+      this.savingDescriptionEventID.set(null);
+    }
   }
 
   async createComparison(): Promise<void> {
@@ -266,6 +441,7 @@ export class ToolsComparePageComponent implements OnInit {
     try {
       await this.eventService.deleteAllEventData(user, item.id);
       this.comparisons.update(events => events.filter(event => event.getID() !== item.id));
+      this.resetComparisonPage();
       this.snackBar.open('Comparison deleted.', undefined, { duration: 2000 });
     } catch (error) {
       this.snackBar.open('Could not delete comparison.', undefined, { duration: 3000 });
@@ -322,6 +498,12 @@ export class ToolsComparePageComponent implements OnInit {
     const benchmarkResults = event.benchmarkResults || {};
     const savedReportCount = Object.keys(benchmarkResults).length;
     const reportCount = savedReportCount || (comparisonEvent.benchmarkResult ? 1 : 0);
+    const hasReport = reportCount > 0;
+    const statusLabel = hasReport ? 'Report ready' : 'Draft';
+    const reportLabel = hasReport
+      ? `${reportCount} report${reportCount === 1 ? '' : 's'}`
+      : 'No reports';
+    const description = typeof event.description === 'string' ? event.description : '';
     const sourceFilesCount = typeof comparisonEvent.sourceFilesCount === 'number'
       ? comparisonEvent.sourceFilesCount
       : this.getOriginalFilesCount(event);
@@ -329,19 +511,147 @@ export class ToolsComparePageComponent implements OnInit {
     const activitiesCount = typeof comparisonEvent.activitiesCount === 'number'
       ? comparisonEvent.activitiesCount
       : (activities.length > 0 ? activities.length : null);
+    const deviceNames = this.resolveComparisonDeviceNames(event, activities);
+    const devicesLabel = deviceNames.length > 0 ? deviceNames.join(', ') : 'Devices unknown';
 
     return {
       id: eventID,
       title: comparisonEvent.comparisonTitle || event.name || 'Benchmark comparison',
       date: event.startDate instanceof Date ? event.startDate : null,
+      dateSortMs: event.startDate instanceof Date ? event.startDate.getTime() : 0,
+      devicesLabel,
+      devicesSort: deviceNames.length > 0 ? deviceNames.join(' ').toLowerCase() : '\uffff',
+      description,
       sourceFilesCount,
       activitiesCount,
+      sourceFilesSort: sourceFilesCount ?? -1,
+      activitiesSort: activitiesCount ?? -1,
       sourceFilesLabel: this.formatCountLabel(sourceFilesCount, 'file', 'Files unknown'),
       activitiesLabel: this.formatCountLabel(activitiesCount, 'activity', 'Activities unknown'),
-      hasReport: reportCount > 0,
+      hasReport,
       reportCount,
+      reportLabel,
+      statusLabel,
+      statusRank: hasReport ? 1 : 0,
+      filterText: [
+        comparisonEvent.comparisonTitle || event.name || 'Benchmark comparison',
+        devicesLabel,
+        description,
+        event.startDate instanceof Date ? event.startDate.toISOString() : 'date unavailable',
+        this.formatCountLabel(sourceFilesCount, 'file', 'Files unknown'),
+        this.formatCountLabel(activitiesCount, 'activity', 'Activities unknown'),
+        statusLabel,
+        reportLabel,
+      ].join(' ').toLowerCase(),
       event,
     };
+  }
+
+  private compareComparisonItems(first: ComparisonListItem, second: ComparisonListItem, column: ComparisonSortColumn): number {
+    switch (column) {
+      case 'date':
+        return first.dateSortMs - second.dateSortMs;
+      case 'title':
+        return first.title.localeCompare(second.title);
+      case 'devices':
+        return first.devicesSort.localeCompare(second.devicesSort);
+      case 'description':
+        return first.description.localeCompare(second.description);
+      case 'sourceFiles':
+        return first.sourceFilesSort - second.sourceFilesSort;
+      case 'activities':
+        return first.activitiesSort - second.activitiesSort;
+      case 'status':
+        return first.statusRank - second.statusRank;
+      case 'reports':
+        return first.reportCount - second.reportCount;
+    }
+
+    return 0;
+  }
+
+  private isComparisonSortColumn(value: string): value is ComparisonSortColumn {
+    return ['date', 'title', 'devices', 'description', 'sourceFiles', 'activities', 'status', 'reports'].includes(value);
+  }
+
+  private resolveComparisonDeviceNames(event: AppEventInterface, activities: ActivityInterface[]): string[] {
+    const devices = new Map<string, string>();
+    const addDevice = (name: unknown, forceFormatted = false): void => {
+      const normalized = this.normalizeDeviceNameKey(name);
+      if (!normalized || devices.has(normalized)) {
+        return;
+      }
+      devices.set(normalized, forceFormatted ? this.formatNormalizedDeviceName(normalized) : `${name}`.trim().replace(/\s+/g, ' '));
+    };
+
+    Object.values(event.benchmarkResults || {}).forEach((result) => {
+      addDevice(result.referenceName);
+      addDevice(result.testName);
+    });
+
+    const legacyBenchmarkResult = event.benchmarkResult as BenchmarkResult | undefined;
+    addDevice(legacyBenchmarkResult?.referenceName);
+    addDevice(legacyBenchmarkResult?.testName);
+
+    (event.benchmarkDevices || []).forEach(deviceName => addDevice(deviceName, true));
+
+    activities.forEach((activity) => {
+      const name = activity.creator?.name || '';
+      const swInfo = activity.creator?.swInfo || '';
+      addDevice(swInfo ? `${name} ${swInfo}` : name);
+    });
+
+    return Array.from(devices.values());
+  }
+
+  private normalizeDeviceNameKey(name: unknown): string | null {
+    if (typeof name !== 'string') {
+      return null;
+    }
+
+    const normalized = name.trim().replace(/\s+/g, ' ').toLowerCase();
+    return normalized || null;
+  }
+
+  private formatNormalizedDeviceName(normalizedName: string): string {
+    const brandLabels: Record<string, string> = {
+      apple: 'Apple',
+      coros: 'COROS',
+      fitbit: 'Fitbit',
+      garmin: 'Garmin',
+      polar: 'Polar',
+      suunto: 'Suunto',
+      wahoo: 'Wahoo',
+    };
+    return normalizedName
+      .split(' ')
+      .map(part => brandLabels[part] || this.capitalizeDeviceNamePart(part))
+      .join(' ');
+  }
+
+  private capitalizeDeviceNamePart(value: string): string {
+    return value ? value.charAt(0).toUpperCase() + value.slice(1) : value;
+  }
+
+  private resetComparisonPage(): void {
+    this.comparisonPage.update(page => ({ ...page, pageIndex: 0 }));
+  }
+
+  private clearDescriptionDraft(eventID: string): void {
+    this.descriptionDrafts.update((drafts) => {
+      if (!(eventID in drafts)) {
+        return drafts;
+      }
+      const nextDrafts = { ...drafts };
+      delete nextDrafts[eventID];
+      return nextDrafts;
+    });
+  }
+
+  private clearDescriptionEdit(eventID: string): void {
+    if (this.editingDescriptionEventID() === eventID) {
+      this.editingDescriptionEventID.set(null);
+    }
   }
 
   private getOriginalFilesCount(event: AppEventInterface): number | null {

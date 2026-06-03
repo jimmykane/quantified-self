@@ -1,5 +1,5 @@
 import { TestBed } from '@angular/core/testing';
-import { AppBenchmarkService } from './app.benchmark.service';
+import { AppBenchmarkService, BenchmarkNoOverlapError } from './app.benchmark.service';
 import { ActivityInterface, DataGradeAdjustedSpeed } from '@sports-alliance/sports-lib';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { webcrypto } from 'node:crypto';
@@ -30,7 +30,7 @@ describe('AppBenchmarkService', () => {
     });
 
     describe('generateBenchmark', () => {
-        it('should throw an error if activities do not overlap', async () => {
+        it('should throw a no-overlap error if activities do not overlap', async () => {
             const actA = {
                 getID: () => 'actA',
                 startDate: new Date('2023-01-01T10:00:00Z'),
@@ -42,7 +42,15 @@ describe('AppBenchmarkService', () => {
                 endDate: new Date('2023-01-01T13:00:00Z'),
             } as ActivityInterface;
 
-            await expect(service.generateBenchmark(actA, actB)).rejects.toThrow('Activities do not overlap in time.');
+            let error: unknown;
+            try {
+                await service.generateBenchmark(actA, actB);
+            } catch (caughtError) {
+                error = caughtError;
+            }
+
+            expect(error).toBeInstanceOf(BenchmarkNoOverlapError);
+            expect((error as Error).message).toBe('Activities do not overlap in time.');
         });
 
         it('should generate a benchmark for overlapping activities with common streams', async () => {

@@ -8,7 +8,7 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 import { ActivityInterface, User } from '@sports-alliance/sports-lib';
 import { AppEventInterface, BenchmarkOptions, BenchmarkResult, getBenchmarkPairKey } from '@shared/app-event.interface';
 import { AppBenchmarkFlowService } from './app.benchmark-flow.service';
-import { AppBenchmarkService } from './app.benchmark.service';
+import { AppBenchmarkService, BenchmarkNoOverlapError } from './app.benchmark.service';
 import { AppEventService } from './app.event.service';
 import { LoggerService } from './logger.service';
 import { AppAnalyticsService } from './app.analytics.service';
@@ -25,7 +25,7 @@ describe('AppBenchmarkFlowService', () => {
     getEventAndActivities: ReturnType<typeof vi.fn>;
     getEventActivitiesAndAllStreams: ReturnType<typeof vi.fn>;
   };
-  let logger: { error: ReturnType<typeof vi.fn> };
+  let logger: { error: ReturnType<typeof vi.fn>; info: ReturnType<typeof vi.fn> };
   let analyticsService: { logEvent: ReturnType<typeof vi.fn> };
 
   const activityA = { getID: () => 'a1' } as ActivityInterface;
@@ -60,7 +60,7 @@ describe('AppBenchmarkFlowService', () => {
       getEventAndActivities: vi.fn(),
       getEventActivitiesAndAllStreams: vi.fn(),
     };
-    logger = { error: vi.fn() };
+    logger = { error: vi.fn(), info: vi.fn() };
     analyticsService = { logEvent: vi.fn() };
 
     TestBed.configureTestingModule({
@@ -377,6 +377,28 @@ describe('AppBenchmarkFlowService', () => {
     });
 
     expect(analyticsService.logEvent).toHaveBeenCalledWith('benchmark_generate_start');
+    expect(analyticsService.logEvent).toHaveBeenCalledWith('benchmark_generate_failure');
+  });
+
+  it('does not log no-overlap benchmark outcomes as errors', async () => {
+    const event = createEvent();
+    const options: BenchmarkOptions = { autoAlignTime: true };
+
+    benchmarkService.generateBenchmark.mockRejectedValueOnce(new BenchmarkNoOverlapError());
+
+    await service.generateAndOpenReport({
+      event,
+      ref: activityA,
+      test: activityB,
+      options
+    });
+
+    expect(snackBar.open).toHaveBeenLastCalledWith('Activities do not overlap in time.', 'Close');
+    expect(logger.info).toHaveBeenCalledWith(
+      'Benchmark skipped because activities do not overlap in time.',
+      expect.any(BenchmarkNoOverlapError),
+    );
+    expect(logger.error).not.toHaveBeenCalledWith('Benchmark flow failed', expect.any(BenchmarkNoOverlapError));
     expect(analyticsService.logEvent).toHaveBeenCalledWith('benchmark_generate_failure');
   });
 });

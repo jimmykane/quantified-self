@@ -4,6 +4,12 @@ import { gunzipSync, gzipSync } from 'node:zlib';
 import type { Response } from 'express';
 import type { Request } from 'firebase-functions/v2/https';
 import { USAGE_LIMITS } from '../../../shared/limits';
+import {
+  TOOL_COMPARISON_EVENT_ID_HEADER,
+  buildToolComparisonContentHashParts,
+  buildToolComparisonEventIDHashParts,
+  getToolComparisonBaseExtension,
+} from '../../../shared/tool-comparison-id';
 
 const hoisted = vi.hoisted(() => {
   const capturedOnRequestOptions = { value: undefined as unknown };
@@ -118,12 +124,6 @@ vi.mock('firebase-admin', () => {
     recursiveDelete: hoisted.mockRecursiveDelete,
   }));
 
-  Object.assign(firestoreFn, {
-    FieldValue: {
-      serverTimestamp: hoisted.mockServerTimestamp,
-    },
-  });
-
   return {
     auth: () => ({
       verifyIdToken: hoisted.mockVerifyIdToken,
@@ -142,6 +142,12 @@ vi.mock('firebase-admin', () => {
     }),
   };
 });
+
+vi.mock('firebase-admin/firestore', () => ({
+  FieldValue: {
+    serverTimestamp: hoisted.mockServerTimestamp,
+  },
+}));
 
 vi.mock('../utils', () => ({
   ALLOWED_CORS_ORIGINS: [],
@@ -318,8 +324,12 @@ function makeNamedError(name: string, message = name): Error {
   return error;
 }
 
-function getBaseExtension(extension: string): string {
-  return extension.endsWith('.gz') ? extension.slice(0, -3) : extension;
+function sha256Hex(parts: ReadonlyArray<string | Buffer>): string {
+  const hash = createHash('sha256');
+  for (const part of parts) {
+    hash.update(part);
+  }
+  return hash.digest('hex');
 }
 
 function hasGzipMagic(data: Buffer): boolean {
@@ -344,31 +354,16 @@ function resolveExtensionForExpectedID(file: TestFile): string {
 }
 
 function generateExpectedComparisonEventID(userID: string, files: TestFile[]): string {
-  const hash = createHash('sha256')
-    .update('benchmark-comparison')
-    .update(':')
-    .update(userID);
-
   const contentHashes = files.map((file) => {
     const extension = resolveExtensionForExpectedID(file);
-    const baseExtension = getBaseExtension(extension.toLowerCase());
+    const baseExtension = getToolComparisonBaseExtension(extension);
     const payload = extension.toLowerCase().endsWith('.gz') || hasGzipMagic(file.bytes)
       ? gunzipSync(file.bytes)
       : file.bytes;
-    return createHash('sha256')
-      .update(baseExtension)
-      .update(':')
-      .update(payload)
-      .digest('hex');
-  }).sort();
+    return sha256Hex(buildToolComparisonContentHashParts(baseExtension, payload));
+  });
 
-  for (const contentHash of contentHashes) {
-    hash
-      .update(':')
-      .update(contentHash);
-  }
-
-  return hash.digest('hex');
+  return sha256Hex(buildToolComparisonEventIDHashParts(userID, contentHashes));
 }
 
 async function invokeCreateToolComparisonEvent(
@@ -703,6 +698,11 @@ describe('createToolComparisonEvent', () => {
   });
 
   it('returns existing comparisons without rewriting saved benchmark reports', async () => {
+    const files = [
+      { bytes: Buffer.from([0x01, 0x02]), extension: 'fit', originalFilename: 'ref.fit' },
+      { bytes: Buffer.from('<gpx></gpx>'), extension: 'gpx', originalFilename: 'test.gpx' },
+    ];
+    const expectedEventID = generateExpectedComparisonEventID('user-1', files);
     hoisted.mockEventDocGet.mockResolvedValueOnce({
       exists: true,
       data: () => ({
@@ -720,10 +720,15 @@ describe('createToolComparisonEvent', () => {
         },
       }),
     });
-    hoisted.mockEventsCountGet.mockResolvedValueOnce({ data: () => ({ count: USAGE_LIMITS.free - 1 }) });
+    hoisted.mockEventsCountGet.mockResolvedValueOnce({ data: () => ({ count: USAGE_LIMITS.free }) });
     const response = makeResponse();
 
-    await invokeCreateToolComparisonEvent(makeRequest(), response);
+    await invokeCreateToolComparisonEvent(makeRequest({
+      files,
+      headers: {
+        [TOOL_COMPARISON_EVENT_ID_HEADER]: expectedEventID,
+      },
+    }), response);
 
     expect(response.status).toHaveBeenCalledWith(200);
     expect(hoisted.mockFITImporter.getFromArrayBuffer).not.toHaveBeenCalled();
@@ -731,11 +736,88 @@ describe('createToolComparisonEvent', () => {
     expect(hoisted.mockWriteAllEventData).not.toHaveBeenCalled();
     expect(hoisted.mockDocSet).not.toHaveBeenCalled();
     expect(response.json).toHaveBeenCalledWith(expect.objectContaining({
+      eventId: expectedEventID,
       sourceFilesCount: 2,
       activitiesCount: 2,
-      uploadCountAfterWrite: USAGE_LIMITS.free - 1,
+      uploadCountAfterWrite: USAGE_LIMITS.free,
       alreadyExists: true,
     }));
+  });
+
+  it('repairs at-limit existing comparisons when the hint matches uploaded files', async () => {
+    const files = [
+      { bytes: Buffer.from([0x04, 0x05, 0x06]), extension: 'fit', originalFilename: 'Garmin.fit' },
+      { bytes: Buffer.from('<gpx><trk></trk></gpx>'), extension: 'gpx', originalFilename: 'Suunto.gpx' },
+    ];
+    const expectedEventID = generateExpectedComparisonEventID('user-1', files);
+    hoisted.mockEventDocGet.mockResolvedValueOnce({
+      exists: true,
+      data: () => ({
+        isMerge: true,
+        originalFiles: makeOriginalFileMetadata(2),
+      }),
+    });
+    hoisted.mockActivitiesCountGet.mockResolvedValueOnce({ data: () => ({ count: 2 }) });
+    hoisted.mockEventsCountGet.mockResolvedValueOnce({ data: () => ({ count: USAGE_LIMITS.free }) });
+    const response = makeResponse();
+
+    await invokeCreateToolComparisonEvent(makeRequest({
+      files,
+      headers: {
+        [TOOL_COMPARISON_EVENT_ID_HEADER]: expectedEventID,
+      },
+    }), response);
+
+    expect(response.status).toHaveBeenCalledWith(200);
+    expect(hoisted.mockFITImporter.getFromArrayBuffer).toHaveBeenCalledTimes(1);
+    expect(hoisted.mockGPXImporter.getFromString).toHaveBeenCalledTimes(1);
+    expect(hoisted.mockWriteAllEventData).not.toHaveBeenCalled();
+    expect(hoisted.mockDocSet).toHaveBeenCalledWith({
+      mergeType: 'benchmark',
+      toolSource: 'tools/compare',
+      sourceFilesCount: 2,
+      activitiesCount: 2,
+      benchmarkDevices: ['fit', 'gpx'],
+      comparisonTitle: 'Benchmark comparison: Garmin vs Suunto',
+      benchmarkStatus: 'draft',
+    }, { merge: true });
+    expect(response.json).toHaveBeenCalledWith(expect.objectContaining({
+      eventId: expectedEventID,
+      uploadCountAfterWrite: USAGE_LIMITS.free,
+      alreadyExists: true,
+    }));
+  });
+
+  it('rejects at-limit repairs when the hinted comparison does not match uploaded files', async () => {
+    const hintedFiles = [
+      { bytes: Buffer.from([0x04, 0x05, 0x06]), extension: 'fit', originalFilename: 'Garmin.fit' },
+      { bytes: Buffer.from('<gpx><trk></trk></gpx>'), extension: 'gpx', originalFilename: 'Suunto.gpx' },
+    ];
+    const uploadedFiles = [
+      { bytes: Buffer.from([0x07, 0x08, 0x09]), extension: 'fit', originalFilename: 'Garmin.fit' },
+      { bytes: Buffer.from('<gpx><trk><name>different</name></trk></gpx>'), extension: 'gpx', originalFilename: 'Suunto.gpx' },
+    ];
+    hoisted.mockEventDocGet.mockResolvedValueOnce({
+      exists: true,
+      data: () => ({
+        isMerge: true,
+        originalFiles: makeOriginalFileMetadata(2),
+      }),
+    });
+    hoisted.mockEventsCountGet.mockResolvedValueOnce({ data: () => ({ count: USAGE_LIMITS.free }) });
+    const response = makeResponse();
+
+    await invokeCreateToolComparisonEvent(makeRequest({
+      files: uploadedFiles,
+      headers: {
+        [TOOL_COMPARISON_EVENT_ID_HEADER]: generateExpectedComparisonEventID('user-1', hintedFiles),
+      },
+    }), response);
+
+    expect(response.status).toHaveBeenCalledWith(409);
+    expect(response.json).toHaveBeenCalledWith({ error: 'Uploaded files do not match the existing comparison.' });
+    expect(hoisted.mockWriteAllEventData).not.toHaveBeenCalled();
+    expect(hoisted.mockDocSet).not.toHaveBeenCalled();
   });
 
   it('uses the same deterministic comparison ID for the same files in a different order', async () => {
@@ -805,6 +887,7 @@ describe('createToolComparisonEvent', () => {
       toolSource: 'tools/compare',
       sourceFilesCount: 2,
       activitiesCount: 3,
+      benchmarkDevices: ['fit-a', 'fit-b', 'gpx-a'],
       comparisonTitle: 'Benchmark comparison: ref vs test',
       benchmarkStatus: 'draft',
     }, { merge: true });
@@ -844,6 +927,7 @@ describe('createToolComparisonEvent', () => {
     expect(hoisted.mockDocSet).toHaveBeenCalledWith({
       sourceFilesCount: 2,
       activitiesCount: 2,
+      benchmarkDevices: ['fit', 'gpx'],
       benchmarkStatus: 'draft',
     }, { merge: true });
     expect(response.json).toHaveBeenCalledWith(expect.objectContaining({
@@ -894,6 +978,7 @@ describe('createToolComparisonEvent', () => {
       toolSource: 'tools/compare',
       sourceFilesCount: 2,
       activitiesCount: 2,
+      benchmarkDevices: ['fit', 'gpx'],
       comparisonTitle: 'Benchmark comparison: Garmin vs Suunto',
       benchmarkStatus: 'draft',
     }, { merge: true });
@@ -1001,6 +1086,18 @@ describe('createToolComparisonEvent', () => {
       toolSource: 'tools/compare',
       sourceFilesCount: 2,
       activitiesCount: 10,
+      benchmarkDevices: [
+        'fit-a',
+        'fit-b',
+        'fit-c',
+        'fit-d',
+        'fit-e',
+        'gpx-a',
+        'gpx-b',
+        'gpx-c',
+        'gpx-d',
+        'gpx-e',
+      ],
       comparisonTitle: 'Benchmark comparison: Garmin vs Suunto',
       benchmarkStatus: 'draft',
     }, { merge: true });
@@ -1392,6 +1489,7 @@ describe('createToolComparisonEvent', () => {
       toolSource: 'tools/compare',
       sourceFilesCount: 2,
       activitiesCount: 2,
+      benchmarkDevices: ['fit', 'gpx'],
       comparisonTitle: 'Review test',
       benchmarkStatus: 'draft',
     }, { merge: true });

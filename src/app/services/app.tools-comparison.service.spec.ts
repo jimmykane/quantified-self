@@ -1,12 +1,20 @@
 import { TestBed } from '@angular/core/testing';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { of } from 'rxjs';
+import { createHash } from 'node:crypto';
 
 import { AppToolsComparisonService } from './app.tools-comparison.service';
 import { FirebaseApp } from 'app/firebase/app';
 import { Auth } from 'app/firebase/auth';
 import { AppCheckReadinessService } from './app-check-readiness.service';
 import { AppEventService } from './app.event.service';
+import { BrowserCompatibilityService } from './browser.compatibility.service';
+import {
+  TOOL_COMPARISON_EVENT_ID_HEADER,
+  buildToolComparisonContentHashParts,
+  buildToolComparisonEventIDHashParts,
+  getToolComparisonBaseExtension,
+} from '@shared/tool-comparison-id';
 import { environment } from '../../environments/environment';
 import { User } from '@sports-alliance/sports-lib';
 
@@ -16,16 +24,19 @@ describe('AppToolsComparisonService', () => {
   let appMock: any;
   let appCheckReadinessMock: Pick<AppCheckReadinessService, 'getToken'>;
   let eventServiceMock: Pick<AppEventService, 'getEventsBy'>;
+  let browserCompatibilityMock: Pick<BrowserCompatibilityService, 'checkCompressionSupport'>;
   let fetchMock: any;
   let originalLocalhost: boolean;
   let originalUseFunctionsEmulator: boolean;
   let originalFileReader: typeof FileReader;
+  let originalCrypto: Crypto | undefined;
   let bytesByFile: WeakMap<File, ArrayBuffer>;
 
   beforeEach(() => {
     originalLocalhost = environment.localhost;
     originalUseFunctionsEmulator = environment.useFunctionsEmulator;
     originalFileReader = globalThis.FileReader;
+    originalCrypto = globalThis.crypto;
     bytesByFile = new WeakMap<File, ArrayBuffer>();
 
     class MockFileReader {
@@ -45,6 +56,21 @@ describe('AppToolsComparisonService', () => {
     }
 
     (globalThis as any).FileReader = MockFileReader;
+    Object.defineProperty(globalThis, 'crypto', {
+      configurable: true,
+      value: {
+        ...originalCrypto,
+        subtle: {
+          digest: vi.fn(async (_algorithm: string, data: BufferSource) => {
+            const bytes = data instanceof ArrayBuffer
+              ? new Uint8Array(data)
+              : new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
+            const digest = createHash('sha256').update(bytes).digest();
+            return digest.buffer.slice(digest.byteOffset, digest.byteOffset + digest.byteLength);
+          }),
+        },
+      },
+    });
   });
 
   beforeEach(() => {
@@ -53,6 +79,7 @@ describe('AppToolsComparisonService', () => {
 
     authMock = {
       currentUser: {
+        uid: 'user-1',
         getIdToken: vi.fn().mockResolvedValue('id-token'),
       },
     };
@@ -67,6 +94,9 @@ describe('AppToolsComparisonService', () => {
     eventServiceMock = {
       getEventsBy: vi.fn().mockReturnValue(of([])),
     };
+    browserCompatibilityMock = {
+      checkCompressionSupport: vi.fn().mockReturnValue(true),
+    };
 
     TestBed.configureTestingModule({
       providers: [
@@ -75,6 +105,7 @@ describe('AppToolsComparisonService', () => {
         { provide: FirebaseApp, useValue: appMock },
         { provide: AppCheckReadinessService, useValue: appCheckReadinessMock },
         { provide: AppEventService, useValue: eventServiceMock },
+        { provide: BrowserCompatibilityService, useValue: browserCompatibilityMock },
       ],
     });
 
@@ -85,6 +116,10 @@ describe('AppToolsComparisonService', () => {
     environment.localhost = originalLocalhost;
     environment.useFunctionsEmulator = originalUseFunctionsEmulator;
     globalThis.FileReader = originalFileReader;
+    Object.defineProperty(globalThis, 'crypto', {
+      configurable: true,
+      value: originalCrypto,
+    });
   });
 
   function makeFile(name: string, bytes: number[]): File {
@@ -92,6 +127,23 @@ describe('AppToolsComparisonService', () => {
     const file = new File([array], name);
     bytesByFile.set(file, array.buffer.slice(array.byteOffset, array.byteOffset + array.byteLength));
     return file;
+  }
+
+  function sha256Hex(parts: ReadonlyArray<string | Uint8Array>): string {
+    const hash = createHash('sha256');
+    for (const part of parts) {
+      hash.update(part);
+    }
+    return hash.digest('hex');
+  }
+
+  function expectedComparisonEventID(userID: string, files: Array<{ extension: string; bytes: number[] }>): string {
+    const contentHashes = files.map(file => sha256Hex(buildToolComparisonContentHashParts(
+      getToolComparisonBaseExtension(file.extension),
+      new Uint8Array(file.bytes),
+    )));
+
+    return sha256Hex(buildToolComparisonEventIDHashParts(userID, contentHashes));
   }
 
   it('uploads comparison files with auth, App Check, manifest, and title headers', async () => {
@@ -128,6 +180,10 @@ describe('AppToolsComparisonService', () => {
     expect(headers.get('Authorization')).toBe('Bearer id-token');
     expect(headers.get('X-Firebase-AppCheck')).toBe('app-check-token');
     expect(headers.get('X-Tool-Comparison-Title-Encoded')).toBe('Review%20set');
+    expect(headers.get(TOOL_COMPARISON_EVENT_ID_HEADER)).toBe(expectedComparisonEventID('user-1', [
+      { extension: 'fit', bytes: [1, 2, 3] },
+      { extension: 'gpx', bytes: [4, 5] },
+    ]));
 
     const manifest = JSON.parse(decodeURIComponent(headers.get('X-Tool-Comparison-Files-Encoded') || '[]'));
     expect(manifest).toEqual([
@@ -292,11 +348,11 @@ describe('AppToolsComparisonService', () => {
       user,
       [
         { fieldPath: 'mergeType', opStr: '==', value: 'benchmark' },
-        { fieldPath: 'toolSource', opStr: '==', value: 'tools/compare' },
       ],
       'startDate',
       false,
       100,
     );
   });
+
 });

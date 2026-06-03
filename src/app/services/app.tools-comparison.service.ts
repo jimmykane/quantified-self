@@ -5,9 +5,16 @@ import { Auth } from 'app/firebase/auth';
 import { User } from '@sports-alliance/sports-lib';
 import { AppEventInterface } from '@shared/app-event.interface';
 import { FUNCTIONS_MANIFEST } from '@shared/functions-manifest';
+import {
+  TOOL_COMPARISON_EVENT_ID_HEADER,
+  buildToolComparisonContentHashParts,
+  buildToolComparisonEventIDHashParts,
+  getToolComparisonBaseExtension,
+} from '@shared/tool-comparison-id';
 import { environment } from '../../environments/environment';
 import { AppCheckReadinessService } from './app-check-readiness.service';
 import { AppEventService } from './app.event.service';
+import { BrowserCompatibilityService } from './browser.compatibility.service';
 
 export interface ToolComparisonUploadResponse {
   eventId: string;
@@ -66,8 +73,8 @@ function resolveExtensionFromFilename(filename: string): string {
   return last;
 }
 
-function getBaseExtension(extension: string): string {
-  return extension.endsWith('.gz') ? extension.slice(0, -3) : extension;
+function hasGzipMagic(bytes: Uint8Array): boolean {
+  return bytes.length > 2 && bytes[0] === 0x1f && bytes[1] === 0x8b;
 }
 
 function readFileAsArrayBuffer(file: File): Promise<ArrayBuffer> {
@@ -123,6 +130,7 @@ export class AppToolsComparisonService {
   private auth = inject(Auth);
   private appCheckReadiness = inject(AppCheckReadinessService);
   private eventService = inject(AppEventService);
+  private browserCompatibilityService = inject(BrowserCompatibilityService);
 
   validateFiles(files: File[]): string | null {
     if (files.length < MIN_COMPARISON_FILES) {
@@ -139,7 +147,7 @@ export class AppToolsComparisonService {
 
     for (const file of files) {
       const extension = resolveExtensionFromFilename(file.name);
-      const baseExtension = getBaseExtension(extension);
+      const baseExtension = getToolComparisonBaseExtension(extension);
       if (!SUPPORTED_COMPARISON_EXTENSIONS.has(baseExtension)) {
         return 'Only FIT, GPX, and TCX files are supported for comparisons.';
       }
@@ -160,11 +168,12 @@ export class AppToolsComparisonService {
       throw new Error(validationError);
     }
 
-    if (!this.auth.currentUser) {
+    const currentUser = this.auth.currentUser;
+    if (!currentUser) {
       throw new Error('User must be authenticated to compare files.');
     }
 
-    const idToken = await this.auth.currentUser.getIdToken(true);
+    const idToken = await currentUser.getIdToken(true);
     const appCheckToken = await this.appCheckReadiness.getToken();
     const projectID = this.app.options.projectId;
     if (!projectID) {
@@ -193,6 +202,10 @@ export class AppToolsComparisonService {
       'X-Tool-Comparison-Files-Encoded': encodeURIComponent(JSON.stringify(manifest)),
       'Content-Type': 'application/octet-stream',
     });
+    const comparisonEventIDHint = await this.generateComparisonEventIDHint(currentUser.uid, preparedFiles);
+    if (comparisonEventIDHint) {
+      headers.set(TOOL_COMPARISON_EVENT_ID_HEADER, comparisonEventIDHint);
+    }
 
     const trimmedTitle = title?.trim().slice(0, MAX_COMPARISON_TITLE_LENGTH);
     if (trimmedTitle) {
@@ -228,7 +241,6 @@ export class AppToolsComparisonService {
       user,
       [
         { fieldPath: 'mergeType', opStr: '==', value: 'benchmark' },
-        { fieldPath: 'toolSource', opStr: '==', value: 'tools/compare' },
       ],
       'startDate',
       false,
@@ -249,6 +261,76 @@ export class AppToolsComparisonService {
     }
 
     return body;
+  }
+
+  private async generateComparisonEventIDHint(userID: string | undefined, files: PreparedComparisonFile[]): Promise<string | null> {
+    if (!userID) {
+      return null;
+    }
+
+    const contentHashes: string[] = [];
+    for (const file of files) {
+      const payloadForHash = await this.resolvePayloadForComparisonHash(file);
+      if (!payloadForHash) {
+        return null;
+      }
+
+      const contentHash = await this.sha256Hex(buildToolComparisonContentHashParts(
+        file.extension,
+        payloadForHash,
+      ));
+      if (!contentHash) {
+        return null;
+      }
+      contentHashes.push(contentHash);
+    }
+
+    return this.sha256Hex(buildToolComparisonEventIDHashParts(userID, contentHashes));
+  }
+
+  private async resolvePayloadForComparisonHash(file: PreparedComparisonFile): Promise<Uint8Array | null> {
+    const bytes = new Uint8Array(file.bytes);
+    const shouldDecompress = file.extension.toLowerCase().endsWith('.gz') || hasGzipMagic(bytes);
+    if (!shouldDecompress) {
+      return bytes;
+    }
+
+    if (!this.browserCompatibilityService.checkCompressionSupport(false)) {
+      return null;
+    }
+
+    try {
+      const stream = new Response(file.bytes).body?.pipeThrough(new DecompressionStream('gzip'));
+      if (!stream) {
+        return null;
+      }
+      const decompressed = await new Response(stream).arrayBuffer();
+      return new Uint8Array(decompressed);
+    } catch {
+      return null;
+    }
+  }
+
+  private async sha256Hex(parts: ReadonlyArray<string | Uint8Array>): Promise<string | null> {
+    const subtle = globalThis.crypto?.subtle;
+    if (!subtle) {
+      return null;
+    }
+
+    const textEncoder = new TextEncoder();
+    const encodedParts = parts.map(part => typeof part === 'string' ? textEncoder.encode(part) : part);
+    const totalLength = encodedParts.reduce((sum, part) => sum + part.byteLength, 0);
+    const combined = new Uint8Array(totalLength);
+    let offset = 0;
+    for (const part of encodedParts) {
+      combined.set(part, offset);
+      offset += part.byteLength;
+    }
+
+    const digest = await subtle.digest('SHA-256', combined);
+    return Array.from(new Uint8Array(digest))
+      .map(byte => byte.toString(16).padStart(2, '0'))
+      .join('');
   }
 
   private resolveFunctionUrl(region: string, functionName: string, projectID: string): string {

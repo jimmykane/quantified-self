@@ -1,6 +1,7 @@
 import { onRequest } from 'firebase-functions/v2/https';
 import * as logger from 'firebase-functions/logger';
 import * as admin from 'firebase-admin';
+import { FieldValue } from 'firebase-admin/firestore';
 import { createHash } from 'node:crypto';
 import { basename } from 'node:path';
 import { gunzipSync } from 'node:zlib';
@@ -30,6 +31,13 @@ import { sportsLibVersionToCode } from '../reparse/sports-lib-reparse.service';
 import { USAGE_LIMITS } from '../../../shared/limits';
 import { FUNCTIONS_MANIFEST } from '../../../shared/functions-manifest';
 import { sanitizeEventFirestoreWritePayload } from '../../../shared/firestore-write-sanitizer';
+import {
+  TOOL_COMPARISON_EVENT_ID_HEADER,
+  buildToolComparisonContentHashParts,
+  buildToolComparisonEventIDHashParts,
+  getToolComparisonBaseExtension,
+  normalizeToolComparisonEventIDHint,
+} from '../../../shared/tool-comparison-id';
 import {
   ACTIVITY_PROCESSING_HTTPS_RUNTIME_OPTIONS,
   MAX_ACTIVITY_DECOMPRESSED_BYTES,
@@ -76,6 +84,7 @@ interface MergedComparisonWriteData {
   mergedEvent: EventInterface;
   originalFiles: OriginalFile[];
   activitiesCount: number;
+  benchmarkDevices: string[];
 }
 
 interface PreparedComparisonFile {
@@ -95,6 +104,7 @@ interface ExistingComparisonEventData {
   sourceFilesCount: number | null;
   activitiesCount: number | null;
   benchmarkStatus: string | null;
+  benchmarkDevices: string[];
   originalFilesCount: number;
   hasProcessingMetadata: boolean;
 }
@@ -119,6 +129,14 @@ function decodeText(data: Buffer): string {
   return new TextDecoder().decode(toArrayBuffer(data));
 }
 
+function sha256Hex(parts: ReadonlyArray<string | Buffer>): string {
+  const hash = createHash('sha256');
+  for (const part of parts) {
+    hash.update(part);
+  }
+  return hash.digest('hex');
+}
+
 function hasGzipMagic(data: Buffer): boolean {
   return data.length > 2 && data[0] === 0x1f && data[1] === 0x8b;
 }
@@ -126,10 +144,6 @@ function hasGzipMagic(data: Buffer): boolean {
 function normalizeExtension(extension: string): string {
   const normalized = extension.trim().toLowerCase();
   return normalized.startsWith('.') ? normalized.slice(1) : normalized;
-}
-
-function getBaseExtension(extension: string): string {
-  return extension.endsWith('.gz') ? extension.slice(0, -3) : extension;
 }
 
 function resolveExtensionFromFilename(filename?: string): string | null {
@@ -163,7 +177,7 @@ function resolveComparisonExtension(extensionHeader?: string, originalFilename?:
     throw new HttpStatusError(400, 'File extension is required.');
   }
 
-  const baseExtension = getBaseExtension(resolved);
+  const baseExtension = getToolComparisonBaseExtension(resolved);
   if (!SUPPORTED_BASE_EXTENSIONS.has(baseExtension)) {
     throw new HttpStatusError(400, `Unsupported file extension: ${baseExtension}. Supported: fit, gpx, tcx.`);
   }
@@ -175,7 +189,7 @@ function resolveComparisonExtension(extensionHeader?: string, originalFilename?:
 }
 
 function resolveStoredExtension(resolvedExtension: string, payload: Buffer): string {
-  const baseExtension = getBaseExtension(resolvedExtension);
+  const baseExtension = getToolComparisonBaseExtension(resolvedExtension);
   if (resolvedExtension.endsWith('.gz')) {
     return `${baseExtension}.gz`;
   }
@@ -325,7 +339,7 @@ function normalizeManifestFiles(
     return {
       originalFilename,
       extension,
-      baseExtension: getBaseExtension(extension),
+      baseExtension: getToolComparisonBaseExtension(extension),
       byteLength,
       startOffset,
       endOffset,
@@ -509,6 +523,7 @@ async function getExistingComparisonEventData(
       sourceFilesCount: null,
       activitiesCount: null,
       benchmarkStatus: null,
+      benchmarkDevices: [],
       originalFilesCount: 0,
       hasProcessingMetadata: false,
     };
@@ -533,6 +548,11 @@ async function getExistingComparisonEventData(
     sourceFilesCount: getNonNegativeInteger(data?.sourceFilesCount),
     activitiesCount: getNonNegativeInteger(data?.activitiesCount),
     benchmarkStatus: getOptionalString(data?.benchmarkStatus),
+    benchmarkDevices: Array.isArray(data?.benchmarkDevices)
+      ? data.benchmarkDevices
+        .map(normalizeBenchmarkDeviceName)
+        .filter((deviceName): deviceName is string => !!deviceName)
+      : [],
     originalFilesCount: countUsableOriginalFileMetadata(data),
     hasProcessingMetadata: processingMetadataSnapshot.exists,
   };
@@ -551,7 +571,7 @@ async function countActivitiesForEvent(userID: string, eventID: string): Promise
 
 async function parseUploadedEvent(payload: Buffer, resolvedExtension: string): Promise<EventInterface> {
   const parsingOptions = createParsingOptions();
-  const baseExtension = getBaseExtension(resolvedExtension);
+  const baseExtension = getToolComparisonBaseExtension(resolvedExtension);
 
   if (baseExtension === 'fit') {
     return EventImporterFIT.getFromArrayBuffer(toArrayBuffer(payload), parsingOptions);
@@ -599,7 +619,7 @@ async function persistProcessingMetadata(userID: string, eventID: string): Promi
   const processingPayload: ProcessingMetaData = {
     sportsLibVersion: SPORTS_LIB_VERSION,
     sportsLibVersionCode: sportsLibVersionToCode(SPORTS_LIB_VERSION),
-    processedAt: admin.firestore.FieldValue.serverTimestamp(),
+    processedAt: FieldValue.serverTimestamp(),
   };
 
   await setEventDocumentIfUserActive(
@@ -673,6 +693,35 @@ function resolveComparisonTitle(
   return 'Benchmark comparison';
 }
 
+function normalizeBenchmarkDeviceName(name: unknown): string | null {
+  if (typeof name !== 'string') {
+    return null;
+  }
+
+  const normalized = name.trim().replace(/\s+/g, ' ').toLowerCase();
+  return normalized || null;
+}
+
+function getActivityCreatorName(activity: unknown): string | null {
+  if (!activity || typeof activity !== 'object') {
+    return null;
+  }
+
+  const creator = (activity as { creator?: { name?: unknown } }).creator;
+  return normalizeBenchmarkDeviceName(creator?.name);
+}
+
+function extractBenchmarkDevicesFromActivities(activities: unknown[]): string[] {
+  const devices = new Set<string>();
+  for (const activity of activities) {
+    const deviceName = getActivityCreatorName(activity);
+    if (deviceName) {
+      devices.add(deviceName);
+    }
+  }
+  return Array.from(devices);
+}
+
 function prepareComparisonFilesForParsing(
   rawBody: Buffer,
   normalizedFiles: NormalizedComparisonFile[],
@@ -692,11 +741,7 @@ function prepareComparisonFilesForParsing(
       );
     }
 
-    const contentHash = createHash('sha256')
-      .update(file.baseExtension)
-      .update(':')
-      .update(payloadForParsing)
-      .digest('hex');
+    const contentHash = sha256Hex(buildToolComparisonContentHashParts(file.baseExtension, payloadForParsing));
     const duplicateFilename = seenHashByFilename.get(contentHash);
     if (duplicateFilename) {
       const currentName = file.originalFilename || `file ${preparedFiles.length + 1}`;
@@ -716,22 +761,10 @@ function prepareComparisonFilesForParsing(
 }
 
 function generateComparisonEventID(userID: string, preparedFiles: PreparedComparisonFile[]): string {
-  const hash = createHash('sha256')
-    .update('benchmark-comparison')
-    .update(':')
-    .update(userID);
-
-  const canonicalContentHashes = preparedFiles
-    .map(preparedFile => preparedFile.contentHash)
-    .sort();
-
-  for (const contentHash of canonicalContentHashes) {
-    hash
-      .update(':')
-      .update(contentHash);
-  }
-
-  return hash.digest('hex');
+  return sha256Hex(buildToolComparisonEventIDHashParts(
+    userID,
+    preparedFiles.map(preparedFile => preparedFile.contentHash),
+  ));
 }
 
 async function parseComparisonFiles(
@@ -800,6 +833,7 @@ async function buildMergedComparisonWriteData(params: {
     mergedEvent,
     originalFiles,
     activitiesCount: activities.length,
+    benchmarkDevices: extractBenchmarkDevicesFromActivities(activities),
   };
 }
 
@@ -808,6 +842,7 @@ async function finalizeToolComparisonMetadata(params: {
   eventID: string;
   sourceFilesCount: number;
   activitiesCount: number;
+  benchmarkDevices: string[];
   comparisonTitle: string;
 }): Promise<void> {
   const comparisonMetadataPayload = sanitizeEventFirestoreWritePayload({
@@ -816,6 +851,7 @@ async function finalizeToolComparisonMetadata(params: {
     toolSource: 'tools/compare',
     sourceFilesCount: params.sourceFilesCount,
     activitiesCount: params.activitiesCount,
+    benchmarkDevices: params.benchmarkDevices,
     comparisonTitle: params.comparisonTitle,
     benchmarkStatus: 'draft',
   });
@@ -882,6 +918,7 @@ async function repairExistingComparisonMetadata(params: {
   existingComparisonEvent: ExistingComparisonEventData;
   sourceFilesCount: number;
   expectedActivitiesCount?: number;
+  benchmarkDevices?: string[];
   comparisonTitle: string;
 }): Promise<ExistingComparisonRepairResult> {
   const repairedComparisonEvent: ExistingComparisonEventData = {
@@ -946,6 +983,10 @@ async function repairExistingComparisonMetadata(params: {
   if (!repairedComparisonEvent.comparisonTitle) {
     repairPayload.comparisonTitle = params.comparisonTitle;
     repairedComparisonEvent.comparisonTitle = params.comparisonTitle;
+  }
+  if (params.benchmarkDevices && params.benchmarkDevices.length > 0 && repairedComparisonEvent.benchmarkDevices.length === 0) {
+    repairPayload.benchmarkDevices = params.benchmarkDevices;
+    repairedComparisonEvent.benchmarkDevices = params.benchmarkDevices;
   }
   if (params.expectedActivitiesCount !== undefined && !hasStoredExpectedActivityCountMarker(repairedComparisonEvent)) {
     repairPayload.benchmarkStatus = 'draft';
@@ -1034,20 +1075,50 @@ export const createToolComparisonEvent = onRequest({
     const manifest = parseFileManifest(getRequestHeader(request, FILE_MANIFEST_HEADER));
     const normalizedFiles = normalizeManifestFiles(manifest, rawBody.length);
     const comparisonTitle = resolveComparisonTitle(getRequestHeader(request, TITLE_HEADER), normalizedFiles);
-    // Keep quota enforcement ahead of gzip decompression and hashing to avoid expensive rejected uploads.
+    const eventIDHint = normalizeToolComparisonEventIDHint(getRequestHeader(request, TOOL_COMPARISON_EVENT_ID_HEADER));
     const { currentCount, uploadLimit } = await resolveUploadQuotaStateForUser(userID);
-    if (uploadLimit !== null && currentCount >= uploadLimit) {
+    const isOverUploadLimit = uploadLimit !== null && currentCount >= uploadLimit;
+    // Reject new over-limit uploads before gzip decompression/hashing. Existing
+    // comparison retries can use the deterministic hint for a cheap lookup, but
+    // any repair/rewrite still recomputes and verifies the ID from the payload.
+
+    let preparedFiles: PreparedComparisonFile[] | null = null;
+    let mergedEventID: string;
+    let existingComparisonEvent: ExistingComparisonEventData;
+
+    const prepareFilesAndResolveEventID = (): PreparedComparisonFile[] => {
+      if (!preparedFiles) {
+        preparedFiles = prepareComparisonFilesForParsing(rawBody, normalizedFiles);
+      }
+
+      const resolvedEventID = generateComparisonEventID(userID, preparedFiles);
+      if (resolvedEventID !== mergedEventID) {
+        throw new HttpStatusError(409, 'Uploaded files do not match the existing comparison.');
+      }
+
+      return preparedFiles;
+    };
+
+    if (isOverUploadLimit && eventIDHint) {
+      mergedEventID = eventIDHint;
+      existingComparisonEvent = await getExistingComparisonEventData(userID, mergedEventID);
+    } else if (isOverUploadLimit) {
       throw new HttpStatusError(429, `Upload limit reached for your tier. You have ${currentCount} events. Limit is ${uploadLimit}.`);
+    } else {
+      preparedFiles = prepareComparisonFilesForParsing(rawBody, normalizedFiles);
+      mergedEventID = generateComparisonEventID(userID, preparedFiles);
+      existingComparisonEvent = await getExistingComparisonEventData(userID, mergedEventID);
     }
 
-    const preparedFiles = prepareComparisonFilesForParsing(rawBody, normalizedFiles);
-    const mergedEventID = generateComparisonEventID(userID, preparedFiles);
-    const existingComparisonEvent = await getExistingComparisonEventData(userID, mergedEventID);
+    if (isOverUploadLimit && !existingComparisonEvent.exists) {
+      throw new HttpStatusError(429, `Upload limit reached for your tier. You have ${currentCount} events. Limit is ${uploadLimit}.`);
+    }
     let mergedComparisonWriteData: MergedComparisonWriteData | null = null;
     const getMergedComparisonWriteData = async (): Promise<MergedComparisonWriteData> => {
       if (!mergedComparisonWriteData) {
+        const resolvedPreparedFiles = prepareFilesAndResolveEventID();
         mergedComparisonWriteData = await buildMergedComparisonWriteData({
-          preparedFiles,
+          preparedFiles: resolvedPreparedFiles,
           mergedEventID,
           comparisonTitle,
         });
@@ -1069,15 +1140,17 @@ export const createToolComparisonEvent = onRequest({
         existingComparisonEvent,
         normalizedFiles.length,
       );
-      const expectedActivitiesCount = needsExpectedActivitiesCount
-        ? (await getMergedComparisonWriteData()).activitiesCount
-        : undefined;
+      const expectedComparisonWriteData = needsExpectedActivitiesCount
+        ? await getMergedComparisonWriteData()
+        : null;
+      const expectedActivitiesCount = expectedComparisonWriteData?.activitiesCount;
       const repairResult = await repairExistingComparisonMetadata({
         userID,
         eventID: mergedEventID,
         existingComparisonEvent,
         sourceFilesCount: normalizedFiles.length,
         expectedActivitiesCount,
+        benchmarkDevices: expectedComparisonWriteData?.benchmarkDevices,
         comparisonTitle,
       });
 
@@ -1111,6 +1184,7 @@ export const createToolComparisonEvent = onRequest({
       eventID: mergedEventID,
       sourceFilesCount: comparisonWriteData.originalFiles.length,
       activitiesCount: comparisonWriteData.activitiesCount,
+      benchmarkDevices: comparisonWriteData.benchmarkDevices,
       comparisonTitle,
     });
 

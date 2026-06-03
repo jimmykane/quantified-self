@@ -5,7 +5,7 @@ import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { ActivityInterface, User } from '@sports-alliance/sports-lib';
 import { AppEventInterface, BenchmarkOptions, BenchmarkResult, getBenchmarkPairKey } from '@shared/app-event.interface';
-import { AppBenchmarkService } from './app.benchmark.service';
+import { BENCHMARK_NO_OVERLAP_MESSAGE, BenchmarkNoOverlapError, AppBenchmarkService } from './app.benchmark.service';
 import { AppEventService } from './app.event.service';
 import { LoggerService } from './logger.service';
 import { AppAnalyticsService } from './app.analytics.service';
@@ -225,6 +225,12 @@ export class AppBenchmarkFlowService {
       this.snackBar.open('Benchmark Generated & Saved!', undefined, { duration: 2000 });
     } catch (error) {
       this.analyticsService.logEvent('benchmark_generate_failure');
+      if (error instanceof BenchmarkNoOverlapError) {
+        this.snackBar.open(BENCHMARK_NO_OVERLAP_MESSAGE, 'Close');
+        this.logger.info('Benchmark skipped because activities do not overlap in time.', error);
+        return;
+      }
+
       this.snackBar.open('Benchmark failed: ' + error, 'Close');
       this.logger.error('Benchmark flow failed', error);
     }
