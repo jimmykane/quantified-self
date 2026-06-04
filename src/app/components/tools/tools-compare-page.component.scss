@@ -330,7 +330,7 @@ h2 {
 
 .comparison-table {
   width: 100%;
-  min-width: 108rem;
+  min-width: 126rem;
 }
 
 .comparison-table th {
@@ -353,6 +353,12 @@ h2 {
 .comparison-table .mat-column-ascent,
 .comparison-table .mat-column-descent {
   width: 7rem;
+}
+
+.comparison-table .mat-column-gnss,
+.comparison-table .mat-column-heartRate,
+.comparison-table .mat-column-altitude {
+  width: 7.75rem;
 }
 
 .comparison-table .mat-column-actions {
@@ -498,6 +504,35 @@ h2 {
 .metric-summary-stack {
   max-width: 6.5rem;
   font-variant-numeric: tabular-nums;
+}
+
+.benchmark-summary-stack {
+  max-width: 7.25rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.benchmark-metric-line {
+  display: grid;
+  grid-template-columns: 2.75rem minmax(0, 1fr);
+  gap: 0.35rem;
+  align-items: center;
+}
+
+.benchmark-metric-label {
+  color: var(--mat-sys-on-surface-variant);
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.benchmark-metric-value {
+  overflow: hidden;
+  min-width: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.benchmark-placeholder-line .benchmark-metric-value {
+  color: var(--mat-sys-on-surface-variant);
 }
 
 .summary-placeholder {

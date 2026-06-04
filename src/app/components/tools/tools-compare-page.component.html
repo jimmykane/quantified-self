@@ -349,6 +349,60 @@
             </td>
           </ng-container>
 
+          <ng-container matColumnDef="gnss">
+            <th mat-header-cell *matHeaderCellDef mat-sort-header="gnss">GNSS</th>
+            <td mat-cell *matCellDef="let item">
+              <div
+                class="summary-stack benchmark-summary-stack"
+                [class.summary-placeholder]="item.gnssBenchmark.isPlaceholder"
+                [matTooltip]="item.gnssBenchmark.title"
+                [attr.title]="item.gnssBenchmark.title">
+                @for (line of item.gnssBenchmark.lines; track line.label) {
+                <span class="summary-line benchmark-metric-line" [class.benchmark-placeholder-line]="line.isPlaceholder">
+                  <span class="benchmark-metric-label">{{ line.label }}</span>
+                  <span class="benchmark-metric-value">{{ line.value }}</span>
+                </span>
+                }
+              </div>
+            </td>
+          </ng-container>
+
+          <ng-container matColumnDef="heartRate">
+            <th mat-header-cell *matHeaderCellDef mat-sort-header="heartRate">HR</th>
+            <td mat-cell *matCellDef="let item">
+              <div
+                class="summary-stack benchmark-summary-stack"
+                [class.summary-placeholder]="item.heartRateBenchmark.isPlaceholder"
+                [matTooltip]="item.heartRateBenchmark.title"
+                [attr.title]="item.heartRateBenchmark.title">
+                @for (line of item.heartRateBenchmark.lines; track line.label) {
+                <span class="summary-line benchmark-metric-line" [class.benchmark-placeholder-line]="line.isPlaceholder">
+                  <span class="benchmark-metric-label">{{ line.label }}</span>
+                  <span class="benchmark-metric-value">{{ line.value }}</span>
+                </span>
+                }
+              </div>
+            </td>
+          </ng-container>
+
+          <ng-container matColumnDef="altitude">
+            <th mat-header-cell *matHeaderCellDef mat-sort-header="altitude">Alt</th>
+            <td mat-cell *matCellDef="let item">
+              <div
+                class="summary-stack benchmark-summary-stack"
+                [class.summary-placeholder]="item.altitudeBenchmark.isPlaceholder"
+                [matTooltip]="item.altitudeBenchmark.title"
+                [attr.title]="item.altitudeBenchmark.title">
+                @for (line of item.altitudeBenchmark.lines; track line.label) {
+                <span class="summary-line benchmark-metric-line" [class.benchmark-placeholder-line]="line.isPlaceholder">
+                  <span class="benchmark-metric-label">{{ line.label }}</span>
+                  <span class="benchmark-metric-value">{{ line.value }}</span>
+                </span>
+                }
+              </div>
+            </td>
+          </ng-container>
+
           <ng-container matColumnDef="description">
             <th mat-header-cell *matHeaderCellDef mat-sort-header="description">Description</th>
             <td mat-cell *matCellDef="let item">

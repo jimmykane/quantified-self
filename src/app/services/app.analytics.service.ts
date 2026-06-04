@@ -38,12 +38,15 @@ export type ToolCompareSavedAction =
 export type ToolCompareSavedActionStatus = 'applied' | 'cleared' | 'confirmed' | 'failure' | 'success';
 export type ToolCompareSavedSortColumn =
     | 'activityType'
+    | 'altitude'
     | 'ascent'
     | 'date'
     | 'description'
     | 'descent'
     | 'devices'
     | 'distance'
+    | 'gnss'
+    | 'heartRate'
     | 'reports'
     | 'sourceFiles'
     | 'status'

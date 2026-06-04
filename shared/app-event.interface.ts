@@ -54,6 +54,8 @@ export function getBenchmarkPairKey(referenceId: string, testId: string): string
 export interface BenchmarkStreamMetrics {
     sourceA_mean: number;
     sourceB_mean: number;
+    /** Signed mean difference, calculated as test minus reference. */
+    meanDeviation?: number;
     pearsonCorrelation: number;
     meanAbsoluteError: number;
     rootMeanSquareError: number;
@@ -70,6 +72,10 @@ export interface BenchmarkResult {
     timestamp: Date;
     metrics: {
         gnss: {
+            /** Mean radial GNSS deviation in meters. Unsigned for GNSS in v1. */
+            meanDeviation?: number;
+            /** Mean absolute radial GNSS deviation in meters. */
+            meanAbsoluteError?: number;
             cep50: number;
             cep95: number;
             maxDeviation: number;

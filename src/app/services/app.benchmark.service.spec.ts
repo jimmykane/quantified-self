@@ -85,7 +85,9 @@ describe('AppBenchmarkService', () => {
             expect(result.referenceId).toBe('actA');
             expect(result.testId).toBe('actB');
             expect(result.metrics.streamMetrics['HeartRate']).toBeDefined();
-            // HeartRate difference is constant (-2), so pearson should be 1
+            // HeartRate difference is constant (+2 test minus reference), so pearson should be 1
+            expect(result.metrics.streamMetrics['HeartRate'].meanDeviation).toBe(2);
+            expect(result.metrics.streamMetrics['HeartRate'].meanAbsoluteError).toBe(2);
             expect(result.metrics.streamMetrics['HeartRate'].pearsonCorrelation).toBe(1);
         });
 
@@ -123,6 +125,8 @@ describe('AppBenchmarkService', () => {
 
             expect(result.metrics.gnss.cep50).toBeDefined();
             expect(result.metrics.gnss.cep95).toBeDefined();
+            expect(result.metrics.gnss.meanDeviation).toBeGreaterThan(0);
+            expect(result.metrics.gnss.meanAbsoluteError).toBe(result.metrics.gnss.meanDeviation);
             expect(result.metrics.gnss.rmse).toBeGreaterThan(0);
             expect(result.metrics.gnss.maxDeviation).toBeGreaterThan(0);
         });
@@ -202,6 +206,10 @@ describe('AppBenchmarkService', () => {
 
         it('meanAbsoluteError should return 0 for identical arrays', () => {
             expect((service as any).meanAbsoluteError([1, 2, 3], [1, 2, 3])).toBe(0);
+        });
+
+        it('meanDeviation should calculate signed test-minus-reference bias', () => {
+            expect((service as any).meanDeviation([10, 20, 30], [13, 22, 31])).toBe(2);
         });
 
         it('rmse should calculate RMSE', () => {

@@ -4,8 +4,8 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { RouterTestingModule } from '@angular/router/testing';
 import { BehaviorSubject, of, Subject, throwError } from 'rxjs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { ActivityTypes, DataActivityTypes, DataAscent, DataDescent, DataDistance, User } from '@sports-alliance/sports-lib';
-import { AppEventInterface } from '@shared/app-event.interface';
+import { ActivityTypes, DataActivityTypes, DataAltitude, DataAscent, DataDescent, DataDistance, DataHeartRate, User } from '@sports-alliance/sports-lib';
+import { AppEventInterface, BenchmarkResult } from '@shared/app-event.interface';
 
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
@@ -79,6 +79,32 @@ function makeActivity(id: string, options: {
     getDistance: () => stats.get(DataDistance.type),
     getStat: (type: string) => stats.get(type),
     getStatsAsArray: () => Array.from(stats.values()),
+  };
+}
+
+function makeBenchmarkResult(overrides: Partial<BenchmarkResult> = {}): BenchmarkResult {
+  const defaultResult: BenchmarkResult = {
+    referenceId: 'reference-activity',
+    testId: 'test-activity',
+    referenceName: 'Garmin Reference',
+    testName: 'Suunto Test',
+    timestamp: new Date('2026-01-01T00:00:00.000Z'),
+    metrics: {
+      gnss: {
+        cep50: 2,
+        cep95: 4,
+        maxDeviation: 8,
+        rmse: 3,
+        totalDistanceDifference: 12,
+      },
+      streamMetrics: {},
+    },
+  };
+
+  return {
+    ...defaultResult,
+    ...overrides,
+    metrics: overrides.metrics || defaultResult.metrics,
   };
 }
 
@@ -920,6 +946,180 @@ describe('ToolsComparePageComponent', () => {
 
     component.updateComparisonFilter('cycling');
     expect(component.filteredComparisonItems().map(item => item.id)).toEqual(['long-course', 'unknown-course']);
+  });
+
+  it('shows sortable benchmark GNSS, heart-rate, and altitude metrics with old-report fallbacks', () => {
+    userSubject.next(new User('user-1'));
+    component.comparisons.set([
+      makeComparisonEvent('latest-report-metrics', {
+        title: 'Latest report metrics',
+        startDate: new Date('2026-01-03T00:00:00.000Z'),
+        benchmarkResults: {
+          older: makeBenchmarkResult({
+            timestamp: new Date('2026-01-01T00:00:00.000Z'),
+            metrics: {
+              gnss: {
+                meanDeviation: 99,
+                meanAbsoluteError: 99,
+                cep50: 99,
+                cep95: 99,
+                maxDeviation: 99,
+                rmse: 99,
+                totalDistanceDifference: 99,
+              },
+              streamMetrics: {
+                [DataHeartRate.type]: {
+                  sourceA_mean: 120,
+                  sourceB_mean: 140,
+                  meanDeviation: 20,
+                  pearsonCorrelation: 1,
+                  meanAbsoluteError: 20,
+                  rootMeanSquareError: 20,
+                },
+              },
+            },
+          }),
+          latest: makeBenchmarkResult({
+            timestamp: new Date('2026-01-02T00:00:00.000Z'),
+            metrics: {
+              gnss: {
+                meanDeviation: 2.4,
+                meanAbsoluteError: 2.4,
+                cep50: 1.8,
+                cep95: 4,
+                maxDeviation: 7,
+                rmse: 3.3,
+                totalDistanceDifference: 12,
+              },
+              streamMetrics: {
+                [DataHeartRate.type]: {
+                  sourceA_mean: 150,
+                  sourceB_mean: 148,
+                  meanDeviation: -2,
+                  pearsonCorrelation: 0.98,
+                  meanAbsoluteError: 4.2,
+                  rootMeanSquareError: 5,
+                },
+                [DataAltitude.type]: {
+                  sourceA_mean: 100,
+                  sourceB_mean: 106.5,
+                  meanDeviation: 6.5,
+                  pearsonCorrelation: 0.97,
+                  meanAbsoluteError: 8.4,
+                  rootMeanSquareError: 9,
+                },
+              },
+            },
+          }),
+        },
+      }),
+      makeComparisonEvent('old-stream-metrics', {
+        title: 'Old stream metrics',
+        startDate: new Date('2026-01-02T00:00:00.000Z'),
+        benchmarkResults: {
+          old: makeBenchmarkResult({
+            timestamp: new Date('2026-01-01T00:00:00.000Z'),
+            metrics: {
+              gnss: {
+                cep50: 5,
+                cep95: 8,
+                maxDeviation: 12,
+                rmse: 7,
+                totalDistanceDifference: 20,
+              },
+              streamMetrics: {
+                [DataHeartRate.type]: {
+                  sourceA_mean: 120,
+                  sourceB_mean: 123,
+                  pearsonCorrelation: 0.98,
+                  meanAbsoluteError: 5,
+                  rootMeanSquareError: 6,
+                },
+                [DataAltitude.type]: {
+                  sourceA_mean: 100,
+                  sourceB_mean: 95,
+                  pearsonCorrelation: 0.95,
+                  meanAbsoluteError: 6,
+                  rootMeanSquareError: 7,
+                },
+              },
+            },
+          }),
+        },
+      }),
+      makeComparisonEvent('draft-no-report', {
+        title: 'Draft no report',
+        startDate: new Date('2026-01-01T00:00:00.000Z'),
+      }),
+    ]);
+    fixture.detectChanges();
+
+    const latest = component.comparisonItems().find(item => item.id === 'latest-report-metrics');
+    expect(latest?.gnssBenchmark.lines.map(line => `${line.label} ${line.value}`)).toEqual([
+      'MD 2.4 m',
+      'MAE 2.4 m',
+      'CEP50 1.8 m',
+      'RMSE 3.3 m',
+    ]);
+    expect(latest?.heartRateBenchmark.lines.map(line => `${line.label} ${line.value}`)).toEqual([
+      'MD -2 bpm',
+      'MAE 4 bpm',
+    ]);
+    expect(latest?.altitudeBenchmark.lines.map(line => `${line.label} ${line.value}`)).toEqual([
+      'MD +6.5 m',
+      'MAE 8.4 m',
+    ]);
+    expect(latest?.gnssBenchmark.title).toContain('Showing latest of 2 reports.');
+
+    const old = component.comparisonItems().find(item => item.id === 'old-stream-metrics');
+    expect(old?.gnssBenchmark.lines.map(line => `${line.label} ${line.value}`)).toEqual([
+      'MD -',
+      'MAE -',
+      'CEP50 5 m',
+      'RMSE 7 m',
+    ]);
+    expect(old?.gnssBenchmark.title).toContain('MD/MAE are unavailable for older GNSS reports');
+    expect(old?.heartRateBenchmark.lines.map(line => `${line.label} ${line.value}`)).toEqual([
+      'MD +3 bpm',
+      'MAE 5 bpm',
+    ]);
+    expect(old?.altitudeBenchmark.lines.map(line => `${line.label} ${line.value}`)).toEqual([
+      'MD -5 m',
+      'MAE 6 m',
+    ]);
+
+    const text = (fixture.nativeElement as HTMLElement).textContent;
+    expect(text).toContain('GNSS');
+    expect(text).toContain('HR');
+    expect(text).toContain('Alt');
+    expect(text).toContain('CEP50');
+    expect(text).toContain('+6.5 m');
+
+    component.onComparisonSortChange({ active: 'heartRate', direction: 'asc' });
+    expect(component.sortedComparisonItems().map(item => item.id)).toEqual([
+      'latest-report-metrics',
+      'old-stream-metrics',
+      'draft-no-report',
+    ]);
+    expect(analyticsServiceMock.logToolCompareSavedAction).toHaveBeenCalledWith('sort', {
+      sortColumn: 'heartRate',
+      sortDirection: 'asc',
+      filterActive: false,
+      resultCount: 3,
+    });
+
+    component.onComparisonSortChange({ active: 'gnss', direction: 'asc' });
+    expect(component.sortedComparisonItems().map(item => item.id)).toEqual([
+      'latest-report-metrics',
+      'old-stream-metrics',
+      'draft-no-report',
+    ]);
+
+    component.updateComparisonFilter('mae');
+    expect(component.filteredComparisonItems().map(item => item.id)).toEqual([
+      'latest-report-metrics',
+      'old-stream-metrics',
+    ]);
   });
 
   it('opens the device color editor from the toolbar and device dot', () => {

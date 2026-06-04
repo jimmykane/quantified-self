@@ -154,7 +154,7 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('[Sports Watch Benchmark](/features/sports-watch-benchmark)');
     expect(gettingStartedSection?.content).toContain('[File Comparison Tool](/tools/compare)');
     expect(gettingStartedSection?.content).toContain('[Tools -> Compare](/tools/compare/saved)');
-    expect(gettingStartedSection?.content).toContain('sortable, filterable, paginated table with devices, activity type, distance, ascent, descent, and quick description notes');
+    expect(gettingStartedSection?.content).toContain('sortable, filterable, paginated table with devices, activity type, distance, ascent, descent, GNSS/heart-rate/altitude benchmark error metrics, and quick description notes');
     expect(gettingStartedSection?.content).toContain('account-level device color preferences from saved file comparisons');
     expect(gettingStartedSection?.content).toContain('keyed by the base device name rather than firmware/software version');
     expect(gettingStartedSection?.content).toContain('activity toggles, event tables, benchmark dialogs, charts, and maps');

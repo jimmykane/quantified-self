@@ -10,9 +10,11 @@ import {
   ActivityTypes,
   ActivityTypesHelper,
   DataActivityTypes,
+  DataAltitude,
   DataAscent,
   DataDescent,
   DataDistance,
+  DataHeartRate,
   DataInterface,
   User,
   UserUnitSettingsInterface,
@@ -69,6 +71,9 @@ interface ComparisonListItem {
   distanceTitle: string;
   ascentTitle: string;
   descentTitle: string;
+  gnssBenchmark: ComparisonBenchmarkMetricCell;
+  heartRateBenchmark: ComparisonBenchmarkMetricCell;
+  altitudeBenchmark: ComparisonBenchmarkMetricCell;
   description: string;
   sourceFilesCount: number | null;
   sourceFilesSort: number | null;
@@ -97,6 +102,19 @@ interface ComparisonActivitySummary {
   filterText: string;
 }
 
+interface ComparisonBenchmarkMetricCell {
+  lines: ComparisonBenchmarkMetricLine[];
+  sortValue: number | null;
+  title: string;
+  isPlaceholder: boolean;
+}
+
+interface ComparisonBenchmarkMetricLine {
+  label: string;
+  value: string;
+  isPlaceholder: boolean;
+}
+
 type ComparisonSortColumn =
   | 'date'
   | 'title'
@@ -105,6 +123,9 @@ type ComparisonSortColumn =
   | 'distance'
   | 'ascent'
   | 'descent'
+  | 'gnss'
+  | 'heartRate'
+  | 'altitude'
   | 'description'
   | 'sourceFiles'
   | 'status'
@@ -179,6 +200,9 @@ export class ToolsComparePageComponent implements OnInit {
     'distance',
     'ascent',
     'descent',
+    'gnss',
+    'heartRate',
+    'altitude',
     'description',
     'sourceFiles',
     'status',
@@ -1084,6 +1108,23 @@ export class ToolsComparePageComponent implements OnInit {
     const activityTypesLabel = activityTypeLabels.length > 0
       ? activityTypeLabels.join(', ')
       : 'Types unknown';
+    const primaryBenchmarkResult = this.resolvePrimaryBenchmarkResult(event);
+    const reportContext = reportCount > 1 ? `Showing latest of ${reportCount} reports.` : '';
+    const gnssBenchmark = this.buildGnssBenchmarkMetricCell(primaryBenchmarkResult, reportContext);
+    const heartRateBenchmark = this.buildStreamBenchmarkMetricCell(
+      primaryBenchmarkResult,
+      DataHeartRate.type,
+      'heart-rate',
+      'bpm',
+      reportContext,
+    );
+    const altitudeBenchmark = this.buildStreamBenchmarkMetricCell(
+      primaryBenchmarkResult,
+      DataAltitude.type,
+      'altitude',
+      'm',
+      reportContext,
+    );
 
     return {
       id: eventID,
@@ -1102,6 +1143,9 @@ export class ToolsComparePageComponent implements OnInit {
       distanceTitle: this.formatSummaryTitle(activitySummaries, summary => summary.distanceLabel, 'Distance unknown'),
       ascentTitle: this.formatSummaryTitle(activitySummaries, summary => summary.ascentLabel, 'Ascent unknown'),
       descentTitle: this.formatSummaryTitle(activitySummaries, summary => summary.descentLabel, 'Descent unknown'),
+      gnssBenchmark,
+      heartRateBenchmark,
+      altitudeBenchmark,
       description,
       sourceFilesCount,
       sourceFilesSort: sourceFilesCount,
@@ -1116,6 +1160,9 @@ export class ToolsComparePageComponent implements OnInit {
         devicesLabel,
         activityTypesLabel,
         activitySummaries.map(summary => summary.filterText).join(' '),
+        this.formatBenchmarkCellFilterText(gnssBenchmark),
+        this.formatBenchmarkCellFilterText(heartRateBenchmark),
+        this.formatBenchmarkCellFilterText(altitudeBenchmark),
         description,
         event.startDate instanceof Date ? event.startDate.toISOString() : 'date unavailable',
         this.formatCountLabel(sourceFilesCount, 'file', 'Files unknown'),
@@ -1149,6 +1196,12 @@ export class ToolsComparePageComponent implements OnInit {
         return this.compareNullableNumbers(first.ascentSort, second.ascentSort, direction);
       case 'descent':
         return this.compareNullableNumbers(first.descentSort, second.descentSort, direction);
+      case 'gnss':
+        return this.compareNullableNumbers(first.gnssBenchmark.sortValue, second.gnssBenchmark.sortValue, direction);
+      case 'heartRate':
+        return this.compareNullableNumbers(first.heartRateBenchmark.sortValue, second.heartRateBenchmark.sortValue, direction);
+      case 'altitude':
+        return this.compareNullableNumbers(first.altitudeBenchmark.sortValue, second.altitudeBenchmark.sortValue, direction);
       case 'description':
         return first.description.localeCompare(second.description) * directionMultiplier;
       case 'sourceFiles':
@@ -1163,7 +1216,7 @@ export class ToolsComparePageComponent implements OnInit {
   }
 
   private isComparisonSortColumn(value: string): value is ComparisonSortColumn {
-    return ['date', 'title', 'devices', 'activityType', 'distance', 'ascent', 'descent', 'description', 'sourceFiles', 'status', 'reports'].includes(value);
+    return ['date', 'title', 'devices', 'activityType', 'distance', 'ascent', 'descent', 'gnss', 'heartRate', 'altitude', 'description', 'sourceFiles', 'status', 'reports'].includes(value);
   }
 
   private compareNullableNumbers(first: number | null, second: number | null, direction: SortDirection): number {
@@ -1178,6 +1231,206 @@ export class ToolsComparePageComponent implements OnInit {
     }
 
     return direction === 'asc' ? first - second : second - first;
+  }
+
+  private resolvePrimaryBenchmarkResult(event: AppEventInterface): BenchmarkResult | null {
+    const benchmarkResults = Object.values(event.benchmarkResults || {});
+    const candidates = benchmarkResults.length > 0
+      ? benchmarkResults
+      : [event.benchmarkResult as BenchmarkResult | undefined].filter((result): result is BenchmarkResult => !!result);
+
+    if (candidates.length === 0) {
+      return null;
+    }
+
+    return candidates
+      .map((result, index) => ({
+        result,
+        index,
+        timestampMs: this.getBenchmarkTimestampMs(result),
+      }))
+      .reduce((selected, candidate) => {
+        if (candidate.timestampMs !== null && selected.timestampMs !== null) {
+          return candidate.timestampMs >= selected.timestampMs ? candidate : selected;
+        }
+        if (candidate.timestampMs !== null) {
+          return candidate;
+        }
+        if (selected.timestampMs !== null) {
+          return selected;
+        }
+        return candidate.index > selected.index ? candidate : selected;
+      }).result;
+  }
+
+  private buildGnssBenchmarkMetricCell(
+    result: BenchmarkResult | null,
+    reportContext: string,
+  ): ComparisonBenchmarkMetricCell {
+    if (!result) {
+      return this.buildPlaceholderBenchmarkMetricCell('No benchmark report yet.');
+    }
+
+    const gnss = result.metrics?.gnss;
+    if (!gnss) {
+      return this.buildPlaceholderBenchmarkMetricCell(this.appendReportContext('No GNSS metrics in latest benchmark report.', reportContext));
+    }
+
+    const meanDeviation = this.getFiniteNumber(gnss.meanDeviation);
+    const meanAbsoluteError = this.getFiniteNumber(gnss.meanAbsoluteError);
+    const cep50 = this.getFiniteNumber(gnss.cep50);
+    const rmse = this.getFiniteNumber(gnss.rmse);
+    const hasLegacyGnssMeanGap = (meanDeviation === null || meanAbsoluteError === null) && (cep50 !== null || rmse !== null);
+    const lines: ComparisonBenchmarkMetricLine[] = [
+      this.buildBenchmarkMetricLine('MD', this.formatMetricValue(meanDeviation, 'm', 1)),
+      this.buildBenchmarkMetricLine('MAE', this.formatMetricValue(meanAbsoluteError, 'm', 1)),
+    ];
+
+    if (cep50 !== null) {
+      lines.push(this.buildBenchmarkMetricLine('CEP50', this.formatMetricValue(cep50, 'm', 1)));
+    }
+    if (rmse !== null) {
+      lines.push(this.buildBenchmarkMetricLine('RMSE', this.formatMetricValue(rmse, 'm', 1)));
+    }
+
+    const title = [
+      'GNSS benchmark metrics.',
+      'MD: mean radial deviation; unsigned for GNSS.',
+      'MAE: mean absolute radial deviation.',
+      'CEP50: median circular error.',
+      'RMSE: root mean square error.',
+      hasLegacyGnssMeanGap ? 'MD/MAE are unavailable for older GNSS reports; rerun the benchmark to store them.' : '',
+      reportContext,
+    ].filter(Boolean).join('\n');
+
+    return {
+      lines,
+      sortValue: meanAbsoluteError,
+      title,
+      isPlaceholder: lines.every(line => line.isPlaceholder),
+    };
+  }
+
+  private buildStreamBenchmarkMetricCell(
+    result: BenchmarkResult | null,
+    streamType: string,
+    streamLabel: string,
+    unit: string,
+    reportContext: string,
+  ): ComparisonBenchmarkMetricCell {
+    if (!result) {
+      return this.buildPlaceholderBenchmarkMetricCell('No benchmark report yet.');
+    }
+
+    const metrics = result.metrics?.streamMetrics?.[streamType];
+    if (!metrics) {
+      return this.buildPlaceholderBenchmarkMetricCell(
+        this.appendReportContext(`No ${streamLabel} stream in latest benchmark report.`, reportContext),
+      );
+    }
+
+    const explicitMeanDeviation = this.getFiniteNumber(metrics.meanDeviation);
+    const sourceAMean = this.getFiniteNumber(metrics.sourceA_mean);
+    const sourceBMean = this.getFiniteNumber(metrics.sourceB_mean);
+    const derivedMeanDeviation = sourceAMean !== null && sourceBMean !== null
+      ? sourceBMean - sourceAMean
+      : null;
+    const meanDeviation = explicitMeanDeviation ?? derivedMeanDeviation;
+    const meanAbsoluteError = this.getFiniteNumber(metrics.meanAbsoluteError);
+    const decimals = unit === 'bpm' ? 0 : 1;
+    const lines: ComparisonBenchmarkMetricLine[] = [
+      this.buildBenchmarkMetricLine('MD', this.formatMetricValue(meanDeviation, unit, decimals, true)),
+      this.buildBenchmarkMetricLine('MAE', this.formatMetricValue(meanAbsoluteError, unit, decimals)),
+    ];
+    const title = [
+      `${this.capitalizeMetricLabel(streamLabel)} benchmark metrics.`,
+      'MD: signed mean deviation, test minus reference.',
+      'MAE: mean absolute deviation.',
+      reportContext,
+    ].filter(Boolean).join('\n');
+
+    return {
+      lines,
+      sortValue: meanAbsoluteError,
+      title,
+      isPlaceholder: lines.every(line => line.isPlaceholder),
+    };
+  }
+
+  private buildPlaceholderBenchmarkMetricCell(title: string): ComparisonBenchmarkMetricCell {
+    return {
+      lines: [
+        this.buildBenchmarkMetricLine('MD', '-'),
+        this.buildBenchmarkMetricLine('MAE', '-'),
+      ],
+      sortValue: null,
+      title,
+      isPlaceholder: true,
+    };
+  }
+
+  private buildBenchmarkMetricLine(label: string, value: string): ComparisonBenchmarkMetricLine {
+    return {
+      label,
+      value,
+      isPlaceholder: value === '-',
+    };
+  }
+
+  private appendReportContext(message: string, reportContext: string): string {
+    return reportContext ? `${message}\n${reportContext}` : message;
+  }
+
+  private formatBenchmarkCellFilterText(cell: ComparisonBenchmarkMetricCell): string {
+    return cell.lines
+      .filter(line => !line.isPlaceholder)
+      .map(line => `${line.label} ${line.value}`)
+      .join(' ')
+      .toLowerCase();
+  }
+
+  private getBenchmarkTimestampMs(result: BenchmarkResult): number | null {
+    const timestamp = (result as { timestamp?: unknown }).timestamp;
+    if (timestamp instanceof Date) {
+      const timestampMs = timestamp.getTime();
+      return Number.isFinite(timestampMs) ? timestampMs : null;
+    }
+    if (timestamp && typeof (timestamp as { toDate?: unknown }).toDate === 'function') {
+      const date = (timestamp as { toDate: () => Date }).toDate();
+      const timestampMs = date.getTime();
+      return Number.isFinite(timestampMs) ? timestampMs : null;
+    }
+    if (timestamp && typeof timestamp === 'object' && typeof (timestamp as { seconds?: unknown }).seconds === 'number') {
+      return (timestamp as { seconds: number }).seconds * 1000;
+    }
+    if (typeof timestamp === 'string' || typeof timestamp === 'number') {
+      const timestampMs = new Date(timestamp).getTime();
+      return Number.isFinite(timestampMs) ? timestampMs : null;
+    }
+    return null;
+  }
+
+  private getFiniteNumber(value: unknown): number | null {
+    return typeof value === 'number' && Number.isFinite(value) ? value : null;
+  }
+
+  private formatMetricValue(
+    value: number | null,
+    unit: string,
+    maxDecimals: number,
+    signed = false,
+  ): string {
+    if (value === null) {
+      return '-';
+    }
+
+    const roundedValue = Number(value.toFixed(maxDecimals));
+    const prefix = signed && roundedValue > 0 ? '+' : '';
+    return `${prefix}${roundedValue} ${unit}`;
+  }
+
+  private capitalizeMetricLabel(value: string): string {
+    return value ? value.charAt(0).toUpperCase() + value.slice(1) : value;
   }
 
   private buildComparisonActivitySummaries(activities: ActivityInterface[]): ComparisonActivitySummary[] {

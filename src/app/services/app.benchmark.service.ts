@@ -152,6 +152,8 @@ export class AppBenchmarkService {
             result.metrics.gnss.cep50 = gnssDeviations[Math.floor(gnssDeviations.length * 0.50)];
             result.metrics.gnss.cep95 = gnssDeviations[Math.floor(gnssDeviations.length * 0.95)];
             result.metrics.gnss.maxDeviation = gnssDeviations[gnssDeviations.length - 1];
+            result.metrics.gnss.meanDeviation = this.mean(gnssDeviations);
+            result.metrics.gnss.meanAbsoluteError = result.metrics.gnss.meanDeviation;
             result.metrics.gnss.rmse = Math.sqrt(gnssDeviations.reduce((acc, val) => acc + (val * val), 0) / gnssDeviations.length);
 
             // Total Distance
@@ -182,6 +184,7 @@ export class AppBenchmarkService {
                 result.metrics.streamMetrics[type] = {
                     sourceA_mean: this.mean(vals.a),
                     sourceB_mean: this.mean(vals.b),
+                    meanDeviation: this.meanDeviation(vals.a, vals.b),
                     pearsonCorrelation: this.pearsonCorrelation(vals.a, vals.b),
                     meanAbsoluteError: this.meanAbsoluteError(vals.a, vals.b),
                     rootMeanSquareError: this.rmse(vals.a, vals.b)
@@ -246,6 +249,10 @@ export class AppBenchmarkService {
 
     private meanAbsoluteError(a: number[], b: number[]): number {
         return a.reduce((acc, val, i) => acc + Math.abs(val - b[i]), 0) / a.length;
+    }
+
+    private meanDeviation(a: number[], b: number[]): number {
+        return a.reduce((acc, val, i) => acc + (b[i] - val), 0) / a.length;
     }
 
     private rmse(a: number[], b: number[]): number {
