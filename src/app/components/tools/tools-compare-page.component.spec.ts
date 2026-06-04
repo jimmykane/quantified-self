@@ -14,6 +14,9 @@ import { AppToolsComparisonService } from '../../services/app.tools-comparison.s
 import { LoggerService } from '../../services/logger.service';
 import { ToolsComparePageComponent } from './tools-compare-page.component';
 import { AppEventColorService } from '../../services/color/app.event.color.service';
+import { AppDeviceColorPreferenceService } from '../../services/color/app-device-color-preference.service';
+import { normalizeDeviceColorKey } from '../../helpers/device-color-preferences.helper';
+import { DeviceColorPreferencesDialogComponent } from './device-color-preferences-dialog.component';
 
 function makeComparisonEvent(id: string, overrides: {
   title?: string;
@@ -103,6 +106,11 @@ describe('ToolsComparePageComponent', () => {
   let eventColorServiceMock: {
     getActivityColor: ReturnType<typeof vi.fn>;
   };
+  let deviceColorByNameState: Record<string, string>;
+  let deviceColorPreferenceServiceMock: {
+    deviceColorByName: ReturnType<typeof vi.fn>;
+    normalizeDeviceColorKey: ReturnType<typeof vi.fn>;
+  };
   let analyticsServiceMock: {
     logToolCompareCreate: ReturnType<typeof vi.fn>;
     logToolCompareFileSelection: ReturnType<typeof vi.fn>;
@@ -160,6 +168,11 @@ describe('ToolsComparePageComponent', () => {
         return '#16B4EA';
       }),
     };
+    deviceColorByNameState = {};
+    deviceColorPreferenceServiceMock = {
+      deviceColorByName: vi.fn(() => deviceColorByNameState),
+      normalizeDeviceColorKey: vi.fn((name: string) => normalizeDeviceColorKey(name)),
+    };
     analyticsServiceMock = {
       logToolCompareCreate: vi.fn(),
       logToolCompareFileSelection: vi.fn(),
@@ -181,6 +194,7 @@ describe('ToolsComparePageComponent', () => {
         { provide: AppAnalyticsService, useValue: analyticsServiceMock },
         { provide: AppEventService, useValue: eventServiceMock },
         { provide: AppEventColorService, useValue: eventColorServiceMock },
+        { provide: AppDeviceColorPreferenceService, useValue: deviceColorPreferenceServiceMock },
         { provide: LoggerService, useValue: loggerMock },
         { provide: ActivatedRoute, useValue: { snapshot: { data: {} } } },
       ],
@@ -906,6 +920,66 @@ describe('ToolsComparePageComponent', () => {
 
     component.updateComparisonFilter('cycling');
     expect(component.filteredComparisonItems().map(item => item.id)).toEqual(['long-course', 'unknown-course']);
+  });
+
+  it('opens the device color editor from the toolbar and device dot', () => {
+    const user = new User('user-1');
+    component.authResolved.set(true);
+    component.firebaseSignedIn.set(true);
+    component.currentUser.set(user);
+    component.comparisons.set([
+      makeComparisonEvent('long-course', {
+        title: 'Long course',
+        activities: [
+          makeActivity('activity-1', {
+            deviceName: 'Garmin Edge',
+            swInfo: '3129',
+            activityType: 'Cycling',
+          }),
+        ],
+      }),
+    ]);
+    const dialogOpenSpy = vi.spyOn((component as any).dialog, 'open').mockReturnValue({ afterClosed: () => of(false) } as any);
+    fixture.detectChanges();
+
+    const colorButton = Array.from((fixture.nativeElement as HTMLElement).querySelectorAll('button'))
+      .find(button => button.textContent?.includes('Device colors')) as HTMLButtonElement | undefined;
+    expect(colorButton?.disabled).toBe(false);
+    colorButton?.dispatchEvent(new Event('click'));
+
+    expect(dialogOpenSpy).toHaveBeenCalledWith(DeviceColorPreferencesDialogComponent, {
+      width: 'min(40rem, calc(100vw - 32px))',
+      maxWidth: 'calc(100vw - 32px)',
+      data: {
+        devices: [
+          {
+            key: 'garmin edge',
+            label: 'Garmin Edge 3129',
+            automaticColor: '#123456',
+          },
+        ],
+        initialDeviceKey: null,
+      },
+    });
+
+    dialogOpenSpy.mockClear();
+    const deviceDotButton = (fixture.nativeElement as HTMLElement).querySelector('.device-color-trigger') as HTMLButtonElement;
+    deviceDotButton.click();
+
+    expect(dialogOpenSpy).toHaveBeenCalledWith(DeviceColorPreferencesDialogComponent, {
+      width: 'min(40rem, calc(100vw - 32px))',
+      maxWidth: 'calc(100vw - 32px)',
+      data: {
+        devices: [
+          {
+            key: 'garmin edge',
+            label: 'Garmin Edge 3129',
+            automaticColor: '#123456',
+          },
+        ],
+        initialDeviceKey: 'garmin edge',
+      },
+    });
   });
 
   it('resolves per-device sport types from activity stats and raw activity type aliases', () => {

@@ -179,7 +179,18 @@
           </button>
           }
         </mat-form-field>
-        <span class="result-summary">{{ comparisonResultSummary() }}</span>
+        <div class="comparison-table-actions">
+          <button
+            mat-stroked-button
+            type="button"
+            class="device-colors-button"
+            [disabled]="comparisonDeviceColorItems().length === 0"
+            (click)="openDeviceColorPreferencesDialog()">
+            <mat-icon>palette</mat-icon>
+            Device colors
+          </button>
+          <span class="result-summary">{{ comparisonResultSummary() }}</span>
+        </div>
       </div>
 
       @if (filteredComparisonCount() === 0) {
@@ -235,7 +246,15 @@
                 <span
                   class="summary-line summary-device device-summary-line"
                   [style.--device-accent-color]="summary.deviceColor">
-                  <span class="device-name-swatch" aria-hidden="true"></span>
+                  <button
+                    type="button"
+                    class="device-color-trigger"
+                    [disabled]="!summary.deviceColorKey"
+                    [matTooltip]="'Set color for ' + summary.deviceLabel"
+                    [attr.aria-label]="'Set color for ' + summary.deviceLabel"
+                    (click)="openDeviceColorPreferencesDialog(summary.deviceColorKey)">
+                    <span class="device-name-swatch" aria-hidden="true"></span>
+                  </button>
                   <span class="device-name-label">{{ summary.deviceLabel }}</span>
                 </span>
                 }

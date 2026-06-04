@@ -6,6 +6,8 @@ import { AppActivityTypeGroupColors } from './app.activity-type-group.colors';
 import { AppActivityTypeGroupGradients } from './app.activity-type-group.gradients';
 import { AppColors } from './app.colors';
 import { LoggerService } from '../logger.service';
+import { AppDeviceColorPreferenceService } from './app-device-color-preference.service';
+import { normalizeDeviceColorKey } from '../../helpers/device-color-preferences.helper';
 
 @Injectable({
   providedIn: 'root',
@@ -14,7 +16,10 @@ export class AppEventColorService {
 
   private colorCache = new WeakMap<ActivityInterface[], Map<ActivityInterface, string>>();
 
-  constructor(private logger: LoggerService) { }
+  constructor(
+    private logger: LoggerService,
+    private deviceColorPreferenceService: AppDeviceColorPreferenceService,
+  ) { }
 
   public getDifferenceColor(percent: number): string {
     if (percent <= 2) {
@@ -45,18 +50,6 @@ export class AppEventColorService {
     const activityID = activity.getID();
     const creatorName = activity.creator.name || 'Unknown';
 
-    let eventColorCache = this.colorCache.get(activities);
-    if (!eventColorCache) {
-      eventColorCache = new Map<ActivityInterface, string>();
-      this.colorCache.set(activities, eventColorCache);
-    }
-    if (eventColorCache.has(activity)) {
-      const cachedColor = eventColorCache.get(activity);
-      if (cachedColor !== undefined) {
-        return cachedColor;
-      }
-    }
-
     // Get the index of the requested activity among all activities
     // Prefer reference matching first to avoid collisions with duplicate IDs.
     let activityIndex = activities.indexOf(activity);
@@ -68,6 +61,23 @@ export class AppEventColorService {
     if (activityIndex === -1) {
       this.logger.warn('[AppEventColorService] Activity not found in provided array, using default offset');
       activityIndex = activities.length + this.getColorSeedFromText(`${creatorName}-${activityID || 'no-id'}`);
+    }
+
+    const preferredColor = this.deviceColorPreferenceService.getPreferredDeviceColor(activity);
+    if (preferredColor && this.isFirstActivityForPreferredDevice(activities, activity, activityID)) {
+      return preferredColor;
+    }
+
+    let eventColorCache = this.colorCache.get(activities);
+    if (!eventColorCache) {
+      eventColorCache = new Map<ActivityInterface, string>();
+      this.colorCache.set(activities, eventColorCache);
+    }
+    if (eventColorCache.has(activity)) {
+      const cachedColor = eventColorCache.get(activity);
+      if (cachedColor !== undefined) {
+        return cachedColor;
+      }
     }
 
     const deviceColors = AppDeviceColors as any;
@@ -102,6 +112,27 @@ export class AppEventColorService {
 
     eventColorCache.set(activity, color);
     return color;
+  }
+
+  private isFirstActivityForPreferredDevice(
+    activities: ActivityInterface[],
+    activity: ActivityInterface,
+    activityID: string,
+  ): boolean {
+    const deviceKey = normalizeDeviceColorKey(activity.creator?.name);
+    if (!deviceKey) {
+      return false;
+    }
+
+    const sameDeviceActivities = activities.filter(eventActivity =>
+      normalizeDeviceColorKey(eventActivity.creator?.name) === deviceKey,
+    );
+    let sameDeviceActivityIndex = sameDeviceActivities.indexOf(activity);
+    if (sameDeviceActivityIndex === -1 && activityID) {
+      sameDeviceActivityIndex = sameDeviceActivities.findIndex((eventActivity) => eventActivity.getID() === activityID);
+    }
+
+    return sameDeviceActivityIndex === 0;
   }
 
   private getColorSeedFromText(text: string): number {

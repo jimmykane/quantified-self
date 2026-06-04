@@ -284,6 +284,7 @@ describe('AppUserUtilities', () => {
             expect(settings.chartSettings?.showSwimLengths).toBe(true);
             expect(settings.chartSettings?.syncChartHoverToMap).toBe(false);
             expect(settings.chartSettings?.eventChartOverlayDataTypeByPrimary).toEqual({});
+            expect(settings.deviceDisplaySettings?.deviceColorByName).toEqual({});
             expect(settings.dashboardSettings?.dateRange).toBe(DateRanges.all);
             expect(settings.dashboardSettings?.includeMergedEvents).toBe(true);
             expect(settings.dashboardSettings?.eventTableFilters).toEqual({
@@ -632,7 +633,13 @@ describe('AppUserUtilities', () => {
             const user = {
                 settings: {
                     appSettings: { theme: AppThemes.Dark, unitSetupCompleted: false } as any,
-                    dashboardSettings: { dateRange: DateRanges.lastYear, includeMergedEvents: false, sleepTrend: { range: '90d' } }
+                    dashboardSettings: { dateRange: DateRanges.lastYear, includeMergedEvents: false, sleepTrend: { range: '90d' } },
+                    deviceDisplaySettings: {
+                        deviceColorByName: {
+                            ' Garmin   Edge ': '#00ffAA',
+                            'Suunto Race': 'green',
+                        },
+                    },
                 }
             } as User;
             const settings = AppUserUtilities.fillMissingAppSettings(user);
@@ -641,6 +648,9 @@ describe('AppUserUtilities', () => {
             expect(settings.dashboardSettings?.dateRange).toBe(DateRanges.lastYear);
             expect(settings.dashboardSettings?.includeMergedEvents).toBe(false);
             expect(settings.dashboardSettings?.sleepTrend?.range).toBe('90d');
+            expect(settings.deviceDisplaySettings?.deviceColorByName).toEqual({
+                'garmin edge': '#00FFAA',
+            });
         });
 
         it('should normalize invalid sleep trend range settings to 14d', () => {

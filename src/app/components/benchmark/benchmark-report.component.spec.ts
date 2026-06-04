@@ -3,6 +3,7 @@ import { BenchmarkReportComponent } from './benchmark-report.component';
 import { BenchmarkResult } from '@shared/app-event.interface';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { MatIconModule } from '@angular/material/icon';
+import { AppDeviceColorPreferenceService } from '../../services/color/app-device-color-preference.service';
 
 describe('BenchmarkReportComponent', () => {
     let component: BenchmarkReportComponent;
@@ -35,7 +36,9 @@ describe('BenchmarkReportComponent', () => {
             imports: [
                 MatIconModule
             ],
-            providers: []
+            providers: [
+                { provide: AppDeviceColorPreferenceService, useValue: { getPreferredDeviceColor: vi.fn(() => null) } },
+            ]
         }).compileComponents();
 
         fixture = TestBed.createComponent(BenchmarkReportComponent);

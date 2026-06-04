@@ -171,6 +171,10 @@ export interface ServiceSyncSettingsInterface {
     activitySyncRoutes?: Partial<Record<ActivitySyncRouteId, ActivitySyncRouteSettingsInterface>>;
 }
 
+export interface AppDeviceDisplaySettingsInterface {
+    deviceColorByName?: Record<string, string>;
+}
+
 export interface AppUserServiceMetaInterface extends UserServiceMetaInterface, ServiceConnectionMetaFields {}
 
 export interface AppUserSettingsInterface extends UserSettingsInterface {
@@ -179,6 +183,7 @@ export interface AppUserSettingsInterface extends UserSettingsInterface {
     dashboardSettings?: AppDashboardSettingsInterface;
     appSettings?: AppAppSettingsInterface;
     serviceSyncSettings?: ServiceSyncSettingsInterface;
+    deviceDisplaySettings?: AppDeviceDisplaySettingsInterface;
 }
 
 export interface AppUserInterface extends User {

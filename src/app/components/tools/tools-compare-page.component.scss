@@ -299,6 +299,19 @@ h2 {
   margin-bottom: 0.75rem;
 }
 
+.comparison-table-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+  justify-content: flex-end;
+  margin-left: auto;
+}
+
+.device-colors-button {
+  white-space: nowrap;
+}
+
 .filter-field {
   width: min(100%, 28rem);
 }
@@ -420,12 +433,36 @@ h2 {
 .device-name-swatch {
   display: block;
   align-self: center;
-  width: 0.5rem;
-  height: 0.5rem;
-  flex: 0 0 0.5rem;
+  width: 0.55rem;
+  height: 0.55rem;
+  flex: 0 0 0.55rem;
   border-radius: 50%;
   background: var(--device-accent-color, var(--mat-sys-primary));
-  transform: translateY(2px);
+}
+
+.device-color-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.25rem;
+  height: 1.25rem;
+  flex: 0 0 1.25rem;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.device-color-trigger:disabled {
+  cursor: default;
+}
+
+.device-color-trigger:focus-visible {
+  outline: 2px solid var(--mat-sys-primary);
+  outline-offset: 2px;
 }
 
 .device-name-label {
@@ -610,7 +647,12 @@ mat-paginator {
   }
 
   .filter-field,
+  .comparison-table-actions,
   .result-summary {
     width: 100%;
+  }
+
+  .comparison-table-actions {
+    justify-content: flex-start;
   }
 }

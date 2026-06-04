@@ -10,6 +10,7 @@ import { CommonModule } from '@angular/common';
 import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { ActivityInterface } from '@sports-alliance/sports-lib';
+import { AppDeviceColorPreferenceService } from '../../services/color/app-device-color-preference.service';
 
 describe('BenchmarkSelectionDialogComponent', () => {
     let component: BenchmarkSelectionDialogComponent;
@@ -48,6 +49,7 @@ describe('BenchmarkSelectionDialogComponent', () => {
             providers: [
                 { provide: MatDialogRef, useValue: mockDialogRef },
                 { provide: MAT_DIALOG_DATA, useValue: mockData },
+                { provide: AppDeviceColorPreferenceService, useValue: { getPreferredDeviceColor: vi.fn(() => null) } },
             ],
             schemas: [NO_ERRORS_SCHEMA],
         }).compileComponents();
@@ -100,6 +102,7 @@ describe('BenchmarkSelectionDialogComponent', () => {
             providers: [
                 { provide: MatDialogRef, useValue: mockDialogRef },
                 { provide: MAT_DIALOG_DATA, useValue: dataWithInitial },
+                { provide: AppDeviceColorPreferenceService, useValue: { getPreferredDeviceColor: vi.fn(() => null) } },
             ],
             schemas: [NO_ERRORS_SCHEMA],
         }).compileComponents();

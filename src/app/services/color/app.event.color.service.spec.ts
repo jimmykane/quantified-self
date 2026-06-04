@@ -6,10 +6,12 @@ import { LoggerService } from '../logger.service';
 import { AppColors } from './app.colors';
 import { AppDeviceColors } from './app.device.colors';
 import { AppActivityTypeGroupColors } from './app.activity-type-group.colors';
+import { AppDeviceColorPreferenceService } from './app-device-color-preference.service';
 
 describe('AppEventColorService', () => {
   let service: AppEventColorService;
   let mockLoggerService: { warn: ReturnType<typeof vi.fn>, log: ReturnType<typeof vi.fn>, error: ReturnType<typeof vi.fn> };
+  let mockDeviceColorPreferenceService: { getPreferredDeviceColor: ReturnType<typeof vi.fn> };
 
   beforeEach(() => {
     mockLoggerService = {
@@ -17,11 +19,15 @@ describe('AppEventColorService', () => {
       log: vi.fn(),
       error: vi.fn(),
     };
+    mockDeviceColorPreferenceService = {
+      getPreferredDeviceColor: vi.fn().mockReturnValue(null),
+    };
 
     TestBed.configureTestingModule({
       providers: [
         AppEventColorService,
         { provide: LoggerService, useValue: mockLoggerService },
+        { provide: AppDeviceColorPreferenceService, useValue: mockDeviceColorPreferenceService },
       ],
     });
 
@@ -110,6 +116,38 @@ describe('AppEventColorService', () => {
 
       expect(firstColor).toBe(AppDeviceColors['Suunto 0']);
       expect(secondColor).not.toBe(firstColor);
+    });
+
+    it('should prefer the saved user color for the first matching device activity', () => {
+      const activities: any[] = [
+        { getID: () => '1', creator: { name: 'Garmin Edge', swInfo: '3129' } },
+        { getID: () => '2', creator: { name: 'Suunto Race' } },
+      ];
+      mockDeviceColorPreferenceService.getPreferredDeviceColor.mockImplementation((activity: any) =>
+        activity.creator.name === 'Garmin Edge' ? '#112233' : null,
+      );
+
+      const firstColor = service.getActivityColor(activities as any, activities[0] as any);
+      const secondColor = service.getActivityColor(activities as any, activities[1] as any);
+
+      expect(firstColor).toBe('#112233');
+      expect(secondColor).not.toBe('#112233');
+    });
+
+    it('should keep automatic variant colors for later duplicate device activities', () => {
+      const activities: any[] = [
+        { getID: () => '1', creator: { name: 'Garmin Edge', swInfo: '3129' } },
+        { getID: () => '2', creator: { name: '  garmin   edge  ', swInfo: '3130' } },
+      ];
+      mockDeviceColorPreferenceService.getPreferredDeviceColor.mockReturnValue('#445566');
+
+      const firstColor = service.getActivityColor(activities as any, activities[0] as any);
+      const secondColor = service.getActivityColor(activities as any, activities[1] as any);
+
+      expect(firstColor).toBe('#445566');
+      expect(secondColor).not.toBe('#445566');
+      expect(mockDeviceColorPreferenceService.getPreferredDeviceColor).toHaveBeenCalledWith(activities[0]);
+      expect(mockDeviceColorPreferenceService.getPreferredDeviceColor).toHaveBeenCalledWith(activities[1]);
     });
 
     it('should handle activity not found in array gracefully and log warning', () => {

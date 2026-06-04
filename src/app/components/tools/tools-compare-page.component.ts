@@ -39,6 +39,11 @@ import { LoggerService } from '../../services/logger.service';
 import { ToolsCompareAuthResolverData } from '../../resolvers/tools-compare-auth.resolver';
 import { AppEventColorService } from '../../services/color/app.event.color.service';
 import { AppColors } from '../../services/color/app.colors';
+import { AppDeviceColorPreferenceService } from '../../services/color/app-device-color-preference.service';
+import {
+  DeviceColorPreferenceDialogDevice,
+  DeviceColorPreferencesDialogComponent,
+} from './device-color-preferences-dialog.component';
 
 interface SelectedFileItem {
   index: number;
@@ -80,6 +85,7 @@ interface ComparisonListItem {
 interface ComparisonActivitySummary {
   id: string;
   deviceLabel: string;
+  deviceColorKey: string;
   deviceColor: string;
   activityTypeLabel: string;
   distanceLabel: string;
@@ -144,6 +150,7 @@ export class ToolsComparePageComponent implements OnInit {
   private eventService = inject(AppEventService);
   private comparisonService = inject(AppToolsComparisonService);
   private eventColorService = inject(AppEventColorService);
+  private deviceColorPreferenceService = inject(AppDeviceColorPreferenceService);
   private logger = inject(LoggerService);
 
   readonly selectedFiles = signal<File[]>([]);
@@ -257,6 +264,38 @@ export class ToolsComparePageComponent implements OnInit {
     return [...this.filteredComparisonItems()].sort((first, second) =>
       this.compareComparisonItems(first, second, sort.active, sort.direction),
     );
+  });
+
+  readonly comparisonDeviceColorItems = computed<DeviceColorPreferenceDialogDevice[]>(() => {
+    const deviceByKey = new Map<string, DeviceColorPreferenceDialogDevice>();
+
+    for (const item of this.comparisonItems()) {
+      for (const summary of item.activitySummaries) {
+        if (!summary.deviceColorKey || deviceByKey.has(summary.deviceColorKey)) {
+          continue;
+        }
+
+        deviceByKey.set(summary.deviceColorKey, {
+          key: summary.deviceColorKey,
+          label: summary.deviceLabel,
+          automaticColor: summary.deviceColor,
+        });
+      }
+    }
+
+    Object.keys(this.deviceColorPreferenceService.deviceColorByName()).forEach((deviceKey) => {
+      if (deviceByKey.has(deviceKey)) {
+        return;
+      }
+
+      deviceByKey.set(deviceKey, {
+        key: deviceKey,
+        label: this.formatNormalizedDeviceName(deviceKey),
+        automaticColor: AppColors.Blue,
+      });
+    });
+
+    return Array.from(deviceByKey.values());
   });
 
   readonly paginatedComparisonItems = computed<ComparisonListItem[]>(() => {
@@ -629,6 +668,22 @@ export class ToolsComparePageComponent implements OnInit {
     } finally {
       this.deletingEventID.set(null);
     }
+  }
+
+  openDeviceColorPreferencesDialog(initialDeviceKey?: string | null): void {
+    const devices = this.comparisonDeviceColorItems();
+    if (devices.length === 0) {
+      return;
+    }
+
+    this.dialog.open(DeviceColorPreferencesDialogComponent, {
+      width: 'min(40rem, calc(100vw - 32px))',
+      maxWidth: 'calc(100vw - 32px)',
+      data: {
+        devices,
+        initialDeviceKey: initialDeviceKey || null,
+      },
+    });
   }
 
   async signIn(redirectUrl = '/tools/compare', source: ToolCompareSignInSource = 'guest_cta'): Promise<void> {
@@ -1130,6 +1185,7 @@ export class ToolsComparePageComponent implements OnInit {
 
     return activities.map((activity, index) => {
       const deviceLabel = this.resolveActivityDeviceLabel(activity, index);
+      const deviceColorKey = this.deviceColorPreferenceService.normalizeDeviceColorKey(activity.creator?.name ?? '');
       const deviceColor = this.resolveActivityDeviceColor(activities, activity);
       const activityTypeLabel = this.resolveActivityTypeLabel(activity);
       const activityID = `${activity.getID?.() ?? ''}`.trim() || this.normalizeDeviceNameKey(deviceLabel) || 'activity';
@@ -1143,6 +1199,7 @@ export class ToolsComparePageComponent implements OnInit {
       return {
         id: `${activityID}-${index}`,
         deviceLabel,
+        deviceColorKey,
         deviceColor,
         activityTypeLabel,
         distanceLabel,
