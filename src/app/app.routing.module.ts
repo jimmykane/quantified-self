@@ -8,6 +8,7 @@ import { onboardingGuard } from './authentication/onboarding.guard';
 import { adminGuard } from './authentication/admin.guard';
 import { pricingRedirectGuard } from './authentication/pricing-redirect.guard';
 import { releasesResolver } from './resolvers/releases.resolver';
+import { toolsCompareAuthResolver } from './resolvers/tools-compare-auth.resolver';
 import { INTEGRATIONS_HUB_ROUTE_DATA, PROVIDER_INTEGRATION_ROUTE_DATA } from './components/integrations/integration-pages.content';
 import { WORKOUT_DATA_COMPARISON_ROUTE_DATA } from './components/features/workout-data-comparison-page.content';
 import { PUBLIC_FEATURE_PATHS, PUBLIC_GUIDE_PATHS, PUBLIC_SEO_ROUTE_DATA } from './components/public-seo/public-seo-pages.content';
@@ -185,6 +186,9 @@ export const routes: Routes = [
   {
     path: 'tools/compare',
     loadComponent: () => import('./components/tools/tools-compare-page.component').then(m => m.ToolsComparePageComponent),
+    resolve: {
+      toolsCompareAuth: toolsCompareAuthResolver,
+    },
     data: {
       title: 'FIT, GPX, TCX File Comparison Tool',
       preload: true,
@@ -204,6 +208,9 @@ export const routes: Routes = [
   {
     path: 'tools/compare/saved',
     loadComponent: () => import('./components/tools/tools-compare-page.component').then(m => m.ToolsComparePageComponent),
+    resolve: {
+      toolsCompareAuth: toolsCompareAuthResolver,
+    },
     data: {
       title: 'Saved File Comparisons',
       preload: true,

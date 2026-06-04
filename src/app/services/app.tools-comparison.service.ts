@@ -1,5 +1,5 @@
 import { Injectable, inject } from '@angular/core';
-import { map, Observable } from 'rxjs';
+import { from, map, Observable } from 'rxjs';
 import { FirebaseApp } from 'app/firebase/app';
 import { Auth } from 'app/firebase/auth';
 import { User } from '@sports-alliance/sports-lib';
@@ -13,8 +13,7 @@ import {
 } from '@shared/tool-comparison-id';
 import { environment } from '../../environments/environment';
 import { AppCheckReadinessService } from './app-check-readiness.service';
-import { AppEventService } from './app.event.service';
-import { BrowserCompatibilityService } from './browser.compatibility.service';
+import { AppEventService, EventQueryCursor } from './app.event.service';
 
 export interface ToolComparisonUploadResponse {
   eventId: string;
@@ -24,6 +23,17 @@ export interface ToolComparisonUploadResponse {
   uploadLimit: number | null;
   uploadCountAfterWrite: number | null;
   alreadyExists?: boolean;
+}
+
+export interface SavedBenchmarkComparisonsPage {
+  events: AppEventInterface[];
+  nextCursor: EventQueryCursor | null;
+  hasMore: boolean;
+}
+
+export interface SavedBenchmarkComparisonsPageRequest {
+  pageSize: number;
+  cursor?: EventQueryCursor | null;
 }
 
 interface PreparedComparisonFile {
@@ -37,8 +47,12 @@ const MIN_COMPARISON_FILES = 2;
 const MAX_COMPARISON_FILES = 10;
 const MAX_COMPARISON_FILE_BYTES = 20 * 1024 * 1024;
 const MAX_COMPARISON_TOTAL_BYTES = 30 * 1024 * 1024;
+// Keep this aligned with MAX_ACTIVITY_DECOMPRESSED_BYTES in the comparison function.
+const MAX_COMPARISON_DECOMPRESSED_HASH_BYTES = 512 * 1024 * 1024;
 const MAX_COMPARISON_TITLE_LENGTH = 120;
-const SAVED_BENCHMARK_COMPARISONS_LIMIT = 100;
+const BENCHMARK_COMPARISON_WHERE = [
+  { fieldPath: 'mergeType', opStr: '==', value: 'benchmark' },
+] as const;
 
 function mapFallbackComparisonErrorMessage(statusCode: number): string {
   if (statusCode >= 500) {
@@ -75,6 +89,16 @@ function resolveExtensionFromFilename(filename: string): string {
 
 function hasGzipMagic(bytes: Uint8Array): boolean {
   return bytes.length > 2 && bytes[0] === 0x1f && bytes[1] === 0x8b;
+}
+
+function concatenateUint8ArrayChunks(chunks: Uint8Array[], totalLength: number): Uint8Array {
+  const result = new Uint8Array(totalLength);
+  let offset = 0;
+  for (const chunk of chunks) {
+    result.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return result;
 }
 
 function readFileAsArrayBuffer(file: File): Promise<ArrayBuffer> {
@@ -130,7 +154,6 @@ export class AppToolsComparisonService {
   private auth = inject(Auth);
   private appCheckReadiness = inject(AppCheckReadinessService);
   private eventService = inject(AppEventService);
-  private browserCompatibilityService = inject(BrowserCompatibilityService);
 
   validateFiles(files: File[]): string | null {
     if (files.length < MIN_COMPARISON_FILES) {
@@ -233,20 +256,32 @@ export class AppToolsComparisonService {
     return parseComparisonUploadResponse(payload);
   }
 
-  getBenchmarkComparisons(
-    user: User,
-    limitCount = SAVED_BENCHMARK_COMPARISONS_LIMIT,
-  ): Observable<AppEventInterface[]> {
-    return this.eventService.getEventsBy(
+  getBenchmarkComparisonCount(user: User): Observable<number> {
+    return from(this.eventService.getEventCountBy(
       user,
-      [
-        { fieldPath: 'mergeType', opStr: '==', value: 'benchmark' },
-      ],
+      [...BENCHMARK_COMPARISON_WHERE],
+    ));
+  }
+
+  getBenchmarkComparisonPage(
+    user: User,
+    request: SavedBenchmarkComparisonsPageRequest,
+  ): Observable<SavedBenchmarkComparisonsPage> {
+    const pageSize = Math.max(1, Math.floor(request.pageSize));
+
+    return this.eventService.getEventsPageOnceByWithMeta(
+      user,
+      [...BENCHMARK_COMPARISON_WHERE],
       'startDate',
       false,
-      limitCount,
+      pageSize,
+      { startAfterCursor: request.cursor || null },
     ).pipe(
-      map(events => events as AppEventInterface[]),
+      map(result => ({
+        events: result.events,
+        nextCursor: result.lastCursor,
+        hasMore: result.hasMore,
+      })),
     );
   }
 
@@ -269,14 +304,20 @@ export class AppToolsComparisonService {
     }
 
     const contentHashes: string[] = [];
+    let totalPayloadForHashBytes = 0;
     for (const file of files) {
-      const payloadForHash = await this.resolvePayloadForComparisonHash(file);
+      const remainingPayloadForHashBytes = MAX_COMPARISON_DECOMPRESSED_HASH_BYTES - totalPayloadForHashBytes;
+      const payloadForHash = await this.resolvePayloadForComparisonHash(file, remainingPayloadForHashBytes);
       if (!payloadForHash) {
+        return null;
+      }
+      totalPayloadForHashBytes += payloadForHash.byteLength;
+      if (totalPayloadForHashBytes > MAX_COMPARISON_DECOMPRESSED_HASH_BYTES) {
         return null;
       }
 
       const contentHash = await this.sha256Hex(buildToolComparisonContentHashParts(
-        file.extension,
+        getToolComparisonBaseExtension(file.extension),
         payloadForHash,
       ));
       if (!contentHash) {
@@ -288,24 +329,56 @@ export class AppToolsComparisonService {
     return this.sha256Hex(buildToolComparisonEventIDHashParts(userID, contentHashes));
   }
 
-  private async resolvePayloadForComparisonHash(file: PreparedComparisonFile): Promise<Uint8Array | null> {
+  private async resolvePayloadForComparisonHash(
+    file: PreparedComparisonFile,
+    maxPayloadForHashBytes: number,
+  ): Promise<Uint8Array | null> {
     const bytes = new Uint8Array(file.bytes);
-    const shouldDecompress = file.extension.toLowerCase().endsWith('.gz') || hasGzipMagic(bytes);
-    if (!shouldDecompress) {
-      return bytes;
+    if (maxPayloadForHashBytes <= 0) {
+      return null;
+    }
+    if (file.extension.toLowerCase().endsWith('.gz') || hasGzipMagic(bytes)) {
+      return this.decompressGzipForComparisonHash(bytes, maxPayloadForHashBytes);
     }
 
-    if (!this.browserCompatibilityService.checkCompressionSupport(false)) {
+    return bytes;
+  }
+
+  private async decompressGzipForComparisonHash(
+    bytes: Uint8Array,
+    maxPayloadForHashBytes: number,
+  ): Promise<Uint8Array | null> {
+    if (typeof globalThis.DecompressionStream !== 'function' || typeof globalThis.ReadableStream !== 'function') {
       return null;
     }
 
     try {
-      const stream = new Response(file.bytes).body?.pipeThrough(new DecompressionStream('gzip'));
-      if (!stream) {
-        return null;
+      const compressedStream = new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(bytes);
+          controller.close();
+        },
+      });
+      const gzipStream = new DecompressionStream('gzip') as unknown as ReadableWritablePair<Uint8Array, Uint8Array>;
+      const stream = compressedStream.pipeThrough(gzipStream);
+      const reader = stream.getReader();
+      const chunks: Uint8Array[] = [];
+      let totalLength = 0;
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) {
+          break;
+        }
+        totalLength += value.byteLength;
+        if (totalLength > maxPayloadForHashBytes) {
+          await reader.cancel().catch(() => undefined);
+          return null;
+        }
+        chunks.push(value);
       }
-      const decompressed = await new Response(stream).arrayBuffer();
-      return new Uint8Array(decompressed);
+
+      return concatenateUint8ArrayChunks(chunks, totalLength);
     } catch {
       return null;
     }

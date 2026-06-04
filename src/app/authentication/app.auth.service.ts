@@ -47,7 +47,9 @@ export class AppAuthService {
     public localStorageService: LocalStorageService,
     private logger: LoggerService
   ) {
-    this.authState$ = authState(this.auth);
+    this.authState$ = authState(this.auth).pipe(
+      shareReplay({ bufferSize: 1, refCount: true })
+    );
 
     // Use modular user observable to react to token refreshes too
     this.user$ = this.userService.user$;

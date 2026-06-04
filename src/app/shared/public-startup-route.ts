@@ -22,6 +22,11 @@ const PUBLIC_STARTUP_PATHS = new Set([
   '/guides/centralize-garmin-suunto-coros-workout-data',
 ]);
 
+const AUTH_SENSITIVE_PUBLIC_STARTUP_PATHS = new Set([
+  '/tools/compare',
+  '/tools/compare/saved',
+]);
+
 export function hasAngularServerContext(documentRef: Document | null | undefined): boolean {
   return !!documentRef?.querySelector('app-root[ng-server-context]');
 }
@@ -44,6 +49,14 @@ export function isPublicStartupPath(path: string): boolean {
 
 export function isPublicStartupDocument(documentRef: Document | null | undefined): boolean {
   return isPublicStartupPath(documentRoutePath(documentRef));
+}
+
+export function isAuthSensitivePublicStartupPath(path: string): boolean {
+  return AUTH_SENSITIVE_PUBLIC_STARTUP_PATHS.has(normalizeRoutePath(path));
+}
+
+export function isAuthSensitivePublicStartupDocument(documentRef: Document | null | undefined): boolean {
+  return isAuthSensitivePublicStartupPath(documentRoutePath(documentRef));
 }
 
 export function isSameDocumentRoutePath(documentRef: Document | null | undefined, nextUrl: string): boolean {

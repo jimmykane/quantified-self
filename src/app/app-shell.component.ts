@@ -35,7 +35,12 @@ import { AppHapticsService } from './services/app.haptics.service';
 import { AppUserInterface } from './models/app-user.interface';
 import { AppUserUtilities } from './utils/app.user.utilities';
 import { ShellNavigationEffectsService } from './services/shell-navigation-effects.service';
-import { hasAngularServerContext, isPublicStartupDocument } from './shared/public-startup-route';
+import {
+  hasAngularServerContext,
+  isAuthSensitivePublicStartupDocument,
+  isAuthSensitivePublicStartupPath,
+  isPublicStartupDocument,
+} from './shared/public-startup-route';
 
 export const APP_SHELL_HEADER_HEIGHT_PX = 64;
 const APP_SHELL_BANNER_HEIGHT_WOBBLE_TOLERANCE_PX = 2;
@@ -78,6 +83,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
   private readonly hasBannerSignal = signal(false);
   public authState: boolean | null = null;
   private readonly showInitialLoaderSignal = signal(true);
+  private readonly renderPublicShellWhileAuthPendingSignal = signal(false);
   private readonly currentUrlSignal = signal('');
   private readonly isOnboardingRouteComputed = computed(() => this.currentUrlSignal().includes('onboarding'));
   private readonly isDashboardRouteComputed = computed(() => this.currentUrlSignal().includes('/dashboard'));
@@ -175,6 +181,10 @@ export class AppShellComponent implements OnInit, OnDestroy {
     this.showInitialLoaderSignal.set(value);
   }
 
+  get renderPublicShellWhileAuthPending(): boolean {
+    return this.renderPublicShellWhileAuthPendingSignal();
+  }
+
   get isOnboardingRoute(): boolean {
     return this.isOnboardingRouteComputed();
   }
@@ -244,7 +254,11 @@ export class AppShellComponent implements OnInit, OnDestroy {
     this.iconService.registerIcons();
 
     if (this.isBrowser && this.shouldUsePublicStartupState()) {
-      this.authState = false;
+      if (this.shouldUseAuthSensitivePublicStartupState()) {
+        this.renderPublicShellWhileAuthPendingSignal.set(true);
+      } else {
+        this.authState = false;
+      }
       this.showInitialLoader = false;
     }
 
@@ -273,6 +287,9 @@ export class AppShellComponent implements OnInit, OnDestroy {
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe(async user => {
         this.authState = !!user;
+        if (this.renderPublicShellWhileAuthPendingSignal()) {
+          this.renderPublicShellWhileAuthPendingSignal.set(false);
+        }
         this.currentUser = user;
         this.updateOnboardingState();
         // Check admin status when user is authenticated
@@ -391,6 +408,9 @@ export class AppShellComponent implements OnInit, OnDestroy {
     }
 
     this.currentUrlSignal.set(currentUrl);
+    if (this.renderPublicShellWhileAuthPendingSignal() && !isAuthSensitivePublicStartupPath(currentUrl)) {
+      this.renderPublicShellWhileAuthPendingSignal.set(false);
+    }
   }
 
   public onLogoClick() {
@@ -618,6 +638,10 @@ export class AppShellComponent implements OnInit, OnDestroy {
 
   private shouldUsePublicStartupState(): boolean {
     return hasAngularServerContext(this.documentRef) || isPublicStartupDocument(this.documentRef);
+  }
+
+  private shouldUseAuthSensitivePublicStartupState(): boolean {
+    return isAuthSensitivePublicStartupDocument(this.documentRef);
   }
 
   public openWhatsNew() {

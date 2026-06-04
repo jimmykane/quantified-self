@@ -962,6 +962,204 @@ describe('AppEventService', () => {
         );
     });
 
+    it('should batch one-shot activities by event ID and preserve empty event groups', async () => {
+        const userId = 'user1';
+        const user = { uid: userId } as any;
+        const firstActivityData = { id: 'activity-1', eventID: 'event-1', type: 'Run' };
+        const secondActivityData = { id: 'activity-2', eventID: 'event-2', type: 'Ride' };
+        const makeParsedActivity = () => ({
+            id: '',
+            setID(id: string) {
+                this.id = id;
+                return this;
+            },
+            getID() {
+                return this.id;
+            },
+        });
+        const parsedActivitiesByType = new Map<string, any>([
+            ['Run', makeParsedActivity()],
+            ['Ride', makeParsedActivity()],
+        ]);
+
+        (collection as Mock).mockReturnValue('activities-ref');
+        (where as Mock).mockImplementation((field: string, op: string, value: unknown) => ({ field, op, value }));
+        (query as Mock).mockReturnValue('activities-query');
+        (getDocs as Mock).mockResolvedValue({
+            docs: [
+                {
+                    id: 'activity-1',
+                    data: () => firstActivityData,
+                },
+                {
+                    id: 'activity-2',
+                    data: () => secondActivityData,
+                },
+            ],
+            size: 2,
+            metadata: {
+                fromCache: false,
+                hasPendingWrites: false,
+            },
+        });
+        mocks.getActivityFromJSON.mockImplementation((json: Record<string, unknown>) =>
+            parsedActivitiesByType.get(`${json.type}`) || { getID: () => `${json.id}` }
+        );
+
+        const activitiesByEvent = await firstValueFrom(service.getActivitiesOnceByEventsWithOptions(
+            user,
+            ['event-1', 'event-2', 'event-empty', 'event-1'],
+            { preferCache: false },
+        ));
+
+        expect(query).toHaveBeenCalledWith(
+            'activities-ref',
+            { field: 'eventID', op: 'in', value: ['event-1', 'event-2', 'event-empty'] },
+        );
+        expect(getDocs).toHaveBeenCalledTimes(1);
+        expect(activitiesByEvent.get('event-1')?.map(activity => activity.getID())).toEqual(['activity-1']);
+        expect(activitiesByEvent.get('event-2')?.map(activity => activity.getID())).toEqual(['activity-2']);
+        expect(activitiesByEvent.get('event-empty')).toEqual([]);
+        expect(mockLogger.info).toHaveBeenCalledWith(
+            '[perf] app_event_service_get_activities_once_by_events_get_docs',
+            expect.objectContaining({
+                snapshots: 2,
+                queryChunks: 1,
+                eventCount: 3,
+                userID: userId,
+            }),
+        );
+    });
+
+    it('should chunk batched one-shot activities by Firestore in-query limits', async () => {
+        const userId = 'user1';
+        const user = { uid: userId } as any;
+        const requestedEventIDs = Array.from({ length: 35 }, (_value, index) => `event-${index + 1}`);
+        mocks.getActivityFromJSON.mockImplementation((json: Record<string, unknown>) => ({
+            id: '',
+            setID(id: string) {
+                this.id = id;
+                return this;
+            },
+            getID() {
+                return this.id;
+            },
+            eventID: json.eventID,
+        }));
+
+        (collection as Mock).mockReturnValue('activities-ref');
+        (where as Mock).mockImplementation((field: string, op: string, value: unknown) => ({
+            field,
+            op,
+            value,
+        }));
+        (query as Mock).mockImplementation((collectionRef: unknown, whereConstraint: unknown) => ({
+            collectionRef,
+            whereConstraint,
+        }));
+        (getDocs as Mock).mockImplementation(async (queryRef: any) => {
+            const eventIDsForChunk = (queryRef.whereConstraint?.value || []) as string[];
+            return {
+                docs: eventIDsForChunk.map((eventID) => ({
+                    id: `activity-${eventID}`,
+                    data: () => ({
+                        id: `activity-${eventID}`,
+                        eventID,
+                        type: 'Run',
+                    }),
+                })),
+                size: eventIDsForChunk.length,
+                metadata: {
+                    fromCache: false,
+                    hasPendingWrites: false,
+                },
+            };
+        });
+
+        const activitiesByEvent = await firstValueFrom(service.getActivitiesOnceByEventsWithOptions(
+            user,
+            requestedEventIDs,
+            { preferCache: false },
+        ));
+
+        expect(getDocs).toHaveBeenCalledTimes(2);
+        expect(where).toHaveBeenNthCalledWith(1, 'eventID', 'in', requestedEventIDs.slice(0, 30));
+        expect(where).toHaveBeenNthCalledWith(2, 'eventID', 'in', requestedEventIDs.slice(30));
+        expect(activitiesByEvent.get('event-1')?.map(activity => activity.getID())).toEqual(['activity-event-1']);
+        expect(activitiesByEvent.get('event-35')?.map(activity => activity.getID())).toEqual(['activity-event-35']);
+    });
+
+    it('should fall back to server batched activities when cache covers only some requested events', async () => {
+        const userId = 'user1';
+        const user = { uid: userId } as any;
+        const cachedActivityData = { id: 'activity-cache-1', eventID: 'event-1', type: 'Run' };
+        const serverActivityData = { id: 'activity-server-2', eventID: 'event-2', type: 'Ride' };
+        mocks.getActivityFromJSON.mockImplementation((json: Record<string, unknown>) => ({
+            id: '',
+            setID(id: string) {
+                this.id = id;
+                return this;
+            },
+            getID() {
+                return this.id;
+            },
+            type: json.type,
+        }));
+
+        (collection as Mock).mockReturnValue('activities-ref');
+        (where as Mock).mockImplementation((field: string, op: string, value: unknown) => ({ field, op, value }));
+        (query as Mock).mockReturnValue('activities-query');
+        (getDocsFromCache as Mock).mockResolvedValue({
+            docs: [
+                {
+                    id: 'activity-cache-1',
+                    data: () => cachedActivityData,
+                },
+            ],
+            size: 1,
+            metadata: {
+                fromCache: true,
+                hasPendingWrites: false,
+            },
+        });
+        (getDocs as Mock).mockResolvedValue({
+            docs: [
+                {
+                    id: 'activity-cache-1',
+                    data: () => cachedActivityData,
+                },
+                {
+                    id: 'activity-server-2',
+                    data: () => serverActivityData,
+                },
+            ],
+            size: 2,
+            metadata: {
+                fromCache: false,
+                hasPendingWrites: false,
+            },
+        });
+
+        const activitiesByEvent = await firstValueFrom(service.getActivitiesOnceByEventsWithOptions(
+            user,
+            ['event-1', 'event-2'],
+            { preferCache: true, warmServer: false },
+        ));
+
+        expect(getDocsFromCache).toHaveBeenCalledTimes(1);
+        expect(getDocs).toHaveBeenCalledTimes(1);
+        expect(activitiesByEvent.get('event-1')?.map(activity => activity.getID())).toEqual(['activity-cache-1']);
+        expect(activitiesByEvent.get('event-2')?.map(activity => activity.getID())).toEqual(['activity-server-2']);
+        expect(mockLogger.info).toHaveBeenCalledWith(
+            '[perf] app_event_service_get_activities_once_by_events_cache_first_fallback',
+            expect.objectContaining({
+                reason: 'partial_cache',
+                eventCount: 2,
+                userID: userId,
+            }),
+        );
+    });
+
     it('should keep unknown-type reporting via captureMessage without captureException', async () => {
         const userId = 'user1';
         const eventId = 'event1';
@@ -1301,6 +1499,43 @@ describe('AppEventService', () => {
         const count = await service.getEventCount(user);
 
         expect(count).toBe(42);
+    });
+
+    it('should return cursor-backed event pages without exposing the lookahead doc', async () => {
+        const user = { uid: 'user-page' } as any;
+        const cursor = { id: 'cursor-doc' } as any;
+        const docs = [
+            createQueryDoc('event-1', { name: 'Event 1', startDate: 1710000000000 }),
+            createQueryDoc('event-2', { name: 'Event 2', startDate: 1710003600000 }),
+            createQueryDoc('event-3', { name: 'Event 3', startDate: 1710007200000 }),
+        ];
+
+        (collection as Mock).mockReturnValue('events-ref');
+        (query as Mock).mockReturnValue('page-query');
+        (getDocs as Mock).mockResolvedValue({
+            docs,
+            size: docs.length,
+            metadata: {
+                fromCache: false,
+                hasPendingWrites: false,
+            },
+        });
+        mocks.getEventFromJSON.mockImplementation((json: Record<string, unknown>) => createMockEvent(json));
+
+        const result = await firstValueFrom(service.getEventsPageOnceByWithMeta(
+            user,
+            [{ fieldPath: 'mergeType', opStr: '==', value: 'benchmark' }],
+            'startDate',
+            false,
+            2,
+            { startAfterCursor: cursor },
+        ));
+
+        expect(getDocs).toHaveBeenCalledWith('page-query');
+        expect(result.events.map(event => event.getID())).toEqual(['event-1', 'event-2']);
+        expect(result.firstCursor).toBe(docs[0]);
+        expect(result.lastCursor).toBe(docs[1]);
+        expect(result.hasMore).toBe(true);
     });
 
     it('should build Firestore query with startDate precedence, filters, and cursors', () => {

@@ -180,16 +180,60 @@ describe('AppShellComponent', () => {
         publicFixture.destroy();
     });
 
-    it('should keep the saved comparisons public startup page visible while browser auth resolves', () => {
+    it('should keep compare routes neutral while browser auth resolves', () => {
+        window.history.pushState({}, '', '/tools/compare');
+
+        const compareFixture = TestBed.createComponent(AppShellComponent);
+        const compareComponent = compareFixture.componentInstance;
+
+        expect(compareComponent.authState).toBeNull();
+        expect(compareComponent.showInitialLoader).toBe(false);
+        expect(compareComponent.renderPublicShellWhileAuthPending).toBe(true);
+
+        compareFixture.destroy();
+    });
+
+    it('should keep saved comparisons neutral while browser auth resolves', () => {
         window.history.pushState({}, '', '/tools/compare/saved');
 
         const publicFixture = TestBed.createComponent(AppShellComponent);
         const publicComponent = publicFixture.componentInstance;
 
-        expect(publicComponent.authState).toBe(false);
+        expect(publicComponent.authState).toBeNull();
         expect(publicComponent.showInitialLoader).toBe(false);
+        expect(publicComponent.renderPublicShellWhileAuthPending).toBe(true);
 
         publicFixture.destroy();
+    });
+
+    it('should leave compare auth-pending shell mode after navigating away', () => {
+        window.history.pushState({}, '', '/tools/compare');
+
+        const compareFixture = TestBed.createComponent(AppShellComponent);
+        const compareComponent = compareFixture.componentInstance;
+        mockRouter.url = '/features/fit-gpx-tcx-file-analyzer';
+
+        (compareComponent as any).syncCurrentRouteState();
+
+        expect(compareComponent.renderPublicShellWhileAuthPending).toBe(false);
+
+        compareFixture.destroy();
+    });
+
+    it('should leave compare auth-pending shell mode after auth resolves', () => {
+        window.history.pushState({}, '', '/tools/compare');
+
+        const compareFixture = TestBed.createComponent(AppShellComponent);
+        const compareComponent = compareFixture.componentInstance;
+
+        expect(compareComponent.renderPublicShellWhileAuthPending).toBe(true);
+
+        compareFixture.detectChanges();
+
+        expect(compareComponent.authState).toBe(false);
+        expect(compareComponent.renderPublicShellWhileAuthPending).toBe(false);
+
+        compareFixture.destroy();
     });
 
     it('should keep the initial loader behavior for private startup routes', () => {

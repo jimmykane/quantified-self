@@ -5,16 +5,40 @@ import { MatDialog } from '@angular/material/dialog';
 import { PageEvent } from '@angular/material/paginator';
 import { Sort, SortDirection } from '@angular/material/sort';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import { ActivityInterface, User } from '@sports-alliance/sports-lib';
+import {
+  ActivityInterface,
+  ActivityTypes,
+  ActivityTypesHelper,
+  DataActivityTypes,
+  DataAscent,
+  DataDescent,
+  DataDistance,
+  DataInterface,
+  User,
+  UserUnitSettingsInterface,
+} from '@sports-alliance/sports-lib';
 import { AppEventInterface, BenchmarkResult } from '@shared/app-event.interface';
-import { catchError, firstValueFrom, of, switchMap, tap } from 'rxjs';
+import { resolveUnitAwareDisplayStat } from '@shared/unit-aware-display';
+import { firstValueFrom } from 'rxjs';
 
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { ConfirmationDialogComponent, ConfirmationDialogData } from '../confirmation-dialog/confirmation-dialog.component';
 import { SharedModule } from '../../modules/shared.module';
-import { AppEventService } from '../../services/app.event.service';
-import { AppToolsComparisonService } from '../../services/app.tools-comparison.service';
+import {
+  AppAnalyticsService,
+  ToolCompareCreateAnalytics,
+  ToolCompareErrorCategory,
+  ToolCompareFileSelectionAnalytics,
+  ToolCompareFileType,
+  ToolCompareSavedActionAnalytics,
+  ToolCompareSignInSource,
+} from '../../services/app.analytics.service';
+import { AppEventService, EventQueryCursor } from '../../services/app.event.service';
+import { AppToolsComparisonService, SavedBenchmarkComparisonsPage } from '../../services/app.tools-comparison.service';
 import { LoggerService } from '../../services/logger.service';
+import { ToolsCompareAuthResolverData } from '../../resolvers/tools-compare-auth.resolver';
+import { AppEventColorService } from '../../services/color/app.event.color.service';
+import { AppColors } from '../../services/color/app.colors';
 
 interface SelectedFileItem {
   index: number;
@@ -28,15 +52,22 @@ interface ComparisonListItem {
   title: string;
   date: Date | null;
   dateSortMs: number;
+  activitySummaries: ComparisonActivitySummary[];
   devicesLabel: string;
   devicesSort: string;
+  activityTypesLabel: string;
+  activityTypesSort: string;
+  activityTypesTitle: string;
+  distanceSort: number | null;
+  ascentSort: number | null;
+  descentSort: number | null;
+  distanceTitle: string;
+  ascentTitle: string;
+  descentTitle: string;
   description: string;
   sourceFilesCount: number | null;
-  activitiesCount: number | null;
-  sourceFilesSort: number;
-  activitiesSort: number;
+  sourceFilesSort: number | null;
   sourceFilesLabel: string;
-  activitiesLabel: string;
   hasReport: boolean;
   reportCount: number;
   reportLabel: string;
@@ -46,7 +77,32 @@ interface ComparisonListItem {
   event: AppEventInterface;
 }
 
-type ComparisonSortColumn = 'date' | 'title' | 'devices' | 'description' | 'sourceFiles' | 'activities' | 'status' | 'reports';
+interface ComparisonActivitySummary {
+  id: string;
+  deviceLabel: string;
+  deviceColor: string;
+  activityTypeLabel: string;
+  distanceLabel: string;
+  ascentLabel: string;
+  descentLabel: string;
+  distanceSort: number | null;
+  ascentSort: number | null;
+  descentSort: number | null;
+  filterText: string;
+}
+
+type ComparisonSortColumn =
+  | 'date'
+  | 'title'
+  | 'devices'
+  | 'activityType'
+  | 'distance'
+  | 'ascent'
+  | 'descent'
+  | 'description'
+  | 'sourceFiles'
+  | 'status'
+  | 'reports';
 type ComparisonDeviceSource = 'report' | 'legacy-report' | 'metadata' | 'activity';
 
 interface ComparisonSortState {
@@ -61,7 +117,6 @@ interface ComparisonPageState {
 
 type ComparisonEventFields = AppEventInterface & {
   sourceFilesCount?: number;
-  activitiesCount?: number;
   comparisonTitle?: string;
   benchmarkResult?: unknown;
 };
@@ -85,8 +140,10 @@ export class ToolsComparePageComponent implements OnInit {
   private dialog = inject(MatDialog);
   private snackBar = inject(MatSnackBar);
   private authService = inject(AppAuthService);
+  private analyticsService = inject(AppAnalyticsService);
   private eventService = inject(AppEventService);
   private comparisonService = inject(AppToolsComparisonService);
+  private eventColorService = inject(AppEventColorService);
   private logger = inject(LoggerService);
 
   readonly selectedFiles = signal<File[]>([]);
@@ -94,6 +151,7 @@ export class ToolsComparePageComponent implements OnInit {
   readonly isCreating = signal(false);
   readonly currentUser = signal<User | null>(null);
   readonly comparisons = signal<AppEventInterface[]>([]);
+  readonly comparisonTotalCount = signal(0);
   readonly isLoadingComparisons = signal(false);
   readonly deletingEventID = signal<string | null>(null);
   readonly savingDescriptionEventID = signal<string | null>(null);
@@ -110,18 +168,45 @@ export class ToolsComparePageComponent implements OnInit {
     'date',
     'title',
     'devices',
+    'activityType',
+    'distance',
+    'ascent',
+    'descent',
     'description',
     'sourceFiles',
-    'activities',
     'status',
     'reports',
     'actions',
   ];
+  private readonly resolvedAuthState = this.route.snapshot.data['toolsCompareAuth'] as ToolsCompareAuthResolverData | undefined;
   private readonly initialTabIndex = this.route.snapshot.data['defaultTab'] === 'saved' ? 1 : 0;
   readonly guestSignInRedirectUrl = this.initialTabIndex === 1 ? '/tools/compare/saved' : '/tools/compare';
   readonly showSavedComparisonsFirst = this.initialTabIndex === 1;
-  private readonly hydratingDeviceEventIDs = new Set<string>();
-  private readonly hydratedDeviceEventIDs = new Set<string>();
+  private readonly hydratingActivitySummaryEventIDs = new Set<string>();
+  private readonly hydratedActivitySummaryEventIDs = new Set<string>();
+  private loadedComparisonPages = new Map<number, AppEventInterface[]>();
+  private comparisonPageCursors = new Map<number, EventQueryCursor | null>([[0, null]]);
+  private comparisonLoadGeneration = 0;
+  private lastLoggedFilterActive = false;
+  readonly authResolved = signal<boolean>(this.resolvedAuthState?.authResolved ?? true);
+  readonly firebaseSignedIn = signal(this.resolvedAuthState?.signedIn === true);
+  readonly isAuthResolving = computed(() => !this.authResolved());
+  readonly isSignedInProfileLoading = computed(() =>
+    this.authResolved()
+    && this.firebaseSignedIn()
+    && !this.currentUser(),
+  );
+  readonly showGuestExperience = computed(() =>
+    this.authResolved()
+    && !this.firebaseSignedIn()
+    && !this.currentUser(),
+  );
+  readonly showSignedInWorkspace = computed(() =>
+    this.firebaseSignedIn()
+    || !!this.currentUser(),
+  );
+  readonly uploadControlsDisabled = computed(() => this.isCreating() || this.isSignedInProfileLoading());
+  readonly isSavedComparisonsLoading = computed(() => this.isSignedInProfileLoading() || this.isLoadingComparisons());
 
   readonly selectedFileItems = computed<SelectedFileItem[]>(() =>
     this.selectedFiles().map((file, index) => ({
@@ -168,10 +253,9 @@ export class ToolsComparePageComponent implements OnInit {
 
   readonly sortedComparisonItems = computed<ComparisonListItem[]>(() => {
     const sort = this.comparisonSort();
-    const directionMultiplier = sort.direction === 'asc' ? 1 : -1;
 
     return [...this.filteredComparisonItems()].sort((first, second) =>
-      this.compareComparisonItems(first, second, sort.active) * directionMultiplier,
+      this.compareComparisonItems(first, second, sort.active, sort.direction),
     );
   });
 
@@ -181,74 +265,71 @@ export class ToolsComparePageComponent implements OnInit {
     return this.sortedComparisonItems().slice(start, start + page.pageSize);
   });
 
-  private readonly hydrateVisibleComparisonDevices = effect(() => {
+  private readonly hydrateVisibleComparisonActivitySummaries = effect(() => {
     const user = this.currentUser();
     if (!user) {
       return;
     }
 
     const eventIDs = this.paginatedComparisonItems()
-      .filter(item => this.shouldHydrateComparisonDeviceRow(item))
+      .filter(item => this.shouldHydrateComparisonActivitySummaryRow(item))
       .map(item => item.id)
-      .filter(eventID => !this.hydratedDeviceEventIDs.has(eventID) && !this.hydratingDeviceEventIDs.has(eventID));
+      .filter(eventID => !this.hydratedActivitySummaryEventIDs.has(eventID) && !this.hydratingActivitySummaryEventIDs.has(eventID));
 
     if (eventIDs.length > 0) {
-      void this.hydrateMissingDeviceRows(user, eventIDs);
+      void this.hydrateMissingActivitySummaryRows(user, eventIDs);
     }
   });
 
   readonly filteredComparisonCount = computed(() => this.filteredComparisonItems().length);
+  readonly comparisonPaginatorLength = computed(() => {
+    if (this.isComparisonFilterActive()) {
+      return this.filteredComparisonCount();
+    }
+    return Math.max(this.comparisonTotalCount(), this.comparisonItems().length);
+  });
   readonly comparisonResultSummary = computed(() => {
-    const total = this.comparisonItems().length;
+    const total = Math.max(this.comparisonTotalCount(), this.comparisonItems().length);
+    const loaded = this.comparisonItems().length;
     const filtered = this.filteredComparisonCount();
-    if (total === 0) {
+    if (loaded === 0 && total === 0) {
       return 'No comparisons';
     }
-    return filtered === total ? `${total} comparison${total === 1 ? '' : 's'}` : `${filtered} of ${total} comparisons`;
+    if (this.isComparisonFilterActive()) {
+      return `${filtered} of ${loaded} loaded comparison${loaded === 1 ? '' : 's'}`;
+    }
+    if (loaded >= total) {
+      return `${total} comparison${total === 1 ? '' : 's'}`;
+    }
+    const sort = this.comparisonSort();
+    const sortScopeLabel = sort.active === 'date' && sort.direction === 'desc' ? '' : '; sorting loaded rows';
+    return `${loaded} of ${total} loaded${sortScopeLabel}`;
   });
 
   ngOnInit(): void {
     this.authService.user$
       .pipe(
         takeUntilDestroyed(this.destroyRef),
-        tap((user) => {
-          const previousUserID = this.currentUser()?.uid ?? null;
-          const nextUserID = user?.uid ?? null;
-          const authScopeChanged = previousUserID !== nextUserID;
-
-          this.currentUser.set(user);
-          this.isLoadingComparisons.set(!!user);
-          if (authScopeChanged) {
-            this.comparisons.set([]);
-            this.descriptionDrafts.set({});
-            this.editingDescriptionEventID.set(null);
-            this.hydratingDeviceEventIDs.clear();
-            this.hydratedDeviceEventIDs.clear();
-            this.resetComparisonPage();
-          }
-          if (!user || (previousUserID && previousUserID !== nextUserID)) {
-            this.selectedFiles.set([]);
-            this.comparisonTitle.set('');
-          }
-        }),
-        switchMap((user) => {
-          if (!user) {
-            return of([]);
-          }
-          return this.comparisonService.getBenchmarkComparisons(user).pipe(
-            tap(() => this.isLoadingComparisons.set(false)),
-            catchError((error) => {
-              this.isLoadingComparisons.set(false);
-              this.logger.warn('[ToolsComparePageComponent] Could not load saved comparisons.', error);
-              this.snackBar.open('Could not load saved comparisons.', undefined, { duration: 3000 });
-              return of([]);
-            }),
-          );
-        }),
       )
-      .subscribe((events) => {
-        this.comparisons.set(events);
-        this.resetComparisonPage();
+      .subscribe((user) => {
+        const previousUserID = this.currentUser()?.uid ?? null;
+        const nextUserID = user?.uid ?? null;
+        const authScopeChanged = previousUserID !== nextUserID;
+
+        this.authResolved.set(true);
+        this.firebaseSignedIn.set(!!user);
+        this.currentUser.set(user);
+
+        if (authScopeChanged) {
+          this.resetComparisonData();
+        }
+        if (!user || (previousUserID && previousUserID !== nextUserID)) {
+          this.selectedFiles.set([]);
+          this.comparisonTitle.set('');
+        }
+        if (user && (authScopeChanged || this.comparisons().length === 0)) {
+          void this.loadInitialComparisonPage(user);
+        }
       });
   }
 
@@ -260,7 +341,10 @@ export class ToolsComparePageComponent implements OnInit {
     }
 
     const files = Array.from(input.files || []);
-    this.addFiles(files);
+    const summary = this.addFiles(files);
+    if (summary) {
+      this.analyticsService.logToolCompareFileSelection(summary);
+    }
     input.value = '';
   }
 
@@ -289,8 +373,17 @@ export class ToolsComparePageComponent implements OnInit {
   }
 
   updateComparisonFilter(value: string): void {
+    const nextFilterActive = value.trim().length > 0;
     this.comparisonFilter.set(value);
     this.resetComparisonPage();
+    if (nextFilterActive !== this.lastLoggedFilterActive) {
+      this.analyticsService.logToolCompareSavedAction('filter', {
+        status: nextFilterActive ? 'applied' : 'cleared',
+        filterActive: nextFilterActive,
+        resultCount: this.filteredComparisonCount(),
+      });
+      this.lastLoggedFilterActive = nextFilterActive;
+    }
   }
 
   onComparisonSortChange(sort: Sort): void {
@@ -298,12 +391,43 @@ export class ToolsComparePageComponent implements OnInit {
     const direction = sort.direction || (active === 'date' ? 'desc' : 'asc');
     this.comparisonSort.set({ active, direction });
     this.resetComparisonPage();
+    this.analyticsService.logToolCompareSavedAction('sort', {
+      sortColumn: active,
+      sortDirection: direction,
+      filterActive: this.isComparisonFilterActive(),
+      resultCount: this.filteredComparisonCount(),
+    });
   }
 
-  onComparisonPageChange(event: PageEvent): void {
-    this.comparisonPage.set({
-      pageIndex: event.pageIndex,
+  async onComparisonPageChange(event: PageEvent): Promise<void> {
+    const currentPage = this.comparisonPage();
+    const pageSizeChanged = currentPage.pageSize !== event.pageSize;
+
+    if (pageSizeChanged) {
+      this.comparisonPage.set({
+        pageIndex: 0,
+        pageSize: event.pageSize,
+      });
+      const user = this.currentUser();
+      if (user) {
+        await this.loadInitialComparisonPage(user);
+      }
+    } else {
+      const pageReady = await this.ensureComparisonPageLoaded(event.pageIndex);
+      if (!pageReady) {
+        return;
+      }
+      this.comparisonPage.set({
+        pageIndex: event.pageIndex,
+        pageSize: event.pageSize,
+      });
+    }
+
+    this.analyticsService.logToolCompareSavedAction('page', {
+      pageIndex: pageSizeChanged ? 0 : event.pageIndex,
       pageSize: event.pageSize,
+      filterActive: this.isComparisonFilterActive(),
+      resultCount: this.filteredComparisonCount(),
     });
   }
 
@@ -317,6 +441,9 @@ export class ToolsComparePageComponent implements OnInit {
     }
 
     this.editingDescriptionEventID.set(item.id);
+    this.analyticsService.logToolCompareSavedAction('description_edit', this.getComparisonSavedActionAnalytics(item, {
+      hadDescription: !!item.description,
+    }));
   }
 
   cancelDescriptionEdit(item: ComparisonListItem): void {
@@ -367,19 +494,25 @@ export class ToolsComparePageComponent implements OnInit {
       await this.eventService.updateEventProperties(user, item.id, {
         description: nextDescription,
       });
-      this.comparisons.update(events => events.map((event) => {
-        if (event.getID() === item.id) {
-          event.description = nextDescription;
-        }
+      this.updateComparisonEventInLoadedRows(item.id, (event) => {
+        event.description = nextDescription;
         return event;
-      }));
+      });
       this.clearDescriptionDraft(item.id);
       this.clearDescriptionEdit(item.id);
       this.snackBar.open('Description saved.', undefined, { duration: 2000 });
+      this.analyticsService.logToolCompareSavedAction('description_save', this.getComparisonSavedActionAnalytics(item, {
+        status: 'success',
+        hadDescription: !!item.description,
+      }));
     } catch (error) {
       this.clearDescriptionDraft(item.id);
       this.clearDescriptionEdit(item.id);
       this.snackBar.open('Could not save description.', undefined, { duration: 3000 });
+      this.analyticsService.logToolCompareSavedAction('description_save', this.getComparisonSavedActionAnalytics(item, {
+        status: 'failure',
+        hadDescription: !!item.description,
+      }));
     } finally {
       this.savingDescriptionEventID.set(null);
     }
@@ -392,22 +525,31 @@ export class ToolsComparePageComponent implements OnInit {
 
     const user = this.currentUser();
     if (!user) {
-      await this.signIn('/tools/compare');
+      await this.signIn('/tools/compare', 'guest_create');
       return;
     }
 
     const validationError = this.comparisonService.validateFiles(this.selectedFiles());
     if (validationError) {
       this.snackBar.open(validationError, undefined, { duration: 3000 });
+      this.analyticsService.logToolCompareCreate('validation_failure', {
+        ...this.getComparisonCreateAnalytics(),
+        errorCategory: this.resolveComparisonErrorCategory(validationError),
+      });
       return;
     }
 
     this.isCreating.set(true);
+    this.analyticsService.logToolCompareCreate('start', this.getComparisonCreateAnalytics());
     try {
       const result = await this.comparisonService.createComparison(
         this.selectedFiles(),
         this.comparisonTitle(),
       );
+      this.analyticsService.logToolCompareCreate('success', {
+        ...this.getComparisonCreateAnalytics(),
+        alreadyExists: result.alreadyExists === true,
+      });
       this.selectedFiles.set([]);
       this.comparisonTitle.set('');
       this.snackBar.open(result.alreadyExists ? 'Existing comparison opened.' : 'Comparison created.', undefined, { duration: 2000 });
@@ -417,6 +559,10 @@ export class ToolsComparePageComponent implements OnInit {
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Could not create comparison.';
       this.snackBar.open(message, 'Close', { duration: 5000 });
+      this.analyticsService.logToolCompareCreate('failure', {
+        ...this.getComparisonCreateAnalytics(),
+        errorCategory: this.resolveComparisonErrorCategory(error),
+      });
     } finally {
       this.isCreating.set(false);
     }
@@ -425,10 +571,14 @@ export class ToolsComparePageComponent implements OnInit {
   async openComparison(item: ComparisonListItem, benchmark: boolean): Promise<void> {
     const user = this.currentUser();
     if (!user) {
-      await this.signIn('/tools/compare/saved');
+      await this.signIn('/tools/compare/saved', 'saved_action');
       return;
     }
 
+    this.analyticsService.logToolCompareSavedAction(
+      benchmark ? (item.hasReport ? 'open_report' : 'run_report') : 'open_details',
+      this.getComparisonSavedActionAnalytics(item),
+    );
     await this.router.navigate(['/user', user.uid, 'event', item.id], {
       queryParams: benchmark ? { benchmark: '1' } : undefined,
     });
@@ -458,31 +608,283 @@ export class ToolsComparePageComponent implements OnInit {
       return;
     }
 
+    this.analyticsService.logToolCompareSavedAction('delete', this.getComparisonSavedActionAnalytics(item, {
+      status: 'confirmed',
+    }));
     this.deletingEventID.set(item.id);
     try {
       await this.eventService.deleteAllEventData(user, item.id);
-      this.comparisons.update(events => events.filter(event => event.getID() !== item.id));
+      this.removeComparisonEventFromLoadedRows(item.id);
+      this.comparisonTotalCount.update(total => Math.max(0, total - 1));
       this.resetComparisonPage();
       this.snackBar.open('Comparison deleted.', undefined, { duration: 2000 });
+      this.analyticsService.logToolCompareSavedAction('delete', this.getComparisonSavedActionAnalytics(item, {
+        status: 'success',
+      }));
     } catch (error) {
       this.snackBar.open('Could not delete comparison.', undefined, { duration: 3000 });
+      this.analyticsService.logToolCompareSavedAction('delete', this.getComparisonSavedActionAnalytics(item, {
+        status: 'failure',
+      }));
     } finally {
       this.deletingEventID.set(null);
     }
   }
 
-  async signIn(redirectUrl = '/tools/compare'): Promise<void> {
+  async signIn(redirectUrl = '/tools/compare', source: ToolCompareSignInSource = 'guest_cta'): Promise<void> {
+    this.analyticsService.logToolCompareSignIn(source, redirectUrl === '/tools/compare/saved' ? 'saved' : 'compare');
     this.authService.redirectUrl = redirectUrl;
     await this.router.navigate(['/login'], { queryParams: { returnUrl: redirectUrl } });
   }
 
-  private addFiles(files: File[]): void {
-    if (this.isCreating() || !this.currentUser() || !files.length) {
+  private async loadInitialComparisonPage(user: User): Promise<void> {
+    const loadGeneration = ++this.comparisonLoadGeneration;
+    this.clearComparisonPageCache();
+    this.comparisonTotalCount.set(0);
+    this.isLoadingComparisons.set(true);
+
+    try {
+      const pageSize = this.comparisonPage().pageSize;
+      const [totalCount, firstPage] = await Promise.all([
+        firstValueFrom(this.comparisonService.getBenchmarkComparisonCount(user)),
+        firstValueFrom(this.comparisonService.getBenchmarkComparisonPage(user, { pageSize })),
+      ]);
+
+      if (!this.isCurrentComparisonLoad(loadGeneration, user)) {
+        return;
+      }
+
+      this.comparisonTotalCount.set(totalCount);
+      this.storeComparisonPage(0, firstPage);
+      this.comparisonPage.set({ pageIndex: 0, pageSize });
+    } catch (error) {
+      if (this.isCurrentComparisonLoad(loadGeneration, user)) {
+        this.handleComparisonLoadError(error);
+      }
+    } finally {
+      if (this.isCurrentComparisonLoad(loadGeneration, user)) {
+        this.isLoadingComparisons.set(false);
+      }
+    }
+  }
+
+  private async ensureComparisonPageLoaded(targetPageIndex: number): Promise<boolean> {
+    if (targetPageIndex <= 0 || this.loadedComparisonPages.has(targetPageIndex)) {
+      return true;
+    }
+
+    const user = this.currentUser();
+    if (!user) {
+      return true;
+    }
+
+    const loadGeneration = this.comparisonLoadGeneration;
+    this.isLoadingComparisons.set(true);
+
+    try {
+      const pageSize = this.comparisonPage().pageSize;
+      for (let pageIndex = 1; pageIndex <= targetPageIndex; pageIndex += 1) {
+        if (this.loadedComparisonPages.has(pageIndex)) {
+          continue;
+        }
+
+        const cursor = this.comparisonPageCursors.get(pageIndex);
+        if (!cursor) {
+          return false;
+        }
+
+        const page = await firstValueFrom(this.comparisonService.getBenchmarkComparisonPage(user, {
+          pageSize,
+          cursor,
+        }));
+        if (!this.isCurrentComparisonLoad(loadGeneration, user)) {
+          return false;
+        }
+
+        this.storeComparisonPage(pageIndex, page);
+        if (!page.hasMore) {
+          return pageIndex >= targetPageIndex;
+        }
+      }
+      return true;
+    } catch (error) {
+      if (this.isCurrentComparisonLoad(loadGeneration, user)) {
+        this.handleComparisonLoadError(error);
+      }
+      return false;
+    } finally {
+      if (this.isCurrentComparisonLoad(loadGeneration, user)) {
+        this.isLoadingComparisons.set(false);
+      }
+    }
+  }
+
+  private handleComparisonLoadError(error: unknown): void {
+    this.isLoadingComparisons.set(false);
+    this.logger.warn('[ToolsComparePageComponent] Could not load saved comparisons.', error);
+    this.snackBar.open('Could not load saved comparisons.', undefined, { duration: 3000 });
+  }
+
+  private storeComparisonPage(pageIndex: number, page: SavedBenchmarkComparisonsPage): void {
+    this.loadedComparisonPages.set(pageIndex, page.events);
+    if (page.nextCursor) {
+      this.comparisonPageCursors.set(pageIndex + 1, page.nextCursor);
+    } else {
+      this.comparisonPageCursors.delete(pageIndex + 1);
+    }
+    if (!page.hasMore) {
+      this.comparisonPageCursors.delete(pageIndex + 1);
+    }
+    this.syncComparisonPages();
+  }
+
+  private syncComparisonPages(): void {
+    const events = Array.from(this.loadedComparisonPages.entries())
+      .sort(([firstPageIndex], [secondPageIndex]) => firstPageIndex - secondPageIndex)
+      .flatMap(([, pageEvents]) => pageEvents);
+    this.comparisons.set(events);
+  }
+
+  private updateComparisonEventInLoadedRows(
+    eventID: string,
+    updateEvent: (event: AppEventInterface) => AppEventInterface,
+  ): void {
+    let updatedLoadedPage = false;
+    for (const [pageIndex, pageEvents] of this.loadedComparisonPages.entries()) {
+      const nextPageEvents = pageEvents.map((event) => {
+        if (event.getID() !== eventID) {
+          return event;
+        }
+        updatedLoadedPage = true;
+        return updateEvent(event);
+      });
+      this.loadedComparisonPages.set(pageIndex, nextPageEvents);
+    }
+
+    if (updatedLoadedPage) {
+      this.syncComparisonPages();
       return;
     }
 
+    this.comparisons.update(events => events.map((event) => {
+      if (event.getID() !== eventID) {
+        return event;
+      }
+      return updateEvent(event);
+    }));
+  }
+
+  private removeComparisonEventFromLoadedRows(eventID: string): void {
+    let removedLoadedPage = false;
+    for (const [pageIndex, pageEvents] of this.loadedComparisonPages.entries()) {
+      const nextPageEvents = pageEvents.filter(event => event.getID() !== eventID);
+      if (nextPageEvents.length !== pageEvents.length) {
+        removedLoadedPage = true;
+      }
+      this.loadedComparisonPages.set(pageIndex, nextPageEvents);
+    }
+
+    if (removedLoadedPage) {
+      this.syncComparisonPages();
+      return;
+    }
+
+    this.comparisons.update(events => events.filter(event => event.getID() !== eventID));
+  }
+
+  private clearComparisonPageCache(): void {
+    this.loadedComparisonPages = new Map<number, AppEventInterface[]>();
+    this.comparisonPageCursors = new Map<number, EventQueryCursor | null>([[0, null]]);
+  }
+
+  private resetComparisonData(): void {
+    this.comparisonLoadGeneration += 1;
+    this.clearComparisonPageCache();
+    this.comparisons.set([]);
+    this.comparisonTotalCount.set(0);
+    this.descriptionDrafts.set({});
+    this.editingDescriptionEventID.set(null);
+    this.hydratingActivitySummaryEventIDs.clear();
+    this.hydratedActivitySummaryEventIDs.clear();
+    this.isLoadingComparisons.set(false);
+    this.resetComparisonPage();
+  }
+
+  private isCurrentComparisonLoad(loadGeneration: number, user: User): boolean {
+    return this.comparisonLoadGeneration === loadGeneration && this.currentUser()?.uid === user.uid;
+  }
+
+  private getComparisonCreateAnalytics(): ToolCompareCreateAnalytics {
+    return {
+      fileCount: this.selectedFiles().length,
+      hasCustomTitle: this.comparisonTitle().trim().length > 0,
+    };
+  }
+
+  private getComparisonSavedActionAnalytics(
+    item: ComparisonListItem,
+    overrides: ToolCompareSavedActionAnalytics = {},
+  ): ToolCompareSavedActionAnalytics {
+    return {
+      hasReport: item.hasReport,
+      reportCount: item.reportCount,
+      filterActive: this.isComparisonFilterActive(),
+      resultCount: this.filteredComparisonCount(),
+      ...overrides,
+    };
+  }
+
+  private isComparisonFilterActive(): boolean {
+    return this.comparisonFilter().trim().length > 0;
+  }
+
+  private resolveComparisonErrorCategory(error: unknown): ToolCompareErrorCategory {
+    const message = (error instanceof Error ? error.message : `${error ?? ''}`).toLowerCase();
+    if (message.includes('select at least')) {
+      return 'too_few_files';
+    }
+    if (message.includes('up to') || message.includes('at once')) {
+      return 'too_many_files';
+    }
+    if (message.includes('only fit') || message.includes('unsupported') || message.includes('format')) {
+      return 'unsupported_format';
+    }
+    if (message.includes('duplicate')) {
+      return 'duplicate_source';
+    }
+    if (message.includes('empty')) {
+      return 'empty_file';
+    }
+    if (message.includes('too large') || message.includes('larger than')) {
+      return 'file_size';
+    }
+    if (message.includes('limit reached') || message.includes('quota')) {
+      return 'quota';
+    }
+    if (message.includes('authenticated') || message.includes('authorized') || message.includes('sign in')) {
+      return 'auth';
+    }
+    if (message.includes('app check') || message.includes('appcheck')) {
+      return 'app_check';
+    }
+    if (message.includes('network') || message.includes('failed to fetch') || message.includes('temporarily unavailable')) {
+      return 'network';
+    }
+    return 'unknown';
+  }
+
+  private addFiles(files: File[]): ToolCompareFileSelectionAnalytics | null {
+    if (this.isCreating() || !this.currentUser() || !files.length) {
+      return null;
+    }
+
     const nextFiles = [...this.selectedFiles()];
+    const acceptedFileTypes: ToolCompareFileType[] = [];
     const rejectedNames: string[] = [];
+    const previousFileCount = nextFiles.length;
+    const compressedCount = files
+      .map(file => this.resolveExtensionFromFilename(file.name))
+      .filter(extension => extension.endsWith('.gz')).length;
     let rejectedForLimit = false;
 
     for (const file of files) {
@@ -493,12 +895,13 @@ export class ToolsComparePageComponent implements OnInit {
 
       const extension = this.resolveExtensionFromFilename(file.name);
       const baseExtension = extension.endsWith('.gz') ? extension.slice(0, -3) : extension;
-      if (!['fit', 'gpx', 'tcx'].includes(baseExtension)) {
+      if (!this.isToolCompareFileType(baseExtension)) {
         rejectedNames.push(file.name || 'Selected file');
         continue;
       }
 
       nextFiles.push(file);
+      acceptedFileTypes.push(baseExtension);
     }
 
     this.selectedFiles.set(nextFiles);
@@ -507,35 +910,58 @@ export class ToolsComparePageComponent implements OnInit {
     } else if (rejectedNames.length > 0) {
       this.snackBar.open('Only FIT, GPX, and TCX files are supported.', undefined, { duration: 3000 });
     }
+
+    const acceptedCount = nextFiles.length - previousFileCount;
+    return {
+      selectedCount: files.length,
+      acceptedCount,
+      rejectedCount: files.length - acceptedCount,
+      fileCountAfterSelection: nextFiles.length,
+      fileTypes: acceptedFileTypes,
+      compressedCount,
+      limitReached: rejectedForLimit,
+    };
   }
 
-  private async hydrateMissingDeviceRows(user: User, eventIDs: string[]): Promise<void> {
-    eventIDs.forEach(eventID => this.hydratingDeviceEventIDs.add(eventID));
+  private isToolCompareFileType(extension: string): extension is ToolCompareFileType {
+    return extension === 'fit' || extension === 'gpx' || extension === 'tcx';
+  }
 
-    for (const eventID of eventIDs) {
-      try {
-        const activities = await firstValueFrom(this.eventService.getActivitiesOnceByEvent(user, eventID));
+  private async hydrateMissingActivitySummaryRows(user: User, eventIDs: string[]): Promise<void> {
+    eventIDs.forEach(eventID => this.hydratingActivitySummaryEventIDs.add(eventID));
+
+    try {
+      const activitiesByEvent = await firstValueFrom(this.eventService.getActivitiesOnceByEventsWithOptions(
+        user,
+        eventIDs,
+        { preferCache: true, warmServer: false },
+      ));
+
+      eventIDs.forEach((eventID) => {
+        const activities = activitiesByEvent.get(eventID) || [];
         if (!activities.length) {
-          continue;
+          return;
         }
 
-        this.comparisons.update(events => events.map((event) => {
-          if (event.getID() !== eventID || (event.getActivities?.() || []).length > 0) {
+        this.updateComparisonEventInLoadedRows(eventID, (event) => {
+          if ((event.getActivities?.() || []).length > 0) {
             return event;
           }
           return this.attachActivitiesToEvent(event, activities);
-        }));
-      } catch (error) {
-        this.logger.warn('[ToolsComparePageComponent] Could not hydrate comparison devices.', { eventID, error });
-      } finally {
-        this.hydratedDeviceEventIDs.add(eventID);
-        this.hydratingDeviceEventIDs.delete(eventID);
-      }
+        });
+      });
+    } catch (error) {
+      this.logger.warn('[ToolsComparePageComponent] Could not hydrate comparison activity summaries.', { eventIDs, error });
+    } finally {
+      eventIDs.forEach((eventID) => {
+        this.hydratedActivitySummaryEventIDs.add(eventID);
+        this.hydratingActivitySummaryEventIDs.delete(eventID);
+      });
     }
   }
 
-  private shouldHydrateComparisonDeviceRow(item: ComparisonListItem): boolean {
-    if (this.hydratedDeviceEventIDs.has(item.id) || this.hydratingDeviceEventIDs.has(item.id)) {
+  private shouldHydrateComparisonActivitySummaryRow(item: ComparisonListItem): boolean {
+    if (this.hydratedActivitySummaryEventIDs.has(item.id) || this.hydratingActivitySummaryEventIDs.has(item.id)) {
       return false;
     }
 
@@ -544,7 +970,15 @@ export class ToolsComparePageComponent implements OnInit {
       return false;
     }
 
-    return item.devicesLabel === 'Devices unknown' || !item.hasReport;
+    if (item.activitySummaries.length > 0) {
+      return false;
+    }
+
+    if (item.hasReport) {
+      return true;
+    }
+
+    return item.devicesLabel === 'Devices unknown';
   }
 
   private attachActivitiesToEvent(event: AppEventInterface, activities: ActivityInterface[]): AppEventInterface {
@@ -588,26 +1022,35 @@ export class ToolsComparePageComponent implements OnInit {
       ? comparisonEvent.sourceFilesCount
       : this.getOriginalFilesCount(event);
     const activities = event.getActivities?.() || [];
-    const activitiesCount = typeof comparisonEvent.activitiesCount === 'number'
-      ? comparisonEvent.activitiesCount
-      : (activities.length > 0 ? activities.length : null);
+    const activitySummaries = this.buildComparisonActivitySummaries(activities);
     const deviceNames = this.resolveComparisonDeviceNames(event, activities);
     const devicesLabel = deviceNames.length > 0 ? deviceNames.join(', ') : 'Devices unknown';
+    const activityTypeLabels = this.getDistinctLabels(activitySummaries.map(summary => summary.activityTypeLabel));
+    const activityTypesLabel = activityTypeLabels.length > 0
+      ? activityTypeLabels.join(', ')
+      : 'Types unknown';
 
     return {
       id: eventID,
       title: comparisonEvent.comparisonTitle || event.name || 'Benchmark comparison',
       date: event.startDate instanceof Date ? event.startDate : null,
       dateSortMs: event.startDate instanceof Date ? event.startDate.getTime() : 0,
+      activitySummaries,
       devicesLabel,
       devicesSort: deviceNames.length > 0 ? deviceNames.join(' ').toLowerCase() : '\uffff',
+      activityTypesLabel,
+      activityTypesSort: activityTypesLabel.toLowerCase(),
+      activityTypesTitle: activityTypeLabels.length > 0 ? activityTypeLabels.join('\n') : 'Types unknown',
+      distanceSort: this.getMetricSort(activitySummaries, 'distanceSort'),
+      ascentSort: this.getMetricSort(activitySummaries, 'ascentSort'),
+      descentSort: this.getMetricSort(activitySummaries, 'descentSort'),
+      distanceTitle: this.formatSummaryTitle(activitySummaries, summary => summary.distanceLabel, 'Distance unknown'),
+      ascentTitle: this.formatSummaryTitle(activitySummaries, summary => summary.ascentLabel, 'Ascent unknown'),
+      descentTitle: this.formatSummaryTitle(activitySummaries, summary => summary.descentLabel, 'Descent unknown'),
       description,
       sourceFilesCount,
-      activitiesCount,
-      sourceFilesSort: sourceFilesCount ?? -1,
-      activitiesSort: activitiesCount ?? -1,
+      sourceFilesSort: sourceFilesCount,
       sourceFilesLabel: this.formatCountLabel(sourceFilesCount, 'file', 'Files unknown'),
-      activitiesLabel: this.formatCountLabel(activitiesCount, 'activity', 'Activities unknown'),
       hasReport,
       reportCount,
       reportLabel,
@@ -616,10 +1059,11 @@ export class ToolsComparePageComponent implements OnInit {
       filterText: [
         comparisonEvent.comparisonTitle || event.name || 'Benchmark comparison',
         devicesLabel,
+        activityTypesLabel,
+        activitySummaries.map(summary => summary.filterText).join(' '),
         description,
         event.startDate instanceof Date ? event.startDate.toISOString() : 'date unavailable',
         this.formatCountLabel(sourceFilesCount, 'file', 'Files unknown'),
-        this.formatCountLabel(activitiesCount, 'activity', 'Activities unknown'),
         statusLabel,
         reportLabel,
       ].join(' ').toLowerCase(),
@@ -627,31 +1071,272 @@ export class ToolsComparePageComponent implements OnInit {
     };
   }
 
-  private compareComparisonItems(first: ComparisonListItem, second: ComparisonListItem, column: ComparisonSortColumn): number {
+  private compareComparisonItems(
+    first: ComparisonListItem,
+    second: ComparisonListItem,
+    column: ComparisonSortColumn,
+    direction: SortDirection,
+  ): number {
+    const directionMultiplier = direction === 'asc' ? 1 : -1;
+
     switch (column) {
       case 'date':
-        return first.dateSortMs - second.dateSortMs;
+        return (first.dateSortMs - second.dateSortMs) * directionMultiplier;
       case 'title':
-        return first.title.localeCompare(second.title);
+        return first.title.localeCompare(second.title) * directionMultiplier;
       case 'devices':
-        return first.devicesSort.localeCompare(second.devicesSort);
+        return first.devicesSort.localeCompare(second.devicesSort) * directionMultiplier;
+      case 'activityType':
+        return first.activityTypesSort.localeCompare(second.activityTypesSort) * directionMultiplier;
+      case 'distance':
+        return this.compareNullableNumbers(first.distanceSort, second.distanceSort, direction);
+      case 'ascent':
+        return this.compareNullableNumbers(first.ascentSort, second.ascentSort, direction);
+      case 'descent':
+        return this.compareNullableNumbers(first.descentSort, second.descentSort, direction);
       case 'description':
-        return first.description.localeCompare(second.description);
+        return first.description.localeCompare(second.description) * directionMultiplier;
       case 'sourceFiles':
-        return first.sourceFilesSort - second.sourceFilesSort;
-      case 'activities':
-        return first.activitiesSort - second.activitiesSort;
+        return this.compareNullableNumbers(first.sourceFilesSort, second.sourceFilesSort, direction);
       case 'status':
-        return first.statusRank - second.statusRank;
+        return (first.statusRank - second.statusRank) * directionMultiplier;
       case 'reports':
-        return first.reportCount - second.reportCount;
+        return (first.reportCount - second.reportCount) * directionMultiplier;
     }
 
     return 0;
   }
 
   private isComparisonSortColumn(value: string): value is ComparisonSortColumn {
-    return ['date', 'title', 'devices', 'description', 'sourceFiles', 'activities', 'status', 'reports'].includes(value);
+    return ['date', 'title', 'devices', 'activityType', 'distance', 'ascent', 'descent', 'description', 'sourceFiles', 'status', 'reports'].includes(value);
+  }
+
+  private compareNullableNumbers(first: number | null, second: number | null, direction: SortDirection): number {
+    if (first === null && second === null) {
+      return 0;
+    }
+    if (first === null) {
+      return 1;
+    }
+    if (second === null) {
+      return -1;
+    }
+
+    return direction === 'asc' ? first - second : second - first;
+  }
+
+  private buildComparisonActivitySummaries(activities: ActivityInterface[]): ComparisonActivitySummary[] {
+    const unitSettings = this.currentUser()?.settings?.unitSettings ?? null;
+
+    return activities.map((activity, index) => {
+      const deviceLabel = this.resolveActivityDeviceLabel(activity, index);
+      const deviceColor = this.resolveActivityDeviceColor(activities, activity);
+      const activityTypeLabel = this.resolveActivityTypeLabel(activity);
+      const activityID = `${activity.getID?.() ?? ''}`.trim() || this.normalizeDeviceNameKey(deviceLabel) || 'activity';
+      const distanceStat = this.getActivityStat(activity, DataDistance.type) || activity.getDistance?.();
+      const ascentStat = this.getActivityStat(activity, DataAscent.type);
+      const descentStat = this.getActivityStat(activity, DataDescent.type);
+      const distanceLabel = this.formatActivityStat(distanceStat, unitSettings);
+      const ascentLabel = this.formatActivityStat(ascentStat, unitSettings);
+      const descentLabel = this.formatActivityStat(descentStat, unitSettings);
+
+      return {
+        id: `${activityID}-${index}`,
+        deviceLabel,
+        deviceColor,
+        activityTypeLabel,
+        distanceLabel,
+        ascentLabel,
+        descentLabel,
+        distanceSort: this.getActivityStatNumericValue(distanceStat),
+        ascentSort: this.getActivityStatNumericValue(ascentStat),
+        descentSort: this.getActivityStatNumericValue(descentStat),
+        filterText: [
+          deviceLabel,
+          activityTypeLabel,
+          distanceLabel,
+          ascentLabel,
+          descentLabel,
+        ].join(' ').toLowerCase(),
+      };
+    });
+  }
+
+  private resolveActivityDeviceColor(activities: ActivityInterface[], activity: ActivityInterface): string {
+    try {
+      return this.eventColorService.getActivityColor(activities, activity) || AppColors.Blue;
+    } catch (error) {
+      this.logger.warn('[ToolsComparePageComponent] Could not resolve comparison activity color.', {
+        activityID: activity.getID?.() ?? null,
+        error,
+      });
+      return AppColors.Blue;
+    }
+  }
+
+  private resolveActivityDeviceLabel(activity: ActivityInterface, index: number): string {
+    const name = `${activity.creator?.name ?? ''}`.trim().replace(/\s+/g, ' ');
+    const swInfo = `${activity.creator?.swInfo ?? ''}`.trim().replace(/\s+/g, ' ');
+    if (name && swInfo) {
+      return `${name} ${swInfo}`;
+    }
+    return name || `Device ${index + 1}`;
+  }
+
+  private resolveActivityTypeLabel(activity: ActivityInterface): string {
+    const labels = this.resolveActivityTypeLabels(activity);
+    return labels.length > 0 ? labels.join(', ') : 'Type unknown';
+  }
+
+  private resolveActivityTypeLabels(activity: ActivityInterface): string[] {
+    const labels: string[] = [];
+    const activityTypesString = (activity as { getActivityTypesAsString?: () => unknown }).getActivityTypesAsString?.();
+    this.addActivityTypeLabels(labels, activityTypesString);
+
+    const activityTypes = (activity as { getActivityTypesAsArray?: () => unknown }).getActivityTypesAsArray?.();
+    this.addActivityTypeLabels(labels, activityTypes);
+
+    const activityTypeStat = this.getActivityStat(activity, DataActivityTypes.type);
+    this.addActivityTypeLabels(labels, activityTypeStat?.getDisplayValue?.());
+    this.addActivityTypeLabels(labels, activityTypeStat?.getValue?.());
+
+    this.addActivityTypeLabels(labels, (activity as { type?: unknown }).type);
+    this.addActivityTypeLabels(labels, (activity as { activityType?: unknown }).activityType);
+    this.addActivityTypeLabels(labels, (activity as { sport?: unknown }).sport);
+
+    const distinctLabels = this.getDistinctLabels(labels);
+    const knownLabels = distinctLabels.filter(label => !this.isUnknownActivityTypeLabel(label));
+    return knownLabels.length > 0 ? knownLabels : distinctLabels;
+  }
+
+  private addActivityTypeLabels(labels: string[], value: unknown): void {
+    if (Array.isArray(value)) {
+      value.forEach(item => this.addActivityTypeLabels(labels, item));
+      return;
+    }
+
+    if (typeof value === 'string' && value.includes(',')) {
+      value.split(',').forEach(item => this.addActivityTypeLabels(labels, item));
+      return;
+    }
+
+    const label = this.formatActivityTypeName(value);
+    if (label) {
+      labels.push(label);
+    }
+  }
+
+  private formatActivityTypeName(type: unknown): string {
+    if (typeof type === 'number') {
+      const numericActivityType = (ActivityTypes as Record<string, string>)[String(type)];
+      return numericActivityType || `${type}`;
+    }
+
+    if (typeof type !== 'string') {
+      return '';
+    }
+
+    const raw = type.trim();
+    if (!raw) {
+      return '';
+    }
+
+    const resolvedActivityType = ActivityTypesHelper.resolveActivityType(raw);
+    if (resolvedActivityType) {
+      return resolvedActivityType;
+    }
+
+    const enumActivityType = (ActivityTypes as Record<string, string>)[raw];
+    if (enumActivityType) {
+      return enumActivityType;
+    }
+
+    if ((Object.values(ActivityTypes) as string[]).includes(raw)) {
+      return raw;
+    }
+
+    const normalized = type
+      .trim()
+      .replace(/[_-]+/g, ' ')
+      .replace(/([a-z])([A-Z])/g, '$1 $2')
+      .replace(/\s+/g, ' ');
+    return normalized ? normalized.charAt(0).toUpperCase() + normalized.slice(1) : '';
+  }
+
+  private isUnknownActivityTypeLabel(label: string): boolean {
+    return ['unknown sport', 'not specified sport', 'type unknown'].includes(label.trim().toLowerCase());
+  }
+
+  private getActivityStat(activity: ActivityInterface, statType: string): DataInterface | null {
+    const stat = (activity as { getStat?: (type: string) => DataInterface | null | undefined }).getStat?.(statType);
+    return stat || null;
+  }
+
+  private formatActivityStat(
+    stat: DataInterface | null | undefined,
+    unitSettings: UserUnitSettingsInterface | null | undefined,
+  ): string {
+    if (!stat) {
+      return '';
+    }
+
+    return resolveUnitAwareDisplayStat(stat, unitSettings ?? null, {
+      stripRepeatedUnit: true,
+      compactAscentDescent: true,
+    })?.text ?? this.formatActivityStatFallback(stat);
+  }
+
+  private formatActivityStatFallback(stat: DataInterface): string {
+    const displayValue = `${stat.getDisplayValue?.() ?? ''}`.trim();
+    const displayUnit = `${stat.getDisplayUnit?.() ?? ''}`.trim();
+    return displayUnit ? `${displayValue} ${displayUnit}`.trim() : displayValue;
+  }
+
+  private getActivityStatNumericValue(stat: DataInterface | null | undefined): number | null {
+    const value = Number(stat?.getValue?.());
+    return Number.isFinite(value) ? value : null;
+  }
+
+  private getMetricSort(
+    summaries: ComparisonActivitySummary[],
+    field: 'distanceSort' | 'ascentSort' | 'descentSort',
+  ): number | null {
+    const values = summaries
+      .map(summary => summary[field])
+      .filter((value): value is number => typeof value === 'number' && Number.isFinite(value));
+    return values.length > 0 ? Math.max(...values) : null;
+  }
+
+  private getDistinctLabels(labels: string[]): string[] {
+    const seen = new Set<string>();
+    const distinctLabels: string[] = [];
+
+    for (const label of labels) {
+      const normalized = label.trim();
+      const key = normalized.toLowerCase();
+      if (!normalized || seen.has(key)) {
+        continue;
+      }
+
+      seen.add(key);
+      distinctLabels.push(normalized);
+    }
+
+    return distinctLabels;
+  }
+
+  private formatSummaryTitle(
+    summaries: ComparisonActivitySummary[],
+    getValue: (summary: ComparisonActivitySummary) => string,
+    emptyLabel: string,
+  ): string {
+    if (summaries.length === 0) {
+      return emptyLabel;
+    }
+
+    return summaries
+      .map(summary => `${summary.deviceLabel}: ${getValue(summary) || '-'}`)
+      .join('\n');
   }
 
   private resolveComparisonDeviceNames(event: AppEventInterface, activities: ActivityInterface[]): string[] {
@@ -774,7 +1459,10 @@ export class ToolsComparePageComponent implements OnInit {
     if (count === null) {
       return emptyLabel;
     }
-    return `${count} ${singularLabel}${count === 1 ? '' : 's'}`;
+    const pluralLabel = singularLabel.endsWith('y')
+      ? `${singularLabel.slice(0, -1)}ies`
+      : `${singularLabel}s`;
+    return `${count} ${count === 1 ? singularLabel : pluralLabel}`;
   }
 
   private resolveExtensionFromFilename(filename: string): string {

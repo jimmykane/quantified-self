@@ -153,4 +153,74 @@ describe('AppAnalyticsService', () => {
             failed_count: 1,
         });
     });
+
+    it('should log compare tool entry and sign-in analytics', () => {
+        userSubject.next({ acceptedTrackingPolicy: true } as User);
+
+        service.logToolCompareEntry('side_nav', true);
+        service.logToolCompareSignIn('guest_create', 'compare');
+
+        expect(logEvent).toHaveBeenCalledWith(expect.anything(), 'tool_compare_entry', {
+            source: 'side_nav',
+            signed_in: true,
+        });
+        expect(logEvent).toHaveBeenCalledWith(expect.anything(), 'tool_compare_sign_in', {
+            source: 'guest_create',
+            destination: 'compare',
+        });
+    });
+
+    it('should log compare file selection analytics without raw file names', () => {
+        userSubject.next({ acceptedTrackingPolicy: true } as User);
+
+        service.logToolCompareFileSelection({
+            selectedCount: 4,
+            acceptedCount: 3,
+            rejectedCount: 1,
+            fileCountAfterSelection: 3,
+            fileTypes: ['gpx', 'fit', 'fit'],
+            compressedCount: 1,
+            limitReached: false,
+        });
+
+        expect(logEvent).toHaveBeenCalledWith(expect.anything(), 'tool_compare_file_selection', {
+            selected_count: 4,
+            accepted_count: 3,
+            rejected_count: 1,
+            file_count_after_selection: 3,
+            file_types: 'fit|gpx',
+            compressed_count: 1,
+            limit_reached: false,
+        });
+    });
+
+    it('should log compare create and saved table actions with compact params', () => {
+        userSubject.next({ acceptedTrackingPolicy: true } as User);
+
+        service.logToolCompareCreate('success', {
+            fileCount: 2,
+            hasCustomTitle: true,
+            alreadyExists: false,
+        });
+        service.logToolCompareSavedAction('sort', {
+            sortColumn: 'distance',
+            sortDirection: 'desc',
+            filterActive: true,
+            resultCount: 12,
+        });
+
+        expect(logEvent).toHaveBeenCalledWith(expect.anything(), 'tool_compare_create', {
+            status: 'success',
+            file_count: 2,
+            has_custom_title: true,
+            already_exists: false,
+        });
+        expect(logEvent).toHaveBeenCalledWith(expect.anything(), 'tool_compare_saved_action', {
+            action: 'sort',
+            sort_column: 'distance',
+            sort_direction: 'desc',
+            filter_active: true,
+            result_count: 12,
+        });
+    });
 });

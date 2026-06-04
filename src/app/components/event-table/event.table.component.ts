@@ -25,6 +25,7 @@ import { AppEventInterface, BenchmarkResult } from '@shared/app-event.interface'
 import { MatTableDataSource } from '@angular/material/table';
 import { SelectionModel } from '@angular/cdk/collections';
 import { DatePipe } from '@angular/common';
+import { ActivityInterface } from '@sports-alliance/sports-lib';
 import { EventInterface } from '@sports-alliance/sports-lib';
 import { User } from '@sports-alliance/sports-lib';
 import { debounceTime, map } from 'rxjs/operators';
@@ -37,6 +38,7 @@ import { AppUserUtilities } from '../../utils/app.user.utilities';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { AppEventColorService } from '../../services/color/app.event.color.service';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
+import { DataDeviceNames } from '@sports-alliance/sports-lib';
 import { DataTableAbstractDirective, StatRowElement } from '../data-table/data-table-abstract.directive';
 import { EventsExportFormComponent } from '../events-export-form/events-export.form.component';
 import { MatDialog } from '@angular/material/dialog';
@@ -54,6 +56,12 @@ interface EventTableRowCacheEntry {
   eventRowContentKey: string;
   renderContextKey: string;
   row: StatRowElement;
+}
+
+interface DeviceNameDisplayItem {
+  label: string;
+  color: string;
+  trackKey: string;
 }
 
 @Component({
@@ -91,7 +99,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
   private breakpointSubscription!: Subscription;
   private isHandset = false;
   private readonly defaultSelectedColumns = AppUserUtilities.getDefaultSelectedTableColumns();
-  private readonly nonSearchableRowKeys = new Set(['Color', 'Gradient', 'Event']);
+  private readonly nonSearchableRowKeys = new Set(['Color', 'Gradient', 'Event', 'Device Name Items']);
   private readonly duplicateSourceFilesMessage = 'Selected events include identical source files. Deselect duplicates and try again.';
   private rowCache = new Map<string, EventTableRowCacheEntry>();
 
@@ -987,6 +995,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     statRowElement['Merged Event'] = event.isMerge;
     statRowElement['Description'] = event.description;
     statRowElement['Device Names'] = event.getDeviceNamesAsString();
+    statRowElement['Device Name Items'] = this.buildDeviceNameDisplayItems(event);
     statRowElement['Color'] = this.eventColorService.getColorForActivityTypeByActivityTypeGroup(
       primaryActivityType
     );
@@ -1013,6 +1022,82 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     statRowElement['sort.Device Names'] = statRowElement['Device Names'];
 
     return statRowElement;
+  }
+
+  private buildDeviceNameDisplayItems(event: EventInterface): DeviceNameDisplayItem[] {
+    const activities = event.getActivities?.() ?? [];
+    if (!activities.length) {
+      return this.buildDeviceNameDisplayItemsFromNames(this.getDeviceNamesFromStat(event));
+    }
+
+    return this.buildDeviceNameDisplayItemsFromActivities(activities);
+  }
+
+  private buildDeviceNameDisplayItemsFromActivities(activities: ActivityInterface[]): DeviceNameDisplayItem[] {
+    return activities.reduce<DeviceNameDisplayItem[]>((items, activity, index) => {
+      const label = this.getDeviceNameLabel(activity);
+      if (!label) {
+        return items;
+      }
+
+      items.push({
+        label,
+        color: this.getDeviceNameColor(activities, activity),
+        trackKey: activity.getID?.() || `${label}-${index}`,
+      });
+      return items;
+    }, []);
+  }
+
+  private buildDeviceNameDisplayItemsFromNames(deviceNames: string[]): DeviceNameDisplayItem[] {
+    const activities = deviceNames.map((deviceName, index) => ({
+      creator: { name: deviceName },
+      getID: () => `device-name-${index}`,
+      type: '',
+    })) as unknown as ActivityInterface[];
+
+    return activities.map((activity, index) => ({
+      label: deviceNames[index],
+      color: this.getDeviceNameColor(activities, activity),
+      trackKey: `device-name-${index}-${deviceNames[index]}`,
+    }));
+  }
+
+  private getDeviceNamesFromStat(event: EventInterface): string[] {
+    const deviceNamesStat = this.safeCallForCacheKey(() => event.getStat(DataDeviceNames.type), null);
+    if (!deviceNamesStat || typeof (deviceNamesStat as any).getValue !== 'function') {
+      return [];
+    }
+
+    const rawDeviceNames = this.safeCallForCacheKey(() => (deviceNamesStat as any).getValue(), []);
+
+    if (!Array.isArray(rawDeviceNames)) {
+      return [];
+    }
+
+    return rawDeviceNames
+      .map((deviceName) => `${deviceName || ''}`.trim())
+      .filter((deviceName) => deviceName.length > 0);
+  }
+
+  private getDeviceNameLabel(activity: ActivityInterface): string {
+    const name = `${activity.creator?.name || ''}`.trim();
+    const swInfo = `${activity.creator?.swInfo || ''}`.trim();
+    const label = swInfo ? `${name} ${swInfo}` : name;
+
+    return `${label}`.trim() || `${activity.type || ''}`.trim();
+  }
+
+  private getDeviceNameColor(activities: ActivityInterface[], activity: ActivityInterface): string {
+    try {
+      return this.eventColorService.getActivityColor(activities, activity);
+    } catch (error) {
+      this.logger.warn('[EventTableComponent] Could not resolve device name color', {
+        activityID: activity.getID?.() ?? null,
+        error,
+      });
+      return AppColors.Blue;
+    }
   }
 
   private buildRowRenderContextKey(dateFormat: string): string {
@@ -1045,6 +1130,8 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       activityTypesAsString: this.safeCallForCacheKey(() => event.getActivityTypesAsString(), ''),
       activityTypesAsArray: this.safeCallForCacheKey(() => event.getActivityTypesAsArray(), []),
       deviceNamesAsString: this.safeCallForCacheKey(() => event.getDeviceNamesAsString(), ''),
+      deviceNamesFromStat: this.getDeviceNamesFromStat(event),
+      deviceNameItems: this.readDeviceNameItemsForCacheKey(event),
       benchmarkResult: this.normalizeCacheValue((event as any).benchmarkResult),
       benchmarkResults: this.normalizeCacheValue(benchmarkResults),
       benchmarkResultKeys: benchmarkResults && typeof benchmarkResults === 'object'
@@ -1052,6 +1139,21 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
         : [],
       stats,
     });
+  }
+
+  private readDeviceNameItemsForCacheKey(event: EventInterface): unknown[] {
+    const activities = this.safeCallForCacheKey(() => event.getActivities?.() ?? [], []);
+    if (!Array.isArray(activities)) {
+      return [];
+    }
+
+    return activities.map((activity: ActivityInterface, index) => ({
+      id: this.safeCallForCacheKey(() => activity.getID?.(), null),
+      index,
+      creatorName: `${activity.creator?.name || ''}`.trim(),
+      creatorSwInfo: `${activity.creator?.swInfo || ''}`.trim(),
+      type: activity.type ?? null,
+    }));
   }
 
   private readStatsForCacheKey(event: EventInterface): unknown[] {

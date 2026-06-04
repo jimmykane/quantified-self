@@ -6,7 +6,7 @@
       Start file comparison directly, then keep benchmark results inside the same private activity archive.
     </p>
     <div class="hero-actions" aria-label="Primary actions">
-      <a mat-flat-button class="qs-mat-primary" routerLink="/tools/compare">
+      <a mat-flat-button class="qs-mat-primary" routerLink="/tools/compare" (click)="logCompareEntry('tools_hub_hero')">
         Compare Files
         <mat-icon iconPositionEnd>arrow_forward</mat-icon>
       </a>
@@ -36,7 +36,7 @@
           <p>{{ tool.description }}</p>
         </mat-card-content>
         <mat-card-actions>
-          <a mat-stroked-button [routerLink]="tool.route">
+          <a mat-stroked-button [routerLink]="tool.route" (click)="logToolCardEntry(tool.route)">
             {{ tool.status === 'available' ? 'Open' : 'Learn More' }}
           </a>
         </mat-card-actions>

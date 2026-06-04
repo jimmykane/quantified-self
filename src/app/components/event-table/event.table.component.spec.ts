@@ -16,7 +16,7 @@ import { LoggerService } from '../../services/logger.service';
 import { DatePipe } from '@angular/common';
 import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { of, Subject, delay } from 'rxjs';
-import { User, EventInterface, DataPace, DataGradeAdjustedPace, DataSpeedAvg, ActivityTypes } from '@sports-alliance/sports-lib';
+import { User, EventInterface, DataPace, DataGradeAdjustedPace, DataSpeedAvg, ActivityTypes, DataDeviceNames } from '@sports-alliance/sports-lib';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { Analytics } from 'app/firebase/analytics';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
@@ -42,13 +42,16 @@ vi.mock('app/firebase/analytics', () => ({
 }));
 
 class MockActivity {
+    constructor(
+        private id = 'activity1',
+        public type = 'Run',
+        public creator: { name: string; swInfo?: string } | undefined = { name: 'Garmin' }
+    ) { }
     startDate = new Date();
     endDate = new Date();
-    type = 'Run';
-    creator = { name: 'Garmin' };
     getStartDate() { return this.startDate; }
     toJSON() { return {}; }
-    getID() { return 'activity1'; }
+    getID() { return this.id; }
     setID(id: any) { return this; }
     getStats() { return []; }
 }
@@ -144,7 +147,8 @@ describe('EventTableComponent', () => {
 
         mockColorService = {
             getColorForActivityTypeByActivityTypeGroup: vi.fn(),
-            getGradientForActivityTypeGroup: vi.fn()
+            getGradientForActivityTypeGroup: vi.fn(),
+            getActivityColor: vi.fn((_activities, activity) => activity.getID() === 'activity1' ? '#ff0000' : '#00ff00')
         };
 
         mockFileService = {
@@ -422,6 +426,72 @@ describe('EventTableComponent', () => {
     it('should initialize data source with events', () => {
         component.ngAfterViewInit();
         expect(component.data.data.length).toBe(3);
+    });
+
+    it('should build colored device name items from event activities', () => {
+        const a1 = new MockActivity('activity1', 'Run', { name: 'Garmin', swInfo: 'Edge' });
+        const a2 = new MockActivity('activity2', 'Ride', { name: 'Wahoo' });
+        const event = new MockEvent('event-devices') as any;
+        event.getActivities = () => [a1, a2];
+        event.getDeviceNamesAsString = () => 'Garmin Edge, Wahoo';
+        mockColorService.getActivityColor.mockImplementation((_activities, activity) =>
+            activity.getID() === 'activity1' ? '#123456' : '#abcdef'
+        );
+        component.events = [event];
+
+        (component as any).processChanges('spec_device_names');
+
+        const row = component.data.data[0] as any;
+        expect(row['Device Names']).toBe('Garmin Edge, Wahoo');
+        expect(row['Device Name Items']).toEqual([
+            { label: 'Garmin Edge', color: '#123456', trackKey: 'activity1' },
+            { label: 'Wahoo', color: '#abcdef', trackKey: 'activity2' },
+        ]);
+        expect(mockColorService.getActivityColor).toHaveBeenCalledWith([a1, a2], a1);
+        expect(mockColorService.getActivityColor).toHaveBeenCalledWith([a1, a2], a2);
+    });
+
+    it('should build colored device name items from event device-name stats when activities are not hydrated', () => {
+        const event = new MockEvent('event-dashboard-devices') as any;
+        event.getActivities = () => [];
+        event.getDeviceNamesAsString = () => 'Garmin Edge, Wahoo';
+        event.getStat = (type: string) => {
+            if (type === DataDeviceNames.type) {
+                return { getValue: () => ['Garmin Edge', 'Wahoo'] };
+            }
+            return null;
+        };
+        mockColorService.getActivityColor.mockImplementation((_activities, activity) =>
+            activity.creator.name === 'Garmin Edge' ? '#123456' : '#abcdef'
+        );
+        component.events = [event];
+
+        (component as any).processChanges('spec_dashboard_device_names');
+
+        expect((component.data.data[0] as any)['Device Name Items']).toEqual([
+            { label: 'Garmin Edge', color: '#123456', trackKey: 'device-name-0-Garmin Edge' },
+            { label: 'Wahoo', color: '#abcdef', trackKey: 'device-name-1-Wahoo' },
+        ]);
+    });
+
+    it('should rebuild cached rows when activity device metadata changes in place', () => {
+        const activity = new MockActivity('activity1', 'Run', { name: 'Garmin', swInfo: 'Edge' });
+        const event = new MockEvent('event-device-cache') as any;
+        event.getActivities = () => [activity];
+        event.getDeviceNamesAsString = () => 'Garmin';
+        component.events = [event];
+
+        (component as any).processChanges('spec_device_names_initial');
+        const initialRow = component.data.data[0] as any;
+        activity.creator!.swInfo = 'Fenix';
+
+        (component as any).processChanges('spec_device_names_mutated');
+
+        const updatedRow = component.data.data[0] as any;
+        expect(updatedRow).not.toBe(initialRow);
+        expect(updatedRow['Device Name Items']).toEqual([
+            { label: 'Garmin Fenix', color: '#ff0000', trackKey: 'activity1' },
+        ]);
     });
 
     it('should reuse cached row models when the next event list contains the same event instances', () => {

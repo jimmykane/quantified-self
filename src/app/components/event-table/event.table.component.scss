@@ -439,6 +439,47 @@ mat-paginator {
   white-space: nowrap;
 }
 
+.device-names-list {
+  display: flex;
+  align-items: center;
+  flex: 1 1 auto;
+  gap: 4px 6px;
+  line-height: 1.25rem;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.device-name-token {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 1 auto;
+  gap: 4px;
+  line-height: 1.25rem;
+  min-width: 0;
+  vertical-align: middle;
+  color: var(--mat-sys-on-surface);
+}
+
+.device-name-swatch {
+  display: block;
+  align-self: center;
+  width: 8px;
+  height: 8px;
+  flex: 0 0 8px;
+  border-radius: 50%;
+  background: var(--device-accent-color, var(--mat-sys-primary));
+  transform: translateY(2px);
+}
+
+.device-name-label {
+  display: block;
+  min-width: 0;
+  line-height: 1.25rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .excluded-icon {
   font-size: 14px;
   width: 14px;

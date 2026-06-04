@@ -1,5 +1,14 @@
 <main class="tools-compare-page">
-  @if (!currentUser()) {
+  @if (isAuthResolving()) {
+  <section class="auth-check-panel" aria-label="Checking account">
+    <mat-card appearance="outlined" class="state-card auth-state-card">
+      <mat-card-content>
+        <mat-progress-spinner diameter="28" mode="indeterminate"></mat-progress-spinner>
+        <span>Checking account</span>
+      </mat-card-content>
+    </mat-card>
+  </section>
+  } @else if (showGuestExperience()) {
   <section class="hero-section" aria-labelledby="tools-compare-title">
     <p class="eyebrow">Tools / Compare</p>
     <h1 id="tools-compare-title">Compare FIT, GPX, and TCX files</h1>
@@ -23,7 +32,7 @@
           Comparison files are handled after sign-in so saved events, reports, and source metadata stay attached to your account.
         </p>
         <div class="guest-auth-actions">
-          <button mat-flat-button class="qs-mat-primary" type="button" (click)="signIn(guestSignInRedirectUrl)">
+          <button mat-flat-button class="qs-mat-primary" type="button" (click)="signIn(guestSignInRedirectUrl, 'guest_cta')">
             <mat-icon>login</mat-icon>
             Sign In
           </button>
@@ -31,12 +40,19 @@
       </mat-card-content>
     </mat-card>
   </section>
-  } @else {
+  } @else if (showSignedInWorkspace()) {
   <section class="signed-in-workspace">
     <header class="workspace-header" aria-labelledby="tools-compare-workspace-title">
       <p class="eyebrow">Tools / Compare</p>
       <h1 id="tools-compare-workspace-title">{{ showSavedComparisonsFirst ? 'Saved comparisons' : 'Compare files' }}</h1>
     </header>
+
+    @if (isSignedInProfileLoading()) {
+    <div class="profile-loading-state" aria-label="Loading account">
+      <mat-progress-spinner diameter="22" mode="indeterminate"></mat-progress-spinner>
+      <span>Loading your account</span>
+    </div>
+    }
 
     <ng-template #uploadPanelTemplate>
     <section class="workspace-panel upload-panel" aria-labelledby="new-comparison-title">
@@ -57,7 +73,7 @@
               maxlength="120"
               aria-label="Comparison title"
               placeholder="Title"
-              [disabled]="isCreating()"
+              [disabled]="uploadControlsDisabled()"
               [value]="comparisonTitle()"
               (input)="updateTitle($any($event.target).value)">
 
@@ -69,16 +85,16 @@
                 hidden
                 multiple
                 accept=".fit,.gpx,.tcx,.fit.gz,.gpx.gz,.tcx.gz"
-                [disabled]="isCreating()"
+                [disabled]="uploadControlsDisabled()"
                 (change)="onFilesSelected($event)">
-              <button mat-stroked-button type="button" [disabled]="isCreating()" (click)="fileInput.click()">
+              <button mat-stroked-button type="button" [disabled]="uploadControlsDisabled()" (click)="fileInput.click()">
                 <mat-icon>attach_file</mat-icon>
                 Add files
               </button>
               <button
                 mat-icon-button
                 type="button"
-                [disabled]="selectedFiles().length === 0 || isCreating()"
+                [disabled]="selectedFiles().length === 0 || uploadControlsDisabled()"
                 matTooltip="Clear files"
                 aria-label="Clear selected files"
                 (click)="clearFiles()">
@@ -111,7 +127,7 @@
                 mat-icon-button
                 type="button"
                 matListItemMeta
-                [disabled]="isCreating()"
+                [disabled]="uploadControlsDisabled()"
                 (click)="removeFile(item.index)"
                 aria-label="Remove selected file">
                 <mat-icon>close</mat-icon>
@@ -135,13 +151,8 @@
     </ng-template>
 
     <ng-template #savedComparisonsPanelTemplate>
-    <section class="workspace-panel saved-panel" aria-labelledby="saved-comparisons-title">
-      <div class="section-heading">
-        <p class="eyebrow">Benchmarks</p>
-        <h2 id="saved-comparisons-title">Previous comparisons</h2>
-      </div>
-
-      @if (isLoadingComparisons()) {
+    <section class="workspace-panel saved-panel" aria-label="Saved benchmark comparisons">
+      @if (isSavedComparisonsLoading() && comparisonItems().length === 0) {
       <div class="loading-state">
         <mat-progress-spinner diameter="28" mode="indeterminate"></mat-progress-spinner>
         <span>Loading comparisons</span>
@@ -156,7 +167,7 @@
       } @else {
       <div class="comparison-table-controls">
         <mat-form-field appearance="outline" class="filter-field" subscriptSizing="dynamic">
-          <mat-label>Filter comparisons</mat-label>
+          <mat-label>Filter loaded comparisons</mat-label>
           <input
             matInput
             type="search"
@@ -175,7 +186,7 @@
       <mat-card appearance="outlined" class="state-card">
         <mat-card-content>
           <mat-icon>search_off</mat-icon>
-          <span>No comparisons match this filter</span>
+          <span>No loaded comparisons match this filter</span>
         </mat-card-content>
       </mat-card>
       } @else {
@@ -215,6 +226,21 @@
           <ng-container matColumnDef="devices">
             <th mat-header-cell *matHeaderCellDef mat-sort-header="devices">Devices</th>
             <td mat-cell *matCellDef="let item">
+              @if (item.activitySummaries.length > 0) {
+              <div
+                class="summary-stack devices-summary-stack"
+                [matTooltip]="item.devicesLabel"
+                [attr.title]="item.devicesLabel">
+                @for (summary of item.activitySummaries; track summary.id) {
+                <span
+                  class="summary-line summary-device device-summary-line"
+                  [style.--device-accent-color]="summary.deviceColor">
+                  <span class="device-name-swatch" aria-hidden="true"></span>
+                  <span class="device-name-label">{{ summary.deviceLabel }}</span>
+                </span>
+                }
+              </div>
+              } @else {
               <span
                 class="devices-cell"
                 [class.devices-placeholder]="item.devicesLabel === 'Devices unknown'"
@@ -222,6 +248,85 @@
                 [attr.title]="item.devicesLabel">
                 {{ item.devicesLabel }}
               </span>
+              }
+            </td>
+          </ng-container>
+
+          <ng-container matColumnDef="activityType">
+            <th mat-header-cell *matHeaderCellDef mat-sort-header="activityType">Type</th>
+            <td mat-cell *matCellDef="let item">
+              <div
+                class="summary-stack type-summary-stack"
+                [class.summary-placeholder]="item.activitySummaries.length === 0"
+                [matTooltip]="item.activityTypesTitle"
+                [attr.title]="item.activityTypesTitle">
+                @if (item.activitySummaries.length > 0) {
+                @for (summary of item.activitySummaries; track summary.id) {
+                <span class="summary-line summary-type-line">
+                  <span class="summary-type-value">{{ summary.activityTypeLabel }}</span>
+                </span>
+                }
+                } @else {
+                <span class="summary-line">Types unknown</span>
+                }
+              </div>
+            </td>
+          </ng-container>
+
+          <ng-container matColumnDef="distance">
+            <th mat-header-cell *matHeaderCellDef mat-sort-header="distance">Distance</th>
+            <td mat-cell *matCellDef="let item">
+              <div
+                class="summary-stack metric-summary-stack"
+                [class.summary-placeholder]="item.activitySummaries.length === 0"
+                [matTooltip]="item.distanceTitle"
+                [attr.title]="item.distanceTitle">
+                @if (item.activitySummaries.length > 0) {
+                @for (summary of item.activitySummaries; track summary.id) {
+                <span class="summary-line">{{ summary.distanceLabel || '-' }}</span>
+                }
+                } @else {
+                <span class="summary-line">Distance unknown</span>
+                }
+              </div>
+            </td>
+          </ng-container>
+
+          <ng-container matColumnDef="ascent">
+            <th mat-header-cell *matHeaderCellDef mat-sort-header="ascent">Ascent</th>
+            <td mat-cell *matCellDef="let item">
+              <div
+                class="summary-stack metric-summary-stack"
+                [class.summary-placeholder]="item.activitySummaries.length === 0"
+                [matTooltip]="item.ascentTitle"
+                [attr.title]="item.ascentTitle">
+                @if (item.activitySummaries.length > 0) {
+                @for (summary of item.activitySummaries; track summary.id) {
+                <span class="summary-line">{{ summary.ascentLabel || '-' }}</span>
+                }
+                } @else {
+                <span class="summary-line">Ascent unknown</span>
+                }
+              </div>
+            </td>
+          </ng-container>
+
+          <ng-container matColumnDef="descent">
+            <th mat-header-cell *matHeaderCellDef mat-sort-header="descent">Descent</th>
+            <td mat-cell *matCellDef="let item">
+              <div
+                class="summary-stack metric-summary-stack"
+                [class.summary-placeholder]="item.activitySummaries.length === 0"
+                [matTooltip]="item.descentTitle"
+                [attr.title]="item.descentTitle">
+                @if (item.activitySummaries.length > 0) {
+                @for (summary of item.activitySummaries; track summary.id) {
+                <span class="summary-line">{{ summary.descentLabel || '-' }}</span>
+                }
+                } @else {
+                <span class="summary-line">Descent unknown</span>
+                }
+              </div>
             </td>
           </ng-container>
 
@@ -230,18 +335,18 @@
             <td mat-cell *matCellDef="let item">
               @if (editingDescriptionEventID() !== item.id && savingDescriptionEventID() !== item.id) {
               <div class="description-display">
-                <span
-                  class="description-text"
-                  [class.description-placeholder]="!item.description">
-                  {{ item.description || 'Add note' }}
-                </span>
                 <button
-                  mat-icon-button
+                  mat-button
                   type="button"
+                  class="description-note-button"
                   [attr.aria-label]="item.description ? 'Edit comparison description' : 'Add comparison description'"
-                  [matTooltip]="item.description ? 'Edit description' : 'Add description'"
+                  [matTooltip]="item.description || 'Add description'"
                   (click)="startDescriptionEdit(item)">
-                  <mat-icon>edit</mat-icon>
+                  <span
+                    class="description-text"
+                    [class.description-placeholder]="!item.description">
+                    {{ item.description || 'Add note' }}
+                  </span>
                 </button>
               </div>
               } @else {
@@ -271,17 +376,12 @@
             <td mat-cell *matCellDef="let item">{{ item.sourceFilesLabel }}</td>
           </ng-container>
 
-          <ng-container matColumnDef="activities">
-            <th mat-header-cell *matHeaderCellDef mat-sort-header="activities">Activities</th>
-            <td mat-cell *matCellDef="let item">{{ item.activitiesLabel }}</td>
-          </ng-container>
-
           <ng-container matColumnDef="status">
             <th mat-header-cell *matHeaderCellDef mat-sort-header="status">Status</th>
             <td mat-cell *matCellDef="let item">
               <span class="status-cell">
                 <mat-icon>{{ item.hasReport ? 'check_circle' : 'pending' }}</mat-icon>
-                {{ item.statusLabel }}
+                <span class="status-label">{{ item.statusLabel }}</span>
               </span>
             </td>
           </ng-container>
@@ -330,10 +430,11 @@
       </div>
 
       <mat-paginator
-        [length]="filteredComparisonCount()"
+        [length]="comparisonPaginatorLength()"
         [pageIndex]="comparisonPage().pageIndex"
         [pageSize]="comparisonPage().pageSize"
         [pageSizeOptions]="comparisonPageSizeOptions"
+        [disabled]="isLoadingComparisons()"
         showFirstLastButtons
         (page)="onComparisonPageChange($event)">
       </mat-paginator>

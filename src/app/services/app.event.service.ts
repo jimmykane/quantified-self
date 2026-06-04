@@ -50,6 +50,20 @@ export interface GetEventsOnceResult {
   source: EventsOnceSource;
 }
 
+export type EventQueryCursor = QueryDocumentSnapshot<DocumentData>;
+
+export interface GetEventsPageOptions {
+  startAfterCursor?: EventQueryCursor | null;
+}
+
+export interface GetEventsPageResult {
+  events: AppEventInterface[];
+  source: EventsOnceSource;
+  firstCursor: EventQueryCursor | null;
+  lastCursor: EventQueryCursor | null;
+  hasMore: boolean;
+}
+
 interface EventQuerySeed {
   eventsById: Map<string, AppEventInterface>;
   fingerprintsById: Map<string, string>;
@@ -655,6 +669,37 @@ export class AppEventService implements OnDestroy {
     return from(this.fetchEventsOnceCacheFirst(q, user.uid, queryStart, warmServer, queryKey, seedLiveQuery));
   }
 
+  public getEventsPageOnceByWithMeta(
+    user: User,
+    whereClauses: { fieldPath: string | any, opStr: any, value: any }[] = [],
+    orderByField: string = 'startDate',
+    asc: boolean = false,
+    pageSize: number = 25,
+    options: GetEventsPageOptions = {},
+  ): Observable<GetEventsPageResult> {
+    const normalizedPageSize = Math.max(1, Math.floor(pageSize));
+    const q = this.getEventQueryForUser(
+      user,
+      whereClauses,
+      orderByField,
+      asc,
+      normalizedPageSize + 1,
+      options.startAfterCursor || undefined,
+    ) as Query<DocumentData>;
+    const queryStart = performance.now();
+
+    this.logger.log('[perf] app_event_service_get_events_page_once_query', {
+      userID: user.uid,
+      whereClauses: whereClauses.length,
+      orderByField,
+      asc,
+      pageSize: normalizedPageSize,
+      hasStartAfterCursor: !!options.startAfterCursor,
+    });
+
+    return from(this.fetchEventsPageOnceFromServer(q, user.uid, queryStart, normalizedPageSize));
+  }
+
   /**
    * @Deprecated
    * @param user
@@ -732,6 +777,55 @@ export class AppEventService implements OnDestroy {
     }
 
     return from(this.fetchActivitiesOnceCacheFirst(q, user.uid, eventID, queryStart, warmServer));
+  }
+
+  public getActivitiesOnceByEventsWithOptions(
+    user: User,
+    eventIDs: string[],
+    options: GetEventsOnceOptions = {},
+  ): Observable<Map<string, ActivityInterface[]>> {
+    const normalizedEventIDs = Array.from(new Set(
+      (eventIDs || []).map(eventID => `${eventID || ''}`.trim()).filter(Boolean)
+    ));
+
+    if (!normalizedEventIDs.length) {
+      return of(new Map<string, ActivityInterface[]>());
+    }
+
+    this.logger.log('[AppEventService] getActivitiesOnceByEvents called', {
+      userID: user.uid,
+      eventCount: normalizedEventIDs.length,
+      queryChunkCount: Math.ceil(normalizedEventIDs.length / AppEventService.FIRESTORE_IN_QUERY_MAX_IDS),
+    });
+
+    const activitiesCollection = collection(this.firestore, 'users', user.uid, 'activities');
+    const eventIDChunks = this.chunkValues(
+      normalizedEventIDs,
+      AppEventService.FIRESTORE_IN_QUERY_MAX_IDS,
+    );
+    const queryStart = performance.now();
+    const preferCache = options.preferCache === true;
+    const warmServer = options.warmServer === true;
+    const activityQueries = eventIDChunks.map(eventIDChunk =>
+      query(activitiesCollection, where('eventID', 'in', eventIDChunk)),
+    );
+
+    if (!preferCache) {
+      return from(this.fetchActivitiesOnceByEventsFromServer(
+        activityQueries,
+        user.uid,
+        normalizedEventIDs,
+        queryStart,
+      ));
+    }
+
+    return from(this.fetchActivitiesOnceByEventsCacheFirst(
+      activityQueries,
+      user.uid,
+      normalizedEventIDs,
+      queryStart,
+      warmServer,
+    ));
   }
 
   /**
@@ -1509,6 +1603,38 @@ export class AppEventService implements OnDestroy {
     };
   }
 
+  private async fetchEventsPageOnceFromServer(
+    q: Query<DocumentData>,
+    userID: string,
+    queryStart: number,
+    pageSize: number,
+  ): Promise<GetEventsPageResult> {
+    const querySnapshot = await getDocs(q);
+    const pageDocs = querySnapshot.docs.slice(0, pageSize);
+    this.logger.info('[perf] app_event_service_get_events_page_once_get_docs', {
+      durationMs: Number((performance.now() - queryStart).toFixed(2)),
+      snapshots: querySnapshot?.size || 0,
+      returnedDocs: pageDocs.length,
+      fromCache: querySnapshot?.metadata?.fromCache,
+      hasPendingWrites: querySnapshot?.metadata?.hasPendingWrites,
+      userID,
+      pageSize,
+    });
+
+    return {
+      events: this.deserializeEventsFromQueryDocs(
+        pageDocs,
+        userID,
+        'app_event_service_get_events_page_once_deserialize',
+        pageDocs.length,
+      ),
+      source: 'server',
+      firstCursor: pageDocs[0] || null,
+      lastCursor: pageDocs[pageDocs.length - 1] || null,
+      hasMore: querySnapshot.docs.length > pageSize,
+    };
+  }
+
   private warmEventsOnceServerQuery(q: any, userID: string): void {
     const warmStart = performance.now();
     void getDocs(q).then((snapshot) => {
@@ -1572,6 +1698,49 @@ export class AppEventService implements OnDestroy {
     return this.fetchActivitiesOnceFromServer(q, userID, eventID, queryStart);
   }
 
+  private async fetchActivitiesOnceByEventsCacheFirst(
+    activityQueries: Query<DocumentData>[],
+    userID: string,
+    eventIDs: string[],
+    queryStart: number,
+    warmServer: boolean,
+  ): Promise<Map<string, ActivityInterface[]>> {
+    const cacheStart = performance.now();
+    try {
+      const cacheSnapshots = await Promise.all(activityQueries.map(q => getDocsFromCache(q)));
+      const cacheDocs = cacheSnapshots.flatMap(snapshot => snapshot.docs);
+      const cacheCoversRequestedEvents = this.queryDocsCoverEventIDs(cacheDocs, eventIDs);
+      this.logger.info('[perf] app_event_service_get_activities_once_by_events_cache_first_hit', {
+        durationMs: Number((performance.now() - cacheStart).toFixed(2)),
+        snapshots: cacheDocs.length,
+        queryChunks: activityQueries.length,
+        eventCount: eventIDs.length,
+        userID,
+      });
+      if (cacheCoversRequestedEvents) {
+        if (warmServer) {
+          this.warmActivitiesOnceByEventsServerQueries(activityQueries, userID, eventIDs.length);
+        }
+        return this.parseActivitiesFromQueryDocsByEvent(eventIDs, cacheDocs);
+      }
+      this.logger.info('[perf] app_event_service_get_activities_once_by_events_cache_first_fallback', {
+        reason: cacheDocs.length > 0 ? 'partial_cache' : 'empty_cache',
+        userID,
+        eventCount: eventIDs.length,
+      });
+    } catch (error: any) {
+      this.logger.warn('[perf] app_event_service_get_activities_once_by_events_cache_first_failed', {
+        durationMs: Number((performance.now() - cacheStart).toFixed(2)),
+        userID,
+        eventCount: eventIDs.length,
+        code: error?.code,
+        message: error?.message,
+      });
+    }
+
+    return this.fetchActivitiesOnceByEventsFromServer(activityQueries, userID, eventIDs, queryStart);
+  }
+
   private async fetchActivitiesOnceFromServer(
     q: any,
     userID: string,
@@ -1588,6 +1757,39 @@ export class AppEventService implements OnDestroy {
       eventID,
     });
     return this.parseActivitiesFromQueryDocs(eventID, querySnapshot.docs);
+  }
+
+  private async fetchActivitiesOnceByEventsFromServer(
+    activityQueries: Query<DocumentData>[],
+    userID: string,
+    eventIDs: string[],
+    queryStart: number,
+  ): Promise<Map<string, ActivityInterface[]>> {
+    const querySnapshots = await Promise.all(activityQueries.map(q => getDocs(q)));
+    const docs = querySnapshots.flatMap(snapshot => snapshot.docs);
+    this.logger.info('[perf] app_event_service_get_activities_once_by_events_get_docs', {
+      durationMs: Number((performance.now() - queryStart).toFixed(2)),
+      snapshots: docs.length,
+      queryChunks: activityQueries.length,
+      eventCount: eventIDs.length,
+      userID,
+    });
+    return this.parseActivitiesFromQueryDocsByEvent(eventIDs, docs);
+  }
+
+  private queryDocsCoverEventIDs(docs: QueryDocumentSnapshot[], eventIDs: string[]): boolean {
+    if (!docs.length) {
+      return false;
+    }
+
+    const eventIDsWithDocs = new Set<string>();
+    docs.forEach((queryDocumentSnapshot) => {
+      const eventID = `${(queryDocumentSnapshot.data() as Record<string, unknown>).eventID || ''}`.trim();
+      if (eventID) {
+        eventIDsWithDocs.add(eventID);
+      }
+    });
+    return eventIDs.every(eventID => eventIDsWithDocs.has(eventID));
   }
 
   private warmActivitiesOnceServerQuery(q: any, userID: string, eventID: string): void {
@@ -1612,12 +1814,64 @@ export class AppEventService implements OnDestroy {
     });
   }
 
+  private warmActivitiesOnceByEventsServerQueries(
+    activityQueries: Query<DocumentData>[],
+    userID: string,
+    eventCount: number,
+  ): void {
+    const warmStart = performance.now();
+    void Promise.all(activityQueries.map(q => getDocs(q))).then((snapshots) => {
+      const snapshotsCount = snapshots.reduce((count, snapshot) => count + (snapshot?.size || 0), 0);
+      this.logger.info('[perf] app_event_service_get_activities_once_by_events_warm_server', {
+        durationMs: Number((performance.now() - warmStart).toFixed(2)),
+        snapshots: snapshotsCount,
+        queryChunks: activityQueries.length,
+        eventCount,
+        userID,
+      });
+    }).catch((error: any) => {
+      this.logger.warn('[perf] app_event_service_get_activities_once_by_events_warm_server_failed', {
+        durationMs: Number((performance.now() - warmStart).toFixed(2)),
+        userID,
+        eventCount,
+        code: error?.code,
+        message: error?.message,
+      });
+    });
+  }
+
   private parseActivitiesFromQueryDocs(eventID: string, docs: QueryDocumentSnapshot[]): ActivityInterface[] {
     const activitySnapshots = docs.map((queryDocumentSnapshot) => ({
       ...(queryDocumentSnapshot.data() as Record<string, unknown>),
       id: queryDocumentSnapshot.id,
     }));
     return this.parseActivitiesFromSnapshots(eventID, activitySnapshots);
+  }
+
+  private parseActivitiesFromQueryDocsByEvent(
+    eventIDs: string[],
+    docs: QueryDocumentSnapshot[],
+  ): Map<string, ActivityInterface[]> {
+    const activitySnapshotsByEvent = new Map<string, Record<string, unknown>[]>();
+    eventIDs.forEach(eventID => activitySnapshotsByEvent.set(eventID, []));
+
+    docs.forEach((queryDocumentSnapshot) => {
+      const activitySnapshot: Record<string, unknown> = {
+        ...(queryDocumentSnapshot.data() as Record<string, unknown>),
+        id: queryDocumentSnapshot.id,
+      };
+      const eventID = `${activitySnapshot.eventID || ''}`.trim();
+      if (!eventID || !activitySnapshotsByEvent.has(eventID)) {
+        return;
+      }
+      activitySnapshotsByEvent.get(eventID)?.push(activitySnapshot);
+    });
+
+    const activitiesByEvent = new Map<string, ActivityInterface[]>();
+    activitySnapshotsByEvent.forEach((activitySnapshots, eventID) => {
+      activitiesByEvent.set(eventID, this.parseActivitiesFromSnapshots(eventID, activitySnapshots));
+    });
+    return activitiesByEvent;
   }
 
   private deserializeEventFromDoc(
@@ -1867,20 +2121,33 @@ export class AppEventService implements OnDestroy {
    * @todo Cache this result (e.g., in a Signal or BehaviorSubject) to avoid unnecessary server calls on every navigation.
    */
   public async getEventCount(user: User): Promise<number> {
+    return this.getEventCountBy(user);
+  }
+
+  public async getEventCountBy(
+    user: User,
+    whereClauses: { fieldPath: string | any, opStr: any, value: any }[] = [],
+  ): Promise<number> {
     const path = `users/${user.uid}/events`;
     const startedAt = performance.now();
     this.logger.info('[debug] app_event_service_event_count_request_start', {
       path,
+      whereClauses: whereClauses.length,
       source: 'server_aggregation',
       localCache: 'skipped_by_getCountFromServer',
     });
 
     try {
       const eventsRef = collection(this.firestore, path);
-      const snapshot = await getCountFromServer(query(eventsRef));
+      const countQuery = query(
+        eventsRef,
+        ...whereClauses.map(clause => where(clause.fieldPath, clause.opStr, clause.value)),
+      );
+      const snapshot = await getCountFromServer(countQuery);
       const count = snapshot.data().count;
       this.logger.info('[debug] app_event_service_event_count_request_success', {
         path,
+        whereClauses: whereClauses.length,
         source: 'server_aggregation',
         localCache: 'skipped_by_getCountFromServer',
         durationMs: Number((performance.now() - startedAt).toFixed(2)),
@@ -1890,6 +2157,7 @@ export class AppEventService implements OnDestroy {
     } catch (error: unknown) {
       this.logger.info('[debug] app_event_service_event_count_request_failed', {
         path,
+        whereClauses: whereClauses.length,
         source: 'server_aggregation',
         localCache: 'skipped_by_getCountFromServer',
         durationMs: Number((performance.now() - startedAt).toFixed(2)),

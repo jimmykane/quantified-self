@@ -69,6 +69,10 @@ h2 {
   margin-top: 0.5rem;
 }
 
+.auth-check-panel {
+  padding: 1rem 0;
+}
+
 .signed-in-workspace {
   display: flex;
   flex-direction: column;
@@ -207,10 +211,20 @@ h2 {
 
 .empty-selection,
 .loading-state,
+.profile-loading-state,
 .state-card mat-card-content {
   display: flex;
   align-items: center;
   gap: 0.75rem;
+}
+
+.auth-state-card mat-card-content {
+  min-height: 4rem;
+}
+
+.profile-loading-state {
+  min-height: 2.5rem;
+  color: var(--mat-sys-on-surface-variant);
 }
 
 .empty-selection {
@@ -272,11 +286,6 @@ h2 {
   margin: 0;
 }
 
-.section-heading {
-  max-width: 46rem;
-  margin-bottom: 1.25rem;
-}
-
 .loading-state {
   min-height: 5rem;
 }
@@ -308,7 +317,7 @@ h2 {
 
 .comparison-table {
   width: 100%;
-  min-width: 78rem;
+  min-width: 108rem;
 }
 
 .comparison-table th {
@@ -323,6 +332,16 @@ h2 {
   width: 14rem;
 }
 
+.comparison-table .mat-column-activityType {
+  width: 12rem;
+}
+
+.comparison-table .mat-column-distance,
+.comparison-table .mat-column-ascent,
+.comparison-table .mat-column-descent {
+  width: 7rem;
+}
+
 .comparison-table .mat-column-actions {
   width: 8.5rem;
   padding-right: 0.5rem;
@@ -332,6 +351,15 @@ h2 {
 .comparison-table td,
 .comparison-table th {
   padding-right: 0.75rem;
+}
+
+.comparison-table td {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 0.95rem;
+  line-height: 1.25rem;
+  padding-top: 0.55rem;
+  padding-bottom: 0.55rem;
+  vertical-align: middle;
 }
 
 .title-cell {
@@ -357,17 +385,113 @@ h2 {
   color: var(--mat-sys-on-surface-variant);
 }
 
-.description-display {
+.summary-stack {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 0.25rem;
+  gap: 0.2rem;
+  min-height: 2.75rem;
+  align-content: center;
+  min-width: 0;
+  color: var(--mat-sys-on-surface);
+}
+
+.summary-line {
+  display: block;
+  min-height: 1.25rem;
+  overflow: hidden;
+  font-size: 0.92rem;
+  line-height: 1.25rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.summary-device {
+  font-weight: 500;
+}
+
+.device-summary-line {
+  display: inline-flex;
   align-items: center;
+  gap: 0.35rem;
+  line-height: 1.25rem;
+  max-width: 100%;
+  vertical-align: middle;
+}
+
+.device-name-swatch {
+  display: block;
+  align-self: center;
+  width: 0.5rem;
+  height: 0.5rem;
+  flex: 0 0 0.5rem;
+  border-radius: 50%;
+  background: var(--device-accent-color, var(--mat-sys-primary));
+  transform: translateY(2px);
+}
+
+.device-name-label {
+  display: block;
+  overflow: hidden;
+  min-width: 0;
+  line-height: 1.25rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.summary-type-line {
+  min-width: 0;
+}
+
+.summary-type-value {
+  display: block;
+  overflow: hidden;
+  min-width: 0;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.devices-summary-stack {
+  max-width: 13rem;
+}
+
+.type-summary-stack {
+  max-width: 11.5rem;
+}
+
+.metric-summary-stack {
+  max-width: 6.5rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.summary-placeholder {
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.description-display {
   max-width: 15rem;
   min-height: 2rem;
   min-width: 0;
 }
 
+.description-note-button {
+  justify-content: flex-start;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  height: 2rem;
+  padding: 0 0.35rem;
+  overflow: hidden;
+  font-family: inherit;
+  font-size: inherit;
+  letter-spacing: 0;
+  line-height: 2rem;
+  text-align: left;
+}
+
 .description-text {
+  display: block;
+  min-width: 0;
+  max-width: 100%;
   overflow: hidden;
   color: var(--mat-sys-on-surface);
   text-overflow: ellipsis;
@@ -376,25 +500,6 @@ h2 {
 
 .description-placeholder {
   color: var(--mat-sys-on-surface-variant);
-}
-
-.description-display button[mat-icon-button] {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 2rem;
-  height: 2rem;
-  padding: 0;
-  color: var(--mat-sys-on-surface-variant);
-  line-height: 1;
-}
-
-.description-display mat-icon {
-  display: block;
-  width: 1.1rem;
-  height: 1.1rem;
-  font-size: 1.1rem;
-  line-height: 1.1rem;
 }
 
 .description-editor {
@@ -445,13 +550,25 @@ h2 {
 
 .status-cell {
   gap: 0.35rem;
+  line-height: 1.25rem;
   white-space: nowrap;
 }
 
 .status-cell mat-icon {
-  width: 1.1rem;
-  height: 1.1rem;
-  font-size: 1.1rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1rem;
+  height: 1rem;
+  flex: 0 0 1rem;
+  font-size: 1rem;
+  line-height: 1;
+  transform: translateY(1px);
+}
+
+.status-label {
+  display: block;
+  line-height: 1.25rem;
 }
 
 .row-actions {
