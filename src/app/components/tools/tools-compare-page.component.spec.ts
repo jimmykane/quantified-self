@@ -87,6 +87,7 @@ describe('ToolsComparePageComponent', () => {
   let eventServiceMock: {
     deleteAllEventData: ReturnType<typeof vi.fn>;
     getActivitiesOnceByEventWithOptions: ReturnType<typeof vi.fn>;
+    getActivitiesOnceByEventsWithOptions: ReturnType<typeof vi.fn>;
     updateEventProperties: ReturnType<typeof vi.fn>;
   };
   let authServiceMock: {
@@ -138,6 +139,7 @@ describe('ToolsComparePageComponent', () => {
     eventServiceMock = {
       deleteAllEventData: vi.fn().mockResolvedValue(true),
       getActivitiesOnceByEventWithOptions: vi.fn().mockReturnValue(of([])),
+      getActivitiesOnceByEventsWithOptions: vi.fn().mockReturnValue(of(new Map())),
       updateEventProperties: vi.fn().mockResolvedValue(undefined),
     };
     eventColorServiceMock = {
@@ -936,7 +938,9 @@ describe('ToolsComparePageComponent', () => {
         swInfo: '3130',
       },
     };
-    eventServiceMock.getActivitiesOnceByEventWithOptions.mockReturnValueOnce(of([activity]));
+    eventServiceMock.getActivitiesOnceByEventsWithOptions.mockReturnValueOnce(of(new Map([
+      ['comparison-1', [activity]],
+    ])));
 
     userSubject.next(user);
     await Promise.resolve();
@@ -958,11 +962,12 @@ describe('ToolsComparePageComponent', () => {
     await Promise.resolve();
     await Promise.resolve();
 
-    expect(eventServiceMock.getActivitiesOnceByEventWithOptions).toHaveBeenCalledWith(
+    expect(eventServiceMock.getActivitiesOnceByEventsWithOptions).toHaveBeenCalledWith(
       user,
-      'comparison-1',
+      ['comparison-1'],
       { preferCache: true, warmServer: false },
     );
+    expect(eventServiceMock.getActivitiesOnceByEventWithOptions).not.toHaveBeenCalled();
     expect(component.comparisonItems()[0].devicesLabel).toContain('Garmin Edge Mtb 3130');
     expect(component.comparisonItems()[0].activitySummaries[0].deviceLabel).toBe('Garmin Edge Mtb 3130');
   });
@@ -984,18 +989,20 @@ describe('ToolsComparePageComponent', () => {
     await Promise.resolve();
     await Promise.resolve();
 
-    expect(eventServiceMock.getActivitiesOnceByEventWithOptions).not.toHaveBeenCalled();
+    expect(eventServiceMock.getActivitiesOnceByEventsWithOptions).not.toHaveBeenCalled();
     expect(component.comparisonItems()[0].devicesLabel).toBe('Garmin Edge Mtb');
   });
 
   it('does not repeatedly retry previous comparison activity summary hydration after a failed activity read', async () => {
     const user = new User('user-1');
     const readError = new Error('activity read failed');
-    eventServiceMock.getActivitiesOnceByEventWithOptions.mockImplementation(() => {
+    eventServiceMock.getActivitiesOnceByEventsWithOptions.mockImplementation(() => {
       throw readError;
     });
 
     userSubject.next(user);
+    await Promise.resolve();
+    await Promise.resolve();
     component.comparisons.set([
       makeComparisonEvent('comparison-1', {
         title: 'Activity-backed devices',
@@ -1013,22 +1020,21 @@ describe('ToolsComparePageComponent', () => {
     fixture.detectChanges();
     await Promise.resolve();
 
-    expect(eventServiceMock.getActivitiesOnceByEventWithOptions).toHaveBeenCalledTimes(1);
+    expect(eventServiceMock.getActivitiesOnceByEventsWithOptions).toHaveBeenCalledTimes(1);
     expect(loggerMock.warn).toHaveBeenCalledWith(
       '[ToolsComparePageComponent] Could not hydrate comparison activity summaries.',
-      { eventID: 'comparison-1', error: readError },
+      { eventIDs: ['comparison-1'], error: readError },
     );
   });
 
-  it('does not enqueue duplicate activity summary hydration reads while a visible batch is pending', async () => {
+  it('batches visible activity summary hydration reads without duplicate pending requests', async () => {
     const user = new User('user-1');
-    const firstActivities$ = new Subject<unknown[]>();
-    const secondActivities$ = new Subject<unknown[]>();
-    eventServiceMock.getActivitiesOnceByEventWithOptions
-      .mockReturnValueOnce(firstActivities$)
-      .mockReturnValueOnce(secondActivities$);
+    const activitiesByEvent$ = new Subject<Map<string, unknown[]>>();
+    eventServiceMock.getActivitiesOnceByEventsWithOptions.mockReturnValueOnce(activitiesByEvent$);
 
     userSubject.next(user);
+    await Promise.resolve();
+    await Promise.resolve();
     component.comparisons.set([
       makeComparisonEvent('comparison-1', {
         title: 'First activity-backed devices',
@@ -1040,28 +1046,23 @@ describe('ToolsComparePageComponent', () => {
     fixture.detectChanges();
     await Promise.resolve();
 
-    expect(eventServiceMock.getActivitiesOnceByEventWithOptions).toHaveBeenCalledTimes(1);
+    expect(eventServiceMock.getActivitiesOnceByEventsWithOptions).toHaveBeenCalledTimes(1);
+    expect(eventServiceMock.getActivitiesOnceByEventsWithOptions).toHaveBeenCalledWith(
+      user,
+      ['comparison-1', 'comparison-2'],
+      { preferCache: true, warmServer: false },
+    );
 
     component.updateComparisonFilter('activity');
     fixture.detectChanges();
     await Promise.resolve();
 
-    expect(eventServiceMock.getActivitiesOnceByEventWithOptions).toHaveBeenCalledTimes(1);
+    expect(eventServiceMock.getActivitiesOnceByEventsWithOptions).toHaveBeenCalledTimes(1);
 
-    firstActivities$.next([]);
-    firstActivities$.complete();
+    activitiesByEvent$.next(new Map());
+    activitiesByEvent$.complete();
     await Promise.resolve();
-
-    expect(eventServiceMock.getActivitiesOnceByEventWithOptions).toHaveBeenCalledTimes(2);
-    expect(eventServiceMock.getActivitiesOnceByEventWithOptions).toHaveBeenLastCalledWith(
-      user,
-      'comparison-2',
-      { preferCache: true, warmServer: false },
-    );
-
-    secondActivities$.next([]);
-    secondActivities$.complete();
-    await Promise.resolve();
+    expect(eventServiceMock.getActivitiesOnceByEventsWithOptions).toHaveBeenCalledTimes(1);
   });
 
   it('renders previous comparison descriptions as compact text until editing', () => {

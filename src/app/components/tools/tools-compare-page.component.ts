@@ -925,15 +925,17 @@ export class ToolsComparePageComponent implements OnInit {
   private async hydrateMissingActivitySummaryRows(user: User, eventIDs: string[]): Promise<void> {
     eventIDs.forEach(eventID => this.hydratingActivitySummaryEventIDs.add(eventID));
 
-    for (const eventID of eventIDs) {
-      try {
-        const activities = await firstValueFrom(this.eventService.getActivitiesOnceByEventWithOptions(
-          user,
-          eventID,
-          { preferCache: true, warmServer: false },
-        ));
+    try {
+      const activitiesByEvent = await firstValueFrom(this.eventService.getActivitiesOnceByEventsWithOptions(
+        user,
+        eventIDs,
+        { preferCache: true, warmServer: false },
+      ));
+
+      eventIDs.forEach((eventID) => {
+        const activities = activitiesByEvent.get(eventID) || [];
         if (!activities.length) {
-          continue;
+          return;
         }
 
         this.updateComparisonEventInLoadedRows(eventID, (event) => {
@@ -942,12 +944,14 @@ export class ToolsComparePageComponent implements OnInit {
           }
           return this.attachActivitiesToEvent(event, activities);
         });
-      } catch (error) {
-        this.logger.warn('[ToolsComparePageComponent] Could not hydrate comparison activity summaries.', { eventID, error });
-      } finally {
+      });
+    } catch (error) {
+      this.logger.warn('[ToolsComparePageComponent] Could not hydrate comparison activity summaries.', { eventIDs, error });
+    } finally {
+      eventIDs.forEach((eventID) => {
         this.hydratedActivitySummaryEventIDs.add(eventID);
         this.hydratingActivitySummaryEventIDs.delete(eventID);
-      }
+      });
     }
   }
 
