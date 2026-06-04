@@ -1,0 +1,40 @@
+.benchmark-review-tags-dialog-content,
+.benchmark-review-tags-dialog-content * {
+  box-sizing: border-box;
+}
+
+.benchmark-review-tags-dialog-content {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+.tags-field {
+  width: 100%;
+  min-width: 0;
+}
+
+.tag-dialog-footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.75rem;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 0.5rem;
+  color: var(--mat-sys-on-surface-variant);
+  font-size: 0.82rem;
+}
+
+.dialog-action-content {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  line-height: 1;
+}
+
+.dialog-action-content mat-progress-spinner {
+  display: inline-block;
+  flex: 0 0 auto;
+}

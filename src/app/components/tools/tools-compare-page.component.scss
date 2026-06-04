@@ -394,7 +394,7 @@ h2 {
 
 .comparison-table {
   width: 100%;
-  min-width: 138rem;
+  min-width: 148rem;
 }
 
 .comparison-table th {
@@ -433,6 +433,11 @@ h2 {
 
 .comparison-table .mat-column-description {
   width: 15rem;
+}
+
+.comparison-table .mat-column-tags {
+  width: 12rem;
+  min-width: 12rem;
 }
 
 .comparison-table .mat-column-devices {
@@ -806,6 +811,55 @@ button.benchmark-summary-stack:disabled {
 
 .description-editor mat-progress-spinner {
   display: inline-block;
+}
+
+.tags-summary-button {
+  justify-content: flex-start;
+  width: 100%;
+  min-width: 0;
+  max-width: 11.5rem;
+  height: 2rem;
+  padding: 0 0.35rem;
+  overflow: hidden;
+  font-family: inherit;
+  font-size: inherit;
+  letter-spacing: 0;
+  line-height: 2rem;
+  text-align: left;
+}
+
+.tag-pill-list {
+  display: flex;
+  gap: 0.25rem;
+  align-items: center;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.tag-pill {
+  display: block;
+  max-width: 5rem;
+  min-width: 0;
+  padding: 0.05rem 0.4rem;
+  border: 1px solid var(--mat-sys-outline-variant);
+  border-radius: 999px;
+  background: var(--mat-sys-surface-container-low);
+  color: var(--mat-sys-on-surface);
+  font-size: 0.78rem;
+  line-height: 1.25rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tag-placeholder {
+  display: block;
+  overflow: hidden;
+  max-width: 100%;
+  color: var(--mat-sys-on-surface-variant);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .status-cell,

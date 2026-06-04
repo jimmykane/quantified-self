@@ -7,6 +7,7 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSnackBar } from '@angular/material/snack-bar';
+import { MatDialog } from '@angular/material/dialog';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { BenchmarkResult } from '@shared/app-event.interface';
 import { Component, Input } from '@angular/core';
@@ -14,6 +15,9 @@ import { EventInterface, UserSummariesSettingsInterface, UserUnitSettingsInterfa
 import { BottomSheetHeaderComponent } from '../shared/bottom-sheet-header/bottom-sheet-header.component';
 import { AppShareService } from '../../services/app.share.service';
 import { AppEventColorService } from '../../services/color/app.event.color.service';
+import { BenchmarkReviewService } from '../../services/benchmark-review.service';
+import { BenchmarkReviewTagsDialogComponent } from './benchmark-review-tags-dialog.component';
+import { of, Subject } from 'rxjs';
 
 // Mock the BenchmarkReportComponent since we're testing the sheet, not the report
 @Component({
@@ -26,6 +30,7 @@ class MockBenchmarkReportComponent {
     @Input() event?: EventInterface;
     @Input() unitSettings?: UserUnitSettingsInterface;
     @Input() summariesSettings?: UserSummariesSettingsInterface;
+    @Input() benchmarkReviewTags?: string[];
     @Input() referenceColor?: string;
     @Input() testColor?: string;
 }
@@ -35,6 +40,15 @@ describe('BenchmarkBottomSheetComponent', () => {
     let fixture: ComponentFixture<BenchmarkBottomSheetComponent>;
     let mockBottomSheetRef: { dismiss: ReturnType<typeof vi.fn> };
     let shareServiceMock: { shareBenchmarkAsImage: ReturnType<typeof vi.fn> };
+    let snackBarMock: { open: ReturnType<typeof vi.fn> };
+    let dialogMock: { open: ReturnType<typeof vi.fn> };
+    let onEventTagsSavedMock: ReturnType<typeof vi.fn>;
+    let benchmarkReviewServiceMock: {
+        normalizeTags: ReturnType<typeof vi.fn>;
+        getEventTags: ReturnType<typeof vi.fn>;
+        copySummary: ReturnType<typeof vi.fn>;
+        saveEventTags: ReturnType<typeof vi.fn>;
+    };
     let originalMatchMedia: typeof window.matchMedia | undefined;
 
     const mockResult: BenchmarkResult = {
@@ -59,6 +73,19 @@ describe('BenchmarkBottomSheetComponent', () => {
         mockBottomSheetRef = { dismiss: vi.fn() };
         shareServiceMock = {
             shareBenchmarkAsImage: vi.fn().mockResolvedValue('data:image/png;base64,QUJD'),
+        };
+        snackBarMock = { open: vi.fn() };
+        dialogMock = {
+            open: vi.fn().mockReturnValue({ afterClosed: () => of(null) }),
+        };
+        onEventTagsSavedMock = vi.fn();
+        benchmarkReviewServiceMock = {
+            normalizeTags: vi.fn((tags: unknown) => Array.isArray(tags)
+                ? tags.filter((tag): tag is string => typeof tag === 'string').map(tag => tag.trim()).filter(Boolean)
+                : []),
+            getEventTags: vi.fn().mockReturnValue(['firmware']),
+            copySummary: vi.fn().mockReturnValue(true),
+            saveEventTags: vi.fn().mockResolvedValue(['firmware']),
         };
         originalMatchMedia = window.matchMedia;
         Object.defineProperty(window, 'matchMedia', {
@@ -90,10 +117,22 @@ describe('BenchmarkBottomSheetComponent', () => {
             ],
             providers: [
                 { provide: MatBottomSheetRef, useValue: mockBottomSheetRef },
-                { provide: MAT_BOTTOM_SHEET_DATA, useValue: { result: mockResult, event: { getActivities: () => [] } } },
-                { provide: MatSnackBar, useValue: { open: vi.fn() } },
+                {
+                    provide: MAT_BOTTOM_SHEET_DATA,
+                    useValue: {
+                        result: mockResult,
+                        event: { getActivities: () => [] },
+                        persistEvent: { getID: () => 'event-1', benchmarkReviewTags: ['firmware'] },
+                        user: { uid: 'user-1' },
+                        onEventTagsSaved: onEventTagsSavedMock,
+                        reviewTagSuggestions: ['Route'],
+                    },
+                },
+                { provide: MatSnackBar, useValue: snackBarMock },
+                { provide: MatDialog, useValue: dialogMock },
                 { provide: AppShareService, useValue: shareServiceMock },
                 { provide: AppEventColorService, useValue: { getActivityColor: vi.fn().mockReturnValue('#000000') } },
+                { provide: BenchmarkReviewService, useValue: benchmarkReviewServiceMock },
             ],
         }).compileComponents();
 
@@ -128,6 +167,44 @@ describe('BenchmarkBottomSheetComponent', () => {
         expect(component.data.result.referenceId).toBe('ref-id');
         expect(component.data.result.referenceName).toBe('Garmin Forerunner 265');
         expect(component.data.result.testName).toBe('COROS PACE 3');
+        expect(component.benchmarkReviewTags).toEqual(['firmware']);
+    });
+
+    it('copies the benchmark reviewer summary', () => {
+        component.copyBenchmarkSummary();
+
+        expect(benchmarkReviewServiceMock.copySummary).toHaveBeenCalledWith(mockResult, ['firmware']);
+        expect(snackBarMock.open).toHaveBeenCalledWith('Benchmark summary copied.', undefined, { duration: 2500 });
+    });
+
+    it('opens the review tag editor with a save callback', async () => {
+        let dialogData: any;
+        const afterClosed$ = new Subject<string[] | null>();
+        dialogMock.open.mockImplementationOnce((_component, config) => {
+            dialogData = config.data;
+            return { afterClosed: () => afterClosed$ };
+        });
+
+        component.openReviewTagsDialog();
+        const savedTags = await dialogData.save([' route ']);
+        afterClosed$.next(['firmware', 'route']);
+        afterClosed$.complete();
+
+        expect(dialogMock.open).toHaveBeenCalledWith(BenchmarkReviewTagsDialogComponent, expect.objectContaining({
+            width: 'min(34rem, calc(100vw - 32px))',
+            data: expect.objectContaining({
+                suggestions: ['Route', 'firmware'],
+            }),
+        }));
+        expect(benchmarkReviewServiceMock.saveEventTags).toHaveBeenCalledWith(
+            component.data.user,
+            component.data.persistEvent,
+            [' route '],
+        );
+        expect(savedTags).toEqual(['firmware']);
+        expect(onEventTagsSavedMock).toHaveBeenCalledWith(['firmware']);
+        expect(component.benchmarkReviewTags).toEqual(['firmware', 'route']);
+        expect(snackBarMock.open).toHaveBeenCalledWith('Review tags saved.', undefined, { duration: 2000 });
     });
 
     it('should use custom brandText plus Quantified Self in export watermark', async () => {

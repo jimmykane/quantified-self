@@ -44,10 +44,12 @@ import { AppColors } from '../../services/color/app.colors';
 import { AppDeviceColorPreferenceService } from '../../services/color/app-device-color-preference.service';
 import { AppBenchmarkFlowService } from '../../services/app.benchmark-flow.service';
 import { AppHapticsService } from '../../services/app.haptics.service';
+import { BenchmarkReviewService } from '../../services/benchmark-review.service';
 import {
   DeviceColorPreferenceDialogDevice,
   DeviceColorPreferencesDialogComponent,
 } from './device-color-preferences-dialog.component';
+import { BenchmarkReviewTagsDialogComponent } from '../benchmark/benchmark-review-tags-dialog.component';
 
 interface SelectedFileItem {
   index: number;
@@ -77,8 +79,12 @@ interface ComparisonListItem {
   heartRateBenchmark: ComparisonBenchmarkMetricCell;
   altitudeBenchmark: ComparisonBenchmarkMetricCell;
   description: string;
+  benchmarkReviewTags: string[];
+  benchmarkReviewTagsTitle: string;
+  benchmarkReviewTagsSort: string | null;
   deviceFilterValues: string[];
   activityTypeFilterValues: string[];
+  tagFilterValues: string[];
   sourceFilesCount: number | null;
   sourceFilesSort: number | null;
   sourceFilesLabel: string;
@@ -138,6 +144,7 @@ type ComparisonSortColumn =
   | 'heartRate'
   | 'altitude'
   | 'description'
+  | 'tags'
   | 'sourceFiles'
   | 'status'
   | 'reports';
@@ -191,6 +198,7 @@ export class ToolsComparePageComponent implements OnInit {
   private deviceColorPreferenceService = inject(AppDeviceColorPreferenceService);
   private benchmarkFlowService = inject(AppBenchmarkFlowService);
   private hapticsService = inject(AppHapticsService);
+  private benchmarkReviewService = inject(BenchmarkReviewService);
   private logger = inject(LoggerService);
 
   readonly selectedFiles = signal<File[]>([]);
@@ -208,6 +216,7 @@ export class ToolsComparePageComponent implements OnInit {
   readonly comparisonFilter = signal('');
   readonly comparisonDeviceFilter = signal('');
   readonly comparisonActivityTypeFilter = signal('');
+  readonly comparisonTagFilter = signal('');
   readonly comparisonSort = signal<ComparisonSortState>({ active: 'date', direction: 'desc' });
   readonly comparisonPage = signal<ComparisonPageState>({
     pageIndex: 0,
@@ -226,6 +235,7 @@ export class ToolsComparePageComponent implements OnInit {
     'heartRate',
     'altitude',
     'description',
+    'tags',
     'sourceFiles',
     'status',
     'reports',
@@ -248,6 +258,7 @@ export class ToolsComparePageComponent implements OnInit {
     sourceFiles: 'attach_file',
     status: 'task_alt',
     reports: 'analytics',
+    tags: 'sell',
     actions: 'more_horiz',
   } as const;
   private readonly resolvedAuthState = this.route.snapshot.data['toolsCompareAuth'] as ToolsCompareAuthResolverData | undefined;
@@ -317,8 +328,9 @@ export class ToolsComparePageComponent implements OnInit {
     const filter = this.comparisonFilter().trim().toLowerCase();
     const deviceFilter = this.comparisonDeviceFilter();
     const activityTypeFilter = this.comparisonActivityTypeFilter();
+    const tagFilter = this.comparisonTagFilter();
     const items = this.comparisonItems();
-    if (!filter && !deviceFilter && !activityTypeFilter) {
+    if (!filter && !deviceFilter && !activityTypeFilter && !tagFilter) {
       return items;
     }
 
@@ -330,6 +342,9 @@ export class ToolsComparePageComponent implements OnInit {
         return false;
       }
       if (activityTypeFilter && !item.activityTypeFilterValues.includes(activityTypeFilter)) {
+        return false;
+      }
+      if (tagFilter && !item.tagFilterValues.includes(tagFilter)) {
         return false;
       }
       return true;
@@ -382,6 +397,10 @@ export class ToolsComparePageComponent implements OnInit {
 
   readonly comparisonActivityTypeFilterOptions = computed<ComparisonFilterOption[]>(() =>
     this.buildComparisonFilterOptions(this.comparisonItems().flatMap(item => item.activityTypeFilterValues)),
+  );
+
+  readonly comparisonTagFilterOptions = computed<ComparisonFilterOption[]>(() =>
+    this.buildComparisonFilterOptions(this.comparisonItems().flatMap(item => item.tagFilterValues)),
   );
 
   readonly paginatedComparisonItems = computed<ComparisonListItem[]>(() => {
@@ -540,6 +559,15 @@ export class ToolsComparePageComponent implements OnInit {
     }
 
     this.comparisonActivityTypeFilter.set(value);
+    this.applyComparisonFacetFilterChange();
+  }
+
+  updateComparisonTagFilter(value: string): void {
+    if (this.comparisonTagFilter() === value) {
+      return;
+    }
+
+    this.comparisonTagFilter.set(value);
     this.applyComparisonFacetFilterChange();
   }
 
@@ -795,7 +823,9 @@ export class ToolsComparePageComponent implements OnInit {
       user,
       initialSelection: this.resolveBenchmarkInitialSelection(item.event),
       hydrateStreamsForGeneration: true,
+      reviewTagSuggestions: this.comparisonTagFilterOptions().map(option => option.label),
       onResult: (benchmarkResult: BenchmarkResult) => this.applyBenchmarkResultToComparisonRow(item.id, benchmarkResult),
+      onEventTagsSaved: (tags: string[]) => this.applyBenchmarkReviewTagsToComparisonRow(item.id, tags),
       onGenerationStart: () => this.benchmarkingEventID.set(item.id),
       onGenerationComplete: (status: 'success' | 'failure') => {
         if (this.benchmarkingEventID() === item.id) {
@@ -843,6 +873,13 @@ export class ToolsComparePageComponent implements OnInit {
       return event;
     });
     this.hapticsService.success();
+  }
+
+  private applyBenchmarkReviewTagsToComparisonRow(eventID: string, tags: string[]): void {
+    this.updateComparisonEventInLoadedRows(eventID, (event) => {
+      event.benchmarkReviewTags = this.benchmarkReviewService.normalizeTags(tags);
+      return event;
+    });
   }
 
   async deleteComparison(item: ComparisonListItem): Promise<void> {
@@ -910,6 +947,49 @@ export class ToolsComparePageComponent implements OnInit {
         initialDeviceKey: initialDeviceKey || null,
       },
     });
+  }
+
+  async openBenchmarkReviewTagsDialog(item: ComparisonListItem): Promise<void> {
+    const user = this.currentUser();
+    if (!user) {
+      this.hapticsService.warning();
+      return;
+    }
+
+    this.hapticsService.selection();
+    this.analyticsService.logToolCompareSavedAction('tags_edit', this.getComparisonSavedActionAnalytics(item, {
+      tagCount: item.benchmarkReviewTags.length,
+    }));
+
+    const dialogRef = this.dialog.open(BenchmarkReviewTagsDialogComponent, {
+      width: 'min(34rem, calc(100vw - 32px))',
+      maxWidth: 'calc(100vw - 32px)',
+      data: {
+        title: 'Comparison tags',
+        tags: item.benchmarkReviewTags,
+        suggestions: this.comparisonTagFilterOptions().map(option => option.label),
+        save: async (tags: string[]) => {
+          const savedTags = await this.benchmarkReviewService.saveEventTags(user, item.event, tags);
+          this.updateComparisonEventInLoadedRows(item.id, (event) => {
+            event.benchmarkReviewTags = savedTags;
+            return event;
+          });
+          return savedTags;
+        },
+      },
+    });
+
+    const savedTags = await firstValueFrom(dialogRef.afterClosed());
+    if (!Array.isArray(savedTags)) {
+      return;
+    }
+
+    this.snackBar.open('Tags saved.', undefined, { duration: 2000 });
+    this.hapticsService.success();
+    this.analyticsService.logToolCompareSavedAction('tags_save', this.getComparisonSavedActionAnalytics(item, {
+      status: 'success',
+      tagCount: savedTags.length,
+    }));
   }
 
   async signIn(redirectUrl = '/tools/compare', source: ToolCompareSignInSource = 'guest_cta'): Promise<void> {
@@ -1101,6 +1181,7 @@ export class ToolsComparePageComponent implements OnInit {
     this.comparisonFilter.set('');
     this.comparisonDeviceFilter.set('');
     this.comparisonActivityTypeFilter.set('');
+    this.comparisonTagFilter.set('');
     this.lastLoggedFilterActive = false;
     this.hydratingActivitySummaryEventIDs.clear();
     this.hydratedActivitySummaryEventIDs.clear();
@@ -1135,7 +1216,8 @@ export class ToolsComparePageComponent implements OnInit {
   private isComparisonFilterActive(): boolean {
     return this.comparisonFilter().trim().length > 0
       || this.comparisonDeviceFilter().length > 0
-      || this.comparisonActivityTypeFilter().length > 0;
+      || this.comparisonActivityTypeFilter().length > 0
+      || this.comparisonTagFilter().length > 0;
   }
 
   private resolveComparisonErrorCategory(error: unknown): ToolCompareErrorCategory {
@@ -1324,6 +1406,10 @@ export class ToolsComparePageComponent implements OnInit {
     const hasReport = reportCount > 0;
     const statusLabel = hasReport ? 'Report ready' : 'Draft';
     const description = typeof event.description === 'string' ? event.description : '';
+    const benchmarkReviewTags = this.benchmarkReviewService.getEventTags(event);
+    const benchmarkReviewTagsTitle = benchmarkReviewTags.length > 0
+      ? benchmarkReviewTags.join('\n')
+      : 'Add reviewer tags for this comparison.';
     const sourceFilesCount = typeof comparisonEvent.sourceFilesCount === 'number'
       ? comparisonEvent.sourceFilesCount
       : this.getOriginalFilesCount(event);
@@ -1382,8 +1468,12 @@ export class ToolsComparePageComponent implements OnInit {
       heartRateBenchmark,
       altitudeBenchmark,
       description,
+      benchmarkReviewTags,
+      benchmarkReviewTagsTitle,
+      benchmarkReviewTagsSort: benchmarkReviewTags.length > 0 ? benchmarkReviewTags.join(' ').toLowerCase() : null,
       deviceFilterValues,
       activityTypeFilterValues,
+      tagFilterValues: benchmarkReviewTags,
       sourceFilesCount,
       sourceFilesSort: sourceFilesCount,
       sourceFilesLabel: this.formatCountLabel(sourceFilesCount, 'file', 'Files unknown'),
@@ -1404,6 +1494,7 @@ export class ToolsComparePageComponent implements OnInit {
         this.formatBenchmarkCellFilterText(heartRateBenchmark),
         this.formatBenchmarkCellFilterText(altitudeBenchmark),
         description,
+        benchmarkReviewTags.join(' '),
         benchmarkPairLabel,
         event.startDate instanceof Date ? event.startDate.toISOString() : 'date unavailable',
         this.formatCountLabel(sourceFilesCount, 'file', 'Files unknown'),
@@ -1445,6 +1536,8 @@ export class ToolsComparePageComponent implements OnInit {
         return this.compareNullableNumbers(first.altitudeBenchmark.sortValue, second.altitudeBenchmark.sortValue, direction);
       case 'description':
         return first.description.localeCompare(second.description) * directionMultiplier;
+      case 'tags':
+        return this.compareNullableStrings(first.benchmarkReviewTagsSort, second.benchmarkReviewTagsSort, direction);
       case 'sourceFiles':
         return this.compareNullableNumbers(first.sourceFilesSort, second.sourceFilesSort, direction);
       case 'status':
@@ -1457,7 +1550,7 @@ export class ToolsComparePageComponent implements OnInit {
   }
 
   private isComparisonSortColumn(value: string): value is ComparisonSortColumn {
-    return ['date', 'title', 'devices', 'activityType', 'distance', 'ascent', 'descent', 'gnss', 'heartRate', 'altitude', 'description', 'sourceFiles', 'status', 'reports'].includes(value);
+    return ['date', 'title', 'devices', 'activityType', 'distance', 'ascent', 'descent', 'gnss', 'heartRate', 'altitude', 'description', 'tags', 'sourceFiles', 'status', 'reports'].includes(value);
   }
 
   private compareNullableNumbers(first: number | null, second: number | null, direction: SortDirection): number {
@@ -1472,6 +1565,20 @@ export class ToolsComparePageComponent implements OnInit {
     }
 
     return direction === 'asc' ? first - second : second - first;
+  }
+
+  private compareNullableStrings(first: string | null, second: string | null, direction: SortDirection): number {
+    if (first === null && second === null) {
+      return 0;
+    }
+    if (first === null) {
+      return 1;
+    }
+    if (second === null) {
+      return -1;
+    }
+
+    return first.localeCompare(second) * (direction === 'asc' ? 1 : -1);
   }
 
   private resolvePrimaryBenchmarkResult(event: AppEventInterface): BenchmarkResult | null {

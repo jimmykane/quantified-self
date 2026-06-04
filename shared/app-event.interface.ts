@@ -41,6 +41,8 @@ export interface AppEventInterface extends EventInterface {
     sourceFilesCount?: number;
     /** Number of activities produced by a comparison event. */
     activitiesCount?: number;
+    /** User-owned reviewer tags for saved benchmark comparisons. */
+    benchmarkReviewTags?: string[];
 }
 
 /**
@@ -156,4 +158,6 @@ export interface FirestoreEventJSON {
     sourceFilesCount?: number;
     /** Number of activities produced by a comparison event. */
     activitiesCount?: number;
+    /** User-owned reviewer tags for saved benchmark comparisons. */
+    benchmarkReviewTags?: string[];
 }

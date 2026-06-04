@@ -1,0 +1,57 @@
+<h2 mat-dialog-title>{{ title }}</h2>
+
+<mat-dialog-content class="benchmark-review-tags-dialog-content qs-scrollbar">
+  <mat-form-field appearance="outline" class="tags-field" subscriptSizing="dynamic">
+    <mat-label>Tags</mat-label>
+    <mat-chip-grid #tagGrid aria-label="Benchmark review tags">
+      @for (tag of stagedTags(); track tag) {
+      <mat-chip-row [disabled]="isSaving()" (removed)="removeTag(tag)">
+        {{ tag }}
+        <button matChipRemove type="button" [disabled]="isSaving()" [attr.aria-label]="'Remove ' + tag">
+          <mat-icon>cancel</mat-icon>
+        </button>
+      </mat-chip-row>
+      }
+      <input
+        #tagInputElement
+        matInput
+        placeholder="Add tag"
+        [disabled]="isSaving() || hasReachedLimit()"
+        [matChipInputFor]="tagGrid"
+        [matChipInputSeparatorKeyCodes]="separatorKeysCodes"
+        [matChipInputAddOnBlur]="true"
+        [matAutocomplete]="tagAutocomplete"
+        (input)="updateTagInput($any($event.target).value)"
+        (matChipInputTokenEnd)="addTagFromInput($event)">
+    </mat-chip-grid>
+    <mat-autocomplete #tagAutocomplete="matAutocomplete" (optionSelected)="selectSuggestion($event)">
+      @for (suggestion of filteredSuggestions(); track suggestion) {
+      <mat-option [value]="suggestion">{{ suggestion }}</mat-option>
+      }
+    </mat-autocomplete>
+  </mat-form-field>
+
+  <div class="tag-dialog-footer">
+    <span>{{ stagedTags().length }} / {{ tagLimit }}</span>
+    @if (hasReachedLimit()) {
+    <span>Tag limit reached</span>
+    }
+  </div>
+</mat-dialog-content>
+
+<mat-dialog-actions align="end">
+  <button mat-button type="button" [mat-dialog-close]="null" [disabled]="isSaving()">Cancel</button>
+  <button
+    mat-flat-button
+    class="qs-mat-primary"
+    type="button"
+    [disabled]="isSaving() || !hasChanges()"
+    (click)="apply()">
+    <span class="dialog-action-content">
+      @if (isSaving()) {
+      <mat-progress-spinner diameter="18" mode="indeterminate"></mat-progress-spinner>
+      }
+      <span>Apply</span>
+    </span>
+  </button>
+</mat-dialog-actions>

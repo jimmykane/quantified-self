@@ -21,6 +21,8 @@ interface BenchmarkFlowConfig {
   result?: BenchmarkResult;
   initialSelection?: ActivityInterface[];
   onResult?: (result: BenchmarkResult) => void;
+  onEventTagsSaved?: (tags: string[]) => void;
+  reviewTagSuggestions?: string[];
   onGenerationStart?: () => void;
   onGenerationComplete?: (status: 'success' | 'failure') => void;
   hydrateStreamsForGeneration?: boolean;
@@ -64,6 +66,10 @@ export class AppBenchmarkFlowService {
       data: {
         result: nextConfig.result,
         event: nextConfig.event,
+        persistEvent: nextConfig.persistEvent,
+        user: nextConfig.user,
+        onEventTagsSaved: nextConfig.onEventTagsSaved,
+        reviewTagSuggestions: nextConfig.reviewTagSuggestions,
         unitSettings: nextConfig.user?.settings?.unitSettings ?? AppUserUtilities.getDefaultUserUnitSettings(),
         summariesSettings: nextConfig.user?.settings?.summariesSettings,
         brandText: (nextConfig.user as any)?.brandText ?? null,

@@ -87,4 +87,14 @@ describe('BenchmarkEventAdapter', () => {
     expect(event.benchmarkDevices).not.toBe(rawData.benchmarkDevices);
     expect(event.benchmarkLatestAt?.toISOString()).toBe(fixedDate.toISOString());
   });
+
+  it('hydrates reviewer tags from saved comparison event metadata', () => {
+    const event = {} as AppEventInterface;
+
+    adapter.applyBenchmarkFieldsFromFirestore(event, {
+      benchmarkReviewTags: [' firmware ', 'gps   route', '', 123, 'publication'],
+    });
+
+    expect(event.benchmarkReviewTags).toEqual(['firmware', 'gps route', 'publication']);
+  });
 });

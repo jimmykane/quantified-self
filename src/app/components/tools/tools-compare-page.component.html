@@ -260,6 +260,18 @@
             }
           </mat-select>
         </mat-form-field>
+        <mat-form-field appearance="outline" class="facet-filter-field" subscriptSizing="dynamic">
+          <mat-label>Tag</mat-label>
+          <mat-select
+            [value]="comparisonTagFilter()"
+            [disabled]="comparisonTagFilterOptions().length === 0"
+            (selectionChange)="updateComparisonTagFilter($event.value)">
+            <mat-option value="">All tags</mat-option>
+            @for (option of comparisonTagFilterOptions(); track option.value) {
+            <mat-option [value]="option.value">{{ option.label }}</mat-option>
+            }
+          </mat-select>
+        </mat-form-field>
         <div class="comparison-table-actions">
           <button
             mat-stroked-button
@@ -595,6 +607,35 @@
                 }
               </div>
               }
+            </td>
+          </ng-container>
+
+          <ng-container matColumnDef="tags">
+            <th mat-header-cell *matHeaderCellDef mat-sort-header="tags">
+              <span class="comparison-header-label">
+                <mat-icon class="comparison-header-icon" aria-hidden="true">{{ comparisonHeaderMaterialIcons.tags }}</mat-icon>
+                <span>Tags</span>
+              </span>
+            </th>
+            <td mat-cell *matCellDef="let item">
+              <button
+                mat-button
+                type="button"
+                class="tags-summary-button"
+                [class.tags-summary-button--empty]="item.benchmarkReviewTags.length === 0"
+                [matTooltip]="item.benchmarkReviewTagsTitle"
+                [attr.aria-label]="item.benchmarkReviewTags.length > 0 ? 'Edit comparison tags' : 'Add comparison tags'"
+                (click)="openBenchmarkReviewTagsDialog(item)">
+                @if (item.benchmarkReviewTags.length > 0) {
+                <span class="tag-pill-list">
+                  @for (tag of item.benchmarkReviewTags; track tag) {
+                  <span class="tag-pill">{{ tag }}</span>
+                  }
+                </span>
+                } @else {
+                <span class="tag-placeholder">Add tags</span>
+                }
+              </button>
             </td>
           </ng-container>
 

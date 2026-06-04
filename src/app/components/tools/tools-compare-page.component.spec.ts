@@ -20,6 +20,8 @@ import { AppDeviceColorPreferenceService } from '../../services/color/app-device
 import { normalizeDeviceColorKey } from '../../helpers/device-color-preferences.helper';
 import { DeviceColorPreferencesDialogComponent } from './device-color-preferences-dialog.component';
 import { AppHapticsService } from '../../services/app.haptics.service';
+import { BenchmarkReviewService } from '../../services/benchmark-review.service';
+import { BenchmarkReviewTagsDialogComponent } from '../benchmark/benchmark-review-tags-dialog.component';
 
 function makeComparisonEvent(id: string, overrides: {
   title?: string;
@@ -28,6 +30,7 @@ function makeComparisonEvent(id: string, overrides: {
   sourceFilesCount?: number;
   benchmarkResults?: Record<string, unknown>;
   benchmarkDevices?: string[];
+  benchmarkReviewTags?: string[];
   activities?: unknown[];
 } = {}): AppEventInterface {
   return {
@@ -38,6 +41,7 @@ function makeComparisonEvent(id: string, overrides: {
     sourceFilesCount: overrides.sourceFilesCount,
     benchmarkResults: overrides.benchmarkResults,
     benchmarkDevices: overrides.benchmarkDevices,
+    benchmarkReviewTags: overrides.benchmarkReviewTags,
     getActivities: () => overrides.activities || [],
   } as unknown as AppEventInterface;
 }
@@ -147,6 +151,11 @@ describe('ToolsComparePageComponent', () => {
     warning: ReturnType<typeof vi.fn>;
     error: ReturnType<typeof vi.fn>;
   };
+  let benchmarkReviewServiceMock: {
+    normalizeTags: ReturnType<typeof vi.fn>;
+    getEventTags: ReturnType<typeof vi.fn>;
+    saveEventTags: ReturnType<typeof vi.fn>;
+  };
   let deviceColorByNameState: Record<string, string>;
   let deviceColorPreferenceServiceMock: {
     deviceColorByName: ReturnType<typeof vi.fn>;
@@ -244,6 +253,17 @@ describe('ToolsComparePageComponent', () => {
       warning: vi.fn(),
       error: vi.fn(),
     };
+    benchmarkReviewServiceMock = {
+      normalizeTags: vi.fn((tags: unknown) => Array.isArray(tags)
+        ? tags.filter((tag): tag is string => typeof tag === 'string').map(tag => tag.trim()).filter(Boolean)
+        : []),
+      getEventTags: vi.fn((event: AppEventInterface) => Array.isArray(event.benchmarkReviewTags) ? event.benchmarkReviewTags : []),
+      saveEventTags: vi.fn(async (_user: User, event: AppEventInterface, tags: unknown) => {
+        const normalizedTags = benchmarkReviewServiceMock.normalizeTags(tags);
+        event.benchmarkReviewTags = normalizedTags;
+        return normalizedTags;
+      }),
+    };
     deviceColorByNameState = {};
     deviceColorPreferenceServiceMock = {
       deviceColorByName: vi.fn(() => deviceColorByNameState),
@@ -270,6 +290,7 @@ describe('ToolsComparePageComponent', () => {
         { provide: AppAnalyticsService, useValue: analyticsServiceMock },
         { provide: AppBenchmarkFlowService, useValue: benchmarkFlowServiceMock },
         { provide: AppHapticsService, useValue: hapticsServiceMock },
+        { provide: BenchmarkReviewService, useValue: benchmarkReviewServiceMock },
         { provide: AppEventService, useValue: eventServiceMock },
         { provide: AppEventColorService, useValue: eventColorServiceMock },
         { provide: AppDeviceColorPreferenceService, useValue: deviceColorPreferenceServiceMock },
@@ -818,6 +839,9 @@ describe('ToolsComparePageComponent', () => {
       result: reportResult,
       hydrateStreamsForGeneration: true,
     }));
+    const reportConfig = benchmarkFlowServiceMock.openBenchmarkReport.mock.calls[0][0];
+    reportConfig.onEventTagsSaved?.(['firmware']);
+    expect(component.comparisonItems()[0].benchmarkReviewTags).toEqual(['firmware']);
     expect(hapticsServiceMock.selection).toHaveBeenCalledTimes(3);
   });
 
@@ -1531,6 +1555,76 @@ describe('ToolsComparePageComponent', () => {
     expect(hapticsServiceMock.selection).toHaveBeenCalledTimes(2);
   });
 
+  it('filters loaded comparisons by review tags and saves row tag edits', async () => {
+    const user = new User('user-1');
+    const firmwareEvent = makeComparisonEvent('firmware-comparison', {
+      title: 'Firmware comparison',
+      benchmarkReviewTags: ['Firmware'],
+    });
+    const routeEvent = makeComparisonEvent('route-comparison', {
+      title: 'Route comparison',
+      benchmarkReviewTags: ['Route'],
+    });
+    const untaggedEvent = makeComparisonEvent('untagged-comparison', {
+      title: 'Untagged comparison',
+    });
+    component.authResolved.set(true);
+    component.firebaseSignedIn.set(true);
+    component.currentUser.set(user);
+    component.comparisons.set([firmwareEvent, routeEvent, untaggedEvent]);
+    fixture.detectChanges();
+
+    expect(component.comparisonTagFilterOptions()).toEqual([
+      { value: 'Firmware', label: 'Firmware' },
+      { value: 'Route', label: 'Route' },
+    ]);
+
+    component.updateComparisonTagFilter('Firmware');
+    expect(component.filteredComparisonItems().map(item => item.id)).toEqual(['firmware-comparison']);
+
+    component.updateComparisonTagFilter('');
+    component.onComparisonSortChange({ active: 'tags', direction: 'desc' });
+    expect(component.sortedComparisonItems().map(item => item.id)).toEqual([
+      'route-comparison',
+      'firmware-comparison',
+      'untagged-comparison',
+    ]);
+
+    let dialogData: any;
+    const afterClosed$ = new Subject<string[] | null>();
+    const dialogOpenSpy = vi.spyOn((component as any).dialog, 'open').mockImplementationOnce((_component, config) => {
+      dialogData = config.data;
+      return { afterClosed: () => afterClosed$ } as any;
+    });
+
+    const editPromise = component.openBenchmarkReviewTagsDialog(component.comparisonItems()[0]);
+    const savedTags = await dialogData.save([' review ']);
+    afterClosed$.next(savedTags);
+    afterClosed$.complete();
+    await editPromise;
+
+    expect(dialogOpenSpy).toHaveBeenCalledWith(BenchmarkReviewTagsDialogComponent, expect.objectContaining({
+      width: 'min(34rem, calc(100vw - 32px))',
+      data: expect.objectContaining({
+        title: 'Comparison tags',
+        tags: ['Firmware'],
+        suggestions: ['Firmware', 'Route'],
+      }),
+    }));
+    expect(benchmarkReviewServiceMock.saveEventTags).toHaveBeenCalledWith(user, firmwareEvent, [' review ']);
+    expect(firmwareEvent.benchmarkReviewTags).toEqual(['review']);
+    expect(component.comparisonItems()[0].benchmarkReviewTags).toEqual(['review']);
+    expect(hapticsServiceMock.success).toHaveBeenCalled();
+    expect(analyticsServiceMock.logToolCompareSavedAction).toHaveBeenCalledWith('tags_save', {
+      hasReport: false,
+      reportCount: 0,
+      filterActive: false,
+      resultCount: 3,
+      status: 'success',
+      tagCount: 1,
+    });
+  });
+
   it('renders dashboard-style icons in previous comparison table headers', () => {
     const user = new User('user-1');
     component.authResolved.set(true);
@@ -1569,6 +1663,7 @@ describe('ToolsComparePageComponent', () => {
       expect.stringContaining('HR'),
       expect.stringContaining('Alt'),
       expect.stringContaining('Description'),
+      expect.stringContaining('Tags'),
       expect.stringContaining('Files'),
       expect.stringContaining('Status'),
       expect.stringContaining('Reports'),
@@ -1589,6 +1684,7 @@ describe('ToolsComparePageComponent', () => {
       'ecg_heart',
       'landscape',
       'font_download',
+      'sell',
       'attach_file',
       'task_alt',
       'analytics',
