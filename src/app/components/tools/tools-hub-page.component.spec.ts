@@ -7,17 +7,17 @@ import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { ToolsHubPageComponent } from './tools-hub-page.component';
 
 describe('ToolsHubPageComponent', () => {
-  it('renders the tools hub with the compare tool link', async () => {
+  it('renders the tools hub with the compare tool link', () => {
     const analyticsServiceMock = {
       logToolCompareEntry: vi.fn(),
     };
 
-    await TestBed.configureTestingModule({
+    TestBed.configureTestingModule({
       imports: [ToolsHubPageComponent, RouterTestingModule.withRoutes([]), NoopAnimationsModule],
       providers: [
         { provide: AppAnalyticsService, useValue: analyticsServiceMock },
       ],
-    }).compileComponents();
+    });
 
     const fixture: ComponentFixture<ToolsHubPageComponent> = TestBed.createComponent(ToolsHubPageComponent);
     fixture.detectChanges();

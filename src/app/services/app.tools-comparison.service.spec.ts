@@ -2,6 +2,12 @@ import { TestBed } from '@angular/core/testing';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { firstValueFrom, of } from 'rxjs';
 import { createHash } from 'node:crypto';
+import {
+  ReadableStream as NodeReadableStream,
+  TransformStream as NodeTransformStream,
+  WritableStream as NodeWritableStream,
+} from 'node:stream/web';
+import { gunzipSync, gzipSync } from 'node:zlib';
 
 import { AppToolsComparisonService } from './app.tools-comparison.service';
 import { FirebaseApp } from 'app/firebase/app';
@@ -28,6 +34,10 @@ describe('AppToolsComparisonService', () => {
   let originalUseFunctionsEmulator: boolean;
   let originalFileReader: typeof FileReader;
   let originalCrypto: Crypto | undefined;
+  let originalDecompressionStream: typeof DecompressionStream | undefined;
+  let originalReadableStream: typeof ReadableStream | undefined;
+  let originalTransformStream: typeof TransformStream | undefined;
+  let originalWritableStream: typeof WritableStream | undefined;
   let bytesByFile: WeakMap<File, ArrayBuffer>;
 
   beforeEach(() => {
@@ -35,6 +45,10 @@ describe('AppToolsComparisonService', () => {
     originalUseFunctionsEmulator = environment.useFunctionsEmulator;
     originalFileReader = globalThis.FileReader;
     originalCrypto = globalThis.crypto;
+    originalDecompressionStream = globalThis.DecompressionStream;
+    originalReadableStream = globalThis.ReadableStream;
+    originalTransformStream = globalThis.TransformStream;
+    originalWritableStream = globalThis.WritableStream;
     bytesByFile = new WeakMap<File, ArrayBuffer>();
 
     class MockFileReader {
@@ -119,6 +133,22 @@ describe('AppToolsComparisonService', () => {
       configurable: true,
       value: originalCrypto,
     });
+    Object.defineProperty(globalThis, 'DecompressionStream', {
+      configurable: true,
+      value: originalDecompressionStream,
+    });
+    Object.defineProperty(globalThis, 'ReadableStream', {
+      configurable: true,
+      value: originalReadableStream,
+    });
+    Object.defineProperty(globalThis, 'TransformStream', {
+      configurable: true,
+      value: originalTransformStream,
+    });
+    Object.defineProperty(globalThis, 'WritableStream', {
+      configurable: true,
+      value: originalWritableStream,
+    });
   });
 
   function makeFile(name: string, bytes: number[]): File {
@@ -143,6 +173,52 @@ describe('AppToolsComparisonService', () => {
     )));
 
     return sha256Hex(buildToolComparisonEventIDHashParts(userID, contentHashes));
+  }
+
+  function installNodeWebStreamGlobals(): void {
+    Object.defineProperty(globalThis, 'ReadableStream', {
+      configurable: true,
+      value: NodeReadableStream as unknown as typeof ReadableStream,
+    });
+    Object.defineProperty(globalThis, 'TransformStream', {
+      configurable: true,
+      value: NodeTransformStream as unknown as typeof TransformStream,
+    });
+    Object.defineProperty(globalThis, 'WritableStream', {
+      configurable: true,
+      value: NodeWritableStream as unknown as typeof WritableStream,
+    });
+  }
+
+  function installNodeGunzipDecompressionStreamMock(): void {
+    installNodeWebStreamGlobals();
+    class NodeGunzipDecompressionStream {
+      readonly readable: ReadableStream<Uint8Array>;
+      readonly writable: WritableStream<Uint8Array>;
+
+      constructor(format: CompressionFormat) {
+        if (format !== 'gzip') {
+          throw new Error(`Unsupported compression format ${format}.`);
+        }
+        const transform = new NodeTransformStream<Uint8Array, Uint8Array>({
+          transform(chunk, controller) {
+            const decompressed = gunzipSync(Buffer.from(chunk));
+            controller.enqueue(new Uint8Array(
+              decompressed.buffer,
+              decompressed.byteOffset,
+              decompressed.byteLength,
+            ));
+          },
+        });
+        this.readable = transform.readable as unknown as ReadableStream<Uint8Array>;
+        this.writable = transform.writable as unknown as WritableStream<Uint8Array>;
+      }
+    }
+
+    Object.defineProperty(globalThis, 'DecompressionStream', {
+      configurable: true,
+      value: NodeGunzipDecompressionStream as unknown as typeof DecompressionStream,
+    });
   }
 
   it('uploads comparison files with auth, App Check, manifest, and title headers', async () => {
@@ -212,7 +288,8 @@ describe('AppToolsComparisonService', () => {
     expect(decodeURIComponent(headers.get('X-Tool-Comparison-Title-Encoded') || '')).toBe('A'.repeat(120));
   });
 
-  it('skips deterministic event id hints for gzip comparison files', async () => {
+  it('sends deterministic event id hints for gzip comparison files using decompressed payloads', async () => {
+    installNodeGunzipDecompressionStreamMock();
     fetchMock.mockResolvedValue({
       ok: true,
       status: 200,
@@ -221,17 +298,23 @@ describe('AppToolsComparisonService', () => {
         mergeType: 'benchmark',
       }),
     });
+    const decompressedFitBytes = [9, 8, 7, 6];
+    const gzippedFitBytes = Array.from(gzipSync(new Uint8Array(decompressedFitBytes)));
 
     await service.createComparison([
-      makeFile('one.fit.gz', [0x1f, 0x8b, 0x08, 0x00]),
+      makeFile('one.fit.gz', gzippedFitBytes),
       makeFile('two.gpx', [2]),
     ]);
 
     const headers = fetchMock.mock.calls[0][1].headers as Headers;
-    expect(headers.has(TOOL_COMPARISON_EVENT_ID_HEADER)).toBe(false);
+    expect(headers.get(TOOL_COMPARISON_EVENT_ID_HEADER)).toBe(expectedComparisonEventID('user-1', [
+      { extension: 'fit.gz', bytes: decompressedFitBytes },
+      { extension: 'gpx', bytes: [2] },
+    ]));
   });
 
-  it('skips deterministic event id hints when gzip magic bytes are disguised as an uncompressed extension', async () => {
+  it('sends deterministic event id hints when gzip magic bytes are disguised as an uncompressed extension', async () => {
+    installNodeGunzipDecompressionStreamMock();
     fetchMock.mockResolvedValue({
       ok: true,
       status: 200,
@@ -240,14 +323,49 @@ describe('AppToolsComparisonService', () => {
         mergeType: 'benchmark',
       }),
     });
+    const decompressedFitBytes = [3, 4, 5, 6];
+    const gzippedFitBytes = Array.from(gzipSync(new Uint8Array(decompressedFitBytes)));
 
     await service.createComparison([
-      makeFile('one.fit', [0x1f, 0x8b, 0x08, 0x00]),
+      makeFile('one.fit', gzippedFitBytes),
       makeFile('two.gpx', [2]),
     ]);
 
     const headers = fetchMock.mock.calls[0][1].headers as Headers;
-    expect(headers.has(TOOL_COMPARISON_EVENT_ID_HEADER)).toBe(false);
+    expect(headers.get(TOOL_COMPARISON_EVENT_ID_HEADER)).toBe(expectedComparisonEventID('user-1', [
+      { extension: 'fit', bytes: decompressedFitBytes },
+      { extension: 'gpx', bytes: [2] },
+    ]));
+  });
+
+  it('skips deterministic gzip event id hints when decompression would exceed the allowed hash payload', async () => {
+    installNodeWebStreamGlobals();
+    const oversizedChunk = { byteLength: 3 } as Uint8Array;
+    class OversizedDecompressionStream {
+      readonly readable: ReadableStream<Uint8Array>;
+      readonly writable: WritableStream<Uint8Array>;
+
+      constructor() {
+        const transform = new NodeTransformStream<Uint8Array, Uint8Array>({
+          transform(_chunk, controller) {
+            controller.enqueue(oversizedChunk);
+          },
+        });
+        this.readable = transform.readable as unknown as ReadableStream<Uint8Array>;
+        this.writable = transform.writable as unknown as WritableStream<Uint8Array>;
+      }
+    }
+    Object.defineProperty(globalThis, 'DecompressionStream', {
+      configurable: true,
+      value: OversizedDecompressionStream as unknown as typeof DecompressionStream,
+    });
+
+    const payloadForHash = await (service as any).resolvePayloadForComparisonHash({
+      bytes: new Uint8Array([0x1f, 0x8b, 0x08, 0x00]).buffer,
+      extension: 'fit.gz',
+    }, 2);
+
+    expect(payloadForHash).toBeNull();
   });
 
   it('validates file count, extensions, and file sizes before upload', async () => {

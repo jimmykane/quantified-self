@@ -47,6 +47,8 @@ const MIN_COMPARISON_FILES = 2;
 const MAX_COMPARISON_FILES = 10;
 const MAX_COMPARISON_FILE_BYTES = 20 * 1024 * 1024;
 const MAX_COMPARISON_TOTAL_BYTES = 30 * 1024 * 1024;
+// Keep this aligned with MAX_ACTIVITY_DECOMPRESSED_BYTES in the comparison function.
+const MAX_COMPARISON_DECOMPRESSED_HASH_BYTES = 512 * 1024 * 1024;
 const MAX_COMPARISON_TITLE_LENGTH = 120;
 const BENCHMARK_COMPARISON_WHERE = [
   { fieldPath: 'mergeType', opStr: '==', value: 'benchmark' },
@@ -87,6 +89,16 @@ function resolveExtensionFromFilename(filename: string): string {
 
 function hasGzipMagic(bytes: Uint8Array): boolean {
   return bytes.length > 2 && bytes[0] === 0x1f && bytes[1] === 0x8b;
+}
+
+function concatenateUint8ArrayChunks(chunks: Uint8Array[], totalLength: number): Uint8Array {
+  const result = new Uint8Array(totalLength);
+  let offset = 0;
+  for (const chunk of chunks) {
+    result.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return result;
 }
 
 function readFileAsArrayBuffer(file: File): Promise<ArrayBuffer> {
@@ -292,14 +304,20 @@ export class AppToolsComparisonService {
     }
 
     const contentHashes: string[] = [];
+    let totalPayloadForHashBytes = 0;
     for (const file of files) {
-      const payloadForHash = await this.resolvePayloadForComparisonHash(file);
+      const remainingPayloadForHashBytes = MAX_COMPARISON_DECOMPRESSED_HASH_BYTES - totalPayloadForHashBytes;
+      const payloadForHash = await this.resolvePayloadForComparisonHash(file, remainingPayloadForHashBytes);
       if (!payloadForHash) {
+        return null;
+      }
+      totalPayloadForHashBytes += payloadForHash.byteLength;
+      if (totalPayloadForHashBytes > MAX_COMPARISON_DECOMPRESSED_HASH_BYTES) {
         return null;
       }
 
       const contentHash = await this.sha256Hex(buildToolComparisonContentHashParts(
-        file.extension,
+        getToolComparisonBaseExtension(file.extension),
         payloadForHash,
       ));
       if (!contentHash) {
@@ -311,13 +329,59 @@ export class AppToolsComparisonService {
     return this.sha256Hex(buildToolComparisonEventIDHashParts(userID, contentHashes));
   }
 
-  private async resolvePayloadForComparisonHash(file: PreparedComparisonFile): Promise<Uint8Array | null> {
+  private async resolvePayloadForComparisonHash(
+    file: PreparedComparisonFile,
+    maxPayloadForHashBytes: number,
+  ): Promise<Uint8Array | null> {
     const bytes = new Uint8Array(file.bytes);
-    if (file.extension.toLowerCase().endsWith('.gz') || hasGzipMagic(bytes)) {
+    if (maxPayloadForHashBytes <= 0) {
       return null;
+    }
+    if (file.extension.toLowerCase().endsWith('.gz') || hasGzipMagic(bytes)) {
+      return this.decompressGzipForComparisonHash(bytes, maxPayloadForHashBytes);
     }
 
     return bytes;
+  }
+
+  private async decompressGzipForComparisonHash(
+    bytes: Uint8Array,
+    maxPayloadForHashBytes: number,
+  ): Promise<Uint8Array | null> {
+    if (typeof globalThis.DecompressionStream !== 'function' || typeof globalThis.ReadableStream !== 'function') {
+      return null;
+    }
+
+    try {
+      const compressedStream = new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(bytes);
+          controller.close();
+        },
+      });
+      const gzipStream = new DecompressionStream('gzip') as unknown as ReadableWritablePair<Uint8Array, Uint8Array>;
+      const stream = compressedStream.pipeThrough(gzipStream);
+      const reader = stream.getReader();
+      const chunks: Uint8Array[] = [];
+      let totalLength = 0;
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) {
+          break;
+        }
+        totalLength += value.byteLength;
+        if (totalLength > maxPayloadForHashBytes) {
+          await reader.cancel().catch(() => undefined);
+          return null;
+        }
+        chunks.push(value);
+      }
+
+      return concatenateUint8ArrayChunks(chunks, totalLength);
+    } catch {
+      return null;
+    }
   }
 
   private async sha256Hex(parts: ReadonlyArray<string | Uint8Array>): Promise<string | null> {

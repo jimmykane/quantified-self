@@ -290,15 +290,20 @@ export class ToolsComparePageComponent implements OnInit {
   });
   readonly comparisonResultSummary = computed(() => {
     const total = Math.max(this.comparisonTotalCount(), this.comparisonItems().length);
+    const loaded = this.comparisonItems().length;
     const filtered = this.filteredComparisonCount();
-    if (total === 0) {
+    if (loaded === 0 && total === 0) {
       return 'No comparisons';
     }
     if (this.isComparisonFilterActive()) {
-      return filtered === total ? `${total} comparison${total === 1 ? '' : 's'}` : `${filtered} of ${total} comparisons`;
+      return `${filtered} of ${loaded} loaded comparison${loaded === 1 ? '' : 's'}`;
     }
-    const loaded = this.comparisonItems().length;
-    return loaded >= total ? `${total} comparison${total === 1 ? '' : 's'}` : `${loaded} of ${total} loaded`;
+    if (loaded >= total) {
+      return `${total} comparison${total === 1 ? '' : 's'}`;
+    }
+    const sort = this.comparisonSort();
+    const sortScopeLabel = sort.active === 'date' && sort.direction === 'desc' ? '' : '; sorting loaded rows';
+    return `${loaded} of ${total} loaded${sortScopeLabel}`;
   });
 
   ngOnInit(): void {

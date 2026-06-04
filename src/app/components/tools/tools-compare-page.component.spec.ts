@@ -671,6 +671,8 @@ describe('ToolsComparePageComponent', () => {
       filterActive: false,
       resultCount: 3,
     });
+    component.comparisonTotalCount.set(50);
+    expect(component.comparisonResultSummary()).toBe('3 of 50 loaded; sorting loaded rows');
 
     expect(component.comparisonPage()).toEqual({
       pageIndex: 0,
@@ -690,12 +692,36 @@ describe('ToolsComparePageComponent', () => {
 
     component.updateComparisonFilter('race');
     expect(component.filteredComparisonItems().map(item => item.id)).toEqual(['new-ready']);
+    expect(component.comparisonResultSummary()).toBe('1 of 3 loaded comparisons');
     expect(component.comparisonPage().pageIndex).toBe(0);
     expect(analyticsServiceMock.logToolCompareSavedAction).toHaveBeenCalledWith('filter', {
       status: 'applied',
       filterActive: true,
       resultCount: 1,
     });
+  });
+
+  it('labels saved comparison filtering as scoped to loaded rows', async () => {
+    userSubject.next(new User('user-1'));
+    await Promise.resolve();
+    await Promise.resolve();
+    component.comparisons.set([
+      makeComparisonEvent('comparison-1', {
+        title: 'Morning reference',
+      }),
+      makeComparisonEvent('comparison-2', {
+        title: 'Evening candidate',
+      }),
+    ]);
+    component.comparisonTotalCount.set(40);
+    component.updateComparisonFilter('missing');
+    fixture.detectChanges();
+
+    const text = fixture.nativeElement.textContent;
+    expect(text).toContain('Filter loaded comparisons');
+    expect(text).toContain('0 of 2 loaded comparisons');
+    expect(text).toContain('No loaded comparisons match this filter');
+    expect(component.comparisonPaginatorLength()).toBe(0);
   });
 
   it('exposes the full previous comparison title when the table truncates it', () => {
