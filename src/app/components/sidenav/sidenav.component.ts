@@ -124,4 +124,9 @@ export class SideNavComponent {
     this.sideNav.close();
   }
 
+  public openCompareFilesFromNav(): void {
+    this.analyticsService.logToolCompareEntry('side_nav', !!this.user);
+    this.closeSideNav();
+  }
+
 }

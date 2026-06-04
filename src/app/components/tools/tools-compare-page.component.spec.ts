@@ -8,6 +8,7 @@ import { ActivityTypes, DataActivityTypes, DataAscent, DataDescent, DataDistance
 import { AppEventInterface } from '@shared/app-event.interface';
 
 import { AppAuthService } from '../../authentication/app.auth.service';
+import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { AppEventService } from '../../services/app.event.service';
 import { AppToolsComparisonService } from '../../services/app.tools-comparison.service';
 import { LoggerService } from '../../services/logger.service';
@@ -96,6 +97,12 @@ describe('ToolsComparePageComponent', () => {
     createComparison: ReturnType<typeof vi.fn>;
     getBenchmarkComparisons: ReturnType<typeof vi.fn>;
   };
+  let analyticsServiceMock: {
+    logToolCompareCreate: ReturnType<typeof vi.fn>;
+    logToolCompareFileSelection: ReturnType<typeof vi.fn>;
+    logToolCompareSavedAction: ReturnType<typeof vi.fn>;
+    logToolCompareSignIn: ReturnType<typeof vi.fn>;
+  };
   let loggerMock: {
     warn: ReturnType<typeof vi.fn>;
   };
@@ -123,6 +130,12 @@ describe('ToolsComparePageComponent', () => {
       getActivitiesOnceByEvent: vi.fn().mockReturnValue(of([])),
       updateEventProperties: vi.fn().mockResolvedValue(undefined),
     };
+    analyticsServiceMock = {
+      logToolCompareCreate: vi.fn(),
+      logToolCompareFileSelection: vi.fn(),
+      logToolCompareSavedAction: vi.fn(),
+      logToolCompareSignIn: vi.fn(),
+    };
     loggerMock = {
       warn: vi.fn(),
     };
@@ -135,6 +148,7 @@ describe('ToolsComparePageComponent', () => {
           useValue: authServiceMock,
         },
         { provide: AppToolsComparisonService, useValue: comparisonServiceMock },
+        { provide: AppAnalyticsService, useValue: analyticsServiceMock },
         { provide: AppEventService, useValue: eventServiceMock },
         { provide: LoggerService, useValue: loggerMock },
         { provide: ActivatedRoute, useValue: { snapshot: { data: {} } } },
@@ -267,6 +281,7 @@ describe('ToolsComparePageComponent', () => {
   it('sends guests to login when they try to create a comparison', async () => {
     await component.createComparison();
 
+    expect(analyticsServiceMock.logToolCompareSignIn).toHaveBeenCalledWith('guest_create', 'compare');
     expect(authServiceMock.redirectUrl).toBe('/tools/compare');
     expect(routerNavigateSpy).toHaveBeenCalledWith(['/login'], {
       queryParams: { returnUrl: '/tools/compare' },
@@ -284,6 +299,32 @@ describe('ToolsComparePageComponent', () => {
     expect(inputTarget.value).toBe('');
     expect(component.selectedFiles()).toEqual([]);
     expect(component.canCreateComparison()).toBe(false);
+    expect(analyticsServiceMock.logToolCompareFileSelection).not.toHaveBeenCalled();
+  });
+
+  it('logs comparison file selection summaries without filenames', () => {
+    userSubject.next(new User('user-1'));
+    const inputTarget = {
+      files: [
+        new File([new Uint8Array([1])], 'review-alpha.fit'),
+        new File([new Uint8Array([2])], 'review-beta.gpx.gz'),
+        new File([new Uint8Array([3])], 'notes.txt'),
+      ],
+      value: 'selected',
+    };
+
+    component.onFilesSelected({ target: inputTarget } as unknown as Event);
+
+    expect(analyticsServiceMock.logToolCompareFileSelection).toHaveBeenCalledWith({
+      selectedCount: 3,
+      acceptedCount: 2,
+      rejectedCount: 1,
+      fileCountAfterSelection: 2,
+      fileTypes: ['fit', 'gpx'],
+      compressedCount: 1,
+      limitReached: false,
+    });
+    expect(inputTarget.value).toBe('');
   });
 
   it('creates a comparison and opens event details with benchmark auto-open', async () => {
@@ -297,8 +338,35 @@ describe('ToolsComparePageComponent', () => {
     await component.createComparison();
 
     expect(comparisonServiceMock.createComparison).toHaveBeenCalledWith([firstFile, secondFile], 'Review pair');
+    expect(analyticsServiceMock.logToolCompareCreate).toHaveBeenCalledWith('start', {
+      fileCount: 2,
+      hasCustomTitle: true,
+    });
+    expect(analyticsServiceMock.logToolCompareCreate).toHaveBeenCalledWith('success', {
+      fileCount: 2,
+      hasCustomTitle: true,
+      alreadyExists: false,
+    });
     expect(routerNavigateSpy).toHaveBeenCalledWith(['/user', 'user-1', 'event', 'event-1'], {
       queryParams: { benchmark: '1' },
+    });
+  });
+
+  it('logs validation failures before comparison creation starts', async () => {
+    userSubject.next(new User('user-1'));
+    component.selectedFiles.set([
+      new File([new Uint8Array([1])], 'one.txt'),
+      new File([new Uint8Array([2])], 'two.txt'),
+    ]);
+    comparisonServiceMock.validateFiles.mockReturnValueOnce('Only FIT, GPX, and TCX files are supported for comparisons.');
+
+    await component.createComparison();
+
+    expect(comparisonServiceMock.createComparison).not.toHaveBeenCalled();
+    expect(analyticsServiceMock.logToolCompareCreate).toHaveBeenCalledWith('validation_failure', {
+      fileCount: 2,
+      hasCustomTitle: false,
+      errorCategory: 'unsupported_format',
     });
   });
 
@@ -382,6 +450,43 @@ describe('ToolsComparePageComponent', () => {
     }));
   });
 
+  it('logs saved comparison open actions without event metadata', async () => {
+    const user = new User('user-1');
+    userSubject.next(user);
+    component.comparisons.set([
+      makeComparisonEvent('ready-comparison', {
+        title: 'Private title',
+        description: 'Private note',
+        benchmarkResults: { 'a_b': { score: 90 } },
+      }),
+      makeComparisonEvent('draft-comparison', {
+        title: 'Draft title',
+      }),
+    ]);
+
+    await component.openComparison(component.comparisonItems()[0], false);
+    await component.openComparison(component.comparisonItems()[1], true);
+
+    expect(analyticsServiceMock.logToolCompareSavedAction).toHaveBeenCalledWith('open_details', {
+      hasReport: true,
+      reportCount: 1,
+      filterActive: false,
+      resultCount: 2,
+    });
+    expect(analyticsServiceMock.logToolCompareSavedAction).toHaveBeenCalledWith('run_report', {
+      hasReport: false,
+      reportCount: 0,
+      filterActive: false,
+      resultCount: 2,
+    });
+    expect(routerNavigateSpy).toHaveBeenCalledWith(['/user', 'user-1', 'event', 'ready-comparison'], {
+      queryParams: undefined,
+    });
+    expect(routerNavigateSpy).toHaveBeenCalledWith(['/user', 'user-1', 'event', 'draft-comparison'], {
+      queryParams: { benchmark: '1' },
+    });
+  });
+
   it('filters, sorts, and paginates previous comparison rows', () => {
     component.comparisons.set([
       makeComparisonEvent('older-draft', {
@@ -423,13 +528,30 @@ describe('ToolsComparePageComponent', () => {
       'middle-ready',
       'new-ready',
     ]);
+    expect(analyticsServiceMock.logToolCompareSavedAction).toHaveBeenCalledWith('sort', {
+      sortColumn: 'sourceFiles',
+      sortDirection: 'asc',
+      filterActive: false,
+      resultCount: 3,
+    });
 
     component.onComparisonPageChange({ pageIndex: 1, pageSize: 1, length: 3, previousPageIndex: 0 });
     expect(component.paginatedComparisonItems().map(item => item.id)).toEqual(['middle-ready']);
+    expect(analyticsServiceMock.logToolCompareSavedAction).toHaveBeenCalledWith('page', {
+      pageIndex: 1,
+      pageSize: 1,
+      filterActive: false,
+      resultCount: 3,
+    });
 
     component.updateComparisonFilter('race');
     expect(component.filteredComparisonItems().map(item => item.id)).toEqual(['new-ready']);
     expect(component.comparisonPage().pageIndex).toBe(0);
+    expect(analyticsServiceMock.logToolCompareSavedAction).toHaveBeenCalledWith('filter', {
+      status: 'applied',
+      filterActive: true,
+      resultCount: 1,
+    });
   });
 
   it('exposes the full previous comparison title when the table truncates it', () => {
@@ -776,6 +898,13 @@ describe('ToolsComparePageComponent', () => {
     expect(component.editingDescriptionEventID()).toBe('comparison-1');
     expect(fixture.nativeElement.querySelector('.description-display')).toBeNull();
     expect(fixture.nativeElement.querySelector('.description-editor')).not.toBeNull();
+    expect(analyticsServiceMock.logToolCompareSavedAction).toHaveBeenCalledWith('description_edit', {
+      hasReport: false,
+      reportCount: 0,
+      filterActive: false,
+      resultCount: 1,
+      hadDescription: true,
+    });
   });
 
   it('saves previous comparison descriptions inline', async () => {
@@ -797,6 +926,14 @@ describe('ToolsComparePageComponent', () => {
     });
     expect(event.description).toBe('Updated note');
     expect(component.descriptionDrafts()).toEqual({});
+    expect(analyticsServiceMock.logToolCompareSavedAction).toHaveBeenCalledWith('description_save', {
+      hasReport: false,
+      reportCount: 0,
+      filterActive: false,
+      resultCount: 1,
+      status: 'success',
+      hadDescription: true,
+    });
   });
 
   it('keeps comparison row data stable while editing description drafts', () => {
@@ -866,6 +1003,20 @@ describe('ToolsComparePageComponent', () => {
 
     expect(eventServiceMock.deleteAllEventData).toHaveBeenCalledWith(user, 'comparison-3');
     expect(component.comparisonPage().pageIndex).toBe(0);
+    expect(analyticsServiceMock.logToolCompareSavedAction).toHaveBeenCalledWith('delete', {
+      hasReport: false,
+      reportCount: 0,
+      filterActive: false,
+      resultCount: 3,
+      status: 'confirmed',
+    });
+    expect(analyticsServiceMock.logToolCompareSavedAction).toHaveBeenCalledWith('delete', {
+      hasReport: false,
+      reportCount: 0,
+      filterActive: false,
+      resultCount: 2,
+      status: 'success',
+    });
   });
 
   it('uses source file metadata count fallbacks instead of showing fake zeroes for saved benchmarks', () => {

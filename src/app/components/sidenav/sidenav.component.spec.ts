@@ -51,6 +51,7 @@ describe('SideNavComponent', () => {
         };
         mockAnalyticsService = {
             logEvent: vi.fn(),
+            logToolCompareEntry: vi.fn(),
         };
         mockHapticsService = {
             selection: vi.fn(),
@@ -254,6 +255,8 @@ describe('SideNavComponent', () => {
             ?? compareFilesItem?.nativeElement.getAttribute('routerLink')
         ).toBe('/tools/compare');
         expect(compareFilesItem?.nativeElement.textContent).toContain('New');
+        compareFilesItem?.triggerEventHandler('click');
+        expect(mockAnalyticsService.logToolCompareEntry).toHaveBeenCalledWith('side_nav', false);
 
         mockUserService.user = vi.fn().mockReturnValue({
             uid: 'user-1',

@@ -1,5 +1,6 @@
-import { ChangeDetectionStrategy, Component } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
 import { SharedModule } from '../../modules/shared.module';
+import { AppAnalyticsService, ToolCompareEntrySource } from '../../services/app.analytics.service';
 
 interface ToolCard {
   title: string;
@@ -18,6 +19,8 @@ interface ToolCard {
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class ToolsHubPageComponent {
+  private analyticsService = inject(AppAnalyticsService);
+
   readonly tools: ToolCard[] = [
     {
       title: 'File comparison',
@@ -41,4 +44,14 @@ export class ToolsHubPageComponent {
       status: 'planned',
     },
   ];
+
+  logCompareEntry(source: ToolCompareEntrySource): void {
+    this.analyticsService.logToolCompareEntry(source);
+  }
+
+  logToolCardEntry(route: string): void {
+    if (route === '/tools/compare') {
+      this.logCompareEntry('tools_hub_card');
+    }
+  }
 }

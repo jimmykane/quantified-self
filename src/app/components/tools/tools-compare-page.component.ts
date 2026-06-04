@@ -24,6 +24,15 @@ import { catchError, firstValueFrom, of, switchMap, tap } from 'rxjs';
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { ConfirmationDialogComponent, ConfirmationDialogData } from '../confirmation-dialog/confirmation-dialog.component';
 import { SharedModule } from '../../modules/shared.module';
+import {
+  AppAnalyticsService,
+  ToolCompareCreateAnalytics,
+  ToolCompareErrorCategory,
+  ToolCompareFileSelectionAnalytics,
+  ToolCompareFileType,
+  ToolCompareSavedActionAnalytics,
+  ToolCompareSignInSource,
+} from '../../services/app.analytics.service';
 import { AppEventService } from '../../services/app.event.service';
 import { AppToolsComparisonService } from '../../services/app.tools-comparison.service';
 import { LoggerService } from '../../services/logger.service';
@@ -127,6 +136,7 @@ export class ToolsComparePageComponent implements OnInit {
   private dialog = inject(MatDialog);
   private snackBar = inject(MatSnackBar);
   private authService = inject(AppAuthService);
+  private analyticsService = inject(AppAnalyticsService);
   private eventService = inject(AppEventService);
   private comparisonService = inject(AppToolsComparisonService);
   private logger = inject(LoggerService);
@@ -167,6 +177,7 @@ export class ToolsComparePageComponent implements OnInit {
   readonly showSavedComparisonsFirst = this.initialTabIndex === 1;
   private readonly hydratingActivitySummaryEventIDs = new Set<string>();
   private readonly hydratedActivitySummaryEventIDs = new Set<string>();
+  private lastLoggedFilterActive = false;
 
   readonly selectedFileItems = computed<SelectedFileItem[]>(() =>
     this.selectedFiles().map((file, index) => ({
@@ -304,7 +315,10 @@ export class ToolsComparePageComponent implements OnInit {
     }
 
     const files = Array.from(input.files || []);
-    this.addFiles(files);
+    const summary = this.addFiles(files);
+    if (summary) {
+      this.analyticsService.logToolCompareFileSelection(summary);
+    }
     input.value = '';
   }
 
@@ -333,8 +347,17 @@ export class ToolsComparePageComponent implements OnInit {
   }
 
   updateComparisonFilter(value: string): void {
+    const nextFilterActive = value.trim().length > 0;
     this.comparisonFilter.set(value);
     this.resetComparisonPage();
+    if (nextFilterActive !== this.lastLoggedFilterActive) {
+      this.analyticsService.logToolCompareSavedAction('filter', {
+        status: nextFilterActive ? 'applied' : 'cleared',
+        filterActive: nextFilterActive,
+        resultCount: this.filteredComparisonCount(),
+      });
+      this.lastLoggedFilterActive = nextFilterActive;
+    }
   }
 
   onComparisonSortChange(sort: Sort): void {
@@ -342,12 +365,24 @@ export class ToolsComparePageComponent implements OnInit {
     const direction = sort.direction || (active === 'date' ? 'desc' : 'asc');
     this.comparisonSort.set({ active, direction });
     this.resetComparisonPage();
+    this.analyticsService.logToolCompareSavedAction('sort', {
+      sortColumn: active,
+      sortDirection: direction,
+      filterActive: this.isComparisonFilterActive(),
+      resultCount: this.filteredComparisonCount(),
+    });
   }
 
   onComparisonPageChange(event: PageEvent): void {
     this.comparisonPage.set({
       pageIndex: event.pageIndex,
       pageSize: event.pageSize,
+    });
+    this.analyticsService.logToolCompareSavedAction('page', {
+      pageIndex: event.pageIndex,
+      pageSize: event.pageSize,
+      filterActive: this.isComparisonFilterActive(),
+      resultCount: this.filteredComparisonCount(),
     });
   }
 
@@ -361,6 +396,9 @@ export class ToolsComparePageComponent implements OnInit {
     }
 
     this.editingDescriptionEventID.set(item.id);
+    this.analyticsService.logToolCompareSavedAction('description_edit', this.getComparisonSavedActionAnalytics(item, {
+      hadDescription: !!item.description,
+    }));
   }
 
   cancelDescriptionEdit(item: ComparisonListItem): void {
@@ -420,10 +458,18 @@ export class ToolsComparePageComponent implements OnInit {
       this.clearDescriptionDraft(item.id);
       this.clearDescriptionEdit(item.id);
       this.snackBar.open('Description saved.', undefined, { duration: 2000 });
+      this.analyticsService.logToolCompareSavedAction('description_save', this.getComparisonSavedActionAnalytics(item, {
+        status: 'success',
+        hadDescription: !!item.description,
+      }));
     } catch (error) {
       this.clearDescriptionDraft(item.id);
       this.clearDescriptionEdit(item.id);
       this.snackBar.open('Could not save description.', undefined, { duration: 3000 });
+      this.analyticsService.logToolCompareSavedAction('description_save', this.getComparisonSavedActionAnalytics(item, {
+        status: 'failure',
+        hadDescription: !!item.description,
+      }));
     } finally {
       this.savingDescriptionEventID.set(null);
     }
@@ -436,22 +482,31 @@ export class ToolsComparePageComponent implements OnInit {
 
     const user = this.currentUser();
     if (!user) {
-      await this.signIn('/tools/compare');
+      await this.signIn('/tools/compare', 'guest_create');
       return;
     }
 
     const validationError = this.comparisonService.validateFiles(this.selectedFiles());
     if (validationError) {
       this.snackBar.open(validationError, undefined, { duration: 3000 });
+      this.analyticsService.logToolCompareCreate('validation_failure', {
+        ...this.getComparisonCreateAnalytics(),
+        errorCategory: this.resolveComparisonErrorCategory(validationError),
+      });
       return;
     }
 
     this.isCreating.set(true);
+    this.analyticsService.logToolCompareCreate('start', this.getComparisonCreateAnalytics());
     try {
       const result = await this.comparisonService.createComparison(
         this.selectedFiles(),
         this.comparisonTitle(),
       );
+      this.analyticsService.logToolCompareCreate('success', {
+        ...this.getComparisonCreateAnalytics(),
+        alreadyExists: result.alreadyExists === true,
+      });
       this.selectedFiles.set([]);
       this.comparisonTitle.set('');
       this.snackBar.open(result.alreadyExists ? 'Existing comparison opened.' : 'Comparison created.', undefined, { duration: 2000 });
@@ -461,6 +516,10 @@ export class ToolsComparePageComponent implements OnInit {
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Could not create comparison.';
       this.snackBar.open(message, 'Close', { duration: 5000 });
+      this.analyticsService.logToolCompareCreate('failure', {
+        ...this.getComparisonCreateAnalytics(),
+        errorCategory: this.resolveComparisonErrorCategory(error),
+      });
     } finally {
       this.isCreating.set(false);
     }
@@ -469,10 +528,14 @@ export class ToolsComparePageComponent implements OnInit {
   async openComparison(item: ComparisonListItem, benchmark: boolean): Promise<void> {
     const user = this.currentUser();
     if (!user) {
-      await this.signIn('/tools/compare/saved');
+      await this.signIn('/tools/compare/saved', 'saved_action');
       return;
     }
 
+    this.analyticsService.logToolCompareSavedAction(
+      benchmark ? (item.hasReport ? 'open_report' : 'run_report') : 'open_details',
+      this.getComparisonSavedActionAnalytics(item),
+    );
     await this.router.navigate(['/user', user.uid, 'event', item.id], {
       queryParams: benchmark ? { benchmark: '1' } : undefined,
     });
@@ -502,31 +565,105 @@ export class ToolsComparePageComponent implements OnInit {
       return;
     }
 
+    this.analyticsService.logToolCompareSavedAction('delete', this.getComparisonSavedActionAnalytics(item, {
+      status: 'confirmed',
+    }));
     this.deletingEventID.set(item.id);
     try {
       await this.eventService.deleteAllEventData(user, item.id);
       this.comparisons.update(events => events.filter(event => event.getID() !== item.id));
       this.resetComparisonPage();
       this.snackBar.open('Comparison deleted.', undefined, { duration: 2000 });
+      this.analyticsService.logToolCompareSavedAction('delete', this.getComparisonSavedActionAnalytics(item, {
+        status: 'success',
+      }));
     } catch (error) {
       this.snackBar.open('Could not delete comparison.', undefined, { duration: 3000 });
+      this.analyticsService.logToolCompareSavedAction('delete', this.getComparisonSavedActionAnalytics(item, {
+        status: 'failure',
+      }));
     } finally {
       this.deletingEventID.set(null);
     }
   }
 
-  async signIn(redirectUrl = '/tools/compare'): Promise<void> {
+  async signIn(redirectUrl = '/tools/compare', source: ToolCompareSignInSource = 'guest_cta'): Promise<void> {
+    this.analyticsService.logToolCompareSignIn(source, redirectUrl === '/tools/compare/saved' ? 'saved' : 'compare');
     this.authService.redirectUrl = redirectUrl;
     await this.router.navigate(['/login'], { queryParams: { returnUrl: redirectUrl } });
   }
 
-  private addFiles(files: File[]): void {
+  private getComparisonCreateAnalytics(): ToolCompareCreateAnalytics {
+    return {
+      fileCount: this.selectedFiles().length,
+      hasCustomTitle: this.comparisonTitle().trim().length > 0,
+    };
+  }
+
+  private getComparisonSavedActionAnalytics(
+    item: ComparisonListItem,
+    overrides: ToolCompareSavedActionAnalytics = {},
+  ): ToolCompareSavedActionAnalytics {
+    return {
+      hasReport: item.hasReport,
+      reportCount: item.reportCount,
+      filterActive: this.isComparisonFilterActive(),
+      resultCount: this.filteredComparisonCount(),
+      ...overrides,
+    };
+  }
+
+  private isComparisonFilterActive(): boolean {
+    return this.comparisonFilter().trim().length > 0;
+  }
+
+  private resolveComparisonErrorCategory(error: unknown): ToolCompareErrorCategory {
+    const message = (error instanceof Error ? error.message : `${error ?? ''}`).toLowerCase();
+    if (message.includes('select at least')) {
+      return 'too_few_files';
+    }
+    if (message.includes('up to') || message.includes('at once')) {
+      return 'too_many_files';
+    }
+    if (message.includes('only fit') || message.includes('unsupported') || message.includes('format')) {
+      return 'unsupported_format';
+    }
+    if (message.includes('duplicate')) {
+      return 'duplicate_source';
+    }
+    if (message.includes('empty')) {
+      return 'empty_file';
+    }
+    if (message.includes('too large') || message.includes('larger than')) {
+      return 'file_size';
+    }
+    if (message.includes('limit reached') || message.includes('quota')) {
+      return 'quota';
+    }
+    if (message.includes('authenticated') || message.includes('authorized') || message.includes('sign in')) {
+      return 'auth';
+    }
+    if (message.includes('app check') || message.includes('appcheck')) {
+      return 'app_check';
+    }
+    if (message.includes('network') || message.includes('failed to fetch') || message.includes('temporarily unavailable')) {
+      return 'network';
+    }
+    return 'unknown';
+  }
+
+  private addFiles(files: File[]): ToolCompareFileSelectionAnalytics | null {
     if (this.isCreating() || !this.currentUser() || !files.length) {
-      return;
+      return null;
     }
 
     const nextFiles = [...this.selectedFiles()];
+    const acceptedFileTypes: ToolCompareFileType[] = [];
     const rejectedNames: string[] = [];
+    const previousFileCount = nextFiles.length;
+    const compressedCount = files
+      .map(file => this.resolveExtensionFromFilename(file.name))
+      .filter(extension => extension.endsWith('.gz')).length;
     let rejectedForLimit = false;
 
     for (const file of files) {
@@ -537,12 +674,13 @@ export class ToolsComparePageComponent implements OnInit {
 
       const extension = this.resolveExtensionFromFilename(file.name);
       const baseExtension = extension.endsWith('.gz') ? extension.slice(0, -3) : extension;
-      if (!['fit', 'gpx', 'tcx'].includes(baseExtension)) {
+      if (!this.isToolCompareFileType(baseExtension)) {
         rejectedNames.push(file.name || 'Selected file');
         continue;
       }
 
       nextFiles.push(file);
+      acceptedFileTypes.push(baseExtension);
     }
 
     this.selectedFiles.set(nextFiles);
@@ -551,6 +689,21 @@ export class ToolsComparePageComponent implements OnInit {
     } else if (rejectedNames.length > 0) {
       this.snackBar.open('Only FIT, GPX, and TCX files are supported.', undefined, { duration: 3000 });
     }
+
+    const acceptedCount = nextFiles.length - previousFileCount;
+    return {
+      selectedCount: files.length,
+      acceptedCount,
+      rejectedCount: files.length - acceptedCount,
+      fileCountAfterSelection: nextFiles.length,
+      fileTypes: acceptedFileTypes,
+      compressedCount,
+      limitReached: rejectedForLimit,
+    };
+  }
+
+  private isToolCompareFileType(extension: string): extension is ToolCompareFileType {
+    return extension === 'fit' || extension === 'gpx' || extension === 'tcx';
   }
 
   private async hydrateMissingActivitySummaryRows(user: User, eventIDs: string[]): Promise<void> {
