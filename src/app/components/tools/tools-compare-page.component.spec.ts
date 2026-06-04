@@ -13,6 +13,7 @@ import { AppEventService } from '../../services/app.event.service';
 import { AppToolsComparisonService } from '../../services/app.tools-comparison.service';
 import { LoggerService } from '../../services/logger.service';
 import { ToolsComparePageComponent } from './tools-compare-page.component';
+import { AppEventColorService } from '../../services/color/app.event.color.service';
 
 function makeComparisonEvent(id: string, overrides: {
   title?: string;
@@ -85,7 +86,7 @@ describe('ToolsComparePageComponent', () => {
   let routerNavigateSpy: ReturnType<typeof vi.spyOn>;
   let eventServiceMock: {
     deleteAllEventData: ReturnType<typeof vi.fn>;
-    getActivitiesOnceByEvent: ReturnType<typeof vi.fn>;
+    getActivitiesOnceByEventWithOptions: ReturnType<typeof vi.fn>;
     updateEventProperties: ReturnType<typeof vi.fn>;
   };
   let authServiceMock: {
@@ -95,7 +96,11 @@ describe('ToolsComparePageComponent', () => {
   let comparisonServiceMock: {
     validateFiles: ReturnType<typeof vi.fn>;
     createComparison: ReturnType<typeof vi.fn>;
-    getBenchmarkComparisons: ReturnType<typeof vi.fn>;
+    getBenchmarkComparisonCount: ReturnType<typeof vi.fn>;
+    getBenchmarkComparisonPage: ReturnType<typeof vi.fn>;
+  };
+  let eventColorServiceMock: {
+    getActivityColor: ReturnType<typeof vi.fn>;
   };
   let analyticsServiceMock: {
     logToolCompareCreate: ReturnType<typeof vi.fn>;
@@ -123,12 +128,35 @@ describe('ToolsComparePageComponent', () => {
         uploadLimit: 100,
         uploadCountAfterWrite: 1,
       }),
-      getBenchmarkComparisons: vi.fn().mockReturnValue(of([])),
+      getBenchmarkComparisonCount: vi.fn().mockReturnValue(of(0)),
+      getBenchmarkComparisonPage: vi.fn().mockReturnValue(of({
+        events: [],
+        nextCursor: null,
+        hasMore: false,
+      })),
     };
     eventServiceMock = {
       deleteAllEventData: vi.fn().mockResolvedValue(true),
-      getActivitiesOnceByEvent: vi.fn().mockReturnValue(of([])),
+      getActivitiesOnceByEventWithOptions: vi.fn().mockReturnValue(of([])),
       updateEventProperties: vi.fn().mockResolvedValue(undefined),
+    };
+    eventColorServiceMock = {
+      getActivityColor: vi.fn((_activities, activity) => {
+        const activityID = activity?.getID?.();
+        if (activityID === 'activity-1') {
+          return '#123456';
+        }
+        if (activityID === 'activity-2') {
+          return '#abcdef';
+        }
+        if (activityID === 'activity-3') {
+          return '#654321';
+        }
+        if (activityID === 'activity-4') {
+          return '#fedcba';
+        }
+        return '#16B4EA';
+      }),
     };
     analyticsServiceMock = {
       logToolCompareCreate: vi.fn(),
@@ -150,6 +178,7 @@ describe('ToolsComparePageComponent', () => {
         { provide: AppToolsComparisonService, useValue: comparisonServiceMock },
         { provide: AppAnalyticsService, useValue: analyticsServiceMock },
         { provide: AppEventService, useValue: eventServiceMock },
+        { provide: AppEventColorService, useValue: eventColorServiceMock },
         { provide: LoggerService, useValue: loggerMock },
         { provide: ActivatedRoute, useValue: { snapshot: { data: {} } } },
       ],
@@ -175,7 +204,7 @@ describe('ToolsComparePageComponent', () => {
     expect(text).not.toContain('No files selected');
     expect(text).not.toContain('Sign in to view saved comparisons.');
     expect(component.guestSignInRedirectUrl).toBe('/tools/compare');
-    expect(comparisonServiceMock.getBenchmarkComparisons).not.toHaveBeenCalled();
+    expect(comparisonServiceMock.getBenchmarkComparisonPage).not.toHaveBeenCalled();
   });
 
   it('does not render the signed-in workspace for guests', () => {
@@ -184,51 +213,155 @@ describe('ToolsComparePageComponent', () => {
     expect(fixture.nativeElement.textContent).not.toContain('Sign in to view saved comparisons.');
   });
 
-  it('loads saved benchmark comparisons for signed-in users', () => {
+  it('renders a neutral auth state before the route auth resolver completes', () => {
+    component.authResolved.set(false);
+    component.firebaseSignedIn.set(false);
+    fixture.detectChanges();
+
+    const text = fixture.nativeElement.textContent;
+    expect(text).toContain('Checking account');
+    expect(text).not.toContain('Sign in to compare files');
+    expect(text).not.toContain('New comparison');
+  });
+
+  it('renders the signed-in workspace while the app user profile is loading', () => {
+    component.authResolved.set(true);
+    component.firebaseSignedIn.set(true);
+    fixture.detectChanges();
+
+    const text = fixture.nativeElement.textContent;
+    expect(text).toContain('Compare files');
+    expect(text).toContain('New comparison');
+    expect(text).toContain('Loading your account');
+    expect(text).toContain('Loading comparisons');
+    expect(text).not.toContain('Sign in to compare files');
+    expect(comparisonServiceMock.getBenchmarkComparisonPage).not.toHaveBeenCalled();
+
+    const addFilesButton = Array.from((fixture.nativeElement as HTMLElement).querySelectorAll('button'))
+      .find(button => button.textContent?.includes('Add files')) as HTMLButtonElement | undefined;
+    expect(addFilesButton?.disabled).toBe(true);
+  });
+
+  it('returns to the guest experience when auth signs out before the app user profile loads', () => {
+    component.authResolved.set(true);
+    component.firebaseSignedIn.set(true);
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.textContent).toContain('Loading your account');
+
+    userSubject.next(null);
+    fixture.detectChanges();
+
+    expect(component.firebaseSignedIn()).toBe(false);
+    expect(fixture.nativeElement.textContent).toContain('Sign in to compare files');
+    expect(fixture.nativeElement.textContent).not.toContain('Loading your account');
+  });
+
+  it('loads the first saved benchmark comparison page for signed-in users', async () => {
     const user = new User('user-1');
     userSubject.next(user);
+    await Promise.resolve();
     fixture.detectChanges();
 
     expect(fixture.nativeElement.textContent).toContain('Compare files');
     expect(fixture.nativeElement.textContent).toContain('New comparison');
-    expect(fixture.nativeElement.textContent).toContain('Previous comparisons');
+    expect(fixture.nativeElement.textContent).toContain('No saved comparisons yet');
+    expect(fixture.nativeElement.textContent).not.toContain('Previous comparisons');
     expect(fixture.nativeElement.textContent).not.toContain('Create one saved benchmark event from multiple source files');
     expect(fixture.nativeElement.querySelector('mat-tab-group')).toBeNull();
-    expect(comparisonServiceMock.getBenchmarkComparisons).toHaveBeenCalledWith(user);
+    expect(comparisonServiceMock.getBenchmarkComparisonCount).toHaveBeenCalledWith(user);
+    expect(comparisonServiceMock.getBenchmarkComparisonPage).toHaveBeenCalledWith(user, { pageSize: 25 });
   });
 
-  it('renders previous comparisons before upload controls when the saved route is focused', () => {
+  it('loads later saved benchmark comparison pages with stored cursors', async () => {
+    const user = new User('user-1');
+    const nextCursor = { id: 'page-1-last-doc' };
+    const firstPageEvents = Array.from({ length: 25 }, (_value, index) =>
+      makeComparisonEvent(`page-1-comparison-${index + 1}`, {
+        startDate: new Date(Date.UTC(2026, 0, 31 - index)),
+      }),
+    );
+    const secondPageEvent = makeComparisonEvent('page-2-comparison-1', {
+      startDate: new Date('2026-01-01T00:00:00.000Z'),
+    });
+    comparisonServiceMock.getBenchmarkComparisonCount.mockReturnValue(of(26));
+    comparisonServiceMock.getBenchmarkComparisonPage
+      .mockReturnValueOnce(of({
+        events: firstPageEvents,
+        nextCursor,
+        hasMore: true,
+      }))
+      .mockReturnValueOnce(of({
+        events: [secondPageEvent],
+        nextCursor: null,
+        hasMore: false,
+      }));
+
+    userSubject.next(user);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(component.comparisonPaginatorLength()).toBe(26);
+    expect(component.paginatedComparisonItems()).toHaveLength(25);
+
+    await component.onComparisonPageChange({
+      pageIndex: 1,
+      pageSize: 25,
+      length: 26,
+      previousPageIndex: 0,
+    });
+
+    expect(comparisonServiceMock.getBenchmarkComparisonPage).toHaveBeenNthCalledWith(1, user, {
+      pageSize: 25,
+    });
+    expect(comparisonServiceMock.getBenchmarkComparisonPage).toHaveBeenNthCalledWith(2, user, {
+      pageSize: 25,
+      cursor: nextCursor,
+    });
+    expect(component.paginatedComparisonItems().map(item => item.id)).toEqual(['page-2-comparison-1']);
+  });
+
+  it('renders the saved comparisons panel before upload controls when the saved route is focused', async () => {
     Object.defineProperty(component, 'showSavedComparisonsFirst', {
       configurable: true,
       value: true,
     });
     userSubject.next(new User('user-1'));
+    await Promise.resolve();
     fixture.detectChanges();
 
     const text = fixture.nativeElement.textContent;
-    expect(text.indexOf('Previous comparisons')).toBeLessThan(text.indexOf('New comparison'));
+    expect(text.indexOf('No saved comparisons yet')).toBeLessThan(text.indexOf('New comparison'));
+    expect(text).not.toContain('Previous comparisons');
   });
 
-  it('clears the saved comparisons loading state after a live query emission', () => {
-    const liveComparisons$ = new Subject<any[]>();
-    comparisonServiceMock.getBenchmarkComparisons.mockReturnValue(liveComparisons$);
+  it('clears the saved comparisons loading state after the first page resolves', async () => {
+    const savedPage$ = new Subject<any>();
+    comparisonServiceMock.getBenchmarkComparisonPage.mockReturnValue(savedPage$);
 
     userSubject.next(new User('user-1'));
     expect(component.isLoadingComparisons()).toBe(true);
 
-    liveComparisons$.next([]);
+    savedPage$.next({
+      events: [],
+      nextCursor: null,
+      hasMore: false,
+    });
+    savedPage$.complete();
+    await Promise.resolve();
 
     expect(component.isLoadingComparisons()).toBe(false);
   });
 
-  it('logs saved comparison load errors so missing-index URLs are visible', () => {
+  it('logs saved comparison load errors so missing-index URLs are visible', async () => {
     const missingIndexError = {
       code: 'failed-precondition',
       message: 'The query requires an index. Create it here: https://console.firebase.google.com/index-url',
     };
-    comparisonServiceMock.getBenchmarkComparisons.mockReturnValue(throwError(() => missingIndexError));
+    comparisonServiceMock.getBenchmarkComparisonPage.mockReturnValue(throwError(() => missingIndexError));
 
     userSubject.next(new User('user-1'));
+    await Promise.resolve();
 
     expect(component.isLoadingComparisons()).toBe(false);
     expect(loggerMock.warn).toHaveBeenCalledWith(
@@ -453,6 +586,8 @@ describe('ToolsComparePageComponent', () => {
   it('logs saved comparison open actions without event metadata', async () => {
     const user = new User('user-1');
     userSubject.next(user);
+    await Promise.resolve();
+    await Promise.resolve();
     component.comparisons.set([
       makeComparisonEvent('ready-comparison', {
         title: 'Private title',
@@ -487,7 +622,7 @@ describe('ToolsComparePageComponent', () => {
     });
   });
 
-  it('filters, sorts, and paginates previous comparison rows', () => {
+  it('filters, sorts, and paginates previous comparison rows', async () => {
     component.comparisons.set([
       makeComparisonEvent('older-draft', {
         title: 'Older draft',
@@ -535,7 +670,14 @@ describe('ToolsComparePageComponent', () => {
       resultCount: 3,
     });
 
-    component.onComparisonPageChange({ pageIndex: 1, pageSize: 1, length: 3, previousPageIndex: 0 });
+    expect(component.comparisonPage()).toEqual({
+      pageIndex: 0,
+      pageSize: 25,
+    });
+    expect(component.comparisonPageSizeOptions).toEqual([10, 25, 50, 100]);
+
+    component.comparisonPage.set({ pageIndex: 0, pageSize: 1 });
+    await component.onComparisonPageChange({ pageIndex: 1, pageSize: 1, length: 3, previousPageIndex: 0 });
     expect(component.paginatedComparisonItems().map(item => item.id)).toEqual(['middle-ready']);
     expect(analyticsServiceMock.logToolCompareSavedAction).toHaveBeenCalledWith('page', {
       pageIndex: 1,
@@ -668,6 +810,7 @@ describe('ToolsComparePageComponent', () => {
     expect(longCourse?.activityTypesLabel).toBe('Cycling');
     expect(longCourse?.activitySummaries.map(summary => ({
       deviceLabel: summary.deviceLabel,
+      deviceColor: summary.deviceColor,
       activityTypeLabel: summary.activityTypeLabel,
       distanceLabel: summary.distanceLabel,
       ascentLabel: summary.ascentLabel,
@@ -675,6 +818,7 @@ describe('ToolsComparePageComponent', () => {
     }))).toEqual([
       {
         deviceLabel: 'Garmin Edge 3130',
+        deviceColor: '#123456',
         activityTypeLabel: 'Cycling',
         distanceLabel: '10.00 km',
         ascentLabel: '120 m',
@@ -682,6 +826,7 @@ describe('ToolsComparePageComponent', () => {
       },
       {
         deviceLabel: 'Suunto Race',
+        deviceColor: '#abcdef',
         activityTypeLabel: 'Cycling',
         distanceLabel: '10.02 km',
         ascentLabel: '121 m',
@@ -694,13 +839,20 @@ describe('ToolsComparePageComponent', () => {
     expect((fixture.nativeElement as HTMLElement).textContent).toContain('Descent');
     expect((fixture.nativeElement as HTMLElement).textContent).toContain('Garmin Edge 3130');
     expect((fixture.nativeElement as HTMLElement).textContent).toContain('10.02 km');
-    const sportTypeLines = Array.from((fixture.nativeElement as HTMLElement).querySelectorAll('.summary-type-line'))
+    const deviceLines = Array.from((fixture.nativeElement as HTMLElement).querySelectorAll('.device-summary-line'))
       .map(line => ({
-        device: line.querySelector('.summary-type-device')?.textContent?.trim(),
-        type: line.querySelector('.summary-type-value')?.textContent?.trim(),
+        label: line.querySelector('.device-name-label')?.textContent?.trim(),
+        style: line.getAttribute('style') || '',
       }));
-    expect(sportTypeLines).toContainEqual({ device: 'Garmin Edge 3130:', type: 'Cycling' });
-    expect(sportTypeLines).toContainEqual({ device: 'Suunto Race:', type: 'Cycling' });
+    expect(deviceLines).toContainEqual({ label: 'Garmin Edge 3130', style: '--device-accent-color: #123456;' });
+    expect(deviceLines).toContainEqual({ label: 'Suunto Race', style: '--device-accent-color: #abcdef;' });
+    expect((fixture.nativeElement as HTMLElement).querySelectorAll('.device-name-swatch').length).toBeGreaterThanOrEqual(2);
+    const sportTypeLines = Array.from((fixture.nativeElement as HTMLElement).querySelectorAll('.summary-type-line'))
+      .map(line => line.textContent?.trim());
+    expect((fixture.nativeElement as HTMLElement).querySelector('.summary-type-device')).toBeNull();
+    expect(sportTypeLines).toContain('Cycling');
+    expect(sportTypeLines).toContain('Running');
+    expect(longCourse?.activityTypesTitle).toBe('Cycling');
     expect(longCourse?.distanceTitle).toContain('Suunto Race: 10.02 km');
 
     component.onComparisonSortChange({ active: 'distance', direction: 'asc' });
@@ -768,15 +920,14 @@ describe('ToolsComparePageComponent', () => {
     ]);
 
     const sportTypeLines = Array.from((fixture.nativeElement as HTMLElement).querySelectorAll('.summary-type-line'))
-      .map(line => ({
-        device: line.querySelector('.summary-type-device')?.textContent?.trim(),
-        type: line.querySelector('.summary-type-value')?.textContent?.trim(),
-      }));
-    expect(sportTypeLines).toContainEqual({ device: 'Garmin Edge:', type: 'Cycling' });
-    expect(sportTypeLines).toContainEqual({ device: 'Suunto Race:', type: 'Running' });
+      .map(line => line.textContent?.trim());
+    expect((fixture.nativeElement as HTMLElement).querySelector('.summary-type-device')).toBeNull();
+    expect(sportTypeLines).toContain('Cycling');
+    expect(sportTypeLines).toContain('Running');
+    expect(item.activityTypesTitle).toBe('Cycling\nRunning');
   });
 
-  it('hydrates draft previous comparison devices from linked activities on visible rows', async () => {
+  it('hydrates previous comparison report rows cache-first when activity summaries are missing', async () => {
     const user = new User('user-1');
     const activity = {
       getID: () => 'activity-1',
@@ -785,12 +936,46 @@ describe('ToolsComparePageComponent', () => {
         swInfo: '3130',
       },
     };
-    eventServiceMock.getActivitiesOnceByEvent.mockReturnValueOnce(of([activity]));
+    eventServiceMock.getActivitiesOnceByEventWithOptions.mockReturnValueOnce(of([activity]));
 
     userSubject.next(user);
+    await Promise.resolve();
+    await Promise.resolve();
     component.comparisons.set([
       makeComparisonEvent('comparison-1', {
         title: 'Activity-backed devices',
+        benchmarkDevices: ['garmin edge mtb'],
+        benchmarkResults: {
+          pair: {
+            referenceName: 'Garmin Edge Mtb',
+            testName: 'Suunto Race',
+          },
+        },
+      }),
+    ]);
+    fixture.detectChanges();
+
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(eventServiceMock.getActivitiesOnceByEventWithOptions).toHaveBeenCalledWith(
+      user,
+      'comparison-1',
+      { preferCache: true, warmServer: false },
+    );
+    expect(component.comparisonItems()[0].devicesLabel).toContain('Garmin Edge Mtb 3130');
+    expect(component.comparisonItems()[0].activitySummaries[0].deviceLabel).toBe('Garmin Edge Mtb 3130');
+  });
+
+  it('does not hydrate draft rows that already have event-level device metadata', async () => {
+    const user = new User('user-1');
+
+    userSubject.next(user);
+    await Promise.resolve();
+    await Promise.resolve();
+    component.comparisons.set([
+      makeComparisonEvent('comparison-1', {
+        title: 'Draft with metadata devices',
         benchmarkDevices: ['garmin edge mtb'],
       }),
     ]);
@@ -799,14 +984,14 @@ describe('ToolsComparePageComponent', () => {
     await Promise.resolve();
     await Promise.resolve();
 
-    expect(eventServiceMock.getActivitiesOnceByEvent).toHaveBeenCalledWith(user, 'comparison-1');
-    expect(component.comparisonItems()[0].devicesLabel).toBe('Garmin Edge Mtb 3130');
+    expect(eventServiceMock.getActivitiesOnceByEventWithOptions).not.toHaveBeenCalled();
+    expect(component.comparisonItems()[0].devicesLabel).toBe('Garmin Edge Mtb');
   });
 
   it('does not repeatedly retry previous comparison activity summary hydration after a failed activity read', async () => {
     const user = new User('user-1');
     const readError = new Error('activity read failed');
-    eventServiceMock.getActivitiesOnceByEvent.mockImplementation(() => {
+    eventServiceMock.getActivitiesOnceByEventWithOptions.mockImplementation(() => {
       throw readError;
     });
 
@@ -828,7 +1013,7 @@ describe('ToolsComparePageComponent', () => {
     fixture.detectChanges();
     await Promise.resolve();
 
-    expect(eventServiceMock.getActivitiesOnceByEvent).toHaveBeenCalledTimes(1);
+    expect(eventServiceMock.getActivitiesOnceByEventWithOptions).toHaveBeenCalledTimes(1);
     expect(loggerMock.warn).toHaveBeenCalledWith(
       '[ToolsComparePageComponent] Could not hydrate comparison activity summaries.',
       { eventID: 'comparison-1', error: readError },
@@ -839,7 +1024,7 @@ describe('ToolsComparePageComponent', () => {
     const user = new User('user-1');
     const firstActivities$ = new Subject<unknown[]>();
     const secondActivities$ = new Subject<unknown[]>();
-    eventServiceMock.getActivitiesOnceByEvent
+    eventServiceMock.getActivitiesOnceByEventWithOptions
       .mockReturnValueOnce(firstActivities$)
       .mockReturnValueOnce(secondActivities$);
 
@@ -855,20 +1040,24 @@ describe('ToolsComparePageComponent', () => {
     fixture.detectChanges();
     await Promise.resolve();
 
-    expect(eventServiceMock.getActivitiesOnceByEvent).toHaveBeenCalledTimes(1);
+    expect(eventServiceMock.getActivitiesOnceByEventWithOptions).toHaveBeenCalledTimes(1);
 
     component.updateComparisonFilter('activity');
     fixture.detectChanges();
     await Promise.resolve();
 
-    expect(eventServiceMock.getActivitiesOnceByEvent).toHaveBeenCalledTimes(1);
+    expect(eventServiceMock.getActivitiesOnceByEventWithOptions).toHaveBeenCalledTimes(1);
 
     firstActivities$.next([]);
     firstActivities$.complete();
     await Promise.resolve();
 
-    expect(eventServiceMock.getActivitiesOnceByEvent).toHaveBeenCalledTimes(2);
-    expect(eventServiceMock.getActivitiesOnceByEvent).toHaveBeenLastCalledWith(user, 'comparison-2');
+    expect(eventServiceMock.getActivitiesOnceByEventWithOptions).toHaveBeenCalledTimes(2);
+    expect(eventServiceMock.getActivitiesOnceByEventWithOptions).toHaveBeenLastCalledWith(
+      user,
+      'comparison-2',
+      { preferCache: true, warmServer: false },
+    );
 
     secondActivities$.next([]);
     secondActivities$.complete();
@@ -888,10 +1077,12 @@ describe('ToolsComparePageComponent', () => {
 
     expect(fixture.nativeElement.querySelector('.description-display')).not.toBeNull();
     expect(fixture.nativeElement.querySelector('.description-editor')).toBeNull();
+    expect(fixture.nativeElement.querySelector('.description-display mat-icon')).toBeNull();
 
     const editButton = fixture.nativeElement.querySelector(
       'button[aria-label="Edit comparison description"]',
     ) as HTMLButtonElement;
+    expect(editButton.textContent).toContain('Original note');
     editButton.click();
     fixture.detectChanges();
 
@@ -907,9 +1098,30 @@ describe('ToolsComparePageComponent', () => {
     });
   });
 
+  it('renders missing comparison descriptions as an add note button', () => {
+    userSubject.next(new User('user-1'));
+    component.comparisons.set([
+      makeComparisonEvent('comparison-1', {
+        title: 'Comparison',
+        description: '',
+        startDate: new Date('2026-01-01T00:00:00.000Z'),
+      }),
+    ]);
+    fixture.detectChanges();
+
+    const addButton = fixture.nativeElement.querySelector(
+      'button[aria-label="Add comparison description"]',
+    ) as HTMLButtonElement;
+
+    expect(addButton.textContent?.trim()).toBe('Add note');
+    expect(addButton.querySelector('mat-icon')).toBeNull();
+  });
+
   it('saves previous comparison descriptions inline', async () => {
     const user = new User('user-1');
     userSubject.next(user);
+    await Promise.resolve();
+    await Promise.resolve();
     const event = makeComparisonEvent('comparison-1', {
       title: 'Comparison',
       description: 'Original note',
@@ -987,6 +1199,8 @@ describe('ToolsComparePageComponent', () => {
   it('resets pagination after deleting a comparison from a later page', async () => {
     const user = new User('user-1');
     userSubject.next(user);
+    await Promise.resolve();
+    await Promise.resolve();
     (component as any).dialog = {
       open: vi.fn().mockReturnValue({
         afterClosed: () => of(true),
@@ -997,7 +1211,8 @@ describe('ToolsComparePageComponent', () => {
       makeComparisonEvent('comparison-2'),
       makeComparisonEvent('comparison-3'),
     ]);
-    component.onComparisonPageChange({ pageIndex: 1, pageSize: 2, length: 3, previousPageIndex: 0 });
+    component.comparisonPage.set({ pageIndex: 0, pageSize: 2 });
+    await component.onComparisonPageChange({ pageIndex: 1, pageSize: 2, length: 3, previousPageIndex: 0 });
 
     await component.deleteComparison(component.comparisonItems()[2]);
 

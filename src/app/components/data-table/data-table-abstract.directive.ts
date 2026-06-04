@@ -166,6 +166,7 @@ export interface StatRowElement {
   'Average Cadence'?: string,
   'Average Power'?: string,
   'Device Names'?: string,
+  'Device Name Items'?: Array<{ label: string; color: string; trackKey: string }>,
   'Merged Event': boolean,
   'Actions': boolean,
   Description?: string,

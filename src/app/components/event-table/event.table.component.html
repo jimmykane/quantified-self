@@ -151,7 +151,17 @@
               <span class="description-text">{{ row[column] }}</span>
               }
               @if (column === 'Device Names') {
-              <span class="device-names-text" [matTooltip]="row[column]" [matTooltipDisabled]="!row[column]">{{ row[column] }}</span>
+              <span class="device-names-list" [matTooltip]="row[column]" [matTooltipDisabled]="!row[column]">
+                @for (device of (row['Device Name Items'] || []); track device.trackKey) {
+                <span class="device-name-token" [style.--device-accent-color]="device.color">
+                  <span class="device-name-swatch" aria-hidden="true"></span>
+                  <span class="device-name-label">{{ device.label }}</span>
+                </span>
+                }
+                @if (!row['Device Name Items']?.length) {
+                <span class="device-names-text">{{ row[column] }}</span>
+                }
+              </span>
               }
               @if (column !== 'Description' && column !== 'Device Names') {
               {{ row[column] }}

@@ -50,6 +50,20 @@ export interface GetEventsOnceResult {
   source: EventsOnceSource;
 }
 
+export type EventQueryCursor = QueryDocumentSnapshot<DocumentData>;
+
+export interface GetEventsPageOptions {
+  startAfterCursor?: EventQueryCursor | null;
+}
+
+export interface GetEventsPageResult {
+  events: AppEventInterface[];
+  source: EventsOnceSource;
+  firstCursor: EventQueryCursor | null;
+  lastCursor: EventQueryCursor | null;
+  hasMore: boolean;
+}
+
 interface EventQuerySeed {
   eventsById: Map<string, AppEventInterface>;
   fingerprintsById: Map<string, string>;
@@ -653,6 +667,37 @@ export class AppEventService implements OnDestroy {
     }
 
     return from(this.fetchEventsOnceCacheFirst(q, user.uid, queryStart, warmServer, queryKey, seedLiveQuery));
+  }
+
+  public getEventsPageOnceByWithMeta(
+    user: User,
+    whereClauses: { fieldPath: string | any, opStr: any, value: any }[] = [],
+    orderByField: string = 'startDate',
+    asc: boolean = false,
+    pageSize: number = 25,
+    options: GetEventsPageOptions = {},
+  ): Observable<GetEventsPageResult> {
+    const normalizedPageSize = Math.max(1, Math.floor(pageSize));
+    const q = this.getEventQueryForUser(
+      user,
+      whereClauses,
+      orderByField,
+      asc,
+      normalizedPageSize + 1,
+      options.startAfterCursor || undefined,
+    ) as Query<DocumentData>;
+    const queryStart = performance.now();
+
+    this.logger.log('[perf] app_event_service_get_events_page_once_query', {
+      userID: user.uid,
+      whereClauses: whereClauses.length,
+      orderByField,
+      asc,
+      pageSize: normalizedPageSize,
+      hasStartAfterCursor: !!options.startAfterCursor,
+    });
+
+    return from(this.fetchEventsPageOnceFromServer(q, user.uid, queryStart, normalizedPageSize));
   }
 
   /**
@@ -1509,6 +1554,38 @@ export class AppEventService implements OnDestroy {
     };
   }
 
+  private async fetchEventsPageOnceFromServer(
+    q: Query<DocumentData>,
+    userID: string,
+    queryStart: number,
+    pageSize: number,
+  ): Promise<GetEventsPageResult> {
+    const querySnapshot = await getDocs(q);
+    const pageDocs = querySnapshot.docs.slice(0, pageSize);
+    this.logger.info('[perf] app_event_service_get_events_page_once_get_docs', {
+      durationMs: Number((performance.now() - queryStart).toFixed(2)),
+      snapshots: querySnapshot?.size || 0,
+      returnedDocs: pageDocs.length,
+      fromCache: querySnapshot?.metadata?.fromCache,
+      hasPendingWrites: querySnapshot?.metadata?.hasPendingWrites,
+      userID,
+      pageSize,
+    });
+
+    return {
+      events: this.deserializeEventsFromQueryDocs(
+        pageDocs,
+        userID,
+        'app_event_service_get_events_page_once_deserialize',
+        pageDocs.length,
+      ),
+      source: 'server',
+      firstCursor: pageDocs[0] || null,
+      lastCursor: pageDocs[pageDocs.length - 1] || null,
+      hasMore: querySnapshot.docs.length > pageSize,
+    };
+  }
+
   private warmEventsOnceServerQuery(q: any, userID: string): void {
     const warmStart = performance.now();
     void getDocs(q).then((snapshot) => {
@@ -1867,20 +1944,33 @@ export class AppEventService implements OnDestroy {
    * @todo Cache this result (e.g., in a Signal or BehaviorSubject) to avoid unnecessary server calls on every navigation.
    */
   public async getEventCount(user: User): Promise<number> {
+    return this.getEventCountBy(user);
+  }
+
+  public async getEventCountBy(
+    user: User,
+    whereClauses: { fieldPath: string | any, opStr: any, value: any }[] = [],
+  ): Promise<number> {
     const path = `users/${user.uid}/events`;
     const startedAt = performance.now();
     this.logger.info('[debug] app_event_service_event_count_request_start', {
       path,
+      whereClauses: whereClauses.length,
       source: 'server_aggregation',
       localCache: 'skipped_by_getCountFromServer',
     });
 
     try {
       const eventsRef = collection(this.firestore, path);
-      const snapshot = await getCountFromServer(query(eventsRef));
+      const countQuery = query(
+        eventsRef,
+        ...whereClauses.map(clause => where(clause.fieldPath, clause.opStr, clause.value)),
+      );
+      const snapshot = await getCountFromServer(countQuery);
       const count = snapshot.data().count;
       this.logger.info('[debug] app_event_service_event_count_request_success', {
         path,
+        whereClauses: whereClauses.length,
         source: 'server_aggregation',
         localCache: 'skipped_by_getCountFromServer',
         durationMs: Number((performance.now() - startedAt).toFixed(2)),
@@ -1890,6 +1980,7 @@ export class AppEventService implements OnDestroy {
     } catch (error: unknown) {
       this.logger.info('[debug] app_event_service_event_count_request_failed', {
         path,
+        whereClauses: whereClauses.length,
         source: 'server_aggregation',
         localCache: 'skipped_by_getCountFromServer',
         durationMs: Number((performance.now() - startedAt).toFixed(2)),

@@ -1,6 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { of } from 'rxjs';
+import { firstValueFrom, of } from 'rxjs';
 import { createHash } from 'node:crypto';
 
 import { AppToolsComparisonService } from './app.tools-comparison.service';
@@ -22,7 +22,7 @@ describe('AppToolsComparisonService', () => {
   let authMock: any;
   let appMock: any;
   let appCheckReadinessMock: Pick<AppCheckReadinessService, 'getToken'>;
-  let eventServiceMock: Pick<AppEventService, 'getEventsBy'>;
+  let eventServiceMock: Pick<AppEventService, 'getEventCountBy' | 'getEventsPageOnceByWithMeta'>;
   let fetchMock: any;
   let originalLocalhost: boolean;
   let originalUseFunctionsEmulator: boolean;
@@ -90,7 +90,12 @@ describe('AppToolsComparisonService', () => {
       getToken: vi.fn().mockResolvedValue('app-check-token'),
     };
     eventServiceMock = {
-      getEventsBy: vi.fn().mockReturnValue(of([])),
+      getEventCountBy: vi.fn().mockResolvedValue(3),
+      getEventsPageOnceByWithMeta: vi.fn().mockReturnValue(of({
+        events: [],
+        lastCursor: null,
+        hasMore: false,
+      })),
     };
 
     TestBed.configureTestingModule({
@@ -371,19 +376,35 @@ describe('AppToolsComparisonService', () => {
     );
   });
 
-  it('lists saved benchmark comparisons through AppEventService', () => {
+  it('counts saved benchmark comparisons through AppEventService', async () => {
     const user = new User('user-1');
 
-    service.getBenchmarkComparisons(user).subscribe();
+    const result = await firstValueFrom(service.getBenchmarkComparisonCount(user));
 
-    expect(eventServiceMock.getEventsBy).toHaveBeenCalledWith(
+    expect(result).toBe(3);
+    expect(eventServiceMock.getEventCountBy).toHaveBeenCalledWith(
+      user,
+      [
+        { fieldPath: 'mergeType', opStr: '==', value: 'benchmark' },
+      ],
+    );
+  });
+
+  it('loads saved benchmark comparison pages through AppEventService without a fixed list cap', () => {
+    const user = new User('user-1');
+    const cursor = { id: 'cursor-1' } as any;
+
+    service.getBenchmarkComparisonPage(user, { pageSize: 25, cursor }).subscribe();
+
+    expect(eventServiceMock.getEventsPageOnceByWithMeta).toHaveBeenCalledWith(
       user,
       [
         { fieldPath: 'mergeType', opStr: '==', value: 'benchmark' },
       ],
       'startDate',
       false,
-      100,
+      25,
+      { startAfterCursor: cursor },
     );
   });
 

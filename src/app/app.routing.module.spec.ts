@@ -3,6 +3,7 @@ import { routes } from './app.routing.module';
 import { authGuard } from './authentication/app.auth.guard';
 import { aiInsightsGuard } from './authentication/ai-insights.guard';
 import { onboardingGuard } from './authentication/onboarding.guard';
+import { toolsCompareAuthResolver } from './resolvers/tools-compare-auth.resolver';
 import { PUBLIC_FEATURE_PATHS, PUBLIC_GUIDE_PATHS } from './components/public-seo/public-seo-pages.content';
 
 describe('AppRoutingModule routes', () => {
@@ -129,6 +130,7 @@ describe('AppRoutingModule routes', () => {
 
     expect(compareRoute).toBeTruthy();
     expect(compareRoute?.canMatch).toBeUndefined();
+    expect(compareRoute?.resolve).toEqual({ toolsCompareAuth: toolsCompareAuthResolver });
     expect(compareRoute?.loadComponent).toBeTypeOf('function');
     expect(compareRoute?.data?.['title']).toBe('FIT, GPX, TCX File Comparison Tool');
     expect(compareRoute?.data?.['description']).toContain('one saved benchmark event');
@@ -138,6 +140,7 @@ describe('AppRoutingModule routes', () => {
     });
 
     expect(savedRoute).toBeTruthy();
+    expect(savedRoute?.resolve).toEqual({ toolsCompareAuth: toolsCompareAuthResolver });
     expect(savedRoute?.data?.['defaultTab']).toBe('saved');
     expect(savedRoute?.data?.['robots']).toBe('noindex, follow');
   });

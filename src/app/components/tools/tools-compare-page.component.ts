@@ -19,7 +19,7 @@ import {
 } from '@sports-alliance/sports-lib';
 import { AppEventInterface, BenchmarkResult } from '@shared/app-event.interface';
 import { resolveUnitAwareDisplayStat } from '@shared/unit-aware-display';
-import { catchError, firstValueFrom, of, switchMap, tap } from 'rxjs';
+import { firstValueFrom } from 'rxjs';
 
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { ConfirmationDialogComponent, ConfirmationDialogData } from '../confirmation-dialog/confirmation-dialog.component';
@@ -33,9 +33,12 @@ import {
   ToolCompareSavedActionAnalytics,
   ToolCompareSignInSource,
 } from '../../services/app.analytics.service';
-import { AppEventService } from '../../services/app.event.service';
-import { AppToolsComparisonService } from '../../services/app.tools-comparison.service';
+import { AppEventService, EventQueryCursor } from '../../services/app.event.service';
+import { AppToolsComparisonService, SavedBenchmarkComparisonsPage } from '../../services/app.tools-comparison.service';
 import { LoggerService } from '../../services/logger.service';
+import { ToolsCompareAuthResolverData } from '../../resolvers/tools-compare-auth.resolver';
+import { AppEventColorService } from '../../services/color/app.event.color.service';
+import { AppColors } from '../../services/color/app.colors';
 
 interface SelectedFileItem {
   index: number;
@@ -77,6 +80,7 @@ interface ComparisonListItem {
 interface ComparisonActivitySummary {
   id: string;
   deviceLabel: string;
+  deviceColor: string;
   activityTypeLabel: string;
   distanceLabel: string;
   ascentLabel: string;
@@ -139,6 +143,7 @@ export class ToolsComparePageComponent implements OnInit {
   private analyticsService = inject(AppAnalyticsService);
   private eventService = inject(AppEventService);
   private comparisonService = inject(AppToolsComparisonService);
+  private eventColorService = inject(AppEventColorService);
   private logger = inject(LoggerService);
 
   readonly selectedFiles = signal<File[]>([]);
@@ -146,6 +151,7 @@ export class ToolsComparePageComponent implements OnInit {
   readonly isCreating = signal(false);
   readonly currentUser = signal<User | null>(null);
   readonly comparisons = signal<AppEventInterface[]>([]);
+  readonly comparisonTotalCount = signal(0);
   readonly isLoadingComparisons = signal(false);
   readonly deletingEventID = signal<string | null>(null);
   readonly savingDescriptionEventID = signal<string | null>(null);
@@ -172,12 +178,35 @@ export class ToolsComparePageComponent implements OnInit {
     'reports',
     'actions',
   ];
+  private readonly resolvedAuthState = this.route.snapshot.data['toolsCompareAuth'] as ToolsCompareAuthResolverData | undefined;
   private readonly initialTabIndex = this.route.snapshot.data['defaultTab'] === 'saved' ? 1 : 0;
   readonly guestSignInRedirectUrl = this.initialTabIndex === 1 ? '/tools/compare/saved' : '/tools/compare';
   readonly showSavedComparisonsFirst = this.initialTabIndex === 1;
   private readonly hydratingActivitySummaryEventIDs = new Set<string>();
   private readonly hydratedActivitySummaryEventIDs = new Set<string>();
+  private loadedComparisonPages = new Map<number, AppEventInterface[]>();
+  private comparisonPageCursors = new Map<number, EventQueryCursor | null>([[0, null]]);
+  private comparisonLoadGeneration = 0;
   private lastLoggedFilterActive = false;
+  readonly authResolved = signal<boolean>(this.resolvedAuthState?.authResolved ?? true);
+  readonly firebaseSignedIn = signal(this.resolvedAuthState?.signedIn === true);
+  readonly isAuthResolving = computed(() => !this.authResolved());
+  readonly isSignedInProfileLoading = computed(() =>
+    this.authResolved()
+    && this.firebaseSignedIn()
+    && !this.currentUser(),
+  );
+  readonly showGuestExperience = computed(() =>
+    this.authResolved()
+    && !this.firebaseSignedIn()
+    && !this.currentUser(),
+  );
+  readonly showSignedInWorkspace = computed(() =>
+    this.firebaseSignedIn()
+    || !!this.currentUser(),
+  );
+  readonly uploadControlsDisabled = computed(() => this.isCreating() || this.isSignedInProfileLoading());
+  readonly isSavedComparisonsLoading = computed(() => this.isSignedInProfileLoading() || this.isLoadingComparisons());
 
   readonly selectedFileItems = computed<SelectedFileItem[]>(() =>
     this.selectedFiles().map((file, index) => ({
@@ -253,57 +282,49 @@ export class ToolsComparePageComponent implements OnInit {
   });
 
   readonly filteredComparisonCount = computed(() => this.filteredComparisonItems().length);
+  readonly comparisonPaginatorLength = computed(() => {
+    if (this.isComparisonFilterActive()) {
+      return this.filteredComparisonCount();
+    }
+    return Math.max(this.comparisonTotalCount(), this.comparisonItems().length);
+  });
   readonly comparisonResultSummary = computed(() => {
-    const total = this.comparisonItems().length;
+    const total = Math.max(this.comparisonTotalCount(), this.comparisonItems().length);
     const filtered = this.filteredComparisonCount();
     if (total === 0) {
       return 'No comparisons';
     }
-    return filtered === total ? `${total} comparison${total === 1 ? '' : 's'}` : `${filtered} of ${total} comparisons`;
+    if (this.isComparisonFilterActive()) {
+      return filtered === total ? `${total} comparison${total === 1 ? '' : 's'}` : `${filtered} of ${total} comparisons`;
+    }
+    const loaded = this.comparisonItems().length;
+    return loaded >= total ? `${total} comparison${total === 1 ? '' : 's'}` : `${loaded} of ${total} loaded`;
   });
 
   ngOnInit(): void {
     this.authService.user$
       .pipe(
         takeUntilDestroyed(this.destroyRef),
-        tap((user) => {
-          const previousUserID = this.currentUser()?.uid ?? null;
-          const nextUserID = user?.uid ?? null;
-          const authScopeChanged = previousUserID !== nextUserID;
-
-          this.currentUser.set(user);
-          this.isLoadingComparisons.set(!!user);
-          if (authScopeChanged) {
-            this.comparisons.set([]);
-            this.descriptionDrafts.set({});
-            this.editingDescriptionEventID.set(null);
-            this.hydratingActivitySummaryEventIDs.clear();
-            this.hydratedActivitySummaryEventIDs.clear();
-            this.resetComparisonPage();
-          }
-          if (!user || (previousUserID && previousUserID !== nextUserID)) {
-            this.selectedFiles.set([]);
-            this.comparisonTitle.set('');
-          }
-        }),
-        switchMap((user) => {
-          if (!user) {
-            return of([]);
-          }
-          return this.comparisonService.getBenchmarkComparisons(user).pipe(
-            tap(() => this.isLoadingComparisons.set(false)),
-            catchError((error) => {
-              this.isLoadingComparisons.set(false);
-              this.logger.warn('[ToolsComparePageComponent] Could not load saved comparisons.', error);
-              this.snackBar.open('Could not load saved comparisons.', undefined, { duration: 3000 });
-              return of([]);
-            }),
-          );
-        }),
       )
-      .subscribe((events) => {
-        this.comparisons.set(events);
-        this.resetComparisonPage();
+      .subscribe((user) => {
+        const previousUserID = this.currentUser()?.uid ?? null;
+        const nextUserID = user?.uid ?? null;
+        const authScopeChanged = previousUserID !== nextUserID;
+
+        this.authResolved.set(true);
+        this.firebaseSignedIn.set(!!user);
+        this.currentUser.set(user);
+
+        if (authScopeChanged) {
+          this.resetComparisonData();
+        }
+        if (!user || (previousUserID && previousUserID !== nextUserID)) {
+          this.selectedFiles.set([]);
+          this.comparisonTitle.set('');
+        }
+        if (user && (authScopeChanged || this.comparisons().length === 0)) {
+          void this.loadInitialComparisonPage(user);
+        }
       });
   }
 
@@ -373,13 +394,32 @@ export class ToolsComparePageComponent implements OnInit {
     });
   }
 
-  onComparisonPageChange(event: PageEvent): void {
-    this.comparisonPage.set({
-      pageIndex: event.pageIndex,
-      pageSize: event.pageSize,
-    });
+  async onComparisonPageChange(event: PageEvent): Promise<void> {
+    const currentPage = this.comparisonPage();
+    const pageSizeChanged = currentPage.pageSize !== event.pageSize;
+
+    if (pageSizeChanged) {
+      this.comparisonPage.set({
+        pageIndex: 0,
+        pageSize: event.pageSize,
+      });
+      const user = this.currentUser();
+      if (user) {
+        await this.loadInitialComparisonPage(user);
+      }
+    } else {
+      const pageReady = await this.ensureComparisonPageLoaded(event.pageIndex);
+      if (!pageReady) {
+        return;
+      }
+      this.comparisonPage.set({
+        pageIndex: event.pageIndex,
+        pageSize: event.pageSize,
+      });
+    }
+
     this.analyticsService.logToolCompareSavedAction('page', {
-      pageIndex: event.pageIndex,
+      pageIndex: pageSizeChanged ? 0 : event.pageIndex,
       pageSize: event.pageSize,
       filterActive: this.isComparisonFilterActive(),
       resultCount: this.filteredComparisonCount(),
@@ -449,12 +489,10 @@ export class ToolsComparePageComponent implements OnInit {
       await this.eventService.updateEventProperties(user, item.id, {
         description: nextDescription,
       });
-      this.comparisons.update(events => events.map((event) => {
-        if (event.getID() === item.id) {
-          event.description = nextDescription;
-        }
+      this.updateComparisonEventInLoadedRows(item.id, (event) => {
+        event.description = nextDescription;
         return event;
-      }));
+      });
       this.clearDescriptionDraft(item.id);
       this.clearDescriptionEdit(item.id);
       this.snackBar.open('Description saved.', undefined, { duration: 2000 });
@@ -571,7 +609,8 @@ export class ToolsComparePageComponent implements OnInit {
     this.deletingEventID.set(item.id);
     try {
       await this.eventService.deleteAllEventData(user, item.id);
-      this.comparisons.update(events => events.filter(event => event.getID() !== item.id));
+      this.removeComparisonEventFromLoadedRows(item.id);
+      this.comparisonTotalCount.update(total => Math.max(0, total - 1));
       this.resetComparisonPage();
       this.snackBar.open('Comparison deleted.', undefined, { duration: 2000 });
       this.analyticsService.logToolCompareSavedAction('delete', this.getComparisonSavedActionAnalytics(item, {
@@ -591,6 +630,183 @@ export class ToolsComparePageComponent implements OnInit {
     this.analyticsService.logToolCompareSignIn(source, redirectUrl === '/tools/compare/saved' ? 'saved' : 'compare');
     this.authService.redirectUrl = redirectUrl;
     await this.router.navigate(['/login'], { queryParams: { returnUrl: redirectUrl } });
+  }
+
+  private async loadInitialComparisonPage(user: User): Promise<void> {
+    const loadGeneration = ++this.comparisonLoadGeneration;
+    this.clearComparisonPageCache();
+    this.comparisonTotalCount.set(0);
+    this.isLoadingComparisons.set(true);
+
+    try {
+      const pageSize = this.comparisonPage().pageSize;
+      const [totalCount, firstPage] = await Promise.all([
+        firstValueFrom(this.comparisonService.getBenchmarkComparisonCount(user)),
+        firstValueFrom(this.comparisonService.getBenchmarkComparisonPage(user, { pageSize })),
+      ]);
+
+      if (!this.isCurrentComparisonLoad(loadGeneration, user)) {
+        return;
+      }
+
+      this.comparisonTotalCount.set(totalCount);
+      this.storeComparisonPage(0, firstPage);
+      this.comparisonPage.set({ pageIndex: 0, pageSize });
+    } catch (error) {
+      if (this.isCurrentComparisonLoad(loadGeneration, user)) {
+        this.handleComparisonLoadError(error);
+      }
+    } finally {
+      if (this.isCurrentComparisonLoad(loadGeneration, user)) {
+        this.isLoadingComparisons.set(false);
+      }
+    }
+  }
+
+  private async ensureComparisonPageLoaded(targetPageIndex: number): Promise<boolean> {
+    if (targetPageIndex <= 0 || this.loadedComparisonPages.has(targetPageIndex)) {
+      return true;
+    }
+
+    const user = this.currentUser();
+    if (!user) {
+      return true;
+    }
+
+    const loadGeneration = this.comparisonLoadGeneration;
+    this.isLoadingComparisons.set(true);
+
+    try {
+      const pageSize = this.comparisonPage().pageSize;
+      for (let pageIndex = 1; pageIndex <= targetPageIndex; pageIndex += 1) {
+        if (this.loadedComparisonPages.has(pageIndex)) {
+          continue;
+        }
+
+        const cursor = this.comparisonPageCursors.get(pageIndex);
+        if (!cursor) {
+          return false;
+        }
+
+        const page = await firstValueFrom(this.comparisonService.getBenchmarkComparisonPage(user, {
+          pageSize,
+          cursor,
+        }));
+        if (!this.isCurrentComparisonLoad(loadGeneration, user)) {
+          return false;
+        }
+
+        this.storeComparisonPage(pageIndex, page);
+        if (!page.hasMore) {
+          return pageIndex >= targetPageIndex;
+        }
+      }
+      return true;
+    } catch (error) {
+      if (this.isCurrentComparisonLoad(loadGeneration, user)) {
+        this.handleComparisonLoadError(error);
+      }
+      return false;
+    } finally {
+      if (this.isCurrentComparisonLoad(loadGeneration, user)) {
+        this.isLoadingComparisons.set(false);
+      }
+    }
+  }
+
+  private handleComparisonLoadError(error: unknown): void {
+    this.isLoadingComparisons.set(false);
+    this.logger.warn('[ToolsComparePageComponent] Could not load saved comparisons.', error);
+    this.snackBar.open('Could not load saved comparisons.', undefined, { duration: 3000 });
+  }
+
+  private storeComparisonPage(pageIndex: number, page: SavedBenchmarkComparisonsPage): void {
+    this.loadedComparisonPages.set(pageIndex, page.events);
+    if (page.nextCursor) {
+      this.comparisonPageCursors.set(pageIndex + 1, page.nextCursor);
+    } else {
+      this.comparisonPageCursors.delete(pageIndex + 1);
+    }
+    if (!page.hasMore) {
+      this.comparisonPageCursors.delete(pageIndex + 1);
+    }
+    this.syncComparisonPages();
+  }
+
+  private syncComparisonPages(): void {
+    const events = Array.from(this.loadedComparisonPages.entries())
+      .sort(([firstPageIndex], [secondPageIndex]) => firstPageIndex - secondPageIndex)
+      .flatMap(([, pageEvents]) => pageEvents);
+    this.comparisons.set(events);
+  }
+
+  private updateComparisonEventInLoadedRows(
+    eventID: string,
+    updateEvent: (event: AppEventInterface) => AppEventInterface,
+  ): void {
+    let updatedLoadedPage = false;
+    for (const [pageIndex, pageEvents] of this.loadedComparisonPages.entries()) {
+      const nextPageEvents = pageEvents.map((event) => {
+        if (event.getID() !== eventID) {
+          return event;
+        }
+        updatedLoadedPage = true;
+        return updateEvent(event);
+      });
+      this.loadedComparisonPages.set(pageIndex, nextPageEvents);
+    }
+
+    if (updatedLoadedPage) {
+      this.syncComparisonPages();
+      return;
+    }
+
+    this.comparisons.update(events => events.map((event) => {
+      if (event.getID() !== eventID) {
+        return event;
+      }
+      return updateEvent(event);
+    }));
+  }
+
+  private removeComparisonEventFromLoadedRows(eventID: string): void {
+    let removedLoadedPage = false;
+    for (const [pageIndex, pageEvents] of this.loadedComparisonPages.entries()) {
+      const nextPageEvents = pageEvents.filter(event => event.getID() !== eventID);
+      if (nextPageEvents.length !== pageEvents.length) {
+        removedLoadedPage = true;
+      }
+      this.loadedComparisonPages.set(pageIndex, nextPageEvents);
+    }
+
+    if (removedLoadedPage) {
+      this.syncComparisonPages();
+      return;
+    }
+
+    this.comparisons.update(events => events.filter(event => event.getID() !== eventID));
+  }
+
+  private clearComparisonPageCache(): void {
+    this.loadedComparisonPages = new Map<number, AppEventInterface[]>();
+    this.comparisonPageCursors = new Map<number, EventQueryCursor | null>([[0, null]]);
+  }
+
+  private resetComparisonData(): void {
+    this.comparisonLoadGeneration += 1;
+    this.clearComparisonPageCache();
+    this.comparisons.set([]);
+    this.comparisonTotalCount.set(0);
+    this.descriptionDrafts.set({});
+    this.editingDescriptionEventID.set(null);
+    this.hydratingActivitySummaryEventIDs.clear();
+    this.hydratedActivitySummaryEventIDs.clear();
+    this.isLoadingComparisons.set(false);
+    this.resetComparisonPage();
+  }
+
+  private isCurrentComparisonLoad(loadGeneration: number, user: User): boolean {
+    return this.comparisonLoadGeneration === loadGeneration && this.currentUser()?.uid === user.uid;
   }
 
   private getComparisonCreateAnalytics(): ToolCompareCreateAnalytics {
@@ -711,17 +927,21 @@ export class ToolsComparePageComponent implements OnInit {
 
     for (const eventID of eventIDs) {
       try {
-        const activities = await firstValueFrom(this.eventService.getActivitiesOnceByEvent(user, eventID));
+        const activities = await firstValueFrom(this.eventService.getActivitiesOnceByEventWithOptions(
+          user,
+          eventID,
+          { preferCache: true, warmServer: false },
+        ));
         if (!activities.length) {
           continue;
         }
 
-        this.comparisons.update(events => events.map((event) => {
-          if (event.getID() !== eventID || (event.getActivities?.() || []).length > 0) {
+        this.updateComparisonEventInLoadedRows(eventID, (event) => {
+          if ((event.getActivities?.() || []).length > 0) {
             return event;
           }
           return this.attachActivitiesToEvent(event, activities);
-        }));
+        });
       } catch (error) {
         this.logger.warn('[ToolsComparePageComponent] Could not hydrate comparison activity summaries.', { eventID, error });
       } finally {
@@ -741,7 +961,15 @@ export class ToolsComparePageComponent implements OnInit {
       return false;
     }
 
-    return item.activitySummaries.length === 0 || item.devicesLabel === 'Devices unknown' || !item.hasReport;
+    if (item.activitySummaries.length > 0) {
+      return false;
+    }
+
+    if (item.hasReport) {
+      return true;
+    }
+
+    return item.devicesLabel === 'Devices unknown';
   }
 
   private attachActivitiesToEvent(event: AppEventInterface, activities: ActivityInterface[]): AppEventInterface {
@@ -803,7 +1031,7 @@ export class ToolsComparePageComponent implements OnInit {
       devicesSort: deviceNames.length > 0 ? deviceNames.join(' ').toLowerCase() : '\uffff',
       activityTypesLabel,
       activityTypesSort: activityTypesLabel.toLowerCase(),
-      activityTypesTitle: this.formatSummaryTitle(activitySummaries, summary => summary.activityTypeLabel, 'Types unknown'),
+      activityTypesTitle: activityTypeLabels.length > 0 ? activityTypeLabels.join('\n') : 'Types unknown',
       distanceSort: this.getMetricSort(activitySummaries, 'distanceSort'),
       ascentSort: this.getMetricSort(activitySummaries, 'ascentSort'),
       descentSort: this.getMetricSort(activitySummaries, 'descentSort'),
@@ -893,6 +1121,7 @@ export class ToolsComparePageComponent implements OnInit {
 
     return activities.map((activity, index) => {
       const deviceLabel = this.resolveActivityDeviceLabel(activity, index);
+      const deviceColor = this.resolveActivityDeviceColor(activities, activity);
       const activityTypeLabel = this.resolveActivityTypeLabel(activity);
       const activityID = `${activity.getID?.() ?? ''}`.trim() || this.normalizeDeviceNameKey(deviceLabel) || 'activity';
       const distanceStat = this.getActivityStat(activity, DataDistance.type) || activity.getDistance?.();
@@ -905,6 +1134,7 @@ export class ToolsComparePageComponent implements OnInit {
       return {
         id: `${activityID}-${index}`,
         deviceLabel,
+        deviceColor,
         activityTypeLabel,
         distanceLabel,
         ascentLabel,
@@ -921,6 +1151,18 @@ export class ToolsComparePageComponent implements OnInit {
         ].join(' ').toLowerCase(),
       };
     });
+  }
+
+  private resolveActivityDeviceColor(activities: ActivityInterface[], activity: ActivityInterface): string {
+    try {
+      return this.eventColorService.getActivityColor(activities, activity) || AppColors.Blue;
+    } catch (error) {
+      this.logger.warn('[ToolsComparePageComponent] Could not resolve comparison activity color.', {
+        activityID: activity.getID?.() ?? null,
+        error,
+      });
+      return AppColors.Blue;
+    }
   }
 
   private resolveActivityDeviceLabel(activity: ActivityInterface, index: number): string {

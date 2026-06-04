@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { PRERENDERED_PUBLIC_ROUTES } from '../app.routes.server';
-import { isPublicStartupPath, shouldProvideClientHydrationForRuntime } from './public-startup-route';
+import {
+  isAuthSensitivePublicStartupPath,
+  isPublicStartupPath,
+  shouldProvideClientHydrationForRuntime,
+} from './public-startup-route';
 
 function toStartupPath(routePath: string): string {
   return routePath ? `/${routePath}` : '/';
@@ -25,6 +29,12 @@ describe('public-startup-route', () => {
 
   it('keeps the client-rendered saved comparisons route visible during auth startup', () => {
     expect(isPublicStartupPath('/tools/compare/saved')).toBe(true);
+  });
+
+  it('marks compare routes as auth-sensitive public startup paths', () => {
+    expect(isAuthSensitivePublicStartupPath('/tools/compare')).toBe(true);
+    expect(isAuthSensitivePublicStartupPath('/tools/compare/saved')).toBe(true);
+    expect(isAuthSensitivePublicStartupPath('/features/fit-gpx-tcx-file-analyzer')).toBe(false);
   });
 
   it('provides hydration while the server render serializes prerendered documents', () => {

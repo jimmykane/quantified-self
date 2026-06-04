@@ -1,4 +1,4 @@
-@if (authState !== null) {
+@if (authState !== null || renderPublicShellWhileAuthPending) {
 <!-- Circular Reveal Theme Overlay -->
 @if (themeOverlayActive) {
 <div class="theme-reveal-overlay" [ngClass]="themeOverlayClass">

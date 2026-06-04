@@ -1303,6 +1303,43 @@ describe('AppEventService', () => {
         expect(count).toBe(42);
     });
 
+    it('should return cursor-backed event pages without exposing the lookahead doc', async () => {
+        const user = { uid: 'user-page' } as any;
+        const cursor = { id: 'cursor-doc' } as any;
+        const docs = [
+            createQueryDoc('event-1', { name: 'Event 1', startDate: 1710000000000 }),
+            createQueryDoc('event-2', { name: 'Event 2', startDate: 1710003600000 }),
+            createQueryDoc('event-3', { name: 'Event 3', startDate: 1710007200000 }),
+        ];
+
+        (collection as Mock).mockReturnValue('events-ref');
+        (query as Mock).mockReturnValue('page-query');
+        (getDocs as Mock).mockResolvedValue({
+            docs,
+            size: docs.length,
+            metadata: {
+                fromCache: false,
+                hasPendingWrites: false,
+            },
+        });
+        mocks.getEventFromJSON.mockImplementation((json: Record<string, unknown>) => createMockEvent(json));
+
+        const result = await firstValueFrom(service.getEventsPageOnceByWithMeta(
+            user,
+            [{ fieldPath: 'mergeType', opStr: '==', value: 'benchmark' }],
+            'startDate',
+            false,
+            2,
+            { startAfterCursor: cursor },
+        ));
+
+        expect(getDocs).toHaveBeenCalledWith('page-query');
+        expect(result.events.map(event => event.getID())).toEqual(['event-1', 'event-2']);
+        expect(result.firstCursor).toBe(docs[0]);
+        expect(result.lastCursor).toBe(docs[1]);
+        expect(result.hasMore).toBe(true);
+    });
+
     it('should build Firestore query with startDate precedence, filters, and cursors', () => {
         const user = { uid: 'user-query' } as any;
         const startCursor = { id: 'start' } as any;
