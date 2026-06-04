@@ -315,6 +315,7 @@ describe('AppBenchmarkFlowService', () => {
     const result = createResult();
     const options: BenchmarkOptions = { autoAlignTime: true };
     const onResult = vi.fn();
+    const generationLifecycle: string[] = [];
 
     benchmarkService.generateBenchmark.mockResolvedValueOnce(result);
 
@@ -324,7 +325,9 @@ describe('AppBenchmarkFlowService', () => {
       ref: activityA,
       test: activityB,
       options,
-      onResult
+      onResult,
+      onGenerationStart: () => generationLifecycle.push('start'),
+      onGenerationComplete: (status) => generationLifecycle.push(`complete:${status}`),
     });
 
     const key = getBenchmarkPairKey(activityA.getID(), activityB.getID());
@@ -342,6 +345,7 @@ describe('AppBenchmarkFlowService', () => {
     expect(bottomSheet.open).toHaveBeenCalled();
     expect(analyticsService.logEvent).toHaveBeenCalledWith('benchmark_generate_start');
     expect(analyticsService.logEvent).toHaveBeenCalledWith('benchmark_generate_success');
+    expect(generationLifecycle).toEqual(['start', 'complete:success']);
   });
 
   it('skips persistence when no user is provided', async () => {
@@ -366,6 +370,7 @@ describe('AppBenchmarkFlowService', () => {
   it('logs failure analytics when benchmark generation fails', async () => {
     const event = createEvent();
     const options: BenchmarkOptions = { autoAlignTime: true };
+    const generationLifecycle: string[] = [];
 
     benchmarkService.generateBenchmark.mockRejectedValueOnce(new Error('boom'));
 
@@ -373,16 +378,20 @@ describe('AppBenchmarkFlowService', () => {
       event,
       ref: activityA,
       test: activityB,
-      options
+      options,
+      onGenerationStart: () => generationLifecycle.push('start'),
+      onGenerationComplete: (status) => generationLifecycle.push(`complete:${status}`),
     });
 
     expect(analyticsService.logEvent).toHaveBeenCalledWith('benchmark_generate_start');
     expect(analyticsService.logEvent).toHaveBeenCalledWith('benchmark_generate_failure');
+    expect(generationLifecycle).toEqual(['start', 'complete:failure']);
   });
 
   it('does not log no-overlap benchmark outcomes as errors', async () => {
     const event = createEvent();
     const options: BenchmarkOptions = { autoAlignTime: true };
+    const generationLifecycle: string[] = [];
 
     benchmarkService.generateBenchmark.mockRejectedValueOnce(new BenchmarkNoOverlapError());
 
@@ -390,7 +399,9 @@ describe('AppBenchmarkFlowService', () => {
       event,
       ref: activityA,
       test: activityB,
-      options
+      options,
+      onGenerationStart: () => generationLifecycle.push('start'),
+      onGenerationComplete: (status) => generationLifecycle.push(`complete:${status}`),
     });
 
     expect(snackBar.open).toHaveBeenLastCalledWith('Activities do not overlap in time.', 'Close');
@@ -400,5 +411,6 @@ describe('AppBenchmarkFlowService', () => {
     );
     expect(logger.error).not.toHaveBeenCalledWith('Benchmark flow failed', expect.any(BenchmarkNoOverlapError));
     expect(analyticsService.logEvent).toHaveBeenCalledWith('benchmark_generate_failure');
+    expect(generationLifecycle).toEqual(['start', 'complete:failure']);
   });
 });

@@ -134,6 +134,16 @@ describe('AppEventColorService', () => {
       expect(secondColor).not.toBe('#112233');
     });
 
+    it('should expose automatic colors without applying saved user preferences', () => {
+      const activities: any[] = [
+        { getID: () => '1', creator: { name: 'Suunto 0', swInfo: '3129' } },
+      ];
+      mockDeviceColorPreferenceService.getPreferredDeviceColor.mockReturnValue('#112233');
+
+      expect(service.getActivityColor(activities as any, activities[0] as any)).toBe('#112233');
+      expect(service.getAutomaticActivityColor(activities as any, activities[0] as any)).toBe(AppDeviceColors['Suunto 0']);
+    });
+
     it('should keep automatic variant colors for later duplicate device activities', () => {
       const activities: any[] = [
         { getID: () => '1', creator: { name: 'Garmin Edge', swInfo: '3129' } },

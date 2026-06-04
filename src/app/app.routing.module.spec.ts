@@ -127,17 +127,28 @@ describe('AppRoutingModule routes', () => {
     expect(toolsRoute?.loadComponent).toBeTypeOf('function');
     expect(toolsRoute?.data?.['title']).toBe('Workout Data Tools');
     expect(toolsRoute?.data?.['description']).toContain('compare FIT, GPX, and TCX files');
+    expect(toolsRoute?.data?.['description']).toContain('saved benchmark reports');
 
     expect(compareRoute).toBeTruthy();
     expect(compareRoute?.canMatch).toBeUndefined();
     expect(compareRoute?.resolve).toEqual({ toolsCompareAuth: toolsCompareAuthResolver });
     expect(compareRoute?.loadComponent).toBeTypeOf('function');
-    expect(compareRoute?.data?.['title']).toBe('FIT, GPX, TCX File Comparison Tool');
-    expect(compareRoute?.data?.['description']).toContain('one saved benchmark event');
+    expect(compareRoute?.data?.['title']).toBe('FIT, GPX, TCX File Comparison & Benchmark Tool');
+    expect(compareRoute?.data?.['description']).toContain('saved benchmark reports');
+    expect(compareRoute?.data?.['description']).toContain('GNSS, heart-rate, and altitude metrics');
     expect(compareRoute?.data?.['jsonLd']).toMatchObject({
       '@type': 'WebApplication',
+      name: 'FIT, GPX, TCX File Comparison & Benchmark Tool',
+      operatingSystem: 'Web',
       url: 'https://quantified-self.io/tools/compare',
+      offers: {
+        '@type': 'Offer',
+        price: '0',
+        priceCurrency: 'USD',
+      },
     });
+    const compareFeatureList = compareRoute?.data?.['jsonLd']?.['featureList'] as string[] | undefined;
+    expect(compareFeatureList).toContain('Review GNSS, heart-rate, and altitude benchmark metrics');
 
     expect(savedRoute).toBeTruthy();
     expect(savedRoute?.resolve).toEqual({ toolsCompareAuth: toolsCompareAuthResolver });

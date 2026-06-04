@@ -48,6 +48,16 @@ export class AppEventColorService {
    */
   public getActivityColor(activities: ActivityInterface[], activity: ActivityInterface): string {
     const activityID = activity.getID();
+    const preferredColor = this.deviceColorPreferenceService.getPreferredDeviceColor(activity);
+    if (preferredColor && this.isFirstActivityForPreferredDevice(activities, activity, activityID)) {
+      return preferredColor;
+    }
+
+    return this.getAutomaticActivityColor(activities, activity);
+  }
+
+  public getAutomaticActivityColor(activities: ActivityInterface[], activity: ActivityInterface): string {
+    const activityID = activity.getID();
     const creatorName = activity.creator.name || 'Unknown';
 
     // Get the index of the requested activity among all activities
@@ -61,11 +71,6 @@ export class AppEventColorService {
     if (activityIndex === -1) {
       this.logger.warn('[AppEventColorService] Activity not found in provided array, using default offset');
       activityIndex = activities.length + this.getColorSeedFromText(`${creatorName}-${activityID || 'no-id'}`);
-    }
-
-    const preferredColor = this.deviceColorPreferenceService.getPreferredDeviceColor(activity);
-    if (preferredColor && this.isFirstActivityForPreferredDevice(activities, activity, activityID)) {
-      return preferredColor;
     }
 
     let eventColorCache = this.colorCache.get(activities);

@@ -5,6 +5,7 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 import equal from 'fast-deep-equal';
 
 import {
+  DEVICE_COLOR_BY_NAME_LIMIT,
   normalizeDeviceColorByName,
   normalizeDeviceColorKey,
   normalizeDeviceColorValue,
@@ -173,7 +174,10 @@ export class DeviceColorPreferencesDialogComponent {
   }
 
   private buildChangeMap(): DeviceColorPreferenceChangeMap {
-    const normalizedStagedColorByName = normalizeDeviceColorByName(this.stagedColorByName());
+    const normalizedStagedColorByName = normalizeDeviceColorByName(
+      this.stagedColorByName(),
+      DEVICE_COLOR_BY_NAME_LIMIT + 1,
+    );
     const keys = new Set([
       ...Object.keys(this.originalColorByName),
       ...Object.keys(normalizedStagedColorByName),

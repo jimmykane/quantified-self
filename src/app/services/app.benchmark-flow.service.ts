@@ -21,6 +21,8 @@ interface BenchmarkFlowConfig {
   result?: BenchmarkResult;
   initialSelection?: ActivityInterface[];
   onResult?: (result: BenchmarkResult) => void;
+  onGenerationStart?: () => void;
+  onGenerationComplete?: (status: 'success' | 'failure') => void;
   hydrateStreamsForGeneration?: boolean;
 }
 
@@ -173,6 +175,8 @@ export class AppBenchmarkFlowService {
     options: BenchmarkOptions;
   }): Promise<void> {
     this.snackBar.open('Generating Benchmark...', undefined, { duration: 2000 });
+    config.onGenerationStart?.();
+    let generationSucceeded = false;
 
     try {
       const generationConfig = await this.resolveBenchmarkGenerationConfig(config);
@@ -223,6 +227,7 @@ export class AppBenchmarkFlowService {
       generationConfig.onResult?.(benchmarkResult);
       await this.openBenchmarkReport({ ...generationConfig, result: benchmarkResult });
       this.snackBar.open('Benchmark Generated & Saved!', undefined, { duration: 2000 });
+      generationSucceeded = true;
     } catch (error) {
       this.analyticsService.logEvent('benchmark_generate_failure');
       if (error instanceof BenchmarkNoOverlapError) {
@@ -233,6 +238,8 @@ export class AppBenchmarkFlowService {
 
       this.snackBar.open('Benchmark failed: ' + error, 'Close');
       this.logger.error('Benchmark flow failed', error);
+    } finally {
+      config.onGenerationComplete?.(generationSucceeded ? 'success' : 'failure');
     }
   }
 

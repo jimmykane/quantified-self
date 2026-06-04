@@ -114,6 +114,30 @@ describe('DeviceColorPreferencesDialogComponent', () => {
     expect(dialogRefMock.close).toHaveBeenCalledWith(true);
   });
 
+  it('passes over-limit staged additions to the service instead of silently dropping them', async () => {
+    const savedColors = Object.fromEntries(
+      Array.from({ length: 100 }, (_value, index) => [`device ${index}`, '#112233']),
+    );
+    deviceColorPreferenceServiceMock.deviceColorByName.mockReturnValue(savedColors);
+    createComponent({
+      devices: [
+        {
+          key: 'device 100',
+          label: 'Device 100',
+          automaticColor: '#123456',
+        },
+      ],
+      initialDeviceKey: 'device 100',
+    });
+
+    component.setSelectedDeviceColor('#16B4EA');
+    await component.apply();
+
+    expect(deviceColorPreferenceServiceMock.applyDeviceColorChanges).toHaveBeenCalledWith({
+      'device 100': '#16B4EA',
+    });
+  });
+
   it('stages a custom color and reset without saving until apply', async () => {
     createComponent();
 
