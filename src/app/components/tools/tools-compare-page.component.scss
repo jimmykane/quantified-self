@@ -952,6 +952,14 @@ button.benchmark-summary-stack:disabled {
   transform: translateY(1px);
 }
 
+.status-cell--error {
+  color: var(--mat-sys-error);
+}
+
+.status-cell--ready mat-icon {
+  color: var(--mat-sys-primary);
+}
+
 .status-label {
   display: block;
   line-height: 1.25rem;

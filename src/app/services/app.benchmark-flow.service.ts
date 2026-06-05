@@ -24,9 +24,11 @@ interface BenchmarkFlowConfig {
   onEventTagsSaved?: (tags: string[]) => void;
   reviewTagSuggestions?: string[];
   onGenerationStart?: () => void;
-  onGenerationComplete?: (status: 'success' | 'failure') => void;
+  onGenerationComplete?: (status: 'success' | 'failure', failureReason?: BenchmarkGenerationFailureReason) => void;
   hydrateStreamsForGeneration?: boolean;
 }
+
+export type BenchmarkGenerationFailureReason = 'no_overlap' | 'unknown';
 
 @Injectable({
   providedIn: 'root'
@@ -184,6 +186,7 @@ export class AppBenchmarkFlowService {
     this.snackBar.open('Generating Benchmark...', undefined, { duration: 2000 });
     config.onGenerationStart?.();
     let generationSucceeded = false;
+    let failureReason: BenchmarkGenerationFailureReason | undefined;
 
     try {
       const generationConfig = await this.resolveBenchmarkGenerationConfig(config);
@@ -238,15 +241,17 @@ export class AppBenchmarkFlowService {
     } catch (error) {
       this.analyticsService.logEvent('benchmark_generate_failure');
       if (error instanceof BenchmarkNoOverlapError) {
+        failureReason = 'no_overlap';
         this.snackBar.open(BENCHMARK_NO_OVERLAP_MESSAGE, 'Close');
         this.logger.info('Benchmark skipped because activities do not overlap in time.', error);
         return;
       }
 
+      failureReason = 'unknown';
       this.snackBar.open('Benchmark failed: ' + error, 'Close');
       this.logger.error('Benchmark flow failed', error);
     } finally {
-      config.onGenerationComplete?.(generationSucceeded ? 'success' : 'failure');
+      config.onGenerationComplete?.(generationSucceeded ? 'success' : 'failure', failureReason);
     }
   }
 

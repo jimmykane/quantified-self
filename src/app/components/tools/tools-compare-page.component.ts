@@ -43,6 +43,8 @@ import { AppEventColorService } from '../../services/color/app.event.color.servi
 import { AppColors } from '../../services/color/app.colors';
 import { AppDeviceColorPreferenceService } from '../../services/color/app-device-color-preference.service';
 import { AppBenchmarkFlowService } from '../../services/app.benchmark-flow.service';
+import type { BenchmarkGenerationFailureReason } from '../../services/app.benchmark-flow.service';
+import { BENCHMARK_NO_OVERLAP_MESSAGE } from '../../services/app.benchmark.service';
 import { AppHapticsService } from '../../services/app.haptics.service';
 import { BenchmarkReviewService } from '../../services/benchmark-review.service';
 import {
@@ -100,9 +102,19 @@ interface ComparisonListItem {
   benchmarkPairLabel: string;
   benchmarkPairTitle: string;
   statusLabel: string;
+  statusTitle: string;
+  statusIcon: string;
+  statusState: ComparisonStatusState;
   statusRank: number;
   filterText: string;
   event: AppEventInterface;
+}
+
+type ComparisonStatusState = 'draft' | 'ready' | 'error';
+
+interface ComparisonBenchmarkFailure {
+  type: 'no_overlap';
+  message: string;
 }
 
 interface ComparisonActivitySummary {
@@ -219,6 +231,7 @@ export class ToolsComparePageComponent implements OnInit {
   readonly savingDescriptionEventID = signal<string | null>(null);
   readonly editingDescriptionEventID = signal<string | null>(null);
   readonly benchmarkingEventID = signal<string | null>(null);
+  readonly benchmarkFailureByEventID = signal<Record<string, ComparisonBenchmarkFailure>>({});
   readonly descriptionDrafts = signal<Record<string, string>>({});
   readonly comparisonFilter = signal('');
   readonly comparisonDeviceFilter = signal('');
@@ -874,10 +887,23 @@ export class ToolsComparePageComponent implements OnInit {
       reviewTagSuggestions: this.comparisonTagFilterOptions().map(option => option.label),
       onResult: (benchmarkResult: BenchmarkResult) => this.applyBenchmarkResultToComparisonRow(item.id, benchmarkResult),
       onEventTagsSaved: (tags: string[]) => this.applyBenchmarkReviewTagsToComparisonRow(item.id, tags),
-      onGenerationStart: () => this.benchmarkingEventID.set(item.id),
-      onGenerationComplete: (status: 'success' | 'failure') => {
+      onGenerationStart: () => {
+        this.clearBenchmarkFailureForComparison(item.id);
+        this.benchmarkingEventID.set(item.id);
+      },
+      onGenerationComplete: (status: 'success' | 'failure', failureReason?: BenchmarkGenerationFailureReason) => {
         if (this.benchmarkingEventID() === item.id) {
           this.benchmarkingEventID.set(null);
+        }
+        if (status === 'success') {
+          this.clearBenchmarkFailureForComparison(item.id);
+          return;
+        }
+        if (failureReason === 'no_overlap') {
+          this.setBenchmarkFailureForComparison(item.id, {
+            type: 'no_overlap',
+            message: BENCHMARK_NO_OVERLAP_MESSAGE,
+          });
         }
         if (status === 'failure') {
           this.hapticsService.warning();
@@ -917,6 +943,7 @@ export class ToolsComparePageComponent implements OnInit {
       return;
     }
 
+    this.clearBenchmarkFailureForComparison(eventID);
     const pairKey = getBenchmarkPairKey(referenceId, testId);
     this.updateComparisonEventInLoadedRows(eventID, (event) => {
       const benchmarkResults = {
@@ -930,6 +957,24 @@ export class ToolsComparePageComponent implements OnInit {
       return event;
     });
     this.hapticsService.success();
+  }
+
+  private setBenchmarkFailureForComparison(eventID: string, failure: ComparisonBenchmarkFailure): void {
+    this.benchmarkFailureByEventID.update(failures => ({
+      ...failures,
+      [eventID]: failure,
+    }));
+  }
+
+  private clearBenchmarkFailureForComparison(eventID: string): void {
+    this.benchmarkFailureByEventID.update((failures) => {
+      if (!failures[eventID]) {
+        return failures;
+      }
+      const nextFailures = { ...failures };
+      delete nextFailures[eventID];
+      return nextFailures;
+    });
   }
 
   private applyBenchmarkReviewTagsToComparisonRow(eventID: string, tags: string[]): void {
@@ -1205,6 +1250,7 @@ export class ToolsComparePageComponent implements OnInit {
   }
 
   private removeComparisonEventFromLoadedRows(eventID: string): void {
+    this.clearBenchmarkFailureForComparison(eventID);
     let removedLoadedPage = false;
     for (const [pageIndex, pageEvents] of this.loadedComparisonPages.entries()) {
       const nextPageEvents = pageEvents.filter(event => event.getID() !== eventID);
@@ -1235,6 +1281,7 @@ export class ToolsComparePageComponent implements OnInit {
     this.descriptionDrafts.set({});
     this.editingDescriptionEventID.set(null);
     this.benchmarkingEventID.set(null);
+    this.benchmarkFailureByEventID.set({});
     this.comparisonFilter.set('');
     this.comparisonDeviceFilter.set('');
     this.comparisonActivityTypeFilter.set('');
@@ -1461,7 +1508,6 @@ export class ToolsComparePageComponent implements OnInit {
     const savedReportCount = Object.keys(benchmarkResults).length;
     const reportCount = savedReportCount || (comparisonEvent.benchmarkResult ? 1 : 0);
     const hasReport = reportCount > 0;
-    const statusLabel = hasReport ? 'Report ready' : 'Draft';
     const description = typeof event.description === 'string' ? event.description : '';
     const benchmarkReviewTags = this.benchmarkReviewService.getEventTags(event);
     const benchmarkReviewTagsTitle = benchmarkReviewTags.length > 0
@@ -1489,6 +1535,8 @@ export class ToolsComparePageComponent implements OnInit {
     const benchmarkPairLabel = this.formatBenchmarkPairLabel(primaryBenchmarkResult);
     const benchmarkPairTitle = this.formatBenchmarkPairTitle(primaryBenchmarkResult);
     const reportTitle = this.buildComparisonReportTitle(reportLabel, benchmarkPairTitle, hasReport);
+    const benchmarkFailure = this.benchmarkFailureByEventID()[eventID] ?? null;
+    const statusPresentation = this.resolveComparisonStatusPresentation(hasReport, benchmarkFailure);
     const reportContext = this.buildBenchmarkReportContext(reportCount, benchmarkPairTitle);
     const gnssBenchmark = this.buildGnssBenchmarkMetricCell(primaryBenchmarkResult, reportContext);
     const heartRateBenchmark = this.buildStreamBenchmarkMetricCell(
@@ -1545,8 +1593,11 @@ export class ToolsComparePageComponent implements OnInit {
       reportTitle,
       benchmarkPairLabel,
       benchmarkPairTitle,
-      statusLabel,
-      statusRank: hasReport ? 1 : 0,
+      statusLabel: statusPresentation.label,
+      statusTitle: statusPresentation.title,
+      statusIcon: statusPresentation.icon,
+      statusState: statusPresentation.state,
+      statusRank: statusPresentation.rank,
       filterText: [
         comparisonEvent.comparisonTitle || event.name || 'Benchmark comparison',
         devicesLabel,
@@ -1561,10 +1612,44 @@ export class ToolsComparePageComponent implements OnInit {
         event.startDate instanceof Date ? event.startDate.toISOString() : 'date unavailable',
         sourceFilesLabel,
         sourceFilesTitle,
-        statusLabel,
+        statusPresentation.label,
+        statusPresentation.title,
         reportLabel,
       ].join(' ').toLowerCase(),
       event,
+    };
+  }
+
+  private resolveComparisonStatusPresentation(
+    hasReport: boolean,
+    benchmarkFailure: ComparisonBenchmarkFailure | null,
+  ): { label: string; title: string; icon: string; state: ComparisonStatusState; rank: number } {
+    if (benchmarkFailure?.type === 'no_overlap') {
+      return {
+        label: 'No time overlap',
+        title: `Last benchmark attempt failed: ${benchmarkFailure.message} Choose overlapping activities and rerun the benchmark.`,
+        icon: 'error',
+        state: 'error',
+        rank: 2,
+      };
+    }
+
+    if (hasReport) {
+      return {
+        label: 'Report ready',
+        title: 'Benchmark report is ready.',
+        icon: 'check_circle',
+        state: 'ready',
+        rank: 1,
+      };
+    }
+
+    return {
+      label: 'Draft',
+      title: 'No benchmark report has been generated yet.',
+      icon: 'pending',
+      state: 'draft',
+      rank: 0,
     };
   }
 

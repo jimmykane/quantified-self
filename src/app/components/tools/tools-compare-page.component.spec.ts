@@ -1010,7 +1010,7 @@ describe('ToolsComparePageComponent', () => {
     const user = new User('user-1');
     let capturedConfig: {
       onGenerationStart?: () => void;
-      onGenerationComplete?: (status: 'success' | 'failure') => void;
+      onGenerationComplete?: (status: 'success' | 'failure', failureReason?: 'no_overlap' | 'unknown') => void;
     } | null = null;
     benchmarkFlowServiceMock.openBenchmarkSelectionDialog.mockImplementationOnce(async (config) => {
       capturedConfig = config;
@@ -1048,6 +1048,59 @@ describe('ToolsComparePageComponent', () => {
 
     expect(component.benchmarkingEventID()).toBeNull();
     expect(hapticsServiceMock.warning).toHaveBeenCalled();
+  });
+
+  it('shows no-overlap benchmark failures as a comparison row error', async () => {
+    const user = new User('user-1');
+    let capturedConfig: {
+      onGenerationStart?: () => void;
+      onGenerationComplete?: (status: 'success' | 'failure', failureReason?: 'no_overlap' | 'unknown') => void;
+    } | null = null;
+    benchmarkFlowServiceMock.openBenchmarkSelectionDialog.mockImplementationOnce(async (config) => {
+      capturedConfig = config;
+      config.onGenerationStart?.();
+      config.onGenerationComplete?.('failure', 'no_overlap');
+    });
+    userSubject.next(user);
+    await Promise.resolve();
+    await Promise.resolve();
+    component.comparisons.set([
+      makeComparisonEvent('draft-comparison', {
+        title: 'Draft title',
+        activities: [
+          makeActivity('activity-1', {
+            deviceName: 'Garmin Edge',
+            activityType: 'Cycling',
+          }),
+          makeActivity('activity-2', {
+            deviceName: 'Suunto Race',
+            activityType: 'Cycling',
+          }),
+        ],
+      }),
+    ]);
+
+    await component.openComparison(component.comparisonItems()[0], true);
+    fixture.detectChanges();
+
+    let item = component.comparisonItems()[0];
+    expect(item.statusLabel).toBe('No time overlap');
+    expect(item.statusIcon).toBe('error');
+    expect(item.statusState).toBe('error');
+    expect(item.statusTitle).toContain('Last benchmark attempt failed');
+    expect(item.statusTitle).toContain('Activities do not overlap in time.');
+    const statusCell = (fixture.nativeElement as HTMLElement).querySelector('.mat-column-status .status-cell') as HTMLElement;
+    expect(statusCell.classList.contains('status-cell--error')).toBe(true);
+    expect(statusCell.textContent).toContain('No time overlap');
+    expect(statusCell.getAttribute('title')).toContain('Choose overlapping activities');
+    expect(hapticsServiceMock.warning).toHaveBeenCalled();
+
+    capturedConfig?.onGenerationStart?.();
+    fixture.detectChanges();
+
+    item = component.comparisonItems()[0];
+    expect(item.statusLabel).toBe('Draft');
+    expect(item.statusState).toBe('draft');
   });
 
   it('filters, sorts, and paginates previous comparison rows', async () => {
