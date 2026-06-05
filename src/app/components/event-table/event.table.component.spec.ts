@@ -15,26 +15,31 @@ import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { LoggerService } from '../../services/logger.service';
 import { DatePipe } from '@angular/common';
 import { NO_ERRORS_SCHEMA } from '@angular/core';
-import { of, Subject, delay } from 'rxjs';
-import { User, EventInterface, DataPace, DataGradeAdjustedPace, DataSpeedAvg, ActivityTypes, DataDeviceNames } from '@sports-alliance/sports-lib';
+import { of, Subject } from 'rxjs';
+import { User, DataPace, DataSpeedAvg, ActivityTypes, DataDeviceNames } from '@sports-alliance/sports-lib';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { Analytics } from 'app/firebase/analytics';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-// Mock MatTableDataSource
-vi.mock('@angular/material/table', () => ({
-    MatTableDataSource: class {
-        data = [];
-        paginator = null;
-        sort = null;
-        sortingDataAccessor = null;
-        filter = '';
-        connect() { return of([]); }
-        disconnect() { }
-    }
-}));
+// Mock MatTableDataSource without hiding MatTableModule from shared Material imports.
+vi.mock('@angular/material/table', async (importOriginal) => {
+    const actual = await importOriginal<typeof import('@angular/material/table')>();
+    const { of: observableOf } = await import('rxjs');
+    return {
+        ...actual,
+        MatTableDataSource: class {
+            data = [];
+            paginator = null;
+            sort = null;
+            sortingDataAccessor = null;
+            filter = '';
+            connect() { return observableOf([]); }
+            disconnect() { }
+        }
+    };
+});
 // Mock Analytics module
 vi.mock('app/firebase/analytics', () => ({
     Analytics: class { },
@@ -52,7 +57,7 @@ class MockActivity {
     getStartDate() { return this.startDate; }
     toJSON() { return {}; }
     getID() { return this.id; }
-    setID(id: any) { return this; }
+    setID(_id: any) { return this; }
     getStats() { return []; }
 }
 
