@@ -64,6 +64,10 @@ const sitemapXml = readFileSync(resolve(__dirname, 'sitemap.xml'), 'utf8');
 
 const expectedCsrRewriteSources = CLIENT_RENDERED_APP_ROUTES.map(routePathToHostingSource);
 const siteOrigin = 'https://quantified-self.io';
+const betaNoIndexHeader = {
+  key: 'X-Robots-Tag',
+  value: 'noindex, nofollow',
+};
 
 function routePathToHostingSource(path: string): string {
   return `/${path.replace(/:[^/]+/g, '*')}`;
@@ -187,6 +191,16 @@ describe('Firebase Hosting configuration', () => {
         ],
       });
     }
+  });
+
+  it('keeps beta hosting out of search indexes without applying noindex to production', () => {
+    const betaTarget = firebaseConfig.hosting.find(target => target.target === 'beta');
+    const productionTarget = firebaseConfig.hosting.find(target => target.target === 'production');
+    const betaGlobalHeaders = betaTarget?.headers?.find(header => header.source === '**')?.headers ?? [];
+    const productionGlobalHeaders = productionTarget?.headers?.find(header => header.source === '**')?.headers ?? [];
+
+    expect(betaGlobalHeaders).toContainEqual(betaNoIndexHeader);
+    expect(productionGlobalHeaders).not.toContainEqual(betaNoIndexHeader);
   });
 
   it('keeps service-worker navigation fallback scoped to known CSR routes', () => {

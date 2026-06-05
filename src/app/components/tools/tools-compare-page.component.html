@@ -687,8 +687,13 @@
               </span>
             </th>
             <td mat-cell *matCellDef="let item">
-              <span class="status-cell">
-                <mat-icon>{{ item.hasReport ? 'check_circle' : 'pending' }}</mat-icon>
+              <span
+                class="status-cell"
+                [class.status-cell--error]="item.statusState === 'error'"
+                [class.status-cell--ready]="item.statusState === 'ready'"
+                [matTooltip]="item.statusTitle"
+                [attr.title]="item.statusTitle">
+                <mat-icon>{{ item.statusIcon }}</mat-icon>
                 <span class="status-label">{{ item.statusLabel }}</span>
               </span>
             </td>

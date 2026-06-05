@@ -420,12 +420,12 @@ describe('AppBenchmarkFlowService', () => {
       test: activityB,
       options,
       onGenerationStart: () => generationLifecycle.push('start'),
-      onGenerationComplete: (status) => generationLifecycle.push(`complete:${status}`),
+      onGenerationComplete: (status, failureReason) => generationLifecycle.push(`complete:${status}:${failureReason ?? 'none'}`),
     });
 
     expect(analyticsService.logEvent).toHaveBeenCalledWith('benchmark_generate_start');
     expect(analyticsService.logEvent).toHaveBeenCalledWith('benchmark_generate_failure');
-    expect(generationLifecycle).toEqual(['start', 'complete:failure']);
+    expect(generationLifecycle).toEqual(['start', 'complete:failure:unknown']);
   });
 
   it('does not log no-overlap benchmark outcomes as errors', async () => {
@@ -441,7 +441,7 @@ describe('AppBenchmarkFlowService', () => {
       test: activityB,
       options,
       onGenerationStart: () => generationLifecycle.push('start'),
-      onGenerationComplete: (status) => generationLifecycle.push(`complete:${status}`),
+      onGenerationComplete: (status, failureReason) => generationLifecycle.push(`complete:${status}:${failureReason ?? 'none'}`),
     });
 
     expect(snackBar.open).toHaveBeenLastCalledWith('Activities do not overlap in time.', 'Close');
@@ -451,6 +451,6 @@ describe('AppBenchmarkFlowService', () => {
     );
     expect(logger.error).not.toHaveBeenCalledWith('Benchmark flow failed', expect.any(BenchmarkNoOverlapError));
     expect(analyticsService.logEvent).toHaveBeenCalledWith('benchmark_generate_failure');
-    expect(generationLifecycle).toEqual(['start', 'complete:failure']);
+    expect(generationLifecycle).toEqual(['start', 'complete:failure:no_overlap']);
   });
 });
