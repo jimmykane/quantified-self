@@ -83,6 +83,16 @@ describe('DeviceColorPreferencesDialogComponent', () => {
     expect(element.querySelector('input[matinput][type="color"]')).toBeTruthy();
   });
 
+  it('keeps scrolling on the device list instead of the outer dialog content', () => {
+    createComponent();
+    const element = fixture.nativeElement as HTMLElement;
+    const dialogContent = element.querySelector('mat-dialog-content');
+    const deviceList = element.querySelector('mat-selection-list.device-color-list');
+
+    expect(dialogContent?.classList.contains('qs-scrollbar')).toBe(false);
+    expect(deviceList?.classList.contains('qs-scrollbar')).toBe(true);
+  });
+
   it('updates the focused device from the Material selection list change event', () => {
     createComponent();
 

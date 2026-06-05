@@ -28,6 +28,7 @@ function makeComparisonEvent(id: string, overrides: {
   description?: string;
   startDate?: Date;
   sourceFilesCount?: number;
+  originalFiles?: AppEventInterface['originalFiles'];
   benchmarkResults?: Record<string, unknown>;
   benchmarkDevices?: string[];
   benchmarkReviewTags?: string[];
@@ -39,6 +40,7 @@ function makeComparisonEvent(id: string, overrides: {
     description: overrides.description || '',
     startDate: overrides.startDate || new Date('2026-01-01T00:00:00.000Z'),
     sourceFilesCount: overrides.sourceFilesCount,
+    originalFiles: overrides.originalFiles,
     benchmarkResults: overrides.benchmarkResults,
     benchmarkDevices: overrides.benchmarkDevices,
     benchmarkReviewTags: overrides.benchmarkReviewTags,
@@ -139,6 +141,7 @@ describe('ToolsComparePageComponent', () => {
   let eventColorServiceMock: {
     getActivityColor: ReturnType<typeof vi.fn>;
     getAutomaticActivityColor: ReturnType<typeof vi.fn>;
+    getColorForActivityTypeByActivityTypeGroup: ReturnType<typeof vi.fn>;
     getDifferenceColor: ReturnType<typeof vi.fn>;
   };
   let benchmarkFlowServiceMock: {
@@ -233,6 +236,7 @@ describe('ToolsComparePageComponent', () => {
         }
         return '#16B4EA';
       }),
+      getColorForActivityTypeByActivityTypeGroup: vi.fn().mockReturnValue('#16B4EA'),
       getDifferenceColor: vi.fn((value: number) => {
         if (value <= 2) {
           return AppColors.Green;
@@ -1263,6 +1267,7 @@ describe('ToolsComparePageComponent', () => {
       deviceLabel: summary.deviceLabel,
       deviceColor: summary.deviceColor,
       activityTypeLabel: summary.activityTypeLabel,
+      activityTypeIconValue: summary.activityTypeIconValue,
       distanceLabel: summary.distanceLabel,
       ascentLabel: summary.ascentLabel,
       descentLabel: summary.descentLabel,
@@ -1271,6 +1276,7 @@ describe('ToolsComparePageComponent', () => {
         deviceLabel: 'Garmin Edge 3130',
         deviceColor: '#123456',
         activityTypeLabel: 'Cycling',
+        activityTypeIconValue: 'Cycling',
         distanceLabel: '10.00 km',
         ascentLabel: '120 m',
         descentLabel: '118 m',
@@ -1279,6 +1285,7 @@ describe('ToolsComparePageComponent', () => {
         deviceLabel: 'Suunto Race',
         deviceColor: '#abcdef',
         activityTypeLabel: 'Cycling',
+        activityTypeIconValue: 'Cycling',
         distanceLabel: '10.02 km',
         ascentLabel: '121 m',
         descentLabel: '117 m',
@@ -1299,10 +1306,16 @@ describe('ToolsComparePageComponent', () => {
     expect(deviceLines).toContainEqual({ label: 'Suunto Race', style: '--device-accent-color: #abcdef;' });
     expect((fixture.nativeElement as HTMLElement).querySelectorAll('.device-name-swatch').length).toBeGreaterThanOrEqual(2);
     const sportTypeLines = Array.from((fixture.nativeElement as HTMLElement).querySelectorAll('.summary-type-line'))
-      .map(line => line.textContent?.trim());
+      .map(line => line.querySelector('.summary-type-value')?.textContent?.trim());
     expect((fixture.nativeElement as HTMLElement).querySelector('.summary-type-device')).toBeNull();
     expect(sportTypeLines).toContain('Cycling');
     expect(sportTypeLines).toContain('Running');
+    const activityTypeIcons = Array.from((fixture.nativeElement as HTMLElement).querySelectorAll('.summary-type-line app-activity-type-icon'));
+    expect(activityTypeIcons.length).toBeGreaterThanOrEqual(4);
+    const firstActivityTypeIconStyle = activityTypeIcons[0].querySelector('mat-icon')?.getAttribute('style') || '';
+    expect(firstActivityTypeIconStyle).toContain('16px');
+    expect(firstActivityTypeIconStyle.toLowerCase()).toMatch(/#16b4ea|rgb\(22,\s*180,\s*234\)/);
+    expect(eventColorServiceMock.getColorForActivityTypeByActivityTypeGroup).toHaveBeenCalled();
     expect(longCourse?.activityTypesTitle).toBe('Cycling');
     expect(longCourse?.distanceTitle).toContain('Suunto Race: 10.02 km');
 
@@ -1816,7 +1829,7 @@ describe('ToolsComparePageComponent', () => {
     ]);
 
     const sportTypeLines = Array.from((fixture.nativeElement as HTMLElement).querySelectorAll('.summary-type-line'))
-      .map(line => line.textContent?.trim());
+      .map(line => line.querySelector('.summary-type-value')?.textContent?.trim());
     expect((fixture.nativeElement as HTMLElement).querySelector('.summary-type-device')).toBeNull();
     expect(sportTypeLines).toContain('Cycling');
     expect(sportTypeLines).toContain('Running');
@@ -2138,7 +2151,10 @@ describe('ToolsComparePageComponent', () => {
         getID: () => 'with-original-files',
         name: 'Original files',
         startDate: new Date('2026-01-03T00:00:00.000Z'),
-        originalFiles: [{ path: 'one.fit', startDate: new Date() }],
+        originalFiles: [
+          { path: 'users/user-1/events/event-1/one.fit', startDate: new Date(), originalFilename: 'reference.fit' },
+          { path: 'users/user-1/events/event-1/test-route.tcx', startDate: new Date() },
+        ],
         getActivities: () => [{ getID: () => 'activity-1' }],
       } as any,
       {
@@ -2150,15 +2166,39 @@ describe('ToolsComparePageComponent', () => {
     ]);
 
     expect(component.comparisonItems()[0]).toEqual(expect.objectContaining({
-      sourceFilesCount: 1,
-      sourceFilesLabel: '1 file',
+      sourceFilesCount: 2,
+      sourceFilesLabel: '2 files',
+      sourceFilesTitle: 'reference.fit\ntest-route.tcx',
     }));
     expect(component.comparisonItems()[1]).toEqual(expect.objectContaining({
       sourceFilesCount: null,
       sourceFilesLabel: 'Files unknown',
+      sourceFilesTitle: 'Files unknown',
     }));
 
     component.onComparisonSortChange({ active: 'sourceFiles', direction: 'asc' });
     expect(component.sortedComparisonItems().map(item => item.id)).toEqual(['with-original-files', 'unknown-counts']);
+  });
+
+  it('shows original comparison filenames in the files cell tooltip', () => {
+    component.authResolved.set(true);
+    component.firebaseSignedIn.set(true);
+    component.currentUser.set(new User('user-1'));
+    component.comparisons.set([
+      makeComparisonEvent('files-tooltip', {
+        title: 'Files tooltip',
+        sourceFilesCount: 2,
+        originalFiles: [
+          { path: 'users/user-1/events/event-1/uploaded-a.fit', startDate: new Date(), originalFilename: 'Garmin Edge.fit' },
+          { path: 'users/user-1/events/event-1/Suunto%20Vertical.gpx', startDate: new Date() },
+        ],
+      }),
+    ]);
+    fixture.detectChanges();
+
+    const filesCell = (fixture.nativeElement as HTMLElement).querySelector('.source-files-cell') as HTMLElement;
+
+    expect(filesCell?.textContent?.trim()).toBe('2 files');
+    expect(filesCell?.getAttribute('title')).toBe('Garmin Edge.fit\nSuunto Vertical.gpx');
   });
 });

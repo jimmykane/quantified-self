@@ -92,6 +92,7 @@ interface ComparisonListItem {
   sourceFilesCount: number | null;
   sourceFilesSort: number | null;
   sourceFilesLabel: string;
+  sourceFilesTitle: string;
   hasReport: boolean;
   reportCount: number;
   reportLabel: string;
@@ -111,6 +112,7 @@ interface ComparisonActivitySummary {
   deviceColor: string;
   automaticDeviceColor: string;
   activityTypeLabel: string;
+  activityTypeIconValue: string;
   distanceLabel: string;
   ascentLabel: string;
   descentLabel: string;
@@ -1468,6 +1470,8 @@ export class ToolsComparePageComponent implements OnInit {
     const sourceFilesCount = typeof comparisonEvent.sourceFilesCount === 'number'
       ? comparisonEvent.sourceFilesCount
       : this.getOriginalFilesCount(event);
+    const sourceFilesLabel = this.formatCountLabel(sourceFilesCount, 'file', 'Files unknown');
+    const sourceFilesTitle = this.buildSourceFilesTitle(event, sourceFilesLabel);
     const activities = event.getActivities?.() || [];
     const activitySummaries = this.buildComparisonActivitySummaries(activities);
     const deviceNames = this.resolveComparisonDeviceNames(event, activities);
@@ -1533,7 +1537,8 @@ export class ToolsComparePageComponent implements OnInit {
       tagFilterValues: benchmarkReviewTags,
       sourceFilesCount,
       sourceFilesSort: sourceFilesCount,
-      sourceFilesLabel: this.formatCountLabel(sourceFilesCount, 'file', 'Files unknown'),
+      sourceFilesLabel,
+      sourceFilesTitle,
       hasReport,
       reportCount,
       reportLabel,
@@ -1554,7 +1559,8 @@ export class ToolsComparePageComponent implements OnInit {
         benchmarkReviewTags.join(' '),
         benchmarkPairLabel,
         event.startDate instanceof Date ? event.startDate.toISOString() : 'date unavailable',
-        this.formatCountLabel(sourceFilesCount, 'file', 'Files unknown'),
+        sourceFilesLabel,
+        sourceFilesTitle,
         statusLabel,
         reportLabel,
       ].join(' ').toLowerCase(),
@@ -1964,6 +1970,7 @@ export class ToolsComparePageComponent implements OnInit {
         deviceColor,
         automaticDeviceColor,
         activityTypeLabel,
+        activityTypeIconValue: activityTypeLabel,
         distanceLabel,
         ascentLabel,
         descentLabel,
@@ -2306,6 +2313,51 @@ export class ToolsComparePageComponent implements OnInit {
       return event.originalFiles.length;
     }
     return event.originalFile ? 1 : null;
+  }
+
+  private buildSourceFilesTitle(event: AppEventInterface, fallbackLabel: string): string {
+    const filenames = this.getOriginalFileDisplayNames(event);
+    return filenames.length > 0 ? filenames.join('\n') : fallbackLabel;
+  }
+
+  private getOriginalFileDisplayNames(event: AppEventInterface): string[] {
+    const files = Array.isArray(event.originalFiles) && event.originalFiles.length > 0
+      ? event.originalFiles
+      : event.originalFile
+        ? [event.originalFile]
+        : [];
+
+    return files
+      .map(file => this.resolveOriginalFileDisplayName(file))
+      .filter((filename): filename is string => !!filename);
+  }
+
+  private resolveOriginalFileDisplayName(file: { originalFilename?: unknown; path?: unknown }): string | null {
+    const originalFilename = this.normalizeSourceFilename(file.originalFilename);
+    if (originalFilename) {
+      return originalFilename;
+    }
+
+    const path = typeof file.path === 'string' ? file.path : '';
+    const basename = path.split('/').filter(Boolean).pop();
+    return this.normalizeSourceFilename(basename);
+  }
+
+  private normalizeSourceFilename(value: unknown): string | null {
+    if (typeof value !== 'string') {
+      return null;
+    }
+
+    const trimmed = value.trim().replace(/\s+/g, ' ');
+    if (!trimmed) {
+      return null;
+    }
+
+    try {
+      return decodeURIComponent(trimmed);
+    } catch {
+      return trimmed;
+    }
   }
 
   private formatCountLabel(count: number | null, singularLabel: string, emptyLabel: string): string {

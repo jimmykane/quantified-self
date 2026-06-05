@@ -458,6 +458,11 @@
                 @if (item.activitySummaries.length > 0) {
                 @for (summary of item.activitySummaries; track summary.id) {
                 <span class="summary-line summary-type-line">
+                  <app-activity-type-icon
+                    [activityType]="summary.activityTypeIconValue"
+                    size="16px"
+                    vAlign="middle">
+                  </app-activity-type-icon>
                   <span class="summary-type-value">{{ summary.activityTypeLabel }}</span>
                 </span>
                 }
@@ -664,7 +669,14 @@
                 <span>Files</span>
               </span>
             </th>
-            <td mat-cell *matCellDef="let item">{{ item.sourceFilesLabel }}</td>
+            <td mat-cell *matCellDef="let item">
+              <span
+                class="source-files-cell"
+                [matTooltip]="item.sourceFilesTitle"
+                [attr.title]="item.sourceFilesTitle">
+                {{ item.sourceFilesLabel }}
+              </span>
+            </td>
           </ng-container>
 
           <ng-container matColumnDef="status">

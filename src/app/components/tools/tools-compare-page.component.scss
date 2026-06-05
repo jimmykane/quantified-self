@@ -604,14 +604,24 @@ h2 {
 }
 
 .summary-type-line {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
   min-width: 0;
+}
+
+.summary-type-line app-activity-type-icon {
+  flex: 0 0 auto;
 }
 
 .summary-type-value {
   display: block;
+  flex: 1 1 auto;
   overflow: hidden;
   min-width: 0;
+  font-size: 0.92rem;
   font-weight: 500;
+  line-height: 1.15rem;
   text-overflow: ellipsis;
   white-space: nowrap;
 }

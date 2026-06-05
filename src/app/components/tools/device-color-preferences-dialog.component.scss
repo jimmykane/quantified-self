@@ -7,8 +7,8 @@
   width: 100%;
   min-width: 0;
   max-width: 100%;
-  max-height: min(70vh, 36rem);
-  overflow-x: hidden;
+  max-height: none;
+  overflow: visible;
 }
 
 .device-color-dialog-layout {
@@ -156,7 +156,7 @@
 
 @media (max-width: 42rem) {
   .device-color-dialog-content {
-    max-height: 72vh;
+    max-height: none;
   }
 
   .device-color-dialog-layout {
