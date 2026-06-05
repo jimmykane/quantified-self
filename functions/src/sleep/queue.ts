@@ -121,6 +121,49 @@ function compactQueuePayload(input: AddSleepSyncQueueItemInput): Partial<SleepSy
     return JSON.parse(JSON.stringify(payload)) as Partial<SleepSyncQueueItemInterface>;
 }
 
+function stableComparableValue(value: unknown): unknown {
+    if (Array.isArray(value)) {
+        return value.map(stableComparableValue);
+    }
+    if (!value || typeof value !== 'object') {
+        return value === undefined ? null : value;
+    }
+
+    const record = value as Record<string, unknown>;
+    return Object.keys(record)
+        .sort()
+        .reduce<Record<string, unknown>>((target, key) => {
+            if (record[key] !== undefined) {
+                target[key] = stableComparableValue(record[key]);
+            }
+            return target;
+        }, {});
+}
+
+function comparableQueuePayload(payload: Partial<SleepSyncQueueItemInterface>): unknown {
+    return stableComparableValue({
+        type: payload.type,
+        provider: payload.provider,
+        providerUserId: payload.providerUserId,
+        userID: payload.userID,
+        payload: payload.payload,
+        callbackURL: payload.callbackURL,
+        rangeStartMs: payload.rangeStartMs,
+        rangeEndMs: payload.rangeEndMs,
+    });
+}
+
+function queuePayloadFingerprint(payload: Partial<SleepSyncQueueItemInterface>): string {
+    return JSON.stringify(comparableQueuePayload(payload));
+}
+
+function isSameQueuePayload(
+    existing: Partial<SleepSyncQueueItemInterface>,
+    incoming: Partial<SleepSyncQueueItemInterface>,
+): boolean {
+    return queuePayloadFingerprint(existing) === queuePayloadFingerprint(incoming);
+}
+
 function firebaseUserIdFromSleepTokenSnapshotOrNull(tokenSnapshot: TokenSnapshot | null): string | null {
     return tokenSnapshot?.ref.parent.parent?.id || null;
 }
@@ -195,7 +238,7 @@ async function deleteSleepQueueDocAfterDeletionGuard(
 
 export async function addSleepSyncQueueItem(input: AddSleepSyncQueueItemInput): Promise<admin.firestore.DocumentReference> {
     const nowMs = Date.now();
-    const queueId = await generateIDFromParts([
+    let queueId = await generateIDFromParts([
         input.provider,
         input.type,
         input.providerUserId,
@@ -207,7 +250,37 @@ export async function addSleepSyncQueueItem(input: AddSleepSyncQueueItemInput): 
         ...input,
         userID,
     };
-    const docRef = queueCollection().doc(queueId);
+    const queuePayload = compactQueuePayload(queuePayloadInput);
+    let docRef = queueCollection().doc(queueId);
+    if (input.dispatchImmediately) {
+        const existingSnapshot = await docRef.get();
+        const existingQueueItem = existingSnapshot.exists ? existingSnapshot.data() as Partial<SleepSyncQueueItemInterface> : null;
+        if (existingQueueItem?.processed || existingQueueItem?.dispatchedToCloudTask) {
+            if (isSameQueuePayload(existingQueueItem, queuePayload)) {
+                logger.info(`[SleepSync] Reusing existing immediate queue item ${queueId} for duplicate ${input.provider} ${input.type} notification.`);
+                return docRef;
+            }
+
+            const revisionQueueId = await generateIDFromParts([
+                input.provider,
+                input.type,
+                input.providerUserId,
+                input.dedupeKey || input.callbackURL || queueId,
+                'revision',
+                queuePayloadFingerprint(queuePayload),
+            ]);
+            queueId = revisionQueueId;
+            docRef = queueCollection().doc(queueId);
+            const revisionSnapshot = await docRef.get();
+            const existingRevisionQueueItem = revisionSnapshot.exists ? revisionSnapshot.data() as Partial<SleepSyncQueueItemInterface> : null;
+            if ((existingRevisionQueueItem?.processed || existingRevisionQueueItem?.dispatchedToCloudTask)
+                && isSameQueuePayload(existingRevisionQueueItem, queuePayload)) {
+                logger.info(`[SleepSync] Reusing existing immediate queue item ${queueId} for duplicate ${input.provider} ${input.type} notification revision.`);
+                return docRef;
+            }
+        }
+    }
+
     await docRef.set({
         id: queueId,
         dateCreated: nowMs,
@@ -215,7 +288,7 @@ export async function addSleepSyncQueueItem(input: AddSleepSyncQueueItemInput): 
         processed: false,
         dispatchedToCloudTask: null,
         expireAt: getExpireAtTimestamp(TTL_CONFIG.QUEUE_ITEM_IN_DAYS),
-        ...compactQueuePayload(queuePayloadInput),
+        ...queuePayload,
     }, { merge: false });
 
     try {

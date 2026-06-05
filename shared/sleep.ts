@@ -109,6 +109,8 @@ export interface SleepSyncState {
   lastBackfillEndMs?: number | null;
   lastBackfillQueueItems?: number | null;
   nextBackfillAllowedAtMs?: number | null;
+  providerMinBackfillStartMs?: number | null;
+  providerMinBackfillStartProviderUserId?: string | null;
   lastError?: string | null;
   updatedAtMs: number;
 }

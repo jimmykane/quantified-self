@@ -3,6 +3,7 @@ import { ServiceNames } from '@sports-alliance/sports-lib';
 import { QueueResult } from '../queue-utils';
 
 const hoisted = vi.hoisted(() => ({
+    docGet: vi.fn(),
     docSet: vi.fn(),
     docUpdate: vi.fn(),
     docIdValues: [] as string[],
@@ -75,6 +76,7 @@ vi.mock('firebase-admin', () => {
                 return {
                     id,
                     parent: { id: name },
+                    get: hoisted.docGet,
                     set: hoisted.docSet,
                     update: hoisted.docUpdate,
                     collection: vi.fn(() => tokenRootQuery),
@@ -209,6 +211,7 @@ describe('sleep queue', () => {
         hoisted.docIdValues.length = 0;
         hoisted.disabledProviders.splice(0, hoisted.disabledProviders.length, 'GarminAPI', 'COROSAPI');
         hoisted.allowedUserIDs.splice(0, hoisted.allowedUserIDs.length, 'xcsAolLDDTWTgtRN9eYF3lW2YKL2');
+        hoisted.docGet.mockResolvedValue({ exists: false, data: () => undefined });
         hoisted.docSet.mockResolvedValue(undefined);
         hoisted.batchCommit.mockResolvedValue(undefined);
         hoisted.tokenRootGet.mockResolvedValue({ docs: [], empty: true });
@@ -293,6 +296,177 @@ describe('sleep queue', () => {
         } finally {
             vi.useRealTimers();
         }
+    });
+
+    it('does not reset an already processed immediate queue item for a duplicate webhook', async () => {
+        hoisted.docGet.mockResolvedValueOnce({
+            exists: true,
+            data: () => ({
+                type: 'suunto_webhook',
+                provider: 'SuuntoApp',
+                userID: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+                providerUserId: 'suunto-user-1',
+                payload: { samples: [{ SleepId: 123 }] },
+                processed: true,
+                dispatchedToCloudTask: 1_777_000_000_000,
+            }),
+        });
+
+        await addSleepSyncQueueItem({
+            type: 'suunto_webhook',
+            provider: 'SuuntoApp',
+            userID: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+            providerUserId: 'suunto-user-1',
+            payload: { samples: [{ SleepId: 123 }] },
+            dedupeKey: 'suunto-user-1:123',
+            dispatchImmediately: true,
+        });
+
+        expect(hoisted.docSet).not.toHaveBeenCalled();
+        expect(hoisted.enqueueSleepSyncTask).not.toHaveBeenCalled();
+        expect(hoisted.docUpdate).not.toHaveBeenCalled();
+    });
+
+    it('does not reset an in-flight immediate queue item for a duplicate webhook', async () => {
+        hoisted.docGet.mockResolvedValueOnce({
+            exists: true,
+            data: () => ({
+                type: 'suunto_webhook',
+                provider: 'SuuntoApp',
+                userID: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+                providerUserId: 'suunto-user-1',
+                payload: { samples: [{ SleepId: 123 }] },
+                processed: false,
+                dispatchedToCloudTask: 1_777_000_000_000,
+            }),
+        });
+
+        await addSleepSyncQueueItem({
+            type: 'suunto_webhook',
+            provider: 'SuuntoApp',
+            userID: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+            providerUserId: 'suunto-user-1',
+            payload: { samples: [{ SleepId: 123 }] },
+            dedupeKey: 'suunto-user-1:123',
+            dispatchImmediately: true,
+        });
+
+        expect(hoisted.docSet).not.toHaveBeenCalled();
+        expect(hoisted.enqueueSleepSyncTask).not.toHaveBeenCalled();
+        expect(hoisted.docUpdate).not.toHaveBeenCalled();
+    });
+
+    it('queues a deterministic immediate revision when a processed webhook payload changes under the same provider key', async () => {
+        vi.useFakeTimers();
+        vi.setSystemTime(new Date('2026-05-06T05:30:00.000Z'));
+        try {
+            hoisted.docGet
+                .mockResolvedValueOnce({
+                    exists: true,
+                    data: () => ({
+                        type: 'suunto_webhook',
+                        provider: 'SuuntoApp',
+                        userID: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+                        providerUserId: 'suunto-user-1',
+                        payload: { samples: [{ SleepId: 123, Duration: 1200 }] },
+                        processed: true,
+                        dispatchedToCloudTask: 1_777_000_000_000,
+                    }),
+                })
+                .mockResolvedValueOnce({ exists: false, data: () => undefined });
+
+            await addSleepSyncQueueItem({
+                type: 'suunto_webhook',
+                provider: 'SuuntoApp',
+                userID: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+                providerUserId: 'suunto-user-1',
+                payload: { samples: [{ SleepId: 123, Duration: 2400 }] },
+                dedupeKey: 'suunto-user-1:123',
+                dispatchImmediately: true,
+            });
+
+            expect(hoisted.docIdValues).toHaveLength(2);
+            expect(hoisted.docIdValues[1]).not.toBe(hoisted.docIdValues[0]);
+            expect(hoisted.docSet).toHaveBeenCalledWith(expect.objectContaining({
+                id: hoisted.docIdValues[1],
+                processed: false,
+                dispatchedToCloudTask: null,
+                type: 'suunto_webhook',
+                provider: 'SuuntoApp',
+                providerUserId: 'suunto-user-1',
+                payload: { samples: [{ SleepId: 123, Duration: 2400 }] },
+            }), { merge: false });
+            expect(hoisted.enqueueSleepSyncTask).toHaveBeenCalledWith(
+                hoisted.docIdValues[1],
+                Date.now(),
+            );
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it('reuses a processed immediate revision for an exact duplicate provider update payload', async () => {
+        hoisted.docGet
+            .mockResolvedValueOnce({
+                exists: true,
+                data: () => ({
+                    type: 'suunto_webhook',
+                    provider: 'SuuntoApp',
+                    userID: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+                    providerUserId: 'suunto-user-1',
+                    payload: { samples: [{ SleepId: 123, Duration: 1200 }] },
+                    processed: true,
+                    dispatchedToCloudTask: 1_777_000_000_000,
+                }),
+            })
+            .mockResolvedValueOnce({
+                exists: true,
+                data: () => ({
+                    type: 'suunto_webhook',
+                    provider: 'SuuntoApp',
+                    userID: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+                    providerUserId: 'suunto-user-1',
+                    payload: { samples: [{ SleepId: 123, Duration: 2400 }] },
+                    processed: true,
+                    dispatchedToCloudTask: 1_777_000_010_000,
+                }),
+            });
+
+        await addSleepSyncQueueItem({
+            type: 'suunto_webhook',
+            provider: 'SuuntoApp',
+            userID: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+            providerUserId: 'suunto-user-1',
+            payload: { samples: [{ SleepId: 123, Duration: 2400 }] },
+            dedupeKey: 'suunto-user-1:123',
+            dispatchImmediately: true,
+        });
+
+        expect(hoisted.docIdValues).toHaveLength(2);
+        expect(hoisted.docSet).not.toHaveBeenCalled();
+        expect(hoisted.enqueueSleepSyncTask).not.toHaveBeenCalled();
+        expect(hoisted.docUpdate).not.toHaveBeenCalled();
+    });
+
+    it('still rewrites deterministic non-immediate queue items for polling and backfill retries', async () => {
+        await addSleepSyncQueueItem({
+            type: 'suunto_poll',
+            provider: 'SuuntoApp',
+            userID: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+            providerUserId: 'suunto-user-1',
+            rangeStartMs: 1_777_392_000_000,
+            rangeEndMs: 1_777_478_400_000,
+            dedupeKey: 'suunto-user-1:poll',
+        });
+
+        expect(hoisted.docGet).not.toHaveBeenCalled();
+        expect(hoisted.docSet).toHaveBeenCalledWith(expect.objectContaining({
+            type: 'suunto_poll',
+            provider: 'SuuntoApp',
+            providerUserId: 'suunto-user-1',
+            rangeStartMs: 1_777_392_000_000,
+            rangeEndMs: 1_777_478_400_000,
+        }), { merge: false });
     });
 
     it('rejects provider-only enqueue without creating a queue doc when no local token resolves', async () => {
