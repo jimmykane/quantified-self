@@ -934,6 +934,70 @@ describe('ToolsComparePageComponent', () => {
     expect(component.benchmarkingEventID()).toBeNull();
   });
 
+  it('reruns a benchmark from a legacy GNSS metric cell with missing mean fields', async () => {
+    const user = new User('user-1');
+    userSubject.next(user);
+    await Promise.resolve();
+    await Promise.resolve();
+    component.comparisons.set([
+      makeComparisonEvent('legacy-gnss-report', {
+        title: 'Legacy GNSS report',
+        activities: [
+          makeActivity('activity-1', {
+            deviceName: 'Garmin Edge',
+            activityType: 'Cycling',
+          }),
+          makeActivity('activity-2', {
+            deviceName: 'Suunto Race',
+            activityType: 'Cycling',
+          }),
+        ],
+        benchmarkResults: {
+          'activity-1_activity-2': makeBenchmarkResult({
+            referenceId: 'activity-1',
+            testId: 'activity-2',
+            metrics: {
+              gnss: {
+                cep50: 42.3,
+                rmse: 42.6,
+              },
+            },
+          }),
+        },
+      }),
+    ]);
+    fixture.detectChanges();
+
+    const item = component.comparisonItems()[0];
+    expect(item.gnssBenchmark.canRerunReport).toBe(true);
+    expect(item.gnssBenchmark.title).toContain('Click to rerun the benchmark');
+
+    const metricButton = (fixture.nativeElement as HTMLElement).querySelector('.mat-column-gnss .benchmark-rerun-action') as HTMLButtonElement;
+    expect(metricButton).toBeTruthy();
+    expect(metricButton.textContent).toContain('Rerun');
+    expect(metricButton.getAttribute('aria-label')).toContain('Rerun benchmark report');
+
+    metricButton.click();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(benchmarkFlowServiceMock.openBenchmarkSelectionDialog).toHaveBeenCalledWith(expect.objectContaining({
+      event: item.event,
+      persistEvent: item.event,
+      user,
+      initialSelection: item.event.getActivities().slice(0, 2),
+      hydrateStreamsForGeneration: true,
+    }));
+    expect(benchmarkFlowServiceMock.openBenchmarkReport).not.toHaveBeenCalled();
+    expect(analyticsServiceMock.logToolCompareSavedAction).toHaveBeenCalledWith('rerun_report', {
+      hasReport: true,
+      reportCount: 1,
+      filterActive: false,
+      resultCount: 1,
+    });
+    expect(hapticsServiceMock.selection).toHaveBeenCalled();
+  });
+
   it('keeps row loading feedback active while benchmark generation callbacks are pending', async () => {
     const user = new User('user-1');
     let capturedConfig: {
@@ -1410,6 +1474,7 @@ describe('ToolsComparePageComponent', () => {
     expect(latest?.gnssBenchmark.color).toBe(AppColors.Orange);
     expect(latest?.gnssBenchmark.severityLabel).toBe('moderate error');
     expect(latest?.gnssBenchmark.dominantLineLabel).toBe('MAE');
+    expect(latest?.gnssBenchmark.canRerunReport).toBe(false);
     expect(latest?.heartRateBenchmark.color).toBe(AppColors.Orange);
     expect(latest?.altitudeBenchmark.color).toBe(AppColors.Red);
     expect(latest?.altitudeBenchmark.severityLabel).toBe('high error');
@@ -1430,6 +1495,7 @@ describe('ToolsComparePageComponent', () => {
     expect(old?.gnssBenchmark.color).toBe(AppColors.Orange);
     expect(old?.gnssBenchmark.dominantLineLabel).toBe('CEP50');
     expect(old?.gnssBenchmark.title).toContain('MD/MAE are unavailable for older GNSS reports');
+    expect(old?.gnssBenchmark.canRerunReport).toBe(true);
     expect(old?.heartRateBenchmark.lines.map(line => `${line.label} ${line.value}`)).toEqual([
       'MD +3 bpm',
       'MAE 5 bpm',
@@ -1455,6 +1521,7 @@ describe('ToolsComparePageComponent', () => {
     expect(text).toContain('HR');
     expect(text).toContain('Alt');
     expect(text).toContain('CEP50');
+    expect(text).toContain('Rerun');
     expect(text).toContain('+6.5 m');
     expect(text).toContain('Garmin Forerunner 965 -> Suunto Race');
     const renderedGnssCells = Array.from((fixture.nativeElement as HTMLElement).querySelectorAll('.mat-column-gnss .benchmark-summary-stack'));
@@ -1491,7 +1558,7 @@ describe('ToolsComparePageComponent', () => {
     ]);
   });
 
-  it('opens the device color editor from the toolbar and device dot', () => {
+  it('opens the device color editor from the page header and device dot', () => {
     const user = new User('user-1');
     eventColorServiceMock.getActivityColor.mockImplementation((_activities, activity) =>
       activity?.getID?.() === 'activity-1' ? '#FF00FF' : '#16B4EA',
@@ -1517,6 +1584,8 @@ describe('ToolsComparePageComponent', () => {
     const colorButton = Array.from((fixture.nativeElement as HTMLElement).querySelectorAll('button'))
       .find(button => button.textContent?.includes('Device colors')) as HTMLButtonElement | undefined;
     expect(colorButton?.disabled).toBe(false);
+    expect(colorButton?.closest('.workspace-header-actions')).not.toBeNull();
+    expect(colorButton?.closest('.comparison-table-controls')).toBeNull();
     colorButton?.dispatchEvent(new Event('click'));
 
     expect(dialogOpenSpy).toHaveBeenCalledWith(DeviceColorPreferencesDialogComponent, {
@@ -1573,6 +1642,17 @@ describe('ToolsComparePageComponent', () => {
     component.currentUser.set(user);
     component.comparisons.set([firmwareEvent, routeEvent, untaggedEvent]);
     fixture.detectChanges();
+
+    expect(component.displayedComparisonColumns.indexOf('tags')).toBeLessThan(
+      component.displayedComparisonColumns.indexOf('devices'),
+    );
+    const tagButtonLabels = Array.from((fixture.nativeElement as HTMLElement).querySelectorAll('.tags-summary-button'))
+      .map(button => button.textContent?.replace(/\s+/g, ' ').trim() || '');
+    expect(tagButtonLabels).toEqual(expect.arrayContaining([
+      expect.stringContaining('Firmware'),
+      expect.stringContaining('Route'),
+      expect.stringContaining('Add tags'),
+    ]));
 
     expect(component.comparisonTagFilterOptions()).toEqual([
       { value: 'Firmware', label: 'Firmware' },

@@ -100,8 +100,22 @@
   } @else if (showSignedInWorkspace()) {
   <section class="signed-in-workspace">
     <header class="workspace-header" aria-labelledby="tools-compare-workspace-title">
-      <p class="eyebrow">Tools / Compare</p>
-      <h1 id="tools-compare-workspace-title">{{ showSavedComparisonsFirst ? 'Saved comparisons' : 'Compare files' }}</h1>
+      <div class="workspace-title-block">
+        <p class="eyebrow">Tools / Compare</p>
+        <h1 id="tools-compare-workspace-title">{{ showSavedComparisonsFirst ? 'Saved comparisons' : 'Compare files' }}</h1>
+      </div>
+      @if (comparisonDeviceColorItems().length > 0) {
+      <div class="workspace-header-actions">
+        <button
+          mat-stroked-button
+          type="button"
+          class="device-colors-button"
+          (click)="openDeviceColorPreferencesDialog()">
+          <mat-icon>palette</mat-icon>
+          Device colors
+        </button>
+      </div>
+      }
     </header>
 
     @if (isSignedInProfileLoading()) {
@@ -273,32 +287,24 @@
           </mat-select>
         </mat-form-field>
         <div class="comparison-table-actions">
-          <button
-            mat-stroked-button
-            type="button"
-            class="device-colors-button"
-            [disabled]="comparisonDeviceColorItems().length === 0"
-            (click)="openDeviceColorPreferencesDialog()">
-            <mat-icon>palette</mat-icon>
-            Device colors
-          </button>
           <span class="result-summary">{{ comparisonResultSummary() }}</span>
         </div>
       </div>
 
       <ng-template #benchmarkMetricCellTemplate let-item="item" let-cell="cell">
-        @if (!item.hasReport) {
+        @if (!item.hasReport || cell.canRerunReport) {
         <button
           type="button"
           class="summary-stack benchmark-summary-stack benchmark-summary-action"
+          [class.benchmark-rerun-action]="cell.canRerunReport"
           [class.summary-placeholder]="cell.isPlaceholder"
           [class.benchmark-is-loading]="benchmarkingEventID() === item.id"
           [disabled]="!!benchmarkingEventID()"
           [matTooltip]="cell.title"
           [attr.title]="cell.title"
           [attr.data-severity]="cell.severityLabel"
-          [attr.aria-label]="'Run benchmark report for ' + item.title"
-          (click)="openBenchmarkFromMetricCell(item)">
+          [attr.aria-label]="cell.canRerunReport ? 'Rerun benchmark report for ' + item.title : 'Run benchmark report for ' + item.title"
+          (click)="openBenchmarkFromMetricCell(item, cell)">
           @if (benchmarkingEventID() === item.id) {
           <span class="benchmark-loading-state">
             <mat-progress-spinner diameter="18" mode="indeterminate"></mat-progress-spinner>
@@ -311,6 +317,12 @@
             [class.benchmark-placeholder-line]="line.isPlaceholder">
             <span class="benchmark-metric-label">{{ line.label }}</span>
             <span class="benchmark-metric-value">{{ line.value }}</span>
+          </span>
+          }
+          @if (cell.canRerunReport) {
+          <span class="benchmark-rerun-hint">
+            <mat-icon aria-hidden="true">refresh</mat-icon>
+            <span>Rerun</span>
           </span>
           }
           }
@@ -619,7 +631,7 @@
             </th>
             <td mat-cell *matCellDef="let item">
               <button
-                mat-button
+                mat-stroked-button
                 type="button"
                 class="tags-summary-button"
                 [class.tags-summary-button--empty]="item.benchmarkReviewTags.length === 0"
@@ -632,7 +644,14 @@
                   <span class="tag-pill">{{ tag }}</span>
                   }
                 </span>
-                } @else {
+                }
+                @if (item.benchmarkReviewTags.length > 0) {
+                <mat-icon iconPositionEnd class="tags-action-icon" aria-hidden="true">edit</mat-icon>
+                }
+                @if (item.benchmarkReviewTags.length === 0) {
+                <mat-icon class="tags-action-icon" aria-hidden="true">sell</mat-icon>
+                }
+                @if (item.benchmarkReviewTags.length === 0) {
                 <span class="tag-placeholder">Add tags</span>
                 }
               </button>

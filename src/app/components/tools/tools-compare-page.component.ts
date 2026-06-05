@@ -121,6 +121,7 @@ interface ComparisonBenchmarkMetricCell {
   sortValue: number | null;
   title: string;
   isPlaceholder: boolean;
+  canRerunReport: boolean;
   color: string | null;
   severityLabel: string;
   dominantLineLabel: string | null;
@@ -226,6 +227,7 @@ export class ToolsComparePageComponent implements OnInit {
   readonly displayedComparisonColumns = [
     'date',
     'title',
+    'tags',
     'devices',
     'activityType',
     'distance',
@@ -235,7 +237,6 @@ export class ToolsComparePageComponent implements OnInit {
     'heartRate',
     'altitude',
     'description',
-    'tags',
     'sourceFiles',
     'status',
     'reports',
@@ -807,17 +808,58 @@ export class ToolsComparePageComponent implements OnInit {
     });
   }
 
-  async openBenchmarkFromMetricCell(item: ComparisonListItem): Promise<void> {
+  async openBenchmarkFromMetricCell(
+    item: ComparisonListItem,
+    cell?: ComparisonBenchmarkMetricCell,
+  ): Promise<void> {
+    if (item.hasReport && !cell?.canRerunReport) {
+      return;
+    }
+
     if (item.hasReport) {
+      await this.rerunBenchmarkReport(item);
       return;
     }
 
     await this.openComparison(item, true);
   }
 
-  private async openBenchmarkFlowFromComparison(item: ComparisonListItem, user: User): Promise<void> {
-    const result = this.resolvePrimaryBenchmarkResult(item.event);
-    const config = {
+  private async rerunBenchmarkReport(item: ComparisonListItem): Promise<void> {
+    const user = this.currentUser();
+    if (!user) {
+      await this.signIn('/tools/compare/saved', 'saved_action');
+      return;
+    }
+
+    if (this.benchmarkingEventID()) {
+      return;
+    }
+
+    this.hapticsService.selection();
+    this.analyticsService.logToolCompareSavedAction(
+      'rerun_report',
+      this.getComparisonSavedActionAnalytics(item),
+    );
+
+    this.benchmarkingEventID.set(item.id);
+    try {
+      await this.openBenchmarkSelectionFlowFromComparison(item, user);
+    } catch (error) {
+      this.logger.warn('[ToolsComparePageComponent] Could not rerun benchmark report.', {
+        eventID: item.id,
+        error,
+      });
+      this.snackBar.open('Could not rerun benchmark report.', undefined, { duration: 3000 });
+      this.hapticsService.error();
+    } finally {
+      if (this.benchmarkingEventID() === item.id) {
+        this.benchmarkingEventID.set(null);
+      }
+    }
+  }
+
+  private buildBenchmarkFlowConfig(item: ComparisonListItem, user: User) {
+    return {
       event: item.event,
       persistEvent: item.event,
       user,
@@ -836,6 +878,11 @@ export class ToolsComparePageComponent implements OnInit {
         }
       },
     };
+  }
+
+  private async openBenchmarkFlowFromComparison(item: ComparisonListItem, user: User): Promise<void> {
+    const result = this.resolvePrimaryBenchmarkResult(item.event);
+    const config = this.buildBenchmarkFlowConfig(item, user);
 
     if (result) {
       await this.benchmarkFlowService.openBenchmarkReport({
@@ -846,6 +893,10 @@ export class ToolsComparePageComponent implements OnInit {
     }
 
     await this.benchmarkFlowService.openBenchmarkSelectionDialog(config);
+  }
+
+  private async openBenchmarkSelectionFlowFromComparison(item: ComparisonListItem, user: User): Promise<void> {
+    await this.benchmarkFlowService.openBenchmarkSelectionDialog(this.buildBenchmarkFlowConfig(item, user));
   }
 
   private resolveBenchmarkInitialSelection(event: AppEventInterface): ActivityInterface[] | undefined {
@@ -1691,7 +1742,7 @@ export class ToolsComparePageComponent implements OnInit {
       'CEP50: median circular error.',
       'RMSE: root mean square error.',
       this.buildBenchmarkMetricColorContext(colorSource, 'm', 1),
-      hasLegacyGnssMeanGap ? 'MD/MAE are unavailable for older GNSS reports; rerun the benchmark to store them.' : '',
+      hasLegacyGnssMeanGap ? 'MD/MAE are unavailable for older GNSS reports. Click to rerun the benchmark and store them.' : '',
       reportContext,
     ].filter(Boolean).join('\n');
 
@@ -1700,6 +1751,7 @@ export class ToolsComparePageComponent implements OnInit {
       sortValue: colorSource?.value ?? null,
       title,
       isPlaceholder: lines.every(line => line.isPlaceholder),
+      canRerunReport: hasLegacyGnssMeanGap,
       color: this.resolveBenchmarkMetricColor(colorSource?.value ?? null),
       severityLabel: this.resolveBenchmarkMetricSeverityLabel(colorSource?.value ?? null),
       dominantLineLabel: colorSource?.label ?? null,
@@ -1754,6 +1806,7 @@ export class ToolsComparePageComponent implements OnInit {
       sortValue: meanAbsoluteError,
       title,
       isPlaceholder: lines.every(line => line.isPlaceholder),
+      canRerunReport: false,
       color: this.resolveBenchmarkMetricColor(meanAbsoluteError),
       severityLabel: this.resolveBenchmarkMetricSeverityLabel(meanAbsoluteError),
       dominantLineLabel: meanAbsoluteError === null ? null : 'MAE',
@@ -1769,6 +1822,7 @@ export class ToolsComparePageComponent implements OnInit {
       sortValue: null,
       title,
       isPlaceholder: true,
+      canRerunReport: false,
       color: null,
       severityLabel: 'missing',
       dominantLineLabel: null,

@@ -32,6 +32,7 @@ export type ToolCompareSavedAction =
     | 'open_details'
     | 'open_report'
     | 'run_report'
+    | 'rerun_report'
     | 'description_edit'
     | 'description_save'
     | 'tags_edit'
