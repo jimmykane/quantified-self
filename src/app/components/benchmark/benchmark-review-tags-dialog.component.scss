@@ -9,25 +9,58 @@
   width: 100%;
   min-width: 0;
   max-width: 100%;
-  padding-top: 0.4rem;
-  overflow-x: hidden;
+  padding-top: 0.9rem;
+  overflow: visible;
 }
 
 .tags-field {
+  --mat-form-field-container-height: 4rem;
+  --mat-form-field-container-vertical-padding: 0.75rem;
+  --mat-chip-container-height: 2rem;
+  --mat-chip-container-shape-radius: 4px;
+  --mat-chip-label-text-color: var(--mat-sys-on-surface);
+  --mat-chip-outline-color: var(--mat-sys-outline);
+  --mat-chip-trailing-action-opacity: 1;
+  --mat-chip-with-trailing-icon-trailing-icon-color: var(--mat-sys-on-surface-variant);
   --mdc-outlined-text-field-container-shape: 4px;
-  --mdc-chip-elevated-container-shape-radius: 4px;
-  --mdc-chip-flat-container-shape-radius: 4px;
 
   width: 100%;
   min-width: 0;
 }
 
 .tags-field mat-chip-grid {
-  min-height: 3rem;
+  display: flex;
+  align-items: center;
+  min-height: 2.5rem;
 }
 
 .tags-field mat-chip-row {
+  align-self: center;
   border-radius: 4px;
+  min-height: 2rem;
+  margin-block: 0;
+  padding-inline: 0.7rem 0.45rem;
+}
+
+.tag-input {
+  align-self: center;
+  height: 2rem;
+  line-height: 2rem;
+  margin-block: 0;
+  padding-block: 0;
+}
+
+.tag-remove-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.125rem;
+  height: 1.125rem;
+  margin-inline-start: 0.35rem;
+  color: var(--mat-sys-on-surface-variant);
+  font-size: 1.05rem;
+  line-height: 1;
+  opacity: 1;
 }
 
 .tag-dialog-footer {

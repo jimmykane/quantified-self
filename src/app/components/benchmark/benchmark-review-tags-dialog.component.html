@@ -7,13 +7,12 @@
       @for (tag of stagedTags(); track tag) {
       <mat-chip-row [disabled]="isSaving()" (removed)="removeTag(tag)">
         {{ tag }}
-        <button matChipRemove type="button" [disabled]="isSaving()" [attr.aria-label]="'Remove ' + tag">
-          <mat-icon>cancel</mat-icon>
-        </button>
+        <mat-icon matChipRemove class="tag-remove-icon" [attr.aria-label]="'Remove ' + tag">close</mat-icon>
       </mat-chip-row>
       }
       <input
         #tagInputElement
+        class="tag-input"
         matInput
         placeholder="Add tag"
         [disabled]="isSaving() || hasReachedLimit()"
