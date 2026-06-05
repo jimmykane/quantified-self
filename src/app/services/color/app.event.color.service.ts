@@ -1,7 +1,7 @@
 import { Injectable } from '@angular/core';
 import { AppDeviceColors } from './app.device.colors';
 import { ActivityInterface } from '@sports-alliance/sports-lib';
-import { ActivityTypes, ActivityTypesHelper } from '@sports-alliance/sports-lib';
+import { ActivityTypeGroups, ActivityTypes, ActivityTypesHelper, type ActivityTypeGroup } from '@sports-alliance/sports-lib';
 import { AppActivityTypeGroupColors } from './app.activity-type-group.colors';
 import { AppActivityTypeGroupGradients } from './app.activity-type-group.gradients';
 import { AppColors } from './app.colors';
@@ -150,14 +150,14 @@ export class AppEventColorService {
   }
 
   getColorForActivityTypeByActivityTypeGroup(activityType: ActivityTypes): string {
-    return AppActivityTypeGroupColors[ActivityTypesHelper.getActivityGroupForActivityType(activityType)];
+    return AppActivityTypeGroupColors[this.getVisualActivityTypeGroup(activityType)];
   }
 
   /**
    * Returns a CSS linear-gradient string for the given activity type.
    */
   getGradientForActivityTypeGroup(activityType: ActivityTypes): string {
-    const group = ActivityTypesHelper.getActivityGroupForActivityType(activityType);
+    const group = this.getVisualActivityTypeGroup(activityType);
     const gradient = AppActivityTypeGroupGradients[group];
     if (gradient) {
       return `linear-gradient(135deg, ${gradient.start}, ${gradient.end})`;
@@ -165,6 +165,15 @@ export class AppEventColorService {
     // Fallback to solid color if gradient not defined
     const solid = AppActivityTypeGroupColors[group] || '#999';
     return `linear-gradient(135deg, ${solid}, ${solid})`;
+  }
+
+  private getVisualActivityTypeGroup(activityType: ActivityTypes): ActivityTypeGroup {
+    switch (activityType) {
+      case ActivityTypes.Trekking:
+        return ActivityTypeGroups.OutdoorAdventuresGroup;
+      default:
+        return ActivityTypesHelper.getActivityGroupForActivityType(activityType);
+    }
   }
 
   getColorForZoneHex(zone: string): string {

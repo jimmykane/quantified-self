@@ -196,6 +196,13 @@ describe('AppEventColorService', () => {
       expect(mountainGradient).toContain('#FF9800');
       expect(mountainGradient).toContain('#43A047');
     });
+
+    it('should use outdoor-adventures gradient for trekking visual treatment', () => {
+      const trekkingGradient = service.getGradientForActivityTypeGroup(ActivityTypes.Trekking);
+
+      expect(trekkingGradient).toContain('#55D781');
+      expect(trekkingGradient).toContain('#2E7D32');
+    });
   });
 
   describe('getColorForActivityTypeByActivityTypeGroup', () => {
@@ -206,6 +213,13 @@ describe('AppEventColorService', () => {
       expect(service.getColorForActivityTypeByActivityTypeGroup(ActivityTypes['Enduro MTB'])).toBe(expectedMountainBikingColor);
       expect(service.getColorForActivityTypeByActivityTypeGroup(ActivityTypes.DownhillCycling)).toBe(expectedMountainBikingColor);
       expect(service.getColorForActivityTypeByActivityTypeGroup(ActivityTypes.Cycling)).not.toBe(expectedMountainBikingColor);
+    });
+
+    it('should use outdoor-adventures color for trekking visual treatment', () => {
+      const expectedOutdoorColor = AppActivityTypeGroupColors[ActivityTypeGroups.OutdoorAdventuresGroup];
+
+      expect(service.getColorForActivityTypeByActivityTypeGroup(ActivityTypes.Trekking)).toBe(expectedOutdoorColor);
+      expect(service.getColorForActivityTypeByActivityTypeGroup(ActivityTypes.Trek)).toBe(expectedOutdoorColor);
     });
   });
 });
