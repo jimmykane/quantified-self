@@ -928,6 +928,9 @@ describe('ToolsComparePageComponent', () => {
       resultCount: 1,
     });
 
+    await component.openComparison(component.comparisonItems()[0], true);
+    expect(benchmarkFlowServiceMock.openBenchmarkSelectionDialog).toHaveBeenCalledTimes(1);
+
     resolveFlow?.();
     await flowPromise;
     await Promise.resolve();
@@ -1395,7 +1398,7 @@ describe('ToolsComparePageComponent', () => {
                 totalDistanceDifference: 12,
               },
               streamMetrics: {
-                [DataHeartRate.type]: {
+                HeartRate: {
                   sourceA_mean: 150,
                   sourceB_mean: 148,
                   meanDeviation: -2,

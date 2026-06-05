@@ -50,6 +50,10 @@ import {
   DeviceColorPreferencesDialogComponent,
 } from './device-color-preferences-dialog.component';
 import { BenchmarkReviewTagsDialogComponent } from '../benchmark/benchmark-review-tags-dialog.component';
+import {
+  resolveBenchmarkStreamMeanDeviation,
+  resolveBenchmarkStreamMetrics,
+} from '../../helpers/benchmark-review.helper';
 
 interface SelectedFileItem {
   index: number;
@@ -699,7 +703,7 @@ export class ToolsComparePageComponent implements OnInit {
         status: 'success',
         hadDescription: !!item.description,
       }));
-    } catch (error) {
+    } catch {
       this.clearDescriptionDraft(item.id);
       this.clearDescriptionEdit(item.id);
       this.snackBar.open('Could not save description.', undefined, { duration: 3000 });
@@ -972,7 +976,7 @@ export class ToolsComparePageComponent implements OnInit {
       this.analyticsService.logToolCompareSavedAction('delete', this.getComparisonSavedActionAnalytics(item, {
         status: 'success',
       }));
-    } catch (error) {
+    } catch {
       this.snackBar.open('Could not delete comparison.', undefined, { duration: 3000 });
       this.hapticsService.error();
       this.analyticsService.logToolCompareSavedAction('delete', this.getComparisonSavedActionAnalytics(item, {
@@ -1486,6 +1490,7 @@ export class ToolsComparePageComponent implements OnInit {
     const heartRateBenchmark = this.buildStreamBenchmarkMetricCell(
       primaryBenchmarkResult,
       DataHeartRate.type,
+      ['HeartRate', 'Heart Rate', 'Average Heart Rate'],
       'heart-rate',
       'bpm',
       reportContext,
@@ -1493,6 +1498,7 @@ export class ToolsComparePageComponent implements OnInit {
     const altitudeBenchmark = this.buildStreamBenchmarkMetricCell(
       primaryBenchmarkResult,
       DataAltitude.type,
+      ['Altitude', 'Average Altitude'],
       'altitude',
       'm',
       reportContext,
@@ -1761,6 +1767,7 @@ export class ToolsComparePageComponent implements OnInit {
   private buildStreamBenchmarkMetricCell(
     result: BenchmarkResult | null,
     streamType: string,
+    streamAliases: string[],
     streamLabel: string,
     unit: string,
     reportContext: string,
@@ -1769,20 +1776,14 @@ export class ToolsComparePageComponent implements OnInit {
       return this.buildPlaceholderBenchmarkMetricCell(MISSING_BENCHMARK_REPORT_TOOLTIP);
     }
 
-    const metrics = result.metrics?.streamMetrics?.[streamType];
+    const metrics = resolveBenchmarkStreamMetrics(result.metrics?.streamMetrics || {}, streamType, streamAliases);
     if (!metrics) {
       return this.buildPlaceholderBenchmarkMetricCell(
         this.appendReportContext(`No ${streamLabel} stream in latest benchmark report.`, reportContext),
       );
     }
 
-    const explicitMeanDeviation = this.getFiniteNumber(metrics.meanDeviation);
-    const sourceAMean = this.getFiniteNumber(metrics.sourceA_mean);
-    const sourceBMean = this.getFiniteNumber(metrics.sourceB_mean);
-    const derivedMeanDeviation = sourceAMean !== null && sourceBMean !== null
-      ? sourceBMean - sourceAMean
-      : null;
-    const meanDeviation = explicitMeanDeviation ?? derivedMeanDeviation;
+    const meanDeviation = this.getFiniteNumber(resolveBenchmarkStreamMeanDeviation(metrics));
     const meanAbsoluteError = this.getFiniteNumber(metrics.meanAbsoluteError);
     const decimals = unit === 'bpm' ? 0 : 1;
     const lines: ComparisonBenchmarkMetricLine[] = [

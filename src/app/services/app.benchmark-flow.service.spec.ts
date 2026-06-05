@@ -1,6 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { of } from 'rxjs';
+import { of, Subject } from 'rxjs';
 import { Overlay } from '@angular/cdk/overlay';
 import { MatBottomSheet } from '@angular/material/bottom-sheet';
 import { MatDialog } from '@angular/material/dialog';
@@ -140,7 +140,6 @@ describe('AppBenchmarkFlowService', () => {
 
   it('opens selection dialog and runs benchmark when two activities returned', async () => {
     const event = createEvent();
-    const result = createResult();
     const options: BenchmarkOptions = { autoAlignTime: true };
 
     const generateSpy = vi.spyOn(service, 'generateAndOpenReport').mockResolvedValue();
@@ -156,6 +155,47 @@ describe('AppBenchmarkFlowService', () => {
       options
     }));
     expect(analyticsService.logEvent).not.toHaveBeenCalled();
+  });
+
+  it('keeps selection dialog promise pending until dialog close and generation complete', async () => {
+    const event = createEvent();
+    const options: BenchmarkOptions = { autoAlignTime: true };
+    const afterClosed = new Subject<{ activities: ActivityInterface[]; options: BenchmarkOptions } | undefined>();
+    let resolveGeneration: (() => void) | undefined;
+    const generationPromise = new Promise<void>((resolve) => {
+      resolveGeneration = resolve;
+    });
+    let resolved = false;
+
+    vi.spyOn(service, 'generateAndOpenReport').mockReturnValueOnce(generationPromise);
+    dialog.open.mockReturnValueOnce({
+      afterClosed: () => afterClosed.asObservable(),
+      componentInstance: { setActivities: vi.fn() },
+    });
+
+    const openPromise = service.openBenchmarkSelectionDialog({ event }).then(() => {
+      resolved = true;
+    });
+
+    await Promise.resolve();
+    expect(resolved).toBe(false);
+
+    afterClosed.next({ activities: [activityA, activityB], options });
+    afterClosed.complete();
+    await Promise.resolve();
+
+    expect(service.generateAndOpenReport).toHaveBeenCalledWith(expect.objectContaining({
+      event,
+      ref: activityA,
+      test: activityB,
+      options,
+    }));
+    expect(resolved).toBe(false);
+
+    resolveGeneration?.();
+    await openPromise;
+
+    expect(resolved).toBe(true);
   });
 
   it('uses an exact two-activity initial selection for the selection dialog', async () => {

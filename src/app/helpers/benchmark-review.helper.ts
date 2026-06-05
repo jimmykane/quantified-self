@@ -62,10 +62,10 @@ export function buildBenchmarkReviewerSummary(
   const overallLabel = `${formatGradeLabel(resolveOverallGrade(result))} agreement`;
   const gnss = result.metrics?.gnss;
   const streamMetrics = result.metrics?.streamMetrics || {};
-  const heartRate = resolveStreamMetrics(streamMetrics, DataHeartRate.type, ['HeartRate', 'Heart Rate', 'Average Heart Rate']);
-  const altitude = resolveStreamMetrics(streamMetrics, DataAltitude.type, ['Altitude', 'Average Altitude']);
-  const heartRateMeanDeviation = resolveStreamMeanDeviation(heartRate);
-  const altitudeMeanDeviation = resolveStreamMeanDeviation(altitude);
+  const heartRate = resolveBenchmarkStreamMetrics(streamMetrics, DataHeartRate.type, ['HeartRate', 'Heart Rate', 'Average Heart Rate']);
+  const altitude = resolveBenchmarkStreamMetrics(streamMetrics, DataAltitude.type, ['Altitude', 'Average Altitude']);
+  const heartRateMeanDeviation = resolveBenchmarkStreamMeanDeviation(heartRate);
+  const altitudeMeanDeviation = resolveBenchmarkStreamMeanDeviation(altitude);
   const qualityIssueCount = Array.isArray(result.qualityIssues) ? result.qualityIssues.length : 0;
 
   const atAGlanceItems: BenchmarkAtAGlanceItem[] = [
@@ -135,7 +135,7 @@ function formatBenchmarkPair(result: BenchmarkResult): string {
   return `${reference} -> ${test}`;
 }
 
-function resolveStreamMetrics(
+export function resolveBenchmarkStreamMetrics(
   streamMetrics: Record<string, BenchmarkStreamMetrics>,
   primaryType: string,
   aliases: string[],
@@ -153,7 +153,7 @@ function normalizeMetricKey(value: string): string {
   return value.trim().replace(/[_\s-]+/g, '').toLowerCase();
 }
 
-function resolveStreamMeanDeviation(metrics: BenchmarkStreamMetrics | undefined): number | undefined {
+export function resolveBenchmarkStreamMeanDeviation(metrics: BenchmarkStreamMetrics | undefined): number | undefined {
   if (!metrics) {
     return undefined;
   }

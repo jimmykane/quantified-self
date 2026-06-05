@@ -80,7 +80,7 @@ export class AppBenchmarkFlowService {
 
     sheetRef.afterDismissed().subscribe((res: { rerun?: boolean } | undefined) => {
       if (res?.rerun) {
-        this.openBenchmarkSelectionDialog(nextConfig);
+        void this.openBenchmarkSelectionDialog(nextConfig);
       }
     });
   }
@@ -102,12 +102,11 @@ export class AppBenchmarkFlowService {
 
     let resolvedEvent: AppEventInterface = config.event;
     let closed = false;
-
-    dialogRef.afterClosed().subscribe(() => {
+    const afterClosed$ = dialogRef.afterClosed();
+    afterClosed$.subscribe(() => {
       closed = true;
     });
-
-    dialogRef.afterClosed().subscribe(async (result: { activities: ActivityInterface[]; options: BenchmarkOptions } | undefined) => {
+    const dialogClosed = firstValueFrom(afterClosed$).then(async (result: { activities: ActivityInterface[]; options: BenchmarkOptions } | undefined) => {
       if (result && result.activities?.length === 2) {
         await this.generateAndOpenReport({
           ...config,
@@ -139,6 +138,8 @@ export class AppBenchmarkFlowService {
           this.snackBar.open('Could not load activities for benchmarking', undefined, { duration: 3000 });
         });
     }
+
+    await dialogClosed;
   }
 
   async openBenchmarkEntry(config: BenchmarkFlowConfig): Promise<void> {
