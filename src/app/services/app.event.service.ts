@@ -349,6 +349,9 @@ export class AppEventService implements OnDestroy {
     if (event.comparisonTitle) {
       clonedEvent.comparisonTitle = event.comparisonTitle;
     }
+    if (Array.isArray(event.benchmarkReviewTags)) {
+      clonedEvent.benchmarkReviewTags = [...event.benchmarkReviewTags];
+    }
     if (typeof event.sourceFilesCount === 'number') {
       clonedEvent.sourceFilesCount = event.sourceFilesCount;
     }

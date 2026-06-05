@@ -21,6 +21,10 @@ interface BenchmarkFlowConfig {
   result?: BenchmarkResult;
   initialSelection?: ActivityInterface[];
   onResult?: (result: BenchmarkResult) => void;
+  onEventTagsSaved?: (tags: string[]) => void;
+  reviewTagSuggestions?: string[];
+  onGenerationStart?: () => void;
+  onGenerationComplete?: (status: 'success' | 'failure') => void;
   hydrateStreamsForGeneration?: boolean;
 }
 
@@ -62,6 +66,10 @@ export class AppBenchmarkFlowService {
       data: {
         result: nextConfig.result,
         event: nextConfig.event,
+        persistEvent: nextConfig.persistEvent,
+        user: nextConfig.user,
+        onEventTagsSaved: nextConfig.onEventTagsSaved,
+        reviewTagSuggestions: nextConfig.reviewTagSuggestions,
         unitSettings: nextConfig.user?.settings?.unitSettings ?? AppUserUtilities.getDefaultUserUnitSettings(),
         summariesSettings: nextConfig.user?.settings?.summariesSettings,
         brandText: (nextConfig.user as any)?.brandText ?? null,
@@ -72,7 +80,7 @@ export class AppBenchmarkFlowService {
 
     sheetRef.afterDismissed().subscribe((res: { rerun?: boolean } | undefined) => {
       if (res?.rerun) {
-        this.openBenchmarkSelectionDialog(nextConfig);
+        void this.openBenchmarkSelectionDialog(nextConfig);
       }
     });
   }
@@ -94,12 +102,11 @@ export class AppBenchmarkFlowService {
 
     let resolvedEvent: AppEventInterface = config.event;
     let closed = false;
-
-    dialogRef.afterClosed().subscribe(() => {
+    const afterClosed$ = dialogRef.afterClosed();
+    afterClosed$.subscribe(() => {
       closed = true;
     });
-
-    dialogRef.afterClosed().subscribe(async (result: { activities: ActivityInterface[]; options: BenchmarkOptions } | undefined) => {
+    const dialogClosed = firstValueFrom(afterClosed$).then(async (result: { activities: ActivityInterface[]; options: BenchmarkOptions } | undefined) => {
       if (result && result.activities?.length === 2) {
         await this.generateAndOpenReport({
           ...config,
@@ -131,6 +138,8 @@ export class AppBenchmarkFlowService {
           this.snackBar.open('Could not load activities for benchmarking', undefined, { duration: 3000 });
         });
     }
+
+    await dialogClosed;
   }
 
   async openBenchmarkEntry(config: BenchmarkFlowConfig): Promise<void> {
@@ -173,6 +182,8 @@ export class AppBenchmarkFlowService {
     options: BenchmarkOptions;
   }): Promise<void> {
     this.snackBar.open('Generating Benchmark...', undefined, { duration: 2000 });
+    config.onGenerationStart?.();
+    let generationSucceeded = false;
 
     try {
       const generationConfig = await this.resolveBenchmarkGenerationConfig(config);
@@ -223,6 +234,7 @@ export class AppBenchmarkFlowService {
       generationConfig.onResult?.(benchmarkResult);
       await this.openBenchmarkReport({ ...generationConfig, result: benchmarkResult });
       this.snackBar.open('Benchmark Generated & Saved!', undefined, { duration: 2000 });
+      generationSucceeded = true;
     } catch (error) {
       this.analyticsService.logEvent('benchmark_generate_failure');
       if (error instanceof BenchmarkNoOverlapError) {
@@ -233,6 +245,8 @@ export class AppBenchmarkFlowService {
 
       this.snackBar.open('Benchmark failed: ' + error, 'Close');
       this.logger.error('Benchmark flow failed', error);
+    } finally {
+      config.onGenerationComplete?.(generationSucceeded ? 'success' : 'failure');
     }
   }
 

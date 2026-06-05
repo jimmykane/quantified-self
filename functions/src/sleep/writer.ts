@@ -107,6 +107,53 @@ function shouldKeepExistingSleepSession(existing: SleepSession, incoming: SleepM
         && existingSleepStageSeconds > incomingSleepStageSeconds;
 }
 
+function stableComparableValue(value: unknown): unknown {
+    if (Array.isArray(value)) {
+        return value.map(stableComparableValue);
+    }
+    if (!value || typeof value !== 'object') {
+        return value === undefined ? null : value;
+    }
+
+    const source = value as Record<string, unknown>;
+    return Object.keys(source)
+        .sort()
+        .reduce<Record<string, unknown>>((target, key) => {
+            if (source[key] !== undefined) {
+                target[key] = stableComparableValue(source[key]);
+            }
+            return target;
+        }, {});
+}
+
+function comparableSleepSessionPayload(session: SleepSession | SleepMapperResult['session']): unknown {
+    const payload = { ...(session as SleepSession) } as Record<string, unknown>;
+    delete payload.id;
+    delete payload.userID;
+    delete payload.createdAtMs;
+    delete payload.updatedAtMs;
+
+    const source = payload.source && typeof payload.source === 'object'
+        ? payload.source as Record<string, unknown>
+        : {};
+    payload.source = {
+        ...source,
+        callbackURL: undefined,
+        receivedAtMs: undefined,
+    };
+
+    return stableComparableValue(payload);
+}
+
+function isIdempotentSleepSessionWrite(existing: SleepSession, incoming: SleepMapperResult['session']): boolean {
+    if (existing.source?.provider !== incoming.source?.provider
+        || existing.source?.sourceSessionKey !== incoming.source?.sourceSessionKey) {
+        return false;
+    }
+
+    return JSON.stringify(comparableSleepSessionPayload(existing)) === JSON.stringify(comparableSleepSessionPayload(incoming));
+}
+
 export async function upsertSleepSession(
     userID: string,
     mapperResult: SleepMapperResult,
@@ -137,6 +184,10 @@ export async function upsertSleepSession(
         const existingSession = existing.exists ? existing.data() as SleepSession : null;
         if (existingSession && shouldKeepExistingSleepSession(existingSession, mapperResult.session)) {
             logger.info(`[SleepSync] Preserved fuller ${provider} sleep session ${id} for ${userID}`);
+            return { id, session: existingSession, written: false };
+        }
+        if (existingSession && isIdempotentSleepSessionWrite(existingSession, mapperResult.session)) {
+            logger.info(`[SleepSync] Skipped unchanged ${provider} sleep session ${id} for ${userID}`);
             return { id, session: existingSession, written: false };
         }
 
@@ -200,6 +251,8 @@ export async function updateSleepSyncState(
         lastBackfillEndMs: number | null;
         lastBackfillQueueItems: number | null;
         nextBackfillAllowedAtMs: number | null;
+        providerMinBackfillStartMs: number | null;
+        providerMinBackfillStartProviderUserId: string | null;
         lastError: string | null;
     }>,
     nowMs = Date.now(),

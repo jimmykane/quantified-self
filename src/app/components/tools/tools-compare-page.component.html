@@ -13,7 +13,7 @@
     <p class="eyebrow">Tools / Compare</p>
     <h1 id="tools-compare-title">Compare FIT, GPX, and TCX files</h1>
     <p class="hero-copy">
-      Create one saved benchmark event from multiple source files and open it in event details.
+      Create one saved benchmark event from multiple source files and open benchmark reports on the compare page.
     </p>
   </section>
 
@@ -40,11 +40,82 @@
       </mat-card-content>
     </mat-card>
   </section>
+
+  <section class="guest-workflow-panel" aria-labelledby="tools-compare-workflow-title">
+    <div class="section-heading">
+      <p class="eyebrow">Benchmark workflow</p>
+      <h2 id="tools-compare-workflow-title">Review file recordings without rebuilding a dashboard</h2>
+      <p class="section-copy">
+        Use the compare tool for device reviews, firmware checks, coaching notes, and repeatable FIT, GPX, or TCX file tests.
+      </p>
+    </div>
+
+    <div class="guest-workflow-grid">
+      <mat-card appearance="outlined" class="workflow-card">
+        <mat-card-header>
+          <div mat-card-avatar class="tool-avatar">
+            <mat-icon>upload_file</mat-icon>
+          </div>
+          <mat-card-title>File-based comparisons</mat-card-title>
+        </mat-card-header>
+        <mat-card-content>
+          <p>Upload two or more FIT, GPX, or TCX recordings after sign-in and create one saved benchmark event.</p>
+        </mat-card-content>
+      </mat-card>
+
+      <mat-card appearance="outlined" class="workflow-card">
+        <mat-card-header>
+          <div mat-card-avatar class="tool-avatar">
+            <mat-icon>query_stats</mat-icon>
+          </div>
+          <mat-card-title>Reviewer metrics</mat-card-title>
+        </mat-card-header>
+        <mat-card-content>
+          <p>Comparison rows can show devices, activity type, distance, ascent, descent, and GNSS, heart-rate, and altitude benchmark error metrics.</p>
+        </mat-card-content>
+      </mat-card>
+
+      <mat-card appearance="outlined" class="workflow-card">
+        <mat-card-header>
+          <div mat-card-avatar class="tool-avatar">
+            <mat-icon>rate_review</mat-icon>
+          </div>
+          <mat-card-title>Device review notes</mat-card-title>
+        </mat-card-header>
+        <mat-card-content>
+          <p>Open benchmark reports on this page, add comparison notes, and keep stable device colors for reviewer tables.</p>
+        </mat-card-content>
+      </mat-card>
+    </div>
+
+    <div class="guest-workflow-links" aria-label="Related comparison pages">
+      <a mat-stroked-button routerLink="/features/workout-file-comparison">
+        Workout file comparison
+      </a>
+      <a mat-stroked-button routerLink="/features/sports-watch-benchmark">
+        Sports watch benchmarks
+      </a>
+    </div>
+  </section>
   } @else if (showSignedInWorkspace()) {
   <section class="signed-in-workspace">
     <header class="workspace-header" aria-labelledby="tools-compare-workspace-title">
-      <p class="eyebrow">Tools / Compare</p>
-      <h1 id="tools-compare-workspace-title">{{ showSavedComparisonsFirst ? 'Saved comparisons' : 'Compare files' }}</h1>
+      <div class="workspace-title-block">
+        <p class="eyebrow">Tools / Compare</p>
+        <h1 id="tools-compare-workspace-title">{{ showSavedComparisonsFirst ? 'Saved comparisons' : 'Compare files' }}</h1>
+      </div>
+      @if (comparisonDeviceColorItems().length > 0) {
+      <div class="workspace-header-actions">
+        <button
+          mat-stroked-button
+          type="button"
+          class="device-colors-button"
+          (click)="openDeviceColorPreferencesDialog()">
+          <mat-icon>palette</mat-icon>
+          Device colors
+        </button>
+      </div>
+      }
     </header>
 
     @if (isSignedInProfileLoading()) {
@@ -179,8 +250,104 @@
           </button>
           }
         </mat-form-field>
-        <span class="result-summary">{{ comparisonResultSummary() }}</span>
+        <mat-form-field appearance="outline" class="facet-filter-field" subscriptSizing="dynamic">
+          <mat-label>Device</mat-label>
+          <mat-select
+            [value]="comparisonDeviceFilter()"
+            [disabled]="comparisonDeviceFilterOptions().length === 0"
+            (selectionChange)="updateComparisonDeviceFilter($event.value)">
+            <mat-option value="">All devices</mat-option>
+            @for (option of comparisonDeviceFilterOptions(); track option.value) {
+            <mat-option [value]="option.value">{{ option.label }}</mat-option>
+            }
+          </mat-select>
+        </mat-form-field>
+        <mat-form-field appearance="outline" class="facet-filter-field" subscriptSizing="dynamic">
+          <mat-label>Activity type</mat-label>
+          <mat-select
+            [value]="comparisonActivityTypeFilter()"
+            [disabled]="comparisonActivityTypeFilterOptions().length === 0"
+            (selectionChange)="updateComparisonActivityTypeFilter($event.value)">
+            <mat-option value="">All types</mat-option>
+            @for (option of comparisonActivityTypeFilterOptions(); track option.value) {
+            <mat-option [value]="option.value">{{ option.label }}</mat-option>
+            }
+          </mat-select>
+        </mat-form-field>
+        <mat-form-field appearance="outline" class="facet-filter-field" subscriptSizing="dynamic">
+          <mat-label>Tag</mat-label>
+          <mat-select
+            [value]="comparisonTagFilter()"
+            [disabled]="comparisonTagFilterOptions().length === 0"
+            (selectionChange)="updateComparisonTagFilter($event.value)">
+            <mat-option value="">All tags</mat-option>
+            @for (option of comparisonTagFilterOptions(); track option.value) {
+            <mat-option [value]="option.value">{{ option.label }}</mat-option>
+            }
+          </mat-select>
+        </mat-form-field>
+        <div class="comparison-table-actions">
+          <span class="result-summary">{{ comparisonResultSummary() }}</span>
+        </div>
       </div>
+
+      <ng-template #benchmarkMetricCellTemplate let-item="item" let-cell="cell">
+        @if (!item.hasReport || cell.canRerunReport) {
+        <button
+          type="button"
+          class="summary-stack benchmark-summary-stack benchmark-summary-action"
+          [class.benchmark-rerun-action]="cell.canRerunReport"
+          [class.summary-placeholder]="cell.isPlaceholder"
+          [class.benchmark-is-loading]="benchmarkingEventID() === item.id"
+          [disabled]="!!benchmarkingEventID()"
+          [matTooltip]="cell.title"
+          [attr.title]="cell.title"
+          [attr.data-severity]="cell.severityLabel"
+          [attr.aria-label]="cell.canRerunReport ? 'Rerun benchmark report for ' + item.title : 'Run benchmark report for ' + item.title"
+          (click)="openBenchmarkFromMetricCell(item, cell)">
+          @if (benchmarkingEventID() === item.id) {
+          <span class="benchmark-loading-state">
+            <mat-progress-spinner diameter="18" mode="indeterminate"></mat-progress-spinner>
+            <span>Running</span>
+          </span>
+          } @else {
+          @for (line of cell.lines; track line.label) {
+          <span
+            class="summary-line benchmark-metric-line"
+            [class.benchmark-placeholder-line]="line.isPlaceholder">
+            <span class="benchmark-metric-label">{{ line.label }}</span>
+            <span class="benchmark-metric-value">{{ line.value }}</span>
+          </span>
+          }
+          @if (!item.hasReport || cell.canRerunReport) {
+          <span class="benchmark-rerun-hint">
+            <mat-icon aria-hidden="true">refresh</mat-icon>
+            <span>{{ cell.canRerunReport ? 'Rerun' : 'Run' }}</span>
+          </span>
+          }
+          }
+        </button>
+        } @else {
+        <div
+          class="summary-stack benchmark-summary-stack"
+          [class.summary-placeholder]="cell.isPlaceholder"
+          [class.benchmark-has-signal]="!!cell.color"
+          [style.--benchmark-accent-color]="cell.color"
+          [attr.data-severity]="cell.severityLabel"
+          [matTooltip]="cell.title"
+          [attr.title]="cell.title">
+          @for (line of cell.lines; track line.label) {
+          <span
+            class="summary-line benchmark-metric-line"
+            [class.benchmark-placeholder-line]="line.isPlaceholder"
+            [class.benchmark-primary-line]="line.label === cell.dominantLineLabel && !line.isPlaceholder">
+            <span class="benchmark-metric-label">{{ line.label }}</span>
+            <span class="benchmark-metric-value">{{ line.value }}</span>
+          </span>
+          }
+        </div>
+        }
+      </ng-template>
 
       @if (filteredComparisonCount() === 0) {
       <mat-card appearance="outlined" class="state-card">
@@ -201,7 +368,12 @@
           [matSortDirection]="comparisonSort().direction"
           (matSortChange)="onComparisonSortChange($event)">
           <ng-container matColumnDef="date">
-            <th mat-header-cell *matHeaderCellDef mat-sort-header="date">Date</th>
+            <th mat-header-cell *matHeaderCellDef mat-sort-header="date">
+              <span class="comparison-header-label">
+                <app-data-type-icon [dataType]="comparisonHeaderDataTypes.date" size="18px" vAlign="middle"></app-data-type-icon>
+                <span>Date</span>
+              </span>
+            </th>
             <td mat-cell *matCellDef="let item">
               @if (item.date) {
               {{ item.date | date:'mediumDate' }}
@@ -212,7 +384,12 @@
           </ng-container>
 
           <ng-container matColumnDef="title">
-            <th mat-header-cell *matHeaderCellDef mat-sort-header="title">Title</th>
+            <th mat-header-cell *matHeaderCellDef mat-sort-header="title">
+              <span class="comparison-header-label">
+                <app-data-type-icon [dataType]="comparisonHeaderDataTypes.title" size="18px" vAlign="middle"></app-data-type-icon>
+                <span>Title</span>
+              </span>
+            </th>
             <td mat-cell *matCellDef="let item">
               <span
                 class="title-cell"
@@ -224,7 +401,12 @@
           </ng-container>
 
           <ng-container matColumnDef="devices">
-            <th mat-header-cell *matHeaderCellDef mat-sort-header="devices">Devices</th>
+            <th mat-header-cell *matHeaderCellDef mat-sort-header="devices">
+              <span class="comparison-header-label">
+                <app-data-type-icon [dataType]="comparisonHeaderDataTypes.devices" size="18px" vAlign="middle"></app-data-type-icon>
+                <span>Devices</span>
+              </span>
+            </th>
             <td mat-cell *matCellDef="let item">
               @if (item.activitySummaries.length > 0) {
               <div
@@ -235,7 +417,15 @@
                 <span
                   class="summary-line summary-device device-summary-line"
                   [style.--device-accent-color]="summary.deviceColor">
-                  <span class="device-name-swatch" aria-hidden="true"></span>
+                  <button
+                    type="button"
+                    class="device-color-trigger"
+                    [disabled]="!summary.deviceColorKey"
+                    [matTooltip]="'Set color for ' + summary.deviceLabel"
+                    [attr.aria-label]="'Set color for ' + summary.deviceLabel"
+                    (click)="openDeviceColorPreferencesDialog(summary.deviceColorKey)">
+                    <span class="device-name-swatch" aria-hidden="true"></span>
+                  </button>
                   <span class="device-name-label">{{ summary.deviceLabel }}</span>
                 </span>
                 }
@@ -253,7 +443,12 @@
           </ng-container>
 
           <ng-container matColumnDef="activityType">
-            <th mat-header-cell *matHeaderCellDef mat-sort-header="activityType">Type</th>
+            <th mat-header-cell *matHeaderCellDef mat-sort-header="activityType">
+              <span class="comparison-header-label">
+                <app-data-type-icon [dataType]="comparisonHeaderDataTypes.activityType" size="18px" vAlign="middle"></app-data-type-icon>
+                <span>Type</span>
+              </span>
+            </th>
             <td mat-cell *matCellDef="let item">
               <div
                 class="summary-stack type-summary-stack"
@@ -263,6 +458,11 @@
                 @if (item.activitySummaries.length > 0) {
                 @for (summary of item.activitySummaries; track summary.id) {
                 <span class="summary-line summary-type-line">
+                  <app-activity-type-icon
+                    [activityType]="summary.activityTypeIconValue"
+                    size="16px"
+                    vAlign="middle">
+                  </app-activity-type-icon>
                   <span class="summary-type-value">{{ summary.activityTypeLabel }}</span>
                 </span>
                 }
@@ -274,7 +474,12 @@
           </ng-container>
 
           <ng-container matColumnDef="distance">
-            <th mat-header-cell *matHeaderCellDef mat-sort-header="distance">Distance</th>
+            <th mat-header-cell *matHeaderCellDef mat-sort-header="distance">
+              <span class="comparison-header-label">
+                <app-data-type-icon [dataType]="comparisonHeaderDataTypes.distance" size="18px" vAlign="middle"></app-data-type-icon>
+                <span>Distance</span>
+              </span>
+            </th>
             <td mat-cell *matCellDef="let item">
               <div
                 class="summary-stack metric-summary-stack"
@@ -293,7 +498,12 @@
           </ng-container>
 
           <ng-container matColumnDef="ascent">
-            <th mat-header-cell *matHeaderCellDef mat-sort-header="ascent">Ascent</th>
+            <th mat-header-cell *matHeaderCellDef mat-sort-header="ascent">
+              <span class="comparison-header-label">
+                <app-data-type-icon [dataType]="comparisonHeaderDataTypes.ascent" size="18px" vAlign="middle"></app-data-type-icon>
+                <span>Ascent</span>
+              </span>
+            </th>
             <td mat-cell *matCellDef="let item">
               <div
                 class="summary-stack metric-summary-stack"
@@ -312,7 +522,12 @@
           </ng-container>
 
           <ng-container matColumnDef="descent">
-            <th mat-header-cell *matHeaderCellDef mat-sort-header="descent">Descent</th>
+            <th mat-header-cell *matHeaderCellDef mat-sort-header="descent">
+              <span class="comparison-header-label">
+                <app-data-type-icon [dataType]="comparisonHeaderDataTypes.descent" size="18px" vAlign="middle"></app-data-type-icon>
+                <span>Descent</span>
+              </span>
+            </th>
             <td mat-cell *matCellDef="let item">
               <div
                 class="summary-stack metric-summary-stack"
@@ -330,8 +545,49 @@
             </td>
           </ng-container>
 
+          <ng-container matColumnDef="gnss">
+            <th mat-header-cell *matHeaderCellDef mat-sort-header="gnss">
+              <span class="comparison-header-label">
+                <mat-icon class="comparison-header-icon" aria-hidden="true">{{ comparisonHeaderMaterialIcons.gnss }}</mat-icon>
+                <span>GNSS</span>
+              </span>
+            </th>
+            <td mat-cell *matCellDef="let item">
+              <ng-container *ngTemplateOutlet="benchmarkMetricCellTemplate; context: { item: item, cell: item.gnssBenchmark }"></ng-container>
+            </td>
+          </ng-container>
+
+          <ng-container matColumnDef="heartRate">
+            <th mat-header-cell *matHeaderCellDef mat-sort-header="heartRate">
+              <span class="comparison-header-label">
+                <app-data-type-icon [dataType]="comparisonHeaderDataTypes.heartRate" size="18px" vAlign="middle"></app-data-type-icon>
+                <span>HR</span>
+              </span>
+            </th>
+            <td mat-cell *matCellDef="let item">
+              <ng-container *ngTemplateOutlet="benchmarkMetricCellTemplate; context: { item: item, cell: item.heartRateBenchmark }"></ng-container>
+            </td>
+          </ng-container>
+
+          <ng-container matColumnDef="altitude">
+            <th mat-header-cell *matHeaderCellDef mat-sort-header="altitude">
+              <span class="comparison-header-label">
+                <app-data-type-icon [dataType]="comparisonHeaderDataTypes.altitude" size="18px" vAlign="middle"></app-data-type-icon>
+                <span>Alt</span>
+              </span>
+            </th>
+            <td mat-cell *matCellDef="let item">
+              <ng-container *ngTemplateOutlet="benchmarkMetricCellTemplate; context: { item: item, cell: item.altitudeBenchmark }"></ng-container>
+            </td>
+          </ng-container>
+
           <ng-container matColumnDef="description">
-            <th mat-header-cell *matHeaderCellDef mat-sort-header="description">Description</th>
+            <th mat-header-cell *matHeaderCellDef mat-sort-header="description">
+              <span class="comparison-header-label">
+                <app-data-type-icon [dataType]="comparisonHeaderDataTypes.description" size="18px" vAlign="middle"></app-data-type-icon>
+                <span>Description</span>
+              </span>
+            </th>
             <td mat-cell *matCellDef="let item">
               @if (editingDescriptionEventID() !== item.id && savingDescriptionEventID() !== item.id) {
               <div class="description-display">
@@ -371,13 +627,65 @@
             </td>
           </ng-container>
 
+          <ng-container matColumnDef="tags">
+            <th mat-header-cell *matHeaderCellDef mat-sort-header="tags">
+              <span class="comparison-header-label">
+                <mat-icon class="comparison-header-icon" aria-hidden="true">{{ comparisonHeaderMaterialIcons.tags }}</mat-icon>
+                <span>Tags</span>
+              </span>
+            </th>
+            <td mat-cell *matCellDef="let item">
+              <button
+                mat-button
+                type="button"
+                class="tags-summary-button"
+                [matTooltip]="item.benchmarkReviewTagsTitle"
+                [attr.aria-label]="item.benchmarkReviewTags.length > 0 ? 'Edit comparison tags' : 'Add comparison tags'"
+                (click)="openBenchmarkReviewTagsDialog(item)">
+                @if (item.benchmarkReviewTags.length > 0) {
+                <span class="tag-pill-list">
+                  @for (tag of item.benchmarkReviewTags; track tag) {
+                  <span class="tag-pill">{{ tag }}</span>
+                  }
+                </span>
+                }
+                @if (item.benchmarkReviewTags.length > 0) {
+                <mat-icon iconPositionEnd class="tags-action-icon" aria-hidden="true">edit</mat-icon>
+                }
+                @if (item.benchmarkReviewTags.length === 0) {
+                <mat-icon class="tags-action-icon" aria-hidden="true">sell</mat-icon>
+                }
+                @if (item.benchmarkReviewTags.length === 0) {
+                <span class="tag-placeholder">Add tags</span>
+                }
+              </button>
+            </td>
+          </ng-container>
+
           <ng-container matColumnDef="sourceFiles">
-            <th mat-header-cell *matHeaderCellDef mat-sort-header="sourceFiles">Files</th>
-            <td mat-cell *matCellDef="let item">{{ item.sourceFilesLabel }}</td>
+            <th mat-header-cell *matHeaderCellDef mat-sort-header="sourceFiles">
+              <span class="comparison-header-label">
+                <mat-icon class="comparison-header-icon" aria-hidden="true">{{ comparisonHeaderMaterialIcons.sourceFiles }}</mat-icon>
+                <span>Files</span>
+              </span>
+            </th>
+            <td mat-cell *matCellDef="let item">
+              <span
+                class="source-files-cell"
+                [matTooltip]="item.sourceFilesTitle"
+                [attr.title]="item.sourceFilesTitle">
+                {{ item.sourceFilesLabel }}
+              </span>
+            </td>
           </ng-container>
 
           <ng-container matColumnDef="status">
-            <th mat-header-cell *matHeaderCellDef mat-sort-header="status">Status</th>
+            <th mat-header-cell *matHeaderCellDef mat-sort-header="status">
+              <span class="comparison-header-label">
+                <mat-icon class="comparison-header-icon" aria-hidden="true">{{ comparisonHeaderMaterialIcons.status }}</mat-icon>
+                <span>Status</span>
+              </span>
+            </th>
             <td mat-cell *matCellDef="let item">
               <span class="status-cell">
                 <mat-icon>{{ item.hasReport ? 'check_circle' : 'pending' }}</mat-icon>
@@ -387,12 +695,33 @@
           </ng-container>
 
           <ng-container matColumnDef="reports">
-            <th mat-header-cell *matHeaderCellDef mat-sort-header="reports">Reports</th>
-            <td mat-cell *matCellDef="let item">{{ item.reportLabel }}</td>
+            <th mat-header-cell *matHeaderCellDef mat-sort-header="reports">
+              <span class="comparison-header-label">
+                <mat-icon class="comparison-header-icon" aria-hidden="true">{{ comparisonHeaderMaterialIcons.reports }}</mat-icon>
+                <span>Reports</span>
+              </span>
+            </th>
+            <td mat-cell *matCellDef="let item">
+              <span
+                class="report-cell"
+                [class.report-cell--empty]="!item.hasReport"
+                [matTooltip]="item.reportTitle"
+                [attr.title]="item.reportTitle">
+                <span class="report-count-label">{{ item.reportLabel }}</span>
+                @if (item.benchmarkPairLabel) {
+                <span class="report-pair-label">{{ item.benchmarkPairLabel }}</span>
+                }
+              </span>
+            </td>
           </ng-container>
 
           <ng-container matColumnDef="actions">
-            <th mat-header-cell *matHeaderCellDef>Actions</th>
+            <th mat-header-cell *matHeaderCellDef>
+              <span class="comparison-header-label comparison-header-label--actions">
+                <mat-icon class="comparison-header-icon" aria-hidden="true">{{ comparisonHeaderMaterialIcons.actions }}</mat-icon>
+                <span>Actions</span>
+              </span>
+            </th>
             <td mat-cell *matCellDef="let item">
               <div class="row-actions">
                 <button mat-icon-button type="button" matTooltip="Open details" (click)="openComparison(item, false)" aria-label="Open comparison details">
@@ -402,9 +731,14 @@
                   mat-icon-button
                   type="button"
                   [matTooltip]="item.hasReport ? 'Open report' : 'Run report'"
+                  [disabled]="!!benchmarkingEventID()"
                   (click)="openComparison(item, true)"
                   [attr.aria-label]="item.hasReport ? 'Open benchmark report' : 'Run benchmark report'">
+                  @if (benchmarkingEventID() === item.id) {
+                  <mat-progress-spinner diameter="18" mode="indeterminate"></mat-progress-spinner>
+                  } @else {
                   <mat-icon>analytics</mat-icon>
+                  }
                 </button>
                 <button
                   mat-icon-button

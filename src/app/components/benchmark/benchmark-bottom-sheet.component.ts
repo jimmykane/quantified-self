@@ -1,14 +1,17 @@
 import { Component, ElementRef, Inject, ViewChild, inject } from '@angular/core';
 import { DatePipe } from '@angular/common';
 import { MAT_BOTTOM_SHEET_DATA, MatBottomSheetRef } from '@angular/material/bottom-sheet';
+import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import { BenchmarkResult } from '@shared/app-event.interface';
+import { AppEventInterface, BenchmarkResult } from '@shared/app-event.interface';
 import { AppEventColorService } from '../../services/color/app.event.color.service';
 import { AppBreakpoints } from '../../constants/breakpoints';
-import { EventInterface, UserSummariesSettingsInterface, UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
+import { EventInterface, User, UserSummariesSettingsInterface, UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
 import { AppShareService } from '../../services/app.share.service';
 import { environment } from '../../../environments/environment';
 import { saveAs } from 'file-saver';
+import { BenchmarkReviewService } from '../../services/benchmark-review.service';
+import { BenchmarkReviewTagsDialogComponent } from './benchmark-review-tags-dialog.component';
 
 type NativeShareStatus = 'shared' | 'unsupported' | 'cancelled' | 'failed';
 
@@ -24,6 +27,14 @@ type NativeShareStatus = 'shared' | 'unsupported' | 'cancelled' | 'failed';
               <button mat-menu-item (click)="shareBenchmark()" [disabled]="isSharing">
                 <mat-icon>share</mat-icon>
                 <span>Share</span>
+              </button>
+              <button mat-menu-item (click)="copyBenchmarkSummary()" [disabled]="isSharing">
+                <mat-icon>content_copy</mat-icon>
+                <span>Copy summary</span>
+              </button>
+              <button mat-menu-item (click)="openReviewTagsDialog()" [disabled]="isSharing || !canEditReviewTags">
+                <mat-icon>sell</mat-icon>
+                <span>Edit tags</span>
               </button>
               <button mat-menu-item (click)="downloadBenchmark()" [disabled]="isSharing">
                 <mat-icon>download</mat-icon>
@@ -45,6 +56,7 @@ type NativeShareStatus = 'shared' | 'unsupported' | 'cancelled' | 'failed';
                   [event]="data.event"
                   [unitSettings]="data.unitSettings"
                   [summariesSettings]="data.summariesSettings"
+                  [benchmarkReviewTags]="benchmarkReviewTags"
                   [referenceColor]="referenceColor"
                   [testColor]="testColor">
               </app-benchmark-report>
@@ -62,13 +74,20 @@ export class BenchmarkBottomSheetComponent {
   testColor = '';
   isSharing = false;
   shareTimestamp = new Date();
+  benchmarkReviewTags: string[] = [];
+  canEditReviewTags = false;
 
   private datePipe = inject(DatePipe);
+  private dialog = inject(MatDialog);
 
   constructor(
     @Inject(MAT_BOTTOM_SHEET_DATA) public data: {
       result: BenchmarkResult;
       event?: EventInterface;
+      persistEvent?: AppEventInterface;
+      user?: User;
+      onEventTagsSaved?: (tags: string[]) => void;
+      reviewTagSuggestions?: string[];
       unitSettings?: UserUnitSettingsInterface;
       summariesSettings?: UserSummariesSettingsInterface;
       brandText?: string | null;
@@ -76,8 +95,11 @@ export class BenchmarkBottomSheetComponent {
     private bottomSheetRef: MatBottomSheetRef<BenchmarkBottomSheetComponent>,
     private eventColorService: AppEventColorService,
     private shareService: AppShareService,
-    private snackBar: MatSnackBar
+    private snackBar: MatSnackBar,
+    private benchmarkReviewService: BenchmarkReviewService
   ) {
+    this.benchmarkReviewTags = this.benchmarkReviewService.getEventTags(this.data.persistEvent);
+    this.canEditReviewTags = !!this.data.user && !!this.data.persistEvent?.getID?.();
     this.calculateColors();
   }
 
@@ -102,6 +124,47 @@ export class BenchmarkBottomSheetComponent {
 
   rerun() {
     this.bottomSheetRef.dismiss({ rerun: true });
+  }
+
+  copyBenchmarkSummary(): void {
+    const copied = this.benchmarkReviewService.copySummary(this.data.result, this.benchmarkReviewTags);
+    this.snackBar.open(copied ? 'Benchmark summary copied.' : 'Could not copy benchmark summary.', undefined, { duration: 2500 });
+  }
+
+  openReviewTagsDialog(): void {
+    const user = this.data.user;
+    const event = this.data.persistEvent;
+    if (!user || !event?.getID?.()) {
+      this.snackBar.open('Sign in to edit review tags.', undefined, { duration: 3000 });
+      return;
+    }
+
+    const dialogRef = this.dialog.open(BenchmarkReviewTagsDialogComponent, {
+      width: 'min(34rem, calc(100vw - 32px))',
+      maxWidth: 'calc(100vw - 32px)',
+      data: {
+        title: 'Benchmark tags',
+        tags: this.benchmarkReviewTags,
+        suggestions: this.benchmarkReviewService.normalizeTags([
+          ...(this.data.reviewTagSuggestions || []),
+          ...this.benchmarkReviewTags,
+        ]),
+        save: async (tags: string[]) => {
+          const savedTags = await this.benchmarkReviewService.saveEventTags(user, event, tags);
+          this.benchmarkReviewTags = savedTags;
+          this.data.onEventTagsSaved?.(savedTags);
+          return savedTags;
+        },
+      },
+    });
+
+    dialogRef.afterClosed().subscribe((savedTags: string[] | null | undefined) => {
+      if (!Array.isArray(savedTags)) {
+        return;
+      }
+      this.benchmarkReviewTags = savedTags;
+      this.snackBar.open('Review tags saved.', undefined, { duration: 2000 });
+    });
   }
 
   async shareBenchmark(): Promise<void> {

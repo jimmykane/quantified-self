@@ -35,6 +35,7 @@ export {
   persistentLocalCache,
   persistentMultipleTabManager,
   query,
+  runTransaction,
   setDoc,
   startAfter,
   terminate,

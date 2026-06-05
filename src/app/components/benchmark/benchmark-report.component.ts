@@ -13,6 +13,8 @@ import {
 import { AppEventColorService } from '../../services/color/app.event.color.service';
 import { buildDiffMapForStats, buildStatDisplayList } from '../../helpers/stats-diff.helper';
 import { BenchmarkQualityIssue, BenchmarkResult } from '@shared/app-event.interface';
+import { BenchmarkAtAGlanceItem, BenchmarkReviewerSummary } from '../../helpers/benchmark-review.helper';
+import { BenchmarkReviewService } from '../../services/benchmark-review.service';
 
 // Grade thresholds for GNSS accuracy (CEP50 in meters)
 const GNSS_THRESHOLDS = {
@@ -83,6 +85,28 @@ interface InsightItem {
             <span>Offset {{ result.timeOffsetSeconds }}s</span>
         </div>
       </div>
+
+      <!-- Reviewer Summary -->
+      <section class="reviewer-summary-card metric-card qs-overlay-section" *ngIf="atAGlanceItems.length > 0">
+        <div class="metric-card-header">
+          <div class="grade-avatar" [ngClass]="reviewerSummaryGrade">
+            <mat-icon>{{ reviewerSummaryIcon }}</mat-icon>
+          </div>
+          <div class="metric-card-heading">
+            <div class="metric-card-title">At a Glance</div>
+            <div class="metric-card-subtitle">Reviewer summary</div>
+          </div>
+        </div>
+        <div class="metric-card-content">
+          <div class="at-a-glance-grid">
+            <div class="at-a-glance-item" *ngFor="let item of atAGlanceItems">
+              <span class="at-a-glance-label">{{ item.label }}</span>
+              <span class="at-a-glance-value">{{ item.value }}</span>
+              <span class="at-a-glance-detail" *ngIf="item.detail">{{ item.detail }}</span>
+            </div>
+          </div>
+        </div>
+      </section>
 
       <!-- Verdict Summary -->
       <div class="verdict-card metric-card qs-overlay-section" [ngClass]="getOverallGrade()">
@@ -255,18 +279,34 @@ export class BenchmarkReportComponent implements OnChanges {
     @Input() event?: EventInterface;
     @Input() unitSettings?: UserUnitSettingsInterface;
     @Input() summariesSettings?: UserSummariesSettingsInterface;
+    @Input() benchmarkReviewTags: string[] = [];
     objectKeys = Object.keys;
     diffChips: BenchmarkDiffChip[] = [];
     qualityIssueGroups: BenchmarkIssueGroup[] = [];
     expandedIssueGroups = new Set<string>();
+    reviewerSummary: BenchmarkReviewerSummary | null = null;
+    atAGlanceItems: BenchmarkAtAGlanceItem[] = [];
+    reviewerSummaryGrade: Grade = 'fair';
+    reviewerSummaryIcon = 'warning';
 
     private eventColorService = inject(AppEventColorService);
+    private benchmarkReviewService = inject(BenchmarkReviewService);
 
     ngOnChanges(changes: SimpleChanges) {
         if (changes['result'] || changes['event'] || changes['unitSettings'] || changes['summariesSettings']) {
             this.updateDiffChips();
             this.updateQualityIssueGroups();
         }
+        if (changes['result'] || changes['benchmarkReviewTags']) {
+            this.updateReviewerSummary();
+        }
+    }
+
+    private updateReviewerSummary(): void {
+        this.reviewerSummary = this.benchmarkReviewService.buildSummary(this.result, this.benchmarkReviewTags);
+        this.atAGlanceItems = this.reviewerSummary.atAGlanceItems;
+        this.reviewerSummaryGrade = this.getOverallGrade();
+        this.reviewerSummaryIcon = this.getGradeIcon(this.reviewerSummaryGrade);
     }
 
     getGnssGrade(): Grade {

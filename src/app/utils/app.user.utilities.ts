@@ -96,6 +96,7 @@ import {
 import { getAppBasicChartDataTypes, getAppCanonicalChartDataTypes } from '../helpers/app-chart-data-types.helper';
 import { ACTIVITY_SYNC_ROUTES, ActivitySyncRouteId } from '@shared/activity-sync-routes';
 import { normalizeDistanceUnits } from '@shared/unit-aware-display';
+import { normalizeDeviceDisplaySettings } from '../helpers/device-color-preferences.helper';
 
 /**
  * Utility class for AppUser related static methods and default settings.
@@ -472,6 +473,7 @@ export class AppUserUtilities {
         (settings.appSettings as AppUserSettingsInterface['appSettings']).dashboardActionPrompts = normalizeDashboardActionPrompts(
             (settings.appSettings as AppUserSettingsInterface['appSettings']).dashboardActionPrompts,
         );
+        settings.deviceDisplaySettings = normalizeDeviceDisplaySettings(settings.deviceDisplaySettings);
 
         // Chart
         settings.chartSettings = settings.chartSettings || <UserChartSettingsInterface>{};

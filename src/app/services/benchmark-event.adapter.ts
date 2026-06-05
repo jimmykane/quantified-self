@@ -1,5 +1,6 @@
 import { Injectable } from '@angular/core';
 import { AppEventInterface, BenchmarkResult } from '@shared/app-event.interface';
+import { normalizeBenchmarkReviewTags } from '../helpers/benchmark-review.helper';
 
 @Injectable({
   providedIn: 'root'
@@ -85,6 +86,9 @@ export class BenchmarkEventAdapter {
     }
     if (typeof rawData.comparisonTitle === 'string') {
       event.comparisonTitle = rawData.comparisonTitle;
+    }
+    if (Array.isArray(rawData.benchmarkReviewTags)) {
+      event.benchmarkReviewTags = normalizeBenchmarkReviewTags(rawData.benchmarkReviewTags);
     }
 
     const sourceFilesCount = getNonNegativeInteger(rawData.sourceFilesCount);

@@ -215,6 +215,67 @@ describe('sleep writer', () => {
         }), { merge: true });
     });
 
+    it('skips unchanged duplicate Garmin sessions even when callback metadata differs', async () => {
+        hoisted.docGet.mockResolvedValue({
+            exists: true,
+            data: () => buildExistingSuuntoSession({
+                source: {
+                    provider: SLEEP_PROVIDERS.GarminAPI,
+                    providerUserId: 'garmin-user-1',
+                    sourceSessionKey: 'garmin-summary-1',
+                    callbackURL: 'https://apis.garmin.com/wellness-api/rest/sleeps?old=true',
+                    receivedAtMs: 2000,
+                },
+            }),
+        });
+
+        const result = await upsertSleepSessions('user-1', [buildMapperResult({
+            source: {
+                provider: SLEEP_PROVIDERS.GarminAPI,
+                providerUserId: 'garmin-user-1',
+                sourceSessionKey: 'garmin-summary-1',
+                callbackURL: 'https://apis.garmin.com/wellness-api/rest/sleeps?new=true',
+                receivedAtMs: 3000,
+            },
+        })], 3000);
+
+        expect(result).toEqual({ written: 0, skipped: 1 });
+        expect(hoisted.docSet).not.toHaveBeenCalled();
+    });
+
+    it('updates duplicate Garmin sessions when the canonical sleep payload changes', async () => {
+        hoisted.docGet.mockResolvedValue({
+            exists: true,
+            data: () => buildExistingSuuntoSession({
+                source: {
+                    provider: SLEEP_PROVIDERS.GarminAPI,
+                    providerUserId: 'garmin-user-1',
+                    sourceSessionKey: 'garmin-summary-1',
+                    callbackURL: 'https://apis.garmin.com/wellness-api/rest/sleeps?old=true',
+                    receivedAtMs: 2000,
+                },
+            }),
+        });
+
+        const result = await upsertSleepSessions('user-1', [buildMapperResult({
+            source: {
+                provider: SLEEP_PROVIDERS.GarminAPI,
+                providerUserId: 'garmin-user-1',
+                sourceSessionKey: 'garmin-summary-1',
+                callbackURL: 'https://apis.garmin.com/wellness-api/rest/sleeps?new=true',
+                receivedAtMs: 3000,
+            },
+            durationSeconds: 33420,
+        })], 3000);
+
+        expect(result).toEqual({ written: 1, skipped: 0 });
+        expect(hoisted.docSet).toHaveBeenCalledWith(expect.any(Object), expect.objectContaining({
+            durationSeconds: 33420,
+            createdAtMs: 1000,
+            updatedAtMs: 3000,
+        }), { merge: true });
+    });
+
     it('does not recreate sleep sessions when user deletion is in progress', async () => {
         hoisted.mockGetUserDeletionGuardState.mockResolvedValueOnce({
             userExists: true,

@@ -1,0 +1,94 @@
+<h2 mat-dialog-title>Device colors</h2>
+
+<mat-dialog-content class="device-color-dialog-content">
+  @if (devices().length === 0) {
+  <p class="empty-device-colors">No loaded devices</p>
+  } @else {
+  <div class="device-color-dialog-layout">
+    <mat-selection-list
+      class="device-color-list qs-scrollbar"
+      aria-label="Devices"
+      [multiple]="false"
+      [hideSingleSelectionIndicator]="true"
+      [disabled]="isSaving()"
+      (selectionChange)="onDeviceSelectionChange($event)">
+      @for (device of devices(); track device.key) {
+      <mat-list-option
+        class="device-color-device-option"
+        [class.selected]="selectedDeviceKey() === device.key"
+        [selected]="selectedDeviceKey() === device.key"
+        [value]="device.key">
+        <span class="device-color-device-row">
+          <span
+            class="device-color-dot"
+            [style.--device-color]="stagedColorByName()[device.key] || device.automaticColor || selectedAutomaticColor()"
+            aria-hidden="true"></span>
+          <span class="device-color-device-label">{{ device.label }}</span>
+        </span>
+      </mat-list-option>
+      }
+    </mat-selection-list>
+
+    <section class="device-color-editor" aria-label="Selected device color">
+      <h3 class="mat-title-small">{{ selectedDevice()?.label }}</h3>
+
+      <div class="palette-grid" role="group" aria-label="Palette colors">
+        @for (color of palette; track color) {
+        <button
+          mat-icon-button
+          type="button"
+          class="palette-swatch"
+          [class.selected]="selectedDeviceColor() === color"
+          [style.--device-color]="color"
+          [disabled]="isSaving()"
+          [attr.aria-label]="'Use ' + color"
+          (click)="setSelectedDeviceColor(color)">
+          <span aria-hidden="true"></span>
+        </button>
+        }
+      </div>
+
+      <mat-form-field appearance="outline" subscriptSizing="dynamic" class="custom-color-field">
+        <mat-label>Custom color</mat-label>
+        <span
+          matPrefix
+          class="custom-color-preview"
+          [style.--device-color]="customColorValue()"
+          aria-hidden="true"></span>
+        <input
+          matInput
+          type="color"
+          [disabled]="isSaving()"
+          [value]="customColorValue()"
+          (input)="setSelectedDeviceColor($any($event.target).value)">
+      </mat-form-field>
+
+      <button
+        mat-button
+        type="button"
+        class="reset-color-button"
+        [disabled]="!selectedDeviceColor() || isSaving()"
+        (click)="resetSelectedDeviceColor()">
+        Reset to Automatic
+      </button>
+    </section>
+  </div>
+  }
+</mat-dialog-content>
+
+<mat-dialog-actions align="end">
+  <button mat-button type="button" [mat-dialog-close]="false" [disabled]="isSaving()">Cancel</button>
+  <button
+    mat-flat-button
+    class="qs-mat-primary"
+    type="button"
+    [disabled]="devices().length === 0 || !hasChanges() || isSaving()"
+    (click)="apply()">
+    <span class="dialog-action-content">
+      @if (isSaving()) {
+      <mat-progress-spinner diameter="18" mode="indeterminate"></mat-progress-spinner>
+      }
+      <span>Apply</span>
+    </span>
+  </button>
+</mat-dialog-actions>

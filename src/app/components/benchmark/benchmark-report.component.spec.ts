@@ -3,6 +3,8 @@ import { BenchmarkReportComponent } from './benchmark-report.component';
 import { BenchmarkResult } from '@shared/app-event.interface';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { MatIconModule } from '@angular/material/icon';
+import { BenchmarkReviewService } from '../../services/benchmark-review.service';
+import { AppEventColorService } from '../../services/color/app.event.color.service';
 
 describe('BenchmarkReportComponent', () => {
     let component: BenchmarkReportComponent;
@@ -35,7 +37,22 @@ describe('BenchmarkReportComponent', () => {
             imports: [
                 MatIconModule
             ],
-            providers: []
+            providers: [
+                {
+                    provide: BenchmarkReviewService,
+                    useValue: {
+                        buildSummary: vi.fn(() => ({
+                            title: 'Benchmark summary',
+                            lines: [],
+                            text: '',
+                            atAGlanceItems: [
+                                { key: 'overall', label: 'Overall', value: 'Excellent agreement' },
+                            ],
+                        })),
+                    },
+                },
+                { provide: AppEventColorService, useValue: { getActivityColor: vi.fn(), getDifferenceColor: vi.fn() } },
+            ]
         }).compileComponents();
 
         fixture = TestBed.createComponent(BenchmarkReportComponent);
@@ -140,5 +157,22 @@ describe('BenchmarkReportComponent', () => {
             expect(insights[0].label).toContain('GNSS');
             expect(insights[1].label).toContain('HeartRate');
         });
+    });
+
+    it('updates reviewer summary at a glance items from tags', () => {
+        component.result = createMockResult(1.5, 0.99);
+        component.benchmarkReviewTags = ['firmware'];
+
+        component.ngOnChanges({
+            result: {} as any,
+            benchmarkReviewTags: {} as any,
+        });
+
+        const reviewService = TestBed.inject(BenchmarkReviewService) as unknown as { buildSummary: ReturnType<typeof vi.fn> };
+        expect(reviewService.buildSummary).toHaveBeenCalledWith(component.result, ['firmware']);
+        expect(component.atAGlanceItems).toEqual([
+            { key: 'overall', label: 'Overall', value: 'Excellent agreement' },
+        ]);
+        expect(component.reviewerSummaryGrade).toBe('excellent');
     });
 });

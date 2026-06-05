@@ -1,11 +1,13 @@
 import { Injectable } from '@angular/core';
 import { AppDeviceColors } from './app.device.colors';
 import { ActivityInterface } from '@sports-alliance/sports-lib';
-import { ActivityTypes, ActivityTypesHelper } from '@sports-alliance/sports-lib';
+import { ActivityTypeGroups, ActivityTypes, ActivityTypesHelper, type ActivityTypeGroup } from '@sports-alliance/sports-lib';
 import { AppActivityTypeGroupColors } from './app.activity-type-group.colors';
 import { AppActivityTypeGroupGradients } from './app.activity-type-group.gradients';
 import { AppColors } from './app.colors';
 import { LoggerService } from '../logger.service';
+import { AppDeviceColorPreferenceService } from './app-device-color-preference.service';
+import { normalizeDeviceColorKey } from '../../helpers/device-color-preferences.helper';
 
 @Injectable({
   providedIn: 'root',
@@ -14,7 +16,10 @@ export class AppEventColorService {
 
   private colorCache = new WeakMap<ActivityInterface[], Map<ActivityInterface, string>>();
 
-  constructor(private logger: LoggerService) { }
+  constructor(
+    private logger: LoggerService,
+    private deviceColorPreferenceService: AppDeviceColorPreferenceService,
+  ) { }
 
   public getDifferenceColor(percent: number): string {
     if (percent <= 2) {
@@ -43,19 +48,17 @@ export class AppEventColorService {
    */
   public getActivityColor(activities: ActivityInterface[], activity: ActivityInterface): string {
     const activityID = activity.getID();
-    const creatorName = activity.creator.name || 'Unknown';
+    const preferredColor = this.deviceColorPreferenceService.getPreferredDeviceColor(activity);
+    if (preferredColor && this.isFirstActivityForPreferredDevice(activities, activity, activityID)) {
+      return preferredColor;
+    }
 
-    let eventColorCache = this.colorCache.get(activities);
-    if (!eventColorCache) {
-      eventColorCache = new Map<ActivityInterface, string>();
-      this.colorCache.set(activities, eventColorCache);
-    }
-    if (eventColorCache.has(activity)) {
-      const cachedColor = eventColorCache.get(activity);
-      if (cachedColor !== undefined) {
-        return cachedColor;
-      }
-    }
+    return this.getAutomaticActivityColor(activities, activity);
+  }
+
+  public getAutomaticActivityColor(activities: ActivityInterface[], activity: ActivityInterface): string {
+    const activityID = activity.getID();
+    const creatorName = activity.creator.name || 'Unknown';
 
     // Get the index of the requested activity among all activities
     // Prefer reference matching first to avoid collisions with duplicate IDs.
@@ -68,6 +71,18 @@ export class AppEventColorService {
     if (activityIndex === -1) {
       this.logger.warn('[AppEventColorService] Activity not found in provided array, using default offset');
       activityIndex = activities.length + this.getColorSeedFromText(`${creatorName}-${activityID || 'no-id'}`);
+    }
+
+    let eventColorCache = this.colorCache.get(activities);
+    if (!eventColorCache) {
+      eventColorCache = new Map<ActivityInterface, string>();
+      this.colorCache.set(activities, eventColorCache);
+    }
+    if (eventColorCache.has(activity)) {
+      const cachedColor = eventColorCache.get(activity);
+      if (cachedColor !== undefined) {
+        return cachedColor;
+      }
     }
 
     const deviceColors = AppDeviceColors as any;
@@ -104,6 +119,27 @@ export class AppEventColorService {
     return color;
   }
 
+  private isFirstActivityForPreferredDevice(
+    activities: ActivityInterface[],
+    activity: ActivityInterface,
+    activityID: string,
+  ): boolean {
+    const deviceKey = normalizeDeviceColorKey(activity.creator?.name);
+    if (!deviceKey) {
+      return false;
+    }
+
+    const sameDeviceActivities = activities.filter(eventActivity =>
+      normalizeDeviceColorKey(eventActivity.creator?.name) === deviceKey,
+    );
+    let sameDeviceActivityIndex = sameDeviceActivities.indexOf(activity);
+    if (sameDeviceActivityIndex === -1 && activityID) {
+      sameDeviceActivityIndex = sameDeviceActivities.findIndex((eventActivity) => eventActivity.getID() === activityID);
+    }
+
+    return sameDeviceActivityIndex === 0;
+  }
+
   private getColorSeedFromText(text: string): number {
     let hash = 0;
     for (let index = 0; index < text.length; index += 1) {
@@ -114,14 +150,14 @@ export class AppEventColorService {
   }
 
   getColorForActivityTypeByActivityTypeGroup(activityType: ActivityTypes): string {
-    return AppActivityTypeGroupColors[ActivityTypesHelper.getActivityGroupForActivityType(activityType)];
+    return AppActivityTypeGroupColors[this.getVisualActivityTypeGroup(activityType)];
   }
 
   /**
    * Returns a CSS linear-gradient string for the given activity type.
    */
   getGradientForActivityTypeGroup(activityType: ActivityTypes): string {
-    const group = ActivityTypesHelper.getActivityGroupForActivityType(activityType);
+    const group = this.getVisualActivityTypeGroup(activityType);
     const gradient = AppActivityTypeGroupGradients[group];
     if (gradient) {
       return `linear-gradient(135deg, ${gradient.start}, ${gradient.end})`;
@@ -129,6 +165,15 @@ export class AppEventColorService {
     // Fallback to solid color if gradient not defined
     const solid = AppActivityTypeGroupColors[group] || '#999';
     return `linear-gradient(135deg, ${solid}, ${solid})`;
+  }
+
+  private getVisualActivityTypeGroup(activityType: ActivityTypes): ActivityTypeGroup {
+    switch (activityType) {
+      case ActivityTypes.Trekking:
+        return ActivityTypeGroups.OutdoorAdventuresGroup;
+      default:
+        return ActivityTypesHelper.getActivityGroupForActivityType(activityType);
+    }
   }
 
   getColorForZoneHex(zone: string): string {

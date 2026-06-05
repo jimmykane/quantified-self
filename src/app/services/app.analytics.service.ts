@@ -32,21 +32,28 @@ export type ToolCompareSavedAction =
     | 'open_details'
     | 'open_report'
     | 'run_report'
+    | 'rerun_report'
     | 'description_edit'
     | 'description_save'
+    | 'tags_edit'
+    | 'tags_save'
     | 'delete';
 export type ToolCompareSavedActionStatus = 'applied' | 'cleared' | 'confirmed' | 'failure' | 'success';
 export type ToolCompareSavedSortColumn =
     | 'activityType'
+    | 'altitude'
     | 'ascent'
     | 'date'
     | 'description'
     | 'descent'
     | 'devices'
     | 'distance'
+    | 'gnss'
+    | 'heartRate'
     | 'reports'
     | 'sourceFiles'
     | 'status'
+    | 'tags'
     | 'title';
 
 export interface ToolCompareFileSelectionAnalytics {
@@ -77,6 +84,7 @@ export interface ToolCompareSavedActionAnalytics {
     hasReport?: boolean;
     reportCount?: number;
     hadDescription?: boolean;
+    tagCount?: number;
 }
 
 @Injectable({ providedIn: 'root' })
@@ -261,6 +269,7 @@ export class AppAnalyticsService {
             has_report: params.hasReport,
             report_count: params.reportCount,
             had_description: params.hadDescription,
+            tag_count: params.tagCount,
         }));
     }
 

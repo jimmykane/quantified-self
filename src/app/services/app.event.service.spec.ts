@@ -261,6 +261,7 @@ describe('AppEventService', () => {
             comparisonTitle: 'Device comparison',
             sourceFilesCount: 2,
             activitiesCount: 5,
+            benchmarkReviewTags: ['firmware', 'gps'],
         });
 
         const event = (service as any).deserializeEventFromDoc(
@@ -274,6 +275,7 @@ describe('AppEventService', () => {
         expect(event.comparisonTitle).toBe('Device comparison');
         expect(event.sourceFilesCount).toBe(2);
         expect(event.activitiesCount).toBe(5);
+        expect(event.benchmarkReviewTags).toEqual(['firmware', 'gps']);
     });
 
     it('should preserve saved tool comparison metadata when cloning event details with activities', () => {
@@ -283,6 +285,7 @@ describe('AppEventService', () => {
         event.comparisonTitle = 'Device comparison';
         event.sourceFilesCount = 2;
         event.activitiesCount = 5;
+        event.benchmarkReviewTags = ['firmware', 'gps'];
         event.hasBenchmark = false;
         event.benchmarkDevices = ['garmin forerunner 265'];
         event.benchmarkLatestAt = new Date('2026-01-01T00:00:00.000Z');
@@ -296,6 +299,8 @@ describe('AppEventService', () => {
         expect(clonedEvent.comparisonTitle).toBe('Device comparison');
         expect(clonedEvent.sourceFilesCount).toBe(2);
         expect(clonedEvent.activitiesCount).toBe(5);
+        expect(clonedEvent.benchmarkReviewTags).toEqual(['firmware', 'gps']);
+        expect(clonedEvent.benchmarkReviewTags).not.toBe(event.benchmarkReviewTags);
         expect(clonedEvent.hasBenchmark).toBe(false);
         expect(clonedEvent.benchmarkDevices).toEqual(['garmin forerunner 265']);
         expect(clonedEvent.benchmarkDevices).not.toBe(event.benchmarkDevices);
@@ -1355,6 +1360,7 @@ describe('AppEventService', () => {
             sourceFilesCount: 2,
             activitiesCount: 4,
             comparisonTitle: 'Spoofed comparison',
+            benchmarkReviewTags: ['review'],
             benchmarkStatus: 'complete',
         };
 
@@ -1374,6 +1380,7 @@ describe('AppEventService', () => {
         expect(writtenPayload.sourceFilesCount).toBeUndefined();
         expect(writtenPayload.activitiesCount).toBeUndefined();
         expect(writtenPayload.comparisonTitle).toBeUndefined();
+        expect(writtenPayload.benchmarkReviewTags).toEqual(['review']);
         expect(writtenPayload.benchmarkStatus).toBeUndefined();
     });
 

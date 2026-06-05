@@ -4,24 +4,34 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { RouterTestingModule } from '@angular/router/testing';
 import { BehaviorSubject, of, Subject, throwError } from 'rxjs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { ActivityTypes, DataActivityTypes, DataAscent, DataDescent, DataDistance, User } from '@sports-alliance/sports-lib';
-import { AppEventInterface } from '@shared/app-event.interface';
+import { ActivityTypes, DataActivityTypes, DataAltitude, DataAscent, DataDescent, DataDistance, DataHeartRate, User } from '@sports-alliance/sports-lib';
+import { AppEventInterface, BenchmarkResult } from '@shared/app-event.interface';
 
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
+import { AppBenchmarkFlowService } from '../../services/app.benchmark-flow.service';
 import { AppEventService } from '../../services/app.event.service';
 import { AppToolsComparisonService } from '../../services/app.tools-comparison.service';
 import { LoggerService } from '../../services/logger.service';
 import { ToolsComparePageComponent } from './tools-compare-page.component';
 import { AppEventColorService } from '../../services/color/app.event.color.service';
+import { AppColors } from '../../services/color/app.colors';
+import { AppDeviceColorPreferenceService } from '../../services/color/app-device-color-preference.service';
+import { normalizeDeviceColorKey } from '../../helpers/device-color-preferences.helper';
+import { DeviceColorPreferencesDialogComponent } from './device-color-preferences-dialog.component';
+import { AppHapticsService } from '../../services/app.haptics.service';
+import { BenchmarkReviewService } from '../../services/benchmark-review.service';
+import { BenchmarkReviewTagsDialogComponent } from '../benchmark/benchmark-review-tags-dialog.component';
 
 function makeComparisonEvent(id: string, overrides: {
   title?: string;
   description?: string;
   startDate?: Date;
   sourceFilesCount?: number;
+  originalFiles?: AppEventInterface['originalFiles'];
   benchmarkResults?: Record<string, unknown>;
   benchmarkDevices?: string[];
+  benchmarkReviewTags?: string[];
   activities?: unknown[];
 } = {}): AppEventInterface {
   return {
@@ -30,8 +40,10 @@ function makeComparisonEvent(id: string, overrides: {
     description: overrides.description || '',
     startDate: overrides.startDate || new Date('2026-01-01T00:00:00.000Z'),
     sourceFilesCount: overrides.sourceFilesCount,
+    originalFiles: overrides.originalFiles,
     benchmarkResults: overrides.benchmarkResults,
     benchmarkDevices: overrides.benchmarkDevices,
+    benchmarkReviewTags: overrides.benchmarkReviewTags,
     getActivities: () => overrides.activities || [],
   } as unknown as AppEventInterface;
 }
@@ -79,6 +91,32 @@ function makeActivity(id: string, options: {
   };
 }
 
+function makeBenchmarkResult(overrides: Partial<BenchmarkResult> = {}): BenchmarkResult {
+  const defaultResult: BenchmarkResult = {
+    referenceId: 'reference-activity',
+    testId: 'test-activity',
+    referenceName: 'Garmin Reference',
+    testName: 'Suunto Test',
+    timestamp: new Date('2026-01-01T00:00:00.000Z'),
+    metrics: {
+      gnss: {
+        cep50: 2,
+        cep95: 4,
+        maxDeviation: 8,
+        rmse: 3,
+        totalDistanceDifference: 12,
+      },
+      streamMetrics: {},
+    },
+  };
+
+  return {
+    ...defaultResult,
+    ...overrides,
+    metrics: overrides.metrics || defaultResult.metrics,
+  };
+}
+
 describe('ToolsComparePageComponent', () => {
   let fixture: ComponentFixture<ToolsComparePageComponent>;
   let component: ToolsComparePageComponent;
@@ -102,6 +140,29 @@ describe('ToolsComparePageComponent', () => {
   };
   let eventColorServiceMock: {
     getActivityColor: ReturnType<typeof vi.fn>;
+    getAutomaticActivityColor: ReturnType<typeof vi.fn>;
+    getColorForActivityTypeByActivityTypeGroup: ReturnType<typeof vi.fn>;
+    getDifferenceColor: ReturnType<typeof vi.fn>;
+  };
+  let benchmarkFlowServiceMock: {
+    openBenchmarkReport: ReturnType<typeof vi.fn>;
+    openBenchmarkSelectionDialog: ReturnType<typeof vi.fn>;
+  };
+  let hapticsServiceMock: {
+    selection: ReturnType<typeof vi.fn>;
+    success: ReturnType<typeof vi.fn>;
+    warning: ReturnType<typeof vi.fn>;
+    error: ReturnType<typeof vi.fn>;
+  };
+  let benchmarkReviewServiceMock: {
+    normalizeTags: ReturnType<typeof vi.fn>;
+    getEventTags: ReturnType<typeof vi.fn>;
+    saveEventTags: ReturnType<typeof vi.fn>;
+  };
+  let deviceColorByNameState: Record<string, string>;
+  let deviceColorPreferenceServiceMock: {
+    deviceColorByName: ReturnType<typeof vi.fn>;
+    normalizeDeviceColorKey: ReturnType<typeof vi.fn>;
   };
   let analyticsServiceMock: {
     logToolCompareCreate: ReturnType<typeof vi.fn>;
@@ -159,6 +220,58 @@ describe('ToolsComparePageComponent', () => {
         }
         return '#16B4EA';
       }),
+      getAutomaticActivityColor: vi.fn((_activities, activity) => {
+        const activityID = activity?.getID?.();
+        if (activityID === 'activity-1') {
+          return '#123456';
+        }
+        if (activityID === 'activity-2') {
+          return '#abcdef';
+        }
+        if (activityID === 'activity-3') {
+          return '#654321';
+        }
+        if (activityID === 'activity-4') {
+          return '#fedcba';
+        }
+        return '#16B4EA';
+      }),
+      getColorForActivityTypeByActivityTypeGroup: vi.fn().mockReturnValue('#16B4EA'),
+      getDifferenceColor: vi.fn((value: number) => {
+        if (value <= 2) {
+          return AppColors.Green;
+        }
+        if (value <= 5) {
+          return AppColors.Orange;
+        }
+        return AppColors.Red;
+      }),
+    };
+    benchmarkFlowServiceMock = {
+      openBenchmarkReport: vi.fn().mockResolvedValue(undefined),
+      openBenchmarkSelectionDialog: vi.fn().mockResolvedValue(undefined),
+    };
+    hapticsServiceMock = {
+      selection: vi.fn(),
+      success: vi.fn(),
+      warning: vi.fn(),
+      error: vi.fn(),
+    };
+    benchmarkReviewServiceMock = {
+      normalizeTags: vi.fn((tags: unknown) => Array.isArray(tags)
+        ? tags.filter((tag): tag is string => typeof tag === 'string').map(tag => tag.trim()).filter(Boolean)
+        : []),
+      getEventTags: vi.fn((event: AppEventInterface) => Array.isArray(event.benchmarkReviewTags) ? event.benchmarkReviewTags : []),
+      saveEventTags: vi.fn(async (_user: User, event: AppEventInterface, tags: unknown) => {
+        const normalizedTags = benchmarkReviewServiceMock.normalizeTags(tags);
+        event.benchmarkReviewTags = normalizedTags;
+        return normalizedTags;
+      }),
+    };
+    deviceColorByNameState = {};
+    deviceColorPreferenceServiceMock = {
+      deviceColorByName: vi.fn(() => deviceColorByNameState),
+      normalizeDeviceColorKey: vi.fn((name: string) => normalizeDeviceColorKey(name)),
     };
     analyticsServiceMock = {
       logToolCompareCreate: vi.fn(),
@@ -179,8 +292,12 @@ describe('ToolsComparePageComponent', () => {
         },
         { provide: AppToolsComparisonService, useValue: comparisonServiceMock },
         { provide: AppAnalyticsService, useValue: analyticsServiceMock },
+        { provide: AppBenchmarkFlowService, useValue: benchmarkFlowServiceMock },
+        { provide: AppHapticsService, useValue: hapticsServiceMock },
+        { provide: BenchmarkReviewService, useValue: benchmarkReviewServiceMock },
         { provide: AppEventService, useValue: eventServiceMock },
         { provide: AppEventColorService, useValue: eventColorServiceMock },
+        { provide: AppDeviceColorPreferenceService, useValue: deviceColorPreferenceServiceMock },
         { provide: LoggerService, useValue: loggerMock },
         { provide: ActivatedRoute, useValue: { snapshot: { data: {} } } },
       ],
@@ -200,11 +317,17 @@ describe('ToolsComparePageComponent', () => {
     expect(text).toContain('Sign in to compare files');
     expect(text).toContain('Benchmark comparisons are saved to your account');
     expect(text).toContain('Comparison files are handled after sign-in');
+    expect(text).toContain('Review file recordings without rebuilding a dashboard');
+    expect(text).toContain('File-based comparisons');
+    expect(text).toContain('Reviewer metrics');
+    expect(text).toContain('Device review notes');
     expect(text).not.toContain('New comparison');
     expect(text).not.toContain('Saved comparisons');
     expect(text).not.toContain('Select Files');
     expect(text).not.toContain('No files selected');
     expect(text).not.toContain('Sign in to view saved comparisons.');
+    expect(fixture.nativeElement.querySelector('a[routerlink="/features/workout-file-comparison"], a[ng-reflect-router-link="/features/workout-file-comparison"]')).toBeTruthy();
+    expect(fixture.nativeElement.querySelector('a[routerlink="/features/sports-watch-benchmark"], a[ng-reflect-router-link="/features/sports-watch-benchmark"]')).toBeTruthy();
     expect(component.guestSignInRedirectUrl).toBe('/tools/compare');
     expect(comparisonServiceMock.getBenchmarkComparisonPage).not.toHaveBeenCalled();
   });
@@ -237,6 +360,7 @@ describe('ToolsComparePageComponent', () => {
     expect(text).toContain('Loading your account');
     expect(text).toContain('Loading comparisons');
     expect(text).not.toContain('Sign in to compare files');
+    expect(text).not.toContain('Review file recordings without rebuilding a dashboard');
     expect(comparisonServiceMock.getBenchmarkComparisonPage).not.toHaveBeenCalled();
 
     const addFilesButton = Array.from((fixture.nativeElement as HTMLElement).querySelectorAll('button'))
@@ -323,6 +447,43 @@ describe('ToolsComparePageComponent', () => {
     expect(component.paginatedComparisonItems().map(item => item.id)).toEqual(['page-2-comparison-1']);
   });
 
+  it('uses warning haptics when user pagination cannot load the requested comparison page', async () => {
+    const user = new User('user-1');
+    const nextCursor = { id: 'page-1-last-doc' };
+    const firstPageEvents = Array.from({ length: 25 }, (_value, index) =>
+      makeComparisonEvent(`page-1-comparison-${index + 1}`, {
+        startDate: new Date(Date.UTC(2026, 0, 31 - index)),
+      }),
+    );
+    const pageError = { message: 'page load failed' };
+    comparisonServiceMock.getBenchmarkComparisonCount.mockReturnValue(of(26));
+    comparisonServiceMock.getBenchmarkComparisonPage
+      .mockReturnValueOnce(of({
+        events: firstPageEvents,
+        nextCursor,
+        hasMore: true,
+      }))
+      .mockReturnValueOnce(throwError(() => pageError));
+
+    userSubject.next(user);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    await component.onComparisonPageChange({
+      pageIndex: 1,
+      pageSize: 25,
+      length: 26,
+      previousPageIndex: 0,
+    });
+
+    expect(loggerMock.warn).toHaveBeenCalledWith(
+      '[ToolsComparePageComponent] Could not load saved comparisons.',
+      pageError,
+    );
+    expect(component.comparisonPage()).toEqual({ pageIndex: 0, pageSize: 25 });
+    expect(hapticsServiceMock.warning).toHaveBeenCalled();
+  });
+
   it('renders the saved comparisons panel before upload controls when the saved route is focused', async () => {
     Object.defineProperty(component, 'showSavedComparisonsFirst', {
       configurable: true,
@@ -370,6 +531,8 @@ describe('ToolsComparePageComponent', () => {
       '[ToolsComparePageComponent] Could not load saved comparisons.',
       missingIndexError,
     );
+    expect(hapticsServiceMock.error).not.toHaveBeenCalled();
+    expect(hapticsServiceMock.warning).not.toHaveBeenCalled();
   });
 
   it('clears staged files and title when the user signs out', () => {
@@ -421,6 +584,7 @@ describe('ToolsComparePageComponent', () => {
     expect(routerNavigateSpy).toHaveBeenCalledWith(['/login'], {
       queryParams: { returnUrl: '/tools/compare' },
     });
+    expect(hapticsServiceMock.selection).toHaveBeenCalled();
   });
 
   it('ignores guest file selection so uploads are not staged before sign-in', () => {
@@ -435,6 +599,7 @@ describe('ToolsComparePageComponent', () => {
     expect(component.selectedFiles()).toEqual([]);
     expect(component.canCreateComparison()).toBe(false);
     expect(analyticsServiceMock.logToolCompareFileSelection).not.toHaveBeenCalled();
+    expect(hapticsServiceMock.warning).toHaveBeenCalled();
   });
 
   it('logs comparison file selection summaries without filenames', () => {
@@ -459,7 +624,26 @@ describe('ToolsComparePageComponent', () => {
       compressedCount: 1,
       limitReached: false,
     });
+    expect(hapticsServiceMock.warning).toHaveBeenCalled();
     expect(inputTarget.value).toBe('');
+  });
+
+  it('uses haptics for accepted staged files and file list changes', () => {
+    userSubject.next(new User('user-1'));
+    const inputTarget = {
+      files: [
+        new File([new Uint8Array([1])], 'review-alpha.fit'),
+        new File([new Uint8Array([2])], 'review-beta.gpx'),
+      ],
+      value: 'selected',
+    };
+
+    component.onFilesSelected({ target: inputTarget } as unknown as Event);
+    component.removeFile(0);
+    component.clearFiles();
+
+    expect(hapticsServiceMock.success).toHaveBeenCalledTimes(1);
+    expect(hapticsServiceMock.selection).toHaveBeenCalledTimes(2);
   });
 
   it('creates a comparison and opens event details with benchmark auto-open', async () => {
@@ -485,6 +669,8 @@ describe('ToolsComparePageComponent', () => {
     expect(routerNavigateSpy).toHaveBeenCalledWith(['/user', 'user-1', 'event', 'event-1'], {
       queryParams: { benchmark: '1' },
     });
+    expect(hapticsServiceMock.selection).toHaveBeenCalledTimes(1);
+    expect(hapticsServiceMock.success).toHaveBeenCalledTimes(1);
   });
 
   it('logs validation failures before comparison creation starts', async () => {
@@ -503,6 +689,7 @@ describe('ToolsComparePageComponent', () => {
       hasCustomTitle: false,
       errorCategory: 'unsupported_format',
     });
+    expect(hapticsServiceMock.warning).toHaveBeenCalled();
   });
 
   it('caps staged files at the comparison upload limit', () => {
@@ -587,6 +774,11 @@ describe('ToolsComparePageComponent', () => {
 
   it('logs saved comparison open actions without event metadata', async () => {
     const user = new User('user-1');
+    const reportResult = makeBenchmarkResult({
+      referenceId: 'activity-1',
+      testId: 'activity-2',
+      timestamp: new Date('2026-01-02T00:00:00.000Z'),
+    });
     userSubject.next(user);
     await Promise.resolve();
     await Promise.resolve();
@@ -594,15 +786,26 @@ describe('ToolsComparePageComponent', () => {
       makeComparisonEvent('ready-comparison', {
         title: 'Private title',
         description: 'Private note',
-        benchmarkResults: { 'a_b': { score: 90 } },
+        benchmarkResults: { 'activity-1_activity-2': reportResult },
       }),
       makeComparisonEvent('draft-comparison', {
         title: 'Draft title',
+        activities: [
+          makeActivity('activity-1', {
+            deviceName: 'Garmin Edge',
+            activityType: 'Cycling',
+          }),
+          makeActivity('activity-2', {
+            deviceName: 'Suunto Race',
+            activityType: 'Cycling',
+          }),
+        ],
       }),
     ]);
 
     await component.openComparison(component.comparisonItems()[0], false);
     await component.openComparison(component.comparisonItems()[1], true);
+    await component.openComparison(component.comparisonItems()[0], true);
 
     expect(analyticsServiceMock.logToolCompareSavedAction).toHaveBeenCalledWith('open_details', {
       hasReport: true,
@@ -616,12 +819,235 @@ describe('ToolsComparePageComponent', () => {
       filterActive: false,
       resultCount: 2,
     });
+    expect(analyticsServiceMock.logToolCompareSavedAction).toHaveBeenCalledWith('open_report', {
+      hasReport: true,
+      reportCount: 1,
+      filterActive: false,
+      resultCount: 2,
+    });
     expect(routerNavigateSpy).toHaveBeenCalledWith(['/user', 'user-1', 'event', 'ready-comparison'], {
       queryParams: undefined,
     });
-    expect(routerNavigateSpy).toHaveBeenCalledWith(['/user', 'user-1', 'event', 'draft-comparison'], {
-      queryParams: { benchmark: '1' },
+    expect(routerNavigateSpy).toHaveBeenCalledTimes(1);
+    expect(benchmarkFlowServiceMock.openBenchmarkSelectionDialog).toHaveBeenCalledWith(expect.objectContaining({
+      event: component.comparisonItems()[1].event,
+      persistEvent: component.comparisonItems()[1].event,
+      user,
+      initialSelection: component.comparisonItems()[1].event.getActivities().slice(0, 2),
+      hydrateStreamsForGeneration: true,
+    }));
+    expect(benchmarkFlowServiceMock.openBenchmarkReport).toHaveBeenCalledWith(expect.objectContaining({
+      event: component.comparisonItems()[0].event,
+      persistEvent: component.comparisonItems()[0].event,
+      user,
+      result: reportResult,
+      hydrateStreamsForGeneration: true,
+    }));
+    const reportConfig = benchmarkFlowServiceMock.openBenchmarkReport.mock.calls[0][0];
+    reportConfig.onEventTagsSaved?.(['firmware']);
+    expect(component.comparisonItems()[0].benchmarkReviewTags).toEqual(['firmware']);
+    expect(hapticsServiceMock.selection).toHaveBeenCalledTimes(3);
+  });
+
+  it('updates saved comparison report metadata after an in-place benchmark run', async () => {
+    const user = new User('user-1');
+    const generatedResult = makeBenchmarkResult({
+      referenceId: 'activity-1',
+      testId: 'activity-2',
+      referenceName: 'Garmin Edge',
+      testName: 'Suunto Race',
+      timestamp: new Date('2026-01-03T00:00:00.000Z'),
     });
+    benchmarkFlowServiceMock.openBenchmarkSelectionDialog.mockImplementationOnce(async (config: { onResult?: (result: BenchmarkResult) => void }) => {
+      config.onResult?.(generatedResult);
+    });
+    userSubject.next(user);
+    await Promise.resolve();
+    await Promise.resolve();
+    component.comparisons.set([
+      makeComparisonEvent('draft-comparison', {
+        title: 'Draft title',
+      }),
+    ]);
+
+    await component.openComparison(component.comparisonItems()[0], true);
+
+    const item = component.comparisonItems()[0];
+    expect(item.hasReport).toBe(true);
+    expect(item.reportCount).toBe(1);
+    expect(item.event.benchmarkResults?.['activity-1_activity-2']).toBe(generatedResult);
+    expect(item.event.benchmarkLatestAt).toBe(generatedResult.timestamp);
+    expect(item.event.benchmarkDevices).toEqual(['garmin edge', 'suunto race']);
+    expect(hapticsServiceMock.success).toHaveBeenCalled();
+  });
+
+  it('runs a benchmark from an empty metric cell with a loading state', async () => {
+    const user = new User('user-1');
+    let resolveFlow: (() => void) | null = null;
+    const flowPromise = new Promise<void>((resolve) => {
+      resolveFlow = resolve;
+    });
+    benchmarkFlowServiceMock.openBenchmarkSelectionDialog.mockReturnValueOnce(flowPromise);
+    userSubject.next(user);
+    await Promise.resolve();
+    await Promise.resolve();
+    component.comparisons.set([
+      makeComparisonEvent('draft-comparison', {
+        title: 'Draft title',
+        activities: [
+          makeActivity('activity-1', {
+            deviceName: 'Garmin Edge',
+            activityType: 'Cycling',
+          }),
+          makeActivity('activity-2', {
+            deviceName: 'Suunto Race',
+            activityType: 'Cycling',
+          }),
+        ],
+      }),
+    ]);
+    fixture.detectChanges();
+
+    const metricButton = (fixture.nativeElement as HTMLElement).querySelector('.mat-column-gnss .benchmark-summary-action') as HTMLButtonElement;
+    expect(metricButton).toBeTruthy();
+    expect(metricButton.getAttribute('title')).toContain('Run the benchmark report');
+    expect(metricButton.textContent).toContain('Run');
+
+    metricButton.click();
+    fixture.detectChanges();
+
+    expect(component.benchmarkingEventID()).toBe('draft-comparison');
+    expect((fixture.nativeElement as HTMLElement).querySelector('.mat-column-gnss mat-progress-spinner')).toBeTruthy();
+    expect(benchmarkFlowServiceMock.openBenchmarkSelectionDialog).toHaveBeenCalledWith(expect.objectContaining({
+      event: component.comparisonItems()[0].event,
+      persistEvent: component.comparisonItems()[0].event,
+      user,
+      initialSelection: component.comparisonItems()[0].event.getActivities().slice(0, 2),
+      hydrateStreamsForGeneration: true,
+    }));
+    expect(analyticsServiceMock.logToolCompareSavedAction).toHaveBeenCalledWith('run_report', {
+      hasReport: false,
+      reportCount: 0,
+      filterActive: false,
+      resultCount: 1,
+    });
+
+    await component.openComparison(component.comparisonItems()[0], true);
+    expect(benchmarkFlowServiceMock.openBenchmarkSelectionDialog).toHaveBeenCalledTimes(1);
+
+    resolveFlow?.();
+    await flowPromise;
+    await Promise.resolve();
+
+    expect(component.benchmarkingEventID()).toBeNull();
+  });
+
+  it('reruns a benchmark from a legacy GNSS metric cell with missing mean fields', async () => {
+    const user = new User('user-1');
+    userSubject.next(user);
+    await Promise.resolve();
+    await Promise.resolve();
+    component.comparisons.set([
+      makeComparisonEvent('legacy-gnss-report', {
+        title: 'Legacy GNSS report',
+        activities: [
+          makeActivity('activity-1', {
+            deviceName: 'Garmin Edge',
+            activityType: 'Cycling',
+          }),
+          makeActivity('activity-2', {
+            deviceName: 'Suunto Race',
+            activityType: 'Cycling',
+          }),
+        ],
+        benchmarkResults: {
+          'activity-1_activity-2': makeBenchmarkResult({
+            referenceId: 'activity-1',
+            testId: 'activity-2',
+            metrics: {
+              gnss: {
+                cep50: 42.3,
+                rmse: 42.6,
+              },
+            },
+          }),
+        },
+      }),
+    ]);
+    fixture.detectChanges();
+
+    const item = component.comparisonItems()[0];
+    expect(item.gnssBenchmark.canRerunReport).toBe(true);
+    expect(item.gnssBenchmark.title).toContain('Click to rerun the benchmark');
+
+    const metricButton = (fixture.nativeElement as HTMLElement).querySelector('.mat-column-gnss .benchmark-rerun-action') as HTMLButtonElement;
+    expect(metricButton).toBeTruthy();
+    expect(metricButton.textContent).toContain('Rerun');
+    expect(metricButton.getAttribute('aria-label')).toContain('Rerun benchmark report');
+
+    metricButton.click();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(benchmarkFlowServiceMock.openBenchmarkSelectionDialog).toHaveBeenCalledWith(expect.objectContaining({
+      event: item.event,
+      persistEvent: item.event,
+      user,
+      initialSelection: item.event.getActivities().slice(0, 2),
+      hydrateStreamsForGeneration: true,
+    }));
+    expect(benchmarkFlowServiceMock.openBenchmarkReport).not.toHaveBeenCalled();
+    expect(analyticsServiceMock.logToolCompareSavedAction).toHaveBeenCalledWith('rerun_report', {
+      hasReport: true,
+      reportCount: 1,
+      filterActive: false,
+      resultCount: 1,
+    });
+    expect(hapticsServiceMock.selection).toHaveBeenCalled();
+  });
+
+  it('keeps row loading feedback active while benchmark generation callbacks are pending', async () => {
+    const user = new User('user-1');
+    let capturedConfig: {
+      onGenerationStart?: () => void;
+      onGenerationComplete?: (status: 'success' | 'failure') => void;
+    } | null = null;
+    benchmarkFlowServiceMock.openBenchmarkSelectionDialog.mockImplementationOnce(async (config) => {
+      capturedConfig = config;
+    });
+    userSubject.next(user);
+    await Promise.resolve();
+    await Promise.resolve();
+    component.comparisons.set([
+      makeComparisonEvent('draft-comparison', {
+        title: 'Draft title',
+        activities: [
+          makeActivity('activity-1', {
+            deviceName: 'Garmin Edge',
+            activityType: 'Cycling',
+          }),
+          makeActivity('activity-2', {
+            deviceName: 'Suunto Race',
+            activityType: 'Cycling',
+          }),
+        ],
+      }),
+    ]);
+
+    await component.openBenchmarkFromMetricCell(component.comparisonItems()[0]);
+    expect(component.benchmarkingEventID()).toBeNull();
+
+    capturedConfig?.onGenerationStart?.();
+    fixture.detectChanges();
+
+    expect(component.benchmarkingEventID()).toBe('draft-comparison');
+    expect((fixture.nativeElement as HTMLElement).querySelector('.mat-column-gnss mat-progress-spinner')).toBeTruthy();
+
+    capturedConfig?.onGenerationComplete?.('failure');
+    fixture.detectChanges();
+
+    expect(component.benchmarkingEventID()).toBeNull();
+    expect(hapticsServiceMock.warning).toHaveBeenCalled();
   });
 
   it('filters, sorts, and paginates previous comparison rows', async () => {
@@ -699,6 +1125,7 @@ describe('ToolsComparePageComponent', () => {
       filterActive: true,
       resultCount: 1,
     });
+    expect(hapticsServiceMock.selection).toHaveBeenCalledTimes(3);
   });
 
   it('labels saved comparison filtering as scoped to loaded rows', async () => {
@@ -840,6 +1267,7 @@ describe('ToolsComparePageComponent', () => {
       deviceLabel: summary.deviceLabel,
       deviceColor: summary.deviceColor,
       activityTypeLabel: summary.activityTypeLabel,
+      activityTypeIconValue: summary.activityTypeIconValue,
       distanceLabel: summary.distanceLabel,
       ascentLabel: summary.ascentLabel,
       descentLabel: summary.descentLabel,
@@ -848,6 +1276,7 @@ describe('ToolsComparePageComponent', () => {
         deviceLabel: 'Garmin Edge 3130',
         deviceColor: '#123456',
         activityTypeLabel: 'Cycling',
+        activityTypeIconValue: 'Cycling',
         distanceLabel: '10.00 km',
         ascentLabel: '120 m',
         descentLabel: '118 m',
@@ -856,6 +1285,7 @@ describe('ToolsComparePageComponent', () => {
         deviceLabel: 'Suunto Race',
         deviceColor: '#abcdef',
         activityTypeLabel: 'Cycling',
+        activityTypeIconValue: 'Cycling',
         distanceLabel: '10.02 km',
         ascentLabel: '121 m',
         descentLabel: '117 m',
@@ -876,10 +1306,16 @@ describe('ToolsComparePageComponent', () => {
     expect(deviceLines).toContainEqual({ label: 'Suunto Race', style: '--device-accent-color: #abcdef;' });
     expect((fixture.nativeElement as HTMLElement).querySelectorAll('.device-name-swatch').length).toBeGreaterThanOrEqual(2);
     const sportTypeLines = Array.from((fixture.nativeElement as HTMLElement).querySelectorAll('.summary-type-line'))
-      .map(line => line.textContent?.trim());
+      .map(line => line.querySelector('.summary-type-value')?.textContent?.trim());
     expect((fixture.nativeElement as HTMLElement).querySelector('.summary-type-device')).toBeNull();
     expect(sportTypeLines).toContain('Cycling');
     expect(sportTypeLines).toContain('Running');
+    const activityTypeIcons = Array.from((fixture.nativeElement as HTMLElement).querySelectorAll('.summary-type-line app-activity-type-icon'));
+    expect(activityTypeIcons.length).toBeGreaterThanOrEqual(4);
+    const firstActivityTypeIconStyle = activityTypeIcons[0].querySelector('mat-icon')?.getAttribute('style') || '';
+    expect(firstActivityTypeIconStyle).toContain('16px');
+    expect(firstActivityTypeIconStyle.toLowerCase()).toMatch(/#16b4ea|rgb\(22,\s*180,\s*234\)/);
+    expect(eventColorServiceMock.getColorForActivityTypeByActivityTypeGroup).toHaveBeenCalled();
     expect(longCourse?.activityTypesTitle).toBe('Cycling');
     expect(longCourse?.distanceTitle).toContain('Suunto Race: 10.02 km');
 
@@ -906,6 +1342,451 @@ describe('ToolsComparePageComponent', () => {
 
     component.updateComparisonFilter('cycling');
     expect(component.filteredComparisonItems().map(item => item.id)).toEqual(['long-course', 'unknown-course']);
+
+    expect(component.comparisonDeviceFilterOptions().map(option => option.label)).toEqual([
+      'Garmin Edge 3130',
+      'Polar Vantage',
+      'Suunto Race',
+      'Wahoo ELEMNT',
+    ]);
+    expect(component.comparisonActivityTypeFilterOptions().map(option => option.label)).toEqual([
+      'Cycling',
+      'Running',
+    ]);
+
+    component.updateComparisonFilter('');
+    component.updateComparisonDeviceFilter('Suunto Race');
+    expect(component.filteredComparisonItems().map(item => item.id)).toEqual(['long-course']);
+
+    component.updateComparisonDeviceFilter('');
+    component.updateComparisonActivityTypeFilter('Running');
+    expect(component.filteredComparisonItems().map(item => item.id)).toEqual(['short-course']);
+  });
+
+  it('shows sortable benchmark GNSS, heart-rate, and altitude metrics with old-report fallbacks', () => {
+    userSubject.next(new User('user-1'));
+    component.comparisons.set([
+      makeComparisonEvent('latest-report-metrics', {
+        title: 'Latest report metrics',
+        startDate: new Date('2026-01-03T00:00:00.000Z'),
+        benchmarkResults: {
+          older: makeBenchmarkResult({
+            referenceName: 'Old Reference',
+            testName: 'Old Test',
+            timestamp: new Date('2026-01-01T00:00:00.000Z'),
+            metrics: {
+              gnss: {
+                meanDeviation: 99,
+                meanAbsoluteError: 99,
+                cep50: 99,
+                cep95: 99,
+                maxDeviation: 99,
+                rmse: 99,
+                totalDistanceDifference: 99,
+              },
+              streamMetrics: {
+                [DataHeartRate.type]: {
+                  sourceA_mean: 120,
+                  sourceB_mean: 140,
+                  meanDeviation: 20,
+                  pearsonCorrelation: 1,
+                  meanAbsoluteError: 20,
+                  rootMeanSquareError: 20,
+                },
+              },
+            },
+          }),
+          latest: makeBenchmarkResult({
+            referenceName: 'Garmin Forerunner 965',
+            testName: 'Suunto Race',
+            timestamp: new Date('2026-01-02T00:00:00.000Z'),
+            metrics: {
+              gnss: {
+                meanDeviation: 2.4,
+                meanAbsoluteError: 2.4,
+                cep50: 1.8,
+                cep95: 4,
+                maxDeviation: 7,
+                rmse: 3.3,
+                totalDistanceDifference: 12,
+              },
+              streamMetrics: {
+                HeartRate: {
+                  sourceA_mean: 150,
+                  sourceB_mean: 148,
+                  meanDeviation: -2,
+                  pearsonCorrelation: 0.98,
+                  meanAbsoluteError: 4.2,
+                  rootMeanSquareError: 5,
+                },
+                [DataAltitude.type]: {
+                  sourceA_mean: 100,
+                  sourceB_mean: 106.5,
+                  meanDeviation: 6.5,
+                  pearsonCorrelation: 0.97,
+                  meanAbsoluteError: 8.4,
+                  rootMeanSquareError: 9,
+                },
+              },
+            },
+          }),
+        },
+      }),
+      makeComparisonEvent('old-stream-metrics', {
+        title: 'Old stream metrics',
+        startDate: new Date('2026-01-02T00:00:00.000Z'),
+        benchmarkResults: {
+          old: makeBenchmarkResult({
+            timestamp: new Date('2026-01-01T00:00:00.000Z'),
+            metrics: {
+              gnss: {
+                cep50: 5,
+                cep95: 8,
+                maxDeviation: 12,
+                rmse: 7,
+                totalDistanceDifference: 20,
+              },
+              streamMetrics: {
+                [DataHeartRate.type]: {
+                  sourceA_mean: 120,
+                  sourceB_mean: 123,
+                  pearsonCorrelation: 0.98,
+                  meanAbsoluteError: 5,
+                  rootMeanSquareError: 6,
+                },
+                [DataAltitude.type]: {
+                  sourceA_mean: 100,
+                  sourceB_mean: 95,
+                  pearsonCorrelation: 0.95,
+                  meanAbsoluteError: 6,
+                  rootMeanSquareError: 7,
+                },
+              },
+            },
+          }),
+        },
+      }),
+      makeComparisonEvent('draft-no-report', {
+        title: 'Draft no report',
+        startDate: new Date('2026-01-01T00:00:00.000Z'),
+      }),
+    ]);
+    fixture.detectChanges();
+
+    const latest = component.comparisonItems().find(item => item.id === 'latest-report-metrics');
+    expect(latest?.gnssBenchmark.lines.map(line => `${line.label} ${line.value}`)).toEqual([
+      'MD 2.4 m',
+      'MAE 2.4 m',
+      'CEP50 1.8 m',
+      'RMSE 3.3 m',
+    ]);
+    expect(latest?.heartRateBenchmark.lines.map(line => `${line.label} ${line.value}`)).toEqual([
+      'MD -2 bpm',
+      'MAE 4 bpm',
+    ]);
+    expect(latest?.altitudeBenchmark.lines.map(line => `${line.label} ${line.value}`)).toEqual([
+      'MD +6.5 m',
+      'MAE 8.4 m',
+    ]);
+    expect(latest?.gnssBenchmark.color).toBe(AppColors.Orange);
+    expect(latest?.gnssBenchmark.severityLabel).toBe('moderate error');
+    expect(latest?.gnssBenchmark.dominantLineLabel).toBe('MAE');
+    expect(latest?.gnssBenchmark.canRerunReport).toBe(false);
+    expect(latest?.heartRateBenchmark.color).toBe(AppColors.Orange);
+    expect(latest?.altitudeBenchmark.color).toBe(AppColors.Red);
+    expect(latest?.altitudeBenchmark.severityLabel).toBe('high error');
+    expect(latest?.benchmarkPairLabel).toBe('Garmin Forerunner 965 -> Suunto Race');
+    expect(latest?.reportTitle).toContain('Benchmark pair: Garmin Forerunner 965 -> Suunto Race.');
+    expect(latest?.gnssBenchmark.title).toContain('Showing latest of 2 reports.');
+    expect(latest?.gnssBenchmark.title).toContain('Benchmark pair: Garmin Forerunner 965 -> Suunto Race.');
+    expect(latest?.gnssBenchmark.title).toContain('Color: moderate error (MAE 2.4 m; green <=2, orange <=5, red >5).');
+
+    const old = component.comparisonItems().find(item => item.id === 'old-stream-metrics');
+    expect(old?.gnssBenchmark.lines.map(line => `${line.label} ${line.value}`)).toEqual([
+      'MD -',
+      'MAE -',
+      'CEP50 5 m',
+      'RMSE 7 m',
+    ]);
+    expect(old?.gnssBenchmark.sortValue).toBe(5);
+    expect(old?.gnssBenchmark.color).toBe(AppColors.Orange);
+    expect(old?.gnssBenchmark.dominantLineLabel).toBe('CEP50');
+    expect(old?.gnssBenchmark.title).toContain('MD/MAE are unavailable for older GNSS reports');
+    expect(old?.gnssBenchmark.canRerunReport).toBe(true);
+    expect(old?.heartRateBenchmark.lines.map(line => `${line.label} ${line.value}`)).toEqual([
+      'MD +3 bpm',
+      'MAE 5 bpm',
+    ]);
+    expect(old?.altitudeBenchmark.lines.map(line => `${line.label} ${line.value}`)).toEqual([
+      'MD -5 m',
+      'MAE 6 m',
+    ]);
+    expect(old?.heartRateBenchmark.color).toBe(AppColors.Orange);
+    expect(old?.altitudeBenchmark.color).toBe(AppColors.Red);
+
+    const draft = component.comparisonItems().find(item => item.id === 'draft-no-report');
+    expect(draft?.gnssBenchmark.color).toBeNull();
+    expect(draft?.gnssBenchmark.severityLabel).toBe('missing');
+    expect(draft?.gnssBenchmark.title).toBe(
+      'No benchmark report yet. Run the benchmark report from this row to generate GNSS, heart-rate, and altitude metrics.',
+    );
+    expect(draft?.heartRateBenchmark.title).toBe(draft?.gnssBenchmark.title);
+    expect(draft?.altitudeBenchmark.title).toBe(draft?.gnssBenchmark.title);
+
+    const text = (fixture.nativeElement as HTMLElement).textContent;
+    expect(text).toContain('GNSS');
+    expect(text).toContain('HR');
+    expect(text).toContain('Alt');
+    expect(text).toContain('CEP50');
+    expect(text).toContain('Rerun');
+    expect(text).toContain('+6.5 m');
+    expect(text).toContain('Garmin Forerunner 965 -> Suunto Race');
+    const renderedGnssCells = Array.from((fixture.nativeElement as HTMLElement).querySelectorAll('.mat-column-gnss .benchmark-summary-stack'));
+    expect(renderedGnssCells.map(cell => cell.getAttribute('data-severity'))).toEqual([
+      'moderate error',
+      'moderate error',
+      'missing',
+    ]);
+
+    component.onComparisonSortChange({ active: 'heartRate', direction: 'asc' });
+    expect(component.sortedComparisonItems().map(item => item.id)).toEqual([
+      'latest-report-metrics',
+      'old-stream-metrics',
+      'draft-no-report',
+    ]);
+    expect(analyticsServiceMock.logToolCompareSavedAction).toHaveBeenCalledWith('sort', {
+      sortColumn: 'heartRate',
+      sortDirection: 'asc',
+      filterActive: false,
+      resultCount: 3,
+    });
+
+    component.onComparisonSortChange({ active: 'gnss', direction: 'asc' });
+    expect(component.sortedComparisonItems().map(item => item.id)).toEqual([
+      'latest-report-metrics',
+      'old-stream-metrics',
+      'draft-no-report',
+    ]);
+
+    component.updateComparisonFilter('mae');
+    expect(component.filteredComparisonItems().map(item => item.id)).toEqual([
+      'latest-report-metrics',
+      'old-stream-metrics',
+    ]);
+  });
+
+  it('opens the device color editor from the page header and device dot', () => {
+    const user = new User('user-1');
+    eventColorServiceMock.getActivityColor.mockImplementation((_activities, activity) =>
+      activity?.getID?.() === 'activity-1' ? '#FF00FF' : '#16B4EA',
+    );
+    component.authResolved.set(true);
+    component.firebaseSignedIn.set(true);
+    component.currentUser.set(user);
+    component.comparisons.set([
+      makeComparisonEvent('long-course', {
+        title: 'Long course',
+        activities: [
+          makeActivity('activity-1', {
+            deviceName: 'Garmin Edge',
+            swInfo: '3129',
+            activityType: 'Cycling',
+          }),
+        ],
+      }),
+    ]);
+    const dialogOpenSpy = vi.spyOn((component as any).dialog, 'open').mockReturnValue({ afterClosed: () => of(false) } as any);
+    fixture.detectChanges();
+
+    const colorButton = Array.from((fixture.nativeElement as HTMLElement).querySelectorAll('button'))
+      .find(button => button.textContent?.includes('Device colors')) as HTMLButtonElement | undefined;
+    expect(colorButton?.disabled).toBe(false);
+    expect(colorButton?.closest('.workspace-header-actions')).not.toBeNull();
+    expect(colorButton?.closest('.comparison-table-controls')).toBeNull();
+    colorButton?.dispatchEvent(new Event('click'));
+
+    expect(dialogOpenSpy).toHaveBeenCalledWith(DeviceColorPreferencesDialogComponent, {
+      width: 'min(40rem, calc(100vw - 32px))',
+      maxWidth: 'calc(100vw - 32px)',
+      data: {
+        devices: [
+          {
+            key: 'garmin edge',
+            label: 'Garmin Edge 3129',
+            automaticColor: '#123456',
+          },
+        ],
+        initialDeviceKey: null,
+      },
+    });
+
+    dialogOpenSpy.mockClear();
+    const deviceDotButton = (fixture.nativeElement as HTMLElement).querySelector('.device-color-trigger') as HTMLButtonElement;
+    deviceDotButton.click();
+
+    expect(dialogOpenSpy).toHaveBeenCalledWith(DeviceColorPreferencesDialogComponent, {
+      width: 'min(40rem, calc(100vw - 32px))',
+      maxWidth: 'calc(100vw - 32px)',
+      data: {
+        devices: [
+          {
+            key: 'garmin edge',
+            label: 'Garmin Edge 3129',
+            automaticColor: '#123456',
+          },
+        ],
+        initialDeviceKey: 'garmin edge',
+      },
+    });
+    expect(hapticsServiceMock.selection).toHaveBeenCalledTimes(2);
+  });
+
+  it('filters loaded comparisons by review tags and saves row tag edits', async () => {
+    const user = new User('user-1');
+    const firmwareEvent = makeComparisonEvent('firmware-comparison', {
+      title: 'Firmware comparison',
+      benchmarkReviewTags: ['Firmware'],
+    });
+    const routeEvent = makeComparisonEvent('route-comparison', {
+      title: 'Route comparison',
+      benchmarkReviewTags: ['Route'],
+    });
+    const untaggedEvent = makeComparisonEvent('untagged-comparison', {
+      title: 'Untagged comparison',
+    });
+    component.authResolved.set(true);
+    component.firebaseSignedIn.set(true);
+    component.currentUser.set(user);
+    component.comparisons.set([firmwareEvent, routeEvent, untaggedEvent]);
+    fixture.detectChanges();
+
+    expect(component.displayedComparisonColumns.indexOf('tags')).toBeLessThan(
+      component.displayedComparisonColumns.indexOf('devices'),
+    );
+    const tagButtonLabels = Array.from((fixture.nativeElement as HTMLElement).querySelectorAll('.tags-summary-button'))
+      .map(button => button.textContent?.replace(/\s+/g, ' ').trim() || '');
+    expect(tagButtonLabels).toEqual(expect.arrayContaining([
+      expect.stringContaining('Firmware'),
+      expect.stringContaining('Route'),
+      expect.stringContaining('Add tags'),
+    ]));
+
+    expect(component.comparisonTagFilterOptions()).toEqual([
+      { value: 'Firmware', label: 'Firmware' },
+      { value: 'Route', label: 'Route' },
+    ]);
+
+    component.updateComparisonTagFilter('Firmware');
+    expect(component.filteredComparisonItems().map(item => item.id)).toEqual(['firmware-comparison']);
+
+    component.updateComparisonTagFilter('');
+    component.onComparisonSortChange({ active: 'tags', direction: 'desc' });
+    expect(component.sortedComparisonItems().map(item => item.id)).toEqual([
+      'route-comparison',
+      'firmware-comparison',
+      'untagged-comparison',
+    ]);
+
+    let dialogData: any;
+    const afterClosed$ = new Subject<string[] | null>();
+    const dialogOpenSpy = vi.spyOn((component as any).dialog, 'open').mockImplementationOnce((_component, config) => {
+      dialogData = config.data;
+      return { afterClosed: () => afterClosed$ } as any;
+    });
+
+    const editPromise = component.openBenchmarkReviewTagsDialog(component.comparisonItems()[0]);
+    const savedTags = await dialogData.save([' review ']);
+    afterClosed$.next(savedTags);
+    afterClosed$.complete();
+    await editPromise;
+
+    expect(dialogOpenSpy).toHaveBeenCalledWith(BenchmarkReviewTagsDialogComponent, expect.objectContaining({
+      width: 'min(34rem, calc(100vw - 32px))',
+      data: expect.objectContaining({
+        title: 'Comparison tags',
+        tags: ['Firmware'],
+        suggestions: ['Firmware', 'Route'],
+      }),
+    }));
+    expect(benchmarkReviewServiceMock.saveEventTags).toHaveBeenCalledWith(user, firmwareEvent, [' review ']);
+    expect(firmwareEvent.benchmarkReviewTags).toEqual(['review']);
+    expect(component.comparisonItems()[0].benchmarkReviewTags).toEqual(['review']);
+    expect(hapticsServiceMock.success).toHaveBeenCalled();
+    expect(analyticsServiceMock.logToolCompareSavedAction).toHaveBeenCalledWith('tags_save', {
+      hasReport: false,
+      reportCount: 0,
+      filterActive: false,
+      resultCount: 3,
+      status: 'success',
+      tagCount: 1,
+    });
+  });
+
+  it('renders dashboard-style icons in previous comparison table headers', () => {
+    const user = new User('user-1');
+    component.authResolved.set(true);
+    component.firebaseSignedIn.set(true);
+    component.currentUser.set(user);
+    component.comparisons.set([
+      makeComparisonEvent('header-icons', {
+        title: 'Header icons',
+        sourceFilesCount: 2,
+        activities: [
+          makeActivity('activity-1', {
+            deviceName: 'Garmin Edge',
+            activityType: 'Cycling',
+          }),
+          makeActivity('activity-2', {
+            deviceName: 'Suunto Race',
+            activityType: 'Cycling',
+          }),
+        ],
+      }),
+    ]);
+
+    fixture.detectChanges();
+
+    const headerLabels = Array.from((fixture.nativeElement as HTMLElement).querySelectorAll('th .comparison-header-label'));
+    const headerTexts = headerLabels.map(header => header.textContent?.replace(/\s+/g, ' ').trim() || '');
+    expect(headerTexts).toEqual(expect.arrayContaining([
+      expect.stringContaining('Date'),
+      expect.stringContaining('Title'),
+      expect.stringContaining('Devices'),
+      expect.stringContaining('Type'),
+      expect.stringContaining('Distance'),
+      expect.stringContaining('Ascent'),
+      expect.stringContaining('Descent'),
+      expect.stringContaining('GNSS'),
+      expect.stringContaining('HR'),
+      expect.stringContaining('Alt'),
+      expect.stringContaining('Description'),
+      expect.stringContaining('Tags'),
+      expect.stringContaining('Files'),
+      expect.stringContaining('Status'),
+      expect.stringContaining('Reports'),
+      expect.stringContaining('Actions'),
+    ]));
+
+    const headerIcons = Array.from((fixture.nativeElement as HTMLElement).querySelectorAll('th .comparison-header-label mat-icon'))
+      .map(icon => icon.textContent?.replace(/\s+/g, ' ').trim())
+      .filter(Boolean);
+    expect(headerIcons).toEqual(expect.arrayContaining([
+      'date_range',
+      'badge',
+      'watch',
+      'filter_none',
+      'route',
+      'elevation',
+      'satellite_alt',
+      'ecg_heart',
+      'landscape',
+      'font_download',
+      'sell',
+      'attach_file',
+      'task_alt',
+      'analytics',
+      'more_horiz',
+    ]));
   });
 
   it('resolves per-device sport types from activity stats and raw activity type aliases', () => {
@@ -948,7 +1829,7 @@ describe('ToolsComparePageComponent', () => {
     ]);
 
     const sportTypeLines = Array.from((fixture.nativeElement as HTMLElement).querySelectorAll('.summary-type-line'))
-      .map(line => line.textContent?.trim());
+      .map(line => line.querySelector('.summary-type-value')?.textContent?.trim());
     expect((fixture.nativeElement as HTMLElement).querySelector('.summary-type-device')).toBeNull();
     expect(sportTypeLines).toContain('Cycling');
     expect(sportTypeLines).toContain('Running');
@@ -1173,6 +2054,7 @@ describe('ToolsComparePageComponent', () => {
       status: 'success',
       hadDescription: true,
     });
+    expect(hapticsServiceMock.success).toHaveBeenCalled();
   });
 
   it('keeps comparison row data stable while editing description drafts', () => {
@@ -1221,6 +2103,7 @@ describe('ToolsComparePageComponent', () => {
 
     expect(event.description).toBe('Original note');
     expect(component.descriptionDrafts()).toEqual({});
+    expect(hapticsServiceMock.error).toHaveBeenCalled();
   });
 
   it('resets pagination after deleting a comparison from a later page', async () => {
@@ -1259,6 +2142,7 @@ describe('ToolsComparePageComponent', () => {
       resultCount: 2,
       status: 'success',
     });
+    expect(hapticsServiceMock.success).toHaveBeenCalled();
   });
 
   it('uses source file metadata count fallbacks instead of showing fake zeroes for saved benchmarks', () => {
@@ -1267,7 +2151,10 @@ describe('ToolsComparePageComponent', () => {
         getID: () => 'with-original-files',
         name: 'Original files',
         startDate: new Date('2026-01-03T00:00:00.000Z'),
-        originalFiles: [{ path: 'one.fit', startDate: new Date() }],
+        originalFiles: [
+          { path: 'users/user-1/events/event-1/one.fit', startDate: new Date(), originalFilename: 'reference.fit' },
+          { path: 'users/user-1/events/event-1/test-route.tcx', startDate: new Date() },
+        ],
         getActivities: () => [{ getID: () => 'activity-1' }],
       } as any,
       {
@@ -1279,15 +2166,39 @@ describe('ToolsComparePageComponent', () => {
     ]);
 
     expect(component.comparisonItems()[0]).toEqual(expect.objectContaining({
-      sourceFilesCount: 1,
-      sourceFilesLabel: '1 file',
+      sourceFilesCount: 2,
+      sourceFilesLabel: '2 files',
+      sourceFilesTitle: 'reference.fit\ntest-route.tcx',
     }));
     expect(component.comparisonItems()[1]).toEqual(expect.objectContaining({
       sourceFilesCount: null,
       sourceFilesLabel: 'Files unknown',
+      sourceFilesTitle: 'Files unknown',
     }));
 
     component.onComparisonSortChange({ active: 'sourceFiles', direction: 'asc' });
     expect(component.sortedComparisonItems().map(item => item.id)).toEqual(['with-original-files', 'unknown-counts']);
+  });
+
+  it('shows original comparison filenames in the files cell tooltip', () => {
+    component.authResolved.set(true);
+    component.firebaseSignedIn.set(true);
+    component.currentUser.set(new User('user-1'));
+    component.comparisons.set([
+      makeComparisonEvent('files-tooltip', {
+        title: 'Files tooltip',
+        sourceFilesCount: 2,
+        originalFiles: [
+          { path: 'users/user-1/events/event-1/uploaded-a.fit', startDate: new Date(), originalFilename: 'Garmin Edge.fit' },
+          { path: 'users/user-1/events/event-1/Suunto%20Vertical.gpx', startDate: new Date() },
+        ],
+      }),
+    ]);
+    fixture.detectChanges();
+
+    const filesCell = (fixture.nativeElement as HTMLElement).querySelector('.source-files-cell') as HTMLElement;
+
+    expect(filesCell?.textContent?.trim()).toBe('2 files');
+    expect(filesCell?.getAttribute('title')).toBe('Garmin Edge.fit\nSuunto Vertical.gpx');
   });
 });
