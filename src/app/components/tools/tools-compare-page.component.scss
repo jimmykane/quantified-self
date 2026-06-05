@@ -853,6 +853,9 @@ button.benchmark-summary-stack:disabled {
 }
 
 .tags-summary-button {
+  --mdc-text-button-container-shape: 4px;
+
+  box-sizing: border-box;
   display: inline-flex;
   align-items: center;
   gap: 0.3rem;
@@ -861,6 +864,7 @@ button.benchmark-summary-stack:disabled {
   min-width: 0;
   max-width: 11.5rem;
   height: 2rem;
+  border-radius: 4px;
   padding: 0 0.35rem;
   overflow: hidden;
   font-family: inherit;
@@ -868,10 +872,6 @@ button.benchmark-summary-stack:disabled {
   letter-spacing: 0;
   line-height: 2rem;
   text-align: left;
-}
-
-.tags-summary-button.tags-summary-button--empty {
-  border-color: var(--mat-sys-outline-variant);
 }
 
 .tag-pill-list {
@@ -888,9 +888,8 @@ button.benchmark-summary-stack:disabled {
   max-width: 5rem;
   min-width: 0;
   padding: 0.05rem 0.4rem;
-  border: 1px solid var(--mat-sys-outline-variant);
-  border-radius: 999px;
-  background: var(--mat-sys-surface-container-low);
+  border-radius: 4px;
+  background: var(--mat-sys-surface-container-high);
   color: var(--mat-sys-on-surface);
   font-size: 0.78rem;
   line-height: 1.25rem;

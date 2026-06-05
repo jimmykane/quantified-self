@@ -4,15 +4,30 @@
 }
 
 .benchmark-review-tags-dialog-content {
+  display: grid;
+  gap: 0.35rem;
   width: 100%;
   min-width: 0;
   max-width: 100%;
+  padding-top: 0.4rem;
   overflow-x: hidden;
 }
 
 .tags-field {
+  --mdc-outlined-text-field-container-shape: 4px;
+  --mdc-chip-elevated-container-shape-radius: 4px;
+  --mdc-chip-flat-container-shape-radius: 4px;
+
   width: 100%;
   min-width: 0;
+}
+
+.tags-field mat-chip-grid {
+  min-height: 3rem;
+}
+
+.tags-field mat-chip-row {
+  border-radius: 4px;
 }
 
 .tag-dialog-footer {
@@ -21,7 +36,6 @@
   gap: 0.35rem 0.75rem;
   align-items: center;
   justify-content: space-between;
-  margin-top: 0.5rem;
   color: var(--mat-sys-on-surface-variant);
   font-size: 0.82rem;
 }

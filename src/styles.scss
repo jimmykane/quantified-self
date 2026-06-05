@@ -752,6 +752,25 @@ mat-table {
   backdrop-filter: none !important;
 }
 
+.mat-mdc-dialog-surface {
+  --mat-dialog-container-color: var(--qs-overlay-surface);
+
+  // Documented Material overlay exception: keep dialogs on the shared app surface
+  // without adding per-dialog panelClass values or changing Material dialog motion.
+  background: var(--qs-overlay-surface) !important;
+  backdrop-filter: blur(var(--qs-glass-panel-blur));
+  -webkit-backdrop-filter: blur(var(--qs-glass-panel-blur));
+  border: 1px solid var(--qs-glass-panel-border);
+  border-radius: var(--qs-glass-panel-radius) !important;
+  box-shadow: var(--qs-glass-panel-shadow) !important;
+}
+
+.dark-theme .mat-mdc-dialog-surface,
+.cdk-overlay-container.dark-theme .mat-mdc-dialog-surface {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2) !important;
+}
+
 /* ==========================================================================
    Global Table Styles
    Standardized Material table overrides for glassmorphism.

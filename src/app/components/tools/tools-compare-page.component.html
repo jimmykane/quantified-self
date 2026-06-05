@@ -319,10 +319,10 @@
             <span class="benchmark-metric-value">{{ line.value }}</span>
           </span>
           }
-          @if (cell.canRerunReport) {
+          @if (!item.hasReport || cell.canRerunReport) {
           <span class="benchmark-rerun-hint">
             <mat-icon aria-hidden="true">refresh</mat-icon>
-            <span>Rerun</span>
+            <span>{{ cell.canRerunReport ? 'Rerun' : 'Run' }}</span>
           </span>
           }
           }
@@ -631,10 +631,9 @@
             </th>
             <td mat-cell *matCellDef="let item">
               <button
-                mat-stroked-button
+                mat-button
                 type="button"
                 class="tags-summary-button"
-                [class.tags-summary-button--empty]="item.benchmarkReviewTags.length === 0"
                 [matTooltip]="item.benchmarkReviewTagsTitle"
                 [attr.aria-label]="item.benchmarkReviewTags.length > 0 ? 'Edit comparison tags' : 'Add comparison tags'"
                 (click)="openBenchmarkReviewTagsDialog(item)">

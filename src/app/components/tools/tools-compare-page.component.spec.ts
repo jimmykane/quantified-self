@@ -907,6 +907,7 @@ describe('ToolsComparePageComponent', () => {
     const metricButton = (fixture.nativeElement as HTMLElement).querySelector('.mat-column-gnss .benchmark-summary-action') as HTMLButtonElement;
     expect(metricButton).toBeTruthy();
     expect(metricButton.getAttribute('title')).toContain('Run the benchmark report');
+    expect(metricButton.textContent).toContain('Run');
 
     metricButton.click();
     fixture.detectChanges();
