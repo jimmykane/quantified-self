@@ -6,8 +6,15 @@
     <mat-chip-grid #tagGrid aria-label="Benchmark review tags">
       @for (tag of stagedTags(); track tag) {
       <mat-chip-row [disabled]="isSaving()" (removed)="removeTag(tag)">
-        {{ tag }}
-        <mat-icon matChipRemove class="tag-remove-icon" [attr.aria-label]="'Remove ' + tag">close</mat-icon>
+        <span class="tag-chip-label">{{ tag }}</span>
+        <button
+          matChipRemove
+          type="button"
+          class="tag-remove-button"
+          [disabled]="isSaving()"
+          [attr.aria-label]="'Remove ' + tag">
+          <mat-icon class="tag-remove-icon">close</mat-icon>
+        </button>
       </mat-chip-row>
       }
       <input

@@ -57,12 +57,15 @@ describe('BenchmarkReviewTagsDialogComponent', () => {
   });
 
   it('renders the Material chip remove icon for staged tags', () => {
-    const removeIcon = fixture.nativeElement.querySelector('mat-chip-row mat-icon[matChipRemove]') as HTMLElement | null;
+    const removeButton = fixture.nativeElement.querySelector('mat-chip-row button[matChipRemove]') as HTMLButtonElement | null;
+    const removeIcon = removeButton?.querySelector('mat-icon') as HTMLElement | null;
 
+    expect(removeButton).toBeTruthy();
+    expect(removeButton?.classList.contains('tag-remove-button')).toBe(true);
+    expect(removeButton?.getAttribute('aria-label')).toBe('Remove firmware');
     expect(removeIcon).toBeTruthy();
     expect(removeIcon?.classList.contains('tag-remove-icon')).toBe(true);
     expect(removeIcon?.textContent?.trim()).toBe('close');
-    expect(removeIcon?.getAttribute('aria-label')).toBe('Remove firmware');
   });
 
   it('saves staged tags and closes with normalized saved tags', async () => {

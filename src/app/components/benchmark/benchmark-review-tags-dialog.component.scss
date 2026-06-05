@@ -21,6 +21,8 @@
   --mat-chip-label-text-color: var(--mat-sys-on-surface);
   --mat-chip-outline-color: var(--mat-sys-outline);
   --mat-chip-trailing-action-opacity: 1;
+  --mat-chip-trailing-action-focus-state-layer-opacity: 0;
+  --mat-chip-trailing-action-hover-state-layer-opacity: 0;
   --mat-chip-with-trailing-icon-trailing-icon-color: var(--mat-sys-on-surface-variant);
   --mdc-outlined-text-field-container-shape: 4px;
 
@@ -39,7 +41,14 @@
   border-radius: 4px;
   min-height: 2rem;
   margin-block: 0;
-  padding-inline: 0.7rem 0.45rem;
+  padding-inline: 0.45rem;
+}
+
+.tag-chip-label {
+  display: inline-flex;
+  align-items: center;
+  margin-inline-start: -0.25rem;
+  line-height: 1;
 }
 
 .tag-input {
@@ -50,15 +59,30 @@
   padding-block: 0;
 }
 
-.tag-remove-icon {
+.tags-field mat-chip-row .tag-remove-button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   width: 1.125rem;
   height: 1.125rem;
-  margin-inline-start: 0.35rem;
+  margin-inline-start: 0.3rem;
+  padding: 0;
   color: var(--mat-sys-on-surface-variant);
-  font-size: 1.05rem;
+  line-height: 1;
+}
+
+.tags-field mat-chip-row .tag-remove-button::after {
+  display: none;
+}
+
+.tag-remove-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1rem;
+  height: 1rem;
+  color: inherit;
+  font-size: 1rem;
   line-height: 1;
   opacity: 1;
 }
