@@ -450,8 +450,9 @@ h2 {
 }
 
 .comparison-table .mat-column-tags {
-  width: 12rem;
-  min-width: 12rem;
+  width: 7.5rem;
+  min-width: 7.5rem;
+  max-width: 7.5rem;
 }
 
 .comparison-table .mat-column-devices {
@@ -870,9 +871,9 @@ button.benchmark-summary-stack:disabled {
   align-items: center;
   gap: 0.3rem;
   justify-content: flex-start;
-  width: 100%;
+  width: fit-content;
   min-width: 0;
-  max-width: 11.5rem;
+  max-width: 100%;
   height: 2rem;
   border-radius: 4px;
   padding: 0 0.35rem;
