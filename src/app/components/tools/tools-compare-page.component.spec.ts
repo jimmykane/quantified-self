@@ -1,5 +1,8 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { BreakpointObserver } from '@angular/cdk/layout';
+import { By } from '@angular/platform-browser';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
+import { MatTooltip } from '@angular/material/tooltip';
 import { ActivatedRoute, Router } from '@angular/router';
 import { RouterTestingModule } from '@angular/router/testing';
 import { BehaviorSubject, of, Subject, throwError } from 'rxjs';
@@ -22,6 +25,7 @@ import { DeviceColorPreferencesDialogComponent } from './device-color-preference
 import { AppHapticsService } from '../../services/app.haptics.service';
 import { BenchmarkReviewService } from '../../services/benchmark-review.service';
 import { BenchmarkReviewTagsDialogComponent } from '../benchmark/benchmark-review-tags-dialog.component';
+import { AppBreakpoints } from '../../constants/breakpoints';
 
 function makeComparisonEvent(id: string, overrides: {
   title?: string;
@@ -173,6 +177,9 @@ describe('ToolsComparePageComponent', () => {
   let loggerMock: {
     warn: ReturnType<typeof vi.fn>;
   };
+  let breakpointObserverMock: {
+    observe: ReturnType<typeof vi.fn>;
+  };
 
   beforeEach(async () => {
     userSubject = new BehaviorSubject<User | null>(null);
@@ -282,6 +289,12 @@ describe('ToolsComparePageComponent', () => {
     loggerMock = {
       warn: vi.fn(),
     };
+    breakpointObserverMock = {
+      observe: vi.fn().mockReturnValue(of({
+        matches: false,
+        breakpoints: {},
+      })),
+    };
 
     await TestBed.configureTestingModule({
       imports: [ToolsComparePageComponent, RouterTestingModule.withRoutes([]), NoopAnimationsModule],
@@ -299,6 +312,7 @@ describe('ToolsComparePageComponent', () => {
         { provide: AppEventColorService, useValue: eventColorServiceMock },
         { provide: AppDeviceColorPreferenceService, useValue: deviceColorPreferenceServiceMock },
         { provide: LoggerService, useValue: loggerMock },
+        { provide: BreakpointObserver, useValue: breakpointObserverMock },
         { provide: ActivatedRoute, useValue: { snapshot: { data: {} } } },
       ],
     }).compileComponents();
@@ -386,6 +400,7 @@ describe('ToolsComparePageComponent', () => {
   it('loads the first saved benchmark comparison page for signed-in users', async () => {
     const user = new User('user-1');
     userSubject.next(user);
+    await Promise.resolve();
     await Promise.resolve();
     fixture.detectChanges();
 
@@ -512,6 +527,7 @@ describe('ToolsComparePageComponent', () => {
     });
     savedPage$.complete();
     await Promise.resolve();
+    await Promise.resolve();
 
     expect(component.isLoadingComparisons()).toBe(false);
   });
@@ -524,6 +540,7 @@ describe('ToolsComparePageComponent', () => {
     comparisonServiceMock.getBenchmarkComparisonPage.mockReturnValue(throwError(() => missingIndexError));
 
     userSubject.next(new User('user-1'));
+    await Promise.resolve();
     await Promise.resolve();
 
     expect(component.isLoadingComparisons()).toBe(false);
@@ -2025,8 +2042,11 @@ describe('ToolsComparePageComponent', () => {
     expect(eventServiceMock.getActivitiesOnceByEventsWithOptions).toHaveBeenCalledTimes(1);
   });
 
-  it('renders previous comparison descriptions as compact text until editing', () => {
+  it('renders previous comparison descriptions as compact text until editing', async () => {
     userSubject.next(new User('user-1'));
+    await Promise.resolve();
+    await Promise.resolve();
+
     component.comparisons.set([
       makeComparisonEvent('comparison-1', {
         title: 'Comparison',
@@ -2253,5 +2273,45 @@ describe('ToolsComparePageComponent', () => {
 
     expect(filesCell?.textContent?.trim()).toBe('2 files');
     expect(filesCell?.getAttribute('title')).toBe('Garmin Edge.fit\nSuunto Vertical.gpx');
+  });
+
+  it('disables dense table tooltips in touch table mode without removing native titles', () => {
+    component.authResolved.set(true);
+    component.firebaseSignedIn.set(true);
+    component.currentUser.set(new User('user-1'));
+    component.comparisons.set([
+      makeComparisonEvent('tooltip-mode', {
+        title: 'Tooltip mode comparison',
+        activities: [
+          makeActivity('activity-1', {
+            deviceName: 'Garmin Edge',
+            activityType: 'Cycling',
+          }),
+          makeActivity('activity-2', {
+            deviceName: 'Suunto Race',
+            activityType: 'Cycling',
+          }),
+        ],
+      }),
+    ]);
+    fixture.detectChanges();
+
+    const titleDebugElement = fixture.debugElement.query(By.css('.title-cell'));
+    const titleTooltip = titleDebugElement.injector.get(MatTooltip);
+    const actionDebugElement = fixture.debugElement.query(By.css('.row-actions button[aria-label="Open comparison details"]'));
+    const actionTooltip = actionDebugElement.injector.get(MatTooltip);
+
+    expect(breakpointObserverMock.observe).toHaveBeenCalledWith(['(pointer: coarse)', '(hover: none)', AppBreakpoints.Handset]);
+    expect(titleTooltip.disabled).toBe(false);
+    expect(titleTooltip.touchGestures).toBe('off');
+    expect(actionTooltip.disabled).toBe(false);
+    expect(actionTooltip.touchGestures).toBe('off');
+
+    component.passiveComparisonTableTooltipsDisabled.set(true);
+    fixture.detectChanges();
+
+    expect(titleTooltip.disabled).toBe(true);
+    expect(titleDebugElement.nativeElement.getAttribute('title')).toBe('Tooltip mode comparison');
+    expect(actionTooltip.disabled).toBe(true);
   });
 });

@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, DestroyRef, computed, effect, inject, OnInit, signal } from '@angular/core';
+import { BreakpointObserver } from '@angular/cdk/layout';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router } from '@angular/router';
 import { MatDialog } from '@angular/material/dialog';
@@ -45,6 +46,7 @@ import { AppDeviceColorPreferenceService } from '../../services/color/app-device
 import { AppBenchmarkFlowService } from '../../services/app.benchmark-flow.service';
 import type { BenchmarkGenerationFailureReason } from '../../services/app.benchmark-flow.service';
 import { BENCHMARK_NO_OVERLAP_MESSAGE } from '../../services/app.benchmark.service';
+import { AppBreakpoints } from '../../constants/breakpoints';
 import { AppHapticsService } from '../../services/app.haptics.service';
 import { BenchmarkReviewService } from '../../services/benchmark-review.service';
 import {
@@ -194,6 +196,7 @@ const MAX_COMPARISON_FILES = 10;
 const DEFAULT_COMPARISON_PAGE_SIZE = 25;
 const COMPARISON_PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
 const MISSING_BENCHMARK_REPORT_TOOLTIP = 'No benchmark report yet. Run the benchmark report from this row to generate GNSS, heart-rate, and altitude metrics.';
+const PASSIVE_TABLE_TOOLTIP_MEDIA_QUERIES = ['(pointer: coarse)', '(hover: none)', AppBreakpoints.Handset] as const;
 
 @Component({
   selector: 'app-tools-compare-page',
@@ -205,6 +208,7 @@ const MISSING_BENCHMARK_REPORT_TOOLTIP = 'No benchmark report yet. Run the bench
 })
 export class ToolsComparePageComponent implements OnInit {
   private destroyRef = inject(DestroyRef);
+  private breakpointObserver = inject(BreakpointObserver);
   private route = inject(ActivatedRoute);
   private router = inject(Router);
   private dialog = inject(MatDialog);
@@ -232,6 +236,7 @@ export class ToolsComparePageComponent implements OnInit {
   readonly editingDescriptionEventID = signal<string | null>(null);
   readonly benchmarkingEventID = signal<string | null>(null);
   readonly benchmarkFailureByEventID = signal<Record<string, ComparisonBenchmarkFailure>>({});
+  readonly passiveComparisonTableTooltipsDisabled = signal(false);
   readonly descriptionDrafts = signal<Record<string, string>>({});
   readonly comparisonFilter = signal('');
   readonly comparisonDeviceFilter = signal('');
@@ -471,6 +476,16 @@ export class ToolsComparePageComponent implements OnInit {
   });
 
   ngOnInit(): void {
+    this.breakpointObserver
+      .observe(PASSIVE_TABLE_TOOLTIP_MEDIA_QUERIES)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(result => {
+        if (result.matches === this.passiveComparisonTableTooltipsDisabled()) {
+          return;
+        }
+        this.passiveComparisonTableTooltipsDisabled.set(result.matches);
+      });
+
     this.authService.user$
       .pipe(
         takeUntilDestroyed(this.destroyRef),
