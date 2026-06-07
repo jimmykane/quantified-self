@@ -23,6 +23,11 @@ import { ROUTE_PROCESSING_HTTPS_RUNTIME_OPTIONS, MAX_ROUTE_DECOMPRESSED_BYTES, M
 import { SPORTS_LIB_VERSION } from '../shared/sports-lib-version.node';
 import { sportsLibVersionToCode } from '../reparse/sports-lib-reparse.service';
 import { ROUTE_USAGE_LIMITS } from '../../../shared/limits';
+import {
+  getUserDeletionGuardState,
+  getUserDeletionGuardStateInTransaction,
+  UserDeletionGuardReadError,
+} from '../shared/user-deletion-guard';
 
 const SUPPORTED_BASE_EXTENSIONS = new Set(['fit', 'gpx']);
 
@@ -35,6 +40,17 @@ class HttpStatusError extends Error {
   constructor(public readonly status: number, message: string) {
     super(message);
     this.name = 'HttpStatusError';
+  }
+}
+
+class RouteQuotaReconciliationRequiredError extends Error {
+  constructor(
+    public readonly counterRouteCount: number,
+    public readonly uploadLimit: number,
+    public readonly counterVersion: string | null,
+  ) {
+    super(`Route quota counter needs reconciliation before rejecting at ${counterRouteCount}/${uploadLimit}.`);
+    this.name = 'RouteQuotaReconciliationRequiredError';
   }
 }
 
@@ -315,6 +331,32 @@ function readRouteCountCounter(value: unknown): number | null {
   return Math.floor(value);
 }
 
+function buildRouteLimitError(currentRouteCount: number, uploadLimit: number): HttpStatusError {
+  return new HttpStatusError(429, `Upload limit reached for your tier. You have ${currentRouteCount} routes. Limit is ${uploadLimit}.`);
+}
+
+function buildAccountDeletionError(): HttpStatusError {
+  return new HttpStatusError(410, 'Account is being deleted or no longer exists.');
+}
+
+function getCounterSnapshotVersion(snapshot: admin.firestore.DocumentSnapshot): string | null {
+  const updateTime = snapshot.updateTime;
+  if (!updateTime) {
+    return null;
+  }
+
+  const structuredTime = updateTime as { seconds?: unknown; nanoseconds?: unknown };
+  if (typeof structuredTime.seconds === 'number' && typeof structuredTime.nanoseconds === 'number') {
+    return `${structuredTime.seconds}:${structuredTime.nanoseconds}`;
+  }
+
+  if (typeof updateTime.toMillis === 'function') {
+    return `${updateTime.toMillis()}`;
+  }
+
+  return null;
+}
+
 function getRouteQuotaCounterPath(userID: string): string {
   return `users/${userID}/metaData/routeQuota`;
 }
@@ -328,6 +370,53 @@ async function getInitialRouteCountForMissingOrInvalidCounter(
     return null;
   }
   return getRouteCountForUser(userID);
+}
+
+async function assertRouteUploadUserActive(userID: string, phase: string): Promise<void> {
+  let deletionGuard;
+  try {
+    deletionGuard = await getUserDeletionGuardState(admin.firestore(), userID);
+  } catch (error) {
+    throw new UserDeletionGuardReadError(userID, phase, error);
+  }
+
+  if (!deletionGuard.shouldSkip) {
+    return;
+  }
+
+  logger.warn('[uploadRoute] Skipping route upload because user is missing or deletion is in progress.', {
+    userID,
+    phase,
+    userExists: deletionGuard.userExists,
+    deletionInProgress: deletionGuard.deletionInProgress,
+  });
+  throw buildAccountDeletionError();
+}
+
+async function assertRouteUploadUserActiveInTransaction(
+  db: admin.firestore.Firestore,
+  transaction: admin.firestore.Transaction,
+  userID: string,
+  phase: string,
+): Promise<void> {
+  let deletionGuard;
+  try {
+    deletionGuard = await getUserDeletionGuardStateInTransaction(db, transaction, userID);
+  } catch (error) {
+    throw new UserDeletionGuardReadError(userID, phase, error);
+  }
+
+  if (!deletionGuard.shouldSkip) {
+    return;
+  }
+
+  logger.warn('[uploadRoute] Skipping route upload write because user is missing or deletion is in progress.', {
+    userID,
+    phase,
+    userExists: deletionGuard.userExists,
+    deletionInProgress: deletionGuard.deletionInProgress,
+  });
+  throw buildAccountDeletionError();
 }
 
 function buildOriginalRouteFileMetadata(
@@ -380,11 +469,65 @@ interface RouteQuotaWriteResult {
   routeCountAfterWrite: number;
 }
 
+interface RouteQuotaReconciliation {
+  routeCount: number;
+  counterVersion: string;
+}
+
+async function preflightRouteQuotaReservation(
+  userID: string,
+  routeID: string,
+  uploadLimit: number | null,
+): Promise<RouteQuotaReconciliation | null> {
+  if (uploadLimit === null) {
+    return null;
+  }
+
+  const db = admin.firestore();
+  const routeRef = db.doc(`users/${userID}/routes/${routeID}`);
+  const counterRef = db.doc(getRouteQuotaCounterPath(userID));
+  const [routeSnapshot, counterSnapshot] = await Promise.all([
+    routeRef.get(),
+    counterRef.get(),
+  ]);
+
+  if (routeSnapshot.exists) {
+    return null;
+  }
+
+  const counterRouteCount = counterSnapshot.exists
+    ? readRouteCountCounter(counterSnapshot.data()?.routeCount)
+    : null;
+  if (counterRouteCount !== null && counterRouteCount < uploadLimit) {
+    return null;
+  }
+
+  const authoritativeRouteCount = await getRouteCountForUser(userID);
+  if (authoritativeRouteCount >= uploadLimit) {
+    throw buildRouteLimitError(authoritativeRouteCount, uploadLimit);
+  }
+
+  if (counterRouteCount === null || !counterSnapshot.exists) {
+    return null;
+  }
+
+  const counterVersion = getCounterSnapshotVersion(counterSnapshot);
+  if (!counterVersion) {
+    return null;
+  }
+
+  return {
+    routeCount: authoritativeRouteCount,
+    counterVersion,
+  };
+}
+
 async function writeRouteWithQuotaReservation(
   userID: string,
   routeFile: AppRouteInterface,
   originalFileMetadata: OriginalRouteFileMetaData,
   uploadLimit: number | null,
+  initialReconciliation: RouteQuotaReconciliation | null = null,
 ): Promise<RouteQuotaWriteResult> {
   const routeID = routeFile.getID();
   if (!routeID) {
@@ -402,50 +545,100 @@ async function writeRouteWithQuotaReservation(
     originalFiles: [originalFileMetadata],
   };
 
-  return db.runTransaction(async (transaction) => {
-    const [routeSnapshot, counterSnapshot] = await Promise.all([
-      transaction.get(routeRef),
-      transaction.get(counterRef),
-    ]);
-    const routeAlreadyExists = routeSnapshot.exists;
-    const counterRouteCount = counterSnapshot.exists
-      ? readRouteCountCounter(counterSnapshot.data()?.routeCount)
-      : null;
+  let reconciliation: RouteQuotaReconciliation | null = initialReconciliation;
+  for (let attempt = 0; attempt < 5; attempt++) {
+    try {
+      return await db.runTransaction(async (transaction) => {
+        await assertRouteUploadUserActiveInTransaction(db, transaction, userID, 'route_upload_write');
 
-    if (counterRouteCount === null && initialRouteCount === null) {
-      throw new Error(`Route quota counter was removed or invalidated while writing ${routeID}.`);
+        const [routeSnapshot, counterSnapshot] = await Promise.all([
+          transaction.get(routeRef),
+          transaction.get(counterRef),
+        ]);
+        const routeAlreadyExists = routeSnapshot.exists;
+        const counterRouteCount = counterSnapshot.exists
+          ? readRouteCountCounter(counterSnapshot.data()?.routeCount)
+          : null;
+
+        if (counterRouteCount === null && initialRouteCount === null) {
+          throw new Error(`Route quota counter was removed or invalidated while writing ${routeID}.`);
+        }
+
+        let currentRouteCount = counterRouteCount !== null
+          ? counterRouteCount
+          : normalizeRouteCount(initialRouteCount);
+        let routeCountBeforeReconcile: number | null = null;
+        let reconciledRouteCount: number | null = null;
+
+        if (uploadLimit !== null && currentRouteCount >= uploadLimit && !routeAlreadyExists) {
+          const counterVersion = counterSnapshot.exists ? getCounterSnapshotVersion(counterSnapshot) : null;
+          if (
+            reconciliation
+            && counterVersion !== null
+            && reconciliation.counterVersion === counterVersion
+            && reconciliation.routeCount < currentRouteCount
+          ) {
+            routeCountBeforeReconcile = currentRouteCount;
+            reconciledRouteCount = normalizeRouteCount(reconciliation.routeCount);
+            currentRouteCount = reconciledRouteCount;
+          } else {
+            throw new RouteQuotaReconciliationRequiredError(currentRouteCount, uploadLimit, counterVersion);
+          }
+        }
+
+        if (uploadLimit !== null && currentRouteCount >= uploadLimit && !routeAlreadyExists) {
+          throw buildRouteLimitError(currentRouteCount, uploadLimit);
+        }
+
+        const routeCountAfterWrite = routeAlreadyExists ? currentRouteCount : currentRouteCount + 1;
+        const serverTimestamp = FieldValue.serverTimestamp();
+        const counterPayload: Record<string, unknown> = {
+          routeCount: routeCountAfterWrite,
+          updatedAt: serverTimestamp,
+        };
+        if (!counterSnapshot.exists) {
+          counterPayload.initializedAt = serverTimestamp;
+        }
+        if (counterSnapshot.exists && counterRouteCount === null) {
+          counterPayload.repairedAt = serverTimestamp;
+        }
+        if (routeCountBeforeReconcile !== null && reconciledRouteCount !== null) {
+          counterPayload.reconciledAt = serverTimestamp;
+          counterPayload.reconciledFromRouteCount = routeCountBeforeReconcile;
+          counterPayload.reconciledActualRouteCount = reconciledRouteCount;
+        }
+
+        transaction.set(routeRef, routePayload);
+        transaction.set(counterRef, counterPayload, { merge: true });
+        transaction.set(processingRef, createProcessingMetadataPayload(), { merge: true });
+
+        return {
+          duplicate: routeAlreadyExists,
+          routeCountAfterWrite,
+        };
+      });
+    } catch (error) {
+      if (!(error instanceof RouteQuotaReconciliationRequiredError)) {
+        throw error;
+      }
+
+      if (!error.counterVersion) {
+        throw buildRouteLimitError(error.counterRouteCount, error.uploadLimit);
+      }
+
+      const authoritativeRouteCount = await getRouteCountForUser(userID);
+      if (authoritativeRouteCount >= error.uploadLimit) {
+        throw buildRouteLimitError(authoritativeRouteCount, error.uploadLimit);
+      }
+
+      reconciliation = {
+        routeCount: authoritativeRouteCount,
+        counterVersion: error.counterVersion,
+      };
     }
+  }
 
-    const currentRouteCount = counterRouteCount !== null
-      ? counterRouteCount
-      : normalizeRouteCount(initialRouteCount);
-
-    if (uploadLimit !== null && currentRouteCount >= uploadLimit && !routeAlreadyExists) {
-      throw new HttpStatusError(429, `Upload limit reached for your tier. You have ${currentRouteCount} routes. Limit is ${uploadLimit}.`);
-    }
-
-    const routeCountAfterWrite = routeAlreadyExists ? currentRouteCount : currentRouteCount + 1;
-    const serverTimestamp = FieldValue.serverTimestamp();
-    const counterPayload: Record<string, unknown> = {
-      routeCount: routeCountAfterWrite,
-      updatedAt: serverTimestamp,
-    };
-    if (!counterSnapshot.exists) {
-      counterPayload.initializedAt = serverTimestamp;
-    }
-    if (counterSnapshot.exists && counterRouteCount === null) {
-      counterPayload.repairedAt = serverTimestamp;
-    }
-
-    transaction.set(routeRef, routePayload);
-    transaction.set(counterRef, counterPayload, { merge: true });
-    transaction.set(processingRef, createProcessingMetadataPayload(), { merge: true });
-
-    return {
-      duplicate: routeAlreadyExists,
-      routeCountAfterWrite,
-    };
-  });
+  throw new HttpStatusError(409, 'Route quota changed while uploading. Please retry.');
 }
 
 export const uploadRoute = onRequest({
@@ -482,6 +675,8 @@ export const uploadRoute = onRequest({
     const payloadForParsing = maybeDecompressPayloadForParsing(rawBody, resolvedExtension);
     const routeID = generateUploadRouteID(userID, payloadForParsing, resolvedExtension);
     const uploadLimit = await resolveUploadLimitForUser(userID);
+    await assertRouteUploadUserActive(userID, 'route_upload_preflight');
+    const preflightReconciliation = await preflightRouteQuotaReservation(userID, routeID, uploadLimit);
 
     let routeFile: AppRouteInterface;
     try {
@@ -523,11 +718,10 @@ export const uploadRoute = onRequest({
         routeFile,
         originalFileMetadata,
         uploadLimit,
+        preflightReconciliation,
       );
     } catch (error) {
-      if (error instanceof HttpStatusError && error.status === 429) {
-        await deleteUploadedOriginalRouteFile(originalFileMetadata);
-      }
+      await deleteUploadedOriginalRouteFile(originalFileMetadata);
       throw error;
     }
 
@@ -543,6 +737,11 @@ export const uploadRoute = onRequest({
   } catch (error) {
     if (error instanceof HttpStatusError) {
       response.status(error.status).json({ error: error.message });
+      return;
+    }
+
+    if (error instanceof UserDeletionGuardReadError) {
+      response.status(error.statusCode).json({ error: 'Could not verify account state. Please retry.' });
       return;
     }
 

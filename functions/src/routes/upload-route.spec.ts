@@ -13,6 +13,7 @@ const hoisted = vi.hoisted(() => {
   });
   const mockVerifyIdToken = vi.fn();
   const mockVerifyAppCheckToken = vi.fn();
+  const mockGetAll = vi.fn();
   const mockRoutesCountGet = vi.fn();
   const mockDocGet = vi.fn();
   const mockDocSet = vi.fn();
@@ -41,6 +42,7 @@ const hoisted = vi.hoisted(() => {
     mockOnRequest,
     mockVerifyIdToken,
     mockVerifyAppCheckToken,
+    mockGetAll,
     mockRoutesCountGet,
     mockDocGet,
     mockDocSet,
@@ -63,20 +65,31 @@ vi.mock('firebase-functions/v2/https', () => ({
 }));
 
 vi.mock('firebase-admin', () => {
+  function userScopedDoc(path: string) {
+    return {
+      path,
+      collection: (name: string) => {
+        if (name === 'routes') {
+          return {
+            count: () => ({ get: hoisted.mockRoutesCountGet }),
+          };
+        }
+        return {};
+      },
+    };
+  }
+
   const firestoreFn = vi.fn(() => ({
+    getAll: hoisted.mockGetAll,
     collection: (path: string) => {
       if (path === 'users') {
         return {
-          doc: () => ({
-            collection: (name: string) => {
-              if (name === 'routes') {
-                return {
-                  count: () => ({ get: hoisted.mockRoutesCountGet }),
-                };
-              }
-              return {};
-            },
-          }),
+          doc: (id: string) => userScopedDoc(`users/${id}`),
+        };
+      }
+      if (path === 'userDeletionTombstones') {
+        return {
+          doc: (id: string) => ({ path: `userDeletionTombstones/${id}` }),
         };
       }
       if (path === 'tmp') {
@@ -244,11 +257,26 @@ async function invokeUploadRoute(
   await handler(request, response);
 }
 
-function makeSnapshot(exists: boolean, data: Record<string, unknown> = {}) {
+function makeSnapshot(
+  exists: boolean,
+  data: Record<string, unknown> = {},
+  updateTime?: { seconds: number; nanoseconds: number },
+) {
   return {
     exists,
     data: () => data,
+    updateTime,
   };
+}
+
+function activeUserGuardSnapshot(ref: { path: string }) {
+  if (ref.path === 'users/user-1') {
+    return makeSnapshot(true);
+  }
+  if (ref.path === 'userDeletionTombstones/user-1') {
+    return makeSnapshot(false);
+  }
+  return null;
 }
 
 function transactionSetCallForPath(path: string) {
@@ -263,6 +291,10 @@ describe('uploadRoute', () => {
     hoisted.mockEnforceAppCheckFlag.value = true;
     hoisted.mockVerifyIdToken.mockResolvedValue({ uid: 'user-1' });
     hoisted.mockVerifyAppCheckToken.mockResolvedValue(undefined);
+    hoisted.mockGetAll.mockResolvedValue([
+      makeSnapshot(true),
+      makeSnapshot(false),
+    ]);
     hoisted.mockRoutesCountGet.mockResolvedValue({ data: () => ({ count: 0 }) });
     hoisted.mockDocGet.mockImplementation(async (path: string) => {
       if (path.endsWith('/metaData/routeQuota')) {
@@ -278,6 +310,12 @@ describe('uploadRoute', () => {
       set: hoisted.mockTransactionSet,
     }));
     hoisted.mockTransactionGet.mockImplementation(async (ref: { path: string }) => {
+      if (ref.path === 'users/user-1') {
+        return makeSnapshot(true);
+      }
+      if (ref.path === 'userDeletionTombstones/user-1') {
+        return makeSnapshot(false);
+      }
       if (ref.path.endsWith('/metaData/routeQuota')) {
         return makeSnapshot(true, { routeCount: 0 });
       }
@@ -412,10 +450,14 @@ describe('uploadRoute', () => {
 
   it('marks duplicate route uploads without incrementing the route count', async () => {
     hoisted.mockTransactionGet.mockImplementation(async (ref: { path: string }) => {
+      const guardSnapshot = activeUserGuardSnapshot(ref);
+      if (guardSnapshot) {
+        return guardSnapshot;
+      }
       if (ref.path.endsWith('/metaData/routeQuota')) {
         return makeSnapshot(true, { routeCount: 3 });
       }
-      return makeSnapshot(true);
+      return ref.path.includes('/routes/') ? makeSnapshot(true) : makeSnapshot(false);
     });
     const response = makeResponse();
 
@@ -434,6 +476,10 @@ describe('uploadRoute', () => {
   it('allows basic users up to the route-specific basic limit', async () => {
     hoisted.mockHasBasicAccess.mockResolvedValue(true);
     hoisted.mockTransactionGet.mockImplementation(async (ref: { path: string }) => {
+      const guardSnapshot = activeUserGuardSnapshot(ref);
+      if (guardSnapshot) {
+        return guardSnapshot;
+      }
       if (ref.path.endsWith('/metaData/routeQuota')) {
         return makeSnapshot(true, { routeCount: ROUTE_USAGE_LIMITS.basic - 1 });
       }
@@ -453,6 +499,10 @@ describe('uploadRoute', () => {
   it('increments the route quota counter for pro users without applying a limit', async () => {
     hoisted.mockHasProAccess.mockResolvedValue(true);
     hoisted.mockTransactionGet.mockImplementation(async (ref: { path: string }) => {
+      const guardSnapshot = activeUserGuardSnapshot(ref);
+      if (guardSnapshot) {
+        return guardSnapshot;
+      }
       if (ref.path.endsWith('/metaData/routeQuota')) {
         return makeSnapshot(true, { routeCount: 250 });
       }
@@ -473,12 +523,13 @@ describe('uploadRoute', () => {
   });
 
   it('rejects new free route uploads at the route-specific free limit', async () => {
-    hoisted.mockTransactionGet.mockImplementation(async (ref: { path: string }) => {
-      if (ref.path.endsWith('/metaData/routeQuota')) {
+    hoisted.mockDocGet.mockImplementation(async (path: string) => {
+      if (path.endsWith('/metaData/routeQuota')) {
         return makeSnapshot(true, { routeCount: ROUTE_USAGE_LIMITS.free });
       }
       return makeSnapshot(false);
     });
+    hoisted.mockRoutesCountGet.mockResolvedValue({ data: () => ({ count: ROUTE_USAGE_LIMITS.free }) });
     const response = makeResponse();
 
     await invokeUploadRoute(makeRequest(), response);
@@ -487,16 +538,136 @@ describe('uploadRoute', () => {
     expect(response.json).toHaveBeenCalledWith({
       error: `Upload limit reached for your tier. You have ${ROUTE_USAGE_LIMITS.free} routes. Limit is ${ROUTE_USAGE_LIMITS.free}.`,
     });
+    expect(hoisted.mockSportsLib.importRoutesFromGPX).not.toHaveBeenCalled();
+    expect(hoisted.mockStorageSave).not.toHaveBeenCalled();
+    expect(hoisted.mockRunTransaction).not.toHaveBeenCalled();
+    expect(hoisted.mockTransactionSet).not.toHaveBeenCalled();
+    expect(hoisted.mockStorageDelete).not.toHaveBeenCalled();
+  });
+
+  it('repairs a stale at-limit route quota counter before accepting a replacement upload', async () => {
+    const counterUpdateTime = { seconds: 100, nanoseconds: 1 };
+    hoisted.mockRoutesCountGet.mockResolvedValue({ data: () => ({ count: ROUTE_USAGE_LIMITS.free - 1 }) });
+    hoisted.mockDocGet.mockImplementation(async (path: string) => {
+      if (path.endsWith('/metaData/routeQuota')) {
+        return makeSnapshot(true, { routeCount: ROUTE_USAGE_LIMITS.free }, counterUpdateTime);
+      }
+      return makeSnapshot(false);
+    });
+    hoisted.mockTransactionGet.mockImplementation(async (ref: { path: string }) => {
+      const guardSnapshot = activeUserGuardSnapshot(ref);
+      if (guardSnapshot) {
+        return guardSnapshot;
+      }
+      if (ref.path.endsWith('/metaData/routeQuota')) {
+        return makeSnapshot(true, { routeCount: ROUTE_USAGE_LIMITS.free }, counterUpdateTime);
+      }
+      return makeSnapshot(false);
+    });
+    const response = makeResponse();
+
+    await invokeUploadRoute(makeRequest(), response);
+
+    expect(hoisted.mockRoutesCountGet).toHaveBeenCalledOnce();
+    expect(transactionSetCallForPath('users/user-1/metaData/routeQuota')?.[1]).toMatchObject({
+      routeCount: ROUTE_USAGE_LIMITS.free,
+      reconciledAt: 'SERVER_TIMESTAMP',
+      reconciledFromRouteCount: ROUTE_USAGE_LIMITS.free,
+      reconciledActualRouteCount: ROUTE_USAGE_LIMITS.free - 1,
+    });
+    expect(response.status).toHaveBeenCalledWith(200);
+    expect(response.json).toHaveBeenCalledWith(expect.objectContaining({
+      duplicate: false,
+      uploadCountAfterWrite: ROUTE_USAGE_LIMITS.free,
+    }));
+    expect(hoisted.mockStorageDelete).not.toHaveBeenCalled();
+  });
+
+  it('does not use a stale repaired count after the quota counter changes', async () => {
+    const originalCounterUpdateTime = { seconds: 100, nanoseconds: 1 };
+    const changedCounterUpdateTime = { seconds: 101, nanoseconds: 1 };
+    hoisted.mockRoutesCountGet
+      .mockResolvedValueOnce({ data: () => ({ count: ROUTE_USAGE_LIMITS.free - 1 }) })
+      .mockResolvedValueOnce({ data: () => ({ count: ROUTE_USAGE_LIMITS.free }) });
+    hoisted.mockDocGet.mockImplementation(async (path: string) => {
+      if (path.endsWith('/metaData/routeQuota')) {
+        return makeSnapshot(true, { routeCount: ROUTE_USAGE_LIMITS.free }, originalCounterUpdateTime);
+      }
+      return makeSnapshot(false);
+    });
+    hoisted.mockTransactionGet.mockImplementation(async (ref: { path: string }) => {
+      const guardSnapshot = activeUserGuardSnapshot(ref);
+      if (guardSnapshot) {
+        return guardSnapshot;
+      }
+      if (ref.path.endsWith('/metaData/routeQuota')) {
+        return makeSnapshot(
+          true,
+          { routeCount: ROUTE_USAGE_LIMITS.free },
+          changedCounterUpdateTime,
+        );
+      }
+      return makeSnapshot(false);
+    });
+    const response = makeResponse();
+
+    await invokeUploadRoute(makeRequest(), response);
+
+    expect(hoisted.mockRoutesCountGet).toHaveBeenCalledTimes(2);
+    expect(response.status).toHaveBeenCalledWith(429);
+    expect(response.json).toHaveBeenCalledWith({
+      error: `Upload limit reached for your tier. You have ${ROUTE_USAGE_LIMITS.free} routes. Limit is ${ROUTE_USAGE_LIMITS.free}.`,
+    });
     expect(hoisted.mockTransactionSet).not.toHaveBeenCalled();
     expect(hoisted.mockStorageDelete).toHaveBeenCalledWith({ ignoreNotFound: true });
   });
 
-  it('allows duplicate replacements at the route-specific free limit without incrementing quota', async () => {
+  it('aborts an in-flight route upload when account deletion starts before the write transaction', async () => {
     hoisted.mockTransactionGet.mockImplementation(async (ref: { path: string }) => {
+      if (ref.path === 'users/user-1') {
+        return makeSnapshot(true);
+      }
+      if (ref.path === 'userDeletionTombstones/user-1') {
+        return makeSnapshot(true, {});
+      }
+      if (ref.path.endsWith('/metaData/routeQuota')) {
+        return makeSnapshot(true, { routeCount: 0 });
+      }
+      return makeSnapshot(false);
+    });
+    const response = makeResponse();
+
+    await invokeUploadRoute(makeRequest(), response);
+
+    expect(hoisted.mockSportsLib.importRoutesFromGPX).toHaveBeenCalled();
+    expect(hoisted.mockStorageSave).toHaveBeenCalled();
+    expect(hoisted.mockTransactionSet).not.toHaveBeenCalled();
+    expect(hoisted.mockStorageDelete).toHaveBeenCalledWith({ ignoreNotFound: true });
+    expect(response.status).toHaveBeenCalledWith(410);
+    expect(response.json).toHaveBeenCalledWith({
+      error: 'Account is being deleted or no longer exists.',
+    });
+  });
+
+  it('allows duplicate replacements at the route-specific free limit without incrementing quota', async () => {
+    hoisted.mockDocGet.mockImplementation(async (path: string) => {
+      if (path.endsWith('/metaData/routeQuota')) {
+        return makeSnapshot(true, { routeCount: ROUTE_USAGE_LIMITS.free });
+      }
+      if (path.includes('/routes/')) {
+        return makeSnapshot(true);
+      }
+      return makeSnapshot(false);
+    });
+    hoisted.mockTransactionGet.mockImplementation(async (ref: { path: string }) => {
+      const guardSnapshot = activeUserGuardSnapshot(ref);
+      if (guardSnapshot) {
+        return guardSnapshot;
+      }
       if (ref.path.endsWith('/metaData/routeQuota')) {
         return makeSnapshot(true, { routeCount: ROUTE_USAGE_LIMITS.free });
       }
-      return makeSnapshot(true);
+      return ref.path.includes('/routes/') ? makeSnapshot(true) : makeSnapshot(false);
     });
     const response = makeResponse();
 
@@ -521,12 +692,12 @@ describe('uploadRoute', () => {
       return makeSnapshot(false);
     });
     hoisted.mockRoutesCountGet.mockResolvedValue({ data: () => ({ count: 4 }) });
-    hoisted.mockTransactionGet.mockImplementation(async () => makeSnapshot(false));
+    hoisted.mockTransactionGet.mockImplementation(async (ref: { path: string }) => activeUserGuardSnapshot(ref) || makeSnapshot(false));
     const response = makeResponse();
 
     await invokeUploadRoute(makeRequest(), response);
 
-    expect(hoisted.mockRoutesCountGet).toHaveBeenCalledOnce();
+    expect(hoisted.mockRoutesCountGet).toHaveBeenCalledTimes(2);
     expect(transactionSetCallForPath('users/user-1/metaData/routeQuota')?.[1]).toMatchObject({
       routeCount: 5,
       initializedAt: 'SERVER_TIMESTAMP',
@@ -547,6 +718,10 @@ describe('uploadRoute', () => {
     });
     hoisted.mockRoutesCountGet.mockResolvedValue({ data: () => ({ count: 4 }) });
     hoisted.mockTransactionGet.mockImplementation(async (ref: { path: string }) => {
+      const guardSnapshot = activeUserGuardSnapshot(ref);
+      if (guardSnapshot) {
+        return guardSnapshot;
+      }
       if (ref.path.endsWith('/metaData/routeQuota')) {
         return makeSnapshot(true, { routeCount: 'invalid' });
       }
@@ -556,7 +731,7 @@ describe('uploadRoute', () => {
 
     await invokeUploadRoute(makeRequest(), response);
 
-    expect(hoisted.mockRoutesCountGet).toHaveBeenCalledOnce();
+    expect(hoisted.mockRoutesCountGet).toHaveBeenCalledTimes(2);
     expect(transactionSetCallForPath('users/user-1/metaData/routeQuota')?.[1]).toMatchObject({
       routeCount: 5,
       repairedAt: 'SERVER_TIMESTAMP',

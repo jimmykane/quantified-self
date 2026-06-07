@@ -3,6 +3,10 @@ import * as logger from 'firebase-functions/logger';
 import { onDocumentDeleted } from 'firebase-functions/v2/firestore';
 import { FieldValue } from 'firebase-admin/firestore';
 import { createHash } from 'node:crypto';
+import {
+  getUserDeletionGuardStateInTransaction,
+  UserDeletionGuardReadError,
+} from '../shared/user-deletion-guard';
 
 const REGION = 'europe-west2';
 
@@ -13,55 +17,92 @@ function readRouteCountCounter(value: unknown): number | null {
   return Math.floor(value);
 }
 
+function normalizeRouteCount(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return 0;
+  }
+  return Math.max(0, Math.floor(value));
+}
+
 function getDeleteMarkerID(userId: string, routeId: string, eventId?: string, eventTime?: string): string {
   return createHash('sha256')
     .update(eventId || `${userId}:${routeId}:${eventTime || 'unknown-delete-event'}`)
     .digest('hex');
 }
 
-async function decrementRouteQuotaCounter(
+async function getRouteCountForUser(userId: string): Promise<number> {
+  const countSnapshot = await admin.firestore()
+    .collection(`users/${userId}/routes`)
+    .count()
+    .get();
+  return normalizeRouteCount(countSnapshot.data().count);
+}
+
+async function reconcileRouteQuotaCounterAfterDelete(
   userId: string,
   routeId: string,
   eventId?: string,
   eventTime?: string,
-): Promise<void> {
+): Promise<{ skippedForDeletedUser: boolean }> {
   const db = admin.firestore();
   const counterRef = db.doc(`users/${userId}/metaData/routeQuota`);
   const deleteMarkerRef = db.doc(`users/${userId}/metaData/routeQuota/deletions/${getDeleteMarkerID(userId, routeId, eventId, eventTime)}`);
 
-  await db.runTransaction(async (transaction) => {
+  return db.runTransaction(async (transaction) => {
+    let deletionGuard;
+    try {
+      deletionGuard = await getUserDeletionGuardStateInTransaction(db, transaction, userId);
+    } catch (error) {
+      throw new UserDeletionGuardReadError(userId, 'route_delete_quota_reconcile', error);
+    }
+
+    if (deletionGuard.shouldSkip) {
+      logger.warn('Skipping route quota reconciliation because user is missing or deletion is in progress', {
+        userId,
+        routeId,
+        eventId,
+        userExists: deletionGuard.userExists,
+        deletionInProgress: deletionGuard.deletionInProgress,
+      });
+      return { skippedForDeletedUser: true };
+    }
+
     const [counterSnapshot, deleteMarkerSnapshot] = await Promise.all([
       transaction.get(counterRef),
       transaction.get(deleteMarkerRef),
     ]);
     if (deleteMarkerSnapshot.exists) {
-      return;
+      return { skippedForDeletedUser: false };
     }
 
+    const authoritativeRouteCount = await getRouteCountForUser(userId);
     const serverTimestamp = FieldValue.serverTimestamp();
-    if (counterSnapshot.exists) {
-      const currentRouteCount = readRouteCountCounter(counterSnapshot.data()?.routeCount);
-      if (currentRouteCount !== null) {
-        transaction.set(counterRef, {
-          routeCount: Math.max(0, currentRouteCount - 1),
-          updatedAt: serverTimestamp,
-          lastDeletedRouteId: routeId,
-        }, { merge: true });
-      } else {
-        transaction.set(counterRef, {
-          routeCountNeedsRepair: true,
-          updatedAt: serverTimestamp,
-          lastDeletedRouteId: routeId,
-        }, { merge: true });
-      }
+    const currentRouteCount = counterSnapshot.exists
+      ? readRouteCountCounter(counterSnapshot.data()?.routeCount)
+      : null;
+    const counterPayload: Record<string, unknown> = {
+      routeCount: authoritativeRouteCount,
+      updatedAt: serverTimestamp,
+      lastDeletedRouteId: routeId,
+      reconciledAfterDeleteAt: serverTimestamp,
+    };
+
+    if (!counterSnapshot.exists) {
+      counterPayload.initializedAt = serverTimestamp;
+    }
+    if (counterSnapshot.exists && currentRouteCount === null) {
+      counterPayload.repairedAt = serverTimestamp;
     }
 
+    transaction.set(counterRef, counterPayload, { merge: true });
     transaction.set(deleteMarkerRef, {
       routeId,
       eventId: eventId || null,
       eventTime: eventTime || null,
       processedAt: serverTimestamp,
     });
+
+    return { skippedForDeletedUser: false };
   });
 }
 
@@ -88,19 +129,31 @@ export const cleanupRouteFiles = onDocumentDeleted({
   const storagePrefix = `users/${userId}/routes/${routeId}/`;
   const eventId = typeof event.id === 'string' ? event.id : undefined;
   const eventTime = typeof event.time === 'string' ? event.time : undefined;
+  let quotaReconciliationError: unknown = null;
+  let skipFirestoreCleanup = false;
 
   try {
-    await decrementRouteQuotaCounter(userId, routeId, eventId, eventTime);
-    logger.info('Route quota counter decremented', { userId, routeId, eventId });
+    const reconciliationResult = await reconcileRouteQuotaCounterAfterDelete(userId, routeId, eventId, eventTime);
+    skipFirestoreCleanup = reconciliationResult.skippedForDeletedUser;
+    if (skipFirestoreCleanup) {
+      logger.info('Route quota counter reconciliation skipped because account deletion owns Firestore cleanup', { userId, routeId, eventId });
+    } else {
+      logger.info('Route quota counter reconciled after delete', { userId, routeId, eventId });
+    }
   } catch (error) {
-    logger.error('Failed to decrement route quota counter', { userId, routeId, eventId, error });
+    quotaReconciliationError = error;
+    logger.error('Failed to reconcile route quota counter after delete', { userId, routeId, eventId, error });
   }
 
-  try {
-    await db.recursiveDelete(db.collection(`users/${userId}/routes/${routeId}/metaData`));
-    logger.info('Route metadata cleaned up', { userId, routeId });
-  } catch (error) {
-    logger.error('Failed to clean up route metadata', { userId, routeId, error });
+  if (!skipFirestoreCleanup) {
+    try {
+      await db.recursiveDelete(db.collection(`users/${userId}/routes/${routeId}/metaData`));
+      logger.info('Route metadata cleaned up', { userId, routeId });
+    } catch (error) {
+      logger.error('Failed to clean up route metadata', { userId, routeId, error });
+    }
+  } else {
+    logger.info('Route metadata cleanup skipped because account deletion owns Firestore cleanup', { userId, routeId });
   }
 
   try {
@@ -111,4 +164,8 @@ export const cleanupRouteFiles = onDocumentDeleted({
   }
 
   logger.info('Route cleanup finished', { userId, routeId, storagePrefix });
+
+  if (quotaReconciliationError) {
+    throw quotaReconciliationError;
+  }
 });
