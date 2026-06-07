@@ -40,7 +40,8 @@ export class RoutesPageComponent implements OnInit {
         this.user.set(user);
         if (user) {
             this.routes$ = this.routeService.getRoutes(user);
-            await this.refreshRouteCount();
+            const routeCount = await this.refreshRouteCount();
+            this.analyticsService.logSavedRouteAction('view', { routeCount });
         }
     }
 
@@ -61,14 +62,16 @@ export class RoutesPageComponent implements OnInit {
         return file?.originalFilename || file?.path?.split('/').pop() || 'Original file';
     }
 
-    async refreshRouteCount(): Promise<void> {
+    async refreshRouteCount(): Promise<number | null> {
         const user = this.user();
         if (!user) {
             this.routeCount.set(null);
-            return;
+            return null;
         }
 
-        this.routeCount.set(await this.routeService.getRouteCount(user));
+        const count = await this.routeService.getRouteCount(user);
+        this.routeCount.set(count);
+        return count;
     }
 
     async confirmDeleteRoute(route: FirestoreRouteJSON): Promise<void> {
@@ -95,9 +98,18 @@ export class RoutesPageComponent implements OnInit {
         this.deletingRouteID.set(routeID);
         try {
             await this.routeService.deleteRoute(user, routeID);
-            await this.refreshRouteCount();
+            const routeCount = await this.refreshRouteCount();
+            this.analyticsService.logSavedRouteAction('delete', {
+                status: 'success',
+                routeCount,
+                fileType: this.getPrimaryRouteFileType(route),
+            });
             this.snackBar.open('Route deleted.', undefined, { duration: 2500 });
         } catch (error) {
+            this.analyticsService.logSavedRouteAction('delete', {
+                status: 'failure',
+                fileType: this.getPrimaryRouteFileType(route),
+            });
             this.logger.error('[RoutesPageComponent] Failed to delete route', { routeID }, error);
             this.snackBar.open('Failed to delete route.', undefined, { duration: 3000 });
         } finally {
@@ -113,6 +125,10 @@ export class RoutesPageComponent implements OnInit {
 
         const originalFiles = this.routeService.getOriginalRouteFiles(route);
         if (originalFiles.length === 0) {
+            this.analyticsService.logSavedRouteAction('download', {
+                status: 'missing_file',
+                fileCount: 0,
+            });
             this.snackBar.open('No original route file found.', undefined, { duration: 3000 });
             return;
         }
@@ -137,7 +153,12 @@ export class RoutesPageComponent implements OnInit {
                 }
 
                 await this.fileService.downloadAsZip(filesToZip, `${baseName}_originals.zip`);
-                this.analyticsService.logEvent('downloaded_route_original_files_zip');
+                this.analyticsService.logSavedRouteAction('download', {
+                    status: 'success',
+                    fileCount: originalFiles.length,
+                    fileType: this.getPrimaryRouteFileType(route),
+                    zipped: true,
+                });
                 return;
             }
 
@@ -145,8 +166,19 @@ export class RoutesPageComponent implements OnInit {
             const extension = this.fileService.getExtensionFromPath(fileMeta.path, fileMeta.extension || 'gpx');
             const buffer = await this.routeService.downloadFile(fileMeta.path);
             this.fileService.downloadFile(new Blob([buffer]), baseName, extension);
-            this.analyticsService.logEvent('downloaded_route_original_file');
+            this.analyticsService.logSavedRouteAction('download', {
+                status: 'success',
+                fileCount: 1,
+                fileType: extension,
+                zipped: false,
+            });
         } catch (error) {
+            this.analyticsService.logSavedRouteAction('download', {
+                status: 'failure',
+                fileCount: originalFiles.length,
+                fileType: this.getPrimaryRouteFileType(route),
+                zipped: originalFiles.length > 1,
+            });
             this.logger.error('[RoutesPageComponent] Failed to download route original file', { routeID }, error);
             this.snackBar.open('Failed to download route file.', undefined, { duration: 3000 });
         } finally {
@@ -183,5 +215,10 @@ export class RoutesPageComponent implements OnInit {
             .replace(/_+/g, '_')
             .replace(/^[-_.]+|[-_.]+$/g, '');
         return sanitized || 'route';
+    }
+
+    private getPrimaryRouteFileType(route: FirestoreRouteJSON): string {
+        const file = this.routeService.getOriginalRouteFiles(route)[0];
+        return this.fileService.getExtensionFromPath(file?.path || '', file?.extension || route.srcFileType || 'route');
     }
 }

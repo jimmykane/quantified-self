@@ -71,6 +71,7 @@ describe('RoutesPageComponent', () => {
         };
         analyticsServiceMock = {
             logEvent: vi.fn(),
+            logSavedRouteAction: vi.fn(),
         };
         loggerMock = {
             error: vi.fn(),
@@ -106,6 +107,9 @@ describe('RoutesPageComponent', () => {
         expect(routeServiceMock.getRoutes).toHaveBeenCalledWith({ uid: 'user-1' });
         expect(routeServiceMock.getRouteCount).toHaveBeenCalledWith({ uid: 'user-1' });
         expect(component.routeCount()).toBe(1);
+        expect(analyticsServiceMock.logSavedRouteAction).toHaveBeenCalledWith('view', {
+            routeCount: 1,
+        });
     });
 
     it('deletes owner route documents after confirmation and refreshes count', async () => {
@@ -116,6 +120,11 @@ describe('RoutesPageComponent', () => {
         expect(dialogMock.open).toHaveBeenCalled();
         expect(routeServiceMock.deleteRoute).toHaveBeenCalledWith({ uid: 'user-1' }, 'route-1');
         expect(routeServiceMock.getRouteCount).toHaveBeenCalledTimes(2);
+        expect(analyticsServiceMock.logSavedRouteAction).toHaveBeenCalledWith('delete', {
+            status: 'success',
+            routeCount: 1,
+            fileType: 'gpx',
+        });
         expect(snackBarMock.open).toHaveBeenCalledWith('Route deleted.', undefined, { duration: 2500 });
         expect(component.deletingRouteID()).toBeNull();
     });
@@ -127,6 +136,10 @@ describe('RoutesPageComponent', () => {
 
         await component.confirmDeleteRoute(route);
 
+        expect(analyticsServiceMock.logSavedRouteAction).toHaveBeenCalledWith('delete', {
+            status: 'failure',
+            fileType: 'gpx',
+        });
         expect(loggerMock.error).toHaveBeenCalledWith(
             '[RoutesPageComponent] Failed to delete route',
             { routeID: 'route-1' },
@@ -142,7 +155,12 @@ describe('RoutesPageComponent', () => {
         expect(routeServiceMock.getOriginalRouteFiles).toHaveBeenCalledWith(route);
         expect(routeServiceMock.downloadFile).toHaveBeenCalledWith('users/user-1/routes/route-1/original.gpx');
         expect(fileServiceMock.downloadFile).toHaveBeenCalled();
-        expect(analyticsServiceMock.logEvent).toHaveBeenCalledWith('downloaded_route_original_file');
+        expect(analyticsServiceMock.logSavedRouteAction).toHaveBeenCalledWith('download', {
+            status: 'success',
+            fileCount: 1,
+            fileType: 'gpx',
+            zipped: false,
+        });
         expect(component.downloadingRouteID()).toBeNull();
     });
 
@@ -152,6 +170,12 @@ describe('RoutesPageComponent', () => {
 
         await component.downloadRouteOriginals(route);
 
+        expect(analyticsServiceMock.logSavedRouteAction).toHaveBeenCalledWith('download', {
+            status: 'failure',
+            fileCount: 1,
+            fileType: 'gpx',
+            zipped: false,
+        });
         expect(loggerMock.error).toHaveBeenCalledWith(
             '[RoutesPageComponent] Failed to download route original file',
             { routeID: 'route-1' },

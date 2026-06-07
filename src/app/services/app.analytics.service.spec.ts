@@ -223,4 +223,51 @@ describe('AppAnalyticsService', () => {
             result_count: 12,
         });
     });
+
+    it('should log route upload and saved route analytics with compact params', () => {
+        userSubject.next({ acceptedTrackingPolicy: true } as User);
+
+        service.logRouteUpload('success', {
+            fileType: 'gpx',
+            storedFileType: 'gpx.gz',
+            compressed: true,
+            uploadLimit: 10,
+            uploadCountAfterWrite: 4,
+        });
+        service.logRouteUploadBatch({
+            totalFiles: 3,
+            successfulUploads: 1,
+            duplicateUploads: 1,
+            failedUploads: 1,
+        });
+        service.logSavedRouteAction('download', {
+            status: 'success',
+            routeCount: null,
+            fileCount: 1,
+            fileType: 'gpx',
+            zipped: false,
+        });
+
+        expect(logEvent).toHaveBeenCalledWith(expect.anything(), 'route_upload', {
+            status: 'success',
+            file_type: 'gpx',
+            stored_file_type: 'gpx.gz',
+            compressed: true,
+            upload_limit: 10,
+            upload_count_after_write: 4,
+        });
+        expect(logEvent).toHaveBeenCalledWith(expect.anything(), 'route_upload_batch', {
+            total_files: 3,
+            successful_uploads: 1,
+            duplicate_uploads: 1,
+            failed_uploads: 1,
+        });
+        expect(logEvent).toHaveBeenCalledWith(expect.anything(), 'saved_route_action', {
+            action: 'download',
+            status: 'success',
+            file_count: 1,
+            file_type: 'gpx',
+            zipped: false,
+        });
+    });
 });

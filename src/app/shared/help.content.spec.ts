@@ -152,6 +152,7 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('[Workout Data Comparison](/features/workout-data-comparison)');
     expect(gettingStartedSection?.content).toContain('[Workout File Comparison](/features/workout-file-comparison)');
     expect(gettingStartedSection?.content).toContain('[Workout File Analyzer](/features/fit-gpx-tcx-file-analyzer)');
+    expect(gettingStartedSection?.content).toContain('[FIT and GPX Route Files](/features/fit-gpx-route-files)');
     expect(gettingStartedSection?.content).toContain('[Sports Watch Benchmark](/features/sports-watch-benchmark)');
     expect(gettingStartedSection?.content).toContain('[File Comparison Tool](/tools/compare)');
     expect(gettingStartedSection?.content).toContain('[Tools -> Compare](/tools/compare/saved)');
@@ -256,6 +257,13 @@ describe('help.content', () => {
     expect(uploadsSection?.content).toContain(`**Starter** includes up to **${ROUTE_USAGE_LIMITS.free} saved routes**`);
     expect(uploadsSection?.content).toContain(`**Basic** includes up to **${ROUTE_USAGE_LIMITS.basic} saved routes**`);
     expect(uploadsSection?.content).toContain("You may have reached your current plan's activity or route limit.");
+    expect(uploadsSection?.content).toContain('[FIT and GPX Route Files](/features/fit-gpx-route-files)');
+    expect(uploadsSection?.links).toContainEqual({
+      label: 'FIT and GPX Route Files',
+      icon: 'route',
+      kind: 'route',
+      target: '/features/fit-gpx-route-files',
+    });
   });
 
   it('should document Garmin/COROS to Suunto route-based activity sync and manual catch-up', () => {
@@ -270,6 +278,7 @@ describe('help.content', () => {
     expect(serviceConnectionsSection?.content).toContain('[Workout Data Comparison](/features/workout-data-comparison)');
     expect(serviceConnectionsSection?.content).toContain('[Workout File Comparison](/features/workout-file-comparison)');
     expect(serviceConnectionsSection?.content).toContain('[Workout File Analyzer](/features/fit-gpx-tcx-file-analyzer)');
+    expect(serviceConnectionsSection?.content).toContain('[FIT and GPX Route Files](/features/fit-gpx-route-files)');
     expect(serviceConnectionsSection?.content).toContain('[Sports Watch Benchmark](/features/sports-watch-benchmark)');
     expect(serviceConnectionsSection?.content).toContain('[Garmin to Suunto sync guide](/guides/sync-garmin-to-suunto)');
     expect(serviceConnectionsSection?.content).toContain('[COROS to Suunto sync guide](/guides/sync-coros-to-suunto)');
@@ -346,6 +355,12 @@ describe('help.content', () => {
       icon: 'analytics',
       kind: 'route',
       target: '/features/fit-gpx-tcx-file-analyzer',
+    });
+    expect(serviceConnectionsSection?.links).toContainEqual({
+      label: 'FIT and GPX Route Files',
+      icon: 'route',
+      kind: 'route',
+      target: '/features/fit-gpx-route-files',
     });
     expect(serviceConnectionsSection?.links).toContainEqual({
       label: 'Garmin to Suunto Guide',

@@ -1,10 +1,11 @@
-import { AI_INSIGHTS_REQUEST_LIMITS, USAGE_LIMITS } from '@shared/limits';
+import { AI_INSIGHTS_REQUEST_LIMITS, ROUTE_USAGE_LIMITS, USAGE_LIMITS } from '@shared/limits';
 
 export type PublicSeoPageKey =
   | 'featuresHub'
   | 'aiInsights'
   | 'workoutFileComparison'
   | 'fitGpxTcxFileAnalyzer'
+  | 'routeFiles'
   | 'sportsWatchBenchmark'
   | 'guidesHub'
   | 'syncGarminToSuunto'
@@ -69,6 +70,7 @@ export const PUBLIC_FEATURE_PATHS = {
   aiInsights: 'features/ai-insights',
   workoutFileComparison: 'features/workout-file-comparison',
   fitGpxTcxFileAnalyzer: 'features/fit-gpx-tcx-file-analyzer',
+  routeFiles: 'features/fit-gpx-route-files',
   sportsWatchBenchmark: 'features/sports-watch-benchmark',
 } as const;
 
@@ -81,6 +83,7 @@ export const PUBLIC_GUIDE_PATHS = {
 
 const SITE_ORIGIN = 'https://quantified-self.io';
 const STARTER_ACTIVITY_LIMIT = USAGE_LIMITS.free;
+const STARTER_ROUTE_LIMIT = ROUTE_USAGE_LIMITS.free;
 const FREE_AI_REQUEST_LIMIT = AI_INSIGHTS_REQUEST_LIMITS.free;
 
 function pageUrl(path: string): string {
@@ -103,15 +106,16 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     path: PUBLIC_FEATURE_PATHS.hub,
     eyebrow: 'Features',
     title: 'Features for Endurance Training Data',
-    description: 'Explore Quantified Self features for endurance training data: AI Insights, workout file comparison, FIT/GPX/TCX file analysis, sports watch benchmark reports, and a private dashboard for Garmin, Suunto, COROS, and uploaded activity files.',
+    description: 'Explore Quantified Self features for endurance training data: AI Insights, workout file comparison, FIT/GPX/TCX file analysis, FIT and GPX route files, sports watch benchmark reports, and a private dashboard for Garmin, Suunto, COROS, and uploaded activity files.',
     h1: 'Features for endurance training data',
-    intro: 'Use Quantified Self to centralize provider activities and uploaded files, compare recordings, benchmark devices, and ask chart-backed questions about your training history.',
-    chips: ['AI Insights', 'Workout comparison', 'FIT/TCX/GPX', 'Benchmarks', 'Free tools'],
+    intro: 'Use Quantified Self to centralize provider activities, uploaded files, and saved route files, compare recordings, benchmark devices, and ask chart-backed questions about your training history.',
+    chips: ['AI Insights', 'Workout comparison', 'FIT/TCX/GPX', 'Route files', 'Benchmarks', 'Free tools'],
     actions: [
       routeAction('AI Insights', '/features/ai-insights', 'flat', 'arrow_forward'),
       routeAction('Workout Data Comparison', '/features/workout-data-comparison'),
       routeAction('Compare Files', '/features/workout-file-comparison'),
       routeAction('Analyze Files', '/features/fit-gpx-tcx-file-analyzer'),
+      routeAction('Route Files', '/features/fit-gpx-route-files'),
       routeAction('Device Benchmarks', '/features/sports-watch-benchmark'),
     ],
     sections: [
@@ -151,6 +155,11 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
             icon: 'analytics',
             title: 'FIT, GPX, and TCX file analysis',
             copy: 'Analyze uploaded workout files for maps, route context, charts, statistics, source files, exports, and reprocessing before using them in comparisons.',
+          },
+          {
+            icon: 'route',
+            title: 'FIT course and GPX route files',
+            copy: `Save route-only FIT and GPX files as first-class route records, keep original files available for download, and use the free plan for up to ${STARTER_ROUTE_LIMIT} saved routes.`,
           },
           {
             icon: 'rate_review',
@@ -432,6 +441,92 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     closingActions: [
       routeAction('Start Free', '/login', 'flat', 'arrow_forward'),
       routeAction('Workout File Comparison', '/features/workout-file-comparison'),
+      routeAction('Route Files', '/features/fit-gpx-route-files'),
+    ],
+  },
+  routeFiles: {
+    key: 'routeFiles',
+    path: PUBLIC_FEATURE_PATHS.routeFiles,
+    eyebrow: 'Route Files',
+    title: 'FIT and GPX Route Files',
+    description: `Save FIT course files and GPX route files in a private route library with original-file retention, route summaries, downloads, and free-plan storage for up to ${STARTER_ROUTE_LIMIT} saved routes.`,
+    h1: 'Save FIT course and GPX route files',
+    intro: `Upload route-only FIT course files or GPX route files, keep the original file attached, and review saved route summaries in a private dashboard. Free accounts include up to ${STARTER_ROUTE_LIMIT} saved routes.`,
+    chips: ['FIT course files', 'GPX route files', 'Saved routes', 'Original files', 'Free route uploads'],
+    actions: [
+      routeAction('Start Free', '/login', 'flat', 'arrow_forward'),
+      routeAction('Upload Help', '/help', 'stroked', undefined, 'uploads-and-imports'),
+      routeAction('Analyze Workout Files', '/features/fit-gpx-tcx-file-analyzer'),
+    ],
+    sections: [
+      {
+        eyebrow: 'Route Library',
+        title: 'Keep planned routes separate from completed workouts',
+        copy: 'Saved route files are for courses, GPX routes, and planned paths that should not be forced into the activity history.',
+        items: [
+          {
+            icon: 'route',
+            title: 'First-class saved routes',
+            copy: 'Store route-only files under Routes with route count, point count, waypoint count, activity type hints, and source-file metadata.',
+          },
+          {
+            icon: 'description',
+            title: 'Original file retention',
+            copy: 'Keep the uploaded FIT course or GPX route file attached to the saved route so it can be downloaded later.',
+          },
+          {
+            icon: 'inventory_2',
+            title: 'Plan-aware limits',
+            copy: `Starter includes up to ${STARTER_ROUTE_LIMIT} saved routes, Basic includes up to ${ROUTE_USAGE_LIMITS.basic} saved routes, and Pro supports unlimited saved routes.`,
+          },
+        ],
+      },
+      {
+        eyebrow: 'Formats',
+        title: 'Use route files without pretending they are activities',
+        copy: 'Route parsing is separate from activity upload parsing, so course files can stay useful even when they have no workout recording.',
+        items: [
+          {
+            icon: 'directions',
+            title: 'FIT course support',
+            copy: 'Upload FIT route or course files exported from planning tools and devices when they describe a route instead of a completed workout.',
+          },
+          {
+            icon: 'map',
+            title: 'GPX route support',
+            copy: 'Upload GPX route files and preserve route points, route summaries, waypoints, and source filename context.',
+          },
+          {
+            icon: 'download',
+            title: 'Download when you need the source',
+            copy: 'Use the saved route list to download the original route file for device transfer, backup, or later reprocessing.',
+          },
+        ],
+      },
+    ],
+    faqItems: [
+      {
+        question: 'Can I upload FIT course files as routes?',
+        answer: 'Yes. Quantified Self supports route-only FIT uploads for saved route records when the file parses as a route or course instead of a completed activity.',
+      },
+      {
+        question: 'Can I upload GPX route files?',
+        answer: 'Yes. GPX route files can be uploaded to Routes, where Quantified Self stores route summaries and keeps the original GPX file available for download.',
+      },
+      {
+        question: 'Are route files counted separately from activities?',
+        answer: `Yes. Saved route limits are separate from activity limits. Free accounts include up to ${STARTER_ROUTE_LIMIT} saved routes, Basic includes up to ${ROUTE_USAGE_LIMITS.basic}, and Pro includes unlimited saved routes.`,
+      },
+      {
+        question: 'Is this a public route planner?',
+        answer: 'No. Quantified Self stores uploaded route files privately in your account. It is not a public route sharing site or route editor.',
+      },
+    ],
+    closingTitle: 'Save the route file without mixing it into workout history',
+    closingCopy: 'Use Routes when you have a planned course, GPX route, or device route file that should stay attached to its original source file.',
+    closingActions: [
+      routeAction('Start Free', '/login', 'flat', 'arrow_forward'),
+      routeAction('Upload Help', '/help', 'stroked', undefined, 'uploads-and-imports'),
     ],
   },
   sportsWatchBenchmark: {
@@ -939,6 +1034,7 @@ export const PUBLIC_SEO_ROUTE_DATA: Record<PublicSeoPageKey, PublicSeoRouteData>
   aiInsights: buildRouteData(PUBLIC_SEO_PAGES.aiInsights),
   workoutFileComparison: buildRouteData(PUBLIC_SEO_PAGES.workoutFileComparison),
   fitGpxTcxFileAnalyzer: buildRouteData(PUBLIC_SEO_PAGES.fitGpxTcxFileAnalyzer),
+  routeFiles: buildRouteData(PUBLIC_SEO_PAGES.routeFiles),
   sportsWatchBenchmark: buildRouteData(PUBLIC_SEO_PAGES.sportsWatchBenchmark),
   guidesHub: buildRouteData(PUBLIC_SEO_PAGES.guidesHub),
   syncGarminToSuunto: buildRouteData(PUBLIC_SEO_PAGES.syncGarminToSuunto),

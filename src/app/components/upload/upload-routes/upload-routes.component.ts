@@ -2,6 +2,7 @@ import { Component, EventEmitter, inject, Input, OnInit, Output } from '@angular
 
 import { AppAuthService } from '../../../authentication/app.auth.service';
 import { AppAnalyticsService } from '../../../services/app.analytics.service';
+import type { RouteFileType, RouteUploadErrorCategory } from '../../../services/app.analytics.service';
 import { AppRouteService } from '../../../services/app.route.service';
 import { AppRouteUploadService } from '../../../services/app.route-upload.service';
 import { BrowserCompatibilityService } from '../../../services/browser.compatibility.service';
@@ -131,22 +132,28 @@ export class UploadRoutesComponent extends UploadAbstractDirective implements On
 
   processAndUploadFile(file: FileInterface): Promise<{ routeId: string; duplicate?: boolean }> {
     const extension = file.extension.toLowerCase().trim();
-    this.analyticsService.logEvent('upload_route_file', { method: extension });
+    const fileType = this.normalizeRouteFileType(extension);
+    this.analyticsService.logRouteUpload('start', { fileType });
     return new Promise((resolve, reject) => {
       if (!SUPPORTED_ROUTE_UPLOAD_EXTENSIONS.has(extension)) {
+        this.analyticsService.logRouteUpload('validation_failure', {
+          fileType,
+          errorCategory: 'unsupported_format',
+        });
         reject(new Error('Only FIT and GPX route files are supported.'));
         return;
       }
 
       const fileReader = new FileReader();
       fileReader.onload = async () => {
+        let preparedUpload: { bytes: ArrayBuffer; extension: string } | null = null;
         try {
           const payload = fileReader.result;
           if (!(payload instanceof ArrayBuffer)) {
             throw new Error('Could not read route file payload.');
           }
 
-          const preparedUpload = await this.prepareUploadPayload(extension, payload);
+          preparedUpload = await this.prepareUploadPayload(extension, payload);
           const originalFilename = file.name && file.name.trim().length > 0
             ? file.name
             : `${file.filename}.${extension}`;
@@ -157,9 +164,22 @@ export class UploadRoutesComponent extends UploadAbstractDirective implements On
           );
           await this.calculateRemainingUploads();
 
+          this.analyticsService.logRouteUpload(uploadResult.duplicate ? 'duplicate' : 'success', {
+            fileType,
+            storedFileType: preparedUpload.extension,
+            compressed: preparedUpload.extension.endsWith('.gz'),
+            uploadLimit: uploadResult.uploadLimit,
+            uploadCountAfterWrite: uploadResult.uploadCountAfterWrite,
+          });
           this.logger.log('[UploadRoutesComponent] Uploaded route', uploadResult.routeId);
           resolve({ routeId: uploadResult.routeId, duplicate: uploadResult.duplicate });
         } catch (error: unknown) {
+          this.analyticsService.logRouteUpload('failure', {
+            fileType,
+            storedFileType: preparedUpload?.extension,
+            compressed: preparedUpload?.extension.endsWith('.gz'),
+            errorCategory: this.resolveRouteUploadErrorCategory(error),
+          });
           const message = this.getUploadErrorMessage(error);
           this.snackBar.open(`Could not upload ${file.name}, reason: ${message}`, 'OK', { duration: 4000 });
           reject(error);
@@ -168,6 +188,10 @@ export class UploadRoutesComponent extends UploadAbstractDirective implements On
 
       fileReader.onerror = () => {
         const error = new Error('Could not read route file.');
+        this.analyticsService.logRouteUpload('failure', {
+          fileType,
+          errorCategory: 'file_read',
+        });
         this.snackBar.open(`Could not upload ${file.name}, reason: ${error.message}`, 'OK', { duration: 4000 });
         reject(error);
       };
@@ -201,6 +225,7 @@ export class UploadRoutesComponent extends UploadAbstractDirective implements On
   }
 
   protected override onUploadBatchFinished(summary: UploadBatchSummary): void {
+    this.analyticsService.logRouteUploadBatch(summary);
     if (summary.successfulUploads > 0) {
       this.routeUploadComplete.emit(summary);
     }
@@ -208,5 +233,36 @@ export class UploadRoutesComponent extends UploadAbstractDirective implements On
 
   protected override getDuplicateUploadMessage(): string {
     return 'Route already exists';
+  }
+
+  private normalizeRouteFileType(extension: string): RouteFileType | string {
+    const baseExtension = extension.endsWith('.gz') ? extension.slice(0, -3) : extension;
+    return baseExtension === 'fit' || baseExtension === 'gpx' ? baseExtension : baseExtension || 'unknown';
+  }
+
+  private resolveRouteUploadErrorCategory(error: unknown): RouteUploadErrorCategory {
+    const message = error instanceof Error ? error.message.toLowerCase() : `${error || ''}`.toLowerCase();
+    if (message.includes('only fit and gpx') || message.includes('unsupported')) {
+      return 'unsupported_format';
+    }
+    if (message.includes('limit') || message.includes('429')) {
+      return 'quota';
+    }
+    if (message.includes('authorized') || message.includes('authenticated') || message.includes('401')) {
+      return 'auth';
+    }
+    if (message.includes('compression') || message.includes('compress')) {
+      return 'compression';
+    }
+    if (message.includes('read route file') || message.includes('read route file payload')) {
+      return 'file_read';
+    }
+    if (message.includes('network') || message.includes('failed to fetch')) {
+      return 'network';
+    }
+    if (message.includes('temporarily unavailable') || message.includes('server') || message.includes('500')) {
+      return 'server';
+    }
+    return 'unknown';
   }
 }

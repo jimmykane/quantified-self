@@ -55,6 +55,19 @@ export type ToolCompareSavedSortColumn =
     | 'status'
     | 'tags'
     | 'title';
+export type RouteFileType = 'fit' | 'gpx';
+export type RouteUploadStatus = 'start' | 'success' | 'duplicate' | 'failure' | 'validation_failure';
+export type RouteUploadErrorCategory =
+    | 'auth'
+    | 'compression'
+    | 'file_read'
+    | 'network'
+    | 'quota'
+    | 'server'
+    | 'unknown'
+    | 'unsupported_format';
+export type SavedRouteAction = 'view' | 'download' | 'delete';
+export type SavedRouteActionStatus = 'success' | 'failure' | 'missing_file';
 
 export interface ToolCompareFileSelectionAnalytics {
     selectedCount: number;
@@ -85,6 +98,30 @@ export interface ToolCompareSavedActionAnalytics {
     reportCount?: number;
     hadDescription?: boolean;
     tagCount?: number;
+}
+
+export interface RouteUploadAnalytics {
+    fileType?: RouteFileType | string;
+    storedFileType?: string;
+    compressed?: boolean;
+    uploadLimit?: number | null;
+    uploadCountAfterWrite?: number | null;
+    errorCategory?: RouteUploadErrorCategory;
+}
+
+export interface RouteUploadBatchAnalytics {
+    totalFiles: number;
+    successfulUploads: number;
+    duplicateUploads: number;
+    failedUploads: number;
+}
+
+export interface SavedRouteActionAnalytics {
+    status?: SavedRouteActionStatus;
+    routeCount?: number | null;
+    fileCount?: number;
+    fileType?: RouteFileType | string;
+    zipped?: boolean;
 }
 
 @Injectable({ providedIn: 'root' })
@@ -270,6 +307,42 @@ export class AppAnalyticsService {
             report_count: params.reportCount,
             had_description: params.hadDescription,
             tag_count: params.tagCount,
+        }));
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────────
+    // Route File Events
+    // ─────────────────────────────────────────────────────────────────────────────
+
+    logRouteUpload(status: RouteUploadStatus, params: RouteUploadAnalytics = {}): void {
+        this.logEvent('route_upload', this.compactParams({
+            status,
+            file_type: params.fileType,
+            stored_file_type: params.storedFileType,
+            compressed: params.compressed,
+            upload_limit: params.uploadLimit,
+            upload_count_after_write: params.uploadCountAfterWrite,
+            error_category: params.errorCategory,
+        }));
+    }
+
+    logRouteUploadBatch(summary: RouteUploadBatchAnalytics): void {
+        this.logEvent('route_upload_batch', {
+            total_files: summary.totalFiles,
+            successful_uploads: summary.successfulUploads,
+            duplicate_uploads: summary.duplicateUploads,
+            failed_uploads: summary.failedUploads,
+        });
+    }
+
+    logSavedRouteAction(action: SavedRouteAction, params: SavedRouteActionAnalytics = {}): void {
+        this.logEvent('saved_route_action', this.compactParams({
+            action,
+            status: params.status,
+            route_count: params.routeCount,
+            file_count: params.fileCount,
+            file_type: params.fileType,
+            zipped: params.zipped,
         }));
     }
 

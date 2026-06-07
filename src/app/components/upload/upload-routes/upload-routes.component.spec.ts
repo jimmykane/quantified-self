@@ -55,6 +55,8 @@ describe('UploadRoutesComponent', () => {
     };
     analyticsServiceMock = {
       logEvent: vi.fn(),
+      logRouteUpload: vi.fn(),
+      logRouteUploadBatch: vi.fn(),
     };
     processingServiceMock = {
       addJob: vi.fn().mockReturnValue('job-id'),
@@ -151,6 +153,12 @@ describe('UploadRoutesComponent', () => {
   it('rejects unsupported route files', async () => {
     await expect(component.processAndUploadFile(makeUploadFile('route.tcx', 'tcx')))
       .rejects.toThrow('Only FIT and GPX route files are supported.');
+
+    expect(analyticsServiceMock.logRouteUpload).toHaveBeenCalledWith('start', { fileType: 'tcx' });
+    expect(analyticsServiceMock.logRouteUpload).toHaveBeenCalledWith('validation_failure', {
+      fileType: 'tcx',
+      errorCategory: 'unsupported_format',
+    });
   });
 
   it('uploads FIT route files through AppRouteUploadService', async () => {
@@ -159,12 +167,19 @@ describe('UploadRoutesComponent', () => {
 
     const result = await component.processAndUploadFile(makeUploadFile('course.fit', 'fit'));
 
-    expect(analyticsServiceMock.logEvent).toHaveBeenCalledWith('upload_route_file', { method: 'fit' });
+    expect(analyticsServiceMock.logRouteUpload).toHaveBeenCalledWith('start', { fileType: 'fit' });
     expect(routeUploadServiceMock.uploadRouteFile).toHaveBeenCalledWith(
       new Uint8Array([1, 2, 3]).buffer,
       'fit',
       'course.fit',
     );
+    expect(analyticsServiceMock.logRouteUpload).toHaveBeenCalledWith('success', {
+      fileType: 'fit',
+      storedFileType: 'fit',
+      compressed: false,
+      uploadLimit: 10,
+      uploadCountAfterWrite: 4,
+    });
     expect(result).toEqual({ routeId: 'route-1', duplicate: false });
   });
 
@@ -182,6 +197,11 @@ describe('UploadRoutesComponent', () => {
       'gpx.gz',
       'route.gpx',
     );
+    expect(analyticsServiceMock.logRouteUpload).toHaveBeenCalledWith('success', expect.objectContaining({
+      fileType: 'gpx',
+      storedFileType: 'gpx.gz',
+      compressed: true,
+    }));
   });
 
   it('reports duplicate single-route upload batches as route duplicates', async () => {
@@ -208,6 +228,19 @@ describe('UploadRoutesComponent', () => {
     });
 
     expect(snackBarMock.open).toHaveBeenCalledWith('Route already exists', 'OK', { duration: 5000 });
+    expect(analyticsServiceMock.logRouteUpload).toHaveBeenCalledWith('duplicate', expect.objectContaining({
+      fileType: 'fit',
+      storedFileType: 'fit',
+      compressed: false,
+      uploadLimit: 10,
+      uploadCountAfterWrite: 3,
+    }));
+    expect(analyticsServiceMock.logRouteUploadBatch).toHaveBeenCalledWith({
+      totalFiles: 1,
+      successfulUploads: 0,
+      duplicateUploads: 1,
+      failedUploads: 0,
+    });
     expect(uploadCompleteSpy).not.toHaveBeenCalled();
   });
 });
