@@ -8,12 +8,16 @@ import { basename } from 'node:path';
 import { gunzipSync } from 'node:zlib';
 import * as xmldom from 'xmldom';
 
-import { AppRouteInterface, AppRouteSegmentInterface } from '../../../shared/app-route.interface';
+import {
+  AppRouteInterface,
+  AppRouteSegmentInterface,
+  FirestoreRouteJSON,
+  OriginalRouteFileMetaData,
+} from '../../../shared/app-route.interface';
 import { ALLOWED_CORS_ORIGINS, ENFORCE_APP_CHECK, hasBasicAccess, hasProAccess } from '../utils';
 import { createRouteParsingOptions, RouteParsingOptionsLike } from '../../../shared/parsing-options';
-import { FirestoreAdapter, StorageAdapter } from '../shared/event-writer';
 import { FUNCTIONS_MANIFEST } from '../../../shared/functions-manifest';
-import { OriginalRouteFile, RouteWriter } from '../shared/route-writer';
+import { buildFirestoreRoutePayload, OriginalRouteFile } from '../shared/route-writer';
 import { ProcessingMetaData } from '../shared/processing-metadata.interface';
 import { ROUTE_PROCESSING_HTTPS_RUNTIME_OPTIONS, MAX_ROUTE_DECOMPRESSED_BYTES, MAX_ROUTE_DECOMPRESSED_BYTES_LABEL, MAX_ROUTE_UPLOAD_BYTES } from '../shared/route-processing-config';
 import { SPORTS_LIB_VERSION } from '../shared/sports-lib-version.node';
@@ -235,13 +239,6 @@ async function getRouteCountForUser(userID: string): Promise<number> {
   return countSnapshot.data().count;
 }
 
-async function routeExistsForUser(userID: string, routeID: string): Promise<boolean> {
-  const snapshot = await admin.firestore()
-    .doc(`users/${userID}/routes/${routeID}`)
-    .get();
-  return snapshot.exists;
-}
-
 function getRouteImporter(): SportsLibRouteImporter {
   const routeImporter = SportsLib as SportsLibRouteImporter;
   if (typeof routeImporter.importRoutesFromFit !== 'function' || typeof routeImporter.importRoutesFromGPX !== 'function') {
@@ -296,35 +293,159 @@ function assignRouteSegmentIDs(routeFile: AppRouteInterface, routeID: string): v
   }
 }
 
-function getFirestoreAdapter(): FirestoreAdapter {
+function createProcessingMetadataPayload(): ProcessingMetaData {
   return {
-    setDoc: async (path: string[], data: unknown) => {
-      await admin.firestore().doc(path.join('/')).set(data as Record<string, unknown>);
-    },
-    createBlob: (data: Uint8Array) => Buffer.from(data),
-    generateID: () => admin.firestore().collection('tmp').doc().id,
-  };
-}
-
-function getStorageAdapter(): StorageAdapter {
-  return {
-    uploadFile: async (path: string, data: unknown) => {
-      await admin.storage().bucket().file(path).save(data as Buffer);
-    },
-    getBucketName: () => admin.storage().bucket().name,
-  };
-}
-
-async function persistProcessingMetadata(userID: string, routeID: string): Promise<void> {
-  const processingPayload: ProcessingMetaData = {
     sportsLibVersion: SPORTS_LIB_VERSION,
     sportsLibVersionCode: sportsLibVersionToCode(SPORTS_LIB_VERSION),
     processedAt: FieldValue.serverTimestamp(),
   };
+}
 
-  await admin.firestore()
-    .doc(`users/${userID}/routes/${routeID}/metaData/processing`)
-    .set(processingPayload, { merge: true });
+function normalizeRouteCount(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return 0;
+  }
+  return Math.max(0, Math.floor(value));
+}
+
+function readRouteCountCounter(value: unknown): number | null {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) {
+    return null;
+  }
+  return Math.floor(value);
+}
+
+function getRouteQuotaCounterPath(userID: string): string {
+  return `users/${userID}/metaData/routeQuota`;
+}
+
+async function getInitialRouteCountForMissingOrInvalidCounter(
+  userID: string,
+  counterRef: admin.firestore.DocumentReference,
+): Promise<number | null> {
+  const counterSnapshot = await counterRef.get();
+  if (counterSnapshot.exists && readRouteCountCounter(counterSnapshot.data()?.routeCount) !== null) {
+    return null;
+  }
+  return getRouteCountForUser(userID);
+}
+
+function buildOriginalRouteFileMetadata(
+  userID: string,
+  routeID: string,
+  originalFile: OriginalRouteFile,
+  bucketName?: string,
+): OriginalRouteFileMetaData {
+  const metadata: OriginalRouteFileMetaData = {
+    path: `users/${userID}/routes/${routeID}/original.${originalFile.extension}`,
+    startDate: originalFile.startDate,
+    extension: originalFile.extension,
+  };
+
+  if (bucketName) {
+    metadata.bucket = bucketName;
+  }
+  if (originalFile.originalFilename) {
+    metadata.originalFilename = originalFile.originalFilename;
+  }
+
+  return metadata;
+}
+
+async function uploadOriginalRouteFile(
+  userID: string,
+  routeID: string,
+  originalFile: OriginalRouteFile,
+): Promise<OriginalRouteFileMetaData> {
+  const bucket = admin.storage().bucket();
+  const metadata = buildOriginalRouteFileMetadata(userID, routeID, originalFile, bucket.name);
+  await bucket.file(metadata.path).save(originalFile.data as Buffer);
+  return metadata;
+}
+
+async function deleteUploadedOriginalRouteFile(metadata: OriginalRouteFileMetaData): Promise<void> {
+  try {
+    await admin.storage().bucket().file(metadata.path).delete({ ignoreNotFound: true });
+  } catch (error) {
+    logger.warn('[uploadRoute] Failed to remove uncommitted route original file', {
+      path: metadata.path,
+      bucket: metadata.bucket,
+      error,
+    });
+  }
+}
+
+interface RouteQuotaWriteResult {
+  duplicate: boolean;
+  routeCountAfterWrite: number;
+}
+
+async function writeRouteWithQuotaReservation(
+  userID: string,
+  routeFile: AppRouteInterface,
+  originalFileMetadata: OriginalRouteFileMetaData,
+  uploadLimit: number | null,
+): Promise<RouteQuotaWriteResult> {
+  const routeID = routeFile.getID();
+  if (!routeID) {
+    throw new Error('Route ID is required before writing route data.');
+  }
+
+  const db = admin.firestore();
+  const routeRef = db.doc(`users/${userID}/routes/${routeID}`);
+  const counterRef = db.doc(getRouteQuotaCounterPath(userID));
+  const processingRef = db.doc(`users/${userID}/routes/${routeID}/metaData/processing`);
+  const initialRouteCount = await getInitialRouteCountForMissingOrInvalidCounter(userID, counterRef);
+  const routePayload: FirestoreRouteJSON = {
+    ...buildFirestoreRoutePayload(userID, routeFile),
+    originalFile: originalFileMetadata,
+    originalFiles: [originalFileMetadata],
+  };
+
+  return db.runTransaction(async (transaction) => {
+    const [routeSnapshot, counterSnapshot] = await Promise.all([
+      transaction.get(routeRef),
+      transaction.get(counterRef),
+    ]);
+    const routeAlreadyExists = routeSnapshot.exists;
+    const counterRouteCount = counterSnapshot.exists
+      ? readRouteCountCounter(counterSnapshot.data()?.routeCount)
+      : null;
+
+    if (counterRouteCount === null && initialRouteCount === null) {
+      throw new Error(`Route quota counter was removed or invalidated while writing ${routeID}.`);
+    }
+
+    const currentRouteCount = counterRouteCount !== null
+      ? counterRouteCount
+      : normalizeRouteCount(initialRouteCount);
+
+    if (uploadLimit !== null && currentRouteCount >= uploadLimit && !routeAlreadyExists) {
+      throw new HttpStatusError(429, `Upload limit reached for your tier. You have ${currentRouteCount} routes. Limit is ${uploadLimit}.`);
+    }
+
+    const routeCountAfterWrite = routeAlreadyExists ? currentRouteCount : currentRouteCount + 1;
+    const serverTimestamp = FieldValue.serverTimestamp();
+    const counterPayload: Record<string, unknown> = {
+      routeCount: routeCountAfterWrite,
+      updatedAt: serverTimestamp,
+    };
+    if (!counterSnapshot.exists) {
+      counterPayload.initializedAt = serverTimestamp;
+    }
+    if (counterSnapshot.exists && counterRouteCount === null) {
+      counterPayload.repairedAt = serverTimestamp;
+    }
+
+    transaction.set(routeRef, routePayload);
+    transaction.set(counterRef, counterPayload, { merge: true });
+    transaction.set(processingRef, createProcessingMetadataPayload(), { merge: true });
+
+    return {
+      duplicate: routeAlreadyExists,
+      routeCountAfterWrite,
+    };
+  });
 }
 
 export const uploadRoute = onRequest({
@@ -360,13 +481,7 @@ export const uploadRoute = onRequest({
 
     const payloadForParsing = maybeDecompressPayloadForParsing(rawBody, resolvedExtension);
     const routeID = generateUploadRouteID(userID, payloadForParsing, resolvedExtension);
-    const routeAlreadyExists = await routeExistsForUser(userID, routeID);
-
-    const currentCount = await getRouteCountForUser(userID);
     const uploadLimit = await resolveUploadLimitForUser(userID);
-    if (uploadLimit !== null && currentCount >= uploadLimit && !routeAlreadyExists) {
-      throw new HttpStatusError(429, `Upload limit reached for your tier. You have ${currentCount} routes. Limit is ${uploadLimit}.`);
-    }
 
     let routeFile: AppRouteInterface;
     try {
@@ -400,18 +515,30 @@ export const uploadRoute = onRequest({
       originalFilename,
     };
 
-    const writer = new RouteWriter(getFirestoreAdapter(), getStorageAdapter());
-    await writer.writeAllRouteData(userID, routeFile, originalFile);
-    await persistProcessingMetadata(userID, routeID);
+    const originalFileMetadata = await uploadOriginalRouteFile(userID, routeID, originalFile);
+    let quotaWriteResult: RouteQuotaWriteResult;
+    try {
+      quotaWriteResult = await writeRouteWithQuotaReservation(
+        userID,
+        routeFile,
+        originalFileMetadata,
+        uploadLimit,
+      );
+    } catch (error) {
+      if (error instanceof HttpStatusError && error.status === 429) {
+        await deleteUploadedOriginalRouteFile(originalFileMetadata);
+      }
+      throw error;
+    }
 
     const routesCount = routeFile.getRoutes().length;
     response.status(200).json({
       routeId: routeID,
       routesCount,
       routeCount: routesCount,
-      duplicate: routeAlreadyExists,
+      duplicate: quotaWriteResult.duplicate,
       uploadLimit,
-      uploadCountAfterWrite: routeAlreadyExists ? currentCount : (currentCount + 1),
+      uploadCountAfterWrite: quotaWriteResult.routeCountAfterWrite,
     });
   } catch (error) {
     if (error instanceof HttpStatusError) {
