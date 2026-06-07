@@ -448,7 +448,103 @@ describe('uploadRoute', () => {
     }));
   });
 
-  it('marks duplicate route uploads without incrementing the route count', async () => {
+  it('rejects deleting users before gzip expansion or parsing', async () => {
+    hoisted.mockGetAll.mockResolvedValueOnce([
+      makeSnapshot(true),
+      makeSnapshot(true, {}),
+    ]);
+    const response = makeResponse();
+    const compressedPayload = gzipSync(Buffer.from('<gpx><rte></rte></gpx>'));
+
+    await invokeUploadRoute(makeRequest({
+      rawBody: compressedPayload,
+      headers: {
+        'x-file-extension': 'gpx.gz',
+        'x-original-filename': 'morning-route.gpx.gz',
+      },
+    }), response);
+
+    expect(response.status).toHaveBeenCalledWith(410);
+    expect(response.json).toHaveBeenCalledWith({
+      error: 'Account is being deleted or no longer exists.',
+    });
+    expect(hoisted.mockHasBasicAccess).not.toHaveBeenCalled();
+    expect(hoisted.mockSportsLib.importRoutesFromGPX).not.toHaveBeenCalled();
+    expect(hoisted.mockStorageSave).not.toHaveBeenCalled();
+    expect(hoisted.mockRunTransaction).not.toHaveBeenCalled();
+  });
+
+  it('rejects gzip route payloads that exceed the bounded decompression ratio before parsing', async () => {
+    const response = makeResponse();
+    const compressedPayload = gzipSync(Buffer.alloc(2 * 1024 * 1024, 'a'));
+
+    await invokeUploadRoute(makeRequest({
+      rawBody: compressedPayload,
+      headers: {
+        'x-file-extension': 'gpx.gz',
+        'x-original-filename': 'oversized-route.gpx.gz',
+      },
+    }), response);
+
+    expect(response.status).toHaveBeenCalledWith(400);
+    expect(response.json).toHaveBeenCalledWith({
+      error: 'Route file is too large after decompression. Maximum decompressed size is 1024KB for this upload.',
+    });
+    expect(hoisted.mockSportsLib.importRoutesFromGPX).not.toHaveBeenCalled();
+    expect(hoisted.mockStorageSave).not.toHaveBeenCalled();
+    expect(hoisted.mockRunTransaction).not.toHaveBeenCalled();
+  });
+
+  it('short-circuits duplicate route uploads before parsing or storage writes', async () => {
+    const rawBody = Buffer.from('<gpx></gpx>');
+    const expectedRouteID = createHash('sha256')
+      .update('gpx')
+      .update(':')
+      .update('user-1')
+      .update(':')
+      .update(rawBody)
+      .digest('hex');
+    hoisted.mockDocGet.mockImplementation(async (path: string) => {
+      if (path === `users/user-1/routes/${expectedRouteID}`) {
+        return makeSnapshot(true, {
+          routeCount: 2,
+          routes: [{ id: 'segment-1' }, { id: 'segment-2' }],
+          name: 'User renamed route',
+          notes: 'Keep this note',
+        });
+      }
+      if (path.endsWith('/metaData/routeQuota')) {
+        return makeSnapshot(true, { routeCount: 3 });
+      }
+      return makeSnapshot(false);
+    });
+    const response = makeResponse();
+
+    await invokeUploadRoute(makeRequest({ rawBody }), response);
+
+    expect(hoisted.mockSportsLib.importRoutesFromGPX).not.toHaveBeenCalled();
+    expect(hoisted.mockStorageSave).not.toHaveBeenCalled();
+    expect(hoisted.mockRunTransaction).not.toHaveBeenCalled();
+    expect(response.status).toHaveBeenCalledWith(200);
+    expect(response.json).toHaveBeenCalledWith({
+      routeId: expectedRouteID,
+      routesCount: 2,
+      routeCount: 2,
+      duplicate: true,
+      uploadLimit: ROUTE_USAGE_LIMITS.free,
+      uploadCountAfterWrite: 3,
+    });
+  });
+
+  it('preserves existing route documents when a duplicate appears during final write', async () => {
+    const rawBody = Buffer.from('<gpx></gpx>');
+    const expectedRouteID = createHash('sha256')
+      .update('gpx')
+      .update(':')
+      .update('user-1')
+      .update(':')
+      .update(rawBody)
+      .digest('hex');
     hoisted.mockTransactionGet.mockImplementation(async (ref: { path: string }) => {
       const guardSnapshot = activeUserGuardSnapshot(ref);
       if (guardSnapshot) {
@@ -461,8 +557,10 @@ describe('uploadRoute', () => {
     });
     const response = makeResponse();
 
-    await invokeUploadRoute(makeRequest(), response);
+    await invokeUploadRoute(makeRequest({ rawBody }), response);
 
+    expect(transactionSetCallForPath(`users/user-1/routes/${expectedRouteID}`)).toBeUndefined();
+    expect(transactionSetCallForPath(`users/user-1/routes/${expectedRouteID}/metaData/processing`)).toBeUndefined();
     expect(transactionSetCallForPath('users/user-1/metaData/routeQuota')?.[1]).toMatchObject({
       routeCount: 3,
     });
@@ -678,9 +776,9 @@ describe('uploadRoute', () => {
       duplicate: true,
       uploadCountAfterWrite: ROUTE_USAGE_LIMITS.free,
     }));
-    expect(transactionSetCallForPath('users/user-1/metaData/routeQuota')?.[1]).toMatchObject({
-      routeCount: ROUTE_USAGE_LIMITS.free,
-    });
+    expect(hoisted.mockSportsLib.importRoutesFromGPX).not.toHaveBeenCalled();
+    expect(hoisted.mockStorageSave).not.toHaveBeenCalled();
+    expect(hoisted.mockRunTransaction).not.toHaveBeenCalled();
     expect(hoisted.mockStorageDelete).not.toHaveBeenCalled();
   });
 

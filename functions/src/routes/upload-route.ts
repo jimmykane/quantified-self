@@ -30,6 +30,10 @@ import {
 } from '../shared/user-deletion-guard';
 
 const SUPPORTED_BASE_EXTENSIONS = new Set(['fit', 'gpx']);
+const MAX_ROUTE_GZIP_DECOMPRESSED_BYTES = 64 * 1024 * 1024;
+const MAX_ROUTE_GZIP_DECOMPRESSED_BYTES_LABEL = '64MB';
+const MIN_ROUTE_GZIP_DECOMPRESSED_BYTES = 1024 * 1024;
+const MAX_ROUTE_GZIP_DECOMPRESSION_RATIO = 32;
 
 type SportsLibRouteImporter = typeof SportsLib & {
   importRoutesFromGPX(gpxString: string, domParser?: unknown, options?: RouteParsingOptionsLike): Promise<AppRouteInterface>;
@@ -64,6 +68,10 @@ function decodeText(data: Buffer): string {
 
 function hasGzipMagic(data: Buffer): boolean {
   return data.length > 2 && data[0] === 0x1f && data[1] === 0x8b;
+}
+
+function shouldDecompressPayloadForParsing(payload: Buffer, resolvedExtension: string): boolean {
+  return resolvedExtension.endsWith('.gz') || hasGzipMagic(payload);
 }
 
 function normalizeExtension(extension: string): string {
@@ -132,27 +140,45 @@ function resolveStoredExtension(resolvedExtension: string, payload: Buffer): str
   return baseExtension;
 }
 
-function maybeDecompressPayloadForParsing(payload: Buffer, resolvedExtension: string): Buffer {
-  const shouldDecompress = resolvedExtension.endsWith('.gz')
-    || hasGzipMagic(payload);
+function resolveMaxRouteDecompressedBytes(payload: Buffer): number {
+  return Math.min(
+    MAX_ROUTE_DECOMPRESSED_BYTES,
+    MAX_ROUTE_GZIP_DECOMPRESSED_BYTES,
+    Math.max(MIN_ROUTE_GZIP_DECOMPRESSED_BYTES, payload.length * MAX_ROUTE_GZIP_DECOMPRESSION_RATIO),
+  );
+}
 
-  if (!shouldDecompress) {
+function resolveRouteDecompressedBytesLabel(maxOutputLength: number): string {
+  if (maxOutputLength === MAX_ROUTE_DECOMPRESSED_BYTES) {
+    return MAX_ROUTE_DECOMPRESSED_BYTES_LABEL;
+  }
+  if (maxOutputLength === MAX_ROUTE_GZIP_DECOMPRESSED_BYTES) {
+    return MAX_ROUTE_GZIP_DECOMPRESSED_BYTES_LABEL;
+  }
+  return `${Math.floor(maxOutputLength / 1024)}KB`;
+}
+
+function maybeDecompressPayloadForParsing(payload: Buffer, resolvedExtension: string): Buffer {
+  if (!shouldDecompressPayloadForParsing(payload, resolvedExtension)) {
     return payload;
   }
 
+  const maxOutputLength = resolveMaxRouteDecompressedBytes(payload);
   try {
-    return gunzipSync(payload, { maxOutputLength: MAX_ROUTE_DECOMPRESSED_BYTES });
+    return gunzipSync(payload, { maxOutputLength });
   } catch (error) {
     logger.warn('[uploadRoute] Gzip decompression failed', {
       error,
       compressedBytes: payload.length,
-      maxDecompressedBytes: MAX_ROUTE_DECOMPRESSED_BYTES,
+      maxDecompressedBytes: maxOutputLength,
+      maxConfiguredDecompressedBytes: MAX_ROUTE_DECOMPRESSED_BYTES,
+      maxDecompressionRatio: MAX_ROUTE_GZIP_DECOMPRESSION_RATIO,
       resolvedExtension,
     });
     if ((error as { code?: unknown } | undefined)?.code === 'ERR_BUFFER_TOO_LARGE') {
       throw new HttpStatusError(
         400,
-        `Route file is too large after decompression. Maximum decompressed size is ${MAX_ROUTE_DECOMPRESSED_BYTES_LABEL}.`,
+        `Route file is too large after decompression. Maximum decompressed size is ${resolveRouteDecompressedBytesLabel(maxOutputLength)} for this upload.`,
       );
     }
     throw new HttpStatusError(400, 'Could not decompress uploaded route payload.');
@@ -474,6 +500,96 @@ interface RouteQuotaReconciliation {
   counterVersion: string;
 }
 
+interface RouteQuotaPreExpansionResult {
+  routeID: string | null;
+  reconciliation: RouteQuotaReconciliation | null;
+}
+
+interface DuplicateRouteUploadResult {
+  routesCount: number;
+  routeCountAfterWrite: number | null;
+}
+
+function readRouteSegmentCountFromSnapshot(snapshot: admin.firestore.DocumentSnapshot): number {
+  const data = snapshot.data();
+  const routeCount = normalizeRouteCount(data?.routeCount);
+  if (routeCount > 0) {
+    return routeCount;
+  }
+  return Array.isArray(data?.routes) ? data.routes.length : 0;
+}
+
+async function preflightDuplicateRouteUpload(
+  userID: string,
+  routeID: string,
+): Promise<DuplicateRouteUploadResult | null> {
+  const db = admin.firestore();
+  const routeRef = db.doc(`users/${userID}/routes/${routeID}`);
+  const counterRef = db.doc(getRouteQuotaCounterPath(userID));
+  const [routeSnapshot, counterSnapshot] = await Promise.all([
+    routeRef.get(),
+    counterRef.get(),
+  ]);
+
+  if (!routeSnapshot.exists) {
+    return null;
+  }
+
+  const counterRouteCount = counterSnapshot.exists
+    ? readRouteCountCounter(counterSnapshot.data()?.routeCount)
+    : null;
+
+  return {
+    routesCount: readRouteSegmentCountFromSnapshot(routeSnapshot),
+    routeCountAfterWrite: counterRouteCount !== null ? counterRouteCount : await getRouteCountForUser(userID),
+  };
+}
+
+async function preflightCompressedRouteQuotaBeforeExpansion(
+  userID: string,
+  uploadLimit: number | null,
+): Promise<void> {
+  if (uploadLimit === null) {
+    return;
+  }
+
+  const counterSnapshot = await admin.firestore().doc(getRouteQuotaCounterPath(userID)).get();
+  const counterRouteCount = counterSnapshot.exists
+    ? readRouteCountCounter(counterSnapshot.data()?.routeCount)
+    : null;
+
+  if (counterRouteCount !== null && counterRouteCount < uploadLimit) {
+    return;
+  }
+
+  logger.info('[uploadRoute] Deferring compressed route quota rejection until duplicate-aware preflight', {
+    userID,
+    uploadLimit,
+    counterRouteCount,
+  });
+}
+
+async function preflightRouteQuotaBeforeExpansion(
+  userID: string,
+  payload: Buffer,
+  resolvedExtension: string,
+  uploadLimit: number | null,
+): Promise<RouteQuotaPreExpansionResult> {
+  if (shouldDecompressPayloadForParsing(payload, resolvedExtension)) {
+    await preflightCompressedRouteQuotaBeforeExpansion(userID, uploadLimit);
+    return {
+      routeID: null,
+      reconciliation: null,
+    };
+  }
+
+  const routeID = generateUploadRouteID(userID, payload, resolvedExtension);
+  return {
+    routeID,
+    reconciliation: await preflightRouteQuotaReservation(userID, routeID, uploadLimit),
+  };
+}
+
 async function preflightRouteQuotaReservation(
   userID: string,
   routeID: string,
@@ -608,9 +724,11 @@ async function writeRouteWithQuotaReservation(
           counterPayload.reconciledActualRouteCount = reconciledRouteCount;
         }
 
-        transaction.set(routeRef, routePayload);
+        if (!routeAlreadyExists) {
+          transaction.set(routeRef, routePayload);
+          transaction.set(processingRef, createProcessingMetadataPayload(), { merge: true });
+        }
         transaction.set(counterRef, counterPayload, { merge: true });
-        transaction.set(processingRef, createProcessingMetadataPayload(), { merge: true });
 
         return {
           duplicate: routeAlreadyExists,
@@ -672,11 +790,31 @@ export const uploadRoute = onRequest({
       throw new HttpStatusError(400, `Route file is too large (${(rawBody.length / 1024 / 1024).toFixed(1)}MB). Maximum size is 20MB.`);
     }
 
-    const payloadForParsing = maybeDecompressPayloadForParsing(rawBody, resolvedExtension);
-    const routeID = generateUploadRouteID(userID, payloadForParsing, resolvedExtension);
+    await assertRouteUploadUserActive(userID, 'route_upload_before_decompression');
     const uploadLimit = await resolveUploadLimitForUser(userID);
-    await assertRouteUploadUserActive(userID, 'route_upload_preflight');
-    const preflightReconciliation = await preflightRouteQuotaReservation(userID, routeID, uploadLimit);
+    const preExpansionPreflight = await preflightRouteQuotaBeforeExpansion(
+      userID,
+      rawBody,
+      resolvedExtension,
+      uploadLimit,
+    );
+    const payloadForParsing = maybeDecompressPayloadForParsing(rawBody, resolvedExtension);
+    const routeID = preExpansionPreflight.routeID || generateUploadRouteID(userID, payloadForParsing, resolvedExtension);
+    const duplicateRouteUpload = await preflightDuplicateRouteUpload(userID, routeID);
+    if (duplicateRouteUpload) {
+      response.status(200).json({
+        routeId: routeID,
+        routesCount: duplicateRouteUpload.routesCount,
+        routeCount: duplicateRouteUpload.routesCount,
+        duplicate: true,
+        uploadLimit,
+        uploadCountAfterWrite: duplicateRouteUpload.routeCountAfterWrite,
+      });
+      return;
+    }
+    const preflightReconciliation = preExpansionPreflight.routeID
+      ? preExpansionPreflight.reconciliation
+      : await preflightRouteQuotaReservation(userID, routeID, uploadLimit);
 
     let routeFile: AppRouteInterface;
     try {

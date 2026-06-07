@@ -2,6 +2,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createHash } from 'node:crypto';
 
 const hoisted = vi.hoisted(() => {
+  const capturedOnDocumentDeletedOptions = { value: undefined as unknown };
+  const mockOnDocumentDeleted = vi.fn((options: unknown, handler: unknown) => {
+    capturedOnDocumentDeletedOptions.value = options;
+    return handler;
+  });
   const recursiveDeleteMock = vi.fn().mockResolvedValue(undefined);
   const routesCountGetMock = vi.fn();
   const collectionMock = vi.fn((path: string) => {
@@ -32,6 +37,8 @@ const hoisted = vi.hoisted(() => {
   const serverTimestampMock = vi.fn(() => 'SERVER_TIMESTAMP');
 
   return {
+    capturedOnDocumentDeletedOptions,
+    mockOnDocumentDeleted,
     recursiveDeleteMock,
     routesCountGetMock,
     collectionMock,
@@ -45,7 +52,7 @@ const hoisted = vi.hoisted(() => {
 });
 
 vi.mock('firebase-functions/v2/firestore', () => ({
-  onDocumentDeleted: (_opts: unknown, handler: unknown) => handler,
+  onDocumentDeleted: hoisted.mockOnDocumentDeleted,
 }));
 
 vi.mock('firebase-functions/logger', () => ({
@@ -127,6 +134,14 @@ describe('cleanupRouteFiles', () => {
       .digest('hex');
     return `users/user-1/metaData/routeQuota/deletions/${markerId}`;
   }
+
+  it('configures the route cleanup trigger as retryable', () => {
+    expect(hoisted.capturedOnDocumentDeletedOptions.value).toMatchObject({
+      document: 'users/{userId}/routes/{routeId}',
+      region: 'europe-west2',
+      retry: true,
+    });
+  });
 
   it('reconciles route quota and deletes route metadata and original files by route prefix', async () => {
     const wrapped = cleanupRouteFiles as unknown as (event: unknown) => Promise<void>;
@@ -216,7 +231,7 @@ describe('cleanupRouteFiles', () => {
     const error = new Error('metadata cleanup failed');
     hoisted.recursiveDeleteMock.mockRejectedValueOnce(error);
 
-    await wrapped({
+    await expect(wrapped({
       id: 'delete-event-1',
       time: '2026-06-07T07:00:00.000Z',
       data: { exists: false },
@@ -224,7 +239,7 @@ describe('cleanupRouteFiles', () => {
         userId: 'user-1',
         routeId: 'route-1',
       },
-    });
+    })).rejects.toThrow('Route cleanup failed: metadata.');
 
     expect(hoisted.deleteFilesMock).toHaveBeenCalledWith({
       prefix: 'users/user-1/routes/route-1/',
@@ -241,7 +256,7 @@ describe('cleanupRouteFiles', () => {
     const error = new Error('storage cleanup failed');
     hoisted.deleteFilesMock.mockRejectedValueOnce(error);
 
-    await wrapped({
+    await expect(wrapped({
       id: 'delete-event-1',
       time: '2026-06-07T07:00:00.000Z',
       data: { exists: false },
@@ -249,7 +264,7 @@ describe('cleanupRouteFiles', () => {
         userId: 'user-1',
         routeId: 'route-1',
       },
-    });
+    })).rejects.toThrow('Route cleanup failed: storage.');
 
     expect(hoisted.recursiveDeleteMock).toHaveBeenCalledWith({ path: 'users/user-1/routes/route-1/metaData' });
     expect(logger.error).toHaveBeenCalledWith(
@@ -276,7 +291,7 @@ describe('cleanupRouteFiles', () => {
         userId: 'user-1',
         routeId: 'route-1',
       },
-    })).rejects.toThrow(error);
+    })).rejects.toThrow('Route cleanup failed: quota.');
 
     expect(hoisted.recursiveDeleteMock).toHaveBeenCalledWith({ path: 'users/user-1/routes/route-1/metaData' });
     expect(hoisted.deleteFilesMock).toHaveBeenCalledWith({

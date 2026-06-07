@@ -10,6 +10,20 @@ import {
 
 const REGION = 'europe-west2';
 
+type RouteCleanupFailurePhase = 'quota' | 'metadata' | 'storage';
+
+interface RouteCleanupFailure {
+  phase: RouteCleanupFailurePhase;
+  error: unknown;
+}
+
+class RouteCleanupError extends Error {
+  constructor(public readonly failures: RouteCleanupFailure[]) {
+    super(`Route cleanup failed: ${failures.map(failure => failure.phase).join(', ')}.`);
+    this.name = 'RouteCleanupError';
+  }
+}
+
 function readRouteCountCounter(value: unknown): number | null {
   if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) {
     return null;
@@ -113,6 +127,7 @@ export const cleanupRouteFiles = onDocumentDeleted({
   memory: '1GiB',
   maxInstances: 10,
   concurrency: 5,
+  retry: true,
 }, async (event) => {
   const { userId, routeId } = event.params;
   if (!userId || !routeId) {
@@ -129,7 +144,7 @@ export const cleanupRouteFiles = onDocumentDeleted({
   const storagePrefix = `users/${userId}/routes/${routeId}/`;
   const eventId = typeof event.id === 'string' ? event.id : undefined;
   const eventTime = typeof event.time === 'string' ? event.time : undefined;
-  let quotaReconciliationError: unknown = null;
+  const cleanupFailures: RouteCleanupFailure[] = [];
   let skipFirestoreCleanup = false;
 
   try {
@@ -141,7 +156,7 @@ export const cleanupRouteFiles = onDocumentDeleted({
       logger.info('Route quota counter reconciled after delete', { userId, routeId, eventId });
     }
   } catch (error) {
-    quotaReconciliationError = error;
+    cleanupFailures.push({ phase: 'quota', error });
     logger.error('Failed to reconcile route quota counter after delete', { userId, routeId, eventId, error });
   }
 
@@ -150,6 +165,7 @@ export const cleanupRouteFiles = onDocumentDeleted({
       await db.recursiveDelete(db.collection(`users/${userId}/routes/${routeId}/metaData`));
       logger.info('Route metadata cleaned up', { userId, routeId });
     } catch (error) {
+      cleanupFailures.push({ phase: 'metadata', error });
       logger.error('Failed to clean up route metadata', { userId, routeId, error });
     }
   } else {
@@ -160,12 +176,13 @@ export const cleanupRouteFiles = onDocumentDeleted({
     await admin.storage().bucket().deleteFiles({ prefix: storagePrefix, force: true });
     logger.info('Route original files cleaned up', { userId, routeId, storagePrefix });
   } catch (error) {
+    cleanupFailures.push({ phase: 'storage', error });
     logger.error('Failed to clean up route original files', { userId, routeId, storagePrefix, error });
   }
 
   logger.info('Route cleanup finished', { userId, routeId, storagePrefix });
 
-  if (quotaReconciliationError) {
-    throw quotaReconciliationError;
+  if (cleanupFailures.length > 0) {
+    throw new RouteCleanupError(cleanupFailures);
   }
 });
