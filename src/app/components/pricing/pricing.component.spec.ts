@@ -10,7 +10,7 @@ import { Router } from '@angular/router';
 import { By } from '@angular/platform-browser';
 
 import { AppAnalyticsService } from '../../services/app.analytics.service';
-import { AI_INSIGHTS_REQUEST_LIMITS, USAGE_LIMITS } from '@shared/limits';
+import { AI_INSIGHTS_REQUEST_LIMITS, ROUTE_USAGE_LIMITS, USAGE_LIMITS } from '@shared/limits';
 import { UpcomingRenewalAmountResult } from '@shared/stripe-renewal';
 
 class MockAppPaymentService {
@@ -134,6 +134,12 @@ describe('PricingComponent', () => {
         expect(component.getActivityLimitLabel('pro')).toBe('Unlimited activities');
     });
 
+    it('should derive route limit labels from the shared route limits map', () => {
+        expect(component.getRouteLimitLabel('free')).toBe(`Up to ${ROUTE_USAGE_LIMITS.free} saved routes`);
+        expect(component.getRouteLimitLabel('basic')).toBe(`Up to ${ROUTE_USAGE_LIMITS.basic} saved routes`);
+        expect(component.getRouteLimitLabel('pro')).toBe('Unlimited saved routes');
+    });
+
     it('should derive AI insights limit labels by plan role', () => {
         expect(component.getAiInsightsLimitLabel('free')).toBe(`AI Insights up to ${AI_INSIGHTS_REQUEST_LIMITS.free} requests per calendar month`);
         expect(component.getAiInsightsLimitLabel('basic')).toBe(`AI Insights up to ${AI_INSIGHTS_REQUEST_LIMITS.basic} requests per billing period`);
@@ -174,8 +180,8 @@ describe('PricingComponent', () => {
 
         const content = fixture.nativeElement.textContent as string;
         expect(content).toContain('Cross-device sync');
+        expect(content).toContain('Unlimited saved routes');
         expect(content).not.toContain('Garmin/COROS');
-        expect(content).not.toContain('routes');
     });
 
     it('should compute a yearly savings label using the matching monthly price', () => {

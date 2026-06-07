@@ -57,6 +57,7 @@ export const FUNCTIONS_MANIFEST = {
 
     // Upload/Reprocess Functions
     uploadActivity: { name: 'uploadActivity', region: 'europe-west2' },
+    uploadRoute: { name: 'uploadRoute', region: 'europe-west2' },
     createToolComparisonEvent: { name: 'createToolComparisonEvent', region: 'europe-west2' },
     reprocessEvent: { name: 'reprocessEvent', region: 'europe-west2' },
     retrySportsLibReparseHeavyJob: { name: RETRY_SPORTS_LIB_REPARSE_HEAVY_JOB_FUNCTION_NAME, region: 'europe-west2' },

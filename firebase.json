@@ -102,6 +102,10 @@
           "destination": "/index.csr.html"
         },
         {
+          "source": "/routes",
+          "destination": "/index.csr.html"
+        },
+        {
           "source": "/settings",
           "destination": "/index.csr.html"
         },
@@ -227,6 +231,10 @@
         },
         {
           "source": "/mytracks",
+          "destination": "/index.csr.html"
+        },
+        {
+          "source": "/routes",
           "destination": "/index.csr.html"
         },
         {

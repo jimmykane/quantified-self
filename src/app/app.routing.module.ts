@@ -338,6 +338,12 @@ export const routes: Routes = [
     canMatch: [authGuard, onboardingGuard]
   },
   {
+    path: 'routes',
+    loadComponent: () => import('./components/routes/routes-page.component').then(module => module.RoutesPageComponent),
+    data: { title: 'Routes', animation: 'Routes', preload: true },
+    canMatch: [authGuard, onboardingGuard]
+  },
+  {
     path: 'settings',
     loadChildren: () => import('./modules/user.module').then(module => module.UserModule),
     data: { title: 'Settings', animation: 'User', preload: true },

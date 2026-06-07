@@ -64,6 +64,7 @@ export const CLIENT_RENDERED_APP_ROUTES = [
   'services',
   'dashboard',
   'mytracks',
+  'routes',
   'settings',
   'user/:userID/event/:eventID',
   'policies',

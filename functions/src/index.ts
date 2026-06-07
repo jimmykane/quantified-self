@@ -159,6 +159,8 @@ export { importActivityToCOROSAPI } from './coros/activities';
 // Events
 export { cleanupEventFile } from './events/cleanup';
 export { uploadActivity } from './events/upload-activity';
+export { cleanupRouteFiles } from './routes/cleanup';
+export { uploadRoute } from './routes/upload-route';
 export { createToolComparisonEvent } from './events/create-tool-comparison-event';
 export { reprocessEvent } from './events/reprocess-event';
 export { mergeEvents } from './events/merge-events';

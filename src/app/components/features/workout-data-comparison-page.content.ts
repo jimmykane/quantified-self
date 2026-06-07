@@ -1,5 +1,5 @@
 import { ServiceNames } from '@sports-alliance/sports-lib';
-import { USAGE_LIMITS } from '@shared/limits';
+import { ROUTE_USAGE_LIMITS, USAGE_LIMITS } from '@shared/limits';
 
 export interface ComparisonProviderSource {
   label: string;
@@ -28,6 +28,7 @@ export interface ComparisonRouteData {
 export const WORKOUT_DATA_COMPARISON_PATH = 'features/workout-data-comparison';
 export const WORKOUT_DATA_COMPARISON_URL = `https://quantified-self.io/${WORKOUT_DATA_COMPARISON_PATH}`;
 export const COMPARISON_FREE_PLAN_ACTIVITY_LIMIT = USAGE_LIMITS.free;
+export const COMPARISON_FREE_PLAN_ROUTE_LIMIT = ROUTE_USAGE_LIMITS.free;
 
 export const COMPARISON_PROVIDER_SOURCES: readonly ComparisonProviderSource[] = [
   { label: 'Garmin', serviceName: ServiceNames.GarminAPI },
@@ -44,7 +45,7 @@ export const COMPARISON_FEATURE_ITEMS: readonly ComparisonFeatureItem[] = [
   {
     icon: 'merge_type',
     title: 'Benchmark any two imported activities',
-    copy: `Compare provider-synced workouts or custom activity files, choose reference and test roles, auto-align time, and save a reusable device-to-device report. Manual uploads and benchmark comparisons are available on the free plan for up to ${COMPARISON_FREE_PLAN_ACTIVITY_LIMIT} activities.`,
+    copy: `Compare provider-synced workouts or custom activity files, choose reference and test roles, auto-align time, and save a reusable device-to-device report. Manual uploads and benchmark comparisons are available on the free plan for up to ${COMPARISON_FREE_PLAN_ACTIVITY_LIMIT} activities and ${COMPARISON_FREE_PLAN_ROUTE_LIMIT} saved routes.`,
   },
   {
     icon: 'stacked_line_chart',
@@ -101,7 +102,7 @@ export const COMPARISON_FAQ_ITEMS: readonly ComparisonFaqItem[] = [
   },
   {
     question: 'Is workout data comparison available on the free plan?',
-    answer: `Yes. Manual uploads, core analysis tools, and benchmark comparisons are available on the free plan for up to ${COMPARISON_FREE_PLAN_ACTIVITY_LIMIT} activities. Automatic service sync and higher limits require a paid plan.`,
+    answer: `Yes. Manual uploads, core analysis tools, and benchmark comparisons are available on the free plan for up to ${COMPARISON_FREE_PLAN_ACTIVITY_LIMIT} activities and ${COMPARISON_FREE_PLAN_ROUTE_LIMIT} saved routes. Automatic service sync and higher limits require a paid plan.`,
   },
   {
     question: 'Can I sync Garmin data to Suunto automatically?',

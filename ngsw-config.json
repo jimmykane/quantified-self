@@ -50,6 +50,7 @@
     "/services",
     "/dashboard",
     "/mytracks",
+    "/routes",
     "/settings",
     "/user/*/event/*",
     "/policies",

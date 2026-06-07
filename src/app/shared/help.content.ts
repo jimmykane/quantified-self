@@ -1,5 +1,5 @@
 import { environment } from '../../environments/environment';
-import { AI_INSIGHTS_REQUEST_LIMITS } from '../../../shared/limits';
+import { AI_INSIGHTS_REQUEST_LIMITS, ROUTE_USAGE_LIMITS, USAGE_LIMITS } from '../../../shared/limits';
 
 export type HelpSectionId =
   | 'getting-started'
@@ -218,7 +218,7 @@ export const HELP_SECTIONS: HelpSection[] = [
 - Saved file comparisons are listed from [Tools -> Compare](/tools/compare/saved) in a sortable, filterable, paginated table with device, activity type, and review tag filters, distance, ascent, descent, visible benchmark pairs, GNSS/heart-rate/altitude benchmark error metrics colored by low/moderate/high error, clickable draft metric cells that open the benchmark flow, quick description notes, and custom reviewer tags for labeling firmware, sensor, route, or publication workflow groups.
 - Benchmark reports show an **At a Glance** reviewer summary with the key pair, overall agreement, GNSS, heart-rate, altitude, quality, and saved tags. The report share menu can copy that summary for review notes.
 - Reviewers can assign account-level device color preferences from saved file comparisons; colors are keyed by the base device name rather than firmware/software version and carry through activity toggles, event tables, benchmark dialogs, charts, and maps.
-- The public [Features hub](/features) links to [Workout Data Comparison](/features/workout-data-comparison), [Workout File Comparison](/features/workout-file-comparison), [Workout File Analyzer](/features/fit-gpx-tcx-file-analyzer), and [Sports Watch Benchmark](/features/sports-watch-benchmark) pages that explain how Garmin, Suunto, COROS, and uploaded FIT/TCX/GPX/JSON/SML activity files fit with benchmark reports, source files, maps, charts, overlays, and reviewer workflows for device tests, YouTube videos, and blog posts. Manual uploads, core analysis, and benchmark comparisons are available on the free plan for up to 100 activities; automatic provider sync and higher limits require a paid plan.
+- The public [Features hub](/features) links to [Workout Data Comparison](/features/workout-data-comparison), [Workout File Comparison](/features/workout-file-comparison), [Workout File Analyzer](/features/fit-gpx-tcx-file-analyzer), and [Sports Watch Benchmark](/features/sports-watch-benchmark) pages that explain how Garmin, Suunto, COROS, and uploaded FIT/TCX/GPX/JSON/SML activity files fit with benchmark reports, source files, maps, charts, overlays, and reviewer workflows for device tests, YouTube videos, and blog posts. Manual uploads, core analysis, and benchmark comparisons are available on the free plan for up to ${USAGE_LIMITS.free} activities and ${ROUTE_USAGE_LIMITS.free} saved routes; automatic provider sync and higher limits require a paid plan.
 
 ### Event jump tables
 
@@ -360,14 +360,17 @@ export const HELP_SECTIONS: HelpSection[] = [
 
 ### Starter (Free)
 
-- Up to **100 activities**
+- Up to **${USAGE_LIMITS.free} activities**
+- Up to **${ROUTE_USAGE_LIMITS.free} saved routes**
 - Manual activity uploads (\`.fit\`, \`.gpx\`, \`.tcx\`, \`.json\`, \`.sml\`)
+- Manual route uploads (\`.fit\`, \`.gpx\`)
 - Core dashboard and event analysis tools
 
 ### Basic
 
 - Everything in Starter
-- Up to **1,000 activities**
+- Up to **${USAGE_LIMITS.basic.toLocaleString('en-US')} activities**
+- Up to **${ROUTE_USAGE_LIMITS.basic} saved routes**
 - **My Tracks (Beta)** access
 - Paid-only profile customization such as custom chart watermark text
 
@@ -375,6 +378,7 @@ export const HELP_SECTIONS: HelpSection[] = [
 
 - Everything in Basic
 - **Unlimited activities**
+- **Unlimited saved routes**
 - Garmin, Suunto, and COROS integration workflows
 - History import workflows (provider limits still apply)
 - Suunto FIT activity upload and GPX route upload tools
@@ -405,7 +409,7 @@ If you downgrade from a paid plan, the app keeps your access through the current
 After the grace period:
 
 - Pro-only sync connections can be disconnected.
-- Existing activities are retained. New uploads follow your current plan limit.
+- Existing activities and routes are retained. New uploads follow your current plan limits.
 
 ## When to contact support
 
@@ -445,10 +449,17 @@ The public [Workout File Analyzer](/features/fit-gpx-tcx-file-analyzer) page exp
 - **Starter** and **Basic** have activity caps.
 - **Pro** does not have an activity cap.
 
+## Route limits
+
+- Saved FIT and GPX route uploads count toward a separate route limit on limited plans.
+- **Starter** includes up to **${ROUTE_USAGE_LIMITS.free} saved routes**.
+- **Basic** includes up to **${ROUTE_USAGE_LIMITS.basic} saved routes**.
+- **Pro** does not have a saved-route cap.
+
 ## Common upload issues
 
 - Your session may have expired. Sign in again and retry.
-- You may have reached your current plan's activity limit.
+- You may have reached your current plan's activity or route limit.
 - The file may be invalid, unsupported, or unreadable by the importer.
 
 ## Export and backup options
@@ -491,7 +502,7 @@ The public [Training Data Sync Guides](/guides) hub links to the [Garmin to Suun
 
 The public [Tools hub](/tools) links to the [File Comparison Tool](/tools/compare), which creates saved benchmark events directly from FIT, GPX, and TCX files.
 
-The public [Features hub](/features) links to [Workout Data Comparison](/features/workout-data-comparison), [Workout File Comparison](/features/workout-file-comparison), [Workout File Analyzer](/features/fit-gpx-tcx-file-analyzer), and [Sports Watch Benchmark](/features/sports-watch-benchmark) pages that explain how centralized Garmin, Suunto, COROS, and uploaded FIT/TCX/GPX/JSON/SML activity files support benchmark reports, metric overlays, maps, charts, source-file workflows, and reviewer workflows for device tests, YouTube videos, and blog posts. Manual uploads, core analysis, and benchmark comparisons are available on the free plan for up to 100 activities; automatic provider sync and higher limits require a paid plan.
+The public [Features hub](/features) links to [Workout Data Comparison](/features/workout-data-comparison), [Workout File Comparison](/features/workout-file-comparison), [Workout File Analyzer](/features/fit-gpx-tcx-file-analyzer), and [Sports Watch Benchmark](/features/sports-watch-benchmark) pages that explain how centralized Garmin, Suunto, COROS, and uploaded FIT/TCX/GPX/JSON/SML activity files support benchmark reports, metric overlays, maps, charts, source-file workflows, and reviewer workflows for device tests, YouTube videos, and blog posts. Manual uploads, core analysis, and benchmark comparisons are available on the free plan for up to ${USAGE_LIMITS.free} activities and ${ROUTE_USAGE_LIMITS.free} saved routes; automatic provider sync and higher limits require a paid plan.
 
 ## Sleep data
 
