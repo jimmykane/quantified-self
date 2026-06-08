@@ -66,7 +66,7 @@ export type RouteUploadErrorCategory =
     | 'server'
     | 'unknown'
     | 'unsupported_format';
-export type SavedRouteAction = 'view' | 'open_details' | 'download' | 'delete';
+export type SavedRouteAction = 'view' | 'open_details' | 'rename' | 'download' | 'delete';
 export type SavedRouteActionStatus = 'success' | 'failure' | 'missing_file';
 
 export interface ToolCompareFileSelectionAnalytics {

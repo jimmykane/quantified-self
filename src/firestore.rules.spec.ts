@@ -732,6 +732,26 @@ describe('Firestore Security Rules', () => {
                 }));
             });
 
+            it('should deny owner saving invalid route names', async () => {
+                const db = testEnv.authenticatedContext(userId).firestore();
+                await testEnv.withSecurityRulesDisabled(async (context) => {
+                    await context.firestore().doc(`users/${userId}/routes/${routeId}`).set({
+                        name: 'Morning Route',
+                        srcFileType: 'fit',
+                        routeCount: 1,
+                        pointCount: 2,
+                        routes: [],
+                    });
+                });
+
+                await assertFails(db.collection(`users/${userId}/routes`).doc(routeId).update({
+                    name: '',
+                }));
+                await assertFails(db.collection(`users/${userId}/routes`).doc(routeId).update({
+                    name: 'x'.repeat(121),
+                }));
+            });
+
             it('should deny owner updating original route file metadata', async () => {
                 const db = testEnv.authenticatedContext(userId).firestore();
                 await testEnv.withSecurityRulesDisabled(async (context) => {

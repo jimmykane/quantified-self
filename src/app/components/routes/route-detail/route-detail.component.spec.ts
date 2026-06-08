@@ -15,6 +15,7 @@ import { AppRouteService } from '../../../services/app.route.service';
 import { AppThemeService } from '../../../services/app.theme.service';
 import { AppUserSettingsQueryService } from '../../../services/app.user-settings-query.service';
 import { LoggerService } from '../../../services/logger.service';
+import { RouteNameDialogComponent } from '../route-name-dialog/route-name-dialog.component';
 import { RouteDetailComponent } from './route-detail.component';
 
 describe('RouteDetailComponent', () => {
@@ -25,6 +26,7 @@ describe('RouteDetailComponent', () => {
   let dialogMock: any;
   let snackBarMock: any;
   let routerMock: any;
+  let loggerMock: any;
 
   const routeDocument: FirestoreRouteJSON = {
     id: 'route-1',
@@ -80,6 +82,7 @@ describe('RouteDetailComponent', () => {
     routeServiceMock = {
       getOriginalRouteFiles: vi.fn((route: FirestoreRouteJSON) => route.originalFiles || []),
       downloadFile: vi.fn().mockResolvedValue(new Uint8Array([1, 2, 3]).buffer),
+      updateRouteName: vi.fn().mockResolvedValue(undefined),
       deleteRoute: vi.fn().mockResolvedValue(undefined),
     };
     fileServiceMock = {
@@ -101,6 +104,9 @@ describe('RouteDetailComponent', () => {
     routerMock = {
       navigate: vi.fn().mockResolvedValue(true),
     };
+    loggerMock = {
+      error: vi.fn(),
+    };
 
     TestBed.configureTestingModule({
       imports: [RouteDetailComponent],
@@ -112,7 +118,7 @@ describe('RouteDetailComponent', () => {
         { provide: MatDialog, useValue: dialogMock },
         { provide: MatSnackBar, useValue: snackBarMock },
         { provide: Router, useValue: routerMock },
-        { provide: LoggerService, useValue: { error: vi.fn() } },
+        { provide: LoggerService, useValue: loggerMock },
         { provide: AppUserSettingsQueryService, useValue: { unitSettings: () => null } },
         { provide: AppThemeService, useValue: { appTheme: () => AppThemes.Normal } },
       ],
@@ -186,6 +192,55 @@ describe('RouteDetailComponent', () => {
     ]);
   });
 
+  it('renames the owner route from the detail page action', async () => {
+    dialogMock.open.mockReturnValueOnce({ afterClosed: () => of('  New   Route Name  ') });
+
+    await component.renameRoute();
+
+    expect(dialogMock.open).toHaveBeenCalledWith(RouteNameDialogComponent, expect.objectContaining({
+      width: '420px',
+      maxWidth: 'calc(100vw - 32px)',
+      data: {
+        currentName: 'Detail Route',
+      },
+    }));
+    expect(routeServiceMock.updateRouteName).toHaveBeenCalledWith(
+      expect.objectContaining({ uid: 'user-1' }),
+      'route-1',
+      'New Route Name',
+    );
+    expect(component.routeName()).toBe('New Route Name');
+    expect(analyticsServiceMock.logSavedRouteAction).toHaveBeenCalledWith('rename', {
+      status: 'success',
+      fileType: 'gpx',
+    });
+    expect(snackBarMock.open).toHaveBeenCalledWith('Route name saved.', undefined, { duration: 2500 });
+  });
+
+  it('rolls back the visible route name when saving a rename fails', async () => {
+    dialogMock.open.mockReturnValueOnce({ afterClosed: () => of('Broken Rename') });
+    routeServiceMock.updateRouteName.mockRejectedValueOnce(new Error('write failed'));
+
+    await component.renameRoute();
+
+    expect(routeServiceMock.updateRouteName).toHaveBeenCalledWith(
+      expect.objectContaining({ uid: 'user-1' }),
+      'route-1',
+      'Broken Rename',
+    );
+    expect(component.routeName()).toBe('Detail Route');
+    expect(analyticsServiceMock.logSavedRouteAction).toHaveBeenCalledWith('rename', {
+      status: 'failure',
+      fileType: 'gpx',
+    });
+    expect(loggerMock.error).toHaveBeenCalledWith(
+      '[RouteDetailComponent] Failed to rename route',
+      { routeID: 'route-1' },
+      expect.any(Error),
+    );
+    expect(snackBarMock.open).toHaveBeenCalledWith('Failed to save route name.', undefined, { duration: 3000 });
+  });
+
   it('downloads the original route file from the detail page action', async () => {
     await component.downloadRouteOriginals();
 
@@ -199,15 +254,18 @@ describe('RouteDetailComponent', () => {
     });
   });
 
-  it('does not download or delete when the resolved user is not the route owner', async () => {
+  it('does not rename, download, or delete when the resolved user is not the route owner', async () => {
     component.user.set(new User('other-user'));
     dialogMock.open.mockClear();
+    routeServiceMock.updateRouteName.mockClear();
     routeServiceMock.downloadFile.mockClear();
     routeServiceMock.deleteRoute.mockClear();
 
+    await component.renameRoute();
     await component.downloadRouteOriginals();
     await component.confirmDeleteRoute();
 
+    expect(routeServiceMock.updateRouteName).not.toHaveBeenCalled();
     expect(routeServiceMock.downloadFile).not.toHaveBeenCalled();
     expect(dialogMock.open).not.toHaveBeenCalled();
     expect(routeServiceMock.deleteRoute).not.toHaveBeenCalled();

@@ -18,9 +18,11 @@ import { AppRouteService } from '../../../services/app.route.service';
 import { AppThemeService } from '../../../services/app.theme.service';
 import { AppUserSettingsQueryService } from '../../../services/app.user-settings-query.service';
 import { LoggerService } from '../../../services/logger.service';
+import { normalizeRouteName } from '../../../helpers/route-name.helper';
 import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../confirmation-dialog/confirmation-dialog.component';
 import { RouteChartComponent } from '../route-chart/route-chart.component';
 import { RouteMapComponent } from '../route-map/route-map.component';
+import { RouteNameDialogComponent, RouteNameDialogData } from '../route-name-dialog/route-name-dialog.component';
 import {
   buildRouteSegmentDetailViews,
   buildRouteSummaryMetrics,
@@ -55,6 +57,7 @@ export class RouteDetailComponent {
   readonly sourceFile = signal<OriginalRouteFileMetaData | null>(null);
   readonly user = signal<User | null>(null);
   readonly selectedSegmentIDs = signal<string[]>([]);
+  readonly renaming = signal(false);
   readonly downloading = signal(false);
   readonly deleting = signal(false);
 
@@ -120,6 +123,55 @@ export class RouteDetailComponent {
 
   selectAllSegments(): void {
     this.selectedSegmentIDs.set(this.segments().map(segment => segment.id));
+  }
+
+  async renameRoute(): Promise<void> {
+    const routeDocument = this.routeDocument();
+    const routeID = routeDocument?.id;
+    const user = this.user();
+    if (!routeDocument || !routeID || !user || this.renaming() || !this.canManageRoute()) {
+      return;
+    }
+
+    const currentName = normalizeRouteName(routeDocument.name || this.routeFile()?.name || '');
+    const dialogRef = this.dialog.open(RouteNameDialogComponent, {
+      width: '420px',
+      maxWidth: 'calc(100vw - 32px)',
+      data: {
+        currentName,
+      } as RouteNameDialogData,
+    });
+
+    const routeName = await firstValueFrom(dialogRef.afterClosed());
+    if (typeof routeName !== 'string') {
+      return;
+    }
+
+    const normalizedRouteName = normalizeRouteName(routeName);
+    if (!normalizedRouteName || normalizedRouteName === currentName) {
+      return;
+    }
+
+    this.renaming.set(true);
+    this.updateCurrentRouteName(routeID, normalizedRouteName);
+    try {
+      await this.routeService.updateRouteName(user, routeID, normalizedRouteName);
+      this.analyticsService.logSavedRouteAction('rename', {
+        status: 'success',
+        fileType: this.getPrimaryRouteFileType(routeDocument),
+      });
+      this.snackBar.open('Route name saved.', undefined, { duration: 2500 });
+    } catch (error) {
+      this.updateCurrentRouteName(routeID, currentName);
+      this.analyticsService.logSavedRouteAction('rename', {
+        status: 'failure',
+        fileType: this.getPrimaryRouteFileType(routeDocument),
+      });
+      this.logger.error('[RouteDetailComponent] Failed to rename route', { routeID }, error);
+      this.snackBar.open('Failed to save route name.', undefined, { duration: 3000 });
+    } finally {
+      this.renaming.set(false);
+    }
   }
 
   async downloadRouteOriginals(): Promise<void> {
@@ -251,6 +303,14 @@ export class RouteDetailComponent {
       fileType: this.getPrimaryRouteFileType(data.routeDocument),
       fileCount: this.routeService.getOriginalRouteFiles(data.routeDocument).length,
     });
+  }
+
+  private updateCurrentRouteName(routeID: string, name: string): void {
+    this.routeDocument.update(routeDocument =>
+      routeDocument?.id === routeID
+        ? { ...routeDocument, name }
+        : routeDocument,
+    );
   }
 
   private resolveRouteDate(): Date | null {

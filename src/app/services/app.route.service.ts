@@ -15,6 +15,7 @@ import {
     updateDoc,
 } from 'app/firebase/firestore';
 import { FirestoreRouteJSON, OriginalRouteFileMetaData } from '@shared/app-route.interface';
+import { validateRouteName } from '../helpers/route-name.helper';
 import { AppOriginalFileHydrationService, DownloadFileOptions } from './app.original-file-hydration.service';
 
 export interface RouteOwner {
@@ -80,6 +81,16 @@ export class AppRouteService {
             doc(this.firestore, 'users', user.uid, 'routes', routeID),
             sanitizedUpdates,
         );
+    }
+
+    async updateRouteName(
+        user: RouteOwner,
+        routeID: string,
+        name: string,
+    ): Promise<void> {
+        await this.updateRouteProperties(user, routeID, {
+            name: validateRouteName(name),
+        });
     }
 
     async deleteRoute(user: RouteOwner, routeID: string): Promise<void> {

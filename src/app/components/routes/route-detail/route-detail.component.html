@@ -23,6 +23,13 @@
       <span summary-chips class="route-chip">{{ sourceFileType() | uppercase }}</span>
       <div summary-actions class="route-summary-actions">
         <button mat-icon-button type="button"
+          aria-label="Rename route"
+          matTooltip="Rename route"
+          [disabled]="renaming() || !canManageRoute()"
+          (click)="renameRoute()">
+          <mat-icon>edit</mat-icon>
+        </button>
+        <button mat-icon-button type="button"
           aria-label="Download original route file"
           matTooltip="Download original route file"
           [disabled]="downloading() || !canManageRoute()"
@@ -32,7 +39,7 @@
         <button mat-icon-button type="button"
           aria-label="Delete route"
           matTooltip="Delete route"
-          [disabled]="deleting() || !canManageRoute()"
+          [disabled]="deleting() || renaming() || !canManageRoute()"
           (click)="confirmDeleteRoute()">
           <mat-icon>delete</mat-icon>
         </button>

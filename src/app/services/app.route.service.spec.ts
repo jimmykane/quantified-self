@@ -13,6 +13,7 @@ import {
     query,
     updateDoc,
 } from 'app/firebase/firestore';
+import { ROUTE_NAME_MAX_LENGTH } from '../helpers/route-name.helper';
 import { AppRouteService } from './app.route.service';
 import { AppOriginalFileHydrationService } from './app.original-file-hydration.service';
 
@@ -115,6 +116,27 @@ describe('AppRouteService', () => {
             routes: [],
             originalFile: { path: 'users/user-1/routes/route-1/original.gpx', startDate: new Date() },
         } as any);
+
+        expect(updateDoc).not.toHaveBeenCalled();
+    });
+
+    it('normalizes route names through the dedicated route name update path', async () => {
+        vi.mocked(updateDoc).mockResolvedValue(undefined);
+
+        await service.updateRouteName({ uid: 'user-1' }, 'route-1', '  Renamed   Route  ');
+
+        expect(doc).toHaveBeenCalledWith(firestoreMock, 'users', 'user-1', 'routes', 'route-1');
+        expect(updateDoc).toHaveBeenCalledWith(
+            { path: 'users/user-1/routes/route-1' },
+            { name: 'Renamed Route' },
+        );
+    });
+
+    it('rejects blank or oversized route names before writing', async () => {
+        await expect(service.updateRouteName({ uid: 'user-1' }, 'route-1', '   '))
+            .rejects.toThrow('Route name is required.');
+        await expect(service.updateRouteName({ uid: 'user-1' }, 'route-1', 'x'.repeat(ROUTE_NAME_MAX_LENGTH + 1)))
+            .rejects.toThrow(`Route name must be ${ROUTE_NAME_MAX_LENGTH} characters or fewer.`);
 
         expect(updateDoc).not.toHaveBeenCalled();
     });
