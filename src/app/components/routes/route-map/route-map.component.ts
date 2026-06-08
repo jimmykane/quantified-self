@@ -288,6 +288,7 @@ export class RouteMapComponent extends MapAbstractDirective implements AfterView
         latitudeDegrees: waypoint.latitudeDegrees,
         longitudeDegrees: waypoint.longitudeDegrees,
         element: this.createWaypointMarker(waypoint.color, waypoint),
+        anchor: 'bottom',
       })),
     }));
 
