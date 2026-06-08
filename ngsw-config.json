@@ -53,6 +53,7 @@
     "/routes",
     "/settings",
     "/user/*/event/*",
+    "/user/*/route/*",
     "/policies",
     "/ai-insights",
     "!/**/*.*",

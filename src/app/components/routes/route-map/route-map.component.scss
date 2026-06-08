@@ -1,0 +1,17 @@
+.route-map-wrapper {
+  display: block;
+}
+
+.route-map-stage {
+  position: relative;
+  min-height: 56vh;
+  overflow: hidden;
+  border: 1px solid var(--mat-sys-outline-variant);
+  border-radius: 8px;
+  background: var(--mat-sys-surface-container-low);
+}
+
+.route-map {
+  position: absolute;
+  inset: 0;
+}

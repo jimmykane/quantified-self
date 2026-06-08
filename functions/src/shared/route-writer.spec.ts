@@ -119,7 +119,7 @@ describe('RouteWriter', () => {
         expect(payload.routes[0]).not.toHaveProperty('streams');
     });
 
-    it('fills missing route distance, ascent, and descent stats from route points', () => {
+    it('fills missing route distance, ascent, descent, and grade stats from route points', () => {
         const payload = buildFirestoreRoutePayload('user-1', makeRouteFile({
             routes: [{
                 id: 'segment-1',
@@ -138,6 +138,8 @@ describe('RouteWriter', () => {
             Ascent: 5,
             Descent: 3,
         });
+        expect(payload.routes[0].stats?.['Minimum Grade'] as number).toBeCloseTo(-2.7, 1);
+        expect(payload.routes[0].stats?.['Maximum Grade'] as number).toBeCloseTo(4.5, 1);
     });
 
     it('normalizes aliased route stats into canonical stat names', () => {
@@ -151,6 +153,8 @@ describe('RouteWriter', () => {
                     distance: '1234.5',
                     ascent: { rawValue: '12' },
                     descent: { _value: '8' },
+                    minGrade: '-4.2',
+                    maxGrade: { value: '9.8' },
                 },
                 points: [
                     { latitudeDegrees: 0, longitudeDegrees: 0, altitude: 10 },
@@ -163,6 +167,8 @@ describe('RouteWriter', () => {
             Distance: 1234.5,
             Ascent: 12,
             Descent: 8,
+            'Minimum Grade': -4.2,
+            'Maximum Grade': 9.8,
         });
     });
 

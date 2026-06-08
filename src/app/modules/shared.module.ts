@@ -37,6 +37,7 @@ import { TypedPromptRotatorComponent } from '../components/shared/typed-prompt-r
 import { HapticTapDirective } from '../directives/haptic-tap.directive';
 import { TooltipTapDirective } from '../directives/tooltip-tap.directive';
 import { UploadActivitiesComponent } from '../components/upload/upload-activities/upload-activities.component';
+import { EventCardChartPanelComponent } from '../components/event/chart/panel/event.card.chart.panel.component';
 
 @NgModule({
     imports: [
@@ -78,6 +79,7 @@ import { UploadActivitiesComponent } from '../components/upload/upload-activitie
         HapticTapDirective,
         TooltipTapDirective,
         UploadActivitiesComponent,
+        EventCardChartPanelComponent,
     ],
     providers: [],
     exports: [
@@ -115,6 +117,7 @@ import { UploadActivitiesComponent } from '../components/upload/upload-activitie
         HapticTapDirective,
         TooltipTapDirective,
         UploadActivitiesComponent,
+        EventCardChartPanelComponent,
     ]
 })
 

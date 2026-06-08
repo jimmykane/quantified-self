@@ -258,6 +258,8 @@ describe('help.content', () => {
     expect(uploadsSection?.content).toContain(`**Basic** includes up to **${ROUTE_USAGE_LIMITS.basic} saved routes**`);
     expect(uploadsSection?.content).toContain("You may have reached your current plan's activity or route limit.");
     expect(uploadsSection?.content).toContain('[FIT and GPX Route Files](/features/fit-gpx-route-files)');
+    expect(uploadsSection?.content).toContain('Saved routes open from **Routes** with the details action.');
+    expect(uploadsSection?.content).toContain('parsed points and streams are not saved back to Firestore');
     expect(uploadsSection?.links).toContainEqual({
       label: 'FIT and GPX Route Files',
       icon: 'route',

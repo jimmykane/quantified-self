@@ -1,10 +1,12 @@
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { firstValueFrom, BehaviorSubject, combineLatest, map, Observable } from 'rxjs';
 import { MatDialog } from '@angular/material/dialog';
+import { Router } from '@angular/router';
 import { Sort, SortDirection } from '@angular/material/sort';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import { DataAscent, DataDescent, DataDistance, User } from '@sports-alliance/sports-lib';
+import { DataAscent, DataDescent, DataDistance, DataGradeMax, DataGradeMin, User } from '@sports-alliance/sports-lib';
 import { FirestoreRouteJSON } from '@shared/app-route.interface';
+import { resolveUnitAwareDisplayFromValue } from '@shared/unit-aware-display';
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { ConfirmationDialogComponent, ConfirmationDialogData } from '../confirmation-dialog/confirmation-dialog.component';
 import { SharedModule } from '../../modules/shared.module';
@@ -28,6 +30,8 @@ interface RoutePageRouteViewModel {
     distance: RouteMetricCell;
     ascent: RouteMetricCell;
     descent: RouteMetricCell;
+    minGrade: RouteMetricCell;
+    maxGrade: RouteMetricCell;
 }
 
 interface RouteMetricCell {
@@ -43,8 +47,12 @@ type RouteSortColumn =
     | 'distance'
     | 'ascent'
     | 'descent'
+    | 'minGrade'
+    | 'maxGrade'
     | 'pointCount'
     | 'originalFilename';
+
+type RouteMetricAggregation = 'sum' | 'min' | 'max';
 
 interface RouteSortState {
     active: RouteSortColumn;
@@ -66,6 +74,7 @@ export class RoutesPageComponent implements OnInit {
     private fileService = inject(AppFileService);
     private analyticsService = inject(AppAnalyticsService);
     private logger = inject(LoggerService);
+    private router = inject(Router);
     private readonly routeSortSubject = new BehaviorSubject<RouteSortState>({
         active: 'date',
         direction: 'desc',
@@ -84,6 +93,8 @@ export class RoutesPageComponent implements OnInit {
         'distance',
         'ascent',
         'descent',
+        'minGrade',
+        'maxGrade',
         'pointCount',
         'originalFilename',
         'actions',
@@ -92,6 +103,8 @@ export class RoutesPageComponent implements OnInit {
         distance: DataDistance.type,
         ascent: DataAscent.type,
         descent: DataDescent.type,
+        minGrade: DataGradeMin.type,
+        maxGrade: DataGradeMax.type,
     };
     routes$: Observable<RoutePageRouteViewModel[]> | null = null;
 
@@ -135,6 +148,19 @@ export class RoutesPageComponent implements OnInit {
         const count = await this.routeService.getRouteCount(user);
         this.routeCount.set(count);
         return count;
+    }
+
+    openRouteDetails(item: RoutePageRouteViewModel): void {
+        const routeID = item.route.id;
+        const userID = item.route.userID || this.user()?.uid;
+        if (!routeID || !userID) {
+            return;
+        }
+
+        this.analyticsService.logSavedRouteAction('open_details', {
+            fileType: this.getPrimaryRouteFileType(item.route),
+        });
+        void this.router.navigate(['/user', userID, 'route', routeID]);
     }
 
     async confirmDeleteRoute(route: FirestoreRouteJSON): Promise<void> {
@@ -287,9 +313,23 @@ export class RoutesPageComponent implements OnInit {
             routeCountLabel: `${routeCount} route${routeCount === 1 ? '' : 's'}`,
             pointCountLabel: `${pointCount} point${pointCount === 1 ? '' : 's'}`,
             waypointCountLabel: waypointCount > 0 ? `${waypointCount} waypoint${waypointCount === 1 ? '' : 's'}` : null,
-            distance: this.buildRouteMetricCell(route, [DataDistance.type, 'Distance', 'distance'], 'distance'),
-            ascent: this.buildRouteMetricCell(route, [DataAscent.type, 'Ascent', 'ascent'], 'ascent'),
-            descent: this.buildRouteMetricCell(route, [DataDescent.type, 'Descent', 'descent'], 'descent'),
+            distance: this.buildRouteMetricCell(route, [DataDistance.type, 'Distance', 'distance'], 'Distance', DataDistance.type, 'sum'),
+            ascent: this.buildRouteMetricCell(route, [DataAscent.type, 'Ascent', 'ascent'], 'Ascent', DataAscent.type, 'sum'),
+            descent: this.buildRouteMetricCell(route, [DataDescent.type, 'Descent', 'descent'], 'Descent', DataDescent.type, 'sum'),
+            minGrade: this.buildRouteMetricCell(
+                route,
+                [DataGradeMin.type, 'minGrade', 'gradeMin', 'minimumGrade'],
+                'Minimum grade',
+                DataGradeMin.type,
+                'min',
+            ),
+            maxGrade: this.buildRouteMetricCell(
+                route,
+                [DataGradeMax.type, 'maxGrade', 'gradeMax', 'maximumGrade'],
+                'Maximum grade',
+                DataGradeMax.type,
+                'max',
+            ),
         };
     }
 
@@ -300,24 +340,38 @@ export class RoutesPageComponent implements OnInit {
     private buildRouteMetricCell(
         route: FirestoreRouteJSON,
         statAliases: string[],
-        metric: 'distance' | 'ascent' | 'descent',
+        metricLabel: string,
+        dataType: string,
+        aggregation: RouteMetricAggregation,
     ): RouteMetricCell {
         const values = (Array.isArray(route.routes) ? route.routes : [])
             .map(segment => this.readRouteStatValue(segment.stats, statAliases))
             .filter((value): value is number => value !== null);
-        const total = values.length > 0 ? values.reduce((sum, value) => sum + value, 0) : null;
-        const label = total === null
+        const value = this.aggregateRouteMetricValues(values, aggregation);
+        const label = value === null
             ? '-'
-            : metric === 'distance'
-                ? this.formatDistance(total)
-                : this.formatVerticalDistance(total);
-        const metricLabel = metric.charAt(0).toUpperCase() + metric.slice(1);
+            : this.formatRouteMetricValue(dataType, value);
 
         return {
             label,
-            sortValue: total,
-            title: total === null ? `${metricLabel} unknown` : `${metricLabel}: ${label}`,
+            sortValue: value,
+            title: value === null ? `${metricLabel} unknown` : `${metricLabel}: ${label}`,
         };
+    }
+
+    private aggregateRouteMetricValues(values: number[], aggregation: RouteMetricAggregation): number | null {
+        if (values.length === 0) {
+            return null;
+        }
+
+        switch (aggregation) {
+            case 'min':
+                return Math.min(...values);
+            case 'max':
+                return Math.max(...values);
+            case 'sum':
+                return values.reduce((sum, value) => sum + value, 0);
+        }
     }
 
     private readRouteStatValue(stats: Record<string, unknown> | undefined, aliases: string[]): number | null {
@@ -367,15 +421,11 @@ export class RoutesPageComponent implements OnInit {
         return null;
     }
 
-    private formatDistance(meters: number): string {
-        if (Math.abs(meters) < 1000) {
-            return `${Math.round(meters)} m`;
-        }
-        return `${(meters / 1000).toFixed(2)} km`;
-    }
-
-    private formatVerticalDistance(meters: number): string {
-        return `${Math.round(meters)} m`;
+    private formatRouteMetricValue(dataType: string, value: number): string {
+        return resolveUnitAwareDisplayFromValue(dataType, value, this.user()?.settings?.unitSettings ?? null, {
+            stripRepeatedUnit: true,
+            compactAscentDescent: true,
+        })?.text ?? `${Math.round(value)}`;
     }
 
     private sortRouteViewModels(
@@ -408,6 +458,10 @@ export class RoutesPageComponent implements OnInit {
                 return this.compareNullableNumbers(first.ascent.sortValue, second.ascent.sortValue, direction);
             case 'descent':
                 return this.compareNullableNumbers(first.descent.sortValue, second.descent.sortValue, direction);
+            case 'minGrade':
+                return this.compareNullableNumbers(first.minGrade.sortValue, second.minGrade.sortValue, direction);
+            case 'maxGrade':
+                return this.compareNullableNumbers(first.maxGrade.sortValue, second.maxGrade.sortValue, direction);
             case 'pointCount':
                 return this.compareNullableNumbers(
                     this.toFiniteNumber(first.route.pointCount),
@@ -440,6 +494,8 @@ export class RoutesPageComponent implements OnInit {
             'distance',
             'ascent',
             'descent',
+            'minGrade',
+            'maxGrade',
             'pointCount',
             'originalFilename',
         ].includes(value);

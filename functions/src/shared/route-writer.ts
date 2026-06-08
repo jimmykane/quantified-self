@@ -25,9 +25,13 @@ const EARTH_RADIUS_METERS = 6371000;
 const ROUTE_DISTANCE_STAT_TYPE = 'Distance';
 const ROUTE_ASCENT_STAT_TYPE = 'Ascent';
 const ROUTE_DESCENT_STAT_TYPE = 'Descent';
+const ROUTE_MINIMUM_GRADE_STAT_TYPE = 'Minimum Grade';
+const ROUTE_MAXIMUM_GRADE_STAT_TYPE = 'Maximum Grade';
 const ROUTE_DISTANCE_STAT_ALIASES = [ROUTE_DISTANCE_STAT_TYPE, 'distance'];
 const ROUTE_ASCENT_STAT_ALIASES = [ROUTE_ASCENT_STAT_TYPE, 'ascent'];
 const ROUTE_DESCENT_STAT_ALIASES = [ROUTE_DESCENT_STAT_TYPE, 'descent'];
+const ROUTE_MINIMUM_GRADE_STAT_ALIASES = [ROUTE_MINIMUM_GRADE_STAT_TYPE, 'minGrade', 'gradeMin', 'minimumGrade'];
+const ROUTE_MAXIMUM_GRADE_STAT_ALIASES = [ROUTE_MAXIMUM_GRADE_STAT_TYPE, 'maxGrade', 'gradeMax', 'maximumGrade'];
 
 const consoleRouteLogAdapter: LogAdapter = {
     info: (message: string, ...args: unknown[]) => console.log('[RouteWriter]', message, ...args),
@@ -314,6 +318,33 @@ function calculateRouteVerticalChange(
     return segmentCount > 0 ? total : null;
 }
 
+function calculateRouteGrade(
+    points: RoutePointJSONInterface[],
+    direction: 'minimum' | 'maximum',
+): number | null {
+    let grade: number | null = null;
+    for (let index = 1; index < points.length; index++) {
+        const previousAltitude = toFiniteNumber(points[index - 1].altitude);
+        const currentAltitude = toFiniteNumber(points[index].altitude);
+        if (previousAltitude === null || currentAltitude === null) {
+            continue;
+        }
+
+        const segmentDistance = getDistanceBetweenRoutePoints(points[index - 1], points[index]);
+        if (segmentDistance === null || segmentDistance <= 0) {
+            continue;
+        }
+
+        const segmentGrade = ((currentAltitude - previousAltitude) / segmentDistance) * 100;
+        grade = grade === null
+            ? segmentGrade
+            : direction === 'minimum'
+                ? Math.min(grade, segmentGrade)
+                : Math.max(grade, segmentGrade);
+    }
+    return grade;
+}
+
 function getRouteStatValue(stats: Record<string, unknown>, statTypes: string[]): number | null {
     for (const statType of statTypes) {
         if (!Object.prototype.hasOwnProperty.call(stats, statType)) {
@@ -375,6 +406,8 @@ function buildRouteStatsSummary(
     ensureRouteStat(stats, ROUTE_DISTANCE_STAT_TYPE, ROUTE_DISTANCE_STAT_ALIASES, () => calculateRouteDistance(points));
     ensureRouteStat(stats, ROUTE_ASCENT_STAT_TYPE, ROUTE_ASCENT_STAT_ALIASES, () => calculateRouteVerticalChange(points, 'ascent'));
     ensureRouteStat(stats, ROUTE_DESCENT_STAT_TYPE, ROUTE_DESCENT_STAT_ALIASES, () => calculateRouteVerticalChange(points, 'descent'));
+    ensureRouteStat(stats, ROUTE_MINIMUM_GRADE_STAT_TYPE, ROUTE_MINIMUM_GRADE_STAT_ALIASES, () => calculateRouteGrade(points, 'minimum'));
+    ensureRouteStat(stats, ROUTE_MAXIMUM_GRADE_STAT_TYPE, ROUTE_MAXIMUM_GRADE_STAT_ALIASES, () => calculateRouteGrade(points, 'maximum'));
 
     return stats;
 }

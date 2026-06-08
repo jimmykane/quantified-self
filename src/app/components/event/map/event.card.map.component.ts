@@ -44,6 +44,12 @@ import { MapStyleService } from '../../../services/map-style.service';
 import { MapboxStyleSynchronizer } from '../../../services/map/mapbox-style-synchronizer';
 import { AppMapStyleName } from '../../../models/app-user.interface';
 import {
+  EventTrackMapViewSettingsState,
+  hasEventTrackMapLayerSettingsDelta,
+  normalizeEventTrackMapViewSettings,
+  resolveTrackMapInitialCamera,
+} from '../../../services/map/track-map-view-state.helper';
+import {
   correctPopupPositionToViewport,
   resolvePopupAnchorPosition
 } from '../../../services/map/mapbox-popup-positioning.utils';
@@ -54,14 +60,6 @@ import {
 } from './event-card-map.manager';
 import { isEventLapTypeAllowed } from '../../../helpers/event-lap-type.helper';
 import { isStyleReady } from '../../../services/map/mapbox-style-ready.utils';
-
-interface MapViewSettingsState {
-  showLaps: boolean;
-  showArrows: boolean;
-  strokeWidth: number;
-  mapStyle: AppMapStyleName;
-  is3D: boolean;
-}
 
 @Component({
   selector: 'app-event-card-map',
@@ -84,7 +82,7 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
   @Input() user!: User;
   @Input() selectedActivities!: ActivityInterface[];
 
-  private mapViewSettings = signal<MapViewSettingsState>({
+  private mapViewSettings = signal<EventTrackMapViewSettingsState>({
     showLaps: true,
     showArrows: true,
     strokeWidth: 2,
@@ -206,11 +204,9 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
 
     effect(() => {
       const remoteSettings = this.userSettingsQuery.mapSettings();
-      const normalized = this.normalizeMapViewSettings(remoteSettings);
+      const normalized = normalizeEventTrackMapViewSettings(remoteSettings);
       const previous = untracked(() => this.mapViewSettings());
-      const hasLayerSettingsDelta = previous.showLaps !== normalized.showLaps
-        || previous.showArrows !== normalized.showArrows
-        || previous.strokeWidth !== normalized.strokeWidth;
+      const hasLayerSettingsDelta = hasEventTrackMapLayerSettingsDelta(previous, normalized);
       const hasTerrainDelta = previous.is3D !== normalized.is3D;
 
       this.logMapSettingsState('settings-sync', {
@@ -1011,16 +1007,6 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
     return buckets[bucketIndex];
   }
 
-  private normalizeMapViewSettings(settings: any): MapViewSettingsState {
-    return {
-      showLaps: settings?.showLaps ?? true,
-      showArrows: settings?.showArrows ?? true,
-      strokeWidth: settings?.strokeWidth ?? 2,
-      mapStyle: (settings?.mapStyle as AppMapStyleName) || 'default',
-      is3D: settings?.is3D === true,
-    };
-  }
-
   private resolveActivityStrokeColor(activity: ActivityInterface): string {
     const fallbackColor = '#2ca3ff';
     const baseColor = this.sanitizeStrokeColor(
@@ -1057,26 +1043,9 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
   }
 
   private resolveInitialCamera(): { center: [number, number]; zoom: number } {
-    const firstPosition = (this.selectedActivities || [])
+    return resolveTrackMapInitialCamera((this.selectedActivities || [])
       .filter((activity) => activity.hasPositionData())
-      .map((activity) => activity.getSquashedPositionData()?.[0])
-      .find((position) =>
-        position
-        && Number.isFinite(position.latitudeDegrees)
-        && Number.isFinite(position.longitudeDegrees)
-      );
-
-    if (firstPosition) {
-      return {
-        center: [firstPosition.longitudeDegrees, firstPosition.latitudeDegrees],
-        zoom: 12,
-      };
-    }
-
-    return {
-      center: [0, 0],
-      zoom: 2,
-    };
+      .map((activity) => activity.getSquashedPositionData()?.[0]));
   }
 
   private logMapSettingsState(stage: string, state: Record<string, unknown>): void {

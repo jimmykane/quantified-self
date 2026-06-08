@@ -1,11 +1,13 @@
 import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
+import { map } from 'rxjs/operators';
 import {
     Firestore,
     collection,
     collectionData,
     deleteDoc,
     doc,
+    docData,
     getCountFromServer,
     limit,
     orderBy,
@@ -50,6 +52,12 @@ export class AppRouteService {
         const routesCollection = collection(this.firestore, 'users', user.uid, 'routes');
         const routesQuery = query(routesCollection, orderBy('importedAt', 'desc'), limit(limitCount));
         return collectionData(routesQuery, { idField: 'id' }) as Observable<FirestoreRouteJSON[]>;
+    }
+
+    getRoute(user: RouteOwner, routeID: string): Observable<FirestoreRouteJSON | null> {
+        const routeDocument = doc(this.firestore, 'users', user.uid, 'routes', routeID);
+        return (docData(routeDocument, { idField: 'id' }) as Observable<FirestoreRouteJSON | undefined>)
+            .pipe(map(route => route ?? null));
     }
 
     async getRouteCount(user: RouteOwner): Promise<number> {

@@ -16,7 +16,6 @@ import { ActivitiesTogglesComponent } from '../components/event/activities-toggl
 import { EventCardStatsTableComponent } from '../components/event/stats-table/event.card.stats-table.component';
 import { EventCardStatsGridComponent } from '../components/event/stats-grid/event.card.stats-grid.component';
 import { EventCardChartComponent } from '../components/event/chart/event.card.chart.component';
-import { EventCardChartPanelComponent } from '../components/event/chart/panel/event.card.chart.panel.component';
 import { ActivityToggleComponent } from '../components/event/activity-toggle/activity-toggle.component';
 import { EventPowerCurveComponent } from '../components/event/power-curve/event.power-curve.component';
 import { EventDurabilityCurveComponent } from '../components/event/durability-curve/event.durability-curve.component';
@@ -51,7 +50,6 @@ import { BenchmarkModule } from './benchmark.module';
         EventCardSwimLengthsComponent,
         EventCardJumpsComponent,
         EventCardChartComponent,
-        EventCardChartPanelComponent,
         EventCardChartActionsComponent,
         EventCardDevicesComponent,
         EventSummaryComponent,

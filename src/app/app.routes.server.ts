@@ -68,6 +68,7 @@ export const CLIENT_RENDERED_APP_ROUTES = [
   'routes',
   'settings',
   'user/:userID/event/:eventID',
+  'user/:userID/route/:routeID',
   'policies',
   'ai-insights',
 ] as const;

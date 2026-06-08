@@ -114,6 +114,10 @@
           "destination": "/index.csr.html"
         },
         {
+          "source": "/user/*/route/*",
+          "destination": "/index.csr.html"
+        },
+        {
           "source": "/policies",
           "destination": "/index.csr.html"
         },
@@ -243,6 +247,10 @@
         },
         {
           "source": "/user/*/event/*",
+          "destination": "/index.csr.html"
+        },
+        {
+          "source": "/user/*/route/*",
           "destination": "/index.csr.html"
         },
         {

@@ -1,6 +1,7 @@
 import { CommonModule } from '@angular/common';
 import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
+import { Router } from '@angular/router';
 import { firstValueFrom, of } from 'rxjs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MatDialog } from '@angular/material/dialog';
@@ -24,6 +25,7 @@ describe('RoutesPageComponent', () => {
     let fileServiceMock: any;
     let analyticsServiceMock: any;
     let loggerMock: any;
+    let routerMock: any;
 
     const route: FirestoreRouteJSON = {
         id: 'route-1',
@@ -39,6 +41,8 @@ describe('RoutesPageComponent', () => {
                 Distance: 10000,
                 Ascent: 120,
                 Descent: 118,
+                'Minimum Grade': -3.2,
+                'Maximum Grade': 8.6,
             },
             pointCount: 2,
             streamTypes: [],
@@ -88,6 +92,9 @@ describe('RoutesPageComponent', () => {
         loggerMock = {
             error: vi.fn(),
         };
+        routerMock = {
+            navigate: vi.fn().mockResolvedValue(true),
+        };
 
         TestBed.configureTestingModule({
             imports: [RoutesPageComponent],
@@ -99,6 +106,7 @@ describe('RoutesPageComponent', () => {
                 { provide: AppFileService, useValue: fileServiceMock },
                 { provide: AppAnalyticsService, useValue: analyticsServiceMock },
                 { provide: LoggerService, useValue: loggerMock },
+                { provide: Router, useValue: routerMock },
             ],
             schemas: [NO_ERRORS_SCHEMA],
         });
@@ -138,9 +146,9 @@ describe('RoutesPageComponent', () => {
             pointCountLabel: '2 points',
             waypointCountLabel: null,
             distance: {
-                label: '10.00 km',
+                label: '10.00 Km',
                 sortValue: 10000,
-                title: 'Distance: 10.00 km',
+                title: 'Distance: 10.00 Km',
             },
             ascent: {
                 label: '120 m',
@@ -151,6 +159,16 @@ describe('RoutesPageComponent', () => {
                 label: '118 m',
                 sortValue: 118,
                 title: 'Descent: 118 m',
+            },
+            minGrade: {
+                label: '-3 %',
+                sortValue: -3.2,
+                title: 'Minimum grade: -3 %',
+            },
+            maxGrade: {
+                label: '9 %',
+                sortValue: 8.6,
+                title: 'Maximum grade: 9 %',
             },
         });
         expect(routes[0].routeDate?.toISOString()).toBe('2026-01-02T00:00:00.000Z');
@@ -170,6 +188,8 @@ describe('RoutesPageComponent', () => {
                     Distance: 5000,
                     Ascent: 40,
                     Descent: 39,
+                    'Minimum Grade': -7,
+                    'Maximum Grade': 5,
                 },
                 pointCount: 1,
                 streamTypes: [],
@@ -188,7 +208,49 @@ describe('RoutesPageComponent', () => {
         const routes = await firstValueFrom(component.routes$!);
 
         expect(routes.map(item => item.route.id)).toEqual(['route-2', 'route-1']);
-        expect(routes.map(item => item.distance.label)).toEqual(['5.00 km', '10.00 km']);
+        expect(routes.map(item => item.distance.label)).toEqual(['5.00 Km', '10.00 Km']);
+    });
+
+    it('sorts route table rows by min and max grade stats', async () => {
+        const steeperRoute: FirestoreRouteJSON = {
+            ...route,
+            id: 'route-2',
+            name: 'Steeper Route',
+            routes: [{
+                id: 'segment-2',
+                name: 'Steep segment',
+                activityType: 'Running',
+                stats: {
+                    Distance: 5000,
+                    Ascent: 400,
+                    Descent: 300,
+                    'Minimum Grade': -12,
+                    'Maximum Grade': 18,
+                },
+                pointCount: 1,
+                streamTypes: [],
+            }],
+            pointCount: 1,
+            originalFiles: [{
+                path: 'users/user-1/routes/route-2/original.gpx',
+                startDate: new Date('2026-01-03T00:00:00.000Z'),
+                extension: 'gpx',
+            }],
+        };
+        routeServiceMock.getRoutes.mockReturnValueOnce(of([route, steeperRoute]));
+        await component.ngOnInit();
+
+        component.onRouteSortChange({ active: 'minGrade', direction: 'asc' });
+        let routes = await firstValueFrom(component.routes$!);
+
+        expect(routes.map(item => item.route.id)).toEqual(['route-2', 'route-1']);
+        expect(routes.map(item => item.minGrade.label)).toEqual(['-12 %', '-3 %']);
+
+        component.onRouteSortChange({ active: 'maxGrade', direction: 'desc' });
+        routes = await firstValueFrom(component.routes$!);
+
+        expect(routes.map(item => item.route.id)).toEqual(['route-2', 'route-1']);
+        expect(routes.map(item => item.maxGrade.label)).toEqual(['18 %', '9 %']);
     });
 
     it('sorts zero point routes as zero instead of missing data', async () => {
@@ -212,6 +274,18 @@ describe('RoutesPageComponent', () => {
 
         expect(routes.map(item => item.route.id)).toEqual(['route-2', 'route-1']);
         expect(routes[0].pointCountLabel).toBe('0 points');
+    });
+
+    it('opens route details from the explicit table action', async () => {
+        await component.ngOnInit();
+        const routes = await firstValueFrom(component.routes$!);
+
+        component.openRouteDetails(routes[0]);
+
+        expect(analyticsServiceMock.logSavedRouteAction).toHaveBeenCalledWith('open_details', {
+            fileType: 'gpx',
+        });
+        expect(routerMock.navigate).toHaveBeenCalledWith(['/user', 'user-1', 'route', 'route-1']);
     });
 
     it('deletes owner route documents after confirmation and refreshes count', async () => {

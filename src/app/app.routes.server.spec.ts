@@ -119,6 +119,7 @@ describe('serverRoutes', () => {
     expect(clientRoutes.find(route => route.path === 'mytracks')?.status).toBeUndefined();
     expect(clientRoutes.find(route => route.path === 'routes')?.status).toBeUndefined();
     expect(clientRoutes.find(route => route.path === 'user/:userID/event/:eventID')?.status).toBeUndefined();
+    expect(clientRoutes.find(route => route.path === 'user/:userID/route/:routeID')?.status).toBeUndefined();
   });
 
   it('keeps every top-level app route represented in the server render config', () => {

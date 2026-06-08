@@ -12,6 +12,7 @@ import { toolsCompareAuthResolver } from './resolvers/tools-compare-auth.resolve
 import { INTEGRATIONS_HUB_ROUTE_DATA, PROVIDER_INTEGRATION_ROUTE_DATA } from './components/integrations/integration-pages.content';
 import { WORKOUT_DATA_COMPARISON_ROUTE_DATA } from './components/features/workout-data-comparison-page.content';
 import { PUBLIC_FEATURE_PATHS, PUBLIC_GUIDE_PATHS, PUBLIC_SEO_ROUTE_DATA } from './components/public-seo/public-seo-pages.content';
+import { routeResolver } from './resolvers/route.resolver';
 
 const HOME_SEO_DESCRIPTION = 'Quantified Self brings Garmin, Suunto, and COROS activity data into one private training dashboard with AI Insights and automatic sync from Garmin or COROS to Suunto.';
 
@@ -358,6 +359,13 @@ export const routes: Routes = [
     path: 'user/:userID/event/:eventID',
     loadChildren: () => import('./modules/event.module').then(module => module.EventModule),
     data: { title: 'Event Details', animation: 'Event' },
+    canMatch: [authGuard, onboardingGuard]
+  },
+  {
+    path: 'user/:userID/route/:routeID',
+    loadComponent: () => import('./components/routes/route-detail/route-detail.component').then(module => module.RouteDetailComponent),
+    resolve: { route: routeResolver },
+    data: { title: 'Route Details', animation: 'Route' },
     canMatch: [authGuard, onboardingGuard]
   },
   {

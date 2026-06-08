@@ -1,0 +1,166 @@
+@if (routeDocument()) {
+<main class="route-detail-page">
+  <header class="route-detail-header" aria-labelledby="route-detail-title">
+    <div class="route-detail-title-block">
+      <a mat-button routerLink="/routes" class="route-back-link">
+        <mat-icon aria-hidden="true">arrow_back</mat-icon>
+        <span>Routes</span>
+      </a>
+      <p class="eyebrow">Routes / Detail</p>
+      <h1 id="route-detail-title">{{ routeName() }}</h1>
+      <p class="route-detail-subtitle">{{ sourceFilename() }}</p>
+    </div>
+  </header>
+
+  <section class="route-detail-summary" aria-label="Route summary">
+    <app-summary-primary-info
+      [activityType]="activityType()"
+      [iconActivityType]="activityType()"
+      [iconEvent]="null"
+      [startDate]="routeDate()"
+      fallbackTopMetaText="Saved route"
+      [metrics]="summaryMetrics()">
+      <span summary-chips class="route-chip">{{ sourceFileType() | uppercase }}</span>
+      <div summary-actions class="route-summary-actions">
+        <button mat-icon-button type="button"
+          aria-label="Download original route file"
+          matTooltip="Download original route file"
+          [disabled]="downloading() || !canManageRoute()"
+          (click)="downloadRouteOriginals()">
+          <mat-icon>download</mat-icon>
+        </button>
+        <button mat-icon-button type="button"
+          aria-label="Delete route"
+          matTooltip="Delete route"
+          [disabled]="deleting() || !canManageRoute()"
+          (click)="confirmDeleteRoute()">
+          <mat-icon>delete</mat-icon>
+        </button>
+      </div>
+    </app-summary-primary-info>
+  </section>
+
+  @if (hasMultipleSegments()) {
+  <section class="segment-selector" aria-label="Route segments">
+    <div class="segment-selector__title">
+      <mat-icon aria-hidden="true">alt_route</mat-icon>
+      <span>Segments</span>
+    </div>
+    <mat-button-toggle-group
+      class="segment-toggle-group"
+      multiple
+      [value]="selectedSegmentIDs()"
+      (change)="onSegmentSelectionChange($event.value)"
+      aria-label="Visible route segments">
+      @for (segment of segments(); track segment.id) {
+      <mat-button-toggle [value]="segment.id">
+        <span class="segment-swatch" [style.background]="segment.color"></span>
+        <span>{{ segment.label }}</span>
+      </mat-button-toggle>
+      }
+    </mat-button-toggle-group>
+    @if (!allSegmentsSelected()) {
+    <button mat-button type="button" (click)="selectAllSegments()">Show all</button>
+    }
+  </section>
+  }
+
+  <section class="route-detail-section route-detail-section--map" aria-labelledby="route-map-heading">
+    <h2 id="route-map-heading">Map</h2>
+    <app-route-map
+      [segments]="selectedSegments()"
+      [waypoints]="waypointDisplayViews()"
+      [user]="user()">
+    </app-route-map>
+
+    @if (waypointDisplayViews().length > 0) {
+    <section class="waypoint-list" aria-label="Waypoints">
+      <header>
+        <mat-icon aria-hidden="true">pin_drop</mat-icon>
+        <span>Waypoints</span>
+      </header>
+      <div class="waypoint-table-wrap">
+        <table class="waypoint-table" aria-label="Route waypoints">
+          <thead>
+            <tr>
+              <th scope="col">Waypoint</th>
+              <th scope="col">Type</th>
+              <th scope="col">Distance</th>
+              <th scope="col">Segment</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (waypoint of waypointDisplayViews(); track waypoint.id) {
+            <tr [style.--route-waypoint-color]="waypoint.color">
+              <td class="waypoint-name-cell">
+                <span class="waypoint-name-content">
+                  <span class="waypoint-color-dot" aria-hidden="true"></span>
+                  <span class="waypoint-name" [matTooltip]="waypoint.name">{{ waypoint.name }}</span>
+                </span>
+              </td>
+              <td>
+                <span class="waypoint-type">{{ waypoint.type }}</span>
+              </td>
+              <td class="waypoint-distance-cell">{{ waypoint.distanceLabel || '-' }}</td>
+              <td>
+                <span class="waypoint-segment">{{ waypoint.segmentLabel }}</span>
+              </td>
+            </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    </section>
+    }
+  </section>
+
+  <section class="route-detail-section" aria-labelledby="route-charts-heading">
+    <h2 id="route-charts-heading">Charts</h2>
+    <app-route-chart
+      [segments]="selectedSegments()"
+      [userUnitSettings]="unitSettings()"
+      [darkTheme]="darkTheme()"
+      [waterMark]="routeName()">
+    </app-route-chart>
+  </section>
+
+  <section class="route-detail-section" aria-labelledby="route-segments-heading">
+    <h2 id="route-segments-heading">Segment Details</h2>
+    <div class="segment-detail-grid">
+      @for (segment of segments(); track segment.id) {
+      <article class="segment-detail-card" [class.segment-detail-card--muted]="!selectedSegmentIDs().includes(segment.id)">
+        <header>
+          <span class="segment-swatch" [style.background]="segment.color"></span>
+          <div>
+            <strong>{{ segment.label }}</strong>
+            <span>{{ segment.activityType }}</span>
+          </div>
+        </header>
+        <dl>
+          <div>
+            <dt>Distance</dt>
+            <dd>{{ segment.distance.label }}</dd>
+          </div>
+          <div>
+            <dt>Ascent</dt>
+            <dd>{{ segment.ascent.label }}</dd>
+          </div>
+          <div>
+            <dt>Descent</dt>
+            <dd>{{ segment.descent.label }}</dd>
+          </div>
+          <div>
+            <dt>Grade</dt>
+            <dd>{{ segment.minGrade.label }} / {{ segment.maxGrade.label }}</dd>
+          </div>
+          <div>
+            <dt>Points</dt>
+            <dd>{{ segment.pointCount }}</dd>
+          </div>
+        </dl>
+      </article>
+      }
+    </div>
+  </section>
+</main>
+}
