@@ -6,6 +6,7 @@
   display: grid;
   gap: 24px;
   width: min(1440px, 100%);
+  box-sizing: border-box;
   margin: 0 auto;
   padding: 24px;
 }

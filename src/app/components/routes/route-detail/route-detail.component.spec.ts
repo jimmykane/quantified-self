@@ -277,6 +277,7 @@ describe('RouteDetailComponent', () => {
       'utf8',
     );
 
+    expect(styles).toContain('box-sizing: border-box;');
     expect(styles).toContain('.segment-toggle-group');
     expect(styles).toContain('max-height: min(28vh, 190px);');
     expect(styles).toContain('.waypoint-table-wrap');
