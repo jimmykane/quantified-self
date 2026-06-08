@@ -512,7 +512,24 @@ describe('AppToolsComparisonService', () => {
     const user = new User('user-1');
     const cursor = { id: 'cursor-1' } as any;
 
-    service.getBenchmarkComparisonPage(user, { pageSize: 25, cursor }).subscribe();
+    service.getBenchmarkComparisonPage(user, { pageSize: 25, cursor, sort: { active: 'date', direction: 'asc' } }).subscribe();
+
+    expect(eventServiceMock.getEventsPageOnceByWithMeta).toHaveBeenCalledWith(
+      user,
+      [
+        { fieldPath: 'mergeType', opStr: '==', value: 'benchmark' },
+      ],
+      'startDate',
+      true,
+      25,
+      { startAfterCursor: cursor },
+    );
+  });
+
+  it('defaults saved benchmark comparison pages to start date descending', () => {
+    const user = new User('user-1');
+
+    service.getBenchmarkComparisonPage(user, { pageSize: 25 }).subscribe();
 
     expect(eventServiceMock.getEventsPageOnceByWithMeta).toHaveBeenCalledWith(
       user,
@@ -522,7 +539,28 @@ describe('AppToolsComparisonService', () => {
       'startDate',
       false,
       25,
-      { startAfterCursor: cursor },
+      { startAfterCursor: null },
+    );
+  });
+
+  it('falls back to date sorting for unsupported saved benchmark comparison sort columns', () => {
+    const user = new User('user-1');
+    const unsupportedRequest = {
+      pageSize: 25,
+      sort: { active: 'devices', direction: 'desc' },
+    } as Parameters<AppToolsComparisonService['getBenchmarkComparisonPage']>[1];
+
+    service.getBenchmarkComparisonPage(user, unsupportedRequest).subscribe();
+
+    expect(eventServiceMock.getEventsPageOnceByWithMeta).toHaveBeenCalledWith(
+      user,
+      [
+        { fieldPath: 'mergeType', opStr: '==', value: 'benchmark' },
+      ],
+      'startDate',
+      false,
+      25,
+      { startAfterCursor: null },
     );
   });
 

@@ -37,7 +37,11 @@ import {
   ToolCompareSignInSource,
 } from '../../services/app.analytics.service';
 import { AppEventService, EventQueryCursor } from '../../services/app.event.service';
-import { AppToolsComparisonService, SavedBenchmarkComparisonsPage } from '../../services/app.tools-comparison.service';
+import {
+  AppToolsComparisonService,
+  SavedBenchmarkComparisonSortColumn,
+  SavedBenchmarkComparisonsPage,
+} from '../../services/app.tools-comparison.service';
 import { LoggerService } from '../../services/logger.service';
 import { ToolsCompareAuthResolverData } from '../../resolvers/tools-compare-auth.resolver';
 import { AppEventColorService } from '../../services/color/app.event.color.service';
@@ -70,16 +74,10 @@ interface ComparisonListItem {
   id: string;
   title: string;
   date: Date | null;
-  dateSortMs: number;
   activitySummaries: ComparisonActivitySummary[];
   devicesLabel: string;
-  devicesSort: string;
   activityTypesLabel: string;
-  activityTypesSort: string;
   activityTypesTitle: string;
-  distanceSort: number | null;
-  ascentSort: number | null;
-  descentSort: number | null;
   distanceTitle: string;
   ascentTitle: string;
   descentTitle: string;
@@ -89,12 +87,10 @@ interface ComparisonListItem {
   description: string;
   benchmarkReviewTags: string[];
   benchmarkReviewTagsTitle: string;
-  benchmarkReviewTagsSort: string | null;
   deviceFilterValues: string[];
   activityTypeFilterValues: string[];
   tagFilterValues: string[];
   sourceFilesCount: number | null;
-  sourceFilesSort: number | null;
   sourceFilesLabel: string;
   sourceFilesTitle: string;
   hasReport: boolean;
@@ -107,7 +103,6 @@ interface ComparisonListItem {
   statusTitle: string;
   statusIcon: string;
   statusState: ComparisonStatusState;
-  statusRank: number;
   filterText: string;
   event: AppEventInterface;
 }
@@ -130,9 +125,6 @@ interface ComparisonActivitySummary {
   distanceLabel: string;
   ascentLabel: string;
   descentLabel: string;
-  distanceSort: number | null;
-  ascentSort: number | null;
-  descentSort: number | null;
   filterText: string;
 }
 
@@ -153,22 +145,7 @@ interface ComparisonBenchmarkMetricLine {
   isPlaceholder: boolean;
 }
 
-type ComparisonSortColumn =
-  | 'date'
-  | 'title'
-  | 'devices'
-  | 'activityType'
-  | 'distance'
-  | 'ascent'
-  | 'descent'
-  | 'gnss'
-  | 'heartRate'
-  | 'altitude'
-  | 'description'
-  | 'tags'
-  | 'sourceFiles'
-  | 'status'
-  | 'reports';
+type ComparisonSortColumn = SavedBenchmarkComparisonSortColumn;
 type ComparisonDeviceSource = 'report' | 'legacy-report' | 'metadata' | 'activity';
 
 interface ComparisonSortState {
@@ -377,11 +354,7 @@ export class ToolsComparePageComponent implements OnInit {
   });
 
   readonly sortedComparisonItems = computed<ComparisonListItem[]>(() => {
-    const sort = this.comparisonSort();
-
-    return [...this.filteredComparisonItems()].sort((first, second) =>
-      this.compareComparisonItems(first, second, sort.active, sort.direction),
-    );
+    return this.filteredComparisonItems();
   });
 
   readonly comparisonDeviceColorItems = computed<DeviceColorPreferenceDialogDevice[]>(() => {
@@ -470,9 +443,7 @@ export class ToolsComparePageComponent implements OnInit {
     if (loaded >= total) {
       return `${total} comparison${total === 1 ? '' : 's'}`;
     }
-    const sort = this.comparisonSort();
-    const sortScopeLabel = sort.active === 'date' && sort.direction === 'desc' ? '' : '; sorting loaded rows';
-    return `${loaded} of ${total} loaded${sortScopeLabel}`;
+    return `${loaded} of ${total} loaded`;
   });
 
   ngOnInit(): void {
@@ -606,11 +577,29 @@ export class ToolsComparePageComponent implements OnInit {
     this.applyComparisonFacetFilterChange();
   }
 
-  onComparisonSortChange(sort: Sort): void {
-    const active = this.isComparisonSortColumn(sort.active) ? sort.active : 'date';
-    const direction = sort.direction || (active === 'date' ? 'desc' : 'asc');
-    this.comparisonSort.set({ active, direction });
-    this.resetComparisonPage();
+  async onComparisonSortChange(sort: Sort): Promise<void> {
+    let active: ComparisonSortColumn = 'date';
+    let requestedDirection: SortDirection = '';
+    if (this.isComparisonSortColumn(sort.active)) {
+      active = sort.active;
+      requestedDirection = sort.direction;
+    }
+    const direction = (requestedDirection || (active === 'date' ? 'desc' : 'asc')) as Exclude<SortDirection, ''>;
+    const previousSort = this.comparisonSort();
+    const nextSort: ComparisonSortState = { active, direction };
+
+    if (previousSort.active === nextSort.active && previousSort.direction === nextSort.direction) {
+      return;
+    }
+
+    this.comparisonSort.set(nextSort);
+    const user = this.currentUser();
+    if (user) {
+      await this.loadInitialComparisonPage(user);
+    } else {
+      this.resetComparisonPage();
+    }
+
     this.hapticsService.selection();
     this.analyticsService.logToolCompareSavedAction('sort', {
       sortColumn: active,
@@ -1137,7 +1126,10 @@ export class ToolsComparePageComponent implements OnInit {
       const pageSize = this.comparisonPage().pageSize;
       const [totalCount, firstPage] = await Promise.all([
         firstValueFrom(this.comparisonService.getBenchmarkComparisonCount(user)),
-        firstValueFrom(this.comparisonService.getBenchmarkComparisonPage(user, { pageSize })),
+        firstValueFrom(this.comparisonService.getBenchmarkComparisonPage(user, {
+          pageSize,
+          sort: this.comparisonSort(),
+        })),
       ]);
 
       if (!this.isCurrentComparisonLoad(loadGeneration, user)) {
@@ -1186,6 +1178,7 @@ export class ToolsComparePageComponent implements OnInit {
         const page = await firstValueFrom(this.comparisonService.getBenchmarkComparisonPage(user, {
           pageSize,
           cursor,
+          sort: this.comparisonSort(),
         }));
         if (!this.isCurrentComparisonLoad(loadGeneration, user)) {
           return false;
@@ -1575,16 +1568,10 @@ export class ToolsComparePageComponent implements OnInit {
       id: eventID,
       title: comparisonEvent.comparisonTitle || event.name || 'Benchmark comparison',
       date: event.startDate instanceof Date ? event.startDate : null,
-      dateSortMs: event.startDate instanceof Date ? event.startDate.getTime() : 0,
       activitySummaries,
       devicesLabel,
-      devicesSort: deviceNames.length > 0 ? deviceNames.join(' ').toLowerCase() : '\uffff',
       activityTypesLabel,
-      activityTypesSort: activityTypesLabel.toLowerCase(),
       activityTypesTitle: activityTypeLabels.length > 0 ? activityTypeLabels.join('\n') : 'Types unknown',
-      distanceSort: this.getMetricSort(activitySummaries, 'distanceSort'),
-      ascentSort: this.getMetricSort(activitySummaries, 'ascentSort'),
-      descentSort: this.getMetricSort(activitySummaries, 'descentSort'),
       distanceTitle: this.formatSummaryTitle(activitySummaries, summary => summary.distanceLabel, 'Distance unknown'),
       ascentTitle: this.formatSummaryTitle(activitySummaries, summary => summary.ascentLabel, 'Ascent unknown'),
       descentTitle: this.formatSummaryTitle(activitySummaries, summary => summary.descentLabel, 'Descent unknown'),
@@ -1594,12 +1581,10 @@ export class ToolsComparePageComponent implements OnInit {
       description,
       benchmarkReviewTags,
       benchmarkReviewTagsTitle,
-      benchmarkReviewTagsSort: benchmarkReviewTags.length > 0 ? benchmarkReviewTags.join(' ').toLowerCase() : null,
       deviceFilterValues,
       activityTypeFilterValues,
       tagFilterValues: benchmarkReviewTags,
       sourceFilesCount,
-      sourceFilesSort: sourceFilesCount,
       sourceFilesLabel,
       sourceFilesTitle,
       hasReport,
@@ -1612,7 +1597,6 @@ export class ToolsComparePageComponent implements OnInit {
       statusTitle: statusPresentation.title,
       statusIcon: statusPresentation.icon,
       statusState: statusPresentation.state,
-      statusRank: statusPresentation.rank,
       filterText: [
         comparisonEvent.comparisonTitle || event.name || 'Benchmark comparison',
         devicesLabel,
@@ -1638,14 +1622,13 @@ export class ToolsComparePageComponent implements OnInit {
   private resolveComparisonStatusPresentation(
     hasReport: boolean,
     benchmarkFailure: ComparisonBenchmarkFailure | null,
-  ): { label: string; title: string; icon: string; state: ComparisonStatusState; rank: number } {
+  ): { label: string; title: string; icon: string; state: ComparisonStatusState } {
     if (benchmarkFailure?.type === 'no_overlap') {
       return {
         label: 'No time overlap',
         title: `Last benchmark attempt failed: ${benchmarkFailure.message} Choose overlapping activities and rerun the benchmark.`,
         icon: 'error',
         state: 'error',
-        rank: 2,
       };
     }
 
@@ -1655,7 +1638,6 @@ export class ToolsComparePageComponent implements OnInit {
         title: 'Benchmark report is ready.',
         icon: 'check_circle',
         state: 'ready',
-        rank: 1,
       };
     }
 
@@ -1664,84 +1646,11 @@ export class ToolsComparePageComponent implements OnInit {
       title: 'No benchmark report has been generated yet.',
       icon: 'pending',
       state: 'draft',
-      rank: 0,
     };
   }
 
-  private compareComparisonItems(
-    first: ComparisonListItem,
-    second: ComparisonListItem,
-    column: ComparisonSortColumn,
-    direction: SortDirection,
-  ): number {
-    const directionMultiplier = direction === 'asc' ? 1 : -1;
-
-    switch (column) {
-      case 'date':
-        return (first.dateSortMs - second.dateSortMs) * directionMultiplier;
-      case 'title':
-        return first.title.localeCompare(second.title) * directionMultiplier;
-      case 'devices':
-        return first.devicesSort.localeCompare(second.devicesSort) * directionMultiplier;
-      case 'activityType':
-        return first.activityTypesSort.localeCompare(second.activityTypesSort) * directionMultiplier;
-      case 'distance':
-        return this.compareNullableNumbers(first.distanceSort, second.distanceSort, direction);
-      case 'ascent':
-        return this.compareNullableNumbers(first.ascentSort, second.ascentSort, direction);
-      case 'descent':
-        return this.compareNullableNumbers(first.descentSort, second.descentSort, direction);
-      case 'gnss':
-        return this.compareNullableNumbers(first.gnssBenchmark.sortValue, second.gnssBenchmark.sortValue, direction);
-      case 'heartRate':
-        return this.compareNullableNumbers(first.heartRateBenchmark.sortValue, second.heartRateBenchmark.sortValue, direction);
-      case 'altitude':
-        return this.compareNullableNumbers(first.altitudeBenchmark.sortValue, second.altitudeBenchmark.sortValue, direction);
-      case 'description':
-        return first.description.localeCompare(second.description) * directionMultiplier;
-      case 'tags':
-        return this.compareNullableStrings(first.benchmarkReviewTagsSort, second.benchmarkReviewTagsSort, direction);
-      case 'sourceFiles':
-        return this.compareNullableNumbers(first.sourceFilesSort, second.sourceFilesSort, direction);
-      case 'status':
-        return (first.statusRank - second.statusRank) * directionMultiplier;
-      case 'reports':
-        return (first.reportCount - second.reportCount) * directionMultiplier;
-    }
-
-    return 0;
-  }
-
   private isComparisonSortColumn(value: string): value is ComparisonSortColumn {
-    return ['date', 'title', 'devices', 'activityType', 'distance', 'ascent', 'descent', 'gnss', 'heartRate', 'altitude', 'description', 'tags', 'sourceFiles', 'status', 'reports'].includes(value);
-  }
-
-  private compareNullableNumbers(first: number | null, second: number | null, direction: SortDirection): number {
-    if (first === null && second === null) {
-      return 0;
-    }
-    if (first === null) {
-      return 1;
-    }
-    if (second === null) {
-      return -1;
-    }
-
-    return direction === 'asc' ? first - second : second - first;
-  }
-
-  private compareNullableStrings(first: string | null, second: string | null, direction: SortDirection): number {
-    if (first === null && second === null) {
-      return 0;
-    }
-    if (first === null) {
-      return 1;
-    }
-    if (second === null) {
-      return -1;
-    }
-
-    return first.localeCompare(second) * (direction === 'asc' ? 1 : -1);
+    return value === 'date';
   }
 
   private resolvePrimaryBenchmarkResult(event: AppEventInterface): BenchmarkResult | null {
@@ -2074,9 +1983,6 @@ export class ToolsComparePageComponent implements OnInit {
         distanceLabel,
         ascentLabel,
         descentLabel,
-        distanceSort: this.getActivityStatNumericValue(distanceStat),
-        ascentSort: this.getActivityStatNumericValue(ascentStat),
-        descentSort: this.getActivityStatNumericValue(descentStat),
         filterText: [
           deviceLabel,
           activityTypeLabel,
@@ -2228,21 +2134,6 @@ export class ToolsComparePageComponent implements OnInit {
     const displayValue = `${stat.getDisplayValue?.() ?? ''}`.trim();
     const displayUnit = `${stat.getDisplayUnit?.() ?? ''}`.trim();
     return displayUnit ? `${displayValue} ${displayUnit}`.trim() : displayValue;
-  }
-
-  private getActivityStatNumericValue(stat: DataInterface | null | undefined): number | null {
-    const value = Number(stat?.getValue?.());
-    return Number.isFinite(value) ? value : null;
-  }
-
-  private getMetricSort(
-    summaries: ComparisonActivitySummary[],
-    field: 'distanceSort' | 'ascentSort' | 'descentSort',
-  ): number | null {
-    const values = summaries
-      .map(summary => summary[field])
-      .filter((value): value is number => typeof value === 'number' && Number.isFinite(value));
-    return values.length > 0 ? Math.max(...values) : null;
   }
 
   private getDistinctLabels(labels: string[]): string[] {
