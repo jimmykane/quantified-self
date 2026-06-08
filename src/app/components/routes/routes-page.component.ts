@@ -80,7 +80,7 @@ export class RoutesPageComponent implements OnInit {
         const dialogRef = this.dialog.open(ConfirmationDialogComponent, {
             data: {
                 title: 'Delete route?',
-                message: `Delete <strong>${route.name || 'this route'}</strong> and its original file?`,
+                message: `Delete ${route.name || 'this route'} and its original file?`,
                 confirmText: 'Delete',
                 confirmColor: 'warn',
             } as ConfirmationDialogData,

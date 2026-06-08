@@ -70,6 +70,57 @@ describe('ConfirmationDialogComponent', () => {
     expect(component.confirmColor).toBe('primary');
   });
 
+  it('should render plain messages as text instead of trusted HTML', async () => {
+    await TestBed.resetTestingModule();
+    await TestBed.configureTestingModule({
+      declarations: [ConfirmationDialogComponent],
+      imports: [MatDialogModule, MatButtonModule],
+      providers: [
+        { provide: MatDialogRef, useValue: dialogRefMock },
+        { provide: MatBottomSheetRef, useValue: bottomSheetRefMock },
+        {
+          provide: MAT_DIALOG_DATA,
+          useValue: {
+            title: 'Delete route?',
+            message: 'Delete <strong>Injected route</strong> and its original file?',
+          },
+        },
+      ],
+    }).compileComponents();
+
+    fixture = TestBed.createComponent(ConfirmationDialogComponent);
+    fixture.detectChanges();
+
+    const content: HTMLElement = fixture.nativeElement.querySelector('mat-dialog-content');
+    expect(content.textContent).toContain('Delete <strong>Injected route</strong> and its original file?');
+    expect(content.querySelector('strong')).toBeNull();
+  });
+
+  it('should render explicit htmlMessage markup for trusted local copy', async () => {
+    await TestBed.resetTestingModule();
+    await TestBed.configureTestingModule({
+      declarations: [ConfirmationDialogComponent],
+      imports: [MatDialogModule, MatButtonModule],
+      providers: [
+        { provide: MatDialogRef, useValue: dialogRefMock },
+        { provide: MatBottomSheetRef, useValue: bottomSheetRefMock },
+        {
+          provide: MAT_DIALOG_DATA,
+          useValue: {
+            title: 'Disconnect service?',
+            htmlMessage: 'Disable <strong>Garmin -> Suunto</strong> sync?',
+          },
+        },
+      ],
+    }).compileComponents();
+
+    fixture = TestBed.createComponent(ConfirmationDialogComponent);
+    fixture.detectChanges();
+
+    const content: HTMLElement = fixture.nativeElement.querySelector('mat-dialog-content');
+    expect(content.querySelector('strong')?.textContent).toBe('Garmin -> Suunto');
+  });
+
   it('should close dialog and bottom-sheet with selected decision', () => {
     component.onConfirm();
     expect(dialogRefMock.close).toHaveBeenCalledWith(true);

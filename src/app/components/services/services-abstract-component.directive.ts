@@ -290,7 +290,7 @@ export abstract class ServicesAbstractComponentDirective implements OnInit, OnDe
     const dialogRef = this.dialog.open(ConfirmationDialogComponent, {
       data: {
         title: `Disconnect ${this.getPartnerDisplayName()}?`,
-        message: this.buildDisconnectImpactMessageHtml(impactedRoutes),
+        htmlMessage: this.buildDisconnectImpactMessageHtml(impactedRoutes),
         confirmLabel: 'Disconnect and disable sync',
         cancelLabel: 'Keep connected',
         confirmColor: 'warn',

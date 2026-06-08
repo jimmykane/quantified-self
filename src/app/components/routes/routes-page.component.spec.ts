@@ -13,6 +13,7 @@ import { AppRouteService } from '../../services/app.route.service';
 import { LoggerService } from '../../services/logger.service';
 import { RoutesPageComponent } from './routes-page.component';
 import { FirestoreRouteJSON } from '@shared/app-route.interface';
+import { ConfirmationDialogComponent } from '../confirmation-dialog/confirmation-dialog.component';
 
 describe('RoutesPageComponent', () => {
     let component: RoutesPageComponent;
@@ -129,10 +130,22 @@ describe('RoutesPageComponent', () => {
 
     it('deletes owner route documents after confirmation and refreshes count', async () => {
         await component.ngOnInit();
+        const routeWithMarkupName = {
+            ...route,
+            name: '<strong>Morning Route</strong>',
+        };
 
-        await component.confirmDeleteRoute(route);
+        await component.confirmDeleteRoute(routeWithMarkupName);
 
-        expect(dialogMock.open).toHaveBeenCalled();
+        expect(dialogMock.open).toHaveBeenCalledWith(
+            ConfirmationDialogComponent,
+            expect.objectContaining({
+                data: expect.objectContaining({
+                    message: 'Delete <strong>Morning Route</strong> and its original file?',
+                }),
+            }),
+        );
+        expect(dialogMock.open.mock.calls[0][1].data.htmlMessage).toBeUndefined();
         expect(routeServiceMock.deleteRoute).toHaveBeenCalledWith({ uid: 'user-1' }, 'route-1');
         expect(routeServiceMock.getRouteCount).toHaveBeenCalledTimes(2);
         expect(analyticsServiceMock.logSavedRouteAction).toHaveBeenCalledWith('delete', {
