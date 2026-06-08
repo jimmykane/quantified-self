@@ -36,6 +36,52 @@
       </div>
     </section>
 
+    @if (loadedRouteCount() > 0) {
+    <div class="route-table-controls">
+      <mat-form-field appearance="outline" class="route-filter-field" subscriptSizing="dynamic">
+        <mat-label>Filter loaded routes</mat-label>
+        <input
+          matInput
+          type="search"
+          [value]="routeFilter()"
+          (input)="updateRouteFilter($any($event.target).value)">
+        @if (routeFilter()) {
+        <button matSuffix mat-icon-button type="button" aria-label="Clear route filter" (click)="updateRouteFilter('')">
+          <mat-icon>close</mat-icon>
+        </button>
+        }
+      </mat-form-field>
+      <mat-form-field appearance="outline" class="route-facet-filter-field" subscriptSizing="dynamic">
+        <mat-label>Source</mat-label>
+        <mat-select
+          [value]="routeFileTypeFilter()"
+          [disabled]="routeFileTypeFilterOptions().length === 0"
+          (selectionChange)="updateRouteFileTypeFilter($event.value)">
+          <mat-option value="">All sources</mat-option>
+          @for (option of routeFileTypeFilterOptions(); track option.value) {
+          <mat-option [value]="option.value">{{ option.label }}</mat-option>
+          }
+        </mat-select>
+      </mat-form-field>
+      <mat-form-field appearance="outline" class="route-facet-filter-field" subscriptSizing="dynamic">
+        <mat-label>Activity type</mat-label>
+        <mat-select
+          [value]="routeActivityTypeFilter()"
+          [disabled]="routeActivityTypeFilterOptions().length === 0"
+          (selectionChange)="updateRouteActivityTypeFilter($event.value)">
+          <mat-option value="">All types</mat-option>
+          @for (option of routeActivityTypeFilterOptions(); track option.value) {
+          <mat-option [value]="option.value">{{ option.label }}</mat-option>
+          }
+        </mat-select>
+      </mat-form-field>
+      <div class="route-table-actions">
+        <span class="route-result-summary">{{ routeResultSummary() }}</span>
+      </div>
+    </div>
+    }
+
+    @if (loadedRouteCount() > 0) {
     @if (routes.length > 0) {
     <section class="route-table-shell" aria-label="Saved routes">
       <table
@@ -229,6 +275,13 @@
         </tr>
       </table>
     </section>
+    } @else {
+    <section class="empty-routes">
+      <mat-icon aria-hidden="true">search_off</mat-icon>
+      <h2>No loaded routes match this filter</h2>
+      <p>Adjust the filter text, source, or activity type.</p>
+    </section>
+    }
     } @else {
     <section class="empty-routes">
       <mat-icon aria-hidden="true">route</mat-icon>

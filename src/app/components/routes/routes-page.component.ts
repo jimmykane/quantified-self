@@ -1,4 +1,4 @@
-import { Component, OnInit, inject, signal } from '@angular/core';
+import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { firstValueFrom, BehaviorSubject, combineLatest, map, Observable } from 'rxjs';
 import { MatDialog } from '@angular/material/dialog';
 import { Router } from '@angular/router';
@@ -21,6 +21,7 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../confirma
 import { SharedModule } from '../../modules/shared.module';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { AppFileService } from '../../services/app.file.service';
+import { AppHapticsService } from '../../services/app.haptics.service';
 import { AppRouteService } from '../../services/app.route.service';
 import { LoggerService } from '../../services/logger.service';
 import { UploadRoutesComponent } from '../upload/upload-routes/upload-routes.component';
@@ -33,7 +34,9 @@ interface RoutePageRouteViewModel {
     activityTypes: string;
     activityTypeSummaries: RouteActivityTypeSummary[];
     activityTypesTitle: string;
+    activityTypeFilterValues: string[];
     fileType: string;
+    fileTypeFilterValue: string;
     originalFilename: string;
     routeCountLabel: string;
     pointCountLabel: string;
@@ -43,6 +46,7 @@ interface RoutePageRouteViewModel {
     descent: RouteMetricCell;
     minGrade: RouteMetricCell;
     maxGrade: RouteMetricCell;
+    filterText: string;
 }
 
 interface RouteMetricCell {
@@ -76,6 +80,17 @@ interface RouteSortState {
     direction: SortDirection;
 }
 
+interface RouteFilterState {
+    text: string;
+    fileType: string;
+    activityType: string;
+}
+
+interface RouteFilterOption {
+    value: string;
+    label: string;
+}
+
 @Component({
     selector: 'app-routes-page',
     standalone: true,
@@ -90,19 +105,50 @@ export class RoutesPageComponent implements OnInit {
     private snackBar = inject(MatSnackBar);
     private fileService = inject(AppFileService);
     private analyticsService = inject(AppAnalyticsService);
+    private hapticsService = inject(AppHapticsService);
     private logger = inject(LoggerService);
     private router = inject(Router);
     private readonly routeSortSubject = new BehaviorSubject<RouteSortState>({
         active: 'date',
         direction: 'desc',
     });
+    private readonly routeFilterSubject = new BehaviorSubject<RouteFilterState>({
+        text: '',
+        fileType: '',
+        activityType: '',
+    });
+    private readonly loadedRouteViewModels = signal<RoutePageRouteViewModel[]>([]);
 
     readonly user = signal<User | null>(null);
     readonly deletingRouteID = signal<string | null>(null);
     readonly downloadingRouteID = signal<string | null>(null);
     readonly routeCount = signal<number | null>(null);
+    readonly loadedRouteCount = signal(0);
+    readonly filteredRouteCount = signal(0);
+    readonly routeFilter = signal('');
+    readonly routeFileTypeFilter = signal('');
+    readonly routeActivityTypeFilter = signal('');
+    readonly routeFileTypeFilterOptions = signal<RouteFilterOption[]>([]);
+    readonly routeActivityTypeFilterOptions = signal<RouteFilterOption[]>([]);
     readonly routeSortActive = signal<RouteSortColumn>('date');
     readonly routeSortDirection = signal<SortDirection>('desc');
+    readonly routeFilterActive = computed(() => this.isRouteFilterActive());
+    readonly routeResultSummary = computed(() => {
+        const total = Math.max(this.routeCount() ?? 0, this.loadedRouteCount());
+        const loaded = this.loadedRouteCount();
+        const filtered = this.filteredRouteCount();
+        if (loaded === 0 && total === 0) {
+            return 'No routes';
+        }
+        if (this.isRouteFilterActive()) {
+            return `${filtered} of ${loaded} loaded route${loaded === 1 ? '' : 's'}`;
+        }
+        if (loaded >= total) {
+            return `${total} route${total === 1 ? '' : 's'}`;
+        }
+        const sortActive = this.routeSortActive() !== 'date' || this.routeSortDirection() !== 'desc';
+        return `${loaded} of ${total} loaded${sortActive ? '; sorting loaded rows' : ''}`;
+    });
     readonly routeColumns = [
         'date',
         'name',
@@ -132,11 +178,18 @@ export class RoutesPageComponent implements OnInit {
             this.routes$ = combineLatest([
                 this.routeService.getRoutes(user),
                 this.routeSortSubject,
+                this.routeFilterSubject,
             ]).pipe(
-                map(([routes, routeSort]) => this.sortRouteViewModels(
-                    routes.map(route => this.toRouteViewModel(route)),
-                    routeSort,
-                )),
+                map(([routes, routeSort, routeFilter]) => {
+                    const routeViewModels = routes.map(route => this.toRouteViewModel(route));
+                    this.loadedRouteViewModels.set(routeViewModels);
+                    this.loadedRouteCount.set(routeViewModels.length);
+                    this.routeFileTypeFilterOptions.set(this.buildRouteFileTypeFilterOptions(routeViewModels));
+                    this.routeActivityTypeFilterOptions.set(this.buildRouteActivityTypeFilterOptions(routeViewModels));
+                    const filteredRouteViewModels = this.filterRouteViewModels(routeViewModels, routeFilter);
+                    this.filteredRouteCount.set(filteredRouteViewModels.length);
+                    return this.sortRouteViewModels(filteredRouteViewModels, routeSort);
+                }),
             );
             const routeCount = await this.refreshRouteCount();
             this.analyticsService.logSavedRouteAction('view', { routeCount });
@@ -153,6 +206,43 @@ export class RoutesPageComponent implements OnInit {
         this.routeSortActive.set(active);
         this.routeSortDirection.set(direction);
         this.routeSortSubject.next({ active, direction });
+        this.hapticsService.selection();
+        this.analyticsService.logSavedRouteAction('sort', {
+            sortColumn: active,
+            sortDirection: direction === 'desc' ? 'desc' : 'asc',
+            filterActive: this.isRouteFilterActive(),
+            resultCount: this.filteredRouteCount(),
+        });
+    }
+
+    updateRouteFilter(value: string): void {
+        const wasFilterActive = this.isRouteFilterActive();
+        this.routeFilter.set(value);
+        this.emitRouteFilterState();
+        if (this.isRouteFilterActive() !== wasFilterActive) {
+            this.hapticsService.selection();
+            this.analyticsService.logSavedRouteAction('filter', {
+                status: this.isRouteFilterActive() ? 'applied' : 'cleared',
+                filterActive: this.isRouteFilterActive(),
+                resultCount: this.filteredRouteCount(),
+            });
+        }
+    }
+
+    updateRouteFileTypeFilter(value: string): void {
+        if (this.routeFileTypeFilter() === value) {
+            return;
+        }
+        this.routeFileTypeFilter.set(value);
+        this.applyRouteFacetFilterChange();
+    }
+
+    updateRouteActivityTypeFilter(value: string): void {
+        if (this.routeActivityTypeFilter() === value) {
+            return;
+        }
+        this.routeActivityTypeFilter.set(value);
+        this.applyRouteFacetFilterChange();
     }
 
     async refreshRouteCount(): Promise<number | null> {
@@ -321,36 +411,66 @@ export class RoutesPageComponent implements OnInit {
         const waypointCount = this.toFiniteNumber(route.waypointCount) ?? 0;
         const activityTypeSummaries = this.buildRouteActivityTypeSummaries(route);
         const activityTypes = activityTypeSummaries.map(summary => summary.activityTypeLabel).join(', ') || 'Route';
+        const originalFilename = file?.originalFilename || file?.path?.split('/').pop() || 'Original file';
+        const fileType = route.srcFileType || file?.extension || 'route';
+        const fileTypeFilterValue = this.normalizeFilterValue(fileType);
+        const activityTypeFilterValues = this.getDistinctLabels(activityTypeSummaries.map(summary => summary.activityTypeLabel));
+        const distance = this.buildRouteMetricCell(route, [DataDistance.type, 'Distance', 'distance'], 'Distance', DataDistance.type, 'sum');
+        const ascent = this.buildRouteMetricCell(route, [DataAscent.type, 'Ascent', 'ascent'], 'Ascent', DataAscent.type, 'sum');
+        const descent = this.buildRouteMetricCell(route, [DataDescent.type, 'Descent', 'descent'], 'Descent', DataDescent.type, 'sum');
+        const minGrade = this.buildRouteMetricCell(
+            route,
+            [DataGradeMin.type, 'minGrade', 'gradeMin', 'minimumGrade'],
+            'Minimum grade',
+            DataGradeMin.type,
+            'min',
+        );
+        const maxGrade = this.buildRouteMetricCell(
+            route,
+            [DataGradeMax.type, 'maxGrade', 'gradeMax', 'maximumGrade'],
+            'Maximum grade',
+            DataGradeMax.type,
+            'max',
+        );
+        const routeName = route.name || 'Untitled route';
+        const routeCountLabel = `${routeCount} route${routeCount === 1 ? '' : 's'}`;
+        const pointCountLabel = `${pointCount} point${pointCount === 1 ? '' : 's'}`;
+        const waypointCountLabel = waypointCount > 0 ? `${waypointCount} waypoint${waypointCount === 1 ? '' : 's'}` : null;
         return {
             route,
-            name: route.name || 'Untitled route',
+            name: routeName,
             routeDate,
             routeDateSortMs: routeDate ? routeDate.getTime() : null,
             activityTypes,
             activityTypeSummaries,
+            activityTypeFilterValues,
             activityTypesTitle: activityTypeSummaries.map(summary => summary.activityTypeLabel).join('\n') || 'Route',
-            fileType: route.srcFileType || 'route',
-            originalFilename: file?.originalFilename || file?.path?.split('/').pop() || 'Original file',
-            routeCountLabel: `${routeCount} route${routeCount === 1 ? '' : 's'}`,
-            pointCountLabel: `${pointCount} point${pointCount === 1 ? '' : 's'}`,
-            waypointCountLabel: waypointCount > 0 ? `${waypointCount} waypoint${waypointCount === 1 ? '' : 's'}` : null,
-            distance: this.buildRouteMetricCell(route, [DataDistance.type, 'Distance', 'distance'], 'Distance', DataDistance.type, 'sum'),
-            ascent: this.buildRouteMetricCell(route, [DataAscent.type, 'Ascent', 'ascent'], 'Ascent', DataAscent.type, 'sum'),
-            descent: this.buildRouteMetricCell(route, [DataDescent.type, 'Descent', 'descent'], 'Descent', DataDescent.type, 'sum'),
-            minGrade: this.buildRouteMetricCell(
-                route,
-                [DataGradeMin.type, 'minGrade', 'gradeMin', 'minimumGrade'],
-                'Minimum grade',
-                DataGradeMin.type,
-                'min',
-            ),
-            maxGrade: this.buildRouteMetricCell(
-                route,
-                [DataGradeMax.type, 'maxGrade', 'gradeMax', 'maximumGrade'],
-                'Maximum grade',
-                DataGradeMax.type,
-                'max',
-            ),
+            fileType,
+            fileTypeFilterValue,
+            originalFilename,
+            routeCountLabel,
+            pointCountLabel,
+            waypointCountLabel,
+            distance,
+            ascent,
+            descent,
+            minGrade,
+            maxGrade,
+            filterText: [
+                routeName,
+                activityTypes,
+                originalFilename,
+                fileType,
+                routeDate ? routeDate.toISOString() : '',
+                routeCountLabel,
+                pointCountLabel,
+                waypointCountLabel,
+                distance.label,
+                ascent.label,
+                descent.label,
+                minGrade.label,
+                maxGrade.label,
+            ].filter(Boolean).join(' ').toLowerCase(),
         };
     }
 
@@ -417,6 +537,21 @@ export class RoutesPageComponent implements OnInit {
 
     private normalizeActivityTypeSummaryID(activityType: string): string {
         return activityType.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+    }
+
+    private getDistinctLabels(labels: string[]): string[] {
+        const distinctLabels: string[] = [];
+        const seenLabels = new Set<string>();
+        labels.forEach((label) => {
+            const normalizedLabel = `${label || ''}`.trim();
+            const key = normalizedLabel.toLowerCase();
+            if (!normalizedLabel || seenLabels.has(key)) {
+                return;
+            }
+            seenLabels.add(key);
+            distinctLabels.push(normalizedLabel);
+        });
+        return distinctLabels;
     }
 
     private resolveRouteDate(route: FirestoreRouteJSON): Date | null {
@@ -557,6 +692,93 @@ export class RoutesPageComponent implements OnInit {
             case 'originalFilename':
                 return this.compareText(first.originalFilename, second.originalFilename, direction);
         }
+    }
+
+    private filterRouteViewModels(
+        routes: RoutePageRouteViewModel[],
+        routeFilter: RouteFilterState,
+    ): RoutePageRouteViewModel[] {
+        const text = routeFilter.text.trim().toLowerCase();
+        const fileType = this.normalizeFilterValue(routeFilter.fileType);
+        const activityType = this.normalizeFilterValue(routeFilter.activityType);
+        if (!text && !fileType && !activityType) {
+            return routes;
+        }
+
+        return routes.filter((route) => {
+            if (text && !route.filterText.includes(text)) {
+                return false;
+            }
+            if (fileType && route.fileTypeFilterValue !== fileType) {
+                return false;
+            }
+            if (activityType && !route.activityTypeFilterValues.some(value => this.normalizeFilterValue(value) === activityType)) {
+                return false;
+            }
+            return true;
+        });
+    }
+
+    private buildRouteFileTypeFilterOptions(routes: RoutePageRouteViewModel[]): RouteFilterOption[] {
+        return this.buildRouteFilterOptions(routes.map(route => route.fileType), label => label.toUpperCase());
+    }
+
+    private buildRouteActivityTypeFilterOptions(routes: RoutePageRouteViewModel[]): RouteFilterOption[] {
+        return this.buildRouteFilterOptions(routes.flatMap(route => route.activityTypeFilterValues));
+    }
+
+    private buildRouteFilterOptions(
+        values: string[],
+        formatLabel: (label: string) => string = label => label,
+    ): RouteFilterOption[] {
+        const labelByValue = new Map<string, string>();
+        values.forEach((value) => {
+            const label = `${value || ''}`.trim();
+            const normalizedValue = this.normalizeFilterValue(label);
+            if (!label || !normalizedValue || labelByValue.has(normalizedValue)) {
+                return;
+            }
+            labelByValue.set(normalizedValue, formatLabel(label));
+        });
+        return Array.from(labelByValue.entries())
+            .map(([value, label]) => ({ value, label }))
+            .sort((first, second) => first.label.localeCompare(second.label, undefined, { sensitivity: 'base' }));
+    }
+
+    private emitRouteFilterState(): void {
+        const routeFilterState = this.getRouteFilterState();
+        this.filteredRouteCount.set(this.filterRouteViewModels(this.loadedRouteViewModels(), routeFilterState).length);
+        this.routeFilterSubject.next(routeFilterState);
+    }
+
+    private getRouteFilterState(): RouteFilterState {
+        return {
+            text: this.routeFilter(),
+            fileType: this.routeFileTypeFilter(),
+            activityType: this.routeActivityTypeFilter(),
+        };
+    }
+
+    private applyRouteFacetFilterChange(): void {
+        this.emitRouteFilterState();
+        this.hapticsService.selection();
+        this.analyticsService.logSavedRouteAction('filter', {
+            status: this.isRouteFilterActive() ? 'applied' : 'cleared',
+            filterActive: this.isRouteFilterActive(),
+            resultCount: this.filteredRouteCount(),
+        });
+    }
+
+    private isRouteFilterActive(): boolean {
+        return !!(
+            this.routeFilter().trim()
+            || this.routeFileTypeFilter()
+            || this.routeActivityTypeFilter()
+        );
+    }
+
+    private normalizeFilterValue(value: string): string {
+        return `${value || ''}`.trim().toLowerCase();
     }
 
     private compareText(first: string, second: string, direction: SortDirection): number {

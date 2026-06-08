@@ -12,6 +12,7 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { AppFileService } from '../../services/app.file.service';
+import { AppHapticsService } from '../../services/app.haptics.service';
 import { AppRouteService } from '../../services/app.route.service';
 import { LoggerService } from '../../services/logger.service';
 import { RoutesPageComponent } from './routes-page.component';
@@ -26,6 +27,7 @@ describe('RoutesPageComponent', () => {
     let snackBarMock: any;
     let fileServiceMock: any;
     let analyticsServiceMock: any;
+    let hapticsServiceMock: any;
     let loggerMock: any;
     let routerMock: any;
 
@@ -91,6 +93,9 @@ describe('RoutesPageComponent', () => {
             logEvent: vi.fn(),
             logSavedRouteAction: vi.fn(),
         };
+        hapticsServiceMock = {
+            selection: vi.fn(),
+        };
         loggerMock = {
             error: vi.fn(),
         };
@@ -107,6 +112,7 @@ describe('RoutesPageComponent', () => {
                 { provide: MatSnackBar, useValue: snackBarMock },
                 { provide: AppFileService, useValue: fileServiceMock },
                 { provide: AppAnalyticsService, useValue: analyticsServiceMock },
+                { provide: AppHapticsService, useValue: hapticsServiceMock },
                 { provide: LoggerService, useValue: loggerMock },
                 { provide: Router, useValue: routerMock },
             ],
@@ -144,11 +150,13 @@ describe('RoutesPageComponent', () => {
             route,
             activityTypes: 'Running',
             activityTypesTitle: 'Running',
+            activityTypeFilterValues: ['Running'],
             activityTypeSummaries: [{
                 id: 'running-0',
                 activityTypeLabel: 'Running',
                 activityTypeIconValue: 'Running',
             }],
+            fileTypeFilterValue: 'gpx',
             originalFilename: 'original.gpx',
             routeCountLabel: '1 route',
             pointCountLabel: '2 points',
@@ -181,6 +189,116 @@ describe('RoutesPageComponent', () => {
         });
         expect(routes[0].routeDate?.toISOString()).toBe('2026-01-02T00:00:00.000Z');
         expect(component.trackByRouteID(0, routes[0])).toBe('route-1');
+    });
+
+    it('filters loaded route rows with compare-style search and facets', async () => {
+        const cyclingRoute: FirestoreRouteJSON = {
+            ...route,
+            id: 'route-2',
+            name: 'Evening Ride',
+            srcFileType: 'fit',
+            routes: [{
+                id: 'segment-2',
+                name: 'Ride segment',
+                activityType: 'Cycling',
+                stats: {
+                    Distance: 24000,
+                    Ascent: 420,
+                    Descent: 410,
+                },
+                pointCount: 3,
+                streamTypes: [],
+            }],
+            routeCount: 1,
+            waypointCount: 2,
+            pointCount: 3,
+            activityTypes: ['Cycling'],
+            originalFiles: [{
+                path: 'users/user-1/routes/route-2/evening.fit',
+                originalFilename: 'evening.fit',
+                startDate: new Date('2026-01-03T00:00:00.000Z'),
+                extension: 'fit',
+            }],
+        };
+        routeServiceMock.getRoutes.mockReturnValueOnce(of([route, cyclingRoute]));
+        routeServiceMock.getRouteCount.mockResolvedValueOnce(2);
+        await component.ngOnInit();
+
+        let routes = await firstValueFrom(component.routes$!);
+
+        expect(routes.map(item => item.route.id)).toEqual(['route-2', 'route-1']);
+        expect(component.loadedRouteCount()).toBe(2);
+        expect(component.filteredRouteCount()).toBe(2);
+        expect(component.routeResultSummary()).toBe('2 routes');
+        expect(component.routeFileTypeFilterOptions()).toEqual([
+            { value: 'fit', label: 'FIT' },
+            { value: 'gpx', label: 'GPX' },
+        ]);
+        expect(component.routeActivityTypeFilterOptions()).toEqual([
+            { value: 'cycling', label: 'Cycling' },
+            { value: 'running', label: 'Running' },
+        ]);
+
+        component.updateRouteFilter('ride');
+        routes = await firstValueFrom(component.routes$!);
+
+        expect(routes.map(item => item.route.id)).toEqual(['route-2']);
+        expect(component.routeResultSummary()).toBe('1 of 2 loaded routes');
+        expect(component.routeFilterActive()).toBe(true);
+        expect(analyticsServiceMock.logSavedRouteAction).toHaveBeenCalledWith('filter', {
+            status: 'applied',
+            filterActive: true,
+            resultCount: 1,
+        });
+
+        component.updateRouteFilter('');
+        routes = await firstValueFrom(component.routes$!);
+
+        expect(routes.map(item => item.route.id)).toEqual(['route-2', 'route-1']);
+        expect(analyticsServiceMock.logSavedRouteAction).toHaveBeenCalledWith('filter', {
+            status: 'cleared',
+            filterActive: false,
+            resultCount: 2,
+        });
+
+        component.updateRouteFileTypeFilter('gpx');
+        routes = await firstValueFrom(component.routes$!);
+
+        expect(routes.map(item => item.route.id)).toEqual(['route-1']);
+        expect(analyticsServiceMock.logSavedRouteAction).toHaveBeenCalledWith('filter', {
+            status: 'applied',
+            filterActive: true,
+            resultCount: 1,
+        });
+
+        component.updateRouteActivityTypeFilter('Running');
+        routes = await firstValueFrom(component.routes$!);
+
+        expect(routes.map(item => item.route.id)).toEqual(['route-1']);
+        expect(hapticsServiceMock.selection).toHaveBeenCalledTimes(4);
+    });
+
+    it('renders compare-style route filter controls and filtered empty state', () => {
+        const template = readFileSync(
+            resolve(process.cwd(), 'src/app/components/routes/routes-page.component.html'),
+            'utf8',
+        );
+        const styles = readFileSync(
+            resolve(process.cwd(), 'src/app/components/routes/routes-page.component.scss'),
+            'utf8',
+        );
+
+        expect(template).toContain('class="route-table-controls"');
+        expect(template).toContain('Filter loaded routes');
+        expect(template).toContain('(input)="updateRouteFilter($any($event.target).value)"');
+        expect(template).toContain('(selectionChange)="updateRouteFileTypeFilter($event.value)"');
+        expect(template).toContain('(selectionChange)="updateRouteActivityTypeFilter($event.value)"');
+        expect(template).toContain('{{ routeResultSummary() }}');
+        expect(template).toContain('No loaded routes match this filter');
+        expect(styles).toContain('.route-table-controls');
+        expect(styles).toContain('.route-filter-field');
+        expect(styles).toContain('.route-facet-filter-field');
+        expect(styles).toContain('.route-result-summary');
     });
 
     it('renders route type cells with the compare icon and label structure', () => {
@@ -252,12 +370,20 @@ describe('RoutesPageComponent', () => {
         };
         routeServiceMock.getRoutes.mockReturnValueOnce(of([route, shorterRoute]));
         await component.ngOnInit();
+        await firstValueFrom(component.routes$!);
 
         component.onRouteSortChange({ active: 'distance', direction: 'asc' });
         const routes = await firstValueFrom(component.routes$!);
 
         expect(routes.map(item => item.route.id)).toEqual(['route-2', 'route-1']);
         expect(routes.map(item => item.distance.label)).toEqual(['5.00 Km', '10.00 Km']);
+        expect(hapticsServiceMock.selection).toHaveBeenCalled();
+        expect(analyticsServiceMock.logSavedRouteAction).toHaveBeenCalledWith('sort', {
+            sortColumn: 'distance',
+            sortDirection: 'asc',
+            filterActive: false,
+            resultCount: 2,
+        });
     });
 
     it('sorts route table rows by min and max grade stats', async () => {

@@ -247,6 +247,12 @@ describe('AppAnalyticsService', () => {
             fileType: 'gpx',
             zipped: false,
         });
+        service.logSavedRouteAction('sort', {
+            sortColumn: 'distance',
+            sortDirection: 'asc',
+            filterActive: true,
+            resultCount: 4,
+        });
 
         expect(logEvent).toHaveBeenCalledWith(expect.anything(), 'route_upload', {
             status: 'success',
@@ -268,6 +274,13 @@ describe('AppAnalyticsService', () => {
             file_count: 1,
             file_type: 'gpx',
             zipped: false,
+        });
+        expect(logEvent).toHaveBeenCalledWith(expect.anything(), 'saved_route_action', {
+            action: 'sort',
+            sort_column: 'distance',
+            sort_direction: 'asc',
+            filter_active: true,
+            result_count: 4,
         });
     });
 });

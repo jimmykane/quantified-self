@@ -66,8 +66,19 @@ export type RouteUploadErrorCategory =
     | 'server'
     | 'unknown'
     | 'unsupported_format';
-export type SavedRouteAction = 'view' | 'open_details' | 'rename' | 'download' | 'delete';
-export type SavedRouteActionStatus = 'success' | 'failure' | 'missing_file';
+export type SavedRouteAction = 'view' | 'filter' | 'sort' | 'open_details' | 'rename' | 'download' | 'delete';
+export type SavedRouteActionStatus = 'applied' | 'cleared' | 'success' | 'failure' | 'missing_file';
+export type SavedRouteSortColumn =
+    | 'activityTypes'
+    | 'ascent'
+    | 'date'
+    | 'descent'
+    | 'distance'
+    | 'maxGrade'
+    | 'minGrade'
+    | 'name'
+    | 'originalFilename'
+    | 'pointCount';
 
 export interface ToolCompareFileSelectionAnalytics {
     selectedCount: number;
@@ -122,6 +133,10 @@ export interface SavedRouteActionAnalytics {
     fileCount?: number;
     fileType?: RouteFileType | string;
     zipped?: boolean;
+    sortColumn?: SavedRouteSortColumn;
+    sortDirection?: 'asc' | 'desc';
+    filterActive?: boolean;
+    resultCount?: number;
 }
 
 @Injectable({ providedIn: 'root' })
@@ -343,6 +358,10 @@ export class AppAnalyticsService {
             file_count: params.fileCount,
             file_type: params.fileType,
             zipped: params.zipped,
+            sort_column: params.sortColumn,
+            sort_direction: params.sortDirection,
+            filter_active: params.filterActive,
+            result_count: params.resultCount,
         }));
     }
 
