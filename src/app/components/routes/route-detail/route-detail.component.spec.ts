@@ -152,6 +152,34 @@ describe('RouteDetailComponent', () => {
     expect(component.selectedSegments().map(segment => segment.id)).toEqual(['segment-1']);
   });
 
+  it('only exposes the segment table affordance when a route has multiple segments', () => {
+    expect(component.hasMultipleSegments()).toBe(false);
+
+    component.routeDocument.set({
+      ...routeDocument,
+      routes: [
+        routeDocument.routes[0],
+        {
+          id: 'segment-2',
+          name: 'Stored Segment 2',
+          activityType: 'Running',
+          pointCount: 2,
+          streamTypes: [],
+          stats: {},
+        },
+      ],
+    });
+    component.routeFile.set({
+      getRoutes: vi.fn(() => [
+        createParsedRoute('segment-1', 'First Segment', 0),
+        createParsedRoute('segment-2', 'Second Segment', 1),
+      ]),
+      getWaypoints: vi.fn(() => []),
+    } as unknown as RouteFileInterface);
+
+    expect(component.hasMultipleSegments()).toBe(true);
+  });
+
   it('updates visible segments from the segment table without allowing an empty map', () => {
     const firstRoute = createParsedRoute('segment-1', 'First Segment', 0);
     const secondRoute = createParsedRoute('segment-2', 'Second Segment', 1);
@@ -319,6 +347,7 @@ describe('RouteDetailComponent', () => {
     expect(chartsIndex).toBeGreaterThan(mapIndex);
     expect(segmentsIndex).toBeGreaterThan(chartsIndex);
     expect(waypointsIndex).toBeGreaterThan(segmentsIndex);
+    expect(template).toContain('@if (hasMultipleSegments())');
     expect(template).toContain('class="segment-table route-data-table"');
     expect(template).toContain('class="segment-visibility-control"');
     expect(template).toContain('(change)="onSegmentVisibilityChange(segment.id, $event.checked)"');

@@ -64,62 +64,64 @@
     </app-route-chart>
   </section>
 
-  <section class="route-detail-section" aria-labelledby="route-segments-heading">
-    <header class="route-section-header">
-      <div>
-        <h2 id="route-segments-heading">Segments</h2>
-        <p>{{ segmentSelectionLabel() }}</p>
-      </div>
-      @if (!allSegmentsSelected()) {
-      <button mat-button type="button" (click)="selectAllSegments()">Show all</button>
-      }
-    </header>
-    <div class="segment-table-wrap route-data-table-wrap">
-      <table class="segment-table route-data-table" aria-label="Route segments">
-        <thead>
-          <tr>
-            <th scope="col">Segment</th>
-            <th scope="col">Distance</th>
-            <th scope="col">Ascent</th>
-            <th scope="col">Descent</th>
-            <th scope="col">Min grade</th>
-            <th scope="col">Max grade</th>
-            <th scope="col">Points</th>
-          </tr>
-        </thead>
-        <tbody>
-          @for (segment of segments(); track segment.id) {
-          <tr
-            [class.segment-table-row--muted]="!selectedSegmentIDSet().has(segment.id)"
-            [style.--route-segment-color]="segment.color">
-            <td class="segment-name-cell">
-              <span class="segment-name-content">
-                <mat-checkbox
-                  class="segment-visibility-control"
-                  [checked]="selectedSegmentIDSet().has(segment.id)"
-                  [disabled]="selectedSegmentIDs().length <= 1 && selectedSegmentIDSet().has(segment.id)"
-                  [attr.aria-label]="'Show ' + segment.label"
-                  (change)="onSegmentVisibilityChange(segment.id, $event.checked)">
-                </mat-checkbox>
-                <span class="segment-swatch" [style.background]="segment.color" aria-hidden="true"></span>
-                <span class="segment-name-stack">
-                  <span class="segment-name" [matTooltip]="segment.label">{{ segment.label }}</span>
-                  <span class="segment-activity-type">{{ segment.activityType }}</span>
+  @if (hasMultipleSegments()) {
+    <section class="route-detail-section" aria-labelledby="route-segments-heading">
+      <header class="route-section-header">
+        <div>
+          <h2 id="route-segments-heading">Segments</h2>
+          <p>{{ segmentSelectionLabel() }}</p>
+        </div>
+        @if (!allSegmentsSelected()) {
+        <button mat-button type="button" (click)="selectAllSegments()">Show all</button>
+        }
+      </header>
+      <div class="segment-table-wrap route-data-table-wrap">
+        <table class="segment-table route-data-table" aria-label="Route segments">
+          <thead>
+            <tr>
+              <th scope="col">Segment</th>
+              <th scope="col">Distance</th>
+              <th scope="col">Ascent</th>
+              <th scope="col">Descent</th>
+              <th scope="col">Min grade</th>
+              <th scope="col">Max grade</th>
+              <th scope="col">Points</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (segment of segments(); track segment.id) {
+            <tr
+              [class.segment-table-row--muted]="!selectedSegmentIDSet().has(segment.id)"
+              [style.--route-segment-color]="segment.color">
+              <td class="segment-name-cell">
+                <span class="segment-name-content">
+                  <mat-checkbox
+                    class="segment-visibility-control"
+                    [checked]="selectedSegmentIDSet().has(segment.id)"
+                    [disabled]="selectedSegmentIDs().length <= 1 && selectedSegmentIDSet().has(segment.id)"
+                    [attr.aria-label]="'Show ' + segment.label"
+                    (change)="onSegmentVisibilityChange(segment.id, $event.checked)">
+                  </mat-checkbox>
+                  <span class="segment-swatch" [style.background]="segment.color" aria-hidden="true"></span>
+                  <span class="segment-name-stack">
+                    <span class="segment-name" [matTooltip]="segment.label">{{ segment.label }}</span>
+                    <span class="segment-activity-type">{{ segment.activityType }}</span>
+                  </span>
                 </span>
-              </span>
-            </td>
-            <td [title]="segment.distance.title">{{ segment.distance.label }}</td>
-            <td [title]="segment.ascent.title">{{ segment.ascent.label }}</td>
-            <td [title]="segment.descent.title">{{ segment.descent.label }}</td>
-            <td [title]="segment.minGrade.title">{{ segment.minGrade.label }}</td>
-            <td [title]="segment.maxGrade.title">{{ segment.maxGrade.label }}</td>
-            <td class="segment-points-cell">{{ segment.pointCount }}</td>
-          </tr>
-          }
-        </tbody>
-      </table>
-    </div>
-  </section>
+              </td>
+              <td [title]="segment.distance.title">{{ segment.distance.label }}</td>
+              <td [title]="segment.ascent.title">{{ segment.ascent.label }}</td>
+              <td [title]="segment.descent.title">{{ segment.descent.label }}</td>
+              <td [title]="segment.minGrade.title">{{ segment.minGrade.label }}</td>
+              <td [title]="segment.maxGrade.title">{{ segment.maxGrade.label }}</td>
+              <td class="segment-points-cell">{{ segment.pointCount }}</td>
+            </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    </section>
+  }
 
   @if (waypointDisplayViews().length > 0) {
   <section class="route-detail-section" aria-labelledby="route-waypoints-heading">

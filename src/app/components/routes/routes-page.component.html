@@ -86,7 +86,20 @@
             <span>Type</span>
           </span>
         </th>
-        <td mat-cell *matCellDef="let item">{{ item.activityTypes }}</td>
+        <td mat-cell *matCellDef="let item">
+          <div class="route-type-stack" [matTooltip]="item.activityTypesTitle" [attr.title]="item.activityTypesTitle">
+            @for (summary of item.activityTypeSummaries; track summary.id) {
+            <span class="route-type-line">
+              <app-activity-type-icon
+                [activityType]="summary.activityTypeIconValue"
+                size="16px"
+                vAlign="middle">
+              </app-activity-type-icon>
+              <span class="route-type-value">{{ summary.activityTypeLabel }}</span>
+            </span>
+            }
+          </div>
+        </td>
       </ng-container>
 
       <ng-container matColumnDef="distance">
@@ -187,30 +200,33 @@
         </th>
         <td mat-cell *matCellDef="let item" class="route-actions-cell">
           <button mat-icon-button type="button"
-            aria-label="Open route details"
-            matTooltip="Open route details"
-            (click)="openRouteDetails(item)">
-            <mat-icon>open_in_new</mat-icon>
-          </button>
-          <button mat-icon-button type="button"
             aria-label="Download original route file"
             matTooltip="Download original route file"
             [disabled]="downloadingRouteID() === item.route.id"
-            (click)="downloadRouteOriginals(item.route)">
+            (click)="$event.stopPropagation(); downloadRouteOriginals(item.route)">
             <mat-icon>download</mat-icon>
           </button>
           <button mat-icon-button type="button"
             aria-label="Delete route"
             matTooltip="Delete route"
             [disabled]="deletingRouteID() === item.route.id"
-            (click)="confirmDeleteRoute(item.route)">
+            (click)="$event.stopPropagation(); confirmDeleteRoute(item.route)">
             <mat-icon>delete</mat-icon>
           </button>
         </td>
       </ng-container>
 
         <tr mat-header-row *matHeaderRowDef="routeColumns"></tr>
-        <tr mat-row *matRowDef="let item; columns: routeColumns;"></tr>
+        <tr
+          mat-row
+          class="route-table-row"
+          tabindex="0"
+          *matRowDef="let item; columns: routeColumns;"
+          [attr.aria-label]="'Open route details for ' + item.name"
+          (click)="openRouteDetails(item)"
+          (keydown.enter)="openRouteDetails(item)"
+          (keydown.space)="$event.preventDefault(); openRouteDetails(item)">
+        </tr>
       </table>
     </section>
     } @else {

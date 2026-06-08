@@ -2,6 +2,8 @@ import { CommonModule } from '@angular/common';
 import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { Router } from '@angular/router';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { firstValueFrom, of } from 'rxjs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MatDialog } from '@angular/material/dialog';
@@ -141,6 +143,12 @@ describe('RoutesPageComponent', () => {
         expect(routes[0]).toMatchObject({
             route,
             activityTypes: 'Running',
+            activityTypesTitle: 'Running',
+            activityTypeSummaries: [{
+                id: 'running-0',
+                activityTypeLabel: 'Running',
+                activityTypeIconValue: 'Running',
+            }],
             originalFilename: 'original.gpx',
             routeCountLabel: '1 route',
             pointCountLabel: '2 points',
@@ -173,6 +181,47 @@ describe('RoutesPageComponent', () => {
         });
         expect(routes[0].routeDate?.toISOString()).toBe('2026-01-02T00:00:00.000Z');
         expect(component.trackByRouteID(0, routes[0])).toBe('route-1');
+    });
+
+    it('renders route type cells with the compare icon and label structure', () => {
+        const template = readFileSync(
+            resolve(process.cwd(), 'src/app/components/routes/routes-page.component.html'),
+            'utf8',
+        );
+        const styles = readFileSync(
+            resolve(process.cwd(), 'src/app/components/routes/routes-page.component.scss'),
+            'utf8',
+        );
+
+        expect(template).toContain('class="route-type-line"');
+        expect(template).toContain('<app-activity-type-icon');
+        expect(template).toContain('[activityType]="summary.activityTypeIconValue"');
+        expect(template).toContain('class="route-type-value"');
+        expect(styles).toContain('.route-type-line');
+        expect(styles).toContain('.route-type-line app-activity-type-icon');
+        expect(styles).toContain('.route-type-value');
+        expect(styles).toContain('font-weight: 500;');
+    });
+
+    it('opens route details from clickable table rows instead of an action icon', () => {
+        const template = readFileSync(
+            resolve(process.cwd(), 'src/app/components/routes/routes-page.component.html'),
+            'utf8',
+        );
+        const styles = readFileSync(
+            resolve(process.cwd(), 'src/app/components/routes/routes-page.component.scss'),
+            'utf8',
+        );
+
+        expect(template).toContain('class="route-table-row"');
+        expect(template).toContain('(click)="openRouteDetails(item)"');
+        expect(template).toContain('(keydown.enter)="openRouteDetails(item)"');
+        expect(template).toContain('(keydown.space)="$event.preventDefault(); openRouteDetails(item)"');
+        expect(template).toContain('(click)="$event.stopPropagation(); downloadRouteOriginals(item.route)"');
+        expect(template).toContain('(click)="$event.stopPropagation(); confirmDeleteRoute(item.route)"');
+        expect(template).not.toContain('<mat-icon>open_in_new</mat-icon>');
+        expect(styles).toContain('.route-table-row');
+        expect(styles).toContain('cursor: pointer;');
     });
 
     it('sorts route table rows by normalized route stats', async () => {
@@ -276,7 +325,18 @@ describe('RoutesPageComponent', () => {
         expect(routes[0].pointCountLabel).toBe('0 points');
     });
 
-    it('opens route details from the explicit table action', async () => {
+    it('keeps point count table values on the default row text color', () => {
+        const styles = readFileSync(
+            resolve(process.cwd(), 'src/app/components/routes/routes-page.component.scss'),
+            'utf8',
+        );
+
+        expect(styles).toContain('.route-detail-stack');
+        expect(styles).toContain('color: inherit;');
+        expect(styles).not.toContain('.route-detail-stack {\n  align-content: center;\n  color: var(--qs-secondary-text-color');
+    });
+
+    it('opens route details from the table row handler', async () => {
         await component.ngOnInit();
         const routes = await firstValueFrom(component.routes$!);
 

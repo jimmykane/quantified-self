@@ -124,6 +124,21 @@
   padding-top: 10px;
 }
 
+.route-table-row {
+  cursor: pointer;
+  transition: background-color 120ms ease;
+}
+
+.route-table-row:hover,
+.route-table-row:focus-visible {
+  background: color-mix(in srgb, var(--mat-sys-primary, #1976d2) 8%, transparent);
+}
+
+.route-table-row:focus-visible {
+  outline: 2px solid var(--mat-sys-primary, #1976d2);
+  outline-offset: -2px;
+}
+
 .route-header-label {
   align-items: center;
   display: inline-flex;
@@ -185,7 +200,7 @@
 .route-table .mat-column-actions {
   padding-right: 8px;
   text-align: right;
-  width: 9rem;
+  width: 6rem;
 }
 
 .route-name-cell {
@@ -227,9 +242,38 @@
   vertical-align: middle;
 }
 
+.route-type-stack {
+  align-content: center;
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.route-type-line {
+  align-items: center;
+  display: flex;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.route-type-line app-activity-type-icon {
+  flex: 0 0 auto;
+}
+
+.route-type-value {
+  display: block;
+  flex: 1 1 auto;
+  font-size: 0.92rem;
+  font-weight: 500;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .route-detail-stack {
   align-content: center;
-  color: var(--qs-secondary-text-color, rgba(0, 0, 0, 0.62));
+  color: inherit;
   display: grid;
   gap: 2px;
 }

@@ -4,7 +4,16 @@ import { MatDialog } from '@angular/material/dialog';
 import { Router } from '@angular/router';
 import { Sort, SortDirection } from '@angular/material/sort';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import { DataAscent, DataDescent, DataDistance, DataGradeMax, DataGradeMin, User } from '@sports-alliance/sports-lib';
+import {
+    ActivityTypes,
+    ActivityTypesHelper,
+    DataAscent,
+    DataDescent,
+    DataDistance,
+    DataGradeMax,
+    DataGradeMin,
+    User,
+} from '@sports-alliance/sports-lib';
 import { FirestoreRouteJSON } from '@shared/app-route.interface';
 import { resolveUnitAwareDisplayFromValue } from '@shared/unit-aware-display';
 import { AppAuthService } from '../../authentication/app.auth.service';
@@ -22,6 +31,8 @@ interface RoutePageRouteViewModel {
     routeDate: Date | null;
     routeDateSortMs: number | null;
     activityTypes: string;
+    activityTypeSummaries: RouteActivityTypeSummary[];
+    activityTypesTitle: string;
     fileType: string;
     originalFilename: string;
     routeCountLabel: string;
@@ -38,6 +49,12 @@ interface RouteMetricCell {
     label: string;
     sortValue: number | null;
     title: string;
+}
+
+interface RouteActivityTypeSummary {
+    id: string;
+    activityTypeLabel: string;
+    activityTypeIconValue: string;
 }
 
 type RouteSortColumn =
@@ -302,12 +319,16 @@ export class RoutesPageComponent implements OnInit {
         const routeCount = this.toFiniteNumber(route.routeCount) ?? 0;
         const pointCount = this.toFiniteNumber(route.pointCount) ?? 0;
         const waypointCount = this.toFiniteNumber(route.waypointCount) ?? 0;
+        const activityTypeSummaries = this.buildRouteActivityTypeSummaries(route);
+        const activityTypes = activityTypeSummaries.map(summary => summary.activityTypeLabel).join(', ') || 'Route';
         return {
             route,
             name: route.name || 'Untitled route',
             routeDate,
             routeDateSortMs: routeDate ? routeDate.getTime() : null,
-            activityTypes: route.activityTypes?.length ? route.activityTypes.join(', ') : 'Route',
+            activityTypes,
+            activityTypeSummaries,
+            activityTypesTitle: activityTypeSummaries.map(summary => summary.activityTypeLabel).join('\n') || 'Route',
             fileType: route.srcFileType || 'route',
             originalFilename: file?.originalFilename || file?.path?.split('/').pop() || 'Original file',
             routeCountLabel: `${routeCount} route${routeCount === 1 ? '' : 's'}`,
@@ -331,6 +352,71 @@ export class RoutesPageComponent implements OnInit {
                 'max',
             ),
         };
+    }
+
+    private buildRouteActivityTypeSummaries(route: FirestoreRouteJSON): RouteActivityTypeSummary[] {
+        const labels = this.getDistinctActivityTypeLabels(route.activityTypes || []);
+        const activityTypeLabels = labels.length > 0 ? labels : ['Route'];
+        return activityTypeLabels.map((activityTypeLabel, index) => ({
+            id: `${this.normalizeActivityTypeSummaryID(activityTypeLabel) || 'route'}-${index}`,
+            activityTypeLabel,
+            activityTypeIconValue: activityTypeLabel,
+        }));
+    }
+
+    private getDistinctActivityTypeLabels(activityTypes: unknown[]): string[] {
+        const labels: string[] = [];
+        const seenLabels = new Set<string>();
+        activityTypes.forEach((activityType) => {
+            const label = this.formatActivityTypeName(activityType);
+            const labelKey = label.toLowerCase();
+            if (!label || seenLabels.has(labelKey)) {
+                return;
+            }
+            seenLabels.add(labelKey);
+            labels.push(label);
+        });
+        return labels;
+    }
+
+    private formatActivityTypeName(type: unknown): string {
+        if (typeof type === 'number') {
+            const numericActivityType = (ActivityTypes as Record<string, string>)[String(type)];
+            return numericActivityType || `${type}`;
+        }
+
+        if (typeof type !== 'string') {
+            return '';
+        }
+
+        const raw = type.trim();
+        if (!raw) {
+            return '';
+        }
+
+        const resolvedActivityType = ActivityTypesHelper.resolveActivityType(raw);
+        if (resolvedActivityType) {
+            return resolvedActivityType;
+        }
+
+        const enumActivityType = (ActivityTypes as Record<string, string>)[raw];
+        if (enumActivityType) {
+            return enumActivityType;
+        }
+
+        if ((Object.values(ActivityTypes) as string[]).includes(raw)) {
+            return raw;
+        }
+
+        const normalized = raw
+            .replace(/[_-]+/g, ' ')
+            .replace(/([a-z])([A-Z])/g, '$1 $2')
+            .replace(/\s+/g, ' ');
+        return normalized ? normalized.charAt(0).toUpperCase() + normalized.slice(1) : '';
+    }
+
+    private normalizeActivityTypeSummaryID(activityType: string): string {
+        return activityType.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
     }
 
     private resolveRouteDate(route: FirestoreRouteJSON): Date | null {
