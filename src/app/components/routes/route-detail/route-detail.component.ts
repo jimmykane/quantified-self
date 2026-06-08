@@ -80,6 +80,10 @@ export class RouteDetailComponent {
     return buildRouteSegmentDetailViews(routeDocument, routeFile, this.unitSettings());
   });
   readonly hasMultipleSegments = computed(() => this.segments().length > 1);
+  readonly singleSegment = computed<RouteSegmentDetailView | null>(() => {
+    const segments = this.segments();
+    return segments.length === 1 ? segments[0] : null;
+  });
   readonly selectedSegments = computed(() => {
     const selectedIDs = new Set(this.selectedSegmentIDs());
     return this.segments().filter(segment => selectedIDs.has(segment.id));

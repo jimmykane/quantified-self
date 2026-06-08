@@ -73,6 +73,8 @@ h2 {
 .route-chip {
   display: inline-flex;
   align-items: center;
+  max-width: min(100%, 360px);
+  min-width: 0;
   min-height: 24px;
   padding: 0 10px;
   border: 1px solid var(--mat-sys-outline-variant);
@@ -81,6 +83,31 @@ h2 {
   color: var(--mat-sys-on-surface-variant);
   font-size: 0.75rem;
   font-weight: 700;
+}
+
+.route-chip--segment {
+  gap: 6px;
+  text-transform: none;
+}
+
+.route-chip-dot {
+  width: 8px;
+  height: 8px;
+  flex: 0 0 8px;
+  border-radius: 50%;
+}
+
+.route-chip-prefix {
+  color: var(--mat-sys-on-surface-variant);
+  font-weight: 650;
+}
+
+.route-chip-value {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--mat-sys-on-surface);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .route-summary-actions {

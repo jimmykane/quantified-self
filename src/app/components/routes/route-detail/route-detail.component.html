@@ -21,6 +21,13 @@
       fallbackTopMetaText="Saved route"
       [metrics]="summaryMetrics()">
       <span summary-chips class="route-chip">{{ sourceFileType() | uppercase }}</span>
+      @if (singleSegment(); as segment) {
+        <span summary-chips class="route-chip route-chip--segment" [matTooltip]="segment.label">
+          <span class="route-chip-dot" [style.background]="segment.color" aria-hidden="true"></span>
+          <span class="route-chip-prefix">Segment</span>
+          <span class="route-chip-value">{{ segment.label }}</span>
+        </span>
+      }
       <div summary-actions class="route-summary-actions">
         <button mat-icon-button type="button"
           aria-label="Rename route"

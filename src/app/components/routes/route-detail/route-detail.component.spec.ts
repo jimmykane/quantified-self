@@ -137,6 +137,7 @@ describe('RouteDetailComponent', () => {
     expect(component.routeName()).toBe('Detail Route');
     expect(component.segments()).toHaveLength(1);
     expect(component.segments()[0].id).toBe('segment-1');
+    expect(component.singleSegment()?.label).toBe('Parsed Segment');
     expect(component.selectedSegmentIDs()).toEqual(['segment-1']);
     expect(component.selectedSegments()).toHaveLength(1);
     expect(component.summaryMetrics().find(metric => metric.label === 'Points')?.value).toBe('2');
@@ -178,6 +179,7 @@ describe('RouteDetailComponent', () => {
     } as unknown as RouteFileInterface);
 
     expect(component.hasMultipleSegments()).toBe(true);
+    expect(component.singleSegment()).toBeNull();
   });
 
   it('updates visible segments from the segment table without allowing an empty map', () => {
@@ -348,6 +350,8 @@ describe('RouteDetailComponent', () => {
     expect(segmentsIndex).toBeGreaterThan(chartsIndex);
     expect(waypointsIndex).toBeGreaterThan(segmentsIndex);
     expect(template).toContain('@if (hasMultipleSegments())');
+    expect(template).toContain('@if (singleSegment(); as segment)');
+    expect(template).toContain('class="route-chip route-chip--segment"');
     expect(template).toContain('class="segment-table route-data-table"');
     expect(template).toContain('class="segment-visibility-control"');
     expect(template).toContain('(change)="onSegmentVisibilityChange(segment.id, $event.checked)"');
