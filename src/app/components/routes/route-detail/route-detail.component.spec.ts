@@ -310,8 +310,8 @@ describe('RouteDetailComponent', () => {
       'utf8',
     );
 
-    const mapIndex = template.indexOf('id="route-map-heading"');
-    const chartsIndex = template.indexOf('id="route-charts-heading"');
+    const mapIndex = template.indexOf('<app-route-map');
+    const chartsIndex = template.indexOf('<app-route-chart');
     const segmentsIndex = template.indexOf('id="route-segments-heading"');
     const waypointsIndex = template.indexOf('id="route-waypoints-heading"');
 
@@ -320,7 +320,23 @@ describe('RouteDetailComponent', () => {
     expect(segmentsIndex).toBeGreaterThan(chartsIndex);
     expect(waypointsIndex).toBeGreaterThan(segmentsIndex);
     expect(template).toContain('class="segment-table route-data-table"');
+    expect(template).toContain('class="segment-visibility-control"');
     expect(template).toContain('(change)="onSegmentVisibilityChange(segment.id, $event.checked)"');
+    expect(template).not.toContain('class="segment-visible-header"');
+    expect(template).not.toContain('id="route-map-heading"');
+    expect(template).not.toContain('id="route-charts-heading"');
+  });
+
+  it('keeps route child components out of parent card wrappers', () => {
+    const styles = readFileSync(
+      resolve(process.cwd(), 'src/app/components/routes/route-detail/route-detail.component.scss'),
+      'utf8',
+    );
+
+    expect(styles).not.toContain('.route-detail-summary,\n.route-detail-section');
+    expect(styles).not.toContain('.route-detail-section--map');
+    expect(styles).toMatch(/\.route-detail-section\s*\{\s*display: grid;\s*gap: 16px;\s*\}/);
+    expect(styles).toMatch(/\.route-detail-summary\s*\{\s*border: 1px solid var\(--mat-sys-outline-variant\);/);
   });
 
   it('bounds large segment and waypoint tables with internal scroll containers', () => {
@@ -332,10 +348,13 @@ describe('RouteDetailComponent', () => {
     expect(styles).toContain('box-sizing: border-box;');
     expect(styles).toContain('.segment-table-wrap');
     expect(styles).toContain('max-height: min(42vh, 520px);');
+    expect(styles).toContain('min-width: 900px;');
     expect(styles).toContain('.waypoint-table-wrap');
     expect(styles).toContain('max-height: min(40vh, 440px);');
+    expect(styles).toContain('min-width: 620px;');
     expect(styles).toContain('.route-data-table-wrap');
     expect(styles).toContain('.route-data-table th');
+    expect(styles).toContain("font-family: 'Barlow Condensed', 'Inter', sans-serif;");
     expect(styles).toContain('--qs-route-table-header-bg: #ffffff;');
     expect(styles).toContain(':host-context(.dark-theme) .route-data-table-wrap');
     expect(styles).toContain('background: var(--qs-route-table-header-bg);');

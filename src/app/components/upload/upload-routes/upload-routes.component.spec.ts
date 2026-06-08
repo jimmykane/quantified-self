@@ -204,6 +204,22 @@ describe('UploadRoutesComponent', () => {
     }));
   });
 
+  it('shows actionable copy when a selected route file has no route data', async () => {
+    component.user = { uid: 'u1' } as any;
+    routeUploadServiceMock.uploadRouteFile.mockRejectedValueOnce(new Error('No routes were found in the uploaded file.'));
+    mockFileReaderResult(new Uint8Array([1, 2, 3]).buffer);
+
+    await expect(component.processAndUploadFile(makeUploadFile('activity.fit', 'fit'))).rejects.toThrow(
+      'No routes were found in the uploaded file.',
+    );
+
+    expect(snackBarMock.open).toHaveBeenCalledWith(
+      'Could not upload activity.fit. No route data was found in this file. Upload a FIT course/route or a GPX file that contains route or track points.',
+      'OK',
+      { duration: 6000 },
+    );
+  });
+
   it('reports duplicate single-route upload batches as route duplicates', async () => {
     component.user = { uid: 'u1' } as any;
     routeUploadServiceMock.uploadRouteFile.mockResolvedValueOnce({

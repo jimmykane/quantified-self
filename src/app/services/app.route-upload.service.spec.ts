@@ -129,13 +129,29 @@ describe('AppRouteUploadService', () => {
       })
       .mockResolvedValueOnce({
         ok: false,
+        status: 400,
+        json: vi.fn().mockResolvedValue({ error: { message: 'No route data was found in this file.' } }),
+      })
+      .mockResolvedValueOnce({
+        ok: false,
         status: 500,
+        json: vi.fn().mockRejectedValue(new SyntaxError('not json')),
+      })
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 400,
         json: vi.fn().mockRejectedValue(new SyntaxError('not json')),
       });
 
     await expect(service.uploadFitRouteFile(new Uint8Array([1]).buffer)).rejects.toThrow('Route limit reached.');
     await expect(service.uploadFitRouteFile(new Uint8Array([1]).buffer)).rejects.toThrow(
+      'No route data was found in this file.',
+    );
+    await expect(service.uploadFitRouteFile(new Uint8Array([1]).buffer)).rejects.toThrow(
       'Route upload service is temporarily unavailable. Please try again shortly.',
+    );
+    await expect(service.uploadFitRouteFile(new Uint8Array([1]).buffer)).rejects.toThrow(
+      'Could not read this route file. Upload a FIT course/route or GPX route file and try again.',
     );
   });
 });

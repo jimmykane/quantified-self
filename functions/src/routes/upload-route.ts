@@ -302,6 +302,34 @@ async function parseUploadedRoute(payload: Buffer, resolvedExtension: string): P
   throw new HttpStatusError(400, `Unsupported route file extension: ${baseExtension}.`);
 }
 
+function getRouteParsingFailureMessage(error: unknown, resolvedExtension: string): string {
+  const message = error instanceof Error ? error.message : `${error || ''}`;
+  const normalizedMessage = message.toLowerCase();
+  const baseExtension = getBaseExtension(resolvedExtension);
+
+  if (normalizedMessage.includes('no routes found')) {
+    return 'No route data was found in this file. Upload a FIT course/route or a GPX file that contains route or track points.';
+  }
+
+  if (normalizedMessage.includes('not a route') || normalizedMessage.includes('not a route/course')) {
+    return 'This FIT file looks like an activity, not a route/course. Use activity upload for workouts, or export a course/route file.';
+  }
+
+  if (normalizedMessage.includes('unable to parse fit')) {
+    return 'Could not read this FIT route file. Export it again as a FIT course/route or GPX route and try again.';
+  }
+
+  if (baseExtension === 'gpx') {
+    return 'Could not read this GPX route file. Upload a GPX file with route or track points and try again.';
+  }
+
+  if (baseExtension === 'fit') {
+    return 'Could not read this FIT route file. Upload a FIT course/route file and try again.';
+  }
+
+  return 'Could not read this route file. Upload a FIT course/route or GPX route file and try again.';
+}
+
 function generateUploadRouteID(userID: string, payload: Buffer, resolvedExtension: string): string {
   const baseExtension = getBaseExtension(resolvedExtension);
 
@@ -828,7 +856,7 @@ export const uploadRoute = onRequest({
         throw error;
       }
       logger.warn('[uploadRoute] Route parsing failed', error);
-      throw new HttpStatusError(400, 'Could not parse uploaded route payload.');
+      throw new HttpStatusError(400, getRouteParsingFailureMessage(error, resolvedExtension));
     }
 
     if (!routeFile.hasRoutes()) {

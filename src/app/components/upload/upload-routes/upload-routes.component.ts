@@ -181,7 +181,7 @@ export class UploadRoutesComponent extends UploadAbstractDirective implements On
             errorCategory: this.resolveRouteUploadErrorCategory(error),
           });
           const message = this.getUploadErrorMessage(error);
-          this.snackBar.open(`Could not upload ${file.name}, reason: ${message}`, 'OK', { duration: 4000 });
+          this.snackBar.open(this.buildUploadFailureMessage(file.name, message), 'OK', { duration: 6000 });
           reject(error);
         }
       };
@@ -192,7 +192,7 @@ export class UploadRoutesComponent extends UploadAbstractDirective implements On
           fileType,
           errorCategory: 'file_read',
         });
-        this.snackBar.open(`Could not upload ${file.name}, reason: ${error.message}`, 'OK', { duration: 4000 });
+        this.snackBar.open(this.buildUploadFailureMessage(file.name, error.message), 'OK', { duration: 6000 });
         reject(error);
       };
 
@@ -202,6 +202,17 @@ export class UploadRoutesComponent extends UploadAbstractDirective implements On
 
   private getUploadErrorMessage(error: unknown): string {
     const rawMessage = error instanceof Error ? error.message : 'Unknown route upload error.';
+    const normalizedMessage = rawMessage.toLowerCase();
+    if (normalizedMessage.includes('no routes were found') || normalizedMessage.includes('no routes found')) {
+      return 'No route data was found in this file. Upload a FIT course/route or a GPX file that contains route or track points.';
+    }
+    if (normalizedMessage.includes('not a route') || normalizedMessage.includes('not a route/course')) {
+      return 'This FIT file looks like an activity, not a route/course. Use activity upload for workouts, or export a course/route file.';
+    }
+    if (normalizedMessage.includes('could not parse uploaded route payload')) {
+      return 'Could not read this route file. Upload a FIT course/route or GPX route file and try again.';
+    }
+
     const genericStatusMatch = rawMessage.match(/^Route upload failed \((\d{3})\)\.?$/);
     if (!genericStatusMatch) {
       return rawMessage;
@@ -218,10 +229,16 @@ export class UploadRoutesComponent extends UploadAbstractDirective implements On
       return 'Route upload is not authorized. Please sign in again.';
     }
     if (status === 400) {
-      return 'Could not process uploaded route file. Check file format and try again.';
+      return 'Could not read this route file. Upload a FIT course/route or GPX route file and try again.';
     }
 
     return rawMessage;
+  }
+
+  private buildUploadFailureMessage(fileName: string, message: string): string {
+    const normalizedMessage = message.trim() || 'Unknown route upload error.';
+    const punctuation = /[.!?]$/.test(normalizedMessage) ? '' : '.';
+    return `Could not upload ${fileName}. ${normalizedMessage}${punctuation}`;
   }
 
   protected override onUploadBatchFinished(summary: UploadBatchSummary): void {

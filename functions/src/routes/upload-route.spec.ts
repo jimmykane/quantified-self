@@ -413,6 +413,26 @@ describe('uploadRoute', () => {
     });
   });
 
+  it('returns an actionable error when the parser cannot find route data', async () => {
+    hoisted.mockSportsLib.importRoutesFromGPX = vi.fn().mockRejectedValueOnce(new Error('No routes found in GPX'));
+    const response = makeResponse();
+
+    await invokeUploadRoute(makeRequest({
+      rawBody: Buffer.from('<gpx></gpx>'),
+      headers: {
+        'x-file-extension': 'gpx',
+        'x-original-filename': 'waypoints-only.gpx',
+      },
+    }), response);
+
+    expect(response.status).toHaveBeenCalledWith(400);
+    expect(response.json).toHaveBeenCalledWith({
+      error: 'No route data was found in this file. Upload a FIT course/route or a GPX file that contains route or track points.',
+    });
+    expect(hoisted.mockStorageSave).not.toHaveBeenCalled();
+    expect(hoisted.mockRunTransaction).not.toHaveBeenCalled();
+  });
+
   it('parses gzip-compressed GPX routes from decompressed bytes while storing the original upload', async () => {
     const response = makeResponse();
     const gpxPayload = Buffer.from('<gpx><rte><rtept lat="60.1" lon="24.9"></rtept></rte></gpx>');

@@ -37,9 +37,29 @@ function mapFallbackRouteUploadErrorMessage(statusCode: number): string {
         return 'Route upload is not authorized. Please sign in again.';
     }
     if (statusCode === 400) {
-        return 'Could not process uploaded route file. Check file format and try again.';
+        return 'Could not read this route file. Upload a FIT course/route or GPX route file and try again.';
     }
     return `Route upload failed (${statusCode}).`;
+}
+
+function getPayloadTextValue(payload: unknown, key: 'error' | 'message'): string {
+    if (!payload || typeof payload !== 'object' || !(key in payload)) {
+        return '';
+    }
+
+    const value = (payload as Record<string, unknown>)[key];
+    if (typeof value === 'string') {
+        return value.trim();
+    }
+    if (value && typeof value === 'object' && 'message' in value) {
+        const nestedMessage = (value as { message?: unknown }).message;
+        return typeof nestedMessage === 'string' ? nestedMessage.trim() : '';
+    }
+    return '';
+}
+
+function getRouteUploadBackendErrorMessage(payload: unknown): string {
+    return getPayloadTextValue(payload, 'error') || getPayloadTextValue(payload, 'message');
 }
 
 @Injectable({
@@ -106,9 +126,7 @@ export class AppRouteUploadService {
         }
 
         if (!response.ok) {
-            const backendMessage = typeof payload === 'object' && payload && 'error' in payload
-                ? `${(payload as { error?: unknown }).error || ''}`
-                : '';
+            const backendMessage = getRouteUploadBackendErrorMessage(payload);
             throw new Error(backendMessage || mapFallbackRouteUploadErrorMessage(response.status));
         }
 

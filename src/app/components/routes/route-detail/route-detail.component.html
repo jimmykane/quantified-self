@@ -47,8 +47,7 @@
     </app-summary-primary-info>
   </section>
 
-  <section class="route-detail-section route-detail-section--map" aria-labelledby="route-map-heading">
-    <h2 id="route-map-heading">Map</h2>
+  <section class="route-detail-section" aria-label="Route map">
     <app-route-map
       [segments]="selectedSegments()"
       [waypoints]="waypointDisplayViews()"
@@ -56,8 +55,7 @@
     </app-route-map>
   </section>
 
-  <section class="route-detail-section" aria-labelledby="route-charts-heading">
-    <h2 id="route-charts-heading">Charts</h2>
+  <section class="route-detail-section" aria-label="Route charts">
     <app-route-chart
       [segments]="selectedSegments()"
       [userUnitSettings]="unitSettings()"
@@ -80,7 +78,6 @@
       <table class="segment-table route-data-table" aria-label="Route segments">
         <thead>
           <tr>
-            <th scope="col" class="segment-visible-header">Visible</th>
             <th scope="col">Segment</th>
             <th scope="col">Distance</th>
             <th scope="col">Ascent</th>
@@ -95,16 +92,15 @@
           <tr
             [class.segment-table-row--muted]="!selectedSegmentIDSet().has(segment.id)"
             [style.--route-segment-color]="segment.color">
-            <td class="segment-visible-cell">
-              <mat-checkbox
-                [checked]="selectedSegmentIDSet().has(segment.id)"
-                [disabled]="selectedSegmentIDs().length <= 1 && selectedSegmentIDSet().has(segment.id)"
-                [attr.aria-label]="'Show ' + segment.label"
-                (change)="onSegmentVisibilityChange(segment.id, $event.checked)">
-              </mat-checkbox>
-            </td>
             <td class="segment-name-cell">
               <span class="segment-name-content">
+                <mat-checkbox
+                  class="segment-visibility-control"
+                  [checked]="selectedSegmentIDSet().has(segment.id)"
+                  [disabled]="selectedSegmentIDs().length <= 1 && selectedSegmentIDSet().has(segment.id)"
+                  [attr.aria-label]="'Show ' + segment.label"
+                  (change)="onSegmentVisibilityChange(segment.id, $event.checked)">
+                </mat-checkbox>
                 <span class="segment-swatch" [style.background]="segment.color" aria-hidden="true"></span>
                 <span class="segment-name-stack">
                   <span class="segment-name" [matTooltip]="segment.label">{{ segment.label }}</span>
