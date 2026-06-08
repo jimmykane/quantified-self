@@ -61,8 +61,7 @@ h2 {
 }
 
 .route-detail-summary,
-.route-detail-section,
-.segment-selector {
+.route-detail-section {
   border: 1px solid var(--mat-sys-outline-variant);
   border-radius: 8px;
   background: var(--mat-sys-surface-container-lowest);
@@ -91,61 +90,6 @@ h2 {
   gap: 4px;
 }
 
-.segment-selector {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  flex-wrap: wrap;
-  padding: 12px;
-}
-
-.segment-selector__title {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-height: 36px;
-  color: var(--mat-sys-on-surface-variant);
-  font-weight: 700;
-}
-
-.segment-toggle-group {
-  display: flex;
-  flex: 1 1 520px;
-  flex-wrap: wrap;
-  align-items: stretch;
-  gap: 6px;
-  max-width: 100%;
-  max-height: min(28vh, 190px);
-  overflow: auto;
-  border: 0;
-  padding-right: 4px;
-}
-
-.segment-toggle-group mat-button-toggle {
-  overflow: hidden;
-  border: 1px solid var(--mat-sys-outline-variant);
-  border-radius: 999px;
-  background: var(--mat-sys-surface-container-low);
-}
-
-:host ::ng-deep .segment-toggle-group .mat-button-toggle-button {
-  min-height: 34px;
-}
-
-:host ::ng-deep .segment-toggle-group .mat-button-toggle-label-content {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  max-width: 220px;
-  line-height: 1.2;
-}
-
-:host ::ng-deep .segment-toggle-group .mat-button-toggle-label-content span:last-child {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .segment-swatch {
   display: inline-block;
   width: 10px;
@@ -164,39 +108,87 @@ h2 {
   gap: 14px;
 }
 
-.waypoint-list {
-  display: grid;
-  gap: 10px;
-}
-
-.waypoint-list header {
+.route-section-header {
   display: flex;
   align-items: center;
-  gap: 8px;
-  color: var(--mat-sys-on-surface-variant);
-  font-weight: 700;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
 }
 
-.waypoint-table-wrap {
+.route-section-header > div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.route-section-header p {
+  color: var(--mat-sys-on-surface-variant);
+  font-size: 0.82rem;
+}
+
+.route-data-table-wrap {
+  --qs-route-table-header-bg: #ffffff;
+
   border: 1px solid var(--mat-sys-outline-variant);
   border-radius: 8px;
   background: var(--mat-sys-surface-container-low);
-  max-height: min(40vh, 440px);
   overflow: auto;
 }
 
-.segment-detail-card {
-  border: 1px solid var(--mat-sys-outline-variant);
-  border-radius: 8px;
-  background: var(--mat-sys-surface-container-low);
+:host-context(.dark-theme) .route-data-table-wrap {
+  --qs-route-table-header-bg: #242424;
 }
 
-.waypoint-table {
+.segment-table-wrap {
+  max-height: min(42vh, 520px);
+}
+
+.waypoint-table-wrap {
+  max-height: min(40vh, 440px);
+}
+
+.route-data-table {
   width: 100%;
-  min-width: 680px;
   border-collapse: separate;
   border-spacing: 0;
   table-layout: fixed;
+}
+
+.segment-table {
+  min-width: 980px;
+}
+
+.waypoint-table {
+  min-width: 680px;
+}
+
+.segment-table th:nth-child(1),
+.segment-table td:nth-child(1) {
+  width: 72px;
+}
+
+.segment-table th:nth-child(2),
+.segment-table td:nth-child(2) {
+  width: 30%;
+}
+
+.segment-table th:nth-child(3),
+.segment-table td:nth-child(3),
+.segment-table th:nth-child(4),
+.segment-table td:nth-child(4),
+.segment-table th:nth-child(5),
+.segment-table td:nth-child(5),
+.segment-table th:nth-child(6),
+.segment-table td:nth-child(6),
+.segment-table th:nth-child(7),
+.segment-table td:nth-child(7) {
+  width: 11%;
+}
+
+.segment-table th:nth-child(8),
+.segment-table td:nth-child(8) {
+  width: 9%;
 }
 
 .waypoint-table th:nth-child(1),
@@ -219,8 +211,8 @@ h2 {
   width: 20%;
 }
 
-.waypoint-table th,
-.waypoint-table td {
+.route-data-table th,
+.route-data-table td {
   overflow: hidden;
   padding: 10px 12px;
   border-bottom: 1px solid var(--mat-sys-outline-variant);
@@ -230,19 +222,25 @@ h2 {
   white-space: nowrap;
 }
 
-.waypoint-table th {
+.route-data-table th {
   position: sticky;
   z-index: 1;
   top: 0;
-  background: var(--mat-sys-surface-container);
+  background: var(--qs-route-table-header-bg);
+  background-clip: padding-box;
   color: var(--mat-sys-on-surface-variant);
   font-size: 0.75rem;
   font-weight: 750;
 }
 
-.waypoint-table td {
+.route-data-table td {
   color: var(--mat-sys-on-surface);
   font-size: 0.88rem;
+}
+
+.segment-table tbody tr {
+  --route-segment-color: var(--mat-sys-primary);
+  box-shadow: inset 3px 0 0 var(--route-segment-color);
 }
 
 .waypoint-table tbody tr {
@@ -250,12 +248,57 @@ h2 {
   box-shadow: inset 3px 0 0 var(--route-waypoint-color);
 }
 
-.waypoint-table tbody tr:last-child td {
+.route-data-table tbody tr:last-child td {
   border-bottom: 0;
 }
 
-.waypoint-table tbody tr:hover {
+.route-data-table tbody tr:hover {
   background: var(--mat-sys-surface-container);
+}
+
+.segment-visible-header,
+.segment-visible-cell {
+  text-align: center;
+}
+
+.segment-visible-cell {
+  overflow: visible;
+}
+
+.segment-name-content {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.segment-name-stack {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.segment-name {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--mat-sys-on-surface);
+  font-weight: 700;
+  text-overflow: ellipsis;
+}
+
+.segment-activity-type {
+  color: var(--mat-sys-on-surface-variant);
+  font-size: 0.78rem;
+}
+
+.segment-points-cell,
+.waypoint-distance-cell {
+  color: var(--mat-sys-on-surface);
+  font-weight: 700;
+}
+
+.segment-table-row--muted {
+  opacity: 0.55;
 }
 
 .waypoint-name-content {
@@ -301,97 +344,13 @@ h2 {
   border-color: var(--route-waypoint-color);
 }
 
-.waypoint-distance-cell {
-  color: var(--mat-sys-on-surface);
-  font-weight: 700;
-}
-
-.segment-detail-card strong {
-  overflow: hidden;
-  color: var(--mat-sys-on-surface);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.segment-detail-card span {
-  color: var(--mat-sys-on-surface-variant);
-  font-size: 0.85rem;
-}
-
-.segment-detail-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-  align-content: start;
-  gap: 12px;
-  max-height: min(46vh, 560px);
-  overflow-y: auto;
-  padding-right: 4px;
-}
-
-.segment-detail-card {
-  display: grid;
-  gap: 12px;
-  padding: 12px;
-}
-
-.segment-detail-card--muted {
-  opacity: 0.62;
-}
-
-.segment-detail-card header {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-width: 0;
-}
-
-.segment-detail-card header div {
-  display: grid;
-  gap: 2px;
-  min-width: 0;
-}
-
-.segment-detail-card dl {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-  margin: 0;
-}
-
-.segment-detail-card dl div {
-  display: grid;
-  gap: 2px;
-}
-
-.segment-detail-card dt {
-  color: var(--mat-sys-on-surface-variant);
-  font-size: 0.75rem;
-  font-weight: 650;
-}
-
-.segment-detail-card dd {
-  margin: 0;
-  color: var(--mat-sys-on-surface);
-  font-weight: 700;
-}
-
 @media (max-width: 720px) {
   .route-detail-page {
     padding: 16px;
   }
 
-  .segment-selector {
-    align-items: stretch;
-    flex-direction: column;
-  }
-
-  .segment-toggle-group,
   .waypoint-table-wrap,
-  .segment-detail-grid {
+  .segment-table-wrap {
     max-height: 360px;
-  }
-
-  .segment-detail-card dl {
-    grid-template-columns: 1fr;
   }
 }

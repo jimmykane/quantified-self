@@ -146,12 +146,45 @@ describe('RouteDetailComponent', () => {
     });
   });
 
-  it('keeps at least one segment selected when filtering', () => {
-    component.onSegmentSelectionChange([]);
+  it('keeps a single-segment route visible when toggling segment table visibility', () => {
+    component.onSegmentVisibilityChange('segment-1', false);
     expect(component.selectedSegmentIDs()).toEqual(['segment-1']);
-
-    component.onSegmentSelectionChange('segment-1');
     expect(component.selectedSegments().map(segment => segment.id)).toEqual(['segment-1']);
+  });
+
+  it('updates visible segments from the segment table without allowing an empty map', () => {
+    const firstRoute = createParsedRoute('segment-1', 'First Segment', 0);
+    const secondRoute = createParsedRoute('segment-2', 'Second Segment', 1);
+    component.routeDocument.set({
+      ...routeDocument,
+      routes: [
+        routeDocument.routes[0],
+        {
+          id: 'segment-2',
+          name: 'Stored Segment 2',
+          activityType: 'Running',
+          pointCount: 2,
+          streamTypes: [],
+          stats: {},
+        },
+      ],
+    });
+    component.routeFile.set({
+      getRoutes: vi.fn(() => [firstRoute, secondRoute]),
+      getWaypoints: vi.fn(() => []),
+    } as unknown as RouteFileInterface);
+    component.selectedSegmentIDs.set(['segment-1', 'segment-2']);
+
+    component.onSegmentVisibilityChange('segment-1', false);
+    expect(component.selectedSegmentIDs()).toEqual(['segment-2']);
+    expect(component.segmentSelectionLabel()).toBe('1/2 visible');
+
+    component.onSegmentVisibilityChange('segment-2', false);
+    expect(component.selectedSegmentIDs()).toEqual(['segment-2']);
+
+    component.onSegmentVisibilityChange('segment-1', true);
+    expect(component.selectedSegmentIDs()).toEqual(['segment-1', 'segment-2']);
+    expect(component.allSegmentsSelected()).toBe(true);
   });
 
   it('filters waypoint details with the selected original route segments', () => {
@@ -271,21 +304,44 @@ describe('RouteDetailComponent', () => {
     expect(routeServiceMock.deleteRoute).not.toHaveBeenCalled();
   });
 
-  it('bounds large segment and waypoint lists with internal scroll containers', () => {
+  it('orders route detail sections as map, charts, segments, then waypoints', () => {
+    const template = readFileSync(
+      resolve(process.cwd(), 'src/app/components/routes/route-detail/route-detail.component.html'),
+      'utf8',
+    );
+
+    const mapIndex = template.indexOf('id="route-map-heading"');
+    const chartsIndex = template.indexOf('id="route-charts-heading"');
+    const segmentsIndex = template.indexOf('id="route-segments-heading"');
+    const waypointsIndex = template.indexOf('id="route-waypoints-heading"');
+
+    expect(mapIndex).toBeGreaterThan(-1);
+    expect(chartsIndex).toBeGreaterThan(mapIndex);
+    expect(segmentsIndex).toBeGreaterThan(chartsIndex);
+    expect(waypointsIndex).toBeGreaterThan(segmentsIndex);
+    expect(template).toContain('class="segment-table route-data-table"');
+    expect(template).toContain('(change)="onSegmentVisibilityChange(segment.id, $event.checked)"');
+  });
+
+  it('bounds large segment and waypoint tables with internal scroll containers', () => {
     const styles = readFileSync(
       resolve(process.cwd(), 'src/app/components/routes/route-detail/route-detail.component.scss'),
       'utf8',
     );
 
     expect(styles).toContain('box-sizing: border-box;');
-    expect(styles).toContain('.segment-toggle-group');
-    expect(styles).toContain('max-height: min(28vh, 190px);');
+    expect(styles).toContain('.segment-table-wrap');
+    expect(styles).toContain('max-height: min(42vh, 520px);');
     expect(styles).toContain('.waypoint-table-wrap');
     expect(styles).toContain('max-height: min(40vh, 440px);');
+    expect(styles).toContain('.route-data-table-wrap');
+    expect(styles).toContain('.route-data-table th');
+    expect(styles).toContain('--qs-route-table-header-bg: #ffffff;');
+    expect(styles).toContain(':host-context(.dark-theme) .route-data-table-wrap');
+    expect(styles).toContain('background: var(--qs-route-table-header-bg);');
     expect(styles).toContain('vertical-align: middle;');
-    expect(styles).toContain('.segment-detail-grid');
-    expect(styles).toContain('max-height: min(46vh, 560px);');
-    expect(styles.match(/overflow(?:-y)?: auto/g)?.length).toBeGreaterThanOrEqual(2);
+    expect(styles).toContain('position: sticky;');
+    expect(styles.match(/overflow(?:-y)?: auto/g)?.length).toBeGreaterThanOrEqual(1);
   });
 
   it('deletes the owner route and navigates back to routes', async () => {

@@ -83,8 +83,15 @@ export class RouteDetailComponent {
     const selectedIDs = new Set(this.selectedSegmentIDs());
     return this.segments().filter(segment => selectedIDs.has(segment.id));
   });
-  readonly hasMultipleSegments = computed(() => this.segments().length > 1);
+  readonly selectedSegmentIDSet = computed(() => new Set(this.selectedSegmentIDs()));
   readonly allSegmentsSelected = computed(() => this.selectedSegments().length === this.segments().length);
+  readonly segmentSelectionLabel = computed(() => {
+    const segmentCount = this.segments().length;
+    if (segmentCount === 0) {
+      return 'No segments';
+    }
+    return `${this.selectedSegments().length}/${segmentCount} visible`;
+  });
   readonly summaryMetrics = computed(() => {
     const routeDocument = this.routeDocument();
     if (!routeDocument) {
@@ -113,12 +120,21 @@ export class RouteDetailComponent {
       .subscribe((data) => this.applyResolvedRouteData(data['route'] as RouteResolverData | null));
   }
 
-  onSegmentSelectionChange(value: string[] | string): void {
-    const ids = Array.isArray(value) ? value : [value];
-    if (ids.length === 0) {
+  onSegmentVisibilityChange(segmentID: string, checked: boolean): void {
+    const selectedIDs = this.selectedSegmentIDs();
+    if (checked) {
+      const selectedIDSet = new Set([...selectedIDs, segmentID]);
+      this.selectedSegmentIDs.set(this.segments()
+        .map(segment => segment.id)
+        .filter(id => selectedIDSet.has(id)));
       return;
     }
-    this.selectedSegmentIDs.set(ids);
+
+    if (selectedIDs.length <= 1 && selectedIDs.includes(segmentID)) {
+      return;
+    }
+
+    this.selectedSegmentIDs.set(selectedIDs.filter(id => id !== segmentID));
   }
 
   selectAllSegments(): void {
