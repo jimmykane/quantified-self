@@ -21,6 +21,14 @@ export interface OriginalRouteFile {
 
 type JsonObject = Record<string, unknown>;
 
+const EARTH_RADIUS_METERS = 6371000;
+const ROUTE_DISTANCE_STAT_TYPE = 'Distance';
+const ROUTE_ASCENT_STAT_TYPE = 'Ascent';
+const ROUTE_DESCENT_STAT_TYPE = 'Descent';
+const ROUTE_DISTANCE_STAT_ALIASES = [ROUTE_DISTANCE_STAT_TYPE, 'distance'];
+const ROUTE_ASCENT_STAT_ALIASES = [ROUTE_ASCENT_STAT_TYPE, 'ascent'];
+const ROUTE_DESCENT_STAT_ALIASES = [ROUTE_DESCENT_STAT_TYPE, 'descent'];
+
 const consoleRouteLogAdapter: LogAdapter = {
     info: (message: string, ...args: unknown[]) => console.log('[RouteWriter]', message, ...args),
     warn: (message: string, ...args: unknown[]) => console.warn('[RouteWriter]', message, ...args),
@@ -145,7 +153,18 @@ function toDateOrNull(value: unknown): Date | null {
 }
 
 function toFiniteNumber(value: unknown): number | null {
-    return typeof value === 'number' && Number.isFinite(value) ? value : null;
+    if (typeof value === 'number') {
+        return Number.isFinite(value) ? value : null;
+    }
+    if (typeof value === 'string') {
+        const normalizedValue = value.trim();
+        if (!normalizedValue) {
+            return null;
+        }
+        const numericValue = Number(normalizedValue);
+        return Number.isFinite(numericValue) ? numericValue : null;
+    }
+    return null;
 }
 
 function getRouteStreamTypes(streams: RouteStreamsJSON | undefined): string[] {
@@ -226,10 +245,145 @@ function mergeBounds(boundsList: (RouteBounds | undefined)[]): RouteBounds | und
     }), validBounds[0]);
 }
 
+function degreesToRadians(degrees: number): number {
+    return degrees * Math.PI / 180;
+}
+
+function getDistanceBetweenRoutePoints(
+    first: RoutePointJSONInterface,
+    second: RoutePointJSONInterface,
+): number | null {
+    const firstLatitude = toFiniteNumber(first.latitudeDegrees);
+    const firstLongitude = toFiniteNumber(first.longitudeDegrees);
+    const secondLatitude = toFiniteNumber(second.latitudeDegrees);
+    const secondLongitude = toFiniteNumber(second.longitudeDegrees);
+    if (
+        firstLatitude === null
+        || firstLongitude === null
+        || secondLatitude === null
+        || secondLongitude === null
+    ) {
+        return null;
+    }
+
+    const deltaLatitude = degreesToRadians(secondLatitude - firstLatitude);
+    const deltaLongitude = degreesToRadians(secondLongitude - firstLongitude);
+    const firstLatitudeRadians = degreesToRadians(firstLatitude);
+    const secondLatitudeRadians = degreesToRadians(secondLatitude);
+    const haversine = Math.sin(deltaLatitude / 2) ** 2
+        + Math.cos(firstLatitudeRadians) * Math.cos(secondLatitudeRadians) * Math.sin(deltaLongitude / 2) ** 2;
+    return 2 * EARTH_RADIUS_METERS * Math.atan2(Math.sqrt(haversine), Math.sqrt(1 - haversine));
+}
+
+function calculateRouteDistance(points: RoutePointJSONInterface[]): number | null {
+    let distance = 0;
+    let segmentCount = 0;
+    for (let index = 1; index < points.length; index++) {
+        const segmentDistance = getDistanceBetweenRoutePoints(points[index - 1], points[index]);
+        if (segmentDistance === null) {
+            continue;
+        }
+        distance += segmentDistance;
+        segmentCount++;
+    }
+    return segmentCount > 0 ? distance : null;
+}
+
+function calculateRouteVerticalChange(
+    points: RoutePointJSONInterface[],
+    direction: 'ascent' | 'descent',
+): number | null {
+    let total = 0;
+    let segmentCount = 0;
+    for (let index = 1; index < points.length; index++) {
+        const previousAltitude = toFiniteNumber(points[index - 1].altitude);
+        const currentAltitude = toFiniteNumber(points[index].altitude);
+        if (previousAltitude === null || currentAltitude === null) {
+            continue;
+        }
+
+        const delta = currentAltitude - previousAltitude;
+        if (direction === 'ascent' && delta > 0) {
+            total += delta;
+        }
+        if (direction === 'descent' && delta < 0) {
+            total += Math.abs(delta);
+        }
+        segmentCount++;
+    }
+    return segmentCount > 0 ? total : null;
+}
+
+function getRouteStatValue(stats: Record<string, unknown>, statTypes: string[]): number | null {
+    for (const statType of statTypes) {
+        if (!Object.prototype.hasOwnProperty.call(stats, statType)) {
+            continue;
+        }
+
+        const rawStat = stats[statType];
+        const directValue = toFiniteNumber(rawStat);
+        if (directValue !== null) {
+            return directValue;
+        }
+
+        if (!rawStat || typeof rawStat !== 'object' || Array.isArray(rawStat)) {
+            continue;
+        }
+
+        const statObject = rawStat as Record<string, unknown>;
+        const objectValue = toFiniteNumber(statObject.value)
+            ?? toFiniteNumber(statObject.rawValue)
+            ?? toFiniteNumber(statObject._value);
+        if (objectValue !== null) {
+            return objectValue;
+        }
+    }
+
+    return null;
+}
+
+function ensureRouteStat(
+    stats: Record<string, unknown>,
+    canonicalStatType: string,
+    aliases: string[],
+    calculateFallback: () => number | null,
+): void {
+    if (getRouteStatValue(stats, [canonicalStatType]) !== null) {
+        return;
+    }
+
+    const existingAliasValue = getRouteStatValue(stats, aliases);
+    if (existingAliasValue !== null) {
+        stats[canonicalStatType] = existingAliasValue;
+        return;
+    }
+
+    const fallbackValue = calculateFallback();
+    if (fallbackValue !== null) {
+        stats[canonicalStatType] = fallbackValue;
+    }
+}
+
+function buildRouteStatsSummary(
+    rawStats: Record<string, unknown> | undefined,
+    points: RoutePointJSONInterface[],
+): Record<string, unknown> {
+    const stats = rawStats && typeof rawStats === 'object' && !Array.isArray(rawStats)
+        ? { ...rawStats }
+        : {};
+
+    ensureRouteStat(stats, ROUTE_DISTANCE_STAT_TYPE, ROUTE_DISTANCE_STAT_ALIASES, () => calculateRouteDistance(points));
+    ensureRouteStat(stats, ROUTE_ASCENT_STAT_TYPE, ROUTE_ASCENT_STAT_ALIASES, () => calculateRouteVerticalChange(points, 'ascent'));
+    ensureRouteStat(stats, ROUTE_DESCENT_STAT_TYPE, ROUTE_DESCENT_STAT_ALIASES, () => calculateRouteVerticalChange(points, 'descent'));
+
+    return stats;
+}
+
 function summarizeRoute(routeJSON: RouteJSONInterface): FirestoreRouteSegmentJSON {
     const points = Array.isArray(routeJSON.points) ? routeJSON.points : [];
     const bounds = getRouteBounds(points);
     const streamTypes = getRouteStreamTypes(routeJSON.streams);
+    const stats = buildRouteStatsSummary(routeJSON.stats, points);
 
     return removeUndefinedAndInvalidNumbers({
         id: routeJSON.id,
@@ -239,7 +393,7 @@ function summarizeRoute(routeJSON: RouteJSONInterface): FirestoreRouteSegmentJSO
         description: routeJSON.description ?? null,
         number: routeJSON.number ?? null,
         links: routeJSON.links,
-        stats: routeJSON.stats || {},
+        stats,
         pointCount: points.length,
         streamTypes,
         bounds,

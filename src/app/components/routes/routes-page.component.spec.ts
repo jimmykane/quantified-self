@@ -31,7 +31,18 @@ describe('RoutesPageComponent', () => {
         name: 'Morning Route',
         srcFileType: 'gpx',
         createdAt: new Date('2026-01-02T00:00:00.000Z'),
-        routes: [],
+        routes: [{
+            id: 'segment-1',
+            name: 'Segment',
+            activityType: 'Running',
+            stats: {
+                Distance: 10000,
+                Ascent: 120,
+                Descent: 118,
+            },
+            pointCount: 2,
+            streamTypes: [],
+        }],
         routeCount: 1,
         waypointCount: 0,
         pointCount: 2,
@@ -51,7 +62,7 @@ describe('RoutesPageComponent', () => {
         routeServiceMock = {
             getRoutes: vi.fn().mockReturnValue(of([route])),
             getRouteCount: vi.fn().mockResolvedValue(1),
-            getOriginalRouteFiles: vi.fn().mockReturnValue(route.originalFiles),
+            getOriginalRouteFiles: vi.fn((sourceRoute: FirestoreRouteJSON) => sourceRoute.originalFiles || []),
             downloadFile: vi.fn().mockResolvedValue(new Uint8Array([1, 2, 3]).buffer),
             deleteRoute: vi.fn().mockResolvedValue(undefined),
         };
@@ -113,7 +124,7 @@ describe('RoutesPageComponent', () => {
         });
     });
 
-    it('projects route display values for list rendering', async () => {
+    it('projects route display values for table rendering', async () => {
         await component.ngOnInit();
 
         const routes = await firstValueFrom(component.routes$!);
@@ -123,9 +134,84 @@ describe('RoutesPageComponent', () => {
             route,
             activityTypes: 'Running',
             originalFilename: 'original.gpx',
+            routeCountLabel: '1 route',
+            pointCountLabel: '2 points',
+            waypointCountLabel: null,
+            distance: {
+                label: '10.00 km',
+                sortValue: 10000,
+                title: 'Distance: 10.00 km',
+            },
+            ascent: {
+                label: '120 m',
+                sortValue: 120,
+                title: 'Ascent: 120 m',
+            },
+            descent: {
+                label: '118 m',
+                sortValue: 118,
+                title: 'Descent: 118 m',
+            },
         });
         expect(routes[0].routeDate?.toISOString()).toBe('2026-01-02T00:00:00.000Z');
         expect(component.trackByRouteID(0, routes[0])).toBe('route-1');
+    });
+
+    it('sorts route table rows by normalized route stats', async () => {
+        const shorterRoute: FirestoreRouteJSON = {
+            ...route,
+            id: 'route-2',
+            name: 'Short Route',
+            routes: [{
+                id: 'segment-2',
+                name: 'Short segment',
+                activityType: 'Running',
+                stats: {
+                    Distance: 5000,
+                    Ascent: 40,
+                    Descent: 39,
+                },
+                pointCount: 1,
+                streamTypes: [],
+            }],
+            pointCount: 1,
+            originalFiles: [{
+                path: 'users/user-1/routes/route-2/original.gpx',
+                startDate: new Date('2026-01-03T00:00:00.000Z'),
+                extension: 'gpx',
+            }],
+        };
+        routeServiceMock.getRoutes.mockReturnValueOnce(of([route, shorterRoute]));
+        await component.ngOnInit();
+
+        component.onRouteSortChange({ active: 'distance', direction: 'asc' });
+        const routes = await firstValueFrom(component.routes$!);
+
+        expect(routes.map(item => item.route.id)).toEqual(['route-2', 'route-1']);
+        expect(routes.map(item => item.distance.label)).toEqual(['5.00 km', '10.00 km']);
+    });
+
+    it('sorts zero point routes as zero instead of missing data', async () => {
+        const emptyRoute: FirestoreRouteJSON = {
+            ...route,
+            id: 'route-2',
+            name: 'Empty Route',
+            routes: [],
+            pointCount: 0,
+            originalFiles: [{
+                path: 'users/user-1/routes/route-2/original.gpx',
+                startDate: new Date('2026-01-03T00:00:00.000Z'),
+                extension: 'gpx',
+            }],
+        };
+        routeServiceMock.getRoutes.mockReturnValueOnce(of([route, emptyRoute]));
+        await component.ngOnInit();
+
+        component.onRouteSortChange({ active: 'pointCount', direction: 'asc' });
+        const routes = await firstValueFrom(component.routes$!);
+
+        expect(routes.map(item => item.route.id)).toEqual(['route-2', 'route-1']);
+        expect(routes[0].pointCountLabel).toBe('0 points');
     });
 
     it('deletes owner route documents after confirmation and refreshes count', async () => {

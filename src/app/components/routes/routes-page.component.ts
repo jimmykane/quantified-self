@@ -1,8 +1,9 @@
 import { Component, OnInit, inject, signal } from '@angular/core';
-import { firstValueFrom, map, Observable } from 'rxjs';
+import { firstValueFrom, BehaviorSubject, combineLatest, map, Observable } from 'rxjs';
 import { MatDialog } from '@angular/material/dialog';
+import { Sort, SortDirection } from '@angular/material/sort';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import { User } from '@sports-alliance/sports-lib';
+import { DataAscent, DataDescent, DataDistance, User } from '@sports-alliance/sports-lib';
 import { FirestoreRouteJSON } from '@shared/app-route.interface';
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { ConfirmationDialogComponent, ConfirmationDialogData } from '../confirmation-dialog/confirmation-dialog.component';
@@ -15,9 +16,39 @@ import { UploadRoutesComponent } from '../upload/upload-routes/upload-routes.com
 
 interface RoutePageRouteViewModel {
     route: FirestoreRouteJSON;
+    name: string;
     routeDate: Date | null;
+    routeDateSortMs: number | null;
     activityTypes: string;
+    fileType: string;
     originalFilename: string;
+    routeCountLabel: string;
+    pointCountLabel: string;
+    waypointCountLabel: string | null;
+    distance: RouteMetricCell;
+    ascent: RouteMetricCell;
+    descent: RouteMetricCell;
+}
+
+interface RouteMetricCell {
+    label: string;
+    sortValue: number | null;
+    title: string;
+}
+
+type RouteSortColumn =
+    | 'date'
+    | 'name'
+    | 'activityTypes'
+    | 'distance'
+    | 'ascent'
+    | 'descent'
+    | 'pointCount'
+    | 'originalFilename';
+
+interface RouteSortState {
+    active: RouteSortColumn;
+    direction: SortDirection;
 }
 
 @Component({
@@ -35,19 +66,47 @@ export class RoutesPageComponent implements OnInit {
     private fileService = inject(AppFileService);
     private analyticsService = inject(AppAnalyticsService);
     private logger = inject(LoggerService);
+    private readonly routeSortSubject = new BehaviorSubject<RouteSortState>({
+        active: 'date',
+        direction: 'desc',
+    });
 
     readonly user = signal<User | null>(null);
     readonly deletingRouteID = signal<string | null>(null);
     readonly downloadingRouteID = signal<string | null>(null);
     readonly routeCount = signal<number | null>(null);
+    readonly routeSortActive = signal<RouteSortColumn>('date');
+    readonly routeSortDirection = signal<SortDirection>('desc');
+    readonly routeColumns = [
+        'date',
+        'name',
+        'activityTypes',
+        'distance',
+        'ascent',
+        'descent',
+        'pointCount',
+        'originalFilename',
+        'actions',
+    ];
+    readonly routeHeaderDataTypes = {
+        distance: DataDistance.type,
+        ascent: DataAscent.type,
+        descent: DataDescent.type,
+    };
     routes$: Observable<RoutePageRouteViewModel[]> | null = null;
 
     async ngOnInit(): Promise<void> {
         const user = await this.authService.getUser();
         this.user.set(user);
         if (user) {
-            this.routes$ = this.routeService.getRoutes(user).pipe(
-                map(routes => routes.map(route => this.toRouteViewModel(route))),
+            this.routes$ = combineLatest([
+                this.routeService.getRoutes(user),
+                this.routeSortSubject,
+            ]).pipe(
+                map(([routes, routeSort]) => this.sortRouteViewModels(
+                    routes.map(route => this.toRouteViewModel(route)),
+                    routeSort,
+                )),
             );
             const routeCount = await this.refreshRouteCount();
             this.analyticsService.logSavedRouteAction('view', { routeCount });
@@ -56,6 +115,14 @@ export class RoutesPageComponent implements OnInit {
 
     trackByRouteID(index: number, item: RoutePageRouteViewModel): string {
         return `${item.route.id || index}`;
+    }
+
+    onRouteSortChange(sort: Sort): void {
+        const active = this.isRouteSortColumn(sort.active) ? sort.active : 'date';
+        const direction = sort.direction || (active === 'date' ? 'desc' : 'asc');
+        this.routeSortActive.set(active);
+        this.routeSortDirection.set(direction);
+        this.routeSortSubject.next({ active, direction });
     }
 
     async refreshRouteCount(): Promise<number | null> {
@@ -205,16 +272,177 @@ export class RoutesPageComponent implements OnInit {
 
     private toRouteViewModel(route: FirestoreRouteJSON): RoutePageRouteViewModel {
         const file = this.routeService.getOriginalRouteFiles(route)[0];
+        const routeDate = this.resolveRouteDate(route);
+        const routeCount = this.toFiniteNumber(route.routeCount) ?? 0;
+        const pointCount = this.toFiniteNumber(route.pointCount) ?? 0;
+        const waypointCount = this.toFiniteNumber(route.waypointCount) ?? 0;
         return {
             route,
-            routeDate: this.resolveRouteDate(route),
+            name: route.name || 'Untitled route',
+            routeDate,
+            routeDateSortMs: routeDate ? routeDate.getTime() : null,
             activityTypes: route.activityTypes?.length ? route.activityTypes.join(', ') : 'Route',
+            fileType: route.srcFileType || 'route',
             originalFilename: file?.originalFilename || file?.path?.split('/').pop() || 'Original file',
+            routeCountLabel: `${routeCount} route${routeCount === 1 ? '' : 's'}`,
+            pointCountLabel: `${pointCount} point${pointCount === 1 ? '' : 's'}`,
+            waypointCountLabel: waypointCount > 0 ? `${waypointCount} waypoint${waypointCount === 1 ? '' : 's'}` : null,
+            distance: this.buildRouteMetricCell(route, [DataDistance.type, 'Distance', 'distance'], 'distance'),
+            ascent: this.buildRouteMetricCell(route, [DataAscent.type, 'Ascent', 'ascent'], 'ascent'),
+            descent: this.buildRouteMetricCell(route, [DataDescent.type, 'Descent', 'descent'], 'descent'),
         };
     }
 
     private resolveRouteDate(route: FirestoreRouteJSON): Date | null {
         return this.toDate(route.createdAt) || this.toDate(route.importedAt);
+    }
+
+    private buildRouteMetricCell(
+        route: FirestoreRouteJSON,
+        statAliases: string[],
+        metric: 'distance' | 'ascent' | 'descent',
+    ): RouteMetricCell {
+        const values = (Array.isArray(route.routes) ? route.routes : [])
+            .map(segment => this.readRouteStatValue(segment.stats, statAliases))
+            .filter((value): value is number => value !== null);
+        const total = values.length > 0 ? values.reduce((sum, value) => sum + value, 0) : null;
+        const label = total === null
+            ? '-'
+            : metric === 'distance'
+                ? this.formatDistance(total)
+                : this.formatVerticalDistance(total);
+        const metricLabel = metric.charAt(0).toUpperCase() + metric.slice(1);
+
+        return {
+            label,
+            sortValue: total,
+            title: total === null ? `${metricLabel} unknown` : `${metricLabel}: ${label}`,
+        };
+    }
+
+    private readRouteStatValue(stats: Record<string, unknown> | undefined, aliases: string[]): number | null {
+        if (!stats || typeof stats !== 'object') {
+            return null;
+        }
+
+        for (const alias of aliases) {
+            if (!Object.prototype.hasOwnProperty.call(stats, alias)) {
+                continue;
+            }
+
+            const value = this.toFiniteNumber(stats[alias]);
+            if (value !== null) {
+                return value;
+            }
+
+            const rawStat = stats[alias];
+            if (!rawStat || typeof rawStat !== 'object' || Array.isArray(rawStat)) {
+                continue;
+            }
+
+            const statObject = rawStat as Record<string, unknown>;
+            const objectValue = this.toFiniteNumber(statObject.value)
+                ?? this.toFiniteNumber(statObject.rawValue)
+                ?? this.toFiniteNumber(statObject._value);
+            if (objectValue !== null) {
+                return objectValue;
+            }
+        }
+
+        return null;
+    }
+
+    private toFiniteNumber(value: unknown): number | null {
+        if (typeof value === 'number') {
+            return Number.isFinite(value) ? value : null;
+        }
+        if (typeof value === 'string') {
+            const normalizedValue = value.trim();
+            if (!normalizedValue) {
+                return null;
+            }
+            const numericValue = Number(normalizedValue);
+            return Number.isFinite(numericValue) ? numericValue : null;
+        }
+        return null;
+    }
+
+    private formatDistance(meters: number): string {
+        if (Math.abs(meters) < 1000) {
+            return `${Math.round(meters)} m`;
+        }
+        return `${(meters / 1000).toFixed(2)} km`;
+    }
+
+    private formatVerticalDistance(meters: number): string {
+        return `${Math.round(meters)} m`;
+    }
+
+    private sortRouteViewModels(
+        routes: RoutePageRouteViewModel[],
+        routeSort: RouteSortState,
+    ): RoutePageRouteViewModel[] {
+        const direction = routeSort.direction || 'asc';
+        return [...routes].sort((first, second) => {
+            const result = this.compareRouteViewModels(first, second, routeSort.active, direction);
+            return result !== 0 ? result : first.name.localeCompare(second.name, undefined, { sensitivity: 'base' });
+        });
+    }
+
+    private compareRouteViewModels(
+        first: RoutePageRouteViewModel,
+        second: RoutePageRouteViewModel,
+        active: RouteSortColumn,
+        direction: SortDirection,
+    ): number {
+        switch (active) {
+            case 'date':
+                return this.compareNullableNumbers(first.routeDateSortMs, second.routeDateSortMs, direction);
+            case 'name':
+                return this.compareText(first.name, second.name, direction);
+            case 'activityTypes':
+                return this.compareText(first.activityTypes, second.activityTypes, direction);
+            case 'distance':
+                return this.compareNullableNumbers(first.distance.sortValue, second.distance.sortValue, direction);
+            case 'ascent':
+                return this.compareNullableNumbers(first.ascent.sortValue, second.ascent.sortValue, direction);
+            case 'descent':
+                return this.compareNullableNumbers(first.descent.sortValue, second.descent.sortValue, direction);
+            case 'pointCount':
+                return this.compareNullableNumbers(
+                    this.toFiniteNumber(first.route.pointCount),
+                    this.toFiniteNumber(second.route.pointCount),
+                    direction,
+                );
+            case 'originalFilename':
+                return this.compareText(first.originalFilename, second.originalFilename, direction);
+        }
+    }
+
+    private compareText(first: string, second: string, direction: SortDirection): number {
+        const result = first.localeCompare(second, undefined, { sensitivity: 'base' });
+        return direction === 'desc' ? -result : result;
+    }
+
+    private compareNullableNumbers(first: number | null, second: number | null, direction: SortDirection): number {
+        if (first === null && second === null) return 0;
+        if (first === null) return 1;
+        if (second === null) return -1;
+        const result = first - second;
+        return direction === 'desc' ? -result : result;
+    }
+
+    private isRouteSortColumn(value: string): value is RouteSortColumn {
+        return [
+            'date',
+            'name',
+            'activityTypes',
+            'distance',
+            'ascent',
+            'descent',
+            'pointCount',
+            'originalFilename',
+        ].includes(value);
     }
 
     private sanitizeFilenameBase(value: string): string {

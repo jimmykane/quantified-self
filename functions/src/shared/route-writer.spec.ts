@@ -119,6 +119,53 @@ describe('RouteWriter', () => {
         expect(payload.routes[0]).not.toHaveProperty('streams');
     });
 
+    it('fills missing route distance, ascent, and descent stats from route points', () => {
+        const payload = buildFirestoreRoutePayload('user-1', makeRouteFile({
+            routes: [{
+                id: 'segment-1',
+                name: 'Measured route',
+                activityType: 'Running',
+                points: [
+                    { latitudeDegrees: 0, longitudeDegrees: 0, altitude: 10 },
+                    { latitudeDegrees: 0, longitudeDegrees: 0.001, altitude: 15 },
+                    { latitudeDegrees: 0, longitudeDegrees: 0.002, altitude: 12 },
+                ],
+            }],
+        }));
+
+        expect(payload.routes[0].stats?.Distance as number).toBeCloseTo(222.39, 1);
+        expect(payload.routes[0].stats).toMatchObject({
+            Ascent: 5,
+            Descent: 3,
+        });
+    });
+
+    it('normalizes aliased route stats into canonical stat names', () => {
+        const payload = buildFirestoreRoutePayload('user-1', makeRouteFile({
+            routes: [{
+                id: 'segment-1',
+                name: 'Parser stats route',
+                activityType: 'Running',
+                stats: {
+                    Distance: ' ',
+                    distance: '1234.5',
+                    ascent: { rawValue: '12' },
+                    descent: { _value: '8' },
+                },
+                points: [
+                    { latitudeDegrees: 0, longitudeDegrees: 0, altitude: 10 },
+                    { latitudeDegrees: 0, longitudeDegrees: 0.001, altitude: 15 },
+                ],
+            }],
+        }));
+
+        expect(payload.routes[0].stats).toMatchObject({
+            Distance: 1234.5,
+            Ascent: 12,
+            Descent: 8,
+        });
+    });
+
     it('writes the route document and uploads the original route file', async () => {
         const writer = new RouteWriter(adapter, storageAdapter, undefined, makeLogger());
         const routeFile = makeRouteFile();
