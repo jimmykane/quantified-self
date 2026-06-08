@@ -321,12 +321,14 @@ export class RouteWriter {
 
         if (filesToUpload.length > 0 && this.storageAdapter) {
             const uploadedFilesMetadata: OriginalRouteFileMetaData[] = [];
+            const uploadAttemptID = this.adapter.generateID();
 
             for (let i = 0; i < filesToUpload.length; i++) {
                 const file = filesToUpload[i];
-                const filePath = filesToUpload.length === 1
-                    ? `users/${userID}/routes/${resolvedRouteID}/original.${file.extension}`
-                    : `users/${userID}/routes/${resolvedRouteID}/original_${i}.${file.extension}`;
+                const filename = filesToUpload.length === 1
+                    ? `original.${file.extension}`
+                    : `original_${i}.${file.extension}`;
+                const filePath = `users/${userID}/routes/${resolvedRouteID}/uploads/${uploadAttemptID}/${filename}`;
 
                 this.logger.info(`Uploading route file ${i + 1}/${filesToUpload.length} to`, filePath);
                 await this.storageAdapter.uploadFile(filePath, file.data);

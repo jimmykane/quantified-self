@@ -1,7 +1,7 @@
 import { CommonModule } from '@angular/common';
 import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { of } from 'rxjs';
+import { firstValueFrom, of } from 'rxjs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
@@ -110,6 +110,21 @@ describe('RoutesPageComponent', () => {
         expect(analyticsServiceMock.logSavedRouteAction).toHaveBeenCalledWith('view', {
             routeCount: 1,
         });
+    });
+
+    it('projects route display values for list rendering', async () => {
+        await component.ngOnInit();
+
+        const routes = await firstValueFrom(component.routes$!);
+
+        expect(routes).toHaveLength(1);
+        expect(routes[0]).toMatchObject({
+            route,
+            activityTypes: 'Running',
+            originalFilename: 'original.gpx',
+        });
+        expect(routes[0].routeDate?.toISOString()).toBe('2026-01-02T00:00:00.000Z');
+        expect(component.trackByRouteID(0, routes[0])).toBe('route-1');
     });
 
     it('deletes owner route documents after confirmation and refreshes count', async () => {

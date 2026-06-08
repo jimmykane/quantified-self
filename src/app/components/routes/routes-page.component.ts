@@ -1,5 +1,5 @@
 import { Component, OnInit, inject, signal } from '@angular/core';
-import { firstValueFrom, Observable } from 'rxjs';
+import { firstValueFrom, map, Observable } from 'rxjs';
 import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { User } from '@sports-alliance/sports-lib';
@@ -12,6 +12,13 @@ import { AppFileService } from '../../services/app.file.service';
 import { AppRouteService } from '../../services/app.route.service';
 import { LoggerService } from '../../services/logger.service';
 import { UploadRoutesComponent } from '../upload/upload-routes/upload-routes.component';
+
+interface RoutePageRouteViewModel {
+    route: FirestoreRouteJSON;
+    routeDate: Date | null;
+    activityTypes: string;
+    originalFilename: string;
+}
 
 @Component({
     selector: 'app-routes-page',
@@ -33,33 +40,22 @@ export class RoutesPageComponent implements OnInit {
     readonly deletingRouteID = signal<string | null>(null);
     readonly downloadingRouteID = signal<string | null>(null);
     readonly routeCount = signal<number | null>(null);
-    routes$: Observable<FirestoreRouteJSON[]> | null = null;
+    routes$: Observable<RoutePageRouteViewModel[]> | null = null;
 
     async ngOnInit(): Promise<void> {
         const user = await this.authService.getUser();
         this.user.set(user);
         if (user) {
-            this.routes$ = this.routeService.getRoutes(user);
+            this.routes$ = this.routeService.getRoutes(user).pipe(
+                map(routes => routes.map(route => this.toRouteViewModel(route))),
+            );
             const routeCount = await this.refreshRouteCount();
             this.analyticsService.logSavedRouteAction('view', { routeCount });
         }
     }
 
-    trackByRouteID(index: number, route: FirestoreRouteJSON): string {
-        return `${route.id || index}`;
-    }
-
-    getRouteDate(route: FirestoreRouteJSON): Date | null {
-        return this.toDate(route.createdAt) || this.toDate(route.importedAt);
-    }
-
-    getRouteActivityTypes(route: FirestoreRouteJSON): string {
-        return route.activityTypes?.length ? route.activityTypes.join(', ') : 'Route';
-    }
-
-    getOriginalFilename(route: FirestoreRouteJSON): string {
-        const file = this.routeService.getOriginalRouteFiles(route)[0];
-        return file?.originalFilename || file?.path?.split('/').pop() || 'Original file';
+    trackByRouteID(index: number, item: RoutePageRouteViewModel): string {
+        return `${item.route.id || index}`;
     }
 
     async refreshRouteCount(): Promise<number | null> {
@@ -136,7 +132,7 @@ export class RoutesPageComponent implements OnInit {
         this.downloadingRouteID.set(routeID);
         this.snackBar.open('Preparing route download...', undefined, { duration: 2000 });
         try {
-            const routeDate = this.getRouteDate(route);
+            const routeDate = this.resolveRouteDate(route);
             const baseName = this.sanitizeFilenameBase(route.name || routeID || 'route');
 
             if (originalFiles.length > 1) {
@@ -205,6 +201,20 @@ export class RoutesPageComponent implements OnInit {
             return Number.isNaN(date.getTime()) ? null : date;
         }
         return null;
+    }
+
+    private toRouteViewModel(route: FirestoreRouteJSON): RoutePageRouteViewModel {
+        const file = this.routeService.getOriginalRouteFiles(route)[0];
+        return {
+            route,
+            routeDate: this.resolveRouteDate(route),
+            activityTypes: route.activityTypes?.length ? route.activityTypes.join(', ') : 'Route',
+            originalFilename: file?.originalFilename || file?.path?.split('/').pop() || 'Original file',
+        };
+    }
+
+    private resolveRouteDate(route: FirestoreRouteJSON): Date | null {
+        return this.toDate(route.createdAt) || this.toDate(route.importedAt);
     }
 
     private sanitizeFilenameBase(value: string): string {

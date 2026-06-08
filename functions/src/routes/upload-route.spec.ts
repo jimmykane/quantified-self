@@ -27,6 +27,11 @@ const hoisted = vi.hoisted(() => {
   }));
   const mockStorageSave = vi.fn();
   const mockStorageDelete = vi.fn();
+  const mockStorageFile = vi.fn((path: string) => ({
+    path,
+    save: mockStorageSave,
+    delete: mockStorageDelete,
+  }));
   const mockHasProAccess = vi.fn();
   const mockHasBasicAccess = vi.fn();
   const mockEnforceAppCheckFlag = { value: true };
@@ -49,6 +54,7 @@ const hoisted = vi.hoisted(() => {
     mockTransactionGet,
     mockTransactionSet,
     mockRunTransaction,
+    mockStorageFile,
     mockStorageSave,
     mockStorageDelete,
     mockHasProAccess,
@@ -122,11 +128,7 @@ vi.mock('firebase-admin', () => {
     storage: () => ({
       bucket: () => ({
         name: 'test-bucket',
-        file: (path: string) => ({
-          path,
-          save: hoisted.mockStorageSave,
-          delete: hoisted.mockStorageDelete,
-        }),
+        file: hoisted.mockStorageFile,
       }),
     }),
   };
@@ -285,6 +287,10 @@ function transactionSetCallForPath(path: string) {
   )?.path === path);
 }
 
+function originalUploadPathPattern(routeID: string, extension: string): RegExp {
+  return new RegExp(`^users/user-1/routes/${routeID}/uploads/[^/]+/original\\.${extension.replace('.', '\\.')}$`);
+}
+
 describe('uploadRoute', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -376,7 +382,7 @@ describe('uploadRoute', () => {
       routeCount: 1,
       pointCount: 2,
       originalFile: {
-        path: `users/user-1/routes/${expectedRouteID}/original.gpx`,
+        path: expect.stringMatching(originalUploadPathPattern(expectedRouteID, 'gpx')),
         bucket: 'test-bucket',
         extension: 'gpx',
         originalFilename: 'morning-route.gpx',
@@ -437,7 +443,7 @@ describe('uploadRoute', () => {
     expect(hoisted.mockStorageSave).toHaveBeenCalledWith(compressedPayload);
     expect(transactionSetCallForPath(`users/user-1/routes/${expectedRouteID}`)?.[1]).toMatchObject({
       originalFile: {
-        path: `users/user-1/routes/${expectedRouteID}/original.gpx.gz`,
+        path: expect.stringMatching(originalUploadPathPattern(expectedRouteID, 'gpx.gz')),
         extension: 'gpx.gz',
         originalFilename: 'morning-route.gpx.gz',
       },
@@ -474,7 +480,7 @@ describe('uploadRoute', () => {
     expect(hoisted.mockRunTransaction).not.toHaveBeenCalled();
   });
 
-  it('rejects gzip route payloads that exceed the bounded decompression ratio before parsing', async () => {
+  it('accepts highly-compressible gzip route payloads that stay under the absolute decompression cap', async () => {
     const response = makeResponse();
     const compressedPayload = gzipSync(Buffer.alloc(2 * 1024 * 1024, 'a'));
 
@@ -486,13 +492,13 @@ describe('uploadRoute', () => {
       },
     }), response);
 
-    expect(response.status).toHaveBeenCalledWith(400);
-    expect(response.json).toHaveBeenCalledWith({
-      error: 'Route file is too large after decompression. Maximum decompressed size is 1024KB for this upload.',
-    });
-    expect(hoisted.mockSportsLib.importRoutesFromGPX).not.toHaveBeenCalled();
-    expect(hoisted.mockStorageSave).not.toHaveBeenCalled();
-    expect(hoisted.mockRunTransaction).not.toHaveBeenCalled();
+    expect(response.status).toHaveBeenCalledWith(200);
+    expect(response.json).toHaveBeenCalledWith(expect.objectContaining({
+      duplicate: false,
+    }));
+    expect(hoisted.mockSportsLib.importRoutesFromGPX).toHaveBeenCalled();
+    expect(hoisted.mockStorageSave).toHaveBeenCalledWith(compressedPayload);
+    expect(hoisted.mockRunTransaction).toHaveBeenCalled();
   });
 
   it('short-circuits duplicate route uploads before parsing or storage writes', async () => {
@@ -559,6 +565,8 @@ describe('uploadRoute', () => {
 
     await invokeUploadRoute(makeRequest({ rawBody }), response);
 
+    expect(hoisted.mockStorageSave).toHaveBeenCalledWith(rawBody);
+    expect(hoisted.mockStorageDelete).toHaveBeenCalledWith({ ignoreNotFound: true });
     expect(transactionSetCallForPath(`users/user-1/routes/${expectedRouteID}`)).toBeUndefined();
     expect(transactionSetCallForPath(`users/user-1/routes/${expectedRouteID}/metaData/processing`)).toBeUndefined();
     expect(transactionSetCallForPath('users/user-1/metaData/routeQuota')?.[1]).toMatchObject({

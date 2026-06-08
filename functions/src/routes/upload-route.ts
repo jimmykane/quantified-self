@@ -3,7 +3,7 @@ import * as logger from 'firebase-functions/logger';
 import * as admin from 'firebase-admin';
 import { FieldValue } from 'firebase-admin/firestore';
 import { SportsLib } from '@sports-alliance/sports-lib';
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { basename } from 'node:path';
 import { gunzipSync } from 'node:zlib';
 import * as xmldom from 'xmldom';
@@ -32,8 +32,6 @@ import {
 const SUPPORTED_BASE_EXTENSIONS = new Set(['fit', 'gpx']);
 const MAX_ROUTE_GZIP_DECOMPRESSED_BYTES = 64 * 1024 * 1024;
 const MAX_ROUTE_GZIP_DECOMPRESSED_BYTES_LABEL = '64MB';
-const MIN_ROUTE_GZIP_DECOMPRESSED_BYTES = 1024 * 1024;
-const MAX_ROUTE_GZIP_DECOMPRESSION_RATIO = 32;
 
 type SportsLibRouteImporter = typeof SportsLib & {
   importRoutesFromGPX(gpxString: string, domParser?: unknown, options?: RouteParsingOptionsLike): Promise<AppRouteInterface>;
@@ -140,11 +138,10 @@ function resolveStoredExtension(resolvedExtension: string, payload: Buffer): str
   return baseExtension;
 }
 
-function resolveMaxRouteDecompressedBytes(payload: Buffer): number {
+function resolveMaxRouteDecompressedBytes(): number {
   return Math.min(
     MAX_ROUTE_DECOMPRESSED_BYTES,
     MAX_ROUTE_GZIP_DECOMPRESSED_BYTES,
-    Math.max(MIN_ROUTE_GZIP_DECOMPRESSED_BYTES, payload.length * MAX_ROUTE_GZIP_DECOMPRESSION_RATIO),
   );
 }
 
@@ -163,7 +160,7 @@ function maybeDecompressPayloadForParsing(payload: Buffer, resolvedExtension: st
     return payload;
   }
 
-  const maxOutputLength = resolveMaxRouteDecompressedBytes(payload);
+  const maxOutputLength = resolveMaxRouteDecompressedBytes();
   try {
     return gunzipSync(payload, { maxOutputLength });
   } catch (error) {
@@ -172,7 +169,7 @@ function maybeDecompressPayloadForParsing(payload: Buffer, resolvedExtension: st
       compressedBytes: payload.length,
       maxDecompressedBytes: maxOutputLength,
       maxConfiguredDecompressedBytes: MAX_ROUTE_DECOMPRESSED_BYTES,
-      maxDecompressionRatio: MAX_ROUTE_GZIP_DECOMPRESSION_RATIO,
+      maxGzipDecompressedBytes: MAX_ROUTE_GZIP_DECOMPRESSED_BYTES,
       resolvedExtension,
     });
     if ((error as { code?: unknown } | undefined)?.code === 'ERR_BUFFER_TOO_LARGE') {
@@ -450,9 +447,10 @@ function buildOriginalRouteFileMetadata(
   routeID: string,
   originalFile: OriginalRouteFile,
   bucketName?: string,
+  uploadAttemptID = randomUUID(),
 ): OriginalRouteFileMetaData {
   const metadata: OriginalRouteFileMetaData = {
-    path: `users/${userID}/routes/${routeID}/original.${originalFile.extension}`,
+    path: `users/${userID}/routes/${routeID}/uploads/${uploadAttemptID}/original.${originalFile.extension}`,
     startDate: originalFile.startDate,
     extension: originalFile.extension,
   };
@@ -492,6 +490,7 @@ async function deleteUploadedOriginalRouteFile(metadata: OriginalRouteFileMetaDa
 
 interface RouteQuotaWriteResult {
   duplicate: boolean;
+  routesCount: number;
   routeCountAfterWrite: number;
 }
 
@@ -730,8 +729,13 @@ async function writeRouteWithQuotaReservation(
         }
         transaction.set(counterRef, counterPayload, { merge: true });
 
+        const routesCount = routeAlreadyExists
+          ? readRouteSegmentCountFromSnapshot(routeSnapshot)
+          : routeFile.getRoutes().length;
+
         return {
           duplicate: routeAlreadyExists,
+          routesCount,
           routeCountAfterWrite,
         };
       });
@@ -862,12 +866,14 @@ export const uploadRoute = onRequest({
       await deleteUploadedOriginalRouteFile(originalFileMetadata);
       throw error;
     }
+    if (quotaWriteResult.duplicate) {
+      await deleteUploadedOriginalRouteFile(originalFileMetadata);
+    }
 
-    const routesCount = routeFile.getRoutes().length;
     response.status(200).json({
       routeId: routeID,
-      routesCount,
-      routeCount: routesCount,
+      routesCount: quotaWriteResult.routesCount,
+      routeCount: quotaWriteResult.routesCount,
       duplicate: quotaWriteResult.duplicate,
       uploadLimit,
       uploadCountAfterWrite: quotaWriteResult.routeCountAfterWrite,

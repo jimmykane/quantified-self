@@ -24,24 +24,24 @@
 
   @if (routes.length > 0) {
   <section class="route-list" aria-label="Saved routes">
-    <article class="route-row" *ngFor="let route of routes; trackBy: trackByRouteID">
+    <article class="route-row" *ngFor="let item of routes; trackBy: trackByRouteID">
       <div class="route-main">
         <div class="route-name-line">
-          <h2>{{ route.name || 'Untitled route' }}</h2>
-          <span class="route-file-type">{{ route.srcFileType || 'route' }}</span>
+          <h2>{{ item.route.name || 'Untitled route' }}</h2>
+          <span class="route-file-type">{{ item.route.srcFileType || 'route' }}</span>
         </div>
         <div class="route-meta">
-          <span>{{ getRouteActivityTypes(route) }}</span>
-          <span>{{ route.routeCount || 0 }} route{{ (route.routeCount || 0) === 1 ? '' : 's' }}</span>
-          <span>{{ route.pointCount || 0 }} points</span>
-          @if (route.waypointCount) {
-          <span>{{ route.waypointCount }} waypoints</span>
+          <span>{{ item.activityTypes }}</span>
+          <span>{{ item.route.routeCount || 0 }} route{{ (item.route.routeCount || 0) === 1 ? '' : 's' }}</span>
+          <span>{{ item.route.pointCount || 0 }} points</span>
+          @if (item.route.waypointCount) {
+          <span>{{ item.route.waypointCount }} waypoints</span>
           }
         </div>
         <div class="route-source">
           <mat-icon aria-hidden="true">description</mat-icon>
-          <span>{{ getOriginalFilename(route) }}</span>
-          @if (getRouteDate(route); as routeDate) {
+          <span>{{ item.originalFilename }}</span>
+          @if (item.routeDate; as routeDate) {
           <span>{{ routeDate | date:'mediumDate' }}</span>
           }
         </div>
@@ -50,15 +50,15 @@
         <button mat-icon-button type="button"
           aria-label="Download original route file"
           matTooltip="Download original route file"
-          [disabled]="downloadingRouteID() === route.id"
-          (click)="downloadRouteOriginals(route)">
+          [disabled]="downloadingRouteID() === item.route.id"
+          (click)="downloadRouteOriginals(item.route)">
           <mat-icon>download</mat-icon>
         </button>
         <button mat-icon-button type="button"
           aria-label="Delete route"
           matTooltip="Delete route"
-          [disabled]="deletingRouteID() === route.id"
-          (click)="confirmDeleteRoute(route)">
+          [disabled]="deletingRouteID() === item.route.id"
+          (click)="confirmDeleteRoute(item.route)">
           <mat-icon>delete</mat-icon>
         </button>
       </div>

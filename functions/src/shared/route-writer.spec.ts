@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { AppRouteInterface, RouteJSONInterface } from '../../../shared/app-route.interface';
+import { AppRouteInterface, OriginalRouteFileMetaData, RouteJSONInterface } from '../../../shared/app-route.interface';
 import { FirestoreAdapter, LogAdapter, StorageAdapter } from './event-writer';
 import { buildFirestoreRoutePayload, RouteWriter } from './route-writer';
 
@@ -14,9 +14,9 @@ function makeLogger(): LogAdapter {
 function makeRouteFile(overrides: {
     id?: string | null;
     routes?: RouteJSONInterface[];
-    waypoints?: any[];
-    originalFiles?: any[];
-    originalFile?: any;
+    waypoints?: unknown[];
+    originalFiles?: OriginalRouteFileMetaData[];
+    originalFile?: OriginalRouteFileMetaData;
 } = {}): AppRouteInterface {
     let id = Object.prototype.hasOwnProperty.call(overrides, 'id') ? overrides.id : 'route-file-1';
     const routes = overrides.routes ?? [{
@@ -131,27 +131,30 @@ describe('RouteWriter', () => {
 
         const persistedFiles = await writer.writeAllRouteData('user-1', routeFile, originalFile);
 
-        expect(uploadFile).toHaveBeenCalledWith('users/user-1/routes/route-file-1/original.gpx', originalFile.data);
+        expect(uploadFile).toHaveBeenCalledWith(
+            'users/user-1/routes/route-file-1/uploads/generated-route-id/original.gpx',
+            originalFile.data,
+        );
         expect(setDoc).toHaveBeenCalledTimes(1);
         expect(setDoc).toHaveBeenCalledWith(
             ['users', 'user-1', 'routes', 'route-file-1'],
             expect.objectContaining({
                 originalFile: expect.objectContaining({
-                    path: 'users/user-1/routes/route-file-1/original.gpx',
+                    path: 'users/user-1/routes/route-file-1/uploads/generated-route-id/original.gpx',
                     bucket: 'test-bucket',
                     originalFilename: 'morning.gpx',
                     extension: 'gpx',
                 }),
                 originalFiles: [
                     expect.objectContaining({
-                        path: 'users/user-1/routes/route-file-1/original.gpx',
+                        path: 'users/user-1/routes/route-file-1/uploads/generated-route-id/original.gpx',
                     }),
                 ],
             }),
         );
         expect(persistedFiles).toEqual([
             expect.objectContaining({
-                path: 'users/user-1/routes/route-file-1/original.gpx',
+                path: 'users/user-1/routes/route-file-1/uploads/generated-route-id/original.gpx',
                 bucket: 'test-bucket',
                 originalFilename: 'morning.gpx',
                 extension: 'gpx',
@@ -180,14 +183,26 @@ describe('RouteWriter', () => {
             { data: Buffer.from('two'), extension: 'gpx', startDate: new Date('2026-01-03T00:00:00.000Z') },
         ]);
 
-        expect(uploadFile).toHaveBeenNthCalledWith(1, 'users/user-1/routes/route-file-1/original_0.fit', expect.any(Buffer));
-        expect(uploadFile).toHaveBeenNthCalledWith(2, 'users/user-1/routes/route-file-1/original_1.gpx', expect.any(Buffer));
+        expect(uploadFile).toHaveBeenNthCalledWith(
+            1,
+            'users/user-1/routes/route-file-1/uploads/generated-route-id/original_0.fit',
+            expect.any(Buffer),
+        );
+        expect(uploadFile).toHaveBeenNthCalledWith(
+            2,
+            'users/user-1/routes/route-file-1/uploads/generated-route-id/original_1.gpx',
+            expect.any(Buffer),
+        );
         expect(setDoc).toHaveBeenCalledWith(
             ['users', 'user-1', 'routes', 'route-file-1'],
             expect.objectContaining({
                 originalFiles: [
-                    expect.objectContaining({ path: 'users/user-1/routes/route-file-1/original_0.fit' }),
-                    expect.objectContaining({ path: 'users/user-1/routes/route-file-1/original_1.gpx' }),
+                    expect.objectContaining({
+                        path: 'users/user-1/routes/route-file-1/uploads/generated-route-id/original_0.fit',
+                    }),
+                    expect.objectContaining({
+                        path: 'users/user-1/routes/route-file-1/uploads/generated-route-id/original_1.gpx',
+                    }),
                 ],
             }),
         );
