@@ -527,6 +527,7 @@ export const scheduleSportsLibRouteReparseScan = onSchedule({
     }
 
     let query = db.collectionGroup('metaData')
+        .where('processingEntity', '==', 'route')
         .where('sportsLibVersionCode', '<', targetSportsLibVersionCode)
         .orderBy('sportsLibVersionCode', 'asc')
         .orderBy(admin.firestore.FieldPath.documentId())

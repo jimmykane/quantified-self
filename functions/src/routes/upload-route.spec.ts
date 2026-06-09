@@ -396,6 +396,7 @@ describe('uploadRoute', () => {
     expect(hoisted.mockTransactionSet).toHaveBeenCalledWith(
       expect.objectContaining({ path: `users/user-1/routes/${expectedRouteID}/metaData/processing` }),
       expect.objectContaining({
+        processingEntity: 'route',
         sportsLibVersionCode: 15000005,
         processedAt: 'SERVER_TIMESTAMP',
       }),

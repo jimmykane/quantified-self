@@ -537,6 +537,25 @@
       "density": "SPARSE_ALL"
     },
     {
+      "collectionGroup": "metaData",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        {
+          "fieldPath": "processingEntity",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "sportsLibVersionCode",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
+        }
+      ],
+      "density": "SPARSE_ALL"
+    },
+    {
       "collectionGroup": "failed_jobs",
       "queryScope": "COLLECTION",
       "fields": [

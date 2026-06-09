@@ -10,6 +10,7 @@ const hoisted = vi.hoisted(() => {
     const mockCheckpointGet = vi.fn();
     const mockCheckpointSet = vi.fn();
     const mockProcessingQueryGet = vi.fn();
+    const mockCollectionGroupWhere = vi.fn();
     const mockRouteQueryGet = vi.fn();
     const mockRouteDocGet = vi.fn();
     const mockRouteStatusGet = vi.fn();
@@ -29,6 +30,7 @@ const hoisted = vi.hoisted(() => {
         mockCheckpointGet,
         mockCheckpointSet,
         mockProcessingQueryGet,
+        mockCollectionGroupWhere,
         mockRouteQueryGet,
         mockRouteDocGet,
         mockRouteStatusGet,
@@ -76,7 +78,11 @@ function makeRouteDoc(path = 'users/user-1/routes/route-1', data: Record<string,
 
 function makeProcessingDoc(
     routePath = 'users/user-1/routes/route-1',
-    data: Record<string, unknown> = { sportsLibVersion: '16.0.1', sportsLibVersionCode: 16_000_001 },
+    data: Record<string, unknown> = {
+        processingEntity: 'route',
+        sportsLibVersion: '16.0.1',
+        sportsLibVersionCode: 16_000_001,
+    },
 ) {
     return {
         ref: {
@@ -107,7 +113,8 @@ vi.mock('firebase-admin', () => {
             };
         },
         collectionGroup: (collectionName: string) => ({
-            where: vi.fn(function where() {
+            where: vi.fn(function where(...args: unknown[]) {
+                hoisted.mockCollectionGroupWhere(...args);
                 return this;
             }),
             orderBy: vi.fn(function orderBy() {
@@ -280,6 +287,8 @@ describe('scheduleSportsLibRouteReparseScan', () => {
         await (scheduleSportsLibRouteReparseScan as any)({});
 
         expect(hoisted.mockProcessingQueryGet).toHaveBeenCalled();
+        expect(hoisted.mockCollectionGroupWhere).toHaveBeenCalledWith('processingEntity', '==', 'route');
+        expect(hoisted.mockCollectionGroupWhere).toHaveBeenCalledWith('sportsLibVersionCode', '<', 16_000_002);
         expect(hoisted.mockRouteDocGet).toHaveBeenCalledWith('users/user-1/routes/route-1');
         expect(hoisted.mockShouldRouteBeReparsed).not.toHaveBeenCalled();
         expect(hoisted.mockJobSet).toHaveBeenCalledWith(expect.objectContaining({

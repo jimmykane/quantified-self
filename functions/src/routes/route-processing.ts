@@ -285,6 +285,7 @@ export function assignRouteSegmentIDs(
 
 export function createRouteProcessingMetadataPayload(): ProcessingMetaData {
   return {
+    processingEntity: 'route',
     sportsLibVersion: SPORTS_LIB_VERSION,
     sportsLibVersionCode: sportsLibVersionToCode(SPORTS_LIB_VERSION),
     processedAt: FieldValue.serverTimestamp(),
