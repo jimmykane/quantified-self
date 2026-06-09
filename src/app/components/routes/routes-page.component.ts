@@ -58,6 +58,7 @@ interface RoutePageRouteViewModel {
     descent: RouteMetricCell;
     minGrade: RouteMetricCell;
     maxGrade: RouteMetricCell;
+    canReprocess: boolean;
     filterText: string;
 }
 
@@ -405,10 +406,6 @@ export class RoutesPageComponent implements OnInit {
         }
     }
 
-    canReprocessRoute(route: FirestoreRouteJSON): boolean {
-        return this.canManageRoute(route) && this.routeService.getOriginalRouteFiles(route).length > 0;
-    }
-
     async reprocessRouteFromOriginalFile(route: FirestoreRouteJSON): Promise<void> {
         const user = this.user();
         const routeID = route.id;
@@ -515,7 +512,8 @@ export class RoutesPageComponent implements OnInit {
     }
 
     private toRouteViewModel(route: FirestoreRouteJSON): RoutePageRouteViewModel {
-        const file = this.routeService.getOriginalRouteFiles(route)[0];
+        const originalFiles = this.routeService.getOriginalRouteFiles(route);
+        const file = originalFiles[0];
         const routeDate = this.resolveRouteDate(route);
         const routeCount = this.toFiniteNumber(route.routeCount) ?? 0;
         const pointCount = this.toFiniteNumber(route.pointCount) ?? 0;
@@ -565,6 +563,7 @@ export class RoutesPageComponent implements OnInit {
             descent,
             minGrade,
             maxGrade,
+            canReprocess: this.canManageRoute(route) && originalFiles.length > 0,
             filterText: [
                 routeName,
                 activityTypes,

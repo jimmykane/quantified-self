@@ -74,6 +74,12 @@ describe('RoutesPageComponent', () => {
         }],
     };
 
+    function withoutTopLevelStats(sourceRoute: FirestoreRouteJSON): FirestoreRouteJSON {
+        const routeClone = { ...sourceRoute };
+        delete routeClone.stats;
+        return routeClone;
+    }
+
     beforeEach(async () => {
         authServiceMock = {
             getUser: vi.fn().mockResolvedValue({ uid: 'user-1' }),
@@ -225,6 +231,7 @@ describe('RoutesPageComponent', () => {
                 sortValue: 8.6,
                 title: 'Maximum grade: 9 %',
             },
+            canReprocess: true,
         });
         expect(routes[0].routeDate?.toISOString()).toBe('2026-01-02T00:00:00.000Z');
         expect(component.trackByRouteID(0, routes[0])).toBe('route-1');
@@ -258,8 +265,8 @@ describe('RoutesPageComponent', () => {
     });
 
     it('does not aggregate table metrics from segment summaries when top-level stats are missing', async () => {
-        const { stats: _stats, ...routeWithoutTopLevelStats } = route;
-        routeServiceMock.getRoutes.mockReturnValue(of([routeWithoutTopLevelStats as FirestoreRouteJSON]));
+        const routeWithoutTopLevelStats = withoutTopLevelStats(route);
+        routeServiceMock.getRoutes.mockReturnValue(of([routeWithoutTopLevelStats]));
         await component.ngOnInit();
 
         const routes = await firstValueFrom(component.routes$!);
@@ -425,6 +432,8 @@ describe('RoutesPageComponent', () => {
         expect(template).toContain('(keydown.enter)="openRouteDetails(item)"');
         expect(template).toContain('(keydown.space)="$event.preventDefault(); openRouteDetails(item)"');
         expect(template).toContain('(click)="$event.stopPropagation(); reprocessRouteFromOriginalFile(item.route)"');
+        expect(template).toContain('!item.canReprocess');
+        expect(template).not.toContain('canReprocessRoute(item.route)');
         expect(template).toContain('<mat-icon>autorenew</mat-icon>');
         expect(template).toContain('(click)="$event.stopPropagation(); downloadRouteOriginals(item.route)"');
         expect(template).toContain('(click)="$event.stopPropagation(); confirmDeleteRoute(item.route)"');
@@ -495,7 +504,7 @@ describe('RoutesPageComponent', () => {
     });
 
     it('keeps routes without top-level metric stats visible when metric sorting', async () => {
-        const { stats: _stats, ...routeWithoutTopLevelStats } = {
+        const routeWithoutTopLevelStats = withoutTopLevelStats({
             ...route,
             id: 'route-2',
             name: 'No Elevation Route',
@@ -504,8 +513,8 @@ describe('RoutesPageComponent', () => {
                 startDate: new Date('2026-01-03T00:00:00.000Z'),
                 extension: 'gpx',
             }],
-        };
-        routeServiceMock.getRoutes.mockReturnValue(of([routeWithoutTopLevelStats as FirestoreRouteJSON, route]));
+        });
+        routeServiceMock.getRoutes.mockReturnValue(of([routeWithoutTopLevelStats, route]));
         await component.ngOnInit();
         await firstValueFrom(component.routes$!);
 

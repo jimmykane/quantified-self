@@ -1,4 +1,6 @@
-export const SPORTS_LIB_REPARSE_TARGET_VERSION = '16.0.0';
+import { SPORTS_LIB_VERSION } from '../shared/sports-lib-version.node';
+
+export const SPORTS_LIB_REPARSE_TARGET_VERSION = SPORTS_LIB_VERSION;
 export const SPORTS_LIB_REPARSE_HEAVY_DURATION_THRESHOLD_MS = 32 * 60 * 60 * 1000;
 
 export const SPORTS_LIB_REPARSE_PROCESSING_TIERS = {

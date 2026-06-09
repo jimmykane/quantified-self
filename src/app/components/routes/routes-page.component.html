@@ -248,7 +248,7 @@
           <button mat-icon-button type="button"
             aria-label="Reprocess route from original file"
             matTooltip="Reprocess route from original file"
-            [disabled]="reprocessingRouteID() !== null || deletingRouteID() === item.route.id || downloadingRouteID() === item.route.id || !canReprocessRoute(item.route)"
+            [disabled]="reprocessingRouteID() !== null || deletingRouteID() === item.route.id || downloadingRouteID() === item.route.id || !item.canReprocess"
             (click)="$event.stopPropagation(); reprocessRouteFromOriginalFile(item.route)">
             <mat-icon>autorenew</mat-icon>
           </button>
