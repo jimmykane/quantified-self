@@ -13,6 +13,7 @@ function makeLogger(): LogAdapter {
 
 function makeRouteFile(overrides: {
     id?: string | null;
+    stats?: Record<string, unknown>;
     routes?: RouteJSONInterface[];
     waypoints?: unknown[];
     originalFiles?: OriginalRouteFileMetaData[];
@@ -59,6 +60,7 @@ function makeRouteFile(overrides: {
             srcFileType: 'gpx',
             createdAt: new Date('2026-01-02T03:04:05.000Z').getTime(),
             creator: { name: 'Test Device' },
+            stats: overrides.stats,
             routes,
             waypoints: overrides.waypoints ?? [],
         }),
@@ -95,6 +97,9 @@ describe('RouteWriter', () => {
             userID: 'user-1',
             name: 'Morning Route',
             srcFileType: 'gpx',
+            stats: {
+                Distance: 2500,
+            },
             routeCount: 1,
             waypointCount: 0,
             pointCount: 2,
@@ -117,6 +122,72 @@ describe('RouteWriter', () => {
         });
         expect(payload.routes[0]).not.toHaveProperty('points');
         expect(payload.routes[0]).not.toHaveProperty('streams');
+    });
+
+    it('builds top-level aggregate stats from route summaries', () => {
+        const payload = buildFirestoreRoutePayload('user-1', makeRouteFile({
+            routes: [
+                {
+                    id: 'segment-1',
+                    name: 'First leg',
+                    activityType: 'Running',
+                    stats: {
+                        Distance: 1000,
+                        Ascent: 20,
+                        Descent: 5,
+                        'Minimum Grade': -2,
+                        'Maximum Grade': 4,
+                        'Average Grade': 1,
+                    },
+                    points: [
+                        { latitudeDegrees: 0, longitudeDegrees: 0, altitude: 10 },
+                        { latitudeDegrees: 0, longitudeDegrees: 0.001, altitude: 20 },
+                    ],
+                },
+                {
+                    id: 'segment-2',
+                    name: 'Second leg',
+                    activityType: 'Running',
+                    stats: {
+                        Distance: 3000,
+                        Ascent: 40,
+                        Descent: 15,
+                        'Minimum Grade': -6,
+                        'Maximum Grade': 12,
+                        'Average Grade': 5,
+                    },
+                    points: [
+                        { latitudeDegrees: 0, longitudeDegrees: 0.001, altitude: 20 },
+                        { latitudeDegrees: 0, longitudeDegrees: 0.002, altitude: 30 },
+                    ],
+                },
+            ],
+        }));
+
+        expect(payload.stats).toMatchObject({
+            Distance: 4000,
+            Ascent: 60,
+            Descent: 20,
+            'Minimum Grade': -6,
+            'Maximum Grade': 12,
+            'Average Grade': 4,
+        });
+    });
+
+    it('preserves existing top-level route-file stats when present', () => {
+        const payload = buildFirestoreRoutePayload('user-1', makeRouteFile({
+            stats: {
+                Distance: 12345,
+                ascent: 77,
+                'Maximum Grade': 9,
+            },
+        }));
+
+        expect(payload.stats).toMatchObject({
+            Distance: 12345,
+            Ascent: 77,
+            'Maximum Grade': 9,
+        });
     });
 
     it('fills missing route distance, ascent, descent, and grade stats from route points', () => {

@@ -1,5 +1,5 @@
 import { Component, OnInit, computed, inject, signal } from '@angular/core';
-import { firstValueFrom, BehaviorSubject, combineLatest, map, Observable } from 'rxjs';
+import { firstValueFrom, BehaviorSubject, combineLatest, distinctUntilChanged, map, Observable, shareReplay, switchMap } from 'rxjs';
 import { MatDialog } from '@angular/material/dialog';
 import { Router } from '@angular/router';
 import { Sort, SortDirection } from '@angular/material/sort';
@@ -22,7 +22,19 @@ import { SharedModule } from '../../modules/shared.module';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { AppFileService } from '../../services/app.file.service';
 import { AppHapticsService } from '../../services/app.haptics.service';
-import { AppRouteService } from '../../services/app.route.service';
+import { AppProcessingService } from '../../services/app.processing.service';
+import {
+    AppRouteReprocessService,
+    getRouteReprocessErrorMessage,
+    getRouteReprocessProgressTitle,
+    RouteReprocessProgress,
+} from '../../services/app.route-reprocess.service';
+import {
+    AppRouteService,
+    isRouteListSortColumn,
+    ROUTE_LIST_DEFAULT_SORT,
+    RouteListSort,
+} from '../../services/app.route.service';
 import { LoggerService } from '../../services/logger.service';
 import { UploadRoutesComponent } from '../upload/upload-routes/upload-routes.component';
 
@@ -73,8 +85,6 @@ type RouteSortColumn =
     | 'pointCount'
     | 'originalFilename';
 
-type RouteMetricAggregation = 'sum' | 'min' | 'max';
-
 interface RouteSortState {
     active: RouteSortColumn;
     direction: SortDirection;
@@ -106,6 +116,8 @@ export class RoutesPageComponent implements OnInit {
     private fileService = inject(AppFileService);
     private analyticsService = inject(AppAnalyticsService);
     private hapticsService = inject(AppHapticsService);
+    private processingService = inject(AppProcessingService);
+    private routeReprocessService = inject(AppRouteReprocessService);
     private logger = inject(LoggerService);
     private router = inject(Router);
     private readonly routeSortSubject = new BehaviorSubject<RouteSortState>({
@@ -122,6 +134,7 @@ export class RoutesPageComponent implements OnInit {
     readonly user = signal<User | null>(null);
     readonly deletingRouteID = signal<string | null>(null);
     readonly downloadingRouteID = signal<string | null>(null);
+    readonly reprocessingRouteID = signal<string | null>(null);
     readonly routeCount = signal<number | null>(null);
     readonly loadedRouteCount = signal(0);
     readonly filteredRouteCount = signal(0);
@@ -147,7 +160,8 @@ export class RoutesPageComponent implements OnInit {
             return `${total} route${total === 1 ? '' : 's'}`;
         }
         const sortActive = this.routeSortActive() !== 'date' || this.routeSortDirection() !== 'desc';
-        return `${loaded} of ${total} loaded${sortActive ? '; sorting loaded rows' : ''}`;
+        const clientOnlySortActive = sortActive && !isRouteListSortColumn(this.routeSortActive());
+        return `${loaded} of ${total} loaded${clientOnlySortActive ? '; sorting loaded rows' : ''}`;
     });
     readonly routeColumns = [
         'date',
@@ -175,8 +189,17 @@ export class RoutesPageComponent implements OnInit {
         const user = await this.authService.getUser();
         this.user.set(user);
         if (user) {
+            const routeDocuments$ = this.routeSortSubject.pipe(
+                map(routeSort => this.toRouteListSort(routeSort)),
+                distinctUntilChanged((first, second) => (
+                    first.active === second.active
+                    && first.direction === second.direction
+                )),
+                switchMap(routeSort => this.routeService.getRoutes(user, 50, routeSort)),
+                shareReplay({ bufferSize: 1, refCount: true }),
+            );
             this.routes$ = combineLatest([
-                this.routeService.getRoutes(user),
+                routeDocuments$,
                 this.routeSortSubject,
                 this.routeFilterSubject,
             ]).pipe(
@@ -382,6 +405,80 @@ export class RoutesPageComponent implements OnInit {
         }
     }
 
+    canReprocessRoute(route: FirestoreRouteJSON): boolean {
+        return this.canManageRoute(route) && this.routeService.getOriginalRouteFiles(route).length > 0;
+    }
+
+    async reprocessRouteFromOriginalFile(route: FirestoreRouteJSON): Promise<void> {
+        const user = this.user();
+        const routeID = route.id;
+        if (
+            !user
+            || !routeID
+            || this.reprocessingRouteID() !== null
+            || this.deletingRouteID() === routeID
+            || this.downloadingRouteID() === routeID
+            || !this.canManageRoute(route)
+        ) {
+            return;
+        }
+
+        const originalFiles = this.routeService.getOriginalRouteFiles(route);
+        if (originalFiles.length === 0) {
+            this.analyticsService.logSavedRouteAction('reprocess', {
+                status: 'missing_file',
+                fileCount: 0,
+                fileType: this.getPrimaryRouteFileType(route),
+            });
+            this.snackBar.open('No original route file found.', undefined, { duration: 3000 });
+            return;
+        }
+
+        const dialogRef = this.dialog.open(ConfirmationDialogComponent, {
+            data: {
+                title: 'Reprocess route from original file?',
+                message: 'This will reparse the saved route source file and rebuild route statistics, segments, map bounds, and waypoint counts.',
+                confirmLabel: 'Reprocess',
+                confirmColor: 'primary',
+            } as ConfirmationDialogData,
+        });
+
+        const confirmed = await firstValueFrom(dialogRef.afterClosed());
+        if (!confirmed) {
+            return;
+        }
+
+        this.reprocessingRouteID.set(routeID);
+        this.snackBar.open('Reprocessing route from source file...', undefined, { duration: 2000 });
+        const jobId = this.processingService.addJob('process', 'Reprocessing route from source file...');
+        this.processingService.updateJob(jobId, { status: 'processing', progress: 5 });
+
+        try {
+            const reprocessedRoute = await this.routeReprocessService.reprocessRouteDocumentFromOriginalFile(user, route, {
+                onProgress: (progress) => this.updateReprocessJob(jobId, progress),
+            });
+            this.processingService.completeJob(jobId, 'Route reprocess completed');
+            this.analyticsService.logSavedRouteAction('reprocess', {
+                status: 'success',
+                fileCount: reprocessedRoute.sourceFilesCount,
+                routeCount: reprocessedRoute.routeCount,
+                fileType: this.getPrimaryRouteFileType(reprocessedRoute.routeDocument),
+            });
+            this.snackBar.open('Route reprocessed from source file.', undefined, { duration: 2500 });
+        } catch (error) {
+            this.processingService.failJob(jobId, 'Route reprocess failed');
+            this.analyticsService.logSavedRouteAction('reprocess', {
+                status: 'failure',
+                fileCount: originalFiles.length,
+                fileType: this.getPrimaryRouteFileType(route),
+            });
+            this.logger.error('[RoutesPageComponent] Failed to reprocess route', { routeID }, error);
+            this.snackBar.open(getRouteReprocessErrorMessage(error), undefined, { duration: 4000 });
+        } finally {
+            this.reprocessingRouteID.set(null);
+        }
+    }
+
     private toDate(rawDate: unknown): Date | null {
         if (!rawDate) return null;
         if (rawDate instanceof Date) return rawDate;
@@ -403,6 +500,20 @@ export class RoutesPageComponent implements OnInit {
         return null;
     }
 
+    private canManageRoute(route: FirestoreRouteJSON): boolean {
+        const user = this.user();
+        return !!user?.uid && !!route.userID && user.uid === route.userID;
+    }
+
+    private updateReprocessJob(jobId: string, progress: RouteReprocessProgress): void {
+        this.processingService.updateJob(jobId, {
+            status: progress.phase === 'done' ? 'completed' : 'processing',
+            title: getRouteReprocessProgressTitle(progress.phase),
+            progress: progress.progress,
+            details: progress.details,
+        });
+    }
+
     private toRouteViewModel(route: FirestoreRouteJSON): RoutePageRouteViewModel {
         const file = this.routeService.getOriginalRouteFiles(route)[0];
         const routeDate = this.resolveRouteDate(route);
@@ -415,22 +526,20 @@ export class RoutesPageComponent implements OnInit {
         const fileType = route.srcFileType || file?.extension || 'route';
         const fileTypeFilterValue = this.normalizeFilterValue(fileType);
         const activityTypeFilterValues = this.getDistinctLabels(activityTypeSummaries.map(summary => summary.activityTypeLabel));
-        const distance = this.buildRouteMetricCell(route, [DataDistance.type, 'Distance', 'distance'], 'Distance', DataDistance.type, 'sum');
-        const ascent = this.buildRouteMetricCell(route, [DataAscent.type, 'Ascent', 'ascent'], 'Ascent', DataAscent.type, 'sum');
-        const descent = this.buildRouteMetricCell(route, [DataDescent.type, 'Descent', 'descent'], 'Descent', DataDescent.type, 'sum');
+        const distance = this.buildRouteMetricCell(route, [DataDistance.type, 'Distance', 'distance'], 'Distance', DataDistance.type);
+        const ascent = this.buildRouteMetricCell(route, [DataAscent.type, 'Ascent', 'ascent'], 'Ascent', DataAscent.type);
+        const descent = this.buildRouteMetricCell(route, [DataDescent.type, 'Descent', 'descent'], 'Descent', DataDescent.type);
         const minGrade = this.buildRouteMetricCell(
             route,
             [DataGradeMin.type, 'minGrade', 'gradeMin', 'minimumGrade'],
             'Minimum grade',
             DataGradeMin.type,
-            'min',
         );
         const maxGrade = this.buildRouteMetricCell(
             route,
             [DataGradeMax.type, 'maxGrade', 'gradeMax', 'maximumGrade'],
             'Maximum grade',
             DataGradeMax.type,
-            'max',
         );
         const routeName = route.name || 'Untitled route';
         const routeCountLabel = `${routeCount} route${routeCount === 1 ? '' : 's'}`;
@@ -563,12 +672,8 @@ export class RoutesPageComponent implements OnInit {
         statAliases: string[],
         metricLabel: string,
         dataType: string,
-        aggregation: RouteMetricAggregation,
     ): RouteMetricCell {
-        const values = (Array.isArray(route.routes) ? route.routes : [])
-            .map(segment => this.readRouteStatValue(segment.stats, statAliases))
-            .filter((value): value is number => value !== null);
-        const value = this.aggregateRouteMetricValues(values, aggregation);
+        const value = this.readRouteStatValue(route.stats, statAliases);
         const label = value === null
             ? '-'
             : this.formatRouteMetricValue(dataType, value);
@@ -578,21 +683,6 @@ export class RoutesPageComponent implements OnInit {
             sortValue: value,
             title: value === null ? `${metricLabel} unknown` : `${metricLabel}: ${label}`,
         };
-    }
-
-    private aggregateRouteMetricValues(values: number[], aggregation: RouteMetricAggregation): number | null {
-        if (values.length === 0) {
-            return null;
-        }
-
-        switch (aggregation) {
-            case 'min':
-                return Math.min(...values);
-            case 'max':
-                return Math.max(...values);
-            case 'sum':
-                return values.reduce((sum, value) => sum + value, 0);
-        }
     }
 
     private readRouteStatValue(stats: Record<string, unknown> | undefined, aliases: string[]): number | null {
@@ -807,6 +897,17 @@ export class RoutesPageComponent implements OnInit {
             'pointCount',
             'originalFilename',
         ].includes(value);
+    }
+
+    private toRouteListSort(routeSort: RouteSortState): RouteListSort {
+        if (!isRouteListSortColumn(routeSort.active)) {
+            return ROUTE_LIST_DEFAULT_SORT;
+        }
+
+        return {
+            active: routeSort.active,
+            direction: routeSort.direction === 'asc' ? 'asc' : 'desc',
+        };
     }
 
     private sanitizeFilenameBase(value: string): string {

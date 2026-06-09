@@ -13,6 +13,8 @@ import { AppAuthService } from '../../authentication/app.auth.service';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { AppFileService } from '../../services/app.file.service';
 import { AppHapticsService } from '../../services/app.haptics.service';
+import { AppProcessingService } from '../../services/app.processing.service';
+import { AppRouteReprocessService, RouteReprocessError } from '../../services/app.route-reprocess.service';
 import { AppRouteService } from '../../services/app.route.service';
 import { LoggerService } from '../../services/logger.service';
 import { RoutesPageComponent } from './routes-page.component';
@@ -28,6 +30,8 @@ describe('RoutesPageComponent', () => {
     let fileServiceMock: any;
     let analyticsServiceMock: any;
     let hapticsServiceMock: any;
+    let processingServiceMock: any;
+    let routeReprocessServiceMock: any;
     let loggerMock: any;
     let routerMock: any;
 
@@ -37,6 +41,13 @@ describe('RoutesPageComponent', () => {
         name: 'Morning Route',
         srcFileType: 'gpx',
         createdAt: new Date('2026-01-02T00:00:00.000Z'),
+        stats: {
+            Distance: 10000,
+            Ascent: 120,
+            Descent: 118,
+            'Minimum Grade': -3.2,
+            'Maximum Grade': 8.6,
+        },
         routes: [{
             id: 'segment-1',
             name: 'Segment',
@@ -96,6 +107,27 @@ describe('RoutesPageComponent', () => {
         hapticsServiceMock = {
             selection: vi.fn(),
         };
+        processingServiceMock = {
+            addJob: vi.fn().mockReturnValue('job-1'),
+            updateJob: vi.fn(),
+            completeJob: vi.fn(),
+            failJob: vi.fn(),
+        };
+        routeReprocessServiceMock = {
+            reprocessRouteDocumentFromOriginalFile: vi.fn().mockResolvedValue({
+                routeDocument: {
+                    ...route,
+                    stats: { Distance: 12000 },
+                    routeCount: 1,
+                    waypointCount: 1,
+                    pointCount: 4,
+                },
+                sourceFilesCount: 1,
+                routeCount: 1,
+                waypointCount: 1,
+                pointCount: 4,
+            }),
+        };
         loggerMock = {
             error: vi.fn(),
         };
@@ -113,6 +145,8 @@ describe('RoutesPageComponent', () => {
                 { provide: AppFileService, useValue: fileServiceMock },
                 { provide: AppAnalyticsService, useValue: analyticsServiceMock },
                 { provide: AppHapticsService, useValue: hapticsServiceMock },
+                { provide: AppProcessingService, useValue: processingServiceMock },
+                { provide: AppRouteReprocessService, useValue: routeReprocessServiceMock },
                 { provide: LoggerService, useValue: loggerMock },
                 { provide: Router, useValue: routerMock },
             ],
@@ -130,9 +164,14 @@ describe('RoutesPageComponent', () => {
 
     it('initializes owner routes and count', async () => {
         await component.ngOnInit();
+        await firstValueFrom(component.routes$!);
 
         expect(authServiceMock.getUser).toHaveBeenCalled();
-        expect(routeServiceMock.getRoutes).toHaveBeenCalledWith({ uid: 'user-1' });
+        expect(routeServiceMock.getRoutes).toHaveBeenCalledWith(
+            { uid: 'user-1' },
+            50,
+            { active: 'date', direction: 'desc' },
+        );
         expect(routeServiceMock.getRouteCount).toHaveBeenCalledWith({ uid: 'user-1' });
         expect(component.routeCount()).toBe(1);
         expect(analyticsServiceMock.logSavedRouteAction).toHaveBeenCalledWith('view', {
@@ -191,12 +230,62 @@ describe('RoutesPageComponent', () => {
         expect(component.trackByRouteID(0, routes[0])).toBe('route-1');
     });
 
+    it('reads persisted route-file aggregate stats for table metrics', async () => {
+        const routeWithAggregateStats: FirestoreRouteJSON = {
+            ...route,
+            stats: {
+                Distance: 12000,
+                Ascent: 150,
+                Descent: 145,
+                'Minimum Grade': -5,
+                'Maximum Grade': 11,
+            },
+        };
+        routeServiceMock.getRoutes.mockReturnValue(of([routeWithAggregateStats]));
+        await component.ngOnInit();
+
+        const routes = await firstValueFrom(component.routes$!);
+
+        expect(routes[0].distance).toMatchObject({
+            label: '12.00 Km',
+            sortValue: 12000,
+            title: 'Distance: 12.00 Km',
+        });
+        expect(routes[0].ascent.sortValue).toBe(150);
+        expect(routes[0].descent.sortValue).toBe(145);
+        expect(routes[0].minGrade.sortValue).toBe(-5);
+        expect(routes[0].maxGrade.sortValue).toBe(11);
+    });
+
+    it('does not aggregate table metrics from segment summaries when top-level stats are missing', async () => {
+        const { stats: _stats, ...routeWithoutTopLevelStats } = route;
+        routeServiceMock.getRoutes.mockReturnValue(of([routeWithoutTopLevelStats as FirestoreRouteJSON]));
+        await component.ngOnInit();
+
+        const routes = await firstValueFrom(component.routes$!);
+
+        expect(routes[0].distance).toMatchObject({
+            label: '-',
+            sortValue: null,
+            title: 'Distance unknown',
+        });
+        expect(routes[0].ascent.sortValue).toBeNull();
+        expect(routes[0].descent.sortValue).toBeNull();
+        expect(routes[0].minGrade.sortValue).toBeNull();
+        expect(routes[0].maxGrade.sortValue).toBeNull();
+    });
+
     it('filters loaded route rows with compare-style search and facets', async () => {
         const cyclingRoute: FirestoreRouteJSON = {
             ...route,
             id: 'route-2',
             name: 'Evening Ride',
             srcFileType: 'fit',
+            stats: {
+                Distance: 24000,
+                Ascent: 420,
+                Descent: 410,
+            },
             routes: [{
                 id: 'segment-2',
                 name: 'Ride segment',
@@ -220,7 +309,7 @@ describe('RoutesPageComponent', () => {
                 extension: 'fit',
             }],
         };
-        routeServiceMock.getRoutes.mockReturnValueOnce(of([route, cyclingRoute]));
+        routeServiceMock.getRoutes.mockReturnValue(of([route, cyclingRoute]));
         routeServiceMock.getRouteCount.mockResolvedValueOnce(2);
         await component.ngOnInit();
 
@@ -335,6 +424,8 @@ describe('RoutesPageComponent', () => {
         expect(template).toContain('(click)="openRouteDetails(item)"');
         expect(template).toContain('(keydown.enter)="openRouteDetails(item)"');
         expect(template).toContain('(keydown.space)="$event.preventDefault(); openRouteDetails(item)"');
+        expect(template).toContain('(click)="$event.stopPropagation(); reprocessRouteFromOriginalFile(item.route)"');
+        expect(template).toContain('<mat-icon>autorenew</mat-icon>');
         expect(template).toContain('(click)="$event.stopPropagation(); downloadRouteOriginals(item.route)"');
         expect(template).toContain('(click)="$event.stopPropagation(); confirmDeleteRoute(item.route)"');
         expect(template).not.toContain('<mat-icon>open_in_new</mat-icon>');
@@ -347,6 +438,13 @@ describe('RoutesPageComponent', () => {
             ...route,
             id: 'route-2',
             name: 'Short Route',
+            stats: {
+                Distance: 5000,
+                Ascent: 40,
+                Descent: 39,
+                'Minimum Grade': -7,
+                'Maximum Grade': 5,
+            },
             routes: [{
                 id: 'segment-2',
                 name: 'Short segment',
@@ -368,7 +466,7 @@ describe('RoutesPageComponent', () => {
                 extension: 'gpx',
             }],
         };
-        routeServiceMock.getRoutes.mockReturnValueOnce(of([route, shorterRoute]));
+        routeServiceMock.getRoutes.mockReturnValue(of([route, shorterRoute]));
         await component.ngOnInit();
         await firstValueFrom(component.routes$!);
 
@@ -377,6 +475,11 @@ describe('RoutesPageComponent', () => {
 
         expect(routes.map(item => item.route.id)).toEqual(['route-2', 'route-1']);
         expect(routes.map(item => item.distance.label)).toEqual(['5.00 Km', '10.00 Km']);
+        expect(routeServiceMock.getRoutes).toHaveBeenCalledWith(
+            { uid: 'user-1' },
+            50,
+            { active: 'distance', direction: 'asc' },
+        );
         expect(hapticsServiceMock.selection).toHaveBeenCalled();
         expect(analyticsServiceMock.logSavedRouteAction).toHaveBeenCalledWith('sort', {
             sortColumn: 'distance',
@@ -391,6 +494,13 @@ describe('RoutesPageComponent', () => {
             ...route,
             id: 'route-2',
             name: 'Steeper Route',
+            stats: {
+                Distance: 5000,
+                Ascent: 400,
+                Descent: 300,
+                'Minimum Grade': -12,
+                'Maximum Grade': 18,
+            },
             routes: [{
                 id: 'segment-2',
                 name: 'Steep segment',
@@ -412,7 +522,7 @@ describe('RoutesPageComponent', () => {
                 extension: 'gpx',
             }],
         };
-        routeServiceMock.getRoutes.mockReturnValueOnce(of([route, steeperRoute]));
+        routeServiceMock.getRoutes.mockReturnValue(of([route, steeperRoute]));
         await component.ngOnInit();
 
         component.onRouteSortChange({ active: 'minGrade', direction: 'asc' });
@@ -441,7 +551,7 @@ describe('RoutesPageComponent', () => {
                 extension: 'gpx',
             }],
         };
-        routeServiceMock.getRoutes.mockReturnValueOnce(of([route, emptyRoute]));
+        routeServiceMock.getRoutes.mockReturnValue(of([route, emptyRoute]));
         await component.ngOnInit();
 
         component.onRouteSortChange({ active: 'pointCount', direction: 'asc' });
@@ -472,6 +582,105 @@ describe('RoutesPageComponent', () => {
             fileType: 'gpx',
         });
         expect(routerMock.navigate).toHaveBeenCalledWith(['/user', 'user-1', 'route', 'route-1']);
+    });
+
+    it('reprocesses a route from the table action', async () => {
+        routeReprocessServiceMock.reprocessRouteDocumentFromOriginalFile.mockImplementationOnce(async (
+            _user: unknown,
+            _route: FirestoreRouteJSON,
+            options: { onProgress?: (progress: unknown) => void },
+        ) => {
+            options.onProgress?.({ phase: 'parsing', progress: 45, details: 'Parsing route' });
+            return {
+                routeDocument: {
+                    ...route,
+                    stats: { Distance: 12000 },
+                    routeCount: 1,
+                    waypointCount: 1,
+                    pointCount: 4,
+                },
+                sourceFilesCount: 1,
+                routeCount: 1,
+                waypointCount: 1,
+                pointCount: 4,
+            };
+        });
+        await component.ngOnInit();
+
+        await component.reprocessRouteFromOriginalFile(route);
+
+        expect(dialogMock.open).toHaveBeenCalledWith(
+            ConfirmationDialogComponent,
+            expect.objectContaining({
+                data: expect.objectContaining({
+                    title: 'Reprocess route from original file?',
+                    confirmLabel: 'Reprocess',
+                }),
+            }),
+        );
+        expect(processingServiceMock.addJob).toHaveBeenCalledWith('process', 'Reprocessing route from source file...');
+        expect(processingServiceMock.updateJob).toHaveBeenCalledWith('job-1', { status: 'processing', progress: 5 });
+        expect(processingServiceMock.updateJob).toHaveBeenCalledWith('job-1', {
+            status: 'processing',
+            title: 'Parsing route...',
+            progress: 45,
+            details: 'Parsing route',
+        });
+        expect(routeReprocessServiceMock.reprocessRouteDocumentFromOriginalFile).toHaveBeenCalledWith(
+            expect.objectContaining({ uid: 'user-1' }),
+            route,
+            expect.objectContaining({ onProgress: expect.any(Function) }),
+        );
+        expect(processingServiceMock.completeJob).toHaveBeenCalledWith('job-1', 'Route reprocess completed');
+        expect(analyticsServiceMock.logSavedRouteAction).toHaveBeenCalledWith('reprocess', {
+            status: 'success',
+            fileCount: 1,
+            routeCount: 1,
+            fileType: 'gpx',
+        });
+        expect(snackBarMock.open).toHaveBeenCalledWith('Route reprocessed from source file.', undefined, { duration: 2500 });
+        expect(component.reprocessingRouteID()).toBeNull();
+    });
+
+    it('reports missing original files for table reprocesses', async () => {
+        await component.ngOnInit();
+        const routeWithoutOriginalFile: FirestoreRouteJSON = {
+            ...route,
+            originalFiles: [],
+        };
+
+        await component.reprocessRouteFromOriginalFile(routeWithoutOriginalFile);
+
+        expect(dialogMock.open).not.toHaveBeenCalled();
+        expect(routeReprocessServiceMock.reprocessRouteDocumentFromOriginalFile).not.toHaveBeenCalled();
+        expect(analyticsServiceMock.logSavedRouteAction).toHaveBeenCalledWith('reprocess', {
+            status: 'missing_file',
+            fileCount: 0,
+            fileType: 'gpx',
+        });
+        expect(snackBarMock.open).toHaveBeenCalledWith('No original route file found.', undefined, { duration: 3000 });
+    });
+
+    it('logs and reports table reprocess failures without leaving the row disabled', async () => {
+        await component.ngOnInit();
+        const error = new RouteReprocessError('PARSE_FAILED', 'parse failed');
+        routeReprocessServiceMock.reprocessRouteDocumentFromOriginalFile.mockRejectedValueOnce(error);
+
+        await component.reprocessRouteFromOriginalFile(route);
+
+        expect(processingServiceMock.failJob).toHaveBeenCalledWith('job-1', 'Route reprocess failed');
+        expect(analyticsServiceMock.logSavedRouteAction).toHaveBeenCalledWith('reprocess', {
+            status: 'failure',
+            fileCount: 1,
+            fileType: 'gpx',
+        });
+        expect(loggerMock.error).toHaveBeenCalledWith(
+            '[RoutesPageComponent] Failed to reprocess route',
+            { routeID: 'route-1' },
+            error,
+        );
+        expect(snackBarMock.open).toHaveBeenCalledWith('Could not parse the original route source file.', undefined, { duration: 4000 });
+        expect(component.reprocessingRouteID()).toBeNull();
     });
 
     it('deletes owner route documents after confirmation and refreshes count', async () => {

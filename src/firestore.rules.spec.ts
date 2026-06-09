@@ -782,6 +782,7 @@ describe('Firestore Security Rules', () => {
                 });
 
                 await assertFails(db.collection(`users/${userId}/routes`).doc(routeId).update({
+                    stats: { Distance: 1 },
                     pointCount: 0,
                     routes: [],
                     bounds: {

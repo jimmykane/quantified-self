@@ -4,7 +4,6 @@ import {
   DataDistance,
   DataGradeMax,
   DataGradeMin,
-  DataInterface,
   RouteFileInterface,
   RouteInterface,
   RoutePointInterface,
@@ -52,8 +51,6 @@ export interface RouteWaypointDisplayView extends RouteWaypointDetailView {
   color: string;
   segmentLabel: string;
 }
-
-export type RouteMetricAggregation = 'sum' | 'min' | 'max';
 
 const ROUTE_SEGMENT_COLORS = [
   '#1e88e5',
@@ -104,34 +101,26 @@ export function buildRouteSegmentDetailViews(
       color: ROUTE_SEGMENT_COLORS[index % ROUTE_SEGMENT_COLORS.length],
       route,
       positions: getRoutePositions(route),
-      pointCount: getRoutePointCount(route, storedSegment),
-      distance: buildRouteMetricCell(route, storedSegment, DataDistance.type, 'Distance', unitSettings),
-      ascent: buildRouteMetricCell(route, storedSegment, DataAscent.type, 'Ascent', unitSettings),
-      descent: buildRouteMetricCell(route, storedSegment, DataDescent.type, 'Descent', unitSettings),
-      minGrade: buildRouteMetricCell(route, storedSegment, DataGradeMin.type, 'Minimum grade', unitSettings),
-      maxGrade: buildRouteMetricCell(route, storedSegment, DataGradeMax.type, 'Maximum grade', unitSettings),
+      pointCount: getRoutePointCount(storedSegment),
+      distance: buildRouteMetricCell(storedSegment, DataDistance.type, 'Distance', unitSettings),
+      ascent: buildRouteMetricCell(storedSegment, DataAscent.type, 'Ascent', unitSettings),
+      descent: buildRouteMetricCell(storedSegment, DataDescent.type, 'Descent', unitSettings),
+      minGrade: buildRouteMetricCell(storedSegment, DataGradeMin.type, 'Minimum grade', unitSettings),
+      maxGrade: buildRouteMetricCell(storedSegment, DataGradeMax.type, 'Maximum grade', unitSettings),
     };
   });
 }
 
 export function buildRouteSummaryMetrics(
   routeDocument: FirestoreRouteJSON,
-  segments: RouteSegmentDetailView[],
   unitSettings: UserUnitSettingsInterface | null,
 ): SummaryPrimaryInfoMetric[] {
-  const distance = aggregateMetricValues(segments.map(segment => segment.distance.rawValue), 'sum')
-    ?? readDocumentRouteMetric(routeDocument, DataDistance.type, 'sum');
-  const ascent = aggregateMetricValues(segments.map(segment => segment.ascent.rawValue), 'sum')
-    ?? readDocumentRouteMetric(routeDocument, DataAscent.type, 'sum');
-  const descent = aggregateMetricValues(segments.map(segment => segment.descent.rawValue), 'sum')
-    ?? readDocumentRouteMetric(routeDocument, DataDescent.type, 'sum');
-  const minGrade = aggregateMetricValues(segments.map(segment => segment.minGrade.rawValue), 'min')
-    ?? readDocumentRouteMetric(routeDocument, DataGradeMin.type, 'min');
-  const maxGrade = aggregateMetricValues(segments.map(segment => segment.maxGrade.rawValue), 'max')
-    ?? readDocumentRouteMetric(routeDocument, DataGradeMax.type, 'max');
-  const pointCount = segments.length > 0
-    ? segments.reduce((sum, segment) => sum + segment.pointCount, 0)
-    : toFiniteNumber(routeDocument.pointCount) ?? 0;
+  const distance = readStoredRouteDocumentStat(routeDocument, DataDistance.type);
+  const ascent = readStoredRouteDocumentStat(routeDocument, DataAscent.type);
+  const descent = readStoredRouteDocumentStat(routeDocument, DataDescent.type);
+  const minGrade = readStoredRouteDocumentStat(routeDocument, DataGradeMin.type);
+  const maxGrade = readStoredRouteDocumentStat(routeDocument, DataGradeMax.type);
+  const pointCount = toFiniteNumber(routeDocument.pointCount) ?? 0;
 
   return [
     {
@@ -253,14 +242,12 @@ export function getRoutePositions(route: RouteInterface): Array<{ latitudeDegree
 }
 
 export function buildRouteMetricCell(
-  route: RouteInterface,
   storedSegment: FirestoreRouteSegmentJSON | null | undefined,
   dataType: string,
   metricLabel: string,
   unitSettings: UserUnitSettingsInterface | null,
 ): RouteMetricCellView {
-  const rawValue = readParsedRouteStat(route, dataType)
-    ?? readStoredRouteSegmentStat(storedSegment, dataType);
+  const rawValue = readStoredRouteSegmentStat(storedSegment, dataType);
   const label = formatRouteMetricValue(dataType, rawValue, unitSettings);
 
   return {
@@ -270,19 +257,35 @@ export function buildRouteMetricCell(
   };
 }
 
-export function readParsedRouteStat(route: RouteInterface | null | undefined, dataType: string): number | null {
-  if (!route || typeof route.getStat !== 'function') {
-    return null;
-  }
-
-  return toFiniteNumber((route.getStat(dataType) as DataInterface | undefined)?.getValue?.());
-}
-
 export function readStoredRouteSegmentStat(
   storedSegment: FirestoreRouteSegmentJSON | null | undefined,
   dataType: string,
 ): number | null {
   const stats = storedSegment?.stats;
+  if (!stats || typeof stats !== 'object') {
+    return null;
+  }
+
+  const aliases = ROUTE_STAT_ALIASES[dataType] || [dataType];
+  for (const alias of aliases) {
+    if (!Object.prototype.hasOwnProperty.call(stats, alias)) {
+      continue;
+    }
+
+    const value = readRouteStatValue(stats[alias]);
+    if (value !== null) {
+      return value;
+    }
+  }
+
+  return null;
+}
+
+export function readStoredRouteDocumentStat(
+  routeDocument: FirestoreRouteJSON | null | undefined,
+  dataType: string,
+): number | null {
+  const stats = routeDocument?.stats;
   if (!stats || typeof stats !== 'object') {
     return null;
   }
@@ -329,44 +332,9 @@ function resolveStoredSegment(
 }
 
 function getRoutePointCount(
-  route: RouteInterface,
   storedSegment: FirestoreRouteSegmentJSON | null | undefined,
 ): number {
-  const parsedPointCount = toFiniteNumber(route.getPointCount?.());
-  if (parsedPointCount !== null) {
-    return parsedPointCount;
-  }
   return toFiniteNumber(storedSegment?.pointCount) ?? 0;
-}
-
-function readDocumentRouteMetric(
-  routeDocument: FirestoreRouteJSON,
-  dataType: string,
-  aggregation: RouteMetricAggregation,
-): number | null {
-  const values = (Array.isArray(routeDocument.routes) ? routeDocument.routes : [])
-    .map(segment => readStoredRouteSegmentStat(segment, dataType))
-    .filter((value): value is number => value !== null);
-  return aggregateMetricValues(values, aggregation);
-}
-
-function aggregateMetricValues(
-  values: Array<number | null>,
-  aggregation: RouteMetricAggregation,
-): number | null {
-  const finiteValues = values.filter((value): value is number => value !== null && Number.isFinite(value));
-  if (finiteValues.length === 0) {
-    return null;
-  }
-
-  switch (aggregation) {
-    case 'min':
-      return Math.min(...finiteValues);
-    case 'max':
-      return Math.max(...finiteValues);
-    case 'sum':
-      return finiteValues.reduce((sum, value) => sum + value, 0);
-  }
 }
 
 function readRouteStatValue(value: unknown): number | null {

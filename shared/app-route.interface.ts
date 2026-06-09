@@ -50,6 +50,7 @@ export interface RouteFileJSONInterface {
     srcFileType: string;
     createdAt: number | Date | null;
     creator?: unknown;
+    stats?: Record<string, unknown>;
     routes: RouteJSONInterface[];
     waypoints: RouteWaypointJSONInterface[];
 }
@@ -133,6 +134,7 @@ export interface FirestoreRouteJSON {
     srcFileType: string;
     createdAt: Date | number | null;
     creator?: unknown;
+    stats?: Record<string, unknown>;
     routes: FirestoreRouteSegmentJSON[];
     routeCount: number;
     waypointCount: number;

@@ -48,30 +48,53 @@ describe('route detail helpers', () => {
       { latitudeDegrees: 40.1, longitudeDegrees: 22.1 },
       { latitudeDegrees: 40.2, longitudeDegrees: 22.2 },
     ]);
-    expect(segments[0].distance.rawValue).toBe(1234);
-    expect(segments[0].minGrade.rawValue).toBe(-7);
-    expect(segments[0].maxGrade.rawValue).toBe(11);
+    expect(segments[0].distance.rawValue).toBe(1000);
+    expect(segments[0].minGrade.rawValue).toBe(-4);
+    expect(segments[0].maxGrade.rawValue).toBe(9);
   });
 
-  it('falls back to Firestore summary stats when parsed stats are missing', () => {
-    const routeDocument = createRouteDocument();
+  it('does not use parsed stats when stored segment stats are missing', () => {
+    const routeDocument = {
+      ...createRouteDocument(),
+      routes: [{
+        id: 'stored-segment-1',
+        name: 'Stored Segment',
+        activityType: 'Running',
+        pointCount: 2,
+        streamTypes: [],
+      }],
+    };
     const parsedRoute = createRoute({
       id: 'stored-segment-1',
       name: 'Parsed Segment',
       pointCount: 2,
       positions: [],
-      stats: {},
+      stats: {
+        [DataDistance.type]: 1234,
+        [DataAscent.type]: 56,
+        [DataDescent.type]: 45,
+      },
     });
 
     const segments = buildRouteSegmentDetailViews(routeDocument, createRouteFile([parsedRoute]), null);
 
-    expect(segments[0].distance.rawValue).toBe(1000);
-    expect(segments[0].ascent.rawValue).toBe(20);
-    expect(segments[0].descent.rawValue).toBe(15);
+    expect(segments[0].distance.rawValue).toBeNull();
+    expect(segments[0].ascent.rawValue).toBeNull();
+    expect(segments[0].descent.rawValue).toBeNull();
   });
 
-  it('builds route summary metrics from parsed segments first', () => {
-    const routeDocument = createRouteDocument();
+  it('builds route summary metrics from top-level route document stats', () => {
+    const routeDocument = {
+      ...createRouteDocument(),
+      pointCount: 9,
+      stats: {
+        [DataDistance.type]: 5000,
+        [DataAscent.type]: 70,
+        [DataDescent.type]: 45,
+        [DataGradeMin.type]: -12,
+        [DataGradeMax.type]: 18,
+      },
+    };
     const routes = [
       createRoute({
         id: 'stored-segment-1',
@@ -102,12 +125,45 @@ describe('route detail helpers', () => {
     ];
     const segments = buildRouteSegmentDetailViews(routeDocument, createRouteFile(routes), null);
 
-    const metrics = buildRouteSummaryMetrics(routeDocument, segments, null);
+    const metrics = buildRouteSummaryMetrics(routeDocument, null);
 
     expect(metrics.map(metric => metric.label)).toEqual(['Distance', 'Ascent', 'Descent', 'Min grade', 'Max grade', 'Points']);
-    expect(metrics.find(metric => metric.label === 'Points')?.value).toBe('5');
-    expect(metrics.find(metric => metric.label === 'Min grade')?.value).toBe('-9 %');
-    expect(metrics.find(metric => metric.label === 'Max grade')?.value).toBe('12 %');
+    expect(metrics.find(metric => metric.label === 'Distance')?.value).toBe('5.00 Km');
+    expect(metrics.find(metric => metric.label === 'Ascent')?.value).toBe('70 m');
+    expect(metrics.find(metric => metric.label === 'Descent')?.value).toBe('45 m');
+    expect(metrics.find(metric => metric.label === 'Min grade')?.value).toBe('-12 %');
+    expect(metrics.find(metric => metric.label === 'Max grade')?.value).toBe('18 %');
+    expect(metrics.find(metric => metric.label === 'Points')?.value).toBe('9');
+  });
+
+  it('does not aggregate route summary metrics from segments when top-level stats are missing', () => {
+    const routeDocument = {
+      ...createRouteDocument(),
+    };
+    const segments = buildRouteSegmentDetailViews(routeDocument, createRouteFile([
+      createRoute({
+        id: 'stored-segment-1',
+        name: 'A',
+        pointCount: 2,
+        positions: [],
+        stats: {
+          [DataDistance.type]: 1000,
+          [DataAscent.type]: 20,
+          [DataDescent.type]: 12,
+          [DataGradeMin.type]: -5,
+          [DataGradeMax.type]: 8,
+        },
+      }),
+    ]), null);
+
+    const metrics = buildRouteSummaryMetrics(routeDocument, null);
+
+    expect(segments[0].distance.rawValue).toBe(1000);
+    expect(metrics.find(metric => metric.label === 'Distance')?.value).toBe('-');
+    expect(metrics.find(metric => metric.label === 'Ascent')?.value).toBe('-');
+    expect(metrics.find(metric => metric.label === 'Descent')?.value).toBe('-');
+    expect(metrics.find(metric => metric.label === 'Min grade')?.value).toBe('-');
+    expect(metrics.find(metric => metric.label === 'Max grade')?.value).toBe('-');
   });
 
   it('builds compact waypoint views with distance labels', () => {

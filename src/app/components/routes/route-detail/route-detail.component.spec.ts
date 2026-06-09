@@ -11,16 +11,21 @@ import { FirestoreRouteJSON } from '@shared/app-route.interface';
 import { RouteResolverData } from '../../../resolvers/route.resolver';
 import { AppAnalyticsService } from '../../../services/app.analytics.service';
 import { AppFileService } from '../../../services/app.file.service';
+import { AppProcessingService } from '../../../services/app.processing.service';
+import { AppRouteReprocessService, RouteReprocessError } from '../../../services/app.route-reprocess.service';
 import { AppRouteService } from '../../../services/app.route.service';
 import { AppThemeService } from '../../../services/app.theme.service';
 import { AppUserSettingsQueryService } from '../../../services/app.user-settings-query.service';
 import { LoggerService } from '../../../services/logger.service';
+import { ConfirmationDialogComponent } from '../../confirmation-dialog/confirmation-dialog.component';
 import { RouteNameDialogComponent } from '../route-name-dialog/route-name-dialog.component';
 import { RouteDetailComponent } from './route-detail.component';
 
 describe('RouteDetailComponent', () => {
   let component: RouteDetailComponent;
   let routeServiceMock: any;
+  let routeReprocessServiceMock: any;
+  let processingServiceMock: any;
   let fileServiceMock: any;
   let analyticsServiceMock: any;
   let dialogMock: any;
@@ -85,6 +90,30 @@ describe('RouteDetailComponent', () => {
       updateRouteName: vi.fn().mockResolvedValue(undefined),
       deleteRoute: vi.fn().mockResolvedValue(undefined),
     };
+    routeReprocessServiceMock = {
+      reprocessRouteFromOriginalFile: vi.fn().mockResolvedValue({
+        routeDocument: {
+          ...routeDocument,
+          name: 'Reprocessed Route',
+          routeCount: 1,
+          waypointCount: 1,
+          pointCount: 2,
+        },
+        routeFile,
+        sourceFile: routeDocument.originalFiles![0],
+        user: new User('user-1'),
+        sourceFilesCount: 1,
+        routeCount: 1,
+        waypointCount: 1,
+        pointCount: 2,
+      }),
+    };
+    processingServiceMock = {
+      addJob: vi.fn().mockReturnValue('job-1'),
+      updateJob: vi.fn(),
+      completeJob: vi.fn(),
+      failJob: vi.fn(),
+    };
     fileServiceMock = {
       getExtensionFromPath: vi.fn().mockReturnValue('gpx'),
       toDate: vi.fn((value: unknown) => value instanceof Date ? value : null),
@@ -113,6 +142,8 @@ describe('RouteDetailComponent', () => {
       providers: [
         { provide: ActivatedRoute, useValue: { data: of({ route: resolvedData }) } },
         { provide: AppRouteService, useValue: routeServiceMock },
+        { provide: AppRouteReprocessService, useValue: routeReprocessServiceMock },
+        { provide: AppProcessingService, useValue: processingServiceMock },
         { provide: AppFileService, useValue: fileServiceMock },
         { provide: AppAnalyticsService, useValue: analyticsServiceMock },
         { provide: MatDialog, useValue: dialogMock },
@@ -317,21 +348,94 @@ describe('RouteDetailComponent', () => {
     });
   });
 
+  it('reprocesses the owner route from the original source file', async () => {
+    await component.reprocessRouteFromOriginalFile();
+
+    expect(dialogMock.open).toHaveBeenCalledWith(ConfirmationDialogComponent, expect.objectContaining({
+      data: expect.objectContaining({
+        title: 'Reprocess route from original file?',
+        confirmLabel: 'Reprocess',
+      }),
+    }));
+    expect(processingServiceMock.addJob).toHaveBeenCalledWith('process', 'Reprocessing route from source file...');
+    expect(routeReprocessServiceMock.reprocessRouteFromOriginalFile).toHaveBeenCalledWith(
+      expect.objectContaining({ uid: 'user-1' }),
+      routeDocument,
+      expect.objectContaining({ onProgress: expect.any(Function) }),
+    );
+    expect(component.routeName()).toBe('Reprocessed Route');
+    expect(processingServiceMock.completeJob).toHaveBeenCalledWith('job-1', 'Route reprocess completed');
+    expect(analyticsServiceMock.logSavedRouteAction).toHaveBeenCalledWith('reprocess', {
+      status: 'success',
+      fileCount: 1,
+      routeCount: 1,
+      fileType: 'gpx',
+    });
+    expect(snackBarMock.open).toHaveBeenCalledWith('Route reprocessed from source file.', undefined, { duration: 2500 });
+  });
+
+  it('does not reprocess when the route has no original source file', async () => {
+    component.routeDocument.set({
+      ...routeDocument,
+      originalFiles: [],
+      originalFile: undefined,
+    });
+
+    await component.reprocessRouteFromOriginalFile();
+
+    expect(dialogMock.open).not.toHaveBeenCalled();
+    expect(routeReprocessServiceMock.reprocessRouteFromOriginalFile).not.toHaveBeenCalled();
+    expect(analyticsServiceMock.logSavedRouteAction).toHaveBeenCalledWith('reprocess', {
+      status: 'missing_file',
+      fileCount: 0,
+      fileType: 'gpx',
+    });
+    expect(snackBarMock.open).toHaveBeenCalledWith('No original route file found.', undefined, { duration: 3000 });
+  });
+
+  it('reports route reprocess failures with a typed message', async () => {
+    routeReprocessServiceMock.reprocessRouteFromOriginalFile.mockRejectedValueOnce(
+      new RouteReprocessError('PARSE_FAILED', 'Could not parse'),
+    );
+
+    await component.reprocessRouteFromOriginalFile();
+
+    expect(processingServiceMock.failJob).toHaveBeenCalledWith('job-1', 'Route reprocess failed');
+    expect(analyticsServiceMock.logSavedRouteAction).toHaveBeenCalledWith('reprocess', {
+      status: 'failure',
+      fileCount: 1,
+      fileType: 'gpx',
+    });
+    expect(loggerMock.error).toHaveBeenCalledWith(
+      '[RouteDetailComponent] Failed to reprocess route',
+      { routeID: 'route-1' },
+      expect.any(RouteReprocessError),
+    );
+    expect(snackBarMock.open).toHaveBeenCalledWith(
+      'Could not parse the original route source file.',
+      undefined,
+      { duration: 4000 },
+    );
+  });
+
   it('does not rename, download, or delete when the resolved user is not the route owner', async () => {
     component.user.set(new User('other-user'));
     dialogMock.open.mockClear();
     routeServiceMock.updateRouteName.mockClear();
     routeServiceMock.downloadFile.mockClear();
     routeServiceMock.deleteRoute.mockClear();
+    routeReprocessServiceMock.reprocessRouteFromOriginalFile.mockClear();
 
     await component.renameRoute();
     await component.downloadRouteOriginals();
+    await component.reprocessRouteFromOriginalFile();
     await component.confirmDeleteRoute();
 
     expect(routeServiceMock.updateRouteName).not.toHaveBeenCalled();
     expect(routeServiceMock.downloadFile).not.toHaveBeenCalled();
     expect(dialogMock.open).not.toHaveBeenCalled();
     expect(routeServiceMock.deleteRoute).not.toHaveBeenCalled();
+    expect(routeReprocessServiceMock.reprocessRouteFromOriginalFile).not.toHaveBeenCalled();
   });
 
   it('orders route detail sections as map, charts, segments, then waypoints', () => {
@@ -351,6 +455,8 @@ describe('RouteDetailComponent', () => {
     expect(waypointsIndex).toBeGreaterThan(segmentsIndex);
     expect(template).toContain('@if (hasMultipleSegments())');
     expect(template).toContain('@if (singleSegment(); as segment)');
+    expect(template).toContain('aria-label="Reprocess route from original file"');
+    expect(template).toContain('(click)="reprocessRouteFromOriginalFile()"');
     expect(template).toContain('class="route-chip route-chip--segment"');
     expect(template).toContain('class="segment-table route-data-table"');
     expect(template).toContain('class="segment-visibility-control"');

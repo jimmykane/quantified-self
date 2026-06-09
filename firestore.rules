@@ -140,6 +140,7 @@ service cloud.firestore {
               'createdAt',
               'importedAt',
               'updatedAt',
+              'stats',
               'routes',
               'routeCount',
               'waypointCount',

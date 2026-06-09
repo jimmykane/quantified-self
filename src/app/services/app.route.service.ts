@@ -2,6 +2,13 @@ import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
 import {
+    DataAscent,
+    DataDescent,
+    DataDistance,
+    DataGradeMax,
+    DataGradeMin,
+} from '@sports-alliance/sports-lib';
+import {
     Firestore,
     collection,
     collectionData,
@@ -22,6 +29,43 @@ export interface RouteOwner {
     uid: string;
 }
 
+export type RouteListSortColumn =
+    | 'date'
+    | 'name'
+    | 'distance'
+    | 'ascent'
+    | 'descent'
+    | 'minGrade'
+    | 'maxGrade'
+    | 'pointCount';
+
+export type RouteListSortDirection = 'asc' | 'desc';
+
+export interface RouteListSort {
+    active: RouteListSortColumn;
+    direction: RouteListSortDirection;
+}
+
+export const ROUTE_LIST_DEFAULT_SORT: RouteListSort = {
+    active: 'date',
+    direction: 'desc',
+};
+
+const ROUTE_LIST_SORT_FIELD_BY_COLUMN: Record<RouteListSortColumn, string> = {
+    date: 'importedAt',
+    name: 'name',
+    distance: `stats.${DataDistance.type}`,
+    ascent: `stats.${DataAscent.type}`,
+    descent: `stats.${DataDescent.type}`,
+    minGrade: `stats.${DataGradeMin.type}`,
+    maxGrade: `stats.${DataGradeMax.type}`,
+    pointCount: 'pointCount',
+};
+
+export function isRouteListSortColumn(value: string): value is RouteListSortColumn {
+    return Object.prototype.hasOwnProperty.call(ROUTE_LIST_SORT_FIELD_BY_COLUMN, value);
+}
+
 const SERVER_OWNED_ROUTE_UPDATE_FIELDS = [
     'id',
     'userID',
@@ -33,6 +77,7 @@ const SERVER_OWNED_ROUTE_UPDATE_FIELDS = [
     'createdAt',
     'importedAt',
     'updatedAt',
+    'stats',
     'routes',
     'routeCount',
     'waypointCount',
@@ -49,9 +94,18 @@ export class AppRouteService {
     private firestore = inject(Firestore);
     private originalFileHydrationService = inject(AppOriginalFileHydrationService);
 
-    getRoutes(user: RouteOwner, limitCount = 50): Observable<FirestoreRouteJSON[]> {
+    getRoutes(
+        user: RouteOwner,
+        limitCount = 50,
+        sort: RouteListSort = ROUTE_LIST_DEFAULT_SORT,
+    ): Observable<FirestoreRouteJSON[]> {
         const routesCollection = collection(this.firestore, 'users', user.uid, 'routes');
-        const routesQuery = query(routesCollection, orderBy('importedAt', 'desc'), limit(limitCount));
+        const resolvedSort = this.resolveRouteListSort(sort);
+        const routesQuery = query(
+            routesCollection,
+            orderBy(ROUTE_LIST_SORT_FIELD_BY_COLUMN[resolvedSort.active], resolvedSort.direction),
+            limit(limitCount),
+        );
         return collectionData(routesQuery, { idField: 'id' }) as Observable<FirestoreRouteJSON[]>;
     }
 
@@ -118,4 +172,16 @@ export class AppRouteService {
         });
         return sanitizedPayload;
     }
+
+    private resolveRouteListSort(sort: RouteListSort | undefined): RouteListSort {
+        if (!sort || !isRouteListSortColumn(sort.active)) {
+            return ROUTE_LIST_DEFAULT_SORT;
+        }
+
+        return {
+            active: sort.active,
+            direction: sort.direction === 'asc' ? 'asc' : 'desc',
+        };
+    }
+
 }

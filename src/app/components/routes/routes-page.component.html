@@ -246,16 +246,23 @@
         </th>
         <td mat-cell *matCellDef="let item" class="route-actions-cell">
           <button mat-icon-button type="button"
+            aria-label="Reprocess route from original file"
+            matTooltip="Reprocess route from original file"
+            [disabled]="reprocessingRouteID() !== null || deletingRouteID() === item.route.id || downloadingRouteID() === item.route.id || !canReprocessRoute(item.route)"
+            (click)="$event.stopPropagation(); reprocessRouteFromOriginalFile(item.route)">
+            <mat-icon>autorenew</mat-icon>
+          </button>
+          <button mat-icon-button type="button"
             aria-label="Download original route file"
             matTooltip="Download original route file"
-            [disabled]="downloadingRouteID() === item.route.id"
+            [disabled]="downloadingRouteID() === item.route.id || reprocessingRouteID() === item.route.id"
             (click)="$event.stopPropagation(); downloadRouteOriginals(item.route)">
             <mat-icon>download</mat-icon>
           </button>
           <button mat-icon-button type="button"
             aria-label="Delete route"
             matTooltip="Delete route"
-            [disabled]="deletingRouteID() === item.route.id"
+            [disabled]="deletingRouteID() === item.route.id || reprocessingRouteID() === item.route.id"
             (click)="$event.stopPropagation(); confirmDeleteRoute(item.route)">
             <mat-icon>delete</mat-icon>
           </button>

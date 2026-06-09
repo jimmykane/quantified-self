@@ -27,11 +27,13 @@ const ROUTE_ASCENT_STAT_TYPE = 'Ascent';
 const ROUTE_DESCENT_STAT_TYPE = 'Descent';
 const ROUTE_MINIMUM_GRADE_STAT_TYPE = 'Minimum Grade';
 const ROUTE_MAXIMUM_GRADE_STAT_TYPE = 'Maximum Grade';
+const ROUTE_AVERAGE_GRADE_STAT_TYPE = 'Average Grade';
 const ROUTE_DISTANCE_STAT_ALIASES = [ROUTE_DISTANCE_STAT_TYPE, 'distance'];
 const ROUTE_ASCENT_STAT_ALIASES = [ROUTE_ASCENT_STAT_TYPE, 'ascent'];
 const ROUTE_DESCENT_STAT_ALIASES = [ROUTE_DESCENT_STAT_TYPE, 'descent'];
 const ROUTE_MINIMUM_GRADE_STAT_ALIASES = [ROUTE_MINIMUM_GRADE_STAT_TYPE, 'minGrade', 'gradeMin', 'minimumGrade'];
 const ROUTE_MAXIMUM_GRADE_STAT_ALIASES = [ROUTE_MAXIMUM_GRADE_STAT_TYPE, 'maxGrade', 'gradeMax', 'maximumGrade'];
+const ROUTE_AVERAGE_GRADE_STAT_ALIASES = [ROUTE_AVERAGE_GRADE_STAT_TYPE, 'avgGrade', 'gradeAvg', 'averageGrade'];
 
 const consoleRouteLogAdapter: LogAdapter = {
     info: (message: string, ...args: unknown[]) => console.log('[RouteWriter]', message, ...args),
@@ -408,6 +410,93 @@ function buildRouteStatsSummary(
     ensureRouteStat(stats, ROUTE_DESCENT_STAT_TYPE, ROUTE_DESCENT_STAT_ALIASES, () => calculateRouteVerticalChange(points, 'descent'));
     ensureRouteStat(stats, ROUTE_MINIMUM_GRADE_STAT_TYPE, ROUTE_MINIMUM_GRADE_STAT_ALIASES, () => calculateRouteGrade(points, 'minimum'));
     ensureRouteStat(stats, ROUTE_MAXIMUM_GRADE_STAT_TYPE, ROUTE_MAXIMUM_GRADE_STAT_ALIASES, () => calculateRouteGrade(points, 'maximum'));
+    ensureRouteStat(stats, ROUTE_AVERAGE_GRADE_STAT_TYPE, ROUTE_AVERAGE_GRADE_STAT_ALIASES, () => null);
+
+    return stats;
+}
+
+function aggregateRouteSummaryStats(
+    routeSummaries: FirestoreRouteSegmentJSON[],
+    aliases: string[],
+    aggregation: 'sum' | 'min' | 'max',
+): number | null {
+    const values = routeSummaries
+        .map(route => route.stats ? getRouteStatValue(route.stats, aliases) : null)
+        .filter((value): value is number => value !== null);
+
+    if (values.length === 0) {
+        return null;
+    }
+
+    switch (aggregation) {
+        case 'sum':
+            return values.reduce((sum, value) => sum + value, 0);
+        case 'min':
+            return Math.min(...values);
+        case 'max':
+            return Math.max(...values);
+    }
+}
+
+function calculateRouteFileAverageGrade(routeSummaries: FirestoreRouteSegmentJSON[]): number | null {
+    let weightedSum = 0;
+    let weightSum = 0;
+    let simpleSum = 0;
+    let simpleCount = 0;
+
+    routeSummaries.forEach((route) => {
+        if (!route.stats) {
+            return;
+        }
+
+        const averageGrade = getRouteStatValue(route.stats, ROUTE_AVERAGE_GRADE_STAT_ALIASES);
+        if (averageGrade === null) {
+            return;
+        }
+
+        simpleSum += averageGrade;
+        simpleCount++;
+
+        const distance = getRouteStatValue(route.stats, ROUTE_DISTANCE_STAT_ALIASES);
+        if (distance !== null && distance > 0) {
+            weightedSum += averageGrade * distance;
+            weightSum += distance;
+        }
+    });
+
+    if (weightSum > 0) {
+        return weightedSum / weightSum;
+    }
+
+    return simpleCount > 0 ? simpleSum / simpleCount : null;
+}
+
+function buildRouteFileStatsSummary(
+    rawStats: Record<string, unknown> | undefined,
+    routeSummaries: FirestoreRouteSegmentJSON[],
+): Record<string, unknown> {
+    const stats = rawStats && typeof rawStats === 'object' && !Array.isArray(rawStats)
+        ? { ...rawStats }
+        : {};
+
+    ensureRouteStat(stats, ROUTE_DISTANCE_STAT_TYPE, ROUTE_DISTANCE_STAT_ALIASES, () => (
+        aggregateRouteSummaryStats(routeSummaries, ROUTE_DISTANCE_STAT_ALIASES, 'sum')
+    ));
+    ensureRouteStat(stats, ROUTE_ASCENT_STAT_TYPE, ROUTE_ASCENT_STAT_ALIASES, () => (
+        aggregateRouteSummaryStats(routeSummaries, ROUTE_ASCENT_STAT_ALIASES, 'sum')
+    ));
+    ensureRouteStat(stats, ROUTE_DESCENT_STAT_TYPE, ROUTE_DESCENT_STAT_ALIASES, () => (
+        aggregateRouteSummaryStats(routeSummaries, ROUTE_DESCENT_STAT_ALIASES, 'sum')
+    ));
+    ensureRouteStat(stats, ROUTE_MINIMUM_GRADE_STAT_TYPE, ROUTE_MINIMUM_GRADE_STAT_ALIASES, () => (
+        aggregateRouteSummaryStats(routeSummaries, ROUTE_MINIMUM_GRADE_STAT_ALIASES, 'min')
+    ));
+    ensureRouteStat(stats, ROUTE_MAXIMUM_GRADE_STAT_TYPE, ROUTE_MAXIMUM_GRADE_STAT_ALIASES, () => (
+        aggregateRouteSummaryStats(routeSummaries, ROUTE_MAXIMUM_GRADE_STAT_ALIASES, 'max')
+    ));
+    ensureRouteStat(stats, ROUTE_AVERAGE_GRADE_STAT_TYPE, ROUTE_AVERAGE_GRADE_STAT_ALIASES, () => (
+        calculateRouteFileAverageGrade(routeSummaries)
+    ));
 
     return stats;
 }
@@ -438,6 +527,7 @@ function summarizeRoute(routeJSON: RouteJSONInterface): FirestoreRouteSegmentJSO
 export function buildFirestoreRoutePayload(userID: string, routeFile: AppRouteInterface): FirestoreRouteJSON {
     const routeFileJSON: RouteFileJSONInterface = routeFile.toJSON();
     const routeSummaries = (Array.isArray(routeFileJSON.routes) ? routeFileJSON.routes : []).map(summarizeRoute);
+    const stats = buildRouteFileStatsSummary(routeFileJSON.stats, routeSummaries);
     const streamTypes = Array.from(new Set(routeSummaries.flatMap(route => route.streamTypes))).sort();
     const activityTypes = Array.from(new Set(
         routeSummaries
@@ -453,6 +543,7 @@ export function buildFirestoreRoutePayload(userID: string, routeFile: AppRouteIn
         srcFileType: routeFileJSON.srcFileType || routeFile.srcFileType || 'unknown',
         createdAt,
         creator: routeFileJSON.creator || routeFile.creator,
+        stats,
         routes: routeSummaries,
         routeCount: routeSummaries.length,
         waypointCount: Array.isArray(routeFileJSON.waypoints) ? routeFileJSON.waypoints.length : 0,

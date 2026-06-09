@@ -14,6 +14,13 @@ import { SharedModule } from '../../../modules/shared.module';
 import { RouteResolverData } from '../../../resolvers/route.resolver';
 import { AppAnalyticsService } from '../../../services/app.analytics.service';
 import { AppFileService } from '../../../services/app.file.service';
+import { AppProcessingService } from '../../../services/app.processing.service';
+import {
+  AppRouteReprocessService,
+  getRouteReprocessErrorMessage,
+  getRouteReprocessProgressTitle,
+  RouteReprocessProgress,
+} from '../../../services/app.route-reprocess.service';
 import { AppRouteService } from '../../../services/app.route.service';
 import { AppThemeService } from '../../../services/app.theme.service';
 import { AppUserSettingsQueryService } from '../../../services/app.user-settings-query.service';
@@ -46,6 +53,8 @@ export class RouteDetailComponent {
   private routeService = inject(AppRouteService);
   private fileService = inject(AppFileService);
   private analyticsService = inject(AppAnalyticsService);
+  private routeReprocessService = inject(AppRouteReprocessService);
+  private processingService = inject(AppProcessingService);
   private dialog = inject(MatDialog);
   private snackBar = inject(MatSnackBar);
   private logger = inject(LoggerService);
@@ -60,6 +69,7 @@ export class RouteDetailComponent {
   readonly renaming = signal(false);
   readonly downloading = signal(false);
   readonly deleting = signal(false);
+  readonly reprocessing = signal(false);
 
   readonly unitSettings = this.userSettingsQuery.unitSettings;
   readonly darkTheme = computed(() => this.themeService.appTheme() === AppThemes.Dark);
@@ -102,7 +112,7 @@ export class RouteDetailComponent {
     if (!routeDocument) {
       return [];
     }
-    return buildRouteSummaryMetrics(routeDocument, this.segments(), this.unitSettings());
+    return buildRouteSummaryMetrics(routeDocument, this.unitSettings());
   });
   readonly waypoints = computed(() => {
     const routeFile = this.routeFile();
@@ -117,6 +127,12 @@ export class RouteDetailComponent {
     const user = this.user();
     const routeDocument = this.routeDocument();
     return !!user?.uid && !!routeDocument?.userID && user.uid === routeDocument.userID;
+  });
+  readonly canReprocessRoute = computed(() => {
+    const routeDocument = this.routeDocument();
+    return !!routeDocument
+      && this.canManageRoute()
+      && this.routeService.getOriginalRouteFiles(routeDocument).length > 0;
   });
 
   constructor() {
@@ -264,6 +280,87 @@ export class RouteDetailComponent {
     }
   }
 
+  async reprocessRouteFromOriginalFile(): Promise<void> {
+    const routeDocument = this.routeDocument();
+    const routeID = routeDocument?.id;
+    const user = this.user();
+    if (
+      !routeDocument
+      || !routeID
+      || !user
+      || this.reprocessing()
+      || this.renaming()
+      || this.downloading()
+      || this.deleting()
+      || !this.canManageRoute()
+    ) {
+      return;
+    }
+
+    const originalFiles = this.routeService.getOriginalRouteFiles(routeDocument);
+    if (originalFiles.length === 0) {
+      this.analyticsService.logSavedRouteAction('reprocess', {
+        status: 'missing_file',
+        fileCount: 0,
+        fileType: this.getPrimaryRouteFileType(routeDocument),
+      });
+      this.snackBar.open('No original route file found.', undefined, { duration: 3000 });
+      return;
+    }
+
+    const dialogRef = this.dialog.open(ConfirmationDialogComponent, {
+      data: {
+        title: 'Reprocess route from original file?',
+        message: 'This will reparse the saved route source file and rebuild route statistics, segments, map bounds, and waypoint counts.',
+        confirmLabel: 'Reprocess',
+        confirmColor: 'primary',
+      } as ConfirmationDialogData,
+    });
+
+    const confirmed = await firstValueFrom(dialogRef.afterClosed());
+    if (!confirmed) {
+      return;
+    }
+
+    this.reprocessing.set(true);
+    this.snackBar.open('Reprocessing route from source file...', undefined, { duration: 2000 });
+    const jobId = this.processingService.addJob('process', 'Reprocessing route from source file...');
+    this.processingService.updateJob(jobId, { status: 'processing', progress: 5 });
+
+    try {
+      const reprocessedRoute = await this.routeReprocessService.reprocessRouteFromOriginalFile(user, routeDocument, {
+        onProgress: (progress) => this.updateReprocessJob(jobId, progress),
+      });
+      this.routeDocument.set(reprocessedRoute.routeDocument);
+      this.routeFile.set(reprocessedRoute.routeFile);
+      this.sourceFile.set(reprocessedRoute.sourceFile);
+      this.selectedSegmentIDs.set(buildRouteSegmentDetailViews(
+        reprocessedRoute.routeDocument,
+        reprocessedRoute.routeFile,
+        this.unitSettings(),
+      ).map(segment => segment.id));
+      this.processingService.completeJob(jobId, 'Route reprocess completed');
+      this.analyticsService.logSavedRouteAction('reprocess', {
+        status: 'success',
+        fileCount: reprocessedRoute.sourceFilesCount,
+        routeCount: reprocessedRoute.routeCount,
+        fileType: this.getPrimaryRouteFileType(reprocessedRoute.routeDocument),
+      });
+      this.snackBar.open('Route reprocessed from source file.', undefined, { duration: 2500 });
+    } catch (error) {
+      this.processingService.failJob(jobId, 'Route reprocess failed');
+      this.analyticsService.logSavedRouteAction('reprocess', {
+        status: 'failure',
+        fileCount: originalFiles.length,
+        fileType: this.getPrimaryRouteFileType(routeDocument),
+      });
+      this.logger.error('[RouteDetailComponent] Failed to reprocess route', { routeID }, error);
+      this.snackBar.open(getRouteReprocessErrorMessage(error), undefined, { duration: 4000 });
+    } finally {
+      this.reprocessing.set(false);
+    }
+  }
+
   async confirmDeleteRoute(): Promise<void> {
     const routeDocument = this.routeDocument();
     const routeID = routeDocument?.id;
@@ -332,6 +429,15 @@ export class RouteDetailComponent {
         ? { ...routeDocument, name }
         : routeDocument,
     );
+  }
+
+  private updateReprocessJob(jobId: string, progress: RouteReprocessProgress): void {
+    this.processingService.updateJob(jobId, {
+      status: progress.phase === 'done' ? 'completed' : 'processing',
+      title: getRouteReprocessProgressTitle(progress.phase),
+      progress: progress.progress,
+      details: progress.details,
+    });
   }
 
   private resolveRouteDate(): Date | null {

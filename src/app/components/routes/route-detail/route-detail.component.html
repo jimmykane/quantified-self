@@ -44,9 +44,16 @@
           <mat-icon>download</mat-icon>
         </button>
         <button mat-icon-button type="button"
+          aria-label="Reprocess route from original file"
+          matTooltip="Reprocess route from original file"
+          [disabled]="reprocessing() || renaming() || downloading() || deleting() || !canReprocessRoute()"
+          (click)="reprocessRouteFromOriginalFile()">
+          <mat-icon>autorenew</mat-icon>
+        </button>
+        <button mat-icon-button type="button"
           aria-label="Delete route"
           matTooltip="Delete route"
-          [disabled]="deleting() || renaming() || !canManageRoute()"
+          [disabled]="deleting() || renaming() || reprocessing() || !canManageRoute()"
           (click)="confirmDeleteRoute()">
           <mat-icon>delete</mat-icon>
         </button>

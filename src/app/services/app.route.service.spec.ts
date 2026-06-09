@@ -2,6 +2,10 @@ import { TestBed } from '@angular/core/testing';
 import { firstValueFrom, of } from 'rxjs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+    DataDistance,
+    DataGradeMin,
+} from '@sports-alliance/sports-lib';
+import {
     Firestore,
     collection,
     collectionData,
@@ -79,6 +83,29 @@ describe('AppRouteService', () => {
         expect(result).toEqual([{ id: 'route-1', name: 'Route 1' }]);
     });
 
+    it('lists routes ordered by persisted aggregate route stats', async () => {
+        vi.mocked(collectionData).mockReturnValue(of([{ id: 'route-1', name: 'Route 1' }]));
+
+        await firstValueFrom(service.getRoutes({ uid: 'user-1' }, 25, { active: 'distance', direction: 'asc' }));
+
+        expect(orderBy).toHaveBeenCalledWith(`stats.${DataDistance.type}`, 'asc');
+        expect(orderBy).toHaveBeenCalledTimes(1);
+        expect(query).toHaveBeenCalledWith(
+            { path: 'users/user-1/routes' },
+            { type: 'orderBy', field: `stats.${DataDistance.type}`, direction: 'asc' },
+            { type: 'limit', value: 25 },
+        );
+        expect(collectionData).toHaveBeenCalledTimes(1);
+    });
+
+    it('lists routes ordered by persisted aggregate grade stats', async () => {
+        vi.mocked(collectionData).mockReturnValue(of([{ id: 'route-1', name: 'Route 1' }]));
+
+        await firstValueFrom(service.getRoutes({ uid: 'user-1' }, 25, { active: 'minGrade', direction: 'desc' }));
+
+        expect(orderBy).toHaveBeenCalledWith(`stats.${DataGradeMin.type}`, 'desc');
+    });
+
     it('counts routes from the user scoped routes collection', async () => {
         vi.mocked(getCountFromServer).mockResolvedValue({ data: () => ({ count: 7 }) } as any);
 
@@ -94,6 +121,7 @@ describe('AppRouteService', () => {
         await service.updateRouteProperties({ uid: 'user-1' }, 'route-1', {
             name: 'Renamed Route',
             creator: { name: 'Injected Device' },
+            stats: { Distance: 999 },
             pointCount: 0,
             originalFiles: [{ path: 'users/other/routes/route-1/original.gpx', startDate: new Date() }],
             routes: [],
