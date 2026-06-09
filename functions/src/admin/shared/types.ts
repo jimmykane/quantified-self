@@ -2,15 +2,19 @@ export interface GetQueueStatsRequest {
     includeAnalysis?: boolean;
 }
 
-export interface EventCountStats {
+export interface CountStats {
     total: number | null;
     cacheStatus?: 'fresh' | 'refreshed' | 'stale' | 'unavailable';
     computedAt?: string | null;
     expireAt?: string | null;
 }
 
+export type EventCountStats = CountStats;
+export type RouteCountStats = CountStats;
+
 export interface UserCountRequest {
     refreshEventCount?: boolean;
+    refreshRouteCount?: boolean;
 }
 
 export interface ListUsersRequest {
@@ -48,6 +52,7 @@ export interface EnrichedUser extends BasicUser {
     hasSubscribedOnce: boolean;
     aiCreditsConsumed: number;
     eventStats: EventCountStats;
+    routeStats: RouteCountStats;
 }
 
 export interface ListUsersResponse {
@@ -67,6 +72,7 @@ export interface UserCountResponse {
     yearlyPaid: number;
     onboardingCompleted: number;
     events: EventCountStats;
+    routes: RouteCountStats;
     providers: Record<string, number>;
 }
 

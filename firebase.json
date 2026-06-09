@@ -102,11 +102,19 @@
           "destination": "/index.csr.html"
         },
         {
+          "source": "/routes",
+          "destination": "/index.csr.html"
+        },
+        {
           "source": "/settings",
           "destination": "/index.csr.html"
         },
         {
           "source": "/user/*/event/*",
+          "destination": "/index.csr.html"
+        },
+        {
+          "source": "/user/*/route/*",
           "destination": "/index.csr.html"
         },
         {
@@ -230,11 +238,19 @@
           "destination": "/index.csr.html"
         },
         {
+          "source": "/routes",
+          "destination": "/index.csr.html"
+        },
+        {
           "source": "/settings",
           "destination": "/index.csr.html"
         },
         {
           "source": "/user/*/event/*",
+          "destination": "/index.csr.html"
+        },
+        {
+          "source": "/user/*/route/*",
           "destination": "/index.csr.html"
         },
         {

@@ -15,6 +15,7 @@ const PUBLIC_STARTUP_PATHS = new Set([
   '/features/ai-insights',
   '/features/workout-file-comparison',
   '/features/fit-gpx-tcx-file-analyzer',
+  '/features/fit-gpx-route-files',
   '/features/sports-watch-benchmark',
   '/guides',
   '/guides/sync-garmin-to-suunto',

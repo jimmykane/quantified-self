@@ -1,0 +1,26 @@
+.route-chart {
+  display: block;
+}
+
+.route-chart-content {
+  padding: 0;
+}
+
+.route-chart-axis {
+  color: var(--mat-sys-on-surface-variant);
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.route-chart-panels {
+  display: grid;
+  gap: 16px;
+}
+
+.route-chart-empty {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 120px;
+  color: var(--mat-sys-on-surface-variant);
+}

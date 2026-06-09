@@ -1,0 +1,537 @@
+import { MarkerFactoryService } from './marker-factory.service';
+import { LoggerService } from '../logger.service';
+import {
+  ensureLayer,
+  removeLayerIfExists,
+  removeSourceIfExists,
+  setPaintIfLayerExists,
+  upsertGeoJsonSource,
+} from './mapbox-layer.utils';
+import {
+  applyTerrain,
+  clearDeferredTerrainToggleState,
+  deferTerrainToggleUntilReady,
+  DeferredTerrainToggleState,
+} from './mapbox-terrain.utils';
+import {
+  attachStyleReloadHandler,
+  isStyleReady,
+} from './mapbox-style-ready.utils';
+
+export interface TrackMapPosition {
+  latitudeDegrees: number;
+  longitudeDegrees: number;
+}
+
+export interface TrackMapExtraMarkerRenderData extends TrackMapPosition {
+  id: string;
+  element: HTMLElement;
+  anchor?: 'center' | 'top' | 'bottom' | 'left' | 'right' | 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
+}
+
+export interface TrackMapRenderData {
+  id: string;
+  label?: string;
+  strokeColor: string;
+  positions: TrackMapPosition[];
+  markers?: TrackMapExtraMarkerRenderData[];
+}
+
+export interface TrackMapCursorRenderData extends TrackMapPosition {
+  trackId: string;
+  color: string;
+}
+
+export interface TrackMapRenderOptions {
+  showArrows: boolean;
+  showEndpointMarkers?: boolean;
+  strokeWidth: number;
+}
+
+interface StoredTrackLayers {
+  sourceId: string;
+  lineLayerId: string;
+  arrowLayerId: string;
+}
+
+export interface TrackMapManagerOptions {
+  layerPrefix?: string;
+  logPrefix?: string;
+}
+
+export class TrackMapManager {
+  private map: any | null = null;
+  private mapboxgl: any | null = null;
+  private styleLoadHandler: (() => void) | null = null;
+  private styleLoadHandlerCleanup: (() => void) | null = null;
+
+  private currentTracks: TrackMapRenderData[] = [];
+  private currentOptions: Required<TrackMapRenderOptions> = {
+    showArrows: true,
+    showEndpointMarkers: true,
+    strokeWidth: 3,
+  };
+
+  private activeLayersByTrackId = new Map<string, StoredTrackLayers>();
+  private startMarkers = new Map<string, any>();
+  private endMarkers = new Map<string, any>();
+  private extraMarkers = new Map<string, any[]>();
+  private cursorMarkers = new Map<string, any>();
+  private cursorState = new Map<string, TrackMapCursorRenderData>();
+  private terrainEnabled = false;
+  private terrainToggleState: DeferredTerrainToggleState = { pendingRequest: null };
+
+  private readonly layerPrefix: string;
+  private readonly logPrefix: string;
+
+  constructor(
+    private markerFactory: MarkerFactoryService,
+    private logger: LoggerService,
+    options: TrackMapManagerOptions = {},
+  ) {
+    this.layerPrefix = options.layerPrefix || 'track';
+    this.logPrefix = options.logPrefix || 'TrackMapManager';
+  }
+
+  public setMap(map: any, mapboxgl: any): void {
+    if (!map || !mapboxgl) {
+      return;
+    }
+
+    this.styleLoadHandlerCleanup?.();
+    clearDeferredTerrainToggleState(this.terrainToggleState);
+
+    this.map = map;
+    this.mapboxgl = mapboxgl;
+    this.styleLoadHandler = () => {
+      this.logger.log(`[${this.logPrefix}] style.load received. Restoring map layers.`, {
+        trackCount: this.currentTracks.length,
+        terrainEnabled: this.terrainEnabled,
+      });
+      this.renderTracks();
+      this.renderCursorMarkers();
+      if (this.terrainEnabled) {
+        this.toggleTerrain(true, false);
+      }
+    };
+    this.styleLoadHandlerCleanup = attachStyleReloadHandler(
+      this.map,
+      this.styleLoadHandler,
+      `${this.layerPrefix}-map-manager`,
+    );
+  }
+
+  public renderTrackData(tracks: TrackMapRenderData[], options: TrackMapRenderOptions): void {
+    const renderStartedAt = this.nowMs();
+    this.currentTracks = tracks || [];
+    this.currentOptions = {
+      showArrows: options?.showArrows !== false,
+      showEndpointMarkers: options?.showEndpointMarkers !== false,
+      strokeWidth: Number.isFinite(options?.strokeWidth) ? options.strokeWidth : 3,
+    };
+    this.renderTracks();
+    this.renderCursorMarkers();
+    this.logPerformance('renderTrackData:complete', renderStartedAt, {
+      trackCount: this.currentTracks.length,
+      showArrows: this.currentOptions.showArrows,
+      showEndpointMarkers: this.currentOptions.showEndpointMarkers,
+      strokeWidth: this.currentOptions.strokeWidth,
+    });
+  }
+
+  public setCursorMarkers(cursors: TrackMapCursorRenderData[]): void {
+    this.cursorState = new Map((cursors || []).map(cursor => [cursor.trackId, cursor]));
+    this.renderCursorMarkers();
+  }
+
+  public clearCursorMarkers(): void {
+    this.cursorState.clear();
+    this.cursorMarkers.forEach(marker => marker.remove());
+    this.cursorMarkers.clear();
+  }
+
+  public clearAll(): void {
+    this.clearTracksAndMarkers();
+    this.clearCursorMarkers();
+    this.currentTracks = [];
+  }
+
+  public toggleTerrain(enable: boolean, animate: boolean = true): void {
+    if (!this.map) {
+      this.logger.warn(`[${this.logPrefix}] toggleTerrain called but map is not set.`, { enable, animate });
+      return;
+    }
+
+    this.terrainEnabled = enable === true;
+    this.logger.log(`[${this.logPrefix}] toggleTerrain requested.`, {
+      enable: this.terrainEnabled,
+      animate,
+      styleReady: isStyleReady(this.map),
+    });
+
+    try {
+      if (!isStyleReady(this.map)) {
+        this.logger.log(`[${this.logPrefix}] Style not ready. Deferring terrain toggle.`, { enable, animate });
+        deferTerrainToggleUntilReady(
+          this.map,
+          { enable: this.terrainEnabled, animate },
+          this.terrainToggleState,
+          (pending) => this.toggleTerrain(pending.enable, pending.animate),
+        );
+        return;
+      }
+
+      clearDeferredTerrainToggleState(this.terrainToggleState);
+      applyTerrain(this.map, this.terrainEnabled, animate);
+
+      this.logger.log(`[${this.logPrefix}] toggleTerrain applied.`, {
+        enable: this.terrainEnabled,
+        pitch: typeof this.map.getPitch === 'function' ? this.map.getPitch() : null,
+      });
+    } catch (error: any) {
+      const message = String(error?.message || '');
+      this.logger.warn(`[${this.logPrefix}] Failed to toggle terrain.`, {
+        enable,
+        animate,
+        error,
+      });
+      if (message.includes('Style is not done loading') || !isStyleReady(this.map)) {
+        this.logger.log(`[${this.logPrefix}] Deferring terrain toggle after failure.`, { enable, animate });
+        deferTerrainToggleUntilReady(
+          this.map,
+          { enable: this.terrainEnabled, animate },
+          this.terrainToggleState,
+          (pending) => this.toggleTerrain(pending.enable, pending.animate),
+        );
+      }
+    }
+  }
+
+  public fitBoundsToTracks(animate: boolean = true): boolean {
+    const fitStartedAt = this.nowMs();
+    if (!this.map || !this.mapboxgl || !this.currentTracks.length) {
+      this.logger.log(`[${this.logPrefix}Perf] fitBoundsToTracks:skipped`, {
+        hasMap: !!this.map,
+        hasMapboxgl: !!this.mapboxgl,
+        trackCount: this.currentTracks.length,
+      });
+      return false;
+    }
+
+    const bounds = new this.mapboxgl.LngLatBounds();
+    let hasPoints = false;
+    this.currentTracks.forEach(track => {
+      (track.positions || []).forEach(position => {
+        if (!this.isFinitePosition(position)) {
+          return;
+        }
+        bounds.extend([position.longitudeDegrees, position.latitudeDegrees]);
+        hasPoints = true;
+      });
+      (track.markers || []).forEach(marker => {
+        if (!this.isFinitePosition(marker)) {
+          return;
+        }
+        bounds.extend([marker.longitudeDegrees, marker.latitudeDegrees]);
+        hasPoints = true;
+      });
+    });
+
+    if (!hasPoints) {
+      this.logPerformance('fitBoundsToTracks:noPoints', fitStartedAt, { trackCount: this.currentTracks.length });
+      return false;
+    }
+
+    this.map.fitBounds(bounds, {
+      padding: 50,
+      animate,
+    });
+    this.logPerformance('fitBoundsToTracks:complete', fitStartedAt, {
+      trackCount: this.currentTracks.length,
+      animate,
+      hasPoints,
+    });
+    return true;
+  }
+
+  public project(latitudeDegrees: number, longitudeDegrees: number): { x: number; y: number } | null {
+    if (!this.map?.project) {
+      return null;
+    }
+    const point = this.map.project([longitudeDegrees, latitudeDegrees]);
+    const x = Number(point?.x);
+    const y = Number(point?.y);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) {
+      return null;
+    }
+    return { x, y };
+  }
+
+  private renderTracks(): void {
+    if (!this.map || !this.mapboxgl) {
+      return;
+    }
+    const incomingTrackIds = new Set((this.currentTracks || []).map((track) => track.id));
+    this.activeLayersByTrackId.forEach((_ids, trackId) => {
+      if (!incomingTrackIds.has(trackId)) {
+        this.removeTrack(trackId);
+      }
+    });
+
+    this.currentTracks.forEach((track) => this.renderSingleTrack(track));
+  }
+
+  private renderSingleTrack(track: TrackMapRenderData): void {
+    if (!this.map || !track || !track.id) {
+      return;
+    }
+
+    const coordinates = (track.positions || [])
+      .filter(position => this.isFinitePosition(position))
+      .map(position => [position.longitudeDegrees, position.latitudeDegrees] as [number, number]);
+
+    if (coordinates.length <= 1) {
+      this.removeTrack(track.id);
+      return;
+    }
+
+    const safeTrackId = this.buildSafeLayerId(track.id);
+    const sourceId = `${this.layerPrefix}-source-${safeTrackId}`;
+    const lineLayerId = `${this.layerPrefix}-line-${safeTrackId}`;
+    const arrowLayerId = `${this.layerPrefix}-arrow-${safeTrackId}`;
+
+    const sourceData = {
+      type: 'Feature',
+      properties: {
+        trackId: track.id,
+        label: track.label || '',
+      },
+      geometry: {
+        type: 'LineString',
+        coordinates,
+      },
+    };
+
+    upsertGeoJsonSource(this.map, sourceId, sourceData);
+    ensureLayer(this.map, {
+      id: lineLayerId,
+      type: 'line',
+      source: sourceId,
+      layout: {
+        'line-cap': 'round',
+        'line-join': 'round',
+      },
+      paint: {
+        'line-color': track.strokeColor,
+        'line-width': this.currentOptions.strokeWidth || 3,
+        'line-opacity': 1,
+        'line-emissive-strength': 1,
+      },
+    });
+    setPaintIfLayerExists(this.map, lineLayerId, {
+      'line-color': track.strokeColor,
+      'line-width': this.currentOptions.strokeWidth || 3,
+      'line-opacity': 1,
+      'line-emissive-strength': 1,
+    });
+
+    if (this.currentOptions.showArrows) {
+      ensureLayer(this.map, {
+        id: arrowLayerId,
+        type: 'symbol',
+        source: sourceId,
+        layout: {
+          'symbol-placement': 'line',
+          'symbol-spacing': 100,
+          'text-field': '▶',
+          'text-size': 11,
+          'text-rotation-alignment': 'map',
+          'text-keep-upright': false,
+          'text-allow-overlap': true,
+          'text-ignore-placement': true,
+        },
+        paint: {
+          'text-color': '#ffffff',
+          'text-halo-color': track.strokeColor,
+          'text-halo-width': 1.1,
+          'text-opacity': 1,
+        },
+      });
+      setPaintIfLayerExists(this.map, arrowLayerId, {
+        'text-halo-color': track.strokeColor,
+        'text-opacity': 1,
+      });
+    } else {
+      removeLayerIfExists(this.map, arrowLayerId);
+    }
+
+    this.activeLayersByTrackId.set(track.id, {
+      sourceId,
+      lineLayerId,
+      arrowLayerId,
+    });
+
+    this.renderTrackMarkers(track, coordinates);
+  }
+
+  private renderTrackMarkers(track: TrackMapRenderData, coordinates: [number, number][]): void {
+    if (!this.map || !this.mapboxgl || !coordinates.length) {
+      return;
+    }
+
+    this.removeTrackMarkers(track.id);
+    const start = coordinates[0];
+    const end = coordinates[coordinates.length - 1];
+    if (this.currentOptions.showEndpointMarkers) {
+      this.startMarkers.set(track.id, this.createMarker(
+        this.markerFactory.createHomeMarker(track.strokeColor),
+        start[0],
+        start[1],
+        'center',
+      ));
+      this.endMarkers.set(track.id, this.createMarker(
+        this.markerFactory.createFlagMarker(track.strokeColor),
+        end[0],
+        end[1],
+        'center',
+      ));
+    }
+
+    const customMarkers = (track.markers || [])
+      .filter(marker => marker?.id && marker.element && this.isFinitePosition(marker))
+      .map(marker => this.createMarker(
+        marker.element,
+        marker.longitudeDegrees,
+        marker.latitudeDegrees,
+        marker.anchor || 'center',
+      ));
+    this.extraMarkers.set(track.id, customMarkers);
+  }
+
+  private createMarker(element: HTMLElement, lng: number, lat: number, anchor: string): any {
+    const marker = new this.mapboxgl.Marker({
+      element,
+      anchor,
+    });
+    marker.setLngLat([lng, lat]);
+    marker.addTo(this.map);
+    return marker;
+  }
+
+  private renderCursorMarkers(): void {
+    if (!this.map || !this.mapboxgl) {
+      return;
+    }
+
+    this.cursorMarkers.forEach((marker, trackId) => {
+      if (!this.cursorState.has(trackId)) {
+        marker.remove();
+        this.cursorMarkers.delete(trackId);
+      }
+    });
+
+    this.cursorState.forEach((cursor, trackId) => {
+      const existing = this.cursorMarkers.get(trackId);
+      if (existing) {
+        existing.setLngLat([cursor.longitudeDegrees, cursor.latitudeDegrees]);
+        return;
+      }
+
+      const marker = this.createMarker(
+        this.markerFactory.createCursorMarker(cursor.color),
+        cursor.longitudeDegrees,
+        cursor.latitudeDegrees,
+        'center',
+      );
+      this.cursorMarkers.set(trackId, marker);
+    });
+  }
+
+  private clearTracksAndMarkers(): void {
+    if (!this.map) {
+      return;
+    }
+
+    this.activeLayersByTrackId.forEach((ids) => {
+      removeLayerIfExists(this.map, ids.arrowLayerId);
+      removeLayerIfExists(this.map, ids.lineLayerId);
+      removeSourceIfExists(this.map, ids.sourceId);
+    });
+    this.activeLayersByTrackId.clear();
+
+    this.startMarkers.forEach(marker => marker.remove());
+    this.startMarkers.clear();
+    this.endMarkers.forEach(marker => marker.remove());
+    this.endMarkers.clear();
+
+    this.extraMarkers.forEach(markers => markers.forEach(marker => marker.remove()));
+    this.extraMarkers.clear();
+  }
+
+  private removeTrack(trackId: string): void {
+    if (!this.map) {
+      return;
+    }
+    const ids = this.activeLayersByTrackId.get(trackId);
+    if (ids) {
+      removeLayerIfExists(this.map, ids.arrowLayerId);
+      removeLayerIfExists(this.map, ids.lineLayerId);
+      removeSourceIfExists(this.map, ids.sourceId);
+      this.activeLayersByTrackId.delete(trackId);
+    }
+    this.removeTrackMarkers(trackId);
+  }
+
+  private removeTrackMarkers(trackId: string): void {
+    const start = this.startMarkers.get(trackId);
+    if (start) {
+      start.remove();
+      this.startMarkers.delete(trackId);
+    }
+    const end = this.endMarkers.get(trackId);
+    if (end) {
+      end.remove();
+      this.endMarkers.delete(trackId);
+    }
+    const customMarkers = this.extraMarkers.get(trackId);
+    if (customMarkers?.length) {
+      customMarkers.forEach((marker) => marker.remove());
+    }
+    this.extraMarkers.delete(trackId);
+  }
+
+  private buildSafeLayerId(value: string): string {
+    const sanitized = value.replace(/[^a-zA-Z0-9_-]/g, '-');
+    const readablePrefix = sanitized.length > 0 ? sanitized : 'track';
+    return `${readablePrefix}-${this.hashTrackId(value)}`;
+  }
+
+  private hashTrackId(value: string): string {
+    let hash = 2166136261;
+    for (let index = 0; index < value.length; index += 1) {
+      hash ^= value.charCodeAt(index);
+      hash = Math.imul(hash, 16777619);
+    }
+    return (hash >>> 0).toString(36);
+  }
+
+  private isFinitePosition(position: TrackMapPosition | null | undefined): position is TrackMapPosition {
+    return Number.isFinite(position?.latitudeDegrees)
+      && Number.isFinite(position?.longitudeDegrees);
+  }
+
+  private nowMs(): number {
+    if (typeof performance !== 'undefined' && typeof performance.now === 'function') {
+      return performance.now();
+    }
+    return Date.now();
+  }
+
+  private logPerformance(stage: string, startedAt: number, state: Record<string, unknown> = {}): void {
+    const durationMs = Math.round((this.nowMs() - startedAt) * 10) / 10;
+    this.logger.log(`[${this.logPrefix}Perf] ${stage}`, {
+      durationMs,
+      ...state,
+    });
+  }
+}

@@ -52,6 +52,10 @@ export abstract class UploadAbstractDirective implements OnInit {
   protected onUploadBatchFinished(_summary: UploadBatchSummary): void {
   }
 
+  protected getDuplicateUploadMessage(): string {
+    return 'Activity already exists';
+  }
+
   /**
    * This can be called multiple times as the user drops more files etc
    * @param event
@@ -132,7 +136,7 @@ export abstract class UploadAbstractDirective implements OnInit {
     let message = '';
     if (filesToProcess.length === 1) {
       if (duplicateUploads === 1) {
-        message = 'Activity already exists';
+        message = this.getDuplicateUploadMessage();
       } else if (successfulUploads === 1) {
         message = 'Successfully uploaded';
       } else {

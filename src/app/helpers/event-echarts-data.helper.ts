@@ -48,48 +48,19 @@ import { normalizeUnitDerivedTypeLabel } from './stat-label.helper';
 import { resolveUnitAwareDisplayStat } from '@shared/unit-aware-display';
 import { AppSwimLength, getActivitySwimLengths } from './event-swim-length.helper';
 import { getAppCanonicalChartDataTypes } from './app-chart-data-types.helper';
+import type {
+  TrackChartPanelModel,
+  TrackChartPanelSeries,
+  TrackChartPoint,
+  TrackChartZoneColorPiece,
+} from './track-chart-panel.model';
 
 export { normalizeEventLapType } from './event-lap-type.helper';
 
-export interface EventChartPoint {
-  x: number;
-  y: number | null;
-  time: number;
-}
-
-export interface EventChartZoneColorPiece {
-  zone: string;
-  color: string;
-  gte?: number;
-  lt?: number;
-}
-
-export interface EventChartPanelSeries {
-  id: string;
-  activityID: string;
-  activityName: string;
-  color: string;
-  streamType: string;
-  displayName: string;
-  unit: string;
-  lineValues?: Float64Array;
-  timeValues?: Float64Array;
-  gradeColorValues?: Float64Array;
-  gradeColorSourceType?: string;
-  pointCount?: number;
-  points?: EventChartPoint[];
-  zoneColorPieces?: EventChartZoneColorPiece[];
-}
-
-export interface EventChartPanelModel {
-  dataType: string;
-  displayName: string;
-  unit: string;
-  colorGroupKey: string;
-  series: EventChartPanelSeries[];
-  minX: number;
-  maxX: number;
-}
+export type EventChartPoint = TrackChartPoint;
+export type EventChartZoneColorPiece = TrackChartZoneColorPiece;
+export type EventChartPanelSeries = TrackChartPanelSeries;
+export type EventChartPanelModel = TrackChartPanelModel;
 
 export interface EventLegendItem {
   activityID: string;

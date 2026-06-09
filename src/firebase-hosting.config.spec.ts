@@ -127,6 +127,7 @@ describe('Firebase Hosting configuration', () => {
     const sources = firebaseConfig.hosting[0]?.rewrites?.map(rewrite => rewrite.source) ?? [];
 
     expect(matchesAnyHostingSource(sources, '/dashboard')).toBe(true);
+    expect(matchesAnyHostingSource(sources, '/routes')).toBe(true);
     expect(matchesAnyHostingSource(sources, '/admin/queues/workout')).toBe(true);
     expect(matchesAnyHostingSource(sources, '/user/user-1/event/event-1')).toBe(true);
     expect(matchesAnyHostingSource(sources, '/tools/compare/saved')).toBe(true);

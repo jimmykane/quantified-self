@@ -204,6 +204,12 @@ describe('AppRoutingModule routes', () => {
         descriptionText: 'FIT file analyzer',
       },
       {
+        path: PUBLIC_FEATURE_PATHS.routeFiles,
+        title: 'FIT and GPX Route Files',
+        h1: 'Save FIT course and GPX route files',
+        descriptionText: 'Save FIT course files and GPX route files',
+      },
+      {
         path: PUBLIC_FEATURE_PATHS.sportsWatchBenchmark,
         title: 'Sports Watch Benchmark Reports',
         h1: 'Sports watch benchmark reports for reviewers and device tests',

@@ -1,0 +1,182 @@
+@if (routeDocument()) {
+<main class="route-detail-page">
+  <header class="route-detail-header" aria-labelledby="route-detail-title">
+    <div class="route-detail-title-block">
+      <a mat-button routerLink="/routes" class="route-back-link">
+        <mat-icon aria-hidden="true">arrow_back</mat-icon>
+        <span>Routes</span>
+      </a>
+      <p class="eyebrow">Routes / Detail</p>
+      <h1 id="route-detail-title">{{ routeName() }}</h1>
+      <p class="route-detail-subtitle">{{ sourceFilename() }}</p>
+    </div>
+  </header>
+
+  <section class="route-detail-summary" aria-label="Route summary">
+    <app-summary-primary-info
+      [activityType]="activityType()"
+      [iconActivityType]="activityType()"
+      [iconEvent]="null"
+      [startDate]="routeDate()"
+      fallbackTopMetaText="Saved route"
+      [metrics]="summaryMetrics()">
+      <span summary-chips class="route-chip">{{ sourceFileType() | uppercase }}</span>
+      @if (singleSegment(); as segment) {
+        <span summary-chips class="route-chip route-chip--segment" [matTooltip]="segment.label">
+          <span class="route-chip-dot" [style.background]="segment.color" aria-hidden="true"></span>
+          <span class="route-chip-prefix">Segment</span>
+          <span class="route-chip-value">{{ segment.label }}</span>
+        </span>
+      }
+      <div summary-actions class="route-summary-actions">
+        <button mat-icon-button type="button"
+          aria-label="Rename route"
+          matTooltip="Rename route"
+          [disabled]="renaming() || !canManageRoute()"
+          (click)="renameRoute()">
+          <mat-icon>edit</mat-icon>
+        </button>
+        <button mat-icon-button type="button"
+          aria-label="Download original route file"
+          matTooltip="Download original route file"
+          [disabled]="downloading() || !canManageRoute()"
+          (click)="downloadRouteOriginals()">
+          <mat-icon>download</mat-icon>
+        </button>
+        <button mat-icon-button type="button"
+          aria-label="Reprocess route from original file"
+          matTooltip="Reprocess route from original file"
+          [disabled]="reprocessing() || renaming() || downloading() || deleting() || !canReprocessRoute()"
+          (click)="reprocessRouteFromOriginalFile()">
+          <mat-icon>autorenew</mat-icon>
+        </button>
+        <button mat-icon-button type="button"
+          aria-label="Delete route"
+          matTooltip="Delete route"
+          [disabled]="deleting() || renaming() || reprocessing() || !canManageRoute()"
+          (click)="confirmDeleteRoute()">
+          <mat-icon>delete</mat-icon>
+        </button>
+      </div>
+    </app-summary-primary-info>
+  </section>
+
+  <section class="route-detail-section" aria-label="Route map">
+    <app-route-map
+      [segments]="selectedSegments()"
+      [waypoints]="waypointDisplayViews()"
+      [user]="user()">
+    </app-route-map>
+  </section>
+
+  <section class="route-detail-section" aria-label="Route charts">
+    <app-route-chart
+      [segments]="selectedSegments()"
+      [userUnitSettings]="unitSettings()"
+      [darkTheme]="darkTheme()"
+      [waterMark]="routeName()">
+    </app-route-chart>
+  </section>
+
+  @if (hasMultipleSegments()) {
+    <section class="route-detail-section" aria-labelledby="route-segments-heading">
+      <header class="route-section-header">
+        <div>
+          <h2 id="route-segments-heading">Segments</h2>
+          <p>{{ segmentSelectionLabel() }}</p>
+        </div>
+        @if (!allSegmentsSelected()) {
+        <button mat-button type="button" (click)="selectAllSegments()">Show all</button>
+        }
+      </header>
+      <div class="segment-table-wrap route-data-table-wrap">
+        <table class="segment-table route-data-table" aria-label="Route segments">
+          <thead>
+            <tr>
+              <th scope="col">Segment</th>
+              <th scope="col">Distance</th>
+              <th scope="col">Ascent</th>
+              <th scope="col">Descent</th>
+              <th scope="col">Min grade</th>
+              <th scope="col">Max grade</th>
+              <th scope="col">Points</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (segment of segments(); track segment.id) {
+            <tr
+              [class.segment-table-row--muted]="!selectedSegmentIDSet().has(segment.id)"
+              [style.--route-segment-color]="segment.color">
+              <td class="segment-name-cell">
+                <span class="segment-name-content">
+                  <mat-checkbox
+                    class="segment-visibility-control"
+                    [checked]="selectedSegmentIDSet().has(segment.id)"
+                    [disabled]="selectedSegmentIDs().length <= 1 && selectedSegmentIDSet().has(segment.id)"
+                    [attr.aria-label]="'Show ' + segment.label"
+                    (change)="onSegmentVisibilityChange(segment.id, $event.checked)">
+                  </mat-checkbox>
+                  <span class="segment-swatch" [style.background]="segment.color" aria-hidden="true"></span>
+                  <span class="segment-name-stack">
+                    <span class="segment-name" [matTooltip]="segment.label">{{ segment.label }}</span>
+                    <span class="segment-activity-type">{{ segment.activityType }}</span>
+                  </span>
+                </span>
+              </td>
+              <td [title]="segment.distance.title">{{ segment.distance.label }}</td>
+              <td [title]="segment.ascent.title">{{ segment.ascent.label }}</td>
+              <td [title]="segment.descent.title">{{ segment.descent.label }}</td>
+              <td [title]="segment.minGrade.title">{{ segment.minGrade.label }}</td>
+              <td [title]="segment.maxGrade.title">{{ segment.maxGrade.label }}</td>
+              <td class="segment-points-cell">{{ segment.pointCount }}</td>
+            </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    </section>
+  }
+
+  @if (waypointDisplayViews().length > 0) {
+  <section class="route-detail-section" aria-labelledby="route-waypoints-heading">
+    <header class="route-section-header">
+      <div>
+        <h2 id="route-waypoints-heading">Waypoints</h2>
+        <p>{{ waypointDisplayViews().length }} visible</p>
+      </div>
+    </header>
+    <div class="waypoint-table-wrap route-data-table-wrap">
+      <table class="waypoint-table route-data-table" aria-label="Route waypoints">
+        <thead>
+          <tr>
+            <th scope="col">Waypoint</th>
+            <th scope="col">Type</th>
+            <th scope="col">Distance</th>
+            <th scope="col">Segment</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (waypoint of waypointDisplayViews(); track waypoint.id) {
+          <tr [style.--route-waypoint-color]="waypoint.color">
+            <td class="waypoint-name-cell">
+              <span class="waypoint-name-content">
+                <span class="waypoint-color-dot" aria-hidden="true"></span>
+                <span class="waypoint-name" [matTooltip]="waypoint.name">{{ waypoint.name }}</span>
+              </span>
+            </td>
+            <td>
+              <span class="waypoint-type">{{ waypoint.type }}</span>
+            </td>
+            <td class="waypoint-distance-cell">{{ waypoint.distanceLabel || '-' }}</td>
+            <td>
+              <span class="waypoint-segment">{{ waypoint.segmentLabel }}</span>
+            </td>
+          </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  </section>
+  }
+</main>
+}

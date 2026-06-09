@@ -15,6 +15,7 @@ export const PRERENDERED_FEATURE_ROUTES = [
   PUBLIC_FEATURE_PATHS.aiInsights,
   PUBLIC_FEATURE_PATHS.workoutFileComparison,
   PUBLIC_FEATURE_PATHS.fitGpxTcxFileAnalyzer,
+  PUBLIC_FEATURE_PATHS.routeFiles,
   PUBLIC_FEATURE_PATHS.sportsWatchBenchmark,
 ] as const;
 
@@ -64,8 +65,10 @@ export const CLIENT_RENDERED_APP_ROUTES = [
   'services',
   'dashboard',
   'mytracks',
+  'routes',
   'settings',
   'user/:userID/event/:eventID',
+  'user/:userID/route/:routeID',
   'policies',
   'ai-insights',
 ] as const;

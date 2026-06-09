@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { HELP_ACTIONS, HELP_SECTIONS, HelpSectionId } from './help.content';
+import { ROUTE_USAGE_LIMITS, USAGE_LIMITS } from '../../../shared/limits';
 
 describe('help.content', () => {
   it('should expose the expected ordered section ids', () => {
@@ -151,6 +152,7 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('[Workout Data Comparison](/features/workout-data-comparison)');
     expect(gettingStartedSection?.content).toContain('[Workout File Comparison](/features/workout-file-comparison)');
     expect(gettingStartedSection?.content).toContain('[Workout File Analyzer](/features/fit-gpx-tcx-file-analyzer)');
+    expect(gettingStartedSection?.content).toContain('[FIT and GPX Route Files](/features/fit-gpx-route-files)');
     expect(gettingStartedSection?.content).toContain('[Sports Watch Benchmark](/features/sports-watch-benchmark)');
     expect(gettingStartedSection?.content).toContain('[File Comparison Tool](/tools/compare)');
     expect(gettingStartedSection?.content).toContain('[Tools -> Compare](/tools/compare/saved)');
@@ -163,7 +165,7 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('uploaded FIT/TCX/GPX/JSON/SML activity files');
     expect(gettingStartedSection?.content).toContain('maps, charts');
     expect(gettingStartedSection?.content).toContain('reviewer workflows for device tests, YouTube videos, and blog posts');
-    expect(gettingStartedSection?.content).toContain('Manual uploads, core analysis, and benchmark comparisons are available on the free plan for up to 100 activities');
+    expect(gettingStartedSection?.content).toContain(`Manual uploads, core analysis, and benchmark comparisons are available on the free plan for up to ${USAGE_LIMITS.free} activities and ${ROUTE_USAGE_LIMITS.free} saved routes`);
     expect(gettingStartedSection?.content).toContain('automatic provider sync and higher limits require a paid plan');
     expect(gettingStartedSection?.content).not.toContain('overlays, AI insights, and reviewer workflows');
     expect(gettingStartedSection?.content).toContain('**Altitude** charts can color the altitude line by grade');
@@ -242,6 +244,30 @@ describe('help.content', () => {
     expect(uploadsSection?.content).toContain('multi-selected GPX exports download as a ZIP');
   });
 
+  it('should document activity and route limits in plans and uploads help', () => {
+    const plansSection = HELP_SECTIONS.find(section => section.id === 'plans-and-billing');
+    const uploadsSection = HELP_SECTIONS.find(section => section.id === 'uploads-and-imports');
+
+    expect(plansSection?.content).toContain(`Up to **${USAGE_LIMITS.free} activities**`);
+    expect(plansSection?.content).toContain(`Up to **${ROUTE_USAGE_LIMITS.free} saved routes**`);
+    expect(plansSection?.content).toContain(`Up to **${USAGE_LIMITS.basic.toLocaleString('en-US')} activities**`);
+    expect(plansSection?.content).toContain(`Up to **${ROUTE_USAGE_LIMITS.basic} saved routes**`);
+    expect(plansSection?.content).toContain('**Unlimited saved routes**');
+    expect(plansSection?.content).toContain('Existing activities and routes are retained. New uploads follow your current plan limits.');
+    expect(uploadsSection?.content).toContain(`**Starter** includes up to **${ROUTE_USAGE_LIMITS.free} saved routes**`);
+    expect(uploadsSection?.content).toContain(`**Basic** includes up to **${ROUTE_USAGE_LIMITS.basic} saved routes**`);
+    expect(uploadsSection?.content).toContain("You may have reached your current plan's activity or route limit.");
+    expect(uploadsSection?.content).toContain('[FIT and GPX Route Files](/features/fit-gpx-route-files)');
+    expect(uploadsSection?.content).toContain('Saved routes open from **Routes** with the details action.');
+    expect(uploadsSection?.content).toContain('parsed points and streams are not saved back to Firestore');
+    expect(uploadsSection?.links).toContainEqual({
+      label: 'FIT and GPX Route Files',
+      icon: 'route',
+      kind: 'route',
+      target: '/features/fit-gpx-route-files',
+    });
+  });
+
   it('should document Garmin/COROS to Suunto route-based activity sync and manual catch-up', () => {
     const serviceConnectionsSection = HELP_SECTIONS.find(section => section.id === 'service-connections');
 
@@ -254,13 +280,14 @@ describe('help.content', () => {
     expect(serviceConnectionsSection?.content).toContain('[Workout Data Comparison](/features/workout-data-comparison)');
     expect(serviceConnectionsSection?.content).toContain('[Workout File Comparison](/features/workout-file-comparison)');
     expect(serviceConnectionsSection?.content).toContain('[Workout File Analyzer](/features/fit-gpx-tcx-file-analyzer)');
+    expect(serviceConnectionsSection?.content).toContain('[FIT and GPX Route Files](/features/fit-gpx-route-files)');
     expect(serviceConnectionsSection?.content).toContain('[Sports Watch Benchmark](/features/sports-watch-benchmark)');
     expect(serviceConnectionsSection?.content).toContain('[Garmin to Suunto sync guide](/guides/sync-garmin-to-suunto)');
     expect(serviceConnectionsSection?.content).toContain('[COROS to Suunto sync guide](/guides/sync-coros-to-suunto)');
     expect(serviceConnectionsSection?.content).toContain('[centralized workout data guide](/guides/centralize-garmin-suunto-coros-workout-data)');
     expect(serviceConnectionsSection?.content).toContain('uploaded FIT/TCX/GPX/JSON/SML activity files');
     expect(serviceConnectionsSection?.content).toContain('reviewer workflows for device tests, YouTube videos, and blog posts');
-    expect(serviceConnectionsSection?.content).toContain('Manual uploads, core analysis, and benchmark comparisons are available on the free plan for up to 100 activities');
+    expect(serviceConnectionsSection?.content).toContain(`Manual uploads, core analysis, and benchmark comparisons are available on the free plan for up to ${USAGE_LIMITS.free} activities and ${ROUTE_USAGE_LIMITS.free} saved routes`);
     expect(serviceConnectionsSection?.content).toContain('automatic provider sync and higher limits require a paid plan');
     expect(serviceConnectionsSection?.content).not.toContain('source-file workflows, AI insights, and reviewer workflows');
     expect(serviceConnectionsSection?.content).toContain('[Garmin Integration](/integrations/garmin)');
@@ -330,6 +357,12 @@ describe('help.content', () => {
       icon: 'analytics',
       kind: 'route',
       target: '/features/fit-gpx-tcx-file-analyzer',
+    });
+    expect(serviceConnectionsSection?.links).toContainEqual({
+      label: 'FIT and GPX Route Files',
+      icon: 'route',
+      kind: 'route',
+      target: '/features/fit-gpx-route-files',
     });
     expect(serviceConnectionsSection?.links).toContainEqual({
       label: 'Garmin to Suunto Guide',

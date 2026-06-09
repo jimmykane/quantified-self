@@ -1,0 +1,24 @@
+<h2 mat-dialog-title>Rename route</h2>
+
+<form [formGroup]="form" (ngSubmit)="save()">
+  <mat-dialog-content>
+    <mat-form-field appearance="outline" class="route-name-field">
+      <mat-label>Route name</mat-label>
+      <input matInput formControlName="routeName" [attr.maxlength]="maxLength" />
+      <mat-hint align="end">{{ routeNameControl.value.length }}/{{ maxLength }}</mat-hint>
+      @if (routeNameControl.touched && routeNameControl.hasError('required')) {
+      <mat-error>Route name is required.</mat-error>
+      }
+      @if (routeNameControl.touched && routeNameControl.hasError('maxlength')) {
+      <mat-error>Maximum {{ maxLength }} characters.</mat-error>
+      }
+    </mat-form-field>
+  </mat-dialog-content>
+
+  <mat-dialog-actions align="end">
+    <button mat-button type="button" (click)="close()">Cancel</button>
+    <button mat-flat-button class="qs-mat-primary" type="submit" [disabled]="form.invalid || isUnchanged">
+      Save
+    </button>
+  </mat-dialog-actions>
+</form>

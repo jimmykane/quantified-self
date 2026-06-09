@@ -1,0 +1,302 @@
+@if (user(); as currentUser) {
+<main class="routes-page">
+  <section class="routes-workspace">
+    <header class="routes-header" aria-labelledby="routes-page-title">
+      <div class="routes-title-block">
+        <p class="eyebrow">Tools / Routes</p>
+        <h1 id="routes-page-title">Routes</h1>
+        <p class="routes-page-copy">Saved FIT and GPX route files with original source downloads.</p>
+      </div>
+      <div class="routes-header-actions">
+        <app-upload-routes
+          [user]="currentUser"
+          [promptAction]="true"
+          [showUploadIcon]="true"
+          (routeUploadComplete)="refreshRouteCount()"
+          uploadLabel="Upload route">
+        </app-upload-routes>
+      </div>
+    </header>
+
+    @if (routes$ | async; as routes) {
+    <section class="routes-summary" aria-label="Route summary">
+      <div class="summary-item">
+        <span class="summary-value">{{ routeCount() ?? routes.length }}</span>
+        <span class="summary-label">saved routes</span>
+      </div>
+      @if ((routeCount() ?? routes.length) !== routes.length) {
+      <div class="summary-item">
+        <span class="summary-value">{{ routes.length }}</span>
+        <span class="summary-label">shown in table</span>
+      </div>
+      }
+      <div class="summary-item">
+        <span class="summary-value">FIT / GPX</span>
+        <span class="summary-label">source formats</span>
+      </div>
+    </section>
+
+    @if (loadedRouteCount() > 0) {
+    <div class="route-table-controls">
+      <mat-form-field appearance="outline" class="route-filter-field" subscriptSizing="dynamic">
+        <mat-label>Filter loaded routes</mat-label>
+        <input
+          matInput
+          type="search"
+          [value]="routeFilter()"
+          (input)="updateRouteFilter($any($event.target).value)">
+        @if (routeFilter()) {
+        <button matSuffix mat-icon-button type="button" aria-label="Clear route filter" (click)="updateRouteFilter('')">
+          <mat-icon>close</mat-icon>
+        </button>
+        }
+      </mat-form-field>
+      <mat-form-field appearance="outline" class="route-facet-filter-field" subscriptSizing="dynamic">
+        <mat-label>Source</mat-label>
+        <mat-select
+          [value]="routeFileTypeFilter()"
+          [disabled]="routeFileTypeFilterOptions().length === 0"
+          (selectionChange)="updateRouteFileTypeFilter($event.value)">
+          <mat-option value="">All sources</mat-option>
+          @for (option of routeFileTypeFilterOptions(); track option.value) {
+          <mat-option [value]="option.value">{{ option.label }}</mat-option>
+          }
+        </mat-select>
+      </mat-form-field>
+      <mat-form-field appearance="outline" class="route-facet-filter-field" subscriptSizing="dynamic">
+        <mat-label>Activity type</mat-label>
+        <mat-select
+          [value]="routeActivityTypeFilter()"
+          [disabled]="routeActivityTypeFilterOptions().length === 0"
+          (selectionChange)="updateRouteActivityTypeFilter($event.value)">
+          <mat-option value="">All types</mat-option>
+          @for (option of routeActivityTypeFilterOptions(); track option.value) {
+          <mat-option [value]="option.value">{{ option.label }}</mat-option>
+          }
+        </mat-select>
+      </mat-form-field>
+      <div class="route-table-actions">
+        <span class="route-result-summary">{{ routeResultSummary() }}</span>
+      </div>
+    </div>
+    }
+
+    @if (loadedRouteCount() > 0) {
+    @if (routes.length > 0) {
+    <section class="route-table-shell" aria-label="Saved routes">
+      <table
+        mat-table
+        matSort
+        matSortDisableClear
+        class="route-table"
+        [dataSource]="routes"
+        [trackBy]="trackByRouteID"
+        [matSortActive]="routeSortActive()"
+        [matSortDirection]="routeSortDirection()"
+        (matSortChange)="onRouteSortChange($event)">
+        <ng-container matColumnDef="date">
+          <th mat-header-cell *matHeaderCellDef mat-sort-header="date">
+            <span class="route-header-label">
+              <mat-icon aria-hidden="true">calendar_month</mat-icon>
+              <span>Date</span>
+            </span>
+          </th>
+          <td mat-cell *matCellDef="let item">
+            @if (item.routeDate) {
+            {{ item.routeDate | date:'mediumDate' }}
+            } @else {
+            -
+            }
+          </td>
+        </ng-container>
+
+      <ng-container matColumnDef="name">
+        <th mat-header-cell *matHeaderCellDef mat-sort-header="name">
+          <span class="route-header-label">
+            <mat-icon aria-hidden="true">route</mat-icon>
+            <span>Route</span>
+          </span>
+        </th>
+        <td mat-cell *matCellDef="let item">
+          <span class="route-name-cell">
+            <span class="route-title-cell" [matTooltip]="item.name" [attr.title]="item.name">{{ item.name }}</span>
+            <span class="route-file-type">{{ item.fileType }}</span>
+          </span>
+        </td>
+      </ng-container>
+
+      <ng-container matColumnDef="activityTypes">
+        <th mat-header-cell *matHeaderCellDef mat-sort-header="activityTypes">
+          <span class="route-header-label">
+            <mat-icon aria-hidden="true">directions_run</mat-icon>
+            <span>Type</span>
+          </span>
+        </th>
+        <td mat-cell *matCellDef="let item">
+          <div class="route-type-stack" [matTooltip]="item.activityTypesTitle" [attr.title]="item.activityTypesTitle">
+            @for (summary of item.activityTypeSummaries; track summary.id) {
+            <span class="route-type-line">
+              <app-activity-type-icon
+                [activityType]="summary.activityTypeIconValue"
+                size="16px"
+                vAlign="middle">
+              </app-activity-type-icon>
+              <span class="route-type-value">{{ summary.activityTypeLabel }}</span>
+            </span>
+            }
+          </div>
+        </td>
+      </ng-container>
+
+      <ng-container matColumnDef="distance">
+        <th mat-header-cell *matHeaderCellDef mat-sort-header="distance">
+          <span class="route-header-label">
+            <app-data-type-icon [dataType]="routeHeaderDataTypes.distance" size="18px" vAlign="middle"></app-data-type-icon>
+            <span>Distance</span>
+          </span>
+        </th>
+        <td mat-cell *matCellDef="let item" [matTooltip]="item.distance.title" [attr.title]="item.distance.title">
+          {{ item.distance.label }}
+        </td>
+      </ng-container>
+
+      <ng-container matColumnDef="ascent">
+        <th mat-header-cell *matHeaderCellDef mat-sort-header="ascent">
+          <span class="route-header-label">
+            <app-data-type-icon [dataType]="routeHeaderDataTypes.ascent" size="18px" vAlign="middle"></app-data-type-icon>
+            <span>Ascent</span>
+          </span>
+        </th>
+        <td mat-cell *matCellDef="let item" [matTooltip]="item.ascent.title" [attr.title]="item.ascent.title">
+          {{ item.ascent.label }}
+        </td>
+      </ng-container>
+
+      <ng-container matColumnDef="descent">
+        <th mat-header-cell *matHeaderCellDef mat-sort-header="descent">
+          <span class="route-header-label">
+            <app-data-type-icon [dataType]="routeHeaderDataTypes.descent" size="18px" vAlign="middle"></app-data-type-icon>
+            <span>Descent</span>
+          </span>
+        </th>
+        <td mat-cell *matCellDef="let item" [matTooltip]="item.descent.title" [attr.title]="item.descent.title">
+          {{ item.descent.label }}
+        </td>
+      </ng-container>
+
+      <ng-container matColumnDef="minGrade">
+        <th mat-header-cell *matHeaderCellDef mat-sort-header="minGrade">
+          <span class="route-header-label">
+            <app-data-type-icon [dataType]="routeHeaderDataTypes.minGrade" size="18px" vAlign="middle"></app-data-type-icon>
+            <span>Min Grade</span>
+          </span>
+        </th>
+        <td mat-cell *matCellDef="let item" [matTooltip]="item.minGrade.title" [attr.title]="item.minGrade.title">
+          {{ item.minGrade.label }}
+        </td>
+      </ng-container>
+
+      <ng-container matColumnDef="maxGrade">
+        <th mat-header-cell *matHeaderCellDef mat-sort-header="maxGrade">
+          <span class="route-header-label">
+            <app-data-type-icon [dataType]="routeHeaderDataTypes.maxGrade" size="18px" vAlign="middle"></app-data-type-icon>
+            <span>Max Grade</span>
+          </span>
+        </th>
+        <td mat-cell *matCellDef="let item" [matTooltip]="item.maxGrade.title" [attr.title]="item.maxGrade.title">
+          {{ item.maxGrade.label }}
+        </td>
+      </ng-container>
+
+      <ng-container matColumnDef="pointCount">
+        <th mat-header-cell *matHeaderCellDef mat-sort-header="pointCount">
+          <span class="route-header-label">
+            <mat-icon aria-hidden="true">timeline</mat-icon>
+            <span>Points</span>
+          </span>
+        </th>
+        <td mat-cell *matCellDef="let item">
+          <div class="route-detail-stack">
+            <span>{{ item.routeCountLabel }}</span>
+            <span>{{ item.pointCountLabel }}</span>
+            @if (item.waypointCountLabel) {
+            <span>{{ item.waypointCountLabel }}</span>
+            }
+          </div>
+        </td>
+      </ng-container>
+
+      <ng-container matColumnDef="originalFilename">
+        <th mat-header-cell *matHeaderCellDef mat-sort-header="originalFilename">
+          <span class="route-header-label">
+            <mat-icon aria-hidden="true">description</mat-icon>
+            <span>Source</span>
+          </span>
+        </th>
+        <td mat-cell *matCellDef="let item">
+          <span class="route-source-cell" [matTooltip]="item.originalFilename" [attr.title]="item.originalFilename">
+            {{ item.originalFilename }}
+          </span>
+        </td>
+      </ng-container>
+
+      <ng-container matColumnDef="actions">
+        <th mat-header-cell *matHeaderCellDef>
+          <span class="route-header-label route-header-label--actions">Actions</span>
+        </th>
+        <td mat-cell *matCellDef="let item" class="route-actions-cell">
+          <button mat-icon-button type="button"
+            aria-label="Reprocess route from original file"
+            matTooltip="Reprocess route from original file"
+            [disabled]="reprocessingRouteID() !== null || deletingRouteID() === item.route.id || downloadingRouteID() === item.route.id || !item.canReprocess"
+            (click)="$event.stopPropagation(); reprocessRouteFromOriginalFile(item.route)">
+            <mat-icon>autorenew</mat-icon>
+          </button>
+          <button mat-icon-button type="button"
+            aria-label="Download original route file"
+            matTooltip="Download original route file"
+            [disabled]="downloadingRouteID() === item.route.id || reprocessingRouteID() === item.route.id"
+            (click)="$event.stopPropagation(); downloadRouteOriginals(item.route)">
+            <mat-icon>download</mat-icon>
+          </button>
+          <button mat-icon-button type="button"
+            aria-label="Delete route"
+            matTooltip="Delete route"
+            [disabled]="deletingRouteID() === item.route.id || reprocessingRouteID() === item.route.id"
+            (click)="$event.stopPropagation(); confirmDeleteRoute(item.route)">
+            <mat-icon>delete</mat-icon>
+          </button>
+        </td>
+      </ng-container>
+
+        <tr mat-header-row *matHeaderRowDef="routeColumns"></tr>
+        <tr
+          mat-row
+          class="route-table-row"
+          tabindex="0"
+          *matRowDef="let item; columns: routeColumns;"
+          [attr.aria-label]="'Open route details for ' + item.name"
+          (click)="openRouteDetails(item)"
+          (keydown.enter)="openRouteDetails(item)"
+          (keydown.space)="$event.preventDefault(); openRouteDetails(item)">
+        </tr>
+      </table>
+    </section>
+    } @else {
+    <section class="empty-routes">
+      <mat-icon aria-hidden="true">search_off</mat-icon>
+      <h2>No loaded routes match this filter</h2>
+      <p>Adjust the filter text, source, or activity type.</p>
+    </section>
+    }
+    } @else {
+    <section class="empty-routes">
+      <mat-icon aria-hidden="true">route</mat-icon>
+      <h2>No saved routes</h2>
+      <p>Upload a FIT course or GPX route file to save it here.</p>
+    </section>
+    }
+    }
+  </section>
+</main>
+}

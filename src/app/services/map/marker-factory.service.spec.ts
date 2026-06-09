@@ -18,7 +18,9 @@ describe('MarkerFactoryService', () => {
     it('should create pin marker', () => {
         const marker = service.createPinMarker('#ff0000');
         expect(marker.innerHTML).toContain('<svg');
-        expect(marker.innerHTML).toContain('scale(0.5) translate(22, 48)');
+        expect(marker.innerHTML).toContain('viewBox="0 0 24 24"');
+        expect(marker.innerHTML).toContain('C8.13 2 5 5.13 5 9');
+        expect(marker.innerHTML).not.toContain('scale(0.5) translate(22, 48)');
         expect(marker.innerHTML).toContain('fill="#ff0000"');
     });
 
