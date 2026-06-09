@@ -55,6 +55,7 @@ export const CLIENT_RENDERED_APP_ROUTES = [
   'admin/queues/activity-sync',
   'admin/queues/sleep-sync',
   'admin/queues/reparse',
+  'admin/queues/route-reparse',
   'admin/queues/derived-metrics',
   'pricing',
   'subscriptions',

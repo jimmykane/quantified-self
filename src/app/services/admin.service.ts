@@ -3,6 +3,12 @@ import { Firestore } from 'app/firebase/firestore';
 import { from, Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
 import { AppFunctionsService } from './app.functions.service';
+import type {
+    AdminQueueStatsSnapshot,
+    EventReparseFailurePreview,
+    GetQueueStatsRequest,
+    RouteReparseFailurePreview,
+} from '../../../shared/admin-queue-stats';
 
 export interface CountStats {
     total: number | null;
@@ -147,188 +153,9 @@ export interface UserGrowthTrendResponse {
     };
 }
 
-export interface DLQStats {
-    total: number;
-    byContext: { context: string; count: number }[];
-    byProvider: { provider: string; count: number }[];
-}
-
-export interface ReparseCheckpointStats {
-    cursorEventPath: string | null;
-    lastScanAt: unknown;
-    lastPassStartedAt: unknown;
-    lastPassCompletedAt: unknown;
-    lastScanCount: number;
-    lastEnqueuedCount: number;
-    overrideUsersInProgress: number;
-}
-
-export interface ReparseJobsStats {
-    total: number;
-    pending: number;
-    processing: number;
-    completed: number;
-    failed: number;
-}
-
-export interface ReparseFailurePreview {
-    jobId: string;
-    uid: string;
-    eventId: string;
-    attemptCount: number;
-    lastError: string;
-    updatedAt: unknown;
-    targetSportsLibVersion: string;
-    processingTier?: string;
-    heavyReason?: string;
-    eventDurationMs?: number | null;
-}
-
-export interface RouteReparseFailurePreview {
-    jobId: string;
-    uid: string;
-    routeId: string;
-    attemptCount: number;
-    lastError: string;
-    updatedAt: unknown;
-    targetSportsLibVersion: string;
-}
-
-export interface ReparseStats {
-    queuePending: number;
-    targetSportsLibVersion: string;
-    jobs: ReparseJobsStats;
-    checkpoint: ReparseCheckpointStats;
-    recentFailures: ReparseFailurePreview[];
-}
-
-export interface RouteReparseStats {
-    queuePending: number;
-    targetSportsLibVersion: string;
-    jobs: ReparseJobsStats & {
-        skipped?: number;
-    };
-    checkpoint: Omit<ReparseCheckpointStats, 'cursorEventPath'> & {
-        cursorProcessingDocPath: string | null;
-        cursorProcessingVersionCode: number | null;
-    };
-    recentFailures: RouteReparseFailurePreview[];
-}
-
-export interface DerivedMetricsCoordinatorStats {
-    idle: number;
-    queued: number;
-    processing: number;
-    staleQueued?: number;
-    staleProcessing?: number;
-    failed: number;
-    total: number;
-}
-
-export interface DerivedMetricsFailurePreview {
-    uid: string;
-    generation: number;
-    dirtyMetricKinds: string[];
-    lastError: string;
-    updatedAtMs: number;
-}
-
-export interface DerivedMetricsStats {
-    coordinators: DerivedMetricsCoordinatorStats;
-    recentFailures: DerivedMetricsFailurePreview[];
-}
-
-export interface QueueStats {
-    pending: number;
-    succeeded: number;
-    stuck: number;
-    cloudTasks?: {
-        pending: number;
-        queues?: {
-            workout?: {
-                queueId: string;
-                pending: number;
-            };
-            activitySync?: {
-                queueId: string;
-                pending: number;
-            };
-            sportsLibReparse?: {
-                queueId: string;
-                pending: number;
-            };
-            sportsLibReparseHeavy?: {
-                queueId: string;
-                pending: number;
-            };
-            sportsLibRouteReparse?: {
-                queueId: string;
-                pending: number;
-            };
-            derivedMetrics?: {
-                queueId: string;
-                pending: number;
-            };
-            sleepSync?: {
-                queueId: string;
-                pending: number;
-            };
-        };
-    };
-    providers: {
-        name: string;
-        pending: number;
-        succeeded: number;
-        stuck: number;
-        dead: number;
-    }[];
-    dlq?: DLQStats;
-    reparse?: ReparseStats;
-    routeReparse?: RouteReparseStats;
-    derivedMetrics?: DerivedMetricsStats;
-    advanced?: {
-        throughput: number;
-        maxLagMs: number;
-        retryHistogram: { '0-3': number; '4-7': number; '8-9': number };
-        topErrors: { error: string; count: number }[];
-    };
-    activitySync?: {
-        pending: number;
-        succeeded: number;
-        stuck: number;
-        dead: number;
-        dlqByContext: { context: string; count: number }[];
-        advanced: {
-            throughput: number;
-            maxLagMs: number;
-            retryHistogram: { '0-3': number; '4-7': number; '8-9': number };
-            topErrors: { error: string; count: number }[];
-        };
-    };
-    sleepSync?: {
-        pending: number;
-        succeeded: number;
-        providerDisabled: number;
-        stuck: number;
-        dead: number;
-        disabledProviders: string[];
-        providers: {
-            provider: string;
-            pending: number;
-            succeeded: number;
-            providerDisabled: number;
-            stuck: number;
-            dead: number;
-        }[];
-        dlqByContext: { context: string; count: number }[];
-        advanced: {
-            throughput: number;
-            maxLagMs: number;
-            retryHistogram: { '0-3': number; '4-7': number; '8-9': number };
-            topErrors: { error: string; count: number }[];
-        };
-    };
-}
+export type QueueStats = AdminQueueStatsSnapshot;
+export type ReparseFailurePreview = EventReparseFailurePreview;
+export type { RouteReparseFailurePreview };
 
 export interface FinancialStats {
     revenue: {
@@ -376,7 +203,7 @@ export class AdminService {
     }
 
     getQueueStats(includeAnalysis = true): Observable<QueueStats> {
-        return from(this.functionsService.call<{ includeAnalysis?: boolean }, QueueStats>('getQueueStats', { includeAnalysis })).pipe(
+        return from(this.functionsService.call<GetQueueStatsRequest, QueueStats>('getQueueStats', { includeAnalysis })).pipe(
             map(result => result.data)
         );
     }

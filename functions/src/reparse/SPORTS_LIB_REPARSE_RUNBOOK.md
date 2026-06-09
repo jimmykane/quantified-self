@@ -15,6 +15,7 @@ Global discovery is query-first on processing metadata:
 - filter: `where('sportsLibVersionCode', '<', targetSportsLibVersionCode)`
 - order: `orderBy('sportsLibVersionCode', 'asc').orderBy('__name__', 'asc')`
 - path guard: only docs at `.../metaData/processing` are treated as reparse candidates
+- entity discriminator: new event processing docs include `processingEntity: "event"`, but the event scan keeps the path guard so legacy unlabeled event docs remain discoverable until a dedicated event-entity backfill is complete.
 
 For each processing doc hit:
 1. Derive identity from parent path only (`users/{uid}/events/{eventId}` from `processingRef.parent.parent`).
@@ -117,6 +118,7 @@ Common outcomes:
 - Path: `users/{uid}/events/{eventId}/metaData/processing`
 
 Expected fields:
+- `processingEntity: "event"` for current writes; legacy docs may omit it
 - `sportsLibVersion: string`
 - `sportsLibVersionCode: number`
 - `processedAt`

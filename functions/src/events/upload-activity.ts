@@ -19,7 +19,7 @@ import { ALLOWED_CORS_ORIGINS, ENFORCE_APP_CHECK, hasBasicAccess, hasProAccess }
 import { createParsingOptions } from '../../../shared/parsing-options';
 import { EventWriter, FirestoreAdapter, StorageAdapter, OriginalFile } from '../shared/event-writer';
 import { generateActivityID } from '../shared/id-generator';
-import { ProcessingMetaData } from '../shared/processing-metadata.interface';
+import { EVENT_PROCESSING_ENTITY, ProcessingMetaData } from '../shared/processing-metadata.interface';
 import { SPORTS_LIB_VERSION } from '../shared/sports-lib-version.node';
 import { sportsLibVersionToCode } from '../reparse/sports-lib-reparse.service';
 import { USAGE_LIMITS } from '../../../shared/limits';
@@ -311,6 +311,7 @@ function getStorageAdapter(): StorageAdapter {
 
 async function persistProcessingMetadata(userID: string, eventID: string): Promise<void> {
   const processingPayload: ProcessingMetaData = {
+    processingEntity: EVENT_PROCESSING_ENTITY,
     sportsLibVersion: SPORTS_LIB_VERSION,
     sportsLibVersionCode: sportsLibVersionToCode(SPORTS_LIB_VERSION),
     processedAt: FieldValue.serverTimestamp(),

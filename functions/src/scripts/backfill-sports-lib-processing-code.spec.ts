@@ -276,6 +276,7 @@ describe('backfill-sports-lib-processing-code script', () => {
         expect(summary.created).toBe(1);
         expect(summary.failed).toBe(0);
         expect(eventDoc.processingSet).toHaveBeenCalledWith(expect.objectContaining({
+            processingEntity: 'event',
             sportsLibVersion: '0.0.0',
             sportsLibVersionCode: 0,
             processedAt: 'SERVER_TIMESTAMP',
@@ -293,8 +294,42 @@ describe('backfill-sports-lib-processing-code script', () => {
         expect(summary.patched).toBe(1);
         expect(summary.skippedInvalid).toBe(0);
         expect(eventDoc.processingSet).toHaveBeenCalledWith({
+            processingEntity: 'event',
             sportsLibVersionCode: 9_000_000,
         }, { merge: true });
+    });
+
+    it('should patch missing processing entity even when sportsLibVersionCode is current', async () => {
+        const eventDoc = makeEventDoc('u1', 'e1', {
+            exists: true,
+            data: { sportsLibVersion: '9.0.0', sportsLibVersionCode: 9_000_000 },
+        });
+        hoisted.userEventsByUID.set('u1', [eventDoc]);
+
+        const summary = await runBackfillSportsLibProcessingCode(['--execute', '--uid', 'u1']);
+        expect(summary.patched).toBe(1);
+        expect(summary.unchanged).toBe(0);
+        expect(eventDoc.processingSet).toHaveBeenCalledWith({
+            processingEntity: 'event',
+            sportsLibVersionCode: 9_000_000,
+        }, { merge: true });
+    });
+
+    it('should leave current event processing metadata unchanged', async () => {
+        const eventDoc = makeEventDoc('u1', 'e1', {
+            exists: true,
+            data: {
+                processingEntity: 'event',
+                sportsLibVersion: '9.0.0',
+                sportsLibVersionCode: 9_000_000,
+            },
+        });
+        hoisted.userEventsByUID.set('u1', [eventDoc]);
+
+        const summary = await runBackfillSportsLibProcessingCode(['--execute', '--uid', 'u1']);
+        expect(summary.unchanged).toBe(1);
+        expect(summary.patched).toBe(0);
+        expect(eventDoc.processingSet).not.toHaveBeenCalled();
     });
 
     it('should skip invalid sportsLibVersion values without aborting run', async () => {

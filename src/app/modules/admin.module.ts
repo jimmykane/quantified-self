@@ -66,6 +66,14 @@ export const adminRoutes: Routes = [
         }
     },
     {
+        path: 'queues/route-reparse',
+        component: AdminQueueMonitorComponent,
+        canActivate: [adminGuard],
+        data: {
+            queueView: 'route-reparse'
+        }
+    },
+    {
         path: 'queues/derived-metrics',
         component: AdminQueueMonitorComponent,
         canActivate: [adminGuard],

@@ -62,6 +62,10 @@
           "destination": "/index.csr.html"
         },
         {
+          "source": "/admin/queues/route-reparse",
+          "destination": "/index.csr.html"
+        },
+        {
           "source": "/admin/queues/derived-metrics",
           "destination": "/index.csr.html"
         },
@@ -195,6 +199,10 @@
         },
         {
           "source": "/admin/queues/reparse",
+          "destination": "/index.csr.html"
+        },
+        {
+          "source": "/admin/queues/route-reparse",
           "destination": "/index.csr.html"
         },
         {
