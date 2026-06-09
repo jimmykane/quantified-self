@@ -103,6 +103,9 @@ const {
         if (queueId === 'processSportsLibReparseHeavyTask') {
             return 2;
         }
+        if (queueId === 'processSportsLibRouteReparseTask') {
+            return 1;
+        }
         if (queueId === 'processDerivedMetricsTask') {
             return 6;
         }
@@ -215,6 +218,7 @@ vi.mock('../../config', () => ({
             sleepSyncQueue: 'processSleepSyncTask',
             sportsLibReparseQueue: 'processSportsLibReparseTask',
             sportsLibReparseHeavyQueue: 'processSportsLibReparseHeavyTask',
+            sportsLibRouteReparseQueue: 'processSportsLibRouteReparseTask',
             derivedMetricsQueue: 'processDerivedMetricsTask',
             queue: 'processWorkoutTask',
         },

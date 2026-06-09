@@ -8,7 +8,7 @@ import { MatTableModule } from '@angular/material/table';
 import { MatCardModule } from '@angular/material/card';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 
-import { AdminService, QueueStats, ReparseFailurePreview } from '../../../services/admin.service';
+import { AdminService, QueueStats, ReparseFailurePreview, RouteReparseFailurePreview } from '../../../services/admin.service';
 import { AppThemeService } from '../../../services/app.theme.service';
 import { AppThemes } from '@sports-alliance/sports-lib';
 import { Subject } from 'rxjs';
@@ -29,6 +29,10 @@ type ReparseFailureRowView = ReparseFailurePreview & {
     updatedAtLabel: string;
     retryHeavyDisabled: boolean;
     retryingHeavy: boolean;
+};
+
+type RouteReparseFailureRowView = RouteReparseFailurePreview & {
+    updatedAtLabel: string;
 };
 
 @Component({
@@ -65,9 +69,11 @@ export class AdminQueueStatsComponent implements OnInit, OnChanges, OnDestroy, A
     @Output() retryHeavyCompleted = new EventEmitter<void>();
     hasRetryData = false;
     readonly reparseFailureColumns = ['uid', 'eventId', 'attemptCount', 'processingTier', 'heavyReason', 'eventDurationMs', 'updatedAt', 'lastError', 'actions'];
+    readonly routeReparseFailureColumns = ['uid', 'routeId', 'attemptCount', 'updatedAt', 'lastError'];
     readonly derivedFailureColumns = ['uid', 'generation', 'dirtyMetricKinds', 'updatedAtMs', 'lastError'];
     readonly retryingHeavyJobIds = new Set<string>();
     reparseFailureRows: ReparseFailureRowView[] = [];
+    routeReparseFailureRows: RouteReparseFailureRowView[] = [];
 
     @ViewChild('retryChart')
     set retryChartRef(ref: ElementRef<HTMLDivElement> | undefined) {
@@ -298,6 +304,10 @@ export class AdminQueueStatsComponent implements OnInit, OnChanges, OnDestroy, A
                 retryingHeavy,
             };
         });
+        this.routeReparseFailureRows = (this.stats?.routeReparse?.recentFailures || []).map(row => ({
+            ...row,
+            updatedAtLabel: this.formatTimestamp(row.updatedAt),
+        }));
     }
 
     private getReparseTierLabel(row: ReparseFailurePreview): string {

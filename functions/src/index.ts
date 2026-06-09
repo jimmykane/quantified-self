@@ -174,6 +174,7 @@ export { onSubscriptionUpdated } from './stripe/subscriptions';
 export { enforceSubscriptionLimits } from './schedule/enforce-subscription-limits';
 export { checkSubscriptionNotifications } from './schedule/notifications';
 export { scheduleSportsLibReparseScan } from './schedule/sports-lib-reparse';
+export { scheduleSportsLibRouteReparseScan } from './schedule/sports-lib-route-reparse';
 export { cleanupUserAccounts } from './users/cleanup';
 export { deleteSelf } from './user/user';
 export { listUsers, getQueueStats, getUserCount, getSubscriptionHistoryTrend, getUserGrowthTrend, setMaintenanceMode, getMaintenanceStatus, impersonateUser, stopImpersonation, getFinancialStats } from './admin';
@@ -183,6 +184,7 @@ export { processWorkoutTask } from './tasks/workout-processor';
 export { processActivitySyncTask } from './tasks/activity-sync-worker';
 export { processSleepSyncTask } from './tasks/sleep-sync-worker';
 export { processSportsLibReparseTask } from './tasks/sports-lib-reparse-worker';
+export { processSportsLibRouteReparseTask } from './tasks/sports-lib-route-reparse-worker';
 export { processDerivedMetricsTask } from './tasks/derived-metrics-worker';
 export { processDerivedMetricsIngressTask } from './tasks/derived-metrics-ingress-worker';
 

@@ -145,6 +145,18 @@ export interface SportsLibReparseJobDocData {
     eventDurationMs?: number;
 }
 
+export interface SportsLibRouteReparseJobDocData {
+    uid?: string;
+    routeId?: string;
+    status?: string;
+    attemptCount?: number;
+    lastError?: string;
+    terminalFailure?: boolean;
+    terminalFailureAt?: unknown;
+    updatedAt?: unknown;
+    targetSportsLibVersion?: string;
+}
+
 export interface DerivedMetricsCoordinatorDocData {
     entryType?: unknown;
     status?: unknown;
@@ -197,6 +209,10 @@ export interface QueueStatsResponse {
                 queueId: string;
                 pending: number;
             };
+            sportsLibRouteReparse: {
+                queueId: string;
+                pending: number;
+            };
             derivedMetrics: {
                 queueId: string;
                 pending: number;
@@ -237,6 +253,37 @@ export interface QueueStatsResponse {
             processingTier: string;
             heavyReason: string;
             eventDurationMs: number | null;
+        }[];
+    };
+    routeReparse: {
+        queuePending: number;
+        targetSportsLibVersion: string;
+        jobs: {
+            total: number;
+            pending: number;
+            processing: number;
+            completed: number;
+            skipped: number;
+            failed: number;
+        };
+        checkpoint: {
+            cursorProcessingDocPath: string | null;
+            cursorProcessingVersionCode: number | null;
+            lastScanAt: unknown;
+            lastPassStartedAt: unknown;
+            lastPassCompletedAt: unknown;
+            lastScanCount: number;
+            lastEnqueuedCount: number;
+            overrideUsersInProgress: number;
+        };
+        recentFailures: {
+            jobId: string;
+            uid: string;
+            routeId: string;
+            attemptCount: number;
+            lastError: string;
+            updatedAt: unknown;
+            targetSportsLibVersion: string;
         }[];
     };
     derivedMetrics: {

@@ -52,8 +52,10 @@ export const FUNCTIONS_MANIFEST = {
 
     // Reparse Functions
     scheduleSportsLibReparseScan: { name: 'scheduleSportsLibReparseScan', region: 'europe-west2' },
+    scheduleSportsLibRouteReparseScan: { name: 'scheduleSportsLibRouteReparseScan', region: 'europe-west2' },
     processSportsLibReparseTask: { name: 'processSportsLibReparseTask', region: 'europe-west2' },
     processSportsLibReparseHeavyTask: { name: SPORTS_LIB_REPARSE_HEAVY_TASK_FUNCTION_NAME, region: 'europe-west2' },
+    processSportsLibRouteReparseTask: { name: 'processSportsLibRouteReparseTask', region: 'europe-west2' },
 
     // Upload/Reprocess Functions
     uploadActivity: { name: 'uploadActivity', region: 'europe-west2' },

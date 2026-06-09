@@ -574,6 +574,18 @@
                 </div>
                 <span class="stat-subtitle" style="font-size: 0.75rem; opacity: 0.8;">queue: heavy reparse</span>
             </mat-card>
+            <mat-card class="app-stat-card status-info"
+                matTooltip="Tasks currently in flight or scheduled in the route sports-lib reparse Cloud Tasks queue.">
+                <div class="app-stat-header">
+                    <mat-icon>route</mat-icon>
+                    <span>Cloud Tasks (Route Reparse)</span>
+                </div>
+                <div class="app-stat-value" *ngIf="!loading">{{ stats?.cloudTasks?.queues?.sportsLibRouteReparse?.pending ?? 0 }}</div>
+                <div class="app-spinner-mini" *ngIf="loading">
+                    <mat-spinner diameter="24"></mat-spinner>
+                </div>
+                <span class="stat-subtitle" style="font-size: 0.75rem; opacity: 0.8;">queue: route reparse</span>
+            </mat-card>
             <mat-card class="app-stat-card status-pending">
                 <div class="app-stat-header">
                     <mat-icon>schedule</mat-icon>
@@ -610,6 +622,56 @@
                     <span>Reparse Jobs (Failed)</span>
                 </div>
                 <div class="app-stat-value" *ngIf="!loading">{{ stats?.reparse?.jobs?.failed ?? 0 }}</div>
+                <div class="app-spinner-mini" *ngIf="loading">
+                    <mat-spinner diameter="24"></mat-spinner>
+                </div>
+            </mat-card>
+            <mat-card class="app-stat-card status-pending">
+                <div class="app-stat-header">
+                    <mat-icon>schedule</mat-icon>
+                    <span>Route Jobs (Pending)</span>
+                </div>
+                <div class="app-stat-value" *ngIf="!loading">{{ stats?.routeReparse?.jobs?.pending ?? 0 }}</div>
+                <div class="app-spinner-mini" *ngIf="loading">
+                    <mat-spinner diameter="24"></mat-spinner>
+                </div>
+            </mat-card>
+            <mat-card class="app-stat-card status-info">
+                <div class="app-stat-header">
+                    <mat-icon>sync</mat-icon>
+                    <span>Route Jobs (Processing)</span>
+                </div>
+                <div class="app-stat-value" *ngIf="!loading">{{ stats?.routeReparse?.jobs?.processing ?? 0 }}</div>
+                <div class="app-spinner-mini" *ngIf="loading">
+                    <mat-spinner diameter="24"></mat-spinner>
+                </div>
+            </mat-card>
+            <mat-card class="app-stat-card status-success">
+                <div class="app-stat-header">
+                    <mat-icon>check_circle</mat-icon>
+                    <span>Route Jobs (Completed)</span>
+                </div>
+                <div class="app-stat-value" *ngIf="!loading">{{ stats?.routeReparse?.jobs?.completed ?? 0 }}</div>
+                <div class="app-spinner-mini" *ngIf="loading">
+                    <mat-spinner diameter="24"></mat-spinner>
+                </div>
+            </mat-card>
+            <mat-card class="app-stat-card status-info">
+                <div class="app-stat-header">
+                    <mat-icon>block</mat-icon>
+                    <span>Route Jobs (Skipped)</span>
+                </div>
+                <div class="app-stat-value" *ngIf="!loading">{{ stats?.routeReparse?.jobs?.skipped ?? 0 }}</div>
+                <div class="app-spinner-mini" *ngIf="loading">
+                    <mat-spinner diameter="24"></mat-spinner>
+                </div>
+            </mat-card>
+            <mat-card class="app-stat-card status-error">
+                <div class="app-stat-header">
+                    <mat-icon>error</mat-icon>
+                    <span>Route Jobs (Failed)</span>
+                </div>
+                <div class="app-stat-value" *ngIf="!loading">{{ stats?.routeReparse?.jobs?.failed ?? 0 }}</div>
                 <div class="app-spinner-mini" *ngIf="loading">
                     <mat-spinner diameter="24"></mat-spinner>
                 </div>
@@ -745,6 +807,46 @@
             </div>
             <ng-template #noReparseFailuresTemplate>
                 <div class="empty-table-state">No recent reparse failures.</div>
+            </ng-template>
+        </mat-card>
+
+        <mat-card class="table-container" style="margin-bottom: 0;">
+            <h3 class="card-title">Recent Route Reparse Failures</h3>
+            <div class="table-wrapper" *ngIf="routeReparseFailureRows.length > 0; else noRouteReparseFailuresTemplate">
+                <table mat-table [dataSource]="routeReparseFailureRows">
+                    <ng-container matColumnDef="uid">
+                        <th mat-header-cell *matHeaderCellDef> UID </th>
+                        <td mat-cell *matCellDef="let row"><span class="mono-cell">{{ row.uid }}</span></td>
+                    </ng-container>
+
+                    <ng-container matColumnDef="routeId">
+                        <th mat-header-cell *matHeaderCellDef> Route ID </th>
+                        <td mat-cell *matCellDef="let row"><span class="mono-cell">{{ row.routeId }}</span></td>
+                    </ng-container>
+
+                    <ng-container matColumnDef="attemptCount">
+                        <th mat-header-cell *matHeaderCellDef> Attempts </th>
+                        <td mat-cell *matCellDef="let row"> {{ row.attemptCount }} </td>
+                    </ng-container>
+
+                    <ng-container matColumnDef="updatedAt">
+                        <th mat-header-cell *matHeaderCellDef> Updated </th>
+                        <td mat-cell *matCellDef="let row"> {{ row.updatedAtLabel }} </td>
+                    </ng-container>
+
+                    <ng-container matColumnDef="lastError">
+                        <th mat-header-cell *matHeaderCellDef> Last Error </th>
+                        <td mat-cell *matCellDef="let row">
+                            <span class="analysis-error-text" [matTooltip]="row.lastError">{{ row.lastError || 'N/A' }}</span>
+                        </td>
+                    </ng-container>
+
+                    <tr mat-header-row *matHeaderRowDef="routeReparseFailureColumns"></tr>
+                    <tr mat-row *matRowDef="let row; columns: routeReparseFailureColumns;"></tr>
+                </table>
+            </div>
+            <ng-template #noRouteReparseFailuresTemplate>
+                <div class="empty-table-state">No recent route reparse failures.</div>
             </ng-template>
         </mat-card>
     </div>

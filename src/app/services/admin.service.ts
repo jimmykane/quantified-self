@@ -184,12 +184,35 @@ export interface ReparseFailurePreview {
     eventDurationMs?: number | null;
 }
 
+export interface RouteReparseFailurePreview {
+    jobId: string;
+    uid: string;
+    routeId: string;
+    attemptCount: number;
+    lastError: string;
+    updatedAt: unknown;
+    targetSportsLibVersion: string;
+}
+
 export interface ReparseStats {
     queuePending: number;
     targetSportsLibVersion: string;
     jobs: ReparseJobsStats;
     checkpoint: ReparseCheckpointStats;
     recentFailures: ReparseFailurePreview[];
+}
+
+export interface RouteReparseStats {
+    queuePending: number;
+    targetSportsLibVersion: string;
+    jobs: ReparseJobsStats & {
+        skipped?: number;
+    };
+    checkpoint: Omit<ReparseCheckpointStats, 'cursorEventPath'> & {
+        cursorProcessingDocPath: string | null;
+        cursorProcessingVersionCode: number | null;
+    };
+    recentFailures: RouteReparseFailurePreview[];
 }
 
 export interface DerivedMetricsCoordinatorStats {
@@ -238,6 +261,10 @@ export interface QueueStats {
                 queueId: string;
                 pending: number;
             };
+            sportsLibRouteReparse?: {
+                queueId: string;
+                pending: number;
+            };
             derivedMetrics?: {
                 queueId: string;
                 pending: number;
@@ -257,6 +284,7 @@ export interface QueueStats {
     }[];
     dlq?: DLQStats;
     reparse?: ReparseStats;
+    routeReparse?: RouteReparseStats;
     derivedMetrics?: DerivedMetricsStats;
     advanced?: {
         throughput: number;

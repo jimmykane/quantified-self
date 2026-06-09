@@ -9,3 +9,10 @@ export const ROUTE_PROCESSING_HTTPS_RUNTIME_OPTIONS = {
   maxInstances: 20,
   timeoutSeconds: 3600,
 } as const;
+
+export const ROUTE_PROCESSING_TASK_RUNTIME_OPTIONS = {
+  memory: '4GiB',
+  cpu: 2,
+  concurrency: 1,
+  timeoutSeconds: 1800,
+} as const;

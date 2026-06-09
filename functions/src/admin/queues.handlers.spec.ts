@@ -282,7 +282,7 @@ describe('getQueueStats Cloud Function', () => {
 
         // Check Cloud Tasks stats
         expect(result.cloudTasks).toEqual({
-            pending: 61,
+            pending: 62,
             queues: {
                 workout: {
                     queueId: 'processWorkoutTask',
@@ -304,12 +304,35 @@ describe('getQueueStats Cloud Function', () => {
                     queueId: 'processSportsLibReparseHeavyTask',
                     pending: 2,
                 },
+                sportsLibRouteReparse: {
+                    queueId: 'processSportsLibRouteReparseTask',
+                    pending: 1,
+                },
                 derivedMetrics: {
                     queueId: 'processDerivedMetricsTask',
                     pending: 6,
                 },
             },
         });
+        expect(result.routeReparse).toEqual(expect.objectContaining({
+            queuePending: 1,
+            targetSportsLibVersion: expect.any(String),
+            jobs: expect.objectContaining({
+                pending: expect.any(Number),
+                processing: expect.any(Number),
+                completed: expect.any(Number),
+                skipped: expect.any(Number),
+                failed: expect.any(Number),
+            }),
+            checkpoint: expect.objectContaining({
+                cursorProcessingDocPath: null,
+                cursorProcessingVersionCode: null,
+                lastScanCount: expect.any(Number),
+                lastEnqueuedCount: expect.any(Number),
+                overrideUsersInProgress: expect.any(Number),
+            }),
+            recentFailures: expect.any(Array),
+        }));
         expect(result.sleepSync).toEqual({
             pending: 5,
             succeeded: 5,
@@ -503,10 +526,11 @@ describe('getQueueStats Cloud Function', () => {
             .mockResolvedValueOnce(3)
             .mockResolvedValueOnce(8)
             .mockResolvedValueOnce(2)
+            .mockResolvedValueOnce(1)
             .mockResolvedValueOnce(6);
         const result = await (getQueueStats as any)(request);
         expect(result.cloudTasks).toEqual({
-            pending: 61,
+            pending: 62,
             queues: {
                 workout: {
                     queueId: 'processWorkoutTask',
@@ -527,6 +551,10 @@ describe('getQueueStats Cloud Function', () => {
                 sportsLibReparseHeavy: {
                     queueId: 'processSportsLibReparseHeavyTask',
                     pending: 2,
+                },
+                sportsLibRouteReparse: {
+                    queueId: 'processSportsLibRouteReparseTask',
+                    pending: 1,
                 },
                 derivedMetrics: {
                     queueId: 'processDerivedMetricsTask',
