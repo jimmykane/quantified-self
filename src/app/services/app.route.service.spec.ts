@@ -2,10 +2,6 @@ import { TestBed } from '@angular/core/testing';
 import { firstValueFrom, of } from 'rxjs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
-    DataDistance,
-    DataGradeMin,
-} from '@sports-alliance/sports-lib';
-import {
     Firestore,
     collection,
     collectionData,
@@ -83,27 +79,35 @@ describe('AppRouteService', () => {
         expect(result).toEqual([{ id: 'route-1', name: 'Route 1' }]);
     });
 
-    it('lists routes ordered by persisted aggregate route stats', async () => {
+    it('keeps nullable metric sorts on the default server query', async () => {
         vi.mocked(collectionData).mockReturnValue(of([{ id: 'route-1', name: 'Route 1' }]));
 
         await firstValueFrom(service.getRoutes({ uid: 'user-1' }, 25, { active: 'distance', direction: 'asc' }));
 
-        expect(orderBy).toHaveBeenCalledWith(`stats.${DataDistance.type}`, 'asc');
+        expect(orderBy).toHaveBeenCalledWith('importedAt', 'desc');
         expect(orderBy).toHaveBeenCalledTimes(1);
         expect(query).toHaveBeenCalledWith(
             { path: 'users/user-1/routes' },
-            { type: 'orderBy', field: `stats.${DataDistance.type}`, direction: 'asc' },
+            { type: 'orderBy', field: 'importedAt', direction: 'desc' },
             { type: 'limit', value: 25 },
         );
         expect(collectionData).toHaveBeenCalledTimes(1);
     });
 
-    it('lists routes ordered by persisted aggregate grade stats', async () => {
+    it('keeps nullable grade metric sorts on the default server query', async () => {
         vi.mocked(collectionData).mockReturnValue(of([{ id: 'route-1', name: 'Route 1' }]));
 
         await firstValueFrom(service.getRoutes({ uid: 'user-1' }, 25, { active: 'minGrade', direction: 'desc' }));
 
-        expect(orderBy).toHaveBeenCalledWith(`stats.${DataGradeMin.type}`, 'desc');
+        expect(orderBy).toHaveBeenCalledWith('importedAt', 'desc');
+    });
+
+    it('lists routes ordered by guaranteed point count', async () => {
+        vi.mocked(collectionData).mockReturnValue(of([{ id: 'route-1', name: 'Route 1' }]));
+
+        await firstValueFrom(service.getRoutes({ uid: 'user-1' }, 25, { active: 'pointCount', direction: 'asc' }));
+
+        expect(orderBy).toHaveBeenCalledWith('pointCount', 'asc');
     });
 
     it('counts routes from the user scoped routes collection', async () => {

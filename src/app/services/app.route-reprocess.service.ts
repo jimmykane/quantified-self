@@ -44,7 +44,9 @@ export interface RouteReprocessDocumentResult {
 export type RouteReprocessErrorCode =
   | 'NO_ORIGINAL_FILES'
   | 'PARSE_FAILED'
-  | 'PERSIST_FAILED';
+  | 'PERSIST_FAILED'
+  | 'ACCOUNT_DELETING'
+  | 'SERVICE_UNAVAILABLE';
 
 export class RouteReprocessError extends Error {
   constructor(
@@ -86,6 +88,12 @@ export function getRouteReprocessErrorMessage(error: unknown): string {
     }
     if (error.code === 'PARSE_FAILED') {
       return 'Could not parse the original route source file.';
+    }
+    if (error.code === 'ACCOUNT_DELETING') {
+      return 'Account deletion is in progress. Route reprocess is unavailable.';
+    }
+    if (error.code === 'SERVICE_UNAVAILABLE') {
+      return 'Route reprocess service is temporarily unavailable. Please try again shortly.';
     }
   }
   return 'Could not reprocess route from source file.';
@@ -188,9 +196,20 @@ export class AppRouteReprocessService {
   }
 
   private mapFunctionError(error: unknown): RouteReprocessError {
-    const message = error instanceof Error ? error.message : `${error}`;
+    const code = `${(error as { code?: unknown })?.code || ''}`;
+    const message = `${(error as { message?: unknown })?.message || (error instanceof Error ? error.message : error) || ''}`.trim();
     if (message.includes('NO_ORIGINAL_FILES')) {
       return new RouteReprocessError('NO_ORIGINAL_FILES', 'No original source file metadata found for this route.', error);
+    }
+    if (code.includes('failed-precondition') && /account is being deleted|account deletion|no longer exists/i.test(message)) {
+      return new RouteReprocessError('ACCOUNT_DELETING', message || 'Account deletion is in progress.', error);
+    }
+    if (code.includes('unavailable') || message.includes('Could not verify account state')) {
+      return new RouteReprocessError(
+        'SERVICE_UNAVAILABLE',
+        message || 'Route reprocess service is temporarily unavailable.',
+        error,
+      );
     }
     return new RouteReprocessError('PARSE_FAILED', 'Could not parse the original route source file.', error);
   }

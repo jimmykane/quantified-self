@@ -114,6 +114,7 @@ export class AdminUserManagementComponent implements OnInit, OnDestroy, AfterVie
     userStats: UserCountStats | null = null;
     isLoading = true;
     isRefreshingEventCount = false;
+    isRefreshingRouteCount = false;
     error: string | null = null;
     totalCount = 0;
     currentPage = 0;
@@ -128,7 +129,7 @@ export class AdminUserManagementComponent implements OnInit, OnDestroy, AfterVie
 
     displayedColumns: string[] = [
         'photoURL', 'email', 'uid', 'providerIds', 'displayName', 'role', 'subscriptionHistory',
-        'aiCreditsConsumed', 'eventStats', 'services', 'created', 'lastLogin', 'onboarding', 'status', 'actions'
+        'aiCreditsConsumed', 'eventStats', 'routeStats', 'services', 'created', 'lastLogin', 'onboarding', 'status', 'actions'
     ];
 
     private searchSubject = new Subject<string>();
@@ -376,6 +377,31 @@ export class AdminUserManagementComponent implements OnInit, OnDestroy, AfterVie
                     this.isRefreshingEventCount = false;
                     this.logger.error('AdminUserManagement event count refresh error:', err);
                     this.snackBar.open('Failed to refresh event count', undefined, { duration: 5000 });
+                }
+            });
+    }
+
+    refreshGlobalRouteCount(): void {
+        if (this.isRefreshingRouteCount) {
+            return;
+        }
+
+        this.isRefreshingRouteCount = true;
+        this.adminService.getTotalUserCount({ refreshRouteCount: true })
+            .pipe(takeUntil(this.destroy$))
+            .subscribe({
+                next: (stats) => {
+                    this.userStats = stats;
+                    if (stats.providers) {
+                        this.updateAuthChart(stats.providers);
+                    }
+                    this.isRefreshingRouteCount = false;
+                    this.snackBar.open('Route count refreshed', undefined, { duration: 3000 });
+                },
+                error: (err) => {
+                    this.isRefreshingRouteCount = false;
+                    this.logger.error('AdminUserManagement route count refresh error:', err);
+                    this.snackBar.open('Failed to refresh route count', undefined, { duration: 5000 });
                 }
             });
     }

@@ -160,6 +160,44 @@ describe('AppRouteReprocessService', () => {
     });
   });
 
+  it('maps account-deletion callable failures to the account unavailable error', async () => {
+    functionsServiceMock.call.mockRejectedValueOnce(Object.assign(
+      new Error('Account is being deleted or no longer exists.'),
+      { code: 'functions/failed-precondition' },
+    ));
+
+    let caughtError: unknown;
+    try {
+      await service.reprocessRouteFromOriginalFile(new User('user-1'), routeDocument);
+    } catch (error) {
+      caughtError = error;
+    }
+
+    expect(caughtError).toMatchObject({ code: 'ACCOUNT_DELETING' });
+    expect(getRouteReprocessErrorMessage(caughtError)).toBe(
+      'Account deletion is in progress. Route reprocess is unavailable.',
+    );
+  });
+
+  it('maps deletion guard read failures to the route service unavailable error', async () => {
+    functionsServiceMock.call.mockRejectedValueOnce(Object.assign(
+      new Error('Could not verify account state. Please retry.'),
+      { code: 'functions/unavailable' },
+    ));
+
+    let caughtError: unknown;
+    try {
+      await service.reprocessRouteFromOriginalFile(new User('user-1'), routeDocument);
+    } catch (error) {
+      caughtError = error;
+    }
+
+    expect(caughtError).toMatchObject({ code: 'SERVICE_UNAVAILABLE' });
+    expect(getRouteReprocessErrorMessage(caughtError)).toBe(
+      'Route reprocess service is temporarily unavailable. Please try again shortly.',
+    );
+  });
+
   it('throws PERSIST_FAILED when the refreshed route cannot be loaded', async () => {
     routeServiceMock.getRoute.mockReturnValueOnce(of(null));
 

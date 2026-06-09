@@ -475,10 +475,15 @@ describe('RoutesPageComponent', () => {
 
         expect(routes.map(item => item.route.id)).toEqual(['route-2', 'route-1']);
         expect(routes.map(item => item.distance.label)).toEqual(['5.00 Km', '10.00 Km']);
-        expect(routeServiceMock.getRoutes).toHaveBeenCalledWith(
+        expect(routeServiceMock.getRoutes).not.toHaveBeenCalledWith(
             { uid: 'user-1' },
             50,
             { active: 'distance', direction: 'asc' },
+        );
+        expect(routeServiceMock.getRoutes).toHaveBeenLastCalledWith(
+            { uid: 'user-1' },
+            50,
+            { active: 'date', direction: 'desc' },
         );
         expect(hapticsServiceMock.selection).toHaveBeenCalled();
         expect(analyticsServiceMock.logSavedRouteAction).toHaveBeenCalledWith('sort', {
@@ -487,6 +492,33 @@ describe('RoutesPageComponent', () => {
             filterActive: false,
             resultCount: 2,
         });
+    });
+
+    it('keeps routes without top-level metric stats visible when metric sorting', async () => {
+        const { stats: _stats, ...routeWithoutTopLevelStats } = {
+            ...route,
+            id: 'route-2',
+            name: 'No Elevation Route',
+            originalFiles: [{
+                path: 'users/user-1/routes/route-2/original.gpx',
+                startDate: new Date('2026-01-03T00:00:00.000Z'),
+                extension: 'gpx',
+            }],
+        };
+        routeServiceMock.getRoutes.mockReturnValue(of([routeWithoutTopLevelStats as FirestoreRouteJSON, route]));
+        await component.ngOnInit();
+        await firstValueFrom(component.routes$!);
+
+        component.onRouteSortChange({ active: 'ascent', direction: 'asc' });
+        const routes = await firstValueFrom(component.routes$!);
+
+        expect(routes.map(item => item.route.id)).toEqual(['route-1', 'route-2']);
+        expect(routes.map(item => item.ascent.label)).toEqual(['120 m', '-']);
+        expect(routeServiceMock.getRoutes).not.toHaveBeenCalledWith(
+            { uid: 'user-1' },
+            50,
+            { active: 'ascent', direction: 'asc' },
+        );
     });
 
     it('sorts route table rows by min and max grade stats', async () => {

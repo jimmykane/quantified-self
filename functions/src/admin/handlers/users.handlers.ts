@@ -13,11 +13,12 @@ import {
 } from '../shared/subscription.constants';
 import { clampListUsersPageSize } from '../shared/date.utils';
 import { enrichUsers } from '../shared/user-enrichment';
-import { BasicUser, EventCountStats, ListUsersRequest, ListUsersResponse, UserCountRequest, UserCountResponse } from '../shared/types';
+import { BasicUser, CountStats, ListUsersRequest, ListUsersResponse, UserCountRequest, UserCountResponse } from '../shared/types';
 
 const ADMIN_STATS_COLLECTION = 'adminStats';
 const ADMIN_EVENT_COUNTS_DOC = 'eventCounts';
-const GLOBAL_EVENT_COUNT_CACHE_TTL_MS = 60 * 60 * 1000;
+const ADMIN_ROUTE_COUNTS_DOC = 'routeCounts';
+const GLOBAL_COLLECTION_COUNT_CACHE_TTL_MS = 60 * 60 * 1000;
 
 const resolveSubscriptionInterval = (subscription: Record<string, unknown>): string | null => {
     const items = Array.isArray(subscription.items) ? subscription.items : [];
@@ -99,7 +100,7 @@ function toIsoString(value: unknown): string | null {
     return time === null ? null : new Date(time).toISOString();
 }
 
-function readCachedGlobalEventCount(data: admin.firestore.DocumentData | undefined, nowMs: number): EventCountStats | null {
+function readCachedGlobalCollectionCount(data: admin.firestore.DocumentData | undefined, nowMs: number): CountStats | null {
     const total = data?.total;
     if (typeof total !== 'number' || !Number.isFinite(total)) {
         return null;
@@ -118,7 +119,7 @@ function readCachedGlobalEventCount(data: admin.firestore.DocumentData | undefin
     };
 }
 
-function readStaleGlobalEventCount(data: admin.firestore.DocumentData | undefined): EventCountStats | null {
+function readStaleGlobalCollectionCount(data: admin.firestore.DocumentData | undefined): CountStats | null {
     const total = data?.total;
     if (typeof total !== 'number' || !Number.isFinite(total)) {
         return null;
@@ -132,25 +133,36 @@ function readStaleGlobalEventCount(data: admin.firestore.DocumentData | undefine
     };
 }
 
-function resolveGlobalEventCountCacheRef(db: admin.firestore.Firestore): admin.firestore.DocumentReference | null {
+function resolveGlobalCollectionCountCacheRef(
+    db: admin.firestore.Firestore,
+    cacheDocId: string,
+    logLabel: string
+): admin.firestore.DocumentReference | null {
     try {
         const collectionRef = db.collection(ADMIN_STATS_COLLECTION);
         if (!collectionRef || typeof collectionRef.doc !== 'function') {
             return null;
         }
-        return collectionRef.doc(ADMIN_EVENT_COUNTS_DOC);
+        return collectionRef.doc(cacheDocId);
     } catch (error) {
-        logger.warn('Failed to resolve admin global event count cache doc', error);
+        logger.warn(`Failed to resolve admin global ${logLabel} count cache doc`, error);
         return null;
     }
 }
 
-async function getGlobalEventCount(
+async function getGlobalCollectionCount(
     db: admin.firestore.Firestore,
-    options: { forceRefresh?: boolean; requestedByUid?: string | null } = {}
-): Promise<EventCountStats> {
+    options: {
+        collectionGroupId: 'events' | 'routes';
+        cacheDocId: string;
+        kind: 'eventCounts' | 'routeCounts';
+        logLabel: string;
+        forceRefresh?: boolean;
+        requestedByUid?: string | null;
+    }
+): Promise<CountStats> {
     const nowMs = Date.now();
-    const cacheRef = resolveGlobalEventCountCacheRef(db);
+    const cacheRef = resolveGlobalCollectionCountCacheRef(db, options.cacheDocId, options.logLabel);
     let cachedData: admin.firestore.DocumentData | undefined;
 
     if (cacheRef) {
@@ -158,26 +170,26 @@ async function getGlobalEventCount(
             const cacheSnapshot = await cacheRef.get();
             cachedData = cacheSnapshot.exists ? cacheSnapshot.data() : undefined;
             if (!options.forceRefresh) {
-                const cached = readCachedGlobalEventCount(cachedData, nowMs);
+                const cached = readCachedGlobalCollectionCount(cachedData, nowMs);
                 if (cached) {
                     return cached;
                 }
             }
         } catch (error) {
-            logger.warn('Failed to read admin global event count cache', error);
+            logger.warn(`Failed to read admin global ${options.logLabel} count cache`, error);
         }
     }
 
     try {
-        const snapshot = await db.collectionGroup('events').count().get();
+        const snapshot = await db.collectionGroup(options.collectionGroupId).count().get();
         const total = normalizeCount(snapshot.data().count);
         const computedAt = new Date(nowMs);
-        const expireAt = new Date(nowMs + GLOBAL_EVENT_COUNT_CACHE_TTL_MS);
+        const expireAt = new Date(nowMs + GLOBAL_COLLECTION_COUNT_CACHE_TTL_MS);
 
         if (cacheRef) {
             try {
                 await cacheRef.set({
-                    kind: 'eventCounts',
+                    kind: options.kind,
                     schemaVersion: 1,
                     total,
                     computedAt,
@@ -186,7 +198,7 @@ async function getGlobalEventCount(
                     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
                 }, { merge: true });
             } catch (error) {
-                logger.warn('Failed to write admin global event count cache', error);
+                logger.warn(`Failed to write admin global ${options.logLabel} count cache`, error);
             }
         }
 
@@ -197,14 +209,40 @@ async function getGlobalEventCount(
             expireAt: expireAt.toISOString(),
         };
     } catch (error) {
-        logger.warn('Failed to count events for admin user stats', error);
-        return readStaleGlobalEventCount(cachedData) || {
+        logger.warn(`Failed to count ${options.collectionGroupId} for admin user stats`, error);
+        return readStaleGlobalCollectionCount(cachedData) || {
             total: null,
             cacheStatus: 'unavailable',
             computedAt: null,
             expireAt: null,
         };
     }
+}
+
+function getGlobalEventCount(
+    db: admin.firestore.Firestore,
+    options: { forceRefresh?: boolean; requestedByUid?: string | null } = {}
+): Promise<CountStats> {
+    return getGlobalCollectionCount(db, {
+        collectionGroupId: 'events',
+        cacheDocId: ADMIN_EVENT_COUNTS_DOC,
+        kind: 'eventCounts',
+        logLabel: 'event',
+        ...options,
+    });
+}
+
+function getGlobalRouteCount(
+    db: admin.firestore.Firestore,
+    options: { forceRefresh?: boolean; requestedByUid?: string | null } = {}
+): Promise<CountStats> {
+    return getGlobalCollectionCount(db, {
+        collectionGroupId: 'routes',
+        cacheDocId: ADMIN_ROUTE_COUNTS_DOC,
+        kind: 'routeCounts',
+        logLabel: 'route',
+        ...options,
+    });
 }
 
 /**
@@ -214,8 +252,8 @@ async function getGlobalEventCount(
  * Performance:
  * - Firebase Auth listUsers: FREE (no Firestore reads)
  * - Search/Sort on Auth data: FREE
- * - Enrich current page only: user detail reads plus one event count aggregation per visible user
- * - Event counts are display-only and are not used for sorting/filtering in v1
+ * - Enrich current page only: user detail reads plus event/route count aggregations per visible user
+ * - Event and route counts are display-only and are not used for sorting/filtering in v1
  */
 export const listUsers = onAdminCall<ListUsersRequest, ListUsersResponse>({
     region: FUNCTIONS_MANIFEST.listUsers.region,
@@ -404,10 +442,11 @@ export const getUserCount = onAdminCall<UserCountRequest, UserCountResponse>({
     try {
         const db = admin.firestore();
         const forceRefreshEventCount = request.data?.refreshEventCount === true;
+        const forceRefreshRouteCount = request.data?.refreshRouteCount === true;
 
         // 1. Get stats from Firestore (subscriptions)
         // Parallel efficient count queries
-        const [totalSnapshot, proSnapshot, basicSnapshot, onboardedSnapshot, eventStats] = await Promise.all([
+        const [totalSnapshot, proSnapshot, basicSnapshot, onboardedSnapshot, eventStats, routeStats] = await Promise.all([
             db.collection('users').count().get(),
             db.collectionGroup('subscriptions')
                 .where('status', 'in', [...ACTIVE_SUBSCRIPTION_STATUSES])
@@ -422,6 +461,10 @@ export const getUserCount = onAdminCall<UserCountRequest, UserCountResponse>({
                 .count().get(),
             getGlobalEventCount(db, {
                 forceRefresh: forceRefreshEventCount,
+                requestedByUid: request.auth?.uid || null,
+            }),
+            getGlobalRouteCount(db, {
+                forceRefresh: forceRefreshRouteCount,
                 requestedByUid: request.auth?.uid || null,
             })
         ]);
@@ -493,6 +536,7 @@ export const getUserCount = onAdminCall<UserCountRequest, UserCountResponse>({
             yearlyPaid,
             onboardingCompleted,
             events: eventStats,
+            routes: routeStats,
             providers: providerCounts
         };
     } catch (error: unknown) {

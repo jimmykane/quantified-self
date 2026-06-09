@@ -25,6 +25,8 @@ const hoisted = vi.hoisted(() => {
   } as Record<string, unknown>;
   const mockServerTimestamp = vi.fn(() => 'SERVER_TIMESTAMP');
   const mockSportsLibVersionToCode = vi.fn(() => 15000006);
+  const mockGetUserDeletionGuardState = vi.fn();
+  const mockGetUserDeletionGuardStateInTransaction = vi.fn();
   let onCallOptions: unknown = null;
 
   return {
@@ -38,6 +40,8 @@ const hoisted = vi.hoisted(() => {
     mockSportsLib,
     mockServerTimestamp,
     mockSportsLibVersionToCode,
+    mockGetUserDeletionGuardState,
+    mockGetUserDeletionGuardStateInTransaction,
     getOnCallOptions: () => onCallOptions,
     setOnCallOptions: (options: unknown) => {
       onCallOptions = options;
@@ -106,6 +110,30 @@ vi.mock('../../../shared/functions-manifest', () => ({
     reprocessRoute: { name: 'reprocessRoute', region: 'europe-west2' },
   },
 }));
+
+vi.mock('../shared/user-deletion-guard', () => {
+  class MockUserDeletionGuardReadError extends Error {
+    readonly name = 'UserDeletionGuardReadError';
+    readonly code = 'unavailable';
+    readonly statusCode = 503;
+
+    constructor(
+      readonly uid: string,
+      readonly phase: string,
+      readonly originalError: unknown,
+    ) {
+      super(`Could not read deletion guard for user ${uid} during ${phase}.`);
+    }
+  }
+
+  return {
+    getUserDeletionGuardState: (...args: unknown[]) => hoisted.mockGetUserDeletionGuardState(...args),
+    getUserDeletionGuardStateInTransaction: (...args: unknown[]) => (
+      hoisted.mockGetUserDeletionGuardStateInTransaction(...args)
+    ),
+    UserDeletionGuardReadError: MockUserDeletionGuardReadError,
+  };
+});
 
 import { reprocessRoute } from './reprocess-route';
 
@@ -208,6 +236,13 @@ function transactionSetCallForPath(path: string) {
 describe('reprocessRoute', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    const activeDeletionGuard = {
+      userExists: true,
+      deletionInProgress: false,
+      shouldSkip: false,
+    };
+    hoisted.mockGetUserDeletionGuardState.mockResolvedValue(activeDeletionGuard);
+    hoisted.mockGetUserDeletionGuardStateInTransaction.mockResolvedValue(activeDeletionGuard);
     const routeDocument = makeRouteDocument();
     hoisted.mockDocGet.mockResolvedValue(makeSnapshot(true, routeDocument));
     hoisted.mockTransactionGet.mockResolvedValue(makeSnapshot(true, routeDocument));
@@ -272,6 +307,64 @@ describe('reprocessRoute', () => {
       waypointCount: 0,
       pointCount: 0,
     });
+    expect(hoisted.mockStorageDownload).not.toHaveBeenCalled();
+    expect(hoisted.mockRunTransaction).not.toHaveBeenCalled();
+  });
+
+  it('does not download or write when account deletion is active before reprocess work', async () => {
+    hoisted.mockGetUserDeletionGuardState.mockResolvedValueOnce({
+      userExists: true,
+      deletionInProgress: true,
+      shouldSkip: true,
+    });
+
+    await expect(reprocessRoute({
+      auth: { uid: 'user-1' },
+      app: { appId: 'app-id' },
+      data: { routeId: 'route-1' },
+    } as any)).rejects.toMatchObject({
+      code: 'failed-precondition',
+      message: 'Account is being deleted or no longer exists.',
+    });
+
+    expect(hoisted.mockStorageDownload).not.toHaveBeenCalled();
+    expect(hoisted.mockSportsLib.importRoutesFromGPX).not.toHaveBeenCalled();
+    expect(hoisted.mockRunTransaction).not.toHaveBeenCalled();
+  });
+
+  it('does not write when account deletion starts before the reprocess transaction', async () => {
+    hoisted.mockGetUserDeletionGuardStateInTransaction.mockResolvedValueOnce({
+      userExists: true,
+      deletionInProgress: true,
+      shouldSkip: true,
+    });
+
+    await expect(reprocessRoute({
+      auth: { uid: 'user-1' },
+      app: { appId: 'app-id' },
+      data: { routeId: 'route-1' },
+    } as any)).rejects.toMatchObject({
+      code: 'failed-precondition',
+      message: 'Account is being deleted or no longer exists.',
+    });
+
+    expect(hoisted.mockStorageDownload).toHaveBeenCalled();
+    expect(hoisted.mockSportsLib.importRoutesFromGPX).toHaveBeenCalled();
+    expect(hoisted.mockTransactionSet).not.toHaveBeenCalled();
+  });
+
+  it('returns unavailable when account deletion state cannot be verified', async () => {
+    hoisted.mockGetUserDeletionGuardState.mockRejectedValueOnce(new Error('guard unavailable'));
+
+    await expect(reprocessRoute({
+      auth: { uid: 'user-1' },
+      app: { appId: 'app-id' },
+      data: { routeId: 'route-1' },
+    } as any)).rejects.toMatchObject({
+      code: 'unavailable',
+      message: 'Could not verify account state. Please retry.',
+    });
+
     expect(hoisted.mockStorageDownload).not.toHaveBeenCalled();
     expect(hoisted.mockRunTransaction).not.toHaveBeenCalled();
   });

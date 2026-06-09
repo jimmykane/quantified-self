@@ -31,7 +31,7 @@ import {
 } from '../../services/app.route-reprocess.service';
 import {
     AppRouteService,
-    isRouteListSortColumn,
+    isRouteListServerSortColumn,
     ROUTE_LIST_DEFAULT_SORT,
     RouteListSort,
 } from '../../services/app.route.service';
@@ -160,7 +160,7 @@ export class RoutesPageComponent implements OnInit {
             return `${total} route${total === 1 ? '' : 's'}`;
         }
         const sortActive = this.routeSortActive() !== 'date' || this.routeSortDirection() !== 'desc';
-        const clientOnlySortActive = sortActive && !isRouteListSortColumn(this.routeSortActive());
+        const clientOnlySortActive = sortActive && !isRouteListServerSortColumn(this.routeSortActive());
         return `${loaded} of ${total} loaded${clientOnlySortActive ? '; sorting loaded rows' : ''}`;
     });
     readonly routeColumns = [
@@ -900,7 +900,7 @@ export class RoutesPageComponent implements OnInit {
     }
 
     private toRouteListSort(routeSort: RouteSortState): RouteListSort {
-        if (!isRouteListSortColumn(routeSort.active)) {
+        if (!isRouteListServerSortColumn(routeSort.active)) {
             return ROUTE_LIST_DEFAULT_SORT;
         }
 

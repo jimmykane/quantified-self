@@ -16,6 +16,11 @@ import {
   resolveRouteSourceExtension,
   RouteProcessingHttpStatusError,
 } from './route-processing';
+import {
+  getUserDeletionGuardState,
+  getUserDeletionGuardStateInTransaction,
+  UserDeletionGuardReadError,
+} from '../shared/user-deletion-guard';
 
 interface ReprocessRouteRequest {
   routeId: string;
@@ -75,6 +80,10 @@ export const reprocessRoute = onCall({
     if (error instanceof HttpsError) {
       throw error;
     }
+    if (isUserDeletionGuardReadError(error)) {
+      logger.error('[reprocessRoute] Could not verify account deletion state', { userID, routeId, error });
+      throw new HttpsError('unavailable', 'Could not verify account state. Please retry.');
+    }
     if (error instanceof RouteProcessingHttpStatusError && error.status >= 400 && error.status < 500) {
       throw new HttpsError('invalid-argument', error.message);
     }
@@ -109,6 +118,8 @@ export async function reprocessRouteFromOriginalFile(
     };
   }
 
+  await assertRouteReprocessUserActive(db, userID, 'route_reprocess_before_download');
+
   const resolvedExtension = resolveRouteSourceExtension(sourceFile, routeDocument.srcFileType);
   const originalPayload = await downloadOriginalRouteFile(sourceFile);
   const payloadForParsing = maybeDecompressPayloadForParsing(originalPayload, resolvedExtension);
@@ -123,6 +134,8 @@ export async function reprocessRouteFromOriginalFile(
   const pointCount = parsedPayload.pointCount;
 
   await db.runTransaction(async (transaction) => {
+    await assertRouteReprocessUserActiveInTransaction(db, transaction, userID, 'route_reprocess_write');
+
     const latestSnapshot = await transaction.get(routeRef);
     if (!latestSnapshot.exists) {
       throw new HttpsError('not-found', `Route ${routeId} was not found for this user.`);
@@ -224,6 +237,66 @@ function buildReprocessedRoutePayload(
     importedAt: latestRouteDocument.importedAt || parsedPayload.importedAt,
     updatedAt: new Date(),
   };
+}
+
+async function assertRouteReprocessUserActive(
+  db: admin.firestore.Firestore,
+  userID: string,
+  phase: string,
+): Promise<void> {
+  let deletionGuard;
+  try {
+    deletionGuard = await getUserDeletionGuardState(db, userID);
+  } catch (error) {
+    throw new UserDeletionGuardReadError(userID, phase, error);
+  }
+
+  if (!deletionGuard.shouldSkip) {
+    return;
+  }
+
+  logger.warn('[reprocessRoute] Skipping route reprocess because user is missing or deletion is in progress.', {
+    userID,
+    phase,
+    userExists: deletionGuard.userExists,
+    deletionInProgress: deletionGuard.deletionInProgress,
+  });
+  throw buildAccountDeletionError();
+}
+
+async function assertRouteReprocessUserActiveInTransaction(
+  db: admin.firestore.Firestore,
+  transaction: admin.firestore.Transaction,
+  userID: string,
+  phase: string,
+): Promise<void> {
+  let deletionGuard;
+  try {
+    deletionGuard = await getUserDeletionGuardStateInTransaction(db, transaction, userID);
+  } catch (error) {
+    throw new UserDeletionGuardReadError(userID, phase, error);
+  }
+
+  if (!deletionGuard.shouldSkip) {
+    return;
+  }
+
+  logger.warn('[reprocessRoute] Skipping route reprocess write because user is missing or deletion is in progress.', {
+    userID,
+    phase,
+    userExists: deletionGuard.userExists,
+    deletionInProgress: deletionGuard.deletionInProgress,
+  });
+  throw buildAccountDeletionError();
+}
+
+function buildAccountDeletionError(): HttpsError {
+  return new HttpsError('failed-precondition', 'Account is being deleted or no longer exists.');
+}
+
+function isUserDeletionGuardReadError(error: unknown): error is UserDeletionGuardReadError {
+  return error instanceof UserDeletionGuardReadError
+    || (error instanceof Error && error.name === 'UserDeletionGuardReadError');
 }
 
 function getUserOwnedRouteFields(routeDocument: FirestoreRouteJSON): Record<string, unknown> {

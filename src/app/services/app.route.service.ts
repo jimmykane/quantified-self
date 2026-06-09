@@ -2,13 +2,6 @@ import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
 import {
-    DataAscent,
-    DataDescent,
-    DataDistance,
-    DataGradeMax,
-    DataGradeMin,
-} from '@sports-alliance/sports-lib';
-import {
     Firestore,
     collection,
     collectionData,
@@ -39,6 +32,8 @@ export type RouteListSortColumn =
     | 'maxGrade'
     | 'pointCount';
 
+export type RouteListServerSortColumn = 'date' | 'name' | 'pointCount';
+
 export type RouteListSortDirection = 'asc' | 'desc';
 
 export interface RouteListSort {
@@ -46,24 +41,34 @@ export interface RouteListSort {
     direction: RouteListSortDirection;
 }
 
-export const ROUTE_LIST_DEFAULT_SORT: RouteListSort = {
+export const ROUTE_LIST_DEFAULT_SORT: RouteListSort & { active: RouteListServerSortColumn } = {
     active: 'date',
     direction: 'desc',
 };
 
-const ROUTE_LIST_SORT_FIELD_BY_COLUMN: Record<RouteListSortColumn, string> = {
+const ROUTE_LIST_SORT_COLUMNS: readonly RouteListSortColumn[] = [
+    'date',
+    'name',
+    'distance',
+    'ascent',
+    'descent',
+    'minGrade',
+    'maxGrade',
+    'pointCount',
+];
+
+const ROUTE_LIST_SERVER_SORT_FIELD_BY_COLUMN: Record<RouteListServerSortColumn, string> = {
     date: 'importedAt',
     name: 'name',
-    distance: `stats.${DataDistance.type}`,
-    ascent: `stats.${DataAscent.type}`,
-    descent: `stats.${DataDescent.type}`,
-    minGrade: `stats.${DataGradeMin.type}`,
-    maxGrade: `stats.${DataGradeMax.type}`,
     pointCount: 'pointCount',
 };
 
 export function isRouteListSortColumn(value: string): value is RouteListSortColumn {
-    return Object.prototype.hasOwnProperty.call(ROUTE_LIST_SORT_FIELD_BY_COLUMN, value);
+    return ROUTE_LIST_SORT_COLUMNS.includes(value as RouteListSortColumn);
+}
+
+export function isRouteListServerSortColumn(value: string): value is RouteListServerSortColumn {
+    return Object.prototype.hasOwnProperty.call(ROUTE_LIST_SERVER_SORT_FIELD_BY_COLUMN, value);
 }
 
 const SERVER_OWNED_ROUTE_UPDATE_FIELDS = [
@@ -103,7 +108,7 @@ export class AppRouteService {
         const resolvedSort = this.resolveRouteListSort(sort);
         const routesQuery = query(
             routesCollection,
-            orderBy(ROUTE_LIST_SORT_FIELD_BY_COLUMN[resolvedSort.active], resolvedSort.direction),
+            orderBy(ROUTE_LIST_SERVER_SORT_FIELD_BY_COLUMN[resolvedSort.active], resolvedSort.direction),
             limit(limitCount),
         );
         return collectionData(routesQuery, { idField: 'id' }) as Observable<FirestoreRouteJSON[]>;
@@ -173,8 +178,10 @@ export class AppRouteService {
         return sanitizedPayload;
     }
 
-    private resolveRouteListSort(sort: RouteListSort | undefined): RouteListSort {
-        if (!sort || !isRouteListSortColumn(sort.active)) {
+    private resolveRouteListSort(sort: RouteListSort | undefined): RouteListSort & { active: RouteListServerSortColumn } {
+        // Firestore orderBy excludes documents where the ordered field is missing.
+        // Nullable aggregate metrics stay client-side so routes without elevation/grade stats remain visible.
+        if (!sort || !isRouteListServerSortColumn(sort.active)) {
             return ROUTE_LIST_DEFAULT_SORT;
         }
 
