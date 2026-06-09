@@ -42,4 +42,6 @@ jobs:
         run: npm run test:rules
 
       - name: Run app tests
-        run: npm run test
+        env:
+          NODE_OPTIONS: --max-old-space-size=3072
+        run: npm run test -- --run
