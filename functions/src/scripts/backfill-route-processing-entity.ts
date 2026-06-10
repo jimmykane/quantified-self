@@ -33,6 +33,12 @@ export interface BackfillRouteProcessingEntitySummary {
     failed: number;
 }
 
+export function shouldFailBackfillRouteProcessingEntityRun(
+    summary: Pick<BackfillRouteProcessingEntitySummary, 'dryRun' | 'failed'>,
+): boolean {
+    return !summary.dryRun && summary.failed > 0;
+}
+
 type RouteProcessingEntityBackfillOutcome =
     | 'patched'
     | 'unchanged'
@@ -358,8 +364,15 @@ export async function runBackfillRouteProcessingEntity(argv: string[]): Promise<
     return summary;
 }
 
+async function main(): Promise<void> {
+    const summary = await runBackfillRouteProcessingEntity(process.argv.slice(2));
+    if (shouldFailBackfillRouteProcessingEntityRun(summary)) {
+        process.exitCode = 1;
+    }
+}
+
 if (require.main === module) {
-    runBackfillRouteProcessingEntity(process.argv.slice(2)).catch(error => {
+    main().catch(error => {
         logger.error('[route-processing-entity-backfill] Fatal error', error);
         process.exitCode = 1;
     });

@@ -175,6 +175,7 @@ vi.mock('firebase-functions/logger', () => ({
 import {
     parseBackfillRouteProcessingEntityOptions,
     runBackfillRouteProcessingEntity,
+    shouldFailBackfillRouteProcessingEntityRun,
 } from './backfill-route-processing-entity';
 
 function makeRouteDoc(
@@ -265,6 +266,21 @@ describe('backfill-route-processing-entity script', () => {
             startAfter: undefined,
             concurrency: 50,
         });
+    });
+
+    it('fails CLI execute runs when per-route failures were counted', () => {
+        expect(shouldFailBackfillRouteProcessingEntityRun({
+            dryRun: true,
+            failed: 1,
+        })).toBe(false);
+        expect(shouldFailBackfillRouteProcessingEntityRun({
+            dryRun: false,
+            failed: 0,
+        })).toBe(false);
+        expect(shouldFailBackfillRouteProcessingEntityRun({
+            dryRun: false,
+            failed: 1,
+        })).toBe(true);
     });
 
     it('dry-runs missing route processing entity patches without writing', async () => {
