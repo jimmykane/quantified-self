@@ -1,11 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const hoisted = vi.hoisted(() => {
-    const parseUIDAllowlist = vi.fn((input?: string) => {
-        if (!input) return null;
-        const values = input.split(',').map(v => v.trim()).filter(Boolean);
-        return values.length ? new Set(values) : null;
-    });
     const parseUidAndEventIdFromEventPath = vi.fn((path: string) => {
         const parts = path.split('/');
         if (parts.length !== 4 || parts[0] !== 'users' || parts[2] !== 'events') {
@@ -13,28 +8,15 @@ const hoisted = vi.hoisted(() => {
         }
         return { uid: parts[1], eventId: parts[3] };
     });
-    const sportsLibVersionToCode = vi.fn((version: string) => {
-        if (version === '0.0.0') return 0;
-        if (version === '9.0.0') return 9_000_000;
-        if (version === '9.1.4') return 9_001_004;
-        throw new Error(`Invalid sports-lib version "${version}"`);
-    });
     const runtimeDefaults = {
         enabled: false,
         scanLimit: 200,
         enqueueLimit: 100,
-        uidAllowlist: null as string[] | null,
     };
-
     const userEventsByUID = new Map<string, any[]>();
     const globalEventDocs: any[] = [];
     const adminApps: any[] = [];
-    const getUserDeletionGuardStateInTransaction = vi.fn(async () => ({
-        userExists: true,
-        deletionInProgress: false,
-        shouldSkip: false,
-    }));
-    const resumeCheckpointPath = 'temp_collection/temp_doc_sportsLibProcessingBackfill';
+    const resumeCheckpointPath = 'temp_collection/temp_doc_eventProcessingEntityBackfill';
     let resumeCheckpointData: Record<string, unknown> | undefined;
     const resumeCheckpointSet = vi.fn(async (payload: Record<string, unknown>) => {
         resumeCheckpointData = {
@@ -42,6 +24,11 @@ const hoisted = vi.hoisted(() => {
             ...payload,
         };
     });
+    const getUserDeletionGuardStateInTransaction = vi.fn(async () => ({
+        userExists: true,
+        deletionInProgress: false,
+        shouldSkip: false,
+    }));
 
     const collection = vi.fn((path: string) => {
         const match = path.match(/^users\/([^/]+)\/events$/);
@@ -140,23 +127,20 @@ const hoisted = vi.hoisted(() => {
     const loggerInfo = vi.fn();
     const loggerWarn = vi.fn();
     const loggerError = vi.fn();
-
     const serverTimestamp = vi.fn(() => 'SERVER_TIMESTAMP');
 
     return {
-        parseUIDAllowlist,
         parseUidAndEventIdFromEventPath,
-        sportsLibVersionToCode,
         runtimeDefaults,
         userEventsByUID,
         globalEventDocs,
         adminApps,
-        getUserDeletionGuardStateInTransaction,
         collection,
         collectionGroup,
         resetGlobalQueryState,
         firestoreDoc,
         runTransaction,
+        getUserDeletionGuardStateInTransaction,
         initializeApp,
         loggerInfo,
         loggerWarn,
@@ -173,9 +157,11 @@ const hoisted = vi.hoisted(() => {
 
 vi.mock('../reparse/sports-lib-reparse.service', () => ({
     SPORTS_LIB_REPARSE_RUNTIME_DEFAULTS: hoisted.runtimeDefaults,
-    parseUIDAllowlist: hoisted.parseUIDAllowlist,
     parseUidAndEventIdFromEventPath: hoisted.parseUidAndEventIdFromEventPath,
-    sportsLibVersionToCode: hoisted.sportsLibVersionToCode,
+}));
+
+vi.mock('../shared/processing-metadata.interface', () => ({
+    EVENT_PROCESSING_ENTITY: 'event',
 }));
 
 vi.mock('../shared/user-deletion-guard', () => ({
@@ -212,7 +198,11 @@ vi.mock('firebase-functions/logger', () => ({
     error: hoisted.loggerError,
 }));
 
-import { parseBackfillOptions, runBackfillSportsLibProcessingCode } from './backfill-sports-lib-processing-code';
+import {
+    parseBackfillEventProcessingEntityOptions,
+    runBackfillEventProcessingEntity,
+    shouldFailBackfillEventProcessingEntityRun,
+} from './backfill-event-processing-entity';
 
 function makeEventDoc(
     uid: string,
@@ -261,7 +251,7 @@ function makeEventDoc(
     };
 }
 
-describe('backfill-sports-lib-processing-code script', () => {
+describe('backfill-event-processing-entity script', () => {
     beforeEach(() => {
         vi.clearAllMocks();
         hoisted.userEventsByUID.clear();
@@ -269,71 +259,98 @@ describe('backfill-sports-lib-processing-code script', () => {
         hoisted.adminApps.length = 0;
         hoisted.resetGlobalQueryState();
         hoisted.runtimeDefaults.scanLimit = 200;
-        hoisted.runtimeDefaults.uidAllowlist = null;
+        hoisted.setResumeCheckpointData(undefined);
         hoisted.getUserDeletionGuardStateInTransaction.mockResolvedValue({
             userExists: true,
             deletionInProgress: false,
             shouldSkip: false,
         });
-        hoisted.setResumeCheckpointData(undefined);
     });
 
-    it('parseBackfillOptions should default to dry-run', () => {
-        const options = parseBackfillOptions([]);
-        expect(options.execute).toBe(false);
-        expect(options.limit).toBe(200);
-        expect(options.concurrency).toBe(5);
-        expect(options.resume).toBe(false);
+    it('parses options with defaults and single uid scope', () => {
+        expect(parseBackfillEventProcessingEntityOptions([])).toEqual({
+            execute: false,
+            uid: undefined,
+            limit: 200,
+            startAfter: undefined,
+            concurrency: 5,
+            resume: false,
+        });
+        expect(parseBackfillEventProcessingEntityOptions([
+            '--execute',
+            '--uid',
+            'u1',
+            '--limit',
+            '10',
+            '--concurrency',
+            '99',
+        ])).toEqual({
+            execute: true,
+            uid: 'u1',
+            limit: 10,
+            startAfter: undefined,
+            concurrency: 50,
+            resume: false,
+        });
+        expect(parseBackfillEventProcessingEntityOptions(['--resume']).resume).toBe(true);
     });
 
-    it('parseBackfillOptions should apply precedence --uid > --uids > constant allowlist', () => {
-        hoisted.runtimeDefaults.uidAllowlist = ['constant1', 'constant2'];
-
-        const withUid = parseBackfillOptions(['--uid', 'single', '--uids', 'cli1,cli2']);
-        expect(withUid.uid).toBe('single');
-        expect(withUid.uids).toBeUndefined();
-
-        const withUids = parseBackfillOptions(['--uids', 'cli1,cli2']);
-        expect(withUids.uids).toEqual(['cli1', 'cli2']);
-
-        const withConstant = parseBackfillOptions([]);
-        expect(withConstant.uids).toEqual(['constant1', 'constant2']);
+    it('rejects multi-uid scope because resume checkpoints are single-cursor only', () => {
+        expect(() => parseBackfillEventProcessingEntityOptions(['--uids', 'u1,u2']))
+            .toThrow('--uids');
+        expect(() => parseBackfillEventProcessingEntityOptions(['--uids=u1,u2']))
+            .toThrow('--uids');
     });
 
-    it('parseBackfillOptions should parse and clamp concurrency', () => {
-        expect(parseBackfillOptions(['--concurrency', '7']).concurrency).toBe(7);
-        expect(parseBackfillOptions(['--concurrency=0']).concurrency).toBe(5);
-        expect(parseBackfillOptions(['--concurrency=999']).concurrency).toBe(50);
+    it('fails CLI execute runs when per-event failures were counted', () => {
+        expect(shouldFailBackfillEventProcessingEntityRun({
+            dryRun: true,
+            failed: 1,
+        })).toBe(false);
+        expect(shouldFailBackfillEventProcessingEntityRun({
+            dryRun: false,
+            failed: 0,
+        })).toBe(false);
+        expect(shouldFailBackfillEventProcessingEntityRun({
+            dryRun: false,
+            failed: 1,
+        })).toBe(true);
     });
 
-    it('parseBackfillOptions should parse --resume flag', () => {
-        expect(parseBackfillOptions(['--resume']).resume).toBe(true);
+    it('dry-runs missing event processing entity patches without writing', async () => {
+        const eventDoc = makeEventDoc('u1', 'e1', {
+            exists: true,
+            data: { sportsLibVersion: '16.0.1', sportsLibVersionCode: 16_000_001 },
+        });
+        hoisted.globalEventDocs.push(eventDoc);
+
+        const summary = await runBackfillEventProcessingEntity([]);
+
+        expect(summary).toMatchObject({
+            dryRun: true,
+            scanned: 1,
+            patched: 1,
+            unchanged: 0,
+            skippedMissing: 0,
+            skippedInvalid: 0,
+            failed: 0,
+        });
+        expect(eventDoc.processingSet).not.toHaveBeenCalled();
     });
 
-    it('parseBackfillOptions should reject resume with multi-UID scope', () => {
-        expect(() => parseBackfillOptions(['--resume', '--uids', 'u1,u2']))
-            .toThrow('--resume with multi-UID scope');
-        expect(() => parseBackfillOptions(['--resume', '--uids=u1,u2']))
-            .toThrow('--resume with multi-UID scope');
-
-        hoisted.runtimeDefaults.uidAllowlist = ['u1'];
-        expect(() => parseBackfillOptions(['--resume']))
-            .toThrow('--resume with multi-UID scope');
-    });
-
-    it('should create missing processing metadata with sentinel version in execute mode', async () => {
-        const eventDoc = makeEventDoc('u1', 'e1', { exists: false });
+    it('executes missing event processing entity patches', async () => {
+        const eventDoc = makeEventDoc('u1', 'e1', {
+            exists: true,
+            data: { sportsLibVersion: '16.0.1', sportsLibVersionCode: 16_000_001 },
+        });
         hoisted.userEventsByUID.set('u1', [eventDoc]);
 
-        const summary = await runBackfillSportsLibProcessingCode(['--execute', '--uid', 'u1']);
-        expect(summary.created).toBe(1);
-        expect(summary.failed).toBe(0);
-        expect(eventDoc.processingSet).toHaveBeenCalledWith(expect.objectContaining({
+        const summary = await runBackfillEventProcessingEntity(['--execute', '--uid', 'u1']);
+
+        expect(summary.patched).toBe(1);
+        expect(eventDoc.processingSet).toHaveBeenCalledWith({
             processingEntity: 'event',
-            sportsLibVersion: '0.0.0',
-            sportsLibVersionCode: 0,
-            processedAt: 'SERVER_TIMESTAMP',
-        }), { merge: true });
+        }, { merge: true });
         expect(hoisted.runTransaction).toHaveBeenCalledTimes(1);
         expect(hoisted.getUserDeletionGuardStateInTransaction).toHaveBeenCalledWith(
             expect.anything(),
@@ -342,101 +359,57 @@ describe('backfill-sports-lib-processing-code script', () => {
         );
     });
 
-    it('should patch missing sportsLibVersionCode when processing version is valid', async () => {
+    it('leaves event processing metadata unchanged when entity already exists', async () => {
         const eventDoc = makeEventDoc('u1', 'e1', {
             exists: true,
-            data: { sportsLibVersion: '9.0.0' },
+            data: { processingEntity: 'event', sportsLibVersion: '16.0.1', sportsLibVersionCode: 16_000_001 },
         });
-        hoisted.userEventsByUID.set('u1', [eventDoc]);
+        hoisted.globalEventDocs.push(eventDoc);
 
-        const summary = await runBackfillSportsLibProcessingCode(['--execute', '--uid', 'u1']);
-        expect(summary.patched).toBe(1);
-        expect(summary.skippedInvalid).toBe(0);
-        expect(eventDoc.processingSet).toHaveBeenCalledWith({
-            processingEntity: 'event',
-            sportsLibVersionCode: 9_000_000,
-        }, { merge: true });
-    });
+        const summary = await runBackfillEventProcessingEntity(['--execute']);
 
-    it('should patch missing processing entity even when sportsLibVersionCode is current', async () => {
-        const eventDoc = makeEventDoc('u1', 'e1', {
-            exists: true,
-            data: { sportsLibVersion: '9.0.0', sportsLibVersionCode: 9_000_000 },
-        });
-        hoisted.userEventsByUID.set('u1', [eventDoc]);
-
-        const summary = await runBackfillSportsLibProcessingCode(['--execute', '--uid', 'u1']);
-        expect(summary.patched).toBe(1);
-        expect(summary.unchanged).toBe(0);
-        expect(eventDoc.processingSet).toHaveBeenCalledWith({
-            processingEntity: 'event',
-            sportsLibVersionCode: 9_000_000,
-        }, { merge: true });
-    });
-
-    it('should leave current event processing metadata unchanged', async () => {
-        const eventDoc = makeEventDoc('u1', 'e1', {
-            exists: true,
-            data: {
-                processingEntity: 'event',
-                sportsLibVersion: '9.0.0',
-                sportsLibVersionCode: 9_000_000,
-            },
-        });
-        hoisted.userEventsByUID.set('u1', [eventDoc]);
-
-        const summary = await runBackfillSportsLibProcessingCode(['--execute', '--uid', 'u1']);
         expect(summary.unchanged).toBe(1);
-        expect(summary.patched).toBe(0);
         expect(eventDoc.processingSet).not.toHaveBeenCalled();
     });
 
-    it('should skip invalid sportsLibVersion values without aborting run', async () => {
+    it('skips missing processing metadata and unexpected existing entities', async () => {
+        const missingDoc = makeEventDoc('u1', 'missing', { exists: false });
         const invalidDoc = makeEventDoc('u1', 'invalid', {
             exists: true,
-            data: { sportsLibVersion: 'unknown' },
+            data: { processingEntity: 'route' },
         });
-        const validDoc = makeEventDoc('u1', 'valid', {
-            exists: true,
-            data: { sportsLibVersion: '9.0.0' },
-        });
-        hoisted.userEventsByUID.set('u1', [invalidDoc, validDoc]);
+        hoisted.globalEventDocs.push(missingDoc, invalidDoc);
 
-        const summary = await runBackfillSportsLibProcessingCode(['--execute', '--uid', 'u1']);
-        expect(summary.skippedInvalid).toBe(1);
-        expect(summary.patched).toBe(1);
-        expect(hoisted.loggerWarn).toHaveBeenCalledWith(
-            '[sports-lib-processing-backfill] Invalid processing metadata. Could not parse sportsLibVersion.',
-            expect.objectContaining({
-                processingDocPath: 'users/u1/events/invalid/metaData/processing',
-            }),
-        );
+        const summary = await runBackfillEventProcessingEntity(['--execute']);
+
+        expect(summary).toMatchObject({
+            scanned: 2,
+            patched: 0,
+            unchanged: 0,
+            skippedMissing: 1,
+            skippedInvalid: 1,
+            failed: 0,
+        });
+        expect(missingDoc.processingSet).not.toHaveBeenCalled();
+        expect(invalidDoc.processingSet).not.toHaveBeenCalled();
     });
 
-    it('should not write documents in dry-run mode', async () => {
-        const eventDoc = makeEventDoc('u1', 'e1', { exists: false });
-        hoisted.userEventsByUID.set('u1', [eventDoc]);
-
-        const summary = await runBackfillSportsLibProcessingCode(['--uid', 'u1']);
-        expect(summary.dryRun).toBe(true);
-        expect(summary.created).toBe(1);
-        expect(eventDoc.processingSet).not.toHaveBeenCalled();
-        expect(hoisted.serverTimestamp).not.toHaveBeenCalled();
-    });
-
-    it('should skip execute writes when user deletion guard is active', async () => {
+    it('skips execute writes when user deletion guard is active', async () => {
         hoisted.getUserDeletionGuardStateInTransaction.mockResolvedValueOnce({
             userExists: true,
             deletionInProgress: true,
             shouldSkip: true,
         });
-        const eventDoc = makeEventDoc('u1', 'e1', { exists: false });
+        const eventDoc = makeEventDoc('u1', 'e1', {
+            exists: true,
+            data: { sportsLibVersion: '16.0.1', sportsLibVersionCode: 16_000_001 },
+        });
         hoisted.userEventsByUID.set('u1', [eventDoc]);
 
-        const summary = await runBackfillSportsLibProcessingCode(['--execute', '--uid', 'u1']);
+        const summary = await runBackfillEventProcessingEntity(['--execute', '--uid', 'u1']);
 
         expect(summary).toMatchObject({
-            created: 0,
+            scanned: 1,
             patched: 0,
             skippedUserDeletion: 1,
             failed: 0,
@@ -445,17 +418,18 @@ describe('backfill-sports-lib-processing-code script', () => {
         expect(eventDoc.processingSet).not.toHaveBeenCalled();
     });
 
-    it('should skip execute writes when the event disappeared before transaction write', async () => {
+    it('skips execute writes when the event disappeared before transaction write', async () => {
         const eventDoc = makeEventDoc('u1', 'e1', {
             eventExists: false,
-            exists: false,
+            exists: true,
+            data: { sportsLibVersion: '16.0.1', sportsLibVersionCode: 16_000_001 },
         });
         hoisted.userEventsByUID.set('u1', [eventDoc]);
 
-        const summary = await runBackfillSportsLibProcessingCode(['--execute', '--uid', 'u1']);
+        const summary = await runBackfillEventProcessingEntity(['--execute', '--uid', 'u1']);
 
         expect(summary).toMatchObject({
-            created: 0,
+            scanned: 1,
             patched: 0,
             skippedEventMissing: 1,
             failed: 0,
@@ -464,54 +438,23 @@ describe('backfill-sports-lib-processing-code script', () => {
         expect(eventDoc.processingSet).not.toHaveBeenCalled();
     });
 
-    it('should log progress while processing events', async () => {
-        const docOne = makeEventDoc('u1', 'e1', {
-            exists: true,
-            data: { sportsLibVersion: '9.0.0', sportsLibVersionCode: 9_000_000 },
-        });
-        const docTwo = makeEventDoc('u1', 'e2', {
-            exists: true,
-            data: { sportsLibVersion: '9.1.4', sportsLibVersionCode: 9_001_004 },
-        });
-        hoisted.userEventsByUID.set('u1', [docOne, docTwo]);
-
-        await runBackfillSportsLibProcessingCode(['--uid', 'u1']);
-
-        expect(hoisted.loggerInfo).toHaveBeenCalledWith(
-            '[sports-lib-processing-backfill] Starting backfill run.',
-            expect.objectContaining({ totalEvents: 2, progressLogEvery: 25 }),
-        );
-
-        const progressCalls = hoisted.loggerInfo.mock.calls.filter(
-            (call: any[]) => call[0] === '[sports-lib-processing-backfill] Progress',
-        );
-        expect(progressCalls).toHaveLength(2);
-        const progressPayloads = progressCalls.map((call: any[]) => call[1]);
-        expect(progressPayloads).toEqual(expect.arrayContaining([
-            expect.objectContaining({
-                scanned: 2,
-                total: 2,
-                percentComplete: 100,
-            }),
-        ]));
-    });
-
-    it('should resume from checkpoint and update checkpoint when --resume execute is enabled', async () => {
+    it('resumes from checkpoint and updates checkpoint when --resume execute is enabled', async () => {
         hoisted.setResumeCheckpointData({
             scopeKey: 'uid:u1',
             lastEventPath: 'users/u1/events/e1',
         });
         const docOne = makeEventDoc('u1', 'e1', {
             exists: true,
-            data: { sportsLibVersion: '9.0.0', sportsLibVersionCode: 9_000_000 },
+            data: { sportsLibVersion: '16.0.1', sportsLibVersionCode: 16_000_001 },
         });
         const docTwo = makeEventDoc('u1', 'e2', {
             exists: true,
-            data: { sportsLibVersion: '9.0.0', sportsLibVersionCode: 9_000_000 },
+            data: { sportsLibVersion: '16.0.1', sportsLibVersionCode: 16_000_001 },
         });
         hoisted.userEventsByUID.set('u1', [docOne, docTwo]);
 
-        const summary = await runBackfillSportsLibProcessingCode(['--execute', '--uid', 'u1', '--resume']);
+        const summary = await runBackfillEventProcessingEntity(['--execute', '--uid', 'u1', '--resume']);
+
         expect(summary.scanned).toBe(1);
         expect(hoisted.resumeCheckpointSet).toHaveBeenCalledWith(expect.objectContaining({
             scopeKey: 'uid:u1',
@@ -519,7 +462,7 @@ describe('backfill-sports-lib-processing-code script', () => {
             updatedAt: 'SERVER_TIMESTAMP',
         }), { merge: true });
         expect(hoisted.loggerInfo).toHaveBeenCalledWith(
-            '[sports-lib-processing-backfill] Resuming from checkpoint.',
+            '[event-processing-entity-backfill] Resuming from checkpoint.',
             expect.objectContaining({
                 checkpointPath: hoisted.resumeCheckpointPath,
                 scopeKey: 'uid:u1',
@@ -528,22 +471,22 @@ describe('backfill-sports-lib-processing-code script', () => {
         );
     });
 
-    it('should not advance checkpoint when --resume dry-run is enabled', async () => {
+    it('does not advance the checkpoint during resume dry-run', async () => {
         hoisted.setResumeCheckpointData({
             scopeKey: 'uid:u1',
             lastEventPath: 'users/u1/events/e1',
         });
         const docOne = makeEventDoc('u1', 'e1', {
             exists: true,
-            data: { sportsLibVersion: '9.0.0', sportsLibVersionCode: 9_000_000 },
+            data: { sportsLibVersion: '16.0.1', sportsLibVersionCode: 16_000_001 },
         });
         const docTwo = makeEventDoc('u1', 'e2', {
             exists: true,
-            data: { sportsLibVersion: '9.0.0', sportsLibVersionCode: 9_000_000 },
+            data: { sportsLibVersion: '16.0.1', sportsLibVersionCode: 16_000_001 },
         });
         hoisted.userEventsByUID.set('u1', [docOne, docTwo]);
 
-        const summary = await runBackfillSportsLibProcessingCode(['--uid', 'u1', '--resume']);
+        const summary = await runBackfillEventProcessingEntity(['--uid', 'u1', '--resume']);
 
         expect(summary.scanned).toBe(1);
         expect(hoisted.resumeCheckpointSet).not.toHaveBeenCalled();
@@ -553,7 +496,39 @@ describe('backfill-sports-lib-processing-code script', () => {
         });
     });
 
-    it('should not advance checkpoint when a resume execute batch has failures', async () => {
+    it('does not clear the checkpoint when resume execute finds no more events', async () => {
+        hoisted.setResumeCheckpointData({
+            scopeKey: 'uid:u1',
+            lastEventPath: 'users/u1/events/e2',
+        });
+        const docOne = makeEventDoc('u1', 'e1', {
+            exists: true,
+            data: { sportsLibVersion: '16.0.1', sportsLibVersionCode: 16_000_001 },
+        });
+        const docTwo = makeEventDoc('u1', 'e2', {
+            exists: true,
+            data: { sportsLibVersion: '16.0.1', sportsLibVersionCode: 16_000_001 },
+        });
+        hoisted.userEventsByUID.set('u1', [docOne, docTwo]);
+
+        const summary = await runBackfillEventProcessingEntity(['--execute', '--uid', 'u1', '--resume']);
+
+        expect(summary.scanned).toBe(0);
+        expect(hoisted.resumeCheckpointSet).not.toHaveBeenCalled();
+        expect(hoisted.getResumeCheckpointData()).toMatchObject({
+            scopeKey: 'uid:u1',
+            lastEventPath: 'users/u1/events/e2',
+        });
+        expect(hoisted.loggerInfo).toHaveBeenCalledWith(
+            '[event-processing-entity-backfill] No events found; resume checkpoint unchanged.',
+            expect.objectContaining({
+                checkpointPath: hoisted.resumeCheckpointPath,
+                scopeKey: 'uid:u1',
+            }),
+        );
+    });
+
+    it('does not advance the checkpoint when a resume execute batch has failures', async () => {
         hoisted.getUserDeletionGuardStateInTransaction.mockRejectedValueOnce(new Error('guard unavailable'));
         hoisted.setResumeCheckpointData({
             scopeKey: 'uid:u1',
@@ -561,15 +536,15 @@ describe('backfill-sports-lib-processing-code script', () => {
         });
         const docOne = makeEventDoc('u1', 'e1', {
             exists: true,
-            data: { sportsLibVersion: '9.0.0', sportsLibVersionCode: 9_000_000 },
+            data: { sportsLibVersion: '16.0.1', sportsLibVersionCode: 16_000_001 },
         });
         const docTwo = makeEventDoc('u1', 'e2', {
             exists: true,
-            data: { sportsLibVersion: '9.0.0', sportsLibVersionCode: 9_000_000 },
+            data: { sportsLibVersion: '16.0.1', sportsLibVersionCode: 16_000_001 },
         });
         hoisted.userEventsByUID.set('u1', [docOne, docTwo]);
 
-        const summary = await runBackfillSportsLibProcessingCode([
+        const summary = await runBackfillEventProcessingEntity([
             '--execute',
             '--uid',
             'u1',
@@ -589,7 +564,7 @@ describe('backfill-sports-lib-processing-code script', () => {
             lastEventPath: 'users/u1/events/e0',
         });
         expect(hoisted.loggerWarn).toHaveBeenCalledWith(
-            '[sports-lib-processing-backfill] Resume checkpoint not advanced because the batch had failures.',
+            '[event-processing-entity-backfill] Resume checkpoint not advanced because the batch had failures.',
             expect.objectContaining({
                 checkpointPath: hoisted.resumeCheckpointPath,
                 scopeKey: 'uid:u1',

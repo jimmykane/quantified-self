@@ -7,6 +7,7 @@ import {
     sportsLibVersionToCode,
 } from '../reparse/sports-lib-reparse.service';
 import { EVENT_PROCESSING_ENTITY } from '../shared/processing-metadata.interface';
+import { getUserDeletionGuardStateInTransaction, UserDeletionGuardReadError } from '../shared/user-deletion-guard';
 
 const MISSING_PROCESSING_VERSION = '0.0.0';
 const MISSING_PROCESSING_VERSION_CODE = 0;
@@ -32,6 +33,8 @@ export interface BackfillSummary {
     patched: number;
     unchanged: number;
     skippedInvalid: number;
+    skippedEventMissing: number;
+    skippedUserDeletion: number;
     failed: number;
 }
 
@@ -39,6 +42,19 @@ interface BackfillResumeCheckpoint {
     scopeKey?: string;
     lastEventPath?: string;
     updatedAt?: unknown;
+}
+
+type BackfillProcessingCodeOutcome =
+    | 'created'
+    | 'patched'
+    | 'unchanged'
+    | 'skipped_invalid'
+    | 'skipped_event_missing'
+    | 'skipped_user_deletion';
+
+interface ProcessingCodeDecision {
+    outcome: BackfillProcessingCodeOutcome;
+    payload?: Record<string, unknown>;
 }
 
 function resolveScopedStartAfterValue(startAfter: string | undefined, options: BackfillOptions): string | undefined {
@@ -73,6 +89,11 @@ function readArgValue(argv: string[], key: string): string | undefined {
     return undefined;
 }
 
+function hasArg(argv: string[], key: string): boolean {
+    const equalsPrefix = `${key}=`;
+    return argv.some(token => token === key || token.startsWith(equalsPrefix));
+}
+
 function parseIntArg(value: string | undefined, fallback: number): number {
     if (!value) {
         return fallback;
@@ -102,6 +123,9 @@ export function parseBackfillOptions(argv: string[]): BackfillOptions {
     const startAfter = readArgValue(argv, '--start-after');
     const concurrency = parseConcurrencyArg(readArgValue(argv, '--concurrency'));
     const resume = argv.includes('--resume');
+    if (resume && (hasArg(argv, '--uids') || (!uid && constantUIDAllowlist && constantUIDAllowlist.size > 0))) {
+        throw new Error('backfill-sports-lib-processing-code does not support --resume with multi-UID scope. Run globally, use --uid, or omit --resume.');
+    }
 
     return {
         execute,
@@ -167,6 +191,8 @@ export async function runBackfillSportsLibProcessingCode(argv: string[]): Promis
         patched: 0,
         unchanged: 0,
         skippedInvalid: 0,
+        skippedEventMissing: 0,
+        skippedUserDeletion: 0,
         failed: 0,
     };
 
@@ -221,17 +247,115 @@ export async function runBackfillSportsLibProcessingCode(argv: string[]): Promis
         const processingDocPath = processingRef.path;
 
         try {
-            const processingSnapshot = await processingRef.get();
-            if (!processingSnapshot.exists) {
-                summary.created++;
-                if (options.execute) {
-                    await processingRef.set({
-                        processingEntity: EVENT_PROCESSING_ENTITY,
-                        sportsLibVersion: MISSING_PROCESSING_VERSION,
-                        sportsLibVersionCode: MISSING_PROCESSING_VERSION_CODE,
-                        processedAt: admin.firestore.FieldValue.serverTimestamp(),
-                    }, { merge: true });
+            const makeDecision = (
+                processingSnapshot: admin.firestore.DocumentSnapshot,
+            ): ProcessingCodeDecision => {
+                if (!processingSnapshot.exists) {
+                    return {
+                        outcome: 'created',
+                        payload: options.execute
+                            ? {
+                                processingEntity: EVENT_PROCESSING_ENTITY,
+                                sportsLibVersion: MISSING_PROCESSING_VERSION,
+                                sportsLibVersionCode: MISSING_PROCESSING_VERSION_CODE,
+                                processedAt: admin.firestore.FieldValue.serverTimestamp(),
+                            }
+                            : undefined,
+                    };
                 }
+
+                const processingData = processingSnapshot.data() as Record<string, unknown>;
+                const rawVersion = processingData.sportsLibVersion;
+                if (typeof rawVersion !== 'string') {
+                    logger.warn('[sports-lib-processing-backfill] Invalid processing metadata. Missing or non-string sportsLibVersion.', {
+                        eventPath,
+                        processingDocPath,
+                        sportsLibVersion: rawVersion,
+                    });
+                    return { outcome: 'skipped_invalid' };
+                }
+
+                let computedCode: number;
+                try {
+                    computedCode = sportsLibVersionToCode(rawVersion);
+                } catch (error) {
+                    logger.warn('[sports-lib-processing-backfill] Invalid processing metadata. Could not parse sportsLibVersion.', {
+                        eventPath,
+                        processingDocPath,
+                        sportsLibVersion: rawVersion,
+                        error: `${error}`,
+                    });
+                    return { outcome: 'skipped_invalid' };
+                }
+
+                const rawCode = processingData.sportsLibVersionCode;
+                const normalizedRawCode = typeof rawCode === 'number' && Number.isFinite(rawCode) ? rawCode : null;
+                const normalizedProcessingEntity = processingData.processingEntity === EVENT_PROCESSING_ENTITY
+                    ? EVENT_PROCESSING_ENTITY
+                    : null;
+                if (normalizedRawCode === computedCode && normalizedProcessingEntity === EVENT_PROCESSING_ENTITY) {
+                    logger.info('[sports-lib-processing-backfill] Processing metadata already up to date.', {
+                        uid,
+                        eventId,
+                        eventPath,
+                        processingDocPath,
+                        processingEntity: normalizedProcessingEntity,
+                        sportsLibVersion: rawVersion,
+                        sportsLibVersionCode: normalizedRawCode,
+                    });
+                    return { outcome: 'unchanged' };
+                }
+
+                return {
+                    outcome: 'patched',
+                    payload: {
+                        processingEntity: EVENT_PROCESSING_ENTITY,
+                        sportsLibVersionCode: computedCode,
+                    },
+                };
+            };
+
+            let decision: ProcessingCodeDecision;
+            if (options.execute) {
+                const db = admin.firestore();
+                decision = await db.runTransaction(async (transaction) => {
+                    const deletionGuard = await getUserDeletionGuardStateInTransaction(db, transaction, uid);
+                    if (deletionGuard.shouldSkip) {
+                        logger.info('[sports-lib-processing-backfill] Skipping event because user is missing or deletion is in progress.', {
+                            uid,
+                            eventId,
+                            eventPath,
+                            processingDocPath,
+                            userExists: deletionGuard.userExists,
+                            deletionInProgress: deletionGuard.deletionInProgress,
+                        });
+                        return { outcome: 'skipped_user_deletion' };
+                    }
+
+                    const latestEventSnapshot = await transaction.get(eventDoc.ref);
+                    if (!latestEventSnapshot.exists) {
+                        logger.warn('[sports-lib-processing-backfill] Skipping event because event document no longer exists.', {
+                            uid,
+                            eventId,
+                            eventPath,
+                            processingDocPath,
+                        });
+                        return { outcome: 'skipped_event_missing' };
+                    }
+
+                    const processingSnapshot = await transaction.get(processingRef);
+                    const transactionDecision = makeDecision(processingSnapshot);
+                    if (transactionDecision.payload) {
+                        transaction.set(processingRef, transactionDecision.payload, { merge: true });
+                    }
+                    return transactionDecision;
+                });
+            } else {
+                decision = makeDecision(await processingRef.get());
+            }
+
+            if (decision.outcome === 'created') {
+                summary.created++;
                 logger.info('[sports-lib-processing-backfill] Created missing processing metadata.', {
                     uid,
                     eventId,
@@ -241,69 +365,29 @@ export async function runBackfillSportsLibProcessingCode(argv: string[]): Promis
                 });
                 return;
             }
-
-            const processingData = processingSnapshot.data() as Record<string, unknown>;
-            const rawVersion = processingData.sportsLibVersion;
-            if (typeof rawVersion !== 'string') {
+            if (decision.outcome === 'skipped_invalid') {
                 summary.skippedInvalid++;
-                logger.warn('[sports-lib-processing-backfill] Invalid processing metadata. Missing or non-string sportsLibVersion.', {
-                    eventPath,
-                    processingDocPath,
-                    sportsLibVersion: rawVersion,
-                });
                 return;
             }
-
-            let computedCode: number;
-            try {
-                computedCode = sportsLibVersionToCode(rawVersion);
-            } catch (error) {
-                summary.skippedInvalid++;
-                logger.warn('[sports-lib-processing-backfill] Invalid processing metadata. Could not parse sportsLibVersion.', {
-                    eventPath,
-                    processingDocPath,
-                    sportsLibVersion: rawVersion,
-                    error: `${error}`,
-                });
+            if (decision.outcome === 'skipped_event_missing') {
+                summary.skippedEventMissing++;
                 return;
             }
-
-            const rawCode = processingData.sportsLibVersionCode;
-            const normalizedRawCode = typeof rawCode === 'number' && Number.isFinite(rawCode) ? rawCode : null;
-            const normalizedProcessingEntity = processingData.processingEntity === EVENT_PROCESSING_ENTITY
-                ? EVENT_PROCESSING_ENTITY
-                : null;
-            if (normalizedRawCode === computedCode && normalizedProcessingEntity === EVENT_PROCESSING_ENTITY) {
+            if (decision.outcome === 'skipped_user_deletion') {
+                summary.skippedUserDeletion++;
+                return;
+            }
+            if (decision.outcome === 'unchanged') {
                 summary.unchanged++;
-                logger.info('[sports-lib-processing-backfill] Processing metadata already up to date.', {
-                    uid,
-                    eventId,
-                    eventPath,
-                    processingDocPath,
-                    processingEntity: normalizedProcessingEntity,
-                    sportsLibVersion: rawVersion,
-                    sportsLibVersionCode: normalizedRawCode,
-                });
                 return;
             }
 
             summary.patched++;
-            if (options.execute) {
-                await processingRef.set({
-                    processingEntity: EVENT_PROCESSING_ENTITY,
-                    sportsLibVersionCode: computedCode,
-                }, { merge: true });
-            }
             logger.info('[sports-lib-processing-backfill] Patched processing metadata.', {
                 uid,
                 eventId,
                 eventPath,
                 processingDocPath,
-                sportsLibVersion: rawVersion,
-                previousProcessingEntity: processingData.processingEntity,
-                newProcessingEntity: EVENT_PROCESSING_ENTITY,
-                previousSportsLibVersionCode: normalizedRawCode,
-                newSportsLibVersionCode: computedCode,
                 dryRun: !options.execute,
             });
         } catch (error) {
@@ -313,6 +397,7 @@ export async function runBackfillSportsLibProcessingCode(argv: string[]): Promis
                 eventId,
                 eventPath,
                 processingDocPath,
+                deletionGuardReadError: error instanceof UserDeletionGuardReadError,
                 error: `${error}`,
             });
         } finally {
@@ -325,6 +410,8 @@ export async function runBackfillSportsLibProcessingCode(argv: string[]): Promis
                     patched: summary.patched,
                     unchanged: summary.unchanged,
                     skippedInvalid: summary.skippedInvalid,
+                    skippedEventMissing: summary.skippedEventMissing,
+                    skippedUserDeletion: summary.skippedUserDeletion,
                     failed: summary.failed,
                 });
             }
@@ -346,18 +433,34 @@ export async function runBackfillSportsLibProcessingCode(argv: string[]): Promis
         await Promise.all(workers);
     }
 
-    if (options.resume) {
-        const lastEventPath = eventDocs.length > 0 ? eventDocs[eventDocs.length - 1].ref.path : null;
-        await checkpointRef.set({
-            scopeKey,
-            lastEventPath,
-            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-        }, { merge: true });
-        logger.info('[sports-lib-processing-backfill] Updated resume checkpoint.', {
-            checkpointPath: BACKFILL_RESUME_CHECKPOINT_PATH,
-            scopeKey,
-            lastEventPath,
-        });
+    if (options.resume && options.execute) {
+        if (eventDocs.length > 0) {
+            const lastEventPath = eventDocs[eventDocs.length - 1].ref.path;
+            if (summary.failed === 0) {
+                await checkpointRef.set({
+                    scopeKey,
+                    lastEventPath,
+                    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+                }, { merge: true });
+                logger.info('[sports-lib-processing-backfill] Updated resume checkpoint.', {
+                    checkpointPath: BACKFILL_RESUME_CHECKPOINT_PATH,
+                    scopeKey,
+                    lastEventPath,
+                });
+            } else {
+                logger.warn('[sports-lib-processing-backfill] Resume checkpoint not advanced because the batch had failures.', {
+                    checkpointPath: BACKFILL_RESUME_CHECKPOINT_PATH,
+                    scopeKey,
+                    lastEventPath,
+                    failed: summary.failed,
+                });
+            }
+        } else {
+            logger.info('[sports-lib-processing-backfill] No events found; resume checkpoint unchanged.', {
+                checkpointPath: BACKFILL_RESUME_CHECKPOINT_PATH,
+                scopeKey,
+            });
+        }
     }
 
     logger.info('[sports-lib-processing-backfill] Summary', summary);
