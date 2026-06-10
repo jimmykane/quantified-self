@@ -276,6 +276,38 @@ export async function enqueueSportsLibReparseHeavyTask(
 }
 
 /**
+ * Enqueue a single route sports-lib reparse job task.
+ */
+export async function enqueueSportsLibRouteReparseTask(
+    jobId: string,
+    scheduleDelaySeconds?: number,
+): Promise<boolean> {
+    const client = getCloudTasksClient();
+    const { projectId, location, sportsLibRouteReparseQueue, serviceAccountEmail } = config.cloudtasks;
+    if (!projectId) {
+        throw new Error('Project ID is not defined in config');
+    }
+
+    const parent = client.queuePath(projectId, location, sportsLibRouteReparseQueue);
+    const url = `https://${location}-${projectId}.cloudfunctions.net/processSportsLibRouteReparseTask`;
+    const safeJobId = jobId.replace(/[^a-zA-Z0-9-_]/g, '-');
+    const taskName = `${parent}/tasks/route-reparse-${safeJobId}`;
+    const payload = { data: { jobId } };
+
+    return enqueueTaskWithRetry({
+        parent,
+        taskName,
+        payload,
+        serviceAccountEmail,
+        url,
+        scheduleDelaySeconds,
+        dispatchDeadlineSeconds: SPORTS_LIB_REPARSE_TASK_DISPATCH_DEADLINE_SECONDS,
+        alreadyExistsLogMessage: `[RouteReparseDispatcher] Task already exists for job ${jobId}, skipping`,
+        failedLogPrefix: `[RouteReparseDispatcher] Failed to enqueue task for job ${jobId}:`,
+    });
+}
+
+/**
  * Enqueue a single derived-metrics rebuild task for one user generation.
  * Task name is deterministic to guarantee one pending task per user generation.
  */

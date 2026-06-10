@@ -185,8 +185,14 @@ function getProcessingVersionCode(value: unknown): number | null {
     return value;
 }
 
-function isProcessingMetadataDocPath(path: string): boolean {
-    return path.endsWith('/metaData/processing');
+function isEventProcessingMetadataDocPath(path: string): boolean {
+    const processingMetadataSuffix = '/metaData/processing';
+    if (!path.endsWith(processingMetadataSuffix)) {
+        return false;
+    }
+
+    const eventPath = path.slice(0, -processingMetadataSuffix.length);
+    return parseUidAndEventIdFromEventPath(eventPath) !== null;
 }
 
 function clampNumber(value: number, minValue: number, maxValue: number): number {
@@ -583,8 +589,8 @@ export const scheduleSportsLibReparseScan = onSchedule({
             lastProcessingVersionCode = processingVersionCode;
         }
 
-        if (!isProcessingMetadataDocPath(processingDoc.ref.path)) {
-            logger.warn('[sports-lib-reparse] Skipping non-processing metadata doc from candidate query.', {
+        if (!isEventProcessingMetadataDocPath(processingDoc.ref.path)) {
+            logger.warn('[sports-lib-reparse] Skipping metadata doc outside event processing path.', {
                 processingDocPath: processingDoc.ref.path,
             });
             continue;

@@ -537,6 +537,25 @@
       "density": "SPARSE_ALL"
     },
     {
+      "collectionGroup": "metaData",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        {
+          "fieldPath": "processingEntity",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "sportsLibVersionCode",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
+        }
+      ],
+      "density": "SPARSE_ALL"
+    },
+    {
       "collectionGroup": "failed_jobs",
       "queryScope": "COLLECTION",
       "fields": [
@@ -698,6 +717,25 @@
     },
     {
       "collectionGroup": "sportsLibReparseJobs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "updatedAt",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "DESCENDING"
+        }
+      ],
+      "density": "SPARSE_ALL"
+    },
+    {
+      "collectionGroup": "sportsLibRouteReparseJobs",
       "queryScope": "COLLECTION",
       "fields": [
         {
@@ -1229,6 +1267,25 @@
     },
     {
       "collectionGroup": "sportsLibReparseJobs",
+      "fieldPath": "expireAt",
+      "ttl": true,
+      "indexes": [
+        {
+          "order": "ASCENDING",
+          "queryScope": "COLLECTION"
+        },
+        {
+          "order": "DESCENDING",
+          "queryScope": "COLLECTION"
+        },
+        {
+          "arrayConfig": "CONTAINS",
+          "queryScope": "COLLECTION"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "sportsLibRouteReparseJobs",
       "fieldPath": "expireAt",
       "ttl": true,
       "indexes": [

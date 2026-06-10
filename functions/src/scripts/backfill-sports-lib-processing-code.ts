@@ -6,6 +6,7 @@ import {
     parseUidAndEventIdFromEventPath,
     sportsLibVersionToCode,
 } from '../reparse/sports-lib-reparse.service';
+import { EVENT_PROCESSING_ENTITY } from '../shared/processing-metadata.interface';
 
 const MISSING_PROCESSING_VERSION = '0.0.0';
 const MISSING_PROCESSING_VERSION_CODE = 0;
@@ -225,6 +226,7 @@ export async function runBackfillSportsLibProcessingCode(argv: string[]): Promis
                 summary.created++;
                 if (options.execute) {
                     await processingRef.set({
+                        processingEntity: EVENT_PROCESSING_ENTITY,
                         sportsLibVersion: MISSING_PROCESSING_VERSION,
                         sportsLibVersionCode: MISSING_PROCESSING_VERSION_CODE,
                         processedAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -268,13 +270,17 @@ export async function runBackfillSportsLibProcessingCode(argv: string[]): Promis
 
             const rawCode = processingData.sportsLibVersionCode;
             const normalizedRawCode = typeof rawCode === 'number' && Number.isFinite(rawCode) ? rawCode : null;
-            if (normalizedRawCode === computedCode) {
+            const normalizedProcessingEntity = processingData.processingEntity === EVENT_PROCESSING_ENTITY
+                ? EVENT_PROCESSING_ENTITY
+                : null;
+            if (normalizedRawCode === computedCode && normalizedProcessingEntity === EVENT_PROCESSING_ENTITY) {
                 summary.unchanged++;
                 logger.info('[sports-lib-processing-backfill] Processing metadata already up to date.', {
                     uid,
                     eventId,
                     eventPath,
                     processingDocPath,
+                    processingEntity: normalizedProcessingEntity,
                     sportsLibVersion: rawVersion,
                     sportsLibVersionCode: normalizedRawCode,
                 });
@@ -284,15 +290,18 @@ export async function runBackfillSportsLibProcessingCode(argv: string[]): Promis
             summary.patched++;
             if (options.execute) {
                 await processingRef.set({
+                    processingEntity: EVENT_PROCESSING_ENTITY,
                     sportsLibVersionCode: computedCode,
                 }, { merge: true });
             }
-            logger.info('[sports-lib-processing-backfill] Patched processing metadata version code.', {
+            logger.info('[sports-lib-processing-backfill] Patched processing metadata.', {
                 uid,
                 eventId,
                 eventPath,
                 processingDocPath,
                 sportsLibVersion: rawVersion,
+                previousProcessingEntity: processingData.processingEntity,
+                newProcessingEntity: EVENT_PROCESSING_ENTITY,
                 previousSportsLibVersionCode: normalizedRawCode,
                 newSportsLibVersionCode: computedCode,
                 dryRun: !options.execute,

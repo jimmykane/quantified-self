@@ -50,7 +50,14 @@ export class AdminQueueMonitorComponent implements OnInit, OnDestroy {
 
     private configureView(): void {
         const rawView = this.route.snapshot.data['queueView'];
-        if (rawView === 'workout' || rawView === 'activity-sync' || rawView === 'sleep-sync' || rawView === 'reparse' || rawView === 'derived') {
+        if (
+            rawView === 'workout' ||
+            rawView === 'activity-sync' ||
+            rawView === 'sleep-sync' ||
+            rawView === 'reparse' ||
+            rawView === 'route-reparse' ||
+            rawView === 'derived'
+        ) {
             this.queueView = rawView;
         } else {
             this.queueView = 'all';
@@ -63,8 +70,14 @@ export class AdminQueueMonitorComponent implements OnInit, OnDestroy {
         }
 
         if (this.queueView === 'reparse') {
-            this.pageTitle = 'Sports-lib Reparse Queue';
-            this.pageSubtitle = 'Monitor reparse jobs, checkpoint progress, and failure diagnostics';
+            this.pageTitle = 'Event Reparse Queue';
+            this.pageSubtitle = 'Monitor event sports-lib reparse jobs, checkpoint progress, and failure diagnostics';
+            return;
+        }
+
+        if (this.queueView === 'route-reparse') {
+            this.pageTitle = 'Route Reparse Queue';
+            this.pageSubtitle = 'Monitor route sports-lib reparse jobs, checkpoint progress, and failure diagnostics';
             return;
         }
 

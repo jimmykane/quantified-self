@@ -14,7 +14,7 @@ import * as base58 from 'bs58';
 import { EventWriter, FirestoreAdapter, StorageAdapter, LogAdapter, OriginalFile } from './shared/event-writer';
 import { generateIDFromParts as sharedGenerateIDFromParts, generateEventID as sharedGenerateEventID } from './shared/id-generator';
 import { SPORTS_LIB_VERSION } from './shared/sports-lib-version.node';
-import { ProcessingMetaData } from './shared/processing-metadata.interface';
+import { EVENT_PROCESSING_ENTITY, ProcessingMetaData } from './shared/processing-metadata.interface';
 import { sportsLibVersionToCode } from './reparse/sports-lib-reparse.service';
 import { OriginalFileMetaData } from '../../shared/app-event.interface';
 import {
@@ -286,6 +286,7 @@ export async function setEvent(userID: string, eventID: string, event: EventInte
   const savedOriginalFiles = await writer.writeAllEventData(userID, event, originalFile);
 
   const processingMetaData: ProcessingMetaData = {
+    processingEntity: EVENT_PROCESSING_ENTITY,
     sportsLibVersion: SPORTS_LIB_VERSION,
     sportsLibVersionCode: sportsLibVersionToCode(SPORTS_LIB_VERSION),
     processedAt: admin.firestore.FieldValue.serverTimestamp(),

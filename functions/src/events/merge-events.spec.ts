@@ -659,6 +659,7 @@ describe('mergeEvents', () => {
       mergeType: 'benchmark',
     }, { merge: true });
     expect(hoisted.mockDocSet).toHaveBeenCalledWith({
+      processingEntity: 'event',
       sportsLibVersion: expect.any(String),
       sportsLibVersionCode: 9001004,
       processedAt: 'SERVER_TIMESTAMP',
@@ -682,6 +683,7 @@ describe('mergeEvents', () => {
       mergeType: 'benchmark',
     }, { merge: true });
     expect(hoisted.mockDocSet).toHaveBeenCalledWith({
+      processingEntity: 'event',
       sportsLibVersion: expect.any(String),
       sportsLibVersionCode: 9001004,
       processedAt: 'SERVER_TIMESTAMP',

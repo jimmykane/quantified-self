@@ -21,7 +21,7 @@ import { FirestoreEventJSON, OriginalFileMetaData } from '../../../shared/app-ev
 import { createParsingOptions } from '../../../shared/parsing-options';
 import { FirestoreAdapter, LogAdapter, EventWriter } from '../shared/event-writer';
 import { generateActivityIDFromSourceKey } from '../shared/id-generator';
-import { ProcessingMetaData } from '../shared/processing-metadata.interface';
+import { EVENT_PROCESSING_ENTITY, ProcessingMetaData } from '../shared/processing-metadata.interface';
 import { SPORTS_LIB_VERSION } from '../shared/sports-lib-version.node';
 import {
     SPORTS_LIB_REPARSE_HEAVY_DURATION_THRESHOLD_MS,
@@ -1452,6 +1452,7 @@ export async function persistReparsedEvent(
     const staleActivitiesDeleted = await deleteStaleActivities(uid, existingActivityDocs, newActivityIDs);
 
     const processingMetaData: ProcessingMetaData = {
+        processingEntity: EVENT_PROCESSING_ENTITY,
         sportsLibVersion: targetSportsLibVersion,
         sportsLibVersionCode: sportsLibVersionToCode(targetSportsLibVersion),
         processedAt: FieldValue.serverTimestamp(),

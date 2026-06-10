@@ -10,6 +10,7 @@ COLLECTIONS=(
     "activitySyncQueue"
     "sleepSyncQueue"
     "sportsLibReparseJobs"
+    "sportsLibRouteReparseJobs"
     "failed_jobs"
     "mail"
     "orphaned_service_tokens"

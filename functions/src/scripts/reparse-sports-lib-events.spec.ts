@@ -540,6 +540,14 @@ describe('reparse-sports-lib-events script', () => {
         );
     });
 
+    it('global mode should warn when --start-after is a route processing metadata path', async () => {
+        await runSportsLibReparseScript(['--start-after', 'users/u1/routes/r1/metaData/processing']);
+        expect(hoisted.loggerWarn).toHaveBeenCalledWith(
+            '[sports-lib-reparse-script] Ignoring --start-after. Expected event path or processing metadata path.',
+            expect.objectContaining({ startAfter: 'users/u1/routes/r1/metaData/processing' }),
+        );
+    });
+
     it('global mode should warn when --start-after processing doc does not exist', async () => {
         await runSportsLibReparseScript(['--start-after', 'users/u1/events/e1/metaData/processing']);
         expect(hoisted.loggerWarn).toHaveBeenCalledWith(
@@ -653,12 +661,39 @@ describe('reparse-sports-lib-events script', () => {
         expect(summary.completed).toBe(0);
         expect(summary.candidates).toBe(0);
         expect(hoisted.loggerWarn).toHaveBeenCalledWith(
-            '[sports-lib-reparse-script] Skipping non-processing metadata doc from candidate query.',
+            '[sports-lib-reparse-script] Skipping metadata doc outside event processing path.',
             expect.objectContaining({ processingDocPath: `${eventRef.path}/metaData/custom` }),
         );
     });
 
-    it('global mode should skip processing docs whose parent path cannot be parsed', async () => {
+    it('global mode should skip route processing metadata docs', async () => {
+        hoisted.processingDocs.push({
+            ref: {
+                path: 'users/u1/routes/r1/metaData/processing',
+                parent: {
+                    parent: {
+                        path: 'users/u1/routes/r1',
+                        get: vi.fn(async () => ({ exists: true, data: () => ({ originalFile: { path: 'route.gpx' } }) })),
+                    },
+                },
+            },
+            data: () => ({
+                sportsLibVersion: '9.0.0',
+                sportsLibVersionCode: 9_000_000,
+            }),
+        });
+
+        const summary = await runSportsLibReparseScript(['--execute']);
+        expect(summary.scanned).toBe(1);
+        expect(summary.completed).toBe(0);
+        expect(summary.candidates).toBe(0);
+        expect(hoisted.loggerWarn).toHaveBeenCalledWith(
+            '[sports-lib-reparse-script] Skipping metadata doc outside event processing path.',
+            expect.objectContaining({ processingDocPath: 'users/u1/routes/r1/metaData/processing' }),
+        );
+    });
+
+    it('global mode should skip processing docs whose path is not an event processing path', async () => {
         const invalidEventRef = {
             path: 'invalid/path',
             get: vi.fn(async () => ({ exists: true, data: () => ({ originalFile: { path: 'x.fit' } }) })),
@@ -678,8 +713,8 @@ describe('reparse-sports-lib-events script', () => {
         expect(summary.scanned).toBe(1);
         expect(summary.completed).toBe(0);
         expect(hoisted.loggerWarn).toHaveBeenCalledWith(
-            '[sports-lib-reparse-script] Could not parse UID/eventID from processing metadata parent path.',
-            expect.objectContaining({ eventPath: 'invalid/path' }),
+            '[sports-lib-reparse-script] Skipping metadata doc outside event processing path.',
+            expect.objectContaining({ processingDocPath: 'invalid/path/metaData/processing' }),
         );
     });
 

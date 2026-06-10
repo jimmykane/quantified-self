@@ -997,9 +997,37 @@ describe('scheduleSportsLibReparseScan', () => {
 
         expect(hoisted.enqueueSportsLibReparseTask).not.toHaveBeenCalled();
         expect(hoisted.loggerWarn).toHaveBeenCalledWith(
-            '[sports-lib-reparse] Skipping non-processing metadata doc from candidate query.',
+            '[sports-lib-reparse] Skipping metadata doc outside event processing path.',
             expect.objectContaining({
                 processingDocPath: `${eventRef.path}/metaData/customMetadataDoc`,
+            }),
+        );
+    });
+
+    it('should skip route processing metadata docs from global event candidate query', async () => {
+        hoisted.processingDocs.push({
+            ref: {
+                path: 'users/u1/routes/r1/metaData/processing',
+                parent: {
+                    parent: {
+                        path: 'users/u1/routes/r1',
+                        get: vi.fn(async () => ({ exists: true, data: () => ({ originalFile: { path: 'route.gpx' } }) })),
+                    },
+                },
+            },
+            data: () => ({
+                sportsLibVersion: '9.0.0',
+                sportsLibVersionCode: 9_000_000,
+            }),
+        });
+
+        await (scheduleSportsLibReparseScan as any)({});
+
+        expect(hoisted.enqueueSportsLibReparseTask).not.toHaveBeenCalled();
+        expect(hoisted.loggerWarn).toHaveBeenCalledWith(
+            '[sports-lib-reparse] Skipping metadata doc outside event processing path.',
+            expect.objectContaining({
+                processingDocPath: 'users/u1/routes/r1/metaData/processing',
             }),
         );
     });

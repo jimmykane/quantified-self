@@ -412,6 +412,7 @@ describe('reprocessRoute', () => {
     });
     expect(routeSetCall?.[2]).toBeUndefined();
     expect(transactionSetCallForPath('users/user-1/routes/route-1/metaData/processing')?.[1]).toMatchObject({
+      processingEntity: 'route',
       sportsLibVersionCode: 15000006,
       processedAt: 'SERVER_TIMESTAMP',
     });

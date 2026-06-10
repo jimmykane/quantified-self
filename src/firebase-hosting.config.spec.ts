@@ -129,6 +129,7 @@ describe('Firebase Hosting configuration', () => {
     expect(matchesAnyHostingSource(sources, '/dashboard')).toBe(true);
     expect(matchesAnyHostingSource(sources, '/routes')).toBe(true);
     expect(matchesAnyHostingSource(sources, '/admin/queues/workout')).toBe(true);
+    expect(matchesAnyHostingSource(sources, '/admin/queues/route-reparse')).toBe(true);
     expect(matchesAnyHostingSource(sources, '/user/user-1/event/event-1')).toBe(true);
     expect(matchesAnyHostingSource(sources, '/tools/compare/saved')).toBe(true);
 

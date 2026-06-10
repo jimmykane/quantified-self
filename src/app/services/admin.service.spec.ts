@@ -60,11 +60,12 @@ describe('AdminService', () => {
                     activitySync: { queueId: 'processActivitySyncTask', pending: 0 },
                     sleepSync: { queueId: 'processSleepSyncTask', pending: 0 },
                     sportsLibReparse: { queueId: 'processSportsLibReparseTask', pending: 2 },
+                    sportsLibRouteReparse: { queueId: 'processSportsLibRouteReparseTask', pending: 1 },
                     derivedMetrics: { queueId: 'processDerivedMetricsTask', pending: 6 },
                 },
             },
             derivedMetrics: {
-                coordinators: { idle: 1, queued: 2, processing: 3, failed: 4, total: 10 },
+                coordinators: { idle: 1, queued: 2, processing: 3, staleQueued: 0, staleProcessing: 0, failed: 4, total: 10 },
                 recentFailures: [
                     {
                         uid: 'user-1',

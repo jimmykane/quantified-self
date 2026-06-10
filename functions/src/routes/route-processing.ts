@@ -12,7 +12,7 @@ import {
   OriginalRouteFileMetaData,
 } from '../../../shared/app-route.interface';
 import { createRouteParsingOptions, RouteParsingOptionsLike } from '../../../shared/parsing-options';
-import { ProcessingMetaData } from '../shared/processing-metadata.interface';
+import { ProcessingMetaData, ROUTE_PROCESSING_ENTITY } from '../shared/processing-metadata.interface';
 import {
   MAX_ROUTE_DECOMPRESSED_BYTES,
   MAX_ROUTE_DECOMPRESSED_BYTES_LABEL,
@@ -285,6 +285,7 @@ export function assignRouteSegmentIDs(
 
 export function createRouteProcessingMetadataPayload(): ProcessingMetaData {
   return {
+    processingEntity: ROUTE_PROCESSING_ENTITY,
     sportsLibVersion: SPORTS_LIB_VERSION,
     sportsLibVersionCode: sportsLibVersionToCode(SPORTS_LIB_VERSION),
     processedAt: FieldValue.serverTimestamp(),
