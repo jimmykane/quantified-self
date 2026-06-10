@@ -50,11 +50,13 @@ const hoisted = vi.hoisted(() => {
     let processingLimit = 200;
     let processingCursorCode: number | null = null;
     let processingCursorPath: string | null = null;
+    let processingEntityFilter: string | null = null;
     let processingTargetCode: number | null = null;
     const resetProcessingCollectionState = () => {
         processingLimit = 200;
         processingCursorCode = null;
         processingCursorPath = null;
+        processingEntityFilter = null;
         processingTargetCode = null;
     };
 
@@ -97,9 +99,16 @@ const hoisted = vi.hoisted(() => {
         }
 
         const q = {
-            where: vi.fn((_field: string, _op: string, value: number) => {
-                processingTargetCode = value;
-                return q;
+            where: vi.fn((field: string, op: string, value: string | number) => {
+                if (field === 'processingEntity' && op === '==') {
+                    processingEntityFilter = `${value}`;
+                    return q;
+                }
+                if (field === 'sportsLibVersionCode' && op === '<' && typeof value === 'number') {
+                    processingTargetCode = value;
+                    return q;
+                }
+                throw new Error(`Unexpected collectionGroup where: ${field} ${op} ${value}`);
             }),
             orderBy: vi.fn().mockReturnThis(),
             limit: vi.fn((value: number) => {
@@ -113,6 +122,12 @@ const hoisted = vi.hoisted(() => {
             }),
             get: vi.fn(async () => ({
                 docs: processingDocs
+                    .filter((doc) => {
+                        if (processingEntityFilter === null) {
+                            return true;
+                        }
+                        return doc.data()?.processingEntity === processingEntityFilter;
+                    })
                     .filter((doc) => {
                         if (processingTargetCode === null) {
                             return true;
@@ -285,7 +300,11 @@ function makeEventDoc(uid: string, eventId: string, data: Record<string, unknown
 
 function createProcessingDoc(eventRef: any, data: Record<string, unknown>): any {
     const path = `${eventRef.path}/metaData/processing`;
-    hoisted.processingDocDataByPath.set(path, data);
+    const processingData = {
+        processingEntity: 'event',
+        ...data,
+    };
+    hoisted.processingDocDataByPath.set(path, processingData);
     return {
         ref: {
             path,
@@ -293,7 +312,7 @@ function createProcessingDoc(eventRef: any, data: Record<string, unknown>): any 
                 parent: eventRef,
             },
         },
-        data: () => data,
+        data: () => processingData,
     };
 }
 
@@ -498,6 +517,7 @@ describe('reparse-sports-lib-events script', () => {
         expect(summary.scanned).toBe(1);
         expect(summary.completed).toBe(1);
         expect(hoisted.collectionGroup).toHaveBeenCalledWith('metaData');
+        expect(hoisted.collectionGroup.mock.results[0].value.where).toHaveBeenCalledWith('processingEntity', '==', 'event');
         expect(hoisted.shouldEventBeReparsed).not.toHaveBeenCalled();
     });
 
@@ -629,6 +649,7 @@ describe('reparse-sports-lib-events script', () => {
                 parent: { parent: null },
             },
             data: () => ({
+                processingEntity: 'event',
                 sportsLibVersion: '9.0.0',
                 sportsLibVersionCode: 9_000_000,
             }),
@@ -651,6 +672,7 @@ describe('reparse-sports-lib-events script', () => {
                 parent: { parent: eventRef },
             },
             data: () => ({
+                processingEntity: 'event',
                 sportsLibVersion: '9.0.0',
                 sportsLibVersionCode: 9_000_000,
             }),
@@ -678,16 +700,17 @@ describe('reparse-sports-lib-events script', () => {
                 },
             },
             data: () => ({
+                processingEntity: 'route',
                 sportsLibVersion: '9.0.0',
                 sportsLibVersionCode: 9_000_000,
             }),
         });
 
         const summary = await runSportsLibReparseScript(['--execute']);
-        expect(summary.scanned).toBe(1);
+        expect(summary.scanned).toBe(0);
         expect(summary.completed).toBe(0);
         expect(summary.candidates).toBe(0);
-        expect(hoisted.loggerWarn).toHaveBeenCalledWith(
+        expect(hoisted.loggerWarn).not.toHaveBeenCalledWith(
             '[sports-lib-reparse-script] Skipping metadata doc outside event processing path.',
             expect.objectContaining({ processingDocPath: 'users/u1/routes/r1/metaData/processing' }),
         );
@@ -704,6 +727,7 @@ describe('reparse-sports-lib-events script', () => {
                 parent: { parent: invalidEventRef },
             },
             data: () => ({
+                processingEntity: 'event',
                 sportsLibVersion: '9.0.0',
                 sportsLibVersionCode: 9_000_000,
             }),
@@ -729,6 +753,7 @@ describe('reparse-sports-lib-events script', () => {
                 parent: { parent: missingEventRef },
             },
             data: () => ({
+                processingEntity: 'event',
                 sportsLibVersion: '9.0.0',
                 sportsLibVersionCode: 9_000_000,
             }),

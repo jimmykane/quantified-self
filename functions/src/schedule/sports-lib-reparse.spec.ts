@@ -63,11 +63,13 @@ const hoisted = vi.hoisted(() => {
     let processingLimitValue = 100;
     let processingCursorCode: number | null = null;
     let processingCursorDocPath: string | null = null;
+    let processingEntityFilter: string | null = null;
     let processingTargetCode: number | null = null;
     const resetProcessingQueryState = () => {
         processingLimitValue = 100;
         processingCursorCode = null;
         processingCursorDocPath = null;
+        processingEntityFilter = null;
         processingTargetCode = null;
     };
 
@@ -76,9 +78,16 @@ const hoisted = vi.hoisted(() => {
             throw new Error(`Unexpected collectionGroup path: ${path}`);
         }
         const q = {
-            where: vi.fn((_field: string, _op: string, value: number) => {
-                processingTargetCode = value;
-                return q;
+            where: vi.fn((field: string, op: string, value: string | number) => {
+                if (field === 'processingEntity' && op === '==') {
+                    processingEntityFilter = `${value}`;
+                    return q;
+                }
+                if (field === 'sportsLibVersionCode' && op === '<' && typeof value === 'number') {
+                    processingTargetCode = value;
+                    return q;
+                }
+                throw new Error(`Unexpected collectionGroup where: ${field} ${op} ${value}`);
             }),
             orderBy: vi.fn().mockReturnThis(),
             limit: vi.fn((value: number) => {
@@ -92,6 +101,12 @@ const hoisted = vi.hoisted(() => {
             }),
             get: vi.fn(async () => {
                 const docs = processingDocs
+                    .filter((doc) => {
+                        if (processingEntityFilter === null) {
+                            return true;
+                        }
+                        return doc.data()?.processingEntity === processingEntityFilter;
+                    })
                     .filter((doc) => {
                         if (processingTargetCode === null) {
                             return true;
@@ -355,7 +370,10 @@ function createProcessingDoc(eventRef: any, data: Record<string, unknown>): any 
                 parent: eventRef,
             },
         },
-        data: () => data,
+        data: () => ({
+            processingEntity: 'event',
+            ...data,
+        }),
     };
 }
 
@@ -417,6 +435,7 @@ describe('scheduleSportsLibReparseScan', () => {
         await (scheduleSportsLibReparseScan as any)({});
 
         expect(hoisted.collectionGroup).toHaveBeenCalledWith('metaData');
+        expect(hoisted.collectionGroup.mock.results[0].value.where).toHaveBeenCalledWith('processingEntity', '==', 'event');
         expect(hoisted.shouldEventBeReparsed).not.toHaveBeenCalled();
         expect(hoisted.enqueueSportsLibReparseTask).toHaveBeenCalledWith('job-1');
     });
@@ -988,6 +1007,7 @@ describe('scheduleSportsLibReparseScan', () => {
                 },
             },
             data: () => ({
+                processingEntity: 'event',
                 sportsLibVersion: '9.0.0',
                 sportsLibVersionCode: 9_000_000,
             }),
@@ -1016,6 +1036,7 @@ describe('scheduleSportsLibReparseScan', () => {
                 },
             },
             data: () => ({
+                processingEntity: 'route',
                 sportsLibVersion: '9.0.0',
                 sportsLibVersionCode: 9_000_000,
             }),
@@ -1024,11 +1045,9 @@ describe('scheduleSportsLibReparseScan', () => {
         await (scheduleSportsLibReparseScan as any)({});
 
         expect(hoisted.enqueueSportsLibReparseTask).not.toHaveBeenCalled();
-        expect(hoisted.loggerWarn).toHaveBeenCalledWith(
+        expect(hoisted.loggerWarn).not.toHaveBeenCalledWith(
             '[sports-lib-reparse] Skipping metadata doc outside event processing path.',
-            expect.objectContaining({
-                processingDocPath: 'users/u1/routes/r1/metaData/processing',
-            }),
+            expect.objectContaining({ processingDocPath: 'users/u1/routes/r1/metaData/processing' }),
         );
     });
 
@@ -1063,6 +1082,7 @@ describe('scheduleSportsLibReparseScan', () => {
                 },
             },
             data: () => ({
+                processingEntity: 'event',
                 sportsLibVersion: '9.0.0',
                 sportsLibVersionCode: 9_000_000,
             }),

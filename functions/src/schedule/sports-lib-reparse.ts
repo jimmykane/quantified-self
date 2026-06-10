@@ -26,6 +26,7 @@ import { enqueueSportsLibReparseHeavyTask, enqueueSportsLibReparseTask } from '.
 import { getExpireAtTimestamp, TTL_CONFIG } from '../shared/ttl-config';
 import { FUNCTIONS_MANIFEST } from '../../../shared/functions-manifest';
 import { getUserDeletionGuardState, UserDeletionGuardReadError } from '../shared/user-deletion-guard';
+import { EVENT_PROCESSING_ENTITY } from '../shared/processing-metadata.interface';
 
 const SPORTS_LIB_REPARSE_SCAN_CONCURRENCY = 25;
 const SPORTS_LIB_REPARSE_TARGET_ENQUEUE_RPS = 12;
@@ -536,6 +537,7 @@ export const scheduleSportsLibReparseScan = onSchedule({
     }
 
     let query = db.collectionGroup('metaData')
+        .where('processingEntity', '==', EVENT_PROCESSING_ENTITY)
         .where('sportsLibVersionCode', '<', targetSportsLibVersionCode)
         .orderBy('sportsLibVersionCode', 'asc')
         .orderBy(admin.firestore.FieldPath.documentId())

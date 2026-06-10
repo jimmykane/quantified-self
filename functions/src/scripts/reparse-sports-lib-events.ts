@@ -17,6 +17,7 @@ import {
     writeReparseStatus,
 } from '../reparse/sports-lib-reparse.service';
 import { getUserDeletionGuardState, UserDeletionGuardReadError } from '../shared/user-deletion-guard';
+import { EVENT_PROCESSING_ENTITY } from '../shared/processing-metadata.interface';
 
 interface ScriptOptions {
     execute: boolean;
@@ -237,6 +238,7 @@ function isEventProcessingMetadataDocPath(path: string): boolean {
 async function getGlobalProcessingDocsToInspect(options: ScriptOptions, targetSportsLibVersionCode: number): Promise<admin.firestore.QueryDocumentSnapshot[]> {
     const db = admin.firestore();
     let groupQuery = db.collectionGroup('metaData')
+        .where('processingEntity', '==', EVENT_PROCESSING_ENTITY)
         .where('sportsLibVersionCode', '<', targetSportsLibVersionCode)
         .orderBy('sportsLibVersionCode', 'asc')
         .orderBy(admin.firestore.FieldPath.documentId())
