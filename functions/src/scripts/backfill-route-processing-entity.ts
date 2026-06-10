@@ -5,6 +5,7 @@ import {
     SPORTS_LIB_ROUTE_REPARSE_RUNTIME_DEFAULTS,
     parseUidAndRouteIdFromRoutePath,
 } from '../reparse/sports-lib-route-reparse.service';
+import { getUserDeletionGuardStateInTransaction, UserDeletionGuardReadError } from '../shared/user-deletion-guard';
 
 const ROUTE_PROCESSING_ENTITY = 'route';
 const PROGRESS_LOG_EVERY = 25;
@@ -27,8 +28,18 @@ export interface BackfillRouteProcessingEntitySummary {
     unchanged: number;
     skippedMissing: number;
     skippedInvalid: number;
+    skippedRouteMissing: number;
+    skippedUserDeletion: number;
     failed: number;
 }
+
+type RouteProcessingEntityBackfillOutcome =
+    | 'patched'
+    | 'unchanged'
+    | 'skipped_missing_processing'
+    | 'skipped_invalid_entity'
+    | 'skipped_route_missing'
+    | 'skipped_user_deletion';
 
 function readArgValue(argv: string[], key: string): string | undefined {
     const equalsPrefix = `${key}=`;
@@ -152,6 +163,8 @@ export async function runBackfillRouteProcessingEntity(argv: string[]): Promise<
         unchanged: 0,
         skippedMissing: 0,
         skippedInvalid: 0,
+        skippedRouteMissing: 0,
+        skippedUserDeletion: 0,
         failed: 0,
     };
 
@@ -186,49 +199,118 @@ export async function runBackfillRouteProcessingEntity(argv: string[]): Promise<
         const processingDocPath = processingRef.path;
 
         try {
-            const processingSnapshot = await processingRef.get();
-            if (!processingSnapshot.exists) {
-                summary.skippedMissing++;
-                logger.warn('[route-processing-entity-backfill] Skipping route without processing metadata.', {
-                    uid,
-                    routeId,
-                    routePath,
-                    processingDocPath,
-                });
-                return;
-            }
+            let existingEntity: unknown;
+            let outcome: RouteProcessingEntityBackfillOutcome;
 
-            const processingData = processingSnapshot.data() as Record<string, unknown>;
-            const existingEntity = processingData.processingEntity;
-            if (existingEntity === ROUTE_PROCESSING_ENTITY) {
-                summary.unchanged++;
-                return;
-            }
-            if (typeof existingEntity === 'string' && existingEntity.length > 0) {
-                summary.skippedInvalid++;
-                logger.warn('[route-processing-entity-backfill] Skipping route processing metadata with unexpected entity.', {
-                    uid,
-                    routeId,
-                    routePath,
-                    processingDocPath,
-                    processingEntity: existingEntity,
-                });
-                return;
-            }
-
-            summary.patched++;
             if (options.execute) {
-                await processingRef.set({
-                    processingEntity: ROUTE_PROCESSING_ENTITY,
-                }, { merge: true });
+                const db = admin.firestore();
+                outcome = await db.runTransaction(async (transaction) => {
+                    const deletionGuard = await getUserDeletionGuardStateInTransaction(db, transaction, uid);
+                    if (deletionGuard.shouldSkip) {
+                        logger.info('[route-processing-entity-backfill] Skipping route because user is missing or deletion is in progress.', {
+                            uid,
+                            routeId,
+                            routePath,
+                            processingDocPath,
+                            userExists: deletionGuard.userExists,
+                            deletionInProgress: deletionGuard.deletionInProgress,
+                        });
+                        return 'skipped_user_deletion';
+                    }
+
+                    const latestRouteSnapshot = await transaction.get(routeDoc.ref);
+                    if (!latestRouteSnapshot.exists) {
+                        logger.warn('[route-processing-entity-backfill] Skipping route because route document no longer exists.', {
+                            uid,
+                            routeId,
+                            routePath,
+                            processingDocPath,
+                        });
+                        return 'skipped_route_missing';
+                    }
+
+                    const processingSnapshot = await transaction.get(processingRef);
+                    if (!processingSnapshot.exists) {
+                        logger.warn('[route-processing-entity-backfill] Skipping route without processing metadata.', {
+                            uid,
+                            routeId,
+                            routePath,
+                            processingDocPath,
+                        });
+                        return 'skipped_missing_processing';
+                    }
+
+                    const processingData = processingSnapshot.data() as Record<string, unknown>;
+                    existingEntity = processingData.processingEntity;
+                    if (existingEntity === ROUTE_PROCESSING_ENTITY) {
+                        return 'unchanged';
+                    }
+                    if (typeof existingEntity === 'string' && existingEntity.length > 0) {
+                        logger.warn('[route-processing-entity-backfill] Skipping route processing metadata with unexpected entity.', {
+                            uid,
+                            routeId,
+                            routePath,
+                            processingDocPath,
+                            processingEntity: existingEntity,
+                        });
+                        return 'skipped_invalid_entity';
+                    }
+
+                    transaction.set(processingRef, {
+                        processingEntity: ROUTE_PROCESSING_ENTITY,
+                    }, { merge: true });
+                    return 'patched';
+                });
+            } else {
+                const processingSnapshot = await processingRef.get();
+                if (!processingSnapshot.exists) {
+                    logger.warn('[route-processing-entity-backfill] Skipping route without processing metadata.', {
+                        uid,
+                        routeId,
+                        routePath,
+                        processingDocPath,
+                    });
+                    outcome = 'skipped_missing_processing';
+                } else {
+                    const processingData = processingSnapshot.data() as Record<string, unknown>;
+                    existingEntity = processingData.processingEntity;
+                    if (existingEntity === ROUTE_PROCESSING_ENTITY) {
+                        outcome = 'unchanged';
+                    } else if (typeof existingEntity === 'string' && existingEntity.length > 0) {
+                        logger.warn('[route-processing-entity-backfill] Skipping route processing metadata with unexpected entity.', {
+                            uid,
+                            routeId,
+                            routePath,
+                            processingDocPath,
+                            processingEntity: existingEntity,
+                        });
+                        outcome = 'skipped_invalid_entity';
+                    } else {
+                        outcome = 'patched';
+                    }
+                }
             }
-            logger.info('[route-processing-entity-backfill] Patched route processing metadata entity.', {
-                uid,
-                routeId,
-                routePath,
-                processingDocPath,
-                dryRun: !options.execute,
-            });
+
+            if (outcome === 'patched') {
+                summary.patched++;
+                logger.info('[route-processing-entity-backfill] Patched route processing metadata entity.', {
+                    uid,
+                    routeId,
+                    routePath,
+                    processingDocPath,
+                    dryRun: !options.execute,
+                });
+            } else if (outcome === 'unchanged') {
+                summary.unchanged++;
+            } else if (outcome === 'skipped_missing_processing') {
+                summary.skippedMissing++;
+            } else if (outcome === 'skipped_invalid_entity') {
+                summary.skippedInvalid++;
+            } else if (outcome === 'skipped_route_missing') {
+                summary.skippedRouteMissing++;
+            } else {
+                summary.skippedUserDeletion++;
+            }
         } catch (error) {
             summary.failed++;
             logger.error('[route-processing-entity-backfill] Failed to backfill route processing metadata entity.', {
@@ -236,6 +318,7 @@ export async function runBackfillRouteProcessingEntity(argv: string[]): Promise<
                 routeId,
                 routePath,
                 processingDocPath,
+                deletionGuardReadError: error instanceof UserDeletionGuardReadError,
                 error: `${error}`,
             });
         } finally {
@@ -248,6 +331,8 @@ export async function runBackfillRouteProcessingEntity(argv: string[]): Promise<
                     unchanged: summary.unchanged,
                     skippedMissing: summary.skippedMissing,
                     skippedInvalid: summary.skippedInvalid,
+                    skippedRouteMissing: summary.skippedRouteMissing,
+                    skippedUserDeletion: summary.skippedUserDeletion,
                     failed: summary.failed,
                 });
             }

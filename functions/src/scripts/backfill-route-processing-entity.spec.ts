@@ -22,6 +22,11 @@ const hoisted = vi.hoisted(() => {
     const userRoutesByUID = new Map<string, any[]>();
     const globalRouteDocs: any[] = [];
     const adminApps: any[] = [];
+    const getUserDeletionGuardStateInTransaction = vi.fn(async () => ({
+        userExists: true,
+        deletionInProgress: false,
+        shouldSkip: false,
+    }));
 
     const collection = vi.fn((path: string) => {
         const match = path.match(/^users\/([^/]+)\/routes$/);
@@ -85,6 +90,23 @@ const hoisted = vi.hoisted(() => {
     });
 
     const firestoreDoc = vi.fn((path: string) => ({ path }));
+    const runTransaction = vi.fn(async (callback: (transaction: any) => Promise<unknown>) => {
+        const transaction = {
+            get: vi.fn(async (ref: { get?: () => Promise<unknown> }) => {
+                if (typeof ref.get === 'function') {
+                    return ref.get();
+                }
+                return { exists: true, data: () => ({}) };
+            }),
+            set: vi.fn((ref: { set?: (payload: unknown, options?: unknown) => Promise<unknown> }, payload: unknown, options?: unknown) => {
+                if (typeof ref.set === 'function') {
+                    return ref.set(payload, options);
+                }
+                return undefined;
+            }),
+        };
+        return callback(transaction);
+    });
     const initializeApp = vi.fn();
     const loggerInfo = vi.fn();
     const loggerWarn = vi.fn();
@@ -101,6 +123,8 @@ const hoisted = vi.hoisted(() => {
         collectionGroup,
         resetGlobalQueryState,
         firestoreDoc,
+        runTransaction,
+        getUserDeletionGuardStateInTransaction,
         initializeApp,
         loggerInfo,
         loggerWarn,
@@ -117,11 +141,17 @@ vi.mock('../reparse/sports-lib-route-reparse.service', () => ({
     parseUidAndRouteIdFromRoutePath: hoisted.parseUidAndRouteIdFromRoutePath,
 }));
 
+vi.mock('../shared/user-deletion-guard', () => ({
+    UserDeletionGuardReadError: class UserDeletionGuardReadError extends Error { },
+    getUserDeletionGuardStateInTransaction: hoisted.getUserDeletionGuardStateInTransaction,
+}));
+
 vi.mock('firebase-admin', () => {
     const firestoreFn = vi.fn(() => ({
         collection: hoisted.collection,
         collectionGroup: hoisted.collectionGroup,
         doc: hoisted.firestoreDoc,
+        runTransaction: hoisted.runTransaction,
     }));
     Object.assign(firestoreFn, {
         FieldPath: {
@@ -153,6 +183,7 @@ function makeRouteDoc(
     processingState: {
         exists: boolean;
         data?: Record<string, unknown>;
+        routeExists?: boolean;
     },
 ): any {
     const processingSet = vi.fn().mockResolvedValue(undefined);
@@ -160,11 +191,16 @@ function makeRouteDoc(
         exists: processingState.exists,
         data: () => processingState.data || {},
     }));
+    const routeGet = vi.fn(async () => ({
+        exists: processingState.routeExists !== false,
+        data: () => ({}),
+    }));
 
     return {
         id: routeId,
         ref: {
             path: `users/${uid}/routes/${routeId}`,
+            get: routeGet,
             collection: vi.fn((name: string) => {
                 if (name !== 'metaData') {
                     return { doc: vi.fn() };
@@ -184,6 +220,7 @@ function makeRouteDoc(
             }),
         },
         processingSet,
+        routeGet,
     };
 }
 
@@ -196,6 +233,11 @@ describe('backfill-route-processing-entity script', () => {
         hoisted.resetGlobalQueryState();
         hoisted.runtimeDefaults.scanLimit = 200;
         hoisted.runtimeDefaults.uidAllowlist = [];
+        hoisted.getUserDeletionGuardStateInTransaction.mockResolvedValue({
+            userExists: true,
+            deletionInProgress: false,
+            shouldSkip: false,
+        });
     });
 
     it('parses options with defaults and uid allowlists', () => {
@@ -259,6 +301,12 @@ describe('backfill-route-processing-entity script', () => {
         expect(routeDoc.processingSet).toHaveBeenCalledWith({
             processingEntity: 'route',
         }, { merge: true });
+        expect(hoisted.runTransaction).toHaveBeenCalledTimes(1);
+        expect(hoisted.getUserDeletionGuardStateInTransaction).toHaveBeenCalledWith(
+            expect.anything(),
+            expect.anything(),
+            'u1',
+        );
     });
 
     it('leaves route processing metadata unchanged when entity already exists', async () => {
@@ -294,5 +342,49 @@ describe('backfill-route-processing-entity script', () => {
         });
         expect(missingDoc.processingSet).not.toHaveBeenCalled();
         expect(invalidDoc.processingSet).not.toHaveBeenCalled();
+    });
+
+    it('skips execute writes when user deletion guard is active', async () => {
+        hoisted.getUserDeletionGuardStateInTransaction.mockResolvedValueOnce({
+            userExists: true,
+            deletionInProgress: true,
+            shouldSkip: true,
+        });
+        const routeDoc = makeRouteDoc('u1', 'r1', {
+            exists: true,
+            data: { sportsLibVersion: '16.0.1', sportsLibVersionCode: 16_000_001 },
+        });
+        hoisted.userRoutesByUID.set('u1', [routeDoc]);
+
+        const summary = await runBackfillRouteProcessingEntity(['--execute', '--uid', 'u1']);
+
+        expect(summary).toMatchObject({
+            scanned: 1,
+            patched: 0,
+            skippedUserDeletion: 1,
+            failed: 0,
+        });
+        expect(routeDoc.routeGet).not.toHaveBeenCalled();
+        expect(routeDoc.processingSet).not.toHaveBeenCalled();
+    });
+
+    it('skips execute writes when the route disappeared before transaction write', async () => {
+        const routeDoc = makeRouteDoc('u1', 'r1', {
+            routeExists: false,
+            exists: true,
+            data: { sportsLibVersion: '16.0.1', sportsLibVersionCode: 16_000_001 },
+        });
+        hoisted.userRoutesByUID.set('u1', [routeDoc]);
+
+        const summary = await runBackfillRouteProcessingEntity(['--execute', '--uid', 'u1']);
+
+        expect(summary).toMatchObject({
+            scanned: 1,
+            patched: 0,
+            skippedRouteMissing: 1,
+            failed: 0,
+        });
+        expect(routeDoc.routeGet).toHaveBeenCalled();
+        expect(routeDoc.processingSet).not.toHaveBeenCalled();
     });
 });
