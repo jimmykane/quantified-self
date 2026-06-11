@@ -21,6 +21,10 @@
       fallbackTopMetaText="Saved route"
       [metrics]="summaryMetrics()">
       <span summary-chips class="route-chip">{{ sourceFileType() | uppercase }}</span>
+      <span summary-chips class="route-chip">{{ sourceSummaryLabel() }}</span>
+      @for (label of syncedDestinationLabels(); track label) {
+        <span summary-chips class="route-chip">{{ label }}</span>
+      }
       @if (singleSegment(); as segment) {
         <span summary-chips class="route-chip route-chip--segment" [matTooltip]="segment.label">
           <span class="route-chip-dot" [style.background]="segment.color" aria-hidden="true"></span>

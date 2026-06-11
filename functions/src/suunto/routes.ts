@@ -31,12 +31,20 @@ export interface SuuntoRouteUploadTokenRef {
 
 export interface SuuntoRouteUploadContext {
   tokenRefs: SuuntoRouteUploadTokenRef[];
+  userNames: string[];
 }
 
 export interface SuuntoRouteUploadResult {
   status: 'success';
   successCount: number;
   providerRouteIds: string[];
+}
+
+export interface SuuntoRouteSummary {
+  id: string;
+  description?: string | null;
+  created?: number | null;
+  modified?: number | null;
 }
 
 export class SuuntoRouteUploadSkippedForDeletedUserError extends Error {
@@ -157,6 +165,11 @@ export async function createSuuntoRouteUploadContext(userID: string): Promise<Su
       id: tokenSnapshot.id,
       ref: tokenSnapshot.ref,
     })),
+    userNames: Array.from(new Set(
+      tokenQuerySnapshots.docs
+        .map(tokenSnapshot => typeof tokenSnapshot.data()?.userName === 'string' ? tokenSnapshot.data().userName.trim() : '')
+        .filter(userName => userName.length > 0),
+    )),
   };
 }
 
@@ -168,6 +181,126 @@ async function getLatestSuuntoTokenSnapshot(
     throw new HttpsError('unauthenticated', 'Authentication failed. Please re-connect your Suunto account.');
   }
   return snapshot;
+}
+
+function normalizeSuuntoRouteSummary(value: unknown): SuuntoRouteSummary | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return null;
+  }
+
+  const route = value as Record<string, unknown>;
+  const id = typeof route.id === 'string' && route.id.trim() ? route.id.trim() : null;
+  if (!id) {
+    return null;
+  }
+
+  return {
+    id,
+    description: typeof route.description === 'string' && route.description.trim() ? route.description.trim() : null,
+    created: typeof route.created === 'number' && Number.isFinite(route.created) ? route.created : null,
+    modified: typeof route.modified === 'number' && Number.isFinite(route.modified) ? route.modified : null,
+  };
+}
+
+async function executeSuuntoRouteReadOperation<T>(
+  userID: string,
+  context: SuuntoRouteUploadContext,
+  operationName: string,
+  operation: (accessToken: string) => Promise<T>,
+): Promise<T> {
+  let authFailures = 0;
+  let lastError: unknown = null;
+
+  for (const tokenRef of context.tokenRefs) {
+    try {
+      const latestTokenSnapshot = await getLatestSuuntoTokenSnapshot(tokenRef);
+      return await executeWithTokenRetry(
+        latestTokenSnapshot,
+        async (accessToken) => {
+          await assertSuuntoRouteUploadUserActive(userID, `before_${operationName}`);
+          return operation(accessToken);
+        },
+        `${operationName} for user ${userID}`,
+      );
+    } catch (error) {
+      if (isUserDeletionGuardReadError(error) || error instanceof SuuntoRouteUploadSkippedForDeletedUserError) {
+        throw error;
+      }
+      if (error instanceof HttpsError && error.code === 'unauthenticated') {
+        authFailures++;
+        lastError = error;
+        continue;
+      }
+      if (getStatusCode(error) === 401) {
+        authFailures++;
+      }
+      lastError = error;
+      logger.warn(`[SuuntoRoutes] ${operationName} failed for token ${tokenRef.id}`, {
+        userID,
+        error,
+      });
+    }
+  }
+
+  if (authFailures > 0) {
+    throw new HttpsError('unauthenticated', 'Authentication failed. Please re-connect your Suunto account.');
+  }
+
+  throw lastError || new HttpsError('internal', 'Suunto route request failed.');
+}
+
+export async function listSuuntoRoutes(
+  userID: string,
+  context?: SuuntoRouteUploadContext,
+): Promise<SuuntoRouteSummary[]> {
+  const routeContext = context || await createSuuntoRouteUploadContext(userID);
+  const result = await executeSuuntoRouteReadOperation(userID, routeContext, 'list_suunto_routes', async (accessToken) => (
+    requestPromise.get({
+      headers: {
+        'Authorization': toSuuntoAuthorizationHeader(accessToken),
+        'Ocp-Apim-Subscription-Key': config.suuntoapp.subscription_key,
+      },
+      json: true,
+      url: 'https://cloudapi.suunto.com/v2/route',
+    })
+  ));
+
+  if (!Array.isArray(result)) {
+    logger.warn('[SuuntoRoutes] Route listing returned unexpected payload shape', {
+      userID,
+      payloadType: typeof result,
+    });
+    return [];
+  }
+
+  return result
+    .map(normalizeSuuntoRouteSummary)
+    .filter((route): route is SuuntoRouteSummary => route !== null);
+}
+
+export async function exportSuuntoRouteAsGPX(
+  userID: string,
+  providerRouteId: string,
+  context?: SuuntoRouteUploadContext,
+): Promise<string> {
+  const routeContext = context || await createSuuntoRouteUploadContext(userID);
+  const result = await executeSuuntoRouteReadOperation(userID, routeContext, 'export_suunto_route', async (accessToken) => (
+    requestPromise.get({
+      headers: {
+        'Accept': 'application/gpx+xml',
+        'Authorization': toSuuntoAuthorizationHeader(accessToken),
+        'Ocp-Apim-Subscription-Key': config.suuntoapp.subscription_key,
+      },
+      url: `https://cloudapi.suunto.com/v2/route/${providerRouteId}/export`,
+    })
+  ));
+
+  const gpxContent = typeof result === 'string' ? result : `${result || ''}`;
+  if (!gpxContent.trim()) {
+    throw new HttpsError('internal', 'Suunto route export returned an empty GPX payload.');
+  }
+
+  return gpxContent;
 }
 
 export async function uploadGPXRouteToSuuntoApp(

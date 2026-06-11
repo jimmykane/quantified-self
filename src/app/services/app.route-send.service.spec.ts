@@ -170,6 +170,24 @@ describe('AppRouteSendService', () => {
     })).toBe('Connect Suunto again before sending routes.');
   });
 
+  it('maps source-service blocked responses to a specific Suunto guidance message', () => {
+    expect(getRouteSendResponseMessage({
+      destinationServiceName: ServiceNames.SuuntoApp,
+      status: 'failure',
+      routeCount: 1,
+      successCount: 0,
+      failureCount: 0,
+      skippedCount: 1,
+      results: [{
+        routeId: 'route-1',
+        destinationServiceName: ServiceNames.SuuntoApp,
+        status: 'skipped',
+        reason: 'SOURCE_SERVICE_BLOCKED',
+        message: 'Routes imported from Suunto are already there and cannot be sent back to Suunto.',
+      }],
+    })).toBe('Routes imported from Suunto are already there and cannot be sent back to Suunto.');
+  });
+
   it('returns actionable route send guidance only for specific non-success responses', () => {
     expect(getActionableRouteSendResponseMessage({
       destinationServiceName: ServiceNames.SuuntoApp,

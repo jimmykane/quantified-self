@@ -110,6 +110,13 @@ export interface ActivitySyncBackfillSummary {
   failedEvents: ActivitySyncBackfillFailedEvent[];
 }
 
+export interface RouteSyncCatchUpSummary {
+  queuedCount: number;
+  skippedCount: number;
+  failureCount: number;
+  totalCount: number;
+}
+
 
 /**
  * Service for managing user data, subscription roles, and settings.
@@ -725,6 +732,11 @@ export class AppUserService implements OnDestroy {
 
   async backfillSuuntoSleepForCurrentUser(): Promise<SleepBackfillQueueResponse> {
     const result = await this.functionsService.call<undefined, SleepBackfillQueueResponse>('backfillSuuntoAppSleep');
+    return result.data;
+  }
+
+  async addSuuntoRoutesToQueueForCurrentUser(): Promise<RouteSyncCatchUpSummary> {
+    const result = await this.functionsService.call<undefined, RouteSyncCatchUpSummary>('addSuuntoAppRoutesToQueue');
     return result.data;
   }
 

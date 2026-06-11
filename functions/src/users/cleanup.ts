@@ -7,6 +7,7 @@ import { GARMIN_API_TOKENS_COLLECTION_NAME, GARMIN_API_WORKOUT_QUEUE_COLLECTION_
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { DERIVED_METRICS_COLLECTION_ID } from '../../../shared/derived-metrics';
 import { ACTIVITY_SYNC_QUEUE_COLLECTION_NAME } from '../activity-sync/constants';
+import { ROUTE_SYNC_QUEUE_COLLECTION_NAME } from '../routes/route-sync.constants';
 import { SLEEP_SYNC_QUEUE_COLLECTION_NAME } from '../sleep/constants';
 import { SUUNTOAPP_WORKOUT_QUEUE_COLLECTION_NAME } from '../suunto/constants';
 import { COROSAPI_WORKOUT_QUEUE_COLLECTION_NAME } from '../coros/constants';
@@ -107,6 +108,7 @@ interface UserProviderIdentifiers {
 
 const CLOUD_TASK_SOURCE_QUEUE_COLLECTIONS = new Set([
     ACTIVITY_SYNC_QUEUE_COLLECTION_NAME,
+    ROUTE_SYNC_QUEUE_COLLECTION_NAME,
     SLEEP_SYNC_QUEUE_COLLECTION_NAME,
     SUUNTOAPP_WORKOUT_QUEUE_COLLECTION_NAME,
     COROSAPI_WORKOUT_QUEUE_COLLECTION_NAME,
@@ -357,6 +359,9 @@ function sourceQueueCollectionFromFailedJobData(data: Record<string, unknown>): 
     if (serviceNameFromSleepProvider(data.provider) && asNonEmptyString(data.providerUserId)) {
         return SLEEP_SYNC_QUEUE_COLLECTION_NAME;
     }
+    if (asNonEmptyString(data.providerRouteId) && asNonEmptyString(data.sourceServiceName) && asNonEmptyString(data.providerUserId)) {
+        return ROUTE_SYNC_QUEUE_COLLECTION_NAME;
+    }
     if (asNonEmptyString(data.userName)) {
         return SUUNTOAPP_WORKOUT_QUEUE_COLLECTION_NAME;
     }
@@ -439,6 +444,10 @@ function providerQueueLookupFromCollectionData(
     switch (collectionName) {
         case SLEEP_SYNC_QUEUE_COLLECTION_NAME: {
             const serviceName = serviceNameFromSleepProvider(data.provider);
+            return serviceName ? providerLookupForService(serviceName, data.providerUserId) : null;
+        }
+        case ROUTE_SYNC_QUEUE_COLLECTION_NAME: {
+            const serviceName = asNonEmptyString(data.sourceServiceName) as ServiceNames | null;
             return serviceName ? providerLookupForService(serviceName, data.providerUserId) : null;
         }
         case SUUNTOAPP_WORKOUT_QUEUE_COLLECTION_NAME:
@@ -575,6 +584,7 @@ async function cleanupLegacyProviderKeyedQueueOrphans(
 
     const db = admin.firestore();
     const collectionNames = [
+        ROUTE_SYNC_QUEUE_COLLECTION_NAME,
         SLEEP_SYNC_QUEUE_COLLECTION_NAME,
         SUUNTOAPP_WORKOUT_QUEUE_COLLECTION_NAME,
         COROSAPI_WORKOUT_QUEUE_COLLECTION_NAME,
@@ -662,6 +672,9 @@ function addProviderIdentifiersFromFailedJobData(identifiers: UserProviderIdenti
         case SLEEP_SYNC_QUEUE_COLLECTION_NAME:
             addProviderIdentifiersFromSleepQueueData(identifiers, data);
             return;
+        case ROUTE_SYNC_QUEUE_COLLECTION_NAME:
+            addProviderIdentifier(identifiers, data.sourceServiceName, data.providerUserId);
+            return;
         case SUUNTOAPP_WORKOUT_QUEUE_COLLECTION_NAME:
             addProviderIdentifier(identifiers, ServiceNames.SuuntoApp, data.userName);
             return;
@@ -676,6 +689,7 @@ function addProviderIdentifiersFromFailedJobData(identifiers: UserProviderIdenti
     }
 
     addProviderIdentifiersFromSleepQueueData(identifiers, data);
+    addProviderIdentifier(identifiers, data.sourceServiceName, data.providerUserId);
     addProviderIdentifier(identifiers, ServiceNames.SuuntoApp, data.userName);
     addProviderIdentifier(identifiers, ServiceNames.COROSAPI, data.openId);
     if (looksLikeLegacyGarminWorkoutQueueData(data)) {
@@ -708,6 +722,14 @@ async function collectProviderIdentifiersFromUidKeyedQueueState(
 ): Promise<void> {
     const firebaseUIDValues = [uid];
 
+    await collectProviderIdentifiersFromQueueQuery(
+        db,
+        uid,
+        ROUTE_SYNC_QUEUE_COLLECTION_NAME,
+        'firebaseUserID',
+        firebaseUIDValues,
+        (data) => addProviderIdentifier(identifiers, data.sourceServiceName, data.providerUserId),
+    );
     await collectProviderIdentifiersFromQueueQuery(
         db,
         uid,
@@ -794,6 +816,8 @@ async function cleanupTopLevelQueueState(uid: string, identifiers: UserProviderI
 
     await recursiveDeleteQueryResults(db, uid, 'activity sync queue', ACTIVITY_SYNC_QUEUE_COLLECTION_NAME, 'userID', firebaseUIDValues, deletedRefKeys);
     await recursiveDeleteQueryResults(db, uid, 'activity sync queue', ACTIVITY_SYNC_QUEUE_COLLECTION_NAME, 'firebaseUserID', firebaseUIDValues, deletedRefKeys);
+    await recursiveDeleteQueryResults(db, uid, 'route sync queue', ROUTE_SYNC_QUEUE_COLLECTION_NAME, 'firebaseUserID', firebaseUIDValues, deletedRefKeys);
+    await recursiveDeleteQueryResults(db, uid, 'route sync queue', ROUTE_SYNC_QUEUE_COLLECTION_NAME, 'providerUserId', providerValues, deletedRefKeys, providerKeyedDeleteFilter(ROUTE_SYNC_QUEUE_COLLECTION_NAME));
     await recursiveDeleteQueryResults(db, uid, 'sleep sync queue', SLEEP_SYNC_QUEUE_COLLECTION_NAME, 'userID', firebaseUIDValues, deletedRefKeys);
     await recursiveDeleteQueryResults(db, uid, 'sleep sync queue', SLEEP_SYNC_QUEUE_COLLECTION_NAME, 'firebaseUserID', firebaseUIDValues, deletedRefKeys);
     await recursiveDeleteQueryResults(db, uid, 'sleep sync queue', SLEEP_SYNC_QUEUE_COLLECTION_NAME, 'providerUserId', providerValues, deletedRefKeys, providerKeyedDeleteFilter(SLEEP_SYNC_QUEUE_COLLECTION_NAME));

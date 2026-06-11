@@ -21,6 +21,7 @@ const ROUTE_SEND_REASON_PRIORITY: SendRouteToServiceFailureReason[] = [
   'ACCOUNT_DELETION_IN_PROGRESS',
   'ACCOUNT_STATE_UNAVAILABLE',
   'SEND_REQUEST_FAILED',
+  'SOURCE_SERVICE_BLOCKED',
   'SOURCE_FILE_UNAVAILABLE',
   'PARSE_FAILED',
   'NOT_FOUND',
@@ -74,6 +75,8 @@ export function getRouteSendResponseMessage(response: SendRoutesToServiceRespons
       return 'Account is being deleted or no longer exists.';
     case 'ACCOUNT_STATE_UNAVAILABLE':
       return 'Could not verify account state. Please retry.';
+    case 'SOURCE_SERVICE_BLOCKED':
+      return 'Routes imported from Suunto are already there and cannot be sent back to Suunto.';
     default:
       return nonSuccessResults.find(result => typeof result.message === 'string' && result.message.trim())?.message?.trim()
         || getDefaultRouteSendFailureMessage(response.destinationServiceName);

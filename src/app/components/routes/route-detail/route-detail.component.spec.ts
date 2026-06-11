@@ -299,6 +299,21 @@ describe('RouteDetailComponent', () => {
     expect(component.allSegmentsSelected()).toBe(true);
   });
 
+  it('surfaces provenance labels and blocks sending routes that already came from Suunto', () => {
+    component.routeDocument.set({
+      ...routeDocument,
+      sourceSummary: {
+        sourceType: 'service_sync',
+        sourceServiceName: ServiceNames.SuuntoApp,
+      },
+      syncedDestinationServiceNames: [ServiceNames.GarminAPI],
+    });
+
+    expect(component.sourceSummaryLabel()).toBe('Synced from Suunto');
+    expect(component.syncedDestinationLabels()).toEqual(['Sent to Garmin']);
+    expect(component.canSendRouteToSuunto()).toBe(false);
+  });
+
   it('filters waypoint details with the selected original route segments', () => {
     const firstRoute = createParsedRoute('segment-1', 'First Segment', 0);
     const secondRoute = createParsedRoute('segment-2', 'Second Segment', 1);

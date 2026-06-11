@@ -303,8 +303,15 @@
   vertical-align: middle;
 }
 
+.route-name-stack {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
 .route-title-cell,
-.route-source-cell {
+.route-source-cell,
+.route-provenance-cell {
   display: inline-block;
   line-height: 1.25rem;
   max-width: 100%;
@@ -316,6 +323,13 @@
 
 .route-title-cell {
   max-width: 11rem;
+}
+
+.route-provenance-cell {
+  color: var(--qs-secondary-text-color, rgba(0, 0, 0, 0.62));
+  font-size: 0.78rem;
+  line-height: 1rem;
+  max-width: 15rem;
 }
 
 .route-file-type {

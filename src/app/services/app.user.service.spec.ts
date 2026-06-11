@@ -1169,6 +1169,22 @@ describe('AppUserService', () => {
             });
         });
 
+        describe('addSuuntoRoutesToQueueForCurrentUser', () => {
+            it('should call cloud function for Suunto route catch-up', async () => {
+                const response = {
+                    queuedCount: 12,
+                    skippedCount: 3,
+                    failureCount: 1,
+                    totalCount: 16,
+                };
+                mockFunctionsService.call.mockResolvedValueOnce({ data: response });
+
+                await expect(service.addSuuntoRoutesToQueueForCurrentUser()).resolves.toEqual(response);
+
+                expect(mockFunctionsService.call).toHaveBeenCalledWith('addSuuntoAppRoutesToQueue');
+            });
+        });
+
         describe('backfillGarminSleepForCurrentUser', () => {
             it('should call cloud function for Garmin sleep backfill', async () => {
                 const response = {

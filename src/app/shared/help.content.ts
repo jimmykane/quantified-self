@@ -519,12 +519,16 @@ Suunto tools currently include:
 - syncing recent sleep samples,
 - backfilling sleep history from Jan 1, 2016,
 - importing history,
+- automatically importing saved Suunto routes,
+- queueing a manual Suunto route catch-up,
 - uploading FIT activities to Suunto,
 - uploading GPX routes to Suunto.
 
 Suunto FIT activity uploads in Services show a per-file queue with upload status, duplicate detection, failure messages, and retry controls for failed files. Large upload batches are processed one file at a time with short pauses between provider upload calls.
 
-Saved FIT and GPX routes can be sent to Suunto from **Routes** using a row action or the selected-row bulk toolbar. Quantified Self reparses each saved route from its original source file, generates a fresh GPX export, and uses the saved Quantified Self route name as the route name sent to Suunto. Bulk sends upload routes one at a time so partial failures can be reported without stopping successful routes.
+While your Suunto account is connected, Quantified Self also imports new and updated Suunto routes into **Routes** automatically. Services includes a **Route Sync** panel with manual catch-up, which queues every current Suunto route again for first-time imports or reconnect cases.
+
+Saved FIT and GPX routes can be sent to Suunto from **Routes** using a row action or the selected-row bulk toolbar. Quantified Self reparses each saved route from its original source file, generates a fresh GPX export, and uses the saved Quantified Self route name as the route name sent to Suunto. Routes imported from Suunto are marked with that source and are not eligible to be sent back to Suunto. Bulk sends upload routes one at a time so partial failures can be reported without stopping successful routes.
 
 ## Garmin
 

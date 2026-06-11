@@ -76,6 +76,16 @@ vi.mock('../suunto/routes', () => ({
   },
 }));
 
+const routePersistenceMocks = {
+  isRouteFromSourceService: vi.fn(),
+  setRouteDeliveryMetadata: vi.fn(),
+};
+
+vi.mock('./route-persistence', () => ({
+  isRouteFromSourceService: (...args: any[]) => routePersistenceMocks.isRouteFromSourceService(...args),
+  setRouteDeliveryMetadata: (...args: any[]) => routePersistenceMocks.setRouteDeliveryMetadata(...args),
+}));
+
 vi.mock('firebase-functions/v2/https', () => ({
   onCall: (_options: unknown, handler: unknown) => handler,
   HttpsError: class HttpsError extends Error {
@@ -180,6 +190,10 @@ describe('sendRoutesToService', () => {
       successCount: 1,
       providerRouteIds: ['suunto-route-1'],
     });
+    routePersistenceMocks.isRouteFromSourceService.mockImplementation((routeDocument: Record<string, any> | null | undefined, serviceName: string) => (
+      routeDocument?.sourceSummary?.sourceServiceName === serviceName
+    ));
+    routePersistenceMocks.setRouteDeliveryMetadata.mockResolvedValue(undefined);
   });
 
   it('rejects unsupported destinations', async () => {
@@ -524,6 +538,15 @@ describe('sendRoutesToService', () => {
       '<gpx><metadata><name>Evening Loop</name></metadata><routes>Evening Loop</routes></gpx>',
       { tokenRefs: [{ id: 'token-1', ref: {} }] },
     );
+    expect(routePersistenceMocks.setRouteDeliveryMetadata).toHaveBeenCalledWith({
+      userID: 'user-1',
+      routeID: 'route-1',
+      deliveryMetadata: expect.objectContaining({
+        serviceName: ServiceNames.SuuntoApp,
+        status: 'success',
+        providerRouteId: 'suunto-route-1',
+      }),
+    });
     expect(result).toMatchObject({
       destinationServiceName: ServiceNames.SuuntoApp,
       status: 'success',
@@ -643,5 +666,36 @@ describe('sendRoutesToService', () => {
       }),
     ]);
     expect(suuntoRouteMocks.uploadGPXRouteToSuuntoApp).not.toHaveBeenCalled();
+  });
+
+  it('skips routes that already came from the destination service', async () => {
+    routeDocuments.set('users/user-1/routes/route-1', {
+      id: 'route-1',
+      userID: 'user-1',
+      name: 'Suunto route',
+      srcFileType: 'gpx',
+      sourceSummary: {
+        sourceType: 'service_sync',
+        sourceServiceName: ServiceNames.SuuntoApp,
+      },
+      originalFiles: [{ path: 'users/user-1/routes/route-1/original.gpx', extension: 'gpx' }],
+      routes: [{ id: 'segment-1' }],
+    });
+
+    const result = await sendRoutesToService(createRequest({
+      routeIds: ['route-1'],
+      destinationServiceName: ServiceNames.SuuntoApp,
+    }) as any);
+
+    expect(result.status).toBe('failure');
+    expect(result.results).toEqual([
+      expect.objectContaining({
+        routeId: 'route-1',
+        status: 'skipped',
+        reason: 'SOURCE_SERVICE_BLOCKED',
+      }),
+    ]);
+    expect(suuntoRouteMocks.uploadGPXRouteToSuuntoApp).not.toHaveBeenCalled();
+    expect(routePersistenceMocks.setRouteDeliveryMetadata).not.toHaveBeenCalled();
   });
 });

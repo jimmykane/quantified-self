@@ -36,6 +36,10 @@ import {
   SuuntoRouteUploadSkippedForDeletedUserError,
   uploadGPXRouteToSuuntoApp,
 } from '../suunto/routes';
+import {
+  isRouteFromSourceService,
+  setRouteDeliveryMetadata,
+} from './route-persistence';
 
 interface PreparedSavedRoute {
   routeId: string;
@@ -124,9 +128,15 @@ export const sendRoutesToService = onCall({
       const routeId = payload.routeIds[index];
       try {
         await assertRouteSendUserActive(userID, 'before_route_prepare');
-        const preparedRoute = await prepareSavedRouteForSending(userID, routeId);
+        const preparedRoute = await prepareSavedRouteForSending(userID, routeId, adapter.destinationServiceName);
         await assertRouteSendUserActive(userID, 'before_provider_upload');
         const providerResult = await adapter.sendRoute(userID, preparedRoute, context);
+        await persistRouteDeliveryMetadataBestEffort({
+          userID,
+          routeID: routeId,
+          destinationServiceName: adapter.destinationServiceName,
+          providerRouteId: providerResult.providerRouteId,
+        });
         results.push({
           routeId,
           destinationServiceName: adapter.destinationServiceName,
@@ -236,13 +246,23 @@ async function assertRouteSendUserActive(userID: string, phase: string): Promise
   throw new RouteSendSkippedForDeletedUserError(userID, phase);
 }
 
-async function prepareSavedRouteForSending(userID: string, routeId: string): Promise<PreparedSavedRoute> {
+async function prepareSavedRouteForSending(
+  userID: string,
+  routeId: string,
+  destinationServiceName: ServiceNames,
+): Promise<PreparedSavedRoute> {
   const routeSnapshot = await admin.firestore().doc(`users/${userID}/routes/${routeId}`).get();
   if (!routeSnapshot.exists) {
     throw new RouteSendItemError('NOT_FOUND', `Route ${routeId} was not found.`);
   }
 
   const routeDocument = routeSnapshot.data() as FirestoreRouteJSON;
+  if (isRouteFromSourceService(routeDocument, destinationServiceName)) {
+    throw new RouteSendItemError(
+      'SOURCE_SERVICE_BLOCKED',
+      `Routes imported from ${destinationServiceName} are already there and cannot be sent back to ${destinationServiceName}.`,
+    );
+  }
   const sourceFile = getPrimaryOriginalRouteFile(routeDocument);
   if (!sourceFile) {
     throw new RouteSendItemError('NO_ORIGINAL_FILES', 'Saved route is missing its original source file.');
@@ -392,7 +412,7 @@ function buildRouteSendFailureResult(
     return {
       routeId,
       destinationServiceName,
-      status: error.reason === 'NO_ORIGINAL_FILES' ? 'skipped' : 'failure',
+      status: error.reason === 'NO_ORIGINAL_FILES' || error.reason === 'SOURCE_SERVICE_BLOCKED' ? 'skipped' : 'failure',
       reason: error.reason,
       message: error.message,
     };
@@ -509,4 +529,32 @@ function isDestinationAuthRequiredError(error: unknown): error is HttpsError {
     ? error.code === 'unauthenticated'
     : (error as { code?: unknown } | null)?.code === 'unauthenticated'
       || (error as { code?: unknown } | null)?.code === 'functions/unauthenticated';
+}
+
+async function persistRouteDeliveryMetadataBestEffort(params: {
+  userID: string;
+  routeID: string;
+  destinationServiceName: ServiceNames;
+  providerRouteId?: string;
+}): Promise<void> {
+  try {
+    await setRouteDeliveryMetadata({
+      userID: params.userID,
+      routeID: params.routeID,
+      deliveryMetadata: {
+        serviceName: params.destinationServiceName,
+        status: 'success',
+        providerRouteId: params.providerRouteId || null,
+        deliveredAt: new Date(),
+        lastAttemptAt: new Date(),
+      },
+    });
+  } catch (error) {
+    logger.warn('[sendRoutesToService] Failed to persist route delivery metadata after successful send', {
+      userID: params.userID,
+      routeID: params.routeID,
+      destinationServiceName: params.destinationServiceName,
+      error,
+    });
+  }
 }

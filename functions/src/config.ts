@@ -25,6 +25,7 @@ interface CloudTasksConfig {
     projectId: string | undefined;
     location: string;
     workoutQueue: string;
+    routeSyncQueue: string;
     activitySyncQueue: string;
     sleepSyncQueue: string;
     sportsLibReparseQueue: string;
@@ -81,6 +82,7 @@ export const config: AppConfig = {
             projectId: process.env.GCLOUD_PROJECT || admin.instanceId().app.options.projectId,
             location: 'europe-west2',
             workoutQueue: 'processWorkoutTask',
+            routeSyncQueue: 'processRouteSyncTask',
             activitySyncQueue: 'processActivitySyncTask',
             sleepSyncQueue: 'processSleepSyncTask',
             sportsLibReparseQueue: 'processSportsLibReparseTask',

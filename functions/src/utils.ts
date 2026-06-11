@@ -485,6 +485,7 @@ export {
   getCloudTaskQueueDepth,
   getCloudTaskQueueDepthForQueue,
   enqueueActivitySyncTask,
+  enqueueRouteSyncTask,
   enqueueSleepSyncTask,
   enqueueWorkoutTask,
   resetCloudTaskQueueDepthCache,

@@ -32,6 +32,11 @@ import {
   RouteProcessingHttpStatusError as HttpStatusError,
   shouldDecompressPayloadForParsing,
 } from './route-processing';
+import {
+  buildManualRouteSourceMetadata,
+  buildRouteDocumentForWrite,
+  getRouteSourceMetadataRef,
+} from './route-persistence';
 
 class RouteQuotaReconciliationRequiredError extends Error {
   constructor(
@@ -442,6 +447,7 @@ async function writeRouteWithQuotaReservation(
   routeFile: AppRouteInterface,
   originalFileMetadata: OriginalRouteFileMetaData,
   uploadLimit: number | null,
+  sourceMetadata: ReturnType<typeof buildManualRouteSourceMetadata>,
   initialReconciliation: RouteQuotaReconciliation | null = null,
 ): Promise<RouteQuotaWriteResult> {
   const routeID = routeFile.getID();
@@ -453,12 +459,15 @@ async function writeRouteWithQuotaReservation(
   const routeRef = db.doc(`users/${userID}/routes/${routeID}`);
   const counterRef = db.doc(getRouteQuotaCounterPath(userID));
   const processingRef = db.doc(`users/${userID}/routes/${routeID}/metaData/processing`);
+  const sourceRef = getRouteSourceMetadataRef(db, userID, routeID);
   const initialRouteCount = await getInitialRouteCountForMissingOrInvalidCounter(userID, counterRef);
-  const routePayload: FirestoreRouteJSON = {
-    ...buildFirestoreRoutePayload(userID, routeFile),
-    originalFile: originalFileMetadata,
+  const routePayload: FirestoreRouteJSON = buildRouteDocumentForWrite({
+    routeId: routeID,
+    userID,
+    parsedPayload: buildFirestoreRoutePayload(userID, routeFile),
     originalFiles: [originalFileMetadata],
-  };
+    sourceMetadata,
+  });
 
   let reconciliation: RouteQuotaReconciliation | null = initialReconciliation;
   for (let attempt = 0; attempt < 5; attempt++) {
@@ -526,6 +535,7 @@ async function writeRouteWithQuotaReservation(
         if (!routeAlreadyExists) {
           transaction.set(routeRef, routePayload);
           transaction.set(processingRef, createRouteProcessingMetadataPayload(), { merge: true });
+          transaction.set(sourceRef, sourceMetadata, { merge: true });
         }
         transaction.set(counterRef, counterPayload, { merge: true });
 
@@ -653,6 +663,12 @@ export const uploadRoute = onRequest({
     };
 
     const originalFileMetadata = await uploadOriginalRouteFile(userID, routeID, originalFile);
+    const sourceMetadata = buildManualRouteSourceMetadata({
+      routeName: routeFile.name,
+      originalFile: originalFileMetadata,
+      importedAt: new Date(),
+      modifiedAt: routeFile.createdAt || null,
+    });
     let quotaWriteResult: RouteQuotaWriteResult;
     try {
       quotaWriteResult = await writeRouteWithQuotaReservation(
@@ -660,6 +676,7 @@ export const uploadRoute = onRequest({
         routeFile,
         originalFileMetadata,
         uploadLimit,
+        sourceMetadata,
         preflightReconciliation,
       );
     } catch (error) {

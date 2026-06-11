@@ -20,6 +20,11 @@ import {
 import { FirestoreRouteJSON } from '@shared/app-route.interface';
 import { resolveUnitAwareDisplayFromValue } from '@shared/unit-aware-display';
 import { buildSuuntoServiceConnectionViewModel, SuuntoServiceConnectionViewModel } from '../../helpers/suunto-service-connection.helper';
+import {
+    getRouteSourceSummaryLabel,
+    getRouteSyncedDestinationLabels,
+    isRouteFromService,
+} from '../../helpers/route-provenance.helper';
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { ConfirmationDialogComponent, ConfirmationDialogData } from '../confirmation-dialog/confirmation-dialog.component';
 import { SharedModule } from '../../modules/shared.module';
@@ -66,6 +71,8 @@ interface RoutePageRouteViewModel {
     routeCountLabel: string;
     pointCountLabel: string;
     waypointCountLabel: string | null;
+    provenanceSummary: string;
+    provenanceTitle: string;
     distance: RouteMetricCell;
     ascent: RouteMetricCell;
     descent: RouteMetricCell;
@@ -1144,7 +1151,8 @@ export class RoutesPageComponent implements OnInit {
 
     private canSendRouteToSuunto(route: FirestoreRouteJSON): boolean {
         return this.canManageRoute(route)
-            && this.routeService.getOriginalRouteFiles(route).length > 0;
+            && this.routeService.getOriginalRouteFiles(route).length > 0
+            && !isRouteFromService(route, ServiceNames.SuuntoApp);
     }
 
     private getSelectedVisibleRouteItems(): RoutePageRouteViewModel[] {
@@ -1257,6 +1265,9 @@ export class RoutesPageComponent implements OnInit {
         const routeCountLabel = `${routeCount} route${routeCount === 1 ? '' : 's'}`;
         const pointCountLabel = `${pointCount} point${pointCount === 1 ? '' : 's'}`;
         const waypointCountLabel = waypointCount > 0 ? `${waypointCount} waypoint${waypointCount === 1 ? '' : 's'}` : null;
+        const sourceLabel = getRouteSourceSummaryLabel(route);
+        const syncedDestinationLabels = getRouteSyncedDestinationLabels(route);
+        const provenanceSummary = [sourceLabel, ...syncedDestinationLabels].join(' · ');
         return {
             route,
             name: routeName,
@@ -1272,6 +1283,8 @@ export class RoutesPageComponent implements OnInit {
             routeCountLabel,
             pointCountLabel,
             waypointCountLabel,
+            provenanceSummary,
+            provenanceTitle: provenanceSummary,
             distance,
             ascent,
             descent,
@@ -1287,6 +1300,7 @@ export class RoutesPageComponent implements OnInit {
                 activityTypes,
                 originalFilename,
                 fileType,
+                provenanceSummary,
                 routeDate ? routeDate.toISOString() : '',
                 routeCountLabel,
                 pointCountLabel,

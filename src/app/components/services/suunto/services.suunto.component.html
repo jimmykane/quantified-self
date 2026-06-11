@@ -113,6 +113,17 @@
     <a
       href=""
       mat-tab-link
+      [active]="activeProviderTool === 'routes'"
+      (click)="$event.preventDefault(); selectProviderTool('routes')">
+      <span class="provider-tab-label">
+        <mat-icon>route</mat-icon>
+        <span>Route Sync</span>
+      </span>
+    </a>
+
+    <a
+      href=""
+      mat-tab-link
       [active]="activeProviderTool === 'uploads'"
       (click)="$event.preventDefault(); selectProviderTool('uploads')">
       <span class="provider-tab-label">
@@ -140,6 +151,64 @@
       } @else {
       <app-status-info type="info" title="Connect Account First">
         You need to connect your Suunto account before importing history.
+      </app-status-info>
+      }
+    </section>
+
+    <section
+      class="provider-tool-panel"
+      [hidden]="activeProviderTool !== 'routes'"
+      [class.locked-panel]="!hasProAccess"
+      (click)="!hasProAccess && triggerUpsell()">
+      @if (!hasProAccess) {
+      <div class="pro-required-inline">
+        <mat-icon>lock</mat-icon>
+        <span>Route sync is a Pro feature.</span>
+      </div>
+      } @else if (!isReconnectRequired && isConnectedToService()) {
+      <section class="tool-subsection">
+        <div class="tool-subsection-header">
+          <div class="tool-subsection-title">
+            <mat-icon>route</mat-icon>
+            <span>Suunto Route Import</span>
+          </div>
+          @if (didLastRouteImport) {
+          <span class="tool-subsection-meta">{{ didLastRouteImport | date:'short' }}</span>
+          }
+        </div>
+        <p class="description-text">
+          New and updated Suunto routes are imported automatically while your account stays connected. Manual catch-up queues every current Suunto route again so recently connected accounts can pull the existing library.
+        </p>
+        <p class="description-text">
+          Imported Suunto routes stay in your saved Routes list with their source marked as Suunto, and they are not eligible to be sent back to Suunto again.
+        </p>
+        @if (didLastRouteImport) {
+        <div class="tool-subsection-meta">
+          Last catch-up checked {{ totalRoutesFromLastRouteImportCount }} {{ totalRoutesFromLastRouteImportCount === 1 ? 'route' : 'routes' }}.
+          Queued {{ queuedRoutesFromLastRouteImportCount }}, skipped {{ skippedRoutesFromLastRouteImportCount }}, failed {{ failedRoutesFromLastRouteImportCount }}.
+        </div>
+        }
+        <div class="tool-actions">
+          <button mat-flat-button class="qs-mat-primary"
+            [disabled]="isQueueingRoutes"
+            (click)="queueRoutesFromSuunto($event)">
+            @if (isQueueingRoutes) {
+            <ng-container>
+              <mat-spinner diameter="20" class="qs-spinner-accent"></mat-spinner>
+              Queueing...
+            </ng-container>
+            } @else {
+            <ng-container>
+              <mat-icon>playlist_add</mat-icon>
+              Queue all current routes
+            </ng-container>
+            }
+          </button>
+        </div>
+      </section>
+      } @else {
+      <app-status-info type="info" title="Connect Account First">
+        You need to connect your Suunto account before importing routes.
       </app-status-info>
       }
     </section>

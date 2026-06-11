@@ -203,7 +203,15 @@
         </th>
         <td mat-cell *matCellDef="let item">
           <span class="route-name-cell">
-            <span class="route-title-cell" [matTooltip]="item.name" [attr.title]="item.name">{{ item.name }}</span>
+            <span class="route-name-stack">
+              <span class="route-title-cell" [matTooltip]="item.name" [attr.title]="item.name">{{ item.name }}</span>
+              <span
+                class="route-provenance-cell"
+                [matTooltip]="item.provenanceTitle"
+                [attr.title]="item.provenanceTitle">
+                {{ item.provenanceSummary }}
+              </span>
+            </span>
             <span class="route-file-type">{{ item.fileType }}</span>
           </span>
         </td>

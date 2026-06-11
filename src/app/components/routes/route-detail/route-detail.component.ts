@@ -36,6 +36,11 @@ import { AppUserService } from '../../../services/app.user.service';
 import { AppUserSettingsQueryService } from '../../../services/app.user-settings-query.service';
 import { LoggerService } from '../../../services/logger.service';
 import { normalizeRouteName } from '../../../helpers/route-name.helper';
+import {
+  getRouteSourceSummaryLabel,
+  getRouteSyncedDestinationLabels,
+  isRouteFromService,
+} from '../../../helpers/route-provenance.helper';
 import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../confirmation-dialog/confirmation-dialog.component';
 import { RouteChartComponent } from '../route-chart/route-chart.component';
 import { RouteMapComponent } from '../route-map/route-map.component';
@@ -97,6 +102,8 @@ export class RouteDetailComponent {
   readonly routeDate = computed(() => this.resolveRouteDate());
   readonly sourceFilename = computed(() => this.getSourceFilename());
   readonly sourceFileType = computed(() => this.getPrimaryRouteFileType(this.routeDocument()));
+  readonly sourceSummaryLabel = computed(() => getRouteSourceSummaryLabel(this.routeDocument()));
+  readonly syncedDestinationLabels = computed(() => getRouteSyncedDestinationLabels(this.routeDocument()));
   readonly activityType = computed(() => {
     const segments = this.segments();
     return segments[0]?.activityType || this.routeDocument()?.activityTypes?.[0] || 'Route';
@@ -158,7 +165,8 @@ export class RouteDetailComponent {
     const routeDocument = this.routeDocument();
     return !!routeDocument
       && this.canManageRoute()
-      && this.routeService.getOriginalRouteFiles(routeDocument).length > 0;
+      && this.routeService.getOriginalRouteFiles(routeDocument).length > 0
+      && !isRouteFromService(routeDocument, ServiceNames.SuuntoApp);
   });
   readonly canReprocessRoute = computed(() => {
     const routeDocument = this.routeDocument();

@@ -173,6 +173,42 @@ export async function enqueueActivitySyncTask(
 }
 
 /**
+ * Enqueue a route sync processing task to Cloud Tasks.
+ * Uses deterministic task names for deduplication.
+ */
+export async function enqueueRouteSyncTask(
+    queueItemId: string,
+    dateCreated: number,
+    scheduleDelaySeconds?: number,
+): Promise<boolean> {
+    const client = getCloudTasksClient();
+    const { projectId, location, routeSyncQueue, serviceAccountEmail } = config.cloudtasks;
+
+    if (!projectId) {
+        throw new Error('Project ID is not defined in config');
+    }
+
+    const url = `https://${location}-${projectId}.cloudfunctions.net/processRouteSyncTask`;
+    const parent = client.queuePath(projectId, location, routeSyncQueue);
+
+    const safeQueueItemId = `${queueItemId}`.replace(/[^a-zA-Z0-9-_]/g, '-');
+    const safeDateCreated = Number.isFinite(dateCreated) ? Math.max(0, Math.floor(dateCreated)) : 0;
+    const taskName = `${parent}/tasks/route-sync-${safeQueueItemId}-${safeDateCreated}`;
+    const payload = { data: { queueItemId } };
+
+    return enqueueTaskWithRetry({
+        parent,
+        taskName,
+        payload,
+        serviceAccountEmail,
+        url,
+        scheduleDelaySeconds,
+        alreadyExistsLogMessage: `[RouteSyncDispatcher] Task already exists for queue item ${queueItemId}, skipping`,
+        failedLogPrefix: `[RouteSyncDispatcher] Failed to enqueue route sync task for ${queueItemId}:`,
+    });
+}
+
+/**
  * Enqueue a sleep sync processing task to Cloud Tasks.
  * Uses deterministic task names for deduplication.
  */

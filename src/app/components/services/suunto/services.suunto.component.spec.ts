@@ -37,6 +37,12 @@ describe('ServicesSuuntoComponent', () => {
         mockUserService = {
             isAdmin: vi.fn(),
             requestAndSetCurrentUserSuuntoAppAccessToken: vi.fn(),
+            addSuuntoRoutesToQueueForCurrentUser: vi.fn().mockResolvedValue({
+                queuedCount: 2,
+                skippedCount: 1,
+                failureCount: 0,
+                totalCount: 3,
+            }),
             getCurrentUserServiceTokenAndRedirectURI: vi.fn(),
             deauthorizeService: vi.fn().mockResolvedValue(undefined),
         };
@@ -114,7 +120,7 @@ describe('ServicesSuuntoComponent', () => {
         expect(providerToolTabs.tagName.toLowerCase()).toBe('nav');
         expect(fixture.nativeElement.querySelector('mat-tab-group')).toBeFalsy();
         expect(providerToolPanel).toBeTruthy();
-        expect(providerTabs.length).toBe(2);
+        expect(providerTabs.length).toBe(3);
         expect(fixture.nativeElement.querySelector('.provider-tools-panel .service-connection-status')).toBeFalsy();
     });
 
@@ -126,7 +132,7 @@ describe('ServicesSuuntoComponent', () => {
         const tabs = fixture.nativeElement.querySelectorAll('a[mat-tab-link]');
         const panels = fixture.nativeElement.querySelectorAll('.provider-tool-panel');
 
-        expect(panels.length).toBe(2);
+        expect(panels.length).toBe(3);
         expect(panels[0].hidden).toBe(false);
         expect(panels[1].hidden).toBe(true);
         expect(getComputedStyle(panels[1]).display).toBe('none');
@@ -134,11 +140,19 @@ describe('ServicesSuuntoComponent', () => {
         tabs[1].dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
         fixture.detectChanges();
 
-        expect(component.activeProviderTool).toBe('uploads');
+        expect(component.activeProviderTool).toBe('routes');
         expect(panels[0].hidden).toBe(true);
         expect(getComputedStyle(panels[0]).display).toBe('none');
         expect(panels[1].hidden).toBe(false);
-        expect(panels[1].textContent).toContain('Upload FIT Activity');
+        expect(panels[1].textContent).toContain('Suunto Route Import');
+
+        tabs[2].dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+        fixture.detectChanges();
+
+        expect(component.activeProviderTool).toBe('uploads');
+        expect(panels[1].hidden).toBe(true);
+        expect(panels[2].hidden).toBe(false);
+        expect(panels[2].textContent).toContain('Upload FIT Activity');
     });
 
     it('renders disconnect beside the connected account details', () => {
@@ -261,6 +275,29 @@ describe('ServicesSuuntoComponent', () => {
             expect(fixture.nativeElement.querySelector('app-upload-route-to-service')).toBeFalsy();
             expect(content).toContain('before uploading activities');
             expect(content).toContain('before uploading routes');
+        });
+    });
+
+    describe('Route Sync Tab', () => {
+        it('should render route sync controls when pro user is connected', () => {
+            component.hasProAccess = true;
+            component.serviceTokens = [{ accessToken: 'token', userName: 'suunto-user' } as any];
+            component.activeProviderTool = 'routes';
+            fixture.detectChanges();
+
+            const content = fixture.nativeElement.textContent;
+            expect(content).toContain('Suunto Route Import');
+            expect(content).toContain('Queue all current routes');
+        });
+
+        it('queues Suunto routes from the services page', async () => {
+            component.hasProAccess = true;
+            component.serviceTokens = [{ accessToken: 'token', userName: 'suunto-user' } as any];
+
+            await component.queueRoutesFromSuunto(new MouseEvent('click'));
+
+            expect(mockUserService.addSuuntoRoutesToQueueForCurrentUser).toHaveBeenCalled();
+            expect(mockSnackBar.open).toHaveBeenCalledWith('Queued 2 routes. Skipped 1.', undefined, { duration: 3500 });
         });
     });
 

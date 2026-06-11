@@ -21,6 +21,12 @@ import {
   getUserDeletionGuardStateInTransaction,
   UserDeletionGuardReadError,
 } from '../shared/user-deletion-guard';
+import {
+  buildManualRouteSourceMetadata,
+  buildRouteDocumentForWrite,
+  getRouteSourceMetadataRef,
+  toRouteSourceMetadata,
+} from './route-persistence';
 
 interface ReprocessRouteRequest {
   routeId: string;
@@ -35,27 +41,6 @@ interface ReprocessRouteResult {
   waypointCount: number;
   pointCount: number;
 }
-
-const SERVER_OWNED_ROUTE_FIELDS = [
-  'id',
-  'userID',
-  'originalFile',
-  'originalFiles',
-  'srcFileType',
-  'sourceFileType',
-  'createdAt',
-  'importedAt',
-  'updatedAt',
-  'creator',
-  'stats',
-  'routes',
-  'routeCount',
-  'waypointCount',
-  'pointCount',
-  'activityTypes',
-  'streamTypes',
-  'bounds',
-] as const;
 
 export const reprocessRoute = onCall({
   region: FUNCTIONS_MANIFEST.reprocessRoute.region,
@@ -132,6 +117,13 @@ export async function reprocessRouteFromOriginalFile(
   const routeCount = parsedPayload.routeCount;
   const waypointCount = parsedPayload.waypointCount;
   const pointCount = parsedPayload.pointCount;
+  const sourceMetadata = toRouteSourceMetadata(routeDocument.sourceSummary)
+    || buildManualRouteSourceMetadata({
+      routeName: routeDocument.name || parsedPayload.name,
+      originalFile: sourceFile,
+      importedAt: routeDocument.importedAt || parsedPayload.importedAt || new Date(),
+      modifiedAt: routeDocument.createdAt || parsedPayload.createdAt || null,
+    });
 
   await db.runTransaction(async (transaction) => {
     await assertRouteReprocessUserActiveInTransaction(db, transaction, userID, 'route_reprocess_write');
@@ -142,18 +134,24 @@ export async function reprocessRouteFromOriginalFile(
     }
 
     const latestRouteDocument = latestSnapshot.data() as FirestoreRouteJSON;
-    const finalPayload = buildReprocessedRoutePayload(
+    const finalPayload = buildRouteDocumentForWrite({
       routeId,
       userID,
       parsedPayload,
-      latestRouteDocument,
-      sourceFile,
-    );
+      existingRouteDocument: latestRouteDocument,
+      originalFiles: getResolvedOriginalFiles(latestRouteDocument, sourceFile),
+      sourceMetadata,
+    });
 
     transaction.set(routeRef, finalPayload);
     transaction.set(
       db.doc(`users/${userID}/routes/${routeId}/metaData/processing`),
       createRouteProcessingMetadataPayload(),
+      { merge: true },
+    );
+    transaction.set(
+      getRouteSourceMetadataRef(db, userID, routeId),
+      sourceMetadata,
       { merge: true },
     );
   });
@@ -211,32 +209,15 @@ function getExistingRouteSegmentIDs(routeDocument: FirestoreRouteJSON): Array<st
     : [];
 }
 
-function buildReprocessedRoutePayload(
-  routeId: string,
-  userID: string,
-  parsedPayload: FirestoreRouteJSON,
-  latestRouteDocument: FirestoreRouteJSON,
-  parsedSourceFile: OriginalRouteFileMetaData,
-): FirestoreRouteJSON {
-  const originalFiles = Array.isArray(latestRouteDocument.originalFiles) && latestRouteDocument.originalFiles.length > 0
-    ? latestRouteDocument.originalFiles
-    : [latestRouteDocument.originalFile || parsedSourceFile];
-  const originalFile = latestRouteDocument.originalFile || originalFiles[0] || parsedSourceFile;
-  const preservedName = typeof latestRouteDocument.name === 'string' && latestRouteDocument.name.trim()
-    ? latestRouteDocument.name
-    : parsedPayload.name;
+function getResolvedOriginalFiles(
+  routeDocument: FirestoreRouteJSON,
+  fallbackSourceFile: OriginalRouteFileMetaData,
+): OriginalRouteFileMetaData[] {
+  if (Array.isArray(routeDocument.originalFiles) && routeDocument.originalFiles.length > 0) {
+    return routeDocument.originalFiles;
+  }
 
-  return {
-    ...getUserOwnedRouteFields(latestRouteDocument),
-    ...parsedPayload,
-    id: routeId,
-    userID,
-    name: preservedName,
-    originalFile,
-    originalFiles,
-    importedAt: latestRouteDocument.importedAt || parsedPayload.importedAt,
-    updatedAt: new Date(),
-  };
+  return [routeDocument.originalFile || fallbackSourceFile];
 }
 
 async function assertRouteReprocessUserActive(
@@ -297,12 +278,4 @@ function buildAccountDeletionError(): HttpsError {
 function isUserDeletionGuardReadError(error: unknown): error is UserDeletionGuardReadError {
   return error instanceof UserDeletionGuardReadError
     || (error instanceof Error && error.name === 'UserDeletionGuardReadError');
-}
-
-function getUserOwnedRouteFields(routeDocument: FirestoreRouteJSON): Record<string, unknown> {
-  const userOwnedFields: Record<string, unknown> = { ...routeDocument };
-  for (const field of SERVER_OWNED_ROUTE_FIELDS) {
-    delete userOwnedFields[field];
-  }
-  return userOwnedFields;
 }

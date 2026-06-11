@@ -265,6 +265,7 @@ describe('RoutesPageComponent', () => {
             routeCountLabel: '1 route',
             pointCountLabel: '2 points',
             waypointCountLabel: null,
+            provenanceSummary: 'Saved route',
             distance: {
                 label: '10.00 Km',
                 sortValue: 10000,
@@ -297,6 +298,23 @@ describe('RoutesPageComponent', () => {
         });
         expect(routes[0].routeDate?.toISOString()).toBe('2026-01-02T00:00:00.000Z');
         expect(component.trackByRouteID(0, routes[0])).toBe('route-1');
+    });
+
+    it('marks Suunto-synced routes as non-sendable and exposes provenance text', async () => {
+        routeServiceMock.getRoutes.mockReturnValueOnce(of([{
+            ...route,
+            sourceSummary: {
+                sourceType: 'service_sync',
+                sourceServiceName: ServiceNames.SuuntoApp,
+            },
+            syncedDestinationServiceNames: [ServiceNames.GarminAPI],
+        }]));
+        await component.ngOnInit();
+
+        const routes = await firstValueFrom(component.routes$!);
+
+        expect(routes[0].canSendToSuunto).toBe(false);
+        expect(routes[0].provenanceSummary).toBe('Synced from Suunto · Sent to Garmin');
     });
 
     it('reads persisted route-file aggregate stats for table metrics', async () => {
