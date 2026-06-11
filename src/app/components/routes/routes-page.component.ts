@@ -1,5 +1,6 @@
-import { Component, OnInit, computed, inject, signal } from '@angular/core';
+import { Component, DestroyRef, OnInit, computed, inject, signal } from '@angular/core';
 import { SelectionModel } from '@angular/cdk/collections';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { firstValueFrom, BehaviorSubject, combineLatest, distinctUntilChanged, map, Observable, shareReplay, switchMap } from 'rxjs';
 import { MatDialog } from '@angular/material/dialog';
 import { Router } from '@angular/router';
@@ -13,10 +14,12 @@ import {
     DataDistance,
     DataGradeMax,
     DataGradeMin,
+    ServiceNames,
     User,
 } from '@sports-alliance/sports-lib';
 import { FirestoreRouteJSON } from '@shared/app-route.interface';
 import { resolveUnitAwareDisplayFromValue } from '@shared/unit-aware-display';
+import { buildSuuntoServiceConnectionViewModel, SuuntoServiceConnectionViewModel } from '../../helpers/suunto-service-connection.helper';
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { ConfirmationDialogComponent, ConfirmationDialogData } from '../confirmation-dialog/confirmation-dialog.component';
 import { SharedModule } from '../../modules/shared.module';
@@ -32,11 +35,18 @@ import {
     RouteReprocessProgress,
 } from '../../services/app.route-reprocess.service';
 import {
+    getActionableRouteSendResponseMessage,
+    AppRouteSendService,
+    getRouteSendErrorMessage,
+    getRouteSendResponseMessage,
+} from '../../services/app.route-send.service';
+import {
     AppRouteService,
     isRouteListServerSortColumn,
     ROUTE_LIST_DEFAULT_SORT,
     RouteListSort,
 } from '../../services/app.route.service';
+import { AppUserService } from '../../services/app.user.service';
 import { LoggerService } from '../../services/logger.service';
 import { UploadRoutesComponent } from '../upload/upload-routes/upload-routes.component';
 
@@ -63,6 +73,7 @@ interface RoutePageRouteViewModel {
     canReprocess: boolean;
     canExportGPX: boolean;
     canDownloadOriginals: boolean;
+    canSendToSuunto: boolean;
     canDelete: boolean;
     filterText: string;
 }
@@ -115,7 +126,9 @@ interface RouteFilterOption {
     styleUrls: ['./routes-page.component.scss'],
 })
 export class RoutesPageComponent implements OnInit {
+    private destroyRef = inject(DestroyRef);
     private authService = inject(AppAuthService);
+    private userService = inject(AppUserService);
     private routeService = inject(AppRouteService);
     private dialog = inject(MatDialog);
     private snackBar = inject(MatSnackBar);
@@ -125,6 +138,7 @@ export class RoutesPageComponent implements OnInit {
     private processingService = inject(AppProcessingService);
     private routeGPXExportService = inject(AppRouteGPXExportService);
     private routeReprocessService = inject(AppRouteReprocessService);
+    private routeSendService = inject(AppRouteSendService);
     private logger = inject(LoggerService);
     private router = inject(Router);
     private readonly routeSortSubject = new BehaviorSubject<RouteSortState>({
@@ -143,6 +157,7 @@ export class RoutesPageComponent implements OnInit {
     readonly deletingRouteID = signal<string | null>(null);
     readonly downloadingRouteID = signal<string | null>(null);
     readonly exportingRouteID = signal<string | null>(null);
+    readonly sendingToServiceRouteID = signal<string | null>(null);
     readonly bulkActionInProgress = signal(false);
     readonly reprocessingRouteID = signal<string | null>(null);
     readonly routeCount = signal<number | null>(null);
@@ -156,9 +171,27 @@ export class RoutesPageComponent implements OnInit {
     readonly routeSortActive = signal<RouteSortColumn>('date');
     readonly routeSortDirection = signal<SortDirection>('desc');
     readonly selectedRouteIDs = signal<string[]>([]);
+    readonly suuntoConnectionView = signal<SuuntoServiceConnectionViewModel>(buildSuuntoServiceConnectionViewModel({
+        hasToken: false,
+        serviceMeta: null,
+    }));
+    readonly canSendRoutesToSuunto = computed(() => {
+        const connectionView = this.suuntoConnectionView();
+        return this.userService.hasProAccessSignal()
+            && connectionView.connected
+            && !connectionView.reconnectRequired;
+    });
     readonly routeFilterActive = computed(() => this.isRouteFilterActive());
     readonly selectedRouteCount = computed(() => this.selectedRouteIDs().length);
     readonly selectedRouteIDSet = computed(() => new Set(this.selectedRouteIDs()));
+    readonly selectedSendableRouteCount = computed(() => {
+        const selectedIDs = this.selectedRouteIDSet();
+        return this.visibleRouteViewModels().filter(item => (
+            !!item.route.id
+            && selectedIDs.has(item.route.id)
+            && item.canSendToSuunto
+        )).length;
+    });
     readonly allVisibleRoutesSelected = computed(() => {
         const visibleRoutes = this.visibleRouteViewModels();
         const selectedIDs = this.selectedRouteIDSet();
@@ -213,6 +246,10 @@ export class RoutesPageComponent implements OnInit {
         const user = await this.authService.getUser();
         this.user.set(user);
         if (user) {
+            this.userService.watchSuuntoServiceConnectionView(user).pipe(
+                takeUntilDestroyed(this.destroyRef),
+            ).subscribe(connectionView => this.suuntoConnectionView.set(connectionView));
+
             const routeDocuments$ = this.routeSortSubject.pipe(
                 map(routeSort => this.toRouteListSort(routeSort)),
                 distinctUntilChanged((first, second) => (
@@ -366,6 +403,7 @@ export class RoutesPageComponent implements OnInit {
             || this.exportingRouteID() === routeID
             || this.downloadingRouteID() === routeID
             || this.reprocessingRouteID() === routeID
+            || this.sendingToServiceRouteID() === routeID
             || !this.canManageRoute(route)
         ) {
             return;
@@ -416,6 +454,7 @@ export class RoutesPageComponent implements OnInit {
             || this.exportingRouteID() === routeID
             || this.deletingRouteID() === routeID
             || this.reprocessingRouteID() === routeID
+            || this.sendingToServiceRouteID() === routeID
             || !this.canManageRoute(route)
         ) {
             return;
@@ -493,6 +532,7 @@ export class RoutesPageComponent implements OnInit {
             || this.deletingRouteID() === routeID
             || this.downloadingRouteID() === routeID
             || this.reprocessingRouteID() === routeID
+            || this.sendingToServiceRouteID() === routeID
             || !this.canManageRoute(route)
         ) {
             return;
@@ -539,9 +579,60 @@ export class RoutesPageComponent implements OnInit {
         }
     }
 
+    async sendRouteToSuunto(route: FirestoreRouteJSON, source: 'routes_list_row' | 'routes_list_bulk' = 'routes_list_row'): Promise<void> {
+        const routeID = route.id;
+        if (
+            !routeID
+            || this.bulkActionInProgress()
+            || this.sendingToServiceRouteID() !== null
+            || this.exportingRouteID() === routeID
+            || this.deletingRouteID() === routeID
+            || this.downloadingRouteID() === routeID
+            || this.reprocessingRouteID() === routeID
+            || !this.canSendRoutesToSuunto()
+            || !this.canSendRouteToSuunto(route)
+        ) {
+            return;
+        }
+
+        this.sendingToServiceRouteID.set(routeID);
+        this.snackBar.open('Sending route to Suunto...', undefined, { duration: 2000 });
+        try {
+            const result = await this.routeSendService.sendRoutesToService([routeID], ServiceNames.SuuntoApp);
+            const status = result.successCount > 0 ? 'success' : 'failure';
+            this.analyticsService.logSavedRouteAction('send_service_route', {
+                status,
+                routeCount: 1,
+                failedCount: result.failureCount,
+                skippedCount: result.skippedCount,
+                fileType: this.getPrimaryRouteFileType(route),
+                source,
+                destinationService: ServiceNames.SuuntoApp,
+            });
+
+            this.snackBar.open(
+                result.successCount > 0 ? 'Route sent to Suunto.' : getRouteSendResponseMessage(result),
+                undefined,
+                { duration: result.successCount > 0 ? 2500 : 3500 },
+            );
+        } catch (error) {
+            this.analyticsService.logSavedRouteAction('send_service_route', {
+                status: 'failure',
+                routeCount: 1,
+                fileType: this.getPrimaryRouteFileType(route),
+                source,
+                destinationService: ServiceNames.SuuntoApp,
+            });
+            this.logger.error('[RoutesPageComponent] Failed to send route to Suunto', { routeID }, error);
+            this.snackBar.open(getRouteSendErrorMessage(error), undefined, { duration: 4000 });
+        } finally {
+            this.sendingToServiceRouteID.set(null);
+        }
+    }
+
     async exportSelectedRoutesAsGPX(): Promise<void> {
         const selectedRoutes = this.getSelectedVisibleRouteItems();
-        if (selectedRoutes.length === 0 || this.bulkActionInProgress()) {
+        if (selectedRoutes.length === 0 || this.bulkActionInProgress() || this.sendingToServiceRouteID() !== null) {
             return;
         }
 
@@ -663,9 +754,103 @@ export class RoutesPageComponent implements OnInit {
         }
     }
 
+    async sendSelectedRoutesToSuunto(): Promise<void> {
+        const selectedRoutes = this.getSelectedVisibleRouteItems();
+        const sendableRoutes = selectedRoutes.filter(item => item.canSendToSuunto);
+        if (
+            sendableRoutes.length === 0
+            || this.bulkActionInProgress()
+            || this.sendingToServiceRouteID() !== null
+            || !this.canSendRoutesToSuunto()
+        ) {
+            return;
+        }
+
+        this.bulkActionInProgress.set(true);
+        const jobId = this.processingService.addJob('process', 'Sending routes to Suunto...');
+        this.processingService.updateJob(jobId, {
+            status: 'processing',
+            progress: 10,
+            details: `${sendableRoutes.length} ${sendableRoutes.length === 1 ? 'route' : 'routes'} ready`,
+        });
+
+        try {
+            const skippedBeforeSendCount = selectedRoutes.length - sendableRoutes.length;
+            const routeIDs = sendableRoutes
+                .map(item => item.route.id)
+                .filter((routeID): routeID is string => !!routeID);
+            const result = await this.routeSendService.sendRoutesToService(routeIDs, ServiceNames.SuuntoApp, {
+                onProgress: progress => {
+                    this.processingService.updateJob(jobId, {
+                        status: 'processing',
+                        progress: 10 + Math.round((progress.processedRouteCount / progress.routeCount) * 80),
+                        details: `Processed ${progress.processedRouteCount} of ${progress.routeCount}`,
+                    });
+                },
+            });
+
+            const successfulRouteIDs = result.results
+                .filter(item => item.status === 'success')
+                .map(item => item.routeId);
+            this.routeSelection.deselect(...successfulRouteIDs);
+            this.syncSelectedRouteIDs();
+
+            const totalSkippedCount = result.skippedCount + skippedBeforeSendCount;
+            if (result.successCount === 0) {
+                this.processingService.failJob(jobId, 'No routes sent to Suunto');
+                this.analyticsService.logSavedRouteAction('send_service_route', {
+                    status: 'failure',
+                    routeCount: selectedRoutes.length,
+                    failedCount: result.failureCount,
+                    skippedCount: totalSkippedCount,
+                    source: 'routes_list_bulk',
+                    destinationService: ServiceNames.SuuntoApp,
+                });
+                this.snackBar.open(getRouteSendResponseMessage(result), undefined, { duration: 4000 });
+                return;
+            }
+
+            const status = result.status === 'success' && totalSkippedCount === 0 ? 'success' : 'partial_success';
+            const guidanceMessage = status === 'partial_success'
+                ? getActionableRouteSendResponseMessage(result)
+                : null;
+            this.processingService.completeJob(
+                jobId,
+                `Sent ${result.successCount} ${result.successCount === 1 ? 'route' : 'routes'} to Suunto`,
+            );
+            this.analyticsService.logSavedRouteAction('send_service_route', {
+                status,
+                routeCount: selectedRoutes.length,
+                failedCount: result.failureCount,
+                skippedCount: totalSkippedCount,
+                source: 'routes_list_bulk',
+                destinationService: ServiceNames.SuuntoApp,
+            });
+            this.snackBar.open(
+                status === 'partial_success'
+                    ? this.getBulkRouteSendSummaryMessage(result.successCount, result.failureCount, totalSkippedCount, guidanceMessage)
+                    : `Sent ${result.successCount} ${result.successCount === 1 ? 'route' : 'routes'} to Suunto.`,
+                undefined,
+                { duration: status === 'partial_success' ? 4000 : 2500 },
+            );
+        } catch (error) {
+            this.processingService.failJob(jobId, 'Route send failed');
+            this.analyticsService.logSavedRouteAction('send_service_route', {
+                status: 'failure',
+                routeCount: selectedRoutes.length,
+                source: 'routes_list_bulk',
+                destinationService: ServiceNames.SuuntoApp,
+            });
+            this.logger.error('[RoutesPageComponent] Failed to send selected routes to Suunto', error);
+            this.snackBar.open(getRouteSendErrorMessage(error), undefined, { duration: 4000 });
+        } finally {
+            this.bulkActionInProgress.set(false);
+        }
+    }
+
     async downloadSelectedRouteOriginals(): Promise<void> {
         const selectedRoutes = this.getSelectedVisibleRouteItems();
-        if (selectedRoutes.length === 0 || this.bulkActionInProgress()) {
+        if (selectedRoutes.length === 0 || this.bulkActionInProgress() || this.sendingToServiceRouteID() !== null) {
             return;
         }
 
@@ -801,7 +986,7 @@ export class RoutesPageComponent implements OnInit {
     async confirmDeleteSelectedRoutes(): Promise<void> {
         const selectedRoutes = this.getSelectedVisibleRouteItems();
         const user = this.user();
-        if (!user || selectedRoutes.length === 0 || this.bulkActionInProgress()) {
+        if (!user || selectedRoutes.length === 0 || this.bulkActionInProgress() || this.sendingToServiceRouteID() !== null) {
             return;
         }
 
@@ -905,6 +1090,7 @@ export class RoutesPageComponent implements OnInit {
             || this.exportingRouteID() === routeID
             || this.deletingRouteID() === routeID
             || this.downloadingRouteID() === routeID
+            || this.sendingToServiceRouteID() === routeID
             || !this.canManageRoute(route)
         ) {
             return;
@@ -992,6 +1178,11 @@ export class RoutesPageComponent implements OnInit {
         return !!user?.uid && !!route.userID && user.uid === route.userID;
     }
 
+    private canSendRouteToSuunto(route: FirestoreRouteJSON): boolean {
+        return this.canManageRoute(route)
+            && this.routeService.getOriginalRouteFiles(route).length > 0;
+    }
+
     private getSelectedVisibleRouteItems(): RoutePageRouteViewModel[] {
         const selectedIDs = new Set(this.selectedRouteIDs());
         return this.visibleRouteViewModels().filter(item => (
@@ -999,6 +1190,26 @@ export class RoutesPageComponent implements OnInit {
             && selectedIDs.has(item.route.id)
             && this.canManageRoute(item.route)
         ));
+    }
+
+    private getBulkRouteSendSummaryMessage(
+        successCount: number,
+        failureCount: number,
+        skippedCount: number,
+        guidanceMessage: string | null,
+    ): string {
+        const routeLabel = successCount === 1 ? 'route' : 'routes';
+        const messageParts = [`Sent ${successCount} ${routeLabel} to Suunto.`];
+        if (failureCount > 0) {
+            messageParts.push(`Failed ${failureCount}.`);
+        }
+        if (skippedCount > 0) {
+            messageParts.push(`Skipped ${skippedCount}.`);
+        }
+        if (guidanceMessage) {
+            messageParts.push(guidanceMessage);
+        }
+        return messageParts.join(' ');
     }
 
     private reconcileSelectionWithVisibleRoutes(visibleRoutes: RoutePageRouteViewModel[]): void {
@@ -1088,6 +1299,7 @@ export class RoutesPageComponent implements OnInit {
             canReprocess: this.canManageRoute(route) && originalFiles.length > 0,
             canExportGPX: this.canManageRoute(route) && originalFiles.length > 0,
             canDownloadOriginals: this.canManageRoute(route) && originalFiles.length > 0,
+            canSendToSuunto: this.canSendRouteToSuunto(route),
             canDelete: this.canManageRoute(route),
             filterText: [
                 routeName,

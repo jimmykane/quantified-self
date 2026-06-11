@@ -250,6 +250,12 @@ describe('AppAnalyticsService', () => {
             zipped: true,
             source: 'routes_list_bulk',
         });
+        service.logSavedRouteAction('send_service_route', {
+            status: 'success',
+            routeCount: 1,
+            destinationService: 'SuuntoApp',
+            source: 'routes_list_row',
+        });
         service.logSavedRouteAction('sort', {
             sortColumn: 'distance',
             sortDirection: 'asc',
@@ -280,6 +286,13 @@ describe('AppAnalyticsService', () => {
             file_type: 'gpx',
             zipped: true,
             source: 'routes_list_bulk',
+        });
+        expect(logEvent).toHaveBeenCalledWith(expect.anything(), 'saved_route_action', {
+            action: 'send_service_route',
+            status: 'success',
+            route_count: 1,
+            source: 'routes_list_row',
+            destination_service: 'SuuntoApp',
         });
         expect(logEvent).toHaveBeenCalledWith(expect.anything(), 'saved_route_action', {
             action: 'sort',

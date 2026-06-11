@@ -66,7 +66,7 @@ export type RouteUploadErrorCategory =
     | 'server'
     | 'unknown'
     | 'unsupported_format';
-export type SavedRouteAction = 'view' | 'filter' | 'sort' | 'open_details' | 'rename' | 'download' | 'export_gpx' | 'delete' | 'reprocess';
+export type SavedRouteAction = 'view' | 'filter' | 'sort' | 'open_details' | 'rename' | 'download' | 'export_gpx' | 'send_service_route' | 'delete' | 'reprocess';
 export type SavedRouteActionStatus = 'applied' | 'cleared' | 'success' | 'partial_success' | 'failure' | 'missing_file';
 export type SavedRouteActionSource = 'route_detail' | 'routes_list_row' | 'routes_list_bulk';
 export type SavedRouteSortColumn =
@@ -137,6 +137,7 @@ export interface SavedRouteActionAnalytics {
     fileType?: RouteFileType | string;
     zipped?: boolean;
     source?: SavedRouteActionSource;
+    destinationService?: string;
     sortColumn?: SavedRouteSortColumn;
     sortDirection?: 'asc' | 'desc';
     filterActive?: boolean;
@@ -365,6 +366,7 @@ export class AppAnalyticsService {
             file_type: params.fileType,
             zipped: params.zipped,
             source: params.source,
+            destination_service: params.destinationService,
             sort_column: params.sortColumn,
             sort_direction: params.sortDirection,
             filter_active: params.filterActive,

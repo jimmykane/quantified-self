@@ -8,6 +8,7 @@ import { firstValueFrom, of } from 'rxjs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
+import { ServiceNames } from '@sports-alliance/sports-lib';
 
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
@@ -16,7 +17,9 @@ import { AppHapticsService } from '../../services/app.haptics.service';
 import { AppProcessingService } from '../../services/app.processing.service';
 import { AppRouteGPXExportService } from '../../services/app.route-gpx-export.service';
 import { AppRouteReprocessService, RouteReprocessError } from '../../services/app.route-reprocess.service';
+import { AppRouteSendService } from '../../services/app.route-send.service';
 import { AppRouteService } from '../../services/app.route.service';
+import { AppUserService } from '../../services/app.user.service';
 import { LoggerService } from '../../services/logger.service';
 import { RoutesPageComponent } from './routes-page.component';
 import { FirestoreRouteJSON } from '@shared/app-route.interface';
@@ -34,6 +37,8 @@ describe('RoutesPageComponent', () => {
     let processingServiceMock: any;
     let routeGPXExportServiceMock: any;
     let routeReprocessServiceMock: any;
+    let routeSendServiceMock: any;
+    let userServiceMock: any;
     let loggerMock: any;
     let routerMock: any;
 
@@ -147,6 +152,36 @@ describe('RoutesPageComponent', () => {
                 pointCount: 4,
             }),
         };
+        routeSendServiceMock = {
+            sendRoutesToService: vi.fn().mockResolvedValue({
+                destinationServiceName: ServiceNames.SuuntoApp,
+                status: 'success',
+                routeCount: 1,
+                successCount: 1,
+                failureCount: 0,
+                skippedCount: 0,
+                results: [{
+                    routeId: 'route-1',
+                    destinationServiceName: ServiceNames.SuuntoApp,
+                    status: 'success',
+                }],
+            }),
+        };
+        userServiceMock = {
+            hasProAccessSignal: vi.fn().mockReturnValue(true),
+            watchSuuntoServiceConnectionView: vi.fn().mockReturnValue(of({
+                connected: true,
+                reconnectRequired: false,
+                showDetails: true,
+                description: 'Connected',
+                failureMessage: null,
+                statusLabelOverride: null,
+                statusIconOverride: null,
+                statusTone: 'default',
+                connectButtonLabel: 'Connect',
+                reconnectPromptSource: 'test',
+            })),
+        };
         loggerMock = {
             error: vi.fn(),
         };
@@ -167,6 +202,8 @@ describe('RoutesPageComponent', () => {
                 { provide: AppProcessingService, useValue: processingServiceMock },
                 { provide: AppRouteGPXExportService, useValue: routeGPXExportServiceMock },
                 { provide: AppRouteReprocessService, useValue: routeReprocessServiceMock },
+                { provide: AppRouteSendService, useValue: routeSendServiceMock },
+                { provide: AppUserService, useValue: userServiceMock },
                 { provide: LoggerService, useValue: loggerMock },
                 { provide: Router, useValue: routerMock },
             ],
@@ -490,6 +527,8 @@ describe('RoutesPageComponent', () => {
         expect(template).toContain('Export GPX');
         expect(template).toContain('(click)="exportRouteAsGPX(item.route)"');
         expect(template).toContain('(click)="downloadRouteOriginals(item.route)"');
+        expect(template).toContain('(click)="sendRouteToSuunto(item.route)"');
+        expect(template).toContain('(click)="$event.preventDefault(); $event.stopPropagation(); sendSelectedRoutesToSuunto()"');
         expect(template).toContain('(click)="confirmDeleteRoute(item.route)"');
         expect(template).toContain('(click)="reprocessRouteFromOriginalFile(item.route)"');
         expect(template).toContain('[matMenuTriggerFor]="routeRowActionsMenu"');
@@ -497,6 +536,7 @@ describe('RoutesPageComponent', () => {
         expect(template).not.toContain('canReprocessRoute(item.route)');
         expect(template).not.toContain('isRouteSelected(item)');
         expect(template).toContain('<mat-icon>autorenew</mat-icon>');
+        expect(template).toContain('<mat-icon>cloud_upload</mat-icon>');
         expect(template).toContain('<mat-icon>open_in_new</mat-icon>');
         expect(styles).toContain('.route-table-row');
         expect(styles).toContain('.route-selection-toolbar');
@@ -755,6 +795,182 @@ describe('RoutesPageComponent', () => {
             zipped: true,
             source: 'routes_list_bulk',
         });
+        expect(component.bulkActionInProgress()).toBe(false);
+    });
+
+    it('sends a row route to Suunto', async () => {
+        await component.ngOnInit();
+
+        await component.sendRouteToSuunto(route);
+
+        expect(routeSendServiceMock.sendRoutesToService).toHaveBeenCalledWith(['route-1'], ServiceNames.SuuntoApp);
+        expect(analyticsServiceMock.logSavedRouteAction).toHaveBeenCalledWith('send_service_route', {
+            status: 'success',
+            routeCount: 1,
+            failedCount: 0,
+            skippedCount: 0,
+            fileType: 'gpx',
+            source: 'routes_list_row',
+            destinationService: ServiceNames.SuuntoApp,
+        });
+        expect(snackBarMock.open).toHaveBeenCalledWith('Route sent to Suunto.', undefined, { duration: 2500 });
+        expect(component.sendingToServiceRouteID()).toBeNull();
+    });
+
+    it('shows reconnect guidance when a row send returns an auth-required response', async () => {
+        routeSendServiceMock.sendRoutesToService.mockResolvedValueOnce({
+            destinationServiceName: ServiceNames.SuuntoApp,
+            status: 'failure',
+            routeCount: 1,
+            successCount: 0,
+            failureCount: 1,
+            skippedCount: 0,
+            results: [{
+                routeId: 'route-1',
+                destinationServiceName: ServiceNames.SuuntoApp,
+                status: 'failure',
+                reason: 'DESTINATION_AUTH_REQUIRED',
+                message: 'Authentication failed. Please re-connect your Suunto account.',
+            }],
+        });
+        await component.ngOnInit();
+
+        await component.sendRouteToSuunto(route);
+
+        expect(snackBarMock.open).toHaveBeenCalledWith('Connect Suunto again before sending routes.', undefined, { duration: 3500 });
+        expect(component.sendingToServiceRouteID()).toBeNull();
+    });
+
+    it('keeps failed rows selected after bulk Suunto sends', async () => {
+        const secondRoute: FirestoreRouteJSON = {
+            ...route,
+            id: 'route-2',
+            name: 'Evening Ride',
+            originalFiles: [{
+                path: 'users/user-1/routes/route-2/evening.gpx',
+                originalFilename: 'evening.gpx',
+                startDate: new Date('2026-01-03T00:00:00.000Z'),
+                extension: 'gpx',
+            }],
+        };
+        routeServiceMock.getRoutes.mockReturnValue(of([route, secondRoute]));
+        routeSendServiceMock.sendRoutesToService.mockResolvedValueOnce({
+            destinationServiceName: ServiceNames.SuuntoApp,
+            status: 'partial_success',
+            routeCount: 2,
+            successCount: 1,
+            failureCount: 1,
+            skippedCount: 0,
+            results: [
+                { routeId: 'route-1', destinationServiceName: ServiceNames.SuuntoApp, status: 'success' },
+                { routeId: 'route-2', destinationServiceName: ServiceNames.SuuntoApp, status: 'failure', reason: 'PROVIDER_ERROR' },
+            ],
+        });
+        await component.ngOnInit();
+        await firstValueFrom(component.routes$!);
+        component.toggleVisibleRouteSelection(true);
+
+        await component.sendSelectedRoutesToSuunto();
+
+        expect(routeSendServiceMock.sendRoutesToService).toHaveBeenCalledWith(
+            expect.arrayContaining(['route-1', 'route-2']),
+            ServiceNames.SuuntoApp,
+            expect.objectContaining({ onProgress: expect.any(Function) }),
+        );
+        expect(component.selectedRouteIDs()).toEqual(['route-2']);
+        expect(processingServiceMock.completeJob).toHaveBeenCalledWith('job-1', 'Sent 1 route to Suunto');
+        expect(analyticsServiceMock.logSavedRouteAction).toHaveBeenCalledWith('send_service_route', {
+            status: 'partial_success',
+            routeCount: 2,
+            failedCount: 1,
+            skippedCount: 0,
+            source: 'routes_list_bulk',
+            destinationService: ServiceNames.SuuntoApp,
+        });
+        expect(snackBarMock.open).toHaveBeenCalledWith('Sent 1 route to Suunto. Failed 1.', undefined, { duration: 4000 });
+        expect(component.bulkActionInProgress()).toBe(false);
+    });
+
+    it('reports skipped bulk Suunto rows as skipped instead of failed', async () => {
+        const routeWithoutOriginals: FirestoreRouteJSON = {
+            ...route,
+            id: 'route-2',
+            name: 'No Source Route',
+            originalFiles: [],
+        };
+        routeServiceMock.getRoutes.mockReturnValue(of([route, routeWithoutOriginals]));
+        routeSendServiceMock.sendRoutesToService.mockResolvedValueOnce({
+            destinationServiceName: ServiceNames.SuuntoApp,
+            status: 'success',
+            routeCount: 1,
+            successCount: 1,
+            failureCount: 0,
+            skippedCount: 0,
+            results: [
+                { routeId: 'route-1', destinationServiceName: ServiceNames.SuuntoApp, status: 'success' },
+            ],
+        });
+        await component.ngOnInit();
+        await firstValueFrom(component.routes$!);
+        component.toggleVisibleRouteSelection(true);
+
+        await component.sendSelectedRoutesToSuunto();
+
+        expect(component.selectedRouteIDs()).toEqual(['route-2']);
+        expect(analyticsServiceMock.logSavedRouteAction).toHaveBeenCalledWith('send_service_route', {
+            status: 'partial_success',
+            routeCount: 2,
+            failedCount: 0,
+            skippedCount: 1,
+            source: 'routes_list_bulk',
+            destinationService: ServiceNames.SuuntoApp,
+        });
+        expect(snackBarMock.open).toHaveBeenCalledWith('Sent 1 route to Suunto. Skipped 1.', undefined, { duration: 4000 });
+        expect(component.bulkActionInProgress()).toBe(false);
+    });
+
+    it('includes reconnect guidance in partial-success bulk Suunto sends when later routes require re-authentication', async () => {
+        const secondRoute: FirestoreRouteJSON = {
+            ...route,
+            id: 'route-2',
+            name: 'Evening Ride',
+            originalFiles: [{
+                path: 'users/user-1/routes/route-2/evening.gpx',
+                originalFilename: 'evening.gpx',
+                startDate: new Date('2026-01-03T00:00:00.000Z'),
+                extension: 'gpx',
+            }],
+        };
+        routeServiceMock.getRoutes.mockReturnValue(of([route, secondRoute]));
+        routeSendServiceMock.sendRoutesToService.mockResolvedValueOnce({
+            destinationServiceName: ServiceNames.SuuntoApp,
+            status: 'partial_success',
+            routeCount: 2,
+            successCount: 1,
+            failureCount: 1,
+            skippedCount: 0,
+            results: [
+                { routeId: 'route-1', destinationServiceName: ServiceNames.SuuntoApp, status: 'success' },
+                {
+                    routeId: 'route-2',
+                    destinationServiceName: ServiceNames.SuuntoApp,
+                    status: 'failure',
+                    reason: 'DESTINATION_AUTH_REQUIRED',
+                    message: 'Authentication failed. Please re-connect your Suunto account.',
+                },
+            ],
+        });
+        await component.ngOnInit();
+        await firstValueFrom(component.routes$!);
+        component.toggleVisibleRouteSelection(true);
+
+        await component.sendSelectedRoutesToSuunto();
+
+        expect(snackBarMock.open).toHaveBeenCalledWith(
+            'Sent 1 route to Suunto. Failed 1. Connect Suunto again before sending routes.',
+            undefined,
+            { duration: 4000 },
+        );
         expect(component.bulkActionInProgress()).toBe(false);
     });
 

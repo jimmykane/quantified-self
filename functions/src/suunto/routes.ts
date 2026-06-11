@@ -9,6 +9,12 @@ import { hasProAccess, PRO_REQUIRED_MESSAGE } from '../utils';
 import * as zlib from 'zlib';
 import { SERVICE_NAME, SUUNTOAPP_ACCESS_TOKENS_COLLECTION_NAME } from './constants';
 import { config } from '../config';
+import { toSuuntoAuthorizationHeader } from './authorization-header';
+import {
+  getUserDeletionGuardState,
+  getUserDeletionGuardStateInTransaction,
+  UserDeletionGuardReadError,
+} from '../shared/user-deletion-guard';
 
 
 /**
@@ -17,6 +23,244 @@ import { config } from '../config';
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { FUNCTIONS_MANIFEST } from '../../../shared/functions-manifest';
 import { ALLOWED_CORS_ORIGINS, enforceAppCheck } from '../utils';
+
+export interface SuuntoRouteUploadTokenRef {
+  id: string;
+  ref: admin.firestore.DocumentReference;
+}
+
+export interface SuuntoRouteUploadContext {
+  tokenRefs: SuuntoRouteUploadTokenRef[];
+}
+
+export interface SuuntoRouteUploadResult {
+  status: 'success';
+  successCount: number;
+  providerRouteIds: string[];
+}
+
+export class SuuntoRouteUploadSkippedForDeletedUserError extends Error {
+  public readonly name = 'SuuntoRouteUploadSkippedForDeletedUserError';
+  public readonly code = 'user_deleted_or_deleting';
+
+  constructor(
+    public readonly userID: string,
+    public readonly phase: string,
+  ) {
+    super(`Skipping Suunto route upload for user ${userID} during ${phase} because the user is missing or deletion is in progress.`);
+  }
+}
+
+function isUserDeletionGuardReadError(error: unknown): boolean {
+  return error instanceof UserDeletionGuardReadError
+    || (error instanceof Error && error.name === 'UserDeletionGuardReadError');
+}
+
+async function assertSuuntoRouteUploadUserActive(userID: string, phase: string): Promise<void> {
+  let deletionGuard;
+  try {
+    deletionGuard = await getUserDeletionGuardState(admin.firestore(), userID);
+  } catch (error) {
+    throw new UserDeletionGuardReadError(userID, `suunto_route_upload:${phase}`, error);
+  }
+
+  if (!deletionGuard.shouldSkip) {
+    return;
+  }
+
+  logger.warn(`Skipping Suunto route upload for user ${userID} during ${phase} because the user is missing or deletion is in progress.`);
+  throw new SuuntoRouteUploadSkippedForDeletedUserError(userID, phase);
+}
+
+async function incrementUploadedRoutesCountIfUserActive(userID: string, incrementBy: number): Promise<boolean> {
+  if (incrementBy <= 0) {
+    return true;
+  }
+
+  const db = admin.firestore();
+  const userServiceMetaDocumentSnapshot = db.collection('users').doc(userID).collection('meta').doc(SERVICE_NAME);
+
+  return db.runTransaction(async (transaction) => {
+    let deletionGuard;
+    try {
+      deletionGuard = await getUserDeletionGuardStateInTransaction(db, transaction, userID);
+    } catch (error) {
+      throw new UserDeletionGuardReadError(userID, 'suunto_route_upload_meta', error);
+    }
+
+    if (deletionGuard.shouldSkip) {
+      logger.warn(`Skipping Suunto uploadedRoutesCount update because user ${userID} is missing or deletion is in progress.`);
+      return false;
+    }
+
+    transaction.set(userServiceMetaDocumentSnapshot, {
+      uploadedRoutesCount: FieldValue.increment(incrementBy),
+    }, { merge: true });
+    return true;
+  });
+}
+
+function getSuuntoProviderRouteId(result: unknown): string | undefined {
+  if (!result || typeof result !== 'object') {
+    return undefined;
+  }
+
+  const value = (result as { id?: unknown; routeId?: unknown; routeID?: unknown }).id
+    || (result as { routeId?: unknown }).routeId
+    || (result as { routeID?: unknown }).routeID;
+  return typeof value === 'string' && value.trim() ? value.trim() : undefined;
+}
+
+function getStatusCode(error: unknown): number | undefined {
+  const directStatusCode = (error as any)?.statusCode;
+  if (typeof directStatusCode === 'number') {
+    return directStatusCode;
+  }
+
+  const responseStatusCode = (error as any)?.response?.statusCode;
+  return typeof responseStatusCode === 'number' ? responseStatusCode : undefined;
+}
+
+function getSuuntoErrorMessage(error: unknown): string | undefined {
+  const errorPayload = (error as any)?.error;
+  if (typeof errorPayload === 'string') {
+    return errorPayload;
+  }
+
+  if (typeof errorPayload?.message === 'string') {
+    return errorPayload.message;
+  }
+
+  if (typeof errorPayload?.error === 'string') {
+    return errorPayload.error;
+  }
+
+  if (typeof errorPayload?.error_description === 'string') {
+    return errorPayload.error_description;
+  }
+
+  return undefined;
+}
+
+export async function createSuuntoRouteUploadContext(userID: string): Promise<SuuntoRouteUploadContext> {
+  await assertSuuntoRouteUploadUserActive(userID, 'before_token_lookup');
+
+  const tokenQuerySnapshots = await admin.firestore().collection(SUUNTOAPP_ACCESS_TOKENS_COLLECTION_NAME).doc(userID).collection('tokens').get();
+  logger.info(`Found ${tokenQuerySnapshots.size} tokens for user ${userID}`);
+
+  if (tokenQuerySnapshots.empty) {
+    throw new HttpsError('unauthenticated', 'No connected Suunto account found');
+  }
+
+  return {
+    tokenRefs: tokenQuerySnapshots.docs.map(tokenSnapshot => ({
+      id: tokenSnapshot.id,
+      ref: tokenSnapshot.ref,
+    })),
+  };
+}
+
+async function getLatestSuuntoTokenSnapshot(
+  tokenRef: SuuntoRouteUploadTokenRef,
+): Promise<admin.firestore.DocumentSnapshot> {
+  const snapshot = await tokenRef.ref.get();
+  if (!snapshot.exists) {
+    throw new HttpsError('unauthenticated', 'Authentication failed. Please re-connect your Suunto account.');
+  }
+  return snapshot;
+}
+
+export async function uploadGPXRouteToSuuntoApp(
+  userID: string,
+  gpxContent: string,
+  context?: SuuntoRouteUploadContext,
+): Promise<SuuntoRouteUploadResult> {
+  if (!gpxContent.trim()) {
+    throw new HttpsError('invalid-argument', 'File content is empty');
+  }
+
+  const uploadContext = context || await createSuuntoRouteUploadContext(userID);
+  let successCount = 0;
+  let authFailures = 0;
+  const providerRouteIds: string[] = [];
+
+  for (const tokenRef of uploadContext.tokenRefs) {
+    let result: any;
+    try {
+      const latestTokenSnapshot = await getLatestSuuntoTokenSnapshot(tokenRef);
+      result = await executeWithTokenRetry(
+        latestTokenSnapshot,
+        async (accessToken) => {
+          await assertSuuntoRouteUploadUserActive(userID, 'before_provider_upload');
+          const postResult = await requestPromise.post({
+            headers: {
+              'Authorization': toSuuntoAuthorizationHeader(accessToken),
+              'Content-Type': 'application/gpx+xml',
+              'Ocp-Apim-Subscription-Key': config.suuntoapp.subscription_key,
+            },
+            body: gpxContent,
+            url: 'https://cloudapi.suunto.com/v2/route/import',
+          });
+          return postResult;
+        },
+        `Upload route for user ${userID}`
+      );
+
+      logger.info('Suunto API raw response:', result);
+      if (typeof result === 'string') {
+        try {
+          result = JSON.parse(result);
+        } catch (e) {
+          logger.warn('Suunto API response is not JSON:', result);
+        }
+      }
+    } catch (e: unknown) {
+      const error = e as Error;
+      if (isUserDeletionGuardReadError(error) || error instanceof SuuntoRouteUploadSkippedForDeletedUserError) {
+        throw error;
+      }
+      if (error instanceof HttpsError && error.code === 'unauthenticated') {
+        authFailures++;
+        logger.warn(`Suunto token ${tokenRef.id} is no longer usable for user ${userID}`, {
+          message: error.message,
+        });
+        continue;
+      }
+
+      logger.error(`Could not upload route for token ${tokenRef.id} for user ${userID}`, error);
+      if (getStatusCode(error) === 401) {
+        authFailures++;
+      }
+      continue;
+    }
+
+    if (result?.error) {
+      logger.error(`Could not upload route for token ${tokenRef.id} for user ${userID} due to service error`, result.error);
+      continue;
+    }
+
+    successCount++;
+    const providerRouteId = getSuuntoProviderRouteId(result);
+    if (providerRouteId) {
+      providerRouteIds.push(providerRouteId);
+    }
+  }
+
+  if (successCount > 0) {
+    try {
+      await incrementUploadedRoutesCountIfUserActive(userID, successCount);
+    } catch (e: unknown) {
+      logger.error('Could not update uploadedRoutes count', e);
+    }
+    return { status: 'success', successCount, providerRouteIds };
+  }
+
+  if (authFailures > 0) {
+    throw new HttpsError('unauthenticated', 'Authentication failed. Please re-connect your Suunto account.');
+  }
+
+  throw new HttpsError('internal', 'Upload failed due to service errors.');
+}
 
 /**
  * Uploads a route to the Suunto app
@@ -48,80 +292,30 @@ export const importRouteToSuuntoApp = onCall({
     throw new HttpsError('invalid-argument', 'File content missing');
   }
 
-  const compressedData = Buffer.from(base64File, 'base64');
-
-  const tokenQuerySnapshots = await admin.firestore().collection(SUUNTOAPP_ACCESS_TOKENS_COLLECTION_NAME).doc(userID).collection('tokens').get();
-  logger.info(`Found ${tokenQuerySnapshots.size} tokens for user ${userID}`);
-
-  let successCount = 0;
-  let authFailures = 0;
-
-  if (tokenQuerySnapshots.empty) {
-    throw new HttpsError('unauthenticated', 'No connected Suunto account found');
-  }
-
-  for (const tokenQueryDocumentSnapshot of tokenQuerySnapshots.docs) {
-    let result: any;
-    try {
-      result = await executeWithTokenRetry(
-        tokenQueryDocumentSnapshot,
-        async (accessToken) => {
-          const postResult = await requestPromise.post({
-            headers: {
-              'Authorization': accessToken,
-              'Content-Type': 'application/gpx+xml',
-              'Ocp-Apim-Subscription-Key': config.suuntoapp.subscription_key,
-              // json: true,
-            },
-            body: zlib.gunzipSync(compressedData).toString(),
-            url: 'https://cloudapi.suunto.com/v2/route/import',
-          });
-          return postResult;
-        },
-        `Upload route for user ${userID}`
-      );
-
-      logger.info('Suunto API raw response:', result);
-      if (typeof result === 'string') {
-        try {
-          result = JSON.parse(result);
-        } catch (e) {
-          logger.warn('Suunto API response is not JSON:', result);
-        }
-      }
-    } catch (e: unknown) {
-      const error = e as Error;
-      // Logging handled in helper mostly, but we log high level failure
-      logger.error(`Could not upload route for token ${tokenQueryDocumentSnapshot.id} for user ${userID}`, error);
-      // We count auth failures if "Unauthorized" / 401 bubbles up (meaning retry failed)
-      if ((error as any).statusCode === 401) {
-        authFailures++;
-      }
-      continue;
-    }
-
-    if (result.error) {
-      logger.error(`Could upload route for token ${tokenQueryDocumentSnapshot.id} for user ${userID} due to service error`, result.error);
-      continue;
-    }
-
-    successCount++;
-
-    try {
-      const userServiceMetaDocumentSnapshot = admin.firestore().collection('users').doc(userID).collection('meta').doc(SERVICE_NAME);
-      await userServiceMetaDocumentSnapshot.set({
-        uploadedRoutesCount: FieldValue.increment(1),
-      }, { merge: true });
-    } catch (e: unknown) {
-      logger.error('Could not update uploadedRoutes count', e);
-    }
-  }
-
-  if (successCount > 0) {
+  try {
+    const compressedData = Buffer.from(base64File, 'base64');
+    const gpxContent = zlib.gunzipSync(compressedData).toString();
+    await uploadGPXRouteToSuuntoApp(userID, gpxContent);
     return { status: 'success' };
-  } else if (authFailures > 0) {
-    throw new HttpsError('unauthenticated', 'Authentication failed. Please re-connect your Suunto account.');
-  } else {
-    throw new HttpsError('internal', 'Upload failed due to service errors.');
+  } catch (error) {
+    if (error instanceof HttpsError) {
+      throw error;
+    }
+    if (isUserDeletionGuardReadError(error)) {
+      logger.error('[importRouteToSuuntoApp] Could not verify account deletion state', { userID, error });
+      throw new HttpsError('unavailable', 'Could not verify account state. Please retry.');
+    }
+    if (error instanceof SuuntoRouteUploadSkippedForDeletedUserError) {
+      throw new HttpsError('failed-precondition', 'Account is being deleted or no longer exists.');
+    }
+
+    const statusCode = getStatusCode(error);
+    const providerMessage = getSuuntoErrorMessage(error);
+    logger.error('[importRouteToSuuntoApp] Could not upload GPX route', {
+      userID,
+      statusCode,
+      message: providerMessage || (error instanceof Error ? error.message : String(error)),
+    });
+    throw new HttpsError('internal', providerMessage || 'Upload failed due to service errors.');
   }
 });

@@ -15,7 +15,7 @@ import { SuuntoAPIAuth2ServiceTokenInterface } from '@sports-alliance/sports-lib
  * @throws The last error encountered if retries fail.
  */
 export async function executeWithTokenRetry<T>(
-    tokenDoc: admin.firestore.QueryDocumentSnapshot,
+    tokenDoc: admin.firestore.QueryDocumentSnapshot | admin.firestore.DocumentSnapshot,
     operation: (accessToken: string) => Promise<T>,
     contextDescription: string
 ): Promise<T> {
