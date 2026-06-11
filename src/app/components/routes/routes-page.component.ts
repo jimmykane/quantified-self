@@ -1,4 +1,5 @@
 import { Component, OnInit, computed, inject, signal } from '@angular/core';
+import { SelectionModel } from '@angular/cdk/collections';
 import { firstValueFrom, BehaviorSubject, combineLatest, distinctUntilChanged, map, Observable, shareReplay, switchMap } from 'rxjs';
 import { MatDialog } from '@angular/material/dialog';
 import { Router } from '@angular/router';
@@ -23,6 +24,7 @@ import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { AppFileService } from '../../services/app.file.service';
 import { AppHapticsService } from '../../services/app.haptics.service';
 import { AppProcessingService } from '../../services/app.processing.service';
+import { AppRouteGPXExportService } from '../../services/app.route-gpx-export.service';
 import {
     AppRouteReprocessService,
     getRouteReprocessErrorMessage,
@@ -59,6 +61,9 @@ interface RoutePageRouteViewModel {
     minGrade: RouteMetricCell;
     maxGrade: RouteMetricCell;
     canReprocess: boolean;
+    canExportGPX: boolean;
+    canDownloadOriginals: boolean;
+    canDelete: boolean;
     filterText: string;
 }
 
@@ -118,6 +123,7 @@ export class RoutesPageComponent implements OnInit {
     private analyticsService = inject(AppAnalyticsService);
     private hapticsService = inject(AppHapticsService);
     private processingService = inject(AppProcessingService);
+    private routeGPXExportService = inject(AppRouteGPXExportService);
     private routeReprocessService = inject(AppRouteReprocessService);
     private logger = inject(LoggerService);
     private router = inject(Router);
@@ -131,10 +137,13 @@ export class RoutesPageComponent implements OnInit {
         activityType: '',
     });
     private readonly loadedRouteViewModels = signal<RoutePageRouteViewModel[]>([]);
+    private readonly visibleRouteViewModels = signal<RoutePageRouteViewModel[]>([]);
 
     readonly user = signal<User | null>(null);
     readonly deletingRouteID = signal<string | null>(null);
     readonly downloadingRouteID = signal<string | null>(null);
+    readonly exportingRouteID = signal<string | null>(null);
+    readonly bulkActionInProgress = signal(false);
     readonly reprocessingRouteID = signal<string | null>(null);
     readonly routeCount = signal<number | null>(null);
     readonly loadedRouteCount = signal(0);
@@ -146,7 +155,19 @@ export class RoutesPageComponent implements OnInit {
     readonly routeActivityTypeFilterOptions = signal<RouteFilterOption[]>([]);
     readonly routeSortActive = signal<RouteSortColumn>('date');
     readonly routeSortDirection = signal<SortDirection>('desc');
+    readonly selectedRouteIDs = signal<string[]>([]);
     readonly routeFilterActive = computed(() => this.isRouteFilterActive());
+    readonly selectedRouteCount = computed(() => this.selectedRouteIDs().length);
+    readonly selectedRouteIDSet = computed(() => new Set(this.selectedRouteIDs()));
+    readonly allVisibleRoutesSelected = computed(() => {
+        const visibleRoutes = this.visibleRouteViewModels();
+        const selectedIDs = this.selectedRouteIDSet();
+        return visibleRoutes.length > 0
+            && visibleRoutes.every(item => !!item.route.id && selectedIDs.has(item.route.id));
+    });
+    readonly visibleRouteSelectionIndeterminate = computed(() => (
+        this.selectedRouteCount() > 0 && !this.allVisibleRoutesSelected()
+    ));
     readonly routeResultSummary = computed(() => {
         const total = Math.max(this.routeCount() ?? 0, this.loadedRouteCount());
         const loaded = this.loadedRouteCount();
@@ -165,6 +186,7 @@ export class RoutesPageComponent implements OnInit {
         return `${loaded} of ${total} loaded${clientOnlySortActive ? '; sorting loaded rows' : ''}`;
     });
     readonly routeColumns = [
+        'select',
         'date',
         'name',
         'activityTypes',
@@ -185,6 +207,7 @@ export class RoutesPageComponent implements OnInit {
         maxGrade: DataGradeMax.type,
     };
     routes$: Observable<RoutePageRouteViewModel[]> | null = null;
+    readonly routeSelection = new SelectionModel<string>(true, []);
 
     async ngOnInit(): Promise<void> {
         const user = await this.authService.getUser();
@@ -212,7 +235,10 @@ export class RoutesPageComponent implements OnInit {
                     this.routeActivityTypeFilterOptions.set(this.buildRouteActivityTypeFilterOptions(routeViewModels));
                     const filteredRouteViewModels = this.filterRouteViewModels(routeViewModels, routeFilter);
                     this.filteredRouteCount.set(filteredRouteViewModels.length);
-                    return this.sortRouteViewModels(filteredRouteViewModels, routeSort);
+                    this.reconcileSelectionWithVisibleRoutes(filteredRouteViewModels);
+                    const sortedRouteViewModels = this.sortRouteViewModels(filteredRouteViewModels, routeSort);
+                    this.visibleRouteViewModels.set(sortedRouteViewModels);
+                    return sortedRouteViewModels;
                 }),
             );
             const routeCount = await this.refreshRouteCount();
@@ -222,6 +248,41 @@ export class RoutesPageComponent implements OnInit {
 
     trackByRouteID(index: number, item: RoutePageRouteViewModel): string {
         return `${item.route.id || index}`;
+    }
+
+    toggleRouteSelection(item: RoutePageRouteViewModel, checked: boolean): void {
+        const routeID = item.route.id;
+        if (!routeID) {
+            return;
+        }
+        if (checked) {
+            this.routeSelection.select(routeID);
+        } else {
+            this.routeSelection.deselect(routeID);
+        }
+        this.syncSelectedRouteIDs();
+        this.hapticsService.selection();
+    }
+
+    toggleVisibleRouteSelection(checked: boolean): void {
+        if (checked) {
+            const visibleRouteIDs = this.visibleRouteViewModels()
+                .map(item => item.route.id)
+                .filter((routeID): routeID is string => !!routeID);
+            this.routeSelection.select(...visibleRouteIDs);
+        } else {
+            this.routeSelection.clear();
+        }
+        this.syncSelectedRouteIDs();
+        this.hapticsService.selection();
+    }
+
+    clearRouteSelection(event?: Event): void {
+        event?.preventDefault();
+        event?.stopPropagation();
+        this.routeSelection.clear();
+        this.syncSelectedRouteIDs();
+        this.hapticsService.selection();
     }
 
     onRouteSortChange(sort: Sort): void {
@@ -297,7 +358,16 @@ export class RoutesPageComponent implements OnInit {
     async confirmDeleteRoute(route: FirestoreRouteJSON): Promise<void> {
         const user = this.user();
         const routeID = route.id;
-        if (!user || !routeID) {
+        if (
+            !user
+            || !routeID
+            || this.deletingRouteID() === routeID
+            || this.bulkActionInProgress()
+            || this.exportingRouteID() === routeID
+            || this.downloadingRouteID() === routeID
+            || this.reprocessingRouteID() === routeID
+            || !this.canManageRoute(route)
+        ) {
             return;
         }
 
@@ -339,7 +409,15 @@ export class RoutesPageComponent implements OnInit {
 
     async downloadRouteOriginals(route: FirestoreRouteJSON): Promise<void> {
         const routeID = route.id;
-        if (!routeID) {
+        if (
+            !routeID
+            || this.bulkActionInProgress()
+            || this.downloadingRouteID() === routeID
+            || this.exportingRouteID() === routeID
+            || this.deletingRouteID() === routeID
+            || this.reprocessingRouteID() === routeID
+            || !this.canManageRoute(route)
+        ) {
             return;
         }
 
@@ -406,6 +484,416 @@ export class RoutesPageComponent implements OnInit {
         }
     }
 
+    async exportRouteAsGPX(route: FirestoreRouteJSON, source: 'routes_list_row' | 'routes_list_bulk' = 'routes_list_row'): Promise<void> {
+        const routeID = route.id;
+        if (
+            !routeID
+            || this.exportingRouteID() !== null
+            || this.bulkActionInProgress()
+            || this.deletingRouteID() === routeID
+            || this.downloadingRouteID() === routeID
+            || this.reprocessingRouteID() === routeID
+            || !this.canManageRoute(route)
+        ) {
+            return;
+        }
+
+        const originalFiles = this.routeService.getOriginalRouteFiles(route);
+        if (originalFiles.length === 0) {
+            this.analyticsService.logSavedRouteAction('export_gpx', {
+                status: 'missing_file',
+                fileCount: 0,
+                fileType: this.getPrimaryRouteFileType(route),
+                source,
+            });
+            this.snackBar.open('No original route file found.', undefined, { duration: 3000 });
+            return;
+        }
+
+        this.exportingRouteID.set(routeID);
+        this.snackBar.open('Generating route GPX...', undefined, { duration: 2000 });
+        try {
+            const result = await this.routeGPXExportService.getRouteDocumentAsGPXBlob(route);
+            const baseName = this.sanitizeFilenameBase(result.hydratedRoute.routeDocument.name || route.name || routeID || 'route');
+            this.fileService.downloadFile(result.blob, baseName, 'gpx');
+            this.analyticsService.logSavedRouteAction('export_gpx', {
+                status: 'success',
+                fileCount: 1,
+                fileType: 'gpx',
+                zipped: false,
+                source,
+            });
+            this.snackBar.open('GPX file served.', undefined, { duration: 2000 });
+        } catch (error) {
+            this.analyticsService.logSavedRouteAction('export_gpx', {
+                status: 'failure',
+                fileCount: 0,
+                fileType: this.getPrimaryRouteFileType(route),
+                zipped: false,
+                source,
+            });
+            this.logger.error('[RoutesPageComponent] Failed to export route GPX', { routeID }, error);
+            this.snackBar.open('Could not export route GPX.', undefined, { duration: 3000 });
+        } finally {
+            this.exportingRouteID.set(null);
+        }
+    }
+
+    async exportSelectedRoutesAsGPX(): Promise<void> {
+        const selectedRoutes = this.getSelectedVisibleRouteItems();
+        if (selectedRoutes.length === 0 || this.bulkActionInProgress()) {
+            return;
+        }
+
+        this.bulkActionInProgress.set(true);
+        const jobId = this.processingService.addJob('download', 'Preparing route GPX export...');
+        this.processingService.updateJob(jobId, {
+            status: 'processing',
+            progress: 10,
+            details: `${selectedRoutes.length} ${selectedRoutes.length === 1 ? 'route' : 'routes'} selected`,
+        });
+
+        const generatedFiles: { data: Blob; fileName: string; routeDate: Date | null }[] = [];
+        let failedCount = 0;
+        let skippedCount = 0;
+        let minDate: Date | null = null;
+        let maxDate: Date | null = null;
+
+        try {
+            for (let index = 0; index < selectedRoutes.length; index++) {
+                const item = selectedRoutes[index];
+                const routeID = item.route.id;
+                const routeDate = item.routeDate;
+                const originalFiles = this.routeService.getOriginalRouteFiles(item.route);
+                if (!routeID || originalFiles.length === 0) {
+                    skippedCount++;
+                    continue;
+                }
+
+                try {
+                    const result = await this.routeGPXExportService.getRouteDocumentAsGPXBlob(item.route);
+                    const baseName = this.sanitizeFilenameBase(result.hydratedRoute.routeDocument.name || item.name || routeID || 'route');
+                    generatedFiles.push({
+                        data: result.blob,
+                        fileName: this.fileService.generateDateBasedFilename(
+                            routeDate,
+                            'gpx',
+                            index + 1,
+                            selectedRoutes.length,
+                            baseName,
+                        ),
+                        routeDate,
+                    });
+                    if (routeDate) {
+                        if (!minDate || routeDate < minDate) minDate = routeDate;
+                        if (!maxDate || routeDate > maxDate) maxDate = routeDate;
+                    }
+                } catch (error) {
+                    failedCount++;
+                    this.logger.error('[RoutesPageComponent] Failed to export selected route GPX', { routeID }, error);
+                }
+
+                this.processingService.updateJob(jobId, {
+                    progress: 10 + Math.round(((index + 1) / selectedRoutes.length) * 70),
+                    details: `Processed ${index + 1} of ${selectedRoutes.length}`,
+                });
+            }
+
+            if (generatedFiles.length === 0) {
+                this.processingService.failJob(jobId, 'No route GPX files exported');
+                this.analyticsService.logSavedRouteAction('export_gpx', {
+                    status: skippedCount > 0 ? 'missing_file' : 'failure',
+                    routeCount: selectedRoutes.length,
+                    fileCount: 0,
+                    failedCount,
+                    skippedCount,
+                    source: 'routes_list_bulk',
+                });
+                this.snackBar.open('Could not export GPX for selected routes.', undefined, { duration: 3000 });
+                return;
+            }
+
+            if (selectedRoutes.length === 1) {
+                const file = generatedFiles[0];
+                const extensionIndex = file.fileName.toLowerCase().lastIndexOf('.gpx');
+                const baseName = extensionIndex > 0 ? file.fileName.slice(0, extensionIndex) : file.fileName;
+                this.fileService.downloadFile(file.data, baseName, 'gpx');
+            } else {
+                this.processingService.updateJob(jobId, { progress: 90, details: 'Zipping route GPX files' });
+                const zipFileName = this.fileService.generateDateRangeZipFilename(minDate, maxDate, 'route_gpx');
+                await this.fileService.downloadAsZip(generatedFiles, zipFileName);
+            }
+
+            const status = failedCount > 0 || skippedCount > 0 ? 'partial_success' : 'success';
+            this.processingService.completeJob(
+                jobId,
+                `Exported ${generatedFiles.length} route GPX ${generatedFiles.length === 1 ? 'file' : 'files'}`,
+            );
+            this.analyticsService.logSavedRouteAction('export_gpx', {
+                status,
+                routeCount: selectedRoutes.length,
+                fileCount: generatedFiles.length,
+                failedCount,
+                skippedCount,
+                fileType: 'gpx',
+                zipped: selectedRoutes.length > 1,
+                source: 'routes_list_bulk',
+            });
+            this.snackBar.open(
+                status === 'partial_success'
+                    ? `Exported ${generatedFiles.length} GPX ${generatedFiles.length === 1 ? 'file' : 'files'}. Skipped ${failedCount + skippedCount}.`
+                    : selectedRoutes.length === 1 ? 'GPX file served.' : 'GPX files served.',
+                undefined,
+                { duration: status === 'partial_success' ? 4000 : 2000 },
+            );
+        } catch (error) {
+            this.processingService.failJob(jobId, 'Route GPX export failed');
+            this.analyticsService.logSavedRouteAction('export_gpx', {
+                status: 'failure',
+                routeCount: selectedRoutes.length,
+                fileCount: generatedFiles.length,
+                failedCount: failedCount + 1,
+                skippedCount,
+                source: 'routes_list_bulk',
+            });
+            this.logger.error('[RoutesPageComponent] Failed to export selected route GPX files', error);
+            this.snackBar.open('Could not export GPX for selected routes.', undefined, { duration: 3000 });
+        } finally {
+            this.bulkActionInProgress.set(false);
+        }
+    }
+
+    async downloadSelectedRouteOriginals(): Promise<void> {
+        const selectedRoutes = this.getSelectedVisibleRouteItems();
+        if (selectedRoutes.length === 0 || this.bulkActionInProgress()) {
+            return;
+        }
+
+        let skippedCount = 0;
+        const originalFileEntries = selectedRoutes.flatMap(item => {
+            const baseName = this.sanitizeFilenameBase(item.name || item.route.id || 'route');
+            const originalFiles = this.routeService.getOriginalRouteFiles(item.route);
+            if (originalFiles.length === 0) {
+                skippedCount++;
+            }
+            return originalFiles.map(file => ({
+                item,
+                file,
+                baseName,
+            }));
+        });
+
+        if (originalFileEntries.length === 0) {
+            this.analyticsService.logSavedRouteAction('download', {
+                status: 'missing_file',
+                routeCount: selectedRoutes.length,
+                fileCount: 0,
+                skippedCount,
+                source: 'routes_list_bulk',
+            });
+            this.snackBar.open('No original route files found for the selected routes.', undefined, { duration: 3000 });
+            return;
+        }
+
+        this.bulkActionInProgress.set(true);
+        const jobId = this.processingService.addJob('download', 'Preparing original route files...');
+        this.processingService.updateJob(jobId, {
+            status: 'processing',
+            progress: 10,
+            details: `${originalFileEntries.length} ${originalFileEntries.length === 1 ? 'file' : 'files'} found`,
+        });
+
+        const downloadedFiles: { data: ArrayBuffer; fileName: string }[] = [];
+        let failedCount = 0;
+        let minDate: Date | null = null;
+        let maxDate: Date | null = null;
+
+        try {
+            for (let index = 0; index < originalFileEntries.length; index++) {
+                const entry = originalFileEntries[index];
+                const routeID = entry.item.route.id;
+                const extension = this.fileService.getExtensionFromPath(entry.file.path, entry.file.extension || 'gpx');
+                const fileDate = this.fileService.toDate(entry.file.startDate) || entry.item.routeDate;
+                const fileName = this.fileService.generateDateBasedFilename(
+                    fileDate,
+                    extension,
+                    index + 1,
+                    originalFileEntries.length,
+                    entry.baseName,
+                );
+
+                try {
+                    downloadedFiles.push({
+                        data: await this.routeService.downloadFile(entry.file.path),
+                        fileName,
+                    });
+                    if (fileDate) {
+                        if (!minDate || fileDate < minDate) minDate = fileDate;
+                        if (!maxDate || fileDate > maxDate) maxDate = fileDate;
+                    }
+                } catch (error) {
+                    failedCount++;
+                    this.logger.error('[RoutesPageComponent] Failed to download selected route original file', { routeID, path: entry.file.path }, error);
+                }
+
+                this.processingService.updateJob(jobId, {
+                    progress: 10 + Math.round(((index + 1) / originalFileEntries.length) * 70),
+                    details: `Downloaded ${downloadedFiles.length} of ${originalFileEntries.length}`,
+                });
+            }
+
+            if (downloadedFiles.length === 0) {
+                this.processingService.failJob(jobId, 'No original route files downloaded');
+                this.analyticsService.logSavedRouteAction('download', {
+                    status: 'failure',
+                    routeCount: selectedRoutes.length,
+                    fileCount: 0,
+                    failedCount,
+                    skippedCount,
+                    source: 'routes_list_bulk',
+                });
+                this.snackBar.open('Could not download original files for selected routes.', undefined, { duration: 3000 });
+                return;
+            }
+
+            this.processingService.updateJob(jobId, { progress: 90, details: 'Zipping original route files' });
+            const zipFileName = this.fileService.generateDateRangeZipFilename(minDate, maxDate, 'route_originals');
+            await this.fileService.downloadAsZip(downloadedFiles, zipFileName);
+            const status = failedCount > 0 || skippedCount > 0 ? 'partial_success' : 'success';
+            this.processingService.completeJob(
+                jobId,
+                `Downloaded ${downloadedFiles.length} original route ${downloadedFiles.length === 1 ? 'file' : 'files'}`,
+            );
+            this.analyticsService.logSavedRouteAction('download', {
+                status,
+                routeCount: selectedRoutes.length,
+                fileCount: downloadedFiles.length,
+                failedCount,
+                skippedCount,
+                zipped: true,
+                source: 'routes_list_bulk',
+            });
+            this.snackBar.open(
+                status === 'partial_success'
+                    ? `Downloaded ${downloadedFiles.length} original ${downloadedFiles.length === 1 ? 'file' : 'files'}. Skipped ${failedCount + skippedCount}.`
+                    : 'Original route files served.',
+                undefined,
+                { duration: status === 'partial_success' ? 4000 : 2000 },
+            );
+        } catch (error) {
+            this.processingService.failJob(jobId, 'Original route file download failed');
+            this.analyticsService.logSavedRouteAction('download', {
+                status: 'failure',
+                routeCount: selectedRoutes.length,
+                fileCount: downloadedFiles.length,
+                failedCount: failedCount + 1,
+                skippedCount,
+                zipped: true,
+                source: 'routes_list_bulk',
+            });
+            this.logger.error('[RoutesPageComponent] Failed to download selected route original files', error);
+            this.snackBar.open('Could not download original files for selected routes.', undefined, { duration: 3000 });
+        } finally {
+            this.bulkActionInProgress.set(false);
+        }
+    }
+
+    async confirmDeleteSelectedRoutes(): Promise<void> {
+        const selectedRoutes = this.getSelectedVisibleRouteItems();
+        const user = this.user();
+        if (!user || selectedRoutes.length === 0 || this.bulkActionInProgress()) {
+            return;
+        }
+
+        const dialogRef = this.dialog.open(ConfirmationDialogComponent, {
+            data: {
+                title: `Delete ${selectedRoutes.length} selected ${selectedRoutes.length === 1 ? 'route' : 'routes'}?`,
+                message: `Delete ${selectedRoutes.length} selected ${selectedRoutes.length === 1 ? 'route' : 'routes'} and their original files?`,
+                confirmText: 'Delete',
+                confirmColor: 'warn',
+            } as ConfirmationDialogData,
+        });
+
+        const confirmed = await firstValueFrom(dialogRef.afterClosed());
+        if (!confirmed) {
+            return;
+        }
+
+        this.bulkActionInProgress.set(true);
+        const jobId = this.processingService.addJob('process', 'Deleting selected routes...');
+        this.processingService.updateJob(jobId, { status: 'processing', progress: 10 });
+        const failedRouteIDs: string[] = [];
+        let deletedCount = 0;
+
+        try {
+            for (let index = 0; index < selectedRoutes.length; index++) {
+                const item = selectedRoutes[index];
+                const routeID = item.route.id;
+                if (!routeID) {
+                    failedRouteIDs.push('');
+                    continue;
+                }
+
+                try {
+                    await this.routeService.deleteRoute(user, routeID);
+                    deletedCount++;
+                } catch (error) {
+                    failedRouteIDs.push(routeID);
+                    this.logger.error('[RoutesPageComponent] Failed to delete selected route', { routeID }, error);
+                }
+
+                this.processingService.updateJob(jobId, {
+                    progress: 10 + Math.round(((index + 1) / selectedRoutes.length) * 80),
+                    details: `Deleted ${deletedCount} of ${selectedRoutes.length}`,
+                });
+            }
+
+            const routeCount = await this.refreshRouteCount();
+            this.routeSelection.clear();
+            this.routeSelection.select(...failedRouteIDs.filter(Boolean));
+            this.syncSelectedRouteIDs();
+
+            if (deletedCount === 0) {
+                this.processingService.failJob(jobId, 'No selected routes deleted');
+                this.analyticsService.logSavedRouteAction('delete', {
+                    status: 'failure',
+                    routeCount,
+                    failedCount: failedRouteIDs.length,
+                    source: 'routes_list_bulk',
+                });
+                this.snackBar.open('Failed to delete selected routes.', undefined, { duration: 3000 });
+                return;
+            }
+
+            const status = failedRouteIDs.length > 0 ? 'partial_success' : 'success';
+            this.processingService.completeJob(jobId, `Deleted ${deletedCount} ${deletedCount === 1 ? 'route' : 'routes'}`);
+            this.analyticsService.logSavedRouteAction('delete', {
+                status,
+                routeCount,
+                failedCount: failedRouteIDs.length,
+                source: 'routes_list_bulk',
+            });
+            this.snackBar.open(
+                status === 'partial_success'
+                    ? `Deleted ${deletedCount} ${deletedCount === 1 ? 'route' : 'routes'}. Failed ${failedRouteIDs.length}.`
+                    : `Deleted ${deletedCount} ${deletedCount === 1 ? 'route' : 'routes'}.`,
+                undefined,
+                { duration: status === 'partial_success' ? 4000 : 2500 },
+            );
+        } catch (error) {
+            this.processingService.failJob(jobId, 'Selected route delete failed');
+            this.analyticsService.logSavedRouteAction('delete', {
+                status: 'failure',
+                failedCount: selectedRoutes.length - deletedCount,
+                source: 'routes_list_bulk',
+            });
+            this.logger.error('[RoutesPageComponent] Failed to delete selected routes', error);
+            this.snackBar.open('Failed to delete selected routes.', undefined, { duration: 3000 });
+        } finally {
+            this.bulkActionInProgress.set(false);
+        }
+    }
+
     async reprocessRouteFromOriginalFile(route: FirestoreRouteJSON): Promise<void> {
         const user = this.user();
         const routeID = route.id;
@@ -413,6 +901,8 @@ export class RoutesPageComponent implements OnInit {
             !user
             || !routeID
             || this.reprocessingRouteID() !== null
+            || this.bulkActionInProgress()
+            || this.exportingRouteID() === routeID
             || this.deletingRouteID() === routeID
             || this.downloadingRouteID() === routeID
             || !this.canManageRoute(route)
@@ -502,6 +992,38 @@ export class RoutesPageComponent implements OnInit {
         return !!user?.uid && !!route.userID && user.uid === route.userID;
     }
 
+    private getSelectedVisibleRouteItems(): RoutePageRouteViewModel[] {
+        const selectedIDs = new Set(this.selectedRouteIDs());
+        return this.visibleRouteViewModels().filter(item => (
+            !!item.route.id
+            && selectedIDs.has(item.route.id)
+            && this.canManageRoute(item.route)
+        ));
+    }
+
+    private reconcileSelectionWithVisibleRoutes(visibleRoutes: RoutePageRouteViewModel[]): void {
+        const visibleIDs = new Set(
+            visibleRoutes
+                .map(item => item.route.id)
+                .filter((routeID): routeID is string => !!routeID),
+        );
+        const selectedIDs = [...this.routeSelection.selected];
+        let changed = false;
+        selectedIDs.forEach((routeID) => {
+            if (!visibleIDs.has(routeID)) {
+                this.routeSelection.deselect(routeID);
+                changed = true;
+            }
+        });
+        if (changed || this.selectedRouteIDs().length !== this.routeSelection.selected.length) {
+            this.syncSelectedRouteIDs();
+        }
+    }
+
+    private syncSelectedRouteIDs(): void {
+        this.selectedRouteIDs.set([...this.routeSelection.selected]);
+    }
+
     private updateReprocessJob(jobId: string, progress: RouteReprocessProgress): void {
         this.processingService.updateJob(jobId, {
             status: progress.phase === 'done' ? 'completed' : 'processing',
@@ -564,6 +1086,9 @@ export class RoutesPageComponent implements OnInit {
             minGrade,
             maxGrade,
             canReprocess: this.canManageRoute(route) && originalFiles.length > 0,
+            canExportGPX: this.canManageRoute(route) && originalFiles.length > 0,
+            canDownloadOriginals: this.canManageRoute(route) && originalFiles.length > 0,
+            canDelete: this.canManageRoute(route),
             filterText: [
                 routeName,
                 activityTypes,

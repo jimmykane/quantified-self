@@ -66,8 +66,9 @@ export type RouteUploadErrorCategory =
     | 'server'
     | 'unknown'
     | 'unsupported_format';
-export type SavedRouteAction = 'view' | 'filter' | 'sort' | 'open_details' | 'rename' | 'download' | 'delete' | 'reprocess';
-export type SavedRouteActionStatus = 'applied' | 'cleared' | 'success' | 'failure' | 'missing_file';
+export type SavedRouteAction = 'view' | 'filter' | 'sort' | 'open_details' | 'rename' | 'download' | 'export_gpx' | 'delete' | 'reprocess';
+export type SavedRouteActionStatus = 'applied' | 'cleared' | 'success' | 'partial_success' | 'failure' | 'missing_file';
+export type SavedRouteActionSource = 'route_detail' | 'routes_list_row' | 'routes_list_bulk';
 export type SavedRouteSortColumn =
     | 'activityTypes'
     | 'ascent'
@@ -131,8 +132,11 @@ export interface SavedRouteActionAnalytics {
     status?: SavedRouteActionStatus;
     routeCount?: number | null;
     fileCount?: number;
+    failedCount?: number;
+    skippedCount?: number;
     fileType?: RouteFileType | string;
     zipped?: boolean;
+    source?: SavedRouteActionSource;
     sortColumn?: SavedRouteSortColumn;
     sortDirection?: 'asc' | 'desc';
     filterActive?: boolean;
@@ -356,8 +360,11 @@ export class AppAnalyticsService {
             status: params.status,
             route_count: params.routeCount,
             file_count: params.fileCount,
+            failed_count: params.failedCount,
+            skipped_count: params.skippedCount,
             file_type: params.fileType,
             zipped: params.zipped,
+            source: params.source,
             sort_column: params.sortColumn,
             sort_direction: params.sortDirection,
             filter_active: params.filterActive,

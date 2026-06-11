@@ -30,33 +30,43 @@
       }
       <div summary-actions class="route-summary-actions">
         <button mat-icon-button type="button"
-          aria-label="Rename route"
-          matTooltip="Rename route"
-          [disabled]="renaming() || !canManageRoute()"
-          (click)="renameRoute()">
-          <mat-icon>edit</mat-icon>
+          aria-label="Route actions"
+          matTooltip="Route actions"
+          [matMenuTriggerFor]="routeDetailActionsMenu">
+          <mat-icon>more_vert</mat-icon>
         </button>
-        <button mat-icon-button type="button"
-          aria-label="Download original route file"
-          matTooltip="Download original route file"
-          [disabled]="downloading() || !canManageRoute()"
-          (click)="downloadRouteOriginals()">
-          <mat-icon>download</mat-icon>
-        </button>
-        <button mat-icon-button type="button"
-          aria-label="Reprocess route from original file"
-          matTooltip="Reprocess route from original file"
-          [disabled]="reprocessing() || renaming() || downloading() || deleting() || !canReprocessRoute()"
-          (click)="reprocessRouteFromOriginalFile()">
-          <mat-icon>autorenew</mat-icon>
-        </button>
-        <button mat-icon-button type="button"
-          aria-label="Delete route"
-          matTooltip="Delete route"
-          [disabled]="deleting() || renaming() || reprocessing() || !canManageRoute()"
-          (click)="confirmDeleteRoute()">
-          <mat-icon>delete</mat-icon>
-        </button>
+        <mat-menu #routeDetailActionsMenu="matMenu" class="qs-menu-panel">
+          <button mat-menu-item type="button"
+            [disabled]="renaming() || downloading() || exportingGPX() || reprocessing() || deleting() || !canManageRoute()"
+            (click)="renameRoute()">
+            <mat-icon>edit</mat-icon>
+            <span>Rename</span>
+          </button>
+          <button mat-menu-item type="button"
+            [disabled]="exportingGPX() || renaming() || downloading() || reprocessing() || deleting() || !canManageRoute()"
+            (click)="exportRouteAsGPX()">
+            <mat-icon>file_download</mat-icon>
+            <span>Export GPX</span>
+          </button>
+          <button mat-menu-item type="button"
+            [disabled]="downloading() || renaming() || exportingGPX() || reprocessing() || deleting() || !canManageRoute()"
+            (click)="downloadRouteOriginals()">
+            <mat-icon>download</mat-icon>
+            <span>Download originals</span>
+          </button>
+          <button mat-menu-item type="button"
+            [disabled]="reprocessing() || renaming() || downloading() || exportingGPX() || deleting() || !canReprocessRoute()"
+            (click)="reprocessRouteFromOriginalFile()">
+            <mat-icon>autorenew</mat-icon>
+            <span>Reprocess</span>
+          </button>
+          <button mat-menu-item type="button"
+            [disabled]="deleting() || renaming() || downloading() || reprocessing() || exportingGPX() || !canManageRoute()"
+            (click)="confirmDeleteRoute()">
+            <mat-icon>delete</mat-icon>
+            <span>Delete</span>
+          </button>
+        </mat-menu>
       </div>
     </app-summary-primary-info>
   </section>

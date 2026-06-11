@@ -14,6 +14,7 @@ import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { AppFileService } from '../../services/app.file.service';
 import { AppHapticsService } from '../../services/app.haptics.service';
 import { AppProcessingService } from '../../services/app.processing.service';
+import { AppRouteGPXExportService } from '../../services/app.route-gpx-export.service';
 import { AppRouteReprocessService, RouteReprocessError } from '../../services/app.route-reprocess.service';
 import { AppRouteService } from '../../services/app.route.service';
 import { LoggerService } from '../../services/logger.service';
@@ -31,6 +32,7 @@ describe('RoutesPageComponent', () => {
     let analyticsServiceMock: any;
     let hapticsServiceMock: any;
     let processingServiceMock: any;
+    let routeGPXExportServiceMock: any;
     let routeReprocessServiceMock: any;
     let loggerMock: any;
     let routerMock: any;
@@ -103,6 +105,9 @@ describe('RoutesPageComponent', () => {
             getExtensionFromPath: vi.fn().mockReturnValue('gpx'),
             toDate: vi.fn((value: unknown) => value instanceof Date ? value : null),
             generateDateBasedFilename: vi.fn().mockReturnValue('2026-01-02_Morning_Route.gpx'),
+            generateDateRangeZipFilename: vi.fn((_minDate: Date | null, _maxDate: Date | null, suffix = 'originals') => (
+                `2026-01-02_${suffix}.zip`
+            )),
             downloadFile: vi.fn(),
             downloadAsZip: vi.fn().mockResolvedValue(undefined),
         };
@@ -118,6 +123,14 @@ describe('RoutesPageComponent', () => {
             updateJob: vi.fn(),
             completeJob: vi.fn(),
             failJob: vi.fn(),
+        };
+        routeGPXExportServiceMock = {
+            getRouteDocumentAsGPXBlob: vi.fn().mockResolvedValue({
+                blob: new Blob(['<gpx></gpx>'], { type: 'application/gpx+xml' }),
+                hydratedRoute: {
+                    routeDocument: route,
+                },
+            }),
         };
         routeReprocessServiceMock = {
             reprocessRouteDocumentFromOriginalFile: vi.fn().mockResolvedValue({
@@ -152,6 +165,7 @@ describe('RoutesPageComponent', () => {
                 { provide: AppAnalyticsService, useValue: analyticsServiceMock },
                 { provide: AppHapticsService, useValue: hapticsServiceMock },
                 { provide: AppProcessingService, useValue: processingServiceMock },
+                { provide: AppRouteGPXExportService, useValue: routeGPXExportServiceMock },
                 { provide: AppRouteReprocessService, useValue: routeReprocessServiceMock },
                 { provide: LoggerService, useValue: loggerMock },
                 { provide: Router, useValue: routerMock },
@@ -232,6 +246,9 @@ describe('RoutesPageComponent', () => {
                 title: 'Maximum grade: 9 %',
             },
             canReprocess: true,
+            canExportGPX: true,
+            canDownloadOriginals: true,
+            canDelete: true,
         });
         expect(routes[0].routeDate?.toISOString()).toBe('2026-01-02T00:00:00.000Z');
         expect(component.trackByRouteID(0, routes[0])).toBe('route-1');
@@ -374,6 +391,38 @@ describe('RoutesPageComponent', () => {
         expect(hapticsServiceMock.selection).toHaveBeenCalledTimes(4);
     });
 
+    it('selects only visible rows and drops hidden selections after filtering', async () => {
+        const cyclingRoute: FirestoreRouteJSON = {
+            ...route,
+            id: 'route-2',
+            name: 'Evening Ride',
+            srcFileType: 'fit',
+            activityTypes: ['Cycling'],
+            originalFiles: [{
+                path: 'users/user-1/routes/route-2/evening.fit',
+                originalFilename: 'evening.fit',
+                startDate: new Date('2026-01-03T00:00:00.000Z'),
+                extension: 'fit',
+            }],
+        };
+        routeServiceMock.getRoutes.mockReturnValue(of([route, cyclingRoute]));
+        await component.ngOnInit();
+        await firstValueFrom(component.routes$!);
+
+        component.toggleVisibleRouteSelection(true);
+
+        expect([...component.selectedRouteIDs()].sort()).toEqual(['route-1', 'route-2']);
+        expect(component.selectedRouteCount()).toBe(2);
+        expect(component.allVisibleRoutesSelected()).toBe(true);
+
+        component.updateRouteFilter('Morning');
+        await firstValueFrom(component.routes$!);
+
+        expect(component.selectedRouteIDs()).toEqual(['route-1']);
+        expect(component.selectedRouteCount()).toBe(1);
+        expect(component.allVisibleRoutesSelected()).toBe(true);
+    });
+
     it('renders compare-style route filter controls and filtered empty state', () => {
         const template = readFileSync(
             resolve(process.cwd(), 'src/app/components/routes/routes-page.component.html'),
@@ -431,14 +480,27 @@ describe('RoutesPageComponent', () => {
         expect(template).toContain('(click)="openRouteDetails(item)"');
         expect(template).toContain('(keydown.enter)="openRouteDetails(item)"');
         expect(template).toContain('(keydown.space)="$event.preventDefault(); openRouteDetails(item)"');
-        expect(template).toContain('(click)="$event.stopPropagation(); reprocessRouteFromOriginalFile(item.route)"');
+        expect(template).toContain('matColumnDef="select"');
+        expect(template).toContain('aria-label="Select all visible routes"');
+        expect(template).toContain('(change)="toggleVisibleRouteSelection($event.checked)"');
+        expect(template).toContain('(change)="toggleRouteSelection(item, $event.checked)"');
+        expect(template).toContain('[checked]="!!item.route.id && selectedRouteIDSet().has(item.route.id)"');
+        expect(template).toContain('(keydown)="$event.stopPropagation()"');
+        expect(template).toContain('class="route-selection-toolbar"');
+        expect(template).toContain('Export GPX');
+        expect(template).toContain('(click)="exportRouteAsGPX(item.route)"');
+        expect(template).toContain('(click)="downloadRouteOriginals(item.route)"');
+        expect(template).toContain('(click)="confirmDeleteRoute(item.route)"');
+        expect(template).toContain('(click)="reprocessRouteFromOriginalFile(item.route)"');
+        expect(template).toContain('[matMenuTriggerFor]="routeRowActionsMenu"');
         expect(template).toContain('!item.canReprocess');
         expect(template).not.toContain('canReprocessRoute(item.route)');
+        expect(template).not.toContain('isRouteSelected(item)');
         expect(template).toContain('<mat-icon>autorenew</mat-icon>');
-        expect(template).toContain('(click)="$event.stopPropagation(); downloadRouteOriginals(item.route)"');
-        expect(template).toContain('(click)="$event.stopPropagation(); confirmDeleteRoute(item.route)"');
-        expect(template).not.toContain('<mat-icon>open_in_new</mat-icon>');
+        expect(template).toContain('<mat-icon>open_in_new</mat-icon>');
         expect(styles).toContain('.route-table-row');
+        expect(styles).toContain('.route-selection-toolbar');
+        expect(styles).toContain('.route-table .mat-column-select');
         expect(styles).toContain('cursor: pointer;');
     });
 
@@ -625,6 +687,151 @@ describe('RoutesPageComponent', () => {
         expect(routerMock.navigate).toHaveBeenCalledWith(['/user', 'user-1', 'route', 'route-1']);
     });
 
+    it('exports a row route as generated GPX', async () => {
+        await component.ngOnInit();
+
+        await component.exportRouteAsGPX(route);
+
+        expect(routeGPXExportServiceMock.getRouteDocumentAsGPXBlob).toHaveBeenCalledWith(route);
+        expect(fileServiceMock.downloadFile).toHaveBeenCalledWith(
+            expect.any(Blob),
+            'Morning_Route',
+            'gpx',
+        );
+        expect(analyticsServiceMock.logSavedRouteAction).toHaveBeenCalledWith('export_gpx', {
+            status: 'success',
+            fileCount: 1,
+            fileType: 'gpx',
+            zipped: false,
+            source: 'routes_list_row',
+        });
+        expect(component.exportingRouteID()).toBeNull();
+    });
+
+    it('exports selected route GPX files as a zip for bulk selections', async () => {
+        const secondRoute: FirestoreRouteJSON = {
+            ...route,
+            id: 'route-2',
+            name: 'Evening Ride',
+            createdAt: new Date('2026-01-03T00:00:00.000Z'),
+            originalFiles: [{
+                path: 'users/user-1/routes/route-2/evening.fit',
+                originalFilename: 'evening.fit',
+                startDate: new Date('2026-01-03T00:00:00.000Z'),
+                extension: 'fit',
+            }],
+        };
+        routeServiceMock.getRoutes.mockReturnValue(of([route, secondRoute]));
+        routeGPXExportServiceMock.getRouteDocumentAsGPXBlob.mockImplementation(async (routeDocument: FirestoreRouteJSON) => ({
+            blob: new Blob([`<gpx>${routeDocument.id}</gpx>`], { type: 'application/gpx+xml' }),
+            hydratedRoute: { routeDocument },
+        }));
+        await component.ngOnInit();
+        await firstValueFrom(component.routes$!);
+        component.toggleVisibleRouteSelection(true);
+
+        await component.exportSelectedRoutesAsGPX();
+
+        expect(routeGPXExportServiceMock.getRouteDocumentAsGPXBlob).toHaveBeenCalledTimes(2);
+        expect(fileServiceMock.generateDateRangeZipFilename).toHaveBeenCalledWith(
+            new Date('2026-01-02T00:00:00.000Z'),
+            new Date('2026-01-03T00:00:00.000Z'),
+            'route_gpx',
+        );
+        expect(fileServiceMock.downloadAsZip).toHaveBeenCalledWith(
+            expect.arrayContaining([
+                expect.objectContaining({ data: expect.any(Blob), fileName: '2026-01-02_Morning_Route.gpx' }),
+            ]),
+            '2026-01-02_route_gpx.zip',
+        );
+        expect(processingServiceMock.completeJob).toHaveBeenCalledWith('job-1', 'Exported 2 route GPX files');
+        expect(analyticsServiceMock.logSavedRouteAction).toHaveBeenCalledWith('export_gpx', {
+            status: 'success',
+            routeCount: 2,
+            fileCount: 2,
+            failedCount: 0,
+            skippedCount: 0,
+            fileType: 'gpx',
+            zipped: true,
+            source: 'routes_list_bulk',
+        });
+        expect(component.bulkActionInProgress()).toBe(false);
+    });
+
+    it('reports partial success when bulk original downloads skip routes without source files', async () => {
+        const routeWithoutOriginals: FirestoreRouteJSON = {
+            ...route,
+            id: 'route-2',
+            name: 'No Source Route',
+            originalFiles: [],
+        };
+        routeServiceMock.getRoutes.mockReturnValue(of([route, routeWithoutOriginals]));
+        await component.ngOnInit();
+        await firstValueFrom(component.routes$!);
+        component.toggleVisibleRouteSelection(true);
+
+        await component.downloadSelectedRouteOriginals();
+
+        expect(routeServiceMock.downloadFile).toHaveBeenCalledTimes(1);
+        expect(routeServiceMock.downloadFile).toHaveBeenCalledWith('users/user-1/routes/route-1/original.gpx');
+        expect(fileServiceMock.generateDateRangeZipFilename).toHaveBeenCalledWith(
+            new Date('2026-01-02T00:00:00.000Z'),
+            new Date('2026-01-02T00:00:00.000Z'),
+            'route_originals',
+        );
+        expect(fileServiceMock.downloadAsZip).toHaveBeenCalledWith(
+            [expect.objectContaining({ data: expect.any(ArrayBuffer), fileName: '2026-01-02_Morning_Route.gpx' })],
+            '2026-01-02_route_originals.zip',
+        );
+        expect(analyticsServiceMock.logSavedRouteAction).toHaveBeenCalledWith('download', {
+            status: 'partial_success',
+            routeCount: 2,
+            fileCount: 1,
+            failedCount: 0,
+            skippedCount: 1,
+            zipped: true,
+            source: 'routes_list_bulk',
+        });
+        expect(snackBarMock.open).toHaveBeenCalledWith('Downloaded 1 original file. Skipped 1.', undefined, { duration: 4000 });
+    });
+
+    it('keeps failed rows selected after bulk delete partial failures', async () => {
+        const secondRoute: FirestoreRouteJSON = {
+            ...route,
+            id: 'route-2',
+            name: 'Evening Ride',
+            originalFiles: [{
+                path: 'users/user-1/routes/route-2/evening.gpx',
+                originalFilename: 'evening.gpx',
+                startDate: new Date('2026-01-03T00:00:00.000Z'),
+                extension: 'gpx',
+            }],
+        };
+        routeServiceMock.getRoutes.mockReturnValue(of([route, secondRoute]));
+        routeServiceMock.deleteRoute.mockImplementation(async (_user: unknown, routeID: string) => {
+            if (routeID === 'route-2') {
+                throw new Error('delete failed');
+            }
+        });
+        await component.ngOnInit();
+        await firstValueFrom(component.routes$!);
+        component.toggleVisibleRouteSelection(true);
+
+        await component.confirmDeleteSelectedRoutes();
+
+        expect(routeServiceMock.deleteRoute).toHaveBeenCalledWith({ uid: 'user-1' }, 'route-1');
+        expect(routeServiceMock.deleteRoute).toHaveBeenCalledWith({ uid: 'user-1' }, 'route-2');
+        expect(component.selectedRouteIDs()).toEqual(['route-2']);
+        expect(processingServiceMock.completeJob).toHaveBeenCalledWith('job-1', 'Deleted 1 route');
+        expect(analyticsServiceMock.logSavedRouteAction).toHaveBeenCalledWith('delete', {
+            status: 'partial_success',
+            routeCount: 1,
+            failedCount: 1,
+            source: 'routes_list_bulk',
+        });
+        expect(snackBarMock.open).toHaveBeenCalledWith('Deleted 1 route. Failed 1.', undefined, { duration: 4000 });
+    });
+
     it('reprocesses a route from the table action', async () => {
         routeReprocessServiceMock.reprocessRouteDocumentFromOriginalFile.mockImplementationOnce(async (
             _user: unknown,
@@ -774,6 +981,8 @@ describe('RoutesPageComponent', () => {
     });
 
     it('downloads the canonical original route file', async () => {
+        await component.ngOnInit();
+
         await component.downloadRouteOriginals(route);
 
         expect(routeServiceMock.getOriginalRouteFiles).toHaveBeenCalledWith(route);
@@ -789,6 +998,7 @@ describe('RoutesPageComponent', () => {
     });
 
     it('logs and reports route download failures without leaving the row disabled', async () => {
+        await component.ngOnInit();
         const error = new Error('download failed');
         routeServiceMock.downloadFile.mockRejectedValueOnce(error);
 

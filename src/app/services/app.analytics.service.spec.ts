@@ -240,12 +240,15 @@ describe('AppAnalyticsService', () => {
             duplicateUploads: 1,
             failedUploads: 1,
         });
-        service.logSavedRouteAction('download', {
-            status: 'success',
+        service.logSavedRouteAction('export_gpx', {
+            status: 'partial_success',
             routeCount: null,
             fileCount: 1,
+            failedCount: 1,
+            skippedCount: 2,
             fileType: 'gpx',
-            zipped: false,
+            zipped: true,
+            source: 'routes_list_bulk',
         });
         service.logSavedRouteAction('sort', {
             sortColumn: 'distance',
@@ -269,11 +272,14 @@ describe('AppAnalyticsService', () => {
             failed_uploads: 1,
         });
         expect(logEvent).toHaveBeenCalledWith(expect.anything(), 'saved_route_action', {
-            action: 'download',
-            status: 'success',
+            action: 'export_gpx',
+            status: 'partial_success',
             file_count: 1,
+            failed_count: 1,
+            skipped_count: 2,
             file_type: 'gpx',
-            zipped: false,
+            zipped: true,
+            source: 'routes_list_bulk',
         });
         expect(logEvent).toHaveBeenCalledWith(expect.anything(), 'saved_route_action', {
             action: 'sort',

@@ -12,6 +12,7 @@ import { RouteResolverData } from '../../../resolvers/route.resolver';
 import { AppAnalyticsService } from '../../../services/app.analytics.service';
 import { AppFileService } from '../../../services/app.file.service';
 import { AppProcessingService } from '../../../services/app.processing.service';
+import { AppRouteGPXExportService } from '../../../services/app.route-gpx-export.service';
 import { AppRouteReprocessService, RouteReprocessError } from '../../../services/app.route-reprocess.service';
 import { AppRouteService } from '../../../services/app.route.service';
 import { AppThemeService } from '../../../services/app.theme.service';
@@ -27,6 +28,7 @@ describe('RouteDetailComponent', () => {
   let routeReprocessServiceMock: any;
   let processingServiceMock: any;
   let fileServiceMock: any;
+  let routeGPXExportServiceMock: any;
   let analyticsServiceMock: any;
   let dialogMock: any;
   let snackBarMock: any;
@@ -121,6 +123,9 @@ describe('RouteDetailComponent', () => {
       downloadFile: vi.fn(),
       downloadAsZip: vi.fn().mockResolvedValue(undefined),
     };
+    routeGPXExportServiceMock = {
+      getRouteFileAsGPXBlob: vi.fn().mockResolvedValue(new Blob(['<gpx></gpx>'], { type: 'application/gpx+xml' })),
+    };
     analyticsServiceMock = {
       logSavedRouteAction: vi.fn(),
     };
@@ -145,6 +150,7 @@ describe('RouteDetailComponent', () => {
         { provide: AppRouteReprocessService, useValue: routeReprocessServiceMock },
         { provide: AppProcessingService, useValue: processingServiceMock },
         { provide: AppFileService, useValue: fileServiceMock },
+        { provide: AppRouteGPXExportService, useValue: routeGPXExportServiceMock },
         { provide: AppAnalyticsService, useValue: analyticsServiceMock },
         { provide: MatDialog, useValue: dialogMock },
         { provide: MatSnackBar, useValue: snackBarMock },
@@ -348,6 +354,25 @@ describe('RouteDetailComponent', () => {
     });
   });
 
+  it('exports the hydrated route file as generated GPX from the detail page action', async () => {
+    await component.exportRouteAsGPX();
+
+    expect(routeGPXExportServiceMock.getRouteFileAsGPXBlob).toHaveBeenCalledWith(component.routeFile());
+    expect(fileServiceMock.downloadFile).toHaveBeenCalledWith(
+      expect.any(Blob),
+      'Detail_Route',
+      'gpx',
+    );
+    expect(analyticsServiceMock.logSavedRouteAction).toHaveBeenCalledWith('export_gpx', {
+      status: 'success',
+      fileCount: 1,
+      fileType: 'gpx',
+      zipped: false,
+      source: 'route_detail',
+    });
+    expect(component.exportingGPX()).toBe(false);
+  });
+
   it('reprocesses the owner route from the original source file', async () => {
     await component.reprocessRouteFromOriginalFile();
 
@@ -424,15 +449,18 @@ describe('RouteDetailComponent', () => {
     routeServiceMock.updateRouteName.mockClear();
     routeServiceMock.downloadFile.mockClear();
     routeServiceMock.deleteRoute.mockClear();
+    routeGPXExportServiceMock.getRouteFileAsGPXBlob.mockClear();
     routeReprocessServiceMock.reprocessRouteFromOriginalFile.mockClear();
 
     await component.renameRoute();
     await component.downloadRouteOriginals();
+    await component.exportRouteAsGPX();
     await component.reprocessRouteFromOriginalFile();
     await component.confirmDeleteRoute();
 
     expect(routeServiceMock.updateRouteName).not.toHaveBeenCalled();
     expect(routeServiceMock.downloadFile).not.toHaveBeenCalled();
+    expect(routeGPXExportServiceMock.getRouteFileAsGPXBlob).not.toHaveBeenCalled();
     expect(dialogMock.open).not.toHaveBeenCalled();
     expect(routeServiceMock.deleteRoute).not.toHaveBeenCalled();
     expect(routeReprocessServiceMock.reprocessRouteFromOriginalFile).not.toHaveBeenCalled();
@@ -455,7 +483,10 @@ describe('RouteDetailComponent', () => {
     expect(waypointsIndex).toBeGreaterThan(segmentsIndex);
     expect(template).toContain('@if (hasMultipleSegments())');
     expect(template).toContain('@if (singleSegment(); as segment)');
-    expect(template).toContain('aria-label="Reprocess route from original file"');
+    expect(template).toContain('aria-label="Route actions"');
+    expect(template).toContain('[matMenuTriggerFor]="routeDetailActionsMenu"');
+    expect(template).toContain('Export GPX');
+    expect(template).toContain('(click)="exportRouteAsGPX()"');
     expect(template).toContain('(click)="reprocessRouteFromOriginalFile()"');
     expect(template).toContain('class="route-chip route-chip--segment"');
     expect(template).toContain('class="segment-table route-data-table"');

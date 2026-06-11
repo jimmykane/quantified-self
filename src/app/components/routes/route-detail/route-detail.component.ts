@@ -15,6 +15,7 @@ import { RouteResolverData } from '../../../resolvers/route.resolver';
 import { AppAnalyticsService } from '../../../services/app.analytics.service';
 import { AppFileService } from '../../../services/app.file.service';
 import { AppProcessingService } from '../../../services/app.processing.service';
+import { AppRouteGPXExportService } from '../../../services/app.route-gpx-export.service';
 import {
   AppRouteReprocessService,
   getRouteReprocessErrorMessage,
@@ -53,6 +54,7 @@ export class RouteDetailComponent {
   private routeService = inject(AppRouteService);
   private fileService = inject(AppFileService);
   private analyticsService = inject(AppAnalyticsService);
+  private routeGPXExportService = inject(AppRouteGPXExportService);
   private routeReprocessService = inject(AppRouteReprocessService);
   private processingService = inject(AppProcessingService);
   private dialog = inject(MatDialog);
@@ -68,6 +70,7 @@ export class RouteDetailComponent {
   readonly selectedSegmentIDs = signal<string[]>([]);
   readonly renaming = signal(false);
   readonly downloading = signal(false);
+  readonly exportingGPX = signal(false);
   readonly deleting = signal(false);
   readonly reprocessing = signal(false);
 
@@ -166,7 +169,17 @@ export class RouteDetailComponent {
     const routeDocument = this.routeDocument();
     const routeID = routeDocument?.id;
     const user = this.user();
-    if (!routeDocument || !routeID || !user || this.renaming() || !this.canManageRoute()) {
+    if (
+      !routeDocument
+      || !routeID
+      || !user
+      || this.renaming()
+      || this.downloading()
+      || this.exportingGPX()
+      || this.reprocessing()
+      || this.deleting()
+      || !this.canManageRoute()
+    ) {
       return;
     }
 
@@ -213,7 +226,15 @@ export class RouteDetailComponent {
 
   async downloadRouteOriginals(): Promise<void> {
     const routeDocument = this.routeDocument();
-    if (!routeDocument?.id || this.downloading() || !this.canManageRoute()) {
+    if (
+      !routeDocument?.id
+      || this.downloading()
+      || this.renaming()
+      || this.exportingGPX()
+      || this.reprocessing()
+      || this.deleting()
+      || !this.canManageRoute()
+    ) {
       return;
     }
 
@@ -280,6 +301,51 @@ export class RouteDetailComponent {
     }
   }
 
+  async exportRouteAsGPX(): Promise<void> {
+    const routeDocument = this.routeDocument();
+    const routeFile = this.routeFile();
+    if (
+      !routeDocument?.id
+      || !routeFile
+      || this.exportingGPX()
+      || this.renaming()
+      || this.downloading()
+      || this.reprocessing()
+      || this.deleting()
+      || !this.canManageRoute()
+    ) {
+      return;
+    }
+
+    this.exportingGPX.set(true);
+    this.snackBar.open('Generating route GPX...', undefined, { duration: 2000 });
+    try {
+      const blob = await this.routeGPXExportService.getRouteFileAsGPXBlob(routeFile);
+      const baseName = this.sanitizeFilenameBase(routeDocument.name || routeDocument.id || 'route');
+      this.fileService.downloadFile(blob, baseName, 'gpx');
+      this.analyticsService.logSavedRouteAction('export_gpx', {
+        status: 'success',
+        fileCount: 1,
+        fileType: 'gpx',
+        zipped: false,
+        source: 'route_detail',
+      });
+      this.snackBar.open('GPX file served.', undefined, { duration: 2000 });
+    } catch (error) {
+      this.analyticsService.logSavedRouteAction('export_gpx', {
+        status: 'failure',
+        fileCount: 0,
+        fileType: this.getPrimaryRouteFileType(routeDocument),
+        zipped: false,
+        source: 'route_detail',
+      });
+      this.logger.error('[RouteDetailComponent] Failed to export route GPX', { routeID: routeDocument.id }, error);
+      this.snackBar.open('Could not export route GPX.', undefined, { duration: 3000 });
+    } finally {
+      this.exportingGPX.set(false);
+    }
+  }
+
   async reprocessRouteFromOriginalFile(): Promise<void> {
     const routeDocument = this.routeDocument();
     const routeID = routeDocument?.id;
@@ -291,6 +357,7 @@ export class RouteDetailComponent {
       || this.reprocessing()
       || this.renaming()
       || this.downloading()
+      || this.exportingGPX()
       || this.deleting()
       || !this.canManageRoute()
     ) {
@@ -365,7 +432,17 @@ export class RouteDetailComponent {
     const routeDocument = this.routeDocument();
     const routeID = routeDocument?.id;
     const user = this.user();
-    if (!routeDocument || !routeID || !user || this.deleting() || !this.canManageRoute()) {
+    if (
+      !routeDocument
+      || !routeID
+      || !user
+      || this.deleting()
+      || this.renaming()
+      || this.downloading()
+      || this.exportingGPX()
+      || this.reprocessing()
+      || !this.canManageRoute()
+    ) {
       return;
     }
 

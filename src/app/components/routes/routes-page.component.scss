@@ -136,6 +136,60 @@
   width: 100%;
 }
 
+.route-selection-toolbar {
+  align-items: center;
+  background: var(--mat-sys-surface-container, rgba(0, 0, 0, 0.04));
+  border-bottom: 1px solid var(--mat-sys-outline-variant, rgba(0, 0, 0, 0.12));
+  display: flex;
+  gap: 0.75rem 1rem;
+  justify-content: space-between;
+  min-width: 1020px;
+  padding: 0.6rem 0.75rem;
+}
+
+.route-selection-summary,
+.route-selection-actions,
+.route-bulk-action-content {
+  align-items: center;
+  display: inline-flex;
+}
+
+.route-selection-summary {
+  color: var(--mat-sys-primary, #1976d2);
+  font-size: 0.9rem;
+  font-weight: 600;
+  gap: 0.45rem;
+  min-width: 0;
+}
+
+.route-selection-summary mat-icon {
+  font-size: 1.15rem;
+  height: 1.15rem;
+  line-height: 1.15rem;
+  width: 1.15rem;
+}
+
+.route-selection-actions {
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  justify-content: flex-end;
+}
+
+.route-bulk-action-button {
+  min-width: 0;
+}
+
+.route-bulk-action-content {
+  gap: 0.35rem;
+}
+
+.route-bulk-action-content mat-icon {
+  font-size: 1.1rem;
+  height: 1.1rem;
+  line-height: 1.1rem;
+  width: 1.1rem;
+}
+
 .route-table th {
   white-space: nowrap;
 }
@@ -199,6 +253,13 @@
   width: 100%;
 }
 
+.route-table .mat-column-select {
+  padding-left: 8px;
+  padding-right: 4px;
+  text-align: center;
+  width: 3.25rem;
+}
+
 .route-table .mat-column-date {
   width: 8rem;
 }
@@ -230,7 +291,7 @@
 .route-table .mat-column-actions {
   padding-right: 8px;
   text-align: right;
-  width: 9rem;
+  width: 4.5rem;
 }
 
 .route-name-cell {
@@ -374,6 +435,16 @@
   .route-table-actions {
     justify-content: flex-start;
     margin-left: 0;
+  }
+
+  .route-selection-toolbar {
+    align-items: stretch;
+    display: grid;
+    min-width: 980px;
+  }
+
+  .route-selection-actions {
+    justify-content: flex-start;
   }
 
   .route-table {

@@ -84,6 +84,56 @@
     @if (loadedRouteCount() > 0) {
     @if (routes.length > 0) {
     <section class="route-table-shell" aria-label="Saved routes">
+      @if (selectedRouteCount() > 0) {
+      <div class="route-selection-toolbar" aria-live="polite">
+        <div class="route-selection-summary">
+          <mat-icon>check_circle</mat-icon>
+          <span>{{ selectedRouteCount() }} {{ selectedRouteCount() === 1 ? 'route' : 'routes' }} selected</span>
+        </div>
+        <div class="route-selection-actions">
+          <button mat-button type="button"
+            class="route-bulk-action-button"
+            [disabled]="bulkActionInProgress()"
+            [attr.aria-label]="'Export GPX for ' + selectedRouteCount() + ' selected ' + (selectedRouteCount() === 1 ? 'route' : 'routes')"
+            (click)="$event.preventDefault(); $event.stopPropagation(); exportSelectedRoutesAsGPX()">
+            <span class="route-bulk-action-content">
+              <mat-icon>file_download</mat-icon>
+              <span>GPX</span>
+            </span>
+          </button>
+          <button mat-button type="button"
+            class="route-bulk-action-button"
+            [disabled]="bulkActionInProgress()"
+            aria-label="Download original files for selected routes"
+            (click)="$event.preventDefault(); $event.stopPropagation(); downloadSelectedRouteOriginals()">
+            <span class="route-bulk-action-content">
+              <mat-icon>folder_zip</mat-icon>
+              <span>Originals</span>
+            </span>
+          </button>
+          <button mat-button color="warn" type="button"
+            class="route-bulk-action-button"
+            [disabled]="bulkActionInProgress()"
+            [attr.aria-label]="'Delete ' + selectedRouteCount() + ' selected ' + (selectedRouteCount() === 1 ? 'route' : 'routes')"
+            (click)="$event.preventDefault(); $event.stopPropagation(); confirmDeleteSelectedRoutes()">
+            <span class="route-bulk-action-content">
+              <mat-icon>delete</mat-icon>
+              <span>Delete</span>
+            </span>
+          </button>
+          <button mat-button type="button"
+            class="route-bulk-action-button"
+            [disabled]="bulkActionInProgress()"
+            aria-label="Clear route selection"
+            (click)="clearRouteSelection($event)">
+            <span class="route-bulk-action-content">
+              <mat-icon>close</mat-icon>
+              <span>Clear</span>
+            </span>
+          </button>
+        </div>
+      </div>
+      }
       <table
         mat-table
         matSort
@@ -94,6 +144,30 @@
         [matSortActive]="routeSortActive()"
         [matSortDirection]="routeSortDirection()"
         (matSortChange)="onRouteSortChange($event)">
+        <ng-container matColumnDef="select">
+          <th mat-header-cell *matHeaderCellDef>
+            <mat-checkbox
+              aria-label="Select all visible routes"
+              [checked]="allVisibleRoutesSelected()"
+              [indeterminate]="visibleRouteSelectionIndeterminate()"
+              [disabled]="bulkActionInProgress()"
+              (click)="$event.stopPropagation()"
+              (keydown)="$event.stopPropagation()"
+              (change)="toggleVisibleRouteSelection($event.checked)">
+            </mat-checkbox>
+          </th>
+          <td mat-cell *matCellDef="let item">
+            <mat-checkbox
+              [attr.aria-label]="'Select ' + item.name"
+              [checked]="!!item.route.id && selectedRouteIDSet().has(item.route.id)"
+              [disabled]="bulkActionInProgress()"
+              (click)="$event.stopPropagation()"
+              (keydown)="$event.stopPropagation()"
+              (change)="toggleRouteSelection(item, $event.checked)">
+            </mat-checkbox>
+          </td>
+        </ng-container>
+
         <ng-container matColumnDef="date">
           <th mat-header-cell *matHeaderCellDef mat-sort-header="date">
             <span class="route-header-label">
@@ -246,26 +320,43 @@
         </th>
         <td mat-cell *matCellDef="let item" class="route-actions-cell">
           <button mat-icon-button type="button"
-            aria-label="Reprocess route from original file"
-            matTooltip="Reprocess route from original file"
-            [disabled]="reprocessingRouteID() !== null || deletingRouteID() === item.route.id || downloadingRouteID() === item.route.id || !item.canReprocess"
-            (click)="$event.stopPropagation(); reprocessRouteFromOriginalFile(item.route)">
-            <mat-icon>autorenew</mat-icon>
+            aria-label="Route row actions"
+            matTooltip="Route actions"
+            [matMenuTriggerFor]="routeRowActionsMenu"
+            (click)="$event.stopPropagation()"
+            (keydown)="$event.stopPropagation()">
+            <mat-icon>more_vert</mat-icon>
           </button>
-          <button mat-icon-button type="button"
-            aria-label="Download original route file"
-            matTooltip="Download original route file"
-            [disabled]="downloadingRouteID() === item.route.id || reprocessingRouteID() === item.route.id"
-            (click)="$event.stopPropagation(); downloadRouteOriginals(item.route)">
-            <mat-icon>download</mat-icon>
-          </button>
-          <button mat-icon-button type="button"
-            aria-label="Delete route"
-            matTooltip="Delete route"
-            [disabled]="deletingRouteID() === item.route.id || reprocessingRouteID() === item.route.id"
-            (click)="$event.stopPropagation(); confirmDeleteRoute(item.route)">
-            <mat-icon>delete</mat-icon>
-          </button>
+          <mat-menu #routeRowActionsMenu="matMenu" class="qs-menu-panel">
+            <button mat-menu-item type="button" (click)="openRouteDetails(item)">
+              <mat-icon>open_in_new</mat-icon>
+              <span>Open details</span>
+            </button>
+            <button mat-menu-item type="button"
+              [disabled]="bulkActionInProgress() || exportingRouteID() === item.route.id || deletingRouteID() === item.route.id || downloadingRouteID() === item.route.id || reprocessingRouteID() === item.route.id || !item.canExportGPX"
+              (click)="exportRouteAsGPX(item.route)">
+              <mat-icon>file_download</mat-icon>
+              <span>Export GPX</span>
+            </button>
+            <button mat-menu-item type="button"
+              [disabled]="bulkActionInProgress() || downloadingRouteID() === item.route.id || deletingRouteID() === item.route.id || exportingRouteID() === item.route.id || reprocessingRouteID() === item.route.id || !item.canDownloadOriginals"
+              (click)="downloadRouteOriginals(item.route)">
+              <mat-icon>download</mat-icon>
+              <span>Download originals</span>
+            </button>
+            <button mat-menu-item type="button"
+              [disabled]="bulkActionInProgress() || reprocessingRouteID() !== null || deletingRouteID() === item.route.id || downloadingRouteID() === item.route.id || exportingRouteID() === item.route.id || !item.canReprocess"
+              (click)="reprocessRouteFromOriginalFile(item.route)">
+              <mat-icon>autorenew</mat-icon>
+              <span>Reprocess</span>
+            </button>
+            <button mat-menu-item type="button"
+              [disabled]="bulkActionInProgress() || deletingRouteID() === item.route.id || downloadingRouteID() === item.route.id || reprocessingRouteID() === item.route.id || exportingRouteID() === item.route.id || !item.canDelete"
+              (click)="confirmDeleteRoute(item.route)">
+              <mat-icon>delete</mat-icon>
+              <span>Delete</span>
+            </button>
+          </mat-menu>
         </td>
       </ng-container>
 
