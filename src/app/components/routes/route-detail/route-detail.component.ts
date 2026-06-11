@@ -16,6 +16,7 @@ import { RouteResolverData } from '../../../resolvers/route.resolver';
 import { buildSuuntoServiceConnectionViewModel, SuuntoServiceConnectionViewModel } from '../../../helpers/suunto-service-connection.helper';
 import { AppAnalyticsService } from '../../../services/app.analytics.service';
 import { AppFileService } from '../../../services/app.file.service';
+import { AppOriginalFileDownloadService } from '../../../services/app.original-file-download.service';
 import { AppProcessingService } from '../../../services/app.processing.service';
 import { AppRouteGPXExportService } from '../../../services/app.route-gpx-export.service';
 import {
@@ -61,6 +62,7 @@ export class RouteDetailComponent {
   private router = inject(Router);
   private routeService = inject(AppRouteService);
   private fileService = inject(AppFileService);
+  private originalFileDownloadService = inject(AppOriginalFileDownloadService);
   private analyticsService = inject(AppAnalyticsService);
   private routeGPXExportService = inject(AppRouteGPXExportService);
   private routeReprocessService = inject(AppRouteReprocessService);
@@ -288,60 +290,20 @@ export class RouteDetailComponent {
     this.downloading.set(true);
     this.snackBar.open('Preparing route download...', undefined, { duration: 2000 });
     try {
-      const usedFileNames = new Set<string>();
-      let minDate: Date | null = null;
-      let maxDate: Date | null = null;
-
-      if (originalFiles.length > 1) {
-        const filesToZip: { data: ArrayBuffer; fileName: string }[] = [];
-        for (let i = 0; i < originalFiles.length; i++) {
-          const fileMeta = originalFiles[i];
-          const fileDate = this.fileService.toDate(fileMeta.startDate) || this.routeDate();
-          const fileName = this.fileService.getUniqueFileName(
-            this.fileService.resolveOriginalSourceFileName(
-              fileMeta,
-              fileMeta.extension || this.getPrimaryRouteFileType(routeDocument),
-              'original-route-file',
-            ),
-            usedFileNames,
-          );
-          if (fileDate) {
-            if (!minDate || fileDate < minDate) minDate = fileDate;
-            if (!maxDate || fileDate > maxDate) maxDate = fileDate;
-          }
-          filesToZip.push({
-            data: await this.routeService.downloadOriginalFile(fileMeta.path),
-            fileName,
-          });
-        }
-
-        await this.fileService.downloadAsZip(
-          filesToZip,
-          this.fileService.generateDateRangeZipFilename(minDate, maxDate, 'route_originals'),
-        );
-        this.analyticsService.logSavedRouteAction('download', {
-          status: 'success',
-          fileCount: originalFiles.length,
-          fileType: this.getPrimaryRouteFileType(routeDocument),
-          zipped: true,
-        });
-        return;
-      }
-
-      const fileMeta = originalFiles[0];
-      const extension = this.fileService.getExtensionFromPath(fileMeta.path, fileMeta.extension || 'gpx');
-      const fileName = this.fileService.resolveOriginalSourceFileName(
-        fileMeta,
-        extension,
-        'original-route-file',
-      );
-      const buffer = await this.routeService.downloadOriginalFile(fileMeta.path);
-      this.fileService.downloadNamedFile(new Blob([buffer]), fileName, extension);
+      const result = await this.originalFileDownloadService.downloadOriginalFiles({
+        sources: originalFiles.map(file => ({
+          ...file,
+          fallbackDate: this.routeDate(),
+        })),
+        downloadFile: (path) => this.routeService.downloadOriginalFile(path),
+        zipSuffix: 'route_originals',
+        fallbackFileName: 'original-route-file',
+      });
       this.analyticsService.logSavedRouteAction('download', {
         status: 'success',
-        fileCount: 1,
-        fileType: extension,
-        zipped: false,
+        fileCount: result.downloadedCount,
+        fileType: this.getPrimaryRouteFileType(routeDocument),
+        zipped: result.mode === 'zip',
       });
     } catch (error) {
       this.analyticsService.logSavedRouteAction('download', {

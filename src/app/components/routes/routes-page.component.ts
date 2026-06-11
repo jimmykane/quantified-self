@@ -26,6 +26,7 @@ import { SharedModule } from '../../modules/shared.module';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { AppFileService } from '../../services/app.file.service';
 import { AppHapticsService } from '../../services/app.haptics.service';
+import { AppOriginalFileDownloadService } from '../../services/app.original-file-download.service';
 import { AppProcessingService } from '../../services/app.processing.service';
 import { AppRouteGPXExportService } from '../../services/app.route-gpx-export.service';
 import {
@@ -135,6 +136,7 @@ export class RoutesPageComponent implements OnInit {
     private fileService = inject(AppFileService);
     private analyticsService = inject(AppAnalyticsService);
     private hapticsService = inject(AppHapticsService);
+    private originalFileDownloadService = inject(AppOriginalFileDownloadService);
     private processingService = inject(AppProcessingService);
     private routeGPXExportService = inject(AppRouteGPXExportService);
     private routeReprocessService = inject(AppRouteReprocessService);
@@ -473,60 +475,20 @@ export class RoutesPageComponent implements OnInit {
         this.downloadingRouteID.set(routeID);
         this.snackBar.open('Preparing route download...', undefined, { duration: 2000 });
         try {
-            const usedFileNames = new Set<string>();
-            let minDate: Date | null = null;
-            let maxDate: Date | null = null;
-
-            if (originalFiles.length > 1) {
-                const filesToZip: { data: ArrayBuffer; fileName: string }[] = [];
-                for (let i = 0; i < originalFiles.length; i++) {
-                    const fileMeta = originalFiles[i];
-                    const fileDate = this.fileService.toDate(fileMeta.startDate) || this.resolveRouteDate(route);
-                    const fileName = this.fileService.getUniqueFileName(
-                        this.fileService.resolveOriginalSourceFileName(
-                            fileMeta,
-                            fileMeta.extension || this.getPrimaryRouteFileType(route),
-                            'original-route-file',
-                        ),
-                        usedFileNames,
-                    );
-                    if (fileDate) {
-                        if (!minDate || fileDate < minDate) minDate = fileDate;
-                        if (!maxDate || fileDate > maxDate) maxDate = fileDate;
-                    }
-                    filesToZip.push({
-                        data: await this.routeService.downloadOriginalFile(fileMeta.path),
-                        fileName,
-                    });
-                }
-
-                await this.fileService.downloadAsZip(
-                    filesToZip,
-                    this.fileService.generateDateRangeZipFilename(minDate, maxDate, 'route_originals'),
-                );
-                this.analyticsService.logSavedRouteAction('download', {
-                    status: 'success',
-                    fileCount: originalFiles.length,
-                    fileType: this.getPrimaryRouteFileType(route),
-                    zipped: true,
-                });
-                return;
-            }
-
-            const fileMeta = originalFiles[0];
-            const extension = this.fileService.getExtensionFromPath(fileMeta.path, fileMeta.extension || 'gpx');
-            const fileName = this.fileService.resolveOriginalSourceFileName(
-                fileMeta,
-                extension,
-                'original-route-file',
-            );
-            const buffer = await this.routeService.downloadOriginalFile(fileMeta.path);
-            this.fileService.downloadNamedFile(new Blob([buffer]), fileName, extension);
+            const result = await this.originalFileDownloadService.downloadOriginalFiles({
+                sources: originalFiles.map(file => ({
+                    ...file,
+                    fallbackDate: this.resolveRouteDate(route),
+                })),
+                downloadFile: (path) => this.routeService.downloadOriginalFile(path),
+                zipSuffix: 'route_originals',
+                fallbackFileName: 'original-route-file',
+            });
             this.analyticsService.logSavedRouteAction('download', {
                 status: 'success',
-                fileCount: 1,
-                fileType: extension,
-                zipped: false,
+                fileCount: result.downloadedCount,
+                fileType: this.getPrimaryRouteFileType(route),
+                zipped: result.mode === 'zip',
             });
         } catch (error) {
             this.analyticsService.logSavedRouteAction('download', {
@@ -905,54 +867,36 @@ export class RoutesPageComponent implements OnInit {
             details: `${originalFileEntries.length} ${originalFileEntries.length === 1 ? 'file' : 'files'} found`,
         });
 
-        const downloadedFiles: { data: ArrayBuffer; fileName: string }[] = [];
-        let failedCount = 0;
-        let minDate: Date | null = null;
-        let maxDate: Date | null = null;
-        const usedFileNames = new Set<string>();
-
         try {
-            for (let index = 0; index < originalFileEntries.length; index++) {
-                const entry = originalFileEntries[index];
-                const routeID = entry.item.route.id;
-                const extension = this.fileService.getExtensionFromPath(entry.file.path, entry.file.extension || 'gpx');
-                const fileDate = this.fileService.toDate(entry.file.startDate) || entry.item.routeDate;
-                const fileName = this.fileService.getUniqueFileName(
-                    this.fileService.resolveOriginalSourceFileName(
-                        entry.file,
-                        extension,
-                        'original-route-file',
-                    ),
-                    usedFileNames,
-                );
-
-                try {
-                    downloadedFiles.push({
-                        data: await this.routeService.downloadOriginalFile(entry.file.path),
-                        fileName,
+            const result = await this.originalFileDownloadService.downloadOriginalFiles({
+                sources: originalFileEntries.map(entry => ({
+                    ...entry.file,
+                    fallbackDate: entry.item.routeDate,
+                    routeID: entry.item.route.id,
+                })),
+                downloadFile: (path) => this.routeService.downloadOriginalFile(path),
+                zipSuffix: 'route_originals',
+                fallbackFileName: 'original-route-file',
+                zipSingleFile: true,
+                continueOnFailure: true,
+                onFileFailed: (source, error) => {
+                    this.logger.error('[RoutesPageComponent] Failed to download selected route original file', { routeID: source.routeID, path: source.path }, error);
+                },
+                onFileProcessed: ({ completed, total, downloadedCount }) => {
+                    this.processingService.updateJob(jobId, {
+                        progress: 10 + Math.round((completed / total) * 70),
+                        details: `Downloaded ${downloadedCount} of ${total}`,
                     });
-                    if (fileDate) {
-                        if (!minDate || fileDate < minDate) minDate = fileDate;
-                        if (!maxDate || fileDate > maxDate) maxDate = fileDate;
-                    }
-                } catch (error) {
-                    failedCount++;
-                    this.logger.error('[RoutesPageComponent] Failed to download selected route original file', { routeID, path: entry.file.path }, error);
-                }
+                },
+            });
 
-                this.processingService.updateJob(jobId, {
-                    progress: 10 + Math.round(((index + 1) / originalFileEntries.length) * 70),
-                    details: `Downloaded ${downloadedFiles.length} of ${originalFileEntries.length}`,
-                });
-            }
-
-            if (downloadedFiles.length === 0) {
+            if (result.mode === 'none') {
                 this.processingService.failJob(jobId, 'No original route files downloaded');
                 this.analyticsService.logSavedRouteAction('download', {
                     status: 'failure',
                     routeCount: selectedRoutes.length,
                     fileCount: 0,
-                    failedCount,
+                    failedCount: result.failedCount,
                     skippedCount,
                     source: 'routes_list_bulk',
                 });
@@ -960,26 +904,27 @@ export class RoutesPageComponent implements OnInit {
                 return;
             }
 
-            this.processingService.updateJob(jobId, { progress: 90, details: 'Zipping original route files' });
-            const zipFileName = this.fileService.generateDateRangeZipFilename(minDate, maxDate, 'route_originals');
-            await this.fileService.downloadAsZip(downloadedFiles, zipFileName);
-            const status = failedCount > 0 || skippedCount > 0 ? 'partial_success' : 'success';
+            this.processingService.updateJob(jobId, {
+                progress: 90,
+                details: result.mode === 'zip' ? 'Zipping original route files' : 'Finalizing original route download',
+            });
+            const status = result.failedCount > 0 || skippedCount > 0 ? 'partial_success' : 'success';
             this.processingService.completeJob(
                 jobId,
-                `Downloaded ${downloadedFiles.length} original route ${downloadedFiles.length === 1 ? 'file' : 'files'}`,
+                `Downloaded ${result.downloadedCount} original route ${result.downloadedCount === 1 ? 'file' : 'files'}`,
             );
             this.analyticsService.logSavedRouteAction('download', {
                 status,
                 routeCount: selectedRoutes.length,
-                fileCount: downloadedFiles.length,
-                failedCount,
+                fileCount: result.downloadedCount,
+                failedCount: result.failedCount,
                 skippedCount,
-                zipped: true,
+                zipped: result.mode === 'zip',
                 source: 'routes_list_bulk',
             });
             this.snackBar.open(
                 status === 'partial_success'
-                    ? `Downloaded ${downloadedFiles.length} original ${downloadedFiles.length === 1 ? 'file' : 'files'}. Skipped ${failedCount + skippedCount}.`
+                    ? this.getBulkOriginalRouteDownloadSummaryMessage(result.downloadedCount, result.failedCount, skippedCount)
                     : 'Original route files served.',
                 undefined,
                 { duration: status === 'partial_success' ? 4000 : 2000 },
@@ -989,10 +934,10 @@ export class RoutesPageComponent implements OnInit {
             this.analyticsService.logSavedRouteAction('download', {
                 status: 'failure',
                 routeCount: selectedRoutes.length,
-                fileCount: downloadedFiles.length,
-                failedCount: failedCount + 1,
+                fileCount: 0,
+                failedCount: 1,
                 skippedCount,
-                zipped: true,
+                zipped: originalFileEntries.length > 1,
                 source: 'routes_list_bulk',
             });
             this.logger.error('[RoutesPageComponent] Failed to download selected route original files', error);
@@ -1227,6 +1172,21 @@ export class RoutesPageComponent implements OnInit {
         }
         if (guidanceMessage) {
             messageParts.push(guidanceMessage);
+        }
+        return messageParts.join(' ');
+    }
+
+    private getBulkOriginalRouteDownloadSummaryMessage(
+        downloadedCount: number,
+        failedCount: number,
+        skippedCount: number,
+    ): string {
+        const messageParts = [`Downloaded ${downloadedCount} original ${downloadedCount === 1 ? 'file' : 'files'}.`];
+        if (failedCount > 0) {
+            messageParts.push(`Failed ${failedCount}.`);
+        }
+        if (skippedCount > 0) {
+            messageParts.push(`Skipped ${skippedCount}.`);
         }
         return messageParts.join(' ');
     }

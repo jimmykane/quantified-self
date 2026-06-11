@@ -1019,6 +1019,51 @@ describe('RoutesPageComponent', () => {
         expect(snackBarMock.open).toHaveBeenCalledWith('Downloaded 1 original file. Skipped 1.', undefined, { duration: 4000 });
     });
 
+    it('reports failed and skipped route original downloads separately during bulk download', async () => {
+        const secondRoute: FirestoreRouteJSON = {
+            ...route,
+            id: 'route-2',
+            name: 'Broken Source Route',
+            originalFiles: [{
+                path: 'users/user-1/routes/route-2/original.fit',
+                originalFilename: 'broken.fit',
+                startDate: new Date('2026-01-03T00:00:00.000Z'),
+                extension: 'fit',
+            }],
+        };
+        const routeWithoutOriginals: FirestoreRouteJSON = {
+            ...route,
+            id: 'route-3',
+            name: 'No Source Route',
+            originalFiles: [],
+        };
+        routeServiceMock.getRoutes.mockReturnValue(of([route, secondRoute, routeWithoutOriginals]));
+        routeServiceMock.downloadOriginalFile
+            .mockResolvedValueOnce(new Uint8Array([1, 2, 3]).buffer)
+            .mockRejectedValueOnce(new Error('download failed'));
+        await component.ngOnInit();
+        await firstValueFrom(component.routes$!);
+        component.toggleVisibleRouteSelection(true);
+
+        await component.downloadSelectedRouteOriginals();
+
+        expect(routeServiceMock.downloadOriginalFile).toHaveBeenCalledTimes(2);
+        expect(analyticsServiceMock.logSavedRouteAction).toHaveBeenCalledWith('download', {
+            status: 'partial_success',
+            routeCount: 3,
+            fileCount: 1,
+            failedCount: 1,
+            skippedCount: 1,
+            zipped: true,
+            source: 'routes_list_bulk',
+        });
+        expect(snackBarMock.open).toHaveBeenCalledWith(
+            'Downloaded 1 original file. Failed 1. Skipped 1.',
+            undefined,
+            { duration: 4000 },
+        );
+    });
+
     it('keeps failed rows selected after bulk delete partial failures', async () => {
         const secondRoute: FirestoreRouteJSON = {
             ...route,
