@@ -93,6 +93,8 @@ export class AppRouteHydrationService {
   }
 
   private applyStoredRouteIdentity(routeDocument: FirestoreRouteJSON, routeFile: RouteFileInterface): void {
+    this.applySavedRouteName(routeDocument, routeFile);
+
     if (routeDocument.id && typeof routeFile.setID === 'function') {
       routeFile.setID(routeDocument.id);
     }
@@ -131,6 +133,20 @@ export class AppRouteHydrationService {
       }
       this.applyRouteSegmentIdentity(parsedRoute, fallbackStoredRoute?.id);
     });
+  }
+
+  private applySavedRouteName(routeDocument: FirestoreRouteJSON, routeFile: RouteFileInterface): void {
+    const storedRouteName = typeof routeDocument.name === 'string' ? routeDocument.name.trim() : '';
+    if (!storedRouteName) {
+      return;
+    }
+
+    routeFile.name = storedRouteName;
+
+    const parsedRoutes = routeFile.getRoutes?.() || [];
+    if (parsedRoutes.length === 1) {
+      parsedRoutes[0].name = storedRouteName;
+    }
   }
 
   private applyRouteSegmentIdentity(route: RouteInterface, id: string | null | undefined): void {

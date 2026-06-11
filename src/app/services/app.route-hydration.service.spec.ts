@@ -40,10 +40,12 @@ describe('AppRouteHydrationService', () => {
 
   beforeEach(() => {
     parsedRouteMock = {
+      name: 'Original imported segment',
       getID: vi.fn(() => null),
       setID: vi.fn(),
     };
     routeFileMock = {
+      name: 'Original imported route',
       setID: vi.fn(),
       getRoutes: vi.fn(() => [parsedRouteMock]),
     } as unknown as RouteFileInterface;
@@ -93,6 +95,8 @@ describe('AppRouteHydrationService', () => {
       }),
       'Test Route',
     );
+    expect(routeFileMock.name).toBe('Test Route');
+    expect(parsedRouteMock.name).toBe('Test Route');
     expect(routeFileMock.setID).toHaveBeenCalledWith('route-1');
     expect(parsedRouteMock.setID).toHaveBeenCalledWith('segment-1');
     expect(result.routeFile).toBe(routeFileMock);
@@ -115,6 +119,31 @@ describe('AppRouteHydrationService', () => {
       expect.objectContaining({ generateUnitStreams: false }),
       'Test Route',
     );
+  });
+
+  it('keeps multi-segment child names while still applying the saved parent route name', async () => {
+    const firstRoute = { name: 'Imported segment A', getID: vi.fn(() => null), setID: vi.fn() };
+    const secondRoute = { name: 'Imported segment B', getID: vi.fn(() => null), setID: vi.fn() };
+    routeFileMock = {
+      name: 'Imported parent name',
+      setID: vi.fn(),
+      getRoutes: vi.fn(() => [firstRoute, secondRoute]),
+    } as unknown as RouteFileInterface;
+    vi.spyOn(RouteImporterGPX, 'getFromString').mockResolvedValueOnce(routeFileMock);
+
+    await service.hydrateRouteFile({
+      ...routeDocument,
+      routes: [
+        { ...routeDocument.routes![0], id: 'segment-1', name: 'Stored segment 1' },
+        { ...routeDocument.routes![0], id: 'segment-2', name: 'Stored segment 2' },
+      ],
+      routeCount: 2,
+      pointCount: 4,
+    });
+
+    expect(routeFileMock.name).toBe('Test Route');
+    expect(firstRoute.name).toBe('Imported segment A');
+    expect(secondRoute.name).toBe('Imported segment B');
   });
 
   it('throws for route documents without an original source file', async () => {
