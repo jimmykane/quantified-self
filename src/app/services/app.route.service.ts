@@ -168,6 +168,13 @@ export class AppRouteService {
         return this.originalFileHydrationService.downloadFile(path, options);
     }
 
+    async downloadOriginalFile(path: string, options?: DownloadFileOptions): Promise<ArrayBuffer> {
+        return this.originalFileHydrationService.downloadFile(path, {
+            ...options,
+            decompress: false,
+        });
+    }
+
     private stripServerOwnedRouteMetadata(
         payload: Record<string, unknown>,
     ): Record<string, unknown> {

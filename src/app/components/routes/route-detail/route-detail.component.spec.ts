@@ -93,6 +93,7 @@ describe('RouteDetailComponent', () => {
     routeServiceMock = {
       getOriginalRouteFiles: vi.fn((route: FirestoreRouteJSON) => route.originalFiles || []),
       downloadFile: vi.fn().mockResolvedValue(new Uint8Array([1, 2, 3]).buffer),
+      downloadOriginalFile: vi.fn().mockResolvedValue(new Uint8Array([1, 2, 3]).buffer),
       updateRouteName: vi.fn().mockResolvedValue(undefined),
       deleteRoute: vi.fn().mockResolvedValue(undefined),
     };
@@ -124,7 +125,15 @@ describe('RouteDetailComponent', () => {
       getExtensionFromPath: vi.fn().mockReturnValue('gpx'),
       toDate: vi.fn((value: unknown) => value instanceof Date ? value : null),
       generateDateBasedFilename: vi.fn().mockReturnValue('route.gpx'),
+      generateDateRangeZipFilename: vi.fn().mockReturnValue('2026-01-02_route_originals.zip'),
+      resolveOriginalSourceFileName: vi.fn((file: { originalFilename?: string; path?: string }, fallbackExtension = 'gpx') => (
+        file.originalFilename
+          || file.path?.split('/').filter(Boolean).pop()
+          || `route.${fallbackExtension}`
+      )),
+      getUniqueFileName: vi.fn((fileName: string) => fileName),
       downloadFile: vi.fn(),
+      downloadNamedFile: vi.fn(),
       downloadAsZip: vi.fn().mockResolvedValue(undefined),
     };
     routeGPXExportServiceMock = {
@@ -380,14 +389,45 @@ describe('RouteDetailComponent', () => {
   it('downloads the original route file from the detail page action', async () => {
     await component.downloadRouteOriginals();
 
-    expect(routeServiceMock.downloadFile).toHaveBeenCalledWith('users/user-1/routes/route-1/original.gpx');
-    expect(fileServiceMock.downloadFile).toHaveBeenCalled();
+    expect(routeServiceMock.downloadOriginalFile).toHaveBeenCalledWith('users/user-1/routes/route-1/original.gpx');
+    expect(fileServiceMock.downloadNamedFile).toHaveBeenCalledWith(
+      expect.any(Blob),
+      'original.gpx',
+      'gpx',
+    );
     expect(analyticsServiceMock.logSavedRouteAction).toHaveBeenCalledWith('download', {
       status: 'success',
       fileCount: 1,
       fileType: 'gpx',
       zipped: false,
     });
+  });
+
+  it('downloads gzipped originals without renaming them to the saved route title', async () => {
+    const gzRouteDocument: FirestoreRouteJSON = {
+      ...routeDocument,
+      name: 'Edited Route Name',
+      srcFileType: 'fit',
+      originalFiles: [{
+        path: 'users/user-1/routes/route-1/original.fit.gz',
+        originalFilename: 'recorded-route.fit.gz',
+        extension: 'fit',
+      }],
+    };
+
+    component.routeDocument.set(gzRouteDocument);
+    component.sourceFile.set(gzRouteDocument.originalFiles![0]);
+    routeServiceMock.getOriginalRouteFiles.mockReturnValue(gzRouteDocument.originalFiles);
+    fileServiceMock.getExtensionFromPath.mockReturnValue('fit');
+
+    await component.downloadRouteOriginals();
+
+    expect(routeServiceMock.downloadOriginalFile).toHaveBeenCalledWith('users/user-1/routes/route-1/original.fit.gz');
+    expect(fileServiceMock.downloadNamedFile).toHaveBeenCalledWith(
+      expect.any(Blob),
+      'recorded-route.fit.gz',
+      'fit',
+    );
   });
 
   it('exports the hydrated route file as generated GPX from the detail page action', async () => {
@@ -523,7 +563,7 @@ describe('RouteDetailComponent', () => {
     component.user.set(new User('other-user'));
     dialogMock.open.mockClear();
     routeServiceMock.updateRouteName.mockClear();
-    routeServiceMock.downloadFile.mockClear();
+    routeServiceMock.downloadOriginalFile.mockClear();
     routeServiceMock.deleteRoute.mockClear();
     routeGPXExportServiceMock.getRouteFileAsGPXBlob.mockClear();
     routeReprocessServiceMock.reprocessRouteFromOriginalFile.mockClear();
@@ -538,7 +578,7 @@ describe('RouteDetailComponent', () => {
 
     expect(routeServiceMock.updateRouteName).not.toHaveBeenCalled();
     expect(routeSendServiceMock.sendRoutesToService).not.toHaveBeenCalled();
-    expect(routeServiceMock.downloadFile).not.toHaveBeenCalled();
+    expect(routeServiceMock.downloadOriginalFile).not.toHaveBeenCalled();
     expect(routeGPXExportServiceMock.getRouteFileAsGPXBlob).not.toHaveBeenCalled();
     expect(dialogMock.open).not.toHaveBeenCalled();
     expect(routeServiceMock.deleteRoute).not.toHaveBeenCalled();

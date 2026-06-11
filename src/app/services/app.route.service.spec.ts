@@ -229,4 +229,14 @@ describe('AppRouteService', () => {
         );
         expect(result.byteLength).toBe(3);
     });
+
+    it('downloads raw original route files without decompression', async () => {
+        const result = await service.downloadOriginalFile('users/user-1/routes/route-1/original.fit.gz', { metadataCacheTtlMs: 0 });
+
+        expect(originalFileHydrationServiceMock.downloadFile).toHaveBeenCalledWith(
+            'users/user-1/routes/route-1/original.fit.gz',
+            { metadataCacheTtlMs: 0, decompress: false },
+        );
+        expect(result.byteLength).toBe(3);
+    });
 });

@@ -534,6 +534,17 @@ describe('AppOriginalFileHydrationService', () => {
     expect(loggerMock.error).toHaveBeenCalled();
   });
 
+  it('downloadFile should preserve raw gzipped buffers when decompression is disabled', async () => {
+    const rawBuffer = new Uint8Array([0x1f, 0x8b, 0x08, 0x00]).buffer;
+    cacheServiceMock.getFile.mockResolvedValue(undefined);
+    storageMocks.getBytes.mockResolvedValue(rawBuffer);
+
+    const result = await service.downloadFile('users/u/routes/r/original.fit.gz', { decompress: false });
+
+    expect(result).toBe(rawBuffer);
+    expect(fileServiceMock.decompressIfNeeded).not.toHaveBeenCalled();
+  });
+
   it('fetchAndParseOneFile should pass metadata cache TTL override to downloadFile', async () => {
     const parsedEvent = { getActivities: () => [] } as any;
     const downloadSpy = vi.spyOn(service, 'downloadFile').mockResolvedValue(new ArrayBuffer(8));

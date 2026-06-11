@@ -288,23 +288,37 @@ export class RouteDetailComponent {
     this.downloading.set(true);
     this.snackBar.open('Preparing route download...', undefined, { duration: 2000 });
     try {
-      const routeDate = this.routeDate();
-      const baseName = this.sanitizeFilenameBase(routeDocument.name || routeDocument.id || 'route');
+      const usedFileNames = new Set<string>();
+      let minDate: Date | null = null;
+      let maxDate: Date | null = null;
 
       if (originalFiles.length > 1) {
         const filesToZip: { data: ArrayBuffer; fileName: string }[] = [];
         for (let i = 0; i < originalFiles.length; i++) {
           const fileMeta = originalFiles[i];
-          const extension = this.fileService.getExtensionFromPath(fileMeta.path, fileMeta.extension || 'gpx');
-          const fileDate = this.fileService.toDate(fileMeta.startDate) || routeDate;
-          const fileName = this.fileService.generateDateBasedFilename(fileDate, extension, i + 1, originalFiles.length, baseName);
+          const fileDate = this.fileService.toDate(fileMeta.startDate) || this.routeDate();
+          const fileName = this.fileService.getUniqueFileName(
+            this.fileService.resolveOriginalSourceFileName(
+              fileMeta,
+              fileMeta.extension || this.getPrimaryRouteFileType(routeDocument),
+              'original-route-file',
+            ),
+            usedFileNames,
+          );
+          if (fileDate) {
+            if (!minDate || fileDate < minDate) minDate = fileDate;
+            if (!maxDate || fileDate > maxDate) maxDate = fileDate;
+          }
           filesToZip.push({
-            data: await this.routeService.downloadFile(fileMeta.path),
+            data: await this.routeService.downloadOriginalFile(fileMeta.path),
             fileName,
           });
         }
 
-        await this.fileService.downloadAsZip(filesToZip, `${baseName}_originals.zip`);
+        await this.fileService.downloadAsZip(
+          filesToZip,
+          this.fileService.generateDateRangeZipFilename(minDate, maxDate, 'route_originals'),
+        );
         this.analyticsService.logSavedRouteAction('download', {
           status: 'success',
           fileCount: originalFiles.length,
@@ -316,8 +330,13 @@ export class RouteDetailComponent {
 
       const fileMeta = originalFiles[0];
       const extension = this.fileService.getExtensionFromPath(fileMeta.path, fileMeta.extension || 'gpx');
-      const buffer = await this.routeService.downloadFile(fileMeta.path);
-      this.fileService.downloadFile(new Blob([buffer]), baseName, extension);
+      const fileName = this.fileService.resolveOriginalSourceFileName(
+        fileMeta,
+        extension,
+        'original-route-file',
+      );
+      const buffer = await this.routeService.downloadOriginalFile(fileMeta.path);
+      this.fileService.downloadNamedFile(new Blob([buffer]), fileName, extension);
       this.analyticsService.logSavedRouteAction('download', {
         status: 'success',
         fileCount: 1,
@@ -621,9 +640,15 @@ export class RouteDetailComponent {
 
   private getSourceFilename(): string {
     const sourceFile = this.sourceFile();
-    return sourceFile?.originalFilename
-      || sourceFile?.path?.split('/').pop()
-      || 'Original route file';
+    if (!sourceFile) {
+      return 'Original route file';
+    }
+
+    return this.fileService.resolveOriginalSourceFileName(
+      sourceFile,
+      sourceFile.extension || this.routeDocument()?.srcFileType || 'route',
+      'Original route file',
+    );
   }
 
   private getPrimaryRouteFileType(route: FirestoreRouteJSON | null): string {

@@ -473,23 +473,37 @@ export class RoutesPageComponent implements OnInit {
         this.downloadingRouteID.set(routeID);
         this.snackBar.open('Preparing route download...', undefined, { duration: 2000 });
         try {
-            const routeDate = this.resolveRouteDate(route);
-            const baseName = this.sanitizeFilenameBase(route.name || routeID || 'route');
+            const usedFileNames = new Set<string>();
+            let minDate: Date | null = null;
+            let maxDate: Date | null = null;
 
             if (originalFiles.length > 1) {
                 const filesToZip: { data: ArrayBuffer; fileName: string }[] = [];
                 for (let i = 0; i < originalFiles.length; i++) {
                     const fileMeta = originalFiles[i];
-                    const extension = this.fileService.getExtensionFromPath(fileMeta.path, fileMeta.extension || 'gpx');
-                    const fileDate = this.fileService.toDate(fileMeta.startDate) || routeDate;
-                    const fileName = this.fileService.generateDateBasedFilename(fileDate, extension, i + 1, originalFiles.length, baseName);
+                    const fileDate = this.fileService.toDate(fileMeta.startDate) || this.resolveRouteDate(route);
+                    const fileName = this.fileService.getUniqueFileName(
+                        this.fileService.resolveOriginalSourceFileName(
+                            fileMeta,
+                            fileMeta.extension || this.getPrimaryRouteFileType(route),
+                            'original-route-file',
+                        ),
+                        usedFileNames,
+                    );
+                    if (fileDate) {
+                        if (!minDate || fileDate < minDate) minDate = fileDate;
+                        if (!maxDate || fileDate > maxDate) maxDate = fileDate;
+                    }
                     filesToZip.push({
-                        data: await this.routeService.downloadFile(fileMeta.path),
+                        data: await this.routeService.downloadOriginalFile(fileMeta.path),
                         fileName,
                     });
                 }
 
-                await this.fileService.downloadAsZip(filesToZip, `${baseName}_originals.zip`);
+                await this.fileService.downloadAsZip(
+                    filesToZip,
+                    this.fileService.generateDateRangeZipFilename(minDate, maxDate, 'route_originals'),
+                );
                 this.analyticsService.logSavedRouteAction('download', {
                     status: 'success',
                     fileCount: originalFiles.length,
@@ -501,8 +515,13 @@ export class RoutesPageComponent implements OnInit {
 
             const fileMeta = originalFiles[0];
             const extension = this.fileService.getExtensionFromPath(fileMeta.path, fileMeta.extension || 'gpx');
-            const buffer = await this.routeService.downloadFile(fileMeta.path);
-            this.fileService.downloadFile(new Blob([buffer]), baseName, extension);
+            const fileName = this.fileService.resolveOriginalSourceFileName(
+                fileMeta,
+                extension,
+                'original-route-file',
+            );
+            const buffer = await this.routeService.downloadOriginalFile(fileMeta.path);
+            this.fileService.downloadNamedFile(new Blob([buffer]), fileName, extension);
             this.analyticsService.logSavedRouteAction('download', {
                 status: 'success',
                 fileCount: 1,
@@ -856,7 +875,6 @@ export class RoutesPageComponent implements OnInit {
 
         let skippedCount = 0;
         const originalFileEntries = selectedRoutes.flatMap(item => {
-            const baseName = this.sanitizeFilenameBase(item.name || item.route.id || 'route');
             const originalFiles = this.routeService.getOriginalRouteFiles(item.route);
             if (originalFiles.length === 0) {
                 skippedCount++;
@@ -864,7 +882,6 @@ export class RoutesPageComponent implements OnInit {
             return originalFiles.map(file => ({
                 item,
                 file,
-                baseName,
             }));
         });
 
@@ -892,6 +909,7 @@ export class RoutesPageComponent implements OnInit {
         let failedCount = 0;
         let minDate: Date | null = null;
         let maxDate: Date | null = null;
+        const usedFileNames = new Set<string>();
 
         try {
             for (let index = 0; index < originalFileEntries.length; index++) {
@@ -899,17 +917,18 @@ export class RoutesPageComponent implements OnInit {
                 const routeID = entry.item.route.id;
                 const extension = this.fileService.getExtensionFromPath(entry.file.path, entry.file.extension || 'gpx');
                 const fileDate = this.fileService.toDate(entry.file.startDate) || entry.item.routeDate;
-                const fileName = this.fileService.generateDateBasedFilename(
-                    fileDate,
-                    extension,
-                    index + 1,
-                    originalFileEntries.length,
-                    entry.baseName,
+                const fileName = this.fileService.getUniqueFileName(
+                    this.fileService.resolveOriginalSourceFileName(
+                        entry.file,
+                        extension,
+                        'original-route-file',
+                    ),
+                    usedFileNames,
                 );
 
                 try {
                     downloadedFiles.push({
-                        data: await this.routeService.downloadFile(entry.file.path),
+                        data: await this.routeService.downloadOriginalFile(entry.file.path),
                         fileName,
                     });
                     if (fileDate) {
@@ -1253,7 +1272,9 @@ export class RoutesPageComponent implements OnInit {
         const waypointCount = this.toFiniteNumber(route.waypointCount) ?? 0;
         const activityTypeSummaries = this.buildRouteActivityTypeSummaries(route);
         const activityTypes = activityTypeSummaries.map(summary => summary.activityTypeLabel).join(', ') || 'Route';
-        const originalFilename = file?.originalFilename || file?.path?.split('/').pop() || 'Original file';
+        const originalFilename = file
+            ? this.fileService.resolveOriginalSourceFileName(file, file.extension || route.srcFileType || 'route', 'Original file')
+            : 'Original file';
         const fileType = route.srcFileType || file?.extension || 'route';
         const fileTypeFilterValue = this.normalizeFilterValue(fileType);
         const activityTypeFilterValues = this.getDistinctLabels(activityTypeSummaries.map(summary => summary.activityTypeLabel));

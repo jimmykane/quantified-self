@@ -96,6 +96,7 @@ describe('RoutesPageComponent', () => {
             getRouteCount: vi.fn().mockResolvedValue(1),
             getOriginalRouteFiles: vi.fn((sourceRoute: FirestoreRouteJSON) => sourceRoute.originalFiles || []),
             downloadFile: vi.fn().mockResolvedValue(new Uint8Array([1, 2, 3]).buffer),
+            downloadOriginalFile: vi.fn().mockResolvedValue(new Uint8Array([1, 2, 3]).buffer),
             deleteRoute: vi.fn().mockResolvedValue(undefined),
         };
         dialogMock = {
@@ -113,7 +114,14 @@ describe('RoutesPageComponent', () => {
             generateDateRangeZipFilename: vi.fn((_minDate: Date | null, _maxDate: Date | null, suffix = 'originals') => (
                 `2026-01-02_${suffix}.zip`
             )),
+            resolveOriginalSourceFileName: vi.fn((file: { originalFilename?: string; path?: string }, fallbackExtension = 'gpx') => (
+                file.originalFilename
+                    || file.path?.split('/').filter(Boolean).pop()
+                    || `route.${fallbackExtension}`
+            )),
+            getUniqueFileName: vi.fn((fileName: string) => fileName),
             downloadFile: vi.fn(),
+            downloadNamedFile: vi.fn(),
             downloadAsZip: vi.fn().mockResolvedValue(undefined),
         };
         analyticsServiceMock = {
@@ -988,15 +996,15 @@ describe('RoutesPageComponent', () => {
 
         await component.downloadSelectedRouteOriginals();
 
-        expect(routeServiceMock.downloadFile).toHaveBeenCalledTimes(1);
-        expect(routeServiceMock.downloadFile).toHaveBeenCalledWith('users/user-1/routes/route-1/original.gpx');
+        expect(routeServiceMock.downloadOriginalFile).toHaveBeenCalledTimes(1);
+        expect(routeServiceMock.downloadOriginalFile).toHaveBeenCalledWith('users/user-1/routes/route-1/original.gpx');
         expect(fileServiceMock.generateDateRangeZipFilename).toHaveBeenCalledWith(
             new Date('2026-01-02T00:00:00.000Z'),
             new Date('2026-01-02T00:00:00.000Z'),
             'route_originals',
         );
         expect(fileServiceMock.downloadAsZip).toHaveBeenCalledWith(
-            [expect.objectContaining({ data: expect.any(ArrayBuffer), fileName: '2026-01-02_Morning_Route.gpx' })],
+            [expect.objectContaining({ data: expect.any(ArrayBuffer), fileName: 'original.gpx' })],
             '2026-01-02_route_originals.zip',
         );
         expect(analyticsServiceMock.logSavedRouteAction).toHaveBeenCalledWith('download', {
@@ -1202,8 +1210,12 @@ describe('RoutesPageComponent', () => {
         await component.downloadRouteOriginals(route);
 
         expect(routeServiceMock.getOriginalRouteFiles).toHaveBeenCalledWith(route);
-        expect(routeServiceMock.downloadFile).toHaveBeenCalledWith('users/user-1/routes/route-1/original.gpx');
-        expect(fileServiceMock.downloadFile).toHaveBeenCalled();
+        expect(routeServiceMock.downloadOriginalFile).toHaveBeenCalledWith('users/user-1/routes/route-1/original.gpx');
+        expect(fileServiceMock.downloadNamedFile).toHaveBeenCalledWith(
+            expect.any(Blob),
+            'original.gpx',
+            'gpx',
+        );
         expect(analyticsServiceMock.logSavedRouteAction).toHaveBeenCalledWith('download', {
             status: 'success',
             fileCount: 1,
@@ -1213,10 +1225,36 @@ describe('RoutesPageComponent', () => {
         expect(component.downloadingRouteID()).toBeNull();
     });
 
+    it('preserves gzipped original filenames for row downloads', async () => {
+        const gzRoute: FirestoreRouteJSON = {
+            ...route,
+            name: 'Edited Route Name',
+            srcFileType: 'fit',
+            originalFiles: [{
+                path: 'users/user-1/routes/route-1/original.fit.gz',
+                originalFilename: 'source-route.fit.gz',
+                extension: 'fit',
+            }],
+        };
+        routeServiceMock.getRoutes.mockReturnValue(of([gzRoute]));
+        routeServiceMock.getOriginalRouteFiles.mockReturnValue(gzRoute.originalFiles || []);
+        fileServiceMock.getExtensionFromPath.mockReturnValue('fit');
+
+        await component.ngOnInit();
+        await component.downloadRouteOriginals(gzRoute);
+
+        expect(routeServiceMock.downloadOriginalFile).toHaveBeenCalledWith('users/user-1/routes/route-1/original.fit.gz');
+        expect(fileServiceMock.downloadNamedFile).toHaveBeenCalledWith(
+            expect.any(Blob),
+            'source-route.fit.gz',
+            'fit',
+        );
+    });
+
     it('logs and reports route download failures without leaving the row disabled', async () => {
         await component.ngOnInit();
         const error = new Error('download failed');
-        routeServiceMock.downloadFile.mockRejectedValueOnce(error);
+        routeServiceMock.downloadOriginalFile.mockRejectedValueOnce(error);
 
         await component.downloadRouteOriginals(route);
 
