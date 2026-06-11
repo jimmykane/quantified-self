@@ -20,7 +20,7 @@ import {
 } from '../../../helpers/echarts-host-controller';
 import { buildOfficialEChartsThemeTokens, ECHARTS_GLOBAL_FONT_FAMILY, resolveEChartsThemeName } from '../../../helpers/echarts-theme.helper';
 
-export type AdminQueueStatsView = 'all' | 'workout' | 'activity-sync' | 'sleep-sync' | 'reparse' | 'route-reparse' | 'derived';
+export type AdminQueueStatsView = 'all' | 'workout' | 'activity-sync' | 'route-sync' | 'sleep-sync' | 'reparse' | 'route-reparse' | 'derived';
 
 type ReparseFailureRowView = ReparseFailurePreview & {
     tierLabel: string;
@@ -255,6 +255,10 @@ export class AdminQueueStatsComponent implements OnInit, OnChanges, OnDestroy, A
             return this.stats?.activitySync?.advanced?.retryHistogram || null;
         }
 
+        if (this.queueView === 'route-sync') {
+            return this.stats?.routeSync?.advanced?.retryHistogram || null;
+        }
+
         if (this.queueView === 'sleep-sync') {
             return this.stats?.sleepSync?.advanced?.retryHistogram || null;
         }
@@ -392,6 +396,10 @@ export class AdminQueueStatsComponent implements OnInit, OnChanges, OnDestroy, A
 
     get showSleepSyncSection(): boolean {
         return this.queueView === 'all' || this.queueView === 'sleep-sync';
+    }
+
+    get showRouteSyncSection(): boolean {
+        return this.queueView === 'all' || this.queueView === 'route-sync';
     }
 
     get showReparseSection(): boolean {

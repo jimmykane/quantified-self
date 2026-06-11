@@ -28,7 +28,7 @@ export class AdminQueueMonitorComponent implements OnInit, OnDestroy {
     isLoadingStats = true;
     queueView: AdminQueueStatsView = 'all';
     pageTitle = 'Queue Monitoring';
-    pageSubtitle = 'Operational health for ingestion, activity sync, sleep sync, reparse, and derived metrics pipelines';
+    pageSubtitle = 'Operational health for ingestion, route sync, activity sync, sleep sync, reparse, and derived metrics pipelines';
 
     private readonly destroy$ = new Subject<void>();
 
@@ -53,6 +53,7 @@ export class AdminQueueMonitorComponent implements OnInit, OnDestroy {
         if (
             rawView === 'workout' ||
             rawView === 'activity-sync' ||
+            rawView === 'route-sync' ||
             rawView === 'sleep-sync' ||
             rawView === 'reparse' ||
             rawView === 'route-reparse' ||
@@ -87,6 +88,12 @@ export class AdminQueueMonitorComponent implements OnInit, OnDestroy {
             return;
         }
 
+        if (this.queueView === 'route-sync') {
+            this.pageTitle = 'Route Sync Queue';
+            this.pageSubtitle = 'Monitor provider route sync queue depth, skips, retries, and failure diagnostics';
+            return;
+        }
+
         if (this.queueView === 'sleep-sync') {
             this.pageTitle = 'Sleep Sync Queue';
             this.pageSubtitle = 'Monitor sleep sync queue depth, provider disablement, retries, and failures';
@@ -100,7 +107,7 @@ export class AdminQueueMonitorComponent implements OnInit, OnDestroy {
         }
 
         this.pageTitle = 'Queue Monitoring';
-        this.pageSubtitle = 'Operational health for ingestion, activity sync, sleep sync, reparse, and derived metrics pipelines';
+        this.pageSubtitle = 'Operational health for ingestion, route sync, activity sync, sleep sync, reparse, and derived metrics pipelines';
     }
 
     fetchQueueStats(): void {

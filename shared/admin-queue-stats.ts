@@ -34,6 +34,7 @@ export interface CloudTaskQueueStats {
 export interface CloudTaskQueueBreakdown {
     workout: CloudTaskQueueStats;
     activitySync: CloudTaskQueueStats;
+    routeSync: CloudTaskQueueStats;
     sportsLibReparse: CloudTaskQueueStats;
     sportsLibReparseHeavy: CloudTaskQueueStats;
     sportsLibRouteReparse: CloudTaskQueueStats;
@@ -133,13 +134,19 @@ export interface DerivedMetricsStats {
     recentFailures: DerivedMetricsFailurePreview[];
 }
 
-export interface ActivitySyncQueueStats {
+export interface SyncPipelineQueueStats {
     pending: number;
     succeeded: number;
     stuck: number;
     dead: number;
     dlqByContext: { context: string; count: number }[];
     advanced: QueueAdvancedStats;
+}
+
+export interface ActivitySyncQueueStats extends SyncPipelineQueueStats {}
+
+export interface RouteSyncQueueStats extends SyncPipelineQueueStats {
+    skipped: number;
 }
 
 export interface SleepSyncProviderQueueStats {
@@ -151,16 +158,10 @@ export interface SleepSyncProviderQueueStats {
     dead: number;
 }
 
-export interface SleepSyncQueueStats {
-    pending: number;
-    succeeded: number;
+export interface SleepSyncQueueStats extends SyncPipelineQueueStats {
     providerDisabled: number;
-    stuck: number;
-    dead: number;
     disabledProviders: string[];
     providers: SleepSyncProviderQueueStats[];
-    dlqByContext: { context: string; count: number }[];
-    advanced: QueueAdvancedStats;
 }
 
 export interface AdminQueueProviderStats {
@@ -186,6 +187,7 @@ export interface AdminQueueStatsResponse {
     derivedMetrics: DerivedMetricsStats;
     advanced: QueueAdvancedStats;
     activitySync: ActivitySyncQueueStats;
+    routeSync: RouteSyncQueueStats;
     sleepSync: SleepSyncQueueStats;
 }
 
@@ -203,5 +205,6 @@ export type AdminQueueStatsSnapshot = Omit<
     derivedMetrics?: DerivedMetricsStats;
     advanced?: QueueAdvancedStats;
     activitySync?: ActivitySyncQueueStats;
+    routeSync?: RouteSyncQueueStats;
     sleepSync?: SleepSyncQueueStats;
 };

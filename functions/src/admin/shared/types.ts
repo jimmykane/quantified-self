@@ -11,6 +11,7 @@ export type {
     RouteReparseFailurePreview,
     RouteReparseJobsStats,
     RouteReparseStats,
+    RouteSyncQueueStats,
 } from '../../../../shared/admin-queue-stats';
 
 export interface CountStats {

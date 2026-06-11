@@ -33,6 +33,7 @@ import {
     SportsLibRouteReparseJobDocData,
 } from '../shared/types';
 import { ACTIVITY_SYNC_QUEUE_COLLECTION_NAME } from '../../activity-sync/constants';
+import { ROUTE_SYNC_QUEUE_COLLECTION_NAME } from '../../routes/route-sync.constants';
 import { SLEEP_SYNC_QUEUE_COLLECTION_NAME } from '../../sleep/constants';
 import { getDisabledSleepProviders } from '../../sleep/provider-flags';
 import { SLEEP_PROVIDERS, SleepProvider } from '../../../../shared/sleep';
@@ -49,6 +50,7 @@ const DERIVED_METRICS_STALE_QUEUED_THRESHOLD_MS = 10 * 60 * 1000;
 const DERIVED_METRICS_STALE_PROCESSING_THRESHOLD_MS = 15 * 60 * 1000;
 const INGESTION_DLQ_PREVIEW_LIMIT = 50;
 const ACTIVITY_SYNC_DLQ_PREVIEW_LIMIT = 50;
+const ROUTE_SYNC_DLQ_PREVIEW_LIMIT = 50;
 const SLEEP_SYNC_DLQ_PREVIEW_LIMIT = 50;
 const SLEEP_PROVIDER_LABELS: Record<SleepProvider, string> = {
     [SLEEP_PROVIDERS.GarminAPI]: 'Garmin',
@@ -101,6 +103,7 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
         const {
             workoutQueue,
             activitySyncQueue,
+            routeSyncQueue,
             sleepSyncQueue,
             sportsLibReparseQueue,
             sportsLibReparseHeavyQueue,
@@ -110,6 +113,7 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
         const [
             workoutCloudTaskDepth,
             activitySyncCloudTaskDepth,
+            routeSyncCloudTaskDepth,
             sleepSyncCloudTaskDepth,
             sportsLibReparseCloudTaskDepth,
             sportsLibReparseHeavyCloudTaskDepth,
@@ -122,6 +126,10 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
             }),
             getCloudTaskQueueDepthForQueue(activitySyncQueue).catch(e => {
                 logger.error(`Error getting Cloud Task depth for queue ${activitySyncQueue}:`, e);
+                return 0;
+            }),
+            getCloudTaskQueueDepthForQueue(routeSyncQueue).catch(e => {
+                logger.error(`Error getting Cloud Task depth for queue ${routeSyncQueue}:`, e);
                 return 0;
             }),
             getCloudTaskQueueDepthForQueue(sleepSyncQueue).catch(e => {
@@ -146,7 +154,7 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
             }),
         ]);
         const reparseCloudTaskDepth = sportsLibReparseCloudTaskDepth + sportsLibReparseHeavyCloudTaskDepth;
-        const totalCloudTaskDepth = workoutCloudTaskDepth + activitySyncCloudTaskDepth + sleepSyncCloudTaskDepth + reparseCloudTaskDepth + sportsLibRouteReparseCloudTaskDepth + derivedMetricsCloudTaskDepth;
+        const totalCloudTaskDepth = workoutCloudTaskDepth + activitySyncCloudTaskDepth + routeSyncCloudTaskDepth + sleepSyncCloudTaskDepth + reparseCloudTaskDepth + sportsLibRouteReparseCloudTaskDepth + derivedMetricsCloudTaskDepth;
         const reparseJobsCollection = db.collection(SPORTS_LIB_REPARSE_JOBS_COLLECTION);
         const routeReparseJobsCollection = db.collection(SPORTS_LIB_ROUTE_REPARSE_JOBS_COLLECTION);
 
@@ -449,6 +457,80 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
             activitySyncMaxLagMs = Math.max(0, Date.now() - activitySyncOldestPendingDate);
         }
 
+        const routeSyncCollection = db.collection(ROUTE_SYNC_QUEUE_COLLECTION_NAME);
+        const [
+            routeSyncPendingSnap,
+            routeSyncSucceededSnap,
+            routeSyncSkippedSnap,
+            routeSyncStuckSnap,
+            routeSyncRetry0to3Snap,
+            routeSyncRetry4to7Snap,
+            routeSyncRetry8to9Snap,
+            routeSyncThroughputSnap,
+            routeSyncOldestPendingSnap,
+            routeSyncDeadSnap,
+        ] = await Promise.all([
+            routeSyncCollection.where('processed', '==', false).where('retryCount', '<', 10).count().get().catch(e => {
+                logger.error('[admin/getQueueStats] Failed to count route sync pending jobs:', e);
+                return null;
+            }),
+            routeSyncCollection.where('resultStatus', '==', 'success').count().get().catch(e => {
+                logger.error('[admin/getQueueStats] Failed to count route sync succeeded jobs:', e);
+                return null;
+            }),
+            routeSyncCollection.where('resultStatus', '==', 'skipped').count().get().catch(e => {
+                logger.error('[admin/getQueueStats] Failed to count route sync skipped jobs:', e);
+                return null;
+            }),
+            routeSyncCollection.where('processed', '==', false).where('retryCount', '>=', 10).count().get().catch(e => {
+                logger.error('[admin/getQueueStats] Failed to count route sync stuck jobs:', e);
+                return null;
+            }),
+            routeSyncCollection.where('processed', '==', false).where('retryCount', '<', 4).count().get().catch(e => {
+                logger.error('[admin/getQueueStats] Failed to count route sync retry bucket 0-3:', e);
+                return null;
+            }),
+            routeSyncCollection.where('processed', '==', false).where('retryCount', '>=', 4).where('retryCount', '<', 8).count().get().catch(e => {
+                logger.error('[admin/getQueueStats] Failed to count route sync retry bucket 4-7:', e);
+                return null;
+            }),
+            routeSyncCollection.where('processed', '==', false).where('retryCount', '>=', 8).where('retryCount', '<', 10).count().get().catch(e => {
+                logger.error('[admin/getQueueStats] Failed to count route sync retry bucket 8-9:', e);
+                return null;
+            }),
+            routeSyncCollection.where('processedAt', '>', ONE_HOUR_AGO).count().get().catch(e => {
+                logger.error('[admin/getQueueStats] Failed to count route sync throughput:', e);
+                return null;
+            }),
+            routeSyncCollection.where('processed', '==', false).orderBy('dateCreated', 'asc').limit(1).get().catch(e => {
+                logger.error('[admin/getQueueStats] Failed to query oldest route sync pending job:', e);
+                return null;
+            }),
+            db.collection('failed_jobs').where('originalCollection', '==', ROUTE_SYNC_QUEUE_COLLECTION_NAME).count().get().catch(e => {
+                logger.error('[admin/getQueueStats] Failed to count route sync dead-letter jobs:', e);
+                return null;
+            }),
+        ]);
+
+        const routeSyncPending = routeSyncPendingSnap?.data().count || 0;
+        const routeSyncSucceeded = routeSyncSucceededSnap?.data().count || 0;
+        const routeSyncSkipped = routeSyncSkippedSnap?.data().count || 0;
+        const routeSyncStuck = routeSyncStuckSnap?.data().count || 0;
+        const routeSyncDead = routeSyncDeadSnap?.data().count || 0;
+        const routeSyncRetryHistogram = {
+            '0-3': routeSyncRetry0to3Snap?.data().count || 0,
+            '4-7': routeSyncRetry4to7Snap?.data().count || 0,
+            '8-9': routeSyncRetry8to9Snap?.data().count || 0,
+        };
+        const routeSyncThroughput = routeSyncThroughputSnap?.data().count || 0;
+        let routeSyncMaxLagMs = 0;
+        const routeSyncOldestPendingDate = routeSyncOldestPendingSnap?.empty === false
+            ? routeSyncOldestPendingSnap.docs[0]?.data()?.dateCreated
+            : null;
+        if (routeSyncOldestPendingDate) {
+            routeSyncMaxLagMs = Math.max(0, Date.now() - routeSyncOldestPendingDate);
+        }
+
         const sleepSyncCollection = db.collection(SLEEP_SYNC_QUEUE_COLLECTION_NAME);
         const [
             sleepSyncPendingSnap,
@@ -646,6 +728,8 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
         let topErrors: { error: string; count: number }[] = [];
         let activitySyncTopErrors: { error: string; count: number }[] = [];
         let activitySyncByContext: { context: string; count: number }[] = [];
+        let routeSyncTopErrors: { error: string; count: number }[] = [];
+        let routeSyncByContext: { context: string; count: number }[] = [];
         let sleepSyncTopErrors: { error: string; count: number }[] = [];
         let sleepSyncByContext: { context: string; count: number }[] = [];
 
@@ -731,6 +815,38 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
                 .slice(0, 5)
                 .map(([error, count]) => ({ error, count }));
 
+            const routeSyncDlqQuery = dlqCol.where('originalCollection', '==', ROUTE_SYNC_QUEUE_COLLECTION_NAME);
+            const routeSyncRecentDlqSnap = await routeSyncDlqQuery
+                .orderBy('failedAt', 'desc')
+                .limit(ROUTE_SYNC_DLQ_PREVIEW_LIMIT)
+                .get()
+                .catch(async (e) => {
+                    logger.error('[admin/getQueueStats] Failed to load ordered route sync DLQ preview:', e);
+                    return routeSyncDlqQuery
+                        .limit(ROUTE_SYNC_DLQ_PREVIEW_LIMIT)
+                        .get()
+                        .catch(fallbackError => {
+                            logger.error('[admin/getQueueStats] Failed to load fallback route sync DLQ preview:', fallbackError);
+                            return null;
+                        });
+                });
+            const routeSyncContextCounts: Record<string, number> = {};
+            const routeSyncErrorCounts: Record<string, number> = {};
+            for (const doc of (routeSyncRecentDlqSnap?.docs || [])) {
+                const data = doc.data();
+                const context = `${data.context || 'UNKNOWN'}`;
+                const errorMsg = normalizeError(data.error || 'Unknown Error');
+                routeSyncContextCounts[context] = (routeSyncContextCounts[context] || 0) + 1;
+                routeSyncErrorCounts[errorMsg] = (routeSyncErrorCounts[errorMsg] || 0) + 1;
+            }
+            routeSyncByContext = Object.entries(routeSyncContextCounts)
+                .map(([context, count]) => ({ context, count }))
+                .sort((a, b) => b.count - a.count);
+            routeSyncTopErrors = Object.entries(routeSyncErrorCounts)
+                .sort((a, b) => b[1] - a[1])
+                .slice(0, 5)
+                .map(([error, count]) => ({ error, count }));
+
             const sleepSyncDlqQuery = dlqCol.where('originalCollection', '==', SLEEP_SYNC_QUEUE_COLLECTION_NAME);
             const sleepSyncRecentDlqSnap = await sleepSyncDlqQuery
                 .orderBy('failedAt', 'desc')
@@ -778,6 +894,10 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
                     activitySync: {
                         queueId: activitySyncQueue,
                         pending: activitySyncCloudTaskDepth,
+                    },
+                    routeSync: {
+                        queueId: routeSyncQueue,
+                        pending: routeSyncCloudTaskDepth,
                     },
                     sleepSync: {
                         queueId: sleepSyncQueue,
@@ -868,6 +988,20 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
                     maxLagMs: activitySyncMaxLagMs,
                     retryHistogram: activitySyncRetryHistogram,
                     topErrors: activitySyncTopErrors,
+                },
+            },
+            routeSync: {
+                pending: routeSyncPending,
+                succeeded: routeSyncSucceeded,
+                skipped: routeSyncSkipped,
+                stuck: routeSyncStuck,
+                dead: routeSyncDead,
+                dlqByContext: routeSyncByContext,
+                advanced: {
+                    throughput: routeSyncThroughput,
+                    maxLagMs: routeSyncMaxLagMs,
+                    retryHistogram: routeSyncRetryHistogram,
+                    topErrors: routeSyncTopErrors,
                 },
             },
             sleepSync: {
