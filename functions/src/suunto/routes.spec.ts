@@ -81,11 +81,19 @@ vi.mock('firebase-functions/v2/https', () => {
 
 vi.mock('firebase-admin', () => {
     const getMock = vi.fn();
+    const tokenRefGetMock = vi.fn();
     const updateMock = vi.fn();
     const setMock = vi.fn();
     const runTransactionMock = vi.fn();
     const collectionMock: any = vi.fn();
     const docMock: any = vi.fn();
+    const tokenSnapshot: any = {
+        id: 'token1',
+        exists: true,
+        data: () => ({}),
+        ref: { get: tokenRefGetMock, update: updateMock },
+    };
+    tokenRefGetMock.mockResolvedValue(tokenSnapshot);
 
     // Needed for accessing metaData ref update
     const docObj = {
@@ -103,7 +111,7 @@ vi.mock('firebase-admin', () => {
     getMock.mockResolvedValue({
         size: 1,
         empty: false,
-        docs: [{ id: 'token1', data: () => ({}) }],
+        docs: [tokenSnapshot],
         data: () => ({ uploadedRoutesCount: 5 }),
         ref: { update: updateMock },
     });
@@ -119,8 +127,8 @@ vi.mock('firebase-admin', () => {
     };
 });
 
-// Import function under test
-import { importRouteToSuuntoApp } from './routes';
+// Import functions under test
+import { importRouteToSuuntoApp, uploadGPXRouteToSuuntoApp } from './routes';
 
 // Helper to create mock request
 function createMockRequest(overrides: Partial<{
@@ -192,6 +200,49 @@ describe('importRouteToSuuntoApp', () => {
         }));
 
         expect(result).toEqual({ status: 'success' });
+    });
+
+    it('fetches the latest Suunto token snapshot for each upload when a batch context is reused', async () => {
+        const firstSnapshot = {
+            id: 'token1',
+            exists: true,
+            data: () => ({ accessToken: 'stale-access-token' }),
+            ref: { update: vi.fn() },
+        };
+        const secondSnapshot = {
+            id: 'token1',
+            exists: true,
+            data: () => ({ accessToken: 'fresh-access-token' }),
+            ref: { update: vi.fn() },
+        };
+        const tokenRefGetMock = vi.fn()
+            .mockResolvedValueOnce(firstSnapshot)
+            .mockResolvedValueOnce(secondSnapshot);
+
+        tokensMocks.getTokenData.mockImplementation(async (tokenSnapshot: { data: () => { accessToken: string } }) => ({
+            accessToken: tokenSnapshot.data().accessToken,
+        }));
+        requestMocks.post.mockResolvedValue(JSON.stringify({ id: 'route-id' }));
+
+        const context = {
+            tokenRefs: [{ id: 'token1', ref: { get: tokenRefGetMock } }],
+        };
+        await uploadGPXRouteToSuuntoApp('test-user-id', '<gpx>first</gpx>', context as any);
+        await uploadGPXRouteToSuuntoApp('test-user-id', '<gpx>second</gpx>', context as any);
+
+        expect(tokenRefGetMock).toHaveBeenCalledTimes(2);
+        expect(requestMocks.post).toHaveBeenNthCalledWith(1, expect.objectContaining({
+            headers: expect.objectContaining({
+                Authorization: 'Bearer stale-access-token',
+            }),
+            body: '<gpx>first</gpx>',
+        }));
+        expect(requestMocks.post).toHaveBeenNthCalledWith(2, expect.objectContaining({
+            headers: expect.objectContaining({
+                Authorization: 'Bearer fresh-access-token',
+            }),
+            body: '<gpx>second</gpx>',
+        }));
     });
 
     it('should block unauthenticated requests', async () => {

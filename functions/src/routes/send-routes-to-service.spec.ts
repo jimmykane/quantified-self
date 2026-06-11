@@ -93,8 +93,11 @@ vi.mock('@sports-alliance/sports-lib', async (importOriginal) => {
   return {
     ...actual,
     RouteExporterGPX: class RouteExporterGPX {
-      async getAsString(routeFile: { getID?: () => string | null | undefined }): Promise<string> {
-        return `<gpx><name>${routeFile.getID?.() || 'route'}</name></gpx>`;
+      async getAsString(routeFile: { name?: string; getRoutes?: () => Array<{ name?: string | null }> }): Promise<string> {
+        const routeNames = (routeFile.getRoutes?.() || [])
+          .map(route => route.name || '')
+          .join('|');
+        return `<gpx><metadata><name>${routeFile.name || ''}</name></metadata><routes>${routeNames}</routes></gpx>`;
       }
     },
   };
@@ -144,13 +147,15 @@ function createRequest(data: Record<string, unknown>, overrides: Partial<{ auth:
   };
 }
 
-function createRouteFile() {
+function createRouteFile(routeNames: Array<string | null> = ['Original segment']) {
   let id: string | null = null;
+  const routes = routeNames.map((name, index) => ({ id: `segment-${index + 1}`, name }));
   return {
+    name: 'Original route file',
     getID: () => id,
     setID: vi.fn((nextID: string) => { id = nextID; }),
     hasRoutes: vi.fn(() => true),
-    getRoutes: vi.fn(() => [{ id: 'segment-1' }]),
+    getRoutes: vi.fn(() => routes),
   };
 }
 
@@ -169,7 +174,7 @@ describe('sendRoutesToService', () => {
     routeProcessingMocks.maybeDecompressPayloadForParsing.mockImplementation((payload: Buffer) => payload);
     routeProcessingMocks.parseRoutePayload.mockResolvedValue(createRouteFile());
     routeProcessingMocks.getRouteParsingFailureMessage.mockReturnValue('Could not read route.');
-    suuntoRouteMocks.createSuuntoRouteUploadContext.mockResolvedValue({ tokenSnapshots: [{ id: 'token-1' }] });
+    suuntoRouteMocks.createSuuntoRouteUploadContext.mockResolvedValue({ tokenRefs: [{ id: 'token-1', ref: {} }] });
     suuntoRouteMocks.uploadGPXRouteToSuuntoApp.mockResolvedValue({
       status: 'success',
       successCount: 1,
@@ -275,6 +280,7 @@ describe('sendRoutesToService', () => {
     routeDocuments.set('users/user-1/routes/route-1', {
       id: 'route-1',
       userID: 'user-1',
+      name: 'Evening Loop',
       srcFileType: 'gpx',
       originalFiles: [{ path: 'users/user-1/routes/route-1/original.gpx', extension: 'gpx' }],
       routes: [{ id: 'segment-1' }],
@@ -293,8 +299,8 @@ describe('sendRoutesToService', () => {
     expect(routeProcessingMocks.assignRouteSegmentIDs).toHaveBeenCalledWith(expect.anything(), 'route-1', ['segment-1']);
     expect(suuntoRouteMocks.uploadGPXRouteToSuuntoApp).toHaveBeenCalledWith(
       'user-1',
-      '<gpx><name>route-1</name></gpx>',
-      { tokenSnapshots: [{ id: 'token-1' }] },
+      '<gpx><metadata><name>Evening Loop</name></metadata><routes>Evening Loop</routes></gpx>',
+      { tokenRefs: [{ id: 'token-1', ref: {} }] },
     );
     expect(result).toMatchObject({
       destinationServiceName: ServiceNames.SuuntoApp,
@@ -304,6 +310,30 @@ describe('sendRoutesToService', () => {
       failureCount: 0,
       skippedCount: 0,
     });
+  });
+
+  it('keeps child route names for multi-route sends', async () => {
+    routeProcessingMocks.parseRoutePayload.mockResolvedValueOnce(createRouteFile(['First segment', 'Second segment']));
+    routeDocuments.set('users/user-1/routes/route-1', {
+      id: 'route-1',
+      userID: 'user-1',
+      name: 'Route Collection',
+      srcFileType: 'gpx',
+      originalFiles: [{ path: 'users/user-1/routes/route-1/original.gpx', extension: 'gpx' }],
+      routes: [{ id: 'segment-1' }, { id: 'segment-2' }],
+    });
+    storagePayloads.set('users/user-1/routes/route-1/original.gpx', Buffer.from('<gpx></gpx>'));
+
+    await sendRoutesToService(createRequest({
+      routeIds: ['route-1'],
+      destinationServiceName: ServiceNames.SuuntoApp,
+    }) as any);
+
+    expect(suuntoRouteMocks.uploadGPXRouteToSuuntoApp).toHaveBeenCalledWith(
+      'user-1',
+      '<gpx><metadata><name>Route Collection</name></metadata><routes>First segment|Second segment</routes></gpx>',
+      { tokenRefs: [{ id: 'token-1', ref: {} }] },
+    );
   });
 
   it('continues after per-route failures and reports skipped source files', async () => {

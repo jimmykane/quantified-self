@@ -24,8 +24,13 @@ import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { FUNCTIONS_MANIFEST } from '../../../shared/functions-manifest';
 import { ALLOWED_CORS_ORIGINS, enforceAppCheck } from '../utils';
 
+export interface SuuntoRouteUploadTokenRef {
+  id: string;
+  ref: admin.firestore.DocumentReference;
+}
+
 export interface SuuntoRouteUploadContext {
-  tokenSnapshots: admin.firestore.QueryDocumentSnapshot[];
+  tokenRefs: SuuntoRouteUploadTokenRef[];
 }
 
 export interface SuuntoRouteUploadResult {
@@ -148,8 +153,21 @@ export async function createSuuntoRouteUploadContext(userID: string): Promise<Su
   }
 
   return {
-    tokenSnapshots: [...tokenQuerySnapshots.docs],
+    tokenRefs: tokenQuerySnapshots.docs.map(tokenSnapshot => ({
+      id: tokenSnapshot.id,
+      ref: tokenSnapshot.ref,
+    })),
   };
+}
+
+async function getLatestSuuntoTokenSnapshot(
+  tokenRef: SuuntoRouteUploadTokenRef,
+): Promise<admin.firestore.DocumentSnapshot> {
+  const snapshot = await tokenRef.ref.get();
+  if (!snapshot.exists) {
+    throw new Error(`Suunto token ${tokenRef.id} no longer exists.`);
+  }
+  return snapshot;
 }
 
 export async function uploadGPXRouteToSuuntoApp(
@@ -166,11 +184,12 @@ export async function uploadGPXRouteToSuuntoApp(
   let authFailures = 0;
   const providerRouteIds: string[] = [];
 
-  for (const tokenQueryDocumentSnapshot of uploadContext.tokenSnapshots) {
+  for (const tokenRef of uploadContext.tokenRefs) {
     let result: any;
     try {
+      const latestTokenSnapshot = await getLatestSuuntoTokenSnapshot(tokenRef);
       result = await executeWithTokenRetry(
-        tokenQueryDocumentSnapshot,
+        latestTokenSnapshot,
         async (accessToken) => {
           await assertSuuntoRouteUploadUserActive(userID, 'before_provider_upload');
           const postResult = await requestPromise.post({
@@ -201,7 +220,7 @@ export async function uploadGPXRouteToSuuntoApp(
         throw error;
       }
 
-      logger.error(`Could not upload route for token ${tokenQueryDocumentSnapshot.id} for user ${userID}`, error);
+      logger.error(`Could not upload route for token ${tokenRef.id} for user ${userID}`, error);
       if (getStatusCode(error) === 401) {
         authFailures++;
       }
@@ -209,7 +228,7 @@ export async function uploadGPXRouteToSuuntoApp(
     }
 
     if (result?.error) {
-      logger.error(`Could not upload route for token ${tokenQueryDocumentSnapshot.id} for user ${userID} due to service error`, result.error);
+      logger.error(`Could not upload route for token ${tokenRef.id} for user ${userID} due to service error`, result.error);
       continue;
     }
 

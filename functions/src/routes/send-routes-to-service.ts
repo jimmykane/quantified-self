@@ -241,6 +241,7 @@ async function prepareSavedRouteForSending(userID: string, routeId: string): Pro
 
   routeFile.setID(routeId);
   assignRouteSegmentIDs(routeFile, routeId, getExistingRouteSegmentIDs(routeDocument));
+  applySavedRouteNameForSending(routeFile as RouteFileInterface, routeDocument, routeId);
 
   const exporter = new RouteExporterGPX();
   const gpxContent = await exporter.getAsString(routeFile as RouteFileInterface);
@@ -254,6 +255,38 @@ async function prepareSavedRouteForSending(userID: string, routeId: string): Pro
     sourceFile,
     gpxContent,
   };
+}
+
+function applySavedRouteNameForSending(
+  routeFile: RouteFileInterface,
+  routeDocument: FirestoreRouteJSON,
+  routeId: string,
+): void {
+  const routeName = getSavedRouteNameForSending(routeDocument, routeId);
+  routeFile.name = routeName;
+
+  const routes = routeFile.getRoutes();
+  if (routes.length === 1) {
+    routes[0].name = routeName;
+  }
+}
+
+function getSavedRouteNameForSending(routeDocument: FirestoreRouteJSON, routeId: string): string {
+  const candidates = [
+    routeDocument.name,
+    routeDocument.id,
+    routeId,
+    'Saved route',
+  ];
+
+  for (const candidate of candidates) {
+    const value = typeof candidate === 'string' ? candidate.trim() : '';
+    if (value) {
+      return value;
+    }
+  }
+
+  return 'Saved route';
 }
 
 function getPrimaryOriginalRouteFile(routeDocument: FirestoreRouteJSON): OriginalRouteFileMetaData | null {
