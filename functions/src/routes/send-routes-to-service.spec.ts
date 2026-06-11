@@ -498,7 +498,7 @@ describe('sendRoutesToService', () => {
     expect(suuntoRouteMocks.uploadGPXRouteToSuuntoApp).toHaveBeenCalledTimes(2);
   });
 
-  it('prepares a saved route and uploads generated GPX to Suunto', async () => {
+  it('prepares a saved route and uploads generated GPX to Suunto without rewriting child route names', async () => {
     routeDocuments.set('users/user-1/routes/route-1', {
       id: 'route-1',
       userID: 'user-1',
@@ -521,7 +521,7 @@ describe('sendRoutesToService', () => {
     expect(routeProcessingMocks.assignRouteSegmentIDs).toHaveBeenCalledWith(expect.anything(), 'route-1', ['segment-1']);
     expect(suuntoRouteMocks.uploadGPXRouteToSuuntoApp).toHaveBeenCalledWith(
       'user-1',
-      '<gpx><metadata><name>Evening Loop</name></metadata><routes>Evening Loop</routes></gpx>',
+      '<gpx><metadata><name>Evening Loop</name></metadata><routes>Original segment</routes></gpx>',
       { tokenRefs: [{ id: 'token-1', ref: {} }] },
     );
     expect(result).toMatchObject({

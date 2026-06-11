@@ -278,11 +278,6 @@ function applySavedRouteNameForSending(
 ): void {
   const routeName = getSavedRouteNameForSending(routeDocument, routeId);
   routeFile.name = routeName;
-
-  const routes = routeFile.getRoutes();
-  if (routes.length === 1) {
-    routes[0].name = routeName;
-  }
 }
 
 function getSavedRouteNameForSending(routeDocument: FirestoreRouteJSON, routeId: string): string {
