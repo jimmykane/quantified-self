@@ -93,7 +93,7 @@
         <div class="route-selection-actions">
           <button mat-button type="button"
             class="route-bulk-action-button"
-            [disabled]="bulkActionInProgress()"
+            [disabled]="bulkActionInProgress() || sendingToServiceRouteID() !== null"
             [attr.aria-label]="'Export GPX for ' + selectedRouteCount() + ' selected ' + (selectedRouteCount() === 1 ? 'route' : 'routes')"
             (click)="$event.preventDefault(); $event.stopPropagation(); exportSelectedRoutesAsGPX()">
             <span class="route-bulk-action-content">
@@ -103,7 +103,7 @@
           </button>
           <button mat-button type="button"
             class="route-bulk-action-button"
-            [disabled]="bulkActionInProgress()"
+            [disabled]="bulkActionInProgress() || sendingToServiceRouteID() !== null"
             aria-label="Download original files for selected routes"
             (click)="$event.preventDefault(); $event.stopPropagation(); downloadSelectedRouteOriginals()">
             <span class="route-bulk-action-content">
@@ -111,9 +111,19 @@
               <span>Originals</span>
             </span>
           </button>
+          <button mat-button type="button"
+            class="route-bulk-action-button"
+            [disabled]="bulkActionInProgress() || sendingToServiceRouteID() !== null || !canSendRoutesToSuunto() || selectedSendableRouteCount() === 0"
+            [attr.aria-label]="'Send ' + selectedRouteCount() + ' selected ' + (selectedRouteCount() === 1 ? 'route' : 'routes') + ' to Suunto'"
+            (click)="$event.preventDefault(); $event.stopPropagation(); sendSelectedRoutesToSuunto()">
+            <span class="route-bulk-action-content">
+              <mat-icon>cloud_upload</mat-icon>
+              <span>Suunto</span>
+            </span>
+          </button>
           <button mat-button color="warn" type="button"
             class="route-bulk-action-button"
-            [disabled]="bulkActionInProgress()"
+            [disabled]="bulkActionInProgress() || sendingToServiceRouteID() !== null"
             [attr.aria-label]="'Delete ' + selectedRouteCount() + ' selected ' + (selectedRouteCount() === 1 ? 'route' : 'routes')"
             (click)="$event.preventDefault(); $event.stopPropagation(); confirmDeleteSelectedRoutes()">
             <span class="route-bulk-action-content">
@@ -333,25 +343,31 @@
               <span>Open details</span>
             </button>
             <button mat-menu-item type="button"
-              [disabled]="bulkActionInProgress() || exportingRouteID() === item.route.id || deletingRouteID() === item.route.id || downloadingRouteID() === item.route.id || reprocessingRouteID() === item.route.id || !item.canExportGPX"
+              [disabled]="bulkActionInProgress() || exportingRouteID() === item.route.id || deletingRouteID() === item.route.id || downloadingRouteID() === item.route.id || reprocessingRouteID() === item.route.id || sendingToServiceRouteID() === item.route.id || !item.canExportGPX"
               (click)="exportRouteAsGPX(item.route)">
               <mat-icon>file_download</mat-icon>
               <span>Export GPX</span>
             </button>
             <button mat-menu-item type="button"
-              [disabled]="bulkActionInProgress() || downloadingRouteID() === item.route.id || deletingRouteID() === item.route.id || exportingRouteID() === item.route.id || reprocessingRouteID() === item.route.id || !item.canDownloadOriginals"
+              [disabled]="bulkActionInProgress() || downloadingRouteID() === item.route.id || deletingRouteID() === item.route.id || exportingRouteID() === item.route.id || reprocessingRouteID() === item.route.id || sendingToServiceRouteID() === item.route.id || !item.canDownloadOriginals"
               (click)="downloadRouteOriginals(item.route)">
               <mat-icon>download</mat-icon>
               <span>Download originals</span>
             </button>
             <button mat-menu-item type="button"
-              [disabled]="bulkActionInProgress() || reprocessingRouteID() !== null || deletingRouteID() === item.route.id || downloadingRouteID() === item.route.id || exportingRouteID() === item.route.id || !item.canReprocess"
+              [disabled]="bulkActionInProgress() || sendingToServiceRouteID() !== null || reprocessingRouteID() !== null || deletingRouteID() === item.route.id || downloadingRouteID() === item.route.id || exportingRouteID() === item.route.id || !item.canReprocess"
               (click)="reprocessRouteFromOriginalFile(item.route)">
               <mat-icon>autorenew</mat-icon>
               <span>Reprocess</span>
             </button>
             <button mat-menu-item type="button"
-              [disabled]="bulkActionInProgress() || deletingRouteID() === item.route.id || downloadingRouteID() === item.route.id || reprocessingRouteID() === item.route.id || exportingRouteID() === item.route.id || !item.canDelete"
+              [disabled]="bulkActionInProgress() || sendingToServiceRouteID() !== null || deletingRouteID() === item.route.id || downloadingRouteID() === item.route.id || reprocessingRouteID() === item.route.id || exportingRouteID() === item.route.id || !canSendRoutesToSuunto() || !item.canSendToSuunto"
+              (click)="sendRouteToSuunto(item.route)">
+              <mat-icon>cloud_upload</mat-icon>
+              <span>Send to Suunto</span>
+            </button>
+            <button mat-menu-item type="button"
+              [disabled]="bulkActionInProgress() || deletingRouteID() === item.route.id || downloadingRouteID() === item.route.id || reprocessingRouteID() === item.route.id || exportingRouteID() === item.route.id || sendingToServiceRouteID() === item.route.id || !item.canDelete"
               (click)="confirmDeleteRoute(item.route)">
               <mat-icon>delete</mat-icon>
               <span>Delete</span>

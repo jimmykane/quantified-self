@@ -153,6 +153,7 @@ export { refreshGarminAPIRefreshTokens } from './garmin/tokens';
 // Suunto Utils
 export { importActivityToSuuntoApp } from './suunto/activities';
 export { importRouteToSuuntoApp } from './suunto/routes';
+export { sendRoutesToService } from './routes/send-routes-to-service';
 export { getSuuntoFITFile } from './suunto/get-suunto-fit-file';
 export { importActivityToCOROSAPI } from './coros/activities';
 

@@ -39,6 +39,29 @@ vi.mock('../tokens', () => ({
     getTokenData: (...args: any[]) => tokensMocks.getTokenData(...args),
 }));
 
+const deletionGuardMocks = {
+    getUserDeletionGuardState: vi.fn(),
+    getUserDeletionGuardStateInTransaction: vi.fn(),
+};
+
+vi.mock('../shared/user-deletion-guard', () => ({
+    getUserDeletionGuardState: (...args: any[]) => deletionGuardMocks.getUserDeletionGuardState(...args),
+    getUserDeletionGuardStateInTransaction: (...args: any[]) => deletionGuardMocks.getUserDeletionGuardStateInTransaction(...args),
+    UserDeletionGuardReadError: class UserDeletionGuardReadError extends Error {
+        readonly name = 'UserDeletionGuardReadError';
+        readonly code = 'unavailable';
+        readonly statusCode = 503;
+
+        constructor(
+            public readonly uid: string,
+            public readonly phase: string,
+            public readonly originalError: unknown,
+        ) {
+            super(`Could not read deletion guard for user ${uid} during ${phase}.`);
+        }
+    },
+}));
+
 // Mock firebase-functions/v2/https
 vi.mock('firebase-functions/v2/https', () => {
     return {
@@ -60,6 +83,7 @@ vi.mock('firebase-admin', () => {
     const getMock = vi.fn();
     const updateMock = vi.fn();
     const setMock = vi.fn();
+    const runTransactionMock = vi.fn();
     const collectionMock: any = vi.fn();
     const docMock: any = vi.fn();
 
@@ -86,6 +110,7 @@ vi.mock('firebase-admin', () => {
 
     const firestoreMock = {
         collection: collectionMock,
+        runTransaction: runTransactionMock,
     };
 
     return {
@@ -111,11 +136,31 @@ function createMockRequest(overrides: Partial<{
 }
 
 describe('importRouteToSuuntoApp', () => {
-    beforeEach(() => {
+    beforeEach(async () => {
         vi.clearAllMocks();
         // Happy path defaults
         utilsMocks.hasProAccess.mockResolvedValue(true);
         tokensMocks.getTokenData.mockResolvedValue({ accessToken: 'fake-access-token' });
+        deletionGuardMocks.getUserDeletionGuardState.mockResolvedValue({
+            userExists: true,
+            deletionInProgress: false,
+            shouldSkip: false,
+        });
+        deletionGuardMocks.getUserDeletionGuardStateInTransaction.mockResolvedValue({
+            userExists: true,
+            deletionInProgress: false,
+            shouldSkip: false,
+        });
+        const admin = await import('firebase-admin');
+        const setMock = (admin.firestore() as any)
+            .collection('users')
+            .doc('test-user-id')
+            .collection('meta')
+            .doc('SuuntoApp')
+            .set;
+        (admin.firestore() as any).runTransaction.mockImplementation(
+            async (runner: (transaction: { set: (...args: any[]) => unknown }) => unknown) => runner({ set: setMock }),
+        );
     });
 
     it('should successfully upload a route', async () => {
@@ -140,7 +185,7 @@ describe('importRouteToSuuntoApp', () => {
         expect(requestMocks.post).toHaveBeenCalledWith(expect.objectContaining({
             url: 'https://cloudapi.suunto.com/v2/route/import',
             headers: expect.objectContaining({
-                'Authorization': 'fake-access-token',
+                'Authorization': 'Bearer fake-access-token',
                 'Content-Type': 'application/gpx+xml'
             }),
             body: gpxContent
@@ -271,6 +316,27 @@ describe('importRouteToSuuntoApp', () => {
         }
     });
 
+    it('should handle auth error from response status code', async () => {
+        const error: any = new Error('Unauthorized');
+        error.response = { statusCode: 401 };
+        requestMocks.post.mockRejectedValue(error);
+
+        const gpxContent = '<gpx>...</gpx>';
+        const compressedBase64 = Buffer.from(zlib.gzipSync(gpxContent)).toString('base64');
+
+        const request = createMockRequest({
+            data: { file: compressedBase64 }
+        });
+
+        await expect(importRouteToSuuntoApp(request as any)).rejects.toThrow();
+
+        try {
+            await importRouteToSuuntoApp(request as any);
+        } catch (e: any) {
+            expect(e.code).toBe('unauthenticated');
+        }
+    });
+
     it('should succeed even if metadata update fails', async () => {
         const gpxContent = '<gpx>...</gpx>';
 
@@ -279,10 +345,9 @@ describe('importRouteToSuuntoApp', () => {
             id: 'route-id',
         }));
 
-        // Mock Firestore set to fail
+        // Mock Firestore transaction to fail after the provider upload succeeds.
         const admin = await import('firebase-admin');
-        const setMock = vi.fn().mockRejectedValue(new Error('Firestore error'));
-        vi.spyOn(admin.firestore().collection('users').doc('test-user-id').collection('meta').doc('SuuntoApp'), 'set').mockImplementation(setMock as any);
+        (admin.firestore() as any).runTransaction.mockRejectedValueOnce(new Error('Firestore error'));
 
         const compressedBase64 = Buffer.from(zlib.gzipSync(gpxContent)).toString('base64');
         const request = createMockRequest({
