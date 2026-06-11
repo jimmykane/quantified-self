@@ -158,10 +158,12 @@ export class AppRouteService {
 
     getOriginalRouteFiles(route: FirestoreRouteJSON): OriginalRouteFileMetaData[] {
         if (Array.isArray(route.originalFiles) && route.originalFiles.length > 0) {
-            return route.originalFiles.filter(file => !!file?.path);
+            return route.originalFiles.filter(file => typeof file?.path === 'string' && file.path.trim().length > 0);
         }
 
-        return route.originalFile?.path ? [route.originalFile] : [];
+        return typeof route.originalFile?.path === 'string' && route.originalFile.path.trim().length > 0
+            ? [route.originalFile]
+            : [];
     }
 
     async downloadFile(path: string, options?: DownloadFileOptions): Promise<ArrayBuffer> {
@@ -169,7 +171,7 @@ export class AppRouteService {
     }
 
     async downloadOriginalFile(path: string, options?: DownloadFileOptions): Promise<ArrayBuffer> {
-        return this.originalFileHydrationService.downloadFile(path, {
+        return this.downloadFile(path, {
             ...options,
             decompress: false,
         });

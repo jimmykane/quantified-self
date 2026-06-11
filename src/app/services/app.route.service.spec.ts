@@ -220,6 +220,44 @@ describe('AppRouteService', () => {
         expect(legacy[0].path).toBe('users/user-1/routes/route-1/original.gpx');
     });
 
+    it('filters route source metadata down to non-empty paths', () => {
+        const canonical = service.getOriginalRouteFiles({
+            userID: 'user-1',
+            name: 'Route',
+            srcFileType: 'fit',
+            createdAt: null,
+            routes: [],
+            routeCount: 0,
+            waypointCount: 0,
+            pointCount: 0,
+            activityTypes: [],
+            streamTypes: [],
+            originalFiles: [
+                { path: 'users/user-1/routes/route-1/original.fit', startDate: new Date(), extension: 'fit' },
+                { path: '   ', startDate: new Date(), extension: 'fit' },
+            ],
+        });
+
+        expect(canonical).toHaveLength(1);
+        expect(canonical[0].path).toBe('users/user-1/routes/route-1/original.fit');
+
+        const legacy = service.getOriginalRouteFiles({
+            userID: 'user-1',
+            name: 'Route',
+            srcFileType: 'gpx',
+            createdAt: null,
+            routes: [],
+            routeCount: 0,
+            waypointCount: 0,
+            pointCount: 0,
+            activityTypes: [],
+            streamTypes: [],
+            originalFile: { path: '   ', startDate: new Date(), extension: 'gpx' },
+        });
+
+        expect(legacy).toEqual([]);
+    });
+
     it('downloads original route files through the shared original-file hydration service', async () => {
         const result = await service.downloadFile('users/user-1/routes/route-1/original.gpx', { metadataCacheTtlMs: 0 });
 

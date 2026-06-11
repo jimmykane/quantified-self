@@ -1907,6 +1907,44 @@ describe('AppEventService', () => {
             expect(result).toBe(expectedBuffer);
         });
 
+        it('should delegate raw original file downloads without decompression', async () => {
+            const hydrationService = (service as any).originalFileHydrationService;
+            const expectedBuffer = new ArrayBuffer(4);
+            vi.spyOn(hydrationService, 'downloadFile').mockResolvedValue(expectedBuffer);
+
+            const result = await service.downloadOriginalFile(
+                'users/u1/events/e1/original.fit.gz',
+                { metadataCacheTtlMs: 120000 },
+            );
+
+            expect(hydrationService.downloadFile).toHaveBeenCalledWith(
+                'users/u1/events/e1/original.fit.gz',
+                { metadataCacheTtlMs: 120000, decompress: false },
+            );
+            expect(result).toBe(expectedBuffer);
+        });
+
+        it('filters original event files down to non-empty source paths', () => {
+            const originalFiles = service.getOriginalEventFiles({
+                originalFiles: [
+                    { path: 'users/u1/events/e1/one.fit', extension: 'fit' } as any,
+                    { path: '   ', extension: 'fit' } as any,
+                    { path: '', extension: 'fit' } as any,
+                ],
+                originalFile: { path: 'users/u1/events/e1/legacy.fit', extension: 'fit' } as any,
+            } as any);
+
+            expect(originalFiles).toHaveLength(1);
+            expect(originalFiles[0].path).toBe('users/u1/events/e1/one.fit');
+
+            const legacyOnly = service.getOriginalEventFiles({
+                originalFiles: [],
+                originalFile: { path: '  ', extension: 'fit' } as any,
+            } as any);
+
+            expect(legacyOnly).toEqual([]);
+        });
+
         it('should reject GPX export when hydrated event has no positional activity data', async () => {
             const hydratedEvent = {
                 getActivities: vi.fn().mockReturnValue([

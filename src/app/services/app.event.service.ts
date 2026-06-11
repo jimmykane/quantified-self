@@ -1223,6 +1223,23 @@ export class AppEventService implements OnDestroy {
     return this.originalFileHydrationService.downloadFile(path, options);
   }
 
+  public async downloadOriginalFile(path: string, options?: DownloadFileOptions): Promise<ArrayBuffer> {
+    return this.downloadFile(path, {
+      ...options,
+      decompress: false,
+    });
+  }
+
+  public getOriginalEventFiles(event: Pick<AppEventInterface, 'originalFiles' | 'originalFile'>): NonNullable<AppEventInterface['originalFiles']> {
+    if (Array.isArray(event.originalFiles) && event.originalFiles.length > 0) {
+      return event.originalFiles.filter(file => typeof file?.path === 'string' && file.path.trim().length > 0);
+    }
+
+    return typeof event.originalFile?.path === 'string' && event.originalFile.path.trim().length > 0
+      ? [event.originalFile]
+      : [];
+  }
+
   private async decompressIfNeeded(buffer: ArrayBuffer, path: string): Promise<ArrayBuffer> {
     // Deprecated in favor of fileService.decompressIfNeeded, but kept for internal service stability if any call remains
     return this.fileService.decompressIfNeeded(buffer, path);
