@@ -170,7 +170,54 @@ describe('AppEventService', () => {
         uid: 'test-uid'
     };
     const mockLogger = { log: vi.fn(), info: vi.fn(), error: vi.fn(), warn: vi.fn(), captureMessage: vi.fn(), captureException: vi.fn() };
-    const mockFileService = {};
+    const mockFileService = {
+        toDate: vi.fn((rawDate: any) => {
+            if (!rawDate) return null;
+            if (rawDate instanceof Date) return rawDate;
+            if (rawDate.toDate && typeof rawDate.toDate === 'function') return rawDate.toDate();
+            if (typeof rawDate === 'number') return new Date(rawDate);
+            if (typeof rawDate === 'string') return new Date(rawDate);
+            return null;
+        }),
+        getExtensionFromPath: vi.fn((path: string, defaultExt = 'fit') => {
+            const parts = path.split('.');
+            if (parts.length <= 1) {
+                return defaultExt;
+            }
+            let extension = parts.pop()?.toLowerCase();
+            if (extension?.includes('/')) {
+                return defaultExt;
+            }
+            if (extension === 'gz' && parts.length > 1) {
+                extension = parts.pop()?.toLowerCase();
+            }
+            return extension || defaultExt;
+        }),
+        resolveOriginalSourceFileName: vi.fn((file: { originalFilename?: string; path?: string }, fallbackExtension = 'fit', fallbackName = 'download') => (
+            file.originalFilename
+                || file.path?.split('/').filter(Boolean).pop()
+                || `${fallbackName}.${fallbackExtension}`
+        )),
+        generateDateBasedFilename: vi.fn((date: Date | null, extension: string, index?: number, totalFiles?: number, fallbackId?: string | null) => {
+            const datePipe = new Intl.DateTimeFormat('sv-SE', {
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: false,
+                timeZone: 'UTC',
+            });
+            const dateParts = datePipe.formatToParts(date || new Date(0));
+            const part = (type: string) => dateParts.find(item => item.type === type)?.value || '00';
+            const dateStr = date ? `${part('year')}-${part('month')}-${part('day')}_${part('hour')}-${part('minute')}` : null;
+            const baseStr = dateStr || fallbackId || 'activity';
+            if (index !== undefined && totalFiles !== undefined && totalFiles > 1) {
+                return `${baseStr}_${index}.${extension}`;
+            }
+            return `${baseStr}.${extension}`;
+        }),
+    };
     const mockCompatibility = { checkCompressionSupport: vi.fn().mockReturnValue(true) };
 
     const originalCompressionStream = globalThis.CompressionStream;
@@ -1943,6 +1990,34 @@ describe('AppEventService', () => {
             } as any);
 
             expect(legacyOnly).toEqual([]);
+        });
+
+        it('builds date-based download names when original filenames are missing', () => {
+            const downloadSources = service.getOriginalEventDownloadSources({
+                startDate: new Date('2024-12-15T08:30:00.000Z'),
+                getID: () => 'event-1',
+                originalFiles: [
+                    { path: 'users/u1/events/e1/original.fit', extension: 'fit' } as any,
+                    { path: 'users/u1/events/e1/original_1.fit', extension: 'fit', startDate: new Date('2024-12-16T09:45:00.000Z') } as any,
+                ],
+            } as any);
+
+            expect(downloadSources).toHaveLength(2);
+            expect(downloadSources[0].downloadFileName).toBe('2024-12-15_08-30_1.fit');
+            expect(downloadSources[1].downloadFileName).toBe('2024-12-16_09-45_2.fit');
+        });
+
+        it('keeps the stored original filename when one exists', () => {
+            const downloadSources = service.getOriginalEventDownloadSources({
+                startDate: new Date('2024-12-15T08:30:00.000Z'),
+                getID: () => 'event-1',
+                originalFiles: [
+                    { path: 'users/u1/events/e1/original.fit.gz', originalFilename: 'watch-record.fit.gz', extension: 'fit' } as any,
+                ],
+            } as any);
+
+            expect(downloadSources).toHaveLength(1);
+            expect(downloadSources[0].downloadFileName).toBe('watch-record.fit.gz');
         });
 
         it('should reject GPX export when hydrated event has no positional activity data', async () => {

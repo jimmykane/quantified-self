@@ -657,21 +657,14 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       }
 
       // Collect all file metadata from selected events
-      const filesToDownload: Array<{ path: string; startDate?: unknown; fallbackDate?: unknown; originalFilename?: string; extension?: string; eventId: string | null }> = [];
+      const filesToDownload: Array<{ path: string; startDate?: unknown; fallbackDate?: unknown; originalFilename?: string; downloadFileName?: string; extension?: string; eventId: string | null }> = [];
 
       this.processingService.updateJob(jobId, { title: 'Gathering file info...', progress: 10 });
 
       for (const event of selectedEvents) {
-        // Use shared utility for date conversion
-        const startDate = this.fileService.toDate(event.startDate);
-        const eventId = event.getID ? event.getID() : null;
-        const originalFiles = this.eventService.getOriginalEventFiles(event as any);
+        const originalFiles = this.eventService.getOriginalEventDownloadSources(event as any);
         for (const fileMeta of originalFiles) {
-          filesToDownload.push({
-            ...fileMeta,
-            fallbackDate: startDate,
-            eventId,
-          });
+          filesToDownload.push(fileMeta);
         }
       }
 

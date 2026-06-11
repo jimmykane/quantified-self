@@ -309,8 +309,7 @@ export class EventActionsComponent implements OnInit, OnDestroy {
   async downloadOriginals() {
     this.snackBar.open('Preparing download...', undefined, { duration: 2000 });
     try {
-      const eventDate = this.fileService.toDate(this.event.startDate);
-      const originalFiles = this.eventService.getOriginalEventFiles(this.event as any);
+      const originalFiles = this.eventService.getOriginalEventDownloadSources(this.event as any);
 
       if (originalFiles.length === 0) {
         this.snackBar.open('No original files found.', undefined, { duration: 3000 });
@@ -318,10 +317,7 @@ export class EventActionsComponent implements OnInit, OnDestroy {
       }
 
       const result = await this.originalFileDownloadService.downloadOriginalFiles({
-        sources: originalFiles.map(file => ({
-          ...file,
-          fallbackDate: eventDate,
-        })),
+        sources: originalFiles,
         downloadFile: (path) => this.eventService.downloadOriginalFile(path),
         fallbackFileName: 'original-file',
       });

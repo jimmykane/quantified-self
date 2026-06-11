@@ -82,6 +82,25 @@ describe('AppOriginalFileDownloadService', () => {
     });
   });
 
+  it('prefers an explicit downloadFileName over path-derived fallback names', async () => {
+    const source: OriginalFileDownloadSource = {
+      path: 'users/u/events/e/original.fit',
+      downloadFileName: '2024-12-15_08-30.fit',
+    };
+    const downloadFile = vi.fn().mockResolvedValue(new ArrayBuffer(8));
+
+    await service.downloadOriginalFiles({
+      sources: [source],
+      downloadFile,
+    });
+
+    expect(fileServiceMock.downloadNamedFile).toHaveBeenCalledWith(
+      expect.any(Blob),
+      '2024-12-15_08-30.fit',
+      'fit',
+    );
+  });
+
   it('zips multiple files and dedupes colliding original filenames', async () => {
     const sources: OriginalFileDownloadSource[] = [
       { path: 'users/u/routes/r1/one.fit', originalFilename: 'track.fit', startDate: new Date('2026-01-01T00:00:00.000Z') },

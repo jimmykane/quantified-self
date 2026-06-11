@@ -6,6 +6,7 @@ export interface OriginalFileDownloadSource {
   startDate?: unknown;
   fallbackDate?: unknown;
   originalFilename?: string;
+  downloadFileName?: string;
   extension?: string;
 }
 
@@ -77,11 +78,13 @@ export class AppOriginalFileDownloadService {
       const extension = this.fileService.getExtensionFromPath(source.path, source.extension || 'bin');
       const fileDate = this.fileService.toDate(source.startDate) || this.fileService.toDate(source.fallbackDate);
       const fileName = this.fileService.getUniqueFileName(
-        this.fileService.resolveOriginalSourceFileName(
-          source,
-          source.extension || extension,
-          options.fallbackFileName || 'original-file',
-        ),
+        typeof source.downloadFileName === 'string' && source.downloadFileName.trim().length > 0
+          ? source.downloadFileName.trim()
+          : this.fileService.resolveOriginalSourceFileName(
+            source,
+            source.extension || extension,
+            options.fallbackFileName || 'original-file',
+          ),
         usedFileNames,
       );
 

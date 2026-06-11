@@ -39,10 +39,20 @@ describe('EventActionsComponent', () => {
         mockEventService = {
             downloadFile: vi.fn(),
             downloadOriginalFile: vi.fn(),
-            getOriginalEventFiles: vi.fn((event: { originalFiles?: any[]; originalFile?: any }) => (
+            getOriginalEventDownloadSources: vi.fn((event: { originalFiles?: any[]; originalFile?: any; startDate?: any }) => (
                 Array.isArray(event.originalFiles) && event.originalFiles.length > 0
-                    ? event.originalFiles.filter((file: any) => !!file?.path)
-                    : event.originalFile?.path ? [event.originalFile] : []
+                    ? event.originalFiles
+                        .filter((file: any) => !!file?.path)
+                        .map((file: any) => ({
+                            ...file,
+                            fallbackDate: file.fallbackDate || file.startDate || event.startDate,
+                            downloadFileName: file.downloadFileName || file.originalFilename || file.path?.split('/').filter(Boolean).pop(),
+                        }))
+                    : event.originalFile?.path ? [{
+                        ...event.originalFile,
+                        fallbackDate: event.originalFile.fallbackDate || event.originalFile.startDate || event.startDate,
+                        downloadFileName: event.originalFile.downloadFileName || event.originalFile.originalFilename || event.originalFile.path.split('/').filter(Boolean).pop(),
+                    }] : []
             )),
             getEventMetaData: vi.fn(),
             getEventAsGPXBloB: vi.fn(),

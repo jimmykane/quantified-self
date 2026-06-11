@@ -36,11 +36,17 @@ import { AppFileService } from './app.file.service';
 import { AppCacheService } from './app.cache.service';
 import { BenchmarkEventAdapter } from './benchmark-event.adapter';
 import { AppOriginalFileHydrationService, DownloadFileOptions } from './app.original-file-hydration.service';
+import { OriginalFileDownloadSource } from './app.original-file-download.service';
 
 export interface GetEventsOnceOptions {
   preferCache?: boolean;
   warmServer?: boolean;
   seedLiveQuery?: boolean;
+}
+
+export interface OriginalEventDownloadSource extends OriginalFileDownloadSource {
+  eventId: string | null;
+  downloadFileName: string;
 }
 
 export type EventsOnceSource = 'cache' | 'server';
@@ -1238,6 +1244,41 @@ export class AppEventService implements OnDestroy {
     return typeof event.originalFile?.path === 'string' && event.originalFile.path.trim().length > 0
       ? [event.originalFile]
       : [];
+  }
+
+  public getOriginalEventDownloadSources(
+    event: Pick<AppEventInterface, 'originalFiles' | 'originalFile' | 'startDate'> & { getID?: () => string },
+  ): OriginalEventDownloadSource[] {
+    const originalFiles = this.getOriginalEventFiles(event);
+    if (!originalFiles.length) {
+      return [];
+    }
+
+    const eventDate = this.fileService.toDate(event.startDate);
+    const eventId = typeof event.getID === 'function' ? event.getID() : null;
+    const totalFiles = originalFiles.length;
+
+    return originalFiles.map((file, index) => {
+      const extension = this.fileService.getExtensionFromPath(file.originalFilename || file.path, 'fit');
+      const fileDate = this.fileService.toDate(file.startDate) || eventDate;
+      const hasOriginalFilename = typeof file.originalFilename === 'string' && file.originalFilename.trim().length > 0;
+      const downloadFileName = hasOriginalFilename
+        ? this.fileService.resolveOriginalSourceFileName(file, extension, 'original-file')
+        : this.fileService.generateDateBasedFilename(
+          fileDate,
+          extension,
+          totalFiles > 1 ? index + 1 : undefined,
+          totalFiles,
+          eventId,
+        );
+
+      return {
+        ...file,
+        fallbackDate: eventDate,
+        eventId,
+        downloadFileName,
+      };
+    });
   }
 
   private async decompressIfNeeded(buffer: ArrayBuffer, path: string): Promise<ArrayBuffer> {
