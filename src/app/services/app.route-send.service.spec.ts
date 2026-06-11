@@ -140,7 +140,11 @@ describe('AppRouteSendService', () => {
 
   it('maps common route send errors to user-facing messages', () => {
     expect(getRouteSendErrorMessage({ code: 'functions/permission-denied' })).toBe('Sending routes to services is a Pro feature.');
-    expect(getRouteSendErrorMessage({ code: 'functions/unauthenticated' })).toBe('Connect Suunto again before sending routes.');
+    expect(getRouteSendErrorMessage({ code: 'functions/unauthenticated' })).toBe('Sending routes is not authorized. Please sign in again.');
+    expect(getRouteSendErrorMessage({
+      code: 'functions/unauthenticated',
+      message: 'No connected Suunto account found',
+    })).toBe('Connect Suunto again before sending routes.');
     expect(getRouteSendErrorMessage({ message: 'Sending saved routes to GarminAPI is not supported yet.' }))
       .toBe('Sending saved routes to GarminAPI is not supported yet.');
     expect(getRouteSendErrorMessage({ message: 'Could not verify account state. Please retry.' }))

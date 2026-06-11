@@ -891,6 +891,44 @@ describe('RoutesPageComponent', () => {
         expect(component.bulkActionInProgress()).toBe(false);
     });
 
+    it('reports skipped bulk Suunto rows as skipped instead of failed', async () => {
+        const routeWithoutOriginals: FirestoreRouteJSON = {
+            ...route,
+            id: 'route-2',
+            name: 'No Source Route',
+            originalFiles: [],
+        };
+        routeServiceMock.getRoutes.mockReturnValue(of([route, routeWithoutOriginals]));
+        routeSendServiceMock.sendRoutesToService.mockResolvedValueOnce({
+            destinationServiceName: ServiceNames.SuuntoApp,
+            status: 'success',
+            routeCount: 1,
+            successCount: 1,
+            failureCount: 0,
+            skippedCount: 0,
+            results: [
+                { routeId: 'route-1', destinationServiceName: ServiceNames.SuuntoApp, status: 'success' },
+            ],
+        });
+        await component.ngOnInit();
+        await firstValueFrom(component.routes$!);
+        component.toggleVisibleRouteSelection(true);
+
+        await component.sendSelectedRoutesToSuunto();
+
+        expect(component.selectedRouteIDs()).toEqual(['route-2']);
+        expect(analyticsServiceMock.logSavedRouteAction).toHaveBeenCalledWith('send_service_route', {
+            status: 'partial_success',
+            routeCount: 2,
+            failedCount: 0,
+            skippedCount: 1,
+            source: 'routes_list_bulk',
+            destinationService: ServiceNames.SuuntoApp,
+        });
+        expect(snackBarMock.open).toHaveBeenCalledWith('Sent 1 route to Suunto. Skipped 1.', undefined, { duration: 4000 });
+        expect(component.bulkActionInProgress()).toBe(false);
+    });
+
     it('reports partial success when bulk original downloads skip routes without source files', async () => {
         const routeWithoutOriginals: FirestoreRouteJSON = {
             ...route,

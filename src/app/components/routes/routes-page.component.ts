@@ -824,7 +824,7 @@ export class RoutesPageComponent implements OnInit {
             });
             this.snackBar.open(
                 status === 'partial_success'
-                    ? `Sent ${result.successCount} ${result.successCount === 1 ? 'route' : 'routes'} to Suunto. Failed ${result.failureCount + totalSkippedCount}.`
+                    ? this.getBulkRouteSendSummaryMessage(result.successCount, result.failureCount, totalSkippedCount)
                     : `Sent ${result.successCount} ${result.successCount === 1 ? 'route' : 'routes'} to Suunto.`,
                 undefined,
                 { duration: status === 'partial_success' ? 4000 : 2500 },
@@ -1186,6 +1186,18 @@ export class RoutesPageComponent implements OnInit {
             && selectedIDs.has(item.route.id)
             && this.canManageRoute(item.route)
         ));
+    }
+
+    private getBulkRouteSendSummaryMessage(successCount: number, failureCount: number, skippedCount: number): string {
+        const routeLabel = successCount === 1 ? 'route' : 'routes';
+        const messageParts = [`Sent ${successCount} ${routeLabel} to Suunto.`];
+        if (failureCount > 0) {
+            messageParts.push(`Failed ${failureCount}.`);
+        }
+        if (skippedCount > 0) {
+            messageParts.push(`Skipped ${skippedCount}.`);
+        }
+        return messageParts.join(' ');
     }
 
     private reconcileSelectionWithVisibleRoutes(visibleRoutes: RoutePageRouteViewModel[]): void {

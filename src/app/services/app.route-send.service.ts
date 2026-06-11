@@ -39,7 +39,9 @@ export function getRouteSendErrorMessage(error: unknown): string {
     return 'Sending routes to services is a Pro feature.';
   }
   if (normalizedCode.includes('unauthenticated')) {
-    return 'Connect Suunto again before sending routes.';
+    return isDestinationAuthReconnectMessage(normalizedMessage)
+      ? 'Connect Suunto again before sending routes.'
+      : 'Sending routes is not authorized. Please sign in again.';
   }
   if (/not supported yet/i.test(normalizedMessage)) {
     return normalizedMessage;
@@ -195,4 +197,10 @@ function getDefaultRouteSendFailureMessage(destinationServiceName: ServiceNames)
     default:
       return 'Could not send routes to the selected service.';
   }
+}
+
+function isDestinationAuthReconnectMessage(message: string): boolean {
+  return /suunto/i.test(message)
+    || /no connected .*account/i.test(message)
+    || /re-?connect/i.test(message);
 }
