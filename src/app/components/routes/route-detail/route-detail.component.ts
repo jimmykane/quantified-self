@@ -1,17 +1,19 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { firstValueFrom } from 'rxjs';
+import { firstValueFrom, map, switchMap } from 'rxjs';
 import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import {
   AppThemes,
   RouteFileInterface,
+  ServiceNames,
   User,
 } from '@sports-alliance/sports-lib';
 import { FirestoreRouteJSON, OriginalRouteFileMetaData } from '@shared/app-route.interface';
 import { SharedModule } from '../../../modules/shared.module';
 import { RouteResolverData } from '../../../resolvers/route.resolver';
+import { buildSuuntoServiceConnectionViewModel, SuuntoServiceConnectionViewModel } from '../../../helpers/suunto-service-connection.helper';
 import { AppAnalyticsService } from '../../../services/app.analytics.service';
 import { AppFileService } from '../../../services/app.file.service';
 import { AppProcessingService } from '../../../services/app.processing.service';
@@ -22,8 +24,14 @@ import {
   getRouteReprocessProgressTitle,
   RouteReprocessProgress,
 } from '../../../services/app.route-reprocess.service';
+import {
+  AppRouteSendService,
+  getRouteSendErrorMessage,
+  getRouteSendResponseMessage,
+} from '../../../services/app.route-send.service';
 import { AppRouteService } from '../../../services/app.route.service';
 import { AppThemeService } from '../../../services/app.theme.service';
+import { AppUserService } from '../../../services/app.user.service';
 import { AppUserSettingsQueryService } from '../../../services/app.user-settings-query.service';
 import { LoggerService } from '../../../services/logger.service';
 import { normalizeRouteName } from '../../../helpers/route-name.helper';
@@ -56,10 +64,12 @@ export class RouteDetailComponent {
   private analyticsService = inject(AppAnalyticsService);
   private routeGPXExportService = inject(AppRouteGPXExportService);
   private routeReprocessService = inject(AppRouteReprocessService);
+  private routeSendService = inject(AppRouteSendService);
   private processingService = inject(AppProcessingService);
   private dialog = inject(MatDialog);
   private snackBar = inject(MatSnackBar);
   private logger = inject(LoggerService);
+  private userService = inject(AppUserService);
   private userSettingsQuery = inject(AppUserSettingsQueryService);
   private themeService = inject(AppThemeService);
 
@@ -73,9 +83,14 @@ export class RouteDetailComponent {
   readonly exportingGPX = signal(false);
   readonly deleting = signal(false);
   readonly reprocessing = signal(false);
+  readonly sendingToService = signal(false);
 
   readonly unitSettings = this.userSettingsQuery.unitSettings;
   readonly darkTheme = computed(() => this.themeService.appTheme() === AppThemes.Dark);
+  readonly suuntoConnectionView = signal<SuuntoServiceConnectionViewModel>(buildSuuntoServiceConnectionViewModel({
+    hasToken: false,
+    serviceMeta: null,
+  }));
   readonly routeName = computed(() => this.routeDocument()?.name || this.routeFile()?.name || 'Untitled route');
   readonly routeDate = computed(() => this.resolveRouteDate());
   readonly sourceFilename = computed(() => this.getSourceFilename());
@@ -131,6 +146,18 @@ export class RouteDetailComponent {
     const routeDocument = this.routeDocument();
     return !!user?.uid && !!routeDocument?.userID && user.uid === routeDocument.userID;
   });
+  readonly canSendRoutesToSuunto = computed(() => {
+    const connectionView = this.suuntoConnectionView();
+    return this.userService.hasProAccessSignal()
+      && connectionView.connected
+      && !connectionView.reconnectRequired;
+  });
+  readonly canSendRouteToSuunto = computed(() => {
+    const routeDocument = this.routeDocument();
+    return !!routeDocument
+      && this.canManageRoute()
+      && this.routeService.getOriginalRouteFiles(routeDocument).length > 0;
+  });
   readonly canReprocessRoute = computed(() => {
     const routeDocument = this.routeDocument();
     return !!routeDocument
@@ -142,6 +169,14 @@ export class RouteDetailComponent {
     this.activatedRoute.data
       .pipe(takeUntilDestroyed())
       .subscribe((data) => this.applyResolvedRouteData(data['route'] as RouteResolverData | null));
+
+    this.activatedRoute.data
+      .pipe(
+        map(data => (data['route'] as RouteResolverData | null)?.user ?? null),
+        switchMap(user => this.userService.watchSuuntoServiceConnectionView(user)),
+        takeUntilDestroyed(),
+      )
+      .subscribe(connectionView => this.suuntoConnectionView.set(connectionView));
   }
 
   onSegmentVisibilityChange(segmentID: string, checked: boolean): void {
@@ -176,6 +211,7 @@ export class RouteDetailComponent {
       || this.renaming()
       || this.downloading()
       || this.exportingGPX()
+      || this.sendingToService()
       || this.reprocessing()
       || this.deleting()
       || !this.canManageRoute()
@@ -231,6 +267,7 @@ export class RouteDetailComponent {
       || this.downloading()
       || this.renaming()
       || this.exportingGPX()
+      || this.sendingToService()
       || this.reprocessing()
       || this.deleting()
       || !this.canManageRoute()
@@ -310,6 +347,7 @@ export class RouteDetailComponent {
       || this.exportingGPX()
       || this.renaming()
       || this.downloading()
+      || this.sendingToService()
       || this.reprocessing()
       || this.deleting()
       || !this.canManageRoute()
@@ -346,6 +384,58 @@ export class RouteDetailComponent {
     }
   }
 
+  async sendRouteToSuunto(): Promise<void> {
+    const routeDocument = this.routeDocument();
+    const routeID = routeDocument?.id;
+    if (
+      !routeDocument
+      || !routeID
+      || this.sendingToService()
+      || this.renaming()
+      || this.downloading()
+      || this.exportingGPX()
+      || this.reprocessing()
+      || this.deleting()
+      || !this.canSendRoutesToSuunto()
+      || !this.canSendRouteToSuunto()
+    ) {
+      return;
+    }
+
+    this.sendingToService.set(true);
+    this.snackBar.open('Sending route to Suunto...', undefined, { duration: 2000 });
+    try {
+      const result = await this.routeSendService.sendRoutesToService([routeID], ServiceNames.SuuntoApp);
+      const status = result.successCount > 0 ? 'success' : 'failure';
+      this.analyticsService.logSavedRouteAction('send_service_route', {
+        status,
+        routeCount: 1,
+        failedCount: result.failureCount,
+        skippedCount: result.skippedCount,
+        fileType: this.getPrimaryRouteFileType(routeDocument),
+        source: 'route_detail',
+        destinationService: ServiceNames.SuuntoApp,
+      });
+      this.snackBar.open(
+        result.successCount > 0 ? 'Route sent to Suunto.' : getRouteSendResponseMessage(result),
+        undefined,
+        { duration: result.successCount > 0 ? 2500 : 3500 },
+      );
+    } catch (error) {
+      this.analyticsService.logSavedRouteAction('send_service_route', {
+        status: 'failure',
+        routeCount: 1,
+        fileType: this.getPrimaryRouteFileType(routeDocument),
+        source: 'route_detail',
+        destinationService: ServiceNames.SuuntoApp,
+      });
+      this.logger.error('[RouteDetailComponent] Failed to send route to Suunto', { routeID }, error);
+      this.snackBar.open(getRouteSendErrorMessage(error), undefined, { duration: 4000 });
+    } finally {
+      this.sendingToService.set(false);
+    }
+  }
+
   async reprocessRouteFromOriginalFile(): Promise<void> {
     const routeDocument = this.routeDocument();
     const routeID = routeDocument?.id;
@@ -358,6 +448,7 @@ export class RouteDetailComponent {
       || this.renaming()
       || this.downloading()
       || this.exportingGPX()
+      || this.sendingToService()
       || this.deleting()
       || !this.canManageRoute()
     ) {
@@ -440,6 +531,7 @@ export class RouteDetailComponent {
       || this.renaming()
       || this.downloading()
       || this.exportingGPX()
+      || this.sendingToService()
       || this.reprocessing()
       || !this.canManageRoute()
     ) {

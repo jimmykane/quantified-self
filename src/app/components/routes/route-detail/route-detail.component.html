@@ -43,25 +43,31 @@
             <span>Rename</span>
           </button>
           <button mat-menu-item type="button"
-            [disabled]="exportingGPX() || renaming() || downloading() || reprocessing() || deleting() || !canManageRoute()"
+            [disabled]="exportingGPX() || renaming() || downloading() || reprocessing() || deleting() || sendingToService() || !canManageRoute()"
             (click)="exportRouteAsGPX()">
             <mat-icon>file_download</mat-icon>
             <span>Export GPX</span>
           </button>
           <button mat-menu-item type="button"
-            [disabled]="downloading() || renaming() || exportingGPX() || reprocessing() || deleting() || !canManageRoute()"
+            [disabled]="downloading() || renaming() || exportingGPX() || reprocessing() || deleting() || sendingToService() || !canManageRoute()"
             (click)="downloadRouteOriginals()">
             <mat-icon>download</mat-icon>
             <span>Download originals</span>
           </button>
           <button mat-menu-item type="button"
-            [disabled]="reprocessing() || renaming() || downloading() || exportingGPX() || deleting() || !canReprocessRoute()"
+            [disabled]="reprocessing() || renaming() || downloading() || exportingGPX() || deleting() || sendingToService() || !canReprocessRoute()"
             (click)="reprocessRouteFromOriginalFile()">
             <mat-icon>autorenew</mat-icon>
             <span>Reprocess</span>
           </button>
           <button mat-menu-item type="button"
-            [disabled]="deleting() || renaming() || downloading() || reprocessing() || exportingGPX() || !canManageRoute()"
+            [disabled]="sendingToService() || renaming() || downloading() || exportingGPX() || reprocessing() || deleting() || !canSendRoutesToSuunto() || !canSendRouteToSuunto()"
+            (click)="sendRouteToSuunto()">
+            <mat-icon>cloud_upload</mat-icon>
+            <span>Send to Suunto</span>
+          </button>
+          <button mat-menu-item type="button"
+            [disabled]="deleting() || renaming() || downloading() || reprocessing() || exportingGPX() || sendingToService() || !canManageRoute()"
             (click)="confirmDeleteRoute()">
             <mat-icon>delete</mat-icon>
             <span>Delete</span>

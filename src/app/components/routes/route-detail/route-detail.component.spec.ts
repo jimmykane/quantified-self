@@ -4,7 +4,7 @@ import { resolve } from 'node:path';
 import { ActivatedRoute, Router } from '@angular/router';
 import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import { DataDistance, RouteFileInterface, RouteInterface, User, AppThemes } from '@sports-alliance/sports-lib';
+import { DataDistance, RouteFileInterface, RouteInterface, User, AppThemes, ServiceNames } from '@sports-alliance/sports-lib';
 import { of } from 'rxjs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { FirestoreRouteJSON } from '@shared/app-route.interface';
@@ -14,8 +14,10 @@ import { AppFileService } from '../../../services/app.file.service';
 import { AppProcessingService } from '../../../services/app.processing.service';
 import { AppRouteGPXExportService } from '../../../services/app.route-gpx-export.service';
 import { AppRouteReprocessService, RouteReprocessError } from '../../../services/app.route-reprocess.service';
+import { AppRouteSendService } from '../../../services/app.route-send.service';
 import { AppRouteService } from '../../../services/app.route.service';
 import { AppThemeService } from '../../../services/app.theme.service';
+import { AppUserService } from '../../../services/app.user.service';
 import { AppUserSettingsQueryService } from '../../../services/app.user-settings-query.service';
 import { LoggerService } from '../../../services/logger.service';
 import { ConfirmationDialogComponent } from '../../confirmation-dialog/confirmation-dialog.component';
@@ -29,6 +31,8 @@ describe('RouteDetailComponent', () => {
   let processingServiceMock: any;
   let fileServiceMock: any;
   let routeGPXExportServiceMock: any;
+  let routeSendServiceMock: any;
+  let userServiceMock: any;
   let analyticsServiceMock: any;
   let dialogMock: any;
   let snackBarMock: any;
@@ -126,6 +130,36 @@ describe('RouteDetailComponent', () => {
     routeGPXExportServiceMock = {
       getRouteFileAsGPXBlob: vi.fn().mockResolvedValue(new Blob(['<gpx></gpx>'], { type: 'application/gpx+xml' })),
     };
+    routeSendServiceMock = {
+      sendRoutesToService: vi.fn().mockResolvedValue({
+        destinationServiceName: ServiceNames.SuuntoApp,
+        status: 'success',
+        routeCount: 1,
+        successCount: 1,
+        failureCount: 0,
+        skippedCount: 0,
+        results: [{
+          routeId: 'route-1',
+          destinationServiceName: ServiceNames.SuuntoApp,
+          status: 'success',
+        }],
+      }),
+    };
+    userServiceMock = {
+      hasProAccessSignal: vi.fn().mockReturnValue(true),
+      watchSuuntoServiceConnectionView: vi.fn().mockReturnValue(of({
+        connected: true,
+        reconnectRequired: false,
+        showDetails: true,
+        description: 'Connected',
+        failureMessage: null,
+        statusLabelOverride: null,
+        statusIconOverride: null,
+        statusTone: 'default',
+        connectButtonLabel: 'Connect',
+        reconnectPromptSource: 'test',
+      })),
+    };
     analyticsServiceMock = {
       logSavedRouteAction: vi.fn(),
     };
@@ -152,6 +186,8 @@ describe('RouteDetailComponent', () => {
         { provide: AppFileService, useValue: fileServiceMock },
         { provide: AppRouteGPXExportService, useValue: routeGPXExportServiceMock },
         { provide: AppAnalyticsService, useValue: analyticsServiceMock },
+        { provide: AppRouteSendService, useValue: routeSendServiceMock },
+        { provide: AppUserService, useValue: userServiceMock },
         { provide: MatDialog, useValue: dialogMock },
         { provide: MatSnackBar, useValue: snackBarMock },
         { provide: Router, useValue: routerMock },
@@ -373,6 +409,46 @@ describe('RouteDetailComponent', () => {
     expect(component.exportingGPX()).toBe(false);
   });
 
+  it('sends the owner route to Suunto from the detail page action', async () => {
+    await component.sendRouteToSuunto();
+
+    expect(routeSendServiceMock.sendRoutesToService).toHaveBeenCalledWith(['route-1'], ServiceNames.SuuntoApp);
+    expect(analyticsServiceMock.logSavedRouteAction).toHaveBeenCalledWith('send_service_route', {
+      status: 'success',
+      routeCount: 1,
+      failedCount: 0,
+      skippedCount: 0,
+      fileType: 'gpx',
+      source: 'route_detail',
+      destinationService: ServiceNames.SuuntoApp,
+    });
+    expect(snackBarMock.open).toHaveBeenCalledWith('Route sent to Suunto.', undefined, { duration: 2500 });
+    expect(component.sendingToService()).toBe(false);
+  });
+
+  it('shows reconnect guidance when route-detail Suunto send returns an auth-required response', async () => {
+    routeSendServiceMock.sendRoutesToService.mockResolvedValueOnce({
+      destinationServiceName: ServiceNames.SuuntoApp,
+      status: 'failure',
+      routeCount: 1,
+      successCount: 0,
+      failureCount: 1,
+      skippedCount: 0,
+      results: [{
+        routeId: 'route-1',
+        destinationServiceName: ServiceNames.SuuntoApp,
+        status: 'failure',
+        reason: 'DESTINATION_AUTH_REQUIRED',
+        message: 'Authentication failed. Please re-connect your Suunto account.',
+      }],
+    });
+
+    await component.sendRouteToSuunto();
+
+    expect(snackBarMock.open).toHaveBeenCalledWith('Connect Suunto again before sending routes.', undefined, { duration: 3500 });
+    expect(component.sendingToService()).toBe(false);
+  });
+
   it('reprocesses the owner route from the original source file', async () => {
     await component.reprocessRouteFromOriginalFile();
 
@@ -443,7 +519,7 @@ describe('RouteDetailComponent', () => {
     );
   });
 
-  it('does not rename, download, or delete when the resolved user is not the route owner', async () => {
+  it('does not rename, send, download, export, reprocess, or delete when the resolved user is not the route owner', async () => {
     component.user.set(new User('other-user'));
     dialogMock.open.mockClear();
     routeServiceMock.updateRouteName.mockClear();
@@ -451,14 +527,17 @@ describe('RouteDetailComponent', () => {
     routeServiceMock.deleteRoute.mockClear();
     routeGPXExportServiceMock.getRouteFileAsGPXBlob.mockClear();
     routeReprocessServiceMock.reprocessRouteFromOriginalFile.mockClear();
+    routeSendServiceMock.sendRoutesToService.mockClear();
 
     await component.renameRoute();
+    await component.sendRouteToSuunto();
     await component.downloadRouteOriginals();
     await component.exportRouteAsGPX();
     await component.reprocessRouteFromOriginalFile();
     await component.confirmDeleteRoute();
 
     expect(routeServiceMock.updateRouteName).not.toHaveBeenCalled();
+    expect(routeSendServiceMock.sendRoutesToService).not.toHaveBeenCalled();
     expect(routeServiceMock.downloadFile).not.toHaveBeenCalled();
     expect(routeGPXExportServiceMock.getRouteFileAsGPXBlob).not.toHaveBeenCalled();
     expect(dialogMock.open).not.toHaveBeenCalled();
@@ -488,6 +567,8 @@ describe('RouteDetailComponent', () => {
     expect(template).toContain('Export GPX');
     expect(template).toContain('(click)="exportRouteAsGPX()"');
     expect(template).toContain('(click)="reprocessRouteFromOriginalFile()"');
+    expect(template).toContain('Send to Suunto');
+    expect(template).toContain('(click)="sendRouteToSuunto()"');
     expect(template).toContain('class="route-chip route-chip--segment"');
     expect(template).toContain('class="segment-table route-data-table"');
     expect(template).toContain('class="segment-visibility-control"');
