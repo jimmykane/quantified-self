@@ -35,6 +35,7 @@ import {
     RouteReprocessProgress,
 } from '../../services/app.route-reprocess.service';
 import {
+    getActionableRouteSendResponseMessage,
     AppRouteSendService,
     getRouteSendErrorMessage,
     getRouteSendResponseMessage,
@@ -810,6 +811,9 @@ export class RoutesPageComponent implements OnInit {
             }
 
             const status = result.status === 'success' && totalSkippedCount === 0 ? 'success' : 'partial_success';
+            const guidanceMessage = status === 'partial_success'
+                ? getActionableRouteSendResponseMessage(result)
+                : null;
             this.processingService.completeJob(
                 jobId,
                 `Sent ${result.successCount} ${result.successCount === 1 ? 'route' : 'routes'} to Suunto`,
@@ -824,7 +828,7 @@ export class RoutesPageComponent implements OnInit {
             });
             this.snackBar.open(
                 status === 'partial_success'
-                    ? this.getBulkRouteSendSummaryMessage(result.successCount, result.failureCount, totalSkippedCount)
+                    ? this.getBulkRouteSendSummaryMessage(result.successCount, result.failureCount, totalSkippedCount, guidanceMessage)
                     : `Sent ${result.successCount} ${result.successCount === 1 ? 'route' : 'routes'} to Suunto.`,
                 undefined,
                 { duration: status === 'partial_success' ? 4000 : 2500 },
@@ -1188,7 +1192,12 @@ export class RoutesPageComponent implements OnInit {
         ));
     }
 
-    private getBulkRouteSendSummaryMessage(successCount: number, failureCount: number, skippedCount: number): string {
+    private getBulkRouteSendSummaryMessage(
+        successCount: number,
+        failureCount: number,
+        skippedCount: number,
+        guidanceMessage: string | null,
+    ): string {
         const routeLabel = successCount === 1 ? 'route' : 'routes';
         const messageParts = [`Sent ${successCount} ${routeLabel} to Suunto.`];
         if (failureCount > 0) {
@@ -1196,6 +1205,9 @@ export class RoutesPageComponent implements OnInit {
         }
         if (skippedCount > 0) {
             messageParts.push(`Skipped ${skippedCount}.`);
+        }
+        if (guidanceMessage) {
+            messageParts.push(guidanceMessage);
         }
         return messageParts.join(' ');
     }

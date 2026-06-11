@@ -29,6 +29,12 @@ const ROUTE_SEND_REASON_PRIORITY: SendRouteToServiceFailureReason[] = [
   'UNSUPPORTED_DESTINATION',
 ];
 
+const GENERIC_ROUTE_SEND_RESPONSE_MESSAGES = new Set<string>([
+  'Could not send route.',
+  'Could not send routes to Suunto.',
+  'Could not send routes to the selected service.',
+]);
+
 export function getRouteSendErrorMessage(error: unknown): string {
   const message = (error as { message?: unknown } | null)?.message;
   const code = (error as { code?: unknown } | null)?.code;
@@ -72,6 +78,16 @@ export function getRouteSendResponseMessage(response: SendRoutesToServiceRespons
       return nonSuccessResults.find(result => typeof result.message === 'string' && result.message.trim())?.message?.trim()
         || getDefaultRouteSendFailureMessage(response.destinationServiceName);
   }
+}
+
+export function getActionableRouteSendResponseMessage(response: SendRoutesToServiceResponse): string | null {
+  const hasNonSuccessResults = response.results.some(result => result.status !== 'success');
+  if (!hasNonSuccessResults) {
+    return null;
+  }
+
+  const message = getRouteSendResponseMessage(response);
+  return GENERIC_ROUTE_SEND_RESPONSE_MESSAGES.has(message) ? null : message;
 }
 
 @Injectable({

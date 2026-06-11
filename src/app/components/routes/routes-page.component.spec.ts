@@ -929,6 +929,51 @@ describe('RoutesPageComponent', () => {
         expect(component.bulkActionInProgress()).toBe(false);
     });
 
+    it('includes reconnect guidance in partial-success bulk Suunto sends when later routes require re-authentication', async () => {
+        const secondRoute: FirestoreRouteJSON = {
+            ...route,
+            id: 'route-2',
+            name: 'Evening Ride',
+            originalFiles: [{
+                path: 'users/user-1/routes/route-2/evening.gpx',
+                originalFilename: 'evening.gpx',
+                startDate: new Date('2026-01-03T00:00:00.000Z'),
+                extension: 'gpx',
+            }],
+        };
+        routeServiceMock.getRoutes.mockReturnValue(of([route, secondRoute]));
+        routeSendServiceMock.sendRoutesToService.mockResolvedValueOnce({
+            destinationServiceName: ServiceNames.SuuntoApp,
+            status: 'partial_success',
+            routeCount: 2,
+            successCount: 1,
+            failureCount: 1,
+            skippedCount: 0,
+            results: [
+                { routeId: 'route-1', destinationServiceName: ServiceNames.SuuntoApp, status: 'success' },
+                {
+                    routeId: 'route-2',
+                    destinationServiceName: ServiceNames.SuuntoApp,
+                    status: 'failure',
+                    reason: 'DESTINATION_AUTH_REQUIRED',
+                    message: 'Authentication failed. Please re-connect your Suunto account.',
+                },
+            ],
+        });
+        await component.ngOnInit();
+        await firstValueFrom(component.routes$!);
+        component.toggleVisibleRouteSelection(true);
+
+        await component.sendSelectedRoutesToSuunto();
+
+        expect(snackBarMock.open).toHaveBeenCalledWith(
+            'Sent 1 route to Suunto. Failed 1. Connect Suunto again before sending routes.',
+            undefined,
+            { duration: 4000 },
+        );
+        expect(component.bulkActionInProgress()).toBe(false);
+    });
+
     it('reports partial success when bulk original downloads skip routes without source files', async () => {
         const routeWithoutOriginals: FirestoreRouteJSON = {
             ...route,

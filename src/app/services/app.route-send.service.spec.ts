@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { SEND_ROUTES_TO_SERVICE_MAX_ROUTE_IDS } from '@shared/saved-route-send';
 import { AppFunctionsService } from './app.functions.service';
 import {
+  getActionableRouteSendResponseMessage,
   AppRouteSendService,
   getRouteSendErrorMessage,
   getRouteSendResponseMessage,
@@ -167,6 +168,46 @@ describe('AppRouteSendService', () => {
         message: 'Authentication failed. Please re-connect your Suunto account.',
       }],
     })).toBe('Connect Suunto again before sending routes.');
+  });
+
+  it('returns actionable route send guidance only for specific non-success responses', () => {
+    expect(getActionableRouteSendResponseMessage({
+      destinationServiceName: ServiceNames.SuuntoApp,
+      status: 'partial_success',
+      routeCount: 2,
+      successCount: 1,
+      failureCount: 1,
+      skippedCount: 0,
+      results: [
+        { routeId: 'route-1', destinationServiceName: ServiceNames.SuuntoApp, status: 'success' },
+        {
+          routeId: 'route-2',
+          destinationServiceName: ServiceNames.SuuntoApp,
+          status: 'failure',
+          reason: 'DESTINATION_AUTH_REQUIRED',
+          message: 'Authentication failed. Please re-connect your Suunto account.',
+        },
+      ],
+    })).toBe('Connect Suunto again before sending routes.');
+
+    expect(getActionableRouteSendResponseMessage({
+      destinationServiceName: ServiceNames.SuuntoApp,
+      status: 'partial_success',
+      routeCount: 2,
+      successCount: 1,
+      failureCount: 1,
+      skippedCount: 0,
+      results: [
+        { routeId: 'route-1', destinationServiceName: ServiceNames.SuuntoApp, status: 'success' },
+        {
+          routeId: 'route-2',
+          destinationServiceName: ServiceNames.SuuntoApp,
+          status: 'failure',
+          reason: 'PROVIDER_ERROR',
+          message: 'Could not send route.',
+        },
+      ],
+    })).toBeNull();
   });
 
   it('prefers account-state guidance when the callable returns in-band account failures', () => {
