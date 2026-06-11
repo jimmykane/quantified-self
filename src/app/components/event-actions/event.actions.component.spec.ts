@@ -38,6 +38,12 @@ describe('EventActionsComponent', () => {
     beforeEach(async () => {
         mockEventService = {
             downloadFile: vi.fn(),
+            downloadOriginalFile: vi.fn(),
+            getOriginalEventFiles: vi.fn((event: { originalFiles?: any[]; originalFile?: any }) => (
+                Array.isArray(event.originalFiles) && event.originalFiles.length > 0
+                    ? event.originalFiles.filter((file: any) => !!file?.path)
+                    : event.originalFile?.path ? [event.originalFile] : []
+            )),
             getEventMetaData: vi.fn(),
             getEventAsGPXBloB: vi.fn(),
         };
@@ -54,6 +60,7 @@ describe('EventActionsComponent', () => {
         mockFileService = {
             downloadAsZip: vi.fn(),
             downloadFile: vi.fn(),
+            downloadNamedFile: vi.fn(),
             toDate: vi.fn((rawDate: any) => {
                 if (!rawDate) return null;
                 if (rawDate instanceof Date) return rawDate;
@@ -62,6 +69,12 @@ describe('EventActionsComponent', () => {
                 if (typeof rawDate === 'string') return new Date(rawDate);
                 return null;
             }),
+            resolveOriginalSourceFileName: vi.fn((file: { originalFilename?: string; path?: string }, fallbackExtension = 'fit') => (
+                file.originalFilename
+                    || file.path?.split('/').filter(Boolean).pop()
+                    || `original-file.${fallbackExtension}`
+            )),
+            getUniqueFileName: vi.fn((fileName: string) => fileName),
             generateDateBasedFilename: vi.fn((date, extension, _index, _totalFiles, fallbackId) => {
                 const dateStr = date ? date.toISOString().split('T')[0] : null;
                 const baseStr = dateStr || fallbackId || 'activity';
@@ -73,7 +86,14 @@ describe('EventActionsComponent', () => {
             }),
             getExtensionFromPath: vi.fn((path: string) => {
                 const parts = path.split('.');
-                return parts.length > 1 ? parts[parts.length - 1] : 'fit';
+                if (parts.length <= 1) {
+                    return 'fit';
+                }
+                let extension = parts[parts.length - 1].toLowerCase();
+                if (extension === 'gz' && parts.length > 2) {
+                    extension = parts[parts.length - 2].toLowerCase();
+                }
+                return extension;
             })
         };
         mockSnackBar = {
@@ -130,22 +150,22 @@ describe('EventActionsComponent', () => {
     describe('downloadOriginals', () => {
         it('should download a single file if originalFile is present', async () => {
             const mockArrayBuffer = new ArrayBuffer(10);
-            mockEventService.downloadFile.mockResolvedValue(mockArrayBuffer);
+            mockEventService.downloadOriginalFile.mockResolvedValue(mockArrayBuffer);
             (component.event as any).originalFile = { path: 'path/to/file.fit' };
 
             await component.downloadOriginals();
 
-            expect(mockEventService.downloadFile).toHaveBeenCalledWith('path/to/file.fit');
-            expect(mockFileService.downloadFile).toHaveBeenCalled();
-            // Check arguments for downloadFile. 
-            // Arg 0 is Blob, Arg 1 is name, Arg 2 is extension
-            const args = mockFileService.downloadFile.mock.calls[0];
-            expect(args[2]).toBe('fit');
+            expect(mockEventService.downloadOriginalFile).toHaveBeenCalledWith('path/to/file.fit');
+            expect(mockFileService.downloadNamedFile).toHaveBeenCalledWith(
+                expect.any(Blob),
+                'file.fit',
+                'fit',
+            );
         });
 
         it('should download a zip if originalFiles (multiple) are present', async () => {
             const mockArrayBuffer = new ArrayBuffer(10);
-            mockEventService.downloadFile.mockResolvedValue(mockArrayBuffer);
+            mockEventService.downloadOriginalFile.mockResolvedValue(mockArrayBuffer);
             (component.event as any).originalFiles = [
                 { path: 'path/to/file1.fit' },
                 { path: 'path/to/file2.fit' }
@@ -153,27 +173,50 @@ describe('EventActionsComponent', () => {
 
             await component.downloadOriginals();
 
-            expect(mockEventService.downloadFile).toHaveBeenCalledTimes(2);
+            expect(mockEventService.downloadOriginalFile).toHaveBeenCalledTimes(2);
             expect(mockFileService.downloadAsZip).toHaveBeenCalled();
             const args = mockFileService.downloadAsZip.mock.calls[0];
             expect(args[0]).toHaveLength(2); // 2 files
+            expect(args[0]).toEqual([
+                expect.objectContaining({ fileName: 'file1.fit' }),
+                expect.objectContaining({ fileName: 'file2.fit' }),
+            ]);
             expect(args[1]).toContain('.zip');
         });
 
         it('should download a single file directly if originalFiles has exactly 1 item', async () => {
             const mockArrayBuffer = new ArrayBuffer(10);
-            mockEventService.downloadFile.mockResolvedValue(mockArrayBuffer);
+            mockEventService.downloadOriginalFile.mockResolvedValue(mockArrayBuffer);
             (component.event as any).originalFiles = [
                 { path: 'path/to/single.fit' }
             ];
 
             await component.downloadOriginals();
 
-            expect(mockEventService.downloadFile).toHaveBeenCalledWith('path/to/single.fit');
-            expect(mockFileService.downloadFile).toHaveBeenCalled();
+            expect(mockEventService.downloadOriginalFile).toHaveBeenCalledWith('path/to/single.fit');
+            expect(mockFileService.downloadNamedFile).toHaveBeenCalledWith(
+                expect.any(Blob),
+                'single.fit',
+                'fit',
+            );
             expect(mockFileService.downloadAsZip).not.toHaveBeenCalled();
-            const args = mockFileService.downloadFile.mock.calls[0];
-            expect(args[2]).toBe('fit');
+        });
+
+        it('should preserve gzipped original filenames for direct downloads', async () => {
+            const mockArrayBuffer = new ArrayBuffer(10);
+            mockEventService.downloadOriginalFile.mockResolvedValue(mockArrayBuffer);
+            (component.event as any).originalFiles = [
+                { path: 'path/to/original.fit.gz', originalFilename: 'watch-record.fit.gz' }
+            ];
+
+            await component.downloadOriginals();
+
+            expect(mockEventService.downloadOriginalFile).toHaveBeenCalledWith('path/to/original.fit.gz');
+            expect(mockFileService.downloadNamedFile).toHaveBeenCalledWith(
+                expect.any(Blob),
+                'watch-record.fit.gz',
+                'fit',
+            );
         });
 
         it('should show snackbar if no files', async () => {

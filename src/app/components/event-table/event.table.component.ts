@@ -45,6 +45,7 @@ import { MatDialog } from '@angular/material/dialog';
 import { OrderByDirection } from 'firebase/firestore';
 import { AppFileService } from '../../services/app.file.service';
 import { LoggerService } from '../../services/logger.service';
+import { AppOriginalFileDownloadService } from '../../services/app.original-file-download.service';
 import { AppProcessingService } from '../../services/app.processing.service';
 import { AppEventUtilities } from '../../utils/app.event.utilities';
 import { AppBenchmarkFlowService } from '../../services/app.benchmark-flow.service';
@@ -117,6 +118,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     private fileService: AppFileService,
     private router: Router, private datePipe: DatePipe,
     private logger: LoggerService,
+    private originalFileDownloadService: AppOriginalFileDownloadService,
     private processingService: AppProcessingService,
     private breakpointObserver: BreakpointObserver,
     private benchmarkFlow: AppBenchmarkFlowService) {
@@ -655,43 +657,21 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       }
 
       // Collect all file metadata from selected events
-      const filesToDownload: { path: string, fileName: string }[] = [];
-      let minDate: Date | null = null;
-      let maxDate: Date | null = null;
+      const filesToDownload: Array<{ path: string; startDate?: unknown; fallbackDate?: unknown; originalFilename?: string; extension?: string; eventId: string | null }> = [];
 
       this.processingService.updateJob(jobId, { title: 'Gathering file info...', progress: 10 });
 
       for (const event of selectedEvents) {
         // Use shared utility for date conversion
         const startDate = this.fileService.toDate(event.startDate);
-
-        if (startDate) {
-          if (!minDate || startDate < minDate) minDate = startDate;
-          if (!maxDate || startDate > maxDate) maxDate = startDate;
-        }
-
-        const appEvent = event as any;
         const eventId = event.getID ? event.getID() : null;
-
-        // Handle array of original files
-        if (appEvent.originalFiles && Array.isArray(appEvent.originalFiles) && appEvent.originalFiles.length > 0) {
-          const totalFiles = appEvent.originalFiles.length;
-          appEvent.originalFiles.forEach((fileMeta: any, index: number) => {
-            if (fileMeta.path) {
-              const extension = this.fileService.getExtensionFromPath(fileMeta.path);
-              const fileDate = this.fileService.toDate(fileMeta.startDate) || startDate;
-              const fileName = this.fileService.generateDateBasedFilename(
-                fileDate, extension, index + 1, totalFiles, eventId
-              );
-              filesToDownload.push({ path: fileMeta.path, fileName });
-            }
+        const originalFiles = this.eventService.getOriginalEventFiles(event as any);
+        for (const fileMeta of originalFiles) {
+          filesToDownload.push({
+            ...fileMeta,
+            fallbackDate: startDate,
+            eventId,
           });
-        }
-        // Handle legacy single original file
-        else if (appEvent.originalFile && appEvent.originalFile.path) {
-          const extension = this.fileService.getExtensionFromPath(appEvent.originalFile.path);
-          const fileName = this.fileService.generateDateBasedFilename(startDate, extension, undefined, undefined, eventId);
-          filesToDownload.push({ path: appEvent.originalFile.path, fileName });
         }
       }
 
@@ -704,54 +684,40 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       // Download all files
       this.processingService.updateJob(jobId, { title: `Downloading ${filesToDownload.length} files...`, progress: 20 });
 
-      const downloadedFiles: { data: ArrayBuffer, fileName: string }[] = [];
-      let completed = 0;
+      const result = await this.originalFileDownloadService.downloadOriginalFiles({
+        sources: filesToDownload,
+        downloadFile: (path) => this.eventService.downloadOriginalFile(path),
+        fallbackFileName: 'original-file',
+        continueOnFailure: true,
+        onFileFailed: (source, error) => {
+          this.logger.error('Failed to download file:', source.path, error);
+        },
+        onFileProcessed: ({ completed, total, downloadedCount }) => {
+          const progress = 20 + Math.round((completed / total) * 60);
+          this.processingService.updateJob(jobId, {
+            progress,
+            details: `Downloaded ${downloadedCount} of ${total}`
+          });
+        },
+      });
 
-      for (const file of filesToDownload) {
-        try {
-          const data = await this.eventService.downloadFile(file.path);
-          downloadedFiles.push({ data, fileName: file.fileName });
-        } catch (e) {
-          this.logger.error('Failed to download file:', file.path, e);
-        }
-        completed++;
-        const progress = 20 + Math.round((completed / filesToDownload.length) * 60); // 20% to 80%
-        this.processingService.updateJob(jobId, {
-          progress,
-          details: `Downloaded ${completed} of ${filesToDownload.length}`
-        });
-      }
-
-      if (downloadedFiles.length === 0) {
+      if (result.mode === 'none') {
         this.snackBar.open('Failed to download any files', undefined, { duration: 3000 });
         this.processingService.failJob(jobId, 'No files downloaded');
         return;
       }
 
-      if (downloadedFiles.length === 1) {
-        // Single file -> Direct download
-        this.processingService.updateJob(jobId, { title: 'Preparing file...', progress: 90 });
-        const file = downloadedFiles[0];
-        const blob = new Blob([file.data]);
-        // Extract extension from fileName (e.g., "2024-01-15.fit" -> "fit")
-        const parts = file.fileName.split('.');
-        const extension = parts.length > 1 ? (parts.pop() || 'fit') : 'fit';
-        const baseNameWithoutExt = parts.join('.');
-        this.fileService.downloadFile(blob, baseNameWithoutExt, extension);
-        this.processingService.completeJob(jobId, 'Downloaded 1 file');
-        this.analyticsService.logEvent('download_originals', { count: 1 });
-      } else {
-        // Multiple files -> ZIP
-        this.processingService.updateJob(jobId, { title: 'Zipping files...', progress: 85 });
-
-        // Generate ZIP filename using shared utility
-        const zipFileName = this.fileService.generateDateRangeZipFilename(minDate, maxDate);
-
-        // Create and download ZIP
-        await this.fileService.downloadAsZip(downloadedFiles, zipFileName);
-
-        this.processingService.completeJob(jobId, `Downloaded ${downloadedFiles.length} files`);
-        this.analyticsService.logEvent('download_originals', { count: downloadedFiles.length });
+      this.processingService.completeJob(jobId, `Downloaded ${result.downloadedCount} file${result.downloadedCount === 1 ? '' : 's'}`);
+      this.analyticsService.logEvent('download_originals', {
+        count: result.downloadedCount,
+        failedCount: result.failedCount,
+      });
+      if (result.failedCount > 0) {
+        this.snackBar.open(
+          `Downloaded ${result.downloadedCount} file${result.downloadedCount === 1 ? '' : 's'}. Failed ${result.failedCount}.`,
+          undefined,
+          { duration: 4000 },
+        );
       }
     } catch (e) {
       this.logger.error('Error downloading originals:', e);
