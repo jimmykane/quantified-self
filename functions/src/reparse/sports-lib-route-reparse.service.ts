@@ -21,7 +21,7 @@ import {
 export const SPORTS_LIB_ROUTE_REPARSE_CHECKPOINT_PATH = 'systemJobs/sportsLibRouteReparse';
 export const SPORTS_LIB_ROUTE_REPARSE_JOBS_COLLECTION = 'sportsLibRouteReparseJobs';
 export const SPORTS_LIB_ROUTE_REPARSE_RUNTIME_DEFAULTS = {
-    enabled: false,
+    enabled: true,
     scanLimit: SPORTS_LIB_REPARSE_RUNTIME_DEFAULTS.scanLimit,
     enqueueLimit: SPORTS_LIB_REPARSE_RUNTIME_DEFAULTS.enqueueLimit,
     uidAllowlist: [] as string[],
