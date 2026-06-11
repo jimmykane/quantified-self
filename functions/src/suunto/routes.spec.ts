@@ -245,6 +245,25 @@ describe('importRouteToSuuntoApp', () => {
         }));
     });
 
+    it('surfaces a deleted Suunto token as reconnect-required auth failure', async () => {
+        const context = {
+            tokenRefs: [{
+                id: 'token1',
+                ref: {
+                    get: vi.fn().mockResolvedValue({ exists: false }),
+                },
+            }],
+        };
+
+        await expect(uploadGPXRouteToSuuntoApp('test-user-id', '<gpx>route</gpx>', context as any))
+            .rejects.toMatchObject({
+                code: 'unauthenticated',
+                message: 'Authentication failed. Please re-connect your Suunto account.',
+            });
+
+        expect(requestMocks.post).not.toHaveBeenCalled();
+    });
+
     it('should block unauthenticated requests', async () => {
         const request = createMockRequest({
             auth: null,

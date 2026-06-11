@@ -120,7 +120,8 @@ export const sendRoutesToService = onCall({
     const context = await adapter.createContext(userID);
     const results: SendRouteToServiceItemResult[] = [];
 
-    for (const routeId of payload.routeIds) {
+    for (let index = 0; index < payload.routeIds.length; index++) {
+      const routeId = payload.routeIds[index];
       try {
         await assertRouteSendUserActive(userID, 'before_route_prepare');
         const preparedRoute = await prepareSavedRouteForSending(userID, routeId);
@@ -134,7 +135,20 @@ export const sendRoutesToService = onCall({
         });
       } catch (error) {
         if (isAccountDeletionSkipError(error) || isUserDeletionGuardReadError(error)) {
-          throw error;
+          results.push(...buildTerminalRouteSendResults(
+            payload.routeIds.slice(index),
+            adapter.destinationServiceName,
+            error,
+          ));
+          break;
+        }
+        if (isDestinationAuthRequiredError(error)) {
+          results.push(...buildTerminalRouteSendResults(
+            payload.routeIds.slice(index),
+            adapter.destinationServiceName,
+            error,
+          ));
+          break;
         }
         results.push(buildRouteSendFailureResult(routeId, adapter.destinationServiceName, error));
       }
@@ -383,6 +397,15 @@ function buildRouteSendFailureResult(
       message: error.message,
     };
   }
+  if (isDestinationAuthRequiredError(error)) {
+    return {
+      routeId,
+      destinationServiceName,
+      status: 'failure',
+      reason: 'DESTINATION_AUTH_REQUIRED',
+      message: error.message,
+    };
+  }
 
   const message = error instanceof Error ? error.message : 'Could not send route.';
   logger.error('[sendRoutesToService] Failed to send route item', {
@@ -397,6 +420,54 @@ function buildRouteSendFailureResult(
     reason: 'PROVIDER_ERROR',
     message,
   };
+}
+
+function buildTerminalRouteSendResults(
+  routeIds: string[],
+  destinationServiceName: ServiceNames,
+  error: unknown,
+): SendRouteToServiceItemResult[] {
+  if (routeIds.length === 0) {
+    return [];
+  }
+
+  if (isAccountDeletionSkipError(error)) {
+    return routeIds.map(routeId => ({
+      routeId,
+      destinationServiceName,
+      status: 'skipped',
+      reason: 'ACCOUNT_DELETION_IN_PROGRESS',
+      message: 'Account is being deleted or no longer exists.',
+    }));
+  }
+
+  if (isUserDeletionGuardReadError(error)) {
+    logger.error('[sendRoutesToService] Could not verify account deletion state during batch route send', {
+      destinationServiceName,
+      routeIds,
+      error,
+    });
+    return routeIds.map(routeId => ({
+      routeId,
+      destinationServiceName,
+      status: 'failure',
+      reason: 'ACCOUNT_STATE_UNAVAILABLE',
+      message: 'Could not verify account state. Please retry.',
+    }));
+  }
+
+  if (isDestinationAuthRequiredError(error)) {
+    const message = error.message || 'Reconnect the selected service and try again.';
+    return routeIds.map(routeId => ({
+      routeId,
+      destinationServiceName,
+      status: 'failure',
+      reason: 'DESTINATION_AUTH_REQUIRED',
+      message,
+    }));
+  }
+
+  return routeIds.map(routeId => buildRouteSendFailureResult(routeId, destinationServiceName, error));
 }
 
 function buildSendRoutesResponse(
@@ -431,4 +502,11 @@ function isAccountDeletionSkipError(error: unknown): boolean {
 function isUserDeletionGuardReadError(error: unknown): error is UserDeletionGuardReadError {
   return error instanceof UserDeletionGuardReadError
     || (error instanceof Error && error.name === 'UserDeletionGuardReadError');
+}
+
+function isDestinationAuthRequiredError(error: unknown): error is HttpsError {
+  return error instanceof HttpsError
+    ? error.code === 'unauthenticated'
+    : (error as { code?: unknown } | null)?.code === 'unauthenticated'
+      || (error as { code?: unknown } | null)?.code === 'functions/unauthenticated';
 }

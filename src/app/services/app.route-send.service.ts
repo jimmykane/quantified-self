@@ -2,6 +2,7 @@ import { Injectable, inject } from '@angular/core';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import {
   SEND_ROUTES_TO_SERVICE_MAX_ROUTE_IDS,
+  SendRouteToServiceFailureReason,
   SendRouteToServiceItemResult,
   SendRoutesToServiceRequest,
   SendRoutesToServiceResponse,
@@ -14,6 +15,19 @@ export interface RouteSendProgress {
   processedRouteCount: number;
   routeCount: number;
 }
+
+const ROUTE_SEND_REASON_PRIORITY: SendRouteToServiceFailureReason[] = [
+  'DESTINATION_AUTH_REQUIRED',
+  'ACCOUNT_DELETION_IN_PROGRESS',
+  'ACCOUNT_STATE_UNAVAILABLE',
+  'SEND_REQUEST_FAILED',
+  'SOURCE_FILE_UNAVAILABLE',
+  'PARSE_FAILED',
+  'NOT_FOUND',
+  'NO_ORIGINAL_FILES',
+  'PROVIDER_ERROR',
+  'UNSUPPORTED_DESTINATION',
+];
 
 export function getRouteSendErrorMessage(error: unknown): string {
   const message = (error as { message?: unknown } | null)?.message;
@@ -33,7 +47,29 @@ export function getRouteSendErrorMessage(error: unknown): string {
   if (/account is being deleted/i.test(normalizedMessage)) {
     return 'Account is being deleted or no longer exists.';
   }
+  if (/could not verify account state/i.test(normalizedMessage)) {
+    return 'Could not verify account state. Please retry.';
+  }
   return normalizedMessage || 'Could not send routes to Suunto.';
+}
+
+export function getRouteSendResponseMessage(response: SendRoutesToServiceResponse): string {
+  const nonSuccessResults = response.results.filter(result => result.status !== 'success');
+  const highestPriorityReason = ROUTE_SEND_REASON_PRIORITY.find(reason =>
+    nonSuccessResults.some(result => result.reason === reason),
+  );
+
+  switch (highestPriorityReason) {
+    case 'DESTINATION_AUTH_REQUIRED':
+      return getDestinationAuthRequiredMessage(response.destinationServiceName);
+    case 'ACCOUNT_DELETION_IN_PROGRESS':
+      return 'Account is being deleted or no longer exists.';
+    case 'ACCOUNT_STATE_UNAVAILABLE':
+      return 'Could not verify account state. Please retry.';
+    default:
+      return nonSuccessResults.find(result => typeof result.message === 'string' && result.message.trim())?.message?.trim()
+        || getDefaultRouteSendFailureMessage(response.destinationServiceName);
+  }
 }
 
 @Injectable({
@@ -140,5 +176,23 @@ export class AppRouteSendService {
       skippedCount,
       results,
     };
+  }
+}
+
+function getDestinationAuthRequiredMessage(destinationServiceName: ServiceNames): string {
+  switch (destinationServiceName) {
+    case ServiceNames.SuuntoApp:
+      return 'Connect Suunto again before sending routes.';
+    default:
+      return 'Reconnect the selected service before sending routes.';
+  }
+}
+
+function getDefaultRouteSendFailureMessage(destinationServiceName: ServiceNames): string {
+  switch (destinationServiceName) {
+    case ServiceNames.SuuntoApp:
+      return 'Could not send routes to Suunto.';
+    default:
+      return 'Could not send routes to the selected service.';
   }
 }

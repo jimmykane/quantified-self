@@ -165,7 +165,7 @@ async function getLatestSuuntoTokenSnapshot(
 ): Promise<admin.firestore.DocumentSnapshot> {
   const snapshot = await tokenRef.ref.get();
   if (!snapshot.exists) {
-    throw new Error(`Suunto token ${tokenRef.id} no longer exists.`);
+    throw new HttpsError('unauthenticated', 'Authentication failed. Please re-connect your Suunto account.');
   }
   return snapshot;
 }
@@ -218,6 +218,13 @@ export async function uploadGPXRouteToSuuntoApp(
       const error = e as Error;
       if (isUserDeletionGuardReadError(error) || error instanceof SuuntoRouteUploadSkippedForDeletedUserError) {
         throw error;
+      }
+      if (error instanceof HttpsError && error.code === 'unauthenticated') {
+        authFailures++;
+        logger.warn(`Suunto token ${tokenRef.id} is no longer usable for user ${userID}`, {
+          message: error.message,
+        });
+        continue;
       }
 
       logger.error(`Could not upload route for token ${tokenRef.id} for user ${userID}`, error);

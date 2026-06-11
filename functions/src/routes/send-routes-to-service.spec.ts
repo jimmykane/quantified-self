@@ -240,7 +240,7 @@ describe('sendRoutesToService', () => {
     });
   });
 
-  it('aborts when account deletion starts before provider upload', async () => {
+  it('returns an in-band skipped result when account deletion starts before provider upload', async () => {
     routeDocuments.set('users/user-1/routes/route-1', {
       id: 'route-1',
       userID: 'user-1',
@@ -266,14 +266,236 @@ describe('sendRoutesToService', () => {
         shouldSkip: true,
       });
 
-    await expect(sendRoutesToService(createRequest({
+    const result = await sendRoutesToService(createRequest({
       routeIds: ['route-1'],
       destinationServiceName: ServiceNames.SuuntoApp,
-    }) as any)).rejects.toMatchObject({
-      code: 'failed-precondition',
-    });
+    }) as any);
 
+    expect(result).toMatchObject({
+      status: 'failure',
+      routeCount: 1,
+      successCount: 0,
+      failureCount: 0,
+      skippedCount: 1,
+    });
+    expect(result.results).toEqual([
+      expect.objectContaining({
+        routeId: 'route-1',
+        status: 'skipped',
+        reason: 'ACCOUNT_DELETION_IN_PROGRESS',
+        message: 'Account is being deleted or no longer exists.',
+      }),
+    ]);
     expect(suuntoRouteMocks.uploadGPXRouteToSuuntoApp).not.toHaveBeenCalled();
+  });
+
+  it('preserves earlier successes when account deletion starts mid-batch', async () => {
+    routeDocuments.set('users/user-1/routes/route-1', {
+      id: 'route-1',
+      userID: 'user-1',
+      srcFileType: 'gpx',
+      originalFiles: [{ path: 'users/user-1/routes/route-1/original.gpx', extension: 'gpx' }],
+      routes: [{ id: 'segment-1' }],
+    });
+    routeDocuments.set('users/user-1/routes/route-2', {
+      id: 'route-2',
+      userID: 'user-1',
+      srcFileType: 'gpx',
+      originalFiles: [{ path: 'users/user-1/routes/route-2/original.gpx', extension: 'gpx' }],
+      routes: [{ id: 'segment-2' }],
+    });
+    routeDocuments.set('users/user-1/routes/route-3', {
+      id: 'route-3',
+      userID: 'user-1',
+      srcFileType: 'gpx',
+      originalFiles: [{ path: 'users/user-1/routes/route-3/original.gpx', extension: 'gpx' }],
+      routes: [{ id: 'segment-3' }],
+    });
+    storagePayloads.set('users/user-1/routes/route-1/original.gpx', Buffer.from('<gpx></gpx>'));
+
+    deletionGuardMocks.getUserDeletionGuardState
+      .mockResolvedValueOnce({
+        userExists: true,
+        deletionInProgress: false,
+        shouldSkip: false,
+      })
+      .mockResolvedValueOnce({
+        userExists: true,
+        deletionInProgress: false,
+        shouldSkip: false,
+      })
+      .mockResolvedValueOnce({
+        userExists: true,
+        deletionInProgress: false,
+        shouldSkip: false,
+      })
+      .mockResolvedValueOnce({
+        userExists: true,
+        deletionInProgress: true,
+        shouldSkip: true,
+      });
+
+    const result = await sendRoutesToService(createRequest({
+      routeIds: ['route-1', 'route-2', 'route-3'],
+      destinationServiceName: ServiceNames.SuuntoApp,
+    }) as any);
+
+    expect(result).toMatchObject({
+      status: 'partial_success',
+      routeCount: 3,
+      successCount: 1,
+      failureCount: 0,
+      skippedCount: 2,
+    });
+    expect(result.results).toEqual([
+      expect.objectContaining({ routeId: 'route-1', status: 'success' }),
+      expect.objectContaining({
+        routeId: 'route-2',
+        status: 'skipped',
+        reason: 'ACCOUNT_DELETION_IN_PROGRESS',
+      }),
+      expect.objectContaining({
+        routeId: 'route-3',
+        status: 'skipped',
+        reason: 'ACCOUNT_DELETION_IN_PROGRESS',
+      }),
+    ]);
+    expect(suuntoRouteMocks.uploadGPXRouteToSuuntoApp).toHaveBeenCalledTimes(1);
+  });
+
+  it('returns remaining routes as account-state failures when the deletion guard cannot be read mid-batch', async () => {
+    routeDocuments.set('users/user-1/routes/route-1', {
+      id: 'route-1',
+      userID: 'user-1',
+      srcFileType: 'gpx',
+      originalFiles: [{ path: 'users/user-1/routes/route-1/original.gpx', extension: 'gpx' }],
+      routes: [{ id: 'segment-1' }],
+    });
+    routeDocuments.set('users/user-1/routes/route-2', {
+      id: 'route-2',
+      userID: 'user-1',
+      srcFileType: 'gpx',
+      originalFiles: [{ path: 'users/user-1/routes/route-2/original.gpx', extension: 'gpx' }],
+      routes: [{ id: 'segment-2' }],
+    });
+    routeDocuments.set('users/user-1/routes/route-3', {
+      id: 'route-3',
+      userID: 'user-1',
+      srcFileType: 'gpx',
+      originalFiles: [{ path: 'users/user-1/routes/route-3/original.gpx', extension: 'gpx' }],
+      routes: [{ id: 'segment-3' }],
+    });
+    storagePayloads.set('users/user-1/routes/route-1/original.gpx', Buffer.from('<gpx></gpx>'));
+
+    deletionGuardMocks.getUserDeletionGuardState
+      .mockResolvedValueOnce({
+        userExists: true,
+        deletionInProgress: false,
+        shouldSkip: false,
+      })
+      .mockResolvedValueOnce({
+        userExists: true,
+        deletionInProgress: false,
+        shouldSkip: false,
+      })
+      .mockResolvedValueOnce({
+        userExists: true,
+        deletionInProgress: false,
+        shouldSkip: false,
+      })
+      .mockRejectedValueOnce(new Error('guard read failed'));
+
+    const result = await sendRoutesToService(createRequest({
+      routeIds: ['route-1', 'route-2', 'route-3'],
+      destinationServiceName: ServiceNames.SuuntoApp,
+    }) as any);
+
+    expect(result).toMatchObject({
+      status: 'partial_success',
+      routeCount: 3,
+      successCount: 1,
+      failureCount: 2,
+      skippedCount: 0,
+    });
+    expect(result.results).toEqual([
+      expect.objectContaining({ routeId: 'route-1', status: 'success' }),
+      expect.objectContaining({
+        routeId: 'route-2',
+        status: 'failure',
+        reason: 'ACCOUNT_STATE_UNAVAILABLE',
+        message: 'Could not verify account state. Please retry.',
+      }),
+      expect.objectContaining({
+        routeId: 'route-3',
+        status: 'failure',
+        reason: 'ACCOUNT_STATE_UNAVAILABLE',
+        message: 'Could not verify account state. Please retry.',
+      }),
+    ]);
+    expect(suuntoRouteMocks.uploadGPXRouteToSuuntoApp).toHaveBeenCalledTimes(1);
+  });
+
+  it('preserves earlier successes when Suunto authentication becomes invalid mid-batch', async () => {
+    const { HttpsError } = await import('firebase-functions/v2/https');
+    routeDocuments.set('users/user-1/routes/route-1', {
+      id: 'route-1',
+      userID: 'user-1',
+      srcFileType: 'gpx',
+      originalFiles: [{ path: 'users/user-1/routes/route-1/original.gpx', extension: 'gpx' }],
+      routes: [{ id: 'segment-1' }],
+    });
+    routeDocuments.set('users/user-1/routes/route-2', {
+      id: 'route-2',
+      userID: 'user-1',
+      srcFileType: 'gpx',
+      originalFiles: [{ path: 'users/user-1/routes/route-2/original.gpx', extension: 'gpx' }],
+      routes: [{ id: 'segment-2' }],
+    });
+    routeDocuments.set('users/user-1/routes/route-3', {
+      id: 'route-3',
+      userID: 'user-1',
+      srcFileType: 'gpx',
+      originalFiles: [{ path: 'users/user-1/routes/route-3/original.gpx', extension: 'gpx' }],
+      routes: [{ id: 'segment-3' }],
+    });
+    storagePayloads.set('users/user-1/routes/route-1/original.gpx', Buffer.from('<gpx></gpx>'));
+    storagePayloads.set('users/user-1/routes/route-2/original.gpx', Buffer.from('<gpx></gpx>'));
+    suuntoRouteMocks.uploadGPXRouteToSuuntoApp
+      .mockResolvedValueOnce({
+        status: 'success',
+        successCount: 1,
+        providerRouteIds: ['suunto-route-1'],
+      })
+      .mockRejectedValueOnce(new HttpsError('unauthenticated', 'Authentication failed. Please re-connect your Suunto account.'));
+
+    const result = await sendRoutesToService(createRequest({
+      routeIds: ['route-1', 'route-2', 'route-3'],
+      destinationServiceName: ServiceNames.SuuntoApp,
+    }) as any);
+
+    expect(result).toMatchObject({
+      status: 'partial_success',
+      routeCount: 3,
+      successCount: 1,
+      failureCount: 2,
+      skippedCount: 0,
+    });
+    expect(result.results).toEqual([
+      expect.objectContaining({ routeId: 'route-1', status: 'success' }),
+      expect.objectContaining({
+        routeId: 'route-2',
+        status: 'failure',
+        reason: 'DESTINATION_AUTH_REQUIRED',
+        message: 'Authentication failed. Please re-connect your Suunto account.',
+      }),
+      expect.objectContaining({
+        routeId: 'route-3',
+        status: 'failure',
+        reason: 'DESTINATION_AUTH_REQUIRED',
+        message: 'Authentication failed. Please re-connect your Suunto account.',
+      }),
+    ]);
+    expect(suuntoRouteMocks.uploadGPXRouteToSuuntoApp).toHaveBeenCalledTimes(2);
   });
 
   it('prepares a saved route and uploads generated GPX to Suunto', async () => {

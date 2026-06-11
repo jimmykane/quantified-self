@@ -34,7 +34,11 @@ import {
     getRouteReprocessProgressTitle,
     RouteReprocessProgress,
 } from '../../services/app.route-reprocess.service';
-import { AppRouteSendService, getRouteSendErrorMessage } from '../../services/app.route-send.service';
+import {
+    AppRouteSendService,
+    getRouteSendErrorMessage,
+    getRouteSendResponseMessage,
+} from '../../services/app.route-send.service';
 import {
     AppRouteService,
     isRouteListServerSortColumn,
@@ -606,7 +610,7 @@ export class RoutesPageComponent implements OnInit {
             });
 
             this.snackBar.open(
-                result.successCount > 0 ? 'Route sent to Suunto.' : 'Could not send route to Suunto.',
+                result.successCount > 0 ? 'Route sent to Suunto.' : getRouteSendResponseMessage(result),
                 undefined,
                 { duration: result.successCount > 0 ? 2500 : 3500 },
             );
@@ -801,7 +805,7 @@ export class RoutesPageComponent implements OnInit {
                     source: 'routes_list_bulk',
                     destinationService: ServiceNames.SuuntoApp,
                 });
-                this.snackBar.open('Could not send selected routes to Suunto.', undefined, { duration: 3500 });
+                this.snackBar.open(getRouteSendResponseMessage(result), undefined, { duration: 4000 });
                 return;
             }
 

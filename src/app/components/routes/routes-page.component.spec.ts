@@ -817,6 +817,30 @@ describe('RoutesPageComponent', () => {
         expect(component.sendingToServiceRouteID()).toBeNull();
     });
 
+    it('shows reconnect guidance when a row send returns an auth-required response', async () => {
+        routeSendServiceMock.sendRoutesToService.mockResolvedValueOnce({
+            destinationServiceName: ServiceNames.SuuntoApp,
+            status: 'failure',
+            routeCount: 1,
+            successCount: 0,
+            failureCount: 1,
+            skippedCount: 0,
+            results: [{
+                routeId: 'route-1',
+                destinationServiceName: ServiceNames.SuuntoApp,
+                status: 'failure',
+                reason: 'DESTINATION_AUTH_REQUIRED',
+                message: 'Authentication failed. Please re-connect your Suunto account.',
+            }],
+        });
+        await component.ngOnInit();
+
+        await component.sendRouteToSuunto(route);
+
+        expect(snackBarMock.open).toHaveBeenCalledWith('Connect Suunto again before sending routes.', undefined, { duration: 3500 });
+        expect(component.sendingToServiceRouteID()).toBeNull();
+    });
+
     it('keeps failed rows selected after bulk Suunto sends', async () => {
         const secondRoute: FirestoreRouteJSON = {
             ...route,

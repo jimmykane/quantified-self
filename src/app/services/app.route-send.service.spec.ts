@@ -3,7 +3,11 @@ import { ServiceNames } from '@sports-alliance/sports-lib';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { SEND_ROUTES_TO_SERVICE_MAX_ROUTE_IDS } from '@shared/saved-route-send';
 import { AppFunctionsService } from './app.functions.service';
-import { AppRouteSendService, getRouteSendErrorMessage } from './app.route-send.service';
+import {
+  AppRouteSendService,
+  getRouteSendErrorMessage,
+  getRouteSendResponseMessage,
+} from './app.route-send.service';
 
 describe('AppRouteSendService', () => {
   let service: AppRouteSendService;
@@ -139,5 +143,52 @@ describe('AppRouteSendService', () => {
     expect(getRouteSendErrorMessage({ code: 'functions/unauthenticated' })).toBe('Connect Suunto again before sending routes.');
     expect(getRouteSendErrorMessage({ message: 'Sending saved routes to GarminAPI is not supported yet.' }))
       .toBe('Sending saved routes to GarminAPI is not supported yet.');
+    expect(getRouteSendErrorMessage({ message: 'Could not verify account state. Please retry.' }))
+      .toBe('Could not verify account state. Please retry.');
+  });
+
+  it('maps route send responses with auth-required failures to reconnect guidance', () => {
+    expect(getRouteSendResponseMessage({
+      destinationServiceName: ServiceNames.SuuntoApp,
+      status: 'failure',
+      routeCount: 1,
+      successCount: 0,
+      failureCount: 1,
+      skippedCount: 0,
+      results: [{
+        routeId: 'route-1',
+        destinationServiceName: ServiceNames.SuuntoApp,
+        status: 'failure',
+        reason: 'DESTINATION_AUTH_REQUIRED',
+        message: 'Authentication failed. Please re-connect your Suunto account.',
+      }],
+    })).toBe('Connect Suunto again before sending routes.');
+  });
+
+  it('prefers account-state guidance when the callable returns in-band account failures', () => {
+    expect(getRouteSendResponseMessage({
+      destinationServiceName: ServiceNames.SuuntoApp,
+      status: 'failure',
+      routeCount: 2,
+      successCount: 0,
+      failureCount: 2,
+      skippedCount: 0,
+      results: [
+        {
+          routeId: 'route-1',
+          destinationServiceName: ServiceNames.SuuntoApp,
+          status: 'failure',
+          reason: 'ACCOUNT_STATE_UNAVAILABLE',
+          message: 'Could not verify account state. Please retry.',
+        },
+        {
+          routeId: 'route-2',
+          destinationServiceName: ServiceNames.SuuntoApp,
+          status: 'failure',
+          reason: 'ACCOUNT_STATE_UNAVAILABLE',
+          message: 'Could not verify account state. Please retry.',
+        },
+      ],
+    })).toBe('Could not verify account state. Please retry.');
   });
 });
