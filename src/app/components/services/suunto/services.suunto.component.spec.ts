@@ -200,7 +200,7 @@ describe('ServicesSuuntoComponent', () => {
         it('should be unlocked/available if user has pro access AND is connected', () => {
             component.hasProAccess = true;
             component.isAdmin = false;
-            component.serviceTokens = [{ accessToken: 'token' } as any];
+            component.serviceTokens = [{ accessToken: 'token', userName: 'suunto-user' } as any];
             fixture.detectChanges();
 
             const historyForm = fixture.nativeElement.querySelector('app-history-import-form');
@@ -253,7 +253,7 @@ describe('ServicesSuuntoComponent', () => {
 
         it('should render upload actions when pro user is connected', () => {
             component.hasProAccess = true;
-            component.serviceTokens = [{ accessToken: 'token' } as any];
+            component.serviceTokens = [{ accessToken: 'token', userName: 'suunto-user' } as any];
             fixture.detectChanges();
 
             expect(fixture.nativeElement.querySelector('app-upload-activity-to-service')).toBeTruthy();
@@ -348,7 +348,7 @@ describe('ServicesSuuntoComponent', () => {
                 }
             }
         } as any;
-        component.serviceTokens = [{ accessToken: 'token' } as any];
+        component.serviceTokens = [{ accessToken: 'token', userName: 'suunto-user' } as any];
         fixture.detectChanges();
 
         const warningPill = fixture.nativeElement.querySelector('.active-sync-warning-pill');
@@ -368,7 +368,7 @@ describe('ServicesSuuntoComponent', () => {
                 }
             }
         } as any;
-        component.serviceTokens = [{ accessToken: 'token' } as any];
+        component.serviceTokens = [{ accessToken: 'token', userName: 'suunto-user' } as any];
         mockDialog.open.mockReturnValueOnce({
             afterClosed: () => of(false),
         });
@@ -377,5 +377,40 @@ describe('ServicesSuuntoComponent', () => {
 
         expect(mockDialog.open).toHaveBeenCalled();
         expect(mockUserService.deauthorizeService).not.toHaveBeenCalled();
+    });
+
+    it('treats malformed Suunto tokens without a provider identity as disconnected', () => {
+        component.hasProAccess = true;
+        component.serviceTokens = [{ accessToken: 'token', dateCreated: 1711000000000 } as any];
+        fixture.detectChanges();
+
+        expect(component.connectionView.connected).toBe(false);
+        expect(component.isConnectedToService()).toBe(false);
+        expect(component.connectedSuuntoServiceTokens).toEqual([]);
+        expect(fixture.nativeElement.querySelector('app-history-import-form')).toBeFalsy();
+        expect(fixture.nativeElement.querySelector('app-upload-activity-to-service')).toBeFalsy();
+        expect(fixture.nativeElement.querySelector('app-upload-route-to-service')).toBeFalsy();
+        expect(fixture.nativeElement.textContent).toContain('before importing history');
+        expect(fixture.nativeElement.textContent).toContain('before uploading activities');
+        expect(fixture.nativeElement.textContent).toContain('before uploading routes');
+    });
+
+    it('shows only valid connected Suunto accounts when malformed tokens are mixed in', () => {
+        component.hasProAccess = true;
+        component.serviceTokens = [
+            { accessToken: 'broken-token', dateCreated: 1710000000000 } as any,
+            { accessToken: 'token', userName: 'suunto-user', dateCreated: 1711000000000 } as any,
+        ];
+        fixture.detectChanges();
+
+        const accountTitles = Array.from(
+            fixture.nativeElement.querySelectorAll('.connected-account-title'),
+        ).map((element: Element) => element.textContent?.trim());
+
+        expect(component.isConnectedToService()).toBe(true);
+        expect(component.suuntoUserName).toBe('suunto-user');
+        expect(component.connectedSuuntoServiceTokens).toHaveLength(1);
+        expect(accountTitles).toEqual(['suunto-user']);
+        expect(fixture.nativeElement.textContent).not.toContain('Syncing connection details...');
     });
 });

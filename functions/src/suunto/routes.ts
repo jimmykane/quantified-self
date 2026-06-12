@@ -10,7 +10,10 @@ import * as zlib from 'zlib';
 import { SERVICE_NAME, SUUNTOAPP_ACCESS_TOKENS_COLLECTION_NAME } from './constants';
 import { config } from '../config';
 import { toSuuntoAuthorizationHeader } from './authorization-header';
-import { getSuuntoRouteImportSourceKeyFromTokenLike } from '../../../shared/suunto-route-import-state';
+import {
+  getSuuntoProviderUserIdFromTokenLike,
+  getSuuntoRouteImportSourceKeyFromTokenLike,
+} from '../../../shared/suunto-route-import-state';
 import {
   getUserDeletionGuardState,
   getUserDeletionGuardStateInTransaction,
@@ -183,7 +186,7 @@ export async function createSuuntoRouteUploadContext(userID: string): Promise<Su
 
   const tokenRefs = tokenQuerySnapshots.docs
     .map((tokenSnapshot) => {
-      const providerUserId = normalizeSuuntoProviderUserId(tokenSnapshot.data()?.userName);
+      const providerUserId = getSuuntoProviderUserIdFromTokenLike(tokenSnapshot.data());
       if (!providerUserId) {
         logger.warn('[SuuntoRoutes] Skipping token without provider user identity', {
           userID,

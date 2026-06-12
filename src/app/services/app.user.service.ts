@@ -717,11 +717,11 @@ export class AppUserService implements OnDestroy {
     ]).pipe(
       map(([tokens, serviceMeta]) => {
         const normalizedServiceMeta = serviceMeta || null;
+        const connectedProviderUserIds = getSuuntoConnectedProviderUserIds(tokens);
         const connectionView = buildSuuntoServiceConnectionViewModel({
-          hasToken: Array.isArray(tokens) && tokens.length > 0,
+          hasToken: connectedProviderUserIds.length > 0,
           serviceMeta: normalizedServiceMeta,
         });
-        const connectedProviderUserIds = getSuuntoConnectedProviderUserIds(tokens);
 
         return {
           connectionView,

@@ -35,7 +35,7 @@
     <app-service-syncing-state></app-service-syncing-state>
     } @else {
     <div class="connected-account-list" role="list">
-      @for (serviceToken of serviceTokens; track $index; let i = $index) {
+      @for (serviceToken of connectedSuuntoServiceTokens; track $index; let i = $index) {
       <div class="connected-account-item" role="listitem">
         <mat-icon class="connected-account-icon" (click)="clicks = clicks+1">account_circle</mat-icon>
         <div class="connected-account-copy">
