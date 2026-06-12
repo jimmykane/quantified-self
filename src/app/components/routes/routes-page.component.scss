@@ -102,7 +102,17 @@
   background: var(--mat-sys-surface-container-lowest, #fff);
   border: 1px solid var(--mat-sys-outline-variant, rgba(0, 0, 0, 0.12));
   border-radius: 8px;
-  overflow-x: auto;
+  overflow: hidden;
+}
+
+.route-table-scroll {
+  max-width: 100%;
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable both-edges;
+  touch-action: pan-x pan-y;
+  width: 100%;
 }
 
 .route-table-controls {

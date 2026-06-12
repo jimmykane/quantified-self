@@ -94,6 +94,7 @@
     @if (loadedRouteCount() > 0) {
     @if (routes.length > 0) {
     <section class="route-table-shell" aria-label="Saved routes">
+      <div class="route-table-scroll qs-scrollbar">
       @if (selectedRouteCount() > 0) {
       <div class="route-selection-toolbar" aria-live="polite">
         <div class="route-selection-summary">
@@ -422,6 +423,7 @@
           (keydown.space)="$event.preventDefault(); openRouteDetails(item)">
         </tr>
       </table>
+      </div>
     </section>
     } @else {
     <section class="empty-routes">

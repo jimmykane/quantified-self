@@ -848,6 +848,25 @@ describe('RoutesPageComponent', () => {
         expect(styles).toContain('cursor: pointer;');
     });
 
+    it('wraps the routes table in the shared scroll container pattern used by app tables', () => {
+        const template = readFileSync(
+            resolve(process.cwd(), 'src/app/components/routes/routes-page.component.html'),
+            'utf8',
+        );
+        const styles = readFileSync(
+            resolve(process.cwd(), 'src/app/components/routes/routes-page.component.scss'),
+            'utf8',
+        );
+
+        expect(template).toContain('class="route-table-scroll qs-scrollbar"');
+        expect(styles).toContain('.route-table-shell');
+        expect(styles).toContain('overflow: hidden;');
+        expect(styles).toContain('.route-table-scroll');
+        expect(styles).toContain('overflow: auto;');
+        expect(styles).toContain('-webkit-overflow-scrolling: touch;');
+        expect(styles).toContain('touch-action: pan-x pan-y;');
+    });
+
     it('sorts route table rows by normalized route stats', async () => {
         const shorterRoute: FirestoreRouteJSON = {
             ...route,
