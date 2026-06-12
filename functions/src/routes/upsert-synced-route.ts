@@ -1,5 +1,6 @@
 import * as admin from 'firebase-admin';
 import * as logger from 'firebase-functions/logger';
+import { randomUUID } from 'node:crypto';
 import { FieldValue } from 'firebase-admin/firestore';
 
 import { AppRouteInterface, FirestoreRouteJSON, OriginalRouteFileMetaData } from '../../../shared/app-route.interface';
@@ -84,8 +85,9 @@ function buildSyncedRouteOriginalFileMetadata(
     originalFile: OriginalRouteFile,
     bucketName?: string,
 ): OriginalRouteFileMetaData {
+    const fileId = randomUUID();
     const metadata: OriginalRouteFileMetaData = {
-        path: `users/${userID}/routes/${routeID}/uploads/provider-sync/original.${originalFile.extension}`,
+        path: `users/${userID}/routes/${routeID}/uploads/provider-sync/original-${fileId}.${originalFile.extension}`,
         startDate: originalFile.startDate,
         extension: originalFile.extension,
     };
