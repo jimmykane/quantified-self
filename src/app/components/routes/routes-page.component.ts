@@ -31,8 +31,8 @@ import {
     buildSuuntoRouteCatchUpSnackbarMessage,
 } from '../../helpers/suunto-route-catch-up.helper';
 import {
-    getRouteSourceSummaryLabel,
-    getRouteSyncedDestinationLabels,
+    getRouteSourceSummary,
+    getRouteSyncedDestinationSummaries,
     isRouteFromService,
 } from '../../helpers/route-provenance.helper';
 import { AppAuthService } from '../../authentication/app.auth.service';
@@ -85,6 +85,7 @@ interface RoutePageRouteViewModel {
     waypointCountLabel: string | null;
     provenanceSummary: string;
     provenanceTitle: string;
+    provenanceItems: RouteProvenanceItem[];
     distance: RouteMetricCell;
     ascent: RouteMetricCell;
     descent: RouteMetricCell;
@@ -102,6 +103,13 @@ interface RouteMetricCell {
     label: string;
     sortValue: number | null;
     title: string;
+}
+
+interface RouteProvenanceItem {
+    id: string;
+    label: string;
+    title: string;
+    serviceName: ServiceNames | null;
 }
 
 interface RouteActivityTypeSummary {
@@ -1447,9 +1455,8 @@ export class RoutesPageComponent implements OnInit {
         const routeCountLabel = `${routeCount} route${routeCount === 1 ? '' : 's'}`;
         const pointCountLabel = `${pointCount} point${pointCount === 1 ? '' : 's'}`;
         const waypointCountLabel = waypointCount > 0 ? `${waypointCount} waypoint${waypointCount === 1 ? '' : 's'}` : null;
-        const sourceLabel = getRouteSourceSummaryLabel(route);
-        const syncedDestinationLabels = getRouteSyncedDestinationLabels(route);
-        const provenanceSummary = [sourceLabel, ...syncedDestinationLabels].join(' · ');
+        const provenanceItems = this.buildRouteProvenanceItems(route);
+        const provenanceSummary = provenanceItems.map(item => item.label).join(' · ');
         return {
             route,
             name: routeName,
@@ -1467,6 +1474,7 @@ export class RoutesPageComponent implements OnInit {
             waypointCountLabel,
             provenanceSummary,
             provenanceTitle: provenanceSummary,
+            provenanceItems,
             distance,
             ascent,
             descent,
@@ -1494,6 +1502,26 @@ export class RoutesPageComponent implements OnInit {
                 maxGrade.label,
             ].filter(Boolean).join(' ').toLowerCase(),
         };
+    }
+
+    private buildRouteProvenanceItems(route: FirestoreRouteJSON): RouteProvenanceItem[] {
+        const sourceSummary = getRouteSourceSummary(route);
+        const destinationSummaries = getRouteSyncedDestinationSummaries(route);
+
+        return [
+            {
+                id: 'source',
+                label: sourceSummary.label,
+                title: sourceSummary.label,
+                serviceName: sourceSummary.serviceName,
+            },
+            ...destinationSummaries.map((summary, index) => ({
+                id: `destination-${summary.serviceName || index}`,
+                label: summary.label,
+                title: summary.label,
+                serviceName: summary.serviceName,
+            })),
+        ];
     }
 
     private buildRouteActivityTypeSummaries(route: FirestoreRouteJSON): RouteActivityTypeSummary[] {

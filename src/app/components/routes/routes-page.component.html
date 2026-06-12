@@ -219,7 +219,23 @@
                 class="route-provenance-cell"
                 [matTooltip]="item.provenanceTitle"
                 [attr.title]="item.provenanceTitle">
-                {{ item.provenanceSummary }}
+                @for (provenance of item.provenanceItems; track provenance.id; let last = $last) {
+                <span
+                  class="route-provenance-item"
+                  [matTooltip]="provenance.title"
+                  [attr.title]="provenance.title">
+                  @if (provenance.serviceName) {
+                  <app-service-source-icon
+                    [sourceServiceName]="provenance.serviceName"
+                    [showTooltip]="false">
+                  </app-service-source-icon>
+                  }
+                  <span class="route-provenance-text">{{ provenance.label }}</span>
+                </span>
+                @if (!last) {
+                <span class="route-provenance-separator" aria-hidden="true">·</span>
+                }
+                }
               </span>
             </span>
             <span class="route-file-type">{{ item.fileType }}</span>

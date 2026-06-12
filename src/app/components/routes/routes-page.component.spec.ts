@@ -444,6 +444,12 @@ describe('RoutesPageComponent', () => {
             pointCountLabel: '2 points',
             waypointCountLabel: null,
             provenanceSummary: 'Saved route',
+            provenanceItems: [{
+                id: 'source',
+                label: 'Saved route',
+                title: 'Saved route',
+                serviceName: null,
+            }],
             distance: {
                 label: '10.00 Km',
                 sortValue: 10000,
@@ -493,6 +499,20 @@ describe('RoutesPageComponent', () => {
 
         expect(routes[0].canSendToSuunto).toBe(false);
         expect(routes[0].provenanceSummary).toBe('Synced from Suunto · Sent to Garmin');
+        expect(routes[0].provenanceItems).toEqual([
+            {
+                id: 'source',
+                label: 'Synced from Suunto',
+                title: 'Synced from Suunto',
+                serviceName: ServiceNames.SuuntoApp,
+            },
+            {
+                id: 'destination-Garmin API',
+                label: 'Sent to Garmin',
+                title: 'Sent to Garmin',
+                serviceName: ServiceNames.GarminAPI,
+            },
+        ]);
     });
 
     it('reads persisted route-file aggregate stats for table metrics', async () => {
@@ -721,6 +741,9 @@ describe('RoutesPageComponent', () => {
         expect(template).toContain('(click)="openRouteDetails(item)"');
         expect(template).toContain('(keydown.enter)="openRouteDetails(item)"');
         expect(template).toContain('(keydown.space)="$event.preventDefault(); openRouteDetails(item)"');
+        expect(template).toContain('class="route-provenance-item"');
+        expect(template).toContain('<app-service-source-icon');
+        expect(template).toContain('[sourceServiceName]="provenance.serviceName"');
         expect(template).toContain('matColumnDef="select"');
         expect(template).toContain('aria-label="Select all visible routes"');
         expect(template).toContain('(change)="toggleVisibleRouteSelection($event.checked)"');

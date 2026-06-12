@@ -331,9 +331,39 @@
 
 .route-provenance-cell {
   color: var(--qs-secondary-text-color, rgba(0, 0, 0, 0.62));
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
   font-size: 0.78rem;
   line-height: 1rem;
   max-width: 15rem;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.route-provenance-item {
+  align-items: center;
+  display: inline-flex;
+  gap: 4px;
+  min-width: 0;
+}
+
+.route-provenance-item app-service-source-icon {
+  flex: 0 0 auto;
+}
+
+.route-provenance-text {
+  display: inline-block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.route-provenance-separator {
+  flex: 0 0 auto;
+  opacity: 0.72;
 }
 
 .route-file-type {
