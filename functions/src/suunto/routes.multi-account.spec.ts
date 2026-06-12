@@ -200,4 +200,19 @@ describe('Suunto route reads with multiple accounts', () => {
       url: 'https://cloudapi.suunto.com/v2/route/provider-route-2/export',
     }));
   });
+
+  it('does not fall back to another connected Suunto account when the source provider token is missing', async () => {
+    suuntoTokens.push(
+      { id: 'token-a', userName: 'suunto-user-a', accessToken: 'token-a' },
+      { id: 'token-b', userName: 'suunto-user-b', accessToken: 'token-b' },
+    );
+
+    await expect(exportSuuntoRouteAsGPX('user-1', 'provider-route-2', {
+      providerUserId: 'suunto-user-missing',
+    })).rejects.toMatchObject({
+      code: 'unauthenticated',
+    });
+
+    expect(requestGetMock).not.toHaveBeenCalled();
+  });
 });

@@ -225,7 +225,7 @@ function getSuuntoTokenRefsForReadOperation(
   }
 
   const matchingTokenRefs = context.tokenRefs.filter(tokenRef => tokenRef.providerUserId === normalizedProviderUserId);
-  return matchingTokenRefs.length > 0 ? matchingTokenRefs : context.tokenRefs;
+  return matchingTokenRefs;
 }
 
 function normalizeSuuntoRouteSummary(value: unknown): SuuntoRouteSummary | null {
@@ -256,10 +256,15 @@ async function executeSuuntoRouteReadOperation<T>(
   operation: (accessToken: string) => Promise<T>,
   providerUserId?: string | null,
 ): Promise<T> {
+  const tokenRefs = getSuuntoTokenRefsForReadOperation(context, providerUserId);
+  if (tokenRefs.length === 0) {
+    throw new HttpsError('unauthenticated', 'Authentication failed. Please re-connect your Suunto account.');
+  }
+
   let authFailures = 0;
   let lastError: unknown = null;
 
-  for (const tokenRef of getSuuntoTokenRefsForReadOperation(context, providerUserId)) {
+  for (const tokenRef of tokenRefs) {
     try {
       const latestTokenSnapshot = await getLatestSuuntoTokenSnapshot(tokenRef);
       return await executeWithTokenRetry(

@@ -49,6 +49,13 @@ export class SyncedRouteSkippedForDeletedUserError extends Error {
     }
 }
 
+export class SyncedRouteProAccessRequiredError extends Error {
+    constructor(public readonly userID: string) {
+        super(`Route sync requires Pro access for user ${userID}.`);
+        this.name = 'SyncedRouteProAccessRequiredError';
+    }
+}
+
 function normalizeRouteCount(value: unknown): number | null {
     return typeof value === 'number' && Number.isFinite(value) && value >= 0
         ? Math.floor(value)
@@ -59,8 +66,8 @@ function getRouteQuotaCounterPath(userID: string): string {
     return `users/${userID}/metaData/routeQuota`;
 }
 
-async function resolveRouteUploadLimitForUser(userID: string): Promise<number | null> {
-    if (await hasProAccess(userID)) {
+async function resolveRouteUploadLimitForUser(userID: string, hasProRouteSyncAccess: boolean): Promise<number | null> {
+    if (hasProRouteSyncAccess) {
         return null;
     }
     if (await hasBasicAccess(userID)) {
@@ -146,7 +153,13 @@ function getExistingOriginalFiles(routeDocument?: FirestoreRouteJSON | null): Or
 export async function upsertSyncedRoute(
     params: UpsertSyncedRouteParams,
 ): Promise<UpsertSyncedRouteResult> {
-    const uploadLimit = await resolveRouteUploadLimitForUser(params.userID);
+    const hasProRouteSyncAccess = await hasProAccess(params.userID);
+    if (!hasProRouteSyncAccess) {
+        logger.warn(`[RouteSync] Skipping synced route upsert for non-pro user ${params.userID}`);
+        throw new SyncedRouteProAccessRequiredError(params.userID);
+    }
+
+    const uploadLimit = await resolveRouteUploadLimitForUser(params.userID, hasProRouteSyncAccess);
     const uploadedOriginalFile = await uploadSyncedRouteOriginalFile(params.userID, params.routeID, params.originalFile);
     const parsedPayload = buildFirestoreRoutePayload(params.userID, params.routeFile);
     const db = admin.firestore();

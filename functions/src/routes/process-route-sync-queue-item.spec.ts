@@ -69,6 +69,7 @@ const upsertSyncedRouteMocks = {
 
 vi.mock('./upsert-synced-route', () => ({
   SyncedRouteLimitExceededError: class SyncedRouteLimitExceededError extends Error {},
+  SyncedRouteProAccessRequiredError: class SyncedRouteProAccessRequiredError extends Error {},
   SyncedRouteSkippedForDeletedUserError: class SyncedRouteSkippedForDeletedUserError extends Error {},
   upsertSyncedRoute: (...args: any[]) => upsertSyncedRouteMocks.upsertSyncedRoute(...args),
 }));
@@ -213,6 +214,26 @@ describe('processRouteSyncQueueItem', () => {
       expect.objectContaining({ id: 'queue-1' }),
       undefined,
       'provider_auth_required',
+      expect.objectContaining({
+        resultStatus: 'skipped',
+      }),
+    );
+    expect(queueUtilsMocks.increaseRetryCountForQueueItem).not.toHaveBeenCalled();
+  });
+
+  it('skips webhook route sync items when synced route writes require Pro access', async () => {
+    const { SyncedRouteProAccessRequiredError } = await import('./upsert-synced-route');
+    upsertSyncedRouteMocks.upsertSyncedRoute.mockRejectedValueOnce(
+      new SyncedRouteProAccessRequiredError('user-1'),
+    );
+
+    const result = await processRouteSyncQueueItem(createQueueItem());
+
+    expect(result).toBe(QueueResult.Processed);
+    expect(queueUtilsMocks.markQueueItemSkipped).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'queue-1' }),
+      undefined,
+      'route_sync_pro_required',
       expect.objectContaining({
         resultStatus: 'skipped',
       }),

@@ -109,7 +109,10 @@ vi.mock('../shared/user-deletion-guard', () => {
   };
 });
 
-import { upsertSyncedRoute } from './upsert-synced-route';
+import {
+  SyncedRouteProAccessRequiredError,
+  upsertSyncedRoute,
+} from './upsert-synced-route';
 
 function makeSnapshot(exists: boolean, data: Record<string, unknown> = {}) {
   return {
@@ -248,5 +251,28 @@ describe('upsertSyncedRoute', () => {
       'users/user-1/routes/route-1/uploads/provider-sync/original-old.gpx',
       { ignoreNotFound: true },
     );
+  });
+
+  it('blocks synced route upserts for non-pro users before uploading or writing', async () => {
+    hoisted.mockHasProAccess.mockResolvedValueOnce(false);
+
+    await expect(upsertSyncedRoute({
+      userID: 'user-1',
+      routeID: 'route-1',
+      routeFile: { name: 'Updated Route' } as never,
+      sourceMetadata: {
+        sourceType: 'service_sync',
+        sourceServiceName: 'suuntoApp',
+      } as never,
+      originalFile: {
+        data: Buffer.from('<gpx />'),
+        extension: 'gpx',
+        originalFilename: 'Updated Route.gpx',
+      },
+    })).rejects.toBeInstanceOf(SyncedRouteProAccessRequiredError);
+
+    expect(hoisted.mockStorageSave).not.toHaveBeenCalled();
+    expect(hoisted.mockBuildFirestoreRoutePayload).not.toHaveBeenCalled();
+    expect(hoisted.mockRunTransaction).not.toHaveBeenCalled();
   });
 });

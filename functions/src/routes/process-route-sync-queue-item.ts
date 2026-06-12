@@ -25,6 +25,7 @@ import { OriginalRouteFile } from '../shared/route-writer';
 import { exportSuuntoRouteAsGPX } from '../suunto/routes';
 import {
     SyncedRouteLimitExceededError,
+    SyncedRouteProAccessRequiredError,
     SyncedRouteSkippedForDeletedUserError,
     upsertSyncedRoute,
 } from './upsert-synced-route';
@@ -270,6 +271,12 @@ export async function processRouteSyncQueueItem(
 
         if (error instanceof SyncedRouteSkippedForDeletedUserError) {
             return markQueueItemSkipped(queueItem, undefined, QUEUE_SKIPPED_REASONS.UserDeletedOrDeleting, {
+                resultStatus: 'skipped',
+            });
+        }
+
+        if (error instanceof SyncedRouteProAccessRequiredError) {
+            return markQueueItemSkipped(queueItem, undefined, 'route_sync_pro_required', {
                 resultStatus: 'skipped',
             });
         }
