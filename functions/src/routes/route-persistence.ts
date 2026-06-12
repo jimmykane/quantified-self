@@ -249,7 +249,7 @@ export function getRouteSourceMetadataRef(
   userID: string,
   routeID: string,
 ): admin.firestore.DocumentReference {
-  return db.collection('users').doc(userID).collection('routes').doc(routeID).collection('metaData').doc(ROUTE_SOURCE_METADATA_DOC_ID);
+  return db.doc(`users/${userID}/routes/${routeID}/metaData/${ROUTE_SOURCE_METADATA_DOC_ID}`);
 }
 
 export function getRouteDeliveryMetadataRef(
@@ -259,8 +259,8 @@ export function getRouteDeliveryMetadataRef(
   serviceName: string,
   providerUserId?: string | null,
 ): admin.firestore.DocumentReference {
-  return db.collection('users').doc(userID).collection('routes').doc(routeID).collection('metaData').doc(
-    getRouteDeliveryMetadataDocId(serviceName, providerUserId),
+  return db.doc(
+    `users/${userID}/routes/${routeID}/metaData/${getRouteDeliveryMetadataDocId(serviceName, providerUserId)}`,
   );
 }
 
