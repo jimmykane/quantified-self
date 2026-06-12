@@ -1,0 +1,438 @@
+@if (user(); as currentUser) {
+<main class="routes-page">
+  <section class="routes-workspace">
+    <header class="routes-header" aria-labelledby="routes-page-title">
+      <div class="routes-title-block">
+        <p class="eyebrow">Tools / Routes</p>
+        <h1 id="routes-page-title">Routes</h1>
+        <p class="routes-page-copy">Saved FIT and GPX route files with original source downloads.</p>
+      </div>
+      <div class="routes-header-actions">
+        <app-upload-routes
+          [user]="currentUser"
+          [promptAction]="true"
+          [showUploadIcon]="true"
+          (routeUploadComplete)="refreshRouteCount()"
+          uploadLabel="Upload route">
+        </app-upload-routes>
+      </div>
+    </header>
+
+    @if (suuntoRouteCatchUpPrompt(); as prompt) {
+    <section class="routes-prompt" aria-label="Suunto route catch-up prompt">
+      <app-dashboard-action-prompt
+        [prompt]="prompt"
+        (primary)="onSuuntoRouteCatchUpPromptPrimary($event)"
+        (secondary)="onSuuntoRouteCatchUpPromptSecondary($event)">
+      </app-dashboard-action-prompt>
+    </section>
+    }
+
+    @if (routes$ | async; as routes) {
+    <section class="routes-summary" aria-label="Route summary">
+      <div class="summary-item">
+        <span class="summary-value">{{ routeCount() ?? routes.length }}</span>
+        <span class="summary-label">saved routes</span>
+      </div>
+      @if ((routeCount() ?? routes.length) !== routes.length) {
+      <div class="summary-item">
+        <span class="summary-value">{{ routes.length }}</span>
+        <span class="summary-label">shown in table</span>
+      </div>
+      }
+      <div class="summary-item">
+        <span class="summary-value">FIT / GPX</span>
+        <span class="summary-label">source formats</span>
+      </div>
+    </section>
+
+    @if (loadedRouteCount() > 0) {
+    <div class="route-table-controls">
+      <mat-form-field appearance="outline" class="route-filter-field" subscriptSizing="dynamic">
+        <mat-label>Filter loaded routes</mat-label>
+        <input
+          matInput
+          type="search"
+          [value]="routeFilter()"
+          (input)="updateRouteFilter($any($event.target).value)">
+        @if (routeFilter()) {
+        <button matSuffix mat-icon-button type="button" aria-label="Clear route filter" (click)="updateRouteFilter('')">
+          <mat-icon>close</mat-icon>
+        </button>
+        }
+      </mat-form-field>
+      <mat-form-field appearance="outline" class="route-facet-filter-field" subscriptSizing="dynamic">
+        <mat-label>Source</mat-label>
+        <mat-select
+          [value]="routeFileTypeFilter()"
+          [disabled]="routeFileTypeFilterOptions().length === 0"
+          (selectionChange)="updateRouteFileTypeFilter($event.value)">
+          <mat-option value="">All sources</mat-option>
+          @for (option of routeFileTypeFilterOptions(); track option.value) {
+          <mat-option [value]="option.value">{{ option.label }}</mat-option>
+          }
+        </mat-select>
+      </mat-form-field>
+      <mat-form-field appearance="outline" class="route-facet-filter-field" subscriptSizing="dynamic">
+        <mat-label>Activity type</mat-label>
+        <mat-select
+          [value]="routeActivityTypeFilter()"
+          [disabled]="routeActivityTypeFilterOptions().length === 0"
+          (selectionChange)="updateRouteActivityTypeFilter($event.value)">
+          <mat-option value="">All types</mat-option>
+          @for (option of routeActivityTypeFilterOptions(); track option.value) {
+          <mat-option [value]="option.value">{{ option.label }}</mat-option>
+          }
+        </mat-select>
+      </mat-form-field>
+      <div class="route-table-actions">
+        <span class="route-result-summary">{{ routeResultSummary() }}</span>
+      </div>
+    </div>
+    }
+
+    @if (loadedRouteCount() > 0) {
+    @if (routes.length > 0) {
+    <section class="route-table-shell qs-scrollbar" aria-label="Saved routes">
+      @if (selectedRouteCount() > 0) {
+      <div class="route-selection-toolbar" aria-live="polite">
+        <div class="route-selection-summary">
+          <mat-icon>check_circle</mat-icon>
+          <span>{{ selectedRouteCount() }} {{ selectedRouteCount() === 1 ? 'route' : 'routes' }} selected</span>
+        </div>
+        <div class="route-selection-actions">
+          <button mat-button type="button"
+            class="route-bulk-action-button"
+            [disabled]="bulkActionInProgress() || sendingToServiceRouteID() !== null"
+            [attr.aria-label]="'Export GPX for ' + selectedRouteCount() + ' selected ' + (selectedRouteCount() === 1 ? 'route' : 'routes')"
+            (click)="$event.preventDefault(); $event.stopPropagation(); exportSelectedRoutesAsGPX()">
+            <span class="route-bulk-action-content">
+              <mat-icon>file_download</mat-icon>
+              <span>GPX</span>
+            </span>
+          </button>
+          <button mat-button type="button"
+            class="route-bulk-action-button"
+            [disabled]="bulkActionInProgress() || sendingToServiceRouteID() !== null"
+            aria-label="Download original files for selected routes"
+            (click)="$event.preventDefault(); $event.stopPropagation(); downloadSelectedRouteOriginals()">
+            <span class="route-bulk-action-content">
+              <mat-icon>folder_zip</mat-icon>
+              <span>Originals</span>
+            </span>
+          </button>
+          <button mat-button type="button"
+            class="route-bulk-action-button"
+            [disabled]="bulkActionInProgress() || sendingToServiceRouteID() !== null || !canSendRoutesToSuunto() || selectedSendableRouteCount() === 0"
+            [attr.aria-label]="'Send ' + selectedRouteCount() + ' selected ' + (selectedRouteCount() === 1 ? 'route' : 'routes') + ' to Suunto'"
+            (click)="$event.preventDefault(); $event.stopPropagation(); sendSelectedRoutesToSuunto()">
+            <span class="route-bulk-action-content">
+              <mat-icon>cloud_upload</mat-icon>
+              <span>Suunto</span>
+            </span>
+          </button>
+          <button mat-button color="warn" type="button"
+            class="route-bulk-action-button"
+            [disabled]="bulkActionInProgress() || sendingToServiceRouteID() !== null"
+            [attr.aria-label]="'Delete ' + selectedRouteCount() + ' selected ' + (selectedRouteCount() === 1 ? 'route' : 'routes')"
+            (click)="$event.preventDefault(); $event.stopPropagation(); confirmDeleteSelectedRoutes()">
+            <span class="route-bulk-action-content">
+              <mat-icon>delete</mat-icon>
+              <span>Delete</span>
+            </span>
+          </button>
+          <button mat-button type="button"
+            class="route-bulk-action-button"
+            [disabled]="bulkActionInProgress()"
+            aria-label="Clear route selection"
+            (click)="clearRouteSelection($event)">
+            <span class="route-bulk-action-content">
+              <mat-icon>close</mat-icon>
+              <span>Clear</span>
+            </span>
+          </button>
+        </div>
+      </div>
+      }
+      <table
+        mat-table
+        matSort
+        matSortDisableClear
+        class="route-table"
+        [dataSource]="routes"
+        [trackBy]="trackByRouteID"
+        [matSortActive]="routeSortActive()"
+        [matSortDirection]="routeSortDirection()"
+        (matSortChange)="onRouteSortChange($event)">
+        <ng-container matColumnDef="select">
+          <th mat-header-cell *matHeaderCellDef>
+            <mat-checkbox
+              aria-label="Select all visible routes"
+              [checked]="allVisibleRoutesSelected()"
+              [indeterminate]="visibleRouteSelectionIndeterminate()"
+              [disabled]="bulkActionInProgress()"
+              (click)="$event.stopPropagation()"
+              (keydown)="$event.stopPropagation()"
+              (change)="toggleVisibleRouteSelection($event.checked)">
+            </mat-checkbox>
+          </th>
+          <td mat-cell *matCellDef="let item">
+            <mat-checkbox
+              [attr.aria-label]="'Select ' + item.name"
+              [checked]="!!item.route.id && selectedRouteIDSet().has(item.route.id)"
+              [disabled]="bulkActionInProgress()"
+              (click)="$event.stopPropagation()"
+              (keydown)="$event.stopPropagation()"
+              (change)="toggleRouteSelection(item, $event.checked)">
+            </mat-checkbox>
+          </td>
+        </ng-container>
+
+        <ng-container matColumnDef="date">
+          <th mat-header-cell *matHeaderCellDef mat-sort-header="date">
+            <span class="route-header-label">
+              <mat-icon aria-hidden="true">calendar_month</mat-icon>
+              <span>Date</span>
+            </span>
+          </th>
+          <td mat-cell *matCellDef="let item">
+            @if (item.routeDate) {
+            {{ item.routeDate | date:'mediumDate' }}
+            } @else {
+            -
+            }
+          </td>
+        </ng-container>
+
+      <ng-container matColumnDef="name">
+        <th mat-header-cell *matHeaderCellDef mat-sort-header="name">
+          <span class="route-header-label">
+            <mat-icon aria-hidden="true">route</mat-icon>
+            <span>Route</span>
+          </span>
+        </th>
+        <td mat-cell *matCellDef="let item">
+          <span class="route-name-cell">
+            <span class="route-name-stack">
+              <span class="route-title-cell" [matTooltip]="item.name" [attr.title]="item.name">{{ item.name }}</span>
+              <span
+                class="route-provenance-cell"
+                [matTooltip]="item.provenanceTitle"
+                [attr.title]="item.provenanceTitle">
+                @for (provenance of item.provenanceItems; track provenance.id; let last = $last) {
+                <span
+                  class="route-provenance-item"
+                  [matTooltip]="provenance.title"
+                  [attr.title]="provenance.title">
+                  @if (provenance.serviceName) {
+                  <app-service-source-icon
+                    [sourceServiceName]="provenance.serviceName"
+                    [showTooltip]="false">
+                  </app-service-source-icon>
+                  }
+                  <span class="route-provenance-text">{{ provenance.label }}</span>
+                </span>
+                @if (!last) {
+                <span class="route-provenance-separator" aria-hidden="true">·</span>
+                }
+                }
+              </span>
+            </span>
+            <span class="route-file-type">{{ item.fileType }}</span>
+          </span>
+        </td>
+      </ng-container>
+
+      <ng-container matColumnDef="activityTypes">
+        <th mat-header-cell *matHeaderCellDef mat-sort-header="activityTypes">
+          <span class="route-header-label">
+            <mat-icon aria-hidden="true">directions_run</mat-icon>
+            <span>Type</span>
+          </span>
+        </th>
+        <td mat-cell *matCellDef="let item">
+          <div class="route-type-stack" [matTooltip]="item.activityTypesTitle" [attr.title]="item.activityTypesTitle">
+            @for (summary of item.activityTypeSummaries; track summary.id) {
+            <span class="route-type-line">
+              <app-activity-type-icon
+                [activityType]="summary.activityTypeIconValue"
+                size="16px"
+                vAlign="middle">
+              </app-activity-type-icon>
+              <span class="route-type-value">{{ summary.activityTypeLabel }}</span>
+            </span>
+            }
+          </div>
+        </td>
+      </ng-container>
+
+      <ng-container matColumnDef="distance">
+        <th mat-header-cell *matHeaderCellDef mat-sort-header="distance">
+          <span class="route-header-label">
+            <app-data-type-icon [dataType]="routeHeaderDataTypes.distance" size="18px" vAlign="middle"></app-data-type-icon>
+            <span>Distance</span>
+          </span>
+        </th>
+        <td mat-cell *matCellDef="let item" [matTooltip]="item.distance.title" [attr.title]="item.distance.title">
+          {{ item.distance.label }}
+        </td>
+      </ng-container>
+
+      <ng-container matColumnDef="ascent">
+        <th mat-header-cell *matHeaderCellDef mat-sort-header="ascent">
+          <span class="route-header-label">
+            <app-data-type-icon [dataType]="routeHeaderDataTypes.ascent" size="18px" vAlign="middle"></app-data-type-icon>
+            <span>Ascent</span>
+          </span>
+        </th>
+        <td mat-cell *matCellDef="let item" [matTooltip]="item.ascent.title" [attr.title]="item.ascent.title">
+          {{ item.ascent.label }}
+        </td>
+      </ng-container>
+
+      <ng-container matColumnDef="descent">
+        <th mat-header-cell *matHeaderCellDef mat-sort-header="descent">
+          <span class="route-header-label">
+            <app-data-type-icon [dataType]="routeHeaderDataTypes.descent" size="18px" vAlign="middle"></app-data-type-icon>
+            <span>Descent</span>
+          </span>
+        </th>
+        <td mat-cell *matCellDef="let item" [matTooltip]="item.descent.title" [attr.title]="item.descent.title">
+          {{ item.descent.label }}
+        </td>
+      </ng-container>
+
+      <ng-container matColumnDef="minGrade">
+        <th mat-header-cell *matHeaderCellDef mat-sort-header="minGrade">
+          <span class="route-header-label">
+            <app-data-type-icon [dataType]="routeHeaderDataTypes.minGrade" size="18px" vAlign="middle"></app-data-type-icon>
+            <span>Min Grade</span>
+          </span>
+        </th>
+        <td mat-cell *matCellDef="let item" [matTooltip]="item.minGrade.title" [attr.title]="item.minGrade.title">
+          {{ item.minGrade.label }}
+        </td>
+      </ng-container>
+
+      <ng-container matColumnDef="maxGrade">
+        <th mat-header-cell *matHeaderCellDef mat-sort-header="maxGrade">
+          <span class="route-header-label">
+            <app-data-type-icon [dataType]="routeHeaderDataTypes.maxGrade" size="18px" vAlign="middle"></app-data-type-icon>
+            <span>Max Grade</span>
+          </span>
+        </th>
+        <td mat-cell *matCellDef="let item" [matTooltip]="item.maxGrade.title" [attr.title]="item.maxGrade.title">
+          {{ item.maxGrade.label }}
+        </td>
+      </ng-container>
+
+      <ng-container matColumnDef="pointCount">
+        <th mat-header-cell *matHeaderCellDef mat-sort-header="pointCount">
+          <span class="route-header-label">
+            <mat-icon aria-hidden="true">timeline</mat-icon>
+            <span>Points</span>
+          </span>
+        </th>
+        <td mat-cell *matCellDef="let item">
+          <div class="route-detail-stack">
+            <span>{{ item.routeCountLabel }}</span>
+            <span>{{ item.pointCountLabel }}</span>
+            @if (item.waypointCountLabel) {
+            <span>{{ item.waypointCountLabel }}</span>
+            }
+          </div>
+        </td>
+      </ng-container>
+
+      <ng-container matColumnDef="originalFilename">
+        <th mat-header-cell *matHeaderCellDef mat-sort-header="originalFilename">
+          <span class="route-header-label">
+            <mat-icon aria-hidden="true">description</mat-icon>
+            <span>Source</span>
+          </span>
+        </th>
+        <td mat-cell *matCellDef="let item">
+          <span class="route-source-cell" [matTooltip]="item.originalFilename" [attr.title]="item.originalFilename">
+            {{ item.originalFilename }}
+          </span>
+        </td>
+      </ng-container>
+
+      <ng-container matColumnDef="actions">
+        <th mat-header-cell *matHeaderCellDef>
+          <span class="route-header-label route-header-label--actions">Actions</span>
+        </th>
+        <td mat-cell *matCellDef="let item" class="route-actions-cell">
+          <button mat-icon-button type="button"
+            aria-label="Route row actions"
+            matTooltip="Route actions"
+            [matMenuTriggerFor]="routeRowActionsMenu"
+            (click)="$event.stopPropagation()"
+            (keydown)="$event.stopPropagation()">
+            <mat-icon>more_vert</mat-icon>
+          </button>
+          <mat-menu #routeRowActionsMenu="matMenu" class="qs-menu-panel">
+            <button mat-menu-item type="button" (click)="openRouteDetails(item)">
+              <mat-icon>open_in_new</mat-icon>
+              <span>Open details</span>
+            </button>
+            <button mat-menu-item type="button"
+              [disabled]="bulkActionInProgress() || exportingRouteID() === item.route.id || deletingRouteID() === item.route.id || downloadingRouteID() === item.route.id || reprocessingRouteID() === item.route.id || sendingToServiceRouteID() === item.route.id || !item.canExportGPX"
+              (click)="exportRouteAsGPX(item.route)">
+              <mat-icon>file_download</mat-icon>
+              <span>Export GPX</span>
+            </button>
+            <button mat-menu-item type="button"
+              [disabled]="bulkActionInProgress() || downloadingRouteID() === item.route.id || deletingRouteID() === item.route.id || exportingRouteID() === item.route.id || reprocessingRouteID() === item.route.id || sendingToServiceRouteID() === item.route.id || !item.canDownloadOriginals"
+              (click)="downloadRouteOriginals(item.route)">
+              <mat-icon>download</mat-icon>
+              <span>Download originals</span>
+            </button>
+            <button mat-menu-item type="button"
+              [disabled]="bulkActionInProgress() || sendingToServiceRouteID() !== null || reprocessingRouteID() !== null || deletingRouteID() === item.route.id || downloadingRouteID() === item.route.id || exportingRouteID() === item.route.id || !item.canReprocess"
+              (click)="reprocessRouteFromOriginalFile(item.route)">
+              <mat-icon>autorenew</mat-icon>
+              <span>Reprocess</span>
+            </button>
+            <button mat-menu-item type="button"
+              [disabled]="bulkActionInProgress() || sendingToServiceRouteID() !== null || deletingRouteID() === item.route.id || downloadingRouteID() === item.route.id || reprocessingRouteID() === item.route.id || exportingRouteID() === item.route.id || !canSendRoutesToSuunto() || !item.canSendToSuunto"
+              (click)="sendRouteToSuunto(item.route)">
+              <mat-icon>cloud_upload</mat-icon>
+              <span>Send to Suunto</span>
+            </button>
+            <button mat-menu-item type="button"
+              [disabled]="bulkActionInProgress() || deletingRouteID() === item.route.id || downloadingRouteID() === item.route.id || reprocessingRouteID() === item.route.id || exportingRouteID() === item.route.id || sendingToServiceRouteID() === item.route.id || !item.canDelete"
+              (click)="confirmDeleteRoute(item.route)">
+              <mat-icon>delete</mat-icon>
+              <span>Delete</span>
+            </button>
+          </mat-menu>
+        </td>
+      </ng-container>
+
+        <tr mat-header-row *matHeaderRowDef="routeColumns"></tr>
+        <tr
+          mat-row
+          class="route-table-row"
+          *matRowDef="let item; columns: routeColumns;">
+        </tr>
+      </table>
+    </section>
+    } @else {
+    <section class="empty-routes">
+      <mat-icon aria-hidden="true">search_off</mat-icon>
+      <h2>No loaded routes match this filter</h2>
+      <p>Adjust the filter text, source, or activity type.</p>
+    </section>
+    }
+    } @else {
+    <section class="empty-routes">
+      <mat-icon aria-hidden="true">route</mat-icon>
+      <h2>No saved routes</h2>
+      <p>Upload a FIT course or GPX route file to save it here.</p>
+    </section>
+    }
+    }
+  </section>
+</main>
+}

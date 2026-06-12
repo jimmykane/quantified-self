@@ -128,6 +128,7 @@ describe('Firestore Security Rules', () => {
         const userId = 'split_user';
         const otherId = 'other_user';
         const eventId = 'event_123';
+        const routeId = 'route_123';
 
         describe('User Root Document (users/{uid})', () => {
             it('should allow user to create their own user document', async () => {
@@ -669,6 +670,178 @@ describe('Firestore Security Rules', () => {
                     activitiesCount: 99,
                     comparisonTitle: 'Spoofed comparison',
                     benchmarkStatus: 'complete'
+                }));
+            });
+        });
+
+        describe('Routes (users/{uid}/routes/{routeId})', () => {
+            it('should deny owner creating route documents directly', async () => {
+                const db = testEnv.authenticatedContext(userId).firestore();
+                await assertFails(db.collection(`users/${userId}/routes`).doc(routeId).set({
+                    name: 'Morning Route',
+                    srcFileType: 'gpx',
+                    routes: [],
+                }));
+            });
+
+            it('should allow owner reading their own route', async () => {
+                const db = testEnv.authenticatedContext(userId).firestore();
+                await testEnv.withSecurityRulesDisabled(async (context) => {
+                    await context.firestore().doc(`users/${userId}/routes/${routeId}`).set({
+                        name: 'Morning Route',
+                        srcFileType: 'gpx',
+                        routeCount: 1,
+                        pointCount: 2,
+                        routes: [],
+                    });
+                });
+
+                await assertSucceeds(db.collection(`users/${userId}/routes`).doc(routeId).get());
+            });
+
+            it('should deny other users reading route documents', async () => {
+                const db = testEnv.authenticatedContext(otherId).firestore();
+                await testEnv.withSecurityRulesDisabled(async (context) => {
+                    await context.firestore().doc(`users/${userId}/routes/${routeId}`).set({
+                        name: 'Morning Route',
+                        srcFileType: 'gpx',
+                        routeCount: 1,
+                        pointCount: 2,
+                        routes: [],
+                    });
+                });
+
+                await assertFails(db.collection(`users/${userId}/routes`).doc(routeId).get());
+            });
+
+            it('should allow owner updating user-owned route fields', async () => {
+                const db = testEnv.authenticatedContext(userId).firestore();
+                await testEnv.withSecurityRulesDisabled(async (context) => {
+                    await context.firestore().doc(`users/${userId}/routes/${routeId}`).set({
+                        name: 'Old Route',
+                        srcFileType: 'fit',
+                        routeCount: 1,
+                        pointCount: 2,
+                        routes: [],
+                    });
+                });
+
+                await assertSucceeds(db.collection(`users/${userId}/routes`).doc(routeId).update({
+                    name: 'New Route',
+                    notes: 'Updated by owner',
+                }));
+            });
+
+            it('should deny owner saving invalid route names', async () => {
+                const db = testEnv.authenticatedContext(userId).firestore();
+                await testEnv.withSecurityRulesDisabled(async (context) => {
+                    await context.firestore().doc(`users/${userId}/routes/${routeId}`).set({
+                        name: 'Morning Route',
+                        srcFileType: 'fit',
+                        routeCount: 1,
+                        pointCount: 2,
+                        routes: [],
+                    });
+                });
+
+                await assertFails(db.collection(`users/${userId}/routes`).doc(routeId).update({
+                    name: '',
+                }));
+                await assertFails(db.collection(`users/${userId}/routes`).doc(routeId).update({
+                    name: 'x'.repeat(121),
+                }));
+            });
+
+            it('should deny owner updating original route file metadata', async () => {
+                const db = testEnv.authenticatedContext(userId).firestore();
+                await testEnv.withSecurityRulesDisabled(async (context) => {
+                    await context.firestore().doc(`users/${userId}/routes/${routeId}`).set({
+                        name: 'Morning Route',
+                        srcFileType: 'gpx',
+                        routeCount: 1,
+                        pointCount: 2,
+                        routes: [],
+                    });
+                });
+
+                await assertFails(db.collection(`users/${userId}/routes`).doc(routeId).update({
+                    originalFiles: [{ path: 'users/attacker/routes/route_123/original.gpx' }],
+                }));
+            });
+
+            it('should deny owner updating server-owned route summary fields', async () => {
+                const db = testEnv.authenticatedContext(userId).firestore();
+                await testEnv.withSecurityRulesDisabled(async (context) => {
+                    await context.firestore().doc(`users/${userId}/routes/${routeId}`).set({
+                        name: 'Morning Route',
+                        srcFileType: 'fit',
+                        routeCount: 1,
+                        pointCount: 2,
+                        routes: [],
+                    });
+                });
+
+                await assertFails(db.collection(`users/${userId}/routes`).doc(routeId).update({
+                    stats: { Distance: 1 },
+                    pointCount: 0,
+                    routes: [],
+                    bounds: {
+                        minLatitudeDegrees: 0,
+                        maxLatitudeDegrees: 0,
+                        minLongitudeDegrees: 0,
+                        maxLongitudeDegrees: 0,
+                    },
+                }));
+            });
+
+            it('should deny owner updating route creator metadata', async () => {
+                const db = testEnv.authenticatedContext(userId).firestore();
+                await testEnv.withSecurityRulesDisabled(async (context) => {
+                    await context.firestore().doc(`users/${userId}/routes/${routeId}`).set({
+                        name: 'Morning Route',
+                        srcFileType: 'fit',
+                        creator: { name: 'Original Device' },
+                        routeCount: 1,
+                        pointCount: 2,
+                        routes: [],
+                    });
+                });
+
+                await assertFails(db.collection(`users/${userId}/routes`).doc(routeId).update({
+                    creator: { name: 'Spoofed Device' },
+                }));
+            });
+
+            it('should allow owner deleting their own route document', async () => {
+                const db = testEnv.authenticatedContext(userId).firestore();
+                await testEnv.withSecurityRulesDisabled(async (context) => {
+                    await context.firestore().doc(`users/${userId}/routes/${routeId}`).set({
+                        name: 'Morning Route',
+                        srcFileType: 'gpx',
+                        routeCount: 1,
+                        pointCount: 2,
+                        routes: [],
+                    });
+                });
+
+                await assertSucceeds(db.collection(`users/${userId}/routes`).doc(routeId).delete());
+            });
+
+            it('should allow owner reading route processing metadata but deny writes', async () => {
+                const db = testEnv.authenticatedContext(userId).firestore();
+                await testEnv.withSecurityRulesDisabled(async (context) => {
+                    await context.firestore().doc(`users/${userId}/routes/${routeId}/metaData/processing`).set({
+                        sportsLibVersion: '15.0.5',
+                        sportsLibVersionCode: 15000005,
+                        processedAt: new Date(),
+                    });
+                });
+
+                await assertSucceeds(db.collection(`users/${userId}/routes/${routeId}/metaData`).doc('processing').get());
+                await assertFails(db.collection(`users/${userId}/routes/${routeId}/metaData`).doc('processing').set({
+                    sportsLibVersion: '15.0.5',
+                    sportsLibVersionCode: 15000005,
+                    processedAt: new Date(),
                 }));
             });
         });

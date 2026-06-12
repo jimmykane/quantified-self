@@ -81,6 +81,11 @@
     <priority>0.8</priority>
   </url>
   <url>
+    <loc>https://quantified-self.io/features/fit-gpx-route-files</loc>
+    <lastmod>2026-06-07</lastmod>
+    <priority>0.8</priority>
+  </url>
+  <url>
     <loc>https://quantified-self.io/features/sports-watch-benchmark</loc>
     <lastmod>2026-05-29</lastmod>
     <priority>0.8</priority>

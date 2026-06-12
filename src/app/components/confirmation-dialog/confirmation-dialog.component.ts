@@ -5,6 +5,7 @@ import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 export interface ConfirmationDialogData {
   title?: string;
   message?: string;
+  htmlMessage?: string;
   confirmText?: string;
   cancelText?: string;
   confirmLabel?: string;
@@ -30,6 +31,10 @@ export class ConfirmationDialogComponent {
 
   get message(): string {
     return this._dialogData?.message || 'This action cannot be undone.';
+  }
+
+  get htmlMessage(): string | null {
+    return this._dialogData?.htmlMessage || null;
   }
 
   get confirmButtonText(): string {

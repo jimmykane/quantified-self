@@ -1158,6 +1158,7 @@ describe('sports-lib-reparse.service', () => {
         const processingCall = setCalls.find(call => call.path.includes('/metaData/processing'));
         expect(processingCall).toBeTruthy();
         expect(processingCall?.payload).toEqual(expect.objectContaining({
+            processingEntity: 'event',
             sportsLibVersion: '9.0.99',
             sportsLibVersionCode: sportsLibVersionToCode('9.0.99'),
             processedAt: 'SERVER_TIMESTAMP',
@@ -1202,6 +1203,7 @@ describe('sports-lib-reparse.service', () => {
 
             const processingCall = setCalls.find(call => call.path.includes('/metaData/processing'));
             expect(processingCall?.payload).toEqual(expect.objectContaining({
+                processingEntity: 'event',
                 processedAt: 'SERVER_TIMESTAMP',
             }));
         } finally {

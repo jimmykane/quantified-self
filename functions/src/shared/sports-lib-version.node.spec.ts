@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { describe, it, expect } from 'vitest';
 import { SPORTS_LIB_VERSION } from './sports-lib-version.node';
+import { SPORTS_LIB_REPARSE_TARGET_VERSION } from '../reparse/sports-lib-reparse.config';
 
 describe('SPORTS_LIB_VERSION (node)', () => {
     it('matches the resolved sports-lib package.json version', () => {
@@ -12,5 +13,9 @@ describe('SPORTS_LIB_VERSION (node)', () => {
         const pkg = JSON.parse(readFileSync(packageJsonPath, 'utf8')) as { version: string };
         expect(SPORTS_LIB_VERSION).toBe(pkg.version);
         expect(SPORTS_LIB_VERSION.length).toBeGreaterThan(0);
+    });
+
+    it('keeps the sports-lib reparse target aligned with the runtime package version', () => {
+        expect(SPORTS_LIB_REPARSE_TARGET_VERSION).toBe(SPORTS_LIB_VERSION);
     });
 });

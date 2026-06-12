@@ -13,6 +13,7 @@ describe('public-seo-pages.content', () => {
       aiInsights: 'features/ai-insights',
       workoutFileComparison: 'features/workout-file-comparison',
       fitGpxTcxFileAnalyzer: 'features/fit-gpx-tcx-file-analyzer',
+      routeFiles: 'features/fit-gpx-route-files',
       sportsWatchBenchmark: 'features/sports-watch-benchmark',
     });
     expect(PUBLIC_GUIDE_PATHS).toEqual({
@@ -65,6 +66,11 @@ describe('public-seo-pages.content', () => {
     expect(PUBLIC_SEO_PAGES.fitGpxTcxFileAnalyzer.intro).toContain('maps, charts, stats, exports');
     expect(PUBLIC_SEO_PAGES.fitGpxTcxFileAnalyzer.faqItems.some(item => item.question === 'Can I analyze FIT files?')).toBe(true);
 
+    expect(PUBLIC_SEO_PAGES.routeFiles.h1).toBe('Save FIT course and GPX route files');
+    expect(PUBLIC_SEO_PAGES.routeFiles.description).toContain('FIT course files and GPX route files');
+    expect(PUBLIC_SEO_PAGES.routeFiles.description).toContain('up to 10 saved routes');
+    expect(PUBLIC_SEO_PAGES.routeFiles.faqItems.some(item => item.question === 'Are route files counted separately from activities?')).toBe(true);
+
     expect(PUBLIC_SEO_PAGES.sportsWatchBenchmark.h1).toBe('Sports watch benchmark reports for reviewers and device tests');
     expect(PUBLIC_SEO_PAGES.sportsWatchBenchmark.intro).toContain('YouTube videos');
     expect(PUBLIC_SEO_PAGES.sportsWatchBenchmark.intro).toContain('firmware QA');
@@ -94,6 +100,7 @@ describe('public-seo-pages.content', () => {
     expect(featureHubLinks).toContain('/features/workout-data-comparison');
     expect(featureHubLinks).toContain('/features/workout-file-comparison');
     expect(featureHubLinks).toContain('/features/fit-gpx-tcx-file-analyzer');
+    expect(featureHubLinks).toContain('/features/fit-gpx-route-files');
     expect(featureHubLinks).toContain('/features/sports-watch-benchmark');
     expect(featureHubLinks).toContain('/integrations');
     expect(featureHubLinks).toContain('/guides');

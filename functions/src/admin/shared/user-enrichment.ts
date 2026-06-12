@@ -4,7 +4,7 @@ import { GARMIN_API_TOKENS_COLLECTION_NAME } from '../../garmin/constants';
 import { SUUNTOAPP_ACCESS_TOKENS_COLLECTION_NAME } from '../../suunto/constants';
 import { COROSAPI_ACCESS_TOKENS_COLLECTION_NAME } from '../../coros/constants';
 import { toEpochMillis } from './date.utils';
-import { BasicUser, EnrichedUser } from './types';
+import { BasicUser, CountStats, EnrichedUser } from './types';
 
 function normalizeCount(value: unknown): number {
     if (typeof value !== 'number' || !Number.isFinite(value)) {
@@ -46,8 +46,26 @@ function resolveAiCreditsConsumedFromUsageData(value: unknown): number {
     );
 }
 
+async function getUserSubcollectionCountStats(
+    db: admin.firestore.Firestore,
+    userUid: string,
+    subcollectionName: 'events' | 'routes'
+): Promise<CountStats> {
+    try {
+        const snapshot = await db.collection('users')
+            .doc(userUid)
+            .collection(subcollectionName)
+            .count()
+            .get();
+        return { total: normalizeCount(snapshot.data().count) };
+    } catch (e) {
+        logger.warn(`Failed to count ${subcollectionName} for ${userUid}`, e);
+        return { total: null };
+    }
+}
+
 /**
- * Enrich a small batch of users with Firestore data (subscriptions, services, event counts).
+ * Enrich a small batch of users with Firestore data (subscriptions, services, event/route counts).
  */
 export async function enrichUsers(
     users: BasicUser[],
@@ -55,6 +73,7 @@ export async function enrichUsers(
 ): Promise<EnrichedUser[]> {
     const userFlagsByUid = new Map<string, { onboardingCompleted: boolean; hasSubscribedOnce: boolean }>();
     const eventStatsByUid = new Map<string, EnrichedUser['eventStats']>();
+    const routeStatsByUid = new Map<string, EnrichedUser['routeStats']>();
 
     if (users.length > 0) {
         try {
@@ -72,17 +91,12 @@ export async function enrichUsers(
         }
 
         await Promise.all(users.map(async (user) => {
-            try {
-                const snapshot = await db.collection('users')
-                    .doc(user.uid)
-                    .collection('events')
-                    .count()
-                    .get();
-                eventStatsByUid.set(user.uid, { total: normalizeCount(snapshot.data().count) });
-            } catch (e) {
-                logger.warn(`Failed to count events for ${user.uid}`, e);
-                eventStatsByUid.set(user.uid, { total: null });
-            }
+            const [eventStats, routeStats] = await Promise.all([
+                getUserSubcollectionCountStats(db, user.uid, 'events'),
+                getUserSubcollectionCountStats(db, user.uid, 'routes'),
+            ]);
+            eventStatsByUid.set(user.uid, eventStats);
+            routeStatsByUid.set(user.uid, routeStats);
         }));
     }
 
@@ -182,6 +196,9 @@ export async function enrichUsers(
                 hasSubscribedOnce,
                 aiCreditsConsumed,
                 eventStats: eventStatsByUid.get(user.uid) || {
+                    total: null,
+                },
+                routeStats: routeStatsByUid.get(user.uid) || {
                     total: null,
                 },
             };

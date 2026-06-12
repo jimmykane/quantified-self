@@ -43,6 +43,7 @@ export interface ParseResult {
 
 export interface DownloadFileOptions {
   metadataCacheTtlMs?: number;
+  decompress?: boolean;
 }
 
 @Injectable({
@@ -63,6 +64,7 @@ export class AppOriginalFileHydrationService {
   public async downloadFile(path: string, options?: DownloadFileOptions): Promise<ArrayBuffer> {
     const fileRef = ref(this.storage, path);
     const metadataCacheTtlMs = this.getMetadataCacheTtlMs(options);
+    const shouldDecompress = options?.decompress !== false;
 
     try {
       const generation = await this.getGeneration(path, fileRef, metadataCacheTtlMs);
@@ -70,17 +72,17 @@ export class AppOriginalFileHydrationService {
 
       if (cached && cached.generation === generation) {
         this.logger.log(`[AppOriginalFileHydrationService] Cache HIT for ${path}`);
-        return this.fileService.decompressIfNeeded(cached.buffer, path);
+        return shouldDecompress ? this.fileService.decompressIfNeeded(cached.buffer, path) : cached.buffer;
       }
 
       this.logger.log(`[AppOriginalFileHydrationService] Cache MISS/STALE for ${path} (Cloud Gen: ${generation}, Cached Gen: ${cached?.generation})`);
       const buffer = await getBytes(fileRef);
       await this.cacheService.setFile(path, { buffer, generation });
-      return this.fileService.decompressIfNeeded(buffer, path);
+      return shouldDecompress ? this.fileService.decompressIfNeeded(buffer, path) : buffer;
     } catch (e) {
       this.logger.error(`[AppOriginalFileHydrationService] Error downloading/caching file ${path}`, e);
       const buffer = await getBytes(fileRef);
-      return this.fileService.decompressIfNeeded(buffer, path);
+      return shouldDecompress ? this.fileService.decompressIfNeeded(buffer, path) : buffer;
     }
   }
 

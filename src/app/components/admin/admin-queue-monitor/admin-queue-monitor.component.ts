@@ -28,7 +28,7 @@ export class AdminQueueMonitorComponent implements OnInit, OnDestroy {
     isLoadingStats = true;
     queueView: AdminQueueStatsView = 'all';
     pageTitle = 'Queue Monitoring';
-    pageSubtitle = 'Operational health for ingestion, activity sync, sleep sync, reparse, and derived metrics pipelines';
+    pageSubtitle = 'Operational health for ingestion, route sync, activity sync, sleep sync, reparse, and derived metrics pipelines';
 
     private readonly destroy$ = new Subject<void>();
 
@@ -50,7 +50,15 @@ export class AdminQueueMonitorComponent implements OnInit, OnDestroy {
 
     private configureView(): void {
         const rawView = this.route.snapshot.data['queueView'];
-        if (rawView === 'workout' || rawView === 'activity-sync' || rawView === 'sleep-sync' || rawView === 'reparse' || rawView === 'derived') {
+        if (
+            rawView === 'workout' ||
+            rawView === 'activity-sync' ||
+            rawView === 'route-sync' ||
+            rawView === 'sleep-sync' ||
+            rawView === 'reparse' ||
+            rawView === 'route-reparse' ||
+            rawView === 'derived'
+        ) {
             this.queueView = rawView;
         } else {
             this.queueView = 'all';
@@ -63,14 +71,26 @@ export class AdminQueueMonitorComponent implements OnInit, OnDestroy {
         }
 
         if (this.queueView === 'reparse') {
-            this.pageTitle = 'Sports-lib Reparse Queue';
-            this.pageSubtitle = 'Monitor reparse jobs, checkpoint progress, and failure diagnostics';
+            this.pageTitle = 'Event Reparse Queue';
+            this.pageSubtitle = 'Monitor event sports-lib reparse jobs, checkpoint progress, and failure diagnostics';
+            return;
+        }
+
+        if (this.queueView === 'route-reparse') {
+            this.pageTitle = 'Route Reparse Queue';
+            this.pageSubtitle = 'Monitor route sports-lib reparse jobs, checkpoint progress, and failure diagnostics';
             return;
         }
 
         if (this.queueView === 'activity-sync') {
             this.pageTitle = 'Activity Sync Queue';
             this.pageSubtitle = 'Monitor cross-service activity sync queue depth';
+            return;
+        }
+
+        if (this.queueView === 'route-sync') {
+            this.pageTitle = 'Route Sync Queue';
+            this.pageSubtitle = 'Monitor provider route sync queue depth, skips, retries, and failure diagnostics';
             return;
         }
 
@@ -87,7 +107,7 @@ export class AdminQueueMonitorComponent implements OnInit, OnDestroy {
         }
 
         this.pageTitle = 'Queue Monitoring';
-        this.pageSubtitle = 'Operational health for ingestion, activity sync, sleep sync, reparse, and derived metrics pipelines';
+        this.pageSubtitle = 'Operational health for ingestion, route sync, activity sync, sleep sync, reparse, and derived metrics pipelines';
     }
 
     fetchQueueStats(): void {

@@ -28,8 +28,8 @@ export function buildSuuntoServiceConnectionViewModel(options: {
     reconnectRequired,
     showDetails: connected || reconnectRequired,
     description: reconnectRequired
-      ? 'Reconnect Suunto to resume sleep sync, history imports, and FIT uploads. If you use Garmin or COROS auto-sync into Suunto, re-enable those routes after reconnecting.'
-      : 'Required for history imports and FIT activity uploads.',
+      ? 'Reconnect Suunto to resume sleep sync, activity history imports, route sync, and uploads. If you use Garmin or COROS auto-sync into Suunto, re-enable those routes after reconnecting.'
+      : 'Required for activity history imports, route sync, and Suunto uploads.',
     failureMessage: options.serviceMeta?.lastAuthFailureMessage || null,
     statusLabelOverride: reconnectRequired ? 'Reconnect required' : null,
     statusIconOverride: reconnectRequired ? 'sync_problem' : null,

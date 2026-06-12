@@ -1,0 +1,369 @@
+:host {
+  display: block;
+}
+
+.route-detail-page {
+  display: grid;
+  gap: 24px;
+  width: min(1440px, 100%);
+  box-sizing: border-box;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+.route-detail-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.route-detail-title-block {
+  display: grid;
+  gap: 6px;
+}
+
+.route-back-link {
+  justify-self: start;
+  margin-left: -8px;
+}
+
+.eyebrow {
+  margin: 0;
+  color: var(--mat-sys-primary);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+h1,
+h2,
+p {
+  margin: 0;
+}
+
+h1 {
+  color: var(--mat-sys-on-surface);
+  font-size: clamp(2rem, 4vw, 3rem);
+  font-weight: 750;
+  line-height: 1.05;
+}
+
+h2 {
+  color: var(--mat-sys-on-surface);
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+
+.route-detail-subtitle {
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.route-detail-summary {
+  border: 1px solid var(--mat-sys-outline-variant);
+  border-radius: 8px;
+  background: var(--mat-sys-surface-container-lowest);
+}
+
+.route-detail-summary {
+  overflow: hidden;
+}
+
+.route-chip {
+  display: inline-flex;
+  align-items: center;
+  max-width: min(100%, 360px);
+  min-width: 0;
+  min-height: 24px;
+  padding: 0 10px;
+  border: 1px solid var(--mat-sys-outline-variant);
+  border-radius: 999px;
+  background: var(--mat-sys-surface-container-high);
+  color: var(--mat-sys-on-surface-variant);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.route-chip--segment {
+  gap: 6px;
+  text-transform: none;
+}
+
+.route-chip-dot {
+  width: 8px;
+  height: 8px;
+  flex: 0 0 8px;
+  border-radius: 50%;
+}
+
+.route-chip-prefix {
+  color: var(--mat-sys-on-surface-variant);
+  font-weight: 650;
+}
+
+.route-chip-value {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--mat-sys-on-surface);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.route-summary-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.segment-swatch {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  flex: 0 0 10px;
+  border-radius: 50%;
+}
+
+.route-detail-section {
+  display: grid;
+  gap: 16px;
+}
+
+.route-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+
+.route-section-header > div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.route-section-header p {
+  color: var(--mat-sys-on-surface-variant);
+  font-size: 0.82rem;
+}
+
+.route-data-table-wrap {
+  --qs-route-table-header-bg: #ffffff;
+
+  border: 1px solid var(--mat-sys-outline-variant);
+  border-radius: 8px;
+  background: var(--mat-sys-surface-container-low);
+  overflow: auto;
+}
+
+:host-context(.dark-theme) .route-data-table-wrap {
+  --qs-route-table-header-bg: #242424;
+}
+
+.segment-table-wrap {
+  max-height: min(42vh, 520px);
+}
+
+.waypoint-table-wrap {
+  max-height: min(40vh, 440px);
+}
+
+.route-data-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-family: 'Barlow Condensed', 'Inter', sans-serif;
+  table-layout: fixed;
+}
+
+.segment-table {
+  min-width: 900px;
+}
+
+.waypoint-table {
+  min-width: 620px;
+}
+
+.segment-table th:nth-child(1),
+.segment-table td:nth-child(1) {
+  width: 34%;
+}
+
+.segment-table th:nth-child(2),
+.segment-table td:nth-child(2),
+.segment-table th:nth-child(3),
+.segment-table td:nth-child(3),
+.segment-table th:nth-child(4),
+.segment-table td:nth-child(4),
+.segment-table th:nth-child(5),
+.segment-table td:nth-child(5),
+.segment-table th:nth-child(6),
+.segment-table td:nth-child(6) {
+  width: 11%;
+}
+
+.segment-table th:nth-child(7),
+.segment-table td:nth-child(7) {
+  width: 11%;
+}
+
+.waypoint-table th:nth-child(1),
+.waypoint-table td:nth-child(1) {
+  width: 22%;
+}
+
+.waypoint-table th:nth-child(2),
+.waypoint-table td:nth-child(2) {
+  width: 36%;
+}
+
+.waypoint-table th:nth-child(3),
+.waypoint-table td:nth-child(3) {
+  width: 14%;
+}
+
+.waypoint-table th:nth-child(4),
+.waypoint-table td:nth-child(4) {
+  width: 28%;
+}
+
+.route-data-table th,
+.route-data-table td {
+  overflow: hidden;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--mat-sys-outline-variant);
+  text-align: left;
+  text-overflow: ellipsis;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.route-data-table th {
+  position: sticky;
+  z-index: 1;
+  top: 0;
+  background: var(--qs-route-table-header-bg);
+  background-clip: padding-box;
+  color: var(--mat-sys-on-surface-variant);
+  font-size: 0.82rem;
+  font-weight: 750;
+}
+
+.route-data-table td {
+  color: var(--mat-sys-on-surface);
+  font-size: 0.95rem;
+}
+
+.segment-table tbody tr {
+  --route-segment-color: var(--mat-sys-primary);
+  box-shadow: inset 3px 0 0 var(--route-segment-color);
+}
+
+.waypoint-table tbody tr {
+  --route-waypoint-color: var(--mat-sys-primary);
+  box-shadow: inset 3px 0 0 var(--route-waypoint-color);
+}
+
+.route-data-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.route-data-table tbody tr:hover {
+  background: var(--mat-sys-surface-container);
+}
+
+.segment-name-content {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.segment-visibility-control {
+  flex: 0 0 auto;
+  margin-left: -6px;
+}
+
+.segment-name-stack {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.segment-name {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--mat-sys-on-surface);
+  font-weight: 700;
+  text-overflow: ellipsis;
+}
+
+.segment-activity-type {
+  color: var(--mat-sys-on-surface-variant);
+  font-size: 0.84rem;
+}
+
+.segment-points-cell,
+.waypoint-distance-cell {
+  color: var(--mat-sys-on-surface);
+  font-weight: 700;
+}
+
+.segment-table-row--muted {
+  opacity: 0.55;
+}
+
+.waypoint-name-content {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.waypoint-color-dot {
+  width: 10px;
+  height: 10px;
+  flex: 0 0 10px;
+  border: 2px solid var(--mat-sys-surface-container-highest);
+  border-radius: 50%;
+  background: var(--route-waypoint-color);
+}
+
+.waypoint-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.waypoint-type,
+.waypoint-segment {
+  display: inline-block;
+  max-width: 100%;
+  padding: 2px 8px;
+  border: 1px solid var(--mat-sys-outline-variant);
+  border-radius: 999px;
+  background: var(--mat-sys-surface-container);
+  color: var(--mat-sys-on-surface-variant);
+  font-size: 0.78rem;
+  font-weight: 650;
+  line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: middle;
+}
+
+.waypoint-segment {
+  border-color: var(--route-waypoint-color);
+}
+
+@media (max-width: 720px) {
+  .route-detail-page {
+    padding: 16px;
+  }
+
+  .waypoint-table-wrap,
+  .segment-table-wrap {
+    max-height: 360px;
+  }
+}

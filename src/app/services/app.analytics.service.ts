@@ -55,6 +55,31 @@ export type ToolCompareSavedSortColumn =
     | 'status'
     | 'tags'
     | 'title';
+export type RouteFileType = 'fit' | 'gpx';
+export type RouteUploadStatus = 'start' | 'success' | 'duplicate' | 'failure' | 'validation_failure';
+export type RouteUploadErrorCategory =
+    | 'auth'
+    | 'compression'
+    | 'file_read'
+    | 'network'
+    | 'quota'
+    | 'server'
+    | 'unknown'
+    | 'unsupported_format';
+export type SavedRouteAction = 'view' | 'filter' | 'sort' | 'open_details' | 'rename' | 'download' | 'export_gpx' | 'send_service_route' | 'delete' | 'reprocess';
+export type SavedRouteActionStatus = 'applied' | 'cleared' | 'success' | 'partial_success' | 'failure' | 'missing_file';
+export type SavedRouteActionSource = 'route_detail' | 'routes_list_row' | 'routes_list_bulk';
+export type SavedRouteSortColumn =
+    | 'activityTypes'
+    | 'ascent'
+    | 'date'
+    | 'descent'
+    | 'distance'
+    | 'maxGrade'
+    | 'minGrade'
+    | 'name'
+    | 'originalFilename'
+    | 'pointCount';
 
 export interface ToolCompareFileSelectionAnalytics {
     selectedCount: number;
@@ -85,6 +110,38 @@ export interface ToolCompareSavedActionAnalytics {
     reportCount?: number;
     hadDescription?: boolean;
     tagCount?: number;
+}
+
+export interface RouteUploadAnalytics {
+    fileType?: RouteFileType | string;
+    storedFileType?: string;
+    compressed?: boolean;
+    uploadLimit?: number | null;
+    uploadCountAfterWrite?: number | null;
+    errorCategory?: RouteUploadErrorCategory;
+}
+
+export interface RouteUploadBatchAnalytics {
+    totalFiles: number;
+    successfulUploads: number;
+    duplicateUploads: number;
+    failedUploads: number;
+}
+
+export interface SavedRouteActionAnalytics {
+    status?: SavedRouteActionStatus;
+    routeCount?: number | null;
+    fileCount?: number;
+    failedCount?: number;
+    skippedCount?: number;
+    fileType?: RouteFileType | string;
+    zipped?: boolean;
+    source?: SavedRouteActionSource;
+    destinationService?: string;
+    sortColumn?: SavedRouteSortColumn;
+    sortDirection?: 'asc' | 'desc';
+    filterActive?: boolean;
+    resultCount?: number;
 }
 
 @Injectable({ providedIn: 'root' })
@@ -270,6 +327,50 @@ export class AppAnalyticsService {
             report_count: params.reportCount,
             had_description: params.hadDescription,
             tag_count: params.tagCount,
+        }));
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────────
+    // Route File Events
+    // ─────────────────────────────────────────────────────────────────────────────
+
+    logRouteUpload(status: RouteUploadStatus, params: RouteUploadAnalytics = {}): void {
+        this.logEvent('route_upload', this.compactParams({
+            status,
+            file_type: params.fileType,
+            stored_file_type: params.storedFileType,
+            compressed: params.compressed,
+            upload_limit: params.uploadLimit,
+            upload_count_after_write: params.uploadCountAfterWrite,
+            error_category: params.errorCategory,
+        }));
+    }
+
+    logRouteUploadBatch(summary: RouteUploadBatchAnalytics): void {
+        this.logEvent('route_upload_batch', {
+            total_files: summary.totalFiles,
+            successful_uploads: summary.successfulUploads,
+            duplicate_uploads: summary.duplicateUploads,
+            failed_uploads: summary.failedUploads,
+        });
+    }
+
+    logSavedRouteAction(action: SavedRouteAction, params: SavedRouteActionAnalytics = {}): void {
+        this.logEvent('saved_route_action', this.compactParams({
+            action,
+            status: params.status,
+            route_count: params.routeCount,
+            file_count: params.fileCount,
+            failed_count: params.failedCount,
+            skipped_count: params.skippedCount,
+            file_type: params.fileType,
+            zipped: params.zipped,
+            source: params.source,
+            destination_service: params.destinationService,
+            sort_column: params.sortColumn,
+            sort_direction: params.sortDirection,
+            filter_active: params.filterActive,
+            result_count: params.resultCount,
         }));
     }
 

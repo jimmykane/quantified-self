@@ -1,0 +1,202 @@
+@if (routeDocument()) {
+<main class="route-detail-page">
+  <header class="route-detail-header" aria-labelledby="route-detail-title">
+    <div class="route-detail-title-block">
+      <a mat-button routerLink="/routes" class="route-back-link">
+        <mat-icon aria-hidden="true">arrow_back</mat-icon>
+        <span>Routes</span>
+      </a>
+      <p class="eyebrow">Routes / Detail</p>
+      <h1 id="route-detail-title">{{ routeName() }}</h1>
+      <p class="route-detail-subtitle">{{ sourceFilename() }}</p>
+    </div>
+  </header>
+
+  <section class="route-detail-summary" aria-label="Route summary">
+    <app-summary-primary-info
+      [activityType]="activityType()"
+      [iconActivityType]="activityType()"
+      [iconEvent]="null"
+      [startDate]="routeDate()"
+      fallbackTopMetaText="Saved route"
+      [metrics]="summaryMetrics()">
+      <span summary-chips class="route-chip">{{ sourceFileType() | uppercase }}</span>
+      <span summary-chips class="route-chip">{{ sourceSummaryLabel() }}</span>
+      @for (label of syncedDestinationLabels(); track label) {
+        <span summary-chips class="route-chip">{{ label }}</span>
+      }
+      @if (singleSegment(); as segment) {
+        <span summary-chips class="route-chip route-chip--segment" [matTooltip]="segment.label">
+          <span class="route-chip-dot" [style.background]="segment.color" aria-hidden="true"></span>
+          <span class="route-chip-prefix">Segment</span>
+          <span class="route-chip-value">{{ segment.label }}</span>
+        </span>
+      }
+      <div summary-actions class="route-summary-actions">
+        <button mat-icon-button type="button"
+          aria-label="Route actions"
+          matTooltip="Route actions"
+          [matMenuTriggerFor]="routeDetailActionsMenu">
+          <mat-icon>more_vert</mat-icon>
+        </button>
+        <mat-menu #routeDetailActionsMenu="matMenu" class="qs-menu-panel">
+          <button mat-menu-item type="button"
+            [disabled]="renaming() || downloading() || exportingGPX() || reprocessing() || deleting() || !canManageRoute()"
+            (click)="renameRoute()">
+            <mat-icon>edit</mat-icon>
+            <span>Rename</span>
+          </button>
+          <button mat-menu-item type="button"
+            [disabled]="exportingGPX() || renaming() || downloading() || reprocessing() || deleting() || sendingToService() || !canManageRoute()"
+            (click)="exportRouteAsGPX()">
+            <mat-icon>file_download</mat-icon>
+            <span>Export GPX</span>
+          </button>
+          <button mat-menu-item type="button"
+            [disabled]="downloading() || renaming() || exportingGPX() || reprocessing() || deleting() || sendingToService() || !canManageRoute()"
+            (click)="downloadRouteOriginals()">
+            <mat-icon>download</mat-icon>
+            <span>Download originals</span>
+          </button>
+          <button mat-menu-item type="button"
+            [disabled]="reprocessing() || renaming() || downloading() || exportingGPX() || deleting() || sendingToService() || !canReprocessRoute()"
+            (click)="reprocessRouteFromOriginalFile()">
+            <mat-icon>autorenew</mat-icon>
+            <span>Reprocess</span>
+          </button>
+          <button mat-menu-item type="button"
+            [disabled]="sendingToService() || renaming() || downloading() || exportingGPX() || reprocessing() || deleting() || !canSendRoutesToSuunto() || !canSendRouteToSuunto()"
+            (click)="sendRouteToSuunto()">
+            <mat-icon>cloud_upload</mat-icon>
+            <span>Send to Suunto</span>
+          </button>
+          <button mat-menu-item type="button"
+            [disabled]="deleting() || renaming() || downloading() || reprocessing() || exportingGPX() || sendingToService() || !canManageRoute()"
+            (click)="confirmDeleteRoute()">
+            <mat-icon>delete</mat-icon>
+            <span>Delete</span>
+          </button>
+        </mat-menu>
+      </div>
+    </app-summary-primary-info>
+  </section>
+
+  <section class="route-detail-section" aria-label="Route map">
+    <app-route-map
+      [segments]="selectedSegments()"
+      [waypoints]="waypointDisplayViews()"
+      [user]="user()">
+    </app-route-map>
+  </section>
+
+  <section class="route-detail-section" aria-label="Route charts">
+    <app-route-chart
+      [segments]="selectedSegments()"
+      [userUnitSettings]="unitSettings()"
+      [darkTheme]="darkTheme()"
+      [waterMark]="routeName()">
+    </app-route-chart>
+  </section>
+
+  @if (hasMultipleSegments()) {
+    <section class="route-detail-section" aria-labelledby="route-segments-heading">
+      <header class="route-section-header">
+        <div>
+          <h2 id="route-segments-heading">Segments</h2>
+          <p>{{ segmentSelectionLabel() }}</p>
+        </div>
+        @if (!allSegmentsSelected()) {
+        <button mat-button type="button" (click)="selectAllSegments()">Show all</button>
+        }
+      </header>
+      <div class="segment-table-wrap route-data-table-wrap">
+        <table class="segment-table route-data-table" aria-label="Route segments">
+          <thead>
+            <tr>
+              <th scope="col">Segment</th>
+              <th scope="col">Distance</th>
+              <th scope="col">Ascent</th>
+              <th scope="col">Descent</th>
+              <th scope="col">Min grade</th>
+              <th scope="col">Max grade</th>
+              <th scope="col">Points</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (segment of segments(); track segment.id) {
+            <tr
+              [class.segment-table-row--muted]="!selectedSegmentIDSet().has(segment.id)"
+              [style.--route-segment-color]="segment.color">
+              <td class="segment-name-cell">
+                <span class="segment-name-content">
+                  <mat-checkbox
+                    class="segment-visibility-control"
+                    [checked]="selectedSegmentIDSet().has(segment.id)"
+                    [disabled]="selectedSegmentIDs().length <= 1 && selectedSegmentIDSet().has(segment.id)"
+                    [attr.aria-label]="'Show ' + segment.label"
+                    (change)="onSegmentVisibilityChange(segment.id, $event.checked)">
+                  </mat-checkbox>
+                  <span class="segment-swatch" [style.background]="segment.color" aria-hidden="true"></span>
+                  <span class="segment-name-stack">
+                    <span class="segment-name" [matTooltip]="segment.label">{{ segment.label }}</span>
+                    <span class="segment-activity-type">{{ segment.activityType }}</span>
+                  </span>
+                </span>
+              </td>
+              <td [title]="segment.distance.title">{{ segment.distance.label }}</td>
+              <td [title]="segment.ascent.title">{{ segment.ascent.label }}</td>
+              <td [title]="segment.descent.title">{{ segment.descent.label }}</td>
+              <td [title]="segment.minGrade.title">{{ segment.minGrade.label }}</td>
+              <td [title]="segment.maxGrade.title">{{ segment.maxGrade.label }}</td>
+              <td class="segment-points-cell">{{ segment.pointCount }}</td>
+            </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    </section>
+  }
+
+  @if (waypointDisplayViews().length > 0) {
+  <section class="route-detail-section" aria-labelledby="route-waypoints-heading">
+    <header class="route-section-header">
+      <div>
+        <h2 id="route-waypoints-heading">Waypoints</h2>
+        <p>{{ waypointDisplayViews().length }} visible</p>
+      </div>
+    </header>
+    <div class="waypoint-table-wrap route-data-table-wrap">
+      <table class="waypoint-table route-data-table" aria-label="Route waypoints">
+        <thead>
+          <tr>
+            <th scope="col">Waypoint</th>
+            <th scope="col">Type</th>
+            <th scope="col">Distance</th>
+            <th scope="col">Segment</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (waypoint of waypointDisplayViews(); track waypoint.id) {
+          <tr [style.--route-waypoint-color]="waypoint.color">
+            <td class="waypoint-name-cell">
+              <span class="waypoint-name-content">
+                <span class="waypoint-color-dot" aria-hidden="true"></span>
+                <span class="waypoint-name" [matTooltip]="waypoint.name">{{ waypoint.name }}</span>
+              </span>
+            </td>
+            <td>
+              <span class="waypoint-type">{{ waypoint.type }}</span>
+            </td>
+            <td class="waypoint-distance-cell">{{ waypoint.distanceLabel || '-' }}</td>
+            <td>
+              <span class="waypoint-segment">{{ waypoint.segmentLabel }}</span>
+            </td>
+          </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  </section>
+  }
+</main>
+}

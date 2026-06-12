@@ -106,6 +106,9 @@ describe('AdminUserManagementComponent', () => {
             hasSubscribedOnce: true,
             eventStats: {
                 total: 125,
+            },
+            routeStats: {
+                total: 8,
             }
         },
         {
@@ -118,6 +121,9 @@ describe('AdminUserManagementComponent', () => {
             providerIds: ['google.com'],
             hasSubscribedOnce: false,
             eventStats: {
+                total: null,
+            },
+            routeStats: {
                 total: null,
             }
         }
@@ -230,6 +236,9 @@ describe('AdminUserManagementComponent', () => {
                 onboardingCompleted: 80,
                 events: {
                     total: 1_000_000,
+                },
+                routes: {
+                    total: 25_000,
                 }
             })),
             getUserGrowthTrend: vi.fn().mockReturnValue(of(mockTrend)),
@@ -322,6 +331,9 @@ describe('AdminUserManagementComponent', () => {
                                         onboardingCompleted: 80,
                                         events: {
                                             total: 1_000_000,
+                                        },
+                                        routes: {
+                                            total: 25_000,
                                         }
                                     },
                                     userGrowthTrend: mockTrend,
@@ -352,6 +364,7 @@ describe('AdminUserManagementComponent', () => {
         expect(component.displayedColumns).toContain('subscriptionHistory');
         expect(component.displayedColumns).toContain('aiCreditsConsumed');
         expect(component.displayedColumns).toContain('eventStats');
+        expect(component.displayedColumns).toContain('routeStats');
         expect(component.displayedColumns).not.toContain('subscription');
     });
 
@@ -377,17 +390,23 @@ describe('AdminUserManagementComponent', () => {
             onboardingCompleted: 80,
             events: {
                 total: 1_000_000,
+            },
+            routes: {
+                total: 25_000,
             }
         });
     });
 
-    it('should show event totals in cards and the user table', () => {
+    it('should show event and route totals in cards and the user table', () => {
         fixture.detectChanges();
 
         const nativeElement = fixture.nativeElement as HTMLElement;
         expect(nativeElement.textContent).toContain('Total Events');
+        expect(nativeElement.textContent).toContain('Total Routes');
         expect(nativeElement.textContent).toContain('1M');
+        expect(nativeElement.textContent).toContain('25K');
         expect(nativeElement.textContent).toContain('125');
+        expect(nativeElement.textContent).toContain('8');
     });
 
     it('should force refresh the global event count from the Total Events card', () => {
@@ -408,6 +427,9 @@ describe('AdminUserManagementComponent', () => {
                 computedAt: '2026-05-07T05:00:00.000Z',
                 expireAt: '2026-05-07T06:00:00.000Z',
             },
+            routes: {
+                total: 25_000,
+            },
             providers: {
                 password: 50,
             },
@@ -419,6 +441,40 @@ describe('AdminUserManagementComponent', () => {
         expect(component.userStats?.events.total).toBe(1_250_000);
         expect(component.isRefreshingEventCount).toBe(false);
         expect(matSnackBarSpy.open).toHaveBeenCalledWith('Event count refreshed', undefined, { duration: 3000 });
+    });
+
+    it('should force refresh the global route count from the Total Routes card', () => {
+        adminServiceSpy.getTotalUserCount.mockReturnValueOnce(of({
+            total: 100,
+            pro: 30,
+            basic: 70,
+            free: 0,
+            monthlyPaid: 70,
+            yearlyPaid: 0,
+            everPaid: 85,
+            canceled: 15,
+            cancelScheduled: 8,
+            onboardingCompleted: 80,
+            events: {
+                total: 1_000_000,
+            },
+            routes: {
+                total: 30_000,
+                cacheStatus: 'refreshed',
+                computedAt: '2026-05-07T05:00:00.000Z',
+                expireAt: '2026-05-07T06:00:00.000Z',
+            },
+            providers: {
+                password: 50,
+            },
+        }));
+
+        component.refreshGlobalRouteCount();
+
+        expect(adminServiceSpy.getTotalUserCount).toHaveBeenCalledWith({ refreshRouteCount: true });
+        expect(component.userStats?.routes.total).toBe(30_000);
+        expect(component.isRefreshingRouteCount).toBe(false);
+        expect(matSnackBarSpy.open).toHaveBeenCalledWith('Route count refreshed', undefined, { duration: 3000 });
     });
 
     it('should use resolved user growth trend data on init', () => {

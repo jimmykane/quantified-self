@@ -26,6 +26,7 @@ import { enqueueSportsLibReparseHeavyTask, enqueueSportsLibReparseTask } from '.
 import { getExpireAtTimestamp, TTL_CONFIG } from '../shared/ttl-config';
 import { FUNCTIONS_MANIFEST } from '../../../shared/functions-manifest';
 import { getUserDeletionGuardState, UserDeletionGuardReadError } from '../shared/user-deletion-guard';
+import { EVENT_PROCESSING_ENTITY } from '../shared/processing-metadata.interface';
 
 const SPORTS_LIB_REPARSE_SCAN_CONCURRENCY = 25;
 const SPORTS_LIB_REPARSE_TARGET_ENQUEUE_RPS = 12;
@@ -185,8 +186,14 @@ function getProcessingVersionCode(value: unknown): number | null {
     return value;
 }
 
-function isProcessingMetadataDocPath(path: string): boolean {
-    return path.endsWith('/metaData/processing');
+function isEventProcessingMetadataDocPath(path: string): boolean {
+    const processingMetadataSuffix = '/metaData/processing';
+    if (!path.endsWith(processingMetadataSuffix)) {
+        return false;
+    }
+
+    const eventPath = path.slice(0, -processingMetadataSuffix.length);
+    return parseUidAndEventIdFromEventPath(eventPath) !== null;
 }
 
 function clampNumber(value: number, minValue: number, maxValue: number): number {
@@ -530,6 +537,7 @@ export const scheduleSportsLibReparseScan = onSchedule({
     }
 
     let query = db.collectionGroup('metaData')
+        .where('processingEntity', '==', EVENT_PROCESSING_ENTITY)
         .where('sportsLibVersionCode', '<', targetSportsLibVersionCode)
         .orderBy('sportsLibVersionCode', 'asc')
         .orderBy(admin.firestore.FieldPath.documentId())
@@ -583,8 +591,8 @@ export const scheduleSportsLibReparseScan = onSchedule({
             lastProcessingVersionCode = processingVersionCode;
         }
 
-        if (!isProcessingMetadataDocPath(processingDoc.ref.path)) {
-            logger.warn('[sports-lib-reparse] Skipping non-processing metadata doc from candidate query.', {
+        if (!isEventProcessingMetadataDocPath(processingDoc.ref.path)) {
+            logger.warn('[sports-lib-reparse] Skipping metadata doc outside event processing path.', {
                 processingDocPath: processingDoc.ref.path,
             });
             continue;

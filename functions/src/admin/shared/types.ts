@@ -1,16 +1,32 @@
-export interface GetQueueStatsRequest {
-    includeAnalysis?: boolean;
-}
+export type {
+    AdminQueueStatsResponse as QueueStatsResponse,
+    CloudTaskQueueStats,
+    DerivedMetricsCoordinatorStats,
+    DerivedMetricsFailurePreview,
+    EventReparseFailurePreview,
+    EventReparseStats,
+    GetQueueStatsRequest,
+    ReparseJobsStats,
+    ReparseQueueStats,
+    RouteReparseFailurePreview,
+    RouteReparseJobsStats,
+    RouteReparseStats,
+    RouteSyncQueueStats,
+} from '../../../../shared/admin-queue-stats';
 
-export interface EventCountStats {
+export interface CountStats {
     total: number | null;
     cacheStatus?: 'fresh' | 'refreshed' | 'stale' | 'unavailable';
     computedAt?: string | null;
     expireAt?: string | null;
 }
 
+export type EventCountStats = CountStats;
+export type RouteCountStats = CountStats;
+
 export interface UserCountRequest {
     refreshEventCount?: boolean;
+    refreshRouteCount?: boolean;
 }
 
 export interface ListUsersRequest {
@@ -48,6 +64,7 @@ export interface EnrichedUser extends BasicUser {
     hasSubscribedOnce: boolean;
     aiCreditsConsumed: number;
     eventStats: EventCountStats;
+    routeStats: RouteCountStats;
 }
 
 export interface ListUsersResponse {
@@ -67,6 +84,7 @@ export interface UserCountResponse {
     yearlyPaid: number;
     onboardingCompleted: number;
     events: EventCountStats;
+    routes: RouteCountStats;
     providers: Record<string, number>;
 }
 
@@ -124,9 +142,8 @@ export interface UserGrowthTrendResponse {
     };
 }
 
-export interface SportsLibReparseJobDocData {
+export interface SportsLibReparseJobDocDataBase {
     uid?: string;
-    eventId?: string;
     status?: string;
     attemptCount?: number;
     lastError?: string;
@@ -134,9 +151,17 @@ export interface SportsLibReparseJobDocData {
     terminalFailureAt?: unknown;
     updatedAt?: unknown;
     targetSportsLibVersion?: string;
+}
+
+export interface SportsLibReparseJobDocData extends SportsLibReparseJobDocDataBase {
+    eventId?: string;
     processingTier?: string;
     heavyReason?: string;
     eventDurationMs?: number;
+}
+
+export interface SportsLibRouteReparseJobDocData extends SportsLibReparseJobDocDataBase {
+    routeId?: string;
 }
 
 export interface DerivedMetricsCoordinatorDocData {
@@ -148,170 +173,6 @@ export interface DerivedMetricsCoordinatorDocData {
     startedAtMs?: unknown;
     updatedAtMs?: unknown;
     lastError?: unknown;
-}
-
-export interface DerivedMetricsFailurePreview {
-    uid: string;
-    generation: number;
-    dirtyMetricKinds: string[];
-    lastError: string;
-    updatedAtMs: number;
-}
-
-export interface DerivedMetricsCoordinatorStats {
-    idle: number;
-    queued: number;
-    processing: number;
-    staleQueued: number;
-    staleProcessing: number;
-    failed: number;
-    total: number;
-}
-
-export interface QueueStatsResponse {
-    pending: number;
-    succeeded: number;
-    stuck: number;
-    cloudTasks: {
-        pending: number;
-        queues: {
-            workout: {
-                queueId: string;
-                pending: number;
-            };
-            activitySync: {
-                queueId: string;
-                pending: number;
-            };
-            sportsLibReparse: {
-                queueId: string;
-                pending: number;
-            };
-            sportsLibReparseHeavy: {
-                queueId: string;
-                pending: number;
-            };
-            derivedMetrics: {
-                queueId: string;
-                pending: number;
-            };
-            sleepSync: {
-                queueId: string;
-                pending: number;
-            };
-        };
-    };
-    reparse: {
-        queuePending: number;
-        targetSportsLibVersion: string;
-        jobs: {
-            total: number;
-            pending: number;
-            processing: number;
-            completed: number;
-            failed: number;
-        };
-        checkpoint: {
-            cursorEventPath: string | null;
-            lastScanAt: unknown;
-            lastPassStartedAt: unknown;
-            lastPassCompletedAt: unknown;
-            lastScanCount: number;
-            lastEnqueuedCount: number;
-            overrideUsersInProgress: number;
-        };
-        recentFailures: {
-            jobId: string;
-            uid: string;
-            eventId: string;
-            attemptCount: number;
-            lastError: string;
-            updatedAt: unknown;
-            targetSportsLibVersion: string;
-            processingTier: string;
-            heavyReason: string;
-            eventDurationMs: number | null;
-        }[];
-    };
-    derivedMetrics: {
-        coordinators: DerivedMetricsCoordinatorStats;
-        recentFailures: DerivedMetricsFailurePreview[];
-    };
-    providers: Array<{
-        name: string;
-        pending: number;
-        succeeded: number;
-        stuck: number;
-        dead: number;
-    }>;
-    dlq: {
-        total: number;
-        byContext: { context: string; count: number }[];
-        byProvider: { provider: string; count: number }[];
-    } | undefined;
-    advanced: {
-        throughput: number;
-        maxLagMs: number;
-        retryHistogram: {
-            '0-3': number;
-            '4-7': number;
-            '8-9': number;
-        };
-        topErrors: {
-            error: string;
-            count: number;
-        }[];
-    };
-    activitySync: {
-        pending: number;
-        succeeded: number;
-        stuck: number;
-        dead: number;
-        dlqByContext: { context: string; count: number }[];
-        advanced: {
-            throughput: number;
-            maxLagMs: number;
-            retryHistogram: {
-                '0-3': number;
-                '4-7': number;
-                '8-9': number;
-            };
-            topErrors: {
-                error: string;
-                count: number;
-            }[];
-        };
-    };
-    sleepSync: {
-        pending: number;
-        succeeded: number;
-        providerDisabled: number;
-        stuck: number;
-        dead: number;
-        disabledProviders: string[];
-        providers: Array<{
-            provider: string;
-            pending: number;
-            succeeded: number;
-            providerDisabled: number;
-            stuck: number;
-            dead: number;
-        }>;
-        dlqByContext: { context: string; count: number }[];
-        advanced: {
-            throughput: number;
-            maxLagMs: number;
-            retryHistogram: {
-                '0-3': number;
-                '4-7': number;
-                '8-9': number;
-            };
-            topErrors: {
-                error: string;
-                count: number;
-            }[];
-        };
-    };
 }
 
 export interface RetrySportsLibReparseHeavyJobRequest {

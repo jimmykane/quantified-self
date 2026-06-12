@@ -334,6 +334,150 @@
         </mat-card>
     </div>
 
+    <div class="pipeline-section" *ngIf="showRouteSyncSection">
+        <h3 class="pipeline-title">
+            <mat-icon>sync_alt</mat-icon>
+            Route Sync
+        </h3>
+
+        <div class="stats-grid">
+            <mat-card class="app-stat-card status-pending">
+                <div class="app-stat-header">
+                    <mat-icon>hourglass_empty</mat-icon>
+                    <span>Pending (DB)</span>
+                </div>
+                <div class="app-stat-value" *ngIf="!loading">{{ stats?.routeSync?.pending ?? 0 }}</div>
+                <div class="app-spinner-mini" *ngIf="loading">
+                    <mat-spinner diameter="24"></mat-spinner>
+                </div>
+                <span class="stat-subtitle" style="font-size: 0.75rem; opacity: 0.8;">waiting in Firestore</span>
+            </mat-card>
+            <mat-card class="app-stat-card status-info"
+                matTooltip="Tasks currently in flight or scheduled in the route sync Cloud Tasks queue.">
+                <div class="app-stat-header">
+                    <mat-icon>sync_alt</mat-icon>
+                    <span>Cloud Tasks (Route Sync)</span>
+                </div>
+                <div class="app-stat-value" *ngIf="!loading">{{ stats?.cloudTasks?.queues?.routeSync?.pending ?? 0 }}</div>
+                <div class="app-spinner-mini" *ngIf="loading">
+                    <mat-spinner diameter="24"></mat-spinner>
+                </div>
+                <span class="stat-subtitle" style="font-size: 0.75rem; opacity: 0.8;">queue: route sync</span>
+            </mat-card>
+            <mat-card class="app-stat-card status-success">
+                <div class="app-stat-header">
+                    <mat-icon>check_circle</mat-icon>
+                    <span>Succeeded (Routes)</span>
+                </div>
+                <div class="app-stat-value" *ngIf="!loading">{{ stats?.routeSync?.succeeded ?? 0 }}</div>
+                <div class="app-spinner-mini" *ngIf="loading">
+                    <mat-spinner diameter="24"></mat-spinner>
+                </div>
+            </mat-card>
+            <mat-card class="app-stat-card status-info">
+                <div class="app-stat-header">
+                    <mat-icon>skip_next</mat-icon>
+                    <span>Skipped (Routes)</span>
+                </div>
+                <div class="app-stat-value" *ngIf="!loading">{{ stats?.routeSync?.skipped ?? 0 }}</div>
+                <div class="app-spinner-mini" *ngIf="loading">
+                    <mat-spinner diameter="24"></mat-spinner>
+                </div>
+                <span class="stat-subtitle" style="font-size: 0.75rem; opacity: 0.8;">up to date or intentionally skipped</span>
+            </mat-card>
+            <mat-card class="app-stat-card status-error">
+                <div class="app-stat-header">
+                    <mat-icon>error</mat-icon>
+                    <span>Stuck (Routes)</span>
+                </div>
+                <div class="app-stat-value" *ngIf="!loading">{{ stats?.routeSync?.stuck ?? 0 }}</div>
+                <div class="app-spinner-mini" *ngIf="loading">
+                    <mat-spinner diameter="24"></mat-spinner>
+                </div>
+            </mat-card>
+            <mat-card class="app-stat-card status-dlq" *ngIf="stats?.routeSync"
+                style="background: rgba(244, 67, 54, 0.1);">
+                <div class="app-stat-header">
+                    <mat-icon style="color: #f44336;">error_outline</mat-icon>
+                    <span style="color: #f44336;">Dead Letter Queue (Route Sync)</span>
+                </div>
+                <div class="app-stat-value" *ngIf="!loading" style="color: #f44336;">{{ stats?.routeSync?.dead ?? 0 }}</div>
+                <div class="app-spinner-mini" *ngIf="loading">
+                    <mat-spinner diameter="24"></mat-spinner>
+                </div>
+            </mat-card>
+        </div>
+
+        <div class="stats-grid" *ngIf="stats?.routeSync?.advanced">
+            <mat-card class="app-stat-card status-success">
+                <div class="app-stat-header">
+                    <mat-icon>speed</mat-icon>
+                    <span>Throughput (1h)</span>
+                </div>
+                <div class="app-stat-value" *ngIf="!loading">{{ stats?.routeSync?.advanced?.throughput ?? 0 }}</div>
+                <div class="app-spinner-mini" *ngIf="loading">
+                    <mat-spinner diameter="24"></mat-spinner>
+                </div>
+                <span class="stat-subtitle" style="font-size: 0.75rem; opacity: 0.8;">success + skipped</span>
+            </mat-card>
+
+            <mat-card class="app-stat-card status-pending">
+                <div class="app-stat-header">
+                    <mat-icon>update</mat-icon>
+                    <span>Max Lag</span>
+                </div>
+                <div class="app-stat-value" *ngIf="!loading">{{ formatDuration(stats?.routeSync?.advanced?.maxLagMs || 0) }}</div>
+                <div class="app-spinner-mini" *ngIf="loading">
+                    <mat-spinner diameter="24"></mat-spinner>
+                </div>
+                <span class="stat-subtitle" style="font-size: 0.75rem; opacity: 0.8;">oldest pending</span>
+            </mat-card>
+        </div>
+
+        <div class="pipeline-grid" *ngIf="queueView === 'route-sync'">
+            <mat-card style="margin-bottom: 0;">
+                <h3 class="chart-header">Retry Distribution (Pending Items)</h3>
+
+                <div class="spinner-container" *ngIf="loading" style="height: 180px; justify-content: center;">
+                    <mat-spinner diameter="40"></mat-spinner>
+                </div>
+
+                <div class="chart-wrapper" *ngIf="!loading">
+                    <div #retryChart class="echart-surface"></div>
+                    <div class="chart-empty-overlay" *ngIf="!hasRetryData">
+                        <mat-icon>check_circle</mat-icon>
+                        <span>No pending retries right now</span>
+                    </div>
+                </div>
+            </mat-card>
+        </div>
+
+        <mat-card class="table-container"
+            *ngIf="(stats?.routeSync?.dlqByContext?.length || 0) > 0 || (stats?.routeSync?.advanced?.topErrors?.length || 0) > 0"
+            style="margin-bottom: 24px;">
+            <h3 class="card-title">Recent Route Sync Failures (Last 50)</h3>
+            <div class="failures-analysis-container">
+                <div class="analysis-column">
+                    <h4 class="subsection-title">By Reason</h4>
+                    <div *ngFor="let item of stats?.routeSync?.dlqByContext" class="analysis-item">
+                        <span class="analysis-label">{{ item.context }}</span>
+                        <span class="status-badge disabled">{{ item.count }}</span>
+                    </div>
+                </div>
+                <div class="analysis-column">
+                    <h4 class="subsection-title">Top Errors</h4>
+                    <div *ngFor="let item of stats?.routeSync?.advanced?.topErrors" class="analysis-item">
+                        <span class="analysis-error-text" [matTooltip]="item.error">{{ item.error }}</span>
+                        <span class="status-badge disabled" style="flex-shrink: 0; margin-left: 8px;">{{ item.count }}</span>
+                    </div>
+                    <div *ngIf="!stats?.routeSync?.advanced?.topErrors?.length" class="empty-state">
+                        No errors recorded
+                    </div>
+                </div>
+            </div>
+        </mat-card>
+    </div>
+
     <div class="pipeline-section" *ngIf="showSleepSyncSection">
         <h3 class="pipeline-title">
             <mat-icon>hotel</mat-icon>
@@ -546,7 +690,7 @@
     <div class="pipeline-section" *ngIf="showReparseSection">
         <h3 class="pipeline-title">
             <mat-icon>autorenew</mat-icon>
-            Sports-lib Reparse
+            Event Reparse
         </h3>
 
         <div class="stats-grid">
@@ -617,7 +761,7 @@
             <mat-card class="app-stat-card status-info">
                 <div class="app-stat-header">
                     <mat-icon>flag</mat-icon>
-                    <span>Target Version</span>
+                    <span>Event Target Version</span>
                 </div>
                 <div class="app-stat-value stat-value-sm" *ngIf="!loading">{{ stats?.reparse?.targetSportsLibVersion || 'N/A' }}</div>
                 <div class="app-spinner-mini" *ngIf="loading">
@@ -627,7 +771,7 @@
             <mat-card class="app-stat-card status-info">
                 <div class="app-stat-header">
                     <mat-icon>history</mat-icon>
-                    <span>Last Scan</span>
+                    <span>Event Last Scan</span>
                 </div>
                 <div class="app-stat-value stat-value-sm" *ngIf="!loading">{{ formatTimestamp(stats?.reparse?.checkpoint?.lastScanAt) }}</div>
                 <div class="app-spinner-mini" *ngIf="loading">
@@ -637,7 +781,7 @@
             <mat-card class="app-stat-card status-info">
                 <div class="app-stat-header">
                     <mat-icon>event</mat-icon>
-                    <span>Last Pass Completed</span>
+                    <span>Event Last Pass Completed</span>
                 </div>
                 <div class="app-stat-value stat-value-sm" *ngIf="!loading">{{ formatTimestamp(stats?.reparse?.checkpoint?.lastPassCompletedAt) }}</div>
                 <div class="app-spinner-mini" *ngIf="loading">
@@ -647,7 +791,7 @@
             <mat-card class="app-stat-card status-info">
                 <div class="app-stat-header">
                     <mat-icon>find_in_page</mat-icon>
-                    <span>Last Scan Count</span>
+                    <span>Event Last Scan Count</span>
                 </div>
                 <div class="app-stat-value" *ngIf="!loading">{{ stats?.reparse?.checkpoint?.lastScanCount ?? 0 }}</div>
                 <div class="app-spinner-mini" *ngIf="loading">
@@ -657,7 +801,7 @@
             <mat-card class="app-stat-card status-info">
                 <div class="app-stat-header">
                     <mat-icon>publish</mat-icon>
-                    <span>Last Enqueued</span>
+                    <span>Event Last Enqueued</span>
                 </div>
                 <div class="app-stat-value" *ngIf="!loading">{{ stats?.reparse?.checkpoint?.lastEnqueuedCount ?? 0 }}</div>
                 <div class="app-spinner-mini" *ngIf="loading">
@@ -667,7 +811,7 @@
             <mat-card class="app-stat-card status-info">
                 <div class="app-stat-header">
                     <mat-icon>person_search</mat-icon>
-                    <span>Override Users Active</span>
+                    <span>Event Override Users Active</span>
                 </div>
                 <div class="app-stat-value" *ngIf="!loading">{{ stats?.reparse?.checkpoint?.overrideUsersInProgress ?? 0 }}</div>
                 <div class="app-spinner-mini" *ngIf="loading">
@@ -677,7 +821,7 @@
         </div>
 
         <mat-card class="table-container" style="margin-bottom: 0;">
-            <h3 class="card-title">Recent Reparse Failures</h3>
+            <h3 class="card-title">Recent Event Reparse Failures</h3>
             <div class="table-wrapper" *ngIf="reparseFailureRows.length > 0; else noReparseFailuresTemplate">
                 <table mat-table [dataSource]="reparseFailureRows">
                     <ng-container matColumnDef="uid">
@@ -745,6 +889,179 @@
             </div>
             <ng-template #noReparseFailuresTemplate>
                 <div class="empty-table-state">No recent reparse failures.</div>
+            </ng-template>
+        </mat-card>
+
+    </div>
+
+    <div class="pipeline-section" *ngIf="showRouteReparseSection">
+        <h3 class="pipeline-title">
+            <mat-icon>route</mat-icon>
+            Route Reparse
+        </h3>
+
+        <div class="stats-grid">
+            <mat-card class="app-stat-card status-info"
+                matTooltip="Tasks currently in flight or scheduled in the route sports-lib reparse Cloud Tasks queue.">
+                <div class="app-stat-header">
+                    <mat-icon>route</mat-icon>
+                    <span>Cloud Tasks (Route Reparse)</span>
+                </div>
+                <div class="app-stat-value" *ngIf="!loading">{{ stats?.cloudTasks?.queues?.sportsLibRouteReparse?.pending ?? 0 }}</div>
+                <div class="app-spinner-mini" *ngIf="loading">
+                    <mat-spinner diameter="24"></mat-spinner>
+                </div>
+                <span class="stat-subtitle" style="font-size: 0.75rem; opacity: 0.8;">queue: route reparse</span>
+            </mat-card>
+            <mat-card class="app-stat-card status-pending">
+                <div class="app-stat-header">
+                    <mat-icon>schedule</mat-icon>
+                    <span>Route Jobs (Pending)</span>
+                </div>
+                <div class="app-stat-value" *ngIf="!loading">{{ stats?.routeReparse?.jobs?.pending ?? 0 }}</div>
+                <div class="app-spinner-mini" *ngIf="loading">
+                    <mat-spinner diameter="24"></mat-spinner>
+                </div>
+            </mat-card>
+            <mat-card class="app-stat-card status-info">
+                <div class="app-stat-header">
+                    <mat-icon>sync</mat-icon>
+                    <span>Route Jobs (Processing)</span>
+                </div>
+                <div class="app-stat-value" *ngIf="!loading">{{ stats?.routeReparse?.jobs?.processing ?? 0 }}</div>
+                <div class="app-spinner-mini" *ngIf="loading">
+                    <mat-spinner diameter="24"></mat-spinner>
+                </div>
+            </mat-card>
+            <mat-card class="app-stat-card status-success">
+                <div class="app-stat-header">
+                    <mat-icon>check_circle</mat-icon>
+                    <span>Route Jobs (Completed)</span>
+                </div>
+                <div class="app-stat-value" *ngIf="!loading">{{ stats?.routeReparse?.jobs?.completed ?? 0 }}</div>
+                <div class="app-spinner-mini" *ngIf="loading">
+                    <mat-spinner diameter="24"></mat-spinner>
+                </div>
+            </mat-card>
+            <mat-card class="app-stat-card status-info">
+                <div class="app-stat-header">
+                    <mat-icon>block</mat-icon>
+                    <span>Route Jobs (Skipped)</span>
+                </div>
+                <div class="app-stat-value" *ngIf="!loading">{{ stats?.routeReparse?.jobs?.skipped ?? 0 }}</div>
+                <div class="app-spinner-mini" *ngIf="loading">
+                    <mat-spinner diameter="24"></mat-spinner>
+                </div>
+            </mat-card>
+            <mat-card class="app-stat-card status-error">
+                <div class="app-stat-header">
+                    <mat-icon>error</mat-icon>
+                    <span>Route Jobs (Failed)</span>
+                </div>
+                <div class="app-stat-value" *ngIf="!loading">{{ stats?.routeReparse?.jobs?.failed ?? 0 }}</div>
+                <div class="app-spinner-mini" *ngIf="loading">
+                    <mat-spinner diameter="24"></mat-spinner>
+                </div>
+            </mat-card>
+            <mat-card class="app-stat-card status-info">
+                <div class="app-stat-header">
+                    <mat-icon>flag</mat-icon>
+                    <span>Route Target Version</span>
+                </div>
+                <div class="app-stat-value stat-value-sm" *ngIf="!loading">{{ stats?.routeReparse?.targetSportsLibVersion || 'N/A' }}</div>
+                <div class="app-spinner-mini" *ngIf="loading">
+                    <mat-spinner diameter="24"></mat-spinner>
+                </div>
+            </mat-card>
+            <mat-card class="app-stat-card status-info">
+                <div class="app-stat-header">
+                    <mat-icon>history</mat-icon>
+                    <span>Route Last Scan</span>
+                </div>
+                <div class="app-stat-value stat-value-sm" *ngIf="!loading">{{ formatTimestamp(stats?.routeReparse?.checkpoint?.lastScanAt) }}</div>
+                <div class="app-spinner-mini" *ngIf="loading">
+                    <mat-spinner diameter="24"></mat-spinner>
+                </div>
+            </mat-card>
+            <mat-card class="app-stat-card status-info">
+                <div class="app-stat-header">
+                    <mat-icon>event</mat-icon>
+                    <span>Route Last Pass Completed</span>
+                </div>
+                <div class="app-stat-value stat-value-sm" *ngIf="!loading">{{ formatTimestamp(stats?.routeReparse?.checkpoint?.lastPassCompletedAt) }}</div>
+                <div class="app-spinner-mini" *ngIf="loading">
+                    <mat-spinner diameter="24"></mat-spinner>
+                </div>
+            </mat-card>
+            <mat-card class="app-stat-card status-info">
+                <div class="app-stat-header">
+                    <mat-icon>find_in_page</mat-icon>
+                    <span>Route Last Scan Count</span>
+                </div>
+                <div class="app-stat-value" *ngIf="!loading">{{ stats?.routeReparse?.checkpoint?.lastScanCount ?? 0 }}</div>
+                <div class="app-spinner-mini" *ngIf="loading">
+                    <mat-spinner diameter="24"></mat-spinner>
+                </div>
+            </mat-card>
+            <mat-card class="app-stat-card status-info">
+                <div class="app-stat-header">
+                    <mat-icon>publish</mat-icon>
+                    <span>Route Last Enqueued</span>
+                </div>
+                <div class="app-stat-value" *ngIf="!loading">{{ stats?.routeReparse?.checkpoint?.lastEnqueuedCount ?? 0 }}</div>
+                <div class="app-spinner-mini" *ngIf="loading">
+                    <mat-spinner diameter="24"></mat-spinner>
+                </div>
+            </mat-card>
+            <mat-card class="app-stat-card status-info">
+                <div class="app-stat-header">
+                    <mat-icon>person_search</mat-icon>
+                    <span>Route Override Users Active</span>
+                </div>
+                <div class="app-stat-value" *ngIf="!loading">{{ stats?.routeReparse?.checkpoint?.overrideUsersInProgress ?? 0 }}</div>
+                <div class="app-spinner-mini" *ngIf="loading">
+                    <mat-spinner diameter="24"></mat-spinner>
+                </div>
+            </mat-card>
+        </div>
+
+        <mat-card class="table-container" style="margin-bottom: 0;">
+            <h3 class="card-title">Recent Route Reparse Failures</h3>
+            <div class="table-wrapper" *ngIf="routeReparseFailureRows.length > 0; else noRouteReparseFailuresTemplate">
+                <table mat-table [dataSource]="routeReparseFailureRows">
+                    <ng-container matColumnDef="uid">
+                        <th mat-header-cell *matHeaderCellDef> UID </th>
+                        <td mat-cell *matCellDef="let row"><span class="mono-cell">{{ row.uid }}</span></td>
+                    </ng-container>
+
+                    <ng-container matColumnDef="routeId">
+                        <th mat-header-cell *matHeaderCellDef> Route ID </th>
+                        <td mat-cell *matCellDef="let row"><span class="mono-cell">{{ row.routeId }}</span></td>
+                    </ng-container>
+
+                    <ng-container matColumnDef="attemptCount">
+                        <th mat-header-cell *matHeaderCellDef> Attempts </th>
+                        <td mat-cell *matCellDef="let row"> {{ row.attemptCount }} </td>
+                    </ng-container>
+
+                    <ng-container matColumnDef="updatedAt">
+                        <th mat-header-cell *matHeaderCellDef> Updated </th>
+                        <td mat-cell *matCellDef="let row"> {{ row.updatedAtLabel }} </td>
+                    </ng-container>
+
+                    <ng-container matColumnDef="lastError">
+                        <th mat-header-cell *matHeaderCellDef> Last Error </th>
+                        <td mat-cell *matCellDef="let row">
+                            <span class="analysis-error-text" [matTooltip]="row.lastError">{{ row.lastError || 'N/A' }}</span>
+                        </td>
+                    </ng-container>
+
+                    <tr mat-header-row *matHeaderRowDef="routeReparseFailureColumns"></tr>
+                    <tr mat-row *matRowDef="let row; columns: routeReparseFailureColumns;"></tr>
+                </table>
+            </div>
+            <ng-template #noRouteReparseFailuresTemplate>
+                <div class="empty-table-state">No recent route reparse failures.</div>
             </ng-template>
         </mat-card>
     </div>

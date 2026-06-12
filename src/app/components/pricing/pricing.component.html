@@ -139,6 +139,7 @@
           @if (product.metadata['role'] === 'free') {
           <ul>
             <li><mat-icon style="color: grey">check</mat-icon> {{ getActivityLimitLabel(product.metadata['role']) }}</li>
+            <li><mat-icon style="color: grey">check</mat-icon> {{ getRouteLimitLabel(product.metadata['role']) }}</li>
             <li><mat-icon style="color: grey">check</mat-icon> Manual uploads</li>
             <li><mat-icon style="color: grey">check</mat-icon> Core analysis tools</li>
             <li><mat-icon style="color: grey">check</mat-icon> {{ getAiInsightsLimitLabel(product.metadata['role']) }}</li>
@@ -146,6 +147,7 @@
           } @else if (product.metadata['role'] === 'basic') {
           <ul>
             <li><mat-icon class="qs-color-accent">check</mat-icon> {{ getActivityLimitLabel(product.metadata['role']) }}</li>
+            <li><mat-icon class="qs-color-accent">check</mat-icon> {{ getRouteLimitLabel(product.metadata['role']) }}</li>
             <li><mat-icon class="qs-color-accent">check</mat-icon> Manual uploads</li>
             <li><mat-icon class="qs-color-accent">check</mat-icon> {{ getAiInsightsLimitLabel(product.metadata['role']) }}</li>
             <li><mat-icon class="qs-color-primary">favorite</mat-icon> Supports independent, privacy-first development</li>
@@ -153,6 +155,7 @@
           } @else if (product.metadata['role'] === 'pro') {
           <ul>
             <li><mat-icon class="qs-color-primary">check_circle</mat-icon> {{ getActivityLimitLabel(product.metadata['role']) }}</li>
+            <li><mat-icon class="qs-color-primary">check_circle</mat-icon> {{ getRouteLimitLabel(product.metadata['role']) }}</li>
             <li><mat-icon class="qs-color-primary">check_circle</mat-icon> Auto-sync from your watch</li>
             <li><mat-icon class="qs-color-primary">check_circle</mat-icon> Cross-device sync</li>
             <li><mat-icon class="qs-color-primary">check_circle</mat-icon> {{ getAiInsightsLimitLabel(product.metadata['role']) }}</li>

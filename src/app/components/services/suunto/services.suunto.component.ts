@@ -8,9 +8,15 @@ import { AppAuthService } from '../../../authentication/app.auth.service';
 import { AppUserService } from '../../../services/app.user.service';
 import { AppWindowService } from '../../../services/app.window.service';
 import { ServiceNames, Auth2ServiceTokenInterface, Auth1ServiceTokenInterface } from '@sports-alliance/sports-lib';
+import { getSuuntoProviderUserIdFromTokenLike } from '@shared/suunto-route-import-state';
 import { ServicesAbstractComponentDirective } from '../services-abstract-component.directive';
 import { AppUserServiceMetaInterface } from '../../../models/app-user.interface';
 import { buildSuuntoServiceConnectionViewModel } from '../../../helpers/suunto-service-connection.helper';
+import {
+  buildSuuntoRouteCatchUpSnackbarMessage,
+  getSuuntoRouteCatchUpCount,
+  getSuuntoRouteCatchUpDateForConnectedProviders,
+} from '../../../helpers/suunto-route-catch-up.helper';
 
 
 @Component({
@@ -22,9 +28,43 @@ import { buildSuuntoServiceConnectionViewModel } from '../../../helpers/suunto-s
 export class ServicesSuuntoComponent extends ServicesAbstractComponentDirective {
   public serviceName = ServiceNames.SuuntoApp;
   clicks = 0;
+  isQueueingRoutes = false;
 
-  get suuntoServiceMeta(): AppUserServiceMetaInterface & { uploadedActivitiesCount?: number } | undefined {
+  get connectedSuuntoServiceTokens(): Array<Auth1ServiceTokenInterface | Auth2ServiceTokenInterface> {
+    return (this.serviceTokens || []).filter(serviceToken => (
+      !!getSuuntoProviderUserIdFromTokenLike(serviceToken)
+    )) as Array<Auth1ServiceTokenInterface | Auth2ServiceTokenInterface>;
+  }
+
+  get hasConnectedSuuntoAccount(): boolean {
+    return this.connectedSuuntoServiceTokens.length > 0;
+  }
+
+  get suuntoServiceMeta(): (AppUserServiceMetaInterface & {
+    uploadedActivitiesCount?: number;
+    uploadedRoutesCount?: number;
+  }) | undefined {
     return this.serviceMeta;
+  }
+
+  get didLastRouteImport(): Date | null {
+    return getSuuntoRouteCatchUpDateForConnectedProviders(this.suuntoServiceMeta, this.serviceTokens);
+  }
+
+  get queuedRoutesFromLastRouteImportCount(): number {
+    return getSuuntoRouteCatchUpCount(this.suuntoServiceMeta?.queuedRoutesFromLastRouteImportCount);
+  }
+
+  get skippedRoutesFromLastRouteImportCount(): number {
+    return getSuuntoRouteCatchUpCount(this.suuntoServiceMeta?.skippedRoutesFromLastRouteImportCount);
+  }
+
+  get failedRoutesFromLastRouteImportCount(): number {
+    return getSuuntoRouteCatchUpCount(this.suuntoServiceMeta?.failedRoutesFromLastRouteImportCount);
+  }
+
+  get totalRoutesFromLastRouteImportCount(): number {
+    return getSuuntoRouteCatchUpCount(this.suuntoServiceMeta?.totalRoutesFromLastRouteImportCount);
   }
 
   get isReconnectRequired(): boolean {
@@ -45,7 +85,7 @@ export class ServicesSuuntoComponent extends ServicesAbstractComponentDirective 
 
   get connectionView() {
     return buildSuuntoServiceConnectionViewModel({
-      hasToken: (!!this.serviceTokens && !!this.serviceTokens.length),
+      hasToken: this.hasConnectedSuuntoAccount,
       forceConnected: this.forceConnected,
       serviceMeta: this.serviceMeta,
     });
@@ -63,7 +103,7 @@ export class ServicesSuuntoComponent extends ServicesAbstractComponentDirective 
   }
 
   isConnectedToService(): boolean {
-    return (!!this.serviceTokens && !!this.serviceTokens.length) || this.forceConnected;
+    return this.hasConnectedSuuntoAccount || this.forceConnected;
   }
 
   buildRedirectURIFromServiceToken(token: { redirect_uri: string }): string {
@@ -79,10 +119,45 @@ export class ServicesSuuntoComponent extends ServicesAbstractComponentDirective 
   }
 
   get suuntoUserName(): string | undefined {
-    return (this.serviceTokens as Auth2ServiceTokenInterface[])?.[0]?.userName;
+    return (this.connectedSuuntoServiceTokens as Auth2ServiceTokenInterface[])?.[0]?.userName;
   }
 
   getSuuntoUserName(token: Auth1ServiceTokenInterface | Auth2ServiceTokenInterface): string | undefined {
     return (token as Auth2ServiceTokenInterface).userName;
+  }
+
+  async queueRoutesFromSuunto(event: Event): Promise<void> {
+    event.preventDefault();
+
+    if (!this.hasProAccess) {
+      this.triggerUpsell();
+      return;
+    }
+
+    if (this.isQueueingRoutes) {
+      return;
+    }
+
+    if (this.isReconnectRequired) {
+      this.snackBar.open('Reconnect Suunto before queuing route catch-up.', undefined, { duration: 4000 });
+      return;
+    }
+
+    if (!this.isConnectedToService()) {
+      this.snackBar.open('Connect your Suunto account before queuing routes.', undefined, { duration: 4000 });
+      return;
+    }
+
+    this.isQueueingRoutes = true;
+    try {
+      const summary = await this.userService.addSuuntoRoutesToQueueForCurrentUser();
+      const feedback = buildSuuntoRouteCatchUpSnackbarMessage(summary);
+      this.snackBar.open(feedback.message, undefined, { duration: feedback.duration });
+    } catch (error: any) {
+      this.logger.error(error);
+      this.snackBar.open(`Could not queue Suunto routes: ${error?.message || 'Unknown error'}`, undefined, { duration: 5000 });
+    } finally {
+      this.isQueueingRoutes = false;
+    }
   }
 }

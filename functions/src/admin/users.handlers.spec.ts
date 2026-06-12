@@ -136,7 +136,7 @@ describe('listUsers Cloud Function', () => {
         expect(result.users[0].hasSubscribedOnce).toBe(false);
     });
 
-    it('should include event counts from Firestore aggregation', async () => {
+    it('should include event and route counts from Firestore aggregation', async () => {
         mockListUsers.mockResolvedValue({
             users: [{ uid: 'user1', email: 'alice@test.com', providerData: [], metadata: {}, customClaims: {} }],
             pageToken: undefined
@@ -146,9 +146,21 @@ describe('listUsers Cloud Function', () => {
         ]);
         const eventCountGet = vi.fn().mockResolvedValue({ data: () => ({ count: 12 }) });
         const eventCount = vi.fn().mockReturnValue({ get: eventCountGet });
-        const eventsCollection = vi.fn().mockReturnValue({ count: eventCount });
+        const routeCountGet = vi.fn().mockResolvedValue({ data: () => ({ count: 5 }) });
+        const routeCount = vi.fn().mockReturnValue({ get: routeCountGet });
+        const userSubcollections = vi.fn((name: string) => {
+            if (name === 'events') {
+                return { count: eventCount };
+            }
+            if (name === 'routes') {
+                return { count: routeCount };
+            }
+            return {
+                limit: vi.fn().mockReturnValue({ get: vi.fn().mockResolvedValue({ empty: true, docs: [] }) }),
+            };
+        });
         const usersDoc = vi.fn().mockReturnValue({
-            collection: eventsCollection,
+            collection: userSubcollections,
         });
         mockCollection.mockImplementation((path) => {
             if (path === 'users') {
@@ -167,9 +179,57 @@ describe('listUsers Cloud Function', () => {
 
         const result: any = await (listUsers as any)(getAdminRequest({ page: 0, pageSize: 25 }));
         expect(result.users[0].eventStats).toEqual({ total: 12 });
+        expect(result.users[0].routeStats).toEqual({ total: 5 });
         expect(usersDoc).toHaveBeenCalledWith('user1');
-        expect(eventsCollection).toHaveBeenCalledWith('events');
+        expect(userSubcollections).toHaveBeenCalledWith('events');
+        expect(userSubcollections).toHaveBeenCalledWith('routes');
         expect(eventCount).toHaveBeenCalled();
+        expect(routeCount).toHaveBeenCalled();
+    });
+
+    it('should keep event count when per-user route count fails', async () => {
+        mockListUsers.mockResolvedValue({
+            users: [{ uid: 'user1', email: 'alice@test.com', providerData: [], metadata: {}, customClaims: {} }],
+            pageToken: undefined
+        });
+        mockGetAll.mockResolvedValue([
+            { id: 'user1', data: () => ({ onboardingCompleted: true }) },
+        ]);
+        const eventCountGet = vi.fn().mockResolvedValue({ data: () => ({ count: 12 }) });
+        const eventCount = vi.fn().mockReturnValue({ get: eventCountGet });
+        const routeCountGet = vi.fn().mockRejectedValue(new Error('route count failed'));
+        const routeCount = vi.fn().mockReturnValue({ get: routeCountGet });
+        const usersDoc = vi.fn().mockReturnValue({
+            collection: vi.fn((name: string) => {
+                if (name === 'events') {
+                    return { count: eventCount };
+                }
+                if (name === 'routes') {
+                    return { count: routeCount };
+                }
+                return {
+                    limit: vi.fn().mockReturnValue({ get: vi.fn().mockResolvedValue({ empty: true, docs: [] }) }),
+                };
+            }),
+        });
+        mockCollection.mockImplementation((path) => {
+            if (path === 'users') {
+                return { doc: usersDoc };
+            }
+            return {
+                doc: vi.fn().mockReturnValue({
+                    collection: vi.fn().mockReturnValue({
+                        limit: vi.fn().mockReturnValue({ get: vi.fn().mockResolvedValue({ empty: true, docs: [] }) })
+                    })
+                }),
+                where: vi.fn().mockReturnThis(),
+                get: vi.fn().mockResolvedValue({ empty: true, docs: [] })
+            };
+        });
+
+        const result: any = await (listUsers as any)(getAdminRequest({ page: 0, pageSize: 25 }));
+        expect(result.users[0].eventStats).toEqual({ total: 12 });
+        expect(result.users[0].routeStats).toEqual({ total: null });
     });
 
     it('should filter users by searchTerm', async () => {

@@ -3,13 +3,19 @@ export const USAGE_LIMITS = {
     basic: 1000,
 } as const;
 
+export type LimitedSubscriptionRole = keyof typeof USAGE_LIMITS;
+
+export const ROUTE_USAGE_LIMITS = {
+    free: 10,
+    basic: 100,
+} as const satisfies Record<LimitedSubscriptionRole, number>;
+
 export const AI_INSIGHTS_REQUEST_LIMITS = {
     free: 20,
     basic: 50,
     pro: 100,
 } as const;
 
-export type LimitedSubscriptionRole = keyof typeof USAGE_LIMITS;
 export type SubscriptionRole = LimitedSubscriptionRole | 'pro';
 
 export function isLimitedSubscriptionRole(role: string): role is LimitedSubscriptionRole {
@@ -26,6 +32,18 @@ export function getUsageLimitForRole(role: string): number | null {
     }
 
     throw new Error(`Unsupported subscription role '${role}' for usage limits.`);
+}
+
+export function getRouteUsageLimitForRole(role: string): number | null {
+    if (role === 'pro') {
+        return null;
+    }
+
+    if (isLimitedSubscriptionRole(role)) {
+        return ROUTE_USAGE_LIMITS[role];
+    }
+
+    throw new Error(`Unsupported subscription role '${role}' for route usage limits.`);
 }
 
 export function getAiInsightsRequestLimitForRole(role: string): number {

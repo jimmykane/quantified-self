@@ -26,8 +26,10 @@ describe('AdminQueueMonitorComponent', () => {
             queues: {
                 workout: { queueId: 'processWorkoutTask', pending: 3 },
                 activitySync: { queueId: 'processActivitySyncTask', pending: 0 },
+                routeSync: { queueId: 'processRouteSyncTask', pending: 2 },
                 sleepSync: { queueId: 'processSleepSyncTask', pending: 1 },
                 sportsLibReparse: { queueId: 'processSportsLibReparseTask', pending: 2 },
+                sportsLibRouteReparse: { queueId: 'processSportsLibRouteReparseTask', pending: 4 },
                 derivedMetrics: { queueId: 'processDerivedMetricsTask', pending: 6 }
             }
         },
@@ -46,6 +48,22 @@ describe('AdminQueueMonitorComponent', () => {
             },
             recentFailures: []
         },
+        routeReparse: {
+            queuePending: 4,
+            targetSportsLibVersion: '9.1.5',
+            jobs: { total: 8, pending: 4, processing: 1, completed: 2, skipped: 0, failed: 1 },
+            checkpoint: {
+                cursorProcessingDocPath: null,
+                cursorProcessingVersionCode: null,
+                lastScanAt: null,
+                lastPassStartedAt: null,
+                lastPassCompletedAt: null,
+                lastScanCount: 0,
+                lastEnqueuedCount: 0,
+                overrideUsersInProgress: 0
+            },
+            recentFailures: []
+        },
         advanced: {
             throughput: 0,
             maxLagMs: 0,
@@ -53,7 +71,7 @@ describe('AdminQueueMonitorComponent', () => {
             topErrors: []
         },
         derivedMetrics: {
-            coordinators: { idle: 1, queued: 1, processing: 1, failed: 0, total: 3 },
+            coordinators: { idle: 1, queued: 1, processing: 1, staleQueued: 0, staleProcessing: 0, failed: 0, total: 3 },
             recentFailures: []
         }
     };
@@ -143,6 +161,16 @@ describe('AdminQueueMonitorComponent', () => {
         expect(activitySyncComponent.pageTitle).toContain('Activity Sync Queue');
     });
 
+    it('should configure route sync queue view from route data', () => {
+        routeData.queueView = 'route-sync';
+        const routeSyncFixture = TestBed.createComponent(AdminQueueMonitorComponent);
+        const routeSyncComponent = routeSyncFixture.componentInstance;
+        routeSyncFixture.detectChanges();
+
+        expect(routeSyncComponent.queueView).toBe('route-sync');
+        expect(routeSyncComponent.pageTitle).toContain('Route Sync Queue');
+    });
+
     it('should configure sleep sync queue view from route data', () => {
         routeData.queueView = 'sleep-sync';
         const sleepSyncFixture = TestBed.createComponent(AdminQueueMonitorComponent);
@@ -153,14 +181,26 @@ describe('AdminQueueMonitorComponent', () => {
         expect(sleepSyncComponent.pageTitle).toContain('Sleep Sync Queue');
     });
 
+    it('should configure route reparse queue view from route data', () => {
+        routeData.queueView = 'route-reparse';
+        const routeReparseFixture = TestBed.createComponent(AdminQueueMonitorComponent);
+        const routeReparseComponent = routeReparseFixture.componentInstance;
+        routeReparseFixture.detectChanges();
+
+        expect(routeReparseComponent.queueView).toBe('route-reparse');
+        expect(routeReparseComponent.pageTitle).toContain('Route Reparse Queue');
+    });
+
     it('should render route navigation buttons', () => {
         const host: HTMLElement = fixture.nativeElement;
         const text = host.textContent || '';
         expect(text).toContain('Back To Dashboard');
         expect(text).toContain('Workout Queue');
         expect(text).toContain('Activity Sync Queue');
+        expect(text).toContain('Route Sync Queue');
         expect(text).toContain('Sleep Sync Queue');
-        expect(text).toContain('Reparse Queue');
+        expect(text).toContain('Event Reparse Queue');
+        expect(text).toContain('Route Reparse Queue');
         expect(text).toContain('Derived Metrics Queue');
     });
 });

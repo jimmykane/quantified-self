@@ -280,6 +280,12 @@ td.mat-cell {
     white-space: nowrap;
 }
 
+.mat-column-eventStats,
+.mat-column-routeStats {
+    width: 1%;
+    white-space: nowrap;
+}
+
 .loading-shade {
     position: absolute;
     top: 0;

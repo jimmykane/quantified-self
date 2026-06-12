@@ -121,6 +121,24 @@ describe('EventTableComponent', () => {
         mockEventService = {
             deleteAllEventData: vi.fn().mockReturnValue(Promise.resolve(true)),
             downloadFile: vi.fn().mockReturnValue(Promise.resolve(new ArrayBuffer(8))),
+            downloadOriginalFile: vi.fn().mockReturnValue(Promise.resolve(new ArrayBuffer(8))),
+            getOriginalEventDownloadSources: vi.fn((event: { originalFiles?: any[]; originalFile?: any; startDate?: any; getID?: () => string }) => (
+                Array.isArray(event.originalFiles) && event.originalFiles.length > 0
+                    ? event.originalFiles
+                        .filter((file: any) => !!file?.path)
+                        .map((file: any) => ({
+                            ...file,
+                            eventId: event.getID?.() || null,
+                            fallbackDate: file.fallbackDate || file.startDate || event.startDate,
+                            downloadFileName: file.downloadFileName || file.originalFilename || file.path?.split('/').filter(Boolean).pop(),
+                        }))
+                    : event.originalFile?.path ? [{
+                        ...event.originalFile,
+                        eventId: event.getID?.() || null,
+                        fallbackDate: event.originalFile.fallbackDate || event.originalFile.startDate || event.startDate,
+                        downloadFileName: event.originalFile.downloadFileName || event.originalFile.originalFilename || event.originalFile.path.split('/').filter(Boolean).pop(),
+                    }] : []
+            )),
             getEventAsGPXBloB: vi.fn().mockResolvedValue(new Blob(['<gpx></gpx>'], { type: 'application/gpx+xml' })),
             updateEventProperties: vi.fn().mockResolvedValue(undefined),
         };
@@ -159,6 +177,7 @@ describe('EventTableComponent', () => {
         mockFileService = {
             downloadAsZip: vi.fn().mockReturnValue(Promise.resolve()),
             downloadFile: vi.fn(),
+            downloadNamedFile: vi.fn(),
             toDate: vi.fn((rawDate: any) => {
                 if (!rawDate) return null;
                 if (rawDate instanceof Date) return rawDate;
@@ -166,6 +185,31 @@ describe('EventTableComponent', () => {
                 if (typeof rawDate === 'number') return new Date(rawDate);
                 if (typeof rawDate === 'string') return new Date(rawDate);
                 return null;
+            }),
+            resolveOriginalSourceFileName: vi.fn((file: { originalFilename?: string; path?: string }, fallbackExtension = 'fit') => {
+                const value = file.originalFilename || file.path?.split('/').filter(Boolean).pop();
+                return value || `original-file.${fallbackExtension}`;
+            }),
+            getUniqueFileName: vi.fn((fileName: string, usedNames?: Set<string>) => {
+                if (!usedNames) {
+                    return fileName;
+                }
+                let candidate = fileName;
+                const lower = () => candidate.toLowerCase();
+                if (!usedNames.has(lower())) {
+                    usedNames.add(lower());
+                    return candidate;
+                }
+                const lastDotIndex = fileName.lastIndexOf('.');
+                const stem = lastDotIndex > 0 ? fileName.slice(0, lastDotIndex) : fileName;
+                const extension = lastDotIndex > 0 ? fileName.slice(lastDotIndex + 1) : '';
+                let suffix = 2;
+                do {
+                    candidate = extension ? `${stem}_${suffix}.${extension}` : `${stem}_${suffix}`;
+                    suffix++;
+                } while (usedNames.has(candidate.toLowerCase()));
+                usedNames.add(candidate.toLowerCase());
+                return candidate;
             }),
             generateDateBasedFilename: vi.fn((date, extension, index, totalFiles, fallbackId) => {
                 const datePipe = new DatePipe('en-US');
@@ -187,7 +231,14 @@ describe('EventTableComponent', () => {
             }),
             getExtensionFromPath: vi.fn((path, defaultExt = 'fit') => {
                 const parts = path.split('.');
-                return parts.length > 1 ? parts[parts.length - 1] : defaultExt;
+                if (parts.length <= 1) {
+                    return defaultExt;
+                }
+                let extension = parts[parts.length - 1].toLowerCase();
+                if (extension === 'gz' && parts.length > 2) {
+                    extension = parts[parts.length - 2].toLowerCase();
+                }
+                return extension;
             })
         };
 
@@ -837,10 +888,17 @@ describe('EventTableComponent', () => {
 
             await component.downloadOriginals();
 
-            expect(mockEventService.downloadFile).toHaveBeenCalledTimes(2);
-            expect(mockEventService.downloadFile).toHaveBeenCalledWith('users/123/files/activity1.fit');
-            expect(mockEventService.downloadFile).toHaveBeenCalledWith('users/123/files/activity2.fit');
+            expect(mockEventService.downloadOriginalFile).toHaveBeenCalledTimes(2);
+            expect(mockEventService.downloadOriginalFile).toHaveBeenCalledWith('users/123/files/activity1.fit');
+            expect(mockEventService.downloadOriginalFile).toHaveBeenCalledWith('users/123/files/activity2.fit');
             expect(mockFileService.downloadAsZip).toHaveBeenCalled();
+            expect(mockFileService.downloadAsZip).toHaveBeenCalledWith(
+                [
+                    expect.objectContaining({ fileName: 'activity1.fit' }),
+                    expect.objectContaining({ fileName: 'activity2.fit' }),
+                ],
+                '2024-12-01_originals.zip'
+            );
             expect(mockProcessingService.completeJob).toHaveBeenCalledWith(expect.any(String), 'Downloaded 2 files');
         });
 
@@ -853,8 +911,12 @@ describe('EventTableComponent', () => {
 
             await component.downloadOriginals();
 
-            expect(mockEventService.downloadFile).toHaveBeenCalledWith('users/123/files/legacy.fit');
-            expect(mockFileService.downloadFile).toHaveBeenCalled();
+            expect(mockEventService.downloadOriginalFile).toHaveBeenCalledWith('users/123/files/legacy.fit');
+            expect(mockFileService.downloadNamedFile).toHaveBeenCalledWith(
+                expect.any(Blob),
+                'legacy.fit',
+                'fit',
+            );
             expect(mockFileService.downloadAsZip).not.toHaveBeenCalled();
             expect(mockProcessingService.completeJob).toHaveBeenCalledWith(expect.any(String), 'Downloaded 1 file');
         });
@@ -879,13 +941,13 @@ describe('EventTableComponent', () => {
             );
         });
 
-        it('should name files using activity-specific dates for merged events', async () => {
+        it('should preserve original filenames and dedupe collisions across merged event files', async () => {
             const e1 = new MockEvent('merged_event');
             e1.startDate = new Date('2024-12-25'); // Merged event date
             e1.originalFiles = [
-                { path: 'users/123/files/act1.fit', startDate: new Date('2024-12-20T10:00:00') },
-                { path: 'users/123/files/act2.fit', startDate: new Date('2024-12-22T07:30:00') },
-                { path: 'users/123/files/act3.fit' } // No per-file date, should fallback to merged event date
+                { path: 'users/123/files/act1.fit', originalFilename: 'track.fit', startDate: new Date('2024-12-20T10:00:00') },
+                { path: 'users/123/files/act2.fit', originalFilename: 'track.fit', startDate: new Date('2024-12-22T07:30:00') },
+                { path: 'users/123/files/act3.fit', originalFilename: 'track.fit' }
             ];
             component.selection.select({ 'Event': e1 } as any);
 
@@ -893,29 +955,29 @@ describe('EventTableComponent', () => {
 
             expect(mockFileService.downloadAsZip).toHaveBeenCalledWith(
                 expect.arrayContaining([
-                    expect.objectContaining({ fileName: expect.stringMatching(/2024-12-20_.*\.fit/) }),
-                    expect.objectContaining({ fileName: expect.stringMatching(/2024-12-22_.*\.fit/) }),
-                    expect.objectContaining({ fileName: expect.stringMatching(/2024-12-25_.*_3\.fit/) })
+                    expect.objectContaining({ fileName: 'track.fit' }),
+                    expect.objectContaining({ fileName: 'track_2.fit' }),
+                    expect.objectContaining({ fileName: 'track_3.fit' })
                 ]),
                 expect.any(String)
             );
         });
 
-        it('should name single file using event date format and download directly', async () => {
+        it('should preserve single original filenames when downloading directly', async () => {
             const e1 = new MockEvent('event1');
             e1.startDate = new Date('2024-12-15T08:30:00');
-            e1.originalFiles = [{ path: 'users/123/files/activity.fit' }];
+            e1.originalFiles = [{ path: 'users/123/files/activity.fit', originalFilename: 'watch.fit' }];
             component.selection.select({ 'Event': e1 } as any);
 
             await component.downloadOriginals();
 
             // Single file should be downloaded directly, not zipped
-            expect(mockFileService.downloadFile).toHaveBeenCalled();
+            expect(mockFileService.downloadNamedFile).toHaveBeenCalledWith(
+                expect.any(Blob),
+                'watch.fit',
+                'fit',
+            );
             expect(mockFileService.downloadAsZip).not.toHaveBeenCalled();
-            // Check that the filename was generated correctly (basename without extension)
-            const args = mockFileService.downloadFile.mock.calls[0];
-            expect(args[1]).toBe('2024-12-15_08-30'); // basename
-            expect(args[2]).toBe('fit'); // extension
         });
 
         it('should handle Firestore Timestamp objects with single file direct download', async () => {
@@ -930,14 +992,15 @@ describe('EventTableComponent', () => {
             await component.downloadOriginals();
 
             // Single file should be downloaded directly
-            expect(mockFileService.downloadFile).toHaveBeenCalled();
+            expect(mockFileService.downloadNamedFile).toHaveBeenCalledWith(
+                expect.any(Blob),
+                'activity.fit',
+                'fit',
+            );
             expect(mockFileService.downloadAsZip).not.toHaveBeenCalled();
-            const args = mockFileService.downloadFile.mock.calls[0];
-            expect(args[1]).toBe('2024-12-20_14-45'); // basename
-            expect(args[2]).toBe('fit'); // extension
         });
 
-        it('should use event ID as fallback for single file when date is missing', async () => {
+        it('should fall back to the stored path basename when the event date is missing', async () => {
             const e1 = new MockEvent('test-event-id');
             (e1 as any).startDate = null;
             e1.originalFiles = [{ path: 'users/123/files/activity.fit' }];
@@ -946,11 +1009,12 @@ describe('EventTableComponent', () => {
             await component.downloadOriginals();
 
             // Single file should be downloaded directly
-            expect(mockFileService.downloadFile).toHaveBeenCalled();
+            expect(mockFileService.downloadNamedFile).toHaveBeenCalledWith(
+                expect.any(Blob),
+                'activity.fit',
+                'fit',
+            );
             expect(mockFileService.downloadAsZip).not.toHaveBeenCalled();
-            const args = mockFileService.downloadFile.mock.calls[0];
-            expect(args[1]).toBe('test-event-id'); // basename falls back to event ID
-            expect(args[2]).toBe('fit'); // extension
         });
 
         it('should handle download errors gracefully and download single remaining file directly', async () => {
@@ -963,16 +1027,25 @@ describe('EventTableComponent', () => {
             component.selection.select({ 'Event': e1 } as any);
 
             // First call succeeds, second fails
-            mockEventService.downloadFile
+            mockEventService.downloadOriginalFile
                 .mockResolvedValueOnce(new ArrayBuffer(8))
                 .mockRejectedValueOnce(new Error('Download failed'));
 
             await component.downloadOriginals();
 
             // Only 1 file succeeded, so it should be downloaded directly (not zipped)
-            expect(mockFileService.downloadFile).toHaveBeenCalled();
+            expect(mockFileService.downloadNamedFile).toHaveBeenCalledWith(
+                expect.any(Blob),
+                'good.fit',
+                'fit',
+            );
             expect(mockFileService.downloadAsZip).not.toHaveBeenCalled();
             expect(mockProcessingService.completeJob).toHaveBeenCalledWith(expect.any(String), 'Downloaded 1 file');
+            expect(mockAnalyticsService.logEvent).toHaveBeenCalledWith('download_originals', {
+                count: 1,
+                failedCount: 1,
+            });
+            expect(mockSnackBar.open).toHaveBeenCalledWith('Downloaded 1 file. Failed 1.', undefined, { duration: 4000 });
         });
     });
 
@@ -1131,11 +1204,13 @@ describe('EventTableComponent', () => {
 
             await component.downloadOriginals();
 
-            // Single file should be downloaded directly with json extension
-            expect(mockFileService.downloadFile).toHaveBeenCalled();
+            // Single file should be downloaded directly with the original gz filename preserved
+            expect(mockFileService.downloadNamedFile).toHaveBeenCalledWith(
+                expect.any(Blob),
+                'activity.json.gz',
+                'json',
+            );
             expect(mockFileService.downloadAsZip).not.toHaveBeenCalled();
-            const args = mockFileService.downloadFile.mock.calls[0];
-            expect(args[2]).toBe('json'); // extension should be json, not json.gz
         });
 
         it('should handle deeply nested paths', async () => {
@@ -1150,7 +1225,7 @@ describe('EventTableComponent', () => {
 
             await component.downloadOriginals();
 
-            expect(mockEventService.downloadFile).toHaveBeenCalledWith(
+            expect(mockEventService.downloadOriginalFile).toHaveBeenCalledWith(
                 'users/abc123/events/xyz789/subdir/nested/original.tcx.gz'
             );
         });
@@ -1167,7 +1242,7 @@ describe('EventTableComponent', () => {
 
             await component.downloadOriginals();
 
-            expect(mockEventService.downloadFile).toHaveBeenCalledWith(
+            expect(mockEventService.downloadOriginalFile).toHaveBeenCalledWith(
                 'users/用户/events/活动/original.gpx.gz'
             );
         });

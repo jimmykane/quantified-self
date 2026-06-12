@@ -479,6 +479,12 @@ describe('uploadActivity', () => {
     await invokeUploadActivity(request, response);
 
     expect(response.status).toHaveBeenCalledWith(200);
+    expect(hoisted.mockDocSet).toHaveBeenCalledWith(expect.objectContaining({
+      processingEntity: 'event',
+      sportsLibVersion: expect.any(String),
+      sportsLibVersionCode: 9001004,
+      processedAt: expect.anything(),
+    }), { merge: true });
     expect(hoisted.mockWriteAllEventData).toHaveBeenCalledWith(
       'user-1',
       expect.objectContaining({ name: 'lowercase' }),

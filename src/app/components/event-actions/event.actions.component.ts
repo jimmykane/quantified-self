@@ -11,6 +11,7 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatDialog } from '@angular/material/dialog';
 import { MatIconModule } from '@angular/material/icon';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
+import { AppOriginalFileDownloadService } from '../../services/app.original-file-download.service';
 
 import { DataDistance } from '@sports-alliance/sports-lib';
 import { environment } from '../../../environments/environment';
@@ -50,6 +51,7 @@ export class EventActionsComponent implements OnInit, OnDestroy {
 
   private auth = inject(Auth);
   private analyticsService = inject(AppAnalyticsService);
+  private originalFileDownloadService = inject(AppOriginalFileDownloadService);
   private logger = inject(LoggerService);
   private eventReprocessService = inject(AppEventReprocessService);
   private processingService = inject(AppProcessingService);
@@ -307,50 +309,25 @@ export class EventActionsComponent implements OnInit, OnDestroy {
   async downloadOriginals() {
     this.snackBar.open('Preparing download...', undefined, { duration: 2000 });
     try {
-      const eventAny = this.event as any;
-      const eventDate = this.fileService.toDate(this.event.startDate);
-      const eventId = this.event.getID ? this.event.getID() : undefined;
+      const originalFiles = this.eventService.getOriginalEventDownloadSources(this.event as any);
 
-      if (eventAny.originalFiles && eventAny.originalFiles.length > 1) {
-        // Multiple files -> ZIP
-        const filesToZip: { data: ArrayBuffer, fileName: string }[] = [];
-        const totalFiles = eventAny.originalFiles.length;
-
-        for (let i = 0; i < totalFiles; i++) {
-          const fileMeta = eventAny.originalFiles[i];
-          const arrayBuffer = await this.eventService.downloadFile(fileMeta.path);
-          const extension = this.fileService.getExtensionFromPath(fileMeta.path);
-          // Use fileMeta.startDate if available, fallback to eventDate
-          const fileDate = this.fileService.toDate(fileMeta.startDate) || eventDate;
-          const fileName = this.fileService.generateDateBasedFilename(
-            fileDate, extension, i + 1, totalFiles, eventId
-          );
-          filesToZip.push({ data: arrayBuffer, fileName });
-        }
-
-        const zipFileName = this.fileService.generateDateRangeZipFilename(eventDate, eventDate);
-        await this.fileService.downloadAsZip(filesToZip, zipFileName);
-        this.analyticsService.logEvent('downloaded_original_files_zip');
-
-      } else if ((eventAny.originalFiles && eventAny.originalFiles.length === 1) ||
-        (eventAny.originalFile && eventAny.originalFile.path)) {
-        // Single file -> Direct download
-        const fileMeta = eventAny.originalFiles?.[0] || eventAny.originalFile;
-        const arrayBuffer = await this.eventService.downloadFile(fileMeta.path);
-        const extension = this.fileService.getExtensionFromPath(fileMeta.path);
-        const fileName = this.fileService.generateDateBasedFilename(eventDate, extension, undefined, undefined, eventId);
-        const blob = new Blob([arrayBuffer]);
-        // Download with basename (without extension) and extension separately
-        const baseNameWithoutExt = fileName.replace(`.${extension}`, '');
-        this.fileService.downloadFile(blob, baseNameWithoutExt, extension);
-        this.analyticsService.logEvent('downloaded_original_file');
-      } else {
+      if (originalFiles.length === 0) {
         this.snackBar.open('No original files found.', undefined, { duration: 3000 });
+        return;
       }
+
+      const result = await this.originalFileDownloadService.downloadOriginalFiles({
+        sources: originalFiles,
+        downloadFile: (path) => this.eventService.downloadOriginalFile(path),
+        fallbackFileName: 'original-file',
+      });
+
+      this.analyticsService.logEvent(
+        result.mode === 'zip' ? 'downloaded_original_files_zip' : 'downloaded_original_file',
+      );
     } catch (error: any) {
       this.logger.error('Download failed', error);
       this.snackBar.open('Failed to download original files.', undefined, { duration: 3000 });
-      this.logger.error(error);
     }
   }
 

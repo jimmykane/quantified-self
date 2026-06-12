@@ -95,6 +95,18 @@ describe('AppFileService', () => {
             expect(fileArg.name).toBe('activity.fit');
             expect(fileArg.type).toBe('application/vnd.ant.fit');
         });
+
+        it('should preserve an explicit filename with a compound extension', () => {
+            const blob = new Blob([new Uint8Array([1, 2, 3]).buffer]);
+
+            service.downloadNamedFile(blob, 'route.fit.gz');
+
+            expect(FileSaver.saveAs).toHaveBeenCalledTimes(1);
+            const fileArg = (FileSaver.saveAs as any).mock.calls[0][0];
+            expect(fileArg).toBeInstanceOf(File);
+            expect(fileArg.name).toBe('route.fit.gz');
+            expect(fileArg.type).toBe('application/gzip');
+        });
     });
 
     describe('downloadAsZip', () => {
@@ -123,6 +135,40 @@ describe('AppFileService', () => {
 
         it('should handle .gz extension and return base extension', () => {
             expect(service.getExtensionFromPath('path/to/file.json.gz')).toBe('json');
+        });
+    });
+
+    describe('resolveOriginalSourceFileName', () => {
+        it('should prefer the stored original filename', () => {
+            expect(service.resolveOriginalSourceFileName({
+                originalFilename: 'Morning Route.fit.gz',
+                path: 'users/u1/routes/r1/original.fit',
+                extension: 'fit',
+            })).toBe('Morning Route.fit.gz');
+        });
+
+        it('should decode and normalize path-derived filenames', () => {
+            expect(service.resolveOriginalSourceFileName({
+                path: 'users/u1/routes/r1/Morning%20Route.gpx',
+                extension: 'gpx',
+            })).toBe('Morning Route.gpx');
+        });
+
+        it('should append the fallback extension when the source filename has no extension', () => {
+            expect(service.resolveOriginalSourceFileName({
+                originalFilename: 'Morning Route',
+                extension: 'gpx',
+            })).toBe('Morning Route.gpx');
+        });
+    });
+
+    describe('getUniqueFileName', () => {
+        it('should suffix duplicate filenames for zip entries', () => {
+            const usedNames = new Set<string>();
+
+            expect(service.getUniqueFileName('original.gpx', usedNames)).toBe('original.gpx');
+            expect(service.getUniqueFileName('original.gpx', usedNames)).toBe('original_2.gpx');
+            expect(service.getUniqueFileName('original.gpx', usedNames)).toBe('original_3.gpx');
         });
     });
 

@@ -1,6 +1,9 @@
 <h2 mat-dialog-title>{{ title }}</h2>
 <mat-dialog-content>
-    <p [innerHTML]="message"></p>
+    <p *ngIf="htmlMessage; else plainMessage" [innerHTML]="htmlMessage"></p>
+    <ng-template #plainMessage>
+        <p>{{ message }}</p>
+    </ng-template>
 </mat-dialog-content>
 <mat-dialog-actions align="end">
     <button mat-button (click)="onCancel()" *ngIf="showCancel">{{ cancelButtonText }}</button>

@@ -892,6 +892,7 @@ describe('createToolComparisonEvent', () => {
       benchmarkStatus: 'draft',
     }, { merge: true });
     expect(hoisted.mockDocSet).toHaveBeenCalledWith({
+      processingEntity: 'event',
       sportsLibVersion: expect.any(String),
       sportsLibVersionCode: 9001004,
       processedAt: 'SERVER_TIMESTAMP',
@@ -1366,6 +1367,7 @@ describe('createToolComparisonEvent', () => {
     expect(hoisted.mockWriteAllEventData).not.toHaveBeenCalled();
     expect(hoisted.mockDocSet).toHaveBeenCalledTimes(1);
     expect(hoisted.mockDocSet).toHaveBeenCalledWith({
+      processingEntity: 'event',
       sportsLibVersion: expect.any(String),
       sportsLibVersionCode: 9001004,
       processedAt: 'SERVER_TIMESTAMP',
@@ -1494,6 +1496,7 @@ describe('createToolComparisonEvent', () => {
       benchmarkStatus: 'draft',
     }, { merge: true });
     expect(hoisted.mockDocSet).toHaveBeenCalledWith({
+      processingEntity: 'event',
       sportsLibVersion: expect.any(String),
       sportsLibVersionCode: 9001004,
       processedAt: 'SERVER_TIMESTAMP',

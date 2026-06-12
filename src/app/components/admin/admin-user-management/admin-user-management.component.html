@@ -134,6 +134,36 @@
                     <mat-spinner diameter="24"></mat-spinner>
                 </div>
             </mat-card>
+
+            <!-- Total Routes -->
+            <mat-card class="app-stat-card">
+                <div class="app-stat-header">
+                    <mat-icon>route</mat-icon>
+                    <span>Total Routes</span>
+                    <button mat-icon-button type="button" class="app-stat-action" matTooltip="Refresh route count"
+                        aria-label="Refresh route count" [disabled]="isRefreshingRouteCount"
+                        (click)="refreshGlobalRouteCount()">
+                        @if (isRefreshingRouteCount) {
+                        <mat-spinner diameter="18"></mat-spinner>
+                        } @else {
+                        <mat-icon>refresh</mat-icon>
+                        }
+                    </button>
+                </div>
+                @if (userStats) {
+                @if (userStats.routes?.total !== null && userStats.routes?.total !== undefined) {
+                <div class="app-stat-value">{{ userStats.routes?.total | compactCount }}</div>
+                @if (userStats.routes?.computedAt) {
+                <div class="app-stat-footnote">Updated {{ userStats.routes?.computedAt | date:'short' }}</div>
+                }
+                } @else {
+                <div class="app-stat-value app-stat-value-muted">-</div>
+                }
+                }
+                <div class="app-spinner-mini" *ngIf="!userStats">
+                    <mat-spinner diameter="24"></mat-spinner>
+                </div>
+            </mat-card>
         </div>
 
         <!-- Auth Provider Breakdown Chart -->
@@ -294,6 +324,18 @@
                         <td mat-cell *matCellDef="let user">
                             @if (user.eventStats?.total !== null && user.eventStats?.total !== undefined) {
                             <span>{{ user.eventStats?.total | compactCount }}</span>
+                            } @else {
+                            <span class="text-detail-muted">-</span>
+                            }
+                        </td>
+                    </ng-container>
+
+                    <!-- Routes Column -->
+                    <ng-container matColumnDef="routeStats">
+                        <th mat-header-cell *matHeaderCellDef> Routes </th>
+                        <td mat-cell *matCellDef="let user">
+                            @if (user.routeStats?.total !== null && user.routeStats?.total !== undefined) {
+                            <span>{{ user.routeStats?.total | compactCount }}</span>
                             } @else {
                             <span class="text-detail-muted">-</span>
                             }

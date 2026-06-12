@@ -94,6 +94,9 @@ const {
         if (queueId === 'processActivitySyncTask') {
             return 0;
         }
+        if (queueId === 'processRouteSyncTask') {
+            return 4;
+        }
         if (queueId === 'processSleepSyncTask') {
             return 3;
         }
@@ -102,6 +105,9 @@ const {
         }
         if (queueId === 'processSportsLibReparseHeavyTask') {
             return 2;
+        }
+        if (queueId === 'processSportsLibRouteReparseTask') {
+            return 1;
         }
         if (queueId === 'processDerivedMetricsTask') {
             return 6;
@@ -212,9 +218,11 @@ vi.mock('../../config', () => ({
         cloudtasks: {
             workoutQueue: 'processWorkoutTask',
             activitySyncQueue: 'processActivitySyncTask',
+            routeSyncQueue: 'processRouteSyncTask',
             sleepSyncQueue: 'processSleepSyncTask',
             sportsLibReparseQueue: 'processSportsLibReparseTask',
             sportsLibReparseHeavyQueue: 'processSportsLibReparseHeavyTask',
+            sportsLibRouteReparseQueue: 'processSportsLibRouteReparseTask',
             derivedMetricsQueue: 'processDerivedMetricsTask',
             queue: 'processWorkoutTask',
         },

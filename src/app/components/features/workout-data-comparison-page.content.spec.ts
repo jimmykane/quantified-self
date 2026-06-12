@@ -3,6 +3,7 @@ import {
   COMPARISON_FAQ_ITEMS,
   COMPARISON_FEATURE_ITEMS,
   COMPARISON_FREE_PLAN_ACTIVITY_LIMIT,
+  COMPARISON_FREE_PLAN_ROUTE_LIMIT,
   COMPARISON_PROVIDER_SOURCES,
   COMPARISON_SEARCH_INTENT_ITEMS,
   WORKOUT_DATA_COMPARISON_PATH,
@@ -44,6 +45,7 @@ describe('workout-data-comparison-page.content', () => {
 
     expect(COMPARISON_PROVIDER_SOURCES.map(source => source.label)).toEqual(['Garmin', 'Suunto', 'COROS']);
     expect(COMPARISON_FREE_PLAN_ACTIVITY_LIMIT).toBe(100);
+    expect(COMPARISON_FREE_PLAN_ROUTE_LIMIT).toBe(10);
     expect(COMPARISON_FEATURE_ITEMS).toHaveLength(4);
     expect(COMPARISON_SEARCH_INTENT_ITEMS).toHaveLength(5);
     expect(COMPARISON_FAQ_ITEMS).toHaveLength(5);
@@ -54,7 +56,7 @@ describe('workout-data-comparison-page.content', () => {
     expect(visibleCopy).toContain('lab tests, beta firmware, review units, exported workouts, or unsupported services');
     expect(visibleCopy).toContain('private dashboard rather than a standalone public file viewer');
     expect(visibleCopy).toContain('Reviewers, YouTube creators, bloggers, coaches, and testers');
-    expect(visibleCopy).toContain('available on the free plan for up to 100 activities');
+    expect(visibleCopy).toContain('available on the free plan for up to 100 activities and 10 saved routes');
     expect(visibleCopy).toContain('Automatic service sync and higher limits require a paid plan');
     expect(visibleCopy).not.toContain('AI insights');
     expect(visibleCopy).not.toContain('AI-backed');

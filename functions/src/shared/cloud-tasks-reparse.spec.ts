@@ -28,6 +28,7 @@ vi.mock('../config', () => ({
             activitySyncQueue: 'processActivitySyncTask',
             sportsLibReparseQueue: 'processSportsLibReparseTask',
             sportsLibReparseHeavyQueue: 'processSportsLibReparseHeavyTask',
+            sportsLibRouteReparseQueue: 'processSportsLibRouteReparseTask',
             derivedMetricsQueue: 'processDerivedMetricsTask',
             queue: 'processWorkoutTask',
             serviceAccountEmail: 'sa@test.com',
@@ -41,7 +42,7 @@ vi.mock('firebase-functions/logger', () => ({
     error: vi.fn(),
 }));
 
-import { enqueueSportsLibReparseHeavyTask, enqueueSportsLibReparseTask } from './cloud-tasks';
+import { enqueueSportsLibReparseHeavyTask, enqueueSportsLibReparseTask, enqueueSportsLibRouteReparseTask } from './cloud-tasks';
 
 describe('enqueueSportsLibReparseTask', () => {
     beforeEach(() => {
@@ -122,5 +123,31 @@ describe('enqueueSportsLibReparseTask', () => {
                 name: 'projects/p/locations/l/queues/q/tasks/reparse-heavy-job-abc-123-manual-1700000000000-abc',
             }),
         });
+    });
+
+    it('should enqueue route reparse task with deterministic name and payload', async () => {
+        await expect(enqueueSportsLibRouteReparseTask('job-abc-123')).resolves.toBe(true);
+
+        expect(hoisted.mockCloudTasksClient.queuePath).toHaveBeenCalledWith(
+            'test-project',
+            'test-location',
+            'processSportsLibRouteReparseTask'
+        );
+
+        expect(hoisted.mockCloudTasksClient.createTask).toHaveBeenCalledWith({
+            parent: 'projects/p/locations/l/queues/q',
+            task: expect.objectContaining({
+                name: 'projects/p/locations/l/queues/q/tasks/route-reparse-job-abc-123',
+                dispatchDeadline: { seconds: 1800 },
+                httpRequest: expect.objectContaining({
+                    url: 'https://test-location-test-project.cloudfunctions.net/processSportsLibRouteReparseTask',
+                    body: expect.any(String),
+                }),
+            }),
+        });
+
+        const encodedBody = hoisted.mockCloudTasksClient.createTask.mock.calls[0][0].task.httpRequest.body;
+        const payload = JSON.parse(Buffer.from(encodedBody, 'base64').toString('utf8'));
+        expect(payload).toEqual({ data: { jobId: 'job-abc-123' } });
     });
 });

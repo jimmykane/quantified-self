@@ -50,6 +50,7 @@ describe('config.ts', () => {
         expect(config.cloudtasks.workoutQueue).toBe('processWorkoutTask');
         expect(config.cloudtasks.activitySyncQueue).toBe('processActivitySyncTask');
         expect(config.cloudtasks.sportsLibReparseQueue).toBe('processSportsLibReparseTask');
+        expect(config.cloudtasks.sportsLibRouteReparseQueue).toBe('processSportsLibRouteReparseTask');
         expect(config.cloudtasks.derivedMetricsQueue).toBe('processDerivedMetricsTask');
         expect(config.cloudtasks.derivedMetricsIngressBucketSeconds).toBe(30);
         expect(config.cloudtasks.sleepSyncQueue).toBe('processSleepSyncTask');

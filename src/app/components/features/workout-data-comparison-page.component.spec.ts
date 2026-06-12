@@ -57,7 +57,7 @@ describe('WorkoutDataComparisonPageComponent', () => {
     expect(text).toContain('live reports use your selected services or uploaded files');
     expect(text).toContain('From sync to benchmark analysis');
     expect(text).toContain('Benchmark any two imported activities');
-    expect(text).toContain('available on the free plan for up to 100 activities');
+    expect(text).toContain('available on the free plan for up to 100 activities and 10 saved routes');
     expect(text).toContain('Reviewer-ready device comparisons');
     expect(text).toContain('Metric overlays for shared signals');
     expect(text).toContain('Custom FIT, TCX, GPX, JSON, and SML imports');

@@ -17,6 +17,7 @@ import {
     writeReparseStatus,
 } from '../reparse/sports-lib-reparse.service';
 import { getUserDeletionGuardState, UserDeletionGuardReadError } from '../shared/user-deletion-guard';
+import { EVENT_PROCESSING_ENTITY } from '../shared/processing-metadata.interface';
 
 interface ScriptOptions {
     execute: boolean;
@@ -215,7 +216,7 @@ function resolveProcessingStartAfterPath(startAfter?: string): string | undefine
         return undefined;
     }
     if (startAfter.endsWith('/metaData/processing')) {
-        return startAfter;
+        return isEventProcessingMetadataDocPath(startAfter) ? startAfter : undefined;
     }
     const parsedEventPath = parseUidAndEventIdFromEventPath(startAfter);
     if (parsedEventPath) {
@@ -224,13 +225,20 @@ function resolveProcessingStartAfterPath(startAfter?: string): string | undefine
     return undefined;
 }
 
-function isProcessingMetadataDocPath(path: string): boolean {
-    return path.endsWith('/metaData/processing');
+function isEventProcessingMetadataDocPath(path: string): boolean {
+    const processingMetadataSuffix = '/metaData/processing';
+    if (!path.endsWith(processingMetadataSuffix)) {
+        return false;
+    }
+
+    const eventPath = path.slice(0, -processingMetadataSuffix.length);
+    return parseUidAndEventIdFromEventPath(eventPath) !== null;
 }
 
 async function getGlobalProcessingDocsToInspect(options: ScriptOptions, targetSportsLibVersionCode: number): Promise<admin.firestore.QueryDocumentSnapshot[]> {
     const db = admin.firestore();
     let groupQuery = db.collectionGroup('metaData')
+        .where('processingEntity', '==', EVENT_PROCESSING_ENTITY)
         .where('sportsLibVersionCode', '<', targetSportsLibVersionCode)
         .orderBy('sportsLibVersionCode', 'asc')
         .orderBy(admin.firestore.FieldPath.documentId())
@@ -424,8 +432,8 @@ export async function runSportsLibReparseScript(argv: string[]): Promise<ScriptS
         const processingDocs = await getGlobalProcessingDocsToInspect(options, targetSportsLibVersionCode);
         for (const processingDoc of processingDocs) {
             summary.scanned++;
-            if (!isProcessingMetadataDocPath(processingDoc.ref.path)) {
-                logger.warn('[sports-lib-reparse-script] Skipping non-processing metadata doc from candidate query.', {
+            if (!isEventProcessingMetadataDocPath(processingDoc.ref.path)) {
+                logger.warn('[sports-lib-reparse-script] Skipping metadata doc outside event processing path.', {
                     processingDocPath: processingDoc.ref.path,
                 });
                 continue;

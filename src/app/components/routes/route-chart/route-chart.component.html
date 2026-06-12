@@ -1,0 +1,36 @@
+<section class="route-chart">
+  <app-event-section-header icon="show_chart">
+    <span class="route-chart-axis">{{ xAxisLabel }}</span>
+  </app-event-section-header>
+
+  <mat-card-content class="route-chart-content">
+    @if (hasPanels) {
+    <section class="route-chart-panels">
+      @for (panel of chartPanels; track panel.dataType) {
+      <app-event-card-chart-panel
+        [panel]="panel"
+        [xAxisType]="xAxisType"
+        [darkTheme]="darkTheme"
+        [useAnimations]="false"
+        [showZoomBar]="false"
+        [cursorBehaviour]="cursorBehaviour"
+        [showLaps]="false"
+        [showSwimLengths]="false"
+        [gainAndLossThreshold]="0"
+        [strokeWidth]="strokeWidth"
+        [fillOpacity]="fillOpacity"
+        [colorAltitudeByGrade]="true"
+        [userUnitSettings]="userUnitSettings"
+        [waterMark]="waterMark"
+        [showActivityNamesInTooltip]="true">
+      </app-event-card-chart-panel>
+      }
+    </section>
+    } @else {
+    <section class="route-chart-empty">
+      <mat-icon aria-hidden="true">show_chart</mat-icon>
+      <span>No elevation or grade streams found.</span>
+    </section>
+    }
+  </mat-card-content>
+</section>
