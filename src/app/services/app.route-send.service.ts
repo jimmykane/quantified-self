@@ -30,6 +30,12 @@ const ROUTE_SEND_REASON_PRIORITY: SendRouteToServiceFailureReason[] = [
   'UNSUPPORTED_DESTINATION',
 ];
 
+const TERMINAL_IN_BAND_ROUTE_SEND_REASONS: readonly SendRouteToServiceFailureReason[] = [
+  'ACCOUNT_DELETION_IN_PROGRESS',
+  'ACCOUNT_STATE_UNAVAILABLE',
+  'DESTINATION_AUTH_REQUIRED',
+];
+
 const GENERIC_ROUTE_SEND_RESPONSE_MESSAGES = new Set<string>([
   'Could not send route.',
   'Could not send routes to Suunto.',
@@ -131,6 +137,19 @@ export class AppRouteSendService {
           processedRouteCount,
           routeCount: uniqueRouteIds.length,
         });
+
+        const terminalChunkResult = this.getTerminalInBandChunkResult(response.data);
+        if (terminalChunkResult) {
+          const unsentRouteIds = uniqueRouteIds.slice(processedRouteCount);
+          if (unsentRouteIds.length > 0) {
+            responses.push(this.buildTerminalInBandResponse(
+              destinationServiceName,
+              unsentRouteIds,
+              terminalChunkResult,
+            ));
+          }
+          break;
+        }
       } catch (error) {
         if (responses.length === 0) {
           throw error;
@@ -171,6 +190,41 @@ export class AppRouteSendService {
         status: 'failure',
         reason: 'SEND_REQUEST_FAILED',
         message,
+      })),
+    };
+  }
+
+  private getTerminalInBandChunkResult(
+    response: SendRoutesToServiceResponse,
+  ): SendRouteToServiceItemResult | null {
+    for (const reason of TERMINAL_IN_BAND_ROUTE_SEND_REASONS) {
+      const match = response.results.find(result => result.reason === reason);
+      if (match) {
+        return match;
+      }
+    }
+
+    return null;
+  }
+
+  private buildTerminalInBandResponse(
+    destinationServiceName: ServiceNames,
+    routeIds: string[],
+    terminalResult: SendRouteToServiceItemResult,
+  ): SendRoutesToServiceResponse {
+    return {
+      destinationServiceName,
+      status: terminalResult.status === 'success' ? 'success' : 'failure',
+      routeCount: routeIds.length,
+      successCount: terminalResult.status === 'success' ? routeIds.length : 0,
+      failureCount: terminalResult.status === 'failure' ? routeIds.length : 0,
+      skippedCount: terminalResult.status === 'skipped' ? routeIds.length : 0,
+      results: routeIds.map(routeId => ({
+        routeId,
+        destinationServiceName,
+        status: terminalResult.status,
+        reason: terminalResult.reason,
+        message: terminalResult.message,
       })),
     };
   }
