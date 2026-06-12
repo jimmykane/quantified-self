@@ -472,6 +472,34 @@ describe('AppUserService', () => {
         });
     });
 
+    it('keeps Suunto route catch-up incomplete for connected accounts when only legacy global route metadata exists', async () => {
+        service = TestBed.inject(AppUserService);
+        const testUser = { uid: 'u1' } as any;
+
+        (collectionData as any).mockReturnValueOnce(of([
+            {
+                accessToken: 'token-a',
+                dateCreated: 1710000000000,
+                userName: 'suunto-user-a',
+            },
+            {
+                accessToken: 'token-b',
+                dateCreated: 1710001000000,
+                userName: 'suunto-user-b',
+            },
+        ]));
+        (docData as any).mockReturnValueOnce(of({
+            didLastRouteImport: {
+                toDate: () => new Date('2026-06-12T09:45:00.000Z'),
+            },
+        }));
+
+        const result = await firstValueFrom(service.watchSuuntoRouteCatchUpPromptContext(testUser).pipe(take(1)));
+
+        expect(result.didLastRouteImport).toBeNull();
+        expect(result.connectedProviderUserIds).toEqual(['suunto-user-a', 'suunto-user-b']);
+    });
+
     describe('createOrUpdateUser policy flow', () => {
         beforeEach(() => {
             service = TestBed.inject(AppUserService);

@@ -491,7 +491,7 @@ export class RoutesPageComponent implements OnInit {
         try {
             const summary = await this.userService.addSuuntoRoutesToQueueForCurrentUser();
             const feedback = buildSuuntoRouteCatchUpSnackbarMessage(summary);
-            if ((summary.failedProviderCount || 0) === 0) {
+            if ((summary.failedProviderCount || 0) === 0 && summary.failureCount === 0) {
                 this.didLastSuuntoRouteCatchUp.set(new Date());
             }
             this.snackBar.open(feedback.message, undefined, { duration: feedback.duration });

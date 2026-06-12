@@ -66,7 +66,13 @@ describe('suunto-route-catch-up.helper', () => {
 
     expect(getSuuntoRouteCatchUpDateForConnectedProviders({
       didLastRouteImport: 1710000000000,
-    }, serviceTokens)?.getTime()).toBe(1710000000000);
+    }, serviceTokens)).toBeNull();
+  });
+
+  it('falls back to legacy global catch-up metadata only when no connected provider accounts are available', () => {
+    expect(getSuuntoRouteCatchUpDateForConnectedProviders({
+      didLastRouteImport: 1710000000000,
+    }, [])?.getTime()).toBe(1710000000000);
   });
 
   it('builds shared snackbar messages for queued route catch-up results', () => {

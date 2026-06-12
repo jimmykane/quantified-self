@@ -14,7 +14,7 @@ import { buildSuuntoServiceConnectionViewModel } from '../../../helpers/suunto-s
 import {
   buildSuuntoRouteCatchUpSnackbarMessage,
   getSuuntoRouteCatchUpCount,
-  getSuuntoRouteCatchUpDate,
+  getSuuntoRouteCatchUpDateForConnectedProviders,
 } from '../../../helpers/suunto-route-catch-up.helper';
 
 
@@ -37,7 +37,7 @@ export class ServicesSuuntoComponent extends ServicesAbstractComponentDirective 
   }
 
   get didLastRouteImport(): Date | null {
-    return getSuuntoRouteCatchUpDate(this.suuntoServiceMeta?.didLastRouteImport);
+    return getSuuntoRouteCatchUpDateForConnectedProviders(this.suuntoServiceMeta, this.serviceTokens);
   }
 
   get queuedRoutesFromLastRouteImportCount(): number {

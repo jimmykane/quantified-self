@@ -290,6 +290,18 @@ describe('ServicesSuuntoComponent', () => {
             expect(content).toContain('Queue all current routes');
         });
 
+        it('does not show legacy global route catch-up completion when connected accounts lack provider-scoped state', () => {
+            component.hasProAccess = true;
+            component.serviceTokens = [{ accessToken: 'token', userName: 'suunto-user' } as any];
+            component.serviceMeta = {
+                didLastRouteImport: 1710000000000,
+            } as any;
+            component.activeProviderTool = 'routes';
+            fixture.detectChanges();
+
+            expect(component.didLastRouteImport).toBeNull();
+        });
+
         it('queues Suunto routes from the services page', async () => {
             component.hasProAccess = true;
             component.serviceTokens = [{ accessToken: 'token', userName: 'suunto-user' } as any];

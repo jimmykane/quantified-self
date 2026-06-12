@@ -219,6 +219,54 @@ describe('Suunto route sync', () => {
     }), { merge: true });
   });
 
+  it('does not mark a provider complete when some of its route queue writes fail', async () => {
+    listSuuntoRoutesMock.mockResolvedValueOnce({
+      routes: [
+        { id: 'route-1', providerUserId: 'suunto-user-1', description: 'Morning Route', created: 1700000000000, modified: 1700000005000 },
+        { id: 'route-2', providerUserId: 'suunto-user-1', description: 'Evening Route', created: 1700000001000, modified: 1700000006000 },
+      ],
+      successfulProviderUserIds: ['suunto-user-1'],
+      failedProviderUserIds: [],
+    });
+    enqueueRouteSyncQueueItemMock.mockReset();
+    enqueueRouteSyncQueueItemMock.mockResolvedValueOnce({ enqueued: true, queueItemId: 'queue-1' });
+    enqueueRouteSyncQueueItemMock.mockRejectedValueOnce(new Error('queue failed'));
+
+    const result = await addSuuntoAppRoutesToQueue({
+      auth: { uid: 'user-1' },
+      app: { appId: 'app-1' },
+      data: {},
+    } as any);
+
+    expect(result).toEqual({
+      queuedCount: 1,
+      skippedCount: 0,
+      failureCount: 1,
+      failedProviderCount: 0,
+      totalCount: 2,
+    });
+
+    const updatePayload = routeImportMetaSetMock.mock.calls.at(-1)?.[0];
+    expect(updatePayload).toMatchObject({
+      queuedRoutesFromLastRouteImportCount: 1,
+      skippedRoutesFromLastRouteImportCount: 0,
+      failedRoutesFromLastRouteImportCount: 1,
+      failedRouteImportProviderCount: 0,
+      totalRoutesFromLastRouteImportCount: 2,
+      routeImportStatesByProviderUserId: {
+        'suunto-user-1': expect.objectContaining({
+          queuedCount: 1,
+          skippedCount: 0,
+          failureCount: 1,
+          totalCount: 2,
+          updatedAt: expect.any(Number),
+        }),
+      },
+    });
+    expect(updatePayload).not.toHaveProperty('didLastRouteImport');
+    expect(updatePayload.routeImportStatesByProviderUserId['suunto-user-1']).not.toHaveProperty('didLastRouteImport');
+  });
+
   it('rejects manual route catch-up for unauthenticated or non-Pro users', async () => {
     await expect(addSuuntoAppRoutesToQueue({
       auth: null,

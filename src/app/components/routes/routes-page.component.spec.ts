@@ -388,6 +388,33 @@ describe('RoutesPageComponent', () => {
         expect(component.suuntoRouteCatchUpPrompt()).not.toBeNull();
     });
 
+    it('keeps the Suunto route catch-up prompt visible after per-route queue failures', async () => {
+        userServiceMock.addSuuntoRoutesToQueueForCurrentUser.mockResolvedValueOnce({
+            queuedCount: 1,
+            skippedCount: 1,
+            failureCount: 1,
+            failedProviderCount: 0,
+            totalCount: 3,
+        });
+        suuntoRouteCatchUpPromptContext$.next({
+            ...suuntoRouteCatchUpPromptContext$.value,
+            didLastRouteImport: null,
+        });
+
+        await component.ngOnInit();
+        await firstValueFrom(component.routes$!);
+
+        await component.queueSuuntoRouteCatchUpPrompt();
+
+        expect(snackBarMock.open).toHaveBeenLastCalledWith(
+            'Queued 1 route. Skipped 1. Failed 1.',
+            undefined,
+            { duration: 4500 },
+        );
+        expect(component.didLastSuuntoRouteCatchUp()).toBeNull();
+        expect(component.suuntoRouteCatchUpPrompt()).not.toBeNull();
+    });
+
     it('dismisses the Suunto route catch-up prompt through dashboardActionPrompts', async () => {
         suuntoRouteCatchUpPromptContext$.next({
             ...suuntoRouteCatchUpPromptContext$.value,

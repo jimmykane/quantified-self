@@ -79,11 +79,16 @@ async function updateSuuntoRouteImportMeta(
   providerStatesByProviderUserId: Record<string, SuuntoRouteImportProviderState>,
 ): Promise<void> {
   const completedAt = Date.now();
+  const completedProviderCount = Object.values(providerStatesByProviderUserId)
+    .filter(providerState => providerState.failureCount === 0)
+    .length;
   const routeImportStatesByProviderUserId = Object.entries(providerStatesByProviderUserId).reduce<Record<string, unknown>>((result, [providerUserId, providerState]) => {
     result[providerUserId] = {
       ...providerState,
-      didLastRouteImport: completedAt,
       updatedAt: completedAt,
+      ...(providerState.failureCount === 0
+        ? { didLastRouteImport: completedAt }
+        : {}),
     };
     return result;
   }, {});
@@ -94,7 +99,9 @@ async function updateSuuntoRouteImportMeta(
     failedRoutesFromLastRouteImportCount: summary.failureCount,
     failedRouteImportProviderCount: summary.failedProviderCount,
     totalRoutesFromLastRouteImportCount: summary.totalCount,
-    ...(summary.failedProviderCount === 0 && Object.keys(routeImportStatesByProviderUserId).length > 0
+    ...(summary.failedProviderCount === 0
+      && completedProviderCount === Object.keys(routeImportStatesByProviderUserId).length
+      && completedProviderCount > 0
       ? { didLastRouteImport: completedAt }
       : {}),
     ...(Object.keys(routeImportStatesByProviderUserId).length > 0

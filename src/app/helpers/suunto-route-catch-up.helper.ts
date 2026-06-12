@@ -135,8 +135,12 @@ export function getSuuntoRouteCatchUpDateForConnectedProviders(
   const connectedProviderUserIds = getSuuntoConnectedProviderUserIds(serviceTokens);
   const providerStates = getSuuntoRouteImportStatesByProviderUserId(serviceMeta);
 
-  if (connectedProviderUserIds.length === 0 || Object.keys(providerStates).length === 0) {
+  if (connectedProviderUserIds.length === 0) {
     return getSuuntoRouteCatchUpDate(serviceMeta?.didLastRouteImport);
+  }
+
+  if (Object.keys(providerStates).length === 0) {
+    return null;
   }
 
   const connectedDates = connectedProviderUserIds.map(providerUserId => (
