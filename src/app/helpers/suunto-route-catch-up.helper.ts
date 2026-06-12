@@ -188,7 +188,11 @@ export function buildSuuntoRouteCatchUpPromptSource(options: {
   }
 
   const tokenSourceKey = getStableSuuntoServiceTokenSourceKey(options.serviceTokens);
-  return `${SUUNTO_ROUTE_CATCH_UP_PROMPT_SOURCE}:connected:${tokenSourceKey ?? 'unknown'}`;
+  if (!tokenSourceKey) {
+    return null;
+  }
+
+  return `${SUUNTO_ROUTE_CATCH_UP_PROMPT_SOURCE}:connected:${tokenSourceKey}`;
 }
 
 export function buildSuuntoRouteCatchUpPromptViewModel(options: {

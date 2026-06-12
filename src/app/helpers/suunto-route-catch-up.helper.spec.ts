@@ -146,6 +146,20 @@ describe('suunto-route-catch-up.helper', () => {
     })).toBeNull();
   });
 
+  it('ignores malformed Suunto tokens without a provider identity when deriving connected route catch-up state', () => {
+    expect(getSuuntoRouteCatchUpDateForConnectedProviders({
+      didLastRouteImport: 1710000000000,
+    }, [
+      { dateCreated: 1710000000000 },
+    ])?.getTime()).toBe(1710000000000);
+
+    expect(buildSuuntoRouteCatchUpPromptSource({
+      connected: true,
+      reconnectRequired: false,
+      serviceTokens: [{ dateCreated: 1710000000000 }],
+    })).toBeNull();
+  });
+
   it('builds an order-independent source key for connected Suunto tokens', () => {
     const forward = buildSuuntoRouteCatchUpPromptSource({
       connected: true,

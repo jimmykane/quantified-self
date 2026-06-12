@@ -50,8 +50,12 @@ export function buildSuuntoServiceTokenFingerprint(serviceToken: unknown): strin
   }
 
   const token = serviceToken as { dateCreated?: unknown; userName?: unknown };
+  const userName = getSuuntoProviderUserIdFromTokenLike(token);
+  if (!userName) {
+    return null;
+  }
+
   const createdAt = toDate(token.dateCreated)?.getTime() ?? 'unknown-created';
-  const userName = getSuuntoProviderUserIdFromTokenLike(token) ?? 'unknown-user';
 
   return `${userName}:${createdAt}`;
 }
@@ -72,4 +76,3 @@ export function getStableSuuntoServiceTokenSourceKey(serviceTokens: unknown): st
 export function getSuuntoRouteImportSourceKeyFromTokenLike(serviceToken: unknown): string | null {
   return buildSuuntoServiceTokenFingerprint(serviceToken);
 }
-
