@@ -10,6 +10,7 @@ import { verifySuuntoWebhookSignature } from './webhook-signature';
 import { isProviderQueueSkippedWithoutRetryError } from '../queue/provider-queue-errors';
 import { enqueueRouteSyncQueueItem } from '../routes/route-sync-queue';
 import { FUNCTIONS_MANIFEST } from '../../../shared/functions-manifest';
+import { SuuntoRouteImportStateEntry } from '../../../shared/suunto-route-import-state';
 import { ALLOWED_CORS_ORIGINS, enforceAppCheck, hasProAccess, PRO_REQUIRED_MESSAGE } from '../utils';
 import {
   createSuuntoRouteUploadContext,
@@ -26,7 +27,7 @@ interface SuuntoRouteCatchUpResponse {
   totalCount: number;
 }
 
-interface SuuntoRouteImportProviderState {
+interface SuuntoRouteImportProviderState extends Omit<SuuntoRouteImportStateEntry, 'didLastRouteImport' | 'updatedAt'> {
   queuedCount: number;
   skippedCount: number;
   failureCount: number;
@@ -76,22 +77,26 @@ function getJsonRouteNotification(body: unknown): {
 async function updateSuuntoRouteImportMeta(
   userID: string,
   summary: SuuntoRouteCatchUpResponse,
-  providerStatesByProviderUserId: Record<string, SuuntoRouteImportProviderState>,
+  providerStatesBySourceKey: Record<string, SuuntoRouteImportProviderState>,
 ): Promise<void> {
   const completedAt = Date.now();
-  const completedProviderCount = Object.values(providerStatesByProviderUserId)
-    .filter(providerState => providerState.failureCount === 0)
-    .length;
-  const routeImportStatesByProviderUserId = Object.entries(providerStatesByProviderUserId).reduce<Record<string, unknown>>((result, [providerUserId, providerState]) => {
-    result[providerUserId] = {
-      ...providerState,
+  const routeImportStatesByProviderSourceKey = Object.values(providerStatesBySourceKey)
+    .sort((left, right) => left.sourceKey.localeCompare(right.sourceKey))
+    .map((providerState) => ({
+      sourceKey: providerState.sourceKey,
+      providerUserId: providerState.providerUserId,
+      queuedCount: providerState.queuedCount,
+      skippedCount: providerState.skippedCount,
+      failureCount: providerState.failureCount,
+      totalCount: providerState.totalCount,
       updatedAt: completedAt,
       ...(providerState.failureCount === 0
         ? { didLastRouteImport: completedAt }
         : {}),
-    };
-    return result;
-  }, {});
+    }));
+  const completedProviderCount = routeImportStatesByProviderSourceKey
+    .filter(providerState => providerState.failureCount === 0)
+    .length;
 
   await admin.firestore().collection('users').doc(userID).collection('meta').doc(ServiceNames.SuuntoApp).set({
     queuedRoutesFromLastRouteImportCount: summary.queuedCount,
@@ -99,14 +104,13 @@ async function updateSuuntoRouteImportMeta(
     failedRoutesFromLastRouteImportCount: summary.failureCount,
     failedRouteImportProviderCount: summary.failedProviderCount,
     totalRoutesFromLastRouteImportCount: summary.totalCount,
+    routeImportStatesByProviderSourceKey,
+    routeImportStatesByProviderUserId: admin.firestore.FieldValue.delete(),
     ...(summary.failedProviderCount === 0
-      && completedProviderCount === Object.keys(routeImportStatesByProviderUserId).length
+      && completedProviderCount === routeImportStatesByProviderSourceKey.length
       && completedProviderCount > 0
       ? { didLastRouteImport: completedAt }
-      : {}),
-    ...(Object.keys(routeImportStatesByProviderUserId).length > 0
-      ? { routeImportStatesByProviderUserId }
-      : {}),
+      : { didLastRouteImport: admin.firestore.FieldValue.delete() }),
   }, { merge: true });
 }
 
@@ -184,11 +188,18 @@ export const addSuuntoAppRoutesToQueue = onCall({
     queuedCount: 0,
     skippedCount: 0,
     failureCount: 0,
-    failedProviderCount: routeListResult.failedProviderUserIds.length,
+    failedProviderCount: routeListResult.failedProviderSourceKeys.length,
     totalCount: routeListResult.routes.length,
   };
-  const providerStatesByProviderUserId = routeListResult.successfulProviderUserIds.reduce<Record<string, SuuntoRouteImportProviderState>>((result, providerUserId) => {
-    result[providerUserId] = {
+  const providerStatesBySourceKey = routeListResult.successfulProviderSourceKeys.reduce<Record<string, SuuntoRouteImportProviderState>>((result, sourceKey) => {
+    const tokenRef = context.tokenRefs.find(item => item.sourceKey === sourceKey);
+    if (!tokenRef) {
+      return result;
+    }
+
+    result[sourceKey] = {
+      sourceKey,
+      providerUserId: tokenRef.providerUserId,
       queuedCount: 0,
       skippedCount: 0,
       failureCount: 0,
@@ -198,15 +209,21 @@ export const addSuuntoAppRoutesToQueue = onCall({
   }, {});
 
   for (const route of routeListResult.routes) {
-    if (!providerStatesByProviderUserId[route.providerUserId]) {
-      providerStatesByProviderUserId[route.providerUserId] = {
+    const providerSourceKey = route.providerSourceKey
+      || context.tokenRefs.find(tokenRef => tokenRef.providerUserId === route.providerUserId)?.sourceKey
+      || `${route.providerUserId}:unknown-created`;
+
+    if (!providerStatesBySourceKey[providerSourceKey]) {
+      providerStatesBySourceKey[providerSourceKey] = {
+        sourceKey: providerSourceKey,
+        providerUserId: route.providerUserId,
         queuedCount: 0,
         skippedCount: 0,
         failureCount: 0,
         totalCount: 0,
       };
     }
-    providerStatesByProviderUserId[route.providerUserId].totalCount++;
+    providerStatesBySourceKey[providerSourceKey].totalCount++;
 
     try {
       const result = await enqueueRouteSyncQueueItem({
@@ -221,15 +238,15 @@ export const addSuuntoAppRoutesToQueue = onCall({
       });
       if (result.enqueued) {
         summary.queuedCount++;
-        providerStatesByProviderUserId[route.providerUserId].queuedCount++;
+        providerStatesBySourceKey[providerSourceKey].queuedCount++;
       } else {
         summary.skippedCount++;
-        providerStatesByProviderUserId[route.providerUserId].skippedCount++;
+        providerStatesBySourceKey[providerSourceKey].skippedCount++;
       }
     } catch (error) {
       if (isProviderQueueSkippedWithoutRetryError(error)) {
         summary.skippedCount++;
-        providerStatesByProviderUserId[route.providerUserId].skippedCount++;
+        providerStatesBySourceKey[providerSourceKey].skippedCount++;
         continue;
       }
       logger.error('[SuuntoRouteSync] Failed to queue route during manual catch-up', {
@@ -239,10 +256,10 @@ export const addSuuntoAppRoutesToQueue = onCall({
         error,
       });
       summary.failureCount++;
-      providerStatesByProviderUserId[route.providerUserId].failureCount++;
+      providerStatesBySourceKey[providerSourceKey].failureCount++;
     }
   }
 
-  await updateSuuntoRouteImportMeta(userID, summary, providerStatesByProviderUserId);
+  await updateSuuntoRouteImportMeta(userID, summary, providerStatesBySourceKey);
   return summary;
 });

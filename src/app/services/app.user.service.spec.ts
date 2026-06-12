@@ -444,18 +444,22 @@ describe('AppUserService', () => {
             },
         ]));
         (docData as any).mockReturnValueOnce(of({
-            routeImportStatesByProviderUserId: {
-                'suunto-user-a': {
+            routeImportStatesByProviderSourceKey: [
+                {
+                    sourceKey: 'suunto-user-a:1710000000000',
+                    providerUserId: 'suunto-user-a',
                     didLastRouteImport: {
                         toDate: () => new Date('2026-06-11T08:30:00.000Z'),
                     },
                 },
-                'suunto-user-b': {
+                {
+                    sourceKey: 'suunto-user-b:1710001000000',
+                    providerUserId: 'suunto-user-b',
                     didLastRouteImport: {
                         toDate: () => new Date('2026-06-12T09:45:00.000Z'),
                     },
                 },
-            },
+            ],
         }));
 
         const result = await firstValueFrom(service.watchSuuntoRouteCatchUpPromptContext(testUser).pipe(take(1)));
@@ -468,7 +472,7 @@ describe('AppUserService', () => {
         expect(result.didLastRouteImport?.toISOString()).toBe('2026-06-12T09:45:00.000Z');
         expect(result.promptSource).toBe('suunto-route-catch-up:connected:suunto-user-a:1710000000000|suunto-user-b:1710001000000');
         expect(result.serviceMeta).toMatchObject({
-            routeImportStatesByProviderUserId: expect.any(Object),
+            routeImportStatesByProviderSourceKey: expect.any(Array),
         });
     });
 
@@ -498,6 +502,39 @@ describe('AppUserService', () => {
 
         expect(result.didLastRouteImport).toBeNull();
         expect(result.connectedProviderUserIds).toEqual(['suunto-user-a', 'suunto-user-b']);
+    });
+
+    it('treats a same-account reconnect as incomplete until the new source key completes', async () => {
+        service = TestBed.inject(AppUserService);
+        const testUser = { uid: 'u1' } as any;
+
+        (collectionData as any).mockReturnValueOnce(of([
+            {
+                accessToken: 'token-a',
+                dateCreated: 1711000000000,
+                userName: 'suunto-user-a',
+            },
+        ]));
+        (docData as any).mockReturnValueOnce(of({
+            didLastRouteImport: {
+                toDate: () => new Date('2026-06-12T09:45:00.000Z'),
+            },
+            routeImportStatesByProviderSourceKey: [
+                {
+                    sourceKey: 'suunto-user-a:1710000000000',
+                    providerUserId: 'suunto-user-a',
+                    didLastRouteImport: {
+                        toDate: () => new Date('2026-06-12T09:45:00.000Z'),
+                    },
+                },
+            ],
+        }));
+
+        const result = await firstValueFrom(service.watchSuuntoRouteCatchUpPromptContext(testUser).pipe(take(1)));
+
+        expect(result.didLastRouteImport).toBeNull();
+        expect(result.promptSource).toBe('suunto-route-catch-up:connected:suunto-user-a:1711000000000');
+        expect(result.connectedProviderUserIds).toEqual(['suunto-user-a']);
     });
 
     describe('createOrUpdateUser policy flow', () => {

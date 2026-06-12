@@ -10,6 +10,7 @@ import * as zlib from 'zlib';
 import { SERVICE_NAME, SUUNTOAPP_ACCESS_TOKENS_COLLECTION_NAME } from './constants';
 import { config } from '../config';
 import { toSuuntoAuthorizationHeader } from './authorization-header';
+import { getSuuntoRouteImportSourceKeyFromTokenLike } from '../../../shared/suunto-route-import-state';
 import {
   getUserDeletionGuardState,
   getUserDeletionGuardStateInTransaction,
@@ -28,6 +29,7 @@ export interface SuuntoRouteUploadTokenRef {
   id: string;
   ref: admin.firestore.DocumentReference;
   providerUserId: string;
+  sourceKey: string;
 }
 
 export interface SuuntoRouteUploadContext {
@@ -47,6 +49,7 @@ export interface SuuntoRouteUploadResult {
 
 export interface SuuntoRouteSummary {
   providerUserId: string;
+  providerSourceKey: string;
   id: string;
   description?: string | null;
   created?: number | null;
@@ -57,6 +60,8 @@ export interface SuuntoRouteListResult {
   routes: SuuntoRouteSummary[];
   successfulProviderUserIds: string[];
   failedProviderUserIds: string[];
+  successfulProviderSourceKeys: string[];
+  failedProviderSourceKeys: string[];
 }
 
 export class SuuntoRouteUploadSkippedForDeletedUserError extends Error {
@@ -191,6 +196,7 @@ export async function createSuuntoRouteUploadContext(userID: string): Promise<Su
         id: tokenSnapshot.id,
         ref: tokenSnapshot.ref,
         providerUserId,
+        sourceKey: getSuuntoRouteImportSourceKeyFromTokenLike(tokenSnapshot.data()) || `${providerUserId}:unknown-created`,
       };
     })
     .filter((tokenRef): tokenRef is SuuntoRouteUploadTokenRef => tokenRef !== null);
@@ -230,18 +236,23 @@ function getSuuntoTokenRefsForReadOperation(
 
 function normalizeSuuntoRouteSummary(value: unknown): SuuntoRouteSummary | null {
   const providerUserId = normalizeSuuntoProviderUserId((value as { providerUserId?: unknown } | null)?.providerUserId);
+  const providerSourceKey = typeof (value as { providerSourceKey?: unknown } | null)?.providerSourceKey === 'string'
+    && (value as { providerSourceKey: string }).providerSourceKey.trim().length > 0
+    ? (value as { providerSourceKey: string }).providerSourceKey.trim()
+    : null;
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     return null;
   }
 
   const route = value as Record<string, unknown>;
   const id = typeof route.id === 'string' && route.id.trim() ? route.id.trim() : null;
-  if (!id || !providerUserId) {
+  if (!id || !providerUserId || !providerSourceKey) {
     return null;
   }
 
   return {
     providerUserId,
+    providerSourceKey,
     id,
     description: typeof route.description === 'string' && route.description.trim() ? route.description.trim() : null,
     created: typeof route.created === 'number' && Number.isFinite(route.created) ? route.created : null,
@@ -311,6 +322,8 @@ export async function listSuuntoRoutes(
   const routesByProviderKey = new Map<string, SuuntoRouteSummary>();
   const successfulProviderUserIds = new Set<string>();
   const failedProviderUserIds = new Set<string>();
+  const successfulProviderSourceKeys = new Set<string>();
+  const failedProviderSourceKeys = new Set<string>();
   let authFailures = 0;
   let lastError: unknown = null;
 
@@ -340,23 +353,27 @@ export async function listSuuntoRoutes(
           payloadType: typeof result,
         });
         failedProviderUserIds.add(tokenRef.providerUserId);
+        failedProviderSourceKeys.add(tokenRef.sourceKey);
         continue;
       }
 
       successfulProviderUserIds.add(tokenRef.providerUserId);
+      successfulProviderSourceKeys.add(tokenRef.sourceKey);
       failedProviderUserIds.delete(tokenRef.providerUserId);
+      failedProviderSourceKeys.delete(tokenRef.sourceKey);
 
       for (const route of result) {
         const normalizedRoute = normalizeSuuntoRouteSummary({
           ...route,
           providerUserId: tokenRef.providerUserId,
+          providerSourceKey: tokenRef.sourceKey,
         });
         if (!normalizedRoute) {
           continue;
         }
 
         routesByProviderKey.set(
-          `${normalizedRoute.providerUserId}:${normalizedRoute.id}`,
+          `${normalizedRoute.providerSourceKey}:${normalizedRoute.id}`,
           normalizedRoute,
         );
       }
@@ -365,6 +382,7 @@ export async function listSuuntoRoutes(
         throw error;
       }
       failedProviderUserIds.add(tokenRef.providerUserId);
+      failedProviderSourceKeys.add(tokenRef.sourceKey);
       if (error instanceof HttpsError && error.code === 'unauthenticated') {
         authFailures++;
         lastError = error;
@@ -388,6 +406,8 @@ export async function listSuuntoRoutes(
       routes: Array.from(routesByProviderKey.values()),
       successfulProviderUserIds: Array.from(successfulProviderUserIds.values()),
       failedProviderUserIds: Array.from(failedProviderUserIds.values()),
+      successfulProviderSourceKeys: Array.from(successfulProviderSourceKeys.values()),
+      failedProviderSourceKeys: Array.from(failedProviderSourceKeys.values()),
     };
   }
 

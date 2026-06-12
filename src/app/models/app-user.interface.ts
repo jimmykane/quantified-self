@@ -183,6 +183,16 @@ export interface AppUserServiceMetaInterface extends UserServiceMetaInterface, S
     failedRoutesFromLastRouteImportCount?: number;
     failedRouteImportProviderCount?: number;
     totalRoutesFromLastRouteImportCount?: number;
+    routeImportStatesByProviderSourceKey?: Array<{
+        sourceKey: string;
+        providerUserId: string;
+        didLastRouteImport?: AppDateValue;
+        queuedCount?: number;
+        skippedCount?: number;
+        failureCount?: number;
+        totalCount?: number;
+        updatedAt?: AppDateValue;
+    }>;
     routeImportStatesByProviderUserId?: Record<string, {
         didLastRouteImport?: AppDateValue;
         queuedCount?: number;

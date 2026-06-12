@@ -302,6 +302,29 @@ describe('ServicesSuuntoComponent', () => {
             expect(component.didLastRouteImport).toBeNull();
         });
 
+        it('treats a same-account reconnect as incomplete until the new source key completes', () => {
+            component.hasProAccess = true;
+            component.serviceTokens = [{
+                accessToken: 'token',
+                userName: 'suunto-user',
+                dateCreated: 1711000000000,
+            } as any];
+            component.serviceMeta = {
+                didLastRouteImport: 1710000000000,
+                routeImportStatesByProviderSourceKey: [
+                    {
+                        sourceKey: 'suunto-user:1710000000000',
+                        providerUserId: 'suunto-user',
+                        didLastRouteImport: 1710000000000,
+                    },
+                ],
+            } as any;
+            component.activeProviderTool = 'routes';
+            fixture.detectChanges();
+
+            expect(component.didLastRouteImport).toBeNull();
+        });
+
         it('queues Suunto routes from the services page', async () => {
             component.hasProAccess = true;
             component.serviceTokens = [{ accessToken: 'token', userName: 'suunto-user' } as any];

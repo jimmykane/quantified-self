@@ -47,26 +47,45 @@ describe('suunto-route-catch-up.helper', () => {
     ];
 
     expect(getSuuntoRouteCatchUpDateForConnectedProviders({
-      routeImportStatesByProviderUserId: {
-        alpha: { didLastRouteImport: 1710000000000 },
-      },
+      routeImportStatesByProviderSourceKey: [
+        { sourceKey: 'alpha:1700000000000', providerUserId: 'alpha', didLastRouteImport: 1710000000000 },
+      ],
       didLastRouteImport: 1710000000000,
     }, serviceTokens)).toBeNull();
 
     expect(getSuuntoRouteCatchUpDateForConnectedProviders({
-      routeImportStatesByProviderUserId: {
-        alpha: { didLastRouteImport: 1710000000000 },
-        beta: {
+      routeImportStatesByProviderSourceKey: [
+        { sourceKey: 'alpha:1700000000000', providerUserId: 'alpha', didLastRouteImport: 1710000000000 },
+        {
+          sourceKey: 'beta:1710000000000',
+          providerUserId: 'beta',
           didLastRouteImport: {
             toDate: () => new Date('2026-06-12T08:45:00.000Z'),
           },
         },
-      },
+      ],
     }, serviceTokens)?.toISOString()).toBe('2026-06-12T08:45:00.000Z');
 
     expect(getSuuntoRouteCatchUpDateForConnectedProviders({
       didLastRouteImport: 1710000000000,
     }, serviceTokens)).toBeNull();
+  });
+
+  it('treats a same-account reconnect as incomplete until the new token source key is completed', () => {
+    const reconnectedTokens = [
+      { userName: 'alpha', dateCreated: 1720000000000 },
+    ];
+
+    expect(getSuuntoRouteCatchUpDateForConnectedProviders({
+      routeImportStatesByProviderSourceKey: [
+        {
+          sourceKey: 'alpha:1700000000000',
+          providerUserId: 'alpha',
+          didLastRouteImport: 1710000000000,
+        },
+      ],
+      didLastRouteImport: 1710000000000,
+    }, reconnectedTokens)).toBeNull();
   });
 
   it('falls back to legacy global catch-up metadata only when no connected provider accounts are available', () => {

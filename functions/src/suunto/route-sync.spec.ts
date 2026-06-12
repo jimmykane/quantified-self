@@ -11,6 +11,7 @@ const verifySuuntoWebhookSignatureMock = vi.fn();
 const hasProAccessMock = vi.fn();
 const enforceAppCheckMock = vi.fn();
 const routeImportMetaSetMock = vi.fn();
+const deleteFieldSentinel = { __op: 'delete' };
 
 vi.mock('./webhook-signature', () => ({
   verifySuuntoWebhookSignature: (...args: any[]) => verifySuuntoWebhookSignatureMock(...args),
@@ -58,7 +59,7 @@ vi.mock('firebase-functions/v2/https', () => ({
 }));
 
 vi.mock('firebase-admin', () => ({
-  firestore: () => ({
+  firestore: Object.assign(() => ({
     collection: () => ({
       doc: () => ({
         collection: () => ({
@@ -68,6 +69,10 @@ vi.mock('firebase-admin', () => ({
         }),
       }),
     }),
+  }), {
+    FieldValue: {
+      delete: () => deleteFieldSentinel,
+    },
   }),
 }));
 
@@ -89,18 +94,20 @@ describe('Suunto route sync', () => {
     verifySuuntoWebhookSignatureMock.mockReturnValue(true);
     createSuuntoRouteUploadContextMock.mockResolvedValue({
       tokenRefs: [
-        { id: 'token-1', ref: {}, providerUserId: 'suunto-user-1' },
-        { id: 'token-2', ref: {}, providerUserId: 'suunto-user-2' },
+        { id: 'token-1', ref: {}, providerUserId: 'suunto-user-1', sourceKey: 'suunto-user-1:1700000000000' },
+        { id: 'token-2', ref: {}, providerUserId: 'suunto-user-2', sourceKey: 'suunto-user-2:1710000000000' },
       ],
       userNames: ['suunto-user-1', 'suunto-user-2'],
     });
     listSuuntoRoutesMock.mockResolvedValue({
       routes: [
-        { id: 'route-1', providerUserId: 'suunto-user-1', description: 'Morning Route', created: 1700000000000, modified: 1700000005000 },
-        { id: 'route-2', providerUserId: 'suunto-user-2', description: 'Evening Route', created: 1700000010000, modified: 1700000015000 },
+        { id: 'route-1', providerUserId: 'suunto-user-1', providerSourceKey: 'suunto-user-1:1700000000000', description: 'Morning Route', created: 1700000000000, modified: 1700000005000 },
+        { id: 'route-2', providerUserId: 'suunto-user-2', providerSourceKey: 'suunto-user-2:1710000000000', description: 'Evening Route', created: 1700000010000, modified: 1700000015000 },
       ],
       successfulProviderUserIds: ['suunto-user-1', 'suunto-user-2'],
       failedProviderUserIds: [],
+      successfulProviderSourceKeys: ['suunto-user-1:1700000000000', 'suunto-user-2:1710000000000'],
+      failedProviderSourceKeys: [],
     });
     enqueueRouteSyncQueueItemMock
       .mockResolvedValueOnce({ enqueued: true, queueItemId: 'queue-1' })
@@ -118,8 +125,8 @@ describe('Suunto route sync', () => {
     expect(createSuuntoRouteUploadContextMock).toHaveBeenCalledWith('user-1');
     expect(listSuuntoRoutesMock).toHaveBeenCalledWith('user-1', {
       tokenRefs: [
-        { id: 'token-1', ref: {}, providerUserId: 'suunto-user-1' },
-        { id: 'token-2', ref: {}, providerUserId: 'suunto-user-2' },
+        { id: 'token-1', ref: {}, providerUserId: 'suunto-user-1', sourceKey: 'suunto-user-1:1700000000000' },
+        { id: 'token-2', ref: {}, providerUserId: 'suunto-user-2', sourceKey: 'suunto-user-2:1710000000000' },
       ],
       userNames: ['suunto-user-1', 'suunto-user-2'],
     });
@@ -151,8 +158,10 @@ describe('Suunto route sync', () => {
       failedRouteImportProviderCount: 0,
       totalRoutesFromLastRouteImportCount: 2,
       didLastRouteImport: expect.any(Number),
-      routeImportStatesByProviderUserId: {
-        'suunto-user-1': expect.objectContaining({
+      routeImportStatesByProviderSourceKey: [
+        expect.objectContaining({
+          sourceKey: 'suunto-user-1:1700000000000',
+          providerUserId: 'suunto-user-1',
           queuedCount: 1,
           skippedCount: 0,
           failureCount: 0,
@@ -160,7 +169,9 @@ describe('Suunto route sync', () => {
           didLastRouteImport: expect.any(Number),
           updatedAt: expect.any(Number),
         }),
-        'suunto-user-2': expect.objectContaining({
+        expect.objectContaining({
+          sourceKey: 'suunto-user-2:1710000000000',
+          providerUserId: 'suunto-user-2',
           queuedCount: 0,
           skippedCount: 1,
           failureCount: 0,
@@ -168,17 +179,20 @@ describe('Suunto route sync', () => {
           didLastRouteImport: expect.any(Number),
           updatedAt: expect.any(Number),
         }),
-      },
+      ],
+      routeImportStatesByProviderUserId: deleteFieldSentinel,
     }), { merge: true });
   });
 
   it('preserves partial provider failures in the catch-up summary and completion metadata', async () => {
     listSuuntoRoutesMock.mockResolvedValueOnce({
       routes: [
-        { id: 'route-1', providerUserId: 'suunto-user-1', description: 'Morning Route', created: 1700000000000, modified: 1700000005000 },
+        { id: 'route-1', providerUserId: 'suunto-user-1', providerSourceKey: 'suunto-user-1:1700000000000', description: 'Morning Route', created: 1700000000000, modified: 1700000005000 },
       ],
       successfulProviderUserIds: ['suunto-user-1'],
       failedProviderUserIds: ['suunto-user-2'],
+      successfulProviderSourceKeys: ['suunto-user-1:1700000000000'],
+      failedProviderSourceKeys: ['suunto-user-2:1710000000000'],
     });
     enqueueRouteSyncQueueItemMock.mockReset();
     enqueueRouteSyncQueueItemMock.mockResolvedValueOnce({ enqueued: true, queueItemId: 'queue-1' });
@@ -202,8 +216,10 @@ describe('Suunto route sync', () => {
       failedRoutesFromLastRouteImportCount: 0,
       failedRouteImportProviderCount: 1,
       totalRoutesFromLastRouteImportCount: 1,
-      routeImportStatesByProviderUserId: {
-        'suunto-user-1': expect.objectContaining({
+      routeImportStatesByProviderSourceKey: [
+        expect.objectContaining({
+          sourceKey: 'suunto-user-1:1700000000000',
+          providerUserId: 'suunto-user-1',
           queuedCount: 1,
           skippedCount: 0,
           failureCount: 0,
@@ -211,22 +227,22 @@ describe('Suunto route sync', () => {
           didLastRouteImport: expect.any(Number),
           updatedAt: expect.any(Number),
         }),
-      },
-    }), { merge: true });
-    expect(routeImportMetaSetMock).not.toHaveBeenCalledWith(expect.objectContaining({
-      didLastRouteImport: expect.any(Number),
-      failedRouteImportProviderCount: 1,
+      ],
+      routeImportStatesByProviderUserId: deleteFieldSentinel,
+      didLastRouteImport: deleteFieldSentinel,
     }), { merge: true });
   });
 
   it('does not mark a provider complete when some of its route queue writes fail', async () => {
     listSuuntoRoutesMock.mockResolvedValueOnce({
       routes: [
-        { id: 'route-1', providerUserId: 'suunto-user-1', description: 'Morning Route', created: 1700000000000, modified: 1700000005000 },
-        { id: 'route-2', providerUserId: 'suunto-user-1', description: 'Evening Route', created: 1700000001000, modified: 1700000006000 },
+        { id: 'route-1', providerUserId: 'suunto-user-1', providerSourceKey: 'suunto-user-1:1700000000000', description: 'Morning Route', created: 1700000000000, modified: 1700000005000 },
+        { id: 'route-2', providerUserId: 'suunto-user-1', providerSourceKey: 'suunto-user-1:1700000000000', description: 'Evening Route', created: 1700000001000, modified: 1700000006000 },
       ],
       successfulProviderUserIds: ['suunto-user-1'],
       failedProviderUserIds: [],
+      successfulProviderSourceKeys: ['suunto-user-1:1700000000000'],
+      failedProviderSourceKeys: [],
     });
     enqueueRouteSyncQueueItemMock.mockReset();
     enqueueRouteSyncQueueItemMock.mockResolvedValueOnce({ enqueued: true, queueItemId: 'queue-1' });
@@ -253,18 +269,21 @@ describe('Suunto route sync', () => {
       failedRoutesFromLastRouteImportCount: 1,
       failedRouteImportProviderCount: 0,
       totalRoutesFromLastRouteImportCount: 2,
-      routeImportStatesByProviderUserId: {
-        'suunto-user-1': expect.objectContaining({
+      routeImportStatesByProviderSourceKey: [
+        expect.objectContaining({
+          sourceKey: 'suunto-user-1:1700000000000',
+          providerUserId: 'suunto-user-1',
           queuedCount: 1,
           skippedCount: 0,
           failureCount: 1,
           totalCount: 2,
           updatedAt: expect.any(Number),
         }),
-      },
+      ],
+      routeImportStatesByProviderUserId: deleteFieldSentinel,
+      didLastRouteImport: deleteFieldSentinel,
     });
-    expect(updatePayload).not.toHaveProperty('didLastRouteImport');
-    expect(updatePayload.routeImportStatesByProviderUserId['suunto-user-1']).not.toHaveProperty('didLastRouteImport');
+    expect(updatePayload.routeImportStatesByProviderSourceKey[0]).not.toHaveProperty('didLastRouteImport');
   });
 
   it('rejects manual route catch-up for unauthenticated or non-Pro users', async () => {

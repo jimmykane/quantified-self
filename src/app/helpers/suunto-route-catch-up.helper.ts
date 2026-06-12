@@ -2,6 +2,12 @@ import {
   DASHBOARD_ACTION_PROMPT_SUUNTO_ROUTE_CATCH_UP_ID,
   DashboardActionPromptViewModel,
 } from './dashboard-action-prompt.helper';
+import {
+  getStableSuuntoServiceTokenSourceKey,
+  getSuuntoProviderUserIdFromTokenLike,
+  getSuuntoRouteImportSourceKeyFromTokenLike,
+  SuuntoRouteImportStateEntry,
+} from '@shared/suunto-route-import-state';
 
 export const SUUNTO_ROUTE_CATCH_UP_PROMPT_SOURCE = 'suunto-route-catch-up';
 
@@ -20,12 +26,9 @@ export interface SuuntoRouteCatchUpSnackbarMessage {
 
 export type SuuntoRouteCatchUpPromptVariant = 'upgrade' | 'reconnect' | 'queue';
 
-interface SuuntoRouteImportProviderStateLike {
-  didLastRouteImport?: unknown;
-}
-
 interface SuuntoRouteImportMetaLike {
   didLastRouteImport?: unknown;
+  routeImportStatesByProviderSourceKey?: unknown;
   routeImportStatesByProviderUserId?: unknown;
 }
 
@@ -53,61 +56,29 @@ function toDate(value: unknown): Date | null {
   return null;
 }
 
-function buildServiceTokenFingerprint(serviceToken: unknown): string | null {
-  if (!serviceToken || typeof serviceToken !== 'object') {
-    return null;
-  }
-
-  const token = serviceToken as { dateCreated?: unknown; userName?: unknown };
-  const createdAt = toDate(token.dateCreated)?.getTime() ?? 'unknown-created';
-  const userName = typeof token.userName === 'string' && token.userName.trim().length > 0
-    ? token.userName.trim()
-    : 'unknown-user';
-
-  return `${userName}:${createdAt}`;
-}
-
-function getProviderUserIdFromServiceToken(serviceToken: unknown): string | null {
-  if (!serviceToken || typeof serviceToken !== 'object') {
-    return null;
-  }
-
-  const userName = (serviceToken as { userName?: unknown }).userName;
-  return typeof userName === 'string' && userName.trim().length > 0
-    ? userName.trim()
-    : null;
-}
-
-function getStableServiceTokenSourceKey(serviceTokens: unknown): string | null {
-  if (!Array.isArray(serviceTokens) || serviceTokens.length === 0) {
-    return null;
-  }
-
-  const fingerprints = serviceTokens
-    .map(token => buildServiceTokenFingerprint(token))
-    .filter((fingerprint): fingerprint is string => !!fingerprint)
-    .sort((left, right) => left.localeCompare(right));
-
-  return fingerprints.length > 0 ? fingerprints.join('|') : null;
-}
-
-function getSuuntoRouteImportStatesByProviderUserId(
+function getSuuntoRouteImportStatesBySourceKey(
   serviceMeta: SuuntoRouteImportMetaLike | null | undefined,
-): Record<string, SuuntoRouteImportProviderStateLike> {
-  const rawStates = serviceMeta?.routeImportStatesByProviderUserId;
-  if (!rawStates || typeof rawStates !== 'object' || Array.isArray(rawStates)) {
+): Record<string, SuuntoRouteImportStateEntry> {
+  const rawStates = serviceMeta?.routeImportStatesByProviderSourceKey;
+  if (!Array.isArray(rawStates) || rawStates.length === 0) {
     return {};
   }
 
-  return Object.entries(rawStates as Record<string, unknown>).reduce<Record<string, SuuntoRouteImportProviderStateLike>>((result, [providerUserId, rawState]) => {
-    if (typeof providerUserId !== 'string' || providerUserId.trim().length === 0) {
-      return result;
-    }
+  return rawStates.reduce<Record<string, SuuntoRouteImportStateEntry>>((result, rawState) => {
     if (!rawState || typeof rawState !== 'object' || Array.isArray(rawState)) {
       return result;
     }
 
-    result[providerUserId.trim()] = rawState as SuuntoRouteImportProviderStateLike;
+    const sourceKey = typeof (rawState as { sourceKey?: unknown }).sourceKey === 'string'
+      && (rawState as { sourceKey: string }).sourceKey.trim().length > 0
+      ? (rawState as { sourceKey: string }).sourceKey.trim()
+      : null;
+
+    if (!sourceKey) {
+      return result;
+    }
+
+    result[sourceKey] = rawState as SuuntoRouteImportStateEntry;
     return result;
   }, {});
 }
@@ -123,8 +94,20 @@ export function getSuuntoConnectedProviderUserIds(serviceTokens: unknown): strin
 
   return Array.from(new Set(
     serviceTokens
-      .map(token => getProviderUserIdFromServiceToken(token))
+      .map(token => getSuuntoProviderUserIdFromTokenLike(token))
       .filter((providerUserId): providerUserId is string => providerUserId !== null),
+  )).sort((left, right) => left.localeCompare(right));
+}
+
+function getSuuntoConnectedProviderSourceKeys(serviceTokens: unknown): string[] {
+  if (!Array.isArray(serviceTokens) || serviceTokens.length === 0) {
+    return [];
+  }
+
+  return Array.from(new Set(
+    serviceTokens
+      .map(token => getSuuntoRouteImportSourceKeyFromTokenLike(token))
+      .filter((sourceKey): sourceKey is string => sourceKey !== null),
   )).sort((left, right) => left.localeCompare(right));
 }
 
@@ -132,10 +115,10 @@ export function getSuuntoRouteCatchUpDateForConnectedProviders(
   serviceMeta: SuuntoRouteImportMetaLike | null | undefined,
   serviceTokens: unknown,
 ): Date | null {
-  const connectedProviderUserIds = getSuuntoConnectedProviderUserIds(serviceTokens);
-  const providerStates = getSuuntoRouteImportStatesByProviderUserId(serviceMeta);
+  const connectedProviderSourceKeys = getSuuntoConnectedProviderSourceKeys(serviceTokens);
+  const providerStates = getSuuntoRouteImportStatesBySourceKey(serviceMeta);
 
-  if (connectedProviderUserIds.length === 0) {
+  if (connectedProviderSourceKeys.length === 0) {
     return getSuuntoRouteCatchUpDate(serviceMeta?.didLastRouteImport);
   }
 
@@ -143,8 +126,8 @@ export function getSuuntoRouteCatchUpDateForConnectedProviders(
     return null;
   }
 
-  const connectedDates = connectedProviderUserIds.map(providerUserId => (
-    getSuuntoRouteCatchUpDate(providerStates[providerUserId]?.didLastRouteImport)
+  const connectedDates = connectedProviderSourceKeys.map(sourceKey => (
+    getSuuntoRouteCatchUpDate(providerStates[sourceKey]?.didLastRouteImport)
   ));
 
   if (connectedDates.some(date => date === null)) {
@@ -204,7 +187,7 @@ export function buildSuuntoRouteCatchUpPromptSource(options: {
     return null;
   }
 
-  const tokenSourceKey = getStableServiceTokenSourceKey(options.serviceTokens);
+  const tokenSourceKey = getStableSuuntoServiceTokenSourceKey(options.serviceTokens);
   return `${SUUNTO_ROUTE_CATCH_UP_PROMPT_SOURCE}:connected:${tokenSourceKey ?? 'unknown'}`;
 }
 

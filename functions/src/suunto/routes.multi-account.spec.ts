@@ -131,6 +131,8 @@ describe('Suunto route reads with multiple accounts', () => {
       ],
       successfulProviderUserIds: ['suunto-user-a', 'suunto-user-b'],
       failedProviderUserIds: [],
+      successfulProviderSourceKeys: ['suunto-user-a:unknown-created', 'suunto-user-b:unknown-created'],
+      failedProviderSourceKeys: [],
     });
     expect(requestGetMock).toHaveBeenCalledTimes(2);
   });
@@ -167,6 +169,8 @@ describe('Suunto route reads with multiple accounts', () => {
       ],
       successfulProviderUserIds: ['suunto-user-a'],
       failedProviderUserIds: ['suunto-user-b'],
+      successfulProviderSourceKeys: ['suunto-user-a:unknown-created'],
+      failedProviderSourceKeys: ['suunto-user-b:unknown-created'],
     });
   });
 
