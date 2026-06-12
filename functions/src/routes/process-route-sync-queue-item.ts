@@ -87,9 +87,33 @@ function getSourceSummary(routeDocument: FirestoreRouteJSON | null | undefined):
         : null;
 }
 
+function isValidDate(date: Date): boolean {
+    return Number.isFinite(date.getTime());
+}
+
+function hasTimestampToDate(value: unknown): value is { toDate: () => Date } {
+    return typeof (value as { toDate?: unknown } | null)?.toDate === 'function';
+}
+
+function hasTimestampFields(value: unknown): value is { seconds: number; nanoseconds?: number } {
+    return typeof (value as { seconds?: unknown } | null)?.seconds === 'number';
+}
+
 function toDate(value: unknown): Date | null {
     if (value instanceof Date && Number.isFinite(value.getTime())) {
         return value;
+    }
+
+    if (hasTimestampToDate(value)) {
+        const date = value.toDate();
+        return isValidDate(date) ? date : null;
+    }
+
+    if (hasTimestampFields(value)) {
+        const seconds = value.seconds;
+        const nanoseconds = typeof value.nanoseconds === 'number' ? value.nanoseconds : 0;
+        const date = new Date((seconds * 1000) + Math.trunc(nanoseconds / 1_000_000));
+        return isValidDate(date) ? date : null;
     }
 
     if (typeof value === 'number' && Number.isFinite(value)) {

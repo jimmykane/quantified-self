@@ -140,6 +140,15 @@ function createParsedRouteFile() {
   };
 }
 
+function createTimestampLike(dateString: string) {
+  const date = new Date(dateString);
+  return {
+    seconds: Math.floor(date.getTime() / 1000),
+    nanoseconds: (date.getTime() % 1000) * 1_000_000,
+    toDate: () => date,
+  };
+}
+
 describe('processRouteSyncQueueItem', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -168,12 +177,14 @@ describe('processRouteSyncQueueItem', () => {
         sourceServiceName: ServiceNames.SuuntoApp,
         providerRouteId: 'provider-route-1',
         providerRouteName: 'Morning Route',
-        modifiedAt: 1700000009000,
-        importedAt: 1700000001000,
+        modifiedAt: createTimestampLike('2026-02-01T12:00:09.000Z'),
+        importedAt: createTimestampLike('2026-02-01T12:00:01.000Z'),
       },
     });
 
-    const result = await processRouteSyncQueueItem(createQueueItem());
+    const result = await processRouteSyncQueueItem(createQueueItem({
+      providerRouteModifiedAt: new Date('2026-02-01T12:00:05.000Z').getTime(),
+    }));
 
     expect(result).toBe(QueueResult.Processed);
     expect(queueUtilsMocks.markQueueItemSkipped).toHaveBeenCalledWith(
@@ -214,14 +225,14 @@ describe('processRouteSyncQueueItem', () => {
     routeDocuments.set('users/user-1/routes/route-doc-1', {
       id: 'route-doc-1',
       userID: 'user-1',
-      importedAt: originalImportedAt,
+      importedAt: { seconds: Math.floor(originalImportedAt.getTime() / 1000), nanoseconds: 0 },
       sourceSummary: {
         sourceType: 'service_sync',
         sourceServiceName: ServiceNames.SuuntoApp,
         providerRouteId: 'provider-route-1',
         providerRouteName: 'Παλιό όνομα',
-        importedAt: originalImportedAt,
-        modifiedAt: 1700000000000,
+        importedAt: createTimestampLike('2026-02-01T12:00:00.000Z'),
+        modifiedAt: createTimestampLike('2023-11-14T22:13:20.000Z'),
       },
     });
 
