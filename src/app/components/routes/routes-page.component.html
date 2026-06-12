@@ -93,8 +93,7 @@
 
     @if (loadedRouteCount() > 0) {
     @if (routes.length > 0) {
-    <section class="route-table-shell" aria-label="Saved routes">
-      <div class="route-table-scroll qs-scrollbar">
+    <section class="route-table-shell qs-scrollbar" aria-label="Saved routes">
       @if (selectedRouteCount() > 0) {
       <div class="route-selection-toolbar" aria-live="polite">
         <div class="route-selection-summary">
@@ -415,15 +414,9 @@
         <tr
           mat-row
           class="route-table-row"
-          tabindex="0"
-          *matRowDef="let item; columns: routeColumns;"
-          [attr.aria-label]="'Open route details for ' + item.name"
-          (click)="openRouteDetails(item)"
-          (keydown.enter)="openRouteDetails(item)"
-          (keydown.space)="$event.preventDefault(); openRouteDetails(item)">
+          *matRowDef="let item; columns: routeColumns;">
         </tr>
       </table>
-      </div>
     </section>
     } @else {
     <section class="empty-routes">

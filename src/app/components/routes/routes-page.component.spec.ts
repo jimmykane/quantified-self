@@ -804,7 +804,7 @@ describe('RoutesPageComponent', () => {
         expect(styles).toContain('font-weight: 500;');
     });
 
-    it('opens route details from clickable table rows instead of an action icon', () => {
+    it('keeps route details in the row action menu instead of clickable table rows', () => {
         const template = readFileSync(
             resolve(process.cwd(), 'src/app/components/routes/routes-page.component.html'),
             'utf8',
@@ -815,9 +815,11 @@ describe('RoutesPageComponent', () => {
         );
 
         expect(template).toContain('class="route-table-row"');
-        expect(template).toContain('(click)="openRouteDetails(item)"');
-        expect(template).toContain('(keydown.enter)="openRouteDetails(item)"');
-        expect(template).toContain('(keydown.space)="$event.preventDefault(); openRouteDetails(item)"');
+        const rowDefinition = template.match(/<tr\s+mat-row[\s\S]*?class="route-table-row"[\s\S]*?\*matRowDef="let item; columns: routeColumns;"[\s\S]*?>/)?.[0] ?? '';
+        expect(rowDefinition).not.toContain('(click)="openRouteDetails(item)"');
+        expect(rowDefinition).not.toContain('(keydown.enter)="openRouteDetails(item)"');
+        expect(rowDefinition).not.toContain('(keydown.space)="$event.preventDefault(); openRouteDetails(item)"');
+        expect(rowDefinition).not.toContain('tabindex="0"');
         expect(template).toContain('class="route-provenance-item"');
         expect(template).toContain('<app-service-source-icon');
         expect(template).toContain('[sourceServiceName]="provenance.serviceName"');
@@ -845,10 +847,10 @@ describe('RoutesPageComponent', () => {
         expect(styles).toContain('.route-table-row');
         expect(styles).toContain('.route-selection-toolbar');
         expect(styles).toContain('.route-table .mat-column-select');
-        expect(styles).toContain('cursor: pointer;');
+        expect(styles).not.toContain('cursor: pointer;');
     });
 
-    it('wraps the routes table in the shared scroll container pattern used by app tables', () => {
+    it('uses the compare-style horizontal scroll shell for the routes table', () => {
         const template = readFileSync(
             resolve(process.cwd(), 'src/app/components/routes/routes-page.component.html'),
             'utf8',
@@ -858,12 +860,11 @@ describe('RoutesPageComponent', () => {
             'utf8',
         );
 
-        expect(template).toContain('class="route-table-scroll qs-scrollbar"');
+        expect(template).toContain('class="route-table-shell qs-scrollbar"');
+        expect(template).not.toContain('class="route-table-scroll qs-scrollbar"');
         expect(styles).toContain('.route-table-shell');
-        expect(styles).toContain('overflow: hidden;');
-        expect(styles).toContain('.route-table-scroll');
-        expect(styles).toContain('overflow: auto;');
-        expect(styles).toContain('-webkit-overflow-scrolling: touch;');
+        expect(styles).toContain('overflow-x: auto;');
+        expect(styles).not.toContain('.route-table-scroll');
         expect(styles).not.toContain('overscroll-behavior: contain;');
         expect(styles).not.toContain('touch-action: pan-x pan-y;');
     });

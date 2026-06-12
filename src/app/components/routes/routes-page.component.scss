@@ -102,15 +102,7 @@
   background: var(--mat-sys-surface-container-lowest, #fff);
   border: 1px solid var(--mat-sys-outline-variant, rgba(0, 0, 0, 0.12));
   border-radius: 8px;
-  overflow: hidden;
-}
-
-.route-table-scroll {
-  max-width: 100%;
-  overflow: auto;
-  -webkit-overflow-scrolling: touch;
-  scrollbar-gutter: stable both-edges;
-  width: 100%;
+  overflow-x: auto;
 }
 
 .route-table-controls {
@@ -221,18 +213,11 @@
 }
 
 .route-table-row {
-  cursor: pointer;
   transition: background-color 120ms ease;
 }
 
-.route-table-row:hover,
-.route-table-row:focus-visible {
+.route-table-row:hover {
   background: color-mix(in srgb, var(--mat-sys-primary, #1976d2) 8%, transparent);
-}
-
-.route-table-row:focus-visible {
-  outline: 2px solid var(--mat-sys-primary, #1976d2);
-  outline-offset: -2px;
 }
 
 .route-header-label {
