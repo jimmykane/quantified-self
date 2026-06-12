@@ -864,7 +864,8 @@ describe('RoutesPageComponent', () => {
         expect(styles).toContain('.route-table-scroll');
         expect(styles).toContain('overflow: auto;');
         expect(styles).toContain('-webkit-overflow-scrolling: touch;');
-        expect(styles).toContain('touch-action: pan-x pan-y;');
+        expect(styles).not.toContain('overscroll-behavior: contain;');
+        expect(styles).not.toContain('touch-action: pan-x pan-y;');
     });
 
     it('sorts route table rows by normalized route stats', async () => {
