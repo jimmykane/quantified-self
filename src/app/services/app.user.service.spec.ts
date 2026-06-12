@@ -427,6 +427,34 @@ describe('AppUserService', () => {
         });
     });
 
+    it('builds shared Suunto route catch-up prompt context from tokens and service meta', async () => {
+        service = TestBed.inject(AppUserService);
+        const testUser = { uid: 'u1' } as any;
+
+        (collectionData as any).mockReturnValueOnce(of([{
+            accessToken: 'token',
+            dateCreated: 1710000000000,
+            userName: 'suunto-user',
+        }]));
+        (docData as any).mockReturnValueOnce(of({
+            didLastRouteImport: {
+                toDate: () => new Date('2026-06-11T08:30:00.000Z'),
+            },
+        }));
+
+        const result = await firstValueFrom(service.watchSuuntoRouteCatchUpPromptContext(testUser).pipe(take(1)));
+
+        expect(result.connectionView).toMatchObject({
+            connected: true,
+            reconnectRequired: false,
+        });
+        expect(result.didLastRouteImport?.toISOString()).toBe('2026-06-11T08:30:00.000Z');
+        expect(result.promptSource).toBe('suunto-route-catch-up:connected:suunto-user:1710000000000');
+        expect(result.serviceMeta).toMatchObject({
+            didLastRouteImport: expect.any(Object),
+        });
+    });
+
     describe('createOrUpdateUser policy flow', () => {
         beforeEach(() => {
             service = TestBed.inject(AppUserService);

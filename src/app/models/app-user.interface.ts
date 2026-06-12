@@ -83,7 +83,8 @@ export type AppDashboardActionPromptId =
     | 'connectActivityService'
     | 'enableActivityAutoSync'
     | 'backfillGarminSleep'
-    | 'reconnectSuuntoService';
+    | 'reconnectSuuntoService'
+    | 'suuntoRouteCatchUp';
 export type AppDashboardActionPromptStateValue = 'dismissed';
 
 export interface AppDashboardActionPromptState {
@@ -175,7 +176,13 @@ export interface AppDeviceDisplaySettingsInterface {
     deviceColorByName?: Record<string, string>;
 }
 
-export interface AppUserServiceMetaInterface extends UserServiceMetaInterface, ServiceConnectionMetaFields {}
+export interface AppUserServiceMetaInterface extends UserServiceMetaInterface, ServiceConnectionMetaFields {
+    didLastRouteImport?: AppDateValue;
+    queuedRoutesFromLastRouteImportCount?: number;
+    skippedRoutesFromLastRouteImportCount?: number;
+    failedRoutesFromLastRouteImportCount?: number;
+    totalRoutesFromLastRouteImportCount?: number;
+}
 
 export interface AppUserSettingsInterface extends UserSettingsInterface {
     myTracksSettings?: AppMyTracksSettings;

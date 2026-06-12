@@ -86,6 +86,10 @@ import { FunctionName } from '@shared/functions-manifest';
 import { SleepBackfillQueueResponse } from '@shared/sleep-backfill';
 import { ActivitySyncRouteId } from '@shared/activity-sync-routes';
 import { buildSuuntoServiceConnectionViewModel, SuuntoServiceConnectionViewModel } from '../helpers/suunto-service-connection.helper';
+import {
+  buildSuuntoRouteCatchUpPromptSource,
+  getSuuntoRouteCatchUpDate,
+} from '../helpers/suunto-route-catch-up.helper';
 
 export const ACTIVITY_SERVICE_CONNECTION_NAMES = [
   ServiceNames.GarminAPI,
@@ -115,6 +119,13 @@ export interface RouteSyncCatchUpSummary {
   skippedCount: number;
   failureCount: number;
   totalCount: number;
+}
+
+export interface SuuntoRouteCatchUpPromptContext {
+  connectionView: SuuntoServiceConnectionViewModel;
+  serviceMeta: AppUserServiceMetaInterface | null;
+  didLastRouteImport: Date | null;
+  promptSource: string | null;
 }
 
 
@@ -668,19 +679,24 @@ export class AppUserService implements OnDestroy {
     }));
   }
 
-  public watchSuuntoServiceConnectionView(user: User | null | undefined): Observable<SuuntoServiceConnectionViewModel> {
+  public watchSuuntoRouteCatchUpPromptContext(user: User | null | undefined): Observable<SuuntoRouteCatchUpPromptContext> {
     const uid = `${user?.uid || ''}`.trim();
     if (!uid || !user) {
-      return of(buildSuuntoServiceConnectionViewModel({
-        hasToken: false,
+      return of({
+        connectionView: buildSuuntoServiceConnectionViewModel({
+          hasToken: false,
+          serviceMeta: null,
+        }),
         serviceMeta: null,
-      }));
+        didLastRouteImport: null,
+        promptSource: null,
+      });
     }
 
     return combineLatest([
       this.getServiceToken(user, ServiceNames.SuuntoApp).pipe(
         catchError(error => {
-          this.logger.warn('[AppUserService] Failed to read Suunto tokens for connection view', {
+          this.logger.warn('[AppUserService] Failed to read Suunto tokens for route catch-up prompt context', {
             userID: uid,
           }, error);
           return of([]);
@@ -688,17 +704,39 @@ export class AppUserService implements OnDestroy {
       ),
       this.getUserMetaForService(user, ServiceNames.SuuntoApp).pipe(
         catchError(error => {
-          this.logger.warn('[AppUserService] Failed to read Suunto service meta for connection view', {
+          this.logger.warn('[AppUserService] Failed to read Suunto service meta for route catch-up prompt context', {
             userID: uid,
           }, error);
           return of(undefined);
         }),
       ),
     ]).pipe(
-      map(([tokens, serviceMeta]) => buildSuuntoServiceConnectionViewModel({
-        hasToken: Array.isArray(tokens) && tokens.length > 0,
-        serviceMeta: serviceMeta || null,
-      })),
+      map(([tokens, serviceMeta]) => {
+        const normalizedServiceMeta = serviceMeta || null;
+        const connectionView = buildSuuntoServiceConnectionViewModel({
+          hasToken: Array.isArray(tokens) && tokens.length > 0,
+          serviceMeta: normalizedServiceMeta,
+        });
+
+        return {
+          connectionView,
+          serviceMeta: normalizedServiceMeta,
+          didLastRouteImport: getSuuntoRouteCatchUpDate(normalizedServiceMeta?.didLastRouteImport),
+          promptSource: buildSuuntoRouteCatchUpPromptSource({
+            connected: connectionView.connected,
+            reconnectRequired: connectionView.reconnectRequired,
+            reconnectPromptSource: connectionView.reconnectPromptSource,
+            serviceTokens: tokens,
+          }),
+        };
+      }),
+      distinctUntilChanged((previous, current) => JSON.stringify(previous) === JSON.stringify(current)),
+    );
+  }
+
+  public watchSuuntoServiceConnectionView(user: User | null | undefined): Observable<SuuntoServiceConnectionViewModel> {
+    return this.watchSuuntoRouteCatchUpPromptContext(user).pipe(
+      map(context => context.connectionView),
       distinctUntilChanged((previous, current) => JSON.stringify(previous) === JSON.stringify(current)),
     );
   }

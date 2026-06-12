@@ -11,6 +11,11 @@ import { ServiceNames, Auth2ServiceTokenInterface, Auth1ServiceTokenInterface } 
 import { ServicesAbstractComponentDirective } from '../services-abstract-component.directive';
 import { AppUserServiceMetaInterface } from '../../../models/app-user.interface';
 import { buildSuuntoServiceConnectionViewModel } from '../../../helpers/suunto-service-connection.helper';
+import {
+  buildSuuntoRouteCatchUpSnackbarMessage,
+  getSuuntoRouteCatchUpCount,
+  getSuuntoRouteCatchUpDate,
+} from '../../../helpers/suunto-route-catch-up.helper';
 
 
 @Component({
@@ -27,47 +32,28 @@ export class ServicesSuuntoComponent extends ServicesAbstractComponentDirective 
   get suuntoServiceMeta(): (AppUserServiceMetaInterface & {
     uploadedActivitiesCount?: number;
     uploadedRoutesCount?: number;
-    didLastRouteImport?: unknown;
-    queuedRoutesFromLastRouteImportCount?: number;
-    skippedRoutesFromLastRouteImportCount?: number;
-    failedRoutesFromLastRouteImportCount?: number;
-    totalRoutesFromLastRouteImportCount?: number;
   }) | undefined {
     return this.serviceMeta;
   }
 
   get didLastRouteImport(): Date | null {
-    const rawValue = this.suuntoServiceMeta?.didLastRouteImport;
-    if (typeof rawValue === 'number' && Number.isFinite(rawValue)) {
-      return new Date(rawValue);
-    }
-    if (rawValue instanceof Date) {
-      return rawValue;
-    }
-    if (typeof (rawValue as { toDate?: unknown } | null)?.toDate === 'function') {
-      return (rawValue as { toDate: () => Date }).toDate();
-    }
-    return null;
+    return getSuuntoRouteCatchUpDate(this.suuntoServiceMeta?.didLastRouteImport);
   }
 
   get queuedRoutesFromLastRouteImportCount(): number {
-    const value = this.suuntoServiceMeta?.queuedRoutesFromLastRouteImportCount;
-    return typeof value === 'number' && Number.isFinite(value) ? value : 0;
+    return getSuuntoRouteCatchUpCount(this.suuntoServiceMeta?.queuedRoutesFromLastRouteImportCount);
   }
 
   get skippedRoutesFromLastRouteImportCount(): number {
-    const value = this.suuntoServiceMeta?.skippedRoutesFromLastRouteImportCount;
-    return typeof value === 'number' && Number.isFinite(value) ? value : 0;
+    return getSuuntoRouteCatchUpCount(this.suuntoServiceMeta?.skippedRoutesFromLastRouteImportCount);
   }
 
   get failedRoutesFromLastRouteImportCount(): number {
-    const value = this.suuntoServiceMeta?.failedRoutesFromLastRouteImportCount;
-    return typeof value === 'number' && Number.isFinite(value) ? value : 0;
+    return getSuuntoRouteCatchUpCount(this.suuntoServiceMeta?.failedRoutesFromLastRouteImportCount);
   }
 
   get totalRoutesFromLastRouteImportCount(): number {
-    const value = this.suuntoServiceMeta?.totalRoutesFromLastRouteImportCount;
-    return typeof value === 'number' && Number.isFinite(value) ? value : 0;
+    return getSuuntoRouteCatchUpCount(this.suuntoServiceMeta?.totalRoutesFromLastRouteImportCount);
   }
 
   get isReconnectRequired(): boolean {
@@ -154,19 +140,8 @@ export class ServicesSuuntoComponent extends ServicesAbstractComponentDirective 
     this.isQueueingRoutes = true;
     try {
       const summary = await this.userService.addSuuntoRoutesToQueueForCurrentUser();
-      if (summary.totalCount === 0) {
-        this.snackBar.open('No Suunto routes were found to queue.', undefined, { duration: 3500 });
-        return;
-      }
-
-      const messageParts = [`Queued ${summary.queuedCount} ${summary.queuedCount === 1 ? 'route' : 'routes'}.`];
-      if (summary.skippedCount > 0) {
-        messageParts.push(`Skipped ${summary.skippedCount}.`);
-      }
-      if (summary.failureCount > 0) {
-        messageParts.push(`Failed ${summary.failureCount}.`);
-      }
-      this.snackBar.open(messageParts.join(' '), undefined, { duration: summary.failureCount > 0 ? 4500 : 3500 });
+      const feedback = buildSuuntoRouteCatchUpSnackbarMessage(summary);
+      this.snackBar.open(feedback.message, undefined, { duration: feedback.duration });
     } catch (error: any) {
       this.logger.error(error);
       this.snackBar.open(`Could not queue Suunto routes: ${error?.message || 'Unknown error'}`, undefined, { duration: 5000 });

@@ -18,6 +18,16 @@
       </div>
     </header>
 
+    @if (suuntoRouteCatchUpPrompt(); as prompt) {
+    <section class="routes-prompt" aria-label="Suunto route catch-up prompt">
+      <app-dashboard-action-prompt
+        [prompt]="prompt"
+        (primary)="onSuuntoRouteCatchUpPromptPrimary($event)"
+        (secondary)="onSuuntoRouteCatchUpPromptSecondary($event)">
+      </app-dashboard-action-prompt>
+    </section>
+    }
+
     @if (routes$ | async; as routes) {
     <section class="routes-summary" aria-label="Route summary">
       <div class="summary-item">

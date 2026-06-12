@@ -24,7 +24,6 @@ import { DashboardManagerDialogComponent } from '../components/summaries/dashboa
 import { DashboardTileEventFiltersComponent } from '../components/tile/event-filters/dashboard-tile-event-filters.component';
 import { DashboardTileBoardComponent } from '../components/summaries/dashboard-tile-board/dashboard-tile-board.component';
 import { DashboardTileCellComponent } from '../components/summaries/dashboard-tile-cell/dashboard-tile-cell.component';
-import { DashboardActionPromptComponent } from '../components/dashboard/dashboard-action-prompt/dashboard-action-prompt.component';
 import { DashboardActionPromptsComponent } from '../components/dashboard/dashboard-action-prompts/dashboard-action-prompts.component';
 
 @NgModule({
@@ -56,7 +55,6 @@ import { DashboardActionPromptsComponent } from '../components/dashboard/dashboa
         DashboardManagerDialogComponent,
         DashboardTileBoardComponent,
         DashboardTileCellComponent,
-        DashboardActionPromptComponent,
         DashboardActionPromptsComponent,
 
     ],
