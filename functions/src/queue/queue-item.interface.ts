@@ -61,6 +61,19 @@ export interface ActivitySyncQueueItemInterface extends QueueItemInterface {
   successProcessedAt?: number;
 }
 
+export interface RouteSyncQueueItemInterface extends QueueItemInterface {
+  sourceServiceName: ServiceNames;
+  providerUserId: string;
+  providerRouteId: string;
+  providerRouteName?: string;
+  providerRouteCreatedAt?: number | null;
+  providerRouteModifiedAt?: number | null;
+  manual: boolean;
+  resultRouteId?: string;
+  resultStatus?: 'success' | 'skipped';
+  skippedReason?: string;
+}
+
 export type SleepSyncQueueItemType =
   | 'garmin_push'
   | 'garmin_ping'

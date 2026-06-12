@@ -115,6 +115,11 @@ export {
 } from './suunto/queue';
 
 export {
+  addSuuntoAppRoutesToQueue,
+  insertSuuntoAppRouteToQueue,
+} from './suunto/route-sync';
+
+export {
   parseSuuntoAppActivityQueue,
 } from './queue';
 
@@ -183,6 +188,7 @@ export { listUsers, getQueueStats, getUserCount, getSubscriptionHistoryTrend, ge
 // Tasks
 export { processWorkoutTask } from './tasks/workout-processor';
 export { processActivitySyncTask } from './tasks/activity-sync-worker';
+export { processRouteSyncTask } from './tasks/route-sync-worker';
 export { processSleepSyncTask } from './tasks/sleep-sync-worker';
 export { processSportsLibReparseTask } from './tasks/sports-lib-reparse-worker';
 export { processSportsLibRouteReparseTask } from './tasks/sports-lib-route-reparse-worker';

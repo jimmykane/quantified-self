@@ -139,6 +139,94 @@ describe('AppRouteSendService', () => {
     });
   });
 
+  it('stops sending later chunks after an in-band destination auth failure and synthesizes the remaining route failures', async () => {
+    const routeIds = Array.from({ length: SEND_ROUTES_TO_SERVICE_MAX_ROUTE_IDS + 1 }, (_value, index) => `route-${index + 1}`);
+    functionsServiceMock.call.mockResolvedValueOnce({
+      data: {
+        destinationServiceName: ServiceNames.SuuntoApp,
+        status: 'partial_success',
+        routeCount: SEND_ROUTES_TO_SERVICE_MAX_ROUTE_IDS,
+        successCount: SEND_ROUTES_TO_SERVICE_MAX_ROUTE_IDS - 1,
+        failureCount: 1,
+        skippedCount: 0,
+        results: [
+          ...routeIds.slice(0, SEND_ROUTES_TO_SERVICE_MAX_ROUTE_IDS - 1).map(routeId => ({
+            routeId,
+            destinationServiceName: ServiceNames.SuuntoApp,
+            status: 'success',
+          })),
+          {
+            routeId: routeIds[SEND_ROUTES_TO_SERVICE_MAX_ROUTE_IDS - 1],
+            destinationServiceName: ServiceNames.SuuntoApp,
+            status: 'failure',
+            reason: 'DESTINATION_AUTH_REQUIRED',
+            message: 'Authentication failed. Please re-connect your Suunto account.',
+          },
+        ],
+      },
+    });
+
+    const result = await service.sendRoutesToService(routeIds, ServiceNames.SuuntoApp);
+
+    expect(functionsServiceMock.call).toHaveBeenCalledTimes(1);
+    expect(result.status).toBe('partial_success');
+    expect(result.routeCount).toBe(SEND_ROUTES_TO_SERVICE_MAX_ROUTE_IDS + 1);
+    expect(result.successCount).toBe(SEND_ROUTES_TO_SERVICE_MAX_ROUTE_IDS - 1);
+    expect(result.failureCount).toBe(2);
+    expect(result.results.slice(-2)).toEqual([
+      {
+        routeId: routeIds[SEND_ROUTES_TO_SERVICE_MAX_ROUTE_IDS - 1],
+        destinationServiceName: ServiceNames.SuuntoApp,
+        status: 'failure',
+        reason: 'DESTINATION_AUTH_REQUIRED',
+        message: 'Authentication failed. Please re-connect your Suunto account.',
+      },
+      {
+        routeId: routeIds[SEND_ROUTES_TO_SERVICE_MAX_ROUTE_IDS],
+        destinationServiceName: ServiceNames.SuuntoApp,
+        status: 'failure',
+        reason: 'DESTINATION_AUTH_REQUIRED',
+        message: 'Authentication failed. Please re-connect your Suunto account.',
+      },
+    ]);
+  });
+
+  it('stops sending later chunks after an in-band account-state failure and synthesizes the remaining route failures', async () => {
+    const routeIds = Array.from({ length: SEND_ROUTES_TO_SERVICE_MAX_ROUTE_IDS + 1 }, (_value, index) => `route-${index + 1}`);
+    functionsServiceMock.call.mockResolvedValueOnce({
+      data: {
+        destinationServiceName: ServiceNames.SuuntoApp,
+        status: 'failure',
+        routeCount: SEND_ROUTES_TO_SERVICE_MAX_ROUTE_IDS,
+        successCount: 0,
+        failureCount: SEND_ROUTES_TO_SERVICE_MAX_ROUTE_IDS,
+        skippedCount: 0,
+        results: routeIds.slice(0, SEND_ROUTES_TO_SERVICE_MAX_ROUTE_IDS).map(routeId => ({
+          routeId,
+          destinationServiceName: ServiceNames.SuuntoApp,
+          status: 'failure',
+          reason: 'ACCOUNT_STATE_UNAVAILABLE',
+          message: 'Could not verify account state. Please retry.',
+        })),
+      },
+    });
+
+    const result = await service.sendRoutesToService(routeIds, ServiceNames.SuuntoApp);
+
+    expect(functionsServiceMock.call).toHaveBeenCalledTimes(1);
+    expect(result.status).toBe('failure');
+    expect(result.routeCount).toBe(SEND_ROUTES_TO_SERVICE_MAX_ROUTE_IDS + 1);
+    expect(result.successCount).toBe(0);
+    expect(result.failureCount).toBe(SEND_ROUTES_TO_SERVICE_MAX_ROUTE_IDS + 1);
+    expect(result.results.at(-1)).toEqual({
+      routeId: routeIds[SEND_ROUTES_TO_SERVICE_MAX_ROUTE_IDS],
+      destinationServiceName: ServiceNames.SuuntoApp,
+      status: 'failure',
+      reason: 'ACCOUNT_STATE_UNAVAILABLE',
+      message: 'Could not verify account state. Please retry.',
+    });
+  });
+
   it('maps common route send errors to user-facing messages', () => {
     expect(getRouteSendErrorMessage({ code: 'functions/permission-denied' })).toBe('Sending routes to services is a Pro feature.');
     expect(getRouteSendErrorMessage({ code: 'functions/unauthenticated' })).toBe('Sending routes is not authorized. Please sign in again.');
@@ -168,6 +256,24 @@ describe('AppRouteSendService', () => {
         message: 'Authentication failed. Please re-connect your Suunto account.',
       }],
     })).toBe('Connect Suunto again before sending routes.');
+  });
+
+  it('maps source-service blocked responses to a specific Suunto guidance message', () => {
+    expect(getRouteSendResponseMessage({
+      destinationServiceName: ServiceNames.SuuntoApp,
+      status: 'failure',
+      routeCount: 1,
+      successCount: 0,
+      failureCount: 0,
+      skippedCount: 1,
+      results: [{
+        routeId: 'route-1',
+        destinationServiceName: ServiceNames.SuuntoApp,
+        status: 'skipped',
+        reason: 'SOURCE_SERVICE_BLOCKED',
+        message: 'Routes imported from Suunto are already in the connected Suunto account and cannot be sent back there.',
+      }],
+    })).toBe('Routes imported from Suunto are already in the connected Suunto account and cannot be sent back there.');
   });
 
   it('returns actionable route send guidance only for specific non-success responses', () => {

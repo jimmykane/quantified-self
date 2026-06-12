@@ -21,12 +21,19 @@ const ROUTE_SEND_REASON_PRIORITY: SendRouteToServiceFailureReason[] = [
   'ACCOUNT_DELETION_IN_PROGRESS',
   'ACCOUNT_STATE_UNAVAILABLE',
   'SEND_REQUEST_FAILED',
+  'SOURCE_SERVICE_BLOCKED',
   'SOURCE_FILE_UNAVAILABLE',
   'PARSE_FAILED',
   'NOT_FOUND',
   'NO_ORIGINAL_FILES',
   'PROVIDER_ERROR',
   'UNSUPPORTED_DESTINATION',
+];
+
+const TERMINAL_IN_BAND_ROUTE_SEND_REASONS: readonly SendRouteToServiceFailureReason[] = [
+  'ACCOUNT_DELETION_IN_PROGRESS',
+  'ACCOUNT_STATE_UNAVAILABLE',
+  'DESTINATION_AUTH_REQUIRED',
 ];
 
 const GENERIC_ROUTE_SEND_RESPONSE_MESSAGES = new Set<string>([
@@ -74,6 +81,12 @@ export function getRouteSendResponseMessage(response: SendRoutesToServiceRespons
       return 'Account is being deleted or no longer exists.';
     case 'ACCOUNT_STATE_UNAVAILABLE':
       return 'Could not verify account state. Please retry.';
+    case 'SOURCE_SERVICE_BLOCKED':
+      return nonSuccessResults.find(result =>
+        result.reason === 'SOURCE_SERVICE_BLOCKED'
+          && typeof result.message === 'string'
+          && result.message.trim().length > 0,
+      )?.message?.trim() || 'Routes imported from Suunto are already there and cannot be sent back to Suunto.';
     default:
       return nonSuccessResults.find(result => typeof result.message === 'string' && result.message.trim())?.message?.trim()
         || getDefaultRouteSendFailureMessage(response.destinationServiceName);
@@ -128,6 +141,19 @@ export class AppRouteSendService {
           processedRouteCount,
           routeCount: uniqueRouteIds.length,
         });
+
+        const terminalChunkResult = this.getTerminalInBandChunkResult(response.data);
+        if (terminalChunkResult) {
+          const unsentRouteIds = uniqueRouteIds.slice(processedRouteCount);
+          if (unsentRouteIds.length > 0) {
+            responses.push(this.buildTerminalInBandResponse(
+              destinationServiceName,
+              unsentRouteIds,
+              terminalChunkResult,
+            ));
+          }
+          break;
+        }
       } catch (error) {
         if (responses.length === 0) {
           throw error;
@@ -168,6 +194,41 @@ export class AppRouteSendService {
         status: 'failure',
         reason: 'SEND_REQUEST_FAILED',
         message,
+      })),
+    };
+  }
+
+  private getTerminalInBandChunkResult(
+    response: SendRoutesToServiceResponse,
+  ): SendRouteToServiceItemResult | null {
+    for (const reason of TERMINAL_IN_BAND_ROUTE_SEND_REASONS) {
+      const match = response.results.find(result => result.reason === reason);
+      if (match) {
+        return match;
+      }
+    }
+
+    return null;
+  }
+
+  private buildTerminalInBandResponse(
+    destinationServiceName: ServiceNames,
+    routeIds: string[],
+    terminalResult: SendRouteToServiceItemResult,
+  ): SendRoutesToServiceResponse {
+    return {
+      destinationServiceName,
+      status: terminalResult.status === 'success' ? 'success' : 'failure',
+      routeCount: routeIds.length,
+      successCount: terminalResult.status === 'success' ? routeIds.length : 0,
+      failureCount: terminalResult.status === 'failure' ? routeIds.length : 0,
+      skippedCount: terminalResult.status === 'skipped' ? routeIds.length : 0,
+      results: routeIds.map(routeId => ({
+        routeId,
+        destinationServiceName,
+        status: terminalResult.status,
+        reason: terminalResult.reason,
+        message: terminalResult.message,
       })),
     };
   }

@@ -147,7 +147,9 @@ service cloud.firestore {
               'pointCount',
               'activityTypes',
               'streamTypes',
-              'bounds'
+              'bounds',
+              'sourceSummary',
+              'syncedDestinationServiceNames'
             ];
           }
 

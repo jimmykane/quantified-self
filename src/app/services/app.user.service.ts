@@ -86,6 +86,11 @@ import { FunctionName } from '@shared/functions-manifest';
 import { SleepBackfillQueueResponse } from '@shared/sleep-backfill';
 import { ActivitySyncRouteId } from '@shared/activity-sync-routes';
 import { buildSuuntoServiceConnectionViewModel, SuuntoServiceConnectionViewModel } from '../helpers/suunto-service-connection.helper';
+import {
+  buildSuuntoRouteCatchUpPromptSource,
+  getSuuntoConnectedProviderUserIds,
+  getSuuntoRouteCatchUpDateForConnectedProviders,
+} from '../helpers/suunto-route-catch-up.helper';
 
 export const ACTIVITY_SERVICE_CONNECTION_NAMES = [
   ServiceNames.GarminAPI,
@@ -108,6 +113,22 @@ export interface ActivitySyncBackfillSummary {
   skippedByReason: Record<string, number>;
   failedCount: number;
   failedEvents: ActivitySyncBackfillFailedEvent[];
+}
+
+export interface RouteSyncCatchUpSummary {
+  queuedCount: number;
+  skippedCount: number;
+  failureCount: number;
+  failedProviderCount?: number;
+  totalCount: number;
+}
+
+export interface SuuntoRouteCatchUpPromptContext {
+  connectionView: SuuntoServiceConnectionViewModel;
+  serviceMeta: AppUserServiceMetaInterface | null;
+  didLastRouteImport: Date | null;
+  promptSource: string | null;
+  connectedProviderUserIds: string[];
 }
 
 
@@ -592,6 +613,18 @@ export class AppUserService implements OnDestroy {
     );
   }
 
+  private hasConnectedActivityServiceToken(serviceName: ActivityServiceConnectionName, tokens: unknown): boolean {
+    if (!Array.isArray(tokens) || tokens.length === 0) {
+      return false;
+    }
+
+    if (serviceName === ServiceNames.SuuntoApp) {
+      return getSuuntoConnectedProviderUserIds(tokens).length > 0;
+    }
+
+    return true;
+  }
+
   public watchActivityServiceConnectionState(user: User | null | undefined): Observable<ActivityServiceConnectionState> {
     const uid = `${user?.uid || ''}`.trim();
     if (!uid || !user) {
@@ -600,7 +633,7 @@ export class AppUserService implements OnDestroy {
 
     return combineLatest(ACTIVITY_SERVICE_CONNECTION_NAMES.map(serviceName => (
       this.getServiceToken(user, serviceName).pipe(
-        map(tokens => Array.isArray(tokens) && tokens.length > 0),
+        map(tokens => this.hasConnectedActivityServiceToken(serviceName, tokens)),
         catchError(error => {
           this.logger.warn('[AppUserService] Failed to read activity service connection state', {
             userID: uid,
@@ -661,19 +694,25 @@ export class AppUserService implements OnDestroy {
     }));
   }
 
-  public watchSuuntoServiceConnectionView(user: User | null | undefined): Observable<SuuntoServiceConnectionViewModel> {
+  public watchSuuntoRouteCatchUpPromptContext(user: User | null | undefined): Observable<SuuntoRouteCatchUpPromptContext> {
     const uid = `${user?.uid || ''}`.trim();
     if (!uid || !user) {
-      return of(buildSuuntoServiceConnectionViewModel({
-        hasToken: false,
+      return of({
+        connectionView: buildSuuntoServiceConnectionViewModel({
+          hasToken: false,
+          serviceMeta: null,
+        }),
         serviceMeta: null,
-      }));
+        didLastRouteImport: null,
+        promptSource: null,
+        connectedProviderUserIds: [],
+      });
     }
 
     return combineLatest([
       this.getServiceToken(user, ServiceNames.SuuntoApp).pipe(
         catchError(error => {
-          this.logger.warn('[AppUserService] Failed to read Suunto tokens for connection view', {
+          this.logger.warn('[AppUserService] Failed to read Suunto tokens for route catch-up prompt context', {
             userID: uid,
           }, error);
           return of([]);
@@ -681,17 +720,41 @@ export class AppUserService implements OnDestroy {
       ),
       this.getUserMetaForService(user, ServiceNames.SuuntoApp).pipe(
         catchError(error => {
-          this.logger.warn('[AppUserService] Failed to read Suunto service meta for connection view', {
+          this.logger.warn('[AppUserService] Failed to read Suunto service meta for route catch-up prompt context', {
             userID: uid,
           }, error);
           return of(undefined);
         }),
       ),
     ]).pipe(
-      map(([tokens, serviceMeta]) => buildSuuntoServiceConnectionViewModel({
-        hasToken: Array.isArray(tokens) && tokens.length > 0,
-        serviceMeta: serviceMeta || null,
-      })),
+      map(([tokens, serviceMeta]) => {
+        const normalizedServiceMeta = serviceMeta || null;
+        const connectedProviderUserIds = getSuuntoConnectedProviderUserIds(tokens);
+        const connectionView = buildSuuntoServiceConnectionViewModel({
+          hasToken: connectedProviderUserIds.length > 0,
+          serviceMeta: normalizedServiceMeta,
+        });
+
+        return {
+          connectionView,
+          serviceMeta: normalizedServiceMeta,
+          didLastRouteImport: getSuuntoRouteCatchUpDateForConnectedProviders(normalizedServiceMeta, tokens),
+          promptSource: buildSuuntoRouteCatchUpPromptSource({
+            connected: connectionView.connected,
+            reconnectRequired: connectionView.reconnectRequired,
+            reconnectPromptSource: connectionView.reconnectPromptSource,
+            serviceTokens: tokens,
+          }),
+          connectedProviderUserIds,
+        };
+      }),
+      distinctUntilChanged((previous, current) => JSON.stringify(previous) === JSON.stringify(current)),
+    );
+  }
+
+  public watchSuuntoServiceConnectionView(user: User | null | undefined): Observable<SuuntoServiceConnectionViewModel> {
+    return this.watchSuuntoRouteCatchUpPromptContext(user).pipe(
+      map(context => context.connectionView),
       distinctUntilChanged((previous, current) => JSON.stringify(previous) === JSON.stringify(current)),
     );
   }
@@ -725,6 +788,11 @@ export class AppUserService implements OnDestroy {
 
   async backfillSuuntoSleepForCurrentUser(): Promise<SleepBackfillQueueResponse> {
     const result = await this.functionsService.call<undefined, SleepBackfillQueueResponse>('backfillSuuntoAppSleep');
+    return result.data;
+  }
+
+  async addSuuntoRoutesToQueueForCurrentUser(): Promise<RouteSyncCatchUpSummary> {
+    const result = await this.functionsService.call<undefined, RouteSyncCatchUpSummary>('addSuuntoAppRoutesToQueue');
     return result.data;
   }
 

@@ -4,7 +4,7 @@ import { TestBed } from '@angular/core/testing';
 import { Router } from '@angular/router';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { firstValueFrom, of } from 'rxjs';
+import { BehaviorSubject, firstValueFrom, of } from 'rxjs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
@@ -20,10 +20,12 @@ import { AppRouteReprocessService, RouteReprocessError } from '../../services/ap
 import { AppRouteSendService } from '../../services/app.route-send.service';
 import { AppRouteService } from '../../services/app.route.service';
 import { AppUserService } from '../../services/app.user.service';
+import { AppWindowService } from '../../services/app.window.service';
 import { LoggerService } from '../../services/logger.service';
 import { RoutesPageComponent } from './routes-page.component';
 import { FirestoreRouteJSON } from '@shared/app-route.interface';
 import { ConfirmationDialogComponent } from '../confirmation-dialog/confirmation-dialog.component';
+import { DASHBOARD_ACTION_PROMPT_SUUNTO_ROUTE_CATCH_UP_ID } from '../../helpers/dashboard-action-prompt.helper';
 
 describe('RoutesPageComponent', () => {
     let component: RoutesPageComponent;
@@ -41,6 +43,8 @@ describe('RoutesPageComponent', () => {
     let userServiceMock: any;
     let loggerMock: any;
     let routerMock: any;
+    let windowServiceMock: any;
+    let suuntoRouteCatchUpPromptContext$: BehaviorSubject<any>;
 
     const route: FirestoreRouteJSON = {
         id: 'route-1',
@@ -88,8 +92,31 @@ describe('RoutesPageComponent', () => {
     }
 
     beforeEach(async () => {
+        const currentUser = {
+            uid: 'user-1',
+            settings: {
+                appSettings: {},
+            },
+        };
+        suuntoRouteCatchUpPromptContext$ = new BehaviorSubject({
+            connectionView: {
+                connected: true,
+                reconnectRequired: false,
+                showDetails: true,
+                description: 'Connected',
+                failureMessage: null,
+                statusLabelOverride: null,
+                statusIconOverride: null,
+                statusTone: 'default',
+                connectButtonLabel: 'Connect',
+                reconnectPromptSource: 'test-reconnect-source',
+            },
+            didLastRouteImport: new Date('2026-06-10T10:00:00.000Z'),
+            promptSource: 'suunto-route-catch-up:connected:1710000000000',
+            connectedProviderUserIds: ['suunto-user-1'],
+        });
         authServiceMock = {
-            getUser: vi.fn().mockResolvedValue({ uid: 'user-1' }),
+            getUser: vi.fn().mockResolvedValue(currentUser),
         };
         routeServiceMock = {
             getRoutes: vi.fn().mockReturnValue(of([route])),
@@ -177,24 +204,30 @@ describe('RoutesPageComponent', () => {
         };
         userServiceMock = {
             hasProAccessSignal: vi.fn().mockReturnValue(true),
-            watchSuuntoServiceConnectionView: vi.fn().mockReturnValue(of({
-                connected: true,
-                reconnectRequired: false,
-                showDetails: true,
-                description: 'Connected',
-                failureMessage: null,
-                statusLabelOverride: null,
-                statusIconOverride: null,
-                statusTone: 'default',
-                connectButtonLabel: 'Connect',
-                reconnectPromptSource: 'test',
-            })),
+            watchSuuntoRouteCatchUpPromptContext: vi.fn().mockReturnValue(suuntoRouteCatchUpPromptContext$.asObservable()),
+            addSuuntoRoutesToQueueForCurrentUser: vi.fn().mockResolvedValue({
+                queuedCount: 2,
+                skippedCount: 1,
+                failureCount: 0,
+                totalCount: 3,
+            }),
+            getCurrentUserServiceTokenAndRedirectURI: vi.fn().mockResolvedValue({
+                redirect_uri: 'https://suunto.example/reconnect',
+            }),
+            updateUserProperties: vi.fn().mockResolvedValue(undefined),
         };
         loggerMock = {
             error: vi.fn(),
         };
         routerMock = {
             navigate: vi.fn().mockResolvedValue(true),
+        };
+        windowServiceMock = {
+            windowRef: {
+                location: {
+                    href: '',
+                },
+            },
         };
 
         TestBed.configureTestingModule({
@@ -212,6 +245,7 @@ describe('RoutesPageComponent', () => {
                 { provide: AppRouteReprocessService, useValue: routeReprocessServiceMock },
                 { provide: AppRouteSendService, useValue: routeSendServiceMock },
                 { provide: AppUserService, useValue: userServiceMock },
+                { provide: AppWindowService, useValue: windowServiceMock },
                 { provide: LoggerService, useValue: loggerMock },
                 { provide: Router, useValue: routerMock },
             ],
@@ -233,14 +267,214 @@ describe('RoutesPageComponent', () => {
 
         expect(authServiceMock.getUser).toHaveBeenCalled();
         expect(routeServiceMock.getRoutes).toHaveBeenCalledWith(
-            { uid: 'user-1' },
+            expect.objectContaining({ uid: 'user-1' }),
             50,
             { active: 'date', direction: 'desc' },
         );
-        expect(routeServiceMock.getRouteCount).toHaveBeenCalledWith({ uid: 'user-1' });
+        expect(routeServiceMock.getRouteCount).toHaveBeenCalledWith(expect.objectContaining({ uid: 'user-1' }));
         expect(component.routeCount()).toBe(1);
         expect(analyticsServiceMock.logSavedRouteAction).toHaveBeenCalledWith('view', {
             routeCount: 1,
+        });
+    });
+
+    it('shows the actionable Suunto route catch-up prompt when manual catch-up has never run', async () => {
+        suuntoRouteCatchUpPromptContext$.next({
+            ...suuntoRouteCatchUpPromptContext$.value,
+            didLastRouteImport: null,
+        });
+
+        await component.ngOnInit();
+        await firstValueFrom(component.routes$!);
+
+        expect(component.suuntoRouteCatchUpPrompt()).toMatchObject({
+            primaryAction: {
+                id: 'queueSuuntoRouteCatchUp',
+            },
+            secondaryAction: {
+                id: 'dismissSuuntoRouteCatchUp',
+            },
+        });
+    });
+
+    it('shows the locked Suunto route catch-up prompt for non-pro users', async () => {
+        userServiceMock.hasProAccessSignal.mockReturnValue(false);
+        suuntoRouteCatchUpPromptContext$.next({
+            ...suuntoRouteCatchUpPromptContext$.value,
+            didLastRouteImport: null,
+        });
+
+        await component.ngOnInit();
+        await firstValueFrom(component.routes$!);
+
+        expect(component.suuntoRouteCatchUpPrompt()).toMatchObject({
+            primaryAction: {
+                id: 'upgradeToPro',
+            },
+        });
+    });
+
+    it('shows the reconnect Suunto route catch-up prompt when reconnect is required', async () => {
+        suuntoRouteCatchUpPromptContext$.next({
+            ...suuntoRouteCatchUpPromptContext$.value,
+            didLastRouteImport: null,
+            connectionView: {
+                ...suuntoRouteCatchUpPromptContext$.value.connectionView,
+                connected: false,
+                reconnectRequired: true,
+            },
+            promptSource: 'suunto-route-catch-up:suunto-reconnect-required:1710000000000',
+        });
+
+        await component.ngOnInit();
+        await firstValueFrom(component.routes$!);
+
+        expect(component.suuntoRouteCatchUpPrompt()).toMatchObject({
+            primaryAction: {
+                id: 'reconnectSuuntoService',
+            },
+        });
+    });
+
+    it('hides the Suunto route catch-up prompt after route catch-up metadata exists', async () => {
+        await component.ngOnInit();
+        await firstValueFrom(component.routes$!);
+
+        expect(component.suuntoRouteCatchUpPrompt()).toBeNull();
+    });
+
+    it('queues Suunto route catch-up from the shared routes prompt', async () => {
+        suuntoRouteCatchUpPromptContext$.next({
+            ...suuntoRouteCatchUpPromptContext$.value,
+            didLastRouteImport: null,
+        });
+
+        await component.ngOnInit();
+        await firstValueFrom(component.routes$!);
+
+        await component.queueSuuntoRouteCatchUpPrompt();
+
+        expect(userServiceMock.addSuuntoRoutesToQueueForCurrentUser).toHaveBeenCalled();
+        expect(snackBarMock.open).toHaveBeenLastCalledWith('Queued 2 routes. Skipped 1.', undefined, { duration: 3500 });
+        expect(component.suuntoRouteCatchUpPromptError()).toBeNull();
+        expect(component.suuntoRouteCatchUpPrompt()).toBeNull();
+    });
+
+    it('keeps the Suunto route catch-up prompt visible after partial connected-account failures', async () => {
+        userServiceMock.addSuuntoRoutesToQueueForCurrentUser.mockResolvedValueOnce({
+            queuedCount: 2,
+            skippedCount: 1,
+            failureCount: 0,
+            failedProviderCount: 1,
+            totalCount: 3,
+        });
+        suuntoRouteCatchUpPromptContext$.next({
+            ...suuntoRouteCatchUpPromptContext$.value,
+            didLastRouteImport: null,
+            connectedProviderUserIds: ['suunto-user-1', 'suunto-user-2'],
+        });
+
+        await component.ngOnInit();
+        await firstValueFrom(component.routes$!);
+
+        await component.queueSuuntoRouteCatchUpPrompt();
+
+        expect(snackBarMock.open).toHaveBeenLastCalledWith(
+            'Queued 2 routes. Skipped 1. Failed 1 connected account.',
+            undefined,
+            { duration: 4500 },
+        );
+        expect(component.didLastSuuntoRouteCatchUp()).toBeNull();
+        expect(component.suuntoRouteCatchUpPrompt()).not.toBeNull();
+    });
+
+    it('keeps the Suunto route catch-up prompt visible after per-route queue failures', async () => {
+        userServiceMock.addSuuntoRoutesToQueueForCurrentUser.mockResolvedValueOnce({
+            queuedCount: 1,
+            skippedCount: 1,
+            failureCount: 1,
+            failedProviderCount: 0,
+            totalCount: 3,
+        });
+        suuntoRouteCatchUpPromptContext$.next({
+            ...suuntoRouteCatchUpPromptContext$.value,
+            didLastRouteImport: null,
+        });
+
+        await component.ngOnInit();
+        await firstValueFrom(component.routes$!);
+
+        await component.queueSuuntoRouteCatchUpPrompt();
+
+        expect(snackBarMock.open).toHaveBeenLastCalledWith(
+            'Queued 1 route. Skipped 1. Failed 1.',
+            undefined,
+            { duration: 4500 },
+        );
+        expect(component.didLastSuuntoRouteCatchUp()).toBeNull();
+        expect(component.suuntoRouteCatchUpPrompt()).not.toBeNull();
+    });
+
+    it('dismisses the Suunto route catch-up prompt through dashboardActionPrompts', async () => {
+        suuntoRouteCatchUpPromptContext$.next({
+            ...suuntoRouteCatchUpPromptContext$.value,
+            didLastRouteImport: null,
+        });
+
+        await component.ngOnInit();
+        await firstValueFrom(component.routes$!);
+        await component.dismissSuuntoRouteCatchUpPrompt();
+
+        expect(userServiceMock.updateUserProperties).toHaveBeenCalledWith(
+            expect.objectContaining({ uid: 'user-1' }),
+            {
+                settings: {
+                    appSettings: {
+                        dashboardActionPrompts: {
+                            [DASHBOARD_ACTION_PROMPT_SUUNTO_ROUTE_CATCH_UP_ID]: expect.objectContaining({
+                                state: 'dismissed',
+                                source: 'suunto-route-catch-up:connected:1710000000000',
+                            }),
+                        },
+                    },
+                },
+            },
+        );
+        expect(component.suuntoRouteCatchUpPrompt()).toBeNull();
+    });
+
+    it('re-shows the Suunto route catch-up prompt when the dismissal source changes', async () => {
+        authServiceMock.getUser.mockResolvedValueOnce({
+            uid: 'user-1',
+            settings: {
+                appSettings: {
+                    dashboardActionPrompts: {
+                        [DASHBOARD_ACTION_PROMPT_SUUNTO_ROUTE_CATCH_UP_ID]: {
+                            state: 'dismissed',
+                            source: 'suunto-route-catch-up:connected:1710000000000',
+                        },
+                    },
+                },
+            },
+        });
+        suuntoRouteCatchUpPromptContext$.next({
+            ...suuntoRouteCatchUpPromptContext$.value,
+            didLastRouteImport: null,
+        });
+
+        await component.ngOnInit();
+        await firstValueFrom(component.routes$!);
+        expect(component.suuntoRouteCatchUpPrompt()).toBeNull();
+
+        suuntoRouteCatchUpPromptContext$.next({
+            ...suuntoRouteCatchUpPromptContext$.value,
+            promptSource: 'suunto-route-catch-up:connected:1810000000000',
+        });
+
+        expect(component.suuntoRouteCatchUpPrompt()).toMatchObject({
+            primaryAction: {
+                id: 'queueSuuntoRouteCatchUp',
+            },
         });
     });
 
@@ -265,6 +499,13 @@ describe('RoutesPageComponent', () => {
             routeCountLabel: '1 route',
             pointCountLabel: '2 points',
             waypointCountLabel: null,
+            provenanceSummary: 'Saved route',
+            provenanceItems: [{
+                id: 'source',
+                label: 'Saved route',
+                title: 'Saved route',
+                serviceName: null,
+            }],
             distance: {
                 label: '10.00 Km',
                 sortValue: 10000,
@@ -297,6 +538,58 @@ describe('RoutesPageComponent', () => {
         });
         expect(routes[0].routeDate?.toISOString()).toBe('2026-01-02T00:00:00.000Z');
         expect(component.trackByRouteID(0, routes[0])).toBe('route-1');
+    });
+
+    it('keeps Suunto-synced routes sendable when another connected Suunto account exists and exposes provenance text', async () => {
+        suuntoRouteCatchUpPromptContext$.next({
+            ...suuntoRouteCatchUpPromptContext$.value,
+            connectedProviderUserIds: ['suunto-user-1', 'suunto-user-2'],
+        });
+        routeServiceMock.getRoutes.mockReturnValueOnce(of([{
+            ...route,
+            sourceSummary: {
+                sourceType: 'service_sync',
+                sourceServiceName: ServiceNames.SuuntoApp,
+                providerUserId: 'suunto-user-1',
+            },
+            syncedDestinationServiceNames: [ServiceNames.GarminAPI],
+        }]));
+        await component.ngOnInit();
+
+        const routes = await firstValueFrom(component.routes$!);
+
+        expect(routes[0].canSendToSuunto).toBe(true);
+        expect(routes[0].provenanceSummary).toBe('Synced from Suunto · Sent to Garmin');
+        expect(routes[0].provenanceItems).toEqual([
+            {
+                id: 'source',
+                label: 'Synced from Suunto',
+                title: 'Synced from Suunto',
+                serviceName: ServiceNames.SuuntoApp,
+            },
+            {
+                id: 'destination-Garmin API',
+                label: 'Sent to Garmin',
+                title: 'Sent to Garmin',
+                serviceName: ServiceNames.GarminAPI,
+            },
+        ]);
+    });
+
+    it('keeps same-account Suunto routes blocked from resend', async () => {
+        routeServiceMock.getRoutes.mockReturnValueOnce(of([{
+            ...route,
+            sourceSummary: {
+                sourceType: 'service_sync',
+                sourceServiceName: ServiceNames.SuuntoApp,
+                providerUserId: 'suunto-user-1',
+            },
+        }]));
+        await component.ngOnInit();
+
+        const routes = await firstValueFrom(component.routes$!);
+
+        expect(routes[0].canSendToSuunto).toBe(false);
     });
 
     it('reads persisted route-file aggregate stats for table metrics', async () => {
@@ -525,6 +818,9 @@ describe('RoutesPageComponent', () => {
         expect(template).toContain('(click)="openRouteDetails(item)"');
         expect(template).toContain('(keydown.enter)="openRouteDetails(item)"');
         expect(template).toContain('(keydown.space)="$event.preventDefault(); openRouteDetails(item)"');
+        expect(template).toContain('class="route-provenance-item"');
+        expect(template).toContain('<app-service-source-icon');
+        expect(template).toContain('[sourceServiceName]="provenance.serviceName"');
         expect(template).toContain('matColumnDef="select"');
         expect(template).toContain('aria-label="Select all visible routes"');
         expect(template).toContain('(change)="toggleVisibleRouteSelection($event.checked)"');
@@ -595,12 +891,12 @@ describe('RoutesPageComponent', () => {
         expect(routes.map(item => item.route.id)).toEqual(['route-2', 'route-1']);
         expect(routes.map(item => item.distance.label)).toEqual(['5.00 Km', '10.00 Km']);
         expect(routeServiceMock.getRoutes).not.toHaveBeenCalledWith(
-            { uid: 'user-1' },
+            expect.objectContaining({ uid: 'user-1' }),
             50,
             { active: 'distance', direction: 'asc' },
         );
         expect(routeServiceMock.getRoutes).toHaveBeenLastCalledWith(
-            { uid: 'user-1' },
+            expect.objectContaining({ uid: 'user-1' }),
             50,
             { active: 'date', direction: 'desc' },
         );
@@ -1088,8 +1384,8 @@ describe('RoutesPageComponent', () => {
 
         await component.confirmDeleteSelectedRoutes();
 
-        expect(routeServiceMock.deleteRoute).toHaveBeenCalledWith({ uid: 'user-1' }, 'route-1');
-        expect(routeServiceMock.deleteRoute).toHaveBeenCalledWith({ uid: 'user-1' }, 'route-2');
+        expect(routeServiceMock.deleteRoute).toHaveBeenCalledWith(expect.objectContaining({ uid: 'user-1' }), 'route-1');
+        expect(routeServiceMock.deleteRoute).toHaveBeenCalledWith(expect.objectContaining({ uid: 'user-1' }), 'route-2');
         expect(component.selectedRouteIDs()).toEqual(['route-2']);
         expect(processingServiceMock.completeJob).toHaveBeenCalledWith('job-1', 'Deleted 1 route');
         expect(analyticsServiceMock.logSavedRouteAction).toHaveBeenCalledWith('delete', {
@@ -1218,7 +1514,7 @@ describe('RoutesPageComponent', () => {
             }),
         );
         expect(dialogMock.open.mock.calls[0][1].data.htmlMessage).toBeUndefined();
-        expect(routeServiceMock.deleteRoute).toHaveBeenCalledWith({ uid: 'user-1' }, 'route-1');
+        expect(routeServiceMock.deleteRoute).toHaveBeenCalledWith(expect.objectContaining({ uid: 'user-1' }), 'route-1');
         expect(routeServiceMock.getRouteCount).toHaveBeenCalledTimes(2);
         expect(analyticsServiceMock.logSavedRouteAction).toHaveBeenCalledWith('delete', {
             status: 'success',

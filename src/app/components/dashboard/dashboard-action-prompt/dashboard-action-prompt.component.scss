@@ -71,11 +71,29 @@
   align-items: center;
   justify-content: center;
   gap: 0.5rem;
+  line-height: 1;
+  min-height: 1.25rem;
+}
+
+.dashboard-action-prompt__button-content > span {
+  align-items: center;
+  display: inline-flex;
+  line-height: 1;
 }
 
 .dashboard-action-prompt__button-content mat-icon,
 .dashboard-action-prompt__button-content mat-progress-spinner {
   flex: 0 0 auto;
+}
+
+.dashboard-action-prompt__button-content mat-icon {
+  align-items: center;
+  display: inline-flex;
+  font-size: 1.1rem;
+  height: 1.1rem;
+  justify-content: center;
+  line-height: 1.1rem;
+  width: 1.1rem;
 }
 
 @media (max-width: 640px) {

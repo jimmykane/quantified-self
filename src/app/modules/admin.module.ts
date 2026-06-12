@@ -50,6 +50,14 @@ export const adminRoutes: Routes = [
         }
     },
     {
+        path: 'queues/route-sync',
+        component: AdminQueueMonitorComponent,
+        canActivate: [adminGuard],
+        data: {
+            queueView: 'route-sync'
+        }
+    },
+    {
         path: 'queues/sleep-sync',
         component: AdminQueueMonitorComponent,
         canActivate: [adminGuard],

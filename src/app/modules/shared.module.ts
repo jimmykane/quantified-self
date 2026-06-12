@@ -38,6 +38,7 @@ import { HapticTapDirective } from '../directives/haptic-tap.directive';
 import { TooltipTapDirective } from '../directives/tooltip-tap.directive';
 import { UploadActivitiesComponent } from '../components/upload/upload-activities/upload-activities.component';
 import { EventCardChartPanelComponent } from '../components/event/chart/panel/event.card.chart.panel.component';
+import { DashboardActionPromptComponent } from '../components/dashboard/dashboard-action-prompt/dashboard-action-prompt.component';
 
 @NgModule({
     imports: [
@@ -80,6 +81,7 @@ import { EventCardChartPanelComponent } from '../components/event/chart/panel/ev
         TooltipTapDirective,
         UploadActivitiesComponent,
         EventCardChartPanelComponent,
+        DashboardActionPromptComponent,
     ],
     providers: [],
     exports: [
@@ -118,6 +120,7 @@ import { EventCardChartPanelComponent } from '../components/event/chart/panel/ev
         TooltipTapDirective,
         UploadActivitiesComponent,
         EventCardChartPanelComponent,
+        DashboardActionPromptComponent,
     ]
 })
 

@@ -29,6 +29,7 @@ export const FUNCTIONS_MANIFEST = {
     requestAndSetSuuntoAPIAccessToken: { name: 'requestAndSetSuuntoAPIAccessToken', region: 'europe-west2' },
     deauthorizeSuuntoApp: { name: 'deauthorizeSuuntoApp', region: 'europe-west2' },
     addSuuntoAppHistoryToQueue: { name: 'addSuuntoAppHistoryToQueue', region: 'europe-west2' },
+    addSuuntoAppRoutesToQueue: { name: 'addSuuntoAppRoutesToQueue', region: 'europe-west2' },
     backfillSuuntoAppSleep: { name: 'backfillSuuntoAppSleep', region: 'europe-west2' },
     importRouteToSuuntoApp: { name: 'importRouteToSuuntoApp', region: 'europe-west2' },
     sendRoutesToService: { name: 'sendRoutesToService', region: 'europe-west2' },

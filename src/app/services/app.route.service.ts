@@ -90,6 +90,8 @@ const SERVER_OWNED_ROUTE_UPDATE_FIELDS = [
     'activityTypes',
     'streamTypes',
     'bounds',
+    'sourceSummary',
+    'syncedDestinationServiceNames',
 ] as const;
 
 @Injectable({

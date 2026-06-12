@@ -156,17 +156,22 @@ describe('RouteDetailComponent', () => {
     };
     userServiceMock = {
       hasProAccessSignal: vi.fn().mockReturnValue(true),
-      watchSuuntoServiceConnectionView: vi.fn().mockReturnValue(of({
-        connected: true,
-        reconnectRequired: false,
-        showDetails: true,
-        description: 'Connected',
-        failureMessage: null,
-        statusLabelOverride: null,
-        statusIconOverride: null,
-        statusTone: 'default',
-        connectButtonLabel: 'Connect',
-        reconnectPromptSource: 'test',
+      watchSuuntoRouteCatchUpPromptContext: vi.fn().mockReturnValue(of({
+        connectionView: {
+          connected: true,
+          reconnectRequired: false,
+          showDetails: true,
+          description: 'Connected',
+          failureMessage: null,
+          statusLabelOverride: null,
+          statusIconOverride: null,
+          statusTone: 'default',
+          connectButtonLabel: 'Connect',
+          reconnectPromptSource: 'test',
+        },
+        didLastRouteImport: new Date('2026-06-10T10:00:00.000Z'),
+        promptSource: 'suunto-route-catch-up:connected:suunto-user-1:1710000000000',
+        connectedProviderUserIds: ['suunto-user-1'],
       })),
     };
     analyticsServiceMock = {
@@ -297,6 +302,36 @@ describe('RouteDetailComponent', () => {
     component.onSegmentVisibilityChange('segment-1', true);
     expect(component.selectedSegmentIDs()).toEqual(['segment-1', 'segment-2']);
     expect(component.allSegmentsSelected()).toBe(true);
+  });
+
+  it('surfaces provenance labels and keeps same-account Suunto routes blocked from resend', () => {
+    component.routeDocument.set({
+      ...routeDocument,
+      sourceSummary: {
+        sourceType: 'service_sync',
+        sourceServiceName: ServiceNames.SuuntoApp,
+        providerUserId: 'suunto-user-1',
+      },
+      syncedDestinationServiceNames: [ServiceNames.GarminAPI],
+    });
+
+    expect(component.sourceSummaryLabel()).toBe('Synced from Suunto');
+    expect(component.syncedDestinationLabels()).toEqual(['Sent to Garmin']);
+    expect(component.canSendRouteToSuunto()).toBe(false);
+  });
+
+  it('allows sending a Suunto-synced route when another connected Suunto account exists', () => {
+    component.connectedSuuntoProviderUserIds.set(['suunto-user-1', 'suunto-user-2']);
+    component.routeDocument.set({
+      ...routeDocument,
+      sourceSummary: {
+        sourceType: 'service_sync',
+        sourceServiceName: ServiceNames.SuuntoApp,
+        providerUserId: 'suunto-user-1',
+      },
+    });
+
+    expect(component.canSendRouteToSuunto()).toBe(true);
   });
 
   it('filters waypoint details with the selected original route segments', () => {

@@ -36,6 +36,11 @@ import { AppUserService } from '../../../services/app.user.service';
 import { AppUserSettingsQueryService } from '../../../services/app.user-settings-query.service';
 import { LoggerService } from '../../../services/logger.service';
 import { normalizeRouteName } from '../../../helpers/route-name.helper';
+import {
+  canSendRouteToConnectedSuuntoAccounts,
+  getRouteSourceSummaryLabel,
+  getRouteSyncedDestinationLabels,
+} from '../../../helpers/route-provenance.helper';
 import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../confirmation-dialog/confirmation-dialog.component';
 import { RouteChartComponent } from '../route-chart/route-chart.component';
 import { RouteMapComponent } from '../route-map/route-map.component';
@@ -86,6 +91,7 @@ export class RouteDetailComponent {
   readonly deleting = signal(false);
   readonly reprocessing = signal(false);
   readonly sendingToService = signal(false);
+  readonly connectedSuuntoProviderUserIds = signal<string[]>([]);
 
   readonly unitSettings = this.userSettingsQuery.unitSettings;
   readonly darkTheme = computed(() => this.themeService.appTheme() === AppThemes.Dark);
@@ -97,6 +103,8 @@ export class RouteDetailComponent {
   readonly routeDate = computed(() => this.resolveRouteDate());
   readonly sourceFilename = computed(() => this.getSourceFilename());
   readonly sourceFileType = computed(() => this.getPrimaryRouteFileType(this.routeDocument()));
+  readonly sourceSummaryLabel = computed(() => getRouteSourceSummaryLabel(this.routeDocument()));
+  readonly syncedDestinationLabels = computed(() => getRouteSyncedDestinationLabels(this.routeDocument()));
   readonly activityType = computed(() => {
     const segments = this.segments();
     return segments[0]?.activityType || this.routeDocument()?.activityTypes?.[0] || 'Route';
@@ -158,7 +166,8 @@ export class RouteDetailComponent {
     const routeDocument = this.routeDocument();
     return !!routeDocument
       && this.canManageRoute()
-      && this.routeService.getOriginalRouteFiles(routeDocument).length > 0;
+      && this.routeService.getOriginalRouteFiles(routeDocument).length > 0
+      && canSendRouteToConnectedSuuntoAccounts(routeDocument, this.connectedSuuntoProviderUserIds());
   });
   readonly canReprocessRoute = computed(() => {
     const routeDocument = this.routeDocument();
@@ -175,10 +184,13 @@ export class RouteDetailComponent {
     this.activatedRoute.data
       .pipe(
         map(data => (data['route'] as RouteResolverData | null)?.user ?? null),
-        switchMap(user => this.userService.watchSuuntoServiceConnectionView(user)),
+        switchMap(user => this.userService.watchSuuntoRouteCatchUpPromptContext(user)),
         takeUntilDestroyed(),
       )
-      .subscribe(connectionView => this.suuntoConnectionView.set(connectionView));
+      .subscribe(context => {
+        this.suuntoConnectionView.set(context.connectionView);
+        this.connectedSuuntoProviderUserIds.set(context.connectedProviderUserIds);
+      });
   }
 
   onSegmentVisibilityChange(segmentID: string, checked: boolean): void {

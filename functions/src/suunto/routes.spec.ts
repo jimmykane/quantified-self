@@ -90,7 +90,7 @@ vi.mock('firebase-admin', () => {
     const tokenSnapshot: any = {
         id: 'token1',
         exists: true,
-        data: () => ({}),
+        data: () => ({ userName: 'suunto-user' }),
         ref: { get: tokenRefGetMock, update: updateMock },
     };
     tokenRefGetMock.mockResolvedValue(tokenSnapshot);
@@ -225,7 +225,7 @@ describe('importRouteToSuuntoApp', () => {
         requestMocks.post.mockResolvedValue(JSON.stringify({ id: 'route-id' }));
 
         const context = {
-            tokenRefs: [{ id: 'token1', ref: { get: tokenRefGetMock } }],
+            tokenRefs: [{ id: 'token1', ref: { get: tokenRefGetMock }, providerUserId: 'suunto-user' }],
         };
         await uploadGPXRouteToSuuntoApp('test-user-id', '<gpx>first</gpx>', context as any);
         await uploadGPXRouteToSuuntoApp('test-user-id', '<gpx>second</gpx>', context as any);
@@ -249,6 +249,7 @@ describe('importRouteToSuuntoApp', () => {
         const context = {
             tokenRefs: [{
                 id: 'token1',
+                providerUserId: 'suunto-user',
                 ref: {
                     get: vi.fn().mockResolvedValue({ exists: false }),
                 },

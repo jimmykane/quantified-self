@@ -76,6 +76,16 @@ vi.mock('../suunto/routes', () => ({
   },
 }));
 
+const routePersistenceMocks = {
+  isRouteFromSourceService: vi.fn(),
+  setRouteDeliveryMetadata: vi.fn(),
+};
+
+vi.mock('./route-persistence', () => ({
+  isRouteFromSourceService: (...args: any[]) => routePersistenceMocks.isRouteFromSourceService(...args),
+  setRouteDeliveryMetadata: (...args: any[]) => routePersistenceMocks.setRouteDeliveryMetadata(...args),
+}));
+
 vi.mock('firebase-functions/v2/https', () => ({
   onCall: (_options: unknown, handler: unknown) => handler,
   HttpsError: class HttpsError extends Error {
@@ -174,12 +184,20 @@ describe('sendRoutesToService', () => {
     routeProcessingMocks.maybeDecompressPayloadForParsing.mockImplementation((payload: Buffer) => payload);
     routeProcessingMocks.parseRoutePayload.mockResolvedValue(createRouteFile());
     routeProcessingMocks.getRouteParsingFailureMessage.mockReturnValue('Could not read route.');
-    suuntoRouteMocks.createSuuntoRouteUploadContext.mockResolvedValue({ tokenRefs: [{ id: 'token-1', ref: {} }] });
+    suuntoRouteMocks.createSuuntoRouteUploadContext.mockResolvedValue({
+      tokenRefs: [{ id: 'token-1', ref: {}, providerUserId: 'suunto-user-1' }],
+      userNames: ['suunto-user-1'],
+    });
     suuntoRouteMocks.uploadGPXRouteToSuuntoApp.mockResolvedValue({
       status: 'success',
       successCount: 1,
       providerRouteIds: ['suunto-route-1'],
+      deliveries: [{ providerUserId: 'suunto-user-1', providerRouteId: 'suunto-route-1' }],
     });
+    routePersistenceMocks.isRouteFromSourceService.mockImplementation((routeDocument: Record<string, any> | null | undefined, serviceName: string) => (
+      routeDocument?.sourceSummary?.sourceServiceName === serviceName
+    ));
+    routePersistenceMocks.setRouteDeliveryMetadata.mockResolvedValue(undefined);
   });
 
   it('rejects unsupported destinations', async () => {
@@ -522,8 +540,21 @@ describe('sendRoutesToService', () => {
     expect(suuntoRouteMocks.uploadGPXRouteToSuuntoApp).toHaveBeenCalledWith(
       'user-1',
       '<gpx><metadata><name>Evening Loop</name></metadata><routes>Evening Loop</routes></gpx>',
-      { tokenRefs: [{ id: 'token-1', ref: {} }] },
+      {
+        tokenRefs: [{ id: 'token-1', ref: {}, providerUserId: 'suunto-user-1' }],
+        userNames: ['suunto-user-1'],
+      },
     );
+    expect(routePersistenceMocks.setRouteDeliveryMetadata).toHaveBeenCalledWith({
+      userID: 'user-1',
+      routeID: 'route-1',
+      deliveryMetadata: expect.objectContaining({
+        serviceName: ServiceNames.SuuntoApp,
+        providerUserId: 'suunto-user-1',
+        status: 'success',
+        providerRouteId: 'suunto-route-1',
+      }),
+    });
     expect(result).toMatchObject({
       destinationServiceName: ServiceNames.SuuntoApp,
       status: 'success',
@@ -554,8 +585,64 @@ describe('sendRoutesToService', () => {
     expect(suuntoRouteMocks.uploadGPXRouteToSuuntoApp).toHaveBeenCalledWith(
       'user-1',
       '<gpx><metadata><name>Route Collection</name></metadata><routes>First segment|Second segment</routes></gpx>',
-      { tokenRefs: [{ id: 'token-1', ref: {} }] },
+      {
+        tokenRefs: [{ id: 'token-1', ref: {}, providerUserId: 'suunto-user-1' }],
+        userNames: ['suunto-user-1'],
+      },
     );
+  });
+
+  it('persists delivery metadata separately for each connected Suunto account', async () => {
+    suuntoRouteMocks.createSuuntoRouteUploadContext.mockResolvedValueOnce({
+      tokenRefs: [
+        { id: 'token-1', ref: {}, providerUserId: 'suunto-user-1' },
+        { id: 'token-2', ref: {}, providerUserId: 'suunto-user-2' },
+      ],
+      userNames: ['suunto-user-1', 'suunto-user-2'],
+    });
+    suuntoRouteMocks.uploadGPXRouteToSuuntoApp.mockResolvedValueOnce({
+      status: 'success',
+      successCount: 2,
+      providerRouteIds: ['suunto-route-1', 'suunto-route-2'],
+      deliveries: [
+        { providerUserId: 'suunto-user-1', providerRouteId: 'suunto-route-1' },
+        { providerUserId: 'suunto-user-2', providerRouteId: 'suunto-route-2' },
+      ],
+    });
+    routeDocuments.set('users/user-1/routes/route-1', {
+      id: 'route-1',
+      userID: 'user-1',
+      name: 'Evening Loop',
+      srcFileType: 'gpx',
+      originalFiles: [{ path: 'users/user-1/routes/route-1/original.gpx', extension: 'gpx' }],
+      routes: [{ id: 'segment-1' }],
+    });
+    storagePayloads.set('users/user-1/routes/route-1/original.gpx', Buffer.from('<gpx></gpx>'));
+
+    await sendRoutesToService(createRequest({
+      routeIds: ['route-1'],
+      destinationServiceName: ServiceNames.SuuntoApp,
+    }) as any);
+
+    expect(routePersistenceMocks.setRouteDeliveryMetadata).toHaveBeenCalledTimes(2);
+    expect(routePersistenceMocks.setRouteDeliveryMetadata).toHaveBeenNthCalledWith(1, {
+      userID: 'user-1',
+      routeID: 'route-1',
+      deliveryMetadata: expect.objectContaining({
+        serviceName: ServiceNames.SuuntoApp,
+        providerUserId: 'suunto-user-1',
+        providerRouteId: 'suunto-route-1',
+      }),
+    });
+    expect(routePersistenceMocks.setRouteDeliveryMetadata).toHaveBeenNthCalledWith(2, {
+      userID: 'user-1',
+      routeID: 'route-1',
+      deliveryMetadata: expect.objectContaining({
+        serviceName: ServiceNames.SuuntoApp,
+        providerUserId: 'suunto-user-2',
+        providerRouteId: 'suunto-route-2',
+      }),
+    });
   });
 
   it('continues after per-route failures and reports skipped source files', async () => {
@@ -643,5 +730,99 @@ describe('sendRoutesToService', () => {
       }),
     ]);
     expect(suuntoRouteMocks.uploadGPXRouteToSuuntoApp).not.toHaveBeenCalled();
+  });
+
+  it('skips Suunto-sourced routes when only the source Suunto account is connected', async () => {
+    routeDocuments.set('users/user-1/routes/route-1', {
+      id: 'route-1',
+      userID: 'user-1',
+      name: 'Suunto route',
+      srcFileType: 'gpx',
+      sourceSummary: {
+        sourceType: 'service_sync',
+        sourceServiceName: ServiceNames.SuuntoApp,
+        providerUserId: 'suunto-user-1',
+      },
+      originalFiles: [{ path: 'users/user-1/routes/route-1/original.gpx', extension: 'gpx' }],
+      routes: [{ id: 'segment-1' }],
+    });
+    storagePayloads.set('users/user-1/routes/route-1/original.gpx', Buffer.from('<gpx></gpx>'));
+
+    const result = await sendRoutesToService(createRequest({
+      routeIds: ['route-1'],
+      destinationServiceName: ServiceNames.SuuntoApp,
+    }) as any);
+
+    expect(result.status).toBe('failure');
+    expect(result.results).toEqual([
+      expect.objectContaining({
+        routeId: 'route-1',
+        status: 'skipped',
+        reason: 'SOURCE_SERVICE_BLOCKED',
+      }),
+    ]);
+    expect(suuntoRouteMocks.uploadGPXRouteToSuuntoApp).not.toHaveBeenCalled();
+    expect(routePersistenceMocks.setRouteDeliveryMetadata).not.toHaveBeenCalled();
+  });
+
+  it('sends Suunto-sourced routes to other connected Suunto accounts and skips the source account', async () => {
+    suuntoRouteMocks.createSuuntoRouteUploadContext.mockResolvedValueOnce({
+      tokenRefs: [
+        { id: 'token-1', ref: {}, providerUserId: 'suunto-user-1' },
+        { id: 'token-2', ref: {}, providerUserId: 'suunto-user-2' },
+      ],
+      userNames: ['suunto-user-1', 'suunto-user-2'],
+    });
+    suuntoRouteMocks.uploadGPXRouteToSuuntoApp.mockResolvedValueOnce({
+      status: 'success',
+      successCount: 1,
+      providerRouteIds: ['suunto-route-2'],
+      deliveries: [
+        { providerUserId: 'suunto-user-2', providerRouteId: 'suunto-route-2' },
+      ],
+    });
+    routeDocuments.set('users/user-1/routes/route-1', {
+      id: 'route-1',
+      userID: 'user-1',
+      name: 'Suunto route',
+      srcFileType: 'gpx',
+      sourceSummary: {
+        sourceType: 'service_sync',
+        sourceServiceName: ServiceNames.SuuntoApp,
+        providerUserId: 'suunto-user-1',
+      },
+      originalFiles: [{ path: 'users/user-1/routes/route-1/original.gpx', extension: 'gpx' }],
+      routes: [{ id: 'segment-1' }],
+    });
+    storagePayloads.set('users/user-1/routes/route-1/original.gpx', Buffer.from('<gpx></gpx>'));
+
+    const result = await sendRoutesToService(createRequest({
+      routeIds: ['route-1'],
+      destinationServiceName: ServiceNames.SuuntoApp,
+    }) as any);
+
+    expect(suuntoRouteMocks.uploadGPXRouteToSuuntoApp).toHaveBeenCalledWith(
+      'user-1',
+      '<gpx><metadata><name>Suunto route</name></metadata><routes>Suunto route</routes></gpx>',
+      {
+        tokenRefs: [{ id: 'token-2', ref: {}, providerUserId: 'suunto-user-2' }],
+        userNames: ['suunto-user-2'],
+      },
+    );
+    expect(routePersistenceMocks.setRouteDeliveryMetadata).toHaveBeenCalledWith({
+      userID: 'user-1',
+      routeID: 'route-1',
+      deliveryMetadata: expect.objectContaining({
+        serviceName: ServiceNames.SuuntoApp,
+        providerUserId: 'suunto-user-2',
+        providerRouteId: 'suunto-route-2',
+      }),
+    });
+    expect(result).toMatchObject({
+      status: 'success',
+      successCount: 1,
+      failureCount: 0,
+      skippedCount: 0,
+    });
   });
 });

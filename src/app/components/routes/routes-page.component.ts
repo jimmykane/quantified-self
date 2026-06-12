@@ -15,11 +15,26 @@ import {
     DataGradeMax,
     DataGradeMin,
     ServiceNames,
-    User,
 } from '@sports-alliance/sports-lib';
 import { FirestoreRouteJSON } from '@shared/app-route.interface';
 import { resolveUnitAwareDisplayFromValue } from '@shared/unit-aware-display';
 import { buildSuuntoServiceConnectionViewModel, SuuntoServiceConnectionViewModel } from '../../helpers/suunto-service-connection.helper';
+import {
+    DASHBOARD_ACTION_PROMPT_SUUNTO_ROUTE_CATCH_UP_ID,
+    DashboardActionPromptEvent,
+    DashboardActionPromptViewModel,
+    isDashboardActionPromptDismissed,
+    markDashboardActionPromptDismissed,
+} from '../../helpers/dashboard-action-prompt.helper';
+import {
+    buildSuuntoRouteCatchUpPromptViewModel,
+    buildSuuntoRouteCatchUpSnackbarMessage,
+} from '../../helpers/suunto-route-catch-up.helper';
+import {
+    canSendRouteToConnectedSuuntoAccounts,
+    getRouteSourceSummary,
+    getRouteSyncedDestinationSummaries,
+} from '../../helpers/route-provenance.helper';
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { ConfirmationDialogComponent, ConfirmationDialogData } from '../confirmation-dialog/confirmation-dialog.component';
 import { SharedModule } from '../../modules/shared.module';
@@ -49,7 +64,9 @@ import {
 } from '../../services/app.route.service';
 import { AppUserService } from '../../services/app.user.service';
 import { LoggerService } from '../../services/logger.service';
+import { AppWindowService } from '../../services/app.window.service';
 import { UploadRoutesComponent } from '../upload/upload-routes/upload-routes.component';
+import { AppAppSettingsInterface, AppUserInterface } from '../../models/app-user.interface';
 
 interface RoutePageRouteViewModel {
     route: FirestoreRouteJSON;
@@ -66,6 +83,9 @@ interface RoutePageRouteViewModel {
     routeCountLabel: string;
     pointCountLabel: string;
     waypointCountLabel: string | null;
+    provenanceSummary: string;
+    provenanceTitle: string;
+    provenanceItems: RouteProvenanceItem[];
     distance: RouteMetricCell;
     ascent: RouteMetricCell;
     descent: RouteMetricCell;
@@ -83,6 +103,13 @@ interface RouteMetricCell {
     label: string;
     sortValue: number | null;
     title: string;
+}
+
+interface RouteProvenanceItem {
+    id: string;
+    label: string;
+    title: string;
+    serviceName: ServiceNames | null;
 }
 
 interface RouteActivityTypeSummary {
@@ -143,6 +170,7 @@ export class RoutesPageComponent implements OnInit {
     private routeSendService = inject(AppRouteSendService);
     private logger = inject(LoggerService);
     private router = inject(Router);
+    private windowService = inject(AppWindowService);
     private readonly routeSortSubject = new BehaviorSubject<RouteSortState>({
         active: 'date',
         direction: 'desc',
@@ -152,10 +180,11 @@ export class RoutesPageComponent implements OnInit {
         fileType: '',
         activityType: '',
     });
+    private readonly connectedSuuntoProviderUserIdsSubject = new BehaviorSubject<string[]>([]);
     private readonly loadedRouteViewModels = signal<RoutePageRouteViewModel[]>([]);
     private readonly visibleRouteViewModels = signal<RoutePageRouteViewModel[]>([]);
 
-    readonly user = signal<User | null>(null);
+    readonly user = signal<AppUserInterface | null>(null);
     readonly deletingRouteID = signal<string | null>(null);
     readonly downloadingRouteID = signal<string | null>(null);
     readonly exportingRouteID = signal<string | null>(null);
@@ -173,6 +202,13 @@ export class RoutesPageComponent implements OnInit {
     readonly routeSortActive = signal<RouteSortColumn>('date');
     readonly routeSortDirection = signal<SortDirection>('desc');
     readonly selectedRouteIDs = signal<string[]>([]);
+    readonly didLastSuuntoRouteCatchUp = signal<Date | null>(null);
+    readonly suuntoRouteCatchUpPromptSource = signal<string | null>(null);
+    readonly isQueueingSuuntoRouteCatchUpPrompt = signal(false);
+    readonly isReconnectingSuuntoRouteCatchUpPrompt = signal(false);
+    readonly isDismissingSuuntoRouteCatchUpPrompt = signal(false);
+    readonly suuntoRouteCatchUpPromptError = signal<string | null>(null);
+    readonly connectedSuuntoProviderUserIds = signal<string[]>([]);
     readonly suuntoConnectionView = signal<SuuntoServiceConnectionViewModel>(buildSuuntoServiceConnectionViewModel({
         hasToken: false,
         serviceMeta: null,
@@ -186,6 +222,37 @@ export class RoutesPageComponent implements OnInit {
     readonly routeFilterActive = computed(() => this.isRouteFilterActive());
     readonly selectedRouteCount = computed(() => this.selectedRouteIDs().length);
     readonly selectedRouteIDSet = computed(() => new Set(this.selectedRouteIDs()));
+    readonly suuntoRouteCatchUpPrompt = computed<DashboardActionPromptViewModel | null>(() => {
+        const user = this.user();
+        const connectionView = this.suuntoConnectionView();
+        const promptSource = this.suuntoRouteCatchUpPromptSource();
+
+        if (
+            !user
+            || this.didLastSuuntoRouteCatchUp() !== null
+            || (!connectionView.connected && !connectionView.reconnectRequired)
+            || !promptSource
+            || isDashboardActionPromptDismissed(
+                user.settings?.appSettings,
+                DASHBOARD_ACTION_PROMPT_SUUNTO_ROUTE_CATCH_UP_ID,
+                promptSource,
+            )
+        ) {
+            return null;
+        }
+
+        return buildSuuntoRouteCatchUpPromptViewModel({
+            variant: !this.userService.hasProAccessSignal()
+                ? 'upgrade'
+                : connectionView.reconnectRequired
+                    ? 'reconnect'
+                    : 'queue',
+            busy: this.isQueueingSuuntoRouteCatchUpPrompt()
+                || this.isReconnectingSuuntoRouteCatchUpPrompt()
+                || this.isDismissingSuuntoRouteCatchUpPrompt(),
+            error: this.suuntoRouteCatchUpPromptError(),
+        });
+    });
     readonly selectedSendableRouteCount = computed(() => {
         const selectedIDs = this.selectedRouteIDSet();
         return this.visibleRouteViewModels().filter(item => (
@@ -245,12 +312,18 @@ export class RoutesPageComponent implements OnInit {
     readonly routeSelection = new SelectionModel<string>(true, []);
 
     async ngOnInit(): Promise<void> {
-        const user = await this.authService.getUser();
+        const user = await this.authService.getUser() as AppUserInterface | null;
         this.user.set(user);
         if (user) {
-            this.userService.watchSuuntoServiceConnectionView(user).pipe(
+            this.userService.watchSuuntoRouteCatchUpPromptContext(user).pipe(
                 takeUntilDestroyed(this.destroyRef),
-            ).subscribe(connectionView => this.suuntoConnectionView.set(connectionView));
+            ).subscribe(context => {
+                this.suuntoConnectionView.set(context.connectionView);
+                this.didLastSuuntoRouteCatchUp.set(context.didLastRouteImport);
+                this.suuntoRouteCatchUpPromptSource.set(context.promptSource);
+                this.connectedSuuntoProviderUserIds.set(context.connectedProviderUserIds);
+                this.connectedSuuntoProviderUserIdsSubject.next(context.connectedProviderUserIds);
+            });
 
             const routeDocuments$ = this.routeSortSubject.pipe(
                 map(routeSort => this.toRouteListSort(routeSort)),
@@ -265,6 +338,7 @@ export class RoutesPageComponent implements OnInit {
                 routeDocuments$,
                 this.routeSortSubject,
                 this.routeFilterSubject,
+                this.connectedSuuntoProviderUserIdsSubject,
             ]).pipe(
                 map(([routes, routeSort, routeFilter]) => {
                     const routeViewModels = routes.map(route => this.toRouteViewModel(route));
@@ -379,6 +453,132 @@ export class RoutesPageComponent implements OnInit {
         const count = await this.routeService.getRouteCount(user);
         this.routeCount.set(count);
         return count;
+    }
+
+    onSuuntoRouteCatchUpPromptPrimary(event: DashboardActionPromptEvent): void {
+        switch (event.action.id) {
+            case 'queueSuuntoRouteCatchUp':
+                void this.queueSuuntoRouteCatchUpPrompt();
+                return;
+            case 'reconnectSuuntoService':
+                void this.reconnectSuuntoRouteCatchUpPrompt();
+                return;
+            case 'upgradeToPro':
+                void this.openSubscriptions();
+                return;
+        }
+    }
+
+    onSuuntoRouteCatchUpPromptSecondary(event: DashboardActionPromptEvent): void {
+        if (event.action.id === 'dismissSuuntoRouteCatchUp') {
+            void this.dismissSuuntoRouteCatchUpPrompt();
+        }
+    }
+
+    async queueSuuntoRouteCatchUpPrompt(): Promise<void> {
+        if (
+            this.suuntoRouteCatchUpPrompt() === null
+            || this.isQueueingSuuntoRouteCatchUpPrompt()
+            || this.isReconnectingSuuntoRouteCatchUpPrompt()
+            || this.isDismissingSuuntoRouteCatchUpPrompt()
+        ) {
+            return;
+        }
+
+        this.isQueueingSuuntoRouteCatchUpPrompt.set(true);
+        this.suuntoRouteCatchUpPromptError.set(null);
+
+        try {
+            const summary = await this.userService.addSuuntoRoutesToQueueForCurrentUser();
+            const feedback = buildSuuntoRouteCatchUpSnackbarMessage(summary);
+            if ((summary.failedProviderCount || 0) === 0 && summary.failureCount === 0) {
+                this.didLastSuuntoRouteCatchUp.set(new Date());
+            }
+            this.snackBar.open(feedback.message, undefined, { duration: feedback.duration });
+        } catch (error: any) {
+            this.suuntoRouteCatchUpPromptError.set('Could not queue Suunto routes.');
+            this.logger.error('[RoutesPageComponent] Failed to queue Suunto route catch-up prompt', error);
+            this.snackBar.open(`Could not queue Suunto routes: ${error?.message || 'Unknown error'}`, undefined, { duration: 5000 });
+        } finally {
+            this.isQueueingSuuntoRouteCatchUpPrompt.set(false);
+        }
+    }
+
+    async reconnectSuuntoRouteCatchUpPrompt(): Promise<void> {
+        if (
+            this.suuntoRouteCatchUpPrompt() === null
+            || this.isQueueingSuuntoRouteCatchUpPrompt()
+            || this.isReconnectingSuuntoRouteCatchUpPrompt()
+            || this.isDismissingSuuntoRouteCatchUpPrompt()
+        ) {
+            return;
+        }
+
+        this.isReconnectingSuuntoRouteCatchUpPrompt.set(true);
+        this.suuntoRouteCatchUpPromptError.set(null);
+
+        try {
+            const tokenAndURI = await this.userService.getCurrentUserServiceTokenAndRedirectURI(ServiceNames.SuuntoApp);
+            this.windowService.windowRef.location.href = tokenAndURI.redirect_uri;
+        } catch (error) {
+            this.suuntoRouteCatchUpPromptError.set('Could not start Suunto reconnect.');
+            this.logger.error('[RoutesPageComponent] Failed to start Suunto reconnect from route catch-up prompt', error);
+            this.isReconnectingSuuntoRouteCatchUpPrompt.set(false);
+        }
+    }
+
+    async dismissSuuntoRouteCatchUpPrompt(): Promise<void> {
+        const user = this.user();
+        const promptSource = this.suuntoRouteCatchUpPromptSource();
+        if (
+            !user
+            || !promptSource
+            || this.suuntoRouteCatchUpPrompt() === null
+            || this.isQueueingSuuntoRouteCatchUpPrompt()
+            || this.isReconnectingSuuntoRouteCatchUpPrompt()
+            || this.isDismissingSuuntoRouteCatchUpPrompt()
+        ) {
+            return;
+        }
+
+        this.isDismissingSuuntoRouteCatchUpPrompt.set(true);
+        this.suuntoRouteCatchUpPromptError.set(null);
+
+        try {
+            user.settings = user.settings || {} as any;
+            const nextAppSettings = {
+                ...(user.settings.appSettings || {}),
+            } as AppAppSettingsInterface;
+            const dismissedState = markDashboardActionPromptDismissed(
+                nextAppSettings,
+                DASHBOARD_ACTION_PROMPT_SUUNTO_ROUTE_CATCH_UP_ID,
+                promptSource,
+                Date.now(),
+            );
+
+            await this.userService.updateUserProperties(user, {
+                settings: {
+                    appSettings: {
+                        dashboardActionPrompts: {
+                            [DASHBOARD_ACTION_PROMPT_SUUNTO_ROUTE_CATCH_UP_ID]: dismissedState,
+                        },
+                    },
+                },
+            });
+            user.settings.appSettings = nextAppSettings;
+            this.user.set(Object.assign(
+                Object.create(Object.getPrototypeOf(user)),
+                user,
+            ) as AppUserInterface);
+            this.analyticsService.logEvent('dashboard_action_prompt_dismiss', {
+                prompt_id: DASHBOARD_ACTION_PROMPT_SUUNTO_ROUTE_CATCH_UP_ID,
+            });
+        } catch (error) {
+            this.suuntoRouteCatchUpPromptError.set('Could not save this choice.');
+            this.logger.error('[RoutesPageComponent] Failed to dismiss Suunto route catch-up prompt', error);
+        } finally {
+            this.isDismissingSuuntoRouteCatchUpPrompt.set(false);
+        }
     }
 
     openRouteDetails(item: RoutePageRouteViewModel): void {
@@ -1144,7 +1344,12 @@ export class RoutesPageComponent implements OnInit {
 
     private canSendRouteToSuunto(route: FirestoreRouteJSON): boolean {
         return this.canManageRoute(route)
-            && this.routeService.getOriginalRouteFiles(route).length > 0;
+            && this.routeService.getOriginalRouteFiles(route).length > 0
+            && canSendRouteToConnectedSuuntoAccounts(route, this.connectedSuuntoProviderUserIds());
+    }
+
+    private async openSubscriptions(): Promise<void> {
+        await this.router.navigate(['/subscriptions']);
     }
 
     private getSelectedVisibleRouteItems(): RoutePageRouteViewModel[] {
@@ -1257,6 +1462,8 @@ export class RoutesPageComponent implements OnInit {
         const routeCountLabel = `${routeCount} route${routeCount === 1 ? '' : 's'}`;
         const pointCountLabel = `${pointCount} point${pointCount === 1 ? '' : 's'}`;
         const waypointCountLabel = waypointCount > 0 ? `${waypointCount} waypoint${waypointCount === 1 ? '' : 's'}` : null;
+        const provenanceItems = this.buildRouteProvenanceItems(route);
+        const provenanceSummary = provenanceItems.map(item => item.label).join(' · ');
         return {
             route,
             name: routeName,
@@ -1272,6 +1479,9 @@ export class RoutesPageComponent implements OnInit {
             routeCountLabel,
             pointCountLabel,
             waypointCountLabel,
+            provenanceSummary,
+            provenanceTitle: provenanceSummary,
+            provenanceItems,
             distance,
             ascent,
             descent,
@@ -1287,6 +1497,7 @@ export class RoutesPageComponent implements OnInit {
                 activityTypes,
                 originalFilename,
                 fileType,
+                provenanceSummary,
                 routeDate ? routeDate.toISOString() : '',
                 routeCountLabel,
                 pointCountLabel,
@@ -1298,6 +1509,26 @@ export class RoutesPageComponent implements OnInit {
                 maxGrade.label,
             ].filter(Boolean).join(' ').toLowerCase(),
         };
+    }
+
+    private buildRouteProvenanceItems(route: FirestoreRouteJSON): RouteProvenanceItem[] {
+        const sourceSummary = getRouteSourceSummary(route);
+        const destinationSummaries = getRouteSyncedDestinationSummaries(route);
+
+        return [
+            {
+                id: 'source',
+                label: sourceSummary.label,
+                title: sourceSummary.label,
+                serviceName: sourceSummary.serviceName,
+            },
+            ...destinationSummaries.map((summary, index) => ({
+                id: `destination-${summary.serviceName || index}`,
+                label: summary.label,
+                title: summary.label,
+                serviceName: summary.serviceName,
+            })),
+        ];
     }
 
     private buildRouteActivityTypeSummaries(route: FirestoreRouteJSON): RouteActivityTypeSummary[] {
