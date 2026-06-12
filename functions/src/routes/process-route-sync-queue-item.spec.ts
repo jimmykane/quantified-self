@@ -231,11 +231,17 @@ describe('processRouteSyncQueueItem', () => {
     }));
 
     expect(result).toBe(QueueResult.Processed);
+    expect(suuntoRouteMocks.exportSuuntoRouteAsGPX).toHaveBeenCalledWith(
+      'user-1',
+      'provider-route-1',
+      { providerUserId: 'suunto-user' },
+    );
     expect(upsertSyncedRouteMocks.upsertSyncedRoute).toHaveBeenCalledWith(expect.objectContaining({
       routeID: 'route-doc-1',
       sourceMetadata: expect.objectContaining({
         importedAt: originalImportedAt,
         originalFilename: 'Εγνατία-Ποδηλασία-δρόμου.gpx',
+        providerUserId: 'suunto-user',
         providerRouteName: 'Εγνατία Ποδηλασία δρόμου',
       }),
     }));

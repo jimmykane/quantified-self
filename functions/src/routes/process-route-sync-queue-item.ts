@@ -126,8 +126,13 @@ function hasMatchingProviderSource(
     queueItem: RouteSyncQueueItemInterface,
 ): boolean {
     const sourceSummary = getSourceSummary(existingRouteDocument);
-    return normalizeNonEmptyString(sourceSummary?.sourceServiceName) === queueItem.sourceServiceName
-        && normalizeNonEmptyString(sourceSummary?.providerRouteId) === queueItem.providerRouteId;
+    if (normalizeNonEmptyString(sourceSummary?.sourceServiceName) !== queueItem.sourceServiceName
+        || normalizeNonEmptyString(sourceSummary?.providerRouteId) !== queueItem.providerRouteId) {
+        return false;
+    }
+
+    const currentProviderUserId = normalizeNonEmptyString(sourceSummary?.providerUserId);
+    return !currentProviderUserId || currentProviderUserId === queueItem.providerUserId;
 }
 
 function shouldSkipUnchangedProviderRoute(
@@ -191,7 +196,9 @@ export async function processRouteSyncQueueItem(
             });
         }
 
-        const gpxContent = await exportSuuntoRouteAsGPX(userID, queueItem.providerRouteId);
+        const gpxContent = await exportSuuntoRouteAsGPX(userID, queueItem.providerRouteId, {
+            providerUserId: queueItem.providerUserId,
+        });
         const routeFile = await parseSuuntoRouteGPX(queueItem, gpxContent);
 
         routeFile.setID(routeID);
@@ -207,6 +214,7 @@ export async function processRouteSyncQueueItem(
 
         const sourceMetadata = buildServiceRouteSourceMetadata({
             sourceServiceName: queueItem.sourceServiceName,
+            providerUserId: queueItem.providerUserId,
             providerRouteId: queueItem.providerRouteId,
             providerRouteName: queueItem.providerRouteName || routeFile.name || null,
             originalFilename: originalFile.originalFilename,

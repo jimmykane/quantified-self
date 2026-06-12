@@ -271,9 +271,9 @@ describe('AppRouteSendService', () => {
         destinationServiceName: ServiceNames.SuuntoApp,
         status: 'skipped',
         reason: 'SOURCE_SERVICE_BLOCKED',
-        message: 'Routes imported from Suunto are already there and cannot be sent back to Suunto.',
+        message: 'Routes imported from Suunto are already in the connected Suunto account and cannot be sent back there.',
       }],
-    })).toBe('Routes imported from Suunto are already there and cannot be sent back to Suunto.');
+    })).toBe('Routes imported from Suunto are already in the connected Suunto account and cannot be sent back there.');
   });
 
   it('returns actionable route send guidance only for specific non-success responses', () => {

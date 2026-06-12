@@ -82,7 +82,11 @@ export function getRouteSendResponseMessage(response: SendRoutesToServiceRespons
     case 'ACCOUNT_STATE_UNAVAILABLE':
       return 'Could not verify account state. Please retry.';
     case 'SOURCE_SERVICE_BLOCKED':
-      return 'Routes imported from Suunto are already there and cannot be sent back to Suunto.';
+      return nonSuccessResults.find(result =>
+        result.reason === 'SOURCE_SERVICE_BLOCKED'
+          && typeof result.message === 'string'
+          && result.message.trim().length > 0,
+      )?.message?.trim() || 'Routes imported from Suunto are already there and cannot be sent back to Suunto.';
     default:
       return nonSuccessResults.find(result => typeof result.message === 'string' && result.message.trim())?.message?.trim()
         || getDefaultRouteSendFailureMessage(response.destinationServiceName);

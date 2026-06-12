@@ -15,6 +15,7 @@ export type RouteDeliveryMetadataStatus = 'success' | 'failed' | 'skipped';
 export interface RouteSourceSummary {
     sourceType: RouteSourceType;
     sourceServiceName?: ServiceNames | string | null;
+    providerUserId?: string | null;
     providerRouteId?: string | null;
     providerRouteName?: string | null;
     originalFilename?: string | null;
@@ -28,6 +29,7 @@ export interface RouteSourceMetadata extends RouteSourceSummary {
 
 export interface RouteDeliveryMetadata {
     serviceName: ServiceNames | string;
+    providerUserId?: string | null;
     status: RouteDeliveryMetadataStatus;
     providerRouteId?: string | null;
     deliveredAt?: number | Date | null;
@@ -37,7 +39,18 @@ export interface RouteDeliveryMetadata {
     lastErrorMessage?: string | null;
 }
 
-export function getRouteDeliveryMetadataDocId(serviceName: ServiceNames | string): string {
-    return `${ROUTE_DELIVERY_METADATA_DOC_PREFIX}${serviceName}`;
+function normalizeRouteProviderUserId(value: unknown): string | null {
+    return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null;
 }
 
+export function getRouteDeliveryMetadataDocId(
+    serviceName: ServiceNames | string,
+    providerUserId?: string | null,
+): string {
+    const normalizedProviderUserId = normalizeRouteProviderUserId(providerUserId);
+    if (!normalizedProviderUserId) {
+        return `${ROUTE_DELIVERY_METADATA_DOC_PREFIX}${serviceName}`;
+    }
+
+    return `${ROUTE_DELIVERY_METADATA_DOC_PREFIX}${serviceName}_${encodeURIComponent(normalizedProviderUserId)}`;
+}

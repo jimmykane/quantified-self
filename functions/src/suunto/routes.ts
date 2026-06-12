@@ -27,6 +27,7 @@ import { ALLOWED_CORS_ORIGINS, enforceAppCheck } from '../utils';
 export interface SuuntoRouteUploadTokenRef {
   id: string;
   ref: admin.firestore.DocumentReference;
+  providerUserId: string;
 }
 
 export interface SuuntoRouteUploadContext {
@@ -38,9 +39,14 @@ export interface SuuntoRouteUploadResult {
   status: 'success';
   successCount: number;
   providerRouteIds: string[];
+  deliveries: Array<{
+    providerUserId: string;
+    providerRouteId?: string | null;
+  }>;
 }
 
 export interface SuuntoRouteSummary {
+  providerUserId: string;
   id: string;
   description?: string | null;
   created?: number | null;
@@ -150,6 +156,10 @@ function getSuuntoErrorMessage(error: unknown): string | undefined {
   return undefined;
 }
 
+function normalizeSuuntoProviderUserId(value: unknown): string | null {
+  return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null;
+}
+
 export async function createSuuntoRouteUploadContext(userID: string): Promise<SuuntoRouteUploadContext> {
   await assertSuuntoRouteUploadUserActive(userID, 'before_token_lookup');
 
@@ -160,16 +170,32 @@ export async function createSuuntoRouteUploadContext(userID: string): Promise<Su
     throw new HttpsError('unauthenticated', 'No connected Suunto account found');
   }
 
+  const tokenRefs = tokenQuerySnapshots.docs
+    .map((tokenSnapshot) => {
+      const providerUserId = normalizeSuuntoProviderUserId(tokenSnapshot.data()?.userName);
+      if (!providerUserId) {
+        logger.warn('[SuuntoRoutes] Skipping token without provider user identity', {
+          userID,
+          tokenId: tokenSnapshot.id,
+        });
+        return null;
+      }
+
+      return {
+        id: tokenSnapshot.id,
+        ref: tokenSnapshot.ref,
+        providerUserId,
+      };
+    })
+    .filter((tokenRef): tokenRef is SuuntoRouteUploadTokenRef => tokenRef !== null);
+
+  if (tokenRefs.length === 0) {
+    throw new HttpsError('unauthenticated', 'No connected Suunto account found');
+  }
+
   return {
-    tokenRefs: tokenQuerySnapshots.docs.map(tokenSnapshot => ({
-      id: tokenSnapshot.id,
-      ref: tokenSnapshot.ref,
-    })),
-    userNames: Array.from(new Set(
-      tokenQuerySnapshots.docs
-        .map(tokenSnapshot => typeof tokenSnapshot.data()?.userName === 'string' ? tokenSnapshot.data().userName.trim() : '')
-        .filter(userName => userName.length > 0),
-    )),
+    tokenRefs,
+    userNames: Array.from(new Set(tokenRefs.map(tokenRef => tokenRef.providerUserId))),
   };
 }
 
@@ -183,18 +209,33 @@ async function getLatestSuuntoTokenSnapshot(
   return snapshot;
 }
 
+function getSuuntoTokenRefsForReadOperation(
+  context: SuuntoRouteUploadContext,
+  providerUserId?: string | null,
+): SuuntoRouteUploadTokenRef[] {
+  const normalizedProviderUserId = normalizeSuuntoProviderUserId(providerUserId);
+  if (!normalizedProviderUserId) {
+    return context.tokenRefs;
+  }
+
+  const matchingTokenRefs = context.tokenRefs.filter(tokenRef => tokenRef.providerUserId === normalizedProviderUserId);
+  return matchingTokenRefs.length > 0 ? matchingTokenRefs : context.tokenRefs;
+}
+
 function normalizeSuuntoRouteSummary(value: unknown): SuuntoRouteSummary | null {
+  const providerUserId = normalizeSuuntoProviderUserId((value as { providerUserId?: unknown } | null)?.providerUserId);
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     return null;
   }
 
   const route = value as Record<string, unknown>;
   const id = typeof route.id === 'string' && route.id.trim() ? route.id.trim() : null;
-  if (!id) {
+  if (!id || !providerUserId) {
     return null;
   }
 
   return {
+    providerUserId,
     id,
     description: typeof route.description === 'string' && route.description.trim() ? route.description.trim() : null,
     created: typeof route.created === 'number' && Number.isFinite(route.created) ? route.created : null,
@@ -207,11 +248,12 @@ async function executeSuuntoRouteReadOperation<T>(
   context: SuuntoRouteUploadContext,
   operationName: string,
   operation: (accessToken: string) => Promise<T>,
+  providerUserId?: string | null,
 ): Promise<T> {
   let authFailures = 0;
   let lastError: unknown = null;
 
-  for (const tokenRef of context.tokenRefs) {
+  for (const tokenRef of getSuuntoTokenRefsForReadOperation(context, providerUserId)) {
     try {
       const latestTokenSnapshot = await getLatestSuuntoTokenSnapshot(tokenRef);
       return await executeWithTokenRetry(
@@ -237,6 +279,7 @@ async function executeSuuntoRouteReadOperation<T>(
       lastError = error;
       logger.warn(`[SuuntoRoutes] ${operationName} failed for token ${tokenRef.id}`, {
         userID,
+        providerUserId: tokenRef.providerUserId,
         error,
       });
     }
@@ -254,36 +297,94 @@ export async function listSuuntoRoutes(
   context?: SuuntoRouteUploadContext,
 ): Promise<SuuntoRouteSummary[]> {
   const routeContext = context || await createSuuntoRouteUploadContext(userID);
-  const result = await executeSuuntoRouteReadOperation(userID, routeContext, 'list_suunto_routes', async (accessToken) => (
-    requestPromise.get({
-      headers: {
-        'Authorization': toSuuntoAuthorizationHeader(accessToken),
-        'Ocp-Apim-Subscription-Key': config.suuntoapp.subscription_key,
-      },
-      json: true,
-      url: 'https://cloudapi.suunto.com/v2/route',
-    })
-  ));
+  const routesByProviderKey = new Map<string, SuuntoRouteSummary>();
+  let authFailures = 0;
+  let lastError: unknown = null;
 
-  if (!Array.isArray(result)) {
-    logger.warn('[SuuntoRoutes] Route listing returned unexpected payload shape', {
-      userID,
-      payloadType: typeof result,
-    });
-    return [];
+  for (const tokenRef of routeContext.tokenRefs) {
+    try {
+      const latestTokenSnapshot = await getLatestSuuntoTokenSnapshot(tokenRef);
+      const result = await executeWithTokenRetry(
+        latestTokenSnapshot,
+        async (accessToken) => {
+          await assertSuuntoRouteUploadUserActive(userID, 'before_list_suunto_routes');
+          return requestPromise.get({
+            headers: {
+              'Authorization': toSuuntoAuthorizationHeader(accessToken),
+              'Ocp-Apim-Subscription-Key': config.suuntoapp.subscription_key,
+            },
+            json: true,
+            url: 'https://cloudapi.suunto.com/v2/route',
+          });
+        },
+        `list_suunto_routes for user ${userID}`,
+      );
+
+      if (!Array.isArray(result)) {
+        logger.warn('[SuuntoRoutes] Route listing returned unexpected payload shape', {
+          userID,
+          providerUserId: tokenRef.providerUserId,
+          payloadType: typeof result,
+        });
+        continue;
+      }
+
+      for (const route of result) {
+        const normalizedRoute = normalizeSuuntoRouteSummary({
+          ...route,
+          providerUserId: tokenRef.providerUserId,
+        });
+        if (!normalizedRoute) {
+          continue;
+        }
+
+        routesByProviderKey.set(
+          `${normalizedRoute.providerUserId}:${normalizedRoute.id}`,
+          normalizedRoute,
+        );
+      }
+    } catch (error) {
+      if (isUserDeletionGuardReadError(error) || error instanceof SuuntoRouteUploadSkippedForDeletedUserError) {
+        throw error;
+      }
+      if (error instanceof HttpsError && error.code === 'unauthenticated') {
+        authFailures++;
+        lastError = error;
+        continue;
+      }
+      if (getStatusCode(error) === 401) {
+        authFailures++;
+      }
+      lastError = error;
+      logger.warn('[SuuntoRoutes] list_suunto_routes failed for token', {
+        userID,
+        providerUserId: tokenRef.providerUserId,
+        tokenId: tokenRef.id,
+        error,
+      });
+    }
   }
 
-  return result
-    .map(normalizeSuuntoRouteSummary)
-    .filter((route): route is SuuntoRouteSummary => route !== null);
+  if (routesByProviderKey.size > 0) {
+    return Array.from(routesByProviderKey.values());
+  }
+
+  if (authFailures > 0) {
+    throw new HttpsError('unauthenticated', 'Authentication failed. Please re-connect your Suunto account.');
+  }
+
+  throw lastError || new HttpsError('internal', 'Suunto route request failed.');
 }
 
 export async function exportSuuntoRouteAsGPX(
   userID: string,
   providerRouteId: string,
-  context?: SuuntoRouteUploadContext,
+  options: {
+    context?: SuuntoRouteUploadContext;
+    providerUserId?: string | null;
+  } = {},
 ): Promise<string> {
-  const routeContext = context || await createSuuntoRouteUploadContext(userID);
+  const routeContext = options.context || await createSuuntoRouteUploadContext(userID);
   const result = await executeSuuntoRouteReadOperation(userID, routeContext, 'export_suunto_route', async (accessToken) => (
     requestPromise.get({
       headers: {
@@ -293,7 +394,7 @@ export async function exportSuuntoRouteAsGPX(
       },
       url: `https://cloudapi.suunto.com/v2/route/${providerRouteId}/export`,
     })
-  ));
+  ), options.providerUserId);
 
   const gpxContent = typeof result === 'string' ? result : `${result || ''}`;
   if (!gpxContent.trim()) {
@@ -316,6 +417,7 @@ export async function uploadGPXRouteToSuuntoApp(
   let successCount = 0;
   let authFailures = 0;
   const providerRouteIds: string[] = [];
+  const deliveries: Array<{ providerUserId: string; providerRouteId?: string | null }> = [];
 
   for (const tokenRef of uploadContext.tokenRefs) {
     let result: any;
@@ -377,6 +479,10 @@ export async function uploadGPXRouteToSuuntoApp(
     if (providerRouteId) {
       providerRouteIds.push(providerRouteId);
     }
+    deliveries.push({
+      providerUserId: tokenRef.providerUserId,
+      providerRouteId: providerRouteId || null,
+    });
   }
 
   if (successCount > 0) {
@@ -385,7 +491,7 @@ export async function uploadGPXRouteToSuuntoApp(
     } catch (e: unknown) {
       logger.error('Could not update uploadedRoutes count', e);
     }
-    return { status: 'success', successCount, providerRouteIds };
+    return { status: 'success', successCount, providerRouteIds, deliveries };
   }
 
   if (authFailures > 0) {

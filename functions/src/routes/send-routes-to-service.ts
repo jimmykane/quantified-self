@@ -37,7 +37,6 @@ import {
   uploadGPXRouteToSuuntoApp,
 } from '../suunto/routes';
 import {
-  isRouteFromSourceService,
   setRouteDeliveryMetadata,
 } from './route-persistence';
 
@@ -51,7 +50,17 @@ interface PreparedSavedRoute {
 interface RouteSendDestinationAdapter<Context = unknown> {
   readonly destinationServiceName: ServiceNames;
   createContext(userID: string): Promise<Context>;
-  sendRoute(userID: string, preparedRoute: PreparedSavedRoute, context: Context): Promise<{ providerRouteId?: string }>;
+  sendRoute(
+    userID: string,
+    preparedRoute: PreparedSavedRoute,
+    context: Context,
+  ): Promise<{
+    providerRouteId?: string;
+    deliveries?: Array<{
+      providerUserId?: string | null;
+      providerRouteId?: string | null;
+    }>;
+  }>;
 }
 
 class RouteSendItemError extends Error {
@@ -87,10 +96,12 @@ class SuuntoRouteSendAdapter implements RouteSendDestinationAdapter<SuuntoRouteU
     userID: string,
     preparedRoute: PreparedSavedRoute,
     context: SuuntoRouteUploadContext,
-  ): Promise<{ providerRouteId?: string }> {
-    const result = await uploadGPXRouteToSuuntoApp(userID, preparedRoute.gpxContent, context);
+  ): Promise<{ providerRouteId?: string; deliveries?: Array<{ providerUserId?: string | null; providerRouteId?: string | null }> }> {
+    const uploadContext = getSuuntoRouteSendContext(preparedRoute.routeDocument, context);
+    const result = await uploadGPXRouteToSuuntoApp(userID, preparedRoute.gpxContent, uploadContext);
     return {
       providerRouteId: result.providerRouteIds[0],
+      deliveries: result.deliveries,
     };
   }
 }
@@ -98,6 +109,56 @@ class SuuntoRouteSendAdapter implements RouteSendDestinationAdapter<SuuntoRouteU
 const ROUTE_SEND_ADAPTERS = new Map<ServiceNames, RouteSendDestinationAdapter>([
   [ServiceNames.SuuntoApp, new SuuntoRouteSendAdapter()],
 ]);
+
+function normalizeNonEmptyString(value: unknown): string | null {
+  return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null;
+}
+
+function getRouteSourceServiceName(routeDocument: FirestoreRouteJSON): string | null {
+  if (!routeDocument?.sourceSummary || typeof routeDocument.sourceSummary !== 'object' || Array.isArray(routeDocument.sourceSummary)) {
+    return null;
+  }
+
+  return normalizeNonEmptyString(routeDocument.sourceSummary.sourceServiceName);
+}
+
+function getRouteSourceProviderUserId(routeDocument: FirestoreRouteJSON): string | null {
+  if (!routeDocument?.sourceSummary || typeof routeDocument.sourceSummary !== 'object' || Array.isArray(routeDocument.sourceSummary)) {
+    return null;
+  }
+
+  return normalizeNonEmptyString(routeDocument.sourceSummary.providerUserId);
+}
+
+function getSuuntoRouteSendContext(
+  routeDocument: FirestoreRouteJSON,
+  context: SuuntoRouteUploadContext,
+): SuuntoRouteUploadContext {
+  if (getRouteSourceServiceName(routeDocument) !== ServiceNames.SuuntoApp) {
+    return context;
+  }
+
+  const sourceProviderUserId = getRouteSourceProviderUserId(routeDocument);
+  if (!sourceProviderUserId) {
+    throw new RouteSendItemError(
+      'SOURCE_SERVICE_BLOCKED',
+      'Routes imported from Suunto can only be sent to a different connected Suunto account once the source account is known.',
+    );
+  }
+
+  const eligibleTokenRefs = context.tokenRefs.filter(tokenRef => tokenRef.providerUserId !== sourceProviderUserId);
+  if (eligibleTokenRefs.length === 0) {
+    throw new RouteSendItemError(
+      'SOURCE_SERVICE_BLOCKED',
+      'Routes imported from Suunto are already in the connected Suunto account and cannot be sent back there.',
+    );
+  }
+
+  return {
+    tokenRefs: eligibleTokenRefs,
+    userNames: Array.from(new Set(eligibleTokenRefs.map(tokenRef => tokenRef.providerUserId))),
+  };
+}
 
 export const sendRoutesToService = onCall({
   region: FUNCTIONS_MANIFEST.sendRoutesToService.region,
@@ -128,7 +189,7 @@ export const sendRoutesToService = onCall({
       const routeId = payload.routeIds[index];
       try {
         await assertRouteSendUserActive(userID, 'before_route_prepare');
-        const preparedRoute = await prepareSavedRouteForSending(userID, routeId, adapter.destinationServiceName);
+        const preparedRoute = await prepareSavedRouteForSending(userID, routeId);
         await assertRouteSendUserActive(userID, 'before_provider_upload');
         const providerResult = await adapter.sendRoute(userID, preparedRoute, context);
         await persistRouteDeliveryMetadataBestEffort({
@@ -136,6 +197,7 @@ export const sendRoutesToService = onCall({
           routeID: routeId,
           destinationServiceName: adapter.destinationServiceName,
           providerRouteId: providerResult.providerRouteId,
+          deliveries: providerResult.deliveries,
         });
         results.push({
           routeId,
@@ -249,7 +311,6 @@ async function assertRouteSendUserActive(userID: string, phase: string): Promise
 async function prepareSavedRouteForSending(
   userID: string,
   routeId: string,
-  destinationServiceName: ServiceNames,
 ): Promise<PreparedSavedRoute> {
   const routeSnapshot = await admin.firestore().doc(`users/${userID}/routes/${routeId}`).get();
   if (!routeSnapshot.exists) {
@@ -257,12 +318,6 @@ async function prepareSavedRouteForSending(
   }
 
   const routeDocument = routeSnapshot.data() as FirestoreRouteJSON;
-  if (isRouteFromSourceService(routeDocument, destinationServiceName)) {
-    throw new RouteSendItemError(
-      'SOURCE_SERVICE_BLOCKED',
-      `Routes imported from ${destinationServiceName} are already there and cannot be sent back to ${destinationServiceName}.`,
-    );
-  }
   const sourceFile = getPrimaryOriginalRouteFile(routeDocument);
   if (!sourceFile) {
     throw new RouteSendItemError('NO_ORIGINAL_FILES', 'Saved route is missing its original source file.');
@@ -536,19 +591,30 @@ async function persistRouteDeliveryMetadataBestEffort(params: {
   routeID: string;
   destinationServiceName: ServiceNames;
   providerRouteId?: string;
+  deliveries?: Array<{
+    providerUserId?: string | null;
+    providerRouteId?: string | null;
+  }>;
 }): Promise<void> {
   try {
-    await setRouteDeliveryMetadata({
-      userID: params.userID,
-      routeID: params.routeID,
-      deliveryMetadata: {
-        serviceName: params.destinationServiceName,
-        status: 'success',
-        providerRouteId: params.providerRouteId || null,
-        deliveredAt: new Date(),
-        lastAttemptAt: new Date(),
-      },
-    });
+    const deliveryEntries = params.deliveries && params.deliveries.length > 0
+      ? params.deliveries
+      : [{ providerRouteId: params.providerRouteId || null }];
+
+    for (const delivery of deliveryEntries) {
+      await setRouteDeliveryMetadata({
+        userID: params.userID,
+        routeID: params.routeID,
+        deliveryMetadata: {
+          serviceName: params.destinationServiceName,
+          providerUserId: delivery.providerUserId || null,
+          status: 'success',
+          providerRouteId: delivery.providerRouteId || null,
+          deliveredAt: new Date(),
+          lastAttemptAt: new Date(),
+        },
+      });
+    }
   } catch (error) {
     logger.warn('[sendRoutesToService] Failed to persist route delivery metadata after successful send', {
       userID: params.userID,

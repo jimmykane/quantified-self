@@ -83,6 +83,7 @@ export function toRouteSourceMetadata(summary: RouteSourceSummary | null | undef
   return {
     sourceType: summary.sourceType,
     sourceServiceName: summary.sourceServiceName || null,
+    providerUserId: summary.providerUserId || null,
     providerRouteId: summary.providerRouteId || null,
     providerRouteName: summary.providerRouteName || null,
     originalFilename: summary.originalFilename || null,
@@ -177,6 +178,7 @@ export function buildManualRouteSourceMetadata(params: {
 
 export function buildServiceRouteSourceMetadata(params: {
   sourceServiceName: string;
+  providerUserId?: string | null;
   providerRouteId: string;
   providerRouteName?: string | null;
   originalFilename?: string | null;
@@ -186,6 +188,7 @@ export function buildServiceRouteSourceMetadata(params: {
   return {
     sourceType: ROUTE_SOURCE_TYPES.ServiceSync,
     sourceServiceName: params.sourceServiceName,
+    providerUserId: normalizeNonEmptyString(params.providerUserId),
     providerRouteId: params.providerRouteId,
     providerRouteName: normalizeNonEmptyString(params.providerRouteName),
     originalFilename: normalizeNonEmptyString(params.originalFilename),
@@ -203,6 +206,7 @@ export function toRouteSourceSummary(sourceMetadata: RouteSourceMetadata | null 
   return {
     sourceType: sourceMetadata.sourceType,
     sourceServiceName: sourceMetadata.sourceServiceName || null,
+    providerUserId: sourceMetadata.providerUserId || null,
     providerRouteId: sourceMetadata.providerRouteId || null,
     providerRouteName: sourceMetadata.providerRouteName || null,
     originalFilename: sourceMetadata.originalFilename || null,
@@ -253,8 +257,11 @@ export function getRouteDeliveryMetadataRef(
   userID: string,
   routeID: string,
   serviceName: string,
+  providerUserId?: string | null,
 ): admin.firestore.DocumentReference {
-  return db.collection('users').doc(userID).collection('routes').doc(routeID).collection('metaData').doc(getRouteDeliveryMetadataDocId(serviceName));
+  return db.collection('users').doc(userID).collection('routes').doc(routeID).collection('metaData').doc(
+    getRouteDeliveryMetadataDocId(serviceName, providerUserId),
+  );
 }
 
 export function mergeSyncedDestinationServiceNames(
@@ -270,8 +277,20 @@ export function mergeSyncedDestinationServiceNames(
 export function isRouteFromSourceService(
   routeDocument: FirestoreRouteJSON | null | undefined,
   serviceName: string,
+  providerUserId?: string | null,
 ): boolean {
-  return normalizeRouteSourceSummary(routeDocument?.sourceSummary)?.sourceServiceName === serviceName;
+  const sourceSummary = normalizeRouteSourceSummary(routeDocument?.sourceSummary);
+  if (sourceSummary?.sourceServiceName !== serviceName) {
+    return false;
+  }
+
+  const normalizedProviderUserId = normalizeNonEmptyString(providerUserId);
+  if (!normalizedProviderUserId) {
+    return true;
+  }
+
+  const currentProviderUserId = normalizeNonEmptyString(sourceSummary?.providerUserId);
+  return currentProviderUserId ? currentProviderUserId === normalizedProviderUserId : true;
 }
 
 export async function setRouteDeliveryMetadata(
@@ -279,7 +298,13 @@ export async function setRouteDeliveryMetadata(
 ): Promise<void> {
   const db = admin.firestore();
   const routeRef = db.collection('users').doc(params.userID).collection('routes').doc(params.routeID);
-  const deliveryRef = getRouteDeliveryMetadataRef(db, params.userID, params.routeID, params.deliveryMetadata.serviceName);
+  const deliveryRef = getRouteDeliveryMetadataRef(
+    db,
+    params.userID,
+    params.routeID,
+    params.deliveryMetadata.serviceName,
+    params.deliveryMetadata.providerUserId,
+  );
 
   await db.runTransaction(async (transaction) => {
     let deletionGuard;
@@ -294,6 +319,7 @@ export async function setRouteDeliveryMetadata(
         userID: params.userID,
         routeID: params.routeID,
         serviceName: params.deliveryMetadata.serviceName,
+        providerUserId: params.deliveryMetadata.providerUserId || null,
       });
       return;
     }

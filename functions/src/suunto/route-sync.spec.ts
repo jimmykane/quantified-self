@@ -88,12 +88,15 @@ describe('Suunto route sync', () => {
     enforceAppCheckMock.mockReturnValue(undefined);
     verifySuuntoWebhookSignatureMock.mockReturnValue(true);
     createSuuntoRouteUploadContextMock.mockResolvedValue({
-      tokenRefs: [{ id: 'token-1', ref: {} }],
-      userNames: ['suunto-user'],
+      tokenRefs: [
+        { id: 'token-1', ref: {}, providerUserId: 'suunto-user-1' },
+        { id: 'token-2', ref: {}, providerUserId: 'suunto-user-2' },
+      ],
+      userNames: ['suunto-user-1', 'suunto-user-2'],
     });
     listSuuntoRoutesMock.mockResolvedValue([
-      { id: 'route-1', description: 'Morning Route', created: 1700000000000, modified: 1700000005000 },
-      { id: 'route-2', description: 'Evening Route', created: 1700000010000, modified: 1700000015000 },
+      { id: 'route-1', providerUserId: 'suunto-user-1', description: 'Morning Route', created: 1700000000000, modified: 1700000005000 },
+      { id: 'route-2', providerUserId: 'suunto-user-2', description: 'Evening Route', created: 1700000010000, modified: 1700000015000 },
     ]);
     enqueueRouteSyncQueueItemMock
       .mockResolvedValueOnce({ enqueued: true, queueItemId: 'queue-1' })
@@ -110,13 +113,23 @@ describe('Suunto route sync', () => {
 
     expect(createSuuntoRouteUploadContextMock).toHaveBeenCalledWith('user-1');
     expect(listSuuntoRoutesMock).toHaveBeenCalledWith('user-1', {
-      tokenRefs: [{ id: 'token-1', ref: {} }],
-      userNames: ['suunto-user'],
+      tokenRefs: [
+        { id: 'token-1', ref: {}, providerUserId: 'suunto-user-1' },
+        { id: 'token-2', ref: {}, providerUserId: 'suunto-user-2' },
+      ],
+      userNames: ['suunto-user-1', 'suunto-user-2'],
     });
     expect(enqueueRouteSyncQueueItemMock).toHaveBeenNthCalledWith(1, expect.objectContaining({
       sourceServiceName: ServiceNames.SuuntoApp,
-      providerUserId: 'suunto-user',
+      providerUserId: 'suunto-user-1',
       providerRouteId: 'route-1',
+      manual: true,
+      firebaseUserID: 'user-1',
+    }));
+    expect(enqueueRouteSyncQueueItemMock).toHaveBeenNthCalledWith(2, expect.objectContaining({
+      sourceServiceName: ServiceNames.SuuntoApp,
+      providerUserId: 'suunto-user-2',
+      providerRouteId: 'route-2',
       manual: true,
       firebaseUserID: 'user-1',
     }));

@@ -147,11 +147,6 @@ export const addSuuntoAppRoutesToQueue = onCall({
   }
 
   const context = await createSuuntoRouteUploadContext(userID);
-  const userName = context.userNames[0];
-  if (!userName) {
-    throw new HttpsError('unauthenticated', 'No connected Suunto account found.');
-  }
-
   const routes = await listSuuntoRoutes(userID, context);
   const summary: SuuntoRouteCatchUpResponse = {
     queuedCount: 0,
@@ -164,7 +159,7 @@ export const addSuuntoAppRoutesToQueue = onCall({
     try {
       const result = await enqueueRouteSyncQueueItem({
         sourceServiceName: ServiceNames.SuuntoApp,
-        providerUserId: userName,
+        providerUserId: route.providerUserId,
         providerRouteId: route.id,
         providerRouteName: route.description || null,
         providerRouteCreatedAt: route.created ?? null,
@@ -184,7 +179,7 @@ export const addSuuntoAppRoutesToQueue = onCall({
       }
       logger.error('[SuuntoRouteSync] Failed to queue route during manual catch-up', {
         userID,
-        providerUserId: userName,
+        providerUserId: route.providerUserId,
         routeId: route.id,
         error,
       });
