@@ -863,7 +863,7 @@ describe('AppUserService', () => {
             const user = { uid: 'u10' } as any;
             (collectionData as any)
                 .mockReturnValueOnce(of([{ accessToken: 'garmin-token' }]))
-                .mockReturnValueOnce(of([{ accessToken: 'suunto-token' }]))
+                .mockReturnValueOnce(of([{ accessToken: 'suunto-token', userName: 'suunto-user' }]))
                 .mockReturnValueOnce(of([]));
 
             const result = await firstValueFrom(service.watchActivityServiceConnectionState(user));
@@ -871,6 +871,22 @@ describe('AppUserService', () => {
             expect(result).toEqual({
                 [ServiceNames.GarminAPI]: true,
                 [ServiceNames.SuuntoApp]: true,
+                [ServiceNames.COROSAPI]: false,
+            });
+        });
+
+        it('watchActivityServiceConnectionState should ignore malformed Suunto tokens without provider identity', async () => {
+            const user = { uid: 'u10b' } as any;
+            (collectionData as any)
+                .mockReturnValueOnce(of([]))
+                .mockReturnValueOnce(of([{ accessToken: 'suunto-token' }]))
+                .mockReturnValueOnce(of([]));
+
+            const result = await firstValueFrom(service.watchActivityServiceConnectionState(user));
+
+            expect(result).toEqual({
+                [ServiceNames.GarminAPI]: false,
+                [ServiceNames.SuuntoApp]: false,
                 [ServiceNames.COROSAPI]: false,
             });
         });
@@ -894,12 +910,24 @@ describe('AppUserService', () => {
             const user = { uid: 'u8' } as any;
             (collectionData as any)
                 .mockReturnValueOnce(of([]))
-                .mockReturnValueOnce(of([{ accessToken: 'suunto-token' }]))
+                .mockReturnValueOnce(of([{ accessToken: 'suunto-token', userName: 'suunto-user' }]))
                 .mockReturnValueOnce(of([]));
 
             const result = await firstValueFrom(service.watchHasAnyActivityServiceConnection(user));
 
             expect(result).toBe(true);
+        });
+
+        it('watchHasAnyActivityServiceConnection should stay false when the only Suunto token is malformed', async () => {
+            const user = { uid: 'u8b' } as any;
+            (collectionData as any)
+                .mockReturnValueOnce(of([]))
+                .mockReturnValueOnce(of([{ accessToken: 'suunto-token' }]))
+                .mockReturnValueOnce(of([]));
+
+            const result = await firstValueFrom(service.watchHasAnyActivityServiceConnection(user));
+
+            expect(result).toBe(false);
         });
 
         it('watchHasAnyActivityServiceConnection should fail closed when token reads fail', async () => {

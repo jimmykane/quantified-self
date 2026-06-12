@@ -613,6 +613,18 @@ export class AppUserService implements OnDestroy {
     );
   }
 
+  private hasConnectedActivityServiceToken(serviceName: ActivityServiceConnectionName, tokens: unknown): boolean {
+    if (!Array.isArray(tokens) || tokens.length === 0) {
+      return false;
+    }
+
+    if (serviceName === ServiceNames.SuuntoApp) {
+      return getSuuntoConnectedProviderUserIds(tokens).length > 0;
+    }
+
+    return true;
+  }
+
   public watchActivityServiceConnectionState(user: User | null | undefined): Observable<ActivityServiceConnectionState> {
     const uid = `${user?.uid || ''}`.trim();
     if (!uid || !user) {
@@ -621,7 +633,7 @@ export class AppUserService implements OnDestroy {
 
     return combineLatest(ACTIVITY_SERVICE_CONNECTION_NAMES.map(serviceName => (
       this.getServiceToken(user, serviceName).pipe(
-        map(tokens => Array.isArray(tokens) && tokens.length > 0),
+        map(tokens => this.hasConnectedActivityServiceToken(serviceName, tokens)),
         catchError(error => {
           this.logger.warn('[AppUserService] Failed to read activity service connection state', {
             userID: uid,
