@@ -113,6 +113,7 @@ describe('RoutesPageComponent', () => {
             },
             didLastRouteImport: new Date('2026-06-10T10:00:00.000Z'),
             promptSource: 'suunto-route-catch-up:connected:1710000000000',
+            connectedProviderUserIds: ['suunto-user-1'],
         });
         authServiceMock = {
             getUser: vi.fn().mockResolvedValue(currentUser),
@@ -359,6 +360,34 @@ describe('RoutesPageComponent', () => {
         expect(component.suuntoRouteCatchUpPrompt()).toBeNull();
     });
 
+    it('keeps the Suunto route catch-up prompt visible after partial connected-account failures', async () => {
+        userServiceMock.addSuuntoRoutesToQueueForCurrentUser.mockResolvedValueOnce({
+            queuedCount: 2,
+            skippedCount: 1,
+            failureCount: 0,
+            failedProviderCount: 1,
+            totalCount: 3,
+        });
+        suuntoRouteCatchUpPromptContext$.next({
+            ...suuntoRouteCatchUpPromptContext$.value,
+            didLastRouteImport: null,
+            connectedProviderUserIds: ['suunto-user-1', 'suunto-user-2'],
+        });
+
+        await component.ngOnInit();
+        await firstValueFrom(component.routes$!);
+
+        await component.queueSuuntoRouteCatchUpPrompt();
+
+        expect(snackBarMock.open).toHaveBeenLastCalledWith(
+            'Queued 2 routes. Skipped 1. Failed 1 connected account.',
+            undefined,
+            { duration: 4500 },
+        );
+        expect(component.didLastSuuntoRouteCatchUp()).toBeNull();
+        expect(component.suuntoRouteCatchUpPrompt()).not.toBeNull();
+    });
+
     it('dismisses the Suunto route catch-up prompt through dashboardActionPrompts', async () => {
         suuntoRouteCatchUpPromptContext$.next({
             ...suuntoRouteCatchUpPromptContext$.value,
@@ -484,12 +513,17 @@ describe('RoutesPageComponent', () => {
         expect(component.trackByRouteID(0, routes[0])).toBe('route-1');
     });
 
-    it('marks Suunto-synced routes as non-sendable and exposes provenance text', async () => {
+    it('keeps Suunto-synced routes sendable when another connected Suunto account exists and exposes provenance text', async () => {
+        suuntoRouteCatchUpPromptContext$.next({
+            ...suuntoRouteCatchUpPromptContext$.value,
+            connectedProviderUserIds: ['suunto-user-1', 'suunto-user-2'],
+        });
         routeServiceMock.getRoutes.mockReturnValueOnce(of([{
             ...route,
             sourceSummary: {
                 sourceType: 'service_sync',
                 sourceServiceName: ServiceNames.SuuntoApp,
+                providerUserId: 'suunto-user-1',
             },
             syncedDestinationServiceNames: [ServiceNames.GarminAPI],
         }]));
@@ -497,7 +531,7 @@ describe('RoutesPageComponent', () => {
 
         const routes = await firstValueFrom(component.routes$!);
 
-        expect(routes[0].canSendToSuunto).toBe(false);
+        expect(routes[0].canSendToSuunto).toBe(true);
         expect(routes[0].provenanceSummary).toBe('Synced from Suunto · Sent to Garmin');
         expect(routes[0].provenanceItems).toEqual([
             {
@@ -513,6 +547,22 @@ describe('RoutesPageComponent', () => {
                 serviceName: ServiceNames.GarminAPI,
             },
         ]);
+    });
+
+    it('keeps same-account Suunto routes blocked from resend', async () => {
+        routeServiceMock.getRoutes.mockReturnValueOnce(of([{
+            ...route,
+            sourceSummary: {
+                sourceType: 'service_sync',
+                sourceServiceName: ServiceNames.SuuntoApp,
+                providerUserId: 'suunto-user-1',
+            },
+        }]));
+        await component.ngOnInit();
+
+        const routes = await firstValueFrom(component.routes$!);
+
+        expect(routes[0].canSendToSuunto).toBe(false);
     });
 
     it('reads persisted route-file aggregate stats for table metrics', async () => {

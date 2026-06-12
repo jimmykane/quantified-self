@@ -31,9 +31,9 @@ import {
     buildSuuntoRouteCatchUpSnackbarMessage,
 } from '../../helpers/suunto-route-catch-up.helper';
 import {
+    canSendRouteToConnectedSuuntoAccounts,
     getRouteSourceSummary,
     getRouteSyncedDestinationSummaries,
-    isRouteFromService,
 } from '../../helpers/route-provenance.helper';
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { ConfirmationDialogComponent, ConfirmationDialogData } from '../confirmation-dialog/confirmation-dialog.component';
@@ -180,6 +180,7 @@ export class RoutesPageComponent implements OnInit {
         fileType: '',
         activityType: '',
     });
+    private readonly connectedSuuntoProviderUserIdsSubject = new BehaviorSubject<string[]>([]);
     private readonly loadedRouteViewModels = signal<RoutePageRouteViewModel[]>([]);
     private readonly visibleRouteViewModels = signal<RoutePageRouteViewModel[]>([]);
 
@@ -207,6 +208,7 @@ export class RoutesPageComponent implements OnInit {
     readonly isReconnectingSuuntoRouteCatchUpPrompt = signal(false);
     readonly isDismissingSuuntoRouteCatchUpPrompt = signal(false);
     readonly suuntoRouteCatchUpPromptError = signal<string | null>(null);
+    readonly connectedSuuntoProviderUserIds = signal<string[]>([]);
     readonly suuntoConnectionView = signal<SuuntoServiceConnectionViewModel>(buildSuuntoServiceConnectionViewModel({
         hasToken: false,
         serviceMeta: null,
@@ -319,6 +321,8 @@ export class RoutesPageComponent implements OnInit {
                 this.suuntoConnectionView.set(context.connectionView);
                 this.didLastSuuntoRouteCatchUp.set(context.didLastRouteImport);
                 this.suuntoRouteCatchUpPromptSource.set(context.promptSource);
+                this.connectedSuuntoProviderUserIds.set(context.connectedProviderUserIds);
+                this.connectedSuuntoProviderUserIdsSubject.next(context.connectedProviderUserIds);
             });
 
             const routeDocuments$ = this.routeSortSubject.pipe(
@@ -334,6 +338,7 @@ export class RoutesPageComponent implements OnInit {
                 routeDocuments$,
                 this.routeSortSubject,
                 this.routeFilterSubject,
+                this.connectedSuuntoProviderUserIdsSubject,
             ]).pipe(
                 map(([routes, routeSort, routeFilter]) => {
                     const routeViewModels = routes.map(route => this.toRouteViewModel(route));
@@ -486,7 +491,9 @@ export class RoutesPageComponent implements OnInit {
         try {
             const summary = await this.userService.addSuuntoRoutesToQueueForCurrentUser();
             const feedback = buildSuuntoRouteCatchUpSnackbarMessage(summary);
-            this.didLastSuuntoRouteCatchUp.set(new Date());
+            if ((summary.failedProviderCount || 0) === 0) {
+                this.didLastSuuntoRouteCatchUp.set(new Date());
+            }
             this.snackBar.open(feedback.message, undefined, { duration: feedback.duration });
         } catch (error: any) {
             this.suuntoRouteCatchUpPromptError.set('Could not queue Suunto routes.');
@@ -1338,7 +1345,7 @@ export class RoutesPageComponent implements OnInit {
     private canSendRouteToSuunto(route: FirestoreRouteJSON): boolean {
         return this.canManageRoute(route)
             && this.routeService.getOriginalRouteFiles(route).length > 0
-            && !isRouteFromService(route, ServiceNames.SuuntoApp);
+            && canSendRouteToConnectedSuuntoAccounts(route, this.connectedSuuntoProviderUserIds());
     }
 
     private async openSubscriptions(): Promise<void> {

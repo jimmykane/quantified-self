@@ -9,6 +9,7 @@ export interface SuuntoRouteCatchUpSummaryLike {
   queuedCount: number;
   skippedCount: number;
   failureCount: number;
+  failedProviderCount?: number;
   totalCount: number;
 }
 
@@ -18,6 +19,15 @@ export interface SuuntoRouteCatchUpSnackbarMessage {
 }
 
 export type SuuntoRouteCatchUpPromptVariant = 'upgrade' | 'reconnect' | 'queue';
+
+interface SuuntoRouteImportProviderStateLike {
+  didLastRouteImport?: unknown;
+}
+
+interface SuuntoRouteImportMetaLike {
+  didLastRouteImport?: unknown;
+  routeImportStatesByProviderUserId?: unknown;
+}
 
 function toDate(value: unknown): Date | null {
   if (value instanceof Date) {
@@ -57,6 +67,17 @@ function buildServiceTokenFingerprint(serviceToken: unknown): string | null {
   return `${userName}:${createdAt}`;
 }
 
+function getProviderUserIdFromServiceToken(serviceToken: unknown): string | null {
+  if (!serviceToken || typeof serviceToken !== 'object') {
+    return null;
+  }
+
+  const userName = (serviceToken as { userName?: unknown }).userName;
+  return typeof userName === 'string' && userName.trim().length > 0
+    ? userName.trim()
+    : null;
+}
+
 function getStableServiceTokenSourceKey(serviceTokens: unknown): string | null {
   if (!Array.isArray(serviceTokens) || serviceTokens.length === 0) {
     return null;
@@ -70,8 +91,64 @@ function getStableServiceTokenSourceKey(serviceTokens: unknown): string | null {
   return fingerprints.length > 0 ? fingerprints.join('|') : null;
 }
 
+function getSuuntoRouteImportStatesByProviderUserId(
+  serviceMeta: SuuntoRouteImportMetaLike | null | undefined,
+): Record<string, SuuntoRouteImportProviderStateLike> {
+  const rawStates = serviceMeta?.routeImportStatesByProviderUserId;
+  if (!rawStates || typeof rawStates !== 'object' || Array.isArray(rawStates)) {
+    return {};
+  }
+
+  return Object.entries(rawStates as Record<string, unknown>).reduce<Record<string, SuuntoRouteImportProviderStateLike>>((result, [providerUserId, rawState]) => {
+    if (typeof providerUserId !== 'string' || providerUserId.trim().length === 0) {
+      return result;
+    }
+    if (!rawState || typeof rawState !== 'object' || Array.isArray(rawState)) {
+      return result;
+    }
+
+    result[providerUserId.trim()] = rawState as SuuntoRouteImportProviderStateLike;
+    return result;
+  }, {});
+}
+
 export function getSuuntoRouteCatchUpDate(value: unknown): Date | null {
   return toDate(value);
+}
+
+export function getSuuntoConnectedProviderUserIds(serviceTokens: unknown): string[] {
+  if (!Array.isArray(serviceTokens) || serviceTokens.length === 0) {
+    return [];
+  }
+
+  return Array.from(new Set(
+    serviceTokens
+      .map(token => getProviderUserIdFromServiceToken(token))
+      .filter((providerUserId): providerUserId is string => providerUserId !== null),
+  )).sort((left, right) => left.localeCompare(right));
+}
+
+export function getSuuntoRouteCatchUpDateForConnectedProviders(
+  serviceMeta: SuuntoRouteImportMetaLike | null | undefined,
+  serviceTokens: unknown,
+): Date | null {
+  const connectedProviderUserIds = getSuuntoConnectedProviderUserIds(serviceTokens);
+  const providerStates = getSuuntoRouteImportStatesByProviderUserId(serviceMeta);
+
+  if (connectedProviderUserIds.length === 0 || Object.keys(providerStates).length === 0) {
+    return getSuuntoRouteCatchUpDate(serviceMeta?.didLastRouteImport);
+  }
+
+  const connectedDates = connectedProviderUserIds.map(providerUserId => (
+    getSuuntoRouteCatchUpDate(providerStates[providerUserId]?.didLastRouteImport)
+  ));
+
+  if (connectedDates.some(date => date === null)) {
+    return null;
+  }
+
+  const latestTimestamp = Math.max(...connectedDates.map(date => (date as Date).getTime()));
+  return new Date(latestTimestamp);
 }
 
 export function getSuuntoRouteCatchUpCount(value: unknown): number {
@@ -81,24 +158,31 @@ export function getSuuntoRouteCatchUpCount(value: unknown): number {
 export function buildSuuntoRouteCatchUpSnackbarMessage(
   summary: SuuntoRouteCatchUpSummaryLike,
 ): SuuntoRouteCatchUpSnackbarMessage {
-  if (summary.totalCount === 0) {
+  const failedProviderCount = getSuuntoRouteCatchUpCount(summary.failedProviderCount);
+
+  if (summary.totalCount === 0 && failedProviderCount === 0) {
     return {
       message: 'No Suunto routes were found to queue.',
       duration: 3500,
     };
   }
 
-  const messageParts = [`Queued ${summary.queuedCount} ${summary.queuedCount === 1 ? 'route' : 'routes'}.`];
+  const messageParts = summary.totalCount === 0
+    ? ['No Suunto routes were found to queue.']
+    : [`Queued ${summary.queuedCount} ${summary.queuedCount === 1 ? 'route' : 'routes'}.`];
   if (summary.skippedCount > 0) {
     messageParts.push(`Skipped ${summary.skippedCount}.`);
   }
   if (summary.failureCount > 0) {
     messageParts.push(`Failed ${summary.failureCount}.`);
   }
+  if (failedProviderCount > 0) {
+    messageParts.push(`Failed ${failedProviderCount} connected ${failedProviderCount === 1 ? 'account' : 'accounts'}.`);
+  }
 
   return {
     message: messageParts.join(' '),
-    duration: summary.failureCount > 0 ? 4500 : 3500,
+    duration: summary.failureCount > 0 || failedProviderCount > 0 ? 4500 : 3500,
   };
 }
 

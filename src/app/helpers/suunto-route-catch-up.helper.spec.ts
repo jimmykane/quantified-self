@@ -4,8 +4,10 @@ import {
   buildSuuntoRouteCatchUpPromptSource,
   buildSuuntoRouteCatchUpPromptViewModel,
   buildSuuntoRouteCatchUpSnackbarMessage,
+  getSuuntoConnectedProviderUserIds,
   getSuuntoRouteCatchUpCount,
   getSuuntoRouteCatchUpDate,
+  getSuuntoRouteCatchUpDateForConnectedProviders,
 } from './suunto-route-catch-up.helper';
 
 describe('suunto-route-catch-up.helper', () => {
@@ -28,6 +30,45 @@ describe('suunto-route-catch-up.helper', () => {
     expect(getSuuntoRouteCatchUpCount('7')).toBe(0);
   });
 
+  it('normalizes connected Suunto provider user ids from service tokens', () => {
+    expect(getSuuntoConnectedProviderUserIds([
+      { userName: 'beta' },
+      { userName: 'alpha' },
+      { userName: 'beta' },
+      { userName: '   ' },
+      {},
+    ])).toEqual(['alpha', 'beta']);
+  });
+
+  it('requires a route catch-up completion marker for every connected Suunto account', () => {
+    const serviceTokens = [
+      { userName: 'alpha', dateCreated: 1700000000000 },
+      { userName: 'beta', dateCreated: 1710000000000 },
+    ];
+
+    expect(getSuuntoRouteCatchUpDateForConnectedProviders({
+      routeImportStatesByProviderUserId: {
+        alpha: { didLastRouteImport: 1710000000000 },
+      },
+      didLastRouteImport: 1710000000000,
+    }, serviceTokens)).toBeNull();
+
+    expect(getSuuntoRouteCatchUpDateForConnectedProviders({
+      routeImportStatesByProviderUserId: {
+        alpha: { didLastRouteImport: 1710000000000 },
+        beta: {
+          didLastRouteImport: {
+            toDate: () => new Date('2026-06-12T08:45:00.000Z'),
+          },
+        },
+      },
+    }, serviceTokens)?.toISOString()).toBe('2026-06-12T08:45:00.000Z');
+
+    expect(getSuuntoRouteCatchUpDateForConnectedProviders({
+      didLastRouteImport: 1710000000000,
+    }, serviceTokens)?.getTime()).toBe(1710000000000);
+  });
+
   it('builds shared snackbar messages for queued route catch-up results', () => {
     expect(buildSuuntoRouteCatchUpSnackbarMessage({
       queuedCount: 0,
@@ -46,6 +87,17 @@ describe('suunto-route-catch-up.helper', () => {
       totalCount: 6,
     })).toEqual({
       message: 'Queued 2 routes. Skipped 1. Failed 3.',
+      duration: 4500,
+    });
+
+    expect(buildSuuntoRouteCatchUpSnackbarMessage({
+      queuedCount: 0,
+      skippedCount: 0,
+      failureCount: 0,
+      failedProviderCount: 1,
+      totalCount: 0,
+    })).toEqual({
+      message: 'No Suunto routes were found to queue. Failed 1 connected account.',
       duration: 4500,
     });
   });

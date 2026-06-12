@@ -37,9 +37,9 @@ import { AppUserSettingsQueryService } from '../../../services/app.user-settings
 import { LoggerService } from '../../../services/logger.service';
 import { normalizeRouteName } from '../../../helpers/route-name.helper';
 import {
+  canSendRouteToConnectedSuuntoAccounts,
   getRouteSourceSummaryLabel,
   getRouteSyncedDestinationLabels,
-  isRouteFromService,
 } from '../../../helpers/route-provenance.helper';
 import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../confirmation-dialog/confirmation-dialog.component';
 import { RouteChartComponent } from '../route-chart/route-chart.component';
@@ -91,6 +91,7 @@ export class RouteDetailComponent {
   readonly deleting = signal(false);
   readonly reprocessing = signal(false);
   readonly sendingToService = signal(false);
+  readonly connectedSuuntoProviderUserIds = signal<string[]>([]);
 
   readonly unitSettings = this.userSettingsQuery.unitSettings;
   readonly darkTheme = computed(() => this.themeService.appTheme() === AppThemes.Dark);
@@ -166,7 +167,7 @@ export class RouteDetailComponent {
     return !!routeDocument
       && this.canManageRoute()
       && this.routeService.getOriginalRouteFiles(routeDocument).length > 0
-      && !isRouteFromService(routeDocument, ServiceNames.SuuntoApp);
+      && canSendRouteToConnectedSuuntoAccounts(routeDocument, this.connectedSuuntoProviderUserIds());
   });
   readonly canReprocessRoute = computed(() => {
     const routeDocument = this.routeDocument();
@@ -183,10 +184,13 @@ export class RouteDetailComponent {
     this.activatedRoute.data
       .pipe(
         map(data => (data['route'] as RouteResolverData | null)?.user ?? null),
-        switchMap(user => this.userService.watchSuuntoServiceConnectionView(user)),
+        switchMap(user => this.userService.watchSuuntoRouteCatchUpPromptContext(user)),
         takeUntilDestroyed(),
       )
-      .subscribe(connectionView => this.suuntoConnectionView.set(connectionView));
+      .subscribe(context => {
+        this.suuntoConnectionView.set(context.connectionView);
+        this.connectedSuuntoProviderUserIds.set(context.connectedProviderUserIds);
+      });
   }
 
   onSegmentVisibilityChange(segmentID: string, checked: boolean): void {

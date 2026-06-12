@@ -114,21 +114,60 @@ describe('Suunto route reads with multiple accounts', () => {
       throw new Error(`Unexpected auth header ${headers.Authorization}`);
     });
 
-    const routes = await listSuuntoRoutes('user-1');
+    const result = await listSuuntoRoutes('user-1');
 
-    expect(routes).toEqual([
-      expect.objectContaining({
-        providerUserId: 'suunto-user-a',
-        id: 'route-a',
-        description: 'Account A route',
-      }),
-      expect.objectContaining({
-        providerUserId: 'suunto-user-b',
-        id: 'route-b',
-        description: 'Account B route',
-      }),
-    ]);
+    expect(result).toEqual({
+      routes: [
+        expect.objectContaining({
+          providerUserId: 'suunto-user-a',
+          id: 'route-a',
+          description: 'Account A route',
+        }),
+        expect.objectContaining({
+          providerUserId: 'suunto-user-b',
+          id: 'route-b',
+          description: 'Account B route',
+        }),
+      ],
+      successfulProviderUserIds: ['suunto-user-a', 'suunto-user-b'],
+      failedProviderUserIds: [],
+    });
     expect(requestGetMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('reports partial provider failures without dropping successful route listings', async () => {
+    suuntoTokens.push(
+      { id: 'token-a', userName: 'suunto-user-a', accessToken: 'token-a' },
+      { id: 'token-b', userName: 'suunto-user-b', accessToken: 'token-b' },
+    );
+    requestGetMock.mockImplementation(async ({ headers, url }: { headers: Record<string, string>; url: string }) => {
+      if (url !== 'https://cloudapi.suunto.com/v2/route') {
+        throw new Error(`Unexpected URL ${url}`);
+      }
+
+      if (headers.Authorization === 'Bearer token-a') {
+        return [{ id: 'route-a', description: 'Account A route' }];
+      }
+      if (headers.Authorization === 'Bearer token-b') {
+        throw new Error('provider unavailable');
+      }
+
+      throw new Error(`Unexpected auth header ${headers.Authorization}`);
+    });
+
+    const result = await listSuuntoRoutes('user-1');
+
+    expect(result).toEqual({
+      routes: [
+        expect.objectContaining({
+          providerUserId: 'suunto-user-a',
+          id: 'route-a',
+          description: 'Account A route',
+        }),
+      ],
+      successfulProviderUserIds: ['suunto-user-a'],
+      failedProviderUserIds: ['suunto-user-b'],
+    });
   });
 
   it('targets the matching Suunto account when exporting a provider route', async () => {

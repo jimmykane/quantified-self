@@ -53,6 +53,12 @@ export interface SuuntoRouteSummary {
   modified?: number | null;
 }
 
+export interface SuuntoRouteListResult {
+  routes: SuuntoRouteSummary[];
+  successfulProviderUserIds: string[];
+  failedProviderUserIds: string[];
+}
+
 export class SuuntoRouteUploadSkippedForDeletedUserError extends Error {
   public readonly name = 'SuuntoRouteUploadSkippedForDeletedUserError';
   public readonly code = 'user_deleted_or_deleting';
@@ -295,9 +301,11 @@ async function executeSuuntoRouteReadOperation<T>(
 export async function listSuuntoRoutes(
   userID: string,
   context?: SuuntoRouteUploadContext,
-): Promise<SuuntoRouteSummary[]> {
+): Promise<SuuntoRouteListResult> {
   const routeContext = context || await createSuuntoRouteUploadContext(userID);
   const routesByProviderKey = new Map<string, SuuntoRouteSummary>();
+  const successfulProviderUserIds = new Set<string>();
+  const failedProviderUserIds = new Set<string>();
   let authFailures = 0;
   let lastError: unknown = null;
 
@@ -326,8 +334,12 @@ export async function listSuuntoRoutes(
           providerUserId: tokenRef.providerUserId,
           payloadType: typeof result,
         });
+        failedProviderUserIds.add(tokenRef.providerUserId);
         continue;
       }
+
+      successfulProviderUserIds.add(tokenRef.providerUserId);
+      failedProviderUserIds.delete(tokenRef.providerUserId);
 
       for (const route of result) {
         const normalizedRoute = normalizeSuuntoRouteSummary({
@@ -347,6 +359,7 @@ export async function listSuuntoRoutes(
       if (isUserDeletionGuardReadError(error) || error instanceof SuuntoRouteUploadSkippedForDeletedUserError) {
         throw error;
       }
+      failedProviderUserIds.add(tokenRef.providerUserId);
       if (error instanceof HttpsError && error.code === 'unauthenticated') {
         authFailures++;
         lastError = error;
@@ -365,8 +378,12 @@ export async function listSuuntoRoutes(
     }
   }
 
-  if (routesByProviderKey.size > 0) {
-    return Array.from(routesByProviderKey.values());
+  if (routesByProviderKey.size > 0 || successfulProviderUserIds.size > 0) {
+    return {
+      routes: Array.from(routesByProviderKey.values()),
+      successfulProviderUserIds: Array.from(successfulProviderUserIds.values()),
+      failedProviderUserIds: Array.from(failedProviderUserIds.values()),
+    };
   }
 
   if (authFailures > 0) {

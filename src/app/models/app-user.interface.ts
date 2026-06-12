@@ -181,7 +181,16 @@ export interface AppUserServiceMetaInterface extends UserServiceMetaInterface, S
     queuedRoutesFromLastRouteImportCount?: number;
     skippedRoutesFromLastRouteImportCount?: number;
     failedRoutesFromLastRouteImportCount?: number;
+    failedRouteImportProviderCount?: number;
     totalRoutesFromLastRouteImportCount?: number;
+    routeImportStatesByProviderUserId?: Record<string, {
+        didLastRouteImport?: AppDateValue;
+        queuedCount?: number;
+        skippedCount?: number;
+        failureCount?: number;
+        totalCount?: number;
+        updatedAt?: AppDateValue;
+    } | undefined>;
 }
 
 export interface AppUserSettingsInterface extends UserSettingsInterface {

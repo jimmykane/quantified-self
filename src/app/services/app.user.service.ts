@@ -88,7 +88,8 @@ import { ActivitySyncRouteId } from '@shared/activity-sync-routes';
 import { buildSuuntoServiceConnectionViewModel, SuuntoServiceConnectionViewModel } from '../helpers/suunto-service-connection.helper';
 import {
   buildSuuntoRouteCatchUpPromptSource,
-  getSuuntoRouteCatchUpDate,
+  getSuuntoConnectedProviderUserIds,
+  getSuuntoRouteCatchUpDateForConnectedProviders,
 } from '../helpers/suunto-route-catch-up.helper';
 
 export const ACTIVITY_SERVICE_CONNECTION_NAMES = [
@@ -118,6 +119,7 @@ export interface RouteSyncCatchUpSummary {
   queuedCount: number;
   skippedCount: number;
   failureCount: number;
+  failedProviderCount?: number;
   totalCount: number;
 }
 
@@ -126,6 +128,7 @@ export interface SuuntoRouteCatchUpPromptContext {
   serviceMeta: AppUserServiceMetaInterface | null;
   didLastRouteImport: Date | null;
   promptSource: string | null;
+  connectedProviderUserIds: string[];
 }
 
 
@@ -690,6 +693,7 @@ export class AppUserService implements OnDestroy {
         serviceMeta: null,
         didLastRouteImport: null,
         promptSource: null,
+        connectedProviderUserIds: [],
       });
     }
 
@@ -717,17 +721,19 @@ export class AppUserService implements OnDestroy {
           hasToken: Array.isArray(tokens) && tokens.length > 0,
           serviceMeta: normalizedServiceMeta,
         });
+        const connectedProviderUserIds = getSuuntoConnectedProviderUserIds(tokens);
 
         return {
           connectionView,
           serviceMeta: normalizedServiceMeta,
-          didLastRouteImport: getSuuntoRouteCatchUpDate(normalizedServiceMeta?.didLastRouteImport),
+          didLastRouteImport: getSuuntoRouteCatchUpDateForConnectedProviders(normalizedServiceMeta, tokens),
           promptSource: buildSuuntoRouteCatchUpPromptSource({
             connected: connectionView.connected,
             reconnectRequired: connectionView.reconnectRequired,
             reconnectPromptSource: connectionView.reconnectPromptSource,
             serviceTokens: tokens,
           }),
+          connectedProviderUserIds,
         };
       }),
       distinctUntilChanged((previous, current) => JSON.stringify(previous) === JSON.stringify(current)),

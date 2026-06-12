@@ -94,10 +94,14 @@ describe('Suunto route sync', () => {
       ],
       userNames: ['suunto-user-1', 'suunto-user-2'],
     });
-    listSuuntoRoutesMock.mockResolvedValue([
-      { id: 'route-1', providerUserId: 'suunto-user-1', description: 'Morning Route', created: 1700000000000, modified: 1700000005000 },
-      { id: 'route-2', providerUserId: 'suunto-user-2', description: 'Evening Route', created: 1700000010000, modified: 1700000015000 },
-    ]);
+    listSuuntoRoutesMock.mockResolvedValue({
+      routes: [
+        { id: 'route-1', providerUserId: 'suunto-user-1', description: 'Morning Route', created: 1700000000000, modified: 1700000005000 },
+        { id: 'route-2', providerUserId: 'suunto-user-2', description: 'Evening Route', created: 1700000010000, modified: 1700000015000 },
+      ],
+      successfulProviderUserIds: ['suunto-user-1', 'suunto-user-2'],
+      failedProviderUserIds: [],
+    });
     enqueueRouteSyncQueueItemMock
       .mockResolvedValueOnce({ enqueued: true, queueItemId: 'queue-1' })
       .mockResolvedValueOnce({ enqueued: false, queueItemId: 'queue-2', reason: 'already_pending' });
@@ -137,14 +141,81 @@ describe('Suunto route sync', () => {
       queuedCount: 1,
       skippedCount: 1,
       failureCount: 0,
+      failedProviderCount: 0,
       totalCount: 2,
     });
     expect(routeImportMetaSetMock).toHaveBeenCalledWith(expect.objectContaining({
       queuedRoutesFromLastRouteImportCount: 1,
       skippedRoutesFromLastRouteImportCount: 1,
       failedRoutesFromLastRouteImportCount: 0,
+      failedRouteImportProviderCount: 0,
       totalRoutesFromLastRouteImportCount: 2,
       didLastRouteImport: expect.any(Number),
+      routeImportStatesByProviderUserId: {
+        'suunto-user-1': expect.objectContaining({
+          queuedCount: 1,
+          skippedCount: 0,
+          failureCount: 0,
+          totalCount: 1,
+          didLastRouteImport: expect.any(Number),
+          updatedAt: expect.any(Number),
+        }),
+        'suunto-user-2': expect.objectContaining({
+          queuedCount: 0,
+          skippedCount: 1,
+          failureCount: 0,
+          totalCount: 1,
+          didLastRouteImport: expect.any(Number),
+          updatedAt: expect.any(Number),
+        }),
+      },
+    }), { merge: true });
+  });
+
+  it('preserves partial provider failures in the catch-up summary and completion metadata', async () => {
+    listSuuntoRoutesMock.mockResolvedValueOnce({
+      routes: [
+        { id: 'route-1', providerUserId: 'suunto-user-1', description: 'Morning Route', created: 1700000000000, modified: 1700000005000 },
+      ],
+      successfulProviderUserIds: ['suunto-user-1'],
+      failedProviderUserIds: ['suunto-user-2'],
+    });
+    enqueueRouteSyncQueueItemMock.mockReset();
+    enqueueRouteSyncQueueItemMock.mockResolvedValueOnce({ enqueued: true, queueItemId: 'queue-1' });
+
+    const result = await addSuuntoAppRoutesToQueue({
+      auth: { uid: 'user-1' },
+      app: { appId: 'app-1' },
+      data: {},
+    } as any);
+
+    expect(result).toEqual({
+      queuedCount: 1,
+      skippedCount: 0,
+      failureCount: 0,
+      failedProviderCount: 1,
+      totalCount: 1,
+    });
+    expect(routeImportMetaSetMock).toHaveBeenCalledWith(expect.objectContaining({
+      queuedRoutesFromLastRouteImportCount: 1,
+      skippedRoutesFromLastRouteImportCount: 0,
+      failedRoutesFromLastRouteImportCount: 0,
+      failedRouteImportProviderCount: 1,
+      totalRoutesFromLastRouteImportCount: 1,
+      routeImportStatesByProviderUserId: {
+        'suunto-user-1': expect.objectContaining({
+          queuedCount: 1,
+          skippedCount: 0,
+          failureCount: 0,
+          totalCount: 1,
+          didLastRouteImport: expect.any(Number),
+          updatedAt: expect.any(Number),
+        }),
+      },
+    }), { merge: true });
+    expect(routeImportMetaSetMock).not.toHaveBeenCalledWith(expect.objectContaining({
+      didLastRouteImport: expect.any(Number),
+      failedRouteImportProviderCount: 1,
     }), { merge: true });
   });
 

@@ -431,14 +431,30 @@ describe('AppUserService', () => {
         service = TestBed.inject(AppUserService);
         const testUser = { uid: 'u1' } as any;
 
-        (collectionData as any).mockReturnValueOnce(of([{
-            accessToken: 'token',
-            dateCreated: 1710000000000,
-            userName: 'suunto-user',
-        }]));
+        (collectionData as any).mockReturnValueOnce(of([
+            {
+                accessToken: 'token-a',
+                dateCreated: 1710000000000,
+                userName: 'suunto-user-a',
+            },
+            {
+                accessToken: 'token-b',
+                dateCreated: 1710001000000,
+                userName: 'suunto-user-b',
+            },
+        ]));
         (docData as any).mockReturnValueOnce(of({
-            didLastRouteImport: {
-                toDate: () => new Date('2026-06-11T08:30:00.000Z'),
+            routeImportStatesByProviderUserId: {
+                'suunto-user-a': {
+                    didLastRouteImport: {
+                        toDate: () => new Date('2026-06-11T08:30:00.000Z'),
+                    },
+                },
+                'suunto-user-b': {
+                    didLastRouteImport: {
+                        toDate: () => new Date('2026-06-12T09:45:00.000Z'),
+                    },
+                },
             },
         }));
 
@@ -448,10 +464,11 @@ describe('AppUserService', () => {
             connected: true,
             reconnectRequired: false,
         });
-        expect(result.didLastRouteImport?.toISOString()).toBe('2026-06-11T08:30:00.000Z');
-        expect(result.promptSource).toBe('suunto-route-catch-up:connected:suunto-user:1710000000000');
+        expect(result.connectedProviderUserIds).toEqual(['suunto-user-a', 'suunto-user-b']);
+        expect(result.didLastRouteImport?.toISOString()).toBe('2026-06-12T09:45:00.000Z');
+        expect(result.promptSource).toBe('suunto-route-catch-up:connected:suunto-user-a:1710000000000|suunto-user-b:1710001000000');
         expect(result.serviceMeta).toMatchObject({
-            didLastRouteImport: expect.any(Object),
+            routeImportStatesByProviderUserId: expect.any(Object),
         });
     });
 

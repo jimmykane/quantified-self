@@ -108,3 +108,24 @@ export function getRouteSyncedDestinationSummaries(route: FirestoreRouteJSON | n
 export function isRouteFromService(route: FirestoreRouteJSON | null | undefined, serviceName: string): boolean {
     return getNormalizedSourceSummary(route)?.sourceServiceName === serviceName;
 }
+
+export function canSendRouteToConnectedSuuntoAccounts(
+    route: FirestoreRouteJSON | null | undefined,
+    connectedProviderUserIds: readonly string[],
+): boolean {
+    const sourceSummary = getNormalizedSourceSummary(route);
+    if (sourceSummary?.sourceServiceName !== ServiceNames.SuuntoApp) {
+        return true;
+    }
+
+    const sourceProviderUserId = normalizeNonEmptyString(sourceSummary.providerUserId);
+    if (!sourceProviderUserId) {
+        return false;
+    }
+
+    return connectedProviderUserIds
+        .map(providerUserId => normalizeNonEmptyString(providerUserId))
+        .some((providerUserId): providerUserId is string => (
+            providerUserId !== null && providerUserId !== sourceProviderUserId
+        ));
+}
