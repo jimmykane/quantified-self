@@ -143,7 +143,7 @@ export interface SyncPipelineQueueStats {
     advanced: QueueAdvancedStats;
 }
 
-export interface ActivitySyncQueueStats extends SyncPipelineQueueStats {}
+export type ActivitySyncQueueStats = SyncPipelineQueueStats;
 
 export interface RouteSyncQueueStats extends SyncPipelineQueueStats {
     skipped: number;
