@@ -1,4 +1,4 @@
-import { Component } from '@angular/core';
+import { Component, DoCheck } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { ActivatedRoute } from '@angular/router';
@@ -11,7 +11,10 @@ import { ServiceNames, Auth2ServiceTokenInterface, Auth1ServiceTokenInterface } 
 import { getSuuntoProviderUserIdFromTokenLike } from '@shared/suunto-route-import-state';
 import { ServicesAbstractComponentDirective } from '../services-abstract-component.directive';
 import { AppUserServiceMetaInterface } from '../../../models/app-user.interface';
-import { buildSuuntoServiceConnectionViewModel } from '../../../helpers/suunto-service-connection.helper';
+import {
+  buildSuuntoServiceConnectionViewModel,
+  SuuntoServiceConnectionViewModel,
+} from '../../../helpers/suunto-service-connection.helper';
 import {
   buildSuuntoRouteCatchUpSnackbarMessage,
   getSuuntoRouteCatchUpCount,
@@ -25,19 +28,48 @@ import {
   styleUrls: ['../services-abstract-component.directive.scss', './services.suunto.component.css'],
   standalone: false
 })
-export class ServicesSuuntoComponent extends ServicesAbstractComponentDirective {
+export class ServicesSuuntoComponent extends ServicesAbstractComponentDirective implements DoCheck {
   public serviceName = ServiceNames.SuuntoApp;
   clicks = 0;
   isQueueingRoutes = false;
+  public isServiceConnected = false;
+  public connectedSuuntoServiceTokens: Array<Auth1ServiceTokenInterface | Auth2ServiceTokenInterface> = [];
+  public connectedSuuntoAccounts: Array<{
+    serviceToken: Auth1ServiceTokenInterface | Auth2ServiceTokenInterface;
+    trackKey: string;
+    userName?: string;
+  }> = [];
+  public hasConnectedSuuntoAccount = false;
+  public connectionView: SuuntoServiceConnectionViewModel = buildSuuntoServiceConnectionViewModel({
+    hasToken: false,
+    serviceMeta: null,
+  });
+  public didLastRouteImport: Date | null = null;
+  public queuedRoutesFromLastRouteImportCount = 0;
+  public skippedRoutesFromLastRouteImportCount = 0;
+  public failedRoutesFromLastRouteImportCount = 0;
+  public totalRoutesFromLastRouteImportCount = 0;
+  private lastServiceTokensRef: Auth2ServiceTokenInterface[] | Auth1ServiceTokenInterface[] | undefined;
+  private lastServiceMetaRef: AppUserServiceMetaInterface | undefined;
+  private lastForceConnected = false;
 
-  get connectedSuuntoServiceTokens(): Array<Auth1ServiceTokenInterface | Auth2ServiceTokenInterface> {
-    return (this.serviceTokens || []).filter(serviceToken => (
-      !!getSuuntoProviderUserIdFromTokenLike(serviceToken)
-    )) as Array<Auth1ServiceTokenInterface | Auth2ServiceTokenInterface>;
+  override async ngOnChanges() {
+    await super.ngOnChanges();
+    this.syncDerivedState();
   }
 
-  get hasConnectedSuuntoAccount(): boolean {
-    return this.connectedSuuntoServiceTokens.length > 0;
+  ngDoCheck(): void {
+    if (
+      this.serviceTokens !== this.lastServiceTokensRef
+      || this.serviceMeta !== this.lastServiceMetaRef
+      || this.forceConnected !== this.lastForceConnected
+    ) {
+      this.syncDerivedState();
+    }
+  }
+
+  protected override onServiceDataChanged(): void {
+    this.syncDerivedState();
   }
 
   get suuntoServiceMeta(): (AppUserServiceMetaInterface & {
@@ -45,26 +77,6 @@ export class ServicesSuuntoComponent extends ServicesAbstractComponentDirective 
     uploadedRoutesCount?: number;
   }) | undefined {
     return this.serviceMeta;
-  }
-
-  get didLastRouteImport(): Date | null {
-    return getSuuntoRouteCatchUpDateForConnectedProviders(this.suuntoServiceMeta, this.serviceTokens);
-  }
-
-  get queuedRoutesFromLastRouteImportCount(): number {
-    return getSuuntoRouteCatchUpCount(this.suuntoServiceMeta?.queuedRoutesFromLastRouteImportCount);
-  }
-
-  get skippedRoutesFromLastRouteImportCount(): number {
-    return getSuuntoRouteCatchUpCount(this.suuntoServiceMeta?.skippedRoutesFromLastRouteImportCount);
-  }
-
-  get failedRoutesFromLastRouteImportCount(): number {
-    return getSuuntoRouteCatchUpCount(this.suuntoServiceMeta?.failedRoutesFromLastRouteImportCount);
-  }
-
-  get totalRoutesFromLastRouteImportCount(): number {
-    return getSuuntoRouteCatchUpCount(this.suuntoServiceMeta?.totalRoutesFromLastRouteImportCount);
   }
 
   get isReconnectRequired(): boolean {
@@ -83,14 +95,6 @@ export class ServicesSuuntoComponent extends ServicesAbstractComponentDirective 
     return this.connectionView.connectButtonLabel;
   }
 
-  get connectionView() {
-    return buildSuuntoServiceConnectionViewModel({
-      hasToken: this.hasConnectedSuuntoAccount,
-      forceConnected: this.forceConnected,
-      serviceMeta: this.serviceMeta,
-    });
-  }
-
   constructor(protected http: HttpClient,
     protected fileService: AppFileService,
     protected eventService: AppEventService,
@@ -103,7 +107,7 @@ export class ServicesSuuntoComponent extends ServicesAbstractComponentDirective 
   }
 
   isConnectedToService(): boolean {
-    return this.hasConnectedSuuntoAccount || this.forceConnected;
+    return this.isServiceConnected;
   }
 
   buildRedirectURIFromServiceToken(token: { redirect_uri: string }): string {
@@ -116,14 +120,6 @@ export class ServicesSuuntoComponent extends ServicesAbstractComponentDirective 
     if (state && code) {
       await this.userService.requestAndSetCurrentUserSuuntoAppAccessToken(state, code);
     }
-  }
-
-  get suuntoUserName(): string | undefined {
-    return (this.connectedSuuntoServiceTokens as Auth2ServiceTokenInterface[])?.[0]?.userName;
-  }
-
-  getSuuntoUserName(token: Auth1ServiceTokenInterface | Auth2ServiceTokenInterface): string | undefined {
-    return (token as Auth2ServiceTokenInterface).userName;
   }
 
   async queueRoutesFromSuunto(event: Event): Promise<void> {
@@ -159,5 +155,50 @@ export class ServicesSuuntoComponent extends ServicesAbstractComponentDirective 
     } finally {
       this.isQueueingRoutes = false;
     }
+  }
+
+  private syncDerivedState(): void {
+    this.lastServiceTokensRef = this.serviceTokens;
+    this.lastServiceMetaRef = this.serviceMeta;
+    this.lastForceConnected = this.forceConnected;
+
+    const connectedTokens = (this.serviceTokens || [])
+      .filter(serviceToken => !!getSuuntoProviderUserIdFromTokenLike(serviceToken))
+      .sort((left, right) => {
+        const leftProviderUserId = getSuuntoProviderUserIdFromTokenLike(left) || '';
+        const rightProviderUserId = getSuuntoProviderUserIdFromTokenLike(right) || '';
+        return leftProviderUserId.localeCompare(rightProviderUserId);
+      }) as Array<Auth1ServiceTokenInterface | Auth2ServiceTokenInterface>;
+
+    this.connectedSuuntoServiceTokens = connectedTokens;
+    this.connectedSuuntoAccounts = connectedTokens.map(serviceToken => ({
+      serviceToken,
+      trackKey: this.buildConnectedSuuntoAccountTrackKey(serviceToken),
+      userName: (serviceToken as Auth2ServiceTokenInterface).userName,
+    }));
+    this.hasConnectedSuuntoAccount = connectedTokens.length > 0;
+    this.isServiceConnected = this.hasConnectedSuuntoAccount || this.forceConnected;
+    this.connectionView = buildSuuntoServiceConnectionViewModel({
+      hasToken: this.hasConnectedSuuntoAccount,
+      forceConnected: this.forceConnected,
+      serviceMeta: this.serviceMeta,
+    });
+    this.didLastRouteImport = getSuuntoRouteCatchUpDateForConnectedProviders(this.suuntoServiceMeta, connectedTokens);
+    this.queuedRoutesFromLastRouteImportCount = getSuuntoRouteCatchUpCount(this.suuntoServiceMeta?.queuedRoutesFromLastRouteImportCount);
+    this.skippedRoutesFromLastRouteImportCount = getSuuntoRouteCatchUpCount(this.suuntoServiceMeta?.skippedRoutesFromLastRouteImportCount);
+    this.failedRoutesFromLastRouteImportCount = getSuuntoRouteCatchUpCount(this.suuntoServiceMeta?.failedRoutesFromLastRouteImportCount);
+    this.totalRoutesFromLastRouteImportCount = getSuuntoRouteCatchUpCount(this.suuntoServiceMeta?.totalRoutesFromLastRouteImportCount);
+  }
+
+  private buildConnectedSuuntoAccountTrackKey(token: Auth1ServiceTokenInterface | Auth2ServiceTokenInterface): string {
+    const providerUserId = getSuuntoProviderUserIdFromTokenLike(token) || 'unknown-user';
+    const createdAt = token?.dateCreated instanceof Date
+      ? token.dateCreated.getTime()
+      : typeof token?.dateCreated === 'number'
+        ? token.dateCreated
+        : typeof token?.dateCreated === 'string'
+          ? token.dateCreated
+          : 'unknown-created';
+    return `${providerUserId}:${createdAt}`;
   }
 }

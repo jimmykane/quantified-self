@@ -328,6 +328,7 @@ describe('ServicesSuuntoComponent', () => {
         it('queues Suunto routes from the services page', async () => {
             component.hasProAccess = true;
             component.serviceTokens = [{ accessToken: 'token', userName: 'suunto-user' } as any];
+            fixture.detectChanges();
 
             await component.queueRoutesFromSuunto(new MouseEvent('click'));
 
@@ -408,9 +409,27 @@ describe('ServicesSuuntoComponent', () => {
         ).map((element: Element) => element.textContent?.trim());
 
         expect(component.isConnectedToService()).toBe(true);
-        expect(component.suuntoUserName).toBe('suunto-user');
         expect(component.connectedSuuntoServiceTokens).toHaveLength(1);
+        expect(component.connectedSuuntoAccounts).toHaveLength(1);
+        expect(component.connectedSuuntoAccounts[0].userName).toBe('suunto-user');
         expect(accountTitles).toEqual(['suunto-user']);
         expect(fixture.nativeElement.textContent).not.toContain('Syncing connection details...');
+    });
+
+    it('renders connected Suunto accounts in a stable sorted order', () => {
+        component.hasProAccess = true;
+        component.serviceTokens = [
+            { accessToken: 'token-b', userName: 'bravo', dateCreated: 1711000000000 } as any,
+            { accessToken: 'token-a', userName: 'alpha', dateCreated: 1710000000000 } as any,
+        ];
+        fixture.detectChanges();
+
+        const accountTitles = Array.from(
+            fixture.nativeElement.querySelectorAll('.connected-account-title'),
+        ).map((element: Element) => element.textContent?.trim());
+
+        expect(component.connectedSuuntoAccounts.map(account => account.userName)).toEqual(['alpha', 'bravo']);
+        expect(accountTitles).toEqual(['alpha', 'bravo']);
+        expect(component.connectedSuuntoAccounts[0].trackKey).toBe('alpha:1710000000000');
     });
 });

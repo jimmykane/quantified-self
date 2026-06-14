@@ -7,15 +7,15 @@
   <app-service-connection-status
     serviceLabel="Suunto App"
     [description]="connectionDescription"
-    [connected]="isConnectedToService()"
+    [connected]="isServiceConnected"
     [loading]="isLoading"
-    [locked]="!hasProAccess && !isConnectedToService()"
-    [proRequired]="!hasProAccess && !isConnectedToService()"
-    [showDetails]="isConnectedToService() || isReconnectRequired"
+    [locked]="!hasProAccess && !isServiceConnected"
+    [proRequired]="!hasProAccess && !isServiceConnected"
+    [showDetails]="isServiceConnected || isReconnectRequired"
     [statusLabelOverride]="isReconnectRequired ? 'Reconnect required' : null"
     [statusIconOverride]="isReconnectRequired ? 'sync_problem' : null"
     [statusTone]="isReconnectRequired ? 'attention' : 'default'"
-    (click)="!hasProAccess && !isConnectedToService() && triggerUpsell()">
+    (click)="!hasProAccess && !isServiceConnected && triggerUpsell()">
     <div connection-body class="connection-details">
     @if (isReconnectRequired) {
     <div class="reconnect-required-banner" role="alert">
@@ -28,19 +28,19 @@
       </div>
     </div>
     }
-    @if (isConnectedToService()) {
+    @if (isServiceConnected) {
     <div class="connection-account-row">
       <div class="connection-account-info">
-    @if (!suuntoUserName) {
+    @if (!hasConnectedSuuntoAccount) {
     <app-service-syncing-state></app-service-syncing-state>
     } @else {
     <div class="connected-account-list" role="list">
-      @for (serviceToken of connectedSuuntoServiceTokens; track $index; let i = $index) {
+      @for (account of connectedSuuntoAccounts; track account.trackKey) {
       <div class="connected-account-item" role="listitem">
         <mat-icon class="connected-account-icon" (click)="clicks = clicks+1">account_circle</mat-icon>
         <div class="connected-account-copy">
-          <div class="connected-account-title">{{ getSuuntoUserName(serviceToken) }}</div>
-          <div class="connected-account-line">Connected: {{ serviceToken.dateCreated | date:'short' }}</div>
+          <div class="connected-account-title">{{ account.userName }}</div>
+          <div class="connected-account-line">Connected: {{ account.serviceToken.dateCreated | date:'short' }}</div>
         </div>
       </div>
       }
@@ -66,13 +66,13 @@
     </div>
 
     <div connection-actions class="tool-actions">
-      @if (isConnectedToService() && hasActiveSyncRoutesUsingService) {
+      @if (isServiceConnected && hasActiveSyncRoutesUsingService) {
       <div class="active-sync-warning-pill">
         <mat-icon>warning</mat-icon>
         <span>{{ activeSyncRouteWarningLabel }}</span>
       </div>
       }
-      @if (!isConnectedToService() || isReconnectRequired || clicks > 10) {
+      @if (!isServiceConnected || isReconnectRequired || clicks > 10) {
       <button mat-flat-button class="qs-mat-primary"
         [disabled]="!user || isLoading || isConnecting || !hasProAccess" (click)="connectWithService($event)">
         @if (isConnecting) {
@@ -144,7 +144,7 @@
         <mat-icon>lock</mat-icon>
         <span>History import is a Pro feature.</span>
       </div>
-      } @else if (!isReconnectRequired && isConnectedToService()) {
+      } @else if (!isReconnectRequired && isServiceConnected) {
       <app-history-import-form [serviceName]="serviceName" [userMetaForService]="serviceMeta"
         [providerConnected]="true"
         [isLoadingParent]="isLoading" (importInitiated)="onHistoryImportInitiated()"></app-history-import-form>
@@ -165,7 +165,7 @@
         <mat-icon>lock</mat-icon>
         <span>Route sync is a Pro feature.</span>
       </div>
-      } @else if (!isReconnectRequired && isConnectedToService()) {
+      } @else if (!isReconnectRequired && isServiceConnected) {
       <section class="tool-subsection">
         <div class="tool-subsection-header">
           <div class="tool-subsection-title">
@@ -230,7 +230,7 @@
           <mat-icon>lock</mat-icon>
           <span>Upload activity is a Pro feature.</span>
         </div>
-        } @else if (!isReconnectRequired && isConnectedToService()) {
+        } @else if (!isReconnectRequired && isServiceConnected) {
         <app-upload-activity-to-service [user]="user" [hasProAccess]="hasProAccess"></app-upload-activity-to-service>
         } @else {
         <app-status-info type="info" title="Connect Account First">
@@ -254,7 +254,7 @@
           <mat-icon>lock</mat-icon>
           <span>Upload route is a Pro feature.</span>
         </div>
-        } @else if (!isReconnectRequired && isConnectedToService()) {
+        } @else if (!isReconnectRequired && isServiceConnected) {
         <app-upload-route-to-service [user]="user" [hasProAccess]="hasProAccess"></app-upload-route-to-service>
         } @else {
         <app-status-info type="info" title="Connect Account First">
