@@ -777,17 +777,19 @@ describe('RoutesPageComponent', () => {
             'utf8',
         );
 
-        expect(template).toContain('class="route-table-controls"');
+        expect(template).toContain('class="routes-table-panel"');
+        expect(template).toContain('class="comparison-table-controls"');
         expect(template).toContain('Filter loaded routes');
         expect(template).toContain('(input)="updateRouteFilter($any($event.target).value)"');
         expect(template).toContain('(selectionChange)="updateRouteFileTypeFilter($event.value)"');
         expect(template).toContain('(selectionChange)="updateRouteActivityTypeFilter($event.value)"');
         expect(template).toContain('{{ routeResultSummary() }}');
         expect(template).toContain('No loaded routes match this filter');
-        expect(styles).toContain('.route-table-controls');
-        expect(styles).toContain('.route-filter-field');
-        expect(styles).toContain('.route-facet-filter-field');
-        expect(styles).toContain('.route-result-summary');
+        expect(styles).toContain('.routes-table-panel');
+        expect(styles).toContain('.comparison-table-controls');
+        expect(styles).toContain('.filter-field');
+        expect(styles).toContain('.facet-filter-field');
+        expect(styles).toContain('.result-summary');
     });
 
     it('renders route type cells with the compare icon and label structure', () => {

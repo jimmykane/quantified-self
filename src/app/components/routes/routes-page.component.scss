@@ -104,6 +104,11 @@
   text-transform: uppercase;
 }
 
+.routes-table-panel {
+  display: grid;
+  gap: 0.75rem;
+}
+
 .route-table-shell {
   background: var(--mat-sys-surface-container-lowest, #fff);
   border: 1px solid var(--mat-sys-outline-variant, rgba(0, 0, 0, 0.12));
@@ -111,7 +116,7 @@
   overflow-x: auto;
 }
 
-.route-table-controls {
+.comparison-table-controls {
   align-items: center;
   display: flex;
   flex-wrap: wrap;
@@ -119,7 +124,7 @@
   justify-content: space-between;
 }
 
-.route-table-actions {
+.comparison-table-actions {
   align-items: center;
   display: flex;
   flex-wrap: wrap;
@@ -128,15 +133,15 @@
   margin-left: auto;
 }
 
-.route-filter-field {
+.filter-field {
   width: min(100%, 28rem);
 }
 
-.route-facet-filter-field {
+.facet-filter-field {
   width: min(100%, 13rem);
 }
 
-.route-result-summary {
+.result-summary {
   color: var(--mat-sys-on-surface-variant, var(--qs-secondary-text-color, rgba(0, 0, 0, 0.62)));
   font-size: 0.9rem;
 }
@@ -469,19 +474,21 @@
     justify-content: flex-start;
   }
 
-  .route-table-controls {
+  .comparison-table-controls {
     align-items: stretch;
     display: grid;
   }
 
-  .route-filter-field,
-  .route-facet-filter-field,
-  .route-table-actions,
-  .route-result-summary {
+  .filter-field,
+  .facet-filter-field,
+  .comparison-table-actions,
+  .result-summary {
     width: 100%;
   }
 
-  .route-table-actions {
+  .comparison-table-actions {
+    align-items: stretch;
+    flex-direction: column;
     justify-content: flex-start;
     margin-left: 0;
   }

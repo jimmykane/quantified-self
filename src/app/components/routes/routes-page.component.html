@@ -47,8 +47,9 @@
     </section>
 
     @if (loadedRouteCount() > 0) {
-    <div class="route-table-controls">
-      <mat-form-field appearance="outline" class="route-filter-field" subscriptSizing="dynamic">
+    <section class="routes-table-panel" aria-label="Saved routes table">
+      <div class="comparison-table-controls">
+      <mat-form-field appearance="outline" class="filter-field" subscriptSizing="dynamic">
         <mat-label>Filter loaded routes</mat-label>
         <input
           matInput
@@ -61,7 +62,7 @@
         </button>
         }
       </mat-form-field>
-      <mat-form-field appearance="outline" class="route-facet-filter-field" subscriptSizing="dynamic">
+      <mat-form-field appearance="outline" class="facet-filter-field" subscriptSizing="dynamic">
         <mat-label>Source</mat-label>
         <mat-select
           [value]="routeFileTypeFilter()"
@@ -73,7 +74,7 @@
           }
         </mat-select>
       </mat-form-field>
-      <mat-form-field appearance="outline" class="route-facet-filter-field" subscriptSizing="dynamic">
+      <mat-form-field appearance="outline" class="facet-filter-field" subscriptSizing="dynamic">
         <mat-label>Activity type</mat-label>
         <mat-select
           [value]="routeActivityTypeFilter()"
@@ -85,15 +86,12 @@
           }
         </mat-select>
       </mat-form-field>
-      <div class="route-table-actions">
-        <span class="route-result-summary">{{ routeResultSummary() }}</span>
+      <div class="comparison-table-actions">
+        <span class="result-summary">{{ routeResultSummary() }}</span>
       </div>
-    </div>
-    }
-
-    @if (loadedRouteCount() > 0) {
-    @if (routes.length > 0) {
-    <section class="route-table-shell qs-scrollbar" aria-label="Saved routes">
+      </div>
+      @if (routes.length > 0) {
+      <section class="route-table-shell qs-scrollbar" aria-label="Saved routes">
       @if (selectedRouteCount() > 0) {
       <div class="route-selection-toolbar" aria-live="polite">
         <div class="route-selection-summary">
@@ -422,14 +420,15 @@
           *matRowDef="let item; columns: routeColumns;">
         </tr>
       </table>
+      </section>
+      } @else {
+      <section class="empty-routes">
+        <mat-icon aria-hidden="true">search_off</mat-icon>
+        <h2>No loaded routes match this filter</h2>
+        <p>Adjust the filter text, source, or activity type.</p>
+      </section>
+      }
     </section>
-    } @else {
-    <section class="empty-routes">
-      <mat-icon aria-hidden="true">search_off</mat-icon>
-      <h2>No loaded routes match this filter</h2>
-      <p>Adjust the filter text, source, or activity type.</p>
-    </section>
-    }
     } @else {
     <section class="empty-routes">
       <mat-icon aria-hidden="true">route</mat-icon>
