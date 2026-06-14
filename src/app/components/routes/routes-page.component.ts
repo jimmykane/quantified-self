@@ -32,6 +32,7 @@ import {
 } from '../../helpers/suunto-route-catch-up.helper';
 import {
     canSendRouteToConnectedSuuntoAccounts,
+    getRouteServiceDisplayName,
     getRouteSourceSummary,
     getRouteSyncedDestinationSummaries,
 } from '../../helpers/route-provenance.helper';
@@ -73,6 +74,9 @@ interface RoutePageRouteViewModel {
     name: string;
     routeDate: Date | null;
     routeDateSortMs: number | null;
+    sourceServiceLabel: string;
+    sourceServiceTitle: string;
+    sourceServiceName: ServiceNames | null;
     activityTypes: string;
     activityTypeSummaries: RouteActivityTypeSummary[];
     activityTypesTitle: string;
@@ -121,6 +125,7 @@ interface RouteActivityTypeSummary {
 type RouteSortColumn =
     | 'date'
     | 'name'
+    | 'sourceService'
     | 'activityTypes'
     | 'distance'
     | 'ascent'
@@ -291,6 +296,7 @@ export class RoutesPageComponent implements OnInit {
         'select',
         'date',
         'name',
+        'sourceService',
         'activityTypes',
         'distance',
         'ascent',
@@ -1462,6 +1468,10 @@ export class RoutesPageComponent implements OnInit {
         const routeCountLabel = `${routeCount} route${routeCount === 1 ? '' : 's'}`;
         const pointCountLabel = `${pointCount} point${pointCount === 1 ? '' : 's'}`;
         const waypointCountLabel = waypointCount > 0 ? `${waypointCount} waypoint${waypointCount === 1 ? '' : 's'}` : null;
+        const sourceSummary = getRouteSourceSummary(route);
+        const sourceServiceLabel = sourceSummary.serviceName
+            ? getRouteServiceDisplayName(sourceSummary.serviceName)
+            : sourceSummary.label;
         const provenanceItems = this.buildRouteProvenanceItems(route);
         const provenanceSummary = provenanceItems.map(item => item.label).join(' · ');
         return {
@@ -1469,6 +1479,9 @@ export class RoutesPageComponent implements OnInit {
             name: routeName,
             routeDate,
             routeDateSortMs: routeDate ? routeDate.getTime() : null,
+            sourceServiceLabel,
+            sourceServiceTitle: sourceSummary.label,
+            sourceServiceName: sourceSummary.serviceName,
             activityTypes,
             activityTypeSummaries,
             activityTypeFilterValues,
@@ -1494,6 +1507,8 @@ export class RoutesPageComponent implements OnInit {
             canDelete: this.canManageRoute(route),
             filterText: [
                 routeName,
+                sourceServiceLabel,
+                sourceSummary.label,
                 activityTypes,
                 originalFilename,
                 fileType,
@@ -1709,6 +1724,8 @@ export class RoutesPageComponent implements OnInit {
                 return this.compareNullableNumbers(first.routeDateSortMs, second.routeDateSortMs, direction);
             case 'name':
                 return this.compareText(first.name, second.name, direction);
+            case 'sourceService':
+                return this.compareText(first.sourceServiceTitle, second.sourceServiceTitle, direction);
             case 'activityTypes':
                 return this.compareText(first.activityTypes, second.activityTypes, direction);
             case 'distance':
@@ -1836,6 +1853,7 @@ export class RoutesPageComponent implements OnInit {
         return [
             'date',
             'name',
+            'sourceService',
             'activityTypes',
             'distance',
             'ascent',

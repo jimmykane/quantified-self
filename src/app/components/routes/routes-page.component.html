@@ -215,30 +215,35 @@
           <span class="route-name-cell">
             <span class="route-name-stack">
               <span class="route-title-cell" [matTooltip]="item.name" [attr.title]="item.name">{{ item.name }}</span>
-              <span
-                class="route-provenance-cell"
-                [matTooltip]="item.provenanceTitle"
-                [attr.title]="item.provenanceTitle">
-                @for (provenance of item.provenanceItems; track provenance.id; let last = $last) {
-                <span
-                  class="route-provenance-item"
-                  [matTooltip]="provenance.title"
-                  [attr.title]="provenance.title">
-                  @if (provenance.serviceName) {
-                  <app-service-source-icon
-                    [sourceServiceName]="provenance.serviceName"
-                    [showTooltip]="false">
-                  </app-service-source-icon>
-                  }
-                  <span class="route-provenance-text">{{ provenance.label }}</span>
-                </span>
-                @if (!last) {
-                <span class="route-provenance-separator" aria-hidden="true">·</span>
-                }
-                }
-              </span>
             </span>
             <span class="route-file-type">{{ item.fileType }}</span>
+          </span>
+        </td>
+      </ng-container>
+
+      <ng-container matColumnDef="sourceService">
+        <th mat-header-cell *matHeaderCellDef mat-sort-header="sourceService">
+          <span class="route-header-label">
+            <mat-icon aria-hidden="true">cloud_sync</mat-icon>
+            <span>Synced from</span>
+          </span>
+        </th>
+        <td mat-cell *matCellDef="let item">
+          <span
+            class="route-source-service-cell"
+            [matTooltip]="item.sourceServiceTitle"
+            [attr.title]="item.sourceServiceTitle">
+            @if (item.sourceServiceName) {
+            <app-service-source-icon
+              [sourceServiceName]="item.sourceServiceName"
+              [showTooltip]="false">
+            </app-service-source-icon>
+            }
+            <span
+              class="route-source-service-label"
+              [class.route-source-service-label--muted]="!item.sourceServiceName">
+              {{ item.sourceServiceLabel }}
+            </span>
           </span>
         </td>
       </ng-container>
@@ -348,11 +353,11 @@
         <th mat-header-cell *matHeaderCellDef mat-sort-header="originalFilename">
           <span class="route-header-label">
             <mat-icon aria-hidden="true">description</mat-icon>
-            <span>Source</span>
+            <span>Original</span>
           </span>
         </th>
         <td mat-cell *matCellDef="let item">
-          <span class="route-source-cell" [matTooltip]="item.originalFilename" [attr.title]="item.originalFilename">
+          <span class="route-original-file-cell" [matTooltip]="item.originalFilename" [attr.title]="item.originalFilename">
             {{ item.originalFilename }}
           </span>
         </td>

@@ -486,6 +486,9 @@ describe('RoutesPageComponent', () => {
         expect(routes).toHaveLength(1);
         expect(routes[0]).toMatchObject({
             route,
+            sourceServiceLabel: 'Saved route',
+            sourceServiceTitle: 'Saved route',
+            sourceServiceName: null,
             activityTypes: 'Running',
             activityTypesTitle: 'Running',
             activityTypeFilterValues: ['Running'],
@@ -559,6 +562,9 @@ describe('RoutesPageComponent', () => {
         const routes = await firstValueFrom(component.routes$!);
 
         expect(routes[0].canSendToSuunto).toBe(true);
+        expect(routes[0].sourceServiceLabel).toBe('Suunto');
+        expect(routes[0].sourceServiceTitle).toBe('Synced from Suunto');
+        expect(routes[0].sourceServiceName).toBe(ServiceNames.SuuntoApp);
         expect(routes[0].provenanceSummary).toBe('Synced from Suunto · Sent to Garmin');
         expect(routes[0].provenanceItems).toEqual([
             {
@@ -820,9 +826,12 @@ describe('RoutesPageComponent', () => {
         expect(rowDefinition).not.toContain('(keydown.enter)="openRouteDetails(item)"');
         expect(rowDefinition).not.toContain('(keydown.space)="$event.preventDefault(); openRouteDetails(item)"');
         expect(rowDefinition).not.toContain('tabindex="0"');
-        expect(template).toContain('class="route-provenance-item"');
+        expect(template).toContain('matColumnDef="sourceService"');
+        expect(template).toContain('class="route-source-service-cell"');
+        expect(template).toContain('[sourceServiceName]="item.sourceServiceName"');
+        expect(template).toContain('class="route-original-file-cell"');
+        expect(template).toContain('<span>Original</span>');
         expect(template).toContain('<app-service-source-icon');
-        expect(template).toContain('[sourceServiceName]="provenance.serviceName"');
         expect(template).toContain('matColumnDef="select"');
         expect(template).toContain('aria-label="Select all visible routes"');
         expect(template).toContain('(change)="toggleVisibleRouteSelection($event.checked)"');
@@ -846,7 +855,13 @@ describe('RoutesPageComponent', () => {
         expect(template).toContain('<mat-icon>open_in_new</mat-icon>');
         expect(styles).toContain('.route-table-row');
         expect(styles).toContain('.route-selection-toolbar');
+        expect(styles).toContain('.route-table .mat-column-name');
+        expect(styles).toContain('width: 20rem;');
+        expect(styles).toContain('.route-table .mat-column-sourceService');
+        expect(styles).toContain('.route-source-service-cell');
+        expect(styles).toContain('.route-original-file-cell');
         expect(styles).toContain('.route-table .mat-column-select');
+        expect(template).not.toContain('class="route-provenance-item"');
         expect(styles).not.toContain('cursor: pointer;');
     });
 
@@ -928,6 +943,51 @@ describe('RoutesPageComponent', () => {
             filterActive: false,
             resultCount: 2,
         });
+    });
+
+    it('sorts route table rows by synced-from source label', async () => {
+        const manualUploadRoute: FirestoreRouteJSON = {
+            ...route,
+            id: 'route-2',
+            name: 'Manual Upload Route',
+            sourceSummary: {
+                sourceType: 'manual_upload',
+            },
+            originalFiles: [{
+                path: 'users/user-1/routes/route-2/manual-upload.gpx',
+                startDate: new Date('2026-01-03T00:00:00.000Z'),
+                extension: 'gpx',
+            }],
+        };
+        const syncedRoute: FirestoreRouteJSON = {
+            ...route,
+            id: 'route-3',
+            name: 'Suunto Route',
+            sourceSummary: {
+                sourceType: 'service_sync',
+                sourceServiceName: ServiceNames.SuuntoApp,
+                providerUserId: 'suunto-user-1',
+            },
+            originalFiles: [{
+                path: 'users/user-1/routes/route-3/suunto-route.gpx',
+                startDate: new Date('2026-01-04T00:00:00.000Z'),
+                extension: 'gpx',
+            }],
+        };
+        routeServiceMock.getRoutes.mockReturnValue(of([syncedRoute, manualUploadRoute]));
+        await component.ngOnInit();
+        await firstValueFrom(component.routes$!);
+
+        component.onRouteSortChange({ active: 'sourceService', direction: 'asc' });
+        const routes = await firstValueFrom(component.routes$!);
+
+        expect(routes.map(item => item.route.id)).toEqual(['route-2', 'route-3']);
+        expect(routes.map(item => item.sourceServiceTitle)).toEqual(['Manual upload', 'Synced from Suunto']);
+        expect(routeServiceMock.getRoutes).toHaveBeenLastCalledWith(
+            expect.objectContaining({ uid: 'user-1' }),
+            50,
+            { active: 'date', direction: 'desc' },
+        );
     });
 
     it('keeps routes without top-level metric stats visible when metric sorting', async () => {
