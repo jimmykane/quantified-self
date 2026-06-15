@@ -156,7 +156,7 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('[Sports Watch Benchmark](/features/sports-watch-benchmark)');
     expect(gettingStartedSection?.content).toContain('[File Comparison Tool](/tools/compare)');
     expect(gettingStartedSection?.content).toContain('[Tools -> Compare](/tools/compare/saved)');
-    expect(gettingStartedSection?.content).toContain('sortable, filterable, paginated table with device, activity type, and review tag filters, distance, ascent, descent, visible benchmark pairs, GNSS/heart-rate/altitude benchmark error metrics colored by low/moderate/high error, clickable draft metric cells that open the benchmark flow, quick description notes, and custom reviewer tags');
+    expect(gettingStartedSection?.content).toContain('sortable, filterable, paginated table with device, activity type, and review tag filters, selected-row bulk delete, distance, ascent, descent, visible benchmark pairs, GNSS/heart-rate/altitude benchmark error metrics colored by low/moderate/high error, clickable draft metric cells that open the benchmark flow, quick description notes, and custom reviewer tags');
     expect(gettingStartedSection?.content).toContain('Benchmark reports show an **At a Glance** reviewer summary');
     expect(gettingStartedSection?.content).toContain('report share menu can copy that summary');
     expect(gettingStartedSection?.content).toContain('account-level device color preferences from saved file comparisons');

@@ -24,6 +24,7 @@ import { AppDeviceColorPreferenceService } from '../../services/color/app-device
 import { normalizeDeviceColorKey } from '../../helpers/device-color-preferences.helper';
 import { DeviceColorPreferencesDialogComponent } from './device-color-preferences-dialog.component';
 import { AppHapticsService } from '../../services/app.haptics.service';
+import { AppProcessingService } from '../../services/app.processing.service';
 import { BenchmarkReviewService } from '../../services/benchmark-review.service';
 import { BenchmarkReviewTagsDialogComponent } from '../benchmark/benchmark-review-tags-dialog.component';
 import { AppBreakpoints } from '../../constants/breakpoints';
@@ -159,6 +160,12 @@ describe('ToolsComparePageComponent', () => {
     warning: ReturnType<typeof vi.fn>;
     error: ReturnType<typeof vi.fn>;
   };
+  let processingServiceMock: {
+    addJob: ReturnType<typeof vi.fn>;
+    updateJob: ReturnType<typeof vi.fn>;
+    completeJob: ReturnType<typeof vi.fn>;
+    failJob: ReturnType<typeof vi.fn>;
+  };
   let benchmarkReviewServiceMock: {
     normalizeTags: ReturnType<typeof vi.fn>;
     getEventTags: ReturnType<typeof vi.fn>;
@@ -177,6 +184,7 @@ describe('ToolsComparePageComponent', () => {
   };
   let loggerMock: {
     warn: ReturnType<typeof vi.fn>;
+    error: ReturnType<typeof vi.fn>;
   };
   let breakpointObserverMock: {
     observe: ReturnType<typeof vi.fn>;
@@ -265,6 +273,12 @@ describe('ToolsComparePageComponent', () => {
       warning: vi.fn(),
       error: vi.fn(),
     };
+    processingServiceMock = {
+      addJob: vi.fn().mockReturnValue('job-1'),
+      updateJob: vi.fn(),
+      completeJob: vi.fn(),
+      failJob: vi.fn(),
+    };
     benchmarkReviewServiceMock = {
       normalizeTags: vi.fn((tags: unknown) => Array.isArray(tags)
         ? tags.filter((tag): tag is string => typeof tag === 'string').map(tag => tag.trim()).filter(Boolean)
@@ -289,6 +303,7 @@ describe('ToolsComparePageComponent', () => {
     };
     loggerMock = {
       warn: vi.fn(),
+      error: vi.fn(),
     };
     breakpointObserverMock = {
       observe: vi.fn().mockReturnValue(of({
@@ -308,6 +323,7 @@ describe('ToolsComparePageComponent', () => {
         { provide: AppAnalyticsService, useValue: analyticsServiceMock },
         { provide: AppBenchmarkFlowService, useValue: benchmarkFlowServiceMock },
         { provide: AppHapticsService, useValue: hapticsServiceMock },
+        { provide: AppProcessingService, useValue: processingServiceMock },
         { provide: BenchmarkReviewService, useValue: benchmarkReviewServiceMock },
         { provide: AppEventService, useValue: eventServiceMock },
         { provide: AppEventColorService, useValue: eventColorServiceMock },
@@ -2197,6 +2213,95 @@ describe('ToolsComparePageComponent', () => {
       status: 'success',
     });
     expect(hapticsServiceMock.success).toHaveBeenCalled();
+  });
+
+  it('bulk deletes selected saved comparisons through event cleanup', async () => {
+    const user = new User('user-1');
+    userSubject.next(user);
+    await Promise.resolve();
+    await Promise.resolve();
+    (component as any).dialog = {
+      open: vi.fn().mockReturnValue({
+        afterClosed: () => of(true),
+      }),
+    };
+    component.comparisons.set([
+      makeComparisonEvent('comparison-1'),
+      makeComparisonEvent('comparison-2'),
+      makeComparisonEvent('comparison-3'),
+    ]);
+    component.comparisonTotalCount.set(3);
+
+    component.toggleComparisonSelection(component.comparisonItems()[0], true);
+    component.toggleComparisonSelection(component.comparisonItems()[1], true);
+    await component.confirmDeleteSelectedComparisons();
+
+    expect(eventServiceMock.deleteAllEventData).toHaveBeenCalledWith(user, 'comparison-1');
+    expect(eventServiceMock.deleteAllEventData).toHaveBeenCalledWith(user, 'comparison-2');
+    expect(component.comparisons().map(event => event.getID())).toEqual(['comparison-3']);
+    expect(component.comparisonTotalCount()).toBe(1);
+    expect(component.selectedComparisonIDs()).toEqual([]);
+    expect(processingServiceMock.addJob).toHaveBeenCalledWith('process', 'Deleting selected comparisons...');
+    expect(processingServiceMock.completeJob).toHaveBeenCalledWith('job-1', 'Deleted 2 comparisons.');
+    expect(analyticsServiceMock.logToolCompareSavedAction).toHaveBeenCalledWith('delete', {
+      status: 'confirmed',
+      filterActive: false,
+      resultCount: 3,
+      selectedCount: 2,
+    });
+    expect(analyticsServiceMock.logToolCompareSavedAction).toHaveBeenCalledWith('delete', {
+      status: 'success',
+      filterActive: false,
+      resultCount: 1,
+      selectedCount: 2,
+      deletedCount: 2,
+      failedCount: 0,
+    });
+  });
+
+  it('keeps failed rows selected after a partial bulk comparison delete', async () => {
+    const user = new User('user-1');
+    userSubject.next(user);
+    await Promise.resolve();
+    await Promise.resolve();
+    (component as any).dialog = {
+      open: vi.fn().mockReturnValue({
+        afterClosed: () => of(true),
+      }),
+    };
+    eventServiceMock.deleteAllEventData.mockImplementation((_user: User, eventID: string) => (
+      eventID === 'comparison-2'
+        ? Promise.reject(new Error('delete failed'))
+        : Promise.resolve(true)
+    ));
+    component.comparisons.set([
+      makeComparisonEvent('comparison-1'),
+      makeComparisonEvent('comparison-2'),
+      makeComparisonEvent('comparison-3'),
+    ]);
+    component.comparisonTotalCount.set(3);
+
+    component.toggleVisibleComparisonSelection(true);
+    await component.confirmDeleteSelectedComparisons();
+
+    expect(component.comparisons().map(event => event.getID())).toEqual(['comparison-2']);
+    expect(component.comparisonTotalCount()).toBe(1);
+    expect(component.selectedComparisonIDs()).toEqual(['comparison-2']);
+    expect(loggerMock.error).toHaveBeenCalledWith(
+      '[ToolsComparePageComponent] Failed to delete selected comparison',
+      { eventID: 'comparison-2' },
+      expect.any(Error),
+    );
+    expect(processingServiceMock.completeJob).toHaveBeenCalledWith('job-1', 'Deleted 2 comparisons. Failed 1.');
+    expect(analyticsServiceMock.logToolCompareSavedAction).toHaveBeenCalledWith('delete', {
+      status: 'partial_success',
+      filterActive: false,
+      resultCount: 1,
+      selectedCount: 3,
+      deletedCount: 2,
+      failedCount: 1,
+    });
+    expect(hapticsServiceMock.warning).toHaveBeenCalled();
   });
 
   it('uses source file metadata count fallbacks instead of showing fake zeroes for saved benchmarks', () => {

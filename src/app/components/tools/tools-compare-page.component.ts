@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, DestroyRef, computed, effect, inject, OnInit, signal } from '@angular/core';
+import { SelectionModel } from '@angular/cdk/collections';
 import { BreakpointObserver } from '@angular/cdk/layout';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router } from '@angular/router';
@@ -52,6 +53,7 @@ import type { BenchmarkGenerationFailureReason } from '../../services/app.benchm
 import { BENCHMARK_NO_OVERLAP_MESSAGE } from '../../services/app.benchmark.service';
 import { AppBreakpoints } from '../../constants/breakpoints';
 import { AppHapticsService } from '../../services/app.haptics.service';
+import { AppProcessingService } from '../../services/app.processing.service';
 import { BenchmarkReviewService } from '../../services/benchmark-review.service';
 import {
   DeviceColorPreferenceDialogDevice,
@@ -198,8 +200,10 @@ export class ToolsComparePageComponent implements OnInit {
   private deviceColorPreferenceService = inject(AppDeviceColorPreferenceService);
   private benchmarkFlowService = inject(AppBenchmarkFlowService);
   private hapticsService = inject(AppHapticsService);
+  private processingService = inject(AppProcessingService);
   private benchmarkReviewService = inject(BenchmarkReviewService);
   private logger = inject(LoggerService);
+  private readonly comparisonSelection = new SelectionModel<string>(true, []);
 
   readonly selectedFiles = signal<File[]>([]);
   readonly comparisonTitle = signal('');
@@ -209,6 +213,7 @@ export class ToolsComparePageComponent implements OnInit {
   readonly comparisonTotalCount = signal(0);
   readonly isLoadingComparisons = signal(false);
   readonly deletingEventID = signal<string | null>(null);
+  readonly bulkActionInProgress = signal(false);
   readonly savingDescriptionEventID = signal<string | null>(null);
   readonly editingDescriptionEventID = signal<string | null>(null);
   readonly benchmarkingEventID = signal<string | null>(null);
@@ -219,6 +224,7 @@ export class ToolsComparePageComponent implements OnInit {
   readonly comparisonDeviceFilter = signal('');
   readonly comparisonActivityTypeFilter = signal('');
   readonly comparisonTagFilter = signal('');
+  readonly selectedComparisonIDs = signal<string[]>([]);
   readonly comparisonSort = signal<ComparisonSortState>({ active: 'date', direction: 'desc' });
   readonly comparisonPage = signal<ComparisonPageState>({
     pageIndex: 0,
@@ -226,6 +232,7 @@ export class ToolsComparePageComponent implements OnInit {
   });
   readonly comparisonPageSizeOptions = COMPARISON_PAGE_SIZE_OPTIONS;
   readonly displayedComparisonColumns = [
+    'select',
     'date',
     'title',
     'tags',
@@ -401,6 +408,21 @@ export class ToolsComparePageComponent implements OnInit {
     this.buildComparisonFilterOptions(this.comparisonItems().flatMap(item => item.tagFilterValues)),
   );
 
+  readonly selectedComparisonCount = computed(() => this.selectedComparisonIDs().length);
+  readonly selectedComparisonIDSet = computed(() => new Set(this.selectedComparisonIDs()));
+  readonly allVisibleComparisonsSelected = computed(() => {
+    const visibleItems = this.paginatedComparisonItems();
+    const selectedIDs = this.selectedComparisonIDSet();
+    return visibleItems.length > 0
+      && visibleItems.every(item => selectedIDs.has(item.id));
+  });
+  readonly visibleComparisonSelectionIndeterminate = computed(() => {
+    const visibleItems = this.paginatedComparisonItems();
+    const selectedIDs = this.selectedComparisonIDSet();
+    const visibleSelectedCount = visibleItems.filter(item => selectedIDs.has(item.id)).length;
+    return visibleSelectedCount > 0 && visibleSelectedCount < visibleItems.length;
+  });
+
   readonly paginatedComparisonItems = computed<ComparisonListItem[]>(() => {
     const page = this.comparisonPage();
     const start = page.pageIndex * page.pageSize;
@@ -536,9 +558,14 @@ export class ToolsComparePageComponent implements OnInit {
   }
 
   updateComparisonFilter(value: string): void {
+    if (this.bulkActionInProgress()) {
+      return;
+    }
+
     const wasFilterActive = this.isComparisonFilterActive();
     this.comparisonFilter.set(value);
     this.resetComparisonPage();
+    this.reconcileComparisonSelectionWithItems(this.filteredComparisonItems());
     if (this.isComparisonFilterActive() !== wasFilterActive) {
       this.hapticsService.selection();
       this.analyticsService.logToolCompareSavedAction('filter', {
@@ -551,6 +578,10 @@ export class ToolsComparePageComponent implements OnInit {
   }
 
   updateComparisonDeviceFilter(value: string): void {
+    if (this.bulkActionInProgress()) {
+      return;
+    }
+
     if (this.comparisonDeviceFilter() === value) {
       return;
     }
@@ -560,6 +591,10 @@ export class ToolsComparePageComponent implements OnInit {
   }
 
   updateComparisonActivityTypeFilter(value: string): void {
+    if (this.bulkActionInProgress()) {
+      return;
+    }
+
     if (this.comparisonActivityTypeFilter() === value) {
       return;
     }
@@ -569,6 +604,10 @@ export class ToolsComparePageComponent implements OnInit {
   }
 
   updateComparisonTagFilter(value: string): void {
+    if (this.bulkActionInProgress()) {
+      return;
+    }
+
     if (this.comparisonTagFilter() === value) {
       return;
     }
@@ -578,6 +617,10 @@ export class ToolsComparePageComponent implements OnInit {
   }
 
   async onComparisonSortChange(sort: Sort): Promise<void> {
+    if (this.bulkActionInProgress()) {
+      return;
+    }
+
     let active: ComparisonSortColumn = 'date';
     let requestedDirection: SortDirection = '';
     if (this.isComparisonSortColumn(sort.active)) {
@@ -610,6 +653,10 @@ export class ToolsComparePageComponent implements OnInit {
   }
 
   async onComparisonPageChange(event: PageEvent): Promise<void> {
+    if (this.bulkActionInProgress()) {
+      return;
+    }
+
     const currentPage = this.comparisonPage();
     const pageSizeChanged = currentPage.pageSize !== event.pageSize;
 
@@ -647,8 +694,44 @@ export class ToolsComparePageComponent implements OnInit {
     return item.id;
   }
 
+  toggleComparisonSelection(item: ComparisonListItem, checked: boolean): void {
+    if (this.bulkActionInProgress()) {
+      return;
+    }
+
+    if (checked) {
+      this.comparisonSelection.select(item.id);
+    } else {
+      this.comparisonSelection.deselect(item.id);
+    }
+    this.syncSelectedComparisonIDs();
+    this.hapticsService.selection();
+  }
+
+  toggleVisibleComparisonSelection(checked: boolean): void {
+    if (this.bulkActionInProgress()) {
+      return;
+    }
+
+    const visibleIDs = this.paginatedComparisonItems().map(item => item.id);
+    if (checked) {
+      this.comparisonSelection.select(...visibleIDs);
+    } else {
+      visibleIDs.forEach(eventID => this.comparisonSelection.deselect(eventID));
+    }
+    this.syncSelectedComparisonIDs();
+    this.hapticsService.selection();
+  }
+
+  clearComparisonSelection(event?: Event): void {
+    event?.preventDefault();
+    event?.stopPropagation();
+    this.clearComparisonSelectionWithoutHaptic();
+    this.hapticsService.selection();
+  }
+
   startDescriptionEdit(item: ComparisonListItem): void {
-    if (this.savingDescriptionEventID()) {
+    if (this.savingDescriptionEventID() || this.bulkActionInProgress()) {
       return;
     }
 
@@ -797,7 +880,7 @@ export class ToolsComparePageComponent implements OnInit {
       return;
     }
 
-    if (benchmark && this.benchmarkingEventID()) {
+    if (this.bulkActionInProgress() || (benchmark && this.benchmarkingEventID())) {
       return;
     }
 
@@ -835,6 +918,10 @@ export class ToolsComparePageComponent implements OnInit {
     item: ComparisonListItem,
     cell?: ComparisonBenchmarkMetricCell,
   ): Promise<void> {
+    if (this.bulkActionInProgress()) {
+      return;
+    }
+
     if (item.hasReport && !cell?.canRerunReport) {
       return;
     }
@@ -988,8 +1075,130 @@ export class ToolsComparePageComponent implements OnInit {
     });
   }
 
+  async confirmDeleteSelectedComparisons(): Promise<void> {
+    const user = this.currentUser();
+    const selectedItems = this.getSelectedLoadedComparisonItems();
+    if (
+      !user
+      || selectedItems.length === 0
+      || this.bulkActionInProgress()
+      || !!this.deletingEventID()
+      || !!this.benchmarkingEventID()
+      || !!this.savingDescriptionEventID()
+      || !!this.editingDescriptionEventID()
+    ) {
+      return;
+    }
+
+    this.hapticsService.selection();
+    const comparisonLabel = selectedItems.length === 1 ? 'comparison' : 'comparisons';
+    const dialogRef = this.dialog.open(ConfirmationDialogComponent, {
+      data: {
+        title: `Delete ${selectedItems.length} selected ${comparisonLabel}?`,
+        message: `This removes ${selectedItems.length} selected saved benchmark ${comparisonLabel} and their source files.`,
+        confirmLabel: 'Delete',
+        cancelLabel: 'Cancel',
+        confirmColor: 'warn',
+      } as ConfirmationDialogData,
+    });
+    const confirmed = await firstValueFrom(dialogRef.afterClosed());
+    if (!confirmed) {
+      return;
+    }
+
+    this.analyticsService.logToolCompareSavedAction('delete', {
+      status: 'confirmed',
+      filterActive: this.isComparisonFilterActive(),
+      resultCount: this.filteredComparisonCount(),
+      selectedCount: selectedItems.length,
+    });
+    this.bulkActionInProgress.set(true);
+    const jobId = this.processingService.addJob('process', 'Deleting selected comparisons...');
+    this.processingService.updateJob(jobId, { status: 'processing', progress: 10 });
+    const failedComparisonIDs: string[] = [];
+    const deletedComparisonIDs: string[] = [];
+
+    try {
+      for (let index = 0; index < selectedItems.length; index += 1) {
+        const item = selectedItems[index];
+        try {
+          await this.eventService.deleteAllEventData(user, item.id);
+          deletedComparisonIDs.push(item.id);
+        } catch (error) {
+          failedComparisonIDs.push(item.id);
+          this.logger.error('[ToolsComparePageComponent] Failed to delete selected comparison', { eventID: item.id }, error);
+        }
+
+        this.processingService.updateJob(jobId, {
+          progress: 10 + Math.round(((index + 1) / selectedItems.length) * 80),
+          details: `Deleted ${deletedComparisonIDs.length} of ${selectedItems.length}`,
+        });
+      }
+
+      if (deletedComparisonIDs.length > 0) {
+        this.removeComparisonEventsFromLoadedRows(deletedComparisonIDs);
+        this.comparisonTotalCount.update(total => Math.max(0, total - deletedComparisonIDs.length));
+        this.resetComparisonPage();
+      }
+
+      this.comparisonSelection.clear();
+      this.comparisonSelection.select(...failedComparisonIDs);
+      this.syncSelectedComparisonIDs();
+
+      if (deletedComparisonIDs.length === 0) {
+        this.processingService.failJob(jobId, 'No selected comparisons deleted');
+        this.analyticsService.logToolCompareSavedAction('delete', {
+          status: 'failure',
+          filterActive: this.isComparisonFilterActive(),
+          resultCount: this.filteredComparisonCount(),
+          selectedCount: selectedItems.length,
+          deletedCount: 0,
+          failedCount: failedComparisonIDs.length,
+        });
+        this.snackBar.open('Could not delete selected comparisons.', undefined, { duration: 3000 });
+        this.hapticsService.error();
+        return;
+      }
+
+      const statusMessage = failedComparisonIDs.length > 0
+        ? `Deleted ${deletedComparisonIDs.length} ${deletedComparisonIDs.length === 1 ? 'comparison' : 'comparisons'}. Failed ${failedComparisonIDs.length}.`
+        : `Deleted ${deletedComparisonIDs.length} ${deletedComparisonIDs.length === 1 ? 'comparison' : 'comparisons'}.`;
+      const analyticsStatus = failedComparisonIDs.length > 0 ? 'partial_success' : 'success';
+      this.processingService.completeJob(jobId, statusMessage);
+      this.analyticsService.logToolCompareSavedAction('delete', {
+        status: analyticsStatus,
+        filterActive: this.isComparisonFilterActive(),
+        resultCount: this.filteredComparisonCount(),
+        selectedCount: selectedItems.length,
+        deletedCount: deletedComparisonIDs.length,
+        failedCount: failedComparisonIDs.length,
+      });
+      this.snackBar.open(statusMessage, undefined, { duration: failedComparisonIDs.length > 0 ? 4000 : 2500 });
+      if (failedComparisonIDs.length > 0) {
+        this.hapticsService.warning();
+      } else {
+        this.hapticsService.success();
+      }
+    } catch (error) {
+      this.processingService.failJob(jobId, 'Selected comparison delete failed');
+      this.analyticsService.logToolCompareSavedAction('delete', {
+        status: 'failure',
+        filterActive: this.isComparisonFilterActive(),
+        resultCount: this.filteredComparisonCount(),
+        selectedCount: selectedItems.length,
+        deletedCount: deletedComparisonIDs.length,
+        failedCount: selectedItems.length - deletedComparisonIDs.length,
+      });
+      this.logger.error('[ToolsComparePageComponent] Failed to delete selected comparisons', error);
+      this.snackBar.open('Could not delete selected comparisons.', undefined, { duration: 3000 });
+      this.hapticsService.error();
+    } finally {
+      this.bulkActionInProgress.set(false);
+    }
+  }
+
   async deleteComparison(item: ComparisonListItem): Promise<void> {
-    if (this.deletingEventID()) {
+    if (this.deletingEventID() || this.bulkActionInProgress()) {
       return;
     }
 
@@ -1039,6 +1248,10 @@ export class ToolsComparePageComponent implements OnInit {
   }
 
   openDeviceColorPreferencesDialog(initialDeviceKey?: string | null): void {
+    if (this.bulkActionInProgress()) {
+      return;
+    }
+
     const devices = this.comparisonDeviceColorItems();
     if (devices.length === 0) {
       return;
@@ -1056,6 +1269,10 @@ export class ToolsComparePageComponent implements OnInit {
   }
 
   async openBenchmarkReviewTagsDialog(item: ComparisonListItem): Promise<void> {
+    if (this.bulkActionInProgress()) {
+      return;
+    }
+
     const user = this.currentUser();
     if (!user) {
       this.hapticsService.warning();
@@ -1107,6 +1324,7 @@ export class ToolsComparePageComponent implements OnInit {
 
   private applyComparisonFacetFilterChange(): void {
     this.resetComparisonPage();
+    this.reconcileComparisonSelectionWithItems(this.filteredComparisonItems());
     this.hapticsService.selection();
     this.analyticsService.logToolCompareSavedAction('filter', {
       status: this.isComparisonFilterActive() ? 'applied' : 'cleared',
@@ -1119,6 +1337,7 @@ export class ToolsComparePageComponent implements OnInit {
   private async loadInitialComparisonPage(user: User): Promise<void> {
     const loadGeneration = ++this.comparisonLoadGeneration;
     this.clearComparisonPageCache();
+    this.clearComparisonSelectionWithoutHaptic();
     this.comparisonTotalCount.set(0);
     this.isLoadingComparisons.set(true);
 
@@ -1226,6 +1445,7 @@ export class ToolsComparePageComponent implements OnInit {
       .sort(([firstPageIndex], [secondPageIndex]) => firstPageIndex - secondPageIndex)
       .flatMap(([, pageEvents]) => pageEvents);
     this.comparisons.set(events);
+    this.reconcileComparisonSelectionWithItems(this.comparisonItems());
   }
 
   private updateComparisonEventInLoadedRows(
@@ -1258,10 +1478,19 @@ export class ToolsComparePageComponent implements OnInit {
   }
 
   private removeComparisonEventFromLoadedRows(eventID: string): void {
-    this.clearBenchmarkFailureForComparison(eventID);
+    this.removeComparisonEventsFromLoadedRows([eventID]);
+  }
+
+  private removeComparisonEventsFromLoadedRows(eventIDs: string[]): void {
+    const eventIDSet = new Set(eventIDs);
+    if (eventIDSet.size === 0) {
+      return;
+    }
+
+    eventIDSet.forEach(eventID => this.clearBenchmarkFailureForComparison(eventID));
     let removedLoadedPage = false;
     for (const [pageIndex, pageEvents] of this.loadedComparisonPages.entries()) {
-      const nextPageEvents = pageEvents.filter(event => event.getID() !== eventID);
+      const nextPageEvents = pageEvents.filter(event => !eventIDSet.has(event.getID()));
       if (nextPageEvents.length !== pageEvents.length) {
         removedLoadedPage = true;
       }
@@ -1270,10 +1499,14 @@ export class ToolsComparePageComponent implements OnInit {
 
     if (removedLoadedPage) {
       this.syncComparisonPages();
+      eventIDs.forEach(eventID => this.comparisonSelection.deselect(eventID));
+      this.syncSelectedComparisonIDs();
       return;
     }
 
-    this.comparisons.update(events => events.filter(event => event.getID() !== eventID));
+    this.comparisons.update(events => events.filter(event => !eventIDSet.has(event.getID())));
+    eventIDs.forEach(eventID => this.comparisonSelection.deselect(eventID));
+    this.syncSelectedComparisonIDs();
   }
 
   private clearComparisonPageCache(): void {
@@ -1294,6 +1527,7 @@ export class ToolsComparePageComponent implements OnInit {
     this.comparisonDeviceFilter.set('');
     this.comparisonActivityTypeFilter.set('');
     this.comparisonTagFilter.set('');
+    this.clearComparisonSelectionWithoutHaptic();
     this.lastLoggedFilterActive = false;
     this.hydratingActivitySummaryEventIDs.clear();
     this.hydratedActivitySummaryEventIDs.clear();
@@ -1303,6 +1537,35 @@ export class ToolsComparePageComponent implements OnInit {
 
   private isCurrentComparisonLoad(loadGeneration: number, user: User): boolean {
     return this.comparisonLoadGeneration === loadGeneration && this.currentUser()?.uid === user.uid;
+  }
+
+  private getSelectedLoadedComparisonItems(): ComparisonListItem[] {
+    const selectedIDs = this.selectedComparisonIDSet();
+    return this.comparisonItems().filter(item => selectedIDs.has(item.id));
+  }
+
+  private reconcileComparisonSelectionWithItems(items: ComparisonListItem[]): void {
+    const visibleIDs = new Set(items.map(item => item.id));
+    let changed = false;
+    [...this.comparisonSelection.selected].forEach((eventID) => {
+      if (!visibleIDs.has(eventID)) {
+        this.comparisonSelection.deselect(eventID);
+        changed = true;
+      }
+    });
+
+    if (changed || this.selectedComparisonIDs().length !== this.comparisonSelection.selected.length) {
+      this.syncSelectedComparisonIDs();
+    }
+  }
+
+  private syncSelectedComparisonIDs(): void {
+    this.selectedComparisonIDs.set([...this.comparisonSelection.selected]);
+  }
+
+  private clearComparisonSelectionWithoutHaptic(): void {
+    this.comparisonSelection.clear();
+    this.syncSelectedComparisonIDs();
   }
 
   private getComparisonCreateAnalytics(): ToolCompareCreateAnalytics {

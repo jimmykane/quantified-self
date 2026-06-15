@@ -110,6 +110,7 @@
           mat-stroked-button
           type="button"
           class="device-colors-button"
+          [disabled]="bulkActionInProgress()"
           (click)="openDeviceColorPreferencesDialog()">
           <mat-icon>palette</mat-icon>
           Device colors
@@ -242,10 +243,17 @@
           <input
             matInput
             type="search"
+            [disabled]="bulkActionInProgress()"
             [value]="comparisonFilter()"
             (input)="updateComparisonFilter($any($event.target).value)">
           @if (comparisonFilter()) {
-          <button matSuffix mat-icon-button type="button" aria-label="Clear comparison filter" (click)="updateComparisonFilter('')">
+          <button
+            matSuffix
+            mat-icon-button
+            type="button"
+            aria-label="Clear comparison filter"
+            [disabled]="bulkActionInProgress()"
+            (click)="updateComparisonFilter('')">
             <mat-icon>close</mat-icon>
           </button>
           }
@@ -254,7 +262,7 @@
           <mat-label>Device</mat-label>
           <mat-select
             [value]="comparisonDeviceFilter()"
-            [disabled]="comparisonDeviceFilterOptions().length === 0"
+            [disabled]="bulkActionInProgress() || comparisonDeviceFilterOptions().length === 0"
             (selectionChange)="updateComparisonDeviceFilter($event.value)">
             <mat-option value="">All devices</mat-option>
             @for (option of comparisonDeviceFilterOptions(); track option.value) {
@@ -266,7 +274,7 @@
           <mat-label>Activity type</mat-label>
           <mat-select
             [value]="comparisonActivityTypeFilter()"
-            [disabled]="comparisonActivityTypeFilterOptions().length === 0"
+            [disabled]="bulkActionInProgress() || comparisonActivityTypeFilterOptions().length === 0"
             (selectionChange)="updateComparisonActivityTypeFilter($event.value)">
             <mat-option value="">All types</mat-option>
             @for (option of comparisonActivityTypeFilterOptions(); track option.value) {
@@ -278,7 +286,7 @@
           <mat-label>Tag</mat-label>
           <mat-select
             [value]="comparisonTagFilter()"
-            [disabled]="comparisonTagFilterOptions().length === 0"
+            [disabled]="bulkActionInProgress() || comparisonTagFilterOptions().length === 0"
             (selectionChange)="updateComparisonTagFilter($event.value)">
             <mat-option value="">All tags</mat-option>
             @for (option of comparisonTagFilterOptions(); track option.value) {
@@ -299,7 +307,7 @@
           [class.benchmark-rerun-action]="cell.canRerunReport"
           [class.summary-placeholder]="cell.isPlaceholder"
           [class.benchmark-is-loading]="benchmarkingEventID() === item.id"
-          [disabled]="!!benchmarkingEventID()"
+          [disabled]="bulkActionInProgress() || !!benchmarkingEventID()"
           [matTooltip]="cell.title"
           [matTooltipDisabled]="passiveComparisonTableTooltipsDisabled()"
           matTooltipTouchGestures="off"
@@ -362,6 +370,49 @@
       </mat-card>
       } @else {
       <div class="comparison-table-shell">
+        @if (selectedComparisonCount() > 0) {
+        <div class="comparison-selection-toolbar" aria-live="polite">
+          <div class="comparison-selection-summary">
+            <mat-icon>check_circle</mat-icon>
+            <span>{{ selectedComparisonCount() }} {{ selectedComparisonCount() === 1 ? 'comparison' : 'comparisons' }} selected</span>
+          </div>
+          <div class="comparison-selection-actions">
+            <button
+              mat-button
+              color="warn"
+              type="button"
+              class="comparison-bulk-action-button"
+              [disabled]="bulkActionInProgress()
+                || !!deletingEventID()
+                || !!benchmarkingEventID()
+                || !!editingDescriptionEventID()
+                || !!savingDescriptionEventID()"
+              [attr.aria-label]="'Delete ' + selectedComparisonCount() + ' selected ' + (selectedComparisonCount() === 1 ? 'comparison' : 'comparisons')"
+              (click)="$event.preventDefault(); $event.stopPropagation(); confirmDeleteSelectedComparisons()">
+              <span class="comparison-bulk-action-content">
+                @if (bulkActionInProgress()) {
+                <mat-progress-spinner diameter="16" mode="indeterminate"></mat-progress-spinner>
+                } @else {
+                <mat-icon>delete</mat-icon>
+                }
+                <span>Delete</span>
+              </span>
+            </button>
+            <button
+              mat-button
+              type="button"
+              class="comparison-bulk-action-button"
+              [disabled]="bulkActionInProgress()"
+              aria-label="Clear comparison selection"
+              (click)="clearComparisonSelection($event)">
+              <span class="comparison-bulk-action-content">
+                <mat-icon>close</mat-icon>
+                <span>Clear</span>
+              </span>
+            </button>
+          </div>
+        </div>
+        }
         <table
           mat-table
           matSort
@@ -371,6 +422,30 @@
           [matSortActive]="comparisonSort().active"
           [matSortDirection]="comparisonSort().direction"
           (matSortChange)="onComparisonSortChange($event)">
+          <ng-container matColumnDef="select">
+            <th mat-header-cell *matHeaderCellDef>
+              <mat-checkbox
+                aria-label="Select all visible comparisons"
+                [checked]="allVisibleComparisonsSelected()"
+                [indeterminate]="visibleComparisonSelectionIndeterminate()"
+                [disabled]="bulkActionInProgress()"
+                (click)="$event.stopPropagation()"
+                (keydown)="$event.stopPropagation()"
+                (change)="toggleVisibleComparisonSelection($event.checked)">
+              </mat-checkbox>
+            </th>
+            <td mat-cell *matCellDef="let item">
+              <mat-checkbox
+                [attr.aria-label]="'Select ' + item.title"
+                [checked]="selectedComparisonIDSet().has(item.id)"
+                [disabled]="bulkActionInProgress()"
+                (click)="$event.stopPropagation()"
+                (keydown)="$event.stopPropagation()"
+                (change)="toggleComparisonSelection(item, $event.checked)">
+              </mat-checkbox>
+            </td>
+          </ng-container>
+
           <ng-container matColumnDef="date">
             <th mat-header-cell *matHeaderCellDef mat-sort-header="date">
               <span class="comparison-header-label">
@@ -428,7 +503,7 @@
                   <button
                     type="button"
                     class="device-color-trigger"
-                    [disabled]="!summary.deviceColorKey"
+                    [disabled]="bulkActionInProgress() || !summary.deviceColorKey"
                     [matTooltip]="'Set color for ' + summary.deviceLabel"
                     [matTooltipDisabled]="passiveComparisonTableTooltipsDisabled()"
                     matTooltipTouchGestures="off"
@@ -615,6 +690,7 @@
                   mat-button
                   type="button"
                   class="description-note-button"
+                  [disabled]="bulkActionInProgress()"
                   [attr.aria-label]="item.description ? 'Edit comparison description' : 'Add comparison description'"
                   [matTooltip]="item.description || 'Add description'"
                   [matTooltipDisabled]="passiveComparisonTableTooltipsDisabled()"
@@ -664,6 +740,7 @@
                 [matTooltip]="item.benchmarkReviewTagsTitle"
                 [matTooltipDisabled]="passiveComparisonTableTooltipsDisabled()"
                 matTooltipTouchGestures="off"
+                [disabled]="bulkActionInProgress()"
                 [attr.aria-label]="item.benchmarkReviewTags.length > 0 ? 'Edit comparison tags' : 'Add comparison tags'"
                 (click)="openBenchmarkReviewTagsDialog(item)">
                 @if (item.benchmarkReviewTags.length > 0) {
@@ -765,6 +842,7 @@
                   matTooltip="Open details"
                   [matTooltipDisabled]="passiveComparisonTableTooltipsDisabled()"
                   matTooltipTouchGestures="off"
+                  [disabled]="bulkActionInProgress()"
                   (click)="openComparison(item, false)"
                   aria-label="Open comparison details">
                   <mat-icon>open_in_new</mat-icon>
@@ -775,7 +853,7 @@
                   [matTooltip]="item.hasReport ? 'Open report' : 'Run report'"
                   [matTooltipDisabled]="passiveComparisonTableTooltipsDisabled()"
                   matTooltipTouchGestures="off"
-                  [disabled]="!!benchmarkingEventID()"
+                  [disabled]="bulkActionInProgress() || !!benchmarkingEventID()"
                   (click)="openComparison(item, true)"
                   [attr.aria-label]="item.hasReport ? 'Open benchmark report' : 'Run benchmark report'">
                   @if (benchmarkingEventID() === item.id) {
@@ -791,7 +869,7 @@
                   matTooltip="Delete comparison"
                   [matTooltipDisabled]="passiveComparisonTableTooltipsDisabled()"
                   matTooltipTouchGestures="off"
-                  [disabled]="!!deletingEventID()"
+                  [disabled]="bulkActionInProgress() || !!deletingEventID()"
                   (click)="deleteComparison(item)"
                   aria-label="Delete comparison">
                   @if (deletingEventID() === item.id) {
@@ -814,7 +892,7 @@
         [pageIndex]="comparisonPage().pageIndex"
         [pageSize]="comparisonPage().pageSize"
         [pageSizeOptions]="comparisonPageSizeOptions"
-        [disabled]="isLoadingComparisons()"
+        [disabled]="isLoadingComparisons() || bulkActionInProgress()"
         showFirstLastButtons
         (page)="onComparisonPageChange($event)">
       </mat-paginator>

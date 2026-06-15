@@ -208,6 +208,12 @@ describe('AppAnalyticsService', () => {
             filterActive: true,
             resultCount: 12,
         });
+        service.logToolCompareSavedAction('delete', {
+            status: 'partial_success',
+            selectedCount: 3,
+            deletedCount: 2,
+            failedCount: 1,
+        });
 
         expect(logEvent).toHaveBeenCalledWith(expect.anything(), 'tool_compare_create', {
             status: 'success',
@@ -221,6 +227,13 @@ describe('AppAnalyticsService', () => {
             sort_direction: 'desc',
             filter_active: true,
             result_count: 12,
+        });
+        expect(logEvent).toHaveBeenCalledWith(expect.anything(), 'tool_compare_saved_action', {
+            action: 'delete',
+            status: 'partial_success',
+            selected_count: 3,
+            deleted_count: 2,
+            failed_count: 1,
         });
     });
 

@@ -38,7 +38,7 @@ export type ToolCompareSavedAction =
     | 'tags_edit'
     | 'tags_save'
     | 'delete';
-export type ToolCompareSavedActionStatus = 'applied' | 'cleared' | 'confirmed' | 'failure' | 'success';
+export type ToolCompareSavedActionStatus = 'applied' | 'cleared' | 'confirmed' | 'failure' | 'partial_success' | 'success';
 export type ToolCompareSavedSortColumn =
     | 'activityType'
     | 'altitude'
@@ -111,6 +111,9 @@ export interface ToolCompareSavedActionAnalytics {
     reportCount?: number;
     hadDescription?: boolean;
     tagCount?: number;
+    selectedCount?: number;
+    deletedCount?: number;
+    failedCount?: number;
 }
 
 export interface RouteUploadAnalytics {
@@ -328,6 +331,9 @@ export class AppAnalyticsService {
             report_count: params.reportCount,
             had_description: params.hadDescription,
             tag_count: params.tagCount,
+            selected_count: params.selectedCount,
+            deleted_count: params.deletedCount,
+            failed_count: params.failedCount,
         }));
     }
 
