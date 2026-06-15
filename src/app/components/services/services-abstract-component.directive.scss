@@ -32,6 +32,23 @@ mat-icon {
     line-height: 1.5;
 }
 
+.service-privacy-link {
+    display: inline-flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: -4px 0 16px;
+    color: var(--mat-sys-on-surface-variant);
+    font-size: 0.88rem;
+    line-height: 1.5;
+}
+
+.service-privacy-link mat-icon {
+    width: 18px;
+    height: 18px;
+    font-size: 18px;
+}
+
 .service-container {
     max-width: 760px;
     min-width: 0;

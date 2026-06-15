@@ -71,7 +71,8 @@
               <a
                 mat-stroked-button
                 class="section-link"
-                [routerLink]="link.target">
+                [routerLink]="link.target"
+                [fragment]="link.fragment ?? null">
                 <mat-icon>{{ link.icon }}</mat-icon>
                 <span>{{ link.label }}</span>
               </a>

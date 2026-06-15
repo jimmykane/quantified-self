@@ -1,5 +1,12 @@
 import { environment } from '../../environments/environment';
 import { AI_INSIGHTS_REQUEST_LIMITS, ROUTE_USAGE_LIMITS, USAGE_LIMITS } from '../../../shared/limits';
+import {
+  POLICIES_AI_AND_PROCESSORS_FRAGMENT,
+  POLICIES_CONNECTED_SERVICES_FRAGMENT,
+  POLICIES_COROS_DATA_FRAGMENT,
+  POLICIES_GARMIN_DATA_FRAGMENT,
+  POLICIES_SUUNTO_DATA_FRAGMENT,
+} from './policies.content';
 
 export type HelpSectionId =
   | 'getting-started'
@@ -23,6 +30,7 @@ export interface HelpSectionLink {
   icon: string;
   kind: 'route' | 'external';
   target: string;
+  fragment?: string;
 }
 
 export interface HelpSection {
@@ -501,6 +509,8 @@ Garmin, Suunto, and COROS connections are part of **Pro**.
 
 The public [Integrations hub](/integrations) links to focused [Garmin Integration](/integrations/garmin), [Suunto Integration](/integrations/suunto), and [COROS Integration](/integrations/coros) pages. They explain Garmin -> Suunto sync, COROS -> Suunto sync, manual catch-up, provider history imports, FIT activity uploads, GPX route uploads, and how those workflows connect to the private training dashboard.
 
+Provider-specific privacy details live on [Policies -> Connected Services](/policies#connected-services-data), with separate sections for [Garmin Data](/policies#garmin-data), [Suunto Data](/policies#suunto-data), [COROS Data](/policies#coros-data), and [AI & Third-Party Processing](/policies#ai-and-third-party-processing).
+
 The public [Training Data Sync Guides](/guides) hub links to the [Garmin to Suunto sync guide](/guides/sync-garmin-to-suunto), [COROS to Suunto sync guide](/guides/sync-coros-to-suunto), and [centralized workout data guide](/guides/centralize-garmin-suunto-coros-workout-data) for step-by-step setup.
 
 The public [Tools hub](/tools) links to the [File Comparison Tool](/tools/compare), which creates saved benchmark events directly from FIT, GPX, and TCX files.
@@ -530,6 +540,8 @@ While your Suunto account is connected, Quantified Self also imports new and upd
 
 Saved FIT and GPX routes can be sent to Suunto from **Routes** using a row action or the selected-row bulk toolbar. Quantified Self reparses each saved route from its original source file, generates a fresh GPX export, and uses the saved Quantified Self route name as the route name sent to Suunto. Routes imported from Suunto are not sent back to the same connected Suunto account, but they can still be sent to a different connected Suunto account when one exists. Bulk sends upload routes one at a time so partial failures can be reported without stopping successful routes.
 
+See [Policies -> Suunto Data](/policies#suunto-data) for the provider-specific privacy summary for Suunto imports, sleep sync, route imports, and route delivery.
+
 ## Garmin
 
 Garmin history import has two important limits:
@@ -542,6 +554,8 @@ Garmin can deliver imported activities gradually over hours or days.
 Garmin sleep history backfill is separate from activity history import. It requests sleep through Garmin Health API and records appear later as Garmin sends sleep notifications.
 
 If Garmin permissions are missing, reconnect the app and grant the required export, history, and health permissions in Garmin Connect.
+
+See [Policies -> Garmin Data](/policies#garmin-data) for the provider-specific privacy summary for Garmin imports, sleep history, and Garmin to Suunto sync.
 
 Garmin -> Suunto activity sync is route-based:
 
@@ -590,6 +604,8 @@ Manual catch-up can run even when the COROS -> Suunto auto-sync toggle is off, a
 
 When COROS and Suunto are connected, the dashboard may offer a one-time action prompt to enable COROS -> Suunto auto-sync. Dismissing the prompt hides it permanently; Manual catch-up remains available in Services.
 
+See [Policies -> COROS Data](/policies#coros-data) for the provider-specific privacy summary for COROS imports, sleep summaries, uploads, and COROS to Suunto sync.
+
 ## Queue behavior
 
 Suunto and COROS history imports are queued jobs. Large ranges can take hours or days to finish, depending on volume and queue load.`,
@@ -607,6 +623,11 @@ Suunto and COROS history imports are queued jobs. Large ranges can take hours or
       { label: 'Garmin Integration', icon: 'sync_alt', kind: 'route', target: '/integrations/garmin' },
       { label: 'Suunto Integration', icon: 'published_with_changes', kind: 'route', target: '/integrations/suunto' },
       { label: 'COROS Integration', icon: 'sync', kind: 'route', target: '/integrations/coros' },
+      { label: 'Connected Service Privacy', icon: 'policy', kind: 'route', target: '/policies', fragment: POLICIES_CONNECTED_SERVICES_FRAGMENT },
+      { label: 'Garmin Data Privacy', icon: 'policy', kind: 'route', target: '/policies', fragment: POLICIES_GARMIN_DATA_FRAGMENT },
+      { label: 'Suunto Data Privacy', icon: 'policy', kind: 'route', target: '/policies', fragment: POLICIES_SUUNTO_DATA_FRAGMENT },
+      { label: 'COROS Data Privacy', icon: 'policy', kind: 'route', target: '/policies', fragment: POLICIES_COROS_DATA_FRAGMENT },
+      { label: 'AI & Processors', icon: 'shield', kind: 'route', target: '/policies', fragment: POLICIES_AI_AND_PROCESSORS_FRAGMENT },
       { label: 'Services', icon: 'sync', kind: 'route', target: '/services' },
       { label: 'Subscription', icon: 'credit_card', kind: 'route', target: '/subscriptions' },
       { label: 'Email Support', icon: 'email', kind: 'external', target: SUPPORT_MAILTO },
@@ -623,6 +644,7 @@ Suunto and COROS history imports are queued jobs. Large ranges can take hours or
 - Share actions that auto-change visibility are disabled.
 - For AI Insights, we do **not** share your raw activity data with AI providers.
 - Only the minimum derived stats required to answer your prompt are sent.
+- The Policies page includes provider-specific sections for [Garmin Data](/policies#garmin-data), [Suunto Data](/policies#suunto-data), [COROS Data](/policies#coros-data), and [AI & Third-Party Processing](/policies#ai-and-third-party-processing).
 
 ## Settings you can change yourself
 
@@ -656,6 +678,10 @@ This action cannot be undone.
     links: [
       { label: 'Settings', icon: 'settings', kind: 'route', target: '/settings' },
       { label: 'Policies', icon: 'policy', kind: 'route', target: '/policies' },
+      { label: 'Garmin Data Privacy', icon: 'policy', kind: 'route', target: '/policies', fragment: POLICIES_GARMIN_DATA_FRAGMENT },
+      { label: 'Suunto Data Privacy', icon: 'policy', kind: 'route', target: '/policies', fragment: POLICIES_SUUNTO_DATA_FRAGMENT },
+      { label: 'COROS Data Privacy', icon: 'policy', kind: 'route', target: '/policies', fragment: POLICIES_COROS_DATA_FRAGMENT },
+      { label: 'AI & Processors', icon: 'shield', kind: 'route', target: '/policies', fragment: POLICIES_AI_AND_PROCESSORS_FRAGMENT },
       { label: 'Privacy Email', icon: 'shield', kind: 'external', target: PRIVACY_MAILTO },
     ],
   },
