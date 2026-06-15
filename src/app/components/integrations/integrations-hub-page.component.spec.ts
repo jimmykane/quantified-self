@@ -41,7 +41,8 @@ describe('IntegrationsHubPageComponent', () => {
     expect(text).toContain('Set up the sync route you need');
     expect(text).toContain('Garmin -> Suunto sync, COROS -> Suunto sync');
     expect(text).toContain('Private dashboard, history import, and Suunto sync');
-    expect(text).toContain('Sync destination, uploads, and Suunto history');
+    expect(text).toContain('Sync destination, route sync, and Suunto history');
+    expect(text).toContain('Import and send Suunto routes');
     expect(text).toContain('Recent history import and Suunto sync');
   });
 
