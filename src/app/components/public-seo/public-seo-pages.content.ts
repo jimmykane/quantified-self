@@ -448,15 +448,15 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     key: 'routeFiles',
     path: PUBLIC_FEATURE_PATHS.routeFiles,
     eyebrow: 'Route Files',
-    title: 'FIT and GPX Route Files',
-    description: `Save FIT course files and GPX route files in a private route library with original-file retention, route summaries, downloads, and free-plan storage for up to ${STARTER_ROUTE_LIMIT} saved routes.`,
-    h1: 'Save FIT course and GPX route files',
-    intro: `Upload route-only FIT course files or GPX route files, keep the original file attached, and review saved route summaries in a private dashboard. Free accounts include up to ${STARTER_ROUTE_LIMIT} saved routes.`,
-    chips: ['FIT course files', 'GPX route files', 'Saved routes', 'Original files', 'Free route uploads'],
+    title: 'FIT, GPX Route Files and Suunto Route Sync',
+    description: `Save FIT course files and GPX route files in a private route library, send saved routes to Suunto, import Suunto routes into Routes, and use free-plan storage for up to ${STARTER_ROUTE_LIMIT} saved routes.`,
+    h1: 'Save FIT and GPX route files, then sync routes with Suunto',
+    intro: `Upload route-only FIT course files or GPX route files, keep the original file attached, send saved routes to Suunto, and import new or existing Suunto routes into a private dashboard. Saved-route storage is free for up to ${STARTER_ROUTE_LIMIT} routes; Suunto route sync requires a connected Suunto account.`,
+    chips: ['FIT course files', 'GPX route files', 'Suunto route sync', 'Saved routes', 'Original files', 'Free route uploads'],
     actions: [
       routeAction('Start Free', '/login', 'flat', 'arrow_forward'),
+      routeAction('Suunto Integration', '/integrations/suunto', 'stroked', 'published_with_changes'),
       routeAction('Upload Help', '/help', 'stroked', undefined, 'uploads-and-imports'),
-      routeAction('Analyze Workout Files', '/features/fit-gpx-tcx-file-analyzer'),
     ],
     sections: [
       {
@@ -478,6 +478,28 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
             icon: 'inventory_2',
             title: 'Plan-aware limits',
             copy: `Starter includes up to ${STARTER_ROUTE_LIMIT} saved routes, Basic includes up to ${ROUTE_USAGE_LIMITS.basic} saved routes, and Pro supports unlimited saved routes.`,
+          },
+        ],
+      },
+      {
+        eyebrow: 'Suunto Sync',
+        title: 'Move routes between Quantified Self and Suunto',
+        copy: 'Use Routes as the private route library between planning files and Suunto devices, without turning planned courses into completed activities.',
+        items: [
+          {
+            icon: 'published_with_changes',
+            title: 'Send saved routes to Suunto',
+            copy: 'Send saved FIT and GPX route records to Suunto from the Routes table. Quantified Self reparses the original route file and uploads a fresh GPX route using the saved route name.',
+          },
+          {
+            icon: 'sync',
+            title: 'Import routes from Suunto',
+            copy: 'Connected Suunto accounts can import new and updated Suunto routes automatically, with manual route catch-up available when you need to queue the current Suunto route library.',
+          },
+          {
+            icon: 'account_tree',
+            title: 'Loop-safe route handling',
+            copy: 'Routes imported from Suunto are not sent back to the same connected Suunto account, while multi-account setups can still send a route to a different Suunto account.',
           },
         ],
       },
@@ -514,6 +536,14 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
         answer: 'Yes. GPX route files can be uploaded to Routes, where Quantified Self stores route summaries and keeps the original GPX file available for download.',
       },
       {
+        question: 'Can I send saved routes to Suunto?',
+        answer: 'Yes, when Suunto is connected. Saved FIT and GPX routes can be sent to Suunto from Routes. Quantified Self reparses the original file, generates a GPX route, and uploads it with the saved route name.',
+      },
+      {
+        question: 'Can Quantified Self import routes from Suunto?',
+        answer: 'Yes, when Suunto is connected. Connected Suunto accounts can import new and updated Suunto routes automatically. Services also includes manual route catch-up for existing Suunto routes.',
+      },
+      {
         question: 'Are route files counted separately from activities?',
         answer: `Yes. Saved route limits are separate from activity limits. Free accounts include up to ${STARTER_ROUTE_LIMIT} saved routes, Basic includes up to ${ROUTE_USAGE_LIMITS.basic}, and Pro includes unlimited saved routes.`,
       },
@@ -522,10 +552,11 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
         answer: 'No. Quantified Self stores uploaded route files privately in your account. It is not a public route sharing site or route editor.',
       },
     ],
-    closingTitle: 'Save the route file without mixing it into workout history',
-    closingCopy: 'Use Routes when you have a planned course, GPX route, or device route file that should stay attached to its original source file.',
+    closingTitle: 'Save the route file, then send it where it needs to go',
+    closingCopy: 'Use Routes when you have a planned course, GPX route, Suunto route, or device route file that should stay attached to its original source file without mixing into workout history.',
     closingActions: [
       routeAction('Start Free', '/login', 'flat', 'arrow_forward'),
+      routeAction('Suunto Integration', '/integrations/suunto', 'stroked', 'published_with_changes'),
       routeAction('Upload Help', '/help', 'stroked', undefined, 'uploads-and-imports'),
     ],
   },

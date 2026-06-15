@@ -164,9 +164,11 @@ describe('Firebase Hosting configuration', () => {
     }
   });
 
-  it('keeps client-rendered saved comparison routes out of sitemap and disallowed by robots', () => {
+  it('keeps private client-rendered routes out of sitemap and disallowed by robots', () => {
     expect(sitemapXml).not.toContain('<loc>https://quantified-self.io/tools/compare/saved</loc>');
+    expect(sitemapXml).not.toContain('<loc>https://quantified-self.io/routes</loc>');
     expect(robotsTxt).toContain('Disallow: /tools/compare/saved');
+    expect(robotsTxt).toContain('Disallow: /routes');
   });
 
   it('copies the static Firebase 404 page into the hosting output', () => {

@@ -21,6 +21,7 @@ Disallow: /user
 Disallow: /user/
 Disallow: /settings
 Disallow: /dashboard
+Disallow: /routes
 Disallow: /tools/compare/saved
 Disallow: /admin
 Disallow: /mytracks

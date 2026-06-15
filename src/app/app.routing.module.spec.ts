@@ -58,6 +58,14 @@ describe('AppRoutingModule routes', () => {
     expect(myTracksRoute?.canMatch).toEqual([authGuard, onboardingGuard]);
   });
 
+  it('should keep the private routes library authenticated and noindexed', () => {
+    const routesRoute = routes.find(route => route.path === 'routes');
+
+    expect(routesRoute).toBeTruthy();
+    expect(routesRoute?.canMatch).toEqual([authGuard, onboardingGuard]);
+    expect(routesRoute?.data?.['robots']).toBe('noindex, follow');
+  });
+
   it('should protect ai insights behind auth, onboarding, and pro access', () => {
     const aiInsightsRoute = routes.find(route => route.path === 'ai-insights');
 
@@ -205,8 +213,8 @@ describe('AppRoutingModule routes', () => {
       },
       {
         path: PUBLIC_FEATURE_PATHS.routeFiles,
-        title: 'FIT and GPX Route Files',
-        h1: 'Save FIT course and GPX route files',
+        title: 'FIT, GPX Route Files and Suunto Route Sync',
+        h1: 'Save FIT and GPX route files, then sync routes with Suunto',
         descriptionText: 'Save FIT course files and GPX route files',
       },
       {
