@@ -1318,7 +1318,7 @@ describe('RoutesPageComponent', () => {
 
         expect(routes[0].canSendToGarmin).toBe(false);
         expect(routes[0].garminSendDisabledReason).toBe('Reconnect the Garmin account previously used for this route before sending it again.');
-        expect(component.getGarminSendMenuLabel(routes[0].garminSendDisabledReason)).toBe('Garmin (reconnect original account)');
+        expect(routes[0].garminSendMenuLabel).toBe('Garmin (reconnect original account)');
     });
 
     it('shows reconnect guidance when a row send returns an auth-required response', async () => {

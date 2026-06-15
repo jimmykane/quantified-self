@@ -39,6 +39,7 @@ import { normalizeRouteName } from '../../../helpers/route-name.helper';
 import {
   canSendRouteToConnectedGarminAccount,
   canSendRouteToConnectedSuuntoAccounts,
+  getGarminRouteSendMenuLabel,
   getGarminRouteSendDisabledReason,
   getRouteServiceDisplayName,
   getRouteSourceSummaryLabel,
@@ -203,20 +204,7 @@ export class RouteDetailComponent {
     return getGarminRouteSendDisabledReason(routeDocument, this.garminRouteSendContext());
   });
   readonly garminRouteSendMenuLabel = computed(() => {
-    const disabledReason = this.garminRouteSendDisabledReason();
-    if (!disabledReason) {
-      return 'Garmin';
-    }
-    if (/course import/i.test(disabledReason)) {
-      return 'Garmin (Course Import required)';
-    }
-    if (/checking garmin permissions/i.test(disabledReason)) {
-      return 'Garmin (checking permissions)';
-    }
-    if (/previously used for this route/i.test(disabledReason)) {
-      return 'Garmin (reconnect original account)';
-    }
-    return 'Garmin';
+    return getGarminRouteSendMenuLabel(this.garminRouteSendDisabledReason());
   });
   readonly hasSendableRouteDestination = computed(() => (
     this.canSendRouteToSuunto() || this.canSendRouteToGarmin() || !!this.garminRouteSendDisabledReason()

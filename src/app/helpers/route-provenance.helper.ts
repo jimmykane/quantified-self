@@ -174,6 +174,23 @@ export function getGarminRouteSendDisabledReason(
     return null;
 }
 
+export function getGarminRouteSendMenuLabel(disabledReason: string | null): string {
+    if (!disabledReason) {
+        return 'Garmin';
+    }
+    if (/course import/i.test(disabledReason)) {
+        return 'Garmin (Course Import required)';
+    }
+    if (/checking garmin permissions/i.test(disabledReason)) {
+        return 'Garmin (checking permissions)';
+    }
+    if (/previously used for this route/i.test(disabledReason)) {
+        return 'Garmin (reconnect original account)';
+    }
+
+    return 'Garmin';
+}
+
 export function canSendRouteToConnectedGarminAccount(
     route: FirestoreRouteJSON | null | undefined,
     context: GarminRouteSendContext,

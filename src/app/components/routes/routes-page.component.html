@@ -444,7 +444,7 @@
               [disabled]="bulkActionInProgress() || sendingToServiceRouteID() !== null || !canSendRoutesToGarmin() || !item.canSendToGarmin"
               (click)="sendRouteToGarmin(item.route)">
               <mat-icon>cloud_upload</mat-icon>
-              <span>{{ getGarminSendMenuLabel(item.garminSendDisabledReason) }}</span>
+              <span>{{ item.garminSendMenuLabel }}</span>
             </button>
             }
           </mat-menu>

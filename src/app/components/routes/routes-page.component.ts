@@ -33,6 +33,7 @@ import {
 import {
     canSendRouteToConnectedGarminAccount,
     canSendRouteToConnectedSuuntoAccounts,
+    getGarminRouteSendMenuLabel,
     getGarminRouteSendDisabledReason,
     getRouteServiceDisplayName,
     getRouteSourceSummary,
@@ -103,6 +104,7 @@ interface RoutePageRouteViewModel {
     canSendToSuunto: boolean;
     canSendToGarmin: boolean;
     garminSendDisabledReason: string | null;
+    garminSendMenuLabel: string;
     canDelete: boolean;
     filterText: string;
 }
@@ -1441,22 +1443,6 @@ export class RoutesPageComponent implements OnInit {
         return getGarminRouteSendDisabledReason(route, this.garminRouteSendContext());
     }
 
-    getGarminSendMenuLabel(disabledReason: string | null): string {
-        if (!disabledReason) {
-            return 'Garmin';
-        }
-        if (/course import/i.test(disabledReason)) {
-            return 'Garmin (Course Import required)';
-        }
-        if (/checking garmin permissions/i.test(disabledReason)) {
-            return 'Garmin (checking permissions)';
-        }
-        if (/previously used for this route/i.test(disabledReason)) {
-            return 'Garmin (reconnect original account)';
-        }
-        return 'Garmin';
-    }
-
     private canSendRoutesToDestination(destinationServiceName: ServiceNames): boolean {
         switch (destinationServiceName) {
             case ServiceNames.SuuntoApp:
@@ -1616,6 +1602,7 @@ export class RoutesPageComponent implements OnInit {
         const provenanceItems = this.buildRouteProvenanceItems(route);
         const provenanceSummary = provenanceItems.map(item => item.label).join(' · ');
         const garminSendDisabledReason = this.getGarminSendDisabledReason(route);
+        const garminSendMenuLabel = getGarminRouteSendMenuLabel(garminSendDisabledReason);
         return {
             route,
             name: routeName,
@@ -1648,6 +1635,7 @@ export class RoutesPageComponent implements OnInit {
             canSendToSuunto: this.canSendRouteToSuunto(route),
             canSendToGarmin: this.canSendRouteToGarmin(route),
             garminSendDisabledReason,
+            garminSendMenuLabel,
             canDelete: this.canManageRoute(route),
             filterText: [
                 routeName,
