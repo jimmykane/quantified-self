@@ -3,6 +3,19 @@
   has been defined by its products.
 </p>
 
+<ng-template #garminPermissionUpdateGuidance>
+  <p><strong>To update permissions:</strong></p>
+  <a class="tool-link" (click)="openGarminConnectApp(); $event.preventDefault()" href="javascript:void(0)">
+    Open Garmin Connect
+  </a>
+  <p><strong>Navigate to:</strong></p>
+  <ul class="permissions-list">
+    <li><strong>Web:</strong> Account Information -> Connected Apps</li>
+    <li><strong>App:</strong> More -> Settings -> Connected Apps</li>
+  </ul>
+  <p class="permission-description">After updating permissions, reconnect to refresh.</p>
+</ng-template>
+
 <div class="service-container">
   <app-service-connection-status
     serviceLabel="Garmin"
@@ -68,16 +81,7 @@
             <div class="permission-description">{{ getPermissionExplanation(permission) }}</div>
           </li>
         </ul>
-        <p><strong>To update permissions:</strong></p>
-        <a class="tool-link" (click)="openGarminConnectApp(); $event.preventDefault()" href="javascript:void(0)">
-          Open Garmin Connect
-        </a>
-        <p><strong>Navigate to:</strong></p>
-        <ul class="permissions-list">
-          <li><strong>Web:</strong> Account Information -> Connected Apps</li>
-          <li><strong>App:</strong> More -> Settings -> Connected Apps</li>
-        </ul>
-        <p class="permission-description">After updating permissions, reconnect to refresh.</p>
+        <ng-container [ngTemplateOutlet]="garminPermissionUpdateGuidance"></ng-container>
       </div>
     </div>
     }
@@ -265,7 +269,12 @@
   @if (hasProAccess && (isConnectedToService() || isReconnectRequired)) {
   <mat-divider class="connection-tools-divider"></mat-divider>
   <app-status-info [type]="routeSendStatusType" [title]="routeSendStatusTitle">
-    {{ routeSendStatusMessage }}
+    <div>{{ routeSendStatusMessage }}</div>
+    @if (routeSendMissingPermissions.length > 0) {
+    <div class="route-send-permission-guidance">
+      <ng-container [ngTemplateOutlet]="garminPermissionUpdateGuidance"></ng-container>
+    </div>
+    }
   </app-status-info>
   }
 </div>

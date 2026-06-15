@@ -347,6 +347,25 @@ describe('ServicesGarminComponent', () => {
             expect(component.routeSendMissingPermissions).toEqual(['COURSE_IMPORT']);
             expect(component.routeSendStatusTitle).toBe('Garmin route delivery needs permission');
             expect(component.routeSendStatusMessage).toContain('COURSE_IMPORT');
+            expect(component.routeSendStatusMessage).toContain('Garmin Connect');
+        });
+
+        it('renders Garmin Connect permission guidance for saved-route delivery when COURSE_IMPORT is missing', () => {
+            component.hasProAccess = true;
+            component.isLoading = false;
+            component.serviceTokens = [{
+                accessToken: 'token',
+                userID: 'garmin-user',
+                permissions: ['HISTORICAL_DATA_EXPORT', 'ACTIVITY_EXPORT', 'HEALTH_EXPORT'],
+                dateCreated: new Date('2026-05-03T10:00:00.000Z'),
+            }] as any;
+
+            fixture.detectChanges();
+
+            const content = fixture.nativeElement.textContent;
+            expect(content).toContain('Open Garmin Connect');
+            expect(content).toContain('Connected Apps');
+            expect(content).toContain('After updating permissions, reconnect to refresh.');
         });
     });
 

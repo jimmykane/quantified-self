@@ -543,7 +543,7 @@ Garmin sleep history backfill is separate from activity history import. It reque
 
 If Garmin permissions are missing, reconnect the app and grant the required export, history, and health permissions in Garmin Connect.
 
-Saved FIT and GPX routes can also be sent to Garmin Connect from **Routes**. This is a user-initiated route delivery workflow, not a Garmin route import or catch-up feature. Garmin route delivery requires a connected Garmin account with **COURSE_IMPORT** permission. Quantified Self reparses the original saved route file, sends the saved Quantified Self route name, and updates the same Garmin course on resend for the same Garmin account instead of creating duplicates.
+Saved FIT and GPX routes can also be sent to Garmin Connect from **Routes**. This is a user-initiated route delivery workflow, not a Garmin route import or catch-up feature. Garmin route delivery requires a connected Garmin account with **COURSE_IMPORT** permission. If that permission is missing, open Garmin Connect, go to **Connected Apps**, update the Quantified Self permissions, and reconnect Garmin in **Services**. Quantified Self reparses the original saved route file, sends the saved Quantified Self route name, and updates the same Garmin course on resend for the same Garmin account instead of creating duplicates.
 
 Garmin -> Suunto activity sync is route-based:
 

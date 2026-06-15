@@ -201,7 +201,7 @@ export class ServicesGarminComponent extends ServicesAbstractComponentDirective 
       return 'Checking Garmin permissions for saved route delivery.';
     }
     if (this.routeSendMissingPermissions.length > 0) {
-      return 'Grant Garmin COURSE_IMPORT permission and reconnect before sending saved routes to Garmin Connect.';
+      return 'Grant Garmin COURSE_IMPORT permission in Garmin Connect, then reconnect before sending saved routes to Garmin Connect.';
     }
     return 'Saved FIT and GPX routes can be sent from Routes to Garmin Connect, and later sends update the same Garmin course for the same saved route.';
   }
