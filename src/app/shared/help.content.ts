@@ -1,5 +1,5 @@
 import { environment } from '../../environments/environment';
-import { AI_INSIGHTS_REQUEST_LIMITS } from '../../../shared/limits';
+import { AI_INSIGHTS_REQUEST_LIMITS, ROUTE_USAGE_LIMITS, USAGE_LIMITS } from '../../../shared/limits';
 
 export type HelpSectionId =
   | 'getting-started'
@@ -215,10 +215,10 @@ export const HELP_SECTIONS: HelpSection[] = [
 - Benchmark comparison uses exactly two activities, supports role swap, and can auto-align time.
 - Benchmark reports can be rerun, shared, and saved as an image.
 - The [File Comparison Tool](/tools/compare) requires sign-in before file selection, then creates one saved benchmark event from multiple FIT, GPX, or TCX files and opens event details with the benchmark report flow.
-- Saved file comparisons are listed from [Tools -> Compare](/tools/compare/saved) in a sortable, filterable, paginated table with device, activity type, and review tag filters, distance, ascent, descent, visible benchmark pairs, GNSS/heart-rate/altitude benchmark error metrics colored by low/moderate/high error, clickable draft metric cells that open the benchmark flow, quick description notes, and custom reviewer tags for labeling firmware, sensor, route, or publication workflow groups.
+- Saved file comparisons are listed from [Tools -> Compare](/tools/compare/saved) in a sortable, filterable, paginated table with device, activity type, and review tag filters, selected-row bulk delete, distance, ascent, descent, visible benchmark pairs, GNSS/heart-rate/altitude benchmark error metrics colored by low/moderate/high error, clickable draft metric cells that open the benchmark flow, quick description notes, and custom reviewer tags for labeling firmware, sensor, route, or publication workflow groups.
 - Benchmark reports show an **At a Glance** reviewer summary with the key pair, overall agreement, GNSS, heart-rate, altitude, quality, and saved tags. The report share menu can copy that summary for review notes.
 - Reviewers can assign account-level device color preferences from saved file comparisons; colors are keyed by the base device name rather than firmware/software version and carry through activity toggles, event tables, benchmark dialogs, charts, and maps.
-- The public [Features hub](/features) links to [Workout Data Comparison](/features/workout-data-comparison), [Workout File Comparison](/features/workout-file-comparison), [Workout File Analyzer](/features/fit-gpx-tcx-file-analyzer), and [Sports Watch Benchmark](/features/sports-watch-benchmark) pages that explain how Garmin, Suunto, COROS, and uploaded FIT/TCX/GPX/JSON/SML activity files fit with benchmark reports, source files, maps, charts, overlays, and reviewer workflows for device tests, YouTube videos, and blog posts. Manual uploads, core analysis, and benchmark comparisons are available on the free plan for up to 100 activities; automatic provider sync and higher limits require a paid plan.
+- The public [Features hub](/features) links to [Workout Data Comparison](/features/workout-data-comparison), [Workout File Comparison](/features/workout-file-comparison), [Workout File Analyzer](/features/fit-gpx-tcx-file-analyzer), [FIT and GPX Route Files](/features/fit-gpx-route-files), and [Sports Watch Benchmark](/features/sports-watch-benchmark) pages that explain how Garmin, Suunto, COROS, uploaded FIT/TCX/GPX/JSON/SML activity files, and saved FIT/GPX route files fit with benchmark reports, source files, maps, charts, overlays, and reviewer workflows for device tests, YouTube videos, and blog posts. Manual uploads, core analysis, and benchmark comparisons are available on the free plan for up to ${USAGE_LIMITS.free} activities and ${ROUTE_USAGE_LIMITS.free} saved routes; automatic provider sync and higher limits require a paid plan.
 
 ### Event jump tables
 
@@ -360,14 +360,17 @@ export const HELP_SECTIONS: HelpSection[] = [
 
 ### Starter (Free)
 
-- Up to **100 activities**
+- Up to **${USAGE_LIMITS.free} activities**
+- Up to **${ROUTE_USAGE_LIMITS.free} saved routes**
 - Manual activity uploads (\`.fit\`, \`.gpx\`, \`.tcx\`, \`.json\`, \`.sml\`)
+- Manual route uploads (\`.fit\`, \`.gpx\`)
 - Core dashboard and event analysis tools
 
 ### Basic
 
 - Everything in Starter
-- Up to **1,000 activities**
+- Up to **${USAGE_LIMITS.basic.toLocaleString('en-US')} activities**
+- Up to **${ROUTE_USAGE_LIMITS.basic} saved routes**
 - **My Tracks (Beta)** access
 - Paid-only profile customization such as custom chart watermark text
 
@@ -375,6 +378,7 @@ export const HELP_SECTIONS: HelpSection[] = [
 
 - Everything in Basic
 - **Unlimited activities**
+- **Unlimited saved routes**
 - Garmin, Suunto, and COROS integration workflows
 - History import workflows (provider limits still apply)
 - Suunto FIT activity upload and GPX route upload tools
@@ -405,7 +409,7 @@ If you downgrade from a paid plan, the app keeps your access through the current
 After the grace period:
 
 - Pro-only sync connections can be disconnected.
-- Existing activities are retained. New uploads follow your current plan limit.
+- Existing activities and routes are retained. New uploads follow your current plan limits.
 
 ## When to contact support
 
@@ -437,7 +441,9 @@ The app accepts these file types for manual activity upload:
 - \`.json\`
 - \`.sml\`
 
-The public [Workout File Analyzer](/features/fit-gpx-tcx-file-analyzer) page explains how FIT, GPX, TCX, JSON, and SML uploads can be analyzed with maps, charts, statistics, exports, source-file context, and reprocessing. The public [Workout File Comparison](/features/workout-file-comparison) page explains how those files can be compared with provider activities and benchmark reports.
+The public [Workout File Analyzer](/features/fit-gpx-tcx-file-analyzer) page explains how FIT, GPX, TCX, JSON, and SML activity uploads can be analyzed with maps, charts, statistics, exports, source-file context, and reprocessing. The public [Workout File Comparison](/features/workout-file-comparison) page explains how those files can be compared with provider activities and benchmark reports. The public [FIT and GPX Route Files](/features/fit-gpx-route-files) page explains saved route-only FIT course and GPX route uploads, original-file retention, downloads, and route limits.
+
+Saved routes open from **Routes** with the details action. Route details parse the original FIT or GPX file in memory to show the route summary, all segments, map, elevation and grade charts, waypoints, and original-file download. The original uploaded route file remains the canonical source; parsed points and streams are not saved back to Firestore.
 
 ## Activity limits
 
@@ -445,10 +451,17 @@ The public [Workout File Analyzer](/features/fit-gpx-tcx-file-analyzer) page exp
 - **Starter** and **Basic** have activity caps.
 - **Pro** does not have an activity cap.
 
+## Route limits
+
+- Saved FIT and GPX route uploads count toward a separate route limit on limited plans.
+- **Starter** includes up to **${ROUTE_USAGE_LIMITS.free} saved routes**.
+- **Basic** includes up to **${ROUTE_USAGE_LIMITS.basic} saved routes**.
+- **Pro** does not have a saved-route cap.
+
 ## Common upload issues
 
 - Your session may have expired. Sign in again and retry.
-- You may have reached your current plan's activity limit.
+- You may have reached your current plan's activity or route limit.
 - The file may be invalid, unsupported, or unreadable by the importer.
 
 ## Export and backup options
@@ -468,6 +481,7 @@ From an activity action menu you can also:
       { label: 'Workout File Comparison', icon: 'upload_file', kind: 'route', target: '/features/workout-file-comparison' },
       { label: 'Compare Files Tool', icon: 'compare_arrows', kind: 'route', target: '/tools/compare' },
       { label: 'Workout File Analyzer', icon: 'analytics', kind: 'route', target: '/features/fit-gpx-tcx-file-analyzer' },
+      { label: 'FIT and GPX Route Files', icon: 'route', kind: 'route', target: '/features/fit-gpx-route-files' },
       { label: 'Sports Watch Benchmarks', icon: 'rate_review', kind: 'route', target: '/features/sports-watch-benchmark' },
       { label: 'Subscription', icon: 'credit_card', kind: 'route', target: '/subscriptions' },
       { label: 'Dashboard', icon: 'space_dashboard', kind: 'route', target: '/dashboard' },
@@ -491,7 +505,7 @@ The public [Training Data Sync Guides](/guides) hub links to the [Garmin to Suun
 
 The public [Tools hub](/tools) links to the [File Comparison Tool](/tools/compare), which creates saved benchmark events directly from FIT, GPX, and TCX files.
 
-The public [Features hub](/features) links to [Workout Data Comparison](/features/workout-data-comparison), [Workout File Comparison](/features/workout-file-comparison), [Workout File Analyzer](/features/fit-gpx-tcx-file-analyzer), and [Sports Watch Benchmark](/features/sports-watch-benchmark) pages that explain how centralized Garmin, Suunto, COROS, and uploaded FIT/TCX/GPX/JSON/SML activity files support benchmark reports, metric overlays, maps, charts, source-file workflows, and reviewer workflows for device tests, YouTube videos, and blog posts. Manual uploads, core analysis, and benchmark comparisons are available on the free plan for up to 100 activities; automatic provider sync and higher limits require a paid plan.
+The public [Features hub](/features) links to [Workout Data Comparison](/features/workout-data-comparison), [Workout File Comparison](/features/workout-file-comparison), [Workout File Analyzer](/features/fit-gpx-tcx-file-analyzer), [FIT and GPX Route Files](/features/fit-gpx-route-files), and [Sports Watch Benchmark](/features/sports-watch-benchmark) pages that explain how centralized Garmin, Suunto, COROS, uploaded FIT/TCX/GPX/JSON/SML activity files, and saved route-only FIT/GPX files support benchmark reports, metric overlays, maps, charts, source-file workflows, and reviewer workflows for device tests, YouTube videos, and blog posts. Manual uploads, core analysis, and benchmark comparisons are available on the free plan for up to ${USAGE_LIMITS.free} activities and ${ROUTE_USAGE_LIMITS.free} saved routes; automatic provider sync and higher limits require a paid plan.
 
 ## Sleep data
 
@@ -505,10 +519,16 @@ Suunto tools currently include:
 - syncing recent sleep samples,
 - backfilling sleep history from Jan 1, 2016,
 - importing history,
+- automatically importing saved Suunto routes,
+- queueing a manual Suunto route catch-up,
 - uploading FIT activities to Suunto,
 - uploading GPX routes to Suunto.
 
 Suunto FIT activity uploads in Services show a per-file queue with upload status, duplicate detection, failure messages, and retry controls for failed files. Large upload batches are processed one file at a time with short pauses between provider upload calls.
+
+While your Suunto account is connected, Quantified Self also imports new and updated Suunto routes into **Routes** automatically. Services includes a **Route Sync** panel with manual catch-up, which queues every current Suunto route again for first-time imports or reconnect cases. The **Routes** page can also show a one-time prompt for the same first-time Suunto route catch-up.
+
+Saved FIT and GPX routes can be sent to Suunto from **Routes** using a row action or the selected-row bulk toolbar. Quantified Self reparses each saved route from its original source file, generates a fresh GPX export, and uses the saved Quantified Self route name as the route name sent to Suunto. Routes imported from Suunto are not sent back to the same connected Suunto account, but they can still be sent to a different connected Suunto account when one exists. Bulk sends upload routes one at a time so partial failures can be reported without stopping successful routes.
 
 ## Garmin
 
@@ -580,6 +600,7 @@ Suunto and COROS history imports are queued jobs. Large ranges can take hours or
       { label: 'Workout Data Comparison', icon: 'compare_arrows', kind: 'route', target: '/features/workout-data-comparison' },
       { label: 'Compare Files Tool', icon: 'compare_arrows', kind: 'route', target: '/tools/compare' },
       { label: 'Workout File Analyzer', icon: 'analytics', kind: 'route', target: '/features/fit-gpx-tcx-file-analyzer' },
+      { label: 'FIT and GPX Route Files', icon: 'route', kind: 'route', target: '/features/fit-gpx-route-files' },
       { label: 'Garmin to Suunto Guide', icon: 'sync_alt', kind: 'route', target: '/guides/sync-garmin-to-suunto' },
       { label: 'COROS to Suunto Guide', icon: 'published_with_changes', kind: 'route', target: '/guides/sync-coros-to-suunto' },
       { label: 'Centralize Workout Data', icon: 'hub', kind: 'route', target: '/guides/centralize-garmin-suunto-coros-workout-data' },

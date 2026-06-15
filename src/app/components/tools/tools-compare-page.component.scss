@@ -400,15 +400,81 @@ h2 {
 }
 
 .comparison-table-shell {
+  --comparison-table-min-width: 153rem;
+
   overflow-x: auto;
   border: 1px solid var(--mat-sys-outline-variant);
   border-radius: 8px;
   background: var(--mat-sys-surface-container-lowest);
 }
 
+.comparison-selection-toolbar {
+  display: flex;
+  align-items: center;
+  box-sizing: border-box;
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  gap: 0.75rem 1rem;
+  left: 0;
+  padding: 0.6rem 0.75rem;
+  position: sticky;
+  width: 100%;
+  z-index: 2;
+  border-bottom: 1px solid var(--mat-sys-outline-variant);
+  background: var(--mat-sys-surface-container);
+}
+
+.comparison-selection-summary,
+.comparison-selection-actions,
+.comparison-bulk-action-content {
+  display: inline-flex;
+  align-items: center;
+}
+
+.comparison-selection-summary {
+  gap: 0.45rem;
+  min-width: 0;
+  color: var(--mat-sys-primary);
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.comparison-selection-summary mat-icon {
+  width: 1.15rem;
+  height: 1.15rem;
+  font-size: 1.15rem;
+  line-height: 1.15rem;
+}
+
+.comparison-selection-actions {
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  gap: 0.25rem;
+}
+
+.comparison-bulk-action-button {
+  min-width: 0;
+}
+
+.comparison-bulk-action-content {
+  gap: 0.35rem;
+}
+
+.comparison-bulk-action-content mat-icon {
+  width: 1.1rem;
+  height: 1.1rem;
+  font-size: 1.1rem;
+  line-height: 1.1rem;
+}
+
+.comparison-bulk-action-content mat-progress-spinner {
+  display: inline-block;
+  flex: 0 0 auto;
+}
+
 .comparison-table {
   width: 100%;
-  min-width: 150rem;
+  min-width: var(--comparison-table-min-width);
 }
 
 .comparison-table th {
@@ -443,6 +509,13 @@ h2 {
 .comparison-header-label--actions {
   justify-content: flex-end;
   width: 100%;
+}
+
+.comparison-table .mat-column-select {
+  width: 3.25rem;
+  padding-right: 0.25rem;
+  padding-left: 0.5rem;
+  text-align: center;
 }
 
 .comparison-table .mat-column-description {
@@ -1044,6 +1117,19 @@ mat-paginator {
   .comparison-table-actions {
     flex-direction: column;
     align-items: stretch;
+    justify-content: flex-start;
+  }
+
+  .comparison-table-shell {
+    --comparison-table-min-width: 980px;
+  }
+
+  .comparison-selection-toolbar {
+    display: grid;
+    align-items: stretch;
+  }
+
+  .comparison-selection-actions {
     justify-content: flex-start;
   }
 }

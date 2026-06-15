@@ -24,7 +24,7 @@ import { environment } from '../../../environments/environment';
 import { MatDialog } from '@angular/material/dialog';
 import { ConfirmationDialogComponent } from '../confirmation-dialog/confirmation-dialog.component';
 import { POLICY_CONTENT } from '../../shared/policies.content';
-import { getAiInsightsRequestLimitForRole, getUsageLimitForRole } from '@shared/limits';
+import { getAiInsightsRequestLimitForRole, getRouteUsageLimitForRole, getUsageLimitForRole } from '@shared/limits';
 
 interface SubscriptionSummary {
     status: StripeSubscription['status'];
@@ -393,6 +393,18 @@ export class PricingComponent implements OnInit, OnDestroy {
         } catch (error) {
             this.logger.error(`Unsupported pricing role '${resolvedRole}' in pricing UI`, error);
             return 'Activity limits unavailable';
+        }
+    }
+
+    getRouteLimitLabel(role: string | null | undefined): string {
+        const resolvedRole = role ?? 'free';
+
+        try {
+            const limit = getRouteUsageLimitForRole(resolvedRole);
+            return limit === null ? 'Unlimited saved routes' : `Up to ${limit} saved routes`;
+        } catch (error) {
+            this.logger.error(`Unsupported pricing role '${resolvedRole}' in route pricing UI`, error);
+            return 'Route limits unavailable';
         }
     }
 

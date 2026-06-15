@@ -11,13 +11,17 @@ import { AppAnalyticsService } from '../../../services/app.analytics.service';
 import { AppProcessingService } from '../../../services/app.processing.service';
 import { of } from 'rxjs';
 import { environment } from '../../../../environments/environment';
-import { describe, it, expect, beforeEach, beforeAll, vi } from 'vitest';
+import { describe, it, expect, beforeEach, beforeAll, afterAll, vi } from 'vitest';
 import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { BrowserCompatibilityService } from '../../../services/browser.compatibility.service';
 import { AppFunctionsService } from '../../../services/app.functions.service';
 import { AppUserService } from '../../../services/app.user.service';
 
+vi.mock('app/firebase/auth', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('app/firebase/auth')>()),
+    getIdToken: vi.fn().mockResolvedValue('token'),
+}));
 
 class MockCompressionStream {
     readable: ReadableStream;
@@ -39,10 +43,28 @@ class MockCompressionStream {
     }
 }
 
+class MockFileReader {
+    result: string | ArrayBuffer | null = null;
+    onload: (() => void) | null = null;
+
+    readAsText(file: File): void {
+        const readText = typeof (file as File & { text?: () => Promise<string> }).text === 'function'
+            ? (file as File & { text: () => Promise<string> }).text()
+            : Promise.resolve('<gpx></gpx>');
+        readText.then((text) => {
+            this.result = text;
+            this.onload?.();
+        });
+    }
+}
+
 describe('UploadRoutesToServiceComponent', () => {
     let component: UploadRoutesToServiceComponent;
     let fixture: ComponentFixture<UploadRoutesToServiceComponent>;
     let httpMock: HttpTestingController;
+    let originalBlobStream: typeof Blob.prototype.stream;
+    let originalFileReader: typeof FileReader;
+    let originalCompressionStream: typeof CompressionStream | undefined;
 
     const mockSnackBar = { open: vi.fn() };
     const mockDialog = {};
@@ -56,6 +78,9 @@ describe('UploadRoutesToServiceComponent', () => {
     const mockFunctionsService = { call: vi.fn().mockResolvedValue({ data: { status: 'OK' } }) };
 
     beforeAll(() => {
+        originalBlobStream = Blob.prototype.stream;
+        originalFileReader = globalThis.FileReader;
+        originalCompressionStream = globalThis.CompressionStream;
         // Mock ReadableStream if missing
         if (typeof ReadableStream === 'undefined') {
             (global as any).ReadableStream = class MockReadableStream {
@@ -75,34 +100,36 @@ describe('UploadRoutesToServiceComponent', () => {
             };
         }
 
-        // Mock Blob.stream via prototype
-        if (!Blob.prototype.stream) {
-            Blob.prototype.stream = function () {
-                // Return a simple empty stream or one with dummy data
-                const stream = new (global as any).ReadableStream({
-                    start(controller: any) {
-                        controller.enqueue(new Uint8Array([1, 2, 3]));
-                        controller.close();
-                    }
-                });
-                // We need pipeThrough for the chain
-                stream.pipeThrough = (transform: any) => {
-                    return transform.readable; // Return the readable side of the transform stream (MockCompressionStream has readable)
-                };
-                return stream;
-            };
-        }
+        Blob.prototype.stream = function () {
+            const stream = new (global as any).ReadableStream({
+                start(controller: any) {
+                    controller.enqueue(new Uint8Array([1, 2, 3]));
+                    controller.close();
+                }
+            });
+            stream.pipeThrough = (transform: any) => transform.readable;
+            return stream;
+        };
 
-        // Mock global CompressionStream if missing (likely in test env)
-        if (typeof window !== 'undefined' && !(window as any).CompressionStream) {
-            (window as any).CompressionStream = MockCompressionStream;
-        }
-        if (typeof global !== 'undefined' && !(global as any).CompressionStream) {
-            (global as any).CompressionStream = MockCompressionStream;
+        globalThis.CompressionStream = MockCompressionStream as unknown as typeof CompressionStream;
+        globalThis.FileReader = MockFileReader as unknown as typeof FileReader;
+    });
+
+    afterAll(() => {
+        Blob.prototype.stream = originalBlobStream;
+        globalThis.FileReader = originalFileReader;
+        if (originalCompressionStream) {
+            globalThis.CompressionStream = originalCompressionStream;
+        } else {
+            delete (globalThis as unknown as { CompressionStream?: typeof CompressionStream }).CompressionStream;
         }
     });
 
     beforeEach(async () => {
+        vi.clearAllMocks();
+        mockCompatibility.checkCompressionSupport.mockReturnValue(true);
+        mockFunctionsService.call.mockResolvedValue({ data: { status: 'OK' } });
+
         await TestBed.configureTestingModule({
             declarations: [UploadRoutesToServiceComponent],
             imports: [HttpClientTestingModule, NoopAnimationsModule],
@@ -148,10 +175,7 @@ describe('UploadRoutesToServiceComponent', () => {
             jobId: '1'
         };
 
-        const promise = component.processAndUploadFile(file);
-
-        // Wait for async file reading and compression
-        await new Promise(resolve => setTimeout(resolve, 100));
+        await component.processAndUploadFile(file);
 
         expect(mockFunctionsService.call).toHaveBeenCalledWith(
             'importRouteToSuuntoApp',
@@ -162,8 +186,6 @@ describe('UploadRoutesToServiceComponent', () => {
         const callArgs = mockFunctionsService.call.mock.calls[0];
         const sentData = callArgs[1];
         expect(sentData.file.length).toBeGreaterThan(0);
-
-        await promise;
     });
 
     it('should reject non-gpx files', async () => {

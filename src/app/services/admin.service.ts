@@ -3,16 +3,26 @@ import { Firestore } from 'app/firebase/firestore';
 import { from, Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
 import { AppFunctionsService } from './app.functions.service';
+import type {
+    AdminQueueStatsSnapshot,
+    EventReparseFailurePreview,
+    GetQueueStatsRequest,
+    RouteReparseFailurePreview,
+} from '../../../shared/admin-queue-stats';
 
-export interface EventCountStats {
+export interface CountStats {
     total: number | null;
     cacheStatus?: 'fresh' | 'refreshed' | 'stale' | 'unavailable';
     computedAt?: string | null;
     expireAt?: string | null;
 }
 
+export type EventCountStats = CountStats;
+export type RouteCountStats = CountStats;
+
 export interface GetTotalUserCountOptions {
     refreshEventCount?: boolean;
+    refreshRouteCount?: boolean;
 }
 
 export interface AdminUser {
@@ -45,6 +55,7 @@ export interface AdminUser {
     hasSubscribedOnce?: boolean;
     aiCreditsConsumed?: number;
     eventStats?: EventCountStats;
+    routeStats?: RouteCountStats;
 }
 
 export interface ListUsersParams {
@@ -76,6 +87,7 @@ export interface UserCountStats {
     onboardingCompleted: number;
     providers: Record<string, number>;
     events: EventCountStats;
+    routes: RouteCountStats;
 }
 
 interface UserCountFunctionResponse {
@@ -92,6 +104,7 @@ interface UserCountFunctionResponse {
     onboardingCompleted?: number;
     providers: Record<string, number>;
     events?: Partial<EventCountStats>;
+    routes?: Partial<RouteCountStats>;
 }
 
 export interface SubscriptionHistoryTrendBucket {
@@ -140,160 +153,9 @@ export interface UserGrowthTrendResponse {
     };
 }
 
-export interface DLQStats {
-    total: number;
-    byContext: { context: string; count: number }[];
-    byProvider: { provider: string; count: number }[];
-}
-
-export interface ReparseCheckpointStats {
-    cursorEventPath: string | null;
-    lastScanAt: unknown;
-    lastPassStartedAt: unknown;
-    lastPassCompletedAt: unknown;
-    lastScanCount: number;
-    lastEnqueuedCount: number;
-    overrideUsersInProgress: number;
-}
-
-export interface ReparseJobsStats {
-    total: number;
-    pending: number;
-    processing: number;
-    completed: number;
-    failed: number;
-}
-
-export interface ReparseFailurePreview {
-    jobId: string;
-    uid: string;
-    eventId: string;
-    attemptCount: number;
-    lastError: string;
-    updatedAt: unknown;
-    targetSportsLibVersion: string;
-    processingTier?: string;
-    heavyReason?: string;
-    eventDurationMs?: number | null;
-}
-
-export interface ReparseStats {
-    queuePending: number;
-    targetSportsLibVersion: string;
-    jobs: ReparseJobsStats;
-    checkpoint: ReparseCheckpointStats;
-    recentFailures: ReparseFailurePreview[];
-}
-
-export interface DerivedMetricsCoordinatorStats {
-    idle: number;
-    queued: number;
-    processing: number;
-    staleQueued?: number;
-    staleProcessing?: number;
-    failed: number;
-    total: number;
-}
-
-export interface DerivedMetricsFailurePreview {
-    uid: string;
-    generation: number;
-    dirtyMetricKinds: string[];
-    lastError: string;
-    updatedAtMs: number;
-}
-
-export interface DerivedMetricsStats {
-    coordinators: DerivedMetricsCoordinatorStats;
-    recentFailures: DerivedMetricsFailurePreview[];
-}
-
-export interface QueueStats {
-    pending: number;
-    succeeded: number;
-    stuck: number;
-    cloudTasks?: {
-        pending: number;
-        queues?: {
-            workout?: {
-                queueId: string;
-                pending: number;
-            };
-            activitySync?: {
-                queueId: string;
-                pending: number;
-            };
-            sportsLibReparse?: {
-                queueId: string;
-                pending: number;
-            };
-            sportsLibReparseHeavy?: {
-                queueId: string;
-                pending: number;
-            };
-            derivedMetrics?: {
-                queueId: string;
-                pending: number;
-            };
-            sleepSync?: {
-                queueId: string;
-                pending: number;
-            };
-        };
-    };
-    providers: {
-        name: string;
-        pending: number;
-        succeeded: number;
-        stuck: number;
-        dead: number;
-    }[];
-    dlq?: DLQStats;
-    reparse?: ReparseStats;
-    derivedMetrics?: DerivedMetricsStats;
-    advanced?: {
-        throughput: number;
-        maxLagMs: number;
-        retryHistogram: { '0-3': number; '4-7': number; '8-9': number };
-        topErrors: { error: string; count: number }[];
-    };
-    activitySync?: {
-        pending: number;
-        succeeded: number;
-        stuck: number;
-        dead: number;
-        dlqByContext: { context: string; count: number }[];
-        advanced: {
-            throughput: number;
-            maxLagMs: number;
-            retryHistogram: { '0-3': number; '4-7': number; '8-9': number };
-            topErrors: { error: string; count: number }[];
-        };
-    };
-    sleepSync?: {
-        pending: number;
-        succeeded: number;
-        providerDisabled: number;
-        stuck: number;
-        dead: number;
-        disabledProviders: string[];
-        providers: {
-            provider: string;
-            pending: number;
-            succeeded: number;
-            providerDisabled: number;
-            stuck: number;
-            dead: number;
-        }[];
-        dlqByContext: { context: string; count: number }[];
-        advanced: {
-            throughput: number;
-            maxLagMs: number;
-            retryHistogram: { '0-3': number; '4-7': number; '8-9': number };
-            topErrors: { error: string; count: number }[];
-        };
-    };
-}
+export type QueueStats = AdminQueueStatsSnapshot;
+export type ReparseFailurePreview = EventReparseFailurePreview;
+export type { RouteReparseFailurePreview };
 
 export interface FinancialStats {
     revenue: {
@@ -341,7 +203,7 @@ export class AdminService {
     }
 
     getQueueStats(includeAnalysis = true): Observable<QueueStats> {
-        return from(this.functionsService.call<{ includeAnalysis?: boolean }, QueueStats>('getQueueStats', { includeAnalysis })).pipe(
+        return from(this.functionsService.call<GetQueueStatsRequest, QueueStats>('getQueueStats', { includeAnalysis })).pipe(
             map(result => result.data)
         );
     }
@@ -356,30 +218,20 @@ export class AdminService {
     }
 
     getTotalUserCount(options: GetTotalUserCountOptions = {}): Observable<UserCountStats> {
-        const payload = options.refreshEventCount === true
-            ? { refreshEventCount: true }
-            : undefined;
+        const payload = {
+            ...(options.refreshEventCount === true ? { refreshEventCount: true } : {}),
+            ...(options.refreshRouteCount === true ? { refreshRouteCount: true } : {}),
+        };
+        const hasPayload = Object.keys(payload).length > 0;
 
-        const request = payload
-            ? this.functionsService.call<{ refreshEventCount?: boolean }, UserCountFunctionResponse>('getUserCount', payload)
+        const request = hasPayload
+            ? this.functionsService.call<GetTotalUserCountOptions, UserCountFunctionResponse>('getUserCount', payload)
             : this.functionsService.call<void, UserCountFunctionResponse>('getUserCount');
 
         return from(request).pipe(
             map(result => {
-                const events: EventCountStats = {
-                    total: typeof result.data.events?.total === 'number'
-                        ? result.data.events.total
-                        : null,
-                };
-                if (result.data.events?.cacheStatus) {
-                    events.cacheStatus = result.data.events.cacheStatus;
-                }
-                if (result.data.events && Object.prototype.hasOwnProperty.call(result.data.events, 'computedAt')) {
-                    events.computedAt = result.data.events.computedAt ?? null;
-                }
-                if (result.data.events && Object.prototype.hasOwnProperty.call(result.data.events, 'expireAt')) {
-                    events.expireAt = result.data.events.expireAt ?? null;
-                }
+                const events = this.mapCountStats(result.data.events);
+                const routes = this.mapCountStats(result.data.routes);
 
                 return {
                     total: result.data.total ?? result.data.count, // Fallback for safety
@@ -394,9 +246,28 @@ export class AdminService {
                     onboardingCompleted: result.data.onboardingCompleted ?? 0,
                     providers: result.data.providers || {},
                     events,
+                    routes,
                 };
             })
         );
+    }
+
+    private mapCountStats(stats: Partial<CountStats> | undefined): CountStats {
+        const mapped: CountStats = {
+            total: typeof stats?.total === 'number'
+                ? stats.total
+                : null,
+        };
+        if (stats?.cacheStatus) {
+            mapped.cacheStatus = stats.cacheStatus;
+        }
+        if (stats && Object.prototype.hasOwnProperty.call(stats, 'computedAt')) {
+            mapped.computedAt = stats.computedAt ?? null;
+        }
+        if (stats && Object.prototype.hasOwnProperty.call(stats, 'expireAt')) {
+            mapped.expireAt = stats.expireAt ?? null;
+        }
+        return mapped;
     }
 
     getSubscriptionHistoryTrend(months = 12): Observable<SubscriptionHistoryTrendResponse> {

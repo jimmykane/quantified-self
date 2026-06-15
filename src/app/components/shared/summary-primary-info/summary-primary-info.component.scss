@@ -10,8 +10,11 @@
 .summary-primary-info {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   padding: 24px;
   width: 100%;
+  max-width: 100%;
+  min-width: 0;
   box-sizing: border-box;
   gap: 20px;
   font-family: 'Inter', sans-serif;
@@ -22,8 +25,9 @@
   display: flex;
   align-items: center;
   gap: 20px;
+  max-width: 100%;
   min-width: 0;
-  flex: 0 1 auto;
+  flex: 1 1 240px;
 }
 
 .activity-icon-container {
@@ -88,13 +92,16 @@
   display: flex;
   flex-direction: column;
   gap: 4px;
+  max-width: 100%;
   min-width: 0;
 }
 
 .top-meta {
   display: flex;
   align-items: baseline;
+  flex-wrap: wrap;
   gap: 6px;
+  min-width: 0;
   color: var(--mat-sys-on-surface);
   font-size: 1.1rem;
   line-height: 1.2;
@@ -120,12 +127,17 @@
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
+  max-width: 100%;
+  min-width: 0;
 }
 
 .chip {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
   padding: 2px 10px;
   min-height: 22px;
   border-radius: 20px;
@@ -133,6 +145,8 @@
   font-weight: 500;
   letter-spacing: 0.02em;
   line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .activity-chip {
@@ -155,10 +169,21 @@
   flex: 0 0 auto;
 }
 
+app-hero-metrics {
+  flex: 1 1 360px;
+  min-width: 0;
+  max-width: 100%;
+}
+
 .summary-actions {
   display: flex;
   align-items: center;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   margin-left: auto;
+  max-width: 100%;
+  min-width: 0;
 }
 
 .summary-actions:empty {
@@ -175,6 +200,7 @@
 }
 
 .summary-primary-info--force-mobile .identity-section {
+  flex: 0 1 auto;
   gap: 12px;
   padding-right: 0px;
 }
@@ -226,6 +252,18 @@
   }
 }
 
+@include bp.max-1024 {
+  .summary-primary-info .metrics-divider {
+    display: none;
+  }
+
+  .summary-primary-info app-hero-metrics {
+    flex-basis: 100%;
+    justify-content: flex-start;
+    width: 100%;
+  }
+}
+
 @include bp.max-768 {
   .summary-primary-info {
     flex-direction: column;
@@ -236,6 +274,7 @@
   }
 
   .summary-primary-info .identity-section {
+    flex: 0 1 auto;
     gap: 12px;
     padding-right: 0px;
   }

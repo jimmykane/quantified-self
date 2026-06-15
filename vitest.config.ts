@@ -2,6 +2,8 @@ import { defineConfig } from 'vitest/config';
 import angular from '@analogjs/vite-plugin-angular';
 import { resolve } from 'path';
 
+const isCI = process.env.CI === 'true';
+
 export default defineConfig({
     plugins: [angular({
         tsconfig: './src/tsconfig.spec.json',
@@ -13,6 +15,11 @@ export default defineConfig({
         }
     },
     test: {
+        ...(isCI ? {
+            pool: 'forks' as const,
+            maxWorkers: 2,
+            minWorkers: 1,
+        } : {}),
         server: {
             deps: {
                 inline: ['firebase', '@sports-alliance/sports-lib']

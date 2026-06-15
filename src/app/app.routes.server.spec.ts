@@ -58,6 +58,7 @@ describe('serverRoutes', () => {
       'features/ai-insights',
       'features/workout-file-comparison',
       'features/fit-gpx-tcx-file-analyzer',
+      'features/fit-gpx-route-files',
       'features/sports-watch-benchmark',
     ]);
     expect(PRERENDERED_GUIDE_ROUTES).toEqual([
@@ -78,6 +79,7 @@ describe('serverRoutes', () => {
     expect(prerenderedPaths.has('dashboard')).toBe(false);
     expect(prerenderedPaths.has('settings')).toBe(false);
     expect(prerenderedPaths.has('mytracks')).toBe(false);
+    expect(prerenderedPaths.has('routes')).toBe(false);
     expect(prerenderedPaths.has('pricing')).toBe(false);
     expect(prerenderedPaths.has('help')).toBe(true);
     expect(prerenderedPaths.has('releases')).toBe(false);
@@ -90,6 +92,7 @@ describe('serverRoutes', () => {
     expect(prerenderedPaths.has('features/ai-insights')).toBe(true);
     expect(prerenderedPaths.has('features/workout-file-comparison')).toBe(true);
     expect(prerenderedPaths.has('features/fit-gpx-tcx-file-analyzer')).toBe(true);
+    expect(prerenderedPaths.has('features/fit-gpx-route-files')).toBe(true);
     expect(prerenderedPaths.has('features/sports-watch-benchmark')).toBe(true);
     expect(prerenderedPaths.has('guides')).toBe(true);
     expect(prerenderedPaths.has('guides/sync-garmin-to-suunto')).toBe(true);
@@ -114,7 +117,9 @@ describe('serverRoutes', () => {
     expect(clientRoutes.find(route => route.path === 'tools/compare/saved')?.status).toBeUndefined();
     expect(clientRoutes.find(route => route.path === 'settings')?.status).toBeUndefined();
     expect(clientRoutes.find(route => route.path === 'mytracks')?.status).toBeUndefined();
+    expect(clientRoutes.find(route => route.path === 'routes')?.status).toBeUndefined();
     expect(clientRoutes.find(route => route.path === 'user/:userID/event/:eventID')?.status).toBeUndefined();
+    expect(clientRoutes.find(route => route.path === 'user/:userID/route/:routeID')?.status).toBeUndefined();
   });
 
   it('keeps every top-level app route represented in the server render config', () => {

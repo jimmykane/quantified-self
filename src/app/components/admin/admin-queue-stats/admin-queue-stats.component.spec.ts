@@ -146,6 +146,7 @@ describe('AdminQueueStatsComponent', () => {
                     pending: 1,
                     queues: {
                         workout: { queueId: 'processWorkoutTask', pending: 1 },
+                        routeSync: { queueId: 'processRouteSyncTask', pending: 0 },
                         sportsLibReparse: { queueId: 'processSportsLibReparseTask', pending: 0 }
                     }
                 },
@@ -182,6 +183,7 @@ describe('AdminQueueStatsComponent', () => {
                     pending: 2,
                     queues: {
                         workout: { queueId: 'processWorkoutTask', pending: 2 },
+                        routeSync: { queueId: 'processRouteSyncTask', pending: 0 },
                         sportsLibReparse: { queueId: 'processSportsLibReparseTask', pending: 0 }
                     }
                 },
@@ -237,6 +239,46 @@ describe('AdminQueueStatsComponent', () => {
             expect(mockEchartsService.setOption).toHaveBeenCalled();
             const optionArg = mockEchartsService.setOption.mock.calls.at(-1)?.[1];
             expect(optionArg.series[0].data).toEqual([2, 1, 0]);
+        });
+
+        it('should use route sync retry histogram in route-sync view', async () => {
+            component.queueView = 'route-sync';
+            component.loading = false;
+            component.stats = {
+                pending: 0,
+                succeeded: 0,
+                stuck: 0,
+                providers: [],
+                cloudTasks: {
+                    pending: 2,
+                    queues: {
+                        routeSync: { queueId: 'processRouteSyncTask', pending: 2 }
+                    }
+                },
+                routeSync: {
+                    pending: 4,
+                    succeeded: 8,
+                    skipped: 3,
+                    stuck: 1,
+                    dead: 0,
+                    dlqByContext: [],
+                    advanced: {
+                        throughput: 6,
+                        maxLagMs: 20000,
+                        retryHistogram: { '0-3': 3, '4-7': 1, '8-9': 1 },
+                        topErrors: []
+                    }
+                }
+            };
+
+            component.ngOnChanges({ stats: new SimpleChange(null, component.stats, true) });
+            fixture.detectChanges();
+            await fixture.whenStable();
+            await new Promise(resolve => setTimeout(resolve, 0));
+
+            expect(mockEchartsService.setOption).toHaveBeenCalled();
+            const optionArg = mockEchartsService.setOption.mock.calls.at(-1)?.[1];
+            expect(optionArg.series[0].data).toEqual([3, 1, 1]);
         });
 
         it('should use sleep sync retry histogram in sleep-sync view', async () => {
@@ -309,7 +351,7 @@ describe('AdminQueueStatsComponent', () => {
     });
 
     describe('Cloud Tasks Queue Breakdown', () => {
-        it('should render workout, activity sync, sleep sync, normal reparse, heavy reparse, and derived queue pending values', () => {
+        it('should render workout, activity sync, sleep sync, event reparse, route reparse, and derived queue pending values', () => {
             component.loading = false;
             component.stats = {
                 pending: 1,
@@ -321,14 +363,16 @@ describe('AdminQueueStatsComponent', () => {
                     queues: {
                         workout: { queueId: 'processWorkoutTask', pending: 42 },
                         activitySync: { queueId: 'processActivitySyncTask', pending: 4 },
+                        routeSync: { queueId: 'processRouteSyncTask', pending: 7 },
                         sleepSync: { queueId: 'processSleepSyncTask', pending: 3 },
                         sportsLibReparse: { queueId: 'processSportsLibReparseTask', pending: 8 },
                         sportsLibReparseHeavy: { queueId: 'processSportsLibReparseHeavyTask', pending: 2 },
+                        sportsLibRouteReparse: { queueId: 'processSportsLibRouteReparseTask', pending: 5 },
                         derivedMetrics: { queueId: 'processDerivedMetricsTask', pending: 6 }
                     }
                 },
                 derivedMetrics: {
-                    coordinators: { idle: 2, queued: 1, processing: 1, failed: 1, total: 5 },
+                    coordinators: { idle: 2, queued: 1, processing: 1, staleQueued: 0, staleProcessing: 0, failed: 1, total: 5 },
                     recentFailures: []
                 },
             };
@@ -337,16 +381,20 @@ describe('AdminQueueStatsComponent', () => {
             const host: HTMLElement = fixture.nativeElement;
             expect(host.textContent).toContain('Cloud Tasks (Workout)');
             expect(host.textContent).toContain('Cloud Tasks (Activity Sync)');
+            expect(host.textContent).toContain('Cloud Tasks (Route Sync)');
             expect(host.textContent).toContain('Cloud Tasks (Sleep Sync)');
             expect(host.textContent).toContain('Cloud Tasks (Reparse Normal)');
             expect(host.textContent).toContain('Cloud Tasks (Reparse Heavy)');
+            expect(host.textContent).toContain('Cloud Tasks (Route Reparse)');
             expect(host.textContent).toContain('Cloud Tasks (Derived Metrics)');
             expect(host.textContent).not.toContain('Cloud Tasks (All Queues)');
             expect(host.textContent).toContain('42');
             expect(host.textContent).toContain('4');
+            expect(host.textContent).toContain('7');
             expect(host.textContent).toContain('3');
             expect(host.textContent).toContain('8');
             expect(host.textContent).toContain('2');
+            expect(host.textContent).toContain('5');
             expect(host.textContent).toContain('6');
         });
 
@@ -376,9 +424,11 @@ describe('AdminQueueStatsComponent', () => {
 
             expect(readCardValue('Cloud Tasks (Workout)')).toBe('0');
             expect(readCardValue('Cloud Tasks (Activity Sync)')).toBe('0');
+            expect(readCardValue('Cloud Tasks (Route Sync)')).toBe('0');
             expect(readCardValue('Cloud Tasks (Sleep Sync)')).toBe('0');
             expect(readCardValue('Cloud Tasks (Reparse Normal)')).toBe('0');
             expect(readCardValue('Cloud Tasks (Reparse Heavy)')).toBe('0');
+            expect(readCardValue('Cloud Tasks (Route Reparse)')).toBe('0');
             expect(readCardValue('Cloud Tasks (Derived Metrics)')).toBe('0');
         });
     });
@@ -413,7 +463,8 @@ describe('AdminQueueStatsComponent', () => {
             fixture.detectChanges();
             const host: HTMLElement = fixture.nativeElement;
             expect(host.textContent).not.toContain('Workout Ingestion');
-            expect(host.textContent).toContain('Sports-lib Reparse');
+            expect(host.textContent).toContain('Event Reparse');
+            expect(host.textContent).not.toContain('Route Reparse');
             expect(host.textContent).not.toContain('Sleep Sync');
             expect(host.textContent).not.toContain('Derived Metrics');
         });
@@ -439,7 +490,8 @@ describe('AdminQueueStatsComponent', () => {
             const host: HTMLElement = fixture.nativeElement;
             expect(host.textContent).toContain('Workout Ingestion');
             expect(host.textContent).not.toContain('Sleep Sync');
-            expect(host.textContent).not.toContain('Sports-lib Reparse');
+            expect(host.textContent).not.toContain('Event Reparse');
+            expect(host.textContent).not.toContain('Route Reparse');
             expect(host.textContent).not.toContain('Derived Metrics');
         });
 
@@ -458,7 +510,7 @@ describe('AdminQueueStatsComponent', () => {
                     }
                 },
                 derivedMetrics: {
-                    coordinators: { idle: 1, queued: 2, processing: 0, failed: 1, total: 4 },
+                    coordinators: { idle: 1, queued: 2, processing: 0, staleQueued: 0, staleProcessing: 0, failed: 1, total: 4 },
                     recentFailures: []
                 }
             };
@@ -468,7 +520,8 @@ describe('AdminQueueStatsComponent', () => {
             expect(host.textContent).toContain('Derived Metrics');
             expect(host.textContent).not.toContain('Workout Ingestion');
             expect(host.textContent).not.toContain('Sleep Sync');
-            expect(host.textContent).not.toContain('Sports-lib Reparse');
+            expect(host.textContent).not.toContain('Event Reparse');
+            expect(host.textContent).not.toContain('Route Reparse');
         });
 
         it('should show only activity sync section in activity-sync-only view', () => {
@@ -512,7 +565,53 @@ describe('AdminQueueStatsComponent', () => {
             expect(host.textContent).toContain('Retry Distribution (Pending Items)');
             expect(host.textContent).not.toContain('Workout Ingestion');
             expect(host.textContent).not.toContain('Sleep Sync');
-            expect(host.textContent).not.toContain('Sports-lib Reparse');
+            expect(host.textContent).not.toContain('Event Reparse');
+            expect(host.textContent).not.toContain('Route Reparse');
+            expect(host.textContent).not.toContain('Derived Metrics');
+        });
+
+        it('should show only route sync section in route-sync-only view', () => {
+            component.loading = false;
+            component.queueView = 'route-sync';
+            component.stats = {
+                pending: 1,
+                succeeded: 1,
+                stuck: 0,
+                providers: [],
+                cloudTasks: {
+                    pending: 2,
+                    queues: {
+                        routeSync: { queueId: 'processRouteSyncTask', pending: 2 }
+                    }
+                },
+                routeSync: {
+                    pending: 4,
+                    succeeded: 10,
+                    skipped: 3,
+                    stuck: 1,
+                    dead: 2,
+                    dlqByContext: [{ context: 'ROUTE_PARSE_FAILED', count: 2 }],
+                    advanced: {
+                        throughput: 8,
+                        maxLagMs: 18000,
+                        retryHistogram: { '0-3': 2, '4-7': 1, '8-9': 0 },
+                        topErrors: [{ error: 'Malformed GPX', count: 2 }]
+                    }
+                }
+            };
+
+            fixture.detectChanges();
+            const host: HTMLElement = fixture.nativeElement;
+            expect(host.textContent).toContain('Route Sync');
+            expect(host.textContent).toContain('Cloud Tasks (Route Sync)');
+            expect(host.textContent).toContain('Skipped (Routes)');
+            expect(host.textContent).toContain('Dead Letter Queue (Route Sync)');
+            expect(host.textContent).toContain('Recent Route Sync Failures');
+            expect(host.textContent).not.toContain('Workout Ingestion');
+            expect(host.textContent).not.toContain('Activity Sync');
+            expect(host.textContent).not.toContain('Sleep Sync');
+            expect(host.textContent).not.toContain('Event Reparse');
+            expect(host.textContent).not.toContain('Route Reparse');
             expect(host.textContent).not.toContain('Derived Metrics');
         });
 
@@ -561,7 +660,8 @@ describe('AdminQueueStatsComponent', () => {
             expect(host.textContent).toContain('Recent Sleep Sync Failures');
             expect(host.textContent).not.toContain('Workout Ingestion');
             expect(host.textContent).not.toContain('Activity Sync');
-            expect(host.textContent).not.toContain('Sports-lib Reparse');
+            expect(host.textContent).not.toContain('Event Reparse');
+            expect(host.textContent).not.toContain('Route Reparse');
             expect(host.textContent).not.toContain('Derived Metrics');
         });
     });
@@ -607,7 +707,7 @@ describe('AdminQueueStatsComponent', () => {
 
             fixture.detectChanges();
             const host: HTMLElement = fixture.nativeElement;
-            expect(host.textContent).toContain('Sports-lib Reparse');
+            expect(host.textContent).toContain('Event Reparse');
             expect(host.textContent).toContain('Cloud Tasks (Reparse Normal)');
             expect(host.textContent).toContain('Cloud Tasks (Reparse Heavy)');
             expect(host.textContent).toContain('Reparse Jobs (Pending)');
@@ -672,7 +772,7 @@ describe('AdminQueueStatsComponent', () => {
 
             fixture.detectChanges();
             const host: HTMLElement = fixture.nativeElement;
-            expect(host.textContent).toContain('Recent Reparse Failures');
+            expect(host.textContent).toContain('Recent Event Reparse Failures');
             expect(host.textContent).toContain('uid-1');
             expect(host.textContent).toContain('event-1');
             expect(host.textContent).toContain('Heavy');
@@ -734,6 +834,122 @@ describe('AdminQueueStatsComponent', () => {
 
             expect(mockAdminService.retrySportsLibReparseHeavyJob).toHaveBeenCalledWith('job1');
             expect(emitSpy).toHaveBeenCalled();
+        });
+    });
+
+    describe('Route Reparse Section', () => {
+        it('should render route reparse job and checkpoint cards in route-only view', () => {
+            component.loading = false;
+            component.queueView = 'route-reparse';
+            component.stats = {
+                pending: 1,
+                succeeded: 1,
+                stuck: 0,
+                providers: [],
+                cloudTasks: {
+                    pending: 4,
+                    queues: {
+                        sportsLibRouteReparse: { queueId: 'processSportsLibRouteReparseTask', pending: 4 }
+                    }
+                },
+                routeReparse: {
+                    queuePending: 4,
+                    targetSportsLibVersion: '16.0.2',
+                    jobs: {
+                        total: 12,
+                        pending: 5,
+                        processing: 2,
+                        completed: 4,
+                        skipped: 1,
+                        failed: 1
+                    },
+                    checkpoint: {
+                        cursorProcessingDocPath: 'users/u1/routes/r1/metaData/processing',
+                        cursorProcessingVersionCode: 16_000_001,
+                        lastScanAt: new Date('2026-02-20T15:00:00Z'),
+                        lastPassStartedAt: new Date('2026-02-20T14:45:00Z'),
+                        lastPassCompletedAt: new Date('2026-02-20T14:58:00Z'),
+                        lastScanCount: 320,
+                        lastEnqueuedCount: 160,
+                        overrideUsersInProgress: 2
+                    },
+                    recentFailures: []
+                }
+            };
+
+            fixture.detectChanges();
+            const host: HTMLElement = fixture.nativeElement;
+            expect(host.textContent).toContain('Route Reparse');
+            expect(host.textContent).toContain('Cloud Tasks (Route Reparse)');
+            expect(host.textContent).toContain('Route Jobs (Pending)');
+            expect(host.textContent).toContain('Route Jobs (Processing)');
+            expect(host.textContent).toContain('Route Jobs (Completed)');
+            expect(host.textContent).toContain('Route Jobs (Skipped)');
+            expect(host.textContent).toContain('Route Jobs (Failed)');
+            expect(host.textContent).toContain('16.0.2');
+            expect(host.textContent).toContain('320');
+            expect(host.textContent).toContain('160');
+            expect(host.textContent).not.toContain('Event Reparse');
+            expect(host.textContent).not.toContain('Workout Ingestion');
+            expect(host.textContent).not.toContain('Derived Metrics');
+        });
+
+        it('should render route reparse failures table rows when failures are present', () => {
+            component.loading = false;
+            component.queueView = 'route-reparse';
+            component.stats = {
+                pending: 1,
+                succeeded: 1,
+                stuck: 0,
+                providers: [],
+                cloudTasks: {
+                    pending: 1,
+                    queues: {
+                        sportsLibRouteReparse: { queueId: 'processSportsLibRouteReparseTask', pending: 1 }
+                    }
+                },
+                routeReparse: {
+                    queuePending: 1,
+                    targetSportsLibVersion: '16.0.2',
+                    jobs: {
+                        total: 1,
+                        pending: 0,
+                        processing: 0,
+                        completed: 0,
+                        skipped: 0,
+                        failed: 1
+                    },
+                    checkpoint: {
+                        cursorProcessingDocPath: null,
+                        cursorProcessingVersionCode: null,
+                        lastScanAt: null,
+                        lastPassStartedAt: null,
+                        lastPassCompletedAt: null,
+                        lastScanCount: 0,
+                        lastEnqueuedCount: 0,
+                        overrideUsersInProgress: 0
+                    },
+                    recentFailures: [
+                        {
+                            jobId: 'route-job-1',
+                            uid: 'uid-route',
+                            routeId: 'route-1',
+                            attemptCount: 3,
+                            lastError: 'Route parse failed',
+                            updatedAt: new Date('2026-02-20T14:30:00Z'),
+                            targetSportsLibVersion: '16.0.2'
+                        }
+                    ]
+                }
+            };
+
+            fixture.detectChanges();
+            const host: HTMLElement = fixture.nativeElement;
+            expect(host.textContent).toContain('Recent Route Reparse Failures');
+            expect(host.textContent).toContain('uid-route');
+            expect(host.textContent).toContain('route-1');
+            expect(host.textContent).toContain('3');
+            expect(host.textContent).toContain('Route parse failed');
         });
     });
 

@@ -18,7 +18,7 @@ import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { combineLatest, firstValueFrom, of, Subscription } from 'rxjs';
 import { EventImporterFIT } from '@sports-alliance/sports-lib';
 import { ActivatedRoute, ParamMap, Router } from '@angular/router';
-import { switchMap, take, tap } from 'rxjs/operators';
+import { distinctUntilChanged, switchMap, take, tap } from 'rxjs/operators';
 import { Auth2ServiceTokenInterface } from '@sports-alliance/sports-lib';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { Auth1ServiceTokenInterface } from '@sports-alliance/sports-lib';
@@ -31,6 +31,7 @@ import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { AppUserInterface, AppUserServiceMetaInterface } from '../../models/app-user.interface';
 import { ACTIVITY_SYNC_ROUTES, ActivitySyncRoute } from '@shared/activity-sync-routes';
 import { ConfirmationDialogComponent, ConfirmationDialogData } from '../confirmation-dialog/confirmation-dialog.component';
+import equal from 'fast-deep-equal';
 
 
 @Directive()
@@ -87,15 +88,20 @@ export abstract class ServicesAbstractComponentDirective implements OnInit, OnDe
       this.userService.getServiceToken(this.user, this.serviceName),
       this.userService
         .getUserMetaForService(this.user, this.serviceName),
-    ]).pipe(tap((results) => {
-      if (!results) {
-        this.serviceTokens = undefined;
-        this.serviceMeta = undefined;
-        return;
-      }
-      this.serviceTokens = results[0];
-      this.serviceMeta = results[1];
-    })).subscribe(async (results) => {
+    ]).pipe(
+      distinctUntilChanged((previous, current) => equal(previous, current)),
+      tap((results) => {
+        if (!results) {
+          this.serviceTokens = undefined;
+          this.serviceMeta = undefined;
+          this.onServiceDataChanged();
+          return;
+        }
+        this.serviceTokens = results[0];
+        this.serviceMeta = results[1];
+        this.onServiceDataChanged();
+      }),
+    ).subscribe(async (results) => {
       const serviceName = this.route.snapshot.queryParamMap.get('serviceName');
       const shouldConnect = this.route.snapshot.queryParamMap.get('connect');
       if (!serviceName || serviceName !== this.serviceName) {
@@ -143,6 +149,9 @@ export abstract class ServicesAbstractComponentDirective implements OnInit, OnDe
   }
 
   async ngOnInit() {
+  }
+
+  protected onServiceDataChanged(): void {
   }
 
   selectProviderTool(tool: string): void {
@@ -290,7 +299,7 @@ export abstract class ServicesAbstractComponentDirective implements OnInit, OnDe
     const dialogRef = this.dialog.open(ConfirmationDialogComponent, {
       data: {
         title: `Disconnect ${this.getPartnerDisplayName()}?`,
-        message: this.buildDisconnectImpactMessageHtml(impactedRoutes),
+        htmlMessage: this.buildDisconnectImpactMessageHtml(impactedRoutes),
         confirmLabel: 'Disconnect and disable sync',
         cancelLabel: 'Keep connected',
         confirmColor: 'warn',

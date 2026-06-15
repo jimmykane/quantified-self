@@ -3,7 +3,11 @@
 :host {
     display: flex;
     align-items: baseline;
+    flex-wrap: wrap;
     gap: 32px;
+    row-gap: 10px;
+    max-width: 100%;
+    min-width: 0;
     padding: 0;
     box-sizing: border-box;
     font-family: 'Inter', sans-serif;
@@ -13,17 +17,24 @@
     display: flex;
     flex-direction: column;
     align-items: center;
+    min-width: 58px;
+    max-width: 100%;
 }
 
 .metric-item .value {
     display: flex;
     align-items: baseline;
     gap: 1px;
+    max-width: 100%;
+    min-width: 0;
+    overflow: hidden;
     font-size: 1.8rem;
     font-weight: 300;
     color: var(--mat-sys-on-surface);
     line-height: 1.1;
     font-family: 'Barlow Condensed', sans-serif;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .metric-item .sub-value {
@@ -35,12 +46,16 @@
 }
 
 .metric-item .unit {
+    max-width: 100%;
+    overflow: hidden;
     font-size: 0.75rem;
     text-transform: uppercase;
     color: var(--mat-sys-on-surface-variant);
     opacity: 0.8;
     letter-spacing: 0.05em;
     line-height: 1.1;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 // ── Skeleton shimmer ────────────────────────────────────────────

@@ -115,6 +115,11 @@ export {
 } from './suunto/queue';
 
 export {
+  addSuuntoAppRoutesToQueue,
+  insertSuuntoAppRouteToQueue,
+} from './suunto/route-sync';
+
+export {
   parseSuuntoAppActivityQueue,
 } from './queue';
 
@@ -153,14 +158,18 @@ export { refreshGarminAPIRefreshTokens } from './garmin/tokens';
 // Suunto Utils
 export { importActivityToSuuntoApp } from './suunto/activities';
 export { importRouteToSuuntoApp } from './suunto/routes';
+export { sendRoutesToService } from './routes/send-routes-to-service';
 export { getSuuntoFITFile } from './suunto/get-suunto-fit-file';
 export { importActivityToCOROSAPI } from './coros/activities';
 
 // Events
 export { cleanupEventFile } from './events/cleanup';
 export { uploadActivity } from './events/upload-activity';
+export { cleanupRouteFiles } from './routes/cleanup';
+export { uploadRoute } from './routes/upload-route';
 export { createToolComparisonEvent } from './events/create-tool-comparison-event';
 export { reprocessEvent } from './events/reprocess-event';
+export { reprocessRoute } from './routes/reprocess-route';
 export { mergeEvents } from './events/merge-events';
 export { aiInsights, getAiInsightsQuotaStatus } from './ai/insights/callable';
 export { ensureDerivedMetrics } from './derived-metrics/ensure-derived-metrics';
@@ -171,6 +180,7 @@ export { onSubscriptionUpdated } from './stripe/subscriptions';
 export { enforceSubscriptionLimits } from './schedule/enforce-subscription-limits';
 export { checkSubscriptionNotifications } from './schedule/notifications';
 export { scheduleSportsLibReparseScan } from './schedule/sports-lib-reparse';
+export { scheduleSportsLibRouteReparseScan } from './schedule/sports-lib-route-reparse';
 export { cleanupUserAccounts } from './users/cleanup';
 export { deleteSelf } from './user/user';
 export { listUsers, getQueueStats, getUserCount, getSubscriptionHistoryTrend, getUserGrowthTrend, setMaintenanceMode, getMaintenanceStatus, impersonateUser, stopImpersonation, getFinancialStats } from './admin';
@@ -178,8 +188,10 @@ export { listUsers, getQueueStats, getUserCount, getSubscriptionHistoryTrend, ge
 // Tasks
 export { processWorkoutTask } from './tasks/workout-processor';
 export { processActivitySyncTask } from './tasks/activity-sync-worker';
+export { processRouteSyncTask } from './tasks/route-sync-worker';
 export { processSleepSyncTask } from './tasks/sleep-sync-worker';
 export { processSportsLibReparseTask } from './tasks/sports-lib-reparse-worker';
+export { processSportsLibRouteReparseTask } from './tasks/sports-lib-route-reparse-worker';
 export { processDerivedMetricsTask } from './tasks/derived-metrics-worker';
 export { processDerivedMetricsIngressTask } from './tasks/derived-metrics-ingress-worker';
 

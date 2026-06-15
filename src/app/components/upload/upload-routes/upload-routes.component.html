@@ -1,0 +1,45 @@
+<ng-container *ngIf="hasProAccess || (uploadCount !== null && uploadLimit !== null && uploadCount < uploadLimit)">
+  <button mat-flat-button (drop)="getFiles($event);" (click)="inputFile.click()"
+    ondragenter="event.stopPropagation(); event.preventDefault();"
+    ondragover="event.stopPropagation(); event.preventDefault();this.classList.add('drag');"
+    ondragleave="event.stopPropagation(); event.preventDefault();this.classList.remove('drag');"
+    [disabled]="disabled"
+    [class.upload-cta]="!promptAction"
+    [class.prompt-action]="promptAction"
+    [class.qs-mat-primary]="promptAction"
+    [class.icon-only]="isHandset" [matTooltip]="isHandset ? 'Upload Routes' : ''">
+    <mat-icon *ngIf="isHandset">route</mat-icon>
+    <ng-container *ngIf="!isHandset">
+      <span class="upload-button-content">
+        @if (showUploadIcon) {
+        <mat-icon>{{ uploadIcon }}</mat-icon>
+        }
+        <span *ngIf="hasProAccess">{{ uploadLabel || 'Upload Routes' }}</span>
+        <span *ngIf="!hasProAccess">
+          {{ uploadLabel || 'Upload Routes' }}
+          @if (!uploadLabel || showRemainingCountWithCustomLabel) {
+            ({{ (uploadLimit - uploadCount) > 0 ? (uploadLimit - uploadCount) : 0 }} remaining)
+          }
+        </span>
+      </span>
+    </ng-container>
+  </button>
+</ng-container>
+
+<a mat-flat-button routerLink="/subscriptions"
+  *ngIf="!hasProAccess && uploadCount !== null && uploadLimit !== null && uploadCount >= uploadLimit"
+  [disabled]="disabled"
+  [class.upload-cta]="!promptAction"
+  [class.prompt-action]="promptAction"
+  [class.qs-mat-primary]="promptAction"
+  [class.icon-only]="isHandset" [matTooltip]="isHandset ? 'Upgrade to Pro' : ''">
+  <mat-icon *ngIf="isHandset">upgrade</mat-icon>
+  <span *ngIf="!isHandset" class="upload-button-content">
+    @if (showUploadIcon) {
+    <mat-icon>upgrade</mat-icon>
+    }
+    <span>{{ upgradeLabel || 'Upgrade to Pro' }}</span>
+  </span>
+</a>
+<input #inputFile type="file" accept=".fit,.fit.gz,.gpx,.gpx.gz" multiple style="display: none;"
+  (change)="getFiles($event)" />

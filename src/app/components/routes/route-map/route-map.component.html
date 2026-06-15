@@ -1,0 +1,28 @@
+<div class="route-map-wrapper">
+  <app-event-section-header icon="map">
+    <app-map-layers-actions
+      [showArrows]="showArrows"
+      [is3D]="is3D"
+      [mapStyle]="mapStyle"
+      [user]="user"
+      [enableLapsToggle]="false"
+      [enableArrowsToggle]="true"
+      [enable3DToggle]="true"
+      analyticsEventName="route_map_layers"
+      (showArrowsChange)="onShowArrowsChange($event)"
+      (is3DChange)="onShow3DChange($event)"
+      (mapStyleChange)="onMapStyleChange($event)">
+    </app-map-layers-actions>
+  </app-event-section-header>
+
+  <app-loading-overlay
+    [isLoading]="isLoading || !apiLoaded()"
+    [hasError]="noMapData"
+    errorMessage="No route map data"
+    [showSkeleton]="true"
+    height="56vh">
+    <section class="route-map-stage">
+      <div #mapDiv class="route-map"></div>
+    </section>
+  </app-loading-overlay>
+</div>

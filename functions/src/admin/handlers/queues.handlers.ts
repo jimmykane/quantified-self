@@ -30,8 +30,10 @@ import {
     RetrySportsLibReparseHeavyJobRequest,
     RetrySportsLibReparseHeavyJobResponse,
     SportsLibReparseJobDocData,
+    SportsLibRouteReparseJobDocData,
 } from '../shared/types';
 import { ACTIVITY_SYNC_QUEUE_COLLECTION_NAME } from '../../activity-sync/constants';
+import { ROUTE_SYNC_QUEUE_COLLECTION_NAME } from '../../routes/route-sync.constants';
 import { SLEEP_SYNC_QUEUE_COLLECTION_NAME } from '../../sleep/constants';
 import { getDisabledSleepProviders } from '../../sleep/provider-flags';
 import { SLEEP_PROVIDERS, SleepProvider } from '../../../../shared/sleep';
@@ -40,12 +42,15 @@ import { getUserDeletionGuardState, getUserDeletionGuardStateInTransaction } fro
 
 const SPORTS_LIB_REPARSE_JOBS_COLLECTION = 'sportsLibReparseJobs';
 const SPORTS_LIB_REPARSE_CHECKPOINT_DOC_PATH = 'systemJobs/sportsLibReparse';
+const SPORTS_LIB_ROUTE_REPARSE_JOBS_COLLECTION = 'sportsLibRouteReparseJobs';
+const SPORTS_LIB_ROUTE_REPARSE_CHECKPOINT_DOC_PATH = 'systemJobs/sportsLibRouteReparse';
 const SPORTS_LIB_REPARSE_FAILURE_PREVIEW_LIMIT = 10;
 const DERIVED_METRICS_FAILURE_PREVIEW_LIMIT = 10;
 const DERIVED_METRICS_STALE_QUEUED_THRESHOLD_MS = 10 * 60 * 1000;
 const DERIVED_METRICS_STALE_PROCESSING_THRESHOLD_MS = 15 * 60 * 1000;
 const INGESTION_DLQ_PREVIEW_LIMIT = 50;
 const ACTIVITY_SYNC_DLQ_PREVIEW_LIMIT = 50;
+const ROUTE_SYNC_DLQ_PREVIEW_LIMIT = 50;
 const SLEEP_SYNC_DLQ_PREVIEW_LIMIT = 50;
 const SLEEP_PROVIDER_LABELS: Record<SleepProvider, string> = {
     [SLEEP_PROVIDERS.GarminAPI]: 'Garmin',
@@ -98,17 +103,21 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
         const {
             workoutQueue,
             activitySyncQueue,
+            routeSyncQueue,
             sleepSyncQueue,
             sportsLibReparseQueue,
             sportsLibReparseHeavyQueue,
+            sportsLibRouteReparseQueue,
             derivedMetricsQueue,
         } = config.cloudtasks;
         const [
             workoutCloudTaskDepth,
             activitySyncCloudTaskDepth,
+            routeSyncCloudTaskDepth,
             sleepSyncCloudTaskDepth,
             sportsLibReparseCloudTaskDepth,
             sportsLibReparseHeavyCloudTaskDepth,
+            sportsLibRouteReparseCloudTaskDepth,
             derivedMetricsCloudTaskDepth,
         ] = await Promise.all([
             getCloudTaskQueueDepthForQueue(workoutQueue).catch(e => {
@@ -117,6 +126,10 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
             }),
             getCloudTaskQueueDepthForQueue(activitySyncQueue).catch(e => {
                 logger.error(`Error getting Cloud Task depth for queue ${activitySyncQueue}:`, e);
+                return 0;
+            }),
+            getCloudTaskQueueDepthForQueue(routeSyncQueue).catch(e => {
+                logger.error(`Error getting Cloud Task depth for queue ${routeSyncQueue}:`, e);
                 return 0;
             }),
             getCloudTaskQueueDepthForQueue(sleepSyncQueue).catch(e => {
@@ -131,14 +144,19 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
                 logger.error(`Error getting Cloud Task depth for queue ${sportsLibReparseHeavyQueue}:`, e);
                 return 0;
             }),
+            getCloudTaskQueueDepthForQueue(sportsLibRouteReparseQueue).catch(e => {
+                logger.error(`Error getting Cloud Task depth for queue ${sportsLibRouteReparseQueue}:`, e);
+                return 0;
+            }),
             getCloudTaskQueueDepthForQueue(derivedMetricsQueue).catch(e => {
                 logger.error(`Error getting Cloud Task depth for queue ${derivedMetricsQueue}:`, e);
                 return 0;
             }),
         ]);
         const reparseCloudTaskDepth = sportsLibReparseCloudTaskDepth + sportsLibReparseHeavyCloudTaskDepth;
-        const totalCloudTaskDepth = workoutCloudTaskDepth + activitySyncCloudTaskDepth + sleepSyncCloudTaskDepth + reparseCloudTaskDepth + derivedMetricsCloudTaskDepth;
+        const totalCloudTaskDepth = workoutCloudTaskDepth + activitySyncCloudTaskDepth + routeSyncCloudTaskDepth + sleepSyncCloudTaskDepth + reparseCloudTaskDepth + sportsLibRouteReparseCloudTaskDepth + derivedMetricsCloudTaskDepth;
         const reparseJobsCollection = db.collection(SPORTS_LIB_REPARSE_JOBS_COLLECTION);
+        const routeReparseJobsCollection = db.collection(SPORTS_LIB_ROUTE_REPARSE_JOBS_COLLECTION);
 
         const [
             reparseTotalJobs,
@@ -146,6 +164,12 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
             reparseProcessingJobs,
             reparseCompletedJobs,
             reparseFailedJobs,
+            routeReparseTotalJobs,
+            routeReparsePendingJobs,
+            routeReparseProcessingJobs,
+            routeReparseCompletedJobs,
+            routeReparseSkippedJobs,
+            routeReparseFailedJobs,
         ] = await Promise.all([
             reparseJobsCollection.count().get().catch(e => {
                 logger.error(`[admin/getQueueStats] Failed to count total reparse jobs:`, e);
@@ -165,6 +189,30 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
             }),
             reparseJobsCollection.where('status', '==', 'failed').count().get().catch(e => {
                 logger.error(`[admin/getQueueStats] Failed to count failed reparse jobs:`, e);
+                return null;
+            }),
+            routeReparseJobsCollection.count().get().catch(e => {
+                logger.error(`[admin/getQueueStats] Failed to count total route reparse jobs:`, e);
+                return null;
+            }),
+            routeReparseJobsCollection.where('status', '==', 'pending').count().get().catch(e => {
+                logger.error(`[admin/getQueueStats] Failed to count pending route reparse jobs:`, e);
+                return null;
+            }),
+            routeReparseJobsCollection.where('status', '==', 'processing').count().get().catch(e => {
+                logger.error(`[admin/getQueueStats] Failed to count processing route reparse jobs:`, e);
+                return null;
+            }),
+            routeReparseJobsCollection.where('status', '==', 'completed').count().get().catch(e => {
+                logger.error(`[admin/getQueueStats] Failed to count completed route reparse jobs:`, e);
+                return null;
+            }),
+            routeReparseJobsCollection.where('status', '==', 'skipped').count().get().catch(e => {
+                logger.error(`[admin/getQueueStats] Failed to count skipped route reparse jobs:`, e);
+                return null;
+            }),
+            routeReparseJobsCollection.where('status', '==', 'failed').count().get().catch(e => {
+                logger.error(`[admin/getQueueStats] Failed to count failed route reparse jobs:`, e);
                 return null;
             }),
         ]);
@@ -261,6 +309,16 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
             ? (checkpointOverrideCursors as Record<string, string | null>)
             : {};
         const overrideUsersInProgress = Object.values(overrideCursorByUid).filter(cursor => !!cursor).length;
+        const routeCheckpointSnapshot = await admin.firestore().doc(SPORTS_LIB_ROUTE_REPARSE_CHECKPOINT_DOC_PATH).get().catch(e => {
+            logger.error('[admin/getQueueStats] Failed to read sports-lib route reparse checkpoint:', e);
+            return null;
+        });
+        const routeCheckpointData = routeCheckpointSnapshot?.data() as Record<string, unknown> | undefined;
+        const routeCheckpointOverrideCursors = routeCheckpointData?.overrideCursorByUid;
+        const routeOverrideCursorByUid = (routeCheckpointOverrideCursors && typeof routeCheckpointOverrideCursors === 'object')
+            ? (routeCheckpointOverrideCursors as Record<string, string | null>)
+            : {};
+        const routeOverrideUsersInProgress = Object.values(routeOverrideCursorByUid).filter(cursor => !!cursor).length;
 
         const recentReparseJobsSnapshot = await reparseJobsCollection
             .where('status', '==', 'failed')
@@ -296,6 +354,29 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
                 processingTier: `${entry.data.processingTier || ''}`,
                 heavyReason: `${entry.data.heavyReason || ''}`,
                 eventDurationMs: toFiniteNumberOrNull(entry.data.eventDurationMs),
+            }));
+        const recentRouteReparseJobsSnapshot = await routeReparseJobsCollection
+            .where('status', '==', 'failed')
+            .orderBy('updatedAt', 'desc')
+            .limit(SPORTS_LIB_REPARSE_FAILURE_PREVIEW_LIMIT)
+            .get()
+            .catch(e => {
+                logger.error('[admin/getQueueStats] Failed to load recent route reparse jobs:', e);
+                return null;
+            });
+        const recentRouteReparseFailures = (recentRouteReparseJobsSnapshot?.docs || [])
+            .map(doc => ({
+                data: doc.data() as SportsLibRouteReparseJobDocData,
+                jobId: doc.id,
+            }))
+            .map(entry => ({
+                jobId: entry.jobId,
+                uid: `${entry.data.uid || ''}`,
+                routeId: `${entry.data.routeId || ''}`,
+                attemptCount: toSafeNumber(entry.data.attemptCount),
+                lastError: `${entry.data.lastError || ''}`,
+                updatedAt: entry.data.updatedAt || null,
+                targetSportsLibVersion: `${entry.data.targetSportsLibVersion || ''}`,
             }));
 
         let totalPending = 0;
@@ -374,6 +455,80 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
             : null;
         if (activitySyncOldestPendingDate) {
             activitySyncMaxLagMs = Math.max(0, Date.now() - activitySyncOldestPendingDate);
+        }
+
+        const routeSyncCollection = db.collection(ROUTE_SYNC_QUEUE_COLLECTION_NAME);
+        const [
+            routeSyncPendingSnap,
+            routeSyncSucceededSnap,
+            routeSyncSkippedSnap,
+            routeSyncStuckSnap,
+            routeSyncRetry0to3Snap,
+            routeSyncRetry4to7Snap,
+            routeSyncRetry8to9Snap,
+            routeSyncThroughputSnap,
+            routeSyncOldestPendingSnap,
+            routeSyncDeadSnap,
+        ] = await Promise.all([
+            routeSyncCollection.where('processed', '==', false).where('retryCount', '<', 10).count().get().catch(e => {
+                logger.error('[admin/getQueueStats] Failed to count route sync pending jobs:', e);
+                return null;
+            }),
+            routeSyncCollection.where('resultStatus', '==', 'success').count().get().catch(e => {
+                logger.error('[admin/getQueueStats] Failed to count route sync succeeded jobs:', e);
+                return null;
+            }),
+            routeSyncCollection.where('resultStatus', '==', 'skipped').count().get().catch(e => {
+                logger.error('[admin/getQueueStats] Failed to count route sync skipped jobs:', e);
+                return null;
+            }),
+            routeSyncCollection.where('processed', '==', false).where('retryCount', '>=', 10).count().get().catch(e => {
+                logger.error('[admin/getQueueStats] Failed to count route sync stuck jobs:', e);
+                return null;
+            }),
+            routeSyncCollection.where('processed', '==', false).where('retryCount', '<', 4).count().get().catch(e => {
+                logger.error('[admin/getQueueStats] Failed to count route sync retry bucket 0-3:', e);
+                return null;
+            }),
+            routeSyncCollection.where('processed', '==', false).where('retryCount', '>=', 4).where('retryCount', '<', 8).count().get().catch(e => {
+                logger.error('[admin/getQueueStats] Failed to count route sync retry bucket 4-7:', e);
+                return null;
+            }),
+            routeSyncCollection.where('processed', '==', false).where('retryCount', '>=', 8).where('retryCount', '<', 10).count().get().catch(e => {
+                logger.error('[admin/getQueueStats] Failed to count route sync retry bucket 8-9:', e);
+                return null;
+            }),
+            routeSyncCollection.where('processedAt', '>', ONE_HOUR_AGO).count().get().catch(e => {
+                logger.error('[admin/getQueueStats] Failed to count route sync throughput:', e);
+                return null;
+            }),
+            routeSyncCollection.where('processed', '==', false).orderBy('dateCreated', 'asc').limit(1).get().catch(e => {
+                logger.error('[admin/getQueueStats] Failed to query oldest route sync pending job:', e);
+                return null;
+            }),
+            db.collection('failed_jobs').where('originalCollection', '==', ROUTE_SYNC_QUEUE_COLLECTION_NAME).count().get().catch(e => {
+                logger.error('[admin/getQueueStats] Failed to count route sync dead-letter jobs:', e);
+                return null;
+            }),
+        ]);
+
+        const routeSyncPending = routeSyncPendingSnap?.data().count || 0;
+        const routeSyncSucceeded = routeSyncSucceededSnap?.data().count || 0;
+        const routeSyncSkipped = routeSyncSkippedSnap?.data().count || 0;
+        const routeSyncStuck = routeSyncStuckSnap?.data().count || 0;
+        const routeSyncDead = routeSyncDeadSnap?.data().count || 0;
+        const routeSyncRetryHistogram = {
+            '0-3': routeSyncRetry0to3Snap?.data().count || 0,
+            '4-7': routeSyncRetry4to7Snap?.data().count || 0,
+            '8-9': routeSyncRetry8to9Snap?.data().count || 0,
+        };
+        const routeSyncThroughput = routeSyncThroughputSnap?.data().count || 0;
+        let routeSyncMaxLagMs = 0;
+        const routeSyncOldestPendingDate = routeSyncOldestPendingSnap?.empty === false
+            ? routeSyncOldestPendingSnap.docs[0]?.data()?.dateCreated
+            : null;
+        if (routeSyncOldestPendingDate) {
+            routeSyncMaxLagMs = Math.max(0, Date.now() - routeSyncOldestPendingDate);
         }
 
         const sleepSyncCollection = db.collection(SLEEP_SYNC_QUEUE_COLLECTION_NAME);
@@ -573,6 +728,8 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
         let topErrors: { error: string; count: number }[] = [];
         let activitySyncTopErrors: { error: string; count: number }[] = [];
         let activitySyncByContext: { context: string; count: number }[] = [];
+        let routeSyncTopErrors: { error: string; count: number }[] = [];
+        let routeSyncByContext: { context: string; count: number }[] = [];
         let sleepSyncTopErrors: { error: string; count: number }[] = [];
         let sleepSyncByContext: { context: string; count: number }[] = [];
 
@@ -658,6 +815,38 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
                 .slice(0, 5)
                 .map(([error, count]) => ({ error, count }));
 
+            const routeSyncDlqQuery = dlqCol.where('originalCollection', '==', ROUTE_SYNC_QUEUE_COLLECTION_NAME);
+            const routeSyncRecentDlqSnap = await routeSyncDlqQuery
+                .orderBy('failedAt', 'desc')
+                .limit(ROUTE_SYNC_DLQ_PREVIEW_LIMIT)
+                .get()
+                .catch(async (e) => {
+                    logger.error('[admin/getQueueStats] Failed to load ordered route sync DLQ preview:', e);
+                    return routeSyncDlqQuery
+                        .limit(ROUTE_SYNC_DLQ_PREVIEW_LIMIT)
+                        .get()
+                        .catch(fallbackError => {
+                            logger.error('[admin/getQueueStats] Failed to load fallback route sync DLQ preview:', fallbackError);
+                            return null;
+                        });
+                });
+            const routeSyncContextCounts: Record<string, number> = {};
+            const routeSyncErrorCounts: Record<string, number> = {};
+            for (const doc of (routeSyncRecentDlqSnap?.docs || [])) {
+                const data = doc.data();
+                const context = `${data.context || 'UNKNOWN'}`;
+                const errorMsg = normalizeError(data.error || 'Unknown Error');
+                routeSyncContextCounts[context] = (routeSyncContextCounts[context] || 0) + 1;
+                routeSyncErrorCounts[errorMsg] = (routeSyncErrorCounts[errorMsg] || 0) + 1;
+            }
+            routeSyncByContext = Object.entries(routeSyncContextCounts)
+                .map(([context, count]) => ({ context, count }))
+                .sort((a, b) => b.count - a.count);
+            routeSyncTopErrors = Object.entries(routeSyncErrorCounts)
+                .sort((a, b) => b[1] - a[1])
+                .slice(0, 5)
+                .map(([error, count]) => ({ error, count }));
+
             const sleepSyncDlqQuery = dlqCol.where('originalCollection', '==', SLEEP_SYNC_QUEUE_COLLECTION_NAME);
             const sleepSyncRecentDlqSnap = await sleepSyncDlqQuery
                 .orderBy('failedAt', 'desc')
@@ -706,6 +895,10 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
                         queueId: activitySyncQueue,
                         pending: activitySyncCloudTaskDepth,
                     },
+                    routeSync: {
+                        queueId: routeSyncQueue,
+                        pending: routeSyncCloudTaskDepth,
+                    },
                     sleepSync: {
                         queueId: sleepSyncQueue,
                         pending: sleepSyncCloudTaskDepth,
@@ -717,6 +910,10 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
                     sportsLibReparseHeavy: {
                         queueId: sportsLibReparseHeavyQueue,
                         pending: sportsLibReparseHeavyCloudTaskDepth,
+                    },
+                    sportsLibRouteReparse: {
+                        queueId: sportsLibRouteReparseQueue,
+                        pending: sportsLibRouteReparseCloudTaskDepth,
                     },
                     derivedMetrics: {
                         queueId: derivedMetricsQueue,
@@ -745,6 +942,29 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
                 },
                 recentFailures: recentReparseFailures,
             },
+            routeReparse: {
+                queuePending: sportsLibRouteReparseCloudTaskDepth,
+                targetSportsLibVersion: `${routeCheckpointData?.targetSportsLibVersion || SPORTS_LIB_REPARSE_TARGET_VERSION}`,
+                jobs: {
+                    total: routeReparseTotalJobs?.data().count || 0,
+                    pending: routeReparsePendingJobs?.data().count || 0,
+                    processing: routeReparseProcessingJobs?.data().count || 0,
+                    completed: routeReparseCompletedJobs?.data().count || 0,
+                    skipped: routeReparseSkippedJobs?.data().count || 0,
+                    failed: routeReparseFailedJobs?.data().count || 0,
+                },
+                checkpoint: {
+                    cursorProcessingDocPath: (routeCheckpointData?.cursorProcessingDocPath as string | null) || null,
+                    cursorProcessingVersionCode: toFiniteNumberOrNull(routeCheckpointData?.cursorProcessingVersionCode),
+                    lastScanAt: routeCheckpointData?.lastScanAt || null,
+                    lastPassStartedAt: routeCheckpointData?.lastPassStartedAt || null,
+                    lastPassCompletedAt: routeCheckpointData?.lastPassCompletedAt || null,
+                    lastScanCount: toSafeNumber(routeCheckpointData?.lastScanCount),
+                    lastEnqueuedCount: toSafeNumber(routeCheckpointData?.lastEnqueuedCount),
+                    overrideUsersInProgress: routeOverrideUsersInProgress,
+                },
+                recentFailures: recentRouteReparseFailures,
+            },
             derivedMetrics: {
                 coordinators: derivedCoordinatorCounts,
                 recentFailures: derivedFailures.slice(0, DERIVED_METRICS_FAILURE_PREVIEW_LIMIT),
@@ -768,6 +988,20 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
                     maxLagMs: activitySyncMaxLagMs,
                     retryHistogram: activitySyncRetryHistogram,
                     topErrors: activitySyncTopErrors,
+                },
+            },
+            routeSync: {
+                pending: routeSyncPending,
+                succeeded: routeSyncSucceeded,
+                skipped: routeSyncSkipped,
+                stuck: routeSyncStuck,
+                dead: routeSyncDead,
+                dlqByContext: routeSyncByContext,
+                advanced: {
+                    throughput: routeSyncThroughput,
+                    maxLagMs: routeSyncMaxLagMs,
+                    retryHistogram: routeSyncRetryHistogram,
+                    topErrors: routeSyncTopErrors,
                 },
             },
             sleepSync: {

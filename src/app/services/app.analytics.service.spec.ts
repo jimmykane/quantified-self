@@ -208,6 +208,12 @@ describe('AppAnalyticsService', () => {
             filterActive: true,
             resultCount: 12,
         });
+        service.logToolCompareSavedAction('delete', {
+            status: 'partial_success',
+            selectedCount: 3,
+            deletedCount: 2,
+            failedCount: 1,
+        });
 
         expect(logEvent).toHaveBeenCalledWith(expect.anything(), 'tool_compare_create', {
             status: 'success',
@@ -221,6 +227,92 @@ describe('AppAnalyticsService', () => {
             sort_direction: 'desc',
             filter_active: true,
             result_count: 12,
+        });
+        expect(logEvent).toHaveBeenCalledWith(expect.anything(), 'tool_compare_saved_action', {
+            action: 'delete',
+            status: 'partial_success',
+            selected_count: 3,
+            deleted_count: 2,
+            failed_count: 1,
+        });
+    });
+
+    it('should log route upload and saved route analytics with compact params', () => {
+        userSubject.next({ acceptedTrackingPolicy: true } as User);
+
+        service.logRouteUpload('success', {
+            fileType: 'gpx',
+            storedFileType: 'gpx.gz',
+            compressed: true,
+            uploadLimit: 10,
+            uploadCountAfterWrite: 4,
+        });
+        service.logRouteUploadBatch({
+            totalFiles: 3,
+            successfulUploads: 1,
+            duplicateUploads: 1,
+            failedUploads: 1,
+        });
+        service.logSavedRouteAction('export_gpx', {
+            status: 'partial_success',
+            routeCount: null,
+            fileCount: 1,
+            failedCount: 1,
+            skippedCount: 2,
+            fileType: 'gpx',
+            zipped: true,
+            source: 'routes_list_bulk',
+        });
+        service.logSavedRouteAction('send_service_route', {
+            status: 'success',
+            routeCount: 1,
+            destinationService: 'SuuntoApp',
+            source: 'routes_list_row',
+        });
+        service.logSavedRouteAction('sort', {
+            sortColumn: 'distance',
+            sortDirection: 'asc',
+            filterActive: true,
+            resultCount: 4,
+        });
+
+        expect(logEvent).toHaveBeenCalledWith(expect.anything(), 'route_upload', {
+            status: 'success',
+            file_type: 'gpx',
+            stored_file_type: 'gpx.gz',
+            compressed: true,
+            upload_limit: 10,
+            upload_count_after_write: 4,
+        });
+        expect(logEvent).toHaveBeenCalledWith(expect.anything(), 'route_upload_batch', {
+            total_files: 3,
+            successful_uploads: 1,
+            duplicate_uploads: 1,
+            failed_uploads: 1,
+        });
+        expect(logEvent).toHaveBeenCalledWith(expect.anything(), 'saved_route_action', {
+            action: 'export_gpx',
+            status: 'partial_success',
+            file_count: 1,
+            failed_count: 1,
+            skipped_count: 2,
+            file_type: 'gpx',
+            zipped: true,
+            source: 'routes_list_bulk',
+        });
+        expect(logEvent).toHaveBeenCalledWith(expect.anything(), 'saved_route_action', {
+            action: 'send_service_route',
+            status: 'success',
+            route_count: 1,
+            source: 'routes_list_row',
+            destination_service: 'SuuntoApp',
+        });
+        expect(logEvent).toHaveBeenCalledWith(expect.anything(), 'saved_route_action', {
+            action: 'sort',
+            sort_column: 'distance',
+            sort_direction: 'asc',
+            filter_active: true,
+            result_count: 4,
         });
     });
 });

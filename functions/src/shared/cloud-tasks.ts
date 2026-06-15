@@ -173,6 +173,42 @@ export async function enqueueActivitySyncTask(
 }
 
 /**
+ * Enqueue a route sync processing task to Cloud Tasks.
+ * Uses deterministic task names for deduplication.
+ */
+export async function enqueueRouteSyncTask(
+    queueItemId: string,
+    dateCreated: number,
+    scheduleDelaySeconds?: number,
+): Promise<boolean> {
+    const client = getCloudTasksClient();
+    const { projectId, location, routeSyncQueue, serviceAccountEmail } = config.cloudtasks;
+
+    if (!projectId) {
+        throw new Error('Project ID is not defined in config');
+    }
+
+    const url = `https://${location}-${projectId}.cloudfunctions.net/processRouteSyncTask`;
+    const parent = client.queuePath(projectId, location, routeSyncQueue);
+
+    const safeQueueItemId = `${queueItemId}`.replace(/[^a-zA-Z0-9-_]/g, '-');
+    const safeDateCreated = Number.isFinite(dateCreated) ? Math.max(0, Math.floor(dateCreated)) : 0;
+    const taskName = `${parent}/tasks/route-sync-${safeQueueItemId}-${safeDateCreated}`;
+    const payload = { data: { queueItemId } };
+
+    return enqueueTaskWithRetry({
+        parent,
+        taskName,
+        payload,
+        serviceAccountEmail,
+        url,
+        scheduleDelaySeconds,
+        alreadyExistsLogMessage: `[RouteSyncDispatcher] Task already exists for queue item ${queueItemId}, skipping`,
+        failedLogPrefix: `[RouteSyncDispatcher] Failed to enqueue route sync task for ${queueItemId}:`,
+    });
+}
+
+/**
  * Enqueue a sleep sync processing task to Cloud Tasks.
  * Uses deterministic task names for deduplication.
  */
@@ -272,6 +308,38 @@ export async function enqueueSportsLibReparseHeavyTask(
         dispatchDeadlineSeconds: SPORTS_LIB_REPARSE_HEAVY_TASK_DISPATCH_DEADLINE_SECONDS,
         alreadyExistsLogMessage: `[ReparseHeavyDispatcher] Task already exists for job ${jobId}, skipping`,
         failedLogPrefix: `[ReparseHeavyDispatcher] Failed to enqueue task for job ${jobId}:`,
+    });
+}
+
+/**
+ * Enqueue a single route sports-lib reparse job task.
+ */
+export async function enqueueSportsLibRouteReparseTask(
+    jobId: string,
+    scheduleDelaySeconds?: number,
+): Promise<boolean> {
+    const client = getCloudTasksClient();
+    const { projectId, location, sportsLibRouteReparseQueue, serviceAccountEmail } = config.cloudtasks;
+    if (!projectId) {
+        throw new Error('Project ID is not defined in config');
+    }
+
+    const parent = client.queuePath(projectId, location, sportsLibRouteReparseQueue);
+    const url = `https://${location}-${projectId}.cloudfunctions.net/processSportsLibRouteReparseTask`;
+    const safeJobId = jobId.replace(/[^a-zA-Z0-9-_]/g, '-');
+    const taskName = `${parent}/tasks/route-reparse-${safeJobId}`;
+    const payload = { data: { jobId } };
+
+    return enqueueTaskWithRetry({
+        parent,
+        taskName,
+        payload,
+        serviceAccountEmail,
+        url,
+        scheduleDelaySeconds,
+        dispatchDeadlineSeconds: SPORTS_LIB_REPARSE_TASK_DISPATCH_DEADLINE_SECONDS,
+        alreadyExistsLogMessage: `[RouteReparseDispatcher] Task already exists for job ${jobId}, skipping`,
+        failedLogPrefix: `[RouteReparseDispatcher] Failed to enqueue task for job ${jobId}:`,
     });
 }
 

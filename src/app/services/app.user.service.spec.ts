@@ -409,7 +409,7 @@ describe('AppUserService', () => {
         service = TestBed.inject(AppUserService);
         const user = { uid: 'u1' } as any;
 
-        (collectionData as any).mockReturnValueOnce(of([{ accessToken: 'token' }]));
+        (collectionData as any).mockReturnValueOnce(of([{ accessToken: 'token', userName: 'suunto-user' }]));
         (docData as any).mockReturnValueOnce(of({
             connectionState: 'reconnect_required',
             lastDisconnectedAt: 123,
@@ -425,6 +425,143 @@ describe('AppUserService', () => {
             connectButtonLabel: 'Reconnect',
             reconnectPromptSource: 'suunto-reconnect-required:123',
         });
+    });
+
+    it('builds shared Suunto route catch-up prompt context from tokens and service meta', async () => {
+        service = TestBed.inject(AppUserService);
+        const testUser = { uid: 'u1' } as any;
+
+        (collectionData as any).mockReturnValueOnce(of([
+            {
+                accessToken: 'token-a',
+                dateCreated: 1710000000000,
+                userName: 'suunto-user-a',
+            },
+            {
+                accessToken: 'token-b',
+                dateCreated: 1710001000000,
+                userName: 'suunto-user-b',
+            },
+        ]));
+        (docData as any).mockReturnValueOnce(of({
+            routeImportStatesByProviderSourceKey: [
+                {
+                    sourceKey: 'suunto-user-a:1710000000000',
+                    providerUserId: 'suunto-user-a',
+                    didLastRouteImport: {
+                        toDate: () => new Date('2026-06-11T08:30:00.000Z'),
+                    },
+                },
+                {
+                    sourceKey: 'suunto-user-b:1710001000000',
+                    providerUserId: 'suunto-user-b',
+                    didLastRouteImport: {
+                        toDate: () => new Date('2026-06-12T09:45:00.000Z'),
+                    },
+                },
+            ],
+        }));
+
+        const result = await firstValueFrom(service.watchSuuntoRouteCatchUpPromptContext(testUser).pipe(take(1)));
+
+        expect(result.connectionView).toMatchObject({
+            connected: true,
+            reconnectRequired: false,
+        });
+        expect(result.connectedProviderUserIds).toEqual(['suunto-user-a', 'suunto-user-b']);
+        expect(result.didLastRouteImport?.toISOString()).toBe('2026-06-12T09:45:00.000Z');
+        expect(result.promptSource).toBe('suunto-route-catch-up:connected:suunto-user-a:1710000000000|suunto-user-b:1710001000000');
+        expect(result.serviceMeta).toMatchObject({
+            routeImportStatesByProviderSourceKey: expect.any(Array),
+        });
+    });
+
+    it('keeps Suunto route catch-up incomplete for connected accounts when only legacy global route metadata exists', async () => {
+        service = TestBed.inject(AppUserService);
+        const testUser = { uid: 'u1' } as any;
+
+        (collectionData as any).mockReturnValueOnce(of([
+            {
+                accessToken: 'token-a',
+                dateCreated: 1710000000000,
+                userName: 'suunto-user-a',
+            },
+            {
+                accessToken: 'token-b',
+                dateCreated: 1710001000000,
+                userName: 'suunto-user-b',
+            },
+        ]));
+        (docData as any).mockReturnValueOnce(of({
+            didLastRouteImport: {
+                toDate: () => new Date('2026-06-12T09:45:00.000Z'),
+            },
+        }));
+
+        const result = await firstValueFrom(service.watchSuuntoRouteCatchUpPromptContext(testUser).pipe(take(1)));
+
+        expect(result.didLastRouteImport).toBeNull();
+        expect(result.connectedProviderUserIds).toEqual(['suunto-user-a', 'suunto-user-b']);
+    });
+
+    it('treats a same-account reconnect as incomplete until the new source key completes', async () => {
+        service = TestBed.inject(AppUserService);
+        const testUser = { uid: 'u1' } as any;
+
+        (collectionData as any).mockReturnValueOnce(of([
+            {
+                accessToken: 'token-a',
+                dateCreated: 1711000000000,
+                userName: 'suunto-user-a',
+            },
+        ]));
+        (docData as any).mockReturnValueOnce(of({
+            didLastRouteImport: {
+                toDate: () => new Date('2026-06-12T09:45:00.000Z'),
+            },
+            routeImportStatesByProviderSourceKey: [
+                {
+                    sourceKey: 'suunto-user-a:1710000000000',
+                    providerUserId: 'suunto-user-a',
+                    didLastRouteImport: {
+                        toDate: () => new Date('2026-06-12T09:45:00.000Z'),
+                    },
+                },
+            ],
+        }));
+
+        const result = await firstValueFrom(service.watchSuuntoRouteCatchUpPromptContext(testUser).pipe(take(1)));
+
+        expect(result.didLastRouteImport).toBeNull();
+        expect(result.promptSource).toBe('suunto-route-catch-up:connected:suunto-user-a:1711000000000');
+        expect(result.connectedProviderUserIds).toEqual(['suunto-user-a']);
+    });
+
+    it('does not treat malformed Suunto tokens without a provider identity as connected', async () => {
+        service = TestBed.inject(AppUserService);
+        const testUser = { uid: 'u1' } as any;
+
+        (collectionData as any).mockReturnValueOnce(of([
+            {
+                accessToken: 'token-a',
+                dateCreated: 1711000000000,
+            },
+        ]));
+        (docData as any).mockReturnValueOnce(of({
+            didLastRouteImport: {
+                toDate: () => new Date('2026-06-12T09:45:00.000Z'),
+            },
+        }));
+
+        const result = await firstValueFrom(service.watchSuuntoRouteCatchUpPromptContext(testUser).pipe(take(1)));
+
+        expect(result.connectionView).toMatchObject({
+            connected: false,
+            reconnectRequired: false,
+        });
+        expect(result.connectedProviderUserIds).toEqual([]);
+        expect(result.promptSource).toBeNull();
+        expect(result.didLastRouteImport?.toISOString()).toBe('2026-06-12T09:45:00.000Z');
     });
 
     describe('createOrUpdateUser policy flow', () => {
@@ -726,7 +863,7 @@ describe('AppUserService', () => {
             const user = { uid: 'u10' } as any;
             (collectionData as any)
                 .mockReturnValueOnce(of([{ accessToken: 'garmin-token' }]))
-                .mockReturnValueOnce(of([{ accessToken: 'suunto-token' }]))
+                .mockReturnValueOnce(of([{ accessToken: 'suunto-token', userName: 'suunto-user' }]))
                 .mockReturnValueOnce(of([]));
 
             const result = await firstValueFrom(service.watchActivityServiceConnectionState(user));
@@ -734,6 +871,22 @@ describe('AppUserService', () => {
             expect(result).toEqual({
                 [ServiceNames.GarminAPI]: true,
                 [ServiceNames.SuuntoApp]: true,
+                [ServiceNames.COROSAPI]: false,
+            });
+        });
+
+        it('watchActivityServiceConnectionState should ignore malformed Suunto tokens without provider identity', async () => {
+            const user = { uid: 'u10b' } as any;
+            (collectionData as any)
+                .mockReturnValueOnce(of([]))
+                .mockReturnValueOnce(of([{ accessToken: 'suunto-token' }]))
+                .mockReturnValueOnce(of([]));
+
+            const result = await firstValueFrom(service.watchActivityServiceConnectionState(user));
+
+            expect(result).toEqual({
+                [ServiceNames.GarminAPI]: false,
+                [ServiceNames.SuuntoApp]: false,
                 [ServiceNames.COROSAPI]: false,
             });
         });
@@ -757,12 +910,24 @@ describe('AppUserService', () => {
             const user = { uid: 'u8' } as any;
             (collectionData as any)
                 .mockReturnValueOnce(of([]))
-                .mockReturnValueOnce(of([{ accessToken: 'suunto-token' }]))
+                .mockReturnValueOnce(of([{ accessToken: 'suunto-token', userName: 'suunto-user' }]))
                 .mockReturnValueOnce(of([]));
 
             const result = await firstValueFrom(service.watchHasAnyActivityServiceConnection(user));
 
             expect(result).toBe(true);
+        });
+
+        it('watchHasAnyActivityServiceConnection should stay false when the only Suunto token is malformed', async () => {
+            const user = { uid: 'u8b' } as any;
+            (collectionData as any)
+                .mockReturnValueOnce(of([]))
+                .mockReturnValueOnce(of([{ accessToken: 'suunto-token' }]))
+                .mockReturnValueOnce(of([]));
+
+            const result = await firstValueFrom(service.watchHasAnyActivityServiceConnection(user));
+
+            expect(result).toBe(false);
         });
 
         it('watchHasAnyActivityServiceConnection should fail closed when token reads fail', async () => {
@@ -1166,6 +1331,22 @@ describe('AppUserService', () => {
                 await expect(service.backfillSuuntoSleepForCurrentUser()).resolves.toEqual(response);
 
                 expect(mockFunctionsService.call).toHaveBeenCalledWith('backfillSuuntoAppSleep');
+            });
+        });
+
+        describe('addSuuntoRoutesToQueueForCurrentUser', () => {
+            it('should call cloud function for Suunto route catch-up', async () => {
+                const response = {
+                    queuedCount: 12,
+                    skippedCount: 3,
+                    failureCount: 1,
+                    totalCount: 16,
+                };
+                mockFunctionsService.call.mockResolvedValueOnce({ data: response });
+
+                await expect(service.addSuuntoRoutesToQueueForCurrentUser()).resolves.toEqual(response);
+
+                expect(mockFunctionsService.call).toHaveBeenCalledWith('addSuuntoAppRoutesToQueue');
             });
         });
 

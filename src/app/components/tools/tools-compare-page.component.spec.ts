@@ -1,5 +1,9 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { BreakpointObserver } from '@angular/cdk/layout';
+import { By } from '@angular/platform-browser';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
+import { MatTooltip } from '@angular/material/tooltip';
+import { readFileSync } from 'node:fs';
 import { ActivatedRoute, Router } from '@angular/router';
 import { RouterTestingModule } from '@angular/router/testing';
 import { BehaviorSubject, of, Subject, throwError } from 'rxjs';
@@ -20,8 +24,10 @@ import { AppDeviceColorPreferenceService } from '../../services/color/app-device
 import { normalizeDeviceColorKey } from '../../helpers/device-color-preferences.helper';
 import { DeviceColorPreferencesDialogComponent } from './device-color-preferences-dialog.component';
 import { AppHapticsService } from '../../services/app.haptics.service';
+import { AppProcessingService } from '../../services/app.processing.service';
 import { BenchmarkReviewService } from '../../services/benchmark-review.service';
 import { BenchmarkReviewTagsDialogComponent } from '../benchmark/benchmark-review-tags-dialog.component';
+import { AppBreakpoints } from '../../constants/breakpoints';
 
 function makeComparisonEvent(id: string, overrides: {
   title?: string;
@@ -154,6 +160,12 @@ describe('ToolsComparePageComponent', () => {
     warning: ReturnType<typeof vi.fn>;
     error: ReturnType<typeof vi.fn>;
   };
+  let processingServiceMock: {
+    addJob: ReturnType<typeof vi.fn>;
+    updateJob: ReturnType<typeof vi.fn>;
+    completeJob: ReturnType<typeof vi.fn>;
+    failJob: ReturnType<typeof vi.fn>;
+  };
   let benchmarkReviewServiceMock: {
     normalizeTags: ReturnType<typeof vi.fn>;
     getEventTags: ReturnType<typeof vi.fn>;
@@ -172,6 +184,10 @@ describe('ToolsComparePageComponent', () => {
   };
   let loggerMock: {
     warn: ReturnType<typeof vi.fn>;
+    error: ReturnType<typeof vi.fn>;
+  };
+  let breakpointObserverMock: {
+    observe: ReturnType<typeof vi.fn>;
   };
 
   beforeEach(async () => {
@@ -257,6 +273,12 @@ describe('ToolsComparePageComponent', () => {
       warning: vi.fn(),
       error: vi.fn(),
     };
+    processingServiceMock = {
+      addJob: vi.fn().mockReturnValue('job-1'),
+      updateJob: vi.fn(),
+      completeJob: vi.fn(),
+      failJob: vi.fn(),
+    };
     benchmarkReviewServiceMock = {
       normalizeTags: vi.fn((tags: unknown) => Array.isArray(tags)
         ? tags.filter((tag): tag is string => typeof tag === 'string').map(tag => tag.trim()).filter(Boolean)
@@ -281,6 +303,13 @@ describe('ToolsComparePageComponent', () => {
     };
     loggerMock = {
       warn: vi.fn(),
+      error: vi.fn(),
+    };
+    breakpointObserverMock = {
+      observe: vi.fn().mockReturnValue(of({
+        matches: false,
+        breakpoints: {},
+      })),
     };
 
     await TestBed.configureTestingModule({
@@ -294,11 +323,13 @@ describe('ToolsComparePageComponent', () => {
         { provide: AppAnalyticsService, useValue: analyticsServiceMock },
         { provide: AppBenchmarkFlowService, useValue: benchmarkFlowServiceMock },
         { provide: AppHapticsService, useValue: hapticsServiceMock },
+        { provide: AppProcessingService, useValue: processingServiceMock },
         { provide: BenchmarkReviewService, useValue: benchmarkReviewServiceMock },
         { provide: AppEventService, useValue: eventServiceMock },
         { provide: AppEventColorService, useValue: eventColorServiceMock },
         { provide: AppDeviceColorPreferenceService, useValue: deviceColorPreferenceServiceMock },
         { provide: LoggerService, useValue: loggerMock },
+        { provide: BreakpointObserver, useValue: breakpointObserverMock },
         { provide: ActivatedRoute, useValue: { snapshot: { data: {} } } },
       ],
     }).compileComponents();
@@ -387,6 +418,7 @@ describe('ToolsComparePageComponent', () => {
     const user = new User('user-1');
     userSubject.next(user);
     await Promise.resolve();
+    await Promise.resolve();
     fixture.detectChanges();
 
     expect(fixture.nativeElement.textContent).toContain('Compare files');
@@ -396,7 +428,10 @@ describe('ToolsComparePageComponent', () => {
     expect(fixture.nativeElement.textContent).not.toContain('Create one saved benchmark event from multiple source files');
     expect(fixture.nativeElement.querySelector('mat-tab-group')).toBeNull();
     expect(comparisonServiceMock.getBenchmarkComparisonCount).toHaveBeenCalledWith(user);
-    expect(comparisonServiceMock.getBenchmarkComparisonPage).toHaveBeenCalledWith(user, { pageSize: 25 });
+    expect(comparisonServiceMock.getBenchmarkComparisonPage).toHaveBeenCalledWith(user, {
+      pageSize: 25,
+      sort: { active: 'date', direction: 'desc' },
+    });
   });
 
   it('loads later saved benchmark comparison pages with stored cursors', async () => {
@@ -439,10 +474,12 @@ describe('ToolsComparePageComponent', () => {
 
     expect(comparisonServiceMock.getBenchmarkComparisonPage).toHaveBeenNthCalledWith(1, user, {
       pageSize: 25,
+      sort: { active: 'date', direction: 'desc' },
     });
     expect(comparisonServiceMock.getBenchmarkComparisonPage).toHaveBeenNthCalledWith(2, user, {
       pageSize: 25,
       cursor: nextCursor,
+      sort: { active: 'date', direction: 'desc' },
     });
     expect(component.paginatedComparisonItems().map(item => item.id)).toEqual(['page-2-comparison-1']);
   });
@@ -512,6 +549,7 @@ describe('ToolsComparePageComponent', () => {
     });
     savedPage$.complete();
     await Promise.resolve();
+    await Promise.resolve();
 
     expect(component.isLoadingComparisons()).toBe(false);
   });
@@ -524,6 +562,7 @@ describe('ToolsComparePageComponent', () => {
     comparisonServiceMock.getBenchmarkComparisonPage.mockReturnValue(throwError(() => missingIndexError));
 
     userSubject.next(new User('user-1'));
+    await Promise.resolve();
     await Promise.resolve();
 
     expect(component.isLoadingComparisons()).toBe(false);
@@ -1103,14 +1142,10 @@ describe('ToolsComparePageComponent', () => {
     expect(item.statusState).toBe('draft');
   });
 
-  it('filters, sorts, and paginates previous comparison rows', async () => {
+  it('filters and paginates server-ordered previous comparison rows', async () => {
+    component.authResolved.set(true);
+    component.firebaseSignedIn.set(true);
     component.comparisons.set([
-      makeComparisonEvent('older-draft', {
-        title: 'Older draft',
-        description: 'Lab test',
-        startDate: new Date('2026-01-01T00:00:00.000Z'),
-        sourceFilesCount: 2,
-      }),
       makeComparisonEvent('new-ready', {
         title: 'New ready',
         description: 'Race file',
@@ -1125,7 +1160,14 @@ describe('ToolsComparePageComponent', () => {
         sourceFilesCount: 3,
         benchmarkResults: { 'c_d': { score: 85 }, 'e_f': { score: 80 } },
       }),
+      makeComparisonEvent('older-draft', {
+        title: 'Older draft',
+        description: 'Lab test',
+        startDate: new Date('2026-01-01T00:00:00.000Z'),
+        sourceFilesCount: 2,
+      }),
     ]);
+    fixture.detectChanges();
 
     expect(component.sortedComparisonItems().map(item => item.id)).toEqual([
       'new-ready',
@@ -1137,21 +1179,12 @@ describe('ToolsComparePageComponent', () => {
       .map(header => header.textContent?.replace(/\s+/g, ' ').trim())
       .filter(Boolean);
     expect(tableHeaders).not.toContain('Activities');
+    const template = readFileSync('src/app/components/tools/tools-compare-page.component.html', 'utf8');
+    const sortHeaderColumns = [...template.matchAll(/mat-sort-header="([^"]+)"/g)].map(match => match[1]);
+    expect(sortHeaderColumns).toEqual(['date']);
 
-    component.onComparisonSortChange({ active: 'sourceFiles', direction: 'asc' });
-    expect(component.sortedComparisonItems().map(item => item.id)).toEqual([
-      'older-draft',
-      'middle-ready',
-      'new-ready',
-    ]);
-    expect(analyticsServiceMock.logToolCompareSavedAction).toHaveBeenCalledWith('sort', {
-      sortColumn: 'sourceFiles',
-      sortDirection: 'asc',
-      filterActive: false,
-      resultCount: 3,
-    });
     component.comparisonTotalCount.set(50);
-    expect(component.comparisonResultSummary()).toBe('3 of 50 loaded; sorting loaded rows');
+    expect(component.comparisonResultSummary()).toBe('3 of 50 loaded');
 
     expect(component.comparisonPage()).toEqual({
       pageIndex: 0,
@@ -1178,7 +1211,42 @@ describe('ToolsComparePageComponent', () => {
       filterActive: true,
       resultCount: 1,
     });
-    expect(hapticsServiceMock.selection).toHaveBeenCalledTimes(3);
+    expect(hapticsServiceMock.selection).toHaveBeenCalledTimes(2);
+  });
+
+  it('reloads saved comparison pages when date sort changes', async () => {
+    const user = new User('user-1');
+    userSubject.next(user);
+    await Promise.resolve();
+    await Promise.resolve();
+    comparisonServiceMock.getBenchmarkComparisonCount.mockClear();
+    comparisonServiceMock.getBenchmarkComparisonPage.mockClear();
+
+    await component.onComparisonSortChange({ active: 'date', direction: 'asc' });
+
+    expect(component.comparisonSort()).toEqual({ active: 'date', direction: 'asc' });
+    expect(component.comparisonPage()).toEqual({ pageIndex: 0, pageSize: 25 });
+    expect(comparisonServiceMock.getBenchmarkComparisonCount).toHaveBeenCalledWith(user);
+    expect(comparisonServiceMock.getBenchmarkComparisonPage).toHaveBeenCalledWith(user, {
+      pageSize: 25,
+      sort: { active: 'date', direction: 'asc' },
+    });
+    expect(analyticsServiceMock.logToolCompareSavedAction).toHaveBeenCalledWith('sort', {
+      sortColumn: 'date',
+      sortDirection: 'asc',
+      filterActive: false,
+      resultCount: 0,
+    });
+  });
+
+  it('ignores non-server-sortable comparison sort columns', async () => {
+    await component.onComparisonSortChange({ active: 'title', direction: 'asc' });
+
+    expect(component.comparisonSort()).toEqual({ active: 'date', direction: 'desc' });
+    expect(analyticsServiceMock.logToolCompareSavedAction).not.toHaveBeenCalledWith(
+      'sort',
+      expect.objectContaining({ sortColumn: 'title' }),
+    );
   });
 
   it('labels saved comparison filtering as scoped to loaded rows', async () => {
@@ -1204,6 +1272,17 @@ describe('ToolsComparePageComponent', () => {
     expect(component.comparisonPaginatorLength()).toBe(0);
   });
 
+  it('keeps saved comparison bulk actions inside the visible scroll area', () => {
+    const styles = readFileSync('src/app/components/tools/tools-compare-page.component.scss', 'utf8');
+    const selectionToolbarStyles = styles.match(/\.comparison-selection-toolbar\s*{(?<body>[^}]*)}/)?.groups?.['body'] ?? '';
+
+    expect(selectionToolbarStyles).toContain('position: sticky;');
+    expect(selectionToolbarStyles).toContain('left: 0;');
+    expect(selectionToolbarStyles).toContain('width: 100%;');
+    expect(selectionToolbarStyles).toContain('justify-content: flex-start;');
+    expect(selectionToolbarStyles).not.toContain('min-width');
+  });
+
   it('exposes the full previous comparison title when the table truncates it', () => {
     const fullTitle = 'Benchmark comparison: morning-device-reference.fit vs evening-device-candidate.gpx';
     userSubject.next(new User('user-1'));
@@ -1219,7 +1298,7 @@ describe('ToolsComparePageComponent', () => {
     expect(titleCell.getAttribute('title')).toBe(fullTitle);
   });
 
-  it('shows previous comparison devices with sorting, filtering, and tooltip text', () => {
+  it('shows previous comparison devices with filtering and tooltip text', () => {
     userSubject.next(new User('user-1'));
     component.comparisons.set([
       makeComparisonEvent('report-devices', {
@@ -1253,18 +1332,11 @@ describe('ToolsComparePageComponent', () => {
     const devicesCell = fixture.nativeElement.querySelector('.devices-cell') as HTMLElement;
     expect(devicesCell.getAttribute('title')).toBe('Garmin Forerunner 265, COROS PACE 3');
 
-    component.onComparisonSortChange({ active: 'devices', direction: 'asc' });
-    expect(component.sortedComparisonItems().map(item => item.id)).toEqual([
-      'report-devices',
-      'metadata-devices',
-      'unknown-devices',
-    ]);
-
     component.updateComparisonFilter('pace 3');
     expect(component.filteredComparisonItems().map(item => item.id)).toEqual(['report-devices']);
   });
 
-  it('shows sortable per-device activity type, distance, ascent, and descent summaries', () => {
+  it('shows per-device activity type, distance, ascent, and descent summaries', () => {
     const user = new User('user-1');
     (user as User & { settings: { unitSettings: null } }).settings = { unitSettings: null };
     userSubject.next(user);
@@ -1372,27 +1444,6 @@ describe('ToolsComparePageComponent', () => {
     expect(longCourse?.activityTypesTitle).toBe('Cycling');
     expect(longCourse?.distanceTitle).toContain('Suunto Race: 10.02 km');
 
-    component.onComparisonSortChange({ active: 'distance', direction: 'asc' });
-    expect(component.sortedComparisonItems().map(item => item.id)).toEqual([
-      'short-course',
-      'long-course',
-      'unknown-course',
-    ]);
-
-    component.onComparisonSortChange({ active: 'distance', direction: 'desc' });
-    expect(component.sortedComparisonItems().map(item => item.id)).toEqual([
-      'long-course',
-      'short-course',
-      'unknown-course',
-    ]);
-
-    component.onComparisonSortChange({ active: 'ascent', direction: 'desc' });
-    expect(component.sortedComparisonItems().map(item => item.id)).toEqual([
-      'long-course',
-      'short-course',
-      'unknown-course',
-    ]);
-
     component.updateComparisonFilter('cycling');
     expect(component.filteredComparisonItems().map(item => item.id)).toEqual(['long-course', 'unknown-course']);
 
@@ -1416,7 +1467,7 @@ describe('ToolsComparePageComponent', () => {
     expect(component.filteredComparisonItems().map(item => item.id)).toEqual(['short-course']);
   });
 
-  it('shows sortable benchmark GNSS, heart-rate, and altitude metrics with old-report fallbacks', () => {
+  it('shows benchmark GNSS, heart-rate, and altitude metrics with old-report fallbacks', () => {
     userSubject.next(new User('user-1'));
     component.comparisons.set([
       makeComparisonEvent('latest-report-metrics', {
@@ -1601,26 +1652,6 @@ describe('ToolsComparePageComponent', () => {
       'missing',
     ]);
 
-    component.onComparisonSortChange({ active: 'heartRate', direction: 'asc' });
-    expect(component.sortedComparisonItems().map(item => item.id)).toEqual([
-      'latest-report-metrics',
-      'old-stream-metrics',
-      'draft-no-report',
-    ]);
-    expect(analyticsServiceMock.logToolCompareSavedAction).toHaveBeenCalledWith('sort', {
-      sortColumn: 'heartRate',
-      sortDirection: 'asc',
-      filterActive: false,
-      resultCount: 3,
-    });
-
-    component.onComparisonSortChange({ active: 'gnss', direction: 'asc' });
-    expect(component.sortedComparisonItems().map(item => item.id)).toEqual([
-      'latest-report-metrics',
-      'old-stream-metrics',
-      'draft-no-report',
-    ]);
-
     component.updateComparisonFilter('mae');
     expect(component.filteredComparisonItems().map(item => item.id)).toEqual([
       'latest-report-metrics',
@@ -1733,12 +1764,6 @@ describe('ToolsComparePageComponent', () => {
     expect(component.filteredComparisonItems().map(item => item.id)).toEqual(['firmware-comparison']);
 
     component.updateComparisonTagFilter('');
-    component.onComparisonSortChange({ active: 'tags', direction: 'desc' });
-    expect(component.sortedComparisonItems().map(item => item.id)).toEqual([
-      'route-comparison',
-      'firmware-comparison',
-      'untagged-comparison',
-    ]);
 
     let dialogData: any;
     const afterClosed$ = new Subject<string[] | null>();
@@ -2025,8 +2050,11 @@ describe('ToolsComparePageComponent', () => {
     expect(eventServiceMock.getActivitiesOnceByEventsWithOptions).toHaveBeenCalledTimes(1);
   });
 
-  it('renders previous comparison descriptions as compact text until editing', () => {
+  it('renders previous comparison descriptions as compact text until editing', async () => {
     userSubject.next(new User('user-1'));
+    await Promise.resolve();
+    await Promise.resolve();
+
     component.comparisons.set([
       makeComparisonEvent('comparison-1', {
         title: 'Comparison',
@@ -2198,6 +2226,95 @@ describe('ToolsComparePageComponent', () => {
     expect(hapticsServiceMock.success).toHaveBeenCalled();
   });
 
+  it('bulk deletes selected saved comparisons through event cleanup', async () => {
+    const user = new User('user-1');
+    userSubject.next(user);
+    await Promise.resolve();
+    await Promise.resolve();
+    (component as any).dialog = {
+      open: vi.fn().mockReturnValue({
+        afterClosed: () => of(true),
+      }),
+    };
+    component.comparisons.set([
+      makeComparisonEvent('comparison-1'),
+      makeComparisonEvent('comparison-2'),
+      makeComparisonEvent('comparison-3'),
+    ]);
+    component.comparisonTotalCount.set(3);
+
+    component.toggleComparisonSelection(component.comparisonItems()[0], true);
+    component.toggleComparisonSelection(component.comparisonItems()[1], true);
+    await component.confirmDeleteSelectedComparisons();
+
+    expect(eventServiceMock.deleteAllEventData).toHaveBeenCalledWith(user, 'comparison-1');
+    expect(eventServiceMock.deleteAllEventData).toHaveBeenCalledWith(user, 'comparison-2');
+    expect(component.comparisons().map(event => event.getID())).toEqual(['comparison-3']);
+    expect(component.comparisonTotalCount()).toBe(1);
+    expect(component.selectedComparisonIDs()).toEqual([]);
+    expect(processingServiceMock.addJob).toHaveBeenCalledWith('process', 'Deleting selected comparisons...');
+    expect(processingServiceMock.completeJob).toHaveBeenCalledWith('job-1', 'Deleted 2 comparisons.');
+    expect(analyticsServiceMock.logToolCompareSavedAction).toHaveBeenCalledWith('delete', {
+      status: 'confirmed',
+      filterActive: false,
+      resultCount: 3,
+      selectedCount: 2,
+    });
+    expect(analyticsServiceMock.logToolCompareSavedAction).toHaveBeenCalledWith('delete', {
+      status: 'success',
+      filterActive: false,
+      resultCount: 1,
+      selectedCount: 2,
+      deletedCount: 2,
+      failedCount: 0,
+    });
+  });
+
+  it('keeps failed rows selected after a partial bulk comparison delete', async () => {
+    const user = new User('user-1');
+    userSubject.next(user);
+    await Promise.resolve();
+    await Promise.resolve();
+    (component as any).dialog = {
+      open: vi.fn().mockReturnValue({
+        afterClosed: () => of(true),
+      }),
+    };
+    eventServiceMock.deleteAllEventData.mockImplementation((_user: User, eventID: string) => (
+      eventID === 'comparison-2'
+        ? Promise.reject(new Error('delete failed'))
+        : Promise.resolve(true)
+    ));
+    component.comparisons.set([
+      makeComparisonEvent('comparison-1'),
+      makeComparisonEvent('comparison-2'),
+      makeComparisonEvent('comparison-3'),
+    ]);
+    component.comparisonTotalCount.set(3);
+
+    component.toggleVisibleComparisonSelection(true);
+    await component.confirmDeleteSelectedComparisons();
+
+    expect(component.comparisons().map(event => event.getID())).toEqual(['comparison-2']);
+    expect(component.comparisonTotalCount()).toBe(1);
+    expect(component.selectedComparisonIDs()).toEqual(['comparison-2']);
+    expect(loggerMock.error).toHaveBeenCalledWith(
+      '[ToolsComparePageComponent] Failed to delete selected comparison',
+      { eventID: 'comparison-2' },
+      expect.any(Error),
+    );
+    expect(processingServiceMock.completeJob).toHaveBeenCalledWith('job-1', 'Deleted 2 comparisons. Failed 1.');
+    expect(analyticsServiceMock.logToolCompareSavedAction).toHaveBeenCalledWith('delete', {
+      status: 'partial_success',
+      filterActive: false,
+      resultCount: 1,
+      selectedCount: 3,
+      deletedCount: 2,
+      failedCount: 1,
+    });
+    expect(hapticsServiceMock.warning).toHaveBeenCalled();
+  });
+
   it('uses source file metadata count fallbacks instead of showing fake zeroes for saved benchmarks', () => {
     component.comparisons.set([
       {
@@ -2228,9 +2345,6 @@ describe('ToolsComparePageComponent', () => {
       sourceFilesLabel: 'Files unknown',
       sourceFilesTitle: 'Files unknown',
     }));
-
-    component.onComparisonSortChange({ active: 'sourceFiles', direction: 'asc' });
-    expect(component.sortedComparisonItems().map(item => item.id)).toEqual(['with-original-files', 'unknown-counts']);
   });
 
   it('shows original comparison filenames in the files cell tooltip', () => {
@@ -2253,5 +2367,45 @@ describe('ToolsComparePageComponent', () => {
 
     expect(filesCell?.textContent?.trim()).toBe('2 files');
     expect(filesCell?.getAttribute('title')).toBe('Garmin Edge.fit\nSuunto Vertical.gpx');
+  });
+
+  it('disables dense table tooltips in touch table mode without removing native titles', () => {
+    component.authResolved.set(true);
+    component.firebaseSignedIn.set(true);
+    component.currentUser.set(new User('user-1'));
+    component.comparisons.set([
+      makeComparisonEvent('tooltip-mode', {
+        title: 'Tooltip mode comparison',
+        activities: [
+          makeActivity('activity-1', {
+            deviceName: 'Garmin Edge',
+            activityType: 'Cycling',
+          }),
+          makeActivity('activity-2', {
+            deviceName: 'Suunto Race',
+            activityType: 'Cycling',
+          }),
+        ],
+      }),
+    ]);
+    fixture.detectChanges();
+
+    const titleDebugElement = fixture.debugElement.query(By.css('.title-cell'));
+    const titleTooltip = titleDebugElement.injector.get(MatTooltip);
+    const actionDebugElement = fixture.debugElement.query(By.css('.row-actions button[aria-label="Open comparison details"]'));
+    const actionTooltip = actionDebugElement.injector.get(MatTooltip);
+
+    expect(breakpointObserverMock.observe).toHaveBeenCalledWith(['(pointer: coarse)', '(hover: none)', AppBreakpoints.Handset]);
+    expect(titleTooltip.disabled).toBe(false);
+    expect(titleTooltip.touchGestures).toBe('off');
+    expect(actionTooltip.disabled).toBe(false);
+    expect(actionTooltip.touchGestures).toBe('off');
+
+    component.passiveComparisonTableTooltipsDisabled.set(true);
+    fixture.detectChanges();
+
+    expect(titleTooltip.disabled).toBe(true);
+    expect(titleDebugElement.nativeElement.getAttribute('title')).toBe('Tooltip mode comparison');
+    expect(actionTooltip.disabled).toBe(true);
   });
 });

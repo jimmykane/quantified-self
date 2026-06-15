@@ -110,6 +110,7 @@
           mat-stroked-button
           type="button"
           class="device-colors-button"
+          [disabled]="bulkActionInProgress()"
           (click)="openDeviceColorPreferencesDialog()">
           <mat-icon>palette</mat-icon>
           Device colors
@@ -242,10 +243,17 @@
           <input
             matInput
             type="search"
+            [disabled]="bulkActionInProgress()"
             [value]="comparisonFilter()"
             (input)="updateComparisonFilter($any($event.target).value)">
           @if (comparisonFilter()) {
-          <button matSuffix mat-icon-button type="button" aria-label="Clear comparison filter" (click)="updateComparisonFilter('')">
+          <button
+            matSuffix
+            mat-icon-button
+            type="button"
+            aria-label="Clear comparison filter"
+            [disabled]="bulkActionInProgress()"
+            (click)="updateComparisonFilter('')">
             <mat-icon>close</mat-icon>
           </button>
           }
@@ -254,7 +262,7 @@
           <mat-label>Device</mat-label>
           <mat-select
             [value]="comparisonDeviceFilter()"
-            [disabled]="comparisonDeviceFilterOptions().length === 0"
+            [disabled]="bulkActionInProgress() || comparisonDeviceFilterOptions().length === 0"
             (selectionChange)="updateComparisonDeviceFilter($event.value)">
             <mat-option value="">All devices</mat-option>
             @for (option of comparisonDeviceFilterOptions(); track option.value) {
@@ -266,7 +274,7 @@
           <mat-label>Activity type</mat-label>
           <mat-select
             [value]="comparisonActivityTypeFilter()"
-            [disabled]="comparisonActivityTypeFilterOptions().length === 0"
+            [disabled]="bulkActionInProgress() || comparisonActivityTypeFilterOptions().length === 0"
             (selectionChange)="updateComparisonActivityTypeFilter($event.value)">
             <mat-option value="">All types</mat-option>
             @for (option of comparisonActivityTypeFilterOptions(); track option.value) {
@@ -278,7 +286,7 @@
           <mat-label>Tag</mat-label>
           <mat-select
             [value]="comparisonTagFilter()"
-            [disabled]="comparisonTagFilterOptions().length === 0"
+            [disabled]="bulkActionInProgress() || comparisonTagFilterOptions().length === 0"
             (selectionChange)="updateComparisonTagFilter($event.value)">
             <mat-option value="">All tags</mat-option>
             @for (option of comparisonTagFilterOptions(); track option.value) {
@@ -299,8 +307,10 @@
           [class.benchmark-rerun-action]="cell.canRerunReport"
           [class.summary-placeholder]="cell.isPlaceholder"
           [class.benchmark-is-loading]="benchmarkingEventID() === item.id"
-          [disabled]="!!benchmarkingEventID()"
+          [disabled]="bulkActionInProgress() || !!benchmarkingEventID()"
           [matTooltip]="cell.title"
+          [matTooltipDisabled]="passiveComparisonTableTooltipsDisabled()"
+          matTooltipTouchGestures="off"
           [attr.title]="cell.title"
           [attr.data-severity]="cell.severityLabel"
           [attr.aria-label]="cell.canRerunReport ? 'Rerun benchmark report for ' + item.title : 'Run benchmark report for ' + item.title"
@@ -335,6 +345,8 @@
           [style.--benchmark-accent-color]="cell.color"
           [attr.data-severity]="cell.severityLabel"
           [matTooltip]="cell.title"
+          [matTooltipDisabled]="passiveComparisonTableTooltipsDisabled()"
+          matTooltipTouchGestures="off"
           [attr.title]="cell.title">
           @for (line of cell.lines; track line.label) {
           <span
@@ -358,6 +370,49 @@
       </mat-card>
       } @else {
       <div class="comparison-table-shell">
+        @if (selectedComparisonCount() > 0) {
+        <div class="comparison-selection-toolbar" aria-live="polite">
+          <div class="comparison-selection-summary">
+            <mat-icon>check_circle</mat-icon>
+            <span>{{ selectedComparisonCount() }} {{ selectedComparisonCount() === 1 ? 'comparison' : 'comparisons' }} selected</span>
+          </div>
+          <div class="comparison-selection-actions">
+            <button
+              mat-button
+              color="warn"
+              type="button"
+              class="comparison-bulk-action-button"
+              [disabled]="bulkActionInProgress()
+                || !!deletingEventID()
+                || !!benchmarkingEventID()
+                || !!editingDescriptionEventID()
+                || !!savingDescriptionEventID()"
+              [attr.aria-label]="'Delete ' + selectedComparisonCount() + ' selected ' + (selectedComparisonCount() === 1 ? 'comparison' : 'comparisons')"
+              (click)="$event.preventDefault(); $event.stopPropagation(); confirmDeleteSelectedComparisons()">
+              <span class="comparison-bulk-action-content">
+                @if (bulkActionInProgress()) {
+                <mat-progress-spinner diameter="16" mode="indeterminate"></mat-progress-spinner>
+                } @else {
+                <mat-icon>delete</mat-icon>
+                }
+                <span>Delete</span>
+              </span>
+            </button>
+            <button
+              mat-button
+              type="button"
+              class="comparison-bulk-action-button"
+              [disabled]="bulkActionInProgress()"
+              aria-label="Clear comparison selection"
+              (click)="clearComparisonSelection($event)">
+              <span class="comparison-bulk-action-content">
+                <mat-icon>close</mat-icon>
+                <span>Clear</span>
+              </span>
+            </button>
+          </div>
+        </div>
+        }
         <table
           mat-table
           matSort
@@ -367,6 +422,30 @@
           [matSortActive]="comparisonSort().active"
           [matSortDirection]="comparisonSort().direction"
           (matSortChange)="onComparisonSortChange($event)">
+          <ng-container matColumnDef="select">
+            <th mat-header-cell *matHeaderCellDef>
+              <mat-checkbox
+                aria-label="Select all visible comparisons"
+                [checked]="allVisibleComparisonsSelected()"
+                [indeterminate]="visibleComparisonSelectionIndeterminate()"
+                [disabled]="bulkActionInProgress()"
+                (click)="$event.stopPropagation()"
+                (keydown)="$event.stopPropagation()"
+                (change)="toggleVisibleComparisonSelection($event.checked)">
+              </mat-checkbox>
+            </th>
+            <td mat-cell *matCellDef="let item">
+              <mat-checkbox
+                [attr.aria-label]="'Select ' + item.title"
+                [checked]="selectedComparisonIDSet().has(item.id)"
+                [disabled]="bulkActionInProgress()"
+                (click)="$event.stopPropagation()"
+                (keydown)="$event.stopPropagation()"
+                (change)="toggleComparisonSelection(item, $event.checked)">
+              </mat-checkbox>
+            </td>
+          </ng-container>
+
           <ng-container matColumnDef="date">
             <th mat-header-cell *matHeaderCellDef mat-sort-header="date">
               <span class="comparison-header-label">
@@ -384,7 +463,7 @@
           </ng-container>
 
           <ng-container matColumnDef="title">
-            <th mat-header-cell *matHeaderCellDef mat-sort-header="title">
+            <th mat-header-cell *matHeaderCellDef>
               <span class="comparison-header-label">
                 <app-data-type-icon [dataType]="comparisonHeaderDataTypes.title" size="18px" vAlign="middle"></app-data-type-icon>
                 <span>Title</span>
@@ -394,6 +473,8 @@
               <span
                 class="title-cell"
                 [matTooltip]="item.title"
+                [matTooltipDisabled]="passiveComparisonTableTooltipsDisabled()"
+                matTooltipTouchGestures="off"
                 [attr.title]="item.title">
                 {{ item.title }}
               </span>
@@ -401,7 +482,7 @@
           </ng-container>
 
           <ng-container matColumnDef="devices">
-            <th mat-header-cell *matHeaderCellDef mat-sort-header="devices">
+            <th mat-header-cell *matHeaderCellDef>
               <span class="comparison-header-label">
                 <app-data-type-icon [dataType]="comparisonHeaderDataTypes.devices" size="18px" vAlign="middle"></app-data-type-icon>
                 <span>Devices</span>
@@ -412,6 +493,8 @@
               <div
                 class="summary-stack devices-summary-stack"
                 [matTooltip]="item.devicesLabel"
+                [matTooltipDisabled]="passiveComparisonTableTooltipsDisabled()"
+                matTooltipTouchGestures="off"
                 [attr.title]="item.devicesLabel">
                 @for (summary of item.activitySummaries; track summary.id) {
                 <span
@@ -420,8 +503,10 @@
                   <button
                     type="button"
                     class="device-color-trigger"
-                    [disabled]="!summary.deviceColorKey"
+                    [disabled]="bulkActionInProgress() || !summary.deviceColorKey"
                     [matTooltip]="'Set color for ' + summary.deviceLabel"
+                    [matTooltipDisabled]="passiveComparisonTableTooltipsDisabled()"
+                    matTooltipTouchGestures="off"
                     [attr.aria-label]="'Set color for ' + summary.deviceLabel"
                     (click)="openDeviceColorPreferencesDialog(summary.deviceColorKey)">
                     <span class="device-name-swatch" aria-hidden="true"></span>
@@ -435,6 +520,8 @@
                 class="devices-cell"
                 [class.devices-placeholder]="item.devicesLabel === 'Devices unknown'"
                 [matTooltip]="item.devicesLabel"
+                [matTooltipDisabled]="passiveComparisonTableTooltipsDisabled()"
+                matTooltipTouchGestures="off"
                 [attr.title]="item.devicesLabel">
                 {{ item.devicesLabel }}
               </span>
@@ -443,7 +530,7 @@
           </ng-container>
 
           <ng-container matColumnDef="activityType">
-            <th mat-header-cell *matHeaderCellDef mat-sort-header="activityType">
+            <th mat-header-cell *matHeaderCellDef>
               <span class="comparison-header-label">
                 <app-data-type-icon [dataType]="comparisonHeaderDataTypes.activityType" size="18px" vAlign="middle"></app-data-type-icon>
                 <span>Type</span>
@@ -454,6 +541,8 @@
                 class="summary-stack type-summary-stack"
                 [class.summary-placeholder]="item.activitySummaries.length === 0"
                 [matTooltip]="item.activityTypesTitle"
+                [matTooltipDisabled]="passiveComparisonTableTooltipsDisabled()"
+                matTooltipTouchGestures="off"
                 [attr.title]="item.activityTypesTitle">
                 @if (item.activitySummaries.length > 0) {
                 @for (summary of item.activitySummaries; track summary.id) {
@@ -474,7 +563,7 @@
           </ng-container>
 
           <ng-container matColumnDef="distance">
-            <th mat-header-cell *matHeaderCellDef mat-sort-header="distance">
+            <th mat-header-cell *matHeaderCellDef>
               <span class="comparison-header-label">
                 <app-data-type-icon [dataType]="comparisonHeaderDataTypes.distance" size="18px" vAlign="middle"></app-data-type-icon>
                 <span>Distance</span>
@@ -485,6 +574,8 @@
                 class="summary-stack metric-summary-stack"
                 [class.summary-placeholder]="item.activitySummaries.length === 0"
                 [matTooltip]="item.distanceTitle"
+                [matTooltipDisabled]="passiveComparisonTableTooltipsDisabled()"
+                matTooltipTouchGestures="off"
                 [attr.title]="item.distanceTitle">
                 @if (item.activitySummaries.length > 0) {
                 @for (summary of item.activitySummaries; track summary.id) {
@@ -498,7 +589,7 @@
           </ng-container>
 
           <ng-container matColumnDef="ascent">
-            <th mat-header-cell *matHeaderCellDef mat-sort-header="ascent">
+            <th mat-header-cell *matHeaderCellDef>
               <span class="comparison-header-label">
                 <app-data-type-icon [dataType]="comparisonHeaderDataTypes.ascent" size="18px" vAlign="middle"></app-data-type-icon>
                 <span>Ascent</span>
@@ -509,6 +600,8 @@
                 class="summary-stack metric-summary-stack"
                 [class.summary-placeholder]="item.activitySummaries.length === 0"
                 [matTooltip]="item.ascentTitle"
+                [matTooltipDisabled]="passiveComparisonTableTooltipsDisabled()"
+                matTooltipTouchGestures="off"
                 [attr.title]="item.ascentTitle">
                 @if (item.activitySummaries.length > 0) {
                 @for (summary of item.activitySummaries; track summary.id) {
@@ -522,7 +615,7 @@
           </ng-container>
 
           <ng-container matColumnDef="descent">
-            <th mat-header-cell *matHeaderCellDef mat-sort-header="descent">
+            <th mat-header-cell *matHeaderCellDef>
               <span class="comparison-header-label">
                 <app-data-type-icon [dataType]="comparisonHeaderDataTypes.descent" size="18px" vAlign="middle"></app-data-type-icon>
                 <span>Descent</span>
@@ -533,6 +626,8 @@
                 class="summary-stack metric-summary-stack"
                 [class.summary-placeholder]="item.activitySummaries.length === 0"
                 [matTooltip]="item.descentTitle"
+                [matTooltipDisabled]="passiveComparisonTableTooltipsDisabled()"
+                matTooltipTouchGestures="off"
                 [attr.title]="item.descentTitle">
                 @if (item.activitySummaries.length > 0) {
                 @for (summary of item.activitySummaries; track summary.id) {
@@ -546,7 +641,7 @@
           </ng-container>
 
           <ng-container matColumnDef="gnss">
-            <th mat-header-cell *matHeaderCellDef mat-sort-header="gnss">
+            <th mat-header-cell *matHeaderCellDef>
               <span class="comparison-header-label">
                 <mat-icon class="comparison-header-icon" aria-hidden="true">{{ comparisonHeaderMaterialIcons.gnss }}</mat-icon>
                 <span>GNSS</span>
@@ -558,7 +653,7 @@
           </ng-container>
 
           <ng-container matColumnDef="heartRate">
-            <th mat-header-cell *matHeaderCellDef mat-sort-header="heartRate">
+            <th mat-header-cell *matHeaderCellDef>
               <span class="comparison-header-label">
                 <app-data-type-icon [dataType]="comparisonHeaderDataTypes.heartRate" size="18px" vAlign="middle"></app-data-type-icon>
                 <span>HR</span>
@@ -570,7 +665,7 @@
           </ng-container>
 
           <ng-container matColumnDef="altitude">
-            <th mat-header-cell *matHeaderCellDef mat-sort-header="altitude">
+            <th mat-header-cell *matHeaderCellDef>
               <span class="comparison-header-label">
                 <app-data-type-icon [dataType]="comparisonHeaderDataTypes.altitude" size="18px" vAlign="middle"></app-data-type-icon>
                 <span>Alt</span>
@@ -582,7 +677,7 @@
           </ng-container>
 
           <ng-container matColumnDef="description">
-            <th mat-header-cell *matHeaderCellDef mat-sort-header="description">
+            <th mat-header-cell *matHeaderCellDef>
               <span class="comparison-header-label">
                 <app-data-type-icon [dataType]="comparisonHeaderDataTypes.description" size="18px" vAlign="middle"></app-data-type-icon>
                 <span>Description</span>
@@ -595,8 +690,11 @@
                   mat-button
                   type="button"
                   class="description-note-button"
+                  [disabled]="bulkActionInProgress()"
                   [attr.aria-label]="item.description ? 'Edit comparison description' : 'Add comparison description'"
                   [matTooltip]="item.description || 'Add description'"
+                  [matTooltipDisabled]="passiveComparisonTableTooltipsDisabled()"
+                  matTooltipTouchGestures="off"
                   (click)="startDescriptionEdit(item)">
                   <span
                     class="description-text"
@@ -628,7 +726,7 @@
           </ng-container>
 
           <ng-container matColumnDef="tags">
-            <th mat-header-cell *matHeaderCellDef mat-sort-header="tags">
+            <th mat-header-cell *matHeaderCellDef>
               <span class="comparison-header-label">
                 <mat-icon class="comparison-header-icon" aria-hidden="true">{{ comparisonHeaderMaterialIcons.tags }}</mat-icon>
                 <span>Tags</span>
@@ -640,6 +738,9 @@
                 type="button"
                 class="tags-summary-button"
                 [matTooltip]="item.benchmarkReviewTagsTitle"
+                [matTooltipDisabled]="passiveComparisonTableTooltipsDisabled()"
+                matTooltipTouchGestures="off"
+                [disabled]="bulkActionInProgress()"
                 [attr.aria-label]="item.benchmarkReviewTags.length > 0 ? 'Edit comparison tags' : 'Add comparison tags'"
                 (click)="openBenchmarkReviewTagsDialog(item)">
                 @if (item.benchmarkReviewTags.length > 0) {
@@ -663,7 +764,7 @@
           </ng-container>
 
           <ng-container matColumnDef="sourceFiles">
-            <th mat-header-cell *matHeaderCellDef mat-sort-header="sourceFiles">
+            <th mat-header-cell *matHeaderCellDef>
               <span class="comparison-header-label">
                 <mat-icon class="comparison-header-icon" aria-hidden="true">{{ comparisonHeaderMaterialIcons.sourceFiles }}</mat-icon>
                 <span>Files</span>
@@ -673,6 +774,8 @@
               <span
                 class="source-files-cell"
                 [matTooltip]="item.sourceFilesTitle"
+                [matTooltipDisabled]="passiveComparisonTableTooltipsDisabled()"
+                matTooltipTouchGestures="off"
                 [attr.title]="item.sourceFilesTitle">
                 {{ item.sourceFilesLabel }}
               </span>
@@ -680,7 +783,7 @@
           </ng-container>
 
           <ng-container matColumnDef="status">
-            <th mat-header-cell *matHeaderCellDef mat-sort-header="status">
+            <th mat-header-cell *matHeaderCellDef>
               <span class="comparison-header-label">
                 <mat-icon class="comparison-header-icon" aria-hidden="true">{{ comparisonHeaderMaterialIcons.status }}</mat-icon>
                 <span>Status</span>
@@ -692,6 +795,8 @@
                 [class.status-cell--error]="item.statusState === 'error'"
                 [class.status-cell--ready]="item.statusState === 'ready'"
                 [matTooltip]="item.statusTitle"
+                [matTooltipDisabled]="passiveComparisonTableTooltipsDisabled()"
+                matTooltipTouchGestures="off"
                 [attr.title]="item.statusTitle">
                 <mat-icon>{{ item.statusIcon }}</mat-icon>
                 <span class="status-label">{{ item.statusLabel }}</span>
@@ -700,7 +805,7 @@
           </ng-container>
 
           <ng-container matColumnDef="reports">
-            <th mat-header-cell *matHeaderCellDef mat-sort-header="reports">
+            <th mat-header-cell *matHeaderCellDef>
               <span class="comparison-header-label">
                 <mat-icon class="comparison-header-icon" aria-hidden="true">{{ comparisonHeaderMaterialIcons.reports }}</mat-icon>
                 <span>Reports</span>
@@ -711,6 +816,8 @@
                 class="report-cell"
                 [class.report-cell--empty]="!item.hasReport"
                 [matTooltip]="item.reportTitle"
+                [matTooltipDisabled]="passiveComparisonTableTooltipsDisabled()"
+                matTooltipTouchGestures="off"
                 [attr.title]="item.reportTitle">
                 <span class="report-count-label">{{ item.reportLabel }}</span>
                 @if (item.benchmarkPairLabel) {
@@ -729,14 +836,24 @@
             </th>
             <td mat-cell *matCellDef="let item">
               <div class="row-actions">
-                <button mat-icon-button type="button" matTooltip="Open details" (click)="openComparison(item, false)" aria-label="Open comparison details">
+                <button
+                  mat-icon-button
+                  type="button"
+                  matTooltip="Open details"
+                  [matTooltipDisabled]="passiveComparisonTableTooltipsDisabled()"
+                  matTooltipTouchGestures="off"
+                  [disabled]="bulkActionInProgress()"
+                  (click)="openComparison(item, false)"
+                  aria-label="Open comparison details">
                   <mat-icon>open_in_new</mat-icon>
                 </button>
                 <button
                   mat-icon-button
                   type="button"
                   [matTooltip]="item.hasReport ? 'Open report' : 'Run report'"
-                  [disabled]="!!benchmarkingEventID()"
+                  [matTooltipDisabled]="passiveComparisonTableTooltipsDisabled()"
+                  matTooltipTouchGestures="off"
+                  [disabled]="bulkActionInProgress() || !!benchmarkingEventID()"
                   (click)="openComparison(item, true)"
                   [attr.aria-label]="item.hasReport ? 'Open benchmark report' : 'Run benchmark report'">
                   @if (benchmarkingEventID() === item.id) {
@@ -750,7 +867,9 @@
                   type="button"
                   color="warn"
                   matTooltip="Delete comparison"
-                  [disabled]="!!deletingEventID()"
+                  [matTooltipDisabled]="passiveComparisonTableTooltipsDisabled()"
+                  matTooltipTouchGestures="off"
+                  [disabled]="bulkActionInProgress() || !!deletingEventID()"
                   (click)="deleteComparison(item)"
                   aria-label="Delete comparison">
                   @if (deletingEventID() === item.id) {
@@ -773,7 +892,7 @@
         [pageIndex]="comparisonPage().pageIndex"
         [pageSize]="comparisonPage().pageSize"
         [pageSizeOptions]="comparisonPageSizeOptions"
-        [disabled]="isLoadingComparisons()"
+        [disabled]="isLoadingComparisons() || bulkActionInProgress()"
         showFirstLastButtons
         (page)="onComparisonPageChange($event)">
       </mat-paginator>

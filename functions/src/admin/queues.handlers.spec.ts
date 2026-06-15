@@ -282,7 +282,7 @@ describe('getQueueStats Cloud Function', () => {
 
         // Check Cloud Tasks stats
         expect(result.cloudTasks).toEqual({
-            pending: 61,
+            pending: 66,
             queues: {
                 workout: {
                     queueId: 'processWorkoutTask',
@@ -291,6 +291,10 @@ describe('getQueueStats Cloud Function', () => {
                 activitySync: {
                     queueId: 'processActivitySyncTask',
                     pending: 0,
+                },
+                routeSync: {
+                    queueId: 'processRouteSyncTask',
+                    pending: 4,
                 },
                 sleepSync: {
                     queueId: 'processSleepSyncTask',
@@ -304,12 +308,35 @@ describe('getQueueStats Cloud Function', () => {
                     queueId: 'processSportsLibReparseHeavyTask',
                     pending: 2,
                 },
+                sportsLibRouteReparse: {
+                    queueId: 'processSportsLibRouteReparseTask',
+                    pending: 1,
+                },
                 derivedMetrics: {
                     queueId: 'processDerivedMetricsTask',
                     pending: 6,
                 },
             },
         });
+        expect(result.routeReparse).toEqual(expect.objectContaining({
+            queuePending: 1,
+            targetSportsLibVersion: expect.any(String),
+            jobs: expect.objectContaining({
+                pending: expect.any(Number),
+                processing: expect.any(Number),
+                completed: expect.any(Number),
+                skipped: expect.any(Number),
+                failed: expect.any(Number),
+            }),
+            checkpoint: expect.objectContaining({
+                cursorProcessingDocPath: null,
+                cursorProcessingVersionCode: null,
+                lastScanCount: expect.any(Number),
+                lastEnqueuedCount: expect.any(Number),
+                overrideUsersInProgress: expect.any(Number),
+            }),
+            recentFailures: expect.any(Array),
+        }));
         expect(result.sleepSync).toEqual({
             pending: 5,
             succeeded: 5,
@@ -503,10 +530,11 @@ describe('getQueueStats Cloud Function', () => {
             .mockResolvedValueOnce(3)
             .mockResolvedValueOnce(8)
             .mockResolvedValueOnce(2)
+            .mockResolvedValueOnce(1)
             .mockResolvedValueOnce(6);
         const result = await (getQueueStats as any)(request);
         expect(result.cloudTasks).toEqual({
-            pending: 61,
+            pending: 68,
             queues: {
                 workout: {
                     queueId: 'processWorkoutTask',
@@ -516,17 +544,25 @@ describe('getQueueStats Cloud Function', () => {
                     queueId: 'processActivitySyncTask',
                     pending: 0,
                 },
+                routeSync: {
+                    queueId: 'processRouteSyncTask',
+                    pending: 3,
+                },
                 sleepSync: {
                     queueId: 'processSleepSyncTask',
-                    pending: 3,
+                    pending: 8,
                 },
                 sportsLibReparse: {
                     queueId: 'processSportsLibReparseTask',
-                    pending: 8,
+                    pending: 2,
                 },
                 sportsLibReparseHeavy: {
                     queueId: 'processSportsLibReparseHeavyTask',
-                    pending: 2,
+                    pending: 1,
+                },
+                sportsLibRouteReparse: {
+                    queueId: 'processSportsLibRouteReparseTask',
+                    pending: 6,
                 },
                 derivedMetrics: {
                     queueId: 'processDerivedMetricsTask',
@@ -729,6 +765,135 @@ describe('getQueueStats Cloud Function', () => {
         }));
     });
 
+    it('counts route-sync success, skipped, retries, and throughput separately', async () => {
+        const resolveRouteSyncCount = (filters: Array<{ field: string; op: string; value: unknown }>): number => {
+            const has = (field: string, op: string, value?: unknown): boolean =>
+                filters.some((filter) => filter.field === field && filter.op === op && (value === undefined || filter.value === value));
+
+            if (has('processedAt', '>')) {
+                return 3;
+            }
+            if (has('resultStatus', '==', 'success')) {
+                return 2;
+            }
+            if (has('resultStatus', '==', 'skipped')) {
+                return 5;
+            }
+            if (has('processed', '==', false) && has('retryCount', '>=', 10)) {
+                return 1;
+            }
+            if (has('processed', '==', false) && has('retryCount', '<', 4)) {
+                return 4;
+            }
+            if (has('processed', '==', false) && has('retryCount', '>=', 4) && has('retryCount', '<', 8)) {
+                return 2;
+            }
+            if (has('processed', '==', false) && has('retryCount', '>=', 8) && has('retryCount', '<', 10)) {
+                return 1;
+            }
+            if (has('processed', '==', false) && has('retryCount', '<', 10)) {
+                return 7;
+            }
+
+            return 0;
+        };
+
+        mockCollection.mockImplementation((collectionName: string) => {
+            if (collectionName === 'routeSyncQueue') {
+                const buildQuery = (filters: Array<{ field: string; op: string; value: unknown }>) => ({
+                    where: vi.fn((field: string, op: string, value: unknown) => buildQuery([...filters, { field, op, value }])),
+                    orderBy: vi.fn(() => buildQuery(filters)),
+                    limit: vi.fn(() => buildQuery(filters)),
+                    count: vi.fn(() => ({
+                        get: vi.fn().mockResolvedValue({
+                            data: () => ({ count: resolveRouteSyncCount(filters) }),
+                        }),
+                    })),
+                    get: vi.fn().mockResolvedValue({
+                        empty: false,
+                        docs: [{ data: () => ({ dateCreated: Date.now() - 15000 }) }],
+                    }),
+                });
+
+                return buildQuery([]);
+            }
+
+            if (collectionName === 'derivedMetrics') {
+                return {
+                    where: vi.fn().mockReturnValue({
+                        get: vi.fn().mockResolvedValue({ docs: [] })
+                    })
+                };
+            }
+
+            if (collectionName === 'failed_jobs') {
+                const filters: Array<{ field: string; op: string; value: unknown }> = [];
+                const failedJobsMock: any = {
+                    where: vi.fn((field: string, op: string, value: unknown) => {
+                        filters.push({ field, op, value });
+                        return failedJobsMock;
+                    }),
+                    count: vi.fn(() => ({
+                        get: vi.fn().mockResolvedValue({
+                            data: () => ({
+                                count: filters.some((f) => f.field === 'originalCollection' && f.value === 'routeSyncQueue') ? 2 : 5,
+                            }),
+                        }),
+                    })),
+                    orderBy: vi.fn().mockReturnValue({
+                        limit: vi.fn().mockReturnValue({
+                            get: vi.fn().mockResolvedValue({
+                                size: 0,
+                                docs: [],
+                            }),
+                        }),
+                    }),
+                    get: vi.fn().mockResolvedValue({
+                        size: 0,
+                        docs: [],
+                    }),
+                };
+                return failedJobsMock;
+            }
+
+            const mockCount = vi.fn().mockReturnValue({
+                get: vi.fn().mockResolvedValue({
+                    data: () => ({ count: 5 })
+                })
+            });
+            return {
+                where: vi.fn().mockReturnThis(),
+                orderBy: vi.fn().mockReturnThis(),
+                limit: vi.fn().mockReturnThis(),
+                count: mockCount,
+                get: vi.fn().mockResolvedValue({
+                    empty: false,
+                    docs: [{ data: () => ({ dateCreated: Date.now() - 10000 }) }],
+                    data: () => ({ count: 5 })
+                })
+            };
+        });
+
+        request.data = { includeAnalysis: false };
+        const result = await (getQueueStats as any)(request);
+
+        expect(result.routeSync).toEqual(expect.objectContaining({
+            pending: 7,
+            succeeded: 2,
+            skipped: 5,
+            stuck: 1,
+            dead: 2,
+            advanced: expect.objectContaining({
+                throughput: 3,
+                retryHistogram: {
+                    '0-3': 4,
+                    '4-7': 2,
+                    '8-9': 1,
+                },
+            }),
+        }));
+    });
+
     it('keeps ingestion DLQ/top-errors isolated from activity-sync failures', async () => {
         type FailedJobDoc = {
             context: string;
@@ -908,6 +1073,71 @@ describe('getQueueStats Cloud Function', () => {
         expect(whereOrderedGet).toHaveBeenCalled();
     });
 
+    it('uses bounded ordered query for route-sync DLQ preview', async () => {
+        const orderedGet = vi.fn().mockResolvedValue({
+            size: 1,
+            docs: [
+                { data: () => ({ context: 'ROUTE_PARSE_FAILED', originalCollection: 'routeSyncQueue', error: 'Bad GPX' }) }
+            ]
+        });
+        const limit = vi.fn().mockReturnValue({
+            get: orderedGet,
+        });
+        const orderBy = vi.fn().mockReturnValue({
+            limit,
+        });
+        const directGet = vi.fn().mockResolvedValue({
+            size: 999,
+            docs: [],
+        });
+
+        mockCollection.mockImplementation((collectionName: string) => {
+            const mockCount = vi.fn().mockReturnValue({
+                get: vi.fn().mockResolvedValue({
+                    data: () => ({ count: 5 })
+                })
+            });
+
+            if (collectionName === 'failed_jobs') {
+                const failedJobsMock: any = {
+                    count: mockCount,
+                    orderBy,
+                    get: directGet,
+                };
+                failedJobsMock.where = vi.fn().mockReturnValue(failedJobsMock);
+                return failedJobsMock;
+            }
+
+            if (collectionName === 'derivedMetrics') {
+                return {
+                    where: vi.fn().mockReturnValue({
+                        get: vi.fn().mockResolvedValue({ docs: [] })
+                    })
+                };
+            }
+
+            return {
+                where: vi.fn().mockReturnThis(),
+                orderBy: vi.fn().mockReturnThis(),
+                limit: vi.fn().mockReturnThis(),
+                count: mockCount,
+                get: vi.fn().mockResolvedValue({
+                    empty: false,
+                    docs: [{ data: () => ({ dateCreated: Date.now() - 10000 }) }],
+                    data: () => ({ count: 5 })
+                })
+            };
+        });
+
+        request.data = { includeAnalysis: true };
+        await (getQueueStats as any)(request);
+
+        expect(orderBy).toHaveBeenCalledWith('failedAt', 'desc');
+        expect(limit).toHaveBeenCalledWith(50);
+        expect(directGet).not.toHaveBeenCalled();
+        expect(orderedGet).toHaveBeenCalled();
+    });
+
     it('should return only basic statistics when includeAnalysis is false', async () => {
         request.data = { includeAnalysis: false };
         const result = await (getQueueStats as any)(request);
@@ -917,6 +1147,8 @@ describe('getQueueStats Cloud Function', () => {
         expect(result.advanced.topErrors).toHaveLength(0); // Should be empty
         expect(result.activitySync.advanced.topErrors).toHaveLength(0); // Should be empty
         expect(result.activitySync.dlqByContext).toHaveLength(0); // Should be empty
+        expect(result.routeSync.advanced.topErrors).toHaveLength(0); // Should be empty
+        expect(result.routeSync.dlqByContext).toHaveLength(0); // Should be empty
     });
 
     it('should require authentication', async () => {

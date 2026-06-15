@@ -31,9 +31,17 @@ export interface SavedBenchmarkComparisonsPage {
   hasMore: boolean;
 }
 
+export type SavedBenchmarkComparisonSortColumn = 'date';
+
+export interface SavedBenchmarkComparisonSort {
+  active: SavedBenchmarkComparisonSortColumn;
+  direction: 'asc' | 'desc';
+}
+
 export interface SavedBenchmarkComparisonsPageRequest {
   pageSize: number;
   cursor?: EventQueryCursor | null;
+  sort?: SavedBenchmarkComparisonSort;
 }
 
 interface PreparedComparisonFile {
@@ -53,6 +61,13 @@ const MAX_COMPARISON_TITLE_LENGTH = 120;
 const BENCHMARK_COMPARISON_WHERE = [
   { fieldPath: 'mergeType', opStr: '==', value: 'benchmark' },
 ] as const;
+const DEFAULT_BENCHMARK_COMPARISON_SORT: SavedBenchmarkComparisonSort = {
+  active: 'date',
+  direction: 'desc',
+};
+const BENCHMARK_COMPARISON_SORT_FIELD_BY_COLUMN: Record<SavedBenchmarkComparisonSortColumn, string> = {
+  date: 'startDate',
+};
 
 function mapFallbackComparisonErrorMessage(statusCode: number): string {
   if (statusCode >= 500) {
@@ -268,12 +283,13 @@ export class AppToolsComparisonService {
     request: SavedBenchmarkComparisonsPageRequest,
   ): Observable<SavedBenchmarkComparisonsPage> {
     const pageSize = Math.max(1, Math.floor(request.pageSize));
+    const sort = this.resolveBenchmarkComparisonSort(request.sort);
 
     return this.eventService.getEventsPageOnceByWithMeta(
       user,
       [...BENCHMARK_COMPARISON_WHERE],
-      'startDate',
-      false,
+      BENCHMARK_COMPARISON_SORT_FIELD_BY_COLUMN[sort.active],
+      sort.direction === 'asc',
       pageSize,
       { startAfterCursor: request.cursor || null },
     ).pipe(
@@ -283,6 +299,17 @@ export class AppToolsComparisonService {
         hasMore: result.hasMore,
       })),
     );
+  }
+
+  private resolveBenchmarkComparisonSort(sort: SavedBenchmarkComparisonSort | undefined): SavedBenchmarkComparisonSort {
+    if (!sort || !(sort.active in BENCHMARK_COMPARISON_SORT_FIELD_BY_COLUMN)) {
+      return DEFAULT_BENCHMARK_COMPARISON_SORT;
+    }
+
+    return {
+      active: sort.active,
+      direction: sort.direction === 'asc' ? 'asc' : 'desc',
+    };
   }
 
   private concatenateFileBytes(files: PreparedComparisonFile[]): Uint8Array {

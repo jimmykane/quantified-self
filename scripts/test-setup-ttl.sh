@@ -1,17 +1,13 @@
 #!/bin/bash
 
-# Mock gcloud function
-gcloud() {
-    echo "MOCK gcloud: $*"
-}
+set -euo pipefail
 
-# Export the function so it's visible to the sourced script if we were sourcing
-# But since we are running the script in a subshell, we can't easily override the command unless we modify the PATH or use an alias.
-# A simpler way to "test" a bash script without executing side effects is often to inspect it or use a dry-run flag if supported.
-# Since the script calls 'gcloud' directly, we can create a temporary 'gcloud' executable in the PATH.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 TEST_DIR=$(mktemp -d)
 MockGcloud="$TEST_DIR/gcloud"
+OutputFile="$TEST_DIR/output.txt"
 
 echo '#!/bin/bash' > "$MockGcloud"
 echo 'echo "MOCK_EXEC: gcloud $*"' >> "$MockGcloud"
@@ -21,7 +17,17 @@ chmod +x "$MockGcloud"
 export PATH="$TEST_DIR:$PATH"
 
 echo "Running setup-ttl.sh with mocked gcloud..."
-./scripts/setup-ttl.sh
+bash "$REPO_ROOT/scripts/setup-ttl.sh" | tee "$OutputFile"
+
+if ! grep -q 'Processing collection: routeSyncQueue' "$OutputFile"; then
+    echo "Expected routeSyncQueue to be included in TTL setup output."
+    exit 1
+fi
+
+if ! grep -q 'Processing collection: queueCleanupTombstones' "$OutputFile"; then
+    echo "Expected queueCleanupTombstones to be included in TTL setup output."
+    exit 1
+fi
 
 # Cleanup
 rm -rf "$TEST_DIR"

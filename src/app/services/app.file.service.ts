@@ -20,19 +20,26 @@ export class AppFileService {
 
   public downloadFile(blob: Blob, name: string, extension: string): void {
     const normalizedExtension = this.normalizeExtension(extension);
-    const filename = `${name}.${normalizedExtension}`;
-    const mimeType = this.resolveDownloadMimeType(normalizedExtension, blob.type);
+    this.downloadNamedFile(blob, `${name}.${normalizedExtension}`, normalizedExtension);
+  }
+
+  public downloadNamedFile(blob: Blob, fileName: string, fallbackExtension: string = 'bin'): void {
+    const normalizedFileName = this.ensureFilenameHasExtension(fileName, fallbackExtension);
+    const mimeType = this.resolveDownloadMimeType(
+      this.getTrailingExtension(normalizedFileName, fallbackExtension),
+      blob.type,
+    );
     const normalizedBlob = blob.type === mimeType
       ? blob
       : new Blob([blob], { type: mimeType });
-    const namedFile = this.createNamedFile(normalizedBlob, filename, mimeType);
+    const namedFile = this.createNamedFile(normalizedBlob, normalizedFileName, mimeType);
 
     if (namedFile) {
       saveAs(namedFile);
       return;
     }
 
-    saveAs(normalizedBlob, filename);
+    saveAs(normalizedBlob, normalizedFileName);
   }
 
   public async downloadAsZip(files: { data: Blob | ArrayBuffer, fileName: string }[], zipFileName: string): Promise<void> {
@@ -133,6 +140,45 @@ export class AppFileService {
     return extension || defaultExt;
   }
 
+  public resolveOriginalSourceFileName(
+    file: { originalFilename?: unknown; path?: unknown; extension?: unknown },
+    fallbackExtension: string = 'bin',
+    fallbackName: string = 'download',
+  ): string {
+    const normalizedExtension = this.normalizeExtension(
+      typeof file.extension === 'string' && file.extension.trim().length > 0
+        ? file.extension
+        : fallbackExtension,
+    );
+    const originalFilename = this.normalizeSourceFilename(file.originalFilename);
+    if (originalFilename) {
+      return this.ensureFilenameHasExtension(originalFilename, normalizedExtension);
+    }
+
+    const path = typeof file.path === 'string' ? file.path : '';
+    const basename = this.extractPathBasename(path);
+    if (basename) {
+      return this.ensureFilenameHasExtension(basename, normalizedExtension);
+    }
+
+    return this.ensureFilenameHasExtension(fallbackName, normalizedExtension);
+  }
+
+  public getUniqueFileName(fileName: string, usedNames: Set<string>): string {
+    const normalizedFileName = this.normalizeSourceFilename(fileName) || 'download';
+    const { stem, extension } = this.splitFileName(normalizedFileName);
+    let candidate = normalizedFileName;
+    let suffix = 2;
+
+    while (usedNames.has(candidate.toLowerCase())) {
+      candidate = extension ? `${stem}_${suffix}.${extension}` : `${stem}_${suffix}`;
+      suffix++;
+    }
+
+    usedNames.add(candidate.toLowerCase());
+    return candidate;
+  }
+
   public async decompressIfNeeded(buffer: ArrayBuffer, path?: string): Promise<ArrayBuffer> {
     const bytes = new Uint8Array(buffer);
     // Gzip magic number: 0x1F 0x8B
@@ -180,11 +226,78 @@ export class AppFileService {
         return 'application/xml';
       case 'csv':
         return 'text/csv';
+      case 'gz':
+        return 'application/gzip';
       case 'zip':
         return 'application/zip';
       default:
         return 'application/octet-stream';
     }
+  }
+
+  private normalizeSourceFilename(value: unknown): string | null {
+    if (typeof value !== 'string') {
+      return null;
+    }
+
+    const trimmed = value.trim().replace(/\s+/g, ' ');
+    if (!trimmed) {
+      return null;
+    }
+
+    let decoded = trimmed;
+    try {
+      decoded = decodeURIComponent(trimmed);
+    } catch {
+      decoded = trimmed;
+    }
+
+    const basename = this.extractPathBasename(decoded) || decoded;
+    return basename.trim() || null;
+  }
+
+  private ensureFilenameHasExtension(fileName: string, fallbackExtension: string): string {
+    const normalizedFileName = this.normalizeSourceFilename(fileName) || 'download';
+    const normalizedFallbackExtension = this.normalizeExtension(fallbackExtension);
+    const currentExtension = this.getExtensionFromPath(normalizedFileName, '');
+    if (currentExtension) {
+      return normalizedFileName;
+    }
+    return `${normalizedFileName}.${normalizedFallbackExtension}`;
+  }
+
+  private extractPathBasename(value: string): string | null {
+    const parts = value.split(/[\\/]/).filter(Boolean);
+    return parts.length > 0 ? parts[parts.length - 1] : null;
+  }
+
+  private splitFileName(fileName: string): { stem: string; extension: string } {
+    const lastDotIndex = fileName.lastIndexOf('.');
+    if (lastDotIndex <= 0 || lastDotIndex === fileName.length - 1) {
+      return {
+        stem: fileName,
+        extension: '',
+      };
+    }
+
+    return {
+      stem: fileName.slice(0, lastDotIndex),
+      extension: fileName.slice(lastDotIndex + 1),
+    };
+  }
+
+  private getTrailingExtension(fileName: string, fallbackExtension: string): string {
+    const parts = fileName.split('.');
+    if (parts.length <= 1) {
+      return this.normalizeExtension(fallbackExtension);
+    }
+
+    const extension = parts.pop()?.trim().toLowerCase();
+    if (!extension || extension.includes('/')) {
+      return this.normalizeExtension(fallbackExtension);
+    }
+
+    return extension;
   }
 
   private createNamedFile(blob: Blob, filename: string, mimeType: string): File | null {

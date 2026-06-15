@@ -44,6 +44,7 @@ describe('adminResolver', () => {
             cancelScheduled: 1,
             onboardingCompleted: 8,
             events: { total: 100 },
+            routes: { total: 12 },
             providers: {}
         };
         const mockTrend = {

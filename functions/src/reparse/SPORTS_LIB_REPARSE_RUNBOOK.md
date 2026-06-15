@@ -12,9 +12,10 @@ Target version source of truth:
 ### Global mode (production path)
 Global discovery is query-first on processing metadata:
 - query: `collectionGroup('metaData')`
-- filter: `where('sportsLibVersionCode', '<', targetSportsLibVersionCode)`
+- filter: `where('processingEntity', '==', 'event').where('sportsLibVersionCode', '<', targetSportsLibVersionCode)`
 - order: `orderBy('sportsLibVersionCode', 'asc').orderBy('__name__', 'asc')`
 - path guard: only docs at `.../metaData/processing` are treated as reparse candidates
+- entity discriminator: global event discovery requires `processingEntity: "event"`; run the event-entity backfill before enabling the scheduler with this query.
 
 For each processing doc hit:
 1. Derive identity from parent path only (`users/{uid}/events/{eventId}` from `processingRef.parent.parent`).
@@ -117,6 +118,7 @@ Common outcomes:
 - Path: `users/{uid}/events/{eventId}/metaData/processing`
 
 Expected fields:
+- `processingEntity: "event"`
 - `sportsLibVersion: string`
 - `sportsLibVersionCode: number`
 - `processedAt`
@@ -218,22 +220,29 @@ Notes:
 - `--uids` mode ignores `--start-after`
 - supports both `--arg value` and `--arg=value`
 
-### Backfill script
+### Backfill scripts
 Dry-run:
 ```bash
 npm run backfill-sports-lib-processing-code -- --limit 1000
+npm run backfill-event-processing-entity -- --resume --limit 1000
 ```
 
 Execute:
 ```bash
 npm run backfill-sports-lib-processing-code -- --execute --limit 1000
+npm run backfill-event-processing-entity -- --execute --resume --limit 1000
 ```
 
 Scoped:
 ```bash
 npm run backfill-sports-lib-processing-code -- --execute --uid <uid> --limit 2000
 npm run backfill-sports-lib-processing-code -- --execute --uids <uid1,uid2> --limit 2000
+npm run backfill-event-processing-entity -- --execute --resume --uid <uid> --limit 2000
 ```
+
+Use `backfill-event-processing-entity` when only legacy event processing docs need the `processingEntity: "event"` discriminator. Use `backfill-sports-lib-processing-code` when missing processing docs or missing `sportsLibVersionCode` also need to be repaired.
+
+`backfill-event-processing-entity --resume` reads its checkpoint in dry-run mode but advances the checkpoint only during successful `--execute` batches. It supports global runs or a single `--uid`; it intentionally rejects `--uids` because the checkpoint is a single cursor.
 
 ## Rollout Order
 1. Deploy Firestore index and wait until READY.
@@ -264,3 +273,4 @@ Functions exports in `functions/src/index.ts`:
 Local npm commands in `functions/package.json`:
 - `reparse-sports-lib-events`
 - `backfill-sports-lib-processing-code`
+- `backfill-event-processing-entity`

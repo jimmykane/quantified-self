@@ -177,6 +177,40 @@ import { cleanupUserAccounts, ORPHANED_SERVICE_TOKENS_COLLECTION_NAME } from './
 
 const testEnv = functionsTest();
 
+function createPaginatedLimitQueryMock(pages: Array<{ docs: unknown[]; empty?: boolean }>) {
+    const get = vi.fn();
+    for (const page of pages) {
+        get.mockResolvedValueOnce(page);
+    }
+    get.mockResolvedValue({ empty: true, docs: [] });
+
+    const startAfter = vi.fn().mockReturnValue({ get });
+    const limit = vi.fn().mockReturnValue({ get, startAfter });
+
+    return { get, startAfter, limit };
+}
+
+function mockCollectionLimitQueriesByName(limitQueriesByCollectionName: Record<string, ReturnType<typeof createPaginatedLimitQueryMock>>) {
+    const collectionMock = firestoreMock().collection;
+    const baseImplementation = collectionMock.getMockImplementation();
+    if (!baseImplementation) {
+        throw new Error('Expected Firestore collection mock implementation');
+    }
+
+    collectionMock.mockImplementation((collectionName: string) => {
+        const baseCollection = baseImplementation(collectionName) as Record<string, unknown>;
+        const queryOverride = limitQueriesByCollectionName[collectionName];
+        if (!queryOverride) {
+            return baseCollection;
+        }
+
+        return {
+            ...baseCollection,
+            limit: queryOverride.limit,
+        };
+    });
+}
+
 describe('cleanupUserAccounts', () => {
     beforeEach(() => {
         vi.clearAllMocks();
@@ -747,7 +781,12 @@ describe('cleanupUserAccounts', () => {
                     : field === 'userID' && value === 'testUser123'
                         ? { docs: [{ id: 'activity-job-1', ref: { path: 'activitySyncQueue/activity-job-1' }, data: () => ({}) }] }
                         : field === 'uid' && value === 'testUser123'
-                            ? { docs: [{ id: 'reparse-job-1', ref: { path: 'sportsLibReparseJobs/reparse-job-1' }, data: () => ({}) }] }
+                            ? {
+                                docs: [
+                                    { id: 'reparse-job-1', ref: { path: 'sportsLibReparseJobs/reparse-job-1' }, data: () => ({}) },
+                                    { id: 'route-reparse-job-1', ref: { path: 'sportsLibRouteReparseJobs/route-reparse-job-1' }, data: () => ({}) },
+                                ],
+                            }
                         : { docs: [] }
             )
         }));
@@ -760,6 +799,7 @@ describe('cleanupUserAccounts', () => {
         expect(firestoreMock().collection).toHaveBeenCalledWith('suuntoAppWorkoutQueue');
         expect(firestoreMock().collection).toHaveBeenCalledWith('COROSAPIWorkoutQueue');
         expect(firestoreMock().collection).toHaveBeenCalledWith('sportsLibReparseJobs');
+        expect(firestoreMock().collection).toHaveBeenCalledWith('sportsLibRouteReparseJobs');
         expect(firestoreMock().collection).toHaveBeenCalledWith('failed_jobs');
         expect(whereMock).toHaveBeenCalledWith('firebaseUserID', '==', 'testUser123');
         expect(whereMock).toHaveBeenCalledWith('uid', '==', 'testUser123');
@@ -771,6 +811,7 @@ describe('cleanupUserAccounts', () => {
         expect(recursiveDeleteMock).toHaveBeenCalledWith(expect.objectContaining({ path: 'activitySyncQueue/activity-job-1' }));
         expect(recursiveDeleteMock).toHaveBeenCalledWith(expect.objectContaining({ path: 'suuntoAppWorkoutQueue/provider-job-1' }));
         expect(recursiveDeleteMock).toHaveBeenCalledWith(expect.objectContaining({ path: 'sportsLibReparseJobs/reparse-job-1' }));
+        expect(recursiveDeleteMock).toHaveBeenCalledWith(expect.objectContaining({ path: 'sportsLibRouteReparseJobs/route-reparse-job-1' }));
         expect(markQueueItemDeletedForUserCleanupMock).toHaveBeenCalledWith(
             'sleepSyncQueue',
             'sleep-job-1',
@@ -900,6 +941,27 @@ describe('cleanupUserAccounts', () => {
     it('should remove legacy provider-keyed orphan queue and DLQ docs for recovered provider identifiers', async () => {
         const wrapped = cleanupUserAccounts;
         const user = testEnv.auth.makeUserRecord({ uid: 'testUser123' });
+        const routeQueueQuery = createPaginatedLimitQueryMock([{ docs: [] }]);
+        const sleepQueueQuery = createPaginatedLimitQueryMock([{
+            docs: [{
+                id: 'legacy-provider-only-sleep',
+                ref: { path: 'sleepSyncQueue/legacy-provider-only-sleep' },
+                data: () => ({
+                    provider: 'SuuntoApp',
+                    providerUserId: 'legacy-suunto-provider',
+                }),
+            }],
+        }]);
+        const failedJobsQuery = createPaginatedLimitQueryMock([{
+            docs: [{
+                id: 'legacy-provider-only-dlq',
+                ref: { path: 'failed_jobs/legacy-provider-only-dlq' },
+                data: () => ({
+                    originalCollection: 'suuntoAppWorkoutQueue',
+                    userName: 'legacy-suunto-provider',
+                }),
+            }],
+        }]);
 
         tokensGetMock.mockResolvedValue({ empty: true, size: 0, docs: [] });
         whereMock.mockImplementation((field: string, _operator: string, value: string) => ({
@@ -918,30 +980,11 @@ describe('cleanupUserAccounts', () => {
                     : { docs: [] }
             )
         }));
-        limitGetMock
-            .mockResolvedValueOnce({
-                docs: [{
-                    id: 'legacy-provider-only-sleep',
-                    ref: { path: 'sleepSyncQueue/legacy-provider-only-sleep' },
-                    data: () => ({
-                        provider: 'SuuntoApp',
-                        providerUserId: 'legacy-suunto-provider',
-                    }),
-                }],
-            })
-            .mockResolvedValueOnce({ docs: [] })
-            .mockResolvedValueOnce({ docs: [] })
-            .mockResolvedValueOnce({ docs: [] })
-            .mockResolvedValueOnce({
-                docs: [{
-                    id: 'legacy-provider-only-dlq',
-                    ref: { path: 'failed_jobs/legacy-provider-only-dlq' },
-                    data: () => ({
-                        originalCollection: 'suuntoAppWorkoutQueue',
-                        userName: 'legacy-suunto-provider',
-                    }),
-                }],
-            });
+        mockCollectionLimitQueriesByName({
+            routeSyncQueue: routeQueueQuery,
+            sleepSyncQueue: sleepQueueQuery,
+            failed_jobs: failedJobsQuery,
+        });
 
         await wrapped(user, { eventId: 'eventId' } as unknown as functions.EventContext);
 
@@ -977,6 +1020,20 @@ describe('cleanupUserAccounts', () => {
                 providerUserId: `other-provider-${index}`,
             }),
         }));
+        const routeQueueQuery = createPaginatedLimitQueryMock([{ docs: [] }]);
+        const sleepQueueQuery = createPaginatedLimitQueryMock([
+            { docs: firstPageDocs },
+            {
+                docs: [{
+                    id: 'second-page-provider-only-sleep',
+                    ref: { path: 'sleepSyncQueue/second-page-provider-only-sleep' },
+                    data: () => ({
+                        provider: 'SuuntoApp',
+                        providerUserId: 'paged-legacy-suunto-provider',
+                    }),
+                }],
+            },
+        ]);
 
         tokensGetMock.mockResolvedValue({ empty: true, size: 0, docs: [] });
         whereMock.mockImplementation((field: string, _operator: string, value: string) => ({
@@ -995,23 +1052,14 @@ describe('cleanupUserAccounts', () => {
                     : { docs: [] }
             )
         }));
-        limitGetMock
-            .mockResolvedValueOnce({ docs: firstPageDocs })
-            .mockResolvedValueOnce({
-                docs: [{
-                    id: 'second-page-provider-only-sleep',
-                    ref: { path: 'sleepSyncQueue/second-page-provider-only-sleep' },
-                    data: () => ({
-                        provider: 'SuuntoApp',
-                        providerUserId: 'paged-legacy-suunto-provider',
-                    }),
-                }],
-            })
-            .mockResolvedValue({ docs: [] });
+        mockCollectionLimitQueriesByName({
+            routeSyncQueue: routeQueueQuery,
+            sleepSyncQueue: sleepQueueQuery,
+        });
 
         await wrapped(user, { eventId: 'eventId' } as unknown as functions.EventContext);
 
-        expect(startAfterMock).toHaveBeenCalledWith(firstPageDocs[firstPageDocs.length - 1]);
+        expect(sleepQueueQuery.startAfter).toHaveBeenCalledWith(firstPageDocs[firstPageDocs.length - 1]);
         expect(recursiveDeleteMock).toHaveBeenCalledWith(expect.objectContaining({
             path: 'sleepSyncQueue/second-page-provider-only-sleep',
         }));
@@ -1039,21 +1087,24 @@ describe('cleanupUserAccounts', () => {
     it('should not remove unassociated provider-keyed orphan queue docs during another user cleanup', async () => {
         const wrapped = cleanupUserAccounts;
         const user = testEnv.auth.makeUserRecord({ uid: 'testUser123' });
+        const routeQueueQuery = createPaginatedLimitQueryMock([{ docs: [] }]);
+        const sleepQueueQuery = createPaginatedLimitQueryMock([{
+            docs: [{
+                id: 'unassociated-provider-only-sleep',
+                ref: { path: 'sleepSyncQueue/unassociated-provider-only-sleep' },
+                data: () => ({
+                    provider: 'SuuntoApp',
+                    providerUserId: 'other-users-provider-id',
+                }),
+            }],
+        }]);
 
         tokensGetMock.mockResolvedValue({ empty: true, size: 0, docs: [] });
         whereMock.mockReturnValue({ get: vi.fn().mockResolvedValue({ docs: [] }) });
-        limitGetMock
-            .mockResolvedValueOnce({
-                docs: [{
-                    id: 'unassociated-provider-only-sleep',
-                    ref: { path: 'sleepSyncQueue/unassociated-provider-only-sleep' },
-                    data: () => ({
-                        provider: 'SuuntoApp',
-                        providerUserId: 'other-users-provider-id',
-                    }),
-                }],
-            })
-            .mockResolvedValue({ docs: [] });
+        mockCollectionLimitQueriesByName({
+            routeSyncQueue: routeQueueQuery,
+            sleepSyncQueue: sleepQueueQuery,
+        });
 
         await wrapped(user, { eventId: 'eventId' } as unknown as functions.EventContext);
 
@@ -1290,6 +1341,17 @@ describe('cleanupUserAccounts', () => {
             }],
         });
         const activeTokenLimit = vi.fn().mockReturnValue({ get: activeTokenGet });
+        const routeQueueQuery = createPaginatedLimitQueryMock([{ docs: [] }]);
+        const sleepQueueQuery = createPaginatedLimitQueryMock([{
+            docs: [{
+                id: 'active-provider-sleep',
+                ref: { path: 'sleepSyncQueue/active-provider-sleep' },
+                data: () => ({
+                    provider: 'SuuntoApp',
+                    providerUserId: 'active-suunto-provider',
+                }),
+            }],
+        }]);
 
         tokensGetMock.mockResolvedValue({ empty: true, size: 0, docs: [] });
         whereMock.mockImplementation((field: string, _operator: string, value: string) => ({
@@ -1328,18 +1390,10 @@ describe('cleanupUserAccounts', () => {
             limit: activeTokenLimit,
             get: activeTokenGet,
         }));
-        limitGetMock
-            .mockResolvedValueOnce({
-                docs: [{
-                    id: 'active-provider-sleep',
-                    ref: { path: 'sleepSyncQueue/active-provider-sleep' },
-                    data: () => ({
-                        provider: 'SuuntoApp',
-                        providerUserId: 'active-suunto-provider',
-                    }),
-                }],
-            })
-            .mockResolvedValue({ docs: [] });
+        mockCollectionLimitQueriesByName({
+            routeSyncQueue: routeQueueQuery,
+            sleepSyncQueue: sleepQueueQuery,
+        });
 
         await wrapped(user, { eventId: 'eventId' } as unknown as functions.EventContext);
 

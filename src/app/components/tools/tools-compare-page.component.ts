@@ -1,4 +1,6 @@
 import { ChangeDetectionStrategy, Component, DestroyRef, computed, effect, inject, OnInit, signal } from '@angular/core';
+import { SelectionModel } from '@angular/cdk/collections';
+import { BreakpointObserver } from '@angular/cdk/layout';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router } from '@angular/router';
 import { MatDialog } from '@angular/material/dialog';
@@ -36,7 +38,11 @@ import {
   ToolCompareSignInSource,
 } from '../../services/app.analytics.service';
 import { AppEventService, EventQueryCursor } from '../../services/app.event.service';
-import { AppToolsComparisonService, SavedBenchmarkComparisonsPage } from '../../services/app.tools-comparison.service';
+import {
+  AppToolsComparisonService,
+  SavedBenchmarkComparisonSortColumn,
+  SavedBenchmarkComparisonsPage,
+} from '../../services/app.tools-comparison.service';
 import { LoggerService } from '../../services/logger.service';
 import { ToolsCompareAuthResolverData } from '../../resolvers/tools-compare-auth.resolver';
 import { AppEventColorService } from '../../services/color/app.event.color.service';
@@ -45,7 +51,9 @@ import { AppDeviceColorPreferenceService } from '../../services/color/app-device
 import { AppBenchmarkFlowService } from '../../services/app.benchmark-flow.service';
 import type { BenchmarkGenerationFailureReason } from '../../services/app.benchmark-flow.service';
 import { BENCHMARK_NO_OVERLAP_MESSAGE } from '../../services/app.benchmark.service';
+import { AppBreakpoints } from '../../constants/breakpoints';
 import { AppHapticsService } from '../../services/app.haptics.service';
+import { AppProcessingService } from '../../services/app.processing.service';
 import { BenchmarkReviewService } from '../../services/benchmark-review.service';
 import {
   DeviceColorPreferenceDialogDevice,
@@ -68,16 +76,10 @@ interface ComparisonListItem {
   id: string;
   title: string;
   date: Date | null;
-  dateSortMs: number;
   activitySummaries: ComparisonActivitySummary[];
   devicesLabel: string;
-  devicesSort: string;
   activityTypesLabel: string;
-  activityTypesSort: string;
   activityTypesTitle: string;
-  distanceSort: number | null;
-  ascentSort: number | null;
-  descentSort: number | null;
   distanceTitle: string;
   ascentTitle: string;
   descentTitle: string;
@@ -87,12 +89,10 @@ interface ComparisonListItem {
   description: string;
   benchmarkReviewTags: string[];
   benchmarkReviewTagsTitle: string;
-  benchmarkReviewTagsSort: string | null;
   deviceFilterValues: string[];
   activityTypeFilterValues: string[];
   tagFilterValues: string[];
   sourceFilesCount: number | null;
-  sourceFilesSort: number | null;
   sourceFilesLabel: string;
   sourceFilesTitle: string;
   hasReport: boolean;
@@ -105,7 +105,6 @@ interface ComparisonListItem {
   statusTitle: string;
   statusIcon: string;
   statusState: ComparisonStatusState;
-  statusRank: number;
   filterText: string;
   event: AppEventInterface;
 }
@@ -128,9 +127,6 @@ interface ComparisonActivitySummary {
   distanceLabel: string;
   ascentLabel: string;
   descentLabel: string;
-  distanceSort: number | null;
-  ascentSort: number | null;
-  descentSort: number | null;
   filterText: string;
 }
 
@@ -151,22 +147,7 @@ interface ComparisonBenchmarkMetricLine {
   isPlaceholder: boolean;
 }
 
-type ComparisonSortColumn =
-  | 'date'
-  | 'title'
-  | 'devices'
-  | 'activityType'
-  | 'distance'
-  | 'ascent'
-  | 'descent'
-  | 'gnss'
-  | 'heartRate'
-  | 'altitude'
-  | 'description'
-  | 'tags'
-  | 'sourceFiles'
-  | 'status'
-  | 'reports';
+type ComparisonSortColumn = SavedBenchmarkComparisonSortColumn;
 type ComparisonDeviceSource = 'report' | 'legacy-report' | 'metadata' | 'activity';
 
 interface ComparisonSortState {
@@ -194,6 +175,7 @@ const MAX_COMPARISON_FILES = 10;
 const DEFAULT_COMPARISON_PAGE_SIZE = 25;
 const COMPARISON_PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
 const MISSING_BENCHMARK_REPORT_TOOLTIP = 'No benchmark report yet. Run the benchmark report from this row to generate GNSS, heart-rate, and altitude metrics.';
+const PASSIVE_TABLE_TOOLTIP_MEDIA_QUERIES = ['(pointer: coarse)', '(hover: none)', AppBreakpoints.Handset] as const;
 
 @Component({
   selector: 'app-tools-compare-page',
@@ -205,6 +187,7 @@ const MISSING_BENCHMARK_REPORT_TOOLTIP = 'No benchmark report yet. Run the bench
 })
 export class ToolsComparePageComponent implements OnInit {
   private destroyRef = inject(DestroyRef);
+  private breakpointObserver = inject(BreakpointObserver);
   private route = inject(ActivatedRoute);
   private router = inject(Router);
   private dialog = inject(MatDialog);
@@ -217,8 +200,10 @@ export class ToolsComparePageComponent implements OnInit {
   private deviceColorPreferenceService = inject(AppDeviceColorPreferenceService);
   private benchmarkFlowService = inject(AppBenchmarkFlowService);
   private hapticsService = inject(AppHapticsService);
+  private processingService = inject(AppProcessingService);
   private benchmarkReviewService = inject(BenchmarkReviewService);
   private logger = inject(LoggerService);
+  private readonly comparisonSelection = new SelectionModel<string>(true, []);
 
   readonly selectedFiles = signal<File[]>([]);
   readonly comparisonTitle = signal('');
@@ -228,15 +213,18 @@ export class ToolsComparePageComponent implements OnInit {
   readonly comparisonTotalCount = signal(0);
   readonly isLoadingComparisons = signal(false);
   readonly deletingEventID = signal<string | null>(null);
+  readonly bulkActionInProgress = signal(false);
   readonly savingDescriptionEventID = signal<string | null>(null);
   readonly editingDescriptionEventID = signal<string | null>(null);
   readonly benchmarkingEventID = signal<string | null>(null);
   readonly benchmarkFailureByEventID = signal<Record<string, ComparisonBenchmarkFailure>>({});
+  readonly passiveComparisonTableTooltipsDisabled = signal(false);
   readonly descriptionDrafts = signal<Record<string, string>>({});
   readonly comparisonFilter = signal('');
   readonly comparisonDeviceFilter = signal('');
   readonly comparisonActivityTypeFilter = signal('');
   readonly comparisonTagFilter = signal('');
+  readonly selectedComparisonIDs = signal<string[]>([]);
   readonly comparisonSort = signal<ComparisonSortState>({ active: 'date', direction: 'desc' });
   readonly comparisonPage = signal<ComparisonPageState>({
     pageIndex: 0,
@@ -244,6 +232,7 @@ export class ToolsComparePageComponent implements OnInit {
   });
   readonly comparisonPageSizeOptions = COMPARISON_PAGE_SIZE_OPTIONS;
   readonly displayedComparisonColumns = [
+    'select',
     'date',
     'title',
     'tags',
@@ -372,11 +361,7 @@ export class ToolsComparePageComponent implements OnInit {
   });
 
   readonly sortedComparisonItems = computed<ComparisonListItem[]>(() => {
-    const sort = this.comparisonSort();
-
-    return [...this.filteredComparisonItems()].sort((first, second) =>
-      this.compareComparisonItems(first, second, sort.active, sort.direction),
-    );
+    return this.filteredComparisonItems();
   });
 
   readonly comparisonDeviceColorItems = computed<DeviceColorPreferenceDialogDevice[]>(() => {
@@ -423,6 +408,21 @@ export class ToolsComparePageComponent implements OnInit {
     this.buildComparisonFilterOptions(this.comparisonItems().flatMap(item => item.tagFilterValues)),
   );
 
+  readonly selectedComparisonCount = computed(() => this.selectedComparisonIDs().length);
+  readonly selectedComparisonIDSet = computed(() => new Set(this.selectedComparisonIDs()));
+  readonly allVisibleComparisonsSelected = computed(() => {
+    const visibleItems = this.paginatedComparisonItems();
+    const selectedIDs = this.selectedComparisonIDSet();
+    return visibleItems.length > 0
+      && visibleItems.every(item => selectedIDs.has(item.id));
+  });
+  readonly visibleComparisonSelectionIndeterminate = computed(() => {
+    const visibleItems = this.paginatedComparisonItems();
+    const selectedIDs = this.selectedComparisonIDSet();
+    const visibleSelectedCount = visibleItems.filter(item => selectedIDs.has(item.id)).length;
+    return visibleSelectedCount > 0 && visibleSelectedCount < visibleItems.length;
+  });
+
   readonly paginatedComparisonItems = computed<ComparisonListItem[]>(() => {
     const page = this.comparisonPage();
     const start = page.pageIndex * page.pageSize;
@@ -465,12 +465,20 @@ export class ToolsComparePageComponent implements OnInit {
     if (loaded >= total) {
       return `${total} comparison${total === 1 ? '' : 's'}`;
     }
-    const sort = this.comparisonSort();
-    const sortScopeLabel = sort.active === 'date' && sort.direction === 'desc' ? '' : '; sorting loaded rows';
-    return `${loaded} of ${total} loaded${sortScopeLabel}`;
+    return `${loaded} of ${total} loaded`;
   });
 
   ngOnInit(): void {
+    this.breakpointObserver
+      .observe(PASSIVE_TABLE_TOOLTIP_MEDIA_QUERIES)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(result => {
+        if (result.matches === this.passiveComparisonTableTooltipsDisabled()) {
+          return;
+        }
+        this.passiveComparisonTableTooltipsDisabled.set(result.matches);
+      });
+
     this.authService.user$
       .pipe(
         takeUntilDestroyed(this.destroyRef),
@@ -550,9 +558,14 @@ export class ToolsComparePageComponent implements OnInit {
   }
 
   updateComparisonFilter(value: string): void {
+    if (this.bulkActionInProgress()) {
+      return;
+    }
+
     const wasFilterActive = this.isComparisonFilterActive();
     this.comparisonFilter.set(value);
     this.resetComparisonPage();
+    this.reconcileComparisonSelectionWithItems(this.filteredComparisonItems());
     if (this.isComparisonFilterActive() !== wasFilterActive) {
       this.hapticsService.selection();
       this.analyticsService.logToolCompareSavedAction('filter', {
@@ -565,6 +578,10 @@ export class ToolsComparePageComponent implements OnInit {
   }
 
   updateComparisonDeviceFilter(value: string): void {
+    if (this.bulkActionInProgress()) {
+      return;
+    }
+
     if (this.comparisonDeviceFilter() === value) {
       return;
     }
@@ -574,6 +591,10 @@ export class ToolsComparePageComponent implements OnInit {
   }
 
   updateComparisonActivityTypeFilter(value: string): void {
+    if (this.bulkActionInProgress()) {
+      return;
+    }
+
     if (this.comparisonActivityTypeFilter() === value) {
       return;
     }
@@ -583,6 +604,10 @@ export class ToolsComparePageComponent implements OnInit {
   }
 
   updateComparisonTagFilter(value: string): void {
+    if (this.bulkActionInProgress()) {
+      return;
+    }
+
     if (this.comparisonTagFilter() === value) {
       return;
     }
@@ -591,11 +616,33 @@ export class ToolsComparePageComponent implements OnInit {
     this.applyComparisonFacetFilterChange();
   }
 
-  onComparisonSortChange(sort: Sort): void {
-    const active = this.isComparisonSortColumn(sort.active) ? sort.active : 'date';
-    const direction = sort.direction || (active === 'date' ? 'desc' : 'asc');
-    this.comparisonSort.set({ active, direction });
-    this.resetComparisonPage();
+  async onComparisonSortChange(sort: Sort): Promise<void> {
+    if (this.bulkActionInProgress()) {
+      return;
+    }
+
+    let active: ComparisonSortColumn = 'date';
+    let requestedDirection: SortDirection = '';
+    if (this.isComparisonSortColumn(sort.active)) {
+      active = sort.active;
+      requestedDirection = sort.direction;
+    }
+    const direction = (requestedDirection || (active === 'date' ? 'desc' : 'asc')) as Exclude<SortDirection, ''>;
+    const previousSort = this.comparisonSort();
+    const nextSort: ComparisonSortState = { active, direction };
+
+    if (previousSort.active === nextSort.active && previousSort.direction === nextSort.direction) {
+      return;
+    }
+
+    this.comparisonSort.set(nextSort);
+    const user = this.currentUser();
+    if (user) {
+      await this.loadInitialComparisonPage(user);
+    } else {
+      this.resetComparisonPage();
+    }
+
     this.hapticsService.selection();
     this.analyticsService.logToolCompareSavedAction('sort', {
       sortColumn: active,
@@ -606,6 +653,10 @@ export class ToolsComparePageComponent implements OnInit {
   }
 
   async onComparisonPageChange(event: PageEvent): Promise<void> {
+    if (this.bulkActionInProgress()) {
+      return;
+    }
+
     const currentPage = this.comparisonPage();
     const pageSizeChanged = currentPage.pageSize !== event.pageSize;
 
@@ -643,8 +694,44 @@ export class ToolsComparePageComponent implements OnInit {
     return item.id;
   }
 
+  toggleComparisonSelection(item: ComparisonListItem, checked: boolean): void {
+    if (this.bulkActionInProgress()) {
+      return;
+    }
+
+    if (checked) {
+      this.comparisonSelection.select(item.id);
+    } else {
+      this.comparisonSelection.deselect(item.id);
+    }
+    this.syncSelectedComparisonIDs();
+    this.hapticsService.selection();
+  }
+
+  toggleVisibleComparisonSelection(checked: boolean): void {
+    if (this.bulkActionInProgress()) {
+      return;
+    }
+
+    const visibleIDs = this.paginatedComparisonItems().map(item => item.id);
+    if (checked) {
+      this.comparisonSelection.select(...visibleIDs);
+    } else {
+      visibleIDs.forEach(eventID => this.comparisonSelection.deselect(eventID));
+    }
+    this.syncSelectedComparisonIDs();
+    this.hapticsService.selection();
+  }
+
+  clearComparisonSelection(event?: Event): void {
+    event?.preventDefault();
+    event?.stopPropagation();
+    this.clearComparisonSelectionWithoutHaptic();
+    this.hapticsService.selection();
+  }
+
   startDescriptionEdit(item: ComparisonListItem): void {
-    if (this.savingDescriptionEventID()) {
+    if (this.savingDescriptionEventID() || this.bulkActionInProgress()) {
       return;
     }
 
@@ -793,7 +880,7 @@ export class ToolsComparePageComponent implements OnInit {
       return;
     }
 
-    if (benchmark && this.benchmarkingEventID()) {
+    if (this.bulkActionInProgress() || (benchmark && this.benchmarkingEventID())) {
       return;
     }
 
@@ -831,6 +918,10 @@ export class ToolsComparePageComponent implements OnInit {
     item: ComparisonListItem,
     cell?: ComparisonBenchmarkMetricCell,
   ): Promise<void> {
+    if (this.bulkActionInProgress()) {
+      return;
+    }
+
     if (item.hasReport && !cell?.canRerunReport) {
       return;
     }
@@ -984,8 +1075,130 @@ export class ToolsComparePageComponent implements OnInit {
     });
   }
 
+  async confirmDeleteSelectedComparisons(): Promise<void> {
+    const user = this.currentUser();
+    const selectedItems = this.getSelectedLoadedComparisonItems();
+    if (
+      !user
+      || selectedItems.length === 0
+      || this.bulkActionInProgress()
+      || !!this.deletingEventID()
+      || !!this.benchmarkingEventID()
+      || !!this.savingDescriptionEventID()
+      || !!this.editingDescriptionEventID()
+    ) {
+      return;
+    }
+
+    this.hapticsService.selection();
+    const comparisonLabel = selectedItems.length === 1 ? 'comparison' : 'comparisons';
+    const dialogRef = this.dialog.open(ConfirmationDialogComponent, {
+      data: {
+        title: `Delete ${selectedItems.length} selected ${comparisonLabel}?`,
+        message: `This removes ${selectedItems.length} selected saved benchmark ${comparisonLabel} and their source files.`,
+        confirmLabel: 'Delete',
+        cancelLabel: 'Cancel',
+        confirmColor: 'warn',
+      } as ConfirmationDialogData,
+    });
+    const confirmed = await firstValueFrom(dialogRef.afterClosed());
+    if (!confirmed) {
+      return;
+    }
+
+    this.analyticsService.logToolCompareSavedAction('delete', {
+      status: 'confirmed',
+      filterActive: this.isComparisonFilterActive(),
+      resultCount: this.filteredComparisonCount(),
+      selectedCount: selectedItems.length,
+    });
+    this.bulkActionInProgress.set(true);
+    const jobId = this.processingService.addJob('process', 'Deleting selected comparisons...');
+    this.processingService.updateJob(jobId, { status: 'processing', progress: 10 });
+    const failedComparisonIDs: string[] = [];
+    const deletedComparisonIDs: string[] = [];
+
+    try {
+      for (let index = 0; index < selectedItems.length; index += 1) {
+        const item = selectedItems[index];
+        try {
+          await this.eventService.deleteAllEventData(user, item.id);
+          deletedComparisonIDs.push(item.id);
+        } catch (error) {
+          failedComparisonIDs.push(item.id);
+          this.logger.error('[ToolsComparePageComponent] Failed to delete selected comparison', { eventID: item.id }, error);
+        }
+
+        this.processingService.updateJob(jobId, {
+          progress: 10 + Math.round(((index + 1) / selectedItems.length) * 80),
+          details: `Deleted ${deletedComparisonIDs.length} of ${selectedItems.length}`,
+        });
+      }
+
+      if (deletedComparisonIDs.length > 0) {
+        this.removeComparisonEventsFromLoadedRows(deletedComparisonIDs);
+        this.comparisonTotalCount.update(total => Math.max(0, total - deletedComparisonIDs.length));
+        this.resetComparisonPage();
+      }
+
+      this.comparisonSelection.clear();
+      this.comparisonSelection.select(...failedComparisonIDs);
+      this.syncSelectedComparisonIDs();
+
+      if (deletedComparisonIDs.length === 0) {
+        this.processingService.failJob(jobId, 'No selected comparisons deleted');
+        this.analyticsService.logToolCompareSavedAction('delete', {
+          status: 'failure',
+          filterActive: this.isComparisonFilterActive(),
+          resultCount: this.filteredComparisonCount(),
+          selectedCount: selectedItems.length,
+          deletedCount: 0,
+          failedCount: failedComparisonIDs.length,
+        });
+        this.snackBar.open('Could not delete selected comparisons.', undefined, { duration: 3000 });
+        this.hapticsService.error();
+        return;
+      }
+
+      const statusMessage = failedComparisonIDs.length > 0
+        ? `Deleted ${deletedComparisonIDs.length} ${deletedComparisonIDs.length === 1 ? 'comparison' : 'comparisons'}. Failed ${failedComparisonIDs.length}.`
+        : `Deleted ${deletedComparisonIDs.length} ${deletedComparisonIDs.length === 1 ? 'comparison' : 'comparisons'}.`;
+      const analyticsStatus = failedComparisonIDs.length > 0 ? 'partial_success' : 'success';
+      this.processingService.completeJob(jobId, statusMessage);
+      this.analyticsService.logToolCompareSavedAction('delete', {
+        status: analyticsStatus,
+        filterActive: this.isComparisonFilterActive(),
+        resultCount: this.filteredComparisonCount(),
+        selectedCount: selectedItems.length,
+        deletedCount: deletedComparisonIDs.length,
+        failedCount: failedComparisonIDs.length,
+      });
+      this.snackBar.open(statusMessage, undefined, { duration: failedComparisonIDs.length > 0 ? 4000 : 2500 });
+      if (failedComparisonIDs.length > 0) {
+        this.hapticsService.warning();
+      } else {
+        this.hapticsService.success();
+      }
+    } catch (error) {
+      this.processingService.failJob(jobId, 'Selected comparison delete failed');
+      this.analyticsService.logToolCompareSavedAction('delete', {
+        status: 'failure',
+        filterActive: this.isComparisonFilterActive(),
+        resultCount: this.filteredComparisonCount(),
+        selectedCount: selectedItems.length,
+        deletedCount: deletedComparisonIDs.length,
+        failedCount: selectedItems.length - deletedComparisonIDs.length,
+      });
+      this.logger.error('[ToolsComparePageComponent] Failed to delete selected comparisons', error);
+      this.snackBar.open('Could not delete selected comparisons.', undefined, { duration: 3000 });
+      this.hapticsService.error();
+    } finally {
+      this.bulkActionInProgress.set(false);
+    }
+  }
+
   async deleteComparison(item: ComparisonListItem): Promise<void> {
-    if (this.deletingEventID()) {
+    if (this.deletingEventID() || this.bulkActionInProgress()) {
       return;
     }
 
@@ -1035,6 +1248,10 @@ export class ToolsComparePageComponent implements OnInit {
   }
 
   openDeviceColorPreferencesDialog(initialDeviceKey?: string | null): void {
+    if (this.bulkActionInProgress()) {
+      return;
+    }
+
     const devices = this.comparisonDeviceColorItems();
     if (devices.length === 0) {
       return;
@@ -1052,6 +1269,10 @@ export class ToolsComparePageComponent implements OnInit {
   }
 
   async openBenchmarkReviewTagsDialog(item: ComparisonListItem): Promise<void> {
+    if (this.bulkActionInProgress()) {
+      return;
+    }
+
     const user = this.currentUser();
     if (!user) {
       this.hapticsService.warning();
@@ -1103,6 +1324,7 @@ export class ToolsComparePageComponent implements OnInit {
 
   private applyComparisonFacetFilterChange(): void {
     this.resetComparisonPage();
+    this.reconcileComparisonSelectionWithItems(this.filteredComparisonItems());
     this.hapticsService.selection();
     this.analyticsService.logToolCompareSavedAction('filter', {
       status: this.isComparisonFilterActive() ? 'applied' : 'cleared',
@@ -1115,6 +1337,7 @@ export class ToolsComparePageComponent implements OnInit {
   private async loadInitialComparisonPage(user: User): Promise<void> {
     const loadGeneration = ++this.comparisonLoadGeneration;
     this.clearComparisonPageCache();
+    this.clearComparisonSelectionWithoutHaptic();
     this.comparisonTotalCount.set(0);
     this.isLoadingComparisons.set(true);
 
@@ -1122,7 +1345,10 @@ export class ToolsComparePageComponent implements OnInit {
       const pageSize = this.comparisonPage().pageSize;
       const [totalCount, firstPage] = await Promise.all([
         firstValueFrom(this.comparisonService.getBenchmarkComparisonCount(user)),
-        firstValueFrom(this.comparisonService.getBenchmarkComparisonPage(user, { pageSize })),
+        firstValueFrom(this.comparisonService.getBenchmarkComparisonPage(user, {
+          pageSize,
+          sort: this.comparisonSort(),
+        })),
       ]);
 
       if (!this.isCurrentComparisonLoad(loadGeneration, user)) {
@@ -1171,6 +1397,7 @@ export class ToolsComparePageComponent implements OnInit {
         const page = await firstValueFrom(this.comparisonService.getBenchmarkComparisonPage(user, {
           pageSize,
           cursor,
+          sort: this.comparisonSort(),
         }));
         if (!this.isCurrentComparisonLoad(loadGeneration, user)) {
           return false;
@@ -1218,6 +1445,7 @@ export class ToolsComparePageComponent implements OnInit {
       .sort(([firstPageIndex], [secondPageIndex]) => firstPageIndex - secondPageIndex)
       .flatMap(([, pageEvents]) => pageEvents);
     this.comparisons.set(events);
+    this.reconcileComparisonSelectionWithItems(this.comparisonItems());
   }
 
   private updateComparisonEventInLoadedRows(
@@ -1250,10 +1478,19 @@ export class ToolsComparePageComponent implements OnInit {
   }
 
   private removeComparisonEventFromLoadedRows(eventID: string): void {
-    this.clearBenchmarkFailureForComparison(eventID);
+    this.removeComparisonEventsFromLoadedRows([eventID]);
+  }
+
+  private removeComparisonEventsFromLoadedRows(eventIDs: string[]): void {
+    const eventIDSet = new Set(eventIDs);
+    if (eventIDSet.size === 0) {
+      return;
+    }
+
+    eventIDSet.forEach(eventID => this.clearBenchmarkFailureForComparison(eventID));
     let removedLoadedPage = false;
     for (const [pageIndex, pageEvents] of this.loadedComparisonPages.entries()) {
-      const nextPageEvents = pageEvents.filter(event => event.getID() !== eventID);
+      const nextPageEvents = pageEvents.filter(event => !eventIDSet.has(event.getID()));
       if (nextPageEvents.length !== pageEvents.length) {
         removedLoadedPage = true;
       }
@@ -1262,10 +1499,14 @@ export class ToolsComparePageComponent implements OnInit {
 
     if (removedLoadedPage) {
       this.syncComparisonPages();
+      eventIDs.forEach(eventID => this.comparisonSelection.deselect(eventID));
+      this.syncSelectedComparisonIDs();
       return;
     }
 
-    this.comparisons.update(events => events.filter(event => event.getID() !== eventID));
+    this.comparisons.update(events => events.filter(event => !eventIDSet.has(event.getID())));
+    eventIDs.forEach(eventID => this.comparisonSelection.deselect(eventID));
+    this.syncSelectedComparisonIDs();
   }
 
   private clearComparisonPageCache(): void {
@@ -1286,6 +1527,7 @@ export class ToolsComparePageComponent implements OnInit {
     this.comparisonDeviceFilter.set('');
     this.comparisonActivityTypeFilter.set('');
     this.comparisonTagFilter.set('');
+    this.clearComparisonSelectionWithoutHaptic();
     this.lastLoggedFilterActive = false;
     this.hydratingActivitySummaryEventIDs.clear();
     this.hydratedActivitySummaryEventIDs.clear();
@@ -1295,6 +1537,35 @@ export class ToolsComparePageComponent implements OnInit {
 
   private isCurrentComparisonLoad(loadGeneration: number, user: User): boolean {
     return this.comparisonLoadGeneration === loadGeneration && this.currentUser()?.uid === user.uid;
+  }
+
+  private getSelectedLoadedComparisonItems(): ComparisonListItem[] {
+    const selectedIDs = this.selectedComparisonIDSet();
+    return this.comparisonItems().filter(item => selectedIDs.has(item.id));
+  }
+
+  private reconcileComparisonSelectionWithItems(items: ComparisonListItem[]): void {
+    const visibleIDs = new Set(items.map(item => item.id));
+    let changed = false;
+    [...this.comparisonSelection.selected].forEach((eventID) => {
+      if (!visibleIDs.has(eventID)) {
+        this.comparisonSelection.deselect(eventID);
+        changed = true;
+      }
+    });
+
+    if (changed || this.selectedComparisonIDs().length !== this.comparisonSelection.selected.length) {
+      this.syncSelectedComparisonIDs();
+    }
+  }
+
+  private syncSelectedComparisonIDs(): void {
+    this.selectedComparisonIDs.set([...this.comparisonSelection.selected]);
+  }
+
+  private clearComparisonSelectionWithoutHaptic(): void {
+    this.comparisonSelection.clear();
+    this.syncSelectedComparisonIDs();
   }
 
   private getComparisonCreateAnalytics(): ToolCompareCreateAnalytics {
@@ -1560,16 +1831,10 @@ export class ToolsComparePageComponent implements OnInit {
       id: eventID,
       title: comparisonEvent.comparisonTitle || event.name || 'Benchmark comparison',
       date: event.startDate instanceof Date ? event.startDate : null,
-      dateSortMs: event.startDate instanceof Date ? event.startDate.getTime() : 0,
       activitySummaries,
       devicesLabel,
-      devicesSort: deviceNames.length > 0 ? deviceNames.join(' ').toLowerCase() : '\uffff',
       activityTypesLabel,
-      activityTypesSort: activityTypesLabel.toLowerCase(),
       activityTypesTitle: activityTypeLabels.length > 0 ? activityTypeLabels.join('\n') : 'Types unknown',
-      distanceSort: this.getMetricSort(activitySummaries, 'distanceSort'),
-      ascentSort: this.getMetricSort(activitySummaries, 'ascentSort'),
-      descentSort: this.getMetricSort(activitySummaries, 'descentSort'),
       distanceTitle: this.formatSummaryTitle(activitySummaries, summary => summary.distanceLabel, 'Distance unknown'),
       ascentTitle: this.formatSummaryTitle(activitySummaries, summary => summary.ascentLabel, 'Ascent unknown'),
       descentTitle: this.formatSummaryTitle(activitySummaries, summary => summary.descentLabel, 'Descent unknown'),
@@ -1579,12 +1844,10 @@ export class ToolsComparePageComponent implements OnInit {
       description,
       benchmarkReviewTags,
       benchmarkReviewTagsTitle,
-      benchmarkReviewTagsSort: benchmarkReviewTags.length > 0 ? benchmarkReviewTags.join(' ').toLowerCase() : null,
       deviceFilterValues,
       activityTypeFilterValues,
       tagFilterValues: benchmarkReviewTags,
       sourceFilesCount,
-      sourceFilesSort: sourceFilesCount,
       sourceFilesLabel,
       sourceFilesTitle,
       hasReport,
@@ -1597,7 +1860,6 @@ export class ToolsComparePageComponent implements OnInit {
       statusTitle: statusPresentation.title,
       statusIcon: statusPresentation.icon,
       statusState: statusPresentation.state,
-      statusRank: statusPresentation.rank,
       filterText: [
         comparisonEvent.comparisonTitle || event.name || 'Benchmark comparison',
         devicesLabel,
@@ -1623,14 +1885,13 @@ export class ToolsComparePageComponent implements OnInit {
   private resolveComparisonStatusPresentation(
     hasReport: boolean,
     benchmarkFailure: ComparisonBenchmarkFailure | null,
-  ): { label: string; title: string; icon: string; state: ComparisonStatusState; rank: number } {
+  ): { label: string; title: string; icon: string; state: ComparisonStatusState } {
     if (benchmarkFailure?.type === 'no_overlap') {
       return {
         label: 'No time overlap',
         title: `Last benchmark attempt failed: ${benchmarkFailure.message} Choose overlapping activities and rerun the benchmark.`,
         icon: 'error',
         state: 'error',
-        rank: 2,
       };
     }
 
@@ -1640,7 +1901,6 @@ export class ToolsComparePageComponent implements OnInit {
         title: 'Benchmark report is ready.',
         icon: 'check_circle',
         state: 'ready',
-        rank: 1,
       };
     }
 
@@ -1649,84 +1909,11 @@ export class ToolsComparePageComponent implements OnInit {
       title: 'No benchmark report has been generated yet.',
       icon: 'pending',
       state: 'draft',
-      rank: 0,
     };
   }
 
-  private compareComparisonItems(
-    first: ComparisonListItem,
-    second: ComparisonListItem,
-    column: ComparisonSortColumn,
-    direction: SortDirection,
-  ): number {
-    const directionMultiplier = direction === 'asc' ? 1 : -1;
-
-    switch (column) {
-      case 'date':
-        return (first.dateSortMs - second.dateSortMs) * directionMultiplier;
-      case 'title':
-        return first.title.localeCompare(second.title) * directionMultiplier;
-      case 'devices':
-        return first.devicesSort.localeCompare(second.devicesSort) * directionMultiplier;
-      case 'activityType':
-        return first.activityTypesSort.localeCompare(second.activityTypesSort) * directionMultiplier;
-      case 'distance':
-        return this.compareNullableNumbers(first.distanceSort, second.distanceSort, direction);
-      case 'ascent':
-        return this.compareNullableNumbers(first.ascentSort, second.ascentSort, direction);
-      case 'descent':
-        return this.compareNullableNumbers(first.descentSort, second.descentSort, direction);
-      case 'gnss':
-        return this.compareNullableNumbers(first.gnssBenchmark.sortValue, second.gnssBenchmark.sortValue, direction);
-      case 'heartRate':
-        return this.compareNullableNumbers(first.heartRateBenchmark.sortValue, second.heartRateBenchmark.sortValue, direction);
-      case 'altitude':
-        return this.compareNullableNumbers(first.altitudeBenchmark.sortValue, second.altitudeBenchmark.sortValue, direction);
-      case 'description':
-        return first.description.localeCompare(second.description) * directionMultiplier;
-      case 'tags':
-        return this.compareNullableStrings(first.benchmarkReviewTagsSort, second.benchmarkReviewTagsSort, direction);
-      case 'sourceFiles':
-        return this.compareNullableNumbers(first.sourceFilesSort, second.sourceFilesSort, direction);
-      case 'status':
-        return (first.statusRank - second.statusRank) * directionMultiplier;
-      case 'reports':
-        return (first.reportCount - second.reportCount) * directionMultiplier;
-    }
-
-    return 0;
-  }
-
   private isComparisonSortColumn(value: string): value is ComparisonSortColumn {
-    return ['date', 'title', 'devices', 'activityType', 'distance', 'ascent', 'descent', 'gnss', 'heartRate', 'altitude', 'description', 'tags', 'sourceFiles', 'status', 'reports'].includes(value);
-  }
-
-  private compareNullableNumbers(first: number | null, second: number | null, direction: SortDirection): number {
-    if (first === null && second === null) {
-      return 0;
-    }
-    if (first === null) {
-      return 1;
-    }
-    if (second === null) {
-      return -1;
-    }
-
-    return direction === 'asc' ? first - second : second - first;
-  }
-
-  private compareNullableStrings(first: string | null, second: string | null, direction: SortDirection): number {
-    if (first === null && second === null) {
-      return 0;
-    }
-    if (first === null) {
-      return 1;
-    }
-    if (second === null) {
-      return -1;
-    }
-
-    return first.localeCompare(second) * (direction === 'asc' ? 1 : -1);
+    return value === 'date';
   }
 
   private resolvePrimaryBenchmarkResult(event: AppEventInterface): BenchmarkResult | null {
@@ -2059,9 +2246,6 @@ export class ToolsComparePageComponent implements OnInit {
         distanceLabel,
         ascentLabel,
         descentLabel,
-        distanceSort: this.getActivityStatNumericValue(distanceStat),
-        ascentSort: this.getActivityStatNumericValue(ascentStat),
-        descentSort: this.getActivityStatNumericValue(descentStat),
         filterText: [
           deviceLabel,
           activityTypeLabel,
@@ -2213,21 +2397,6 @@ export class ToolsComparePageComponent implements OnInit {
     const displayValue = `${stat.getDisplayValue?.() ?? ''}`.trim();
     const displayUnit = `${stat.getDisplayUnit?.() ?? ''}`.trim();
     return displayUnit ? `${displayValue} ${displayUnit}`.trim() : displayValue;
-  }
-
-  private getActivityStatNumericValue(stat: DataInterface | null | undefined): number | null {
-    const value = Number(stat?.getValue?.());
-    return Number.isFinite(value) ? value : null;
-  }
-
-  private getMetricSort(
-    summaries: ComparisonActivitySummary[],
-    field: 'distanceSort' | 'ascentSort' | 'descentSort',
-  ): number | null {
-    const values = summaries
-      .map(summary => summary[field])
-      .filter((value): value is number => typeof value === 'number' && Number.isFinite(value));
-    return values.length > 0 ? Math.max(...values) : null;
   }
 
   private getDistinctLabels(labels: string[]): string[] {

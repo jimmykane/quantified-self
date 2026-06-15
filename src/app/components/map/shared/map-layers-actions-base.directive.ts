@@ -4,7 +4,7 @@ import { AppMapStyleName } from '../../../models/app-user.interface';
 
 @Directive()
 export abstract class MapLayersActionsBaseDirective {
-  @Input() user: User;
+  @Input() user: User | null = null;
   @Input() disabled = false;
   @Input() mapStyle: AppMapStyleName = 'default';
   @Input() is3D = false;

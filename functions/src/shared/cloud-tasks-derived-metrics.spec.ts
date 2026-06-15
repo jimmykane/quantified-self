@@ -28,6 +28,7 @@ vi.mock('../config', () => ({
       workoutQueue: 'processWorkoutTask',
       activitySyncQueue: 'processActivitySyncTask',
       sportsLibReparseQueue: 'processSportsLibReparseTask',
+      sportsLibRouteReparseQueue: 'processSportsLibRouteReparseTask',
       derivedMetricsQueue: 'processDerivedMetricsTask',
       derivedMetricsIngressBucketSeconds: 30,
       serviceAccountEmail: 'sa@test.com',

@@ -301,6 +301,7 @@ describe('utils higher-level helpers', () => {
             const processingCall = hoisted.transactionSet.mock.calls.find((call: any[]) => call[1]?.sportsLibVersion);
             expect(processingCall).toBeTruthy();
             expect(processingCall[1]).toEqual(expect.objectContaining({
+                processingEntity: 'event',
                 sportsLibVersion: SPORTS_LIB_VERSION,
                 sportsLibVersionCode: expect.any(Number),
                 processedAt: 'SERVER_TIMESTAMP',
