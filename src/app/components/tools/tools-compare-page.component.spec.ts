@@ -1272,6 +1272,17 @@ describe('ToolsComparePageComponent', () => {
     expect(component.comparisonPaginatorLength()).toBe(0);
   });
 
+  it('keeps saved comparison bulk actions inside the visible scroll area', () => {
+    const styles = readFileSync('src/app/components/tools/tools-compare-page.component.scss', 'utf8');
+    const selectionToolbarStyles = styles.match(/\.comparison-selection-toolbar\s*{(?<body>[^}]*)}/)?.groups?.['body'] ?? '';
+
+    expect(selectionToolbarStyles).toContain('position: sticky;');
+    expect(selectionToolbarStyles).toContain('left: 0;');
+    expect(selectionToolbarStyles).toContain('width: 100%;');
+    expect(selectionToolbarStyles).toContain('justify-content: flex-start;');
+    expect(selectionToolbarStyles).not.toContain('min-width');
+  });
+
   it('exposes the full previous comparison title when the table truncates it', () => {
     const fullTitle = 'Benchmark comparison: morning-device-reference.fit vs evening-device-candidate.gpx';
     userSubject.next(new User('user-1'));

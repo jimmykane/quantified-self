@@ -858,7 +858,9 @@ describe('RoutesPageComponent', () => {
         expect(styles).toContain('.route-table-row');
         expect(styles).toContain('.route-selection-toolbar');
         expect(styles).toContain('.route-table .mat-column-name');
-        expect(styles).toContain('width: 20rem;');
+        expect(styles).toContain('width: 14rem;');
+        expect(styles).toContain('min-width: 12rem;');
+        expect(styles).toContain('max-width: 16rem;');
         expect(styles).toContain('.route-table .mat-column-sourceService');
         expect(styles).toContain('.route-source-service-cell');
         expect(styles).toContain('.route-original-file-cell');
@@ -880,10 +882,17 @@ describe('RoutesPageComponent', () => {
         expect(template).toContain('class="route-table-shell qs-scrollbar"');
         expect(template).not.toContain('class="route-table-scroll qs-scrollbar"');
         expect(styles).toContain('.route-table-shell');
+        expect(styles).toContain('--route-table-min-width: 108rem;');
         expect(styles).toContain('overflow-x: auto;');
         expect(styles).not.toContain('.route-table-scroll');
         expect(styles).not.toContain('overscroll-behavior: contain;');
         expect(styles).not.toContain('touch-action: pan-x pan-y;');
+        const selectionToolbarStyles = styles.match(/\.route-selection-toolbar\s*{(?<body>[^}]*)}/)?.groups?.['body'] ?? '';
+        expect(selectionToolbarStyles).toContain('position: sticky;');
+        expect(selectionToolbarStyles).toContain('left: 0;');
+        expect(selectionToolbarStyles).toContain('width: 100%;');
+        expect(selectionToolbarStyles).toContain('justify-content: flex-start;');
+        expect(selectionToolbarStyles).not.toContain('min-width');
     });
 
     it('sorts route table rows by normalized route stats', async () => {
