@@ -21,6 +21,9 @@ import {
   getSuuntoRouteCatchUpDateForConnectedProviders,
 } from '../../../helpers/suunto-route-catch-up.helper';
 
+function isDateValue(value: unknown): value is Date {
+  return Object.prototype.toString.call(value) === '[object Date]';
+}
 
 @Component({
   selector: 'app-services-suunto',
@@ -192,12 +195,13 @@ export class ServicesSuuntoComponent extends ServicesAbstractComponentDirective 
 
   private buildConnectedSuuntoAccountTrackKey(token: Auth1ServiceTokenInterface | Auth2ServiceTokenInterface): string {
     const providerUserId = getSuuntoProviderUserIdFromTokenLike(token) || 'unknown-user';
-    const createdAt = token?.dateCreated instanceof Date
-      ? token.dateCreated.getTime()
-      : typeof token?.dateCreated === 'number'
-        ? token.dateCreated
-        : typeof token?.dateCreated === 'string'
-          ? token.dateCreated
+    const rawDateCreated = token?.dateCreated;
+    const createdAt = isDateValue(rawDateCreated)
+      ? rawDateCreated.getTime()
+      : typeof rawDateCreated === 'number'
+        ? rawDateCreated
+        : typeof rawDateCreated === 'string'
+          ? rawDateCreated
           : 'unknown-created';
     return `${providerUserId}:${createdAt}`;
   }

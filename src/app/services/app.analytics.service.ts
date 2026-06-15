@@ -79,7 +79,8 @@ export type SavedRouteSortColumn =
     | 'minGrade'
     | 'name'
     | 'originalFilename'
-    | 'pointCount';
+    | 'pointCount'
+    | 'sourceService';
 
 export interface ToolCompareFileSelectionAnalytics {
     selectedCount: number;
