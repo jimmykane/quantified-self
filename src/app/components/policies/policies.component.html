@@ -4,6 +4,57 @@
 </div>
 
 <div class="policies-container">
+  <section class="connected-services-section" [attr.id]="connectedServicesPolicy.id">
+    <mat-card appearance="outlined" class="connected-services-card">
+      <mat-card-header>
+        <div mat-card-avatar class="policy-avatar">
+          <mat-icon>hub</mat-icon>
+        </div>
+        <mat-card-title>{{ connectedServicesPolicy.title }}</mat-card-title>
+        <mat-card-subtitle>{{ connectedServicesPolicy.summary }}</mat-card-subtitle>
+      </mat-card-header>
+
+      <mat-card-content>
+        <nav class="policy-anchor-nav" aria-label="Connected services policy sections">
+          <a
+            *ngFor="let link of connectedServicesPolicy.navLinks"
+            class="policy-anchor-link"
+            [href]="'#' + link.id">
+            <mat-icon>{{ link.icon }}</mat-icon>
+            <span>{{ link.label }}</span>
+          </a>
+        </nav>
+
+        <div class="policy-topic-intro">
+          <ng-container *ngFor="let item of connectedServicesPolicy.content">
+            <div [innerHTML]="item" class="policy-content-item"></div>
+          </ng-container>
+        </div>
+
+        <section
+          *ngFor="let topic of connectedServicesPolicy.topics"
+          class="connected-service-topic"
+          [attr.id]="topic.id">
+          <header class="connected-service-topic__header">
+            <div class="policy-avatar connected-service-topic__avatar">
+              <mat-icon>{{ topic.icon }}</mat-icon>
+            </div>
+            <div class="connected-service-topic__copy">
+              <h2>{{ topic.title }}</h2>
+              <p>{{ topic.summary }}</p>
+            </div>
+          </header>
+
+          <div class="connected-service-topic__content">
+            <ng-container *ngFor="let item of topic.content">
+              <div [innerHTML]="item" class="policy-content-item"></div>
+            </ng-container>
+          </div>
+        </section>
+      </mat-card-content>
+    </mat-card>
+  </section>
+
   <div class="policies-grid">
 
     <mat-card appearance="outlined" *ngFor="let policy of policies" class="policy-card">

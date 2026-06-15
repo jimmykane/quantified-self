@@ -118,6 +118,18 @@ describe('HelpPageComponent', () => {
     expect(bugLink?.attributes['target']).toBe('_blank');
   });
 
+  it('should preserve route fragments for provider-specific policy links', () => {
+    component.onSectionTabChange(4);
+    fixture.detectChanges();
+
+    const garminPolicyLink = fixture.debugElement
+      .queryAll(By.css('.section-links a'))
+      .find(node => node.nativeElement.textContent.includes('Garmin Data Privacy'));
+
+    expect(garminPolicyLink?.attributes['href']).toContain('/policies#garmin-data');
+    expect(garminPolicyLink?.attributes['target']).toBeUndefined();
+  });
+
   it('should select section from URL fragment on refresh render', async () => {
     const targetId = HELP_SECTIONS[2].id;
     window.history.replaceState(null, '', `/help#${targetId}`);

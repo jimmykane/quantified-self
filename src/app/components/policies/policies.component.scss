@@ -49,6 +49,97 @@
     gap: 1.5rem;
 }
 
+.connected-services-section {
+    margin-bottom: 1.5rem;
+    scroll-margin-top: 96px;
+}
+
+.connected-services-card {
+    overflow: hidden;
+}
+
+.policy-anchor-nav {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    margin-bottom: 1.5rem;
+}
+
+.policy-anchor-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.625rem 0.875rem;
+    border: 1px solid var(--mat-sys-outline-variant);
+    border-radius: 999px;
+    color: inherit;
+    text-decoration: none;
+    transition: background-color 120ms ease, border-color 120ms ease;
+}
+
+.policy-anchor-link:hover {
+    background: rgba(0, 0, 0, 0.03);
+    border-color: var(--mat-sys-outline);
+}
+
+:host-context(.dark-theme) .policy-anchor-link:hover {
+    background: rgba(255, 255, 255, 0.06);
+}
+
+.policy-anchor-link mat-icon {
+    font-size: 18px;
+    width: 18px;
+    height: 18px;
+    color: var(--mat-sys-primary, #3f51b5);
+}
+
+.policy-topic-intro {
+    display: grid;
+    gap: 0.85rem;
+    margin-bottom: 1.5rem;
+}
+
+.connected-service-topic {
+    padding-top: 1.5rem;
+    margin-top: 1.5rem;
+    border-top: 1px solid var(--mat-sys-outline-variant);
+    scroll-margin-top: 96px;
+}
+
+.connected-service-topic__header {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 1rem;
+    align-items: start;
+    margin-bottom: 1rem;
+}
+
+.connected-service-topic__avatar {
+    margin-top: 0.125rem;
+}
+
+.connected-service-topic__copy {
+    min-width: 0;
+}
+
+.connected-service-topic__copy h2 {
+    margin: 0 0 0.35rem;
+    font-size: 1.2rem;
+    font-weight: 600;
+    color: var(--mat-sys-on-surface);
+}
+
+.connected-service-topic__copy p {
+    margin: 0;
+    color: var(--mat-sys-on-surface-variant);
+    line-height: 1.5;
+}
+
+.connected-service-topic__content {
+    display: grid;
+    gap: 0.85rem;
+}
+
 @include bp.min-768 {
     .policies-grid {
         grid-template-columns: repeat(2, 1fr);
@@ -127,4 +218,14 @@ mat-card-content p {
 
 :host-context(.dark-theme) .policy-content-item a {
     color: var(--mat-sys-tertiary, #bb86fc);
+}
+
+@include bp.max-768 {
+    .connected-service-topic__header {
+        grid-template-columns: 1fr;
+    }
+
+    .connected-service-topic__avatar {
+        display: none;
+    }
 }

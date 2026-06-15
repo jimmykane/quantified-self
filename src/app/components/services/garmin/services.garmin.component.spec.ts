@@ -58,7 +58,17 @@ describe('ServicesGarminComponent', () => {
             }
         };
         mockRouter = {
-            navigate: vi.fn().mockResolvedValue(true)
+            navigate: vi.fn().mockResolvedValue(true),
+            events: of({}),
+            createUrlTree: vi.fn((commands: unknown[], extras?: { fragment?: string }) => ({
+                commands,
+                fragment: extras?.fragment ?? null,
+            })),
+            serializeUrl: vi.fn((urlTree: { commands?: unknown[]; fragment?: string | null }) => {
+                const segments = (urlTree.commands ?? []).map(segment => `${segment}`.replace(/^\/+/, ''));
+                const path = `/${segments.join('/')}`.replace(/\/+/g, '/');
+                return urlTree.fragment ? `${path}#${urlTree.fragment}` : path;
+            }),
         };
         mockDialog = {
             open: vi.fn(() => ({
@@ -133,6 +143,14 @@ describe('ServicesGarminComponent', () => {
 
     it('should create', () => {
         expect(component).toBeTruthy();
+    });
+
+    it('renders a direct privacy link to the Garmin policy section', () => {
+        const privacyLink = fixture.nativeElement.querySelector('.service-privacy-link a');
+
+        expect(privacyLink).toBeTruthy();
+        expect(privacyLink.textContent).toContain('Privacy details for Garmin data');
+        expect(privacyLink.getAttribute('href')).toContain('/policies#garmin-data');
     });
 
     it('renders connection status outside the provider tool tabs', () => {
