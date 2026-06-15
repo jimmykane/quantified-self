@@ -6,12 +6,15 @@
 <div class="service-container">
   <app-service-connection-status
     serviceLabel="Garmin"
-    description="Required for history imports and Garmin to Suunto auto-sync."
+    [description]="connectionDescription"
     [connected]="isConnectedToService()"
     [loading]="isLoading"
     [locked]="!hasProAccess && !isConnectedToService()"
     [proRequired]="!hasProAccess && !isConnectedToService()"
-    [showDetails]="isConnectedToService()"
+    [showDetails]="isConnectedToService() || isReconnectRequired"
+    [statusLabelOverride]="isReconnectRequired ? 'Reconnect required' : null"
+    [statusIconOverride]="isReconnectRequired ? 'sync_problem' : null"
+    [statusTone]="isReconnectRequired ? 'attention' : 'default'"
     (click)="!hasProAccess && !isConnectedToService() && triggerUpsell()">
     <div connection-body class="connection-details">
     @if (isConnectedToService()) {
@@ -87,7 +90,7 @@
         <span>{{ activeSyncRouteWarningLabel }}</span>
       </div>
       }
-      @if (!isConnectedToService()) {
+      @if (!isConnectedToService() || isReconnectRequired) {
       <button mat-flat-button class="qs-mat-primary"
         [disabled]="!user || isLoading || isConnecting || !hasProAccess" (click)="connectWithService($event)">
         @if (isConnecting) {
@@ -97,7 +100,7 @@
         </ng-container>
         } @else {
         <ng-container>
-          <mat-icon>link</mat-icon> Connect
+          <mat-icon>{{ isReconnectRequired ? 'sync' : 'link' }}</mat-icon> {{ connectButtonLabel }}
         </ng-container>
         }
       </button>
@@ -258,4 +261,11 @@
       </section>
     }
   </mat-tab-nav-panel>
+
+  @if (hasProAccess && (isConnectedToService() || isReconnectRequired)) {
+  <mat-divider class="connection-tools-divider"></mat-divider>
+  <app-status-info [type]="routeSendStatusType" [title]="routeSendStatusTitle">
+    {{ routeSendStatusMessage }}
+  </app-status-info>
+  }
 </div>

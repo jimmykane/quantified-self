@@ -20,6 +20,13 @@ import {
   SuuntoServiceConnectionViewModel,
 } from '../../../helpers/suunto-service-connection.helper';
 import { GARMIN_SLEEP_BACKFILL_REQUIRED_PERMISSIONS } from '@shared/sleep-backfill';
+import {
+  GARMIN_ROUTE_SEND_REQUIRED_PERMISSIONS,
+  getMissingGarminPermissionsForTokenLike,
+  hasConnectedGarminToken,
+  selectPreferredGarminTokenLike,
+} from '@shared/garmin-service-token';
+import { isReconnectRequiredServiceConnection } from '@shared/service-connection';
 
 const GARMIN_ACTIVITY_HISTORY_REQUIRED_PERMISSIONS = ['HISTORICAL_DATA_EXPORT', 'ACTIVITY_EXPORT'] as const;
 
@@ -47,7 +54,7 @@ export class ServicesGarminComponent extends ServicesAbstractComponentDirective 
     'ACTIVITY_EXPORT': 'Without this, your new activities will not automatically sync to Quantified Self.',
     'WORKOUT_IMPORT': 'Coming soon: This will be used to sync training plans to your device.',
     'HEALTH_EXPORT': 'Required for Garmin sleep sync and sleep history backfill.',
-    'COURSE_IMPORT': 'Coming soon: This will be used for route synchronization.',
+    'COURSE_IMPORT': 'Required to send saved Quantified Self routes to Garmin Connect.',
     'MCT_EXPORT': 'Coming soon: This will be used for health tracking data.'
   };
 
@@ -85,7 +92,21 @@ export class ServicesGarminComponent extends ServicesAbstractComponentDirective 
   }
 
   isConnectedToService(): boolean {
-    return this.garminTokens.some(token => `${token.accessToken || ''}`.trim().length > 0) || this.forceConnected;
+    return hasConnectedGarminToken(this.garminTokens) || this.forceConnected;
+  }
+
+  get isReconnectRequired(): boolean {
+    return isReconnectRequiredServiceConnection(this.serviceMeta);
+  }
+
+  get connectButtonLabel(): string {
+    return this.isReconnectRequired ? 'Reconnect' : 'Connect';
+  }
+
+  get connectionDescription(): string {
+    return this.isReconnectRequired
+      ? 'Reconnect Garmin to resume history imports, saved route delivery, and Garmin to Suunto auto-sync.'
+      : 'Required for history imports, saved route delivery, and Garmin to Suunto auto-sync.';
   }
 
   buildRedirectURIFromServiceToken(token: { redirect_uri: string }): string {
@@ -125,6 +146,64 @@ export class ServicesGarminComponent extends ServicesAbstractComponentDirective 
         .forEach(permission => missingPermissions.add(permission));
     }
     return GARMIN_REQUIRED_PERMISSIONS.filter(permission => missingPermissions.has(permission));
+  }
+
+  get routeSendMissingPermissions(): string[] {
+    const token = this.preferredGarminRouteSendToken;
+    return token
+      ? getMissingGarminPermissionsForTokenLike(token, GARMIN_ROUTE_SEND_REQUIRED_PERMISSIONS)
+      : [];
+  }
+
+  get isRouteSendPermissionStateLoading(): boolean {
+    return this.isConnectedToService()
+      && !this.isReconnectRequired
+      && !this.hasPermissionsLoaded;
+  }
+
+  get canSendSavedRoutesToGarmin(): boolean {
+    return this.hasProAccess
+      && this.isConnectedToService()
+      && !this.isReconnectRequired
+      && !this.isRouteSendPermissionStateLoading
+      && !!this.preferredGarminRouteSendToken
+      && this.routeSendMissingPermissions.length === 0;
+  }
+
+  get routeSendStatusType(): 'success' | 'warning' | 'info' {
+    if (this.isReconnectRequired || this.isRouteSendPermissionStateLoading) {
+      return 'info';
+    }
+    if (this.routeSendMissingPermissions.length > 0) {
+      return 'warning';
+    }
+    return 'success';
+  }
+
+  get routeSendStatusTitle(): string {
+    if (this.isReconnectRequired) {
+      return 'Reconnect Garmin for route delivery';
+    }
+    if (this.isRouteSendPermissionStateLoading) {
+      return 'Checking Garmin route delivery';
+    }
+    if (this.routeSendMissingPermissions.length > 0) {
+      return 'Garmin route delivery needs permission';
+    }
+    return 'Saved route delivery ready';
+  }
+
+  get routeSendStatusMessage(): string {
+    if (this.isReconnectRequired) {
+      return 'Reconnect Garmin before sending saved routes from Routes to Garmin Connect.';
+    }
+    if (this.isRouteSendPermissionStateLoading) {
+      return 'Checking Garmin permissions for saved route delivery.';
+    }
+    if (this.routeSendMissingPermissions.length > 0) {
+      return 'Grant Garmin COURSE_IMPORT permission and reconnect before sending saved routes to Garmin Connect.';
+    }
+    return 'Saved FIT and GPX routes can be sent from Routes to Garmin Connect, and later sends update the same Garmin course for the same saved route.';
   }
 
   get hasPermissionsLoaded(): boolean {
@@ -217,6 +296,10 @@ export class ServicesGarminComponent extends ServicesAbstractComponentDirective 
     return [...this.permissionLoadedTokens]
       .sort((left, right) => this.missingPermissionsForToken(left, GARMIN_REQUIRED_PERMISSIONS).length - this.missingPermissionsForToken(right, GARMIN_REQUIRED_PERMISSIONS).length)[0]
       || null;
+  }
+
+  private get preferredGarminRouteSendToken(): Record<string, unknown> | null {
+    return selectPreferredGarminTokenLike(this.permissionLoadedTokens, GARMIN_ROUTE_SEND_REQUIRED_PERMISSIONS);
   }
 
   private hasTokenWithPermissions(requiredPermissions: readonly string[]): boolean {

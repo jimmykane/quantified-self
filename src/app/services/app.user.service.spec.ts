@@ -862,7 +862,7 @@ describe('AppUserService', () => {
         it('watchActivityServiceConnectionState should emit per-service connection state', async () => {
             const user = { uid: 'u10' } as any;
             (collectionData as any)
-                .mockReturnValueOnce(of([{ accessToken: 'garmin-token' }]))
+                .mockReturnValueOnce(of([{ accessToken: 'garmin-token', userID: 'garmin-user' }]))
                 .mockReturnValueOnce(of([{ accessToken: 'suunto-token', userName: 'suunto-user' }]))
                 .mockReturnValueOnce(of([]));
 

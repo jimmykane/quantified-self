@@ -45,6 +45,7 @@ describe('RoutesPageComponent', () => {
     let routerMock: any;
     let windowServiceMock: any;
     let suuntoRouteCatchUpPromptContext$: BehaviorSubject<any>;
+    let garminRouteSendContext$: BehaviorSubject<any>;
 
     const route: FirestoreRouteJSON = {
         id: 'route-1',
@@ -114,6 +115,13 @@ describe('RoutesPageComponent', () => {
             didLastRouteImport: new Date('2026-06-10T10:00:00.000Z'),
             promptSource: 'suunto-route-catch-up:connected:1710000000000',
             connectedProviderUserIds: ['suunto-user-1'],
+        });
+        garminRouteSendContext$ = new BehaviorSubject({
+            connected: false,
+            reconnectRequired: false,
+            missingPermissions: [],
+            providerUserId: null,
+            serviceMeta: null,
         });
         authServiceMock = {
             getUser: vi.fn().mockResolvedValue(currentUser),
@@ -205,6 +213,7 @@ describe('RoutesPageComponent', () => {
         userServiceMock = {
             hasProAccessSignal: vi.fn().mockReturnValue(true),
             watchSuuntoRouteCatchUpPromptContext: vi.fn().mockReturnValue(suuntoRouteCatchUpPromptContext$.asObservable()),
+            watchGarminRouteSendContext: vi.fn().mockReturnValue(garminRouteSendContext$.asObservable()),
             addSuuntoRoutesToQueueForCurrentUser: vi.fn().mockResolvedValue({
                 queuedCount: 2,
                 skippedCount: 1,
@@ -845,7 +854,10 @@ describe('RoutesPageComponent', () => {
         expect(template).toContain('(click)="exportRouteAsGPX(item.route)"');
         expect(template).toContain('(click)="downloadRouteOriginals(item.route)"');
         expect(template).toContain('(click)="sendRouteToSuunto(item.route)"');
+        expect(template).toContain('(click)="sendRouteToGarmin(item.route)"');
         expect(template).toContain('(click)="$event.preventDefault(); $event.stopPropagation(); sendSelectedRoutesToSuunto()"');
+        expect(template).toContain('(click)="$event.preventDefault(); $event.stopPropagation(); sendSelectedRoutesToGarmin()"');
+        expect(template).toContain('<span>Send to</span>');
         expect(template).toContain('(click)="confirmDeleteRoute(item.route)"');
         expect(template).toContain('(click)="reprocessRouteFromOriginalFile(item.route)"');
         expect(template).toContain('[matMenuTriggerFor]="routeRowActionsMenu"');
@@ -1213,6 +1225,60 @@ describe('RoutesPageComponent', () => {
         expect(component.sendingToServiceRouteID()).toBeNull();
     });
 
+    it('enables Garmin as a route-send destination when Garmin route delivery is ready', async () => {
+        garminRouteSendContext$.next({
+            connected: true,
+            reconnectRequired: false,
+            missingPermissions: [],
+            providerUserId: 'garmin-user-1',
+            serviceMeta: null,
+        });
+        await component.ngOnInit();
+        const routes = await firstValueFrom(component.routes$!);
+
+        expect(routes[0].canSendToGarmin).toBe(true);
+        expect(component.canSendRoutesToGarmin()).toBe(true);
+    });
+
+    it('sends a row route to Garmin', async () => {
+        garminRouteSendContext$.next({
+            connected: true,
+            reconnectRequired: false,
+            missingPermissions: [],
+            providerUserId: 'garmin-user-1',
+            serviceMeta: null,
+        });
+        routeSendServiceMock.sendRoutesToService.mockResolvedValueOnce({
+            destinationServiceName: ServiceNames.GarminAPI,
+            status: 'success',
+            routeCount: 1,
+            successCount: 1,
+            failureCount: 0,
+            skippedCount: 0,
+            results: [{
+                routeId: 'route-1',
+                destinationServiceName: ServiceNames.GarminAPI,
+                status: 'success',
+            }],
+        });
+        await component.ngOnInit();
+
+        await component.sendRouteToGarmin(route);
+
+        expect(routeSendServiceMock.sendRoutesToService).toHaveBeenCalledWith(['route-1'], ServiceNames.GarminAPI);
+        expect(analyticsServiceMock.logSavedRouteAction).toHaveBeenCalledWith('send_service_route', {
+            status: 'success',
+            routeCount: 1,
+            failedCount: 0,
+            skippedCount: 0,
+            fileType: 'gpx',
+            source: 'routes_list_row',
+            destinationService: ServiceNames.GarminAPI,
+        });
+        expect(snackBarMock.open).toHaveBeenCalledWith('Route sent to Garmin.', undefined, { duration: 2500 });
+        expect(component.sendingToServiceRouteID()).toBeNull();
+    });
+
     it('shows reconnect guidance when a row send returns an auth-required response', async () => {
         routeSendServiceMock.sendRoutesToService.mockResolvedValueOnce({
             destinationServiceName: ServiceNames.SuuntoApp,
@@ -1235,6 +1301,62 @@ describe('RoutesPageComponent', () => {
 
         expect(snackBarMock.open).toHaveBeenCalledWith('Connect Suunto again before sending routes.', undefined, { duration: 3500 });
         expect(component.sendingToServiceRouteID()).toBeNull();
+    });
+
+    it('keeps failed rows selected after bulk Garmin sends', async () => {
+        const secondRoute: FirestoreRouteJSON = {
+            ...route,
+            id: 'route-2',
+            name: 'Evening Ride',
+            originalFiles: [{
+                path: 'users/user-1/routes/route-2/evening.gpx',
+                originalFilename: 'evening.gpx',
+                startDate: new Date('2026-01-03T00:00:00.000Z'),
+                extension: 'gpx',
+            }],
+        };
+        garminRouteSendContext$.next({
+            connected: true,
+            reconnectRequired: false,
+            missingPermissions: [],
+            providerUserId: 'garmin-user-1',
+            serviceMeta: null,
+        });
+        routeServiceMock.getRoutes.mockReturnValue(of([route, secondRoute]));
+        routeSendServiceMock.sendRoutesToService.mockResolvedValueOnce({
+            destinationServiceName: ServiceNames.GarminAPI,
+            status: 'partial_success',
+            routeCount: 2,
+            successCount: 1,
+            failureCount: 1,
+            skippedCount: 0,
+            results: [
+                { routeId: 'route-1', destinationServiceName: ServiceNames.GarminAPI, status: 'success' },
+                { routeId: 'route-2', destinationServiceName: ServiceNames.GarminAPI, status: 'failure', reason: 'PROVIDER_ERROR' },
+            ],
+        });
+        await component.ngOnInit();
+        await firstValueFrom(component.routes$!);
+        component.toggleVisibleRouteSelection(true);
+
+        await component.sendSelectedRoutesToGarmin();
+
+        expect(routeSendServiceMock.sendRoutesToService).toHaveBeenCalledWith(
+            expect.arrayContaining(['route-1', 'route-2']),
+            ServiceNames.GarminAPI,
+            expect.objectContaining({ onProgress: expect.any(Function) }),
+        );
+        expect(component.selectedRouteIDs()).toEqual(['route-2']);
+        expect(analyticsServiceMock.logSavedRouteAction).toHaveBeenCalledWith('send_service_route', {
+            status: 'partial_success',
+            routeCount: 2,
+            failedCount: 1,
+            skippedCount: 0,
+            source: 'routes_list_bulk',
+            destinationService: ServiceNames.GarminAPI,
+        });
+        expect(snackBarMock.open).toHaveBeenCalledWith('Sent 1 route to Garmin. Failed 1.', undefined, { duration: 4000 });
+        expect(component.bulkActionInProgress()).toBe(false);
     });
 
     it('keeps failed rows selected after bulk Suunto sends', async () => {

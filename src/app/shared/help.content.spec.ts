@@ -244,6 +244,16 @@ describe('help.content', () => {
     expect(uploadsSection?.content).toContain('multi-selected GPX exports download as a ZIP');
   });
 
+  it('should document Garmin saved-route delivery requirements and behavior', () => {
+    const serviceConnectionsSection = HELP_SECTIONS.find(section => section.id === 'service-connections');
+
+    expect(serviceConnectionsSection?.content).toContain('Garmin saved-route delivery to Garmin Connect');
+    expect(serviceConnectionsSection?.content).toContain('Saved FIT and GPX routes can also be sent to Garmin Connect from **Routes**');
+    expect(serviceConnectionsSection?.content).toContain('not a Garmin route import or catch-up feature');
+    expect(serviceConnectionsSection?.content).toContain('**COURSE_IMPORT**');
+    expect(serviceConnectionsSection?.content).toContain('updates the same Garmin course on resend for the same Garmin account');
+  });
+
   it('should document activity and route limits in plans and uploads help', () => {
     const plansSection = HELP_SECTIONS.find(section => section.id === 'plans-and-billing');
     const uploadsSection = HELP_SECTIONS.find(section => section.id === 'uploads-and-imports');

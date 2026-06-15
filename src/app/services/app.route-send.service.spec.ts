@@ -234,6 +234,10 @@ describe('AppRouteSendService', () => {
       code: 'functions/unauthenticated',
       message: 'No connected Suunto account found',
     })).toBe('Connect Suunto again before sending routes.');
+    expect(getRouteSendErrorMessage({
+      code: 'functions/unauthenticated',
+      message: 'No connected Garmin account found',
+    }, ServiceNames.GarminAPI)).toBe('Connect Garmin again before sending routes.');
     expect(getRouteSendErrorMessage({ message: 'Sending saved routes to GarminAPI is not supported yet.' }))
       .toBe('Sending saved routes to GarminAPI is not supported yet.');
     expect(getRouteSendErrorMessage({ message: 'Could not verify account state. Please retry.' }))
@@ -256,6 +260,24 @@ describe('AppRouteSendService', () => {
         message: 'Authentication failed. Please re-connect your Suunto account.',
       }],
     })).toBe('Connect Suunto again before sending routes.');
+  });
+
+  it('maps Garmin permission-required failures to reconnect guidance', () => {
+    expect(getRouteSendResponseMessage({
+      destinationServiceName: ServiceNames.GarminAPI,
+      status: 'failure',
+      routeCount: 1,
+      successCount: 0,
+      failureCount: 1,
+      skippedCount: 0,
+      results: [{
+        routeId: 'route-1',
+        destinationServiceName: ServiceNames.GarminAPI,
+        status: 'failure',
+        reason: 'DESTINATION_PERMISSION_REQUIRED',
+        message: 'Missing Garmin COURSE_IMPORT permission.',
+      }],
+    })).toBe('Grant Garmin Course Import permission and reconnect before sending routes.');
   });
 
   it('maps source-service blocked responses to a specific Suunto guidance message', () => {

@@ -37,13 +37,21 @@ import {
   uploadGPXRouteToSuuntoApp,
 } from '../suunto/routes';
 import {
+  createGarminRouteSendContext,
+  GarminRouteSendContext,
+  GarminRouteSendPermissionRequiredError,
+  sendRouteToGarminConnect,
+} from '../garmin/routes';
+import {
   setRouteDeliveryMetadata,
 } from './route-persistence';
+import { TokenRefreshSkippedForDeletedUserError } from '../tokens';
 
 interface PreparedSavedRoute {
   routeId: string;
   routeDocument: FirestoreRouteJSON;
   sourceFile: OriginalRouteFileMetaData;
+  routeFile: RouteFileInterface;
   gpxContent: string;
 }
 
@@ -106,8 +114,31 @@ class SuuntoRouteSendAdapter implements RouteSendDestinationAdapter<SuuntoRouteU
   }
 }
 
+class GarminRouteSendAdapter implements RouteSendDestinationAdapter<GarminRouteSendContext> {
+  readonly destinationServiceName = ServiceNames.GarminAPI;
+
+  createContext(userID: string): Promise<GarminRouteSendContext> {
+    return createGarminRouteSendContext(userID);
+  }
+
+  sendRoute(
+    userID: string,
+    preparedRoute: PreparedSavedRoute,
+    context: GarminRouteSendContext,
+  ): Promise<{ providerRouteId?: string; deliveries?: Array<{ providerUserId?: string | null; providerRouteId?: string | null }> }> {
+    return sendRouteToGarminConnect(
+      userID,
+      preparedRoute.routeId,
+      preparedRoute.routeDocument,
+      preparedRoute.routeFile,
+      context,
+    );
+  }
+}
+
 const ROUTE_SEND_ADAPTERS = new Map<ServiceNames, RouteSendDestinationAdapter>([
   [ServiceNames.SuuntoApp, new SuuntoRouteSendAdapter()],
+  [ServiceNames.GarminAPI, new GarminRouteSendAdapter()],
 ]);
 
 function normalizeNonEmptyString(value: unknown): string | null {
@@ -182,8 +213,16 @@ export const sendRoutesToService = onCall({
 
   try {
     await assertRouteSendUserActive(userID, 'before_destination_context');
-    const context = await adapter.createContext(userID);
     const results: SendRouteToServiceItemResult[] = [];
+    let context;
+    try {
+      context = await adapter.createContext(userID);
+    } catch (error) {
+      return buildSendRoutesResponse(
+        adapter.destinationServiceName,
+        buildTerminalRouteSendResults(payload.routeIds, adapter.destinationServiceName, error),
+      );
+    }
 
     for (let index = 0; index < payload.routeIds.length; index++) {
       const routeId = payload.routeIds[index];
@@ -342,6 +381,7 @@ async function prepareSavedRouteForSending(
     routeId,
     routeDocument,
     sourceFile,
+    routeFile: routeFile as RouteFileInterface,
     gpxContent,
   };
 }
@@ -481,6 +521,15 @@ function buildRouteSendFailureResult(
       message: error.message,
     };
   }
+  if (isDestinationPermissionRequiredError(error)) {
+    return {
+      routeId,
+      destinationServiceName,
+      status: 'failure',
+      reason: 'DESTINATION_PERMISSION_REQUIRED',
+      message: error.message,
+    };
+  }
 
   const message = error instanceof Error ? error.message : 'Could not send route.';
   logger.error('[sendRoutesToService] Failed to send route item', {
@@ -541,6 +590,16 @@ function buildTerminalRouteSendResults(
       message,
     }));
   }
+  if (isDestinationPermissionRequiredError(error)) {
+    const message = error.message || 'Grant the required destination permissions and reconnect before sending routes.';
+    return routeIds.map(routeId => ({
+      routeId,
+      destinationServiceName,
+      status: 'failure',
+      reason: 'DESTINATION_PERMISSION_REQUIRED',
+      message,
+    }));
+  }
 
   return routeIds.map(routeId => buildRouteSendFailureResult(routeId, destinationServiceName, error));
 }
@@ -570,8 +629,10 @@ function buildSendRoutesResponse(
 function isAccountDeletionSkipError(error: unknown): boolean {
   return error instanceof RouteSendSkippedForDeletedUserError
     || error instanceof SuuntoRouteUploadSkippedForDeletedUserError
+    || error instanceof TokenRefreshSkippedForDeletedUserError
     || (error instanceof Error && error.name === 'RouteSendSkippedForDeletedUserError')
-    || (error instanceof Error && error.name === 'SuuntoRouteUploadSkippedForDeletedUserError');
+    || (error instanceof Error && error.name === 'SuuntoRouteUploadSkippedForDeletedUserError')
+    || (error instanceof Error && error.name === 'TokenRefreshSkippedForDeletedUserError');
 }
 
 function isUserDeletionGuardReadError(error: unknown): error is UserDeletionGuardReadError {
@@ -584,6 +645,11 @@ function isDestinationAuthRequiredError(error: unknown): error is HttpsError {
     ? error.code === 'unauthenticated'
     : (error as { code?: unknown } | null)?.code === 'unauthenticated'
       || (error as { code?: unknown } | null)?.code === 'functions/unauthenticated';
+}
+
+function isDestinationPermissionRequiredError(error: unknown): error is GarminRouteSendPermissionRequiredError {
+  return error instanceof GarminRouteSendPermissionRequiredError
+    || (error instanceof Error && error.name === 'GarminRouteSendPermissionRequiredError');
 }
 
 async function persistRouteDeliveryMetadataBestEffort(params: {

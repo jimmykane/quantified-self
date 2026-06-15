@@ -214,7 +214,7 @@ describe('ServicesGarminComponent', () => {
         it('should be unlocked/available if user has pro access AND is connected', () => {
             component.hasProAccess = true;
             component.isAdmin = false;
-            component.serviceTokens = [{ accessToken: 'token', permissions: [] } as any];
+            component.serviceTokens = [{ accessToken: 'token', userID: 'garmin-user', permissions: [] } as any];
             fixture.detectChanges();
 
             const historyForm = fixture.nativeElement.querySelector('app-history-import-form');
@@ -275,6 +275,24 @@ describe('ServicesGarminComponent', () => {
             expect(component.isHistoryImportLoading).toBe(true);
         });
 
+        it('keeps saved-route delivery in a loading state while Garmin token permissions are not loaded', () => {
+            component.hasProAccess = true;
+            component.isLoading = false;
+            component.serviceTokens = [{
+                accessToken: 'garmin-token',
+                userID: 'garmin-user',
+            }] as any;
+
+            expect(component.isConnectedToService()).toBe(true);
+            expect(component.hasPermissionsLoaded).toBe(false);
+            expect(component.isRouteSendPermissionStateLoading).toBe(true);
+            expect(component.canSendSavedRoutesToGarmin).toBe(false);
+            expect(component.routeSendMissingPermissions).toEqual([]);
+            expect(component.routeSendStatusType).toBe('info');
+            expect(component.routeSendStatusTitle).toBe('Checking Garmin route delivery');
+            expect(component.routeSendStatusMessage).toContain('Checking Garmin permissions');
+        });
+
         it('does not report sleep permissions missing when a later Garmin token can backfill sleep', () => {
             component.serviceTokens = [{
                 accessToken: 'activity-token',
@@ -298,6 +316,37 @@ describe('ServicesGarminComponent', () => {
             }] as any;
 
             expect(component.missingPermissions).toEqual(['HEALTH_EXPORT']);
+        });
+
+        it('reports saved-route delivery as ready when COURSE_IMPORT is available', () => {
+            component.hasProAccess = true;
+            component.isLoading = false;
+            component.serviceTokens = [{
+                accessToken: 'token',
+                userID: 'garmin-user',
+                permissions: ['HISTORICAL_DATA_EXPORT', 'ACTIVITY_EXPORT', 'HEALTH_EXPORT', 'COURSE_IMPORT'],
+                dateCreated: new Date('2026-05-03T10:00:00.000Z'),
+            }] as any;
+
+            expect(component.canSendSavedRoutesToGarmin).toBe(true);
+            expect(component.routeSendStatusTitle).toBe('Saved route delivery ready');
+            expect(component.routeSendStatusMessage).toContain('Garmin Connect');
+        });
+
+        it('reports saved-route delivery permission gaps when COURSE_IMPORT is missing', () => {
+            component.hasProAccess = true;
+            component.isLoading = false;
+            component.serviceTokens = [{
+                accessToken: 'token',
+                userID: 'garmin-user',
+                permissions: ['HISTORICAL_DATA_EXPORT', 'ACTIVITY_EXPORT', 'HEALTH_EXPORT'],
+                dateCreated: new Date('2026-05-03T10:00:00.000Z'),
+            }] as any;
+
+            expect(component.canSendSavedRoutesToGarmin).toBe(false);
+            expect(component.routeSendMissingPermissions).toEqual(['COURSE_IMPORT']);
+            expect(component.routeSendStatusTitle).toBe('Garmin route delivery needs permission');
+            expect(component.routeSendStatusMessage).toContain('COURSE_IMPORT');
         });
     });
 
@@ -474,7 +523,7 @@ describe('ServicesGarminComponent', () => {
         it('should show route toggle when Garmin and Suunto are connected', async () => {
             component.hasProAccess = true;
             component.user = { uid: ACTIVITY_SYNC_ALLOWLISTED_UID, settings: {} } as any;
-            mockUserService.getServiceToken.mockReturnValueOnce(of([{ accessToken: 'garmin-token', permissions: [] }]));
+            mockUserService.getServiceToken.mockReturnValueOnce(of([{ accessToken: 'garmin-token', userID: 'garmin-user', permissions: [] }]));
             mockUserService.watchSuuntoServiceConnectionView.mockReturnValueOnce(of(buildSuuntoServiceConnectionViewModel({
                 hasToken: true,
                 serviceMeta: null,
@@ -490,7 +539,7 @@ describe('ServicesGarminComponent', () => {
         it('should persist Garmin->Suunto route toggle to settings', async () => {
             component.hasProAccess = true;
             component.user = { uid: ACTIVITY_SYNC_ALLOWLISTED_UID, settings: {} } as any;
-            component.serviceTokens = [{ accessToken: 'garmin-token', permissions: [] }] as any;
+            component.serviceTokens = [{ accessToken: 'garmin-token', userID: 'garmin-user', permissions: [] }] as any;
             component.suuntoConnectionView = buildSuuntoServiceConnectionViewModel({ hasToken: true, serviceMeta: null });
 
             await component.onGarminToSuuntoRouteToggle(true);
@@ -527,7 +576,7 @@ describe('ServicesGarminComponent', () => {
             const snackBarSpy = vi.spyOn(snackBar, 'open');
             component.hasProAccess = true;
             component.user = { uid: ACTIVITY_SYNC_ALLOWLISTED_UID, settings: {} } as any;
-            component.serviceTokens = [{ accessToken: 'garmin-token', permissions: [] }] as any;
+            component.serviceTokens = [{ accessToken: 'garmin-token', userID: 'garmin-user', permissions: [] }] as any;
             component.suuntoConnectionView = buildSuuntoServiceConnectionViewModel({
                 hasToken: true,
                 serviceMeta: { connectionState: 'reconnect_required' } as any,
@@ -572,7 +621,7 @@ describe('ServicesGarminComponent', () => {
         it('should allow manual catch-up when auto-sync toggle is disabled', () => {
             component.hasProAccess = true;
             component.user = { uid: ACTIVITY_SYNC_ALLOWLISTED_UID, settings: {} } as any;
-            component.serviceTokens = [{ accessToken: 'garmin-token', permissions: [] }] as any;
+            component.serviceTokens = [{ accessToken: 'garmin-token', userID: 'garmin-user', permissions: [] }] as any;
             component.suuntoConnectionView = buildSuuntoServiceConnectionViewModel({ hasToken: true, serviceMeta: null });
             component.isBackfillingSync = false;
             component.backfillStartDate = new Date('2026-01-01T00:00:00.000Z');
@@ -591,7 +640,7 @@ describe('ServicesGarminComponent', () => {
         it('should show reconnect-required copy instead of route controls when Suunto requires reconnect', () => {
             component.hasProAccess = true;
             component.user = { uid: ACTIVITY_SYNC_ALLOWLISTED_UID, settings: {} } as any;
-            component.serviceTokens = [{ accessToken: 'garmin-token', permissions: [] }] as any;
+            component.serviceTokens = [{ accessToken: 'garmin-token', userID: 'garmin-user', permissions: [] }] as any;
             component.suuntoConnectionView = buildSuuntoServiceConnectionViewModel({
                 hasToken: true,
                 serviceMeta: { connectionState: 'reconnect_required' } as any,
@@ -614,7 +663,7 @@ describe('ServicesGarminComponent', () => {
         it('should render failed backfill events in the summary', () => {
             component.hasProAccess = true;
             component.user = { uid: ACTIVITY_SYNC_ALLOWLISTED_UID, settings: {} } as any;
-            component.serviceTokens = [{ accessToken: 'garmin-token', permissions: [] }] as any;
+            component.serviceTokens = [{ accessToken: 'garmin-token', userID: 'garmin-user', permissions: [] }] as any;
             component.suuntoConnectionView = buildSuuntoServiceConnectionViewModel({ hasToken: true, serviceMeta: null });
             component.backfillSummary = {
                 scanned: 10,
@@ -641,7 +690,7 @@ describe('ServicesGarminComponent', () => {
         it('should explain that manual catch-up only uses already imported Quantified Self events', () => {
             component.hasProAccess = true;
             component.user = { uid: ACTIVITY_SYNC_ALLOWLISTED_UID, settings: {} } as any;
-            component.serviceTokens = [{ accessToken: 'garmin-token', permissions: [] }] as any;
+            component.serviceTokens = [{ accessToken: 'garmin-token', userID: 'garmin-user', permissions: [] }] as any;
             component.suuntoConnectionView = buildSuuntoServiceConnectionViewModel({ hasToken: true, serviceMeta: null });
 
             fixture.detectChanges();
@@ -658,7 +707,7 @@ describe('ServicesGarminComponent', () => {
         it('should log route backfill analytics when catch-up succeeds', async () => {
             component.hasProAccess = true;
             component.user = { uid: ACTIVITY_SYNC_ALLOWLISTED_UID, settings: {} } as any;
-            component.serviceTokens = [{ accessToken: 'garmin-token', permissions: [] }] as any;
+            component.serviceTokens = [{ accessToken: 'garmin-token', userID: 'garmin-user', permissions: [] }] as any;
             component.suuntoConnectionView = buildSuuntoServiceConnectionViewModel({ hasToken: true, serviceMeta: null });
             mockUserService.backfillActivitySyncRouteForCurrentUser.mockResolvedValueOnce({
                 scanned: 20,
@@ -692,7 +741,7 @@ describe('ServicesGarminComponent', () => {
                     }
                 }
             } as any;
-            component.serviceTokens = [{ accessToken: 'garmin-token', permissions: [] }] as any;
+            component.serviceTokens = [{ accessToken: 'garmin-token', userID: 'garmin-user', permissions: [] }] as any;
             component.suuntoConnectionView = buildSuuntoServiceConnectionViewModel({ hasToken: true, serviceMeta: null });
 
             fixture.detectChanges();
@@ -714,7 +763,7 @@ describe('ServicesGarminComponent', () => {
                     }
                 }
             } as any;
-            component.serviceTokens = [{ accessToken: 'garmin-token', permissions: [] }] as any;
+            component.serviceTokens = [{ accessToken: 'garmin-token', userID: 'garmin-user', permissions: [] }] as any;
             component.suuntoConnectionView = buildSuuntoServiceConnectionViewModel({ hasToken: true, serviceMeta: null });
             mockDialog.open.mockReturnValueOnce({
                 afterClosed: () => of(false),
@@ -747,7 +796,7 @@ describe('ServicesGarminComponent', () => {
                     }
                 }
             } as any;
-            component.serviceTokens = [{ accessToken: 'garmin-token', permissions: [] }] as any;
+            component.serviceTokens = [{ accessToken: 'garmin-token', userID: 'garmin-user', permissions: [] }] as any;
             component.suuntoConnectionView = buildSuuntoServiceConnectionViewModel({ hasToken: true, serviceMeta: null });
 
             await component.deauthorizeService(new MouseEvent('click'));
