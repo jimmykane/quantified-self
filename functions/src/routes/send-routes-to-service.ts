@@ -261,6 +261,14 @@ export const sendRoutesToService = onCall({
           ));
           break;
         }
+        if (isDestinationPermissionRequiredError(error)) {
+          results.push(...buildTerminalRouteSendResults(
+            payload.routeIds.slice(index),
+            adapter.destinationServiceName,
+            error,
+          ));
+          break;
+        }
         results.push(buildRouteSendFailureResult(routeId, adapter.destinationServiceName, error));
       }
     }

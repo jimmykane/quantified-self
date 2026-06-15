@@ -212,9 +212,12 @@ describe('sendRoutesToService', () => {
     ));
     routePersistenceMocks.setRouteDeliveryMetadata.mockResolvedValue(undefined);
     garminRouteMocks.createGarminRouteSendContext.mockResolvedValue({
-      tokenRef: { get: vi.fn() },
-      tokenID: 'garmin-token-1',
-      providerUserId: 'garmin-user-1',
+      tokenSnapshots: [{
+        id: 'garmin-token-1',
+        ref: { get: vi.fn() },
+        data: () => ({ userID: 'garmin-user-1', permissions: ['COURSE_IMPORT'] }),
+      }],
+      preferredProviderUserId: 'garmin-user-1',
     });
     garminRouteMocks.sendRouteToGarminConnect.mockResolvedValue({
       providerRouteId: 'garmin-course-1',
@@ -338,6 +341,56 @@ describe('sendRoutesToService', () => {
         routeId: 'route-1',
         reason: 'DESTINATION_PERMISSION_REQUIRED',
         message: 'Grant Garmin Course Import permission and reconnect before sending routes.',
+      }),
+    ]);
+  });
+
+  it('stops the current Garmin chunk after an in-band Course Import permission failure', async () => {
+    routeDocuments.set('users/user-1/routes/route-1', {
+      id: 'route-1',
+      userID: 'user-1',
+      srcFileType: 'gpx',
+      originalFiles: [{ path: 'users/user-1/routes/route-1/original.gpx', extension: 'gpx' }],
+      routes: [{ id: 'segment-1' }],
+    });
+    routeDocuments.set('users/user-1/routes/route-2', {
+      id: 'route-2',
+      userID: 'user-1',
+      srcFileType: 'gpx',
+      originalFiles: [{ path: 'users/user-1/routes/route-2/original.gpx', extension: 'gpx' }],
+      routes: [{ id: 'segment-1' }],
+    });
+    storagePayloads.set('users/user-1/routes/route-1/original.gpx', Buffer.from('<gpx></gpx>'));
+    storagePayloads.set('users/user-1/routes/route-2/original.gpx', Buffer.from('<gpx></gpx>'));
+
+    const { GarminRouteSendPermissionRequiredError } = await import('../garmin/routes');
+    garminRouteMocks.sendRouteToGarminConnect
+      .mockRejectedValueOnce(new GarminRouteSendPermissionRequiredError(
+        'Grant Garmin Course Import permission and reconnect before sending routes.',
+      ));
+
+    const result = await sendRoutesToService(createRequest({
+      routeIds: ['route-1', 'route-2'],
+      destinationServiceName: ServiceNames.GarminAPI,
+    }) as any);
+
+    expect(garminRouteMocks.sendRouteToGarminConnect).toHaveBeenCalledTimes(1);
+    expect(result).toMatchObject({
+      destinationServiceName: ServiceNames.GarminAPI,
+      status: 'failure',
+      routeCount: 2,
+      successCount: 0,
+      failureCount: 2,
+      skippedCount: 0,
+    });
+    expect(result.results).toEqual([
+      expect.objectContaining({
+        routeId: 'route-1',
+        reason: 'DESTINATION_PERMISSION_REQUIRED',
+      }),
+      expect.objectContaining({
+        routeId: 'route-2',
+        reason: 'DESTINATION_PERMISSION_REQUIRED',
       }),
     ]);
   });
@@ -766,7 +819,7 @@ describe('sendRoutesToService', () => {
       'route-1',
       expect.objectContaining({ id: 'route-1', name: 'Garmin Ready Route' }),
       expect.objectContaining({ name: 'Garmin Ready Route' }),
-      expect.objectContaining({ providerUserId: 'garmin-user-1' }),
+      expect.objectContaining({ preferredProviderUserId: 'garmin-user-1' }),
     );
     expect(routePersistenceMocks.setRouteDeliveryMetadata).toHaveBeenCalledWith({
       userID: 'user-1',

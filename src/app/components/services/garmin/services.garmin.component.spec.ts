@@ -233,6 +233,19 @@ describe('ServicesGarminComponent', () => {
             expect(historyForm).toBeFalsy();
             expect(content).toContain('before importing history');
         });
+
+        it('should require reconnect before showing the Garmin history import form', () => {
+            component.hasProAccess = true;
+            component.serviceMeta = { connectionState: 'reconnect_required' } as any;
+            component.serviceTokens = [{ accessToken: 'token', userID: 'garmin-user', permissions: ['HISTORICAL_DATA_EXPORT', 'ACTIVITY_EXPORT'] } as any];
+            fixture.detectChanges();
+
+            const historyForm = fixture.nativeElement.querySelector('app-history-import-form');
+            const content = fixture.nativeElement.textContent;
+
+            expect(historyForm).toBeFalsy();
+            expect(content).toContain('Reconnect Garmin before importing history.');
+        });
     });
 
     describe('Permission State', () => {

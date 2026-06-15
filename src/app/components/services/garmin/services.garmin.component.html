@@ -156,6 +156,10 @@
         <mat-icon>lock</mat-icon>
         <span>History import is a Pro feature.</span>
       </div>
+      } @else if (isReconnectRequired) {
+      <app-status-info type="info" title="Reconnect Garmin Required">
+        Reconnect Garmin before importing history.
+      </app-status-info>
       } @else if (isConnectedToService()) {
       <app-history-import-form [serviceName]="serviceName" [userMetaForService]="serviceMeta"
         [missingPermissions]="missingPermissions" [isLoadingParent]="isHistoryImportLoading"

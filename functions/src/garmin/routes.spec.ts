@@ -109,7 +109,7 @@ function createTokenSnapshot(id: string, userID: string, permissions: string[] =
   return snapshot;
 }
 
-function createRouteFile() {
+function createRouteFile(activityType = 'Cycling') {
   return {
     name: 'QS Route Name',
     getStats: () => new Map([
@@ -118,7 +118,7 @@ function createRouteFile() {
       ['Descent', { getValue: () => 321.4 }],
     ]),
     getRoutes: () => [{
-      activityType: 'Cycling',
+      activityType,
       getPointData: () => [
         { latitudeDegrees: 37.1, longitudeDegrees: 23.7, altitude: 120, name: 'Start' },
         { latitudeDegrees: 37.2, longitudeDegrees: 23.8, altitude: 135 },
@@ -225,6 +225,99 @@ describe('garmin route sending', () => {
     expect(result.providerRouteId).toBe('course-42');
   });
 
+  it('keeps resends pinned to the Garmin account that already owns the delivered course', async () => {
+    garminTokenDocsByUser.set('garminAPITokens:user-1', [
+      createTokenSnapshot('token-older', 'garmin-user-1', ['COURSE_IMPORT'], 1000),
+      createTokenSnapshot('token-newer', 'garmin-user-2', ['COURSE_IMPORT'], 2000),
+    ]);
+    routeDeliveryMetadataByKey.set(`user-1:route-1:${ServiceNames.GarminAPI}:garmin-user-1`, {
+      providerRouteId: 'course-42',
+      updatedAt: 3000,
+    });
+    requestHelperMocks.put.mockResolvedValueOnce('');
+
+    const context = await createGarminRouteSendContext('user-1');
+    const result = await sendRouteToGarminConnect(
+      'user-1',
+      'route-1',
+      {
+        id: 'route-1',
+        name: 'QS Route Name',
+        activityTypes: ['Cycling'],
+        syncedDestinationServiceNames: [ServiceNames.GarminAPI],
+      } as any,
+      createRouteFile(),
+      context,
+    );
+
+    expect(requestHelperMocks.put).toHaveBeenCalledWith(expect.objectContaining({
+      url: 'https://apis.garmin.com/training-api/courses/v1/course/course-42',
+      headers: expect.objectContaining({
+        Authorization: 'Bearer garmin-access-token',
+      }),
+    }));
+    expect(requestHelperMocks.post).not.toHaveBeenCalled();
+    expect(result).toEqual({
+      providerRouteId: 'course-42',
+      deliveries: [{ providerUserId: 'garmin-user-1', providerRouteId: 'course-42' }],
+    });
+  });
+
+  it('does not fall back to a different Garmin account when the existing delivery account lost Course Import permission', async () => {
+    garminTokenDocsByUser.set('garminAPITokens:user-1', [
+      createTokenSnapshot('token-older', 'garmin-user-1', ['ACTIVITY_EXPORT'], 1000),
+      createTokenSnapshot('token-newer', 'garmin-user-2', ['COURSE_IMPORT'], 2000),
+    ]);
+    routeDeliveryMetadataByKey.set(`user-1:route-1:${ServiceNames.GarminAPI}:garmin-user-1`, {
+      providerRouteId: 'course-42',
+      updatedAt: 3000,
+    });
+
+    const context = await createGarminRouteSendContext('user-1');
+
+    await expect(sendRouteToGarminConnect(
+      'user-1',
+      'route-1',
+      {
+        id: 'route-1',
+        name: 'QS Route Name',
+        activityTypes: ['Cycling'],
+        syncedDestinationServiceNames: [ServiceNames.GarminAPI],
+      } as any,
+      createRouteFile(),
+      context,
+    )).rejects.toBeInstanceOf(GarminRouteSendPermissionRequiredError);
+
+    expect(requestHelperMocks.put).not.toHaveBeenCalled();
+    expect(requestHelperMocks.post).not.toHaveBeenCalled();
+  });
+
+  it('does not fall back to a different Garmin account when the original delivery account is no longer connected', async () => {
+    garminTokenDocsByUser.set('garminAPITokens:user-1', [
+      createTokenSnapshot('token-newer', 'garmin-user-2', ['COURSE_IMPORT'], 2000),
+    ]);
+
+    const context = await createGarminRouteSendContext('user-1');
+
+    await expect(sendRouteToGarminConnect(
+      'user-1',
+      'route-1',
+      {
+        id: 'route-1',
+        name: 'QS Route Name',
+        activityTypes: ['Cycling'],
+        syncedDestinationServiceNames: [ServiceNames.GarminAPI],
+      } as any,
+      createRouteFile(),
+      context,
+    )).rejects.toMatchObject({
+      code: 'unauthenticated',
+    });
+
+    expect(requestHelperMocks.put).not.toHaveBeenCalled();
+    expect(requestHelperMocks.post).not.toHaveBeenCalled();
+  });
+
   it('falls back to create when the stored Garmin course id no longer exists remotely', async () => {
     garminTokenDocsByUser.set('garminAPITokens:user-1', [
       createTokenSnapshot('token-1', 'garmin-user-1'),
@@ -264,5 +357,27 @@ describe('garmin route sending', () => {
       createRouteFile(),
       context,
     )).rejects.toBeInstanceOf(GarminRouteSendPermissionRequiredError);
+  });
+
+  it('maps hiking trail route types to HIKING before generic trail matching', async () => {
+    garminTokenDocsByUser.set('garminAPITokens:user-1', [
+      createTokenSnapshot('token-1', 'garmin-user-1'),
+    ]);
+    requestHelperMocks.post.mockResolvedValueOnce({ courseId: 9001 });
+
+    const context = await createGarminRouteSendContext('user-1');
+    await sendRouteToGarminConnect(
+      'user-1',
+      'route-1',
+      { id: 'route-1', name: 'QS Route Name', activityTypes: ['hiking_trail'] } as any,
+      createRouteFile('hiking_trail'),
+      context,
+    );
+
+    expect(requestHelperMocks.post).toHaveBeenCalledWith(expect.objectContaining({
+      body: expect.objectContaining({
+        activityType: 'HIKING',
+      }),
+    }));
   });
 });

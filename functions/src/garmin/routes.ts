@@ -15,7 +15,6 @@ import * as requestPromise from '../request-helper';
 import { FirestoreRouteJSON } from '../../../shared/app-route.interface';
 import {
   GARMIN_ROUTE_SEND_REQUIRED_PERMISSIONS,
-  getGarminProviderUserIdFromTokenLike,
   getMissingGarminPermissionsForTokenLike,
   selectPreferredGarminTokenLike,
 } from '../../../shared/garmin-service-token';
@@ -27,9 +26,22 @@ import { getTokenData, TerminalServiceAuthError, TokenRefreshSkippedForDeletedUs
 const GARMIN_COURSES_API_BASE_URL = 'https://apis.garmin.com/training-api/courses/v1/course';
 
 export interface GarminRouteSendContext {
+  tokenSnapshots: admin.firestore.QueryDocumentSnapshot[];
+  preferredProviderUserId: string;
+}
+
+interface GarminRouteSendTokenSnapshot {
+  snapshot: admin.firestore.QueryDocumentSnapshot;
   tokenRef: admin.firestore.DocumentReference;
   tokenID: string;
   providerUserId: string;
+  missingPermissions: string[];
+}
+
+interface GarminRouteDeliveryTarget {
+  providerUserId: string;
+  providerRouteId: string;
+  updatedAtMs: number;
 }
 
 interface GarminCourseGeoPointInformation {
@@ -65,6 +77,36 @@ export class GarminRouteSendPermissionRequiredError extends Error {
 
 function normalizeNonEmptyString(value: unknown): string | null {
   return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null;
+}
+
+function toTimestampMs(value: unknown): number {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (value instanceof Date) {
+    return Number.isFinite(value.getTime()) ? value.getTime() : 0;
+  }
+
+  if (typeof (value as { toDate?: unknown } | null)?.toDate === 'function') {
+    const date = (value as { toDate: () => Date }).toDate();
+    return Number.isFinite(date.getTime()) ? date.getTime() : 0;
+  }
+
+  if (
+    typeof (value as { seconds?: unknown } | null)?.seconds === 'number'
+    && typeof (value as { nanoseconds?: unknown } | null)?.nanoseconds === 'number'
+  ) {
+    const timestamp = value as { seconds: number; nanoseconds: number };
+    return (timestamp.seconds * 1000) + Math.round(timestamp.nanoseconds / 1000000);
+  }
+
+  if (typeof value === 'string') {
+    const date = new Date(value);
+    return Number.isFinite(date.getTime()) ? date.getTime() : 0;
+  }
+
+  return 0;
 }
 
 function getGarminStatusCode(error: unknown): number | null {
@@ -150,14 +192,14 @@ function resolveGarminCourseActivityType(routeFile: RouteFileInterface, routeDoc
     if (candidate.includes('mountain') || candidate.includes('mtb') || candidate.includes('downhill') || candidate.includes('enduro')) {
       return 'MOUNTAIN_BIKING';
     }
+    if (candidate.includes('hiking') || candidate.includes('trekking') || candidate.includes('walking')) {
+      return 'HIKING';
+    }
     if (candidate.includes('trail running') || candidate.includes('trail_running') || candidate.includes('trail')) {
       return 'TRAIL_RUNNING';
     }
     if (candidate.includes('running')) {
       return 'RUNNING';
-    }
-    if (candidate.includes('hiking') || candidate.includes('trekking') || candidate.includes('walking')) {
-      return 'HIKING';
     }
     if (candidate.includes('cycling') || candidate.includes('biking') || candidate.includes('road')) {
       return 'ROAD_CYCLING';
@@ -193,9 +235,9 @@ function buildGarminCoursePayload(routeFile: RouteFileInterface, routeDocument: 
 }
 
 async function getLatestGarminTokenSnapshot(
-  context: GarminRouteSendContext,
+  tokenSnapshotRef: GarminRouteSendTokenSnapshot,
 ): Promise<admin.firestore.DocumentSnapshot> {
-  const snapshot = await context.tokenRef.get();
+  const snapshot = await tokenSnapshotRef.tokenRef.get();
   if (!snapshot.exists) {
     throw buildGarminAuthRequiredError();
   }
@@ -228,10 +270,10 @@ async function getGarminAccessToken(
 }
 
 async function executeGarminCourseRequest<T>(
-  context: GarminRouteSendContext,
+  tokenSnapshotRef: GarminRouteSendTokenSnapshot,
   requestFactory: (accessToken: string) => Promise<T>,
 ): Promise<T> {
-  const latestTokenSnapshot = await getLatestGarminTokenSnapshot(context);
+  const latestTokenSnapshot = await getLatestGarminTokenSnapshot(tokenSnapshotRef);
 
   try {
     const accessToken = await getGarminAccessToken(latestTokenSnapshot, false);
@@ -255,11 +297,11 @@ async function executeGarminCourseRequest<T>(
 }
 
 async function createGarminCourse(
-  context: GarminRouteSendContext,
+  tokenSnapshotRef: GarminRouteSendTokenSnapshot,
   payload: GarminCoursePayload,
 ): Promise<string> {
   try {
-    const response = await executeGarminCourseRequest(context, async (accessToken) => requestPromise.post({
+    const response = await executeGarminCourseRequest(tokenSnapshotRef, async (accessToken) => requestPromise.post({
       url: GARMIN_COURSES_API_BASE_URL,
       json: true,
       body: payload,
@@ -288,12 +330,12 @@ async function createGarminCourse(
 }
 
 async function updateGarminCourse(
-  context: GarminRouteSendContext,
+  tokenSnapshotRef: GarminRouteSendTokenSnapshot,
   courseId: string,
   payload: GarminCoursePayload,
 ): Promise<'updated' | 'missing'> {
   try {
-    await executeGarminCourseRequest(context, async (accessToken) => requestPromise.put({
+    await executeGarminCourseRequest(tokenSnapshotRef, async (accessToken) => requestPromise.put({
       url: `${GARMIN_COURSES_API_BASE_URL}/${encodeURIComponent(courseId)}`,
       body: payload,
       headers: {
@@ -319,24 +361,145 @@ async function updateGarminCourse(
   }
 }
 
-async function getExistingGarminCourseId(
-  userID: string,
-  routeID: string,
+function getGarminRouteSendTokenSnapshot(
+  context: GarminRouteSendContext,
   providerUserId: string,
-): Promise<string | null> {
-  const deliverySnapshot = await getRouteDeliveryMetadataRef(
-    admin.firestore(),
-    userID,
-    routeID,
-    ServiceNames.GarminAPI,
-    providerUserId,
-  ).get();
-
-  if (!deliverySnapshot.exists) {
+): GarminRouteSendTokenSnapshot | null {
+  const tokenCandidates = context.tokenSnapshots
+    .map(snapshot => ({
+      snapshot,
+      ...snapshot.data(),
+    }))
+    .filter(tokenCandidate => normalizeNonEmptyString(tokenCandidate.userID) === providerUserId);
+  const tokenCandidate = selectPreferredGarminTokenLike(
+    tokenCandidates,
+    GARMIN_ROUTE_SEND_REQUIRED_PERMISSIONS,
+  ) as ({ snapshot?: admin.firestore.QueryDocumentSnapshot } & Record<string, unknown>) | null;
+  const snapshot = tokenCandidate?.snapshot;
+  if (!snapshot) {
     return null;
   }
 
-  return normalizeNonEmptyString((deliverySnapshot.data() as { providerRouteId?: unknown } | null)?.providerRouteId);
+  return {
+    snapshot,
+    tokenRef: snapshot.ref,
+    tokenID: snapshot.id,
+    providerUserId,
+    missingPermissions: getMissingGarminPermissionsForTokenLike(
+      tokenCandidate,
+      GARMIN_ROUTE_SEND_REQUIRED_PERMISSIONS,
+    ),
+  };
+}
+
+function getPreferredGarminRouteSendTokenSnapshot(
+  context: GarminRouteSendContext,
+): GarminRouteSendTokenSnapshot | null {
+  return getGarminRouteSendTokenSnapshot(context, context.preferredProviderUserId);
+}
+
+function hasRouteBeenSentToGarmin(routeDocument: FirestoreRouteJSON): boolean {
+  return Array.isArray(routeDocument.syncedDestinationServiceNames)
+    && routeDocument.syncedDestinationServiceNames.includes(ServiceNames.GarminAPI);
+}
+
+async function getExistingGarminDeliveryTarget(
+  userID: string,
+  routeID: string,
+  context: GarminRouteSendContext,
+): Promise<GarminRouteDeliveryTarget | null> {
+  const deliveries = await Promise.all(
+    Array.from(new Set(context.tokenSnapshots
+      .map(snapshot => normalizeNonEmptyString(snapshot.data()?.userID))
+      .filter((providerUserId): providerUserId is string => providerUserId !== null)))
+      .map(async (providerUserId) => {
+        const deliverySnapshot = await getRouteDeliveryMetadataRef(
+          admin.firestore(),
+          userID,
+          routeID,
+          ServiceNames.GarminAPI,
+          providerUserId,
+        ).get();
+
+        if (!deliverySnapshot.exists) {
+          return null;
+        }
+
+        const data = deliverySnapshot.data() as {
+          providerRouteId?: unknown;
+          updatedAt?: unknown;
+          deliveredAt?: unknown;
+          lastAttemptAt?: unknown;
+        } | null;
+        const providerRouteId = normalizeNonEmptyString(data?.providerRouteId);
+        if (!providerRouteId) {
+          return null;
+        }
+
+        return {
+          providerUserId,
+          providerRouteId,
+          updatedAtMs: toTimestampMs(data?.updatedAt)
+            || toTimestampMs(data?.deliveredAt)
+            || toTimestampMs(data?.lastAttemptAt),
+        } satisfies GarminRouteDeliveryTarget;
+      }),
+  );
+
+  const matchingDeliveries = deliveries
+    .filter((delivery): delivery is GarminRouteDeliveryTarget => delivery !== null)
+    .sort((left, right) => (
+      right.updatedAtMs - left.updatedAtMs
+      || Number(right.providerUserId === context.preferredProviderUserId) - Number(left.providerUserId === context.preferredProviderUserId)
+      || left.providerUserId.localeCompare(right.providerUserId)
+    ));
+
+  return matchingDeliveries[0] || null;
+}
+
+async function resolveGarminRouteDeliveryTarget(
+  userID: string,
+  routeID: string,
+  routeDocument: FirestoreRouteJSON,
+  context: GarminRouteSendContext,
+): Promise<{
+  tokenSnapshotRef: GarminRouteSendTokenSnapshot;
+  existingCourseId: string | null;
+}> {
+  const existingDelivery = await getExistingGarminDeliveryTarget(userID, routeID, context);
+  if (existingDelivery) {
+    const tokenSnapshotRef = getGarminRouteSendTokenSnapshot(context, existingDelivery.providerUserId);
+    if (!tokenSnapshotRef) {
+      throw buildGarminAuthRequiredError('Reconnect the Garmin account previously used for this route before sending it again.');
+    }
+    if (tokenSnapshotRef.missingPermissions.length > 0) {
+      throw new GarminRouteSendPermissionRequiredError(
+        'Grant Garmin Course Import permission for the Garmin account previously used for this route, then reconnect before sending routes.',
+      );
+    }
+
+    return {
+      tokenSnapshotRef,
+      existingCourseId: existingDelivery.providerRouteId,
+    };
+  }
+
+  if (hasRouteBeenSentToGarmin(routeDocument)) {
+    throw buildGarminAuthRequiredError('Reconnect the Garmin account previously used for this route before sending it again.');
+  }
+
+  const preferredTokenSnapshotRef = getPreferredGarminRouteSendTokenSnapshot(context);
+  if (!preferredTokenSnapshotRef) {
+    throw buildGarminAuthRequiredError('No connected Garmin account found.');
+  }
+  if (preferredTokenSnapshotRef.missingPermissions.length > 0) {
+    throw new GarminRouteSendPermissionRequiredError('Grant Garmin Course Import permission and reconnect before sending routes.');
+  }
+
+  return {
+    tokenSnapshotRef: preferredTokenSnapshotRef,
+    existingCourseId: null,
+  };
 }
 
 export async function createGarminRouteSendContext(userID: string): Promise<GarminRouteSendContext> {
@@ -357,7 +520,7 @@ export async function createGarminRouteSendContext(userID: string): Promise<Garm
     })),
     GARMIN_ROUTE_SEND_REQUIRED_PERMISSIONS,
   );
-  const preferredProviderUserId = getGarminProviderUserIdFromTokenLike(preferredTokenCandidate);
+  const preferredProviderUserId = normalizeNonEmptyString((preferredTokenCandidate as { userID?: unknown } | null)?.userID);
   if (!preferredTokenCandidate || !preferredProviderUserId) {
     throw buildGarminAuthRequiredError('No connected Garmin account found.');
   }
@@ -380,9 +543,8 @@ export async function createGarminRouteSendContext(userID: string): Promise<Garm
   }
 
   return {
-    tokenRef: preferredTokenSnapshot.ref,
-    tokenID: preferredTokenSnapshot.id,
-    providerUserId: preferredProviderUserId,
+    tokenSnapshots: tokenQuerySnapshot.docs,
+    preferredProviderUserId,
   };
 }
 
@@ -397,22 +559,25 @@ export async function sendRouteToGarminConnect(
   deliveries: Array<{ providerUserId: string; providerRouteId: string }>;
 }> {
   const payload = buildGarminCoursePayload(routeFile, routeDocument);
-  const existingCourseId = await getExistingGarminCourseId(userID, routeID, context.providerUserId);
+  const {
+    tokenSnapshotRef,
+    existingCourseId,
+  } = await resolveGarminRouteDeliveryTarget(userID, routeID, routeDocument, context);
 
   let providerRouteId = existingCourseId;
   if (existingCourseId) {
-    const updateResult = await updateGarminCourse(context, existingCourseId, payload);
+    const updateResult = await updateGarminCourse(tokenSnapshotRef, existingCourseId, payload);
     if (updateResult === 'missing') {
-      providerRouteId = await createGarminCourse(context, payload);
+      providerRouteId = await createGarminCourse(tokenSnapshotRef, payload);
     }
   } else {
-    providerRouteId = await createGarminCourse(context, payload);
+    providerRouteId = await createGarminCourse(tokenSnapshotRef, payload);
   }
 
   return {
     providerRouteId,
     deliveries: [{
-      providerUserId: context.providerUserId,
+      providerUserId: tokenSnapshotRef.providerUserId,
       providerRouteId,
     }],
   };
