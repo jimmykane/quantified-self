@@ -30,6 +30,12 @@ describe('integration-pages.content', () => {
     expect(PROVIDER_INTEGRATION_ROUTE_DATA.coros.description).toContain('COROS -> Suunto sync');
     expect(PROVIDER_INTEGRATION_ROUTE_DATA.coros).not.toHaveProperty('keywords');
     expect(PROVIDER_INTEGRATION_ROUTE_DATA.suunto.description).toContain('Sync Garmin and COROS activities to Suunto');
+    expect(PROVIDER_INTEGRATION_ROUTE_DATA.suunto.description).toContain('import Suunto routes');
+    expect(PROVIDER_INTEGRATION_ROUTE_DATA.suunto.description).toContain('send saved GPX routes to Suunto');
+    expect(PROVIDER_INTEGRATION_PAGES.suunto.h1).toBe('Suunto Integration for Activity and Route Sync');
+    expect(PROVIDER_INTEGRATION_PAGES.suunto.highlights).toContain('Suunto route import and catch-up');
+    expect(PROVIDER_INTEGRATION_PAGES.suunto.tools.some(tool => tool.title === 'Suunto route import')).toBe(true);
+    expect(PROVIDER_INTEGRATION_PAGES.suunto.faqItems.some(item => item.question === 'Can Quantified Self sync routes with Suunto?')).toBe(true);
     expect(PROVIDER_INTEGRATION_ROUTE_DATA.suunto).not.toHaveProperty('keywords');
   });
 });

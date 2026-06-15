@@ -346,7 +346,7 @@ export const routes: Routes = [
   {
     path: 'routes',
     loadComponent: () => import('./components/routes/routes-page.component').then(module => module.RoutesPageComponent),
-    data: { title: 'Routes', animation: 'Routes', preload: true },
+    data: { title: 'Routes', animation: 'Routes', preload: true, robots: 'noindex, follow' },
     canMatch: [authGuard, onboardingGuard]
   },
   {
