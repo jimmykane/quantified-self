@@ -2,7 +2,11 @@
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ServiceNames } from '@sports-alliance/sports-lib';
-import { SEND_ROUTES_TO_SERVICE_MAX_ROUTE_IDS } from '../../../shared/saved-route-send';
+import {
+  GARMIN_DELIVERY_METADATA_ABORT_MESSAGE,
+  GARMIN_DELIVERY_METADATA_PERSIST_FAILURE_MESSAGE,
+  SEND_ROUTES_TO_SERVICE_MAX_ROUTE_IDS,
+} from '../../../shared/saved-route-send';
 import { PRO_REQUIRED_MESSAGE } from '../utils';
 
 const routeDocuments = new Map<string, Record<string, unknown>>();
@@ -405,7 +409,7 @@ describe('sendRoutesToService', () => {
         routeId: 'route-1',
         status: 'failure',
         reason: 'DELIVERY_METADATA_PERSIST_FAILED',
-        message: 'Route was sent to Garmin Connect, but Quantified Self could not save the resend state. Check Garmin Connect before retrying this route.',
+        message: GARMIN_DELIVERY_METADATA_PERSIST_FAILURE_MESSAGE,
       }),
     ]);
   });
@@ -446,10 +450,12 @@ describe('sendRoutesToService', () => {
       expect.objectContaining({
         routeId: 'route-1',
         reason: 'DELIVERY_METADATA_PERSIST_FAILED',
+        message: GARMIN_DELIVERY_METADATA_PERSIST_FAILURE_MESSAGE,
       }),
       expect.objectContaining({
         routeId: 'route-2',
-        reason: 'DELIVERY_METADATA_PERSIST_FAILED',
+        reason: 'SEND_REQUEST_FAILED',
+        message: GARMIN_DELIVERY_METADATA_ABORT_MESSAGE,
       }),
     ]);
   });

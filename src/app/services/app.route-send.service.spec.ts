@@ -1,7 +1,11 @@
 import { TestBed } from '@angular/core/testing';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { SEND_ROUTES_TO_SERVICE_MAX_ROUTE_IDS } from '@shared/saved-route-send';
+import {
+  GARMIN_DELIVERY_METADATA_ABORT_MESSAGE,
+  GARMIN_DELIVERY_METADATA_PERSIST_FAILURE_MESSAGE,
+  SEND_ROUTES_TO_SERVICE_MAX_ROUTE_IDS,
+} from '@shared/saved-route-send';
 import { AppFunctionsService } from './app.functions.service';
 import {
   getActionableRouteSendResponseMessage,
@@ -272,13 +276,22 @@ describe('AppRouteSendService', () => {
         successCount: 0,
         failureCount: SEND_ROUTES_TO_SERVICE_MAX_ROUTE_IDS,
         skippedCount: 0,
-        results: routeIds.slice(0, SEND_ROUTES_TO_SERVICE_MAX_ROUTE_IDS).map(routeId => ({
-          routeId,
-          destinationServiceName: ServiceNames.GarminAPI,
-          status: 'failure',
-          reason: 'DELIVERY_METADATA_PERSIST_FAILED',
-          message: 'Route was sent to Garmin Connect, but Quantified Self could not save the resend state. Check Garmin Connect before retrying this route.',
-        })),
+        results: [
+          {
+            routeId: routeIds[0],
+            destinationServiceName: ServiceNames.GarminAPI,
+            status: 'failure',
+            reason: 'DELIVERY_METADATA_PERSIST_FAILED',
+            message: GARMIN_DELIVERY_METADATA_PERSIST_FAILURE_MESSAGE,
+          },
+          ...routeIds.slice(1, SEND_ROUTES_TO_SERVICE_MAX_ROUTE_IDS).map(routeId => ({
+            routeId,
+            destinationServiceName: ServiceNames.GarminAPI,
+            status: 'failure',
+            reason: 'SEND_REQUEST_FAILED',
+            message: GARMIN_DELIVERY_METADATA_ABORT_MESSAGE,
+          })),
+        ],
       },
     });
 
@@ -292,8 +305,8 @@ describe('AppRouteSendService', () => {
       routeId: routeIds[SEND_ROUTES_TO_SERVICE_MAX_ROUTE_IDS],
       destinationServiceName: ServiceNames.GarminAPI,
       status: 'failure',
-      reason: 'DELIVERY_METADATA_PERSIST_FAILED',
-      message: 'Route was sent to Garmin Connect, but Quantified Self could not save the resend state. Check Garmin Connect before retrying this route.',
+      reason: 'SEND_REQUEST_FAILED',
+      message: GARMIN_DELIVERY_METADATA_ABORT_MESSAGE,
     });
   });
 

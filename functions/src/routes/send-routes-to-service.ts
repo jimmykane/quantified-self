@@ -10,6 +10,8 @@ import {
 import { FirestoreRouteJSON, OriginalRouteFileMetaData } from '../../../shared/app-route.interface';
 import { FUNCTIONS_MANIFEST } from '../../../shared/functions-manifest';
 import {
+  GARMIN_DELIVERY_METADATA_ABORT_MESSAGE,
+  GARMIN_DELIVERY_METADATA_PERSIST_FAILURE_MESSAGE,
   SEND_ROUTES_TO_SERVICE_MAX_ROUTE_IDS,
   SendRouteToServiceFailureReason,
   SendRouteToServiceItemResult,
@@ -145,7 +147,6 @@ const STRICT_ROUTE_DELIVERY_METADATA_DESTINATIONS = new Set<ServiceNames>([
   ServiceNames.GarminAPI,
 ]);
 const ROUTE_DELIVERY_METADATA_MAX_ATTEMPTS = 3;
-const GARMIN_DELIVERY_METADATA_FAILURE_MESSAGE = 'Route was sent to Garmin Connect, but Quantified Self could not save the resend state. Check Garmin Connect before retrying this route.';
 
 function normalizeNonEmptyString(value: unknown): string | null {
   return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null;
@@ -276,10 +277,10 @@ export const sendRoutesToService = onCall({
           break;
         }
         if (isDeliveryMetadataPersistenceError(error)) {
-          results.push(...buildTerminalRouteSendResults(
-            payload.routeIds.slice(index),
+          results.push(buildRouteSendFailureResult(routeId, adapter.destinationServiceName, error));
+          results.push(...buildUnattemptedRouteSendResultsAfterDeliveryMetadataFailure(
+            payload.routeIds.slice(index + 1),
             adapter.destinationServiceName,
-            error,
           ));
           break;
         }
@@ -635,6 +636,19 @@ function buildTerminalRouteSendResults(
   return routeIds.map(routeId => buildRouteSendFailureResult(routeId, destinationServiceName, error));
 }
 
+function buildUnattemptedRouteSendResultsAfterDeliveryMetadataFailure(
+  routeIds: string[],
+  destinationServiceName: ServiceNames,
+): SendRouteToServiceItemResult[] {
+  return routeIds.map(routeId => ({
+    routeId,
+    destinationServiceName,
+    status: 'failure',
+    reason: 'SEND_REQUEST_FAILED',
+    message: GARMIN_DELIVERY_METADATA_ABORT_MESSAGE,
+  }));
+}
+
 function buildSendRoutesResponse(
   destinationServiceName: ServiceNames,
   results: SendRouteToServiceItemResult[],
@@ -742,6 +756,6 @@ async function persistRouteDeliveryMetadataAfterSend(params: {
       maxAttempts: ROUTE_DELIVERY_METADATA_MAX_ATTEMPTS,
       error: lastError,
     });
-    throw new RouteSendItemError('DELIVERY_METADATA_PERSIST_FAILED', GARMIN_DELIVERY_METADATA_FAILURE_MESSAGE);
+    throw new RouteSendItemError('DELIVERY_METADATA_PERSIST_FAILED', GARMIN_DELIVERY_METADATA_PERSIST_FAILURE_MESSAGE);
   }
 }
