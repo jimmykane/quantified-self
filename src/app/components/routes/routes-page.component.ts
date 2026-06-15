@@ -31,7 +31,9 @@ import {
     buildSuuntoRouteCatchUpSnackbarMessage,
 } from '../../helpers/suunto-route-catch-up.helper';
 import {
+    canSendRouteToConnectedGarminAccount,
     canSendRouteToConnectedSuuntoAccounts,
+    getGarminRouteSendDisabledReason,
     getRouteServiceDisplayName,
     getRouteSourceSummary,
     getRouteSyncedDestinationSummaries,
@@ -100,6 +102,7 @@ interface RoutePageRouteViewModel {
     canDownloadOriginals: boolean;
     canSendToSuunto: boolean;
     canSendToGarmin: boolean;
+    garminSendDisabledReason: string | null;
     canDelete: boolean;
     filterText: string;
 }
@@ -192,6 +195,7 @@ export class RoutesPageComponent implements OnInit {
         reconnectRequired: false,
         missingPermissions: [],
         providerUserId: null,
+        providerStates: [],
         serviceMeta: null,
     });
     private readonly loadedRouteViewModels = signal<RoutePageRouteViewModel[]>([]);
@@ -227,6 +231,7 @@ export class RoutesPageComponent implements OnInit {
         reconnectRequired: false,
         missingPermissions: [],
         providerUserId: null,
+        providerStates: [],
         serviceMeta: null,
     });
     readonly suuntoConnectionView = signal<SuuntoServiceConnectionViewModel>(buildSuuntoServiceConnectionViewModel({
@@ -1425,7 +1430,31 @@ export class RoutesPageComponent implements OnInit {
     private canSendRouteToGarmin(route: FirestoreRouteJSON): boolean {
         return this.canManageRoute(route)
             && this.routeService.getOriginalRouteFiles(route).length > 0
-            && this.canSendRoutesToGarmin();
+            && canSendRouteToConnectedGarminAccount(route, this.garminRouteSendContext());
+    }
+
+    private getGarminSendDisabledReason(route: FirestoreRouteJSON): string | null {
+        if (!this.canManageRoute(route) || this.routeService.getOriginalRouteFiles(route).length === 0) {
+            return null;
+        }
+
+        return getGarminRouteSendDisabledReason(route, this.garminRouteSendContext());
+    }
+
+    getGarminSendMenuLabel(disabledReason: string | null): string {
+        if (!disabledReason) {
+            return 'Garmin';
+        }
+        if (/course import/i.test(disabledReason)) {
+            return 'Garmin (Course Import required)';
+        }
+        if (/checking garmin permissions/i.test(disabledReason)) {
+            return 'Garmin (checking permissions)';
+        }
+        if (/previously used for this route/i.test(disabledReason)) {
+            return 'Garmin (reconnect original account)';
+        }
+        return 'Garmin';
     }
 
     private canSendRoutesToDestination(destinationServiceName: ServiceNames): boolean {
@@ -1586,6 +1615,7 @@ export class RoutesPageComponent implements OnInit {
             : sourceSummary.label;
         const provenanceItems = this.buildRouteProvenanceItems(route);
         const provenanceSummary = provenanceItems.map(item => item.label).join(' · ');
+        const garminSendDisabledReason = this.getGarminSendDisabledReason(route);
         return {
             route,
             name: routeName,
@@ -1617,6 +1647,7 @@ export class RoutesPageComponent implements OnInit {
             canDownloadOriginals: this.canManageRoute(route) && originalFiles.length > 0,
             canSendToSuunto: this.canSendRouteToSuunto(route),
             canSendToGarmin: this.canSendRouteToGarmin(route),
+            garminSendDisabledReason,
             canDelete: this.canManageRoute(route),
             filterText: [
                 routeName,

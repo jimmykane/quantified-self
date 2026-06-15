@@ -121,6 +121,7 @@ describe('RoutesPageComponent', () => {
             reconnectRequired: false,
             missingPermissions: [],
             providerUserId: null,
+            providerStates: [],
             serviceMeta: null,
         });
         authServiceMock = {
@@ -1231,6 +1232,11 @@ describe('RoutesPageComponent', () => {
             reconnectRequired: false,
             missingPermissions: [],
             providerUserId: 'garmin-user-1',
+            providerStates: [{
+                providerUserId: 'garmin-user-1',
+                permissionsLoaded: true,
+                missingPermissions: [],
+            }],
             serviceMeta: null,
         });
         await component.ngOnInit();
@@ -1246,6 +1252,11 @@ describe('RoutesPageComponent', () => {
             reconnectRequired: false,
             missingPermissions: [],
             providerUserId: 'garmin-user-1',
+            providerStates: [{
+                providerUserId: 'garmin-user-1',
+                permissionsLoaded: true,
+                missingPermissions: [],
+            }],
             serviceMeta: null,
         });
         routeSendServiceMock.sendRoutesToService.mockResolvedValueOnce({
@@ -1277,6 +1288,37 @@ describe('RoutesPageComponent', () => {
         });
         expect(snackBarMock.open).toHaveBeenCalledWith('Route sent to Garmin.', undefined, { duration: 2500 });
         expect(component.sendingToServiceRouteID()).toBeNull();
+    });
+
+    it('disables Garmin resend for routes pinned to a different Garmin account', async () => {
+        const garminDeliveredRoute: FirestoreRouteJSON = {
+            ...route,
+            syncedDestinationServiceNames: [ServiceNames.GarminAPI],
+            deliverySummaries: [{
+                serviceName: ServiceNames.GarminAPI,
+                providerUserIds: ['garmin-user-1'],
+                latestProviderUserId: 'garmin-user-1',
+            }],
+        };
+        routeServiceMock.getRoutes.mockReturnValueOnce(of([garminDeliveredRoute]));
+        garminRouteSendContext$.next({
+            connected: true,
+            reconnectRequired: false,
+            missingPermissions: [],
+            providerUserId: 'garmin-user-2',
+            providerStates: [{
+                providerUserId: 'garmin-user-2',
+                permissionsLoaded: true,
+                missingPermissions: [],
+            }],
+            serviceMeta: null,
+        });
+        await component.ngOnInit();
+        const routes = await firstValueFrom(component.routes$!);
+
+        expect(routes[0].canSendToGarmin).toBe(false);
+        expect(routes[0].garminSendDisabledReason).toBe('Reconnect the Garmin account previously used for this route before sending it again.');
+        expect(component.getGarminSendMenuLabel(routes[0].garminSendDisabledReason)).toBe('Garmin (reconnect original account)');
     });
 
     it('shows reconnect guidance when a row send returns an auth-required response', async () => {
@@ -1320,6 +1362,11 @@ describe('RoutesPageComponent', () => {
             reconnectRequired: false,
             missingPermissions: [],
             providerUserId: 'garmin-user-1',
+            providerStates: [{
+                providerUserId: 'garmin-user-1',
+                permissionsLoaded: true,
+                missingPermissions: [],
+            }],
             serviceMeta: null,
         });
         routeServiceMock.getRoutes.mockReturnValue(of([route, secondRoute]));

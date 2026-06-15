@@ -37,7 +37,9 @@ import { AppUserSettingsQueryService } from '../../../services/app.user-settings
 import { LoggerService } from '../../../services/logger.service';
 import { normalizeRouteName } from '../../../helpers/route-name.helper';
 import {
+  canSendRouteToConnectedGarminAccount,
   canSendRouteToConnectedSuuntoAccounts,
+  getGarminRouteSendDisabledReason,
   getRouteServiceDisplayName,
   getRouteSourceSummaryLabel,
   getRouteSyncedDestinationLabels,
@@ -98,6 +100,7 @@ export class RouteDetailComponent {
     reconnectRequired: false,
     missingPermissions: [],
     providerUserId: null,
+    providerStates: [],
     serviceMeta: null,
   });
 
@@ -189,10 +192,34 @@ export class RouteDetailComponent {
     return !!routeDocument
       && this.canManageRoute()
       && this.routeService.getOriginalRouteFiles(routeDocument).length > 0
-      && this.canSendRoutesToGarmin();
+      && canSendRouteToConnectedGarminAccount(routeDocument, this.garminRouteSendContext());
+  });
+  readonly garminRouteSendDisabledReason = computed(() => {
+    const routeDocument = this.routeDocument();
+    if (!routeDocument || !this.canManageRoute() || this.routeService.getOriginalRouteFiles(routeDocument).length === 0) {
+      return null;
+    }
+
+    return getGarminRouteSendDisabledReason(routeDocument, this.garminRouteSendContext());
+  });
+  readonly garminRouteSendMenuLabel = computed(() => {
+    const disabledReason = this.garminRouteSendDisabledReason();
+    if (!disabledReason) {
+      return 'Garmin';
+    }
+    if (/course import/i.test(disabledReason)) {
+      return 'Garmin (Course Import required)';
+    }
+    if (/checking garmin permissions/i.test(disabledReason)) {
+      return 'Garmin (checking permissions)';
+    }
+    if (/previously used for this route/i.test(disabledReason)) {
+      return 'Garmin (reconnect original account)';
+    }
+    return 'Garmin';
   });
   readonly hasSendableRouteDestination = computed(() => (
-    this.canSendRouteToSuunto() || this.canSendRouteToGarmin()
+    this.canSendRouteToSuunto() || this.canSendRouteToGarmin() || !!this.garminRouteSendDisabledReason()
   ));
   readonly canReprocessRoute = computed(() => {
     const routeDocument = this.routeDocument();

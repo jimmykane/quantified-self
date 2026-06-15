@@ -73,6 +73,7 @@ describe('RouteDetailComponent', () => {
       reconnectRequired: false,
       missingPermissions: [],
       providerUserId: null,
+      providerStates: [],
       serviceMeta: null,
     });
     const parsedRoute = {
@@ -517,6 +518,11 @@ describe('RouteDetailComponent', () => {
       reconnectRequired: false,
       missingPermissions: [],
       providerUserId: 'garmin-user-1',
+      providerStates: [{
+        providerUserId: 'garmin-user-1',
+        permissionsLoaded: true,
+        missingPermissions: [],
+      }],
       serviceMeta: null,
     });
     routeSendServiceMock.sendRoutesToService.mockResolvedValueOnce({
@@ -549,6 +555,34 @@ describe('RouteDetailComponent', () => {
     });
     expect(snackBarMock.open).toHaveBeenCalledWith('Route sent to Garmin.', undefined, { duration: 2500 });
     expect(component.sendingToService()).toBe(false);
+  });
+
+  it('disables Garmin resend when the original Garmin delivery account is not currently sendable', async () => {
+    component.routeDocument.set({
+      ...routeDocument,
+      syncedDestinationServiceNames: [ServiceNames.GarminAPI],
+      deliverySummaries: [{
+        serviceName: ServiceNames.GarminAPI,
+        providerUserIds: ['garmin-user-1'],
+        latestProviderUserId: 'garmin-user-1',
+      }],
+    });
+    garminRouteSendContext$.next({
+      connected: true,
+      reconnectRequired: false,
+      missingPermissions: [],
+      providerUserId: 'garmin-user-2',
+      providerStates: [{
+        providerUserId: 'garmin-user-2',
+        permissionsLoaded: true,
+        missingPermissions: [],
+      }],
+      serviceMeta: null,
+    });
+
+    expect(component.canSendRouteToGarmin()).toBe(false);
+    expect(component.garminRouteSendDisabledReason()).toBe('Reconnect the Garmin account previously used for this route before sending it again.');
+    expect(component.garminRouteSendMenuLabel()).toBe('Garmin (reconnect original account)');
   });
 
   it('shows reconnect guidance when route-detail Suunto send returns an auth-required response', async () => {

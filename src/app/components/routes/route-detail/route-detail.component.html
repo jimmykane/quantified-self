@@ -86,12 +86,12 @@
             <span>Suunto</span>
           </button>
           }
-          @if (canSendRouteToGarmin()) {
+          @if (canSendRouteToGarmin() || canSendRoutesToGarmin() || garminRouteSendDisabledReason()) {
           <button mat-menu-item type="button"
-            [disabled]="sendingToService() || !canSendRoutesToGarmin()"
+            [disabled]="sendingToService() || !canSendRoutesToGarmin() || !canSendRouteToGarmin()"
             (click)="sendRouteToGarmin()">
-            <mat-icon>cloud_upload</mat-icon>
-            <span>Garmin</span>
+              <mat-icon>cloud_upload</mat-icon>
+            <span>{{ garminRouteSendMenuLabel() }}</span>
           </button>
           }
         </mat-menu>

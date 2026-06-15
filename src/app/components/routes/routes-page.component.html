@@ -418,7 +418,7 @@
             </button>
             <button mat-menu-item type="button"
               [matMenuTriggerFor]="routeRowSendMenu"
-              [disabled]="bulkActionInProgress() || sendingToServiceRouteID() !== null || deletingRouteID() === item.route.id || downloadingRouteID() === item.route.id || reprocessingRouteID() === item.route.id || exportingRouteID() === item.route.id || (!item.canSendToSuunto && !item.canSendToGarmin)"
+              [disabled]="bulkActionInProgress() || sendingToServiceRouteID() !== null || deletingRouteID() === item.route.id || downloadingRouteID() === item.route.id || reprocessingRouteID() === item.route.id || exportingRouteID() === item.route.id || (!item.canSendToSuunto && !item.canSendToGarmin && !item.garminSendDisabledReason)"
               (click)="$event.stopPropagation()">
               <mat-icon>cloud_upload</mat-icon>
               <span>Send to</span>
@@ -439,12 +439,12 @@
               <span>Suunto</span>
             </button>
             }
-            @if (item.canSendToGarmin || canSendRoutesToGarmin()) {
+            @if (item.canSendToGarmin || canSendRoutesToGarmin() || item.garminSendDisabledReason) {
             <button mat-menu-item type="button"
               [disabled]="bulkActionInProgress() || sendingToServiceRouteID() !== null || !canSendRoutesToGarmin() || !item.canSendToGarmin"
               (click)="sendRouteToGarmin(item.route)">
               <mat-icon>cloud_upload</mat-icon>
-              <span>Garmin</span>
+              <span>{{ getGarminSendMenuLabel(item.garminSendDisabledReason) }}</span>
             </button>
             }
           </mat-menu>

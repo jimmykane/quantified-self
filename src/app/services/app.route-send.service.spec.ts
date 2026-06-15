@@ -273,6 +273,10 @@ describe('AppRouteSendService', () => {
       code: 'functions/unauthenticated',
       message: 'No connected Garmin account found',
     }, ServiceNames.GarminAPI)).toBe('Connect Garmin again before sending routes.');
+    expect(getRouteSendErrorMessage({
+      code: 'functions/unauthenticated',
+      message: 'Reconnect the Garmin account previously used for this route before sending it again.',
+    }, ServiceNames.GarminAPI)).toBe('Reconnect the Garmin account previously used for this route before sending it again.');
     expect(getRouteSendErrorMessage({ message: 'Sending saved routes to GarminAPI is not supported yet.' }))
       .toBe('Sending saved routes to GarminAPI is not supported yet.');
     expect(getRouteSendErrorMessage({ message: 'Could not verify account state. Please retry.' }))
@@ -313,6 +317,42 @@ describe('AppRouteSendService', () => {
         message: 'Missing Garmin COURSE_IMPORT permission.',
       }],
     })).toBe('Grant Garmin Course Import permission and reconnect before sending routes.');
+  });
+
+  it('preserves Garmin route-specific auth guidance from the backend', () => {
+    expect(getRouteSendResponseMessage({
+      destinationServiceName: ServiceNames.GarminAPI,
+      status: 'failure',
+      routeCount: 1,
+      successCount: 0,
+      failureCount: 1,
+      skippedCount: 0,
+      results: [{
+        routeId: 'route-1',
+        destinationServiceName: ServiceNames.GarminAPI,
+        status: 'failure',
+        reason: 'DESTINATION_AUTH_REQUIRED',
+        message: 'Reconnect the Garmin account previously used for this route before sending it again.',
+      }],
+    })).toBe('Reconnect the Garmin account previously used for this route before sending it again.');
+  });
+
+  it('preserves Garmin route-specific permission guidance from the backend', () => {
+    expect(getRouteSendResponseMessage({
+      destinationServiceName: ServiceNames.GarminAPI,
+      status: 'failure',
+      routeCount: 1,
+      successCount: 0,
+      failureCount: 1,
+      skippedCount: 0,
+      results: [{
+        routeId: 'route-1',
+        destinationServiceName: ServiceNames.GarminAPI,
+        status: 'failure',
+        reason: 'DESTINATION_PERMISSION_REQUIRED',
+        message: 'Grant Garmin Course Import permission for the Garmin account previously used for this route, then reconnect before sending routes.',
+      }],
+    })).toBe('Grant Garmin Course Import permission for the Garmin account previously used for this route, then reconnect before sending routes.');
   });
 
   it('maps source-service blocked responses to a specific Suunto guidance message', () => {

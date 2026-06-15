@@ -51,6 +51,10 @@ export function getRouteSendErrorMessage(error: unknown, destinationServiceName?
   const normalizedMessage = typeof message === 'string' ? message : '';
   const normalizedCode = typeof code === 'string' ? code : '';
 
+  if (isSpecificGarminRouteSendGuidance(normalizedMessage)) {
+    return normalizedMessage;
+  }
+
   if (normalizedCode.includes('permission-denied')) {
     return 'Sending routes to services is a Pro feature.';
   }
@@ -82,9 +86,11 @@ export function getRouteSendResponseMessage(response: SendRoutesToServiceRespons
 
   switch (highestPriorityReason) {
     case 'DESTINATION_AUTH_REQUIRED':
-      return getDestinationAuthRequiredMessage(response.destinationServiceName);
+      return getSpecificRouteSendResultMessage(nonSuccessResults, 'DESTINATION_AUTH_REQUIRED')
+        || getDestinationAuthRequiredMessage(response.destinationServiceName);
     case 'DESTINATION_PERMISSION_REQUIRED':
-      return getDestinationPermissionRequiredMessage(response.destinationServiceName);
+      return getSpecificRouteSendResultMessage(nonSuccessResults, 'DESTINATION_PERMISSION_REQUIRED')
+        || getDestinationPermissionRequiredMessage(response.destinationServiceName);
     case 'ACCOUNT_DELETION_IN_PROGRESS':
       return 'Account is being deleted or no longer exists.';
     case 'ACCOUNT_STATE_UNAVAILABLE':
@@ -284,6 +290,24 @@ function getDestinationPermissionRequiredMessage(destinationServiceName: Service
     default:
       return 'Grant the required destination permissions and reconnect before sending routes.';
   }
+}
+
+function isSpecificGarminRouteSendGuidance(message: string): boolean {
+  return /previously used for this route/i.test(message);
+}
+
+function getSpecificRouteSendResultMessage(
+  results: SendRouteToServiceItemResult[],
+  reason: SendRouteToServiceFailureReason,
+): string | null {
+  const message = results.find(result => (
+    result.reason === reason
+      && typeof result.message === 'string'
+      && result.message.trim().length > 0
+      && isSpecificGarminRouteSendGuidance(result.message.trim())
+  ))?.message?.trim();
+
+  return message || null;
 }
 
 function getDefaultRouteSendFailureMessage(destinationServiceName?: ServiceNames | null): string {

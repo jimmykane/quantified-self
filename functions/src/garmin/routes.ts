@@ -15,6 +15,7 @@ import * as requestPromise from '../request-helper';
 import { FirestoreRouteJSON } from '../../../shared/app-route.interface';
 import {
   GARMIN_ROUTE_SEND_REQUIRED_PERMISSIONS,
+  getGarminProviderUserIdFromTokenLike,
   getMissingGarminPermissionsForTokenLike,
   selectPreferredGarminTokenLike,
 } from '../../../shared/garmin-service-token';
@@ -365,12 +366,12 @@ function getGarminRouteSendTokenSnapshot(
   context: GarminRouteSendContext,
   providerUserId: string,
 ): GarminRouteSendTokenSnapshot | null {
-  const tokenCandidates = context.tokenSnapshots
+  const tokenCandidates: Array<Record<string, unknown> & { snapshot: admin.firestore.QueryDocumentSnapshot }> = context.tokenSnapshots
     .map(snapshot => ({
       snapshot,
-      ...snapshot.data(),
+      ...(snapshot.data() as Record<string, unknown>),
     }))
-    .filter(tokenCandidate => normalizeNonEmptyString(tokenCandidate.userID) === providerUserId);
+    .filter(tokenCandidate => getGarminProviderUserIdFromTokenLike(tokenCandidate) === providerUserId);
   const tokenCandidate = selectPreferredGarminTokenLike(
     tokenCandidates,
     GARMIN_ROUTE_SEND_REQUIRED_PERMISSIONS,
@@ -572,6 +573,9 @@ export async function sendRouteToGarminConnect(
     }
   } else {
     providerRouteId = await createGarminCourse(tokenSnapshotRef, payload);
+  }
+  if (!providerRouteId) {
+    throw new Error('Garmin route delivery did not return a course id.');
   }
 
   return {

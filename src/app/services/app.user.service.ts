@@ -93,6 +93,7 @@ import {
 } from '../helpers/suunto-route-catch-up.helper';
 import {
   GARMIN_ROUTE_SEND_REQUIRED_PERMISSIONS,
+  getConnectedGarminProviderUserIds,
   getGarminProviderUserIdFromTokenLike,
   getMissingGarminPermissionsForTokenLike,
   hasConnectedGarminToken,
@@ -144,7 +145,14 @@ export interface GarminRouteSendContext {
   reconnectRequired: boolean;
   missingPermissions: string[];
   providerUserId: string | null;
+  providerStates: GarminRouteSendProviderState[];
   serviceMeta: AppUserServiceMetaInterface | null;
+}
+
+export interface GarminRouteSendProviderState {
+  providerUserId: string;
+  permissionsLoaded: boolean;
+  missingPermissions: string[];
 }
 
 
@@ -787,6 +795,7 @@ export class AppUserService implements OnDestroy {
         reconnectRequired: false,
         missingPermissions: [],
         providerUserId: null,
+        providerStates: [],
         serviceMeta: null,
       });
     }
@@ -814,6 +823,23 @@ export class AppUserService implements OnDestroy {
         const preferredToken = Array.isArray(tokens)
           ? selectPreferredGarminTokenLike(tokens, GARMIN_ROUTE_SEND_REQUIRED_PERMISSIONS)
           : null;
+        const providerStates = Array.isArray(tokens)
+          ? getConnectedGarminProviderUserIds(tokens).map(providerUserId => {
+            const providerTokens = tokens.filter(token => getGarminProviderUserIdFromTokenLike(token) === providerUserId);
+            const preferredProviderToken = selectPreferredGarminTokenLike(
+              providerTokens,
+              GARMIN_ROUTE_SEND_REQUIRED_PERMISSIONS,
+            );
+
+            return {
+              providerUserId,
+              permissionsLoaded: Array.isArray((preferredProviderToken as { permissions?: unknown } | null)?.permissions),
+              missingPermissions: preferredProviderToken
+                ? getMissingGarminPermissionsForTokenLike(preferredProviderToken, GARMIN_ROUTE_SEND_REQUIRED_PERMISSIONS)
+                : [...GARMIN_ROUTE_SEND_REQUIRED_PERMISSIONS],
+            };
+          })
+          : [];
 
         return {
           connected: Array.isArray(tokens) && hasConnectedGarminToken(tokens),
@@ -822,6 +848,7 @@ export class AppUserService implements OnDestroy {
             ? getMissingGarminPermissionsForTokenLike(preferredToken, GARMIN_ROUTE_SEND_REQUIRED_PERMISSIONS)
             : [],
           providerUserId: getGarminProviderUserIdFromTokenLike(preferredToken),
+          providerStates,
           serviceMeta: normalizedServiceMeta,
         };
       }),
