@@ -22,6 +22,7 @@ import {
 import { GARMIN_SLEEP_BACKFILL_REQUIRED_PERMISSIONS } from '@shared/sleep-backfill';
 import {
   GARMIN_ROUTE_SEND_REQUIRED_PERMISSIONS,
+  getGarminProviderUserIdFromTokenLike,
   getMissingGarminPermissionsForTokenLike,
   hasConnectedGarminToken,
   selectPreferredGarminTokenLike,
@@ -119,9 +120,26 @@ export class ServicesGarminComponent extends ServicesAbstractComponentDirective 
     return userID || undefined;
   }
 
+  get routeSendGarminUserID(): string | undefined {
+    const token = this.preferredGarminRouteSendToken;
+    const userID = `${token?.userID || ''}`.trim();
+    return userID || undefined;
+  }
+
   get connectedAt(): string | number | Date | null {
     const value = this.preferredGarminToken?.dateCreated;
     return typeof value === 'string' || typeof value === 'number' || value instanceof Date ? value : null;
+  }
+
+  get routeSendConnectedAt(): string | number | Date | null {
+    const value = this.preferredGarminRouteSendToken?.dateCreated;
+    return typeof value === 'string' || typeof value === 'number' || value instanceof Date ? value : null;
+  }
+
+  get isRouteSendAccountDifferentFromConnectedAccount(): boolean {
+    return !!this.routeSendGarminUserID
+      && !!this.garminUserID
+      && this.routeSendGarminUserID !== this.garminUserID;
   }
 
   get permissionsLastChangedAt(): number | undefined {
@@ -194,16 +212,23 @@ export class ServicesGarminComponent extends ServicesAbstractComponentDirective 
   }
 
   get routeSendStatusMessage(): string {
+    const routeSendAccount = this.routeSendGarminUserID;
     if (this.isReconnectRequired) {
-      return 'Reconnect Garmin before sending saved routes from Routes to Garmin Connect.';
+      return routeSendAccount
+        ? `Reconnect Garmin account ${routeSendAccount} before sending saved routes from Routes to Garmin Connect.`
+        : 'Reconnect Garmin before sending saved routes from Routes to Garmin Connect.';
     }
     if (this.isRouteSendPermissionStateLoading) {
       return 'Checking Garmin permissions for saved route delivery.';
     }
     if (this.routeSendMissingPermissions.length > 0) {
-      return 'Grant Garmin COURSE_IMPORT permission in Garmin Connect, then reconnect before sending saved routes to Garmin Connect.';
+      return routeSendAccount
+        ? `Grant Garmin COURSE_IMPORT permission for ${routeSendAccount} in Garmin Connect, then reconnect before sending saved routes to Garmin Connect.`
+        : 'Grant Garmin COURSE_IMPORT permission in Garmin Connect, then reconnect before sending saved routes to Garmin Connect.';
     }
-    return 'Saved FIT and GPX routes can be sent from Routes to Garmin Connect, and later sends update the same Garmin course for the same saved route.';
+    return routeSendAccount
+      ? `Saved FIT and GPX routes can be sent from Routes to Garmin Connect using ${routeSendAccount}, and later sends update the same Garmin course for the same saved route.`
+      : 'Saved FIT and GPX routes can be sent from Routes to Garmin Connect, and later sends update the same Garmin course for the same saved route.';
   }
 
   get hasPermissionsLoaded(): boolean {
@@ -282,7 +307,10 @@ export class ServicesGarminComponent extends ServicesAbstractComponentDirective 
 
   private get permissionLoadedTokens(): Array<Record<string, unknown> & { permissions: unknown[] }> {
     return this.garminTokens
-      .filter((token): token is Record<string, unknown> & { permissions: unknown[] } => Array.isArray(token.permissions));
+      .filter((token): token is Record<string, unknown> & { permissions: unknown[] } => (
+        Array.isArray(token.permissions)
+        && !!getGarminProviderUserIdFromTokenLike(token)
+      ));
   }
 
   private get preferredGarminToken(): Record<string, unknown> | null {

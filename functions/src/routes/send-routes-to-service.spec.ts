@@ -345,6 +345,115 @@ describe('sendRoutesToService', () => {
     ]);
   });
 
+  it('retries Garmin delivery metadata persistence after a transient write failure and still returns success', async () => {
+    routeDocuments.set('users/user-1/routes/route-1', {
+      id: 'route-1',
+      userID: 'user-1',
+      srcFileType: 'gpx',
+      originalFiles: [{ path: 'users/user-1/routes/route-1/original.gpx', extension: 'gpx' }],
+      routes: [{ id: 'segment-1' }],
+    });
+    storagePayloads.set('users/user-1/routes/route-1/original.gpx', Buffer.from('<gpx></gpx>'));
+    routePersistenceMocks.setRouteDeliveryMetadata
+      .mockRejectedValueOnce(new Error('transient Firestore failure'))
+      .mockResolvedValue(undefined);
+
+    const result = await sendRoutesToService(createRequest({
+      routeIds: ['route-1'],
+      destinationServiceName: ServiceNames.GarminAPI,
+    }) as any);
+
+    expect(result).toMatchObject({
+      destinationServiceName: ServiceNames.GarminAPI,
+      status: 'success',
+      routeCount: 1,
+      successCount: 1,
+      failureCount: 0,
+      skippedCount: 0,
+    });
+    expect(routePersistenceMocks.setRouteDeliveryMetadata).toHaveBeenCalledTimes(2);
+  });
+
+  it('returns a Garmin send failure when delivery metadata cannot be saved after upload', async () => {
+    routeDocuments.set('users/user-1/routes/route-1', {
+      id: 'route-1',
+      userID: 'user-1',
+      srcFileType: 'gpx',
+      originalFiles: [{ path: 'users/user-1/routes/route-1/original.gpx', extension: 'gpx' }],
+      routes: [{ id: 'segment-1' }],
+    });
+    storagePayloads.set('users/user-1/routes/route-1/original.gpx', Buffer.from('<gpx></gpx>'));
+    routePersistenceMocks.setRouteDeliveryMetadata.mockRejectedValue(new Error('Firestore unavailable'));
+
+    const result = await sendRoutesToService(createRequest({
+      routeIds: ['route-1'],
+      destinationServiceName: ServiceNames.GarminAPI,
+    }) as any);
+
+    expect(garminRouteMocks.sendRouteToGarminConnect).toHaveBeenCalledTimes(1);
+    expect(routePersistenceMocks.setRouteDeliveryMetadata).toHaveBeenCalledTimes(3);
+    expect(result).toMatchObject({
+      destinationServiceName: ServiceNames.GarminAPI,
+      status: 'failure',
+      routeCount: 1,
+      successCount: 0,
+      failureCount: 1,
+      skippedCount: 0,
+    });
+    expect(result.results).toEqual([
+      expect.objectContaining({
+        routeId: 'route-1',
+        status: 'failure',
+        reason: 'DELIVERY_METADATA_PERSIST_FAILED',
+        message: 'Route was sent to Garmin Connect, but Quantified Self could not save the resend state. Check Garmin Connect before retrying this route.',
+      }),
+    ]);
+  });
+
+  it('stops the current Garmin batch after delivery metadata persistence fails', async () => {
+    routeDocuments.set('users/user-1/routes/route-1', {
+      id: 'route-1',
+      userID: 'user-1',
+      srcFileType: 'gpx',
+      originalFiles: [{ path: 'users/user-1/routes/route-1/original.gpx', extension: 'gpx' }],
+      routes: [{ id: 'segment-1' }],
+    });
+    routeDocuments.set('users/user-1/routes/route-2', {
+      id: 'route-2',
+      userID: 'user-1',
+      srcFileType: 'gpx',
+      originalFiles: [{ path: 'users/user-1/routes/route-2/original.gpx', extension: 'gpx' }],
+      routes: [{ id: 'segment-2' }],
+    });
+    storagePayloads.set('users/user-1/routes/route-1/original.gpx', Buffer.from('<gpx></gpx>'));
+    routePersistenceMocks.setRouteDeliveryMetadata.mockRejectedValue(new Error('Firestore unavailable'));
+
+    const result = await sendRoutesToService(createRequest({
+      routeIds: ['route-1', 'route-2'],
+      destinationServiceName: ServiceNames.GarminAPI,
+    }) as any);
+
+    expect(garminRouteMocks.sendRouteToGarminConnect).toHaveBeenCalledTimes(1);
+    expect(result).toMatchObject({
+      destinationServiceName: ServiceNames.GarminAPI,
+      status: 'failure',
+      routeCount: 2,
+      successCount: 0,
+      failureCount: 2,
+      skippedCount: 0,
+    });
+    expect(result.results).toEqual([
+      expect.objectContaining({
+        routeId: 'route-1',
+        reason: 'DELIVERY_METADATA_PERSIST_FAILED',
+      }),
+      expect.objectContaining({
+        routeId: 'route-2',
+        reason: 'DELIVERY_METADATA_PERSIST_FAILED',
+      }),
+    ]);
+  });
+
   it('stops the current Garmin chunk after an in-band Course Import permission failure', async () => {
     routeDocuments.set('users/user-1/routes/route-1', {
       id: 'route-1',

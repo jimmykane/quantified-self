@@ -44,6 +44,20 @@
           <div class="connected-account-line">Connected: {{ connectedAt | date:'short' }}</div>
         </div>
       </div>
+      @if (isRouteSendAccountDifferentFromConnectedAccount) {
+      <div class="connected-account-item" role="listitem">
+        <mat-icon class="connected-account-icon">route</mat-icon>
+        <div class="connected-account-copy">
+          <div class="connected-account-title">Route Delivery Account</div>
+          <div class="connected-account-line">
+            {{ routeSendGarminUserID }}
+            @if (routeSendConnectedAt) {
+            <span> · Connected: {{ routeSendConnectedAt | date:'short' }}</span>
+            }
+          </div>
+        </div>
+      </div>
+      }
       <div *ngIf="permissionsLastChangedAt" class="connected-account-item" role="listitem">
         <mat-icon class="connected-account-icon">update</mat-icon>
         <div class="connected-account-copy">

@@ -262,6 +262,41 @@ describe('AppRouteSendService', () => {
     });
   });
 
+  it('stops sending later chunks after an in-band Garmin delivery-state persistence failure and synthesizes the remaining route failures', async () => {
+    const routeIds = Array.from({ length: SEND_ROUTES_TO_SERVICE_MAX_ROUTE_IDS + 1 }, (_value, index) => `route-${index + 1}`);
+    functionsServiceMock.call.mockResolvedValueOnce({
+      data: {
+        destinationServiceName: ServiceNames.GarminAPI,
+        status: 'failure',
+        routeCount: SEND_ROUTES_TO_SERVICE_MAX_ROUTE_IDS,
+        successCount: 0,
+        failureCount: SEND_ROUTES_TO_SERVICE_MAX_ROUTE_IDS,
+        skippedCount: 0,
+        results: routeIds.slice(0, SEND_ROUTES_TO_SERVICE_MAX_ROUTE_IDS).map(routeId => ({
+          routeId,
+          destinationServiceName: ServiceNames.GarminAPI,
+          status: 'failure',
+          reason: 'DELIVERY_METADATA_PERSIST_FAILED',
+          message: 'Route was sent to Garmin Connect, but Quantified Self could not save the resend state. Check Garmin Connect before retrying this route.',
+        })),
+      },
+    });
+
+    const result = await service.sendRoutesToService(routeIds, ServiceNames.GarminAPI);
+
+    expect(functionsServiceMock.call).toHaveBeenCalledTimes(1);
+    expect(result.status).toBe('failure');
+    expect(result.routeCount).toBe(SEND_ROUTES_TO_SERVICE_MAX_ROUTE_IDS + 1);
+    expect(result.failureCount).toBe(SEND_ROUTES_TO_SERVICE_MAX_ROUTE_IDS + 1);
+    expect(result.results.at(-1)).toEqual({
+      routeId: routeIds[SEND_ROUTES_TO_SERVICE_MAX_ROUTE_IDS],
+      destinationServiceName: ServiceNames.GarminAPI,
+      status: 'failure',
+      reason: 'DELIVERY_METADATA_PERSIST_FAILED',
+      message: 'Route was sent to Garmin Connect, but Quantified Self could not save the resend state. Check Garmin Connect before retrying this route.',
+    });
+  });
+
   it('maps common route send errors to user-facing messages', () => {
     expect(getRouteSendErrorMessage({ code: 'functions/permission-denied' })).toBe('Sending routes to services is a Pro feature.');
     expect(getRouteSendErrorMessage({ code: 'functions/unauthenticated' })).toBe('Sending routes is not authorized. Please sign in again.');

@@ -306,6 +306,23 @@ describe('ServicesGarminComponent', () => {
             expect(component.routeSendStatusMessage).toContain('Checking Garmin permissions');
         });
 
+        it('ignores permission arrays on Garmin tokens without a provider identity', () => {
+            component.hasProAccess = true;
+            component.isLoading = false;
+            component.serviceTokens = [{
+                accessToken: 'invalid-token',
+                permissions: ['COURSE_IMPORT'],
+            }, {
+                accessToken: 'valid-token',
+                userID: 'garmin-user',
+            }] as any;
+
+            expect(component.isConnectedToService()).toBe(true);
+            expect(component.hasPermissionsLoaded).toBe(false);
+            expect(component.isRouteSendPermissionStateLoading).toBe(true);
+            expect(component.canSendSavedRoutesToGarmin).toBe(false);
+        });
+
         it('does not report sleep permissions missing when a later Garmin token can backfill sleep', () => {
             component.serviceTokens = [{
                 accessToken: 'activity-token',
@@ -344,6 +361,36 @@ describe('ServicesGarminComponent', () => {
             expect(component.canSendSavedRoutesToGarmin).toBe(true);
             expect(component.routeSendStatusTitle).toBe('Saved route delivery ready');
             expect(component.routeSendStatusMessage).toContain('Garmin Connect');
+        });
+
+        it('shows the Garmin account used for saved-route delivery when it differs from the primary connected account', () => {
+            component.hasProAccess = true;
+            component.isLoading = false;
+            component.serviceTokens = [{
+                accessToken: 'history-token',
+                userID: 'history-garmin-user',
+                permissions: ['HISTORICAL_DATA_EXPORT', 'ACTIVITY_EXPORT', 'HEALTH_EXPORT'],
+                permissionsLastChangedAt: 200,
+                dateCreated: new Date('2026-05-03T10:00:00.000Z'),
+            }, {
+                accessToken: 'route-token',
+                userID: 'route-garmin-user',
+                permissions: ['COURSE_IMPORT'],
+                permissionsLastChangedAt: 250,
+                dateCreated: new Date('2026-05-04T10:00:00.000Z'),
+            }] as any;
+
+            fixture.detectChanges();
+
+            expect(component.garminUserID).toBe('history-garmin-user');
+            expect(component.routeSendGarminUserID).toBe('route-garmin-user');
+            expect(component.isRouteSendAccountDifferentFromConnectedAccount).toBe(true);
+            expect(component.canSendSavedRoutesToGarmin).toBe(true);
+            expect(component.routeSendStatusMessage).toContain('route-garmin-user');
+
+            const content = fixture.nativeElement.textContent;
+            expect(content).toContain('Route Delivery Account');
+            expect(content).toContain('route-garmin-user');
         });
 
         it('reports saved-route delivery permission gaps when COURSE_IMPORT is missing', () => {
