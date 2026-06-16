@@ -85,7 +85,14 @@ describe('EventSummaryComponent', () => {
 
         it('openDetailedStats should open bottom sheet', () => {
             component.openDetailedStats();
-            expect(mockBottomSheet.open).toHaveBeenCalled();
+            expect(mockBottomSheet.open).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+                data: expect.objectContaining({
+                    event: component.event,
+                    user: component.user,
+                    selectedActivities: component.selectedActivities,
+                    userUnitSettings: component.unitSettings,
+                }),
+            }));
         });
 
         // openDevices requires data mocking for checks, but basic call check:

@@ -17,15 +17,20 @@ import {
     DataSpeedAvgMilesPerHour,
     DataStaminaMin,
     EventInterface,
+    ServiceNames,
+    User,
     UserUnitSettingsInterface
 } from '@sports-alliance/sports-lib';
 import { DataExportService } from '../../../services/data-export.service';
+import { AppEventService } from '../../../services/app.event.service';
+import { of } from 'rxjs';
 
 describe('EventCardStatsTableComponent', () => {
     let component: EventCardStatsTableComponent;
     let fixture: ComponentFixture<EventCardStatsTableComponent>;
     let mockEventColorService: any;
     let mockDataExportService: any;
+    let mockEventService: any;
 
     const mockActivity = {
         creator: { name: 'Player 1' },
@@ -39,6 +44,10 @@ describe('EventCardStatsTableComponent', () => {
         getID: () => 'event1',
         isMerge: true,
     } as unknown as EventInterface;
+
+    const mockUser = {
+        uid: 'user-1',
+    } as User;
 
     const mockUserUnitSettings = {
         swimPaceUnits: [],
@@ -57,6 +66,9 @@ describe('EventCardStatsTableComponent', () => {
             copyToMarkdown: vi.fn(),
             copyToSheets: vi.fn(),
         };
+        mockEventService = {
+            getEventMetaDataKeys: vi.fn().mockReturnValue(of([])),
+        };
 
         await TestBed.configureTestingModule({
             imports: [MatTableModule, NoopAnimationsModule],
@@ -64,6 +76,7 @@ describe('EventCardStatsTableComponent', () => {
             providers: [
                 { provide: AppEventColorService, useValue: mockEventColorService },
                 { provide: DataExportService, useValue: mockDataExportService },
+                { provide: AppEventService, useValue: mockEventService },
             ],
             schemas: [NO_ERRORS_SCHEMA],
         }).compileComponents();
@@ -73,6 +86,7 @@ describe('EventCardStatsTableComponent', () => {
         fixture = TestBed.createComponent(EventCardStatsTableComponent);
         component = fixture.componentInstance;
         component.event = mockEvent;
+        component.user = mockUser;
         component.userUnitSettings = mockUserUnitSettings;
         component.selectedActivities = [mockActivity];
         fixture.detectChanges();
@@ -98,24 +112,42 @@ describe('EventCardStatsTableComponent', () => {
         expect(component.selection.hasValue()).toBe(false);
     });
 
-    it('should copy selected rows to clipboard as markdown', () => {
+    it('should copy selected rows to clipboard as markdown with provider attribution', async () => {
+        mockEventService.getEventMetaDataKeys.mockReturnValue(of([ServiceNames.GarminAPI]));
         component.columns = ['Name', 'Player 1 #ff0000'];
         const row1 = { Name: 'Distance', 'Player 1 #ff0000': '10 km' };
         component.selection.select(row1);
 
-        component.copyToClipboard();
+        await component.copyToClipboard();
 
-        expect(mockDataExportService.copyToMarkdown).toHaveBeenCalledWith([row1], component.columns);
+        expect(mockDataExportService.copyToMarkdown).toHaveBeenCalledWith([row1], component.columns, expect.objectContaining({
+            attributionLabel: 'Garmin',
+            seriesPresentations: expect.objectContaining({
+                'Player 1 #ff0000': expect.objectContaining({
+                    serviceName: ServiceNames.GarminAPI,
+                    exportLabel: 'Garmin Player 1',
+                }),
+            }),
+        }));
     });
 
-    it('should copy selected rows to clipboard as TSV (Sheets)', () => {
+    it('should copy selected rows to clipboard as TSV (Sheets) with provider attribution', async () => {
+        mockEventService.getEventMetaDataKeys.mockReturnValue(of([ServiceNames.SuuntoApp]));
         component.columns = ['Name', 'Player 1 #ff0000'];
         const row1 = { Name: 'Distance', 'Player 1 #ff0000': '10 km' };
         component.selection.select(row1);
 
-        component.copyToSheets();
+        await component.copyToSheets();
 
-        expect(mockDataExportService.copyToSheets).toHaveBeenCalledWith([row1], component.columns);
+        expect(mockDataExportService.copyToSheets).toHaveBeenCalledWith([row1], component.columns, expect.objectContaining({
+            attributionLabel: 'Suunto',
+            seriesPresentations: expect.objectContaining({
+                'Player 1 #ff0000': expect.objectContaining({
+                    serviceName: ServiceNames.SuuntoApp,
+                    exportLabel: 'Suunto',
+                }),
+            }),
+        }));
     });
 
     it('should NOT copy to markdown if selection is empty', () => {
