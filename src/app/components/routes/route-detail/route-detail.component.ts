@@ -57,6 +57,7 @@ import {
   filterRouteWaypointsForSegments,
   RouteSegmentDetailView,
 } from '../../../helpers/route-detail.helper';
+import { SHOW_GARMIN_ROUTE_SEND } from '../../../constants/route-delivery.constants';
 
 @Component({
   selector: 'app-route-detail',
@@ -181,6 +182,7 @@ export class RouteDetailComponent {
       && !connectionView.reconnectRequired
       && connectionView.missingPermissions.length === 0;
   });
+  readonly showGarminRouteSend = SHOW_GARMIN_ROUTE_SEND;
   readonly canSendRouteToSuunto = computed(() => {
     const routeDocument = this.routeDocument();
     return !!routeDocument
@@ -207,7 +209,9 @@ export class RouteDetailComponent {
     return getGarminRouteSendMenuLabel(this.garminRouteSendDisabledReason());
   });
   readonly hasSendableRouteDestination = computed(() => (
-    this.canSendRouteToSuunto() || this.canSendRouteToGarmin() || !!this.garminRouteSendDisabledReason()
+    this.canSendRouteToSuunto() || (
+      this.showGarminRouteSend && (this.canSendRouteToGarmin() || !!this.garminRouteSendDisabledReason())
+    )
   ));
   readonly canReprocessRoute = computed(() => {
     const routeDocument = this.routeDocument();

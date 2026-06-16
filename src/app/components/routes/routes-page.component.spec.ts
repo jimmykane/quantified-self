@@ -859,9 +859,9 @@ describe('RoutesPageComponent', () => {
         expect(template).toContain('(click)="exportRouteAsGPX(item.route)"');
         expect(template).toContain('(click)="downloadRouteOriginals(item.route)"');
         expect(template).toContain('(click)="sendRouteToSuunto(item.route)"');
-        expect(template).toContain('(click)="sendRouteToGarmin(item.route)"');
         expect(template).toContain('(click)="$event.preventDefault(); $event.stopPropagation(); sendSelectedRoutesToSuunto()"');
-        expect(template).toContain('(click)="$event.preventDefault(); $event.stopPropagation(); sendSelectedRoutesToGarmin()"');
+        expect(template).toContain('@if (showGarminRouteSend && (item.canSendToGarmin || canSendRoutesToGarmin() || item.garminSendDisabledReason))');
+        expect(template).toContain('@if (showGarminRouteSend && (selectedSendableRoutesToGarminCount() > 0 || canSendRoutesToGarmin()))');
         expect(template).toContain('<span>Send to</span>');
         expect(template).toContain('(click)="confirmDeleteRoute(item.route)"');
         expect(template).toContain('(click)="reprocessRouteFromOriginalFile(item.route)"');
