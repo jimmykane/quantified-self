@@ -69,6 +69,13 @@ describe('PoliciesComponent', () => {
     expect(fixture.nativeElement.querySelector('#ai-and-third-party-processing')).toBeTruthy();
   });
 
+  it('renders connected-services anchor buttons as policies-route fragment links', () => {
+    const garminLink = fixture.debugElement.queryAll(By.css('.policy-anchor-link'))
+      .find(link => `${link.nativeElement.textContent || ''}`.includes('Garmin'));
+
+    expect(garminLink?.nativeElement.getAttribute('href')).toContain('/policies#garmin-data');
+  });
+
   it('renders the current AI provider disclosure', () => {
     const sectionCopy = fixture.nativeElement.textContent as string;
 

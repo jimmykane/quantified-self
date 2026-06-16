@@ -19,7 +19,8 @@
           <a
             *ngFor="let link of connectedServicesPolicy.navLinks"
             class="policy-anchor-link"
-            [href]="'#' + link.id">
+            [routerLink]="['/policies']"
+            [fragment]="link.id">
             <mat-icon>{{ link.icon }}</mat-icon>
             <span>{{ link.label }}</span>
           </a>
