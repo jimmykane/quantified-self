@@ -1275,6 +1275,19 @@ describe('ToolsComparePageComponent', () => {
     expect(component.comparisonPaginatorLength()).toBe(0);
   });
 
+  it('uses the shared comparison-style table controls layout', () => {
+    const styles = readFileSync('src/app/components/tools/tools-compare-page.component.scss', 'utf8');
+    const sharedTableControls = readFileSync('src/styles/_table-controls.scss', 'utf8');
+
+    expect(styles).toContain("@use '../../../styles/table-controls' as tableControls;");
+    expect(styles).toContain('@include tableControls.comparisonTableControlsLayout($includeDeviceColorsButton: true);');
+    expect(styles).toContain('@include bp.max-768 {');
+    expect(sharedTableControls).toContain('.comparison-table-controls');
+    expect(sharedTableControls).toContain('.comparison-table-actions');
+    expect(sharedTableControls).toContain('.filter-field');
+    expect(sharedTableControls).toContain('.facet-filter-field');
+  });
+
   it('keeps saved comparison bulk actions inside the visible scroll area', () => {
     const styles = readFileSync('src/app/components/tools/tools-compare-page.component.scss', 'utf8');
     const selectionToolbarStyles = styles.match(/\.comparison-selection-toolbar\s*{(?<body>[^}]*)}/)?.groups?.['body'] ?? '';

@@ -1,3 +1,6 @@
+@use '../../../styles/breakpoints' as bp;
+@use '../../../styles/table-controls' as tableControls;
+
 :host {
   display: block;
   color: var(--mat-sys-on-surface);
@@ -364,39 +367,14 @@ h2 {
   min-height: 5rem;
 }
 
-.comparison-table-controls {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.75rem 1rem;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 0.75rem;
-}
+@include tableControls.comparisonTableControlsLayout($includeDeviceColorsButton: true);
 
-.comparison-table-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.75rem;
-  align-items: center;
-  justify-content: flex-end;
-  margin-left: auto;
+.comparison-table-controls {
+  margin-bottom: 0.75rem;
 }
 
 .device-colors-button {
   white-space: nowrap;
-}
-
-.filter-field {
-  width: min(100%, 28rem);
-}
-
-.facet-filter-field {
-  width: min(100%, 13rem);
-}
-
-.result-summary {
-  color: var(--mat-sys-on-surface-variant);
-  font-size: 0.9rem;
 }
 
 .comparison-table-shell {
@@ -1064,7 +1042,7 @@ mat-paginator {
   border-radius: 0 0 8px 8px;
 }
 
-@media (max-width: 48rem) {
+@include bp.max-768 {
   .tools-compare-page {
     padding: 1.25rem 0.875rem 2.5rem;
   }
@@ -1113,25 +1091,6 @@ mat-paginator {
   .upload-controls button[mat-icon-button] {
     width: 42px;
     justify-self: center;
-  }
-
-  .comparison-table-controls {
-    display: grid;
-    align-items: stretch;
-  }
-
-  .filter-field,
-  .facet-filter-field,
-  .comparison-table-actions,
-  .device-colors-button,
-  .result-summary {
-    width: 100%;
-  }
-
-  .comparison-table-actions {
-    flex-direction: column;
-    align-items: stretch;
-    justify-content: flex-start;
   }
 
   .comparison-table-shell {

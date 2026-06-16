@@ -786,6 +786,10 @@ describe('RoutesPageComponent', () => {
             resolve(process.cwd(), 'src/app/components/routes/routes-page.component.scss'),
             'utf8',
         );
+        const sharedTableControls = readFileSync(
+            resolve(process.cwd(), 'src/styles/_table-controls.scss'),
+            'utf8',
+        );
 
         expect(template).toContain('class="routes-table-panel"');
         expect(template).toContain('class="comparison-table-controls"');
@@ -796,10 +800,13 @@ describe('RoutesPageComponent', () => {
         expect(template).toContain('{{ routeResultSummary() }}');
         expect(template).toContain('No loaded routes match this filter');
         expect(styles).toContain('.routes-table-panel');
-        expect(styles).toContain('.comparison-table-controls');
-        expect(styles).toContain('.filter-field');
-        expect(styles).toContain('.facet-filter-field');
-        expect(styles).toContain('.result-summary');
+        expect(styles).toContain("@use '../../../styles/table-controls' as tableControls;");
+        expect(styles).toContain('@include tableControls.comparisonTableControlsLayout();');
+        expect(styles).toContain('@include bp.max-768 {');
+        expect(sharedTableControls).toContain('.comparison-table-controls');
+        expect(sharedTableControls).toContain('.filter-field');
+        expect(sharedTableControls).toContain('.facet-filter-field');
+        expect(sharedTableControls).toContain('.result-summary');
     });
 
     it('renders route type cells with the compare icon and label structure', () => {
