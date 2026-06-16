@@ -303,5 +303,31 @@ describe('DataExportService', () => {
 
             blobSpy.mockRestore();
         });
+
+        it('should use sheet-safe light backgrounds and dark default text in HTML export', async () => {
+            const writeMock = vi.fn().mockResolvedValue(undefined);
+            Object.assign(navigator, {
+                clipboard: { write: writeMock }
+            });
+            global.ClipboardItem = vi.fn() as any;
+
+            const blobSpy = vi.spyOn(global, 'Blob').mockImplementation((content) => {
+                return { size: (content as any)[0].length, type: '' } as Blob;
+            });
+
+            await service.copyToSheets([{ Name: 'Distance', Value: '10 km' }], ['Name', 'Value']);
+
+            const htmlCall = blobSpy.mock.calls.find(call => call[1]?.type === 'text/html');
+            expect(htmlCall).toBeDefined();
+            if (htmlCall) {
+                const htmlContent = htmlCall[0]![0] as string;
+                expect(htmlContent).toContain('background-color: #ffffff;');
+                expect(htmlContent).toContain('color: #111827;');
+                expect(htmlContent).not.toContain('color: white;');
+                expect(htmlContent).not.toContain('border: 1px solid white;');
+            }
+
+            blobSpy.mockRestore();
+        });
     });
 });

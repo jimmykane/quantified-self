@@ -103,7 +103,7 @@ export class DataExportService {
             return '';
         }
 
-        return `<caption style="caption-side: top; text-align: left; color: white; padding: 0 0 8px;">${lines.join('<br>')}</caption>`;
+        return `<caption style="caption-side: top; text-align: left; color: #111827; padding: 0 0 8px; background-color: #ffffff;">${lines.join('<br>')}</caption>`;
     }
 
     private buildTsvPrefix(columns: string[], options?: DataExportOptions): string {
@@ -186,23 +186,23 @@ export class DataExportService {
             const coloredContent = color
                 ? `<span style="color: ${color}">${escapeHtml(displayName)}</span>`
                 : escapeHtml(displayName);
-            return `<th style="color: white; border: 1px solid white;">${coloredContent}</th>`;
+            return `<th style="color: #111827; background-color: #f8fafc; border: 1px solid #d1d5db;">${coloredContent}</th>`;
         }).join('');
 
-        let html = `<table style="border-collapse: collapse; border: 1px solid white;">${this.buildTableCaption(columns, options)}<thead><tr>${headerCells}</tr></thead><tbody>`;
+        let html = `<table style="border-collapse: collapse; border: 1px solid #d1d5db; background-color: #ffffff;">${this.buildTableCaption(columns, options)}<thead><tr>${headerCells}</tr></thead><tbody>`;
         data.forEach(row => {
             html += '<tr>';
             columns.forEach(col => {
                 const val = row[col];
                 let cellContent = '';
-                let cellStyle = 'color: white; border: 1px solid white;';
+                let cellStyle = 'color: #111827; background-color: #ffffff; border: 1px solid #d1d5db;';
 
                 if (col === 'Difference' && val && typeof val === 'object') {
                     // Difference specific logic - use difference color
                     cellContent = escapeHtml(`${val.display} (${val.percent.toFixed(1)}%)`);
-                    cellStyle = `color: ${this.appEventColorService.getDifferenceColor(val.percent)}; border: 1px solid white;`;
+                    cellStyle = `color: ${this.appEventColorService.getDifferenceColor(val.percent)}; background-color: #ffffff; border: 1px solid #d1d5db;`;
                 } else {
-                    // Standard processing with white text
+                    // Standard processing with sheet-safe dark text
                     cellContent = escapeHtml(val === null || val === undefined ? '' : String(val));
                 }
 
