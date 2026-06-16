@@ -2,10 +2,16 @@ import { ServiceNames } from '@sports-alliance/sports-lib';
 import { FirestoreRouteJSON } from '@shared/app-route.interface';
 import { ROUTE_SOURCE_TYPES, RouteDeliverySummary, RouteSourceSummary } from '@shared/route-provenance';
 import type { GarminRouteSendContext, GarminRouteSendProviderState } from '../services/app.user.service';
+import { getProviderDisplayName, ProviderPresentation } from '@shared/provider-presentation';
+import {
+    buildDestinationProviderPresentation,
+    buildSourceProviderPresentation,
+} from './provider-presentation.helper';
 
 export interface RouteProvenanceServiceSummary {
     label: string;
     serviceName: ServiceNames | null;
+    presentation: ProviderPresentation | null;
 }
 
 function normalizeNonEmptyString(value: unknown): string | null {
@@ -43,25 +49,7 @@ function normalizeRouteServiceName(serviceName: string | null | undefined): Serv
 }
 
 export function getRouteServiceDisplayName(serviceName: string | null | undefined): string {
-    switch (serviceName) {
-        case ServiceNames.SuuntoApp:
-            return 'Suunto';
-        case ServiceNames.GarminAPI:
-            return 'Garmin';
-        case ServiceNames.COROSAPI:
-            return 'COROS';
-        default: {
-            const normalized = normalizeNonEmptyString(serviceName);
-            if (!normalized) {
-                return 'service';
-            }
-            return normalized
-                .replace(/\bAPI\b/gi, '')
-                .replace(/\bApp\b/gi, '')
-                .replace(/\s+/g, ' ')
-                .trim();
-        }
-    }
+    return getProviderDisplayName(serviceName, 'source');
 }
 
 export function getRouteSourceSummaryLabel(route: FirestoreRouteJSON | null | undefined): string {
@@ -74,13 +62,18 @@ export function getRouteSourceSummary(route: FirestoreRouteJSON | null | undefin
         return {
             label: 'Saved route',
             serviceName: null,
+            presentation: null,
         };
     }
 
     if (sourceSummary.sourceType === ROUTE_SOURCE_TYPES.ServiceSync && sourceSummary.sourceServiceName) {
+        const serviceName = normalizeRouteServiceName(sourceSummary.sourceServiceName);
+        const presentation = buildSourceProviderPresentation(serviceName);
+        const displayLabel = presentation?.displayLabel || getRouteServiceDisplayName(sourceSummary.sourceServiceName);
         return {
-            label: `Synced from ${getRouteServiceDisplayName(sourceSummary.sourceServiceName)}`,
-            serviceName: normalizeRouteServiceName(sourceSummary.sourceServiceName),
+            label: `Synced from ${displayLabel}`,
+            serviceName,
+            presentation,
         };
     }
 
@@ -88,12 +81,14 @@ export function getRouteSourceSummary(route: FirestoreRouteJSON | null | undefin
         return {
             label: 'Manual upload',
             serviceName: null,
+            presentation: null,
         };
     }
 
     return {
         label: 'Saved route',
         serviceName: null,
+        presentation: null,
     };
 }
 
@@ -110,10 +105,16 @@ export function getRouteSyncedDestinationSummaries(route: FirestoreRouteJSON | n
         route.syncedDestinationServiceNames
             .map(serviceName => normalizeNonEmptyString(serviceName))
             .filter((serviceName): serviceName is string => serviceName !== null),
-    )).map(serviceName => ({
-        label: `Sent to ${getRouteServiceDisplayName(serviceName)}`,
-        serviceName: normalizeRouteServiceName(serviceName),
-    }));
+    )).map(serviceName => {
+        const normalizedServiceName = normalizeRouteServiceName(serviceName);
+        const presentation = buildDestinationProviderPresentation(normalizedServiceName);
+        const displayLabel = presentation?.displayLabel || getProviderDisplayName(serviceName, 'destination');
+        return {
+            label: `Sent to ${displayLabel}`,
+            serviceName: normalizedServiceName,
+            presentation,
+        };
+    });
 }
 
 export function getRouteDeliverySummaryForService(

@@ -17,6 +17,7 @@ import {
     ServiceNames,
 } from '@sports-alliance/sports-lib';
 import { FirestoreRouteJSON } from '@shared/app-route.interface';
+import { ProviderPresentation } from '@shared/provider-presentation';
 import { resolveUnitAwareDisplayFromValue } from '@shared/unit-aware-display';
 import { buildSuuntoServiceConnectionViewModel, SuuntoServiceConnectionViewModel } from '../../helpers/suunto-service-connection.helper';
 import {
@@ -77,6 +78,7 @@ interface RoutePageRouteViewModel {
     name: string;
     routeDate: Date | null;
     routeDateSortMs: number | null;
+    sourcePresentation: ProviderPresentation | null;
     sourceServiceLabel: string;
     sourceServiceTitle: string;
     sourceServiceName: ServiceNames | null;
@@ -1596,9 +1598,9 @@ export class RoutesPageComponent implements OnInit {
         const pointCountLabel = `${pointCount} point${pointCount === 1 ? '' : 's'}`;
         const waypointCountLabel = waypointCount > 0 ? `${waypointCount} waypoint${waypointCount === 1 ? '' : 's'}` : null;
         const sourceSummary = getRouteSourceSummary(route);
-        const sourceServiceLabel = sourceSummary.serviceName
-            ? getRouteServiceDisplayName(sourceSummary.serviceName)
-            : sourceSummary.label;
+        const sourcePresentation = sourceSummary.presentation;
+        const sourceServiceLabel = sourcePresentation?.displayLabel
+            || (sourceSummary.serviceName ? getRouteServiceDisplayName(sourceSummary.serviceName) : sourceSummary.label);
         const provenanceItems = this.buildRouteProvenanceItems(route);
         const provenanceSummary = provenanceItems.map(item => item.label).join(' · ');
         const garminSendDisabledReason = this.getGarminSendDisabledReason(route);
@@ -1608,6 +1610,7 @@ export class RoutesPageComponent implements OnInit {
             name: routeName,
             routeDate,
             routeDateSortMs: routeDate ? routeDate.getTime() : null,
+            sourcePresentation,
             sourceServiceLabel,
             sourceServiceTitle: sourceSummary.label,
             sourceServiceName: sourceSummary.serviceName,

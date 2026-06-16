@@ -144,7 +144,7 @@ describe('ServicesGarminComponent', () => {
         const providerTabs = fixture.nativeElement.querySelectorAll('a[mat-tab-link]');
 
         expect(connectionStatus).toBeTruthy();
-        expect(connectionStatus.textContent).toContain('Garmin connection');
+        expect(connectionStatus.textContent).toContain('Garmin Connect connection');
         expect(providerToolTabs.tagName.toLowerCase()).toBe('nav');
         expect(fixture.nativeElement.querySelector('mat-tab-group')).toBeFalsy();
         expect(providerToolPanel).toBeTruthy();
@@ -445,7 +445,7 @@ describe('ServicesGarminComponent', () => {
             await component.connectWithService(new MouseEvent('click'));
 
             expect(snackBarSpy).toHaveBeenCalledWith(
-                'Garmin is temporarily unavailable. Please try again later.',
+                'Garmin Connect is temporarily unavailable. Please try again later.',
                 undefined,
                 expect.objectContaining({ duration: 5000 })
             );
@@ -507,7 +507,7 @@ describe('ServicesGarminComponent', () => {
             expect(mockUserService.requestAndSetCurrentUserGarminAPIAccessToken).toHaveBeenCalledWith('state-token', 'auth-code');
             expect(mockAnalyticsService.logEvent).toHaveBeenCalledWith('connected_to_service', { serviceName: component.serviceName });
             expect(snackBarSpy).toHaveBeenCalledWith(
-                `Successfully connected to ${component.serviceName}`,
+                'Successfully connected to Garmin Connect',
                 undefined,
                 { duration: 10000 }
             );
@@ -543,7 +543,7 @@ describe('ServicesGarminComponent', () => {
             await new Promise(resolve => setTimeout(resolve, 0));
 
             expect(snackBarSpy).toHaveBeenCalledWith(
-                'Garmin is temporarily unavailable. Please try again later.',
+                'Garmin Connect is temporarily unavailable. Please try again later.',
                 undefined,
                 { duration: 10000 }
             );

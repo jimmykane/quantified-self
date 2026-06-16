@@ -327,7 +327,7 @@ describe('RouteDetailComponent', () => {
     });
 
     expect(component.sourceSummaryLabel()).toBe('Synced from Suunto');
-    expect(component.syncedDestinationLabels()).toEqual(['Sent to Garmin']);
+    expect(component.syncedDestinationLabels()).toEqual(['Sent to Garmin Connect']);
     expect(component.canSendRouteToSuunto()).toBe(false);
   });
 

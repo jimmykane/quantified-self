@@ -222,8 +222,8 @@ describe('UploadActivitiesToServiceComponent', () => {
             .mockReturnValueOnce('job-2');
 
         vi.spyOn(component, 'processAndUploadFile')
-            .mockResolvedValueOnce({ success: true, duplicate: false, message: 'Uploaded to Suunto' } as any)
-            .mockResolvedValueOnce({ success: true, duplicate: false, message: 'Uploaded to Suunto' } as any);
+            .mockResolvedValueOnce({ success: true, duplicate: false, message: 'Uploaded to Suunto App' } as any)
+            .mockResolvedValueOnce({ success: true, duplicate: false, message: 'Uploaded to Suunto App' } as any);
 
         await component.getFiles(event);
 
@@ -277,7 +277,7 @@ describe('UploadActivitiesToServiceComponent', () => {
         expect(mockProcessingService.updateJob).toHaveBeenCalledWith('job-2', { status: 'processing', progress: 0 });
         expect(mockProcessingService.updateJob).toHaveBeenCalledWith('job-3', { status: 'processing', progress: 0 });
         expect(mockProcessingService.completeJob).toHaveBeenCalledTimes(1);
-        expect(mockProcessingService.completeJob).toHaveBeenCalledWith('job-1', 'Uploaded to Suunto');
+        expect(mockProcessingService.completeJob).toHaveBeenCalledWith('job-1', 'Uploaded to Suunto App');
         expect(mockProcessingService.updateJob).toHaveBeenCalledWith(
             'job-2',
             expect.objectContaining({ status: 'duplicate', progress: 100 })
@@ -314,13 +314,13 @@ describe('UploadActivitiesToServiceComponent', () => {
 
         mockProcessingService.addJob.mockReturnValueOnce('job-1');
         vi.spyOn(component, 'processAndUploadFile')
-            .mockResolvedValueOnce({ success: true, duplicate: false, message: 'Uploaded to Suunto' } as any);
+            .mockResolvedValueOnce({ success: true, duplicate: false, message: 'Uploaded to Suunto App' } as any);
 
         await component.getFiles(event);
 
         expect(component.uploadRows()).toHaveLength(1);
         expect(component.uploadRows()[0].name).toBe('dropped.fit');
-        expect(mockProcessingService.completeJob).toHaveBeenCalledWith('job-1', 'Uploaded to Suunto');
+        expect(mockProcessingService.completeJob).toHaveBeenCalledWith('job-1', 'Uploaded to Suunto App');
     });
 
     it('getFiles should pace multi-file provider uploads with a shared inter-file delay', async () => {
@@ -347,14 +347,14 @@ describe('UploadActivitiesToServiceComponent', () => {
         });
         const uploadSpy = vi.spyOn(component, 'processAndUploadFile')
             .mockReturnValueOnce(firstUpload as any)
-            .mockResolvedValueOnce({ success: true, duplicate: false, message: 'Uploaded to Suunto' } as any);
+            .mockResolvedValueOnce({ success: true, duplicate: false, message: 'Uploaded to Suunto App' } as any);
 
         const uploadPromise = component.getFiles(event);
         await Promise.resolve();
 
         expect(uploadSpy).toHaveBeenCalledTimes(1);
 
-        resolveFirstUpload({ success: true, duplicate: false, message: 'Uploaded to Suunto' });
+        resolveFirstUpload({ success: true, duplicate: false, message: 'Uploaded to Suunto App' });
         await Promise.resolve();
         await Promise.resolve();
 
@@ -422,7 +422,7 @@ describe('UploadActivitiesToServiceComponent', () => {
         expect(ignoredEvent.dataTransfer.clearData).toHaveBeenCalledTimes(1);
         expect(ignoredDropZone.classList.contains('drag')).toBe(false);
 
-        resolveActiveUpload({ success: true, duplicate: false, message: 'Uploaded to Suunto' });
+        resolveActiveUpload({ success: true, duplicate: false, message: 'Uploaded to Suunto App' });
         await activeUploadPromise;
     });
 
@@ -443,7 +443,7 @@ describe('UploadActivitiesToServiceComponent', () => {
 
         const uploadSpy = vi.spyOn(component, 'processAndUploadFile')
             .mockRejectedValueOnce(new Error('temporary failure'))
-            .mockResolvedValueOnce({ success: true, duplicate: false, message: 'Uploaded to Suunto' } as any);
+            .mockResolvedValueOnce({ success: true, duplicate: false, message: 'Uploaded to Suunto App' } as any);
 
         await component.getFiles(event);
 
@@ -458,8 +458,8 @@ describe('UploadActivitiesToServiceComponent', () => {
         expect(uploadSpy).toHaveBeenCalledTimes(2);
         expect(retriedRow.status).toBe('success');
         expect(retriedRow.attempts).toBe(2);
-        expect(retriedRow.message).toBe('Uploaded to Suunto');
-        expect(mockProcessingService.completeJob).toHaveBeenCalledWith('job-2', 'Uploaded to Suunto');
+        expect(retriedRow.message).toBe('Uploaded to Suunto App');
+        expect(mockProcessingService.completeJob).toHaveBeenCalledWith('job-2', 'Uploaded to Suunto App');
     });
 
     it('retryFailedUploads should retry only failed rows', async () => {
@@ -481,8 +481,8 @@ describe('UploadActivitiesToServiceComponent', () => {
 
         const uploadSpy = vi.spyOn(component, 'processAndUploadFile')
             .mockRejectedValueOnce(new Error('temporary failure'))
-            .mockResolvedValueOnce({ success: true, duplicate: false, message: 'Uploaded to Suunto' } as any)
-            .mockResolvedValueOnce({ success: true, duplicate: false, message: 'Uploaded to Suunto' } as any);
+            .mockResolvedValueOnce({ success: true, duplicate: false, message: 'Uploaded to Suunto App' } as any)
+            .mockResolvedValueOnce({ success: true, duplicate: false, message: 'Uploaded to Suunto App' } as any);
 
         await component.getFiles(event);
         await component.retryFailedUploads();
@@ -490,7 +490,7 @@ describe('UploadActivitiesToServiceComponent', () => {
         expect(uploadSpy).toHaveBeenCalledTimes(3);
         expect(component.uploadRows().map(row => row.status)).toEqual(['success', 'success']);
         expect(component.uploadRows().map(row => row.attempts)).toEqual([2, 1]);
-        expect(mockProcessingService.completeJob).toHaveBeenCalledWith('job-3', 'Uploaded to Suunto');
+        expect(mockProcessingService.completeJob).toHaveBeenCalledWith('job-3', 'Uploaded to Suunto App');
     });
 
     it('getFiles should mark unsupported rows failed before calling the service function', async () => {

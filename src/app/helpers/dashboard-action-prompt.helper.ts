@@ -12,6 +12,7 @@ import {
   ActivitySyncRouteId,
 } from '@shared/activity-sync-routes';
 import { isActivitySyncRouteUIDAllowlisted } from '@shared/activity-sync-rollout';
+import { getProviderDisplayName } from '@shared/provider-presentation';
 
 export const DASHBOARD_ACTION_PROMPT_UNIT_SETUP_ID: AppDashboardActionPromptId = 'unitSetup';
 export const DASHBOARD_ACTION_PROMPT_FIRST_ACTIVITY_UPLOAD_ID: AppDashboardActionPromptId = 'firstActivityUpload';
@@ -364,20 +365,14 @@ function formatActivityAutoSyncRouteSourceLabel(routeIds: readonly ActivitySyncR
     .filter((serviceName): serviceName is ServiceNames => !!serviceName)
     .map(getActivityServiceDisplayName);
 
-  return formatList(sourceLabels.length ? sourceLabels : ['Garmin', 'COROS']);
+  return formatList(sourceLabels.length ? sourceLabels : [
+    getProviderDisplayName(ServiceNames.GarminAPI, 'source'),
+    getProviderDisplayName(ServiceNames.COROSAPI, 'source'),
+  ]);
 }
 
 function getActivityServiceDisplayName(serviceName: ServiceNames): string {
-  switch (serviceName) {
-    case ServiceNames.GarminAPI:
-      return 'Garmin';
-    case ServiceNames.COROSAPI:
-      return 'COROS';
-    case ServiceNames.SuuntoApp:
-      return 'Suunto';
-    default:
-      return `${serviceName}`;
-  }
+  return getProviderDisplayName(serviceName, 'source');
 }
 
 function formatList(labels: readonly string[]): string {

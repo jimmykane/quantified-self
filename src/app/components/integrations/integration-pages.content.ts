@@ -1,4 +1,5 @@
 import { ServiceNames } from '@sports-alliance/sports-lib';
+import { getProviderDisplayName } from '@shared/provider-presentation';
 
 export type IntegrationProviderKey = 'garmin' | 'suunto' | 'coros';
 
@@ -62,9 +63,9 @@ export interface IntegrationRouteData {
 }
 
 const ALL_PROVIDER_SOURCES: readonly ProviderSource[] = [
-  { label: 'Garmin', serviceName: ServiceNames.GarminAPI },
-  { label: 'Suunto', serviceName: ServiceNames.SuuntoApp },
-  { label: 'COROS', serviceName: ServiceNames.COROSAPI },
+  { label: getProviderDisplayName(ServiceNames.GarminAPI, 'source'), serviceName: ServiceNames.GarminAPI },
+  { label: getProviderDisplayName(ServiceNames.SuuntoApp, 'source'), serviceName: ServiceNames.SuuntoApp },
+  { label: getProviderDisplayName(ServiceNames.COROSAPI, 'source'), serviceName: ServiceNames.COROSAPI },
 ];
 
 export const PROVIDER_INTEGRATION_PAGES: Record<IntegrationProviderKey, ProviderIntegrationPage> = {
@@ -369,7 +370,7 @@ export const PROVIDER_INTEGRATION_PAGES: Record<IntegrationProviderKey, Provider
 export const INTEGRATION_HUB_CARDS: readonly IntegrationHubCard[] = [
   {
     slug: 'garmin',
-    label: 'Garmin',
+    label: getProviderDisplayName(ServiceNames.GarminAPI, 'source'),
     serviceName: ServiceNames.GarminAPI,
     subtitle: 'Private dashboard, history import, and Suunto sync',
     summary: 'Connect Garmin to import history, send new Garmin activities to Suunto, and analyze Garmin data beside Suunto and COROS in one private dashboard.',
@@ -381,7 +382,7 @@ export const INTEGRATION_HUB_CARDS: readonly IntegrationHubCard[] = [
   },
   {
     slug: 'suunto',
-    label: 'Suunto',
+    label: getProviderDisplayName(ServiceNames.SuuntoApp, 'source'),
     serviceName: ServiceNames.SuuntoApp,
     subtitle: 'Sync destination, route sync, and Suunto history',
     summary: 'Connect Suunto to receive Garmin and COROS activities, import Suunto routes, upload FIT activities and GPX routes to Suunto, and keep Suunto history in the same private dashboard.',
@@ -393,7 +394,7 @@ export const INTEGRATION_HUB_CARDS: readonly IntegrationHubCard[] = [
   },
   {
     slug: 'coros',
-    label: 'COROS',
+    label: getProviderDisplayName(ServiceNames.COROSAPI, 'source'),
     serviceName: ServiceNames.COROSAPI,
     subtitle: 'Recent history import and Suunto sync',
     summary: 'Connect COROS to import recent history, send new COROS workouts to Suunto, and compare COROS data beside Garmin and Suunto in one private dashboard.',

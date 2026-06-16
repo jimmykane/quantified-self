@@ -575,7 +575,7 @@ describe('RoutesPageComponent', () => {
         expect(routes[0].sourceServiceLabel).toBe('Suunto');
         expect(routes[0].sourceServiceTitle).toBe('Synced from Suunto');
         expect(routes[0].sourceServiceName).toBe(ServiceNames.SuuntoApp);
-        expect(routes[0].provenanceSummary).toBe('Synced from Suunto · Sent to Garmin');
+        expect(routes[0].provenanceSummary).toBe('Synced from Suunto · Sent to Garmin Connect');
         expect(routes[0].provenanceItems).toEqual([
             {
                 id: 'source',
@@ -585,8 +585,8 @@ describe('RoutesPageComponent', () => {
             },
             {
                 id: 'destination-Garmin API',
-                label: 'Sent to Garmin',
-                title: 'Sent to Garmin',
+                label: 'Sent to Garmin Connect',
+                title: 'Sent to Garmin Connect',
                 serviceName: ServiceNames.GarminAPI,
             },
         ]);
@@ -840,7 +840,7 @@ describe('RoutesPageComponent', () => {
         expect(rowDefinition).not.toContain('tabindex="0"');
         expect(template).toContain('matColumnDef="sourceService"');
         expect(template).toContain('class="route-source-service-cell"');
-        expect(template).toContain('[sourceServiceName]="item.sourceServiceName"');
+        expect(template).toContain('[presentation]="item.sourcePresentation"');
         expect(template).toContain('class="route-original-file-cell"');
         expect(template).toContain('<span>Original</span>');
         expect(template).toContain('<app-service-source-icon');

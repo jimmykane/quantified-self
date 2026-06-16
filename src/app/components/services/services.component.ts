@@ -12,6 +12,7 @@ import { AppUserService } from '../../services/app.user.service';
 import { AppWindowService } from '../../services/app.window.service';
 import { Auth2ServiceTokenInterface } from '@sports-alliance/sports-lib';
 import { ServiceNames } from '@sports-alliance/sports-lib';
+import { getProviderDisplayName } from '@shared/provider-presentation';
 
 type ServiceSectionId = 'suunto' | 'garmin' | 'coros';
 
@@ -39,20 +40,20 @@ export class ServicesComponent implements OnInit, OnDestroy {
   public readonly serviceSectionOptions: ServiceSectionOption[] = [
     {
       id: 'suunto',
-      label: 'Suunto',
-      description: 'Suunto App',
+      label: getProviderDisplayName(ServiceNames.SuuntoApp, 'source'),
+      description: getProviderDisplayName(ServiceNames.SuuntoApp, 'destination'),
       svgIcon: 'suunto',
     },
     {
       id: 'garmin',
-      label: 'Garmin',
-      description: 'Garmin Connect',
+      label: getProviderDisplayName(ServiceNames.GarminAPI, 'source'),
+      description: getProviderDisplayName(ServiceNames.GarminAPI, 'destination'),
       svgIcon: 'garmin',
     },
     {
       id: 'coros',
-      label: 'COROS',
-      description: 'COROS account',
+      label: getProviderDisplayName(ServiceNames.COROSAPI, 'source'),
+      description: getProviderDisplayName(ServiceNames.COROSAPI, 'destination'),
       svgIcon: 'coros',
     },
   ];
