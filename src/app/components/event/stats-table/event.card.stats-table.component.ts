@@ -16,10 +16,10 @@ import { DataExportOptions, DataExportService } from '../../../services/data-exp
 import { expandCollapse } from '../../../animations/animations';
 import { computeStatDiff } from '../../../helpers/stats-diff.helper';
 import { normalizeUnitDerivedTypeLabel } from '../../../helpers/stat-label.helper';
-import { firstValueFrom } from 'rxjs';
 import { buildSourceProviderPresentation } from '../../../helpers/provider-presentation.helper';
 import { normalizeProviderServiceName, ProviderPresentation } from '@shared/provider-presentation';
 import { AppEventService } from '../../../services/app.event.service';
+import { take } from 'rxjs/operators';
 
 @Component({
   selector: 'app-event-stats-table',
@@ -43,6 +43,8 @@ export class EventCardStatsTableComponent implements OnChanges {
   private readonly rowTypeKey = '__statType';
   private readonly verticalSpeedRegex = /vertical speed/i;
   private activitySeriesColumns: Array<{ columnKey: string; activity: ActivityInterface }> = [];
+  private exportOptions: DataExportOptions | undefined;
+  private exportOptionsRequestId = 0;
 
   constructor(
     private eventColorService: AppEventColorService,
@@ -55,6 +57,7 @@ export class EventCardStatsTableComponent implements OnChanges {
     this.data = new MatTableDataSource<object>();
     this.columns = [];
     this.activitySeriesColumns = [];
+    this.exportOptions = undefined;
     this.selection.clear();
     if (!this.selectedActivities.length || !this.userUnitSettings) {
       return;
@@ -228,6 +231,8 @@ export class EventCardStatsTableComponent implements OnChanges {
       const rowString = Object.values(row).join(' ').toLowerCase();
       return terms.some(term => rowString.includes(term));
     };
+
+    this.refreshExportOptions();
   }
 
   applyFilter(event: any) {
@@ -278,18 +283,16 @@ export class EventCardStatsTableComponent implements OnChanges {
     return this.selection.isEmpty();
   }
 
-  async copyToClipboard(): Promise<void> {
+  copyToClipboard(): void {
     const selectedRows = this.selection.selected;
     if (selectedRows.length === 0) return;
-    const exportOptions = await this.resolveExportOptions();
-    this.dataExportService.copyToMarkdown(selectedRows, this.columns, exportOptions);
+    this.dataExportService.copyToMarkdown(selectedRows, this.columns, this.exportOptions);
   }
 
-  async copyToSheets(): Promise<void> {
+  copyToSheets(): void {
     const selectedRows = this.selection.selected;
     if (selectedRows.length === 0) return;
-    const exportOptions = await this.resolveExportOptions();
-    await this.dataExportService.copyToSheets(selectedRows, this.columns, exportOptions);
+    void this.dataExportService.copyToSheets(selectedRows, this.columns, this.exportOptions);
   }
 
   private getActivityHeaderLabel(activity: ActivityInterface): string {
@@ -367,8 +370,7 @@ export class EventCardStatsTableComponent implements OnChanges {
     return preferredTypes;
   }
 
-  private async resolveExportOptions(): Promise<DataExportOptions | undefined> {
-    const knownSourceServices = await this.resolveKnownSourceServices();
+  private buildExportOptions(knownSourceServices: ServiceNames[]): DataExportOptions | undefined {
     if (knownSourceServices.length === 0) {
       return undefined;
     }
@@ -386,31 +388,42 @@ export class EventCardStatsTableComponent implements OnChanges {
     };
   }
 
-  private async resolveKnownSourceServices(): Promise<ServiceNames[]> {
-    const metadataServices = await this.loadEventMetadataSourceServices();
-    if (metadataServices.length > 0) {
-      return metadataServices;
-    }
+  private refreshExportOptions(): void {
+    const fallbackServices = this.inferSourceServicesFromActivities();
+    this.exportOptions = this.buildExportOptions(fallbackServices);
 
-    return this.inferSourceServicesFromActivities();
-  }
-
-  private async loadEventMetadataSourceServices(): Promise<ServiceNames[]> {
     const eventID = this.event?.getID?.();
     if (!this.user || !eventID) {
-      return [];
+      return;
     }
 
-    try {
-      const metadataKeys = await firstValueFrom(this.eventService.getEventMetaDataKeys(this.user, eventID));
-      return Array.from(new Set(
-        metadataKeys
-          .map(serviceName => normalizeProviderServiceName(serviceName))
-          .filter((serviceName): serviceName is ServiceNames => !!serviceName),
-      ));
-    } catch {
-      return [];
-    }
+    const requestId = ++this.exportOptionsRequestId;
+    this.eventService.getEventMetaDataKeys(this.user, eventID)
+      .pipe(take(1))
+      .subscribe({
+        next: (metadataKeys) => {
+          if (requestId !== this.exportOptionsRequestId) {
+            return;
+          }
+
+          const metadataServices = Array.from(new Set(
+            metadataKeys
+              .map(serviceName => normalizeProviderServiceName(serviceName))
+              .filter((serviceName): serviceName is ServiceNames => !!serviceName),
+          ));
+          if (metadataServices.length === 0) {
+            return;
+          }
+
+          this.exportOptions = this.buildExportOptions(metadataServices);
+        },
+        error: () => {
+          if (requestId !== this.exportOptionsRequestId) {
+            return;
+          }
+          this.exportOptions = this.exportOptions || this.buildExportOptions(fallbackServices);
+        },
+      });
   }
 
   private inferSourceServicesFromActivities(): ServiceNames[] {

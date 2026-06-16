@@ -23,7 +23,7 @@ import {
 } from '@sports-alliance/sports-lib';
 import { DataExportService } from '../../../services/data-export.service';
 import { AppEventService } from '../../../services/app.event.service';
-import { of } from 'rxjs';
+import { NEVER, of } from 'rxjs';
 
 describe('EventCardStatsTableComponent', () => {
     let component: EventCardStatsTableComponent;
@@ -112,13 +112,14 @@ describe('EventCardStatsTableComponent', () => {
         expect(component.selection.hasValue()).toBe(false);
     });
 
-    it('should copy selected rows to clipboard as markdown with provider attribution', async () => {
+    it('should copy selected rows to clipboard as markdown with provider attribution', () => {
         mockEventService.getEventMetaDataKeys.mockReturnValue(of([ServiceNames.GarminAPI]));
+        component.ngOnChanges({});
         component.columns = ['Name', 'Player 1 #ff0000'];
         const row1 = { Name: 'Distance', 'Player 1 #ff0000': '10 km' };
         component.selection.select(row1);
 
-        await component.copyToClipboard();
+        component.copyToClipboard();
 
         expect(mockDataExportService.copyToMarkdown).toHaveBeenCalledWith([row1], component.columns, expect.objectContaining({
             attributionLabel: 'Garmin',
@@ -131,13 +132,14 @@ describe('EventCardStatsTableComponent', () => {
         }));
     });
 
-    it('should copy selected rows to clipboard as TSV (Sheets) with provider attribution', async () => {
+    it('should copy selected rows to clipboard as TSV (Sheets) with provider attribution', () => {
         mockEventService.getEventMetaDataKeys.mockReturnValue(of([ServiceNames.SuuntoApp]));
+        component.ngOnChanges({});
         component.columns = ['Name', 'Player 1 #ff0000'];
         const row1 = { Name: 'Distance', 'Player 1 #ff0000': '10 km' };
         component.selection.select(row1);
 
-        await component.copyToSheets();
+        component.copyToSheets();
 
         expect(mockDataExportService.copyToSheets).toHaveBeenCalledWith([row1], component.columns, expect.objectContaining({
             attributionLabel: 'Suunto',
@@ -147,6 +149,26 @@ describe('EventCardStatsTableComponent', () => {
                     exportLabel: 'Suunto',
                 }),
             }),
+        }));
+    });
+
+    it('should trigger Sheets export immediately even while metadata attribution is still loading', () => {
+        const garminActivity = {
+            ...mockActivity,
+            creator: { name: 'Garmin' },
+            getID: () => 'act-garmin',
+        } as unknown as ActivityInterface;
+        mockEventService.getEventMetaDataKeys.mockReturnValue(NEVER);
+        component.selectedActivities = [garminActivity];
+        component.ngOnChanges({});
+
+        const row1 = { Name: 'Distance', 'Value #ff0000': '10 km' };
+        component.selection.select(row1);
+
+        component.copyToSheets();
+
+        expect(mockDataExportService.copyToSheets).toHaveBeenCalledWith([row1], component.columns, expect.objectContaining({
+            attributionLabel: 'Garmin',
         }));
     });
 
