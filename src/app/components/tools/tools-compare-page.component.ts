@@ -949,7 +949,11 @@ export class ToolsComparePageComponent implements OnInit {
     void this.openComparison(item, false);
   }
 
-  onComparisonRowKeydown(item: ComparisonListItem, event: KeyboardEvent): void {
+  onComparisonRowKeydown(item: ComparisonListItem, event: Event): void {
+    if (!(event instanceof KeyboardEvent)) {
+      return;
+    }
+
     if (!shouldActivateTableRowFromKeyboard(event)) {
       return;
     }

@@ -683,7 +683,11 @@ export class RoutesPageComponent implements OnInit {
         this.openRouteDetails(item);
     }
 
-    onRouteRowKeydown(item: RoutePageRouteViewModel, event: KeyboardEvent): void {
+    onRouteRowKeydown(item: RoutePageRouteViewModel, event: Event): void {
+        if (!(event instanceof KeyboardEvent)) {
+            return;
+        }
+
         if (!shouldActivateTableRowFromKeyboard(event)) {
             return;
         }
