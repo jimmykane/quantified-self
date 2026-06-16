@@ -375,17 +375,35 @@ export class EventCardStatsTableComponent implements OnChanges {
       return undefined;
     }
 
-    const attributionLabel = this.buildAttributionLabel(knownSourceServices);
-    const seriesPresentations = this.buildSeriesPresentations(knownSourceServices);
+    const ambiguousSeriesColumns = this.getAmbiguousActivitySeriesColumns();
+    if (ambiguousSeriesColumns.length === 0) {
+      return undefined;
+    }
+
+    if (knownSourceServices.length === 1) {
+      const attributionLabel = this.buildAttributionLabel(knownSourceServices);
+      return attributionLabel ? { attributionLabel } : undefined;
+    }
+
+    const seriesPresentations = this.buildSeriesPresentations(knownSourceServices, ambiguousSeriesColumns);
+    const unresolvedAmbiguousColumnCount = ambiguousSeriesColumns.length - Object.keys(seriesPresentations).length;
+    const attributionLabel = unresolvedAmbiguousColumnCount > 0
+      ? this.buildAttributionLabel(knownSourceServices)
+      : null;
 
     if (!attributionLabel && Object.keys(seriesPresentations).length === 0) {
       return undefined;
     }
 
-    return {
-      attributionLabel,
-      seriesPresentations: Object.keys(seriesPresentations).length > 0 ? seriesPresentations : undefined,
-    };
+    const options: DataExportOptions = {};
+    if (attributionLabel) {
+      options.attributionLabel = attributionLabel;
+    }
+    if (Object.keys(seriesPresentations).length > 0) {
+      options.seriesPresentations = seriesPresentations;
+    }
+
+    return Object.keys(options).length > 0 ? options : undefined;
   }
 
   private refreshExportOptions(): void {
@@ -459,8 +477,16 @@ export class EventCardStatsTableComponent implements OnChanges {
       .filter((entry): entry is { columnKey: string; activity: ActivityInterface } => !!entry.activity);
   }
 
-  private buildSeriesPresentations(sourceServices: ServiceNames[]): Record<string, ProviderPresentation> {
-    return this.getActivitySeriesColumnsForExport().reduce<Record<string, ProviderPresentation>>((presentations, entry) => {
+  private getAmbiguousActivitySeriesColumns(): Array<{ columnKey: string; activity: ActivityInterface }> {
+    return this.getActivitySeriesColumnsForExport()
+      .filter(entry => this.isActivitySeriesHeaderAmbiguous(entry.columnKey));
+  }
+
+  private buildSeriesPresentations(
+    sourceServices: ServiceNames[],
+    seriesColumns: Array<{ columnKey: string; activity: ActivityInterface }>,
+  ): Record<string, ProviderPresentation> {
+    return seriesColumns.reduce<Record<string, ProviderPresentation>>((presentations, entry) => {
       const presentation = this.buildActivitySeriesPresentation(entry.activity, sourceServices);
       if (presentation) {
         presentations[entry.columnKey] = presentation;
@@ -479,11 +505,7 @@ export class EventCardStatsTableComponent implements OnChanges {
       return null;
     }
 
-    const singleActivityEvent = {
-      getActivities: () => [activity],
-    } as EventInterface;
-
-    return buildSourceProviderPresentation(serviceName, singleActivityEvent);
+    return buildSourceProviderPresentation(serviceName);
   }
 
   private inferSourceServiceFromActivity(
@@ -531,5 +553,33 @@ export class EventCardStatsTableComponent implements OnChanges {
     return typeof value === 'string' && value.trim().length > 0
       ? value.trim().toLowerCase()
       : null;
+  }
+
+  private isActivitySeriesHeaderAmbiguous(columnKey: string): boolean {
+    const headerLabel = this.getColumnHeaderName(columnKey).trim();
+    if (!headerLabel) {
+      return true;
+    }
+
+    if (!this.event?.isMerge) {
+      return true;
+    }
+
+    return this.isGenericMergeSeriesLabel(headerLabel);
+  }
+
+  private isGenericMergeSeriesLabel(label: string): boolean {
+    const normalizedLabel = label.trim().toLowerCase();
+    if (!normalizedLabel) {
+      return true;
+    }
+
+    return normalizedLabel === 'device'
+      || normalizedLabel === 'activity'
+      || normalizedLabel === 'reference'
+      || normalizedLabel === 'test'
+      || /^player\s+[a-z0-9-]+$/i.test(normalizedLabel)
+      || /^device\s+[a-z0-9-]+$/i.test(normalizedLabel)
+      || /^activity\s+[a-z0-9-]+$/i.test(normalizedLabel);
   }
 }

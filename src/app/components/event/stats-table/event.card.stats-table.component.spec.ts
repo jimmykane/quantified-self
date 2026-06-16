@@ -62,7 +62,12 @@ describe('EventCardStatsTableComponent', () => {
             getActivityColor: vi.fn().mockReturnValue('#ff0000'),
         };
         mockDataExportService = {
-            getColumnHeaderName: vi.fn(name => name),
+            getColumnHeaderName: vi.fn((columnHeader: string) => {
+                if (columnHeader === 'Name' || columnHeader === 'Difference') {
+                    return columnHeader;
+                }
+                return columnHeader.slice(0, -7);
+            }),
             copyToMarkdown: vi.fn(),
             copyToSheets: vi.fn(),
         };
@@ -112,7 +117,7 @@ describe('EventCardStatsTableComponent', () => {
         expect(component.selection.hasValue()).toBe(false);
     });
 
-    it('should copy selected rows to clipboard as markdown with provider attribution', () => {
+    it('should copy selected rows to clipboard as markdown with event-level provider attribution for ambiguous single-provider headers', () => {
         mockEventService.getEventMetaDataKeys.mockReturnValue(of([ServiceNames.GarminAPI]));
         component.ngOnChanges({});
         component.columns = ['Name', 'Player 1 #ff0000'];
@@ -121,18 +126,12 @@ describe('EventCardStatsTableComponent', () => {
 
         component.copyToClipboard();
 
-        expect(mockDataExportService.copyToMarkdown).toHaveBeenCalledWith([row1], component.columns, expect.objectContaining({
+        expect(mockDataExportService.copyToMarkdown).toHaveBeenCalledWith([row1], component.columns, {
             attributionLabel: 'Garmin',
-            seriesPresentations: expect.objectContaining({
-                'Player 1 #ff0000': expect.objectContaining({
-                    serviceName: ServiceNames.GarminAPI,
-                    exportLabel: 'Garmin Player 1',
-                }),
-            }),
-        }));
+        });
     });
 
-    it('should copy selected rows to clipboard as TSV (Sheets) with provider attribution', () => {
+    it('should copy selected rows to clipboard as TSV (Sheets) with event-level provider attribution for ambiguous single-provider headers', () => {
         mockEventService.getEventMetaDataKeys.mockReturnValue(of([ServiceNames.SuuntoApp]));
         component.ngOnChanges({});
         component.columns = ['Name', 'Player 1 #ff0000'];
@@ -141,15 +140,9 @@ describe('EventCardStatsTableComponent', () => {
 
         component.copyToSheets();
 
-        expect(mockDataExportService.copyToSheets).toHaveBeenCalledWith([row1], component.columns, expect.objectContaining({
+        expect(mockDataExportService.copyToSheets).toHaveBeenCalledWith([row1], component.columns, {
             attributionLabel: 'Suunto',
-            seriesPresentations: expect.objectContaining({
-                'Player 1 #ff0000': expect.objectContaining({
-                    serviceName: ServiceNames.SuuntoApp,
-                    exportLabel: 'Suunto',
-                }),
-            }),
-        }));
+        });
     });
 
     it('should trigger Sheets export immediately even while metadata attribution is still loading', () => {
@@ -159,6 +152,7 @@ describe('EventCardStatsTableComponent', () => {
             getID: () => 'act-garmin',
         } as unknown as ActivityInterface;
         mockEventService.getEventMetaDataKeys.mockReturnValue(NEVER);
+        component.event = { ...mockEvent, isMerge: false } as EventInterface;
         component.selectedActivities = [garminActivity];
         component.ngOnChanges({});
 
@@ -170,6 +164,69 @@ describe('EventCardStatsTableComponent', () => {
         expect(mockDataExportService.copyToSheets).toHaveBeenCalledWith([row1], component.columns, expect.objectContaining({
             attributionLabel: 'Garmin',
         }));
+    });
+
+    it('should omit export attribution when merge headers already expose the device name', () => {
+        const explicitDeviceActivity = {
+            ...mockActivity,
+            creator: { name: 'Edge 540' },
+            getID: () => 'act-edge-540',
+        } as unknown as ActivityInterface;
+        mockEventService.getEventMetaDataKeys.mockReturnValue(of([ServiceNames.GarminAPI]));
+        component.selectedActivities = [explicitDeviceActivity];
+        component.ngOnChanges({});
+
+        const row1 = { Name: 'Distance', 'Edge 540 #ff0000': '10 km' };
+        component.selection.select(row1);
+
+        component.copyToClipboard();
+
+        expect(mockDataExportService.copyToMarkdown).toHaveBeenCalledWith([row1], component.columns, undefined);
+    });
+
+    it('should add per-series provider attribution for ambiguous mixed-provider headers', () => {
+        const garminActivity = {
+            ...mockActivity,
+            creator: {
+                name: 'Player 1',
+                devices: [{ manufacturer: 'Garmin', name: 'Forerunner 965' }],
+            },
+            getID: () => 'act-garmin',
+        } as unknown as ActivityInterface;
+        const suuntoActivity = {
+            ...mockActivity,
+            creator: {
+                name: 'Player 2',
+                devices: [{ manufacturer: 'Suunto', name: 'Vertical' }],
+            },
+            getID: () => 'act-suunto',
+        } as unknown as ActivityInterface;
+
+        mockEventService.getEventMetaDataKeys.mockReturnValue(of([ServiceNames.GarminAPI, ServiceNames.SuuntoApp]));
+        component.selectedActivities = [garminActivity, suuntoActivity];
+        component.ngOnChanges({});
+
+        const row1 = {
+            Name: 'Distance',
+            'Player 1 #ff0000': '10 km',
+            'Player 2 #ff0000': '12 km',
+        };
+        component.selection.select(row1);
+
+        component.copyToClipboard();
+
+        expect(mockDataExportService.copyToMarkdown).toHaveBeenCalledWith([row1], component.columns, {
+            seriesPresentations: {
+                'Player 1 #ff0000': expect.objectContaining({
+                    serviceName: ServiceNames.GarminAPI,
+                    exportLabel: 'Garmin',
+                }),
+                'Player 2 #ff0000': expect.objectContaining({
+                    serviceName: ServiceNames.SuuntoApp,
+                    exportLabel: 'Suunto',
+                }),
+            },
+        });
     });
 
     it('should NOT copy to markdown if selection is empty', () => {
