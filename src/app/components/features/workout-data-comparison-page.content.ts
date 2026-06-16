@@ -1,5 +1,6 @@
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { ROUTE_USAGE_LIMITS, USAGE_LIMITS } from '@shared/limits';
+import { getProviderDisplayName } from '@shared/provider-presentation';
 
 export interface ComparisonProviderSource {
   label: string;
@@ -31,9 +32,9 @@ export const COMPARISON_FREE_PLAN_ACTIVITY_LIMIT = USAGE_LIMITS.free;
 export const COMPARISON_FREE_PLAN_ROUTE_LIMIT = ROUTE_USAGE_LIMITS.free;
 
 export const COMPARISON_PROVIDER_SOURCES: readonly ComparisonProviderSource[] = [
-  { label: 'Garmin', serviceName: ServiceNames.GarminAPI },
-  { label: 'Suunto', serviceName: ServiceNames.SuuntoApp },
-  { label: 'COROS', serviceName: ServiceNames.COROSAPI },
+  { label: getProviderDisplayName(ServiceNames.GarminAPI, 'source'), serviceName: ServiceNames.GarminAPI },
+  { label: getProviderDisplayName(ServiceNames.SuuntoApp, 'source'), serviceName: ServiceNames.SuuntoApp },
+  { label: getProviderDisplayName(ServiceNames.COROSAPI, 'source'), serviceName: ServiceNames.COROSAPI },
 ];
 
 export const COMPARISON_FEATURE_ITEMS: readonly ComparisonFeatureItem[] = [

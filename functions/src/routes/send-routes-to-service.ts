@@ -10,6 +10,8 @@ import {
 import { FirestoreRouteJSON, OriginalRouteFileMetaData } from '../../../shared/app-route.interface';
 import { FUNCTIONS_MANIFEST } from '../../../shared/functions-manifest';
 import {
+  GARMIN_DELIVERY_METADATA_ABORT_MESSAGE,
+  GARMIN_DELIVERY_METADATA_PERSIST_FAILURE_MESSAGE,
   SEND_ROUTES_TO_SERVICE_MAX_ROUTE_IDS,
   SendRouteToServiceFailureReason,
   SendRouteToServiceItemResult,
@@ -37,13 +39,21 @@ import {
   uploadGPXRouteToSuuntoApp,
 } from '../suunto/routes';
 import {
+  createGarminRouteSendContext,
+  GarminRouteSendContext,
+  GarminRouteSendPermissionRequiredError,
+  sendRouteToGarminConnect,
+} from '../garmin/routes';
+import {
   setRouteDeliveryMetadata,
 } from './route-persistence';
+import { TokenRefreshSkippedForDeletedUserError } from '../tokens';
 
 interface PreparedSavedRoute {
   routeId: string;
   routeDocument: FirestoreRouteJSON;
   sourceFile: OriginalRouteFileMetaData;
+  routeFile: RouteFileInterface;
   gpxContent: string;
 }
 
@@ -106,9 +116,37 @@ class SuuntoRouteSendAdapter implements RouteSendDestinationAdapter<SuuntoRouteU
   }
 }
 
+class GarminRouteSendAdapter implements RouteSendDestinationAdapter<GarminRouteSendContext> {
+  readonly destinationServiceName = ServiceNames.GarminAPI;
+
+  createContext(userID: string): Promise<GarminRouteSendContext> {
+    return createGarminRouteSendContext(userID);
+  }
+
+  sendRoute(
+    userID: string,
+    preparedRoute: PreparedSavedRoute,
+    context: GarminRouteSendContext,
+  ): Promise<{ providerRouteId?: string; deliveries?: Array<{ providerUserId?: string | null; providerRouteId?: string | null }> }> {
+    return sendRouteToGarminConnect(
+      userID,
+      preparedRoute.routeId,
+      preparedRoute.routeDocument,
+      preparedRoute.routeFile,
+      context,
+    );
+  }
+}
+
 const ROUTE_SEND_ADAPTERS = new Map<ServiceNames, RouteSendDestinationAdapter>([
   [ServiceNames.SuuntoApp, new SuuntoRouteSendAdapter()],
+  [ServiceNames.GarminAPI, new GarminRouteSendAdapter()],
 ]);
+
+const STRICT_ROUTE_DELIVERY_METADATA_DESTINATIONS = new Set<ServiceNames>([
+  ServiceNames.GarminAPI,
+]);
+const ROUTE_DELIVERY_METADATA_MAX_ATTEMPTS = 3;
 
 function normalizeNonEmptyString(value: unknown): string | null {
   return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null;
@@ -182,8 +220,16 @@ export const sendRoutesToService = onCall({
 
   try {
     await assertRouteSendUserActive(userID, 'before_destination_context');
-    const context = await adapter.createContext(userID);
     const results: SendRouteToServiceItemResult[] = [];
+    let context;
+    try {
+      context = await adapter.createContext(userID);
+    } catch (error) {
+      return buildSendRoutesResponse(
+        adapter.destinationServiceName,
+        buildTerminalRouteSendResults(payload.routeIds, adapter.destinationServiceName, error),
+      );
+    }
 
     for (let index = 0; index < payload.routeIds.length; index++) {
       const routeId = payload.routeIds[index];
@@ -192,7 +238,7 @@ export const sendRoutesToService = onCall({
         const preparedRoute = await prepareSavedRouteForSending(userID, routeId);
         await assertRouteSendUserActive(userID, 'before_provider_upload');
         const providerResult = await adapter.sendRoute(userID, preparedRoute, context);
-        await persistRouteDeliveryMetadataBestEffort({
+        await persistRouteDeliveryMetadataAfterSend({
           userID,
           routeID: routeId,
           destinationServiceName: adapter.destinationServiceName,
@@ -219,6 +265,22 @@ export const sendRoutesToService = onCall({
             payload.routeIds.slice(index),
             adapter.destinationServiceName,
             error,
+          ));
+          break;
+        }
+        if (isDestinationPermissionRequiredError(error)) {
+          results.push(...buildTerminalRouteSendResults(
+            payload.routeIds.slice(index),
+            adapter.destinationServiceName,
+            error,
+          ));
+          break;
+        }
+        if (isDeliveryMetadataPersistenceError(error)) {
+          results.push(buildRouteSendFailureResult(routeId, adapter.destinationServiceName, error));
+          results.push(...buildUnattemptedRouteSendResultsAfterDeliveryMetadataFailure(
+            payload.routeIds.slice(index + 1),
+            adapter.destinationServiceName,
           ));
           break;
         }
@@ -342,6 +404,7 @@ async function prepareSavedRouteForSending(
     routeId,
     routeDocument,
     sourceFile,
+    routeFile: routeFile as RouteFileInterface,
     gpxContent,
   };
 }
@@ -481,6 +544,15 @@ function buildRouteSendFailureResult(
       message: error.message,
     };
   }
+  if (isDestinationPermissionRequiredError(error)) {
+    return {
+      routeId,
+      destinationServiceName,
+      status: 'failure',
+      reason: 'DESTINATION_PERMISSION_REQUIRED',
+      message: error.message,
+    };
+  }
 
   const message = error instanceof Error ? error.message : 'Could not send route.';
   logger.error('[sendRoutesToService] Failed to send route item', {
@@ -541,8 +613,40 @@ function buildTerminalRouteSendResults(
       message,
     }));
   }
+  if (isDestinationPermissionRequiredError(error)) {
+    const message = error.message || 'Grant the required destination permissions and reconnect before sending routes.';
+    return routeIds.map(routeId => ({
+      routeId,
+      destinationServiceName,
+      status: 'failure',
+      reason: 'DESTINATION_PERMISSION_REQUIRED',
+      message,
+    }));
+  }
+  if (isDeliveryMetadataPersistenceError(error)) {
+    return routeIds.map(routeId => ({
+      routeId,
+      destinationServiceName,
+      status: 'failure',
+      reason: 'DELIVERY_METADATA_PERSIST_FAILED',
+      message: error.message,
+    }));
+  }
 
   return routeIds.map(routeId => buildRouteSendFailureResult(routeId, destinationServiceName, error));
+}
+
+function buildUnattemptedRouteSendResultsAfterDeliveryMetadataFailure(
+  routeIds: string[],
+  destinationServiceName: ServiceNames,
+): SendRouteToServiceItemResult[] {
+  return routeIds.map(routeId => ({
+    routeId,
+    destinationServiceName,
+    status: 'failure',
+    reason: 'SEND_REQUEST_FAILED',
+    message: GARMIN_DELIVERY_METADATA_ABORT_MESSAGE,
+  }));
 }
 
 function buildSendRoutesResponse(
@@ -570,8 +674,10 @@ function buildSendRoutesResponse(
 function isAccountDeletionSkipError(error: unknown): boolean {
   return error instanceof RouteSendSkippedForDeletedUserError
     || error instanceof SuuntoRouteUploadSkippedForDeletedUserError
+    || error instanceof TokenRefreshSkippedForDeletedUserError
     || (error instanceof Error && error.name === 'RouteSendSkippedForDeletedUserError')
-    || (error instanceof Error && error.name === 'SuuntoRouteUploadSkippedForDeletedUserError');
+    || (error instanceof Error && error.name === 'SuuntoRouteUploadSkippedForDeletedUserError')
+    || (error instanceof Error && error.name === 'TokenRefreshSkippedForDeletedUserError');
 }
 
 function isUserDeletionGuardReadError(error: unknown): error is UserDeletionGuardReadError {
@@ -586,7 +692,18 @@ function isDestinationAuthRequiredError(error: unknown): error is HttpsError {
       || (error as { code?: unknown } | null)?.code === 'functions/unauthenticated';
 }
 
-async function persistRouteDeliveryMetadataBestEffort(params: {
+function isDestinationPermissionRequiredError(error: unknown): error is GarminRouteSendPermissionRequiredError {
+  return error instanceof GarminRouteSendPermissionRequiredError
+    || (error instanceof Error && error.name === 'GarminRouteSendPermissionRequiredError');
+}
+
+function isDeliveryMetadataPersistenceError(error: unknown): error is RouteSendItemError {
+  return error instanceof RouteSendItemError
+    ? error.reason === 'DELIVERY_METADATA_PERSIST_FAILED'
+    : false;
+}
+
+async function persistRouteDeliveryMetadataAfterSend(params: {
   userID: string;
   routeID: string;
   destinationServiceName: ServiceNames;
@@ -596,31 +713,49 @@ async function persistRouteDeliveryMetadataBestEffort(params: {
     providerRouteId?: string | null;
   }>;
 }): Promise<void> {
-  try {
-    const deliveryEntries = params.deliveries && params.deliveries.length > 0
-      ? params.deliveries
-      : [{ providerRouteId: params.providerRouteId || null }];
+  const deliveryEntries = params.deliveries && params.deliveries.length > 0
+    ? params.deliveries
+    : [{ providerRouteId: params.providerRouteId || null }];
+  let lastError: unknown = null;
 
-    for (const delivery of deliveryEntries) {
-      await setRouteDeliveryMetadata({
+  for (let attempt = 1; attempt <= ROUTE_DELIVERY_METADATA_MAX_ATTEMPTS; attempt++) {
+    try {
+      for (const delivery of deliveryEntries) {
+        await setRouteDeliveryMetadata({
+          userID: params.userID,
+          routeID: params.routeID,
+          deliveryMetadata: {
+            serviceName: params.destinationServiceName,
+            providerUserId: delivery.providerUserId || null,
+            status: 'success',
+            providerRouteId: delivery.providerRouteId || null,
+            deliveredAt: new Date(),
+            lastAttemptAt: new Date(),
+          },
+        });
+      }
+      return;
+    } catch (error) {
+      lastError = error;
+      logger.warn('[sendRoutesToService] Failed to persist route delivery metadata after successful send', {
         userID: params.userID,
         routeID: params.routeID,
-        deliveryMetadata: {
-          serviceName: params.destinationServiceName,
-          providerUserId: delivery.providerUserId || null,
-          status: 'success',
-          providerRouteId: delivery.providerRouteId || null,
-          deliveredAt: new Date(),
-          lastAttemptAt: new Date(),
-        },
+        destinationServiceName: params.destinationServiceName,
+        attempt,
+        maxAttempts: ROUTE_DELIVERY_METADATA_MAX_ATTEMPTS,
+        error,
       });
     }
-  } catch (error) {
-    logger.warn('[sendRoutesToService] Failed to persist route delivery metadata after successful send', {
+  }
+
+  if (STRICT_ROUTE_DELIVERY_METADATA_DESTINATIONS.has(params.destinationServiceName)) {
+    logger.error('[sendRoutesToService] Route delivery metadata persistence failed for a strict destination', {
       userID: params.userID,
       routeID: params.routeID,
       destinationServiceName: params.destinationServiceName,
-      error,
+      maxAttempts: ROUTE_DELIVERY_METADATA_MAX_ATTEMPTS,
+      error: lastError,
     });
+    throw new RouteSendItemError('DELIVERY_METADATA_PERSIST_FAILED', GARMIN_DELIVERY_METADATA_PERSIST_FAILURE_MESSAGE);
   }
 }

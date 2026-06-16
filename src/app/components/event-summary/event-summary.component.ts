@@ -86,6 +86,7 @@ export class EventSummaryComponent implements OnChanges {
     this.bottomSheet.open(EventStatsBottomSheetComponent, {
       data: {
         event: this.event,
+        user: this.user,
         selectedActivities: this.selectedActivities,
         userUnitSettings: this.unitSettings
       },

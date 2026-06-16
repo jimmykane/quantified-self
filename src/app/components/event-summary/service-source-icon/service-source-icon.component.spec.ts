@@ -6,6 +6,7 @@ import { of } from 'rxjs';
 import { EventInterface, ServiceNames, User } from '@sports-alliance/sports-lib';
 import { MatIconModule } from '@angular/material/icon';
 import { MatTooltipModule } from '@angular/material/tooltip';
+import { buildSourceProviderPresentation } from '../../../helpers/provider-presentation.helper';
 
 describe('ServiceSourceIconComponent', () => {
     let component: ServiceSourceIconComponent;
@@ -120,23 +121,89 @@ describe('ServiceSourceIconComponent', () => {
     });
 
     it('should map service names to user-friendly sync labels', () => {
-        component.serviceName = ServiceNames.GarminAPI;
+        component.presentation = buildSourceProviderPresentation(ServiceNames.GarminAPI);
+        component.ngOnChanges({
+            presentation: {
+                currentValue: component.presentation,
+                previousValue: null,
+                firstChange: true,
+                isFirstChange: () => true,
+            },
+        });
         expect(component.serviceDisplayName).toBe('Garmin');
 
-        component.serviceName = ServiceNames.SuuntoApp;
+        component.presentation = buildSourceProviderPresentation(ServiceNames.SuuntoApp);
+        component.ngOnChanges({
+            presentation: {
+                currentValue: component.presentation,
+                previousValue: null,
+                firstChange: false,
+                isFirstChange: () => false,
+            },
+        });
         expect(component.serviceDisplayName).toBe('Suunto');
 
-        component.serviceName = ServiceNames.COROSAPI;
+        component.presentation = buildSourceProviderPresentation(ServiceNames.COROSAPI);
+        component.ngOnChanges({
+            presentation: {
+                currentValue: component.presentation,
+                previousValue: null,
+                firstChange: false,
+                isFirstChange: () => false,
+            },
+        });
         expect(component.serviceDisplayName).toBe('COROS');
     });
 
     it('should expose a human-readable tooltip only when enabled', () => {
-        component.serviceName = ServiceNames.GarminAPI;
+        component.presentation = buildSourceProviderPresentation(ServiceNames.GarminAPI);
+        component.ngOnChanges({
+            presentation: {
+                currentValue: component.presentation,
+                previousValue: null,
+                firstChange: true,
+                isFirstChange: () => true,
+            },
+        });
 
         expect(component.serviceTooltip).toBe('Synced from Garmin');
 
         component.showTooltip = false;
+        component.ngOnChanges({
+            showTooltip: {
+                currentValue: false,
+                previousValue: true,
+                firstChange: false,
+                isFirstChange: () => false,
+            },
+        });
 
         expect(component.serviceTooltip).toBe('');
+    });
+
+    it('should include a Garmin device model when a single imported device is clear', () => {
+        const event = {
+            getActivities: () => [{ creator: { name: 'Edge 540' } }],
+        } as unknown as EventInterface;
+
+        component.event = event;
+        component.sourceServiceName = ServiceNames.GarminAPI;
+        component.ngOnChanges({
+            sourceServiceName: {
+                currentValue: ServiceNames.GarminAPI,
+                previousValue: null,
+                firstChange: true,
+                isFirstChange: () => true,
+            },
+            event: {
+                currentValue: event,
+                previousValue: null,
+                firstChange: true,
+                isFirstChange: () => true,
+            },
+        });
+
+        expect(component.serviceDisplayName).toBe('Garmin Edge 540');
+        expect(component.serviceTooltip).toBe('Synced from Garmin Edge 540');
     });
 });

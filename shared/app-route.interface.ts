@@ -1,5 +1,5 @@
 import { OriginalFileMetaData } from './app-event.interface';
-import { RouteSourceSummary } from './route-provenance';
+import { RouteDeliverySummary, RouteSourceSummary } from './route-provenance';
 
 export interface OriginalRouteFileMetaData extends OriginalFileMetaData {
     extension?: string;
@@ -151,4 +151,5 @@ export interface FirestoreRouteJSON {
     originalFiles?: OriginalRouteFileMetaData[];
     sourceSummary?: RouteSourceSummary | null;
     syncedDestinationServiceNames?: string[];
+    deliverySummaries?: RouteDeliverySummary[];
 }

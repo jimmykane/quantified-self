@@ -30,6 +30,7 @@ import { AppEventService } from '../../services/app.event.service';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { AppUserInterface, AppUserServiceMetaInterface } from '../../models/app-user.interface';
 import { ACTIVITY_SYNC_ROUTES, ActivitySyncRoute } from '@shared/activity-sync-routes';
+import { getProviderDisplayName } from '@shared/provider-presentation';
 import { ConfirmationDialogComponent, ConfirmationDialogData } from '../confirmation-dialog/confirmation-dialog.component';
 import equal from 'fast-deep-equal';
 
@@ -120,7 +121,7 @@ export abstract class ServicesAbstractComponentDirective implements OnInit, OnDe
         await this.requestAndSetToken(this.route.snapshot.queryParamMap)
         this.analyticsService.logEvent('connected_to_service', { serviceName: this.serviceName });
         this.forceConnected = true;
-        this.snackBar.open(`Successfully connected to ${this.serviceName}`, undefined, {
+        this.snackBar.open(`Successfully connected to ${this.getPartnerDisplayName()}`, undefined, {
           duration: 10000,
         });
       } catch (e: any) {
@@ -250,16 +251,7 @@ export abstract class ServicesAbstractComponentDirective implements OnInit, OnDe
   }
 
   private getServiceDisplayName(serviceName: ServiceNames): string {
-    switch (serviceName) {
-      case ServiceNames.GarminAPI:
-        return 'Garmin';
-      case ServiceNames.SuuntoApp:
-        return 'Suunto';
-      case ServiceNames.COROSAPI:
-        return 'COROS';
-      default:
-        return 'Partner service';
-    }
+    return getProviderDisplayName(serviceName, 'destination');
   }
 
   private get activeSyncRoutesUsingService(): ActivitySyncRoute[] {

@@ -1,8 +1,14 @@
 import { Injectable } from '@angular/core';
 import { Clipboard } from '@angular/cdk/clipboard';
 import { MatSnackBar } from '@angular/material/snack-bar';
+import { ProviderPresentation } from '@shared/provider-presentation';
 import { AppEventColorService } from './color/app.event.color.service';
 import { LoggerService } from './logger.service';
+
+export interface DataExportOptions {
+    attributionLabel?: string | null;
+    seriesPresentations?: Record<string, ProviderPresentation | null | undefined>;
+}
 
 @Injectable({
     providedIn: 'root'
@@ -15,6 +21,10 @@ export class DataExportService {
         private appEventColorService: AppEventColorService,
         private logger: LoggerService
     ) { }
+
+    private normalizeNonEmptyString(value: unknown): string {
+        return typeof value === 'string' ? value.trim() : '';
+    }
 
     /**
      * Cleans column headers by removing internal color codes (e.g., "Player 1 #ff0000" -> "Player 1")
@@ -43,9 +53,78 @@ export class DataExportService {
         });
     }
 
-    public copyToMarkdown(data: any[], columns: string[]): void {
+    private buildSeriesAttributionEntries(columns: string[], options?: DataExportOptions): string[] {
+        if (!options?.seriesPresentations) {
+            return [];
+        }
+
+        return columns.reduce<string[]>((entries, column) => {
+            const presentation = options.seriesPresentations?.[column];
+            if (!presentation) {
+                return entries;
+            }
+
+            const headerLabel = this.getColumnHeaderName(column).trim() || column;
+            entries.push(`${headerLabel}: ${presentation.exportLabel}`);
+            return entries;
+        }, []);
+    }
+
+    private buildMarkdownPrefix(columns: string[], options?: DataExportOptions): string {
+        const lines: string[] = [];
+        const attributionLabel = this.normalizeNonEmptyString(options?.attributionLabel);
+        if (attributionLabel) {
+            lines.push(`Source: ${attributionLabel}`);
+        }
+
+        const seriesEntries = this.buildSeriesAttributionEntries(columns, options);
+        if (seriesEntries.length > 0) {
+            lines.push(`Series sources: ${seriesEntries.join(' | ')}`);
+        }
+
+        return lines.length > 0
+            ? `${lines.map(line => `> ${line}`).join('\n')}\n\n`
+            : '';
+    }
+
+    private buildTableCaption(columns: string[], options?: DataExportOptions): string {
+        const lines: string[] = [];
+        const attributionLabel = this.normalizeNonEmptyString(options?.attributionLabel);
+        if (attributionLabel) {
+            lines.push(`Source: ${attributionLabel}`);
+        }
+
+        const seriesEntries = this.buildSeriesAttributionEntries(columns, options);
+        if (seriesEntries.length > 0) {
+            lines.push(`Series sources: ${seriesEntries.join(' | ')}`);
+        }
+
+        if (lines.length === 0) {
+            return '';
+        }
+
+        return `<caption style="caption-side: top; text-align: left; color: #111827; padding: 0 0 8px; background-color: #ffffff;">${lines.join('<br>')}</caption>`;
+    }
+
+    private buildTsvPrefix(columns: string[], options?: DataExportOptions): string {
+        const rows: string[] = [];
+        const attributionLabel = this.normalizeNonEmptyString(options?.attributionLabel);
+        if (attributionLabel) {
+            rows.push(`Source\t${attributionLabel}`);
+        }
+
+        const seriesEntries = this.buildSeriesAttributionEntries(columns, options);
+        if (seriesEntries.length > 0) {
+            rows.push(`Series sources\t${seriesEntries.join(' | ')}`);
+        }
+
+        return rows.length > 0 ? `${rows.join('\n')}\n\n` : '';
+    }
+
+    public copyToMarkdown(data: any[], columns: string[], options?: DataExportOptions): void {
         const headers = columns.map(c => this.getColumnHeaderName(c));
-        let markdown = '| ' + headers.join(' | ') + ' |\n';
+        let markdown = this.buildMarkdownPrefix(columns, options);
+        markdown += '| ' + headers.join(' | ') + ' |\n';
         markdown += '| ' + headers.map(() => '---').join(' | ') + ' |\n';
 
         data.forEach(row => {
@@ -68,11 +147,12 @@ export class DataExportService {
         }
     }
 
-    public async copyToSheets(data: any[], columns: string[]): Promise<void> {
+    public async copyToSheets(data: any[], columns: string[], options?: DataExportOptions): Promise<void> {
         const headers = columns.map(c => this.getColumnHeaderName(c));
 
         // 1. Generate TSV (Plain Text)
-        let tsv = headers.join('\t') + '\n';
+        let tsv = this.buildTsvPrefix(columns, options);
+        tsv += headers.join('\t') + '\n';
         data.forEach(row => {
             const rowValues = this.processRowValues(row, columns);
             // Replace tabs with spaces to prevent breaking TSV structure
@@ -106,23 +186,23 @@ export class DataExportService {
             const coloredContent = color
                 ? `<span style="color: ${color}">${escapeHtml(displayName)}</span>`
                 : escapeHtml(displayName);
-            return `<th style="color: white; border: 1px solid white;">${coloredContent}</th>`;
+            return `<th style="color: #111827; background-color: #f8fafc; border: 1px solid #d1d5db;">${coloredContent}</th>`;
         }).join('');
 
-        let html = `<table style="border-collapse: collapse; border: 1px solid white;"><thead><tr>${headerCells}</tr></thead><tbody>`;
+        let html = `<table style="border-collapse: collapse; border: 1px solid #d1d5db; background-color: #ffffff;">${this.buildTableCaption(columns, options)}<thead><tr>${headerCells}</tr></thead><tbody>`;
         data.forEach(row => {
             html += '<tr>';
             columns.forEach(col => {
                 const val = row[col];
                 let cellContent = '';
-                let cellStyle = 'color: white; border: 1px solid white;';
+                let cellStyle = 'color: #111827; background-color: #ffffff; border: 1px solid #d1d5db;';
 
                 if (col === 'Difference' && val && typeof val === 'object') {
                     // Difference specific logic - use difference color
                     cellContent = escapeHtml(`${val.display} (${val.percent.toFixed(1)}%)`);
-                    cellStyle = `color: ${this.appEventColorService.getDifferenceColor(val.percent)}; border: 1px solid white;`;
+                    cellStyle = `color: ${this.appEventColorService.getDifferenceColor(val.percent)}; background-color: #ffffff; border: 1px solid #d1d5db;`;
                 } else {
-                    // Standard processing with white text
+                    // Standard processing with sheet-safe dark text
                     cellContent = escapeHtml(val === null || val === undefined ? '' : String(val));
                 }
 

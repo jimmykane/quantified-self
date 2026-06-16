@@ -1,7 +1,9 @@
 import { ChangeDetectionStrategy, ChangeDetectorRef, Component, Input, OnChanges, OnDestroy, SimpleChanges } from '@angular/core';
 import { EventInterface, ServiceNames, User } from '@sports-alliance/sports-lib';
+import { ProviderPresentation } from '@shared/provider-presentation';
 import { Subscription } from 'rxjs';
 import { take } from 'rxjs/operators';
+import { buildSourceProviderPresentation } from '../../../helpers/provider-presentation.helper';
 import { AppEventService } from '../../../services/app.event.service';
 
 @Component({
@@ -15,20 +17,35 @@ export class ServiceSourceIconComponent implements OnChanges, OnDestroy {
     @Input() event!: EventInterface;
     @Input() user!: User;
     @Input() sourceServiceName: ServiceNames | null = null;
+    @Input() presentation: ProviderPresentation | null = null;
     @Input() showIcon = true;
     @Input() showTooltip = true;
     @Input() showText = false;
 
     serviceName: ServiceNames | null = null;
     serviceLogo: string | null = null;
+    serviceDisplayName = '';
+    serviceTooltipText = '';
+    private servicePresentation: ProviderPresentation | null = null;
     private metadataKeysSubscription?: Subscription;
 
     constructor(private eventService: AppEventService, private cd: ChangeDetectorRef) { }
 
     ngOnChanges(changes: SimpleChanges): void {
+        if (this.presentation) {
+            this.metadataKeysSubscription?.unsubscribe();
+            this.applyPresentation(this.presentation);
+            return;
+        }
+
         if (this.sourceServiceName) {
             this.metadataKeysSubscription?.unsubscribe();
             this.setServiceSource(this.sourceServiceName);
+            return;
+        }
+
+        if (changes['showTooltip'] && this.serviceName) {
+            this.setServiceSource(this.serviceName);
             return;
         }
 
@@ -71,45 +88,20 @@ export class ServiceSourceIconComponent implements OnChanges, OnDestroy {
         this.metadataKeysSubscription?.unsubscribe();
     }
 
-    get serviceDisplayName(): string {
-        switch (this.serviceName) {
-            case ServiceNames.COROSAPI:
-                return 'COROS';
-            case ServiceNames.SuuntoApp:
-                return 'Suunto';
-            case ServiceNames.GarminAPI:
-                return 'Garmin';
-            default:
-                return '';
-        }
-    }
-
     get serviceTooltip(): string {
-        if (!this.showTooltip || !this.serviceName) {
-            return '';
-        }
-
-        return `Synced from ${this.serviceDisplayName || this.serviceName}`;
+        return this.serviceTooltipText;
     }
 
-    private getServiceLogo(serviceName: ServiceNames): string {
-        switch (serviceName) {
-            case ServiceNames.COROSAPI:
-                return 'coros';
-            case ServiceNames.SuuntoApp:
-                return 'suunto';
-            case ServiceNames.GarminAPI:
-                return 'garmin';
-            default:
-                return '';
-        }
+    private applyPresentation(presentation: ProviderPresentation | null): void {
+        this.servicePresentation = presentation;
+        this.serviceName = presentation?.serviceName ?? null;
+        this.serviceLogo = presentation?.iconKey ?? null;
+        this.serviceDisplayName = presentation?.displayLabel ?? '';
+        this.serviceTooltipText = this.showTooltip ? presentation?.tooltipLabel ?? '' : '';
+        this.cd.markForCheck();
     }
 
     private setServiceSource(serviceName: ServiceNames | null): void {
-        this.serviceName = serviceName;
-        this.serviceLogo = serviceName
-            ? this.getServiceLogo(serviceName)
-            : null;
-        this.cd.markForCheck();
+        this.applyPresentation(buildSourceProviderPresentation(serviceName, this.event));
     }
 }

@@ -91,6 +91,15 @@ import {
   getSuuntoConnectedProviderUserIds,
   getSuuntoRouteCatchUpDateForConnectedProviders,
 } from '../helpers/suunto-route-catch-up.helper';
+import {
+  GARMIN_ROUTE_SEND_REQUIRED_PERMISSIONS,
+  getConnectedGarminProviderUserIds,
+  getGarminProviderUserIdFromTokenLike,
+  getMissingGarminPermissionsForTokenLike,
+  hasConnectedGarminToken,
+  selectPreferredGarminTokenLike,
+} from '@shared/garmin-service-token';
+import { isReconnectRequiredServiceConnection } from '@shared/service-connection';
 
 export const ACTIVITY_SERVICE_CONNECTION_NAMES = [
   ServiceNames.GarminAPI,
@@ -129,6 +138,21 @@ export interface SuuntoRouteCatchUpPromptContext {
   didLastRouteImport: Date | null;
   promptSource: string | null;
   connectedProviderUserIds: string[];
+}
+
+export interface GarminRouteSendContext {
+  connected: boolean;
+  reconnectRequired: boolean;
+  missingPermissions: string[];
+  providerUserId: string | null;
+  providerStates: GarminRouteSendProviderState[];
+  serviceMeta: AppUserServiceMetaInterface | null;
+}
+
+export interface GarminRouteSendProviderState {
+  providerUserId: string;
+  permissionsLoaded: boolean;
+  missingPermissions: string[];
 }
 
 
@@ -622,6 +646,10 @@ export class AppUserService implements OnDestroy {
       return getSuuntoConnectedProviderUserIds(tokens).length > 0;
     }
 
+    if (serviceName === ServiceNames.GarminAPI) {
+      return hasConnectedGarminToken(tokens);
+    }
+
     return true;
   }
 
@@ -755,6 +783,75 @@ export class AppUserService implements OnDestroy {
   public watchSuuntoServiceConnectionView(user: User | null | undefined): Observable<SuuntoServiceConnectionViewModel> {
     return this.watchSuuntoRouteCatchUpPromptContext(user).pipe(
       map(context => context.connectionView),
+      distinctUntilChanged((previous, current) => JSON.stringify(previous) === JSON.stringify(current)),
+    );
+  }
+
+  public watchGarminRouteSendContext(user: User | null | undefined): Observable<GarminRouteSendContext> {
+    const uid = `${user?.uid || ''}`.trim();
+    if (!uid || !user) {
+      return of({
+        connected: false,
+        reconnectRequired: false,
+        missingPermissions: [],
+        providerUserId: null,
+        providerStates: [],
+        serviceMeta: null,
+      });
+    }
+
+    return combineLatest([
+      this.getServiceToken(user, ServiceNames.GarminAPI).pipe(
+        catchError(error => {
+          this.logger.warn('[AppUserService] Failed to read Garmin tokens for route send context', {
+            userID: uid,
+          }, error);
+          return of([]);
+        }),
+      ),
+      this.getUserMetaForService(user, ServiceNames.GarminAPI).pipe(
+        catchError(error => {
+          this.logger.warn('[AppUserService] Failed to read Garmin service meta for route send context', {
+            userID: uid,
+          }, error);
+          return of(undefined);
+        }),
+      ),
+    ]).pipe(
+      map(([tokens, serviceMeta]) => {
+        const normalizedServiceMeta = serviceMeta || null;
+        const preferredToken = Array.isArray(tokens)
+          ? selectPreferredGarminTokenLike(tokens, GARMIN_ROUTE_SEND_REQUIRED_PERMISSIONS)
+          : null;
+        const providerStates = Array.isArray(tokens)
+          ? getConnectedGarminProviderUserIds(tokens).map(providerUserId => {
+            const providerTokens = tokens.filter(token => getGarminProviderUserIdFromTokenLike(token) === providerUserId);
+            const preferredProviderToken = selectPreferredGarminTokenLike(
+              providerTokens,
+              GARMIN_ROUTE_SEND_REQUIRED_PERMISSIONS,
+            );
+
+            return {
+              providerUserId,
+              permissionsLoaded: Array.isArray((preferredProviderToken as { permissions?: unknown } | null)?.permissions),
+              missingPermissions: preferredProviderToken
+                ? getMissingGarminPermissionsForTokenLike(preferredProviderToken, GARMIN_ROUTE_SEND_REQUIRED_PERMISSIONS)
+                : [...GARMIN_ROUTE_SEND_REQUIRED_PERMISSIONS],
+            };
+          })
+          : [];
+
+        return {
+          connected: Array.isArray(tokens) && hasConnectedGarminToken(tokens),
+          reconnectRequired: isReconnectRequiredServiceConnection(normalizedServiceMeta),
+          missingPermissions: preferredToken
+            ? getMissingGarminPermissionsForTokenLike(preferredToken, GARMIN_ROUTE_SEND_REQUIRED_PERMISSIONS)
+            : [],
+          providerUserId: getGarminProviderUserIdFromTokenLike(preferredToken),
+          providerStates,
+          serviceMeta: normalizedServiceMeta,
+        };
+      }),
       distinctUntilChanged((previous, current) => JSON.stringify(previous) === JSON.stringify(current)),
     );
   }

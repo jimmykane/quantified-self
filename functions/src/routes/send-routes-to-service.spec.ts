@@ -2,7 +2,11 @@
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ServiceNames } from '@sports-alliance/sports-lib';
-import { SEND_ROUTES_TO_SERVICE_MAX_ROUTE_IDS } from '../../../shared/saved-route-send';
+import {
+  GARMIN_DELIVERY_METADATA_ABORT_MESSAGE,
+  GARMIN_DELIVERY_METADATA_PERSIST_FAILURE_MESSAGE,
+  SEND_ROUTES_TO_SERVICE_MAX_ROUTE_IDS,
+} from '../../../shared/saved-route-send';
 import { PRO_REQUIRED_MESSAGE } from '../utils';
 
 const routeDocuments = new Map<string, Record<string, unknown>>();
@@ -73,6 +77,19 @@ vi.mock('../suunto/routes', () => ({
   uploadGPXRouteToSuuntoApp: (...args: any[]) => suuntoRouteMocks.uploadGPXRouteToSuuntoApp(...args),
   SuuntoRouteUploadSkippedForDeletedUserError: class SuuntoRouteUploadSkippedForDeletedUserError extends Error {
     readonly name = 'SuuntoRouteUploadSkippedForDeletedUserError';
+  },
+}));
+
+const garminRouteMocks = {
+  createGarminRouteSendContext: vi.fn(),
+  sendRouteToGarminConnect: vi.fn(),
+};
+
+vi.mock('../garmin/routes', () => ({
+  createGarminRouteSendContext: (...args: any[]) => garminRouteMocks.createGarminRouteSendContext(...args),
+  sendRouteToGarminConnect: (...args: any[]) => garminRouteMocks.sendRouteToGarminConnect(...args),
+  GarminRouteSendPermissionRequiredError: class GarminRouteSendPermissionRequiredError extends Error {
+    readonly name = 'GarminRouteSendPermissionRequiredError';
   },
 }));
 
@@ -198,12 +215,24 @@ describe('sendRoutesToService', () => {
       routeDocument?.sourceSummary?.sourceServiceName === serviceName
     ));
     routePersistenceMocks.setRouteDeliveryMetadata.mockResolvedValue(undefined);
+    garminRouteMocks.createGarminRouteSendContext.mockResolvedValue({
+      tokenSnapshots: [{
+        id: 'garmin-token-1',
+        ref: { get: vi.fn() },
+        data: () => ({ userID: 'garmin-user-1', permissions: ['COURSE_IMPORT'] }),
+      }],
+      preferredProviderUserId: 'garmin-user-1',
+    });
+    garminRouteMocks.sendRouteToGarminConnect.mockResolvedValue({
+      providerRouteId: 'garmin-course-1',
+      deliveries: [{ providerUserId: 'garmin-user-1', providerRouteId: 'garmin-course-1' }],
+    });
   });
 
   it('rejects unsupported destinations', async () => {
     await expect(sendRoutesToService(createRequest({
       routeIds: ['route-1'],
-      destinationServiceName: ServiceNames.GarminAPI,
+      destinationServiceName: ServiceNames.COROSAPI,
     }) as any)).rejects.toMatchObject({
       code: 'failed-precondition',
     });
@@ -221,7 +250,7 @@ describe('sendRoutesToService', () => {
     }) as any)).rejects.toMatchObject({ code: 'invalid-argument' });
   });
 
-  it('rejects non-pro users and missing Suunto tokens', async () => {
+  it('rejects non-pro users and returns in-band Suunto auth failures when no Suunto account is connected', async () => {
     utilsMocks.hasProAccess.mockResolvedValueOnce(false);
     await expect(sendRoutesToService(createRequest({
       routeIds: ['route-1'],
@@ -235,12 +264,250 @@ describe('sendRoutesToService', () => {
     suuntoRouteMocks.createSuuntoRouteUploadContext.mockRejectedValueOnce(
       new HttpsError('unauthenticated', 'No connected Suunto account found'),
     );
-    await expect(sendRoutesToService(createRequest({
+
+    const result = await sendRoutesToService(createRequest({
       routeIds: ['route-1'],
       destinationServiceName: ServiceNames.SuuntoApp,
-    }) as any)).rejects.toMatchObject({
-      code: 'unauthenticated',
+    }) as any);
+
+    expect(result).toMatchObject({
+      destinationServiceName: ServiceNames.SuuntoApp,
+      status: 'failure',
+      routeCount: 1,
+      successCount: 0,
+      failureCount: 1,
+      skippedCount: 0,
     });
+    expect(result.results).toEqual([
+      expect.objectContaining({
+        routeId: 'route-1',
+        reason: 'DESTINATION_AUTH_REQUIRED',
+        message: 'No connected Suunto account found',
+      }),
+    ]);
+    expect(suuntoRouteMocks.uploadGPXRouteToSuuntoApp).not.toHaveBeenCalled();
+  });
+
+  it('returns Garmin auth failures in-band when no Garmin account is connected', async () => {
+    const { HttpsError } = await import('firebase-functions/v2/https');
+    garminRouteMocks.createGarminRouteSendContext.mockRejectedValueOnce(
+      new HttpsError('unauthenticated', 'No connected Garmin account found.'),
+    );
+
+    const result = await sendRoutesToService(createRequest({
+      routeIds: ['route-1', 'route-2'],
+      destinationServiceName: ServiceNames.GarminAPI,
+    }) as any);
+
+    expect(result).toMatchObject({
+      destinationServiceName: ServiceNames.GarminAPI,
+      status: 'failure',
+      routeCount: 2,
+      successCount: 0,
+      failureCount: 2,
+      skippedCount: 0,
+    });
+    expect(result.results).toEqual([
+      expect.objectContaining({
+        routeId: 'route-1',
+        reason: 'DESTINATION_AUTH_REQUIRED',
+        message: 'No connected Garmin account found.',
+      }),
+      expect.objectContaining({
+        routeId: 'route-2',
+        reason: 'DESTINATION_AUTH_REQUIRED',
+        message: 'No connected Garmin account found.',
+      }),
+    ]);
+  });
+
+  it('returns Garmin permission failures in-band when Course Import permission is missing', async () => {
+    const { GarminRouteSendPermissionRequiredError } = await import('../garmin/routes');
+    garminRouteMocks.createGarminRouteSendContext.mockRejectedValueOnce(
+      new GarminRouteSendPermissionRequiredError('Grant Garmin Course Import permission and reconnect before sending routes.'),
+    );
+
+    const result = await sendRoutesToService(createRequest({
+      routeIds: ['route-1'],
+      destinationServiceName: ServiceNames.GarminAPI,
+    }) as any);
+
+    expect(result).toMatchObject({
+      destinationServiceName: ServiceNames.GarminAPI,
+      status: 'failure',
+      routeCount: 1,
+      successCount: 0,
+      failureCount: 1,
+      skippedCount: 0,
+    });
+    expect(result.results).toEqual([
+      expect.objectContaining({
+        routeId: 'route-1',
+        reason: 'DESTINATION_PERMISSION_REQUIRED',
+        message: 'Grant Garmin Course Import permission and reconnect before sending routes.',
+      }),
+    ]);
+  });
+
+  it('retries Garmin delivery metadata persistence after a transient write failure and still returns success', async () => {
+    routeDocuments.set('users/user-1/routes/route-1', {
+      id: 'route-1',
+      userID: 'user-1',
+      srcFileType: 'gpx',
+      originalFiles: [{ path: 'users/user-1/routes/route-1/original.gpx', extension: 'gpx' }],
+      routes: [{ id: 'segment-1' }],
+    });
+    storagePayloads.set('users/user-1/routes/route-1/original.gpx', Buffer.from('<gpx></gpx>'));
+    routePersistenceMocks.setRouteDeliveryMetadata
+      .mockRejectedValueOnce(new Error('transient Firestore failure'))
+      .mockResolvedValue(undefined);
+
+    const result = await sendRoutesToService(createRequest({
+      routeIds: ['route-1'],
+      destinationServiceName: ServiceNames.GarminAPI,
+    }) as any);
+
+    expect(result).toMatchObject({
+      destinationServiceName: ServiceNames.GarminAPI,
+      status: 'success',
+      routeCount: 1,
+      successCount: 1,
+      failureCount: 0,
+      skippedCount: 0,
+    });
+    expect(routePersistenceMocks.setRouteDeliveryMetadata).toHaveBeenCalledTimes(2);
+  });
+
+  it('returns a Garmin send failure when delivery metadata cannot be saved after upload', async () => {
+    routeDocuments.set('users/user-1/routes/route-1', {
+      id: 'route-1',
+      userID: 'user-1',
+      srcFileType: 'gpx',
+      originalFiles: [{ path: 'users/user-1/routes/route-1/original.gpx', extension: 'gpx' }],
+      routes: [{ id: 'segment-1' }],
+    });
+    storagePayloads.set('users/user-1/routes/route-1/original.gpx', Buffer.from('<gpx></gpx>'));
+    routePersistenceMocks.setRouteDeliveryMetadata.mockRejectedValue(new Error('Firestore unavailable'));
+
+    const result = await sendRoutesToService(createRequest({
+      routeIds: ['route-1'],
+      destinationServiceName: ServiceNames.GarminAPI,
+    }) as any);
+
+    expect(garminRouteMocks.sendRouteToGarminConnect).toHaveBeenCalledTimes(1);
+    expect(routePersistenceMocks.setRouteDeliveryMetadata).toHaveBeenCalledTimes(3);
+    expect(result).toMatchObject({
+      destinationServiceName: ServiceNames.GarminAPI,
+      status: 'failure',
+      routeCount: 1,
+      successCount: 0,
+      failureCount: 1,
+      skippedCount: 0,
+    });
+    expect(result.results).toEqual([
+      expect.objectContaining({
+        routeId: 'route-1',
+        status: 'failure',
+        reason: 'DELIVERY_METADATA_PERSIST_FAILED',
+        message: GARMIN_DELIVERY_METADATA_PERSIST_FAILURE_MESSAGE,
+      }),
+    ]);
+  });
+
+  it('stops the current Garmin batch after delivery metadata persistence fails', async () => {
+    routeDocuments.set('users/user-1/routes/route-1', {
+      id: 'route-1',
+      userID: 'user-1',
+      srcFileType: 'gpx',
+      originalFiles: [{ path: 'users/user-1/routes/route-1/original.gpx', extension: 'gpx' }],
+      routes: [{ id: 'segment-1' }],
+    });
+    routeDocuments.set('users/user-1/routes/route-2', {
+      id: 'route-2',
+      userID: 'user-1',
+      srcFileType: 'gpx',
+      originalFiles: [{ path: 'users/user-1/routes/route-2/original.gpx', extension: 'gpx' }],
+      routes: [{ id: 'segment-2' }],
+    });
+    storagePayloads.set('users/user-1/routes/route-1/original.gpx', Buffer.from('<gpx></gpx>'));
+    routePersistenceMocks.setRouteDeliveryMetadata.mockRejectedValue(new Error('Firestore unavailable'));
+
+    const result = await sendRoutesToService(createRequest({
+      routeIds: ['route-1', 'route-2'],
+      destinationServiceName: ServiceNames.GarminAPI,
+    }) as any);
+
+    expect(garminRouteMocks.sendRouteToGarminConnect).toHaveBeenCalledTimes(1);
+    expect(result).toMatchObject({
+      destinationServiceName: ServiceNames.GarminAPI,
+      status: 'failure',
+      routeCount: 2,
+      successCount: 0,
+      failureCount: 2,
+      skippedCount: 0,
+    });
+    expect(result.results).toEqual([
+      expect.objectContaining({
+        routeId: 'route-1',
+        reason: 'DELIVERY_METADATA_PERSIST_FAILED',
+        message: GARMIN_DELIVERY_METADATA_PERSIST_FAILURE_MESSAGE,
+      }),
+      expect.objectContaining({
+        routeId: 'route-2',
+        reason: 'SEND_REQUEST_FAILED',
+        message: GARMIN_DELIVERY_METADATA_ABORT_MESSAGE,
+      }),
+    ]);
+  });
+
+  it('stops the current Garmin chunk after an in-band Course Import permission failure', async () => {
+    routeDocuments.set('users/user-1/routes/route-1', {
+      id: 'route-1',
+      userID: 'user-1',
+      srcFileType: 'gpx',
+      originalFiles: [{ path: 'users/user-1/routes/route-1/original.gpx', extension: 'gpx' }],
+      routes: [{ id: 'segment-1' }],
+    });
+    routeDocuments.set('users/user-1/routes/route-2', {
+      id: 'route-2',
+      userID: 'user-1',
+      srcFileType: 'gpx',
+      originalFiles: [{ path: 'users/user-1/routes/route-2/original.gpx', extension: 'gpx' }],
+      routes: [{ id: 'segment-1' }],
+    });
+    storagePayloads.set('users/user-1/routes/route-1/original.gpx', Buffer.from('<gpx></gpx>'));
+    storagePayloads.set('users/user-1/routes/route-2/original.gpx', Buffer.from('<gpx></gpx>'));
+
+    const { GarminRouteSendPermissionRequiredError } = await import('../garmin/routes');
+    garminRouteMocks.sendRouteToGarminConnect
+      .mockRejectedValueOnce(new GarminRouteSendPermissionRequiredError(
+        'Grant Garmin Course Import permission and reconnect before sending routes.',
+      ));
+
+    const result = await sendRoutesToService(createRequest({
+      routeIds: ['route-1', 'route-2'],
+      destinationServiceName: ServiceNames.GarminAPI,
+    }) as any);
+
+    expect(garminRouteMocks.sendRouteToGarminConnect).toHaveBeenCalledTimes(1);
+    expect(result).toMatchObject({
+      destinationServiceName: ServiceNames.GarminAPI,
+      status: 'failure',
+      routeCount: 2,
+      successCount: 0,
+      failureCount: 2,
+      skippedCount: 0,
+    });
+    expect(result.results).toEqual([
+      expect.objectContaining({
+        routeId: 'route-1',
+        reason: 'DESTINATION_PERMISSION_REQUIRED',
+      }),
+      expect.objectContaining({
+        routeId: 'route-2',
+        reason: 'DESTINATION_PERMISSION_REQUIRED',
+      }),
+    ]);
   });
 
   it('rejects when the account deletion guard is active', async () => {
@@ -642,6 +909,57 @@ describe('sendRoutesToService', () => {
         providerUserId: 'suunto-user-2',
         providerRouteId: 'suunto-route-2',
       }),
+    });
+  });
+
+  it('sends saved routes to Garmin Connect and persists provider-scoped delivery metadata', async () => {
+    routeDocuments.set('users/user-1/routes/route-1', {
+      id: 'route-1',
+      userID: 'user-1',
+      name: 'Garmin Ready Route',
+      srcFileType: 'gpx',
+      originalFiles: [{ path: 'users/user-1/routes/route-1/original.gpx', extension: 'gpx' }],
+      routes: [{ id: 'segment-1' }],
+    });
+    storagePayloads.set('users/user-1/routes/route-1/original.gpx', Buffer.from('<gpx></gpx>'));
+
+    const result = await sendRoutesToService(createRequest({
+      routeIds: ['route-1'],
+      destinationServiceName: ServiceNames.GarminAPI,
+    }) as any);
+
+    expect(garminRouteMocks.createGarminRouteSendContext).toHaveBeenCalledWith('user-1');
+    expect(garminRouteMocks.sendRouteToGarminConnect).toHaveBeenCalledWith(
+      'user-1',
+      'route-1',
+      expect.objectContaining({ id: 'route-1', name: 'Garmin Ready Route' }),
+      expect.objectContaining({ name: 'Garmin Ready Route' }),
+      expect.objectContaining({ preferredProviderUserId: 'garmin-user-1' }),
+    );
+    expect(routePersistenceMocks.setRouteDeliveryMetadata).toHaveBeenCalledWith({
+      userID: 'user-1',
+      routeID: 'route-1',
+      deliveryMetadata: expect.objectContaining({
+        serviceName: ServiceNames.GarminAPI,
+        providerUserId: 'garmin-user-1',
+        status: 'success',
+        providerRouteId: 'garmin-course-1',
+      }),
+    });
+    expect(result).toMatchObject({
+      destinationServiceName: ServiceNames.GarminAPI,
+      status: 'success',
+      routeCount: 1,
+      successCount: 1,
+      failureCount: 0,
+      skippedCount: 0,
+      results: [
+        expect.objectContaining({
+          routeId: 'route-1',
+          status: 'success',
+          providerRouteId: 'garmin-course-1',
+        }),
+      ],
     });
   });
 

@@ -150,7 +150,7 @@ describe('ServicesComponent', () => {
         expect(desktopNav).toBeTruthy();
         expect(desktopNav.querySelector('mat-nav-list')).toBeTruthy();
         expect(navLabels).toEqual(['Suunto', 'Garmin', 'COROS']);
-        expect(navDescriptions).toEqual(['Suunto App', 'Garmin Connect', 'COROS account']);
+        expect(navDescriptions).toEqual(['Suunto App', 'Garmin Connect', 'COROS']);
     });
 
     it('keeps service panels mounted and hides inactive panels during tab switches', () => {

@@ -1,6 +1,6 @@
 import { AfterViewInit, Component, ElementRef, Inject, ViewChild } from '@angular/core';
 import { MAT_BOTTOM_SHEET_DATA, MatBottomSheetRef } from '@angular/material/bottom-sheet';
-import { EventInterface, ActivityInterface, UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
+import { EventInterface, ActivityInterface, User, UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
 
 @Component({
     selector: 'app-event-stats-bottom-sheet',
@@ -17,6 +17,7 @@ export class EventStatsBottomSheetComponent implements AfterViewInit {
     constructor(
         @Inject(MAT_BOTTOM_SHEET_DATA) public data: {
             event: EventInterface,
+            user?: User | null,
             selectedActivities: ActivityInterface[],
             userUnitSettings: UserUnitSettingsInterface
         },
