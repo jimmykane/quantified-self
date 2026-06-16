@@ -94,6 +94,14 @@ describe('ServicesSuuntoComponent', () => {
         expect(component).toBeTruthy();
     });
 
+    it('renders a direct privacy link to the Suunto policy section', () => {
+        const privacyLink = fixture.nativeElement.querySelector('.service-privacy-link a');
+
+        expect(privacyLink).toBeTruthy();
+        expect(privacyLink.textContent).toContain('Privacy details for Suunto imports');
+        expect(privacyLink.getAttribute('href')).toContain('/policies#suunto-data');
+    });
+
     it('should show syncing state when forceConnected is true but tokens are not yet loaded', () => {
         component.forceConnected = true;
         component.serviceTokens = undefined;

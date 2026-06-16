@@ -10,6 +10,112 @@ export interface PolicyItem {
     isOptional?: boolean;
 }
 
+export const POLICIES_CONNECTED_SERVICES_FRAGMENT = 'connected-services-data';
+export const POLICIES_GARMIN_DATA_FRAGMENT = 'garmin-data';
+export const POLICIES_SUUNTO_DATA_FRAGMENT = 'suunto-data';
+export const POLICIES_COROS_DATA_FRAGMENT = 'coros-data';
+export const POLICIES_AI_AND_PROCESSORS_FRAGMENT = 'ai-and-third-party-processing';
+
+export type PolicyFragmentId =
+    | typeof POLICIES_CONNECTED_SERVICES_FRAGMENT
+    | typeof POLICIES_GARMIN_DATA_FRAGMENT
+    | typeof POLICIES_SUUNTO_DATA_FRAGMENT
+    | typeof POLICIES_COROS_DATA_FRAGMENT
+    | typeof POLICIES_AI_AND_PROCESSORS_FRAGMENT;
+
+export interface ConnectedServicesPolicyAnchor {
+    id: PolicyFragmentId;
+    label: string;
+    icon: string;
+}
+
+export interface ConnectedServicesPolicyTopic {
+    id: Exclude<PolicyFragmentId, typeof POLICIES_CONNECTED_SERVICES_FRAGMENT>;
+    title: string;
+    icon: string;
+    summary: string;
+    content: string[];
+}
+
+export interface ConnectedServicesPolicySection {
+    id: typeof POLICIES_CONNECTED_SERVICES_FRAGMENT;
+    title: string;
+    summary: string;
+    content: string[];
+    navLinks: ConnectedServicesPolicyAnchor[];
+    topics: ConnectedServicesPolicyTopic[];
+}
+
+export const CONNECTED_SERVICES_POLICY_SECTION: ConnectedServicesPolicySection = {
+    id: POLICIES_CONNECTED_SERVICES_FRAGMENT,
+    title: 'Connected Services, AI & Third-Party Processing',
+    summary: 'Provider-specific disclosures for Garmin, Suunto, COROS, AI Insights, infrastructure, payments, and analytics.',
+    content: [
+        '<strong>What this section covers:</strong> This page explains what connected-service data Quantified Self collects, how it is used inside the product, what may be stored for exports, reprocessing, and sync tools, and which third parties process that data.',
+        '<strong>Storage location:</strong> Imported provider data, saved route metadata, source-file references, and related processing metadata are stored in Quantified Self infrastructure on Google Cloud in the EU region.',
+        '<strong>User-initiated sharing:</strong> When you explicitly use provider features such as history import, FIT/GPX uploads, Suunto route delivery, or Garmin/COROS to Suunto sync, Quantified Self must transmit the relevant activity, route, or metadata payload to the destination provider so that workflow can complete.',
+        '<strong>AI scope:</strong> Connected-service data is not forwarded wholesale to AI providers. AI Insights uses only the minimum derived stats needed to answer the prompt you submit, and does not send your raw activities, raw routes, or uploaded source files to the AI provider.',
+    ],
+    navLinks: [
+        { id: POLICIES_CONNECTED_SERVICES_FRAGMENT, label: 'Overview', icon: 'hub' },
+        { id: POLICIES_GARMIN_DATA_FRAGMENT, label: 'Garmin', icon: 'sync_alt' },
+        { id: POLICIES_SUUNTO_DATA_FRAGMENT, label: 'Suunto', icon: 'published_with_changes' },
+        { id: POLICIES_COROS_DATA_FRAGMENT, label: 'COROS', icon: 'sync' },
+        { id: POLICIES_AI_AND_PROCESSORS_FRAGMENT, label: 'AI & Processors', icon: 'shield' },
+    ],
+    topics: [
+        {
+            id: POLICIES_GARMIN_DATA_FRAGMENT,
+            title: 'Garmin Data',
+            icon: 'sync_alt',
+            summary: 'Garmin activity, sleep, and Garmin to Suunto sync workflows.',
+            content: [
+                '<strong>Collected from Garmin:</strong> When you connect Garmin, Quantified Self can import Garmin activities, request Garmin history imports, request Garmin sleep history, and receive Garmin health/sleep updates when Garmin permissions allow it.',
+                '<strong>Stored and used in Quantified Self:</strong> Imported Garmin data is used to build your dashboard, event analysis, sleep views, and related summaries. When the workflow requires it, Quantified Self may retain original activity files or equivalent source-file metadata so downloads, exports, reprocessing, and manual catch-up can work later.',
+                '<strong>Shared with Suunto from Garmin:</strong> If you enable Garmin to Suunto auto-sync or manual catch-up, Quantified Self uses the stored original activity file already attached to the Quantified Self event to deliver that activity to Suunto. That workflow therefore involves both Garmin-originated data and Suunto as a destination processor.',
+            ],
+        },
+        {
+            id: POLICIES_SUUNTO_DATA_FRAGMENT,
+            title: 'Suunto Data',
+            icon: 'published_with_changes',
+            summary: 'Suunto activity, sleep, route-import, FIT upload, and route-delivery workflows.',
+            content: [
+                '<strong>Collected from Suunto:</strong> When you connect Suunto, Quantified Self can import Suunto activities, request Suunto history imports, sync recent sleep data, request sleep backfill, and automatically import new or updated Suunto routes into your saved Routes list.',
+                '<strong>Stored and used in Quantified Self:</strong> Imported Suunto data is used for event analysis, route detail views, dashboard summaries, sleep views, and saved route management. Connection metadata and processing metadata are also stored so reconnect, dedupe, and refresh workflows can work reliably.',
+                '<strong>Shared back to Suunto:</strong> When you upload FIT activities to Suunto or send a saved Quantified Self route to Suunto, Quantified Self transmits the file or generated GPX route payload needed for that upload. Saved route sends reparse the original saved route source file, generate a normalized GPX payload, and use the saved Quantified Self route name for the outbound route name.',
+                '<strong>Account-scope note:</strong> Routes imported from one Suunto account are blocked from being sent back to that same account, but can still be sent to a different connected Suunto account when that workflow is available to you.',
+            ],
+        },
+        {
+            id: POLICIES_COROS_DATA_FRAGMENT,
+            title: 'COROS Data',
+            icon: 'sync',
+            summary: 'COROS activity, sleep-summary, FIT upload, and COROS to Suunto sync workflows.',
+            content: [
+                '<strong>Collected from COROS:</strong> When you connect COROS, Quantified Self can import recent COROS history, sync recent COROS sleep summaries, and import activities for event analysis and dashboard use.',
+                '<strong>Stored and used in Quantified Self:</strong> Imported COROS activities and summaries are used for dashboard metrics, event analysis, and provider-specific history tooling. Quantified Self may retain original activity files or equivalent source-file metadata when later downloads, exports, reprocessing, or sync tools depend on them.',
+                '<strong>Shared back to COROS:</strong> When you use the COROS FIT upload workflow, Quantified Self sends the selected FIT payload to COROS so the upload can complete.',
+                '<strong>Shared with Suunto from COROS:</strong> If you enable COROS to Suunto auto-sync or manual catch-up, Quantified Self uses the stored original activity file already attached to the imported Quantified Self event to transmit that activity to Suunto. That workflow therefore involves both COROS-originated data and Suunto as a destination processor.',
+            ],
+        },
+        {
+            id: POLICIES_AI_AND_PROCESSORS_FRAGMENT,
+            title: 'AI & Third-Party Processing',
+            icon: 'shield',
+            summary: 'Infrastructure, billing, analytics, maps, and the current AI provider.',
+            content: [
+                '<strong>Google Cloud:</strong> Quantified Self stores application data, connected-service metadata, and processing state on Google Cloud in the EU region.',
+                '<strong>Stripe:</strong> Stripe processes subscription and billing data needed to charge, renew, and manage your plan.',
+                '<strong>Google Analytics:</strong> If you consent to analytics cookies, Google Analytics receives anonymized usage analytics used to improve the service. Analytics is optional and can be withdrawn in Settings.',
+                '<strong>Mapbox:</strong> When you use location-based AI Insights queries, Mapbox is used to resolve places and geographic scope for those prompts.',
+                '<strong>Google GenAI / Gemini:</strong> AI Insights currently uses Google\'s Gemini models through Google GenAI. Quantified Self sends only the minimum derived statistics needed to answer the prompt you explicitly submit. Raw activities, raw routes, uploaded FIT/GPX/TCX/JSON/SML files, and saved route source files are not sent to the AI provider.',
+                '<strong>No hidden provider forwarding:</strong> Connected Garmin, Suunto, and COROS data is only sent to destination providers when you explicitly use the related import, upload, delivery, or sync feature.',
+            ],
+        },
+    ],
+};
+
 export const POLICY_CONTENT: PolicyItem[] = [
     {
         id: 'privacy',
@@ -22,7 +128,7 @@ export const POLICY_CONTENT: PolicyItem[] = [
             '<strong>Default Privacy:</strong> Visibility defaults to private and is only seen by your account unless platform policy changes.',
             '<strong>No Data Sales:</strong> We don\'t sell or send your data to any other 3rd party nor do we process your private data in any other way rather than allowing you to visualize them.',
             '<strong>Legal Basis:</strong> We process your data based on: (a) your consent for optional features like analytics, (b) contractual necessity to provide the service you subscribed to, and (c) our legitimate interest in maintaining service security.',
-            '<strong>Third-Party Processors:</strong> Your data is processed by: Google Cloud (hosting, EU region), Stripe (payments), and the fitness service providers you connect (Garmin, Suunto, COROS, Polar) solely to sync your activity, sleep, and related health data.'
+            '<strong>Third-Party Processors:</strong> Your data may be processed by Google Cloud (hosting and storage in the EU region), Stripe (payments), Google Analytics (only with consent), Mapbox (location resolution for AI queries), Google GenAI / Gemini (AI Insights using minimum derived stats only), and the connected fitness services you explicitly use. See <a href="#connected-services-data">Connected Services, AI &amp; Third-Party Processing</a> below for provider-specific details.'
         ],
         checkboxLabel: 'I have read and agree to the Privacy Policy and acknowledge my data ownership rights.',
         formControlName: 'acceptPrivacyPolicy'

@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { HELP_ACTIONS, HELP_SECTIONS, HelpSectionId } from './help.content';
 import { ROUTE_USAGE_LIMITS, USAGE_LIMITS } from '../../../shared/limits';
+import {
+  POLICIES_AI_AND_PROCESSORS_FRAGMENT,
+  POLICIES_CONNECTED_SERVICES_FRAGMENT,
+  POLICIES_COROS_DATA_FRAGMENT,
+  POLICIES_GARMIN_DATA_FRAGMENT,
+  POLICIES_SUUNTO_DATA_FRAGMENT,
+} from './policies.content';
 
 describe('help.content', () => {
   it('should expose the expected ordered section ids', () => {
@@ -303,6 +310,11 @@ describe('help.content', () => {
     expect(serviceConnectionsSection?.content).toContain('[Garmin Integration](/integrations/garmin)');
     expect(serviceConnectionsSection?.content).toContain('[COROS Integration](/integrations/coros)');
     expect(serviceConnectionsSection?.content).toContain('/integrations/suunto');
+    expect(serviceConnectionsSection?.content).toContain('[Policies -> Connected Services](/policies#connected-services-data)');
+    expect(serviceConnectionsSection?.content).toContain('[Policies -> Garmin Data](/policies#garmin-data)');
+    expect(serviceConnectionsSection?.content).toContain('[Policies -> Suunto Data](/policies#suunto-data)');
+    expect(serviceConnectionsSection?.content).toContain('[Policies -> COROS Data](/policies#coros-data)');
+    expect(serviceConnectionsSection?.content).toContain('[AI & Third-Party Processing](/policies#ai-and-third-party-processing)');
     expect(serviceConnectionsSection?.content).toContain('Suunto FIT activity uploads in Services show a per-file queue');
     expect(serviceConnectionsSection?.content).toContain('retry controls for failed files');
     expect(serviceConnectionsSection?.content).toContain('processed one file at a time with short pauses');
@@ -413,6 +425,78 @@ describe('help.content', () => {
       icon: 'sync',
       kind: 'route',
       target: '/integrations/coros',
+    });
+    expect(serviceConnectionsSection?.links).toContainEqual({
+      label: 'Connected Service Privacy',
+      icon: 'policy',
+      kind: 'route',
+      target: '/policies',
+      fragment: POLICIES_CONNECTED_SERVICES_FRAGMENT,
+    });
+    expect(serviceConnectionsSection?.links).toContainEqual({
+      label: 'Garmin Data Privacy',
+      icon: 'policy',
+      kind: 'route',
+      target: '/policies',
+      fragment: POLICIES_GARMIN_DATA_FRAGMENT,
+    });
+    expect(serviceConnectionsSection?.links).toContainEqual({
+      label: 'Suunto Data Privacy',
+      icon: 'policy',
+      kind: 'route',
+      target: '/policies',
+      fragment: POLICIES_SUUNTO_DATA_FRAGMENT,
+    });
+    expect(serviceConnectionsSection?.links).toContainEqual({
+      label: 'COROS Data Privacy',
+      icon: 'policy',
+      kind: 'route',
+      target: '/policies',
+      fragment: POLICIES_COROS_DATA_FRAGMENT,
+    });
+    expect(serviceConnectionsSection?.links).toContainEqual({
+      label: 'AI & Processors',
+      icon: 'shield',
+      kind: 'route',
+      target: '/policies',
+      fragment: POLICIES_AI_AND_PROCESSORS_FRAGMENT,
+    });
+  });
+
+  it('should expose provider-specific privacy links from the data-and-privacy section', () => {
+    const dataAndPrivacySection = HELP_SECTIONS.find(section => section.id === 'data-and-privacy');
+
+    expect(dataAndPrivacySection?.content).toContain('[Garmin Data](/policies#garmin-data)');
+    expect(dataAndPrivacySection?.content).toContain('[Suunto Data](/policies#suunto-data)');
+    expect(dataAndPrivacySection?.content).toContain('[COROS Data](/policies#coros-data)');
+    expect(dataAndPrivacySection?.content).toContain('[AI & Third-Party Processing](/policies#ai-and-third-party-processing)');
+    expect(dataAndPrivacySection?.links).toContainEqual({
+      label: 'Garmin Data Privacy',
+      icon: 'policy',
+      kind: 'route',
+      target: '/policies',
+      fragment: POLICIES_GARMIN_DATA_FRAGMENT,
+    });
+    expect(dataAndPrivacySection?.links).toContainEqual({
+      label: 'Suunto Data Privacy',
+      icon: 'policy',
+      kind: 'route',
+      target: '/policies',
+      fragment: POLICIES_SUUNTO_DATA_FRAGMENT,
+    });
+    expect(dataAndPrivacySection?.links).toContainEqual({
+      label: 'COROS Data Privacy',
+      icon: 'policy',
+      kind: 'route',
+      target: '/policies',
+      fragment: POLICIES_COROS_DATA_FRAGMENT,
+    });
+    expect(dataAndPrivacySection?.links).toContainEqual({
+      label: 'AI & Processors',
+      icon: 'shield',
+      kind: 'route',
+      target: '/policies',
+      fragment: POLICIES_AI_AND_PROCESSORS_FRAGMENT,
     });
   });
 });
