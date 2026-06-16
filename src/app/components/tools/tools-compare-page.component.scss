@@ -1044,6 +1044,20 @@ button.benchmark-summary-stack:disabled {
   width: 100%;
 }
 
+.comparison-table-row {
+  cursor: pointer;
+  transition: background-color 120ms ease;
+}
+
+.comparison-table-row:hover {
+  background: color-mix(in srgb, var(--mat-sys-primary, #1976d2) 8%, transparent);
+}
+
+.comparison-table-row:focus-visible {
+  outline: 2px solid var(--mat-sys-primary, #1976d2);
+  outline-offset: -2px;
+}
+
 mat-paginator {
   border: 1px solid var(--mat-sys-outline-variant);
   border-top: 0;

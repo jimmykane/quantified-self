@@ -822,7 +822,7 @@ describe('RoutesPageComponent', () => {
         expect(styles).toContain('font-weight: 500;');
     });
 
-    it('keeps route details in the row action menu instead of clickable table rows', () => {
+    it('keeps route details in the row action menu while also allowing guarded row activation', () => {
         const template = readFileSync(
             resolve(process.cwd(), 'src/app/components/routes/routes-page.component.html'),
             'utf8',
@@ -834,10 +834,14 @@ describe('RoutesPageComponent', () => {
 
         expect(template).toContain('class="route-table-row"');
         const rowDefinition = template.match(/<tr\s+mat-row[\s\S]*?class="route-table-row"[\s\S]*?\*matRowDef="let item; columns: routeColumns;"[\s\S]*?>/)?.[0] ?? '';
-        expect(rowDefinition).not.toContain('(click)="openRouteDetails(item)"');
-        expect(rowDefinition).not.toContain('(keydown.enter)="openRouteDetails(item)"');
-        expect(rowDefinition).not.toContain('(keydown.space)="$event.preventDefault(); openRouteDetails(item)"');
-        expect(rowDefinition).not.toContain('tabindex="0"');
+        expect(rowDefinition).toContain('(pointerdown)="onRouteRowPointerDown($event)"');
+        expect(rowDefinition).toContain('(pointermove)="onRouteRowPointerMove($event)"');
+        expect(rowDefinition).toContain('(pointerup)="onRouteRowPointerUp($event)"');
+        expect(rowDefinition).toContain('(pointercancel)="onRouteRowPointerCancel($event)"');
+        expect(rowDefinition).toContain('(click)="onRouteRowClick(item, $event)"');
+        expect(rowDefinition).toContain('(keydown.enter)="onRouteRowKeydown(item, $event)"');
+        expect(rowDefinition).toContain('(keydown.space)="onRouteRowKeydown(item, $event)"');
+        expect(rowDefinition).toContain('tabindex="0"');
         expect(template).toContain('matColumnDef="sourceService"');
         expect(template).toContain('class="route-source-service-cell"');
         expect(template).toContain('[presentation]="item.sourcePresentation"');
@@ -869,6 +873,8 @@ describe('RoutesPageComponent', () => {
         expect(template).toContain('<mat-icon>cloud_upload</mat-icon>');
         expect(template).toContain('<mat-icon>open_in_new</mat-icon>');
         expect(styles).toContain('.route-table-row');
+        expect(styles).toContain('cursor: pointer;');
+        expect(styles).toContain('.route-table-row:focus-visible');
         expect(styles).toContain('.route-selection-toolbar');
         expect(styles).toContain('.route-table .mat-column-name');
         expect(styles).toContain('width: 14rem;');
@@ -879,7 +885,6 @@ describe('RoutesPageComponent', () => {
         expect(styles).toContain('.route-original-file-cell');
         expect(styles).toContain('.route-table .mat-column-select');
         expect(template).not.toContain('class="route-provenance-item"');
-        expect(styles).not.toContain('cursor: pointer;');
     });
 
     it('uses the compare-style horizontal scroll shell for the routes table', () => {

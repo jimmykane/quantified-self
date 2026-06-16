@@ -1,5 +1,6 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { BreakpointObserver } from '@angular/cdk/layout';
+import { OverlayContainer } from '@angular/cdk/overlay';
 import { By } from '@angular/platform-browser';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { MatTooltip } from '@angular/material/tooltip';
@@ -189,6 +190,7 @@ describe('ToolsComparePageComponent', () => {
   let breakpointObserverMock: {
     observe: ReturnType<typeof vi.fn>;
   };
+  let overlayContainer: OverlayContainer;
 
   beforeEach(async () => {
     userSubject = new BehaviorSubject<User | null>(null);
@@ -338,6 +340,7 @@ describe('ToolsComparePageComponent', () => {
 
     fixture = TestBed.createComponent(ToolsComparePageComponent);
     component = fixture.componentInstance;
+    overlayContainer = TestBed.inject(OverlayContainer);
     fixture.detectChanges();
   });
 
@@ -2369,6 +2372,69 @@ describe('ToolsComparePageComponent', () => {
     expect(filesCell?.getAttribute('title')).toBe('Garmin Edge.fit\nSuunto Vertical.gpx');
   });
 
+  it('renders saved comparison row actions as a menu like routes', async () => {
+    component.authResolved.set(true);
+    component.firebaseSignedIn.set(true);
+    component.currentUser.set(new User('user-1'));
+    component.comparisons.set([
+      makeComparisonEvent('ready-comparison', {
+        title: 'Ready comparison',
+        benchmarkResults: { 'activity-1_activity-2': makeBenchmarkResult() },
+      }),
+      makeComparisonEvent('draft-comparison', {
+        title: 'Draft comparison',
+      }),
+    ]);
+    fixture.detectChanges();
+
+    const actionButtons = fixture.debugElement.queryAll(By.css('.row-actions button[aria-label="Comparison row actions"]'));
+    expect(actionButtons).toHaveLength(2);
+
+    actionButtons[0].nativeElement.click();
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    let overlayText = overlayContainer.getContainerElement().textContent || '';
+    expect(overlayText).toContain('Open details');
+    expect(overlayText).toContain('Open report');
+    expect(overlayText).toContain('Delete');
+    expect(overlayText).not.toContain('Run report');
+
+    actionButtons[1].nativeElement.click();
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    overlayText = overlayContainer.getContainerElement().textContent || '';
+    expect(overlayText).toContain('Open details');
+    expect(overlayText).toContain('Run report');
+    expect(overlayText).toContain('Delete');
+  });
+
+  it('wires saved comparison rows for guarded row activation', () => {
+    const template = readFileSync(
+      'src/app/components/tools/tools-compare-page.component.html',
+      'utf8',
+    );
+    const styles = readFileSync(
+      'src/app/components/tools/tools-compare-page.component.scss',
+      'utf8',
+    );
+
+    const rowDefinition = template.match(/<tr\s+mat-row[\s\S]*?class="comparison-table-row"[\s\S]*?\*matRowDef="let row; columns: displayedComparisonColumns;"[\s\S]*?>/)?.[0] ?? '';
+    expect(rowDefinition).toContain('(pointerdown)="onComparisonRowPointerDown($event)"');
+    expect(rowDefinition).toContain('(pointermove)="onComparisonRowPointerMove($event)"');
+    expect(rowDefinition).toContain('(pointerup)="onComparisonRowPointerUp($event)"');
+    expect(rowDefinition).toContain('(pointercancel)="onComparisonRowPointerCancel($event)"');
+    expect(rowDefinition).toContain('(click)="onComparisonRowClick(row, $event)"');
+    expect(rowDefinition).toContain('(keydown.enter)="onComparisonRowKeydown(row, $event)"');
+    expect(rowDefinition).toContain('(keydown.space)="onComparisonRowKeydown(row, $event)"');
+    expect(rowDefinition).toContain('tabindex="0"');
+    expect(styles).toContain('.comparison-table-row');
+    expect(styles).toContain('cursor: pointer;');
+    expect(styles).toContain('.comparison-table-row:hover');
+    expect(styles).toContain('.comparison-table-row:focus-visible');
+  });
+
   it('disables dense table tooltips in touch table mode without removing native titles', () => {
     component.authResolved.set(true);
     component.firebaseSignedIn.set(true);
@@ -2392,7 +2458,7 @@ describe('ToolsComparePageComponent', () => {
 
     const titleDebugElement = fixture.debugElement.query(By.css('.title-cell'));
     const titleTooltip = titleDebugElement.injector.get(MatTooltip);
-    const actionDebugElement = fixture.debugElement.query(By.css('.row-actions button[aria-label="Open comparison details"]'));
+    const actionDebugElement = fixture.debugElement.query(By.css('.row-actions button[aria-label="Comparison row actions"]'));
     const actionTooltip = actionDebugElement.injector.get(MatTooltip);
 
     expect(breakpointObserverMock.observe).toHaveBeenCalledWith(['(pointer: coarse)', '(hover: none)', AppBreakpoints.Handset]);

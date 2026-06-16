@@ -228,11 +228,17 @@
 }
 
 .route-table-row {
+  cursor: pointer;
   transition: background-color 120ms ease;
 }
 
 .route-table-row:hover {
   background: color-mix(in srgb, var(--mat-sys-primary, #1976d2) 8%, transparent);
+}
+
+.route-table-row:focus-visible {
+  outline: 2px solid var(--mat-sys-primary, #1976d2);
+  outline-offset: -2px;
 }
 
 .route-header-label {

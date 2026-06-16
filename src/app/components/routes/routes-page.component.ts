@@ -40,6 +40,16 @@ import {
     getRouteSourceSummary,
     getRouteSyncedDestinationSummaries,
 } from '../../helpers/route-provenance.helper';
+import {
+    beginTableRowPointerTracking,
+    cancelTableRowPointerTracking,
+    createTableRowActivationState,
+    endTableRowPointerTracking,
+    shouldActivateTableRowFromClick,
+    shouldActivateTableRowFromKeyboard,
+    TableRowActivationState,
+    updateTableRowPointerTracking,
+} from '../../helpers/table-row-activation.helper';
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { ConfirmationDialogComponent, ConfirmationDialogData } from '../confirmation-dialog/confirmation-dialog.component';
 import { SharedModule } from '../../modules/shared.module';
@@ -204,6 +214,7 @@ export class RoutesPageComponent implements OnInit {
     });
     private readonly loadedRouteViewModels = signal<RoutePageRouteViewModel[]>([]);
     private readonly visibleRouteViewModels = signal<RoutePageRouteViewModel[]>([]);
+    private readonly routeRowActivationState: TableRowActivationState = createTableRowActivationState();
 
     readonly user = signal<AppUserInterface | null>(null);
     readonly deletingRouteID = signal<string | null>(null);
@@ -644,6 +655,41 @@ export class RoutesPageComponent implements OnInit {
             fileType: this.getPrimaryRouteFileType(item.route),
         });
         void this.router.navigate(['/user', userID, 'route', routeID]);
+    }
+
+    onRouteRowPointerDown(event: PointerEvent): void {
+        beginTableRowPointerTracking(this.routeRowActivationState, event);
+    }
+
+    onRouteRowPointerMove(event: PointerEvent): void {
+        updateTableRowPointerTracking(this.routeRowActivationState, event);
+    }
+
+    onRouteRowPointerUp(event: PointerEvent): void {
+        endTableRowPointerTracking(this.routeRowActivationState, event);
+    }
+
+    onRouteRowPointerCancel(event: PointerEvent): void {
+        cancelTableRowPointerTracking(this.routeRowActivationState, event);
+    }
+
+    onRouteRowClick(item: RoutePageRouteViewModel, event: MouseEvent): void {
+        if (!shouldActivateTableRowFromClick(this.routeRowActivationState, event)) {
+            return;
+        }
+
+        this.openRouteDetails(item);
+    }
+
+    onRouteRowKeydown(item: RoutePageRouteViewModel, event: KeyboardEvent): void {
+        if (!shouldActivateTableRowFromKeyboard(event)) {
+            return;
+        }
+
+        if (event.key === ' ') {
+            event.preventDefault();
+        }
+        this.openRouteDetails(item);
     }
 
     async confirmDeleteRoute(route: FirestoreRouteJSON): Promise<void> {

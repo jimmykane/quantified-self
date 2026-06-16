@@ -455,7 +455,15 @@
         <tr
           mat-row
           class="route-table-row"
-          *matRowDef="let item; columns: routeColumns;">
+          *matRowDef="let item; columns: routeColumns;"
+          tabindex="0"
+          (pointerdown)="onRouteRowPointerDown($event)"
+          (pointermove)="onRouteRowPointerMove($event)"
+          (pointerup)="onRouteRowPointerUp($event)"
+          (pointercancel)="onRouteRowPointerCancel($event)"
+          (click)="onRouteRowClick(item, $event)"
+          (keydown.enter)="onRouteRowKeydown(item, $event)"
+          (keydown.space)="onRouteRowKeydown(item, $event)">
         </tr>
       </table>
       </section>
