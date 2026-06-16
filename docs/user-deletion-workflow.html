@@ -208,10 +208,22 @@
                 <tbody>
                     <tr>
                         <td><strong>User Profile</strong></td>
-                        <td><code>users/{uid}</code><br><code>users/{uid}/events/*</code><br><code>users/{uid}/config/*</code>
+                        <td><code>users/{uid}</code><br><code>users/{uid}/config/*</code><br><code>users/{uid}/system/*</code>
                         </td>
                         <td>Extension</td>
-                        <td>Recursive deletion enabled</td>
+                        <td>Recursive deletion enabled for the entire user subtree</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Saved Events &amp; Activities</strong></td>
+                        <td><code>users/{uid}/events/*</code><br><code>users/{uid}/events/*/metaData/*</code><br><code>users/{uid}/activities/*</code><br>Storage: <code>users/{uid}/events/*</code></td>
+                        <td>Extension + <code>cleanupEventFile</code></td>
+                        <td>The extension removes the user subtree during account deletion; <code>cleanupEventFile</code> covers normal event deletes, linked flat activities, event metadata, and event-scoped original files</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Saved Routes</strong></td>
+                        <td><code>users/{uid}/routes/*</code><br><code>users/{uid}/routes/*/metaData/*</code><br>Storage: <code>users/{uid}/routes/*</code></td>
+                        <td>Extension + <code>cleanupRouteFiles</code></td>
+                        <td>The extension removes saved routes during account deletion; <code>cleanupRouteFiles</code> covers normal route deletes, route metadata, route-scoped original files, and route quota reconciliation while skipping Firestore-owned work when account deletion is already in progress</td>
                     </tr>
                     <tr>
                         <td><strong>Stripe Data</strong></td>
@@ -228,9 +240,9 @@
                     </tr>
                     <tr>
                         <td><strong>Operational Queues</strong></td>
-                        <td><code>activitySyncQueue/*</code><br><code>sleepSyncQueue/*</code><br><code>suuntoAppWorkoutQueue/*</code><br><code>COROSAPIWorkoutQueue/*</code><br><code>garminAPIActivityQueue/*</code><br><code>failed_jobs/*</code></td>
+                        <td><code>activitySyncQueue/*</code><br><code>routeSyncQueue/*</code><br><code>sleepSyncQueue/*</code><br><code>suuntoAppWorkoutQueue/*</code><br><code>COROSAPIWorkoutQueue/*</code><br><code>garminAPIActivityQueue/*</code><br><code>failed_jobs/*</code><br><code>sportsLibReparseJobs/*</code><br><code>sportsLibRouteReparseJobs/*</code></td>
                         <td><code>cleanupUserAccounts</code></td>
-                        <td>Top-level queue docs are outside the extension paths, so cleanup queries by Firebase UID and known provider ids, writes short-lived cleanup tombstones, then recursively deletes queue roots</td>
+                        <td>Top-level queue docs are outside the extension paths, so cleanup queries by Firebase UID and known provider ids, writes short-lived cleanup tombstones, then recursively deletes queue roots, including route sync and route reparse jobs</td>
                     </tr>
                     <tr>
                         <td><strong>Email Logs</strong></td>
@@ -239,10 +251,10 @@
                         <td>Queries by UID and Email</td>
                     </tr>
                     <tr>
-                        <td><strong>Files</strong></td>
+                        <td><strong>Other Files</strong></td>
                         <td>Storage: <code>users/{uid}/*</code></td>
                         <td>Extension</td>
-                        <td>All user-uploaded content</td>
+                        <td>Catch-all storage cleanup for any remaining user-uploaded content under the user prefix</td>
                     </tr>
                     <tr>
                         <td><strong>Permissions</strong></td>
