@@ -11,6 +11,7 @@ import { v2beta3 } from '@google-cloud/tasks';
 import * as logger from 'firebase-functions/logger';
 import { config } from '../config';
 import { ServiceNames } from '@sports-alliance/sports-lib';
+import { randomUUID } from 'crypto';
 import {
     REPARSE_PROCESSING_HEAVY_TASK_RUNTIME_OPTIONS,
     REPARSE_PROCESSING_TASK_RUNTIME_OPTIONS,
@@ -33,6 +34,32 @@ function getCloudTasksClient(): v2beta3.CloudTasksClient {
         _cloudTasksClient = new v2beta3.CloudTasksClient();
     }
     return _cloudTasksClient;
+}
+
+function sanitizeTaskNamePart(value: string): string {
+    return value.replace(/[^a-zA-Z0-9-_]/g, '-');
+}
+
+function isCloudTaskNotFoundError(error: unknown): boolean {
+    const code = (error as { code?: unknown })?.code;
+    const message = `${(error as { message?: unknown })?.message || ''}`;
+    return code === 5
+        || code === 'not-found'
+        || code === 'NOT_FOUND'
+        || message.includes('NOT_FOUND')
+        || message.includes('not found');
+}
+
+async function cloudTaskExists(taskName: string): Promise<boolean> {
+    try {
+        await getCloudTasksClient().getTask({ name: taskName });
+        return true;
+    } catch (error) {
+        if (isCloudTaskNotFoundError(error)) {
+            return false;
+        }
+        throw error;
+    }
 }
 
 // Cache for queue depth to reduce API calls
@@ -114,9 +141,7 @@ export async function enqueueWorkoutTask(
     const url = `https://${location}-${projectId}.cloudfunctions.net/processWorkoutTask`;
     const parent = client.queuePath(projectId, location, workoutQueue);
 
-    // Deterministic task name for deduplication
-    // Sanitize serviceName to allow only letters, numbers, hyphens, or underscores
-    const sanitizedServiceName = serviceName.replace(/[^a-zA-Z0-9-_]/g, '-');
+    const sanitizedServiceName = sanitizeTaskNamePart(serviceName);
 
     // Use dateCreated to ensure uniqueness for re-created items (race condition fix)
     // while preserving deduplication for retries of the SAME item.
@@ -124,7 +149,7 @@ export async function enqueueWorkoutTask(
 
     const payload = { data: { queueItemId, serviceName } };
 
-    return enqueueTaskWithRetry({
+    const taskCreated = await enqueueTaskWithRetry({
         parent,
         taskName,
         payload,
@@ -134,6 +159,31 @@ export async function enqueueWorkoutTask(
         alreadyExistsLogMessage: `[Dispatcher] Task already exists for ${serviceName}:${queueItemId}, skipping`,
         failedLogPrefix: `[Dispatcher] Failed to enqueue task for ${serviceName}:${queueItemId}:`,
     });
+    if (taskCreated) {
+        return true;
+    }
+
+    if (await cloudTaskExists(taskName)) {
+        logger.info(`[Dispatcher] Existing task is still live for ${serviceName}:${queueItemId}; treating workout queue item as dispatched.`);
+        return true;
+    }
+
+    const recoveryTaskName = `${taskName}-dedupe-recovery-${Date.now()}-${randomUUID()}`;
+    logger.warn(`[Dispatcher] Task name for ${serviceName}:${queueItemId} is reserved but no live task was found; enqueueing recovery task.`);
+    const recoveryTaskCreated = await enqueueTaskWithRetry({
+        parent,
+        taskName: recoveryTaskName,
+        payload,
+        serviceAccountEmail,
+        url,
+        scheduleDelaySeconds,
+        alreadyExistsLogMessage: `[Dispatcher] Recovery task already exists for ${serviceName}:${queueItemId}, skipping`,
+        failedLogPrefix: `[Dispatcher] Failed to enqueue recovery task for ${serviceName}:${queueItemId}:`,
+    });
+    if (!recoveryTaskCreated) {
+        throw new Error(`[Dispatcher] Recovery task name unexpectedly already exists for ${serviceName}:${queueItemId}.`);
+    }
+    return true;
 }
 
 /**
