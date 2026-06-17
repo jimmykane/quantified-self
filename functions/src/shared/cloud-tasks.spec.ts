@@ -319,18 +319,20 @@ describe('Cloud Tasks Utils', () => {
                 .mockResolvedValueOnce([{ name: 'recovery-task-name' }]);
             mockCloudTasksClient.getTask.mockRejectedValueOnce(notFoundError);
 
-            const result = await enqueueWorkoutTask(ServiceNames.SuuntoApp, 'item-123', 1000);
+            const result = await enqueueWorkoutTask(ServiceNames.SuuntoApp, 'item-123', 1000, undefined, {
+                recoveryTaskKey: 7,
+            });
 
             expect(result).toBe(true);
             expect(mockCloudTasksClient.createTask).toHaveBeenCalledTimes(2);
             const firstTaskName = mockCloudTasksClient.createTask.mock.calls[0][0].task.name;
             const recoveryTaskName = mockCloudTasksClient.createTask.mock.calls[1][0].task.name;
             expect(firstTaskName).toBe('projects/p/locations/l/queues/q/tasks/suuntoApp-item-123-1000');
-            expect(recoveryTaskName).toContain('projects/p/locations/l/queues/q/tasks/suuntoApp-item-123-1000-dedupe-recovery-');
+            expect(recoveryTaskName).toBe('projects/p/locations/l/queues/q/tasks/suuntoApp-item-123-1000-dedupe-recovery-7');
             expect(recoveryTaskName).not.toBe(firstTaskName);
         });
 
-        it('should throw if the workout recovery task name unexpectedly already exists', async () => {
+        it('should treat ALREADY_EXISTS recovery as enqueued when the deterministic recovery task is still live', async () => {
             const { enqueueWorkoutTask } = await import('./cloud-tasks');
             const { ServiceNames } = await import('@sports-alliance/sports-lib');
 
@@ -339,11 +341,44 @@ describe('Cloud Tasks Utils', () => {
             const notFoundError = new Error('NOT_FOUND');
             (notFoundError as Error & { code: number }).code = 5;
             mockCloudTasksClient.createTask.mockRejectedValue(alreadyExistsError);
-            mockCloudTasksClient.getTask.mockRejectedValueOnce(notFoundError);
+            mockCloudTasksClient.getTask
+                .mockRejectedValueOnce(notFoundError)
+                .mockResolvedValueOnce([{ name: 'projects/p/locations/l/queues/q/tasks/suuntoApp-item-123-1000-dedupe-recovery-7' }]);
 
-            await expect(enqueueWorkoutTask(ServiceNames.SuuntoApp, 'item-123', 1000))
-                .rejects.toThrow('Recovery task name unexpectedly already exists');
+            const result = await enqueueWorkoutTask(ServiceNames.SuuntoApp, 'item-123', 1000, undefined, {
+                recoveryTaskKey: 7,
+            });
+
+            expect(result).toBe(true);
             expect(mockCloudTasksClient.createTask).toHaveBeenCalledTimes(2);
+            expect(mockCloudTasksClient.getTask).toHaveBeenNthCalledWith(1, {
+                name: 'projects/p/locations/l/queues/q/tasks/suuntoApp-item-123-1000',
+            });
+            expect(mockCloudTasksClient.getTask).toHaveBeenNthCalledWith(2, {
+                name: 'projects/p/locations/l/queues/q/tasks/suuntoApp-item-123-1000-dedupe-recovery-7',
+            });
+        });
+
+        it('should leave the dispatch marker untouched when original and recovery task names are reserved but not live', async () => {
+            const { enqueueWorkoutTask } = await import('./cloud-tasks');
+            const { ServiceNames } = await import('@sports-alliance/sports-lib');
+
+            const alreadyExistsError = new Error('Already Exists');
+            (alreadyExistsError as Error & { code: number }).code = 6;
+            const notFoundError = new Error('NOT_FOUND');
+            (notFoundError as Error & { code: number }).code = 5;
+            mockCloudTasksClient.createTask.mockRejectedValue(alreadyExistsError);
+            mockCloudTasksClient.getTask
+                .mockRejectedValueOnce(notFoundError)
+                .mockRejectedValueOnce(notFoundError);
+
+            const result = await enqueueWorkoutTask(ServiceNames.SuuntoApp, 'item-123', 1000, undefined, {
+                recoveryTaskKey: 7,
+            });
+
+            expect(result).toBe(false);
+            expect(mockCloudTasksClient.createTask).toHaveBeenCalledTimes(2);
+            expect(mockCloudTasksClient.getTask).toHaveBeenCalledTimes(2);
         });
 
         it('should rethrow non-6 errors', async () => {

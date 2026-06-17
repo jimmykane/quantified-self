@@ -264,7 +264,9 @@ export async function dispatchQueueItemTasks(serviceName: ServiceNames) {
     }
 
     try {
-      const wasTaskEnqueued = await enqueueWorkoutTask(serviceName, doc.id, data.dateCreated, delay);
+      const wasTaskEnqueued = await enqueueWorkoutTask(serviceName, doc.id, data.dateCreated, delay, {
+        recoveryTaskKey: workoutQueueRecoveryTaskKey(data),
+      });
       if (!wasTaskEnqueued) {
         logger.info(`Task not enqueued for ${serviceName} queue item ${doc.id}; leaving dispatch marker unchanged.`);
         return false;
@@ -722,6 +724,16 @@ function isFirestoreNotFoundError(error: unknown): boolean {
   return code === 5 || code === 'not-found' || code === 'NOT_FOUND' || message.includes('NOT_FOUND') || message.includes('No document to update');
 }
 
+function workoutQueueRecoveryTaskKey(queueItem: { totalRetryCount?: unknown, retryCount?: unknown } | null | undefined): number {
+  if (typeof queueItem?.totalRetryCount === 'number') {
+    return queueItem.totalRetryCount;
+  }
+  if (typeof queueItem?.retryCount === 'number') {
+    return queueItem.retryCount;
+  }
+  return 0;
+}
+
 async function wasQueueItemMovedToFailedJobs(
   queueItemId: string,
   serviceName: ServiceNames,
@@ -891,7 +903,7 @@ async function addToWorkoutQueue(queueItem: SuuntoAppWorkoutQueueItemInterface |
     } catch (error) {
       if (isFirestoreAlreadyExistsError(error)) {
         const existingSnapshot = await queueItemDocument.get();
-        const existingQueueItem = existingSnapshot.data() as ({ dateCreated?: number, processed?: boolean } | undefined);
+        const existingQueueItem = existingSnapshot.data() as ({ dateCreated?: number, processed?: boolean, retryCount?: number, totalRetryCount?: number } | undefined);
         if (existingQueueItem?.processed === true) {
           logger.info(`Queue item ${queueItem.id} already processed for ${serviceName}; skipping duplicate enqueue.`);
           return queueItemDocument;
@@ -924,7 +936,9 @@ async function addToWorkoutQueue(queueItem: SuuntoAppWorkoutQueueItemInterface |
           }
         }
 
-        const wasDuplicateTaskEnqueued = await enqueueWorkoutTask(serviceName, queueItem.id, dateCreated);
+        const wasDuplicateTaskEnqueued = await enqueueWorkoutTask(serviceName, queueItem.id, dateCreated, undefined, {
+          recoveryTaskKey: workoutQueueRecoveryTaskKey(existingQueueItem || queueItem),
+        });
         if (wasDuplicateTaskEnqueued) {
           const didMarkDuplicateDispatched = await markWorkoutQueueItemDispatched(
             queueItemDocument,
@@ -955,7 +969,9 @@ async function addToWorkoutQueue(queueItem: SuuntoAppWorkoutQueueItemInterface |
 
   if (!deferDispatch) {
     // Dispatch a Cloud Task for immediate processing
-    const wasTaskEnqueued = await enqueueWorkoutTask(serviceName, queueItem.id, queueItem.dateCreated);
+    const wasTaskEnqueued = await enqueueWorkoutTask(serviceName, queueItem.id, queueItem.dateCreated, undefined, {
+      recoveryTaskKey: workoutQueueRecoveryTaskKey(queueItem),
+    });
     if (wasTaskEnqueued) {
       const didMarkDispatched = await markWorkoutQueueItemDispatched(
         queueItemDocument,

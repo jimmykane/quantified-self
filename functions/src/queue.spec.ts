@@ -597,8 +597,8 @@ describe('queue', () => {
 
             // Verify enqueue called for both
             expect(utils.enqueueWorkoutTask).toHaveBeenCalledTimes(2);
-            expect(utils.enqueueWorkoutTask).toHaveBeenCalledWith(ServiceNames.GarminAPI, 'doc1', expect.any(Number), expect.any(Number));
-            expect(utils.enqueueWorkoutTask).toHaveBeenCalledWith(ServiceNames.GarminAPI, 'doc2', expect.any(Number), expect.any(Number));
+            expect(utils.enqueueWorkoutTask).toHaveBeenCalledWith(ServiceNames.GarminAPI, 'doc1', expect.any(Number), expect.any(Number), { recoveryTaskKey: 0 });
+            expect(utils.enqueueWorkoutTask).toHaveBeenCalledWith(ServiceNames.GarminAPI, 'doc2', expect.any(Number), expect.any(Number), { recoveryTaskKey: 0 });
 
             // Verify dispatchedToCloudTask update
             expect(mockDoc1.ref.update).toHaveBeenCalledWith({ dispatchedToCloudTask: expect.any(Number) });
@@ -632,9 +632,9 @@ describe('queue', () => {
             expect(utils.getCloudTaskQueueDepth).toHaveBeenCalledWith(true);
             // Expected spread: Total 1800s. Size 3. Delay per item = 600s.
             // Items: 0, 600, 1200
-            expect(utils.enqueueWorkoutTask).toHaveBeenNthCalledWith(1, ServiceNames.GarminAPI, '1', expect.any(Number), 0);
-            expect(utils.enqueueWorkoutTask).toHaveBeenNthCalledWith(2, ServiceNames.GarminAPI, '2', expect.any(Number), delayPerItem);
-            expect(utils.enqueueWorkoutTask).toHaveBeenNthCalledWith(3, ServiceNames.GarminAPI, '3', expect.any(Number), delayPerItem * 2);
+            expect(utils.enqueueWorkoutTask).toHaveBeenNthCalledWith(1, ServiceNames.GarminAPI, '1', expect.any(Number), 0, { recoveryTaskKey: 0 });
+            expect(utils.enqueueWorkoutTask).toHaveBeenNthCalledWith(2, ServiceNames.GarminAPI, '2', expect.any(Number), delayPerItem, { recoveryTaskKey: 0 });
+            expect(utils.enqueueWorkoutTask).toHaveBeenNthCalledWith(3, ServiceNames.GarminAPI, '3', expect.any(Number), delayPerItem * 2, { recoveryTaskKey: 0 });
         });
 
         it('should delete user-owned queue docs instead of dispatching when account deletion is active', async () => {
@@ -843,7 +843,7 @@ describe('queue', () => {
             await dispatchQueueItemTasks(ServiceNames.SuuntoApp);
 
             expect(utils.enqueueWorkoutTask).toHaveBeenCalledTimes(1);
-            expect(utils.enqueueWorkoutTask).toHaveBeenCalledWith(ServiceNames.SuuntoApp, 'healthy-doc', expect.any(Number), expect.any(Number));
+            expect(utils.enqueueWorkoutTask).toHaveBeenCalledWith(ServiceNames.SuuntoApp, 'healthy-doc', expect.any(Number), expect.any(Number), { recoveryTaskKey: 0 });
             expect(updateGuardFailure).not.toHaveBeenCalled();
             expect(updateHealthy).toHaveBeenCalledWith({ dispatchedToCloudTask: expect.any(Number) });
         });
@@ -885,7 +885,7 @@ describe('queue', () => {
 
             await dispatchQueueItemTasks(ServiceNames.SuuntoApp);
 
-            expect(utils.enqueueWorkoutTask).toHaveBeenCalledWith(ServiceNames.SuuntoApp, 'raced-doc', expect.any(Number), 0);
+            expect(utils.enqueueWorkoutTask).toHaveBeenCalledWith(ServiceNames.SuuntoApp, 'raced-doc', expect.any(Number), 0, { recoveryTaskKey: 0 });
             expect(mockRecursiveDelete).toHaveBeenCalledWith(racedRef);
             expect(updateRaced).not.toHaveBeenCalled();
         });
@@ -920,7 +920,7 @@ describe('queue', () => {
 
             await dispatchQueueItemTasks(ServiceNames.SuuntoApp);
 
-            expect(utils.enqueueWorkoutTask).toHaveBeenCalledWith(ServiceNames.SuuntoApp, 'doc-moved-to-dlq', expect.any(Number), 0);
+            expect(utils.enqueueWorkoutTask).toHaveBeenCalledWith(ServiceNames.SuuntoApp, 'doc-moved-to-dlq', expect.any(Number), 0, { recoveryTaskKey: 0 });
             expect(mockDoc.ref.update).toHaveBeenCalledWith({ dispatchedToCloudTask: expect.any(Number) });
             expect(mockDocRef.get).toHaveBeenCalled();
         });
@@ -1226,7 +1226,7 @@ describe('queue', () => {
                 dispatchedToCloudTask: null
             }));
             expect(doc.set).not.toHaveBeenCalled();
-            expect(utils.enqueueWorkoutTask).toHaveBeenCalledWith(ServiceNames.SuuntoApp, 'user1-work1', expect.any(Number));
+            expect(utils.enqueueWorkoutTask).toHaveBeenCalledWith(ServiceNames.SuuntoApp, 'user1-work1', expect.any(Number), undefined, { recoveryTaskKey: 0 });
             expect(doc.update).toHaveBeenCalledWith({ dispatchedToCloudTask: expect.any(Number) });
         });
 
@@ -1352,7 +1352,7 @@ describe('queue', () => {
             const result = await addToQueueForSuunto({ userName: 'user1', workoutID: 'work1' });
 
             expect(result.id).toBe('mock-doc-id');
-            expect(utils.enqueueWorkoutTask).toHaveBeenCalledWith(ServiceNames.SuuntoApp, 'user1-work1', expect.any(Number));
+            expect(utils.enqueueWorkoutTask).toHaveBeenCalledWith(ServiceNames.SuuntoApp, 'user1-work1', expect.any(Number), undefined, { recoveryTaskKey: 0 });
             expect(mockDocRef.get).toHaveBeenCalled();
         });
 
@@ -1424,7 +1424,7 @@ describe('queue', () => {
                 workoutID: 'work1'
             }));
             expect(mockDocRef.set).not.toHaveBeenCalled();
-            expect(utils.enqueueWorkoutTask).toHaveBeenCalledWith(ServiceNames.SuuntoApp, 'user1-work1', 123456);
+            expect(utils.enqueueWorkoutTask).toHaveBeenCalledWith(ServiceNames.SuuntoApp, 'user1-work1', 123456, undefined, { recoveryTaskKey: 0 });
             expect(mockDocRef.update).toHaveBeenCalledWith({ dispatchedToCloudTask: expect.any(Number) });
         });
 
@@ -1447,7 +1447,7 @@ describe('queue', () => {
             const result = await addToQueueForSuunto({ userName: 'user1', workoutID: 'work1' });
 
             expect(result.id).toBe('mock-doc-id');
-            expect(utils.enqueueWorkoutTask).toHaveBeenCalledWith(ServiceNames.SuuntoApp, 'user1-work1', 123456);
+            expect(utils.enqueueWorkoutTask).toHaveBeenCalledWith(ServiceNames.SuuntoApp, 'user1-work1', 123456, undefined, { recoveryTaskKey: 0 });
             expect(mockDocRef.update).not.toHaveBeenCalledWith({ dispatchedToCloudTask: expect.any(Number) });
         });
 

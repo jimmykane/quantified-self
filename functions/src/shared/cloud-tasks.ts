@@ -11,7 +11,6 @@ import { v2beta3 } from '@google-cloud/tasks';
 import * as logger from 'firebase-functions/logger';
 import { config } from '../config';
 import { ServiceNames } from '@sports-alliance/sports-lib';
-import { randomUUID } from 'crypto';
 import {
     REPARSE_PROCESSING_HEAVY_TASK_RUNTIME_OPTIONS,
     REPARSE_PROCESSING_TASK_RUNTIME_OPTIONS,
@@ -27,6 +26,10 @@ const SPORTS_LIB_REPARSE_HEAVY_TASK_DISPATCH_DEADLINE_SECONDS = REPARSE_PROCESSI
 interface EnqueueSportsLibReparseHeavyTaskOptions {
     scheduleDelaySeconds?: number;
     taskNameSuffix?: string;
+}
+
+interface EnqueueWorkoutTaskOptions {
+    recoveryTaskKey?: number | string;
 }
 
 function getCloudTasksClient(): v2beta3.CloudTasksClient {
@@ -129,7 +132,8 @@ export async function enqueueWorkoutTask(
     serviceName: ServiceNames,
     queueItemId: string,
     dateCreated: number,
-    scheduleDelaySeconds?: number
+    scheduleDelaySeconds?: number,
+    options: EnqueueWorkoutTaskOptions = {},
 ): Promise<boolean> {
     const client = getCloudTasksClient();
     const { projectId, location, workoutQueue, serviceAccountEmail } = config.cloudtasks;
@@ -168,7 +172,8 @@ export async function enqueueWorkoutTask(
         return true;
     }
 
-    const recoveryTaskName = `${taskName}-dedupe-recovery-${Date.now()}-${randomUUID()}`;
+    const recoveryTaskKey = sanitizeTaskNamePart(`${options.recoveryTaskKey ?? 0}`);
+    const recoveryTaskName = `${taskName}-dedupe-recovery-${recoveryTaskKey}`;
     logger.warn(`[Dispatcher] Task name for ${serviceName}:${queueItemId} is reserved but no live task was found; enqueueing recovery task.`);
     const recoveryTaskCreated = await enqueueTaskWithRetry({
         parent,
@@ -180,10 +185,17 @@ export async function enqueueWorkoutTask(
         alreadyExistsLogMessage: `[Dispatcher] Recovery task already exists for ${serviceName}:${queueItemId}, skipping`,
         failedLogPrefix: `[Dispatcher] Failed to enqueue recovery task for ${serviceName}:${queueItemId}:`,
     });
-    if (!recoveryTaskCreated) {
-        throw new Error(`[Dispatcher] Recovery task name unexpectedly already exists for ${serviceName}:${queueItemId}.`);
+    if (recoveryTaskCreated) {
+        return true;
     }
-    return true;
+
+    if (await cloudTaskExists(recoveryTaskName)) {
+        logger.info(`[Dispatcher] Existing recovery task is still live for ${serviceName}:${queueItemId}; treating workout queue item as dispatched.`);
+        return true;
+    }
+
+    logger.warn(`[Dispatcher] Recovery task name for ${serviceName}:${queueItemId} is reserved but no live recovery task was found; leaving dispatch marker unchanged.`);
+    return false;
 }
 
 /**
