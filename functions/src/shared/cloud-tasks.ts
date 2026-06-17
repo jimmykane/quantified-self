@@ -28,11 +28,41 @@ interface EnqueueSportsLibReparseHeavyTaskOptions {
     taskNameSuffix?: string;
 }
 
+interface EnqueueWorkoutTaskOptions {
+    recoveryTaskKey?: number | string;
+}
+
 function getCloudTasksClient(): v2beta3.CloudTasksClient {
     if (!_cloudTasksClient) {
         _cloudTasksClient = new v2beta3.CloudTasksClient();
     }
     return _cloudTasksClient;
+}
+
+function sanitizeTaskNamePart(value: string): string {
+    return value.replace(/[^a-zA-Z0-9-_]/g, '-');
+}
+
+function isCloudTaskNotFoundError(error: unknown): boolean {
+    const code = (error as { code?: unknown })?.code;
+    const message = `${(error as { message?: unknown })?.message || ''}`;
+    return code === 5
+        || code === 'not-found'
+        || code === 'NOT_FOUND'
+        || message.includes('NOT_FOUND')
+        || message.includes('not found');
+}
+
+async function cloudTaskExists(taskName: string): Promise<boolean> {
+    try {
+        await getCloudTasksClient().getTask({ name: taskName });
+        return true;
+    } catch (error) {
+        if (isCloudTaskNotFoundError(error)) {
+            return false;
+        }
+        throw error;
+    }
 }
 
 // Cache for queue depth to reduce API calls
@@ -102,8 +132,9 @@ export async function enqueueWorkoutTask(
     serviceName: ServiceNames,
     queueItemId: string,
     dateCreated: number,
-    scheduleDelaySeconds?: number
-): Promise<void> {
+    scheduleDelaySeconds?: number,
+    options: EnqueueWorkoutTaskOptions = {},
+): Promise<boolean> {
     const client = getCloudTasksClient();
     const { projectId, location, workoutQueue, serviceAccountEmail } = config.cloudtasks;
 
@@ -114,9 +145,7 @@ export async function enqueueWorkoutTask(
     const url = `https://${location}-${projectId}.cloudfunctions.net/processWorkoutTask`;
     const parent = client.queuePath(projectId, location, workoutQueue);
 
-    // Deterministic task name for deduplication
-    // Sanitize serviceName to allow only letters, numbers, hyphens, or underscores
-    const sanitizedServiceName = serviceName.replace(/[^a-zA-Z0-9-_]/g, '-');
+    const sanitizedServiceName = sanitizeTaskNamePart(serviceName);
 
     // Use dateCreated to ensure uniqueness for re-created items (race condition fix)
     // while preserving deduplication for retries of the SAME item.
@@ -124,7 +153,7 @@ export async function enqueueWorkoutTask(
 
     const payload = { data: { queueItemId, serviceName } };
 
-    await enqueueTaskWithRetry({
+    const taskCreated = await enqueueTaskWithRetry({
         parent,
         taskName,
         payload,
@@ -134,6 +163,39 @@ export async function enqueueWorkoutTask(
         alreadyExistsLogMessage: `[Dispatcher] Task already exists for ${serviceName}:${queueItemId}, skipping`,
         failedLogPrefix: `[Dispatcher] Failed to enqueue task for ${serviceName}:${queueItemId}:`,
     });
+    if (taskCreated) {
+        return true;
+    }
+
+    if (await cloudTaskExists(taskName)) {
+        logger.info(`[Dispatcher] Existing task is still live for ${serviceName}:${queueItemId}; treating workout queue item as dispatched.`);
+        return true;
+    }
+
+    const recoveryTaskKey = sanitizeTaskNamePart(`${options.recoveryTaskKey ?? 0}`);
+    const recoveryTaskName = `${taskName}-dedupe-recovery-${recoveryTaskKey}`;
+    logger.warn(`[Dispatcher] Task name for ${serviceName}:${queueItemId} is reserved but no live task was found; enqueueing recovery task.`);
+    const recoveryTaskCreated = await enqueueTaskWithRetry({
+        parent,
+        taskName: recoveryTaskName,
+        payload,
+        serviceAccountEmail,
+        url,
+        scheduleDelaySeconds,
+        alreadyExistsLogMessage: `[Dispatcher] Recovery task already exists for ${serviceName}:${queueItemId}, skipping`,
+        failedLogPrefix: `[Dispatcher] Failed to enqueue recovery task for ${serviceName}:${queueItemId}:`,
+    });
+    if (recoveryTaskCreated) {
+        return true;
+    }
+
+    if (await cloudTaskExists(recoveryTaskName)) {
+        logger.info(`[Dispatcher] Existing recovery task is still live for ${serviceName}:${queueItemId}; treating workout queue item as dispatched.`);
+        return true;
+    }
+
+    logger.warn(`[Dispatcher] Recovery task name for ${serviceName}:${queueItemId} is reserved but no live recovery task was found; leaving dispatch marker unchanged.`);
+    return false;
 }
 
 /**

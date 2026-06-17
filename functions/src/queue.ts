@@ -31,7 +31,7 @@ import { normalizeDownloadedFitPayload } from './shared/fit-payload';
 import { enqueueActivitySyncJobsForImportedEvent } from './activity-sync/enqueue-imported-event';
 import { shouldSkipQueueWorkForDeletedUser } from './queue/user-deletion-skip';
 import { ProviderQueueUserDeletedOrDeletingError, ProviderQueueUserNotConnectedError } from './queue/provider-queue-errors';
-import { getUserDeletionGuardState, UserDeletionGuardReadError } from './shared/user-deletion-guard';
+import { getUserDeletionGuardState, getUserDeletionGuardStateInTransaction, UserDeletionGuardReadError } from './shared/user-deletion-guard';
 import {
   QueueItemUserGuardedUpdateResult,
   markQueueItemDispatchedIfUserActive,
@@ -231,17 +231,18 @@ export async function dispatchQueueItemTasks(serviceName: ServiceNames) {
 
   const delayPerItem = DISPATCH_SPREAD_SECONDS / querySnapshot.size;
 
-  const promises = querySnapshot.docs.map(async (doc, index) => {
+  const promises = querySnapshot.docs.map(async (doc, index): Promise<boolean> => {
     const delay = Math.floor(index * delayPerItem);
     const data = doc.data() as QueueItemInterface;
 
     if (!data.dateCreated) {
       logger.error(`Queue item ${doc.id} missing dateCreated, skipping dispatch.`);
-      return;
+      return false;
     }
 
+    let dispatchContext: WorkoutQueueDispatchContext;
     try {
-      await assertWorkoutQueueCanDispatch(
+      dispatchContext = await assertWorkoutQueueCanDispatch(
         doc.ref,
         Object.assign({}, data, { id: doc.id }) as SuuntoAppWorkoutQueueItemInterface | GarminAPIActivityQueueItemInterface | COROSAPIWorkoutQueueItemInterface,
         serviceName,
@@ -250,21 +251,32 @@ export async function dispatchQueueItemTasks(serviceName: ServiceNames) {
     } catch (error) {
       if (error instanceof ProviderQueueUserDeletedOrDeletingError) {
         logger.info(`Skipped ${serviceName} queue item ${doc.id} dispatch because the owning user is missing or deletion is in progress.`);
-        return;
+        return false;
       }
       if (error instanceof ProviderQueueUserNotConnectedError) {
         logger.info(`Skipped ${serviceName} queue item ${doc.id} dispatch because the provider user no longer resolves to a local token.`);
-        return;
+        return false;
       }
       if (isUserDeletionGuardReadError(error)) {
         logger.error(`Could not check deletion guard for ${serviceName} queue item ${doc.id}; leaving item undispatched for a future run.`, error);
-        return;
+        return false;
       }
       throw error;
     }
 
     try {
-      await enqueueWorkoutTask(serviceName, doc.id, data.dateCreated, delay);
+      const queueItemForDispatch = Object.assign({}, data, { id: doc.id }) as QueueItemInterface;
+      const wasTaskEnqueued = await enqueueWorkoutTaskWithRecoveryGeneration(
+        doc.ref,
+        queueItemForDispatch,
+        serviceName,
+        dispatchContext.firebaseUserID,
+        delay,
+      );
+      if (!wasTaskEnqueued) {
+        logger.info(`Task not enqueued for ${serviceName} queue item ${doc.id}; leaving dispatch marker unchanged.`);
+        return false;
+      }
       const markerContext = await assertWorkoutQueueCanDispatch(
         doc.ref,
         Object.assign({}, data, { id: doc.id }) as SuuntoAppWorkoutQueueItemInterface | GarminAPIActivityQueueItemInterface | COROSAPIWorkoutQueueItemInterface,
@@ -279,27 +291,29 @@ export async function dispatchQueueItemTasks(serviceName: ServiceNames) {
       );
       if (!didMarkDispatched) {
         logger.info(`Skipped ${serviceName} queue item ${doc.id} dispatch marker because the owning user is missing or deletion is in progress.`);
-        return;
+        return false;
       }
+      return true;
     } catch (error) {
       if (error instanceof ProviderQueueUserDeletedOrDeletingError) {
         logger.info(`Skipped ${serviceName} queue item ${doc.id} dispatch marker because the owning user is missing or deletion is in progress.`);
-        return;
+        return false;
       }
       if (error instanceof ProviderQueueUserNotConnectedError) {
         logger.info(`Skipped ${serviceName} queue item ${doc.id} dispatch marker because the provider user no longer resolves to a local token.`);
-        return;
+        return false;
       }
       if (isUserDeletionGuardReadError(error)) {
         logger.error(`Could not re-check deletion guard for ${serviceName} queue item ${doc.id}; leaving dispatch marker untouched for a future run.`, error);
-        return;
+        return false;
       }
       throw error;
     }
   });
 
-  await Promise.all(promises);
-  logger.info(`Dispatched ${querySnapshot.size} tasks spread over ${DISPATCH_SPREAD_SECONDS}s`);
+  const dispatchResults = await Promise.all(promises);
+  const dispatchedCount = dispatchResults.filter(Boolean).length;
+  logger.info(`Dispatched ${dispatchedCount}/${querySnapshot.size} tasks spread over ${DISPATCH_SPREAD_SECONDS}s`);
 }
 
 const TIMEOUT_DEFAULT = 300;
@@ -716,6 +730,135 @@ function isFirestoreNotFoundError(error: unknown): boolean {
   return code === 5 || code === 'not-found' || code === 'NOT_FOUND' || message.includes('NOT_FOUND') || message.includes('No document to update');
 }
 
+function workoutQueueRetryGeneration(queueItem: { totalRetryCount?: unknown, retryCount?: unknown } | null | undefined): number {
+  if (typeof queueItem?.totalRetryCount === 'number' && Number.isFinite(queueItem.totalRetryCount)) {
+    return Math.max(0, Math.floor(queueItem.totalRetryCount));
+  }
+  if (typeof queueItem?.retryCount === 'number' && Number.isFinite(queueItem.retryCount)) {
+    return Math.max(0, Math.floor(queueItem.retryCount));
+  }
+  return 0;
+}
+
+function workoutQueueDispatchRecoveryGeneration(queueItem: { dispatchRecoveryGeneration?: unknown } | null | undefined): number {
+  return typeof queueItem?.dispatchRecoveryGeneration === 'number' && Number.isFinite(queueItem.dispatchRecoveryGeneration)
+    ? Math.max(0, Math.floor(queueItem.dispatchRecoveryGeneration))
+    : 0;
+}
+
+function workoutQueueRecoveryTaskKey(
+  queueItem: { totalRetryCount?: unknown, retryCount?: unknown, dispatchRecoveryGeneration?: unknown } | null | undefined,
+): number | string {
+  const retryGeneration = workoutQueueRetryGeneration(queueItem);
+  const dispatchGeneration = workoutQueueDispatchRecoveryGeneration(queueItem);
+  return dispatchGeneration > 0 ? `${retryGeneration}-${dispatchGeneration}` : retryGeneration;
+}
+
+async function advanceWorkoutQueueDispatchRecoveryGeneration(
+  queueItemDocument: admin.firestore.DocumentReference,
+  queueItem: QueueItemInterface,
+  serviceName: ServiceNames,
+  firebaseUserID: string,
+): Promise<QueueItemInterface | null> {
+  const attemptedGeneration = workoutQueueDispatchRecoveryGeneration(queueItem);
+  try {
+    const result = await admin.firestore().runTransaction(async (transaction) => {
+      let deletionGuard;
+      try {
+        deletionGuard = await getUserDeletionGuardStateInTransaction(admin.firestore(), transaction, firebaseUserID);
+      } catch (error) {
+        throw new UserDeletionGuardReadError(firebaseUserID, `workout_queue_dispatch_recovery_generation:${serviceName}`, error);
+      }
+      if (deletionGuard.shouldSkip) {
+        return { status: 'skipped_deleted_user' as const };
+      }
+
+      const queueItemSnapshot = await transaction.get(queueItemDocument);
+      if (!queueItemSnapshot.exists) {
+        return { status: 'not_current' as const };
+      }
+
+      const currentQueueItem = queueItemSnapshot.data() as Partial<QueueItemInterface>;
+      if ((currentQueueItem as { processed?: unknown }).processed === true
+        || currentQueueItem.dispatchedToCloudTask !== null && currentQueueItem.dispatchedToCloudTask !== undefined) {
+        return { status: 'not_current' as const };
+      }
+
+      const currentGeneration = workoutQueueDispatchRecoveryGeneration(currentQueueItem);
+      if (currentGeneration > attemptedGeneration) {
+        return {
+          status: 'advanced' as const,
+          queueItem: Object.assign({}, queueItem, currentQueueItem, { id: queueItem.id }) as QueueItemInterface,
+        };
+      }
+
+      const nextGeneration = Math.max(currentGeneration, attemptedGeneration) + 1;
+      transaction.update(queueItemDocument, { dispatchRecoveryGeneration: nextGeneration });
+      return {
+        status: 'advanced' as const,
+        queueItem: Object.assign({}, queueItem, currentQueueItem, {
+          id: queueItem.id,
+          dispatchRecoveryGeneration: nextGeneration,
+        }) as QueueItemInterface,
+      };
+    });
+
+    if (result.status === 'skipped_deleted_user') {
+      await deleteWorkoutQueueDocBeforeDispatch(
+        queueItemDocument,
+        queueItem.id,
+        serviceName,
+        `Firebase user ${firebaseUserID} is missing or deletion is in progress before dispatch recovery generation advance`,
+      );
+      return null;
+    }
+    if (result.status === 'not_current') {
+      return null;
+    }
+    return result.queueItem;
+  } catch (error) {
+    if (!isFirestoreNotFoundError(error)) {
+      throw error;
+    }
+    if (await wasQueueItemMovedToFailedJobs(queueItem.id, serviceName)) {
+      logger.info(`Queue item ${queueItem.id} for ${serviceName} was already moved to failed_jobs before dispatch recovery generation update.`);
+      return null;
+    }
+    throw error;
+  }
+}
+
+async function enqueueWorkoutTaskWithRecoveryGeneration(
+  queueItemDocument: admin.firestore.DocumentReference,
+  queueItem: QueueItemInterface,
+  serviceName: ServiceNames,
+  firebaseUserID: string,
+  scheduleDelaySeconds?: number,
+): Promise<boolean> {
+  const wasTaskEnqueued = await enqueueWorkoutTask(serviceName, queueItem.id, queueItem.dateCreated, scheduleDelaySeconds, {
+    recoveryTaskKey: workoutQueueRecoveryTaskKey(queueItem),
+  });
+  if (wasTaskEnqueued) {
+    return true;
+  }
+
+  const nextQueueItem = await advanceWorkoutQueueDispatchRecoveryGeneration(
+    queueItemDocument,
+    queueItem,
+    serviceName,
+    firebaseUserID,
+  );
+  if (!nextQueueItem) {
+    logger.info(`Could not advance dispatch recovery generation for ${serviceName} queue item ${queueItem.id}; leaving dispatch marker unchanged.`);
+    return false;
+  }
+
+  logger.warn(`Advanced dispatch recovery generation for ${serviceName} queue item ${queueItem.id} to ${nextQueueItem.dispatchRecoveryGeneration}; retrying deterministic Cloud Task enqueue.`);
+  return enqueueWorkoutTask(serviceName, nextQueueItem.id, nextQueueItem.dateCreated, scheduleDelaySeconds, {
+    recoveryTaskKey: workoutQueueRecoveryTaskKey(nextQueueItem),
+  });
+}
+
 async function wasQueueItemMovedToFailedJobs(
   queueItemId: string,
   serviceName: ServiceNames,
@@ -885,7 +1028,7 @@ async function addToWorkoutQueue(queueItem: SuuntoAppWorkoutQueueItemInterface |
     } catch (error) {
       if (isFirestoreAlreadyExistsError(error)) {
         const existingSnapshot = await queueItemDocument.get();
-        const existingQueueItem = existingSnapshot.data() as ({ dateCreated?: number, processed?: boolean } | undefined);
+        const existingQueueItem = existingSnapshot.data() as ({ dateCreated?: number, processed?: boolean, retryCount?: number, totalRetryCount?: number, dispatchRecoveryGeneration?: number } | undefined);
         if (existingQueueItem?.processed === true) {
           logger.info(`Queue item ${queueItem.id} already processed for ${serviceName}; skipping duplicate enqueue.`);
           return queueItemDocument;
@@ -918,20 +1061,35 @@ async function addToWorkoutQueue(queueItem: SuuntoAppWorkoutQueueItemInterface |
           }
         }
 
-        await enqueueWorkoutTask(serviceName, queueItem.id, dateCreated);
-        const didMarkDuplicateDispatched = await markWorkoutQueueItemDispatched(
+        const queueItemForDuplicateDispatch = Object.assign(
+          {},
+          queuePayload,
+          existingQueueItem || {},
+          { id: queueItem.id, dateCreated },
+        ) as QueueItemInterface;
+        const wasDuplicateTaskEnqueued = await enqueueWorkoutTaskWithRecoveryGeneration(
           queueItemDocument,
-          queueItem.id,
+          queueItemForDuplicateDispatch,
           serviceName,
           duplicateDispatchContext.firebaseUserID,
         );
-        if (!didMarkDuplicateDispatched) {
-          throw new ProviderQueueUserDeletedOrDeletingError(
+        if (wasDuplicateTaskEnqueued) {
+          const didMarkDuplicateDispatched = await markWorkoutQueueItemDispatched(
+            queueItemDocument,
+            queueItem.id,
             serviceName,
             duplicateDispatchContext.firebaseUserID,
-            duplicateDispatchContext.providerUserID,
-            queueItem.id,
           );
+          if (!didMarkDuplicateDispatched) {
+            throw new ProviderQueueUserDeletedOrDeletingError(
+              serviceName,
+              duplicateDispatchContext.firebaseUserID,
+              duplicateDispatchContext.providerUserID,
+              queueItem.id,
+            );
+          }
+        } else {
+          logger.info(`Task not enqueued for duplicate ${serviceName} queue item ${queueItem.id}; leaving dispatch marker unchanged.`);
         }
         return queueItemDocument;
       }
@@ -945,20 +1103,29 @@ async function addToWorkoutQueue(queueItem: SuuntoAppWorkoutQueueItemInterface |
 
   if (!deferDispatch) {
     // Dispatch a Cloud Task for immediate processing
-    await enqueueWorkoutTask(serviceName, queueItem.id, queueItem.dateCreated);
-    const didMarkDispatched = await markWorkoutQueueItemDispatched(
+    const wasTaskEnqueued = await enqueueWorkoutTaskWithRecoveryGeneration(
       queueItemDocument,
-      queueItem.id,
+      queueItem,
       serviceName,
       dispatchContext.firebaseUserID,
     );
-    if (!didMarkDispatched) {
-      throw new ProviderQueueUserDeletedOrDeletingError(
+    if (wasTaskEnqueued) {
+      const didMarkDispatched = await markWorkoutQueueItemDispatched(
+        queueItemDocument,
+        queueItem.id,
         serviceName,
         dispatchContext.firebaseUserID,
-        dispatchContext.providerUserID,
-        queueItem.id,
       );
+      if (!didMarkDispatched) {
+        throw new ProviderQueueUserDeletedOrDeletingError(
+          serviceName,
+          dispatchContext.firebaseUserID,
+          dispatchContext.providerUserID,
+          queueItem.id,
+        );
+      }
+    } else {
+      logger.info(`Task not enqueued for immediate ${serviceName} queue item ${queueItem.id}; leaving dispatch marker unchanged.`);
     }
   }
   return queueItemDocument;
