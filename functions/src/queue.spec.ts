@@ -317,6 +317,7 @@ describe('queue', () => {
                 dispatchedToCloudTask: null,
             }),
         });
+        vi.mocked(utils.enqueueWorkoutTask).mockResolvedValue(true);
         mockShouldSkipQueueWorkForDeletedUser.mockResolvedValue(false);
         mockGetUserDeletionGuardState.mockResolvedValue({
             userExists: true,
@@ -943,16 +944,14 @@ describe('queue', () => {
             expect(utils.enqueueWorkoutTask).not.toHaveBeenCalled();
         });
 
-        it('can leave an item stuck when enqueue returns ALREADY_EXISTS-style success without a runnable task', async () => {
+        it('leaves the item undispatched when Cloud Tasks reports ALREADY_EXISTS so a later scheduler pass can retry', async () => {
             const utils = await import('./utils');
             vi.mocked(utils.getCloudTaskQueueDepth).mockResolvedValue(0);
-            // Simulate enqueue swallowing ALREADY_EXISTS (same as cloud-tasks helper behavior).
-            vi.mocked(utils.enqueueWorkoutTask).mockResolvedValue(undefined);
+            vi.mocked(utils.enqueueWorkoutTask).mockResolvedValue(false);
             const { dispatchQueueItemTasks } = await import('./queue');
             const admin = await import('firebase-admin');
 
             let persistedDispatchedAt: number | null = null;
-            let firstScan = true;
 
             const mockDoc = {
                 id: 'stuck-doc',
@@ -968,28 +967,6 @@ describe('queue', () => {
 
             const firestore = admin.firestore();
             vi.mocked(firestore.collection('any').get).mockImplementation(async () => {
-                // First scheduler pass sees the item as undispatched.
-                if (firstScan) {
-                    firstScan = false;
-                    return {
-                        docs: [mockDoc] as any,
-                        size: 1,
-                        empty: false,
-                        isEqual: vi.fn(),
-                    } as any;
-                }
-
-                // Second pass simulates Firestore query filter where dispatchedToCloudTask != null
-                // excludes this doc, so dispatcher never retries this item.
-                if (persistedDispatchedAt !== null) {
-                    return {
-                        docs: [],
-                        size: 0,
-                        empty: true,
-                        isEqual: vi.fn(),
-                    } as any;
-                }
-
                 return {
                     docs: [mockDoc] as any,
                     size: 1,
@@ -1000,12 +977,11 @@ describe('queue', () => {
 
             await dispatchQueueItemTasks(ServiceNames.GarminAPI);
             expect(utils.enqueueWorkoutTask).toHaveBeenCalledTimes(1);
-            expect(mockDoc.ref.update).toHaveBeenCalledWith({ dispatchedToCloudTask: expect.any(Number) });
-            expect(persistedDispatchedAt).not.toBeNull();
+            expect(mockDoc.ref.update).not.toHaveBeenCalled();
+            expect(persistedDispatchedAt).toBeNull();
 
             await dispatchQueueItemTasks(ServiceNames.GarminAPI);
-            // No second enqueue attempt after "successful" ALREADY_EXISTS-style first dispatch.
-            expect(utils.enqueueWorkoutTask).toHaveBeenCalledTimes(1);
+            expect(utils.enqueueWorkoutTask).toHaveBeenCalledTimes(2);
         });
     });
 
@@ -1085,6 +1061,27 @@ describe('queue', () => {
 
             // Should call enqueue
             expect(utils.enqueueWorkoutTask).toHaveBeenCalled();
+        });
+
+        it('should not write the immediate dispatch marker when Cloud Tasks reports ALREADY_EXISTS', async () => {
+            const utils = await import('./utils');
+            vi.mocked(utils.enqueueWorkoutTask).mockResolvedValueOnce(false);
+
+            const { addToQueueForGarmin } = await import('./queue');
+
+            await addToQueueForGarmin({
+                userID: 'u1',
+                startTimeInSeconds: 123,
+                manual: false,
+                activityFileID: 'f1',
+                activityFileType: 'FIT',
+                token: 't1',
+                userAccessToken: 'at1',
+                callbackURL: 'cb1'
+            });
+
+            expect(utils.enqueueWorkoutTask).toHaveBeenCalled();
+            expect(mockDocRef.update).not.toHaveBeenCalledWith({ dispatchedToCloudTask: expect.any(Number) });
         });
 
         it('should not write the dispatch marker when deletion starts after immediate Cloud Task enqueue', async () => {
@@ -1429,6 +1426,29 @@ describe('queue', () => {
             expect(mockDocRef.set).not.toHaveBeenCalled();
             expect(utils.enqueueWorkoutTask).toHaveBeenCalledWith(ServiceNames.SuuntoApp, 'user1-work1', 123456);
             expect(mockDocRef.update).toHaveBeenCalledWith({ dispatchedToCloudTask: expect.any(Number) });
+        });
+
+        it('addToQueueForSuunto should not mark duplicate unprocessed queue items dispatched when Cloud Tasks reports ALREADY_EXISTS', async () => {
+            const alreadyExistsError: any = new Error('ALREADY_EXISTS');
+            alreadyExistsError.code = 6;
+            mockDocRef.create.mockRejectedValueOnce(alreadyExistsError);
+            mockDocRef.get.mockResolvedValueOnce({
+                exists: true,
+                data: () => ({
+                    id: 'user1-work1',
+                    dateCreated: 123456,
+                    processed: false,
+                    retryCount: 0,
+                    dispatchedToCloudTask: null,
+                }),
+            });
+            vi.mocked(utils.enqueueWorkoutTask).mockResolvedValueOnce(false);
+
+            const result = await addToQueueForSuunto({ userName: 'user1', workoutID: 'work1' });
+
+            expect(result.id).toBe('mock-doc-id');
+            expect(utils.enqueueWorkoutTask).toHaveBeenCalledWith(ServiceNames.SuuntoApp, 'user1-work1', 123456);
+            expect(mockDocRef.update).not.toHaveBeenCalledWith({ dispatchedToCloudTask: expect.any(Number) });
         });
 
         it('addToQueueForSuunto should delete duplicate queue docs and skip redispatch when deletion starts after duplicate lookup', async () => {

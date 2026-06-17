@@ -252,8 +252,9 @@ describe('Cloud Tasks Utils', () => {
             mockCloudTasksClient.createTask.mockResolvedValue([{ name: 'task-name' }]);
 
             const dateCreated = 1000;
-            await enqueueWorkoutTask(ServiceNames.GarminAPI, 'item-123', dateCreated);
+            const result = await enqueueWorkoutTask(ServiceNames.GarminAPI, 'item-123', dateCreated);
 
+            expect(result).toBe(true);
             expect(mockCloudTasksClient.createTask).toHaveBeenCalledWith({
                 parent: 'projects/p/locations/l/queues/q',
                 task: expect.objectContaining({
@@ -294,8 +295,9 @@ describe('Cloud Tasks Utils', () => {
             (error as Error & { code: number }).code = 6;
             mockCloudTasksClient.createTask.mockRejectedValue(error);
 
-            await enqueueWorkoutTask(ServiceNames.GarminAPI, 'item-123', 1000);
+            const result = await enqueueWorkoutTask(ServiceNames.GarminAPI, 'item-123', 1000);
 
+            expect(result).toBe(false);
             expect(mockCloudTasksClient.createTask).toHaveBeenCalled();
         });
 

@@ -103,7 +103,7 @@ export async function enqueueWorkoutTask(
     queueItemId: string,
     dateCreated: number,
     scheduleDelaySeconds?: number
-): Promise<void> {
+): Promise<boolean> {
     const client = getCloudTasksClient();
     const { projectId, location, workoutQueue, serviceAccountEmail } = config.cloudtasks;
 
@@ -124,7 +124,7 @@ export async function enqueueWorkoutTask(
 
     const payload = { data: { queueItemId, serviceName } };
 
-    await enqueueTaskWithRetry({
+    return enqueueTaskWithRetry({
         parent,
         taskName,
         payload,
