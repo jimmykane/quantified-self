@@ -11,6 +11,7 @@ export interface QueueItemInterface {
   processed: false,
   retryCount: number,
   totalRetryCount?: number,
+  dispatchRecoveryGeneration?: number,
   errors?: QueueItemError[],
   processedAt?: number,
   expireAt?: admin.firestore.Timestamp | Date,
