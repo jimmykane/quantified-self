@@ -64,6 +64,16 @@ import {
   resolveBenchmarkStreamMeanDeviation,
   resolveBenchmarkStreamMetrics,
 } from '../../helpers/benchmark-review.helper';
+import {
+  beginTableRowPointerTracking,
+  cancelTableRowPointerTracking,
+  createTableRowActivationState,
+  endTableRowPointerTracking,
+  shouldActivateTableRowFromClick,
+  shouldActivateTableRowFromKeyboard,
+  TableRowActivationState,
+  updateTableRowPointerTracking,
+} from '../../helpers/table-row-activation.helper';
 
 interface SelectedFileItem {
   index: number;
@@ -204,6 +214,7 @@ export class ToolsComparePageComponent implements OnInit {
   private benchmarkReviewService = inject(BenchmarkReviewService);
   private logger = inject(LoggerService);
   private readonly comparisonSelection = new SelectionModel<string>(true, []);
+  private readonly comparisonRowActivationState: TableRowActivationState = createTableRowActivationState();
 
   readonly selectedFiles = signal<File[]>([]);
   readonly comparisonTitle = signal('');
@@ -912,6 +923,45 @@ export class ToolsComparePageComponent implements OnInit {
     await this.router.navigate(['/user', user.uid, 'event', item.id], {
       queryParams: undefined,
     });
+  }
+
+  onComparisonRowPointerDown(event: PointerEvent): void {
+    beginTableRowPointerTracking(this.comparisonRowActivationState, event);
+  }
+
+  onComparisonRowPointerMove(event: PointerEvent): void {
+    updateTableRowPointerTracking(this.comparisonRowActivationState, event);
+  }
+
+  onComparisonRowPointerUp(event: PointerEvent): void {
+    endTableRowPointerTracking(this.comparisonRowActivationState, event);
+  }
+
+  onComparisonRowPointerCancel(event: PointerEvent): void {
+    cancelTableRowPointerTracking(this.comparisonRowActivationState, event);
+  }
+
+  onComparisonRowClick(item: ComparisonListItem, event: MouseEvent): void {
+    if (!shouldActivateTableRowFromClick(this.comparisonRowActivationState, event)) {
+      return;
+    }
+
+    void this.openComparison(item, false);
+  }
+
+  onComparisonRowKeydown(item: ComparisonListItem, event: Event): void {
+    if (!(event instanceof KeyboardEvent)) {
+      return;
+    }
+
+    if (!shouldActivateTableRowFromKeyboard(event)) {
+      return;
+    }
+
+    if (event.key === ' ') {
+      event.preventDefault();
+    }
+    void this.openComparison(item, false);
   }
 
   async openBenchmarkFromMetricCell(

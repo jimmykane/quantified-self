@@ -9,15 +9,31 @@
   </a>
 </p>
 
+<ng-template #garminPermissionUpdateGuidance>
+  <p><strong>To update permissions:</strong></p>
+  <a class="tool-link" (click)="openGarminConnectApp(); $event.preventDefault()" href="javascript:void(0)">
+    Open Garmin Connect
+  </a>
+  <p><strong>Navigate to:</strong></p>
+  <ul class="permissions-list">
+    <li><strong>Web:</strong> Account Information -> Connected Apps</li>
+    <li><strong>App:</strong> More -> Settings -> Connected Apps</li>
+  </ul>
+  <p class="permission-description">After updating permissions, reconnect to refresh.</p>
+</ng-template>
+
 <div class="service-container">
   <app-service-connection-status
-    serviceLabel="Garmin"
-    description="Required for history imports and Garmin to Suunto auto-sync."
+    serviceLabel="Garmin Connect"
+    [description]="connectionDescription"
     [connected]="isConnectedToService()"
     [loading]="isLoading"
     [locked]="!hasProAccess && !isConnectedToService()"
     [proRequired]="!hasProAccess && !isConnectedToService()"
-    [showDetails]="isConnectedToService()"
+    [showDetails]="isConnectedToService() || isReconnectRequired"
+    [statusLabelOverride]="isReconnectRequired ? 'Reconnect required' : null"
+    [statusIconOverride]="isReconnectRequired ? 'sync_problem' : null"
+    [statusTone]="isReconnectRequired ? 'attention' : 'default'"
     (click)="!hasProAccess && !isConnectedToService() && triggerUpsell()">
     <div connection-body class="connection-details">
     @if (isConnectedToService()) {
@@ -34,6 +50,20 @@
           <div class="connected-account-line">Connected: {{ connectedAt | date:'short' }}</div>
         </div>
       </div>
+      @if (isRouteSendAccountDifferentFromConnectedAccount) {
+      <div class="connected-account-item" role="listitem">
+        <mat-icon class="connected-account-icon">route</mat-icon>
+        <div class="connected-account-copy">
+          <div class="connected-account-title">Route Delivery Account</div>
+          <div class="connected-account-line">
+            {{ routeSendGarminUserID }}
+            @if (routeSendConnectedAt) {
+            <span> · Connected: {{ routeSendConnectedAt | date:'short' }}</span>
+            }
+          </div>
+        </div>
+      </div>
+      }
       <div *ngIf="permissionsLastChangedAt" class="connected-account-item" role="listitem">
         <mat-icon class="connected-account-icon">update</mat-icon>
         <div class="connected-account-copy">
@@ -71,16 +101,7 @@
             <div class="permission-description">{{ getPermissionExplanation(permission) }}</div>
           </li>
         </ul>
-        <p><strong>To update permissions:</strong></p>
-        <a class="tool-link" (click)="openGarminConnectApp(); $event.preventDefault()" href="javascript:void(0)">
-          Open Garmin Connect
-        </a>
-        <p><strong>Navigate to:</strong></p>
-        <ul class="permissions-list">
-          <li><strong>Web:</strong> Account Information -> Connected Apps</li>
-          <li><strong>App:</strong> More -> Settings -> Connected Apps</li>
-        </ul>
-        <p class="permission-description">After updating permissions, reconnect to refresh.</p>
+        <ng-container [ngTemplateOutlet]="garminPermissionUpdateGuidance"></ng-container>
       </div>
     </div>
     }
@@ -93,7 +114,7 @@
         <span>{{ activeSyncRouteWarningLabel }}</span>
       </div>
       }
-      @if (!isConnectedToService()) {
+      @if (!isConnectedToService() || isReconnectRequired) {
       <button mat-flat-button class="qs-mat-primary"
         [disabled]="!user || isLoading || isConnecting || !hasProAccess" (click)="connectWithService($event)">
         @if (isConnecting) {
@@ -103,7 +124,7 @@
         </ng-container>
         } @else {
         <ng-container>
-          <mat-icon>link</mat-icon> Connect
+          <mat-icon>{{ isReconnectRequired ? 'sync' : 'link' }}</mat-icon> {{ connectButtonLabel }}
         </ng-container>
         }
       </button>
@@ -155,6 +176,10 @@
         <mat-icon>lock</mat-icon>
         <span>History import is a Pro feature.</span>
       </div>
+      } @else if (isReconnectRequired) {
+      <app-status-info type="info" title="Reconnect Garmin Required">
+        Reconnect Garmin before importing history.
+      </app-status-info>
       } @else if (isConnectedToService()) {
       <app-history-import-form [serviceName]="serviceName" [userMetaForService]="serviceMeta"
         [missingPermissions]="missingPermissions" [isLoadingParent]="isHistoryImportLoading"
@@ -264,4 +289,16 @@
       </section>
     }
   </mat-tab-nav-panel>
+
+  @if (hasProAccess && (isConnectedToService() || isReconnectRequired)) {
+  <mat-divider class="connection-tools-divider"></mat-divider>
+  <app-status-info [type]="routeSendStatusType" [title]="routeSendStatusTitle">
+    <div>{{ routeSendStatusMessage }}</div>
+    @if (routeSendMissingPermissions.length > 0) {
+    <div class="route-send-permission-guidance">
+      <ng-container [ngTemplateOutlet]="garminPermissionUpdateGuidance"></ng-container>
+    </div>
+    }
+  </app-status-info>
+  }
 </div>

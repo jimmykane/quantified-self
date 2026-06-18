@@ -96,6 +96,25 @@ nav button[mat-stroked-button] {
   justify-content: center;
 }
 
+.responsive-action-button {
+  gap: 8px;
+}
+
+.responsive-action-button__icon {
+  display: none;
+  width: 20px;
+  height: 20px;
+  font-size: 20px;
+  color: inherit;
+  flex-shrink: 0;
+}
+
+.responsive-action-button__label {
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
+}
+
 nav button[mat-icon-button] {
   padding: 0;
   width: 40px;
@@ -106,12 +125,6 @@ nav button[mat-icon-button] {
   align-items: center;
   justify-content: center;
   border-radius: 50%;
-}
-
-nav button.icon-only {
-  min-width: 40px;
-  width: 40px;
-  padding: 0;
 }
 
 /* Admin button specific styling */
@@ -142,17 +155,6 @@ nav button.admin-button {
   }
 }
 
-/* Icon-only button override (for Dashboard, Login, etc. on mobile) */
-nav button.icon-only {
-  min-width: 40px !important;
-  width: 40px !important;
-  padding: 0 !important;
-
-  mat-icon {
-    margin: 0 !important;
-  }
-}
-
 /* Specific styling for the Upload Activities component if it appears in nav */
 nav app-upload-activities {
   display: flex;
@@ -168,6 +170,25 @@ nav button.hamburger-link {
   min-width: 40px;
   margin-right: 8px;
   flex-shrink: 0;
+}
+
+@media (max-width: 959.98px) {
+  .responsive-action-button {
+    min-width: 40px !important;
+    width: 40px !important;
+    padding: 0 !important;
+    gap: 0;
+  }
+
+  .responsive-action-button__icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .responsive-action-button__label {
+    display: none;
+  }
 }
 
 /* Dark Theme Overrides */

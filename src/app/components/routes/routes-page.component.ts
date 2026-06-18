@@ -17,6 +17,7 @@ import {
     ServiceNames,
 } from '@sports-alliance/sports-lib';
 import { FirestoreRouteJSON } from '@shared/app-route.interface';
+import { ProviderPresentation } from '@shared/provider-presentation';
 import { resolveUnitAwareDisplayFromValue } from '@shared/unit-aware-display';
 import { buildSuuntoServiceConnectionViewModel, SuuntoServiceConnectionViewModel } from '../../helpers/suunto-service-connection.helper';
 import {
@@ -31,11 +32,25 @@ import {
     buildSuuntoRouteCatchUpSnackbarMessage,
 } from '../../helpers/suunto-route-catch-up.helper';
 import {
+    canSendRouteToConnectedGarminAccount,
     canSendRouteToConnectedSuuntoAccounts,
+    getGarminRouteSendMenuLabel,
+    getGarminRouteSendDisabledReason,
     getRouteServiceDisplayName,
     getRouteSourceSummary,
     getRouteSyncedDestinationSummaries,
 } from '../../helpers/route-provenance.helper';
+import {
+    beginTableRowPointerTracking,
+    cancelTableRowPointerTracking,
+    createTableRowActivationState,
+    endTableRowPointerTracking,
+    shouldActivateTableRowFromClick,
+    shouldActivateTableRowFromKeyboard,
+    TableRowActivationState,
+    updateTableRowPointerTracking,
+} from '../../helpers/table-row-activation.helper';
+import { SHOW_GARMIN_ROUTE_SEND } from '../../constants/route-delivery.constants';
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { ConfirmationDialogComponent, ConfirmationDialogData } from '../confirmation-dialog/confirmation-dialog.component';
 import { SharedModule } from '../../modules/shared.module';
@@ -63,7 +78,7 @@ import {
     ROUTE_LIST_DEFAULT_SORT,
     RouteListSort,
 } from '../../services/app.route.service';
-import { AppUserService } from '../../services/app.user.service';
+import { AppUserService, GarminRouteSendContext } from '../../services/app.user.service';
 import { LoggerService } from '../../services/logger.service';
 import { AppWindowService } from '../../services/app.window.service';
 import { UploadRoutesComponent } from '../upload/upload-routes/upload-routes.component';
@@ -74,6 +89,7 @@ interface RoutePageRouteViewModel {
     name: string;
     routeDate: Date | null;
     routeDateSortMs: number | null;
+    sourcePresentation: ProviderPresentation | null;
     sourceServiceLabel: string;
     sourceServiceTitle: string;
     sourceServiceName: ServiceNames | null;
@@ -99,6 +115,9 @@ interface RoutePageRouteViewModel {
     canExportGPX: boolean;
     canDownloadOriginals: boolean;
     canSendToSuunto: boolean;
+    canSendToGarmin: boolean;
+    garminSendDisabledReason: string | null;
+    garminSendMenuLabel: string;
     canDelete: boolean;
     filterText: string;
 }
@@ -186,8 +205,17 @@ export class RoutesPageComponent implements OnInit {
         activityType: '',
     });
     private readonly connectedSuuntoProviderUserIdsSubject = new BehaviorSubject<string[]>([]);
+    private readonly garminRouteSendContextSubject = new BehaviorSubject<GarminRouteSendContext>({
+        connected: false,
+        reconnectRequired: false,
+        missingPermissions: [],
+        providerUserId: null,
+        providerStates: [],
+        serviceMeta: null,
+    });
     private readonly loadedRouteViewModels = signal<RoutePageRouteViewModel[]>([]);
     private readonly visibleRouteViewModels = signal<RoutePageRouteViewModel[]>([]);
+    private readonly routeRowActivationState: TableRowActivationState = createTableRowActivationState();
 
     readonly user = signal<AppUserInterface | null>(null);
     readonly deletingRouteID = signal<string | null>(null);
@@ -214,6 +242,14 @@ export class RoutesPageComponent implements OnInit {
     readonly isDismissingSuuntoRouteCatchUpPrompt = signal(false);
     readonly suuntoRouteCatchUpPromptError = signal<string | null>(null);
     readonly connectedSuuntoProviderUserIds = signal<string[]>([]);
+    readonly garminRouteSendContext = signal<GarminRouteSendContext>({
+        connected: false,
+        reconnectRequired: false,
+        missingPermissions: [],
+        providerUserId: null,
+        providerStates: [],
+        serviceMeta: null,
+    });
     readonly suuntoConnectionView = signal<SuuntoServiceConnectionViewModel>(buildSuuntoServiceConnectionViewModel({
         hasToken: false,
         serviceMeta: null,
@@ -224,6 +260,14 @@ export class RoutesPageComponent implements OnInit {
             && connectionView.connected
             && !connectionView.reconnectRequired;
     });
+    readonly canSendRoutesToGarmin = computed(() => {
+        const connectionView = this.garminRouteSendContext();
+        return this.userService.hasProAccessSignal()
+            && connectionView.connected
+            && !connectionView.reconnectRequired
+            && connectionView.missingPermissions.length === 0;
+    });
+    readonly showGarminRouteSend = SHOW_GARMIN_ROUTE_SEND;
     readonly routeFilterActive = computed(() => this.isRouteFilterActive());
     readonly selectedRouteCount = computed(() => this.selectedRouteIDs().length);
     readonly selectedRouteIDSet = computed(() => new Set(this.selectedRouteIDs()));
@@ -264,6 +308,14 @@ export class RoutesPageComponent implements OnInit {
             !!item.route.id
             && selectedIDs.has(item.route.id)
             && item.canSendToSuunto
+        )).length;
+    });
+    readonly selectedSendableRoutesToGarminCount = computed(() => {
+        const selectedIDs = this.selectedRouteIDSet();
+        return this.visibleRouteViewModels().filter(item => (
+            !!item.route.id
+            && selectedIDs.has(item.route.id)
+            && item.canSendToGarmin
         )).length;
     });
     readonly allVisibleRoutesSelected = computed(() => {
@@ -330,6 +382,12 @@ export class RoutesPageComponent implements OnInit {
                 this.connectedSuuntoProviderUserIds.set(context.connectedProviderUserIds);
                 this.connectedSuuntoProviderUserIdsSubject.next(context.connectedProviderUserIds);
             });
+            this.userService.watchGarminRouteSendContext(user).pipe(
+                takeUntilDestroyed(this.destroyRef),
+            ).subscribe(context => {
+                this.garminRouteSendContext.set(context);
+                this.garminRouteSendContextSubject.next(context);
+            });
 
             const routeDocuments$ = this.routeSortSubject.pipe(
                 map(routeSort => this.toRouteListSort(routeSort)),
@@ -345,6 +403,7 @@ export class RoutesPageComponent implements OnInit {
                 this.routeSortSubject,
                 this.routeFilterSubject,
                 this.connectedSuuntoProviderUserIdsSubject,
+                this.garminRouteSendContextSubject,
             ]).pipe(
                 map(([routes, routeSort, routeFilter]) => {
                     const routeViewModels = routes.map(route => this.toRouteViewModel(route));
@@ -600,6 +659,45 @@ export class RoutesPageComponent implements OnInit {
         void this.router.navigate(['/user', userID, 'route', routeID]);
     }
 
+    onRouteRowPointerDown(event: PointerEvent): void {
+        beginTableRowPointerTracking(this.routeRowActivationState, event);
+    }
+
+    onRouteRowPointerMove(event: PointerEvent): void {
+        updateTableRowPointerTracking(this.routeRowActivationState, event);
+    }
+
+    onRouteRowPointerUp(event: PointerEvent): void {
+        endTableRowPointerTracking(this.routeRowActivationState, event);
+    }
+
+    onRouteRowPointerCancel(event: PointerEvent): void {
+        cancelTableRowPointerTracking(this.routeRowActivationState, event);
+    }
+
+    onRouteRowClick(item: RoutePageRouteViewModel, event: MouseEvent): void {
+        if (!shouldActivateTableRowFromClick(this.routeRowActivationState, event)) {
+            return;
+        }
+
+        this.openRouteDetails(item);
+    }
+
+    onRouteRowKeydown(item: RoutePageRouteViewModel, event: Event): void {
+        if (!(event instanceof KeyboardEvent)) {
+            return;
+        }
+
+        if (!shouldActivateTableRowFromKeyboard(event)) {
+            return;
+        }
+
+        if (event.key === ' ') {
+            event.preventDefault();
+        }
+        this.openRouteDetails(item);
+    }
+
     async confirmDeleteRoute(route: FirestoreRouteJSON): Promise<void> {
         const user = this.user();
         const routeID = route.id;
@@ -766,8 +864,25 @@ export class RoutesPageComponent implements OnInit {
         }
     }
 
+    getRouteSendDestinationLabel(destinationServiceName: ServiceNames): string {
+        return getRouteServiceDisplayName(destinationServiceName);
+    }
+
     async sendRouteToSuunto(route: FirestoreRouteJSON, source: 'routes_list_row' | 'routes_list_bulk' = 'routes_list_row'): Promise<void> {
+        await this.sendRouteToService(route, ServiceNames.SuuntoApp, source);
+    }
+
+    async sendRouteToGarmin(route: FirestoreRouteJSON, source: 'routes_list_row' | 'routes_list_bulk' = 'routes_list_row'): Promise<void> {
+        await this.sendRouteToService(route, ServiceNames.GarminAPI, source);
+    }
+
+    async sendRouteToService(
+        route: FirestoreRouteJSON,
+        destinationServiceName: ServiceNames,
+        source: 'routes_list_row' | 'routes_list_bulk' = 'routes_list_row',
+    ): Promise<void> {
         const routeID = route.id;
+        const destinationLabel = this.getRouteSendDestinationLabel(destinationServiceName);
         if (
             !routeID
             || this.bulkActionInProgress()
@@ -776,16 +891,16 @@ export class RoutesPageComponent implements OnInit {
             || this.deletingRouteID() === routeID
             || this.downloadingRouteID() === routeID
             || this.reprocessingRouteID() === routeID
-            || !this.canSendRoutesToSuunto()
-            || !this.canSendRouteToSuunto(route)
+            || !this.canSendRoutesToDestination(destinationServiceName)
+            || !this.canSendRouteToDestination(route, destinationServiceName)
         ) {
             return;
         }
 
         this.sendingToServiceRouteID.set(routeID);
-        this.snackBar.open('Sending route to Suunto...', undefined, { duration: 2000 });
+        this.snackBar.open(`Sending route to ${destinationLabel}...`, undefined, { duration: 2000 });
         try {
-            const result = await this.routeSendService.sendRoutesToService([routeID], ServiceNames.SuuntoApp);
+            const result = await this.routeSendService.sendRoutesToService([routeID], destinationServiceName);
             const status = result.successCount > 0 ? 'success' : 'failure';
             this.analyticsService.logSavedRouteAction('send_service_route', {
                 status,
@@ -794,11 +909,11 @@ export class RoutesPageComponent implements OnInit {
                 skippedCount: result.skippedCount,
                 fileType: this.getPrimaryRouteFileType(route),
                 source,
-                destinationService: ServiceNames.SuuntoApp,
+                destinationService: destinationServiceName,
             });
 
             this.snackBar.open(
-                result.successCount > 0 ? 'Route sent to Suunto.' : getRouteSendResponseMessage(result),
+                result.successCount > 0 ? `Route sent to ${destinationLabel}.` : getRouteSendResponseMessage(result),
                 undefined,
                 { duration: result.successCount > 0 ? 2500 : 3500 },
             );
@@ -808,10 +923,13 @@ export class RoutesPageComponent implements OnInit {
                 routeCount: 1,
                 fileType: this.getPrimaryRouteFileType(route),
                 source,
-                destinationService: ServiceNames.SuuntoApp,
+                destinationService: destinationServiceName,
             });
-            this.logger.error('[RoutesPageComponent] Failed to send route to Suunto', { routeID }, error);
-            this.snackBar.open(getRouteSendErrorMessage(error), undefined, { duration: 4000 });
+            this.logger.error('[RoutesPageComponent] Failed to send route to service', {
+                routeID,
+                destinationServiceName,
+            }, error);
+            this.snackBar.open(getRouteSendErrorMessage(error, destinationServiceName), undefined, { duration: 4000 });
         } finally {
             this.sendingToServiceRouteID.set(null);
         }
@@ -942,19 +1060,28 @@ export class RoutesPageComponent implements OnInit {
     }
 
     async sendSelectedRoutesToSuunto(): Promise<void> {
+        await this.sendSelectedRoutesToService(ServiceNames.SuuntoApp);
+    }
+
+    async sendSelectedRoutesToGarmin(): Promise<void> {
+        await this.sendSelectedRoutesToService(ServiceNames.GarminAPI);
+    }
+
+    async sendSelectedRoutesToService(destinationServiceName: ServiceNames): Promise<void> {
         const selectedRoutes = this.getSelectedVisibleRouteItems();
-        const sendableRoutes = selectedRoutes.filter(item => item.canSendToSuunto);
+        const sendableRoutes = selectedRoutes.filter(item => this.canSendRouteItemToDestination(item, destinationServiceName));
+        const destinationLabel = this.getRouteSendDestinationLabel(destinationServiceName);
         if (
             sendableRoutes.length === 0
             || this.bulkActionInProgress()
             || this.sendingToServiceRouteID() !== null
-            || !this.canSendRoutesToSuunto()
+            || !this.canSendRoutesToDestination(destinationServiceName)
         ) {
             return;
         }
 
         this.bulkActionInProgress.set(true);
-        const jobId = this.processingService.addJob('process', 'Sending routes to Suunto...');
+        const jobId = this.processingService.addJob('process', `Sending routes to ${destinationLabel}...`);
         this.processingService.updateJob(jobId, {
             status: 'processing',
             progress: 10,
@@ -966,7 +1093,7 @@ export class RoutesPageComponent implements OnInit {
             const routeIDs = sendableRoutes
                 .map(item => item.route.id)
                 .filter((routeID): routeID is string => !!routeID);
-            const result = await this.routeSendService.sendRoutesToService(routeIDs, ServiceNames.SuuntoApp, {
+            const result = await this.routeSendService.sendRoutesToService(routeIDs, destinationServiceName, {
                 onProgress: progress => {
                     this.processingService.updateJob(jobId, {
                         status: 'processing',
@@ -984,14 +1111,14 @@ export class RoutesPageComponent implements OnInit {
 
             const totalSkippedCount = result.skippedCount + skippedBeforeSendCount;
             if (result.successCount === 0) {
-                this.processingService.failJob(jobId, 'No routes sent to Suunto');
+                this.processingService.failJob(jobId, `No routes sent to ${destinationLabel}`);
                 this.analyticsService.logSavedRouteAction('send_service_route', {
                     status: 'failure',
                     routeCount: selectedRoutes.length,
                     failedCount: result.failureCount,
                     skippedCount: totalSkippedCount,
                     source: 'routes_list_bulk',
-                    destinationService: ServiceNames.SuuntoApp,
+                    destinationService: destinationServiceName,
                 });
                 this.snackBar.open(getRouteSendResponseMessage(result), undefined, { duration: 4000 });
                 return;
@@ -1003,7 +1130,7 @@ export class RoutesPageComponent implements OnInit {
                 : null;
             this.processingService.completeJob(
                 jobId,
-                `Sent ${result.successCount} ${result.successCount === 1 ? 'route' : 'routes'} to Suunto`,
+                `Sent ${result.successCount} ${result.successCount === 1 ? 'route' : 'routes'} to ${destinationLabel}`,
             );
             this.analyticsService.logSavedRouteAction('send_service_route', {
                 status,
@@ -1011,12 +1138,12 @@ export class RoutesPageComponent implements OnInit {
                 failedCount: result.failureCount,
                 skippedCount: totalSkippedCount,
                 source: 'routes_list_bulk',
-                destinationService: ServiceNames.SuuntoApp,
+                destinationService: destinationServiceName,
             });
             this.snackBar.open(
                 status === 'partial_success'
-                    ? this.getBulkRouteSendSummaryMessage(result.successCount, result.failureCount, totalSkippedCount, guidanceMessage)
-                    : `Sent ${result.successCount} ${result.successCount === 1 ? 'route' : 'routes'} to Suunto.`,
+                    ? this.getBulkRouteSendSummaryMessage(destinationServiceName, result.successCount, result.failureCount, totalSkippedCount, guidanceMessage)
+                    : `Sent ${result.successCount} ${result.successCount === 1 ? 'route' : 'routes'} to ${destinationLabel}.`,
                 undefined,
                 { duration: status === 'partial_success' ? 4000 : 2500 },
             );
@@ -1026,10 +1153,12 @@ export class RoutesPageComponent implements OnInit {
                 status: 'failure',
                 routeCount: selectedRoutes.length,
                 source: 'routes_list_bulk',
-                destinationService: ServiceNames.SuuntoApp,
+                destinationService: destinationServiceName,
             });
-            this.logger.error('[RoutesPageComponent] Failed to send selected routes to Suunto', error);
-            this.snackBar.open(getRouteSendErrorMessage(error), undefined, { duration: 4000 });
+            this.logger.error('[RoutesPageComponent] Failed to send selected routes to service', {
+                destinationServiceName,
+            }, error);
+            this.snackBar.open(getRouteSendErrorMessage(error, destinationServiceName), undefined, { duration: 4000 });
         } finally {
             this.bulkActionInProgress.set(false);
         }
@@ -1354,6 +1483,56 @@ export class RoutesPageComponent implements OnInit {
             && canSendRouteToConnectedSuuntoAccounts(route, this.connectedSuuntoProviderUserIds());
     }
 
+    private canSendRouteToGarmin(route: FirestoreRouteJSON): boolean {
+        return this.canManageRoute(route)
+            && this.routeService.getOriginalRouteFiles(route).length > 0
+            && canSendRouteToConnectedGarminAccount(route, this.garminRouteSendContext());
+    }
+
+    private getGarminSendDisabledReason(route: FirestoreRouteJSON): string | null {
+        if (!this.canManageRoute(route) || this.routeService.getOriginalRouteFiles(route).length === 0) {
+            return null;
+        }
+
+        return getGarminRouteSendDisabledReason(route, this.garminRouteSendContext());
+    }
+
+    private canSendRoutesToDestination(destinationServiceName: ServiceNames): boolean {
+        switch (destinationServiceName) {
+            case ServiceNames.SuuntoApp:
+                return this.canSendRoutesToSuunto();
+            case ServiceNames.GarminAPI:
+                return this.canSendRoutesToGarmin();
+            default:
+                return false;
+        }
+    }
+
+    private canSendRouteToDestination(route: FirestoreRouteJSON, destinationServiceName: ServiceNames): boolean {
+        switch (destinationServiceName) {
+            case ServiceNames.SuuntoApp:
+                return this.canSendRouteToSuunto(route);
+            case ServiceNames.GarminAPI:
+                return this.canSendRouteToGarmin(route);
+            default:
+                return false;
+        }
+    }
+
+    private canSendRouteItemToDestination(
+        item: Pick<RoutePageRouteViewModel, 'canSendToSuunto' | 'canSendToGarmin'>,
+        destinationServiceName: ServiceNames,
+    ): boolean {
+        switch (destinationServiceName) {
+            case ServiceNames.SuuntoApp:
+                return item.canSendToSuunto;
+            case ServiceNames.GarminAPI:
+                return item.canSendToGarmin;
+            default:
+                return false;
+        }
+    }
+
     private async openSubscriptions(): Promise<void> {
         await this.router.navigate(['/subscriptions']);
     }
@@ -1368,13 +1547,15 @@ export class RoutesPageComponent implements OnInit {
     }
 
     private getBulkRouteSendSummaryMessage(
+        destinationServiceName: ServiceNames,
         successCount: number,
         failureCount: number,
         skippedCount: number,
         guidanceMessage: string | null,
     ): string {
+        const destinationLabel = this.getRouteSendDestinationLabel(destinationServiceName);
         const routeLabel = successCount === 1 ? 'route' : 'routes';
-        const messageParts = [`Sent ${successCount} ${routeLabel} to Suunto.`];
+        const messageParts = [`Sent ${successCount} ${routeLabel} to ${destinationLabel}.`];
         if (failureCount > 0) {
             messageParts.push(`Failed ${failureCount}.`);
         }
@@ -1469,16 +1650,19 @@ export class RoutesPageComponent implements OnInit {
         const pointCountLabel = `${pointCount} point${pointCount === 1 ? '' : 's'}`;
         const waypointCountLabel = waypointCount > 0 ? `${waypointCount} waypoint${waypointCount === 1 ? '' : 's'}` : null;
         const sourceSummary = getRouteSourceSummary(route);
-        const sourceServiceLabel = sourceSummary.serviceName
-            ? getRouteServiceDisplayName(sourceSummary.serviceName)
-            : sourceSummary.label;
+        const sourcePresentation = sourceSummary.presentation;
+        const sourceServiceLabel = sourcePresentation?.displayLabel
+            || (sourceSummary.serviceName ? getRouteServiceDisplayName(sourceSummary.serviceName) : sourceSummary.label);
         const provenanceItems = this.buildRouteProvenanceItems(route);
         const provenanceSummary = provenanceItems.map(item => item.label).join(' · ');
+        const garminSendDisabledReason = this.getGarminSendDisabledReason(route);
+        const garminSendMenuLabel = getGarminRouteSendMenuLabel(garminSendDisabledReason);
         return {
             route,
             name: routeName,
             routeDate,
             routeDateSortMs: routeDate ? routeDate.getTime() : null,
+            sourcePresentation,
             sourceServiceLabel,
             sourceServiceTitle: sourceSummary.label,
             sourceServiceName: sourceSummary.serviceName,
@@ -1504,6 +1688,9 @@ export class RoutesPageComponent implements OnInit {
             canExportGPX: this.canManageRoute(route) && originalFiles.length > 0,
             canDownloadOriginals: this.canManageRoute(route) && originalFiles.length > 0,
             canSendToSuunto: this.canSendRouteToSuunto(route),
+            canSendToGarmin: this.canSendRouteToGarmin(route),
+            garminSendDisabledReason,
+            garminSendMenuLabel,
             canDelete: this.canManageRoute(route),
             filterText: [
                 routeName,

@@ -39,6 +39,13 @@ export interface RouteDeliveryMetadata {
     lastErrorMessage?: string | null;
 }
 
+export interface RouteDeliverySummary {
+    serviceName: ServiceNames | string;
+    providerUserIds?: string[];
+    latestProviderUserId?: string | null;
+    updatedAt?: number | Date | null;
+}
+
 function normalizeRouteProviderUserId(value: unknown): string | null {
     return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null;
 }

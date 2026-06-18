@@ -92,7 +92,11 @@ const { mockDocRef, mockBatch, mockDocSnapshot, mockCollection, mockRecursiveDel
             deletionInProgress: false,
             shouldSkip: false,
         }),
-        mockRunTransaction: vi.fn(async (runner: (transaction: { update: (ref: { update?: (data: unknown) => Promise<void> }, data: unknown) => Promise<void> | void }) => unknown) => runner({
+        mockRunTransaction: vi.fn(async (runner: (transaction: {
+            get: (ref: { get?: () => Promise<unknown> }) => Promise<unknown>,
+            update: (ref: { update?: (data: unknown) => Promise<void> }, data: unknown) => Promise<void> | void
+        }) => unknown) => runner({
+            get: async (ref) => ref.get ? ref.get() : { exists: true, data: () => ({}) },
             update: (ref, data) => ref.update?.(data),
         })),
         mockMarkQueueItemDeletedForUserCleanup: vi.fn().mockResolvedValue(true),
@@ -317,6 +321,7 @@ describe('queue', () => {
                 dispatchedToCloudTask: null,
             }),
         });
+        vi.mocked(utils.enqueueWorkoutTask).mockResolvedValue(true);
         mockShouldSkipQueueWorkForDeletedUser.mockResolvedValue(false);
         mockGetUserDeletionGuardState.mockResolvedValue({
             userExists: true,
@@ -329,7 +334,11 @@ describe('queue', () => {
             shouldSkip: false,
         });
         mockMarkQueueItemDeletedForUserCleanup.mockResolvedValue(true);
-        mockRunTransaction.mockImplementation(async (runner: (transaction: { update: (ref: { update?: (data: unknown) => Promise<void> }, data: unknown) => Promise<void> | void }) => unknown) => runner({
+        mockRunTransaction.mockImplementation(async (runner: (transaction: {
+            get: (ref: { get?: () => Promise<unknown> }) => Promise<unknown>,
+            update: (ref: { update?: (data: unknown) => Promise<void> }, data: unknown) => Promise<void> | void
+        }) => unknown) => runner({
+            get: async (ref) => ref.get ? ref.get() : { exists: true, data: () => ({}) },
             update: (ref, data) => ref.update?.(data),
         }));
         mockRecursiveDelete.mockResolvedValue(undefined);
@@ -596,8 +605,8 @@ describe('queue', () => {
 
             // Verify enqueue called for both
             expect(utils.enqueueWorkoutTask).toHaveBeenCalledTimes(2);
-            expect(utils.enqueueWorkoutTask).toHaveBeenCalledWith(ServiceNames.GarminAPI, 'doc1', expect.any(Number), expect.any(Number));
-            expect(utils.enqueueWorkoutTask).toHaveBeenCalledWith(ServiceNames.GarminAPI, 'doc2', expect.any(Number), expect.any(Number));
+            expect(utils.enqueueWorkoutTask).toHaveBeenCalledWith(ServiceNames.GarminAPI, 'doc1', expect.any(Number), expect.any(Number), { recoveryTaskKey: 0 });
+            expect(utils.enqueueWorkoutTask).toHaveBeenCalledWith(ServiceNames.GarminAPI, 'doc2', expect.any(Number), expect.any(Number), { recoveryTaskKey: 0 });
 
             // Verify dispatchedToCloudTask update
             expect(mockDoc1.ref.update).toHaveBeenCalledWith({ dispatchedToCloudTask: expect.any(Number) });
@@ -631,9 +640,9 @@ describe('queue', () => {
             expect(utils.getCloudTaskQueueDepth).toHaveBeenCalledWith(true);
             // Expected spread: Total 1800s. Size 3. Delay per item = 600s.
             // Items: 0, 600, 1200
-            expect(utils.enqueueWorkoutTask).toHaveBeenNthCalledWith(1, ServiceNames.GarminAPI, '1', expect.any(Number), 0);
-            expect(utils.enqueueWorkoutTask).toHaveBeenNthCalledWith(2, ServiceNames.GarminAPI, '2', expect.any(Number), delayPerItem);
-            expect(utils.enqueueWorkoutTask).toHaveBeenNthCalledWith(3, ServiceNames.GarminAPI, '3', expect.any(Number), delayPerItem * 2);
+            expect(utils.enqueueWorkoutTask).toHaveBeenNthCalledWith(1, ServiceNames.GarminAPI, '1', expect.any(Number), 0, { recoveryTaskKey: 0 });
+            expect(utils.enqueueWorkoutTask).toHaveBeenNthCalledWith(2, ServiceNames.GarminAPI, '2', expect.any(Number), delayPerItem, { recoveryTaskKey: 0 });
+            expect(utils.enqueueWorkoutTask).toHaveBeenNthCalledWith(3, ServiceNames.GarminAPI, '3', expect.any(Number), delayPerItem * 2, { recoveryTaskKey: 0 });
         });
 
         it('should delete user-owned queue docs instead of dispatching when account deletion is active', async () => {
@@ -842,7 +851,7 @@ describe('queue', () => {
             await dispatchQueueItemTasks(ServiceNames.SuuntoApp);
 
             expect(utils.enqueueWorkoutTask).toHaveBeenCalledTimes(1);
-            expect(utils.enqueueWorkoutTask).toHaveBeenCalledWith(ServiceNames.SuuntoApp, 'healthy-doc', expect.any(Number), expect.any(Number));
+            expect(utils.enqueueWorkoutTask).toHaveBeenCalledWith(ServiceNames.SuuntoApp, 'healthy-doc', expect.any(Number), expect.any(Number), { recoveryTaskKey: 0 });
             expect(updateGuardFailure).not.toHaveBeenCalled();
             expect(updateHealthy).toHaveBeenCalledWith({ dispatchedToCloudTask: expect.any(Number) });
         });
@@ -884,7 +893,7 @@ describe('queue', () => {
 
             await dispatchQueueItemTasks(ServiceNames.SuuntoApp);
 
-            expect(utils.enqueueWorkoutTask).toHaveBeenCalledWith(ServiceNames.SuuntoApp, 'raced-doc', expect.any(Number), 0);
+            expect(utils.enqueueWorkoutTask).toHaveBeenCalledWith(ServiceNames.SuuntoApp, 'raced-doc', expect.any(Number), 0, { recoveryTaskKey: 0 });
             expect(mockRecursiveDelete).toHaveBeenCalledWith(racedRef);
             expect(updateRaced).not.toHaveBeenCalled();
         });
@@ -919,7 +928,7 @@ describe('queue', () => {
 
             await dispatchQueueItemTasks(ServiceNames.SuuntoApp);
 
-            expect(utils.enqueueWorkoutTask).toHaveBeenCalledWith(ServiceNames.SuuntoApp, 'doc-moved-to-dlq', expect.any(Number), 0);
+            expect(utils.enqueueWorkoutTask).toHaveBeenCalledWith(ServiceNames.SuuntoApp, 'doc-moved-to-dlq', expect.any(Number), 0, { recoveryTaskKey: 0 });
             expect(mockDoc.ref.update).toHaveBeenCalledWith({ dispatchedToCloudTask: expect.any(Number) });
             expect(mockDocRef.get).toHaveBeenCalled();
         });
@@ -943,53 +952,48 @@ describe('queue', () => {
             expect(utils.enqueueWorkoutTask).not.toHaveBeenCalled();
         });
 
-        it('can leave an item stuck when enqueue returns ALREADY_EXISTS-style success without a runnable task', async () => {
+        it('advances dispatch recovery generation and retries when Cloud Tasks names are stale-reserved', async () => {
             const utils = await import('./utils');
             vi.mocked(utils.getCloudTaskQueueDepth).mockResolvedValue(0);
-            // Simulate enqueue swallowing ALREADY_EXISTS (same as cloud-tasks helper behavior).
-            vi.mocked(utils.enqueueWorkoutTask).mockResolvedValue(undefined);
+            vi.mocked(utils.enqueueWorkoutTask)
+                .mockResolvedValueOnce(false)
+                .mockResolvedValueOnce(true);
             const { dispatchQueueItemTasks } = await import('./queue');
             const admin = await import('firebase-admin');
 
+            const dateCreated = 1_777_000_000_000;
             let persistedDispatchedAt: number | null = null;
-            let firstScan = true;
+            let persistedDispatchRecoveryGeneration = 0;
+            const readQueueData = () => ({
+                dateCreated,
+                dispatchedToCloudTask: persistedDispatchedAt,
+                dispatchRecoveryGeneration: persistedDispatchRecoveryGeneration,
+                firebaseUserID: 'firebase-stuck',
+                userID: 'garmin-stuck',
+                retryCount: 0,
+                processed: false,
+            });
 
             const mockDoc = {
                 id: 'stuck-doc',
                 ref: {
-                    update: vi.fn(async ({ dispatchedToCloudTask }: { dispatchedToCloudTask: number }) => {
-                        persistedDispatchedAt = dispatchedToCloudTask;
+                    get: vi.fn(async () => ({ exists: true, data: readQueueData })),
+                    update: vi.fn(async (data: { dispatchedToCloudTask?: number, dispatchRecoveryGeneration?: number }) => {
+                        if (typeof data.dispatchRecoveryGeneration === 'number') {
+                            persistedDispatchRecoveryGeneration = data.dispatchRecoveryGeneration;
+                        }
+                        if (typeof data.dispatchedToCloudTask === 'number') {
+                            persistedDispatchedAt = data.dispatchedToCloudTask;
+                        }
                     }),
                     parent: { id: 'col' },
                     id: 'stuck-doc',
                 },
-                data: () => ({ dateCreated: Date.now(), dispatchedToCloudTask: persistedDispatchedAt, firebaseUserID: 'firebase-stuck', userID: 'garmin-stuck' }),
+                data: readQueueData,
             };
 
             const firestore = admin.firestore();
             vi.mocked(firestore.collection('any').get).mockImplementation(async () => {
-                // First scheduler pass sees the item as undispatched.
-                if (firstScan) {
-                    firstScan = false;
-                    return {
-                        docs: [mockDoc] as any,
-                        size: 1,
-                        empty: false,
-                        isEqual: vi.fn(),
-                    } as any;
-                }
-
-                // Second pass simulates Firestore query filter where dispatchedToCloudTask != null
-                // excludes this doc, so dispatcher never retries this item.
-                if (persistedDispatchedAt !== null) {
-                    return {
-                        docs: [],
-                        size: 0,
-                        empty: true,
-                        isEqual: vi.fn(),
-                    } as any;
-                }
-
                 return {
                     docs: [mockDoc] as any,
                     size: 1,
@@ -999,13 +1003,144 @@ describe('queue', () => {
             });
 
             await dispatchQueueItemTasks(ServiceNames.GarminAPI);
-            expect(utils.enqueueWorkoutTask).toHaveBeenCalledTimes(1);
+            expect(utils.enqueueWorkoutTask).toHaveBeenCalledTimes(2);
+            expect(utils.enqueueWorkoutTask).toHaveBeenNthCalledWith(
+                1,
+                ServiceNames.GarminAPI,
+                'stuck-doc',
+                dateCreated,
+                0,
+                { recoveryTaskKey: 0 },
+            );
+            expect(utils.enqueueWorkoutTask).toHaveBeenNthCalledWith(
+                2,
+                ServiceNames.GarminAPI,
+                'stuck-doc',
+                dateCreated,
+                0,
+                { recoveryTaskKey: '0-1' },
+            );
+            expect(mockDoc.ref.update).toHaveBeenCalledWith({ dispatchRecoveryGeneration: 1 });
             expect(mockDoc.ref.update).toHaveBeenCalledWith({ dispatchedToCloudTask: expect.any(Number) });
-            expect(persistedDispatchedAt).not.toBeNull();
+            expect(persistedDispatchRecoveryGeneration).toBe(1);
+            expect(persistedDispatchedAt).toEqual(expect.any(Number));
+        });
+
+        it('reuses a newer persisted dispatch recovery generation instead of incrementing again', async () => {
+            const utils = await import('./utils');
+            vi.mocked(utils.getCloudTaskQueueDepth).mockResolvedValue(0);
+            vi.mocked(utils.enqueueWorkoutTask)
+                .mockResolvedValueOnce(false)
+                .mockResolvedValueOnce(true);
+            const { dispatchQueueItemTasks } = await import('./queue');
+            const admin = await import('firebase-admin');
+
+            const dateCreated = 1_777_000_000_001;
+            const update = vi.fn();
+            const mockDoc = {
+                id: 'stuck-doc',
+                ref: {
+                    get: vi.fn(async () => ({
+                        exists: true,
+                        data: () => ({
+                            dateCreated,
+                            dispatchedToCloudTask: null,
+                            dispatchRecoveryGeneration: 1,
+                            firebaseUserID: 'firebase-stuck',
+                            userID: 'garmin-stuck',
+                            retryCount: 0,
+                            processed: false,
+                        }),
+                    })),
+                    update,
+                    parent: { id: 'col' },
+                    id: 'stuck-doc',
+                },
+                data: () => ({
+                    dateCreated,
+                    dispatchedToCloudTask: null,
+                    dispatchRecoveryGeneration: 0,
+                    firebaseUserID: 'firebase-stuck',
+                    userID: 'garmin-stuck',
+                    retryCount: 0,
+                    processed: false,
+                }),
+            };
+
+            const firestore = admin.firestore();
+            vi.mocked(firestore.collection('any').get).mockResolvedValue({
+                docs: [mockDoc] as any,
+                size: 1,
+                empty: false,
+                isEqual: vi.fn(),
+            } as any);
 
             await dispatchQueueItemTasks(ServiceNames.GarminAPI);
-            // No second enqueue attempt after "successful" ALREADY_EXISTS-style first dispatch.
+
+            expect(utils.enqueueWorkoutTask).toHaveBeenCalledTimes(2);
+            expect(utils.enqueueWorkoutTask).toHaveBeenNthCalledWith(
+                2,
+                ServiceNames.GarminAPI,
+                'stuck-doc',
+                dateCreated,
+                0,
+                { recoveryTaskKey: '0-1' },
+            );
+            expect(update).not.toHaveBeenCalledWith({ dispatchRecoveryGeneration: 2 });
+            expect(update).toHaveBeenCalledWith({ dispatchedToCloudTask: expect.any(Number) });
+        });
+
+        it('does not advance dispatch recovery generation when the queue doc was already dispatched', async () => {
+            const utils = await import('./utils');
+            vi.mocked(utils.getCloudTaskQueueDepth).mockResolvedValue(0);
+            vi.mocked(utils.enqueueWorkoutTask).mockResolvedValueOnce(false);
+            const { dispatchQueueItemTasks } = await import('./queue');
+            const admin = await import('firebase-admin');
+
+            const update = vi.fn();
+            const mockDoc = {
+                id: 'already-dispatched-doc',
+                ref: {
+                    get: vi.fn(async () => ({
+                        exists: true,
+                        data: () => ({
+                            dateCreated: 1_777_000_000_002,
+                            dispatchedToCloudTask: 1_777_000_000_100,
+                            dispatchRecoveryGeneration: 0,
+                            firebaseUserID: 'firebase-stuck',
+                            userID: 'garmin-stuck',
+                            retryCount: 0,
+                            processed: false,
+                        }),
+                    })),
+                    update,
+                    parent: { id: 'col' },
+                    id: 'already-dispatched-doc',
+                },
+                data: () => ({
+                    dateCreated: 1_777_000_000_002,
+                    dispatchedToCloudTask: null,
+                    dispatchRecoveryGeneration: 0,
+                    firebaseUserID: 'firebase-stuck',
+                    userID: 'garmin-stuck',
+                    retryCount: 0,
+                    processed: false,
+                }),
+            };
+
+            const firestore = admin.firestore();
+            vi.mocked(firestore.collection('any').get).mockResolvedValue({
+                docs: [mockDoc] as any,
+                size: 1,
+                empty: false,
+                isEqual: vi.fn(),
+            } as any);
+
+            await dispatchQueueItemTasks(ServiceNames.GarminAPI);
+
             expect(utils.enqueueWorkoutTask).toHaveBeenCalledTimes(1);
+            expect(update).not.toHaveBeenCalledWith({ dispatchRecoveryGeneration: expect.any(Number) });
+            expect(update).not.toHaveBeenCalledWith({ dispatchedToCloudTask: expect.any(Number) });
         });
     });
 
@@ -1085,6 +1220,30 @@ describe('queue', () => {
 
             // Should call enqueue
             expect(utils.enqueueWorkoutTask).toHaveBeenCalled();
+        });
+
+        it('should not write the immediate dispatch marker when Cloud Tasks recovery remains blocked', async () => {
+            const utils = await import('./utils');
+            vi.mocked(utils.enqueueWorkoutTask).mockResolvedValue(false);
+
+            const { addToQueueForGarmin } = await import('./queue');
+
+            await addToQueueForGarmin({
+                userID: 'u1',
+                startTimeInSeconds: 123,
+                manual: false,
+                activityFileID: 'f1',
+                activityFileType: 'FIT',
+                token: 't1',
+                userAccessToken: 'at1',
+                callbackURL: 'cb1'
+            });
+
+            expect(utils.enqueueWorkoutTask).toHaveBeenCalled();
+            expect(utils.enqueueWorkoutTask).toHaveBeenCalledTimes(2);
+            expect(utils.enqueueWorkoutTask).toHaveBeenNthCalledWith(2, ServiceNames.GarminAPI, 'u1-f1', expect.any(Number), undefined, { recoveryTaskKey: '0-1' });
+            expect(mockDocRef.update).toHaveBeenCalledWith({ dispatchRecoveryGeneration: 1 });
+            expect(mockDocRef.update).not.toHaveBeenCalledWith({ dispatchedToCloudTask: expect.any(Number) });
         });
 
         it('should not write the dispatch marker when deletion starts after immediate Cloud Task enqueue', async () => {
@@ -1229,7 +1388,7 @@ describe('queue', () => {
                 dispatchedToCloudTask: null
             }));
             expect(doc.set).not.toHaveBeenCalled();
-            expect(utils.enqueueWorkoutTask).toHaveBeenCalledWith(ServiceNames.SuuntoApp, 'user1-work1', expect.any(Number));
+            expect(utils.enqueueWorkoutTask).toHaveBeenCalledWith(ServiceNames.SuuntoApp, 'user1-work1', expect.any(Number), undefined, { recoveryTaskKey: 0 });
             expect(doc.update).toHaveBeenCalledWith({ dispatchedToCloudTask: expect.any(Number) });
         });
 
@@ -1355,7 +1514,7 @@ describe('queue', () => {
             const result = await addToQueueForSuunto({ userName: 'user1', workoutID: 'work1' });
 
             expect(result.id).toBe('mock-doc-id');
-            expect(utils.enqueueWorkoutTask).toHaveBeenCalledWith(ServiceNames.SuuntoApp, 'user1-work1', expect.any(Number));
+            expect(utils.enqueueWorkoutTask).toHaveBeenCalledWith(ServiceNames.SuuntoApp, 'user1-work1', expect.any(Number), undefined, { recoveryTaskKey: 0 });
             expect(mockDocRef.get).toHaveBeenCalled();
         });
 
@@ -1427,8 +1586,33 @@ describe('queue', () => {
                 workoutID: 'work1'
             }));
             expect(mockDocRef.set).not.toHaveBeenCalled();
-            expect(utils.enqueueWorkoutTask).toHaveBeenCalledWith(ServiceNames.SuuntoApp, 'user1-work1', 123456);
+            expect(utils.enqueueWorkoutTask).toHaveBeenCalledWith(ServiceNames.SuuntoApp, 'user1-work1', 123456, undefined, { recoveryTaskKey: 0 });
             expect(mockDocRef.update).toHaveBeenCalledWith({ dispatchedToCloudTask: expect.any(Number) });
+        });
+
+        it('addToQueueForSuunto should not mark duplicate unprocessed queue items dispatched when Cloud Tasks recovery remains blocked', async () => {
+            const alreadyExistsError: any = new Error('ALREADY_EXISTS');
+            alreadyExistsError.code = 6;
+            mockDocRef.create.mockRejectedValueOnce(alreadyExistsError);
+            mockDocRef.get.mockResolvedValueOnce({
+                exists: true,
+                data: () => ({
+                    id: 'user1-work1',
+                    dateCreated: 123456,
+                    processed: false,
+                    retryCount: 0,
+                    dispatchedToCloudTask: null,
+                }),
+            });
+            vi.mocked(utils.enqueueWorkoutTask).mockResolvedValue(false);
+
+            const result = await addToQueueForSuunto({ userName: 'user1', workoutID: 'work1' });
+
+            expect(result.id).toBe('mock-doc-id');
+            expect(utils.enqueueWorkoutTask).toHaveBeenCalledWith(ServiceNames.SuuntoApp, 'user1-work1', 123456, undefined, { recoveryTaskKey: 0 });
+            expect(utils.enqueueWorkoutTask).toHaveBeenCalledWith(ServiceNames.SuuntoApp, 'user1-work1', 123456, undefined, { recoveryTaskKey: '0-1' });
+            expect(mockDocRef.update).toHaveBeenCalledWith({ dispatchRecoveryGeneration: 1 });
+            expect(mockDocRef.update).not.toHaveBeenCalledWith({ dispatchedToCloudTask: expect.any(Number) });
         });
 
         it('addToQueueForSuunto should delete duplicate queue docs and skip redispatch when deletion starts after duplicate lookup', async () => {

@@ -4,7 +4,9 @@ import { Clipboard } from '@angular/cdk/clipboard';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { AppEventColorService } from './color/app.event.color.service';
 import { AppColors } from './color/app.colors';
+import { ServiceNames } from '@sports-alliance/sports-lib';
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { buildSourceProviderPresentation } from '../helpers/provider-presentation.helper';
 
 describe('DataExportService', () => {
     let service: DataExportService;
@@ -103,6 +105,23 @@ describe('DataExportService', () => {
             // Expect empty cells
             expect(copied).toContain('|  |  |');
         });
+
+        it('should prepend explicit attribution and series provenance when provided', () => {
+            const data = [{ Name: 'Distance', 'Reference #ff0000': '10 km' }];
+            const columns = ['Name', 'Reference #ff0000'];
+
+            service.copyToMarkdown(data, columns, {
+                attributionLabel: 'Garmin Edge 540',
+                seriesPresentations: {
+                    'Reference #ff0000': buildSourceProviderPresentation(ServiceNames.SuuntoApp),
+                },
+            });
+
+            const copied = mockClipboard.copy.mock.calls[0][0];
+            expect(copied).toContain('> Source: Garmin Edge 540');
+            expect(copied).toContain('> Series sources: Reference: Suunto');
+            expect(copied).toContain('| Name | Reference  |');
+        });
     });
 
     describe('copyToSheets', () => {
@@ -138,6 +157,22 @@ describe('DataExportService', () => {
             const copied = mockClipboard.copy.mock.calls[0][0];
             expect(copied).toContain('Name\nTest\n');
             expect(mockSnackBar.open).toHaveBeenCalledWith('Copied to clipboard (Sheets)', 'Dismiss', expect.any(Object));
+        });
+
+        it('should include attribution rows in fallback TSV export when provided', async () => {
+            Object.assign(navigator, { clipboard: undefined });
+
+            await service.copyToSheets(data, columns, {
+                attributionLabel: 'Garmin Edge 540',
+                seriesPresentations: {
+                    Name: buildSourceProviderPresentation(ServiceNames.GarminAPI),
+                },
+            });
+
+            const copied = mockClipboard.copy.mock.calls[0][0];
+            expect(copied).toContain('Source\tGarmin Edge 540');
+            expect(copied).toContain('Series sources\tName: Garmin');
+            expect(copied).toContain('\n\nName\nTest\n');
         });
 
         it('should fallback to clipboard.copy if navigator.clipboard.write fails', async () => {
@@ -234,6 +269,67 @@ describe('DataExportService', () => {
                 // We expect 4 style="color:" occurrences: 1 header + 3 data rows
                 const matches = htmlContent.match(/style="color:/g);
                 expect(matches?.length).toBe(4);
+            }
+
+            blobSpy.mockRestore();
+        });
+
+        it('should add an HTML caption for attribution when provided', async () => {
+            const writeMock = vi.fn().mockResolvedValue(undefined);
+            Object.assign(navigator, {
+                clipboard: { write: writeMock }
+            });
+            global.ClipboardItem = vi.fn() as any;
+
+            const blobSpy = vi.spyOn(global, 'Blob').mockImplementation((content) => {
+                return { size: (content as any)[0].length, type: '' } as Blob;
+            });
+
+            await service.copyToSheets(data, columns, {
+                attributionLabel: 'Garmin <Edge 540>',
+                seriesPresentations: {
+                    Name: {
+                        ...buildSourceProviderPresentation(ServiceNames.COROSAPI),
+                        exportLabel: 'COROS "Apex" <script>alert(1)</script>',
+                    },
+                },
+            });
+
+            const htmlCall = blobSpy.mock.calls.find(call => call[1]?.type === 'text/html');
+            expect(htmlCall).toBeDefined();
+            if (htmlCall) {
+                const htmlContent = htmlCall[0]![0] as string;
+                expect(htmlContent).toContain('<caption');
+                expect(htmlContent).toContain('Source: Garmin &lt;Edge 540&gt;');
+                expect(htmlContent).toContain('Series sources: Name: COROS &quot;Apex&quot; &lt;script&gt;alert(1)&lt;/script&gt;');
+                expect(htmlContent).not.toContain('Source: Garmin <Edge 540>');
+                expect(htmlContent).not.toContain('<script>alert(1)</script>');
+            }
+
+            blobSpy.mockRestore();
+        });
+
+        it('should use sheet-safe light backgrounds and dark default text in HTML export', async () => {
+            const writeMock = vi.fn().mockResolvedValue(undefined);
+            Object.assign(navigator, {
+                clipboard: { write: writeMock }
+            });
+            global.ClipboardItem = vi.fn() as any;
+
+            const blobSpy = vi.spyOn(global, 'Blob').mockImplementation((content) => {
+                return { size: (content as any)[0].length, type: '' } as Blob;
+            });
+
+            await service.copyToSheets([{ Name: 'Distance', Value: '10 km' }], ['Name', 'Value']);
+
+            const htmlCall = blobSpy.mock.calls.find(call => call[1]?.type === 'text/html');
+            expect(htmlCall).toBeDefined();
+            if (htmlCall) {
+                const htmlContent = htmlCall[0]![0] as string;
+                expect(htmlContent).toContain('background-color: #ffffff;');
+                expect(htmlContent).toContain('color: #111827;');
+                expect(htmlContent).not.toContain('color: white;');
+                expect(htmlContent).not.toContain('border: 1px solid white;');
             }
 
             blobSpy.mockRestore();

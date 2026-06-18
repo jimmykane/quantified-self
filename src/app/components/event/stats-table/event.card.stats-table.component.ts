@@ -1,8 +1,6 @@
 import { ChangeDetectionStrategy, Component, Input, OnChanges } from '@angular/core';
 import { MatTableDataSource } from '@angular/material/table';
-import { EventInterface } from '@sports-alliance/sports-lib';
-import { ActivityInterface } from '@sports-alliance/sports-lib';
-import { DataInterface } from '@sports-alliance/sports-lib';
+import { ActivityInterface, DataInterface, EventInterface, ServiceNames, User } from '@sports-alliance/sports-lib';
 import { AppColors } from '../../../services/color/app.colors';
 import { DynamicDataLoader } from '@sports-alliance/sports-lib';
 import { UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
@@ -14,10 +12,14 @@ import { ActivityTypes } from '@sports-alliance/sports-lib';
 import { AppEventColorService } from '../../../services/color/app.event.color.service';
 import { DataGradeAdjustedPace } from '@sports-alliance/sports-lib';
 import { SelectionModel } from '@angular/cdk/collections';
-import { DataExportService } from '../../../services/data-export.service';
+import { DataExportOptions, DataExportService } from '../../../services/data-export.service';
 import { expandCollapse } from '../../../animations/animations';
 import { computeStatDiff } from '../../../helpers/stats-diff.helper';
 import { normalizeUnitDerivedTypeLabel } from '../../../helpers/stat-label.helper';
+import { buildSourceProviderPresentation } from '../../../helpers/provider-presentation.helper';
+import { normalizeProviderServiceName, ProviderPresentation } from '@shared/provider-presentation';
+import { AppEventService } from '../../../services/app.event.service';
+import { take } from 'rxjs/operators';
 
 @Component({
   selector: 'app-event-stats-table',
@@ -30,6 +32,7 @@ import { normalizeUnitDerivedTypeLabel } from '../../../helpers/stat-label.helpe
 
 export class EventCardStatsTableComponent implements OnChanges {
   @Input() event!: EventInterface;
+  @Input() user: User | null = null;
   @Input() userUnitSettings!: UserUnitSettingsInterface;
   @Input() selectedActivities!: ActivityInterface[];
   @Input() showAsExpansion = true;
@@ -39,16 +42,22 @@ export class EventCardStatsTableComponent implements OnChanges {
   selection = new SelectionModel<any>(true, []);
   private readonly rowTypeKey = '__statType';
   private readonly verticalSpeedRegex = /vertical speed/i;
+  private activitySeriesColumns: Array<{ columnKey: string; activity: ActivityInterface }> = [];
+  private exportOptions: DataExportOptions | undefined;
+  private exportOptionsRequestId = 0;
 
   constructor(
     private eventColorService: AppEventColorService,
-    private dataExportService: DataExportService
+    private dataExportService: DataExportService,
+    private eventService: AppEventService,
   ) {
   }
 
   ngOnChanges(simpleChanges: any) {
     this.data = new MatTableDataSource<object>();
     this.columns = [];
+    this.activitySeriesColumns = [];
+    this.exportOptions = undefined;
     this.selection.clear();
     if (!this.selectedActivities.length || !this.userUnitSettings) {
       return;
@@ -61,6 +70,10 @@ export class EventCardStatsTableComponent implements OnChanges {
       return `${label} ${color}`;
     });
     this.columns = ['Name'].concat(activityColumnKeys);
+    this.activitySeriesColumns = this.selectedActivities.map((activity, index) => ({
+      activity,
+      columnKey: activityColumnKeys[index],
+    }));
 
     // Collect all the stat types from all the activities
     const stats = this.selectedActivities.reduce((statsMap: Map<string, DataInterface>, activity) => {
@@ -218,6 +231,8 @@ export class EventCardStatsTableComponent implements OnChanges {
       const rowString = Object.values(row).join(' ').toLowerCase();
       return terms.some(term => rowString.includes(term));
     };
+
+    this.refreshExportOptions();
   }
 
   applyFilter(event: any) {
@@ -271,13 +286,13 @@ export class EventCardStatsTableComponent implements OnChanges {
   copyToClipboard(): void {
     const selectedRows = this.selection.selected;
     if (selectedRows.length === 0) return;
-    this.dataExportService.copyToMarkdown(selectedRows, this.columns);
+    this.dataExportService.copyToMarkdown(selectedRows, this.columns, this.exportOptions);
   }
 
   copyToSheets(): void {
     const selectedRows = this.selection.selected;
     if (selectedRows.length === 0) return;
-    this.dataExportService.copyToSheets(selectedRows, this.columns);
+    void this.dataExportService.copyToSheets(selectedRows, this.columns, this.exportOptions);
   }
 
   private getActivityHeaderLabel(activity: ActivityInterface): string {
@@ -353,5 +368,218 @@ export class EventCardStatsTableComponent implements OnChanges {
     });
 
     return preferredTypes;
+  }
+
+  private buildExportOptions(knownSourceServices: ServiceNames[]): DataExportOptions | undefined {
+    if (knownSourceServices.length === 0) {
+      return undefined;
+    }
+
+    const ambiguousSeriesColumns = this.getAmbiguousActivitySeriesColumns();
+    if (ambiguousSeriesColumns.length === 0) {
+      return undefined;
+    }
+
+    if (knownSourceServices.length === 1) {
+      const attributionLabel = this.buildAttributionLabel(knownSourceServices);
+      return attributionLabel ? { attributionLabel } : undefined;
+    }
+
+    const seriesPresentations = this.buildSeriesPresentations(knownSourceServices, ambiguousSeriesColumns);
+    const unresolvedAmbiguousColumnCount = ambiguousSeriesColumns.length - Object.keys(seriesPresentations).length;
+    const attributionLabel = unresolvedAmbiguousColumnCount > 0
+      ? this.buildAttributionLabel(knownSourceServices)
+      : null;
+
+    if (!attributionLabel && Object.keys(seriesPresentations).length === 0) {
+      return undefined;
+    }
+
+    const options: DataExportOptions = {};
+    if (attributionLabel) {
+      options.attributionLabel = attributionLabel;
+    }
+    if (Object.keys(seriesPresentations).length > 0) {
+      options.seriesPresentations = seriesPresentations;
+    }
+
+    return Object.keys(options).length > 0 ? options : undefined;
+  }
+
+  private refreshExportOptions(): void {
+    const fallbackServices = this.inferSourceServicesFromActivities();
+    this.exportOptions = this.buildExportOptions(fallbackServices);
+
+    const eventID = this.event?.getID?.();
+    if (!this.user || !eventID) {
+      return;
+    }
+
+    const requestId = ++this.exportOptionsRequestId;
+    this.eventService.getEventMetaDataKeys(this.user, eventID)
+      .pipe(take(1))
+      .subscribe({
+        next: (metadataKeys) => {
+          if (requestId !== this.exportOptionsRequestId) {
+            return;
+          }
+
+          const metadataServices = Array.from(new Set(
+            metadataKeys
+              .map(serviceName => normalizeProviderServiceName(serviceName))
+              .filter((serviceName): serviceName is ServiceNames => !!serviceName),
+          ));
+          if (metadataServices.length === 0) {
+            return;
+          }
+
+          this.exportOptions = this.buildExportOptions(metadataServices);
+        },
+        error: () => {
+          if (requestId !== this.exportOptionsRequestId) {
+            return;
+          }
+          this.exportOptions = this.exportOptions || this.buildExportOptions(fallbackServices);
+        },
+      });
+  }
+
+  private inferSourceServicesFromActivities(): ServiceNames[] {
+    return Array.from(new Set(
+      this.selectedActivities
+        .map(activity => this.inferSourceServiceFromActivity(activity))
+        .filter((serviceName): serviceName is ServiceNames => !!serviceName),
+    ));
+  }
+
+  private buildAttributionLabel(sourceServices: ServiceNames[]): string | null {
+    if (sourceServices.length === 1) {
+      return buildSourceProviderPresentation(sourceServices[0], this.event)?.exportLabel || null;
+    }
+
+    const labels = sourceServices
+      .map(serviceName => buildSourceProviderPresentation(serviceName)?.exportLabel || null)
+      .filter((label): label is string => !!label);
+    return labels.length > 0 ? labels.join(' | ') : null;
+  }
+
+  private getActivitySeriesColumnsForExport(): Array<{ columnKey: string; activity: ActivityInterface }> {
+    if (this.activitySeriesColumns.length > 0) {
+      return this.activitySeriesColumns;
+    }
+
+    const activityColumns = this.columns.filter(column => column !== 'Name' && column !== 'Difference');
+    return activityColumns
+      .map((columnKey, index) => ({
+        columnKey,
+        activity: this.selectedActivities[index],
+      }))
+      .filter((entry): entry is { columnKey: string; activity: ActivityInterface } => !!entry.activity);
+  }
+
+  private getAmbiguousActivitySeriesColumns(): Array<{ columnKey: string; activity: ActivityInterface }> {
+    return this.getActivitySeriesColumnsForExport()
+      .filter(entry => this.isActivitySeriesHeaderAmbiguous(entry.columnKey));
+  }
+
+  private buildSeriesPresentations(
+    sourceServices: ServiceNames[],
+    seriesColumns: Array<{ columnKey: string; activity: ActivityInterface }>,
+  ): Record<string, ProviderPresentation> {
+    return seriesColumns.reduce<Record<string, ProviderPresentation>>((presentations, entry) => {
+      const presentation = this.buildActivitySeriesPresentation(entry.activity, sourceServices);
+      if (presentation) {
+        presentations[entry.columnKey] = presentation;
+      }
+      return presentations;
+    }, {});
+  }
+
+  private buildActivitySeriesPresentation(
+    activity: ActivityInterface,
+    sourceServices: ServiceNames[],
+  ): ProviderPresentation | null {
+    const inferredService = this.inferSourceServiceFromActivity(activity, sourceServices);
+    const serviceName = inferredService || (sourceServices.length === 1 ? sourceServices[0] : null);
+    if (!serviceName) {
+      return null;
+    }
+
+    return buildSourceProviderPresentation(serviceName);
+  }
+
+  private inferSourceServiceFromActivity(
+    activity: ActivityInterface,
+    allowedSourceServices: ServiceNames[] = [
+      ServiceNames.GarminAPI,
+      ServiceNames.SuuntoApp,
+      ServiceNames.COROSAPI,
+    ],
+  ): ServiceNames | null {
+    const hints = this.getActivityProviderHints(activity);
+    if (hints.some(hint => hint.includes('coros')) && allowedSourceServices.includes(ServiceNames.COROSAPI)) {
+      return ServiceNames.COROSAPI;
+    }
+    if (hints.some(hint => hint.includes('suunto')) && allowedSourceServices.includes(ServiceNames.SuuntoApp)) {
+      return ServiceNames.SuuntoApp;
+    }
+    if (hints.some(hint => hint.includes('garmin')) && allowedSourceServices.includes(ServiceNames.GarminAPI)) {
+      return ServiceNames.GarminAPI;
+    }
+    return null;
+  }
+
+  private getActivityProviderHints(activity: ActivityInterface): string[] {
+    const hints = new Set<string>();
+    const creator = (activity as { creator?: { name?: unknown; devices?: Array<{ name?: unknown; manufacturer?: unknown; type?: unknown }> } }).creator;
+
+    const creatorName = this.normalizeProviderHint(creator?.name);
+    if (creatorName) {
+      hints.add(creatorName);
+    }
+
+    const devices = Array.isArray(creator?.devices) ? creator.devices : [];
+    devices.forEach(device => {
+      [device?.name, device?.manufacturer, device?.type]
+        .map(value => this.normalizeProviderHint(value))
+        .filter((value): value is string => !!value)
+        .forEach(value => hints.add(value));
+    });
+
+    return [...hints.values()];
+  }
+
+  private normalizeProviderHint(value: unknown): string | null {
+    return typeof value === 'string' && value.trim().length > 0
+      ? value.trim().toLowerCase()
+      : null;
+  }
+
+  private isActivitySeriesHeaderAmbiguous(columnKey: string): boolean {
+    const headerLabel = this.getColumnHeaderName(columnKey).trim();
+    if (!headerLabel) {
+      return true;
+    }
+
+    if (!this.event?.isMerge) {
+      return true;
+    }
+
+    return this.isGenericMergeSeriesLabel(headerLabel);
+  }
+
+  private isGenericMergeSeriesLabel(label: string): boolean {
+    const normalizedLabel = label.trim().toLowerCase();
+    if (!normalizedLabel) {
+      return true;
+    }
+
+    return normalizedLabel === 'device'
+      || normalizedLabel === 'activity'
+      || normalizedLabel === 'reference'
+      || normalizedLabel === 'test'
+      || /^player\s+[a-z0-9-]+$/i.test(normalizedLabel)
+      || /^device\s+[a-z0-9-]+$/i.test(normalizedLabel)
+      || /^activity\s+[a-z0-9-]+$/i.test(normalizedLabel);
   }
 }

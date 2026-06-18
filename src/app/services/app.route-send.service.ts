@@ -1,6 +1,7 @@
 import { Injectable, inject } from '@angular/core';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import {
+  GARMIN_DELIVERY_METADATA_ABORT_MESSAGE,
   SEND_ROUTES_TO_SERVICE_MAX_ROUTE_IDS,
   SendRouteToServiceFailureReason,
   SendRouteToServiceItemResult,
@@ -18,6 +19,8 @@ export interface RouteSendProgress {
 
 const ROUTE_SEND_REASON_PRIORITY: SendRouteToServiceFailureReason[] = [
   'DESTINATION_AUTH_REQUIRED',
+  'DESTINATION_PERMISSION_REQUIRED',
+  'DELIVERY_METADATA_PERSIST_FAILED',
   'ACCOUNT_DELETION_IN_PROGRESS',
   'ACCOUNT_STATE_UNAVAILABLE',
   'SEND_REQUEST_FAILED',
@@ -34,30 +37,40 @@ const TERMINAL_IN_BAND_ROUTE_SEND_REASONS: readonly SendRouteToServiceFailureRea
   'ACCOUNT_DELETION_IN_PROGRESS',
   'ACCOUNT_STATE_UNAVAILABLE',
   'DESTINATION_AUTH_REQUIRED',
+  'DESTINATION_PERMISSION_REQUIRED',
+  'DELIVERY_METADATA_PERSIST_FAILED',
 ];
 
 const GENERIC_ROUTE_SEND_RESPONSE_MESSAGES = new Set<string>([
   'Could not send route.',
   'Could not send routes to Suunto.',
+  'Could not send routes to Garmin.',
   'Could not send routes to the selected service.',
 ]);
 
-export function getRouteSendErrorMessage(error: unknown): string {
+export function getRouteSendErrorMessage(error: unknown, destinationServiceName?: ServiceNames): string {
   const message = (error as { message?: unknown } | null)?.message;
   const code = (error as { code?: unknown } | null)?.code;
   const normalizedMessage = typeof message === 'string' ? message : '';
   const normalizedCode = typeof code === 'string' ? code : '';
 
+  if (isSpecificGarminRouteSendGuidance(normalizedMessage)) {
+    return normalizedMessage;
+  }
+
   if (normalizedCode.includes('permission-denied')) {
     return 'Sending routes to services is a Pro feature.';
   }
   if (normalizedCode.includes('unauthenticated')) {
-    return isDestinationAuthReconnectMessage(normalizedMessage)
-      ? 'Connect Suunto again before sending routes.'
+    return isDestinationAuthReconnectMessage(normalizedMessage, destinationServiceName)
+      ? getDestinationAuthRequiredMessage(destinationServiceName || inferDestinationServiceNameFromMessage(normalizedMessage))
       : 'Sending routes is not authorized. Please sign in again.';
   }
   if (/not supported yet/i.test(normalizedMessage)) {
     return normalizedMessage;
+  }
+  if (/grant .*permission/i.test(normalizedMessage) || /course import/i.test(normalizedMessage)) {
+    return getDestinationPermissionRequiredMessage(destinationServiceName || inferDestinationServiceNameFromMessage(normalizedMessage));
   }
   if (/account is being deleted/i.test(normalizedMessage)) {
     return 'Account is being deleted or no longer exists.';
@@ -65,7 +78,7 @@ export function getRouteSendErrorMessage(error: unknown): string {
   if (/could not verify account state/i.test(normalizedMessage)) {
     return 'Could not verify account state. Please retry.';
   }
-  return normalizedMessage || 'Could not send routes to Suunto.';
+  return normalizedMessage || getDefaultRouteSendFailureMessage(destinationServiceName);
 }
 
 export function getRouteSendResponseMessage(response: SendRoutesToServiceResponse): string {
@@ -76,7 +89,11 @@ export function getRouteSendResponseMessage(response: SendRoutesToServiceRespons
 
   switch (highestPriorityReason) {
     case 'DESTINATION_AUTH_REQUIRED':
-      return getDestinationAuthRequiredMessage(response.destinationServiceName);
+      return getSpecificRouteSendResultMessage(nonSuccessResults, 'DESTINATION_AUTH_REQUIRED')
+        || getDestinationAuthRequiredMessage(response.destinationServiceName);
+    case 'DESTINATION_PERMISSION_REQUIRED':
+      return getSpecificRouteSendResultMessage(nonSuccessResults, 'DESTINATION_PERMISSION_REQUIRED')
+        || getDestinationPermissionRequiredMessage(response.destinationServiceName);
     case 'ACCOUNT_DELETION_IN_PROGRESS':
       return 'Account is being deleted or no longer exists.';
     case 'ACCOUNT_STATE_UNAVAILABLE':
@@ -180,7 +197,7 @@ export class AppRouteSendService {
     routeIds: string[],
     error: unknown,
   ): SendRoutesToServiceResponse {
-    const message = getRouteSendErrorMessage(error);
+    const message = getRouteSendErrorMessage(error, destinationServiceName);
     return {
       destinationServiceName,
       status: 'failure',
@@ -216,6 +233,24 @@ export class AppRouteSendService {
     routeIds: string[],
     terminalResult: SendRouteToServiceItemResult,
   ): SendRoutesToServiceResponse {
+    if (terminalResult.reason === 'DELIVERY_METADATA_PERSIST_FAILED') {
+      return {
+        destinationServiceName,
+        status: 'failure',
+        routeCount: routeIds.length,
+        successCount: 0,
+        failureCount: routeIds.length,
+        skippedCount: 0,
+        results: routeIds.map(routeId => ({
+          routeId,
+          destinationServiceName,
+          status: 'failure',
+          reason: 'SEND_REQUEST_FAILED',
+          message: GARMIN_DELIVERY_METADATA_ABORT_MESSAGE,
+        })),
+      };
+    }
+
     return {
       destinationServiceName,
       status: terminalResult.status === 'success' ? 'success' : 'failure',
@@ -262,22 +297,68 @@ function getDestinationAuthRequiredMessage(destinationServiceName: ServiceNames)
   switch (destinationServiceName) {
     case ServiceNames.SuuntoApp:
       return 'Connect Suunto again before sending routes.';
+    case ServiceNames.GarminAPI:
+      return 'Connect Garmin again before sending routes.';
     default:
       return 'Reconnect the selected service before sending routes.';
   }
 }
 
-function getDefaultRouteSendFailureMessage(destinationServiceName: ServiceNames): string {
+function getDestinationPermissionRequiredMessage(destinationServiceName: ServiceNames | null | undefined): string {
+  switch (destinationServiceName) {
+    case ServiceNames.GarminAPI:
+      return 'Grant Garmin Course Import permission and reconnect before sending routes.';
+    default:
+      return 'Grant the required destination permissions and reconnect before sending routes.';
+  }
+}
+
+function isSpecificGarminRouteSendGuidance(message: string): boolean {
+  return /previously used for this route/i.test(message);
+}
+
+function getSpecificRouteSendResultMessage(
+  results: SendRouteToServiceItemResult[],
+  reason: SendRouteToServiceFailureReason,
+): string | null {
+  const message = results.find(result => (
+    result.reason === reason
+      && typeof result.message === 'string'
+      && result.message.trim().length > 0
+      && isSpecificGarminRouteSendGuidance(result.message.trim())
+  ))?.message?.trim();
+
+  return message || null;
+}
+
+function getDefaultRouteSendFailureMessage(destinationServiceName?: ServiceNames | null): string {
   switch (destinationServiceName) {
     case ServiceNames.SuuntoApp:
       return 'Could not send routes to Suunto.';
+    case ServiceNames.GarminAPI:
+      return 'Could not send routes to Garmin.';
     default:
       return 'Could not send routes to the selected service.';
   }
 }
 
-function isDestinationAuthReconnectMessage(message: string): boolean {
-  return /suunto/i.test(message)
+function inferDestinationServiceNameFromMessage(message: string): ServiceNames | null {
+  if (/suunto/i.test(message)) {
+    return ServiceNames.SuuntoApp;
+  }
+  if (/garmin/i.test(message)) {
+    return ServiceNames.GarminAPI;
+  }
+  return null;
+}
+
+function isDestinationAuthReconnectMessage(message: string, destinationServiceName?: ServiceNames): boolean {
+  return destinationServiceName === ServiceNames.SuuntoApp
+    ? /suunto/i.test(message) || /no connected .*account/i.test(message) || /re-?connect/i.test(message)
+    : destinationServiceName === ServiceNames.GarminAPI
+      ? /garmin/i.test(message) || /no connected .*account/i.test(message) || /re-?connect/i.test(message)
+      : /suunto/i.test(message)
+        || /garmin/i.test(message)
     || /no connected .*account/i.test(message)
-    || /re-?connect/i.test(message);
+        || /re-?connect/i.test(message);
 }

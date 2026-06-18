@@ -32,12 +32,16 @@ import {
 } from '../../../services/app.route-send.service';
 import { AppRouteService } from '../../../services/app.route.service';
 import { AppThemeService } from '../../../services/app.theme.service';
-import { AppUserService } from '../../../services/app.user.service';
+import { AppUserService, GarminRouteSendContext } from '../../../services/app.user.service';
 import { AppUserSettingsQueryService } from '../../../services/app.user-settings-query.service';
 import { LoggerService } from '../../../services/logger.service';
 import { normalizeRouteName } from '../../../helpers/route-name.helper';
 import {
+  canSendRouteToConnectedGarminAccount,
   canSendRouteToConnectedSuuntoAccounts,
+  getGarminRouteSendMenuLabel,
+  getGarminRouteSendDisabledReason,
+  getRouteServiceDisplayName,
   getRouteSourceSummaryLabel,
   getRouteSyncedDestinationLabels,
 } from '../../../helpers/route-provenance.helper';
@@ -53,6 +57,7 @@ import {
   filterRouteWaypointsForSegments,
   RouteSegmentDetailView,
 } from '../../../helpers/route-detail.helper';
+import { SHOW_GARMIN_ROUTE_SEND } from '../../../constants/route-delivery.constants';
 
 @Component({
   selector: 'app-route-detail',
@@ -92,6 +97,14 @@ export class RouteDetailComponent {
   readonly reprocessing = signal(false);
   readonly sendingToService = signal(false);
   readonly connectedSuuntoProviderUserIds = signal<string[]>([]);
+  readonly garminRouteSendContext = signal<GarminRouteSendContext>({
+    connected: false,
+    reconnectRequired: false,
+    missingPermissions: [],
+    providerUserId: null,
+    providerStates: [],
+    serviceMeta: null,
+  });
 
   readonly unitSettings = this.userSettingsQuery.unitSettings;
   readonly darkTheme = computed(() => this.themeService.appTheme() === AppThemes.Dark);
@@ -162,6 +175,14 @@ export class RouteDetailComponent {
       && connectionView.connected
       && !connectionView.reconnectRequired;
   });
+  readonly canSendRoutesToGarmin = computed(() => {
+    const connectionView = this.garminRouteSendContext();
+    return this.userService.hasProAccessSignal()
+      && connectionView.connected
+      && !connectionView.reconnectRequired
+      && connectionView.missingPermissions.length === 0;
+  });
+  readonly showGarminRouteSend = SHOW_GARMIN_ROUTE_SEND;
   readonly canSendRouteToSuunto = computed(() => {
     const routeDocument = this.routeDocument();
     return !!routeDocument
@@ -169,6 +190,29 @@ export class RouteDetailComponent {
       && this.routeService.getOriginalRouteFiles(routeDocument).length > 0
       && canSendRouteToConnectedSuuntoAccounts(routeDocument, this.connectedSuuntoProviderUserIds());
   });
+  readonly canSendRouteToGarmin = computed(() => {
+    const routeDocument = this.routeDocument();
+    return !!routeDocument
+      && this.canManageRoute()
+      && this.routeService.getOriginalRouteFiles(routeDocument).length > 0
+      && canSendRouteToConnectedGarminAccount(routeDocument, this.garminRouteSendContext());
+  });
+  readonly garminRouteSendDisabledReason = computed(() => {
+    const routeDocument = this.routeDocument();
+    if (!routeDocument || !this.canManageRoute() || this.routeService.getOriginalRouteFiles(routeDocument).length === 0) {
+      return null;
+    }
+
+    return getGarminRouteSendDisabledReason(routeDocument, this.garminRouteSendContext());
+  });
+  readonly garminRouteSendMenuLabel = computed(() => {
+    return getGarminRouteSendMenuLabel(this.garminRouteSendDisabledReason());
+  });
+  readonly hasSendableRouteDestination = computed(() => (
+    this.canSendRouteToSuunto() || (
+      this.showGarminRouteSend && (this.canSendRouteToGarmin() || !!this.garminRouteSendDisabledReason())
+    )
+  ));
   readonly canReprocessRoute = computed(() => {
     const routeDocument = this.routeDocument();
     return !!routeDocument
@@ -190,6 +234,16 @@ export class RouteDetailComponent {
       .subscribe(context => {
         this.suuntoConnectionView.set(context.connectionView);
         this.connectedSuuntoProviderUserIds.set(context.connectedProviderUserIds);
+      });
+
+    this.activatedRoute.data
+      .pipe(
+        map(data => (data['route'] as RouteResolverData | null)?.user ?? null),
+        switchMap(user => this.userService.watchGarminRouteSendContext(user)),
+        takeUntilDestroyed(),
+      )
+      .subscribe(context => {
+        this.garminRouteSendContext.set(context);
       });
   }
 
@@ -377,9 +431,22 @@ export class RouteDetailComponent {
     }
   }
 
+  getRouteSendDestinationLabel(destinationServiceName: ServiceNames): string {
+    return getRouteServiceDisplayName(destinationServiceName);
+  }
+
   async sendRouteToSuunto(): Promise<void> {
+    await this.sendRouteToService(ServiceNames.SuuntoApp);
+  }
+
+  async sendRouteToGarmin(): Promise<void> {
+    await this.sendRouteToService(ServiceNames.GarminAPI);
+  }
+
+  async sendRouteToService(destinationServiceName: ServiceNames): Promise<void> {
     const routeDocument = this.routeDocument();
     const routeID = routeDocument?.id;
+    const destinationLabel = this.getRouteSendDestinationLabel(destinationServiceName);
     if (
       !routeDocument
       || !routeID
@@ -389,16 +456,16 @@ export class RouteDetailComponent {
       || this.exportingGPX()
       || this.reprocessing()
       || this.deleting()
-      || !this.canSendRoutesToSuunto()
-      || !this.canSendRouteToSuunto()
+      || !this.canSendRoutesToDestination(destinationServiceName)
+      || !this.canSendRouteToDestination(destinationServiceName)
     ) {
       return;
     }
 
     this.sendingToService.set(true);
-    this.snackBar.open('Sending route to Suunto...', undefined, { duration: 2000 });
+    this.snackBar.open(`Sending route to ${destinationLabel}...`, undefined, { duration: 2000 });
     try {
-      const result = await this.routeSendService.sendRoutesToService([routeID], ServiceNames.SuuntoApp);
+      const result = await this.routeSendService.sendRoutesToService([routeID], destinationServiceName);
       const status = result.successCount > 0 ? 'success' : 'failure';
       this.analyticsService.logSavedRouteAction('send_service_route', {
         status,
@@ -407,10 +474,10 @@ export class RouteDetailComponent {
         skippedCount: result.skippedCount,
         fileType: this.getPrimaryRouteFileType(routeDocument),
         source: 'route_detail',
-        destinationService: ServiceNames.SuuntoApp,
+        destinationService: destinationServiceName,
       });
       this.snackBar.open(
-        result.successCount > 0 ? 'Route sent to Suunto.' : getRouteSendResponseMessage(result),
+        result.successCount > 0 ? `Route sent to ${destinationLabel}.` : getRouteSendResponseMessage(result),
         undefined,
         { duration: result.successCount > 0 ? 2500 : 3500 },
       );
@@ -420,10 +487,13 @@ export class RouteDetailComponent {
         routeCount: 1,
         fileType: this.getPrimaryRouteFileType(routeDocument),
         source: 'route_detail',
-        destinationService: ServiceNames.SuuntoApp,
+        destinationService: destinationServiceName,
       });
-      this.logger.error('[RouteDetailComponent] Failed to send route to Suunto', { routeID }, error);
-      this.snackBar.open(getRouteSendErrorMessage(error), undefined, { duration: 4000 });
+      this.logger.error('[RouteDetailComponent] Failed to send route to service', {
+        routeID,
+        destinationServiceName,
+      }, error);
+      this.snackBar.open(getRouteSendErrorMessage(error, destinationServiceName), undefined, { duration: 4000 });
     } finally {
       this.sendingToService.set(false);
     }
@@ -662,5 +732,27 @@ export class RouteDetailComponent {
       .replace(/_+/g, '_')
       .replace(/^[-_.]+|[-_.]+$/g, '');
     return sanitized || 'route';
+  }
+
+  private canSendRoutesToDestination(destinationServiceName: ServiceNames): boolean {
+    switch (destinationServiceName) {
+      case ServiceNames.SuuntoApp:
+        return this.canSendRoutesToSuunto();
+      case ServiceNames.GarminAPI:
+        return this.canSendRoutesToGarmin();
+      default:
+        return false;
+    }
+  }
+
+  private canSendRouteToDestination(destinationServiceName: ServiceNames): boolean {
+    switch (destinationServiceName) {
+      case ServiceNames.SuuntoApp:
+        return this.canSendRouteToSuunto();
+      case ServiceNames.GarminAPI:
+        return this.canSendRouteToGarmin();
+      default:
+        return false;
+    }
   }
 }

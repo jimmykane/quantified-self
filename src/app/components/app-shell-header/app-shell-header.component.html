@@ -24,14 +24,10 @@
   }
 
   @if (authState === true && !isDashboardRoute) {
-  <button mat-flat-button class="right qs-mat-accent" (click)="dashboardClick.emit()"
-    [matTooltip]="isHandset ? 'Dashboard' : ''" [class.icon-only]="isHandset">
-    @if (isHandset) {
-    <mat-icon>dashboard</mat-icon>
-    }
-    @if (!isHandset) {
-    <span>Dashboard</span>
-    }
+  <button mat-flat-button class="right qs-mat-accent responsive-action-button" (click)="dashboardClick.emit()"
+    [matTooltip]="isHandset ? 'Dashboard' : ''">
+    <mat-icon class="responsive-action-button__icon" aria-hidden="true">dashboard</mat-icon>
+    <span class="responsive-action-button__label">Dashboard</span>
   </button>
   }
 
@@ -48,14 +44,10 @@
   }
 
   @if (authState === false && !isLoginRoute) {
-  <button mat-flat-button class="right qs-mat-accent" (click)="loginClick.emit()"
-    [matTooltip]="isHandset ? 'Login or Register' : ''" [class.icon-only]="isHandset">
-    @if (isHandset) {
-    <mat-icon>login</mat-icon>
-    }
-    @if (!isHandset) {
-    <span>Login or Register</span>
-    }
+  <button mat-flat-button class="right qs-mat-accent responsive-action-button" (click)="loginClick.emit()"
+    [matTooltip]="isHandset ? 'Login or Register' : ''">
+    <mat-icon class="responsive-action-button__icon" aria-hidden="true">login</mat-icon>
+    <span class="responsive-action-button__label">Login or Register</span>
   </button>
   }
 </nav>

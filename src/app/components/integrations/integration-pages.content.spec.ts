@@ -24,7 +24,12 @@ describe('integration-pages.content', () => {
   it('should keep Garmin and COROS SEO intent distinct from the Suunto sync page', () => {
     expect(PROVIDER_INTEGRATION_ROUTE_DATA.garmin.title).toBe('Private Garmin Training Dashboard');
     expect(PROVIDER_INTEGRATION_ROUTE_DATA.garmin.description).toContain('private training dashboard for Garmin data');
+    expect(PROVIDER_INTEGRATION_ROUTE_DATA.garmin.description).toContain('saved-route delivery to Garmin Connect');
     expect(PROVIDER_INTEGRATION_ROUTE_DATA.garmin.description).toContain('Garmin -> Suunto sync');
+    expect(PROVIDER_INTEGRATION_PAGES.garmin.highlights).toContain('Send saved routes to Garmin Connect');
+    expect(PROVIDER_INTEGRATION_PAGES.garmin.syncFlows.some(flow => flow.title === 'Send saved routes to Garmin Connect')).toBe(true);
+    expect(PROVIDER_INTEGRATION_PAGES.garmin.tools.some(tool => tool.title === 'Garmin course delivery')).toBe(true);
+    expect(PROVIDER_INTEGRATION_PAGES.garmin.faqItems.some(item => item.question === 'Can I send saved routes to Garmin Connect?')).toBe(true);
     expect(PROVIDER_INTEGRATION_ROUTE_DATA.garmin).not.toHaveProperty('keywords');
     expect(PROVIDER_INTEGRATION_ROUTE_DATA.coros.description).toContain('centralized Garmin, Suunto, and COROS workout data');
     expect(PROVIDER_INTEGRATION_ROUTE_DATA.coros.description).toContain('COROS -> Suunto sync');

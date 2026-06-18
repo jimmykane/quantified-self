@@ -121,14 +121,33 @@
           </button>
           <button mat-button type="button"
             class="route-bulk-action-button"
-            [disabled]="bulkActionInProgress() || sendingToServiceRouteID() !== null || !canSendRoutesToSuunto() || selectedSendableRouteCount() === 0"
-            [attr.aria-label]="'Send ' + selectedRouteCount() + ' selected ' + (selectedRouteCount() === 1 ? 'route' : 'routes') + ' to Suunto'"
-            (click)="$event.preventDefault(); $event.stopPropagation(); sendSelectedRoutesToSuunto()">
+            [matMenuTriggerFor]="routeBulkSendMenu"
+            [disabled]="bulkActionInProgress() || sendingToServiceRouteID() !== null || (selectedSendableRouteCount() === 0 && (!showGarminRouteSend || selectedSendableRoutesToGarminCount() === 0))"
+            aria-label="Send selected routes to a connected service"
+            (click)="$event.preventDefault(); $event.stopPropagation()">
             <span class="route-bulk-action-content">
               <mat-icon>cloud_upload</mat-icon>
-              <span>Suunto</span>
+              <span>Send to</span>
             </span>
           </button>
+          <mat-menu #routeBulkSendMenu="matMenu" class="qs-menu-panel">
+            @if (selectedSendableRouteCount() > 0 || canSendRoutesToSuunto()) {
+            <button mat-menu-item type="button"
+              [disabled]="bulkActionInProgress() || sendingToServiceRouteID() !== null || !canSendRoutesToSuunto() || selectedSendableRouteCount() === 0"
+              (click)="$event.preventDefault(); $event.stopPropagation(); sendSelectedRoutesToSuunto()">
+              <mat-icon>cloud_upload</mat-icon>
+              <span>Suunto</span>
+            </button>
+            }
+            @if (showGarminRouteSend && (selectedSendableRoutesToGarminCount() > 0 || canSendRoutesToGarmin())) {
+            <button mat-menu-item type="button"
+              [disabled]="bulkActionInProgress() || sendingToServiceRouteID() !== null || !canSendRoutesToGarmin() || selectedSendableRoutesToGarminCount() === 0"
+              (click)="$event.preventDefault(); $event.stopPropagation(); sendSelectedRoutesToGarmin()">
+              <mat-icon>cloud_upload</mat-icon>
+              <span>Garmin</span>
+            </button>
+            }
+          </mat-menu>
           <button mat-button color="warn" type="button"
             class="route-bulk-action-button"
             [disabled]="bulkActionInProgress() || sendingToServiceRouteID() !== null"
@@ -233,7 +252,7 @@
             [attr.title]="item.sourceServiceTitle">
             @if (item.sourceServiceName) {
             <app-service-source-icon
-              [sourceServiceName]="item.sourceServiceName"
+              [presentation]="item.sourcePresentation"
               [showTooltip]="false">
             </app-service-source-icon>
             }
@@ -398,10 +417,11 @@
               <span>Reprocess</span>
             </button>
             <button mat-menu-item type="button"
-              [disabled]="bulkActionInProgress() || sendingToServiceRouteID() !== null || deletingRouteID() === item.route.id || downloadingRouteID() === item.route.id || reprocessingRouteID() === item.route.id || exportingRouteID() === item.route.id || !canSendRoutesToSuunto() || !item.canSendToSuunto"
-              (click)="sendRouteToSuunto(item.route)">
+              [matMenuTriggerFor]="routeRowSendMenu"
+              [disabled]="bulkActionInProgress() || sendingToServiceRouteID() !== null || deletingRouteID() === item.route.id || downloadingRouteID() === item.route.id || reprocessingRouteID() === item.route.id || exportingRouteID() === item.route.id || (!item.canSendToSuunto && (!showGarminRouteSend || (!item.canSendToGarmin && !item.garminSendDisabledReason)))"
+              (click)="$event.stopPropagation()">
               <mat-icon>cloud_upload</mat-icon>
-              <span>Send to Suunto</span>
+              <span>Send to</span>
             </button>
             <button mat-menu-item type="button"
               [disabled]="bulkActionInProgress() || deletingRouteID() === item.route.id || downloadingRouteID() === item.route.id || reprocessingRouteID() === item.route.id || exportingRouteID() === item.route.id || sendingToServiceRouteID() === item.route.id || !item.canDelete"
@@ -410,6 +430,24 @@
               <span>Delete</span>
             </button>
           </mat-menu>
+          <mat-menu #routeRowSendMenu="matMenu" class="qs-menu-panel">
+            @if (item.canSendToSuunto || canSendRoutesToSuunto()) {
+            <button mat-menu-item type="button"
+              [disabled]="bulkActionInProgress() || sendingToServiceRouteID() !== null || !canSendRoutesToSuunto() || !item.canSendToSuunto"
+              (click)="sendRouteToSuunto(item.route)">
+              <mat-icon>cloud_upload</mat-icon>
+              <span>Suunto</span>
+            </button>
+            }
+            @if (showGarminRouteSend && (item.canSendToGarmin || canSendRoutesToGarmin() || item.garminSendDisabledReason)) {
+            <button mat-menu-item type="button"
+              [disabled]="bulkActionInProgress() || sendingToServiceRouteID() !== null || !canSendRoutesToGarmin() || !item.canSendToGarmin"
+              (click)="sendRouteToGarmin(item.route)">
+              <mat-icon>cloud_upload</mat-icon>
+              <span>{{ item.garminSendMenuLabel }}</span>
+            </button>
+            }
+          </mat-menu>
         </td>
       </ng-container>
 
@@ -417,7 +455,15 @@
         <tr
           mat-row
           class="route-table-row"
-          *matRowDef="let item; columns: routeColumns;">
+          *matRowDef="let item; columns: routeColumns;"
+          tabindex="0"
+          (pointerdown)="onRouteRowPointerDown($event)"
+          (pointermove)="onRouteRowPointerMove($event)"
+          (pointerup)="onRouteRowPointerUp($event)"
+          (pointercancel)="onRouteRowPointerCancel($event)"
+          (click)="onRouteRowClick(item, $event)"
+          (keydown.enter)="onRouteRowKeydown(item, $event)"
+          (keydown.space)="onRouteRowKeydown(item, $event)">
         </tr>
       </table>
       </section>

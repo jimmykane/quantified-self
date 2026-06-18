@@ -39,4 +39,30 @@ describe('AppShellHeaderComponent', () => {
 
     expect(emitSpy).toHaveBeenCalledTimes(1);
   });
+
+  it('should render both login icon and label in the signed-out primary action', () => {
+    component.authState = false;
+    fixture.detectChanges();
+
+    const actionButton = fixture.nativeElement.querySelector('button.responsive-action-button') as HTMLButtonElement | null;
+    const icon = actionButton?.querySelector('mat-icon');
+    const label = actionButton?.querySelector('.responsive-action-button__label');
+
+    expect(actionButton).toBeTruthy();
+    expect(icon?.textContent?.trim()).toBe('login');
+    expect(label?.textContent?.trim()).toBe('Login or Register');
+  });
+
+  it('should render both dashboard icon and label in the authenticated primary action', () => {
+    component.authState = true;
+    fixture.detectChanges();
+
+    const actionButton = fixture.nativeElement.querySelector('button.responsive-action-button') as HTMLButtonElement | null;
+    const icon = actionButton?.querySelector('mat-icon');
+    const label = actionButton?.querySelector('.responsive-action-button__label');
+
+    expect(actionButton).toBeTruthy();
+    expect(icon?.textContent?.trim()).toBe('dashboard');
+    expect(label?.textContent?.trim()).toBe('Dashboard');
+  });
 });

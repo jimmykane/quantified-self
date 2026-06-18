@@ -5,7 +5,7 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { DataDistance, RouteFileInterface, RouteInterface, User, AppThemes, ServiceNames } from '@sports-alliance/sports-lib';
-import { of } from 'rxjs';
+import { BehaviorSubject, of } from 'rxjs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { FirestoreRouteJSON } from '@shared/app-route.interface';
 import { RouteResolverData } from '../../../resolvers/route.resolver';
@@ -38,6 +38,7 @@ describe('RouteDetailComponent', () => {
   let snackBarMock: any;
   let routerMock: any;
   let loggerMock: any;
+  let garminRouteSendContext$: BehaviorSubject<any>;
 
   const routeDocument: FirestoreRouteJSON = {
     id: 'route-1',
@@ -67,6 +68,14 @@ describe('RouteDetailComponent', () => {
   };
 
   beforeEach(async () => {
+    garminRouteSendContext$ = new BehaviorSubject({
+      connected: false,
+      reconnectRequired: false,
+      missingPermissions: [],
+      providerUserId: null,
+      providerStates: [],
+      serviceMeta: null,
+    });
     const parsedRoute = {
       name: 'Parsed Segment',
       activityType: 'Running',
@@ -173,7 +182,9 @@ describe('RouteDetailComponent', () => {
         promptSource: 'suunto-route-catch-up:connected:suunto-user-1:1710000000000',
         connectedProviderUserIds: ['suunto-user-1'],
       })),
+      watchGarminRouteSendContext: vi.fn(),
     };
+    userServiceMock.watchGarminRouteSendContext.mockReturnValue(garminRouteSendContext$.asObservable());
     analyticsServiceMock = {
       logSavedRouteAction: vi.fn(),
     };
@@ -316,7 +327,7 @@ describe('RouteDetailComponent', () => {
     });
 
     expect(component.sourceSummaryLabel()).toBe('Synced from Suunto');
-    expect(component.syncedDestinationLabels()).toEqual(['Sent to Garmin']);
+    expect(component.syncedDestinationLabels()).toEqual(['Sent to Garmin Connect']);
     expect(component.canSendRouteToSuunto()).toBe(false);
   });
 
@@ -501,6 +512,79 @@ describe('RouteDetailComponent', () => {
     expect(component.sendingToService()).toBe(false);
   });
 
+  it('sends the owner route to Garmin from the detail page action when Garmin route delivery is ready', async () => {
+    garminRouteSendContext$.next({
+      connected: true,
+      reconnectRequired: false,
+      missingPermissions: [],
+      providerUserId: 'garmin-user-1',
+      providerStates: [{
+        providerUserId: 'garmin-user-1',
+        permissionsLoaded: true,
+        missingPermissions: [],
+      }],
+      serviceMeta: null,
+    });
+    routeSendServiceMock.sendRoutesToService.mockResolvedValueOnce({
+      destinationServiceName: ServiceNames.GarminAPI,
+      status: 'success',
+      routeCount: 1,
+      successCount: 1,
+      failureCount: 0,
+      skippedCount: 0,
+      results: [{
+        routeId: 'route-1',
+        destinationServiceName: ServiceNames.GarminAPI,
+        status: 'success',
+      }],
+    });
+
+    expect(component.canSendRouteToGarmin()).toBe(true);
+
+    await component.sendRouteToGarmin();
+
+    expect(routeSendServiceMock.sendRoutesToService).toHaveBeenCalledWith(['route-1'], ServiceNames.GarminAPI);
+    expect(analyticsServiceMock.logSavedRouteAction).toHaveBeenCalledWith('send_service_route', {
+      status: 'success',
+      routeCount: 1,
+      failedCount: 0,
+      skippedCount: 0,
+      fileType: 'gpx',
+      source: 'route_detail',
+      destinationService: ServiceNames.GarminAPI,
+    });
+    expect(snackBarMock.open).toHaveBeenCalledWith('Route sent to Garmin.', undefined, { duration: 2500 });
+    expect(component.sendingToService()).toBe(false);
+  });
+
+  it('disables Garmin resend when the original Garmin delivery account is not currently sendable', async () => {
+    component.routeDocument.set({
+      ...routeDocument,
+      syncedDestinationServiceNames: [ServiceNames.GarminAPI],
+      deliverySummaries: [{
+        serviceName: ServiceNames.GarminAPI,
+        providerUserIds: ['garmin-user-1'],
+        latestProviderUserId: 'garmin-user-1',
+      }],
+    });
+    garminRouteSendContext$.next({
+      connected: true,
+      reconnectRequired: false,
+      missingPermissions: [],
+      providerUserId: 'garmin-user-2',
+      providerStates: [{
+        providerUserId: 'garmin-user-2',
+        permissionsLoaded: true,
+        missingPermissions: [],
+      }],
+      serviceMeta: null,
+    });
+
+    expect(component.canSendRouteToGarmin()).toBe(false);
+    expect(component.garminRouteSendDisabledReason()).toBe('Reconnect the Garmin account previously used for this route before sending it again.');
+    expect(component.garminRouteSendMenuLabel()).toBe('Garmin (reconnect original account)');
+  });
+
   it('shows reconnect guidance when route-detail Suunto send returns an auth-required response', async () => {
     routeSendServiceMock.sendRoutesToService.mockResolvedValueOnce({
       destinationServiceName: ServiceNames.SuuntoApp,
@@ -642,8 +726,9 @@ describe('RouteDetailComponent', () => {
     expect(template).toContain('Export GPX');
     expect(template).toContain('(click)="exportRouteAsGPX()"');
     expect(template).toContain('(click)="reprocessRouteFromOriginalFile()"');
-    expect(template).toContain('Send to Suunto');
+    expect(template).toContain('<span>Send to</span>');
     expect(template).toContain('(click)="sendRouteToSuunto()"');
+    expect(template).toContain('@if (showGarminRouteSend && (canSendRouteToGarmin() || canSendRoutesToGarmin() || garminRouteSendDisabledReason()))');
     expect(template).toContain('class="route-chip route-chip--segment"');
     expect(template).toContain('class="segment-table route-data-table"');
     expect(template).toContain('class="segment-visibility-control"');

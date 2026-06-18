@@ -1,7 +1,11 @@
 import { TestBed } from '@angular/core/testing';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { SEND_ROUTES_TO_SERVICE_MAX_ROUTE_IDS } from '@shared/saved-route-send';
+import {
+  GARMIN_DELIVERY_METADATA_ABORT_MESSAGE,
+  GARMIN_DELIVERY_METADATA_PERSIST_FAILURE_MESSAGE,
+  SEND_ROUTES_TO_SERVICE_MAX_ROUTE_IDS,
+} from '@shared/saved-route-send';
 import { AppFunctionsService } from './app.functions.service';
 import {
   getActionableRouteSendResponseMessage,
@@ -227,6 +231,85 @@ describe('AppRouteSendService', () => {
     });
   });
 
+  it('stops sending later chunks after an in-band destination-permission failure and synthesizes the remaining route failures', async () => {
+    const routeIds = Array.from({ length: SEND_ROUTES_TO_SERVICE_MAX_ROUTE_IDS + 1 }, (_value, index) => `route-${index + 1}`);
+    functionsServiceMock.call.mockResolvedValueOnce({
+      data: {
+        destinationServiceName: ServiceNames.GarminAPI,
+        status: 'failure',
+        routeCount: SEND_ROUTES_TO_SERVICE_MAX_ROUTE_IDS,
+        successCount: 0,
+        failureCount: SEND_ROUTES_TO_SERVICE_MAX_ROUTE_IDS,
+        skippedCount: 0,
+        results: routeIds.slice(0, SEND_ROUTES_TO_SERVICE_MAX_ROUTE_IDS).map(routeId => ({
+          routeId,
+          destinationServiceName: ServiceNames.GarminAPI,
+          status: 'failure',
+          reason: 'DESTINATION_PERMISSION_REQUIRED',
+          message: 'Grant Garmin Course Import permission and reconnect before sending routes.',
+        })),
+      },
+    });
+
+    const result = await service.sendRoutesToService(routeIds, ServiceNames.GarminAPI);
+
+    expect(functionsServiceMock.call).toHaveBeenCalledTimes(1);
+    expect(result.status).toBe('failure');
+    expect(result.routeCount).toBe(SEND_ROUTES_TO_SERVICE_MAX_ROUTE_IDS + 1);
+    expect(result.failureCount).toBe(SEND_ROUTES_TO_SERVICE_MAX_ROUTE_IDS + 1);
+    expect(result.results.at(-1)).toEqual({
+      routeId: routeIds[SEND_ROUTES_TO_SERVICE_MAX_ROUTE_IDS],
+      destinationServiceName: ServiceNames.GarminAPI,
+      status: 'failure',
+      reason: 'DESTINATION_PERMISSION_REQUIRED',
+      message: 'Grant Garmin Course Import permission and reconnect before sending routes.',
+    });
+  });
+
+  it('stops sending later chunks after an in-band Garmin delivery-state persistence failure and synthesizes the remaining route failures', async () => {
+    const routeIds = Array.from({ length: SEND_ROUTES_TO_SERVICE_MAX_ROUTE_IDS + 1 }, (_value, index) => `route-${index + 1}`);
+    functionsServiceMock.call.mockResolvedValueOnce({
+      data: {
+        destinationServiceName: ServiceNames.GarminAPI,
+        status: 'failure',
+        routeCount: SEND_ROUTES_TO_SERVICE_MAX_ROUTE_IDS,
+        successCount: 0,
+        failureCount: SEND_ROUTES_TO_SERVICE_MAX_ROUTE_IDS,
+        skippedCount: 0,
+        results: [
+          {
+            routeId: routeIds[0],
+            destinationServiceName: ServiceNames.GarminAPI,
+            status: 'failure',
+            reason: 'DELIVERY_METADATA_PERSIST_FAILED',
+            message: GARMIN_DELIVERY_METADATA_PERSIST_FAILURE_MESSAGE,
+          },
+          ...routeIds.slice(1, SEND_ROUTES_TO_SERVICE_MAX_ROUTE_IDS).map(routeId => ({
+            routeId,
+            destinationServiceName: ServiceNames.GarminAPI,
+            status: 'failure',
+            reason: 'SEND_REQUEST_FAILED',
+            message: GARMIN_DELIVERY_METADATA_ABORT_MESSAGE,
+          })),
+        ],
+      },
+    });
+
+    const result = await service.sendRoutesToService(routeIds, ServiceNames.GarminAPI);
+
+    expect(functionsServiceMock.call).toHaveBeenCalledTimes(1);
+    expect(result.status).toBe('failure');
+    expect(result.routeCount).toBe(SEND_ROUTES_TO_SERVICE_MAX_ROUTE_IDS + 1);
+    expect(result.failureCount).toBe(SEND_ROUTES_TO_SERVICE_MAX_ROUTE_IDS + 1);
+    expect(result.results.at(-1)).toEqual({
+      routeId: routeIds[SEND_ROUTES_TO_SERVICE_MAX_ROUTE_IDS],
+      destinationServiceName: ServiceNames.GarminAPI,
+      status: 'failure',
+      reason: 'SEND_REQUEST_FAILED',
+      message: GARMIN_DELIVERY_METADATA_ABORT_MESSAGE,
+    });
+  });
+
   it('maps common route send errors to user-facing messages', () => {
     expect(getRouteSendErrorMessage({ code: 'functions/permission-denied' })).toBe('Sending routes to services is a Pro feature.');
     expect(getRouteSendErrorMessage({ code: 'functions/unauthenticated' })).toBe('Sending routes is not authorized. Please sign in again.');
@@ -234,6 +317,14 @@ describe('AppRouteSendService', () => {
       code: 'functions/unauthenticated',
       message: 'No connected Suunto account found',
     })).toBe('Connect Suunto again before sending routes.');
+    expect(getRouteSendErrorMessage({
+      code: 'functions/unauthenticated',
+      message: 'No connected Garmin account found',
+    }, ServiceNames.GarminAPI)).toBe('Connect Garmin again before sending routes.');
+    expect(getRouteSendErrorMessage({
+      code: 'functions/unauthenticated',
+      message: 'Reconnect the Garmin account previously used for this route before sending it again.',
+    }, ServiceNames.GarminAPI)).toBe('Reconnect the Garmin account previously used for this route before sending it again.');
     expect(getRouteSendErrorMessage({ message: 'Sending saved routes to GarminAPI is not supported yet.' }))
       .toBe('Sending saved routes to GarminAPI is not supported yet.');
     expect(getRouteSendErrorMessage({ message: 'Could not verify account state. Please retry.' }))
@@ -256,6 +347,60 @@ describe('AppRouteSendService', () => {
         message: 'Authentication failed. Please re-connect your Suunto account.',
       }],
     })).toBe('Connect Suunto again before sending routes.');
+  });
+
+  it('maps Garmin permission-required failures to reconnect guidance', () => {
+    expect(getRouteSendResponseMessage({
+      destinationServiceName: ServiceNames.GarminAPI,
+      status: 'failure',
+      routeCount: 1,
+      successCount: 0,
+      failureCount: 1,
+      skippedCount: 0,
+      results: [{
+        routeId: 'route-1',
+        destinationServiceName: ServiceNames.GarminAPI,
+        status: 'failure',
+        reason: 'DESTINATION_PERMISSION_REQUIRED',
+        message: 'Missing Garmin COURSE_IMPORT permission.',
+      }],
+    })).toBe('Grant Garmin Course Import permission and reconnect before sending routes.');
+  });
+
+  it('preserves Garmin route-specific auth guidance from the backend', () => {
+    expect(getRouteSendResponseMessage({
+      destinationServiceName: ServiceNames.GarminAPI,
+      status: 'failure',
+      routeCount: 1,
+      successCount: 0,
+      failureCount: 1,
+      skippedCount: 0,
+      results: [{
+        routeId: 'route-1',
+        destinationServiceName: ServiceNames.GarminAPI,
+        status: 'failure',
+        reason: 'DESTINATION_AUTH_REQUIRED',
+        message: 'Reconnect the Garmin account previously used for this route before sending it again.',
+      }],
+    })).toBe('Reconnect the Garmin account previously used for this route before sending it again.');
+  });
+
+  it('preserves Garmin route-specific permission guidance from the backend', () => {
+    expect(getRouteSendResponseMessage({
+      destinationServiceName: ServiceNames.GarminAPI,
+      status: 'failure',
+      routeCount: 1,
+      successCount: 0,
+      failureCount: 1,
+      skippedCount: 0,
+      results: [{
+        routeId: 'route-1',
+        destinationServiceName: ServiceNames.GarminAPI,
+        status: 'failure',
+        reason: 'DESTINATION_PERMISSION_REQUIRED',
+        message: 'Grant Garmin Course Import permission for the Garmin account previously used for this route, then reconnect before sending routes.',
+      }],
+    })).toBe('Grant Garmin Course Import permission for the Garmin account previously used for this route, then reconnect before sending routes.');
   });
 
   it('maps source-service blocked responses to a specific Suunto guidance message', () => {

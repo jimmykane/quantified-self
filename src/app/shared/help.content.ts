@@ -507,7 +507,7 @@ Garmin, Suunto, and COROS connections are part of **Pro**.
 
 ## Integration pages overview
 
-The public [Integrations hub](/integrations) links to focused [Garmin Integration](/integrations/garmin), [Suunto Integration](/integrations/suunto), and [COROS Integration](/integrations/coros) pages. They explain Garmin -> Suunto sync, COROS -> Suunto sync, manual catch-up, provider history imports, FIT activity uploads, GPX route uploads, and how those workflows connect to the private training dashboard.
+The public [Integrations hub](/integrations) links to focused [Garmin Integration](/integrations/garmin), [Suunto Integration](/integrations/suunto), and [COROS Integration](/integrations/coros) pages. They explain Garmin -> Suunto sync, COROS -> Suunto sync, Garmin saved-route delivery to Garmin Connect, manual catch-up, provider history imports, FIT activity uploads, GPX route uploads, and how those workflows connect to the private training dashboard.
 
 Provider-specific privacy details live on [Policies -> Connected Services](/policies#connected-services-data), with separate sections for [Garmin Data](/policies#garmin-data), [Suunto Data](/policies#suunto-data), [COROS Data](/policies#coros-data), and [AI & Third-Party Processing](/policies#ai-and-third-party-processing).
 
@@ -555,6 +555,7 @@ Garmin sleep history backfill is separate from activity history import. It reque
 
 If Garmin permissions are missing, reconnect the app and grant the required export, history, and health permissions in Garmin Connect.
 
+Saved FIT and GPX routes can also be sent to Garmin Connect from **Routes**. This is a user-initiated route delivery workflow, not a Garmin route import or catch-up feature. Garmin route delivery requires a connected Garmin account with **COURSE_IMPORT** permission. If that permission is missing, open Garmin Connect, go to **Connected Apps**, update the Quantified Self permissions, and reconnect Garmin in **Services**. Quantified Self reparses the original saved route file, sends the saved Quantified Self route name, and updates the same Garmin course on resend for the same Garmin account instead of creating duplicates.
 See [Policies -> Garmin Data](/policies#garmin-data) for the provider-specific privacy summary for Garmin imports, sleep history, and Garmin to Suunto sync.
 
 Garmin -> Suunto activity sync is route-based:

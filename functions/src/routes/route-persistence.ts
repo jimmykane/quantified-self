@@ -7,6 +7,7 @@ import {
 } from '../../../shared/app-route.interface';
 import {
   getRouteDeliveryMetadataDocId,
+  RouteDeliverySummary,
   ROUTE_SOURCE_METADATA_DOC_ID,
   ROUTE_SOURCE_TYPES,
   RouteDeliveryMetadata,
@@ -39,6 +40,7 @@ export const ROUTE_SERVER_OWNED_FIELDS = [
   'bounds',
   'sourceSummary',
   'syncedDestinationServiceNames',
+  'deliverySummaries',
 ] as const;
 
 interface BuildRouteDocumentForWriteParams {
@@ -152,6 +154,78 @@ function normalizeSyncedDestinationServiceNames(value: unknown): string[] {
   )).sort();
 }
 
+function normalizeRouteDeliverySummary(value: unknown): RouteDeliverySummary | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return null;
+  }
+
+  const serviceName = normalizeNonEmptyString((value as RouteDeliverySummary).serviceName);
+  if (!serviceName) {
+    return null;
+  }
+
+  const providerUserIds = Array.isArray((value as RouteDeliverySummary).providerUserIds)
+    ? Array.from(new Set(
+      (value as RouteDeliverySummary).providerUserIds
+        ?.map(providerUserId => normalizeNonEmptyString(providerUserId))
+        .filter((providerUserId): providerUserId is string => providerUserId !== null) || [],
+    )).sort()
+    : [];
+  const latestProviderUserId = normalizeNonEmptyString((value as RouteDeliverySummary).latestProviderUserId);
+
+  return {
+    serviceName,
+    providerUserIds,
+    latestProviderUserId,
+    updatedAt: (value as RouteDeliverySummary).updatedAt || null,
+  };
+}
+
+function normalizeRouteDeliverySummaries(value: unknown): RouteDeliverySummary[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .map(summary => normalizeRouteDeliverySummary(summary))
+    .filter((summary): summary is RouteDeliverySummary => summary !== null)
+    .sort((left, right) => `${left.serviceName}`.localeCompare(`${right.serviceName}`));
+}
+
+function mergeRouteDeliverySummaries(
+  existingValues: unknown,
+  serviceName: string,
+  providerUserId?: string | null,
+  updatedAt?: unknown,
+): RouteDeliverySummary[] {
+  const normalizedServiceName = normalizeNonEmptyString(serviceName);
+  if (!normalizedServiceName) {
+    return normalizeRouteDeliverySummaries(existingValues);
+  }
+
+  const existingSummaries = normalizeRouteDeliverySummaries(existingValues);
+  const existingSummary = existingSummaries.find(summary => summary.serviceName === normalizedServiceName) || null;
+  const normalizedProviderUserId = normalizeNonEmptyString(providerUserId);
+  const providerUserIds = Array.from(new Set([
+    ...(existingSummary?.providerUserIds || []),
+    ...(normalizedProviderUserId ? [normalizedProviderUserId] : []),
+  ])).sort();
+  const normalizedUpdatedAt = updatedAt instanceof Date || typeof updatedAt === 'number'
+    ? updatedAt
+    : new Date();
+  const nextSummary: RouteDeliverySummary = {
+    serviceName: normalizedServiceName,
+    providerUserIds,
+    latestProviderUserId: normalizedProviderUserId || existingSummary?.latestProviderUserId || null,
+    updatedAt: normalizedUpdatedAt,
+  };
+
+  return [
+    ...existingSummaries.filter(summary => summary.serviceName !== normalizedServiceName),
+    nextSummary,
+  ].sort((left, right) => `${left.serviceName}`.localeCompare(`${right.serviceName}`));
+}
+
 export function getUserOwnedRouteFields(routeDocument?: FirestoreRouteJSON | null): Record<string, unknown> {
   const userOwnedFields: Record<string, unknown> = { ...(routeDocument || {}) };
   for (const field of ROUTE_SERVER_OWNED_FIELDS) {
@@ -241,6 +315,7 @@ export function buildRouteDocumentForWrite(params: BuildRouteDocumentForWritePar
     syncedDestinationServiceNames: normalizeSyncedDestinationServiceNames(
       params.syncedDestinationServiceNames ?? existingRouteDocument?.syncedDestinationServiceNames,
     ),
+    deliverySummaries: normalizeRouteDeliverySummaries(existingRouteDocument?.deliverySummaries),
   };
 }
 
@@ -334,6 +409,12 @@ export async function setRouteDeliveryMetadata(
       routeDocument.syncedDestinationServiceNames,
       `${params.deliveryMetadata.serviceName}`,
     );
+    const deliverySummaries = mergeRouteDeliverySummaries(
+      routeDocument.deliverySummaries,
+      `${params.deliveryMetadata.serviceName}`,
+      params.deliveryMetadata.providerUserId,
+      params.deliveryMetadata.updatedAt || new Date(),
+    );
 
     transaction.set(deliveryRef, {
       ...params.deliveryMetadata,
@@ -341,6 +422,7 @@ export async function setRouteDeliveryMetadata(
     }, { merge: true });
     transaction.set(routeRef, {
       syncedDestinationServiceNames,
+      deliverySummaries,
       updatedAt: new Date(),
     }, { merge: true });
   });

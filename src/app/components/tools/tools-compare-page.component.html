@@ -839,51 +839,67 @@
                 <button
                   mat-icon-button
                   type="button"
-                  matTooltip="Open details"
+                  matTooltip="Comparison actions"
                   [matTooltipDisabled]="passiveComparisonTableTooltipsDisabled()"
                   matTooltipTouchGestures="off"
+                  [matMenuTriggerFor]="comparisonRowActionsMenu"
+                  (click)="$event.stopPropagation()"
+                  (keydown)="$event.stopPropagation()"
+                  aria-label="Comparison row actions">
+                  <mat-icon>more_vert</mat-icon>
+                </button>
+              </div>
+              <mat-menu #comparisonRowActionsMenu="matMenu" class="qs-menu-panel">
+                <button
+                  mat-menu-item
+                  type="button"
                   [disabled]="bulkActionInProgress()"
-                  (click)="openComparison(item, false)"
-                  aria-label="Open comparison details">
+                  (click)="openComparison(item, false)">
                   <mat-icon>open_in_new</mat-icon>
+                  <span>Open details</span>
                 </button>
                 <button
-                  mat-icon-button
+                  mat-menu-item
                   type="button"
-                  [matTooltip]="item.hasReport ? 'Open report' : 'Run report'"
-                  [matTooltipDisabled]="passiveComparisonTableTooltipsDisabled()"
-                  matTooltipTouchGestures="off"
                   [disabled]="bulkActionInProgress() || !!benchmarkingEventID()"
-                  (click)="openComparison(item, true)"
-                  [attr.aria-label]="item.hasReport ? 'Open benchmark report' : 'Run benchmark report'">
+                  (click)="openComparison(item, true)">
                   @if (benchmarkingEventID() === item.id) {
                   <mat-progress-spinner diameter="18" mode="indeterminate"></mat-progress-spinner>
                   } @else {
                   <mat-icon>analytics</mat-icon>
                   }
+                  <span>{{ item.hasReport ? 'Open report' : 'Run report' }}</span>
                 </button>
                 <button
-                  mat-icon-button
+                  mat-menu-item
                   type="button"
-                  color="warn"
-                  matTooltip="Delete comparison"
-                  [matTooltipDisabled]="passiveComparisonTableTooltipsDisabled()"
-                  matTooltipTouchGestures="off"
                   [disabled]="bulkActionInProgress() || !!deletingEventID()"
-                  (click)="deleteComparison(item)"
-                  aria-label="Delete comparison">
+                  (click)="deleteComparison(item)">
                   @if (deletingEventID() === item.id) {
                   <mat-progress-spinner diameter="18" mode="indeterminate"></mat-progress-spinner>
                   } @else {
                   <mat-icon>delete</mat-icon>
                   }
+                  <span>Delete</span>
                 </button>
-              </div>
+              </mat-menu>
             </td>
           </ng-container>
 
           <tr mat-header-row *matHeaderRowDef="displayedComparisonColumns"></tr>
-          <tr mat-row *matRowDef="let row; columns: displayedComparisonColumns;"></tr>
+          <tr
+            mat-row
+            class="comparison-table-row"
+            *matRowDef="let row; columns: displayedComparisonColumns;"
+            tabindex="0"
+            (pointerdown)="onComparisonRowPointerDown($event)"
+            (pointermove)="onComparisonRowPointerMove($event)"
+            (pointerup)="onComparisonRowPointerUp($event)"
+            (pointercancel)="onComparisonRowPointerCancel($event)"
+            (click)="onComparisonRowClick(row, $event)"
+            (keydown.enter)="onComparisonRowKeydown(row, $event)"
+            (keydown.space)="onComparisonRowKeydown(row, $event)">
+          </tr>
         </table>
       </div>
 

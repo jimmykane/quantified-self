@@ -8,6 +8,7 @@ import { ServiceNames } from '@sports-alliance/sports-lib';
 import { AppFunctionsService } from '../../../services/app.functions.service';
 import { UPLOAD_STATUS } from '../upload-status/upload.status';
 import type { FunctionName } from '@shared/functions-manifest';
+import { getProviderDisplayName } from '@shared/provider-presentation';
 
 const MAX_ACTIVITY_UPLOAD_TO_SERVICE_BYTES = 20 * 1024 * 1024;
 const BASE64_CHUNK_SIZE = 0x8000;
@@ -66,7 +67,7 @@ export class UploadActivitiesToServiceComponent extends UploadAbstractDirective 
 
   @Input() set serviceName(value: ServiceNames) {
     this._serviceName = value || ServiceNames.SuuntoApp;
-    this.destinationName = this._serviceName === ServiceNames.COROSAPI ? 'COROS' : 'Suunto';
+    this.destinationName = getProviderDisplayName(this._serviceName, 'destination');
     this.callableFunction = this._serviceName === ServiceNames.COROSAPI ? 'importActivityToCOROSAPI' : 'importActivityToSuuntoApp';
   }
 
@@ -74,7 +75,7 @@ export class UploadActivitiesToServiceComponent extends UploadAbstractDirective 
     return this._serviceName;
   }
 
-  public destinationName = 'Suunto';
+  public destinationName = getProviderDisplayName(ServiceNames.SuuntoApp, 'destination');
   public callableFunction: FunctionName = 'importActivityToSuuntoApp';
   public uploadDelayMs = SERVICE_ACTIVITY_UPLOAD_DELAY_MS;
   public readonly displayedColumns = ['file', 'status', 'attempts', 'message', 'actions'];
