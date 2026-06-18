@@ -1,1 +1,1 @@
-export const SHOW_GARMIN_ROUTE_SEND = false;
+export const SHOW_GARMIN_ROUTE_SEND = true;

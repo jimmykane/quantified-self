@@ -206,4 +206,47 @@ describe('ServiceSourceIconComponent', () => {
         expect(component.serviceDisplayName).toBe('Garmin Edge 540');
         expect(component.serviceTooltip).toBe('Synced from Garmin Edge 540');
     });
+
+    it('should hide source text when it duplicates a visible device label', () => {
+        component.presentation = {
+            ...buildSourceProviderPresentation(ServiceNames.GarminAPI),
+            displayLabel: 'Garmin Edge MTB',
+        };
+        component.showText = true;
+        component.showIcon = false;
+        component.suppressedTextLabels = ['  garmin   edge mtb  '];
+
+        component.ngOnChanges({
+            presentation: {
+                currentValue: component.presentation,
+                previousValue: null,
+                firstChange: true,
+                isFirstChange: () => true,
+            },
+        });
+        fixture.detectChanges();
+
+        expect(component.shouldShowText).toBe(false);
+        expect(fixture.nativeElement.querySelector('.service-source-text')).toBeNull();
+    });
+
+    it('should keep source text when it differs from the visible device label', () => {
+        component.presentation = buildSourceProviderPresentation(ServiceNames.SuuntoApp);
+        component.showText = true;
+        component.showIcon = false;
+        component.suppressedTextLabels = ['Garmin Edge MTB'];
+
+        component.ngOnChanges({
+            presentation: {
+                currentValue: component.presentation,
+                previousValue: null,
+                firstChange: true,
+                isFirstChange: () => true,
+            },
+        });
+        fixture.detectChanges();
+
+        expect(component.shouldShowText).toBe(true);
+        expect(fixture.nativeElement.querySelector('.service-source-text')?.textContent?.trim()).toBe('Suunto');
+    });
 });

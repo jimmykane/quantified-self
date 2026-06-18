@@ -58,6 +58,7 @@ export class EventSummaryComponent implements OnChanges {
   private showDeviceChipValue = false;
   private deviceChipLabelValue = '';
   private deviceChipTooltipValue = '';
+  private deviceSourceSuppressedLabelsValue: readonly string[] = [];
   private cachedEventRef: AppEventInterface | null = null;
   private cachedSelectedActivitiesRef: ActivityInterface[] | null = null;
   private templateStateInitialized = false;
@@ -111,6 +112,11 @@ export class EventSummaryComponent implements OnChanges {
   get deviceChipTooltip(): string {
     this.ensureTemplateState();
     return this.deviceChipTooltipValue;
+  }
+
+  get deviceSourceSuppressedLabels(): readonly string[] {
+    this.ensureTemplateState();
+    return this.deviceSourceSuppressedLabelsValue;
   }
 
   get heroStats(): string[] {
@@ -251,6 +257,7 @@ export class EventSummaryComponent implements OnChanges {
       : (selectedActivityDeviceNames.length > 0
         ? selectedActivityDeviceNames.join('\n')
         : (this.hasDevicesValue ? 'Device details available' : ''));
+    this.deviceSourceSuppressedLabelsValue = this.deviceChipLabelValue ? [this.deviceChipLabelValue] : [];
     this.benchmarkCountValue = this.event?.benchmarkResults ? Object.keys(this.event.benchmarkResults).length : 0;
 
     const feelingStat = this.event?.getStat(DataFeeling.type) as DataFeeling;

@@ -21,6 +21,7 @@ export class ServiceSourceIconComponent implements OnChanges, OnDestroy {
     @Input() showIcon = true;
     @Input() showTooltip = true;
     @Input() showText = false;
+    @Input() suppressedTextLabels: readonly string[] = [];
 
     serviceName: ServiceNames | null = null;
     serviceLogo: string | null = null;
@@ -90,6 +91,23 @@ export class ServiceSourceIconComponent implements OnChanges, OnDestroy {
 
     get serviceTooltip(): string {
         return this.serviceTooltipText;
+    }
+
+    get shouldShowText(): boolean {
+        if (!this.showText || !this.serviceName) {
+            return false;
+        }
+
+        const displayName = this.normalizeLabel(this.serviceDisplayName || this.serviceName);
+        return !!displayName && !this.suppressedTextLabels
+            .map(label => this.normalizeLabel(label))
+            .some(label => label === displayName);
+    }
+
+    private normalizeLabel(label: unknown): string {
+        return typeof label === 'string'
+            ? label.trim().replace(/\s+/g, ' ').toLowerCase()
+            : '';
     }
 
     private applyPresentation(presentation: ProviderPresentation | null): void {

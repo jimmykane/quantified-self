@@ -3,6 +3,8 @@ import { EventSummaryComponent } from './event-summary.component';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatBottomSheet } from '@angular/material/bottom-sheet';
 import { ChangeDetectorRef, NO_ERRORS_SCHEMA } from '@angular/core';
+import { readFileSync } from 'fs';
+import { resolve } from 'path';
 import {
     ActivityTypes,
     DataDistance,
@@ -352,6 +354,27 @@ describe('EventSummaryComponent', () => {
             expect(component.showDeviceChip).toBe(true);
             expect(component.hasDevices).toBe(false);
             expect(component.deviceChipLabel).toBe('Garmin Edge 540');
+        });
+
+        it('should pass the visible device label to the source label suppression input', () => {
+            component.selectedActivities = [
+                {
+                    creator: {
+                        name: 'Garmin Edge MTB',
+                        swInfo: '',
+                        devices: [],
+                    },
+                } as any,
+            ];
+
+            fixture.detectChanges();
+
+            expect(component.deviceSourceSuppressedLabels).toEqual(['Garmin Edge MTB']);
+            const template = readFileSync(
+                resolve(process.cwd(), 'src/app/components/event-summary/event-summary.component.html'),
+                'utf8',
+            );
+            expect(template).toContain('[suppressedTextLabels]="deviceSourceSuppressedLabels"');
         });
     });
 
