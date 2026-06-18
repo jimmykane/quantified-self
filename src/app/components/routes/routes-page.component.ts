@@ -50,7 +50,6 @@ import {
     TableRowActivationState,
     updateTableRowPointerTracking,
 } from '../../helpers/table-row-activation.helper';
-import { SHOW_GARMIN_ROUTE_SEND } from '../../constants/route-delivery.constants';
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { ConfirmationDialogComponent, ConfirmationDialogData } from '../confirmation-dialog/confirmation-dialog.component';
 import { SharedModule } from '../../modules/shared.module';
@@ -267,7 +266,6 @@ export class RoutesPageComponent implements OnInit {
             && !connectionView.reconnectRequired
             && connectionView.missingPermissions.length === 0;
     });
-    readonly showGarminRouteSend = SHOW_GARMIN_ROUTE_SEND;
     readonly routeFilterActive = computed(() => this.isRouteFilterActive());
     readonly selectedRouteCount = computed(() => this.selectedRouteIDs().length);
     readonly selectedRouteIDSet = computed(() => new Set(this.selectedRouteIDs()));

@@ -86,7 +86,7 @@
             <span>Suunto</span>
           </button>
           }
-          @if (showGarminRouteSend && (canSendRouteToGarmin() || canSendRoutesToGarmin() || garminRouteSendDisabledReason())) {
+          @if (canSendRouteToGarmin() || canSendRoutesToGarmin() || garminRouteSendDisabledReason()) {
           <button mat-menu-item type="button"
             [disabled]="sendingToService() || !canSendRoutesToGarmin() || !canSendRouteToGarmin()"
             (click)="sendRouteToGarmin()">

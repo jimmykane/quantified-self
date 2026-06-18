@@ -728,7 +728,7 @@ describe('RouteDetailComponent', () => {
     expect(template).toContain('(click)="reprocessRouteFromOriginalFile()"');
     expect(template).toContain('<span>Send to</span>');
     expect(template).toContain('(click)="sendRouteToSuunto()"');
-    expect(template).toContain('@if (showGarminRouteSend && (canSendRouteToGarmin() || canSendRoutesToGarmin() || garminRouteSendDisabledReason()))');
+    expect(template).toContain('(click)="sendRouteToGarmin()"');
     expect(template).toContain('class="route-chip route-chip--segment"');
     expect(template).toContain('class="segment-table route-data-table"');
     expect(template).toContain('class="segment-visibility-control"');
