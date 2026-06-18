@@ -26,6 +26,15 @@ export class DataExportService {
         return typeof value === 'string' ? value.trim() : '';
     }
 
+    private escapeHtml(text: string): string {
+        return text
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#039;");
+    }
+
     /**
      * Cleans column headers by removing internal color codes (e.g., "Player 1 #ff0000" -> "Player 1")
      * Preserves standard headers like "Name" and "Difference".
@@ -103,7 +112,7 @@ export class DataExportService {
             return '';
         }
 
-        return `<caption style="caption-side: top; text-align: left; color: #111827; padding: 0 0 8px; background-color: #ffffff;">${lines.join('<br>')}</caption>`;
+        return `<caption style="caption-side: top; text-align: left; color: #111827; padding: 0 0 8px; background-color: #ffffff;">${lines.map(line => this.escapeHtml(line)).join('<br>')}</caption>`;
     }
 
     private buildTsvPrefix(columns: string[], options?: DataExportOptions): string {
@@ -161,14 +170,6 @@ export class DataExportService {
         });
 
         // 2. Generate HTML Table (Rich Text)
-        // Simple HTML escape for values
-        const escapeHtml = (text: string) => text
-            .replace(/&/g, "&amp;")
-            .replace(/</g, "&lt;")
-            .replace(/>/g, "&gt;")
-            .replace(/"/g, "&quot;")
-            .replace(/'/g, "&#039;");
-
         // Extract activity colors from column headers (format: "Creator Name #xxxxxx")
         const getColumnColor = (col: string): string | null => {
             if (col === 'Name' || col === 'Difference') {
@@ -184,8 +185,8 @@ export class DataExportService {
             const color = getColumnColor(col);
             // Use span with inline style for colors
             const coloredContent = color
-                ? `<span style="color: ${color}">${escapeHtml(displayName)}</span>`
-                : escapeHtml(displayName);
+                ? `<span style="color: ${color}">${this.escapeHtml(displayName)}</span>`
+                : this.escapeHtml(displayName);
             return `<th style="color: #111827; background-color: #f8fafc; border: 1px solid #d1d5db;">${coloredContent}</th>`;
         }).join('');
 
@@ -199,11 +200,11 @@ export class DataExportService {
 
                 if (col === 'Difference' && val && typeof val === 'object') {
                     // Difference specific logic - use difference color
-                    cellContent = escapeHtml(`${val.display} (${val.percent.toFixed(1)}%)`);
+                    cellContent = this.escapeHtml(`${val.display} (${val.percent.toFixed(1)}%)`);
                     cellStyle = `color: ${this.appEventColorService.getDifferenceColor(val.percent)}; background-color: #ffffff; border: 1px solid #d1d5db;`;
                 } else {
                     // Standard processing with sheet-safe dark text
-                    cellContent = escapeHtml(val === null || val === undefined ? '' : String(val));
+                    cellContent = this.escapeHtml(val === null || val === undefined ? '' : String(val));
                 }
 
                 html += `<td style="${cellStyle}">${cellContent}</td>`;

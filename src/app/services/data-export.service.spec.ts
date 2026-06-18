@@ -286,9 +286,12 @@ describe('DataExportService', () => {
             });
 
             await service.copyToSheets(data, columns, {
-                attributionLabel: 'Garmin Edge 540',
+                attributionLabel: 'Garmin <Edge 540>',
                 seriesPresentations: {
-                    Name: buildSourceProviderPresentation(ServiceNames.COROSAPI),
+                    Name: {
+                        ...buildSourceProviderPresentation(ServiceNames.COROSAPI),
+                        exportLabel: 'COROS "Apex" <script>alert(1)</script>',
+                    },
                 },
             });
 
@@ -297,8 +300,10 @@ describe('DataExportService', () => {
             if (htmlCall) {
                 const htmlContent = htmlCall[0]![0] as string;
                 expect(htmlContent).toContain('<caption');
-                expect(htmlContent).toContain('Source: Garmin Edge 540');
-                expect(htmlContent).toContain('Series sources: Name: COROS');
+                expect(htmlContent).toContain('Source: Garmin &lt;Edge 540&gt;');
+                expect(htmlContent).toContain('Series sources: Name: COROS &quot;Apex&quot; &lt;script&gt;alert(1)&lt;/script&gt;');
+                expect(htmlContent).not.toContain('Source: Garmin <Edge 540>');
+                expect(htmlContent).not.toContain('<script>alert(1)</script>');
             }
 
             blobSpy.mockRestore();
