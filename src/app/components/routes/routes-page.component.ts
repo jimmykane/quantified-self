@@ -330,7 +330,6 @@ export class RoutesPageComponent implements OnInit {
         }
 
         return buildGarminRoutePermissionPromptViewModel({
-            providerUserId: context.providerUserId,
             busy: this.isReconnectingGarminRoutePermissionPrompt()
                 || this.isDismissingGarminRoutePermissionPrompt(),
             error: this.garminRoutePermissionPromptError(),

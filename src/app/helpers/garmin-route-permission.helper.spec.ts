@@ -56,13 +56,12 @@ describe('garmin-route-permission helper', () => {
     const prompt = buildGarminRoutePermissionPromptViewModel({
       busy: false,
       error: null,
-      providerUserId: 'garmin-user-1',
     });
 
     expect(prompt).toMatchObject({
       id: DASHBOARD_ACTION_PROMPT_GARMIN_ROUTE_PERMISSION_ID,
       title: 'Enable Garmin route delivery',
-      description: expect.stringContaining('Garmin account garmin-user-1'),
+      description: expect.stringContaining('In Garmin Connect, open Connected Apps'),
       primaryAction: {
         id: 'reconnectGarminRoutePermission',
         label: 'Reconnect Garmin',
@@ -71,5 +70,6 @@ describe('garmin-route-permission helper', () => {
         id: 'dismissGarminRoutePermission',
       },
     });
+    expect(prompt.description).not.toContain('garmin-user-1');
   });
 });

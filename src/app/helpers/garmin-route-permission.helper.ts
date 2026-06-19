@@ -16,7 +16,6 @@ export interface BuildGarminRoutePermissionPromptSourceOptions {
 export interface BuildGarminRoutePermissionPromptViewModelOptions {
   busy: boolean;
   error: string | null;
-  providerUserId?: string | null;
 }
 
 function normalizeNonEmptyString(value: unknown): string | null {
@@ -107,15 +106,11 @@ export function buildGarminRoutePermissionPromptSource(
 export function buildGarminRoutePermissionPromptViewModel(
   options: BuildGarminRoutePermissionPromptViewModelOptions,
 ): DashboardActionPromptViewModel {
-  const accountText = options.providerUserId
-    ? ` for Garmin account ${options.providerUserId}`
-    : '';
-
   return {
     id: DASHBOARD_ACTION_PROMPT_GARMIN_ROUTE_PERMISSION_ID,
     icon: 'route',
     title: 'Enable Garmin route delivery',
-    description: `Garmin is connected, but saved-route delivery needs Course Import permission${accountText}. Open Garmin Connect, update Quantified Self under Connected Apps, then reconnect Garmin to refresh permissions.`,
+    description: 'Garmin is connected, but sending saved routes needs route delivery permission. In Garmin Connect, open Connected Apps, choose Quantified Self, enable Course Import, then reconnect Garmin here.',
     busy: options.busy,
     error: options.error,
     primaryAction: {
