@@ -100,19 +100,20 @@ nav button[mat-stroked-button] {
   gap: 8px;
 }
 
-.responsive-action-button__icon {
-  display: none;
+.responsive-action-button--mobile {
+  display: none !important;
+}
+
+.responsive-action-icon-button {
+  box-shadow: none !important;
+}
+
+.responsive-action-icon-button mat-icon {
+  margin: 0;
   width: 20px;
   height: 20px;
   font-size: 20px;
-  color: inherit;
-  flex-shrink: 0;
-}
-
-.responsive-action-button__label {
-  display: inline-flex;
-  align-items: center;
-  white-space: nowrap;
+  line-height: 20px;
 }
 
 nav button[mat-icon-button] {
@@ -173,21 +174,20 @@ nav button.hamburger-link {
 }
 
 @media (max-width: 959.98px) {
-  .responsive-action-button {
-    min-width: 40px !important;
-    width: 40px !important;
-    padding: 0 !important;
-    gap: 0;
+  .responsive-action-button--desktop {
+    display: none !important;
   }
 
-  .responsive-action-button__icon {
-    display: inline-flex;
+  .responsive-action-button--mobile {
+    display: inline-flex !important;
+  }
+
+  .responsive-action-icon-button {
+    width: 40px;
+    height: 40px;
+    min-width: 40px;
     align-items: center;
     justify-content: center;
-  }
-
-  .responsive-action-button__label {
-    display: none;
   }
 }
 
