@@ -52,6 +52,7 @@ export class DashboardActionPromptsComponent {
     backfillGarminSleep: 4,
     reconnectSuuntoService: 5,
     suuntoRouteCatchUp: 6,
+    garminRoutePermission: 7,
   };
 
   private syncOrderedPrompts(): void {
