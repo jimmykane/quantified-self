@@ -92,6 +92,9 @@ import {
   getSuuntoRouteCatchUpDateForConnectedProviders,
 } from '../helpers/suunto-route-catch-up.helper';
 import {
+  buildGarminRoutePermissionPromptSource,
+} from '../helpers/garmin-route-permission.helper';
+import {
   GARMIN_ROUTE_SEND_REQUIRED_PERMISSIONS,
   getConnectedGarminProviderUserIds,
   getGarminProviderUserIdFromTokenLike,
@@ -147,6 +150,7 @@ export interface GarminRouteSendContext {
   providerUserId: string | null;
   providerStates: GarminRouteSendProviderState[];
   serviceMeta: AppUserServiceMetaInterface | null;
+  permissionPromptSource: string | null;
 }
 
 export interface GarminRouteSendProviderState {
@@ -797,6 +801,7 @@ export class AppUserService implements OnDestroy {
         providerUserId: null,
         providerStates: [],
         serviceMeta: null,
+        permissionPromptSource: null,
       });
     }
 
@@ -841,15 +846,26 @@ export class AppUserService implements OnDestroy {
           })
           : [];
 
+        const missingPermissions = preferredToken
+          ? getMissingGarminPermissionsForTokenLike(preferredToken, GARMIN_ROUTE_SEND_REQUIRED_PERMISSIONS)
+          : [];
+        const connected = Array.isArray(tokens) && hasConnectedGarminToken(tokens);
+        const reconnectRequired = isReconnectRequiredServiceConnection(normalizedServiceMeta);
+        const permissionPromptSource = buildGarminRoutePermissionPromptSource({
+          connected,
+          reconnectRequired,
+          tokenLike: preferredToken,
+          missingPermissions,
+        });
+
         return {
-          connected: Array.isArray(tokens) && hasConnectedGarminToken(tokens),
-          reconnectRequired: isReconnectRequiredServiceConnection(normalizedServiceMeta),
-          missingPermissions: preferredToken
-            ? getMissingGarminPermissionsForTokenLike(preferredToken, GARMIN_ROUTE_SEND_REQUIRED_PERMISSIONS)
-            : [],
+          connected,
+          reconnectRequired,
+          missingPermissions,
           providerUserId: getGarminProviderUserIdFromTokenLike(preferredToken),
           providerStates,
           serviceMeta: normalizedServiceMeta,
+          permissionPromptSource,
         };
       }),
       distinctUntilChanged((previous, current) => JSON.stringify(previous) === JSON.stringify(current)),

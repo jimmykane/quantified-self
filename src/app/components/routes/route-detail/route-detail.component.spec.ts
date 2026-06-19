@@ -75,6 +75,7 @@ describe('RouteDetailComponent', () => {
       providerUserId: null,
       providerStates: [],
       serviceMeta: null,
+      permissionPromptSource: null,
     });
     const parsedRoute = {
       name: 'Parsed Segment',

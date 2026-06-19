@@ -21,12 +21,16 @@ import { ProviderPresentation } from '@shared/provider-presentation';
 import { resolveUnitAwareDisplayFromValue } from '@shared/unit-aware-display';
 import { buildSuuntoServiceConnectionViewModel, SuuntoServiceConnectionViewModel } from '../../helpers/suunto-service-connection.helper';
 import {
+    DASHBOARD_ACTION_PROMPT_GARMIN_ROUTE_PERMISSION_ID,
     DASHBOARD_ACTION_PROMPT_SUUNTO_ROUTE_CATCH_UP_ID,
     DashboardActionPromptEvent,
     DashboardActionPromptViewModel,
     isDashboardActionPromptDismissed,
     markDashboardActionPromptDismissed,
 } from '../../helpers/dashboard-action-prompt.helper';
+import {
+    buildGarminRoutePermissionPromptViewModel,
+} from '../../helpers/garmin-route-permission.helper';
 import {
     buildSuuntoRouteCatchUpPromptViewModel,
     buildSuuntoRouteCatchUpSnackbarMessage,
@@ -211,6 +215,7 @@ export class RoutesPageComponent implements OnInit {
         providerUserId: null,
         providerStates: [],
         serviceMeta: null,
+        permissionPromptSource: null,
     });
     private readonly loadedRouteViewModels = signal<RoutePageRouteViewModel[]>([]);
     private readonly visibleRouteViewModels = signal<RoutePageRouteViewModel[]>([]);
@@ -240,6 +245,9 @@ export class RoutesPageComponent implements OnInit {
     readonly isReconnectingSuuntoRouteCatchUpPrompt = signal(false);
     readonly isDismissingSuuntoRouteCatchUpPrompt = signal(false);
     readonly suuntoRouteCatchUpPromptError = signal<string | null>(null);
+    readonly isReconnectingGarminRoutePermissionPrompt = signal(false);
+    readonly isDismissingGarminRoutePermissionPrompt = signal(false);
+    readonly garminRoutePermissionPromptError = signal<string | null>(null);
     readonly connectedSuuntoProviderUserIds = signal<string[]>([]);
     readonly garminRouteSendContext = signal<GarminRouteSendContext>({
         connected: false,
@@ -248,6 +256,7 @@ export class RoutesPageComponent implements OnInit {
         providerUserId: null,
         providerStates: [],
         serviceMeta: null,
+        permissionPromptSource: null,
     });
     readonly suuntoConnectionView = signal<SuuntoServiceConnectionViewModel>(buildSuuntoServiceConnectionViewModel({
         hasToken: false,
@@ -298,6 +307,33 @@ export class RoutesPageComponent implements OnInit {
                 || this.isReconnectingSuuntoRouteCatchUpPrompt()
                 || this.isDismissingSuuntoRouteCatchUpPrompt(),
             error: this.suuntoRouteCatchUpPromptError(),
+        });
+    });
+    readonly garminRoutePermissionPrompt = computed<DashboardActionPromptViewModel | null>(() => {
+        const user = this.user();
+        const context = this.garminRouteSendContext();
+        const promptSource = context.permissionPromptSource;
+
+        if (
+            !user
+            || !this.userService.hasProAccessSignal()
+            || !context.connected
+            || context.reconnectRequired
+            || !promptSource
+            || isDashboardActionPromptDismissed(
+                user.settings?.appSettings,
+                DASHBOARD_ACTION_PROMPT_GARMIN_ROUTE_PERMISSION_ID,
+                promptSource,
+            )
+        ) {
+            return null;
+        }
+
+        return buildGarminRoutePermissionPromptViewModel({
+            providerUserId: context.providerUserId,
+            busy: this.isReconnectingGarminRoutePermissionPrompt()
+                || this.isDismissingGarminRoutePermissionPrompt(),
+            error: this.garminRoutePermissionPromptError(),
         });
     });
     readonly selectedSendableRouteCount = computed(() => {
@@ -538,6 +574,18 @@ export class RoutesPageComponent implements OnInit {
         }
     }
 
+    onGarminRoutePermissionPromptPrimary(event: DashboardActionPromptEvent): void {
+        if (event.action.id === 'reconnectGarminRoutePermission') {
+            void this.reconnectGarminRoutePermissionPrompt();
+        }
+    }
+
+    onGarminRoutePermissionPromptSecondary(event: DashboardActionPromptEvent): void {
+        if (event.action.id === 'dismissGarminRoutePermission') {
+            void this.dismissGarminRoutePermissionPrompt();
+        }
+    }
+
     async queueSuuntoRouteCatchUpPrompt(): Promise<void> {
         if (
             this.suuntoRouteCatchUpPrompt() === null
@@ -641,6 +689,81 @@ export class RoutesPageComponent implements OnInit {
             this.logger.error('[RoutesPageComponent] Failed to dismiss Suunto route catch-up prompt', error);
         } finally {
             this.isDismissingSuuntoRouteCatchUpPrompt.set(false);
+        }
+    }
+
+    async reconnectGarminRoutePermissionPrompt(): Promise<void> {
+        if (
+            this.garminRoutePermissionPrompt() === null
+            || this.isReconnectingGarminRoutePermissionPrompt()
+            || this.isDismissingGarminRoutePermissionPrompt()
+        ) {
+            return;
+        }
+
+        this.isReconnectingGarminRoutePermissionPrompt.set(true);
+        this.garminRoutePermissionPromptError.set(null);
+
+        try {
+            const tokenAndURI = await this.userService.getCurrentUserServiceTokenAndRedirectURI(ServiceNames.GarminAPI);
+            this.windowService.windowRef.location.href = tokenAndURI.redirect_uri;
+        } catch (error) {
+            this.garminRoutePermissionPromptError.set('Could not start Garmin reconnect.');
+            this.logger.error('[RoutesPageComponent] Failed to start Garmin reconnect from route permission prompt', error);
+            this.isReconnectingGarminRoutePermissionPrompt.set(false);
+        }
+    }
+
+    async dismissGarminRoutePermissionPrompt(): Promise<void> {
+        const user = this.user();
+        const promptSource = this.garminRouteSendContext().permissionPromptSource;
+        if (
+            !user
+            || !promptSource
+            || this.garminRoutePermissionPrompt() === null
+            || this.isReconnectingGarminRoutePermissionPrompt()
+            || this.isDismissingGarminRoutePermissionPrompt()
+        ) {
+            return;
+        }
+
+        this.isDismissingGarminRoutePermissionPrompt.set(true);
+        this.garminRoutePermissionPromptError.set(null);
+
+        try {
+            user.settings = user.settings || {} as any;
+            const nextAppSettings = {
+                ...(user.settings.appSettings || {}),
+            } as AppAppSettingsInterface;
+            const dismissedState = markDashboardActionPromptDismissed(
+                nextAppSettings,
+                DASHBOARD_ACTION_PROMPT_GARMIN_ROUTE_PERMISSION_ID,
+                promptSource,
+                Date.now(),
+            );
+
+            await this.userService.updateUserProperties(user, {
+                settings: {
+                    appSettings: {
+                        dashboardActionPrompts: {
+                            [DASHBOARD_ACTION_PROMPT_GARMIN_ROUTE_PERMISSION_ID]: dismissedState,
+                        },
+                    },
+                },
+            });
+            user.settings.appSettings = nextAppSettings;
+            this.user.set(Object.assign(
+                Object.create(Object.getPrototypeOf(user)),
+                user,
+            ) as AppUserInterface);
+            this.analyticsService.logEvent('dashboard_action_prompt_dismiss', {
+                prompt_id: DASHBOARD_ACTION_PROMPT_GARMIN_ROUTE_PERMISSION_ID,
+            });
+        } catch (error) {
+            this.garminRoutePermissionPromptError.set('Could not save this choice.');
+            this.logger.error('[RoutesPageComponent] Failed to dismiss Garmin route permission prompt', error);
+        } finally {
+            this.isDismissingGarminRoutePermissionPrompt.set(false);
         }
     }
 

@@ -25,7 +25,10 @@ import { LoggerService } from '../../services/logger.service';
 import { RoutesPageComponent } from './routes-page.component';
 import { FirestoreRouteJSON } from '@shared/app-route.interface';
 import { ConfirmationDialogComponent } from '../confirmation-dialog/confirmation-dialog.component';
-import { DASHBOARD_ACTION_PROMPT_SUUNTO_ROUTE_CATCH_UP_ID } from '../../helpers/dashboard-action-prompt.helper';
+import {
+    DASHBOARD_ACTION_PROMPT_GARMIN_ROUTE_PERMISSION_ID,
+    DASHBOARD_ACTION_PROMPT_SUUNTO_ROUTE_CATCH_UP_ID,
+} from '../../helpers/dashboard-action-prompt.helper';
 
 describe('RoutesPageComponent', () => {
     let component: RoutesPageComponent;
@@ -123,6 +126,7 @@ describe('RoutesPageComponent', () => {
             providerUserId: null,
             providerStates: [],
             serviceMeta: null,
+            permissionPromptSource: null,
         });
         authServiceMock = {
             getUser: vi.fn().mockResolvedValue(currentUser),
@@ -484,6 +488,150 @@ describe('RoutesPageComponent', () => {
         expect(component.suuntoRouteCatchUpPrompt()).toMatchObject({
             primaryAction: {
                 id: 'queueSuuntoRouteCatchUp',
+            },
+        });
+    });
+
+    it('shows the Garmin route permission prompt when Course Import is missing', async () => {
+        garminRouteSendContext$.next({
+            connected: true,
+            reconnectRequired: false,
+            missingPermissions: ['COURSE_IMPORT'],
+            providerUserId: 'garmin-user-1',
+            providerStates: [{
+                providerUserId: 'garmin-user-1',
+                permissionsLoaded: true,
+                missingPermissions: ['COURSE_IMPORT'],
+            }],
+            serviceMeta: null,
+            permissionPromptSource: 'garmin-route-course-import:garmin-user-1:1710000000:COURSE_IMPORT',
+        });
+
+        await component.ngOnInit();
+        await firstValueFrom(component.routes$!);
+
+        expect(component.garminRoutePermissionPrompt()).toMatchObject({
+            id: DASHBOARD_ACTION_PROMPT_GARMIN_ROUTE_PERMISSION_ID,
+            primaryAction: {
+                id: 'reconnectGarminRoutePermission',
+            },
+            secondaryAction: {
+                id: 'dismissGarminRoutePermission',
+            },
+        });
+    });
+
+    it('starts Garmin reconnect from the route permission prompt', async () => {
+        userServiceMock.getCurrentUserServiceTokenAndRedirectURI.mockResolvedValueOnce({
+            redirect_uri: 'https://garmin.example/reconnect',
+        });
+        garminRouteSendContext$.next({
+            connected: true,
+            reconnectRequired: false,
+            missingPermissions: ['COURSE_IMPORT'],
+            providerUserId: 'garmin-user-1',
+            providerStates: [{
+                providerUserId: 'garmin-user-1',
+                permissionsLoaded: true,
+                missingPermissions: ['COURSE_IMPORT'],
+            }],
+            serviceMeta: null,
+            permissionPromptSource: 'garmin-route-course-import:garmin-user-1:1710000000:COURSE_IMPORT',
+        });
+
+        await component.ngOnInit();
+        await firstValueFrom(component.routes$!);
+        component.onGarminRoutePermissionPromptPrimary({
+            promptId: DASHBOARD_ACTION_PROMPT_GARMIN_ROUTE_PERMISSION_ID,
+            action: {
+                id: 'reconnectGarminRoutePermission',
+                label: 'Reconnect Garmin',
+            },
+        });
+        await Promise.resolve();
+
+        expect(userServiceMock.getCurrentUserServiceTokenAndRedirectURI).toHaveBeenCalledWith(ServiceNames.GarminAPI);
+        expect(windowServiceMock.windowRef.location.href).toBe('https://garmin.example/reconnect');
+    });
+
+    it('dismisses the Garmin route permission prompt through dashboardActionPrompts', async () => {
+        garminRouteSendContext$.next({
+            connected: true,
+            reconnectRequired: false,
+            missingPermissions: ['COURSE_IMPORT'],
+            providerUserId: 'garmin-user-1',
+            providerStates: [{
+                providerUserId: 'garmin-user-1',
+                permissionsLoaded: true,
+                missingPermissions: ['COURSE_IMPORT'],
+            }],
+            serviceMeta: null,
+            permissionPromptSource: 'garmin-route-course-import:garmin-user-1:1710000000:COURSE_IMPORT',
+        });
+
+        await component.ngOnInit();
+        await firstValueFrom(component.routes$!);
+        await component.dismissGarminRoutePermissionPrompt();
+
+        expect(userServiceMock.updateUserProperties).toHaveBeenCalledWith(
+            expect.objectContaining({ uid: 'user-1' }),
+            {
+                settings: {
+                    appSettings: {
+                        dashboardActionPrompts: {
+                            [DASHBOARD_ACTION_PROMPT_GARMIN_ROUTE_PERMISSION_ID]: expect.objectContaining({
+                                state: 'dismissed',
+                                source: 'garmin-route-course-import:garmin-user-1:1710000000:COURSE_IMPORT',
+                            }),
+                        },
+                    },
+                },
+            },
+        );
+        expect(component.garminRoutePermissionPrompt()).toBeNull();
+    });
+
+    it('hides the Garmin route permission prompt after it is dismissed for the same source', async () => {
+        authServiceMock.getUser.mockResolvedValueOnce({
+            uid: 'user-1',
+            settings: {
+                appSettings: {
+                    dashboardActionPrompts: {
+                        [DASHBOARD_ACTION_PROMPT_GARMIN_ROUTE_PERMISSION_ID]: {
+                            state: 'dismissed',
+                            source: 'garmin-route-course-import:garmin-user-1:1710000000:COURSE_IMPORT',
+                        },
+                    },
+                },
+            },
+        });
+        garminRouteSendContext$.next({
+            connected: true,
+            reconnectRequired: false,
+            missingPermissions: ['COURSE_IMPORT'],
+            providerUserId: 'garmin-user-1',
+            providerStates: [{
+                providerUserId: 'garmin-user-1',
+                permissionsLoaded: true,
+                missingPermissions: ['COURSE_IMPORT'],
+            }],
+            serviceMeta: null,
+            permissionPromptSource: 'garmin-route-course-import:garmin-user-1:1710000000:COURSE_IMPORT',
+        });
+
+        await component.ngOnInit();
+        await firstValueFrom(component.routes$!);
+
+        expect(component.garminRoutePermissionPrompt()).toBeNull();
+
+        garminRouteSendContext$.next({
+            ...garminRouteSendContext$.value,
+            permissionPromptSource: 'garmin-route-course-import:garmin-user-1:1810000000:COURSE_IMPORT',
+        });
+
+        expect(component.garminRoutePermissionPrompt()).toMatchObject({
+            primaryAction: {
+                id: 'reconnectGarminRoutePermission',
             },
         });
     });

@@ -103,6 +103,7 @@ export class RouteDetailComponent {
     providerUserId: null,
     providerStates: [],
     serviceMeta: null,
+    permissionPromptSource: null,
   });
 
   readonly unitSettings = this.userSettingsQuery.unitSettings;

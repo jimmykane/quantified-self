@@ -27,6 +27,15 @@
       </app-dashboard-action-prompt>
     </section>
     }
+    @if (garminRoutePermissionPrompt(); as prompt) {
+    <section class="routes-prompt" aria-label="Garmin route permission prompt">
+      <app-dashboard-action-prompt
+        [prompt]="prompt"
+        (primary)="onGarminRoutePermissionPromptPrimary($event)"
+        (secondary)="onGarminRoutePermissionPromptSecondary($event)">
+      </app-dashboard-action-prompt>
+    </section>
+    }
 
     @if (routes$ | async; as routes) {
     <section class="routes-summary" aria-label="Route summary">
