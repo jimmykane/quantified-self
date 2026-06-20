@@ -27,6 +27,15 @@
       </app-dashboard-action-prompt>
     </section>
     }
+    @if (garminRoutePermissionPrompt(); as prompt) {
+    <section class="routes-prompt" aria-label="Garmin route permission prompt">
+      <app-dashboard-action-prompt
+        [prompt]="prompt"
+        (primary)="onGarminRoutePermissionPromptPrimary($event)"
+        (secondary)="onGarminRoutePermissionPromptSecondary($event)">
+      </app-dashboard-action-prompt>
+    </section>
+    }
 
     @if (routes$ | async; as routes) {
     <section class="routes-summary" aria-label="Route summary">
@@ -122,7 +131,7 @@
           <button mat-button type="button"
             class="route-bulk-action-button"
             [matMenuTriggerFor]="routeBulkSendMenu"
-            [disabled]="bulkActionInProgress() || sendingToServiceRouteID() !== null || (selectedSendableRouteCount() === 0 && (!showGarminRouteSend || selectedSendableRoutesToGarminCount() === 0))"
+            [disabled]="bulkActionInProgress() || sendingToServiceRouteID() !== null || (selectedSendableRouteCount() === 0 && selectedSendableRoutesToGarminCount() === 0)"
             aria-label="Send selected routes to a connected service"
             (click)="$event.preventDefault(); $event.stopPropagation()">
             <span class="route-bulk-action-content">
@@ -139,7 +148,7 @@
               <span>Suunto</span>
             </button>
             }
-            @if (showGarminRouteSend && (selectedSendableRoutesToGarminCount() > 0 || canSendRoutesToGarmin())) {
+            @if (selectedSendableRoutesToGarminCount() > 0 || canSendRoutesToGarmin()) {
             <button mat-menu-item type="button"
               [disabled]="bulkActionInProgress() || sendingToServiceRouteID() !== null || !canSendRoutesToGarmin() || selectedSendableRoutesToGarminCount() === 0"
               (click)="$event.preventDefault(); $event.stopPropagation(); sendSelectedRoutesToGarmin()">
@@ -418,7 +427,7 @@
             </button>
             <button mat-menu-item type="button"
               [matMenuTriggerFor]="routeRowSendMenu"
-              [disabled]="bulkActionInProgress() || sendingToServiceRouteID() !== null || deletingRouteID() === item.route.id || downloadingRouteID() === item.route.id || reprocessingRouteID() === item.route.id || exportingRouteID() === item.route.id || (!item.canSendToSuunto && (!showGarminRouteSend || (!item.canSendToGarmin && !item.garminSendDisabledReason)))"
+              [disabled]="bulkActionInProgress() || sendingToServiceRouteID() !== null || deletingRouteID() === item.route.id || downloadingRouteID() === item.route.id || reprocessingRouteID() === item.route.id || exportingRouteID() === item.route.id || (!item.canSendToSuunto && !item.canSendToGarmin && !item.garminSendDisabledReason)"
               (click)="$event.stopPropagation()">
               <mat-icon>cloud_upload</mat-icon>
               <span>Send to</span>
@@ -439,7 +448,7 @@
               <span>Suunto</span>
             </button>
             }
-            @if (showGarminRouteSend && (item.canSendToGarmin || canSendRoutesToGarmin() || item.garminSendDisabledReason)) {
+            @if (item.canSendToGarmin || canSendRoutesToGarmin() || item.garminSendDisabledReason) {
             <button mat-menu-item type="button"
               [disabled]="bulkActionInProgress() || sendingToServiceRouteID() !== null || !canSendRoutesToGarmin() || !item.canSendToGarmin"
               (click)="sendRouteToGarmin(item.route)">

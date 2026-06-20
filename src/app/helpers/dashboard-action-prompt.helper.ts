@@ -21,6 +21,7 @@ export const DASHBOARD_ACTION_PROMPT_ENABLE_ACTIVITY_AUTO_SYNC_ID: AppDashboardA
 export const DASHBOARD_ACTION_PROMPT_BACKFILL_GARMIN_SLEEP_ID: AppDashboardActionPromptId = 'backfillGarminSleep';
 export const DASHBOARD_ACTION_PROMPT_RECONNECT_SUUNTO_SERVICE_ID: AppDashboardActionPromptId = 'reconnectSuuntoService';
 export const DASHBOARD_ACTION_PROMPT_SUUNTO_ROUTE_CATCH_UP_ID: AppDashboardActionPromptId = 'suuntoRouteCatchUp';
+export const DASHBOARD_ACTION_PROMPT_GARMIN_ROUTE_PERMISSION_ID: AppDashboardActionPromptId = 'garminRoutePermission';
 export const DASHBOARD_ACTION_PROMPT_FIRST_ACTIVITY_UPLOAD_SOURCE = 'first-activity-upload';
 export const DASHBOARD_ACTION_PROMPT_CONNECT_ACTIVITY_SERVICE_SOURCE = 'activity-service-connection';
 export const DASHBOARD_ACTION_PROMPT_ACTIVITY_AUTO_SYNC_SOURCE = 'activity-auto-sync';
@@ -47,7 +48,9 @@ export type DashboardActionPromptActionId =
   | 'reconnectSuuntoService'
   | 'dismissReconnectSuuntoService'
   | 'queueSuuntoRouteCatchUp'
-  | 'dismissSuuntoRouteCatchUp';
+  | 'dismissSuuntoRouteCatchUp'
+  | 'reconnectGarminRoutePermission'
+  | 'dismissGarminRoutePermission';
 
 export type DashboardActionPromptMenuActionId =
   | 'openUnitSettings'

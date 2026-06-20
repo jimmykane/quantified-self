@@ -258,6 +258,7 @@ describe('help.content', () => {
     expect(serviceConnectionsSection?.content).toContain('Saved FIT and GPX routes can also be sent to Garmin Connect from **Routes**');
     expect(serviceConnectionsSection?.content).toContain('not a Garmin route import or catch-up feature');
     expect(serviceConnectionsSection?.content).toContain('**COURSE_IMPORT**');
+    expect(serviceConnectionsSection?.content).toContain('Routes can show a Garmin permission prompt');
     expect(serviceConnectionsSection?.content).toContain('updates the same Garmin course on resend for the same Garmin account');
   });
 

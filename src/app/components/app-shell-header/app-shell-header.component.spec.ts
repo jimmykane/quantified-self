@@ -40,29 +40,29 @@ describe('AppShellHeaderComponent', () => {
     expect(emitSpy).toHaveBeenCalledTimes(1);
   });
 
-  it('should render both login icon and label in the signed-out primary action', () => {
+  it('should render both signed-out desktop and mobile primary actions', () => {
     component.authState = false;
     fixture.detectChanges();
 
-    const actionButton = fixture.nativeElement.querySelector('button.responsive-action-button') as HTMLButtonElement | null;
-    const icon = actionButton?.querySelector('mat-icon');
-    const label = actionButton?.querySelector('.responsive-action-button__label');
+    const desktopActionButton = fixture.nativeElement.querySelector('button.responsive-action-button--desktop') as HTMLButtonElement | null;
+    const mobileActionButton = fixture.nativeElement.querySelector('button.responsive-action-button--mobile') as HTMLButtonElement | null;
+    const mobileIcon = mobileActionButton?.querySelector('mat-icon');
 
-    expect(actionButton).toBeTruthy();
-    expect(icon?.textContent?.trim()).toBe('login');
-    expect(label?.textContent?.trim()).toBe('Login or Register');
+    expect(desktopActionButton?.textContent?.trim()).toBe('Login or Register');
+    expect(mobileActionButton?.getAttribute('aria-label')).toBe('Login or Register');
+    expect(mobileIcon?.textContent?.trim()).toBe('login');
   });
 
-  it('should render both dashboard icon and label in the authenticated primary action', () => {
+  it('should render both authenticated desktop and mobile primary actions', () => {
     component.authState = true;
     fixture.detectChanges();
 
-    const actionButton = fixture.nativeElement.querySelector('button.responsive-action-button') as HTMLButtonElement | null;
-    const icon = actionButton?.querySelector('mat-icon');
-    const label = actionButton?.querySelector('.responsive-action-button__label');
+    const desktopActionButton = fixture.nativeElement.querySelector('button.responsive-action-button--desktop') as HTMLButtonElement | null;
+    const mobileActionButton = fixture.nativeElement.querySelector('button.responsive-action-button--mobile') as HTMLButtonElement | null;
+    const mobileIcon = mobileActionButton?.querySelector('mat-icon');
 
-    expect(actionButton).toBeTruthy();
-    expect(icon?.textContent?.trim()).toBe('dashboard');
-    expect(label?.textContent?.trim()).toBe('Dashboard');
+    expect(desktopActionButton?.textContent?.trim()).toBe('Dashboard');
+    expect(mobileActionButton?.getAttribute('aria-label')).toBe('Dashboard');
+    expect(mobileIcon?.textContent?.trim()).toBe('dashboard');
   });
 });

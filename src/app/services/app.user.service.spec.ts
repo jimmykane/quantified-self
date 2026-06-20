@@ -564,6 +564,66 @@ describe('AppUserService', () => {
         expect(result.didLastRouteImport?.toISOString()).toBe('2026-06-12T09:45:00.000Z');
     });
 
+    it('builds Garmin route send context with a permission prompt source when Course Import is missing', async () => {
+        service = TestBed.inject(AppUserService);
+        const testUser = { uid: 'u1' } as any;
+
+        (collectionData as any).mockReturnValueOnce(of([
+            {
+                accessToken: 'garmin-token',
+                userID: 'garmin-user-1',
+                permissions: ['ACTIVITY_EXPORT'],
+                permissionsLastChangedAt: 1710000000,
+                dateCreated: 1700000000000,
+            },
+        ]));
+        (docData as any).mockReturnValueOnce(of({}));
+
+        const result = await firstValueFrom(service.watchGarminRouteSendContext(testUser).pipe(take(1)));
+
+        expect(result).toMatchObject({
+            connected: true,
+            reconnectRequired: false,
+            missingPermissions: ['COURSE_IMPORT'],
+            providerUserId: 'garmin-user-1',
+            permissionPromptSource: 'garmin-route-course-import:garmin-user-1:1710000000:COURSE_IMPORT',
+        });
+        expect(result.providerStates).toEqual([{
+            providerUserId: 'garmin-user-1',
+            permissionsLoaded: true,
+            missingPermissions: ['COURSE_IMPORT'],
+        }]);
+    });
+
+    it('builds Garmin route permission prompt source for legacy tokens without stored permissions', async () => {
+        service = TestBed.inject(AppUserService);
+        const testUser = { uid: 'u1' } as any;
+
+        (collectionData as any).mockReturnValueOnce(of([
+            {
+                accessToken: 'garmin-token',
+                userID: 'garmin-user-1',
+                dateCreated: 1700000000000,
+            },
+        ]));
+        (docData as any).mockReturnValueOnce(of({}));
+
+        const result = await firstValueFrom(service.watchGarminRouteSendContext(testUser).pipe(take(1)));
+
+        expect(result).toMatchObject({
+            connected: true,
+            reconnectRequired: false,
+            missingPermissions: ['COURSE_IMPORT'],
+            providerUserId: 'garmin-user-1',
+            permissionPromptSource: 'garmin-route-course-import:garmin-user-1:1700000000000:COURSE_IMPORT',
+        });
+        expect(result.providerStates).toEqual([{
+            providerUserId: 'garmin-user-1',
+            permissionsLoaded: false,
+            missingPermissions: ['COURSE_IMPORT'],
+        }]);
+    });
+
     describe('createOrUpdateUser policy flow', () => {
         beforeEach(() => {
             service = TestBed.inject(AppUserService);

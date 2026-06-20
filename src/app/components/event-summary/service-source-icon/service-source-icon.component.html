@@ -6,6 +6,6 @@
   [matTooltipDisabled]="!serviceTooltip">
 </mat-icon>
 }
-@if (showText && serviceName) {
+@if (shouldShowText) {
 <span class="service-source-text">{{ serviceDisplayName || serviceName }}</span>
 }
