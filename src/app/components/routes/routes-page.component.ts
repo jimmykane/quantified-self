@@ -344,6 +344,10 @@ export class RoutesPageComponent implements OnInit {
         )).length;
     });
     readonly selectedSendableRoutesToGarminCount = computed(() => {
+        if (!this.canSendRoutesToGarmin()) {
+            return 0;
+        }
+
         const selectedIDs = this.selectedRouteIDSet();
         return this.visibleRouteViewModels().filter(item => (
             !!item.route.id

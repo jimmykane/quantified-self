@@ -1406,6 +1406,30 @@ describe('RoutesPageComponent', () => {
         expect(component.canSendRoutesToGarmin()).toBe(true);
     });
 
+    it('does not count selected Garmin routes for bulk send when the user is not Pro', async () => {
+        userServiceMock.hasProAccessSignal.mockReturnValue(false);
+        garminRouteSendContext$.next({
+            connected: true,
+            reconnectRequired: false,
+            missingPermissions: [],
+            providerUserId: 'garmin-user-1',
+            providerStates: [{
+                providerUserId: 'garmin-user-1',
+                permissionsLoaded: true,
+                missingPermissions: [],
+            }],
+            serviceMeta: null,
+        });
+        await component.ngOnInit();
+        const routes = await firstValueFrom(component.routes$!);
+
+        component.toggleVisibleRouteSelection(true);
+
+        expect(routes[0].canSendToGarmin).toBe(true);
+        expect(component.canSendRoutesToGarmin()).toBe(false);
+        expect(component.selectedSendableRoutesToGarminCount()).toBe(0);
+    });
+
     it('sends a row route to Garmin', async () => {
         garminRouteSendContext$.next({
             connected: true,
