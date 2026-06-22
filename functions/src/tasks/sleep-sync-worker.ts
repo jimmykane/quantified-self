@@ -52,6 +52,9 @@ export const processSleepSyncTask = onTaskDispatched({
         case QueueResult.Processed:
             logger.info(`[SleepSyncTaskWorker] Successfully processed item ${queueItemId}`);
             return;
+        case QueueResult.Deferred:
+            logger.warn(`[SleepSyncTaskWorker] Deferred item ${queueItemId}; it remains queued for a future dispatcher run.`);
+            return;
         case QueueResult.MovedToDLQ:
             logger.warn(`[SleepSyncTaskWorker] Item ${queueItemId} was moved to DLQ.`);
             return;

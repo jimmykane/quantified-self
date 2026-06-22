@@ -4,6 +4,7 @@ import { ActivitySyncQueueItemInterface } from '../queue/queue-item.interface';
 import {
     QueueResult,
     QUEUE_SKIPPED_REASONS,
+    deferQueueItemForPendingDisconnect,
     increaseRetryCountForQueueItem,
     markQueueItemSkipped,
     moveToDeadLetterQueue,
@@ -11,7 +12,11 @@ import {
 } from '../queue-utils';
 import { ACTIVITY_SYNC_ROUTES } from '../../../shared/activity-sync-routes';
 import { isActivitySyncRouteEnabledForUser } from './settings';
-import { isServiceUnavailableForSyncForUser } from '../service-connection-meta';
+import { getServiceConnectionMeta } from '../service-connection-meta';
+import {
+    isDisconnectPendingServiceConnection,
+    isServiceUnavailableForSyncConnection,
+} from '../../../shared/service-connection';
 import {
     setActivitySyncFailedMetadata,
     setActivitySyncProcessingMetadata,
@@ -135,11 +140,40 @@ function isAccountDeletionSkipError(error: unknown): boolean {
         );
 }
 
-async function isDestinationConnected(userID: string, destinationServiceName: ServiceNames): Promise<boolean> {
+function isTokenUseSkippedForPendingDisconnectError(error: unknown): boolean {
+    return error instanceof Error && error.name === 'TokenUseSkippedForPendingDisconnectError';
+}
+
+async function getPendingDisconnectServiceForRoute(
+    userID: string,
+    route: typeof ACTIVITY_SYNC_ROUTES[keyof typeof ACTIVITY_SYNC_ROUTES],
+): Promise<ServiceNames | null> {
+    const [sourceMeta, destinationMeta] = await Promise.all([
+        getServiceConnectionMeta(userID, route.sourceServiceName),
+        getServiceConnectionMeta(userID, route.destinationServiceName),
+    ]);
+
+    if (isDisconnectPendingServiceConnection(sourceMeta)) {
+        return route.sourceServiceName;
+    }
+    if (isDisconnectPendingServiceConnection(destinationMeta)) {
+        return route.destinationServiceName;
+    }
+
+    return null;
+}
+
+type DestinationConnectionStatus = 'connected' | 'not_connected' | 'disconnect_pending';
+
+async function getDestinationConnectionStatus(userID: string, destinationServiceName: ServiceNames): Promise<DestinationConnectionStatus> {
     switch (destinationServiceName) {
         case ServiceNames.SuuntoApp: {
-            if (await isServiceUnavailableForSyncForUser(userID, destinationServiceName)) {
-                return false;
+            const meta = await getServiceConnectionMeta(userID, destinationServiceName);
+            if (isDisconnectPendingServiceConnection(meta)) {
+                return 'disconnect_pending';
+            }
+            if (isServiceUnavailableForSyncConnection(meta)) {
+                return 'not_connected';
             }
             const snapshot = await admin.firestore()
                 .collection(SUUNTOAPP_ACCESS_TOKENS_COLLECTION_NAME)
@@ -147,10 +181,10 @@ async function isDestinationConnected(userID: string, destinationServiceName: Se
                 .collection('tokens')
                 .limit(1)
                 .get();
-            return snapshot.size > 0;
+            return snapshot.size > 0 ? 'connected' : 'not_connected';
         }
         default:
-            return false;
+            return 'not_connected';
     }
 }
 
@@ -199,6 +233,29 @@ function getDeadLetterContext(error: unknown): string {
     const errorLike = asErrorLike(error) as ErrorLike & { dlqContext?: unknown };
     const context = `${errorLike.dlqContext || ''}`.trim();
     return context.length > 0 ? context : 'ACTIVITY_SYNC_PERMANENT_FAILURE';
+}
+
+async function deferActivitySyncQueueItemForPendingDisconnect(
+    queueItem: ActivitySyncQueueItemInterface,
+    bulkWriter: admin.firestore.BulkWriter | undefined,
+    routeMeta: {
+        routeId: ActivitySyncQueueItemInterface['routeId'];
+        userID: string;
+        eventID: string;
+        sourceServiceName: ServiceNames;
+        destinationServiceName: ServiceNames;
+        manual: boolean;
+    },
+    serviceName: ServiceNames,
+): Promise<QueueResult.Deferred | QueueResult.Failed> {
+    const error = new Error(`${serviceName} disconnect is pending.`);
+    await safelyWriteMetadata(() => setActivitySyncRetryingMetadata({
+        ...routeMeta,
+        error: toActivitySyncMetadataError(error),
+    }));
+    return deferQueueItemForPendingDisconnect(queueItem, bulkWriter, {
+        deferredServiceName: `${serviceName}`,
+    });
 }
 
 export async function processActivitySyncQueueItem(
@@ -277,6 +334,16 @@ export async function processActivitySyncQueueItem(
         const enabled = await isActivitySyncRouteEnabledForUser(queueItem.userID, queueItem.routeId);
         const isManualRun = queueItem.manual === true;
         if (!enabled && !isManualRun) {
+            const pendingDisconnectService = await getPendingDisconnectServiceForRoute(queueItem.userID, route);
+            if (pendingDisconnectService) {
+                return deferActivitySyncQueueItemForPendingDisconnect(
+                    queueItem,
+                    bulkWriter,
+                    routeMeta,
+                    pendingDisconnectService,
+                );
+            }
+
             await setActivitySyncSkippedMetadata({
                 ...routeMeta,
                 skippedReason: 'route_disabled',
@@ -288,8 +355,16 @@ export async function processActivitySyncQueueItem(
             });
         }
 
-        const destinationConnected = await isDestinationConnected(queueItem.userID, queueItem.destinationServiceName);
-        if (!destinationConnected) {
+        const destinationConnectionStatus = await getDestinationConnectionStatus(queueItem.userID, queueItem.destinationServiceName);
+        if (destinationConnectionStatus === 'disconnect_pending') {
+            return deferActivitySyncQueueItemForPendingDisconnect(
+                queueItem,
+                bulkWriter,
+                routeMeta,
+                queueItem.destinationServiceName,
+            );
+        }
+        if (destinationConnectionStatus === 'not_connected') {
             await setActivitySyncSkippedMetadata({
                 ...routeMeta,
                 skippedReason: 'destination_not_connected',
@@ -373,6 +448,15 @@ export async function processActivitySyncQueueItem(
             return markQueueItemSkipped(queueItem, bulkWriter, QUEUE_SKIPPED_REASONS.UserDeletedOrDeleting, {
                 skippedContext: 'USER_DELETION_GUARD',
             });
+        }
+
+        if (isTokenUseSkippedForPendingDisconnectError(error)) {
+            return deferActivitySyncQueueItemForPendingDisconnect(
+                queueItem,
+                bulkWriter,
+                routeMeta,
+                queueItem.destinationServiceName,
+            );
         }
 
         const normalizedError = toError(error);

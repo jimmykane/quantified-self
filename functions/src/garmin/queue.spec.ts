@@ -11,6 +11,7 @@ const {
     mockCollection,
     mockCollectionGroup,
     mockRequestGet,
+    mockDeferQueueItemForPendingDisconnect,
     mockIncreaseRetryCountForQueueItem,
     mockMarkQueueItemSkipped,
     mockMoveToDeadLetterQueue,
@@ -40,6 +41,7 @@ const {
         mockCollection: vi.fn(),
         mockCollectionGroup: vi.fn(),
         mockRequestGet: vi.fn(),
+        mockDeferQueueItemForPendingDisconnect: vi.fn(),
         mockIncreaseRetryCountForQueueItem: vi.fn(),
         mockMarkQueueItemSkipped: vi.fn(),
         mockMoveToDeadLetterQueue: vi.fn(),
@@ -123,6 +125,7 @@ vi.mock('../activity-sync/enqueue-imported-event', () => ({
 
 // Mock queue utilities
 vi.mock('../queue-utils', () => ({
+    deferQueueItemForPendingDisconnect: mockDeferQueueItemForPendingDisconnect,
     increaseRetryCountForQueueItem: mockIncreaseRetryCountForQueueItem,
     markQueueItemSkipped: mockMarkQueueItemSkipped,
     QUEUE_SKIPPED_REASONS: {
@@ -133,6 +136,7 @@ vi.mock('../queue-utils', () => ({
     QueueResult: {
         Processed: 'PROCESSED',
         Skipped: 'SKIPPED',
+        Deferred: 'DEFERRED',
         MovedToDLQ: 'MOVED_TO_DLQ',
         RetryIncremented: 'RETRY_INCREMENTED',
         Failed: 'FAILED',
@@ -330,6 +334,7 @@ describe('Garmin Queue', () => { // Grouping for cleaner output
                 eventID: 'saved-event-id',
                 savedOriginalFiles: [{ path: 'users/firebase-user-id/events/saved-event-id/original.fit' }],
             });
+            mockDeferQueueItemForPendingDisconnect.mockResolvedValue('DEFERRED');
             mockIncreaseRetryCountForQueueItem.mockResolvedValue('RETRY_INCREMENTED');
             mockMarkQueueItemSkipped.mockResolvedValue('PROCESSED');
             mockMoveToDeadLetterQueue.mockResolvedValue('MOVED_TO_DLQ');
@@ -362,6 +367,25 @@ describe('Garmin Queue', () => { // Grouping for cleaner output
                 sourceActivityID: queueItem.activityFileID,
             }));
             expect(updateToProcessed).toHaveBeenCalledWith(queueItem, undefined);
+        });
+
+        it('defers without marking processed when token use is blocked by pending disconnect', async () => {
+            const pendingDisconnectError = new Error('service disconnect is pending');
+            pendingDisconnectError.name = 'TokenUseSkippedForPendingDisconnectError';
+            vi.mocked(getTokenData).mockRejectedValueOnce(pendingDisconnectError);
+
+            const result = await processGarminAPIActivityQueueItem(queueItem);
+
+            expect(result).toBe('DEFERRED');
+            expect(mockDeferQueueItemForPendingDisconnect).toHaveBeenCalledWith(queueItem, undefined);
+            expect(mockMarkQueueItemSkipped).not.toHaveBeenCalledWith(
+                queueItem,
+                undefined,
+                'service_disconnect_pending',
+                expect.any(Object),
+            );
+            expect(mockIncreaseRetryCountForQueueItem).not.toHaveBeenCalled();
+            expect(updateToProcessed).not.toHaveBeenCalled();
         });
 
         it('should not enqueue activity sync when processing with bulkWriter', async () => {

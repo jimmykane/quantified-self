@@ -26,6 +26,7 @@ import * as requestPromise from '../request-helper';
 import { config } from '../config';
 import { toSuuntoAuthorizationHeader } from '../suunto/authorization-header';
 import {
+    deferQueueItemForPendingDisconnect,
     increaseRetryCountForQueueItem,
     markQueueItemSkipped,
     moveToDeadLetterQueue,
@@ -784,9 +785,8 @@ export async function processSleepSyncQueueItem(queueItem: SleepSyncQueueItemInt
             });
         }
         if (isTokenUseSkippedForPendingDisconnectError(error)) {
-            logger.warn(`[SleepSync] Queue item ${queueItem.id} skipped token use because service disconnect is pending.`);
-            return markQueueItemSkipped(queueItem, undefined, 'service_disconnect_pending', {
-                skippedContext: 'SERVICE_DISCONNECT_PENDING',
+            logger.warn(`[SleepSync] Queue item ${queueItem.id} deferred token use because service disconnect is pending.`);
+            return deferQueueItemForPendingDisconnect(queueItem, undefined, {
                 sessionsWritten: 0,
                 sessionsSkipped: 0,
             });

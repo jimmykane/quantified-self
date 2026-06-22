@@ -4,7 +4,7 @@ import * as admin from 'firebase-admin';
 import { QueueErrors, QueueLogs } from '../shared/constants';
 import { addToQueueForGarmin } from '../queue';
 import { isProviderQueueSkippedWithoutRetryError } from '../queue/provider-queue-errors';
-import { increaseRetryCountForQueueItem, markQueueItemSkipped, QUEUE_SKIPPED_REASONS, updateToProcessed, moveToDeadLetterQueue, QueueResult } from '../queue-utils';
+import { deferQueueItemForPendingDisconnect, increaseRetryCountForQueueItem, markQueueItemSkipped, QUEUE_SKIPPED_REASONS, updateToProcessed, moveToDeadLetterQueue, QueueResult } from '../queue-utils';
 
 import { EventImporterFIT } from '@sports-alliance/sports-lib';
 import { EventWriteSkippedForDeletedUserError, generateEventID, setEvent, UsageLimitExceededError, UserNotFoundError } from '../utils';
@@ -56,13 +56,11 @@ function markGarminQueueItemSkippedForDeletedUser(
   });
 }
 
-function markGarminQueueItemSkippedForPendingDisconnect(
+function deferGarminQueueItemForPendingDisconnect(
   queueItem: GarminAPIActivityQueueItemInterface,
   bulkWriter?: admin.firestore.BulkWriter,
-): Promise<QueueResult.Processed | QueueResult.Failed> {
-  return markQueueItemSkipped(queueItem, bulkWriter, 'service_disconnect_pending', {
-    skippedContext: 'SERVICE_DISCONNECT_PENDING',
-  });
+): Promise<QueueResult.Deferred | QueueResult.Failed> {
+  return deferQueueItemForPendingDisconnect(queueItem, bulkWriter);
 }
 
 
@@ -170,8 +168,8 @@ export async function processGarminAPIActivityQueueItem(queueItem: GarminAPIActi
       return markGarminQueueItemSkippedForDeletedUser(queueItem, bulkWriter);
     }
     if (isTokenUseSkippedForPendingDisconnectError(e)) {
-      logger.warn(`Skipping Garmin queue item ${queueItem.id} because service disconnect is pending for user ${firebaseUserID}.`);
-      return markGarminQueueItemSkippedForPendingDisconnect(queueItem, bulkWriter);
+      logger.warn(`Deferring Garmin queue item ${queueItem.id} because service disconnect is pending for user ${firebaseUserID}.`);
+      return deferGarminQueueItemForPendingDisconnect(queueItem, bulkWriter);
     }
     if (e instanceof TerminalServiceAuthError) {
       logger.warn(`Garmin token for queue item ${queueItem.id} requires reconnect; moving item to DLQ with ${e.dlqContext}.`, {

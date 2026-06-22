@@ -2011,6 +2011,31 @@ describe('queue', () => {
             }));
         });
 
+        it('should defer without consuming retries when token use is blocked by pending disconnect', async () => {
+            const pendingDisconnectError = new Error('service disconnect is pending');
+            pendingDisconnectError.name = 'TokenUseSkippedForPendingDisconnectError';
+            vi.mocked(getTokenData).mockRejectedValueOnce(pendingDisconnectError);
+
+            const result = await parseWorkoutQueueItemForServiceName(ServiceNames.SuuntoApp, suuntoQueueItem);
+
+            expect(result).toBe(QueueResult.Deferred);
+            expect(requestHelper.get).not.toHaveBeenCalled();
+            expect(mockBatch.set).not.toHaveBeenCalled();
+            expect(mockBatch.delete).not.toHaveBeenCalledWith(mockRef);
+            expect(mockRef.update).toHaveBeenCalledWith(expect.objectContaining({
+                processed: false,
+                resultStatus: 'deferred',
+                deferredReason: 'service_disconnect_pending',
+                dispatchedToCloudTask: null,
+            }));
+            expect(mockRef.update).not.toHaveBeenCalledWith(expect.objectContaining({
+                processed: true,
+            }));
+            expect(mockRef.update).not.toHaveBeenCalledWith(expect.objectContaining({
+                retryCount: expect.any(Number),
+            }));
+        });
+
         it('should prefer INVALID_GRANT when multiple terminal auth failures disagree on DLQ context', async () => {
             const admin = await import('firebase-admin');
             vi.spyOn(admin.firestore().collectionGroup('tokens'), 'get').mockResolvedValueOnce({

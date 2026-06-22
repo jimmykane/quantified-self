@@ -5,7 +5,7 @@ import { QueueErrors, QueueLogs } from './shared/constants';
 import * as admin from 'firebase-admin';
 import * as logger from 'firebase-functions/logger';
 
-import { increaseRetryCountForQueueItem, markQueueItemSkipped, QUEUE_SKIPPED_REASONS, updateToProcessed, moveToDeadLetterQueue, QueueResult } from './queue-utils';
+import { deferQueueItemForPendingDisconnect, increaseRetryCountForQueueItem, markQueueItemSkipped, QUEUE_SKIPPED_REASONS, updateToProcessed, moveToDeadLetterQueue, QueueResult } from './queue-utils';
 import { processGarminAPIActivityQueueItem } from './garmin/queue';
 import {
   QueueItemInterface,
@@ -91,13 +91,11 @@ function markWorkoutQueueItemSkippedForDeletedUser(
   });
 }
 
-function markWorkoutQueueItemSkippedForPendingDisconnect(
+function deferWorkoutQueueItemForPendingDisconnect(
   queueItem: QueueItemInterface,
   bulkWriter?: admin.firestore.BulkWriter,
-): Promise<QueueResult.Processed | QueueResult.Failed> {
-  return markQueueItemSkipped(queueItem, bulkWriter, 'service_disconnect_pending', {
-    skippedContext: 'SERVICE_DISCONNECT_PENDING',
-  });
+): Promise<QueueResult.Deferred | QueueResult.Failed> {
+  return deferQueueItemForPendingDisconnect(queueItem, bulkWriter);
 }
 
 
@@ -727,6 +725,11 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
     return updateToProcessed(queueItem, bulkWriter);
   }
 
+  if (sawPendingDisconnectSkip && !sawRetryableFailure) {
+    logger.warn(`Deferring ${serviceName} queue item ${queueItem.id} because at least one matching token is pending disconnect and no token succeeded.`);
+    return deferWorkoutQueueItemForPendingDisconnect(queueItem, bulkWriter);
+  }
+
   if (terminalAuthError && !sawRetryableFailure) {
     logger.warn(`At least one matching ${serviceName} token for ${queueItem.id} failed with terminal auth and none succeeded; moving queue item to DLQ with ${terminalAuthError.dlqContext}`);
     return moveToDeadLetterQueue(queueItem, terminalAuthError, bulkWriter, terminalAuthError.dlqContext);
@@ -739,11 +742,6 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
   if (sawUserDeletionSkip && !sawRetryableFailure) {
     logger.warn(`Skipping ${serviceName} queue item ${queueItem.id} without retry because every usable token owner is missing or deletion is in progress.`);
     return markWorkoutQueueItemSkippedForDeletedUser(queueItem, bulkWriter);
-  }
-
-  if (sawPendingDisconnectSkip && !sawRetryableFailure) {
-    logger.warn(`Skipping ${serviceName} queue item ${queueItem.id} without retry because every usable token is pending disconnect.`);
-    return markWorkoutQueueItemSkippedForPendingDisconnect(queueItem, bulkWriter);
   }
 
   // If we finished the loop without returning, it means every token attempt failed.

@@ -1297,7 +1297,7 @@ describe('sleep queue', () => {
         }));
     });
 
-    it('marks pending-disconnect token use as skipped instead of retrying', async () => {
+    it('defers pending-disconnect token use without marking processed or incrementing retries', async () => {
         hoisted.tokenRootGet.mockResolvedValue({
             docs: [{
                 id: 'suunto-token-1',
@@ -1337,11 +1337,21 @@ describe('sleep queue', () => {
             } as any,
         });
 
-        expect(result).toBe(QueueResult.Processed);
+        expect(result).toBe(QueueResult.Deferred);
         expect(hoisted.markSleepSyncError).not.toHaveBeenCalled();
         expect(update).toHaveBeenCalledWith(expect.objectContaining({
-            resultStatus: 'skipped',
-            skippedReason: 'service_disconnect_pending',
+            processed: false,
+            resultStatus: 'deferred',
+            deferredReason: 'service_disconnect_pending',
+            dispatchedToCloudTask: null,
+            sessionsWritten: 0,
+            sessionsSkipped: 0,
+        }));
+        expect(update).not.toHaveBeenCalledWith(expect.objectContaining({
+            processed: true,
+        }));
+        expect(update).not.toHaveBeenCalledWith(expect.objectContaining({
+            retryCount: expect.any(Number),
         }));
     });
 

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { moveToDeadLetterQueue, increaseRetryCountForQueueItem, markQueueItemSkipped, QUEUE_SKIPPED_REASONS, updateToProcessed, QueueResult } from './queue-utils';
+import { deferQueueItemForPendingDisconnect, moveToDeadLetterQueue, increaseRetryCountForQueueItem, markQueueItemSkipped, QUEUE_DEFERRED_REASONS, QUEUE_SKIPPED_REASONS, updateToProcessed, QueueResult } from './queue-utils';
 
 // Hoisted Firestore mocks
 const hoisted = vi.hoisted(() => {
@@ -142,6 +142,35 @@ describe('queue-utils', () => {
                     skippedContext: 'USER_DELETION_GUARD',
                 }),
             );
+        });
+    });
+
+    describe('deferQueueItemForPendingDisconnect', () => {
+        it('keeps queue item unprocessed and redispatchable without incrementing retry count', async () => {
+            const update = vi.fn();
+            const queueItem: any = {
+                id: 'q6',
+                ref: { update },
+                retryCount: 3,
+                dispatchedToCloudTask: 123,
+            };
+
+            const res = await deferQueueItemForPendingDisconnect(queueItem, undefined, {
+                extra: true,
+            });
+
+            expect(res).toBe(QueueResult.Deferred);
+            expect(update).toHaveBeenCalledWith(expect.objectContaining({
+                processed: false,
+                resultStatus: 'deferred',
+                deferredReason: QUEUE_DEFERRED_REASONS.ServiceDisconnectPending,
+                deferredContext: 'SERVICE_DISCONNECT_PENDING',
+                dispatchedToCloudTask: null,
+                extra: true,
+            }));
+            expect(update).not.toHaveBeenCalledWith(expect.objectContaining({
+                retryCount: expect.any(Number),
+            }));
         });
     });
 });

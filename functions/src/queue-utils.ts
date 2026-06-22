@@ -9,6 +9,7 @@ import { getExpireAtTimestamp, TTL_CONFIG } from './shared/ttl-config';
 export enum QueueResult {
     Processed = 'PROCESSED',
     Skipped = 'SKIPPED',
+    Deferred = 'DEFERRED',
     MovedToDLQ = 'MOVED_TO_DLQ',
     RetryIncremented = 'RETRY_INCREMENTED',
     Failed = 'FAILED',
@@ -19,7 +20,12 @@ export const QUEUE_SKIPPED_REASONS = {
     WorkerReturnedSkipped: 'worker_returned_skipped',
 } as const;
 
+export const QUEUE_DEFERRED_REASONS = {
+    ServiceDisconnectPending: 'service_disconnect_pending',
+} as const;
+
 export type QueueSkippedReason = typeof QUEUE_SKIPPED_REASONS[keyof typeof QUEUE_SKIPPED_REASONS] | string;
+export type QueueDeferredReason = typeof QUEUE_DEFERRED_REASONS[keyof typeof QUEUE_DEFERRED_REASONS] | string;
 
 export async function moveToDeadLetterQueue(queueItem: QueueItemInterface, error: Error, bulkWriter?: admin.firestore.BulkWriter, context?: string): Promise<QueueResult.MovedToDLQ | QueueResult.Failed> {
 
@@ -139,4 +145,38 @@ export async function markQueueItemSkipped(
         resultStatus: 'skipped',
         skippedReason,
     });
+}
+
+export async function deferQueueItemForPendingDisconnect(
+    queueItem: QueueItemInterface,
+    bulkWriter?: admin.firestore.BulkWriter,
+    additionalData: Record<string, unknown> = {},
+): Promise<QueueResult.Deferred | QueueResult.Failed> {
+    if (!queueItem.ref) {
+        throw new Error(`No document reference supplied for queue item ${queueItem.id}`);
+    }
+
+    try {
+        const updateData = {
+            ...additionalData,
+            processed: false,
+            resultStatus: 'deferred',
+            deferredReason: QUEUE_DEFERRED_REASONS.ServiceDisconnectPending,
+            deferredContext: 'SERVICE_DISCONNECT_PENDING',
+            serviceDisconnectPendingDeferredAt: Date.now(),
+            dispatchedToCloudTask: null,
+        };
+
+        if (bulkWriter) {
+            void bulkWriter.update(queueItem.ref, updateData);
+        } else {
+            await queueItem.ref.update(updateData);
+        }
+
+        logger.info(`Deferred queue item ${queueItem.id} because service disconnect is pending.`);
+        return QueueResult.Deferred;
+    } catch {
+        logger.error(new Error(`Could not update deferred state for ${queueItem.id}`));
+        return QueueResult.Failed;
+    }
 }
