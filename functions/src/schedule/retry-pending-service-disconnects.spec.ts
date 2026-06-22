@@ -134,6 +134,77 @@ describe('retry-pending-service-disconnects', () => {
     );
   });
 
+  it('records retry failure when local cleanup remains partial without a retryable partner failure', async () => {
+    hoisted.cleanupServiceConnectionForUser.mockResolvedValueOnce({
+      deletedTokenCount: 0,
+      preservedTokenCount: 0,
+      localCleanupStatus: 'partial',
+      retryableDisconnectFailures: [],
+    });
+
+    await retryPendingServiceDisconnectsTestInternals.retryPendingDisconnectRoot(
+      { serviceName: ServiceNames.SuuntoApp, collectionName: 'suuntoAppAccessTokens' },
+      {
+        id: 'user-1',
+        data: () => ({ disconnectState: 'disconnect_pending' }),
+      } as any,
+    );
+
+    expect(hoisted.recordServiceDisconnectRetryFailure).toHaveBeenCalledWith(
+      'user-1',
+      ServiceNames.SuuntoApp,
+      {
+        tokenID: 'unknown',
+        statusCode: null,
+        errorMessage: expect.stringContaining('local cleanup remained partial'),
+      },
+    );
+  });
+
+  it('clears restored-entitlement pending roots even when they are not due for retry', async () => {
+    const pendingRootQuery = {
+      where: vi.fn().mockReturnThis(),
+      limit: vi.fn().mockReturnThis(),
+      get: vi.fn().mockResolvedValue({
+        docs: [
+          {
+            id: 'user-1',
+            data: () => ({
+              disconnectState: 'disconnect_pending',
+              disconnectManualReviewRequired: true,
+              disconnectNextAttemptAt: null,
+            }),
+          },
+        ],
+      }),
+    };
+    const activeSubscriptionQuery = {
+      where: vi.fn().mockReturnThis(),
+      orderBy: vi.fn().mockReturnThis(),
+      limit: vi.fn().mockReturnThis(),
+      get: vi.fn().mockResolvedValue({
+        empty: false,
+        docs: [{ data: () => ({ role: 'pro' }) }],
+      }),
+    };
+    hoisted.collection
+      .mockReturnValueOnce(pendingRootQuery)
+      .mockReturnValueOnce(activeSubscriptionQuery);
+    hoisted.doc.mockReturnValueOnce({
+      get: vi.fn().mockResolvedValue({ data: () => ({}) }),
+    });
+
+    const clearedCount = await retryPendingServiceDisconnectsTestInternals.clearPendingDisconnectsForRestoredEntitlements(
+      { serviceName: ServiceNames.SuuntoApp, collectionName: 'suuntoAppAccessTokens' },
+    );
+
+    expect(clearedCount).toBe(1);
+    expect(pendingRootQuery.where).toHaveBeenCalledWith('disconnectState', '==', 'disconnect_pending');
+    expect(pendingRootQuery.where).not.toHaveBeenCalledWith('disconnectNextAttemptAt', expect.anything(), expect.anything());
+    expect(hoisted.clearServiceDisconnectPending).toHaveBeenCalledWith('user-1', ServiceNames.SuuntoApp);
+    expect(hoisted.cleanupServiceConnectionForUser).not.toHaveBeenCalled();
+  });
+
   it('uses a token resolver that explicitly allows pending-disconnect token use', async () => {
     const tokenDoc = { id: 'token-1' };
 

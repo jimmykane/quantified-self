@@ -912,6 +912,14 @@ export async function cleanupServiceConnectionForUser(
     } catch (deleteError: any) {
       cleanupErrors.push(deleteError);
       logger.error(`Failed to delete local token ${tokenQueryDocumentSnapshot.id}: ${deleteError?.message || deleteError}`);
+      if (reason === SERVICE_AUTH_CLEANUP_REASONS.SubscriptionEnforcement) {
+        addRetryableDisconnectFailure(
+          outcome,
+          tokenQueryDocumentSnapshot.id,
+          null,
+          `${serviceName} local cleanup failed after subscription-enforcement deauthorization: ${deleteError?.message || deleteError}`,
+        );
+      }
     }
   }
 

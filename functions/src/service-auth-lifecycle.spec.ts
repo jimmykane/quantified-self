@@ -1122,6 +1122,46 @@ describe('service-auth-lifecycle terminal auth handling', () => {
     );
   });
 
+  it('records subscription-enforcement local cleanup failures for pending disconnect retry', async () => {
+    tokenCollectionRef.get.mockResolvedValueOnce({
+      empty: false,
+      size: 1,
+      docs: [
+        {
+          id: 'suunto-token-id',
+          data: () => ({
+            serviceName: ServiceNames.SuuntoApp,
+            accessToken: 'valid-access-token',
+            refreshToken: 'stored-refresh-token',
+            expiresAt: Date.now() + 120_000,
+            scope: 'workout',
+            tokenType: 'bearer',
+            userName: 'suunto-user-id',
+            dateCreated: 1,
+            dateRefreshed: 2,
+          }),
+        },
+      ],
+    });
+    mockDeleteLocalServiceToken.mockRejectedValueOnce(new Error('firestore unavailable'));
+
+    const outcome = await cleanupServiceConnectionForUser(
+      'firebase-user-123',
+      ServiceNames.SuuntoApp,
+      SERVICE_AUTH_CLEANUP_REASONS.SubscriptionEnforcement,
+    );
+
+    expect(outcome.localCleanupStatus).toBe('partial');
+    expect(outcome.deletedTokenCount).toBe(0);
+    expect(outcome.retryableDisconnectFailures).toEqual([
+      {
+        tokenID: 'suunto-token-id',
+        statusCode: null,
+        errorMessage: expect.stringContaining('local cleanup failed after subscription-enforcement deauthorization'),
+      },
+    ]);
+  });
+
   it('archives stored account-deletion token material when partner deauthorization fails without a status before refresh', async () => {
     tokenCollectionRef.get.mockResolvedValueOnce({
       empty: false,
