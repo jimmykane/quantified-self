@@ -3,6 +3,10 @@ import * as admin from 'firebase-admin';
 import * as logger from 'firebase-functions/logger';
 import { ACTIVITY_SYNC_ROUTES, ActivitySyncRouteId } from '../../../shared/activity-sync-routes';
 import {
+  isServiceUnavailableForSyncConnection,
+  type ServiceConnectionMetaFields,
+} from '../../../shared/service-connection';
+import {
   getUserDeletionGuardStateInTransaction,
   UserDeletionGuardReadError,
 } from '../shared/user-deletion-guard';
@@ -31,8 +35,48 @@ function getAffectedRouteIds(serviceName: ServiceNames): ActivitySyncRouteId[] {
     .map((route) => route.id);
 }
 
-function getPendingDisconnectRestoreKey(serviceName: ServiceNames): string {
-  return `${serviceName}`;
+function getUserServiceMetaRef(
+  db: FirebaseFirestore.Firestore,
+  userID: string,
+  serviceName: ServiceNames,
+): FirebaseFirestore.DocumentReference {
+  return db.collection('users').doc(userID).collection('meta').doc(`${serviceName}`);
+}
+
+async function isServiceAvailableForPendingRouteRestore(
+  db: FirebaseFirestore.Firestore,
+  transaction: FirebaseFirestore.Transaction,
+  userID: string,
+  serviceName: ServiceNames,
+  serviceUnavailableCache: Map<string, boolean>,
+): Promise<boolean> {
+  const serviceKey = `${serviceName}`;
+  const cachedUnavailable = serviceUnavailableCache.get(serviceKey);
+  if (cachedUnavailable !== undefined) {
+    return !cachedUnavailable;
+  }
+
+  const metaSnapshot = await transaction.get(getUserServiceMetaRef(db, userID, serviceName));
+  const metaData = asRecord(metaSnapshot.data()) as unknown as ServiceConnectionMetaFields;
+  const unavailable = isServiceUnavailableForSyncConnection(metaData);
+  serviceUnavailableCache.set(serviceKey, unavailable);
+  return !unavailable;
+}
+
+async function isRouteAvailableForPendingRestore(
+  db: FirebaseFirestore.Firestore,
+  transaction: FirebaseFirestore.Transaction,
+  userID: string,
+  routeId: ActivitySyncRouteId,
+  serviceUnavailableCache: Map<string, boolean>,
+): Promise<boolean> {
+  const route = ACTIVITY_SYNC_ROUTES[routeId];
+  const [sourceAvailable, destinationAvailable] = await Promise.all([
+    isServiceAvailableForPendingRouteRestore(db, transaction, userID, route.sourceServiceName, serviceUnavailableCache),
+    isServiceAvailableForPendingRouteRestore(db, transaction, userID, route.destinationServiceName, serviceUnavailableCache),
+  ]);
+
+  return sourceAvailable && destinationAvailable;
 }
 
 export async function disableActivitySyncRoutesForDisconnectedService(
@@ -78,20 +122,24 @@ export async function disableActivitySyncRoutesForDisconnectedService(
       const existingServiceSyncSettings = asRecord(settingsData.serviceSyncSettings);
       const existingRouteSettings = asRecord(existingServiceSyncSettings.activitySyncRoutes);
       const existingRestoreSettings = asRecord(existingServiceSyncSettings.pendingDisconnectRouteRestore);
-      const serviceRestoreKey = getPendingDisconnectRestoreKey(disconnectedServiceName);
+      const serviceRestoreKey = `${disconnectedServiceName}`;
       const existingServiceRestoreSettings = asRecord(existingRestoreSettings[serviceRestoreKey]);
       const routeRestoreUpdates: Partial<Record<ActivitySyncRouteId, true>> = {};
 
       for (const routeId of affectedRouteIds) {
         const routeSetting = asRecord(existingRouteSettings[routeId]);
-        if (routeSetting.enabled === true || existingServiceRestoreSettings[routeId] === true) {
+        if (
+          routeSetting.enabled === true ||
+          existingRestoreSettings[routeId] === true ||
+          existingServiceRestoreSettings[routeId] === true
+        ) {
           routeRestoreUpdates[routeId] = true;
         }
       }
 
-      serviceSyncSettings.pendingDisconnectRouteRestore = {
-        [serviceRestoreKey]: routeRestoreUpdates,
-      };
+      if (Object.keys(routeRestoreUpdates).length > 0) {
+        serviceSyncSettings.pendingDisconnectRouteRestore = routeRestoreUpdates;
+      }
     }
 
     transaction.set(settingsRef, {
@@ -131,24 +179,36 @@ export async function restoreActivitySyncRoutesForPendingDisconnectClear(
     const settingsData = asRecord(settingsSnapshot.data());
     const serviceSyncSettings = asRecord(settingsData.serviceSyncSettings);
     const restoreSettings = asRecord(serviceSyncSettings.pendingDisconnectRouteRestore);
-    const serviceRestoreKey = getPendingDisconnectRestoreKey(serviceName);
+    const serviceRestoreKey = `${serviceName}`;
     const serviceRestoreSettings = asRecord(restoreSettings[serviceRestoreKey]);
     const routeUpdates: Partial<Record<ActivitySyncRouteId, { enabled: boolean }>> = {};
+    const restoreMarkerUpdates: Record<string, unknown> = {};
+    const serviceUnavailableCache = new Map<string, boolean>();
 
     for (const routeId of affectedRouteIds) {
-      if (serviceRestoreSettings[routeId] === true) {
+      const hasRestoreMarker = restoreSettings[routeId] === true || serviceRestoreSettings[routeId] === true;
+      if (!hasRestoreMarker) {
+        continue;
+      }
+
+      if (await isRouteAvailableForPendingRestore(db, transaction, userID, routeId, serviceUnavailableCache)) {
         routeUpdates[routeId] = { enabled: true };
+        restoreMarkerUpdates[routeId] = admin.firestore.FieldValue.delete();
+      } else if (serviceRestoreSettings[routeId] === true && restoreSettings[routeId] !== true) {
+        restoreMarkerUpdates[routeId] = true;
       }
     }
 
-    if (Object.keys(routeUpdates).length === 0 && Object.keys(serviceRestoreSettings).length === 0) {
+    if (Object.keys(serviceRestoreSettings).length > 0) {
+      restoreMarkerUpdates[serviceRestoreKey] = admin.firestore.FieldValue.delete();
+    }
+
+    if (Object.keys(routeUpdates).length === 0 && Object.keys(restoreMarkerUpdates).length === 0) {
       return;
     }
 
     const nextServiceSyncSettings: Record<string, unknown> = {
-      pendingDisconnectRouteRestore: {
-        [serviceRestoreKey]: admin.firestore.FieldValue.delete(),
-      },
+      pendingDisconnectRouteRestore: restoreMarkerUpdates,
     };
     if (Object.keys(routeUpdates).length > 0) {
       nextServiceSyncSettings.activitySyncRoutes = routeUpdates;

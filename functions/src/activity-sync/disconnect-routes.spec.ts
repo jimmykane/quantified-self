@@ -5,6 +5,7 @@ import { ACTIVITY_SYNC_ROUTE_IDS } from '../../../shared/activity-sync-routes';
 const {
   mockOnDocumentDeleted,
   mockCollection,
+  mockMetaGet,
   mockSettingsGet,
   mockSettingsSet,
   mockGetUserDeletionGuardStateInTransaction,
@@ -12,6 +13,7 @@ const {
   mockFieldValueDelete,
 } = vi.hoisted(() => {
   const mockOnDocumentDeleted = vi.fn((_options: unknown, handler: unknown) => handler);
+  const mockMetaGet = vi.fn();
   const mockSettingsGet = vi.fn();
   const mockSettingsSet = vi.fn().mockResolvedValue(undefined);
   const mockGetUserDeletionGuardStateInTransaction = vi.fn().mockResolvedValue({
@@ -29,6 +31,16 @@ const {
     return {
       doc: vi.fn(() => ({
         collection: vi.fn((subcollectionName: string) => {
+          if (subcollectionName === 'meta') {
+            return {
+              doc: vi.fn((docName: string) => ({
+                __mockType: 'meta',
+                serviceName: docName,
+                get: () => mockMetaGet(docName),
+              })),
+            };
+          }
+
           if (subcollectionName !== 'config') {
             throw new Error(`Unexpected subcollection: ${subcollectionName}`);
           }
@@ -40,6 +52,7 @@ const {
               }
 
               return {
+                __mockType: 'settings',
                 get: mockSettingsGet,
                 set: mockSettingsSet,
               };
@@ -53,6 +66,7 @@ const {
   return {
     mockOnDocumentDeleted,
     mockCollection,
+    mockMetaGet,
     mockSettingsGet,
     mockSettingsSet,
     mockGetUserDeletionGuardStateInTransaction,
@@ -110,13 +124,20 @@ describe('activity-sync/disconnect-routes', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockRunTransaction.mockImplementation(async (runner: (transaction: {
-      get: typeof mockSettingsGet;
+      get: (ref: { __mockType?: string; serviceName?: string }) => unknown;
       set: typeof mockSettingsSet;
     }) => unknown) => runner({
-      get: mockSettingsGet,
+      get: vi.fn((ref: { __mockType?: string; serviceName?: string }) => (
+        ref?.__mockType === 'meta'
+          ? mockMetaGet(ref.serviceName)
+          : mockSettingsGet(ref)
+      )),
       set: mockSettingsSet,
     }));
     mockSettingsGet.mockResolvedValue({
+      data: () => ({}),
+    });
+    mockMetaGet.mockResolvedValue({
       data: () => ({}),
     });
     mockGetUserDeletionGuardStateInTransaction.mockResolvedValue({
@@ -241,9 +262,7 @@ describe('activity-sync/disconnect-routes', () => {
           [ACTIVITY_SYNC_ROUTE_IDS.COROSAPI_to_SuuntoApp]: { enabled: false },
         },
         pendingDisconnectRouteRestore: {
-          suuntoApp: {
-            [ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp]: true,
-          },
+          [ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp]: true,
         },
       },
     }, { merge: true });
@@ -257,9 +276,7 @@ describe('activity-sync/disconnect-routes', () => {
             [ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp]: { enabled: false },
           },
           pendingDisconnectRouteRestore: {
-            suuntoApp: {
-              [ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp]: true,
-            },
+            [ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp]: true,
           },
         },
       }),
@@ -272,9 +289,7 @@ describe('activity-sync/disconnect-routes', () => {
     expect(mockSettingsSet).toHaveBeenCalledWith(expect.any(Object), expect.objectContaining({
       serviceSyncSettings: expect.objectContaining({
         pendingDisconnectRouteRestore: {
-          suuntoApp: {
-            [ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp]: true,
-          },
+          [ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp]: true,
         },
       }),
     }), { merge: true });
@@ -285,10 +300,8 @@ describe('activity-sync/disconnect-routes', () => {
       data: () => ({
         serviceSyncSettings: {
           pendingDisconnectRouteRestore: {
-            suuntoApp: {
-              [ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp]: true,
-              [ACTIVITY_SYNC_ROUTE_IDS.COROSAPI_to_SuuntoApp]: false,
-            },
+            [ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp]: true,
+            [ACTIVITY_SYNC_ROUTE_IDS.COROSAPI_to_SuuntoApp]: false,
           },
         },
       }),
@@ -299,12 +312,35 @@ describe('activity-sync/disconnect-routes', () => {
     expect(mockSettingsSet).toHaveBeenCalledWith(expect.any(Object), {
       serviceSyncSettings: {
         pendingDisconnectRouteRestore: {
-          suuntoApp: 'DELETE_SENTINEL',
+          [ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp]: 'DELETE_SENTINEL',
         },
         activitySyncRoutes: {
           [ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp]: { enabled: true },
         },
       },
     }, { merge: true });
+  });
+
+  it('does not restore a route while the other route service is still unavailable', async () => {
+    mockSettingsGet.mockResolvedValueOnce({
+      data: () => ({
+        serviceSyncSettings: {
+          pendingDisconnectRouteRestore: {
+            [ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp]: true,
+          },
+        },
+      }),
+    });
+    mockMetaGet.mockImplementation(async (serviceName: string) => ({
+      data: () => (
+        serviceName === `${ServiceNames.SuuntoApp}`
+          ? {}
+          : { connectionState: 'disconnect_pending' }
+      ),
+    }));
+
+    await restoreActivitySyncRoutesForPendingDisconnectClear('user-1', ServiceNames.SuuntoApp);
+
+    expect(mockSettingsSet).not.toHaveBeenCalled();
   });
 });

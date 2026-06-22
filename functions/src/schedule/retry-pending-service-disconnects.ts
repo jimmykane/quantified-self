@@ -24,6 +24,15 @@ interface PendingDisconnectCollectionConfig {
   collectionName: string;
 }
 
+type PendingDisconnectScanType = 'due_retry' | 'restored_entitlement';
+
+interface PendingDisconnectScanCursorData {
+  documentId?: string;
+  disconnectNextAttemptAt?: FirebaseFirestore.Timestamp;
+}
+
+const PENDING_SERVICE_DISCONNECT_SCAN_CURSOR_COLLECTION = 'pendingServiceDisconnectRetryCursors';
+
 const PENDING_DISCONNECT_COLLECTIONS: ReadonlyArray<PendingDisconnectCollectionConfig> = [
   {
     serviceName: ServiceNames.SuuntoApp,
@@ -63,14 +72,79 @@ async function shouldKeepConnectionForCurrentEntitlement(uid: string): Promise<b
   return pro || gracePeriodActive;
 }
 
+function getPendingDisconnectScanCursorRef(
+  config: PendingDisconnectCollectionConfig,
+  scanType: PendingDisconnectScanType,
+): FirebaseFirestore.DocumentReference {
+  return admin.firestore()
+    .doc(`${PENDING_SERVICE_DISCONNECT_SCAN_CURSOR_COLLECTION}/${config.collectionName}_${scanType}`);
+}
+
+async function getPendingDisconnectScanCursor(
+  config: PendingDisconnectCollectionConfig,
+  scanType: PendingDisconnectScanType,
+): Promise<PendingDisconnectScanCursorData | null> {
+  const snapshot = await getPendingDisconnectScanCursorRef(config, scanType).get();
+  if (!snapshot.exists) {
+    return null;
+  }
+
+  const data = snapshot.data() as PendingDisconnectScanCursorData | undefined;
+  return data?.documentId ? data : null;
+}
+
+async function clearPendingDisconnectScanCursor(
+  config: PendingDisconnectCollectionConfig,
+  scanType: PendingDisconnectScanType,
+): Promise<void> {
+  // Cursor docs are flat scheduler-owned checkpoints; this feature never writes descendants under them.
+  await getPendingDisconnectScanCursorRef(config, scanType).delete();
+}
+
+function getSnapshotField(snapshot: admin.firestore.QueryDocumentSnapshot, fieldName: string): unknown {
+  const snapshotGetter = (snapshot as { get?: (fieldPath: string) => unknown }).get;
+  if (typeof snapshotGetter === 'function') {
+    return snapshotGetter.call(snapshot, fieldName);
+  }
+
+  return (snapshot.data() as Record<string, unknown>)[fieldName];
+}
+
+async function updatePendingDisconnectScanCursor(
+  config: PendingDisconnectCollectionConfig,
+  scanType: PendingDisconnectScanType,
+  docs: admin.firestore.QueryDocumentSnapshot[],
+): Promise<void> {
+  if (docs.length < PENDING_SERVICE_DISCONNECT_BATCH_LIMIT) {
+    await clearPendingDisconnectScanCursor(config, scanType);
+    return;
+  }
+
+  const lastDoc = docs[docs.length - 1];
+  const cursorData: PendingDisconnectScanCursorData = {
+    documentId: lastDoc.id,
+  };
+
+  if (scanType === 'due_retry') {
+    const disconnectNextAttemptAt = getSnapshotField(lastDoc, 'disconnectNextAttemptAt');
+    if (!disconnectNextAttemptAt) {
+      await clearPendingDisconnectScanCursor(config, scanType);
+      return;
+    }
+    cursorData.disconnectNextAttemptAt = disconnectNextAttemptAt as FirebaseFirestore.Timestamp;
+  }
+
+  await getPendingDisconnectScanCursorRef(config, scanType).set(cursorData, { merge: true });
+}
+
 async function getDuePendingDisconnectRoots(
   config: PendingDisconnectCollectionConfig,
   now: admin.firestore.Timestamp,
 ): Promise<admin.firestore.QueryDocumentSnapshot[]> {
-  const roots: admin.firestore.QueryDocumentSnapshot[] = [];
-  let pageCursor: admin.firestore.QueryDocumentSnapshot | null = null;
+  const scanType: PendingDisconnectScanType = 'due_retry';
+  const cursor = await getPendingDisconnectScanCursor(config, scanType);
 
-  while (true) {
+  const runQuery = async (pageCursor: PendingDisconnectScanCursorData | null) => {
     let query = admin.firestore()
       .collection(config.collectionName)
       .where('disconnectState', '==', 'disconnect_pending')
@@ -80,51 +154,51 @@ async function getDuePendingDisconnectRoots(
       .orderBy(admin.firestore.FieldPath.documentId())
       .limit(PENDING_SERVICE_DISCONNECT_BATCH_LIMIT);
 
-    if (pageCursor) {
-      query = query.startAfter(pageCursor);
+    if (pageCursor?.documentId && pageCursor.disconnectNextAttemptAt) {
+      query = query.startAfter(pageCursor.disconnectNextAttemptAt, pageCursor.documentId);
     }
 
-    const snapshot = await query.get();
-    roots.push(...snapshot.docs);
+    return query.get();
+  };
 
-    if (snapshot.docs.length < PENDING_SERVICE_DISCONNECT_BATCH_LIMIT) {
-      break;
-    }
-
-    pageCursor = snapshot.docs[snapshot.docs.length - 1];
+  let snapshot = await runQuery(cursor);
+  if (snapshot.docs.length === 0 && cursor?.documentId) {
+    await clearPendingDisconnectScanCursor(config, scanType);
+    snapshot = await runQuery(null);
   }
 
-  return roots;
+  await updatePendingDisconnectScanCursor(config, scanType, snapshot.docs);
+  return snapshot.docs;
 }
 
 async function getPendingDisconnectRootsForEntitlementCheck(
   config: PendingDisconnectCollectionConfig,
 ): Promise<admin.firestore.QueryDocumentSnapshot[]> {
-  const roots: admin.firestore.QueryDocumentSnapshot[] = [];
-  let pageCursor: admin.firestore.QueryDocumentSnapshot | null = null;
+  const scanType: PendingDisconnectScanType = 'restored_entitlement';
+  const cursor = await getPendingDisconnectScanCursor(config, scanType);
 
-  while (true) {
+  const runQuery = async (pageCursor: PendingDisconnectScanCursorData | null) => {
     let query = admin.firestore()
       .collection(config.collectionName)
       .where('disconnectState', '==', 'disconnect_pending')
       .orderBy(admin.firestore.FieldPath.documentId())
       .limit(PENDING_SERVICE_DISCONNECT_BATCH_LIMIT);
 
-    if (pageCursor) {
-      query = query.startAfter(pageCursor);
+    if (pageCursor?.documentId) {
+      query = query.startAfter(pageCursor.documentId);
     }
 
-    const snapshot = await query.get();
-    roots.push(...snapshot.docs);
+    return query.get();
+  };
 
-    if (snapshot.docs.length < PENDING_SERVICE_DISCONNECT_BATCH_LIMIT) {
-      break;
-    }
-
-    pageCursor = snapshot.docs[snapshot.docs.length - 1];
+  let snapshot = await runQuery(cursor);
+  if (snapshot.docs.length === 0 && cursor?.documentId) {
+    await clearPendingDisconnectScanCursor(config, scanType);
+    snapshot = await runQuery(null);
   }
 
-  return roots;
+  await updatePendingDisconnectScanCursor(config, scanType, snapshot.docs);
+  return snapshot.docs;
 }
 
 async function clearPendingDisconnectRootIfEntitled(
