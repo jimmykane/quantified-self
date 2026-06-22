@@ -11,7 +11,7 @@ import {
 } from '../queue-utils';
 import { ACTIVITY_SYNC_ROUTES } from '../../../shared/activity-sync-routes';
 import { isActivitySyncRouteEnabledForUser } from './settings';
-import { isServiceReconnectRequiredForUser } from '../service-connection-meta';
+import { isServiceUnavailableForSyncForUser } from '../service-connection-meta';
 import {
     setActivitySyncFailedMetadata,
     setActivitySyncProcessingMetadata,
@@ -138,7 +138,7 @@ function isAccountDeletionSkipError(error: unknown): boolean {
 async function isDestinationConnected(userID: string, destinationServiceName: ServiceNames): Promise<boolean> {
     switch (destinationServiceName) {
         case ServiceNames.SuuntoApp: {
-            if (await isServiceReconnectRequiredForUser(userID, destinationServiceName)) {
+            if (await isServiceUnavailableForSyncForUser(userID, destinationServiceName)) {
                 return false;
             }
             const snapshot = await admin.firestore()

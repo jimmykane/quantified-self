@@ -17,6 +17,7 @@ import {
   MissingTokensBehavior,
   SERVICE_AUTH_CLEANUP_REASONS,
 } from './service-auth-lifecycle';
+import { clearServiceDisconnectPending } from './service-disconnect-pending';
 import {
   getUserDeletionGuardState,
   getUserDeletionGuardStateInTransaction,
@@ -344,6 +345,7 @@ export async function getAndSetServiceOAuth2AccessTokenForUser(userID: string, s
       throw error;
     }
 
+    await clearServiceDisconnectPending(userID, serviceName);
     const didMarkConnected = await markServiceConnected(userID, serviceName);
     if (!didMarkConnected) {
       logger.warn(`Skipping duplicate cleanup for ${serviceName} OAuth callback for user ${userID} because the user is missing or deletion is in progress after token persistence.`);
@@ -388,6 +390,23 @@ export async function deauthorizeServiceForUser(
     SERVICE_AUTH_CLEANUP_REASONS.UserDisconnect,
     {
       missingTokensBehavior: options.missingTokensBehavior || 'throw',
+      tokenResolver: (doc) => getTokenData(doc, serviceName, false, {
+        recoverTerminalAuthFailure: false,
+      }),
+    },
+  );
+}
+
+export async function deauthorizeServiceForSubscriptionEnforcement(
+  userID: string,
+  serviceName: ServiceNames,
+) {
+  return cleanupServiceConnectionForUser(
+    userID,
+    serviceName,
+    SERVICE_AUTH_CLEANUP_REASONS.SubscriptionEnforcement,
+    {
+      missingTokensBehavior: 'ignore',
       tokenResolver: (doc) => getTokenData(doc, serviceName, false, {
         recoverTerminalAuthFailure: false,
       }),

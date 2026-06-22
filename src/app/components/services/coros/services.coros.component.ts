@@ -18,6 +18,7 @@ import {
   buildSuuntoServiceConnectionViewModel,
   SuuntoServiceConnectionViewModel,
 } from '../../../helpers/suunto-service-connection.helper';
+import { isDisconnectPendingServiceConnection } from '@shared/service-connection';
 
 
 @Component({
@@ -78,7 +79,17 @@ export class ServicesCorosComponent extends ServicesAbstractComponentDirective {
     this.suuntoConnectionSubscription = null;
   }
 
-  isConnectedToService = () => (!!this.serviceTokens && !!this.serviceTokens.length) || this.forceConnected;
+  isConnectedToService = () => !this.isDisconnectPending && ((!!this.serviceTokens && !!this.serviceTokens.length) || this.forceConnected);
+
+  get isDisconnectPending(): boolean {
+    return isDisconnectPendingServiceConnection(this.serviceMeta);
+  }
+
+  get connectionDescription(): string {
+    return this.isDisconnectPending
+      ? 'Disconnect is pending while COROS finishes deauthorization. Sync and imports are paused for this connection.'
+      : 'Required for history imports, uploads, and COROS to Suunto auto-sync.';
+  }
 
   buildRedirectURIFromServiceToken(token: { redirect_uri: string }): string {
     return token.redirect_uri

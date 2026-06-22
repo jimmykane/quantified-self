@@ -13,14 +13,28 @@
 <div class="service-container">
   <app-service-connection-status
     serviceLabel="COROS"
-    description="Required for history imports, uploads, and COROS to Suunto auto-sync."
+    [description]="connectionDescription"
     [connected]="isConnectedToService()"
     [loading]="isLoading"
     [locked]="!hasProAccess && !isConnectedToService()"
     [proRequired]="!hasProAccess && !isConnectedToService()"
-    [showDetails]="isConnectedToService()"
+    [showDetails]="isConnectedToService() || isDisconnectPending"
+    [statusLabelOverride]="isDisconnectPending ? 'Disconnect pending' : null"
+    [statusIconOverride]="isDisconnectPending ? 'sync_problem' : null"
+    [statusTone]="isDisconnectPending ? 'attention' : 'default'"
     (click)="!hasProAccess && !isConnectedToService() && triggerUpsell()">
     <div connection-body class="connection-details">
+    @if (isDisconnectPending) {
+    <div class="reconnect-required-banner" role="status">
+      <mat-icon>sync_problem</mat-icon>
+      <div class="reconnect-required-banner__copy">
+        <div class="reconnect-required-banner__title">Disconnect pending</div>
+        <div class="reconnect-required-banner__message">
+          We are retrying the COROS disconnect in the background. Sync and imports are paused for this connection.
+        </div>
+      </div>
+    </div>
+    }
     @if (isConnectedToService()) {
     <div class="connection-account-row">
       <div class="connection-account-info">
@@ -65,7 +79,7 @@
         <span>{{ activeSyncRouteWarningLabel }}</span>
       </div>
       }
-      @if (!isConnectedToService()) {
+      @if (!isConnectedToService() && !isDisconnectPending) {
       <button mat-flat-button class="qs-mat-primary"
         [disabled]="!user || isLoading || isConnecting || !hasProAccess" (click)="connectWithService($event)">
         @if (isConnecting) {

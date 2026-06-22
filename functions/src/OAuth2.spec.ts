@@ -25,6 +25,7 @@ const {
     mockGetUserDeletionGuardStateInTransaction,
     mockArchiveOrphanedServiceToken,
     mockMarkServiceConnected,
+    mockClearServiceDisconnectPending,
 } = vi.hoisted(() => ({
     mockGetUserDeletionGuardState: vi.fn().mockResolvedValue({
         userExists: true,
@@ -38,6 +39,7 @@ const {
     }),
     mockArchiveOrphanedServiceToken: vi.fn().mockResolvedValue(undefined),
     mockMarkServiceConnected: vi.fn().mockResolvedValue(true),
+    mockClearServiceDisconnectPending: vi.fn().mockResolvedValue(undefined),
 }));
 
 const mockDocInstance = {
@@ -191,6 +193,10 @@ vi.mock('./service-connection-meta', () => ({
     clearServiceConnectionState: vi.fn().mockResolvedValue(undefined),
 }));
 
+vi.mock('./service-disconnect-pending', () => ({
+    clearServiceDisconnectPending: mockClearServiceDisconnectPending,
+}));
+
 vi.mock('./shared/user-deletion-guard', () => ({
     getUserDeletionGuardState: mockGetUserDeletionGuardState,
     getUserDeletionGuardStateInTransaction: mockGetUserDeletionGuardStateInTransaction,
@@ -256,6 +262,7 @@ describe('OAuth2', () => {
         installDefaultRunTransactionMock();
         mockArchiveOrphanedServiceToken.mockReset().mockResolvedValue(undefined);
         mockMarkServiceConnected.mockReset().mockResolvedValue(true);
+        mockClearServiceDisconnectPending.mockReset().mockResolvedValue(undefined);
     });
 
     describe('getServiceConfig', () => {
@@ -1290,6 +1297,21 @@ describe('OAuth2', () => {
                 state: 'delete-sentinel',
                 codeVerifier: 'delete-sentinel',
             }));
+        });
+
+        it('clears pending disconnect root fields before marking an OAuth reconnect as connected', async () => {
+            const MockAuthCode = (await import('simple-oauth2')).AuthorizationCode;
+            vi.spyOn(MockAuthCode.prototype, 'getToken').mockResolvedValue({
+                token: { user: 'test-external-user', access_token: 'mock-token' },
+                expired: () => false,
+            } as any);
+
+            await getAndSetServiceOAuth2AccessTokenForUser(userID, ServiceNames.SuuntoApp, redirectUri, code);
+
+            expect(mockClearServiceDisconnectPending).toHaveBeenCalledWith(userID, ServiceNames.SuuntoApp);
+            expect(mockMarkServiceConnected).toHaveBeenCalledWith(userID, ServiceNames.SuuntoApp);
+            expect(mockClearServiceDisconnectPending.mock.invocationCallOrder[0])
+                .toBeLessThan(mockMarkServiceConnected.mock.invocationCallOrder[0]);
         });
 
         it('should cleanup state and codeVerifier even if token exchange fails', async () => {

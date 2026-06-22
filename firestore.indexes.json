@@ -1,6 +1,75 @@
 {
   "indexes": [
     {
+      "collectionGroup": "suuntoAppAccessTokens",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "disconnectState",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "disconnectManualReviewRequired",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "disconnectNextAttemptAt",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
+        }
+      ],
+      "density": "SPARSE_ALL"
+    },
+    {
+      "collectionGroup": "COROSAPIAccessTokens",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "disconnectState",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "disconnectManualReviewRequired",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "disconnectNextAttemptAt",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
+        }
+      ],
+      "density": "SPARSE_ALL"
+    },
+    {
+      "collectionGroup": "garminAPITokens",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "disconnectState",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "disconnectManualReviewRequired",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "disconnectNextAttemptAt",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
+        }
+      ],
+      "density": "SPARSE_ALL"
+    },
+    {
       "collectionGroup": "activitySyncQueue",
       "queryScope": "COLLECTION",
       "fields": [

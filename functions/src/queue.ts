@@ -22,7 +22,11 @@ import {
 } from '@sports-alliance/sports-lib';
 import * as requestPromise from './request-helper';
 import { config } from './config';
-import { getTokenData, TerminalServiceAuthError, TokenRefreshSkippedForDeletedUserError } from './tokens';
+import {
+  getTokenData,
+  TerminalServiceAuthError,
+  TokenRefreshSkippedForDeletedUserError,
+} from './tokens';
 import { EventImporterFIT } from '@sports-alliance/sports-lib';
 import { COROSAPIEventMetaData, SuuntoAppEventMetaData } from '@sports-alliance/sports-lib';
 import { uploadDebugFile } from './debug-utils';
@@ -87,6 +91,15 @@ function markWorkoutQueueItemSkippedForDeletedUser(
   });
 }
 
+function markWorkoutQueueItemSkippedForPendingDisconnect(
+  queueItem: QueueItemInterface,
+  bulkWriter?: admin.firestore.BulkWriter,
+): Promise<QueueResult.Processed | QueueResult.Failed> {
+  return markQueueItemSkipped(queueItem, bulkWriter, 'service_disconnect_pending', {
+    skippedContext: 'SERVICE_DISCONNECT_PENDING',
+  });
+}
+
 
 function toArrayBuffer(payload: Uint8Array): ArrayBuffer {
   const copy = new Uint8Array(payload.byteLength);
@@ -110,6 +123,10 @@ function selectPreferredTerminalAuthError(
 function isTokenRefreshSkippedForDeletedUserError(error: unknown): error is TokenRefreshSkippedForDeletedUserError {
   return error instanceof TokenRefreshSkippedForDeletedUserError
     || (error instanceof Error && error.name === 'TokenRefreshSkippedForDeletedUserError');
+}
+
+function isTokenUseSkippedForPendingDisconnectError(error: unknown): boolean {
+  return error instanceof Error && error.name === 'TokenUseSkippedForPendingDisconnectError';
 }
 
 function isEventWriteSkippedForDeletedUserError(error: unknown): error is EventWriteSkippedForDeletedUserError {
@@ -492,6 +509,7 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
   let terminalAuthError: TerminalServiceAuthError | null = null;
   let sawRetryableFailure = false;
   let sawUserDeletionSkip = false;
+  let sawPendingDisconnectSkip = false;
 
   for (const tokenQueryDocumentSnapshot of tokenQuerySnapshots.docs) {
     let serviceToken;
@@ -512,6 +530,11 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
       if (isTokenRefreshSkippedForDeletedUserError(e)) {
         sawUserDeletionSkip = true;
         logger.warn(`Skipping ${serviceName} queue item ${queueItem.id} for token ${tokenQueryDocumentSnapshot.id} because the owning user is missing or deletion is in progress.`);
+        continue;
+      }
+      if (isTokenUseSkippedForPendingDisconnectError(e)) {
+        sawPendingDisconnectSkip = true;
+        logger.warn(`Skipping ${serviceName} queue item ${queueItem.id} for token ${tokenQueryDocumentSnapshot.id} because service disconnect is pending.`);
         continue;
       }
       if (e instanceof TerminalServiceAuthError) {
@@ -566,6 +589,11 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
           if (isTokenRefreshSkippedForDeletedUserError(retryError)) {
             sawUserDeletionSkip = true;
             logger.warn(`Skipping ${serviceName} queue item ${queueItem.id} during forced refresh because user ${parentID} is missing or deletion is in progress.`);
+            continue;
+          }
+          if (isTokenUseSkippedForPendingDisconnectError(retryError)) {
+            sawPendingDisconnectSkip = true;
+            logger.warn(`Skipping ${serviceName} queue item ${queueItem.id} during forced refresh because service disconnect is pending.`);
             continue;
           }
           if (retryError instanceof TerminalServiceAuthError) {
@@ -711,6 +739,11 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
   if (sawUserDeletionSkip && !sawRetryableFailure) {
     logger.warn(`Skipping ${serviceName} queue item ${queueItem.id} without retry because every usable token owner is missing or deletion is in progress.`);
     return markWorkoutQueueItemSkippedForDeletedUser(queueItem, bulkWriter);
+  }
+
+  if (sawPendingDisconnectSkip && !sawRetryableFailure) {
+    logger.warn(`Skipping ${serviceName} queue item ${queueItem.id} without retry because every usable token is pending disconnect.`);
+    return markWorkoutQueueItemSkippedForPendingDisconnect(queueItem, bulkWriter);
   }
 
   // If we finished the loop without returning, it means every token attempt failed.

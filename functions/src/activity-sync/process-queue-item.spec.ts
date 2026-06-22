@@ -20,7 +20,7 @@ const {
   mockToActivitySyncMetadataError,
   mockUploadActivityFileToSuunto,
   mockHasProAccess,
-  mockIsServiceReconnectRequiredForUser,
+  mockIsServiceUnavailableForSyncForUser,
   mockShouldSkipQueueWorkForDeletedUser,
   mockMarkQueueItemSkipped,
 } = vi.hoisted(() => {
@@ -48,7 +48,7 @@ const {
     })),
     mockUploadActivityFileToSuunto: vi.fn(),
     mockHasProAccess: vi.fn(),
-    mockIsServiceReconnectRequiredForUser: vi.fn(),
+    mockIsServiceUnavailableForSyncForUser: vi.fn(),
     mockShouldSkipQueueWorkForDeletedUser: vi.fn(),
     mockMarkQueueItemSkipped: vi.fn(),
   };
@@ -124,7 +124,7 @@ vi.mock('../utils', async (importOriginal) => {
 });
 
 vi.mock('../service-connection-meta', () => ({
-  isServiceReconnectRequiredForUser: mockIsServiceReconnectRequiredForUser,
+  isServiceUnavailableForSyncForUser: mockIsServiceUnavailableForSyncForUser,
 }));
 
 vi.mock('../queue/user-deletion-skip', () => ({
@@ -162,7 +162,7 @@ describe('activity-sync/process-queue-item', () => {
     mockIsActivitySyncRouteUserAllowlisted.mockReturnValue(true);
     mockHasProAccess.mockResolvedValue(true);
     mockIsActivitySyncRouteEnabledForUser.mockResolvedValue(true);
-    mockIsServiceReconnectRequiredForUser.mockResolvedValue(false);
+    mockIsServiceUnavailableForSyncForUser.mockResolvedValue(false);
     mockTokenGet.mockResolvedValue({ size: 1 });
     mockDownload.mockResolvedValue([Buffer.from('FITDATA')]);
     mockUploadActivityFileToSuunto.mockResolvedValue({
@@ -361,7 +361,7 @@ describe('activity-sync/process-queue-item', () => {
   });
 
   it('skips and marks processed when destination service requires reconnect even if a token remains', async () => {
-    mockIsServiceReconnectRequiredForUser.mockResolvedValue(true);
+    mockIsServiceUnavailableForSyncForUser.mockResolvedValue(true);
 
     const result = await processActivitySyncQueueItem(baseQueueItem);
 

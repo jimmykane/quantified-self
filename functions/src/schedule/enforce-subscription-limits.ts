@@ -1,10 +1,14 @@
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 import * as admin from 'firebase-admin';
 import * as logger from 'firebase-functions/logger';
-import { deauthorizeServiceForUser } from '../OAuth2';
+import { deauthorizeServiceForSubscriptionEnforcement } from '../OAuth2';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { reconcileClaims } from '../stripe/claims';
 import { TokenNotFoundError } from '../utils';
+import {
+    isServiceDisconnectPendingForUser,
+    markServiceDisconnectPending,
+} from '../service-disconnect-pending';
 
 import { SUUNTOAPP_ACCESS_TOKENS_COLLECTION_NAME } from '../suunto/constants';
 import { COROSAPI_ACCESS_TOKENS_COLLECTION_NAME } from '../coros/constants';
@@ -177,7 +181,22 @@ function isTokenNotFoundError(error: unknown): boolean {
 async function deauthorizeConnectedServicesBestEffort(uid: string): Promise<void> {
     for (const serviceName of SERVICES_TO_DEAUTHORIZE) {
         try {
-            await deauthorizeServiceForUser(uid, serviceName);
+            if (await isServiceDisconnectPendingForUser(uid, serviceName)) {
+                logger.info(`[enforceSubscriptionLimits] ${serviceName} disconnect already pending for ${uid}; waiting for retry worker.`);
+                continue;
+            }
+
+            const outcome = await deauthorizeServiceForSubscriptionEnforcement(uid, serviceName);
+            const retryableFailure = outcome.retryableDisconnectFailures?.[0];
+            if (retryableFailure) {
+                await markServiceDisconnectPending(uid, serviceName, retryableFailure);
+                logger.warn(`[enforceSubscriptionLimits] ${serviceName} disconnect pending for ${uid} after retryable partner failure.`, {
+                    serviceName,
+                    uid,
+                    tokenID: retryableFailure.tokenID,
+                    statusCode: retryableFailure.statusCode,
+                });
+            }
         } catch (error) {
             if (isTokenNotFoundError(error)) {
                 logger.info(`[enforceSubscriptionLimits] No ${serviceName} tokens found for ${uid} during cleanup.`);

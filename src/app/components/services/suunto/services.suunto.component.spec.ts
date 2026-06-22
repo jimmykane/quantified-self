@@ -204,6 +204,24 @@ describe('ServicesSuuntoComponent', () => {
         expect(fixture.nativeElement.querySelector('.qs-mat-primary')?.textContent).toContain('Reconnect');
     });
 
+    it('does not treat preserved Suunto tokens as connected while disconnect is pending', () => {
+        component.hasProAccess = true;
+        component.serviceTokens = [{
+            accessToken: 'token',
+            userName: 'suunto-user',
+            dateCreated: new Date('2026-05-03T10:00:00Z'),
+        } as any];
+        component.serviceMeta = { connectionState: 'disconnect_pending' } as any;
+        fixture.detectChanges();
+
+        const content = fixture.nativeElement.textContent;
+
+        expect(component.isDisconnectPending).toBe(true);
+        expect(component.isConnectedToService()).toBe(false);
+        expect(content).toContain('Disconnect pending');
+        expect(fixture.nativeElement.querySelector('.connection-disconnect-button')).toBeFalsy();
+    });
+
     describe('History Import Tab', () => {
         it('should be unlocked/available if user has pro access AND is connected', () => {
             component.hasProAccess = true;

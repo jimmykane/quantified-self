@@ -9,6 +9,10 @@ import {
   markServiceReconnectRequired,
 } from './service-connection-meta';
 import {
+  isRetryableSubscriptionEnforcementDisconnectStatus,
+  PendingServiceDisconnectFailure,
+} from './service-disconnect-pending';
+import {
   deleteLocalServiceToken,
   getServiceTokenCollectionRef,
   getServiceTokenRootDocumentRef,
@@ -28,6 +32,7 @@ export const SERVICE_AUTH_CLEANUP_REASONS = {
   PartnerDisconnect: 'partner_disconnect',
   DuplicateConnectionCleanup: 'duplicate_connection_cleanup',
   OrphanCleanup: 'orphan_cleanup',
+  SubscriptionEnforcement: 'subscription_enforcement',
 } as const;
 
 export type ServiceAuthCleanupReason = typeof SERVICE_AUTH_CLEANUP_REASONS[keyof typeof SERVICE_AUTH_CLEANUP_REASONS];
@@ -61,6 +66,7 @@ export interface ServiceAuthCleanupOutcome {
   connectionStateUpdate: 'reconnect_required' | 'cleared' | 'unchanged';
   fallbackTokenRootCleanupPerformed: boolean;
   tokensToArchive?: ServiceAuthCleanupArchiveToken[];
+  retryableDisconnectFailures?: PendingServiceDisconnectFailure[];
 }
 
 export interface ServiceAuthCleanupArchiveToken {
@@ -181,6 +187,10 @@ function isRetryableAccountDeletionPartnerFailure(statusCode: number | null): bo
     || (statusCode >= 500 && statusCode <= 599);
 }
 
+function isPendingDisconnectTokenUseSkip(error: unknown): boolean {
+  return error instanceof Error && error.name === 'TokenUseSkippedForPendingDisconnectError';
+}
+
 function addAccountDeletionTokenArchive(
   outcome: ServiceAuthCleanupOutcome,
   tokenID: string,
@@ -191,6 +201,20 @@ function addAccountDeletionTokenArchive(
   outcome.tokensToArchive.push({
     tokenID,
     tokenData,
+    errorMessage,
+  });
+}
+
+function addRetryableDisconnectFailure(
+  outcome: ServiceAuthCleanupOutcome,
+  tokenID: string,
+  statusCode: number | null,
+  errorMessage: string,
+): void {
+  outcome.retryableDisconnectFailures = outcome.retryableDisconnectFailures || [];
+  outcome.retryableDisconnectFailures.push({
+    tokenID,
+    statusCode,
     errorMessage,
   });
 }
@@ -392,6 +416,7 @@ async function buildServiceTokenForCleanup(
 function resolveCleanupPolicy(reason: ServiceAuthCleanupReason): ServiceAuthCleanupPolicy {
   switch (reason) {
     case SERVICE_AUTH_CLEANUP_REASONS.UserDisconnect:
+    case SERVICE_AUTH_CLEANUP_REASONS.SubscriptionEnforcement:
       return {
         attemptPartnerDeauthorize: true,
         clearConnectionStateWhenNoTokensRemain: true,
@@ -590,7 +615,8 @@ export async function cleanupServiceTokenById(
       : null;
     const deleteResult = await deleteLocalServiceToken(userID, serviceName, tokenID, {
       preserveOAuthFlowContext: reason !== SERVICE_AUTH_CLEANUP_REASONS.UserDisconnect
-        && reason !== SERVICE_AUTH_CLEANUP_REASONS.AccountDeletion,
+        && reason !== SERVICE_AUTH_CLEANUP_REASONS.AccountDeletion
+        && reason !== SERVICE_AUTH_CLEANUP_REASONS.SubscriptionEnforcement,
     });
     outcome.deletedTokenCount = 1;
     if (tokenDataForOperationalCleanup) {
@@ -789,6 +815,19 @@ export async function cleanupServiceConnectionForUser(
             error?.message || `${serviceName} account-deletion token refresh failed with ${statusCode || 'unknown status'}`,
           );
           logger.error(`Refreshing token failed with ${statusCode || 'unknown status'} for ${tokenQueryDocumentSnapshot.id}. Archiving stored token material and proceeding with local cleanup.`);
+        } else if (reason === SERVICE_AUTH_CLEANUP_REASONS.SubscriptionEnforcement
+          && isRetryableSubscriptionEnforcementDisconnectStatus(statusCode)) {
+          addRetryableDisconnectFailure(
+            outcome,
+            tokenQueryDocumentSnapshot.id,
+            statusCode,
+            error?.message || `${serviceName} subscription-enforcement token refresh failed with ${statusCode || 'unknown status'}`,
+          );
+          logger.error(`Refreshing token failed with ${statusCode || 'unknown status'} for ${tokenQueryDocumentSnapshot.id}. Preserving local token for subscription-enforcement retry.`);
+          shouldDeleteToken = false;
+        } else if (isPendingDisconnectTokenUseSkip(error)) {
+          logger.warn(`Token ${tokenQueryDocumentSnapshot.id} is already pending disconnect. Preserving local token for the scheduled retry worker.`);
+          shouldDeleteToken = false;
         } else if (isLegacyProviderUnavailableStatus(statusCode) && policy.preserveLocalTokenOnPartnerFailure) {
           logger.error(`Refreshing token failed with ${statusCode || 'unknown status'} for ${tokenQueryDocumentSnapshot.id}. Preserving local token.`);
           shouldDeleteToken = false;
@@ -823,6 +862,16 @@ export async function cleanupServiceConnectionForUser(
               apiError?.message || `${serviceName} API deauthorization failed with ${statusCode || 'unknown status'}`,
             );
             logger.error(`${serviceName} API deauthorization failed with ${statusCode || 'unknown status'} for ${userID}. Archiving stored token material and proceeding with local cleanup.`);
+          } else if (reason === SERVICE_AUTH_CLEANUP_REASONS.SubscriptionEnforcement
+            && isRetryableSubscriptionEnforcementDisconnectStatus(statusCode)) {
+            addRetryableDisconnectFailure(
+              outcome,
+              tokenQueryDocumentSnapshot.id,
+              statusCode,
+              apiError?.message || `${serviceName} API deauthorization failed with ${statusCode || 'unknown status'}`,
+            );
+            logger.error(`${serviceName} API deauthorization failed with ${statusCode || 'unknown status'} for ${userID}. Preserving local token for subscription-enforcement retry.`);
+            shouldDeleteToken = false;
           } else if (policy.preserveLocalTokenOnPartnerFailure && (
             isLegacyProviderUnavailableStatus(statusCode)
           )) {
@@ -844,7 +893,8 @@ export async function cleanupServiceConnectionForUser(
       const tokenDataForOperationalCleanup = getSnapshotDataForOperationalCleanup(tokenQueryDocumentSnapshot);
       const deleteResult = await deleteLocalServiceToken(userID, serviceName, tokenQueryDocumentSnapshot.id, {
         preserveOAuthFlowContext: reason !== SERVICE_AUTH_CLEANUP_REASONS.UserDisconnect
-          && reason !== SERVICE_AUTH_CLEANUP_REASONS.AccountDeletion,
+          && reason !== SERVICE_AUTH_CLEANUP_REASONS.AccountDeletion
+          && reason !== SERVICE_AUTH_CLEANUP_REASONS.SubscriptionEnforcement,
       });
       outcome.deletedTokenCount += 1;
       knownNoTokensRemain = deleteResult.tokenRootDeleted;

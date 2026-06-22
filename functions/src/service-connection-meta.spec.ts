@@ -146,12 +146,20 @@ describe('service-connection-meta', () => {
   it('returns true when connected-state write succeeds', async () => {
     await expect(markServiceConnected('user-1', ServiceNames.SuuntoApp)).resolves.toBe(true);
 
-    expect(hoisted.metaSet).toHaveBeenCalledWith(expect.any(Object), {
+    expect(hoisted.metaSet).toHaveBeenCalledWith(expect.any(Object), expect.objectContaining({
       connectionState: 'connected',
       lastAuthFailureCode: 'delete-sentinel',
       lastAuthFailureMessage: 'delete-sentinel',
       lastDisconnectedAt: 'delete-sentinel',
-    }, { merge: true });
+      disconnectReason: 'delete-sentinel',
+      disconnectAttemptCount: 'delete-sentinel',
+      disconnectNextAttemptAt: 'delete-sentinel',
+      disconnectLastAttemptAt: 'delete-sentinel',
+      disconnectRetryExpiresAt: 'delete-sentinel',
+      disconnectLastStatusCode: 'delete-sentinel',
+      disconnectLastErrorMessage: 'delete-sentinel',
+      disconnectManualReviewRequired: 'delete-sentinel',
+    }), { merge: true });
   });
 
   it('skips clear-state writes when user deletion is in progress', async () => {

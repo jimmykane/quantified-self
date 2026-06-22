@@ -3,7 +3,7 @@ import { ACTIVITY_SYNC_ROUTE_IDS, ACTIVITY_SYNC_ROUTES } from '../../../shared/a
 
 const hoisted = vi.hoisted(() => ({
   settingsGet: vi.fn(),
-  isServiceReconnectRequiredForUser: vi.fn(),
+  isServiceUnavailableForSyncForUser: vi.fn(),
 }));
 
 vi.mock('firebase-admin', () => ({
@@ -21,7 +21,7 @@ vi.mock('firebase-admin', () => ({
 }));
 
 vi.mock('../service-connection-meta', () => ({
-  isServiceReconnectRequiredForUser: hoisted.isServiceReconnectRequiredForUser,
+  isServiceUnavailableForSyncForUser: hoisted.isServiceUnavailableForSyncForUser,
 }));
 
 import {
@@ -33,7 +33,7 @@ describe('activity-sync/settings', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     hoisted.settingsGet.mockResolvedValue({ data: () => ({}) });
-    hoisted.isServiceReconnectRequiredForUser.mockResolvedValue(false);
+    hoisted.isServiceUnavailableForSyncForUser.mockResolvedValue(false);
   });
 
   it('reads enabled route state from user settings', async () => {
@@ -54,7 +54,7 @@ describe('activity-sync/settings', () => {
   });
 
   it('blocks routes when either source or destination service requires reconnect', async () => {
-    hoisted.isServiceReconnectRequiredForUser
+    hoisted.isServiceUnavailableForSyncForUser
       .mockResolvedValueOnce(false)
       .mockResolvedValueOnce(true);
 
@@ -63,11 +63,11 @@ describe('activity-sync/settings', () => {
       ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp,
     )).resolves.toBe(true);
 
-    expect(hoisted.isServiceReconnectRequiredForUser).toHaveBeenCalledWith(
+    expect(hoisted.isServiceUnavailableForSyncForUser).toHaveBeenCalledWith(
       'user-1',
       ACTIVITY_SYNC_ROUTES[ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp].sourceServiceName,
     );
-    expect(hoisted.isServiceReconnectRequiredForUser).toHaveBeenCalledWith(
+    expect(hoisted.isServiceUnavailableForSyncForUser).toHaveBeenCalledWith(
       'user-1',
       ACTIVITY_SYNC_ROUTES[ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp].destinationServiceName,
     );

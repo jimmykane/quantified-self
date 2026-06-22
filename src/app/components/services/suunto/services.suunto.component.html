@@ -17,10 +17,10 @@
     [loading]="isLoading"
     [locked]="!hasProAccess && !isServiceConnected"
     [proRequired]="!hasProAccess && !isServiceConnected"
-    [showDetails]="isServiceConnected || isReconnectRequired"
-    [statusLabelOverride]="isReconnectRequired ? 'Reconnect required' : null"
-    [statusIconOverride]="isReconnectRequired ? 'sync_problem' : null"
-    [statusTone]="isReconnectRequired ? 'attention' : 'default'"
+    [showDetails]="connectionView.showDetails"
+    [statusLabelOverride]="connectionView.statusLabelOverride"
+    [statusIconOverride]="connectionView.statusIconOverride"
+    [statusTone]="connectionView.statusTone"
     (click)="!hasProAccess && !isServiceConnected && triggerUpsell()">
     <div connection-body class="connection-details">
     @if (isReconnectRequired) {
@@ -30,6 +30,17 @@
         <div class="reconnect-required-banner__title">Suunto needs to be reconnected</div>
         <div class="reconnect-required-banner__message">
           {{ reconnectFailureMessage || 'The previous connection is no longer accepted by Suunto. Reconnect to resume imports and sleep sync.' }}
+        </div>
+      </div>
+    </div>
+    }
+    @if (isDisconnectPending) {
+    <div class="reconnect-required-banner" role="status">
+      <mat-icon>sync_problem</mat-icon>
+      <div class="reconnect-required-banner__copy">
+        <div class="reconnect-required-banner__title">Disconnect pending</div>
+        <div class="reconnect-required-banner__message">
+          We are retrying the partner disconnect in the background. Sync and imports are paused for this connection.
         </div>
       </div>
     </div>
@@ -78,7 +89,7 @@
         <span>{{ activeSyncRouteWarningLabel }}</span>
       </div>
       }
-      @if (!isServiceConnected || isReconnectRequired || clicks > 10) {
+      @if ((!isServiceConnected || isReconnectRequired || clicks > 10) && !isDisconnectPending) {
       <button mat-flat-button class="qs-mat-primary"
         [disabled]="!user || isLoading || isConnecting || !hasProAccess" (click)="connectWithService($event)">
         @if (isConnecting) {

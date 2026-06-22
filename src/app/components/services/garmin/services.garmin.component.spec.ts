@@ -293,6 +293,19 @@ describe('ServicesGarminComponent', () => {
             expect(component.isHistoryImportLoading).toBe(false);
         });
 
+        it('does not treat preserved Garmin tokens as connected while disconnect is pending', () => {
+            component.serviceMeta = { connectionState: 'disconnect_pending' } as any;
+            component.serviceTokens = [{
+                accessToken: 'garmin-token',
+                userID: 'garmin-user',
+                permissions: ['HISTORICAL_DATA_EXPORT', 'ACTIVITY_EXPORT', 'HEALTH_EXPORT'],
+            }] as any;
+
+            expect(component.isDisconnectPending).toBe(true);
+            expect(component.isConnectedToService()).toBe(false);
+            expect(component.connectionDescription).toContain('Disconnect is pending');
+        });
+
         it('keeps history import loading while Garmin token permissions are not loaded', () => {
             component.isLoading = false;
             component.serviceTokens = [{

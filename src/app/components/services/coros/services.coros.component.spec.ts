@@ -158,6 +158,18 @@ describe('ServicesCorosComponent', () => {
         expect(fixture.nativeElement.querySelector('.service-connection-status__actions .connection-disconnect-button')).toBeFalsy();
     });
 
+    it('does not treat preserved COROS tokens as connected while disconnect is pending', () => {
+        component.serviceMeta = { connectionState: 'disconnect_pending' } as any;
+        component.serviceTokens = [{
+            accessToken: 'token',
+            openId: 'coros-user',
+        } as any];
+
+        expect(component.isDisconnectPending).toBe(true);
+        expect(component.isConnectedToService()).toBe(false);
+        expect(component.connectionDescription).toContain('Disconnect is pending');
+    });
+
     it('should show syncing state when forceConnected is true but tokens are not yet loaded', () => {
         component.forceConnected = true;
         component.serviceTokens = undefined;

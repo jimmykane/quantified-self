@@ -1297,6 +1297,54 @@ describe('sleep queue', () => {
         }));
     });
 
+    it('marks pending-disconnect token use as skipped instead of retrying', async () => {
+        hoisted.tokenRootGet.mockResolvedValue({
+            docs: [{
+                id: 'suunto-token-1',
+                data: () => ({
+                    userName: 'suunto-user-1',
+                    serviceName: 'SuuntoApp',
+                }),
+                ref: {
+                    parent: {
+                        parent: {
+                            id: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+                        },
+                    },
+                },
+            }],
+            empty: false,
+        });
+        const pendingDisconnectError = new Error('service disconnect is pending');
+        pendingDisconnectError.name = 'TokenUseSkippedForPendingDisconnectError';
+        hoisted.getTokenData.mockRejectedValueOnce(pendingDisconnectError);
+        const update = vi.fn().mockResolvedValue(undefined);
+
+        const result = await processSleepSyncQueueItem({
+            id: 'suunto-sleep-pending-disconnect',
+            dateCreated: 1_700_000_000_000,
+            dispatchedToCloudTask: 1_700_000_000_500,
+            processed: false,
+            provider: 'SuuntoApp',
+            userID: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+            providerUserId: 'suunto-user-1',
+            retryCount: 0,
+            type: 'suunto_poll',
+            rangeStartMs: 1_777_392_000_000,
+            rangeEndMs: 1_777_478_400_000,
+            ref: {
+                update,
+            } as any,
+        });
+
+        expect(result).toBe(QueueResult.Processed);
+        expect(hoisted.markSleepSyncError).not.toHaveBeenCalled();
+        expect(update).toHaveBeenCalledWith(expect.objectContaining({
+            resultStatus: 'skipped',
+            skippedReason: 'service_disconnect_pending',
+        }));
+    });
+
     it('resolves all-user Suunto queue items with an indexed userName and serviceName token query', async () => {
         hoisted.allowedUserIDs.splice(0, hoisted.allowedUserIDs.length);
         hoisted.collectionGroupGet.mockResolvedValue({

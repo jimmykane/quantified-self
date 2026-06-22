@@ -643,6 +643,43 @@ describe('service-auth-lifecycle terminal auth handling', () => {
     );
   });
 
+  it('preserves pending-disconnect tokens during explicit user disconnect cleanup', async () => {
+    tokenCollectionRef.get.mockResolvedValueOnce({
+      empty: false,
+      size: 1,
+      docs: [
+        {
+          id: 'garmin-token-id',
+          data: () => ({
+            serviceName: ServiceNames.GarminAPI,
+            accessToken: 'access-token',
+            refreshToken: 'refresh-token',
+            expiresAt: Date.now() + 60_000,
+          }),
+        },
+      ],
+    });
+    const pendingError = new Error('service disconnect is pending');
+    pendingError.name = 'TokenUseSkippedForPendingDisconnectError';
+
+    const outcome = await cleanupServiceConnectionForUser(
+      'firebase-user-123',
+      ServiceNames.GarminAPI,
+      SERVICE_AUTH_CLEANUP_REASONS.UserDisconnect,
+      {
+        tokenResolver: async () => {
+          throw pendingError;
+        },
+      },
+    );
+
+    expect(outcome.preservedTokenCount).toBe(1);
+    expect(outcome.deletedTokenCount).toBe(0);
+    expect(outcome.partnerDeauthorizeAttempted).toBe(0);
+    expect(mockDeleteLocalServiceToken).not.toHaveBeenCalled();
+    expect(mockClearServiceConnectionState).not.toHaveBeenCalled();
+  });
+
   it('throws when user disconnect local cleanup is partial', async () => {
     tokenCollectionRef.get.mockResolvedValueOnce({
       empty: false,
@@ -985,6 +1022,98 @@ describe('service-auth-lifecycle terminal auth handling', () => {
     expect(outcome.tokensToArchive).toBeUndefined();
     expect(outcome.preservedTokenCount).toBe(0);
     expect(outcome.deletedTokenCount).toBe(1);
+    expect(mockDeleteLocalServiceToken).toHaveBeenCalledWith(
+      'firebase-user-123',
+      ServiceNames.SuuntoApp,
+      'suunto-token-id',
+      { preserveOAuthFlowContext: false },
+    );
+  });
+
+  it('preserves subscription-enforcement tokens when partner deauthorization fails retryably', async () => {
+    tokenCollectionRef.get.mockResolvedValueOnce({
+      empty: false,
+      size: 1,
+      docs: [
+        {
+          id: 'suunto-token-id',
+          data: () => ({
+            serviceName: ServiceNames.SuuntoApp,
+            accessToken: 'valid-access-token',
+            refreshToken: 'stored-refresh-token',
+            expiresAt: Date.now() + 120_000,
+            scope: 'workout',
+            tokenType: 'bearer',
+            userName: 'suunto-user-id',
+            dateCreated: 1,
+            dateRefreshed: 2,
+          }),
+        },
+      ],
+    });
+    mockAdapterDeauthorize.mockRejectedValueOnce(Object.assign(new Error('gateway timeout'), {
+      statusCode: 504,
+    }));
+
+    const outcome = await cleanupServiceConnectionForUser(
+      'firebase-user-123',
+      ServiceNames.SuuntoApp,
+      SERVICE_AUTH_CLEANUP_REASONS.SubscriptionEnforcement,
+    );
+
+    expect(outcome.partnerDeauthorizeFailed).toBe(1);
+    expect(outcome.preservedTokenCount).toBe(1);
+    expect(outcome.deletedTokenCount).toBe(0);
+    expect(outcome.retryableDisconnectFailures).toEqual([
+      {
+        tokenID: 'suunto-token-id',
+        statusCode: 504,
+        errorMessage: 'gateway timeout',
+      },
+    ]);
+    expect(mockDeleteLocalServiceToken).not.toHaveBeenCalled();
+  });
+
+  it('deletes subscription-enforcement tokens when partner deauthorization fails terminally', async () => {
+    tokenCollectionRef.get.mockResolvedValueOnce({
+      empty: false,
+      size: 1,
+      docs: [
+        {
+          id: 'suunto-token-id',
+          data: () => ({
+            serviceName: ServiceNames.SuuntoApp,
+            accessToken: 'valid-access-token',
+            refreshToken: 'stored-refresh-token',
+            expiresAt: Date.now() + 120_000,
+            scope: 'workout',
+            tokenType: 'bearer',
+            userName: 'suunto-user-id',
+            dateCreated: 1,
+            dateRefreshed: 2,
+          }),
+        },
+      ],
+    });
+    mockAdapterDeauthorize.mockRejectedValueOnce(Object.assign(new Error('registration not found'), {
+      statusCode: 404,
+    }));
+    mockDeleteLocalServiceToken.mockResolvedValueOnce({
+      tokenRootDeleted: true,
+      tokenRootPreservedForOAuthFlow: false,
+      remainingTokenCount: 0,
+    });
+
+    const outcome = await cleanupServiceConnectionForUser(
+      'firebase-user-123',
+      ServiceNames.SuuntoApp,
+      SERVICE_AUTH_CLEANUP_REASONS.SubscriptionEnforcement,
+    );
+
+    expect(outcome.partnerDeauthorizeFailed).toBe(1);
+    expect(outcome.preservedTokenCount).toBe(0);
+    expect(outcome.deletedTokenCount).toBe(1);
+    expect(outcome.retryableDisconnectFailures).toBeUndefined();
     expect(mockDeleteLocalServiceToken).toHaveBeenCalledWith(
       'firebase-user-123',
       ServiceNames.SuuntoApp,

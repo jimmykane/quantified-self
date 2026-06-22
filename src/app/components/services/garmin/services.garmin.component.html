@@ -30,12 +30,23 @@
     [loading]="isLoading"
     [locked]="!hasProAccess && !isConnectedToService()"
     [proRequired]="!hasProAccess && !isConnectedToService()"
-    [showDetails]="isConnectedToService() || isReconnectRequired"
-    [statusLabelOverride]="isReconnectRequired ? 'Reconnect required' : null"
-    [statusIconOverride]="isReconnectRequired ? 'sync_problem' : null"
-    [statusTone]="isReconnectRequired ? 'attention' : 'default'"
+    [showDetails]="isConnectedToService() || isReconnectRequired || isDisconnectPending"
+    [statusLabelOverride]="isDisconnectPending ? 'Disconnect pending' : isReconnectRequired ? 'Reconnect required' : null"
+    [statusIconOverride]="isDisconnectPending || isReconnectRequired ? 'sync_problem' : null"
+    [statusTone]="isDisconnectPending || isReconnectRequired ? 'attention' : 'default'"
     (click)="!hasProAccess && !isConnectedToService() && triggerUpsell()">
     <div connection-body class="connection-details">
+    @if (isDisconnectPending) {
+    <div class="reconnect-required-banner" role="status">
+      <mat-icon>sync_problem</mat-icon>
+      <div class="reconnect-required-banner__copy">
+        <div class="reconnect-required-banner__title">Disconnect pending</div>
+        <div class="reconnect-required-banner__message">
+          We are retrying the Garmin disconnect in the background. Sync and imports are paused for this connection.
+        </div>
+      </div>
+    </div>
+    }
     @if (isConnectedToService()) {
     <div class="connection-account-row">
       <div class="connection-account-info">
@@ -114,7 +125,7 @@
         <span>{{ activeSyncRouteWarningLabel }}</span>
       </div>
       }
-      @if (!isConnectedToService() || isReconnectRequired) {
+      @if ((!isConnectedToService() || isReconnectRequired) && !isDisconnectPending) {
       <button mat-flat-button class="qs-mat-primary"
         [disabled]="!user || isLoading || isConnecting || !hasProAccess" (click)="connectWithService($event)">
         @if (isConnecting) {

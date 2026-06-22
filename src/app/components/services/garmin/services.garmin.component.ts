@@ -27,7 +27,10 @@ import {
   hasConnectedGarminToken,
   selectPreferredGarminTokenLike,
 } from '@shared/garmin-service-token';
-import { isReconnectRequiredServiceConnection } from '@shared/service-connection';
+import {
+  isDisconnectPendingServiceConnection,
+  isReconnectRequiredServiceConnection,
+} from '@shared/service-connection';
 
 const GARMIN_ACTIVITY_HISTORY_REQUIRED_PERMISSIONS = ['HISTORICAL_DATA_EXPORT', 'ACTIVITY_EXPORT'] as const;
 
@@ -93,11 +96,15 @@ export class ServicesGarminComponent extends ServicesAbstractComponentDirective 
   }
 
   isConnectedToService(): boolean {
-    return hasConnectedGarminToken(this.garminTokens) || this.forceConnected;
+    return !this.isDisconnectPending && (hasConnectedGarminToken(this.garminTokens) || this.forceConnected);
   }
 
   get isReconnectRequired(): boolean {
     return isReconnectRequiredServiceConnection(this.serviceMeta);
+  }
+
+  get isDisconnectPending(): boolean {
+    return isDisconnectPendingServiceConnection(this.serviceMeta);
   }
 
   get connectButtonLabel(): string {
@@ -105,7 +112,9 @@ export class ServicesGarminComponent extends ServicesAbstractComponentDirective 
   }
 
   get connectionDescription(): string {
-    return this.isReconnectRequired
+    return this.isDisconnectPending
+      ? 'Disconnect is pending while Garmin finishes deauthorization. Sync and imports are paused for this connection.'
+      : this.isReconnectRequired
       ? 'Reconnect Garmin to resume history imports, saved route delivery, and Garmin to Suunto auto-sync.'
       : 'Required for history imports, saved route delivery, and Garmin to Suunto auto-sync.';
   }
