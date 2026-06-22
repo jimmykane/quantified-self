@@ -307,7 +307,7 @@ describe('ServicesGarminComponent', () => {
         });
 
         it('shows reconnect action instead of retry copy when pending disconnect needs manual review', () => {
-            component.hasProAccess = true;
+            component.hasProAccess = false;
             component.user = { uid: 'user-1' } as any;
             component.serviceMeta = {
                 connectionState: 'disconnect_pending',
@@ -325,10 +325,12 @@ describe('ServicesGarminComponent', () => {
 
             expect(component.isDisconnectManualReviewRequired).toBe(true);
             expect(component.shouldShowConnectAction).toBe(true);
+            expect(component.canConnectServiceWithCurrentAccess).toBe(true);
             expect(content).toContain('Reconnect Garmin');
             expect(content).toContain('Garmin disconnect retries have stopped');
             expect(content).not.toContain('retrying the Garmin disconnect');
             expect(connectButton?.textContent).toContain('Reconnect');
+            expect(connectButton?.disabled).toBe(false);
         });
 
         it('keeps history import loading while Garmin token permissions are not loaded', () => {

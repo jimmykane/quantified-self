@@ -111,6 +111,10 @@ export class ServicesGarminComponent extends ServicesAbstractComponentDirective 
     return this.isDisconnectPending && this.serviceMeta?.disconnectManualReviewRequired === true;
   }
 
+  protected override get canConnectWithoutProAccess(): boolean {
+    return this.isDisconnectManualReviewRequired;
+  }
+
   get shouldShowConnectAction(): boolean {
     return (!this.isConnectedToService() || this.isReconnectRequired || this.isDisconnectManualReviewRequired)
       && (!this.isDisconnectPending || this.isDisconnectManualReviewRequired);

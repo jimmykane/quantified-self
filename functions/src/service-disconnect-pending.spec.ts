@@ -5,7 +5,8 @@ const hoisted = vi.hoisted(() => ({
   runTransaction: vi.fn(),
   transactionGet: vi.fn(),
   transactionSet: vi.fn(),
-  rootRef: { path: 'suuntoAppAccessTokens/user-1' },
+  rootGet: vi.fn(),
+  rootRef: { path: 'suuntoAppAccessTokens/user-1', get: vi.fn() },
   getServiceTokenRootDocumentRef: vi.fn(),
   clearServiceConnectionState: vi.fn(),
   mirrorServiceDisconnectPendingToUserMeta: vi.fn(),
@@ -60,6 +61,7 @@ vi.mock('./queue/pending-disconnect-release', () => ({
 
 import {
   clearServiceDisconnectPending,
+  isServiceDisconnectManualReviewRequiredForUser,
   markServiceDisconnectPending,
   recordServiceDisconnectRetryFailure,
   sanitizePendingServiceDisconnectErrorMessage,
@@ -75,6 +77,8 @@ describe('service-disconnect-pending', () => {
       shouldSkip: false,
     });
     hoisted.transactionGet.mockResolvedValue({ exists: true, data: () => ({}) });
+    hoisted.rootGet.mockResolvedValue({ exists: false });
+    hoisted.rootRef.get = hoisted.rootGet;
     hoisted.runTransaction.mockImplementation(async (callback: (transaction: unknown) => Promise<unknown>) => callback({
       get: hoisted.transactionGet,
       set: hoisted.transactionSet,
@@ -104,9 +108,39 @@ describe('service-disconnect-pending', () => {
     expect(sanitized).not.toContain('client-secret-query');
   });
 
+  it('identifies manual-review pending disconnect roots', async () => {
+    hoisted.rootGet.mockResolvedValueOnce({
+      exists: true,
+      data: () => ({
+        disconnectState: 'disconnect_pending',
+        disconnectManualReviewRequired: true,
+      }),
+    });
+
+    await expect(isServiceDisconnectManualReviewRequiredForUser('user-1', ServiceNames.SuuntoApp)).resolves.toBe(true);
+  });
+
+  it('does not identify retrying pending disconnect roots as manual review', async () => {
+    hoisted.rootGet.mockResolvedValueOnce({
+      exists: true,
+      data: () => ({
+        disconnectState: 'disconnect_pending',
+        disconnectManualReviewRequired: false,
+      }),
+    });
+
+    await expect(isServiceDisconnectManualReviewRequiredForUser('user-1', ServiceNames.SuuntoApp)).resolves.toBe(false);
+  });
+
   it('clears pending fields from the token root and user meta when the user is active', async () => {
+    hoisted.transactionGet.mockResolvedValue({
+      exists: true,
+      data: () => ({ disconnectState: 'disconnect_pending' }),
+    });
+
     await clearServiceDisconnectPending('user-1', ServiceNames.SuuntoApp);
 
+    expect(hoisted.releaseQueueItemsDeferredForPendingDisconnect).toHaveBeenCalledWith('user-1', ServiceNames.SuuntoApp);
     expect(hoisted.transactionSet).toHaveBeenCalledWith(
       hoisted.rootRef,
       expect.objectContaining({
@@ -119,7 +153,46 @@ describe('service-disconnect-pending', () => {
     expect(hoisted.clearServiceConnectionState).toHaveBeenCalledWith('user-1', ServiceNames.SuuntoApp, {
       restorePendingDisconnectActivitySyncRoutes: true,
     });
+    expect(hoisted.releaseQueueItemsDeferredForPendingDisconnect.mock.invocationCallOrder[0])
+      .toBeLessThan(hoisted.transactionSet.mock.invocationCallOrder[0]);
+  });
+
+  it('does not clear pending state when deferred queue release fails', async () => {
+    hoisted.transactionGet.mockResolvedValue({
+      exists: true,
+      data: () => ({ disconnectState: 'disconnect_pending' }),
+    });
+    hoisted.releaseQueueItemsDeferredForPendingDisconnect.mockRejectedValueOnce(new Error('release failed'));
+
+    await expect(clearServiceDisconnectPending('user-1', ServiceNames.SuuntoApp))
+      .rejects.toThrow('release failed');
+
     expect(hoisted.releaseQueueItemsDeferredForPendingDisconnect).toHaveBeenCalledWith('user-1', ServiceNames.SuuntoApp);
+    expect(hoisted.transactionSet).not.toHaveBeenCalled();
+    expect(hoisted.clearServiceConnectionState).not.toHaveBeenCalled();
+  });
+
+  it('clears non-pending token roots without releasing deferred pending-disconnect queue items', async () => {
+    hoisted.transactionGet.mockResolvedValue({
+      exists: true,
+      data: () => ({ connectionState: 'connected' }),
+    });
+
+    await clearServiceDisconnectPending('user-1', ServiceNames.SuuntoApp);
+
+    expect(hoisted.releaseQueueItemsDeferredForPendingDisconnect).not.toHaveBeenCalled();
+    expect(hoisted.transactionSet).toHaveBeenCalledWith(
+      hoisted.rootRef,
+      expect.objectContaining({
+        disconnectState: 'DELETE_SENTINEL',
+        disconnectReason: 'DELETE_SENTINEL',
+        disconnectManualReviewRequired: 'DELETE_SENTINEL',
+      }),
+      { merge: true },
+    );
+    expect(hoisted.clearServiceConnectionState).toHaveBeenCalledWith('user-1', ServiceNames.SuuntoApp, {
+      restorePendingDisconnectActivitySyncRoutes: true,
+    });
   });
 
   it('clears stale user meta when the pending token root is already missing', async () => {

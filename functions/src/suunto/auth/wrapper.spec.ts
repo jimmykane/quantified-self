@@ -4,6 +4,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import * as utils from '../../utils';
 import * as oauth2 from '../../OAuth2';
 import { ServiceNames } from '@sports-alliance/sports-lib';
+import * as serviceOAuthAccess from '../../service-oauth-access';
 
 // Mock firebase-functions/v2/https
 vi.mock('firebase-functions/v2/https', () => {
@@ -37,6 +38,10 @@ vi.mock('../../OAuth2', () => ({
     validateOAuth2State: vi.fn().mockResolvedValue(true)
 }));
 
+vi.mock('../../service-oauth-access', () => ({
+    hasServiceOAuthConnectAccess: vi.fn().mockResolvedValue(true),
+}));
+
 // Import AFTER mocks
 import {
     getSuuntoAPIAuthRequestTokenRedirectURI,
@@ -61,6 +66,7 @@ describe('Suunto Auth Wrapper', () => {
     beforeEach(() => {
         vi.clearAllMocks();
         (utils.hasProAccess as any).mockResolvedValue(true);
+        (serviceOAuthAccess.hasServiceOAuthConnectAccess as any).mockResolvedValue(true);
     });
 
     describe('getSuuntoAPIAuthRequestTokenRedirectURI', () => {
@@ -71,7 +77,7 @@ describe('Suunto Auth Wrapper', () => {
 
             const result = await getSuuntoAPIAuthRequestTokenRedirectURI(request as any);
 
-            expect(utils.hasProAccess).toHaveBeenCalledWith('testUserID');
+            expect(serviceOAuthAccess.hasServiceOAuthConnectAccess).toHaveBeenCalledWith('testUserID', ServiceNames.SuuntoApp);
             expect(oauth2.getServiceOAuth2CodeRedirectAndSaveStateToUser).toHaveBeenCalledWith(
                 'testUserID',
                 ServiceNames.SuuntoApp,
@@ -80,8 +86,8 @@ describe('Suunto Auth Wrapper', () => {
             expect(result).toEqual({ redirect_uri: 'https://mock-redirect.com' });
         });
 
-        it('should throw error for non-pro user', async () => {
-            (utils.hasProAccess as any).mockResolvedValue(false);
+        it('should throw error when OAuth connect access is denied', async () => {
+            (serviceOAuthAccess.hasServiceOAuthConnectAccess as any).mockResolvedValue(false);
             const request = createMockRequest({
                 data: { redirectUri: 'https://app.com/callback' }
             });
@@ -129,6 +135,7 @@ describe('Suunto Auth Wrapper', () => {
 
             await requestAndSetSuuntoAPIAccessToken(request as any);
 
+            expect(serviceOAuthAccess.hasServiceOAuthConnectAccess).toHaveBeenCalledWith('testUserID', ServiceNames.SuuntoApp);
             expect(oauth2.validateOAuth2State).toHaveBeenCalledWith('testUserID', ServiceNames.SuuntoApp, 'validState');
             expect(oauth2.getAndSetServiceOAuth2AccessTokenForUser).toHaveBeenCalledWith(
                 'testUserID',

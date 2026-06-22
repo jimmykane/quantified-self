@@ -94,6 +94,10 @@ export class ServicesSuuntoComponent extends ServicesAbstractComponentDirective 
     return this.connectionView.disconnectManualReviewRequired;
   }
 
+  protected override get canConnectWithoutProAccess(): boolean {
+    return this.isDisconnectManualReviewRequired;
+  }
+
   get shouldShowConnectAction(): boolean {
     return (!this.isServiceConnected || this.isReconnectRequired || this.isDisconnectManualReviewRequired || this.clicks > 10)
       && (!this.isDisconnectPending || this.isDisconnectManualReviewRequired);

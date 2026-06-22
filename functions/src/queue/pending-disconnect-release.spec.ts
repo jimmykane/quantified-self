@@ -16,6 +16,7 @@ const hoisted = vi.hoisted(() => {
     };
 
     const collections = new Map<string, StoredDoc[]>();
+    const getFailures = new Map<string, Error>();
     const deleteSentinel = { delete: true };
     const timestampFromDate = vi.fn((date: Date) => date);
 
@@ -27,6 +28,11 @@ const hoisted = vi.hoisted(() => {
             return makeQuery(collectionName, [...filters, { field, value }]);
         }),
         get: vi.fn(async () => {
+            const getFailure = getFailures.get(collectionName);
+            if (getFailure) {
+                throw getFailure;
+            }
+
             const docs = (collections.get(collectionName) || [])
                 .filter((doc) => filters.every((filter) => doc.data[filter.field] === filter.value))
                 .map((doc) => ({
@@ -50,6 +56,7 @@ const hoisted = vi.hoisted(() => {
 
     return {
         collections,
+        getFailures,
         deleteSentinel,
         timestampFromDate,
         collection: vi.fn((collectionName: string) => makeQuery(collectionName)),
@@ -87,6 +94,7 @@ describe('pending disconnect queue release', () => {
     beforeEach(() => {
         vi.clearAllMocks();
         hoisted.collections.clear();
+        hoisted.getFailures.clear();
     });
 
     afterEach(() => {
@@ -103,6 +111,10 @@ describe('pending disconnect queue release', () => {
 
     function addServiceTokenDoc(collectionName: string, userID: string, id: string, data: Record<string, unknown>): ReturnType<typeof vi.fn> {
         return addDoc(`${collectionName}/${userID}/tokens`, id, data);
+    }
+
+    function failCollectionGet(collectionName: string, error: Error): void {
+        hoisted.getFailures.set(collectionName, error);
     }
 
     it('releases deferred queue items for the restored service without touching other services', async () => {
@@ -218,5 +230,37 @@ describe('pending disconnect queue release', () => {
         expect(releasedCount).toBe(2);
         expect(workoutUpdate).toHaveBeenCalledTimes(1);
         expect(sleepUpdate).toHaveBeenCalledTimes(1);
+    });
+
+    it('fails release when provider identifier lookup fails so pending state can be retried later', async () => {
+        failCollectionGet('suuntoAppAccessTokens/user-1/tokens', new Error('token lookup unavailable'));
+        const workoutUpdate = addDoc(getServiceWorkoutQueueName(ServiceNames.SuuntoApp), 'workout-1', {
+            firebaseUserID: 'user-1',
+            deferredReason: QUEUE_DEFERRED_REASONS.ServiceDisconnectPending,
+        });
+
+        await expect(releaseQueueItemsDeferredForPendingDisconnect('user-1', ServiceNames.SuuntoApp))
+            .rejects.toThrow('Failed to read provider identifiers');
+
+        expect(workoutUpdate).not.toHaveBeenCalled();
+    });
+
+    it('fails release when any deferred queue item update fails so pending state can be retried later', async () => {
+        const workoutUpdate = addDoc(getServiceWorkoutQueueName(ServiceNames.SuuntoApp), 'workout-1', {
+            firebaseUserID: 'user-1',
+            deferredReason: QUEUE_DEFERRED_REASONS.ServiceDisconnectPending,
+        });
+        workoutUpdate.mockRejectedValueOnce(new Error('write unavailable'));
+
+        await expect(releaseQueueItemsDeferredForPendingDisconnect('user-1', ServiceNames.SuuntoApp))
+            .rejects.toThrow('Failed to release 1 deferred queue item');
+
+        expect(hoisted.loggerError).toHaveBeenCalledWith(
+            '[PendingDisconnectQueueRelease] Failed to release deferred queue item.',
+            expect.objectContaining({
+                queueItemPath: `${getServiceWorkoutQueueName(ServiceNames.SuuntoApp)}/workout-1`,
+                error: 'write unavailable',
+            }),
+        );
     });
 });

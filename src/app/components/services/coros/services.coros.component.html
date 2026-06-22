@@ -16,13 +16,13 @@
     [description]="connectionDescription"
     [connected]="isConnectedToService()"
     [loading]="isLoading"
-    [locked]="!hasProAccess && !isConnectedToService()"
-    [proRequired]="!hasProAccess && !isConnectedToService()"
+    [locked]="!canConnectServiceWithCurrentAccess && !isConnectedToService()"
+    [proRequired]="!canConnectServiceWithCurrentAccess && !isConnectedToService()"
     [showDetails]="isConnectedToService() || isDisconnectPending"
     [statusLabelOverride]="isDisconnectManualReviewRequired ? 'Reconnect needed' : isDisconnectPending ? 'Disconnect pending' : null"
     [statusIconOverride]="isDisconnectPending ? 'sync_problem' : null"
     [statusTone]="isDisconnectPending ? 'attention' : 'default'"
-    (click)="!hasProAccess && !isConnectedToService() && triggerUpsell()">
+    (click)="!canConnectServiceWithCurrentAccess && !isConnectedToService() && triggerUpsell()">
     <div connection-body class="connection-details">
     @if (isDisconnectPending) {
     <div class="reconnect-required-banner" [attr.role]="isDisconnectManualReviewRequired ? 'alert' : 'status'">
@@ -85,7 +85,7 @@
       }
       @if (shouldShowConnectAction) {
       <button mat-flat-button class="qs-mat-primary"
-        [disabled]="!user || isLoading || isConnecting || !hasProAccess" (click)="connectWithService($event)">
+        [disabled]="!user || isLoading || isConnecting || !canConnectServiceWithCurrentAccess" (click)="connectWithService($event)">
         @if (isConnecting) {
         <ng-container>
           <mat-spinner diameter="20" class="qs-spinner-accent"></mat-spinner>

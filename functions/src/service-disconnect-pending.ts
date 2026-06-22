@@ -151,6 +151,14 @@ export async function isServiceDisconnectPendingForUser(
   return isServiceDisconnectPendingData(await getServiceDisconnectPendingData(userID, serviceName));
 }
 
+export async function isServiceDisconnectManualReviewRequiredForUser(
+  userID: string,
+  serviceName: ServiceNames,
+): Promise<boolean> {
+  const data = await getServiceDisconnectPendingData(userID, serviceName);
+  return isServiceDisconnectPendingData(data) && data?.disconnectManualReviewRequired === true;
+}
+
 export async function markServiceDisconnectPending(
   userID: string,
   serviceName: ServiceNames,
@@ -294,6 +302,36 @@ export async function clearServiceDisconnectPending(
   const db = admin.firestore();
   const rootRef = getServiceTokenRootDocumentRef(userID, serviceName);
 
+  const releaseReadiness = await db.runTransaction(async (transaction) => {
+    if (await shouldSkipPendingDisconnectWrite(db, transaction, userID, serviceName, 'clear')) {
+      return 'skipped' as const;
+    }
+
+    const snapshot = await transaction.get(rootRef);
+    if (!snapshot.exists) {
+      return 'root_missing' as const;
+    }
+
+    return isServiceDisconnectPendingData(snapshot.data() as PendingServiceDisconnectRootData)
+      ? 'release_required' as const
+      : 'clear_only' as const;
+  });
+
+  if (releaseReadiness === 'skipped') {
+    return;
+  }
+
+  if (releaseReadiness === 'root_missing') {
+    await clearServiceConnectionState(userID, serviceName, {
+      restorePendingDisconnectActivitySyncRoutes: true,
+    });
+    return;
+  }
+
+  if (releaseReadiness === 'release_required') {
+    await releaseQueueItemsDeferredForPendingDisconnect(userID, serviceName);
+  }
+
   const clearResult = await db.runTransaction(async (transaction) => {
     if (await shouldSkipPendingDisconnectWrite(db, transaction, userID, serviceName, 'clear')) {
       return 'skipped' as const;
@@ -315,8 +353,4 @@ export async function clearServiceDisconnectPending(
   await clearServiceConnectionState(userID, serviceName, {
     restorePendingDisconnectActivitySyncRoutes: true,
   });
-
-  if (clearResult === 'cleared') {
-    await releaseQueueItemsDeferredForPendingDisconnect(userID, serviceName);
-  }
 }

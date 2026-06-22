@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import * as utils from '../../utils';
 import * as oauth2 from '../../OAuth2';
 import { SERVICE_NAME } from '../constants';
+import * as serviceOAuthAccess from '../../service-oauth-access';
 
 // Mock dependencies
 vi.mock('firebase-functions/v1', () => ({
@@ -39,6 +40,10 @@ vi.mock('../../OAuth2', () => ({
     validateOAuth2State: vi.fn().mockResolvedValue(true)
 }));
 
+vi.mock('../../service-oauth-access', () => ({
+    hasServiceOAuthConnectAccess: vi.fn().mockResolvedValue(true),
+}));
+
 // Import AFTER mocks
 import {
     getCOROSAPIAuthRequestTokenRedirectURI,
@@ -53,6 +58,7 @@ describe('COROS Auth Wrapper', () => {
     beforeEach(() => {
         vi.clearAllMocks();
         (utils.hasProAccess as any).mockResolvedValue(true);
+        (serviceOAuthAccess.hasServiceOAuthConnectAccess as any).mockResolvedValue(true);
 
         context = {
             app: { appId: 'test-app' },
@@ -67,7 +73,7 @@ describe('COROS Auth Wrapper', () => {
         it('should return redirect URI for pro user', async () => {
             const result = await getCOROSAPIAuthRequestTokenRedirectURI(data, context);
 
-            expect(utils.hasProAccess).toHaveBeenCalledWith('testUserID');
+            expect(serviceOAuthAccess.hasServiceOAuthConnectAccess).toHaveBeenCalledWith('testUserID', SERVICE_NAME);
             expect(oauth2.getServiceOAuth2CodeRedirectAndSaveStateToUser).toHaveBeenCalledWith(
                 'testUserID',
                 SERVICE_NAME,
@@ -76,8 +82,8 @@ describe('COROS Auth Wrapper', () => {
             expect(result).toEqual({ redirect_uri: 'https://mock-redirect.com' });
         });
 
-        it('should throw error for non-pro user', async () => {
-            (utils.hasProAccess as any).mockResolvedValue(false);
+        it('should throw error when OAuth connect access is denied', async () => {
+            (serviceOAuthAccess.hasServiceOAuthConnectAccess as any).mockResolvedValue(false);
 
             await expect(getCOROSAPIAuthRequestTokenRedirectURI(data, context))
                 .rejects.toThrow('Service sync is a Pro feature.');
@@ -110,6 +116,7 @@ describe('COROS Auth Wrapper', () => {
         it('should validate state and set tokens', async () => {
             await requestAndSetCOROSAPIAccessToken(data, context);
 
+            expect(serviceOAuthAccess.hasServiceOAuthConnectAccess).toHaveBeenCalledWith('testUserID', SERVICE_NAME);
             expect(oauth2.validateOAuth2State).toHaveBeenCalledWith('testUserID', SERVICE_NAME, 'validState');
             expect(oauth2.getAndSetServiceOAuth2AccessTokenForUser).toHaveBeenCalledWith(
                 'testUserID',

@@ -155,12 +155,20 @@ export abstract class ServicesAbstractComponentDirective implements OnInit, OnDe
   protected onServiceDataChanged(): void {
   }
 
+  protected get canConnectWithoutProAccess(): boolean {
+    return false;
+  }
+
+  get canConnectServiceWithCurrentAccess(): boolean {
+    return this.hasProAccess || this.canConnectWithoutProAccess;
+  }
+
   selectProviderTool(tool: string): void {
     this.activeProviderTool = tool;
   }
 
   async connectWithService(event) {
-    if (!this.hasProAccess) {
+    if (!this.canConnectServiceWithCurrentAccess) {
       this.triggerUpsell();
       return;
     }

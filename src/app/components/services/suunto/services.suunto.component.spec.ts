@@ -223,7 +223,7 @@ describe('ServicesSuuntoComponent', () => {
     });
 
     it('shows reconnect action instead of retry copy when pending disconnect needs manual review', () => {
-        component.hasProAccess = true;
+        component.hasProAccess = false;
         component.user = { uid: 'user-1' } as any;
         component.serviceTokens = [{
             accessToken: 'token',
@@ -241,10 +241,12 @@ describe('ServicesSuuntoComponent', () => {
 
         expect(component.isDisconnectManualReviewRequired).toBe(true);
         expect(component.shouldShowConnectAction).toBe(true);
+        expect(component.canConnectServiceWithCurrentAccess).toBe(true);
         expect(content).toContain('Reconnect Suunto');
         expect(content).toContain('Suunto disconnect retries have stopped');
         expect(content).not.toContain('retrying the partner disconnect');
         expect(connectButton?.textContent).toContain('Reconnect');
+        expect(connectButton?.disabled).toBe(false);
     });
 
     describe('History Import Tab', () => {

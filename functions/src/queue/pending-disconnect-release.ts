@@ -109,12 +109,13 @@ async function collectProviderQueueLookupsForUser(
         });
         return lookups;
     } catch (error) {
+        const message = error instanceof Error ? error.message : `${error}`;
         logger.error('[PendingDisconnectQueueRelease] Failed to read provider identifiers for deferred queue release.', {
             userID,
             serviceName,
-            error: error instanceof Error ? error.message : `${error}`,
+            error: message,
         });
-        return [];
+        throw new Error(`Failed to read provider identifiers for ${serviceName} pending disconnect queue release: ${message}`);
     }
 }
 
@@ -150,11 +151,16 @@ async function releaseDeferredDocsForQuery(
                 queueItemPath: doc.ref.path,
                 error: error instanceof Error ? error.message : `${error}`,
             });
-            return false;
+            return 'failed' as const;
         }
     }));
 
-    return results.filter(Boolean).length;
+    const failedCount = results.filter(result => result === 'failed').length;
+    if (failedCount > 0) {
+        throw new Error(`Failed to release ${failedCount} deferred queue item(s) for pending disconnect.`);
+    }
+
+    return results.filter(result => result === true).length;
 }
 
 async function releaseDeferredDocsForQueries(

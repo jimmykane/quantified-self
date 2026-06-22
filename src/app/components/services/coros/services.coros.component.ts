@@ -89,6 +89,10 @@ export class ServicesCorosComponent extends ServicesAbstractComponentDirective {
     return this.isDisconnectPending && this.serviceMeta?.disconnectManualReviewRequired === true;
   }
 
+  protected override get canConnectWithoutProAccess(): boolean {
+    return this.isDisconnectManualReviewRequired;
+  }
+
   get shouldShowConnectAction(): boolean {
     return !this.isConnectedToService()
       && (!this.isDisconnectPending || this.isDisconnectManualReviewRequired);

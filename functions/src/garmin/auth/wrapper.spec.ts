@@ -88,6 +88,10 @@ vi.mock('../../service-auth-lifecycle', () => ({
     },
 }));
 
+vi.mock('../../service-oauth-access', () => ({
+    hasServiceOAuthConnectAccess: vi.fn(),
+}));
+
 import {
     getGarminAPIAuthRequestTokenRedirectURI,
     requestAndSetGarminAPIAccessToken,
@@ -97,6 +101,7 @@ import {
 } from './wrapper';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import * as serviceAuthLifecycle from '../../service-auth-lifecycle';
+import * as serviceOAuthAccess from '../../service-oauth-access';
 import * as logger from 'firebase-functions/logger';
 
 describe('Garmin Auth Wrapper', () => {
@@ -109,6 +114,7 @@ describe('Garmin Auth Wrapper', () => {
         vi.mocked(utils.getUserIDFromFirebaseToken).mockResolvedValue('testUserID');
         vi.mocked(utils.hasProAccess).mockResolvedValue(true);
         vi.mocked(utils.determineRedirectURI).mockReturnValue('https://callback');
+        vi.mocked(serviceOAuthAccess.hasServiceOAuthConnectAccess).mockResolvedValue(true);
 
         context = {
             auth: { uid: 'testUserID' },
@@ -123,12 +129,13 @@ describe('Garmin Auth Wrapper', () => {
 
             const result = await (getGarminAPIAuthRequestTokenRedirectURI as any)(data, context);
 
+            expect(serviceOAuthAccess.hasServiceOAuthConnectAccess).toHaveBeenCalledWith('testUserID', ServiceNames.GarminAPI);
             expect(OAuth2.getServiceOAuth2CodeRedirectAndSaveStateToUser).toHaveBeenCalledWith('testUserID', ServiceNames.GarminAPI, 'https://callback');
             expect(result).toEqual({ redirect_uri: 'https://garmin.com/oauth' });
         });
 
-        it('should throw permission-denied for non-pro user', async () => {
-            vi.mocked(utils.hasProAccess).mockResolvedValue(false);
+        it('should throw permission-denied when OAuth connect access is denied', async () => {
+            vi.mocked(serviceOAuthAccess.hasServiceOAuthConnectAccess).mockResolvedValue(false);
             const data = { redirectUri: 'https://callback' };
 
             await expect((getGarminAPIAuthRequestTokenRedirectURI as any)(data, context)).rejects.toThrow('Service sync is a Pro feature.');
@@ -155,6 +162,7 @@ describe('Garmin Auth Wrapper', () => {
 
             await (requestAndSetGarminAPIAccessToken as any)(data, context);
 
+            expect(serviceOAuthAccess.hasServiceOAuthConnectAccess).toHaveBeenCalledWith('testUserID', ServiceNames.GarminAPI);
             expect(OAuth2.validateOAuth2State).toHaveBeenCalledWith('testUserID', ServiceNames.GarminAPI, 'validState');
             expect(OAuth2.getAndSetServiceOAuth2AccessTokenForUser).toHaveBeenCalledWith('testUserID', ServiceNames.GarminAPI, 'https://callback', 'validCode');
         });
