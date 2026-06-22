@@ -4,6 +4,7 @@ import { ServiceNames } from '@sports-alliance/sports-lib';
 const hoisted = vi.hoisted(() => ({
   metaSet: vi.fn().mockResolvedValue(undefined),
   disableActivitySyncRoutesForDisconnectedService: vi.fn().mockResolvedValue(undefined),
+  restoreActivitySyncRoutesForPendingDisconnectClear: vi.fn().mockResolvedValue(undefined),
   getUserDeletionGuardStateInTransaction: vi.fn().mockResolvedValue({
     userExists: true,
     deletionInProgress: false,
@@ -37,6 +38,7 @@ vi.mock('./shared/user-deletion-guard', () => ({
 
 vi.mock('./activity-sync/route-cleanup', () => ({
   disableActivitySyncRoutesForDisconnectedService: hoisted.disableActivitySyncRoutesForDisconnectedService,
+  restoreActivitySyncRoutesForPendingDisconnectClear: hoisted.restoreActivitySyncRoutesForPendingDisconnectClear,
 }));
 
 vi.mock('firebase-admin', () => {
@@ -69,6 +71,7 @@ import {
   clearServiceConnectionState,
   markServiceConnected,
   markServiceReconnectRequired,
+  mirrorServiceDisconnectPendingToUserMeta,
 } from './service-connection-meta';
 
 describe('service-connection-meta', () => {
@@ -172,5 +175,32 @@ describe('service-connection-meta', () => {
     await clearServiceConnectionState('user-1', ServiceNames.SuuntoApp);
 
     expect(hoisted.metaSet).not.toHaveBeenCalled();
+  });
+
+  it('tracks route restore state when mirroring pending disconnect metadata', async () => {
+    await mirrorServiceDisconnectPendingToUserMeta('user-1', ServiceNames.SuuntoApp, {
+      reason: 'subscription_enforcement',
+      attemptCount: 0,
+      nextAttemptAt: 'next-attempt',
+      retryExpiresAt: 'expires-at',
+      manualReviewRequired: false,
+    });
+
+    expect(hoisted.disableActivitySyncRoutesForDisconnectedService).toHaveBeenCalledWith(
+      'user-1',
+      ServiceNames.SuuntoApp,
+      { trackPendingDisconnectRestore: true },
+    );
+  });
+
+  it('restores pending-disconnect activity sync routes when requested after clearing state', async () => {
+    await clearServiceConnectionState('user-1', ServiceNames.SuuntoApp, {
+      restorePendingDisconnectActivitySyncRoutes: true,
+    });
+
+    expect(hoisted.restoreActivitySyncRoutesForPendingDisconnectClear).toHaveBeenCalledWith(
+      'user-1',
+      ServiceNames.SuuntoApp,
+    );
   });
 });

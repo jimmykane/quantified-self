@@ -25,6 +25,9 @@ vi.mock('firebase-admin', () => {
     collection: hoisted.collection,
     doc: hoisted.doc,
   }), {
+    FieldPath: {
+      documentId: vi.fn(() => '__name__'),
+    },
     Timestamp: {
       now: vi.fn(() => ({ toMillis: () => 1_000 })),
       fromMillis: vi.fn((value: number) => ({ toMillis: () => value })),
@@ -61,12 +64,27 @@ function mockEmptyGraceAndSubscription(): void {
   hoisted.doc.mockReturnValue({
     get: vi.fn().mockResolvedValue({ data: () => ({}) }),
   });
-  hoisted.collection.mockReturnValue({
+    hoisted.collection.mockReturnValue({
+      where: vi.fn().mockReturnThis(),
+      orderBy: vi.fn().mockReturnThis(),
+      limit: vi.fn().mockReturnThis(),
+      startAfter: vi.fn().mockReturnThis(),
+      get: vi.fn().mockResolvedValue({ empty: true, docs: [] }),
+    });
+  }
+
+function buildPagedQuery(pages: any[][]) {
+  let pageIndex = 0;
+  return {
     where: vi.fn().mockReturnThis(),
     orderBy: vi.fn().mockReturnThis(),
     limit: vi.fn().mockReturnThis(),
-    get: vi.fn().mockResolvedValue({ empty: true, docs: [] }),
-  });
+    startAfter: vi.fn().mockReturnThis(),
+    get: vi.fn().mockImplementation(async () => ({
+      empty: pages[pageIndex]?.length === 0,
+      docs: pages[pageIndex++] || [],
+    })),
+  };
 }
 
 describe('retry-pending-service-disconnects', () => {
@@ -164,7 +182,9 @@ describe('retry-pending-service-disconnects', () => {
   it('clears restored-entitlement pending roots even when they are not due for retry', async () => {
     const pendingRootQuery = {
       where: vi.fn().mockReturnThis(),
+      orderBy: vi.fn().mockReturnThis(),
       limit: vi.fn().mockReturnThis(),
+      startAfter: vi.fn().mockReturnThis(),
       get: vi.fn().mockResolvedValue({
         docs: [
           {
@@ -203,6 +223,75 @@ describe('retry-pending-service-disconnects', () => {
     expect(pendingRootQuery.where).not.toHaveBeenCalledWith('disconnectNextAttemptAt', expect.anything(), expect.anything());
     expect(hoisted.clearServiceDisconnectPending).toHaveBeenCalledWith('user-1', ServiceNames.SuuntoApp);
     expect(hoisted.cleanupServiceConnectionForUser).not.toHaveBeenCalled();
+  });
+
+  it('paginates restored-entitlement scans so later pending roots are not starved', async () => {
+    const firstPageDocs = Array.from({ length: 50 }, (_, index) => ({
+      id: `free-user-${index}`,
+      data: () => ({ disconnectState: 'disconnect_pending' }),
+    }));
+    const entitledRoot = {
+      id: 'entitled-user',
+      data: () => ({ disconnectState: 'disconnect_pending' }),
+    };
+    const pendingRootQuery = buildPagedQuery([
+      firstPageDocs,
+      [entitledRoot],
+    ]);
+    hoisted.collection.mockImplementation((path: string) => {
+      if (path === 'suuntoAppAccessTokens') {
+        return pendingRootQuery;
+      }
+
+      return {
+        where: vi.fn().mockReturnThis(),
+        orderBy: vi.fn().mockReturnThis(),
+        limit: vi.fn().mockReturnThis(),
+        startAfter: vi.fn().mockReturnThis(),
+        get: vi.fn().mockImplementation(async () => ({
+          empty: path.includes('entitled-user') ? false : true,
+          docs: path.includes('entitled-user') ? [{ data: () => ({ role: 'pro' }) }] : [],
+        })),
+      };
+    });
+    hoisted.doc.mockReturnValue({
+      get: vi.fn().mockResolvedValue({ data: () => ({}) }),
+    });
+
+    const clearedCount = await retryPendingServiceDisconnectsTestInternals.clearPendingDisconnectsForRestoredEntitlements(
+      { serviceName: ServiceNames.SuuntoApp, collectionName: 'suuntoAppAccessTokens' },
+    );
+
+    expect(clearedCount).toBe(1);
+    expect(pendingRootQuery.get).toHaveBeenCalledTimes(2);
+    expect(pendingRootQuery.startAfter).toHaveBeenCalledWith(firstPageDocs[49]);
+    expect(hoisted.clearServiceDisconnectPending).toHaveBeenCalledWith('entitled-user', ServiceNames.SuuntoApp);
+  });
+
+  it('paginates due pending disconnect roots by next attempt time and document id', async () => {
+    const firstPageDocs = Array.from({ length: 50 }, (_, index) => ({
+      id: `due-user-${index}`,
+      data: () => ({ disconnectState: 'disconnect_pending' }),
+    }));
+    const secondPageDoc = {
+      id: 'due-user-50',
+      data: () => ({ disconnectState: 'disconnect_pending' }),
+    };
+    const dueQuery = buildPagedQuery([
+      firstPageDocs,
+      [secondPageDoc],
+    ]);
+    hoisted.collection.mockReturnValue(dueQuery);
+
+    const roots = await retryPendingServiceDisconnectsTestInternals.getDuePendingDisconnectRoots(
+      { serviceName: ServiceNames.SuuntoApp, collectionName: 'suuntoAppAccessTokens' },
+      { toMillis: () => 1_000 } as any,
+    );
+
+    expect(roots).toHaveLength(51);
+    expect(dueQuery.orderBy).toHaveBeenCalledWith('disconnectNextAttemptAt');
+    expect(dueQuery.orderBy).toHaveBeenCalledWith('__name__');
+    expect(dueQuery.startAfter).toHaveBeenCalledWith(firstPageDocs[49]);
   });
 
   it('uses a token resolver that explicitly allows pending-disconnect token use', async () => {

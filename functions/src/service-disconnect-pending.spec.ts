@@ -110,7 +110,9 @@ describe('service-disconnect-pending', () => {
       }),
       { merge: true },
     );
-    expect(hoisted.clearServiceConnectionState).toHaveBeenCalledWith('user-1', ServiceNames.SuuntoApp);
+    expect(hoisted.clearServiceConnectionState).toHaveBeenCalledWith('user-1', ServiceNames.SuuntoApp, {
+      restorePendingDisconnectActivitySyncRoutes: true,
+    });
   });
 
   it('clears stale user meta when the pending token root is already missing', async () => {
@@ -119,7 +121,9 @@ describe('service-disconnect-pending', () => {
     await clearServiceDisconnectPending('user-1', ServiceNames.SuuntoApp);
 
     expect(hoisted.transactionSet).not.toHaveBeenCalled();
-    expect(hoisted.clearServiceConnectionState).toHaveBeenCalledWith('user-1', ServiceNames.SuuntoApp);
+    expect(hoisted.clearServiceConnectionState).toHaveBeenCalledWith('user-1', ServiceNames.SuuntoApp, {
+      restorePendingDisconnectActivitySyncRoutes: true,
+    });
   });
 
   it('does not clear root or meta state when the user is missing or deletion is in progress', async () => {

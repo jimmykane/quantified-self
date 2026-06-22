@@ -311,5 +311,7 @@ export async function clearServiceDisconnectPending(
     return;
   }
 
-  await clearServiceConnectionState(userID, serviceName);
+  await clearServiceConnectionState(userID, serviceName, {
+    restorePendingDisconnectActivitySyncRoutes: true,
+  });
 }

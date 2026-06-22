@@ -67,25 +67,64 @@ async function getDuePendingDisconnectRoots(
   config: PendingDisconnectCollectionConfig,
   now: admin.firestore.Timestamp,
 ): Promise<admin.firestore.QueryDocumentSnapshot[]> {
-  const snapshot = await admin.firestore()
-    .collection(config.collectionName)
-    .where('disconnectState', '==', 'disconnect_pending')
-    .where('disconnectManualReviewRequired', '==', false)
-    .where('disconnectNextAttemptAt', '<=', now)
-    .limit(PENDING_SERVICE_DISCONNECT_BATCH_LIMIT)
-    .get();
-  return snapshot.docs;
+  const roots: admin.firestore.QueryDocumentSnapshot[] = [];
+  let pageCursor: admin.firestore.QueryDocumentSnapshot | null = null;
+
+  while (true) {
+    let query = admin.firestore()
+      .collection(config.collectionName)
+      .where('disconnectState', '==', 'disconnect_pending')
+      .where('disconnectManualReviewRequired', '==', false)
+      .where('disconnectNextAttemptAt', '<=', now)
+      .orderBy('disconnectNextAttemptAt')
+      .orderBy(admin.firestore.FieldPath.documentId())
+      .limit(PENDING_SERVICE_DISCONNECT_BATCH_LIMIT);
+
+    if (pageCursor) {
+      query = query.startAfter(pageCursor);
+    }
+
+    const snapshot = await query.get();
+    roots.push(...snapshot.docs);
+
+    if (snapshot.docs.length < PENDING_SERVICE_DISCONNECT_BATCH_LIMIT) {
+      break;
+    }
+
+    pageCursor = snapshot.docs[snapshot.docs.length - 1];
+  }
+
+  return roots;
 }
 
 async function getPendingDisconnectRootsForEntitlementCheck(
   config: PendingDisconnectCollectionConfig,
 ): Promise<admin.firestore.QueryDocumentSnapshot[]> {
-  const snapshot = await admin.firestore()
-    .collection(config.collectionName)
-    .where('disconnectState', '==', 'disconnect_pending')
-    .limit(PENDING_SERVICE_DISCONNECT_BATCH_LIMIT)
-    .get();
-  return snapshot.docs;
+  const roots: admin.firestore.QueryDocumentSnapshot[] = [];
+  let pageCursor: admin.firestore.QueryDocumentSnapshot | null = null;
+
+  while (true) {
+    let query = admin.firestore()
+      .collection(config.collectionName)
+      .where('disconnectState', '==', 'disconnect_pending')
+      .orderBy(admin.firestore.FieldPath.documentId())
+      .limit(PENDING_SERVICE_DISCONNECT_BATCH_LIMIT);
+
+    if (pageCursor) {
+      query = query.startAfter(pageCursor);
+    }
+
+    const snapshot = await query.get();
+    roots.push(...snapshot.docs);
+
+    if (snapshot.docs.length < PENDING_SERVICE_DISCONNECT_BATCH_LIMIT) {
+      break;
+    }
+
+    pageCursor = snapshot.docs[snapshot.docs.length - 1];
+  }
+
+  return roots;
 }
 
 async function clearPendingDisconnectRootIfEntitled(
