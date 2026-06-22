@@ -132,7 +132,7 @@ describe('service-disconnect-pending', () => {
     await expect(isServiceDisconnectManualReviewRequiredForUser('user-1', ServiceNames.SuuntoApp)).resolves.toBe(false);
   });
 
-  it('clears pending fields from the token root and user meta when the user is active', async () => {
+  it('clears pending fields before releasing deferred queue items when the user is active', async () => {
     hoisted.transactionGet.mockResolvedValue({
       exists: true,
       data: () => ({ disconnectState: 'disconnect_pending' }),
@@ -153,14 +153,29 @@ describe('service-disconnect-pending', () => {
     expect(hoisted.clearServiceConnectionState).toHaveBeenCalledWith('user-1', ServiceNames.SuuntoApp, {
       restorePendingDisconnectActivitySyncRoutes: true,
     });
-    expect(hoisted.releaseQueueItemsDeferredForPendingDisconnect.mock.invocationCallOrder[0])
-      .toBeLessThan(hoisted.transactionSet.mock.invocationCallOrder[0]);
+    expect(hoisted.transactionSet.mock.invocationCallOrder[0])
+      .toBeLessThan(hoisted.clearServiceConnectionState.mock.invocationCallOrder[0]);
+    expect(hoisted.clearServiceConnectionState.mock.invocationCallOrder[0])
+      .toBeLessThan(hoisted.releaseQueueItemsDeferredForPendingDisconnect.mock.invocationCallOrder[0]);
   });
 
-  it('does not clear pending state when deferred queue release fails', async () => {
-    hoisted.transactionGet.mockResolvedValue({
+  it('restores pending state when deferred queue release fails after clear', async () => {
+    hoisted.transactionGet.mockResolvedValueOnce({
       exists: true,
-      data: () => ({ disconnectState: 'disconnect_pending' }),
+      data: () => ({
+        disconnectState: 'disconnect_pending',
+        disconnectReason: 'subscription_enforcement',
+        disconnectAttemptCount: 2,
+        disconnectNextAttemptAt: 'next-attempt',
+        disconnectLastAttemptAt: 'last-attempt',
+        disconnectRetryExpiresAt: 'retry-expires',
+        disconnectLastStatusCode: 504,
+        disconnectLastErrorMessage: 'gateway timeout',
+        disconnectManualReviewRequired: false,
+      }),
+    }).mockResolvedValueOnce({
+      exists: true,
+      data: () => ({}),
     });
     hoisted.releaseQueueItemsDeferredForPendingDisconnect.mockRejectedValueOnce(new Error('release failed'));
 
@@ -168,8 +183,40 @@ describe('service-disconnect-pending', () => {
       .rejects.toThrow('release failed');
 
     expect(hoisted.releaseQueueItemsDeferredForPendingDisconnect).toHaveBeenCalledWith('user-1', ServiceNames.SuuntoApp);
-    expect(hoisted.transactionSet).not.toHaveBeenCalled();
-    expect(hoisted.clearServiceConnectionState).not.toHaveBeenCalled();
+    expect(hoisted.clearServiceConnectionState).toHaveBeenCalledWith('user-1', ServiceNames.SuuntoApp, {
+      restorePendingDisconnectActivitySyncRoutes: true,
+    });
+    expect(hoisted.transactionSet).toHaveBeenNthCalledWith(
+      1,
+      hoisted.rootRef,
+      expect.objectContaining({
+        disconnectState: 'DELETE_SENTINEL',
+        disconnectReason: 'DELETE_SENTINEL',
+        disconnectManualReviewRequired: 'DELETE_SENTINEL',
+      }),
+      { merge: true },
+    );
+    expect(hoisted.transactionSet).toHaveBeenNthCalledWith(
+      2,
+      hoisted.rootRef,
+      expect.objectContaining({
+        disconnectState: 'disconnect_pending',
+        disconnectAttemptCount: 2,
+        disconnectNextAttemptAt: 'next-attempt',
+        disconnectLastStatusCode: 504,
+      }),
+      { merge: true },
+    );
+    expect(hoisted.mirrorServiceDisconnectPendingToUserMeta).toHaveBeenCalledWith(
+      'user-1',
+      ServiceNames.SuuntoApp,
+      expect.objectContaining({
+        attemptCount: 2,
+        nextAttemptAt: 'next-attempt',
+        lastStatusCode: 504,
+        manualReviewRequired: false,
+      }),
+    );
   });
 
   it('clears non-pending token roots without releasing deferred pending-disconnect queue items', async () => {
