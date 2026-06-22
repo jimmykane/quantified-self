@@ -43,6 +43,9 @@ const hoisted = vi.hoisted(() => {
                 docs,
             };
         }),
+        doc: vi.fn((docID: string) => ({
+            collection: vi.fn((subcollectionName: string) => makeQuery(`${collectionName}/${docID}/${subcollectionName}`)),
+        })),
     });
 
     return {
@@ -98,6 +101,10 @@ describe('pending disconnect queue release', () => {
         return update;
     }
 
+    function addServiceTokenDoc(collectionName: string, userID: string, id: string, data: Record<string, unknown>): ReturnType<typeof vi.fn> {
+        return addDoc(`${collectionName}/${userID}/tokens`, id, data);
+    }
+
     it('releases deferred queue items for the restored service without touching other services', async () => {
         const nowMs = 1_782_126_100_000;
         vi.spyOn(Date, 'now').mockReturnValue(nowMs);
@@ -141,5 +148,75 @@ describe('pending disconnect queue release', () => {
         }
         expect(otherActivityUpdate).not.toHaveBeenCalled();
         expect(notDeferredSleepUpdate).not.toHaveBeenCalled();
+    });
+
+    it('releases legacy workout and sleep queue items by provider identifier when local user fields are missing', async () => {
+        const nowMs = 1_782_126_100_000;
+        vi.spyOn(Date, 'now').mockReturnValue(nowMs);
+        const deferredReason = QUEUE_DEFERRED_REASONS.ServiceDisconnectPending;
+        addServiceTokenDoc('suuntoAppAccessTokens', 'user-1', 'token-1', {
+            userName: 'suunto-provider-user',
+        });
+        const workoutUpdate = addDoc(getServiceWorkoutQueueName(ServiceNames.SuuntoApp), 'workout-legacy', {
+            userName: 'suunto-provider-user',
+            deferredReason,
+        });
+        const sleepUpdate = addDoc(SLEEP_SYNC_QUEUE_COLLECTION_NAME, 'sleep-legacy', {
+            provider: SLEEP_PROVIDERS.SuuntoApp,
+            providerUserId: 'suunto-provider-user',
+            deferredReason,
+        });
+        const otherUserWorkoutUpdate = addDoc(getServiceWorkoutQueueName(ServiceNames.SuuntoApp), 'workout-other-user', {
+            firebaseUserID: 'user-2',
+            userName: 'suunto-provider-user',
+            deferredReason,
+        });
+        const otherProviderSleepUpdate = addDoc(SLEEP_SYNC_QUEUE_COLLECTION_NAME, 'sleep-other-provider', {
+            provider: SLEEP_PROVIDERS.GarminAPI,
+            providerUserId: 'suunto-provider-user',
+            deferredReason,
+        });
+
+        const releasedCount = await releaseQueueItemsDeferredForPendingDisconnect('user-1', ServiceNames.SuuntoApp);
+
+        expect(releasedCount).toBe(2);
+        expect(workoutUpdate).toHaveBeenCalledWith(expect.objectContaining({
+            processed: false,
+            dispatchedToCloudTask: null,
+            expireAt: new Date(nowMs + TTL_CONFIG.QUEUE_ITEM_IN_DAYS * 24 * 60 * 60 * 1000),
+            deferredReason: hoisted.deleteSentinel,
+        }));
+        expect(sleepUpdate).toHaveBeenCalledWith(expect.objectContaining({
+            processed: false,
+            dispatchedToCloudTask: null,
+            expireAt: new Date(nowMs + TTL_CONFIG.QUEUE_ITEM_IN_DAYS * 24 * 60 * 60 * 1000),
+            deferredReason: hoisted.deleteSentinel,
+        }));
+        expect(otherUserWorkoutUpdate).not.toHaveBeenCalled();
+        expect(otherProviderSleepUpdate).not.toHaveBeenCalled();
+    });
+
+    it('does not release the same queue item twice when it matches local and provider identifier queries', async () => {
+        const deferredReason = QUEUE_DEFERRED_REASONS.ServiceDisconnectPending;
+        addServiceTokenDoc('garminAPITokens', 'user-1', 'token-1', {
+            userID: 'garmin-provider-user',
+        });
+        const workoutUpdate = addDoc(getServiceWorkoutQueueName(ServiceNames.GarminAPI), 'workout-1', {
+            firebaseUserID: 'user-1',
+            userID: 'garmin-provider-user',
+            deferredReason,
+        });
+        const sleepUpdate = addDoc(SLEEP_SYNC_QUEUE_COLLECTION_NAME, 'sleep-1', {
+            userID: 'user-1',
+            provider: SLEEP_PROVIDERS.GarminAPI,
+            providerUserId: 'garmin-provider-user',
+            deferredReason,
+        });
+
+        const releasedCount = await releaseQueueItemsDeferredForPendingDisconnect('user-1', ServiceNames.GarminAPI);
+
+        expect(releasedCount).toBe(2);
+        expect(workoutUpdate).toHaveBeenCalledTimes(1);
+        expect(sleepUpdate).toHaveBeenCalledTimes(1);
     });
 });

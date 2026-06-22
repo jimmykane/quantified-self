@@ -107,12 +107,23 @@ export class ServicesGarminComponent extends ServicesAbstractComponentDirective 
     return isDisconnectPendingServiceConnection(this.serviceMeta);
   }
 
+  get isDisconnectManualReviewRequired(): boolean {
+    return this.isDisconnectPending && this.serviceMeta?.disconnectManualReviewRequired === true;
+  }
+
+  get shouldShowConnectAction(): boolean {
+    return (!this.isConnectedToService() || this.isReconnectRequired || this.isDisconnectManualReviewRequired)
+      && (!this.isDisconnectPending || this.isDisconnectManualReviewRequired);
+  }
+
   get connectButtonLabel(): string {
-    return this.isReconnectRequired ? 'Reconnect' : 'Connect';
+    return this.isReconnectRequired || this.isDisconnectManualReviewRequired ? 'Reconnect' : 'Connect';
   }
 
   get connectionDescription(): string {
-    return this.isDisconnectPending
+    return this.isDisconnectManualReviewRequired
+      ? 'Garmin disconnect retries have stopped. Reconnect Garmin to refresh this connection, or contact support if the old connection still appears in Garmin Connect.'
+      : this.isDisconnectPending
       ? 'Disconnect is pending while Garmin finishes deauthorization. Sync and imports are paused for this connection.'
       : this.isReconnectRequired
       ? 'Reconnect Garmin to resume history imports, saved route delivery, and Garmin to Suunto auto-sync.'

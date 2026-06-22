@@ -31,18 +31,22 @@
     [locked]="!hasProAccess && !isConnectedToService()"
     [proRequired]="!hasProAccess && !isConnectedToService()"
     [showDetails]="isConnectedToService() || isReconnectRequired || isDisconnectPending"
-    [statusLabelOverride]="isDisconnectPending ? 'Disconnect pending' : isReconnectRequired ? 'Reconnect required' : null"
+    [statusLabelOverride]="isDisconnectManualReviewRequired ? 'Reconnect needed' : isDisconnectPending ? 'Disconnect pending' : isReconnectRequired ? 'Reconnect required' : null"
     [statusIconOverride]="isDisconnectPending || isReconnectRequired ? 'sync_problem' : null"
     [statusTone]="isDisconnectPending || isReconnectRequired ? 'attention' : 'default'"
     (click)="!hasProAccess && !isConnectedToService() && triggerUpsell()">
     <div connection-body class="connection-details">
     @if (isDisconnectPending) {
-    <div class="reconnect-required-banner" role="status">
+    <div class="reconnect-required-banner" [attr.role]="isDisconnectManualReviewRequired ? 'alert' : 'status'">
       <mat-icon>sync_problem</mat-icon>
       <div class="reconnect-required-banner__copy">
-        <div class="reconnect-required-banner__title">Disconnect pending</div>
+        <div class="reconnect-required-banner__title">{{ isDisconnectManualReviewRequired ? 'Reconnect Garmin' : 'Disconnect pending' }}</div>
         <div class="reconnect-required-banner__message">
+          @if (isDisconnectManualReviewRequired) {
+          Garmin disconnect retries have stopped. Reconnect Garmin to refresh this connection, or contact support if it still appears connected in Garmin Connect.
+          } @else {
           We are retrying the Garmin disconnect in the background. Sync and imports are paused for this connection.
+          }
         </div>
       </div>
     </div>
@@ -125,7 +129,7 @@
         <span>{{ activeSyncRouteWarningLabel }}</span>
       </div>
       }
-      @if ((!isConnectedToService() || isReconnectRequired) && !isDisconnectPending) {
+      @if (shouldShowConnectAction) {
       <button mat-flat-button class="qs-mat-primary"
         [disabled]="!user || isLoading || isConnecting || !hasProAccess" (click)="connectWithService($event)">
         @if (isConnecting) {
@@ -135,7 +139,7 @@
         </ng-container>
         } @else {
         <ng-container>
-          <mat-icon>{{ isReconnectRequired ? 'sync' : 'link' }}</mat-icon> {{ connectButtonLabel }}
+          <mat-icon>{{ isReconnectRequired || isDisconnectManualReviewRequired ? 'sync' : 'link' }}</mat-icon> {{ connectButtonLabel }}
         </ng-container>
         }
       </button>

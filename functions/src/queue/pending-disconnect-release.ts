@@ -9,8 +9,26 @@ import {
 } from '../queue-utils';
 import { getServiceWorkoutQueueName } from '../shared/queue-names';
 import { getExpireAtTimestamp, TTL_CONFIG } from '../shared/ttl-config';
+import { getServiceTokenCollectionRef } from '../service-token-store';
 
 type QueueDocData = Record<string, unknown>;
+type ProviderIdentifierField = 'userName' | 'openId' | 'userID';
+
+interface ProviderQueueLookup {
+    fieldName: ProviderIdentifierField;
+    providerUserID: string;
+}
+
+interface ReleaseQuerySpec {
+    query: admin.firestore.Query;
+    matchesService: (data: QueueDocData) => boolean;
+    logContext: Record<string, unknown>;
+}
+
+function asNonEmptyString(value: unknown): string | null {
+    const normalized = typeof value === 'string' ? value.trim() : '';
+    return normalized || null;
+}
 
 function buildDeferredQueueReleaseUpdate(): Record<string, unknown> {
     const deleteField = admin.firestore.FieldValue.delete();
@@ -41,6 +59,19 @@ function getSleepProviderForService(serviceName: ServiceNames): SleepProvider | 
     }
 }
 
+function getProviderIdentifierFieldForService(serviceName: ServiceNames): ProviderIdentifierField | null {
+    switch (serviceName) {
+        case ServiceNames.GarminAPI:
+            return 'userID';
+        case ServiceNames.SuuntoApp:
+            return 'userName';
+        case ServiceNames.COROSAPI:
+            return 'openId';
+        default:
+            return null;
+    }
+}
+
 function isActivitySyncDeferredForService(data: QueueDocData, serviceName: ServiceNames): boolean {
     const deferredServiceName = `${data.deferredServiceName || ''}`.trim();
     if (deferredServiceName) {
@@ -50,10 +81,48 @@ function isActivitySyncDeferredForService(data: QueueDocData, serviceName: Servi
     return data.sourceServiceName === serviceName || data.destinationServiceName === serviceName;
 }
 
+function isMissingOrMatchingLocalUser(data: QueueDocData, fieldName: 'firebaseUserID' | 'userID', userID: string): boolean {
+    const localUserID = asNonEmptyString(data[fieldName]);
+    return !localUserID || localUserID === userID;
+}
+
+async function collectProviderQueueLookupsForUser(
+    userID: string,
+    serviceName: ServiceNames,
+): Promise<ProviderQueueLookup[]> {
+    const fieldName = getProviderIdentifierFieldForService(serviceName);
+    if (!fieldName) {
+        return [];
+    }
+
+    try {
+        const snapshot = await getServiceTokenCollectionRef(userID, serviceName).get();
+        const seenProviderIDs = new Set<string>();
+        const lookups: ProviderQueueLookup[] = [];
+        snapshot.docs.forEach((doc) => {
+            const providerUserID = asNonEmptyString((doc.data() as QueueDocData)[fieldName]);
+            if (!providerUserID || seenProviderIDs.has(providerUserID)) {
+                return;
+            }
+            seenProviderIDs.add(providerUserID);
+            lookups.push({ fieldName, providerUserID });
+        });
+        return lookups;
+    } catch (error) {
+        logger.error('[PendingDisconnectQueueRelease] Failed to read provider identifiers for deferred queue release.', {
+            userID,
+            serviceName,
+            error: error instanceof Error ? error.message : `${error}`,
+        });
+        return [];
+    }
+}
+
 async function releaseDeferredDocsForQuery(
     query: admin.firestore.Query,
     matchesService: (data: QueueDocData) => boolean,
     logContext: Record<string, unknown>,
+    releasedQueueItemPaths: Set<string>,
 ): Promise<number> {
     const snapshot = await query.get();
     if (snapshot.empty) {
@@ -67,8 +136,13 @@ async function releaseDeferredDocsForQuery(
             return false;
         }
 
+        if (releasedQueueItemPaths.has(doc.ref.path)) {
+            return false;
+        }
+
         try {
             await doc.ref.update(updateData);
+            releasedQueueItemPaths.add(doc.ref.path);
             return true;
         } catch (error) {
             logger.error('[PendingDisconnectQueueRelease] Failed to release deferred queue item.', {
@@ -83,31 +157,83 @@ async function releaseDeferredDocsForQuery(
     return results.filter(Boolean).length;
 }
 
+async function releaseDeferredDocsForQueries(
+    specs: ReleaseQuerySpec[],
+    releasedQueueItemPaths: Set<string>,
+): Promise<number> {
+    let releasedCount = 0;
+    for (const spec of specs) {
+        releasedCount += await releaseDeferredDocsForQuery(
+            spec.query,
+            spec.matchesService,
+            spec.logContext,
+            releasedQueueItemPaths,
+        );
+    }
+    return releasedCount;
+}
+
 export async function releaseQueueItemsDeferredForPendingDisconnect(
     userID: string,
     serviceName: ServiceNames,
 ): Promise<number> {
     const db = admin.firestore();
     const sleepProvider = getSleepProviderForService(serviceName);
+    const workoutQueue = db.collection(getServiceWorkoutQueueName(serviceName));
+    const sleepQueue = db.collection(SLEEP_SYNC_QUEUE_COLLECTION_NAME);
+    const providerLookups = await collectProviderQueueLookupsForUser(userID, serviceName);
+    const releasedQueueItemPaths = new Set<string>();
+
+    const workoutQueries: ReleaseQuerySpec[] = [
+        {
+            query: workoutQueue.where('firebaseUserID', '==', userID),
+            matchesService: () => true,
+            logContext: { userID, serviceName, queueType: 'workout', lookupType: 'firebaseUserID' },
+        },
+        ...providerLookups.map((lookup) => ({
+            query: workoutQueue.where(lookup.fieldName, '==', lookup.providerUserID),
+            matchesService: (data: QueueDocData) => isMissingOrMatchingLocalUser(data, 'firebaseUserID', userID),
+            logContext: {
+                userID,
+                serviceName,
+                queueType: 'workout',
+                lookupType: 'providerIdentifier',
+                lookupField: lookup.fieldName,
+            },
+        })),
+    ];
+
+    const sleepQueries: ReleaseQuerySpec[] = sleepProvider ? [
+        {
+            query: sleepQueue.where('userID', '==', userID),
+            matchesService: (data) => data.provider === sleepProvider,
+            logContext: { userID, serviceName, queueType: 'sleep_sync', lookupType: 'userID' },
+        },
+        ...providerLookups.map((lookup) => ({
+            query: sleepQueue.where('providerUserId', '==', lookup.providerUserID),
+            matchesService: (data: QueueDocData) => (
+                data.provider === sleepProvider
+                && isMissingOrMatchingLocalUser(data, 'userID', userID)
+            ),
+            logContext: {
+                userID,
+                serviceName,
+                queueType: 'sleep_sync',
+                lookupType: 'providerIdentifier',
+                lookupField: lookup.fieldName,
+            },
+        })),
+    ] : [];
 
     const [workoutCount, activitySyncCount, sleepSyncCount] = await Promise.all([
-        releaseDeferredDocsForQuery(
-            db.collection(getServiceWorkoutQueueName(serviceName)).where('firebaseUserID', '==', userID),
-            () => true,
-            { userID, serviceName, queueType: 'workout' },
-        ),
+        releaseDeferredDocsForQueries(workoutQueries, releasedQueueItemPaths),
         releaseDeferredDocsForQuery(
             db.collection(ACTIVITY_SYNC_QUEUE_COLLECTION_NAME).where('userID', '==', userID),
             (data) => isActivitySyncDeferredForService(data, serviceName),
             { userID, serviceName, queueType: 'activity_sync' },
+            releasedQueueItemPaths,
         ),
-        sleepProvider
-            ? releaseDeferredDocsForQuery(
-                db.collection(SLEEP_SYNC_QUEUE_COLLECTION_NAME).where('userID', '==', userID),
-                (data) => data.provider === sleepProvider,
-                { userID, serviceName, queueType: 'sleep_sync' },
-            )
-            : Promise.resolve(0),
+        releaseDeferredDocsForQueries(sleepQueries, releasedQueueItemPaths),
     ]);
 
     const releasedCount = workoutCount + activitySyncCount + sleepSyncCount;

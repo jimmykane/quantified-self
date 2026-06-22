@@ -19,18 +19,22 @@
     [locked]="!hasProAccess && !isConnectedToService()"
     [proRequired]="!hasProAccess && !isConnectedToService()"
     [showDetails]="isConnectedToService() || isDisconnectPending"
-    [statusLabelOverride]="isDisconnectPending ? 'Disconnect pending' : null"
+    [statusLabelOverride]="isDisconnectManualReviewRequired ? 'Reconnect needed' : isDisconnectPending ? 'Disconnect pending' : null"
     [statusIconOverride]="isDisconnectPending ? 'sync_problem' : null"
     [statusTone]="isDisconnectPending ? 'attention' : 'default'"
     (click)="!hasProAccess && !isConnectedToService() && triggerUpsell()">
     <div connection-body class="connection-details">
     @if (isDisconnectPending) {
-    <div class="reconnect-required-banner" role="status">
+    <div class="reconnect-required-banner" [attr.role]="isDisconnectManualReviewRequired ? 'alert' : 'status'">
       <mat-icon>sync_problem</mat-icon>
       <div class="reconnect-required-banner__copy">
-        <div class="reconnect-required-banner__title">Disconnect pending</div>
+        <div class="reconnect-required-banner__title">{{ isDisconnectManualReviewRequired ? 'Reconnect COROS' : 'Disconnect pending' }}</div>
         <div class="reconnect-required-banner__message">
+          @if (isDisconnectManualReviewRequired) {
+          COROS disconnect retries have stopped. Reconnect COROS to refresh this connection, or contact support if it still appears connected in COROS.
+          } @else {
           We are retrying the COROS disconnect in the background. Sync and imports are paused for this connection.
+          }
         </div>
       </div>
     </div>
@@ -79,7 +83,7 @@
         <span>{{ activeSyncRouteWarningLabel }}</span>
       </div>
       }
-      @if (!isConnectedToService() && !isDisconnectPending) {
+      @if (shouldShowConnectAction) {
       <button mat-flat-button class="qs-mat-primary"
         [disabled]="!user || isLoading || isConnecting || !hasProAccess" (click)="connectWithService($event)">
         @if (isConnecting) {
@@ -89,7 +93,7 @@
         </ng-container>
         } @else {
         <ng-container>
-          <mat-icon>link</mat-icon> Connect
+          <mat-icon>{{ isDisconnectManualReviewRequired ? 'sync' : 'link' }}</mat-icon> {{ connectButtonLabel }}
         </ng-container>
         }
       </button>

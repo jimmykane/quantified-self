@@ -90,6 +90,15 @@ export class ServicesSuuntoComponent extends ServicesAbstractComponentDirective 
     return this.connectionView.disconnectPending;
   }
 
+  get isDisconnectManualReviewRequired(): boolean {
+    return this.connectionView.disconnectManualReviewRequired;
+  }
+
+  get shouldShowConnectAction(): boolean {
+    return (!this.isServiceConnected || this.isReconnectRequired || this.isDisconnectManualReviewRequired || this.clicks > 10)
+      && (!this.isDisconnectPending || this.isDisconnectManualReviewRequired);
+  }
+
   get connectionDescription(): string {
     return this.connectionView.description;
   }

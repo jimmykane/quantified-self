@@ -85,8 +85,23 @@ export class ServicesCorosComponent extends ServicesAbstractComponentDirective {
     return isDisconnectPendingServiceConnection(this.serviceMeta);
   }
 
+  get isDisconnectManualReviewRequired(): boolean {
+    return this.isDisconnectPending && this.serviceMeta?.disconnectManualReviewRequired === true;
+  }
+
+  get shouldShowConnectAction(): boolean {
+    return !this.isConnectedToService()
+      && (!this.isDisconnectPending || this.isDisconnectManualReviewRequired);
+  }
+
+  get connectButtonLabel(): string {
+    return this.isDisconnectManualReviewRequired ? 'Reconnect' : 'Connect';
+  }
+
   get connectionDescription(): string {
-    return this.isDisconnectPending
+    return this.isDisconnectManualReviewRequired
+      ? 'COROS disconnect retries have stopped. Reconnect COROS to refresh this connection, or contact support if the old connection still appears in COROS.'
+      : this.isDisconnectPending
       ? 'Disconnect is pending while COROS finishes deauthorization. Sync and imports are paused for this connection.'
       : 'Required for history imports, uploads, and COROS to Suunto auto-sync.';
   }

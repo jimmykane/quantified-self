@@ -222,6 +222,31 @@ describe('ServicesSuuntoComponent', () => {
         expect(fixture.nativeElement.querySelector('.connection-disconnect-button')).toBeFalsy();
     });
 
+    it('shows reconnect action instead of retry copy when pending disconnect needs manual review', () => {
+        component.hasProAccess = true;
+        component.user = { uid: 'user-1' } as any;
+        component.serviceTokens = [{
+            accessToken: 'token',
+            userName: 'suunto-user',
+            dateCreated: new Date('2026-05-03T10:00:00Z'),
+        } as any];
+        component.serviceMeta = {
+            connectionState: 'disconnect_pending',
+            disconnectManualReviewRequired: true,
+        } as any;
+        fixture.detectChanges();
+
+        const content = fixture.nativeElement.textContent;
+        const connectButton = fixture.nativeElement.querySelector('.qs-mat-primary');
+
+        expect(component.isDisconnectManualReviewRequired).toBe(true);
+        expect(component.shouldShowConnectAction).toBe(true);
+        expect(content).toContain('Reconnect Suunto');
+        expect(content).toContain('Suunto disconnect retries have stopped');
+        expect(content).not.toContain('retrying the partner disconnect');
+        expect(connectButton?.textContent).toContain('Reconnect');
+    });
+
     describe('History Import Tab', () => {
         it('should be unlocked/available if user has pro access AND is connected', () => {
             component.hasProAccess = true;

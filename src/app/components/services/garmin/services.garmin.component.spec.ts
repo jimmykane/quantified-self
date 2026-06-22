@@ -306,6 +306,31 @@ describe('ServicesGarminComponent', () => {
             expect(component.connectionDescription).toContain('Disconnect is pending');
         });
 
+        it('shows reconnect action instead of retry copy when pending disconnect needs manual review', () => {
+            component.hasProAccess = true;
+            component.user = { uid: 'user-1' } as any;
+            component.serviceMeta = {
+                connectionState: 'disconnect_pending',
+                disconnectManualReviewRequired: true,
+            } as any;
+            component.serviceTokens = [{
+                accessToken: 'garmin-token',
+                userID: 'garmin-user',
+                permissions: ['HISTORICAL_DATA_EXPORT', 'ACTIVITY_EXPORT', 'HEALTH_EXPORT'],
+            }] as any;
+            fixture.detectChanges();
+
+            const content = fixture.nativeElement.textContent;
+            const connectButton = fixture.nativeElement.querySelector('.qs-mat-primary');
+
+            expect(component.isDisconnectManualReviewRequired).toBe(true);
+            expect(component.shouldShowConnectAction).toBe(true);
+            expect(content).toContain('Reconnect Garmin');
+            expect(content).toContain('Garmin disconnect retries have stopped');
+            expect(content).not.toContain('retrying the Garmin disconnect');
+            expect(connectButton?.textContent).toContain('Reconnect');
+        });
+
         it('keeps history import loading while Garmin token permissions are not loaded', () => {
             component.isLoading = false;
             component.serviceTokens = [{

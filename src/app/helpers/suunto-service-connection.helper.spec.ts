@@ -62,4 +62,23 @@ describe('suunto-service-connection.helper', () => {
       statusTone: 'attention',
     });
   });
+
+  it('builds manual-review disconnect state with reconnect copy', () => {
+    const result = buildSuuntoServiceConnectionViewModel({
+      hasToken: true,
+      serviceMeta: {
+        connectionState: 'disconnect_pending',
+        disconnectManualReviewRequired: true,
+      } as any,
+    });
+
+    expect(result).toMatchObject({
+      connected: false,
+      disconnectPending: true,
+      disconnectManualReviewRequired: true,
+      description: 'Suunto disconnect retries have stopped. Reconnect Suunto to refresh this connection, or contact support if the old connection still appears in Suunto.',
+      statusLabelOverride: 'Reconnect needed',
+      connectButtonLabel: 'Reconnect',
+    });
+  });
 });

@@ -170,6 +170,30 @@ describe('ServicesCorosComponent', () => {
         expect(component.connectionDescription).toContain('Disconnect is pending');
     });
 
+    it('shows reconnect action instead of retry copy when pending disconnect needs manual review', () => {
+        component.hasProAccess = true;
+        component.user = { uid: 'user-1' } as any;
+        component.serviceMeta = {
+            connectionState: 'disconnect_pending',
+            disconnectManualReviewRequired: true,
+        } as any;
+        component.serviceTokens = [{
+            accessToken: 'token',
+            openId: 'coros-user',
+        } as any];
+        fixture.detectChanges();
+
+        const content = fixture.nativeElement.textContent;
+        const connectButton = fixture.nativeElement.querySelector('.qs-mat-primary');
+
+        expect(component.isDisconnectManualReviewRequired).toBe(true);
+        expect(component.shouldShowConnectAction).toBe(true);
+        expect(content).toContain('Reconnect COROS');
+        expect(content).toContain('COROS disconnect retries have stopped');
+        expect(content).not.toContain('retrying the COROS disconnect');
+        expect(connectButton?.textContent).toContain('Reconnect');
+    });
+
     it('should show syncing state when forceConnected is true but tokens are not yet loaded', () => {
         component.forceConnected = true;
         component.serviceTokens = undefined;
