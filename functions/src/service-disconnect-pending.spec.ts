@@ -10,6 +10,7 @@ const hoisted = vi.hoisted(() => ({
   clearServiceConnectionState: vi.fn(),
   mirrorServiceDisconnectPendingToUserMeta: vi.fn(),
   getUserDeletionGuardStateInTransaction: vi.fn(),
+  releaseQueueItemsDeferredForPendingDisconnect: vi.fn(),
   loggerError: vi.fn(),
   loggerWarn: vi.fn(),
 }));
@@ -53,6 +54,10 @@ vi.mock('./shared/user-deletion-guard', () => ({
   },
 }));
 
+vi.mock('./queue/pending-disconnect-release', () => ({
+  releaseQueueItemsDeferredForPendingDisconnect: hoisted.releaseQueueItemsDeferredForPendingDisconnect,
+}));
+
 import {
   clearServiceDisconnectPending,
   markServiceDisconnectPending,
@@ -75,6 +80,7 @@ describe('service-disconnect-pending', () => {
       set: hoisted.transactionSet,
     }));
     hoisted.clearServiceConnectionState.mockResolvedValue(undefined);
+    hoisted.releaseQueueItemsDeferredForPendingDisconnect.mockResolvedValue(0);
   });
 
   it('redacts token material from persisted disconnect error messages', () => {
@@ -113,6 +119,7 @@ describe('service-disconnect-pending', () => {
     expect(hoisted.clearServiceConnectionState).toHaveBeenCalledWith('user-1', ServiceNames.SuuntoApp, {
       restorePendingDisconnectActivitySyncRoutes: true,
     });
+    expect(hoisted.releaseQueueItemsDeferredForPendingDisconnect).toHaveBeenCalledWith('user-1', ServiceNames.SuuntoApp);
   });
 
   it('clears stale user meta when the pending token root is already missing', async () => {
@@ -124,6 +131,7 @@ describe('service-disconnect-pending', () => {
     expect(hoisted.clearServiceConnectionState).toHaveBeenCalledWith('user-1', ServiceNames.SuuntoApp, {
       restorePendingDisconnectActivitySyncRoutes: true,
     });
+    expect(hoisted.releaseQueueItemsDeferredForPendingDisconnect).not.toHaveBeenCalled();
   });
 
   it('does not clear root or meta state when the user is missing or deletion is in progress', async () => {
@@ -138,6 +146,7 @@ describe('service-disconnect-pending', () => {
     expect(hoisted.transactionGet).not.toHaveBeenCalled();
     expect(hoisted.transactionSet).not.toHaveBeenCalled();
     expect(hoisted.clearServiceConnectionState).not.toHaveBeenCalled();
+    expect(hoisted.releaseQueueItemsDeferredForPendingDisconnect).not.toHaveBeenCalled();
   });
 
   it('marks pending disconnect when the user is active', async () => {

@@ -11,6 +11,7 @@ import {
   getUserDeletionGuardStateInTransaction,
   UserDeletionGuardReadError,
 } from './shared/user-deletion-guard';
+import { releaseQueueItemsDeferredForPendingDisconnect } from './queue/pending-disconnect-release';
 
 export const SERVICE_DISCONNECT_PENDING_REASON = {
   SubscriptionEnforcement: 'subscription_enforcement',
@@ -314,4 +315,8 @@ export async function clearServiceDisconnectPending(
   await clearServiceConnectionState(userID, serviceName, {
     restorePendingDisconnectActivitySyncRoutes: true,
   });
+
+  if (clearResult === 'cleared') {
+    await releaseQueueItemsDeferredForPendingDisconnect(userID, serviceName);
+  }
 }

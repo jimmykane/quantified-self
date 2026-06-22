@@ -1340,15 +1340,13 @@ describe('sleep queue', () => {
         expect(result).toBe(QueueResult.Deferred);
         expect(hoisted.markSleepSyncError).not.toHaveBeenCalled();
         expect(update).toHaveBeenCalledWith(expect.objectContaining({
-            processed: false,
+            processed: true,
             resultStatus: 'deferred',
             deferredReason: 'service_disconnect_pending',
-            dispatchedToCloudTask: null,
+            dispatchedToCloudTask: expect.any(Number),
+            serviceDisconnectPendingDeferredAt: expect.any(Number),
             sessionsWritten: 0,
             sessionsSkipped: 0,
-        }));
-        expect(update).not.toHaveBeenCalledWith(expect.objectContaining({
-            processed: true,
         }));
         expect(update).not.toHaveBeenCalledWith(expect.objectContaining({
             retryCount: expect.any(Number),

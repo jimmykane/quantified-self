@@ -2023,13 +2023,11 @@ describe('queue', () => {
             expect(mockBatch.set).not.toHaveBeenCalled();
             expect(mockBatch.delete).not.toHaveBeenCalledWith(mockRef);
             expect(mockRef.update).toHaveBeenCalledWith(expect.objectContaining({
-                processed: false,
+                processed: true,
                 resultStatus: 'deferred',
                 deferredReason: 'service_disconnect_pending',
-                dispatchedToCloudTask: null,
-            }));
-            expect(mockRef.update).not.toHaveBeenCalledWith(expect.objectContaining({
-                processed: true,
+                dispatchedToCloudTask: expect.any(Number),
+                serviceDisconnectPendingDeferredAt: expect.any(Number),
             }));
             expect(mockRef.update).not.toHaveBeenCalledWith(expect.objectContaining({
                 retryCount: expect.any(Number),

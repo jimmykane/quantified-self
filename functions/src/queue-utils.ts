@@ -27,6 +27,14 @@ export const QUEUE_DEFERRED_REASONS = {
 export type QueueSkippedReason = typeof QUEUE_SKIPPED_REASONS[keyof typeof QUEUE_SKIPPED_REASONS] | string;
 export type QueueDeferredReason = typeof QUEUE_DEFERRED_REASONS[keyof typeof QUEUE_DEFERRED_REASONS] | string;
 
+export const PENDING_DISCONNECT_QUEUE_DISPATCH_MARKER = Number.MAX_SAFE_INTEGER;
+
+export function isPendingDisconnectQueueItemDeferred(queueItem: {
+    deferredReason?: unknown;
+} | null | undefined): boolean {
+    return queueItem?.deferredReason === QUEUE_DEFERRED_REASONS.ServiceDisconnectPending;
+}
+
 export async function moveToDeadLetterQueue(queueItem: QueueItemInterface, error: Error, bulkWriter?: admin.firestore.BulkWriter, context?: string): Promise<QueueResult.MovedToDLQ | QueueResult.Failed> {
 
     if (!queueItem.ref) {
@@ -157,14 +165,16 @@ export async function deferQueueItemForPendingDisconnect(
     }
 
     try {
+        const nowMs = Date.now();
         const updateData = {
             ...additionalData,
-            processed: false,
+            processed: true,
             resultStatus: 'deferred',
             deferredReason: QUEUE_DEFERRED_REASONS.ServiceDisconnectPending,
             deferredContext: 'SERVICE_DISCONNECT_PENDING',
-            serviceDisconnectPendingDeferredAt: Date.now(),
-            dispatchedToCloudTask: null,
+            serviceDisconnectPendingDeferredAt: nowMs,
+            dispatchedToCloudTask: PENDING_DISCONNECT_QUEUE_DISPATCH_MARKER,
+            expireAt: getExpireAtTimestamp(TTL_CONFIG.PENDING_DISCONNECT_QUEUE_ITEM_IN_DAYS),
         };
 
         if (bulkWriter) {
