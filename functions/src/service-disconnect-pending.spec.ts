@@ -1,9 +1,25 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { ServiceNames } from '@sports-alliance/sports-lib';
+
+const hoisted = vi.hoisted(() => ({
+  runTransaction: vi.fn(),
+  transactionGet: vi.fn(),
+  transactionSet: vi.fn(),
+  rootRef: { path: 'suuntoAppAccessTokens/user-1' },
+  getServiceTokenRootDocumentRef: vi.fn(),
+  clearServiceConnectionState: vi.fn(),
+  mirrorServiceDisconnectPendingToUserMeta: vi.fn(),
+  getUserDeletionGuardStateInTransaction: vi.fn(),
+  loggerError: vi.fn(),
+  loggerWarn: vi.fn(),
+}));
 
 vi.mock('firebase-admin', () => {
-  const firestore = Object.assign(vi.fn(), {
+  const firestore = Object.assign(() => ({
+    runTransaction: hoisted.runTransaction,
+  }), {
     FieldValue: {
-      delete: vi.fn(),
+      delete: vi.fn(() => 'DELETE_SENTINEL'),
     },
     Timestamp: {
       fromMillis: vi.fn((value: number) => ({ toMillis: () => value })),
@@ -17,21 +33,48 @@ vi.mock('firebase-admin', () => {
 });
 
 vi.mock('firebase-functions/logger', () => ({
-  error: vi.fn(),
+  error: hoisted.loggerError,
+  warn: hoisted.loggerWarn,
 }));
 
 vi.mock('./service-token-store', () => ({
-  getServiceTokenRootDocumentRef: vi.fn(),
+  getServiceTokenRootDocumentRef: hoisted.getServiceTokenRootDocumentRef,
 }));
 
 vi.mock('./service-connection-meta', () => ({
-  clearServiceConnectionState: vi.fn(),
-  mirrorServiceDisconnectPendingToUserMeta: vi.fn(),
+  clearServiceConnectionState: hoisted.clearServiceConnectionState,
+  mirrorServiceDisconnectPendingToUserMeta: hoisted.mirrorServiceDisconnectPendingToUserMeta,
 }));
 
-import { sanitizePendingServiceDisconnectErrorMessage } from './service-disconnect-pending';
+vi.mock('./shared/user-deletion-guard', () => ({
+  getUserDeletionGuardStateInTransaction: hoisted.getUserDeletionGuardStateInTransaction,
+  UserDeletionGuardReadError: class UserDeletionGuardReadError extends Error {
+    public readonly name = 'UserDeletionGuardReadError';
+  },
+}));
+
+import {
+  clearServiceDisconnectPending,
+  sanitizePendingServiceDisconnectErrorMessage,
+} from './service-disconnect-pending';
 
 describe('service-disconnect-pending', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    hoisted.getServiceTokenRootDocumentRef.mockReturnValue(hoisted.rootRef);
+    hoisted.getUserDeletionGuardStateInTransaction.mockResolvedValue({
+      userExists: true,
+      deletionInProgress: false,
+      shouldSkip: false,
+    });
+    hoisted.transactionGet.mockResolvedValue({ exists: true });
+    hoisted.runTransaction.mockImplementation(async (callback: (transaction: unknown) => Promise<unknown>) => callback({
+      get: hoisted.transactionGet,
+      set: hoisted.transactionSet,
+    }));
+    hoisted.clearServiceConnectionState.mockResolvedValue(undefined);
+  });
+
   it('redacts token material from persisted disconnect error messages', () => {
     const message = [
       'request failed',
@@ -51,5 +94,43 @@ describe('service-disconnect-pending', () => {
     expect(sanitized).not.toContain('access-token-query');
     expect(sanitized).not.toContain('refresh-token-json');
     expect(sanitized).not.toContain('client-secret-query');
+  });
+
+  it('clears pending fields from the token root and user meta when the user is active', async () => {
+    await clearServiceDisconnectPending('user-1', ServiceNames.SuuntoApp);
+
+    expect(hoisted.transactionSet).toHaveBeenCalledWith(
+      hoisted.rootRef,
+      expect.objectContaining({
+        disconnectState: 'DELETE_SENTINEL',
+        disconnectReason: 'DELETE_SENTINEL',
+        disconnectManualReviewRequired: 'DELETE_SENTINEL',
+      }),
+      { merge: true },
+    );
+    expect(hoisted.clearServiceConnectionState).toHaveBeenCalledWith('user-1', ServiceNames.SuuntoApp);
+  });
+
+  it('clears stale user meta when the pending token root is already missing', async () => {
+    hoisted.transactionGet.mockResolvedValueOnce({ exists: false });
+
+    await clearServiceDisconnectPending('user-1', ServiceNames.SuuntoApp);
+
+    expect(hoisted.transactionSet).not.toHaveBeenCalled();
+    expect(hoisted.clearServiceConnectionState).toHaveBeenCalledWith('user-1', ServiceNames.SuuntoApp);
+  });
+
+  it('does not clear root or meta state when the user is missing or deletion is in progress', async () => {
+    hoisted.getUserDeletionGuardStateInTransaction.mockResolvedValueOnce({
+      userExists: true,
+      deletionInProgress: true,
+      shouldSkip: true,
+    });
+
+    await clearServiceDisconnectPending('user-1', ServiceNames.SuuntoApp);
+
+    expect(hoisted.transactionGet).not.toHaveBeenCalled();
+    expect(hoisted.transactionSet).not.toHaveBeenCalled();
+    expect(hoisted.clearServiceConnectionState).not.toHaveBeenCalled();
   });
 });

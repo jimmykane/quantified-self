@@ -7,6 +7,10 @@ import {
   clearServiceConnectionState,
   mirrorServiceDisconnectPendingToUserMeta,
 } from './service-connection-meta';
+import {
+  getUserDeletionGuardStateInTransaction,
+  UserDeletionGuardReadError,
+} from './shared/user-deletion-guard';
 
 export const SERVICE_DISCONNECT_PENDING_REASON = {
   SubscriptionEnforcement: 'subscription_enforcement',
@@ -238,10 +242,39 @@ export async function clearServiceDisconnectPending(
   userID: string,
   serviceName: ServiceNames,
 ): Promise<void> {
+  const db = admin.firestore();
   const rootRef = getServiceTokenRootDocumentRef(userID, serviceName);
-  const snapshot = await rootRef.get();
-  if (snapshot.exists) {
-    await rootRef.set(buildPendingDisconnectFieldDeletes(), { merge: true });
+
+  const clearResult = await db.runTransaction(async (transaction) => {
+    let deletionGuard;
+    try {
+      deletionGuard = await getUserDeletionGuardStateInTransaction(db, transaction, userID);
+    } catch (error) {
+      throw new UserDeletionGuardReadError(userID, `service_disconnect_pending_clear:${serviceName}`, error);
+    }
+
+    if (deletionGuard.shouldSkip) {
+      logger.warn('[ServiceDisconnectPending] Skipping pending disconnect clear because the user is missing or deletion is in progress.', {
+        userID,
+        serviceName,
+        userExists: deletionGuard.userExists,
+        deletionInProgress: deletionGuard.deletionInProgress,
+      });
+      return 'skipped' as const;
+    }
+
+    const snapshot = await transaction.get(rootRef);
+    if (!snapshot.exists) {
+      return 'root_missing' as const;
+    }
+
+    transaction.set(rootRef, buildPendingDisconnectFieldDeletes(), { merge: true });
+    return 'cleared' as const;
+  });
+
+  if (clearResult === 'skipped') {
+    return;
   }
+
   await clearServiceConnectionState(userID, serviceName);
 }
