@@ -221,6 +221,49 @@ describe('processRouteSyncQueueItem', () => {
     expect(queueUtilsMocks.increaseRetryCountForQueueItem).not.toHaveBeenCalled();
   });
 
+  it('retries Suunto route export JSON 5xx payloads instead of treating them as GPX parse failures', async () => {
+    suuntoRouteMocks.exportSuuntoRouteAsGPX.mockResolvedValueOnce(JSON.stringify({
+      code: 500,
+      data: null,
+      message: 'connection timed out after 6000 ms: /10.224.2.183:60820',
+    }));
+
+    const result = await processRouteSyncQueueItem(createQueueItem());
+
+    expect(result).toBe(QueueResult.RetryIncremented);
+    expect(routeProcessingMocks.parseRoutePayload).not.toHaveBeenCalled();
+    expect(queueUtilsMocks.increaseRetryCountForQueueItem).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'queue-1' }),
+      expect.objectContaining({
+        message: 'Suunto route export returned provider error 500: connection timed out after 6000 ms: /10.224.2.183:60820',
+        statusCode: 500,
+      }),
+      1,
+    );
+    expect(queueUtilsMocks.moveToDeadLetterQueue).not.toHaveBeenCalled();
+  });
+
+  it('marks Suunto route export JSON auth payloads as provider auth required', async () => {
+    suuntoRouteMocks.exportSuuntoRouteAsGPX.mockResolvedValueOnce(JSON.stringify({
+      code: 401,
+      message: 'token expired',
+    }));
+
+    const result = await processRouteSyncQueueItem(createQueueItem());
+
+    expect(result).toBe(QueueResult.Processed);
+    expect(routeProcessingMocks.parseRoutePayload).not.toHaveBeenCalled();
+    expect(queueUtilsMocks.markQueueItemSkipped).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'queue-1' }),
+      undefined,
+      'provider_auth_required',
+      expect.objectContaining({
+        resultStatus: 'skipped',
+      }),
+    );
+    expect(queueUtilsMocks.moveToDeadLetterQueue).not.toHaveBeenCalled();
+  });
+
   it('skips webhook route sync items when synced route writes require Pro access', async () => {
     const { SyncedRouteProAccessRequiredError } = await import('./upsert-synced-route');
     upsertSyncedRouteMocks.upsertSyncedRoute.mockRejectedValueOnce(
