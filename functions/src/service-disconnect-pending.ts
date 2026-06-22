@@ -100,6 +100,34 @@ function normalizeErrorMessage(value: string | null | undefined): string | null 
   return sanitizePendingServiceDisconnectErrorMessage(trimmed).slice(0, 500);
 }
 
+async function shouldSkipPendingDisconnectWrite(
+  db: admin.firestore.Firestore,
+  transaction: admin.firestore.Transaction,
+  userID: string,
+  serviceName: ServiceNames,
+  operation: string,
+): Promise<boolean> {
+  let deletionGuard;
+  try {
+    deletionGuard = await getUserDeletionGuardStateInTransaction(db, transaction, userID);
+  } catch (error) {
+    throw new UserDeletionGuardReadError(userID, `service_disconnect_pending_${operation}:${serviceName}`, error);
+  }
+
+  if (!deletionGuard.shouldSkip) {
+    return false;
+  }
+
+  logger.warn('[ServiceDisconnectPending] Skipping pending disconnect write because the user is missing or deletion is in progress.', {
+    userID,
+    serviceName,
+    operation,
+    userExists: deletionGuard.userExists,
+    deletionInProgress: deletionGuard.deletionInProgress,
+  });
+  return true;
+}
+
 export function sanitizePendingServiceDisconnectErrorMessage(value: string): string {
   return value
     .replace(/\bBearer\s+[A-Za-z0-9._~+/=-]+/gi, 'Bearer [redacted]')
@@ -128,13 +156,18 @@ export async function markServiceDisconnectPending(
   failure: PendingServiceDisconnectFailure,
   reason: ServiceDisconnectPendingReason = SERVICE_DISCONNECT_PENDING_REASON.SubscriptionEnforcement,
   nowMs = Date.now(),
-): Promise<void> {
+): Promise<boolean> {
+  const db = admin.firestore();
   const rootRef = getServiceTokenRootDocumentRef(userID, serviceName);
   const nowTimestamp = admin.firestore.Timestamp.fromMillis(nowMs);
   const initialNextAttemptAt = buildPendingServiceDisconnectNextAttemptAt(0, nowMs);
   const initialRetryExpiresAt = buildRetryWindowExpiresAt(nowMs);
 
-  const rootData = await admin.firestore().runTransaction(async (transaction) => {
+  const rootData = await db.runTransaction(async (transaction) => {
+    if (await shouldSkipPendingDisconnectWrite(db, transaction, userID, serviceName, 'mark')) {
+      return null;
+    }
+
     const snapshot = await transaction.get(rootRef);
     const existing = snapshot.exists ? snapshot.data() as PendingServiceDisconnectRootData : {};
     const alreadyPending = isServiceDisconnectPendingData(existing);
@@ -164,6 +197,10 @@ export async function markServiceDisconnectPending(
     return nextData;
   });
 
+  if (!rootData) {
+    return false;
+  }
+
   await mirrorServiceDisconnectPendingToUserMeta(userID, serviceName, {
     reason: rootData.disconnectReason || reason,
     attemptCount: rootData.disconnectAttemptCount || 0,
@@ -174,6 +211,7 @@ export async function markServiceDisconnectPending(
     lastErrorMessage: rootData.disconnectLastErrorMessage || null,
     manualReviewRequired: rootData.disconnectManualReviewRequired === true,
   });
+  return true;
 }
 
 export async function recordServiceDisconnectRetryFailure(
@@ -181,11 +219,16 @@ export async function recordServiceDisconnectRetryFailure(
   serviceName: ServiceNames,
   failure: PendingServiceDisconnectFailure,
   nowMs = Date.now(),
-): Promise<void> {
+): Promise<boolean> {
+  const db = admin.firestore();
   const rootRef = getServiceTokenRootDocumentRef(userID, serviceName);
   const nowTimestamp = admin.firestore.Timestamp.fromMillis(nowMs);
 
-  const rootData = await admin.firestore().runTransaction(async (transaction) => {
+  const rootData = await db.runTransaction(async (transaction) => {
+    if (await shouldSkipPendingDisconnectWrite(db, transaction, userID, serviceName, 'retry_failure')) {
+      return null;
+    }
+
     const snapshot = await transaction.get(rootRef);
     const existing = snapshot.exists ? snapshot.data() as PendingServiceDisconnectRootData : {};
     const previousAttemptCount = typeof existing.disconnectAttemptCount === 'number'
@@ -215,6 +258,10 @@ export async function recordServiceDisconnectRetryFailure(
     return nextData;
   });
 
+  if (!rootData) {
+    return false;
+  }
+
   await mirrorServiceDisconnectPendingToUserMeta(userID, serviceName, {
     reason: rootData.disconnectReason || SERVICE_DISCONNECT_PENDING_REASON.SubscriptionEnforcement,
     attemptCount: rootData.disconnectAttemptCount || 0,
@@ -236,6 +283,7 @@ export async function recordServiceDisconnectRetryFailure(
       retryExpiresAt: rootData.disconnectRetryExpiresAt?.toDate().toISOString(),
     });
   }
+  return true;
 }
 
 export async function clearServiceDisconnectPending(
@@ -246,20 +294,7 @@ export async function clearServiceDisconnectPending(
   const rootRef = getServiceTokenRootDocumentRef(userID, serviceName);
 
   const clearResult = await db.runTransaction(async (transaction) => {
-    let deletionGuard;
-    try {
-      deletionGuard = await getUserDeletionGuardStateInTransaction(db, transaction, userID);
-    } catch (error) {
-      throw new UserDeletionGuardReadError(userID, `service_disconnect_pending_clear:${serviceName}`, error);
-    }
-
-    if (deletionGuard.shouldSkip) {
-      logger.warn('[ServiceDisconnectPending] Skipping pending disconnect clear because the user is missing or deletion is in progress.', {
-        userID,
-        serviceName,
-        userExists: deletionGuard.userExists,
-        deletionInProgress: deletionGuard.deletionInProgress,
-      });
+    if (await shouldSkipPendingDisconnectWrite(db, transaction, userID, serviceName, 'clear')) {
       return 'skipped' as const;
     }
 

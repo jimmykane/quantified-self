@@ -189,7 +189,11 @@ async function deauthorizeConnectedServicesBestEffort(uid: string): Promise<void
             const outcome = await deauthorizeServiceForSubscriptionEnforcement(uid, serviceName);
             const retryableFailure = outcome.retryableDisconnectFailures?.[0];
             if (retryableFailure) {
-                await markServiceDisconnectPending(uid, serviceName, retryableFailure);
+                const didMarkPending = await markServiceDisconnectPending(uid, serviceName, retryableFailure);
+                if (!didMarkPending) {
+                    logger.warn(`[enforceSubscriptionLimits] Skipped pending ${serviceName} disconnect mark for ${uid} because the user is missing or deletion is in progress.`);
+                    continue;
+                }
                 logger.warn(`[enforceSubscriptionLimits] ${serviceName} disconnect pending for ${uid} after retryable partner failure.`, {
                     serviceName,
                     uid,

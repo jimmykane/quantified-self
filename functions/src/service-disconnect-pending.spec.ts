@@ -55,6 +55,8 @@ vi.mock('./shared/user-deletion-guard', () => ({
 
 import {
   clearServiceDisconnectPending,
+  markServiceDisconnectPending,
+  recordServiceDisconnectRetryFailure,
   sanitizePendingServiceDisconnectErrorMessage,
 } from './service-disconnect-pending';
 
@@ -67,7 +69,7 @@ describe('service-disconnect-pending', () => {
       deletionInProgress: false,
       shouldSkip: false,
     });
-    hoisted.transactionGet.mockResolvedValue({ exists: true });
+    hoisted.transactionGet.mockResolvedValue({ exists: true, data: () => ({}) });
     hoisted.runTransaction.mockImplementation(async (callback: (transaction: unknown) => Promise<unknown>) => callback({
       get: hoisted.transactionGet,
       set: hoisted.transactionSet,
@@ -132,5 +134,99 @@ describe('service-disconnect-pending', () => {
     expect(hoisted.transactionGet).not.toHaveBeenCalled();
     expect(hoisted.transactionSet).not.toHaveBeenCalled();
     expect(hoisted.clearServiceConnectionState).not.toHaveBeenCalled();
+  });
+
+  it('marks pending disconnect when the user is active', async () => {
+    const didMark = await markServiceDisconnectPending(
+      'user-1',
+      ServiceNames.SuuntoApp,
+      { tokenID: 'token-1', statusCode: 504, errorMessage: 'gateway timeout' },
+    );
+
+    expect(didMark).toBe(true);
+    expect(hoisted.transactionSet).toHaveBeenCalledWith(
+      hoisted.rootRef,
+      expect.objectContaining({
+        disconnectState: 'disconnect_pending',
+        disconnectLastStatusCode: 504,
+        disconnectManualReviewRequired: false,
+      }),
+      { merge: true },
+    );
+    expect(hoisted.mirrorServiceDisconnectPendingToUserMeta).toHaveBeenCalledWith(
+      'user-1',
+      ServiceNames.SuuntoApp,
+      expect.objectContaining({
+        lastStatusCode: 504,
+        manualReviewRequired: false,
+      }),
+    );
+  });
+
+  it('does not mark pending disconnect when the user is missing or deletion is in progress', async () => {
+    hoisted.getUserDeletionGuardStateInTransaction.mockResolvedValueOnce({
+      userExists: false,
+      deletionInProgress: false,
+      shouldSkip: true,
+    });
+
+    const didMark = await markServiceDisconnectPending(
+      'user-1',
+      ServiceNames.SuuntoApp,
+      { tokenID: 'token-1', statusCode: 504, errorMessage: 'gateway timeout' },
+    );
+
+    expect(didMark).toBe(false);
+    expect(hoisted.transactionGet).not.toHaveBeenCalled();
+    expect(hoisted.transactionSet).not.toHaveBeenCalled();
+    expect(hoisted.mirrorServiceDisconnectPendingToUserMeta).not.toHaveBeenCalled();
+  });
+
+  it('records retry failures when the user is active', async () => {
+    const didRecord = await recordServiceDisconnectRetryFailure(
+      'user-1',
+      ServiceNames.SuuntoApp,
+      { tokenID: 'token-1', statusCode: 504, errorMessage: 'gateway timeout' },
+    );
+
+    expect(didRecord).toBe(true);
+    expect(hoisted.transactionSet).toHaveBeenCalledWith(
+      hoisted.rootRef,
+      expect.objectContaining({
+        disconnectState: 'disconnect_pending',
+        disconnectAttemptCount: 1,
+        disconnectLastStatusCode: 504,
+        disconnectManualReviewRequired: false,
+      }),
+      { merge: true },
+    );
+    expect(hoisted.mirrorServiceDisconnectPendingToUserMeta).toHaveBeenCalledWith(
+      'user-1',
+      ServiceNames.SuuntoApp,
+      expect.objectContaining({
+        attemptCount: 1,
+        lastStatusCode: 504,
+        manualReviewRequired: false,
+      }),
+    );
+  });
+
+  it('does not record retry failures when the user is missing or deletion is in progress', async () => {
+    hoisted.getUserDeletionGuardStateInTransaction.mockResolvedValueOnce({
+      userExists: true,
+      deletionInProgress: true,
+      shouldSkip: true,
+    });
+
+    const didRecord = await recordServiceDisconnectRetryFailure(
+      'user-1',
+      ServiceNames.SuuntoApp,
+      { tokenID: 'token-1', statusCode: 504, errorMessage: 'gateway timeout' },
+    );
+
+    expect(didRecord).toBe(false);
+    expect(hoisted.transactionGet).not.toHaveBeenCalled();
+    expect(hoisted.transactionSet).not.toHaveBeenCalled();
+    expect(hoisted.mirrorServiceDisconnectPendingToUserMeta).not.toHaveBeenCalled();
   });
 });

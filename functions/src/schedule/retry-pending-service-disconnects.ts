@@ -181,7 +181,10 @@ async function retryPendingDisconnectRoot(
   if (!retryableFailure) {
     if (outcome.localCleanupStatus === 'partial') {
       const partialCleanupFailure = buildUnexpectedPartialCleanupFailure(config, rootSnapshot);
-      await recordServiceDisconnectRetryFailure(userID, config.serviceName, partialCleanupFailure);
+      const didRecordRetryFailure = await recordServiceDisconnectRetryFailure(userID, config.serviceName, partialCleanupFailure);
+      if (!didRecordRetryFailure) {
+        return;
+      }
       logger.warn('[RetryPendingServiceDisconnects] Pending disconnect local cleanup remained partial without a recorded retryable failure; scheduled another attempt if retry budget remains.', {
         userID,
         serviceName: config.serviceName,
@@ -200,7 +203,10 @@ async function retryPendingDisconnectRoot(
     return;
   }
 
-  await recordServiceDisconnectRetryFailure(userID, config.serviceName, retryableFailure);
+  const didRecordRetryFailure = await recordServiceDisconnectRetryFailure(userID, config.serviceName, retryableFailure);
+  if (!didRecordRetryFailure) {
+    return;
+  }
   logger.warn('[RetryPendingServiceDisconnects] Pending disconnect retry failed; scheduled another attempt if retry budget remains.', {
     userID,
     serviceName: config.serviceName,
