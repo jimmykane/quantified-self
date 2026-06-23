@@ -49,6 +49,7 @@ vi.mock('../queue-utils', () => ({
   QueueResult: {
     Processed: 'PROCESSED',
     Skipped: 'SKIPPED',
+    Deferred: 'DEFERRED',
     RetryIncremented: 'RETRY_INCREMENTED',
     MovedToDLQ: 'MOVED_TO_DLQ',
     Failed: 'FAILED',
@@ -119,5 +120,17 @@ describe('processSleepSyncTask', () => {
     await expect(invokeWorker({ data: { queueItemId: 'sleep-item-1' } }))
       .rejects
       .toThrow('[SleepSyncTaskWorker] Queue item sleep-item-1 not found in sleepSyncQueue');
+  });
+
+  it('stops Cloud Task retries when processing defers the queue item', async () => {
+    mockQueueGet.mockResolvedValueOnce({
+      exists: true,
+      id: 'sleep-item-1',
+      ref: { path: 'sleepSyncQueue/sleep-item-1' },
+      data: () => ({ processed: false }),
+    });
+    mockProcessSleepSyncQueueItem.mockResolvedValueOnce('DEFERRED');
+
+    await expect(invokeWorker({ data: { queueItemId: 'sleep-item-1' } })).resolves.toBeUndefined();
   });
 });

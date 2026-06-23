@@ -204,6 +204,51 @@ describe('ServicesSuuntoComponent', () => {
         expect(fixture.nativeElement.querySelector('.qs-mat-primary')?.textContent).toContain('Reconnect');
     });
 
+    it('does not treat preserved Suunto tokens as connected while disconnect is pending', () => {
+        component.hasProAccess = true;
+        component.serviceTokens = [{
+            accessToken: 'token',
+            userName: 'suunto-user',
+            dateCreated: new Date('2026-05-03T10:00:00Z'),
+        } as any];
+        component.serviceMeta = { connectionState: 'disconnect_pending' } as any;
+        fixture.detectChanges();
+
+        const content = fixture.nativeElement.textContent;
+
+        expect(component.isDisconnectPending).toBe(true);
+        expect(component.isConnectedToService()).toBe(false);
+        expect(content).toContain('Disconnect pending');
+        expect(fixture.nativeElement.querySelector('.connection-disconnect-button')).toBeFalsy();
+    });
+
+    it('shows reconnect action instead of retry copy when pending disconnect needs manual review', () => {
+        component.hasProAccess = false;
+        component.user = { uid: 'user-1' } as any;
+        component.serviceTokens = [{
+            accessToken: 'token',
+            userName: 'suunto-user',
+            dateCreated: new Date('2026-05-03T10:00:00Z'),
+        } as any];
+        component.serviceMeta = {
+            connectionState: 'disconnect_pending',
+            disconnectManualReviewRequired: true,
+        } as any;
+        fixture.detectChanges();
+
+        const content = fixture.nativeElement.textContent;
+        const connectButton = fixture.nativeElement.querySelector('.qs-mat-primary');
+
+        expect(component.isDisconnectManualReviewRequired).toBe(true);
+        expect(component.shouldShowConnectAction).toBe(true);
+        expect(component.canConnectServiceWithCurrentAccess).toBe(true);
+        expect(content).toContain('Reconnect Suunto');
+        expect(content).toContain('Suunto disconnect retries have stopped');
+        expect(content).not.toContain('retrying the partner disconnect');
+        expect(connectButton?.textContent).toContain('Reconnect');
+        expect(connectButton?.disabled).toBe(false);
+    });
+
     describe('History Import Tab', () => {
         it('should be unlocked/available if user has pro access AND is connected', () => {
             component.hasProAccess = true;

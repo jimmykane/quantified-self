@@ -15,6 +15,7 @@ import {
   TerminalServiceAuthFailureResolution,
 } from './service-auth-lifecycle';
 import { getUserDeletionGuardState } from './shared/user-deletion-guard';
+import { isServiceDisconnectPendingForUser } from './service-disconnect-pending';
 import QueryDocumentSnapshot = admin.firestore.QueryDocumentSnapshot;
 import DocumentSnapshot = admin.firestore.DocumentSnapshot;
 import QuerySnapshot = admin.firestore.QuerySnapshot;
@@ -34,6 +35,19 @@ export class TokenRefreshSkippedForDeletedUserError extends Error {
   }
 }
 
+export class TokenUseSkippedForPendingDisconnectError extends Error {
+  public readonly name = 'TokenUseSkippedForPendingDisconnectError';
+
+  constructor(
+    public readonly firebaseUserID: string,
+    public readonly serviceName: ServiceNames,
+    public readonly tokenDocumentID: string,
+    public readonly phase: 'before_return' | 'before_refresh' | 'before_persist',
+  ) {
+    super(`Skipping ${serviceName} token use for ${tokenDocumentID} because service disconnect is pending for user ${firebaseUserID}.`);
+  }
+}
+
 //
 export async function refreshTokens(querySnapshot: QuerySnapshot, serviceName: ServiceNames) {
   logger.info(`Found ${querySnapshot.size} auth tokens to process`);
@@ -43,6 +57,11 @@ export async function refreshTokens(querySnapshot: QuerySnapshot, serviceName: S
       await getTokenData(authToken, serviceName, true);
       count++;
     } catch (e) {
+      if (e instanceof TokenUseSkippedForPendingDisconnectError
+        || (e instanceof Error && e.name === 'TokenUseSkippedForPendingDisconnectError')) {
+        logger.warn(`Skipping stale ${serviceName} token refresh for ${authToken.id} because service disconnect is pending.`);
+        continue;
+      }
       logger.error(`Error parsing token #${count} of ${querySnapshot.size} and id ${authToken.id}`, e);
     }
   }
@@ -52,6 +71,7 @@ export async function refreshTokens(querySnapshot: QuerySnapshot, serviceName: S
 interface GetTokenDataOptions {
   recoverTerminalAuthFailure?: boolean;
   allowSupersededSnapshotRetry?: boolean;
+  allowDisconnectPendingTokenUse?: boolean;
 }
 
 function getFirebaseUserIDForTokenDocument(doc: QueryDocumentSnapshot | DocumentSnapshot): string | null {
@@ -62,6 +82,7 @@ async function assertTokenUseAllowedForUser(
   doc: QueryDocumentSnapshot | DocumentSnapshot,
   serviceName: ServiceNames,
   phase: 'before_return' | 'before_refresh' | 'before_persist',
+  options: Pick<GetTokenDataOptions, 'allowDisconnectPendingTokenUse'> = {},
 ): Promise<void> {
   const firebaseUserID = getFirebaseUserIDForTokenDocument(doc);
   if (!firebaseUserID) {
@@ -70,14 +91,23 @@ async function assertTokenUseAllowedForUser(
   }
 
   const deletionGuard = await getUserDeletionGuardState(admin.firestore(), firebaseUserID);
-  if (!deletionGuard.shouldSkip) {
+  if (deletionGuard.shouldSkip) {
+    logger.warn(
+      `Skipping ${serviceName} token refresh for ${doc.id} during ${phase} because user ${firebaseUserID} is missing or deletion is in progress.`,
+    );
+    throw new TokenRefreshSkippedForDeletedUserError(firebaseUserID, serviceName, doc.id, phase);
+  }
+
+  if (options.allowDisconnectPendingTokenUse === true) {
     return;
   }
 
-  logger.warn(
-    `Skipping ${serviceName} token refresh for ${doc.id} during ${phase} because user ${firebaseUserID} is missing or deletion is in progress.`,
-  );
-  throw new TokenRefreshSkippedForDeletedUserError(firebaseUserID, serviceName, doc.id, phase);
+  if (await isServiceDisconnectPendingForUser(firebaseUserID, serviceName)) {
+    logger.warn(
+      `Skipping ${serviceName} token use for ${doc.id} during ${phase} because service disconnect is pending for user ${firebaseUserID}.`,
+    );
+    throw new TokenUseSkippedForPendingDisconnectError(firebaseUserID, serviceName, doc.id, phase);
+  }
 }
 
 export async function getTokenData(
@@ -99,7 +129,7 @@ export async function getTokenData(
   });
 
   if (!token.expired() && !forceRefreshAndSave) {
-    await assertTokenUseAllowedForUser(doc, serviceName, 'before_return');
+    await assertTokenUseAllowedForUser(doc, serviceName, 'before_return', options);
     logger.info(`Token is not expired won't refresh ${doc.id}`);
     switch (serviceName) {
       default:
@@ -151,7 +181,7 @@ export async function getTokenData(
 
   let responseToken;
   const date = new Date();
-  await assertTokenUseAllowedForUser(doc, serviceName, 'before_refresh');
+  await assertTokenUseAllowedForUser(doc, serviceName, 'before_refresh', options);
   try {
     responseToken = await token.refresh();
     // COROS Exception for response
@@ -243,7 +273,7 @@ export async function getTokenData(
       break;
   }
 
-  await assertTokenUseAllowedForUser(doc, serviceName, 'before_persist');
+  await assertTokenUseAllowedForUser(doc, serviceName, 'before_persist', options);
   await doc.ref.update(newToken as any);
   logger.info(`Successfully saved refreshed token ${doc.id}`);
   return newToken;

@@ -15,7 +15,7 @@ import {
     isSleepSyncUserAllowed,
     SLEEP_SYNC_DISABLED_PROVIDERS,
 } from './provider-flags';
-import { isServiceReconnectRequiredForUser } from '../service-connection-meta';
+import { isServiceUnavailableForSyncForUser } from '../service-connection-meta';
 import { getUserDeletionGuardState } from '../shared/user-deletion-guard';
 import { isProviderQueueUserDeletedOrDeletingError } from '../queue/provider-queue-errors';
 
@@ -84,14 +84,14 @@ function getProviderUserId(provider: SleepProvider, tokenData: admin.firestore.D
     }
 }
 
-function getReconnectRequiredStateBestEffort(
+function getUnavailableForSyncStateBestEffort(
     provider: SleepProvider,
     userID: string,
     serviceName: ServiceNames,
 ): Promise<boolean> {
-    return isServiceReconnectRequiredForUser(userID, serviceName).catch((error: unknown) => {
+    return isServiceUnavailableForSyncForUser(userID, serviceName).catch((error: unknown) => {
         logger.warn(
-            `[SleepSync][${provider}] Failed to read reconnect state for user ${userID} and service ${serviceName}; continuing sleep polling.`,
+            `[SleepSync][${provider}] Failed to read service connection state for user ${userID} and service ${serviceName}; continuing sleep polling.`,
             error,
         );
         return false;
@@ -132,7 +132,7 @@ async function enqueueProviderPolls(
     const windows = chunkRecentWindow(nowMs, SLEEP_SYNC_RECENT_WINDOW_DAYS, maxWindowDays);
     const tokenSnapshots = await getProviderTokenSnapshots(provider, serviceName);
     const deletionGuardCache = new Map<string, Promise<boolean>>();
-    const reconnectRequiredCache = new Map<string, Promise<boolean>>();
+    const unavailableForSyncCache = new Map<string, Promise<boolean>>();
     let queued = 0;
     for (const tokenSnapshot of tokenSnapshots) {
         const userID = getFirebaseUserID(tokenSnapshot);
@@ -149,13 +149,13 @@ async function enqueueProviderPolls(
             continue;
         }
         const cacheKey = `${userID}:${serviceName}`;
-        let pendingReconnectRequired = reconnectRequiredCache.get(cacheKey);
-        if (!pendingReconnectRequired) {
-            pendingReconnectRequired = getReconnectRequiredStateBestEffort(provider, userID, serviceName);
-            reconnectRequiredCache.set(cacheKey, pendingReconnectRequired);
+        let pendingUnavailableForSync = unavailableForSyncCache.get(cacheKey);
+        if (!pendingUnavailableForSync) {
+            pendingUnavailableForSync = getUnavailableForSyncStateBestEffort(provider, userID, serviceName);
+            unavailableForSyncCache.set(cacheKey, pendingUnavailableForSync);
         }
-        if (await pendingReconnectRequired) {
-            logger.info(`[SleepSync][${provider}] Skipping user ${userID} because ${serviceName} is marked reconnect_required`);
+        if (await pendingUnavailableForSync) {
+            logger.info(`[SleepSync][${provider}] Skipping user ${userID} because ${serviceName} is unavailable for sync`);
             continue;
         }
         for (const window of windows) {

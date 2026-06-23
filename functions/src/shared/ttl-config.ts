@@ -8,6 +8,7 @@ import { Timestamp as FirestoreTimestamp } from 'firebase-admin/firestore';
 export const TTL_CONFIG = {
     MAIL_IN_DAYS: 90,
     QUEUE_ITEM_IN_DAYS: 7,
+    PENDING_DISCONNECT_QUEUE_ITEM_IN_DAYS: 35,
     ORPHANED_TOKEN_IN_DAYS: 90,
     FAILED_JOBS_IN_DAYS: 30,
     SPORTS_LIB_REPARSE_JOBS_IN_DAYS: 30,

@@ -4,7 +4,7 @@ import * as admin from 'firebase-admin';
 import { QueueErrors, QueueLogs } from '../shared/constants';
 import { addToQueueForGarmin } from '../queue';
 import { isProviderQueueSkippedWithoutRetryError } from '../queue/provider-queue-errors';
-import { increaseRetryCountForQueueItem, markQueueItemSkipped, QUEUE_SKIPPED_REASONS, updateToProcessed, moveToDeadLetterQueue, QueueResult } from '../queue-utils';
+import { deferQueueItemForPendingDisconnect, increaseRetryCountForQueueItem, markQueueItemSkipped, QUEUE_SKIPPED_REASONS, updateToProcessed, moveToDeadLetterQueue, QueueResult } from '../queue-utils';
 
 import { EventImporterFIT } from '@sports-alliance/sports-lib';
 import { EventWriteSkippedForDeletedUserError, generateEventID, setEvent, UsageLimitExceededError, UserNotFoundError } from '../utils';
@@ -13,7 +13,11 @@ import {
   GarminAPIActivityQueueItemInterface,
 } from '../queue/queue-item.interface';
 import { ServiceNames } from '@sports-alliance/sports-lib';
-import { getTokenData, TerminalServiceAuthError, TokenRefreshSkippedForDeletedUserError } from '../tokens';
+import {
+  getTokenData,
+  TerminalServiceAuthError,
+  TokenRefreshSkippedForDeletedUserError,
+} from '../tokens';
 import { EventImporterGPX } from '@sports-alliance/sports-lib';
 import { EventImporterTCX } from '@sports-alliance/sports-lib';
 import * as xmldom from 'xmldom';
@@ -34,6 +38,10 @@ function isTokenRefreshSkippedForDeletedUserError(error: unknown): error is Toke
     || (error instanceof Error && error.name === 'TokenRefreshSkippedForDeletedUserError');
 }
 
+function isTokenUseSkippedForPendingDisconnectError(error: unknown): boolean {
+  return error instanceof Error && error.name === 'TokenUseSkippedForPendingDisconnectError';
+}
+
 function isEventWriteSkippedForDeletedUserError(error: unknown): error is EventWriteSkippedForDeletedUserError {
   return error instanceof EventWriteSkippedForDeletedUserError
     || (error instanceof Error && error.name === 'EventWriteSkippedForDeletedUserError');
@@ -46,6 +54,13 @@ function markGarminQueueItemSkippedForDeletedUser(
   return markQueueItemSkipped(queueItem, bulkWriter, QUEUE_SKIPPED_REASONS.UserDeletedOrDeleting, {
     skippedContext: 'USER_DELETION_GUARD',
   });
+}
+
+function deferGarminQueueItemForPendingDisconnect(
+  queueItem: GarminAPIActivityQueueItemInterface,
+  bulkWriter?: admin.firestore.BulkWriter,
+): Promise<QueueResult.Deferred | QueueResult.Failed> {
+  return deferQueueItemForPendingDisconnect(queueItem, bulkWriter);
 }
 
 
@@ -151,6 +166,10 @@ export async function processGarminAPIActivityQueueItem(queueItem: GarminAPIActi
     if (isTokenRefreshSkippedForDeletedUserError(e)) {
       logger.warn(`Skipping Garmin queue item ${queueItem.id} because user ${firebaseUserID} is missing or deletion is in progress.`);
       return markGarminQueueItemSkippedForDeletedUser(queueItem, bulkWriter);
+    }
+    if (isTokenUseSkippedForPendingDisconnectError(e)) {
+      logger.warn(`Deferring Garmin queue item ${queueItem.id} because service disconnect is pending for user ${firebaseUserID}.`);
+      return deferGarminQueueItemForPendingDisconnect(queueItem, bulkWriter);
     }
     if (e instanceof TerminalServiceAuthError) {
       logger.warn(`Garmin token for queue item ${queueItem.id} requires reconnect; moving item to DLQ with ${e.dlqContext}.`, {

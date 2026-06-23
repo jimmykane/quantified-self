@@ -5,6 +5,39 @@ service cloud.firestore {
       return request.auth != null && request.auth.token.admin == true;
     }
 
+    function isNonAnonymousOwner(userID) {
+      return request.auth != null
+        && request.auth.uid == userID
+        && request.auth.token.firebase.sign_in_provider != 'anonymous';
+    }
+
+    function serviceDisconnectFields() {
+      return [
+        'disconnectState',
+        'disconnectReason',
+        'disconnectAttemptCount',
+        'disconnectNextAttemptAt',
+        'disconnectLastAttemptAt',
+        'disconnectRetryExpiresAt',
+        'disconnectLastStatusCode',
+        'disconnectLastErrorMessage',
+        'disconnectManualReviewRequired'
+      ];
+    }
+
+    function serviceRootCreateDoesNotSetDisconnectFields() {
+      return !request.resource.data.keys().hasAny(serviceDisconnectFields());
+    }
+
+    function serviceRootUpdateDoesNotTouchDisconnectFields() {
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny(serviceDisconnectFields());
+    }
+
+    function serviceRootIsNotPendingDisconnect() {
+      return !('disconnectState' in resource.data)
+        || resource.data.disconnectState != 'disconnect_pending';
+    }
+
     // Make sure the uid of the requesting user matches name of the user
     // document. The wildcard expression {userId} makes the userId variable
     // available in rules.
@@ -244,23 +277,59 @@ service cloud.firestore {
 
 
     match /suuntoAppAccessTokens/{userID} {
-      allow read, write: if request.auth.uid == userID && request.auth.token.firebase.sign_in_provider != 'anonymous';
+      allow read: if isNonAnonymousOwner(userID);
+      allow create: if isNonAnonymousOwner(userID)
+        && serviceRootCreateDoesNotSetDisconnectFields();
+      allow update: if isNonAnonymousOwner(userID)
+        && serviceRootIsNotPendingDisconnect()
+        && serviceRootUpdateDoesNotTouchDisconnectFields();
+      allow delete: if isNonAnonymousOwner(userID)
+        && serviceRootIsNotPendingDisconnect();
        match /tokens/{document=**} {
-          allow read, write: if request.auth.uid == userID && request.auth.token.firebase.sign_in_provider != 'anonymous';
+          allow read: if isNonAnonymousOwner(userID);
+          allow write: if isNonAnonymousOwner(userID)
+            && (
+              !exists(/databases/$(database)/documents/suuntoAppAccessTokens/$(userID))
+              || get(/databases/$(database)/documents/suuntoAppAccessTokens/$(userID)).data.disconnectState != 'disconnect_pending'
+            );
        }
     }
 
     match /COROSAPIAccessTokens/{userID} {
-      allow read, write: if request.auth.uid == userID && request.auth.token.firebase.sign_in_provider != 'anonymous';
+      allow read: if isNonAnonymousOwner(userID);
+      allow create: if isNonAnonymousOwner(userID)
+        && serviceRootCreateDoesNotSetDisconnectFields();
+      allow update: if isNonAnonymousOwner(userID)
+        && serviceRootIsNotPendingDisconnect()
+        && serviceRootUpdateDoesNotTouchDisconnectFields();
+      allow delete: if isNonAnonymousOwner(userID)
+        && serviceRootIsNotPendingDisconnect();
        match /tokens/{document=**} {
-          allow read, write: if request.auth.uid == userID && request.auth.token.firebase.sign_in_provider != 'anonymous';
+          allow read: if isNonAnonymousOwner(userID);
+          allow write: if isNonAnonymousOwner(userID)
+            && (
+              !exists(/databases/$(database)/documents/COROSAPIAccessTokens/$(userID))
+              || get(/databases/$(database)/documents/COROSAPIAccessTokens/$(userID)).data.disconnectState != 'disconnect_pending'
+            );
        }
     }
 
     match /garminAPITokens/{userID} {
-      allow read, write: if request.auth.uid == userID && request.auth.token.firebase.sign_in_provider != 'anonymous';
+      allow read: if isNonAnonymousOwner(userID);
+      allow create: if isNonAnonymousOwner(userID)
+        && serviceRootCreateDoesNotSetDisconnectFields();
+      allow update: if isNonAnonymousOwner(userID)
+        && serviceRootIsNotPendingDisconnect()
+        && serviceRootUpdateDoesNotTouchDisconnectFields();
+      allow delete: if isNonAnonymousOwner(userID)
+        && serviceRootIsNotPendingDisconnect();
        match /tokens/{document=**} {
-          allow read, write: if request.auth.uid == userID && request.auth.token.firebase.sign_in_provider != 'anonymous';
+          allow read: if isNonAnonymousOwner(userID);
+          allow write: if isNonAnonymousOwner(userID)
+            && (
+              !exists(/databases/$(database)/documents/garminAPITokens/$(userID))
+              || get(/databases/$(database)/documents/garminAPITokens/$(userID)).data.disconnectState != 'disconnect_pending'
+            );
        }
     }
 

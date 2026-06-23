@@ -123,6 +123,55 @@ describe('Firestore Security Rules', () => {
         });
     });
 
+    describe('Service token pending disconnect protection', () => {
+        const userId = 'service_user';
+        const authClaims = { firebase: { sign_in_provider: 'password' } };
+
+        it('denies client writes to backend-owned disconnect fields', async () => {
+            const db = testEnv.authenticatedContext(userId, authClaims).firestore();
+
+            await assertFails(db.collection('suuntoAppAccessTokens').doc(userId).set({
+                disconnectState: 'disconnect_pending',
+            }));
+
+            await testEnv.withSecurityRulesDisabled(async (context) => {
+                await context.firestore().collection('suuntoAppAccessTokens').doc(userId).set({
+                    state: 'oauth-state',
+                });
+            });
+
+            await assertFails(db.collection('suuntoAppAccessTokens').doc(userId).update({
+                disconnectAttemptCount: 0,
+            }));
+        });
+
+        it('denies client token mutations while disconnect is pending', async () => {
+            const db = testEnv.authenticatedContext(userId, authClaims).firestore();
+            const tokenRef = db.collection('suuntoAppAccessTokens').doc(userId).collection('tokens').doc('token-1');
+
+            await testEnv.withSecurityRulesDisabled(async (context) => {
+                await context.firestore().collection('suuntoAppAccessTokens').doc(userId).set({
+                    disconnectState: 'disconnect_pending',
+                });
+                await context.firestore()
+                    .collection('suuntoAppAccessTokens')
+                    .doc(userId)
+                    .collection('tokens')
+                    .doc('token-1')
+                    .set({
+                        accessToken: 'stored-token',
+                    });
+            });
+
+            await assertSucceeds(tokenRef.get());
+            await assertFails(tokenRef.update({ accessToken: 'changed' }));
+            await assertFails(tokenRef.delete());
+            await assertFails(db.collection('suuntoAppAccessTokens').doc(userId).update({
+                state: 'new-oauth-state',
+            }));
+        });
+    });
+
 
     describe('User Split Model', () => {
         const userId = 'split_user';

@@ -17,6 +17,7 @@ import {
   MissingTokensBehavior,
   SERVICE_AUTH_CLEANUP_REASONS,
 } from './service-auth-lifecycle';
+import { clearServiceDisconnectPending } from './service-disconnect-pending';
 import {
   getUserDeletionGuardState,
   getUserDeletionGuardStateInTransaction,
@@ -24,6 +25,7 @@ import {
   UserDeletionGuardReadError,
 } from './shared/user-deletion-guard';
 import { archiveOrphanedServiceToken } from './orphaned-service-tokens';
+import { hasProAccess } from './utils';
 export { deleteLocalServiceToken } from './service-token-store';
 
 class OAuthServiceConnectionSkippedForDeletedUserError extends Error {
@@ -301,6 +303,7 @@ export function convertAccessTokenResponseToServiceToken(response: AccessToken, 
 export async function getAndSetServiceOAuth2AccessTokenForUser(userID: string, serviceName: ServiceNames, redirectUri: string, code: string) {
   const adapter = getServiceAdapter(serviceName);
   let tokenPersisted = false;
+  let shouldCleanupOAuthContext = true;
 
   // Retrieve stored flow context (state, PKCE verifier, etc)
   const tokensDocumentSnapshot = await admin.firestore().collection(adapter.tokenCollectionName).doc(userID).get();
@@ -344,10 +347,25 @@ export async function getAndSetServiceOAuth2AccessTokenForUser(userID: string, s
       throw error;
     }
 
-    const didMarkConnected = await markServiceConnected(userID, serviceName);
-    if (!didMarkConnected) {
-      logger.warn(`Skipping duplicate cleanup for ${serviceName} OAuth callback for user ${userID} because the user is missing or deletion is in progress after token persistence.`);
-      throw new OAuthServiceConnectionSkippedForDeletedUserError(userID, serviceName, `oauth_mark_connected:${serviceName}`);
+    if (await hasProAccess(userID)) {
+      await clearServiceDisconnectPending(userID, serviceName);
+      const didMarkConnected = await markServiceConnected(userID, serviceName);
+      if (!didMarkConnected) {
+        logger.warn(`Skipping duplicate cleanup for ${serviceName} OAuth callback for user ${userID} because the user is missing or deletion is in progress after token persistence.`);
+        throw new OAuthServiceConnectionSkippedForDeletedUserError(userID, serviceName, `oauth_mark_connected:${serviceName}`);
+      }
+    } else {
+      const outcome = await deauthorizeServiceForSubscriptionEnforcement(userID, serviceName, {
+        allowDisconnectPendingTokenUse: true,
+      });
+      logger.warn(`Immediately deauthorized ${serviceName} OAuth recovery token for non-Pro user ${userID}.`, {
+        deletedTokenCount: outcome.deletedTokenCount,
+        preservedTokenCount: outcome.preservedTokenCount,
+        localCleanupStatus: outcome.localCleanupStatus,
+        retryableDisconnectFailureCount: outcome.retryableDisconnectFailures?.length || 0,
+      });
+      shouldCleanupOAuthContext = outcome.preservedTokenCount > 0 || outcome.localCleanupStatus === 'partial';
+      return;
     }
 
     // Remove any OTHER users connected to this same external account
@@ -364,8 +382,10 @@ export async function getAndSetServiceOAuth2AccessTokenForUser(userID: string, s
   } finally {
     // Cleanup temporary fields (state, PKCE verifier)
     try {
-      await cleanupOAuthFlowContext(userID, serviceName, adapter.tokenCollectionName, tokenPersisted);
-      logger.info(`Finished temporary OAuth2 cleanup for User ${userID} and ${serviceName}`);
+      if (shouldCleanupOAuthContext) {
+        await cleanupOAuthFlowContext(userID, serviceName, adapter.tokenCollectionName, tokenPersisted);
+        logger.info(`Finished temporary OAuth2 cleanup for User ${userID} and ${serviceName}`);
+      }
     } catch (e) {
       // Don't fail if cleanup fails, but log it
       logger.warn(`Failed to cleanup temporary OAuth2 data for user ${userID}`, e);
@@ -375,6 +395,10 @@ export async function getAndSetServiceOAuth2AccessTokenForUser(userID: string, s
 
 interface DeauthorizeServiceForUserOptions {
   missingTokensBehavior?: MissingTokensBehavior;
+}
+
+interface DeauthorizeServiceForSubscriptionEnforcementOptions {
+  allowDisconnectPendingTokenUse?: boolean;
 }
 
 export async function deauthorizeServiceForUser(
@@ -390,6 +414,25 @@ export async function deauthorizeServiceForUser(
       missingTokensBehavior: options.missingTokensBehavior || 'throw',
       tokenResolver: (doc) => getTokenData(doc, serviceName, false, {
         recoverTerminalAuthFailure: false,
+      }),
+    },
+  );
+}
+
+export async function deauthorizeServiceForSubscriptionEnforcement(
+  userID: string,
+  serviceName: ServiceNames,
+  options: DeauthorizeServiceForSubscriptionEnforcementOptions = {},
+) {
+  return cleanupServiceConnectionForUser(
+    userID,
+    serviceName,
+    SERVICE_AUTH_CLEANUP_REASONS.SubscriptionEnforcement,
+    {
+      missingTokensBehavior: 'ignore',
+      tokenResolver: (doc) => getTokenData(doc, serviceName, false, {
+        recoverTerminalAuthFailure: false,
+        allowDisconnectPendingTokenUse: options.allowDisconnectPendingTokenUse === true,
       }),
     },
   );

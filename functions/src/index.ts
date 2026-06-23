@@ -178,6 +178,7 @@ export { restoreUserClaims, linkExistingStripeCustomer } from './stripe/claims';
 export { getUpcomingRenewalAmount } from './stripe/get-upcoming-renewal-amount';
 export { onSubscriptionUpdated } from './stripe/subscriptions';
 export { enforceSubscriptionLimits } from './schedule/enforce-subscription-limits';
+export { retryPendingServiceDisconnects } from './schedule/retry-pending-service-disconnects';
 export { checkSubscriptionNotifications } from './schedule/notifications';
 export { scheduleSportsLibReparseScan } from './schedule/sports-lib-reparse';
 export { scheduleSportsLibRouteReparseScan } from './schedule/sports-lib-route-reparse';

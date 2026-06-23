@@ -15,13 +15,13 @@
     [description]="connectionDescription"
     [connected]="isServiceConnected"
     [loading]="isLoading"
-    [locked]="!hasProAccess && !isServiceConnected"
-    [proRequired]="!hasProAccess && !isServiceConnected"
-    [showDetails]="isServiceConnected || isReconnectRequired"
-    [statusLabelOverride]="isReconnectRequired ? 'Reconnect required' : null"
-    [statusIconOverride]="isReconnectRequired ? 'sync_problem' : null"
-    [statusTone]="isReconnectRequired ? 'attention' : 'default'"
-    (click)="!hasProAccess && !isServiceConnected && triggerUpsell()">
+    [locked]="!canConnectServiceWithCurrentAccess && !isServiceConnected"
+    [proRequired]="!canConnectServiceWithCurrentAccess && !isServiceConnected"
+    [showDetails]="connectionView.showDetails"
+    [statusLabelOverride]="connectionView.statusLabelOverride"
+    [statusIconOverride]="connectionView.statusIconOverride"
+    [statusTone]="connectionView.statusTone"
+    (click)="!canConnectServiceWithCurrentAccess && !isServiceConnected && triggerUpsell()">
     <div connection-body class="connection-details">
     @if (isReconnectRequired) {
     <div class="reconnect-required-banner" role="alert">
@@ -30,6 +30,21 @@
         <div class="reconnect-required-banner__title">Suunto needs to be reconnected</div>
         <div class="reconnect-required-banner__message">
           {{ reconnectFailureMessage || 'The previous connection is no longer accepted by Suunto. Reconnect to resume imports and sleep sync.' }}
+        </div>
+      </div>
+    </div>
+    }
+    @if (isDisconnectPending) {
+    <div class="reconnect-required-banner" [attr.role]="isDisconnectManualReviewRequired ? 'alert' : 'status'">
+      <mat-icon>sync_problem</mat-icon>
+      <div class="reconnect-required-banner__copy">
+        <div class="reconnect-required-banner__title">{{ isDisconnectManualReviewRequired ? 'Reconnect Suunto' : 'Disconnect pending' }}</div>
+        <div class="reconnect-required-banner__message">
+          @if (isDisconnectManualReviewRequired) {
+          Suunto disconnect retries have stopped. Reconnect Suunto to refresh this connection, or contact support if it still appears connected in Suunto.
+          } @else {
+          We are retrying the partner disconnect in the background. Sync and imports are paused for this connection.
+          }
         </div>
       </div>
     </div>
@@ -78,9 +93,9 @@
         <span>{{ activeSyncRouteWarningLabel }}</span>
       </div>
       }
-      @if (!isServiceConnected || isReconnectRequired || clicks > 10) {
+      @if (shouldShowConnectAction) {
       <button mat-flat-button class="qs-mat-primary"
-        [disabled]="!user || isLoading || isConnecting || !hasProAccess" (click)="connectWithService($event)">
+        [disabled]="!user || isLoading || isConnecting || !canConnectServiceWithCurrentAccess" (click)="connectWithService($event)">
         @if (isConnecting) {
         <ng-container>
           <mat-spinner diameter="20" class="qs-spinner-accent"></mat-spinner>
@@ -88,7 +103,7 @@
         </ng-container>
         } @else {
         <ng-container>
-          <mat-icon>{{ isReconnectRequired ? 'sync' : 'link' }}</mat-icon> {{ connectButtonLabel }}
+          <mat-icon>{{ isReconnectRequired || isDisconnectManualReviewRequired ? 'sync' : 'link' }}</mat-icon> {{ connectButtonLabel }}
         </ng-container>
         }
       </button>

@@ -13,14 +13,32 @@
 <div class="service-container">
   <app-service-connection-status
     serviceLabel="COROS"
-    description="Required for history imports, uploads, and COROS to Suunto auto-sync."
+    [description]="connectionDescription"
     [connected]="isConnectedToService()"
     [loading]="isLoading"
-    [locked]="!hasProAccess && !isConnectedToService()"
-    [proRequired]="!hasProAccess && !isConnectedToService()"
-    [showDetails]="isConnectedToService()"
-    (click)="!hasProAccess && !isConnectedToService() && triggerUpsell()">
+    [locked]="!canConnectServiceWithCurrentAccess && !isConnectedToService()"
+    [proRequired]="!canConnectServiceWithCurrentAccess && !isConnectedToService()"
+    [showDetails]="isConnectedToService() || isDisconnectPending"
+    [statusLabelOverride]="isDisconnectManualReviewRequired ? 'Reconnect needed' : isDisconnectPending ? 'Disconnect pending' : null"
+    [statusIconOverride]="isDisconnectPending ? 'sync_problem' : null"
+    [statusTone]="isDisconnectPending ? 'attention' : 'default'"
+    (click)="!canConnectServiceWithCurrentAccess && !isConnectedToService() && triggerUpsell()">
     <div connection-body class="connection-details">
+    @if (isDisconnectPending) {
+    <div class="reconnect-required-banner" [attr.role]="isDisconnectManualReviewRequired ? 'alert' : 'status'">
+      <mat-icon>sync_problem</mat-icon>
+      <div class="reconnect-required-banner__copy">
+        <div class="reconnect-required-banner__title">{{ isDisconnectManualReviewRequired ? 'Reconnect COROS' : 'Disconnect pending' }}</div>
+        <div class="reconnect-required-banner__message">
+          @if (isDisconnectManualReviewRequired) {
+          COROS disconnect retries have stopped. Reconnect COROS to refresh this connection, or contact support if it still appears connected in COROS.
+          } @else {
+          We are retrying the COROS disconnect in the background. Sync and imports are paused for this connection.
+          }
+        </div>
+      </div>
+    </div>
+    }
     @if (isConnectedToService()) {
     <div class="connection-account-row">
       <div class="connection-account-info">
@@ -65,9 +83,9 @@
         <span>{{ activeSyncRouteWarningLabel }}</span>
       </div>
       }
-      @if (!isConnectedToService()) {
+      @if (shouldShowConnectAction) {
       <button mat-flat-button class="qs-mat-primary"
-        [disabled]="!user || isLoading || isConnecting || !hasProAccess" (click)="connectWithService($event)">
+        [disabled]="!user || isLoading || isConnecting || !canConnectServiceWithCurrentAccess" (click)="connectWithService($event)">
         @if (isConnecting) {
         <ng-container>
           <mat-spinner diameter="20" class="qs-spinner-accent"></mat-spinner>
@@ -75,7 +93,7 @@
         </ng-container>
         } @else {
         <ng-container>
-          <mat-icon>link</mat-icon> Connect
+          <mat-icon>{{ isDisconnectManualReviewRequired ? 'sync' : 'link' }}</mat-icon> {{ connectButtonLabel }}
         </ng-container>
         }
       </button>

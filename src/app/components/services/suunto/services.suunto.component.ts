@@ -86,6 +86,23 @@ export class ServicesSuuntoComponent extends ServicesAbstractComponentDirective 
     return this.connectionView.reconnectRequired;
   }
 
+  get isDisconnectPending(): boolean {
+    return this.connectionView.disconnectPending;
+  }
+
+  get isDisconnectManualReviewRequired(): boolean {
+    return this.connectionView.disconnectManualReviewRequired;
+  }
+
+  protected override get canConnectWithoutProAccess(): boolean {
+    return this.isDisconnectManualReviewRequired;
+  }
+
+  get shouldShowConnectAction(): boolean {
+    return (!this.isServiceConnected || this.isReconnectRequired || this.isDisconnectManualReviewRequired || this.clicks > 10)
+      && (!this.isDisconnectPending || this.isDisconnectManualReviewRequired);
+  }
+
   get connectionDescription(): string {
     return this.connectionView.description;
   }
@@ -180,12 +197,12 @@ export class ServicesSuuntoComponent extends ServicesAbstractComponentDirective 
       userName: (serviceToken as Auth2ServiceTokenInterface).userName,
     }));
     this.hasConnectedSuuntoAccount = connectedTokens.length > 0;
-    this.isServiceConnected = this.hasConnectedSuuntoAccount || this.forceConnected;
     this.connectionView = buildSuuntoServiceConnectionViewModel({
       hasToken: this.hasConnectedSuuntoAccount,
       forceConnected: this.forceConnected,
       serviceMeta: this.serviceMeta,
     });
+    this.isServiceConnected = this.connectionView.connected;
     this.didLastRouteImport = getSuuntoRouteCatchUpDateForConnectedProviders(this.suuntoServiceMeta, connectedTokens);
     this.queuedRoutesFromLastRouteImportCount = getSuuntoRouteCatchUpCount(this.suuntoServiceMeta?.queuedRoutesFromLastRouteImportCount);
     this.skippedRoutesFromLastRouteImportCount = getSuuntoRouteCatchUpCount(this.suuntoServiceMeta?.skippedRoutesFromLastRouteImportCount);

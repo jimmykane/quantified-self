@@ -72,6 +72,9 @@ export const processWorkoutTask = onTaskDispatched({
                     throw new Error(`Fatal failure updating skipped state for ${serviceName} item: ${queueItemId}`);
                 }
                 break;
+            case QueueResult.Deferred:
+                logger.warn(`[TaskWorker] Deferred ${serviceName} item ${queueItemId}; it remains queued for a future dispatcher run.`);
+                break;
             case QueueResult.MovedToDLQ:
                 logger.warn(`[TaskWorker] Item ${queueItemId} for ${serviceName} was moved to DLQ (failed_jobs).`);
                 break;

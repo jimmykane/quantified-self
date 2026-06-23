@@ -1,7 +1,6 @@
 import * as functions from 'firebase-functions/v1';
 import * as logger from 'firebase-functions/logger';
 import {
-  hasProAccess,
   PRO_REQUIRED_MESSAGE
 } from '../../utils';
 import {
@@ -17,6 +16,7 @@ import {
   cleanupServiceTokenById,
   SERVICE_AUTH_CLEANUP_REASONS,
 } from '../../service-auth-lifecycle';
+import { hasServiceOAuthConnectAccess } from '../../service-oauth-access';
 
 const SERVICE_NAME = ServiceNames.GarminAPI;
 
@@ -51,7 +51,7 @@ export const getGarminAPIAuthRequestTokenRedirectURI = functions.region(FUNCTION
   const userID = context.auth.uid;
 
   // 3. Enforce Pro Access
-  if (!(await hasProAccess(userID))) {
+  if (!(await hasServiceOAuthConnectAccess(userID, SERVICE_NAME))) {
     logger.warn(`Blocking Garmin Auth for non-pro user ${userID}`);
     throw new functions.https.HttpsError(
       'permission-denied',
@@ -99,7 +99,7 @@ export const requestAndSetGarminAPIAccessToken = functions.region(FUNCTIONS_MANI
   const userID = context.auth.uid;
 
   // 3. Enforce Pro Access
-  if (!(await hasProAccess(userID))) {
+  if (!(await hasServiceOAuthConnectAccess(userID, SERVICE_NAME))) {
     logger.warn(`Blocking Garmin Token Set for non-pro user ${userID}`);
     throw new functions.https.HttpsError('permission-denied', PRO_REQUIRED_MESSAGE);
   }

@@ -2,6 +2,7 @@ import * as admin from 'firebase-admin';
 import * as logger from 'firebase-functions/logger';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import {
+  isServiceUnavailableForSyncConnection,
   isReconnectRequiredServiceConnection,
   ServiceConnectionMetaFields,
   SERVICE_CONNECTION_STATES,
@@ -10,7 +11,10 @@ import {
   getUserDeletionGuardStateInTransaction,
   UserDeletionGuardReadError,
 } from './shared/user-deletion-guard';
-import { disableActivitySyncRoutesForDisconnectedService } from './activity-sync/route-cleanup';
+import {
+  disableActivitySyncRoutesForDisconnectedService,
+  restoreActivitySyncRoutesForPendingDisconnectClear,
+} from './activity-sync/route-cleanup';
 
 function serviceMetaRef(
   db: admin.firestore.Firestore,
@@ -75,22 +79,103 @@ export async function markServiceReconnectRequired(
   }
 }
 
+export interface ServiceDisconnectPendingMetaInput {
+  reason: string;
+  attemptCount: number;
+  nextAttemptAt: unknown;
+  lastAttemptAt?: unknown | null;
+  retryExpiresAt: unknown;
+  lastStatusCode?: number | null;
+  lastErrorMessage?: string | null;
+  manualReviewRequired?: boolean;
+}
+
+interface ClearServiceConnectionStateOptions {
+  restorePendingDisconnectActivitySyncRoutes?: boolean;
+}
+
+export async function mirrorServiceDisconnectPendingToUserMeta(
+  userID: string,
+  serviceName: ServiceNames,
+  input: ServiceDisconnectPendingMetaInput,
+): Promise<boolean> {
+  const didWrite = await setServiceMetaIfUserActive(userID, serviceName, {
+    connectionState: SERVICE_CONNECTION_STATES.DisconnectPending,
+    disconnectReason: input.reason,
+    disconnectAttemptCount: input.attemptCount,
+    disconnectNextAttemptAt: input.nextAttemptAt,
+    disconnectLastAttemptAt: input.lastAttemptAt || null,
+    disconnectRetryExpiresAt: input.retryExpiresAt,
+    disconnectLastStatusCode: input.lastStatusCode ?? null,
+    disconnectLastErrorMessage: input.lastErrorMessage || null,
+    disconnectManualReviewRequired: input.manualReviewRequired === true,
+    lastDisconnectedAt: Date.now(),
+  });
+  if (!didWrite) {
+    return false;
+  }
+
+  try {
+    await disableActivitySyncRoutesForDisconnectedService(userID, serviceName, {
+      trackPendingDisconnectRestore: true,
+    });
+  } catch (error) {
+    logger.error(
+      `[ServiceConnectionMeta] Failed to disable activity sync routes for pending-disconnect ${serviceName} user ${userID}.`,
+      error,
+    );
+  }
+  return true;
+}
+
 export async function markServiceConnected(userID: string, serviceName: ServiceNames): Promise<boolean> {
   return setServiceMetaIfUserActive(userID, serviceName, {
     connectionState: SERVICE_CONNECTION_STATES.Connected,
     lastAuthFailureCode: admin.firestore.FieldValue.delete(),
     lastAuthFailureMessage: admin.firestore.FieldValue.delete(),
     lastDisconnectedAt: admin.firestore.FieldValue.delete(),
+    disconnectReason: admin.firestore.FieldValue.delete(),
+    disconnectAttemptCount: admin.firestore.FieldValue.delete(),
+    disconnectNextAttemptAt: admin.firestore.FieldValue.delete(),
+    disconnectLastAttemptAt: admin.firestore.FieldValue.delete(),
+    disconnectRetryExpiresAt: admin.firestore.FieldValue.delete(),
+    disconnectLastStatusCode: admin.firestore.FieldValue.delete(),
+    disconnectLastErrorMessage: admin.firestore.FieldValue.delete(),
+    disconnectManualReviewRequired: admin.firestore.FieldValue.delete(),
   });
 }
 
-export async function clearServiceConnectionState(userID: string, serviceName: ServiceNames): Promise<void> {
-  await setServiceMetaIfUserActive(userID, serviceName, {
+export async function clearServiceConnectionState(
+  userID: string,
+  serviceName: ServiceNames,
+  options: ClearServiceConnectionStateOptions = {},
+): Promise<void> {
+  const didWrite = await setServiceMetaIfUserActive(userID, serviceName, {
     connectionState: admin.firestore.FieldValue.delete(),
     lastAuthFailureCode: admin.firestore.FieldValue.delete(),
     lastAuthFailureMessage: admin.firestore.FieldValue.delete(),
     lastDisconnectedAt: admin.firestore.FieldValue.delete(),
+    disconnectReason: admin.firestore.FieldValue.delete(),
+    disconnectAttemptCount: admin.firestore.FieldValue.delete(),
+    disconnectNextAttemptAt: admin.firestore.FieldValue.delete(),
+    disconnectLastAttemptAt: admin.firestore.FieldValue.delete(),
+    disconnectRetryExpiresAt: admin.firestore.FieldValue.delete(),
+    disconnectLastStatusCode: admin.firestore.FieldValue.delete(),
+    disconnectLastErrorMessage: admin.firestore.FieldValue.delete(),
+    disconnectManualReviewRequired: admin.firestore.FieldValue.delete(),
   });
+  if (!didWrite || !options.restorePendingDisconnectActivitySyncRoutes) {
+    return;
+  }
+
+  try {
+    await restoreActivitySyncRoutesForPendingDisconnectClear(userID, serviceName);
+  } catch (error) {
+    logger.error(
+      `[ServiceConnectionMeta] Failed to restore activity sync routes for recovered pending-disconnect ${serviceName} user ${userID}.`,
+      error,
+    );
+  }
 }
 
 export async function getServiceConnectionMeta(
@@ -106,4 +191,11 @@ export async function isServiceReconnectRequiredForUser(
   serviceName: ServiceNames,
 ): Promise<boolean> {
   return isReconnectRequiredServiceConnection(await getServiceConnectionMeta(userID, serviceName));
+}
+
+export async function isServiceUnavailableForSyncForUser(
+  userID: string,
+  serviceName: ServiceNames,
+): Promise<boolean> {
+  return isServiceUnavailableForSyncConnection(await getServiceConnectionMeta(userID, serviceName));
 }

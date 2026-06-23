@@ -102,7 +102,10 @@ import {
   hasConnectedGarminToken,
   selectPreferredGarminTokenLike,
 } from '@shared/garmin-service-token';
-import { isReconnectRequiredServiceConnection } from '@shared/service-connection';
+import {
+  isDisconnectPendingServiceConnection,
+  isReconnectRequiredServiceConnection,
+} from '@shared/service-connection';
 
 export const ACTIVITY_SERVICE_CONNECTION_NAMES = [
   ServiceNames.GarminAPI,
@@ -664,8 +667,14 @@ export class AppUserService implements OnDestroy {
     }
 
     return combineLatest(ACTIVITY_SERVICE_CONNECTION_NAMES.map(serviceName => (
-      this.getServiceToken(user, serviceName).pipe(
-        map(tokens => this.hasConnectedActivityServiceToken(serviceName, tokens)),
+      combineLatest([
+        this.getServiceToken(user, serviceName),
+        this.getUserMetaForService(user, serviceName),
+      ]).pipe(
+        map(([tokens, serviceMeta]) => (
+          !isDisconnectPendingServiceConnection(serviceMeta)
+          && this.hasConnectedActivityServiceToken(serviceName, tokens)
+        )),
         catchError(error => {
           this.logger.warn('[AppUserService] Failed to read activity service connection state', {
             userID: uid,
@@ -825,31 +834,30 @@ export class AppUserService implements OnDestroy {
     ]).pipe(
       map(([tokens, serviceMeta]) => {
         const normalizedServiceMeta = serviceMeta || null;
-        const preferredToken = Array.isArray(tokens)
-          ? selectPreferredGarminTokenLike(tokens, GARMIN_ROUTE_SEND_REQUIRED_PERMISSIONS)
-          : null;
-        const providerStates = Array.isArray(tokens)
-          ? getConnectedGarminProviderUserIds(tokens).map(providerUserId => {
-            const providerTokens = tokens.filter(token => getGarminProviderUserIdFromTokenLike(token) === providerUserId);
-            const preferredProviderToken = selectPreferredGarminTokenLike(
-              providerTokens,
-              GARMIN_ROUTE_SEND_REQUIRED_PERMISSIONS,
-            );
-
-            return {
-              providerUserId,
-              permissionsLoaded: Array.isArray((preferredProviderToken as { permissions?: unknown } | null)?.permissions),
-              missingPermissions: preferredProviderToken
-                ? getMissingGarminPermissionsForTokenLike(preferredProviderToken, GARMIN_ROUTE_SEND_REQUIRED_PERMISSIONS)
-                : [...GARMIN_ROUTE_SEND_REQUIRED_PERMISSIONS],
-            };
-          })
+        const serviceTokens = !isDisconnectPendingServiceConnection(normalizedServiceMeta) && Array.isArray(tokens)
+          ? tokens
           : [];
+        const preferredToken = selectPreferredGarminTokenLike(serviceTokens, GARMIN_ROUTE_SEND_REQUIRED_PERMISSIONS);
+        const providerStates = getConnectedGarminProviderUserIds(serviceTokens).map(providerUserId => {
+          const providerTokens = serviceTokens.filter(token => getGarminProviderUserIdFromTokenLike(token) === providerUserId);
+          const preferredProviderToken = selectPreferredGarminTokenLike(
+            providerTokens,
+            GARMIN_ROUTE_SEND_REQUIRED_PERMISSIONS,
+          );
+
+          return {
+            providerUserId,
+            permissionsLoaded: Array.isArray((preferredProviderToken as { permissions?: unknown } | null)?.permissions),
+            missingPermissions: preferredProviderToken
+              ? getMissingGarminPermissionsForTokenLike(preferredProviderToken, GARMIN_ROUTE_SEND_REQUIRED_PERMISSIONS)
+              : [...GARMIN_ROUTE_SEND_REQUIRED_PERMISSIONS],
+          };
+        });
 
         const missingPermissions = preferredToken
           ? getMissingGarminPermissionsForTokenLike(preferredToken, GARMIN_ROUTE_SEND_REQUIRED_PERMISSIONS)
           : [];
-        const connected = Array.isArray(tokens) && hasConnectedGarminToken(tokens);
+        const connected = hasConnectedGarminToken(serviceTokens);
         const reconnectRequired = isReconnectRequiredServiceConnection(normalizedServiceMeta);
         const permissionPromptSource = buildGarminRoutePermissionPromptSource({
           connected,
@@ -871,8 +879,6 @@ export class AppUserService implements OnDestroy {
       distinctUntilChanged((previous, current) => JSON.stringify(previous) === JSON.stringify(current)),
     );
   }
-
-
 
   async importServiceHistoryForCurrentUser(serviceName: ServiceNames, startDate: Date, endDate: Date) {
     let functionName: FunctionName;

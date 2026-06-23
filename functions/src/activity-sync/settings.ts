@@ -1,6 +1,6 @@
 import * as admin from 'firebase-admin';
 import { ACTIVITY_SYNC_ROUTES, ActivitySyncRouteId } from '../../../shared/activity-sync-routes';
-import { isServiceReconnectRequiredForUser } from '../service-connection-meta';
+import { isServiceUnavailableForSyncForUser } from '../service-connection-meta';
 
 function asRecord(value: unknown): Record<string, unknown> | null {
     return value && typeof value === 'object' ? value as Record<string, unknown> : null;
@@ -34,8 +34,8 @@ export async function isActivitySyncRouteBlockedByReconnectRequiredForUser(
         route.sourceServiceName,
         route.destinationServiceName,
     ]));
-    const reconnectRequiredChecks = await Promise.all(
-        serviceNames.map((serviceName) => isServiceReconnectRequiredForUser(userID, serviceName)),
+    const unavailableChecks = await Promise.all(
+        serviceNames.map((serviceName) => isServiceUnavailableForSyncForUser(userID, serviceName)),
     );
-    return reconnectRequiredChecks.some((reconnectRequired) => reconnectRequired);
+    return unavailableChecks.some((unavailable) => unavailable);
 }
