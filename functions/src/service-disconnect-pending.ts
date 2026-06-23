@@ -1,53 +1,44 @@
 import * as admin from 'firebase-admin';
 import * as logger from 'firebase-functions/logger';
 import { ServiceNames } from '@sports-alliance/sports-lib';
-import { SERVICE_CONNECTION_STATES } from '../../shared/service-connection';
 import { getServiceTokenRootDocumentRef } from './service-token-store';
 import {
   clearServiceConnectionState,
   mirrorServiceDisconnectPendingToUserMeta,
-  type ServiceDisconnectPendingMetaInput,
 } from './service-connection-meta';
 import {
   getUserDeletionGuardStateInTransaction,
   UserDeletionGuardReadError,
 } from './shared/user-deletion-guard';
 import { releaseQueueItemsDeferredForPendingDisconnect } from './queue/pending-disconnect-release';
+import {
+  buildPendingDisconnectMarkState,
+  buildPendingDisconnectMetaInputFromRootData,
+  buildPendingDisconnectRetryFailureTransition,
+  buildRestoredPendingDisconnectData,
+  isServiceDisconnectPendingData,
+  SERVICE_DISCONNECT_PENDING_REASON,
+  timestampToISOString,
+  type PendingServiceDisconnectFailure,
+  type PendingServiceDisconnectRootData,
+  type ServiceDisconnectPendingReason,
+} from './service-disconnect-pending-state';
 
-export const SERVICE_DISCONNECT_PENDING_REASON = {
-  SubscriptionEnforcement: 'subscription_enforcement',
-} as const;
-
-export type ServiceDisconnectPendingReason = typeof SERVICE_DISCONNECT_PENDING_REASON[keyof typeof SERVICE_DISCONNECT_PENDING_REASON];
-
-export interface PendingServiceDisconnectFailure {
-  tokenID: string;
-  statusCode: number | null;
-  errorMessage: string;
-}
-
-export interface PendingServiceDisconnectRootData {
-  disconnectState?: string | null;
-  disconnectReason?: string | null;
-  disconnectAttemptCount?: number | null;
-  disconnectNextAttemptAt?: admin.firestore.Timestamp | null;
-  disconnectLastAttemptAt?: admin.firestore.Timestamp | null;
-  disconnectRetryExpiresAt?: admin.firestore.Timestamp | null;
-  disconnectLastStatusCode?: number | null;
-  disconnectLastErrorMessage?: string | null;
-  disconnectManualReviewRequired?: boolean | null;
-}
-
-export const PENDING_SERVICE_DISCONNECT_MAX_ATTEMPTS = 10;
-export const PENDING_SERVICE_DISCONNECT_RETRY_WINDOW_DAYS = 30;
-export const PENDING_SERVICE_DISCONNECT_BATCH_LIMIT = 50;
-
-const PENDING_SERVICE_DISCONNECT_BACKOFF_MS = [
-  30 * 60 * 1000,
-  2 * 60 * 60 * 1000,
-  6 * 60 * 60 * 1000,
-  24 * 60 * 60 * 1000,
-];
+export {
+  buildPendingServiceDisconnectNextAttemptAt,
+  isRetryableSubscriptionEnforcementDisconnectStatus,
+  isServiceDisconnectPendingData,
+  PENDING_SERVICE_DISCONNECT_BATCH_LIMIT,
+  PENDING_SERVICE_DISCONNECT_MAX_ATTEMPTS,
+  PENDING_SERVICE_DISCONNECT_RETRY_WINDOW_DAYS,
+  sanitizePendingServiceDisconnectErrorMessage,
+  SERVICE_DISCONNECT_PENDING_REASON,
+} from './service-disconnect-pending-state';
+export type {
+  PendingServiceDisconnectFailure,
+  PendingServiceDisconnectRootData,
+  ServiceDisconnectPendingReason,
+} from './service-disconnect-pending-state';
 
 function buildPendingDisconnectFieldDeletes(): Record<string, admin.firestore.FieldValue> {
   return {
@@ -61,88 +52,6 @@ function buildPendingDisconnectFieldDeletes(): Record<string, admin.firestore.Fi
     disconnectLastErrorMessage: admin.firestore.FieldValue.delete(),
     disconnectManualReviewRequired: admin.firestore.FieldValue.delete(),
   };
-}
-
-function buildRestoredPendingDisconnectData(
-  data: PendingServiceDisconnectRootData,
-  nowMs = Date.now(),
-): PendingServiceDisconnectRootData {
-  const attemptCount = typeof data.disconnectAttemptCount === 'number' ? data.disconnectAttemptCount : 0;
-  const manualReviewRequired = data.disconnectManualReviewRequired === true;
-  return {
-    disconnectState: SERVICE_CONNECTION_STATES.DisconnectPending,
-    disconnectReason: data.disconnectReason || SERVICE_DISCONNECT_PENDING_REASON.SubscriptionEnforcement,
-    disconnectAttemptCount: attemptCount,
-    disconnectNextAttemptAt: manualReviewRequired
-      ? null
-      : data.disconnectNextAttemptAt || buildPendingServiceDisconnectNextAttemptAt(attemptCount, nowMs),
-    disconnectLastAttemptAt: data.disconnectLastAttemptAt || null,
-    disconnectRetryExpiresAt: data.disconnectRetryExpiresAt || buildRetryWindowExpiresAt(nowMs),
-    disconnectLastStatusCode: data.disconnectLastStatusCode ?? null,
-    disconnectLastErrorMessage: data.disconnectLastErrorMessage || null,
-    disconnectManualReviewRequired: manualReviewRequired,
-  };
-}
-
-function buildPendingDisconnectMetaInputFromRootData(
-  data: PendingServiceDisconnectRootData,
-  nowMs = Date.now(),
-): ServiceDisconnectPendingMetaInput {
-  return {
-    reason: data.disconnectReason || SERVICE_DISCONNECT_PENDING_REASON.SubscriptionEnforcement,
-    attemptCount: typeof data.disconnectAttemptCount === 'number' ? data.disconnectAttemptCount : 0,
-    nextAttemptAt: data.disconnectNextAttemptAt || null,
-    lastAttemptAt: data.disconnectLastAttemptAt || null,
-    retryExpiresAt: data.disconnectRetryExpiresAt || buildRetryWindowExpiresAt(nowMs),
-    lastStatusCode: data.disconnectLastStatusCode ?? null,
-    lastErrorMessage: data.disconnectLastErrorMessage || null,
-    manualReviewRequired: data.disconnectManualReviewRequired === true,
-  };
-}
-
-function asTimestamp(value: admin.firestore.Timestamp | null | undefined, fallbackMs: number): admin.firestore.Timestamp {
-  return value || admin.firestore.Timestamp.fromMillis(fallbackMs);
-}
-
-function buildRetryWindowExpiresAt(nowMs: number): admin.firestore.Timestamp {
-  return admin.firestore.Timestamp.fromMillis(
-    nowMs + PENDING_SERVICE_DISCONNECT_RETRY_WINDOW_DAYS * 24 * 60 * 60 * 1000,
-  );
-}
-
-function timestampToISOString(value: admin.firestore.Timestamp | null | undefined): string | undefined {
-  return typeof value?.toDate === 'function'
-    ? value.toDate().toISOString()
-    : undefined;
-}
-
-export function isServiceDisconnectPendingData(
-  data: PendingServiceDisconnectRootData | null | undefined,
-): boolean {
-  return data?.disconnectState === SERVICE_CONNECTION_STATES.DisconnectPending;
-}
-
-export function isRetryableSubscriptionEnforcementDisconnectStatus(statusCode: number | null): boolean {
-  return statusCode === null
-    || statusCode === 408
-    || statusCode === 429
-    || (statusCode >= 500 && statusCode <= 599);
-}
-
-export function buildPendingServiceDisconnectNextAttemptAt(attemptCount: number, nowMs = Date.now()): admin.firestore.Timestamp {
-  const backoffIndex = Math.min(
-    Math.max(0, attemptCount),
-    PENDING_SERVICE_DISCONNECT_BACKOFF_MS.length - 1,
-  );
-  return admin.firestore.Timestamp.fromMillis(nowMs + PENDING_SERVICE_DISCONNECT_BACKOFF_MS[backoffIndex]);
-}
-
-function normalizeErrorMessage(value: string | null | undefined): string | null {
-  const trimmed = `${value || ''}`.trim();
-  if (!trimmed) {
-    return null;
-  }
-  return sanitizePendingServiceDisconnectErrorMessage(trimmed).slice(0, 500);
 }
 
 async function shouldSkipPendingDisconnectWrite(
@@ -171,13 +80,6 @@ async function shouldSkipPendingDisconnectWrite(
     deletionInProgress: deletionGuard.deletionInProgress,
   });
   return true;
-}
-
-export function sanitizePendingServiceDisconnectErrorMessage(value: string): string {
-  return value
-    .replace(/\bBearer\s+[A-Za-z0-9._~+/=-]+/gi, 'Bearer [redacted]')
-    .replace(/\b(access_token|refresh_token|id_token|client_secret|authorization|token)=([^&\s]+)/gi, '$1=[redacted]')
-    .replace(/\b(access_token|refresh_token|id_token|client_secret|authorization|token)["']?\s*:\s*["'][^"']+["']/gi, '$1: "[redacted]"');
 }
 
 export async function getServiceDisconnectPendingData(
@@ -212,54 +114,31 @@ export async function markServiceDisconnectPending(
 ): Promise<boolean> {
   const db = admin.firestore();
   const rootRef = getServiceTokenRootDocumentRef(userID, serviceName);
-  const nowTimestamp = admin.firestore.Timestamp.fromMillis(nowMs);
-  const initialNextAttemptAt = buildPendingServiceDisconnectNextAttemptAt(0, nowMs);
-  const initialRetryExpiresAt = buildRetryWindowExpiresAt(nowMs);
 
-  const rootData = await db.runTransaction(async (transaction) => {
+  const markState = await db.runTransaction(async (transaction) => {
     if (await shouldSkipPendingDisconnectWrite(db, transaction, userID, serviceName, 'mark')) {
       return null;
     }
 
     const snapshot = await transaction.get(rootRef);
     const existing = snapshot.exists ? snapshot.data() as PendingServiceDisconnectRootData : {};
-    const alreadyPending = isServiceDisconnectPendingData(existing);
-    const attemptCount = alreadyPending && typeof existing.disconnectAttemptCount === 'number'
-      ? existing.disconnectAttemptCount
-      : 0;
-    const nextAttemptAt = alreadyPending
-      ? asTimestamp(existing.disconnectNextAttemptAt, initialNextAttemptAt.toMillis())
-      : initialNextAttemptAt;
-    const retryExpiresAt = alreadyPending
-      ? asTimestamp(existing.disconnectRetryExpiresAt, initialRetryExpiresAt.toMillis())
-      : initialRetryExpiresAt;
+    const nextState = buildPendingDisconnectMarkState(existing, failure, reason, nowMs);
 
-    const nextData: PendingServiceDisconnectRootData = {
-      disconnectState: SERVICE_CONNECTION_STATES.DisconnectPending,
-      disconnectReason: reason,
-      disconnectAttemptCount: attemptCount,
-      disconnectNextAttemptAt: nextAttemptAt,
-      disconnectLastAttemptAt: existing.disconnectLastAttemptAt || nowTimestamp,
-      disconnectRetryExpiresAt: retryExpiresAt,
-      disconnectLastStatusCode: failure.statusCode,
-      disconnectLastErrorMessage: normalizeErrorMessage(failure.errorMessage),
-      disconnectManualReviewRequired: existing.disconnectManualReviewRequired === true,
-    };
-
-    transaction.set(rootRef, nextData, { merge: true });
-    return nextData;
+    transaction.set(rootRef, nextState.rootData, { merge: true });
+    return nextState;
   });
 
-  if (!rootData) {
+  if (!markState) {
     return false;
   }
 
+  const { rootData } = markState;
   await mirrorServiceDisconnectPendingToUserMeta(userID, serviceName, {
     reason: rootData.disconnectReason || reason,
     attemptCount: rootData.disconnectAttemptCount || 0,
-    nextAttemptAt: rootData.disconnectNextAttemptAt || initialNextAttemptAt,
-    lastAttemptAt: rootData.disconnectLastAttemptAt || nowTimestamp,
-    retryExpiresAt: rootData.disconnectRetryExpiresAt || initialRetryExpiresAt,
+    nextAttemptAt: rootData.disconnectNextAttemptAt || markState.initialNextAttemptAt,
+    lastAttemptAt: rootData.disconnectLastAttemptAt || markState.nowTimestamp,
+    retryExpiresAt: rootData.disconnectRetryExpiresAt || markState.initialRetryExpiresAt,
     lastStatusCode: rootData.disconnectLastStatusCode ?? null,
     lastErrorMessage: rootData.disconnectLastErrorMessage || null,
     manualReviewRequired: rootData.disconnectManualReviewRequired === true,
@@ -275,7 +154,6 @@ export async function recordServiceDisconnectRetryFailure(
 ): Promise<boolean> {
   const db = admin.firestore();
   const rootRef = getServiceTokenRootDocumentRef(userID, serviceName);
-  const nowTimestamp = admin.firestore.Timestamp.fromMillis(nowMs);
 
   const retryUpdate = await db.runTransaction(async (transaction) => {
     if (await shouldSkipPendingDisconnectWrite(db, transaction, userID, serviceName, 'retry_failure')) {
@@ -284,40 +162,10 @@ export async function recordServiceDisconnectRetryFailure(
 
     const snapshot = await transaction.get(rootRef);
     const existing = snapshot.exists ? snapshot.data() as PendingServiceDisconnectRootData : {};
-    const previousAttemptCount = typeof existing.disconnectAttemptCount === 'number'
-      ? existing.disconnectAttemptCount
-      : 0;
-    const nextAttemptCount = previousAttemptCount + 1;
-    const retryExpiresAt = asTimestamp(existing.disconnectRetryExpiresAt, buildRetryWindowExpiresAt(nowMs).toMillis());
-    const retryWindowExpired = retryExpiresAt.toMillis() <= nowMs;
-    const manualReviewRequired = nextAttemptCount >= PENDING_SERVICE_DISCONNECT_MAX_ATTEMPTS || retryWindowExpired;
-    const retryableNextAttemptAt = buildPendingServiceDisconnectNextAttemptAt(nextAttemptCount, nowMs);
+    const nextTransition = buildPendingDisconnectRetryFailureTransition(existing, failure, nowMs);
 
-    const nextData: PendingServiceDisconnectRootData = {
-      disconnectState: SERVICE_CONNECTION_STATES.DisconnectPending,
-      disconnectReason: existing.disconnectReason || SERVICE_DISCONNECT_PENDING_REASON.SubscriptionEnforcement,
-      disconnectAttemptCount: nextAttemptCount,
-      disconnectNextAttemptAt: retryableNextAttemptAt,
-      disconnectLastAttemptAt: nowTimestamp,
-      disconnectRetryExpiresAt: retryExpiresAt,
-      disconnectLastStatusCode: failure.statusCode,
-      disconnectLastErrorMessage: normalizeErrorMessage(failure.errorMessage),
-      disconnectManualReviewRequired: false,
-    };
-    const finalData = manualReviewRequired
-      ? {
-        ...nextData,
-        disconnectNextAttemptAt: null,
-        disconnectManualReviewRequired: true,
-      }
-      : nextData;
-
-    transaction.set(rootRef, nextData, { merge: true });
-    return {
-      rootData: nextData,
-      finalData,
-      manualReviewRequired,
-    };
+    transaction.set(rootRef, nextTransition.rootData, { merge: true });
+    return nextTransition;
   });
 
   if (!retryUpdate) {
