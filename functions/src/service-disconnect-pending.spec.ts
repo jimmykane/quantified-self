@@ -84,6 +84,7 @@ describe('service-disconnect-pending', () => {
       set: hoisted.transactionSet,
     }));
     hoisted.clearServiceConnectionState.mockResolvedValue(undefined);
+    hoisted.mirrorServiceDisconnectPendingToUserMeta.mockResolvedValue(true);
     hoisted.releaseQueueItemsDeferredForPendingDisconnect.mockResolvedValue(0);
   });
 
@@ -341,6 +342,95 @@ describe('service-disconnect-pending', () => {
         lastStatusCode: 504,
         manualReviewRequired: false,
       }),
+    );
+  });
+
+  it('finalizes manual-review roots only after mirroring terminal pending state to user meta', async () => {
+    hoisted.transactionGet
+      .mockResolvedValueOnce({
+        exists: true,
+        data: () => ({
+          disconnectState: 'disconnect_pending',
+          disconnectAttemptCount: 9,
+        }),
+      })
+      .mockResolvedValueOnce({
+        exists: true,
+        data: () => ({
+          disconnectState: 'disconnect_pending',
+          disconnectAttemptCount: 10,
+          disconnectManualReviewRequired: false,
+        }),
+      });
+
+    const didRecord = await recordServiceDisconnectRetryFailure(
+      'user-1',
+      ServiceNames.SuuntoApp,
+      { tokenID: 'token-1', statusCode: 504, errorMessage: 'gateway timeout' },
+    );
+
+    expect(didRecord).toBe(true);
+    expect(hoisted.transactionSet).toHaveBeenNthCalledWith(
+      1,
+      hoisted.rootRef,
+      expect.objectContaining({
+        disconnectState: 'disconnect_pending',
+        disconnectAttemptCount: 10,
+        disconnectManualReviewRequired: false,
+        disconnectNextAttemptAt: expect.objectContaining({ toMillis: expect.any(Function) }),
+      }),
+      { merge: true },
+    );
+    expect(hoisted.mirrorServiceDisconnectPendingToUserMeta).toHaveBeenCalledWith(
+      'user-1',
+      ServiceNames.SuuntoApp,
+      expect.objectContaining({
+        attemptCount: 10,
+        nextAttemptAt: null,
+        manualReviewRequired: true,
+      }),
+    );
+    expect(hoisted.transactionSet).toHaveBeenNthCalledWith(
+      2,
+      hoisted.rootRef,
+      expect.objectContaining({
+        disconnectState: 'disconnect_pending',
+        disconnectAttemptCount: 10,
+        disconnectManualReviewRequired: true,
+        disconnectNextAttemptAt: null,
+      }),
+      { merge: true },
+    );
+    expect(hoisted.mirrorServiceDisconnectPendingToUserMeta.mock.invocationCallOrder[0])
+      .toBeLessThan(hoisted.transactionSet.mock.invocationCallOrder[1]);
+  });
+
+  it('keeps manual-review retry failures scheduler-visible when the user-meta mirror fails', async () => {
+    hoisted.transactionGet.mockResolvedValueOnce({
+      exists: true,
+      data: () => ({
+        disconnectState: 'disconnect_pending',
+        disconnectAttemptCount: 9,
+      }),
+    });
+    hoisted.mirrorServiceDisconnectPendingToUserMeta.mockRejectedValueOnce(new Error('meta write failed'));
+
+    await expect(recordServiceDisconnectRetryFailure(
+      'user-1',
+      ServiceNames.SuuntoApp,
+      { tokenID: 'token-1', statusCode: 504, errorMessage: 'gateway timeout' },
+    )).rejects.toThrow('meta write failed');
+
+    expect(hoisted.transactionSet).toHaveBeenCalledTimes(1);
+    expect(hoisted.transactionSet).toHaveBeenCalledWith(
+      hoisted.rootRef,
+      expect.objectContaining({
+        disconnectState: 'disconnect_pending',
+        disconnectAttemptCount: 10,
+        disconnectManualReviewRequired: false,
+        disconnectNextAttemptAt: expect.objectContaining({ toMillis: expect.any(Function) }),
+      }),
+      { merge: true },
     );
   });
 

@@ -110,6 +110,12 @@ function buildRetryWindowExpiresAt(nowMs: number): admin.firestore.Timestamp {
   );
 }
 
+function timestampToISOString(value: admin.firestore.Timestamp | null | undefined): string | undefined {
+  return typeof value?.toDate === 'function'
+    ? value.toDate().toISOString()
+    : undefined;
+}
+
 export function isServiceDisconnectPendingData(
   data: PendingServiceDisconnectRootData | null | undefined,
 ): boolean {
@@ -271,7 +277,7 @@ export async function recordServiceDisconnectRetryFailure(
   const rootRef = getServiceTokenRootDocumentRef(userID, serviceName);
   const nowTimestamp = admin.firestore.Timestamp.fromMillis(nowMs);
 
-  const rootData = await db.runTransaction(async (transaction) => {
+  const retryUpdate = await db.runTransaction(async (transaction) => {
     if (await shouldSkipPendingDisconnectWrite(db, transaction, userID, serviceName, 'retry_failure')) {
       return null;
     }
@@ -285,49 +291,99 @@ export async function recordServiceDisconnectRetryFailure(
     const retryExpiresAt = asTimestamp(existing.disconnectRetryExpiresAt, buildRetryWindowExpiresAt(nowMs).toMillis());
     const retryWindowExpired = retryExpiresAt.toMillis() <= nowMs;
     const manualReviewRequired = nextAttemptCount >= PENDING_SERVICE_DISCONNECT_MAX_ATTEMPTS || retryWindowExpired;
-    const nextAttemptAt = manualReviewRequired
-      ? null
-      : buildPendingServiceDisconnectNextAttemptAt(nextAttemptCount, nowMs);
+    const retryableNextAttemptAt = buildPendingServiceDisconnectNextAttemptAt(nextAttemptCount, nowMs);
 
     const nextData: PendingServiceDisconnectRootData = {
       disconnectState: SERVICE_CONNECTION_STATES.DisconnectPending,
       disconnectReason: existing.disconnectReason || SERVICE_DISCONNECT_PENDING_REASON.SubscriptionEnforcement,
       disconnectAttemptCount: nextAttemptCount,
-      disconnectNextAttemptAt: nextAttemptAt,
+      disconnectNextAttemptAt: retryableNextAttemptAt,
       disconnectLastAttemptAt: nowTimestamp,
       disconnectRetryExpiresAt: retryExpiresAt,
       disconnectLastStatusCode: failure.statusCode,
       disconnectLastErrorMessage: normalizeErrorMessage(failure.errorMessage),
-      disconnectManualReviewRequired: manualReviewRequired,
+      disconnectManualReviewRequired: false,
     };
+    const finalData = manualReviewRequired
+      ? {
+        ...nextData,
+        disconnectNextAttemptAt: null,
+        disconnectManualReviewRequired: true,
+      }
+      : nextData;
 
     transaction.set(rootRef, nextData, { merge: true });
-    return nextData;
+    return {
+      rootData: nextData,
+      finalData,
+      manualReviewRequired,
+    };
   });
 
-  if (!rootData) {
+  if (!retryUpdate) {
     return false;
   }
 
-  await mirrorServiceDisconnectPendingToUserMeta(userID, serviceName, {
-    reason: rootData.disconnectReason || SERVICE_DISCONNECT_PENDING_REASON.SubscriptionEnforcement,
-    attemptCount: rootData.disconnectAttemptCount || 0,
-    nextAttemptAt: rootData.disconnectNextAttemptAt || null,
-    lastAttemptAt: rootData.disconnectLastAttemptAt || nowTimestamp,
-    retryExpiresAt: rootData.disconnectRetryExpiresAt || buildRetryWindowExpiresAt(nowMs),
-    lastStatusCode: rootData.disconnectLastStatusCode ?? null,
-    lastErrorMessage: rootData.disconnectLastErrorMessage || null,
-    manualReviewRequired: rootData.disconnectManualReviewRequired === true,
-  });
+  const didMirror = await mirrorServiceDisconnectPendingToUserMeta(
+    userID,
+    serviceName,
+    buildPendingDisconnectMetaInputFromRootData(retryUpdate.finalData, nowMs),
+  );
 
-  if (rootData.disconnectManualReviewRequired) {
+  if (retryUpdate.manualReviewRequired && !didMirror) {
+    logger.warn('[ServiceDisconnectPending] Keeping pending disconnect retryable because manual-review meta mirror was skipped.', {
+      userID,
+      serviceName,
+      tokenID: failure.tokenID,
+      statusCode: failure.statusCode,
+      attemptCount: retryUpdate.finalData.disconnectAttemptCount,
+      retryExpiresAt: timestampToISOString(retryUpdate.finalData.disconnectRetryExpiresAt),
+    });
+    return false;
+  }
+
+  if (retryUpdate.manualReviewRequired) {
+    const didFinalizeManualReviewRoot = await db.runTransaction(async (transaction) => {
+      if (await shouldSkipPendingDisconnectWrite(db, transaction, userID, serviceName, 'manual_review_finalize')) {
+        return false;
+      }
+
+      const snapshot = await transaction.get(rootRef);
+      if (!snapshot.exists) {
+        return false;
+      }
+
+      const current = snapshot.data() as PendingServiceDisconnectRootData;
+      if (current.disconnectManualReviewRequired === true) {
+        return true;
+      }
+      if (!isServiceDisconnectPendingData(current)
+        || current.disconnectAttemptCount !== retryUpdate.rootData.disconnectAttemptCount) {
+        return false;
+      }
+
+      transaction.set(rootRef, retryUpdate.finalData, { merge: true });
+      return true;
+    });
+
+    if (!didFinalizeManualReviewRoot) {
+      logger.warn('[ServiceDisconnectPending] Manual-review meta was mirrored but the pending disconnect root stayed retryable.', {
+        userID,
+        serviceName,
+        tokenID: failure.tokenID,
+        statusCode: failure.statusCode,
+        attemptCount: retryUpdate.finalData.disconnectAttemptCount,
+      });
+      return false;
+    }
+
     logger.error('[ServiceDisconnectPending] Pending disconnect requires manual review', {
       userID,
       serviceName,
       tokenID: failure.tokenID,
       statusCode: failure.statusCode,
-      attemptCount: rootData.disconnectAttemptCount,
-      retryExpiresAt: rootData.disconnectRetryExpiresAt?.toDate().toISOString(),
+      attemptCount: retryUpdate.finalData.disconnectAttemptCount,
+      retryExpiresAt: timestampToISOString(retryUpdate.finalData.disconnectRetryExpiresAt),
     });
   }
   return true;
