@@ -4,6 +4,7 @@ import { ServiceNames } from '@sports-alliance/sports-lib';
 
 import { enqueueRouteSyncTask, generateIDFromParts } from '../utils';
 import { RouteSyncQueueItemInterface } from '../queue/queue-item.interface';
+import { isPendingDisconnectQueueItemDeferred } from '../queue-utils';
 import { getExpireAtTimestamp, TTL_CONFIG } from '../shared/ttl-config';
 import {
     getUserDeletionGuardState,
@@ -181,7 +182,8 @@ export async function enqueueRouteSyncQueueItem(
 
         if (existingSnapshot.exists) {
             const existingData = existingSnapshot.data() as Partial<RouteSyncQueueItemInterface>;
-            if (!existingData.processed) {
+            const isDeferredForPendingDisconnect = isPendingDisconnectQueueItemDeferred(existingData);
+            if (isDeferredForPendingDisconnect || !existingData.processed) {
                 transaction.set(queueDocRef, {
                     providerRouteName: params.providerRouteName || existingData.providerRouteName || null,
                     providerRouteCreatedAt: params.providerRouteCreatedAt ?? existingData.providerRouteCreatedAt ?? null,
@@ -193,7 +195,8 @@ export async function enqueueRouteSyncQueueItem(
                     queueItemId,
                     reason: 'already_pending',
                     dateCreated: Number(existingData.dateCreated) || Date.now(),
-                    shouldDispatchExisting: existingData.dispatchedToCloudTask === null || existingData.dispatchedToCloudTask === undefined,
+                    shouldDispatchExisting: !isDeferredForPendingDisconnect
+                        && (existingData.dispatchedToCloudTask === null || existingData.dispatchedToCloudTask === undefined),
                 };
             }
         }
