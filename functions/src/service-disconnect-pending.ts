@@ -115,7 +115,7 @@ export async function markServiceDisconnectPending(
   const db = admin.firestore();
   const rootRef = getServiceTokenRootDocumentRef(userID, serviceName);
 
-  const markState = await db.runTransaction(async (transaction) => {
+  const rootData = await db.runTransaction(async (transaction) => {
     if (await shouldSkipPendingDisconnectWrite(db, transaction, userID, serviceName, 'mark')) {
       return null;
     }
@@ -125,24 +125,18 @@ export async function markServiceDisconnectPending(
     const nextState = buildPendingDisconnectMarkState(existing, failure, reason, nowMs);
 
     transaction.set(rootRef, nextState.rootData, { merge: true });
-    return nextState;
+    return nextState.rootData;
   });
 
-  if (!markState) {
+  if (!rootData) {
     return false;
   }
 
-  const { rootData } = markState;
-  await mirrorServiceDisconnectPendingToUserMeta(userID, serviceName, {
-    reason: rootData.disconnectReason || reason,
-    attemptCount: rootData.disconnectAttemptCount || 0,
-    nextAttemptAt: rootData.disconnectNextAttemptAt || markState.initialNextAttemptAt,
-    lastAttemptAt: rootData.disconnectLastAttemptAt || markState.nowTimestamp,
-    retryExpiresAt: rootData.disconnectRetryExpiresAt || markState.initialRetryExpiresAt,
-    lastStatusCode: rootData.disconnectLastStatusCode ?? null,
-    lastErrorMessage: rootData.disconnectLastErrorMessage || null,
-    manualReviewRequired: rootData.disconnectManualReviewRequired === true,
-  });
+  await mirrorServiceDisconnectPendingToUserMeta(
+    userID,
+    serviceName,
+    buildPendingDisconnectMetaInputFromRootData(rootData, nowMs),
+  );
   return true;
 }
 
