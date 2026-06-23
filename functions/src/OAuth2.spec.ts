@@ -242,7 +242,7 @@ import {
     validateOAuth2State,
     removeDuplicateConnections,
 } from './OAuth2';
-import { TokenNotFoundError } from './utils';
+import { TokenNotFoundError, hasProAccess } from './utils';
 import * as admin from 'firebase-admin';
 import { getTokenData } from './tokens';
 import { clearServiceConnectionState } from './service-connection-meta';
@@ -263,6 +263,7 @@ describe('OAuth2', () => {
         mockArchiveOrphanedServiceToken.mockReset().mockResolvedValue(undefined);
         mockMarkServiceConnected.mockReset().mockResolvedValue(true);
         mockClearServiceDisconnectPending.mockReset().mockResolvedValue(undefined);
+        (hasProAccess as Mock).mockReset().mockResolvedValue(true);
     });
 
     describe('getServiceConfig', () => {
@@ -1312,6 +1313,80 @@ describe('OAuth2', () => {
             expect(mockMarkServiceConnected).toHaveBeenCalledWith(userID, ServiceNames.SuuntoApp);
             expect(mockClearServiceDisconnectPending.mock.invocationCallOrder[0])
                 .toBeLessThan(mockMarkServiceConnected.mock.invocationCallOrder[0]);
+        });
+
+        it('immediately deauthorizes manual-review OAuth recovery for non-Pro users without marking connected', async () => {
+            (hasProAccess as Mock).mockResolvedValue(false);
+            const MockAuthCode = (await import('simple-oauth2')).AuthorizationCode;
+            vi.spyOn(MockAuthCode.prototype, 'getToken').mockResolvedValue({
+                token: {
+                    user: 'test-external-user',
+                    access_token: 'mock-token',
+                    refresh_token: 'mock-refresh-token',
+                    expires_in: 3600,
+                    scope: 'workout',
+                },
+                expired: () => false,
+            } as any);
+            const tokenDoc = {
+                id: 'test-external-user',
+                data: () => ({
+                    serviceName: ServiceNames.SuuntoApp,
+                    accessToken: 'mock-token',
+                    refreshToken: 'mock-refresh-token',
+                    expiresAt: Date.now() + 3_600_000,
+                    scope: 'workout',
+                    tokenType: 'bearer',
+                    userName: 'test-external-user',
+                    dateCreated: Date.now(),
+                    dateRefreshed: Date.now(),
+                }),
+            };
+            mockGet
+                .mockResolvedValueOnce({
+                    exists: true,
+                    data: () => ({ state: 'some-state', codeVerifier: 'some-verifier' }),
+                } as any)
+                .mockResolvedValueOnce({
+                    empty: false,
+                    size: 1,
+                    docs: [tokenDoc],
+                } as any)
+                .mockResolvedValueOnce({
+                    empty: false,
+                    size: 1,
+                    docs: [tokenDoc],
+                } as any);
+            (getTokenData as Mock).mockResolvedValueOnce({
+                serviceName: ServiceNames.SuuntoApp,
+                accessToken: 'mock-token',
+                refreshToken: 'mock-refresh-token',
+                expiresAt: Date.now() + 3_600_000,
+                scope: 'workout',
+                tokenType: 'bearer',
+                userName: 'test-external-user',
+                dateCreated: Date.now(),
+                dateRefreshed: Date.now(),
+            });
+            (requestPromise.get as Mock).mockResolvedValueOnce({});
+
+            await getAndSetServiceOAuth2AccessTokenForUser(userID, ServiceNames.SuuntoApp, redirectUri, code);
+
+            expect(mockClearServiceDisconnectPending).not.toHaveBeenCalled();
+            expect(mockMarkServiceConnected).not.toHaveBeenCalled();
+            expect(getTokenData).toHaveBeenCalledWith(
+                tokenDoc,
+                ServiceNames.SuuntoApp,
+                false,
+                expect.objectContaining({
+                    recoverTerminalAuthFailure: false,
+                    allowDisconnectPendingTokenUse: true,
+                }),
+            );
+            expect(requestPromise.get).toHaveBeenCalledWith(expect.objectContaining({
+                url: expect.stringContaining('/oauth/deauthorize'),
+            }));
+            expect(clearServiceConnectionState).toHaveBeenCalledWith(userID, ServiceNames.SuuntoApp);
         });
 
         it('should cleanup state and codeVerifier even if token exchange fails', async () => {
