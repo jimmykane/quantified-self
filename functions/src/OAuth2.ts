@@ -17,7 +17,10 @@ import {
   MissingTokensBehavior,
   SERVICE_AUTH_CLEANUP_REASONS,
 } from './service-auth-lifecycle';
-import { clearServiceDisconnectPending } from './service-disconnect-pending';
+import {
+  clearServiceDisconnectPending,
+  resumeServiceDisconnectRetryAfterRecoveryFailure,
+} from './service-disconnect-pending';
 import {
   getUserDeletionGuardState,
   getUserDeletionGuardStateInTransaction,
@@ -364,6 +367,18 @@ export async function getAndSetServiceOAuth2AccessTokenForUser(userID: string, s
         localCleanupStatus: outcome.localCleanupStatus,
         retryableDisconnectFailureCount: outcome.retryableDisconnectFailures?.length || 0,
       });
+      const retryableFailure = outcome.retryableDisconnectFailures?.[0];
+      if (retryableFailure) {
+        const didResumeRetry = await resumeServiceDisconnectRetryAfterRecoveryFailure(userID, serviceName, retryableFailure);
+        if (!didResumeRetry) {
+          logger.warn(`Skipped pending ${serviceName} disconnect retry resume for non-Pro OAuth recovery because the user is missing or deletion is in progress.`, {
+            userID,
+            serviceName,
+            tokenID: retryableFailure.tokenID,
+            statusCode: retryableFailure.statusCode,
+          });
+        }
+      }
       shouldCleanupOAuthContext = outcome.preservedTokenCount > 0 || outcome.localCleanupStatus === 'partial';
       return;
     }

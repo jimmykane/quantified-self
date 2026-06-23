@@ -177,6 +177,27 @@ export function buildPendingDisconnectMarkState(
   };
 }
 
+export function buildPendingDisconnectRecoveryRetryData(
+  existing: PendingServiceDisconnectRootData,
+  failure: PendingServiceDisconnectFailure,
+  nowMs = Date.now(),
+): PendingServiceDisconnectRootData {
+  const nowTimestamp = admin.firestore.Timestamp.fromMillis(nowMs);
+  const attemptCount = 0;
+
+  return {
+    disconnectState: SERVICE_CONNECTION_STATES.DisconnectPending,
+    disconnectReason: existing.disconnectReason || SERVICE_DISCONNECT_PENDING_REASON.SubscriptionEnforcement,
+    disconnectAttemptCount: attemptCount,
+    disconnectNextAttemptAt: buildPendingServiceDisconnectNextAttemptAt(attemptCount, nowMs),
+    disconnectLastAttemptAt: nowTimestamp,
+    disconnectRetryExpiresAt: buildRetryWindowExpiresAt(nowMs),
+    disconnectLastStatusCode: failure.statusCode,
+    disconnectLastErrorMessage: normalizePendingServiceDisconnectErrorMessage(failure.errorMessage),
+    disconnectManualReviewRequired: false,
+  };
+}
+
 export function buildPendingDisconnectRetryFailureTransition(
   existing: PendingServiceDisconnectRootData,
   failure: PendingServiceDisconnectFailure,

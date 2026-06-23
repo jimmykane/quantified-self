@@ -64,6 +64,7 @@ import {
   isServiceDisconnectManualReviewRequiredForUser,
   markServiceDisconnectPending,
   recordServiceDisconnectRetryFailure,
+  resumeServiceDisconnectRetryAfterRecoveryFailure,
   sanitizePendingServiceDisconnectErrorMessage,
 } from './service-disconnect-pending';
 
@@ -431,6 +432,50 @@ describe('service-disconnect-pending', () => {
         disconnectNextAttemptAt: expect.objectContaining({ toMillis: expect.any(Function) }),
       }),
       { merge: true },
+    );
+  });
+
+  it('resumes retry scheduling after a manual-review OAuth recovery deauthorization fails retryably', async () => {
+    hoisted.transactionGet.mockResolvedValueOnce({
+      exists: true,
+      data: () => ({
+        disconnectState: 'disconnect_pending',
+        disconnectReason: 'subscription_enforcement',
+        disconnectAttemptCount: 10,
+        disconnectNextAttemptAt: null,
+        disconnectRetryExpiresAt: { toMillis: () => 1 },
+        disconnectManualReviewRequired: true,
+      }),
+    });
+
+    const didResume = await resumeServiceDisconnectRetryAfterRecoveryFailure(
+      'user-1',
+      ServiceNames.SuuntoApp,
+      { tokenID: 'token-1', statusCode: 504, errorMessage: 'gateway timeout' },
+      1_000,
+    );
+
+    expect(didResume).toBe(true);
+    expect(hoisted.transactionSet).toHaveBeenCalledWith(
+      hoisted.rootRef,
+      expect.objectContaining({
+        disconnectState: 'disconnect_pending',
+        disconnectAttemptCount: 0,
+        disconnectLastStatusCode: 504,
+        disconnectManualReviewRequired: false,
+        disconnectNextAttemptAt: expect.objectContaining({ toMillis: expect.any(Function) }),
+      }),
+      { merge: true },
+    );
+    expect(hoisted.mirrorServiceDisconnectPendingToUserMeta).toHaveBeenCalledWith(
+      'user-1',
+      ServiceNames.SuuntoApp,
+      expect.objectContaining({
+        attemptCount: 0,
+        lastStatusCode: 504,
+        manualReviewRequired: false,
+        nextAttemptAt: expect.objectContaining({ toMillis: expect.any(Function) }),
+      }),
     );
   });
 

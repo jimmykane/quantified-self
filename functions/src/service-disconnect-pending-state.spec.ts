@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   buildPendingDisconnectMarkState,
   buildPendingDisconnectMetaInputFromRootData,
+  buildPendingDisconnectRecoveryRetryData,
   buildPendingDisconnectRetryFailureTransition,
   buildRestoredPendingDisconnectData,
   normalizePendingServiceDisconnectErrorMessage,
@@ -121,6 +122,33 @@ describe('service-disconnect-pending-state', () => {
     expect(toMillis(transition.rootData.disconnectNextAttemptAt)).toBe(NOW_MS + DAY_MS);
     expect(toMillis(transition.rootData.disconnectLastAttemptAt)).toBe(NOW_MS);
     expect(transition.rootData.disconnectRetryExpiresAt).toBe(retryExpiresAt);
+  });
+
+  it('builds fresh recovery retry data from a manual-review root', () => {
+    const restored = buildPendingDisconnectRecoveryRetryData(
+      {
+        disconnectState: 'disconnect_pending',
+        disconnectReason: SERVICE_DISCONNECT_PENDING_REASON.SubscriptionEnforcement,
+        disconnectAttemptCount: 10,
+        disconnectNextAttemptAt: null,
+        disconnectRetryExpiresAt: timestamp(NOW_MS - DAY_MS),
+        disconnectManualReviewRequired: true,
+      },
+      { tokenID: 'token-1', statusCode: 504, errorMessage: 'gateway timeout' },
+      NOW_MS,
+    );
+
+    expect(restored).toMatchObject({
+      disconnectState: 'disconnect_pending',
+      disconnectReason: SERVICE_DISCONNECT_PENDING_REASON.SubscriptionEnforcement,
+      disconnectAttemptCount: 0,
+      disconnectLastStatusCode: 504,
+      disconnectLastErrorMessage: 'gateway timeout',
+      disconnectManualReviewRequired: false,
+    });
+    expect(toMillis(restored.disconnectNextAttemptAt)).toBe(NOW_MS + 30 * MINUTE_MS);
+    expect(toMillis(restored.disconnectLastAttemptAt)).toBe(NOW_MS);
+    expect(toMillis(restored.disconnectRetryExpiresAt)).toBe(NOW_MS + 30 * DAY_MS);
   });
 
   it('builds retry failure data at max attempts with terminal manual-review projection', () => {

@@ -14,6 +14,7 @@ import { releaseQueueItemsDeferredForPendingDisconnect } from './queue/pending-d
 import {
   buildPendingDisconnectMarkState,
   buildPendingDisconnectMetaInputFromRootData,
+  buildPendingDisconnectRecoveryRetryData,
   buildPendingDisconnectRetryFailureTransition,
   buildRestoredPendingDisconnectData,
   isServiceDisconnectPendingData,
@@ -228,6 +229,40 @@ export async function recordServiceDisconnectRetryFailure(
       retryExpiresAt: timestampToISOString(retryUpdate.finalData.disconnectRetryExpiresAt),
     });
   }
+  return true;
+}
+
+export async function resumeServiceDisconnectRetryAfterRecoveryFailure(
+  userID: string,
+  serviceName: ServiceNames,
+  failure: PendingServiceDisconnectFailure,
+  nowMs = Date.now(),
+): Promise<boolean> {
+  const db = admin.firestore();
+  const rootRef = getServiceTokenRootDocumentRef(userID, serviceName);
+
+  const rootData = await db.runTransaction(async (transaction) => {
+    if (await shouldSkipPendingDisconnectWrite(db, transaction, userID, serviceName, 'recovery_retry_resume')) {
+      return null;
+    }
+
+    const snapshot = await transaction.get(rootRef);
+    const existing = snapshot.exists ? snapshot.data() as PendingServiceDisconnectRootData : {};
+    const nextData = buildPendingDisconnectRecoveryRetryData(existing, failure, nowMs);
+
+    transaction.set(rootRef, nextData, { merge: true });
+    return nextData;
+  });
+
+  if (!rootData) {
+    return false;
+  }
+
+  await mirrorServiceDisconnectPendingToUserMeta(
+    userID,
+    serviceName,
+    buildPendingDisconnectMetaInputFromRootData(rootData, nowMs),
+  );
   return true;
 }
 
