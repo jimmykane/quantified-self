@@ -5,6 +5,7 @@ import {
   ActivityInterface,
   DataSpeed,
   DataSwimPace,
+  DataSwimDistance,
   DataSwimPaceMinutesPer100Yard,
   DistanceUnits,
   EventInterface,
@@ -49,6 +50,11 @@ function createSwimLength(overrides: Record<string, unknown> = {}): Record<strin
     calories: 4,
     ...overrides,
   };
+}
+
+function formatExpectedSwimDistance(distance: number): string {
+  const swimDistance = new DataSwimDistance(distance);
+  return `${swimDistance.getDisplayValue()} ${swimDistance.getDisplayUnit()}`;
 }
 
 describe('EventCardSwimLengthsComponent', () => {
@@ -201,9 +207,10 @@ describe('EventCardSwimLengthsComponent', () => {
     component.ngOnChanges();
 
     const group = component.swimLengthViews[0].groups[0];
-    expect(group.rows[0].Distance).toBe('1500 m');
-    expect(group.rows[0].Split).toBe('1500 m');
-    expect(group.summaryRow.Distance).toBe('1500 m');
+    const expectedDistance = formatExpectedSwimDistance(1500);
+    expect(group.rows[0].Distance).toBe(expectedDistance);
+    expect(group.rows[0].Split).toBe(expectedDistance);
+    expect(group.summaryRow.Distance).toBe(expectedDistance);
   });
 
   it('should create rest-only groups for consecutive idle rows', () => {

@@ -16,6 +16,7 @@ import {
   DataSpeed,
   DataStamina,
   DataSwimPace,
+  DataSwimDistance,
   DistanceUnits,
   DynamicDataLoader,
   LapTypes,
@@ -2036,7 +2037,9 @@ describe('event-echarts-data.helper', () => {
       } as any,
     });
 
-    expect(markers[0].tooltipDetails.find((detail) => detail.label === 'Distance')?.value).toBe('1500 m');
+    const expectedDistance = new DataSwimDistance(1500);
+    expect(markers[0].tooltipDetails.find((detail) => detail.label === 'Distance')?.value)
+      .toBe(`${expectedDistance.getDisplayValue()} ${expectedDistance.getDisplayUnit()}`);
   });
 
   it('formats swim length pace with preferred 100-yard units', () => {

@@ -1,6 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { describe, expect, it, beforeEach, vi } from 'vitest';
-import { ActivityTypes, DataDistance, DataDuration, DataPaceAvg, DataSpeedAvg, DistanceUnits, EventInterface } from '@sports-alliance/sports-lib';
+import { ActivityTypes, DataDistance, DataDuration, DataPaceAvg, DataSpeedAvg, DataSwimDistance, DistanceUnits, EventInterface } from '@sports-alliance/sports-lib';
 import { AppUserSettingsQueryService } from '../app.user-settings-query.service';
 import { MapEventPopupContentService } from './map-event-popup-content.service';
 
@@ -91,7 +91,8 @@ describe('MapEventPopupContentService', () => {
 
     const content = service.buildFromEvent(event);
 
-    expect(content.metrics[1]).toEqual({ value: '1500', label: 'm' });
+    const expectedDistance = new DataSwimDistance(1500);
+    expect(content.metrics[1]).toEqual({ value: `${expectedDistance.getDisplayValue()}`, label: 'm' });
   });
 
   it('returns placeholder effort when event effort stats are missing', () => {

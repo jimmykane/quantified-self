@@ -12,6 +12,7 @@ import {
     DataFeeling,
     DataPaceAvg,
     DataSpeedAvg,
+    DataSwimDistance,
     DistanceUnits,
     DynamicDataLoader,
     EventInterface,
@@ -192,9 +193,10 @@ describe('EventSummaryComponent', () => {
 
             fixture.detectChanges();
 
-            expect(component.getStatValue(DataDistance.type)).toBe('1500');
+            const expectedDistance = new DataSwimDistance(1500);
+            expect(component.getStatValue(DataDistance.type)).toBe(`${expectedDistance.getDisplayValue()}`);
             expect(component.getStatUnit(DataDistance.type)).toBe('m');
-            expect(component.heroSummaryMetrics[1]).toEqual({ value: '1500', label: 'm' });
+            expect(component.heroSummaryMetrics[1]).toEqual({ value: `${expectedDistance.getDisplayValue()}`, label: 'm' });
         });
 
         it('should expose single selected device name in the summary chip', () => {
