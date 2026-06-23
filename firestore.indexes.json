@@ -5,11 +5,11 @@
       "queryScope": "COLLECTION",
       "fields": [
         {
-          "fieldPath": "disconnectState",
+          "fieldPath": "disconnectManualReviewRequired",
           "order": "ASCENDING"
         },
         {
-          "fieldPath": "disconnectManualReviewRequired",
+          "fieldPath": "disconnectState",
           "order": "ASCENDING"
         },
         {
@@ -43,11 +43,11 @@
       "queryScope": "COLLECTION",
       "fields": [
         {
-          "fieldPath": "disconnectState",
+          "fieldPath": "disconnectManualReviewRequired",
           "order": "ASCENDING"
         },
         {
-          "fieldPath": "disconnectManualReviewRequired",
+          "fieldPath": "disconnectState",
           "order": "ASCENDING"
         },
         {
@@ -81,11 +81,11 @@
       "queryScope": "COLLECTION",
       "fields": [
         {
-          "fieldPath": "disconnectState",
+          "fieldPath": "disconnectManualReviewRequired",
           "order": "ASCENDING"
         },
         {
-          "fieldPath": "disconnectManualReviewRequired",
+          "fieldPath": "disconnectState",
           "order": "ASCENDING"
         },
         {
