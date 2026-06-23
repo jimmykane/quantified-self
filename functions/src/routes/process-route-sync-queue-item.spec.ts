@@ -6,6 +6,7 @@ import { ServiceNames } from '@sports-alliance/sports-lib';
 const routeDocuments = new Map<string, Record<string, unknown>>();
 
 const queueUtilsMocks = {
+  deferQueueItemForPendingDisconnect: vi.fn(),
   increaseRetryCountForQueueItem: vi.fn(),
   markQueueItemSkipped: vi.fn(),
   moveToDeadLetterQueue: vi.fn(),
@@ -24,6 +25,7 @@ vi.mock('../queue-utils', () => ({
   QUEUE_SKIPPED_REASONS: {
     UserDeletedOrDeleting: 'user_deleted_or_deleting',
   },
+  deferQueueItemForPendingDisconnect: (...args: any[]) => queueUtilsMocks.deferQueueItemForPendingDisconnect(...args),
   increaseRetryCountForQueueItem: (...args: any[]) => queueUtilsMocks.increaseRetryCountForQueueItem(...args),
   markQueueItemSkipped: (...args: any[]) => queueUtilsMocks.markQueueItemSkipped(...args),
   moveToDeadLetterQueue: (...args: any[]) => queueUtilsMocks.moveToDeadLetterQueue(...args),
@@ -158,6 +160,7 @@ describe('processRouteSyncQueueItem', () => {
     utilsMocks.generateIDFromParts.mockResolvedValue('route-doc-1');
     queueUtilsMocks.markQueueItemSkipped.mockResolvedValue(QueueResult.Processed);
     queueUtilsMocks.updateToProcessed.mockResolvedValue(QueueResult.Processed);
+    queueUtilsMocks.deferQueueItemForPendingDisconnect.mockResolvedValue(QueueResult.Deferred);
     queueUtilsMocks.increaseRetryCountForQueueItem.mockResolvedValue(QueueResult.RetryIncremented);
     queueUtilsMocks.moveToDeadLetterQueue.mockResolvedValue(QueueResult.MovedToDLQ);
     routeProcessingMocks.parseRoutePayload.mockResolvedValue(createParsedRouteFile());
@@ -220,6 +223,25 @@ describe('processRouteSyncQueueItem', () => {
       }),
     );
     expect(queueUtilsMocks.increaseRetryCountForQueueItem).not.toHaveBeenCalled();
+  });
+
+  it('defers route sync items when Suunto token use is blocked by a pending disconnect', async () => {
+    const pendingDisconnectError = new Error('Suunto disconnect is pending.');
+    pendingDisconnectError.name = 'TokenUseSkippedForPendingDisconnectError';
+    const queueItem = createQueueItem();
+    suuntoRouteMocks.exportSuuntoRouteAsGPX.mockRejectedValueOnce(pendingDisconnectError);
+
+    const result = await processRouteSyncQueueItem(queueItem);
+
+    expect(result).toBe(QueueResult.Deferred);
+    expect(queueUtilsMocks.deferQueueItemForPendingDisconnect).toHaveBeenCalledWith(
+      queueItem,
+      undefined,
+      { deferredServiceName: ServiceNames.SuuntoApp },
+    );
+    expect(queueUtilsMocks.increaseRetryCountForQueueItem).not.toHaveBeenCalled();
+    expect(queueUtilsMocks.moveToDeadLetterQueue).not.toHaveBeenCalled();
+    expect(queueUtilsMocks.markQueueItemSkipped).not.toHaveBeenCalled();
   });
 
   it('retries Suunto route export JSON 5xx payloads instead of treating them as GPX parse failures', async () => {

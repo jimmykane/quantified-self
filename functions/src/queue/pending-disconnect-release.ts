@@ -4,6 +4,7 @@ import { ServiceNames } from '@sports-alliance/sports-lib';
 import { SLEEP_PROVIDERS, type SleepProvider } from '../../../shared/sleep';
 import { ACTIVITY_SYNC_QUEUE_COLLECTION_NAME } from '../activity-sync/constants';
 import { SLEEP_SYNC_QUEUE_COLLECTION_NAME } from '../sleep/constants';
+import { ROUTE_SYNC_QUEUE_COLLECTION_NAME } from '../routes/route-sync.constants';
 import {
     isPendingDisconnectQueueItemDeferred,
 } from '../queue-utils';
@@ -79,6 +80,15 @@ function isActivitySyncDeferredForService(data: QueueDocData, serviceName: Servi
     }
 
     return data.sourceServiceName === serviceName || data.destinationServiceName === serviceName;
+}
+
+function isRouteSyncDeferredForService(data: QueueDocData, serviceName: ServiceNames): boolean {
+    const deferredServiceName = `${data.deferredServiceName || ''}`.trim();
+    if (deferredServiceName) {
+        return deferredServiceName === serviceName;
+    }
+
+    return data.sourceServiceName === serviceName;
 }
 
 function isMissingOrMatchingLocalUser(data: QueueDocData, fieldName: 'firebaseUserID' | 'userID', userID: string): boolean {
@@ -187,6 +197,7 @@ export async function releaseQueueItemsDeferredForPendingDisconnect(
     const sleepProvider = getSleepProviderForService(serviceName);
     const workoutQueue = db.collection(getServiceWorkoutQueueName(serviceName));
     const sleepQueue = db.collection(SLEEP_SYNC_QUEUE_COLLECTION_NAME);
+    const routeSyncQueue = db.collection(ROUTE_SYNC_QUEUE_COLLECTION_NAME);
     const providerLookups = await collectProviderQueueLookupsForUser(userID, serviceName);
     const releasedQueueItemPaths = new Set<string>();
 
@@ -231,7 +242,30 @@ export async function releaseQueueItemsDeferredForPendingDisconnect(
         })),
     ] : [];
 
-    const [workoutCount, activitySyncCount, sleepSyncCount] = await Promise.all([
+    const routeSyncQueries: ReleaseQuerySpec[] = [
+        {
+            query: routeSyncQueue.where('firebaseUserID', '==', userID),
+            matchesService: (data) => isRouteSyncDeferredForService(data, serviceName),
+            logContext: { userID, serviceName, queueType: 'route_sync', lookupType: 'firebaseUserID' },
+        },
+        ...providerLookups.map((lookup) => ({
+            query: routeSyncQueue.where('providerUserId', '==', lookup.providerUserID),
+            matchesService: (data: QueueDocData) => (
+                isRouteSyncDeferredForService(data, serviceName)
+                && isMissingOrMatchingLocalUser(data, 'firebaseUserID', userID)
+            ),
+            logContext: {
+                userID,
+                serviceName,
+                queueType: 'route_sync',
+                lookupType: 'providerIdentifier',
+                lookupField: 'providerUserId',
+                tokenLookupField: lookup.fieldName,
+            },
+        })),
+    ];
+
+    const [workoutCount, activitySyncCount, sleepSyncCount, routeSyncCount] = await Promise.all([
         releaseDeferredDocsForQueries(workoutQueries, releasedQueueItemPaths),
         releaseDeferredDocsForQuery(
             db.collection(ACTIVITY_SYNC_QUEUE_COLLECTION_NAME).where('userID', '==', userID),
@@ -240,9 +274,10 @@ export async function releaseQueueItemsDeferredForPendingDisconnect(
             releasedQueueItemPaths,
         ),
         releaseDeferredDocsForQueries(sleepQueries, releasedQueueItemPaths),
+        releaseDeferredDocsForQueries(routeSyncQueries, releasedQueueItemPaths),
     ]);
 
-    const releasedCount = workoutCount + activitySyncCount + sleepSyncCount;
+    const releasedCount = workoutCount + activitySyncCount + sleepSyncCount + routeSyncCount;
     if (releasedCount > 0) {
         logger.info('[PendingDisconnectQueueRelease] Released deferred queue items after pending disconnect cleared.', {
             userID,
@@ -250,6 +285,7 @@ export async function releaseQueueItemsDeferredForPendingDisconnect(
             workoutCount,
             activitySyncCount,
             sleepSyncCount,
+            routeSyncCount,
             releasedCount,
         });
     }

@@ -4,6 +4,7 @@ import { FirestoreRouteJSON } from '../../../shared/app-route.interface';
 
 import { generateIDFromParts } from '../utils';
 import {
+    deferQueueItemForPendingDisconnect,
     increaseRetryCountForQueueItem,
     markQueueItemSkipped,
     moveToDeadLetterQueue,
@@ -241,6 +242,10 @@ function isProviderAuthRequiredError(error: unknown): boolean {
         || code === 'functions/permission-denied';
 }
 
+function isTokenUseSkippedForPendingDisconnectError(error: unknown): boolean {
+    return error instanceof Error && error.name === 'TokenUseSkippedForPendingDisconnectError';
+}
+
 export async function processRouteSyncQueueItem(
     queueItem: RouteSyncQueueItemInterface,
 ): Promise<QueueResult> {
@@ -326,6 +331,12 @@ export async function processRouteSyncQueueItem(
 
         if (isUserDeletionGuardReadError(error)) {
             return increaseRetryCountForQueueItem(queueItem, error, 1);
+        }
+
+        if (isTokenUseSkippedForPendingDisconnectError(error)) {
+            return deferQueueItemForPendingDisconnect(queueItem, undefined, {
+                deferredServiceName: queueItem.sourceServiceName,
+            });
         }
 
         if (isProviderAuthRequiredError(error)) {

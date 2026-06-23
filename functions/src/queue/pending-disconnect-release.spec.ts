@@ -3,6 +3,7 @@ import { ServiceNames } from '@sports-alliance/sports-lib';
 import { SLEEP_PROVIDERS } from '../../../shared/sleep';
 import { ACTIVITY_SYNC_QUEUE_COLLECTION_NAME } from '../activity-sync/constants';
 import { SLEEP_SYNC_QUEUE_COLLECTION_NAME } from '../sleep/constants';
+import { ROUTE_SYNC_QUEUE_COLLECTION_NAME } from '../routes/route-sync.constants';
 import { getServiceWorkoutQueueName } from '../shared/queue-names';
 import { QUEUE_DEFERRED_REASONS } from '../queue-utils';
 import { TTL_CONFIG } from '../shared/ttl-config';
@@ -140,15 +141,25 @@ describe('pending disconnect queue release', () => {
             provider: SLEEP_PROVIDERS.SuuntoApp,
             deferredReason,
         });
+        const routeSyncUpdate = addDoc(ROUTE_SYNC_QUEUE_COLLECTION_NAME, 'route-1', {
+            firebaseUserID: 'user-1',
+            sourceServiceName: ServiceNames.SuuntoApp,
+            deferredReason,
+        });
         const notDeferredSleepUpdate = addDoc(SLEEP_SYNC_QUEUE_COLLECTION_NAME, 'sleep-2', {
             userID: 'user-1',
             provider: SLEEP_PROVIDERS.SuuntoApp,
         });
+        const otherRouteSyncUpdate = addDoc(ROUTE_SYNC_QUEUE_COLLECTION_NAME, 'route-2', {
+            firebaseUserID: 'user-1',
+            sourceServiceName: ServiceNames.GarminAPI,
+            deferredReason,
+        });
 
         const releasedCount = await releaseQueueItemsDeferredForPendingDisconnect('user-1', ServiceNames.SuuntoApp);
 
-        expect(releasedCount).toBe(3);
-        for (const update of [workoutUpdate, activityUpdate, sleepUpdate]) {
+        expect(releasedCount).toBe(4);
+        for (const update of [workoutUpdate, activityUpdate, sleepUpdate, routeSyncUpdate]) {
             expect(update).toHaveBeenCalledWith(expect.objectContaining({
                 processed: false,
                 dispatchedToCloudTask: null,
@@ -160,9 +171,10 @@ describe('pending disconnect queue release', () => {
         }
         expect(otherActivityUpdate).not.toHaveBeenCalled();
         expect(notDeferredSleepUpdate).not.toHaveBeenCalled();
+        expect(otherRouteSyncUpdate).not.toHaveBeenCalled();
     });
 
-    it('releases legacy workout and sleep queue items by provider identifier when local user fields are missing', async () => {
+    it('releases legacy workout, sleep, and route queue items by provider identifier when local user fields are missing', async () => {
         const nowMs = 1_782_126_100_000;
         vi.spyOn(Date, 'now').mockReturnValue(nowMs);
         const deferredReason = QUEUE_DEFERRED_REASONS.ServiceDisconnectPending;
@@ -178,6 +190,11 @@ describe('pending disconnect queue release', () => {
             providerUserId: 'suunto-provider-user',
             deferredReason,
         });
+        const routeSyncUpdate = addDoc(ROUTE_SYNC_QUEUE_COLLECTION_NAME, 'route-legacy', {
+            providerUserId: 'suunto-provider-user',
+            sourceServiceName: ServiceNames.SuuntoApp,
+            deferredReason,
+        });
         const otherUserWorkoutUpdate = addDoc(getServiceWorkoutQueueName(ServiceNames.SuuntoApp), 'workout-other-user', {
             firebaseUserID: 'user-2',
             userName: 'suunto-provider-user',
@@ -188,10 +205,16 @@ describe('pending disconnect queue release', () => {
             providerUserId: 'suunto-provider-user',
             deferredReason,
         });
+        const otherUserRouteSyncUpdate = addDoc(ROUTE_SYNC_QUEUE_COLLECTION_NAME, 'route-other-user', {
+            firebaseUserID: 'user-2',
+            providerUserId: 'suunto-provider-user',
+            sourceServiceName: ServiceNames.SuuntoApp,
+            deferredReason,
+        });
 
         const releasedCount = await releaseQueueItemsDeferredForPendingDisconnect('user-1', ServiceNames.SuuntoApp);
 
-        expect(releasedCount).toBe(2);
+        expect(releasedCount).toBe(3);
         expect(workoutUpdate).toHaveBeenCalledWith(expect.objectContaining({
             processed: false,
             dispatchedToCloudTask: null,
@@ -204,8 +227,15 @@ describe('pending disconnect queue release', () => {
             expireAt: new Date(nowMs + TTL_CONFIG.QUEUE_ITEM_IN_DAYS * 24 * 60 * 60 * 1000),
             deferredReason: hoisted.deleteSentinel,
         }));
+        expect(routeSyncUpdate).toHaveBeenCalledWith(expect.objectContaining({
+            processed: false,
+            dispatchedToCloudTask: null,
+            expireAt: new Date(nowMs + TTL_CONFIG.QUEUE_ITEM_IN_DAYS * 24 * 60 * 60 * 1000),
+            deferredReason: hoisted.deleteSentinel,
+        }));
         expect(otherUserWorkoutUpdate).not.toHaveBeenCalled();
         expect(otherProviderSleepUpdate).not.toHaveBeenCalled();
+        expect(otherUserRouteSyncUpdate).not.toHaveBeenCalled();
     });
 
     it('does not release the same queue item twice when it matches local and provider identifier queries', async () => {
