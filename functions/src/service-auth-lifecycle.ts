@@ -191,6 +191,10 @@ function isPendingDisconnectTokenUseSkip(error: unknown): boolean {
   return error instanceof Error && error.name === 'TokenUseSkippedForPendingDisconnectError';
 }
 
+function isDeletedUserTokenRefreshSkip(error: unknown): boolean {
+  return error instanceof Error && error.name === 'TokenRefreshSkippedForDeletedUserError';
+}
+
 function addAccountDeletionTokenArchive(
   outcome: ServiceAuthCleanupOutcome,
   tokenID: string,
@@ -815,6 +819,8 @@ export async function cleanupServiceConnectionForUser(
             error?.message || `${serviceName} account-deletion token refresh failed with ${statusCode || 'unknown status'}`,
           );
           logger.error(`Refreshing token failed with ${statusCode || 'unknown status'} for ${tokenQueryDocumentSnapshot.id}. Archiving stored token material and proceeding with local cleanup.`);
+        } else if (isDeletedUserTokenRefreshSkip(error)) {
+          logger.warn(`Token refresh for ${tokenQueryDocumentSnapshot.id} was skipped because the user is missing or deletion is in progress. Proceeding with local cleanup.`);
         } else if (reason === SERVICE_AUTH_CLEANUP_REASONS.SubscriptionEnforcement
           && isRetryableSubscriptionEnforcementDisconnectStatus(statusCode)) {
           addRetryableDisconnectFailure(

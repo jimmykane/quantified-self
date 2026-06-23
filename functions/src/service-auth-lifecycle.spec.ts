@@ -1074,6 +1074,57 @@ describe('service-auth-lifecycle terminal auth handling', () => {
     expect(mockDeleteLocalServiceToken).not.toHaveBeenCalled();
   });
 
+  it('deletes subscription-enforcement tokens when token refresh is skipped for a deleted user', async () => {
+    tokenCollectionRef.get.mockResolvedValueOnce({
+      empty: false,
+      size: 1,
+      docs: [
+        {
+          id: 'suunto-token-id',
+          data: () => ({
+            serviceName: ServiceNames.SuuntoApp,
+            accessToken: 'valid-access-token',
+            refreshToken: 'stored-refresh-token',
+            expiresAt: Date.now() - 120_000,
+            scope: 'workout',
+            tokenType: 'bearer',
+            userName: 'suunto-user-id',
+            dateCreated: 1,
+            dateRefreshed: 2,
+          }),
+        },
+      ],
+    });
+    mockDeleteLocalServiceToken.mockResolvedValueOnce({
+      tokenRootDeleted: true,
+      tokenRootPreservedForOAuthFlow: false,
+      remainingTokenCount: 0,
+    });
+    const deletionGuardSkip = Object.assign(new Error('Skipping suuntoApp token use because user is missing'), {
+      name: 'TokenRefreshSkippedForDeletedUserError',
+    });
+
+    const outcome = await cleanupServiceConnectionForUser(
+      'firebase-user-123',
+      ServiceNames.SuuntoApp,
+      SERVICE_AUTH_CLEANUP_REASONS.SubscriptionEnforcement,
+      {
+        tokenResolver: vi.fn().mockRejectedValueOnce(deletionGuardSkip),
+      },
+    );
+
+    expect(outcome.preservedTokenCount).toBe(0);
+    expect(outcome.deletedTokenCount).toBe(1);
+    expect(outcome.retryableDisconnectFailures).toBeUndefined();
+    expect(mockAdapterDeauthorize).not.toHaveBeenCalled();
+    expect(mockDeleteLocalServiceToken).toHaveBeenCalledWith(
+      'firebase-user-123',
+      ServiceNames.SuuntoApp,
+      'suunto-token-id',
+      { preserveOAuthFlowContext: false },
+    );
+  });
+
   it('deletes subscription-enforcement tokens when partner deauthorization fails terminally', async () => {
     tokenCollectionRef.get.mockResolvedValueOnce({
       empty: false,
