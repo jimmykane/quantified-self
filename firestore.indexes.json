@@ -24,60 +24,7 @@
       "density": "SPARSE_ALL"
     },
     {
-      "collectionGroup": "suuntoAppAccessTokens",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "disconnectState",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "__name__",
-          "order": "ASCENDING"
-        }
-      ],
-      "density": "SPARSE_ALL"
-    },
-    {
       "collectionGroup": "COROSAPIAccessTokens",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "disconnectManualReviewRequired",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "disconnectState",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "disconnectNextAttemptAt",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "__name__",
-          "order": "ASCENDING"
-        }
-      ],
-      "density": "SPARSE_ALL"
-    },
-    {
-      "collectionGroup": "COROSAPIAccessTokens",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "disconnectState",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "__name__",
-          "order": "ASCENDING"
-        }
-      ],
-      "density": "SPARSE_ALL"
-    },
-    {
-      "collectionGroup": "garminAPITokens",
       "queryScope": "COLLECTION",
       "fields": [
         {
@@ -104,7 +51,15 @@
       "queryScope": "COLLECTION",
       "fields": [
         {
+          "fieldPath": "disconnectManualReviewRequired",
+          "order": "ASCENDING"
+        },
+        {
           "fieldPath": "disconnectState",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "disconnectNextAttemptAt",
           "order": "ASCENDING"
         },
         {
