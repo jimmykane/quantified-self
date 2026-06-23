@@ -2,7 +2,7 @@
 
 import * as functions from 'firebase-functions/v1';
 import * as logger from 'firebase-functions/logger';
-import { hasProAccess, PRO_REQUIRED_MESSAGE } from '../../utils';
+import { PRO_REQUIRED_MESSAGE } from '../../utils';
 import {
   disconnectServiceForUser,
   getAndSetServiceOAuth2AccessTokenForUser,
@@ -11,6 +11,7 @@ import {
 } from '../../OAuth2';
 import { SERVICE_NAME } from '../constants';
 import { FUNCTIONS_MANIFEST } from '../../../../shared/functions-manifest';
+import { hasServiceOAuthConnectAccess } from '../../service-oauth-access';
 
 
 interface GetAuthRedirectURIRequest {
@@ -38,7 +39,7 @@ export const getCOROSAPIAuthRequestTokenRedirectURI = functions
     const userID = context.auth.uid;
 
     // Enforce Pro Access
-    if (!(await hasProAccess(userID))) {
+    if (!(await hasServiceOAuthConnectAccess(userID, SERVICE_NAME))) {
       logger.warn(`Blocking COROS Auth for non-pro user ${userID}`);
       throw new functions.https.HttpsError('permission-denied', PRO_REQUIRED_MESSAGE);
     }
@@ -77,7 +78,7 @@ export const requestAndSetCOROSAPIAccessToken = functions
     const userID = context.auth.uid;
 
     // Enforce Pro Access
-    if (!(await hasProAccess(userID))) {
+    if (!(await hasServiceOAuthConnectAccess(userID, SERVICE_NAME))) {
       logger.warn(`Blocking COROS Token Set for non-pro user ${userID}`);
       throw new functions.https.HttpsError('permission-denied', PRO_REQUIRED_MESSAGE);
     }

@@ -1,15 +1,24 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import * as admin from 'firebase-admin';
+import { ServiceNames } from '@sports-alliance/sports-lib';
 
 // Mock dependencies using vi.hoisted to avoid initialization errors
-const { mockReconcileClaims, mockCheckAndSendEmails, mockLogger } = vi.hoisted(() => ({
+const {
+    mockReconcileClaims,
+    mockCheckAndSendEmails,
+    mockLogger,
+    mockIsServiceDisconnectPendingForUser,
+    mockClearServiceDisconnectPending,
+} = vi.hoisted(() => ({
     mockReconcileClaims: vi.fn(),
     mockCheckAndSendEmails: vi.fn(),
     mockLogger: {
         info: vi.fn(),
         warn: vi.fn(),
         error: vi.fn()
-    }
+    },
+    mockIsServiceDisconnectPendingForUser: vi.fn(),
+    mockClearServiceDisconnectPending: vi.fn(),
 }));
 
 vi.mock('./claims', () => ({
@@ -18,6 +27,11 @@ vi.mock('./claims', () => ({
 
 vi.mock('./email-triggers', () => ({
     checkAndSendSubscriptionEmails: mockCheckAndSendEmails
+}));
+
+vi.mock('../service-disconnect-pending', () => ({
+    isServiceDisconnectPendingForUser: mockIsServiceDisconnectPendingForUser,
+    clearServiceDisconnectPending: mockClearServiceDisconnectPending,
 }));
 
 vi.mock('firebase-functions/logger', () => mockLogger);
@@ -137,6 +151,8 @@ describe('onSubscriptionUpdated', () => {
         systemStatusData = {};
         hasActiveSubscription = false;
         deletionMarkerSequence = [];
+        mockIsServiceDisconnectPendingForUser.mockResolvedValue(false);
+        mockClearServiceDisconnectPending.mockResolvedValue(undefined);
 
         docSpy = vi.fn((path: string) => ({
             get: vi.fn(() => Promise.resolve(getDocSnapshot(path))),
@@ -358,6 +374,56 @@ describe('onSubscriptionUpdated', () => {
 
             // Should call reconcileClaims twice (initial + after clearing grace period)
             expect(mockReconcileClaims).toHaveBeenCalledTimes(2);
+        });
+
+        it('should clear pending disconnects when a Pro subscription is restored', async () => {
+            const uid = 'pro_restored_user';
+            const event = createMockEvent(uid, 'sub456');
+
+            setupUserExists(true, { gracePeriodUntil: new Date() });
+            setupSubscriptionsQuery(true);
+            mockReconcileClaims.mockResolvedValue({ role: 'pro' });
+            mockIsServiceDisconnectPendingForUser.mockImplementation(async (_uid: string, serviceName: ServiceNames) => (
+                serviceName === ServiceNames.SuuntoApp
+            ));
+
+            await onSubscriptionUpdated(event);
+
+            expect(mockClearServiceDisconnectPending).toHaveBeenCalledWith(uid, ServiceNames.SuuntoApp);
+            expect(mockClearServiceDisconnectPending).not.toHaveBeenCalledWith(uid, ServiceNames.COROSAPI);
+            expect(mockClearServiceDisconnectPending).not.toHaveBeenCalledWith(uid, ServiceNames.GarminAPI);
+        });
+
+        it('should not clear pending disconnects for a non-Pro active subscription', async () => {
+            const uid = 'basic_active_user';
+            const event = createMockEvent(uid, 'sub456');
+
+            setupUserExists(true, { gracePeriodUntil: new Date() });
+            setupSubscriptionsQuery(true);
+            mockReconcileClaims.mockResolvedValue({ role: 'basic' });
+            mockIsServiceDisconnectPendingForUser.mockResolvedValue(true);
+
+            await onSubscriptionUpdated(event);
+
+            expect(mockClearServiceDisconnectPending).not.toHaveBeenCalled();
+        });
+
+        it('should clear pending disconnects when an active grace period is set', async () => {
+            const uid = 'grace_restored_user';
+            const event = createMockEvent(uid, 'sub456');
+
+            setupUserExists(true, {});
+            setupSubscriptionsQuery(false);
+            mockReconcileClaims.mockResolvedValue({ role: 'free' });
+            mockIsServiceDisconnectPendingForUser.mockImplementation(async (_uid: string, serviceName: ServiceNames) => (
+                serviceName === ServiceNames.GarminAPI
+            ));
+
+            await onSubscriptionUpdated(event);
+
+            expect(mockClearServiceDisconnectPending).toHaveBeenCalledWith(uid, ServiceNames.GarminAPI);
+            expect(mockClearServiceDisconnectPending).not.toHaveBeenCalledWith(uid, ServiceNames.SuuntoApp);
+            expect(mockClearServiceDisconnectPending).not.toHaveBeenCalledWith(uid, ServiceNames.COROSAPI);
         });
 
         it('should handle update error gracefully when clearing grace period', async () => {

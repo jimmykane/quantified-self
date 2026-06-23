@@ -1,5 +1,6 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { moveToDeadLetterQueue, increaseRetryCountForQueueItem, markQueueItemSkipped, QUEUE_SKIPPED_REASONS, updateToProcessed, QueueResult } from './queue-utils';
+import { afterEach, describe, it, expect, vi, beforeEach } from 'vitest';
+import { deferQueueItemForPendingDisconnect, moveToDeadLetterQueue, increaseRetryCountForQueueItem, markQueueItemSkipped, PENDING_DISCONNECT_QUEUE_DISPATCH_MARKER, QUEUE_DEFERRED_REASONS, QUEUE_SKIPPED_REASONS, updateToProcessed, QueueResult } from './queue-utils';
+import { TTL_CONFIG } from './shared/ttl-config';
 
 // Hoisted Firestore mocks
 const hoisted = vi.hoisted(() => {
@@ -41,6 +42,10 @@ describe('queue-utils', () => {
         hoisted.batch.commit.mockReset();
         hoisted.bulkWriter.set.mockReset();
         hoisted.bulkWriter.delete.mockReset();
+    });
+
+    afterEach(() => {
+        vi.restoreAllMocks();
     });
 
     describe('moveToDeadLetterQueue', () => {
@@ -142,6 +147,39 @@ describe('queue-utils', () => {
                     skippedContext: 'USER_DELETION_GUARD',
                 }),
             );
+        });
+    });
+
+    describe('deferQueueItemForPendingDisconnect', () => {
+        it('parks queue item as deferred until pending disconnect clears without incrementing retry count', async () => {
+            const nowMs = 1_782_126_100_000;
+            vi.spyOn(Date, 'now').mockReturnValue(nowMs);
+            const update = vi.fn();
+            const queueItem: any = {
+                id: 'q6',
+                ref: { update },
+                retryCount: 3,
+                dispatchedToCloudTask: 123,
+            };
+
+            const res = await deferQueueItemForPendingDisconnect(queueItem, undefined, {
+                extra: true,
+            });
+
+            expect(res).toBe(QueueResult.Deferred);
+            expect(update).toHaveBeenCalledWith(expect.objectContaining({
+                processed: true,
+                resultStatus: 'deferred',
+                deferredReason: QUEUE_DEFERRED_REASONS.ServiceDisconnectPending,
+                deferredContext: 'SERVICE_DISCONNECT_PENDING',
+                dispatchedToCloudTask: PENDING_DISCONNECT_QUEUE_DISPATCH_MARKER,
+                serviceDisconnectPendingDeferredAt: nowMs,
+                expireAt: new Date(nowMs + TTL_CONFIG.PENDING_DISCONNECT_QUEUE_ITEM_IN_DAYS * 24 * 60 * 60 * 1000),
+                extra: true,
+            }));
+            expect(update).not.toHaveBeenCalledWith(expect.objectContaining({
+                retryCount: expect.any(Number),
+            }));
         });
     });
 });

@@ -7,7 +7,9 @@ const {
     mockSetCustomUserClaims,
     mockRecursiveDelete,
     mockFirestoreInstance,
-    mockAuthInstance
+    mockAuthInstance,
+    mockIsServiceDisconnectPendingForUser,
+    mockMarkServiceDisconnectPending
 } = vi.hoisted(() => {
     const auth = {
         getUser: vi.fn().mockResolvedValue({ customClaims: {} }),
@@ -42,7 +44,9 @@ const {
         mockSetCustomUserClaims: auth.setCustomUserClaims,
         mockAuthInstance: auth,
         mockRecursiveDelete: fs.recursiveDelete,
-        mockFirestoreInstance: fs
+        mockFirestoreInstance: fs,
+        mockIsServiceDisconnectPendingForUser: vi.fn().mockResolvedValue(false),
+        mockMarkServiceDisconnectPending: vi.fn().mockResolvedValue(undefined)
     };
 });
 
@@ -62,6 +66,11 @@ vi.mock('firebase-functions/v2/scheduler', () => ({
     onSchedule: (opts: any, handler: any) => handler
 }));
 
+vi.mock('../service-disconnect-pending', () => ({
+    isServiceDisconnectPendingForUser: mockIsServiceDisconnectPendingForUser,
+    markServiceDisconnectPending: mockMarkServiceDisconnectPending,
+}));
+
 // Import AFTER mocks
 import { enforceSubscriptionLimits } from './enforce-subscription-limits';
 import * as OAuth2 from '../OAuth2';
@@ -77,7 +86,20 @@ describe('enforceSubscriptionLimits', () => {
         vi.clearAllMocks();
 
         mockGetUser.mockResolvedValue({ customClaims: {} });
-        deauthorizeServiceSpy = vi.spyOn(OAuth2, 'deauthorizeServiceForUser').mockResolvedValue(undefined);
+        mockIsServiceDisconnectPendingForUser.mockResolvedValue(false);
+        mockMarkServiceDisconnectPending.mockResolvedValue(undefined);
+        deauthorizeServiceSpy = vi.spyOn(OAuth2, 'deauthorizeServiceForSubscriptionEnforcement').mockResolvedValue({
+            reason: 'subscription_enforcement',
+            tokenCount: 0,
+            deletedTokenCount: 0,
+            preservedTokenCount: 0,
+            partnerDeauthorizeAttempted: 0,
+            partnerDeauthorizeFailed: 0,
+            localCleanupStatus: 'completed',
+            connectionStateUpdate: 'unchanged',
+            fallbackTokenRootCleanupPerformed: false,
+            retryableDisconnectFailures: [],
+        } as any);
         vi.spyOn(Claims, 'reconcileClaims').mockResolvedValue({ role: 'free' });
     });
 
@@ -370,6 +392,78 @@ describe('enforceSubscriptionLimits', () => {
         expect(deauthorizeServiceSpy).toHaveBeenCalledWith('user1', ServiceNames.COROSAPI);
         expect(deauthorizeServiceSpy).toHaveBeenCalledWith('user1', ServiceNames.GarminAPI);
         expect(mockRecursiveDelete).not.toHaveBeenCalled();
+    });
+
+    it('should mark subscription-enforcement disconnect pending for retryable partner failures', async () => {
+        const pastDate = new Date(Date.now() - 100000);
+
+        mockFirestoreInstance.collection.mockImplementation((path: string) => {
+            if (path === GARMIN_API_TOKENS_COLLECTION_NAME) return mockQuery([{ id: 'user1' }]);
+            if (path === 'users') return mockQuery([mockUserDoc('user1', { hasSubscribedOnce: true })]);
+            if (path.includes('subscriptions')) return mockQuery([]);
+            return mockQuery([]);
+        });
+
+        mockFirestoreInstance.doc.mockImplementation((path: string) => {
+            if (path === 'users/user1/system/status') {
+                return mockDoc({ gracePeriodUntil: admin.firestore.Timestamp.fromDate(pastDate) });
+            }
+            return mockDoc({});
+        });
+
+        deauthorizeServiceSpy.mockImplementation(async (_uid: string, serviceName: ServiceNames) => ({
+            reason: 'subscription_enforcement',
+            tokenCount: 1,
+            deletedTokenCount: 0,
+            preservedTokenCount: serviceName === ServiceNames.SuuntoApp ? 1 : 0,
+            partnerDeauthorizeAttempted: 1,
+            partnerDeauthorizeFailed: serviceName === ServiceNames.SuuntoApp ? 1 : 0,
+            localCleanupStatus: 'completed',
+            connectionStateUpdate: 'unchanged',
+            fallbackTokenRootCleanupPerformed: false,
+            retryableDisconnectFailures: serviceName === ServiceNames.SuuntoApp
+                ? [{ tokenID: 'suunto-token-id', statusCode: 504, errorMessage: 'gateway timeout' }]
+                : [],
+        }));
+
+        const wrapped = enforceSubscriptionLimits as any;
+        await wrapped({});
+
+        expect(mockMarkServiceDisconnectPending).toHaveBeenCalledWith(
+            'user1',
+            ServiceNames.SuuntoApp,
+            { tokenID: 'suunto-token-id', statusCode: 504, errorMessage: 'gateway timeout' },
+        );
+    });
+
+    it('should not reset disconnect retry state when service disconnect is already pending', async () => {
+        const pastDate = new Date(Date.now() - 100000);
+
+        mockFirestoreInstance.collection.mockImplementation((path: string) => {
+            if (path === GARMIN_API_TOKENS_COLLECTION_NAME) return mockQuery([{ id: 'user1' }]);
+            if (path === 'users') return mockQuery([mockUserDoc('user1', { hasSubscribedOnce: true })]);
+            if (path.includes('subscriptions')) return mockQuery([]);
+            return mockQuery([]);
+        });
+
+        mockFirestoreInstance.doc.mockImplementation((path: string) => {
+            if (path === 'users/user1/system/status') {
+                return mockDoc({ gracePeriodUntil: admin.firestore.Timestamp.fromDate(pastDate) });
+            }
+            return mockDoc({});
+        });
+
+        mockIsServiceDisconnectPendingForUser.mockImplementation(async (_uid: string, serviceName: ServiceNames) => (
+            serviceName === ServiceNames.SuuntoApp
+        ));
+
+        const wrapped = enforceSubscriptionLimits as any;
+        await wrapped({});
+
+        expect(deauthorizeServiceSpy).not.toHaveBeenCalledWith('user1', ServiceNames.SuuntoApp);
+        expect(deauthorizeServiceSpy).toHaveBeenCalledWith('user1', ServiceNames.COROSAPI);
+        expect(deauthorizeServiceSpy).toHaveBeenCalledWith('user1', ServiceNames.GarminAPI);
+        expect(mockMarkServiceDisconnectPending).not.toHaveBeenCalled();
     });
 
     it('should skip deauthorization and event cleanup for Pro users', async () => {

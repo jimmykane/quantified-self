@@ -54,6 +54,9 @@ export const processActivitySyncTask = onTaskDispatched({
             case QueueResult.Processed:
                 logger.info(`[ActivitySyncTaskWorker] Successfully processed item ${queueItemId}`);
                 break;
+            case QueueResult.Deferred:
+                logger.warn(`[ActivitySyncTaskWorker] Deferred item ${queueItemId}; it remains queued for a future dispatcher run.`);
+                break;
             case QueueResult.MovedToDLQ:
                 logger.warn(`[ActivitySyncTaskWorker] Item ${queueItemId} was moved to DLQ.`);
                 break;

@@ -49,6 +49,7 @@ vi.mock('../queue-utils', () => ({
   QueueResult: {
     Processed: 'PROCESSED',
     Skipped: 'SKIPPED',
+    Deferred: 'DEFERRED',
     RetryIncremented: 'RETRY_INCREMENTED',
     MovedToDLQ: 'MOVED_TO_DLQ',
     Failed: 'FAILED',
@@ -145,5 +146,17 @@ describe('processActivitySyncTask', () => {
     await expect(invokeWorker({ data: { queueItemId: 'queue-item-1' } }))
       .rejects
       .toThrow('Item queue-item-1 failed and was scheduled for retry.');
+  });
+
+  it('stops Cloud Task retries when processing defers the queue item', async () => {
+    mockQueueGet.mockResolvedValueOnce({
+      exists: true,
+      id: 'queue-item-1',
+      ref: { path: 'activitySyncQueue/queue-item-1' },
+      data: () => ({ processed: false }),
+    });
+    mockProcessActivitySyncQueueItem.mockResolvedValueOnce('DEFERRED');
+
+    await expect(invokeWorker({ data: { queueItemId: 'queue-item-1' } })).resolves.toBeUndefined();
   });
 });

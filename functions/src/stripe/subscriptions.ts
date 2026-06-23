@@ -39,19 +39,61 @@
 import { onDocumentWritten } from 'firebase-functions/v2/firestore';
 import * as admin from 'firebase-admin';
 import * as logger from 'firebase-functions/logger';
+import { ServiceNames } from '@sports-alliance/sports-lib';
 import { reconcileClaims } from './claims';
 import { checkAndSendSubscriptionEmails } from './email-triggers';
 import { GRACE_PERIOD_DAYS } from '../../../shared/limits';
+import {
+    clearServiceDisconnectPending,
+    isServiceDisconnectPendingForUser,
+} from '../service-disconnect-pending';
 
 const USER_DELETION_TOMBSTONES_COLLECTION = 'userDeletionTombstones';
+const SUBSCRIPTION_ENFORCED_SERVICE_NAMES: ReadonlyArray<ServiceNames> = [
+    ServiceNames.SuuntoApp,
+    ServiceNames.COROSAPI,
+    ServiceNames.GarminAPI,
+];
 
 const getTimestampMillis = (value: unknown): number | null => {
     if (value && typeof value === 'object' && typeof (value as { toMillis?: unknown }).toMillis === 'function') {
         return (value as { toMillis: () => number }).toMillis();
     }
 
+    if (value instanceof Date) {
+        return value.getTime();
+    }
+
     return null;
 };
+
+const clearPendingServiceDisconnectsForRestoredEntitlement = async (
+    uid: string,
+    reason: 'active_pro_subscription' | 'active_grace_period'
+): Promise<void> => {
+    await Promise.all(SUBSCRIPTION_ENFORCED_SERVICE_NAMES.map(async (serviceName) => {
+        try {
+            if (!(await isServiceDisconnectPendingForUser(uid, serviceName))) {
+                return;
+            }
+
+            await clearServiceDisconnectPending(uid, serviceName);
+            logger.info(`[onSubscriptionUpdated] Cleared pending ${serviceName} disconnect for ${uid} because entitlement is restored.`, {
+                uid,
+                serviceName,
+                reason,
+            });
+        } catch (error) {
+            logger.error(`[onSubscriptionUpdated] Failed to clear pending ${serviceName} disconnect for restored entitlement on ${uid}.`, error);
+        }
+    }));
+};
+
+async function isCurrentGracePeriodActive(systemStatusRef: admin.firestore.DocumentReference): Promise<boolean> {
+    const systemDoc = await systemStatusRef.get();
+    const gracePeriodUntilMs = getTimestampMillis(systemDoc.data()?.gracePeriodUntil);
+    return gracePeriodUntilMs !== null && gracePeriodUntilMs > Date.now();
+}
 
 const hasActiveDeletionMarker = async (
     deletionMarkerRef: admin.firestore.DocumentReference,
@@ -155,8 +197,11 @@ export const onSubscriptionUpdated = onDocumentWritten({
         return;
     }
 
+    let latestReconciledRole: string | null = null;
+
     try {
-        await reconcileClaims(uid);
+        const claimsResult = await reconcileClaims(uid);
+        latestReconciledRole = typeof claimsResult?.role === 'string' ? claimsResult.role : null;
     } catch (error: any) {
         if (error.code === 'auth/user-not-found' || error.code === 'not-found' || error.message?.includes('No active subscription found')) {
             logger.info(`[onSubscriptionUpdated] reconcileClaims skipped or failed gracefully for ${uid}: ${error.message || 'not found'}`);
@@ -223,7 +268,11 @@ export const onSubscriptionUpdated = onDocumentWritten({
             logger.info(`[onSubscriptionUpdated] Setting gracePeriodUntil: ${gracePeriodUntil.toDate().toISOString()} for user ${uid}`);
 
             // Re-reconcile to ensure the new grace period is in the Auth claims
-            await reconcileClaims(uid);
+            const claimsResult = await reconcileClaims(uid);
+            latestReconciledRole = typeof claimsResult?.role === 'string' ? claimsResult.role : latestReconciledRole;
+            await clearPendingServiceDisconnectsForRestoredEntitlement(uid, 'active_grace_period');
+        } else if (gracePeriodResult === 'already-set' && await isCurrentGracePeriodActive(systemStatusRef)) {
+            await clearPendingServiceDisconnectsForRestoredEntitlement(uid, 'active_grace_period');
         }
     } else {
         // User has an active sub. Clear grace period if it exists.
@@ -239,7 +288,11 @@ export const onSubscriptionUpdated = onDocumentWritten({
         }).catch(() => { }); // Ignore error if field doesn't exist
 
         // Re-reconcile to ensure the cleared grace period is reflected in Auth claims
-        await reconcileClaims(uid);
+        const claimsResult = await reconcileClaims(uid);
+        latestReconciledRole = typeof claimsResult?.role === 'string' ? claimsResult.role : latestReconciledRole;
+        if (latestReconciledRole === 'pro') {
+            await clearPendingServiceDisconnectsForRestoredEntitlement(uid, 'active_pro_subscription');
+        }
     }
 
     // Check for email triggers (Welcome, Upgrade, Downgrade, Cancellation)

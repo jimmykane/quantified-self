@@ -1,6 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ServiceNames } from '@sports-alliance/sports-lib';
-import { getTokenData, refreshTokens, refreshStaleTokens, TerminalServiceAuthError, TokenRefreshSkippedForDeletedUserError } from './tokens';
+import {
+    getTokenData,
+    refreshTokens,
+    refreshStaleTokens,
+    TerminalServiceAuthError,
+    TokenRefreshSkippedForDeletedUserError,
+    TokenUseSkippedForPendingDisconnectError,
+} from './tokens';
 
 const hoisted = vi.hoisted(() => ({
     getUserDeletionGuardState: vi.fn().mockResolvedValue({
@@ -8,6 +15,7 @@ const hoisted = vi.hoisted(() => ({
         deletionInProgress: false,
         shouldSkip: false,
     }),
+    isServiceDisconnectPendingForUser: vi.fn().mockResolvedValue(false),
 }));
 
 vi.mock('firebase-functions', () => ({
@@ -133,6 +141,10 @@ vi.mock('./shared/user-deletion-guard', () => ({
     getUserDeletionGuardState: hoisted.getUserDeletionGuardState,
 }));
 
+vi.mock('./service-disconnect-pending', () => ({
+    isServiceDisconnectPendingForUser: hoisted.isServiceDisconnectPendingForUser,
+}));
+
 import { getServiceAdapter } from './auth/factory';
 import { handleTerminalServiceAuthFailure } from './service-auth-lifecycle';
 
@@ -149,6 +161,7 @@ describe('tokens', () => {
             deletionInProgress: false,
             shouldSkip: false,
         });
+        hoisted.isServiceDisconnectPendingForUser.mockResolvedValue(false);
         (handleTerminalServiceAuthFailure as any).mockReset().mockImplementation(async (doc: any, serviceName: ServiceNames, serviceTokenData: any, failure: any, originalError: unknown) => ({
             kind: 'terminal_error',
             error: new TerminalServiceAuthError(
@@ -258,6 +271,29 @@ describe('tokens', () => {
 
             expect(mockToken.refresh).not.toHaveBeenCalled();
             expect(mockDoc.ref.update).not.toHaveBeenCalled();
+        });
+
+        it('should not return an existing valid token when service disconnect is pending', async () => {
+            mockToken.expired.mockReturnValue(false);
+            hoisted.isServiceDisconnectPendingForUser.mockResolvedValueOnce(true);
+
+            await expect(getTokenData(mockDoc, ServiceNames.SuuntoApp, false))
+                .rejects.toBeInstanceOf(TokenUseSkippedForPendingDisconnectError);
+
+            expect(mockToken.refresh).not.toHaveBeenCalled();
+            expect(mockDoc.ref.update).not.toHaveBeenCalled();
+        });
+
+        it('should allow pending-disconnect token use when explicitly requested', async () => {
+            mockToken.expired.mockReturnValue(false);
+
+            const result = await getTokenData(mockDoc, ServiceNames.SuuntoApp, false, {
+                allowDisconnectPendingTokenUse: true,
+            });
+
+            expect(result.accessToken).toBe('old-access');
+            expect(mockToken.refresh).not.toHaveBeenCalled();
+            expect(hoisted.isServiceDisconnectPendingForUser).not.toHaveBeenCalled();
         });
 
         it('should refresh token if forced', async () => {

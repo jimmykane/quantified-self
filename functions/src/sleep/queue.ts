@@ -26,6 +26,7 @@ import * as requestPromise from '../request-helper';
 import { config } from '../config';
 import { toSuuntoAuthorizationHeader } from '../suunto/authorization-header';
 import {
+    deferQueueItemForPendingDisconnect,
     increaseRetryCountForQueueItem,
     markQueueItemSkipped,
     moveToDeadLetterQueue,
@@ -514,6 +515,10 @@ class MissingSleepProviderTokenError extends Error {
     }
 }
 
+function isTokenUseSkippedForPendingDisconnectError(error: unknown): boolean {
+    return error instanceof Error && error.name === 'TokenUseSkippedForPendingDisconnectError';
+}
+
 async function resolveTokenAndUser(queueItem: SleepSyncQueueItemInterface): Promise<{
     tokenSnapshot: TokenSnapshot;
     firebaseUserID: string;
@@ -775,6 +780,13 @@ export async function processSleepSyncQueueItem(queueItem: SleepSyncQueueItemInt
             logger.warn(`[SleepSync] Queue item ${queueItem.id} skipped token refresh because user ${error.firebaseUserID} is missing or deletion is in progress.`);
             return markQueueItemSkipped(queueItem, undefined, QUEUE_SKIPPED_REASONS.UserDeletedOrDeleting, {
                 skippedContext: 'USER_DELETION_GUARD',
+                sessionsWritten: 0,
+                sessionsSkipped: 0,
+            });
+        }
+        if (isTokenUseSkippedForPendingDisconnectError(error)) {
+            logger.warn(`[SleepSync] Queue item ${queueItem.id} deferred token use because service disconnect is pending.`);
+            return deferQueueItemForPendingDisconnect(queueItem, undefined, {
                 sessionsWritten: 0,
                 sessionsSkipped: 0,
             });

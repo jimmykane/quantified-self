@@ -4,6 +4,7 @@ import { FirestoreRouteJSON } from '../../../shared/app-route.interface';
 
 import { generateIDFromParts } from '../utils';
 import {
+    deferQueueItemForPendingDisconnect,
     increaseRetryCountForQueueItem,
     markQueueItemSkipped,
     moveToDeadLetterQueue,
@@ -52,7 +53,50 @@ function buildProviderOriginalFilename(queueItem: RouteSyncQueueItemInterface): 
     return `${baseName}.gpx`;
 }
 
+function parseProviderErrorPayload(payload: string): { code?: number; message?: string } | null {
+    const trimmedPayload = payload.trim();
+    if (!trimmedPayload.startsWith('{')) {
+        return null;
+    }
+
+    try {
+        const parsedPayload = JSON.parse(trimmedPayload) as { code?: unknown; message?: unknown; error?: unknown };
+        const code = typeof parsedPayload.code === 'number' ? parsedPayload.code : undefined;
+        const message = typeof parsedPayload.message === 'string'
+            ? parsedPayload.message
+            : (typeof parsedPayload.error === 'string' ? parsedPayload.error : undefined);
+        return code === undefined && !message ? null : { code, message };
+    } catch {
+        return null;
+    }
+}
+
+function createSuuntoRouteExportProviderError(payload: string): Error | null {
+    const providerError = parseProviderErrorPayload(payload);
+    if (!providerError) {
+        return null;
+    }
+
+    const code = providerError.code;
+    const message = providerError.message || 'Unknown provider error';
+    const error = new Error(`Suunto route export returned provider error${code ? ` ${code}` : ''}: ${message}`) as Error & { statusCode?: number; code?: string };
+    if (typeof code === 'number') {
+        error.statusCode = code;
+    }
+    if (code === 401) {
+        error.code = 'unauthenticated';
+    } else if (code === 403) {
+        error.code = 'permission-denied';
+    }
+    return error;
+}
+
 async function parseSuuntoRouteGPX(queueItem: RouteSyncQueueItemInterface, gpxContent: string) {
+    const providerError = createSuuntoRouteExportProviderError(gpxContent);
+    if (providerError) {
+        throw providerError;
+    }
+
     try {
         const routeFile = await parseRoutePayload(Buffer.from(gpxContent, 'utf8'), 'gpx');
         if (!routeFile.hasRoutes()) {
@@ -198,6 +242,10 @@ function isProviderAuthRequiredError(error: unknown): boolean {
         || code === 'functions/permission-denied';
 }
 
+function isTokenUseSkippedForPendingDisconnectError(error: unknown): boolean {
+    return error instanceof Error && error.name === 'TokenUseSkippedForPendingDisconnectError';
+}
+
 export async function processRouteSyncQueueItem(
     queueItem: RouteSyncQueueItemInterface,
 ): Promise<QueueResult> {
@@ -283,6 +331,12 @@ export async function processRouteSyncQueueItem(
 
         if (isUserDeletionGuardReadError(error)) {
             return increaseRetryCountForQueueItem(queueItem, error, 1);
+        }
+
+        if (isTokenUseSkippedForPendingDisconnectError(error)) {
+            return deferQueueItemForPendingDisconnect(queueItem, undefined, {
+                deferredServiceName: queueItem.sourceServiceName,
+            });
         }
 
         if (isProviderAuthRequiredError(error)) {

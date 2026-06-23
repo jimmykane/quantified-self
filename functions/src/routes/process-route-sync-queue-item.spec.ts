@@ -6,6 +6,7 @@ import { ServiceNames } from '@sports-alliance/sports-lib';
 const routeDocuments = new Map<string, Record<string, unknown>>();
 
 const queueUtilsMocks = {
+  deferQueueItemForPendingDisconnect: vi.fn(),
   increaseRetryCountForQueueItem: vi.fn(),
   markQueueItemSkipped: vi.fn(),
   moveToDeadLetterQueue: vi.fn(),
@@ -16,6 +17,7 @@ vi.mock('../queue-utils', () => ({
   QueueResult: {
     Processed: 'PROCESSED',
     Skipped: 'SKIPPED',
+    Deferred: 'DEFERRED',
     MovedToDLQ: 'MOVED_TO_DLQ',
     RetryIncremented: 'RETRY_INCREMENTED',
     Failed: 'FAILED',
@@ -23,6 +25,7 @@ vi.mock('../queue-utils', () => ({
   QUEUE_SKIPPED_REASONS: {
     UserDeletedOrDeleting: 'user_deleted_or_deleting',
   },
+  deferQueueItemForPendingDisconnect: (...args: any[]) => queueUtilsMocks.deferQueueItemForPendingDisconnect(...args),
   increaseRetryCountForQueueItem: (...args: any[]) => queueUtilsMocks.increaseRetryCountForQueueItem(...args),
   markQueueItemSkipped: (...args: any[]) => queueUtilsMocks.markQueueItemSkipped(...args),
   moveToDeadLetterQueue: (...args: any[]) => queueUtilsMocks.moveToDeadLetterQueue(...args),
@@ -157,6 +160,7 @@ describe('processRouteSyncQueueItem', () => {
     utilsMocks.generateIDFromParts.mockResolvedValue('route-doc-1');
     queueUtilsMocks.markQueueItemSkipped.mockResolvedValue(QueueResult.Processed);
     queueUtilsMocks.updateToProcessed.mockResolvedValue(QueueResult.Processed);
+    queueUtilsMocks.deferQueueItemForPendingDisconnect.mockResolvedValue(QueueResult.Deferred);
     queueUtilsMocks.increaseRetryCountForQueueItem.mockResolvedValue(QueueResult.RetryIncremented);
     queueUtilsMocks.moveToDeadLetterQueue.mockResolvedValue(QueueResult.MovedToDLQ);
     routeProcessingMocks.parseRoutePayload.mockResolvedValue(createParsedRouteFile());
@@ -219,6 +223,68 @@ describe('processRouteSyncQueueItem', () => {
       }),
     );
     expect(queueUtilsMocks.increaseRetryCountForQueueItem).not.toHaveBeenCalled();
+  });
+
+  it('defers route sync items when Suunto token use is blocked by a pending disconnect', async () => {
+    const pendingDisconnectError = new Error('Suunto disconnect is pending.');
+    pendingDisconnectError.name = 'TokenUseSkippedForPendingDisconnectError';
+    const queueItem = createQueueItem();
+    suuntoRouteMocks.exportSuuntoRouteAsGPX.mockRejectedValueOnce(pendingDisconnectError);
+
+    const result = await processRouteSyncQueueItem(queueItem);
+
+    expect(result).toBe(QueueResult.Deferred);
+    expect(queueUtilsMocks.deferQueueItemForPendingDisconnect).toHaveBeenCalledWith(
+      queueItem,
+      undefined,
+      { deferredServiceName: ServiceNames.SuuntoApp },
+    );
+    expect(queueUtilsMocks.increaseRetryCountForQueueItem).not.toHaveBeenCalled();
+    expect(queueUtilsMocks.moveToDeadLetterQueue).not.toHaveBeenCalled();
+    expect(queueUtilsMocks.markQueueItemSkipped).not.toHaveBeenCalled();
+  });
+
+  it('retries Suunto route export JSON 5xx payloads instead of treating them as GPX parse failures', async () => {
+    suuntoRouteMocks.exportSuuntoRouteAsGPX.mockResolvedValueOnce(JSON.stringify({
+      code: 500,
+      data: null,
+      message: 'connection timed out after 6000 ms: /10.224.2.183:60820',
+    }));
+
+    const result = await processRouteSyncQueueItem(createQueueItem());
+
+    expect(result).toBe(QueueResult.RetryIncremented);
+    expect(routeProcessingMocks.parseRoutePayload).not.toHaveBeenCalled();
+    expect(queueUtilsMocks.increaseRetryCountForQueueItem).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'queue-1' }),
+      expect.objectContaining({
+        message: 'Suunto route export returned provider error 500: connection timed out after 6000 ms: /10.224.2.183:60820',
+        statusCode: 500,
+      }),
+      1,
+    );
+    expect(queueUtilsMocks.moveToDeadLetterQueue).not.toHaveBeenCalled();
+  });
+
+  it('marks Suunto route export JSON auth payloads as provider auth required', async () => {
+    suuntoRouteMocks.exportSuuntoRouteAsGPX.mockResolvedValueOnce(JSON.stringify({
+      code: 401,
+      message: 'token expired',
+    }));
+
+    const result = await processRouteSyncQueueItem(createQueueItem());
+
+    expect(result).toBe(QueueResult.Processed);
+    expect(routeProcessingMocks.parseRoutePayload).not.toHaveBeenCalled();
+    expect(queueUtilsMocks.markQueueItemSkipped).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'queue-1' }),
+      undefined,
+      'provider_auth_required',
+      expect.objectContaining({
+        resultStatus: 'skipped',
+      }),
+    );
+    expect(queueUtilsMocks.moveToDeadLetterQueue).not.toHaveBeenCalled();
   });
 
   it('skips webhook route sync items when synced route writes require Pro access', async () => {

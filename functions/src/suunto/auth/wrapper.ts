@@ -2,7 +2,7 @@
 
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import * as logger from 'firebase-functions/logger';
-import { hasProAccess, PRO_REQUIRED_MESSAGE, ALLOWED_CORS_ORIGINS, enforceAppCheck } from '../../utils';
+import { PRO_REQUIRED_MESSAGE, ALLOWED_CORS_ORIGINS, enforceAppCheck } from '../../utils';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import {
   disconnectServiceForUser,
@@ -11,6 +11,7 @@ import {
   validateOAuth2State,
 } from '../../OAuth2';
 import { FUNCTIONS_MANIFEST } from '../../../../shared/functions-manifest';
+import { hasServiceOAuthConnectAccess } from '../../service-oauth-access';
 
 const SERVICE_NAME = ServiceNames.SuuntoApp;
 
@@ -40,7 +41,7 @@ export const getSuuntoAPIAuthRequestTokenRedirectURI = onCall({
   const userID = request.auth.uid;
 
   // Enforce Pro Access
-  if (!(await hasProAccess(userID))) {
+  if (!(await hasServiceOAuthConnectAccess(userID, SERVICE_NAME))) {
     logger.warn(`Blocking Suunto Auth for non-pro user ${userID}`);
     throw new HttpsError('permission-denied', PRO_REQUIRED_MESSAGE);
   }
@@ -79,7 +80,7 @@ export const requestAndSetSuuntoAPIAccessToken = onCall({
   const userID = request.auth.uid;
 
   // Enforce Pro Access
-  if (!(await hasProAccess(userID))) {
+  if (!(await hasServiceOAuthConnectAccess(userID, SERVICE_NAME))) {
     logger.warn(`Blocking Suunto Token Set for non-pro user ${userID}`);
     throw new HttpsError('permission-denied', PRO_REQUIRED_MESSAGE);
   }

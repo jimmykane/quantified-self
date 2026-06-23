@@ -55,6 +55,9 @@ export const processRouteSyncTask = onTaskDispatched({
             case QueueResult.Processed:
                 logger.info(`[RouteSyncTaskWorker] Successfully processed item ${queueItemId}`);
                 return;
+            case QueueResult.Deferred:
+                logger.warn(`[RouteSyncTaskWorker] Deferred item ${queueItemId}; it remains queued for a future dispatcher run.`);
+                return;
             case QueueResult.MovedToDLQ:
                 logger.warn(`[RouteSyncTaskWorker] Item ${queueItemId} was moved to DLQ.`);
                 return;

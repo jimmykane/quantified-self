@@ -268,6 +268,25 @@ describe('processWorkoutTask', () => {
         await expect((processWorkoutTask as any)(request)).resolves.toBeUndefined();
     });
 
+    it('should NOT throw if QueueResult.Deferred is returned', async () => {
+        const queueItemId = 'test-id';
+        const serviceName = ServiceNames.GarminAPI;
+        const queueData = { processed: false };
+
+        mockGet.mockResolvedValue({
+            exists: true,
+            data: () => queueData,
+        });
+
+        mockParseWorkoutQueueItemForServiceName.mockResolvedValue(QueueResult.Deferred);
+
+        const request = {
+            data: { queueItemId, serviceName }
+        };
+
+        await expect((processWorkoutTask as any)(request)).resolves.toBeUndefined();
+    });
+
     it('should mark skipped queue result processed instead of acking without a queue transition', async () => {
         const queueItemId = 'test-id';
         const serviceName = ServiceNames.GarminAPI;

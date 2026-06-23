@@ -27,7 +27,10 @@ import {
   hasConnectedGarminToken,
   selectPreferredGarminTokenLike,
 } from '@shared/garmin-service-token';
-import { isReconnectRequiredServiceConnection } from '@shared/service-connection';
+import {
+  isDisconnectPendingServiceConnection,
+  isReconnectRequiredServiceConnection,
+} from '@shared/service-connection';
 
 const GARMIN_ACTIVITY_HISTORY_REQUIRED_PERMISSIONS = ['HISTORICAL_DATA_EXPORT', 'ACTIVITY_EXPORT'] as const;
 
@@ -93,19 +96,40 @@ export class ServicesGarminComponent extends ServicesAbstractComponentDirective 
   }
 
   isConnectedToService(): boolean {
-    return hasConnectedGarminToken(this.garminTokens) || this.forceConnected;
+    return !this.isDisconnectPending && (hasConnectedGarminToken(this.garminTokens) || this.forceConnected);
   }
 
   get isReconnectRequired(): boolean {
     return isReconnectRequiredServiceConnection(this.serviceMeta);
   }
 
+  get isDisconnectPending(): boolean {
+    return isDisconnectPendingServiceConnection(this.serviceMeta);
+  }
+
+  get isDisconnectManualReviewRequired(): boolean {
+    return this.isDisconnectPending && this.serviceMeta?.disconnectManualReviewRequired === true;
+  }
+
+  protected override get canConnectWithoutProAccess(): boolean {
+    return this.isDisconnectManualReviewRequired;
+  }
+
+  get shouldShowConnectAction(): boolean {
+    return (!this.isConnectedToService() || this.isReconnectRequired || this.isDisconnectManualReviewRequired)
+      && (!this.isDisconnectPending || this.isDisconnectManualReviewRequired);
+  }
+
   get connectButtonLabel(): string {
-    return this.isReconnectRequired ? 'Reconnect' : 'Connect';
+    return this.isReconnectRequired || this.isDisconnectManualReviewRequired ? 'Reconnect' : 'Connect';
   }
 
   get connectionDescription(): string {
-    return this.isReconnectRequired
+    return this.isDisconnectManualReviewRequired
+      ? 'Garmin disconnect retries have stopped. Reconnect Garmin to refresh this connection, or contact support if the old connection still appears in Garmin Connect.'
+      : this.isDisconnectPending
+      ? 'Disconnect is pending while Garmin finishes deauthorization. Sync and imports are paused for this connection.'
+      : this.isReconnectRequired
       ? 'Reconnect Garmin to resume history imports, saved route delivery, and Garmin to Suunto auto-sync.'
       : 'Required for history imports, saved route delivery, and Garmin to Suunto auto-sync.';
   }

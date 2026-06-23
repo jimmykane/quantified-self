@@ -1,12 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ServiceNames } from '@sports-alliance/sports-lib';
-import { ACTIVITY_SYNC_ROUTE_IDS } from '../../../shared/activity-sync-routes';
+import { ACTIVITY_SYNC_ROUTE_IDS, ACTIVITY_SYNC_ROUTES } from '../../../shared/activity-sync-routes';
 import { ActivitySyncQueueItemInterface } from '../queue/queue-item.interface';
 
 const {
   mockTokenGet,
   mockDownload,
   mockUpdateToProcessed,
+  mockDeferQueueItemForPendingDisconnect,
   mockIncreaseRetryCountForQueueItem,
   mockMoveToDeadLetterQueue,
   mockGetActivitySyncRouteAllowlistConfigError,
@@ -20,7 +21,7 @@ const {
   mockToActivitySyncMetadataError,
   mockUploadActivityFileToSuunto,
   mockHasProAccess,
-  mockIsServiceReconnectRequiredForUser,
+  mockGetServiceConnectionMeta,
   mockShouldSkipQueueWorkForDeletedUser,
   mockMarkQueueItemSkipped,
 } = vi.hoisted(() => {
@@ -31,6 +32,7 @@ const {
     mockTokenGet,
     mockDownload,
     mockUpdateToProcessed: vi.fn(),
+    mockDeferQueueItemForPendingDisconnect: vi.fn(),
     mockIncreaseRetryCountForQueueItem: vi.fn(),
     mockMoveToDeadLetterQueue: vi.fn(),
     mockGetActivitySyncRouteAllowlistConfigError: vi.fn(),
@@ -48,7 +50,7 @@ const {
     })),
     mockUploadActivityFileToSuunto: vi.fn(),
     mockHasProAccess: vi.fn(),
-    mockIsServiceReconnectRequiredForUser: vi.fn(),
+    mockGetServiceConnectionMeta: vi.fn(),
     mockShouldSkipQueueWorkForDeletedUser: vi.fn(),
     mockMarkQueueItemSkipped: vi.fn(),
   };
@@ -79,11 +81,13 @@ vi.mock('../queue-utils', () => ({
   QueueResult: {
     Processed: 'PROCESSED',
     Skipped: 'SKIPPED',
+    Deferred: 'DEFERRED',
     RetryIncremented: 'RETRY_INCREMENTED',
     MovedToDLQ: 'MOVED_TO_DLQ',
     Failed: 'FAILED',
   },
   updateToProcessed: mockUpdateToProcessed,
+  deferQueueItemForPendingDisconnect: mockDeferQueueItemForPendingDisconnect,
   markQueueItemSkipped: mockMarkQueueItemSkipped,
   increaseRetryCountForQueueItem: mockIncreaseRetryCountForQueueItem,
   moveToDeadLetterQueue: mockMoveToDeadLetterQueue,
@@ -124,7 +128,7 @@ vi.mock('../utils', async (importOriginal) => {
 });
 
 vi.mock('../service-connection-meta', () => ({
-  isServiceReconnectRequiredForUser: mockIsServiceReconnectRequiredForUser,
+  getServiceConnectionMeta: mockGetServiceConnectionMeta,
 }));
 
 vi.mock('../queue/user-deletion-skip', () => ({
@@ -162,7 +166,7 @@ describe('activity-sync/process-queue-item', () => {
     mockIsActivitySyncRouteUserAllowlisted.mockReturnValue(true);
     mockHasProAccess.mockResolvedValue(true);
     mockIsActivitySyncRouteEnabledForUser.mockResolvedValue(true);
-    mockIsServiceReconnectRequiredForUser.mockResolvedValue(false);
+    mockGetServiceConnectionMeta.mockResolvedValue(null);
     mockTokenGet.mockResolvedValue({ size: 1 });
     mockDownload.mockResolvedValue([Buffer.from('FITDATA')]);
     mockUploadActivityFileToSuunto.mockResolvedValue({
@@ -172,6 +176,7 @@ describe('activity-sync/process-queue-item', () => {
       workoutKey: 'workout-1',
     });
     mockUpdateToProcessed.mockResolvedValue(QueueResult.Processed);
+    mockDeferQueueItemForPendingDisconnect.mockResolvedValue(QueueResult.Deferred);
     mockMarkQueueItemSkipped.mockResolvedValue(QueueResult.Processed);
     mockIncreaseRetryCountForQueueItem.mockResolvedValue(QueueResult.RetryIncremented);
     mockMoveToDeadLetterQueue.mockResolvedValue(QueueResult.MovedToDLQ);
@@ -361,7 +366,11 @@ describe('activity-sync/process-queue-item', () => {
   });
 
   it('skips and marks processed when destination service requires reconnect even if a token remains', async () => {
-    mockIsServiceReconnectRequiredForUser.mockResolvedValue(true);
+    mockGetServiceConnectionMeta.mockImplementation(async (_userID: string, serviceName: ServiceNames) => (
+      serviceName === ServiceNames.SuuntoApp
+        ? { connectionState: 'reconnect_required' }
+        : null
+    ));
 
     const result = await processActivitySyncQueueItem(baseQueueItem);
 
@@ -375,6 +384,58 @@ describe('activity-sync/process-queue-item', () => {
       skippedReason: 'destination_not_connected',
       resultStatus: 'skipped',
     }));
+    expect(mockUploadActivityFileToSuunto).not.toHaveBeenCalled();
+  });
+
+  it('defers instead of marking processed when destination service is pending disconnect', async () => {
+    mockGetServiceConnectionMeta.mockImplementation(async (_userID: string, serviceName: ServiceNames) => (
+      serviceName === ServiceNames.SuuntoApp
+        ? { connectionState: 'disconnect_pending' }
+        : null
+    ));
+
+    const result = await processActivitySyncQueueItem(baseQueueItem);
+
+    expect(result).toBe(QueueResult.Deferred);
+    expect(mockTokenGet).not.toHaveBeenCalled();
+    expect(mockSetActivitySyncSkippedMetadata).not.toHaveBeenCalledWith(expect.objectContaining({
+      skippedReason: 'destination_not_connected',
+    }));
+    expect(mockSetActivitySyncRetryingMetadata).toHaveBeenCalled();
+    expect(mockDeferQueueItemForPendingDisconnect).toHaveBeenCalledWith(
+      baseQueueItem,
+      undefined,
+      expect.objectContaining({
+        deferredServiceName: `${ServiceNames.SuuntoApp}`,
+      }),
+    );
+    expect(mockUpdateToProcessed).not.toHaveBeenCalled();
+    expect(mockIncreaseRetryCountForQueueItem).not.toHaveBeenCalled();
+    expect(mockUploadActivityFileToSuunto).not.toHaveBeenCalled();
+  });
+
+  it('defers route-disabled work when route was disabled by pending disconnect', async () => {
+    const route = ACTIVITY_SYNC_ROUTES[baseQueueItem.routeId];
+    mockIsActivitySyncRouteEnabledForUser.mockResolvedValue(false);
+    mockGetServiceConnectionMeta.mockResolvedValue({ connectionState: 'disconnect_pending' });
+
+    const result = await processActivitySyncQueueItem(baseQueueItem);
+
+    expect(result).toBe(QueueResult.Deferred);
+    expect(mockGetServiceConnectionMeta).toHaveBeenCalledWith(baseQueueItem.userID, route.sourceServiceName);
+    expect(mockGetServiceConnectionMeta).toHaveBeenCalledWith(baseQueueItem.userID, route.destinationServiceName);
+    expect(mockSetActivitySyncSkippedMetadata).not.toHaveBeenCalledWith(expect.objectContaining({
+      skippedReason: 'route_disabled',
+    }));
+    expect(mockDeferQueueItemForPendingDisconnect).toHaveBeenCalledWith(
+      baseQueueItem,
+      undefined,
+      expect.objectContaining({
+        deferredServiceName: `${route.sourceServiceName}`,
+      }),
+    );
+    expect(mockUpdateToProcessed).not.toHaveBeenCalled();
+    expect(mockIncreaseRetryCountForQueueItem).not.toHaveBeenCalled();
     expect(mockUploadActivityFileToSuunto).not.toHaveBeenCalled();
   });
 

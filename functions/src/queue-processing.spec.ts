@@ -124,6 +124,7 @@ vi.mock('./queue-utils', () => ({
     QueueResult: {
         Processed: 'PROCESSED',
         Skipped: 'SKIPPED',
+        Deferred: 'DEFERRED',
         MovedToDLQ: 'MOVED_TO_DLQ',
         RetryIncremented: 'RETRY_INCREMENTED',
         Failed: 'FAILED',

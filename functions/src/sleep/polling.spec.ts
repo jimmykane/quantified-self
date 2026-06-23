@@ -279,7 +279,7 @@ describe('sleep polling', () => {
         expect(queued).toBe(2);
         expect(addSleepSyncQueueItem).toHaveBeenCalledTimes(2);
         expect(logger.warn).toHaveBeenCalledWith(
-            '[SleepSync][SuuntoApp] Failed to read reconnect state for user suunto-user-id-1 and service suuntoApp; continuing sleep polling.',
+            '[SleepSync][SuuntoApp] Failed to read service connection state for user suunto-user-id-1 and service suuntoApp; continuing sleep polling.',
             expect.any(Error),
         );
     });

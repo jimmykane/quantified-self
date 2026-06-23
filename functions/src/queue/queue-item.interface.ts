@@ -17,6 +17,10 @@ export interface QueueItemInterface {
   expireAt?: admin.firestore.Timestamp | Date,
   dispatchedToCloudTask: number | null,
   firebaseUserID?: string,
+  resultStatus?: 'success' | 'skipped' | 'deferred',
+  deferredReason?: string,
+  deferredContext?: string,
+  serviceDisconnectPendingDeferredAt?: number,
 }
 
 export interface SuuntoAppWorkoutQueueItemInterface extends QueueItemInterface {
@@ -58,7 +62,6 @@ export interface ActivitySyncQueueItemInterface extends QueueItemInterface {
   sourceActivityID?: string;
   originalFile: ActivitySyncOriginalFileMetadata;
   manual: boolean;
-  resultStatus?: 'success' | 'skipped';
   successProcessedAt?: number;
 }
 
@@ -71,7 +74,6 @@ export interface RouteSyncQueueItemInterface extends QueueItemInterface {
   providerRouteModifiedAt?: number | null;
   manual: boolean;
   resultRouteId?: string;
-  resultStatus?: 'success' | 'skipped';
   skippedReason?: string;
 }
 

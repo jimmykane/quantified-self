@@ -624,6 +624,33 @@ describe('AppUserService', () => {
         }]);
     });
 
+    it('treats pending Garmin disconnect as unavailable for route send context even when tokens exist', async () => {
+        service = TestBed.inject(AppUserService);
+        const testUser = { uid: 'u1' } as any;
+
+        (collectionData as any).mockReturnValueOnce(of([
+            {
+                accessToken: 'garmin-token',
+                userID: 'garmin-user-1',
+                permissions: ['ACTIVITY_EXPORT'],
+                permissionsLastChangedAt: 1710000000,
+                dateCreated: 1700000000000,
+            },
+        ]));
+        (docData as any).mockReturnValueOnce(of({ connectionState: 'disconnect_pending' }));
+
+        const result = await firstValueFrom(service.watchGarminRouteSendContext(testUser).pipe(take(1)));
+
+        expect(result).toMatchObject({
+            connected: false,
+            reconnectRequired: false,
+            missingPermissions: [],
+            providerUserId: null,
+            providerStates: [],
+            permissionPromptSource: null,
+        });
+    });
+
     describe('createOrUpdateUser policy flow', () => {
         beforeEach(() => {
             service = TestBed.inject(AppUserService);
