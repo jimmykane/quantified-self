@@ -28,7 +28,7 @@ export class AdminQueueMonitorComponent implements OnInit, OnDestroy {
     isLoadingStats = true;
     queueView: AdminQueueStatsView = 'all';
     pageTitle = 'Queue Monitoring';
-    pageSubtitle = 'Operational health for ingestion, route sync, activity sync, sleep sync, reparse, and derived metrics pipelines';
+    pageSubtitle = 'Operational health for ingestion, route delivery sync, route import sync, activity sync, sleep sync, reparse, and derived metrics pipelines';
 
     private readonly destroy$ = new Subject<void>();
 
@@ -53,6 +53,7 @@ export class AdminQueueMonitorComponent implements OnInit, OnDestroy {
         if (
             rawView === 'workout' ||
             rawView === 'activity-sync' ||
+            rawView === 'route-delivery-sync' ||
             rawView === 'route-sync' ||
             rawView === 'sleep-sync' ||
             rawView === 'reparse' ||
@@ -88,9 +89,15 @@ export class AdminQueueMonitorComponent implements OnInit, OnDestroy {
             return;
         }
 
+        if (this.queueView === 'route-delivery-sync') {
+            this.pageTitle = 'Route Delivery Sync Queue';
+            this.pageSubtitle = 'Monitor saved route delivery sync from Quantified Self to destination providers';
+            return;
+        }
+
         if (this.queueView === 'route-sync') {
             this.pageTitle = 'Route Sync Queue';
-            this.pageSubtitle = 'Monitor provider route sync queue depth, skips, retries, and failure diagnostics';
+            this.pageSubtitle = 'Monitor provider route import queue depth, skips, retries, and failure diagnostics';
             return;
         }
 
@@ -107,7 +114,7 @@ export class AdminQueueMonitorComponent implements OnInit, OnDestroy {
         }
 
         this.pageTitle = 'Queue Monitoring';
-        this.pageSubtitle = 'Operational health for ingestion, route sync, activity sync, sleep sync, reparse, and derived metrics pipelines';
+        this.pageSubtitle = 'Operational health for ingestion, route delivery sync, route import sync, activity sync, sleep sync, reparse, and derived metrics pipelines';
     }
 
     fetchQueueStats(): void {

@@ -77,6 +77,19 @@ vi.mock('./upsert-synced-route', () => ({
   upsertSyncedRoute: (...args: any[]) => upsertSyncedRouteMocks.upsertSyncedRoute(...args),
 }));
 
+const routeDeliverySyncMocks = {
+  buildRouteDeliverySourceRevisionKey: vi.fn(),
+  enqueueRouteDeliverySyncJobsForImportedRoute: vi.fn(),
+};
+
+vi.mock('../route-delivery-sync/enqueue-imported-route', () => ({
+  enqueueRouteDeliverySyncJobsForImportedRoute: (...args: any[]) => routeDeliverySyncMocks.enqueueRouteDeliverySyncJobsForImportedRoute(...args),
+}));
+
+vi.mock('../route-delivery-sync/revision', () => ({
+  buildRouteDeliverySourceRevisionKey: (...args: any[]) => routeDeliverySyncMocks.buildRouteDeliverySourceRevisionKey(...args),
+}));
+
 vi.mock('../shared/user-deletion-guard', () => ({
   UserDeletionGuardReadError: class UserDeletionGuardReadError extends Error {
     readonly name = 'UserDeletionGuardReadError';
@@ -171,18 +184,26 @@ describe('processRouteSyncQueueItem', () => {
       routeID: 'route-doc-1',
       routeCountAfterWrite: 1,
     });
+    routeDeliverySyncMocks.buildRouteDeliverySourceRevisionKey.mockReturnValue('SuuntoApp:provider-route-1:1700000005000');
+    routeDeliverySyncMocks.enqueueRouteDeliverySyncJobsForImportedRoute.mockResolvedValue({
+      queued: 1,
+      skippedByReason: {},
+    });
   });
 
   it('skips provider routes that are already up to date', async () => {
+    const savedModifiedAt = createTimestampLike('2026-02-01T12:00:09.000Z');
     routeDocuments.set('users/user-1/routes/route-doc-1', {
       id: 'route-doc-1',
       userID: 'user-1',
+      updatedAt: createTimestampLike('2026-02-01T12:00:10.000Z'),
       sourceSummary: {
         sourceType: 'service_sync',
         sourceServiceName: ServiceNames.SuuntoApp,
         providerRouteId: 'provider-route-1',
+        providerUserId: 'suunto-user',
         providerRouteName: 'Morning Route',
-        modifiedAt: createTimestampLike('2026-02-01T12:00:09.000Z'),
+        modifiedAt: savedModifiedAt,
         importedAt: createTimestampLike('2026-02-01T12:00:01.000Z'),
       },
     });
@@ -203,6 +224,21 @@ describe('processRouteSyncQueueItem', () => {
     );
     expect(suuntoRouteMocks.exportSuuntoRouteAsGPX).not.toHaveBeenCalled();
     expect(upsertSyncedRouteMocks.upsertSyncedRoute).not.toHaveBeenCalled();
+    expect(routeDeliverySyncMocks.buildRouteDeliverySourceRevisionKey).toHaveBeenCalledWith(expect.objectContaining({
+      sourceServiceName: ServiceNames.SuuntoApp,
+      providerRouteId: 'provider-route-1',
+      providerRouteModifiedAt: savedModifiedAt,
+      fallbackRouteID: 'route-doc-1',
+    }));
+    expect(routeDeliverySyncMocks.enqueueRouteDeliverySyncJobsForImportedRoute).toHaveBeenCalledWith(expect.objectContaining({
+      userID: 'user-1',
+      savedRouteID: 'route-doc-1',
+      sourceServiceName: ServiceNames.SuuntoApp,
+      sourceProviderRouteId: 'provider-route-1',
+      sourceProviderUserId: 'suunto-user',
+      sourceRevisionKey: 'SuuntoApp:provider-route-1:1700000005000',
+      manual: false,
+    }));
   });
 
   it('marks provider auth failures as skipped instead of retrying', async () => {
@@ -343,5 +379,31 @@ describe('processRouteSyncQueueItem', () => {
         providerRouteName: 'Εγνατία Ποδηλασία δρόμου',
       }),
     }));
+    expect(routeDeliverySyncMocks.enqueueRouteDeliverySyncJobsForImportedRoute).toHaveBeenCalledWith(expect.objectContaining({
+      userID: 'user-1',
+      savedRouteID: 'route-doc-1',
+      sourceServiceName: ServiceNames.SuuntoApp,
+      sourceProviderRouteId: 'provider-route-1',
+      sourceProviderUserId: 'suunto-user',
+      sourceRevisionKey: 'SuuntoApp:provider-route-1:1700000005000',
+      manual: false,
+    }));
+  });
+
+  it('keeps route import successful when route delivery sync enqueue fails', async () => {
+    routeDeliverySyncMocks.enqueueRouteDeliverySyncJobsForImportedRoute.mockRejectedValueOnce(new Error('dispatch failed'));
+
+    const result = await processRouteSyncQueueItem(createQueueItem());
+
+    expect(result).toBe(QueueResult.Processed);
+    expect(upsertSyncedRouteMocks.upsertSyncedRoute).toHaveBeenCalled();
+    expect(queueUtilsMocks.updateToProcessed).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'queue-1' }),
+      undefined,
+      expect.objectContaining({
+        resultRouteId: 'route-doc-1',
+        resultStatus: 'success',
+      }),
+    );
   });
 });

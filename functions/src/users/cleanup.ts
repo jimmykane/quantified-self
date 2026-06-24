@@ -7,6 +7,7 @@ import { GARMIN_API_TOKENS_COLLECTION_NAME, GARMIN_API_WORKOUT_QUEUE_COLLECTION_
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { DERIVED_METRICS_COLLECTION_ID } from '../../../shared/derived-metrics';
 import { ACTIVITY_SYNC_QUEUE_COLLECTION_NAME } from '../activity-sync/constants';
+import { ROUTE_DELIVERY_SYNC_QUEUE_COLLECTION_NAME } from '../route-delivery-sync/constants';
 import { ROUTE_SYNC_QUEUE_COLLECTION_NAME } from '../routes/route-sync.constants';
 import { SLEEP_SYNC_QUEUE_COLLECTION_NAME } from '../sleep/constants';
 import { SUUNTOAPP_WORKOUT_QUEUE_COLLECTION_NAME } from '../suunto/constants';
@@ -108,6 +109,7 @@ interface UserProviderIdentifiers {
 
 const CLOUD_TASK_SOURCE_QUEUE_COLLECTIONS = new Set([
     ACTIVITY_SYNC_QUEUE_COLLECTION_NAME,
+    ROUTE_DELIVERY_SYNC_QUEUE_COLLECTION_NAME,
     ROUTE_SYNC_QUEUE_COLLECTION_NAME,
     SLEEP_SYNC_QUEUE_COLLECTION_NAME,
     SUUNTOAPP_WORKOUT_QUEUE_COLLECTION_NAME,
@@ -492,7 +494,11 @@ function getExplicitFirebaseUidAssociation(collectionName: string, data: Record<
         return uid;
     }
 
-    if (collectionName === ACTIVITY_SYNC_QUEUE_COLLECTION_NAME || collectionName === SLEEP_SYNC_QUEUE_COLLECTION_NAME) {
+    if (
+        collectionName === ACTIVITY_SYNC_QUEUE_COLLECTION_NAME ||
+        collectionName === ROUTE_DELIVERY_SYNC_QUEUE_COLLECTION_NAME ||
+        collectionName === SLEEP_SYNC_QUEUE_COLLECTION_NAME
+    ) {
         return asNonEmptyString(data.userID);
     }
 
@@ -501,7 +507,11 @@ function getExplicitFirebaseUidAssociation(collectionName: string, data: Record<
     }
 
     const originalCollection = asNonEmptyString(data.originalCollection);
-    if (originalCollection === ACTIVITY_SYNC_QUEUE_COLLECTION_NAME || originalCollection === SLEEP_SYNC_QUEUE_COLLECTION_NAME) {
+    if (
+        originalCollection === ACTIVITY_SYNC_QUEUE_COLLECTION_NAME ||
+        originalCollection === ROUTE_DELIVERY_SYNC_QUEUE_COLLECTION_NAME ||
+        originalCollection === SLEEP_SYNC_QUEUE_COLLECTION_NAME
+    ) {
         return asNonEmptyString(data.userID);
     }
 
@@ -585,6 +595,7 @@ async function cleanupLegacyProviderKeyedQueueOrphans(
     const db = admin.firestore();
     const collectionNames = [
         ROUTE_SYNC_QUEUE_COLLECTION_NAME,
+        ROUTE_DELIVERY_SYNC_QUEUE_COLLECTION_NAME,
         SLEEP_SYNC_QUEUE_COLLECTION_NAME,
         SUUNTOAPP_WORKOUT_QUEUE_COLLECTION_NAME,
         COROSAPI_WORKOUT_QUEUE_COLLECTION_NAME,
@@ -816,6 +827,8 @@ async function cleanupTopLevelQueueState(uid: string, identifiers: UserProviderI
 
     await recursiveDeleteQueryResults(db, uid, 'activity sync queue', ACTIVITY_SYNC_QUEUE_COLLECTION_NAME, 'userID', firebaseUIDValues, deletedRefKeys);
     await recursiveDeleteQueryResults(db, uid, 'activity sync queue', ACTIVITY_SYNC_QUEUE_COLLECTION_NAME, 'firebaseUserID', firebaseUIDValues, deletedRefKeys);
+    await recursiveDeleteQueryResults(db, uid, 'route delivery sync queue', ROUTE_DELIVERY_SYNC_QUEUE_COLLECTION_NAME, 'userID', firebaseUIDValues, deletedRefKeys);
+    await recursiveDeleteQueryResults(db, uid, 'route delivery sync queue', ROUTE_DELIVERY_SYNC_QUEUE_COLLECTION_NAME, 'firebaseUserID', firebaseUIDValues, deletedRefKeys);
     await recursiveDeleteQueryResults(db, uid, 'route sync queue', ROUTE_SYNC_QUEUE_COLLECTION_NAME, 'firebaseUserID', firebaseUIDValues, deletedRefKeys);
     await recursiveDeleteQueryResults(db, uid, 'route sync queue', ROUTE_SYNC_QUEUE_COLLECTION_NAME, 'providerUserId', providerValues, deletedRefKeys, providerKeyedDeleteFilter(ROUTE_SYNC_QUEUE_COLLECTION_NAME));
     await recursiveDeleteQueryResults(db, uid, 'sleep sync queue', SLEEP_SYNC_QUEUE_COLLECTION_NAME, 'userID', firebaseUIDValues, deletedRefKeys);

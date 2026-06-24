@@ -353,6 +353,11 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    match /routeDeliverySyncQueue/{queueItemID} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
     match /sleepSyncQueue/{queueItemID} {
       allow read: if isAdmin();
       allow write: if false;

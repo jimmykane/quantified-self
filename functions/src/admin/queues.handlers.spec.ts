@@ -292,6 +292,10 @@ describe('getQueueStats Cloud Function', () => {
                     queueId: 'processActivitySyncTask',
                     pending: 0,
                 },
+                routeDeliverySync: {
+                    queueId: 'processRouteDeliverySyncTask',
+                    pending: 0,
+                },
                 routeSync: {
                     queueId: 'processRouteSyncTask',
                     pending: 4,
@@ -534,7 +538,7 @@ describe('getQueueStats Cloud Function', () => {
             .mockResolvedValueOnce(6);
         const result = await (getQueueStats as any)(request);
         expect(result.cloudTasks).toEqual({
-            pending: 68,
+            pending: 69,
             queues: {
                 workout: {
                     queueId: 'processWorkoutTask',
@@ -544,25 +548,29 @@ describe('getQueueStats Cloud Function', () => {
                     queueId: 'processActivitySyncTask',
                     pending: 0,
                 },
+                routeDeliverySync: {
+                    queueId: 'processRouteDeliverySyncTask',
+                    pending: 3,
+                },
                 routeSync: {
                     queueId: 'processRouteSyncTask',
-                    pending: 3,
+                    pending: 8,
                 },
                 sleepSync: {
                     queueId: 'processSleepSyncTask',
-                    pending: 8,
+                    pending: 2,
                 },
                 sportsLibReparse: {
                     queueId: 'processSportsLibReparseTask',
-                    pending: 2,
+                    pending: 1,
                 },
                 sportsLibReparseHeavy: {
                     queueId: 'processSportsLibReparseHeavyTask',
-                    pending: 1,
+                    pending: 6,
                 },
                 sportsLibRouteReparse: {
                     queueId: 'processSportsLibRouteReparseTask',
-                    pending: 6,
+                    pending: 1,
                 },
                 derivedMetrics: {
                     queueId: 'processDerivedMetricsTask',
@@ -887,6 +895,135 @@ describe('getQueueStats Cloud Function', () => {
                 throughput: 3,
                 retryHistogram: {
                     '0-3': 4,
+                    '4-7': 2,
+                    '8-9': 1,
+                },
+            }),
+        }));
+    });
+
+    it('counts route-delivery success, skipped, retries, and throughput separately', async () => {
+        const resolveRouteDeliverySyncCount = (filters: Array<{ field: string; op: string; value: unknown }>): number => {
+            const has = (field: string, op: string, value?: unknown): boolean =>
+                filters.some((filter) => filter.field === field && filter.op === op && (value === undefined || filter.value === value));
+
+            if (has('successProcessedAt', '>')) {
+                return 4;
+            }
+            if (has('resultStatus', '==', 'success')) {
+                return 6;
+            }
+            if (has('resultStatus', '==', 'skipped')) {
+                return 3;
+            }
+            if (has('processed', '==', false) && has('retryCount', '>=', 10)) {
+                return 2;
+            }
+            if (has('processed', '==', false) && has('retryCount', '<', 4)) {
+                return 5;
+            }
+            if (has('processed', '==', false) && has('retryCount', '>=', 4) && has('retryCount', '<', 8)) {
+                return 2;
+            }
+            if (has('processed', '==', false) && has('retryCount', '>=', 8) && has('retryCount', '<', 10)) {
+                return 1;
+            }
+            if (has('processed', '==', false) && has('retryCount', '<', 10)) {
+                return 8;
+            }
+
+            return 0;
+        };
+
+        mockCollection.mockImplementation((collectionName: string) => {
+            if (collectionName === 'routeDeliverySyncQueue') {
+                const buildQuery = (filters: Array<{ field: string; op: string; value: unknown }>) => ({
+                    where: vi.fn((field: string, op: string, value: unknown) => buildQuery([...filters, { field, op, value }])),
+                    orderBy: vi.fn(() => buildQuery(filters)),
+                    limit: vi.fn(() => buildQuery(filters)),
+                    count: vi.fn(() => ({
+                        get: vi.fn().mockResolvedValue({
+                            data: () => ({ count: resolveRouteDeliverySyncCount(filters) }),
+                        }),
+                    })),
+                    get: vi.fn().mockResolvedValue({
+                        empty: false,
+                        docs: [{ data: () => ({ dateCreated: Date.now() - 20000 }) }],
+                    }),
+                });
+
+                return buildQuery([]);
+            }
+
+            if (collectionName === 'derivedMetrics') {
+                return {
+                    where: vi.fn().mockReturnValue({
+                        get: vi.fn().mockResolvedValue({ docs: [] })
+                    })
+                };
+            }
+
+            if (collectionName === 'failed_jobs') {
+                const filters: Array<{ field: string; op: string; value: unknown }> = [];
+                const failedJobsMock: any = {
+                    where: vi.fn((field: string, op: string, value: unknown) => {
+                        filters.push({ field, op, value });
+                        return failedJobsMock;
+                    }),
+                    count: vi.fn(() => ({
+                        get: vi.fn().mockResolvedValue({
+                            data: () => ({
+                                count: filters.some((f) => f.field === 'originalCollection' && f.value === 'routeDeliverySyncQueue') ? 7 : 5,
+                            }),
+                        }),
+                    })),
+                    orderBy: vi.fn().mockReturnValue({
+                        limit: vi.fn().mockReturnValue({
+                            get: vi.fn().mockResolvedValue({
+                                size: 0,
+                                docs: [],
+                            }),
+                        }),
+                    }),
+                    get: vi.fn().mockResolvedValue({
+                        size: 0,
+                        docs: [],
+                    }),
+                };
+                return failedJobsMock;
+            }
+
+            const mockCount = vi.fn().mockReturnValue({
+                get: vi.fn().mockResolvedValue({
+                    data: () => ({ count: 5 })
+                })
+            });
+            return {
+                where: vi.fn().mockReturnThis(),
+                orderBy: vi.fn().mockReturnThis(),
+                limit: vi.fn().mockReturnThis(),
+                count: mockCount,
+                get: vi.fn().mockResolvedValue({
+                    empty: false,
+                    docs: [{ data: () => ({ dateCreated: Date.now() - 10000 }) }],
+                    data: () => ({ count: 5 })
+                })
+            };
+        });
+
+        request.data = { includeAnalysis: false };
+        const result = await (getQueueStats as any)(request);
+
+        expect(result.routeDeliverySync).toEqual(expect.objectContaining({
+            pending: 8,
+            succeeded: 6,
+            skipped: 3,
+            stuck: 2,
+            dead: 7,
+            advanced: expect.objectContaining({
+                throughput: 4,
+                retryHistogram: {
+                    '0-3': 5,
                     '4-7': 2,
                     '8-9': 1,
                 },

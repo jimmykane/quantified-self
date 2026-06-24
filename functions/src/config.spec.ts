@@ -49,6 +49,7 @@ describe('config.ts', () => {
         expect(config.cloudtasks.projectId).toBe('mock-project');
         expect(config.cloudtasks.workoutQueue).toBe('processWorkoutTask');
         expect(config.cloudtasks.activitySyncQueue).toBe('processActivitySyncTask');
+        expect(config.cloudtasks.routeDeliverySyncQueue).toBe('processRouteDeliverySyncTask');
         expect(config.cloudtasks.sportsLibReparseQueue).toBe('processSportsLibReparseTask');
         expect(config.cloudtasks.sportsLibRouteReparseQueue).toBe('processSportsLibRouteReparseTask');
         expect(config.cloudtasks.derivedMetricsQueue).toBe('processDerivedMetricsTask');

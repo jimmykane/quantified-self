@@ -11,6 +11,7 @@ import { PRO_REQUIRED_MESSAGE } from '../utils';
 
 const routeDocuments = new Map<string, Record<string, unknown>>();
 const storagePayloads = new Map<string, Buffer>();
+const storageErrors = new Map<string, unknown>();
 
 const utilsMocks = {
   hasProAccess: vi.fn(),
@@ -148,6 +149,9 @@ vi.mock('firebase-admin', () => {
   const bucketMock = vi.fn((_bucketName?: string) => ({
     file: (path: string) => ({
       download: vi.fn().mockImplementation(async () => {
+        if (storageErrors.has(path)) {
+          throw storageErrors.get(path);
+        }
         const payload = storagePayloads.get(path);
         if (!payload) {
           throw new Error(`Missing storage payload for ${path}`);
@@ -191,6 +195,7 @@ describe('sendRoutesToService', () => {
     vi.clearAllMocks();
     routeDocuments.clear();
     storagePayloads.clear();
+    storageErrors.clear();
     utilsMocks.hasProAccess.mockResolvedValue(true);
     deletionGuardMocks.getUserDeletionGuardState.mockResolvedValue({
       userExists: true,
@@ -214,7 +219,7 @@ describe('sendRoutesToService', () => {
     routePersistenceMocks.isRouteFromSourceService.mockImplementation((routeDocument: Record<string, any> | null | undefined, serviceName: string) => (
       routeDocument?.sourceSummary?.sourceServiceName === serviceName
     ));
-    routePersistenceMocks.setRouteDeliveryMetadata.mockResolvedValue(undefined);
+    routePersistenceMocks.setRouteDeliveryMetadata.mockResolvedValue(true);
     garminRouteMocks.createGarminRouteSendContext.mockResolvedValue({
       tokenSnapshots: [{
         id: 'garmin-token-1',
@@ -360,7 +365,7 @@ describe('sendRoutesToService', () => {
     storagePayloads.set('users/user-1/routes/route-1/original.gpx', Buffer.from('<gpx></gpx>'));
     routePersistenceMocks.setRouteDeliveryMetadata
       .mockRejectedValueOnce(new Error('transient Firestore failure'))
-      .mockResolvedValue(undefined);
+      .mockResolvedValue(true);
 
     const result = await sendRoutesToService(createRequest({
       routeIds: ['route-1'],
@@ -404,6 +409,34 @@ describe('sendRoutesToService', () => {
       failureCount: 1,
       skippedCount: 0,
     });
+    expect(result.results).toEqual([
+      expect.objectContaining({
+        routeId: 'route-1',
+        status: 'failure',
+        reason: 'DELIVERY_METADATA_PERSIST_FAILED',
+        message: GARMIN_DELIVERY_METADATA_PERSIST_FAILURE_MESSAGE,
+      }),
+    ]);
+  });
+
+  it('returns a Garmin send failure when delivery metadata write is explicitly skipped after upload', async () => {
+    routeDocuments.set('users/user-1/routes/route-1', {
+      id: 'route-1',
+      userID: 'user-1',
+      srcFileType: 'gpx',
+      originalFiles: [{ path: 'users/user-1/routes/route-1/original.gpx', extension: 'gpx' }],
+      routes: [{ id: 'segment-1' }],
+    });
+    storagePayloads.set('users/user-1/routes/route-1/original.gpx', Buffer.from('<gpx></gpx>'));
+    routePersistenceMocks.setRouteDeliveryMetadata.mockResolvedValue(false);
+
+    const result = await sendRoutesToService(createRequest({
+      routeIds: ['route-1'],
+      destinationServiceName: ServiceNames.GarminAPI,
+    }) as any);
+
+    expect(garminRouteMocks.sendRouteToGarminConnect).toHaveBeenCalledTimes(1);
+    expect(routePersistenceMocks.setRouteDeliveryMetadata).toHaveBeenCalledTimes(3);
     expect(result.results).toEqual([
       expect.objectContaining({
         routeId: 'route-1',
@@ -1044,6 +1077,35 @@ describe('sendRoutesToService', () => {
         routeId: 'route-1',
         status: 'failure',
         reason: 'SOURCE_FILE_UNAVAILABLE',
+        message: 'Saved route source file could not be downloaded.',
+      }),
+    ]);
+    expect(suuntoRouteMocks.uploadGPXRouteToSuuntoApp).not.toHaveBeenCalled();
+  });
+
+  it('reports transient stored original download failures as provider errors', async () => {
+    routeDocuments.set('users/user-1/routes/route-1', {
+      id: 'route-1',
+      userID: 'user-1',
+      srcFileType: 'gpx',
+      originalFiles: [{ path: 'users/user-1/routes/route-1/original.gpx', extension: 'gpx' }],
+      routes: [{ id: 'segment-1' }],
+    });
+    storageErrors.set('users/user-1/routes/route-1/original.gpx', Object.assign(new Error('Storage unavailable'), {
+      code: 503,
+    }));
+
+    const result = await sendRoutesToService(createRequest({
+      routeIds: ['route-1'],
+      destinationServiceName: ServiceNames.SuuntoApp,
+    }) as any);
+
+    expect(result.status).toBe('failure');
+    expect(result.results).toEqual([
+      expect.objectContaining({
+        routeId: 'route-1',
+        status: 'failure',
+        reason: 'PROVIDER_ERROR',
         message: 'Saved route source file could not be downloaded.',
       }),
     ]);

@@ -1322,6 +1322,38 @@ describe('Firestore Security Rules', () => {
             }));
         });
 
+        it('should deny non-admin reads from routeDeliverySyncQueue', async () => {
+            await testEnv.withSecurityRulesDisabled(async (context) => {
+                await context.firestore().doc('routeDeliverySyncQueue/queue-item-1').set({
+                    processed: false,
+                    routeId: 'SuuntoApp_to_GarminAPI'
+                });
+            });
+
+            const db = testEnv.authenticatedContext('regular-user').firestore();
+            await assertFails(db.doc('routeDeliverySyncQueue/queue-item-1').get());
+        });
+
+        it('should allow admin reads from routeDeliverySyncQueue', async () => {
+            await testEnv.withSecurityRulesDisabled(async (context) => {
+                await context.firestore().doc('routeDeliverySyncQueue/queue-item-2').set({
+                    processed: false,
+                    routeId: 'SuuntoApp_to_GarminAPI'
+                });
+            });
+
+            const db = testEnv.authenticatedContext('admin-user', { admin: true }).firestore();
+            await assertSucceeds(db.doc('routeDeliverySyncQueue/queue-item-2').get());
+        });
+
+        it('should deny writes to routeDeliverySyncQueue even for admins', async () => {
+            const db = testEnv.authenticatedContext('admin-user', { admin: true }).firestore();
+            await assertFails(db.doc('routeDeliverySyncQueue/queue-item-3').set({
+                processed: false,
+                routeId: 'SuuntoApp_to_GarminAPI'
+            }));
+        });
+
         it('should deny non-admin reads from sleepSyncQueue', async () => {
             await testEnv.withSecurityRulesDisabled(async (context) => {
                 await context.firestore().doc('sleepSyncQueue/queue-item-1').set({

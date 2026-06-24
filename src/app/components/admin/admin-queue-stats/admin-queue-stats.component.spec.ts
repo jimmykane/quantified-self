@@ -146,6 +146,7 @@ describe('AdminQueueStatsComponent', () => {
                     pending: 1,
                     queues: {
                         workout: { queueId: 'processWorkoutTask', pending: 1 },
+                        routeDeliverySync: { queueId: 'processRouteDeliverySyncTask', pending: 0 },
                         routeSync: { queueId: 'processRouteSyncTask', pending: 0 },
                         sportsLibReparse: { queueId: 'processSportsLibReparseTask', pending: 0 }
                     }
@@ -183,6 +184,7 @@ describe('AdminQueueStatsComponent', () => {
                     pending: 2,
                     queues: {
                         workout: { queueId: 'processWorkoutTask', pending: 2 },
+                        routeDeliverySync: { queueId: 'processRouteDeliverySyncTask', pending: 0 },
                         routeSync: { queueId: 'processRouteSyncTask', pending: 0 },
                         sportsLibReparse: { queueId: 'processSportsLibReparseTask', pending: 0 }
                     }
@@ -281,6 +283,46 @@ describe('AdminQueueStatsComponent', () => {
             expect(optionArg.series[0].data).toEqual([3, 1, 1]);
         });
 
+        it('should use route delivery sync retry histogram in route-delivery-sync view', async () => {
+            component.queueView = 'route-delivery-sync';
+            component.loading = false;
+            component.stats = {
+                pending: 0,
+                succeeded: 0,
+                stuck: 0,
+                providers: [],
+                cloudTasks: {
+                    pending: 2,
+                    queues: {
+                        routeDeliverySync: { queueId: 'processRouteDeliverySyncTask', pending: 2 }
+                    }
+                },
+                routeDeliverySync: {
+                    pending: 4,
+                    succeeded: 8,
+                    skipped: 3,
+                    stuck: 1,
+                    dead: 0,
+                    dlqByContext: [],
+                    advanced: {
+                        throughput: 6,
+                        maxLagMs: 20000,
+                        retryHistogram: { '0-3': 3, '4-7': 1, '8-9': 1 },
+                        topErrors: []
+                    }
+                }
+            };
+
+            component.ngOnChanges({ stats: new SimpleChange(null, component.stats, true) });
+            fixture.detectChanges();
+            await fixture.whenStable();
+            await new Promise(resolve => setTimeout(resolve, 0));
+
+            expect(mockEchartsService.setOption).toHaveBeenCalled();
+            const optionArg = mockEchartsService.setOption.mock.calls.at(-1)?.[1];
+            expect(optionArg.series[0].data).toEqual([3, 1, 1]);
+        });
+
         it('should use sleep sync retry histogram in sleep-sync view', async () => {
             component.queueView = 'sleep-sync';
             component.loading = false;
@@ -351,7 +393,7 @@ describe('AdminQueueStatsComponent', () => {
     });
 
     describe('Cloud Tasks Queue Breakdown', () => {
-        it('should render workout, activity sync, sleep sync, event reparse, route reparse, and derived queue pending values', () => {
+        it('should render workout, activity sync, route delivery sync, sleep sync, event reparse, route reparse, and derived queue pending values', () => {
             component.loading = false;
             component.stats = {
                 pending: 1,
@@ -363,6 +405,7 @@ describe('AdminQueueStatsComponent', () => {
                     queues: {
                         workout: { queueId: 'processWorkoutTask', pending: 42 },
                         activitySync: { queueId: 'processActivitySyncTask', pending: 4 },
+                        routeDeliverySync: { queueId: 'processRouteDeliverySyncTask', pending: 9 },
                         routeSync: { queueId: 'processRouteSyncTask', pending: 7 },
                         sleepSync: { queueId: 'processSleepSyncTask', pending: 3 },
                         sportsLibReparse: { queueId: 'processSportsLibReparseTask', pending: 8 },
@@ -381,6 +424,7 @@ describe('AdminQueueStatsComponent', () => {
             const host: HTMLElement = fixture.nativeElement;
             expect(host.textContent).toContain('Cloud Tasks (Workout)');
             expect(host.textContent).toContain('Cloud Tasks (Activity Sync)');
+            expect(host.textContent).toContain('Cloud Tasks (Route Delivery)');
             expect(host.textContent).toContain('Cloud Tasks (Route Sync)');
             expect(host.textContent).toContain('Cloud Tasks (Sleep Sync)');
             expect(host.textContent).toContain('Cloud Tasks (Reparse Normal)');
@@ -390,6 +434,7 @@ describe('AdminQueueStatsComponent', () => {
             expect(host.textContent).not.toContain('Cloud Tasks (All Queues)');
             expect(host.textContent).toContain('42');
             expect(host.textContent).toContain('4');
+            expect(host.textContent).toContain('9');
             expect(host.textContent).toContain('7');
             expect(host.textContent).toContain('3');
             expect(host.textContent).toContain('8');
@@ -424,6 +469,7 @@ describe('AdminQueueStatsComponent', () => {
 
             expect(readCardValue('Cloud Tasks (Workout)')).toBe('0');
             expect(readCardValue('Cloud Tasks (Activity Sync)')).toBe('0');
+            expect(readCardValue('Cloud Tasks (Route Delivery)')).toBe('0');
             expect(readCardValue('Cloud Tasks (Route Sync)')).toBe('0');
             expect(readCardValue('Cloud Tasks (Sleep Sync)')).toBe('0');
             expect(readCardValue('Cloud Tasks (Reparse Normal)')).toBe('0');
@@ -607,6 +653,53 @@ describe('AdminQueueStatsComponent', () => {
             expect(host.textContent).toContain('Skipped (Routes)');
             expect(host.textContent).toContain('Dead Letter Queue (Route Sync)');
             expect(host.textContent).toContain('Recent Route Sync Failures');
+            expect(host.textContent).not.toContain('Workout Ingestion');
+            expect(host.textContent).not.toContain('Activity Sync');
+            expect(host.textContent).not.toContain('Sleep Sync');
+            expect(host.textContent).not.toContain('Event Reparse');
+            expect(host.textContent).not.toContain('Route Reparse');
+            expect(host.textContent).not.toContain('Derived Metrics');
+        });
+
+        it('should show only route delivery sync section in route-delivery-sync-only view', () => {
+            component.loading = false;
+            component.queueView = 'route-delivery-sync';
+            component.stats = {
+                pending: 1,
+                succeeded: 1,
+                stuck: 0,
+                providers: [],
+                cloudTasks: {
+                    pending: 2,
+                    queues: {
+                        routeDeliverySync: { queueId: 'processRouteDeliverySyncTask', pending: 2 }
+                    }
+                },
+                routeDeliverySync: {
+                    pending: 4,
+                    succeeded: 10,
+                    skipped: 3,
+                    stuck: 1,
+                    dead: 2,
+                    dlqByContext: [{ context: 'ROUTE_DELIVERY_PARSE_FAILED', count: 2 }],
+                    advanced: {
+                        throughput: 8,
+                        maxLagMs: 18000,
+                        retryHistogram: { '0-3': 0, '4-7': 0, '8-9': 0 },
+                        topErrors: [{ error: 'Malformed GPX', count: 2 }]
+                    }
+                }
+            };
+
+            fixture.detectChanges();
+            const host: HTMLElement = fixture.nativeElement;
+            expect(host.textContent).toContain('Route Delivery Sync');
+            expect(host.textContent).toContain('Cloud Tasks (Route Delivery)');
+            expect(host.textContent).toContain('Skipped (Delivery)');
+            expect(host.textContent).toContain('Dead Letter Queue (Route Delivery)');
+            expect(host.textContent).toContain('Retry Distribution (Pending Items)');
+            expect(host.textContent).toContain('No pending retries right now');
+            expect(host.textContent).toContain('Recent Route Delivery Sync Failures');
             expect(host.textContent).not.toContain('Workout Ingestion');
             expect(host.textContent).not.toContain('Activity Sync');
             expect(host.textContent).not.toContain('Sleep Sync');

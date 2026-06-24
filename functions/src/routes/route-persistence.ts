@@ -370,7 +370,7 @@ export function isRouteFromSourceService(
 
 export async function setRouteDeliveryMetadata(
   params: SetRouteDeliveryMetadataParams,
-): Promise<void> {
+): Promise<boolean> {
   const db = admin.firestore();
   const routeRef = db.collection('users').doc(params.userID).collection('routes').doc(params.routeID);
   const deliveryRef = getRouteDeliveryMetadataRef(
@@ -381,7 +381,7 @@ export async function setRouteDeliveryMetadata(
     params.deliveryMetadata.providerUserId,
   );
 
-  await db.runTransaction(async (transaction) => {
+  return db.runTransaction(async (transaction) => {
     let deletionGuard;
     try {
       deletionGuard = await getUserDeletionGuardStateInTransaction(db, transaction, params.userID);
@@ -396,34 +396,39 @@ export async function setRouteDeliveryMetadata(
         serviceName: params.deliveryMetadata.serviceName,
         providerUserId: params.deliveryMetadata.providerUserId || null,
       });
-      return;
+      return false;
     }
 
     const routeSnapshot = await transaction.get(routeRef);
     if (!routeSnapshot.exists) {
-      return;
+      return false;
     }
-
-    const routeDocument = routeSnapshot.data() as FirestoreRouteJSON;
-    const syncedDestinationServiceNames = mergeSyncedDestinationServiceNames(
-      routeDocument.syncedDestinationServiceNames,
-      `${params.deliveryMetadata.serviceName}`,
-    );
-    const deliverySummaries = mergeRouteDeliverySummaries(
-      routeDocument.deliverySummaries,
-      `${params.deliveryMetadata.serviceName}`,
-      params.deliveryMetadata.providerUserId,
-      params.deliveryMetadata.updatedAt || new Date(),
-    );
 
     transaction.set(deliveryRef, {
       ...params.deliveryMetadata,
       updatedAt: new Date(),
     }, { merge: true });
-    transaction.set(routeRef, {
-      syncedDestinationServiceNames,
-      deliverySummaries,
-      updatedAt: new Date(),
-    }, { merge: true });
+
+    if (params.deliveryMetadata.status === 'success') {
+      const routeDocument = routeSnapshot.data() as FirestoreRouteJSON;
+      const syncedDestinationServiceNames = mergeSyncedDestinationServiceNames(
+        routeDocument.syncedDestinationServiceNames,
+        `${params.deliveryMetadata.serviceName}`,
+      );
+      const deliverySummaries = mergeRouteDeliverySummaries(
+        routeDocument.deliverySummaries,
+        `${params.deliveryMetadata.serviceName}`,
+        params.deliveryMetadata.providerUserId,
+        params.deliveryMetadata.updatedAt || new Date(),
+      );
+
+      transaction.set(routeRef, {
+        syncedDestinationServiceNames,
+        deliverySummaries,
+        updatedAt: new Date(),
+      }, { merge: true });
+    }
+
+    return true;
   });
 }

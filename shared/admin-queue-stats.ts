@@ -34,6 +34,7 @@ export interface CloudTaskQueueStats {
 export interface CloudTaskQueueBreakdown {
     workout: CloudTaskQueueStats;
     activitySync: CloudTaskQueueStats;
+    routeDeliverySync: CloudTaskQueueStats;
     routeSync: CloudTaskQueueStats;
     sportsLibReparse: CloudTaskQueueStats;
     sportsLibReparseHeavy: CloudTaskQueueStats;
@@ -145,6 +146,10 @@ export interface SyncPipelineQueueStats {
 
 export type ActivitySyncQueueStats = SyncPipelineQueueStats;
 
+export interface RouteDeliverySyncQueueStats extends SyncPipelineQueueStats {
+    skipped: number;
+}
+
 export interface RouteSyncQueueStats extends SyncPipelineQueueStats {
     skipped: number;
 }
@@ -187,6 +192,7 @@ export interface AdminQueueStatsResponse {
     derivedMetrics: DerivedMetricsStats;
     advanced: QueueAdvancedStats;
     activitySync: ActivitySyncQueueStats;
+    routeDeliverySync: RouteDeliverySyncQueueStats;
     routeSync: RouteSyncQueueStats;
     sleepSync: SleepSyncQueueStats;
 }
@@ -205,6 +211,7 @@ export type AdminQueueStatsSnapshot = Omit<
     derivedMetrics?: DerivedMetricsStats;
     advanced?: QueueAdvancedStats;
     activitySync?: ActivitySyncQueueStats;
+    routeDeliverySync?: RouteDeliverySyncQueueStats;
     routeSync?: RouteSyncQueueStats;
     sleepSync?: SleepSyncQueueStats;
 };

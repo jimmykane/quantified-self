@@ -33,6 +33,7 @@ import {
     SportsLibRouteReparseJobDocData,
 } from '../shared/types';
 import { ACTIVITY_SYNC_QUEUE_COLLECTION_NAME } from '../../activity-sync/constants';
+import { ROUTE_DELIVERY_SYNC_QUEUE_COLLECTION_NAME } from '../../route-delivery-sync/constants';
 import { ROUTE_SYNC_QUEUE_COLLECTION_NAME } from '../../routes/route-sync.constants';
 import { SLEEP_SYNC_QUEUE_COLLECTION_NAME } from '../../sleep/constants';
 import { getDisabledSleepProviders } from '../../sleep/provider-flags';
@@ -50,6 +51,7 @@ const DERIVED_METRICS_STALE_QUEUED_THRESHOLD_MS = 10 * 60 * 1000;
 const DERIVED_METRICS_STALE_PROCESSING_THRESHOLD_MS = 15 * 60 * 1000;
 const INGESTION_DLQ_PREVIEW_LIMIT = 50;
 const ACTIVITY_SYNC_DLQ_PREVIEW_LIMIT = 50;
+const ROUTE_DELIVERY_SYNC_DLQ_PREVIEW_LIMIT = 50;
 const ROUTE_SYNC_DLQ_PREVIEW_LIMIT = 50;
 const SLEEP_SYNC_DLQ_PREVIEW_LIMIT = 50;
 const SLEEP_PROVIDER_LABELS: Record<SleepProvider, string> = {
@@ -103,6 +105,7 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
         const {
             workoutQueue,
             activitySyncQueue,
+            routeDeliverySyncQueue,
             routeSyncQueue,
             sleepSyncQueue,
             sportsLibReparseQueue,
@@ -113,6 +116,7 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
         const [
             workoutCloudTaskDepth,
             activitySyncCloudTaskDepth,
+            routeDeliverySyncCloudTaskDepth,
             routeSyncCloudTaskDepth,
             sleepSyncCloudTaskDepth,
             sportsLibReparseCloudTaskDepth,
@@ -126,6 +130,10 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
             }),
             getCloudTaskQueueDepthForQueue(activitySyncQueue).catch(e => {
                 logger.error(`Error getting Cloud Task depth for queue ${activitySyncQueue}:`, e);
+                return 0;
+            }),
+            getCloudTaskQueueDepthForQueue(routeDeliverySyncQueue).catch(e => {
+                logger.error(`Error getting Cloud Task depth for queue ${routeDeliverySyncQueue}:`, e);
                 return 0;
             }),
             getCloudTaskQueueDepthForQueue(routeSyncQueue).catch(e => {
@@ -154,7 +162,7 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
             }),
         ]);
         const reparseCloudTaskDepth = sportsLibReparseCloudTaskDepth + sportsLibReparseHeavyCloudTaskDepth;
-        const totalCloudTaskDepth = workoutCloudTaskDepth + activitySyncCloudTaskDepth + routeSyncCloudTaskDepth + sleepSyncCloudTaskDepth + reparseCloudTaskDepth + sportsLibRouteReparseCloudTaskDepth + derivedMetricsCloudTaskDepth;
+        const totalCloudTaskDepth = workoutCloudTaskDepth + activitySyncCloudTaskDepth + routeDeliverySyncCloudTaskDepth + routeSyncCloudTaskDepth + sleepSyncCloudTaskDepth + reparseCloudTaskDepth + sportsLibRouteReparseCloudTaskDepth + derivedMetricsCloudTaskDepth;
         const reparseJobsCollection = db.collection(SPORTS_LIB_REPARSE_JOBS_COLLECTION);
         const routeReparseJobsCollection = db.collection(SPORTS_LIB_ROUTE_REPARSE_JOBS_COLLECTION);
 
@@ -457,6 +465,80 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
             activitySyncMaxLagMs = Math.max(0, Date.now() - activitySyncOldestPendingDate);
         }
 
+        const routeDeliverySyncCollection = db.collection(ROUTE_DELIVERY_SYNC_QUEUE_COLLECTION_NAME);
+        const [
+            routeDeliverySyncPendingSnap,
+            routeDeliverySyncSucceededSnap,
+            routeDeliverySyncSkippedSnap,
+            routeDeliverySyncStuckSnap,
+            routeDeliverySyncRetry0to3Snap,
+            routeDeliverySyncRetry4to7Snap,
+            routeDeliverySyncRetry8to9Snap,
+            routeDeliverySyncThroughputSnap,
+            routeDeliverySyncOldestPendingSnap,
+            routeDeliverySyncDeadSnap,
+        ] = await Promise.all([
+            routeDeliverySyncCollection.where('processed', '==', false).where('retryCount', '<', 10).count().get().catch(e => {
+                logger.error('[admin/getQueueStats] Failed to count route delivery sync pending jobs:', e);
+                return null;
+            }),
+            routeDeliverySyncCollection.where('resultStatus', '==', 'success').count().get().catch(e => {
+                logger.error('[admin/getQueueStats] Failed to count route delivery sync succeeded jobs:', e);
+                return null;
+            }),
+            routeDeliverySyncCollection.where('resultStatus', '==', 'skipped').count().get().catch(e => {
+                logger.error('[admin/getQueueStats] Failed to count route delivery sync skipped jobs:', e);
+                return null;
+            }),
+            routeDeliverySyncCollection.where('processed', '==', false).where('retryCount', '>=', 10).count().get().catch(e => {
+                logger.error('[admin/getQueueStats] Failed to count route delivery sync stuck jobs:', e);
+                return null;
+            }),
+            routeDeliverySyncCollection.where('processed', '==', false).where('retryCount', '<', 4).count().get().catch(e => {
+                logger.error('[admin/getQueueStats] Failed to count route delivery sync retry bucket 0-3:', e);
+                return null;
+            }),
+            routeDeliverySyncCollection.where('processed', '==', false).where('retryCount', '>=', 4).where('retryCount', '<', 8).count().get().catch(e => {
+                logger.error('[admin/getQueueStats] Failed to count route delivery sync retry bucket 4-7:', e);
+                return null;
+            }),
+            routeDeliverySyncCollection.where('processed', '==', false).where('retryCount', '>=', 8).where('retryCount', '<', 10).count().get().catch(e => {
+                logger.error('[admin/getQueueStats] Failed to count route delivery sync retry bucket 8-9:', e);
+                return null;
+            }),
+            routeDeliverySyncCollection.where('successProcessedAt', '>', ONE_HOUR_AGO).count().get().catch(e => {
+                logger.error('[admin/getQueueStats] Failed to count route delivery sync throughput:', e);
+                return null;
+            }),
+            routeDeliverySyncCollection.where('processed', '==', false).orderBy('dateCreated', 'asc').limit(1).get().catch(e => {
+                logger.error('[admin/getQueueStats] Failed to query oldest route delivery sync pending job:', e);
+                return null;
+            }),
+            db.collection('failed_jobs').where('originalCollection', '==', ROUTE_DELIVERY_SYNC_QUEUE_COLLECTION_NAME).count().get().catch(e => {
+                logger.error('[admin/getQueueStats] Failed to count route delivery sync dead-letter jobs:', e);
+                return null;
+            }),
+        ]);
+
+        const routeDeliverySyncPending = routeDeliverySyncPendingSnap?.data().count || 0;
+        const routeDeliverySyncSucceeded = routeDeliverySyncSucceededSnap?.data().count || 0;
+        const routeDeliverySyncSkipped = routeDeliverySyncSkippedSnap?.data().count || 0;
+        const routeDeliverySyncStuck = routeDeliverySyncStuckSnap?.data().count || 0;
+        const routeDeliverySyncDead = routeDeliverySyncDeadSnap?.data().count || 0;
+        const routeDeliverySyncRetryHistogram = {
+            '0-3': routeDeliverySyncRetry0to3Snap?.data().count || 0,
+            '4-7': routeDeliverySyncRetry4to7Snap?.data().count || 0,
+            '8-9': routeDeliverySyncRetry8to9Snap?.data().count || 0,
+        };
+        const routeDeliverySyncThroughput = routeDeliverySyncThroughputSnap?.data().count || 0;
+        let routeDeliverySyncMaxLagMs = 0;
+        const routeDeliverySyncOldestPendingDate = routeDeliverySyncOldestPendingSnap?.empty === false
+            ? routeDeliverySyncOldestPendingSnap.docs[0]?.data()?.dateCreated
+            : null;
+        if (routeDeliverySyncOldestPendingDate) {
+            routeDeliverySyncMaxLagMs = Math.max(0, Date.now() - routeDeliverySyncOldestPendingDate);
+        }
+
         const routeSyncCollection = db.collection(ROUTE_SYNC_QUEUE_COLLECTION_NAME);
         const [
             routeSyncPendingSnap,
@@ -728,6 +810,8 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
         let topErrors: { error: string; count: number }[] = [];
         let activitySyncTopErrors: { error: string; count: number }[] = [];
         let activitySyncByContext: { context: string; count: number }[] = [];
+        let routeDeliverySyncTopErrors: { error: string; count: number }[] = [];
+        let routeDeliverySyncByContext: { context: string; count: number }[] = [];
         let routeSyncTopErrors: { error: string; count: number }[] = [];
         let routeSyncByContext: { context: string; count: number }[] = [];
         let sleepSyncTopErrors: { error: string; count: number }[] = [];
@@ -815,6 +899,38 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
                 .slice(0, 5)
                 .map(([error, count]) => ({ error, count }));
 
+            const routeDeliverySyncDlqQuery = dlqCol.where('originalCollection', '==', ROUTE_DELIVERY_SYNC_QUEUE_COLLECTION_NAME);
+            const routeDeliverySyncRecentDlqSnap = await routeDeliverySyncDlqQuery
+                .orderBy('failedAt', 'desc')
+                .limit(ROUTE_DELIVERY_SYNC_DLQ_PREVIEW_LIMIT)
+                .get()
+                .catch(async (e) => {
+                    logger.error('[admin/getQueueStats] Failed to load ordered route delivery sync DLQ preview:', e);
+                    return routeDeliverySyncDlqQuery
+                        .limit(ROUTE_DELIVERY_SYNC_DLQ_PREVIEW_LIMIT)
+                        .get()
+                        .catch(fallbackError => {
+                            logger.error('[admin/getQueueStats] Failed to load fallback route delivery sync DLQ preview:', fallbackError);
+                            return null;
+                        });
+                });
+            const routeDeliverySyncContextCounts: Record<string, number> = {};
+            const routeDeliverySyncErrorCounts: Record<string, number> = {};
+            for (const doc of (routeDeliverySyncRecentDlqSnap?.docs || [])) {
+                const data = doc.data();
+                const context = `${data.context || 'UNKNOWN'}`;
+                const errorMsg = normalizeError(data.error || 'Unknown Error');
+                routeDeliverySyncContextCounts[context] = (routeDeliverySyncContextCounts[context] || 0) + 1;
+                routeDeliverySyncErrorCounts[errorMsg] = (routeDeliverySyncErrorCounts[errorMsg] || 0) + 1;
+            }
+            routeDeliverySyncByContext = Object.entries(routeDeliverySyncContextCounts)
+                .map(([context, count]) => ({ context, count }))
+                .sort((a, b) => b.count - a.count);
+            routeDeliverySyncTopErrors = Object.entries(routeDeliverySyncErrorCounts)
+                .sort((a, b) => b[1] - a[1])
+                .slice(0, 5)
+                .map(([error, count]) => ({ error, count }));
+
             const routeSyncDlqQuery = dlqCol.where('originalCollection', '==', ROUTE_SYNC_QUEUE_COLLECTION_NAME);
             const routeSyncRecentDlqSnap = await routeSyncDlqQuery
                 .orderBy('failedAt', 'desc')
@@ -894,6 +1010,10 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
                     activitySync: {
                         queueId: activitySyncQueue,
                         pending: activitySyncCloudTaskDepth,
+                    },
+                    routeDeliverySync: {
+                        queueId: routeDeliverySyncQueue,
+                        pending: routeDeliverySyncCloudTaskDepth,
                     },
                     routeSync: {
                         queueId: routeSyncQueue,
@@ -988,6 +1108,20 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
                     maxLagMs: activitySyncMaxLagMs,
                     retryHistogram: activitySyncRetryHistogram,
                     topErrors: activitySyncTopErrors,
+                },
+            },
+            routeDeliverySync: {
+                pending: routeDeliverySyncPending,
+                succeeded: routeDeliverySyncSucceeded,
+                skipped: routeDeliverySyncSkipped,
+                stuck: routeDeliverySyncStuck,
+                dead: routeDeliverySyncDead,
+                dlqByContext: routeDeliverySyncByContext,
+                advanced: {
+                    throughput: routeDeliverySyncThroughput,
+                    maxLagMs: routeDeliverySyncMaxLagMs,
+                    retryHistogram: routeDeliverySyncRetryHistogram,
+                    topErrors: routeDeliverySyncTopErrors,
                 },
             },
             routeSync: {

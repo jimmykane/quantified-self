@@ -9,6 +9,7 @@ import {
   QUEUE_CLEANUP_TOMBSTONE_REASONS,
 } from './queue/cleanup-tombstone';
 import { ACTIVITY_SYNC_QUEUE_COLLECTION_NAME } from './activity-sync/constants';
+import { ROUTE_DELIVERY_SYNC_QUEUE_COLLECTION_NAME } from './route-delivery-sync/constants';
 import { SLEEP_SYNC_QUEUE_COLLECTION_NAME } from './sleep/constants';
 import { SUUNTOAPP_WORKOUT_QUEUE_COLLECTION_NAME } from './suunto/constants';
 
@@ -31,6 +32,7 @@ interface OperationalCleanupQuery {
 
 const CLOUD_TASK_SOURCE_QUEUE_COLLECTIONS = new Set([
   ACTIVITY_SYNC_QUEUE_COLLECTION_NAME,
+  ROUTE_DELIVERY_SYNC_QUEUE_COLLECTION_NAME,
   SLEEP_SYNC_QUEUE_COLLECTION_NAME,
   SUUNTOAPP_WORKOUT_QUEUE_COLLECTION_NAME,
   COROSAPI_WORKOUT_QUEUE_COLLECTION_NAME,
@@ -146,7 +148,11 @@ function getExplicitFirebaseUidAssociation(
     return uid;
   }
 
-  if (collectionName === ACTIVITY_SYNC_QUEUE_COLLECTION_NAME || collectionName === SLEEP_SYNC_QUEUE_COLLECTION_NAME) {
+  if (
+    collectionName === ACTIVITY_SYNC_QUEUE_COLLECTION_NAME ||
+    collectionName === ROUTE_DELIVERY_SYNC_QUEUE_COLLECTION_NAME ||
+    collectionName === SLEEP_SYNC_QUEUE_COLLECTION_NAME
+  ) {
     return asNonEmptyString(data.userID);
   }
 
@@ -155,7 +161,11 @@ function getExplicitFirebaseUidAssociation(
   }
 
   const originalCollection = asNonEmptyString(data.originalCollection);
-  if (originalCollection === ACTIVITY_SYNC_QUEUE_COLLECTION_NAME || originalCollection === SLEEP_SYNC_QUEUE_COLLECTION_NAME) {
+  if (
+    originalCollection === ACTIVITY_SYNC_QUEUE_COLLECTION_NAME ||
+    originalCollection === ROUTE_DELIVERY_SYNC_QUEUE_COLLECTION_NAME ||
+    originalCollection === SLEEP_SYNC_QUEUE_COLLECTION_NAME
+  ) {
     return asNonEmptyString(data.userID);
   }
 
@@ -219,6 +229,9 @@ function buildOperationalCleanupQueries(config: ProviderOperationalCleanupConfig
     serviceNameFromSleepProvider(data.provider) === config.serviceName;
   const isWorkoutDocForProvider = (data: Record<string, unknown>) =>
     asNonEmptyString(data[config.providerUserIdField]) === config.providerUserId;
+  const isRouteDeliverySourceDocForProvider = (data: Record<string, unknown>) =>
+    asNonEmptyString(data.sourceServiceName) === config.serviceName
+    && asNonEmptyString(data.sourceProviderUserId) === config.providerUserId;
 
   return [
     {
@@ -234,6 +247,12 @@ function buildOperationalCleanupQueries(config: ProviderOperationalCleanupConfig
       matches: isSleepDocForProvider,
     },
     {
+      collectionName: ROUTE_DELIVERY_SYNC_QUEUE_COLLECTION_NAME,
+      fieldName: 'sourceProviderUserId',
+      sourceCollectionName: ROUTE_DELIVERY_SYNC_QUEUE_COLLECTION_NAME,
+      matches: isRouteDeliverySourceDocForProvider,
+    },
+    {
       collectionName: 'failed_jobs',
       fieldName: config.providerUserIdField,
       sourceCollectionName: failedJobSourceCollection,
@@ -244,6 +263,12 @@ function buildOperationalCleanupQueries(config: ProviderOperationalCleanupConfig
       fieldName: 'providerUserId',
       sourceCollectionName: failedJobSourceCollection,
       matches: isSleepDocForProvider,
+    },
+    {
+      collectionName: 'failed_jobs',
+      fieldName: 'sourceProviderUserId',
+      sourceCollectionName: failedJobSourceCollection,
+      matches: isRouteDeliverySourceDocForProvider,
     },
   ];
 }
