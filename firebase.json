@@ -54,6 +54,10 @@
           "destination": "/index.csr.html"
         },
         {
+          "source": "/admin/queues/route-delivery-sync",
+          "destination": "/index.csr.html"
+        },
+        {
           "source": "/admin/queues/route-sync",
           "destination": "/index.csr.html"
         },
@@ -195,6 +199,10 @@
         },
         {
           "source": "/admin/queues/activity-sync",
+          "destination": "/index.csr.html"
+        },
+        {
+          "source": "/admin/queues/route-delivery-sync",
           "destination": "/index.csr.html"
         },
         {
