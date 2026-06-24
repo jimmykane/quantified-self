@@ -1,5 +1,17 @@
 import { ServiceNames } from '@sports-alliance/sports-lib';
 
+interface RouteDeliverySourceSummaryRevisionLike {
+    providerRouteId?: unknown;
+    modifiedAt?: unknown;
+    importedAt?: unknown;
+}
+
+export interface RouteDeliverySourceRevisionInput {
+    providerRouteId: string;
+    providerRouteModifiedAt: unknown;
+    fallbackUpdatedAt: unknown;
+}
+
 export function buildRouteDeliverySourceRevisionKey(parts: {
     sourceServiceName: ServiceNames | string;
     providerRouteId?: string | null;
@@ -15,6 +27,40 @@ export function buildRouteDeliverySourceRevisionKey(parts: {
         providerRouteId || parts.fallbackRouteID,
         modifiedAt || fallbackUpdatedAt || parts.fallbackRouteID,
     ].join(':');
+}
+
+export function getRouteDeliverySourceRevisionInput(params: {
+    sourceSummary?: RouteDeliverySourceSummaryRevisionLike | null;
+    fallbackProviderRouteId?: unknown;
+    fallbackProviderRouteModifiedAt?: unknown;
+    routeImportedAt?: unknown;
+    fallbackRouteID: string;
+}): RouteDeliverySourceRevisionInput {
+    return {
+        providerRouteId: normalizeNonEmptyString(params.sourceSummary?.providerRouteId)
+            || normalizeNonEmptyString(params.fallbackProviderRouteId)
+            || params.fallbackRouteID,
+        providerRouteModifiedAt: params.sourceSummary?.modifiedAt || params.fallbackProviderRouteModifiedAt || null,
+        fallbackUpdatedAt: params.sourceSummary?.importedAt || params.routeImportedAt || null,
+    };
+}
+
+export function buildRouteDeliverySourceRevisionKeyForRouteSource(params: {
+    sourceServiceName: ServiceNames | string;
+    sourceSummary?: RouteDeliverySourceSummaryRevisionLike | null;
+    fallbackProviderRouteId?: unknown;
+    fallbackProviderRouteModifiedAt?: unknown;
+    routeImportedAt?: unknown;
+    fallbackRouteID: string;
+}): string {
+    const revisionInput = getRouteDeliverySourceRevisionInput(params);
+    return buildRouteDeliverySourceRevisionKey({
+        sourceServiceName: params.sourceServiceName,
+        providerRouteId: revisionInput.providerRouteId,
+        providerRouteModifiedAt: revisionInput.providerRouteModifiedAt,
+        fallbackUpdatedAt: revisionInput.fallbackUpdatedAt,
+        fallbackRouteID: params.fallbackRouteID,
+    });
 }
 
 function toRevisionPart(value: unknown): string | null {
@@ -37,4 +83,8 @@ function toRevisionPart(value: unknown): string | null {
         return `${seconds * 1000}`;
     }
     return null;
+}
+
+function normalizeNonEmptyString(value: unknown): string | null {
+    return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null;
 }

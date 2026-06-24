@@ -843,6 +843,27 @@ describe('Firestore Security Rules', () => {
                 }));
             });
 
+            it('should deny owner forging route delivery summaries', async () => {
+                const db = testEnv.authenticatedContext(userId).firestore();
+                await testEnv.withSecurityRulesDisabled(async (context) => {
+                    await context.firestore().doc(`users/${userId}/routes/${routeId}`).set({
+                        name: 'Morning Route',
+                        routeCount: 1,
+                        pointCount: 2,
+                        routes: [],
+                        deliverySummaries: [],
+                    });
+                });
+
+                await assertFails(db.collection(`users/${userId}/routes`).doc(routeId).update({
+                    deliverySummaries: [{
+                        serviceName: 'GarminAPI',
+                        providerUserIds: ['forged-garmin-user'],
+                        latestProviderUserId: 'forged-garmin-user',
+                    }],
+                }));
+            });
+
             it('should deny owner updating route creator metadata', async () => {
                 const db = testEnv.authenticatedContext(userId).firestore();
                 await testEnv.withSecurityRulesDisabled(async (context) => {

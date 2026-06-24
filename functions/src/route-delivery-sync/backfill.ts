@@ -9,7 +9,7 @@ import { ALLOWED_CORS_ORIGINS, enforceAppCheck, hasProAccess, PRO_REQUIRED_MESSA
 import {
     enqueueRouteDeliverySyncJobsForImportedRoute,
 } from './enqueue-imported-route';
-import { buildRouteDeliverySourceRevisionKey } from './revision';
+import { buildRouteDeliverySourceRevisionKeyForRouteSource } from './revision';
 import {
     getRouteDeliverySyncRouteAllowlistConfigError,
     isRouteDeliverySyncRouteUserAllowlisted,
@@ -141,11 +141,11 @@ async function processBackfillRoute(params: {
 
         const sourceProviderRouteId = normalizeNonEmptyString(sourceSummary?.providerRouteId) || undefined;
         const sourceProviderUserId = normalizeNonEmptyString(sourceSummary?.providerUserId) || undefined;
-        const sourceRevisionKey = buildRouteDeliverySourceRevisionKey({
+        const sourceRevisionKey = buildRouteDeliverySourceRevisionKeyForRouteSource({
             sourceServiceName,
-            providerRouteId: sourceProviderRouteId,
-            providerRouteModifiedAt: sourceSummary?.modifiedAt,
-            fallbackUpdatedAt: routeDocument.updatedAt || routeDocument.importedAt || null,
+            sourceSummary,
+            fallbackProviderRouteId: sourceProviderRouteId,
+            routeImportedAt: routeDocument.importedAt,
             fallbackRouteID: savedRouteID,
         });
 

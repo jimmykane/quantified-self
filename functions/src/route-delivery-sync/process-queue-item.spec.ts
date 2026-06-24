@@ -214,6 +214,40 @@ describe('route-delivery-sync/process-queue-item', () => {
     }));
   });
 
+  it('uses stable source import timestamps for revision checks when provider modified time is missing', async () => {
+    const importedAt = '2026-02-01T12:00:00.000Z';
+    mockPrepareSavedRoute.mockResolvedValue({
+      routeId: 'route-1',
+      routeDocument: {
+        importedAt: '2026-02-01T12:00:01.000Z',
+        updatedAt: '2026-02-03T12:00:00.000Z',
+        sourceSummary: {
+          sourceServiceName: ServiceNames.SuuntoApp,
+          providerRouteId: 'provider-route-1',
+          providerUserId: 'suunto-user',
+          importedAt,
+        },
+      },
+      routeFile: {},
+      sourceFile: { path: 'route.gpx' },
+      gpxContent: '<gpx />',
+    });
+
+    const result = await processRouteDeliverySyncQueueItem({
+      ...baseQueueItem,
+      sourceRevisionKey: `${ServiceNames.SuuntoApp}:provider-route-1:${new Date(importedAt).getTime()}`,
+    });
+
+    expect(result).toBe(QueueResult.Processed);
+    expect(mockSendPreparedRoute).toHaveBeenCalled();
+    expect(mockUpdateToProcessed).toHaveBeenCalledWith(expect.anything(), undefined, expect.objectContaining({
+      resultStatus: 'success',
+    }));
+    expect(mockUpdateToProcessed).not.toHaveBeenCalledWith(expect.anything(), undefined, expect.objectContaining({
+      skippedReason: 'stale_source_revision',
+    }));
+  });
+
   it('skips non-allowlisted users without retrying', async () => {
     mockIsAllowlisted.mockReturnValue(false);
 
@@ -260,6 +294,17 @@ describe('route-delivery-sync/process-queue-item', () => {
 
     expect(result).toBe(QueueResult.RetryIncremented);
     expect(mockIncreaseRetryCount).toHaveBeenCalledWith(expect.anything(), transientError, 1, undefined);
+    expect(mockMoveToDLQ).not.toHaveBeenCalled();
+  });
+
+  it('retries provider rate limits reported as HTTP status errors', async () => {
+    const rateLimitError = Object.assign(new Error('Garmin rate limited'), { statusCode: 429 });
+    mockSendPreparedRoute.mockRejectedValue(rateLimitError);
+
+    const result = await processRouteDeliverySyncQueueItem({ ...baseQueueItem });
+
+    expect(result).toBe(QueueResult.RetryIncremented);
+    expect(mockIncreaseRetryCount).toHaveBeenCalledWith(expect.anything(), rateLimitError, 1, undefined);
     expect(mockMoveToDLQ).not.toHaveBeenCalled();
   });
 

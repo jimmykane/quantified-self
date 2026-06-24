@@ -36,7 +36,7 @@ import { UserDeletionGuardReadError } from '../shared/user-deletion-guard';
 import {
     enqueueRouteDeliverySyncJobsForImportedRoute,
 } from '../route-delivery-sync/enqueue-imported-route';
-import { buildRouteDeliverySourceRevisionKey } from '../route-delivery-sync/revision';
+import { buildRouteDeliverySourceRevisionKeyForRouteSource } from '../route-delivery-sync/revision';
 
 async function buildSourceRouteID(
     sourceServiceName: ServiceNames,
@@ -187,18 +187,14 @@ function toTimestampMs(value: unknown): number | null {
 function getRouteSourceRevisionInput(
     existingRouteDocument: FirestoreRouteJSON | null,
     queueItem: RouteSyncQueueItemInterface,
- ): {
+): {
     sourceProviderRouteId: string;
     sourceProviderUserId?: string;
-    providerRouteModifiedAt?: unknown;
-    fallbackUpdatedAt?: unknown;
 } {
     const sourceSummary = getSourceSummary(existingRouteDocument);
     return {
         sourceProviderRouteId: normalizeNonEmptyString(sourceSummary?.providerRouteId) || queueItem.providerRouteId,
         sourceProviderUserId: normalizeNonEmptyString(sourceSummary?.providerUserId) || normalizeNonEmptyString(queueItem.providerUserId) || undefined,
-        providerRouteModifiedAt: sourceSummary?.modifiedAt || queueItem.providerRouteModifiedAt || null,
-        fallbackUpdatedAt: existingRouteDocument?.updatedAt || sourceSummary?.importedAt || existingRouteDocument?.importedAt || null,
     };
 }
 
@@ -210,20 +206,22 @@ async function enqueueRouteDeliveryForSavedSuuntoRoute(params: {
     fallbackUpdatedAt?: unknown;
 }): Promise<void> {
     try {
-        const revisionInput = getRouteSourceRevisionInput(params.existingRouteDocument, params.queueItem);
-        const sourceRevisionKey = buildRouteDeliverySourceRevisionKey({
+        const sourceSummary = getSourceSummary(params.existingRouteDocument);
+        const providerInput = getRouteSourceRevisionInput(params.existingRouteDocument, params.queueItem);
+        const sourceRevisionKey = buildRouteDeliverySourceRevisionKeyForRouteSource({
             sourceServiceName: params.queueItem.sourceServiceName,
-            providerRouteId: revisionInput.sourceProviderRouteId,
-            providerRouteModifiedAt: revisionInput.providerRouteModifiedAt,
-            fallbackUpdatedAt: revisionInput.fallbackUpdatedAt || params.fallbackUpdatedAt || params.routeID,
+            sourceSummary,
+            fallbackProviderRouteId: params.queueItem.providerRouteId,
+            fallbackProviderRouteModifiedAt: params.queueItem.providerRouteModifiedAt,
+            routeImportedAt: params.existingRouteDocument?.importedAt || params.fallbackUpdatedAt,
             fallbackRouteID: params.routeID,
         });
         await enqueueRouteDeliverySyncJobsForImportedRoute({
             userID: params.userID,
             savedRouteID: params.routeID,
             sourceServiceName: params.queueItem.sourceServiceName,
-            sourceProviderRouteId: revisionInput.sourceProviderRouteId,
-            sourceProviderUserId: revisionInput.sourceProviderUserId,
+            sourceProviderRouteId: providerInput.sourceProviderRouteId,
+            sourceProviderUserId: providerInput.sourceProviderUserId,
             sourceRevisionKey,
             manual: false,
         });

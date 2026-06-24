@@ -182,7 +182,8 @@ service cloud.firestore {
               'streamTypes',
               'bounds',
               'sourceSummary',
-              'syncedDestinationServiceNames'
+              'syncedDestinationServiceNames',
+              'deliverySummaries'
             ];
           }
 

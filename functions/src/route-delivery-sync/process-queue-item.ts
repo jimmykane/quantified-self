@@ -18,7 +18,7 @@ import {
     getRouteDeliverySyncRouteAllowlistConfigError,
     isRouteDeliverySyncRouteUserAllowlisted,
 } from './allowlist';
-import { buildRouteDeliverySourceRevisionKey } from './revision';
+import { buildRouteDeliverySourceRevisionKeyForRouteSource } from './revision';
 import { isRouteDeliverySyncRouteEnabledForUser } from './settings';
 import {
     assertRouteSendUserActive,
@@ -196,13 +196,11 @@ function getCurrentRouteSourceRevisionKey(
     routeDocument: FirestoreRouteJSON,
 ): string {
     const sourceSummary = getSourceSummary(routeDocument);
-    return buildRouteDeliverySourceRevisionKey({
+    return buildRouteDeliverySourceRevisionKeyForRouteSource({
         sourceServiceName: queueItem.sourceServiceName,
-        providerRouteId: normalizeNonEmptyString(sourceSummary?.providerRouteId)
-            || normalizeNonEmptyString(queueItem.sourceProviderRouteId)
-            || queueItem.savedRouteID,
-        providerRouteModifiedAt: sourceSummary?.modifiedAt || null,
-        fallbackUpdatedAt: routeDocument.updatedAt || sourceSummary?.importedAt || routeDocument.importedAt || queueItem.savedRouteID,
+        sourceSummary,
+        fallbackProviderRouteId: queueItem.sourceProviderRouteId,
+        routeImportedAt: routeDocument.importedAt,
         fallbackRouteID: queueItem.savedRouteID,
     });
 }

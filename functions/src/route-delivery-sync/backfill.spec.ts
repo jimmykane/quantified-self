@@ -62,15 +62,13 @@ vi.mock('./enqueue-imported-route', () => ({
   enqueueRouteDeliverySyncJobsForImportedRoute: mockEnqueueRouteDeliverySyncJobsForImportedRoute,
 }));
 
-vi.mock('./revision', () => ({
-  buildRouteDeliverySourceRevisionKey: vi.fn((parts: {
-    sourceServiceName: string;
-    providerRouteId?: string | null;
-    providerRouteModifiedAt?: unknown;
-    fallbackUpdatedAt?: unknown;
-    fallbackRouteID: string;
-  }) => `${parts.sourceServiceName}:${parts.providerRouteId || parts.fallbackRouteID}:${parts.providerRouteModifiedAt || parts.fallbackUpdatedAt || parts.fallbackRouteID}`),
-}));
+vi.mock('./revision', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./revision')>();
+  return {
+    ...actual,
+    buildRouteDeliverySourceRevisionKey: vi.fn(actual.buildRouteDeliverySourceRevisionKey),
+  };
+});
 
 vi.mock('./allowlist', () => ({
   getRouteDeliverySyncRouteAllowlistConfigError: mockGetRouteDeliverySyncRouteAllowlistConfigError,
@@ -225,6 +223,25 @@ describe('route-delivery-sync/backfill callable', () => {
         sourceRevisionKey: `${route.sourceServiceName}:suunto-route-2:1710000000001`,
       }],
     });
+    const alreadySyncedWithoutProviderModifiedAtRoute = makeRouteDoc({
+      routeID: 'route-already-synced-imported-at',
+      data: {
+        updatedAt: '2026-02-03T12:00:00.000Z',
+        importedAt: '2026-02-01T12:00:01.000Z',
+        originalFile: { path: 'users/user-1/routes/route-already-synced-imported-at/original.gpx' },
+        sourceSummary: {
+          sourceServiceName: route.sourceServiceName,
+          providerRouteId: 'suunto-route-imported-at',
+          importedAt: '2026-02-01T12:00:00.000Z',
+        },
+      },
+      metadataDocs: [{
+        serviceName: route.destinationServiceName,
+        status: 'success',
+        routeSyncRouteId: route.id,
+        sourceRevisionKey: `${route.sourceServiceName}:suunto-route-imported-at:${new Date('2026-02-01T12:00:00.000Z').getTime()}`,
+      }],
+    });
     const updatedSinceLastDeliveryRoute = makeRouteDoc({
       routeID: 'route-updated',
       data: {
@@ -258,8 +275,8 @@ describe('route-delivery-sync/backfill callable', () => {
       .mockResolvedValueOnce({ empty: false, size: fillerPage.length, docs: fillerPage })
       .mockResolvedValueOnce({
         empty: false,
-        size: 4,
-        docs: [eligibleRoute, alreadySyncedRoute, updatedSinceLastDeliveryRoute, missingOriginalRoute],
+        size: 5,
+        docs: [eligibleRoute, alreadySyncedRoute, alreadySyncedWithoutProviderModifiedAtRoute, updatedSinceLastDeliveryRoute, missingOriginalRoute],
       });
 
     const response = await invokeBackfill({
@@ -271,10 +288,10 @@ describe('route-delivery-sync/backfill callable', () => {
       },
     });
     expect(response).toEqual({
-      scanned: 204,
+      scanned: 205,
       queued: 2,
       skippedByReason: {
-        already_synced: 1,
+        already_synced: 2,
         missing_original_files: 1,
       },
       failedCount: 0,
