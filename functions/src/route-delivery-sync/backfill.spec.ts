@@ -311,6 +311,7 @@ describe('route-delivery-sync/backfill callable', () => {
       routeIdFilter: route.id,
       manual: true,
       respectRouteEnabled: false,
+      skipExistingSuccessfulDeliveryCheck: true,
     }));
     expect(mockEnqueueRouteDeliverySyncJobsForImportedRoute).toHaveBeenCalledWith(expect.objectContaining({
       savedRouteID: 'route-updated',

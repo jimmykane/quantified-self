@@ -1,4 +1,5 @@
 import { ServiceNames } from '@sports-alliance/sports-lib';
+import * as admin from 'firebase-admin';
 import {
     ROUTE_DELIVERY_SYNC_ROUTES,
     RouteDeliverySyncRoute,
@@ -11,6 +12,7 @@ import {
 import { isRouteDeliverySyncRouteEnabledForUser } from './settings';
 import { enqueueRouteDeliverySyncQueueItem } from './queue';
 import { shouldSkipQueueWorkForDeletedUser } from '../queue/user-deletion-skip';
+import { hasSuccessfulRouteDeliveryMetadataForRevision } from './delivery-metadata';
 export { buildRouteDeliverySourceRevisionKey } from './revision';
 
 export interface EnqueueRouteDeliverySyncJobsForImportedRouteParams {
@@ -23,6 +25,7 @@ export interface EnqueueRouteDeliverySyncJobsForImportedRouteParams {
     manual?: boolean;
     routeIdFilter?: RouteDeliverySyncRouteId;
     respectRouteEnabled?: boolean;
+    skipExistingSuccessfulDeliveryCheck?: boolean;
 }
 
 export interface EnqueueRouteDeliverySyncJobsForImportedRouteResult {
@@ -71,6 +74,8 @@ export async function enqueueRouteDeliverySyncJobsForImportedRoute(
         };
     }
 
+    const db = admin.firestore();
+
     for (const route of routes) {
         const allowlistConfigError = getRouteDeliverySyncRouteAllowlistConfigError(route.id);
         if (allowlistConfigError) {
@@ -85,6 +90,21 @@ export async function enqueueRouteDeliverySyncJobsForImportedRoute(
 
         if (respectRouteEnabled && !(await isRouteDeliverySyncRouteEnabledForUser(params.userID, route.id))) {
             incrementSkippedReason(skippedByReason, 'route_disabled');
+            continue;
+        }
+
+        const routeRef = db
+            .collection('users')
+            .doc(params.userID)
+            .collection('routes')
+            .doc(params.savedRouteID);
+        if (params.skipExistingSuccessfulDeliveryCheck !== true && await hasSuccessfulRouteDeliveryMetadataForRevision({
+            routeRef,
+            routeId: route.id,
+            destinationServiceName: route.destinationServiceName,
+            sourceRevisionKey: params.sourceRevisionKey,
+        })) {
+            incrementSkippedReason(skippedByReason, 'already_synced');
             continue;
         }
 

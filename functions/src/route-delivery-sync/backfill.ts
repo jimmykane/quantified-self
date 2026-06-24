@@ -14,6 +14,7 @@ import {
     getRouteDeliverySyncRouteAllowlistConfigError,
     isRouteDeliverySyncRouteUserAllowlisted,
 } from './allowlist';
+import { hasSuccessfulRouteDeliveryMetadataForRevision } from './delivery-metadata';
 
 interface BackfillRouteDeliverySyncRouteRequest {
     sourceServiceName: ServiceNames;
@@ -88,22 +89,6 @@ function incrementSkippedReason(
     skippedByReason[reason] = (skippedByReason[reason] || 0) + 1;
 }
 
-async function hasSuccessfulDeliveryMetadataForRevision(params: {
-    routeSnapshot: admin.firestore.QueryDocumentSnapshot;
-    routeId: NonNullable<ReturnType<typeof getRouteDeliverySyncRouteId>>;
-    destinationServiceName: ServiceNames;
-    sourceRevisionKey: string;
-}): Promise<boolean> {
-    const metadataSnapshot = await params.routeSnapshot.ref.collection('metaData').get();
-    return metadataSnapshot.docs.some(docSnapshot => {
-        const data = docSnapshot.data();
-        return data?.serviceName === params.destinationServiceName
-            && data?.status === 'success'
-            && data?.routeSyncRouteId === params.routeId
-            && data?.sourceRevisionKey === params.sourceRevisionKey;
-    });
-}
-
 async function processBackfillRoute(params: {
     routeId: NonNullable<ReturnType<typeof getRouteDeliverySyncRouteId>>;
     userID: string;
@@ -149,8 +134,8 @@ async function processBackfillRoute(params: {
             fallbackRouteID: savedRouteID,
         });
 
-        if (await hasSuccessfulDeliveryMetadataForRevision({
-            routeSnapshot,
+        if (await hasSuccessfulRouteDeliveryMetadataForRevision({
+            routeRef: routeSnapshot.ref,
             routeId,
             destinationServiceName,
             sourceRevisionKey,
@@ -172,6 +157,7 @@ async function processBackfillRoute(params: {
             routeIdFilter: routeId,
             manual: true,
             respectRouteEnabled: false,
+            skipExistingSuccessfulDeliveryCheck: true,
         });
 
         return {
