@@ -1,11 +1,14 @@
 import * as admin from 'firebase-admin';
 import { FieldValue } from 'firebase-admin/firestore';
+import { ServiceNames } from '@sports-alliance/sports-lib';
 import { FirestoreRouteJSON } from '../../../shared/app-route.interface';
 import { ROUTE_DELIVERY_SYNC_ROUTES } from '../../../shared/route-delivery-sync-routes';
+import { isDisconnectPendingServiceConnection } from '../../../shared/service-connection';
 import {
     RouteDeliverySyncQueueItemInterface,
 } from '../queue/queue-item.interface';
 import {
+    deferQueueItemForPendingDisconnect,
     increaseRetryCountForQueueItem,
     markQueueItemSkipped,
     moveToDeadLetterQueue,
@@ -34,12 +37,14 @@ import {
 } from '../routes/route-send-core';
 import { setRouteDeliveryMetadata } from '../routes/route-persistence';
 import { shouldSkipQueueWorkForDeletedUser } from '../queue/user-deletion-skip';
+import { getServiceConnectionMeta } from '../service-connection-meta';
 
 interface ErrorLike {
     code?: unknown;
     status?: unknown;
     statusCode?: unknown;
     message?: unknown;
+    serviceName?: unknown;
 }
 
 function asErrorLike(error: unknown): ErrorLike {
@@ -108,6 +113,25 @@ function toErrorCode(error: unknown): string {
 function toErrorMessage(error: unknown): string {
     const errorLike = asErrorLike(error);
     return `${errorLike.message || error || 'Unknown error'}`.slice(0, 500);
+}
+
+function isTokenUseSkippedForPendingDisconnectError(error: unknown): boolean {
+    return error instanceof Error && error.name === 'TokenUseSkippedForPendingDisconnectError';
+}
+
+function getPendingDisconnectServiceFromError(
+    error: unknown,
+    queueItem: RouteDeliverySyncQueueItemInterface,
+): ServiceNames {
+    const errorServiceName = normalizeNonEmptyString(asErrorLike(error).serviceName);
+    if (errorServiceName === queueItem.sourceServiceName) {
+        return queueItem.sourceServiceName;
+    }
+    if (errorServiceName === queueItem.destinationServiceName) {
+        return queueItem.destinationServiceName;
+    }
+
+    return queueItem.destinationServiceName;
 }
 
 async function safelyWriteDeliveryMetadata(writeOperation: () => Promise<void>): Promise<void> {
@@ -184,7 +208,8 @@ function hasMatchingSourceProvenance(
     }
 
     const expectedProviderUserId = normalizeNonEmptyString(queueItem.sourceProviderUserId);
-    if (expectedProviderUserId && normalizeNonEmptyString(sourceSummary?.providerUserId) !== expectedProviderUserId) {
+    const currentProviderUserId = normalizeNonEmptyString(sourceSummary?.providerUserId);
+    if (expectedProviderUserId && currentProviderUserId && currentProviderUserId !== expectedProviderUserId) {
         return false;
     }
 
@@ -224,6 +249,35 @@ function getDeadLetterContext(error: unknown): string {
         return `ROUTE_DELIVERY_${error.reason}`;
     }
     return 'ROUTE_DELIVERY_SYNC_PERMANENT_FAILURE';
+}
+
+async function getPendingDisconnectServiceForRoute(
+    userID: string,
+    route: typeof ROUTE_DELIVERY_SYNC_ROUTES[keyof typeof ROUTE_DELIVERY_SYNC_ROUTES],
+): Promise<ServiceNames | null> {
+    const [sourceMeta, destinationMeta] = await Promise.all([
+        getServiceConnectionMeta(userID, route.sourceServiceName),
+        getServiceConnectionMeta(userID, route.destinationServiceName),
+    ]);
+
+    if (isDisconnectPendingServiceConnection(sourceMeta)) {
+        return route.sourceServiceName;
+    }
+    if (isDisconnectPendingServiceConnection(destinationMeta)) {
+        return route.destinationServiceName;
+    }
+
+    return null;
+}
+
+async function deferRouteDeliverySyncQueueItemForPendingDisconnect(
+    queueItem: RouteDeliverySyncQueueItemInterface,
+    bulkWriter: admin.firestore.BulkWriter | undefined,
+    serviceName: ServiceNames,
+): Promise<QueueResult.Deferred | QueueResult.Failed> {
+    return deferQueueItemForPendingDisconnect(queueItem, bulkWriter, {
+        deferredServiceName: `${serviceName}`,
+    });
 }
 
 export async function processRouteDeliverySyncQueueItem(
@@ -275,6 +329,15 @@ export async function processRouteDeliverySyncQueueItem(
         }
 
         const enabled = await isRouteDeliverySyncRouteEnabledForUser(queueItem.userID, queueItem.routeId);
+        const pendingDisconnectService = await getPendingDisconnectServiceForRoute(queueItem.userID, route);
+        if (pendingDisconnectService) {
+            return deferRouteDeliverySyncQueueItemForPendingDisconnect(
+                queueItem,
+                bulkWriter,
+                pendingDisconnectService,
+            );
+        }
+
         if (!enabled && queueItem.manual !== true) {
             await safelyWriteDeliveryMetadata(() => setSkippedDeliveryMetadata(queueItem, 'route_disabled', 'Route delivery sync route is disabled in user settings.'));
             return updateToProcessed(queueItem, bulkWriter, {
@@ -374,6 +437,14 @@ export async function processRouteDeliverySyncQueueItem(
             return markQueueItemSkipped(queueItem, bulkWriter, QUEUE_SKIPPED_REASONS.UserDeletedOrDeleting, {
                 skippedContext: 'USER_DELETION_GUARD',
             });
+        }
+
+        if (isTokenUseSkippedForPendingDisconnectError(error)) {
+            return deferRouteDeliverySyncQueueItemForPendingDisconnect(
+                queueItem,
+                bulkWriter,
+                getPendingDisconnectServiceFromError(error, queueItem),
+            );
         }
 
         if (isDestinationAuthRequiredError(error)) {

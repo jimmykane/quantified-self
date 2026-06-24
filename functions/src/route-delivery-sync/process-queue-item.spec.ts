@@ -1,6 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { ServiceNames } from '@sports-alliance/sports-lib';
-import { ROUTE_DELIVERY_SYNC_ROUTE_IDS } from '../../../shared/route-delivery-sync-routes';
+import { ROUTE_DELIVERY_SYNC_ROUTE_IDS, ROUTE_DELIVERY_SYNC_ROUTES } from '../../../shared/route-delivery-sync-routes';
 
 const {
   mockHasProAccess,
@@ -9,10 +8,12 @@ const {
   mockIsAllowlisted,
   mockShouldSkipDeletedUser,
   mockUpdateToProcessed,
+  mockDeferQueueItemForPendingDisconnect,
   mockMarkQueueItemSkipped,
   mockIncreaseRetryCount,
   mockMoveToDLQ,
   mockSetRouteDeliveryMetadata,
+  mockGetServiceConnectionMeta,
   mockAssertRouteSendUserActive,
   mockGetRouteSendAdapter,
   mockCreateContext,
@@ -31,10 +32,12 @@ const {
   mockIsAllowlisted: vi.fn(),
   mockShouldSkipDeletedUser: vi.fn(),
   mockUpdateToProcessed: vi.fn(),
+  mockDeferQueueItemForPendingDisconnect: vi.fn(),
   mockMarkQueueItemSkipped: vi.fn(),
   mockIncreaseRetryCount: vi.fn(),
   mockMoveToDLQ: vi.fn(),
   mockSetRouteDeliveryMetadata: vi.fn(),
+  mockGetServiceConnectionMeta: vi.fn(),
   mockAssertRouteSendUserActive: vi.fn(),
   mockGetRouteSendAdapter: vi.fn(),
   mockCreateContext: vi.fn(),
@@ -85,10 +88,15 @@ vi.mock('../queue-utils', () => ({
   QUEUE_SKIPPED_REASONS: {
     UserDeletedOrDeleting: 'user_deleted_or_deleting',
   },
-  updateToProcessed: mockUpdateToProcessed,
-  markQueueItemSkipped: mockMarkQueueItemSkipped,
-  increaseRetryCountForQueueItem: mockIncreaseRetryCount,
-  moveToDeadLetterQueue: mockMoveToDLQ,
+  updateToProcessed: (...args: any[]) => mockUpdateToProcessed(...args),
+  deferQueueItemForPendingDisconnect: (...args: any[]) => mockDeferQueueItemForPendingDisconnect(...args),
+  markQueueItemSkipped: (...args: any[]) => mockMarkQueueItemSkipped(...args),
+  increaseRetryCountForQueueItem: (...args: any[]) => mockIncreaseRetryCount(...args),
+  moveToDeadLetterQueue: (...args: any[]) => mockMoveToDLQ(...args),
+}));
+
+vi.mock('../service-connection-meta', () => ({
+  getServiceConnectionMeta: (...args: any[]) => mockGetServiceConnectionMeta(...args),
 }));
 
 vi.mock('../routes/route-send-core', () => ({
@@ -119,8 +127,9 @@ import { RouteDeliverySyncQueueItemInterface } from '../queue/queue-item.interfa
 import { processRouteDeliverySyncQueueItem } from './process-queue-item';
 
 type QueueItemRefMock = RouteDeliverySyncQueueItemInterface['ref'];
-const CURRENT_SOURCE_REVISION_KEY = `${ServiceNames.SuuntoApp}:provider-route-1:1710000000000`;
-const STALE_SOURCE_REVISION_KEY = `${ServiceNames.SuuntoApp}:provider-route-1:1700000000000`;
+const suuntoToGarminRoute = ROUTE_DELIVERY_SYNC_ROUTES[ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_GarminAPI];
+const CURRENT_SOURCE_REVISION_KEY = `${suuntoToGarminRoute.sourceServiceName}:provider-route-1:1710000000000`;
+const STALE_SOURCE_REVISION_KEY = `${suuntoToGarminRoute.sourceServiceName}:provider-route-1:1700000000000`;
 
 const baseQueueItem: RouteDeliverySyncQueueItemInterface = {
   id: 'queue-1',
@@ -130,8 +139,8 @@ const baseQueueItem: RouteDeliverySyncQueueItemInterface = {
   totalRetryCount: 0,
   dispatchedToCloudTask: 1,
   routeId: ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_GarminAPI,
-  sourceServiceName: ServiceNames.SuuntoApp,
-  destinationServiceName: ServiceNames.GarminAPI,
+  sourceServiceName: suuntoToGarminRoute.sourceServiceName,
+  destinationServiceName: suuntoToGarminRoute.destinationServiceName,
   userID: 'user-1',
   savedRouteID: 'route-1',
   sourceRevisionKey: CURRENT_SOURCE_REVISION_KEY,
@@ -148,10 +157,11 @@ function mockSuccessfulPrerequisites(): void {
   mockHasProAccess.mockResolvedValue(true);
   mockIsRouteEnabled.mockResolvedValue(true);
   mockSetRouteDeliveryMetadata.mockResolvedValue(undefined);
+  mockGetServiceConnectionMeta.mockResolvedValue(null);
   mockAssertRouteSendUserActive.mockResolvedValue(undefined);
   mockCreateContext.mockResolvedValue({ context: true });
   mockGetRouteSendAdapter.mockReturnValue({
-    destinationServiceName: ServiceNames.GarminAPI,
+    destinationServiceName: suuntoToGarminRoute.destinationServiceName,
     createContext: mockCreateContext,
     sendRoute: vi.fn(),
   });
@@ -159,7 +169,7 @@ function mockSuccessfulPrerequisites(): void {
     routeId: 'route-1',
     routeDocument: {
       sourceSummary: {
-        sourceServiceName: ServiceNames.SuuntoApp,
+        sourceServiceName: suuntoToGarminRoute.sourceServiceName,
         providerRouteId: 'provider-route-1',
         providerUserId: 'suunto-user',
         modifiedAt: 1710000000000,
@@ -175,6 +185,7 @@ function mockSuccessfulPrerequisites(): void {
   });
   mockPersistRouteDeliveryMetadata.mockResolvedValue(undefined);
   mockUpdateToProcessed.mockResolvedValue(QueueResult.Processed);
+  mockDeferQueueItemForPendingDisconnect.mockResolvedValue(QueueResult.Deferred);
   mockMarkQueueItemSkipped.mockResolvedValue(QueueResult.Processed);
   mockIncreaseRetryCount.mockResolvedValue(QueueResult.RetryIncremented);
   mockMoveToDLQ.mockResolvedValue(QueueResult.MovedToDLQ);
@@ -197,13 +208,13 @@ describe('route-delivery-sync/process-queue-item', () => {
     expect(mockSendPreparedRoute).toHaveBeenCalledWith(
       'user-1',
       expect.objectContaining({ routeId: 'route-1' }),
-      expect.objectContaining({ destinationServiceName: ServiceNames.GarminAPI }),
+      expect.objectContaining({ destinationServiceName: suuntoToGarminRoute.destinationServiceName }),
       { context: true },
     );
     expect(mockPersistRouteDeliveryMetadata).toHaveBeenCalledWith(expect.objectContaining({
       userID: 'user-1',
       routeID: 'route-1',
-      destinationServiceName: ServiceNames.GarminAPI,
+      destinationServiceName: suuntoToGarminRoute.destinationServiceName,
       providerRouteId: 'garmin-course-1',
       routeSyncRouteId: ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_GarminAPI,
       sourceRevisionKey: CURRENT_SOURCE_REVISION_KEY,
@@ -222,7 +233,7 @@ describe('route-delivery-sync/process-queue-item', () => {
         importedAt: '2026-02-01T12:00:01.000Z',
         updatedAt: '2026-02-03T12:00:00.000Z',
         sourceSummary: {
-          sourceServiceName: ServiceNames.SuuntoApp,
+          sourceServiceName: suuntoToGarminRoute.sourceServiceName,
           providerRouteId: 'provider-route-1',
           providerUserId: 'suunto-user',
           importedAt,
@@ -235,7 +246,7 @@ describe('route-delivery-sync/process-queue-item', () => {
 
     const result = await processRouteDeliverySyncQueueItem({
       ...baseQueueItem,
-      sourceRevisionKey: `${ServiceNames.SuuntoApp}:provider-route-1:${new Date(importedAt).getTime()}`,
+      sourceRevisionKey: `${suuntoToGarminRoute.sourceServiceName}:provider-route-1:${new Date(importedAt).getTime()}`,
     });
 
     expect(result).toBe(QueueResult.Processed);
@@ -270,7 +281,7 @@ describe('route-delivery-sync/process-queue-item', () => {
   it('skips destination permission failures without retrying', async () => {
     const permissionError = new Error('Grant Garmin COURSE_IMPORT permission.');
     mockGetRouteSendAdapter.mockReturnValue({
-      destinationServiceName: ServiceNames.GarminAPI,
+      destinationServiceName: suuntoToGarminRoute.destinationServiceName,
       createContext: vi.fn().mockRejectedValue(permissionError),
       sendRoute: vi.fn(),
     });
@@ -284,6 +295,117 @@ describe('route-delivery-sync/process-queue-item', () => {
       skippedReason: 'destination_permission_required',
     }));
     expect(mockIncreaseRetryCount).not.toHaveBeenCalled();
+  });
+
+  it('delivers legacy saved routes when source provider user id is absent from saved source metadata', async () => {
+    mockPrepareSavedRoute.mockResolvedValue({
+      routeId: 'route-1',
+      routeDocument: {
+        sourceSummary: {
+          sourceServiceName: suuntoToGarminRoute.sourceServiceName,
+          providerRouteId: 'provider-route-1',
+          modifiedAt: 1710000000000,
+        },
+      },
+      routeFile: {},
+      sourceFile: { path: 'route.gpx' },
+      gpxContent: '<gpx />',
+    });
+
+    const result = await processRouteDeliverySyncQueueItem({ ...baseQueueItem });
+
+    expect(result).toBe(QueueResult.Processed);
+    expect(mockSendPreparedRoute).toHaveBeenCalledWith(
+      'user-1',
+      expect.objectContaining({ routeId: 'route-1' }),
+      expect.objectContaining({ destinationServiceName: suuntoToGarminRoute.destinationServiceName }),
+      { context: true },
+    );
+    expect(mockUpdateToProcessed).toHaveBeenCalledWith(expect.anything(), undefined, expect.objectContaining({
+      resultStatus: 'success',
+    }));
+    expect(mockUpdateToProcessed).not.toHaveBeenCalledWith(expect.anything(), undefined, expect.objectContaining({
+      skippedReason: 'source_route_mismatch',
+    }));
+  });
+
+  it('defers manual route delivery when source service disconnect is pending', async () => {
+    mockIsRouteEnabled.mockResolvedValue(false);
+    mockGetServiceConnectionMeta
+      .mockResolvedValueOnce({ connectionState: 'disconnect_pending' })
+      .mockResolvedValueOnce(null);
+
+    const manualQueueItem: RouteDeliverySyncQueueItemInterface = {
+      ...baseQueueItem,
+      manual: true,
+    };
+
+    const result = await processRouteDeliverySyncQueueItem(manualQueueItem);
+
+    expect(result).toBe(QueueResult.Deferred);
+    expect(mockGetServiceConnectionMeta).toHaveBeenCalledWith(baseQueueItem.userID, suuntoToGarminRoute.sourceServiceName);
+    expect(mockGetServiceConnectionMeta).toHaveBeenCalledWith(baseQueueItem.userID, suuntoToGarminRoute.destinationServiceName);
+    expect(mockDeferQueueItemForPendingDisconnect).toHaveBeenCalledWith(
+      manualQueueItem,
+      undefined,
+      expect.objectContaining({
+        deferredServiceName: `${suuntoToGarminRoute.sourceServiceName}`,
+      }),
+    );
+    expect(mockCreateContext).not.toHaveBeenCalled();
+    expect(mockSendPreparedRoute).not.toHaveBeenCalled();
+    expect(mockUpdateToProcessed).not.toHaveBeenCalledWith(expect.anything(), undefined, expect.objectContaining({
+      skippedReason: 'route_disabled',
+    }));
+  });
+
+  it('defers manual route delivery before Garmin context creation when destination disconnect is pending', async () => {
+    mockGetServiceConnectionMeta
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ connectionState: 'disconnect_pending' });
+
+    const manualQueueItem: RouteDeliverySyncQueueItemInterface = {
+      ...baseQueueItem,
+      manual: true,
+    };
+
+    const result = await processRouteDeliverySyncQueueItem(manualQueueItem);
+
+    expect(result).toBe(QueueResult.Deferred);
+    expect(mockDeferQueueItemForPendingDisconnect).toHaveBeenCalledWith(
+      manualQueueItem,
+      undefined,
+      expect.objectContaining({
+        deferredServiceName: `${suuntoToGarminRoute.destinationServiceName}`,
+      }),
+    );
+    expect(mockCreateContext).not.toHaveBeenCalled();
+    expect(mockSendPreparedRoute).not.toHaveBeenCalled();
+    expect(mockPersistRouteDeliveryMetadata).not.toHaveBeenCalled();
+  });
+
+  it('defers when destination token use becomes blocked by pending disconnect during context creation', async () => {
+    const pendingDisconnectError = Object.assign(new Error('Garmin disconnect is pending.'), {
+      name: 'TokenUseSkippedForPendingDisconnectError',
+      serviceName: suuntoToGarminRoute.destinationServiceName,
+    });
+    mockCreateContext.mockRejectedValue(pendingDisconnectError);
+
+    const result = await processRouteDeliverySyncQueueItem({ ...baseQueueItem });
+
+    expect(result).toBe(QueueResult.Deferred);
+    expect(mockDeferQueueItemForPendingDisconnect).toHaveBeenCalledWith(
+      expect.objectContaining({ id: baseQueueItem.id }),
+      undefined,
+      expect.objectContaining({
+        deferredServiceName: `${suuntoToGarminRoute.destinationServiceName}`,
+      }),
+    );
+    expect(mockUpdateToProcessed).not.toHaveBeenCalledWith(expect.anything(), undefined, expect.objectContaining({
+      skippedReason: 'destination_not_connected',
+    }));
+    expect(mockIncreaseRetryCount).not.toHaveBeenCalled();
+    expect(mockMoveToDLQ).not.toHaveBeenCalled();
   });
 
   it('retries transient provider failures', async () => {

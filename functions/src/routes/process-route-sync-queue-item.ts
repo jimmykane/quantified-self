@@ -194,7 +194,7 @@ function getRouteSourceRevisionInput(
     const sourceSummary = getSourceSummary(existingRouteDocument);
     return {
         sourceProviderRouteId: normalizeNonEmptyString(sourceSummary?.providerRouteId) || queueItem.providerRouteId,
-        sourceProviderUserId: normalizeNonEmptyString(sourceSummary?.providerUserId) || normalizeNonEmptyString(queueItem.providerUserId) || undefined,
+        sourceProviderUserId: normalizeNonEmptyString(sourceSummary?.providerUserId) || undefined,
     };
 }
 
