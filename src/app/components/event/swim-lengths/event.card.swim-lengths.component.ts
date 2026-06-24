@@ -7,8 +7,8 @@ import {
   DataEnergy,
   DataHeartRate,
   DataInterface,
-  DataPoolLength,
   DataSwimPace,
+  DataSwimDistance,
   DynamicDataLoader,
   EventInterface,
   UserUnitSettingsInterface,
@@ -285,7 +285,7 @@ export class EventCardSwimLengthsComponent implements OnChanges {
   }
 
   private formatSwimDistanceValue(distance: number | null): string {
-    return distance === null ? '' : this.formatUnitAwareStat(new DataPoolLength(distance));
+    return distance === null ? '' : this.formatUnitAwareStat(new DataSwimDistance(distance));
   }
 
   private formatEnergy(calories: AppSwimLength['calories']): string {

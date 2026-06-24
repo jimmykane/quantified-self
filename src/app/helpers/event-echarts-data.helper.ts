@@ -21,13 +21,13 @@ import {
   DataPace,
   DataPower,
   DataPowerAvg,
-  DataPoolLength,
   DataSpeedAvg,
   DataDescent,
   DataSpeed,
   DataStrydDistance,
   DataStrydAltitude,
   DataSwimPace,
+  DataSwimDistance,
   DynamicDataLoader,
   LapTypes,
   LapInterface,
@@ -1885,13 +1885,13 @@ function getSwimLengthPace(swimLength: AppSwimLength): DataSwimPace | null {
   return new DataSwimPace(convertSpeedToSwimPace(speedValue));
 }
 
-function getSwimLengthDistance(swimLength: AppSwimLength): DataPoolLength | null {
+function getSwimLengthDistance(swimLength: AppSwimLength): DataSwimDistance | null {
   const distanceValue = swimLength.distance?.getValue?.();
   if (typeof distanceValue !== 'number' || !Number.isFinite(distanceValue)) {
     return null;
   }
 
-  return new DataPoolLength(distanceValue);
+  return new DataSwimDistance(distanceValue);
 }
 
 function formatNullableInteger(value: number | null | undefined): string {

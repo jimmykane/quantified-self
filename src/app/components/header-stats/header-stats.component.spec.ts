@@ -10,6 +10,7 @@ import {
   DataPowerMax,
   DataPowerMin,
   DataSpeedAvgKilometersPerHour,
+  DataSwimDistance,
   DistanceUnits,
   DynamicDataLoader,
 } from '@sports-alliance/sports-lib';
@@ -232,10 +233,11 @@ describe('HeaderStatsComponent', () => {
 
     expect(component.displayedStatCards).toHaveLength(1);
     expect(component.displayedStatCards[0].label).toBe(DataDistance.type);
+    const expectedDistance = new DataSwimDistance(1500);
     expect(component.displayedStatCards[0].valueItems[0]).toEqual(expect.objectContaining({
       type: DataDistance.type,
       displayType: DataDistance.type,
-      displayValue: '1500',
+      displayValue: `${expectedDistance.getDisplayValue()}`,
       displayUnit: 'm',
     }));
   });

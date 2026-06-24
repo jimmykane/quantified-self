@@ -1,12 +1,13 @@
 import {
   ActivityInterface,
   DataCadence,
-  DataDistance,
   DataDuration,
   DataEnergy,
   DataHeartRate,
   DataInterface,
+  DataPoolLength,
   DataSpeed,
+  DataSwimDistance,
 } from '@sports-alliance/sports-lib';
 
 export interface AppSwimLength {
@@ -19,8 +20,8 @@ export interface AppSwimLength {
   strokes: number | null;
   elapsedTime: DataDuration | null;
   timerTime: DataDuration | null;
-  distance: DataDistance | null;
-  poolLength: DataDistance | null;
+  distance: DataSwimDistance | null;
+  poolLength: DataPoolLength | null;
   avgSpeed: DataSpeed | null;
   avgCadence: DataCadence | null;
   avgHeartRate: DataHeartRate | null;
@@ -115,8 +116,8 @@ export function normalizeSwimLength(value: unknown): AppSwimLength | null {
     strokes: normalizeNumber(getRecordValue(record, 'strokes')),
     elapsedTime: normalizeDataNumber(getRecordValue(record, 'elapsedTime'), DataDuration),
     timerTime: normalizeDataNumber(getRecordValue(record, 'timerTime'), DataDuration),
-    distance: normalizeDataNumber(getRecordValue(record, 'distance'), DataDistance),
-    poolLength: normalizeDataNumber(getRecordValue(record, 'poolLength'), DataDistance),
+    distance: normalizeDataNumber(getRecordValue(record, 'distance'), DataSwimDistance),
+    poolLength: normalizeDataNumber(getRecordValue(record, 'poolLength'), DataPoolLength),
     avgSpeed: normalizeDataNumber(getRecordValue(record, 'avgSpeed'), DataSpeed),
     avgCadence: normalizeDataNumber(getRecordValue(record, 'avgCadence'), DataCadence),
     avgHeartRate: normalizeDataNumber(getRecordValue(record, 'avgHeartRate'), DataHeartRate),
