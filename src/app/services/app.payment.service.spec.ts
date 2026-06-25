@@ -27,7 +27,7 @@ vi.mock('app/firebase/functions', async () => {
 
 
 const {
-    mockAddDoc,
+    mockSetDoc,
     mockGetDoc,
     mockGetDocs,
     mockLimit,
@@ -40,7 +40,7 @@ const {
     mockRunInInjectionContext
 } = vi.hoisted(() => {
     return {
-        mockAddDoc: vi.fn(),
+        mockSetDoc: vi.fn(),
         mockGetDoc: vi.fn(),
         mockGetDocs: vi.fn(),
         mockLimit: vi.fn(),
@@ -59,7 +59,7 @@ vi.mock('app/firebase/firestore', async () => {
     const actual = await vi.importActual('app/firebase/firestore');
     return {
         ...actual,
-        addDoc: mockAddDoc,
+        setDoc: mockSetDoc,
         getDoc: mockGetDoc,
         getDocs: mockGetDocs,
         limit: mockLimit,
@@ -93,9 +93,11 @@ const mockFunctionsService = {
 
 describe('AppPaymentService', () => {
     let service: AppPaymentService;
+    let generatedCheckoutDocSequence = 0;
 
     beforeEach(() => {
         vi.clearAllMocks(); // Reset spies
+        generatedCheckoutDocSequence = 0;
 
         mockAuth.currentUser = {
             uid: 'test_user_uid',
@@ -105,7 +107,15 @@ describe('AppPaymentService', () => {
         mockFunctionsService.call.mockResolvedValue({ data: {} });
 
         // Configure mock implementations here where 'of' is available
-        mockAddDoc.mockResolvedValue({ id: 'test_session_id' });
+        mockSetDoc.mockResolvedValue(undefined);
+        mockDoc.mockImplementation((_parentOrFirestore: unknown, path?: string) => {
+            if (typeof path === 'string') {
+                return { id: path.split('/').pop(), path };
+            }
+
+            generatedCheckoutDocSequence += 1;
+            return { id: `test_session_id_${generatedCheckoutDocSequence}` };
+        });
         mockDocData.mockReturnValue(of({ url: 'http://stripe.com/checkout' }));
         mockCollectionData.mockReturnValue(of([]));
         mockGetDocs.mockResolvedValue({ docs: [] });
@@ -145,12 +155,12 @@ describe('AppPaymentService', () => {
             // We pass a string, so mode defaults to 'subscription'
             await service.appendCheckoutSession(priceId);
 
-            // Verify addDoc was called
-            expect(mockAddDoc).toHaveBeenCalled();
+            // Verify checkout document was written
+            expect(mockSetDoc).toHaveBeenCalled();
 
-            // Check arguments of the first call to addDoc
-            // addDoc(ref, payload)
-            const args = mockAddDoc.mock.calls[0];
+            // Check arguments of the first call to setDoc
+            // setDoc(ref, payload, options)
+            const args = mockSetDoc.mock.calls[0];
             const payload = args[1];
 
             expect(payload.mode).toBe('subscription');
@@ -163,6 +173,7 @@ describe('AppPaymentService', () => {
             // CHECK 2: Automatic Tax
             expect(payload.automatic_tax).toEqual({ enabled: true });
             expect(payload.payment_method_collection).toBe('if_required');
+            expect(args[2]).toEqual({ merge: true });
 
             // CHECK 3: Extension-compatible trial field remains top-level
             expect(payload.subscription_data).toBeUndefined();
@@ -183,8 +194,8 @@ describe('AppPaymentService', () => {
 
             await service.appendCheckoutSession(oneTimePrice);
 
-            expect(mockAddDoc).toHaveBeenCalled();
-            const args = mockAddDoc.mock.calls[0];
+            expect(mockSetDoc).toHaveBeenCalled();
+            const args = mockSetDoc.mock.calls[0];
             const payload = args[1];
 
             expect(payload.mode).toBe('payment');
@@ -219,8 +230,8 @@ describe('AppPaymentService', () => {
 
             await service.appendCheckoutSession(recurringPriceWithTrial);
 
-            expect(mockAddDoc).toHaveBeenCalled();
-            const args = mockAddDoc.mock.calls[0];
+            expect(mockSetDoc).toHaveBeenCalled();
+            const args = mockSetDoc.mock.calls[0];
             const payload = args[1];
 
             expect(payload.trial_period_days).toBe(14);
@@ -249,8 +260,8 @@ describe('AppPaymentService', () => {
 
             await service.appendCheckoutSession(recurringPriceWithTrial);
 
-            expect(mockAddDoc).toHaveBeenCalled();
-            const args = mockAddDoc.mock.calls[0];
+            expect(mockSetDoc).toHaveBeenCalled();
+            const args = mockSetDoc.mock.calls[0];
             const payload = args[1];
 
             expect(payload.trial_period_days).toBeUndefined();
@@ -276,8 +287,8 @@ describe('AppPaymentService', () => {
 
             await service.appendCheckoutSession(recurringPriceWithTrial);
 
-            expect(mockAddDoc).toHaveBeenCalled();
-            const args = mockAddDoc.mock.calls[0];
+            expect(mockSetDoc).toHaveBeenCalled();
+            const args = mockSetDoc.mock.calls[0];
             const payload = args[1];
 
             expect(payload.trial_period_days).toBeUndefined();
@@ -299,8 +310,8 @@ describe('AppPaymentService', () => {
 
             await service.appendCheckoutSession(recurringPriceWithoutTrial);
 
-            expect(mockAddDoc).toHaveBeenCalled();
-            const args = mockAddDoc.mock.calls[0];
+            expect(mockSetDoc).toHaveBeenCalled();
+            const args = mockSetDoc.mock.calls[0];
             const payload = args[1];
 
             expect(payload.trial_period_days).toBeUndefined();
@@ -325,8 +336,8 @@ describe('AppPaymentService', () => {
 
             await service.appendCheckoutSession(recurringPriceWithInvalidTrialMetadata);
 
-            expect(mockAddDoc).toHaveBeenCalled();
-            const args = mockAddDoc.mock.calls[0];
+            expect(mockSetDoc).toHaveBeenCalled();
+            const args = mockSetDoc.mock.calls[0];
             const payload = args[1];
 
             expect(payload.trial_period_days).toBeUndefined();
@@ -345,7 +356,7 @@ describe('AppPaymentService', () => {
 
             await expect(service.appendCheckoutSession('price_123')).rejects.toThrow('SUBSCRIPTION_RESTORED:pro');
             expect(mockAuth.currentUser.getIdToken).toHaveBeenCalledWith(true);
-            expect(mockAddDoc).not.toHaveBeenCalled();
+            expect(mockSetDoc).not.toHaveBeenCalled();
         });
 
         it('should exit checkout when user cancels manage-subscription prompt', async () => {
@@ -357,7 +368,7 @@ describe('AppPaymentService', () => {
 
             await service.appendCheckoutSession('price_123');
 
-            expect(mockAddDoc).not.toHaveBeenCalled();
+            expect(mockSetDoc).not.toHaveBeenCalled();
         });
 
         it('should hand off to manageSubscriptions when user confirms existing-subscription prompt', async () => {
@@ -371,7 +382,7 @@ describe('AppPaymentService', () => {
             await service.appendCheckoutSession('price_123');
 
             expect(manageSpy).toHaveBeenCalledTimes(1);
-            expect(mockAddDoc).not.toHaveBeenCalled();
+            expect(mockSetDoc).not.toHaveBeenCalled();
         });
 
         it('should retry checkout once after stale customer error and then continue', async () => {
@@ -381,7 +392,7 @@ describe('AppPaymentService', () => {
 
             await service.appendCheckoutSession('price_123');
 
-            expect(mockAddDoc).toHaveBeenCalledTimes(2);
+            expect(mockSetDoc).toHaveBeenCalledTimes(2);
             const cleanupCalls = mockFunctionsService.call.mock.calls.filter(call => call[0] === 'cleanupStripeCustomer');
             expect(cleanupCalls).toHaveLength(1);
         });
@@ -394,7 +405,7 @@ describe('AppPaymentService', () => {
 
             await service.appendCheckoutSession('price_123');
 
-            expect(mockAddDoc).toHaveBeenCalledTimes(2);
+            expect(mockSetDoc).toHaveBeenCalledTimes(2);
             const cleanupCalls = mockFunctionsService.call.mock.calls.filter(call => call[0] === 'cleanupStripeCustomer');
             expect(cleanupCalls).toHaveLength(1);
             expect(alertSpy).toHaveBeenCalledWith(expect.stringContaining('No such customer'));

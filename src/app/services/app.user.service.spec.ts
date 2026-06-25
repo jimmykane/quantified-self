@@ -705,14 +705,15 @@ describe('AppUserService', () => {
             expect(mainUserDocWrite[1].creationDate).toEqual(new Date('2026-01-01T00:00:00.000Z'));
         });
 
-        it('acceptPolicies should persist only legal fields explicitly set to true', async () => {
+        it('acceptPolicies should persist required true policies and explicit optional consent choices', async () => {
             const policies = {
                 uid: 'u1',
                 acceptedPrivacyPolicy: true,
                 acceptedDataPolicy: false,
-                acceptedTrackingPolicy: true,
-                acceptedMarketingPolicy: true,
+                acceptedTrackingPolicy: false,
+                acceptedMarketingPolicy: false,
                 acceptedDiagnosticsPolicy: true,
+                acceptedTos: false,
                 displayName: 'Should be ignored',
             } as any;
 
@@ -721,9 +722,9 @@ describe('AppUserService', () => {
             expect(setDoc).toHaveBeenCalledTimes(1);
             expect((setDoc as any).mock.calls[0][1]).toEqual({
                 acceptedPrivacyPolicy: true,
-                acceptedTrackingPolicy: true,
-                acceptedMarketingPolicy: true,
                 acceptedDiagnosticsPolicy: true,
+                acceptedTrackingPolicy: false,
+                acceptedMarketingPolicy: false,
             });
             expect((setDoc as any).mock.calls[0][2]).toEqual({ merge: true });
         });
@@ -1212,6 +1213,20 @@ describe('AppUserService', () => {
             expect(updateDoc).not.toHaveBeenCalled();
         });
 
+        it('should reject optional legal writes when profile reads are incomplete', async () => {
+            const user = { uid: 'u1' } as AppUserInterface;
+
+            (service as any).usersWithIncompleteProfileReads.add('u1');
+            await expect(service.updateUserProperties(user, {
+                displayName: 'New Name',
+                acceptedTrackingPolicy: false,
+                acceptedMarketingPolicy: false
+            })).rejects.toThrow('Cannot update legal consent until user profile finishes loading.');
+
+            expect(setDoc).not.toHaveBeenCalled();
+            expect(updateDoc).not.toHaveBeenCalled();
+        });
+
         it('should split settings and other properties', async () => {
             const user = { uid: 'u1' } as any;
             const settings = { theme: 'dark' };
@@ -1252,6 +1267,23 @@ describe('AppUserService', () => {
             // Should update remaining propeties on user doc
             expect(updateDoc).toHaveBeenCalledWith(
                 expect.anything(), // doc ref
+                { displayName: 'New Name' }
+            );
+        });
+
+        it('should ignore non-boolean optional legal field updates', async () => {
+            const user = { uid: 'test-uid' } as AppUserInterface;
+            const propertiesToUpdate = {
+                displayName: 'New Name',
+                acceptedTrackingPolicy: undefined,
+                acceptedMarketingPolicy: null
+            };
+
+            await service.updateUserProperties(user, propertiesToUpdate);
+
+            expect(setDoc).not.toHaveBeenCalled();
+            expect(updateDoc).toHaveBeenCalledWith(
+                expect.anything(),
                 { displayName: 'New Name' }
             );
         });
