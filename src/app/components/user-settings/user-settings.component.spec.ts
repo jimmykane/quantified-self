@@ -344,6 +344,16 @@ describe('UserSettingsComponent', () => {
         expect(component.userSettingsFormGroup.get('acceptedMarketingPolicy').value).toBe(false);
     });
 
+    it('should initialize missing optional legal preferences as false', () => {
+        delete (component.user as any).acceptedTrackingPolicy;
+        delete (component.user as any).acceptedMarketingPolicy;
+
+        component.ngOnChanges();
+
+        expect(component.userSettingsFormGroup.get('acceptedTrackingPolicy').value).toBe(false);
+        expect(component.userSettingsFormGroup.get('acceptedMarketingPolicy').value).toBe(false);
+    });
+
     it('should initialize brandText from user data', () => {
         (component.user as any).stripeRole = 'basic';
         (component.user as any).brandText = 'My Team';
@@ -426,6 +436,24 @@ describe('UserSettingsComponent', () => {
             expect.objectContaining({ uid: 'test-uid' }),
             expect.objectContaining({
                 acceptedMarketingPolicy: true
+            })
+        );
+    });
+
+    it('should save missing optional legal preferences as strict false booleans', async () => {
+        const userService = TestBed.inject(AppUserService);
+        const updateUserPropertiesSpy = vi.spyOn(userService, 'updateUserProperties').mockResolvedValue(true as any);
+        delete (component.user as any).acceptedTrackingPolicy;
+        delete (component.user as any).acceptedMarketingPolicy;
+        component.ngOnChanges();
+
+        await component.onSubmit(new Event('submit'));
+
+        expect(updateUserPropertiesSpy).toHaveBeenCalledWith(
+            expect.objectContaining({ uid: 'test-uid' }),
+            expect.objectContaining({
+                acceptedTrackingPolicy: false,
+                acceptedMarketingPolicy: false
             })
         );
     });

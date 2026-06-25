@@ -283,8 +283,8 @@ export class UserSettingsComponent implements OnChanges, OnDestroy, OnInit {
         [
           Validators.required,
         ]),
-      acceptedTrackingPolicy: new UntypedFormControl(this.user.acceptedTrackingPolicy, []),
-      acceptedMarketingPolicy: new UntypedFormControl(this.user.acceptedMarketingPolicy || false, []),
+      acceptedTrackingPolicy: new UntypedFormControl(this.user.acceptedTrackingPolicy === true, []),
+      acceptedMarketingPolicy: new UntypedFormControl(this.user.acceptedMarketingPolicy === true, []),
       brandText: new UntypedFormControl(
         {
           value: (this.user as any).brandText || '',
@@ -480,8 +480,8 @@ export class UserSettingsComponent implements OnChanges, OnDestroy, OnInit {
 
       const propertiesToUpdate: any = {
         displayName: this.userSettingsFormGroup.get('displayName').value,
-        acceptedTrackingPolicy: this.userSettingsFormGroup.get('acceptedTrackingPolicy').value,
-        acceptedMarketingPolicy: this.userSettingsFormGroup.get('acceptedMarketingPolicy').value,
+        acceptedTrackingPolicy: this.userSettingsFormGroup.get('acceptedTrackingPolicy').value === true,
+        acceptedMarketingPolicy: this.userSettingsFormGroup.get('acceptedMarketingPolicy').value === true,
         settings: <UserSettingsInterface>{
           chartSettings: userChartSettings as unknown as UserSettingsInterface['chartSettings'],
           appSettings: appSettingsToSave,

@@ -521,14 +521,22 @@ export class AppUserService implements OnDestroy {
     return AppUserUtilities.hasPaidAccessUser(user, isAdmin);
   }
 
-  public static readonly legalFields = [
+  private static readonly requiredLegalFields = [
     'acceptedPrivacyPolicy',
     'acceptedDataPolicy',
-    'acceptedTrackingPolicy',
-    'acceptedMarketingPolicy',
     'acceptedDiagnosticsPolicy',
     'acceptedTos',
-  ];
+  ] as const;
+
+  private static readonly optionalLegalConsentFields = [
+    'acceptedTrackingPolicy',
+    'acceptedMarketingPolicy',
+  ] as const;
+
+  public static readonly legalFields = [
+    ...AppUserService.requiredLegalFields,
+    ...AppUserService.optionalLegalConsentFields,
+  ] as const;
 
 
 
@@ -625,11 +633,20 @@ export class AppUserService implements OnDestroy {
   }
 
   public async acceptPolicies(policies: Partial<AppUserInterface>) {
-    const dataToWrite: any = {};
+    const dataToWrite: Partial<Record<typeof AppUserService.legalFields[number], boolean>> = {};
     let hasChanges = false;
-    AppUserService.legalFields.forEach(field => {
-      if ((policies as any)[field] === true) {
+
+    AppUserService.requiredLegalFields.forEach(field => {
+      if (policies[field] === true) {
         dataToWrite[field] = true;
+        hasChanges = true;
+      }
+    });
+
+    AppUserService.optionalLegalConsentFields.forEach(field => {
+      const value = policies[field];
+      if (typeof value === 'boolean') {
+        dataToWrite[field] = value;
         hasChanges = true;
       }
     });
@@ -1107,15 +1124,20 @@ export class AppUserService implements OnDestroy {
     }
 
     // Handle legal fields separately
-    const legalUpdates: any = {};
-    const allowedLegalUpdates = ['acceptedTrackingPolicy', 'acceptedMarketingPolicy'];
+    const legalUpdates: Partial<Record<typeof AppUserService.optionalLegalConsentFields[number], boolean>> = {};
+    const allowedLegalUpdates = AppUserService.optionalLegalConsentFields as readonly string[];
 
     // First strip all legal fields from propertiesToUpdate to ensure they don't land in the main doc
     AppUserService.legalFields.forEach(field => {
       if (field in propertiesToUpdate) {
         // Only allow specific legal fields to be updated via this method
         if (allowedLegalUpdates.includes(field)) {
-          legalUpdates[field] = propertiesToUpdate[field];
+          const value = propertiesToUpdate[field];
+          if (typeof value === 'boolean') {
+            legalUpdates[field as typeof AppUserService.optionalLegalConsentFields[number]] = value;
+          } else {
+            this.logger.warn(`[AppUserService] Ignoring legal field '${field}' because value is not boolean.`);
+          }
         } else {
           this.logger.warn(`[AppUserService] Stripping restricted legal field '${field}' from update payload.`);
         }
