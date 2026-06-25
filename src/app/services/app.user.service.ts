@@ -1107,8 +1107,9 @@ export class AppUserService implements OnDestroy {
 
   public async updateUserProperties(user: AppUserInterface, propertiesToUpdate: any) {
     const promises = [];
+    const hasIncompleteProfileReads = this.hasIncompleteProfileReads(user?.uid);
     if (propertiesToUpdate.settings) {
-      if (this.hasIncompleteProfileReads(user?.uid)) {
+      if (hasIncompleteProfileReads) {
         this.logger.warn('[AppUserService] Skipping settings write because profile reads are incomplete.', {
           uid: user?.uid ?? null,
         });
@@ -1146,12 +1147,18 @@ export class AppUserService implements OnDestroy {
     });
 
     if (Object.keys(legalUpdates).length > 0) {
-      promises.push(setDoc(doc(this.firestore, `users/${user.uid}/legal/agreements`), legalUpdates, { merge: true })
-        .catch(err => {
-          this.logger.error('[AppUserService] Legal update FAILED', err);
-          throw err;
-        })
-      );
+      if (hasIncompleteProfileReads) {
+        this.logger.warn('[AppUserService] Skipping legal write because profile reads are incomplete.', {
+          uid: user?.uid ?? null,
+        });
+      } else {
+        promises.push(setDoc(doc(this.firestore, `users/${user.uid}/legal/agreements`), legalUpdates, { merge: true })
+          .catch(err => {
+            this.logger.error('[AppUserService] Legal update FAILED', err);
+            throw err;
+          })
+        );
+      }
     }
 
     // Keep auth-claim state out of the main profile doc.

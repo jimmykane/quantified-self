@@ -1213,6 +1213,23 @@ describe('AppUserService', () => {
             expect(updateDoc).not.toHaveBeenCalled();
         });
 
+        it('should skip optional legal writes when profile reads are incomplete', async () => {
+            const user = { uid: 'u1' } as AppUserInterface;
+
+            (service as any).usersWithIncompleteProfileReads.add('u1');
+            await service.updateUserProperties(user, {
+                displayName: 'New Name',
+                acceptedTrackingPolicy: false,
+                acceptedMarketingPolicy: false
+            });
+
+            expect(setDoc).not.toHaveBeenCalled();
+            expect(updateDoc).toHaveBeenCalledWith(
+                expect.anything(),
+                { displayName: 'New Name' }
+            );
+        });
+
         it('should split settings and other properties', async () => {
             const user = { uid: 'u1' } as any;
             const settings = { theme: 'dark' };

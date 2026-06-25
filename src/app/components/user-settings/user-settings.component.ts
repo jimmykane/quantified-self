@@ -480,8 +480,6 @@ export class UserSettingsComponent implements OnChanges, OnDestroy, OnInit {
 
       const propertiesToUpdate: any = {
         displayName: this.userSettingsFormGroup.get('displayName').value,
-        acceptedTrackingPolicy: this.userSettingsFormGroup.get('acceptedTrackingPolicy').value === true,
-        acceptedMarketingPolicy: this.userSettingsFormGroup.get('acceptedMarketingPolicy').value === true,
         settings: <UserSettingsInterface>{
           chartSettings: userChartSettings as unknown as UserSettingsInterface['chartSettings'],
           appSettings: appSettingsToSave,
@@ -515,6 +513,15 @@ export class UserSettingsComponent implements OnChanges, OnDestroy, OnInit {
           exportToCSVSettings: settings.exportToCSVSettings
         }
       };
+
+      const acceptedTrackingPolicyControl = this.userSettingsFormGroup.get('acceptedTrackingPolicy');
+      const acceptedMarketingPolicyControl = this.userSettingsFormGroup.get('acceptedMarketingPolicy');
+      if (acceptedTrackingPolicyControl?.dirty) {
+        propertiesToUpdate.acceptedTrackingPolicy = acceptedTrackingPolicyControl.value === true;
+      }
+      if (acceptedMarketingPolicyControl?.dirty) {
+        propertiesToUpdate.acceptedMarketingPolicy = acceptedMarketingPolicyControl.value === true;
+      }
 
       if (this.canEditBrandText) {
         const rawBrandText = this.userSettingsFormGroup.get('brandText')?.value ?? '';
