@@ -1148,17 +1148,17 @@ export class AppUserService implements OnDestroy {
 
     if (Object.keys(legalUpdates).length > 0) {
       if (hasIncompleteProfileReads) {
-        this.logger.warn('[AppUserService] Skipping legal write because profile reads are incomplete.', {
+        this.logger.warn('[AppUserService] Refusing legal write because profile reads are incomplete.', {
           uid: user?.uid ?? null,
         });
-      } else {
-        promises.push(setDoc(doc(this.firestore, `users/${user.uid}/legal/agreements`), legalUpdates, { merge: true })
-          .catch(err => {
-            this.logger.error('[AppUserService] Legal update FAILED', err);
-            throw err;
-          })
-        );
+        throw new Error('Cannot update legal consent until user profile finishes loading.');
       }
+      promises.push(setDoc(doc(this.firestore, `users/${user.uid}/legal/agreements`), legalUpdates, { merge: true })
+        .catch(err => {
+          this.logger.error('[AppUserService] Legal update FAILED', err);
+          throw err;
+        })
+      );
     }
 
     // Keep auth-claim state out of the main profile doc.

@@ -1213,21 +1213,18 @@ describe('AppUserService', () => {
             expect(updateDoc).not.toHaveBeenCalled();
         });
 
-        it('should skip optional legal writes when profile reads are incomplete', async () => {
+        it('should reject optional legal writes when profile reads are incomplete', async () => {
             const user = { uid: 'u1' } as AppUserInterface;
 
             (service as any).usersWithIncompleteProfileReads.add('u1');
-            await service.updateUserProperties(user, {
+            await expect(service.updateUserProperties(user, {
                 displayName: 'New Name',
                 acceptedTrackingPolicy: false,
                 acceptedMarketingPolicy: false
-            });
+            })).rejects.toThrow('Cannot update legal consent until user profile finishes loading.');
 
             expect(setDoc).not.toHaveBeenCalled();
-            expect(updateDoc).toHaveBeenCalledWith(
-                expect.anything(),
-                { displayName: 'New Name' }
-            );
+            expect(updateDoc).not.toHaveBeenCalled();
         });
 
         it('should split settings and other properties', async () => {
