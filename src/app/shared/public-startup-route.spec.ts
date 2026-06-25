@@ -47,6 +47,17 @@ describe('public-startup-route', () => {
     expect(shouldProvideClientHydrationForRuntime(testDocument, true)).toBe(true);
   });
 
+  it('skips hydration for Google Translate proxy documents even when prerendered', () => {
+    const appRoot = document.createElement('app-root');
+    appRoot.setAttribute('ng-server-context', 'ssg');
+    const testDocument = {
+      location: { hostname: 'quantified--self-io.translate.goog' },
+      querySelector: (selector: string) => selector === 'app-root[ng-server-context]' ? appRoot : null,
+    } as unknown as Document;
+
+    expect(shouldProvideClientHydrationForRuntime(testDocument, true)).toBe(false);
+  });
+
   it('skips hydration in the browser for client-rendered startup documents', () => {
     const testDocument = htmlDocument('<app-root></app-root>');
 
