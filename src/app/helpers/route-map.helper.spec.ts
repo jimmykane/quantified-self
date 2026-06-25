@@ -92,6 +92,7 @@ describe('route map helper', () => {
       sourceSymbolLabel: null,
       presentation: resolveRouteWaypointPresentation({ name: id, type: 'Waypoint' }),
       isRouteShapingPoint: false,
+      isRouteTurnInstruction: false,
       distanceLabel: null,
       routeIndex,
       routePointIndex: null,

@@ -35,8 +35,47 @@ describe('MarkerFactoryService', () => {
         expect(marker.title).toBe('Water stop');
         expect(marker.getAttribute('aria-label')).toBe('Waypoint Water stop, Water');
         expect(marker.getAttribute('role')).toBe('img');
+        expect(marker.style.position).toBe('absolute');
         expect(marker.textContent).toContain('water_drop');
         expect(marker.querySelector('path')?.getAttribute('fill')).toBe('#0277bd');
+    });
+
+    it('should create accessible compact icon marker', () => {
+        const marker = service.createCompactIconMarker({
+            color: '#3949ab',
+            icon: 'turn_sharp_right',
+            title: 'Sharp right',
+            ariaLabel: 'Waypoint Sharp right, Sharp right turn',
+        });
+
+        expect(marker.title).toBe('Sharp right');
+        expect(marker.getAttribute('aria-label')).toBe('Waypoint Sharp right, Sharp right turn');
+        expect(marker.getAttribute('role')).toBe('img');
+        expect(marker.style.position).toBe('absolute');
+        expect(marker.style.width).toBe('22px');
+        expect(marker.style.height).toBe('22px');
+        expect(marker.style.borderRadius).toBe('50%');
+        expect(marker.style.backgroundColor).toBe('rgb(57, 73, 171)');
+        expect(marker.textContent).toContain('turn_sharp_right');
+        expect(marker.querySelector('svg')).toBeNull();
+    });
+
+    it('should create compact icon marker with a centered route turn glyph', () => {
+        const marker = service.createCompactIconMarker({
+            color: '#3949ab',
+            icon: 'turn_sharp_right',
+            svgPath: 'M8 12h9m-3.5-3.5L17 12l-3.5 3.5',
+            title: 'Sharp right',
+            ariaLabel: 'Waypoint Sharp right, Sharp right turn',
+        });
+
+        const svg = marker.querySelector('svg');
+        const path = marker.querySelector('path');
+        expect(svg?.getAttribute('viewBox')).toBe('0 0 24 24');
+        expect(path?.getAttribute('d')).toBe('M8 12h9m-3.5-3.5L17 12l-3.5 3.5');
+        expect(path?.getAttribute('stroke')).toBe('#fff');
+        expect(path?.getAttribute('fill')).toBe('none');
+        expect(marker.textContent).not.toContain('turn_sharp_right');
     });
 
     it('should create home marker', () => {

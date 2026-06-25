@@ -288,7 +288,7 @@ export class RouteMapComponent extends MapAbstractDirective implements AfterView
         latitudeDegrees: waypoint.latitudeDegrees,
         longitudeDegrees: waypoint.longitudeDegrees,
         element: this.createWaypointMarker(waypoint.color, waypoint),
-        anchor: 'bottom',
+        anchor: this.getWaypointMarkerAnchor(waypoint),
       })),
     }));
 
@@ -306,9 +306,10 @@ export class RouteMapComponent extends MapAbstractDirective implements AfterView
   }
 
   private createWaypointMarker(color: string, waypoint: RouteMapWaypointRenderData): HTMLElement {
-    return this.markerFactory.createIconPinMarker({
+    const markerOptions = {
       color,
       icon: waypoint.presentation.icon,
+      ...(waypoint.presentation.turnGlyphPath ? { svgPath: waypoint.presentation.turnGlyphPath } : {}),
       title: [
         waypoint.name,
         waypoint.presentation.label,
@@ -321,7 +322,15 @@ export class RouteMapComponent extends MapAbstractDirective implements AfterView
         waypoint.distanceLabel,
         waypoint.segmentLabel,
       ].filter(Boolean).join(', '),
-    });
+    };
+
+    return waypoint.presentation.markerVariant === 'compact'
+      ? this.markerFactory.createCompactIconMarker(markerOptions)
+      : this.markerFactory.createIconPinMarker(markerOptions);
+  }
+
+  private getWaypointMarkerAnchor(waypoint: RouteMapWaypointRenderData): 'bottom' | 'center' {
+    return waypoint.presentation.markerVariant === 'compact' ? 'center' : 'bottom';
   }
 
   private scheduleFitBounds(): void {

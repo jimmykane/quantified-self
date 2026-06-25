@@ -204,6 +204,35 @@ describe('route detail helpers', () => {
     });
   });
 
+  it('keeps turn instructions visible in waypoint display views', () => {
+    const routeDocument = createRouteDocument();
+    const segments = buildRouteSegmentDetailViews(routeDocument, createRouteFile([
+      createRoute({
+        id: 'stored-segment-1',
+        name: 'Parsed Segment',
+        pointCount: 2,
+        positions: [],
+        stats: {},
+      }),
+    ]), null);
+    const waypoints: RouteWaypointDetailView[] = [
+      createWaypoint('Sharp right', 'Sharp_right_turn', 0),
+      createWaypoint('Aid station', 'aid_station', 0),
+    ];
+
+    const displayViews = buildRouteWaypointDisplayViews(waypoints, segments);
+
+    expect(displayViews.map(waypoint => waypoint.name)).toEqual(['Sharp right', 'Aid station']);
+    expect(displayViews[0]).toMatchObject({
+      isRouteTurnInstruction: true,
+      presentation: expect.objectContaining({
+        category: 'sharp_right',
+        icon: 'turn_sharp_right',
+        markerVariant: 'compact',
+      }),
+    });
+  });
+
   it('builds waypoint display views with segment and presentation colors', () => {
     const routeDocument = createRouteDocument();
     const segments = buildRouteSegmentDetailViews(routeDocument, createRouteFile([
@@ -328,6 +357,7 @@ describe('route detail helpers', () => {
       sourceSymbolLabel: null,
       presentation: resolveRouteWaypointPresentation({ name, type }),
       isRouteShapingPoint: resolveRouteWaypointPresentation({ name, type }).isRouteShapingPoint,
+      isRouteTurnInstruction: resolveRouteWaypointPresentation({ name, type }).isRouteTurnInstruction,
       distanceLabel: null,
       routeIndex,
       routePointIndex: null,

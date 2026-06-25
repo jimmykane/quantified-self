@@ -199,7 +199,13 @@
             <td class="waypoint-name-cell">
               <span class="waypoint-name-content">
                 <span class="waypoint-icon-badge" aria-hidden="true">
+                  @if (waypoint.presentation.turnGlyphPath) {
+                  <svg class="waypoint-turn-icon" viewBox="0 0 24 24" focusable="false" aria-hidden="true">
+                    <path [attr.d]="waypoint.presentation.turnGlyphPath"></path>
+                  </svg>
+                  } @else {
                   <mat-icon class="waypoint-marker-icon">{{ waypoint.presentation.icon }}</mat-icon>
+                  }
                 </span>
                 <span class="waypoint-name" [matTooltip]="waypoint.name">{{ waypoint.name }}</span>
               </span>

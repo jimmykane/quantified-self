@@ -9,11 +9,17 @@ export type RouteWaypointCategory =
   | 'danger'
   | 'left'
   | 'right'
+  | 'sharp_left'
+  | 'sharp_right'
+  | 'slight_left'
+  | 'slight_right'
   | 'straight'
   | 'first_aid'
   | 'climb'
   | 'sprint'
   | 'fork'
+  | 'fork_left'
+  | 'fork_right'
   | 'u_turn'
   | 'segment_start'
   | 'segment_end'
@@ -44,6 +50,9 @@ export interface RouteWaypointPresentation {
   label: string;
   sourceLabel: string;
   isRouteShapingPoint: boolean;
+  isRouteTurnInstruction: boolean;
+  markerVariant: 'pin' | 'compact';
+  turnGlyphPath?: string;
 }
 
 export interface RouteWaypointPresentationInput {
@@ -87,13 +96,13 @@ const COURSE_POINT_TYPE_BY_NUMBER: Record<number, RouteWaypointCategory> = {
   13: 'climb',
   14: 'climb',
   15: 'sprint',
-  16: 'fork',
-  17: 'fork',
+  16: 'fork_left',
+  17: 'fork_right',
   18: 'fork',
-  19: 'left',
-  20: 'left',
-  21: 'right',
-  22: 'right',
+  19: 'slight_left',
+  20: 'sharp_left',
+  21: 'slight_right',
+  22: 'sharp_right',
   23: 'u_turn',
   24: 'segment_start',
   25: 'segment_end',
@@ -123,14 +132,21 @@ const COURSE_POINT_TYPE_BY_NUMBER: Record<number, RouteWaypointCategory> = {
 
 const COURSE_POINT_TYPE_BY_KEY: Record<string, RouteWaypointCategory> = {
   generic: 'generic',
+  begin: 'start',
+  start: 'start',
+  finish: 'finish',
+  end: 'finish',
   summit: 'summit',
   valley: 'valley',
   water: 'water',
   food: 'food',
   danger: 'danger',
   left: 'left',
+  left_turn: 'left',
   right: 'right',
+  right_turn: 'right',
   straight: 'straight',
+  straight_turn: 'straight',
   first_aid: 'first_aid',
   fourth_category: 'climb',
   third_category: 'climb',
@@ -138,14 +154,21 @@ const COURSE_POINT_TYPE_BY_KEY: Record<string, RouteWaypointCategory> = {
   first_category: 'climb',
   hors_category: 'climb',
   sprint: 'sprint',
-  left_fork: 'fork',
-  right_fork: 'fork',
+  left_fork: 'fork_left',
+  right_fork: 'fork_right',
   middle_fork: 'fork',
-  slight_left: 'left',
-  sharp_left: 'left',
-  slight_right: 'right',
-  sharp_right: 'right',
+  left_at_fork_turn: 'fork_left',
+  right_at_fork_turn: 'fork_right',
+  slight_left: 'slight_left',
+  slight_left_turn: 'slight_left',
+  sharp_left: 'sharp_left',
+  sharp_left_turn: 'sharp_left',
+  slight_right: 'slight_right',
+  slight_right_turn: 'slight_right',
+  sharp_right: 'sharp_right',
+  sharp_right_turn: 'sharp_right',
   u_turn: 'u_turn',
+  uturn: 'u_turn',
   segment_start: 'segment_start',
   segment_end: 'segment_end',
   shaping_point: 'shaping_point',
@@ -172,41 +195,47 @@ const COURSE_POINT_TYPE_BY_KEY: Record<string, RouteWaypointCategory> = {
   crossing: 'crossing',
 };
 
-const KEYWORD_CATEGORY_RULES: Array<{ pattern: RegExp; category: RouteWaypointCategory }> = [
-  { pattern: /\b(shaping[_\s-]*point)\b/i, category: 'shaping_point' },
-  { pattern: /\b(segment[_\s-]*start)\b/i, category: 'segment_start' },
-  { pattern: /\b(segment[_\s-]*end)\b/i, category: 'segment_end' },
-  { pattern: /\b(start|begin|trailhead|trail[_\s-]*head|departure)\b/i, category: 'start' },
-  { pattern: /\b(end|finish|destination|arrival)\b/i, category: 'finish' },
-  { pattern: /\b(first[_\s-]*aid|medical|hospital)\b/i, category: 'first_aid' },
-  { pattern: /\b(aid[_\s-]*station)\b/i, category: 'aid_station' },
-  { pattern: /\b(sports[_\s-]*drink|drink)\b/i, category: 'sports_drink' },
-  { pattern: /\b(water|spring|fountain)\b/i, category: 'water' },
-  { pattern: /\b(energy[_\s-]*gel|gel)\b/i, category: 'energy_gel' },
-  { pattern: /\b(food|restaurant|cafe|coffee|grocery|shop|store)\b/i, category: 'food' },
-  { pattern: /\b(toilet|restroom|bathroom|wc)\b/i, category: 'toilet' },
-  { pattern: /\b(shower)\b/i, category: 'shower' },
-  { pattern: /\b(campsite|campground|camp)\b/i, category: 'campsite' },
-  { pattern: /\b(shelter|hut)\b/i, category: 'shelter' },
-  { pattern: /\b(rest[_\s-]*area|rest[_\s-]*stop|lodging|hotel)\b/i, category: 'rest_area' },
-  { pattern: /\b(overlook|lookout|view|scenic)\b/i, category: 'overlook' },
-  { pattern: /\b(summit|peak)\b/i, category: 'summit' },
-  { pattern: /\b(valley)\b/i, category: 'valley' },
-  { pattern: /\b(climb|mountain|hill|steep|incline)\b/i, category: 'climb' },
-  { pattern: /\b(sprint)\b/i, category: 'sprint' },
-  { pattern: /\b(u[_\s-]*turn|uturn)\b/i, category: 'u_turn' },
-  { pattern: /\b(left|slight[_\s-]*left|sharp[_\s-]*left)\b/i, category: 'left' },
-  { pattern: /\b(right|slight[_\s-]*right|sharp[_\s-]*right)\b/i, category: 'right' },
-  { pattern: /\b(straight)\b/i, category: 'straight' },
-  { pattern: /\b(fork|junction|intersection|turn)\b/i, category: 'fork' },
-  { pattern: /\b(bridge|tunnel|crossing|underpass|overpass)\b/i, category: 'route_feature' },
-  { pattern: /\b(obstacle|roadblock|closed|blocked)\b/i, category: 'obstacle' },
-  { pattern: /\b(warning|danger|hazard|caution|accident|sharp[_\s-]*curve)\b/i, category: 'danger' },
-  { pattern: /\b(meeting[_\s-]*spot|meet)\b/i, category: 'meeting_spot' },
-  { pattern: /\b(mile[_\s-]*marker|km[_\s-]*marker|marker)\b/i, category: 'mile_marker' },
-  { pattern: /\b(checkpoint|control|flag)\b/i, category: 'checkpoint' },
-  { pattern: /\b(service|repair|fuel|gas)\b/i, category: 'service' },
-  { pattern: /\b(gear|equipment|tool)\b/i, category: 'gear' },
+const KEYWORD_CATEGORY_RULES: Array<{ keys: string[]; category: RouteWaypointCategory }> = [
+  { keys: ['shaping_point'], category: 'shaping_point' },
+  { keys: ['segment_start'], category: 'segment_start' },
+  { keys: ['segment_end'], category: 'segment_end' },
+  { keys: ['start', 'begin', 'trailhead', 'trail_head', 'departure'], category: 'start' },
+  { keys: ['end', 'finish', 'destination', 'arrival'], category: 'finish' },
+  { keys: ['first_aid', 'medical', 'hospital'], category: 'first_aid' },
+  { keys: ['aid_station'], category: 'aid_station' },
+  { keys: ['sports_drink', 'drink'], category: 'sports_drink' },
+  { keys: ['water', 'spring', 'fountain'], category: 'water' },
+  { keys: ['energy_gel', 'gel'], category: 'energy_gel' },
+  { keys: ['food', 'restaurant', 'cafe', 'coffee', 'grocery', 'shop', 'store'], category: 'food' },
+  { keys: ['toilet', 'restroom', 'bathroom', 'wc'], category: 'toilet' },
+  { keys: ['shower'], category: 'shower' },
+  { keys: ['campsite', 'campground', 'camp'], category: 'campsite' },
+  { keys: ['shelter', 'hut'], category: 'shelter' },
+  { keys: ['rest_area', 'rest_stop', 'lodging', 'hotel'], category: 'rest_area' },
+  { keys: ['overlook', 'lookout', 'view', 'scenic'], category: 'overlook' },
+  { keys: ['summit', 'peak'], category: 'summit' },
+  { keys: ['valley'], category: 'valley' },
+  { keys: ['climb', 'mountain', 'hill', 'steep', 'incline'], category: 'climb' },
+  { keys: ['sprint'], category: 'sprint' },
+  { keys: ['u_turn', 'uturn'], category: 'u_turn' },
+  { keys: ['sharp_left'], category: 'sharp_left' },
+  { keys: ['sharp_right'], category: 'sharp_right' },
+  { keys: ['slight_left'], category: 'slight_left' },
+  { keys: ['slight_right'], category: 'slight_right' },
+  { keys: ['left_fork', 'left_at_fork'], category: 'fork_left' },
+  { keys: ['right_fork', 'right_at_fork'], category: 'fork_right' },
+  { keys: ['left'], category: 'left' },
+  { keys: ['right'], category: 'right' },
+  { keys: ['straight'], category: 'straight' },
+  { keys: ['fork', 'junction', 'intersection', 'turn'], category: 'fork' },
+  { keys: ['bridge', 'tunnel', 'crossing', 'underpass', 'overpass'], category: 'route_feature' },
+  { keys: ['obstacle', 'roadblock', 'closed', 'blocked'], category: 'obstacle' },
+  { keys: ['warning', 'danger', 'hazard', 'caution', 'accident', 'sharp_curve'], category: 'danger' },
+  { keys: ['meeting_spot', 'meet'], category: 'meeting_spot' },
+  { keys: ['mile_marker', 'km_marker', 'marker'], category: 'mile_marker' },
+  { keys: ['checkpoint', 'control', 'flag'], category: 'checkpoint' },
+  { keys: ['service', 'repair', 'fuel', 'gas'], category: 'service' },
+  { keys: ['gear', 'equipment', 'tool'], category: 'gear' },
 ];
 
 const CATEGORY_DEFINITIONS: Record<RouteWaypointCategory, RouteWaypointCategoryDefinition> = {
@@ -220,11 +249,17 @@ const CATEGORY_DEFINITIONS: Record<RouteWaypointCategory, RouteWaypointCategoryD
   danger: { icon: 'warning', color: '#d84315', label: 'Danger' },
   left: { icon: 'turn_left', color: '#3949ab', label: 'Left turn' },
   right: { icon: 'turn_right', color: '#3949ab', label: 'Right turn' },
+  sharp_left: { icon: 'turn_sharp_left', color: '#3949ab', label: 'Sharp left turn' },
+  sharp_right: { icon: 'turn_sharp_right', color: '#3949ab', label: 'Sharp right turn' },
+  slight_left: { icon: 'turn_slight_left', color: '#3949ab', label: 'Slight left turn' },
+  slight_right: { icon: 'turn_slight_right', color: '#3949ab', label: 'Slight right turn' },
   straight: { icon: 'straight', color: '#3949ab', label: 'Straight' },
   first_aid: { icon: 'medical_services', color: '#d81b60', label: 'First aid' },
   climb: { icon: 'terrain', color: '#8e24aa', label: 'Climb' },
   sprint: { icon: 'sprint', color: '#00897b', label: 'Sprint' },
   fork: { icon: 'alt_route', color: '#3949ab', label: 'Fork' },
+  fork_left: { icon: 'turn_left', color: '#3949ab', label: 'Left at fork' },
+  fork_right: { icon: 'turn_right', color: '#3949ab', label: 'Right at fork' },
   u_turn: { icon: 'u_turn_left', color: '#3949ab', label: 'U-turn' },
   segment_start: { icon: 'flag', color: '#2e7d32', label: 'Segment start' },
   segment_end: { icon: 'sports_score', color: '#c62828', label: 'Segment end' },
@@ -247,6 +282,34 @@ const CATEGORY_DEFINITIONS: Record<RouteWaypointCategory, RouteWaypointCategoryD
   obstacle: { icon: 'warning', color: '#d84315', label: 'Obstacle' },
   crossing: { icon: 'alt_route', color: '#3949ab', label: 'Crossing' },
   shaping_point: { icon: 'route', color: '#78909c', label: 'Shaping point' },
+};
+
+const ROUTE_TURN_INSTRUCTION_CATEGORIES = new Set<RouteWaypointCategory>([
+  'left',
+  'right',
+  'sharp_left',
+  'sharp_right',
+  'slight_left',
+  'slight_right',
+  'straight',
+  'fork',
+  'fork_left',
+  'fork_right',
+  'u_turn',
+]);
+
+const ROUTE_TURN_GLYPH_PATHS: Partial<Record<RouteWaypointCategory, string>> = {
+  left: 'M16 12H7m3.5-3.5L7 12l3.5 3.5',
+  right: 'M8 12h9m-3.5-3.5L17 12l-3.5 3.5',
+  sharp_left: 'M16 12H7m3.5-3.5L7 12l3.5 3.5',
+  sharp_right: 'M8 12h9m-3.5-3.5L17 12l-3.5 3.5',
+  slight_left: 'M16 16 8 8m0 5V8h5',
+  slight_right: 'M8 16l8-8m-5 0h5v5',
+  straight: 'M12 17V7m-3.5 3.5L12 7l3.5 3.5',
+  fork: 'M12 17V7m-3.5 3.5L12 7l3.5 3.5',
+  fork_left: 'M16 16 8 8m0 5V8h5',
+  fork_right: 'M8 16l8-8m-5 0h5v5',
+  u_turn: 'M16 17v-5a4 4 0 0 0-4-4H7m3.5-3.5L7 8l3.5 3.5',
 };
 
 export function resolveRouteWaypointPresentation(
@@ -314,6 +377,7 @@ export function toRouteWaypointSourceLabel(value: unknown): string | null {
 
 function buildPresentation(resolution: RouteWaypointResolution): RouteWaypointPresentation {
   const definition = CATEGORY_DEFINITIONS[resolution.category];
+  const isRouteTurnInstruction = ROUTE_TURN_INSTRUCTION_CATEGORIES.has(resolution.category);
   return {
     category: resolution.category,
     icon: definition.icon,
@@ -321,6 +385,9 @@ function buildPresentation(resolution: RouteWaypointResolution): RouteWaypointPr
     label: definition.label,
     sourceLabel: resolution.sourceLabel || DEFAULT_SOURCE_LABEL,
     isRouteShapingPoint: resolution.category === 'shaping_point',
+    isRouteTurnInstruction,
+    markerVariant: isRouteTurnInstruction ? 'compact' : 'pin',
+    turnGlyphPath: ROUTE_TURN_GLYPH_PATHS[resolution.category],
   };
 }
 
@@ -357,7 +424,8 @@ function resolveKeywordValue(sourceLabel: string | null): RouteWaypointResolutio
     return null;
   }
 
-  const rule = KEYWORD_CATEGORY_RULES.find(item => item.pattern.test(sourceLabel));
+  const lookupKey = normalizeLookupKey(sourceLabel);
+  const rule = KEYWORD_CATEGORY_RULES.find(item => item.keys.some(key => hasLookupKeyPart(lookupKey, key)));
   return rule ? { category: rule.category, sourceLabel } : null;
 }
 
@@ -396,4 +464,11 @@ function normalizeLookupKey(value: string): string {
     .replace(/&/g, ' and ')
     .replace(/[^a-z0-9]+/g, '_')
     .replace(/^_+|_+$/g, '');
+}
+
+function hasLookupKeyPart(lookupKey: string, part: string): boolean {
+  return lookupKey === part
+    || lookupKey.startsWith(`${part}_`)
+    || lookupKey.endsWith(`_${part}`)
+    || lookupKey.includes(`_${part}_`);
 }

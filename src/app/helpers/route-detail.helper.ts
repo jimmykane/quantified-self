@@ -49,6 +49,7 @@ export interface RouteWaypointDetailView {
   sourceSymbolLabel: string | null;
   presentation: RouteWaypointPresentation;
   isRouteShapingPoint: boolean;
+  isRouteTurnInstruction: boolean;
   distanceLabel: string | null;
   routeIndex: number | null;
   routePointIndex: number | null;
@@ -166,6 +167,7 @@ export function buildRouteWaypointDetailViews(
         sourceSymbolLabel,
         presentation,
         isRouteShapingPoint: presentation.isRouteShapingPoint,
+        isRouteTurnInstruction: presentation.isRouteTurnInstruction,
         distanceLabel: Number.isFinite(waypoint.distance)
           ? formatRouteMetricValue(DataDistance.type, waypoint.distance as number, unitSettings)
           : null,

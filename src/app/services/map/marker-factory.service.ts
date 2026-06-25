@@ -3,6 +3,7 @@ import { Injectable } from '@angular/core';
 export interface IconPinMarkerOptions {
   color: string;
   icon: string;
+  svgPath?: string;
   title?: string;
   ariaLabel?: string;
 }
@@ -31,7 +32,7 @@ export class MarkerFactoryService {
   createIconPinMarker(options: IconPinMarkerOptions): HTMLDivElement {
     const marker = document.createElement('div');
     marker.style.cursor = 'pointer';
-    marker.style.position = 'relative';
+    marker.style.position = 'absolute';
     marker.style.width = '30px';
     marker.style.height = '34px';
     marker.style.display = 'block';
@@ -73,6 +74,63 @@ export class MarkerFactoryService {
     icon.style.pointerEvents = 'none';
 
     marker.appendChild(svg);
+    marker.appendChild(icon);
+    return marker;
+  }
+
+  createCompactIconMarker(options: IconPinMarkerOptions): HTMLDivElement {
+    const marker = document.createElement('div');
+    marker.style.cursor = 'pointer';
+    marker.style.position = 'absolute';
+    marker.style.width = '22px';
+    marker.style.height = '22px';
+    marker.style.display = 'flex';
+    marker.style.alignItems = 'center';
+    marker.style.justifyContent = 'center';
+    marker.style.borderRadius = '50%';
+    marker.style.backgroundColor = options.color;
+    marker.style.border = '2px solid #fff';
+    marker.style.boxShadow = '0 1px 4px rgba(0, 0, 0, 0.35)';
+
+    if (options.title) {
+      marker.title = options.title;
+    }
+    if (options.ariaLabel) {
+      marker.setAttribute('aria-label', options.ariaLabel);
+      marker.setAttribute('role', 'img');
+    }
+
+    if (options.svgPath) {
+      const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      svg.setAttribute('width', '16');
+      svg.setAttribute('height', '16');
+      svg.setAttribute('viewBox', '0 0 24 24');
+      svg.setAttribute('aria-hidden', 'true');
+      svg.style.display = 'block';
+      svg.style.pointerEvents = 'none';
+
+      const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      path.setAttribute('d', options.svgPath);
+      path.setAttribute('fill', 'none');
+      path.setAttribute('stroke', '#fff');
+      path.setAttribute('stroke-width', '2.7');
+      path.setAttribute('stroke-linecap', 'round');
+      path.setAttribute('stroke-linejoin', 'round');
+      svg.appendChild(path);
+      marker.appendChild(svg);
+      return marker;
+    }
+
+    const icon = document.createElement('span');
+    icon.className = 'material-symbols-rounded';
+    icon.setAttribute('aria-hidden', 'true');
+    icon.textContent = options.icon || 'place';
+    icon.style.color = '#fff';
+    icon.style.fontSize = '15px';
+    icon.style.fontVariationSettings = '"FILL" 1, "wght" 650, "GRAD" 0, "opsz" 20';
+    icon.style.lineHeight = '1';
+    icon.style.pointerEvents = 'none';
+
     marker.appendChild(icon);
     return marker;
   }
