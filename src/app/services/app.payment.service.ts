@@ -2,7 +2,7 @@ import { Injectable, inject } from '@angular/core';
 import { MatDialog } from '@angular/material/dialog';
 import { ConfirmationDialogComponent } from '../components/confirmation-dialog/confirmation-dialog.component';
 import { environment } from '../../environments/environment';
-import { Firestore, collection, collectionData, addDoc, doc, docData, getDocs, getDocsFromServer, limit, query, where } from 'app/firebase/firestore';
+import { Firestore, collection, collectionData, doc, docData, getDocs, getDocsFromServer, limit, query, setDoc, where } from 'app/firebase/firestore';
 
 // ... (other imports)
 
@@ -322,11 +322,11 @@ export class AppPaymentService {
         this.logger.log('Creating checkout session for price:', checkoutInput.priceId, 'mode:', checkoutInput.mode);
         const checkoutSessionsRef = collection(this.firestore, `customers/${userId}/checkout_sessions`);
         const sessionPayload = this.buildCheckoutSessionPayload(checkoutInput, userId, successUrl, cancelUrl, trialPeriodDays);
+        const sessionDoc = doc(checkoutSessionsRef);
+        const checkoutSessionDocId = sessionDoc.id;
 
-        let checkoutSessionDocId = '';
         try {
-            const sessionDoc = await addDoc(checkoutSessionsRef, sessionPayload);
-            checkoutSessionDocId = sessionDoc.id;
+            await setDoc(sessionDoc, sessionPayload, { merge: true });
             this.logger.log('Checkout session created with ID:', checkoutSessionDocId);
         } catch (error) {
             this.logger.error('Error creating checkout doc:', error);
