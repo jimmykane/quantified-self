@@ -33,8 +33,8 @@ export class MarkerFactoryService {
     const marker = document.createElement('div');
     marker.style.cursor = 'pointer';
     marker.style.position = 'absolute';
-    marker.style.width = '30px';
-    marker.style.height = '34px';
+    marker.style.width = '32px';
+    marker.style.height = '36px';
     marker.style.display = 'block';
 
     if (options.title) {
@@ -46,16 +46,16 @@ export class MarkerFactoryService {
     }
 
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-    svg.setAttribute('width', '30');
-    svg.setAttribute('height', '34');
-    svg.setAttribute('viewBox', '0 0 30 34');
+    svg.setAttribute('width', '32');
+    svg.setAttribute('height', '36');
+    svg.setAttribute('viewBox', '0 0 32 36');
     svg.style.overflow = 'visible';
 
     const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-    path.setAttribute('d', 'M15 1.75C10.1 1.75 6.1 5.75 6.1 10.65c0 6.25 8.9 20.3 8.9 20.3s8.9-14.05 8.9-20.3c0-4.9-4-8.9-8.9-8.9z');
+    path.setAttribute('d', 'M16 1.75C9.7 1.75 4.65 6.8 4.65 13.1c0 7.8 11.35 21.15 11.35 21.15S27.35 20.9 27.35 13.1C27.35 6.8 22.3 1.75 16 1.75Z');
     path.setAttribute('fill', options.color);
     path.setAttribute('stroke', '#FFF');
-    path.setAttribute('stroke-width', '1.6');
+    path.setAttribute('stroke-width', '1.9');
     path.setAttribute('stroke-linejoin', 'round');
     svg.appendChild(path);
 
@@ -65,11 +65,11 @@ export class MarkerFactoryService {
     icon.textContent = options.icon || 'place';
     icon.style.position = 'absolute';
     icon.style.left = '50%';
-    icon.style.top = '10.5px';
+    icon.style.top = '12.6px';
     icon.style.transform = 'translate(-50%, -50%)';
     icon.style.color = '#fff';
-    icon.style.fontSize = '16px';
-    icon.style.fontVariationSettings = '"FILL" 1, "wght" 600, "GRAD" 0, "opsz" 20';
+    icon.style.fontSize = '17px';
+    icon.style.fontVariationSettings = '"FILL" 1, "wght" 750, "GRAD" 0, "opsz" 20';
     icon.style.lineHeight = '1';
     icon.style.pointerEvents = 'none';
 

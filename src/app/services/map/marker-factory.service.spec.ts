@@ -36,8 +36,11 @@ describe('MarkerFactoryService', () => {
         expect(marker.getAttribute('aria-label')).toBe('Waypoint Water stop, Water');
         expect(marker.getAttribute('role')).toBe('img');
         expect(marker.style.position).toBe('absolute');
+        expect(marker.style.width).toBe('32px');
+        expect(marker.style.height).toBe('36px');
         expect(marker.textContent).toContain('water_drop');
         expect(marker.querySelector('path')?.getAttribute('fill')).toBe('#0277bd');
+        expect(marker.querySelector('circle')).toBeNull();
     });
 
     it('should create accessible compact icon marker', () => {
