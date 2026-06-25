@@ -1,5 +1,12 @@
 import { Injectable } from '@angular/core';
 
+export interface IconPinMarkerOptions {
+  color: string;
+  icon: string;
+  title?: string;
+  ariaLabel?: string;
+}
+
 @Injectable({
   providedIn: 'root'
 })
@@ -19,6 +26,55 @@ export class MarkerFactoryService {
                 fill="${color}" stroke="#FFF" stroke-width="1.4" stroke-linejoin="round" />
           <circle cx="12" cy="9" r="2.6" fill="#FFF" opacity="0.92" />
         </svg>`);
+  }
+
+  createIconPinMarker(options: IconPinMarkerOptions): HTMLDivElement {
+    const marker = document.createElement('div');
+    marker.style.cursor = 'pointer';
+    marker.style.position = 'relative';
+    marker.style.width = '30px';
+    marker.style.height = '34px';
+    marker.style.display = 'block';
+
+    if (options.title) {
+      marker.title = options.title;
+    }
+    if (options.ariaLabel) {
+      marker.setAttribute('aria-label', options.ariaLabel);
+      marker.setAttribute('role', 'img');
+    }
+
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('width', '30');
+    svg.setAttribute('height', '34');
+    svg.setAttribute('viewBox', '0 0 30 34');
+    svg.style.overflow = 'visible';
+
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    path.setAttribute('d', 'M15 1.75C10.1 1.75 6.1 5.75 6.1 10.65c0 6.25 8.9 20.3 8.9 20.3s8.9-14.05 8.9-20.3c0-4.9-4-8.9-8.9-8.9z');
+    path.setAttribute('fill', options.color);
+    path.setAttribute('stroke', '#FFF');
+    path.setAttribute('stroke-width', '1.6');
+    path.setAttribute('stroke-linejoin', 'round');
+    svg.appendChild(path);
+
+    const icon = document.createElement('span');
+    icon.className = 'material-symbols-rounded';
+    icon.setAttribute('aria-hidden', 'true');
+    icon.textContent = options.icon || 'place';
+    icon.style.position = 'absolute';
+    icon.style.left = '50%';
+    icon.style.top = '10.5px';
+    icon.style.transform = 'translate(-50%, -50%)';
+    icon.style.color = '#fff';
+    icon.style.fontSize = '16px';
+    icon.style.fontVariationSettings = '"FILL" 1, "wght" 600, "GRAD" 0, "opsz" 20';
+    icon.style.lineHeight = '1';
+    icon.style.pointerEvents = 'none';
+
+    marker.appendChild(svg);
+    marker.appendChild(icon);
+    return marker;
   }
 
   createHomeMarker(color: string): HTMLDivElement {

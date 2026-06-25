@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { RouteSegmentDetailView, RouteWaypointDisplayView } from './route-detail.helper';
 import { buildRouteMapSegmentRenderData } from './route-map.helper';
+import { resolveRouteWaypointPresentation } from './route-waypoint-presentation.helper';
 
 describe('route map helper', () => {
   it('builds segment render data, skips invalid coordinates, and assigns waypoints', () => {
@@ -87,6 +88,10 @@ describe('route map helper', () => {
       id,
       name: id,
       type: 'Waypoint',
+      sourceTypeLabel: 'Waypoint',
+      sourceSymbolLabel: null,
+      presentation: resolveRouteWaypointPresentation({ name: id, type: 'Waypoint' }),
+      isRouteShapingPoint: false,
       distanceLabel: null,
       routeIndex,
       routePointIndex: null,

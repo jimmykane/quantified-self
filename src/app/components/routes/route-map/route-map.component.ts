@@ -306,10 +306,22 @@ export class RouteMapComponent extends MapAbstractDirective implements AfterView
   }
 
   private createWaypointMarker(color: string, waypoint: RouteMapWaypointRenderData): HTMLElement {
-    const element = this.markerFactory.createPinMarker(color);
-    element.title = [waypoint.name, waypoint.type, waypoint.distanceLabel].filter(Boolean).join('\n');
-    element.setAttribute('aria-label', `Waypoint ${waypoint.name}`);
-    return element;
+    return this.markerFactory.createIconPinMarker({
+      color,
+      icon: waypoint.presentation.icon,
+      title: [
+        waypoint.name,
+        waypoint.presentation.label,
+        waypoint.distanceLabel,
+        waypoint.segmentLabel,
+      ].filter(Boolean).join('\n'),
+      ariaLabel: [
+        `Waypoint ${waypoint.name}`,
+        waypoint.presentation.label,
+        waypoint.distanceLabel,
+        waypoint.segmentLabel,
+      ].filter(Boolean).join(', '),
+    });
   }
 
   private scheduleFitBounds(): void {

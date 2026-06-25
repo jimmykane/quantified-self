@@ -16,6 +16,7 @@ import {
   buildRouteWaypointDisplayViews,
   RouteWaypointDetailView,
 } from './route-detail.helper';
+import { resolveRouteWaypointPresentation } from './route-waypoint-presentation.helper';
 
 describe('route detail helpers', () => {
   it('builds segment views from parsed route data and keeps Firestore segment IDs', () => {
@@ -95,36 +96,6 @@ describe('route detail helpers', () => {
         [DataGradeMax.type]: 18,
       },
     };
-    const routes = [
-      createRoute({
-        id: 'stored-segment-1',
-        name: 'A',
-        pointCount: 2,
-        positions: [],
-        stats: {
-          [DataDistance.type]: 1000,
-          [DataAscent.type]: 20,
-          [DataDescent.type]: 12,
-          [DataGradeMin.type]: -5,
-          [DataGradeMax.type]: 8,
-        },
-      }),
-      createRoute({
-        id: 'stored-segment-2',
-        name: 'B',
-        pointCount: 3,
-        positions: [],
-        stats: {
-          [DataDistance.type]: 2000,
-          [DataAscent.type]: 30,
-          [DataDescent.type]: 18,
-          [DataGradeMin.type]: -9,
-          [DataGradeMax.type]: 12,
-        },
-      }),
-    ];
-    const segments = buildRouteSegmentDetailViews(routeDocument, createRouteFile(routes), null);
-
     const metrics = buildRouteSummaryMetrics(routeDocument, null);
 
     expect(metrics.map(metric => metric.label)).toEqual(['Distance', 'Ascent', 'Descent', 'Min grade', 'Max grade', 'Points']);
@@ -192,6 +163,15 @@ describe('route detail helpers', () => {
     expect(waypoints[0]).toMatchObject({
       name: 'Summit',
       type: 'peak',
+      sourceTypeLabel: 'peak',
+      sourceSymbolLabel: null,
+      isRouteShapingPoint: false,
+      presentation: expect.objectContaining({
+        category: 'summit',
+        icon: 'terrain',
+        label: 'Summit',
+        sourceLabel: 'peak',
+      }),
       routeIndex: 0,
       routePointIndex: 2,
       latitudeDegrees: 40.2,
@@ -200,7 +180,31 @@ describe('route detail helpers', () => {
     expect(waypoints[0].distanceLabel).toBe('1.00 Km');
   });
 
-  it('builds waypoint display views with segment and type colors', () => {
+  it('preserves numeric FIT course-point type zero in waypoint detail views', () => {
+    const routeFile = {
+      getWaypoints: vi.fn(() => [
+        {
+          name: 'Generic course point',
+          type: 0,
+          latitudeDegrees: 40.2,
+          longitudeDegrees: 22.2,
+        },
+      ]),
+    } as unknown as RouteFileInterface;
+
+    const waypoints = buildRouteWaypointDetailViews(routeFile, null);
+
+    expect(waypoints[0]).toMatchObject({
+      type: '0',
+      sourceTypeLabel: '0',
+      presentation: expect.objectContaining({
+        category: 'generic',
+        sourceLabel: '0',
+      }),
+    });
+  });
+
+  it('builds waypoint display views with segment and presentation colors', () => {
     const routeDocument = createRouteDocument();
     const segments = buildRouteSegmentDetailViews(routeDocument, createRouteFile([
       createRoute({
@@ -228,7 +232,32 @@ describe('route detail helpers', () => {
       name: 'Global summit',
       color: '#8e24aa',
       segmentLabel: 'Global',
+      presentation: expect.objectContaining({
+        category: 'summit',
+        icon: 'terrain',
+      }),
     });
+  });
+
+  it('does not render shaping points as visible waypoint display rows', () => {
+    const routeDocument = createRouteDocument();
+    const segments = buildRouteSegmentDetailViews(routeDocument, createRouteFile([
+      createRoute({
+        id: 'stored-segment-1',
+        name: 'Parsed Segment',
+        pointCount: 2,
+        positions: [],
+        stats: {},
+      }),
+    ]), null);
+    const waypoints: RouteWaypointDetailView[] = [
+      createWaypoint('Shaping point', '26', 0),
+      createWaypoint('Aid station', 'aid_station', 0),
+    ];
+
+    const displayViews = buildRouteWaypointDisplayViews(waypoints, segments);
+
+    expect(displayViews.map(waypoint => waypoint.name)).toEqual(['Aid station']);
   });
 
   function createRouteDocument(): FirestoreRouteJSON {
@@ -295,6 +324,10 @@ describe('route detail helpers', () => {
       id: name,
       name,
       type,
+      sourceTypeLabel: type,
+      sourceSymbolLabel: null,
+      presentation: resolveRouteWaypointPresentation({ name, type }),
+      isRouteShapingPoint: resolveRouteWaypointPresentation({ name, type }).isRouteShapingPoint,
       distanceLabel: null,
       routeIndex,
       routePointIndex: null,

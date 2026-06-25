@@ -198,12 +198,21 @@
           <tr [style.--route-waypoint-color]="waypoint.color">
             <td class="waypoint-name-cell">
               <span class="waypoint-name-content">
-                <span class="waypoint-color-dot" aria-hidden="true"></span>
+                <span class="waypoint-icon-badge" aria-hidden="true">
+                  <mat-icon class="waypoint-marker-icon">{{ waypoint.presentation.icon }}</mat-icon>
+                </span>
                 <span class="waypoint-name" [matTooltip]="waypoint.name">{{ waypoint.name }}</span>
               </span>
             </td>
             <td>
-              <span class="waypoint-type">{{ waypoint.type }}</span>
+              <span class="waypoint-type-stack">
+                <span class="waypoint-type">{{ waypoint.presentation.label }}</span>
+                @if (waypoint.presentation.sourceLabel && waypoint.presentation.sourceLabel !== waypoint.presentation.label) {
+                  <span class="waypoint-source-label" [matTooltip]="waypoint.presentation.sourceLabel">
+                    {{ waypoint.presentation.sourceLabel }}
+                  </span>
+                }
+              </span>
             </td>
             <td class="waypoint-distance-cell">{{ waypoint.distanceLabel || '-' }}</td>
             <td>

@@ -24,6 +24,21 @@ describe('MarkerFactoryService', () => {
         expect(marker.innerHTML).toContain('fill="#ff0000"');
     });
 
+    it('should create accessible icon pin marker', () => {
+        const marker = service.createIconPinMarker({
+            color: '#0277bd',
+            icon: 'water_drop',
+            title: 'Water stop',
+            ariaLabel: 'Waypoint Water stop, Water',
+        });
+
+        expect(marker.title).toBe('Water stop');
+        expect(marker.getAttribute('aria-label')).toBe('Waypoint Water stop, Water');
+        expect(marker.getAttribute('role')).toBe('img');
+        expect(marker.textContent).toContain('water_drop');
+        expect(marker.querySelector('path')?.getAttribute('fill')).toBe('#0277bd');
+    });
+
     it('should create home marker', () => {
         const marker = service.createHomeMarker('#00ff00');
         expect(marker.innerHTML).toContain('<svg');

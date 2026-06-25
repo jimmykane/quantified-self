@@ -321,13 +321,25 @@ h2 {
   min-width: 0;
 }
 
-.waypoint-color-dot {
-  width: 10px;
-  height: 10px;
-  flex: 0 0 10px;
-  border: 2px solid var(--mat-sys-surface-container-highest);
+.waypoint-icon-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  flex: 0 0 24px;
+  border: 1px solid var(--mat-sys-surface-container-highest);
   border-radius: 50%;
   background: var(--route-waypoint-color);
+  color: #fff;
+}
+
+.waypoint-marker-icon {
+  width: 16px;
+  height: 16px;
+  font-size: 16px;
+  font-variation-settings: 'FILL' 1, 'wght' 600, 'GRAD' 0, 'opsz' 20;
+  line-height: 16px;
 }
 
 .waypoint-name {
@@ -336,7 +348,17 @@ h2 {
   text-overflow: ellipsis;
 }
 
+.waypoint-type-stack {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  min-width: 0;
+  vertical-align: middle;
+}
+
 .waypoint-type,
+.waypoint-source-label,
 .waypoint-segment {
   display: inline-block;
   max-width: 100%;
@@ -351,6 +373,12 @@ h2 {
   overflow: hidden;
   text-overflow: ellipsis;
   vertical-align: middle;
+}
+
+.waypoint-source-label {
+  background: transparent;
+  color: var(--mat-sys-on-surface-variant);
+  font-weight: 550;
 }
 
 .waypoint-segment {
