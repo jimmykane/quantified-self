@@ -22,6 +22,8 @@ import { resolveUnitAwareDisplayFromValue } from '@shared/unit-aware-display';
 import { buildSuuntoServiceConnectionViewModel, SuuntoServiceConnectionViewModel } from '../../helpers/suunto-service-connection.helper';
 import {
     DASHBOARD_ACTION_PROMPT_GARMIN_ROUTE_PERMISSION_ID,
+    DASHBOARD_ACTION_PROMPT_ROUTE_DELIVERY_AUTO_SYNC_ID,
+    DASHBOARD_ACTION_PROMPT_ROUTE_DELIVERY_AUTO_SYNC_SOURCE,
     DASHBOARD_ACTION_PROMPT_SUUNTO_ROUTE_CATCH_UP_ID,
     DashboardActionPromptEvent,
     DashboardActionPromptViewModel,
@@ -31,6 +33,9 @@ import {
 import {
     buildGarminRoutePermissionPromptViewModel,
 } from '../../helpers/garmin-route-permission.helper';
+import {
+    buildRouteDeliveryAutoSyncPromptViewModel,
+} from '../../helpers/route-delivery-auto-sync-prompt.helper';
 import {
     buildSuuntoRouteCatchUpPromptViewModel,
     buildSuuntoRouteCatchUpSnackbarMessage,
@@ -86,6 +91,8 @@ import { LoggerService } from '../../services/logger.service';
 import { AppWindowService } from '../../services/app.window.service';
 import { UploadRoutesComponent } from '../upload/upload-routes/upload-routes.component';
 import { AppAppSettingsInterface, AppUserInterface } from '../../models/app-user.interface';
+import { ROUTE_DELIVERY_SYNC_ROUTE_IDS } from '@shared/route-delivery-sync-routes';
+import { isRouteDeliverySyncRouteUIDAllowlisted } from '@shared/route-delivery-sync-rollout';
 
 interface RoutePageRouteViewModel {
     route: FirestoreRouteJSON;
@@ -248,6 +255,9 @@ export class RoutesPageComponent implements OnInit {
     readonly isReconnectingGarminRoutePermissionPrompt = signal(false);
     readonly isDismissingGarminRoutePermissionPrompt = signal(false);
     readonly garminRoutePermissionPromptError = signal<string | null>(null);
+    readonly isEnablingRouteDeliveryAutoSyncPrompt = signal(false);
+    readonly isDismissingRouteDeliveryAutoSyncPrompt = signal(false);
+    readonly routeDeliveryAutoSyncPromptError = signal<string | null>(null);
     readonly connectedSuuntoProviderUserIds = signal<string[]>([]);
     readonly garminRouteSendContext = signal<GarminRouteSendContext>({
         connected: false,
@@ -333,6 +343,37 @@ export class RoutesPageComponent implements OnInit {
             busy: this.isReconnectingGarminRoutePermissionPrompt()
                 || this.isDismissingGarminRoutePermissionPrompt(),
             error: this.garminRoutePermissionPromptError(),
+        });
+    });
+    readonly suuntoToGarminRouteDeliveryPrompt = computed<DashboardActionPromptViewModel | null>(() => {
+        const user = this.user();
+        const suuntoConnectionView = this.suuntoConnectionView();
+        const garminContext = this.garminRouteSendContext();
+        const routeID = ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_GarminAPI;
+
+        if (
+            !user
+            || !this.userService.hasProAccessSignal()
+            || !isRouteDeliverySyncRouteUIDAllowlisted(routeID, user.uid)
+            || this.isRouteDeliverySyncRouteEnabled(user)
+            || !suuntoConnectionView.connected
+            || suuntoConnectionView.reconnectRequired
+            || !garminContext.connected
+            || garminContext.reconnectRequired
+            || garminContext.missingPermissions.length > 0
+            || isDashboardActionPromptDismissed(
+                user.settings?.appSettings,
+                DASHBOARD_ACTION_PROMPT_ROUTE_DELIVERY_AUTO_SYNC_ID,
+                DASHBOARD_ACTION_PROMPT_ROUTE_DELIVERY_AUTO_SYNC_SOURCE,
+            )
+        ) {
+            return null;
+        }
+
+        return buildRouteDeliveryAutoSyncPromptViewModel({
+            busy: this.isEnablingRouteDeliveryAutoSyncPrompt()
+                || this.isDismissingRouteDeliveryAutoSyncPrompt(),
+            error: this.routeDeliveryAutoSyncPromptError(),
         });
     });
     readonly selectedSendableRouteCount = computed(() => {
@@ -589,6 +630,18 @@ export class RoutesPageComponent implements OnInit {
         }
     }
 
+    onRouteDeliveryAutoSyncPromptPrimary(event: DashboardActionPromptEvent): void {
+        if (event.action.id === 'enableRouteDeliveryAutoSync') {
+            void this.enableRouteDeliveryAutoSyncPrompt();
+        }
+    }
+
+    onRouteDeliveryAutoSyncPromptSecondary(event: DashboardActionPromptEvent): void {
+        if (event.action.id === 'dismissRouteDeliveryAutoSync') {
+            void this.dismissRouteDeliveryAutoSyncPrompt();
+        }
+    }
+
     async queueSuuntoRouteCatchUpPrompt(): Promise<void> {
         if (
             this.suuntoRouteCatchUpPrompt() === null
@@ -767,6 +820,88 @@ export class RoutesPageComponent implements OnInit {
             this.logger.error('[RoutesPageComponent] Failed to dismiss Garmin route permission prompt', error);
         } finally {
             this.isDismissingGarminRoutePermissionPrompt.set(false);
+        }
+    }
+
+    async enableRouteDeliveryAutoSyncPrompt(): Promise<void> {
+        const user = this.user();
+        const routeID = ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_GarminAPI;
+        if (
+            !user
+            || this.suuntoToGarminRouteDeliveryPrompt() === null
+            || this.isEnablingRouteDeliveryAutoSyncPrompt()
+            || this.isDismissingRouteDeliveryAutoSyncPrompt()
+        ) {
+            return;
+        }
+
+        this.isEnablingRouteDeliveryAutoSyncPrompt.set(true);
+        this.routeDeliveryAutoSyncPromptError.set(null);
+
+        try {
+            await this.userService.updateRouteDeliverySyncRouteSettings(user, {
+                [routeID]: true,
+            });
+            this.user.set(this.cloneUserForSignal(user));
+            this.analyticsService.logEvent('route_delivery_sync_route_toggle', {
+                route_id: routeID,
+                enabled: true,
+                source: 'routes_prompt',
+            });
+            this.snackBar.open('Suunto to Garmin route delivery enabled.', undefined, { duration: 3000 });
+        } catch (error) {
+            this.routeDeliveryAutoSyncPromptError.set('Could not enable route sync.');
+            this.logger.error('[RoutesPageComponent] Failed to enable Suunto to Garmin route delivery prompt', error);
+        } finally {
+            this.isEnablingRouteDeliveryAutoSyncPrompt.set(false);
+        }
+    }
+
+    async dismissRouteDeliveryAutoSyncPrompt(): Promise<void> {
+        const user = this.user();
+        if (
+            !user
+            || this.suuntoToGarminRouteDeliveryPrompt() === null
+            || this.isEnablingRouteDeliveryAutoSyncPrompt()
+            || this.isDismissingRouteDeliveryAutoSyncPrompt()
+        ) {
+            return;
+        }
+
+        this.isDismissingRouteDeliveryAutoSyncPrompt.set(true);
+        this.routeDeliveryAutoSyncPromptError.set(null);
+
+        try {
+            user.settings = user.settings || {} as any;
+            const nextAppSettings = {
+                ...(user.settings.appSettings || {}),
+            } as AppAppSettingsInterface;
+            const dismissedState = markDashboardActionPromptDismissed(
+                nextAppSettings,
+                DASHBOARD_ACTION_PROMPT_ROUTE_DELIVERY_AUTO_SYNC_ID,
+                DASHBOARD_ACTION_PROMPT_ROUTE_DELIVERY_AUTO_SYNC_SOURCE,
+                Date.now(),
+            );
+
+            await this.userService.updateUserProperties(user, {
+                settings: {
+                    appSettings: {
+                        dashboardActionPrompts: {
+                            [DASHBOARD_ACTION_PROMPT_ROUTE_DELIVERY_AUTO_SYNC_ID]: dismissedState,
+                        },
+                    },
+                },
+            });
+            user.settings.appSettings = nextAppSettings;
+            this.user.set(this.cloneUserForSignal(user));
+            this.analyticsService.logEvent('dashboard_action_prompt_dismiss', {
+                prompt_id: DASHBOARD_ACTION_PROMPT_ROUTE_DELIVERY_AUTO_SYNC_ID,
+            });
+        } catch (error) {
+            this.routeDeliveryAutoSyncPromptError.set('Could not save this choice.');
+            this.logger.error('[RoutesPageComponent] Failed to dismiss Suunto to Garmin route delivery prompt', error);
+        } finally {
+            this.isDismissingRouteDeliveryAutoSyncPrompt.set(false);
         }
     }
 
@@ -2185,6 +2320,19 @@ export class RoutesPageComponent implements OnInit {
             active: routeSort.active,
             direction: routeSort.direction === 'asc' ? 'asc' : 'desc',
         };
+    }
+
+    private isRouteDeliverySyncRouteEnabled(user: AppUserInterface): boolean {
+        return user.settings?.serviceSyncSettings?.routeDeliverySyncRoutes?.[
+            ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_GarminAPI
+        ]?.enabled === true;
+    }
+
+    private cloneUserForSignal(user: AppUserInterface): AppUserInterface {
+        return Object.assign(
+            Object.create(Object.getPrototypeOf(user)),
+            user,
+        ) as AppUserInterface;
     }
 
     private sanitizeFilenameBase(value: string): string {

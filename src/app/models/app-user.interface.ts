@@ -86,7 +86,8 @@ export type AppDashboardActionPromptId =
     | 'backfillGarminSleep'
     | 'reconnectSuuntoService'
     | 'suuntoRouteCatchUp'
-    | 'garminRoutePermission';
+    | 'garminRoutePermission'
+    | 'enableRouteDeliveryAutoSync';
 export type AppDashboardActionPromptStateValue = 'dismissed';
 
 export interface AppDashboardActionPromptState {

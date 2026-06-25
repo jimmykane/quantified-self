@@ -22,11 +22,13 @@ export const DASHBOARD_ACTION_PROMPT_BACKFILL_GARMIN_SLEEP_ID: AppDashboardActio
 export const DASHBOARD_ACTION_PROMPT_RECONNECT_SUUNTO_SERVICE_ID: AppDashboardActionPromptId = 'reconnectSuuntoService';
 export const DASHBOARD_ACTION_PROMPT_SUUNTO_ROUTE_CATCH_UP_ID: AppDashboardActionPromptId = 'suuntoRouteCatchUp';
 export const DASHBOARD_ACTION_PROMPT_GARMIN_ROUTE_PERMISSION_ID: AppDashboardActionPromptId = 'garminRoutePermission';
+export const DASHBOARD_ACTION_PROMPT_ROUTE_DELIVERY_AUTO_SYNC_ID: AppDashboardActionPromptId = 'enableRouteDeliveryAutoSync';
 export const DASHBOARD_ACTION_PROMPT_FIRST_ACTIVITY_UPLOAD_SOURCE = 'first-activity-upload';
 export const DASHBOARD_ACTION_PROMPT_CONNECT_ACTIVITY_SERVICE_SOURCE = 'activity-service-connection';
 export const DASHBOARD_ACTION_PROMPT_ACTIVITY_AUTO_SYNC_SOURCE = 'activity-auto-sync';
 export const DASHBOARD_ACTION_PROMPT_BACKFILL_GARMIN_SLEEP_SOURCE = 'garmin-sleep-backfill';
 export const DASHBOARD_ACTION_PROMPT_RECONNECT_SUUNTO_SERVICE_SOURCE = 'suunto-reconnect-required';
+export const DASHBOARD_ACTION_PROMPT_ROUTE_DELIVERY_AUTO_SYNC_SOURCE = 'route-delivery-auto-sync';
 
 export const DASHBOARD_ACTIVITY_AUTO_SYNC_ROUTE_IDS: readonly ActivitySyncRouteId[] = [
   ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp,
@@ -50,7 +52,9 @@ export type DashboardActionPromptActionId =
   | 'queueSuuntoRouteCatchUp'
   | 'dismissSuuntoRouteCatchUp'
   | 'reconnectGarminRoutePermission'
-  | 'dismissGarminRoutePermission';
+  | 'dismissGarminRoutePermission'
+  | 'enableRouteDeliveryAutoSync'
+  | 'dismissRouteDeliveryAutoSync';
 
 export type DashboardActionPromptMenuActionId =
   | 'openUnitSettings'

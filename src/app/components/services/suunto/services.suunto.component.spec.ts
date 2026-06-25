@@ -30,8 +30,6 @@ import { ACTIVITY_SYNC_ROUTE_IDS } from '@shared/activity-sync-routes';
 import { ROUTE_DELIVERY_SYNC_ROUTE_IDS } from '@shared/route-delivery-sync-routes';
 import { ServiceConnectionStatusComponent } from '../service-connection-status/service-connection-status.component';
 
-const ROUTE_DELIVERY_SYNC_ALLOWLISTED_UID = 'xcsAolLDDTWTgtRN9eYF3lW2YKL2';
-
 describe('ServicesSuuntoComponent', () => {
     let component: ServicesSuuntoComponent;
     let fixture: ComponentFixture<ServicesSuuntoComponent>;
@@ -420,29 +418,9 @@ describe('ServicesSuuntoComponent', () => {
             expect(mockSnackBar.open).toHaveBeenCalledWith('Queued 2 routes. Skipped 1.', undefined, { duration: 3500 });
         });
 
-        it('hides Suunto to Garmin course delivery controls for non-allowlisted users', () => {
-            component.user = { uid: 'user-1', settings: {} } as any;
-            component.hasProAccess = true;
-            component.serviceTokens = [{ accessToken: 'token', userName: 'suunto-user' } as any];
-            component.garminRouteSendContext = {
-                connected: true,
-                reconnectRequired: false,
-                missingPermissions: [],
-                providerUserId: 'garmin-user',
-                providerStates: [],
-                serviceMeta: null,
-                permissionPromptSource: null,
-            };
-            component.activeProviderTool = 'routes';
-            fixture.detectChanges();
-
-            expect(component.isSuuntoToGarminRouteAvailableForUser).toBe(false);
-            expect(fixture.nativeElement.textContent).not.toContain('Suunto -> Garmin Course Delivery');
-        });
-
-        it('renders Suunto to Garmin course delivery controls for the allowlisted user', () => {
+        it('renders Suunto to Garmin course delivery controls for a regular user', () => {
             component.user = {
-                uid: ROUTE_DELIVERY_SYNC_ALLOWLISTED_UID,
+                uid: 'user-1',
                 settings: {
                     serviceSyncSettings: {
                         routeDeliverySyncRoutes: {
@@ -466,6 +444,7 @@ describe('ServicesSuuntoComponent', () => {
             fixture.detectChanges();
 
             const content = fixture.nativeElement.textContent;
+            expect(component.isSuuntoToGarminRouteAvailableForUser).toBe(true);
             expect(content).toContain('Suunto -> Garmin Course Delivery');
             expect(content).toContain('Queue now');
             expect(content).toContain('only uses routes already saved in Quantified Self');
@@ -473,7 +452,7 @@ describe('ServicesSuuntoComponent', () => {
         });
 
         it('blocks enabling Suunto to Garmin delivery when Garmin COURSE_IMPORT is missing', async () => {
-            component.user = { uid: ROUTE_DELIVERY_SYNC_ALLOWLISTED_UID, settings: {} } as any;
+            component.user = { uid: 'user-1', settings: {} } as any;
             component.hasProAccess = true;
             component.serviceTokens = [{ accessToken: 'token', userName: 'suunto-user' } as any];
             component.garminRouteSendContext = {
@@ -499,7 +478,7 @@ describe('ServicesSuuntoComponent', () => {
         });
 
         it('blocks enabling Suunto to Garmin delivery while Suunto connection details are still loading', async () => {
-            component.user = { uid: ROUTE_DELIVERY_SYNC_ALLOWLISTED_UID, settings: {} } as any;
+            component.user = { uid: 'user-1', settings: {} } as any;
             component.hasProAccess = true;
             component.forceConnected = true;
             component.serviceTokens = undefined;
@@ -529,8 +508,8 @@ describe('ServicesSuuntoComponent', () => {
             );
         });
 
-        it('writes route delivery sync settings when toggled by an allowlisted ready user', async () => {
-            component.user = { uid: ROUTE_DELIVERY_SYNC_ALLOWLISTED_UID, settings: {} } as any;
+        it('writes route delivery sync settings when toggled by a ready user', async () => {
+            component.user = { uid: 'user-1', settings: {} } as any;
             component.hasProAccess = true;
             component.serviceTokens = [{ accessToken: 'token', userName: 'suunto-user' } as any];
             component.garminRouteSendContext = {
@@ -553,7 +532,7 @@ describe('ServicesSuuntoComponent', () => {
         });
 
         it('queues Suunto to Garmin delivery from saved Quantified Self routes', async () => {
-            component.user = { uid: ROUTE_DELIVERY_SYNC_ALLOWLISTED_UID, settings: {} } as any;
+            component.user = { uid: 'user-1', settings: {} } as any;
             component.hasProAccess = true;
             component.serviceTokens = [{ accessToken: 'token', userName: 'suunto-user' } as any];
             component.garminRouteSendContext = {
@@ -607,7 +586,7 @@ describe('ServicesSuuntoComponent', () => {
     it('should show inline warning pill when connected service is used by active route delivery sync', () => {
         component.hasProAccess = true;
         component.user = {
-            uid: ROUTE_DELIVERY_SYNC_ALLOWLISTED_UID,
+            uid: 'u-1',
             settings: {
                 serviceSyncSettings: {
                     routeDeliverySyncRoutes: {

@@ -53,6 +53,7 @@ export class DashboardActionPromptsComponent {
     reconnectSuuntoService: 5,
     suuntoRouteCatchUp: 6,
     garminRoutePermission: 7,
+    enableRouteDeliveryAutoSync: 8,
   };
 
   private syncOrderedPrompts(): void {

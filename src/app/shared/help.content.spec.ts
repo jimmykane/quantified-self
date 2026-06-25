@@ -266,6 +266,7 @@ describe('help.content', () => {
     const serviceConnectionsSection = HELP_SECTIONS.find(section => section.id === 'service-connections');
 
     expect(serviceConnectionsSection?.content).toContain('**Suunto -> Garmin course delivery**');
+    expect(serviceConnectionsSection?.content).toContain('one-time **Routes** page action prompt');
     expect(serviceConnectionsSection?.content).toContain('already saved in Quantified Self to Garmin as courses');
     expect(serviceConnectionsSection?.content).toContain('requires Garmin to be connected with **COURSE_IMPORT** permission');
     expect(serviceConnectionsSection?.content).toContain('**Queue now** action is a convenience backfill');

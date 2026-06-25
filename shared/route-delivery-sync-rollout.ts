@@ -1,7 +1,8 @@
 import { ROUTE_DELIVERY_SYNC_ROUTE_IDS, RouteDeliverySyncRouteId } from './route-delivery-sync-routes';
 
 export const ROUTE_DELIVERY_SYNC_ROUTE_ALLOWED_UIDS: Record<RouteDeliverySyncRouteId, ReadonlyArray<string>> = {
-    [ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_GarminAPI]: ['xcsAolLDDTWTgtRN9eYF3lW2YKL2'],
+    // Empty allowlist disables UID-gating for the route (production-wide rollout).
+    [ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_GarminAPI]: [],
 };
 
 export function isRouteDeliverySyncRouteUIDAllowlisted(routeId: RouteDeliverySyncRouteId, uid: string): boolean {
@@ -11,8 +12,12 @@ export function isRouteDeliverySyncRouteUIDAllowlisted(routeId: RouteDeliverySyn
     }
 
     const allowlist = ROUTE_DELIVERY_SYNC_ROUTE_ALLOWED_UIDS[routeId];
-    if (!Array.isArray(allowlist) || allowlist.length === 0) {
+    if (!Array.isArray(allowlist)) {
         return false;
+    }
+
+    if (allowlist.length === 0) {
+        return true;
     }
 
     return allowlist.includes(normalizedUID);
