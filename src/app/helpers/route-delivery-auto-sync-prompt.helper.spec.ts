@@ -13,7 +13,7 @@ describe('route-delivery-auto-sync-prompt helper', () => {
     expect(prompt).toMatchObject({
       id: DASHBOARD_ACTION_PROMPT_ROUTE_DELIVERY_AUTO_SYNC_ID,
       title: 'Sync Suunto routes to Garmin courses',
-      description: 'Automatically deliver new and updated Suunto routes saved in Quantified Self to Garmin as courses.',
+      description: 'Enable future Suunto route imports and updates to be delivered to Garmin as courses. Existing saved routes can still be queued from Services.',
       primaryAction: {
         id: 'enableRouteDeliveryAutoSync',
         label: 'Enable route sync',

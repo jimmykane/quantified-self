@@ -711,6 +711,28 @@ describe('RoutesPageComponent', () => {
         expect(component.suuntoToGarminRouteDeliveryPrompt()).toBeNull();
     });
 
+    it('hides Suunto to Garmin route sync prompt for non-pro users', async () => {
+        userServiceMock.hasProAccessSignal.mockReturnValue(false);
+        garminRouteSendContext$.next({
+            connected: true,
+            reconnectRequired: false,
+            missingPermissions: [],
+            providerUserId: 'garmin-user-1',
+            providerStates: [{
+                providerUserId: 'garmin-user-1',
+                permissionsLoaded: true,
+                missingPermissions: [],
+            }],
+            serviceMeta: null,
+            permissionPromptSource: null,
+        });
+
+        await component.ngOnInit();
+        await firstValueFrom(component.routes$!);
+
+        expect(component.suuntoToGarminRouteDeliveryPrompt()).toBeNull();
+    });
+
     it('does not show Suunto to Garmin route sync prompt while Garmin Course Import is missing', async () => {
         garminRouteSendContext$.next({
             connected: true,
