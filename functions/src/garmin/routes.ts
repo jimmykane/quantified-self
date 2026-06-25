@@ -76,6 +76,16 @@ export class GarminRouteSendPermissionRequiredError extends Error {
   readonly name = 'GarminRouteSendPermissionRequiredError';
 }
 
+class GarminRouteSendRateLimitError extends Error {
+  readonly name = 'GarminRouteSendRateLimitError';
+  readonly code = 'unavailable';
+  readonly statusCode = 429;
+
+  constructor() {
+    super('Garmin Connect rate limit reached. Please retry later.');
+  }
+}
+
 function normalizeNonEmptyString(value: unknown): string | null {
   return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null;
 }
@@ -324,7 +334,7 @@ async function createGarminCourse(
       throw new GarminRouteSendPermissionRequiredError('Grant Garmin Course Import permission and reconnect before sending routes.');
     }
     if (statusCode === 429) {
-      throw new Error('Garmin Connect rate limit reached. Please retry later.');
+      throw new GarminRouteSendRateLimitError();
     }
     throw error;
   }
@@ -356,7 +366,7 @@ async function updateGarminCourse(
       throw new GarminRouteSendPermissionRequiredError('Grant Garmin Course Import permission and reconnect before sending routes.');
     }
     if (statusCode === 429) {
-      throw new Error('Garmin Connect rate limit reached. Please retry later.');
+      throw new GarminRouteSendRateLimitError();
     }
     throw error;
   }

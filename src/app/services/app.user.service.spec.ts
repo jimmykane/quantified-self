@@ -13,6 +13,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { DataAltitude, DataCadence, DataGradeAdjustedSpeed, DataHeartRate, DataPace, DataPotentialStamina, DataPower, DataSpeed, DataStamina, ServiceNames } from '@sports-alliance/sports-lib';
 import { LoggerService } from './logger.service';
 import { ACTIVITY_SYNC_ROUTE_IDS } from '@shared/activity-sync-routes';
+import { ROUTE_DELIVERY_SYNC_ROUTE_IDS } from '@shared/route-delivery-sync-routes';
 import { getAppCanonicalChartDataTypes } from '../helpers/app-chart-data-types.helper';
 
 vi.mock('app/firebase/auth', async (importOriginal) => {
@@ -1087,6 +1088,64 @@ describe('AppUserService', () => {
                 [ACTIVITY_SYNC_ROUTE_IDS.COROSAPI_to_SuuntoApp]: { enabled: false },
             });
         });
+
+        it('updateRouteDeliverySyncRouteSettings should write only route delivery settings and preserve local settings', async () => {
+            const user = {
+                uid: 'u13',
+                settings: {
+                    appSettings: { theme: 'dark' },
+                    serviceSyncSettings: {
+                        activitySyncRoutes: {
+                            [ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp]: { enabled: true },
+                        },
+                    },
+                },
+            } as any;
+
+            await service.updateRouteDeliverySyncRouteSettings(user, {
+                [ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_GarminAPI]: true,
+            });
+
+            expect(setDoc).toHaveBeenCalledWith(expect.anything(), {
+                serviceSyncSettings: {
+                    routeDeliverySyncRoutes: {
+                        [ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_GarminAPI]: {
+                            enabled: true,
+                        },
+                    },
+                },
+            }, { merge: true });
+            expect(user.settings.appSettings.theme).toBe('dark');
+            expect(user.settings.serviceSyncSettings.activitySyncRoutes).toEqual({
+                [ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp]: { enabled: true },
+            });
+            expect(user.settings.serviceSyncSettings.routeDeliverySyncRoutes).toEqual({
+                [ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_GarminAPI]: { enabled: true },
+            });
+        });
+
+        it('updateRouteDeliverySyncRouteSettings should fail without local mutation when profile reads are incomplete', async () => {
+            const user = {
+                uid: 'u14',
+                settings: {
+                    serviceSyncSettings: {
+                        routeDeliverySyncRoutes: {
+                            [ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_GarminAPI]: { enabled: false },
+                        },
+                    },
+                },
+            } as any;
+            (service as any).usersWithIncompleteProfileReads.add('u14');
+
+            await expect(service.updateRouteDeliverySyncRouteSettings(user, {
+                [ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_GarminAPI]: true,
+            })).rejects.toThrow('Cannot update route delivery sync route settings until user settings finish loading.');
+
+            expect(setDoc).not.toHaveBeenCalled();
+            expect(user.settings.serviceSyncSettings.routeDeliverySyncRoutes).toEqual({
+                [ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_GarminAPI]: { enabled: false },
+            });
+        });
     });
 
     describe('gracePeriodUntil signal', () => {
@@ -1539,6 +1598,37 @@ describe('AppUserService', () => {
                 ).rejects.toThrow('Invalid endDate');
 
                 expect(mockFunctionsService.call).not.toHaveBeenCalledWith('backfillActivitySyncRoute', expect.anything());
+            });
+        });
+
+        describe('backfillRouteDeliverySyncRouteForCurrentUser', () => {
+            it('should call cloud function for route delivery sync route backfill', async () => {
+                mockFunctionsService.call.mockResolvedValueOnce({
+                    data: {
+                        scanned: 3,
+                        queued: 2,
+                        skippedByReason: { already_synced: 1 },
+                        failedCount: 0,
+                        failedRoutes: [],
+                    },
+                });
+
+                const summary = await service.backfillRouteDeliverySyncRouteForCurrentUser(
+                    ServiceNames.SuuntoApp,
+                    ServiceNames.GarminAPI,
+                );
+
+                expect(mockFunctionsService.call).toHaveBeenCalledWith('backfillRouteDeliverySyncRoute', {
+                    sourceServiceName: ServiceNames.SuuntoApp,
+                    destinationServiceName: ServiceNames.GarminAPI,
+                });
+                expect(summary).toEqual({
+                    scanned: 3,
+                    queued: 2,
+                    skippedByReason: { already_synced: 1 },
+                    failedCount: 0,
+                    failedRoutes: [],
+                });
             });
         });
 

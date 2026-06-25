@@ -3,6 +3,7 @@ import * as logger from 'firebase-functions/logger';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { SLEEP_PROVIDERS, type SleepProvider } from '../../../shared/sleep';
 import { ACTIVITY_SYNC_QUEUE_COLLECTION_NAME } from '../activity-sync/constants';
+import { ROUTE_DELIVERY_SYNC_QUEUE_COLLECTION_NAME } from '../route-delivery-sync/constants';
 import { SLEEP_SYNC_QUEUE_COLLECTION_NAME } from '../sleep/constants';
 import { ROUTE_SYNC_QUEUE_COLLECTION_NAME } from '../routes/route-sync.constants';
 import {
@@ -74,6 +75,15 @@ function getProviderIdentifierFieldForService(serviceName: ServiceNames): Provid
 }
 
 function isActivitySyncDeferredForService(data: QueueDocData, serviceName: ServiceNames): boolean {
+    const deferredServiceName = `${data.deferredServiceName || ''}`.trim();
+    if (deferredServiceName) {
+        return deferredServiceName === serviceName;
+    }
+
+    return data.sourceServiceName === serviceName || data.destinationServiceName === serviceName;
+}
+
+function isRouteDeliverySyncDeferredForService(data: QueueDocData, serviceName: ServiceNames): boolean {
     const deferredServiceName = `${data.deferredServiceName || ''}`.trim();
     if (deferredServiceName) {
         return deferredServiceName === serviceName;
@@ -198,6 +208,7 @@ export async function releaseQueueItemsDeferredForPendingDisconnect(
     const workoutQueue = db.collection(getServiceWorkoutQueueName(serviceName));
     const sleepQueue = db.collection(SLEEP_SYNC_QUEUE_COLLECTION_NAME);
     const routeSyncQueue = db.collection(ROUTE_SYNC_QUEUE_COLLECTION_NAME);
+    const routeDeliverySyncQueue = db.collection(ROUTE_DELIVERY_SYNC_QUEUE_COLLECTION_NAME);
     const providerLookups = await collectProviderQueueLookupsForUser(userID, serviceName);
     const releasedQueueItemPaths = new Set<string>();
 
@@ -265,7 +276,7 @@ export async function releaseQueueItemsDeferredForPendingDisconnect(
         })),
     ];
 
-    const [workoutCount, activitySyncCount, sleepSyncCount, routeSyncCount] = await Promise.all([
+    const [workoutCount, activitySyncCount, routeDeliverySyncCount, sleepSyncCount, routeSyncCount] = await Promise.all([
         releaseDeferredDocsForQueries(workoutQueries, releasedQueueItemPaths),
         releaseDeferredDocsForQuery(
             db.collection(ACTIVITY_SYNC_QUEUE_COLLECTION_NAME).where('userID', '==', userID),
@@ -273,17 +284,24 @@ export async function releaseQueueItemsDeferredForPendingDisconnect(
             { userID, serviceName, queueType: 'activity_sync' },
             releasedQueueItemPaths,
         ),
+        releaseDeferredDocsForQuery(
+            routeDeliverySyncQueue.where('userID', '==', userID),
+            (data) => isRouteDeliverySyncDeferredForService(data, serviceName),
+            { userID, serviceName, queueType: 'route_delivery_sync' },
+            releasedQueueItemPaths,
+        ),
         releaseDeferredDocsForQueries(sleepQueries, releasedQueueItemPaths),
         releaseDeferredDocsForQueries(routeSyncQueries, releasedQueueItemPaths),
     ]);
 
-    const releasedCount = workoutCount + activitySyncCount + sleepSyncCount + routeSyncCount;
+    const releasedCount = workoutCount + activitySyncCount + routeDeliverySyncCount + sleepSyncCount + routeSyncCount;
     if (releasedCount > 0) {
         logger.info('[PendingDisconnectQueueRelease] Released deferred queue items after pending disconnect cleared.', {
             userID,
             serviceName,
             workoutCount,
             activitySyncCount,
+            routeDeliverySyncCount,
             sleepSyncCount,
             routeSyncCount,
             releasedCount,

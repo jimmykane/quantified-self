@@ -77,6 +77,19 @@ vi.mock('./upsert-synced-route', () => ({
   upsertSyncedRoute: (...args: any[]) => upsertSyncedRouteMocks.upsertSyncedRoute(...args),
 }));
 
+const routeDeliverySyncMocks = {
+  buildRouteDeliverySourceRevisionKeyForRouteSource: vi.fn(),
+  enqueueRouteDeliverySyncJobsForImportedRoute: vi.fn(),
+};
+
+vi.mock('../route-delivery-sync/enqueue-imported-route', () => ({
+  enqueueRouteDeliverySyncJobsForImportedRoute: (...args: any[]) => routeDeliverySyncMocks.enqueueRouteDeliverySyncJobsForImportedRoute(...args),
+}));
+
+vi.mock('../route-delivery-sync/revision', () => ({
+  buildRouteDeliverySourceRevisionKeyForRouteSource: (...args: any[]) => routeDeliverySyncMocks.buildRouteDeliverySourceRevisionKeyForRouteSource(...args),
+}));
+
 vi.mock('../shared/user-deletion-guard', () => ({
   UserDeletionGuardReadError: class UserDeletionGuardReadError extends Error {
     readonly name = 'UserDeletionGuardReadError';
@@ -171,18 +184,26 @@ describe('processRouteSyncQueueItem', () => {
       routeID: 'route-doc-1',
       routeCountAfterWrite: 1,
     });
+    routeDeliverySyncMocks.buildRouteDeliverySourceRevisionKeyForRouteSource.mockReturnValue('SuuntoApp:provider-route-1:1700000005000');
+    routeDeliverySyncMocks.enqueueRouteDeliverySyncJobsForImportedRoute.mockResolvedValue({
+      queued: 1,
+      skippedByReason: {},
+    });
   });
 
   it('skips provider routes that are already up to date', async () => {
+    const savedModifiedAt = createTimestampLike('2026-02-01T12:00:09.000Z');
     routeDocuments.set('users/user-1/routes/route-doc-1', {
       id: 'route-doc-1',
       userID: 'user-1',
+      updatedAt: createTimestampLike('2026-02-01T12:00:10.000Z'),
       sourceSummary: {
         sourceType: 'service_sync',
         sourceServiceName: ServiceNames.SuuntoApp,
         providerRouteId: 'provider-route-1',
+        providerUserId: 'suunto-user',
         providerRouteName: 'Morning Route',
-        modifiedAt: createTimestampLike('2026-02-01T12:00:09.000Z'),
+        modifiedAt: savedModifiedAt,
         importedAt: createTimestampLike('2026-02-01T12:00:01.000Z'),
       },
     });
@@ -203,6 +224,87 @@ describe('processRouteSyncQueueItem', () => {
     );
     expect(suuntoRouteMocks.exportSuuntoRouteAsGPX).not.toHaveBeenCalled();
     expect(upsertSyncedRouteMocks.upsertSyncedRoute).not.toHaveBeenCalled();
+    expect(routeDeliverySyncMocks.buildRouteDeliverySourceRevisionKeyForRouteSource).toHaveBeenCalledWith(expect.objectContaining({
+      sourceServiceName: ServiceNames.SuuntoApp,
+      sourceSummary: expect.objectContaining({
+        providerRouteId: 'provider-route-1',
+        modifiedAt: savedModifiedAt,
+      }),
+      fallbackRouteID: 'route-doc-1',
+    }));
+    expect(routeDeliverySyncMocks.enqueueRouteDeliverySyncJobsForImportedRoute).toHaveBeenCalledWith(expect.objectContaining({
+      userID: 'user-1',
+      savedRouteID: 'route-doc-1',
+      sourceServiceName: ServiceNames.SuuntoApp,
+      sourceProviderRouteId: 'provider-route-1',
+      sourceProviderUserId: 'suunto-user',
+      sourceRevisionKey: 'SuuntoApp:provider-route-1:1700000005000',
+      manual: false,
+    }));
+  });
+
+  it('does not require provider user id for unchanged legacy routes that were saved before sourceSummary stored it', async () => {
+    routeDocuments.set('users/user-1/routes/route-doc-1', {
+      id: 'route-doc-1',
+      userID: 'user-1',
+      updatedAt: createTimestampLike('2026-02-01T12:00:10.000Z'),
+      sourceSummary: {
+        sourceType: 'service_sync',
+        sourceServiceName: ServiceNames.SuuntoApp,
+        providerRouteId: 'provider-route-1',
+        providerRouteName: 'Morning Route',
+        modifiedAt: createTimestampLike('2026-02-01T12:00:09.000Z'),
+        importedAt: createTimestampLike('2026-02-01T12:00:01.000Z'),
+      },
+    });
+
+    const result = await processRouteSyncQueueItem(createQueueItem({
+      providerRouteModifiedAt: new Date('2026-02-01T12:00:05.000Z').getTime(),
+    }));
+
+    expect(result).toBe(QueueResult.Processed);
+    expect(suuntoRouteMocks.exportSuuntoRouteAsGPX).not.toHaveBeenCalled();
+    const deliveryParams = routeDeliverySyncMocks.enqueueRouteDeliverySyncJobsForImportedRoute.mock.calls.at(-1)?.[0];
+    expect(deliveryParams).toEqual(expect.objectContaining({
+      userID: 'user-1',
+      savedRouteID: 'route-doc-1',
+      sourceServiceName: ServiceNames.SuuntoApp,
+      sourceProviderRouteId: 'provider-route-1',
+      manual: false,
+    }));
+    expect(deliveryParams?.sourceProviderUserId).toBeUndefined();
+  });
+
+  it('uses source import timestamp, not mutable route updatedAt, for delivery revision fallback', async () => {
+    const importedAt = createTimestampLike('2026-02-01T12:00:01.000Z');
+    const routeUpdatedAt = createTimestampLike('2026-02-03T12:00:00.000Z');
+    routeDocuments.set('users/user-1/routes/route-doc-1', {
+      id: 'route-doc-1',
+      userID: 'user-1',
+      updatedAt: routeUpdatedAt,
+      sourceSummary: {
+        sourceType: 'service_sync',
+        sourceServiceName: ServiceNames.SuuntoApp,
+        providerRouteId: 'provider-route-1',
+        providerUserId: 'suunto-user',
+        providerRouteName: 'Morning Route',
+        importedAt,
+      },
+    });
+
+    await processRouteSyncQueueItem(createQueueItem({
+      providerRouteModifiedAt: null,
+    }));
+
+    const revisionInput = routeDeliverySyncMocks.buildRouteDeliverySourceRevisionKeyForRouteSource.mock.calls.at(-1)?.[0];
+    expect(revisionInput).toEqual(expect.objectContaining({
+      sourceSummary: expect.objectContaining({
+        providerRouteId: 'provider-route-1',
+      }),
+    }));
+    expect(revisionInput?.sourceSummary).not.toHaveProperty('updatedAt');
+    expect((revisionInput?.sourceSummary?.importedAt as Date).getTime()).toBe(importedAt.toDate().getTime());
+    expect((revisionInput?.routeImportedAt as Date).getTime()).not.toBe(routeUpdatedAt.toDate().getTime());
   });
 
   it('marks provider auth failures as skipped instead of retrying', async () => {
@@ -343,5 +445,31 @@ describe('processRouteSyncQueueItem', () => {
         providerRouteName: 'Εγνατία Ποδηλασία δρόμου',
       }),
     }));
+    expect(routeDeliverySyncMocks.enqueueRouteDeliverySyncJobsForImportedRoute).toHaveBeenCalledWith(expect.objectContaining({
+      userID: 'user-1',
+      savedRouteID: 'route-doc-1',
+      sourceServiceName: ServiceNames.SuuntoApp,
+      sourceProviderRouteId: 'provider-route-1',
+      sourceProviderUserId: 'suunto-user',
+      sourceRevisionKey: 'SuuntoApp:provider-route-1:1700000005000',
+      manual: false,
+    }));
+  });
+
+  it('keeps route import successful when route delivery sync enqueue fails', async () => {
+    routeDeliverySyncMocks.enqueueRouteDeliverySyncJobsForImportedRoute.mockRejectedValueOnce(new Error('dispatch failed'));
+
+    const result = await processRouteSyncQueueItem(createQueueItem());
+
+    expect(result).toBe(QueueResult.Processed);
+    expect(upsertSyncedRouteMocks.upsertSyncedRoute).toHaveBeenCalled();
+    expect(queueUtilsMocks.updateToProcessed).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'queue-1' }),
+      undefined,
+      expect.objectContaining({
+        resultRouteId: 'route-doc-1',
+        resultStatus: 'success',
+      }),
+    );
   });
 });

@@ -159,6 +159,7 @@ export { refreshGarminAPIRefreshTokens } from './garmin/tokens';
 export { importActivityToSuuntoApp } from './suunto/activities';
 export { importRouteToSuuntoApp } from './suunto/routes';
 export { sendRoutesToService } from './routes/send-routes-to-service';
+export { backfillRouteDeliverySyncRoute } from './route-delivery-sync/backfill';
 export { getSuuntoFITFile } from './suunto/get-suunto-fit-file';
 export { importActivityToCOROSAPI } from './coros/activities';
 
@@ -182,6 +183,7 @@ export { retryPendingServiceDisconnects } from './schedule/retry-pending-service
 export { checkSubscriptionNotifications } from './schedule/notifications';
 export { scheduleSportsLibReparseScan } from './schedule/sports-lib-reparse';
 export { scheduleSportsLibRouteReparseScan } from './schedule/sports-lib-route-reparse';
+export { dispatchRouteDeliverySyncQueue } from './route-delivery-sync/dispatcher';
 export { cleanupUserAccounts } from './users/cleanup';
 export { deleteSelf } from './user/user';
 export { listUsers, getQueueStats, getUserCount, getSubscriptionHistoryTrend, getUserGrowthTrend, setMaintenanceMode, getMaintenanceStatus, impersonateUser, stopImpersonation, getFinancialStats } from './admin';
@@ -190,6 +192,7 @@ export { listUsers, getQueueStats, getUserCount, getSubscriptionHistoryTrend, ge
 export { processWorkoutTask } from './tasks/workout-processor';
 export { processActivitySyncTask } from './tasks/activity-sync-worker';
 export { processRouteSyncTask } from './tasks/route-sync-worker';
+export { processRouteDeliverySyncTask } from './tasks/route-delivery-sync-worker';
 export { processSleepSyncTask } from './tasks/sleep-sync-worker';
 export { processSportsLibReparseTask } from './tasks/sports-lib-reparse-worker';
 export { processSportsLibRouteReparseTask } from './tasks/sports-lib-route-reparse-worker';

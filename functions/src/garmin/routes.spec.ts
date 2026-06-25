@@ -359,6 +359,49 @@ describe('garmin route sending', () => {
     )).rejects.toBeInstanceOf(GarminRouteSendPermissionRequiredError);
   });
 
+  it('preserves Garmin create rate limits as retryable status errors', async () => {
+    garminTokenDocsByUser.set('garminAPITokens:user-1', [
+      createTokenSnapshot('token-1', 'garmin-user-1'),
+    ]);
+    requestHelperMocks.post.mockRejectedValueOnce({ statusCode: 429 });
+
+    const context = await createGarminRouteSendContext('user-1');
+
+    await expect(sendRouteToGarminConnect(
+      'user-1',
+      'route-1',
+      { id: 'route-1', name: 'QS Route Name', activityTypes: ['Cycling'] } as any,
+      createRouteFile(),
+      context,
+    )).rejects.toMatchObject({
+      statusCode: 429,
+      code: 'unavailable',
+    });
+  });
+
+  it('preserves Garmin update rate limits as retryable status errors', async () => {
+    garminTokenDocsByUser.set('garminAPITokens:user-1', [
+      createTokenSnapshot('token-1', 'garmin-user-1'),
+    ]);
+    routeDeliveryMetadataByKey.set(`user-1:route-1:${ServiceNames.GarminAPI}:garmin-user-1`, {
+      providerRouteId: 'course-42',
+    });
+    requestHelperMocks.put.mockRejectedValueOnce({ statusCode: 429 });
+
+    const context = await createGarminRouteSendContext('user-1');
+
+    await expect(sendRouteToGarminConnect(
+      'user-1',
+      'route-1',
+      { id: 'route-1', name: 'QS Route Name', activityTypes: ['Cycling'] } as any,
+      createRouteFile(),
+      context,
+    )).rejects.toMatchObject({
+      statusCode: 429,
+      code: 'unavailable',
+    });
+  });
+
   it('maps hiking trail route types to HIKING before generic trail matching', async () => {
     garminTokenDocsByUser.set('garminAPITokens:user-1', [
       createTokenSnapshot('token-1', 'garmin-user-1'),

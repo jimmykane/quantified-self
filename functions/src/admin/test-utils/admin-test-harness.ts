@@ -94,6 +94,9 @@ const {
         if (queueId === 'processActivitySyncTask') {
             return 0;
         }
+        if (queueId === 'processRouteDeliverySyncTask') {
+            return 0;
+        }
         if (queueId === 'processRouteSyncTask') {
             return 4;
         }
@@ -218,6 +221,7 @@ vi.mock('../../config', () => ({
         cloudtasks: {
             workoutQueue: 'processWorkoutTask',
             activitySyncQueue: 'processActivitySyncTask',
+            routeDeliverySyncQueue: 'processRouteDeliverySyncTask',
             routeSyncQueue: 'processRouteSyncTask',
             sleepSyncQueue: 'processSleepSyncTask',
             sportsLibReparseQueue: 'processSportsLibReparseTask',

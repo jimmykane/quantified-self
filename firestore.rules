@@ -182,7 +182,8 @@ service cloud.firestore {
               'streamTypes',
               'bounds',
               'sourceSummary',
-              'syncedDestinationServiceNames'
+              'syncedDestinationServiceNames',
+              'deliverySummaries'
             ];
           }
 
@@ -349,6 +350,11 @@ service cloud.firestore {
     }
 
     match /activitySyncQueue/{queueItemID} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    match /routeDeliverySyncQueue/{queueItemID} {
       allow read: if isAdmin();
       allow write: if false;
     }

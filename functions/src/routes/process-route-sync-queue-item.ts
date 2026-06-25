@@ -1,4 +1,5 @@
 import * as admin from 'firebase-admin';
+import * as logger from 'firebase-functions/logger';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { FirestoreRouteJSON } from '../../../shared/app-route.interface';
 
@@ -15,6 +16,7 @@ import {
 import { RouteSyncQueueItemInterface } from '../queue/queue-item.interface';
 import {
     buildServiceRouteSourceMetadata,
+    toRouteSourceSummary,
 } from './route-persistence';
 import {
     assignRouteSegmentIDs,
@@ -31,6 +33,10 @@ import {
     upsertSyncedRoute,
 } from './upsert-synced-route';
 import { UserDeletionGuardReadError } from '../shared/user-deletion-guard';
+import {
+    enqueueRouteDeliverySyncJobsForImportedRoute,
+} from '../route-delivery-sync/enqueue-imported-route';
+import { buildRouteDeliverySourceRevisionKeyForRouteSource } from '../route-delivery-sync/revision';
 
 async function buildSourceRouteID(
     sourceServiceName: ServiceNames,
@@ -178,6 +184,52 @@ function toTimestampMs(value: unknown): number | null {
     return date ? date.getTime() : null;
 }
 
+function getRouteSourceRevisionInput(
+    existingRouteDocument: FirestoreRouteJSON | null,
+    queueItem: RouteSyncQueueItemInterface,
+): {
+    sourceProviderRouteId: string;
+    sourceProviderUserId?: string;
+} {
+    const sourceSummary = getSourceSummary(existingRouteDocument);
+    return {
+        sourceProviderRouteId: normalizeNonEmptyString(sourceSummary?.providerRouteId) || queueItem.providerRouteId,
+        sourceProviderUserId: normalizeNonEmptyString(sourceSummary?.providerUserId) || undefined,
+    };
+}
+
+async function enqueueRouteDeliveryForSavedSuuntoRoute(params: {
+    userID: string;
+    routeID: string;
+    queueItem: RouteSyncQueueItemInterface;
+    existingRouteDocument: FirestoreRouteJSON | null;
+    fallbackUpdatedAt?: unknown;
+}): Promise<void> {
+    try {
+        const sourceSummary = getSourceSummary(params.existingRouteDocument);
+        const providerInput = getRouteSourceRevisionInput(params.existingRouteDocument, params.queueItem);
+        const sourceRevisionKey = buildRouteDeliverySourceRevisionKeyForRouteSource({
+            sourceServiceName: params.queueItem.sourceServiceName,
+            sourceSummary,
+            fallbackProviderRouteId: params.queueItem.providerRouteId,
+            fallbackProviderRouteModifiedAt: params.queueItem.providerRouteModifiedAt,
+            routeImportedAt: params.existingRouteDocument?.importedAt || params.fallbackUpdatedAt,
+            fallbackRouteID: params.routeID,
+        });
+        await enqueueRouteDeliverySyncJobsForImportedRoute({
+            userID: params.userID,
+            savedRouteID: params.routeID,
+            sourceServiceName: params.queueItem.sourceServiceName,
+            sourceProviderRouteId: providerInput.sourceProviderRouteId,
+            sourceProviderUserId: providerInput.sourceProviderUserId,
+            sourceRevisionKey,
+            manual: false,
+        });
+    } catch (routeDeliverySyncError) {
+        logger.error(`[RouteDeliverySync] Failed to enqueue post-import delivery sync for route ${params.routeID} and user ${params.userID}. Route import remains successful.`, routeDeliverySyncError);
+    }
+}
+
 async function getExistingRouteDocument(
     userID: string,
     routeID: string,
@@ -262,6 +314,12 @@ export async function processRouteSyncQueueItem(
         const routeID = await buildSourceRouteID(queueItem.sourceServiceName, queueItem.providerRouteId);
         const existingRouteDocument = await getExistingRouteDocument(userID, routeID);
         if (shouldSkipUnchangedProviderRoute(existingRouteDocument, queueItem)) {
+            await enqueueRouteDeliveryForSavedSuuntoRoute({
+                userID,
+                routeID,
+                queueItem,
+                existingRouteDocument,
+            });
             return markQueueItemSkipped(queueItem, undefined, 'provider_route_up_to_date', {
                 resultRouteId: routeID,
                 resultStatus: 'skipped',
@@ -301,6 +359,17 @@ export async function processRouteSyncQueueItem(
             routeFile,
             sourceMetadata,
             originalFile,
+        });
+
+        await enqueueRouteDeliveryForSavedSuuntoRoute({
+            userID,
+            routeID,
+            queueItem,
+            existingRouteDocument: {
+                ...(existingRouteDocument || {}),
+                sourceSummary: toRouteSourceSummary(sourceMetadata),
+            } as FirestoreRouteJSON,
+            fallbackUpdatedAt: importedAt,
         });
 
         return updateToProcessed(queueItem, undefined, {

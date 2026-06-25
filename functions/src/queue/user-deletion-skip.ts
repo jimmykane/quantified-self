@@ -10,6 +10,10 @@ export type QueueUserDeletionGuardPhase =
     | 'before_activity_sync_processing'
     | 'before_activity_sync_upload'
     | 'before_activity_sync_destination_upload'
+    | 'before_route_delivery_sync_enqueue'
+    | 'before_route_delivery_sync_processing'
+    | 'before_route_delivery_sync_prepare'
+    | 'before_route_delivery_sync_destination_upload'
     | 'before_sleep_token_resolution'
     | 'before_sleep_provider_sync';
 

@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { ACTIVITY_SYNC_ROUTE_IDS } from '../../../shared/activity-sync-routes';
+import { ROUTE_DELIVERY_SYNC_ROUTE_IDS } from '../../../shared/route-delivery-sync-routes';
 
 const {
   mockOnDocumentDeleted,
@@ -159,6 +160,11 @@ describe('activity-sync/disconnect-routes', () => {
             enabled: false,
           },
         },
+        routeDeliverySyncRoutes: {
+          [ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_GarminAPI]: {
+            enabled: false,
+          },
+        },
       },
     }, { merge: true });
   });
@@ -175,6 +181,11 @@ describe('activity-sync/disconnect-routes', () => {
             enabled: false,
           },
           [ACTIVITY_SYNC_ROUTE_IDS.COROSAPI_to_SuuntoApp]: {
+            enabled: false,
+          },
+        },
+        routeDeliverySyncRoutes: {
+          [ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_GarminAPI]: {
             enabled: false,
           },
         },
@@ -226,12 +237,22 @@ describe('activity-sync/disconnect-routes', () => {
             enabled: false,
           },
         },
+        routeDeliverySyncRoutes: {
+          [ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_GarminAPI]: {
+            enabled: false,
+          },
+        },
       },
     }, { merge: true });
     expect(mockSettingsSet).toHaveBeenNthCalledWith(2, expect.any(Object), {
       serviceSyncSettings: {
         activitySyncRoutes: {
           [ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp]: {
+            enabled: false,
+          },
+        },
+        routeDeliverySyncRoutes: {
+          [ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_GarminAPI]: {
             enabled: false,
           },
         },
@@ -247,6 +268,9 @@ describe('activity-sync/disconnect-routes', () => {
             [ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp]: { enabled: true },
             [ACTIVITY_SYNC_ROUTE_IDS.COROSAPI_to_SuuntoApp]: { enabled: false },
           },
+          routeDeliverySyncRoutes: {
+            [ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_GarminAPI]: { enabled: true },
+          },
         },
       }),
     });
@@ -261,8 +285,12 @@ describe('activity-sync/disconnect-routes', () => {
           [ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp]: { enabled: false },
           [ACTIVITY_SYNC_ROUTE_IDS.COROSAPI_to_SuuntoApp]: { enabled: false },
         },
+        routeDeliverySyncRoutes: {
+          [ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_GarminAPI]: { enabled: false },
+        },
         pendingDisconnectRouteRestore: {
           [ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp]: true,
+          [ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_GarminAPI]: true,
         },
       },
     }, { merge: true });
@@ -301,6 +329,7 @@ describe('activity-sync/disconnect-routes', () => {
         serviceSyncSettings: {
           pendingDisconnectRouteRestore: {
             [ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp]: true,
+            [ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_GarminAPI]: true,
             [ACTIVITY_SYNC_ROUTE_IDS.COROSAPI_to_SuuntoApp]: false,
           },
         },
@@ -313,9 +342,13 @@ describe('activity-sync/disconnect-routes', () => {
       serviceSyncSettings: {
         pendingDisconnectRouteRestore: {
           [ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp]: 'DELETE_SENTINEL',
+          [ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_GarminAPI]: 'DELETE_SENTINEL',
         },
         activitySyncRoutes: {
           [ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp]: { enabled: true },
+        },
+        routeDeliverySyncRoutes: {
+          [ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_GarminAPI]: { enabled: true },
         },
       },
     }, { merge: true });

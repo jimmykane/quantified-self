@@ -85,6 +85,7 @@ import { AppFunctionsService } from './app.functions.service';
 import { FunctionName } from '@shared/functions-manifest';
 import { SleepBackfillQueueResponse } from '@shared/sleep-backfill';
 import { ActivitySyncRouteId } from '@shared/activity-sync-routes';
+import { RouteDeliverySyncRouteId } from '@shared/route-delivery-sync-routes';
 import { buildSuuntoServiceConnectionViewModel, SuuntoServiceConnectionViewModel } from '../helpers/suunto-service-connection.helper';
 import {
   buildSuuntoRouteCatchUpPromptSource,
@@ -128,6 +129,20 @@ export interface ActivitySyncBackfillSummary {
   skippedByReason: Record<string, number>;
   failedCount: number;
   failedEvents: ActivitySyncBackfillFailedEvent[];
+}
+
+export interface RouteDeliverySyncBackfillFailedRoute {
+  routeID: string;
+  reason: string;
+  message: string;
+}
+
+export interface RouteDeliverySyncBackfillSummary {
+  scanned: number;
+  queued: number;
+  skippedByReason: Record<string, number>;
+  failedCount: number;
+  failedRoutes: RouteDeliverySyncBackfillFailedRoute[];
 }
 
 export interface RouteSyncCatchUpSummary {
@@ -728,6 +743,40 @@ export class AppUserService implements OnDestroy {
     this.applyActivitySyncRouteSettingsToUser(user, activitySyncRoutes);
   }
 
+  public async updateRouteDeliverySyncRouteSettings(
+    user: AppUserInterface,
+    routeSettings: Partial<Record<RouteDeliverySyncRouteId, boolean>>,
+  ): Promise<void> {
+    const uid = `${user?.uid || ''}`.trim();
+    if (!uid) {
+      throw new Error('Cannot update route delivery sync route settings without a user.');
+    }
+
+    if (this.hasIncompleteProfileReads(uid)) {
+      throw new Error('Cannot update route delivery sync route settings until user settings finish loading.');
+    }
+
+    const routeDeliverySyncRoutes = Object.entries(routeSettings)
+      .reduce<Partial<Record<RouteDeliverySyncRouteId, { enabled: boolean }>>>((updates, [routeID, enabled]) => {
+        updates[routeID as RouteDeliverySyncRouteId] = { enabled: enabled === true };
+        return updates;
+      }, {});
+
+    if (Object.keys(routeDeliverySyncRoutes).length === 0) {
+      return;
+    }
+
+    await this.updateUserProperties(user, {
+      settings: {
+        serviceSyncSettings: {
+          routeDeliverySyncRoutes,
+        },
+      },
+    });
+
+    this.applyRouteDeliverySyncRouteSettingsToUser(user, routeDeliverySyncRoutes);
+  }
+
   public getUserMetaForService(user: User, serviceName: string): Observable<AppUserServiceMetaInterface | undefined> {
     const metaDoc = doc(this.firestore, 'users', user.uid, 'meta', serviceName);
     return docData(metaDoc).pipe(map((d) => {
@@ -940,6 +989,17 @@ export class AppUserService implements OnDestroy {
       endDate: normalizedEndDate.toISOString(),
     });
     return result.data as ActivitySyncBackfillSummary;
+  }
+
+  async backfillRouteDeliverySyncRouteForCurrentUser(
+    sourceServiceName: ServiceNames,
+    destinationServiceName: ServiceNames,
+  ): Promise<RouteDeliverySyncBackfillSummary> {
+    const result = await this.functionsService.call('backfillRouteDeliverySyncRoute', {
+      sourceServiceName,
+      destinationServiceName,
+    });
+    return result.data as RouteDeliverySyncBackfillSummary;
   }
 
   private coerceValidDate(value: Date | string | number, fieldName: 'startDate' | 'endDate'): Date {
@@ -1297,6 +1357,26 @@ export class AppUserService implements OnDestroy {
     for (const [routeID, routeSetting] of Object.entries(routeSettings)) {
       settings.serviceSyncSettings.activitySyncRoutes[routeID as ActivitySyncRouteId] = {
         ...(settings.serviceSyncSettings.activitySyncRoutes[routeID as ActivitySyncRouteId] || {}),
+        enabled: routeSetting.enabled,
+      };
+    }
+
+    user.settings = settings;
+  }
+
+  private applyRouteDeliverySyncRouteSettingsToUser(
+    user: AppUserInterface,
+    routeSettings: Partial<Record<RouteDeliverySyncRouteId, { enabled: boolean }>>,
+  ): void {
+    const settings = (user.settings || {}) as AppUserSettingsInterface;
+    settings.serviceSyncSettings = settings.serviceSyncSettings || {};
+    settings.serviceSyncSettings.routeDeliverySyncRoutes = {
+      ...(settings.serviceSyncSettings.routeDeliverySyncRoutes || {}),
+    };
+
+    for (const [routeID, routeSetting] of Object.entries(routeSettings)) {
+      settings.serviceSyncSettings.routeDeliverySyncRoutes[routeID as RouteDeliverySyncRouteId] = {
+        ...(settings.serviceSyncSettings.routeDeliverySyncRoutes[routeID as RouteDeliverySyncRouteId] || {}),
         enabled: routeSetting.enabled,
       };
     }

@@ -7,7 +7,7 @@
  * - Singleton client management for performance
  */
 
-import { v2beta3 } from '@google-cloud/tasks';
+import { protos, v2beta3 } from '@google-cloud/tasks';
 import * as logger from 'firebase-functions/logger';
 import { config } from '../config';
 import { ServiceNames } from '@sports-alliance/sports-lib';
@@ -271,6 +271,42 @@ export async function enqueueRouteSyncTask(
 }
 
 /**
+ * Enqueue a route delivery sync processing task to Cloud Tasks.
+ * Uses deterministic task names for deduplication.
+ */
+export async function enqueueRouteDeliverySyncTask(
+    queueItemId: string,
+    dateCreated: number,
+    scheduleDelaySeconds?: number,
+): Promise<boolean> {
+    const client = getCloudTasksClient();
+    const { projectId, location, routeDeliverySyncQueue, serviceAccountEmail } = config.cloudtasks;
+
+    if (!projectId) {
+        throw new Error('Project ID is not defined in config');
+    }
+
+    const url = `https://${location}-${projectId}.cloudfunctions.net/processRouteDeliverySyncTask`;
+    const parent = client.queuePath(projectId, location, routeDeliverySyncQueue);
+
+    const safeQueueItemId = `${queueItemId}`.replace(/[^a-zA-Z0-9-_]/g, '-');
+    const safeDateCreated = Number.isFinite(dateCreated) ? Math.max(0, Math.floor(dateCreated)) : 0;
+    const taskName = `${parent}/tasks/route-delivery-sync-${safeQueueItemId}-${safeDateCreated}`;
+    const payload = { data: { queueItemId } };
+
+    return enqueueTaskWithRetry({
+        parent,
+        taskName,
+        payload,
+        serviceAccountEmail,
+        url,
+        scheduleDelaySeconds,
+        alreadyExistsLogMessage: `[RouteDeliverySyncDispatcher] Task already exists for queue item ${queueItemId}, skipping`,
+        failedLogPrefix: `[RouteDeliverySyncDispatcher] Failed to enqueue route delivery sync task for ${queueItemId}:`,
+    });
+}
+
+/**
  * Enqueue a sleep sync processing task to Cloud Tasks.
  * Uses deterministic task names for deduplication.
  */
@@ -519,7 +555,7 @@ async function enqueueTaskWithRetry(params: EnqueueTaskParams): Promise<boolean>
         failedLogPrefix,
     } = params;
 
-    const task: any = {
+    const task: protos.google.cloud.tasks.v2beta3.ITask = {
         name: taskName,
         httpRequest: {
             httpMethod: 'POST' as const,
@@ -560,17 +596,20 @@ async function enqueueTaskWithRetry(params: EnqueueTaskParams): Promise<boolean>
             const [response] = await currentClient.createTask({ parent, task });
             logger.info(`[Dispatcher] Enqueued task: ${response.name}`);
             return true;
-        } catch (error: any) {
-            if ((error as any).code === 6) {
+        } catch (error) {
+            const cloudTaskError = error as { code?: unknown; message?: unknown };
+            const errorMessage = `${cloudTaskError.message || ''}`;
+
+            if (cloudTaskError.code === 6) {
                 logger.info(alreadyExistsLogMessage);
                 return false;
             }
 
-            const isRetryable = (error.code === 14) ||
-                (error.message && (error.message.includes('ECONNRESET') || error.message.includes('Unavailable')));
+            const isRetryable = (cloudTaskError.code === 14) ||
+                (errorMessage.includes('ECONNRESET') || errorMessage.includes('Unavailable'));
 
             if (isRetryable && attempt < MAX_RETRIES - 1) {
-                logger.warn(`[Dispatcher] Transient error enqueueing task (attempt ${attempt + 1}/${MAX_RETRIES}): ${error.message}. Resetting client and retrying...`);
+                logger.warn(`[Dispatcher] Transient error enqueueing task (attempt ${attempt + 1}/${MAX_RETRIES}): ${errorMessage}. Resetting client and retrying...`);
                 _cloudTasksClient = null;
                 attempt++;
                 const delayMs = 1000 * Math.pow(2, attempt - 1);
