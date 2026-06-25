@@ -1,6 +1,7 @@
 import { CommonModule } from '@angular/common';
 import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
+import { BreakpointObserver } from '@angular/cdk/layout';
 import { Router } from '@angular/router';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -32,6 +33,7 @@ import {
     DASHBOARD_ACTION_PROMPT_SUUNTO_ROUTE_CATCH_UP_ID,
 } from '../../helpers/dashboard-action-prompt.helper';
 import { ROUTE_DELIVERY_SYNC_ROUTE_IDS } from '@shared/route-delivery-sync-routes';
+import { AppBreakpoints } from '../../constants/breakpoints';
 
 describe('RoutesPageComponent', () => {
     let component: RoutesPageComponent;
@@ -50,6 +52,7 @@ describe('RoutesPageComponent', () => {
     let loggerMock: any;
     let routerMock: any;
     let windowServiceMock: any;
+    let breakpointObserverMock: any;
     let suuntoRouteCatchUpPromptContext$: BehaviorSubject<any>;
     let garminRouteSendContext$: BehaviorSubject<any>;
 
@@ -256,6 +259,9 @@ describe('RoutesPageComponent', () => {
                 },
             },
         };
+        breakpointObserverMock = {
+            observe: vi.fn().mockReturnValue(of({ matches: false })),
+        };
 
         TestBed.configureTestingModule({
             imports: [RoutesPageComponent],
@@ -275,6 +281,7 @@ describe('RoutesPageComponent', () => {
                 { provide: AppWindowService, useValue: windowServiceMock },
                 { provide: LoggerService, useValue: loggerMock },
                 { provide: Router, useValue: routerMock },
+                { provide: BreakpointObserver, useValue: breakpointObserverMock },
             ],
             schemas: [NO_ERRORS_SCHEMA],
         });
@@ -1217,6 +1224,8 @@ describe('RoutesPageComponent', () => {
         expect(template).toContain('<mat-icon>autorenew</mat-icon>');
         expect(template).toContain('<mat-icon>cloud_upload</mat-icon>');
         expect(template).toContain('<mat-icon>open_in_new</mat-icon>');
+        expect(template).toContain('[matTooltipDisabled]="passiveRouteTableTooltipsDisabled()"');
+        expect(template).toContain('matTooltipTouchGestures="off"');
         expect(styles).toContain('.route-table-row');
         expect(styles).toContain('cursor: pointer;');
         expect(styles).toContain('.route-table-row:focus-visible');
@@ -1232,7 +1241,7 @@ describe('RoutesPageComponent', () => {
         expect(template).not.toContain('class="route-provenance-item"');
     });
 
-    it('uses the compare-style horizontal scroll shell for the routes table', () => {
+    it('uses a bounded two-axis scroll shell for the routes table', () => {
         const template = readFileSync(
             resolve(process.cwd(), 'src/app/components/routes/routes-page.component.html'),
             'utf8',
@@ -1246,9 +1255,14 @@ describe('RoutesPageComponent', () => {
         expect(template).not.toContain('class="route-table-scroll qs-scrollbar"');
         expect(styles).toContain('.route-table-shell');
         expect(styles).toContain('--route-table-min-width: 108rem;');
-        expect(styles).toContain('overflow-x: auto;');
+        expect(styles).toContain('max-height: min(72vh, 48rem);');
+        expect(styles).toContain('max-width: 100%;');
+        expect(styles).toContain('min-width: 0;');
+        expect(styles).toContain('overflow: auto;');
+        expect(styles).toContain('overscroll-behavior: contain;');
+        expect(styles).toContain('scrollbar-gutter: stable;');
+        expect(styles).toContain('-webkit-overflow-scrolling: touch;');
         expect(styles).not.toContain('.route-table-scroll');
-        expect(styles).not.toContain('overscroll-behavior: contain;');
         expect(styles).not.toContain('touch-action: pan-x pan-y;');
         const selectionToolbarStyles = styles.match(/\.route-selection-toolbar\s*{(?<body>[^}]*)}/)?.groups?.['body'] ?? '';
         expect(selectionToolbarStyles).toContain('position: sticky;');
@@ -1256,6 +1270,16 @@ describe('RoutesPageComponent', () => {
         expect(selectionToolbarStyles).toContain('width: 100%;');
         expect(selectionToolbarStyles).toContain('justify-content: flex-start;');
         expect(selectionToolbarStyles).not.toContain('min-width');
+    });
+
+    it('disables passive route table tooltips on touch-oriented layouts', async () => {
+        breakpointObserverMock.observe.mockReturnValue(of({ matches: true }));
+
+        await component.ngOnInit();
+        await firstValueFrom(component.routes$!);
+
+        expect(breakpointObserverMock.observe).toHaveBeenCalledWith(['(pointer: coarse)', '(hover: none)', AppBreakpoints.Handset]);
+        expect(component.passiveRouteTableTooltipsDisabled()).toBe(true);
     });
 
     it('sorts route table rows by normalized route stats', async () => {

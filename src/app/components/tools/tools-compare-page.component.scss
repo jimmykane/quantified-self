@@ -8,9 +8,11 @@
 }
 
 .tools-compare-page {
+  box-sizing: border-box;
   max-width: 86rem;
   margin: 0 auto;
   padding: 1.5rem 1rem 3rem;
+  width: 100%;
 }
 
 .hero-section {
@@ -380,7 +382,12 @@ h2 {
 .comparison-table-shell {
   --comparison-table-min-width: 153rem;
 
-  overflow-x: auto;
+  max-width: 100%;
+  min-width: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  -webkit-overflow-scrolling: touch;
   border: 1px solid var(--mat-sys-outline-variant);
   border-radius: 8px;
   background: var(--mat-sys-surface-container-lowest);

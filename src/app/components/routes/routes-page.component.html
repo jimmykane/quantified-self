@@ -249,7 +249,14 @@
         <td mat-cell *matCellDef="let item">
           <span class="route-name-cell">
             <span class="route-name-stack">
-              <span class="route-title-cell" [matTooltip]="item.name" [attr.title]="item.name">{{ item.name }}</span>
+              <span
+                class="route-title-cell"
+                [matTooltip]="item.name"
+                [matTooltipDisabled]="passiveRouteTableTooltipsDisabled()"
+                matTooltipTouchGestures="off"
+                [attr.title]="item.name">
+                {{ item.name }}
+              </span>
             </span>
             <span class="route-file-type">{{ item.fileType }}</span>
           </span>
@@ -267,6 +274,8 @@
           <span
             class="route-source-service-cell"
             [matTooltip]="item.sourceServiceTitle"
+            [matTooltipDisabled]="passiveRouteTableTooltipsDisabled()"
+            matTooltipTouchGestures="off"
             [attr.title]="item.sourceServiceTitle">
             @if (item.sourceServiceName) {
             <app-service-source-icon
@@ -291,7 +300,12 @@
           </span>
         </th>
         <td mat-cell *matCellDef="let item">
-          <div class="route-type-stack" [matTooltip]="item.activityTypesTitle" [attr.title]="item.activityTypesTitle">
+          <div
+            class="route-type-stack"
+            [matTooltip]="item.activityTypesTitle"
+            [matTooltipDisabled]="passiveRouteTableTooltipsDisabled()"
+            matTooltipTouchGestures="off"
+            [attr.title]="item.activityTypesTitle">
             @for (summary of item.activityTypeSummaries; track summary.id) {
             <span class="route-type-line">
               <app-activity-type-icon
@@ -313,7 +327,13 @@
             <span>Distance</span>
           </span>
         </th>
-        <td mat-cell *matCellDef="let item" [matTooltip]="item.distance.title" [attr.title]="item.distance.title">
+        <td
+          mat-cell
+          *matCellDef="let item"
+          [matTooltip]="item.distance.title"
+          [matTooltipDisabled]="passiveRouteTableTooltipsDisabled()"
+          matTooltipTouchGestures="off"
+          [attr.title]="item.distance.title">
           {{ item.distance.label }}
         </td>
       </ng-container>
@@ -325,7 +345,13 @@
             <span>Ascent</span>
           </span>
         </th>
-        <td mat-cell *matCellDef="let item" [matTooltip]="item.ascent.title" [attr.title]="item.ascent.title">
+        <td
+          mat-cell
+          *matCellDef="let item"
+          [matTooltip]="item.ascent.title"
+          [matTooltipDisabled]="passiveRouteTableTooltipsDisabled()"
+          matTooltipTouchGestures="off"
+          [attr.title]="item.ascent.title">
           {{ item.ascent.label }}
         </td>
       </ng-container>
@@ -337,7 +363,13 @@
             <span>Descent</span>
           </span>
         </th>
-        <td mat-cell *matCellDef="let item" [matTooltip]="item.descent.title" [attr.title]="item.descent.title">
+        <td
+          mat-cell
+          *matCellDef="let item"
+          [matTooltip]="item.descent.title"
+          [matTooltipDisabled]="passiveRouteTableTooltipsDisabled()"
+          matTooltipTouchGestures="off"
+          [attr.title]="item.descent.title">
           {{ item.descent.label }}
         </td>
       </ng-container>
@@ -349,7 +381,13 @@
             <span>Min Grade</span>
           </span>
         </th>
-        <td mat-cell *matCellDef="let item" [matTooltip]="item.minGrade.title" [attr.title]="item.minGrade.title">
+        <td
+          mat-cell
+          *matCellDef="let item"
+          [matTooltip]="item.minGrade.title"
+          [matTooltipDisabled]="passiveRouteTableTooltipsDisabled()"
+          matTooltipTouchGestures="off"
+          [attr.title]="item.minGrade.title">
           {{ item.minGrade.label }}
         </td>
       </ng-container>
@@ -361,7 +399,13 @@
             <span>Max Grade</span>
           </span>
         </th>
-        <td mat-cell *matCellDef="let item" [matTooltip]="item.maxGrade.title" [attr.title]="item.maxGrade.title">
+        <td
+          mat-cell
+          *matCellDef="let item"
+          [matTooltip]="item.maxGrade.title"
+          [matTooltipDisabled]="passiveRouteTableTooltipsDisabled()"
+          matTooltipTouchGestures="off"
+          [attr.title]="item.maxGrade.title">
           {{ item.maxGrade.label }}
         </td>
       </ng-container>
@@ -392,7 +436,12 @@
           </span>
         </th>
         <td mat-cell *matCellDef="let item">
-          <span class="route-original-file-cell" [matTooltip]="item.originalFilename" [attr.title]="item.originalFilename">
+          <span
+            class="route-original-file-cell"
+            [matTooltip]="item.originalFilename"
+            [matTooltipDisabled]="passiveRouteTableTooltipsDisabled()"
+            matTooltipTouchGestures="off"
+            [attr.title]="item.originalFilename">
             {{ item.originalFilename }}
           </span>
         </td>
@@ -406,6 +455,8 @@
           <button mat-icon-button type="button"
             aria-label="Route row actions"
             matTooltip="Route actions"
+            [matTooltipDisabled]="passiveRouteTableTooltipsDisabled()"
+            matTooltipTouchGestures="off"
             [matMenuTriggerFor]="routeRowActionsMenu"
             (click)="$event.stopPropagation()"
             (keydown)="$event.stopPropagation()">

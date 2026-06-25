@@ -1,5 +1,6 @@
 import { Component, DestroyRef, OnInit, computed, inject, signal } from '@angular/core';
 import { SelectionModel } from '@angular/cdk/collections';
+import { BreakpointObserver } from '@angular/cdk/layout';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { firstValueFrom, BehaviorSubject, combineLatest, distinctUntilChanged, map, Observable, shareReplay, switchMap } from 'rxjs';
 import { MatDialog } from '@angular/material/dialog';
@@ -91,6 +92,7 @@ import { LoggerService } from '../../services/logger.service';
 import { AppWindowService } from '../../services/app.window.service';
 import { UploadRoutesComponent } from '../upload/upload-routes/upload-routes.component';
 import { AppAppSettingsInterface, AppUserInterface } from '../../models/app-user.interface';
+import { AppBreakpoints } from '../../constants/breakpoints';
 import { ROUTE_DELIVERY_SYNC_ROUTE_IDS } from '@shared/route-delivery-sync-routes';
 import { isRouteDeliverySyncRouteUIDAllowlisted } from '@shared/route-delivery-sync-rollout';
 
@@ -180,6 +182,8 @@ interface RouteFilterOption {
     label: string;
 }
 
+const PASSIVE_ROUTE_TABLE_TOOLTIP_MEDIA_QUERIES = ['(pointer: coarse)', '(hover: none)', AppBreakpoints.Handset] as const;
+
 @Component({
     selector: 'app-routes-page',
     standalone: true,
@@ -189,6 +193,7 @@ interface RouteFilterOption {
 })
 export class RoutesPageComponent implements OnInit {
     private destroyRef = inject(DestroyRef);
+    private breakpointObserver = inject(BreakpointObserver);
     private authService = inject(AppAuthService);
     private userService = inject(AppUserService);
     private routeService = inject(AppRouteService);
@@ -446,8 +451,19 @@ export class RoutesPageComponent implements OnInit {
     };
     routes$: Observable<RoutePageRouteViewModel[]> | null = null;
     readonly routeSelection = new SelectionModel<string>(true, []);
+    readonly passiveRouteTableTooltipsDisabled = signal(false);
 
     async ngOnInit(): Promise<void> {
+        this.breakpointObserver
+            .observe(PASSIVE_ROUTE_TABLE_TOOLTIP_MEDIA_QUERIES)
+            .pipe(takeUntilDestroyed(this.destroyRef))
+            .subscribe(result => {
+                if (result.matches === this.passiveRouteTableTooltipsDisabled()) {
+                    return;
+                }
+                this.passiveRouteTableTooltipsDisabled.set(result.matches);
+            });
+
         const user = await this.authService.getUser() as AppUserInterface | null;
         this.user.set(user);
         if (user) {
