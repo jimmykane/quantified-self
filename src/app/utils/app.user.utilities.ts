@@ -95,6 +95,7 @@ import {
 } from '../helpers/dashboard-chart-display-settings.helper';
 import { getAppBasicChartDataTypes, getAppCanonicalChartDataTypes } from '../helpers/app-chart-data-types.helper';
 import { ACTIVITY_SYNC_ROUTES, ActivitySyncRouteId } from '@shared/activity-sync-routes';
+import { ROUTE_DELIVERY_SYNC_ROUTES, RouteDeliverySyncRouteId } from '@shared/route-delivery-sync-routes';
 import { normalizeDistanceUnits } from '@shared/unit-aware-display';
 import { normalizeDeviceDisplaySettings } from '../helpers/device-color-preferences.helper';
 
@@ -705,6 +706,15 @@ export class AppUserUtilities {
             };
         }
         settings.serviceSyncSettings.activitySyncRoutes = normalizedRouteSettings;
+
+        const existingRouteDeliverySettings = settings.serviceSyncSettings.routeDeliverySyncRoutes || {};
+        const normalizedRouteDeliverySettings: Partial<Record<RouteDeliverySyncRouteId, { enabled?: boolean }>> = {};
+        for (const routeID of Object.keys(ROUTE_DELIVERY_SYNC_ROUTES) as RouteDeliverySyncRouteId[]) {
+            normalizedRouteDeliverySettings[routeID] = {
+                enabled: existingRouteDeliverySettings[routeID]?.enabled === true,
+            };
+        }
+        settings.serviceSyncSettings.routeDeliverySyncRoutes = normalizedRouteDeliverySettings;
 
         // @warning !!!!!! Enums with 0 as start value default to the override
         return settings;

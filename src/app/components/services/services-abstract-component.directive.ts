@@ -30,10 +30,12 @@ import { AppEventService } from '../../services/app.event.service';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { AppUserInterface, AppUserServiceMetaInterface } from '../../models/app-user.interface';
 import { ACTIVITY_SYNC_ROUTES, ActivitySyncRoute } from '@shared/activity-sync-routes';
+import { ROUTE_DELIVERY_SYNC_ROUTES, RouteDeliverySyncRoute } from '@shared/route-delivery-sync-routes';
 import { getProviderDisplayName } from '@shared/provider-presentation';
 import { ConfirmationDialogComponent, ConfirmationDialogData } from '../confirmation-dialog/confirmation-dialog.component';
 import equal from 'fast-deep-equal';
 
+type ServiceSyncRouteImpact = ActivitySyncRoute | RouteDeliverySyncRoute;
 
 @Directive()
 export abstract class ServicesAbstractComponentDirective implements OnInit, OnDestroy, OnChanges {
@@ -262,7 +264,14 @@ export abstract class ServicesAbstractComponentDirective implements OnInit, OnDe
     return getProviderDisplayName(serviceName, 'destination');
   }
 
-  private get activeSyncRoutesUsingService(): ActivitySyncRoute[] {
+  private get activeSyncRoutesUsingService(): ServiceSyncRouteImpact[] {
+    return [
+      ...this.activeActivitySyncRoutesUsingService,
+      ...this.activeRouteDeliverySyncRoutesUsingService,
+    ];
+  }
+
+  private get activeActivitySyncRoutesUsingService(): ActivitySyncRoute[] {
     const routeSettings = this.user?.settings?.serviceSyncSettings?.activitySyncRoutes;
     if (!routeSettings) {
       return [];
@@ -277,11 +286,26 @@ export abstract class ServicesAbstractComponentDirective implements OnInit, OnDe
     });
   }
 
-  private formatRouteLabel(route: ActivitySyncRoute): string {
+  private get activeRouteDeliverySyncRoutesUsingService(): RouteDeliverySyncRoute[] {
+    const routeSettings = this.user?.settings?.serviceSyncSettings?.routeDeliverySyncRoutes;
+    if (!routeSettings) {
+      return [];
+    }
+
+    return Object.values(ROUTE_DELIVERY_SYNC_ROUTES).filter((route) => {
+      const routeUsesCurrentService = (
+        route.sourceServiceName === this.serviceName ||
+        route.destinationServiceName === this.serviceName
+      );
+      return routeUsesCurrentService && routeSettings[route.id]?.enabled === true;
+    });
+  }
+
+  private formatRouteLabel(route: ServiceSyncRouteImpact): string {
     return `${this.getServiceDisplayName(route.sourceServiceName)} -> ${this.getServiceDisplayName(route.destinationServiceName)}`;
   }
 
-  private buildDisconnectImpactMessageHtml(routes: ActivitySyncRoute[]): string {
+  private buildDisconnectImpactMessageHtml(routes: ServiceSyncRouteImpact[]): string {
     const isSingleRoute = routes.length === 1;
     const heading = isSingleRoute
       ? 'Disconnecting now will disable this active auto-sync route:'

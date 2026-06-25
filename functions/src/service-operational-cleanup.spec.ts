@@ -1,6 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 
+interface FirestoreDocMock {
+  id?: string;
+  ref: unknown;
+  data: () => Record<string, unknown>;
+}
+
 const {
   mockCollection,
   mockCollectionGroup,
@@ -9,12 +15,12 @@ const {
   queryDocsByKey,
   activeTokenDocs,
 } = vi.hoisted(() => {
-  const queryDocsByKey = new Map<string, any[]>();
-  const activeTokenDocs: any[] = [];
+  const queryDocsByKey = new Map<string, FirestoreDocMock[]>();
+  const activeTokenDocs: FirestoreDocMock[] = [];
   const mockRecursiveDelete = vi.fn().mockResolvedValue(undefined);
   const mockMarkQueueItemDeletedForUserCleanup = vi.fn().mockResolvedValue(true);
 
-  const buildSnapshot = (docs: any[]) => ({
+  const buildSnapshot = (docs: FirestoreDocMock[]) => ({
     empty: docs.length === 0,
     size: docs.length,
     docs,
@@ -29,7 +35,7 @@ const {
   }));
 
   const mockCollectionGroup = vi.fn(() => ({
-    where: vi.fn((_fieldName: string, _operator: string, _value: string) => ({
+    where: vi.fn(() => ({
       get: vi.fn().mockResolvedValue(buildSnapshot(activeTokenDocs)),
     })),
   }));
@@ -68,15 +74,15 @@ vi.mock('./queue/cleanup-tombstone', () => ({
 
 import { cleanupProviderOperationalDocsForServiceToken } from './service-operational-cleanup';
 
-function makeDoc(path: string, data: Record<string, unknown>) {
+function makeDoc(path: string, data: Record<string, unknown>): FirestoreDocMock {
   return {
-    id: path.split('/').pop(),
+    id: path.split('/').pop() || path,
     ref: { path },
     data: () => data,
   };
 }
 
-function setQueryDocs(collectionName: string, fieldName: string, value: string, docs: any[]) {
+function setQueryDocs(collectionName: string, fieldName: string, value: string, docs: FirestoreDocMock[]) {
   queryDocsByKey.set(`${collectionName}:${fieldName}:${value}`, docs);
 }
 
@@ -94,11 +100,41 @@ describe('cleanupProviderOperationalDocsForServiceToken', () => {
     setQueryDocs('sleepSyncQueue', 'providerUserId', 'suunto-user', [
       makeDoc('sleepSyncQueue/sleep-1', { provider: 'SuuntoApp', providerUserId: 'suunto-user' }),
     ]);
+    setQueryDocs('routeDeliverySyncQueue', 'sourceProviderUserId', 'suunto-user', [
+      makeDoc('routeDeliverySyncQueue/route-delivery-1', {
+        userID: 'firebase-user-123',
+        sourceServiceName: ServiceNames.SuuntoApp,
+        sourceProviderUserId: 'suunto-user',
+        destinationServiceName: ServiceNames.GarminAPI,
+      }),
+      makeDoc('routeDeliverySyncQueue/not-suunto-source', {
+        userID: 'firebase-user-123',
+        sourceServiceName: ServiceNames.GarminAPI,
+        sourceProviderUserId: 'suunto-user',
+        destinationServiceName: ServiceNames.SuuntoApp,
+      }),
+    ]);
     setQueryDocs('failed_jobs', 'userName', 'suunto-user', [
       makeDoc('failed_jobs/workout-dlq-1', { originalCollection: 'suuntoAppWorkoutQueue', userName: 'suunto-user' }),
     ]);
     setQueryDocs('failed_jobs', 'providerUserId', 'suunto-user', [
       makeDoc('failed_jobs/sleep-dlq-1', { originalCollection: 'sleepSyncQueue', provider: 'SuuntoApp', providerUserId: 'suunto-user' }),
+    ]);
+    setQueryDocs('failed_jobs', 'sourceProviderUserId', 'suunto-user', [
+      makeDoc('failed_jobs/route-delivery-dlq-1', {
+        originalCollection: 'routeDeliverySyncQueue',
+        userID: 'firebase-user-123',
+        sourceServiceName: ServiceNames.SuuntoApp,
+        sourceProviderUserId: 'suunto-user',
+        destinationServiceName: ServiceNames.GarminAPI,
+      }),
+      makeDoc('failed_jobs/not-suunto-source-dlq', {
+        originalCollection: 'routeDeliverySyncQueue',
+        userID: 'firebase-user-123',
+        sourceServiceName: ServiceNames.GarminAPI,
+        sourceProviderUserId: 'suunto-user',
+        destinationServiceName: ServiceNames.SuuntoApp,
+      }),
     ]);
 
     const result = await cleanupProviderOperationalDocsForServiceToken(
@@ -112,17 +148,31 @@ describe('cleanupProviderOperationalDocsForServiceToken', () => {
 
     expect(result).toMatchObject({
       providerUserId: 'suunto-user',
-      deletedDocCount: 4,
+      deletedDocCount: 6,
       skippedForActiveConnection: false,
     });
-    expect(mockRecursiveDelete).toHaveBeenCalledTimes(4);
+    expect(mockRecursiveDelete).toHaveBeenCalledTimes(6);
     expect(mockRecursiveDelete).toHaveBeenCalledWith(expect.objectContaining({ path: 'suuntoAppWorkoutQueue/workout-1' }));
     expect(mockRecursiveDelete).toHaveBeenCalledWith(expect.objectContaining({ path: 'sleepSyncQueue/sleep-1' }));
+    expect(mockRecursiveDelete).toHaveBeenCalledWith(expect.objectContaining({ path: 'routeDeliverySyncQueue/route-delivery-1' }));
     expect(mockRecursiveDelete).toHaveBeenCalledWith(expect.objectContaining({ path: 'failed_jobs/workout-dlq-1' }));
     expect(mockRecursiveDelete).toHaveBeenCalledWith(expect.objectContaining({ path: 'failed_jobs/sleep-dlq-1' }));
+    expect(mockRecursiveDelete).toHaveBeenCalledWith(expect.objectContaining({ path: 'failed_jobs/route-delivery-dlq-1' }));
+    expect(mockRecursiveDelete).not.toHaveBeenCalledWith(expect.objectContaining({ path: 'routeDeliverySyncQueue/not-suunto-source' }));
+    expect(mockRecursiveDelete).not.toHaveBeenCalledWith(expect.objectContaining({ path: 'failed_jobs/not-suunto-source-dlq' }));
     expect(mockMarkQueueItemDeletedForUserCleanup).toHaveBeenCalledWith(
       'suuntoAppWorkoutQueue',
       'workout-1',
+      'service_disconnect_cleanup',
+    );
+    expect(mockMarkQueueItemDeletedForUserCleanup).toHaveBeenCalledWith(
+      'routeDeliverySyncQueue',
+      'route-delivery-1',
+      'service_disconnect_cleanup',
+    );
+    expect(mockMarkQueueItemDeletedForUserCleanup).toHaveBeenCalledWith(
+      'routeDeliverySyncQueue',
+      'route-delivery-dlq-1',
       'service_disconnect_cleanup',
     );
     expect(mockMarkQueueItemDeletedForUserCleanup).toHaveBeenCalledWith(

@@ -11,6 +11,8 @@ import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatTabsModule } from '@angular/material/tabs';
+import { MatSlideToggleModule } from '@angular/material/slide-toggle';
+import { MatButtonModule } from '@angular/material/button';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { RouterTestingModule } from '@angular/router/testing';
 import { MatDialog } from '@angular/material/dialog';
@@ -20,9 +22,12 @@ import { AppAuthService } from '../../../authentication/app.auth.service';
 import { AppUserService } from '../../../services/app.user.service';
 import { AppWindowService } from '../../../services/app.window.service';
 import { LoggerService } from '../../../services/logger.service';
+import { AppAnalyticsService } from '../../../services/app.analytics.service';
 import { CUSTOM_ELEMENTS_SCHEMA } from '@angular/core';
 import { of } from 'rxjs';
+import { ServiceNames } from '@sports-alliance/sports-lib';
 import { ACTIVITY_SYNC_ROUTE_IDS } from '@shared/activity-sync-routes';
+import { ROUTE_DELIVERY_SYNC_ROUTE_IDS } from '@shared/route-delivery-sync-routes';
 import { ServiceConnectionStatusComponent } from '../service-connection-status/service-connection-status.component';
 
 describe('ServicesSuuntoComponent', () => {
@@ -32,11 +37,29 @@ describe('ServicesSuuntoComponent', () => {
     let mockEventService: any;
     let mockSnackBar: any;
     let mockDialog: any;
+    let mockAnalyticsService: any;
 
     beforeEach(async () => {
         mockUserService = {
             isAdmin: vi.fn(),
             requestAndSetCurrentUserSuuntoAppAccessToken: vi.fn(),
+            watchGarminRouteSendContext: vi.fn().mockReturnValue(of({
+                connected: false,
+                reconnectRequired: false,
+                missingPermissions: [],
+                providerUserId: null,
+                providerStates: [],
+                serviceMeta: null,
+                permissionPromptSource: null,
+            })),
+            updateRouteDeliverySyncRouteSettings: vi.fn().mockResolvedValue(undefined),
+            backfillRouteDeliverySyncRouteForCurrentUser: vi.fn().mockResolvedValue({
+                scanned: 2,
+                queued: 1,
+                skippedByReason: { already_synced: 1 },
+                failedCount: 0,
+                failedRoutes: [],
+            }),
             addSuuntoRoutesToQueueForCurrentUser: vi.fn().mockResolvedValue({
                 queuedCount: 2,
                 skippedCount: 1,
@@ -56,6 +79,9 @@ describe('ServicesSuuntoComponent', () => {
                 afterClosed: () => of(true),
             })),
         };
+        mockAnalyticsService = {
+            logEvent: vi.fn(),
+        };
 
         await TestBed.configureTestingModule({
             declarations: [ServicesSuuntoComponent, ServiceSyncingStateComponent, ServiceConnectionStatusComponent],
@@ -68,6 +94,8 @@ describe('ServicesSuuntoComponent', () => {
                 MatProgressBarModule,
                 MatSnackBarModule,
                 MatTabsModule,
+                MatSlideToggleModule,
+                MatButtonModule,
                 RouterTestingModule
             ],
             providers: [
@@ -77,6 +105,7 @@ describe('ServicesSuuntoComponent', () => {
                 { provide: AppUserService, useValue: mockUserService },
                 { provide: AppWindowService, useValue: { currentDomain: 'http://localhost', windowRef: { location: { href: '' } } } },
                 { provide: LoggerService, useValue: { error: vi.fn(), log: vi.fn() } },
+                { provide: AppAnalyticsService, useValue: mockAnalyticsService },
                 { provide: MatSnackBar, useValue: mockSnackBar },
                 { provide: MatDialog, useValue: mockDialog },
             ],
@@ -388,6 +417,150 @@ describe('ServicesSuuntoComponent', () => {
             expect(mockUserService.addSuuntoRoutesToQueueForCurrentUser).toHaveBeenCalled();
             expect(mockSnackBar.open).toHaveBeenCalledWith('Queued 2 routes. Skipped 1.', undefined, { duration: 3500 });
         });
+
+        it('renders Suunto to Garmin course delivery controls for a regular user', () => {
+            component.user = {
+                uid: 'user-1',
+                settings: {
+                    serviceSyncSettings: {
+                        routeDeliverySyncRoutes: {
+                            [ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_GarminAPI]: { enabled: false },
+                        },
+                    },
+                },
+            } as any;
+            component.hasProAccess = true;
+            component.serviceTokens = [{ accessToken: 'token', userName: 'suunto-user' } as any];
+            component.garminRouteSendContext = {
+                connected: true,
+                reconnectRequired: false,
+                missingPermissions: [],
+                providerUserId: 'garmin-user',
+                providerStates: [],
+                serviceMeta: null,
+                permissionPromptSource: null,
+            };
+            component.activeProviderTool = 'routes';
+            fixture.detectChanges();
+
+            const content = fixture.nativeElement.textContent;
+            expect(component.isSuuntoToGarminRouteAvailableForUser).toBe(true);
+            expect(content).toContain('Suunto -> Garmin Course Delivery');
+            expect(content).toContain('Queue now');
+            expect(content).toContain('only uses routes already saved in Quantified Self');
+            expect(component.canEnableSuuntoToGarminRoute).toBe(true);
+        });
+
+        it('blocks enabling Suunto to Garmin delivery when Garmin COURSE_IMPORT is missing', async () => {
+            component.user = { uid: 'user-1', settings: {} } as any;
+            component.hasProAccess = true;
+            component.serviceTokens = [{ accessToken: 'token', userName: 'suunto-user' } as any];
+            component.garminRouteSendContext = {
+                connected: true,
+                reconnectRequired: false,
+                missingPermissions: ['COURSE_IMPORT'],
+                providerUserId: 'garmin-user',
+                providerStates: [],
+                serviceMeta: null,
+                permissionPromptSource: 'source',
+            };
+            component.activeProviderTool = 'routes';
+            fixture.detectChanges();
+
+            await component.onSuuntoToGarminRouteToggle(true);
+
+            expect(mockUserService.updateRouteDeliverySyncRouteSettings).not.toHaveBeenCalled();
+            expect(mockSnackBar.open).toHaveBeenCalledWith(
+                'Connect Suunto and Garmin with Garmin Course Import permission before enabling route delivery.',
+                undefined,
+                { duration: 4500 },
+            );
+        });
+
+        it('blocks enabling Suunto to Garmin delivery while Suunto connection details are still loading', async () => {
+            component.user = { uid: 'user-1', settings: {} } as any;
+            component.hasProAccess = true;
+            component.forceConnected = true;
+            component.serviceTokens = undefined;
+            component.garminRouteSendContext = {
+                connected: true,
+                reconnectRequired: false,
+                missingPermissions: [],
+                providerUserId: 'garmin-user',
+                providerStates: [],
+                serviceMeta: null,
+                permissionPromptSource: null,
+            };
+            component.activeProviderTool = 'routes';
+            fixture.detectChanges();
+
+            expect(component.isConnectedToService()).toBe(true);
+            expect(component.hasConnectedSuuntoAccount).toBe(false);
+            expect(component.canEnableSuuntoToGarminRoute).toBe(false);
+
+            await component.onSuuntoToGarminRouteToggle(true);
+
+            expect(mockUserService.updateRouteDeliverySyncRouteSettings).not.toHaveBeenCalled();
+            expect(mockSnackBar.open).toHaveBeenCalledWith(
+                'Connect Suunto and Garmin with Garmin Course Import permission before enabling route delivery.',
+                undefined,
+                { duration: 4500 },
+            );
+        });
+
+        it('writes route delivery sync settings when toggled by a ready user', async () => {
+            component.user = { uid: 'user-1', settings: {} } as any;
+            component.hasProAccess = true;
+            component.serviceTokens = [{ accessToken: 'token', userName: 'suunto-user' } as any];
+            component.garminRouteSendContext = {
+                connected: true,
+                reconnectRequired: false,
+                missingPermissions: [],
+                providerUserId: 'garmin-user',
+                providerStates: [],
+                serviceMeta: null,
+                permissionPromptSource: null,
+            };
+            fixture.detectChanges();
+
+            await component.onSuuntoToGarminRouteToggle(true);
+
+            expect(mockUserService.updateRouteDeliverySyncRouteSettings).toHaveBeenCalledWith(component.user, {
+                [ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_GarminAPI]: true,
+            });
+            expect(mockSnackBar.open).toHaveBeenCalledWith('Suunto to Garmin route delivery enabled.', undefined, { duration: 3000 });
+        });
+
+        it('queues Suunto to Garmin delivery from saved Quantified Self routes', async () => {
+            component.user = { uid: 'user-1', settings: {} } as any;
+            component.hasProAccess = true;
+            component.serviceTokens = [{ accessToken: 'token', userName: 'suunto-user' } as any];
+            component.garminRouteSendContext = {
+                connected: true,
+                reconnectRequired: false,
+                missingPermissions: [],
+                providerUserId: 'garmin-user',
+                providerStates: [],
+                serviceMeta: null,
+                permissionPromptSource: null,
+            };
+            fixture.detectChanges();
+
+            await component.queueSuuntoToGarminRouteDelivery(new MouseEvent('click'));
+
+            expect(mockUserService.backfillRouteDeliverySyncRouteForCurrentUser).toHaveBeenCalledWith(
+                ServiceNames.SuuntoApp,
+                ServiceNames.GarminAPI,
+            );
+            expect(component.routeDeliveryBackfillSummary).toEqual({
+                scanned: 2,
+                queued: 1,
+                skippedByReason: { already_synced: 1 },
+                failedCount: 0,
+                failedRoutes: [],
+            });
+            expect(mockSnackBar.open).toHaveBeenCalledWith('Queued 1 route delivery job(s).', undefined, { duration: 4000 });
+        });
     });
 
     it('should show inline warning pill when connected service is used by active route', () => {
@@ -398,6 +571,26 @@ describe('ServicesSuuntoComponent', () => {
                 serviceSyncSettings: {
                     activitySyncRoutes: {
                         [ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp]: { enabled: true }
+                    }
+                }
+            }
+        } as any;
+        component.serviceTokens = [{ accessToken: 'token', userName: 'suunto-user' } as any];
+        fixture.detectChanges();
+
+        const warningPill = fixture.nativeElement.querySelector('.active-sync-warning-pill');
+        expect(warningPill).toBeTruthy();
+        expect((warningPill.textContent || '').trim()).toContain('Used by active auto-sync route');
+    });
+
+    it('should show inline warning pill when connected service is used by active route delivery sync', () => {
+        component.hasProAccess = true;
+        component.user = {
+            uid: 'u-1',
+            settings: {
+                serviceSyncSettings: {
+                    routeDeliverySyncRoutes: {
+                        [ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_GarminAPI]: { enabled: true }
                     }
                 }
             }

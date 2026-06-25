@@ -31,10 +31,13 @@ export interface RouteDeliveryMetadata {
     serviceName: ServiceNames | string;
     providerUserId?: string | null;
     status: RouteDeliveryMetadataStatus;
+    routeSyncRouteId?: string | null;
+    sourceRevisionKey?: string | null;
     providerRouteId?: string | null;
     deliveredAt?: number | Date | null;
     lastAttemptAt?: number | Date | null;
     updatedAt?: number | Date | null;
+    skippedReason?: string | null;
     lastErrorCode?: string | null;
     lastErrorMessage?: string | null;
 }

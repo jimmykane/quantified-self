@@ -60,6 +60,13 @@ describe('DashboardActionPromptsComponent', () => {
     description: 'Choose units.',
     primaryAction: { id: 'applyUnitSetup', label: 'Apply' },
     secondaryAction: { id: 'dismissUnitSetup', label: 'Not now' },
+  }, {
+    id: 'enableRouteDeliveryAutoSync',
+    icon: 'sync_alt',
+    title: 'Sync Suunto routes to Garmin courses',
+    description: 'Automatically deliver new Suunto routes to Garmin.',
+    primaryAction: { id: 'enableRouteDeliveryAutoSync', label: 'Enable route sync' },
+    secondaryAction: { id: 'dismissRouteDeliveryAutoSync', label: 'Not now' },
   }];
 
   beforeEach(async () => {
@@ -80,11 +87,12 @@ describe('DashboardActionPromptsComponent', () => {
   it('renders prompts in deterministic order with unit setup first', () => {
     const cards = fixture.nativeElement.querySelectorAll('app-dashboard-action-prompt');
 
-    expect(cards.length).toBe(4);
+    expect(cards.length).toBe(5);
     expect(cards[0].textContent).toContain('Default units');
     expect(cards[1].textContent).toContain('Upload your first activities');
     expect(cards[2].textContent).toContain('Connect a service');
     expect(cards[3].textContent).toContain('Send new activities to Suunto');
+    expect(cards[4].textContent).toContain('Sync Suunto routes to Garmin courses');
   });
 
   it('uses a responsive grid so prompt cards can form columns when they fit', () => {

@@ -26,6 +26,7 @@ interface CloudTasksConfig {
     location: string;
     workoutQueue: string;
     routeSyncQueue: string;
+    routeDeliverySyncQueue: string;
     activitySyncQueue: string;
     sleepSyncQueue: string;
     sportsLibReparseQueue: string;
@@ -83,6 +84,7 @@ export const config: AppConfig = {
             location: 'europe-west2',
             workoutQueue: 'processWorkoutTask',
             routeSyncQueue: 'processRouteSyncTask',
+            routeDeliverySyncQueue: 'processRouteDeliverySyncTask',
             activitySyncQueue: 'processActivitySyncTask',
             sleepSyncQueue: 'processSleepSyncTask',
             sportsLibReparseQueue: 'processSportsLibReparseTask',

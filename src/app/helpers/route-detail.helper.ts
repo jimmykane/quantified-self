@@ -13,6 +13,11 @@ import {
 import { FirestoreRouteJSON, FirestoreRouteSegmentJSON } from '@shared/app-route.interface';
 import { resolveUnitAwareDisplayFromValue } from '@shared/unit-aware-display';
 import { SummaryPrimaryInfoMetric } from '../components/shared/summary-primary-info/summary-primary-info.component';
+import {
+  resolveRouteWaypointPresentation,
+  RouteWaypointPresentation,
+  toRouteWaypointSourceLabel,
+} from './route-waypoint-presentation.helper';
 
 export interface RouteMetricCellView {
   label: string;
@@ -40,6 +45,11 @@ export interface RouteWaypointDetailView {
   id: string;
   name: string;
   type: string;
+  sourceTypeLabel: string | null;
+  sourceSymbolLabel: string | null;
+  presentation: RouteWaypointPresentation;
+  isRouteShapingPoint: boolean;
+  isRouteTurnInstruction: boolean;
   distanceLabel: string | null;
   routeIndex: number | null;
   routePointIndex: number | null;
@@ -62,17 +72,6 @@ const ROUTE_SEGMENT_COLORS = [
   '#3949ab',
   '#6d4c41',
 ] as const;
-
-const ROUTE_WAYPOINT_DEFAULT_COLOR = '#607d8b';
-
-const ROUTE_WAYPOINT_TYPE_COLORS: Array<{ pattern: RegExp; color: string }> = [
-  { pattern: /\b(start|begin|trailhead)\b/i, color: '#2e7d32' },
-  { pattern: /\b(end|finish|destination)\b/i, color: '#c62828' },
-  { pattern: /\b(food|water|aid|gas|fuel|restaurant|cafe|shop|store|hotel|lodging|camp)\b/i, color: '#00897b' },
-  { pattern: /\b(summit|peak|view|scenic|mountain|hill)\b/i, color: '#8e24aa' },
-  { pattern: /\b(warning|danger|hazard|caution|roadblock|closed|accident|police|hospital)\b/i, color: '#f57c00' },
-  { pattern: /\b(turn|left|right|junction|intersection|crossing|bridge|flag)\b/i, color: '#3949ab' },
-];
 
 const ROUTE_STAT_ALIASES: Record<string, string[]> = {
   [DataDistance.type]: [DataDistance.type, 'distance'],
@@ -156,18 +155,28 @@ export function buildRouteWaypointDetailViews(
 ): RouteWaypointDetailView[] {
   return (routeFile.getWaypoints?.() || [])
     .filter(waypoint => Number.isFinite(waypoint?.latitudeDegrees) && Number.isFinite(waypoint?.longitudeDegrees))
-    .map((waypoint, index) => ({
-      id: `waypoint-${index}`,
-      name: getWaypointName(waypoint, index),
-      type: `${waypoint.type || waypoint.symbol || 'Waypoint'}`.trim(),
-      distanceLabel: Number.isFinite(waypoint.distance)
-        ? formatRouteMetricValue(DataDistance.type, waypoint.distance as number, unitSettings)
-        : null,
-      routeIndex: Number.isFinite(waypoint.routeIndex) ? waypoint.routeIndex as number : null,
-      routePointIndex: Number.isFinite(waypoint.routePointIndex) ? waypoint.routePointIndex as number : null,
-      latitudeDegrees: waypoint.latitudeDegrees,
-      longitudeDegrees: waypoint.longitudeDegrees,
-    }));
+    .map((waypoint, index) => {
+      const presentation = resolveRouteWaypointPresentation(waypoint);
+      const sourceTypeLabel = toRouteWaypointSourceLabel(waypoint.type);
+      const sourceSymbolLabel = toRouteWaypointSourceLabel(waypoint.symbol);
+      return {
+        id: `waypoint-${index}`,
+        name: getWaypointName(waypoint, index),
+        type: sourceTypeLabel || sourceSymbolLabel || presentation.label,
+        sourceTypeLabel,
+        sourceSymbolLabel,
+        presentation,
+        isRouteShapingPoint: presentation.isRouteShapingPoint,
+        isRouteTurnInstruction: presentation.isRouteTurnInstruction,
+        distanceLabel: Number.isFinite(waypoint.distance)
+          ? formatRouteMetricValue(DataDistance.type, waypoint.distance as number, unitSettings)
+          : null,
+        routeIndex: Number.isFinite(waypoint.routeIndex) ? waypoint.routeIndex as number : null,
+        routePointIndex: Number.isFinite(waypoint.routePointIndex) ? waypoint.routePointIndex as number : null,
+        latitudeDegrees: waypoint.latitudeDegrees,
+        longitudeDegrees: waypoint.longitudeDegrees,
+      };
+    });
 }
 
 export function filterRouteWaypointsForSegments(
@@ -191,6 +200,7 @@ export function buildRouteWaypointDisplayViews(
 ): RouteWaypointDisplayView[] {
   return (Array.isArray(waypoints) ? waypoints : [])
     .filter(waypoint => Number.isFinite(waypoint.latitudeDegrees) && Number.isFinite(waypoint.longitudeDegrees))
+    .filter(waypoint => !waypoint.isRouteShapingPoint)
     .map(waypoint => ({
       ...waypoint,
       color: getRouteWaypointDisplayColor(waypoint, segments),
@@ -207,7 +217,7 @@ export function getRouteWaypointDisplayColor(
     return segment.color;
   }
 
-  return getWaypointTypeColor(`${waypoint.type} ${waypoint.name}`);
+  return waypoint.presentation.color;
 }
 
 export function getRouteWaypointSegmentLabel(
@@ -383,10 +393,4 @@ function resolveWaypointSegment(
   return (Array.isArray(segments) ? segments : [])
     .find(segment => segment.routeIndex === waypoint.routeIndex)
     || null;
-}
-
-function getWaypointTypeColor(descriptor: string): string {
-  const normalizedDescriptor = `${descriptor || ''}`.trim();
-  const match = ROUTE_WAYPOINT_TYPE_COLORS.find(rule => rule.pattern.test(normalizedDescriptor));
-  return match?.color || ROUTE_WAYPOINT_DEFAULT_COLOR;
 }

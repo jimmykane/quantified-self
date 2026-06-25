@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { SLEEP_PROVIDERS } from '../../../shared/sleep';
 import { ACTIVITY_SYNC_QUEUE_COLLECTION_NAME } from '../activity-sync/constants';
+import { ROUTE_DELIVERY_SYNC_QUEUE_COLLECTION_NAME } from '../route-delivery-sync/constants';
 import { SLEEP_SYNC_QUEUE_COLLECTION_NAME } from '../sleep/constants';
 import { ROUTE_SYNC_QUEUE_COLLECTION_NAME } from '../routes/route-sync.constants';
 import { getServiceWorkoutQueueName } from '../shared/queue-names';
@@ -136,6 +137,20 @@ describe('pending disconnect queue release', () => {
             deferredReason,
             deferredServiceName: ServiceNames.GarminAPI,
         });
+        const routeDeliveryUpdate = addDoc(ROUTE_DELIVERY_SYNC_QUEUE_COLLECTION_NAME, 'route-delivery-1', {
+            userID: 'user-1',
+            sourceServiceName: ServiceNames.SuuntoApp,
+            destinationServiceName: ServiceNames.GarminAPI,
+            deferredReason,
+            deferredServiceName: ServiceNames.SuuntoApp,
+        });
+        const otherRouteDeliveryUpdate = addDoc(ROUTE_DELIVERY_SYNC_QUEUE_COLLECTION_NAME, 'route-delivery-2', {
+            userID: 'user-1',
+            sourceServiceName: ServiceNames.SuuntoApp,
+            destinationServiceName: ServiceNames.GarminAPI,
+            deferredReason,
+            deferredServiceName: ServiceNames.GarminAPI,
+        });
         const sleepUpdate = addDoc(SLEEP_SYNC_QUEUE_COLLECTION_NAME, 'sleep-1', {
             userID: 'user-1',
             provider: SLEEP_PROVIDERS.SuuntoApp,
@@ -158,8 +173,8 @@ describe('pending disconnect queue release', () => {
 
         const releasedCount = await releaseQueueItemsDeferredForPendingDisconnect('user-1', ServiceNames.SuuntoApp);
 
-        expect(releasedCount).toBe(4);
-        for (const update of [workoutUpdate, activityUpdate, sleepUpdate, routeSyncUpdate]) {
+        expect(releasedCount).toBe(5);
+        for (const update of [workoutUpdate, activityUpdate, routeDeliveryUpdate, sleepUpdate, routeSyncUpdate]) {
             expect(update).toHaveBeenCalledWith(expect.objectContaining({
                 processed: false,
                 dispatchedToCloudTask: null,
@@ -170,6 +185,7 @@ describe('pending disconnect queue release', () => {
             }));
         }
         expect(otherActivityUpdate).not.toHaveBeenCalled();
+        expect(otherRouteDeliveryUpdate).not.toHaveBeenCalled();
         expect(notDeferredSleepUpdate).not.toHaveBeenCalled();
         expect(otherRouteSyncUpdate).not.toHaveBeenCalled();
     });

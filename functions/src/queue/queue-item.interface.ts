@@ -1,6 +1,7 @@
 import * as admin from 'firebase-admin';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { ActivitySyncRouteId } from '../../../shared/activity-sync-routes';
+import { RouteDeliverySyncRouteId } from '../../../shared/route-delivery-sync-routes';
 import { SleepProvider } from '../../../shared/sleep';
 import DocumentReference = admin.firestore.DocumentReference;
 
@@ -75,6 +76,20 @@ export interface RouteSyncQueueItemInterface extends QueueItemInterface {
   manual: boolean;
   resultRouteId?: string;
   skippedReason?: string;
+}
+
+export interface RouteDeliverySyncQueueItemInterface extends QueueItemInterface {
+  routeId: RouteDeliverySyncRouteId;
+  sourceServiceName: ServiceNames;
+  destinationServiceName: ServiceNames;
+  userID: string;
+  savedRouteID: string;
+  sourceRevisionKey: string;
+  sourceProviderRouteId?: string;
+  sourceProviderUserId?: string;
+  manual: boolean;
+  skippedReason?: string;
+  successProcessedAt?: number;
 }
 
 export type SleepSyncQueueItemType =

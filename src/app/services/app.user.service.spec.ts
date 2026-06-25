@@ -13,6 +13,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { DataAltitude, DataCadence, DataGradeAdjustedSpeed, DataHeartRate, DataPace, DataPotentialStamina, DataPower, DataSpeed, DataStamina, ServiceNames } from '@sports-alliance/sports-lib';
 import { LoggerService } from './logger.service';
 import { ACTIVITY_SYNC_ROUTE_IDS } from '@shared/activity-sync-routes';
+import { ROUTE_DELIVERY_SYNC_ROUTE_IDS } from '@shared/route-delivery-sync-routes';
 import { getAppCanonicalChartDataTypes } from '../helpers/app-chart-data-types.helper';
 
 vi.mock('app/firebase/auth', async (importOriginal) => {
@@ -704,14 +705,15 @@ describe('AppUserService', () => {
             expect(mainUserDocWrite[1].creationDate).toEqual(new Date('2026-01-01T00:00:00.000Z'));
         });
 
-        it('acceptPolicies should persist only legal fields explicitly set to true', async () => {
+        it('acceptPolicies should persist required true policies and explicit optional consent choices', async () => {
             const policies = {
                 uid: 'u1',
                 acceptedPrivacyPolicy: true,
                 acceptedDataPolicy: false,
-                acceptedTrackingPolicy: true,
-                acceptedMarketingPolicy: true,
+                acceptedTrackingPolicy: false,
+                acceptedMarketingPolicy: false,
                 acceptedDiagnosticsPolicy: true,
+                acceptedTos: false,
                 displayName: 'Should be ignored',
             } as any;
 
@@ -720,9 +722,9 @@ describe('AppUserService', () => {
             expect(setDoc).toHaveBeenCalledTimes(1);
             expect((setDoc as any).mock.calls[0][1]).toEqual({
                 acceptedPrivacyPolicy: true,
-                acceptedTrackingPolicy: true,
-                acceptedMarketingPolicy: true,
                 acceptedDiagnosticsPolicy: true,
+                acceptedTrackingPolicy: false,
+                acceptedMarketingPolicy: false,
             });
             expect((setDoc as any).mock.calls[0][2]).toEqual({ merge: true });
         });
@@ -1087,6 +1089,64 @@ describe('AppUserService', () => {
                 [ACTIVITY_SYNC_ROUTE_IDS.COROSAPI_to_SuuntoApp]: { enabled: false },
             });
         });
+
+        it('updateRouteDeliverySyncRouteSettings should write only route delivery settings and preserve local settings', async () => {
+            const user = {
+                uid: 'u13',
+                settings: {
+                    appSettings: { theme: 'dark' },
+                    serviceSyncSettings: {
+                        activitySyncRoutes: {
+                            [ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp]: { enabled: true },
+                        },
+                    },
+                },
+            } as any;
+
+            await service.updateRouteDeliverySyncRouteSettings(user, {
+                [ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_GarminAPI]: true,
+            });
+
+            expect(setDoc).toHaveBeenCalledWith(expect.anything(), {
+                serviceSyncSettings: {
+                    routeDeliverySyncRoutes: {
+                        [ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_GarminAPI]: {
+                            enabled: true,
+                        },
+                    },
+                },
+            }, { merge: true });
+            expect(user.settings.appSettings.theme).toBe('dark');
+            expect(user.settings.serviceSyncSettings.activitySyncRoutes).toEqual({
+                [ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp]: { enabled: true },
+            });
+            expect(user.settings.serviceSyncSettings.routeDeliverySyncRoutes).toEqual({
+                [ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_GarminAPI]: { enabled: true },
+            });
+        });
+
+        it('updateRouteDeliverySyncRouteSettings should fail without local mutation when profile reads are incomplete', async () => {
+            const user = {
+                uid: 'u14',
+                settings: {
+                    serviceSyncSettings: {
+                        routeDeliverySyncRoutes: {
+                            [ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_GarminAPI]: { enabled: false },
+                        },
+                    },
+                },
+            } as any;
+            (service as any).usersWithIncompleteProfileReads.add('u14');
+
+            await expect(service.updateRouteDeliverySyncRouteSettings(user, {
+                [ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_GarminAPI]: true,
+            })).rejects.toThrow('Cannot update route delivery sync route settings until user settings finish loading.');
+
+            expect(setDoc).not.toHaveBeenCalled();
+            expect(user.settings.serviceSyncSettings.routeDeliverySyncRoutes).toEqual({
+                [ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_GarminAPI]: { enabled: false },
+            });
+        });
     });
 
     describe('gracePeriodUntil signal', () => {
@@ -1153,6 +1213,20 @@ describe('AppUserService', () => {
             expect(updateDoc).not.toHaveBeenCalled();
         });
 
+        it('should reject optional legal writes when profile reads are incomplete', async () => {
+            const user = { uid: 'u1' } as AppUserInterface;
+
+            (service as any).usersWithIncompleteProfileReads.add('u1');
+            await expect(service.updateUserProperties(user, {
+                displayName: 'New Name',
+                acceptedTrackingPolicy: false,
+                acceptedMarketingPolicy: false
+            })).rejects.toThrow('Cannot update legal consent until user profile finishes loading.');
+
+            expect(setDoc).not.toHaveBeenCalled();
+            expect(updateDoc).not.toHaveBeenCalled();
+        });
+
         it('should split settings and other properties', async () => {
             const user = { uid: 'u1' } as any;
             const settings = { theme: 'dark' };
@@ -1193,6 +1267,23 @@ describe('AppUserService', () => {
             // Should update remaining propeties on user doc
             expect(updateDoc).toHaveBeenCalledWith(
                 expect.anything(), // doc ref
+                { displayName: 'New Name' }
+            );
+        });
+
+        it('should ignore non-boolean optional legal field updates', async () => {
+            const user = { uid: 'test-uid' } as AppUserInterface;
+            const propertiesToUpdate = {
+                displayName: 'New Name',
+                acceptedTrackingPolicy: undefined,
+                acceptedMarketingPolicy: null
+            };
+
+            await service.updateUserProperties(user, propertiesToUpdate);
+
+            expect(setDoc).not.toHaveBeenCalled();
+            expect(updateDoc).toHaveBeenCalledWith(
+                expect.anything(),
                 { displayName: 'New Name' }
             );
         });
@@ -1539,6 +1630,37 @@ describe('AppUserService', () => {
                 ).rejects.toThrow('Invalid endDate');
 
                 expect(mockFunctionsService.call).not.toHaveBeenCalledWith('backfillActivitySyncRoute', expect.anything());
+            });
+        });
+
+        describe('backfillRouteDeliverySyncRouteForCurrentUser', () => {
+            it('should call cloud function for route delivery sync route backfill', async () => {
+                mockFunctionsService.call.mockResolvedValueOnce({
+                    data: {
+                        scanned: 3,
+                        queued: 2,
+                        skippedByReason: { already_synced: 1 },
+                        failedCount: 0,
+                        failedRoutes: [],
+                    },
+                });
+
+                const summary = await service.backfillRouteDeliverySyncRouteForCurrentUser(
+                    ServiceNames.SuuntoApp,
+                    ServiceNames.GarminAPI,
+                );
+
+                expect(mockFunctionsService.call).toHaveBeenCalledWith('backfillRouteDeliverySyncRoute', {
+                    sourceServiceName: ServiceNames.SuuntoApp,
+                    destinationServiceName: ServiceNames.GarminAPI,
+                });
+                expect(summary).toEqual({
+                    scanned: 3,
+                    queued: 2,
+                    skippedByReason: { already_synced: 1 },
+                    failedCount: 0,
+                    failedRoutes: [],
+                });
             });
         });
 

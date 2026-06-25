@@ -227,6 +227,70 @@
           </button>
         </div>
       </section>
+
+      @if (isSuuntoToGarminRouteAvailableForUser) {
+      <section class="tool-subsection">
+        <div class="tool-subsection-header">
+          <div class="tool-subsection-title">
+            <mat-icon>directions</mat-icon>
+            <span>Suunto -> Garmin Course Delivery</span>
+          </div>
+          <mat-slide-toggle
+            color="primary"
+            [checked]="isSuuntoToGarminRouteEnabled"
+            [disabled]="isSavingRouteDeliverySyncRoute || (!isSuuntoToGarminRouteEnabled && !canEnableSuuntoToGarminRoute)"
+            (change)="onSuuntoToGarminRouteToggle($event.checked)">
+            {{ isSuuntoToGarminRouteEnabled ? 'Enabled' : 'Disabled' }}
+          </mat-slide-toggle>
+        </div>
+
+        <app-status-info [type]="suuntoToGarminRouteStatusType" [title]="suuntoToGarminRouteStatusTitle">
+          {{ suuntoToGarminRouteStatusMessage }}
+        </app-status-info>
+
+        <p class="description-text">
+          When enabled, newly imported or updated Suunto routes saved in Quantified Self are queued for delivery to Garmin as courses.
+          Manual queueing below only uses routes already saved in Quantified Self; it does not fetch routes from Suunto.
+        </p>
+
+        <div class="tool-section-title">Manual Queue</div>
+        <app-status-info type="info" title="Manual Queue Scope">
+          Use this anytime to queue Suunto -> Garmin course delivery for Suunto-sourced routes already saved in Quantified Self.
+          It can run even when automatic route delivery is turned off.
+        </app-status-info>
+
+        <button mat-flat-button class="qs-mat-primary full-width-action"
+          [disabled]="isQueueingRouteDeliverySyncBackfill || !canQueueSuuntoToGarminRouteBackfill"
+          (click)="queueSuuntoToGarminRouteDelivery($event)">
+          @if (isQueueingRouteDeliverySyncBackfill) {
+          <ng-container>
+            <mat-spinner diameter="20" class="qs-spinner-accent"></mat-spinner>
+            Queueing...
+          </ng-container>
+          } @else {
+          <ng-container>
+            Queue now
+          </ng-container>
+          }
+        </button>
+
+        @if (routeDeliveryBackfillSummary) {
+        <app-status-info type="success" title="Queue Summary">
+          <div>Scanned: {{ routeDeliveryBackfillSummary.scanned }} | Queued: {{ routeDeliveryBackfillSummary.queued }}</div>
+          @if (routeDeliveryBackfillSummary.failedCount > 0) {
+          <div>Failed: {{ routeDeliveryBackfillSummary.failedCount }}</div>
+          @if (routeDeliveryBackfillSummary.failedRoutes?.length) {
+          <ul class="backfill-summary-list">
+            <li *ngFor="let failedRoute of routeDeliveryBackfillSummary.failedRoutes">
+              <code>{{ failedRoute.routeID }}</code>: {{ failedRoute.message }}
+            </li>
+          </ul>
+          }
+          }
+        </app-status-info>
+        }
+      </section>
+      }
       } @else {
       <app-status-info type="info" title="Connect Account First">
         You need to connect your Suunto account before importing routes.

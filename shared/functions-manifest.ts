@@ -30,6 +30,7 @@ export const FUNCTIONS_MANIFEST = {
     deauthorizeSuuntoApp: { name: 'deauthorizeSuuntoApp', region: 'europe-west2' },
     addSuuntoAppHistoryToQueue: { name: 'addSuuntoAppHistoryToQueue', region: 'europe-west2' },
     addSuuntoAppRoutesToQueue: { name: 'addSuuntoAppRoutesToQueue', region: 'europe-west2' },
+    backfillRouteDeliverySyncRoute: { name: 'backfillRouteDeliverySyncRoute', region: 'europe-west2' },
     backfillSuuntoAppSleep: { name: 'backfillSuuntoAppSleep', region: 'europe-west2' },
     importRouteToSuuntoApp: { name: 'importRouteToSuuntoApp', region: 'europe-west2' },
     sendRoutesToService: { name: 'sendRoutesToService', region: 'europe-west2' },
@@ -58,6 +59,7 @@ export const FUNCTIONS_MANIFEST = {
     processSportsLibReparseTask: { name: 'processSportsLibReparseTask', region: 'europe-west2' },
     processSportsLibReparseHeavyTask: { name: SPORTS_LIB_REPARSE_HEAVY_TASK_FUNCTION_NAME, region: 'europe-west2' },
     processSportsLibRouteReparseTask: { name: 'processSportsLibRouteReparseTask', region: 'europe-west2' },
+    processRouteDeliverySyncTask: { name: 'processRouteDeliverySyncTask', region: 'europe-west2' },
 
     // Upload/Reprocess Functions
     uploadActivity: { name: 'uploadActivity', region: 'europe-west2' },

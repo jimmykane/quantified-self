@@ -288,7 +288,7 @@ export class RouteMapComponent extends MapAbstractDirective implements AfterView
         latitudeDegrees: waypoint.latitudeDegrees,
         longitudeDegrees: waypoint.longitudeDegrees,
         element: this.createWaypointMarker(waypoint.color, waypoint),
-        anchor: 'bottom',
+        anchor: this.getWaypointMarkerAnchor(waypoint),
       })),
     }));
 
@@ -306,10 +306,31 @@ export class RouteMapComponent extends MapAbstractDirective implements AfterView
   }
 
   private createWaypointMarker(color: string, waypoint: RouteMapWaypointRenderData): HTMLElement {
-    const element = this.markerFactory.createPinMarker(color);
-    element.title = [waypoint.name, waypoint.type, waypoint.distanceLabel].filter(Boolean).join('\n');
-    element.setAttribute('aria-label', `Waypoint ${waypoint.name}`);
-    return element;
+    const markerOptions = {
+      color,
+      icon: waypoint.presentation.icon,
+      ...(waypoint.presentation.turnGlyphPath ? { svgPath: waypoint.presentation.turnGlyphPath } : {}),
+      title: [
+        waypoint.name,
+        waypoint.presentation.label,
+        waypoint.distanceLabel,
+        waypoint.segmentLabel,
+      ].filter(Boolean).join('\n'),
+      ariaLabel: [
+        `Waypoint ${waypoint.name}`,
+        waypoint.presentation.label,
+        waypoint.distanceLabel,
+        waypoint.segmentLabel,
+      ].filter(Boolean).join(', '),
+    };
+
+    return waypoint.presentation.markerVariant === 'compact'
+      ? this.markerFactory.createCompactIconMarker(markerOptions)
+      : this.markerFactory.createIconPinMarker(markerOptions);
+  }
+
+  private getWaypointMarkerAnchor(waypoint: RouteMapWaypointRenderData): 'bottom' | 'center' {
+    return waypoint.presentation.markerVariant === 'compact' ? 'center' : 'bottom';
   }
 
   private scheduleFitBounds(): void {

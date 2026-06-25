@@ -32,11 +32,16 @@ export function hasAngularServerContext(documentRef: Document | null | undefined
   return !!documentRef?.querySelector('app-root[ng-server-context]');
 }
 
+/**
+ * Google Translate serves pages through `*.translate.goog` and may rewrite text
+ * nodes before Angular boots. Hydration requires the client DOM to match the
+ * prerendered DOM exactly, so translated proxy documents must client-render.
+ */
 export function shouldProvideClientHydrationForRuntime(
   documentRef: Document | null | undefined,
   hasBrowserWindow: boolean,
 ): boolean {
-  return !hasBrowserWindow || hasAngularServerContext(documentRef);
+  return !hasBrowserWindow || (!isGoogleTranslateProxyDocument(documentRef) && hasAngularServerContext(documentRef));
 }
 
 export function documentRoutePath(documentRef: Document | null | undefined): string {
@@ -78,6 +83,11 @@ function normalizeRoutePath(rawUrl: string, documentRef?: Document | null): stri
 function resolveBaseUrl(documentRef?: Document | null): string {
   const origin = documentRef?.location?.origin;
   return origin && origin !== 'null' ? origin : 'http://localhost';
+}
+
+function isGoogleTranslateProxyDocument(documentRef: Document | null | undefined): boolean {
+  const hostname = documentRef?.location?.hostname?.toLowerCase();
+  return hostname === 'translate.goog' || !!hostname?.endsWith('.translate.goog');
 }
 
 function normalizePathname(pathname: string): string {

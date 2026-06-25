@@ -17,6 +17,10 @@
             <mat-icon>published_with_changes</mat-icon>
             Activity Sync Queue
         </button>
+        <button mat-stroked-button class="qs-mat-primary" routerLink="/admin/queues/route-delivery-sync" [disabled]="queueView === 'route-delivery-sync'">
+            <mat-icon>directions</mat-icon>
+            Route Delivery Sync Queue
+        </button>
         <button mat-stroked-button class="qs-mat-primary" routerLink="/admin/queues/route-sync" [disabled]="queueView === 'route-sync'">
             <mat-icon>sync_alt</mat-icon>
             Route Sync Queue

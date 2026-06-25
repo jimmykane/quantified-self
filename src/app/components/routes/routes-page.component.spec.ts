@@ -27,8 +27,11 @@ import { FirestoreRouteJSON } from '@shared/app-route.interface';
 import { ConfirmationDialogComponent } from '../confirmation-dialog/confirmation-dialog.component';
 import {
     DASHBOARD_ACTION_PROMPT_GARMIN_ROUTE_PERMISSION_ID,
+    DASHBOARD_ACTION_PROMPT_ROUTE_DELIVERY_AUTO_SYNC_ID,
+    DASHBOARD_ACTION_PROMPT_ROUTE_DELIVERY_AUTO_SYNC_SOURCE,
     DASHBOARD_ACTION_PROMPT_SUUNTO_ROUTE_CATCH_UP_ID,
 } from '../../helpers/dashboard-action-prompt.helper';
+import { ROUTE_DELIVERY_SYNC_ROUTE_IDS } from '@shared/route-delivery-sync-routes';
 
 describe('RoutesPageComponent', () => {
     let component: RoutesPageComponent;
@@ -227,6 +230,16 @@ describe('RoutesPageComponent', () => {
             }),
             getCurrentUserServiceTokenAndRedirectURI: vi.fn().mockResolvedValue({
                 redirect_uri: 'https://suunto.example/reconnect',
+            }),
+            updateRouteDeliverySyncRouteSettings: vi.fn().mockImplementation(async (user: any, routeSettings: Record<string, boolean>) => {
+                user.settings = user.settings || {};
+                user.settings.serviceSyncSettings = user.settings.serviceSyncSettings || {};
+                user.settings.serviceSyncSettings.routeDeliverySyncRoutes = {
+                    ...(user.settings.serviceSyncSettings.routeDeliverySyncRoutes || {}),
+                };
+                Object.entries(routeSettings).forEach(([routeID, enabled]) => {
+                    user.settings.serviceSyncSettings.routeDeliverySyncRoutes[routeID] = { enabled };
+                });
             }),
             updateUserProperties: vi.fn().mockResolvedValue(undefined),
         };
@@ -634,6 +647,183 @@ describe('RoutesPageComponent', () => {
                 id: 'reconnectGarminRoutePermission',
             },
         });
+    });
+
+    it('shows Suunto to Garmin route sync prompt when both services are ready and route delivery is disabled', async () => {
+        garminRouteSendContext$.next({
+            connected: true,
+            reconnectRequired: false,
+            missingPermissions: [],
+            providerUserId: 'garmin-user-1',
+            providerStates: [{
+                providerUserId: 'garmin-user-1',
+                permissionsLoaded: true,
+                missingPermissions: [],
+            }],
+            serviceMeta: null,
+            permissionPromptSource: null,
+        });
+
+        await component.ngOnInit();
+        await firstValueFrom(component.routes$!);
+
+        expect(component.suuntoToGarminRouteDeliveryPrompt()).toMatchObject({
+            id: DASHBOARD_ACTION_PROMPT_ROUTE_DELIVERY_AUTO_SYNC_ID,
+            primaryAction: {
+                id: 'enableRouteDeliveryAutoSync',
+                label: 'Enable route sync',
+            },
+            secondaryAction: {
+                id: 'dismissRouteDeliveryAutoSync',
+            },
+        });
+    });
+
+    it('hides Suunto to Garmin route sync prompt when route delivery is already enabled', async () => {
+        authServiceMock.getUser.mockResolvedValueOnce({
+            uid: 'user-1',
+            settings: {
+                appSettings: {},
+                serviceSyncSettings: {
+                    routeDeliverySyncRoutes: {
+                        [ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_GarminAPI]: { enabled: true },
+                    },
+                },
+            },
+        });
+        garminRouteSendContext$.next({
+            connected: true,
+            reconnectRequired: false,
+            missingPermissions: [],
+            providerUserId: 'garmin-user-1',
+            providerStates: [{
+                providerUserId: 'garmin-user-1',
+                permissionsLoaded: true,
+                missingPermissions: [],
+            }],
+            serviceMeta: null,
+            permissionPromptSource: null,
+        });
+
+        await component.ngOnInit();
+        await firstValueFrom(component.routes$!);
+
+        expect(component.suuntoToGarminRouteDeliveryPrompt()).toBeNull();
+    });
+
+    it('hides Suunto to Garmin route sync prompt for non-pro users', async () => {
+        userServiceMock.hasProAccessSignal.mockReturnValue(false);
+        garminRouteSendContext$.next({
+            connected: true,
+            reconnectRequired: false,
+            missingPermissions: [],
+            providerUserId: 'garmin-user-1',
+            providerStates: [{
+                providerUserId: 'garmin-user-1',
+                permissionsLoaded: true,
+                missingPermissions: [],
+            }],
+            serviceMeta: null,
+            permissionPromptSource: null,
+        });
+
+        await component.ngOnInit();
+        await firstValueFrom(component.routes$!);
+
+        expect(component.suuntoToGarminRouteDeliveryPrompt()).toBeNull();
+    });
+
+    it('does not show Suunto to Garmin route sync prompt while Garmin Course Import is missing', async () => {
+        garminRouteSendContext$.next({
+            connected: true,
+            reconnectRequired: false,
+            missingPermissions: ['COURSE_IMPORT'],
+            providerUserId: 'garmin-user-1',
+            providerStates: [{
+                providerUserId: 'garmin-user-1',
+                permissionsLoaded: true,
+                missingPermissions: ['COURSE_IMPORT'],
+            }],
+            serviceMeta: null,
+            permissionPromptSource: 'garmin-route-course-import:garmin-user-1:1710000000:COURSE_IMPORT',
+        });
+
+        await component.ngOnInit();
+        await firstValueFrom(component.routes$!);
+
+        expect(component.garminRoutePermissionPrompt()).not.toBeNull();
+        expect(component.suuntoToGarminRouteDeliveryPrompt()).toBeNull();
+    });
+
+    it('enables Suunto to Garmin route delivery from the routes prompt', async () => {
+        garminRouteSendContext$.next({
+            connected: true,
+            reconnectRequired: false,
+            missingPermissions: [],
+            providerUserId: 'garmin-user-1',
+            providerStates: [{
+                providerUserId: 'garmin-user-1',
+                permissionsLoaded: true,
+                missingPermissions: [],
+            }],
+            serviceMeta: null,
+            permissionPromptSource: null,
+        });
+
+        await component.ngOnInit();
+        await firstValueFrom(component.routes$!);
+        await component.enableRouteDeliveryAutoSyncPrompt();
+
+        expect(userServiceMock.updateRouteDeliverySyncRouteSettings).toHaveBeenCalledWith(
+            expect.objectContaining({ uid: 'user-1' }),
+            {
+                [ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_GarminAPI]: true,
+            },
+        );
+        expect(analyticsServiceMock.logEvent).toHaveBeenCalledWith('route_delivery_sync_route_toggle', {
+            route_id: ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_GarminAPI,
+            enabled: true,
+            source: 'routes_prompt',
+        });
+        expect(snackBarMock.open).toHaveBeenCalledWith('Suunto to Garmin route delivery enabled.', undefined, { duration: 3000 });
+        expect(component.suuntoToGarminRouteDeliveryPrompt()).toBeNull();
+    });
+
+    it('dismisses Suunto to Garmin route sync prompt through dashboardActionPrompts', async () => {
+        garminRouteSendContext$.next({
+            connected: true,
+            reconnectRequired: false,
+            missingPermissions: [],
+            providerUserId: 'garmin-user-1',
+            providerStates: [{
+                providerUserId: 'garmin-user-1',
+                permissionsLoaded: true,
+                missingPermissions: [],
+            }],
+            serviceMeta: null,
+            permissionPromptSource: null,
+        });
+
+        await component.ngOnInit();
+        await firstValueFrom(component.routes$!);
+        await component.dismissRouteDeliveryAutoSyncPrompt();
+
+        expect(userServiceMock.updateUserProperties).toHaveBeenCalledWith(
+            expect.objectContaining({ uid: 'user-1' }),
+            {
+                settings: {
+                    appSettings: {
+                        dashboardActionPrompts: {
+                            [DASHBOARD_ACTION_PROMPT_ROUTE_DELIVERY_AUTO_SYNC_ID]: expect.objectContaining({
+                                state: 'dismissed',
+                                source: DASHBOARD_ACTION_PROMPT_ROUTE_DELIVERY_AUTO_SYNC_SOURCE,
+                            }),
+                        },
+                    },
+                },
+            },
+        );
+        expect(component.suuntoToGarminRouteDeliveryPrompt()).toBeNull();
     });
 
     it('projects route display values for table rendering', async () => {

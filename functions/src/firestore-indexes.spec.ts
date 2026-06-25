@@ -75,4 +75,85 @@ describe('firestore indexes', () => {
             ],
         });
     });
+
+    it('keeps route delivery sync queue dispatcher/admin query indexes and TTL config deployable', () => {
+        const config = loadFirestoreIndexes();
+
+        expect(config.indexes).toContainEqual({
+            collectionGroup: 'routeDeliverySyncQueue',
+            queryScope: 'COLLECTION',
+            fields: [
+                {
+                    fieldPath: 'processed',
+                    order: 'ASCENDING',
+                },
+                {
+                    fieldPath: 'dateCreated',
+                    order: 'ASCENDING',
+                },
+                {
+                    fieldPath: '__name__',
+                    order: 'ASCENDING',
+                },
+            ],
+            density: 'SPARSE_ALL',
+        });
+        expect(config.indexes).toContainEqual({
+            collectionGroup: 'routeDeliverySyncQueue',
+            queryScope: 'COLLECTION',
+            fields: [
+                {
+                    fieldPath: 'processed',
+                    order: 'ASCENDING',
+                },
+                {
+                    fieldPath: 'retryCount',
+                    order: 'ASCENDING',
+                },
+                {
+                    fieldPath: '__name__',
+                    order: 'ASCENDING',
+                },
+            ],
+            density: 'SPARSE_ALL',
+        });
+        expect(config.indexes).toContainEqual({
+            collectionGroup: 'routeDeliverySyncQueue',
+            queryScope: 'COLLECTION',
+            fields: [
+                {
+                    fieldPath: 'resultStatus',
+                    order: 'ASCENDING',
+                },
+                {
+                    fieldPath: 'successProcessedAt',
+                    order: 'ASCENDING',
+                },
+                {
+                    fieldPath: '__name__',
+                    order: 'ASCENDING',
+                },
+            ],
+            density: 'SPARSE_ALL',
+        });
+        expect(config.fieldOverrides).toContainEqual({
+            collectionGroup: 'routeDeliverySyncQueue',
+            fieldPath: 'expireAt',
+            ttl: true,
+            indexes: [
+                {
+                    order: 'ASCENDING',
+                    queryScope: 'COLLECTION',
+                },
+                {
+                    order: 'DESCENDING',
+                    queryScope: 'COLLECTION',
+                },
+                {
+                    arrayConfig: 'CONTAINS',
+                    queryScope: 'COLLECTION',
+                },
+            ],
+        });
+    });
 });

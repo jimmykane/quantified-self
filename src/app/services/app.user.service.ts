@@ -85,6 +85,7 @@ import { AppFunctionsService } from './app.functions.service';
 import { FunctionName } from '@shared/functions-manifest';
 import { SleepBackfillQueueResponse } from '@shared/sleep-backfill';
 import { ActivitySyncRouteId } from '@shared/activity-sync-routes';
+import { RouteDeliverySyncRouteId } from '@shared/route-delivery-sync-routes';
 import { buildSuuntoServiceConnectionViewModel, SuuntoServiceConnectionViewModel } from '../helpers/suunto-service-connection.helper';
 import {
   buildSuuntoRouteCatchUpPromptSource,
@@ -128,6 +129,20 @@ export interface ActivitySyncBackfillSummary {
   skippedByReason: Record<string, number>;
   failedCount: number;
   failedEvents: ActivitySyncBackfillFailedEvent[];
+}
+
+export interface RouteDeliverySyncBackfillFailedRoute {
+  routeID: string;
+  reason: string;
+  message: string;
+}
+
+export interface RouteDeliverySyncBackfillSummary {
+  scanned: number;
+  queued: number;
+  skippedByReason: Record<string, number>;
+  failedCount: number;
+  failedRoutes: RouteDeliverySyncBackfillFailedRoute[];
 }
 
 export interface RouteSyncCatchUpSummary {
@@ -506,14 +521,22 @@ export class AppUserService implements OnDestroy {
     return AppUserUtilities.hasPaidAccessUser(user, isAdmin);
   }
 
-  public static readonly legalFields = [
+  private static readonly requiredLegalFields = [
     'acceptedPrivacyPolicy',
     'acceptedDataPolicy',
-    'acceptedTrackingPolicy',
-    'acceptedMarketingPolicy',
     'acceptedDiagnosticsPolicy',
     'acceptedTos',
-  ];
+  ] as const;
+
+  private static readonly optionalLegalConsentFields = [
+    'acceptedTrackingPolicy',
+    'acceptedMarketingPolicy',
+  ] as const;
+
+  public static readonly legalFields = [
+    ...AppUserService.requiredLegalFields,
+    ...AppUserService.optionalLegalConsentFields,
+  ] as const;
 
 
 
@@ -610,11 +633,20 @@ export class AppUserService implements OnDestroy {
   }
 
   public async acceptPolicies(policies: Partial<AppUserInterface>) {
-    const dataToWrite: any = {};
+    const dataToWrite: Partial<Record<typeof AppUserService.legalFields[number], boolean>> = {};
     let hasChanges = false;
-    AppUserService.legalFields.forEach(field => {
-      if ((policies as any)[field] === true) {
+
+    AppUserService.requiredLegalFields.forEach(field => {
+      if (policies[field] === true) {
         dataToWrite[field] = true;
+        hasChanges = true;
+      }
+    });
+
+    AppUserService.optionalLegalConsentFields.forEach(field => {
+      const value = policies[field];
+      if (typeof value === 'boolean') {
+        dataToWrite[field] = value;
         hasChanges = true;
       }
     });
@@ -726,6 +758,40 @@ export class AppUserService implements OnDestroy {
     });
 
     this.applyActivitySyncRouteSettingsToUser(user, activitySyncRoutes);
+  }
+
+  public async updateRouteDeliverySyncRouteSettings(
+    user: AppUserInterface,
+    routeSettings: Partial<Record<RouteDeliverySyncRouteId, boolean>>,
+  ): Promise<void> {
+    const uid = `${user?.uid || ''}`.trim();
+    if (!uid) {
+      throw new Error('Cannot update route delivery sync route settings without a user.');
+    }
+
+    if (this.hasIncompleteProfileReads(uid)) {
+      throw new Error('Cannot update route delivery sync route settings until user settings finish loading.');
+    }
+
+    const routeDeliverySyncRoutes = Object.entries(routeSettings)
+      .reduce<Partial<Record<RouteDeliverySyncRouteId, { enabled: boolean }>>>((updates, [routeID, enabled]) => {
+        updates[routeID as RouteDeliverySyncRouteId] = { enabled: enabled === true };
+        return updates;
+      }, {});
+
+    if (Object.keys(routeDeliverySyncRoutes).length === 0) {
+      return;
+    }
+
+    await this.updateUserProperties(user, {
+      settings: {
+        serviceSyncSettings: {
+          routeDeliverySyncRoutes,
+        },
+      },
+    });
+
+    this.applyRouteDeliverySyncRouteSettingsToUser(user, routeDeliverySyncRoutes);
   }
 
   public getUserMetaForService(user: User, serviceName: string): Observable<AppUserServiceMetaInterface | undefined> {
@@ -942,6 +1008,17 @@ export class AppUserService implements OnDestroy {
     return result.data as ActivitySyncBackfillSummary;
   }
 
+  async backfillRouteDeliverySyncRouteForCurrentUser(
+    sourceServiceName: ServiceNames,
+    destinationServiceName: ServiceNames,
+  ): Promise<RouteDeliverySyncBackfillSummary> {
+    const result = await this.functionsService.call('backfillRouteDeliverySyncRoute', {
+      sourceServiceName,
+      destinationServiceName,
+    });
+    return result.data as RouteDeliverySyncBackfillSummary;
+  }
+
   private coerceValidDate(value: Date | string | number, fieldName: 'startDate' | 'endDate'): Date {
     if (value === null || value === undefined) {
       throw new Error(`Invalid ${fieldName}`);
@@ -1030,8 +1107,9 @@ export class AppUserService implements OnDestroy {
 
   public async updateUserProperties(user: AppUserInterface, propertiesToUpdate: any) {
     const promises = [];
+    const hasIncompleteProfileReads = this.hasIncompleteProfileReads(user?.uid);
     if (propertiesToUpdate.settings) {
-      if (this.hasIncompleteProfileReads(user?.uid)) {
+      if (hasIncompleteProfileReads) {
         this.logger.warn('[AppUserService] Skipping settings write because profile reads are incomplete.', {
           uid: user?.uid ?? null,
         });
@@ -1047,15 +1125,20 @@ export class AppUserService implements OnDestroy {
     }
 
     // Handle legal fields separately
-    const legalUpdates: any = {};
-    const allowedLegalUpdates = ['acceptedTrackingPolicy', 'acceptedMarketingPolicy'];
+    const legalUpdates: Partial<Record<typeof AppUserService.optionalLegalConsentFields[number], boolean>> = {};
+    const allowedLegalUpdates = AppUserService.optionalLegalConsentFields as readonly string[];
 
     // First strip all legal fields from propertiesToUpdate to ensure they don't land in the main doc
     AppUserService.legalFields.forEach(field => {
       if (field in propertiesToUpdate) {
         // Only allow specific legal fields to be updated via this method
         if (allowedLegalUpdates.includes(field)) {
-          legalUpdates[field] = propertiesToUpdate[field];
+          const value = propertiesToUpdate[field];
+          if (typeof value === 'boolean') {
+            legalUpdates[field as typeof AppUserService.optionalLegalConsentFields[number]] = value;
+          } else {
+            this.logger.warn(`[AppUserService] Ignoring legal field '${field}' because value is not boolean.`);
+          }
         } else {
           this.logger.warn(`[AppUserService] Stripping restricted legal field '${field}' from update payload.`);
         }
@@ -1064,6 +1147,12 @@ export class AppUserService implements OnDestroy {
     });
 
     if (Object.keys(legalUpdates).length > 0) {
+      if (hasIncompleteProfileReads) {
+        this.logger.warn('[AppUserService] Refusing legal write because profile reads are incomplete.', {
+          uid: user?.uid ?? null,
+        });
+        throw new Error('Cannot update legal consent until user profile finishes loading.');
+      }
       promises.push(setDoc(doc(this.firestore, `users/${user.uid}/legal/agreements`), legalUpdates, { merge: true })
         .catch(err => {
           this.logger.error('[AppUserService] Legal update FAILED', err);
@@ -1297,6 +1386,26 @@ export class AppUserService implements OnDestroy {
     for (const [routeID, routeSetting] of Object.entries(routeSettings)) {
       settings.serviceSyncSettings.activitySyncRoutes[routeID as ActivitySyncRouteId] = {
         ...(settings.serviceSyncSettings.activitySyncRoutes[routeID as ActivitySyncRouteId] || {}),
+        enabled: routeSetting.enabled,
+      };
+    }
+
+    user.settings = settings;
+  }
+
+  private applyRouteDeliverySyncRouteSettingsToUser(
+    user: AppUserInterface,
+    routeSettings: Partial<Record<RouteDeliverySyncRouteId, { enabled: boolean }>>,
+  ): void {
+    const settings = (user.settings || {}) as AppUserSettingsInterface;
+    settings.serviceSyncSettings = settings.serviceSyncSettings || {};
+    settings.serviceSyncSettings.routeDeliverySyncRoutes = {
+      ...(settings.serviceSyncSettings.routeDeliverySyncRoutes || {}),
+    };
+
+    for (const [routeID, routeSetting] of Object.entries(routeSettings)) {
+      settings.serviceSyncSettings.routeDeliverySyncRoutes[routeID as RouteDeliverySyncRouteId] = {
+        ...(settings.serviceSyncSettings.routeDeliverySyncRoutes[routeID as RouteDeliverySyncRouteId] || {}),
         enabled: routeSetting.enabled,
       };
     }

@@ -30,6 +30,9 @@ vi.mock('../config', () => ({
             location: 'test-location',
             workoutQueue: 'processWorkoutTask',
             activitySyncQueue: 'processActivitySyncTask',
+            routeDeliverySyncQueue: 'processRouteDeliverySyncTask',
+            routeSyncQueue: 'processRouteSyncTask',
+            sleepSyncQueue: 'processSleepSyncTask',
             sportsLibReparseQueue: 'processSportsLibReparseTask',
             sportsLibRouteReparseQueue: 'processSportsLibRouteReparseTask',
             derivedMetricsQueue: 'processDerivedMetricsTask',
@@ -610,6 +613,45 @@ describe('Cloud Tasks Utils', () => {
             mockCloudTasksClient.createTask.mockRejectedValue(error);
 
             const enqueued = await enqueueActivitySyncTask('activitySync__route__user__event', 1234);
+            expect(enqueued).toBe(false);
+        });
+    });
+
+    describe('enqueueRouteDeliverySyncTask', () => {
+        it('should enqueue route delivery sync task with deterministic name', async () => {
+            const { enqueueRouteDeliverySyncTask } = await import('./cloud-tasks');
+
+            mockCloudTasksClient.createTask.mockResolvedValue([{ name: 'task-name' }]);
+
+            await enqueueRouteDeliverySyncTask('routeDeliverySync__route__user__savedRoute__revision', 1234);
+
+            expect(mockCloudTasksClient.createTask).toHaveBeenCalledWith({
+                parent: 'projects/p/locations/l/queues/q',
+                task: expect.objectContaining({
+                    name: expect.stringContaining('/tasks/route-delivery-sync-routeDeliverySync__route__user__savedRoute__revision-1234'),
+                    httpRequest: expect.objectContaining({
+                        url: expect.stringContaining('test-location-test-project.cloudfunctions.net/processRouteDeliverySyncTask'),
+                        httpMethod: 'POST',
+                        body: expect.any(String),
+                    }),
+                }),
+            });
+
+            const call = mockCloudTasksClient.createTask.mock.calls[0][0];
+            const decodedBody = JSON.parse(Buffer.from(call.task.httpRequest.body, 'base64').toString());
+            expect(decodedBody).toEqual({
+                data: { queueItemId: 'routeDeliverySync__route__user__savedRoute__revision' },
+            });
+        });
+
+        it('should handle ALREADY_EXISTS for route delivery sync dispatch', async () => {
+            const { enqueueRouteDeliverySyncTask } = await import('./cloud-tasks');
+
+            const error = new Error('Already Exists');
+            (error as Error & { code: number }).code = 6;
+            mockCloudTasksClient.createTask.mockRejectedValue(error);
+
+            const enqueued = await enqueueRouteDeliverySyncTask('routeDeliverySync__route__user__savedRoute__revision', 1234);
             expect(enqueued).toBe(false);
         });
     });

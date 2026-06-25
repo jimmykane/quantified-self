@@ -17,6 +17,7 @@ import { StripeRole } from './stripe-role.model';
 import { AppThemePreference } from './app-theme-preference.type';
 import { AppDateValue } from './app-date-value.type';
 import { ActivitySyncRouteId } from '@shared/activity-sync-routes';
+import { RouteDeliverySyncRouteId } from '@shared/route-delivery-sync-routes';
 import { ServiceConnectionMetaFields } from '@shared/service-connection';
 import { UserServiceMetaInterface } from '@sports-alliance/sports-lib';
 
@@ -85,7 +86,8 @@ export type AppDashboardActionPromptId =
     | 'backfillGarminSleep'
     | 'reconnectSuuntoService'
     | 'suuntoRouteCatchUp'
-    | 'garminRoutePermission';
+    | 'garminRoutePermission'
+    | 'enableRouteDeliveryAutoSync';
 export type AppDashboardActionPromptStateValue = 'dismissed';
 
 export interface AppDashboardActionPromptState {
@@ -169,8 +171,13 @@ export interface ActivitySyncRouteSettingsInterface {
     enabled?: boolean;
 }
 
+export interface RouteDeliverySyncRouteSettingsInterface {
+    enabled?: boolean;
+}
+
 export interface ServiceSyncSettingsInterface {
     activitySyncRoutes?: Partial<Record<ActivitySyncRouteId, ActivitySyncRouteSettingsInterface>>;
+    routeDeliverySyncRoutes?: Partial<Record<RouteDeliverySyncRouteId, RouteDeliverySyncRouteSettingsInterface>>;
 }
 
 export interface AppDeviceDisplaySettingsInterface {

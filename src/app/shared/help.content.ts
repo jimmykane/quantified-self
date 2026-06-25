@@ -451,7 +451,7 @@ The app accepts these file types for manual activity upload:
 
 The public [Workout File Analyzer](/features/fit-gpx-tcx-file-analyzer) page explains how FIT, GPX, TCX, JSON, and SML activity uploads can be analyzed with maps, charts, statistics, exports, source-file context, and reprocessing. The public [Workout File Comparison](/features/workout-file-comparison) page explains how those files can be compared with provider activities and benchmark reports. The public [FIT and GPX Route Files](/features/fit-gpx-route-files) page explains saved route-only FIT course and GPX route uploads, original-file retention, downloads, and route limits.
 
-Saved routes open from **Routes** with the details action. Route details parse the original FIT or GPX file in memory to show the route summary, all segments, map, elevation and grade charts, waypoints, and original-file download. The original uploaded route file remains the canonical source; parsed points and streams are not saved back to Firestore.
+Saved routes open from **Routes** with the details action. Route details parse the original FIT or GPX file in memory to show the route summary, all segments, map, elevation and grade charts, waypoints and turn instructions, and original-file download. The original uploaded route file remains the canonical source; parsed points and streams are not saved back to Firestore.
 
 ## Activity limits
 
@@ -537,6 +537,8 @@ Suunto tools currently include:
 Suunto FIT activity uploads in Services show a per-file queue with upload status, duplicate detection, failure messages, and retry controls for failed files. Large upload batches are processed one file at a time with short pauses between provider upload calls.
 
 While your Suunto account is connected, Quantified Self also imports new and updated Suunto routes into **Routes** automatically. Services includes a **Route Sync** panel with manual catch-up, which queues every current Suunto route again for first-time imports or reconnect cases. The **Routes** page can also show a one-time prompt for the same first-time Suunto route catch-up.
+
+Suunto users can also enable **Suunto -> Garmin course delivery** from the Suunto **Route Sync** panel or from a one-time **Routes** page action prompt when Suunto and Garmin route delivery are both ready. This sends newly imported or updated Suunto routes that are already saved in Quantified Self to Garmin as courses. It requires Garmin to be connected with **COURSE_IMPORT** permission. The **Queue now** action is a convenience backfill that scans Suunto-sourced routes already saved in Quantified Self; it does not fetch routes from Suunto or Garmin.
 
 Saved FIT and GPX routes can be sent to Suunto from **Routes** using a row action or the selected-row bulk toolbar. Quantified Self reparses each saved route from its original source file, generates a fresh GPX export, and uses the saved Quantified Self route name as the route name sent to Suunto. Routes imported from Suunto are not sent back to the same connected Suunto account, but they can still be sent to a different connected Suunto account when one exists. Bulk sends upload routes one at a time so partial failures can be reported without stopping successful routes.
 

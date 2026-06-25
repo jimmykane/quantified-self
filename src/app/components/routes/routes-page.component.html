@@ -36,6 +36,15 @@
       </app-dashboard-action-prompt>
     </section>
     }
+    @if (suuntoToGarminRouteDeliveryPrompt(); as prompt) {
+    <section class="routes-prompt" aria-label="Suunto to Garmin route sync prompt">
+      <app-dashboard-action-prompt
+        [prompt]="prompt"
+        (primary)="onRouteDeliveryAutoSyncPromptPrimary($event)"
+        (secondary)="onRouteDeliveryAutoSyncPromptSecondary($event)">
+      </app-dashboard-action-prompt>
+    </section>
+    }
 
     @if (routes$ | async; as routes) {
     <section class="routes-summary" aria-label="Route summary">
