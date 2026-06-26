@@ -102,6 +102,8 @@ export class TracksMapManager {
     private mapboxgl: any; // Mapbox GL JS library reference
     private tracksByActivityId = new Map<string, TrackRenderRecord>();
     private styleLoadHandlerCleanup: (() => void) | null = null;
+    private homeAreaStyleReadyCleanup: (() => void) | null = null;
+    private tripAreaStyleReadyCleanup: (() => void) | null = null;
     private terrainControl: any;
     private terrainToggleState: DeferredTerrainToggleState = { pendingRequest: null };
     private isDarkTheme = false;
@@ -131,6 +133,8 @@ export class TracksMapManager {
 
     public setMap(map: any, mapboxgl: any) {
         this.styleLoadHandlerCleanup?.();
+        this.clearDeferredHomeAreaRender();
+        this.clearDeferredTripAreaRender();
         clearDeferredTerrainToggleState(this.terrainToggleState);
         this.map = map;
         this.mapboxgl = mapboxgl;
@@ -841,33 +845,55 @@ export class TracksMapManager {
             this.removeHomeAreaLayerAndSource();
             return;
         }
-        const beforeLayerId = this.getFirstTrackLayerId();
-        const fillPaint = this.buildHomeAreaFillPaint();
-        const outlinePaint = this.buildHomeAreaOutlinePaint();
+        if (!this.isCurrentMapStyleReady()) {
+            this.deferHomeAreaRenderUntilStyleReady();
+            return;
+        }
+        this.clearDeferredHomeAreaRender();
 
         this.zone.runOutsideAngular(() => {
-            upsertMapSearchScopeOverlay(this.map, {
-                sourceId: TracksMapManager.HOME_AREA_SOURCE_ID,
-                fillLayerId: TracksMapManager.HOME_AREA_FILL_LAYER_ID,
-                outlineLayerId: TracksMapManager.HOME_AREA_OUTLINE_LAYER_ID,
-                featureCollection: sourceData,
-                fillPaint,
-                outlinePaint,
-                beforeLayerId,
-            });
+            try {
+                const beforeLayerId = this.getFirstTrackLayerId();
+                const fillPaint = this.buildHomeAreaFillPaint();
+                const outlinePaint = this.buildHomeAreaOutlinePaint();
+
+                upsertMapSearchScopeOverlay(this.map, {
+                    sourceId: TracksMapManager.HOME_AREA_SOURCE_ID,
+                    fillLayerId: TracksMapManager.HOME_AREA_FILL_LAYER_ID,
+                    outlineLayerId: TracksMapManager.HOME_AREA_OUTLINE_LAYER_ID,
+                    featureCollection: sourceData,
+                    fillPaint,
+                    outlinePaint,
+                    beforeLayerId,
+                });
+            } catch (error) {
+                if (this.shouldDeferSearchScopeOverlayRender(error)) {
+                    this.deferHomeAreaRenderUntilStyleReady();
+                    return;
+                }
+                throw error;
+            }
         });
     }
 
     private removeHomeAreaLayerAndSource(): void {
+        this.clearDeferredHomeAreaRender();
         if (!this.map) return;
 
         this.zone.runOutsideAngular(() => {
-            removeMapSearchScopeOverlay(
-                this.map,
-                TracksMapManager.HOME_AREA_SOURCE_ID,
-                TracksMapManager.HOME_AREA_FILL_LAYER_ID,
-                TracksMapManager.HOME_AREA_OUTLINE_LAYER_ID,
-            );
+            try {
+                removeMapSearchScopeOverlay(
+                    this.map,
+                    TracksMapManager.HOME_AREA_SOURCE_ID,
+                    TracksMapManager.HOME_AREA_FILL_LAYER_ID,
+                    TracksMapManager.HOME_AREA_OUTLINE_LAYER_ID,
+                );
+            } catch (error) {
+                if (this.shouldDeferSearchScopeOverlayRender(error)) {
+                    return;
+                }
+                throw error;
+            }
         });
     }
 
@@ -890,34 +916,108 @@ export class TracksMapManager {
             this.removeTripAreaLayerAndSource();
             return;
         }
-        const beforeLayerId = this.getTripAreaBeforeLayerId();
-        const fillPaint = this.buildTripAreaFillPaint();
-        const outlinePaint = this.buildTripAreaOutlinePaint();
+        if (!this.isCurrentMapStyleReady()) {
+            this.deferTripAreaRenderUntilStyleReady();
+            return;
+        }
+        this.clearDeferredTripAreaRender();
 
         this.zone.runOutsideAngular(() => {
-            upsertMapSearchScopeOverlay(this.map, {
-                sourceId: TracksMapManager.TRIP_AREA_SOURCE_ID,
-                fillLayerId: TracksMapManager.TRIP_AREA_FILL_LAYER_ID,
-                outlineLayerId: TracksMapManager.TRIP_AREA_OUTLINE_LAYER_ID,
-                featureCollection: sourceData,
-                fillPaint,
-                outlinePaint,
-                beforeLayerId,
-            });
+            try {
+                const beforeLayerId = this.getTripAreaBeforeLayerId();
+                const fillPaint = this.buildTripAreaFillPaint();
+                const outlinePaint = this.buildTripAreaOutlinePaint();
+
+                upsertMapSearchScopeOverlay(this.map, {
+                    sourceId: TracksMapManager.TRIP_AREA_SOURCE_ID,
+                    fillLayerId: TracksMapManager.TRIP_AREA_FILL_LAYER_ID,
+                    outlineLayerId: TracksMapManager.TRIP_AREA_OUTLINE_LAYER_ID,
+                    featureCollection: sourceData,
+                    fillPaint,
+                    outlinePaint,
+                    beforeLayerId,
+                });
+            } catch (error) {
+                if (this.shouldDeferSearchScopeOverlayRender(error)) {
+                    this.deferTripAreaRenderUntilStyleReady();
+                    return;
+                }
+                throw error;
+            }
         });
     }
 
     private removeTripAreaLayerAndSource(): void {
+        this.clearDeferredTripAreaRender();
         if (!this.map) return;
 
         this.zone.runOutsideAngular(() => {
-            removeMapSearchScopeOverlay(
-                this.map,
-                TracksMapManager.TRIP_AREA_SOURCE_ID,
-                TracksMapManager.TRIP_AREA_FILL_LAYER_ID,
-                TracksMapManager.TRIP_AREA_OUTLINE_LAYER_ID,
-            );
+            try {
+                removeMapSearchScopeOverlay(
+                    this.map,
+                    TracksMapManager.TRIP_AREA_SOURCE_ID,
+                    TracksMapManager.TRIP_AREA_FILL_LAYER_ID,
+                    TracksMapManager.TRIP_AREA_OUTLINE_LAYER_ID,
+                );
+            } catch (error) {
+                if (this.shouldDeferSearchScopeOverlayRender(error)) {
+                    return;
+                }
+                throw error;
+            }
         });
+    }
+
+    private deferHomeAreaRenderUntilStyleReady(): void {
+        if (!this.map) return;
+        this.clearDeferredHomeAreaRender();
+        this.homeAreaStyleReadyCleanup = runWhenStyleReady(
+            this.map,
+            () => {
+                this.homeAreaStyleReadyCleanup = null;
+                this.renderHomeArea();
+            },
+            { runImmediately: false }
+        );
+    }
+
+    private clearDeferredHomeAreaRender(): void {
+        this.homeAreaStyleReadyCleanup?.();
+        this.homeAreaStyleReadyCleanup = null;
+    }
+
+    private deferTripAreaRenderUntilStyleReady(): void {
+        if (!this.map) return;
+        this.clearDeferredTripAreaRender();
+        this.tripAreaStyleReadyCleanup = runWhenStyleReady(
+            this.map,
+            () => {
+                this.tripAreaStyleReadyCleanup = null;
+                this.renderTripArea();
+            },
+            { runImmediately: false }
+        );
+    }
+
+    private clearDeferredTripAreaRender(): void {
+        this.tripAreaStyleReadyCleanup?.();
+        this.tripAreaStyleReadyCleanup = null;
+    }
+
+    private isCurrentMapStyleReady(): boolean {
+        try {
+            return isStyleReady(this.map);
+        } catch {
+            return false;
+        }
+    }
+
+    private shouldDeferSearchScopeOverlayRender(error: any): boolean {
+        const message = `${error?.message || error || ''}`;
+        return !this.isCurrentMapStyleReady()
+            || message.includes('Style is not done loading')
+            || message.includes('getOwnLayer')
+            || message.includes('getOwnSource');
     }
 
     private getFirstTrackLayerId(): string | undefined {

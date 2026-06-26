@@ -374,6 +374,117 @@ describe('TracksMapManager', () => {
             const afterStyleReload = mockMap.addLayer.mock.calls.filter((call) => call[0]?.id === 'home-area-fill-layer').length;
             expect(afterStyleReload).toBeGreaterThan(beforeStyleReload);
         });
+
+        it('should defer home area rendering until the map style is ready', () => {
+            mockMap.isStyleLoaded.mockReturnValue(false);
+            mockMap.getSource.mockImplementation(() => {
+                throw new TypeError("Cannot read properties of undefined (reading 'getOwnSource')");
+            });
+            mockMap.getLayer.mockImplementation(() => {
+                throw new TypeError("Cannot read properties of undefined (reading 'getOwnLayer')");
+            });
+
+            expect(() => manager.setHomeArea({
+                destinationId: 'destination-home',
+                pointCount: 5,
+                pointShare: 0.55,
+                centroidLat: 37.98,
+                centroidLng: 23.72,
+                bounds: {
+                    west: 23.71,
+                    east: 23.73,
+                    south: 37.97,
+                    north: 37.99,
+                },
+                radiusKm: 2.8,
+            })).not.toThrow();
+
+            expect(mockMap.getSource).not.toHaveBeenCalled();
+            expect(mockMap.addSource).not.toHaveBeenCalled();
+            expect(mockMap.on).toHaveBeenCalledWith('idle', expect.any(Function));
+
+            mockMap.isStyleLoaded.mockReturnValue(true);
+            mockMap.getSource.mockReset();
+            mockMap.getSource.mockReturnValue(null);
+            mockMap.getLayer.mockReset();
+            mockMap.getLayer.mockReturnValue(null);
+
+            emitMapEvent('idle');
+
+            expect(mockMap.addSource).toHaveBeenCalledWith(
+                'home-area-source',
+                expect.objectContaining({ type: 'geojson' })
+            );
+        });
+
+        it('should retry home area rendering when source lookup fails during a style swap', () => {
+            mockMap.isStyleLoaded.mockReturnValue(true);
+            mockMap.getSource.mockImplementation(() => {
+                throw new TypeError("Cannot read properties of undefined (reading 'getOwnSource')");
+            });
+
+            expect(() => manager.setHomeArea({
+                destinationId: 'destination-home',
+                pointCount: 5,
+                pointShare: 0.55,
+                centroidLat: 37.98,
+                centroidLng: 23.72,
+                bounds: {
+                    west: 23.71,
+                    east: 23.73,
+                    south: 37.97,
+                    north: 37.99,
+                },
+                radiusKm: 2.8,
+            })).not.toThrow();
+
+            expect(mockMap.addSource).not.toHaveBeenCalled();
+            expect(mockMap.on).toHaveBeenCalledWith('idle', expect.any(Function));
+
+            mockMap.getSource.mockReset();
+            mockMap.getSource.mockReturnValue(null);
+            mockMap.getLayer.mockReturnValue(null);
+
+            emitMapEvent('idle');
+
+            expect(mockMap.addSource).toHaveBeenCalledWith(
+                'home-area-source',
+                expect.objectContaining({ type: 'geojson' })
+            );
+        });
+
+        it('should cancel deferred home area rendering when cleared before style readiness', () => {
+            mockMap.isStyleLoaded.mockReturnValue(false);
+
+            manager.setHomeArea({
+                destinationId: 'destination-home',
+                pointCount: 5,
+                pointShare: 0.55,
+                centroidLat: 37.98,
+                centroidLng: 23.72,
+                bounds: {
+                    west: 23.71,
+                    east: 23.73,
+                    south: 37.97,
+                    north: 37.99,
+                },
+                radiusKm: 2.8,
+            });
+            mockMap.getSource.mockImplementation(() => {
+                throw new TypeError("Cannot read properties of undefined (reading 'getOwnSource')");
+            });
+            mockMap.getLayer.mockImplementation(() => {
+                throw new TypeError("Cannot read properties of undefined (reading 'getOwnLayer')");
+            });
+
+            expect(() => manager.clearHomeArea()).not.toThrow();
+
+            mockMap.isStyleLoaded.mockReturnValue(true);
+            emitMapEvent('idle');
+
+            expect(mockMap.addSource).not.toHaveBeenCalled();
+            expect(mockMap.addLayer).not.toHaveBeenCalled();
+        });
     });
 
     describe('trip area', () => {
@@ -451,6 +562,109 @@ describe('TracksMapManager', () => {
 
             const afterStyleReload = mockMap.addLayer.mock.calls.filter((call) => call[0]?.id === 'trip-area-fill-layer').length;
             expect(afterStyleReload).toBeGreaterThan(beforeStyleReload);
+        });
+
+        it('should defer trip area rendering until the map style is ready', () => {
+            mockMap.isStyleLoaded.mockReturnValue(false);
+            mockMap.getSource.mockImplementation(() => {
+                throw new TypeError("Cannot read properties of undefined (reading 'getOwnSource')");
+            });
+            mockMap.getLayer.mockImplementation(() => {
+                throw new TypeError("Cannot read properties of undefined (reading 'getOwnLayer')");
+            });
+
+            expect(() => manager.setTripArea({
+                tripId: 'trip-athens',
+                centroidLat: 37.9838,
+                centroidLng: 23.7275,
+                bounds: {
+                    west: 23.70,
+                    east: 23.76,
+                    south: 37.95,
+                    north: 38.01,
+                },
+            })).not.toThrow();
+
+            expect(mockMap.getSource).not.toHaveBeenCalled();
+            expect(mockMap.getLayer).not.toHaveBeenCalled();
+            expect(mockMap.addSource).not.toHaveBeenCalled();
+            expect(mockMap.on).toHaveBeenCalledWith('idle', expect.any(Function));
+
+            mockMap.isStyleLoaded.mockReturnValue(true);
+            mockMap.getSource.mockReset();
+            mockMap.getSource.mockReturnValue(null);
+            mockMap.getLayer.mockReset();
+            mockMap.getLayer.mockReturnValue(null);
+
+            emitMapEvent('idle');
+
+            expect(mockMap.addSource).toHaveBeenCalledWith(
+                'trip-area-source',
+                expect.objectContaining({ type: 'geojson' })
+            );
+        });
+
+        it('should retry trip area rendering when layer lookup fails during a style swap', () => {
+            mockMap.isStyleLoaded.mockReturnValue(true);
+            mockMap.getLayer.mockImplementation(() => {
+                throw new TypeError("Cannot read properties of undefined (reading 'getOwnLayer')");
+            });
+
+            expect(() => manager.setTripArea({
+                tripId: 'trip-athens',
+                centroidLat: 37.9838,
+                centroidLng: 23.7275,
+                bounds: {
+                    west: 23.70,
+                    east: 23.76,
+                    south: 37.95,
+                    north: 38.01,
+                },
+            })).not.toThrow();
+
+            expect(mockMap.addSource).not.toHaveBeenCalled();
+            expect(mockMap.on).toHaveBeenCalledWith('idle', expect.any(Function));
+
+            mockMap.getSource.mockReturnValue(null);
+            mockMap.getLayer.mockReset();
+            mockMap.getLayer.mockReturnValue(null);
+
+            emitMapEvent('idle');
+
+            expect(mockMap.addSource).toHaveBeenCalledWith(
+                'trip-area-source',
+                expect.objectContaining({ type: 'geojson' })
+            );
+        });
+
+        it('should cancel deferred trip area rendering when cleared before style readiness', () => {
+            mockMap.isStyleLoaded.mockReturnValue(false);
+
+            manager.setTripArea({
+                tripId: 'trip-athens',
+                centroidLat: 37.9838,
+                centroidLng: 23.7275,
+                bounds: {
+                    west: 23.70,
+                    east: 23.76,
+                    south: 37.95,
+                    north: 38.01,
+                },
+            });
+            mockMap.getSource.mockImplementation(() => {
+                throw new TypeError("Cannot read properties of undefined (reading 'getOwnSource')");
+            });
+            mockMap.getLayer.mockImplementation(() => {
+                throw new TypeError("Cannot read properties of undefined (reading 'getOwnLayer')");
+            });
+
+            expect(() => manager.clearTripArea()).not.toThrow();
+
+            mockMap.isStyleLoaded.mockReturnValue(true);
+            emitMapEvent('idle');
+
+            expect(mockMap.addSource).not.toHaveBeenCalled();
+            expect(mockMap.addLayer).not.toHaveBeenCalled();
         });
     });
 
