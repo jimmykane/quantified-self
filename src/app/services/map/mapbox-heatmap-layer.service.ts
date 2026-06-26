@@ -12,11 +12,16 @@ export interface MapboxHeatmapRenderConfig {
   beforeLayerId?: string;
 }
 
+interface DeferredHeatmapRenderRegistration {
+  callback: () => void;
+  tryRun: () => void;
+}
+
 @Injectable({
   providedIn: 'root'
 })
 export class MapboxHeatmapLayerService {
-  private pendingRenderLayersByMap = new WeakMap<any, Set<string>>();
+  private pendingRendersByMap = new WeakMap<any, Map<string, DeferredHeatmapRenderRegistration>>();
 
   constructor(private logger: LoggerService) { }
 
@@ -33,7 +38,11 @@ export class MapboxHeatmapLayerService {
       this.logger.log('[MapboxHeatmapLayerService] Heatmap render deferred; style not ready.', {
         layerId: config.layerId
       });
-      this.deferRender(map, config.layerId, () => this.renderGeoJsonHeatmapLayer(map, config));
+      this.deferRender(
+        map,
+        this.buildPendingRenderKey(config.layerId),
+        () => this.renderGeoJsonHeatmapLayer(map, config)
+      );
       return;
     }
 
@@ -82,7 +91,7 @@ export class MapboxHeatmapLayerService {
       if (this.shouldDeferAfterMapboxError(map, error)) {
         this.deferRender(
           map,
-          config.layerId,
+          this.buildPendingRenderKey(config.layerId),
           () => this.renderGeoJsonHeatmapLayer(map, config),
           { runImmediately: false }
         );
@@ -99,7 +108,11 @@ export class MapboxHeatmapLayerService {
     if (!map || !layerId) return;
     if (!this.isStyleReady(map)) {
       if (this.isMapRemoved(map)) return;
-      this.deferRender(map, layerId, () => this.setLayerVisibility(map, layerId, visible));
+      this.deferRender(
+        map,
+        this.buildPendingVisibilityKey(layerId),
+        () => this.setLayerVisibility(map, layerId, visible)
+      );
       return;
     }
     try {
@@ -111,7 +124,7 @@ export class MapboxHeatmapLayerService {
       if (this.shouldDeferAfterMapboxError(map, error)) {
         this.deferRender(
           map,
-          layerId,
+          this.buildPendingVisibilityKey(layerId),
           () => this.setLayerVisibility(map, layerId, visible),
           { runImmediately: false }
         );
@@ -126,6 +139,8 @@ export class MapboxHeatmapLayerService {
 
   public clearLayerAndSource(map: any, sourceId: string, layerId: string): void {
     if (!map) return;
+    this.cancelDeferredRender(map, this.buildPendingRenderKey(layerId));
+    this.cancelDeferredRender(map, this.buildPendingVisibilityKey(layerId));
     this.removeLayerIfPresent(map, layerId);
     this.removeSourceIfPresent(map, sourceId);
   }
@@ -185,53 +200,79 @@ export class MapboxHeatmapLayerService {
 
   private deferRender(
     map: any,
-    layerId: string,
+    key: string,
     callback: () => void,
     options: { runImmediately?: boolean } = {}
   ): void {
-    if (!map?.on || !layerId || this.isMapRemoved(map)) return;
+    if (!map?.on || !key || this.isMapRemoved(map)) return;
 
-    const pendingLayers = this.getPendingLayerSet(map);
-    if (pendingLayers.has(layerId)) return;
-    pendingLayers.add(layerId);
+    const pendingRenders = this.getPendingRenderMap(map);
+    const existingRegistration = pendingRenders.get(key);
+    if (existingRegistration) {
+      existingRegistration.callback = callback;
+      return;
+    }
 
-    const cleanup = () => {
-      if (map?.off) {
-        map.off('style.load', tryRun);
-        map.off('styledata', tryRun);
-        map.off('load', tryRun);
-        map.off('idle', tryRun);
+    const registration = {
+      callback,
+      tryRun: () => {
+        if (this.isMapRemoved(map)) {
+          this.cancelDeferredRender(map, key);
+          return;
+        }
+        if (!this.isStyleReady(map)) return;
+
+        const activeRegistration = this.getPendingRenderMap(map).get(key);
+        if (activeRegistration !== registration) return;
+
+        this.detachDeferredRenderListeners(map, registration.tryRun);
+        this.getPendingRenderMap(map).delete(key);
+        registration.callback();
       }
     };
+    pendingRenders.set(key, registration);
 
-    const tryRun = () => {
-      if (this.isMapRemoved(map)) {
-        pendingLayers.delete(layerId);
-        cleanup();
-        return;
-      }
-      if (!this.isStyleReady(map)) return;
-
-      pendingLayers.delete(layerId);
-      cleanup();
-      callback();
-    };
-
-    map.on('style.load', tryRun);
-    map.on('styledata', tryRun);
-    map.on('load', tryRun);
-    map.on('idle', tryRun);
+    map.on('style.load', registration.tryRun);
+    map.on('styledata', registration.tryRun);
+    map.on('load', registration.tryRun);
+    map.on('idle', registration.tryRun);
     if (options.runImmediately !== false) {
-      tryRun();
+      registration.tryRun();
     }
   }
 
-  private getPendingLayerSet(map: any): Set<string> {
-    let layerSet = this.pendingRenderLayersByMap.get(map);
-    if (!layerSet) {
-      layerSet = new Set<string>();
-      this.pendingRenderLayersByMap.set(map, layerSet);
+  private cancelDeferredRender(map: any, key: string): void {
+    if (!map || !key) return;
+    const pendingRenders = this.pendingRendersByMap.get(map);
+    const registration = pendingRenders?.get(key);
+    if (!registration) return;
+
+    this.detachDeferredRenderListeners(map, registration.tryRun);
+    pendingRenders?.delete(key);
+  }
+
+  private detachDeferredRenderListeners(map: any, tryRun: () => void): void {
+    if (!map?.off) return;
+    map.off('style.load', tryRun);
+    map.off('styledata', tryRun);
+    map.off('load', tryRun);
+    map.off('idle', tryRun);
+  }
+
+  private getPendingRenderMap(map: any): Map<string, DeferredHeatmapRenderRegistration> {
+    let renderMap = this.pendingRendersByMap.get(map);
+    if (!renderMap) {
+      renderMap = new Map<string, DeferredHeatmapRenderRegistration>();
+      this.pendingRendersByMap.set(map, renderMap);
     }
-    return layerSet;
+    return renderMap;
+  }
+
+  private buildPendingRenderKey(layerId: string): string {
+    return `render:${layerId}`;
+  }
+
+  private buildPendingVisibilityKey(layerId: string): string {
+    return `visibility:${layerId}`;
   }
 }

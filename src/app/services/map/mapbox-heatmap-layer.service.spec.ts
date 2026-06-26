@@ -91,6 +91,69 @@ describe('MapboxHeatmapLayerService', () => {
         expect(map.off).toHaveBeenCalledWith('idle', expect.any(Function));
     });
 
+    it('renderGeoJsonHeatmapLayer should replay the latest deferred render for the same layer', () => {
+        const { map, handlers, setStyleReady } = createMapHarness({ styleReady: false, hasLayer: false, hasSource: false });
+        const oldConfig = {
+            sourceId: 'heat-source',
+            layerId: 'heat-layer',
+            featureCollection: {
+                type: 'FeatureCollection' as const,
+                features: [{ type: 'Feature', geometry: { type: 'Point', coordinates: [0, 0] }, properties: { id: 'old' } }]
+            },
+            paint: { 'heatmap-opacity': 0.4 }
+        };
+        const newConfig = {
+            sourceId: 'heat-source',
+            layerId: 'heat-layer',
+            featureCollection: {
+                type: 'FeatureCollection' as const,
+                features: [{ type: 'Feature', geometry: { type: 'Point', coordinates: [1, 1] }, properties: { id: 'new' } }]
+            },
+            paint: { 'heatmap-opacity': 0.9 }
+        };
+
+        service.renderGeoJsonHeatmapLayer(map as any, oldConfig);
+        service.renderGeoJsonHeatmapLayer(map as any, newConfig);
+
+        expect(handlers['style.load']).toHaveLength(1);
+
+        setStyleReady(true);
+        handlers['style.load'][0]();
+
+        expect(map.addSource).toHaveBeenCalledWith('heat-source', {
+            type: 'geojson',
+            data: newConfig.featureCollection
+        });
+        expect(map.addLayer).toHaveBeenCalledWith(expect.objectContaining({
+            paint: { 'heatmap-opacity': 0.9 }
+        }));
+    });
+
+    it('clearLayerAndSource should cancel a pending deferred render', () => {
+        const { map, handlers, setStyleReady } = createMapHarness({ styleReady: false, hasLayer: false, hasSource: false });
+
+        service.renderGeoJsonHeatmapLayer(map as any, {
+            sourceId: 'heat-source',
+            layerId: 'heat-layer',
+            featureCollection: {
+                type: 'FeatureCollection' as const,
+                features: [{ type: 'Feature', geometry: { type: 'Point', coordinates: [0, 0] }, properties: {} }]
+            },
+            paint: { 'heatmap-opacity': 0.8 }
+        });
+
+        expect(handlers['style.load']).toHaveLength(1);
+
+        service.clearLayerAndSource(map as any, 'heat-source', 'heat-layer');
+
+        setStyleReady(true);
+        handlers['style.load'][0]?.();
+
+        expect(map.addSource).not.toHaveBeenCalled();
+        expect(map.addLayer).not.toHaveBeenCalled();
+        expect(map.off).toHaveBeenCalledWith('style.load', expect.any(Function));
+    });
+
     it('renderGeoJsonHeatmapLayer should not defer work on a removed map', () => {
         const { map } = createMapHarness({ styleReady: false });
         (map as any)._removed = true;
