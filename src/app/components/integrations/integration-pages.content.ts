@@ -179,18 +179,19 @@ export const PROVIDER_INTEGRATION_PAGES: Record<IntegrationProviderKey, Provider
     label: 'Suunto',
     serviceName: ServiceNames.SuuntoApp,
     h1: 'Suunto Integration for Activity and Route Sync',
-    heroCopy: 'Use Quantified Self as a private training dashboard, automatically sync Garmin and COROS activities to Suunto, import Suunto routes into Routes, and send saved GPX routes to Suunto.',
+    heroCopy: 'Use Quantified Self as a private training dashboard, automatically sync Garmin and COROS activities to Suunto, import Suunto routes into Routes, deliver Suunto routes to Garmin courses, and send saved GPX routes to Suunto.',
     providerSources: ALL_PROVIDER_SOURCES,
-    summary: 'Sync Garmin and COROS workouts to Suunto, upload FIT activities and GPX routes, import Suunto routes, run route catch-up, import Suunto history, and keep training data centralized.',
+    summary: 'Sync Garmin and COROS workouts to Suunto, upload FIT activities and GPX routes, import Suunto routes, deliver Suunto routes to Garmin courses, run route catch-up, import Suunto history, and keep training data centralized.',
     highlights: [
       'Garmin -> Suunto automatic sync',
       'COROS -> Suunto automatic sync',
       'Suunto route import and catch-up',
+      'Suunto -> Garmin course delivery',
       'FIT activity and GPX route upload to Suunto',
     ],
     syncEyebrow: 'Automatic Sync',
-    syncTitle: 'How to sync Garmin and COROS data to Suunto automatically',
-    syncCopy: 'Quantified Self keeps the sync route explicit: connect the source service, connect Suunto, enable the route toggle, and keep the relevant service permissions active.',
+    syncTitle: 'How to sync activities to Suunto and deliver Suunto routes to Garmin',
+    syncCopy: 'Quantified Self keeps each sync route explicit: connect the source and destination services, enable the route toggle, and keep the relevant service permissions active.',
     syncFlows: [
       {
         icon: 'sync_alt',
@@ -212,10 +213,15 @@ export const PROVIDER_INTEGRATION_PAGES: Record<IntegrationProviderKey, Provider
         title: 'Suunto route import and catch-up',
         copy: 'Import new and updated Suunto routes into Routes automatically, or run route catch-up to queue the current Suunto route library after first connection or reconnect.',
       },
+      {
+        icon: 'send',
+        title: 'Suunto -> Garmin course delivery',
+        copy: 'Connect Garmin with COURSE_IMPORT, enable Suunto -> Garmin Course Delivery, and newly imported or updated Suunto routes saved in Quantified Self can be delivered to Garmin as courses.',
+      },
     ],
     toolsEyebrow: 'Suunto Tools',
     toolsTitle: 'Activity, route, history, and sleep workflows',
-    toolsCopy: 'Suunto is not only a sync destination. Quantified Self also supports direct Suunto workflows for uploads, route import, route catch-up, history, and recovery context.',
+    toolsCopy: 'Suunto is not only a sync destination. Quantified Self also supports direct Suunto workflows for uploads, route import, route catch-up, Garmin course delivery, history, and recovery context.',
     tools: [
       {
         icon: 'upload_file',
@@ -231,6 +237,11 @@ export const PROVIDER_INTEGRATION_PAGES: Record<IntegrationProviderKey, Provider
         icon: 'sync',
         title: 'Suunto route import',
         copy: 'Bring Suunto routes back into Quantified Self automatically, then use manual route catch-up when older Suunto routes need to be queued.',
+      },
+      {
+        icon: 'send',
+        title: 'Garmin course delivery',
+        copy: 'Deliver Suunto-sourced routes already saved in Quantified Self to Garmin Connect as courses when Garmin includes COURSE_IMPORT permission.',
       },
       {
         icon: 'bedtime',
@@ -271,9 +282,13 @@ export const PROVIDER_INTEGRATION_PAGES: Record<IntegrationProviderKey, Provider
         question: 'Can Quantified Self sync routes with Suunto?',
         answer: 'Yes. Quantified Self can import new and updated Suunto routes into Routes, queue manual Suunto route catch-up, and send saved FIT or GPX routes to Suunto from the route library.',
       },
+      {
+        question: 'Can Suunto routes sync to Garmin courses?',
+        answer: 'Yes. Connect Suunto and Garmin, grant Garmin COURSE_IMPORT permission, and enable Suunto -> Garmin Course Delivery. Queue now scans Suunto routes already saved in Quantified Self and does not fetch routes from Suunto or Garmin.',
+      },
     ],
     closingTitle: 'Connect once, then keep your services aligned',
-    closingCopy: 'New Garmin and COROS workouts can move to Suunto automatically after setup. Existing activities and Suunto routes can be queued later with manual catch-up from Services.',
+    closingCopy: 'New Garmin and COROS workouts can move to Suunto automatically after setup. Suunto routes can be imported into Quantified Self and delivered to Garmin courses when both route connections are ready.',
   },
   coros: {
     slug: 'coros',
@@ -384,12 +399,12 @@ export const INTEGRATION_HUB_CARDS: readonly IntegrationHubCard[] = [
     slug: 'suunto',
     label: getProviderDisplayName(ServiceNames.SuuntoApp, 'source'),
     serviceName: ServiceNames.SuuntoApp,
-    subtitle: 'Sync destination, route sync, and Suunto history',
-    summary: 'Connect Suunto to receive Garmin and COROS activities, import Suunto routes, upload FIT activities and GPX routes to Suunto, and keep Suunto history in the same private dashboard.',
+    subtitle: 'Sync destination, route sync, and Garmin course delivery',
+    summary: 'Connect Suunto to receive Garmin and COROS activities, import Suunto routes, deliver Suunto routes to Garmin courses, upload FIT activities and GPX routes to Suunto, and keep Suunto history in the same private dashboard.',
     highlights: [
       'Receive Garmin -> Suunto sync',
       'Receive COROS -> Suunto sync',
-      'Import and send Suunto routes',
+      'Deliver Suunto routes to Garmin',
     ],
   },
   {
@@ -464,12 +479,12 @@ export const INTEGRATIONS_HUB_ROUTE_DATA: IntegrationRouteData = {
   title: 'Integrations',
   preload: true,
   animation: 'Integrations',
-  description: 'Explore Garmin, Suunto, and COROS integrations for private training dashboards, provider sync, history imports, uploads, and centralized workout data.',
+  description: 'Explore Garmin, Suunto, and COROS integrations for private training dashboards, provider sync, route delivery, history imports, uploads, and centralized workout data.',
   jsonLd: {
     '@context': 'https://schema.org',
     '@type': 'CollectionPage',
     name: 'Quantified Self Integrations',
-    description: 'Public integration hub for Garmin, Suunto, and COROS workflows in Quantified Self.',
+    description: 'Public integration hub for Garmin, Suunto, and COROS workflows in Quantified Self, including activity sync and route delivery.',
     url: 'https://quantified-self.io/integrations',
     inLanguage: 'en',
     hasPart: INTEGRATION_HUB_CARDS.map(page => ({
@@ -495,10 +510,10 @@ export const PROVIDER_INTEGRATION_ROUTE_DATA: Record<IntegrationProviderKey, Int
     title: 'Suunto Integration',
     preload: true,
     animation: 'Integrations',
-    description: 'Sync Garmin and COROS activities to Suunto, import Suunto routes, send saved GPX routes to Suunto, upload FIT activities, and centralize Garmin, Suunto, and COROS workout data.',
+    description: 'Sync Garmin and COROS activities to Suunto, import Suunto routes, deliver Suunto routes to Garmin courses, send saved GPX routes to Suunto, upload FIT activities, and centralize Garmin, Suunto, and COROS workout data.',
     jsonLd: providerWebPageJsonLd(
       PROVIDER_INTEGRATION_PAGES.suunto,
-      'Sync Garmin and COROS activities to Suunto, import Suunto routes, send saved GPX routes to Suunto, upload FIT activities, and centralize Garmin, Suunto, and COROS workout data.'
+      'Sync Garmin and COROS activities to Suunto, import Suunto routes, deliver Suunto routes to Garmin courses, send saved GPX routes to Suunto, upload FIT activities, and centralize Garmin, Suunto, and COROS workout data.'
     ),
   },
   coros: {

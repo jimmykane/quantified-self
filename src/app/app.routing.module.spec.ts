@@ -15,7 +15,7 @@ describe('AppRoutingModule routes', () => {
     expect(helpRoute?.loadComponent).toBeTypeOf('function');
     expect(helpRoute?.data).toMatchObject({
       title: 'Help & Support',
-      description: 'Get help with Garmin -> Suunto and COROS -> Suunto sync routes, catch-up sync, AI Insights, account setup, uploads, billing, privacy, and troubleshooting in Quantified Self.',
+      description: 'Get help with Garmin -> Suunto and COROS -> Suunto sync routes, Suunto -> Garmin course delivery, catch-up sync, AI Insights, account setup, uploads, billing, privacy, and troubleshooting in Quantified Self.',
       animation: 'Help',
       preload: true,
       jsonLd: {
@@ -30,6 +30,7 @@ describe('AppRoutingModule routes', () => {
     const helpAbout = helpJsonLd?.['about'] as string[] | undefined;
     expect(helpAbout).toContain('Garmin -> Suunto sync');
     expect(helpAbout).toContain('COROS -> Suunto sync');
+    expect(helpAbout).toContain('Suunto -> Garmin course delivery');
     expect(helpAbout).toContain('Catch-up sync');
   });
 
@@ -274,6 +275,10 @@ describe('AppRoutingModule routes', () => {
       {
         path: PUBLIC_GUIDE_PATHS.syncCorosToSuunto,
         h1: 'How to sync COROS workouts to Suunto automatically',
+      },
+      {
+        path: PUBLIC_GUIDE_PATHS.syncSuuntoRoutesToGarmin,
+        h1: 'How to sync Suunto routes to Garmin courses',
       },
       {
         path: PUBLIC_GUIDE_PATHS.centralizeWorkoutData,

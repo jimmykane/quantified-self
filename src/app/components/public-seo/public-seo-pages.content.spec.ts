@@ -20,6 +20,7 @@ describe('public-seo-pages.content', () => {
       hub: 'guides',
       syncGarminToSuunto: 'guides/sync-garmin-to-suunto',
       syncCorosToSuunto: 'guides/sync-coros-to-suunto',
+      syncSuuntoRoutesToGarmin: 'guides/sync-suunto-routes-to-garmin-courses',
       centralizeWorkoutData: 'guides/centralize-garmin-suunto-coros-workout-data',
     });
   });
@@ -89,6 +90,11 @@ describe('public-seo-pages.content', () => {
     expect(PUBLIC_SEO_PAGES.syncGarminToSuunto.h1).toBe('How to sync Garmin data to Suunto automatically');
     expect(PUBLIC_SEO_PAGES.syncGarminToSuunto.howToSteps).toHaveLength(4);
 
+    expect(PUBLIC_SEO_PAGES.syncSuuntoRoutesToGarmin.h1).toBe('How to sync Suunto routes to Garmin courses');
+    expect(PUBLIC_SEO_PAGES.syncSuuntoRoutesToGarmin.description).toContain('COURSE_IMPORT');
+    expect(PUBLIC_SEO_PAGES.syncSuuntoRoutesToGarmin.description).toContain('Queue now');
+    expect(PUBLIC_SEO_PAGES.syncSuuntoRoutesToGarmin.howToSteps).toHaveLength(5);
+
     expect(PUBLIC_SEO_PAGES.centralizeWorkoutData.h1).toBe('Centralize Garmin, Suunto, and COROS workout data');
     expect(PUBLIC_SEO_PAGES.centralizeWorkoutData.intro).not.toContain('centralize Garmin Suunto and COROS workout data');
   });
@@ -114,28 +120,35 @@ describe('public-seo-pages.content', () => {
 
     expect(guideHubLinks).toContain('/guides/sync-garmin-to-suunto');
     expect(guideHubLinks).toContain('/guides/sync-coros-to-suunto');
+    expect(guideHubLinks).toContain('/guides/sync-suunto-routes-to-garmin-courses');
     expect(guideHubLinks).toContain('/guides/centralize-garmin-suunto-coros-workout-data');
     expect(guideHubLinks).toContain('/features');
     expect(guideHubLinks).toContain('/integrations');
   });
 
   it('keeps HowTo JSON-LD step text aligned with visible guide steps', () => {
-    const jsonLd = PUBLIC_SEO_ROUTE_DATA.syncGarminToSuunto.jsonLd;
-    const mainEntity = jsonLd['mainEntity'] as Record<string, unknown>[];
-    const howTo = mainEntity.find(entity => entity['@type'] === 'HowTo');
-    const steps = howTo?.['step'] as Record<string, unknown>[];
+    for (const [key, page] of Object.entries(PUBLIC_SEO_PAGES)) {
+      if (!page.howToSteps?.length) {
+        continue;
+      }
 
-    expect(steps).toHaveLength(PUBLIC_SEO_PAGES.syncGarminToSuunto.howToSteps?.length);
+      const jsonLd = PUBLIC_SEO_ROUTE_DATA[key as keyof typeof PUBLIC_SEO_ROUTE_DATA].jsonLd;
+      const mainEntity = jsonLd['mainEntity'] as Record<string, unknown>[];
+      const howTo = mainEntity.find(entity => entity['@type'] === 'HowTo');
+      const steps = howTo?.['step'] as Record<string, unknown>[];
 
-    for (const [index, step] of steps.entries()) {
-      const expectedStep = PUBLIC_SEO_PAGES.syncGarminToSuunto.howToSteps?.[index];
+      expect(steps).toHaveLength(page.howToSteps.length);
 
-      expect(step).toMatchObject({
-        '@type': 'HowToStep',
-        position: index + 1,
-        name: expectedStep,
-        text: expectedStep,
-      });
+      for (const [index, step] of steps.entries()) {
+        const expectedStep = page.howToSteps[index];
+
+        expect(step).toMatchObject({
+          '@type': 'HowToStep',
+          position: index + 1,
+          name: expectedStep,
+          text: expectedStep,
+        });
+      }
     }
   });
 });

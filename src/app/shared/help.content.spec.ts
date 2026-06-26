@@ -266,11 +266,14 @@ describe('help.content', () => {
     const serviceConnectionsSection = HELP_SECTIONS.find(section => section.id === 'service-connections');
 
     expect(serviceConnectionsSection?.content).toContain('**Suunto -> Garmin course delivery**');
+    expect(serviceConnectionsSection?.content).toContain('Suunto -> Garmin course delivery, manual catch-up');
     expect(serviceConnectionsSection?.content).toContain('one-time **Routes** page action prompt');
     expect(serviceConnectionsSection?.content).toContain('already saved in Quantified Self to Garmin as courses');
     expect(serviceConnectionsSection?.content).toContain('requires Garmin to be connected with **COURSE_IMPORT** permission');
     expect(serviceConnectionsSection?.content).toContain('**Queue now** action is a convenience backfill');
     expect(serviceConnectionsSection?.content).toContain('does not fetch routes from Suunto or Garmin');
+    expect(serviceConnectionsSection?.content).toContain('[Suunto routes to Garmin courses guide](/guides/sync-suunto-routes-to-garmin-courses)');
+    expect(serviceConnectionsSection?.links?.some(link => link.target === '/guides/sync-suunto-routes-to-garmin-courses')).toBe(true);
   });
 
   it('should document activity and route limits in plans and uploads help', () => {

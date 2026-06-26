@@ -107,12 +107,12 @@ export const routes: Routes = [
       title: 'Help & Support',
       preload: true,
       animation: 'Help',
-      description: 'Get help with Garmin -> Suunto and COROS -> Suunto sync routes, catch-up sync, AI Insights, account setup, uploads, billing, privacy, and troubleshooting in Quantified Self.',
+      description: 'Get help with Garmin -> Suunto and COROS -> Suunto sync routes, Suunto -> Garmin course delivery, catch-up sync, AI Insights, account setup, uploads, billing, privacy, and troubleshooting in Quantified Self.',
       jsonLd: {
         "@context": "https://schema.org",
         "@type": "WebPage",
         "name": "Quantified Self Help & Support",
-        "description": "Get help with Garmin -> Suunto and COROS -> Suunto sync routes, catch-up sync, AI Insights, account setup, uploads, billing, privacy, and troubleshooting in Quantified Self.",
+        "description": "Get help with Garmin -> Suunto and COROS -> Suunto sync routes, Suunto -> Garmin course delivery, catch-up sync, AI Insights, account setup, uploads, billing, privacy, and troubleshooting in Quantified Self.",
         "url": "https://quantified-self.io/help",
         "inLanguage": "en",
         "isPartOf": {
@@ -127,6 +127,7 @@ export const routes: Routes = [
           "Membership and billing",
           "Garmin -> Suunto sync",
           "COROS -> Suunto sync",
+          "Suunto -> Garmin course delivery",
           "Catch-up sync",
           "Garmin integration",
           "Suunto integration",
@@ -284,6 +285,11 @@ export const routes: Routes = [
     path: PUBLIC_GUIDE_PATHS.syncCorosToSuunto,
     loadComponent: () => import('./components/public-seo/public-seo-page.component').then(m => m.PublicSeoPageComponent),
     data: PUBLIC_SEO_ROUTE_DATA.syncCorosToSuunto
+  },
+  {
+    path: PUBLIC_GUIDE_PATHS.syncSuuntoRoutesToGarmin,
+    loadComponent: () => import('./components/public-seo/public-seo-page.component').then(m => m.PublicSeoPageComponent),
+    data: PUBLIC_SEO_ROUTE_DATA.syncSuuntoRoutesToGarmin
   },
   {
     path: PUBLIC_GUIDE_PATHS.centralizeWorkoutData,
