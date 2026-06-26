@@ -41,8 +41,9 @@ describe('IntegrationsHubPageComponent', () => {
     expect(text).toContain('Set up the sync route you need');
     expect(text).toContain('Garmin -> Suunto sync, COROS -> Suunto sync');
     expect(text).toContain('Private dashboard, history import, and Suunto sync');
-    expect(text).toContain('Sync destination, route sync, and Suunto history');
-    expect(text).toContain('Import and send Suunto routes');
+    expect(text).toContain('Sync destination, route sync, and Garmin course delivery');
+    expect(text).toContain('Deliver Suunto routes to Garmin');
+    expect(text).toContain('Suunto routes to Garmin courses');
     expect(text).toContain('Recent history import and Suunto sync');
   });
 
@@ -61,6 +62,7 @@ describe('IntegrationsHubPageComponent', () => {
     expect(hrefs).toContain('/guides');
     expect(hrefs).toContain('/guides/sync-garmin-to-suunto');
     expect(hrefs).toContain('/guides/sync-coros-to-suunto');
+    expect(hrefs).toContain('/guides/sync-suunto-routes-to-garmin-courses');
     expect(hrefs).toContain('/guides/centralize-garmin-suunto-coros-workout-data');
     expect(hrefs).toContain('/login');
     expect(hrefs).toContain('/help#service-connections');
