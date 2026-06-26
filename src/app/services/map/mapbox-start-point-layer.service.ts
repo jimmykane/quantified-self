@@ -61,6 +61,7 @@ export class MapboxStartPointLayerService {
 
   public renderStartPoints(map: any, config: MapboxStartPointLayerRenderConfig): void {
     if (!map || !config) return;
+    const pendingRenderKey = `${config.sourceId}:${config.layerId}:${config.hitLayerId}`;
 
     if (!Array.isArray(config.points) || !config.points.length) {
       this.clear(map, config);
@@ -71,7 +72,7 @@ export class MapboxStartPointLayerService {
       this.logger.log('[MapboxStartPointLayerService] Start-point render deferred; style not ready.', {
         layerId: config.layerId
       });
-      this.deferRender(map, `${config.sourceId}:${config.layerId}:${config.hitLayerId}`, () => this.renderStartPoints(map, config));
+      this.deferRender(map, pendingRenderKey, () => this.renderStartPoints(map, config));
       return;
     }
 
@@ -118,6 +119,7 @@ export class MapboxStartPointLayerService {
       this.ensureLayer(map, markerLayer, config.beforeLayerId);
       // Ensure any legacy hit layer is removed so it cannot appear as a visual artifact.
       this.removeLayerIfPresent(map, config.hitLayerId);
+      this.cancelDeferredRender(map, pendingRenderKey);
     } catch (error) {
       if (shouldDeferForMapboxStyle(map, error)) {
         this.logger.log('[MapboxStartPointLayerService] Start-point render deferred after Mapbox style error.', {
@@ -126,7 +128,7 @@ export class MapboxStartPointLayerService {
         });
         this.deferRender(
           map,
-          `${config.sourceId}:${config.layerId}:${config.hitLayerId}`,
+          pendingRenderKey,
           () => this.renderStartPoints(map, config),
           { runImmediately: false }
         );

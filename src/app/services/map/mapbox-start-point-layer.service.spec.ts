@@ -265,6 +265,43 @@ describe('MapboxStartPointLayerService', () => {
     expect(mockMap.addLayer).toHaveBeenCalledTimes(2);
   });
 
+  it('should cancel a stale deferred render after a newer render succeeds', () => {
+    mockMap.addSource.mockImplementationOnce(() => {
+      throw new Error('Style is not done loading');
+    });
+
+    service.renderStartPoints(mockMap, {
+      sourceId: 'track-start-source',
+      layerId: 'track-start-layer',
+      hitLayerId: 'track-start-hit-layer',
+      points: [{ lng: 20, lat: 40, properties: { pointId: 'stale' } }]
+    });
+    const idleHandler = mockMap.on.mock.calls.find(
+      (call: any[]) => call[0] === 'idle' && typeof call[1] === 'function'
+    )?.[1];
+
+    service.renderStartPoints(mockMap, {
+      sourceId: 'track-start-source',
+      layerId: 'track-start-layer',
+      hitLayerId: 'track-start-hit-layer',
+      points: [{ lng: 30, lat: 50, properties: { pointId: 'fresh' } }]
+    });
+    idleHandler?.();
+
+    expect(mockMap.addSource).toHaveBeenCalledTimes(2);
+    const freshSourceData = mockMap.addSource.mock.calls[1][1]?.data;
+    expect(freshSourceData?.features).toEqual([
+      expect.objectContaining({
+        properties: { pointId: 'fresh' },
+        geometry: expect.objectContaining({
+          coordinates: [30, 50],
+        }),
+      }),
+    ]);
+    expect(mockMap.addLayer).toHaveBeenCalledTimes(1);
+    expect(mockMap.off).toHaveBeenCalledWith('idle', idleHandler);
+  });
+
   it('should refresh paint on existing layers', () => {
     mockMap.getSource.mockReturnValue({ setData: vi.fn() });
     mockMap.getLayer.mockImplementation((id: string) => id === 'track-start-layer' || id === 'track-start-hit-layer');
