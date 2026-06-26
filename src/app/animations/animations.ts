@@ -26,6 +26,7 @@ export const expandCollapse =
 
 export const slideInAnimation =
   trigger('routeAnimations', [
+    transition('* => RouteAnimationDisabled, RouteAnimationDisabled => *', []),
     transition('* <=> *', [
       query(':enter, :leave', style({ position: 'absolute', inset: 0, width: '100%' }), { optional: true }),
       group([

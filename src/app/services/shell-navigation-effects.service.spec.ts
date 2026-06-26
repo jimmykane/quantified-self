@@ -59,6 +59,24 @@ describe('ShellNavigationEffectsService', () => {
     expect(service.animationState()).toBe('Dashboard');
   });
 
+  it('uses the disabled animation state when any active route opts out', () => {
+    (mockRouter as any).routerState.snapshot.root = {
+      data: { animation: 'Root' },
+      firstChild: {
+        data: { animation: 'MyTracks', disableRouteAnimation: true },
+        firstChild: {
+          data: { animation: 'MyTracksChild' },
+          firstChild: null
+        }
+      }
+    };
+
+    events$.next(new NavigationEnd(1, '/login', '/login'));
+    events$.next(new NavigationEnd(2, '/mytracks', '/mytracks'));
+
+    expect(service.animationState()).toBe('RouteAnimationDisabled');
+  });
+
   it('triggers haptics only for imperative navigation after initial navigation', () => {
     events$.next(new NavigationEnd(1, '/dashboard', '/dashboard'));
     events$.next(new NavigationStart(2, '/help', 'imperative'));

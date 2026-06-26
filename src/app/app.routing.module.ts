@@ -346,7 +346,7 @@ export const routes: Routes = [
   {
     path: 'mytracks',
     loadChildren: () => import('./modules/my-tracks.module').then(module => module.MyTracksModule),
-    data: { title: 'MyTracks', animation: 'MyTracks', preload: true },
+    data: { title: 'MyTracks', animation: 'MyTracks', disableRouteAnimation: true, preload: true },
     canMatch: [authGuard, onboardingGuard]
   },
   {

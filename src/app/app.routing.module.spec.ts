@@ -57,6 +57,7 @@ describe('AppRoutingModule routes', () => {
 
     expect(myTracksRoute).toBeTruthy();
     expect(myTracksRoute?.canMatch).toEqual([authGuard, onboardingGuard]);
+    expect(myTracksRoute?.data?.['disableRouteAnimation']).toBe(true);
   });
 
   it('should keep the private routes library authenticated and noindexed', () => {
