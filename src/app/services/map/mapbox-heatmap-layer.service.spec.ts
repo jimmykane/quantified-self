@@ -203,6 +203,49 @@ describe('MapboxHeatmapLayerService', () => {
         }));
     });
 
+    it('renderGeoJsonHeatmapLayer should cancel a stale deferred render after a newer render succeeds', () => {
+        const { map, handlers } = createMapHarness({ styleReady: true, hasLayer: false, hasSource: false });
+        const staleConfig = {
+            sourceId: 'heat-source',
+            layerId: 'heat-layer',
+            featureCollection: {
+                type: 'FeatureCollection' as const,
+                features: [{ type: 'Feature', geometry: { type: 'Point', coordinates: [0, 0] }, properties: { id: 'stale' } }]
+            },
+            paint: { 'heatmap-opacity': 0.3 }
+        };
+        const freshConfig = {
+            sourceId: 'heat-source',
+            layerId: 'heat-layer',
+            featureCollection: {
+                type: 'FeatureCollection' as const,
+                features: [{ type: 'Feature', geometry: { type: 'Point', coordinates: [1, 1] }, properties: { id: 'fresh' } }]
+            },
+            paint: { 'heatmap-opacity': 0.9 }
+        };
+        map.addSource.mockImplementationOnce(() => {
+            throw new Error('Style is not done loading');
+        });
+
+        service.renderGeoJsonHeatmapLayer(map as any, staleConfig);
+        const deferredIdleHandler = handlers['idle'][0];
+
+        service.renderGeoJsonHeatmapLayer(map as any, freshConfig);
+        deferredIdleHandler();
+
+        expect(map.addSource).toHaveBeenCalledTimes(2);
+        expect(map.addSource).toHaveBeenLastCalledWith('heat-source', {
+            type: 'geojson',
+            data: freshConfig.featureCollection
+        });
+        expect(map.addLayer).toHaveBeenCalledTimes(1);
+        expect(map.addLayer).toHaveBeenLastCalledWith(expect.objectContaining({
+            id: 'heat-layer',
+            paint: { 'heatmap-opacity': 0.9 }
+        }));
+        expect(map.off).toHaveBeenCalledWith('idle', deferredIdleHandler);
+    });
+
     it('setLayerVisibility should defer until style is ready and then apply visibility', () => {
         const { map, handlers, setStyleReady } = createMapHarness({ styleReady: false, hasLayer: true });
 
@@ -213,6 +256,21 @@ describe('MapboxHeatmapLayerService', () => {
         handlers['styledata'][0]();
 
         expect(map.setLayoutProperty).toHaveBeenCalledWith('heat-layer', 'visibility', 'none');
+    });
+
+    it('setLayerVisibility should cancel a stale deferred visibility update after a newer update succeeds', () => {
+        const { map, handlers, setStyleReady } = createMapHarness({ styleReady: false, hasLayer: true });
+
+        service.setLayerVisibility(map as any, 'heat-layer', false);
+        const deferredIdleHandler = handlers['idle'][0];
+
+        setStyleReady(true);
+        service.setLayerVisibility(map as any, 'heat-layer', true);
+        deferredIdleHandler();
+
+        expect(map.setLayoutProperty).toHaveBeenCalledTimes(1);
+        expect(map.setLayoutProperty).toHaveBeenCalledWith('heat-layer', 'visibility', 'visible');
+        expect(map.off).toHaveBeenCalledWith('idle', deferredIdleHandler);
     });
 
     it('clearLayerAndSource should remove only existing layer/source', () => {

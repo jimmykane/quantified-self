@@ -27,6 +27,7 @@ export class MapboxHeatmapLayerService {
 
   public renderGeoJsonHeatmapLayer(map: any, config: MapboxHeatmapRenderConfig): void {
     if (!map || !config) return;
+    const pendingRenderKey = this.buildPendingRenderKey(config.layerId);
 
     if (!config.featureCollection?.features?.length) {
       this.clearLayerAndSource(map, config.sourceId, config.layerId);
@@ -40,7 +41,7 @@ export class MapboxHeatmapLayerService {
       });
       this.deferRender(
         map,
-        this.buildPendingRenderKey(config.layerId),
+        pendingRenderKey,
         () => this.renderGeoJsonHeatmapLayer(map, config)
       );
       return;
@@ -78,20 +79,20 @@ export class MapboxHeatmapLayerService {
         } else {
           map.addLayer(layerDefinition);
         }
-        return;
+      } else {
+        if (config.beforeLayerId && typeof map.moveLayer === 'function') {
+          map.moveLayer(config.layerId, config.beforeLayerId);
+        }
+        if (typeof map.setLayoutProperty === 'function') {
+          map.setLayoutProperty(config.layerId, 'visibility', visibility);
+        }
       }
-
-      if (config.beforeLayerId && typeof map.moveLayer === 'function') {
-        map.moveLayer(config.layerId, config.beforeLayerId);
-      }
-      if (typeof map.setLayoutProperty === 'function') {
-        map.setLayoutProperty(config.layerId, 'visibility', visibility);
-      }
+      this.cancelDeferredRender(map, pendingRenderKey);
     } catch (error) {
       if (this.shouldDeferAfterMapboxError(map, error)) {
         this.deferRender(
           map,
-          this.buildPendingRenderKey(config.layerId),
+          pendingRenderKey,
           () => this.renderGeoJsonHeatmapLayer(map, config),
           { runImmediately: false }
         );
@@ -106,11 +107,12 @@ export class MapboxHeatmapLayerService {
 
   public setLayerVisibility(map: any, layerId: string, visible: boolean): void {
     if (!map || !layerId) return;
+    const pendingVisibilityKey = this.buildPendingVisibilityKey(layerId);
     if (!this.isStyleReady(map)) {
       if (this.isMapRemoved(map)) return;
       this.deferRender(
         map,
-        this.buildPendingVisibilityKey(layerId),
+        pendingVisibilityKey,
         () => this.setLayerVisibility(map, layerId, visible)
       );
       return;
@@ -120,11 +122,12 @@ export class MapboxHeatmapLayerService {
       if (typeof map.setLayoutProperty === 'function') {
         map.setLayoutProperty(layerId, 'visibility', visible ? 'visible' : 'none');
       }
+      this.cancelDeferredRender(map, pendingVisibilityKey);
     } catch (error) {
       if (this.shouldDeferAfterMapboxError(map, error)) {
         this.deferRender(
           map,
-          this.buildPendingVisibilityKey(layerId),
+          pendingVisibilityKey,
           () => this.setLayerVisibility(map, layerId, visible),
           { runImmediately: false }
         );
