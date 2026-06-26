@@ -19,8 +19,11 @@ export class MapboxStyleSynchronizer {
     constructor(
         private map: any,
         private styleService: MapStyleServiceInterface,
-        private logger: LoggerInterface
+        private logger: LoggerInterface,
+        initialState?: MapStyleState,
     ) {
+        this.currentStyleUrl = initialState?.styleUrl;
+        this.pendingState = initialState || null;
         this.attachListeners();
     }
 
@@ -67,9 +70,16 @@ export class MapboxStyleSynchronizer {
             return;
         }
 
+        if (!isStyleReady(this.map)) {
+            this.pendingState = state;
+            this.logger.info('[MapboxStyleSynchronizer] Style not ready, queued preset update', state);
+            return;
+        }
+
         // Style URL is same, check/apply preset
         // We delegate to the service's "safe" applier which checks for redundancy
         this.styleService.applyStandardPreset(this.map, styleUrl, preset);
+        this.pendingState = null;
     }
 
     /**
@@ -160,6 +170,10 @@ export class MapboxStyleSynchronizer {
                 target: next.styleUrl
             });
             this.applyState(next); // This will set isLoading=true again
+            return;
+        }
+
+        if (!isStyleReady(this.map)) {
             return;
         }
 

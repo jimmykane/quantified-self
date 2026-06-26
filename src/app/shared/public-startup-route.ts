@@ -20,6 +20,7 @@ const PUBLIC_STARTUP_PATHS = new Set([
   '/guides',
   '/guides/sync-garmin-to-suunto',
   '/guides/sync-coros-to-suunto',
+  '/guides/sync-suunto-routes-to-garmin-courses',
   '/guides/centralize-garmin-suunto-coros-workout-data',
 ]);
 

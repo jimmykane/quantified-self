@@ -5,6 +5,7 @@ describe('integration-pages.content', () => {
   it('should define a hub card and route metadata for each provider page', () => {
     expect(INTEGRATION_HUB_CARDS.map(card => card.slug)).toEqual(['garmin', 'suunto', 'coros']);
     expect(INTEGRATIONS_HUB_ROUTE_DATA.jsonLd['@type']).toBe('CollectionPage');
+    expect(INTEGRATIONS_HUB_ROUTE_DATA.description).toContain('route delivery');
 
     for (const key of ['garmin', 'suunto', 'coros'] as const) {
       const page = PROVIDER_INTEGRATION_PAGES[key];
@@ -36,11 +37,17 @@ describe('integration-pages.content', () => {
     expect(PROVIDER_INTEGRATION_ROUTE_DATA.coros).not.toHaveProperty('keywords');
     expect(PROVIDER_INTEGRATION_ROUTE_DATA.suunto.description).toContain('Sync Garmin and COROS activities to Suunto');
     expect(PROVIDER_INTEGRATION_ROUTE_DATA.suunto.description).toContain('import Suunto routes');
+    expect(PROVIDER_INTEGRATION_ROUTE_DATA.suunto.description).toContain('deliver Suunto routes to Garmin courses');
     expect(PROVIDER_INTEGRATION_ROUTE_DATA.suunto.description).toContain('send saved GPX routes to Suunto');
+    expect(INTEGRATION_HUB_CARDS.find(card => card.slug === 'suunto')?.summary).toContain('deliver Suunto routes to Garmin courses');
+    expect(INTEGRATION_HUB_CARDS.find(card => card.slug === 'suunto')?.highlights).toContain('Deliver Suunto routes to Garmin');
     expect(PROVIDER_INTEGRATION_PAGES.suunto.h1).toBe('Suunto Integration for Activity and Route Sync');
     expect(PROVIDER_INTEGRATION_PAGES.suunto.highlights).toContain('Suunto route import and catch-up');
+    expect(PROVIDER_INTEGRATION_PAGES.suunto.highlights).toContain('Suunto -> Garmin course delivery');
     expect(PROVIDER_INTEGRATION_PAGES.suunto.tools.some(tool => tool.title === 'Suunto route import')).toBe(true);
+    expect(PROVIDER_INTEGRATION_PAGES.suunto.tools.some(tool => tool.title === 'Garmin course delivery')).toBe(true);
     expect(PROVIDER_INTEGRATION_PAGES.suunto.faqItems.some(item => item.question === 'Can Quantified Self sync routes with Suunto?')).toBe(true);
+    expect(PROVIDER_INTEGRATION_PAGES.suunto.faqItems.some(item => item.question === 'Can Suunto routes sync to Garmin courses?')).toBe(true);
     expect(PROVIDER_INTEGRATION_ROUTE_DATA.suunto).not.toHaveProperty('keywords');
   });
 });

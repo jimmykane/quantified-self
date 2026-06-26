@@ -15,6 +15,7 @@ Allow: /features/sports-watch-benchmark
 Allow: /guides
 Allow: /guides/sync-garmin-to-suunto
 Allow: /guides/sync-coros-to-suunto
+Allow: /guides/sync-suunto-routes-to-garmin-courses
 Allow: /guides/centralize-garmin-suunto-coros-workout-data
 Allow: /releases
 Disallow: /user

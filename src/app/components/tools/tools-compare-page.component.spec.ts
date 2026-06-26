@@ -1292,6 +1292,12 @@ describe('ToolsComparePageComponent', () => {
     const styles = readFileSync('src/app/components/tools/tools-compare-page.component.scss', 'utf8');
     const selectionToolbarStyles = styles.match(/\.comparison-selection-toolbar\s*{(?<body>[^}]*)}/)?.groups?.['body'] ?? '';
 
+    expect(styles).toContain('max-width: 100%;');
+    expect(styles).toContain('min-width: 0;');
+    expect(styles).toContain('overflow: auto;');
+    expect(styles).toContain('overscroll-behavior: contain;');
+    expect(styles).toContain('scrollbar-gutter: stable;');
+    expect(styles).toContain('-webkit-overflow-scrolling: touch;');
     expect(selectionToolbarStyles).toContain('position: sticky;');
     expect(selectionToolbarStyles).toContain('left: 0;');
     expect(selectionToolbarStyles).toContain('width: 100%;');

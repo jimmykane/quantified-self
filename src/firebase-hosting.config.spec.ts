@@ -92,6 +92,16 @@ function matchesAnyHostingSource(sources: readonly string[], path: string): bool
   return sources.some(source => matchesHostingSource(source, path));
 }
 
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function sitemapLastmodForUrl(url: string): string | null {
+  const match = sitemapXml.match(new RegExp(`<url>\\s*<loc>${escapeRegExp(url)}</loc>\\s*<lastmod>([^<]+)</lastmod>`, 'm'));
+
+  return match?.[1] ?? null;
+}
+
 function isAllowedByRobots(source: string): boolean {
   const allowSources = robotsTxt
     .split('\n')
@@ -161,6 +171,23 @@ describe('Firebase Hosting configuration', () => {
 
       expect(sitemapXml).toContain(`<loc>${url}</loc>`);
       expect(isAllowedByRobots(source)).toBe(true);
+    }
+  });
+
+  it('marks route-delivery SEO launch pages as recently updated in sitemap', () => {
+    const expectedLastmod = '2026-06-26';
+    const updatedUrls = [
+      `${siteOrigin}/help`,
+      `${siteOrigin}/integrations`,
+      `${siteOrigin}/integrations/garmin`,
+      `${siteOrigin}/integrations/suunto`,
+      `${siteOrigin}/features/fit-gpx-route-files`,
+      `${siteOrigin}/guides`,
+      `${siteOrigin}/guides/sync-suunto-routes-to-garmin-courses`,
+    ];
+
+    for (const url of updatedUrls) {
+      expect(sitemapLastmodForUrl(url), url).toBe(expectedLastmod);
     }
   });
 

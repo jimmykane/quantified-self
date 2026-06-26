@@ -1,12 +1,12 @@
 @if (activitiesWithJumps.length > 0) {
 <app-event-section-header icon="monitoring" title="Jumps"></app-event-section-header>
 <mat-tab-group [dynamicHeight]="true" [preserveContent]="true">
-  @for (activity of activitiesWithJumps; track activity; let i = $index) {
-  <mat-tab [label]="getActivityTabLabel(activity, i)">
-    @if (getDataSource(activity)) {
+  @for (view of jumpActivityViews; track view.key) {
+  <mat-tab [label]="view.label">
+    @if (view.dataSource) {
     <section class="table-container">
-      <table mat-table [dataSource]="getDataSource(activity)">
-        @for (column of getColumns(activity); track column) {
+      <table mat-table [dataSource]="view.dataSource">
+        @for (column of view.columns; track column) {
         <ng-container [matColumnDef]="column" [sticky]="isSticky(column)">
           <mat-header-cell *matHeaderCellDef>
             <app-data-type-icon [dataType]="column"></app-data-type-icon>
@@ -15,8 +15,8 @@
         </ng-container>
         }
 
-        <mat-header-row *matHeaderRowDef="getColumns(activity)"></mat-header-row>
-        <mat-row *matRowDef="let row; columns: getColumns(activity);"></mat-row>
+        <mat-header-row *matHeaderRowDef="view.columns"></mat-header-row>
+        <mat-row *matRowDef="let row; columns: view.columns;"></mat-row>
       </table>
     </section>
     }

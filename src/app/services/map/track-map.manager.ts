@@ -16,6 +16,8 @@ import {
 import {
   attachStyleReloadHandler,
   isStyleReady,
+  runWhenStyleReady,
+  shouldDeferForMapboxStyle,
 } from './mapbox-style-ready.utils';
 
 export interface TrackMapPosition {
@@ -64,6 +66,7 @@ export class TrackMapManager {
   private mapboxgl: any | null = null;
   private styleLoadHandler: (() => void) | null = null;
   private styleLoadHandlerCleanup: (() => void) | null = null;
+  private styleReadyRenderCleanup: (() => void) | null = null;
 
   private currentTracks: TrackMapRenderData[] = [];
   private currentOptions: Required<TrackMapRenderOptions> = {
@@ -99,6 +102,8 @@ export class TrackMapManager {
     }
 
     this.styleLoadHandlerCleanup?.();
+    this.styleReadyRenderCleanup?.();
+    this.styleReadyRenderCleanup = null;
     clearDeferredTerrainToggleState(this.terrainToggleState);
 
     this.map = map;
@@ -151,6 +156,8 @@ export class TrackMapManager {
   }
 
   public clearAll(): void {
+    this.styleReadyRenderCleanup?.();
+    this.styleReadyRenderCleanup = null;
     this.clearTracksAndMarkers();
     this.clearCursorMarkers();
     this.currentTracks = [];
@@ -189,13 +196,12 @@ export class TrackMapManager {
         pitch: typeof this.map.getPitch === 'function' ? this.map.getPitch() : null,
       });
     } catch (error: any) {
-      const message = String(error?.message || '');
       this.logger.warn(`[${this.logPrefix}] Failed to toggle terrain.`, {
         enable,
         animate,
         error,
       });
-      if (message.includes('Style is not done loading') || !isStyleReady(this.map)) {
+      if (shouldDeferForMapboxStyle(this.map, error)) {
         this.logger.log(`[${this.logPrefix}] Deferring terrain toggle after failure.`, { enable, animate });
         deferTerrainToggleUntilReady(
           this.map,
@@ -271,14 +277,54 @@ export class TrackMapManager {
     if (!this.map || !this.mapboxgl) {
       return;
     }
-    const incomingTrackIds = new Set((this.currentTracks || []).map((track) => track.id));
-    this.activeLayersByTrackId.forEach((_ids, trackId) => {
-      if (!incomingTrackIds.has(trackId)) {
-        this.removeTrack(trackId);
-      }
-    });
 
-    this.currentTracks.forEach((track) => this.renderSingleTrack(track));
+    if (!isStyleReady(this.map)) {
+      this.scheduleRenderWhenStyleReady();
+      this.logger.log(`[${this.logPrefix}] Style not ready. Track layer render deferred.`, {
+        trackCount: this.currentTracks.length,
+      });
+      return;
+    }
+
+    this.styleReadyRenderCleanup?.();
+    this.styleReadyRenderCleanup = null;
+
+    try {
+      const incomingTrackIds = new Set((this.currentTracks || []).map((track) => track.id));
+      this.activeLayersByTrackId.forEach((_ids, trackId) => {
+        if (!incomingTrackIds.has(trackId)) {
+          this.removeTrack(trackId);
+        }
+      });
+
+      this.currentTracks.forEach((track) => this.renderSingleTrack(track));
+    } catch (error) {
+      if (shouldDeferForMapboxStyle(this.map, error)) {
+        this.logger.log(`[${this.logPrefix}] Track layer render deferred after Mapbox style error.`, {
+          trackCount: this.currentTracks.length,
+          error,
+        });
+        this.scheduleRenderWhenStyleReady();
+        return;
+      }
+      throw error;
+    }
+  }
+
+  private scheduleRenderWhenStyleReady(): void {
+    if (!this.map || this.styleReadyRenderCleanup) {
+      return;
+    }
+
+    this.styleReadyRenderCleanup = runWhenStyleReady(
+      this.map,
+      () => {
+        this.styleReadyRenderCleanup = null;
+        this.renderTracks();
+        this.renderCursorMarkers();
+      },
+      { runImmediately: false },
+    );
   }
 
   private renderSingleTrack(track: TrackMapRenderData): void {

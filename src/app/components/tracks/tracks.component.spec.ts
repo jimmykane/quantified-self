@@ -1015,7 +1015,10 @@ describe('TracksComponent', () => {
       fixture.detectChanges();
       await waitForAsyncWork();
 
-      expect(mockMapStyleService.createSynchronizer).toHaveBeenCalledWith(mockMap);
+      expect(mockMapStyleService.createSynchronizer).toHaveBeenCalledWith(mockMap, expect.objectContaining({
+        styleUrl: 'mapbox://styles/mapbox/standard',
+        preset: 'day',
+      }));
 
       const synchronizer = mockMapStyleService.createSynchronizer.mock.results[0].value;
       expect(synchronizer.update).toHaveBeenCalled();

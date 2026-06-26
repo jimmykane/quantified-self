@@ -56,8 +56,10 @@ describe('ProviderIntegrationPageComponent', () => {
     const text = fixture.nativeElement.textContent as string;
 
     expect(text).toContain('Suunto Integration for Activity and Route Sync');
-    expect(text).toContain('How to sync Garmin and COROS data to Suunto automatically');
+    expect(text).toContain('How to sync activities to Suunto and deliver Suunto routes to Garmin');
     expect(text).toContain('Suunto route import and catch-up');
+    expect(text).toContain('Suunto -> Garmin course delivery');
+    expect(text).toContain('Can Suunto routes sync to Garmin courses?');
     expect(text).toContain('FIT activity upload');
     expect(text).toContain('GPX route upload');
     expect(text).toContain('Can Quantified Self sync routes with Suunto?');

@@ -22,7 +22,7 @@
   </url>
   <url>
     <loc>https://quantified-self.io/help</loc>
-    <lastmod>2026-05-29</lastmod>
+    <lastmod>2026-06-26</lastmod>
     <priority>0.8</priority>
   </url>
   <url>
@@ -37,17 +37,17 @@
   </url>
   <url>
     <loc>https://quantified-self.io/integrations</loc>
-    <lastmod>2026-05-29</lastmod>
+    <lastmod>2026-06-26</lastmod>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://quantified-self.io/integrations/garmin</loc>
-    <lastmod>2026-05-29</lastmod>
+    <lastmod>2026-06-26</lastmod>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://quantified-self.io/integrations/suunto</loc>
-    <lastmod>2026-06-15</lastmod>
+    <lastmod>2026-06-26</lastmod>
     <priority>0.8</priority>
   </url>
   <url>
@@ -82,7 +82,7 @@
   </url>
   <url>
     <loc>https://quantified-self.io/features/fit-gpx-route-files</loc>
-    <lastmod>2026-06-15</lastmod>
+    <lastmod>2026-06-26</lastmod>
     <priority>0.8</priority>
   </url>
   <url>
@@ -92,7 +92,7 @@
   </url>
   <url>
     <loc>https://quantified-self.io/guides</loc>
-    <lastmod>2026-05-29</lastmod>
+    <lastmod>2026-06-26</lastmod>
     <priority>0.8</priority>
   </url>
   <url>
@@ -103,6 +103,11 @@
   <url>
     <loc>https://quantified-self.io/guides/sync-coros-to-suunto</loc>
     <lastmod>2026-05-29</lastmod>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://quantified-self.io/guides/sync-suunto-routes-to-garmin-courses</loc>
+    <lastmod>2026-06-26</lastmod>
     <priority>0.7</priority>
   </url>
   <url>

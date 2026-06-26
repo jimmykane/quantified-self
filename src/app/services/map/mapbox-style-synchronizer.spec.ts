@@ -52,6 +52,44 @@ describe('MapboxStyleSynchronizer', () => {
         expect(mockMap.setStyle).toHaveBeenCalledWith(state.styleUrl, { diff: false });
     });
 
+    it('should not reload the style when initialized with the current style', () => {
+        const state: MapStyleState = { styleUrl: 'mapbox://styles/mapbox/standard', preset: 'day' };
+        synchronizer = new MapboxStyleSynchronizer(mockMap, mockMapStyleService, mockLogger, state);
+
+        synchronizer.update(state);
+
+        expect(mockMap.setStyle).not.toHaveBeenCalled();
+        expect(mockMapStyleService.applyStandardPreset).toHaveBeenCalledWith(mockMap, state.styleUrl, 'day');
+    });
+
+    it('should queue same-style preset updates until the style is ready', () => {
+        const initialState: MapStyleState = { styleUrl: 'mapbox://styles/mapbox/standard', preset: 'day' };
+        const nextState: MapStyleState = { styleUrl: initialState.styleUrl, preset: 'night' };
+        mockMap.isStyleLoaded.mockReturnValue(false);
+        synchronizer = new MapboxStyleSynchronizer(mockMap, mockMapStyleService, mockLogger, initialState);
+
+        synchronizer.update(nextState);
+
+        expect(mockMap.setStyle).not.toHaveBeenCalled();
+        expect(mockMapStyleService.applyStandardPreset).not.toHaveBeenCalled();
+
+        const styleDataArgs = mockMap.on.mock.calls
+            .filter((args: any[]) => args[0] === 'styledata')
+            .at(-1);
+        expect(styleDataArgs).toBeTruthy();
+        styleDataArgs[1]();
+        expect(mockMapStyleService.applyStandardPreset).not.toHaveBeenCalled();
+
+        mockMap.isStyleLoaded.mockReturnValue(true);
+        const styleLoadArgs = mockMap.on.mock.calls
+            .filter((args: any[]) => args[0] === 'style.load')
+            .at(-1);
+        expect(styleLoadArgs).toBeTruthy();
+        styleLoadArgs[1]();
+
+        expect(mockMapStyleService.applyStandardPreset).toHaveBeenCalledWith(mockMap, nextState.styleUrl, 'night');
+    });
+
     it('should buffer rapid updates and apply only the latest', () => {
         const state1: MapStyleState = { styleUrl: 'url1', preset: 'day' };
         const state2: MapStyleState = { styleUrl: 'url2', preset: 'night' };

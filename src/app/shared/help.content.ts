@@ -507,11 +507,11 @@ Garmin, Suunto, and COROS connections are part of **Pro**.
 
 ## Integration pages overview
 
-The public [Integrations hub](/integrations) links to focused [Garmin Integration](/integrations/garmin), [Suunto Integration](/integrations/suunto), and [COROS Integration](/integrations/coros) pages. They explain Garmin -> Suunto sync, COROS -> Suunto sync, Garmin saved-route delivery to Garmin Connect, manual catch-up, provider history imports, FIT activity uploads, GPX route uploads, and how those workflows connect to the private training dashboard.
+The public [Integrations hub](/integrations) links to focused [Garmin Integration](/integrations/garmin), [Suunto Integration](/integrations/suunto), and [COROS Integration](/integrations/coros) pages. They explain Garmin -> Suunto sync, COROS -> Suunto sync, Garmin saved-route delivery to Garmin Connect, Suunto -> Garmin course delivery, manual catch-up, provider history imports, FIT activity uploads, GPX route uploads, and how those workflows connect to the private training dashboard.
 
 Provider-specific privacy details live on [Policies -> Connected Services](/policies#connected-services-data), with separate sections for [Garmin Data](/policies#garmin-data), [Suunto Data](/policies#suunto-data), [COROS Data](/policies#coros-data), and [AI & Third-Party Processing](/policies#ai-and-third-party-processing).
 
-The public [Training Data Sync Guides](/guides) hub links to the [Garmin to Suunto sync guide](/guides/sync-garmin-to-suunto), [COROS to Suunto sync guide](/guides/sync-coros-to-suunto), and [centralized workout data guide](/guides/centralize-garmin-suunto-coros-workout-data) for step-by-step setup.
+The public [Training Data Sync Guides](/guides) hub links to the [Garmin to Suunto sync guide](/guides/sync-garmin-to-suunto), [COROS to Suunto sync guide](/guides/sync-coros-to-suunto), [Suunto routes to Garmin courses guide](/guides/sync-suunto-routes-to-garmin-courses), and [centralized workout data guide](/guides/centralize-garmin-suunto-coros-workout-data) for step-by-step setup.
 
 The public [Tools hub](/tools) links to the [File Comparison Tool](/tools/compare), which creates saved benchmark events directly from FIT, GPX, and TCX files.
 
@@ -622,6 +622,7 @@ Suunto and COROS history imports are queued jobs. Large ranges can take hours or
       { label: 'FIT and GPX Route Files', icon: 'route', kind: 'route', target: '/features/fit-gpx-route-files' },
       { label: 'Garmin to Suunto Guide', icon: 'sync_alt', kind: 'route', target: '/guides/sync-garmin-to-suunto' },
       { label: 'COROS to Suunto Guide', icon: 'published_with_changes', kind: 'route', target: '/guides/sync-coros-to-suunto' },
+      { label: 'Suunto Routes to Garmin Guide', icon: 'route', kind: 'route', target: '/guides/sync-suunto-routes-to-garmin-courses' },
       { label: 'Centralize Workout Data', icon: 'hub', kind: 'route', target: '/guides/centralize-garmin-suunto-coros-workout-data' },
       { label: 'Garmin Integration', icon: 'sync_alt', kind: 'route', target: '/integrations/garmin' },
       { label: 'Suunto Integration', icon: 'published_with_changes', kind: 'route', target: '/integrations/suunto' },

@@ -26,7 +26,8 @@ import {
 import {
     attachStyleReloadHandler,
     isStyleReady,
-    runWhenStyleReady
+    runWhenStyleReady,
+    shouldDeferForMapboxStyle
 } from '../../services/map/mapbox-style-ready.utils';
 import { resolveThemedActivityColor } from '../../services/map/map-activity-color.utils';
 import {
@@ -102,6 +103,10 @@ export class TracksMapManager {
     private mapboxgl: any; // Mapbox GL JS library reference
     private tracksByActivityId = new Map<string, TrackRenderRecord>();
     private styleLoadHandlerCleanup: (() => void) | null = null;
+    private homeAreaStyleReadyCleanup: (() => void) | null = null;
+    private homeAreaRemovalStyleReadyCleanup: (() => void) | null = null;
+    private tripAreaStyleReadyCleanup: (() => void) | null = null;
+    private tripAreaRemovalStyleReadyCleanup: (() => void) | null = null;
     private terrainControl: any;
     private terrainToggleState: DeferredTerrainToggleState = { pendingRequest: null };
     private isDarkTheme = false;
@@ -131,6 +136,10 @@ export class TracksMapManager {
 
     public setMap(map: any, mapboxgl: any) {
         this.styleLoadHandlerCleanup?.();
+        this.clearDeferredHomeAreaRender();
+        this.clearDeferredHomeAreaRemoval();
+        this.clearDeferredTripAreaRender();
+        this.clearDeferredTripAreaRemoval();
         clearDeferredTerrainToggleState(this.terrainToggleState);
         this.map = map;
         this.mapboxgl = mapboxgl;
@@ -841,33 +850,65 @@ export class TracksMapManager {
             this.removeHomeAreaLayerAndSource();
             return;
         }
-        const beforeLayerId = this.getFirstTrackLayerId();
-        const fillPaint = this.buildHomeAreaFillPaint();
-        const outlinePaint = this.buildHomeAreaOutlinePaint();
+        this.clearDeferredHomeAreaRemoval();
+        if (!isStyleReady(this.map)) {
+            this.deferHomeAreaRenderUntilStyleReady();
+            return;
+        }
+        this.clearDeferredHomeAreaRender();
 
         this.zone.runOutsideAngular(() => {
-            upsertMapSearchScopeOverlay(this.map, {
-                sourceId: TracksMapManager.HOME_AREA_SOURCE_ID,
-                fillLayerId: TracksMapManager.HOME_AREA_FILL_LAYER_ID,
-                outlineLayerId: TracksMapManager.HOME_AREA_OUTLINE_LAYER_ID,
-                featureCollection: sourceData,
-                fillPaint,
-                outlinePaint,
-                beforeLayerId,
-            });
+            try {
+                const beforeLayerId = this.getFirstTrackLayerId();
+                const fillPaint = this.buildHomeAreaFillPaint();
+                const outlinePaint = this.buildHomeAreaOutlinePaint();
+
+                upsertMapSearchScopeOverlay(this.map, {
+                    sourceId: TracksMapManager.HOME_AREA_SOURCE_ID,
+                    fillLayerId: TracksMapManager.HOME_AREA_FILL_LAYER_ID,
+                    outlineLayerId: TracksMapManager.HOME_AREA_OUTLINE_LAYER_ID,
+                    featureCollection: sourceData,
+                    fillPaint,
+                    outlinePaint,
+                    beforeLayerId,
+                });
+            } catch (error) {
+                if (shouldDeferForMapboxStyle(this.map, error)) {
+                    this.deferHomeAreaRenderUntilStyleReady();
+                    return;
+                }
+                throw error;
+            }
         });
     }
 
     private removeHomeAreaLayerAndSource(): void {
-        if (!this.map) return;
+        this.clearDeferredHomeAreaRender();
+        if (!this.map) {
+            this.clearDeferredHomeAreaRemoval();
+            return;
+        }
+        if (!isStyleReady(this.map)) {
+            this.deferHomeAreaRemovalUntilStyleReady();
+            return;
+        }
 
         this.zone.runOutsideAngular(() => {
-            removeMapSearchScopeOverlay(
-                this.map,
-                TracksMapManager.HOME_AREA_SOURCE_ID,
-                TracksMapManager.HOME_AREA_FILL_LAYER_ID,
-                TracksMapManager.HOME_AREA_OUTLINE_LAYER_ID,
-            );
+            try {
+                removeMapSearchScopeOverlay(
+                    this.map,
+                    TracksMapManager.HOME_AREA_SOURCE_ID,
+                    TracksMapManager.HOME_AREA_FILL_LAYER_ID,
+                    TracksMapManager.HOME_AREA_OUTLINE_LAYER_ID,
+                );
+                this.clearDeferredHomeAreaRemoval();
+            } catch (error) {
+                if (shouldDeferForMapboxStyle(this.map, error)) {
+                    this.deferHomeAreaRemovalUntilStyleReady();
+                    return;
+                }
+                throw error;
+            }
         });
     }
 
@@ -890,34 +931,138 @@ export class TracksMapManager {
             this.removeTripAreaLayerAndSource();
             return;
         }
-        const beforeLayerId = this.getTripAreaBeforeLayerId();
-        const fillPaint = this.buildTripAreaFillPaint();
-        const outlinePaint = this.buildTripAreaOutlinePaint();
+        this.clearDeferredTripAreaRemoval();
+        if (!isStyleReady(this.map)) {
+            this.deferTripAreaRenderUntilStyleReady();
+            return;
+        }
+        this.clearDeferredTripAreaRender();
 
         this.zone.runOutsideAngular(() => {
-            upsertMapSearchScopeOverlay(this.map, {
-                sourceId: TracksMapManager.TRIP_AREA_SOURCE_ID,
-                fillLayerId: TracksMapManager.TRIP_AREA_FILL_LAYER_ID,
-                outlineLayerId: TracksMapManager.TRIP_AREA_OUTLINE_LAYER_ID,
-                featureCollection: sourceData,
-                fillPaint,
-                outlinePaint,
-                beforeLayerId,
-            });
+            try {
+                const beforeLayerId = this.getTripAreaBeforeLayerId();
+                const fillPaint = this.buildTripAreaFillPaint();
+                const outlinePaint = this.buildTripAreaOutlinePaint();
+
+                upsertMapSearchScopeOverlay(this.map, {
+                    sourceId: TracksMapManager.TRIP_AREA_SOURCE_ID,
+                    fillLayerId: TracksMapManager.TRIP_AREA_FILL_LAYER_ID,
+                    outlineLayerId: TracksMapManager.TRIP_AREA_OUTLINE_LAYER_ID,
+                    featureCollection: sourceData,
+                    fillPaint,
+                    outlinePaint,
+                    beforeLayerId,
+                });
+            } catch (error) {
+                if (shouldDeferForMapboxStyle(this.map, error)) {
+                    this.deferTripAreaRenderUntilStyleReady();
+                    return;
+                }
+                throw error;
+            }
         });
     }
 
     private removeTripAreaLayerAndSource(): void {
-        if (!this.map) return;
+        this.clearDeferredTripAreaRender();
+        if (!this.map) {
+            this.clearDeferredTripAreaRemoval();
+            return;
+        }
+        if (!isStyleReady(this.map)) {
+            this.deferTripAreaRemovalUntilStyleReady();
+            return;
+        }
 
         this.zone.runOutsideAngular(() => {
-            removeMapSearchScopeOverlay(
-                this.map,
-                TracksMapManager.TRIP_AREA_SOURCE_ID,
-                TracksMapManager.TRIP_AREA_FILL_LAYER_ID,
-                TracksMapManager.TRIP_AREA_OUTLINE_LAYER_ID,
-            );
+            try {
+                removeMapSearchScopeOverlay(
+                    this.map,
+                    TracksMapManager.TRIP_AREA_SOURCE_ID,
+                    TracksMapManager.TRIP_AREA_FILL_LAYER_ID,
+                    TracksMapManager.TRIP_AREA_OUTLINE_LAYER_ID,
+                );
+                this.clearDeferredTripAreaRemoval();
+            } catch (error) {
+                if (shouldDeferForMapboxStyle(this.map, error)) {
+                    this.deferTripAreaRemovalUntilStyleReady();
+                    return;
+                }
+                throw error;
+            }
         });
+    }
+
+    private deferHomeAreaRenderUntilStyleReady(): void {
+        if (!this.map) return;
+        this.clearDeferredHomeAreaRender();
+        this.homeAreaStyleReadyCleanup = runWhenStyleReady(
+            this.map,
+            () => {
+                this.homeAreaStyleReadyCleanup = null;
+                this.renderHomeArea();
+            },
+            { runImmediately: false }
+        );
+    }
+
+    private clearDeferredHomeAreaRender(): void {
+        this.homeAreaStyleReadyCleanup?.();
+        this.homeAreaStyleReadyCleanup = null;
+    }
+
+    private deferHomeAreaRemovalUntilStyleReady(): void {
+        if (!this.map) return;
+        this.clearDeferredHomeAreaRemoval();
+        this.homeAreaRemovalStyleReadyCleanup = runWhenStyleReady(
+            this.map,
+            () => {
+                this.homeAreaRemovalStyleReadyCleanup = null;
+                this.removeHomeAreaLayerAndSource();
+            },
+            { runImmediately: false }
+        );
+    }
+
+    private clearDeferredHomeAreaRemoval(): void {
+        this.homeAreaRemovalStyleReadyCleanup?.();
+        this.homeAreaRemovalStyleReadyCleanup = null;
+    }
+
+    private deferTripAreaRenderUntilStyleReady(): void {
+        if (!this.map) return;
+        this.clearDeferredTripAreaRender();
+        this.tripAreaStyleReadyCleanup = runWhenStyleReady(
+            this.map,
+            () => {
+                this.tripAreaStyleReadyCleanup = null;
+                this.renderTripArea();
+            },
+            { runImmediately: false }
+        );
+    }
+
+    private clearDeferredTripAreaRender(): void {
+        this.tripAreaStyleReadyCleanup?.();
+        this.tripAreaStyleReadyCleanup = null;
+    }
+
+    private deferTripAreaRemovalUntilStyleReady(): void {
+        if (!this.map) return;
+        this.clearDeferredTripAreaRemoval();
+        this.tripAreaRemovalStyleReadyCleanup = runWhenStyleReady(
+            this.map,
+            () => {
+                this.tripAreaRemovalStyleReadyCleanup = null;
+                this.removeTripAreaLayerAndSource();
+            },
+            { runImmediately: false }
+        );
+    }
+
+    private clearDeferredTripAreaRemoval(): void {
+        this.tripAreaRemovalStyleReadyCleanup?.();
+        this.tripAreaRemovalStyleReadyCleanup = null;
     }
 
     private getFirstTrackLayerId(): string | undefined {

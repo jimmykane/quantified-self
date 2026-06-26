@@ -22,6 +22,14 @@ interface JumpTableRow {
   'Jump Score': string;
 }
 
+interface JumpActivityView {
+  key: string;
+  activity: ActivityInterface;
+  label: string;
+  dataSource: MatTableDataSource<JumpTableRow>;
+  columns: string[];
+}
+
 @Component({
   selector: 'app-event-card-jumps',
   templateUrl: './event.card.jumps.component.html',
@@ -35,6 +43,7 @@ export class EventCardJumpsComponent implements OnChanges {
   @Input() unitSettings!: UserUnitSettingsInterface;
 
   public activitiesWithJumps: ActivityInterface[] = [];
+  public jumpActivityViews: JumpActivityView[] = [];
 
   public dataSourcesMap = new Map<string, MatTableDataSource<JumpTableRow>>();
   public columnsMap = new Map<string, string[]>();
@@ -73,12 +82,14 @@ export class EventCardJumpsComponent implements OnChanges {
     this.columnsMap.clear();
     this.activityKeys = new WeakMap<ActivityInterface, string>();
     this.activitiesWithJumps = [];
+    this.jumpActivityViews = [];
 
     if (!Array.isArray(this.selectedActivities) || this.selectedActivities.length === 0) {
       this.changeDetectorRef.markForCheck();
       return;
     }
 
+    const views: JumpActivityView[] = [];
     this.selectedActivities.forEach((activity, index) => {
       const rows = this.generateJumpData(activity);
       if (!rows.length) {
@@ -90,10 +101,22 @@ export class EventCardJumpsComponent implements OnChanges {
       this.activitiesWithJumps.push(activity);
 
       const dataSource = new MatTableDataSource(rows);
+      const columns = this.calculateColumns(rows);
       this.dataSourcesMap.set(key, dataSource);
-      this.columnsMap.set(key, this.calculateColumns(rows));
+      this.columnsMap.set(key, columns);
+      views.push({
+        key,
+        activity,
+        label: '',
+        dataSource,
+        columns,
+      });
     });
 
+    this.jumpActivityViews = views.map((view, index) => ({
+      ...view,
+      label: this.getActivityTabLabel(view.activity, index),
+    }));
     this.changeDetectorRef.markForCheck();
   }
 

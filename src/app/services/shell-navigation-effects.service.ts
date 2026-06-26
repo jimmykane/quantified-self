@@ -14,6 +14,8 @@ import { AppHapticsService } from './app.haptics.service';
 
 @Injectable({ providedIn: 'root' })
 export class ShellNavigationEffectsService {
+  private static readonly ROUTE_ANIMATION_DISABLED_STATE = 'RouteAnimationDisabled';
+
   private readonly destroyRef = inject(DestroyRef);
   private readonly documentRef = inject(DOCUMENT);
   private readonly router = inject(Router);
@@ -89,12 +91,23 @@ export class ShellNavigationEffectsService {
       return null;
     }
 
-    let currentRoute = rootRoute;
-    while (currentRoute.firstChild) {
+    let currentRoute: typeof rootRoute | null = rootRoute;
+    let animationState: string | null = null;
+    let disableRouteAnimation = false;
+
+    while (currentRoute) {
+      if (currentRoute.data?.['disableRouteAnimation'] === true) {
+        disableRouteAnimation = true;
+      }
+      if (typeof currentRoute.data?.['animation'] === 'string') {
+        animationState = currentRoute.data['animation'];
+      }
       currentRoute = currentRoute.firstChild;
     }
 
-    return currentRoute.data?.['animation'] ?? null;
+    return disableRouteAnimation
+      ? ShellNavigationEffectsService.ROUTE_ANIMATION_DISABLED_STATE
+      : animationState;
   }
 
   private resetScrollPosition(): void {
