@@ -16,6 +16,7 @@ import {
 import {
   attachStyleReloadHandler,
   isStyleReady,
+  runWhenStyleReady,
 } from './mapbox-style-ready.utils';
 
 export interface TrackMapPosition {
@@ -64,6 +65,7 @@ export class TrackMapManager {
   private mapboxgl: any | null = null;
   private styleLoadHandler: (() => void) | null = null;
   private styleLoadHandlerCleanup: (() => void) | null = null;
+  private styleReadyRenderCleanup: (() => void) | null = null;
 
   private currentTracks: TrackMapRenderData[] = [];
   private currentOptions: Required<TrackMapRenderOptions> = {
@@ -99,6 +101,8 @@ export class TrackMapManager {
     }
 
     this.styleLoadHandlerCleanup?.();
+    this.styleReadyRenderCleanup?.();
+    this.styleReadyRenderCleanup = null;
     clearDeferredTerrainToggleState(this.terrainToggleState);
 
     this.map = map;
@@ -151,6 +155,8 @@ export class TrackMapManager {
   }
 
   public clearAll(): void {
+    this.styleReadyRenderCleanup?.();
+    this.styleReadyRenderCleanup = null;
     this.clearTracksAndMarkers();
     this.clearCursorMarkers();
     this.currentTracks = [];
@@ -271,6 +277,18 @@ export class TrackMapManager {
     if (!this.map || !this.mapboxgl) {
       return;
     }
+
+    if (!isStyleReady(this.map)) {
+      this.scheduleRenderWhenStyleReady();
+      this.logger.log(`[${this.logPrefix}] Style not ready. Track layer render deferred.`, {
+        trackCount: this.currentTracks.length,
+      });
+      return;
+    }
+
+    this.styleReadyRenderCleanup?.();
+    this.styleReadyRenderCleanup = null;
+
     const incomingTrackIds = new Set((this.currentTracks || []).map((track) => track.id));
     this.activeLayersByTrackId.forEach((_ids, trackId) => {
       if (!incomingTrackIds.has(trackId)) {
@@ -279,6 +297,22 @@ export class TrackMapManager {
     });
 
     this.currentTracks.forEach((track) => this.renderSingleTrack(track));
+  }
+
+  private scheduleRenderWhenStyleReady(): void {
+    if (!this.map || this.styleReadyRenderCleanup) {
+      return;
+    }
+
+    this.styleReadyRenderCleanup = runWhenStyleReady(
+      this.map,
+      () => {
+        this.styleReadyRenderCleanup = null;
+        this.renderTracks();
+        this.renderCursorMarkers();
+      },
+      { runImmediately: false },
+    );
   }
 
   private renderSingleTrack(track: TrackMapRenderData): void {

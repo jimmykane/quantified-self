@@ -390,7 +390,7 @@ export class TracksComponent implements OnInit, OnDestroy {
         this.mapSignal.set(mapInstance);
 
         // Initialize Synchronizer
-        this.mapSynchronizer.set(this.mapStyleService.createSynchronizer(mapInstance));
+        this.mapSynchronizer.set(this.mapStyleService.createSynchronizer(mapInstance, resolved));
         // We don't call update(resolved) here because the effect will trigger automatically 
         // as soon as mapSignal and mapSynchronizer are both set.
 

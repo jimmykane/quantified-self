@@ -223,6 +223,10 @@ describe('EventsMapComponent', () => {
     await initMap();
 
     expect(mockMapboxLoader.createMap).toHaveBeenCalled();
+    expect(mockMapStyleService.createSynchronizer).toHaveBeenCalledWith(map, expect.objectContaining({
+      styleUrl: 'mapbox://styles/mapbox/standard',
+      preset: 'day',
+    }));
     expect(map.addSource).toHaveBeenCalledWith(EVENTS_SOURCE_ID, expect.objectContaining({ cluster: true }));
     expect(map.addLayer).toHaveBeenCalledWith(expect.objectContaining({ id: EVENTS_UNCLUSTERED_LAYER_ID }));
     expect(map.addLayer).toHaveBeenCalledWith(expect.objectContaining({ id: EVENTS_CLUSTER_LAYER_ID }));

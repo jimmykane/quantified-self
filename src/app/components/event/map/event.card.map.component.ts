@@ -559,7 +559,7 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
       });
 
       this.mapInstance.set(map);
-      this.mapStyleSynchronizer.set(this.mapStyleService.createSynchronizer(map));
+      this.mapStyleSynchronizer.set(this.mapStyleService.createSynchronizer(map, resolvedStyle));
       this.bindMapPopupListeners(map);
 
       this.requestMapActivities(true, 'initializeMap');

@@ -277,7 +277,7 @@ export class EventsMapComponent extends MapAbstractDirective implements OnChange
       this.mapboxgl = await this.mapboxLoader.loadMapbox();
 
       this.mapInstance.set(map);
-      this.mapStyleSynchronizer.set(this.mapStyleService.createSynchronizer(map));
+      this.mapStyleSynchronizer.set(this.mapStyleService.createSynchronizer(map, resolvedStyle));
 
       this.styleLoadHandlerCleanup = attachStyleReloadHandler(
         map,

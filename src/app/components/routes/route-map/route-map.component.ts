@@ -260,7 +260,7 @@ export class RouteMapComponent extends MapAbstractDirective implements AfterView
       });
 
       this.mapInstance.set(map);
-      this.mapStyleSynchronizer.set(this.mapStyleService.createSynchronizer(map));
+      this.mapStyleSynchronizer.set(this.mapStyleService.createSynchronizer(map, resolvedStyle));
       applyStyleReadyState();
     } catch (error) {
       this.logger.error('[RouteMapComponent] Failed to initialize Mapbox map.', error);

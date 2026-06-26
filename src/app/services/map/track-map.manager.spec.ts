@@ -108,6 +108,58 @@ describe('TrackMapManager', () => {
     expect(markerFactory.createFlagMarker).toHaveBeenCalledWith('#1e88e5');
   });
 
+  it('defers track layer rendering until the Mapbox style is ready', () => {
+    map.isStyleLoaded.mockReturnValue(false);
+
+    manager.renderTrackData([{
+      id: 'route-loading',
+      label: 'Loading Route',
+      strokeColor: '#1e88e5',
+      positions: [
+        { latitudeDegrees: 40.1, longitudeDegrees: 22.1 },
+        { latitudeDegrees: 40.2, longitudeDegrees: 22.2 },
+      ],
+    }], {
+      showArrows: true,
+      strokeWidth: 4,
+    });
+
+    expect(map.addSource).not.toHaveBeenCalled();
+    expect(map.addLayer).not.toHaveBeenCalled();
+
+    manager.renderTrackData([{
+      id: 'route-ready',
+      label: 'Ready Route',
+      strokeColor: '#43a047',
+      positions: [
+        { latitudeDegrees: 41.1, longitudeDegrees: 23.1 },
+        { latitudeDegrees: 41.2, longitudeDegrees: 23.2 },
+      ],
+    }], {
+      showArrows: false,
+      strokeWidth: 5,
+    });
+
+    map.isStyleLoaded.mockReturnValue(true);
+    map.on.mock.calls
+      .filter((call: any[]) => call[0] === 'style.load')
+      .forEach((call: any[]) => call[1]());
+
+    const addedSources = map.addSource.mock.calls.map((call: any[]) => String(call[0]));
+    expect(addedSources.some((sourceId: string) => sourceId.includes('route-loading'))).toBe(false);
+    expect(addedSources.some((sourceId: string) => sourceId.includes('route-ready'))).toBe(true);
+    expect(map.addLayer).toHaveBeenCalledWith(expect.objectContaining({
+      id: expect.stringMatching(/^route-track-line-route-ready-[a-z0-9]+$/),
+      paint: expect.objectContaining({
+        'line-color': '#43a047',
+        'line-width': 5,
+      }),
+    }));
+    expect(map.addLayer).not.toHaveBeenCalledWith(expect.objectContaining({
+      id: expect.stringMatching(/^route-track-arrow-route-ready-[a-z0-9]+$/),
+    }));
+  });
+
   it('keeps layer IDs distinct when track IDs sanitize to the same value', () => {
     manager.renderTrackData([
       {

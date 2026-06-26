@@ -159,7 +159,10 @@ describe('EventCardMapComponent', () => {
     await component.ngAfterViewInit();
     expect(mockMapboxLoader.createMap).toHaveBeenCalled();
     expect(mockMapboxLoader.loadMapbox).toHaveBeenCalled();
-    expect(mockMapStyleService.createSynchronizer).toHaveBeenCalled();
+    expect(mockMapStyleService.createSynchronizer).toHaveBeenCalledWith(mockMap, expect.objectContaining({
+      styleUrl: 'mapbox://styles/mapbox/standard',
+      preset: 'day',
+    }));
   });
 
   it('should flush deferred map activities once style becomes ready', async () => {

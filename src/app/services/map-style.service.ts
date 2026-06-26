@@ -28,8 +28,8 @@ export class MapStyleService implements MapStyleServiceInterface {
 
   constructor(private logger: LoggerService) { }
 
-  public createSynchronizer(map: any): MapboxStyleSynchronizer {
-    return new MapboxStyleSynchronizer(map, this, this.logger);
+  public createSynchronizer(map: any, initialState?: MapStyleState): MapboxStyleSynchronizer {
+    return new MapboxStyleSynchronizer(map, this, this.logger, initialState);
   }
 
   public getDefaultStyle(): MapStyleName {
