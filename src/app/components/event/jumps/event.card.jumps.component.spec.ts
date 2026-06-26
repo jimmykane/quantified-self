@@ -72,6 +72,22 @@ describe('EventCardJumpsComponent', () => {
     expect(fixture.nativeElement.querySelectorAll('mat-tab')).toHaveLength(1);
   });
 
+  it('keeps stable jump activity view keys when activity instances are rebuilt', () => {
+    const firstActivity = createActivity('activity-1', 'Running', [createJumpEvent(90)]);
+
+    component.selectedActivities = [firstActivity];
+    component.ngOnChanges();
+
+    const firstKey = component.jumpActivityViews[0]?.key;
+    const rebuiltActivity = createActivity('activity-1', 'Running', [createJumpEvent(95)]);
+
+    component.selectedActivities = [rebuiltActivity];
+    component.ngOnChanges();
+
+    expect(component.jumpActivityViews[0]?.key).toBe(firstKey);
+    expect(component.jumpActivityViews[0]?.activity).toBe(rebuiltActivity);
+  });
+
   it('uses the stats-grid performance icon for the jumps section header', () => {
     const jumpActivity = createActivity('activity-1', 'Skiing', [createJumpEvent(90)]);
 
