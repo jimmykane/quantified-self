@@ -103,7 +103,9 @@ export class TracksMapManager {
     private tracksByActivityId = new Map<string, TrackRenderRecord>();
     private styleLoadHandlerCleanup: (() => void) | null = null;
     private homeAreaStyleReadyCleanup: (() => void) | null = null;
+    private homeAreaRemovalStyleReadyCleanup: (() => void) | null = null;
     private tripAreaStyleReadyCleanup: (() => void) | null = null;
+    private tripAreaRemovalStyleReadyCleanup: (() => void) | null = null;
     private terrainControl: any;
     private terrainToggleState: DeferredTerrainToggleState = { pendingRequest: null };
     private isDarkTheme = false;
@@ -134,7 +136,9 @@ export class TracksMapManager {
     public setMap(map: any, mapboxgl: any) {
         this.styleLoadHandlerCleanup?.();
         this.clearDeferredHomeAreaRender();
+        this.clearDeferredHomeAreaRemoval();
         this.clearDeferredTripAreaRender();
+        this.clearDeferredTripAreaRemoval();
         clearDeferredTerrainToggleState(this.terrainToggleState);
         this.map = map;
         this.mapboxgl = mapboxgl;
@@ -845,6 +849,7 @@ export class TracksMapManager {
             this.removeHomeAreaLayerAndSource();
             return;
         }
+        this.clearDeferredHomeAreaRemoval();
         if (!this.isCurrentMapStyleReady()) {
             this.deferHomeAreaRenderUntilStyleReady();
             return;
@@ -878,7 +883,14 @@ export class TracksMapManager {
 
     private removeHomeAreaLayerAndSource(): void {
         this.clearDeferredHomeAreaRender();
-        if (!this.map) return;
+        if (!this.map) {
+            this.clearDeferredHomeAreaRemoval();
+            return;
+        }
+        if (!this.isCurrentMapStyleReady()) {
+            this.deferHomeAreaRemovalUntilStyleReady();
+            return;
+        }
 
         this.zone.runOutsideAngular(() => {
             try {
@@ -888,8 +900,10 @@ export class TracksMapManager {
                     TracksMapManager.HOME_AREA_FILL_LAYER_ID,
                     TracksMapManager.HOME_AREA_OUTLINE_LAYER_ID,
                 );
+                this.clearDeferredHomeAreaRemoval();
             } catch (error) {
                 if (this.shouldDeferSearchScopeOverlayRender(error)) {
+                    this.deferHomeAreaRemovalUntilStyleReady();
                     return;
                 }
                 throw error;
@@ -916,6 +930,7 @@ export class TracksMapManager {
             this.removeTripAreaLayerAndSource();
             return;
         }
+        this.clearDeferredTripAreaRemoval();
         if (!this.isCurrentMapStyleReady()) {
             this.deferTripAreaRenderUntilStyleReady();
             return;
@@ -949,7 +964,14 @@ export class TracksMapManager {
 
     private removeTripAreaLayerAndSource(): void {
         this.clearDeferredTripAreaRender();
-        if (!this.map) return;
+        if (!this.map) {
+            this.clearDeferredTripAreaRemoval();
+            return;
+        }
+        if (!this.isCurrentMapStyleReady()) {
+            this.deferTripAreaRemovalUntilStyleReady();
+            return;
+        }
 
         this.zone.runOutsideAngular(() => {
             try {
@@ -959,8 +981,10 @@ export class TracksMapManager {
                     TracksMapManager.TRIP_AREA_FILL_LAYER_ID,
                     TracksMapManager.TRIP_AREA_OUTLINE_LAYER_ID,
                 );
+                this.clearDeferredTripAreaRemoval();
             } catch (error) {
                 if (this.shouldDeferSearchScopeOverlayRender(error)) {
+                    this.deferTripAreaRemovalUntilStyleReady();
                     return;
                 }
                 throw error;
@@ -986,6 +1010,24 @@ export class TracksMapManager {
         this.homeAreaStyleReadyCleanup = null;
     }
 
+    private deferHomeAreaRemovalUntilStyleReady(): void {
+        if (!this.map) return;
+        this.clearDeferredHomeAreaRemoval();
+        this.homeAreaRemovalStyleReadyCleanup = runWhenStyleReady(
+            this.map,
+            () => {
+                this.homeAreaRemovalStyleReadyCleanup = null;
+                this.removeHomeAreaLayerAndSource();
+            },
+            { runImmediately: false }
+        );
+    }
+
+    private clearDeferredHomeAreaRemoval(): void {
+        this.homeAreaRemovalStyleReadyCleanup?.();
+        this.homeAreaRemovalStyleReadyCleanup = null;
+    }
+
     private deferTripAreaRenderUntilStyleReady(): void {
         if (!this.map) return;
         this.clearDeferredTripAreaRender();
@@ -1002,6 +1044,24 @@ export class TracksMapManager {
     private clearDeferredTripAreaRender(): void {
         this.tripAreaStyleReadyCleanup?.();
         this.tripAreaStyleReadyCleanup = null;
+    }
+
+    private deferTripAreaRemovalUntilStyleReady(): void {
+        if (!this.map) return;
+        this.clearDeferredTripAreaRemoval();
+        this.tripAreaRemovalStyleReadyCleanup = runWhenStyleReady(
+            this.map,
+            () => {
+                this.tripAreaRemovalStyleReadyCleanup = null;
+                this.removeTripAreaLayerAndSource();
+            },
+            { runImmediately: false }
+        );
+    }
+
+    private clearDeferredTripAreaRemoval(): void {
+        this.tripAreaRemovalStyleReadyCleanup?.();
+        this.tripAreaRemovalStyleReadyCleanup = null;
     }
 
     private isCurrentMapStyleReady(): boolean {

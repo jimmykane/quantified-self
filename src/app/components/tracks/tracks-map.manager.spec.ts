@@ -349,6 +349,84 @@ describe('TracksMapManager', () => {
             expect(mockMap.removeSource).toHaveBeenCalledWith('home-area-source');
         });
 
+        it('should defer home area removal until the map style is ready', () => {
+            mockMap.getSource.mockReturnValue(null);
+            mockMap.getLayer.mockReturnValue(null);
+
+            manager.setHomeArea({
+                destinationId: 'destination-home',
+                pointCount: 4,
+                pointShare: 0.6,
+                centroidLat: 37.98,
+                centroidLng: 23.72,
+                bounds: {
+                    west: 23.71,
+                    east: 23.73,
+                    south: 37.97,
+                    north: 37.99,
+                },
+                radiusKm: 3,
+            });
+            vi.clearAllMocks();
+
+            mockMap.isStyleLoaded.mockReturnValue(false);
+            manager.clearHomeArea();
+
+            expect(mockMap.removeLayer).not.toHaveBeenCalled();
+            expect(mockMap.removeSource).not.toHaveBeenCalled();
+            expect(mockMap.on).toHaveBeenCalledWith('idle', expect.any(Function));
+
+            mockMap.isStyleLoaded.mockReturnValue(true);
+            mockMap.getLayer.mockImplementation((id: string) => id === 'home-area-fill-layer' || id === 'home-area-outline-layer');
+            mockMap.getSource.mockImplementation((id: string) => id === 'home-area-source');
+
+            emitMapEvent('idle');
+
+            expect(mockMap.removeLayer).toHaveBeenCalledWith('home-area-outline-layer');
+            expect(mockMap.removeLayer).toHaveBeenCalledWith('home-area-fill-layer');
+            expect(mockMap.removeSource).toHaveBeenCalledWith('home-area-source');
+        });
+
+        it('should retry home area removal when layer lookup fails during a style swap', () => {
+            mockMap.getSource.mockReturnValue(null);
+            mockMap.getLayer.mockReturnValue(null);
+
+            manager.setHomeArea({
+                destinationId: 'destination-home',
+                pointCount: 4,
+                pointShare: 0.6,
+                centroidLat: 37.98,
+                centroidLng: 23.72,
+                bounds: {
+                    west: 23.71,
+                    east: 23.73,
+                    south: 37.97,
+                    north: 37.99,
+                },
+                radiusKm: 3,
+            });
+            vi.clearAllMocks();
+
+            mockMap.isStyleLoaded.mockReturnValue(true);
+            mockMap.getLayer.mockImplementation(() => {
+                throw new TypeError("Cannot read properties of undefined (reading 'getOwnLayer')");
+            });
+
+            expect(() => manager.clearHomeArea()).not.toThrow();
+
+            expect(mockMap.removeLayer).not.toHaveBeenCalled();
+            expect(mockMap.on).toHaveBeenCalledWith('idle', expect.any(Function));
+
+            mockMap.getLayer.mockImplementation((id: string) => id === 'home-area-fill-layer' || id === 'home-area-outline-layer');
+            mockMap.getSource.mockImplementation((id: string) => id === 'home-area-source');
+
+            emitMapEvent('idle');
+
+            expect(mockMap.removeLayer).toHaveBeenCalledWith('home-area-outline-layer');
+            expect(mockMap.removeLayer).toHaveBeenCalledWith('home-area-fill-layer');
+            expect(mockMap.removeSource).toHaveBeenCalledWith('home-area-source');
+        });
+
         it('should restore the home area after style reload', () => {
             mockMap.getSource.mockReturnValue(null);
             mockMap.getLayer.mockReturnValue(null);
@@ -485,6 +563,37 @@ describe('TracksMapManager', () => {
             expect(mockMap.addSource).not.toHaveBeenCalled();
             expect(mockMap.addLayer).not.toHaveBeenCalled();
         });
+
+        it('should cancel deferred home area removal when a home area is set again before style readiness', () => {
+            mockMap.isStyleLoaded.mockReturnValue(false);
+
+            manager.clearHomeArea();
+            manager.setHomeArea({
+                destinationId: 'destination-home',
+                pointCount: 5,
+                pointShare: 0.55,
+                centroidLat: 37.98,
+                centroidLng: 23.72,
+                bounds: {
+                    west: 23.71,
+                    east: 23.73,
+                    south: 37.97,
+                    north: 37.99,
+                },
+                radiusKm: 2.8,
+            });
+
+            const source = { setData: vi.fn() };
+            mockMap.isStyleLoaded.mockReturnValue(true);
+            mockMap.getSource.mockImplementation((id: string) => id === 'home-area-source' ? source : null);
+            mockMap.getLayer.mockImplementation((id: string) => id === 'home-area-fill-layer' || id === 'home-area-outline-layer');
+
+            emitMapEvent('idle');
+
+            expect(mockMap.removeLayer).not.toHaveBeenCalled();
+            expect(mockMap.removeSource).not.toHaveBeenCalled();
+            expect(source.setData).toHaveBeenCalled();
+        });
     });
 
     describe('trip area', () => {
@@ -535,6 +644,78 @@ describe('TracksMapManager', () => {
             mockMap.getSource.mockImplementation((id: string) => id === 'trip-area-source');
 
             manager.clearTripArea();
+
+            expect(mockMap.removeLayer).toHaveBeenCalledWith('trip-area-outline-layer');
+            expect(mockMap.removeLayer).toHaveBeenCalledWith('trip-area-fill-layer');
+            expect(mockMap.removeSource).toHaveBeenCalledWith('trip-area-source');
+        });
+
+        it('should defer trip area removal until the map style is ready', () => {
+            mockMap.getSource.mockReturnValue(null);
+            mockMap.getLayer.mockReturnValue(null);
+
+            manager.setTripArea({
+                tripId: 'trip-athens',
+                centroidLat: 37.9838,
+                centroidLng: 23.7275,
+                bounds: {
+                    west: 23.70,
+                    east: 23.76,
+                    south: 37.95,
+                    north: 38.01,
+                },
+            });
+            vi.clearAllMocks();
+
+            mockMap.isStyleLoaded.mockReturnValue(false);
+            manager.clearTripArea();
+
+            expect(mockMap.removeLayer).not.toHaveBeenCalled();
+            expect(mockMap.removeSource).not.toHaveBeenCalled();
+            expect(mockMap.on).toHaveBeenCalledWith('idle', expect.any(Function));
+
+            mockMap.isStyleLoaded.mockReturnValue(true);
+            mockMap.getLayer.mockImplementation((id: string) => id === 'trip-area-fill-layer' || id === 'trip-area-outline-layer');
+            mockMap.getSource.mockImplementation((id: string) => id === 'trip-area-source');
+
+            emitMapEvent('idle');
+
+            expect(mockMap.removeLayer).toHaveBeenCalledWith('trip-area-outline-layer');
+            expect(mockMap.removeLayer).toHaveBeenCalledWith('trip-area-fill-layer');
+            expect(mockMap.removeSource).toHaveBeenCalledWith('trip-area-source');
+        });
+
+        it('should retry trip area removal when layer lookup fails during a style swap', () => {
+            mockMap.getSource.mockReturnValue(null);
+            mockMap.getLayer.mockReturnValue(null);
+
+            manager.setTripArea({
+                tripId: 'trip-athens',
+                centroidLat: 37.9838,
+                centroidLng: 23.7275,
+                bounds: {
+                    west: 23.70,
+                    east: 23.76,
+                    south: 37.95,
+                    north: 38.01,
+                },
+            });
+            vi.clearAllMocks();
+
+            mockMap.isStyleLoaded.mockReturnValue(true);
+            mockMap.getLayer.mockImplementation(() => {
+                throw new TypeError("Cannot read properties of undefined (reading 'getOwnLayer')");
+            });
+
+            expect(() => manager.clearTripArea()).not.toThrow();
+
+            expect(mockMap.removeLayer).not.toHaveBeenCalled();
+            expect(mockMap.on).toHaveBeenCalledWith('idle', expect.any(Function));
+
+            mockMap.getLayer.mockImplementation((id: string) => id === 'trip-area-fill-layer' || id === 'trip-area-outline-layer');
+            mockMap.getSource.mockImplementation((id: string) => id === 'trip-area-source');
+
+            emitMapEvent('idle');
 
             expect(mockMap.removeLayer).toHaveBeenCalledWith('trip-area-outline-layer');
             expect(mockMap.removeLayer).toHaveBeenCalledWith('trip-area-fill-layer');
@@ -665,6 +846,34 @@ describe('TracksMapManager', () => {
 
             expect(mockMap.addSource).not.toHaveBeenCalled();
             expect(mockMap.addLayer).not.toHaveBeenCalled();
+        });
+
+        it('should cancel deferred trip area removal when a trip area is set again before style readiness', () => {
+            mockMap.isStyleLoaded.mockReturnValue(false);
+
+            manager.clearTripArea();
+            manager.setTripArea({
+                tripId: 'trip-athens',
+                centroidLat: 37.9838,
+                centroidLng: 23.7275,
+                bounds: {
+                    west: 23.70,
+                    east: 23.76,
+                    south: 37.95,
+                    north: 38.01,
+                },
+            });
+
+            const source = { setData: vi.fn() };
+            mockMap.isStyleLoaded.mockReturnValue(true);
+            mockMap.getSource.mockImplementation((id: string) => id === 'trip-area-source' ? source : null);
+            mockMap.getLayer.mockImplementation((id: string) => id === 'trip-area-fill-layer' || id === 'trip-area-outline-layer');
+
+            emitMapEvent('idle');
+
+            expect(mockMap.removeLayer).not.toHaveBeenCalled();
+            expect(mockMap.removeSource).not.toHaveBeenCalled();
+            expect(source.setData).toHaveBeenCalled();
         });
     });
 
