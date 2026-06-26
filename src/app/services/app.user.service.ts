@@ -177,6 +177,10 @@ export interface GarminRouteSendProviderState {
   missingPermissions: string[];
 }
 
+interface UserProfileReadOptions {
+  bubbleSubDocumentPermissionDenied?: boolean;
+}
+
 
 /**
  * Service for managing user data, subscription roles, and settings.
@@ -310,7 +314,7 @@ export class AppUserService implements OnDestroy {
 
   private getUserProfileWithAuthRetry(firebaseUser: any): Observable<AppUserInterface | null> {
     const loadUserProfile = () => this.retryTransientProfileReads(
-      this.getUserByID(firebaseUser.uid),
+      this.getUserByID(firebaseUser.uid, { bubbleSubDocumentPermissionDenied: true }),
       firebaseUser.uid
     );
 
@@ -458,6 +462,34 @@ export class AppUserService implements OnDestroy {
     }
   }
 
+  private async retryCurrentUserFirestoreWriteAfterPermissionDenied<T>(
+    userID: string,
+    write: () => Promise<T>
+  ): Promise<T> {
+    try {
+      return await write();
+    } catch (error) {
+      const currentUser = this.auth.currentUser;
+      if (!this.isFirestorePermissionDenied(error) || currentUser?.uid !== userID) {
+        throw error;
+      }
+
+      await currentUser.getIdToken(true);
+      return write();
+    }
+  }
+
+  private setLegalAgreementsWithAuthRetry(
+    userID: string,
+    legalUpdates: Partial<Record<typeof AppUserService.legalFields[number], boolean>>
+  ): Promise<void> {
+    const legalDoc = doc(this.firestore, `users/${userID}/legal/agreements`);
+    return this.retryCurrentUserFirestoreWriteAfterPermissionDenied(
+      userID,
+      () => setDoc(legalDoc, legalUpdates, { merge: true })
+    );
+  }
+
   public readonly user = toSignal(this.user$, { initialValue: null });
 
   public readonly stripeRoleSignal = computed(() => this.user()?.stripeRole || null);
@@ -561,7 +593,7 @@ export class AppUserService implements OnDestroy {
     });
   }
 
-  public getUserByID(userID: string): Observable<AppUserInterface | null> {
+  public getUserByID(userID: string, options: UserProfileReadOptions = {}): Observable<AppUserInterface | null> {
     const userDoc = doc(this.firestore, 'users', userID) as any;
     const legalDoc = doc(this.firestore, `users/${userID}/legal/agreements`) as any;
     const systemDoc = doc(this.firestore, `users/${userID}/system/status`) as any;
@@ -573,6 +605,10 @@ export class AppUserService implements OnDestroy {
       ),
       legal: (docData(legalDoc) as Observable<Record<string, unknown>>).pipe(
         catchError((err) => {
+          if (options.bubbleSubDocumentPermissionDenied && this.isFirestorePermissionDenied(err)) {
+            return throwError(() => err);
+          }
+
           this.markIncompleteProfileRead(userID);
           this.logUserSubDocumentReadError('legal', userID, `users/${userID}/legal/agreements`, err);
           return of({});
@@ -580,6 +616,10 @@ export class AppUserService implements OnDestroy {
       ),
       system: (docData(systemDoc) as Observable<Record<string, unknown>>).pipe(
         catchError((err) => {
+          if (options.bubbleSubDocumentPermissionDenied && this.isFirestorePermissionDenied(err)) {
+            return throwError(() => err);
+          }
+
           this.markIncompleteProfileRead(userID);
           this.logUserSubDocumentReadError('system', userID, `users/${userID}/system/status`, err);
           return of({});
@@ -587,6 +627,10 @@ export class AppUserService implements OnDestroy {
       ),
       settings: (docData(settingsDoc) as Observable<Record<string, unknown>>).pipe(
         catchError((err) => {
+          if (options.bubbleSubDocumentPermissionDenied && this.isFirestorePermissionDenied(err)) {
+            return throwError(() => err);
+          }
+
           this.markIncompleteProfileRead(userID);
           this.logUserSubDocumentReadError('settings', userID, `users/${userID}/config/settings`, err);
           return of({});
@@ -653,7 +697,7 @@ export class AppUserService implements OnDestroy {
 
     if (hasChanges) {
       // Use set with merge true to allow "upsert" of the agreements doc
-      await setDoc(doc(this.firestore, `users/${policies.uid}/legal/agreements`), dataToWrite, { merge: true });
+      await this.setLegalAgreementsWithAuthRetry(`${policies.uid}`, dataToWrite);
     }
   }
 
@@ -1153,7 +1197,7 @@ export class AppUserService implements OnDestroy {
         });
         throw new Error('Cannot update legal consent until user profile finishes loading.');
       }
-      promises.push(setDoc(doc(this.firestore, `users/${user.uid}/legal/agreements`), legalUpdates, { merge: true })
+      promises.push(this.setLegalAgreementsWithAuthRetry(user.uid, legalUpdates)
         .catch(err => {
           this.logger.error('[AppUserService] Legal update FAILED', err);
           throw err;

@@ -27,8 +27,8 @@ describe('dashboard-sleep-chart.helper', () => {
       vitals: {
         averageHeartRateBpm: 48,
         overnightHrvMs: 67,
-        maxSpo2Percent: 98,
       },
+      spo2Samples: [{ value: 95 }, { value: 98 }],
       source: { provider: 'GarminAPI', sourceSessionKey: 'garmin-source-1' },
     } as any]);
 
@@ -109,6 +109,7 @@ describe('dashboard-sleep-chart.helper', () => {
         isNap: false,
         vitals: {
           averageHeartRateBpm: 65,
+          minimumHeartRateBpm: 49,
           averageHrvMs: 31,
         },
         providerFields: {
@@ -127,6 +128,7 @@ describe('dashboard-sleep-chart.helper', () => {
         isNap: true,
         vitals: {
           averageHeartRateBpm: 56,
+          minimumHeartRateBpm: 48,
           averageHrvMs: 45,
         },
         providerFields: {
@@ -145,6 +147,7 @@ describe('dashboard-sleep-chart.helper', () => {
         isNap: false,
         vitals: {
           averageHeartRateBpm: 64,
+          minimumHeartRateBpm: 47,
           averageHrvMs: 32,
         },
         providerFields: {
@@ -166,6 +169,7 @@ describe('dashboard-sleep-chart.helper', () => {
       napStartTimeMs: Date.UTC(2026, 4, 26, 2),
       napEndTimeMs: Date.UTC(2026, 4, 26, 4, 52),
       averageHeartRateBpm: 65,
+      minimumHeartRateBpm: 49,
       averageHrvMs: 31,
       napAverageHeartRateBpm: 56,
       napAverageHrvMs: 45,
@@ -178,6 +182,7 @@ describe('dashboard-sleep-chart.helper', () => {
       totalSeconds: 33300,
       napSeconds: 0,
       averageHeartRateBpm: 64,
+      minimumHeartRateBpm: 47,
       averageHrvMs: 32,
       isNap: false,
     });

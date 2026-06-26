@@ -221,10 +221,81 @@ describe('ChartsSleepTrendComponent', () => {
     });
   });
 
-  it('omits the HRV line and secondary axis when no sleep point has HRV', async () => {
+  it('renders sleep heart-rate and SpO2 as secondary-axis lines', async () => {
+    const point = buildSleepPoint();
+    const secondPoint = buildSleepPoint({
+      id: 'suunto-sleep-2',
+      categoryLabel: 'Apr 29\nSuunto',
+      sleepDate: '2026-04-29',
+      startTimeMs: Date.UTC(2026, 3, 28, 21, 45),
+      endTimeMs: Date.UTC(2026, 3, 29, 5, 30),
+      averageHeartRateBpm: null,
+      minimumHeartRateBpm: 44,
+      maxSpo2Percent: 96,
+    });
+    component.sleepTrend = {
+      points: [point, secondPoint],
+      latestPoint: secondPoint,
+      hasRealPoints: true,
+    };
+
+    fixture.detectChanges();
+    await fixture.whenStable();
+    await vi.waitFor(() => {
+      expect(mockLoader.setOption).toHaveBeenCalled();
+    });
+
+    const setOptionCall = mockLoader.setOption.mock.calls.at(-1) || [];
+    const optionCandidate = setOptionCall[1] || setOptionCall[0];
+    const option = optionCandidate as Record<string, any>;
+    const averageHeartRateSeries = option.series.find((series: any) => series.name === 'Avg HR');
+    const minimumHeartRateSeries = option.series.find((series: any) => series.name === 'Min HR');
+    const spo2Series = option.series.find((series: any) => series.name === 'SpO2 max');
+    const tooltipHtml = option.tooltip.formatter([{ dataIndex: 0 }]);
+
+    expect(Array.isArray(option.yAxis)).toBe(true);
+    expect(averageHeartRateSeries).toMatchObject({
+      name: 'Avg HR',
+      type: 'line',
+      yAxisIndex: 1,
+      connectNulls: false,
+      lineStyle: { color: AppColors.Blue },
+      itemStyle: { color: AppColors.Blue },
+      data: [48, null],
+    });
+    expect(minimumHeartRateSeries).toMatchObject({
+      name: 'Min HR',
+      type: 'line',
+      yAxisIndex: 1,
+      connectNulls: false,
+      lineStyle: { color: AppColors.Pink },
+      itemStyle: { color: AppColors.Pink },
+      data: [42, 44],
+    });
+    expect(spo2Series).toMatchObject({
+      name: 'SpO2 max',
+      type: 'line',
+      yAxisIndex: 1,
+      connectNulls: false,
+      lineStyle: { color: AppColors.Red },
+      itemStyle: { color: AppColors.Red },
+      data: [98, 96],
+    });
+    expect(tooltipHtml).toContain('HR avg');
+    expect(tooltipHtml).toContain('48 bpm');
+    expect(tooltipHtml).toContain('HR min');
+    expect(tooltipHtml).toContain('42 bpm');
+    expect(tooltipHtml).toContain('SpO2 max');
+    expect(tooltipHtml).toContain('98%');
+  });
+
+  it('omits vitals lines and the secondary axis when no sleep point has vitals', async () => {
     const point = {
       ...buildSleepPoint(),
+      averageHeartRateBpm: null,
+      minimumHeartRateBpm: null,
       averageHrvMs: null,
+      maxSpo2Percent: null,
     };
     component.sleepTrend = {
       points: [point],
@@ -244,6 +315,9 @@ describe('ChartsSleepTrendComponent', () => {
     expect(Array.isArray(option.yAxis)).toBe(false);
     expect(option.grid.right).toBe(8);
     expect(option.series.some((series: any) => series.name === 'HRV')).toBe(false);
+    expect(option.series.some((series: any) => series.name === 'Avg HR')).toBe(false);
+    expect(option.series.some((series: any) => series.name === 'Min HR')).toBe(false);
+    expect(option.series.some((series: any) => series.name === 'SpO2 max')).toBe(false);
   });
 
   it('keeps empty sleep dates on the x-axis without connecting HRV across the gap', async () => {
@@ -264,6 +338,7 @@ describe('ChartsSleepTrendComponent', () => {
       unknownSeconds: 0,
       score: null,
       averageHeartRateBpm: null,
+      minimumHeartRateBpm: null,
       averageHrvMs: null,
       maxSpo2Percent: null,
       isNap: false,
@@ -376,7 +451,7 @@ describe('ChartsSleepTrendComponent', () => {
     expect(tooltipHtml).toContain('45 ms');
   });
 
-  it('renders tooltip markers with sleep segment and HRV colors', async () => {
+  it('renders tooltip markers with sleep segment and vitals colors', async () => {
     const point = buildSleepPoint({
       id: 'suunto-sleep-with-nap',
       categoryLabel: 'Tue, May 26',
@@ -411,13 +486,19 @@ describe('ChartsSleepTrendComponent', () => {
     expect(tooltipHtml).toContain('Awake');
     expect(tooltipHtml).toContain('Nap');
     expect(tooltipHtml).toContain('HRV');
-    expect(tooltipHtml).toContain('background:#3F51B5;');
-    expect(tooltipHtml).toContain('background:#4DB6AC;');
-    expect(tooltipHtml).toContain('background:#AB47BC;');
-    expect(tooltipHtml).toContain('background:#90A4AE;');
-    expect(tooltipHtml).toContain('background:#F9A825;');
+    expect(tooltipHtml).toContain('HR avg');
+    expect(tooltipHtml).toContain('HR min');
+    expect(tooltipHtml).toContain('SpO2 max');
+    expect(tooltipHtml).toContain(`background:${AppColors.DeepBlue};`);
     expect(tooltipHtml).toContain(`background:${AppColors.LightBlue};`);
+    expect(tooltipHtml).toContain(`background:${AppColors.Purple};`);
+    expect(tooltipHtml).toContain(`background:${AppColors.MediumGray};`);
+    expect(tooltipHtml).toContain(`background:${AppColors.Orange};`);
+    expect(tooltipHtml).toContain(`background:${AppColors.Yellow};`);
     expect(tooltipHtml).toContain(`background:${AppColors.Green};`);
+    expect(tooltipHtml).toContain(`background:${AppColors.Blue};`);
+    expect(tooltipHtml).toContain(`background:${AppColors.Pink};`);
+    expect(tooltipHtml).toContain(`background:${AppColors.Red};`);
   });
 
   it('highlights all stacked sleep bar segments from the x-axis pointer', async () => {
@@ -544,6 +625,7 @@ function buildSleepPoint(overrides: Partial<DashboardSleepTrendPoint> = {}): Das
     unknownSeconds: 1800,
     score: 82,
     averageHeartRateBpm: 48,
+    minimumHeartRateBpm: 42,
     averageHrvMs: 62,
     maxSpo2Percent: 98,
     isNap: false,

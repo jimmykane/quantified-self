@@ -192,7 +192,7 @@ const DASHBOARD_MANAGER_PRESET_DEFINITIONS: DashboardManagerPresetDefinition[] =
     id: DASHBOARD_MANAGER_PRESET_IDS.CURATED_SLEEP,
     label: 'Sleep',
     tileName: 'Sleep',
-    description: 'Sleep duration, stages, and HRV by connected source.',
+    description: 'Sleep duration, stages, HRV, HR, and SpO2 by connected source.',
     icon: 'hotel',
     category: 'curated',
     curatedChartType: DASHBOARD_SLEEP_TREND_CHART_TYPE,

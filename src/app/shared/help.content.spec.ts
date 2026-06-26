@@ -349,7 +349,9 @@ describe('help.content', () => {
     expect(serviceConnectionsSection?.content).toContain('Sleep sync is server-owned health data');
     expect(serviceConnectionsSection?.content).toContain('14d, 30d, 90d, and 1y range control');
     expect(serviceConnectionsSection?.content).toContain('independent from dashboard event filters');
-    expect(serviceConnectionsSection?.content).toContain('overlays recorded sleep HRV with an average HRV reference line');
+    expect(serviceConnectionsSection?.content).toContain('overlays available vitals');
+    expect(serviceConnectionsSection?.content).toContain('sleep heart rate');
+    expect(serviceConnectionsSection?.content).toContain('max SpO2');
     expect(serviceConnectionsSection?.content).toContain('Backfill Sleep History');
     expect(serviceConnectionsSection?.content).toContain('Jan 1, 2016');
     expect(serviceConnectionsSection?.content).toContain('7-day cooldown');

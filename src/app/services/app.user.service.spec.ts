@@ -50,6 +50,14 @@ describe('AppUserService', () => {
         vi.clearAllMocks();
         (authState as any).mockImplementation((auth: any) => of(auth?.currentUser || null));
         (user as any).mockImplementation((auth: any) => of(auth?.currentUser || null));
+        (docData as any).mockReset();
+        (docData as any).mockReturnValue(of({}));
+        (collectionData as any).mockReset();
+        (collectionData as any).mockReturnValue(of([]));
+        (setDoc as any).mockReset();
+        (setDoc as any).mockResolvedValue(undefined);
+        (updateDoc as any).mockReset();
+        (updateDoc as any).mockResolvedValue(undefined);
 
         mockAuth = {
             currentUser: {
@@ -72,8 +80,6 @@ describe('AppUserService', () => {
         mockFunctionsService = {
             call: vi.fn().mockResolvedValue({ success: true })
         };
-
-        (docData as any).mockReturnValue(of({}));
 
         TestBed.configureTestingModule({
             providers: [
@@ -221,6 +227,50 @@ describe('AppUserService', () => {
         expect(mergedUser.email).toBe('transient-recovered@example.com');
         expect(mergedUser.acceptedPrivacyPolicy).toBe(true);
         expect(service.hasIncompleteProfileReads('u1')).toBe(false);
+    });
+
+    it('should refresh the auth token and retry when a legal sub-document read is permission-denied during current-user loading', async () => {
+        const permissionDeniedError = Object.assign(new Error('Missing or insufficient permissions.'), {
+            code: 'permission-denied'
+        });
+        const logger = TestBed.inject(LoggerService);
+        const loggerErrorSpy = vi.spyOn(logger, 'error');
+        let docDataCallCount = 0;
+
+        (docData as any).mockImplementation(() => {
+            docDataCallCount += 1;
+
+            if (docDataCallCount === 1 || docDataCallCount === 5) {
+                return of({ uid: 'u1', acceptedPrivacyPolicy: false });
+            }
+            if (docDataCallCount === 2) {
+                return throwError(() => permissionDeniedError);
+            }
+            if (docDataCallCount === 6) {
+                return of({
+                    acceptedPrivacyPolicy: true,
+                    acceptedDataPolicy: true,
+                    acceptedTos: true,
+                });
+            }
+
+            return of({});
+        });
+
+        service = TestBed.inject(AppUserService);
+        const mergedUser = await firstValueFrom(service.user$.pipe(filter((user): user is AppUserInterface => !!user), take(1)));
+
+        expect(mockAuth.currentUser.getIdToken).toHaveBeenCalledWith();
+        expect(mockAuth.currentUser.getIdToken).toHaveBeenCalledWith(true);
+        expect(mergedUser.acceptedPrivacyPolicy).toBe(true);
+        expect(mergedUser.acceptedDataPolicy).toBe(true);
+        expect(mergedUser.acceptedTos).toBe(true);
+        expect(service.hasIncompleteProfileReads('u1')).toBe(false);
+        expect(loggerErrorSpy).not.toHaveBeenCalledWith(
+            '[AppUserService] Error fetching legal doc',
+            expect.anything(),
+            expect.anything()
+        );
     });
 
     it('should cap transient profile-read retries and fall back to a synthetic user', async () => {
@@ -735,13 +785,22 @@ describe('AppUserService', () => {
                 acceptedPrivacyPolicy: true,
                 acceptedDataPolicy: true,
             } as AppUserInterface;
-            const writeError = new Error('permission-denied');
+            const writeError = Object.assign(new Error('permission-denied'), {
+                code: 'permission-denied'
+            });
             const updateUserSpy = vi.spyOn(service, 'updateUser');
-            (setDoc as any).mockRejectedValueOnce(writeError);
 
-            await expect(service.createOrUpdateUser(user)).rejects.toThrow('permission-denied');
+            try {
+                (setDoc as any)
+                    .mockRejectedValueOnce(writeError)
+                    .mockRejectedValueOnce(writeError);
 
-            expect(updateUserSpy).not.toHaveBeenCalled();
+                await expect(service.createOrUpdateUser(user)).rejects.toThrow('permission-denied');
+
+                expect(updateUserSpy).not.toHaveBeenCalled();
+            } finally {
+                (setDoc as any).mockResolvedValue(undefined);
+            }
         });
     });
 
@@ -1269,6 +1328,31 @@ describe('AppUserService', () => {
                 expect.anything(), // doc ref
                 { displayName: 'New Name' }
             );
+        });
+
+        it('should refresh the auth token and retry optional legal writes after permission-denied', async () => {
+            const user = { uid: 'u1' } as AppUserInterface;
+            const permissionDeniedError = Object.assign(new Error('Missing or insufficient permissions.'), {
+                code: 'permission-denied'
+            });
+
+            (setDoc as any)
+                .mockRejectedValueOnce(permissionDeniedError)
+                .mockResolvedValueOnce(undefined);
+
+            await service.updateUserProperties(user, {
+                acceptedMarketingPolicy: true
+            });
+
+            expect(mockAuth.currentUser.getIdToken).toHaveBeenCalledWith(true);
+            expect(setDoc).toHaveBeenCalledTimes(2);
+            expect(setDoc).toHaveBeenNthCalledWith(
+                2,
+                expect.anything(),
+                { acceptedMarketingPolicy: true },
+                { merge: true }
+            );
+            expect(updateDoc).not.toHaveBeenCalled();
         });
 
         it('should ignore non-boolean optional legal field updates', async () => {
