@@ -52,11 +52,11 @@ type AxisPointerEvent = {
 type SleepStackValueKey = 'deepSeconds' | 'lightSeconds' | 'remSeconds' | 'unknownSeconds' | 'awakeSeconds' | 'napSeconds';
 
 const STAGE_SERIES = [
-  { key: 'deepSeconds', name: 'Deep', color: '#3F51B5' },
-  { key: 'lightSeconds', name: 'Light', color: '#4DB6AC' },
-  { key: 'remSeconds', name: 'REM', color: '#AB47BC' },
-  { key: 'unknownSeconds', name: 'Unknown', color: '#90A4AE' },
-  { key: 'awakeSeconds', name: 'Awake', color: '#F9A825' },
+  { key: 'deepSeconds', name: 'Deep', color: AppColors.DeepBlue },
+  { key: 'lightSeconds', name: 'Light', color: AppColors.LightBlue },
+  { key: 'remSeconds', name: 'REM', color: AppColors.Purple },
+  { key: 'unknownSeconds', name: 'Unknown', color: AppColors.MediumGray },
+  { key: 'awakeSeconds', name: 'Awake', color: AppColors.Orange },
 ] as const;
 
 const HRV_SERIES = {
@@ -64,9 +64,24 @@ const HRV_SERIES = {
   color: AppColors.Green,
 } as const;
 
+const AVERAGE_HEART_RATE_SERIES = {
+  name: 'Avg HR',
+  color: AppColors.Blue,
+} as const;
+
+const MINIMUM_HEART_RATE_SERIES = {
+  name: 'Min HR',
+  color: AppColors.Pink,
+} as const;
+
+const SPO2_SERIES = {
+  name: 'SpO2 max',
+  color: AppColors.Red,
+} as const;
+
 const NAP_SERIES = {
   name: 'Nap',
-  color: AppColors.LightBlue,
+  color: AppColors.Yellow,
 } as const;
 
 const GRID_BOTTOM_WITH_LEGEND = 58;
@@ -232,7 +247,14 @@ export class ChartsSleepTrendComponent implements AfterViewInit, OnChanges, OnDe
       : { show: false };
     const xAxisLabelInterval = this.buildXAxisLabelInterval(points, chartWidth);
     const hrvData = points.map(point => this.toFiniteMetric(point.averageHrvMs));
+    const averageHeartRateData = points.map(point => this.toFiniteMetric(point.averageHeartRateBpm));
+    const minimumHeartRateData = points.map(point => this.toFiniteMetric(point.minimumHeartRateBpm));
+    const spo2Data = points.map(point => this.toFiniteMetric(point.maxSpo2Percent));
     const hasHrvSeries = hrvData.some(value => value !== null);
+    const hasAverageHeartRateSeries = averageHeartRateData.some(value => value !== null);
+    const hasMinimumHeartRateSeries = minimumHeartRateData.some(value => value !== null);
+    const hasSpo2Series = spo2Data.some(value => value !== null);
+    const hasVitalsSeries = hasHrvSeries || hasAverageHeartRateSeries || hasMinimumHeartRateSeries || hasSpo2Series;
     const averageHrvMs = this.averageMetric(hrvData);
     const napData = points.map(point => this.secondsToHours(point.napSeconds));
     const hasNapSeries = napData.some(value => value > 0);
@@ -254,13 +276,13 @@ export class ChartsSleepTrendComponent implements AfterViewInit, OnChanges, OnDe
       },
       splitLine: { lineStyle: { color: style.gridColor } },
     };
-    const hrvAxis = {
+    const vitalsAxis = {
       type: 'value',
       min: 0,
       axisLabel: {
         color: style.secondaryTextColor,
         fontSize: style.axisFontSize,
-        formatter: (value: number) => `${Math.round(value)}ms`,
+        formatter: (value: number) => `${Math.round(value)}`,
       },
       splitLine: { show: false },
     };
@@ -290,22 +312,7 @@ export class ChartsSleepTrendComponent implements AfterViewInit, OnChanges, OnDe
       emphasis: STACK_BAR_EMPHASIS,
       data: this.buildStackedBarData(points, 'napSeconds', stackKeys),
     }] : [];
-    const hrvSeries = hasHrvSeries ? [{
-      name: HRV_SERIES.name,
-      type: 'line',
-      yAxisIndex: 1,
-      smooth: false,
-      connectNulls: false,
-      showSymbol: true,
-      symbolSize: 5,
-      lineStyle: {
-        color: HRV_SERIES.color,
-        width: 2,
-      },
-      itemStyle: {
-        color: HRV_SERIES.color,
-      },
-      emphasis: { focus: 'series' },
+    const hrvSeries = hasHrvSeries ? [this.buildVitalsLineSeries(HRV_SERIES, hrvData, {
       markLine: averageHrvMs === null ? undefined : {
         silent: true,
         symbol: 'none',
@@ -335,8 +342,16 @@ export class ChartsSleepTrendComponent implements AfterViewInit, OnChanges, OnDe
           yAxis: averageHrvMs,
         }],
       },
-      data: hrvData,
-    }] : [];
+    })] : [];
+    const averageHeartRateSeries = hasAverageHeartRateSeries
+      ? [this.buildVitalsLineSeries(AVERAGE_HEART_RATE_SERIES, averageHeartRateData)]
+      : [];
+    const minimumHeartRateSeries = hasMinimumHeartRateSeries
+      ? [this.buildVitalsLineSeries(MINIMUM_HEART_RATE_SERIES, minimumHeartRateData)]
+      : [];
+    const spo2Series = hasSpo2Series
+      ? [this.buildVitalsLineSeries(SPO2_SERIES, spo2Data)]
+      : [];
 
     return {
       animation: false,
@@ -347,7 +362,7 @@ export class ChartsSleepTrendComponent implements AfterViewInit, OnChanges, OnDe
       },
       grid: {
         left: 26,
-        right: hasHrvSeries ? 32 : 8,
+        right: hasVitalsSeries ? 32 : 8,
         top: 8,
         bottom: style.isCompactLayout ? GRID_BOTTOM_COMPACT : GRID_BOTTOM_WITH_LEGEND,
       },
@@ -396,11 +411,14 @@ export class ChartsSleepTrendComponent implements AfterViewInit, OnChanges, OnDe
           hideOverlap: true,
         },
       },
-      yAxis: hasHrvSeries ? [sleepDurationAxis, hrvAxis] : sleepDurationAxis,
+      yAxis: hasVitalsSeries ? [sleepDurationAxis, vitalsAxis] : sleepDurationAxis,
       series: [
         ...stageSeries,
         ...napSeries,
         ...hrvSeries,
+        ...averageHeartRateSeries,
+        ...minimumHeartRateSeries,
+        ...spo2Series,
       ],
     };
   }
@@ -426,6 +444,9 @@ export class ChartsSleepTrendComponent implements AfterViewInit, OnChanges, OnDe
       });
     }
     const averageHrvMs = this.toFiniteMetric(point.averageHrvMs);
+    const averageHeartRateBpm = this.toFiniteMetric(point.averageHeartRateBpm);
+    const minimumHeartRateBpm = this.toFiniteMetric(point.minimumHeartRateBpm);
+    const maxSpo2Percent = this.toFiniteMetric(point.maxSpo2Percent);
     const napAverageHrvMs = this.toFiniteMetric(point.napAverageHrvMs);
     const napAverageHeartRateBpm = this.toFiniteMetric(point.napAverageHeartRateBpm);
     const hasSeparateNap = point.napSeconds > 0;
@@ -454,8 +475,11 @@ export class ChartsSleepTrendComponent implements AfterViewInit, OnChanges, OnDe
     if (point.score !== null) {
       rows.push({ label: 'Score', value: `${Math.round(point.score)}` });
     }
-    if (point.averageHeartRateBpm !== null) {
-      rows.push({ label: 'HR avg', value: `${Math.round(point.averageHeartRateBpm)} bpm` });
+    if (averageHeartRateBpm !== null) {
+      rows.push({ label: 'HR avg', value: `${Math.round(averageHeartRateBpm)} bpm`, markerColor: AVERAGE_HEART_RATE_SERIES.color });
+    }
+    if (minimumHeartRateBpm !== null) {
+      rows.push({ label: 'HR min', value: `${Math.round(minimumHeartRateBpm)} bpm`, markerColor: MINIMUM_HEART_RATE_SERIES.color });
     }
     if (averageHrvMs !== null) {
       rows.push({ label: 'HRV', value: `${Math.round(averageHrvMs)} ms`, markerColor: HRV_SERIES.color });
@@ -466,8 +490,8 @@ export class ChartsSleepTrendComponent implements AfterViewInit, OnChanges, OnDe
     if (napAverageHrvMs !== null) {
       rows.push({ label: `${napLabel} HRV`, value: `${Math.round(napAverageHrvMs)} ms`, markerColor: HRV_SERIES.color });
     }
-    if (point.maxSpo2Percent !== null) {
-      rows.push({ label: 'SpO2 max', value: `${Math.round(point.maxSpo2Percent)}%` });
+    if (maxSpo2Percent !== null) {
+      rows.push({ label: 'SpO2 max', value: `${Math.round(maxSpo2Percent)}%`, markerColor: SPO2_SERIES.color });
     }
 
     return renderDashboardEChartsTooltipCard(style, {
@@ -624,6 +648,32 @@ export class ChartsSleepTrendComponent implements AfterViewInit, OnChanges, OnDe
     }
     const total = finiteValues.reduce((sum, value) => sum + value, 0);
     return total / finiteValues.length;
+  }
+
+  private buildVitalsLineSeries(
+    series: { name: string; color: string },
+    data: ReadonlyArray<number | null>,
+    extras: Record<string, unknown> = {},
+  ): Record<string, unknown> {
+    return {
+      name: series.name,
+      type: 'line',
+      yAxisIndex: 1,
+      smooth: false,
+      connectNulls: false,
+      showSymbol: true,
+      symbolSize: 5,
+      lineStyle: {
+        color: series.color,
+        width: 2,
+      },
+      itemStyle: {
+        color: series.color,
+      },
+      emphasis: { focus: 'series' },
+      data,
+      ...extras,
+    };
   }
 
   private buildXAxisLabelInterval(points: DashboardSleepTrendPoint[], chartWidth: number): 0 | ((index: number) => boolean) {

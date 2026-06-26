@@ -24,6 +24,7 @@ export interface DashboardSleepTrendPoint {
   unknownSeconds: number;
   score: number | null;
   averageHeartRateBpm: number | null;
+  minimumHeartRateBpm: number | null;
   averageHrvMs: number | null;
   maxSpo2Percent: number | null;
   isNap: boolean;
@@ -80,6 +81,26 @@ function stageSeconds(stageDurations: SleepStageDurationsSeconds | null | undefi
 function toMetric(value: unknown): number | null {
   const numberValue = Number(value);
   return Number.isFinite(numberValue) ? numberValue : null;
+}
+
+function toSpo2Percent(value: unknown): number | null {
+  const metric = toMetric(value);
+  if (metric === null) {
+    return null;
+  }
+  return metric <= 1 ? metric * 100 : metric;
+}
+
+function maxSpo2SamplePercent(values: ReadonlyArray<unknown>): number | null {
+  const finiteValues = values
+    .map(toSpo2Percent)
+    .filter((value): value is number => Number.isFinite(value));
+  return finiteValues.length ? Math.max(...finiteValues) : null;
+}
+
+function resolveMaxSpo2Percent(session: SleepSession): number | null {
+  return toSpo2Percent(session.vitals?.maxSpo2Percent)
+    ?? maxSpo2SamplePercent((session.spo2Samples || []).map(sample => sample?.value));
 }
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -223,6 +244,7 @@ function buildPlaceholderPoint(sleepDate: string): DashboardSleepTrendPoint {
     unknownSeconds: 0,
     score: null,
     averageHeartRateBpm: null,
+    minimumHeartRateBpm: null,
     averageHrvMs: null,
     maxSpo2Percent: null,
     isNap: false,
@@ -275,8 +297,9 @@ function buildPoint(session: SleepSession): DashboardSleepTrendPoint | null {
     unknownSeconds,
     score: toMetric(session.score?.value),
     averageHeartRateBpm: toMetric(session.vitals?.averageHeartRateBpm),
+    minimumHeartRateBpm: toMetric(session.vitals?.minimumHeartRateBpm),
     averageHrvMs: toMetric(session.vitals?.averageHrvMs ?? session.vitals?.overnightHrvMs),
-    maxSpo2Percent: toMetric(session.vitals?.maxSpo2Percent),
+    maxSpo2Percent: resolveMaxSpo2Percent(session),
     isNap: session.isNap === true,
     napSeconds: 0,
     napCount: 0,
@@ -314,6 +337,16 @@ function aggregateFiniteMetrics(values: ReadonlyArray<number | null>): number | 
     return null;
   }
   return finiteValues.reduce((sum, value) => sum + value, 0) / finiteValues.length;
+}
+
+function minFiniteMetric(values: ReadonlyArray<number | null>): number | null {
+  const finiteValues = values.filter((value): value is number => Number.isFinite(value));
+  return finiteValues.length ? Math.min(...finiteValues) : null;
+}
+
+function maxFiniteMetric(values: ReadonlyArray<number | null>): number | null {
+  const finiteValues = values.filter((value): value is number => Number.isFinite(value));
+  return finiteValues.length ? Math.max(...finiteValues) : null;
 }
 
 function sumPointSeconds(points: readonly DashboardSleepTrendPoint[], key: keyof Pick<
@@ -354,8 +387,9 @@ function aggregatePointGroup(points: readonly DashboardSleepTrendPoint[]): Dashb
     awakeSeconds: sumPointSeconds(primaryPoints, 'awakeSeconds'),
     unknownSeconds: sumPointSeconds(primaryPoints, 'unknownSeconds'),
     averageHeartRateBpm: aggregateFiniteMetrics(primaryPoints.map(point => point.averageHeartRateBpm)),
+    minimumHeartRateBpm: minFiniteMetric(primaryPoints.map(point => point.minimumHeartRateBpm)),
     averageHrvMs: aggregateFiniteMetrics(primaryPoints.map(point => point.averageHrvMs)),
-    maxSpo2Percent: aggregateFiniteMetrics(primaryPoints.map(point => point.maxSpo2Percent)),
+    maxSpo2Percent: maxFiniteMetric(primaryPoints.map(point => point.maxSpo2Percent)),
     isNap: sleepPoints.length === 0 && napPoints.length > 0,
     napSeconds: sleepPoints.length ? napSeconds : 0,
     napCount: sleepPoints.length ? napPoints.length : 0,
