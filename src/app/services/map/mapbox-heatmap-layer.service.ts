@@ -1,5 +1,6 @@
 import { Injectable } from '@angular/core';
 import { LoggerService } from '../logger.service';
+import { isStyleReady, shouldDeferForMapboxStyle } from './mapbox-style-ready.utils';
 
 export interface MapboxHeatmapRenderConfig {
   sourceId: string;
@@ -79,7 +80,12 @@ export class MapboxHeatmapLayerService {
       }
     } catch (error) {
       if (this.shouldDeferAfterMapboxError(map, error)) {
-        this.deferRender(map, config.layerId, () => this.renderGeoJsonHeatmapLayer(map, config));
+        this.deferRender(
+          map,
+          config.layerId,
+          () => this.renderGeoJsonHeatmapLayer(map, config),
+          { runImmediately: false }
+        );
         return;
       }
       this.logger.warn?.('[MapboxHeatmapLayerService] Failed to render heatmap layer.', {
@@ -103,7 +109,12 @@ export class MapboxHeatmapLayerService {
       }
     } catch (error) {
       if (this.shouldDeferAfterMapboxError(map, error)) {
-        this.deferRender(map, layerId, () => this.setLayerVisibility(map, layerId, visible));
+        this.deferRender(
+          map,
+          layerId,
+          () => this.setLayerVisibility(map, layerId, visible),
+          { runImmediately: false }
+        );
         return;
       }
       this.logger.warn?.('[MapboxHeatmapLayerService] Failed to set heatmap visibility.', {
@@ -120,19 +131,8 @@ export class MapboxHeatmapLayerService {
   }
 
   private isStyleReady(map: any): boolean {
-    if (!map) return false;
     if (this.isMapRemoved(map)) return false;
-    try {
-      if (typeof map.isStyleLoaded === 'function') {
-        return map.isStyleLoaded();
-      }
-      if (typeof map.loaded === 'function') {
-        return map.loaded();
-      }
-    } catch {
-      return false;
-    }
-    return true;
+    return isStyleReady(map);
   }
 
   private isMapRemoved(map: any): boolean {
@@ -180,17 +180,15 @@ export class MapboxHeatmapLayerService {
   }
 
   private shouldDeferAfterMapboxError(map: any, error: any): boolean {
-    const message = `${error?.message || error || ''}`;
-    return !this.isMapRemoved(map)
-      && (
-        !this.isStyleReady(map)
-        || message.includes('Style is not done loading')
-        || message.includes('getOwnLayer')
-        || message.includes('getOwnSource')
-      );
+    return !this.isMapRemoved(map) && shouldDeferForMapboxStyle(map, error);
   }
 
-  private deferRender(map: any, layerId: string, callback: () => void): void {
+  private deferRender(
+    map: any,
+    layerId: string,
+    callback: () => void,
+    options: { runImmediately?: boolean } = {}
+  ): void {
     if (!map?.on || !layerId || this.isMapRemoved(map)) return;
 
     const pendingLayers = this.getPendingLayerSet(map);
@@ -223,7 +221,9 @@ export class MapboxHeatmapLayerService {
     map.on('styledata', tryRun);
     map.on('load', tryRun);
     map.on('idle', tryRun);
-    tryRun();
+    if (options.runImmediately !== false) {
+      tryRun();
+    }
   }
 
   private getPendingLayerSet(map: any): Set<string> {

@@ -110,6 +110,36 @@ describe('MapboxHeatmapLayerService', () => {
         expect(map.addLayer).not.toHaveBeenCalled();
     });
 
+    it('renderGeoJsonHeatmapLayer should retry source creation on the next style event after a style-swap error', () => {
+        const { map, handlers } = createMapHarness({ styleReady: true, hasLayer: false, hasSource: false });
+        const config = {
+            sourceId: 'heat-source',
+            layerId: 'heat-layer',
+            featureCollection: {
+                type: 'FeatureCollection' as const,
+                features: [{ type: 'Feature', geometry: { type: 'Point', coordinates: [0, 0] }, properties: {} }]
+            },
+            paint: { 'heatmap-opacity': 0.8 }
+        };
+        map.addSource.mockImplementationOnce(() => {
+            throw new Error('Style is not done loading');
+        });
+
+        service.renderGeoJsonHeatmapLayer(map as any, config);
+
+        expect(map.addSource).toHaveBeenCalledTimes(1);
+        expect(map.addLayer).not.toHaveBeenCalled();
+        expect(handlers['idle']).toHaveLength(1);
+
+        handlers['idle'][0]();
+
+        expect(map.addSource).toHaveBeenCalledTimes(2);
+        expect(map.addLayer).toHaveBeenCalledWith(expect.objectContaining({
+            id: 'heat-layer',
+            source: 'heat-source'
+        }));
+    });
+
     it('setLayerVisibility should defer until style is ready and then apply visibility', () => {
         const { map, handlers, setStyleReady } = createMapHarness({ styleReady: false, hasLayer: true });
 

@@ -26,7 +26,8 @@ import {
 import {
     attachStyleReloadHandler,
     isStyleReady,
-    runWhenStyleReady
+    runWhenStyleReady,
+    shouldDeferForMapboxStyle
 } from '../../services/map/mapbox-style-ready.utils';
 import { resolveThemedActivityColor } from '../../services/map/map-activity-color.utils';
 import {
@@ -850,7 +851,7 @@ export class TracksMapManager {
             return;
         }
         this.clearDeferredHomeAreaRemoval();
-        if (!this.isCurrentMapStyleReady()) {
+        if (!isStyleReady(this.map)) {
             this.deferHomeAreaRenderUntilStyleReady();
             return;
         }
@@ -872,7 +873,7 @@ export class TracksMapManager {
                     beforeLayerId,
                 });
             } catch (error) {
-                if (this.shouldDeferSearchScopeOverlayRender(error)) {
+                if (shouldDeferForMapboxStyle(this.map, error)) {
                     this.deferHomeAreaRenderUntilStyleReady();
                     return;
                 }
@@ -887,7 +888,7 @@ export class TracksMapManager {
             this.clearDeferredHomeAreaRemoval();
             return;
         }
-        if (!this.isCurrentMapStyleReady()) {
+        if (!isStyleReady(this.map)) {
             this.deferHomeAreaRemovalUntilStyleReady();
             return;
         }
@@ -902,7 +903,7 @@ export class TracksMapManager {
                 );
                 this.clearDeferredHomeAreaRemoval();
             } catch (error) {
-                if (this.shouldDeferSearchScopeOverlayRender(error)) {
+                if (shouldDeferForMapboxStyle(this.map, error)) {
                     this.deferHomeAreaRemovalUntilStyleReady();
                     return;
                 }
@@ -931,7 +932,7 @@ export class TracksMapManager {
             return;
         }
         this.clearDeferredTripAreaRemoval();
-        if (!this.isCurrentMapStyleReady()) {
+        if (!isStyleReady(this.map)) {
             this.deferTripAreaRenderUntilStyleReady();
             return;
         }
@@ -953,7 +954,7 @@ export class TracksMapManager {
                     beforeLayerId,
                 });
             } catch (error) {
-                if (this.shouldDeferSearchScopeOverlayRender(error)) {
+                if (shouldDeferForMapboxStyle(this.map, error)) {
                     this.deferTripAreaRenderUntilStyleReady();
                     return;
                 }
@@ -968,7 +969,7 @@ export class TracksMapManager {
             this.clearDeferredTripAreaRemoval();
             return;
         }
-        if (!this.isCurrentMapStyleReady()) {
+        if (!isStyleReady(this.map)) {
             this.deferTripAreaRemovalUntilStyleReady();
             return;
         }
@@ -983,7 +984,7 @@ export class TracksMapManager {
                 );
                 this.clearDeferredTripAreaRemoval();
             } catch (error) {
-                if (this.shouldDeferSearchScopeOverlayRender(error)) {
+                if (shouldDeferForMapboxStyle(this.map, error)) {
                     this.deferTripAreaRemovalUntilStyleReady();
                     return;
                 }
@@ -1062,22 +1063,6 @@ export class TracksMapManager {
     private clearDeferredTripAreaRemoval(): void {
         this.tripAreaRemovalStyleReadyCleanup?.();
         this.tripAreaRemovalStyleReadyCleanup = null;
-    }
-
-    private isCurrentMapStyleReady(): boolean {
-        try {
-            return isStyleReady(this.map);
-        } catch {
-            return false;
-        }
-    }
-
-    private shouldDeferSearchScopeOverlayRender(error: any): boolean {
-        const message = `${error?.message || error || ''}`;
-        return !this.isCurrentMapStyleReady()
-            || message.includes('Style is not done loading')
-            || message.includes('getOwnLayer')
-            || message.includes('getOwnSource');
     }
 
     private getFirstTrackLayerId(): string | undefined {

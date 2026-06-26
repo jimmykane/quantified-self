@@ -28,13 +28,33 @@ const styleReloadHandlerRegistry = new WeakMap<object, Map<string, (...args: any
 
 export function isStyleReady(map: MapboxLikeMap | null | undefined): boolean {
   if (!map) return false;
-  if (typeof map.isStyleLoaded === 'function') {
-    return map.isStyleLoaded();
-  }
-  if (typeof map.loaded === 'function') {
-    return map.loaded();
+  try {
+    if (typeof map.isStyleLoaded === 'function') {
+      return map.isStyleLoaded();
+    }
+    if (typeof map.loaded === 'function') {
+      return map.loaded();
+    }
+  } catch {
+    return false;
   }
   return true;
+}
+
+export function isMapboxStyleLifecycleError(error: any): boolean {
+  const details = `${error?.message || error || ''}\n${error?.stack || ''}`;
+  return details.includes('Style is not done loading')
+    || details.includes('getOwnLayer')
+    || details.includes('getOwnSource')
+    || details.includes('layout.get')
+    || details.includes('continuePlacement');
+}
+
+export function shouldDeferForMapboxStyle(
+  map: MapboxLikeMap | null | undefined,
+  error: any
+): boolean {
+  return !isStyleReady(map) || isMapboxStyleLifecycleError(error);
 }
 
 export function runWhenStyleReady(

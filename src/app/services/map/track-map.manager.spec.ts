@@ -160,6 +160,84 @@ describe('TrackMapManager', () => {
     }));
   });
 
+  it('retries track rendering when source creation fails during a style swap', () => {
+    map.isStyleLoaded.mockReturnValue(true);
+    map.addSource.mockImplementation(() => {
+      throw new Error('Style is not done loading');
+    });
+
+    expect(() => manager.renderTrackData([{
+      id: 'route-style-swap',
+      label: 'Style Swap Route',
+      strokeColor: '#1e88e5',
+      positions: [
+        { latitudeDegrees: 40.1, longitudeDegrees: 22.1 },
+        { latitudeDegrees: 40.2, longitudeDegrees: 22.2 },
+      ],
+    }], {
+      showArrows: true,
+      strokeWidth: 4,
+    })).not.toThrow();
+
+    expect(map.addLayer).not.toHaveBeenCalled();
+    expect(map.on).toHaveBeenCalledWith('idle', expect.any(Function));
+
+    map.addSource.mockReset();
+    map.addSource.mockImplementation((sourceId: string) => sourceState.add(sourceId));
+    map.getSource.mockImplementation((sourceId: string) => sourceState.has(sourceId) ? { setData: vi.fn() } : null);
+    map.getLayer.mockImplementation((layerId: string) => layerState.has(layerId));
+
+    map.on.mock.calls
+      .filter((call: any[]) => call[0] === 'idle')
+      .forEach((call: any[]) => call[1]());
+
+    expect(map.addSource).toHaveBeenCalledWith(
+      expect.stringMatching(/^route-track-source-route-style-swap-[a-z0-9]+$/),
+      expect.objectContaining({ type: 'geojson' }),
+    );
+    expect(map.addLayer).toHaveBeenCalledWith(expect.objectContaining({
+      id: expect.stringMatching(/^route-track-line-route-style-swap-[a-z0-9]+$/),
+    }));
+  });
+
+  it('retries track rendering when layer lookup fails during a style swap', () => {
+    map.isStyleLoaded.mockReturnValue(true);
+    map.getLayer.mockImplementation(() => {
+      throw new TypeError("Cannot read properties of undefined (reading 'getOwnLayer')");
+    });
+
+    expect(() => manager.renderTrackData([{
+      id: 'route-layer-swap',
+      label: 'Layer Swap Route',
+      strokeColor: '#43a047',
+      positions: [
+        { latitudeDegrees: 41.1, longitudeDegrees: 23.1 },
+        { latitudeDegrees: 41.2, longitudeDegrees: 23.2 },
+      ],
+    }], {
+      showArrows: false,
+      strokeWidth: 5,
+    })).not.toThrow();
+
+    expect(map.addLayer).not.toHaveBeenCalled();
+    expect(map.on).toHaveBeenCalledWith('idle', expect.any(Function));
+
+    map.getLayer.mockReset();
+    map.getLayer.mockImplementation((layerId: string) => layerState.has(layerId));
+
+    map.on.mock.calls
+      .filter((call: any[]) => call[0] === 'idle')
+      .forEach((call: any[]) => call[1]());
+
+    expect(map.addLayer).toHaveBeenCalledWith(expect.objectContaining({
+      id: expect.stringMatching(/^route-track-line-route-layer-swap-[a-z0-9]+$/),
+      paint: expect.objectContaining({
+        'line-color': '#43a047',
+        'line-width': 5,
+      }),
+    }));
+  });
+
   it('keeps layer IDs distinct when track IDs sanitize to the same value', () => {
     manager.renderTrackData([
       {

@@ -1,6 +1,7 @@
 import { Injectable } from '@angular/core';
 import { LoggerService } from '../logger.service';
 import { buildReadableActivityMarkerPaint } from './map-activity-color.utils';
+import { isStyleReady as isMapboxStyleReady, shouldDeferForMapboxStyle } from './mapbox-style-ready.utils';
 
 export interface MapboxStartPointRenderPoint {
   lng: number;
@@ -86,36 +87,53 @@ export class MapboxStartPointLayerService {
       }))
     };
 
-    const source = this.getSourceSafely(map, config.sourceId);
-    if (!source) {
-      map.addSource(config.sourceId, {
-        type: 'geojson',
-        data: sourceData
-      });
-    } else if (typeof source.setData === 'function') {
-      source.setData(sourceData);
+    try {
+      const source = this.getSourceSafely(map, config.sourceId);
+      if (!source) {
+        map.addSource(config.sourceId, {
+          type: 'geojson',
+          data: sourceData
+        });
+      } else if (typeof source.setData === 'function') {
+        source.setData(sourceData);
+      }
+
+      const visibility = config.visibility ?? 'visible';
+      const minzoom = this.normalizeMinZoom(config.minzoom);
+
+      const markerLayer = {
+        id: config.layerId,
+        type: 'circle',
+        source: config.sourceId,
+        minzoom,
+        layout: { visibility },
+        paint: buildReadableActivityMarkerPaint({
+          colorExpression: ['coalesce', ['get', 'markerColor'], config.markerColor || '#2ca3ff'],
+          strokeColor: config.markerStrokeColor || '#f5f8ff',
+          radiusExpression: ['coalesce', ['get', 'markerRadius'], 6],
+          strokeWidthExpression: ['interpolate', ['linear'], ['zoom'], minzoom, 2.6, 18, 3.4],
+        })
+      };
+
+      this.ensureLayer(map, markerLayer, config.beforeLayerId);
+      // Ensure any legacy hit layer is removed so it cannot appear as a visual artifact.
+      this.removeLayerIfPresent(map, config.hitLayerId);
+    } catch (error) {
+      if (shouldDeferForMapboxStyle(map, error)) {
+        this.logger.log('[MapboxStartPointLayerService] Start-point render deferred after Mapbox style error.', {
+          layerId: config.layerId,
+          error
+        });
+        this.deferRender(
+          map,
+          `${config.sourceId}:${config.layerId}:${config.hitLayerId}`,
+          () => this.renderStartPoints(map, config),
+          { runImmediately: false }
+        );
+        return;
+      }
+      throw error;
     }
-
-    const visibility = config.visibility ?? 'visible';
-    const minzoom = this.normalizeMinZoom(config.minzoom);
-
-    const markerLayer = {
-      id: config.layerId,
-      type: 'circle',
-      source: config.sourceId,
-      minzoom,
-      layout: { visibility },
-      paint: buildReadableActivityMarkerPaint({
-        colorExpression: ['coalesce', ['get', 'markerColor'], config.markerColor || '#2ca3ff'],
-        strokeColor: config.markerStrokeColor || '#f5f8ff',
-        radiusExpression: ['coalesce', ['get', 'markerRadius'], 6],
-        strokeWidthExpression: ['interpolate', ['linear'], ['zoom'], minzoom, 2.6, 18, 3.4],
-      })
-    };
-
-    this.ensureLayer(map, markerLayer, config.beforeLayerId);
-    // Ensure any legacy hit layer is removed so it cannot appear as a visual artifact.
-    this.removeLayerIfPresent(map, config.hitLayerId);
   }
 
   public bindInteraction(map: any, config: MapboxStartPointInteractionConfig): void {
@@ -254,21 +272,15 @@ export class MapboxStartPointLayerService {
   }
 
   private isStyleReady(map: any): boolean {
-    if (!map) return false;
-    try {
-      if (typeof map.isStyleLoaded === 'function') {
-        return map.isStyleLoaded();
-      }
-      if (typeof map.loaded === 'function') {
-        return map.loaded();
-      }
-      return true;
-    } catch {
-      return false;
-    }
+    return isMapboxStyleReady(map);
   }
 
-  private deferRender(map: any, key: string, callback: () => void): void {
+  private deferRender(
+    map: any,
+    key: string,
+    callback: () => void,
+    options: { runImmediately?: boolean } = {}
+  ): void {
     if (!map?.on || !key) return;
     const pendingRenders = this.getPendingRenderMap(map);
     const existingRegistration = pendingRenders.get(key);
@@ -296,7 +308,9 @@ export class MapboxStartPointLayerService {
     map.on('styledata', registration.tryRun);
     map.on('load', registration.tryRun);
     map.on('idle', registration.tryRun);
-    registration.tryRun();
+    if (options.runImmediately !== false) {
+      registration.tryRun();
+    }
   }
 
   private cancelDeferredRender(map: any, key: string): void {

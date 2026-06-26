@@ -17,6 +17,7 @@ import {
   attachStyleReloadHandler,
   isStyleReady,
   runWhenStyleReady,
+  shouldDeferForMapboxStyle,
 } from './mapbox-style-ready.utils';
 
 export interface TrackMapPosition {
@@ -195,13 +196,12 @@ export class TrackMapManager {
         pitch: typeof this.map.getPitch === 'function' ? this.map.getPitch() : null,
       });
     } catch (error: any) {
-      const message = String(error?.message || '');
       this.logger.warn(`[${this.logPrefix}] Failed to toggle terrain.`, {
         enable,
         animate,
         error,
       });
-      if (message.includes('Style is not done loading') || !isStyleReady(this.map)) {
+      if (shouldDeferForMapboxStyle(this.map, error)) {
         this.logger.log(`[${this.logPrefix}] Deferring terrain toggle after failure.`, { enable, animate });
         deferTerrainToggleUntilReady(
           this.map,
@@ -289,14 +289,26 @@ export class TrackMapManager {
     this.styleReadyRenderCleanup?.();
     this.styleReadyRenderCleanup = null;
 
-    const incomingTrackIds = new Set((this.currentTracks || []).map((track) => track.id));
-    this.activeLayersByTrackId.forEach((_ids, trackId) => {
-      if (!incomingTrackIds.has(trackId)) {
-        this.removeTrack(trackId);
-      }
-    });
+    try {
+      const incomingTrackIds = new Set((this.currentTracks || []).map((track) => track.id));
+      this.activeLayersByTrackId.forEach((_ids, trackId) => {
+        if (!incomingTrackIds.has(trackId)) {
+          this.removeTrack(trackId);
+        }
+      });
 
-    this.currentTracks.forEach((track) => this.renderSingleTrack(track));
+      this.currentTracks.forEach((track) => this.renderSingleTrack(track));
+    } catch (error) {
+      if (shouldDeferForMapboxStyle(this.map, error)) {
+        this.logger.log(`[${this.logPrefix}] Track layer render deferred after Mapbox style error.`, {
+          trackCount: this.currentTracks.length,
+          error,
+        });
+        this.scheduleRenderWhenStyleReady();
+        return;
+      }
+      throw error;
+    }
   }
 
   private scheduleRenderWhenStyleReady(): void {

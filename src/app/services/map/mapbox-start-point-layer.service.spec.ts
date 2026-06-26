@@ -212,6 +212,59 @@ describe('MapboxStartPointLayerService', () => {
     expect(mockMap.off).toHaveBeenCalledWith('style.load', expect.any(Function));
   });
 
+  it('should retry rendering when source creation fails during a style swap', () => {
+    mockMap.addSource.mockImplementationOnce(() => {
+      throw new Error('Style is not done loading');
+    });
+
+    expect(() => service.renderStartPoints(mockMap, {
+      sourceId: 'track-start-source',
+      layerId: 'track-start-layer',
+      hitLayerId: 'track-start-hit-layer',
+      points: [{ lng: 20, lat: 40, properties: { pointId: 'p1' } }]
+    })).not.toThrow();
+
+    expect(mockMap.addSource).toHaveBeenCalledTimes(1);
+    expect(mockMap.addLayer).not.toHaveBeenCalled();
+
+    const idleHandler = mockMap.on.mock.calls.find(
+      (call: any[]) => call[0] === 'idle' && typeof call[1] === 'function'
+    )?.[1];
+    idleHandler?.();
+
+    expect(mockMap.addSource).toHaveBeenCalledTimes(2);
+    expect(mockMap.addLayer).toHaveBeenCalledWith(expect.objectContaining({
+      id: 'track-start-layer',
+      source: 'track-start-source',
+    }));
+  });
+
+  it('should retry rendering when layer creation fails during a style swap', () => {
+    const existingSource = { setData: vi.fn() };
+    mockMap.getSource.mockReturnValue(existingSource);
+    mockMap.addLayer.mockImplementationOnce(() => {
+      throw new TypeError("Cannot read properties of undefined (reading 'getOwnLayer')");
+    });
+
+    expect(() => service.renderStartPoints(mockMap, {
+      sourceId: 'track-start-source',
+      layerId: 'track-start-layer',
+      hitLayerId: 'track-start-hit-layer',
+      points: [{ lng: 20, lat: 40, properties: { pointId: 'p1' } }]
+    })).not.toThrow();
+
+    expect(existingSource.setData).toHaveBeenCalledTimes(1);
+    expect(mockMap.addLayer).toHaveBeenCalledTimes(1);
+
+    const idleHandler = mockMap.on.mock.calls.find(
+      (call: any[]) => call[0] === 'idle' && typeof call[1] === 'function'
+    )?.[1];
+    idleHandler?.();
+
+    expect(existingSource.setData).toHaveBeenCalledTimes(2);
+    expect(mockMap.addLayer).toHaveBeenCalledTimes(2);
+  });
+
   it('should refresh paint on existing layers', () => {
     mockMap.getSource.mockReturnValue({ setData: vi.fn() });
     mockMap.getLayer.mockImplementation((id: string) => id === 'track-start-layer' || id === 'track-start-hit-layer');

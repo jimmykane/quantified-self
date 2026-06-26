@@ -1,8 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   attachStyleReloadHandler,
+  isMapboxStyleLifecycleError,
   isStyleReady,
   runWhenStyleReady,
+  shouldDeferForMapboxStyle,
 } from './mapbox-style-ready.utils';
 
 function createMapMock() {
@@ -34,6 +36,36 @@ describe('mapbox-style-ready.utils', () => {
     expect(isStyleReady(map)).toBe(true);
     expect(map.isStyleLoaded).toHaveBeenCalled();
     expect(map.loaded).not.toHaveBeenCalled();
+  });
+
+  it('isStyleReady treats Mapbox readiness check errors as not ready', () => {
+    const map = {
+      isStyleLoaded: vi.fn(() => {
+        throw new Error('Style is not done loading');
+      }),
+    };
+
+    expect(isStyleReady(map)).toBe(false);
+  });
+
+  it('detects transient Mapbox style lifecycle errors', () => {
+    expect(isMapboxStyleLifecycleError(new Error('Style is not done loading'))).toBe(true);
+    expect(isMapboxStyleLifecycleError(new TypeError("Cannot read properties of undefined (reading 'getOwnLayer')"))).toBe(true);
+    expect(isMapboxStyleLifecycleError(new TypeError("Cannot read properties of undefined (reading 'getOwnSource')"))).toBe(true);
+    expect(isMapboxStyleLifecycleError(new TypeError("undefined is not an object (evaluating 'h.layout.get')"))).toBe(true);
+    const placementError = new Error('Mapbox placement failed');
+    placementError.stack = 'at continuePlacement (/chunk-mapbox.js:2:132027)';
+    expect(isMapboxStyleLifecycleError(placementError)).toBe(true);
+    expect(isMapboxStyleLifecycleError(new Error('Some other map error'))).toBe(false);
+  });
+
+  it('shouldDeferForMapboxStyle defers when style is not ready or the error is a lifecycle race', () => {
+    const readyMap = { isStyleLoaded: vi.fn().mockReturnValue(true) };
+    const loadingMap = { isStyleLoaded: vi.fn().mockReturnValue(false) };
+
+    expect(shouldDeferForMapboxStyle(loadingMap, new Error('Some other map error'))).toBe(true);
+    expect(shouldDeferForMapboxStyle(readyMap, new Error('Style is not done loading'))).toBe(true);
+    expect(shouldDeferForMapboxStyle(readyMap, new Error('Some other map error'))).toBe(false);
   });
 
   it('runWhenStyleReady waits for a ready event and cleans listeners', () => {
