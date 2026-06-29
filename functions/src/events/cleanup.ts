@@ -2,6 +2,29 @@ import { onDocumentDeleted } from 'firebase-functions/v2/firestore';
 import * as admin from 'firebase-admin';
 import * as logger from 'firebase-functions/logger';
 
+async function shouldSkipEventCleanup(userId: string, eventId: string, phase: string): Promise<boolean> {
+    try {
+        const currentEventSnapshot = await admin.firestore().doc(`users/${userId}/events/${eventId}`).get();
+        if (currentEventSnapshot.exists) {
+            logger.warn('[Cleanup] stale_delete_trigger_skipped: event exists again, skipping destructive cleanup.', {
+                userId,
+                eventId,
+                phase,
+            });
+            return true;
+        }
+        return false;
+    } catch (error) {
+        logger.error('[Cleanup] stale_delete_guard_failed: could not verify event absence, skipping destructive cleanup.', {
+            userId,
+            eventId,
+            phase,
+            error,
+        });
+        return true;
+    }
+}
+
 export const cleanupEventFile = onDocumentDeleted({
     document: 'users/{userId}/events/{eventId}',
     region: 'europe-west2',
@@ -20,6 +43,10 @@ export const cleanupEventFile = onDocumentDeleted({
     }
 
     logger.info(`[Cleanup] Event ${eventId} for user ${userId} deleted. Checking for original file.`);
+
+    if (await shouldSkipEventCleanup(userId, eventId, 'before_activity_cleanup')) {
+        return;
+    }
 
     // Delete linked activities (Flat structure)
     try {
@@ -44,6 +71,9 @@ export const cleanupEventFile = onDocumentDeleted({
 
     // Delete linked metaData (Subcollection)
     try {
+        if (await shouldSkipEventCleanup(userId, eventId, 'before_metadata_cleanup')) {
+            return;
+        }
         const metaDataRef = admin.firestore().collection(`users/${userId}/events/${eventId}/metaData`);
         // Using recursiveDelete to efficiently remove the entire subcollection
         await admin.firestore().recursiveDelete(metaDataRef);
@@ -53,9 +83,12 @@ export const cleanupEventFile = onDocumentDeleted({
     }
 
     const prefix = `users/${userId}/events/${eventId}/`;
-    logger.info(`[Cleanup] Deleting all files with prefix ${prefix}`);
 
     try {
+        if (await shouldSkipEventCleanup(userId, eventId, 'before_storage_cleanup')) {
+            return;
+        }
+        logger.info(`[Cleanup] Deleting all files with prefix ${prefix}`);
         await admin.storage().bucket().deleteFiles({ prefix });
         logger.info(`[Cleanup] Successfully deleted files with prefix ${prefix}`);
     } catch (error) {

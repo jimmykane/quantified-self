@@ -3,7 +3,17 @@ import { vi, describe, it, expect, beforeEach, afterEach, Mock } from 'vitest';
 
 
 // Use vi.hoisted to ensure mocks are initialized before vi.mock
-const { adminFirestoreMock, adminStorageMock, batchDeleteMock, batchCommitMock, deleteFilesMock, recursiveDeleteMock } = vi.hoisted(() => {
+const {
+    adminFirestoreMock,
+    adminStorageMock,
+    batchDeleteMock,
+    batchCommitMock,
+    deleteFilesMock,
+    docGetMock,
+    loggerErrorMock,
+    loggerWarnMock,
+    recursiveDeleteMock,
+} = vi.hoisted(() => {
     const onDeleteMock = vi.fn((handler) => handler);
     const documentMock = vi.fn(() => ({ onDelete: onDeleteMock }));
 
@@ -16,6 +26,11 @@ const { adminFirestoreMock, adminStorageMock, batchDeleteMock, batchCommitMock, 
         where: whereMock,
         get: getMock
     }));
+    const docGetMock = vi.fn().mockResolvedValue({ exists: false });
+    const docMock = vi.fn((path) => ({
+        path: path || 'mock/doc',
+        get: docGetMock,
+    }));
 
     // Batch Mocks
     const batchDeleteMock = vi.fn();
@@ -27,6 +42,7 @@ const { adminFirestoreMock, adminStorageMock, batchDeleteMock, batchCommitMock, 
 
     const firestoreMock = {
         collection: collectionMock,
+        doc: docMock,
         recursiveDelete: recursiveDeleteMock,
         batch: batchMock
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -42,6 +58,8 @@ const { adminFirestoreMock, adminStorageMock, batchDeleteMock, batchCommitMock, 
         }),
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } as any;
+    const loggerErrorMock = vi.fn();
+    const loggerWarnMock = vi.fn();
 
     return {
         firestoreBuilderMock: { document: documentMock },
@@ -50,7 +68,10 @@ const { adminFirestoreMock, adminStorageMock, batchDeleteMock, batchCommitMock, 
         recursiveDeleteMock,
         batchDeleteMock,
         batchCommitMock,
-        deleteFilesMock
+        deleteFilesMock,
+        docGetMock,
+        loggerErrorMock,
+        loggerWarnMock,
     };
 });
 
@@ -66,6 +87,12 @@ vi.mock('firebase-admin', () => ({
     credential: {
         cert: vi.fn(),
     },
+}));
+
+vi.mock('firebase-functions/logger', () => ({
+    info: vi.fn(),
+    warn: loggerWarnMock,
+    error: loggerErrorMock,
 }));
 
 // Import the function AFTER mocking
@@ -86,12 +113,16 @@ describe('cleanupEventFile', () => {
         deleteFile: adminStorageMock.bucket().file().delete,
         deleteFiles: deleteFilesMock,
         batchDelete: batchDeleteMock,
-        batchCommit: batchCommitMock
+        batchCommit: batchCommitMock,
+        docGet: docGetMock,
+        loggerError: loggerErrorMock,
+        loggerWarn: loggerWarnMock,
     };
 
     beforeEach(() => {
         // Reset mocks if needed, but since they are hoisted consts, verify they are cleared
         vi.clearAllMocks();
+        mocks.docGet.mockResolvedValue({ exists: false });
     });
 
     afterEach(() => {
@@ -206,5 +237,87 @@ describe('cleanupEventFile', () => {
         // @ts-ignore
         expect(collectionRef.path).toBe('users/testUser/events/testEvent/metaData');
     });
-});
 
+    it('should skip destructive cleanup when a deleted event has been recreated', async () => {
+        const wrapped = cleanupEventFile as unknown as (event: unknown) => Promise<void>;
+        const snap = testEnv.firestore.makeDocumentSnapshot({}, 'users/testUser/events/testEvent');
+        const event = {
+            data: snap,
+            params: { userId: 'testUser', eventId: 'testEvent' },
+        };
+        mocks.docGet.mockResolvedValue({ exists: true });
+
+        await wrapped(event);
+
+        expect(mocks.firestore.doc).toHaveBeenCalledWith('users/testUser/events/testEvent');
+        expect(mocks.batchDelete).not.toHaveBeenCalled();
+        expect(mocks.batchCommit).not.toHaveBeenCalled();
+        expect(mocks.recursiveDelete).not.toHaveBeenCalled();
+        expect(mocks.deleteFiles).not.toHaveBeenCalled();
+        expect(mocks.loggerWarn).toHaveBeenCalledWith(
+            expect.stringContaining('stale_delete_trigger_skipped'),
+            expect.objectContaining({
+                userId: 'testUser',
+                eventId: 'testEvent',
+                phase: 'before_activity_cleanup',
+            }),
+        );
+    });
+
+    it('should skip storage cleanup when a deleted event is recreated after metadata cleanup', async () => {
+        const wrapped = cleanupEventFile as unknown as (event: unknown) => Promise<void>;
+        const snap = testEnv.firestore.makeDocumentSnapshot({}, 'users/testUser/events/testEvent');
+        const event = {
+            data: snap,
+            params: { userId: 'testUser', eventId: 'testEvent' },
+        };
+        mocks.docGet
+            .mockResolvedValueOnce({ exists: false })
+            .mockResolvedValueOnce({ exists: false })
+            .mockResolvedValueOnce({ exists: true });
+        (mocks.firestore.collection('users/testUser/activities').where as Mock).mockReturnValue({
+            get: vi.fn().mockResolvedValue({ empty: true, size: 0, docs: [] })
+        });
+
+        await wrapped(event);
+
+        expect(mocks.batchCommit).not.toHaveBeenCalled();
+        expect(mocks.recursiveDelete).toHaveBeenCalledTimes(1);
+        expect(mocks.deleteFiles).not.toHaveBeenCalled();
+        expect(mocks.loggerWarn).toHaveBeenCalledWith(
+            expect.stringContaining('stale_delete_trigger_skipped'),
+            expect.objectContaining({
+                userId: 'testUser',
+                eventId: 'testEvent',
+                phase: 'before_storage_cleanup',
+            }),
+        );
+    });
+
+    it('should fail closed when the stale cleanup guard cannot read the current event', async () => {
+        const wrapped = cleanupEventFile as unknown as (event: unknown) => Promise<void>;
+        const snap = testEnv.firestore.makeDocumentSnapshot({}, 'users/testUser/events/testEvent');
+        const event = {
+            data: snap,
+            params: { userId: 'testUser', eventId: 'testEvent' },
+        };
+        const readError = new Error('firestore unavailable');
+        mocks.docGet.mockRejectedValue(readError);
+
+        await wrapped(event);
+
+        expect(mocks.batchDelete).not.toHaveBeenCalled();
+        expect(mocks.batchCommit).not.toHaveBeenCalled();
+        expect(mocks.recursiveDelete).not.toHaveBeenCalled();
+        expect(mocks.deleteFiles).not.toHaveBeenCalled();
+        expect(mocks.loggerError).toHaveBeenCalledWith(
+            expect.stringContaining('stale_delete_guard_failed'),
+            expect.objectContaining({
+                userId: 'testUser',
+                eventId: 'testEvent',
+                phase: 'before_activity_cleanup',
+                error: readError,
+            }),
+        );
+    });
+});
