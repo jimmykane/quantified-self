@@ -9,6 +9,7 @@ import { Router, ActivatedRoute } from '@angular/router';
 import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { NO_ERRORS_SCHEMA } from '@angular/core';
+import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { of, Subject } from 'rxjs';
 import {
     ActivityTypes,
@@ -31,6 +32,7 @@ import { AppWindowService } from '../../services/app.window.service';
 import { buildSuuntoServiceConnectionViewModel } from '../../helpers/suunto-service-connection.helper';
 import { AppSleepService } from '../../services/app.sleep.service';
 import { SLEEP_PROVIDERS } from '@shared/sleep';
+import { MaterialModule } from '../../modules/material.module';
 
 describe('DashboardComponent', () => {
     let component: DashboardComponent;
@@ -75,7 +77,8 @@ describe('DashboardComponent', () => {
 
         mockEventService = {
             getEventsBy: vi.fn().mockReturnValue(of([{ id: 'event1' }])),
-            getEventCount: vi.fn().mockResolvedValue(1)
+            getEventCount: vi.fn().mockResolvedValue(1),
+            hasAnyActivity: vi.fn().mockResolvedValue(true)
         };
 
         mockUserService = {
@@ -129,6 +132,7 @@ describe('DashboardComponent', () => {
         mockLogger = { info: vi.fn(), warn: vi.fn(), error: vi.fn(), log: vi.fn() };
 
         await TestBed.configureTestingModule({
+            imports: [MaterialModule, NoopAnimationsModule],
             declarations: [DashboardComponent],
             providers: [
                 { provide: AppAuthService, useValue: mockAuthService },
@@ -304,6 +308,54 @@ describe('DashboardComponent', () => {
 
         expect(mockEventService.getEventCount).not.toHaveBeenCalled();
         expect(component.dashboardActionPrompts.some(prompt => prompt.id === 'firstActivityUpload')).toBe(false);
+    });
+
+    it('shows the no-activity dashboard state for owner dashboards without activities', async () => {
+        mockActivatedRoute.snapshot.data.dashboardData.events = [];
+        mockEventService.getEventsBy.mockReturnValue(of([]));
+        mockEventService.hasAnyActivity.mockResolvedValue(false);
+        mockUser.stripeRole = 'pro';
+        mockUser.settings.appSettings = {};
+        mockUserService.watchActivityServiceConnectionState.mockReturnValue(of({
+            [ServiceNames.GarminAPI]: false,
+            [ServiceNames.SuuntoApp]: false,
+            [ServiceNames.COROSAPI]: false,
+        }));
+
+        fixture.detectChanges();
+        await fixture.whenStable();
+        fixture.detectChanges();
+
+        const text = fixture.nativeElement.textContent;
+        const template = readFileSync(resolve(process.cwd(), 'src/app/components/dashboard/dashboard.component.html'), 'utf8');
+        expect(mockEventService.hasAnyActivity).toHaveBeenCalledWith(mockUser);
+        expect(component.showNoActivityDashboardState).toBe(true);
+        expect(text).toContain('No activities yet');
+        expect(text).toContain('Upload an activity file or connect Garmin, Suunto, or COROS.');
+        expect(template).toContain('[fullWidth]="true"');
+        expect(template).toContain('uploadLabel="Upload activity"');
+        expect(component.dashboardActionPrompts.some(prompt => prompt.id === 'connectActivityService')).toBe(false);
+    });
+
+    it('does not show the no-activity dashboard state on another user dashboard', async () => {
+        mockActivatedRoute.snapshot.data.dashboardData.user = mockUser;
+        mockActivatedRoute.snapshot.data.dashboardData.targetUser = { uid: 'other-user' };
+        mockEventService.hasAnyActivity.mockResolvedValue(false);
+
+        fixture.detectChanges();
+        await fixture.whenStable();
+
+        expect(mockEventService.hasAnyActivity).not.toHaveBeenCalled();
+        expect(component.showNoActivityDashboardState).toBe(false);
+    });
+
+    it('uses the shared overlay surface for the no-activity dashboard state', () => {
+        const styles = readFileSync(resolve(process.cwd(), 'src/app/components/dashboard/dashboard.component.scss'), 'utf8');
+
+        expect(styles).toContain('.dashboard-no-activity {');
+        expect(styles).toContain('--mdc-outlined-card-container-color: var(--qs-overlay-surface);');
+        expect(styles).toContain('--mdc-outlined-card-outline-color: var(--qs-overlay-surface-border);');
+        expect(styles).toContain('background: var(--qs-overlay-surface);');
     });
 
     it('dismisses first activity upload prompt and persists action prompt state', async () => {
@@ -861,6 +913,14 @@ describe('DashboardComponent', () => {
         });
     });
 
+    it('navigates to the selected services provider from the no-activity state', async () => {
+        await component.onNoActivityConnectService(ServiceNames.COROSAPI);
+
+        expect(mockRouter.navigate).toHaveBeenCalledWith(['/services'], {
+            queryParams: { serviceName: ServiceNames.COROSAPI },
+        });
+    });
+
     it('navigates to subscriptions from the first activity upgrade action', async () => {
         component.onDashboardActionPromptPrimary({
             promptId: 'firstActivityUpload',
@@ -889,6 +949,43 @@ describe('DashboardComponent', () => {
         });
 
         expect(component.dashboardActionPrompts.some(prompt => prompt.id === 'firstActivityUpload')).toBe(false);
+    });
+
+    it('hides the no-activity dashboard state after a successful upload completes', () => {
+        component.user = mockUser;
+        component.isInitialized = true;
+        (component as any).hasAnyActivity = false;
+        (component as any).syncDashboardActionPromptState();
+
+        expect(component.showNoActivityDashboardState).toBe(true);
+
+        component.onNoActivityUploadComplete();
+
+        expect(component.showNoActivityDashboardState).toBe(false);
+    });
+
+    it('does not restore the no-activity dashboard state when auth refreshes after upload', async () => {
+        const authUserSubject = new BehaviorSubject<AppUserInterface | null>(mockUser);
+        mockAuthService.user$ = authUserSubject.asObservable();
+        mockActivatedRoute.snapshot.data.dashboardData.user = mockUser;
+        mockActivatedRoute.snapshot.data.dashboardData.events = [];
+        mockEventService.getEventsBy.mockReturnValue(of([]));
+        mockEventService.hasAnyActivity.mockResolvedValue(false);
+        mockUser.stripeRole = 'pro';
+
+        fixture.detectChanges();
+        await fixture.whenStable();
+        fixture.detectChanges();
+
+        expect(component.showNoActivityDashboardState).toBe(true);
+
+        component.onNoActivityUploadComplete();
+        authUserSubject.next(mockUser);
+        await fixture.whenStable();
+        fixture.detectChanges();
+
+        expect(component.showNoActivityDashboardState).toBe(false);
+        expect(mockEventService.hasAnyActivity).toHaveBeenCalledTimes(1);
     });
 
     it('dismisses service connection prompt and persists action prompt state', async () => {

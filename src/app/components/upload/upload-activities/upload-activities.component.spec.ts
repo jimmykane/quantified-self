@@ -174,6 +174,19 @@ describe('UploadActivitiesComponent', () => {
     expect(button.querySelector('.upload-button-content mat-icon')?.textContent?.trim()).toBe('upload_file');
   });
 
+  it('should support full-width prompt actions when requested', async () => {
+    component.uploadLabel = 'Upload activity';
+    component.promptAction = true;
+    component.fullWidth = true;
+
+    await component.ngOnInit();
+    fixture.detectChanges();
+
+    const button = fixture.nativeElement.querySelector('button') as HTMLButtonElement;
+
+    expect(button.classList.contains('full-width-action')).toBe(true);
+  });
+
   it('should skip upload count checks for pro users', async () => {
     component.user = { uid: 'u1' } as any;
     userServiceMock.hasProAccessSignal.mockReturnValueOnce(true);

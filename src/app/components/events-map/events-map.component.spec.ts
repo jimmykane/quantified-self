@@ -1,6 +1,8 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { CUSTOM_ELEMENTS_SCHEMA, NgZone, SimpleChange, signal } from '@angular/core';
 import { RouterTestingModule } from '@angular/router/testing';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { of, Subject } from 'rxjs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -236,9 +238,53 @@ describe('EventsMapComponent', () => {
   it('should mark map data as empty when no event has start positions', async () => {
     component.events = [];
     await initMap();
+    fixture.detectChanges();
 
     expect(component.noMapData).toBe(true);
+    expect(component.mapLoadFailed).toBe(false);
+    expect(component.showMapEmptyState).toBe(true);
+    expect(component.mapEmptyStateTitle).toBe('No activities in range');
+    expect(component.mapEmptyStateHint).toBe('Widen the range or clear activity filters to show mapped activities.');
+    expect(fixture.nativeElement.textContent).toContain('No activities in range');
     expect(map.addSource).not.toHaveBeenCalledWith(EVENTS_SOURCE_ID, expect.anything());
+  });
+
+  it('shows a mapped-activities empty state when events lack GPS start data', async () => {
+    component.events = [{
+      ...createEvent('event-without-position'),
+      getStat: () => null,
+    } as EventInterface];
+
+    await initMap();
+    fixture.detectChanges();
+
+    expect(component.noMapData).toBe(true);
+    expect(component.mapLoadFailed).toBe(false);
+    expect(component.showMapEmptyState).toBe(true);
+    expect(component.mapEmptyStateTitle).toBe('No mapped activities');
+    expect(component.mapEmptyStateHint).toBe('Activities with GPS start data will appear here.');
+    expect(fixture.nativeElement.textContent).toContain('No mapped activities');
+  });
+
+  it('uses the shared overlay surface for map empty-state panels', () => {
+    const stylePath = resolve(process.cwd(), 'src/app/components/events-map/events-map.component.css');
+    const styles = readFileSync(stylePath, 'utf8');
+
+    expect(styles).toContain('.events-map-empty-state__panel {');
+    expect(styles).toContain('background: var(--qs-overlay-surface);');
+    expect(styles).toContain('border: 1px solid var(--qs-overlay-surface-border);');
+  });
+
+  it('uses the loading overlay error state only when the map fails to initialize', async () => {
+    mockMapboxLoader.createMap.mockRejectedValueOnce(new Error('map unavailable'));
+
+    fixture.detectChanges();
+    await flush();
+    fixture.detectChanges();
+
+    expect(component.mapLoadFailed).toBe(true);
+    expect(component.noMapData).toBe(false);
+    expect(component.showMapEmptyState).toBe(false);
   });
 
   it('applies theme-adjusted marker color for event points', async () => {

@@ -12,6 +12,49 @@
         (controlChange)="onDashboardActionPromptControlChange($event)">
       </app-dashboard-action-prompts>
 
+      @if (showNoActivityDashboardState && user) {
+      <mat-card class="dashboard-no-activity" appearance="outlined">
+        <mat-card-content class="dashboard-no-activity__content">
+          <div class="dashboard-no-activity__intro">
+            <div class="dashboard-no-activity__icon">
+              <mat-icon aria-hidden="true">directions_run</mat-icon>
+            </div>
+            <div class="dashboard-no-activity__copy">
+              <h2 class="dashboard-no-activity__title">No activities yet</h2>
+              <p class="dashboard-no-activity__description">
+                Upload an activity file or connect Garmin, Suunto, or COROS.
+              </p>
+            </div>
+          </div>
+          <div class="dashboard-no-activity__actions">
+            <app-upload-activities
+              [user]="user"
+              [promptAction]="true"
+              [showUploadIcon]="true"
+              [fullWidth]="true"
+              uploadLabel="Upload activity"
+              (activityUploadComplete)="onNoActivityUploadComplete()">
+            </app-upload-activities>
+            <button mat-stroked-button type="button" [matMenuTriggerFor]="noActivityConnectServiceMenu">
+              <mat-icon aria-hidden="true">sync</mat-icon>
+              <span>Connect service</span>
+            </button>
+            <mat-menu #noActivityConnectServiceMenu="matMenu" class="qs-menu-panel">
+              @for (option of noActivityConnectServiceOptions; track option.serviceName) {
+              <button mat-menu-item type="button" (click)="onNoActivityConnectService(option.serviceName)">
+                <app-service-source-icon
+                  [sourceServiceName]="option.serviceName"
+                  [showTooltip]="false">
+                </app-service-source-icon>
+                <span>{{ option.label }}</span>
+              </button>
+              }
+            </mat-menu>
+          </div>
+        </mat-card-content>
+      </mat-card>
+      }
+
       <!-- Removed mat-divider in favor of CSS spacing/gap -->
 
       @if (user) {

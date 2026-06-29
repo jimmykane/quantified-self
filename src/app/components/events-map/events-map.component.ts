@@ -122,6 +122,10 @@ export class EventsMapComponent extends MapAbstractDirective implements OnChange
   }
 
   public noMapData = false;
+  public mapLoadFailed = false;
+  public showMapEmptyState = false;
+  public mapEmptyStateTitle = '';
+  public mapEmptyStateHint = '';
   public selectedEvent?: EventInterface;
   public selectedEventPopupContent: MapEventPopupContent | null = null;
   public selectedEventPositionsByActivity: Array<{
@@ -311,7 +315,9 @@ export class EventsMapComponent extends MapAbstractDirective implements OnChange
       });
     } catch (error) {
       this.logger.error('[EventsMapComponent] Failed to initialize Mapbox map.', error);
-      this.noMapData = true;
+      this.noMapData = false;
+      this.mapLoadFailed = true;
+      this.showMapEmptyState = false;
       this.apiLoaded.set(true);
       this.changeDetectorRef.markForCheck();
     }
@@ -416,12 +422,18 @@ export class EventsMapComponent extends MapAbstractDirective implements OnChange
     const pointFeatures = this.buildEventPointFeatures();
     if (!pointFeatures.length) {
       this.noMapData = true;
+      this.mapLoadFailed = false;
+      this.applyMapEmptyState();
       this.clearEventLayersAndSource();
       this.changeDetectorRef.markForCheck();
       return;
     }
 
     this.noMapData = false;
+    this.mapLoadFailed = false;
+    this.showMapEmptyState = false;
+    this.mapEmptyStateTitle = '';
+    this.mapEmptyStateHint = '';
 
     const sourceData: { type: 'FeatureCollection'; features: EventPointFeature[] } = {
       type: 'FeatureCollection',
@@ -771,6 +783,19 @@ export class EventsMapComponent extends MapAbstractDirective implements OnChange
     removeLayerIfExists(map, EventsMapComponent.EVENTS_CLUSTER_LAYER_ID);
     removeLayerIfExists(map, EventsMapComponent.EVENTS_UNCLUSTERED_LAYER_ID);
     removeSourceIfExists(map, EventsMapComponent.EVENTS_SOURCE_ID);
+  }
+
+  private applyMapEmptyState(): void {
+    this.showMapEmptyState = true;
+
+    if ((this.events || []).length === 0) {
+      this.mapEmptyStateTitle = 'No activities in range';
+      this.mapEmptyStateHint = 'Widen the range or clear activity filters to show mapped activities.';
+      return;
+    }
+
+    this.mapEmptyStateTitle = 'No mapped activities';
+    this.mapEmptyStateHint = 'Activities with GPS start data will appear here.';
   }
 
   private fitBoundsToEvents(animate: boolean): void {

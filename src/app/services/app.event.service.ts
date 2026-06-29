@@ -2185,6 +2185,18 @@ export class AppEventService implements OnDestroy {
     return this.getEventCountBy(user);
   }
 
+  public async hasAnyEvent(user: User): Promise<boolean> {
+    const path = `users/${user.uid}/events`;
+    const eventsRef = collection(this.firestore, path);
+    const eventsQuery = query(eventsRef, limit(1));
+    const snapshot = await getDocs(eventsQuery);
+    return !snapshot.empty && snapshot.size > 0;
+  }
+
+  public hasAnyActivity(user: User): Promise<boolean> {
+    return this.hasAnyEvent(user);
+  }
+
   public async getEventCountBy(
     user: User,
     whereClauses: { fieldPath: string | any, opStr: any, value: any }[] = [],

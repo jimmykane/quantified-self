@@ -1555,6 +1555,50 @@ describe('AppEventService', () => {
         expect(count).toBe(42);
     });
 
+    it('should check whether any event exists using a single-document query', async () => {
+        const user = { uid: 'user-any' } as any;
+        (collection as Mock).mockReturnValue('events-ref');
+        (query as Mock).mockReturnValue('events-existence-query');
+        (getDocs as Mock).mockResolvedValueOnce({
+            empty: false,
+            size: 1,
+            docs: [createQueryDoc('event-1', {})],
+        });
+
+        const result = await service.hasAnyEvent(user);
+
+        expect(result).toBe(true);
+        expect(collection).toHaveBeenCalledWith(expect.anything(), 'users/user-any/events');
+        expect(query).toHaveBeenCalledWith('events-ref', expect.objectContaining({ type: 'limit', _limit: 1 }));
+        expect(getDocs).toHaveBeenCalledWith('events-existence-query');
+        expect(mocks.getCountFromServer).not.toHaveBeenCalled();
+    });
+
+    it('should return false when the single-document event existence query is empty', async () => {
+        const user = { uid: 'user-empty' } as any;
+        (collection as Mock).mockReturnValue('events-ref');
+        (query as Mock).mockReturnValue('events-existence-query');
+        (getDocs as Mock).mockResolvedValueOnce({
+            empty: true,
+            size: 0,
+            docs: [],
+        });
+
+        const result = await service.hasAnyEvent(user);
+
+        expect(result).toBe(false);
+    });
+
+    it('should expose an activity existence alias for event-backed activities', async () => {
+        const user = { uid: 'user-activity-alias' } as any;
+        const hasAnyEventSpy = vi.spyOn(service, 'hasAnyEvent').mockResolvedValueOnce(true);
+
+        const result = await service.hasAnyActivity(user);
+
+        expect(result).toBe(true);
+        expect(hasAnyEventSpy).toHaveBeenCalledWith(user);
+    });
+
     it('should return cursor-backed event pages without exposing the lookahead doc', async () => {
         const user = { uid: 'user-page' } as any;
         const cursor = { id: 'cursor-doc' } as any;
