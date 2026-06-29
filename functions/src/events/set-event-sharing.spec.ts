@@ -54,6 +54,7 @@ vi.mock('firebase-functions/v2/https', () => ({
 
 vi.mock('firebase-functions/logger', () => ({
   error: vi.fn(),
+  warn: vi.fn(),
 }));
 
 vi.mock('firebase-admin', () => ({
@@ -165,6 +166,47 @@ describe('setEventSharing', () => {
     expect(hoisted.mockSetMetadata.mock.invocationCallOrder[0]).toBeLessThan(
       hoisted.mockEventUpdate.mock.invocationCallOrder[0],
     );
+    expect(result).toMatchObject({
+      eventID: 'event-1',
+      privacy: 'private',
+    });
+  });
+
+  it('allows the owner to disable sharing when source file metadata is invalid', async () => {
+    hoisted.mockEventGet.mockResolvedValueOnce({
+      exists: true,
+      data: () => ({
+        privacy: 'public',
+        originalFiles: [
+          { path: 'users/user-1/events/other-event/original.fit' },
+        ],
+      }),
+    });
+
+    const result = await callSetEventSharing({
+      auth: { uid: 'user-1' },
+      app: { appId: 'app-id' },
+      data: { userID: 'user-1', eventID: 'event-1', enabled: false },
+    });
+
+    expect(hoisted.mockSetMetadata).not.toHaveBeenCalled();
+    expect(hoisted.mockEventUpdate).toHaveBeenCalledWith({ privacy: 'private' });
+    expect(result).toMatchObject({
+      eventID: 'event-1',
+      privacy: 'private',
+    });
+  });
+
+  it('allows the owner to disable sharing when source metadata cleanup fails', async () => {
+    hoisted.mockGetMetadata.mockRejectedValueOnce(new Error('storage unavailable'));
+
+    const result = await callSetEventSharing({
+      auth: { uid: 'user-1' },
+      app: { appId: 'app-id' },
+      data: { userID: 'user-1', eventID: 'event-1', enabled: false },
+    });
+
+    expect(hoisted.mockEventUpdate).toHaveBeenCalledWith({ privacy: 'private' });
     expect(result).toMatchObject({
       eventID: 'event-1',
       privacy: 'private',

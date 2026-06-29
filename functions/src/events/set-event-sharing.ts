@@ -146,6 +146,23 @@ async function updateSourceFilesPrivacy(
   }
 }
 
+async function updateSourceFilesPrivacyBestEffort(
+  sourceFiles: SourceFileReference[],
+  privacy: EventPrivacy,
+): Promise<void> {
+  const results = await Promise.allSettled(
+    sourceFiles.map((sourceFile) => updateStorageFilePrivacy(sourceFile, privacy)),
+  );
+  const rejectedResults = results.filter((result): result is PromiseRejectedResult => result.status === 'rejected');
+  if (rejectedResults.length) {
+    logger.warn('[setEventSharing] Could not update every source file privacy metadata.', {
+      failedCount: rejectedResults.length,
+      privacy,
+      reasons: rejectedResults.map((result) => result.reason),
+    });
+  }
+}
+
 function buildSharePath(prefix: string, userID: string, eventID: string): string {
   return `${prefix}/${encodeURIComponent(userID)}/${encodeURIComponent(eventID)}`;
 }
@@ -177,12 +194,12 @@ export const setEventSharing = onCall({
 
   const eventData = asRecord(eventSnapshot.data()) || {};
   const defaultBucketName = admin.storage().bucket().name;
-  const sourceFiles = resolveSourceFiles(eventData, userID, eventID, defaultBucketName);
   const privacy: EventPrivacy = enabled ? 'public' : 'private';
   const eventPatch = sanitizeEventFirestoreWritePayload({ privacy });
 
-  try {
-    if (enabled) {
+  if (enabled) {
+    const sourceFiles = resolveSourceFiles(eventData, userID, eventID, defaultBucketName);
+    try {
       const updatedSourceFiles: SourceFileReference[] = [];
       try {
         await updateSourceFilesPrivacy(sourceFiles, privacy, updatedSourceFiles);
@@ -191,13 +208,28 @@ export const setEventSharing = onCall({
         await Promise.allSettled(updatedSourceFiles.map((sourceFile) => updateStorageFilePrivacy(sourceFile, 'private')));
         throw error;
       }
-    } else {
-      await updateSourceFilesPrivacy(sourceFiles, privacy);
-      await eventRef.update(eventPatch);
+    } catch (error) {
+      logger.error('[setEventSharing] Failed to update event sharing', { userID, eventID, enabled, error });
+      throw new HttpsError('internal', 'Could not update event sharing.');
     }
-  } catch (error) {
-    logger.error('[setEventSharing] Failed to update event sharing', { userID, eventID, enabled, error });
-    throw new HttpsError('internal', 'Could not update event sharing.');
+  } else {
+    try {
+      let sourceFiles: SourceFileReference[] = [];
+      try {
+        sourceFiles = resolveSourceFiles(eventData, userID, eventID, defaultBucketName);
+      } catch (error) {
+        logger.warn('[setEventSharing] Could not resolve source files while disabling sharing.', {
+          userID,
+          eventID,
+          error,
+        });
+      }
+      await updateSourceFilesPrivacyBestEffort(sourceFiles, privacy);
+      await eventRef.update(eventPatch);
+    } catch (error) {
+      logger.error('[setEventSharing] Failed to update event sharing', { userID, eventID, enabled, error });
+      throw new HttpsError('internal', 'Could not update event sharing.');
+    }
   }
 
   return {
