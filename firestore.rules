@@ -146,7 +146,8 @@ service cloud.firestore {
           // RESTRICTED ACCESS: Must be owner AND have a valid role (Free, Basic, or PRO)
           // TEMPORARILY DISABLED FOR TESTING - Re-enable when ready to enforce paywall
           // allow read, write: if request.auth.uid == userID && isSubscribed();
-          allow read: if isOwner() || isPublicEvent();
+          allow get: if isOwner() || isPublicEvent();
+          allow list: if isOwner();
           allow create: if false;
           allow update: if request.auth.uid == userID
             && !request.resource.data.diff(resource.data).affectedKeys().hasAny(serverOwnedEventFields());

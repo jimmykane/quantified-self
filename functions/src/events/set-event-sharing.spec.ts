@@ -172,7 +172,7 @@ describe('setEventSharing', () => {
     });
   });
 
-  it('allows the owner to disable sharing when source file metadata is invalid', async () => {
+  it('fails safely when disabling sharing and source file metadata is invalid', async () => {
     hoisted.mockEventGet.mockResolvedValueOnce({
       exists: true,
       data: () => ({
@@ -183,34 +183,51 @@ describe('setEventSharing', () => {
       }),
     });
 
-    const result = await callSetEventSharing({
+    await expect(callSetEventSharing({
       auth: { uid: 'user-1' },
       app: { appId: 'app-id' },
       data: { userID: 'user-1', eventID: 'event-1', enabled: false },
-    });
+    })).rejects.toMatchObject({ code: 'failed-precondition' });
 
     expect(hoisted.mockSetMetadata).not.toHaveBeenCalled();
-    expect(hoisted.mockEventUpdate).toHaveBeenCalledWith({ privacy: 'private' });
-    expect(result).toMatchObject({
-      eventID: 'event-1',
-      privacy: 'private',
-    });
+    expect(hoisted.mockEventUpdate).not.toHaveBeenCalled();
   });
 
-  it('allows the owner to disable sharing when source metadata cleanup fails', async () => {
+  it('does not mark the event private when source metadata cleanup fails', async () => {
     hoisted.mockGetMetadata.mockRejectedValueOnce(new Error('storage unavailable'));
 
-    const result = await callSetEventSharing({
+    await expect(callSetEventSharing({
       auth: { uid: 'user-1' },
       app: { appId: 'app-id' },
       data: { userID: 'user-1', eventID: 'event-1', enabled: false },
-    });
+    })).rejects.toMatchObject({ code: 'internal' });
 
-    expect(hoisted.mockEventUpdate).toHaveBeenCalledWith({ privacy: 'private' });
-    expect(result).toMatchObject({
-      eventID: 'event-1',
-      privacy: 'private',
+    expect(hoisted.mockEventUpdate).not.toHaveBeenCalled();
+  });
+
+  it('does not mark the event private unless every source file is made private', async () => {
+    hoisted.mockEventGet.mockResolvedValueOnce({
+      exists: true,
+      data: () => ({
+        privacy: 'public',
+        originalFiles: [
+          { path: 'users/user-1/events/event-1/original.fit' },
+          { path: 'users/user-1/events/event-1/original-2.fit' },
+        ],
+      }),
     });
+    hoisted.mockSetMetadata
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new Error('storage unavailable'));
+
+    await expect(callSetEventSharing({
+      auth: { uid: 'user-1' },
+      app: { appId: 'app-id' },
+      data: { userID: 'user-1', eventID: 'event-1', enabled: false },
+    })).rejects.toMatchObject({ code: 'internal' });
+
+    expect(hoisted.mockSetMetadata).toHaveBeenCalledTimes(2);
+    expect(hoisted.mockEventUpdate).not.toHaveBeenCalled();
   });
 
   it('rejects unauthenticated and non-owner callers', async () => {

@@ -645,6 +645,18 @@ describe('Firestore Security Rules', () => {
                 await assertSucceeds(db.collection(`users/${userId}/events`).doc(eventId).get());
             });
 
+            it('should deny unauthenticated queries for public events', async () => {
+                const db = testEnv.unauthenticatedContext().firestore();
+                await testEnv.withSecurityRulesDisabled(async (context) => {
+                    await context.firestore().doc(`users/${userId}/events/${eventId}`).set({
+                        name: 'Morning Run',
+                        privacy: 'public'
+                    });
+                });
+
+                await assertFails(db.collection(`users/${userId}/events`).where('privacy', '==', 'public').get());
+            });
+
             it('should allow other authenticated users to read a public event', async () => {
                 const db = testEnv.authenticatedContext(otherId).firestore();
                 await testEnv.withSecurityRulesDisabled(async (context) => {
