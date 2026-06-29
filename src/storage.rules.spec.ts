@@ -18,6 +18,11 @@ describe('Storage Security Rules', () => {
     beforeAll(async () => {
         testEnv = await initializeTestEnvironment({
             projectId: 'demo-test',
+            firestore: {
+                rules: readFileSync(resolve(__dirname, '../firestore.rules'), 'utf8'),
+                host: 'localhost',
+                port: 8081,
+            },
             storage: {
                 rules: readFileSync(resolve(__dirname, '../storage.quantified-self-io.rules'), 'utf8'),
                 host: 'localhost',
@@ -33,6 +38,7 @@ describe('Storage Security Rules', () => {
     });
 
     beforeEach(async () => {
+        await testEnv.clearFirestore();
         await testEnv.clearStorage?.();
     });
 
@@ -79,6 +85,12 @@ describe('Storage Security Rules', () => {
         }
     }
 
+    async function seedEventPrivacy(privacy: 'public' | 'private'): Promise<void> {
+        await testEnv.withSecurityRulesDisabled(async (context) => {
+            await context.firestore().doc(`users/${userId}/events/${eventId}`).set({ privacy });
+        });
+    }
+
     it('allows owners to read their own private event source files', async () => {
         await seedFile(filePath, 'private');
 
@@ -86,9 +98,23 @@ describe('Storage Security Rules', () => {
     });
 
     it('allows anonymous reads for event source files with public metadata', async () => {
+        await seedEventPrivacy('public');
         await seedFile(filePath, 'public');
 
         await assertSucceeds(storageForUser().ref(filePath).getMetadata());
+    });
+
+    it('denies anonymous reads for public metadata when the parent event is private', async () => {
+        await seedEventPrivacy('private');
+        await seedFile(filePath, 'public');
+
+        await assertFails(storageForUser().ref(filePath).getMetadata());
+    });
+
+    it('denies anonymous reads for public metadata when the parent event is missing', async () => {
+        await seedFile(filePath, 'public');
+
+        await assertFails(storageForUser().ref(filePath).getMetadata());
     });
 
     it('denies anonymous and other-user reads for private event source files', async () => {
