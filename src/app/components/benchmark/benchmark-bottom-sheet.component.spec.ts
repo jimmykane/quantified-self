@@ -163,6 +163,16 @@ describe('BenchmarkBottomSheetComponent', () => {
         expect(mockBottomSheetRef.dismiss).toHaveBeenCalled();
     });
 
+    it('should not rerun when opened as a read-only report', () => {
+        component.data.allowRerun = false;
+        fixture.detectChanges();
+
+        component.rerun();
+
+        expect(mockBottomSheetRef.dismiss).not.toHaveBeenCalled();
+        expect(fixture.nativeElement.textContent).not.toContain('refresh');
+    });
+
     it('should pass result to child report component', () => {
         expect(component.data.result.referenceId).toBe('ref-id');
         expect(component.data.result.referenceName).toBe('Garmin Forerunner 265');

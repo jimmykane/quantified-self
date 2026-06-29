@@ -13,7 +13,7 @@ import { debounceTime } from 'rxjs/operators';
 import { firstValueFrom, Subscription } from 'rxjs';
 
 import { ActivityInterface } from '@sports-alliance/sports-lib';
-import { AppEventInterface } from '@shared/app-event.interface';
+import { AppEventInterface, BenchmarkResult, getBenchmarkPairKey } from '@shared/app-event.interface';
 import { EventInterface } from '@sports-alliance/sports-lib';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { AppAuthService } from '../../authentication/app.auth.service';
@@ -48,6 +48,8 @@ import { hasVisibleEventJumps } from '../../helpers/event-jump-type.helper';
 import { hasVisibleSwimLengths } from '../../helpers/event-swim-length.helper';
 import { getAppNonUnitBasedChartDataTypes } from '../../helpers/app-chart-data-types.helper';
 import { AppBenchmarkFlowService } from '../../services/app.benchmark-flow.service';
+import { AppUserUtilities } from '../../utils/app.user.utilities';
+import { EventResolverData } from '../../resolvers/event.resolver';
 
 @Component({
   selector: 'app-event-card',
@@ -80,6 +82,10 @@ export class EventCardComponent implements OnInit {
   public selectedActivitiesDebounced = signal<ActivityInterface[]>([]);
   public isDownloading = signal<boolean>(false);
   public targetUserID = signal<string>('');
+  public isPublicShare = signal<boolean>(false);
+  public shareKind = signal<'event' | 'comparison'>('event');
+  public loadError = signal<EventResolverData['loadError'] | null>(null);
+  private publicViewerUser = signal<User | null>(null);
   private liveSyncSubscription: Subscription | null = null;
   private liveSyncRouteKey: string | null = null;
   private liveReloadInProgress = false;
@@ -136,7 +142,7 @@ export class EventCardComponent implements OnInit {
 
   public hasChartDataFlag = computed(() => {
     const event = this.event();
-    const user = this.currentUser();
+    const user = this.displayUser();
     const selectedActivities = this.selectedActivitiesDebounced();
 
     if (!event || !user || selectedActivities.length === 0) {
@@ -161,6 +167,8 @@ export class EventCardComponent implements OnInit {
     const user = this.currentUser();
     return !!(targetUID && user && targetUID === user.uid);
   });
+
+  public displayUser = computed(() => this.currentUser() ?? this.publicViewerUser());
 
   // Convert theme observables to signals
   // User settings (derived from query service)
@@ -208,22 +216,31 @@ export class EventCardComponent implements OnInit {
     this.route.data
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe((data: any) => {
-        const resolvedData = data.event as any;
+        const resolvedData = data.event as EventResolverData | AppEventInterface | null;
+        this.targetUserID.set(this.route.snapshot.paramMap.get('userID') ?? '');
         this.logger.log('[EventCard] route.data emission received', {
-          hasWrappedResolverData: !!(resolvedData && resolvedData.event),
+          hasWrappedResolverData: this.isResolverPayload(resolvedData),
           hasResolvedData: !!resolvedData,
         });
 
-        if (resolvedData && resolvedData.event) {
-          this.event.set(resolvedData.event);
+        if (this.isResolverPayload(resolvedData)) {
+          this.isPublicShare.set(resolvedData.publicShare === true);
+          this.shareKind.set(resolvedData.shareKind === 'comparison' ? 'comparison' : 'event');
+          this.loadError.set(resolvedData.loadError ?? null);
+          this.event.set(resolvedData.event as AppEventInterface | null);
           this.currentUser.set(resolvedData.user);
+          this.syncPublicViewerUser();
           this.logger.log('[EventCard] route.data applied wrapped resolver payload', {
             eventID: resolvedData.event?.getID?.(),
             activityCount: resolvedData.event?.getActivities?.()?.length ?? 0,
             userID: resolvedData.user?.uid ?? null,
           });
         } else {
-          this.event.set(resolvedData);
+          this.isPublicShare.set(false);
+          this.shareKind.set('event');
+          this.loadError.set(null);
+          this.publicViewerUser.set(null);
+          this.event.set(resolvedData as AppEventInterface | null);
           this.logger.log('[EventCard] route.data applied direct event payload', {
             eventID: resolvedData?.getID?.(),
             activityCount: resolvedData?.getActivities?.()?.length ?? 0,
@@ -236,8 +253,6 @@ export class EventCardComponent implements OnInit {
           activityCount: activities.length,
         });
         this.syncSelectedActivities(activities);
-
-        this.targetUserID.set(this.route.snapshot.paramMap.get('userID') ?? '');
         this.logger.log('[EventCard] target user set from route snapshot', {
           targetUserID: this.targetUserID(),
         });
@@ -250,8 +265,24 @@ export class EventCardComponent implements OnInit {
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe((user: User | null) => {
         this.currentUser.set(user);
+        this.syncPublicViewerUser();
         this.maybeOpenBenchmarkFromQuery();
       });
+  }
+
+  private isResolverPayload(value: EventResolverData | AppEventInterface | null): value is EventResolverData {
+    return !!value && Object.prototype.hasOwnProperty.call(value, 'event');
+  }
+
+  private syncPublicViewerUser(): void {
+    if (!this.isPublicShare() || this.currentUser()) {
+      this.publicViewerUser.set(null);
+      return;
+    }
+
+    const publicUser = new User(this.targetUserID() || 'public-viewer');
+    AppUserUtilities.fillMissingAppSettings(publicUser);
+    this.publicViewerUser.set(publicUser);
   }
 
   private startEventDetailsLiveSync(): void {
@@ -291,6 +322,10 @@ export class EventCardComponent implements OnInit {
         },
         error: (error) => {
           this.logger.error('Live event details sync failed', error);
+          if (this.isPublicShare()) {
+            this.clearPublicShareEvent('unavailable');
+            return;
+          }
           this.snackBar.open('Could not live-sync event details', undefined, { duration: 3000 });
           this.router.navigate(['/dashboard']);
         },
@@ -300,6 +335,9 @@ export class EventCardComponent implements OnInit {
   private applyLiveEventUpdate(liveEvent: AppEventInterface | null): void {
     if (!liveEvent) {
       this.logger.log('[EventCard] applyLiveEventUpdate skipped because liveEvent is null');
+      if (this.isPublicShare()) {
+        this.clearPublicShareEvent('not_found');
+      }
       return;
     }
     const selectedIDs = this.selectedActivitiesInstant().map((activity) => activity.getID());
@@ -354,6 +392,9 @@ export class EventCardComponent implements OnInit {
       );
       if (!refreshedEvent) {
         this.logger.log('[EventCard] reloadEventDetailsWithStreams completed with null refreshedEvent');
+        if (this.isPublicShare()) {
+          this.clearPublicShareEvent('not_found');
+        }
         return;
       }
 
@@ -374,6 +415,10 @@ export class EventCardComponent implements OnInit {
       this.maybeOpenBenchmarkFromQuery();
     } catch (error) {
       this.logger.error('Could not refresh event details after live reconcile mismatch', error);
+      if (this.isPublicShare()) {
+        this.clearPublicShareEvent('unavailable');
+        return;
+      }
       this.snackBar.open('Could not refresh event details', undefined, { duration: 3000 });
       this.router.navigate(['/dashboard']);
     } finally {
@@ -391,6 +436,13 @@ export class EventCardComponent implements OnInit {
     }
 
     this.syncSelectedActivities(selectedActivities);
+  }
+
+  private clearPublicShareEvent(loadError: EventResolverData['loadError']): void {
+    this.loadError.set(loadError);
+    this.event.set(null);
+    this.benchmarkAutoOpenAttemptedForEventID = null;
+    this.syncSelectedActivities([]);
   }
 
   private syncSelectedActivities(selectedActivities: ActivityInterface[]): void {
@@ -463,7 +515,8 @@ export class EventCardComponent implements OnInit {
   }
 
   private maybeOpenBenchmarkFromQuery(): void {
-    const shouldOpenBenchmark = this.route.snapshot.queryParamMap?.get('benchmark') === '1';
+    const shouldOpenBenchmark = this.route.snapshot.queryParamMap?.get('benchmark') === '1'
+      || (this.isPublicShare() && this.shareKind() === 'comparison');
     if (!shouldOpenBenchmark) {
       return;
     }
@@ -471,7 +524,7 @@ export class EventCardComponent implements OnInit {
     const event = this.event();
     const user = this.currentUser();
     const eventID = event?.getID?.();
-    if (!event || !user || !eventID) {
+    if (!event || !eventID) {
       return;
     }
 
@@ -481,6 +534,16 @@ export class EventCardComponent implements OnInit {
 
     const activities = event.getActivities?.() || [];
     if (activities.length < 2) {
+      return;
+    }
+
+    if (this.isPublicShare()) {
+      this.benchmarkAutoOpenAttemptedForEventID = eventID;
+      void this.openExistingPublicBenchmarkReport(event);
+      return;
+    }
+
+    if (!user) {
       return;
     }
 
@@ -502,6 +565,44 @@ export class EventCardComponent implements OnInit {
 
     this.benchmarkAutoOpenAttemptedForEventID = eventID;
     void this.benchmarkFlow.openBenchmarkEntry(benchmarkConfig);
+  }
+
+  private async openExistingPublicBenchmarkReport(event: AppEventInterface): Promise<void> {
+    const result = this.resolveSavedBenchmarkResult(event);
+    if (!result) {
+      return;
+    }
+
+    const activities = event.getActivities?.() || [];
+    const initialSelection = activities.filter(activity => {
+      const activityID = activity.getID();
+      return activityID === result.referenceId || activityID === result.testId;
+    });
+
+    await this.benchmarkFlow.openBenchmarkReport({
+      event,
+      user: this.currentUser() ?? undefined,
+      result,
+      initialSelection: initialSelection.length === 2 ? initialSelection : undefined,
+      allowRerun: false,
+    });
+  }
+
+  private resolveSavedBenchmarkResult(event: AppEventInterface): BenchmarkResult | null {
+    const selectedActivities = this.selectedActivitiesInstant();
+    if (selectedActivities.length === 2) {
+      const referenceID = selectedActivities[0].getID();
+      const testID = selectedActivities[1].getID();
+      if (referenceID && testID) {
+        const savedResult = event.benchmarkResults?.[getBenchmarkPairKey(referenceID, testID)];
+        if (savedResult) {
+          return savedResult;
+        }
+      }
+    }
+
+    const benchmarkResults = Object.values(event.benchmarkResults || {});
+    return benchmarkResults[0] || event.benchmarkResult || null;
   }
 
 }

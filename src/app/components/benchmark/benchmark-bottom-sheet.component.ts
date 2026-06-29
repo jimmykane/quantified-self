@@ -41,7 +41,7 @@ type NativeShareStatus = 'shared' | 'unsupported' | 'cancelled' | 'failed';
                 <span>Save image</span>
               </button>
             </mat-menu>
-            <button mat-icon-button matTooltip="Re-run with different activities" (click)="rerun()">
+            <button *ngIf="data.allowRerun !== false" mat-icon-button matTooltip="Re-run with different activities" (click)="rerun()">
                 <mat-icon>refresh</mat-icon>
             </button>
             <button mat-icon-button (click)="close()">
@@ -91,6 +91,7 @@ export class BenchmarkBottomSheetComponent {
       unitSettings?: UserUnitSettingsInterface;
       summariesSettings?: UserSummariesSettingsInterface;
       brandText?: string | null;
+      allowRerun?: boolean;
     },
     private bottomSheetRef: MatBottomSheetRef<BenchmarkBottomSheetComponent>,
     private eventColorService: AppEventColorService,
@@ -123,6 +124,9 @@ export class BenchmarkBottomSheetComponent {
   }
 
   rerun() {
+    if (this.data.allowRerun === false) {
+      return;
+    }
     this.bottomSheetRef.dismiss({ rerun: true });
   }
 

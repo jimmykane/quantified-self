@@ -81,6 +81,8 @@ describe('serverRoutes', () => {
     expect(prerenderedPaths.has('settings')).toBe(false);
     expect(prerenderedPaths.has('mytracks')).toBe(false);
     expect(prerenderedPaths.has('routes')).toBe(false);
+    expect(prerenderedPaths.has('share/event/:userID/:eventID')).toBe(false);
+    expect(prerenderedPaths.has('share/comparison/:userID/:eventID')).toBe(false);
     expect(prerenderedPaths.has('pricing')).toBe(false);
     expect(prerenderedPaths.has('help')).toBe(true);
     expect(prerenderedPaths.has('releases')).toBe(false);
@@ -120,6 +122,8 @@ describe('serverRoutes', () => {
     expect(clientRoutes.find(route => route.path === 'settings')?.status).toBeUndefined();
     expect(clientRoutes.find(route => route.path === 'mytracks')?.status).toBeUndefined();
     expect(clientRoutes.find(route => route.path === 'routes')?.status).toBeUndefined();
+    expect(clientRoutes.find(route => route.path === 'share/event/:userID/:eventID')?.status).toBeUndefined();
+    expect(clientRoutes.find(route => route.path === 'share/comparison/:userID/:eventID')?.status).toBeUndefined();
     expect(clientRoutes.find(route => route.path === 'user/:userID/event/:eventID')?.status).toBeUndefined();
     expect(clientRoutes.find(route => route.path === 'user/:userID/route/:routeID')?.status).toBeUndefined();
   });

@@ -1409,6 +1409,7 @@ describe('AppEventService', () => {
             comparisonTitle: 'Spoofed comparison',
             benchmarkReviewTags: ['review'],
             benchmarkStatus: 'complete',
+            privacy: 'public',
         };
 
         (doc as Mock).mockReturnValue({});
@@ -1429,6 +1430,7 @@ describe('AppEventService', () => {
         expect(writtenPayload.comparisonTitle).toBeUndefined();
         expect(writtenPayload.benchmarkReviewTags).toEqual(['review']);
         expect(writtenPayload.benchmarkStatus).toBeUndefined();
+        expect(writtenPayload.privacy).toBeUndefined();
     });
 
     it('should keep primitive update payloads unchanged in updateEventProperties', async () => {
@@ -1506,6 +1508,7 @@ describe('AppEventService', () => {
             activitiesCount: 4,
             comparisonTitle: 'Spoofed comparison',
             benchmarkStatus: 'complete',
+            privacy: 'public',
         };
 
         (doc as Mock).mockReturnValue({});
@@ -1542,6 +1545,7 @@ describe('AppEventService', () => {
         expect(writtenEventPatch.activitiesCount).toBeUndefined();
         expect(writtenEventPatch.comparisonTitle).toBeUndefined();
         expect(writtenEventPatch.benchmarkStatus).toBeUndefined();
+        expect(writtenEventPatch.privacy).toBeUndefined();
         expect(hasStreamsKey(writtenEventPatch)).toBe(false);
         expect(mocks.batchCommit).toHaveBeenCalledTimes(1);
     });

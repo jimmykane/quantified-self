@@ -99,6 +99,25 @@ describe('AppBenchmarkFlowService', () => {
     expect(analyticsService.logEvent).not.toHaveBeenCalled();
   });
 
+  it('opens read-only reports without allowing rerun generation', async () => {
+    const event = createEvent();
+    const result = createResult();
+
+    bottomSheet.open.mockReturnValueOnce({ afterDismissed: () => of({ rerun: true }) });
+
+    await service.openBenchmarkReport({ event, result, allowRerun: false });
+
+    expect(bottomSheet.open).toHaveBeenCalledWith(
+      expect.any(Function),
+      expect.objectContaining({
+        data: expect.objectContaining({
+          allowRerun: false,
+        }),
+      }),
+    );
+    expect(dialog.open).not.toHaveBeenCalled();
+  });
+
   it('passes user brandText to benchmark bottom sheet data', async () => {
     const event = createEvent();
     const result = createResult();

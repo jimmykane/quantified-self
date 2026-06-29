@@ -26,6 +26,7 @@ interface BenchmarkFlowConfig {
   onGenerationStart?: () => void;
   onGenerationComplete?: (status: 'success' | 'failure', failureReason?: BenchmarkGenerationFailureReason) => void;
   hydrateStreamsForGeneration?: boolean;
+  allowRerun?: boolean;
 }
 
 export type BenchmarkGenerationFailureReason = 'no_overlap' | 'unknown';
@@ -75,13 +76,14 @@ export class AppBenchmarkFlowService {
         unitSettings: nextConfig.user?.settings?.unitSettings ?? AppUserUtilities.getDefaultUserUnitSettings(),
         summariesSettings: nextConfig.user?.settings?.summariesSettings,
         brandText: (nextConfig.user as any)?.brandText ?? null,
+        allowRerun: nextConfig.allowRerun !== false,
       },
       autoFocus: 'dialog',
       scrollStrategy: this.overlay.scrollStrategies.noop()
     });
 
     sheetRef.afterDismissed().subscribe((res: { rerun?: boolean } | undefined) => {
-      if (res?.rerun) {
+      if (res?.rerun && nextConfig.allowRerun !== false) {
         void this.openBenchmarkSelectionDialog(nextConfig);
       }
     });

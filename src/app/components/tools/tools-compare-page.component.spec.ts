@@ -29,6 +29,7 @@ import { AppProcessingService } from '../../services/app.processing.service';
 import { BenchmarkReviewService } from '../../services/benchmark-review.service';
 import { BenchmarkReviewTagsDialogComponent } from '../benchmark/benchmark-review-tags-dialog.component';
 import { AppBreakpoints } from '../../constants/breakpoints';
+import { AppEventSharingService } from '../../services/app.event-sharing.service';
 
 function makeComparisonEvent(id: string, overrides: {
   title?: string;
@@ -40,6 +41,7 @@ function makeComparisonEvent(id: string, overrides: {
   benchmarkDevices?: string[];
   benchmarkReviewTags?: string[];
   activities?: unknown[];
+  privacy?: 'public' | 'private';
 } = {}): AppEventInterface {
   return {
     getID: () => id,
@@ -51,6 +53,7 @@ function makeComparisonEvent(id: string, overrides: {
     benchmarkResults: overrides.benchmarkResults,
     benchmarkDevices: overrides.benchmarkDevices,
     benchmarkReviewTags: overrides.benchmarkReviewTags,
+    privacy: overrides.privacy || 'private',
     getActivities: () => overrides.activities || [],
   } as unknown as AppEventInterface;
 }
@@ -172,6 +175,10 @@ describe('ToolsComparePageComponent', () => {
     getEventTags: ReturnType<typeof vi.fn>;
     saveEventTags: ReturnType<typeof vi.fn>;
   };
+  let eventSharingServiceMock: {
+    setEventSharing: ReturnType<typeof vi.fn>;
+    copyShareUrl: ReturnType<typeof vi.fn>;
+  };
   let deviceColorByNameState: Record<string, string>;
   let deviceColorPreferenceServiceMock: {
     deviceColorByName: ReturnType<typeof vi.fn>;
@@ -292,6 +299,15 @@ describe('ToolsComparePageComponent', () => {
         return normalizedTags;
       }),
     };
+    eventSharingServiceMock = {
+      setEventSharing: vi.fn().mockResolvedValue({
+        eventID: 'comparison-1',
+        privacy: 'public',
+        publicEventUrl: '/share/event/user-1/comparison-1',
+        publicComparisonUrl: '/share/comparison/user-1/comparison-1',
+      }),
+      copyShareUrl: vi.fn(() => true),
+    };
     deviceColorByNameState = {};
     deviceColorPreferenceServiceMock = {
       deviceColorByName: vi.fn(() => deviceColorByNameState),
@@ -327,6 +343,7 @@ describe('ToolsComparePageComponent', () => {
         { provide: AppHapticsService, useValue: hapticsServiceMock },
         { provide: AppProcessingService, useValue: processingServiceMock },
         { provide: BenchmarkReviewService, useValue: benchmarkReviewServiceMock },
+        { provide: AppEventSharingService, useValue: eventSharingServiceMock },
         { provide: AppEventService, useValue: eventServiceMock },
         { provide: AppEventColorService, useValue: eventColorServiceMock },
         { provide: AppDeviceColorPreferenceService, useValue: deviceColorPreferenceServiceMock },
@@ -2246,6 +2263,69 @@ describe('ToolsComparePageComponent', () => {
       status: 'success',
     });
     expect(hapticsServiceMock.success).toHaveBeenCalled();
+  });
+
+  it('shares a saved comparison and copies the public comparison link', async () => {
+    const user = new User('user-1');
+    userSubject.next(user);
+    await Promise.resolve();
+    await Promise.resolve();
+    (component as any).dialog = {
+      open: vi.fn().mockReturnValue({
+        afterClosed: () => of(true),
+      }),
+    };
+    component.comparisons.set([
+      makeComparisonEvent('comparison-1', { privacy: 'private' }),
+    ]);
+
+    await component.shareComparisonLink(component.comparisonItems()[0]);
+
+    expect(eventSharingServiceMock.setEventSharing).toHaveBeenCalledWith(user, 'comparison-1', true);
+    expect(eventSharingServiceMock.copyShareUrl).toHaveBeenCalledWith('comparison', 'user-1', 'comparison-1');
+    expect(component.comparisonItems()[0].event.privacy).toBe('public');
+    expect(hapticsServiceMock.success).toHaveBeenCalled();
+  });
+
+  it('copies an existing public comparison link without enabling sharing again', async () => {
+    const user = new User('user-1');
+    userSubject.next(user);
+    await Promise.resolve();
+    await Promise.resolve();
+    component.comparisons.set([
+      makeComparisonEvent('comparison-1', { privacy: 'public' }),
+    ]);
+
+    await component.copyComparisonShareLink(component.comparisonItems()[0]);
+
+    expect(eventSharingServiceMock.setEventSharing).not.toHaveBeenCalled();
+    expect(eventSharingServiceMock.copyShareUrl).toHaveBeenCalledWith('comparison', 'user-1', 'comparison-1');
+  });
+
+  it('stops sharing a saved comparison', async () => {
+    const user = new User('user-1');
+    userSubject.next(user);
+    await Promise.resolve();
+    await Promise.resolve();
+    (component as any).dialog = {
+      open: vi.fn().mockReturnValue({
+        afterClosed: () => of(true),
+      }),
+    };
+    eventSharingServiceMock.setEventSharing.mockResolvedValueOnce({
+      eventID: 'comparison-1',
+      privacy: 'private',
+      publicEventUrl: '/share/event/user-1/comparison-1',
+      publicComparisonUrl: '/share/comparison/user-1/comparison-1',
+    });
+    component.comparisons.set([
+      makeComparisonEvent('comparison-1', { privacy: 'public' }),
+    ]);
+
+    await component.stopSharingComparison(component.comparisonItems()[0]);
+
+    expect(eventSharingServiceMock.setEventSharing).toHaveBeenCalledWith(user, 'comparison-1', false);
+    expect(component.comparisonItems()[0].event.privacy).toBe('private');
   });
 
   it('bulk deletes selected saved comparisons through event cleanup', async () => {

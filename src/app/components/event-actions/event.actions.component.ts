@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, ChangeDetectorRef, Component, Input, OnDestroy, OnInit, inject, Output, EventEmitter } from '@angular/core';
 import { Router } from '@angular/router';
-import { EventInterface } from '@sports-alliance/sports-lib';
+import { EventInterface, Privacy } from '@sports-alliance/sports-lib';
 import { AppEventService } from '../../services/app.event.service';
 import { AppFileService } from '../../services/app.file.service';
 import { User } from '@sports-alliance/sports-lib';
@@ -30,6 +30,7 @@ import {
   ReprocessProgress
 } from '../../services/app.event-reprocess.service';
 import { AppProcessingService } from '../../services/app.processing.service';
+import { AppEventSharingService } from '../../services/app.event-sharing.service';
 
 @Component({
   selector: 'app-event-actions',
@@ -45,6 +46,7 @@ export class EventActionsComponent implements OnInit, OnDestroy {
   @Input() showDownloadOriginal = false;
 
   public isReprocessing = false;
+  public isSharing = false;
 
   public garminAPIServiceMetaData!: GarminAPIEventMetaData;
   private deleteConfirmationSubscription!: Subscription;
@@ -55,6 +57,7 @@ export class EventActionsComponent implements OnInit, OnDestroy {
   private logger = inject(LoggerService);
   private eventReprocessService = inject(AppEventReprocessService);
   private processingService = inject(AppProcessingService);
+  private eventSharingService = inject(AppEventSharingService);
 
 
   constructor(
@@ -111,6 +114,77 @@ export class EventActionsComponent implements OnInit, OnDestroy {
       return '';
     }
     return 'No original source files available for this event';
+  }
+
+  public get isPubliclyShared(): boolean {
+    return (this.event as { privacy?: unknown } | null)?.privacy === 'public';
+  }
+
+  async shareEventLink(): Promise<void> {
+    if (this.isSharing) {
+      return;
+    }
+
+    const eventID = this.event.getID();
+    const confirmed = await this.confirmReprocessAction({
+      title: 'Share event publicly?',
+      message: 'Anyone with the link will be able to view this event, its activities, and the original source files while sharing is enabled.',
+      confirmLabel: 'Share',
+      confirmColor: 'primary',
+    });
+    if (!confirmed) {
+      return;
+    }
+
+    await this.updateEventSharing(eventID, true, 'event');
+  }
+
+  async copyPublicEventLink(): Promise<void> {
+    const eventID = this.event.getID();
+    const copied = this.eventSharingService.copyShareUrl('event', this.user.uid, eventID);
+    this.snackBar.open(copied ? 'Public link copied' : 'Could not copy public link', undefined, {
+      duration: 2500,
+    });
+  }
+
+  async stopSharingEvent(): Promise<void> {
+    if (this.isSharing) {
+      return;
+    }
+
+    const eventID = this.event.getID();
+    const confirmed = await this.confirmReprocessAction({
+      title: 'Stop sharing this event?',
+      message: 'The public event and comparison links will stop working. The event remains available to you.',
+      confirmLabel: 'Stop sharing',
+      confirmColor: 'warn',
+    });
+    if (!confirmed) {
+      return;
+    }
+
+    await this.updateEventSharing(eventID, false, 'event');
+  }
+
+  private async updateEventSharing(eventID: string, enabled: boolean, copyKind: 'event' | 'comparison'): Promise<void> {
+    this.isSharing = true;
+    this.changeDetectorRef.markForCheck();
+    try {
+      const response = await this.eventSharingService.setEventSharing(this.user, eventID, enabled);
+      (this.event as { privacy?: Privacy }).privacy = response.privacy === 'public' ? Privacy.Public : Privacy.Private;
+      if (enabled) {
+        const copied = this.eventSharingService.copyShareUrl(copyKind, this.user.uid, eventID);
+        this.snackBar.open(copied ? 'Public link copied' : 'Sharing enabled', undefined, { duration: 2500 });
+      } else {
+        this.snackBar.open('Sharing stopped', undefined, { duration: 2500 });
+      }
+    } catch (error) {
+      this.logger.error('[EventActionsComponent] Failed to update sharing', error);
+      this.snackBar.open('Could not update sharing', undefined, { duration: 3500 });
+    } finally {
+      this.isSharing = false;
+      this.changeDetectorRef.markForCheck();
+    }
   }
 
   async reGenerateStatistics() {

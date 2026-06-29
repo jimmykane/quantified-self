@@ -148,6 +148,61 @@ describe('eventResolver', () => {
         });
     }));
 
+    it('should return public fallback data instead of redirecting when shared route params are missing', () => new Promise<void>(done => {
+        const route = new ActivatedRouteSnapshot();
+        (route as any).data = {
+            publicShare: true,
+            shareKind: 'event',
+        };
+        vi.spyOn(route.paramMap, 'get').mockReturnValue(null);
+        const state = {} as RouterStateSnapshot;
+
+        (executeResolver(route, state) as any).subscribe((result: EventResolverData) => {
+            expect(result).toEqual({
+                event: null,
+                user: null,
+                publicShare: true,
+                shareKind: 'event',
+                openBenchmarkOnLoad: false,
+                loadError: 'missing_params',
+            });
+            expect(routerSpy.navigate).not.toHaveBeenCalled();
+            done();
+        });
+    }));
+
+    it('should return public fallback data instead of redirecting when a shared event is unavailable', () => new Promise<void>(done => {
+        eventServiceSpy.getEventActivitiesAndSomeStreams.mockReturnValue(of(null));
+        userServiceSpy.getUserChartDataTypesToUse.mockReturnValue([]);
+
+        const route = new ActivatedRouteSnapshot();
+        (route as any).data = {
+            publicShare: true,
+            shareKind: 'comparison',
+            openBenchmarkOnLoad: true,
+        };
+        vi.spyOn(route.paramMap, 'get').mockImplementation((key) => {
+            if (key === 'eventID') return '123';
+            if (key === 'userID') return '456';
+            return null;
+        });
+        const state = {} as RouterStateSnapshot;
+
+        (executeResolver(route, state) as any).subscribe((result: EventResolverData) => {
+            expect(result).toEqual({
+                event: null,
+                user: mockUser,
+                publicShare: true,
+                shareKind: 'comparison',
+                openBenchmarkOnLoad: true,
+                loadError: 'not_found',
+            });
+            expect(routerSpy.navigate).not.toHaveBeenCalled();
+            expect(snackBarSpy.open).not.toHaveBeenCalled();
+            done();
+        });
+    }));
+
     it('should handle permission errors with specific message', () => new Promise<void>(done => {
         const error = new Error('Missing or insufficient permissions');
         // Simulate Firebase error code if needed, but message check involves substring

@@ -141,10 +141,13 @@ describe('Firebase Hosting configuration', () => {
     expect(matchesAnyHostingSource(sources, '/admin/queues/workout')).toBe(true);
     expect(matchesAnyHostingSource(sources, '/admin/queues/route-reparse')).toBe(true);
     expect(matchesAnyHostingSource(sources, '/user/user-1/event/event-1')).toBe(true);
+    expect(matchesAnyHostingSource(sources, '/share/event/user-1/event-1')).toBe(true);
+    expect(matchesAnyHostingSource(sources, '/share/comparison/user-1/event-1')).toBe(true);
     expect(matchesAnyHostingSource(sources, '/tools/compare/saved')).toBe(true);
 
     expect(matchesAnyHostingSource(sources, '/admin/missing')).toBe(false);
     expect(matchesAnyHostingSource(sources, '/user/user-1/event/event-1/extra')).toBe(false);
+    expect(matchesAnyHostingSource(sources, '/share/event/user-1/event-1/extra')).toBe(false);
     expect(matchesAnyHostingSource(sources, '/definitely-missing')).toBe(false);
     expect(matchesAnyHostingSource(sources, '/integrations/garmin')).toBe(false);
     expect(matchesAnyHostingSource(sources, '/features/ai-insights')).toBe(false);
@@ -193,9 +196,20 @@ describe('Firebase Hosting configuration', () => {
 
   it('keeps private client-rendered routes out of sitemap and disallowed by robots', () => {
     expect(sitemapXml).not.toContain('<loc>https://quantified-self.io/tools/compare/saved</loc>');
+    expect(sitemapXml).not.toContain('<loc>https://quantified-self.io/share/event/');
+    expect(sitemapXml).not.toContain('<loc>https://quantified-self.io/share/comparison/');
     expect(sitemapXml).not.toContain('<loc>https://quantified-self.io/routes</loc>');
     expect(robotsTxt).toContain('Disallow: /tools/compare/saved');
     expect(robotsTxt).toContain('Disallow: /routes');
+  });
+
+  it('marks public share routes noindex at the hosting layer', () => {
+    const productionTarget = firebaseConfig.hosting.find(target => target.target === 'production');
+    const eventShareHeaders = productionTarget?.headers?.find(header => header.source === '/share/event/**')?.headers ?? [];
+    const comparisonShareHeaders = productionTarget?.headers?.find(header => header.source === '/share/comparison/**')?.headers ?? [];
+
+    expect(eventShareHeaders).toContainEqual(betaNoIndexHeader);
+    expect(comparisonShareHeaders).toContainEqual(betaNoIndexHeader);
   });
 
   it('copies the static Firebase 404 page into the hosting output', () => {
