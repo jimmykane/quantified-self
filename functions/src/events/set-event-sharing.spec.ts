@@ -76,6 +76,16 @@ vi.mock('../utils', () => ({
 
 import { setEventSharing } from './set-event-sharing';
 
+type SetEventSharingCallableRequest = Parameters<typeof setEventSharing>[0];
+
+function callSetEventSharing(request: {
+  auth: { uid: string } | null;
+  app: { appId: string };
+  data: { userID: string; eventID: string; enabled: boolean };
+}) {
+  return setEventSharing(request as unknown as SetEventSharingCallableRequest);
+}
+
 describe('setEventSharing', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -111,11 +121,11 @@ describe('setEventSharing', () => {
   });
 
   it('allows the owner to enable sharing and marks source files public first', async () => {
-    const result = await setEventSharing({
+    const result = await callSetEventSharing({
       auth: { uid: 'user-1' },
       app: { appId: 'app-id' },
       data: { userID: 'user-1', eventID: 'event-1', enabled: true },
-    } as any);
+    });
 
     expect(hoisted.mockDoc).toHaveBeenCalledWith('users/user-1/events/event-1');
     expect(hoisted.mockFile).toHaveBeenCalledWith('users/user-1/events/event-1/original.fit');
@@ -139,11 +149,11 @@ describe('setEventSharing', () => {
   });
 
   it('allows the owner to disable sharing and marks source files private first', async () => {
-    const result = await setEventSharing({
+    const result = await callSetEventSharing({
       auth: { uid: 'user-1' },
       app: { appId: 'app-id' },
       data: { userID: 'user-1', eventID: 'event-1', enabled: false },
-    } as any);
+    });
 
     expect(hoisted.mockEventUpdate).toHaveBeenCalledWith({ privacy: 'private' });
     expect(hoisted.mockSetMetadata).toHaveBeenCalledWith({
@@ -162,17 +172,17 @@ describe('setEventSharing', () => {
   });
 
   it('rejects unauthenticated and non-owner callers', async () => {
-    await expect(setEventSharing({
+    await expect(callSetEventSharing({
       auth: null,
       app: { appId: 'app-id' },
       data: { userID: 'user-1', eventID: 'event-1', enabled: true },
-    } as any)).rejects.toMatchObject({ code: 'unauthenticated' });
+    })).rejects.toMatchObject({ code: 'unauthenticated' });
 
-    await expect(setEventSharing({
+    await expect(callSetEventSharing({
       auth: { uid: 'other-user' },
       app: { appId: 'app-id' },
       data: { userID: 'user-1', eventID: 'event-1', enabled: true },
-    } as any)).rejects.toMatchObject({ code: 'permission-denied' });
+    })).rejects.toMatchObject({ code: 'permission-denied' });
 
     expect(hoisted.mockDoc).not.toHaveBeenCalled();
   });
@@ -180,11 +190,11 @@ describe('setEventSharing', () => {
   it('fails safely when the event is missing', async () => {
     hoisted.mockEventGet.mockResolvedValueOnce({ exists: false });
 
-    await expect(setEventSharing({
+    await expect(callSetEventSharing({
       auth: { uid: 'user-1' },
       app: { appId: 'app-id' },
       data: { userID: 'user-1', eventID: 'event-1', enabled: true },
-    } as any)).rejects.toMatchObject({ code: 'not-found' });
+    })).rejects.toMatchObject({ code: 'not-found' });
 
     expect(hoisted.mockSetMetadata).not.toHaveBeenCalled();
     expect(hoisted.mockEventUpdate).not.toHaveBeenCalled();
@@ -200,11 +210,11 @@ describe('setEventSharing', () => {
       }),
     });
 
-    await expect(setEventSharing({
+    await expect(callSetEventSharing({
       auth: { uid: 'user-1' },
       app: { appId: 'app-id' },
       data: { userID: 'user-1', eventID: 'event-1', enabled: true },
-    } as any)).rejects.toMatchObject({ code: 'failed-precondition' });
+    })).rejects.toMatchObject({ code: 'failed-precondition' });
 
     expect(hoisted.mockSetMetadata).not.toHaveBeenCalled();
     expect(hoisted.mockEventUpdate).not.toHaveBeenCalled();
@@ -223,11 +233,11 @@ describe('setEventSharing', () => {
       }),
     });
 
-    await expect(setEventSharing({
+    await expect(callSetEventSharing({
       auth: { uid: 'user-1' },
       app: { appId: 'app-id' },
       data: { userID: 'user-1', eventID: 'event-1', enabled: true },
-    } as any)).rejects.toMatchObject({ code: 'failed-precondition' });
+    })).rejects.toMatchObject({ code: 'failed-precondition' });
 
     expect(hoisted.mockFile).not.toHaveBeenCalled();
     expect(hoisted.mockSetMetadata).not.toHaveBeenCalled();
@@ -237,11 +247,11 @@ describe('setEventSharing', () => {
   it('does not make the event public when source metadata cannot be updated', async () => {
     hoisted.mockGetMetadata.mockRejectedValueOnce(new Error('not found'));
 
-    await expect(setEventSharing({
+    await expect(callSetEventSharing({
       auth: { uid: 'user-1' },
       app: { appId: 'app-id' },
       data: { userID: 'user-1', eventID: 'event-1', enabled: true },
-    } as any)).rejects.toMatchObject({ code: 'internal' });
+    })).rejects.toMatchObject({ code: 'internal' });
 
     expect(hoisted.mockEventUpdate).not.toHaveBeenCalled();
   });
@@ -249,11 +259,11 @@ describe('setEventSharing', () => {
   it('rolls public source-file metadata back when enabling fails after storage updates', async () => {
     hoisted.mockEventUpdate.mockRejectedValueOnce(new Error('firestore unavailable'));
 
-    await expect(setEventSharing({
+    await expect(callSetEventSharing({
       auth: { uid: 'user-1' },
       app: { appId: 'app-id' },
       data: { userID: 'user-1', eventID: 'event-1', enabled: true },
-    } as any)).rejects.toMatchObject({ code: 'internal' });
+    })).rejects.toMatchObject({ code: 'internal' });
 
     expect(hoisted.mockSetMetadata).toHaveBeenNthCalledWith(1, {
       metadata: {

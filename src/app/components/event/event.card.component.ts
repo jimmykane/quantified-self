@@ -7,19 +7,17 @@ import {
   OnInit,
   signal
 } from '@angular/core';
-import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router } from '@angular/router';
 import { debounceTime } from 'rxjs/operators';
 import { firstValueFrom, Subscription } from 'rxjs';
 
 import { ActivityInterface } from '@sports-alliance/sports-lib';
 import { AppEventInterface, BenchmarkResult, getBenchmarkPairKey } from '@shared/app-event.interface';
-import { EventInterface } from '@sports-alliance/sports-lib';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { User } from '@sports-alliance/sports-lib';
 import {
-  ChartCursorBehaviours,
   XAxisTypes
 } from '@sports-alliance/sports-lib';
 import {
@@ -34,8 +32,6 @@ import { AppThemes } from '@sports-alliance/sports-lib';
 import { AppUserService } from '../../services/app.user.service';
 import { AppActivitySelectionService } from '../../services/activity-selection-service/app-activity-selection.service';
 import { AppUserSettingsQueryService } from '../../services/app.user-settings-query.service';
-import { LapTypes } from '@sports-alliance/sports-lib';
-import { MatBottomSheet } from '@angular/material/bottom-sheet';
 import { LoggerService } from '../../services/logger.service';
 import { AppEventService } from '../../services/app.event.service';
 import { shouldRenderIntensityZonesChart } from '../../helpers/intensity-zones-chart-data-helper';
@@ -69,7 +65,6 @@ export class EventCardComponent implements OnInit {
   private userSettingsQuery = inject(AppUserSettingsQueryService);
   private snackBar = inject(MatSnackBar);
   private themeService = inject(AppThemeService);
-  private bottomSheet = inject(MatBottomSheet);
   private logger = inject(LoggerService);
   private eventService = inject(AppEventService);
   private performanceCurveDataService = inject(PerformanceCurveDataService);
@@ -150,8 +145,6 @@ export class EventCardComponent implements OnInit {
     }
 
     const chartSettings = this.userSettingsQuery.chartSettings();
-    const userUnitSettings = this.userUnitSettings();
-    const dataTypesToUse = this.userService.getUserChartDataTypesToUse(user);
     const xAxisType = resolveEventChartXAxisType(
       event,
       chartSettings?.xAxisType ?? XAxisTypes.Duration,

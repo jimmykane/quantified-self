@@ -1,7 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { ResolveFn, Router, ActivatedRouteSnapshot, RouterStateSnapshot } from '@angular/router';
-import { DataAltitude, DataGrade, DataGradeSmooth, DataPotentialStamina, DataStamina, EventInterface, User } from '@sports-alliance/sports-lib';
-import { of, throwError, EMPTY } from 'rxjs';
+import { DataAltitude, DataGrade, DataGradeSmooth, DataPotentialStamina, DataStamina, User } from '@sports-alliance/sports-lib';
+import { of, throwError } from 'rxjs';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { AppEventService } from '../services/app.event.service';
 import { AppUserService } from '../services/app.user.service';

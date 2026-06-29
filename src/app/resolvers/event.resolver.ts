@@ -16,7 +16,7 @@ import {
     DataDistance
 } from '@sports-alliance/sports-lib';
 import { map, switchMap, catchError, take } from 'rxjs/operators';
-import { of, EMPTY, Observable } from 'rxjs';
+import { of, EMPTY } from 'rxjs';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { AppAuthService } from '../authentication/app.auth.service';
 import { LoggerService } from '../services/logger.service';
@@ -51,7 +51,7 @@ function getRouteDataValue<T>(route: ActivatedRouteSnapshot, key: string): T | u
 
 export const eventResolver: ResolveFn<EventResolverData> = (
     route: ActivatedRouteSnapshot,
-    state: RouterStateSnapshot
+    _state: RouterStateSnapshot
 ) => {
     const eventService = inject(AppEventService);
     const userService = inject(AppUserService);

@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, ChangeDetectorRef, Component, Input, OnDestroy, OnInit, inject, Output, EventEmitter } from '@angular/core';
+import { ChangeDetectionStrategy, ChangeDetectorRef, Component, Input, OnDestroy, OnInit, inject } from '@angular/core';
 import { Router } from '@angular/router';
 import { EventInterface, Privacy } from '@sports-alliance/sports-lib';
 import { AppEventService } from '../../services/app.event.service';
@@ -9,19 +9,14 @@ import { take } from 'rxjs/operators';
 import { Subscription } from 'rxjs';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatDialog } from '@angular/material/dialog';
-import { MatIconModule } from '@angular/material/icon';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { AppOriginalFileDownloadService } from '../../services/app.original-file-download.service';
 
 import { DataDistance } from '@sports-alliance/sports-lib';
-import { environment } from '../../../environments/environment';
-import { HttpClient, HttpHeaders } from '@angular/common/http';
-import { Auth, getIdToken } from 'app/firebase/auth';
 
 import { ServiceNames, GarminAPIEventMetaData } from '@sports-alliance/sports-lib';
 import { EventExporterGPX } from '@sports-alliance/sports-lib';
 import { DataStartPosition } from '@sports-alliance/sports-lib';
-import { AppWindowService } from '../../services/app.window.service';
 import { LoggerService } from '../../services/logger.service';
 import {
   AppEventReprocessService,
@@ -51,7 +46,6 @@ export class EventActionsComponent implements OnInit, OnDestroy {
   public garminAPIServiceMetaData!: GarminAPIEventMetaData;
   private deleteConfirmationSubscription!: Subscription;
 
-  private auth = inject(Auth);
   private analyticsService = inject(AppAnalyticsService);
   private originalFileDownloadService = inject(AppOriginalFileDownloadService);
   private logger = inject(LoggerService);
@@ -66,8 +60,6 @@ export class EventActionsComponent implements OnInit, OnDestroy {
     private router: Router,
     private snackBar: MatSnackBar,
     private fileService: AppFileService,
-    private http: HttpClient,
-    private windowService: AppWindowService,
     private dialog: MatDialog) {
   }
 
@@ -78,7 +70,7 @@ export class EventActionsComponent implements OnInit, OnDestroy {
 
   }
 
-  async menuOpen(event) {
+  async menuOpen(_event: unknown) {
     if (!this.showDownloadOriginal) {
       return;
     }
