@@ -11,6 +11,18 @@
         "beta": [
           "quantified-self-io-beta"
         ]
+      },
+      "storage": {
+        "production": [
+          "quantified-self-io"
+        ]
+      }
+    },
+    "demo-test": {
+      "storage": {
+        "production": [
+          "demo-test.appspot.com"
+        ]
       }
     }
   },
