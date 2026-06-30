@@ -2050,7 +2050,7 @@ export class ToolsComparePageComponent implements OnInit {
   }
 
   private isEventPubliclyShared(event: AppEventInterface): boolean {
-    return event?.privacy === Privacy.Public || event?.privacy === 'public';
+    return event?.privacy === Privacy.Public;
   }
 
   private resolveComparisonStatusPresentation(

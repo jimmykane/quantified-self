@@ -995,7 +995,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
   }
 
   private isEventPubliclyShared(event: EventInterface): boolean {
-    return event?.privacy === Privacy.Public || event?.privacy === 'public';
+    return event?.privacy === Privacy.Public;
   }
 
   private buildDeviceNameDisplayItems(event: EventInterface): DeviceNameDisplayItem[] {

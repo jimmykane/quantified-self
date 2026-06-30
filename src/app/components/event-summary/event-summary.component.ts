@@ -235,7 +235,7 @@ export class EventSummaryComponent implements OnChanges {
   }
 
   get isEventShared(): boolean {
-    return this.event?.privacy === Privacy.Public || this.event?.privacy === 'public';
+    return this.event?.privacy === Privacy.Public;
   }
 
   private rebuildTemplateState(): void {
