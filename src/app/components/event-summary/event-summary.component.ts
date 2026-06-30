@@ -10,6 +10,7 @@ import {
   DataFeeling,
   DataRPE,
   Feelings,
+  Privacy,
   RPEBorgCR10SCale,
 } from '@sports-alliance/sports-lib';
 import { MatBottomSheet } from '@angular/material/bottom-sheet';
@@ -62,6 +63,7 @@ export class EventSummaryComponent implements OnChanges {
   private cachedEventRef: AppEventInterface | null = null;
   private cachedSelectedActivitiesRef: ActivityInterface[] | null = null;
   private templateStateInitialized = false;
+  readonly sharedEventTooltip = 'Public link enabled. Anyone with the link can view this event, comparison data, and original files.';
 
   constructor(
     private cd: ChangeDetectorRef,
@@ -230,6 +232,10 @@ export class EventSummaryComponent implements OnChanges {
   get feelingIcon(): string {
     this.ensureTemplateState();
     return this.feelingIconValue;
+  }
+
+  get isEventShared(): boolean {
+    return this.event?.privacy === Privacy.Public || this.event?.privacy === 'public';
   }
 
   private rebuildTemplateState(): void {

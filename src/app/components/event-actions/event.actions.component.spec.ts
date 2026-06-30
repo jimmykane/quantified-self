@@ -19,6 +19,7 @@ import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { MatMenuModule } from '@angular/material/menu';
 import { of } from 'rxjs';
+import { ConfirmationDialogComponent } from '../confirmation-dialog/confirmation-dialog.component';
 
 vi.mock('app/firebase/analytics', () => ({
     Analytics: class { },
@@ -177,6 +178,23 @@ describe('EventActionsComponent', () => {
         expect(mockEventSharingService.setEventSharing).toHaveBeenCalledWith(component.user, 'event-123', true);
         expect(mockEventSharingService.copyShareUrl).toHaveBeenCalledWith('event', 'test-uid', 'event-123');
         expect((component.event as any).privacy).toBe('public');
+    });
+
+    it('should not enable sharing when the public-share confirmation is cancelled', async () => {
+        mockDialog.open.mockReturnValueOnce({
+            afterClosed: () => of(false),
+        });
+
+        await component.shareEventLink();
+
+        expect(mockDialog.open).toHaveBeenCalledWith(ConfirmationDialogComponent, expect.objectContaining({
+            data: expect.objectContaining({
+                title: 'Share event publicly?',
+            }),
+        }));
+        expect(mockEventSharingService.setEventSharing).not.toHaveBeenCalled();
+        expect(mockEventSharingService.copyShareUrl).not.toHaveBeenCalled();
+        expect((component.event as any).privacy).toBe('private');
     });
 
     it('should copy an existing public event link without calling the backend', async () => {

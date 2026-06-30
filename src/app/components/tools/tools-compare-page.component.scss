@@ -380,7 +380,7 @@ h2 {
 }
 
 .comparison-table-shell {
-  --comparison-table-min-width: 153rem;
+  --comparison-table-min-width: 160rem;
 
   max-width: 100%;
   min-width: 0;
@@ -541,6 +541,11 @@ h2 {
 .comparison-table .mat-column-reports {
   width: 12rem;
   min-width: 12rem;
+}
+
+.comparison-table .mat-column-sharing {
+  width: 7rem;
+  min-width: 7rem;
 }
 
 .comparison-table .mat-column-actions {
@@ -987,18 +992,21 @@ button.benchmark-summary-stack:disabled {
 }
 
 .status-cell,
+.sharing-cell,
 .row-actions {
   display: inline-flex;
   align-items: center;
 }
 
-.status-cell {
+.status-cell,
+.sharing-cell {
   gap: 0.35rem;
   line-height: 1.25rem;
   white-space: nowrap;
 }
 
-.status-cell mat-icon {
+.status-cell mat-icon,
+.sharing-cell mat-icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1018,7 +1026,25 @@ button.benchmark-summary-stack:disabled {
   color: var(--mat-sys-primary);
 }
 
-.status-label {
+.sharing-cell {
+  color: var(--mat-sys-primary);
+  font-weight: 600;
+}
+
+.sharing-cell--empty {
+  color: var(--mat-sys-on-surface-variant);
+  font-weight: 500;
+  opacity: 0.55;
+}
+
+.sharing-empty {
+  display: inline-block;
+  min-width: 1rem;
+  text-align: center;
+}
+
+.status-label,
+.sharing-label {
   display: block;
   line-height: 1.25rem;
 }
@@ -1101,7 +1127,7 @@ mat-paginator {
   }
 
   .comparison-table-shell {
-    --comparison-table-min-width: 980px;
+    --comparison-table-min-width: 1040px;
   }
 
   .comparison-selection-toolbar {

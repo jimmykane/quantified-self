@@ -30,6 +30,7 @@ import { BenchmarkReviewService } from '../../services/benchmark-review.service'
 import { BenchmarkReviewTagsDialogComponent } from '../benchmark/benchmark-review-tags-dialog.component';
 import { AppBreakpoints } from '../../constants/breakpoints';
 import { AppEventSharingService } from '../../services/app.event-sharing.service';
+import { ConfirmationDialogComponent } from '../confirmation-dialog/confirmation-dialog.component';
 
 function makeComparisonEvent(id: string, overrides: {
   title?: string;
@@ -1195,6 +1196,9 @@ describe('ToolsComparePageComponent', () => {
       'older-draft',
     ]);
     expect(component.displayedComparisonColumns).not.toContain('activities');
+    expect(component.displayedComparisonColumns.indexOf('sharing')).toBeLessThan(
+      component.displayedComparisonColumns.indexOf('actions'),
+    );
     const tableHeaders = Array.from((fixture.nativeElement as HTMLElement).querySelectorAll('th'))
       .map(header => header.textContent?.replace(/\s+/g, ' ').trim())
       .filter(Boolean);
@@ -1232,6 +1236,66 @@ describe('ToolsComparePageComponent', () => {
       resultCount: 1,
     });
     expect(hapticsServiceMock.selection).toHaveBeenCalledTimes(2);
+  });
+
+  it('marks public saved comparisons as shared and filters loaded rows by shared text', () => {
+    component.authResolved.set(true);
+    component.firebaseSignedIn.set(true);
+    component.comparisons.set([
+      makeComparisonEvent('public-comparison', {
+        title: 'Public comparison',
+        privacy: 'public',
+      }),
+      makeComparisonEvent('private-comparison', {
+        title: 'Private comparison',
+        privacy: 'private',
+      }),
+    ]);
+
+    const publicItem = component.comparisonItems().find(item => item.id === 'public-comparison');
+    const privateItem = component.comparisonItems().find(item => item.id === 'private-comparison');
+    expect(publicItem).toEqual(expect.objectContaining({
+      isShared: true,
+      sharingLabel: 'Shared',
+    }));
+    expect(publicItem?.sharingTitle).toContain('Anyone with the link can view this saved comparison');
+    expect(privateItem).toEqual(expect.objectContaining({
+      isShared: false,
+      sharingLabel: '',
+      sharingTitle: '',
+    }));
+
+    component.comparisonFilter.set('shared');
+    expect(component.filteredComparisonItems().map(item => item.id)).toEqual(['public-comparison']);
+
+    component.comparisonFilter.set('public');
+    expect(component.filteredComparisonItems().map(item => item.id)).toEqual(['public-comparison']);
+  });
+
+  it('renders shared state cells for saved comparison rows', () => {
+    const user = new User('user-1');
+    component.authResolved.set(true);
+    component.firebaseSignedIn.set(true);
+    component.currentUser.set(user);
+    component.comparisons.set([
+      makeComparisonEvent('public-comparison', {
+        title: 'Public comparison',
+        privacy: 'public',
+      }),
+      makeComparisonEvent('private-comparison', {
+        title: 'Private comparison',
+        privacy: 'private',
+      }),
+    ]);
+
+    fixture.detectChanges();
+
+    const sharingCells = Array.from((fixture.nativeElement as HTMLElement).querySelectorAll('.sharing-cell'));
+    const publicCell = sharingCells.find(cell => cell.textContent?.includes('Shared'));
+    const privateCell = sharingCells.find(cell => cell.getAttribute('aria-label') === 'Not shared');
+    expect(publicCell?.textContent).toContain('Shared');
+    expect(publicCell?.getAttribute('aria-label')).toContain('Anyone with the link can view this saved comparison');
+    expect(privateCell?.textContent?.trim()).toBe('-');
   });
 
   it('reloads saved comparison pages when date sort changes', async () => {
@@ -1881,6 +1945,7 @@ describe('ToolsComparePageComponent', () => {
       expect.stringContaining('Files'),
       expect.stringContaining('Status'),
       expect.stringContaining('Reports'),
+      expect.stringContaining('Shared'),
       expect.stringContaining('Actions'),
     ]));
 
@@ -1902,6 +1967,7 @@ describe('ToolsComparePageComponent', () => {
       'attach_file',
       'task_alt',
       'analytics',
+      'public',
       'more_horiz',
     ]));
   });
@@ -2285,6 +2351,33 @@ describe('ToolsComparePageComponent', () => {
     expect(eventSharingServiceMock.copyShareUrl).toHaveBeenCalledWith('comparison', 'user-1', 'comparison-1');
     expect(component.comparisonItems()[0].event.privacy).toBe('public');
     expect(hapticsServiceMock.success).toHaveBeenCalled();
+  });
+
+  it('requires confirmation before sharing a saved comparison', async () => {
+    const user = new User('user-1');
+    userSubject.next(user);
+    await Promise.resolve();
+    await Promise.resolve();
+    const dialogOpen = vi.fn().mockReturnValue({
+      afterClosed: () => of(false),
+    });
+    (component as any).dialog = {
+      open: dialogOpen,
+    };
+    component.comparisons.set([
+      makeComparisonEvent('comparison-1', { privacy: 'private' }),
+    ]);
+
+    await component.shareComparisonLink(component.comparisonItems()[0]);
+
+    expect(dialogOpen).toHaveBeenCalledWith(ConfirmationDialogComponent, expect.objectContaining({
+      data: expect.objectContaining({
+        title: 'Share comparison publicly?',
+      }),
+    }));
+    expect(eventSharingServiceMock.setEventSharing).not.toHaveBeenCalled();
+    expect(eventSharingServiceMock.copyShareUrl).not.toHaveBeenCalled();
+    expect(component.comparisonItems()[0].event.privacy).toBe('private');
   });
 
   it('copies an existing public comparison link without enabling sharing again', async () => {

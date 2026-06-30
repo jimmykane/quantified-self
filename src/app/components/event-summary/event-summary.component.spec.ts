@@ -80,6 +80,34 @@ describe('EventSummaryComponent', () => {
         expect(component).toBeTruthy();
     });
 
+    describe('shared state chip', () => {
+        it('should not render the shared chip for private events', () => {
+            fixture.componentRef.setInput('event', {
+                ...mockEvent,
+                privacy: Privacy.Private,
+            } as any);
+
+            fixture.detectChanges();
+
+            expect(fixture.nativeElement.querySelector('.shared-chip')).toBeFalsy();
+        });
+
+        it('should render the shared chip with exposure copy for public events', () => {
+            fixture.componentRef.setInput('event', {
+                ...mockEvent,
+                privacy: Privacy.Public,
+            } as any);
+
+            fixture.detectChanges();
+
+            expect(component.isEventShared).toBe(true);
+            const chip: HTMLElement | null = fixture.nativeElement.querySelector('.shared-chip');
+            expect(chip).toBeTruthy();
+            expect(chip?.textContent).toContain('Shared');
+            expect(chip?.getAttribute('aria-label')).toContain('Anyone with the link can view this event');
+        });
+    });
+
     describe('open... methods', () => {
         it('openEditDetails should open bottom sheet', () => {
             component.openEditDetails();

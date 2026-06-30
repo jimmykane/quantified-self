@@ -11,6 +11,12 @@
     <div summary-icon-badge class="privacy-mini-wrapper">
       <app-privacy-icon [privacy]="event.privacy"></app-privacy-icon>
     </div>
+    @if (isEventShared) {
+    <span summary-chips class="chip shared-chip" [matTooltip]="sharedEventTooltip" [attr.aria-label]="sharedEventTooltip">
+      <mat-icon aria-hidden="true">public</mat-icon>
+      <span>Shared</span>
+    </span>
+    }
     @if (feelingIcon) {
     <span summary-chips class="chip feeling-chip" [matTooltip]="'Feeling: ' + feelingLabel" [attr.aria-label]="'Feeling: ' + feelingLabel">
       <mat-icon aria-hidden="true">{{ feelingIcon }}</mat-icon>

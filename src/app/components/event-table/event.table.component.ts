@@ -27,6 +27,7 @@ import { SelectionModel } from '@angular/cdk/collections';
 import { DatePipe } from '@angular/common';
 import { ActivityInterface } from '@sports-alliance/sports-lib';
 import { EventInterface } from '@sports-alliance/sports-lib';
+import { Privacy } from '@sports-alliance/sports-lib';
 import { User } from '@sports-alliance/sports-lib';
 import { debounceTime, map } from 'rxjs/operators';
 import { firstValueFrom, race, Subject, Subscription } from 'rxjs';
@@ -100,8 +101,9 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
   private breakpointSubscription!: Subscription;
   private isHandset = false;
   private readonly defaultSelectedColumns = AppUserUtilities.getDefaultSelectedTableColumns();
-  private readonly nonSearchableRowKeys = new Set(['Color', 'Gradient', 'Event', 'Device Name Items']);
+  private readonly nonSearchableRowKeys = new Set(['Color', 'Gradient', 'Event', 'Device Name Items', 'Shared Title']);
   private readonly duplicateSourceFilesMessage = 'Selected events include identical source files. Deselect duplicates and try again.';
+  readonly sharedEventTooltip = 'Public link enabled. Anyone with the link can view this event, comparison data, and original files.';
   private rowCache = new Map<string, EventTableRowCacheEntry>();
 
 
@@ -724,9 +726,13 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     return this.displayedColumns;
   }
 
+  override isColumnHeaderSortable(columnName: string): boolean {
+    return columnName === 'Shared' || super.isColumnHeaderSortable(columnName);
+  }
+
   private updateDisplayedColumns() {
     const sortedSelectedColumns = (this.selectedColumns || [])
-      .filter(column => column !== 'Description')
+      .filter(column => column !== 'Description' && column !== 'Shared')
       .sort((a, b) => this.defaultSelectedColumns.indexOf(a) - this.defaultSelectedColumns.indexOf(b));
 
     const columns = [
@@ -734,12 +740,13 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       'Start Date',
       ...sortedSelectedColumns,
       'Description',
+      'Shared',
       'Actions',
     ];
 
     this.displayedColumns = this.showActions
       ? columns
-      : columns.filter(column => column !== 'Checkbox' && column !== 'Actions');
+      : columns.filter(column => column !== 'Checkbox' && column !== 'Shared' && column !== 'Actions');
   }
 
   async saveEventDescription(description: string, event: EventInterface) {
@@ -947,7 +954,10 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       ? event.startDate
       : null;
 
+    const isShared = this.isEventPubliclyShared(event);
     statRowElement['Privacy'] = event.privacy;
+    statRowElement['Shared'] = isShared ? 'Shared' : '';
+    statRowElement['Shared Title'] = isShared ? this.sharedEventTooltip : '';
     statRowElement['Name'] = event.name;
     statRowElement['Start Date'] = startDate ? this.datePipe.transform(startDate, dateFormat) : 'None?';
     statRowElement['Activity Types'] = event.getActivityTypesAsString();
@@ -979,8 +989,13 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     statRowElement['sort.Activity Types'] = statRowElement['Activity Types'];
     statRowElement['sort.Description'] = statRowElement['Description'];
     statRowElement['sort.Device Names'] = statRowElement['Device Names'];
+    statRowElement['sort.Shared'] = isShared ? 1 : 0;
 
     return statRowElement;
+  }
+
+  private isEventPubliclyShared(event: EventInterface): boolean {
+    return event?.privacy === Privacy.Public || event?.privacy === 'public';
   }
 
   private buildDeviceNameDisplayItems(event: EventInterface): DeviceNameDisplayItem[] {

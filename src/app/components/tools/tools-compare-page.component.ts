@@ -107,6 +107,9 @@ interface ComparisonListItem {
   sourceFilesCount: number | null;
   sourceFilesLabel: string;
   sourceFilesTitle: string;
+  isShared: boolean;
+  sharingLabel: string;
+  sharingTitle: string;
   hasReport: boolean;
   reportCount: number;
   reportLabel: string;
@@ -263,6 +266,7 @@ export class ToolsComparePageComponent implements OnInit {
     'sourceFiles',
     'status',
     'reports',
+    'sharing',
     'actions',
   ];
   readonly comparisonHeaderDataTypes = {
@@ -282,6 +286,7 @@ export class ToolsComparePageComponent implements OnInit {
     sourceFiles: 'attach_file',
     status: 'task_alt',
     reports: 'analytics',
+    sharing: 'public',
     tags: 'sell',
     actions: 'more_horiz',
   } as const;
@@ -291,6 +296,7 @@ export class ToolsComparePageComponent implements OnInit {
   readonly showSavedComparisonsFirst = this.initialTabIndex === 1;
   private readonly hydratingActivitySummaryEventIDs = new Set<string>();
   private readonly hydratedActivitySummaryEventIDs = new Set<string>();
+  readonly sharedComparisonTooltip = 'Public link enabled. Anyone with the link can view this saved comparison, event data, and original files.';
   private loadedComparisonPages = new Map<number, AppEventInterface[]>();
   private comparisonPageCursors = new Map<number, EventQueryCursor | null>([[0, null]]);
   private comparisonLoadGeneration = 0;
@@ -1943,6 +1949,9 @@ export class ToolsComparePageComponent implements OnInit {
       : this.getOriginalFilesCount(event);
     const sourceFilesLabel = this.formatCountLabel(sourceFilesCount, 'file', 'Files unknown');
     const sourceFilesTitle = this.buildSourceFilesTitle(event, sourceFilesLabel);
+    const isShared = this.isEventPubliclyShared(event);
+    const sharingLabel = isShared ? 'Shared' : '';
+    const sharingTitle = isShared ? this.sharedComparisonTooltip : '';
     const activities = event.getActivities?.() || [];
     const activitySummaries = this.buildComparisonActivitySummaries(activities);
     const deviceNames = this.resolveComparisonDeviceNames(event, activities);
@@ -2004,6 +2013,9 @@ export class ToolsComparePageComponent implements OnInit {
       sourceFilesCount,
       sourceFilesLabel,
       sourceFilesTitle,
+      isShared,
+      sharingLabel,
+      sharingTitle,
       hasReport,
       reportCount,
       reportLabel,
@@ -2028,12 +2040,17 @@ export class ToolsComparePageComponent implements OnInit {
         event.startDate instanceof Date ? event.startDate.toISOString() : 'date unavailable',
         sourceFilesLabel,
         sourceFilesTitle,
+        isShared ? 'shared public link' : '',
         statusPresentation.label,
         statusPresentation.title,
         reportLabel,
       ].join(' ').toLowerCase(),
       event,
     };
+  }
+
+  private isEventPubliclyShared(event: AppEventInterface): boolean {
+    return event?.privacy === Privacy.Public || event?.privacy === 'public';
   }
 
   private resolveComparisonStatusPresentation(
