@@ -269,6 +269,8 @@ export async function setEvent(userID: string, eventID: string, event: EventInte
       const bucket = admin.storage().bucket();
       const file = bucket.file(path);
       await file.save(data);
+      const [metadata] = await file.getMetadata();
+      return { generation: metadata.generation };
     },
     getBucketName: () => {
       return admin.storage().bucket().name;

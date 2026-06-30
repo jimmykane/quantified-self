@@ -303,7 +303,10 @@ function getFirestoreAdapter(): FirestoreAdapter {
 function getStorageAdapter(): StorageAdapter {
   return {
     uploadFile: async (path: string, data: unknown) => {
-      await admin.storage().bucket().file(path).save(data as Buffer);
+      const file = admin.storage().bucket().file(path);
+      await file.save(data as Buffer);
+      const [metadata] = await file.getMetadata();
+      return { generation: metadata.generation };
     },
     getBucketName: () => admin.storage().bucket().name,
   };

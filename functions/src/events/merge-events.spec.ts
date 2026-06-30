@@ -24,6 +24,7 @@ const hoisted = vi.hoisted(() => {
   const mockSportsLibVersionToCode = vi.fn(() => 9001004);
   const mockServerTimestamp = vi.fn(() => 'SERVER_TIMESTAMP');
   const mockStorageSave = vi.fn();
+  const mockStorageGetMetadata = vi.fn();
 
   function makeEvent(json: Record<string, unknown>) {
     const eventState = {
@@ -95,6 +96,7 @@ const hoisted = vi.hoisted(() => {
       mockSportsLibVersionToCode,
       mockServerTimestamp,
       mockStorageSave,
+      mockStorageGetMetadata,
       mockEventImporterJSON,
       mockMergeEvents,
       makeEvent,
@@ -214,6 +216,7 @@ vi.mock('firebase-admin', () => {
             return [bytes];
           },
           save: hoisted.mockStorageSave,
+          getMetadata: hoisted.mockStorageGetMetadata,
         }),
       }),
     }),
@@ -357,6 +360,7 @@ describe('mergeEvents', () => {
     hoisted.mockDocSet.mockResolvedValue(undefined);
     hoisted.mockWriteAllEventData.mockResolvedValue(undefined);
     hoisted.mockStorageSave.mockResolvedValue(undefined);
+    hoisted.mockStorageGetMetadata.mockResolvedValue([{ generation: 'storage-generation-1' }]);
 
     seedTwoEvents();
   });
