@@ -65,6 +65,14 @@ export function isPublicStartupDocument(documentRef: Document | null | undefined
   return isPublicStartupPath(documentRoutePath(documentRef));
 }
 
+export function isRouteLoaderSuppressedStartupPath(path: string): boolean {
+  return PUBLIC_STARTUP_PATHS.has(normalizeRoutePath(path));
+}
+
+export function isRouteLoaderSuppressedStartupDocument(documentRef: Document | null | undefined): boolean {
+  return isRouteLoaderSuppressedStartupPath(documentRoutePath(documentRef));
+}
+
 export function isAuthSensitivePublicStartupPath(path: string): boolean {
   return AUTH_SENSITIVE_PUBLIC_STARTUP_PATHS.has(normalizeRoutePath(path));
 }

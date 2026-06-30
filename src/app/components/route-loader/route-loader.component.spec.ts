@@ -90,6 +90,18 @@ describe('RouteLoaderComponent', () => {
         expect(comp.isLoading).toBe(false);
     });
 
+    it('should show an active startup navigation on dynamic share routes', () => {
+        window.history.pushState({}, '', '/share/event/user-1/event-1');
+        const mockRouter = {
+            events: new Subject(),
+            getCurrentNavigation: () => ({ id: 1, initialUrl: '/share/event/user-1/event-1' })
+        } as any;
+
+        const comp = new RouteLoaderComponent(mockRouter, document);
+
+        expect(comp.isLoading).toBe(true);
+    });
+
     it('should suppress only the same-document startup navigation on public routes', () => {
         window.history.pushState({}, '', '/features');
         const events$ = new Subject<RouterEvent>();

@@ -3,6 +3,7 @@ import { PRERENDERED_PUBLIC_ROUTES } from '../app.routes.server';
 import {
   isAuthSensitivePublicStartupPath,
   isPublicStartupPath,
+  isRouteLoaderSuppressedStartupPath,
   shouldProvideClientHydrationForRuntime,
 } from './public-startup-route';
 
@@ -35,6 +36,12 @@ describe('public-startup-route', () => {
     expect(isPublicStartupPath('/share/event/user-1/event-1')).toBe(true);
     expect(isPublicStartupPath('/share/comparison/user-1/event-1?utm_source=test')).toBe(true);
     expect(isPublicStartupPath('/share/unknown/user-1/event-1')).toBe(false);
+  });
+
+  it('does not suppress the route loader for dynamic share startup routes', () => {
+    expect(isRouteLoaderSuppressedStartupPath('/features')).toBe(true);
+    expect(isRouteLoaderSuppressedStartupPath('/share/event/user-1/event-1')).toBe(false);
+    expect(isRouteLoaderSuppressedStartupPath('/share/comparison/user-1/event-1')).toBe(false);
   });
 
   it('marks compare routes as auth-sensitive public startup paths', () => {
