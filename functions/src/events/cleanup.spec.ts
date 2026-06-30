@@ -1,30 +1,30 @@
 import functionsTest from 'firebase-functions-test';
-import { vi, describe, it, expect, beforeEach, afterEach, Mock } from 'vitest';
+import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 
 
 // Use vi.hoisted to ensure mocks are initialized before vi.mock
 const {
     adminFirestoreMock,
     adminStorageMock,
-    batchDeleteMock,
-    batchCommitMock,
     deleteFilesMock,
     docGetMock,
     loggerErrorMock,
     loggerWarnMock,
     recursiveDeleteMock,
+    runTransactionMock,
+    transactionDeleteMock,
+    transactionGetMock,
 } = vi.hoisted(() => {
     const onDeleteMock = vi.fn((handler) => handler);
     const documentMock = vi.fn(() => ({ onDelete: onDeleteMock }));
 
     const recursiveDeleteMock = vi.fn().mockResolvedValue(undefined); // Keep for potential other use or safety
-    // Mock return of collection() needs to permit chaining: .where().get()
-    const whereMock = vi.fn();
-    const getMock = vi.fn();
     const collectionMock = vi.fn((path) => ({
         path: path || 'mock/path',
-        where: whereMock,
-        get: getMock
+        where: vi.fn((field: string, operator: string, value: unknown) => ({
+            path: path || 'mock/path',
+            filters: [{ field, operator, value }],
+        })),
     }));
     const docGetMock = vi.fn().mockResolvedValue({ exists: false });
     const docMock = vi.fn((path) => ({
@@ -32,19 +32,20 @@ const {
         get: docGetMock,
     }));
 
-    // Batch Mocks
-    const batchDeleteMock = vi.fn();
-    const batchCommitMock = vi.fn().mockResolvedValue(undefined);
-    const batchMock = vi.fn().mockReturnValue({
-        delete: batchDeleteMock,
-        commit: batchCommitMock
-    });
+    const transactionGetMock = vi.fn();
+    const transactionDeleteMock = vi.fn();
+    const runTransactionMock = vi.fn(async (handler: unknown) => (
+        handler as (transaction: unknown) => Promise<unknown>
+    )({
+        get: transactionGetMock,
+        delete: transactionDeleteMock,
+    }));
 
     const firestoreMock = {
         collection: collectionMock,
         doc: docMock,
         recursiveDelete: recursiveDeleteMock,
-        batch: batchMock
+        runTransaction: runTransactionMock,
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } as any;
 
@@ -66,12 +67,13 @@ const {
         adminFirestoreMock: firestoreMock,
         adminStorageMock: storageMock,
         recursiveDeleteMock,
-        batchDeleteMock,
-        batchCommitMock,
         deleteFilesMock,
         docGetMock,
         loggerErrorMock,
         loggerWarnMock,
+        runTransactionMock,
+        transactionDeleteMock,
+        transactionGetMock,
     };
 });
 
@@ -112,17 +114,33 @@ describe('cleanupEventFile', () => {
         recursiveDelete: recursiveDeleteMock,
         deleteFile: adminStorageMock.bucket().file().delete,
         deleteFiles: deleteFilesMock,
-        batchDelete: batchDeleteMock,
-        batchCommit: batchCommitMock,
         docGet: docGetMock,
         loggerError: loggerErrorMock,
         loggerWarn: loggerWarnMock,
+        runTransaction: runTransactionMock,
+        transactionDelete: transactionDeleteMock,
+        transactionGet: transactionGetMock,
     };
 
     beforeEach(() => {
         // Reset mocks if needed, but since they are hoisted consts, verify they are cleared
         vi.clearAllMocks();
         mocks.docGet.mockResolvedValue({ exists: false });
+        mocks.transactionGet.mockImplementation(async (refOrQuery: { path?: string }) => {
+            if (refOrQuery.path === 'users/testUser/events/testEvent') {
+                return { exists: false };
+            }
+            if (refOrQuery.path === 'users/testUser/activities') {
+                return { empty: true, size: 0, docs: [] };
+            }
+            return { exists: false };
+        });
+        mocks.runTransaction.mockImplementation(async (handler: unknown) => (
+            handler as (transaction: unknown) => Promise<unknown>
+        )({
+            get: mocks.transactionGet,
+            delete: mocks.transactionDelete,
+        }));
     });
 
     afterEach(() => {
@@ -148,22 +166,37 @@ describe('cleanupEventFile', () => {
 
         // Mock snapshot for flat activities
         const mockDocs = [{ ref: 'docRef1' }, { ref: 'docRef2' }];
-        (mocks.firestore.collection('users/testUser/activities').where as Mock).mockReturnValue({
-            get: vi.fn().mockResolvedValue({
-                empty: false,
-                size: 2,
-                docs: mockDocs.map(doc => ({ ref: doc.ref })) // Ensure docs have a ref property
-            })
+        mocks.transactionGet.mockImplementation(async (refOrQuery: { path?: string }) => {
+            if (refOrQuery.path === 'users/testUser/events/testEvent') {
+                return { exists: false };
+            }
+            if (refOrQuery.path === 'users/testUser/activities') {
+                return {
+                    empty: false,
+                    size: 2,
+                    docs: mockDocs.map(doc => ({ ref: doc.ref })) // Ensure docs have a ref property
+                };
+            }
+            return { exists: false };
         });
 
         await wrapped(event);
 
         // Check flat activity delete
         expect(mocks.firestore.collection).toHaveBeenCalledWith('users/testUser/activities');
+        expect(mocks.runTransaction).toHaveBeenCalledTimes(1);
+        expect(mocks.transactionGet.mock.calls[0][0]).toMatchObject({
+            path: 'users/testUser/events/testEvent',
+        });
+        expect(mocks.transactionGet.mock.calls[1][0]).toMatchObject({
+            path: 'users/testUser/activities',
+            filters: [{ field: 'eventID', operator: '==', value: 'testEvent' }],
+        });
 
-        // Expect batch delete to be called 2 times (once per doc) for activities
-        expect(mocks.batchDelete).toHaveBeenCalledTimes(2);
-        expect(mocks.batchCommit).toHaveBeenCalled();
+        // Expect transaction delete to be called 2 times (once per doc) for activities
+        expect(mocks.transactionDelete).toHaveBeenCalledTimes(2);
+        expect(mocks.transactionDelete).toHaveBeenCalledWith('docRef1');
+        expect(mocks.transactionDelete).toHaveBeenCalledWith('docRef2');
 
         // Expect recursiveDelete to be called 1 time (for metaData)
         expect(mocks.recursiveDelete).toHaveBeenCalledTimes(1);
@@ -175,15 +208,6 @@ describe('cleanupEventFile', () => {
     });
 
     it('should delete activities and files even if originalFile metadata is missing', async () => {
-        // Mock snapshot for flat activities (EMPTY)
-        (mocks.firestore.collection('users/testUser/activities').where as Mock).mockReturnValue({
-            get: vi.fn().mockResolvedValue({
-                empty: true,
-                size: 0,
-                docs: []
-            })
-        });
-
         const wrapped = cleanupEventFile as unknown as (event: unknown) => Promise<void>;
 
         // NO data in snapshot
@@ -201,6 +225,7 @@ describe('cleanupEventFile', () => {
 
         // Check flat activity delete query called
         expect(mocks.firestore.collection).toHaveBeenCalledWith('users/testUser/activities');
+        expect(mocks.transactionDelete).not.toHaveBeenCalled();
 
         // Check file delete called with prefix regardless
         expect(mocks.deleteFiles).toHaveBeenCalledWith({
@@ -215,11 +240,6 @@ describe('cleanupEventFile', () => {
             data: snap,
             params: { userId: 'testUser', eventId: 'testEvent' },
         };
-
-        // Mock activities (empty)
-        (mocks.firestore.collection('users/testUser/activities').where as Mock).mockReturnValue({
-            get: vi.fn().mockResolvedValue({ empty: true, size: 0, docs: [] })
-        });
 
         // For recursiveDelete, we don't need to mock the .get() return value of metaDataRef specifically,
         // because we are just asserting that recursiveDelete is called with the collection ref.
@@ -238,20 +258,25 @@ describe('cleanupEventFile', () => {
         expect(collectionRef.path).toBe('users/testUser/events/testEvent/metaData');
     });
 
-    it('should skip destructive cleanup when a deleted event has been recreated', async () => {
+    it('should skip destructive cleanup when a deleted event has been recreated inside the activity transaction', async () => {
         const wrapped = cleanupEventFile as unknown as (event: unknown) => Promise<void>;
         const snap = testEnv.firestore.makeDocumentSnapshot({}, 'users/testUser/events/testEvent');
         const event = {
             data: snap,
             params: { userId: 'testUser', eventId: 'testEvent' },
         };
-        mocks.docGet.mockResolvedValue({ exists: true });
+        mocks.transactionGet.mockImplementation(async (refOrQuery: { path?: string }) => {
+            if (refOrQuery.path === 'users/testUser/events/testEvent') {
+                return { exists: true };
+            }
+            return { empty: true, size: 0, docs: [] };
+        });
 
         await wrapped(event);
 
         expect(mocks.firestore.doc).toHaveBeenCalledWith('users/testUser/events/testEvent');
-        expect(mocks.batchDelete).not.toHaveBeenCalled();
-        expect(mocks.batchCommit).not.toHaveBeenCalled();
+        expect(mocks.transactionGet).toHaveBeenCalledTimes(1);
+        expect(mocks.transactionDelete).not.toHaveBeenCalled();
         expect(mocks.recursiveDelete).not.toHaveBeenCalled();
         expect(mocks.deleteFiles).not.toHaveBeenCalled();
         expect(mocks.loggerWarn).toHaveBeenCalledWith(
@@ -259,7 +284,7 @@ describe('cleanupEventFile', () => {
             expect.objectContaining({
                 userId: 'testUser',
                 eventId: 'testEvent',
-                phase: 'before_activity_cleanup',
+                phase: 'activity_transaction',
             }),
         );
     });
@@ -273,15 +298,11 @@ describe('cleanupEventFile', () => {
         };
         mocks.docGet
             .mockResolvedValueOnce({ exists: false })
-            .mockResolvedValueOnce({ exists: false })
             .mockResolvedValueOnce({ exists: true });
-        (mocks.firestore.collection('users/testUser/activities').where as Mock).mockReturnValue({
-            get: vi.fn().mockResolvedValue({ empty: true, size: 0, docs: [] })
-        });
 
         await wrapped(event);
 
-        expect(mocks.batchCommit).not.toHaveBeenCalled();
+        expect(mocks.transactionDelete).not.toHaveBeenCalled();
         expect(mocks.recursiveDelete).toHaveBeenCalledTimes(1);
         expect(mocks.deleteFiles).not.toHaveBeenCalled();
         expect(mocks.loggerWarn).toHaveBeenCalledWith(
@@ -302,22 +323,17 @@ describe('cleanupEventFile', () => {
             params: { userId: 'testUser', eventId: 'testEvent' },
         };
         const readError = new Error('firestore unavailable');
-        mocks.docGet.mockRejectedValue(readError);
+        mocks.transactionGet.mockRejectedValue(readError);
 
         await wrapped(event);
 
-        expect(mocks.batchDelete).not.toHaveBeenCalled();
-        expect(mocks.batchCommit).not.toHaveBeenCalled();
+        expect(mocks.runTransaction).toHaveBeenCalledTimes(1);
+        expect(mocks.transactionDelete).not.toHaveBeenCalled();
         expect(mocks.recursiveDelete).not.toHaveBeenCalled();
         expect(mocks.deleteFiles).not.toHaveBeenCalled();
         expect(mocks.loggerError).toHaveBeenCalledWith(
-            expect.stringContaining('stale_delete_guard_failed'),
-            expect.objectContaining({
-                userId: 'testUser',
-                eventId: 'testEvent',
-                phase: 'before_activity_cleanup',
-                error: readError,
-            }),
+            expect.stringContaining('Failed to delete linked activities'),
+            readError,
         );
     });
 });

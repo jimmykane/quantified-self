@@ -396,8 +396,87 @@ describe('EventCardComponent', () => {
         expect(mockBenchmarkFlowService.openBenchmarkEntry).not.toHaveBeenCalled();
         expect(mockBenchmarkFlowService.openBenchmarkReport).toHaveBeenCalledWith(expect.objectContaining({
             event: comparisonEvent,
+            user: undefined,
             result: savedResult,
             initialSelection: [referenceActivity, testActivity],
+            allowRerun: false,
+        }));
+    });
+
+    it('should omit signed-in non-owner users from public comparison reports', () => {
+        const referenceActivity = createActivity('act-a');
+        const testActivity = createActivity('act-b');
+        const savedResult = {
+            referenceId: 'act-a',
+            testId: 'act-b',
+            timestamp: new Date('2026-01-01T00:00:00.000Z'),
+            metrics: {
+                gnss: {},
+                streamMetrics: {},
+            },
+        };
+        const comparisonEvent = {
+            ...createEvent('evt1', [referenceActivity, testActivity], 'Public Tool Comparison'),
+            benchmarkResults: {
+                'act-a_act-b': savedResult,
+            },
+        } as any;
+        routeUserID = 'ownerUser';
+
+        routeData$.next({
+            event: {
+                event: comparisonEvent,
+                user: mockUser,
+                publicShare: true,
+                shareKind: 'comparison',
+                openBenchmarkOnLoad: true,
+            } as any,
+        });
+
+        expect(component.isOwner()).toBe(false);
+        expect(mockBenchmarkFlowService.openBenchmarkReport).toHaveBeenCalledWith(expect.objectContaining({
+            event: comparisonEvent,
+            user: undefined,
+            result: savedResult,
+            allowRerun: false,
+        }));
+    });
+
+    it('should pass the owner user into public comparison reports', () => {
+        const referenceActivity = createActivity('act-a');
+        const testActivity = createActivity('act-b');
+        const savedResult = {
+            referenceId: 'act-a',
+            testId: 'act-b',
+            timestamp: new Date('2026-01-01T00:00:00.000Z'),
+            metrics: {
+                gnss: {},
+                streamMetrics: {},
+            },
+        };
+        const comparisonEvent = {
+            ...createEvent('evt1', [referenceActivity, testActivity], 'Public Tool Comparison'),
+            benchmarkResults: {
+                'act-a_act-b': savedResult,
+            },
+        } as any;
+        routeUserID = 'testUser';
+
+        routeData$.next({
+            event: {
+                event: comparisonEvent,
+                user: mockUser,
+                publicShare: true,
+                shareKind: 'comparison',
+                openBenchmarkOnLoad: true,
+            } as any,
+        });
+
+        expect(component.isOwner()).toBe(true);
+        expect(mockBenchmarkFlowService.openBenchmarkReport).toHaveBeenCalledWith(expect.objectContaining({
+            event: comparisonEvent,
+            user: mockUser,
+            result: savedResult,
             allowRerun: false,
         }));
     });

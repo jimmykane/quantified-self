@@ -574,7 +574,7 @@ export class EventCardComponent implements OnInit {
 
     await this.benchmarkFlow.openBenchmarkReport({
       event,
-      user: this.currentUser() ?? undefined,
+      user: this.isOwner() ? this.currentUser() ?? undefined : undefined,
       result,
       initialSelection: initialSelection.length === 2 ? initialSelection : undefined,
       allowRerun: false,

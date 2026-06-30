@@ -25,6 +25,50 @@ async function shouldSkipEventCleanup(userId: string, eventId: string, phase: st
     }
 }
 
+interface ActivityCleanupResult {
+    skipped: boolean;
+    deletedCount: number;
+}
+
+async function deleteLinkedActivitiesIfEventStillMissing(userId: string, eventId: string): Promise<ActivityCleanupResult> {
+    const db = admin.firestore();
+    const eventRef = db.doc(`users/${userId}/events/${eventId}`);
+    const activitiesQuery = db.collection(`users/${userId}/activities`).where('eventID', '==', eventId);
+
+    const result = await db.runTransaction(async (transaction): Promise<ActivityCleanupResult> => {
+        const currentEventSnapshot = await transaction.get(eventRef);
+        if (currentEventSnapshot.exists) {
+            return { skipped: true, deletedCount: 0 };
+        }
+
+        const activitySnapshot = await transaction.get(activitiesQuery);
+        if (activitySnapshot.empty) {
+            return { skipped: false, deletedCount: 0 };
+        }
+
+        activitySnapshot.docs.forEach((doc) => {
+            // Flat activity documents do not own cleanup-managed subcollections.
+            transaction.delete(doc.ref);
+        });
+
+        return { skipped: false, deletedCount: activitySnapshot.size };
+    });
+
+    if (result.skipped) {
+        logger.warn('[Cleanup] stale_delete_trigger_skipped: event exists again, skipping destructive cleanup.', {
+            userId,
+            eventId,
+            phase: 'activity_transaction',
+        });
+    } else if (result.deletedCount === 0) {
+        logger.info(`[Cleanup] No flat activities found for event ${eventId}`);
+    } else {
+        logger.info(`[Cleanup] Successfully deleted ${result.deletedCount} linked activities for event ${eventId}`);
+    }
+
+    return result;
+}
+
 export const cleanupEventFile = onDocumentDeleted({
     document: 'users/{userId}/events/{eventId}',
     region: 'europe-west2',
@@ -44,29 +88,15 @@ export const cleanupEventFile = onDocumentDeleted({
 
     logger.info(`[Cleanup] Event ${eventId} for user ${userId} deleted. Checking for original file.`);
 
-    if (await shouldSkipEventCleanup(userId, eventId, 'before_activity_cleanup')) {
-        return;
-    }
-
     // Delete linked activities (Flat structure)
     try {
-        const activitiesRef = admin.firestore().collection(`users/${userId}/activities`);
-        const snapshot = await activitiesRef.where('eventID', '==', eventId).get();
-
-        if (snapshot.empty) {
-            logger.info(`[Cleanup] No flat activities found for event ${eventId}`);
-        } else {
-            logger.info(`[Cleanup] Found ${snapshot.size} flat activities linked to event ${eventId}. Deleting...`);
-            const batch = admin.firestore().batch();
-            snapshot.docs.forEach((doc) => {
-                batch.delete(doc.ref);
-            });
-            await batch.commit();
-            logger.info(`[Cleanup] Successfully deleted linked activities for event ${eventId}`);
+        const activityCleanup = await deleteLinkedActivitiesIfEventStillMissing(userId, eventId);
+        if (activityCleanup.skipped) {
+            return;
         }
-
     } catch (error) {
         logger.error(`[Cleanup] Failed to delete linked activities for event ${eventId}`, error);
+        return;
     }
 
     // Delete linked metaData (Subcollection)
