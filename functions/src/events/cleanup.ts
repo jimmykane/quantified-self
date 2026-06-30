@@ -8,7 +8,9 @@ interface EventSourceFileForCleanup {
     generation?: string;
 }
 
-async function shouldSkipEventCleanup(userId: string, eventId: string, phase: string): Promise<boolean> {
+type EventCleanupDecision = 'continue' | 'event_exists' | 'guard_failed';
+
+async function getEventCleanupDecision(userId: string, eventId: string, phase: string): Promise<EventCleanupDecision> {
     try {
         const currentEventSnapshot = await admin.firestore().doc(`users/${userId}/events/${eventId}`).get();
         if (currentEventSnapshot.exists) {
@@ -17,9 +19,9 @@ async function shouldSkipEventCleanup(userId: string, eventId: string, phase: st
                 eventId,
                 phase,
             });
-            return true;
+            return 'event_exists';
         }
-        return false;
+        return 'continue';
     } catch (error) {
         logger.error('[Cleanup] stale_delete_guard_failed: could not verify event absence, skipping destructive cleanup.', {
             userId,
@@ -27,7 +29,7 @@ async function shouldSkipEventCleanup(userId: string, eventId: string, phase: st
             phase,
             error,
         });
-        return true;
+        return 'guard_failed';
     }
 }
 
@@ -335,8 +337,14 @@ async function deleteSourceFilesForDeletedEventSnapshot(
                 continue;
             }
 
-            if (!sourceFile.generation && await shouldSkipEventCleanup(userId, eventId, 'before_legacy_storage_delete')) {
-                continue;
+            if (!sourceFile.generation) {
+                const cleanupDecision = await getEventCleanupDecision(userId, eventId, 'before_legacy_storage_delete');
+                if (cleanupDecision === 'event_exists') {
+                    continue;
+                }
+                if (cleanupDecision === 'guard_failed') {
+                    throw new Error(`Could not verify event absence before deleting legacy source file ${sourceFile.path}.`);
+                }
             }
 
             logger.info(`[Cleanup] Deleting source file generation ${attemptedGeneration} at ${sourceFile.path}`);
@@ -387,6 +395,7 @@ export const cleanupEventFile = onDocumentDeleted({
     }
 
     logger.info(`[Cleanup] Event ${eventId} for user ${userId} deleted. Checking for original file.`);
+    const cleanupFailures: string[] = [];
 
     // Delete linked activities (Flat structure)
     try {
@@ -396,7 +405,7 @@ export const cleanupEventFile = onDocumentDeleted({
         }
     } catch (error) {
         logger.error(`[Cleanup] Failed to delete linked activities for event ${eventId}`, error);
-        return;
+        cleanupFailures.push('activities');
     }
 
     // Delete linked metaData (Subcollection)
@@ -407,22 +416,32 @@ export const cleanupEventFile = onDocumentDeleted({
         }
     } catch (error) {
         logger.error(`[Cleanup] Failed to delete metaData for event ${eventId}`, error);
-        return;
+        cleanupFailures.push('metadata');
     }
 
     try {
-        if (await shouldSkipEventCleanup(userId, eventId, 'before_storage_cleanup')) {
+        const cleanupDecision = await getEventCleanupDecision(userId, eventId, 'before_storage_cleanup');
+        if (cleanupDecision === 'event_exists') {
             return;
         }
-        const deletedEventBoundaryMillis = normalizeTimestampMillis((event as { time?: unknown }).time)
-            ?? normalizeTimestampMillis(snap.updateTime);
-        await deleteSourceFilesForDeletedEventSnapshot(
-            userId,
-            eventId,
-            snap.data(),
-            deletedEventBoundaryMillis,
-        );
+        if (cleanupDecision === 'guard_failed') {
+            cleanupFailures.push('storage_guard');
+        } else {
+            const deletedEventBoundaryMillis = normalizeTimestampMillis((event as { time?: unknown }).time)
+                ?? normalizeTimestampMillis(snap.updateTime);
+            await deleteSourceFilesForDeletedEventSnapshot(
+                userId,
+                eventId,
+                snap.data(),
+                deletedEventBoundaryMillis,
+            );
+        }
     } catch (error) {
         logger.error(`[Cleanup] Failed to delete source files for event ${eventId}`, error);
+        cleanupFailures.push('source_files');
+    }
+
+    if (cleanupFailures.length > 0) {
+        throw new Error(`Event cleanup failed for ${eventId}: ${cleanupFailures.join(', ')}.`);
     }
 });

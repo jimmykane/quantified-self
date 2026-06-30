@@ -421,7 +421,37 @@ describe('cleanupEventFile', () => {
         );
     });
 
-    it('should fail closed when the stale cleanup guard cannot read the current event', async () => {
+    it('should fail the invocation when the storage cleanup guard cannot verify event absence', async () => {
+        const wrapped = cleanupEventFile as unknown as (event: unknown) => Promise<void>;
+        const snap = testEnv.firestore.makeDocumentSnapshot({
+            originalFile: {
+                path: 'users/testUser/events/testEvent/original.fit',
+                bucket: 'quantified-self-io',
+                generation: '12345',
+            },
+        }, 'users/testUser/events/testEvent');
+        const event = {
+            data: snap,
+            params: { userId: 'testUser', eventId: 'testEvent' },
+        };
+        const guardError = new Error('firestore unavailable before storage cleanup');
+        mocks.docGet.mockRejectedValueOnce(guardError);
+
+        await expect(wrapped(event)).rejects.toThrow('Event cleanup failed for testEvent: storage_guard.');
+
+        expect(mocks.fileDelete).not.toHaveBeenCalled();
+        expect(mocks.loggerError).toHaveBeenCalledWith(
+            expect.stringContaining('stale_delete_guard_failed'),
+            expect.objectContaining({
+                userId: 'testUser',
+                eventId: 'testEvent',
+                phase: 'before_storage_cleanup',
+                error: guardError,
+            }),
+        );
+    });
+
+    it('should fail the invocation when the activity cleanup transaction cannot verify event absence', async () => {
         const wrapped = cleanupEventFile as unknown as (event: unknown) => Promise<void>;
         const snap = testEnv.firestore.makeDocumentSnapshot({}, 'users/testUser/events/testEvent');
         const event = {
@@ -431,9 +461,9 @@ describe('cleanupEventFile', () => {
         const readError = new Error('firestore unavailable');
         mocks.transactionGet.mockRejectedValue(readError);
 
-        await wrapped(event);
+        await expect(wrapped(event)).rejects.toThrow('Event cleanup failed for testEvent: activities, metadata.');
 
-        expect(mocks.runTransaction).toHaveBeenCalledTimes(1);
+        expect(mocks.runTransaction).toHaveBeenCalledTimes(2);
         expect(mocks.transactionDelete).not.toHaveBeenCalled();
         expect(mocks.recursiveDelete).not.toHaveBeenCalled();
         expect(mocks.deleteFiles).not.toHaveBeenCalled();
@@ -441,6 +471,46 @@ describe('cleanupEventFile', () => {
         expect(mocks.loggerError).toHaveBeenCalledWith(
             expect.stringContaining('Failed to delete linked activities'),
             readError,
+        );
+    });
+
+    it('should continue source file cleanup and fail the invocation when activity cleanup fails', async () => {
+        const wrapped = cleanupEventFile as unknown as (event: unknown) => Promise<void>;
+        const snap = testEnv.firestore.makeDocumentSnapshot({
+            originalFile: {
+                path: 'users/testUser/events/testEvent/original.fit',
+                bucket: 'quantified-self-io',
+                generation: '12345',
+            },
+        }, 'users/testUser/events/testEvent');
+        const event = {
+            data: snap,
+            params: { userId: 'testUser', eventId: 'testEvent' },
+        };
+        const activityCleanupError = new Error('activity query unavailable');
+        mocks.transactionGet.mockImplementation(async (refOrQuery: { path?: string }) => {
+            if (refOrQuery.path === 'users/testUser/events/testEvent') {
+                return { exists: false };
+            }
+            if (refOrQuery.path === 'users/testUser/activities') {
+                throw activityCleanupError;
+            }
+            if (refOrQuery.path === 'users/testUser/events/testEvent/metaData') {
+                return { empty: true, size: 0, docs: [] };
+            }
+            return { exists: false };
+        });
+
+        await expect(wrapped(event)).rejects.toThrow('Event cleanup failed for testEvent: activities.');
+
+        expect(mocks.runTransaction).toHaveBeenCalledTimes(2);
+        expect(mocks.fileDelete).toHaveBeenCalledWith({
+            ignoreNotFound: true,
+            ifGenerationMatch: '12345',
+        });
+        expect(mocks.loggerError).toHaveBeenCalledWith(
+            expect.stringContaining('Failed to delete linked activities'),
+            activityCleanupError,
         );
     });
 
