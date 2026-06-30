@@ -78,6 +78,11 @@ describe('EChartsLoaderService', () => {
   let visualViewportEventListeners: Map<string, EventListener>;
   let rafCallbacks: FrameRequestCallback[];
 
+  const setElementSize = (element: HTMLElement, width: number, height: number): void => {
+    Object.defineProperty(element, 'clientWidth', { configurable: true, value: width });
+    Object.defineProperty(element, 'clientHeight', { configurable: true, value: height });
+  };
+
   beforeEach(() => {
     windowEventListeners = new Map();
     visualViewportEventListeners = new Map();
@@ -207,6 +212,7 @@ describe('EChartsLoaderService', () => {
   it('should initialize chart instance with theme', async () => {
     const chart = { id: 'chart-1' };
     const container = document.createElement('div');
+    setElementSize(container, 320, 180);
     const runOutsideAngularSpy = vi.spyOn(zone, 'runOutsideAngular');
     echartsCoreMock.init.mockReturnValue(chart);
 
@@ -223,6 +229,7 @@ describe('EChartsLoaderService', () => {
   it('should initialize chart instance with default app theme when theme is not provided', async () => {
     const chart = { id: 'chart-2' };
     const container = document.createElement('div');
+    setElementSize(container, 320, 180);
     echartsCoreMock.init.mockReturnValue(chart);
 
     const initialized = await service.init(container);
@@ -237,6 +244,7 @@ describe('EChartsLoaderService', () => {
   it('should allow callers to override init options such as dirty rect', async () => {
     const chart = { id: 'chart-3' };
     const container = document.createElement('div');
+    setElementSize(container, 320, 180);
     echartsCoreMock.init.mockReturnValue(chart);
 
     const initialized = await service.init(container, 'dark', { useDirtyRect: true });
@@ -244,6 +252,49 @@ describe('EChartsLoaderService', () => {
     expect(echartsCoreMock.init).toHaveBeenCalledWith(container, 'dark', {
       renderer: 'canvas',
       useDirtyRect: true,
+    });
+    expect(initialized).toBe(chart);
+  });
+
+  it('should pass fallback init dimensions when the container has not been laid out yet', async () => {
+    const chart = { id: 'chart-zero-size' };
+    const container = document.createElement('div');
+    setElementSize(container, 0, 0);
+    echartsCoreMock.init.mockReturnValue(chart);
+
+    const initialized = await service.init(container, 'dark');
+
+    expect(echartsCoreMock.init).toHaveBeenCalledWith(container, 'dark', {
+      renderer: 'canvas',
+      useDirtyRect: false,
+      width: 1,
+      height: 1,
+    });
+    expect(initialized).toBe(chart);
+  });
+
+  it('should use bounding rect dimensions before falling back to explicit init size', async () => {
+    const chart = { id: 'chart-bounding-rect-size' };
+    const container = document.createElement('div');
+    setElementSize(container, 0, 0);
+    vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({
+      width: 480,
+      height: 260,
+      top: 0,
+      right: 480,
+      bottom: 260,
+      left: 0,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    });
+    echartsCoreMock.init.mockReturnValue(chart);
+
+    const initialized = await service.init(container, 'dark');
+
+    expect(echartsCoreMock.init).toHaveBeenCalledWith(container, 'dark', {
+      renderer: 'canvas',
+      useDirtyRect: false,
     });
     expect(initialized).toBe(chart);
   });
