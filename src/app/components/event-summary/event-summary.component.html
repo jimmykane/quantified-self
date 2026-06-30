@@ -58,7 +58,7 @@
     <div class="device-info-banner-primary">
       <span class="device-info-banner-label">{{ deviceChipLabel }}</span>
     </div>
-    <app-service-source-icon class="device-info-banner-source" [event]="event" [user]="user" [showIcon]="false"
+    <app-service-source-icon class="device-info-banner-source" [event]="event" [user]="ownerMetadataLookupUser" [showIcon]="false"
       [showText]="true" [suppressedTextLabels]="deviceSourceSuppressedLabels"></app-service-source-icon>
   </div>
   }
