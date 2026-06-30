@@ -363,7 +363,50 @@ describe('setEventSharing', () => {
     expect(hoisted.mockSetMetadata).toHaveBeenNthCalledWith(2, {
       metadata: {
         existing: 'kept',
-        privacy: 'private',
+        privacy: null,
+      },
+    });
+  });
+
+  it('restores previous public source-file metadata when a share retry fails after storage updates', async () => {
+    hoisted.mockEventGet.mockResolvedValueOnce({
+      exists: true,
+      data: () => ({
+        privacy: 'public',
+        originalFiles: [
+          {
+            path: 'users/user-1/events/event-1/original.fit',
+            originalFilename: 'watch.fit',
+          },
+        ],
+      }),
+    });
+    hoisted.mockGetMetadata.mockResolvedValueOnce([
+      {
+        metadata: {
+          existing: 'kept',
+          privacy: 'public',
+        },
+      },
+    ]);
+    hoisted.mockEventUpdate.mockRejectedValueOnce(new Error('firestore unavailable'));
+
+    await expect(callSetEventSharing({
+      auth: { uid: 'user-1' },
+      app: { appId: 'app-id' },
+      data: { userID: 'user-1', eventID: 'event-1', enabled: true },
+    })).rejects.toMatchObject({ code: 'internal' });
+
+    expect(hoisted.mockSetMetadata).toHaveBeenNthCalledWith(1, {
+      metadata: {
+        existing: 'kept',
+        privacy: 'public',
+      },
+    });
+    expect(hoisted.mockSetMetadata).toHaveBeenNthCalledWith(2, {
+      metadata: {
+        existing: 'kept',
+        privacy: 'public',
       },
     });
   });

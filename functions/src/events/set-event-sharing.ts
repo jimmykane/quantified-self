@@ -19,6 +19,11 @@ interface SourceFileReference {
   bucket?: string;
 }
 
+interface SourceFilePrivacyRollback {
+  sourceFile: SourceFileReference;
+  previousCustomMetadata: Record<string, string>;
+}
+
 const PUBLIC_EVENT_ROUTE_PREFIX = '/share/event';
 const PUBLIC_COMPARISON_ROUTE_PREFIX = '/share/comparison';
 
@@ -120,11 +125,28 @@ function toStringMetadata(value: unknown): Record<string, string> {
   return normalized;
 }
 
-async function updateStorageFilePrivacy(sourceFile: SourceFileReference, privacy: EventPrivacy): Promise<void> {
+function getStorageFile(sourceFile: SourceFileReference) {
   const storageBucket = sourceFile.bucket
     ? admin.storage().bucket(sourceFile.bucket)
     : admin.storage().bucket();
-  const storageFile = storageBucket.file(sourceFile.path);
+  return storageBucket.file(sourceFile.path);
+}
+
+async function setStorageFileCustomMetadata(
+  sourceFile: SourceFileReference,
+  customMetadata: Record<string, string | null>,
+): Promise<void> {
+  const storageFile = getStorageFile(sourceFile);
+  await storageFile.setMetadata({
+    metadata: customMetadata,
+  });
+}
+
+async function updateStorageFilePrivacy(
+  sourceFile: SourceFileReference,
+  privacy: EventPrivacy,
+): Promise<SourceFilePrivacyRollback> {
+  const storageFile = getStorageFile(sourceFile);
   const [metadata] = await storageFile.getMetadata();
   const existingCustomMetadata = toStringMetadata(asRecord(metadata)?.metadata);
   await storageFile.setMetadata({
@@ -133,16 +155,33 @@ async function updateStorageFilePrivacy(sourceFile: SourceFileReference, privacy
       privacy,
     },
   });
+  return {
+    sourceFile,
+    previousCustomMetadata: existingCustomMetadata,
+  };
+}
+
+async function restoreStorageFilePrivacy(rollback: SourceFilePrivacyRollback): Promise<void> {
+  const restoredCustomMetadata: Record<string, string | null> = {
+    ...rollback.previousCustomMetadata,
+  };
+
+  if (!Object.prototype.hasOwnProperty.call(restoredCustomMetadata, 'privacy')) {
+    // Cloud Storage custom metadata keys are removed by setting them to null.
+    restoredCustomMetadata.privacy = null;
+  }
+
+  await setStorageFileCustomMetadata(rollback.sourceFile, restoredCustomMetadata);
 }
 
 async function updateSourceFilesPrivacy(
   sourceFiles: SourceFileReference[],
   privacy: EventPrivacy,
-  updatedSourceFiles: SourceFileReference[] = [],
+  rollbackEntries: SourceFilePrivacyRollback[] = [],
 ): Promise<void> {
   for (const sourceFile of sourceFiles) {
-    await updateStorageFilePrivacy(sourceFile, privacy);
-    updatedSourceFiles.push(sourceFile);
+    const rollbackEntry = await updateStorageFilePrivacy(sourceFile, privacy);
+    rollbackEntries.push(rollbackEntry);
   }
 }
 
@@ -200,12 +239,12 @@ export const setEventSharing = onCall({
   if (enabled) {
     const sourceFiles = resolveSourceFiles(eventData, userID, eventID, defaultBucketName);
     try {
-      const updatedSourceFiles: SourceFileReference[] = [];
+      const rollbackEntries: SourceFilePrivacyRollback[] = [];
       try {
-        await updateSourceFilesPrivacy(sourceFiles, privacy, updatedSourceFiles);
+        await updateSourceFilesPrivacy(sourceFiles, privacy, rollbackEntries);
         await eventRef.update(eventPatch);
       } catch (error) {
-        await Promise.allSettled(updatedSourceFiles.map((sourceFile) => updateStorageFilePrivacy(sourceFile, 'private')));
+        await Promise.allSettled(rollbackEntries.map((rollbackEntry) => restoreStorageFilePrivacy(rollbackEntry)));
         throw error;
       }
     } catch (error) {
