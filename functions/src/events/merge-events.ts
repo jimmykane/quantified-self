@@ -47,7 +47,6 @@ interface SourceEventLoadResult {
 const MAX_SOURCE_EVENTS = 10;
 const GENERATED_MERGE_DESCRIPTION_PREFIX = 'a merge of 2 or more activit';
 const PRIMARY_BUCKET = 'quantified-self-io';
-const LEGACY_BUCKET = 'quantified-self-io.appspot.com';
 const DUPLICATE_SOURCE_FILES_MESSAGE = 'Selected events include identical source files. Deselect duplicates and try again.';
 const MAX_DECOMPRESSED_HASH_BYTES = 150 * 1024 * 1024;
 
@@ -115,13 +114,6 @@ function normalizeBucketName(bucketName?: string): string | null {
   return normalized.length > 0 ? normalized : null;
 }
 
-function getAppspotVariant(bucketName: string): string {
-  if (bucketName.endsWith('.appspot.com')) {
-    return bucketName.replace(/\.appspot\.com$/, '');
-  }
-  return `${bucketName}.appspot.com`;
-}
-
 function pushBucketCandidate(candidates: string[], bucketName?: string | null): void {
   const normalized = normalizeBucketName(bucketName || undefined);
   if (!normalized) {
@@ -136,18 +128,12 @@ function resolveBucketCandidates(metadataBucket?: string): string[] {
   const candidates: string[] = [];
   pushBucketCandidate(candidates, metadataBucket);
   pushBucketCandidate(candidates, PRIMARY_BUCKET);
-  pushBucketCandidate(candidates, LEGACY_BUCKET);
 
   try {
     const defaultBucketName = admin.storage().bucket().name;
     pushBucketCandidate(candidates, defaultBucketName);
   } catch (_error) {
     // Ignore and continue with explicit candidates.
-  }
-
-  const baseCandidates = [...candidates];
-  for (const bucketName of baseCandidates) {
-    pushBucketCandidate(candidates, getAppspotVariant(bucketName));
   }
 
   return candidates;

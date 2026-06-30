@@ -149,7 +149,7 @@ describe('setEventSharing', () => {
     });
   });
 
-  it('allows the owner to disable sharing and marks source files private first', async () => {
+  it('allows the owner to disable sharing and marks the event private before cleaning source files', async () => {
     const result = await callSetEventSharing({
       auth: { uid: 'user-1' },
       app: { appId: 'app-id' },
@@ -163,8 +163,8 @@ describe('setEventSharing', () => {
         privacy: 'private',
       },
     });
-    expect(hoisted.mockSetMetadata.mock.invocationCallOrder[0]).toBeLessThan(
-      hoisted.mockEventUpdate.mock.invocationCallOrder[0],
+    expect(hoisted.mockEventUpdate.mock.invocationCallOrder[0]).toBeLessThan(
+      hoisted.mockSetMetadata.mock.invocationCallOrder[0],
     );
     expect(result).toMatchObject({
       eventID: 'event-1',
@@ -172,7 +172,7 @@ describe('setEventSharing', () => {
     });
   });
 
-  it('fails safely when disabling sharing and source file metadata is invalid', async () => {
+  it('allows the owner to disable sharing when source file metadata is invalid', async () => {
     hoisted.mockEventGet.mockResolvedValueOnce({
       exists: true,
       data: () => ({
@@ -183,29 +183,38 @@ describe('setEventSharing', () => {
       }),
     });
 
-    await expect(callSetEventSharing({
+    const result = await callSetEventSharing({
       auth: { uid: 'user-1' },
       app: { appId: 'app-id' },
       data: { userID: 'user-1', eventID: 'event-1', enabled: false },
-    })).rejects.toMatchObject({ code: 'failed-precondition' });
+    });
 
     expect(hoisted.mockSetMetadata).not.toHaveBeenCalled();
-    expect(hoisted.mockEventUpdate).not.toHaveBeenCalled();
+    expect(hoisted.mockEventUpdate).toHaveBeenCalledWith({ privacy: 'private' });
+    expect(result).toMatchObject({
+      eventID: 'event-1',
+      privacy: 'private',
+    });
   });
 
-  it('does not mark the event private when source metadata cleanup fails', async () => {
+  it('allows the owner to disable sharing when source metadata cleanup fails', async () => {
     hoisted.mockGetMetadata.mockRejectedValueOnce(new Error('storage unavailable'));
 
-    await expect(callSetEventSharing({
+    const result = await callSetEventSharing({
       auth: { uid: 'user-1' },
       app: { appId: 'app-id' },
       data: { userID: 'user-1', eventID: 'event-1', enabled: false },
-    })).rejects.toMatchObject({ code: 'internal' });
+    });
 
-    expect(hoisted.mockEventUpdate).not.toHaveBeenCalled();
+    expect(hoisted.mockEventUpdate).toHaveBeenCalledWith({ privacy: 'private' });
+    expect(hoisted.mockGetMetadata).toHaveBeenCalled();
+    expect(result).toMatchObject({
+      eventID: 'event-1',
+      privacy: 'private',
+    });
   });
 
-  it('does not mark the event private unless every source file is made private', async () => {
+  it('allows the owner to disable sharing even when only some source files are made private', async () => {
     hoisted.mockEventGet.mockResolvedValueOnce({
       exists: true,
       data: () => ({
@@ -220,14 +229,35 @@ describe('setEventSharing', () => {
       .mockResolvedValueOnce(undefined)
       .mockRejectedValueOnce(new Error('storage unavailable'));
 
+    const result = await callSetEventSharing({
+      auth: { uid: 'user-1' },
+      app: { appId: 'app-id' },
+      data: { userID: 'user-1', eventID: 'event-1', enabled: false },
+    });
+
+    expect(hoisted.mockSetMetadata).toHaveBeenCalledTimes(2);
+    expect(hoisted.mockEventUpdate).toHaveBeenCalledWith({ privacy: 'private' });
+    expect(hoisted.mockEventUpdate.mock.invocationCallOrder[0]).toBeLessThan(
+      hoisted.mockSetMetadata.mock.invocationCallOrder[0],
+    );
+    expect(result).toMatchObject({
+      eventID: 'event-1',
+      privacy: 'private',
+    });
+  });
+
+  it('does not clean source files when disabling sharing fails before the event is private', async () => {
+    hoisted.mockEventUpdate.mockRejectedValueOnce(new Error('firestore unavailable'));
+
     await expect(callSetEventSharing({
       auth: { uid: 'user-1' },
       app: { appId: 'app-id' },
       data: { userID: 'user-1', eventID: 'event-1', enabled: false },
     })).rejects.toMatchObject({ code: 'internal' });
 
-    expect(hoisted.mockSetMetadata).toHaveBeenCalledTimes(2);
-    expect(hoisted.mockEventUpdate).not.toHaveBeenCalled();
+    expect(hoisted.mockEventUpdate).toHaveBeenCalledWith({ privacy: 'private' });
+    expect(hoisted.mockGetMetadata).not.toHaveBeenCalled();
+    expect(hoisted.mockSetMetadata).not.toHaveBeenCalled();
   });
 
   it('rejects unauthenticated and non-owner callers', async () => {
