@@ -47,20 +47,6 @@
   font-size: 18px;
 }
 
-.shared-chip {
-  gap: 4px;
-  background: var(--mat-sys-secondary-container);
-  color: var(--mat-sys-on-secondary-container);
-  cursor: help;
-}
-
-.shared-chip mat-icon {
-  width: 16px;
-  height: 16px;
-  line-height: 16px;
-  font-size: 16px;
-}
-
 .rpe-chip {
   background: var(--mat-sys-tertiary-container);
   color: var(--mat-sys-on-tertiary-container);
