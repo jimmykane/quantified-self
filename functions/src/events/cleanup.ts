@@ -5,7 +5,7 @@ import * as logger from 'firebase-functions/logger';
 interface EventSourceFileForCleanup {
     path: string;
     bucket: string;
-    generation: string;
+    generation?: string;
 }
 
 async function shouldSkipEventCleanup(userId: string, eventId: string, phase: string): Promise<boolean> {
@@ -129,6 +129,32 @@ function normalizeStorageGeneration(value: unknown): string | null {
     return null;
 }
 
+function normalizeTimestampMillis(value: unknown): number | null {
+    if (value instanceof Date) {
+        const millis = value.getTime();
+        return Number.isFinite(millis) ? millis : null;
+    }
+
+    if (typeof value === 'string' || typeof value === 'number') {
+        const millis = new Date(value).getTime();
+        return Number.isFinite(millis) ? millis : null;
+    }
+
+    const valueRecord = asRecord(value);
+    const toMillis = valueRecord?.toMillis;
+    if (typeof toMillis === 'function') {
+        const millis = toMillis.call(value);
+        return typeof millis === 'number' && Number.isFinite(millis) ? millis : null;
+    }
+
+    const toDate = valueRecord?.toDate;
+    if (typeof toDate === 'function') {
+        return normalizeTimestampMillis(toDate.call(value));
+    }
+
+    return null;
+}
+
 function asRecord(value: unknown): Record<string, unknown> | null {
     return value !== null && typeof value === 'object' && !Array.isArray(value)
         ? value as Record<string, unknown>
@@ -155,8 +181,7 @@ function resolveSourceFilesForCleanup(
     }
 
     const prefix = `users/${userId}/events/${eventId}/`;
-    const sourceFiles: EventSourceFileForCleanup[] = [];
-    const seen = new Set<string>();
+    const sourceFileByPath = new Map<string, EventSourceFileForCleanup>();
 
     candidates.forEach((candidate) => {
         const sourceFile = asRecord(candidate);
@@ -182,25 +207,15 @@ function resolveSourceFilesForCleanup(
             return;
         }
 
-        const generation = normalizeStorageGeneration(sourceFile.generation);
-        if (!generation) {
-            logger.warn('[Cleanup] Skipping source file cleanup without a storage generation precondition.', {
-                userId,
-                eventId,
-                path,
-                bucket,
-            });
-            return;
-        }
-
-        const key = `${bucket}/${path}@${generation}`;
-        if (!seen.has(key)) {
-            seen.add(key);
-            sourceFiles.push({ path, bucket, generation });
+        const generation = normalizeStorageGeneration(sourceFile.generation) ?? undefined;
+        const key = `${bucket}/${path}`;
+        const existingSourceFile = sourceFileByPath.get(key);
+        if (!existingSourceFile || (!existingSourceFile.generation && generation)) {
+            sourceFileByPath.set(key, { path, bucket, ...(generation ? { generation } : {}) });
         }
     });
 
-    return sourceFiles;
+    return Array.from(sourceFileByPath.values());
 }
 
 function isStoragePreconditionFailure(error: unknown): boolean {
@@ -210,28 +225,126 @@ function isStoragePreconditionFailure(error: unknown): boolean {
     return code === 412 || code === '412' || statusCode === 412 || statusCode === '412';
 }
 
+function isStorageNotFound(error: unknown): boolean {
+    const errorRecord = asRecord(error);
+    const code = errorRecord?.code;
+    const statusCode = errorRecord?.statusCode;
+    return code === 404 || code === '404' || statusCode === 404 || statusCode === '404';
+}
+
+async function resolveCurrentStorageGenerationForLegacySourceFile(params: {
+    file: { getMetadata(): Promise<[Record<string, unknown>, ...unknown[]]> };
+    userId: string;
+    eventId: string;
+    sourceFile: EventSourceFileForCleanup;
+    deletedEventBoundaryMillis: number | null;
+}): Promise<string | null> {
+    const { file, userId, eventId, sourceFile, deletedEventBoundaryMillis } = params;
+
+    if (deletedEventBoundaryMillis === null) {
+        logger.warn('[Cleanup] Skipping legacy source file cleanup without a deleted event timestamp.', {
+            userId,
+            eventId,
+            path: sourceFile.path,
+            bucket: sourceFile.bucket,
+        });
+        return null;
+    }
+
+    let metadata: Record<string, unknown>;
+    try {
+        [metadata] = await file.getMetadata();
+    } catch (error) {
+        if (isStorageNotFound(error)) {
+            logger.info(`[Cleanup] Legacy source file ${sourceFile.path} was already missing.`);
+            return null;
+        }
+        throw error;
+    }
+
+    const timeCreatedMillis = normalizeTimestampMillis(metadata.timeCreated);
+    if (timeCreatedMillis === null) {
+        logger.warn('[Cleanup] Skipping legacy source file cleanup because current storage metadata has no creation time.', {
+            userId,
+            eventId,
+            path: sourceFile.path,
+            bucket: sourceFile.bucket,
+        });
+        return null;
+    }
+
+    // Legacy event docs do not record Storage generation. Only trust live-resolved generation
+    // when the current object clearly predates the delete event; newer objects may be from a recreated event.
+    if (timeCreatedMillis >= deletedEventBoundaryMillis) {
+        logger.warn('[Cleanup] Skipping legacy source file cleanup because the current object was created at or after the deleted event boundary.', {
+            userId,
+            eventId,
+            path: sourceFile.path,
+            bucket: sourceFile.bucket,
+            timeCreated: metadata.timeCreated,
+        });
+        return null;
+    }
+
+    const generation = normalizeStorageGeneration(metadata.generation);
+    if (!generation) {
+        logger.warn('[Cleanup] Skipping legacy source file cleanup because current storage metadata has no generation.', {
+            userId,
+            eventId,
+            path: sourceFile.path,
+            bucket: sourceFile.bucket,
+        });
+        return null;
+    }
+
+    return generation;
+}
+
 async function deleteSourceFilesForDeletedEventSnapshot(
     userId: string,
     eventId: string,
     eventData: unknown,
+    deletedEventBoundaryMillis: number | null,
 ): Promise<void> {
     const defaultBucket = admin.storage().bucket();
     const defaultBucketName = defaultBucket.name;
     const sourceFiles = resolveSourceFilesForCleanup(eventData, userId, eventId, defaultBucketName);
 
     if (sourceFiles.length === 0) {
-        logger.info(`[Cleanup] No generation-pinned source files found for event ${eventId}`);
+        logger.info(`[Cleanup] No event source files found for event ${eventId}`);
         return;
     }
 
     const failures: unknown[] = [];
+    let deletedCount = 0;
     for (const sourceFile of sourceFiles) {
+        let attemptedGeneration = sourceFile.generation;
         try {
-            logger.info(`[Cleanup] Deleting source file generation ${sourceFile.generation} at ${sourceFile.path}`);
-            await defaultBucket.file(sourceFile.path).delete({
+            const file = defaultBucket.file(sourceFile.path);
+            const resolvedGeneration = attemptedGeneration
+                ?? await resolveCurrentStorageGenerationForLegacySourceFile({
+                    file,
+                    userId,
+                    eventId,
+                    sourceFile,
+                    deletedEventBoundaryMillis,
+                });
+            attemptedGeneration = resolvedGeneration ?? undefined;
+
+            if (!attemptedGeneration) {
+                continue;
+            }
+
+            if (!sourceFile.generation && await shouldSkipEventCleanup(userId, eventId, 'before_legacy_storage_delete')) {
+                continue;
+            }
+
+            logger.info(`[Cleanup] Deleting source file generation ${attemptedGeneration} at ${sourceFile.path}`);
+            await file.delete({
                 ignoreNotFound: true,
-                ifGenerationMatch: sourceFile.generation,
+                ifGenerationMatch: attemptedGeneration,
             });
+            deletedCount++;
         } catch (error) {
             if (isStoragePreconditionFailure(error)) {
                 logger.warn('[Cleanup] Source file generation no longer matches; skipping stale file delete.', {
@@ -239,7 +352,7 @@ async function deleteSourceFilesForDeletedEventSnapshot(
                     eventId,
                     path: sourceFile.path,
                     bucket: sourceFile.bucket,
-                    generation: sourceFile.generation,
+                    generation: attemptedGeneration,
                     error,
                 });
                 continue;
@@ -253,7 +366,7 @@ async function deleteSourceFilesForDeletedEventSnapshot(
         throw new Error(`Failed to delete ${failures.length} source file(s) for event ${eventId}.`);
     }
 
-    logger.info(`[Cleanup] Successfully deleted ${sourceFiles.length} generation-pinned source file(s) for event ${eventId}`);
+    logger.info(`[Cleanup] Successfully deleted ${deletedCount} source file(s) for event ${eventId}`);
 }
 
 export const cleanupEventFile = onDocumentDeleted({
@@ -301,7 +414,14 @@ export const cleanupEventFile = onDocumentDeleted({
         if (await shouldSkipEventCleanup(userId, eventId, 'before_storage_cleanup')) {
             return;
         }
-        await deleteSourceFilesForDeletedEventSnapshot(userId, eventId, snap.data());
+        const deletedEventBoundaryMillis = normalizeTimestampMillis((event as { time?: unknown }).time)
+            ?? normalizeTimestampMillis(snap.updateTime);
+        await deleteSourceFilesForDeletedEventSnapshot(
+            userId,
+            eventId,
+            snap.data(),
+            deletedEventBoundaryMillis,
+        );
     } catch (error) {
         logger.error(`[Cleanup] Failed to delete source files for event ${eventId}`, error);
     }

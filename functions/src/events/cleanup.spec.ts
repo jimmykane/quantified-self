@@ -9,6 +9,7 @@ const {
     deleteFilesMock,
     docGetMock,
     fileDeleteMock,
+    fileGetMetadataMock,
     fileMock,
     loggerErrorMock,
     loggerWarnMock,
@@ -53,8 +54,13 @@ const {
 
     const deleteFilesMock = vi.fn().mockResolvedValue(undefined);
     const fileDeleteMock = vi.fn().mockResolvedValue(undefined);
+    const fileGetMetadataMock = vi.fn().mockResolvedValue([{
+        generation: 'resolved-generation',
+        timeCreated: '2025-01-01T00:00:00.000Z',
+    }]);
     const fileMock = vi.fn().mockReturnValue({
         delete: fileDeleteMock,
+        getMetadata: fileGetMetadataMock,
     });
     const storageMock = {
         bucket: vi.fn((name?: string) => ({
@@ -75,6 +81,7 @@ const {
         deleteFilesMock,
         docGetMock,
         fileDeleteMock,
+        fileGetMetadataMock,
         fileMock,
         loggerErrorMock,
         loggerWarnMock,
@@ -120,6 +127,7 @@ describe('cleanupEventFile', () => {
         recursiveDelete: recursiveDeleteMock,
         deleteFiles: deleteFilesMock,
         fileDelete: fileDeleteMock,
+        fileGetMetadata: fileGetMetadataMock,
         file: fileMock,
         docGet: docGetMock,
         loggerError: loggerErrorMock,
@@ -136,8 +144,13 @@ describe('cleanupEventFile', () => {
         mocks.transactionGet.mockReset();
         mocks.runTransaction.mockReset();
         mocks.fileDelete.mockReset();
+        mocks.fileGetMetadata.mockReset();
         mocks.docGet.mockResolvedValue({ exists: false });
         mocks.fileDelete.mockResolvedValue(undefined);
+        mocks.fileGetMetadata.mockResolvedValue([{
+            generation: 'resolved-generation',
+            timeCreated: '2025-01-01T00:00:00.000Z',
+        }]);
         mocks.transactionGet.mockImplementation(async (refOrQuery: { path?: string }) => {
             if (refOrQuery.path === 'users/testUser/events/testEvent') {
                 return { exists: false };
@@ -222,7 +235,41 @@ describe('cleanupEventFile', () => {
 
         expect(mocks.recursiveDelete).not.toHaveBeenCalled();
         expect(mocks.deleteFiles).not.toHaveBeenCalled();
+        expect(mocks.fileGetMetadata).not.toHaveBeenCalled();
         expect(mocks.file).toHaveBeenCalledWith('users/testUser/events/testEvent/original.fit');
+        expect(mocks.fileDelete).toHaveBeenCalledWith({
+            ignoreNotFound: true,
+            ifGenerationMatch: '12345',
+        });
+    });
+
+    it('should prefer stored generation over duplicate legacy source metadata for the same path', async () => {
+        const wrapped = cleanupEventFile as unknown as (event: unknown) => Promise<void>;
+
+        const snap = testEnv.firestore.makeDocumentSnapshot({
+            originalFiles: [{
+                path: 'users/testUser/events/testEvent/original.fit',
+                bucket: 'quantified-self-io',
+                generation: '12345',
+            }],
+            originalFile: {
+                path: 'users/testUser/events/testEvent/original.fit',
+                bucket: 'quantified-self-io',
+            },
+        }, 'users/testUser/events/testEvent');
+
+        const event = {
+            data: snap,
+            params: {
+                userId: 'testUser',
+                eventId: 'testEvent',
+            },
+        };
+
+        await wrapped(event);
+
+        expect(mocks.fileGetMetadata).not.toHaveBeenCalled();
+        expect(mocks.fileDelete).toHaveBeenCalledTimes(1);
         expect(mocks.fileDelete).toHaveBeenCalledWith({
             ignoreNotFound: true,
             ifGenerationMatch: '12345',
@@ -397,7 +444,35 @@ describe('cleanupEventFile', () => {
         );
     });
 
-    it('should skip legacy source files without storage generation metadata', async () => {
+    it('should delete legacy source files by resolving the current storage generation', async () => {
+        const wrapped = cleanupEventFile as unknown as (event: unknown) => Promise<void>;
+        const snap = testEnv.firestore.makeDocumentSnapshot({
+            originalFile: {
+                path: 'users/testUser/events/testEvent/original.fit',
+                bucket: 'quantified-self-io',
+            },
+        }, 'users/testUser/events/testEvent');
+        Object.defineProperty(snap, 'updateTime', {
+            value: { toMillis: () => Date.parse('2025-01-02T00:00:00.000Z') },
+            configurable: true,
+        });
+        const event = {
+            data: snap,
+            params: { userId: 'testUser', eventId: 'testEvent' },
+        };
+
+        await wrapped(event);
+
+        expect(mocks.deleteFiles).not.toHaveBeenCalled();
+        expect(mocks.fileGetMetadata).toHaveBeenCalledTimes(1);
+        expect(mocks.fileDelete).toHaveBeenCalledWith({
+            ignoreNotFound: true,
+            ifGenerationMatch: 'resolved-generation',
+        });
+        expect(mocks.docGet).toHaveBeenCalledTimes(2);
+    });
+
+    it('should use the delete event timestamp when resolving legacy source file generation', async () => {
         const wrapped = cleanupEventFile as unknown as (event: unknown) => Promise<void>;
         const snap = testEnv.firestore.makeDocumentSnapshot({
             originalFile: {
@@ -407,15 +482,112 @@ describe('cleanupEventFile', () => {
         }, 'users/testUser/events/testEvent');
         const event = {
             data: snap,
+            time: '2025-01-02T00:00:00.000Z',
             params: { userId: 'testUser', eventId: 'testEvent' },
         };
 
         await wrapped(event);
 
-        expect(mocks.deleteFiles).not.toHaveBeenCalled();
+        expect(mocks.fileGetMetadata).toHaveBeenCalledTimes(1);
+        expect(mocks.fileDelete).toHaveBeenCalledWith({
+            ignoreNotFound: true,
+            ifGenerationMatch: 'resolved-generation',
+        });
+    });
+
+    it('should skip legacy source file delete when the event is recreated after generation resolution', async () => {
+        const wrapped = cleanupEventFile as unknown as (event: unknown) => Promise<void>;
+        const snap = testEnv.firestore.makeDocumentSnapshot({
+            originalFile: {
+                path: 'users/testUser/events/testEvent/original.fit',
+                bucket: 'quantified-self-io',
+            },
+        }, 'users/testUser/events/testEvent');
+        Object.defineProperty(snap, 'updateTime', {
+            value: { toMillis: () => Date.parse('2025-01-02T00:00:00.000Z') },
+            configurable: true,
+        });
+        const event = {
+            data: snap,
+            params: { userId: 'testUser', eventId: 'testEvent' },
+        };
+        mocks.docGet
+            .mockResolvedValueOnce({ exists: false })
+            .mockResolvedValueOnce({ exists: true });
+
+        await wrapped(event);
+
+        expect(mocks.fileGetMetadata).toHaveBeenCalledTimes(1);
         expect(mocks.fileDelete).not.toHaveBeenCalled();
         expect(mocks.loggerWarn).toHaveBeenCalledWith(
-            expect.stringContaining('Skipping source file cleanup without a storage generation precondition'),
+            expect.stringContaining('stale_delete_trigger_skipped'),
+            expect.objectContaining({
+                userId: 'testUser',
+                eventId: 'testEvent',
+                phase: 'before_legacy_storage_delete',
+            }),
+        );
+    });
+
+    it('should skip legacy source files when the current object was created after the delete boundary', async () => {
+        const wrapped = cleanupEventFile as unknown as (event: unknown) => Promise<void>;
+        const snap = testEnv.firestore.makeDocumentSnapshot({
+            originalFile: {
+                path: 'users/testUser/events/testEvent/original.fit',
+                bucket: 'quantified-self-io',
+            },
+        }, 'users/testUser/events/testEvent');
+        Object.defineProperty(snap, 'updateTime', {
+            value: { toMillis: () => Date.parse('2025-01-02T00:00:00.000Z') },
+            configurable: true,
+        });
+        const event = {
+            data: snap,
+            params: { userId: 'testUser', eventId: 'testEvent' },
+        };
+        mocks.fileGetMetadata.mockResolvedValueOnce([{
+            generation: 'new-generation',
+            timeCreated: '2025-01-03T00:00:00.000Z',
+        }]);
+
+        await wrapped(event);
+
+        expect(mocks.fileGetMetadata).toHaveBeenCalledTimes(1);
+        expect(mocks.fileDelete).not.toHaveBeenCalled();
+        expect(mocks.loggerWarn).toHaveBeenCalledWith(
+            expect.stringContaining('current object was created at or after the deleted event boundary'),
+            expect.objectContaining({
+                userId: 'testUser',
+                eventId: 'testEvent',
+                path: 'users/testUser/events/testEvent/original.fit',
+            }),
+        );
+    });
+
+    it('should skip legacy source files when current storage metadata has no creation time', async () => {
+        const wrapped = cleanupEventFile as unknown as (event: unknown) => Promise<void>;
+        const snap = testEnv.firestore.makeDocumentSnapshot({
+            originalFile: {
+                path: 'users/testUser/events/testEvent/original.fit',
+                bucket: 'quantified-self-io',
+            },
+        }, 'users/testUser/events/testEvent');
+        Object.defineProperty(snap, 'updateTime', {
+            value: { toMillis: () => Date.parse('2025-01-02T00:00:00.000Z') },
+            configurable: true,
+        });
+        const event = {
+            data: snap,
+            params: { userId: 'testUser', eventId: 'testEvent' },
+        };
+        mocks.fileGetMetadata.mockResolvedValueOnce([{ generation: 'resolved-generation' }]);
+
+        await wrapped(event);
+
+        expect(mocks.fileGetMetadata).toHaveBeenCalledTimes(1);
+        expect(mocks.fileDelete).not.toHaveBeenCalled();
+        expect(mocks.loggerWarn).toHaveBeenCalledWith(
+            expect.stringContaining('current storage metadata has no creation time'),
             expect.objectContaining({
                 userId: 'testUser',
                 eventId: 'testEvent',
