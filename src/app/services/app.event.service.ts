@@ -97,6 +97,7 @@ const SERVER_OWNED_EVENT_UPDATE_FIELDS = [
   'activitiesCount',
   'comparisonTitle',
   'benchmarkStatus',
+  'privacy',
 ] as const;
 
 
@@ -241,7 +242,7 @@ export class AppEventService implements OnDestroy {
   }
 
   /**
-   * Firestore rules treat source-file and comparison classification fields as server-owned.
+   * Firestore rules treat source-file, sharing, and comparison classification fields as server-owned.
    * Frontend write paths must never send these keys, even if the in-memory event
    * instance has them hydrated for download/reparse UX.
    */

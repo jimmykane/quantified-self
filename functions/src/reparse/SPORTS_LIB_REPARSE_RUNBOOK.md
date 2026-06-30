@@ -147,18 +147,15 @@ Activity identity strategy:
 - delete stale old activities not present in the new parsed ID set
 
 ## Bucket Fallback + Auto-Heal
-To handle legacy or incorrect bucket metadata safely, reparse download tries multiple bucket candidates and auto-heals metadata when fallback succeeds.
+To handle incorrect bucket metadata safely, reparse download tries the known canonical buckets and auto-heals metadata when fallback succeeds.
 
 Code constants:
 - `SPORTS_LIB_PRIMARY_BUCKET = 'quantified-self-io'`
-- `SPORTS_LIB_LEGACY_APPSPOT_BUCKET = 'quantified-self-io.appspot.com'`
 
 Download candidate order:
 1. metadata bucket from source-file metadata (if present)
 2. explicit primary bucket
-3. explicit legacy appspot bucket
-4. runtime Admin default bucket (`admin.storage().bucket().name`)
-5. appspot/non-appspot variants of candidates above (deduped)
+3. runtime Admin default bucket (`admin.storage().bucket().name`)
 
 If fallback bucket is used successfully:
 - reparse continues

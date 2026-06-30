@@ -31,6 +31,12 @@ describe('public-startup-route', () => {
     expect(isPublicStartupPath('/tools/compare/saved')).toBe(true);
   });
 
+  it('keeps dynamic share routes visible during auth startup', () => {
+    expect(isPublicStartupPath('/share/event/user-1/event-1')).toBe(true);
+    expect(isPublicStartupPath('/share/comparison/user-1/event-1?utm_source=test')).toBe(true);
+    expect(isPublicStartupPath('/share/unknown/user-1/event-1')).toBe(false);
+  });
+
   it('marks compare routes as auth-sensitive public startup paths', () => {
     expect(isAuthSensitivePublicStartupPath('/tools/compare')).toBe(true);
     expect(isAuthSensitivePublicStartupPath('/tools/compare/saved')).toBe(true);

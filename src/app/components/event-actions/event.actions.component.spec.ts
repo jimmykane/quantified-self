@@ -14,6 +14,7 @@ import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { AppEventReprocessService, ReprocessError } from '../../services/app.event-reprocess.service';
 import { AppProcessingService } from '../../services/app.processing.service';
+import { AppEventSharingService } from '../../services/app.event-sharing.service';
 import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { MatMenuModule } from '@angular/material/menu';
@@ -34,6 +35,7 @@ describe('EventActionsComponent', () => {
     let mockFileService: any;
     let mockSnackBar: any;
     let mockDialog: any;
+    let mockEventSharingService: any;
 
     beforeEach(async () => {
         mockEventService = {
@@ -114,6 +116,15 @@ describe('EventActionsComponent', () => {
                 afterClosed: () => of(true),
             }),
         };
+        mockEventSharingService = {
+            setEventSharing: vi.fn().mockResolvedValue({
+                eventID: 'event-123',
+                privacy: 'public',
+                publicEventUrl: '/share/event/test-uid/event-123',
+                publicComparisonUrl: '/share/comparison/test-uid/event-123',
+            }),
+            copyShareUrl: vi.fn(() => true),
+        };
 
         await TestBed.configureTestingModule({
             declarations: [EventActionsComponent],
@@ -131,6 +142,7 @@ describe('EventActionsComponent', () => {
                 { provide: MatBottomSheet, useValue: { open: vi.fn() } },
                 { provide: AppWindowService, useValue: { windowRef: { open: vi.fn() } } },
                 { provide: Clipboard, useValue: { copy: vi.fn() } },
+                { provide: AppEventSharingService, useValue: mockEventSharingService },
                 { provide: AppAnalyticsService, useValue: { logEvent: vi.fn() } }
             ],
             schemas: [NO_ERRORS_SCHEMA]
@@ -148,13 +160,47 @@ describe('EventActionsComponent', () => {
             getActivityTypesAsString: () => 'Run',
             getFirstActivity: () => ({ hasStreamData: () => false, hasPositionData: () => false }),
             getActivities: () => [],
-            getStat: () => null
+            getStat: () => null,
+            privacy: 'private',
         } as any;
         fixture.detectChanges();
     });
 
     it('should create', () => {
         expect(component).toBeTruthy();
+    });
+
+    it('should enable sharing and copy the event link after confirmation', async () => {
+        await component.shareEventLink();
+
+        expect(mockDialog.open).toHaveBeenCalled();
+        expect(mockEventSharingService.setEventSharing).toHaveBeenCalledWith(component.user, 'event-123', true);
+        expect(mockEventSharingService.copyShareUrl).toHaveBeenCalledWith('event', 'test-uid', 'event-123');
+        expect((component.event as any).privacy).toBe('public');
+    });
+
+    it('should copy an existing public event link without calling the backend', async () => {
+        (component.event as any).privacy = 'public';
+
+        await component.copyPublicEventLink();
+
+        expect(mockEventSharingService.setEventSharing).not.toHaveBeenCalled();
+        expect(mockEventSharingService.copyShareUrl).toHaveBeenCalledWith('event', 'test-uid', 'event-123');
+    });
+
+    it('should disable sharing after confirmation', async () => {
+        (component.event as any).privacy = 'public';
+        mockEventSharingService.setEventSharing.mockResolvedValueOnce({
+            eventID: 'event-123',
+            privacy: 'private',
+            publicEventUrl: '/share/event/test-uid/event-123',
+            publicComparisonUrl: '/share/comparison/test-uid/event-123',
+        });
+
+        await component.stopSharingEvent();
+
+        expect(mockEventSharingService.setEventSharing).toHaveBeenCalledWith(component.user, 'event-123', false);
+        expect((component.event as any).privacy).toBe('private');
     });
 
     describe('downloadOriginals', () => {

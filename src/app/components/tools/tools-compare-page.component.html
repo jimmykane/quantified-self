@@ -870,6 +870,41 @@
                   }
                   <span>{{ item.hasReport ? 'Open report' : 'Run report' }}</span>
                 </button>
+                @if (item.event.privacy !== 'public') {
+                <button
+                  mat-menu-item
+                  type="button"
+                  [disabled]="bulkActionInProgress() || !!sharingEventID()"
+                  (click)="shareComparisonLink(item)">
+                  @if (sharingEventID() === item.id) {
+                  <mat-progress-spinner diameter="18" mode="indeterminate"></mat-progress-spinner>
+                  } @else {
+                  <mat-icon>share</mat-icon>
+                  }
+                  <span>Share link</span>
+                </button>
+                } @else {
+                <button
+                  mat-menu-item
+                  type="button"
+                  [disabled]="bulkActionInProgress() || !!sharingEventID()"
+                  (click)="copyComparisonShareLink(item)">
+                  <mat-icon>link</mat-icon>
+                  <span>Copy public link</span>
+                </button>
+                <button
+                  mat-menu-item
+                  type="button"
+                  [disabled]="bulkActionInProgress() || !!sharingEventID()"
+                  (click)="stopSharingComparison(item)">
+                  @if (sharingEventID() === item.id) {
+                  <mat-progress-spinner diameter="18" mode="indeterminate"></mat-progress-spinner>
+                  } @else {
+                  <mat-icon>link_off</mat-icon>
+                  }
+                  <span>Stop sharing</span>
+                </button>
+                }
                 <button
                   mat-menu-item
                   type="button"

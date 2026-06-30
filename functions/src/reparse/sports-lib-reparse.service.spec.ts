@@ -213,7 +213,6 @@ import {
     reparseEventFromOriginalFiles,
     SPORTS_LIB_REPARSE_SKIP_REASON_NO_ORIGINAL_FILES,
     SPORTS_LIB_PRIMARY_BUCKET,
-    SPORTS_LIB_LEGACY_APPSPOT_BUCKET,
     applyAutoHealedSourceBucketMetadata,
 } from './sports-lib-reparse.service';
 import * as admin from 'firebase-admin';
@@ -415,8 +414,8 @@ describe('sports-lib-reparse.service', () => {
             name: bucketName || 'quantified-self-io',
             file: vi.fn(() => ({
                 download: vi.fn(async () => {
-                    if (bucketName === 'quantified-self-io.appspot.com') {
-                        throw new Error('No such object: quantified-self-io.appspot.com/users/u1/events/e1/original.fit');
+                    if (bucketName === 'metadata-bucket') {
+                        throw new Error('No such object: metadata-bucket/users/u1/events/e1/original.fit');
                     }
                     return [Buffer.from('fit-data')];
                 }),
@@ -424,7 +423,7 @@ describe('sports-lib-reparse.service', () => {
         }));
 
         const result = await parseFromOriginalFilesStrict([
-            { path: 'users/u1/events/e1/original.fit', bucket: 'quantified-self-io.appspot.com' },
+            { path: 'users/u1/events/e1/original.fit', bucket: 'metadata-bucket' },
         ]);
 
         expect(result.sourceFilesCount).toBe(1);
@@ -1894,8 +1893,8 @@ describe('sports-lib-reparse.service', () => {
             name: bucketName || SPORTS_LIB_PRIMARY_BUCKET,
             file: vi.fn(() => ({
                 download: vi.fn(async () => {
-                    if (bucketName === SPORTS_LIB_LEGACY_APPSPOT_BUCKET) {
-                        throw new Error(`No such object: ${SPORTS_LIB_LEGACY_APPSPOT_BUCKET}/users/u1/events/e1/original.fit`);
+                    if (bucketName === 'metadata-bucket') {
+                        throw new Error('No such object: metadata-bucket/users/u1/events/e1/original.fit');
                     }
                     return [Buffer.from('fit-data')];
                 }),
@@ -1906,7 +1905,7 @@ describe('sports-lib-reparse.service', () => {
             eventData: {
                 originalFile: {
                     path: 'users/u1/events/e1/original.fit',
-                    bucket: SPORTS_LIB_LEGACY_APPSPOT_BUCKET,
+                    bucket: 'metadata-bucket',
                 },
                 originalFiles: [
                     null as any,
@@ -1916,7 +1915,7 @@ describe('sports-lib-reparse.service', () => {
                     },
                     {
                         path: 'users/u1/events/e1/original.fit',
-                        bucket: SPORTS_LIB_LEGACY_APPSPOT_BUCKET,
+                        bucket: 'metadata-bucket',
                     },
                 ],
             },

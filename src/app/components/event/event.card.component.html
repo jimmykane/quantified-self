@@ -2,9 +2,19 @@
 
 
 
-  @if (event(); as activeEvent) {
+  @if (!event() && isPublicShare()) {
+  <mat-card class="shared-event-state">
+    <mat-card-content>
+      <mat-icon>link_off</mat-icon>
+      <div>
+        <h1>Shared item unavailable</h1>
+        <p>This shared link is no longer available, or the owner has stopped sharing it.</p>
+      </div>
+    </mat-card-content>
+  </mat-card>
+  } @else if (event(); as activeEvent) {
   <!-- Standard Event Dashboard -->
-  <app-event-summary [event]="activeEvent" [user]='currentUser()' [isOwner]="isOwner()"
+  <app-event-summary [event]="activeEvent" [user]='displayUser()' [isOwner]="isOwner()"
     [selectedActivities]="selectedActivitiesInstant()" [unitSettings]="userUnitSettings()"
     [statsToShow]="basicStatsTypes">
 
@@ -23,7 +33,7 @@
     <!-- Secondary Details Section -->
     <div summary-bottom class="secondary-details-container">
       <div class="responsive-grid">
-        @if (currentUser(); as activeUser) {
+        @if (displayUser(); as activeUser) {
 
         <!-- Map Section -->
         @if (targetUserID() && hasPositionsFlag()) {

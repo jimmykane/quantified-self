@@ -45,7 +45,6 @@ export const SPORTS_LIB_REPARSE_JOBS_COLLECTION = 'sportsLibReparseJobs';
 export const SPORTS_LIB_REPARSE_STATUS_DOC_ID = 'reparseStatus';
 export const SPORTS_LIB_REPARSE_SKIP_REASON_NO_ORIGINAL_FILES = 'NO_ORIGINAL_FILES';
 export const SPORTS_LIB_PRIMARY_BUCKET = 'quantified-self-io';
-export const SPORTS_LIB_LEGACY_APPSPOT_BUCKET = 'quantified-self-io.appspot.com';
 const MERGE_TYPE_VALUES = new Set(['benchmark', 'multi']);
 export {
     SPORTS_LIB_REPARSE_HEAVY_DURATION_THRESHOLD_MS,
@@ -284,13 +283,6 @@ function normalizeBucketName(bucketName?: string): string | null {
     return normalized.length > 0 ? normalized : null;
 }
 
-function getAppspotVariant(bucketName: string): string {
-    if (bucketName.endsWith('.appspot.com')) {
-        return bucketName.replace(/\.appspot\.com$/, '');
-    }
-    return `${bucketName}.appspot.com`;
-}
-
 function pushBucketCandidate(candidates: string[], bucketName?: string | null): void {
     const normalized = normalizeBucketName(bucketName || undefined);
     if (!normalized) {
@@ -305,18 +297,12 @@ function resolveBucketCandidates(metadataBucket?: string): string[] {
     const candidates: string[] = [];
     pushBucketCandidate(candidates, metadataBucket);
     pushBucketCandidate(candidates, SPORTS_LIB_PRIMARY_BUCKET);
-    pushBucketCandidate(candidates, SPORTS_LIB_LEGACY_APPSPOT_BUCKET);
 
     try {
         const defaultBucketName = admin.storage().bucket().name;
         pushBucketCandidate(candidates, defaultBucketName);
     } catch (_error) {
         // Ignore and continue with explicit metadata bucket candidates.
-    }
-
-    const baseCandidates = [...candidates];
-    for (const bucketName of baseCandidates) {
-        pushBucketCandidate(candidates, getAppspotVariant(bucketName));
     }
 
     return candidates;

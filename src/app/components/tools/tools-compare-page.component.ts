@@ -18,6 +18,7 @@ import {
   DataDistance,
   DataHeartRate,
   DataInterface,
+  Privacy,
   User,
   UserUnitSettingsInterface,
 } from '@sports-alliance/sports-lib';
@@ -55,6 +56,7 @@ import { AppBreakpoints } from '../../constants/breakpoints';
 import { AppHapticsService } from '../../services/app.haptics.service';
 import { AppProcessingService } from '../../services/app.processing.service';
 import { BenchmarkReviewService } from '../../services/benchmark-review.service';
+import { AppEventSharingService } from '../../services/app.event-sharing.service';
 import {
   DeviceColorPreferenceDialogDevice,
   DeviceColorPreferencesDialogComponent,
@@ -212,6 +214,7 @@ export class ToolsComparePageComponent implements OnInit {
   private hapticsService = inject(AppHapticsService);
   private processingService = inject(AppProcessingService);
   private benchmarkReviewService = inject(BenchmarkReviewService);
+  private eventSharingService = inject(AppEventSharingService);
   private logger = inject(LoggerService);
   private readonly comparisonSelection = new SelectionModel<string>(true, []);
   private readonly comparisonRowActivationState: TableRowActivationState = createTableRowActivationState();
@@ -228,6 +231,7 @@ export class ToolsComparePageComponent implements OnInit {
   readonly savingDescriptionEventID = signal<string | null>(null);
   readonly editingDescriptionEventID = signal<string | null>(null);
   readonly benchmarkingEventID = signal<string | null>(null);
+  readonly sharingEventID = signal<string | null>(null);
   readonly benchmarkFailureByEventID = signal<Record<string, ComparisonBenchmarkFailure>>({});
   readonly passiveComparisonTableTooltipsDisabled = signal(false);
   readonly descriptionDrafts = signal<Record<string, string>>({});
@@ -923,6 +927,106 @@ export class ToolsComparePageComponent implements OnInit {
     await this.router.navigate(['/user', user.uid, 'event', item.id], {
       queryParams: undefined,
     });
+  }
+
+  async shareComparisonLink(item: ComparisonListItem): Promise<void> {
+    if (this.sharingEventID() || this.bulkActionInProgress()) {
+      return;
+    }
+
+    const user = this.currentUser();
+    if (!user) {
+      await this.signIn('/tools/compare/saved', 'saved_action');
+      return;
+    }
+
+    this.hapticsService.selection();
+    const dialogRef = this.dialog.open(ConfirmationDialogComponent, {
+      data: {
+        title: 'Share comparison publicly?',
+        message: 'Anyone with the link will be able to view this comparison, its benchmark report, activities, and original source files while sharing is enabled.',
+        confirmLabel: 'Share',
+        cancelLabel: 'Cancel',
+        confirmColor: 'primary',
+      } as ConfirmationDialogData,
+    });
+    const confirmed = await firstValueFrom(dialogRef.afterClosed());
+    if (!confirmed) {
+      return;
+    }
+
+    await this.updateComparisonSharing(item, user, true, true);
+  }
+
+  async copyComparisonShareLink(item: ComparisonListItem): Promise<void> {
+    const user = this.currentUser();
+    if (!user) {
+      await this.signIn('/tools/compare/saved', 'saved_action');
+      return;
+    }
+
+    const copied = this.eventSharingService.copyShareUrl('comparison', user.uid, item.id);
+    this.snackBar.open(copied ? 'Public comparison link copied.' : 'Could not copy public link.', undefined, {
+      duration: 2500,
+    });
+  }
+
+  async stopSharingComparison(item: ComparisonListItem): Promise<void> {
+    if (this.sharingEventID() || this.bulkActionInProgress()) {
+      return;
+    }
+
+    const user = this.currentUser();
+    if (!user) {
+      await this.signIn('/tools/compare/saved', 'saved_action');
+      return;
+    }
+
+    this.hapticsService.selection();
+    const dialogRef = this.dialog.open(ConfirmationDialogComponent, {
+      data: {
+        title: 'Stop sharing this comparison?',
+        message: 'The public comparison and event links will stop working. The comparison remains available to you.',
+        confirmLabel: 'Stop sharing',
+        cancelLabel: 'Cancel',
+        confirmColor: 'warn',
+      } as ConfirmationDialogData,
+    });
+    const confirmed = await firstValueFrom(dialogRef.afterClosed());
+    if (!confirmed) {
+      return;
+    }
+
+    await this.updateComparisonSharing(item, user, false, false);
+  }
+
+  private async updateComparisonSharing(
+    item: ComparisonListItem,
+    user: User,
+    enabled: boolean,
+    copyLink: boolean,
+  ): Promise<void> {
+    this.sharingEventID.set(item.id);
+    try {
+      const response = await this.eventSharingService.setEventSharing(user, item.id, enabled);
+      this.updateComparisonEventInLoadedRows(item.id, (event) => {
+        event.privacy = response.privacy === 'public' ? Privacy.Public : Privacy.Private;
+        return event;
+      });
+      if (enabled && copyLink) {
+        const copied = this.eventSharingService.copyShareUrl('comparison', user.uid, item.id);
+        this.snackBar.open(copied ? 'Public comparison link copied.' : 'Sharing enabled.', undefined, { duration: 2500 });
+      } else {
+        this.snackBar.open('Sharing stopped.', undefined, { duration: 2500 });
+      }
+      this.hapticsService.success();
+    } catch (error) {
+      this.logger.error('[ToolsComparePageComponent] Failed to update comparison sharing', { eventID: item.id }, error);
+      this.snackBar.open('Could not update sharing.', undefined, { duration: 3500 });
+      this.hapticsService.error();
+    } finally {
+      this.sharingEventID.set(null);
+    }
   }
 
   onComparisonRowPointerDown(event: PointerEvent): void {

@@ -14,6 +14,33 @@
   margin: 0 auto;
 }
 
+.shared-event-state {
+  max-width: 720px;
+  width: 100%;
+  margin: 48px auto;
+}
+
+.shared-event-state mat-card-content {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+.shared-event-state mat-icon {
+  flex: 0 0 auto;
+  margin-top: 4px;
+}
+
+.shared-event-state h1 {
+  margin: 0 0 8px;
+  font-size: 1.5rem;
+  line-height: 1.2;
+}
+
+.shared-event-state p {
+  margin: 0;
+}
+
 .global-download-progress {
   position: absolute;
   top: 0;

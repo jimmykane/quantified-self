@@ -29,7 +29,7 @@ export default defineConfig({
         environment: 'jsdom',
         setupFiles: ['src/test-setup.ts'],
         include: ['**/*.spec.ts'],
-        exclude: ['functions/**', 'node_modules/**', 'src/firestore.rules.spec.ts'],
+        exclude: ['functions/**', 'node_modules/**', 'src/firestore.rules.spec.ts', 'src/storage.rules.spec.ts'],
         reporters: ['default'],
     }
 });

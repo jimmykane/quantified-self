@@ -1,7 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { ResolveFn, Router, ActivatedRouteSnapshot, RouterStateSnapshot } from '@angular/router';
-import { DataAltitude, DataGrade, DataGradeSmooth, DataPotentialStamina, DataStamina, EventInterface, User } from '@sports-alliance/sports-lib';
-import { of, throwError, EMPTY } from 'rxjs';
+import { DataAltitude, DataGrade, DataGradeSmooth, DataPotentialStamina, DataStamina, User } from '@sports-alliance/sports-lib';
+import { of, throwError } from 'rxjs';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { AppEventService } from '../services/app.event.service';
 import { AppUserService } from '../services/app.user.service';
@@ -144,6 +144,61 @@ describe('eventResolver', () => {
             expect(result).toBeNull();
             expect(routerSpy.navigate).toHaveBeenCalledWith(['/dashboard']);
             expect(snackBarSpy.open).toHaveBeenCalled();
+            done();
+        });
+    }));
+
+    it('should return public fallback data instead of redirecting when shared route params are missing', () => new Promise<void>(done => {
+        const route = new ActivatedRouteSnapshot();
+        (route as any).data = {
+            publicShare: true,
+            shareKind: 'event',
+        };
+        vi.spyOn(route.paramMap, 'get').mockReturnValue(null);
+        const state = {} as RouterStateSnapshot;
+
+        (executeResolver(route, state) as any).subscribe((result: EventResolverData) => {
+            expect(result).toEqual({
+                event: null,
+                user: null,
+                publicShare: true,
+                shareKind: 'event',
+                openBenchmarkOnLoad: false,
+                loadError: 'missing_params',
+            });
+            expect(routerSpy.navigate).not.toHaveBeenCalled();
+            done();
+        });
+    }));
+
+    it('should return public fallback data instead of redirecting when a shared event is unavailable', () => new Promise<void>(done => {
+        eventServiceSpy.getEventActivitiesAndSomeStreams.mockReturnValue(of(null));
+        userServiceSpy.getUserChartDataTypesToUse.mockReturnValue([]);
+
+        const route = new ActivatedRouteSnapshot();
+        (route as any).data = {
+            publicShare: true,
+            shareKind: 'comparison',
+            openBenchmarkOnLoad: true,
+        };
+        vi.spyOn(route.paramMap, 'get').mockImplementation((key) => {
+            if (key === 'eventID') return '123';
+            if (key === 'userID') return '456';
+            return null;
+        });
+        const state = {} as RouterStateSnapshot;
+
+        (executeResolver(route, state) as any).subscribe((result: EventResolverData) => {
+            expect(result).toEqual({
+                event: null,
+                user: mockUser,
+                publicShare: true,
+                shareKind: 'comparison',
+                openBenchmarkOnLoad: true,
+                loadError: 'not_found',
+            });
+            expect(routerSpy.navigate).not.toHaveBeenCalled();
+            expect(snackBarSpy.open).not.toHaveBeenCalled();
             done();
         });
     }));

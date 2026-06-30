@@ -71,6 +71,8 @@ export const CLIENT_RENDERED_APP_ROUTES = [
   'mytracks',
   'routes',
   'settings',
+  'share/event/:userID/:eventID',
+  'share/comparison/:userID/:eventID',
   'user/:userID/event/:eventID',
   'user/:userID/route/:routeID',
   'policies',

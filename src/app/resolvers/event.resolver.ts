@@ -16,20 +16,42 @@ import {
     DataDistance
 } from '@sports-alliance/sports-lib';
 import { map, switchMap, catchError, take } from 'rxjs/operators';
-import { of, EMPTY, Observable } from 'rxjs';
+import { of, EMPTY } from 'rxjs';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { AppAuthService } from '../authentication/app.auth.service';
 import { LoggerService } from '../services/logger.service';
 import { getAppNonUnitBasedChartDataTypes } from '../helpers/app-chart-data-types.helper';
 
 export interface EventResolverData {
-    event: EventInterface;
+    event: EventInterface | null;
     user: User | null;
+    publicShare?: boolean;
+    shareKind?: 'event' | 'comparison';
+    openBenchmarkOnLoad?: boolean;
+    loadError?: 'missing_params' | 'not_found' | 'unavailable';
+}
+
+function getRouteDataValue<T>(route: ActivatedRouteSnapshot, key: string): T | undefined {
+    let currentRoute: ActivatedRouteSnapshot | null = route;
+    while (currentRoute) {
+        const routeData = (currentRoute as { data?: Record<string, unknown> }).data;
+        if (routeData && Object.prototype.hasOwnProperty.call(routeData, key)) {
+            return routeData[key] as T;
+        }
+
+        try {
+            currentRoute = currentRoute.parent;
+        } catch {
+            currentRoute = null;
+        }
+    }
+
+    return undefined;
 }
 
 export const eventResolver: ResolveFn<EventResolverData> = (
     route: ActivatedRouteSnapshot,
-    state: RouterStateSnapshot
+    _state: RouterStateSnapshot
 ) => {
     const eventService = inject(AppEventService);
     const userService = inject(AppUserService);
@@ -40,8 +62,23 @@ export const eventResolver: ResolveFn<EventResolverData> = (
 
     const eventID = route.paramMap.get('eventID');
     const targetUserID = route.paramMap.get('userID');
+    const publicShare = getRouteDataValue<boolean>(route, 'publicShare') === true;
+    const shareKind = getRouteDataValue<'event' | 'comparison'>(route, 'shareKind');
+    const openBenchmarkOnLoad = getRouteDataValue<boolean>(route, 'openBenchmarkOnLoad') === true;
+
+    const publicFallback = (loadError: EventResolverData['loadError'], user: User | null = null): EventResolverData => ({
+        event: null,
+        user,
+        publicShare,
+        shareKind,
+        openBenchmarkOnLoad,
+        loadError,
+    });
 
     if (!eventID || !targetUserID) {
+        if (publicShare) {
+            return of(publicFallback('missing_params'));
+        }
         router.navigate(['/dashboard']);
         return EMPTY;
     }
@@ -94,8 +131,11 @@ export const eventResolver: ResolveFn<EventResolverData> = (
         map(({ event, user }) => {
             if (event) {
                 // Determine layout mode based on event data
-                return { event, user };
+                return { event, user, publicShare, shareKind, openBenchmarkOnLoad };
             } else {
+                if (publicShare) {
+                    return publicFallback('not_found', user);
+                }
                 snackBar.open('Event not found', 'Close', { duration: 3000 });
                 router.navigate(['/dashboard']);
                 return null;
@@ -110,6 +150,9 @@ export const eventResolver: ResolveFn<EventResolverData> = (
                 || error?.message?.includes('original source file')
             ) {
                 message = 'Event data unavailable: original source files are missing or invalid.';
+            }
+            if (publicShare) {
+                return of(publicFallback('unavailable'));
             }
             snackBar.open(message, 'Close', { duration: 5000 });
             router.navigate(['/dashboard']);

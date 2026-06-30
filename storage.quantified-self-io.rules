@@ -1,9 +1,21 @@
 rules_version = '2';
 service firebase.storage {
-  match /b/quantified-self-io/o {
+  match /b/{bucket}/o {
+    match /users/{userId}/events/{eventId}/{allPaths=**} {
+      function isPublicParentEvent() {
+        return firestore.exists(/databases/(default)/documents/users/$(userId)/events/$(eventId))
+          && firestore.get(/databases/(default)/documents/users/$(userId)/events/$(eventId)).data.privacy == 'public';
+      }
+
+      // Public event sharing intentionally exposes the original source files while enabled.
+      allow read: if (request.auth != null && request.auth.uid == userId)
+        || (resource.metadata.privacy == 'public' && isPublicParentEvent());
+      allow write: if false;
+    }
+
     match /users/{userId}/{allPaths=**} {
       // Client apps can read their own stored originals, but uploads/writes are backend-only.
-      allow read: if request.auth.uid == userId;
+      allow read: if request.auth != null && request.auth.uid == userId;
       allow write: if false;
     }
   }

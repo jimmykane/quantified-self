@@ -124,6 +124,10 @@ service cloud.firestore {
       }
 
         match /events/{eventID} {
+          function isPublicEvent() {
+            return resource.data.privacy == 'public';
+          }
+
           function serverOwnedEventFields() {
             return [
               'originalFile',
@@ -134,14 +138,16 @@ service cloud.firestore {
               'sourceFilesCount',
               'activitiesCount',
               'comparisonTitle',
-              'benchmarkStatus'
+              'benchmarkStatus',
+              'privacy'
             ];
           }
 
           // RESTRICTED ACCESS: Must be owner AND have a valid role (Free, Basic, or PRO)
           // TEMPORARILY DISABLED FOR TESTING - Re-enable when ready to enforce paywall
           // allow read, write: if request.auth.uid == userID && isSubscribed();
-          allow read: if request.auth.uid == userID;
+          allow get: if isOwner() || isPublicEvent();
+          allow list: if isOwner();
           allow create: if false;
           allow update: if request.auth.uid == userID
             && !request.resource.data.diff(resource.data).affectedKeys().hasAny(serverOwnedEventFields());
@@ -218,7 +224,14 @@ service cloud.firestore {
               );
             }
 
-            allow read: if request.auth.uid == userID;
+            function parentEventIsPublic(data) {
+              return data.keys().hasAll(['eventID']) && (
+                data.eventID is string &&
+                get(/databases/$(database)/documents/users/$(userID)/events/$(data.eventID)).data.privacy == 'public'
+              );
+            }
+
+            allow read: if request.auth.uid == userID || parentEventIsPublic(resource.data);
             allow create: if false;
             allow delete: if false;
             allow update: if request.auth.uid == userID
