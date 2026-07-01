@@ -1,6 +1,7 @@
 import { HttpsError } from 'firebase-functions/v2/https';
 import * as logger from 'firebase-functions/logger';
 import * as admin from 'firebase-admin';
+import { FieldValue } from 'firebase-admin/firestore';
 import { onAdminCall } from '../../shared/auth';
 import { GARMIN_API_TOKENS_COLLECTION_NAME } from '../../garmin/constants';
 import { SUUNTOAPP_ACCESS_TOKENS_COLLECTION_NAME } from '../../suunto/constants';
@@ -195,7 +196,7 @@ async function getGlobalCollectionCount(
                     computedAt,
                     expireAt,
                     refreshedBy: options.requestedByUid || null,
-                    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+                    updatedAt: FieldValue.serverTimestamp(),
                 }, { merge: true });
             } catch (error) {
                 logger.warn(`Failed to write admin global ${options.logLabel} count cache`, error);
