@@ -524,7 +524,8 @@ describe('help.content', () => {
     const dataAndPrivacySection = HELP_SECTIONS.find(section => section.id === 'data-and-privacy');
 
     expect(dataAndPrivacySection?.content).toContain('Event and saved comparison sharing is manual');
-    expect(dataAndPrivacySection?.content).toContain('original source files');
+    expect(dataAndPrivacySection?.content).toContain('every object stored under that event\'s source-file folder');
+    expect(dataAndPrivacySection?.content).toContain('users/{uid}/events/{eventId}/...');
     expect(dataAndPrivacySection?.content).toContain('Use **Stop sharing**');
     expect(dataAndPrivacySection?.content).toContain('cannot generate or save new reports');
   });

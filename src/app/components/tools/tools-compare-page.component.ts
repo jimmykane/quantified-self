@@ -950,7 +950,7 @@ export class ToolsComparePageComponent implements OnInit {
     const dialogRef = this.dialog.open(ConfirmationDialogComponent, {
       data: {
         title: 'Share comparison publicly?',
-        message: 'Anyone with the link will be able to view this comparison, its benchmark report, activities, and original source files while sharing is enabled.',
+        message: 'Anyone with the link will be able to view this comparison, its benchmark report, activities, and every source-file object stored under this event folder while sharing is enabled.',
         confirmLabel: 'Share',
         cancelLabel: 'Cancel',
         confirmColor: 'primary',

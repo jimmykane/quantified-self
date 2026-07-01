@@ -120,7 +120,7 @@ export class EventActionsComponent implements OnInit, OnDestroy {
     const eventID = this.event.getID();
     const confirmed = await this.confirmReprocessAction({
       title: 'Share event publicly?',
-      message: 'Anyone with the link will be able to view this event, its activities, and the original source files while sharing is enabled.',
+      message: 'Anyone with the link will be able to view this event, its activities, and every source-file object stored under this event folder while sharing is enabled.',
       confirmLabel: 'Share',
       confirmColor: 'primary',
     });

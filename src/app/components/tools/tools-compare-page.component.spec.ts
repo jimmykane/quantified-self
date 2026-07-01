@@ -2373,6 +2373,7 @@ describe('ToolsComparePageComponent', () => {
     expect(dialogOpen).toHaveBeenCalledWith(ConfirmationDialogComponent, expect.objectContaining({
       data: expect.objectContaining({
         title: 'Share comparison publicly?',
+        message: expect.stringContaining('every source-file object stored under this event folder'),
       }),
     }));
     expect(eventSharingServiceMock.setEventSharing).not.toHaveBeenCalled();

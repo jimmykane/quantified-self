@@ -190,6 +190,7 @@ describe('EventActionsComponent', () => {
         expect(mockDialog.open).toHaveBeenCalledWith(ConfirmationDialogComponent, expect.objectContaining({
             data: expect.objectContaining({
                 title: 'Share event publicly?',
+                message: expect.stringContaining('every source-file object stored under this event folder'),
             }),
         }));
         expect(mockEventSharingService.setEventSharing).not.toHaveBeenCalled();

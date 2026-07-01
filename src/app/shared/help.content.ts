@@ -646,9 +646,9 @@ Suunto and COROS history imports are queued jobs. Large ranges can take hours or
 
 - Profile and activity visibility is managed by the platform and is not configurable in the app UI.
 - Event and saved comparison sharing is manual. Use **Share link** on an event or saved comparison to create a public URL.
-- Public links expose the shared event, its activities, any saved benchmark report, and the original source files while sharing is enabled.
+- Public links expose the shared event, its activities, any saved benchmark report, and every object stored under that event's source-file folder (\`users/{uid}/events/{eventId}/...\`) while sharing is enabled.
 - Public links do not expire automatically and are marked noindex, but anyone with the URL can open them.
-- Use **Stop sharing** from the event details menu or saved comparison row to make the event, activities, and source files private again.
+- Use **Stop sharing** from the event details menu or saved comparison row to make the event, activities, and event source-file folder private again.
 - Anonymous viewers are read-only. They can open an existing saved benchmark report from a comparison link, but they cannot generate or save new reports.
 - For AI Insights, we do **not** share your raw activity data with AI providers.
 - Only the minimum derived stats required to answer your prompt are sent.
