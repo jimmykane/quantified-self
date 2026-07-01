@@ -8,7 +8,8 @@ service firebase.storage {
       }
 
       // Event folders store original source files only. Public event sharing intentionally exposes
-      // known object paths under the shared event folder while the parent event is public.
+      // every object under this event folder by direct get while the parent event is public.
+      // Anonymous listing remains denied.
       allow read: if request.auth != null && request.auth.uid == userId;
       allow get: if isPublicParentEvent();
       allow write: if false;
