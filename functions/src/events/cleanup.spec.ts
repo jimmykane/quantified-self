@@ -11,6 +11,7 @@ const {
     fileDeleteMock,
     fileGetMetadataMock,
     fileMock,
+    getFilesMock,
     loggerErrorMock,
     loggerWarnMock,
     recursiveDeleteMock,
@@ -62,10 +63,12 @@ const {
         delete: fileDeleteMock,
         getMetadata: fileGetMetadataMock,
     });
+    const getFilesMock = vi.fn().mockResolvedValue([[]]);
     const storageMock = {
         bucket: vi.fn((name?: string) => ({
             name: name || 'quantified-self-io',
             file: fileMock,
+            getFiles: getFilesMock,
             deleteFiles: deleteFilesMock,
         })),
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -83,6 +86,7 @@ const {
         fileDeleteMock,
         fileGetMetadataMock,
         fileMock,
+        getFilesMock,
         loggerErrorMock,
         loggerWarnMock,
         runTransactionMock,
@@ -129,6 +133,7 @@ describe('cleanupEventFile', () => {
         fileDelete: fileDeleteMock,
         fileGetMetadata: fileGetMetadataMock,
         file: fileMock,
+        getFiles: getFilesMock,
         docGet: docGetMock,
         loggerError: loggerErrorMock,
         loggerWarn: loggerWarnMock,
@@ -145,12 +150,14 @@ describe('cleanupEventFile', () => {
         mocks.runTransaction.mockReset();
         mocks.fileDelete.mockReset();
         mocks.fileGetMetadata.mockReset();
+        mocks.getFiles.mockReset();
         mocks.docGet.mockResolvedValue({ exists: false });
         mocks.fileDelete.mockResolvedValue(undefined);
         mocks.fileGetMetadata.mockResolvedValue([{
             generation: 'resolved-generation',
             timeCreated: '2025-01-01T00:00:00.000Z',
         }]);
+        mocks.getFiles.mockResolvedValue([[]]);
         mocks.transactionGet.mockImplementation(async (refOrQuery: { path?: string }) => {
             if (refOrQuery.path === 'users/testUser/events/testEvent') {
                 return { exists: false };
@@ -274,6 +281,97 @@ describe('cleanupEventFile', () => {
             ignoreNotFound: true,
             ifGenerationMatch: '12345',
         });
+    });
+
+    it('should delete stale unreferenced source files listed under the deleted event prefix', async () => {
+        const wrapped = cleanupEventFile as unknown as (event: unknown) => Promise<void>;
+
+        const snap = testEnv.firestore.makeDocumentSnapshot({
+            originalFiles: [{
+                path: 'users/testUser/events/testEvent/original.fit.gz',
+                bucket: 'quantified-self-io',
+                generation: 'current-generation',
+            }],
+        }, 'users/testUser/events/testEvent');
+        const event = {
+            data: snap,
+            time: '2025-01-02T00:00:00.000Z',
+            params: {
+                userId: 'testUser',
+                eventId: 'testEvent',
+            },
+        };
+        mocks.getFiles.mockResolvedValueOnce([[
+            {
+                name: 'users/testUser/events/testEvent/original.fit',
+                metadata: {
+                    generation: 'stale-generation',
+                    timeCreated: '2025-01-01T00:00:00.000Z',
+                },
+            },
+            {
+                name: 'users/testUser/events/testEvent/original.fit.gz',
+                metadata: {
+                    generation: 'current-generation',
+                    timeCreated: '2025-01-01T00:00:00.000Z',
+                },
+            },
+        ]]);
+
+        await wrapped(event);
+
+        expect(mocks.deleteFiles).not.toHaveBeenCalled();
+        expect(mocks.getFiles).toHaveBeenCalledWith({
+            prefix: 'users/testUser/events/testEvent/',
+        });
+        expect(mocks.file).toHaveBeenCalledWith('users/testUser/events/testEvent/original.fit.gz');
+        expect(mocks.file).toHaveBeenCalledWith('users/testUser/events/testEvent/original.fit');
+        expect(mocks.fileDelete).toHaveBeenCalledWith({
+            ignoreNotFound: true,
+            ifGenerationMatch: 'current-generation',
+        });
+        expect(mocks.fileDelete).toHaveBeenCalledWith({
+            ignoreNotFound: true,
+            ifGenerationMatch: 'stale-generation',
+        });
+        expect(mocks.fileGetMetadata).not.toHaveBeenCalled();
+    });
+
+    it('should skip unreferenced source files listed under the event prefix when they were created after deletion', async () => {
+        const wrapped = cleanupEventFile as unknown as (event: unknown) => Promise<void>;
+
+        const snap = testEnv.firestore.makeDocumentSnapshot({}, 'users/testUser/events/testEvent');
+        const event = {
+            data: snap,
+            time: '2025-01-02T00:00:00.000Z',
+            params: {
+                userId: 'testUser',
+                eventId: 'testEvent',
+            },
+        };
+        mocks.getFiles.mockResolvedValueOnce([[
+            {
+                name: 'users/testUser/events/testEvent/original.fit',
+                metadata: {
+                    generation: 'new-generation',
+                    timeCreated: '2025-01-03T00:00:00.000Z',
+                },
+            },
+        ]]);
+
+        await wrapped(event);
+
+        expect(mocks.file).toHaveBeenCalledWith('users/testUser/events/testEvent/original.fit');
+        expect(mocks.fileDelete).not.toHaveBeenCalled();
+        expect(mocks.fileGetMetadata).not.toHaveBeenCalled();
+        expect(mocks.loggerWarn).toHaveBeenCalledWith(
+            expect.stringContaining('current object was created at or after the deleted event boundary'),
+            expect.objectContaining({
+                userId: 'testUser',
+                eventId: 'testEvent',
+                path: 'users/testUser/events/testEvent/original.fit',
+            }),
+        );
     });
 
     it('should skip source file cleanup when originalFile metadata is missing', async () => {
@@ -594,7 +692,7 @@ describe('cleanupEventFile', () => {
             expect.objectContaining({
                 userId: 'testUser',
                 eventId: 'testEvent',
-                phase: 'before_legacy_storage_delete',
+                phase: 'before_unpinned_storage_delete',
             }),
         );
     });

@@ -91,40 +91,59 @@ describe('Storage Security Rules', () => {
         });
     }
 
-    it('allows owners to read their own private event source files', async () => {
+    it('allows owners to read their own event source files', async () => {
         await seedFile(filePath, 'private');
 
         await assertSucceeds(storageForUser(userId).ref(filePath).getMetadata());
     });
 
-    it('allows anonymous reads for event source files with public metadata', async () => {
+    it('allows anonymous reads for event source files when the parent event is public', async () => {
         await seedEventPrivacy('public');
-        await seedFile(filePath, 'public');
+        await seedFile(filePath);
 
         await assertSucceeds(storageForUser().ref(filePath).getMetadata());
     });
 
-    it('denies anonymous reads for public metadata when the parent event is private', async () => {
+    it('allows anonymous reads for all objects under a public event source-file folder', async () => {
+        const staleOriginalPath = `users/${userId}/events/${eventId}/stale-original.fit`;
+        await seedEventPrivacy('public');
+        await seedFile(filePath, 'private');
+        await seedFile(staleOriginalPath);
+
+        await assertSucceeds(storageForUser().ref(filePath).getMetadata());
+        await assertSucceeds(storageForUser().ref(staleOriginalPath).getMetadata());
+    });
+
+    it('denies anonymous listing under a public event source-file folder', async () => {
+        await seedEventPrivacy('public');
+        await seedFile(filePath);
+
+        await assertFails(storageForUser().ref(`users/${userId}/events/${eventId}`).listAll());
+        await assertSucceeds(storageForUser(userId).ref(`users/${userId}/events/${eventId}`).listAll());
+    });
+
+    it('denies anonymous reads when the parent event is private regardless of object metadata', async () => {
         await seedEventPrivacy('private');
         await seedFile(filePath, 'public');
 
         await assertFails(storageForUser().ref(filePath).getMetadata());
     });
 
-    it('denies anonymous reads for public metadata when the parent event is missing', async () => {
+    it('denies anonymous reads when the parent event is missing regardless of object metadata', async () => {
         await seedFile(filePath, 'public');
 
         await assertFails(storageForUser().ref(filePath).getMetadata());
     });
 
-    it('denies anonymous and other-user reads for private event source files', async () => {
+    it('denies anonymous and other-user reads for source files under private events', async () => {
+        await seedEventPrivacy('private');
         await seedFile(filePath, 'private');
 
         await assertFails(storageForUser().ref(filePath).getMetadata());
         await assertFails(storageForUser(otherUserId).ref(filePath).getMetadata());
     });
 
-    it('does not allow public metadata outside the event source-file path', async () => {
+    it('does not allow public reads outside the event source-file path', async () => {
         await seedFile(otherFilePath, 'public');
 
         await assertFails(storageForUser().ref(otherFilePath).getMetadata());

@@ -7,9 +7,10 @@ service firebase.storage {
           && firestore.get(/databases/(default)/documents/users/$(userId)/events/$(eventId)).data.privacy == 'public';
       }
 
-      // Public event sharing intentionally exposes the original source files while enabled.
-      allow read: if (request.auth != null && request.auth.uid == userId)
-        || (resource.metadata.privacy == 'public' && isPublicParentEvent());
+      // Event folders store original source files only. Public event sharing intentionally exposes
+      // known object paths under the shared event folder while the parent event is public.
+      allow read: if request.auth != null && request.auth.uid == userId;
+      allow get: if isPublicParentEvent();
       allow write: if false;
     }
 
