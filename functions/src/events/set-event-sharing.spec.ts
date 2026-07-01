@@ -121,7 +121,7 @@ describe('setEventSharing', () => {
     });
   });
 
-  it('allows the owner to enable sharing by updating only event privacy', async () => {
+  it('allows the owner to enable sharing after validating source files', async () => {
     const result = await callSetEventSharing({
       auth: { uid: 'user-1' },
       app: { appId: 'app-id' },
@@ -130,10 +130,13 @@ describe('setEventSharing', () => {
 
     expect(hoisted.mockDoc).toHaveBeenCalledWith('users/user-1/events/event-1');
     expect(hoisted.mockSanitizeEventFirestoreWritePayload).toHaveBeenCalledWith({ privacy: 'public' });
+    expect(hoisted.mockBucket).toHaveBeenCalledWith();
+    expect(hoisted.mockFile).toHaveBeenCalledWith('users/user-1/events/event-1/original.fit');
+    expect(hoisted.mockGetMetadata).toHaveBeenCalled();
+    expect(hoisted.mockGetMetadata.mock.invocationCallOrder[0]).toBeLessThan(
+      hoisted.mockEventUpdate.mock.invocationCallOrder[0],
+    );
     expect(hoisted.mockEventUpdate).toHaveBeenCalledWith({ privacy: 'public' });
-    expect(hoisted.mockBucket).not.toHaveBeenCalled();
-    expect(hoisted.mockFile).not.toHaveBeenCalled();
-    expect(hoisted.mockGetMetadata).not.toHaveBeenCalled();
     expect(hoisted.mockSetMetadata).not.toHaveBeenCalled();
     expect(result).toEqual({
       eventID: 'event-1',
@@ -161,15 +164,15 @@ describe('setEventSharing', () => {
     });
   });
 
-  it('allows sharing when original source metadata is missing or invalid because storage access is event-prefix scoped', async () => {
+  it('allows the owner to enable sharing with legacy originalFile metadata when originalFiles is absent', async () => {
     hoisted.mockEventGet.mockResolvedValueOnce({
       exists: true,
       data: () => ({
         privacy: 'private',
-        originalFiles: [
-          { path: 'users/user-1/events/other-event/original.fit' },
-          { path: 'users/user-1/events/event-1/original.fit', bucket: 'other-bucket' },
-        ],
+        originalFile: {
+          path: 'users/user-1/events/event-1/legacy.fit',
+          originalFilename: 'legacy.fit',
+        },
       }),
     });
 
@@ -179,13 +182,116 @@ describe('setEventSharing', () => {
       data: { userID: 'user-1', eventID: 'event-1', enabled: true },
     });
 
+    expect(hoisted.mockFile).toHaveBeenCalledWith('users/user-1/events/event-1/legacy.fit');
     expect(hoisted.mockEventUpdate).toHaveBeenCalledWith({ privacy: 'public' });
-    expect(hoisted.mockBucket).not.toHaveBeenCalled();
     expect(hoisted.mockSetMetadata).not.toHaveBeenCalled();
     expect(result).toMatchObject({
       eventID: 'event-1',
       privacy: 'public',
     });
+  });
+
+  it('rejects enabling sharing when source file metadata is missing', async () => {
+    hoisted.mockEventGet.mockResolvedValueOnce({
+      exists: true,
+      data: () => ({
+        privacy: 'private',
+        originalFiles: [],
+      }),
+    });
+
+    await expect(callSetEventSharing({
+      auth: { uid: 'user-1' },
+      app: { appId: 'app-id' },
+      data: { userID: 'user-1', eventID: 'event-1', enabled: true },
+    })).rejects.toMatchObject({ code: 'failed-precondition' });
+
+    expect(hoisted.mockFile).not.toHaveBeenCalled();
+    expect(hoisted.mockSetMetadata).not.toHaveBeenCalled();
+    expect(hoisted.mockEventUpdate).not.toHaveBeenCalled();
+  });
+
+  it('rejects enabling sharing when source file metadata points outside the event folder', async () => {
+    hoisted.mockEventGet.mockResolvedValueOnce({
+      exists: true,
+      data: () => ({
+        privacy: 'private',
+        originalFiles: [
+          { path: 'users/user-1/events/other-event/original.fit' },
+        ],
+      }),
+    });
+
+    await expect(callSetEventSharing({
+      auth: { uid: 'user-1' },
+      app: { appId: 'app-id' },
+      data: { userID: 'user-1', eventID: 'event-1', enabled: true },
+    })).rejects.toMatchObject({ code: 'failed-precondition' });
+
+    expect(hoisted.mockFile).not.toHaveBeenCalled();
+    expect(hoisted.mockSetMetadata).not.toHaveBeenCalled();
+    expect(hoisted.mockEventUpdate).not.toHaveBeenCalled();
+  });
+
+  it('rejects enabling sharing when source file metadata path has surrounding whitespace', async () => {
+    hoisted.mockEventGet.mockResolvedValueOnce({
+      exists: true,
+      data: () => ({
+        privacy: 'private',
+        originalFiles: [
+          { path: ' users/user-1/events/event-1/original.fit ' },
+        ],
+      }),
+    });
+
+    await expect(callSetEventSharing({
+      auth: { uid: 'user-1' },
+      app: { appId: 'app-id' },
+      data: { userID: 'user-1', eventID: 'event-1', enabled: true },
+    })).rejects.toMatchObject({ code: 'failed-precondition' });
+
+    expect(hoisted.mockFile).not.toHaveBeenCalled();
+    expect(hoisted.mockSetMetadata).not.toHaveBeenCalled();
+    expect(hoisted.mockEventUpdate).not.toHaveBeenCalled();
+  });
+
+  it('rejects enabling sharing when source file metadata points outside the default bucket', async () => {
+    hoisted.mockEventGet.mockResolvedValueOnce({
+      exists: true,
+      data: () => ({
+        privacy: 'private',
+        originalFiles: [
+          {
+            path: 'users/user-1/events/event-1/original.fit',
+            bucket: 'other-bucket',
+          },
+        ],
+      }),
+    });
+
+    await expect(callSetEventSharing({
+      auth: { uid: 'user-1' },
+      app: { appId: 'app-id' },
+      data: { userID: 'user-1', eventID: 'event-1', enabled: true },
+    })).rejects.toMatchObject({ code: 'failed-precondition' });
+
+    expect(hoisted.mockFile).not.toHaveBeenCalled();
+    expect(hoisted.mockSetMetadata).not.toHaveBeenCalled();
+    expect(hoisted.mockEventUpdate).not.toHaveBeenCalled();
+  });
+
+  it('rejects enabling sharing when a source file object is missing', async () => {
+    hoisted.mockGetMetadata.mockRejectedValueOnce(Object.assign(new Error('not found'), { code: 404 }));
+
+    await expect(callSetEventSharing({
+      auth: { uid: 'user-1' },
+      app: { appId: 'app-id' },
+      data: { userID: 'user-1', eventID: 'event-1', enabled: true },
+    })).rejects.toMatchObject({ code: 'failed-precondition' });
+
+    expect(hoisted.mockFile).toHaveBeenCalledWith('users/user-1/events/event-1/original.fit');
+    expect(hoisted.mockSetMetadata).not.toHaveBeenCalled();
+    expect(hoisted.mockEventUpdate).not.toHaveBeenCalled();
   });
 
   it('does not touch storage when disabling sharing fails', async () => {
