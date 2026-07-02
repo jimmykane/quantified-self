@@ -10,6 +10,24 @@
       ],
       "headers": [
         {
+          "source": "/share/event/**",
+          "headers": [
+            {
+              "key": "X-Robots-Tag",
+              "value": "noindex, nofollow"
+            }
+          ]
+        },
+        {
+          "source": "/share/comparison/**",
+          "headers": [
+            {
+              "key": "X-Robots-Tag",
+              "value": "noindex, nofollow"
+            }
+          ]
+        },
+        {
           "source": "404.html",
           "headers": [
             {
@@ -119,6 +137,14 @@
         },
         {
           "source": "/settings",
+          "destination": "/index.csr.html"
+        },
+        {
+          "source": "/share/event/*/*",
+          "destination": "/index.csr.html"
+        },
+        {
+          "source": "/share/comparison/*/*",
           "destination": "/index.csr.html"
         },
         {
@@ -270,6 +296,14 @@
           "destination": "/index.csr.html"
         },
         {
+          "source": "/share/event/*/*",
+          "destination": "/index.csr.html"
+        },
+        {
+          "source": "/share/comparison/*/*",
+          "destination": "/index.csr.html"
+        },
+        {
           "source": "/user/*/event/*",
           "destination": "/index.csr.html"
         },
@@ -298,7 +332,7 @@
   },
   "storage": [
     {
-      "bucket": "quantified-self-io",
+      "target": "production",
       "rules": "storage.quantified-self-io.rules"
     }
   ],
@@ -311,6 +345,9 @@
     },
     "firestore": {
       "port": 8081
+    },
+    "storage": {
+      "port": 9199
     },
     "ui": {
       "enabled": true,

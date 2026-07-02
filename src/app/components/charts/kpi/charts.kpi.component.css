@@ -27,11 +27,23 @@
   padding-right: 58px;
 }
 
+.kpi-layout.kpi-layout-empty {
+  grid-template-rows: minmax(0, 1fr);
+}
+
+.kpi-layout.kpi-layout-row.kpi-layout-empty {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .kpi-header {
   display: grid;
   gap: 4px;
   padding: 0 10px;
   min-width: 0;
+}
+
+.kpi-layout-empty .kpi-header {
+  align-content: center;
 }
 
 .kpi-layout-row .kpi-header {
@@ -234,6 +246,10 @@
   overflow: hidden;
 }
 
+.kpi-layout-empty .kpi-sparkline-shell {
+  display: none;
+}
+
 .kpi-sparkline {
   display: block;
   width: 100%;
@@ -260,6 +276,10 @@
 
   .kpi-layout.kpi-layout-row.kpi-layout-reserve-actions {
     padding-right: 38px;
+  }
+
+  .kpi-layout.kpi-layout-row.kpi-layout-empty {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .kpi-layout-row .kpi-header {

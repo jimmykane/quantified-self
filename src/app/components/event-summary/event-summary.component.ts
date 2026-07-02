@@ -87,7 +87,7 @@ export class EventSummaryComponent implements OnChanges {
     this.bottomSheet.open(EventStatsBottomSheetComponent, {
       data: {
         event: this.event,
-        user: this.user,
+        user: this.ownerMetadataLookupUser,
         selectedActivities: this.selectedActivities,
         userUnitSettings: this.unitSettings
       },
@@ -117,6 +117,10 @@ export class EventSummaryComponent implements OnChanges {
   get deviceSourceSuppressedLabels(): readonly string[] {
     this.ensureTemplateState();
     return this.deviceSourceSuppressedLabelsValue;
+  }
+
+  get ownerMetadataLookupUser(): User | null {
+    return this.isOwner ? this.user || null : null;
   }
 
   get heroStats(): string[] {

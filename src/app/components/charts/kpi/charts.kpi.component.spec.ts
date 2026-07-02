@@ -251,12 +251,15 @@ describe('ChartsKpiComponent', () => {
     fixture.detectChanges();
     await fixture.whenStable();
 
-    expect(component.showNoDataError).toBe(true);
+    expect(component.showNoDataError).toBe(false);
+    expect(component.kpiNoDataState).toBe('pending');
+    expect(component.primaryValueText).toBe('--');
+    expect(component.primaryLabel).toBe('Updating metrics');
     expect(component.noDataErrorMessage).toBe('Updating KPI data');
     expect(component.noDataErrorHint).toBe('Training metrics are being recalculated in the background.');
   });
 
-  it('shows no-data through the shared loading overlay after compact KPI loading finishes', async () => {
+  it('shows missing KPI data inside the compact tile after loading finishes', async () => {
     component.compactRow = true;
     component.chartType = DASHBOARD_ACWR_KPI_CHART_TYPE;
     component.acwr = null;
@@ -271,12 +274,14 @@ describe('ChartsKpiComponent', () => {
     const nativeElement = fixture.nativeElement as HTMLElement;
     const overlay = getLoadingOverlay();
 
-    expect(component.showNoDataError).toBe(true);
+    expect(component.showNoDataError).toBe(false);
+    expect(component.kpiNoDataState).toBe('missing');
+    expect(component.primaryValueText).toBe('--');
+    expect(component.primaryLabel).toBe('Needs training load');
     expect(overlay.isLoading).toBe(false);
-    expect(overlay.hasError).toBe(true);
-    expect(overlay.errorMessage).toBe('No KPI data yet');
-    expect(overlay.errorHint).toBe('Upload activities with training load to calculate this metric.');
-    expect(nativeElement.querySelector('.kpi-row-status')).toBeNull();
+    expect(overlay.hasError).toBe(false);
+    expect(nativeElement.querySelector('.kpi-layout-empty')).toBeTruthy();
+    expect(nativeElement.textContent).toContain('Needs training load');
   });
 
   it('uses the shared loading overlay while compact KPI data is loading', async () => {
@@ -286,15 +291,17 @@ describe('ChartsKpiComponent', () => {
 
     fixture.detectChanges();
     await fixture.whenStable();
+    fixture.detectChanges();
 
     const nativeElement = fixture.nativeElement as HTMLElement;
     const overlay = getLoadingOverlay();
 
-    expect(component.showNoDataError).toBe(true);
+    expect(component.showNoDataError).toBe(false);
+    expect(component.kpiNoDataState).toBe('missing');
     expect(overlay.isLoading).toBe(true);
     expect(overlay.hasError).toBe(false);
     expect(overlay.showSkeleton).toBe(false);
-    expect(nativeElement.querySelector('.kpi-row-status')).toBeNull();
+    expect(nativeElement.querySelector('.kpi-layout-empty')).toBeTruthy();
   });
 
   it('renders Form Now readiness KPI presentation', async () => {

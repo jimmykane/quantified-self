@@ -7,6 +7,7 @@
     [class.upload-cta]="!promptAction"
     [class.prompt-action]="promptAction"
     [class.qs-mat-primary]="promptAction"
+    [class.full-width-action]="fullWidth"
     [class.icon-only]="isHandset" [matTooltip]="isHandset ? 'Upload Activities' : ''">
     <mat-icon *ngIf="isHandset">upload</mat-icon>
     <ng-container *ngIf="!isHandset">
@@ -32,6 +33,7 @@
   [class.upload-cta]="!promptAction"
   [class.prompt-action]="promptAction"
   [class.qs-mat-primary]="promptAction"
+  [class.full-width-action]="fullWidth"
   [class.icon-only]="isHandset" [matTooltip]="isHandset ? 'Upgrade to Pro' : ''">
   <mat-icon *ngIf="isHandset">upgrade</mat-icon>
   <span *ngIf="!isHandset" class="upload-button-content">

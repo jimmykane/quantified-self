@@ -194,6 +194,7 @@ describe('EventCardComponent', () => {
         };
         mockBenchmarkFlowService = {
             openBenchmarkEntry: vi.fn().mockResolvedValue(undefined),
+            openBenchmarkReport: vi.fn().mockResolvedValue(undefined),
         };
 
         await TestBed.configureTestingModule({
@@ -361,6 +362,161 @@ describe('EventCardComponent', () => {
         expect(config).not.toHaveProperty('initialSelection');
         expect(config.event).toBe(comparisonEvent);
         expect(config.hydrateStreamsForGeneration).toBe(true);
+    });
+
+    it('should auto-open an existing public comparison report without entering generation flow', () => {
+        const referenceActivity = createActivity('act-a');
+        const testActivity = createActivity('act-b');
+        const savedResult = {
+            referenceId: 'act-a',
+            testId: 'act-b',
+            timestamp: new Date('2026-01-01T00:00:00.000Z'),
+            metrics: {
+                gnss: {},
+                streamMetrics: {},
+            },
+        };
+        const comparisonEvent = {
+            ...createEvent('evt1', [referenceActivity, testActivity], 'Public Tool Comparison'),
+            benchmarkResults: {
+                'act-a_act-b': savedResult,
+            },
+        } as any;
+
+        routeData$.next({
+            event: {
+                event: comparisonEvent,
+                user: null,
+                publicShare: true,
+                shareKind: 'comparison',
+                openBenchmarkOnLoad: true,
+            } as any,
+        });
+
+        expect(mockBenchmarkFlowService.openBenchmarkEntry).not.toHaveBeenCalled();
+        expect(mockBenchmarkFlowService.openBenchmarkReport).toHaveBeenCalledWith(expect.objectContaining({
+            event: comparisonEvent,
+            user: undefined,
+            result: savedResult,
+            initialSelection: [referenceActivity, testActivity],
+            allowRerun: false,
+        }));
+    });
+
+    it('should omit signed-in non-owner users from public comparison reports', () => {
+        const referenceActivity = createActivity('act-a');
+        const testActivity = createActivity('act-b');
+        const savedResult = {
+            referenceId: 'act-a',
+            testId: 'act-b',
+            timestamp: new Date('2026-01-01T00:00:00.000Z'),
+            metrics: {
+                gnss: {},
+                streamMetrics: {},
+            },
+        };
+        const comparisonEvent = {
+            ...createEvent('evt1', [referenceActivity, testActivity], 'Public Tool Comparison'),
+            benchmarkResults: {
+                'act-a_act-b': savedResult,
+            },
+        } as any;
+        routeUserID = 'ownerUser';
+
+        routeData$.next({
+            event: {
+                event: comparisonEvent,
+                user: mockUser,
+                publicShare: true,
+                shareKind: 'comparison',
+                openBenchmarkOnLoad: true,
+            } as any,
+        });
+
+        expect(component.isOwner()).toBe(false);
+        expect(mockBenchmarkFlowService.openBenchmarkReport).toHaveBeenCalledWith(expect.objectContaining({
+            event: comparisonEvent,
+            user: undefined,
+            result: savedResult,
+            allowRerun: false,
+        }));
+    });
+
+    it('should pass the owner user into public comparison reports', () => {
+        const referenceActivity = createActivity('act-a');
+        const testActivity = createActivity('act-b');
+        const savedResult = {
+            referenceId: 'act-a',
+            testId: 'act-b',
+            timestamp: new Date('2026-01-01T00:00:00.000Z'),
+            metrics: {
+                gnss: {},
+                streamMetrics: {},
+            },
+        };
+        const comparisonEvent = {
+            ...createEvent('evt1', [referenceActivity, testActivity], 'Public Tool Comparison'),
+            benchmarkResults: {
+                'act-a_act-b': savedResult,
+            },
+        } as any;
+        routeUserID = 'testUser';
+
+        routeData$.next({
+            event: {
+                event: comparisonEvent,
+                user: mockUser,
+                publicShare: true,
+                shareKind: 'comparison',
+                openBenchmarkOnLoad: true,
+            } as any,
+        });
+
+        expect(component.isOwner()).toBe(true);
+        expect(mockBenchmarkFlowService.openBenchmarkReport).toHaveBeenCalledWith(expect.objectContaining({
+            event: comparisonEvent,
+            user: mockUser,
+            result: savedResult,
+            allowRerun: false,
+        }));
+    });
+
+    it('should keep anonymous public shares read-only while using fallback display settings', () => {
+        const publicEvent = createEvent('evt1', [createActivity('act-public')], 'Public Shared Event');
+        routeUserID = 'ownerUser';
+
+        routeData$.next({
+            event: {
+                event: publicEvent,
+                user: null,
+                publicShare: true,
+                shareKind: 'event',
+            } as any,
+        });
+
+        expect(component.displayUser()?.uid).toBe('ownerUser');
+        expect(component.isOwner()).toBe(false);
+    });
+
+    it('should clear public share data when live sync loses access', () => {
+        const publicEvent = createEvent('evt1', [createActivity('act-public')], 'Public Shared Event');
+        routeUserID = 'ownerUser';
+
+        routeData$.next({
+            event: {
+                event: publicEvent,
+                user: null,
+                publicShare: true,
+                shareKind: 'event',
+            } as any,
+        });
+
+        liveEventDetailsByRouteKey.get('ownerUser:evt1')?.error(new Error('permission-denied'));
+
+        expect(component.event()).toBeNull();
+        expect(component.loadError()).toBe('unavailable');
+        expect(mockRouter.navigate).not.toHaveBeenCalled();
+        expect(mockSnackBar.open).not.toHaveBeenCalled();
     });
 
     it('should set targetUserID signal from route', () => {

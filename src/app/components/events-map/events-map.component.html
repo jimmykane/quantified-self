@@ -1,8 +1,8 @@
 <app-loading-overlay
   [isLoading]="isLoading || !apiLoaded()"
-  [hasError]="noMapData"
-  [errorMessage]="'No map data yet'"
-  [errorHint]="'Pan/zoom wider or load more activities to see markers'"
+  [hasError]="mapLoadFailed"
+  [errorMessage]="'Map unavailable'"
+  [errorHint]="'Could not load the map. Try again later.'"
   [errorIcon]="'map'"
   [showSkeleton]="false"
   height="100%"
@@ -31,5 +31,14 @@
 
   <section class="mapbox-stage">
     <div #mapDiv class="mapbox-map"></div>
+    @if (showMapEmptyState) {
+    <div class="events-map-empty-state" role="status" aria-live="polite">
+      <div class="events-map-empty-state__panel">
+        <mat-icon aria-hidden="true">map</mat-icon>
+        <div class="events-map-empty-state__title">{{ mapEmptyStateTitle }}</div>
+        <div class="events-map-empty-state__hint">{{ mapEmptyStateHint }}</div>
+      </div>
+    </div>
+    }
   </section>
 </app-loading-overlay>

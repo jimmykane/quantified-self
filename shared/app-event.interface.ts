@@ -3,6 +3,7 @@ import { EventInterface } from '@sports-alliance/sports-lib';
 export interface OriginalFileMetaData {
     path: string;
     bucket?: string;
+    generation?: string;
     startDate: Date;
     originalFilename?: string;
 }

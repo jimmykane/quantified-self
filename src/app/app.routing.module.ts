@@ -362,6 +362,29 @@ export const routes: Routes = [
     canMatch: [authGuard, onboardingGuard],
   },
   {
+    path: 'share/event/:userID/:eventID',
+    loadChildren: () => import('./modules/event.module').then(module => module.EventModule),
+    data: {
+      title: 'Shared Event',
+      animation: 'Event',
+      publicShare: true,
+      shareKind: 'event',
+      robots: 'noindex, nofollow',
+    },
+  },
+  {
+    path: 'share/comparison/:userID/:eventID',
+    loadChildren: () => import('./modules/event.module').then(module => module.EventModule),
+    data: {
+      title: 'Shared Comparison',
+      animation: 'Event',
+      publicShare: true,
+      shareKind: 'comparison',
+      openBenchmarkOnLoad: true,
+      robots: 'noindex, nofollow',
+    },
+  },
+  {
     path: 'user/:userID/event/:eventID',
     loadChildren: () => import('./modules/event.module').then(module => module.EventModule),
     data: { title: 'Event Details', animation: 'Event' },

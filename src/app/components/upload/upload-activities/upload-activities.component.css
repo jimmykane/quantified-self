@@ -36,6 +36,11 @@ a.prompt-action[mat-flat-button] {
   box-sizing: border-box;
 }
 
+button.full-width-action,
+a.full-width-action[mat-flat-button] {
+  width: 100%;
+}
+
 .upload-button-content {
   align-items: center;
   display: inline-flex;

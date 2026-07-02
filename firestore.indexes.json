@@ -1,75 +1,6 @@
 {
   "indexes": [
     {
-      "collectionGroup": "suuntoAppAccessTokens",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "disconnectManualReviewRequired",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "disconnectState",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "disconnectNextAttemptAt",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "__name__",
-          "order": "ASCENDING"
-        }
-      ],
-      "density": "SPARSE_ALL"
-    },
-    {
-      "collectionGroup": "COROSAPIAccessTokens",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "disconnectManualReviewRequired",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "disconnectState",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "disconnectNextAttemptAt",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "__name__",
-          "order": "ASCENDING"
-        }
-      ],
-      "density": "SPARSE_ALL"
-    },
-    {
-      "collectionGroup": "garminAPITokens",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "disconnectManualReviewRequired",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "disconnectState",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "disconnectNextAttemptAt",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "__name__",
-          "order": "ASCENDING"
-        }
-      ],
-      "density": "SPARSE_ALL"
-    },
-    {
       "collectionGroup": "activitySyncQueue",
       "queryScope": "COLLECTION",
       "fields": [
@@ -141,6 +72,29 @@
         {
           "fieldPath": "__name__",
           "order": "DESCENDING"
+        }
+      ],
+      "density": "SPARSE_ALL"
+    },
+    {
+      "collectionGroup": "COROSAPIAccessTokens",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "disconnectManualReviewRequired",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "disconnectState",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "disconnectNextAttemptAt",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
         }
       ],
       "density": "SPARSE_ALL"
@@ -606,25 +560,6 @@
       "density": "SPARSE_ALL"
     },
     {
-      "collectionGroup": "metaData",
-      "queryScope": "COLLECTION_GROUP",
-      "fields": [
-        {
-          "fieldPath": "processingEntity",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "sportsLibVersionCode",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "__name__",
-          "order": "ASCENDING"
-        }
-      ],
-      "density": "SPARSE_ALL"
-    },
-    {
       "collectionGroup": "failed_jobs",
       "queryScope": "COLLECTION",
       "fields": [
@@ -724,7 +659,49 @@
       "density": "SPARSE_ALL"
     },
     {
-      "collectionGroup": "sleepSyncQueue",
+      "collectionGroup": "garminAPITokens",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "disconnectManualReviewRequired",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "disconnectState",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "disconnectNextAttemptAt",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
+        }
+      ],
+      "density": "SPARSE_ALL"
+    },
+    {
+      "collectionGroup": "metaData",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        {
+          "fieldPath": "processingEntity",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "sportsLibVersionCode",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
+        }
+      ],
+      "density": "SPARSE_ALL"
+    },
+    {
+      "collectionGroup": "routeDeliverySyncQueue",
       "queryScope": "COLLECTION",
       "fields": [
         {
@@ -733,6 +710,44 @@
         },
         {
           "fieldPath": "dateCreated",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
+        }
+      ],
+      "density": "SPARSE_ALL"
+    },
+    {
+      "collectionGroup": "routeDeliverySyncQueue",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "processed",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "retryCount",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
+        }
+      ],
+      "density": "SPARSE_ALL"
+    },
+    {
+      "collectionGroup": "routeDeliverySyncQueue",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "resultStatus",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "successProcessedAt",
           "order": "ASCENDING"
         },
         {
@@ -790,6 +805,25 @@
         },
         {
           "fieldPath": "retryCount",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
+        }
+      ],
+      "density": "SPARSE_ALL"
+    },
+    {
+      "collectionGroup": "sleepSyncQueue",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "processed",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "dateCreated",
           "order": "ASCENDING"
         },
         {
@@ -998,6 +1032,29 @@
       "density": "SPARSE_ALL"
     },
     {
+      "collectionGroup": "suuntoAppAccessTokens",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "disconnectManualReviewRequired",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "disconnectState",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "disconnectNextAttemptAt",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
+        }
+      ],
+      "density": "SPARSE_ALL"
+    },
+    {
       "collectionGroup": "suuntoAppWorkoutQueue",
       "queryScope": "COLLECTION",
       "fields": [
@@ -1144,63 +1201,6 @@
         },
         {
           "fieldPath": "userName",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "__name__",
-          "order": "ASCENDING"
-        }
-      ],
-      "density": "SPARSE_ALL"
-    },
-    {
-      "collectionGroup": "routeDeliverySyncQueue",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "processed",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "dateCreated",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "__name__",
-          "order": "ASCENDING"
-        }
-      ],
-      "density": "SPARSE_ALL"
-    },
-    {
-      "collectionGroup": "routeDeliverySyncQueue",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "processed",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "retryCount",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "__name__",
-          "order": "ASCENDING"
-        }
-      ],
-      "density": "SPARSE_ALL"
-    },
-    {
-      "collectionGroup": "routeDeliverySyncQueue",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "resultStatus",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "successProcessedAt",
           "order": "ASCENDING"
         },
         {
@@ -1412,6 +1412,25 @@
     },
     {
       "collectionGroup": "queueCleanupTombstones",
+      "fieldPath": "expireAt",
+      "ttl": true,
+      "indexes": [
+        {
+          "order": "ASCENDING",
+          "queryScope": "COLLECTION"
+        },
+        {
+          "order": "DESCENDING",
+          "queryScope": "COLLECTION"
+        },
+        {
+          "arrayConfig": "CONTAINS",
+          "queryScope": "COLLECTION"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "routeDeliverySyncQueue",
       "fieldPath": "expireAt",
       "ttl": true,
       "indexes": [
@@ -1710,25 +1729,6 @@
     },
     {
       "collectionGroup": "userDeletionTombstones",
-      "fieldPath": "expireAt",
-      "ttl": true,
-      "indexes": [
-        {
-          "order": "ASCENDING",
-          "queryScope": "COLLECTION"
-        },
-        {
-          "order": "DESCENDING",
-          "queryScope": "COLLECTION"
-        },
-        {
-          "arrayConfig": "CONTAINS",
-          "queryScope": "COLLECTION"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "routeDeliverySyncQueue",
       "fieldPath": "expireAt",
       "ttl": true,
       "indexes": [

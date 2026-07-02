@@ -19,6 +19,7 @@ const hoisted = vi.hoisted(() => {
   const mockDocSet = vi.fn();
   const mockDocGet = vi.fn();
   const mockStorageSave = vi.fn();
+  const mockStorageGetMetadata = vi.fn();
   const mockWriteAllEventData = vi.fn();
   const mockGenerateEventID = vi.fn();
   const mockGenerateActivityID = vi.fn();
@@ -45,6 +46,7 @@ const hoisted = vi.hoisted(() => {
     mockDocSet,
     mockDocGet,
     mockStorageSave,
+    mockStorageGetMetadata,
     mockWriteAllEventData,
     mockGenerateEventID,
     mockGenerateActivityID,
@@ -123,6 +125,7 @@ vi.mock('firebase-admin', () => {
         name: 'test-bucket',
         file: () => ({
           save: hoisted.mockStorageSave,
+          getMetadata: hoisted.mockStorageGetMetadata,
         }),
       }),
     }),
@@ -258,6 +261,7 @@ describe('uploadActivity', () => {
     hoisted.mockDocSet.mockResolvedValue(undefined);
     hoisted.mockDocGet.mockResolvedValue({ exists: false });
     hoisted.mockStorageSave.mockResolvedValue(undefined);
+    hoisted.mockStorageGetMetadata.mockResolvedValue([{ generation: 'storage-generation-1' }]);
     hoisted.mockGenerateEventID.mockResolvedValue('event-1');
     hoisted.mockGenerateActivityID.mockResolvedValue('activity-1');
     hoisted.mockHasProAccess.mockResolvedValue(false);
@@ -1070,6 +1074,7 @@ describe('uploadActivity', () => {
 
     await storageAdapter.uploadFile('users/user-1/events/adapter-test/original.fit', Buffer.from([0xaa]));
     expect(hoisted.mockStorageSave).toHaveBeenCalledWith(Buffer.from([0xaa]));
+    expect(hoisted.mockStorageGetMetadata).toHaveBeenCalled();
     expect(storageAdapter.getBucketName()).toBe('test-bucket');
   });
 });

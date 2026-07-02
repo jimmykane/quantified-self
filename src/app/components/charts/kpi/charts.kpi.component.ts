@@ -70,6 +70,7 @@ import { EChartsLoaderService } from '../../../services/echarts-loader.service';
 import { LoggerService } from '../../../services/logger.service';
 
 type ChartOption = Parameters<EChartsType['setOption']>[0];
+type KpiNoDataState = 'missing' | 'pending';
 
 interface KpiPresentation {
   title: string;
@@ -143,6 +144,7 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
   public secondaryLabel = 'Acute / chronic load';
   public secondaryValueText = '';
   public showNoDataError = false;
+  public kpiNoDataState: KpiNoDataState | null = null;
   public noDataErrorMessage = 'No KPI data yet';
   public noDataErrorHint = 'Upload activities with training load to calculate this metric.';
   public noDataErrorIcon = 'insights';
@@ -266,16 +268,25 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
     this.secondaryValueText = presentation.secondaryValueText || '';
 
     const hasRenderableValue = presentation.primaryValue !== null || !!presentation.primaryValueText;
-    this.showNoDataError = !hasRenderableValue;
+    this.showNoDataError = false;
+    this.kpiNoDataState = null;
     this.noDataErrorMessage = 'No KPI data yet';
     this.noDataErrorHint = 'Upload activities with training load to calculate this metric.';
     this.noDataErrorIcon = 'insights';
 
-    if (isDerivedMetricPendingStatus(this.resolveActiveStatus()) && !hasRenderableValue) {
-      this.showNoDataError = true;
-      this.noDataErrorMessage = 'Updating KPI data';
-      this.noDataErrorHint = 'Training metrics are being recalculated in the background.';
-      this.noDataErrorIcon = 'autorenew';
+    if (!hasRenderableValue) {
+      const isPending = isDerivedMetricPendingStatus(this.resolveActiveStatus());
+      this.kpiNoDataState = isPending ? 'pending' : 'missing';
+      this.primaryValueText = '--';
+      this.primaryValueIsText = false;
+      this.primaryLabel = isPending ? 'Updating metrics' : 'Needs training load';
+      this.secondaryLabel = '';
+      this.secondaryValueText = '';
+      if (isPending) {
+        this.noDataErrorMessage = 'Updating KPI data';
+        this.noDataErrorHint = 'Training metrics are being recalculated in the background.';
+        this.noDataErrorIcon = 'autorenew';
+      }
     }
     this.changeDetectorRef.markForCheck();
 

@@ -104,6 +104,7 @@ describe('EventWriter', () => {
             startDate: new Date(),
             originalFilename: 'test.fit',
         };
+        storageAdapter.uploadFile.mockResolvedValueOnce({ generation: '101' });
         await writer.writeAllEventData('user-1', eventMock, originalFile);
 
         expect(storageAdapter.uploadFile).toHaveBeenCalledWith(
@@ -118,6 +119,7 @@ describe('EventWriter', () => {
                 originalFile: expect.objectContaining({
                     path: 'users/user-1/events/event-1/original.fit',
                     bucket: 'quantified-self-io',
+                    generation: '101',
                     startDate: originalFile.startDate,
                     originalFilename: 'test.fit',
                 }),
@@ -125,6 +127,7 @@ describe('EventWriter', () => {
                     expect.objectContaining({
                         path: 'users/user-1/events/event-1/original.fit',
                         bucket: 'quantified-self-io',
+                        generation: '101',
                         startDate: originalFile.startDate,
                         originalFilename: 'test.fit',
                     })
@@ -136,6 +139,9 @@ describe('EventWriter', () => {
     it('should upload multiple files with indexed naming', async () => {
         const file1: any = { data: 'data1', extension: 'fit', startDate: new Date() };
         const file2: any = { data: 'data2', extension: 'gpx', startDate: new Date() };
+        storageAdapter.uploadFile
+            .mockResolvedValueOnce({ generation: 201 })
+            .mockResolvedValueOnce({ generation: '202' });
 
         await writer.writeAllEventData('user-1', eventMock, [file1, file2]);
 
@@ -155,8 +161,14 @@ describe('EventWriter', () => {
             expect.any(Array),
             expect.objectContaining({
                 originalFiles: expect.arrayContaining([
-                    expect.objectContaining({ path: 'users/user-1/events/event-1/original_0.fit' }),
-                    expect.objectContaining({ path: 'users/user-1/events/event-1/original_1.gpx' })
+                    expect.objectContaining({
+                        path: 'users/user-1/events/event-1/original_0.fit',
+                        generation: '201',
+                    }),
+                    expect.objectContaining({
+                        path: 'users/user-1/events/event-1/original_1.gpx',
+                        generation: '202',
+                    })
                 ])
             })
         );

@@ -436,6 +436,50 @@ describe('EventTableComponent', () => {
         expect(updateDisplayedColumnsSpy).toHaveBeenCalled();
     });
 
+    it('should add a fixed Shared column before Actions only for owner action tables', () => {
+        component.selectedColumns = ['Shared', 'Distance'];
+        component.showActions = true;
+        (component as any).updateDisplayedColumns();
+
+        expect(component.displayedColumns).toContain('Shared');
+        expect(component.displayedColumns.filter(column => column === 'Shared')).toHaveLength(1);
+        expect(component.displayedColumns.indexOf('Shared')).toBeLessThan(component.displayedColumns.indexOf('Actions'));
+        expect(component.isColumnHeaderSortable('Shared')).toBe(true);
+
+        component.showActions = false;
+        (component as any).updateDisplayedColumns();
+
+        expect(component.displayedColumns).not.toContain('Shared');
+    });
+
+    it('should derive shared row display and sorting state from event privacy', () => {
+        const publicEvent = new MockEvent('public-event') as any;
+        publicEvent.privacy = 'public';
+        const privateEvent = new MockEvent('private-event') as any;
+        privateEvent.privacy = 'private';
+        component.events = [publicEvent, privateEvent];
+
+        (component as any).processChanges('spec_shared_state');
+
+        expect((component.data.data[0] as any).Shared).toBe('Shared');
+        expect((component.data.data[0] as any)['Shared Title']).toContain('Anyone with the link can view this event');
+        expect((component.data.data[0] as any)['sort.Shared']).toBe(1);
+        expect((component.data.data[1] as any).Shared).toBe('');
+        expect((component.data.data[1] as any)['Shared Title']).toBe('');
+        expect((component.data.data[1] as any)['sort.Shared']).toBe(0);
+    });
+
+    it('should render shared state through an explicit table cell branch', () => {
+        const template = readFileSync(
+            join(process.cwd(), 'src/app/components/event-table/event.table.component.html'),
+            'utf8'
+        );
+
+        expect(template).toContain("column === 'Shared'");
+        expect(template).toContain('shared-state-cell');
+        expect(template).toContain("row['Shared Title']");
+    });
+
     it('should not change paginator page size when already in sync', () => {
         const updateDisplayedColumnsSpy = vi.spyOn(component as any, 'updateDisplayedColumns');
         component.user.settings.dashboardSettings.tableSettings.selectedColumns = ['Name', 'Start Date'];
@@ -612,6 +656,8 @@ describe('EventTableComponent', () => {
         expect(component.data.filterPredicate(row, 'test run,missing')).toBe(true);
         expect(component.data.filterPredicate(row, 'missing,test description')).toBe(true);
         expect(component.data.filterPredicate(row, 'missing,unknown')).toBe(false);
+        expect(component.data.filterPredicate(row, 'shared')).toBe(true);
+        expect(component.data.filterPredicate(row, 'anyone with the link')).toBe(false);
     });
 
     it('should treat all filtered rows as selected even when full data has additional hidden rows', () => {

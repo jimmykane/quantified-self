@@ -27,6 +27,7 @@ const hoisted = vi.hoisted(() => {
   const mockDocSet = vi.fn();
   const mockRecursiveDelete = vi.fn();
   const mockStorageSave = vi.fn();
+  const mockStorageGetMetadata = vi.fn();
   const mockWriteAllEventData = vi.fn();
   const capturedFirestoreAdapter = { value: undefined as unknown };
   const capturedStorageAdapter = { value: undefined as unknown };
@@ -57,6 +58,7 @@ const hoisted = vi.hoisted(() => {
     mockDocSet,
     mockRecursiveDelete,
     mockStorageSave,
+    mockStorageGetMetadata,
     mockWriteAllEventData,
     capturedFirestoreAdapter,
     capturedStorageAdapter,
@@ -137,6 +139,7 @@ vi.mock('firebase-admin', () => {
         name: 'test-bucket',
         file: () => ({
           save: hoisted.mockStorageSave,
+          getMetadata: hoisted.mockStorageGetMetadata,
         }),
       }),
     }),
@@ -389,6 +392,7 @@ describe('createToolComparisonEvent', () => {
     hoisted.mockDocSet.mockResolvedValue(undefined);
     hoisted.mockRecursiveDelete.mockResolvedValue(undefined);
     hoisted.mockStorageSave.mockResolvedValue(undefined);
+    hoisted.mockStorageGetMetadata.mockResolvedValue([{ generation: 'storage-generation-1' }]);
     hoisted.mockGenerateActivityID.mockImplementation(async (_eventID: string, index: number) => `activity-${index}`);
     hoisted.mockGetUserDeletionGuardState.mockResolvedValue({
       userExists: true,

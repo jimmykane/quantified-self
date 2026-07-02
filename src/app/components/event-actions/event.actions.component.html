@@ -2,6 +2,22 @@
   <mat-icon>more_vert</mat-icon>
 </button>
 <mat-menu #menu="matMenu" class="qs-menu-panel">
+  @if (!isPubliclyShared) {
+  <button mat-menu-item (click)="shareEventLink()" [disabled]="isSharing">
+    <mat-icon>share</mat-icon>
+    <span>Share link</span>
+  </button>
+  } @else {
+  <button mat-menu-item (click)="copyPublicEventLink()" [disabled]="isSharing">
+    <mat-icon>link</mat-icon>
+    <span>Copy public link</span>
+  </button>
+  <button mat-menu-item (click)="stopSharingEvent()" [disabled]="isSharing">
+    <mat-icon>link_off</mat-icon>
+    <span>Stop sharing</span>
+  </button>
+  }
+
   <button mat-menu-item class="regenerate-stat-item" (click)="reGenerateStatistics()" [disabled]="isReprocessing">
     <mat-icon>autorenew</mat-icon>
     <span class="menu-item-with-tooltip">Regenerate activity statistics using Sports-Lib <mat-icon class="toolTip"

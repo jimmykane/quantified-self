@@ -55,6 +55,8 @@
     "/mytracks",
     "/routes",
     "/settings",
+    "/share/event/*/*",
+    "/share/comparison/*/*",
     "/user/*/event/*",
     "/user/*/route/*",
     "/policies",

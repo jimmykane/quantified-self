@@ -25,6 +25,7 @@ export class UploadActivitiesComponent extends UploadAbstractDirective implement
   @Input() disabled = false;
   @Input() promptAction = false;
   @Input() showUploadIcon = false;
+  @Input() fullWidth = false;
   @Input() showRemainingCountWithCustomLabel = false;
   @Input() uploadIcon = 'upload_file';
   @Output() activityUploadComplete = new EventEmitter<void>();

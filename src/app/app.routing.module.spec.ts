@@ -68,6 +68,28 @@ describe('AppRoutingModule routes', () => {
     expect(routesRoute?.data?.['robots']).toBe('noindex, follow');
   });
 
+  it('should define unguarded noindexed public share routes', () => {
+    const eventShareRoute = routes.find(route => route.path === 'share/event/:userID/:eventID');
+    const comparisonShareRoute = routes.find(route => route.path === 'share/comparison/:userID/:eventID');
+
+    expect(eventShareRoute?.canMatch).toBeUndefined();
+    expect(eventShareRoute?.loadChildren).toBeTypeOf('function');
+    expect(eventShareRoute?.data).toMatchObject({
+      publicShare: true,
+      shareKind: 'event',
+      robots: 'noindex, nofollow',
+    });
+
+    expect(comparisonShareRoute?.canMatch).toBeUndefined();
+    expect(comparisonShareRoute?.loadChildren).toBeTypeOf('function');
+    expect(comparisonShareRoute?.data).toMatchObject({
+      publicShare: true,
+      shareKind: 'comparison',
+      openBenchmarkOnLoad: true,
+      robots: 'noindex, nofollow',
+    });
+  });
+
   it('should protect ai insights behind auth, onboarding, and pro access', () => {
     const aiInsightsRoute = routes.find(route => route.path === 'ai-insights');
 

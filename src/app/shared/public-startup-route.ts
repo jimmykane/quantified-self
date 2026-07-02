@@ -29,6 +29,11 @@ const AUTH_SENSITIVE_PUBLIC_STARTUP_PATHS = new Set([
   '/tools/compare/saved',
 ]);
 
+const PUBLIC_STARTUP_PREFIXES = [
+  '/share/event/',
+  '/share/comparison/',
+] as const;
+
 export function hasAngularServerContext(documentRef: Document | null | undefined): boolean {
   return !!documentRef?.querySelector('app-root[ng-server-context]');
 }
@@ -51,11 +56,21 @@ export function documentRoutePath(documentRef: Document | null | undefined): str
 }
 
 export function isPublicStartupPath(path: string): boolean {
-  return PUBLIC_STARTUP_PATHS.has(normalizeRoutePath(path));
+  const normalizedPath = normalizeRoutePath(path);
+  return PUBLIC_STARTUP_PATHS.has(normalizedPath)
+    || PUBLIC_STARTUP_PREFIXES.some(prefix => normalizedPath.startsWith(prefix));
 }
 
 export function isPublicStartupDocument(documentRef: Document | null | undefined): boolean {
   return isPublicStartupPath(documentRoutePath(documentRef));
+}
+
+export function isRouteLoaderSuppressedStartupPath(path: string): boolean {
+  return PUBLIC_STARTUP_PATHS.has(normalizeRoutePath(path));
+}
+
+export function isRouteLoaderSuppressedStartupDocument(documentRef: Document | null | undefined): boolean {
+  return isRouteLoaderSuppressedStartupPath(documentRoutePath(documentRef));
 }
 
 export function isAuthSensitivePublicStartupPath(path: string): boolean {

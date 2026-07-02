@@ -99,6 +99,12 @@ describe('DataTypeIconComponent', () => {
     expect(component.getColumnHeaderIcon(DataRPE.type)).toBe('fitness_center');
   });
 
+  it('should return a public icon for the shared event state column', () => {
+    const component = new DataTypeIconComponent();
+
+    expect(component.getColumnHeaderIcon('Shared')).toBe('public');
+  });
+
   it('should map ascent and descent to elevation', () => {
     const component = new DataTypeIconComponent();
 

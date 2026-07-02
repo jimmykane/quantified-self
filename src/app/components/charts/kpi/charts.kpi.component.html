@@ -1,7 +1,8 @@
 <app-loading-overlay [isLoading]="isLoading" [hasError]="!isLoading && showNoDataError" [allowErrorPassthrough]="true" [errorMessage]="noDataErrorMessage"
   [errorHint]="noDataErrorHint" [errorIcon]="noDataErrorIcon" [showSkeleton]="false" height="100%" [style.height.%]="100">
   <section class="kpi-layout" [class.kpi-layout-dark]="darkTheme" [class.kpi-layout-row]="compactRow"
-    [class.kpi-layout-reserve-actions]="reserveTitleActionSpace" (click)="onKpiLayoutClick($event)">
+    [class.kpi-layout-reserve-actions]="reserveTitleActionSpace" [class.kpi-layout-empty]="kpiNoDataState !== null"
+    (click)="onKpiLayoutClick($event)">
     <header class="kpi-header" [class.kpi-header-reserve-actions]="reserveTitleActionSpace">
       @if (compactRow) {
       <div class="kpi-copy-block">
@@ -46,12 +47,16 @@
         </div>
         <div class="kpi-primary-label">{{ primaryLabel }}</div>
       </div>
+      @if (secondaryLabel || secondaryValueText) {
       <div class="kpi-meta">
+        @if (secondaryLabel) {
         <div class="kpi-secondary-label">{{ secondaryLabel }}</div>
+        }
         @if (secondaryValueText) {
         <div class="kpi-secondary-value">{{ secondaryValueText }}</div>
         }
       </div>
+      }
       }
     </header>
     <div class="kpi-sparkline-shell">

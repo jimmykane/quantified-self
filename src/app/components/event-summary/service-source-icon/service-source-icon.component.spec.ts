@@ -67,6 +67,21 @@ describe('ServiceSourceIconComponent', () => {
         expect(component.serviceLogo).toBe('garmin');
     });
 
+    it('should not query metadata when no lookup user is provided', () => {
+        const event = { getID: () => 'event-1' } as any as EventInterface;
+
+        component.user = null;
+        component.event = event;
+        component.ngOnChanges({
+            user: { currentValue: null, previousValue: null, firstChange: true, isFirstChange: () => true },
+            event: { currentValue: event, previousValue: null, firstChange: true, isFirstChange: () => true }
+        });
+
+        expect(eventService.getEventMetaDataKeys).not.toHaveBeenCalled();
+        expect(component.serviceName).toBeNull();
+        expect(component.serviceLogo).toBeNull();
+    });
+
     it('should detect Suunto service source', () => {
         const user = { getID: () => 'user-1' } as any as User;
         const event = { getID: () => 'event-1' } as any as EventInterface;

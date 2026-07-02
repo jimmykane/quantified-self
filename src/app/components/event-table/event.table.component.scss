@@ -147,9 +147,37 @@
 
 /* Allow columns to size naturally or use flex */
 .mat-column-Privacy,
+.mat-column-Shared,
 .mat-column-Actions {
   width: 50px;
   /* Minimal constraint */
+}
+
+.shared-state-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--mat-sys-primary);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.shared-state-cell mat-icon {
+  width: 16px;
+  height: 16px;
+  font-size: 16px;
+  line-height: 16px;
+}
+
+.shared-state-cell--empty {
+  color: var(--mat-sys-on-surface-variant);
+  opacity: 0.55;
+}
+
+.shared-state-empty {
+  display: inline-block;
+  min-width: 16px;
+  text-align: center;
 }
 
 .mat-column-Checkbox {

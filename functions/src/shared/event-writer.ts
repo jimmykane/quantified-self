@@ -27,8 +27,12 @@ export interface FirestoreAdapter {
     generateID(): string;
 }
 
+export interface UploadedStorageFileMetadata {
+    generation?: string | number;
+}
+
 export interface StorageAdapter {
-    uploadFile(path: string, data: unknown, metadata?: unknown): Promise<void>;
+    uploadFile(path: string, data: unknown, metadata?: unknown): Promise<UploadedStorageFileMetadata | void>;
     getBucketName?(): string;  // Optional: some adapters may provide bucket name
 }
 
@@ -96,6 +100,16 @@ function isFirestoreUndefinedValueError(error: Error): boolean {
 function isControlFlowWriteAbort(error: Error): boolean {
     return error.name === 'EventWriteSkippedForDeletedUserError'
         || error.name === 'UserDeletionGuardReadError';
+}
+
+function normalizeStorageGeneration(value: unknown): string | undefined {
+    if (typeof value === 'string' && value.trim().length > 0) {
+        return value.trim();
+    }
+    if (typeof value === 'number' && Number.isFinite(value)) {
+        return `${value}`;
+    }
+    return undefined;
 }
 
 export class EventWriter {
@@ -196,7 +210,7 @@ export class EventWriter {
             if (filesToUpload.length > 0 && this.storageAdapter) {
                 this.logger.info(`Starting upload of ${filesToUpload.length} files...`);
                 const startUpload = Date.now();
-                const uploadedFilesMetadata: { path: string, bucket?: string, startDate: Date, originalFilename?: string }[] = [];
+                const uploadedFilesMetadata: OriginalFileMetaData[] = [];
 
                 for (let i = 0; i < filesToUpload.length; i++) {
                     const file = filesToUpload[i];
@@ -216,12 +230,14 @@ export class EventWriter {
 
                     const subStart = Date.now();
                     this.logger.info(`Uploading file ${i + 1}/${filesToUpload.length} to`, filePath);
-                    await this.storageAdapter.uploadFile(filePath, file.data);
+                    const uploadResult = await this.storageAdapter.uploadFile(filePath, file.data);
                     this.logger.info(`File ${i + 1} uploaded in ${Date.now() - subStart}ms`);
+                    const generation = normalizeStorageGeneration(uploadResult?.generation);
 
                     uploadedFilesMetadata.push({
                         path: filePath,
                         bucket: this.storageAdapter.getBucketName?.() || this.bucketName,
+                        ...(generation ? { generation } : {}),
                         startDate: file.startDate,
                         originalFilename: file.originalFilename // Save if present
                     });

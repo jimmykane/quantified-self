@@ -827,6 +827,32 @@
             </td>
           </ng-container>
 
+          <ng-container matColumnDef="sharing">
+            <th mat-header-cell *matHeaderCellDef>
+              <span class="comparison-header-label">
+                <mat-icon class="comparison-header-icon" aria-hidden="true">{{ comparisonHeaderMaterialIcons.sharing }}</mat-icon>
+                <span>Shared</span>
+              </span>
+            </th>
+            <td mat-cell *matCellDef="let item">
+              <span
+                class="sharing-cell"
+                [class.sharing-cell--empty]="!item.isShared"
+                [matTooltip]="item.sharingTitle"
+                [matTooltipDisabled]="!item.isShared || passiveComparisonTableTooltipsDisabled()"
+                matTooltipTouchGestures="off"
+                [attr.title]="item.sharingTitle"
+                [attr.aria-label]="item.isShared ? item.sharingTitle : 'Not shared'">
+                @if (item.isShared) {
+                <mat-icon aria-hidden="true">public</mat-icon>
+                <span class="sharing-label">{{ item.sharingLabel }}</span>
+                } @else {
+                <span class="sharing-empty">-</span>
+                }
+              </span>
+            </td>
+          </ng-container>
+
           <ng-container matColumnDef="actions">
             <th mat-header-cell *matHeaderCellDef>
               <span class="comparison-header-label comparison-header-label--actions">
@@ -870,6 +896,41 @@
                   }
                   <span>{{ item.hasReport ? 'Open report' : 'Run report' }}</span>
                 </button>
+                @if (item.event.privacy !== 'public') {
+                <button
+                  mat-menu-item
+                  type="button"
+                  [disabled]="bulkActionInProgress() || !!sharingEventID()"
+                  (click)="shareComparisonLink(item)">
+                  @if (sharingEventID() === item.id) {
+                  <mat-progress-spinner diameter="18" mode="indeterminate"></mat-progress-spinner>
+                  } @else {
+                  <mat-icon>share</mat-icon>
+                  }
+                  <span>Share link</span>
+                </button>
+                } @else {
+                <button
+                  mat-menu-item
+                  type="button"
+                  [disabled]="bulkActionInProgress() || !!sharingEventID()"
+                  (click)="copyComparisonShareLink(item)">
+                  <mat-icon>link</mat-icon>
+                  <span>Copy public link</span>
+                </button>
+                <button
+                  mat-menu-item
+                  type="button"
+                  [disabled]="bulkActionInProgress() || !!sharingEventID()"
+                  (click)="stopSharingComparison(item)">
+                  @if (sharingEventID() === item.id) {
+                  <mat-progress-spinner diameter="18" mode="indeterminate"></mat-progress-spinner>
+                  } @else {
+                  <mat-icon>link_off</mat-icon>
+                  }
+                  <span>Stop sharing</span>
+                </button>
+                }
                 <button
                   mat-menu-item
                   type="button"

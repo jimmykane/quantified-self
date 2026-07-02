@@ -1409,6 +1409,7 @@ describe('AppEventService', () => {
             comparisonTitle: 'Spoofed comparison',
             benchmarkReviewTags: ['review'],
             benchmarkStatus: 'complete',
+            privacy: 'public',
         };
 
         (doc as Mock).mockReturnValue({});
@@ -1429,6 +1430,7 @@ describe('AppEventService', () => {
         expect(writtenPayload.comparisonTitle).toBeUndefined();
         expect(writtenPayload.benchmarkReviewTags).toEqual(['review']);
         expect(writtenPayload.benchmarkStatus).toBeUndefined();
+        expect(writtenPayload.privacy).toBeUndefined();
     });
 
     it('should keep primitive update payloads unchanged in updateEventProperties', async () => {
@@ -1506,6 +1508,7 @@ describe('AppEventService', () => {
             activitiesCount: 4,
             comparisonTitle: 'Spoofed comparison',
             benchmarkStatus: 'complete',
+            privacy: 'public',
         };
 
         (doc as Mock).mockReturnValue({});
@@ -1542,6 +1545,7 @@ describe('AppEventService', () => {
         expect(writtenEventPatch.activitiesCount).toBeUndefined();
         expect(writtenEventPatch.comparisonTitle).toBeUndefined();
         expect(writtenEventPatch.benchmarkStatus).toBeUndefined();
+        expect(writtenEventPatch.privacy).toBeUndefined();
         expect(hasStreamsKey(writtenEventPatch)).toBe(false);
         expect(mocks.batchCommit).toHaveBeenCalledTimes(1);
     });
@@ -1553,6 +1557,50 @@ describe('AppEventService', () => {
         const count = await service.getEventCount(user);
 
         expect(count).toBe(42);
+    });
+
+    it('should check whether any event exists using a single-document query', async () => {
+        const user = { uid: 'user-any' } as any;
+        (collection as Mock).mockReturnValue('events-ref');
+        (query as Mock).mockReturnValue('events-existence-query');
+        (getDocs as Mock).mockResolvedValueOnce({
+            empty: false,
+            size: 1,
+            docs: [createQueryDoc('event-1', {})],
+        });
+
+        const result = await service.hasAnyEvent(user);
+
+        expect(result).toBe(true);
+        expect(collection).toHaveBeenCalledWith(expect.anything(), 'users/user-any/events');
+        expect(query).toHaveBeenCalledWith('events-ref', expect.objectContaining({ type: 'limit', _limit: 1 }));
+        expect(getDocs).toHaveBeenCalledWith('events-existence-query');
+        expect(mocks.getCountFromServer).not.toHaveBeenCalled();
+    });
+
+    it('should return false when the single-document event existence query is empty', async () => {
+        const user = { uid: 'user-empty' } as any;
+        (collection as Mock).mockReturnValue('events-ref');
+        (query as Mock).mockReturnValue('events-existence-query');
+        (getDocs as Mock).mockResolvedValueOnce({
+            empty: true,
+            size: 0,
+            docs: [],
+        });
+
+        const result = await service.hasAnyEvent(user);
+
+        expect(result).toBe(false);
+    });
+
+    it('should expose an activity existence alias for event-backed activities', async () => {
+        const user = { uid: 'user-activity-alias' } as any;
+        const hasAnyEventSpy = vi.spyOn(service, 'hasAnyEvent').mockResolvedValueOnce(true);
+
+        const result = await service.hasAnyActivity(user);
+
+        expect(result).toBe(true);
+        expect(hasAnyEventSpy).toHaveBeenCalledWith(user);
     });
 
     it('should return cursor-backed event pages without exposing the lookahead doc', async () => {

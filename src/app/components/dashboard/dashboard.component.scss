@@ -27,6 +27,7 @@ section.component-container {
     box-sizing: border-box;
     display: flex;
     flex-direction: column;
+    gap: 1rem;
 }
 
 /* Ensure child components take full width and handle their own internal layout */
@@ -37,6 +38,76 @@ app-event-table {
     display: block;
 }
 
+.dashboard-no-activity {
+    --mdc-outlined-card-container-color: var(--qs-overlay-surface);
+    --mdc-outlined-card-outline-color: var(--qs-overlay-surface-border);
+    border-color: var(--qs-overlay-surface-border);
+    border-radius: 8px;
+    background: var(--qs-overlay-surface);
+}
+
+.dashboard-no-activity__content {
+    display: grid;
+    gap: 1rem;
+    padding: 1rem;
+}
+
+.dashboard-no-activity__intro {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 0.875rem;
+    align-items: start;
+}
+
+.dashboard-no-activity__icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.5rem;
+    height: 2.5rem;
+    border-radius: 50%;
+    color: var(--mat-sys-on-primary-container);
+    background: var(--mat-sys-primary-container);
+}
+
+.dashboard-no-activity__copy {
+    display: grid;
+    gap: 0.25rem;
+    min-width: 0;
+}
+
+.dashboard-no-activity__title {
+    margin: 0;
+    color: var(--mat-sys-on-surface);
+    font: var(--mat-sys-title-large);
+    letter-spacing: 0;
+}
+
+.dashboard-no-activity__description {
+    max-width: 52ch;
+    margin: 0;
+    color: var(--mat-sys-on-surface-variant);
+    font: var(--mat-sys-body-medium);
+    letter-spacing: 0;
+}
+
+.dashboard-no-activity__actions {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+}
+
+.dashboard-no-activity__actions button,
+.dashboard-no-activity__actions app-upload-activities {
+    min-width: 0;
+}
+
+.dashboard-no-activity__actions button {
+    display: inline-flex;
+    align-items: center;
+}
+
 app-event-search {
     // margin-top: 16px;
 }
@@ -44,6 +115,27 @@ app-event-search {
 @media (max-width: 640px) {
     section.component-container {
         padding: 0.75rem;
+    }
+
+    .dashboard-no-activity__actions {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .dashboard-no-activity__actions button {
+        justify-content: center;
+    }
+
+    .dashboard-no-activity__actions button,
+    .dashboard-no-activity__actions app-upload-activities {
+        width: 100%;
+    }
+}
+
+@media (max-width: 420px) {
+    .dashboard-no-activity__intro {
+        grid-template-columns: 1fr;
+        gap: 0.75rem;
     }
 }
 

@@ -163,6 +163,8 @@ export class DataTypeIconComponent {
         return 'filter_none';
       case 'privacy':
         return 'visibility';
+      case 'Shared':
+        return 'public';
       case DataPowerAvg.type:
       case DataPowerMax.type:
       case DataPowerMin.type:

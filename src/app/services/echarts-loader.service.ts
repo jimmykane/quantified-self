@@ -13,9 +13,14 @@ type EChartsOption = Parameters<EChartsType['setOption']>[0];
 const CLICK_AXIS_POINTER_HAPTIC_SUPPRESSION_MS = 180;
 const DEFAULT_SURFACE_DRAG_THRESHOLD_PX = 8;
 const DEFAULT_SURFACE_DRAG_BUCKET_PX = 24;
+const FALLBACK_INIT_SIZE_PX = 1;
 type EChartsSetOptionSettings = Parameters<EChartsType['setOption']>[1];
 type EChartsResizeOptions = NonNullable<Parameters<EChartsType['resize']>[0]>;
 type EChartsInitOptions = Parameters<EChartsCoreModule['init']>[2];
+type EChartsInitSizeOptions = {
+  width?: number | string | null;
+  height?: number | string | null;
+};
 type ZRenderLike = {
   on(eventName: string, handler: (params: unknown) => void): void;
   off(eventName: string, handler: (params: unknown) => void): void;
@@ -123,11 +128,8 @@ export class EChartsLoaderService {
   public async init(container: HTMLElement, theme?: string, options?: EChartsInitOptions): Promise<EChartsType> {
     const echarts = await this.load();
     const resolvedTheme = this.resolveThemeName(theme);
-    return this.zone.runOutsideAngular(() => echarts.init(container, resolvedTheme, {
-      renderer: 'canvas',
-      useDirtyRect: false,
-      ...options,
-    }));
+    const initOptions = this.buildSafeInitOptions(container, options);
+    return this.zone.runOutsideAngular(() => echarts.init(container, resolvedTheme, initOptions));
   }
 
   public setOption(chart: EChartsType, option: EChartsOption, settings?: EChartsSetOptionSettings): void {
@@ -149,6 +151,47 @@ export class EChartsLoaderService {
     this.zone.runOutsideAngular(() => {
       chart.dispose();
     });
+  }
+
+  private buildSafeInitOptions(container: HTMLElement, options?: EChartsInitOptions): EChartsInitOptions {
+    const initOptions: EChartsInitOptions & EChartsInitSizeOptions = {
+      renderer: 'canvas',
+      useDirtyRect: false,
+      ...options,
+    };
+
+    const containerSize = this.getContainerSize(container);
+    if (!this.hasExplicitInitDimension(initOptions.width) && containerSize.width <= 0) {
+      initOptions.width = FALLBACK_INIT_SIZE_PX;
+    }
+    if (!this.hasExplicitInitDimension(initOptions.height) && containerSize.height <= 0) {
+      initOptions.height = FALLBACK_INIT_SIZE_PX;
+    }
+
+    return initOptions;
+  }
+
+  private hasExplicitInitDimension(value: EChartsInitSizeOptions['width']): boolean {
+    return value !== undefined && value !== null;
+  }
+
+  private getContainerSize(container: HTMLElement): { width: number; height: number } {
+    const clientWidth = Number(container.clientWidth);
+    const clientHeight = Number(container.clientHeight);
+    const width = Number.isFinite(clientWidth) ? clientWidth : 0;
+    const height = Number.isFinite(clientHeight) ? clientHeight : 0;
+
+    if (width > 0 && height > 0) {
+      return { width, height };
+    }
+
+    const rect = container.getBoundingClientRect();
+    const rectWidth = Number.isFinite(rect.width) ? rect.width : 0;
+    const rectHeight = Number.isFinite(rect.height) ? rect.height : 0;
+    return {
+      width: width > 0 ? width : rectWidth,
+      height: height > 0 ? height : rectHeight,
+    };
   }
 
   public subscribeToViewportResize(listener: () => void): () => void {

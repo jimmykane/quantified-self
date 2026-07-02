@@ -99,11 +99,13 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('Distance values in dashboards, event charts, activity chips, and CSV exports');
     expect(gettingStartedSection?.content).toContain('Dashboard **Action prompts**');
     expect(gettingStartedSection?.content).toContain('dashboard **Default units** action prompt');
-    expect(gettingStartedSection?.content).toContain('Users without Pro access and no uploaded activities');
-    expect(gettingStartedSection?.content).toContain('**Upload your first activities** action prompt');
-    expect(gettingStartedSection?.content).toContain('FIT, GPX, TCX, JSON, or SML files');
-    expect(gettingStartedSection?.content).toContain('upgrade to Pro for automatic activity sync');
-    expect(gettingStartedSection?.content).toContain('manual uploads remain available from the header and upload tools');
+    expect(gettingStartedSection?.content).toContain('**No activities yet**');
+    expect(gettingStartedSection?.content).toContain('**Upload activity**');
+    expect(gettingStartedSection?.content).toContain('**Connect service**');
+    expect(gettingStartedSection?.content).toContain('FIT, GPX, TCX, JSON, and SML files');
+    expect(gettingStartedSection?.content).toContain('Garmin, Suunto, and COROS');
+    expect(gettingStartedSection?.content).toContain('after activity data exists');
+    expect(gettingStartedSection?.content).toContain('Pro users with activity data but without a connected activity service');
     expect(gettingStartedSection?.content).toContain('**Connect a service** action prompt');
     expect(gettingStartedSection?.content).toContain('dismissing it hides the prompt permanently');
     expect(gettingStartedSection?.content).toContain('**Send new activities to Suunto** action prompt');
@@ -516,5 +518,15 @@ describe('help.content', () => {
       target: '/policies',
       fragment: POLICIES_AI_AND_PROCESSORS_FRAGMENT,
     });
+  });
+
+  it('should explain public event and comparison sharing exposure', () => {
+    const dataAndPrivacySection = HELP_SECTIONS.find(section => section.id === 'data-and-privacy');
+
+    expect(dataAndPrivacySection?.content).toContain('Event and saved comparison sharing is manual');
+    expect(dataAndPrivacySection?.content).toContain('every object stored under that event\'s source-file folder');
+    expect(dataAndPrivacySection?.content).toContain('users/{uid}/events/{eventId}/...');
+    expect(dataAndPrivacySection?.content).toContain('Use **Stop sharing**');
+    expect(dataAndPrivacySection?.content).toContain('cannot generate or save new reports');
   });
 });

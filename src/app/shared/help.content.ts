@@ -125,10 +125,10 @@ export const HELP_SECTIONS: HelpSection[] = [
 - Haptics automatically fall back to no-op when vibration support is unavailable or reduced-motion is enabled.
 - Event search filters only the dashboard event table.
 - **Custom** charts use their own tile date-range and activity filters, with matching controls in Dashboard manager.
-- Dashboard **Action prompts** are contextual setup cards shown above your dashboard when an account action needs attention.
+- If your account has no activities yet, the dashboard shows **No activities yet** with actions to **Upload activity** or **Connect service**. Uploads support FIT, GPX, TCX, JSON, and SML files; service connections support Garmin, Suunto, and COROS.
+- Dashboard **Action prompts** are contextual setup cards shown above your dashboard when an account action needs attention after activity data exists.
 - New users can choose a kilometers or miles preset from the dashboard **Default units** action prompt; choose **Advanced settings** there, or open **Settings -> Units**, to fine-tune individual unit preferences later.
-- Users without Pro access and no uploaded activities may see an **Upload your first activities** action prompt with options to upload FIT, GPX, TCX, JSON, or SML files, or upgrade to Pro for automatic activity sync. Dismissing it hides the prompt; manual uploads remain available from the header and upload tools.
-- Pro users without a connected activity service may see a one-time **Connect a service** action prompt; dismissing it hides the prompt permanently, and services can still be connected later from **Services**.
+- Pro users with activity data but without a connected activity service may see a one-time **Connect a service** action prompt; dismissing it hides the prompt permanently, and services can still be connected later from **Services**.
 - Pro users with Suunto plus Garmin and/or COROS connected may see a **Send new activities to Suunto** action prompt when an eligible auto-sync route is still disabled. Enabling it turns on future Garmin/COROS -> Suunto imports only; existing activities can still be queued from **Services** with Manual Catch-up. Dismissing it hides the prompt permanently.
 - If Suunto disconnects server-side or stops accepting the stored token, the dashboard can show a **Reconnect Suunto** action prompt. Reconnecting restarts sleep sync, history imports, and upload tools. Garmin/COROS -> Suunto auto-sync routes stay disabled until you enable them again in **Services**; dismissing the card only hides the reminder.
 - Distance values in dashboards, event charts, activity chips, and CSV exports follow your kilometers or miles preference from **Settings -> Units**; jump distances display in feet when miles are selected.
@@ -645,7 +645,11 @@ Suunto and COROS history imports are queued jobs. Large ranges can take hours or
     content: `## Privacy controls
 
 - Profile and activity visibility is managed by the platform and is not configurable in the app UI.
-- Share actions that auto-change visibility are disabled.
+- Event and saved comparison sharing is manual. Use **Share link** on an event or saved comparison to create a public URL.
+- Public links expose the shared event, its activities, any saved benchmark report, and every object stored under that event's source-file folder (\`users/{uid}/events/{eventId}/...\`) while sharing is enabled.
+- Public links do not expire automatically and are marked noindex, but anyone with the URL can open them.
+- Use **Stop sharing** from the event details menu or saved comparison row to make the event, activities, and event source-file folder private again.
+- Anonymous viewers are read-only. They can open an existing saved benchmark report from a comparison link, but they cannot generate or save new reports.
 - For AI Insights, we do **not** share your raw activity data with AI providers.
 - Only the minimum derived stats required to answer your prompt are sent.
 - The Policies page includes provider-specific sections for [Garmin Data](/policies#garmin-data), [Suunto Data](/policies#suunto-data), [COROS Data](/policies#coros-data), and [AI & Third-Party Processing](/policies#ai-and-third-party-processing).

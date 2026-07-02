@@ -106,6 +106,12 @@ export class DashboardComponent implements OnInit, OnDestroy {
   public isBackfillingGarminSleepPrompt = false;
   public isDismissingGarminSleepPrompt = false;
   public garminSleepBackfillPromptError: string | null = null;
+  public showNoActivityDashboardState = false;
+  public readonly noActivityConnectServiceOptions = [
+    { serviceName: ServiceNames.GarminAPI, label: 'Garmin' },
+    { serviceName: ServiceNames.SuuntoApp, label: 'Suunto' },
+    { serviceName: ServiceNames.COROSAPI, label: 'COROS' },
+  ];
 
   private shouldSearch: boolean;
   private manualSearchTrigger$ = new Subject<{ user: AppUserInterface | null; refreshToken: number }>();
@@ -118,6 +124,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
   private hasActivityServiceConnection: boolean | null = null;
   private activityServiceConnectionState: ActivityServiceConnectionState | null = null;
   private uploadedActivityCount: number | null = null;
+  private hasAnyActivity: boolean | null = null;
+  private userIDWithKnownActivity: string | null = null;
   private suuntoConnectionView: SuuntoServiceConnectionViewModel = buildSuuntoServiceConnectionViewModel({
     hasToken: false,
     serviceMeta: null,
@@ -194,6 +202,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
         return;
       }
     }
+    this.watchNoActivityDashboardState();
     this.watchFirstActivityUploadPromptState();
     this.watchActivityServiceConnectionPromptState();
     this.watchSuuntoReconnectPromptState();
@@ -348,6 +357,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
       this.user = eventsAndUser.user;
       this.isLoading = false;
       this.isInitialized = true;
+      if (this.user && this.isOwnerDashboard(this.user) && this.events.length > 0) {
+        this.markUserHasActivity(this.user);
+        this.hasAnyActivity = true;
+      }
       this.syncDashboardActionPromptState();
       this.logger.info('[perf] dashboard_state_update', { events: this.events.length });
 
@@ -518,9 +531,16 @@ export class DashboardComponent implements OnInit, OnDestroy {
       event.promptId === DASHBOARD_ACTION_PROMPT_FIRST_ACTIVITY_UPLOAD_ID
       && event.value === 'activityUploaded'
     ) {
-      this.uploadedActivityCount = 1;
-      this.syncDashboardActionPromptState();
+      this.markDashboardHasActivity();
     }
+  }
+
+  onNoActivityUploadComplete(): void {
+    this.markDashboardHasActivity();
+  }
+
+  async onNoActivityConnectService(serviceName: ServiceNames): Promise<void> {
+    await this.openServiceProvider(serviceName);
   }
 
   async applyUnitSetupPreset(): Promise<void> {
@@ -937,14 +957,16 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   private syncDashboardActionPromptState(): void {
     this.showUnitSetupPrompt = shouldShowUnitSetupPrompt(this.user, this.targetUser);
+    this.updateNoActivityDashboardState();
+    const suppressNoActivityPrompts = this.showNoActivityDashboardState;
     this.dashboardActionPrompts = buildDashboardActionPromptViewModels({
       showUnitSetupPrompt: this.showUnitSetupPrompt,
       unitSetupBusy: this.isSavingUnitSetup,
       unitSetupError: this.unitSetupError,
-      showFirstActivityUploadPrompt: this.shouldShowFirstActivityUploadPrompt(),
+      showFirstActivityUploadPrompt: !suppressNoActivityPrompts && this.shouldShowFirstActivityUploadPrompt(),
       firstActivityUploadBusy: this.isDismissingFirstActivityUploadPrompt,
       firstActivityUploadError: this.firstActivityUploadPromptError,
-      showConnectActivityServicePrompt: this.shouldShowConnectActivityServicePrompt(),
+      showConnectActivityServicePrompt: !suppressNoActivityPrompts && this.shouldShowConnectActivityServicePrompt(),
       connectActivityServiceBusy: this.isDismissingConnectActivityServicePrompt,
       connectActivityServiceError: this.connectActivityServicePromptError,
       showEnableActivityAutoSyncPrompt: this.shouldShowActivityAutoSyncPrompt(),
@@ -957,6 +979,44 @@ export class DashboardComponent implements OnInit, OnDestroy {
       showReconnectSuuntoServicePrompt: this.shouldShowReconnectSuuntoServicePrompt(),
       reconnectSuuntoServiceBusy: this.isReconnectingSuuntoServicePrompt || this.isDismissingReconnectSuuntoServicePrompt,
       reconnectSuuntoServiceError: this.reconnectSuuntoServicePromptError,
+    });
+  }
+
+  private watchNoActivityDashboardState(): void {
+    this.authService.user$.pipe(
+      switchMap((user: AppUserInterface | null) => {
+        const hasKnownActivity = !!user && this.userIDWithKnownActivity === user.uid;
+        this.hasAnyActivity = hasKnownActivity ? true : null;
+        this.syncDashboardActionPromptState();
+
+        if (!user || !this.isOwnerDashboard(user)) {
+          return of(null);
+        }
+
+        if (hasKnownActivity) {
+          return of(true);
+        }
+
+        return from(this.eventService.hasAnyActivity(user)).pipe(
+          catchError(error => {
+            this.logger.warn('[DashboardComponent] Failed to check dashboard activity existence', {
+              userID: user.uid,
+            }, error);
+            return of(null);
+          }),
+        );
+      }),
+      takeUntilDestroyed(this.destroyRef),
+    ).subscribe((hasAnyActivity) => {
+      if (this.hasAnyActivity === true && hasAnyActivity !== true) {
+        this.syncDashboardActionPromptState();
+        return;
+      }
+      if (hasAnyActivity === true) {
+        this.markUserHasActivity(this.user);
+      }
+      this.hasAnyActivity = hasAnyActivity;
+      this.syncDashboardActionPromptState();
     });
   }
 
@@ -1253,6 +1313,27 @@ export class DashboardComponent implements OnInit, OnDestroy {
     return this.shouldEvaluateActivityServiceConnectionPrompt(user)
       || this.shouldEvaluateActivityAutoSyncPrompt(user)
       || this.shouldEvaluateGarminSleepBackfillPrompt(user);
+  }
+
+  private updateNoActivityDashboardState(): void {
+    this.showNoActivityDashboardState = this.isInitialized
+      && this.hasAnyActivity === false
+      && !!this.user
+      && this.isOwnerDashboard(this.user);
+  }
+
+  private markDashboardHasActivity(): void {
+    this.markUserHasActivity(this.user);
+    this.hasAnyActivity = true;
+    this.uploadedActivityCount = 1;
+    this.showNoActivityDashboardState = false;
+    this.syncDashboardActionPromptState();
+  }
+
+  private markUserHasActivity(user: AppUserInterface | null | undefined): void {
+    if (user?.uid) {
+      this.userIDWithKnownActivity = user.uid;
+    }
   }
 
   private getEligibleActivityAutoSyncRouteIds(): ActivitySyncRouteId[] {

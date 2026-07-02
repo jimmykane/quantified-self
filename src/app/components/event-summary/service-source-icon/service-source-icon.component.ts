@@ -15,7 +15,7 @@ import { AppEventService } from '../../../services/app.event.service';
 })
 export class ServiceSourceIconComponent implements OnChanges, OnDestroy {
     @Input() event!: EventInterface;
-    @Input() user!: User;
+    @Input() user: User | null = null;
     @Input() sourceServiceName: ServiceNames | null = null;
     @Input() presentation: ProviderPresentation | null = null;
     @Input() showIcon = true;

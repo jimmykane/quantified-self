@@ -4,7 +4,7 @@ import { NavigationCancel, NavigationEnd, NavigationError, NavigationStart, Rout
 import { Subscription } from 'rxjs';
 import {
     hasAngularServerContext,
-    isPublicStartupDocument,
+    isRouteLoaderSuppressedStartupDocument,
     isSameDocumentRoutePath,
 } from '../../shared/public-startup-route';
 
@@ -24,7 +24,7 @@ export class RouteLoaderComponent implements OnDestroy {
         @Inject(DOCUMENT) private documentRef: Document,
     ) {
         this.suppressInitialSameDocumentNavigation =
-            hasAngularServerContext(this.documentRef) || isPublicStartupDocument(this.documentRef);
+            hasAngularServerContext(this.documentRef) || isRouteLoaderSuppressedStartupDocument(this.documentRef);
 
         // Check if there's an active navigation already (e.g. on initial page load)
         if (this.router.getCurrentNavigation()) {

@@ -27,6 +27,45 @@ app-loading-overlay {
   min-height: 100%;
 }
 
+.events-map-empty-state {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  pointer-events: none;
+}
+
+.events-map-empty-state__panel {
+  display: grid;
+  gap: 6px;
+  justify-items: center;
+  width: min(320px, 100%);
+  box-sizing: border-box;
+  padding: 16px;
+  border: 1px solid var(--qs-overlay-surface-border);
+  border-radius: 8px;
+  background: var(--qs-overlay-surface);
+  color: var(--mat-sys-on-surface);
+  text-align: center;
+}
+
+.events-map-empty-state__panel mat-icon {
+  color: var(--mat-sys-primary);
+}
+
+.events-map-empty-state__title {
+  font: var(--mat-sys-title-small);
+}
+
+.events-map-empty-state__hint {
+  max-width: 28ch;
+  color: var(--mat-sys-on-surface-variant);
+  font: var(--mat-sys-body-small);
+}
+
 .events-map-popup-anchor {
   position: absolute;
   top: 12px;

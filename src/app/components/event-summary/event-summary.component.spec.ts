@@ -24,7 +24,6 @@ import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { AppBenchmarkFlowService } from '../../services/app.benchmark-flow.service';
 
 
-
 describe('EventSummaryComponent', () => {
     let component: EventSummaryComponent;
     let fixture: ComponentFixture<EventSummaryComponent>;
@@ -39,7 +38,7 @@ describe('EventSummaryComponent', () => {
         getID: () => 'test-event-id',
         privacy: Privacy.Private,
         getActivities: () => [{ type: ActivityTypes.Running }],
-        getStat: (type: string) => null,
+        getStat: (_type: string) => null,
         startDate: new Date(),
     } as unknown as EventInterface;
 
@@ -57,7 +56,7 @@ describe('EventSummaryComponent', () => {
 
         await TestBed.configureTestingModule({
             declarations: [
-                EventSummaryComponent
+                EventSummaryComponent,
             ],
             providers: [
                 { provide: MatBottomSheet, useValue: mockBottomSheet },
@@ -91,9 +90,21 @@ describe('EventSummaryComponent', () => {
             expect(mockBottomSheet.open).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
                 data: expect.objectContaining({
                     event: component.event,
-                    user: component.user,
+                    user: null,
                     selectedActivities: component.selectedActivities,
                     userUnitSettings: component.unitSettings,
+                }),
+            }));
+        });
+
+        it('openDetailedStats should pass the user only for owners', () => {
+            component.isOwner = true;
+
+            component.openDetailedStats();
+
+            expect(mockBottomSheet.open).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+                data: expect.objectContaining({
+                    user: component.user,
                 }),
             }));
         });
@@ -377,6 +388,27 @@ describe('EventSummaryComponent', () => {
                 'utf8',
             );
             expect(template).toContain('[suppressedTextLabels]="deviceSourceSuppressedLabels"');
+        });
+
+        it('should expose no metadata lookup user for non-owners', () => {
+            component.isOwner = false;
+
+            expect(component.ownerMetadataLookupUser).toBeNull();
+        });
+
+        it('should expose the metadata lookup user for owners', () => {
+            component.isOwner = true;
+
+            expect(component.ownerMetadataLookupUser).toBe(component.user);
+        });
+
+        it('should bind source icon metadata lookup to the owner-only user', () => {
+            const template = readFileSync(
+                resolve(process.cwd(), 'src/app/components/event-summary/event-summary.component.html'),
+                'utf8',
+            );
+            expect(template).toContain('[user]="ownerMetadataLookupUser"');
+            expect(template).not.toContain('[user]="user" [showIcon]="false"');
         });
     });
 
