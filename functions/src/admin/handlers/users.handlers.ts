@@ -23,6 +23,17 @@ const ADMIN_EVENT_COUNTS_DOC = 'eventCounts';
 const ADMIN_ROUTE_COUNTS_DOC = 'routeCounts';
 const GLOBAL_COLLECTION_COUNT_CACHE_TTL_MS = 60 * 60 * 1000;
 
+interface SubscriptionOwnerDocSnapshot {
+    data: () => Record<string, unknown>;
+    ref?: {
+        parent?: {
+            parent?: {
+                id?: string;
+            } | null;
+        } | null;
+    } | null;
+}
+
 const resolveSubscriptionInterval = (subscription: Record<string, unknown>): string | null => {
     const items = Array.isArray(subscription.items) ? subscription.items : [];
     const firstItem = items.length > 0 && typeof items[0] === 'object' && items[0] !== null
@@ -59,6 +70,28 @@ function normalizeCount(value: unknown): number {
     }
 
     return Math.max(0, Math.floor(value));
+}
+
+function readSubscriptionOwnerId(doc: SubscriptionOwnerDocSnapshot): string | null {
+    const parentId = doc.ref?.parent?.parent?.id;
+    if (typeof parentId === 'string' && parentId.trim()) {
+        return parentId.trim();
+    }
+
+    const data = doc.data();
+    const uid = data.uid ?? data.userId;
+    return typeof uid === 'string' && uid.trim() ? uid.trim() : null;
+}
+
+function countDistinctSubscriptionOwners(docs: SubscriptionOwnerDocSnapshot[]): number {
+    const ownerIds = new Set<string>();
+    docs.forEach((doc) => {
+        const ownerId = readSubscriptionOwnerId(doc);
+        if (ownerId) {
+            ownerIds.add(ownerId);
+        }
+    });
+    return ownerIds.size;
 }
 
 function toEpochMillis(value: unknown): number | null {
@@ -449,7 +482,7 @@ export const getUserCount = onAdminCall<UserCountRequest, UserCountResponse>({
 
         // 1. Get stats from Firestore (subscriptions)
         // Parallel efficient count queries
-        const [totalSnapshot, proSnapshot, basicSnapshot, onboardedSnapshot, everPaidSnapshot, eventStats, routeStats] = await Promise.all([
+        const [totalSnapshot, proSnapshot, basicSnapshot, onboardedSnapshot, paidSubscriptionHistorySnapshot, eventStats, routeStats] = await Promise.all([
             db.collection('users').count().get(),
             db.collectionGroup('subscriptions')
                 .where('status', 'in', [...ACTIVE_SUBSCRIPTION_STATUSES])
@@ -462,9 +495,10 @@ export const getUserCount = onAdminCall<UserCountRequest, UserCountResponse>({
             db.collection('users')
                 .where('onboardingCompleted', '==', true)
                 .count().get(),
-            db.collection('users')
-                .where('hasSubscribedOnce', '==', true)
-                .count().get(),
+            db.collectionGroup('subscriptions')
+                .where('role', 'in', [SUBSCRIPTION_ROLE_PRO, SUBSCRIPTION_ROLE_BASIC])
+                .select('role')
+                .get(),
             getGlobalEventCount(db, {
                 forceRefresh: forceRefreshEventCount,
                 requestedByUid: request.auth?.uid || null,
@@ -480,7 +514,7 @@ export const getUserCount = onAdminCall<UserCountRequest, UserCountResponse>({
         const basic = basicSnapshot.data().count;
         const activePaid = pro + basic;
         const onboardingCompleted = onboardedSnapshot.data().count;
-        const everPaid = everPaidSnapshot.data().count;
+        const everPaid = Math.max(activePaid, countDistinctSubscriptionOwners(paidSubscriptionHistorySnapshot.docs));
         const canceled = Math.max(0, everPaid - activePaid);
         const free = Math.max(0, total - activePaid);
 

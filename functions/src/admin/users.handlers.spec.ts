@@ -886,17 +886,27 @@ describe('listUsers Cloud Function', () => {
                 get: vi.fn().mockResolvedValue({ exists: false, data: () => undefined }),
                 set: vi.fn().mockResolvedValue(undefined),
             };
+            const subscriptionDoc = (uid: string, data: Record<string, unknown>) => ({
+                ref: { parent: { parent: { id: uid } } },
+                data: () => data,
+            });
+            const paidHistoryDocs = Array.from({ length: 70 }, (_, index) => subscriptionDoc(
+                `paid-${index}`,
+                { role: index % 2 === 0 ? 'pro' : 'basic' }
+            ));
+            const activeSubscriptionDocs = [
+                subscriptionDoc('paid-0', { role: 'pro', items: [{ plan: { interval: 'month' } }], cancel_at_period_end: true }),
+                subscriptionDoc('paid-1', { role: 'basic', items: [{ price: { recurring: { interval: 'year' } } }], cancel_at_period_end: true }),
+                subscriptionDoc('paid-2', { role: 'pro', items: [{ plan: { interval: 'month' } }], cancel_at_period_end: true }),
+                subscriptionDoc('legacy-active', { role: 'legacy', items: [{ plan: { interval: 'month' } }], cancel_at_period_end: true }),
+            ];
 
             mockCollection.mockImplementation((path: string) => {
                 if (path === 'users') {
                     return {
                         count: vi.fn().mockReturnValue({ get: countGet(120) }),
                         where: vi.fn((field: string) => {
-                            const count = field === 'onboardingCompleted'
-                                ? 90
-                                : field === 'hasSubscribedOnce'
-                                    ? 70
-                                    : 0;
+                            const count = field === 'onboardingCompleted' ? 90 : 0;
                             return {
                                 count: vi.fn().mockReturnValue({ get: countGet(count) })
                             };
@@ -923,16 +933,13 @@ describe('listUsers Cloud Function', () => {
                                 return Promise.resolve(countSnap(0));
                             })
                         }),
-                        select: vi.fn().mockReturnValue({
+                        select: vi.fn().mockImplementation(() => ({
                             get: vi.fn().mockResolvedValue({
-                                docs: [
-                                    { data: () => ({ role: 'pro', items: [{ plan: { interval: 'month' } }], cancel_at_period_end: true }) },
-                                    { data: () => ({ role: 'basic', items: [{ price: { recurring: { interval: 'year' } } }], cancel_at_period_end: true }) },
-                                    { data: () => ({ role: 'pro', items: [{ plan: { interval: 'month' } }], cancel_at_period_end: true }) },
-                                    { data: () => ({ role: 'legacy', items: [{ plan: { interval: 'month' } }], cancel_at_period_end: true }) },
-                                ]
+                                docs: conditions.some(condition => condition.field === 'role' && Array.isArray(condition.value))
+                                    ? paidHistoryDocs
+                                    : activeSubscriptionDocs
                             })
-                        })
+                        }))
                     };
                     return query;
                 }
@@ -977,31 +984,46 @@ describe('listUsers Cloud Function', () => {
                 get: vi.fn().mockResolvedValue({ exists: false, data: () => undefined }),
                 set: vi.fn().mockResolvedValue(undefined),
             };
+            const subscriptionDoc = (uid: string, data: Record<string, unknown>) => ({
+                ref: { parent: { parent: { id: uid } } },
+                data: () => data,
+            });
+            const paidHistoryDocs = Array.from({ length: 4 }, (_, index) => subscriptionDoc(
+                `paid-${index}`,
+                { role: index % 2 === 0 ? 'pro' : 'basic' }
+            ));
+            const activeSubscriptionDocs = [
+                subscriptionDoc('active-1', { cancel_at_period_end: true }),
+                subscriptionDoc('active-2', { cancel_at_period_end: false }),
+            ];
 
             mockCollection.mockImplementation((path: string) => {
                 if (path === 'users') {
                     return {
                         count: vi.fn().mockReturnValue({ get: countGet(10) }),
-                        where: vi.fn((field: string) => ({
+                        where: vi.fn(() => ({
                             count: vi.fn().mockReturnValue({
-                                get: countGet(field === 'hasSubscribedOnce' ? 4 : 0)
+                                get: countGet(0)
                             })
                         }))
                     };
                 }
 
                 if (path === 'subscriptions') {
+                    const conditions: { field: string; value: unknown }[] = [];
                     const query: any = {
-                        where: vi.fn(() => query),
+                        where: vi.fn((field: string, _op: string, value: unknown) => {
+                            conditions.push({ field, value });
+                            return query;
+                        }),
                         count: vi.fn().mockReturnValue({ get: countGet(0) }),
-                        select: vi.fn().mockReturnValue({
+                        select: vi.fn().mockImplementation(() => ({
                             get: vi.fn().mockResolvedValue({
-                                docs: [
-                                    { data: () => ({ cancel_at_period_end: true }) },
-                                    { data: () => ({ cancel_at_period_end: false }) },
-                                ]
+                                docs: conditions.some(condition => condition.field === 'role' && Array.isArray(condition.value))
+                                    ? paidHistoryDocs
+                                    : activeSubscriptionDocs
                             })
-                        })
+                        }))
                     };
                     return query;
                 }
