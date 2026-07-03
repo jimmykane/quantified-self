@@ -2,7 +2,10 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { Component, Input, NO_ERRORS_SCHEMA, SimpleChange } from '@angular/core';
 import { By } from '@angular/platform-browser';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { MatTooltip } from '@angular/material/tooltip';
+import { MatButtonModule } from '@angular/material/button';
+import { MatIconModule } from '@angular/material/icon';
+import { MatMenuModule } from '@angular/material/menu';
+import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { ChartsKpiComponent } from './charts.kpi.component';
 import { AppHapticsService } from '../../../services/app.haptics.service';
 import { EChartsLoaderService } from '../../../services/echarts-loader.service';
@@ -81,6 +84,12 @@ describe('ChartsKpiComponent', () => {
     hapticsMock = { selection: vi.fn() };
 
     await TestBed.configureTestingModule({
+      imports: [
+        MatButtonModule,
+        MatIconModule,
+        MatMenuModule,
+        NoopAnimationsModule,
+      ],
       declarations: [ChartsKpiComponent, MockLoadingOverlayComponent],
       providers: [
         { provide: AppHapticsService, useValue: hapticsMock },
@@ -691,31 +700,45 @@ describe('ChartsKpiComponent', () => {
     expect(tooltipHtml).not.toContain('Week of Apr 6');
   });
 
-  it('shows the info tooltip without broad row haptics when clicking the KPI layout', () => {
-    vi.useFakeTimers();
-    const tooltip = {
-      show: vi.fn(),
-      hide: vi.fn(),
-    } as unknown as MatTooltip;
+  it('renders KPI detail rows for the info menu without row-level haptics', async () => {
+    component.chartType = DASHBOARD_LOAD_STATUS_KPI_CHART_TYPE;
     component.infoTooltip = 'KPI info';
-    component.infoTooltipDirective = tooltip;
+    component.formNow = {
+      latestDayMs: Date.UTC(2026, 0, 1),
+      value: -4,
+      trend8Weeks: [],
+    };
+    component.rampRate = {
+      latestDayMs: Date.UTC(2026, 0, 1),
+      ctlToday: 62,
+      ctl7DaysAgo: 58,
+      rampRate: 4,
+      trend8Weeks: [],
+    };
+    component.fitnessCtl = {
+      latestDayMs: Date.UTC(2026, 0, 1),
+      value: 62,
+      trend8Weeks: [],
+    };
+    component.fatigueAtl = {
+      latestDayMs: Date.UTC(2026, 0, 1),
+      value: 66,
+      trend8Weeks: [],
+    };
 
-    component.onKpiLayoutClick(new MouseEvent('click'));
+    fixture.detectChanges();
+    await fixture.whenStable();
 
-    expect((tooltip.show as any)).toHaveBeenCalledWith(0);
+    expect(component.hasKpiDetails).toBe(true);
+    expect(component.kpiDetailsRows).toContainEqual({ label: 'Current label', value: 'Building' });
+    expect(component.kpiDetailsRows).toContainEqual({ label: 'Reason', value: 'Productive load' });
+    expect(component.kpiDetailsRows).toContainEqual({ label: 'Fitness (CTL)', value: '62' });
     expect(hapticsMock.selection).not.toHaveBeenCalled();
-    vi.advanceTimersByTime(2200);
-    expect((tooltip.hide as any)).toHaveBeenCalledWith(0);
-    vi.useRealTimers();
   });
 
   it('triggers haptics when info button is clicked', () => {
     const stopPropagation = vi.fn();
     component.infoTooltip = 'KPI info';
-    component.infoTooltipDirective = {
-      show: vi.fn(),
-      hide: vi.fn(),
-    } as unknown as MatTooltip;
 
     component.onInfoButtonClick({ stopPropagation } as unknown as MouseEvent);
 

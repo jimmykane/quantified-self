@@ -120,7 +120,7 @@ export const HELP_SECTIONS: HelpSection[] = [
 - The **Today** header can show **Uploaded activities**, which counts current uploaded activity events.
 - On mobile, Today rows stay compact while the chart/map grid stays unchanged below.
 - KPI choices in Dashboard manager are grouped as **Load**, **Readiness**, and **Execution** for both manual and preset flows.
-- Curated and KPI tiles include an **info** icon beside the title with formulas and interpretation guidance.
+- Curated and KPI tiles include an **info** icon beside the title with formulas, interpretation guidance, and KPI detail rows such as metric state, freshness date, source, and the signals behind the current label.
 - On supported mobile devices, dashboard buttons and chart interactions provide lightweight haptic feedback.
 - Haptics automatically fall back to no-op when vibration support is unavailable or reduced-motion is enabled.
 - Event search filters only the dashboard event table.
@@ -190,6 +190,8 @@ export const HELP_SECTIONS: HelpSection[] = [
 - **Ramp Rate** uses CTL(today) - CTL(today-7d) with an 8-week sparkline.
 - **Monotony / Strain** uses 7-day load mean/stddev for monotony, and load * monotony for strain.
 - **Load Status** summarizes current training state from current TSB, CTL ramp, current CTL, and current ATL.
+- KPI detail menus show the current metric state, the latest derived day or week used, and the input signals behind summary labels such as **Load Status** and **Training Balance**.
+- KPI no-data guidance is metric-specific: efficiency asks for power plus heart-rate samples, intensity balance asks for power or heart-rate zones, and load/readiness KPIs ask for TSS-backed training load.
 - **Form Now** uses current TSB readiness from the latest derived load state.
 - **Fitness (CTL)** uses current 42-day chronic training load from the derived Form model.
 - **Fatigue (ATL)** uses current 7-day acute training load from the derived Form model.

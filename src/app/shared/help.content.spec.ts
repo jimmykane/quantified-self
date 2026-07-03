@@ -235,6 +235,9 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('**info** icon');
     expect(gettingStartedSection?.content).toContain('**Today** section');
     expect(gettingStartedSection?.content).toContain('Today rows stay compact');
+    expect(gettingStartedSection?.content).toContain('KPI detail rows');
+    expect(gettingStartedSection?.content).toContain('freshness date');
+    expect(gettingStartedSection?.content).toContain('metric-specific');
   });
 
   it('should document mobile dashboard haptic feedback behavior and fallback', () => {

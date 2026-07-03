@@ -10,7 +10,6 @@ import {
   SimpleChanges,
   ViewChild,
 } from '@angular/core';
-import { MatTooltip } from '@angular/material/tooltip';
 import type { EChartsType } from 'echarts/core';
 import {
   ECHARTS_CARTESIAN_IMMEDIATE_UPDATE_SETTINGS,
@@ -65,6 +64,10 @@ import {
   DASHBOARD_TRAINING_BALANCE_KPI_CHART_TYPE,
   type DashboardKpiChartType,
 } from '../../../helpers/dashboard-special-chart-types';
+import {
+  buildDashboardKpiExplanation,
+  type DashboardKpiExplanationRow,
+} from '../../../helpers/dashboard-kpi-explanation.helper';
 import { AppHapticsService } from '../../../services/app.haptics.service';
 import { EChartsLoaderService } from '../../../services/echarts-loader.service';
 import { LoggerService } from '../../../services/logger.service';
@@ -131,10 +134,8 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
   @Input() intensityDistributionStatus?: DashboardDerivedMetricStatus | null;
 
   @ViewChild('chartDiv', { static: true }) chartDiv!: ElementRef<HTMLDivElement>;
-  @ViewChild(MatTooltip) infoTooltipDirective?: MatTooltip;
 
   private readonly chartHost: EChartsHostController;
-  private infoTooltipHideTimeoutId: ReturnType<typeof setTimeout> | null = null;
 
   public title = 'ACWR';
   public titleDisplay = 'ACWR';
@@ -148,6 +149,10 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
   public noDataErrorMessage = 'No KPI data yet';
   public noDataErrorHint = 'Upload activities with training load to calculate this metric.';
   public noDataErrorIcon = 'insights';
+  public kpiDetailsDescription = '';
+  public kpiDetailsRows: DashboardKpiExplanationRow[] = [];
+  public kpiDetailsMissingHint = '';
+  public hasKpiDetails = false;
 
   constructor(
     private eChartsLoader: EChartsLoaderService,
@@ -215,25 +220,12 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
   }
 
   ngOnDestroy(): void {
-    this.clearInfoTooltipTimer();
     this.chartHost.dispose();
-  }
-
-  onKpiLayoutClick(event: MouseEvent): void {
-    if (!this.infoTooltip) {
-      return;
-    }
-    const target = event.target as HTMLElement | null;
-    if (target?.closest('.title-info-button')) {
-      return;
-    }
-    this.showInfoTooltip();
   }
 
   onInfoButtonClick(event: MouseEvent): void {
     event.stopPropagation();
     this.hapticsService.selection();
-    this.showInfoTooltip();
   }
 
   private async refreshChart(): Promise<void> {
@@ -266,6 +258,30 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
       && typeof presentation.primaryValueText === 'string'
       && presentation.primaryValueText.trim().length > 0;
     this.secondaryValueText = presentation.secondaryValueText || '';
+    const activeStatus = this.resolveActiveStatus();
+    const details = buildDashboardKpiExplanation({
+      chartType: this.chartType,
+      primaryValueText: this.primaryValueText,
+      primaryLabel: this.primaryLabel,
+      secondaryValueText: this.secondaryValueText,
+      status: activeStatus,
+      acwr: this.acwr,
+      rampRate: this.rampRate,
+      monotonyStrain: this.monotonyStrain,
+      formNow: this.formNow,
+      fitnessCtl: this.fitnessCtl,
+      fatigueAtl: this.fatigueAtl,
+      formPlus7d: this.formPlus7d,
+      easyPercent: this.easyPercent,
+      hardPercent: this.hardPercent,
+      efficiencyDelta4w: this.efficiencyDelta4w,
+      freshnessForecast: this.freshnessForecast,
+      intensityDistribution: this.intensityDistribution,
+    }, (value, options) => this.formatPrimaryValue(value, options));
+    this.kpiDetailsDescription = details.description;
+    this.kpiDetailsRows = details.rows;
+    this.kpiDetailsMissingHint = details.missingHint;
+    this.hasKpiDetails = !!this.infoTooltip || !!this.kpiDetailsDescription || this.kpiDetailsRows.length > 0;
 
     const hasRenderableValue = presentation.primaryValue !== null || !!presentation.primaryValueText;
     this.showNoDataError = false;
@@ -275,13 +291,14 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
     this.noDataErrorIcon = 'insights';
 
     if (!hasRenderableValue) {
-      const isPending = isDerivedMetricPendingStatus(this.resolveActiveStatus());
+      const isPending = isDerivedMetricPendingStatus(activeStatus);
       this.kpiNoDataState = isPending ? 'pending' : 'missing';
       this.primaryValueText = '--';
       this.primaryValueIsText = false;
       this.primaryLabel = isPending ? 'Updating metrics' : 'Needs training load';
       this.secondaryLabel = '';
       this.secondaryValueText = '';
+      this.noDataErrorHint = this.kpiDetailsMissingHint || this.noDataErrorHint;
       if (isPending) {
         this.noDataErrorMessage = 'Updating KPI data';
         this.noDataErrorHint = 'Training metrics are being recalculated in the background.';
@@ -781,26 +798,6 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
       return 'Balance';
     }
     return this.title;
-  }
-
-  private showInfoTooltip(): void {
-    if (!this.infoTooltipDirective || !this.infoTooltip) {
-      return;
-    }
-    this.infoTooltipDirective.show(0);
-    this.clearInfoTooltipTimer();
-    this.infoTooltipHideTimeoutId = setTimeout(() => {
-      this.infoTooltipDirective?.hide(0);
-      this.infoTooltipHideTimeoutId = null;
-    }, 2200);
-  }
-
-  private clearInfoTooltipTimer(): void {
-    if (this.infoTooltipHideTimeoutId === null) {
-      return;
-    }
-    clearTimeout(this.infoTooltipHideTimeoutId);
-    this.infoTooltipHideTimeoutId = null;
   }
 
   private buildOption(presentation: KpiPresentation): ChartOption {

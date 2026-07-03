@@ -1,16 +1,15 @@
 <app-loading-overlay [isLoading]="isLoading" [hasError]="!isLoading && showNoDataError" [allowErrorPassthrough]="true" [errorMessage]="noDataErrorMessage"
   [errorHint]="noDataErrorHint" [errorIcon]="noDataErrorIcon" [showSkeleton]="false" height="100%" [style.height.%]="100">
   <section class="kpi-layout" [class.kpi-layout-dark]="darkTheme" [class.kpi-layout-row]="compactRow"
-    [class.kpi-layout-reserve-actions]="reserveTitleActionSpace" [class.kpi-layout-empty]="kpiNoDataState !== null"
-    (click)="onKpiLayoutClick($event)">
+    [class.kpi-layout-reserve-actions]="reserveTitleActionSpace" [class.kpi-layout-empty]="kpiNoDataState !== null">
     <header class="kpi-header" [class.kpi-header-reserve-actions]="reserveTitleActionSpace">
       @if (compactRow) {
       <div class="kpi-copy-block">
         <div class="title-row">
           <div class="kpi-title qs-dashboard-chart-title" [attr.title]="title">{{ titleDisplay }}</div>
-          @if (infoTooltip) {
-          <button mat-icon-button class="title-info-button" [matTooltip]="infoTooltip" matTooltipPosition="below"
-            aria-label="How this KPI is calculated" (click)="onInfoButtonClick($event)">
+          @if (hasKpiDetails) {
+          <button mat-icon-button class="title-info-button" [matMenuTriggerFor]="kpiDetailsMenu"
+            aria-label="KPI details" (click)="onInfoButtonClick($event)">
             <mat-icon>info</mat-icon>
           </button>
           }
@@ -34,9 +33,9 @@
       } @else {
       <div class="title-row">
         <div class="kpi-title qs-dashboard-chart-title" [attr.title]="title">{{ titleDisplay }}</div>
-        @if (infoTooltip) {
-        <button mat-icon-button class="title-info-button" [matTooltip]="infoTooltip" matTooltipPosition="below"
-          aria-label="How this KPI is calculated" (click)="onInfoButtonClick($event)">
+        @if (hasKpiDetails) {
+        <button mat-icon-button class="title-info-button" [matMenuTriggerFor]="kpiDetailsMenu"
+          aria-label="KPI details" (click)="onInfoButtonClick($event)">
           <mat-icon>info</mat-icon>
         </button>
         }
@@ -64,3 +63,30 @@
     </div>
   </section>
 </app-loading-overlay>
+
+<mat-menu #kpiDetailsMenu="matMenu" class="qs-menu-panel kpi-details-menu" xPosition="after" yPosition="below">
+  <section class="kpi-details-content" aria-label="KPI details">
+    <div class="kpi-details-heading">{{ title }}</div>
+    @if (infoTooltip) {
+    <p class="kpi-details-description">{{ infoTooltip }}</p>
+    } @else if (kpiDetailsDescription) {
+    <p class="kpi-details-description">{{ kpiDetailsDescription }}</p>
+    }
+    @if (kpiDetailsRows.length) {
+    <dl class="kpi-details-list">
+      @for (row of kpiDetailsRows; track row.label + row.value) {
+      <div class="kpi-details-row">
+        <dt>{{ row.label }}</dt>
+        <dd>{{ row.value }}</dd>
+      </div>
+      }
+    </dl>
+    }
+    @if (kpiNoDataState === 'missing' && kpiDetailsMissingHint) {
+    <div class="kpi-details-missing">
+      <mat-icon aria-hidden="true">info</mat-icon>
+      <span>{{ kpiDetailsMissingHint }}</span>
+    </div>
+    }
+  </section>
+</mat-menu>
