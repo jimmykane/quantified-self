@@ -230,12 +230,14 @@ describe('admin-dashboard-summary helper', () => {
             'derived-metrics',
         ]);
         expect(rows.find(row => row.id === 'workout')?.severity).toBe('error');
+        expect(rows.find(row => row.id === 'route-delivery-sync')?.severity).toBe('ok');
         expect(rows.find(row => row.id === 'route-sync')?.maxLagLabel).toBe('0s');
         expect(rows.find(row => row.id === 'derived-metrics')?.maxLagLabel).toBe('-');
         expect(rows.find(row => row.id === 'reparse')?.pendingDb).toBe(6);
         expect(rows.find(row => row.id === 'reparse')?.cloudTasks).toBe(5);
         expect(rows.find(row => row.id === 'route-reparse')?.pendingDb).toBe(7);
         expect(rows.find(row => row.id === 'route-reparse')?.cloudTasks).toBe(0);
+        expect(rows.find(row => row.id === 'route-reparse')?.severity).toBe('ok');
         expect(rows.find(row => row.id === 'sleep-sync')?.chips).toContain('Disabled: Garmin');
         expect(rows.find(row => row.id === 'derived-metrics')?.problemLabel).toBe('Stale');
     });

@@ -437,21 +437,16 @@ function buildQueueRow(base: QueueRowBase): AdminDashboardQueueRow {
     return {
         ...row,
         maxLagLabel: row.maxLagMs === null ? '-' : formatAdminDashboardDuration(row.maxLagMs),
-        severity: resolveQueueSeverity(row.problemCount, row.dead, row.pendingDb, row.cloudTasks),
+        severity: resolveQueueSeverity(row.problemCount, row.dead),
     };
 }
 
 function resolveQueueSeverity(
     problemCount: number,
-    dead: number,
-    pendingDb: number,
-    cloudTasks: number
+    dead: number
 ): AdminDashboardSeverity {
     if (problemCount > 0 || dead > 0) {
         return 'error';
-    }
-    if (pendingDb > 0 || cloudTasks > 0) {
-        return 'warning';
     }
     return 'ok';
 }
