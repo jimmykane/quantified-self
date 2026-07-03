@@ -82,6 +82,9 @@ export interface UserCountResponse {
     free: number;
     monthlyPaid: number;
     yearlyPaid: number;
+    everPaid: number;
+    canceled: number;
+    cancelScheduled: number;
     onboardingCompleted: number;
     events: EventCountStats;
     routes: RouteCountStats;

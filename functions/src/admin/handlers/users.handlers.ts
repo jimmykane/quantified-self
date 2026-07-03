@@ -10,7 +10,9 @@ import { FUNCTIONS_MANIFEST } from '../../../../shared/functions-manifest';
 import {
     ACTIVE_SUBSCRIPTION_STATUSES,
     SUBSCRIPTION_INTERVAL_MONTH,
-    SUBSCRIPTION_INTERVAL_YEAR
+    SUBSCRIPTION_INTERVAL_YEAR,
+    SUBSCRIPTION_ROLE_BASIC,
+    SUBSCRIPTION_ROLE_PRO
 } from '../shared/subscription.constants';
 import { clampListUsersPageSize } from '../shared/date.utils';
 import { enrichUsers } from '../shared/user-enrichment';
@@ -447,7 +449,7 @@ export const getUserCount = onAdminCall<UserCountRequest, UserCountResponse>({
 
         // 1. Get stats from Firestore (subscriptions)
         // Parallel efficient count queries
-        const [totalSnapshot, proSnapshot, basicSnapshot, onboardedSnapshot, eventStats, routeStats] = await Promise.all([
+        const [totalSnapshot, proSnapshot, basicSnapshot, onboardedSnapshot, everPaidSnapshot, eventStats, routeStats] = await Promise.all([
             db.collection('users').count().get(),
             db.collectionGroup('subscriptions')
                 .where('status', 'in', [...ACTIVE_SUBSCRIPTION_STATUSES])
@@ -459,6 +461,9 @@ export const getUserCount = onAdminCall<UserCountRequest, UserCountResponse>({
                 .count().get(),
             db.collection('users')
                 .where('onboardingCompleted', '==', true)
+                .count().get(),
+            db.collection('users')
+                .where('hasSubscribedOnce', '==', true)
                 .count().get(),
             getGlobalEventCount(db, {
                 forceRefresh: forceRefreshEventCount,
@@ -475,27 +480,34 @@ export const getUserCount = onAdminCall<UserCountRequest, UserCountResponse>({
         const basic = basicSnapshot.data().count;
         const activePaid = pro + basic;
         const onboardingCompleted = onboardedSnapshot.data().count;
+        const everPaid = everPaidSnapshot.data().count;
+        const canceled = Math.max(0, everPaid - activePaid);
         const free = Math.max(0, total - activePaid);
 
         let monthlyPaid = 0;
         let yearlyPaid = 0;
+        let cancelScheduled = 0;
 
-        if (activePaid > 0) {
-            const activeSubscriptionSnapshot = await db.collectionGroup('subscriptions')
-                .where('status', 'in', [...ACTIVE_SUBSCRIPTION_STATUSES])
-                .select('items')
-                .get();
+        const activeSubscriptionSnapshot = await db.collectionGroup('subscriptions')
+            .where('status', 'in', [...ACTIVE_SUBSCRIPTION_STATUSES])
+            .select('items', 'cancel_at_period_end', 'role')
+            .get();
 
-            activeSubscriptionSnapshot.docs.forEach((doc) => {
-                const subscription = doc.data() as Record<string, unknown>;
-                const interval = resolveSubscriptionInterval(subscription);
-                if (interval === SUBSCRIPTION_INTERVAL_MONTH) {
-                    monthlyPaid += 1;
-                } else if (interval === SUBSCRIPTION_INTERVAL_YEAR) {
-                    yearlyPaid += 1;
-                }
-            });
-        }
+        activeSubscriptionSnapshot.docs.forEach((doc) => {
+            const subscription = doc.data() as Record<string, unknown>;
+            if (subscription.cancel_at_period_end === true) {
+                cancelScheduled += 1;
+            }
+            if (subscription.role !== SUBSCRIPTION_ROLE_PRO && subscription.role !== SUBSCRIPTION_ROLE_BASIC) {
+                return;
+            }
+            const interval = resolveSubscriptionInterval(subscription);
+            if (interval === SUBSCRIPTION_INTERVAL_MONTH) {
+                monthlyPaid += 1;
+            } else if (interval === SUBSCRIPTION_INTERVAL_YEAR) {
+                yearlyPaid += 1;
+            }
+        });
 
         const unknownCadencePaid = Math.max(0, activePaid - monthlyPaid - yearlyPaid);
 
@@ -535,6 +547,9 @@ export const getUserCount = onAdminCall<UserCountRequest, UserCountResponse>({
             free,
             monthlyPaid,
             yearlyPaid,
+            everPaid,
+            canceled,
+            cancelScheduled,
             onboardingCompleted,
             events: eventStats,
             routes: routeStats,

@@ -31,10 +31,10 @@ describe('getUserCount Cloud Function', () => {
         const mockActiveSubscriptionsGet = vi.fn().mockResolvedValue({
             docs: [
                 ...Array.from({ length: 45 }, () => ({
-                    data: () => ({ items: [{ plan: { interval: 'month' } }] })
+                    data: () => ({ role: 'pro', items: [{ plan: { interval: 'month' } }] })
                 })),
                 ...Array.from({ length: 5 }, () => ({
-                    data: () => ({ items: [{ plan: { interval: 'year' } }] })
+                    data: () => ({ role: 'basic', items: [{ plan: { interval: 'year' } }] })
                 }))
             ]
         });
@@ -127,6 +127,7 @@ describe('getUserCount Cloud Function', () => {
         const mockSubscriptionQuery = {
             where: vi.fn().mockReturnThis(),
             count: vi.fn().mockReturnValue({ get: mockCountGet }),
+            select: vi.fn().mockReturnValue({ get: vi.fn().mockResolvedValue({ docs: [] }) }),
         };
 
         mockCollection.mockImplementation((name) => {
@@ -178,6 +179,7 @@ describe('getUserCount Cloud Function', () => {
         const mockSubscriptionQuery = {
             where: vi.fn().mockReturnThis(),
             count: vi.fn().mockReturnValue({ get: mockCountGet }),
+            select: vi.fn().mockReturnValue({ get: vi.fn().mockResolvedValue({ docs: [] }) }),
         };
 
         mockCollection.mockImplementation((name) => {
@@ -235,6 +237,7 @@ describe('getUserCount Cloud Function', () => {
         const mockSubscriptionQuery = {
             where: vi.fn().mockReturnThis(),
             count: vi.fn().mockReturnValue({ get: mockCountGet }),
+            select: vi.fn().mockReturnValue({ get: vi.fn().mockResolvedValue({ docs: [] }) }),
         };
         const staleComputedAt = '2026-05-07T05:00:00.000Z';
         const staleExpireAt = '2026-05-07T06:00:00.000Z';
@@ -609,6 +612,7 @@ describe('getUserCount Cloud Function', () => {
             const mockSubscriptionQuery = {
                 where: vi.fn().mockReturnThis(),
                 count: vi.fn().mockReturnValue({ get: mockCountGet }),
+                select: vi.fn().mockReturnValue({ get: vi.fn().mockResolvedValue({ docs: [] }) }),
             };
 
             mockCollection.mockImplementation((name) => {

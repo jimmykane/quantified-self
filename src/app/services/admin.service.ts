@@ -175,6 +175,19 @@ export interface FinancialStats {
     };
 }
 
+export interface MaintenanceEnvironmentStatus {
+    enabled: boolean;
+    message: string;
+    updatedAt?: unknown;
+    updatedBy?: string;
+}
+
+export interface MaintenanceStatus {
+    prod: MaintenanceEnvironmentStatus;
+    beta: MaintenanceEnvironmentStatus;
+    dev: MaintenanceEnvironmentStatus;
+}
+
 export interface RetrySportsLibReparseHeavyJobResponse {
     success: boolean;
     jobId: string;
@@ -311,12 +324,8 @@ export class AdminService {
         );
     }
 
-    getMaintenanceStatus(): Observable<{
-        prod: { enabled: boolean; message: string; updatedAt?: unknown; updatedBy?: string };
-        beta: { enabled: boolean; message: string; updatedAt?: unknown; updatedBy?: string };
-        dev: { enabled: boolean; message: string; updatedAt?: unknown; updatedBy?: string };
-    }> {
-        return from(this.functionsService.call<void, any>('getMaintenanceStatus')).pipe(
+    getMaintenanceStatus(): Observable<MaintenanceStatus> {
+        return from(this.functionsService.call<void, MaintenanceStatus>('getMaintenanceStatus')).pipe(
             map(result => result.data)
         );
     }
