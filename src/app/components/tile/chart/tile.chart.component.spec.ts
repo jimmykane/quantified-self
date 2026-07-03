@@ -30,6 +30,7 @@ import {
   DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE,
   DASHBOARD_LOAD_STATUS_KPI_CHART_TYPE,
   DASHBOARD_MONOTONY_STRAIN_KPI_CHART_TYPE,
+  DASHBOARD_POWER_CURVE_CHART_TYPE,
   DASHBOARD_RAMP_RATE_KPI_CHART_TYPE,
   DASHBOARD_RECOVERY_DEBT_KPI_CHART_TYPE,
   DASHBOARD_RECOVERY_NOW_CHART_TYPE,
@@ -261,6 +262,20 @@ class MockSleepTrendChartComponent {
 }
 
 @Component({
+  selector: 'app-power-curve-chart',
+  template: '',
+  standalone: false
+})
+class MockPowerCurveChartComponent {
+  @Input() isLoading = false;
+  @Input() darkTheme = false;
+  @Input() powerCurve: any;
+  @Input() infoTooltip?: string | null;
+  @Input() reserveTitleActionSpace = false;
+  @Input() mobileTapFeedbackOptions?: unknown;
+}
+
+@Component({
   selector: 'app-event-intensity-zones',
   template: '',
   standalone: false
@@ -293,6 +308,7 @@ describe('TileChartComponent', () => {
         MockIntensityDistributionChartComponent,
         MockEfficiencyTrendChartComponent,
         MockSleepTrendChartComponent,
+        MockPowerCurveChartComponent,
         MockEventIntensityZonesComponent,
       ],
       schemas: [NO_ERRORS_SCHEMA]
@@ -367,6 +383,11 @@ describe('TileChartComponent', () => {
   const getSleepTrendComponent = (): MockSleepTrendChartComponent => {
     const debugElement = fixture.debugElement.query(By.directive(MockSleepTrendChartComponent));
     return debugElement.componentInstance as MockSleepTrendChartComponent;
+  };
+
+  const getPowerCurveComponent = (): MockPowerCurveChartComponent => {
+    const debugElement = fixture.debugElement.query(By.directive(MockPowerCurveChartComponent));
+    return debugElement.componentInstance as MockPowerCurveChartComponent;
   };
 
   it('should set vertical=false for LinesHorizontal', () => {
@@ -509,6 +530,28 @@ describe('TileChartComponent', () => {
     expect(ranges).toEqual(['30d']);
     expect(activitySelections).toEqual([[ActivityTypes.Running]]);
     expect(directions).toEqual(['older']);
+  });
+
+  it('should render Power Curve as an event-backed curated tile', () => {
+    const powerCurve = {
+      eventCount: 1,
+      series: [],
+      summaryPoints: [],
+      latestEventID: 'event-1',
+      latestEventStartMs: Date.now(),
+    };
+    component.chartType = DASHBOARD_POWER_CURVE_CHART_TYPE as any;
+    component.powerCurve = powerCurve as any;
+    component.showActions = true;
+    component.eventFilters = { range: '1y', activityTypes: [] };
+
+    fixture.detectChanges();
+
+    const chart = getPowerCurveComponent();
+    expect(chart.powerCurve).toBe(powerCurve);
+    expect(chart.infoTooltip).toContain('Power Curve compares');
+    expect(chart.reserveTitleActionSpace).toBe(true);
+    expect(getEventFiltersComponent().eventFilters).toEqual(component.eventFilters);
   });
 
   it('should offset chart loading shades when top header controls are shown', () => {

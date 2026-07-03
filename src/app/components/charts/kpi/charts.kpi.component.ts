@@ -4,13 +4,19 @@ import {
   ChangeDetectorRef,
   Component,
   ElementRef,
+  inject,
   Input,
   OnChanges,
   OnDestroy,
   SimpleChanges,
+  TemplateRef,
   ViewChild,
 } from '@angular/core';
+import { BreakpointObserver } from '@angular/cdk/layout';
+import { MatDialog, MatDialogRef } from '@angular/material/dialog';
+import { toSignal } from '@angular/core/rxjs-interop';
 import type { EChartsType } from 'echarts/core';
+import { map } from 'rxjs/operators';
 import {
   ECHARTS_CARTESIAN_IMMEDIATE_UPDATE_SETTINGS,
   EChartsHostController,
@@ -101,6 +107,9 @@ interface KpiSparklineStyle {
   standalone: false,
 })
 export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
+  private readonly breakpointObserver = inject(BreakpointObserver);
+  private readonly dialog = inject(MatDialog);
+
   @Input() darkTheme = false;
   @Input() isLoading = false;
   @Input() chartType: DashboardKpiChartType = DASHBOARD_ACWR_KPI_CHART_TYPE;
@@ -134,8 +143,14 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
   @Input() intensityDistributionStatus?: DashboardDerivedMetricStatus | null;
 
   @ViewChild('chartDiv', { static: true }) chartDiv!: ElementRef<HTMLDivElement>;
+  @ViewChild('kpiDetailsDialogTemplate') kpiDetailsDialogTemplate?: TemplateRef<unknown>;
 
   private readonly chartHost: EChartsHostController;
+  private kpiDetailsDialogRef?: MatDialogRef<unknown>;
+  public readonly useKpiDetailsDialog = toSignal(
+    this.breakpointObserver.observe('(max-width: 767px)').pipe(map(state => state.matches)),
+    { initialValue: false },
+  );
 
   public title = 'ACWR';
   public titleDisplay = 'ACWR';
@@ -220,12 +235,38 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    this.kpiDetailsDialogRef?.close();
     this.chartHost.dispose();
   }
 
   onInfoButtonClick(event: MouseEvent): void {
     event.stopPropagation();
     this.hapticsService.selection();
+  }
+
+  openKpiDetailsDialog(event: MouseEvent): void {
+    event.stopPropagation();
+    this.hapticsService.selection();
+    if (!this.kpiDetailsDialogTemplate) {
+      return;
+    }
+    if (this.kpiDetailsDialogRef) {
+      return;
+    }
+
+    const dialogRef = this.dialog.open(this.kpiDetailsDialogTemplate, {
+      ariaLabel: 'KPI details',
+      autoFocus: false,
+      maxWidth: '340px',
+      restoreFocus: true,
+      width: 'calc(100vw - 32px)',
+    });
+    this.kpiDetailsDialogRef = dialogRef;
+    dialogRef.afterClosed().subscribe(() => {
+      if (this.kpiDetailsDialogRef === dialogRef) {
+        this.kpiDetailsDialogRef = undefined;
+      }
+    });
   }
 
   private async refreshChart(): Promise<void> {

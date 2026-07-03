@@ -33,6 +33,7 @@ import {
   DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE,
   DASHBOARD_LOAD_STATUS_KPI_CHART_TYPE,
   DASHBOARD_MONOTONY_STRAIN_KPI_CHART_TYPE,
+  DASHBOARD_POWER_CURVE_CHART_TYPE,
   DASHBOARD_RAMP_RATE_KPI_CHART_TYPE,
   DASHBOARD_RECOVERY_DEBT_KPI_CHART_TYPE,
   DASHBOARD_RECOVERY_NOW_CHART_TYPE,
@@ -50,6 +51,10 @@ import type {
   AppDashboardMapTileSettingsInterface,
 } from '../models/app-user.interface';
 import { AppUserUtilities } from '../utils/app.user.utilities';
+import {
+  buildDashboardCuratedAutoTile,
+  type DashboardDefaultCuratedChartType,
+} from './dashboard-auto-tile.helper';
 
 export const DASHBOARD_MANAGER_PRESET_IDS = {
   CURATED_RECOVERY: 'curated-recovery',
@@ -58,6 +63,7 @@ export const DASHBOARD_MANAGER_PRESET_IDS = {
   CURATED_INTENSITY_DISTRIBUTION: 'curated-intensity-distribution',
   CURATED_EFFICIENCY_TREND: 'curated-efficiency-trend',
   CURATED_SLEEP: 'curated-sleep',
+  CURATED_POWER_CURVE: 'curated-power-curve',
   KPI_ACWR: 'kpi-acwr',
   KPI_RAMP_RATE: 'kpi-ramp-rate',
   KPI_MONOTONY_STRAIN: 'kpi-monotony-strain',
@@ -196,6 +202,15 @@ const DASHBOARD_MANAGER_PRESET_DEFINITIONS: DashboardManagerPresetDefinition[] =
     icon: 'hotel',
     category: 'curated',
     curatedChartType: DASHBOARD_SLEEP_TREND_CHART_TYPE,
+  },
+  {
+    id: DASHBOARD_MANAGER_PRESET_IDS.CURATED_POWER_CURVE,
+    label: 'Power Curve',
+    tileName: 'Power Curve',
+    description: 'Best power envelope with latest power ride comparison.',
+    icon: 'speed',
+    category: 'curated',
+    curatedChartType: DASHBOARD_POWER_CURVE_CHART_TYPE,
   },
   {
     id: DASHBOARD_MANAGER_PRESET_IDS.KPI_ACWR,
@@ -513,6 +528,14 @@ export function buildDashboardManagerPresetTile(
         dataTimeInterval: TimeIntervals.Daily,
       };
       return sleepTile;
+    }
+
+    if (definition.curatedChartType === DASHBOARD_POWER_CURVE_CHART_TYPE) {
+      return buildDashboardCuratedAutoTile(
+        definition.curatedChartType as DashboardDefaultCuratedChartType,
+        input.order,
+        input.size,
+      );
     }
 
     const displaySettings = getDefaultDashboardChartTileDisplaySettingsForChartType(definition.curatedChartType);

@@ -17,6 +17,8 @@ import {
 import {
   DASHBOARD_AUTO_TILE_CURATED_ID_BY_CHART_TYPE,
   DASHBOARD_AUTO_TILE_CURATED_SOURCE,
+  DASHBOARD_AUTO_TILE_POWER_CURVE_ID,
+  DASHBOARD_AUTO_TILE_POWER_CURVE_SOURCE,
   DASHBOARD_AUTO_TILE_SLEEP_TREND_ID,
   DASHBOARD_AUTO_TILE_SLEEP_TREND_SOURCE,
   DASHBOARD_AUTO_TILE_KPI_ID_BY_CHART_TYPE,
@@ -34,6 +36,7 @@ import {
   type DashboardDefaultCuratedChartType,
 } from '../helpers/dashboard-auto-tile.helper';
 import {
+  DASHBOARD_POWER_CURVE_CHART_TYPE,
   DASHBOARD_RECOVERY_NOW_CHART_TYPE,
   DASHBOARD_SLEEP_TREND_CHART_TYPE,
   getDefaultDashboardKpiChartDefinitions,
@@ -42,6 +45,7 @@ import {
 import { cloneDashboardTileEventFilters } from '../helpers/dashboard-tile-event-filters.helper';
 import { cloneDashboardChartTileDisplaySettingsForChartType } from '../helpers/dashboard-chart-display-settings.helper';
 import { AppSleepService } from './app.sleep.service';
+import { AppEventService } from './app.event.service';
 import { AppUserService } from './app.user.service';
 import { LoggerService } from './logger.service';
 
@@ -77,7 +81,9 @@ const DASHBOARD_DEFAULT_CURATED_AUTO_TILE_RULES: DashboardAutoTileRule[] = getDa
     return {
       id: DASHBOARD_AUTO_TILE_CURATED_ID_BY_CHART_TYPE[chartType],
       label: buildDashboardCuratedAutoTile(chartType, 0).name,
-      source: DASHBOARD_AUTO_TILE_CURATED_SOURCE,
+      source: chartType === DASHBOARD_POWER_CURVE_CHART_TYPE
+        ? DASHBOARD_AUTO_TILE_POWER_CURVE_SOURCE
+        : DASHBOARD_AUTO_TILE_CURATED_SOURCE,
       qualifies: (eligibility) => eligibility[DASHBOARD_AUTO_TILE_CURATED_ID_BY_CHART_TYPE[chartType]] === true,
       isPresent: (tiles) => tiles.some(tile => isDashboardCuratedAutoTile(tile, chartType)),
       createTile: (order) => buildDashboardCuratedAutoTile(chartType, order),
@@ -98,6 +104,7 @@ export const DASHBOARD_AUTO_TILE_RULES: readonly DashboardAutoTileRule[] = [{
 })
 export class DashboardAutoTileService {
   private sleepService = inject(AppSleepService);
+  private eventService = inject(AppEventService);
   private userService = inject(AppUserService);
   private snackBar = inject(MatSnackBar);
   private logger = inject(LoggerService);
@@ -141,6 +148,16 @@ export class DashboardAutoTileService {
       },
       error: (error) => {
         this.logger.warn('[DashboardAutoTileService] Failed to watch sleep auto-tile eligibility', error);
+        scheduleApply();
+      },
+    }));
+    subscription.add(this.eventService.watchHasAnyPowerCurveEvent(uid).subscribe({
+      next: (hasPowerCurveEvent) => {
+        eligibility[DASHBOARD_AUTO_TILE_POWER_CURVE_ID] = hasPowerCurveEvent;
+        scheduleApply();
+      },
+      error: (error) => {
+        this.logger.warn('[DashboardAutoTileService] Failed to watch Power Curve auto-tile eligibility', error);
         scheduleApply();
       },
     }));
@@ -302,9 +319,12 @@ export class DashboardAutoTileService {
       .filter(definition => definition.chartType !== DASHBOARD_SLEEP_TREND_CHART_TYPE)
       .reduce<DashboardAutoTileEligibility>((eligibility, definition) => {
         const chartType = definition.chartType as DashboardDefaultCuratedChartType;
-        eligibility[DASHBOARD_AUTO_TILE_CURATED_ID_BY_CHART_TYPE[chartType]] = (
-          chartType !== DASHBOARD_RECOVERY_NOW_CHART_TYPE || !hasDismissedLegacyRecovery
-        );
+        const id = DASHBOARD_AUTO_TILE_CURATED_ID_BY_CHART_TYPE[chartType];
+        if (chartType === DASHBOARD_POWER_CURVE_CHART_TYPE) {
+          eligibility[id] = false;
+        } else {
+          eligibility[id] = chartType !== DASHBOARD_RECOVERY_NOW_CHART_TYPE || !hasDismissedLegacyRecovery;
+        }
         return eligibility;
       }, {});
   }

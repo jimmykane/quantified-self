@@ -1,7 +1,11 @@
 import { Injectable } from '@angular/core';
 import { ActivityInterface, DataCadence, DataHeartRate, DataPower } from '@sports-alliance/sports-lib';
+import {
+  normalizePowerCurvePoints,
+  POWER_CURVE_STAT_TYPE,
+  type PowerCurvePoint as SharedPowerCurvePoint,
+} from '@shared/power-curve';
 
-const POWER_CURVE_TYPE = 'PowerCurve';
 const DEFAULT_ROLLING_WINDOW_SECONDS = 180;
 const DEFAULT_EFFORT_WINDOWS = [5, 30, 60, 300, 1200, 3600];
 const MIN_VALID_CADENCE = 35;
@@ -38,11 +42,7 @@ export interface BuildPerformanceAvailabilityOptions {
   isMerge?: boolean;
 }
 
-export interface PowerCurveChartPoint {
-  duration: number;
-  power: number;
-  wattsPerKg?: number;
-}
+export type PowerCurveChartPoint = SharedPowerCurvePoint;
 
 export interface PowerCurveChartSeries {
   activity: ActivityInterface;
@@ -153,7 +153,7 @@ export class PerformanceCurveDataService {
     const isMerge = options.isMerge === true;
 
     const candidateSeries = activities.map((activity, index) => {
-      const points = this.normalizePowerCurvePoints(this.getRawPowerCurvePoints(activity));
+      const points = normalizePowerCurvePoints(this.getRawPowerCurveStatValue(activity)).points;
 
       return {
         activity,
@@ -512,54 +512,10 @@ export class PerformanceCurveDataService {
       );
   }
 
-  private getRawPowerCurvePoints(activity: ActivityInterface): unknown[] {
-    const stat = activity?.getStat?.(POWER_CURVE_TYPE) as ValueObject | null | undefined;
+  private getRawPowerCurveStatValue(activity: ActivityInterface): unknown {
+    const stat = activity?.getStat?.(POWER_CURVE_STAT_TYPE) as ValueObject | null | undefined;
     const statValue = stat?.getValue?.();
-    return Array.isArray(statValue) ? statValue : [];
-  }
-
-  private normalizePowerCurvePoints(rawPoints: unknown[]): PowerCurveChartPoint[] {
-    const byDuration = new Map<number, PowerCurveChartPoint>();
-
-    rawPoints.forEach((rawPoint) => {
-      if (!rawPoint || typeof rawPoint !== 'object') {
-        return;
-      }
-
-      const point = rawPoint as { duration?: unknown; power?: unknown; wattsPerKg?: unknown };
-      const duration = this.toFiniteNumber(point.duration);
-      const power = this.toFiniteNumber(point.power);
-      const wattsPerKg = this.toFiniteNumber(point.wattsPerKg);
-
-      if (!duration || duration <= 0 || !power || power <= 0) {
-        return;
-      }
-
-      const normalizedDuration = Number(duration);
-      const normalizedPoint: PowerCurveChartPoint = {
-        duration: normalizedDuration,
-        power: Number(power),
-      };
-
-      if (wattsPerKg && wattsPerKg > 0) {
-        normalizedPoint.wattsPerKg = Number(wattsPerKg);
-      }
-
-      const existingPoint = byDuration.get(normalizedDuration);
-      if (!existingPoint || normalizedPoint.power > existingPoint.power) {
-        byDuration.set(normalizedDuration, normalizedPoint);
-        return;
-      }
-
-      if (
-        normalizedPoint.power === existingPoint.power
-        && (normalizedPoint.wattsPerKg ?? 0) > (existingPoint.wattsPerKg ?? 0)
-      ) {
-        byDuration.set(normalizedDuration, normalizedPoint);
-      }
-    });
-
-    return [...byDuration.values()].sort((left, right) => left.duration - right.duration);
+    return statValue;
   }
 
   private buildActivityLabels(activities: ActivityInterface[], isMerge: boolean): ActivityLabelDescriptor[] {

@@ -91,6 +91,9 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('**Uploaded activities**');
     expect(gettingStartedSection?.content).toContain('current-state set: **Load Status**, **Form Now**, **Fitness Trend**, **Fatigue Trend**, **Recovery Debt**, and **Training Balance**');
     expect(gettingStartedSection?.content).toContain('Additional KPI rows such as **Fitness (CTL)**, **Fatigue (ATL)**');
+    expect(gettingStartedSection?.content).toContain('**Power Curve** is a curated event-backed chart');
+    expect(gettingStartedSection?.content).toContain('defaults to **1y**');
+    expect(gettingStartedSection?.content).toContain('Power Curve** joins that auto-add flow only after an event with stored Power Curve data exists');
   });
 
   it('should document that distance values follow unit preferences across the app', () => {
@@ -208,6 +211,8 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('Freshness Forecast');
     expect(gettingStartedSection?.content).toContain('Intensity Distribution');
     expect(gettingStartedSection?.content).toContain('Efficiency Trend');
+    expect(gettingStartedSection?.content).toContain('Power Curve');
+    expect(gettingStartedSection?.content).toContain("each event's stored PowerCurve stat");
     expect(gettingStartedSection?.content).toContain('saved per dashboard tile');
     expect(gettingStartedSection?.content).not.toContain('**Sleep** shows connected-source sleep duration');
     expect(gettingStartedSection?.content).toContain('ACWR');

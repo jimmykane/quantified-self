@@ -113,7 +113,7 @@ export const HELP_SECTIONS: HelpSection[] = [
 - **Presets** provide quick-start tile templates and can be applied in both **Add** and **Edit** modes.
 - **Curated Recovery** remains a fixed insight and does not react to event table or custom tile date ranges.
 - **Curated Form/TSS** computes from full history and does not react to event table or custom tile date ranges. Its **W / M / Y** view setting is saved on that dashboard tile.
-- New curated charts: **Freshness Forecast**, **Intensity Distribution**, and **Efficiency Trend**.
+- New curated charts: **Freshness Forecast**, **Intensity Distribution**, **Efficiency Trend**, and **Power Curve**.
 - The default KPI rows are the current-state set: **Load Status**, **Form Now**, **Fitness Trend**, **Fatigue Trend**, **Recovery Debt**, and **Training Balance**.
 - Additional KPI rows such as **Fitness (CTL)**, **Fatigue (ATL)**, **ACWR**, **Ramp Rate**, **Monotony / Strain**, **Form +7d**, **Easy %**, **Hard %**, and **Efficiency Δ (4w)** remain available from Dashboard manager.
 - KPI rows are shown in the compact **Today** section above the main dashboard grid.
@@ -133,9 +133,10 @@ export const HELP_SECTIONS: HelpSection[] = [
 - If Suunto disconnects server-side or stops accepting the stored token, the dashboard can show a **Reconnect Suunto** action prompt. Reconnecting restarts sleep sync, history imports, and upload tools. Garmin/COROS -> Suunto auto-sync routes stay disabled until you enable them again in **Services**; dismissing the card only hides the reminder.
 - Distance values in dashboards, event charts, activity chips, and CSV exports follow your kilometers or miles preference from **Settings -> Units**; jump distances display in feet when miles are selected.
 - **Map** tiles use their own tile date-range and activity filters, independent from the event table search.
+- **Power Curve** is a curated event-backed chart: it uses its own tile date-range and activity filters, defaults to **1y**, and compares your best power per duration in range with the latest ride in range that has stored Power Curve data.
 - Curated, KPI, form, recovery, sleep, and other derived tiles stay independent from event table filters and custom/map tile filters.
 - When sleep sync imports sleep sessions, the dashboard can add the **Sleep** tile once, and you can also add it manually from Dashboard manager; removing an auto-added Sleep tile prevents future automatic Sleep tile adds.
-- Existing dashboards can receive the default curated chart set and core KPI row set automatically once; removing an auto-added curated chart or KPI prevents that chart from being suggested again.
+- Existing dashboards can receive the default curated chart set and core KPI row set automatically once. **Power Curve** joins that auto-add flow only after an event with stored Power Curve data exists; removing an auto-added curated chart or KPI prevents that chart from being suggested again.
 - Derived curated and KPI chart types are unique: only one tile per special derived chart type can exist at a time.
 - Map tiles are also unique: only one map tile can exist at a time.
 - Map style and cluster-marker settings are edited inside Dashboard manager.
@@ -206,6 +207,7 @@ export const HELP_SECTIONS: HelpSection[] = [
 - **Intensity Distribution** uses power zones when available, otherwise heart-rate zones, grouped to Easy/Moderate/Hard by week.
 - Intensity Distribution headline percentages are labeled as **Current week**; when no current-week bucket exists they are labeled **Latest week**.
 - **Efficiency Trend** uses weekly duration-weighted average of avgPower/avgHeartRate.
+- **Power Curve** uses each event's stored PowerCurve stat to draw the best power envelope and the newest power ride inside that tile's filters.
 - Intensity Distribution and Efficiency Trend include compact **8w / 12w / 6m / 1y / All** range selectors that only change the visible derived weekly history and are saved per dashboard tile.
 - Training-derived tiles do not fall back to currently loaded dashboard events.
 

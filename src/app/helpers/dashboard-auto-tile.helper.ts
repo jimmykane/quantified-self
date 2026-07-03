@@ -31,6 +31,7 @@ import {
   DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE,
   DASHBOARD_LOAD_STATUS_KPI_CHART_TYPE,
   DASHBOARD_MONOTONY_STRAIN_KPI_CHART_TYPE,
+  DASHBOARD_POWER_CURVE_CHART_TYPE,
   DASHBOARD_RAMP_RATE_KPI_CHART_TYPE,
   DASHBOARD_RECOVERY_DEBT_KPI_CHART_TYPE,
   DASHBOARD_RECOVERY_NOW_CHART_TYPE,
@@ -45,6 +46,8 @@ import { getDefaultDashboardChartTileDisplaySettingsForChartType } from './dashb
 
 export const DASHBOARD_AUTO_TILE_SLEEP_TREND_ID: AppDashboardAutoTileId = 'sleepTrend';
 export const DASHBOARD_AUTO_TILE_SLEEP_TREND_SOURCE = 'sleep-sync';
+export const DASHBOARD_AUTO_TILE_POWER_CURVE_ID: AppDashboardAutoTileId = 'powerCurve';
+export const DASHBOARD_AUTO_TILE_POWER_CURVE_SOURCE = 'power-curve';
 export const DASHBOARD_AUTO_TILE_CURATED_SOURCE = 'default-curated';
 export const DASHBOARD_AUTO_TILE_KPI_SOURCE = 'default-kpi';
 
@@ -56,6 +59,7 @@ export const DASHBOARD_AUTO_TILE_CURATED_ID_BY_CHART_TYPE: Record<DashboardDefau
   [DASHBOARD_FRESHNESS_FORECAST_CHART_TYPE]: 'curatedFreshnessForecast',
   [DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE]: 'curatedIntensityDistribution',
   [DASHBOARD_EFFICIENCY_TREND_CHART_TYPE]: 'curatedEfficiencyTrend',
+  [DASHBOARD_POWER_CURVE_CHART_TYPE]: DASHBOARD_AUTO_TILE_POWER_CURVE_ID,
 };
 export const DASHBOARD_AUTO_TILE_RECOVERY_NOW_ID = DASHBOARD_AUTO_TILE_CURATED_ID_BY_CHART_TYPE[DASHBOARD_RECOVERY_NOW_CHART_TYPE];
 
@@ -140,8 +144,15 @@ export function buildDashboardCuratedAutoTile(
     [DASHBOARD_FRESHNESS_FORECAST_CHART_TYPE]: 'Freshness Forecast',
     [DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE]: 'Intensity Distribution',
     [DASHBOARD_EFFICIENCY_TREND_CHART_TYPE]: 'Efficiency Trend',
+    [DASHBOARD_POWER_CURVE_CHART_TYPE]: 'Power Curve',
   };
   const displaySettings = getDefaultDashboardChartTileDisplaySettingsForChartType(chartType);
+  const eventFilters = chartType === DASHBOARD_POWER_CURVE_CHART_TYPE
+    ? {
+      range: '1y' as const,
+      activityTypes: [],
+    }
+    : undefined;
 
   return {
     name: chartNameByType[chartType],
@@ -154,6 +165,7 @@ export function buildDashboardCuratedAutoTile(
     dataCategoryType: ChartDataCategoryTypes.DateType,
     dataTimeInterval: TimeIntervals.Weekly,
     ...(displaySettings ? { displaySettings } : {}),
+    ...(eventFilters ? { eventFilters } : {}),
   };
 }
 
@@ -237,7 +249,12 @@ export function getDashboardAutoTileDescriptorForTile(
   const chartType = `${chartTile.chartType}` as DashboardDefaultCuratedChartType | DashboardKpiChartType;
   const curatedId = DASHBOARD_AUTO_TILE_CURATED_ID_BY_CHART_TYPE[chartType as DashboardDefaultCuratedChartType];
   if (curatedId) {
-    return { id: curatedId, source: DASHBOARD_AUTO_TILE_CURATED_SOURCE };
+    return {
+      id: curatedId,
+      source: curatedId === DASHBOARD_AUTO_TILE_POWER_CURVE_ID
+        ? DASHBOARD_AUTO_TILE_POWER_CURVE_SOURCE
+        : DASHBOARD_AUTO_TILE_CURATED_SOURCE,
+    };
   }
 
   const kpiId = DASHBOARD_AUTO_TILE_KPI_ID_BY_CHART_TYPE[chartType as DashboardKpiChartType];

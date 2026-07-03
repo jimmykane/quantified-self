@@ -1,11 +1,15 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { CommonModule } from '@angular/common';
 import { Component, Input, NO_ERRORS_SCHEMA, SimpleChange } from '@angular/core';
 import { By } from '@angular/platform-browser';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
+import { MatDialog, MatDialogModule, MatDialogRef } from '@angular/material/dialog';
+import { BreakpointObserver, BreakpointState } from '@angular/cdk/layout';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
+import { BehaviorSubject, of } from 'rxjs';
 import { ChartsKpiComponent } from './charts.kpi.component';
 import { AppHapticsService } from '../../../services/app.haptics.service';
 import { EChartsLoaderService } from '../../../services/echarts-loader.service';
@@ -56,6 +60,7 @@ describe('ChartsKpiComponent', () => {
     attachMobileSeriesTapFeedback: ReturnType<typeof vi.fn>;
   };
   let hapticsMock: { selection: ReturnType<typeof vi.fn> };
+  let breakpointState$: BehaviorSubject<BreakpointState>;
   let originalResizeObserver: typeof ResizeObserver | undefined;
 
   beforeEach(async () => {
@@ -82,10 +87,16 @@ describe('ChartsKpiComponent', () => {
       attachMobileSeriesTapFeedback: vi.fn(() => () => { }),
     };
     hapticsMock = { selection: vi.fn() };
+    breakpointState$ = new BehaviorSubject<BreakpointState>({
+      matches: false,
+      breakpoints: { '(max-width: 767px)': false },
+    });
 
     await TestBed.configureTestingModule({
       imports: [
+        CommonModule,
         MatButtonModule,
+        MatDialogModule,
         MatIconModule,
         MatMenuModule,
         NoopAnimationsModule,
@@ -93,6 +104,7 @@ describe('ChartsKpiComponent', () => {
       declarations: [ChartsKpiComponent, MockLoadingOverlayComponent],
       providers: [
         { provide: AppHapticsService, useValue: hapticsMock },
+        { provide: BreakpointObserver, useValue: { observe: vi.fn(() => breakpointState$.asObservable()) } },
         { provide: EChartsLoaderService, useValue: mockLoader },
         { provide: LoggerService, useValue: { error: vi.fn(), warn: vi.fn() } },
       ],
@@ -743,6 +755,42 @@ describe('ChartsKpiComponent', () => {
     component.onInfoButtonClick({ stopPropagation } as unknown as MouseEvent);
 
     expect(stopPropagation).toHaveBeenCalledTimes(1);
+    expect(hapticsMock.selection).toHaveBeenCalledTimes(1);
+  });
+
+  it('opens KPI details in a centered dialog on mobile viewport', async () => {
+    breakpointState$.next({
+      matches: true,
+      breakpoints: { '(max-width: 767px)': true },
+    });
+    component.infoTooltip = 'KPI info';
+    component.hasKpiDetails = true;
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    const dialog = TestBed.inject(MatDialog);
+    const dialogRefStub = {
+      afterClosed: () => of(undefined),
+      close: vi.fn(),
+    } as Partial<MatDialogRef<unknown>> as MatDialogRef<unknown>;
+    const openSpy = vi.spyOn(dialog, 'open').mockReturnValue({
+      ...dialogRefStub,
+    });
+
+    const infoButton = fixture.debugElement.query(By.css('.title-info-button')).nativeElement as HTMLButtonElement;
+    infoButton.click();
+
+    expect(openSpy).toHaveBeenCalledTimes(1);
+    expect(openSpy).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        ariaLabel: 'KPI details',
+        autoFocus: false,
+        maxWidth: '340px',
+        restoreFocus: true,
+        width: 'calc(100vw - 32px)',
+      }),
+    );
     expect(hapticsMock.selection).toHaveBeenCalledTimes(1);
   });
 

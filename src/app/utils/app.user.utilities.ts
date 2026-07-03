@@ -72,6 +72,7 @@ import {
     DASHBOARD_SLEEP_TREND_CHART_TYPE,
     getDefaultDashboardKpiChartDefinitions,
     getDashboardCuratedChartDefinitions,
+    isDashboardEventBackedSpecialChartType,
     isDashboardRecoveryNowChartType,
     isDashboardSpecialChartType,
 } from '../helpers/dashboard-special-chart-types';
@@ -595,11 +596,12 @@ export class AppUserUtilities {
                     AppUserUtilities.normalizeDashboardChartTileDisplaySettings(normalizedRecoveryTile as AppDashboardChartTileSettingsInterface);
                     return normalizedRecoveryTile;
                 }
-                if (!isDashboardSpecialChartType(chartTile.chartType)) {
+                if (!isDashboardSpecialChartType(chartTile.chartType) || isDashboardEventBackedSpecialChartType(chartTile.chartType)) {
+                    const eventBackedSpecial = isDashboardEventBackedSpecialChartType(chartTile.chartType);
                     chartTile.eventFilters = normalizeDashboardTileEventFilters(
                         chartTile.eventFilters,
-                        legacyTileEventFilterRange,
-                        legacyTileEventFilterActivityTypes,
+                        eventBackedSpecial ? '1y' : legacyTileEventFilterRange,
+                        eventBackedSpecial ? [] : legacyTileEventFilterActivityTypes,
                     );
                 } else {
                     delete chartTile.eventFilters;

@@ -269,6 +269,12 @@
   padding: 12px 14px;
 }
 
+.kpi-details-dialog-content .kpi-details-content {
+  max-width: 100%;
+  min-width: 0;
+  width: 100%;
+}
+
 .kpi-details-heading {
   color: var(--mat-sys-on-surface);
   font: var(--mat-sys-title-small);

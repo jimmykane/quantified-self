@@ -68,6 +68,7 @@ import {
   DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE,
   DASHBOARD_LOAD_STATUS_KPI_CHART_TYPE,
   DASHBOARD_MONOTONY_STRAIN_KPI_CHART_TYPE,
+  DASHBOARD_POWER_CURVE_CHART_TYPE,
   DASHBOARD_RAMP_RATE_KPI_CHART_TYPE,
   DASHBOARD_RECOVERY_DEBT_KPI_CHART_TYPE,
   DASHBOARD_RECOVERY_NOW_CHART_TYPE,
@@ -80,6 +81,7 @@ import {
   getDashboardKpiChartDefinitions,
   isDashboardKpiChartType,
   isDashboardCuratedChartType,
+  isDashboardEventBackedSpecialChartType,
   isDashboardRecoveryNowChartType,
   isDashboardSpecialChartType,
   resolveDashboardChartCategory,
@@ -115,6 +117,8 @@ import {
   DASHBOARD_AUTO_TILE_CURATED_SOURCE,
   DASHBOARD_AUTO_TILE_KPI_ID_BY_CHART_TYPE,
   DASHBOARD_AUTO_TILE_KPI_SOURCE,
+  DASHBOARD_AUTO_TILE_POWER_CURVE_ID,
+  DASHBOARD_AUTO_TILE_POWER_CURVE_SOURCE,
   DASHBOARD_AUTO_TILE_SLEEP_TREND_ID,
   DASHBOARD_AUTO_TILE_SLEEP_TREND_SOURCE,
   DASHBOARD_AUTO_TILE_RECOVERY_NOW_ID,
@@ -292,6 +296,7 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
     [DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE]: 'bar_chart',
     [DASHBOARD_EFFICIENCY_TREND_CHART_TYPE]: 'show_chart',
     [DASHBOARD_SLEEP_TREND_CHART_TYPE]: 'hotel',
+    [DASHBOARD_POWER_CURVE_CHART_TYPE]: 'speed',
   };
   public readonly curatedChartDescriptionByType: Record<DashboardCuratedChartType, string> = {
     [DASHBOARD_RECOVERY_NOW_CHART_TYPE]: 'Recovery left vs elapsed recovery.',
@@ -300,6 +305,7 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
     [DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE]: 'Weekly easy/moderate/hard intensity split (Power or HR fallback).',
     [DASHBOARD_EFFICIENCY_TREND_CHART_TYPE]: 'Weekly duration-weighted power/heart-rate efficiency trend.',
     [DASHBOARD_SLEEP_TREND_CHART_TYPE]: 'Sleep duration and stages by connected source.',
+    [DASHBOARD_POWER_CURVE_CHART_TYPE]: 'Best power envelope with latest power ride comparison.',
   };
   public readonly kpiChartIconByType: Record<DashboardKpiChartType, string> = {
     [DASHBOARD_ACWR_KPI_CHART_TYPE]: 'monitoring',
@@ -1293,6 +1299,10 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
     } else {
       delete nextChartTile.displaySettings;
     }
+    if (isDashboardEventBackedSpecialChartType(nextChartTile.chartType)) {
+      nextChartTile.eventFilters = cloneDashboardTileEventFilters(existingChartTile.eventFilters)
+        || cloneDashboardTileEventFilters(nextChartTile.eventFilters);
+    }
     return nextChartTile;
   }
 
@@ -1539,7 +1549,14 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
     );
 
     Object.values(DASHBOARD_AUTO_TILE_CURATED_ID_BY_CHART_TYPE).forEach((id) => {
-      markDashboardAutoTileDismissed(dashboardSettings, id, DASHBOARD_AUTO_TILE_CURATED_SOURCE, nowMs);
+      markDashboardAutoTileDismissed(
+        dashboardSettings,
+        id,
+        id === DASHBOARD_AUTO_TILE_POWER_CURVE_ID
+          ? DASHBOARD_AUTO_TILE_POWER_CURVE_SOURCE
+          : DASHBOARD_AUTO_TILE_CURATED_SOURCE,
+        nowMs,
+      );
     });
 
     Object.values(DASHBOARD_AUTO_TILE_KPI_ID_BY_CHART_TYPE).forEach((id) => {

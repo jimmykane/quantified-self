@@ -1,6 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { AppEventService } from './app.event.service';
-import { Firestore, doc, docData, collection, collectionData, deleteDoc, updateDoc, writeBatch, query, where, getDocs, getDocsFromCache, onSnapshot, documentId } from 'app/firebase/firestore';
+import { Firestore, doc, docData, collection, collectionData, deleteDoc, updateDoc, writeBatch, query, where, limit, getDocs, getDocsFromCache, onSnapshot, documentId } from 'app/firebase/firestore';
 import { Storage } from 'app/firebase/storage';
 import { Auth } from 'app/firebase/auth';
 import { AppAnalyticsService } from './app.analytics.service';
@@ -10,10 +10,11 @@ import { AppFileService } from './app.file.service';
 import { BrowserCompatibilityService } from './browser.compatibility.service';
 import { AppEventUtilities } from '../utils/app.event.utilities';
 import { vi, describe, it, expect, beforeEach, afterEach, Mock } from 'vitest';
-import { of, firstValueFrom, Subject } from 'rxjs';
+import { of, firstValueFrom, Subject, throwError } from 'rxjs';
 import { AppCacheService } from './app.cache.service';
 import { getMetadata } from 'app/firebase/storage';
 import { webcrypto } from 'node:crypto';
+import { POWER_CURVE_STAT_TYPE } from '@shared/power-curve';
 
 // Polyfill crypto for JSDOM environment
 if (!globalThis.crypto || !globalThis.crypto.subtle) {
@@ -111,6 +112,7 @@ vi.mock('app/firebase/firestore', async (importOriginal) => {
         collectionData: vi.fn(),
         query: vi.fn(),
         where: vi.fn(),
+        limit: vi.fn(),
         documentId: vi.fn(() => '__name__'),
         getDocs: vi.fn(),
         getDocsFromCache: vi.fn(),
@@ -270,6 +272,7 @@ describe('AppEventService', () => {
         });
         mocks.getCountFromServer.mockResolvedValue({ data: () => ({ count: 0 }) });
         mocks.batchCommit.mockResolvedValue(undefined);
+        (limit as Mock).mockImplementation((count: number) => ({ type: 'limit', _limit: count }));
 
         // Polyfills
         // @ts-expect-error - JSDOM does not provide CompressionStream
@@ -295,6 +298,63 @@ describe('AppEventService', () => {
 
     it('should be created', () => {
         expect(service).toBeTruthy();
+    });
+
+    describe('watchHasAnyPowerCurveEvent', () => {
+        it('should emit false without a user id and skip Firestore', async () => {
+            await expect(firstValueFrom(service.watchHasAnyPowerCurveEvent(''))).resolves.toBe(false);
+
+            expect(collection).not.toHaveBeenCalled();
+            expect(collectionData).not.toHaveBeenCalled();
+        });
+
+        it('should watch one event with a stored PowerCurve stat', async () => {
+            (collection as Mock).mockReturnValue('events-collection');
+            (where as Mock).mockImplementation((fieldPath: unknown, opStr: unknown, value: unknown) => ({
+                fieldPath,
+                opStr,
+                value,
+            }));
+            (limit as Mock).mockImplementation((count: number) => ({ limit: count }));
+            (query as Mock).mockImplementation((collectionRef: unknown, ...constraints: unknown[]) => ({
+                collectionRef,
+                constraints,
+            }));
+            (collectionData as Mock).mockReturnValue(of([{ id: 'event-1' }]));
+
+            await expect(firstValueFrom(service.watchHasAnyPowerCurveEvent(' user-1 '))).resolves.toBe(true);
+
+            expect(collection).toHaveBeenCalledWith(mockFirestore, 'users/user-1/events');
+            expect(where).toHaveBeenCalledWith(`stats.${POWER_CURVE_STAT_TYPE}`, '!=', null);
+            expect(limit).toHaveBeenCalledWith(1);
+            expect(query).toHaveBeenCalledWith(
+                'events-collection',
+                { fieldPath: `stats.${POWER_CURVE_STAT_TYPE}`, opStr: '!=', value: null },
+                { limit: 1 },
+            );
+            expect(collectionData).toHaveBeenCalledWith({
+                collectionRef: 'events-collection',
+                constraints: [
+                    { fieldPath: `stats.${POWER_CURVE_STAT_TYPE}`, opStr: '!=', value: null },
+                    { limit: 1 },
+                ],
+            });
+        });
+
+        it('should fail closed when the PowerCurve eligibility watch errors', async () => {
+            (collection as Mock).mockReturnValue('events-collection');
+            (where as Mock).mockReturnValue({ fieldPath: `stats.${POWER_CURVE_STAT_TYPE}`, opStr: '!=', value: null });
+            (limit as Mock).mockReturnValue({ limit: 1 });
+            (query as Mock).mockReturnValue('power-curve-query');
+            (collectionData as Mock).mockReturnValue(throwError(() => new Error('permission denied')));
+
+            await expect(firstValueFrom(service.watchHasAnyPowerCurveEvent('user-1'))).resolves.toBe(false);
+
+            expect(mockLogger.warn).toHaveBeenCalledWith(
+                '[AppEventService] Failed to watch Power Curve eligibility',
+                expect.any(Error),
+            );
+        });
     });
 
     it('should preserve saved tool comparison metadata when deserializing event docs', () => {

@@ -1,0 +1,22 @@
+<app-loading-overlay [isLoading]="isLoading" [hasError]="showNoDataError" [allowErrorPassthrough]="true"
+  [errorMessage]="noDataErrorMessage" [errorHint]="noDataErrorHint" [errorIcon]="noDataErrorIcon"
+  [showSkeleton]="false" height="100%" [style.height.%]="100">
+  <section class="power-curve-layout">
+    <header class="power-curve-header" [class.power-curve-header-reserve-actions]="reserveTitleActionSpace">
+      <div class="title-row">
+        <div class="power-curve-title-group">
+          <div class="power-curve-title qs-dashboard-chart-title">Power Curve</div>
+          @if (infoTooltip) {
+          <button mat-icon-button class="title-info-button" appHapticTap appTooltipTap [matTooltip]="infoTooltip"
+            matTooltipPosition="below" aria-label="How this chart is calculated">
+            <mat-icon>info</mat-icon>
+          </button>
+          }
+        </div>
+      </div>
+      <div class="power-curve-value">{{ headlineValueText }}</div>
+      <div class="power-curve-subtitle">{{ subtitleText }}</div>
+    </header>
+    <div #chartDiv class="power-curve-chart"></div>
+  </section>
+</app-loading-overlay>

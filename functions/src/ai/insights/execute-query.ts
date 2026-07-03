@@ -17,10 +17,17 @@ import {
 import type {
   AiInsightAdvisoryResult,
   AiInsightPowerCurve,
-  AiInsightPowerCurvePoint,
   AiInsightPowerCurveSeries,
   NormalizedInsightQuery,
 } from '../../../../shared/ai-insights.types';
+import {
+  buildPowerCurveEnvelope,
+  normalizePowerCurvePoints,
+  POWER_CURVE_DROPPED_POINT_SAMPLE_LIMIT,
+  POWER_CURVE_STAT_TYPE,
+  type DroppedPowerCurvePointSample,
+  type PowerCurvePoint,
+} from '../../../../shared/power-curve';
 import type { FirestoreEventJSON } from '../../../../shared/app-event.interface';
 import {
   AI_INSIGHTS_TOP_RESULTS_DEFAULT,
@@ -183,18 +190,8 @@ interface FetchEventDocsResult {
   prefilterDiagnostics: FetchEventDocsPrefilterDiagnostics;
 }
 
-const POWER_CURVE_STAT_TYPE = 'PowerCurve';
-const POWER_CURVE_DROPPED_POINT_SAMPLE_LIMIT = 5;
-
-interface DroppedPowerCurvePointSample {
-  rawPointType: string;
-  durationType?: string;
-  powerType?: string;
-  wattsPerKgType?: string;
-}
-
 interface ResolvedPowerCurvePointsResult {
-  points: AiInsightPowerCurvePoint[];
+  points: PowerCurvePoint[];
   droppedPointCount: number;
   droppedPointSamples: DroppedPowerCurvePointSample[];
 }
@@ -688,130 +685,10 @@ function toFiniteNumber(value: unknown): number | null {
   return resolve(value, new Set<object>());
 }
 
-function describePowerCurveValueType(value: unknown): string {
-  if (value === null) {
-    return 'null';
-  }
-  if (Array.isArray(value)) {
-    return 'array';
-  }
-  if (value instanceof Date) {
-    return 'date';
-  }
-  return typeof value;
-}
-
-function pushDroppedPowerCurvePointSample(
-  samples: DroppedPowerCurvePointSample[],
-  sample: DroppedPowerCurvePointSample,
-): void {
-  if (samples.length >= POWER_CURVE_DROPPED_POINT_SAMPLE_LIMIT) {
-    return;
-  }
-  samples.push(sample);
-}
-
 function resolvePowerCurvePoints(event: EventInterface): ResolvedPowerCurvePointsResult {
   const stat = event.getStat?.(POWER_CURVE_STAT_TYPE) as { getValue?: () => unknown } | null | undefined;
   const statValue = stat?.getValue?.();
-  if (!Array.isArray(statValue)) {
-    if (statValue === null || statValue === undefined) {
-      return {
-        points: [],
-        droppedPointCount: 0,
-        droppedPointSamples: [],
-      };
-    }
-
-    return {
-      points: [],
-      droppedPointCount: 1,
-      droppedPointSamples: [{
-        rawPointType: `stat_value_${describePowerCurveValueType(statValue)}`,
-      }],
-    };
-  }
-
-  const pointsByDuration = new Map<number, AiInsightPowerCurvePoint>();
-  const droppedPointSamples: DroppedPowerCurvePointSample[] = [];
-  let droppedPointCount = 0;
-  for (const rawPoint of statValue) {
-    if (!rawPoint || typeof rawPoint !== 'object' || Array.isArray(rawPoint)) {
-      droppedPointCount += 1;
-      pushDroppedPowerCurvePointSample(droppedPointSamples, {
-        rawPointType: describePowerCurveValueType(rawPoint),
-      });
-      continue;
-    }
-
-    const point = rawPoint as { duration?: unknown; power?: unknown; wattsPerKg?: unknown };
-    const duration = toFiniteNumber(point.duration);
-    const power = toFiniteNumber(point.power);
-    const wattsPerKg = toFiniteNumber(point.wattsPerKg);
-    if (!duration || duration <= 0 || !power || power <= 0) {
-      droppedPointCount += 1;
-      pushDroppedPowerCurvePointSample(droppedPointSamples, {
-        rawPointType: 'object',
-        durationType: describePowerCurveValueType(point.duration),
-        powerType: describePowerCurveValueType(point.power),
-        wattsPerKgType: describePowerCurveValueType(point.wattsPerKg),
-      });
-      continue;
-    }
-
-    const normalizedDuration = Number(duration);
-    const normalizedPoint: AiInsightPowerCurvePoint = {
-      duration: normalizedDuration,
-      power: Number(power),
-    };
-    if (wattsPerKg && wattsPerKg > 0) {
-      normalizedPoint.wattsPerKg = Number(wattsPerKg);
-    }
-
-    const existingPoint = pointsByDuration.get(normalizedDuration);
-    if (!existingPoint || normalizedPoint.power > existingPoint.power) {
-      pointsByDuration.set(normalizedDuration, normalizedPoint);
-      continue;
-    }
-
-    if (
-      normalizedPoint.power === existingPoint.power
-      && (normalizedPoint.wattsPerKg ?? 0) > (existingPoint.wattsPerKg ?? 0)
-    ) {
-      pointsByDuration.set(normalizedDuration, normalizedPoint);
-    }
-  }
-
-  return {
-    points: [...pointsByDuration.values()].sort((left, right) => left.duration - right.duration),
-    droppedPointCount,
-    droppedPointSamples,
-  };
-}
-
-function buildPowerCurveEnvelope(pointsCollection: readonly AiInsightPowerCurvePoint[][]): AiInsightPowerCurvePoint[] {
-  const pointsByDuration = new Map<number, AiInsightPowerCurvePoint>();
-
-  pointsCollection.forEach((points) => {
-    points.forEach((point) => {
-      const existingPoint = pointsByDuration.get(point.duration);
-      if (!existingPoint || point.power > existingPoint.power) {
-        pointsByDuration.set(point.duration, point);
-        return;
-      }
-
-      if (
-        point.power === existingPoint.power
-        && (point.wattsPerKg ?? 0) > (existingPoint.wattsPerKg ?? 0)
-      ) {
-        pointsByDuration.set(point.duration, point);
-      }
-    });
-  });
-
-  return [...pointsByDuration.values()]
-    .sort((left, right) => left.duration - right.duration)
-    .map((point) => ({ ...point }));
+  return normalizePowerCurvePoints(statValue);
 }
 
 function resolveBucketEndDate(bucketStartDate: Date, timeInterval: TimeIntervals): Date {
@@ -932,7 +809,7 @@ function buildPowerCurve(
     : query.requestedTimeInterval;
   const bucketEntries = new Map<number, {
     time: number;
-    pointsCollection: AiInsightPowerCurvePoint[][];
+    pointsCollection: PowerCurvePoint[][];
     eventCount: number;
   }>();
 

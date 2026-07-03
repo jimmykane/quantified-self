@@ -17,6 +17,7 @@ import {
 import { EventExporterGPX } from '@sports-alliance/sports-lib';
 
 import { sanitizeActivityFirestoreWritePayload, sanitizeEventFirestoreWritePayload } from '@shared/firestore-write-sanitizer';
+import { POWER_CURVE_STAT_TYPE } from '@shared/power-curve';
 import { createParsingOptions } from '@shared/parsing-options';
 import { EventImporterSuuntoJSON } from '@sports-alliance/sports-lib';
 import { EventImporterFIT } from '@sports-alliance/sports-lib';
@@ -2196,6 +2197,27 @@ export class AppEventService implements OnDestroy {
 
   public hasAnyActivity(user: User): Promise<boolean> {
     return this.hasAnyEvent(user);
+  }
+
+  public watchHasAnyPowerCurveEvent(userID: string | null | undefined): Observable<boolean> {
+    const uid = `${userID || ''}`.trim();
+    if (!uid) {
+      return of(false);
+    }
+
+    const eventsRef = collection(this.firestore, `users/${uid}/events`);
+    const eventsQuery = query(
+      eventsRef,
+      where(`stats.${POWER_CURVE_STAT_TYPE}`, '!=', null),
+      limit(1),
+    );
+    return (collectionData(eventsQuery) as Observable<unknown[]>).pipe(
+      map((events) => (events || []).length > 0),
+      catchError((error) => {
+        this.logger.warn('[AppEventService] Failed to watch Power Curve eligibility', error);
+        return of(false);
+      }),
+    );
   }
 
   public async getEventCountBy(

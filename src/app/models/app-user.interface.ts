@@ -50,6 +50,7 @@ export type AppDashboardAutoTileId =
     | 'curatedFreshnessForecast'
     | 'curatedIntensityDistribution'
     | 'curatedEfficiencyTrend'
+    | 'powerCurve'
     | 'kpiAcwr'
     | 'kpiRampRate'
     | 'kpiMonotonyStrain'

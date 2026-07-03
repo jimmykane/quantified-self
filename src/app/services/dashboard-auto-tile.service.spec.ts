@@ -14,6 +14,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   DASHBOARD_AUTO_TILE_CURATED_ID_BY_CHART_TYPE,
   DASHBOARD_AUTO_TILE_KPI_ID_BY_CHART_TYPE,
+  DASHBOARD_AUTO_TILE_POWER_CURVE_ID,
+  DASHBOARD_AUTO_TILE_POWER_CURVE_SOURCE,
   DASHBOARD_AUTO_TILE_RECOVERY_NOW_ID,
   DASHBOARD_AUTO_TILE_SLEEP_TREND_ID,
   buildDashboardSleepTrendAutoTile,
@@ -22,12 +24,14 @@ import {
 import {
   DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE,
   DASHBOARD_LOAD_STATUS_KPI_CHART_TYPE,
+  DASHBOARD_POWER_CURVE_CHART_TYPE,
   DASHBOARD_RECOVERY_NOW_CHART_TYPE,
   DASHBOARD_SLEEP_TREND_CHART_TYPE,
   getDefaultDashboardKpiChartDefinitions,
   getDashboardCuratedChartDefinitions,
 } from '../helpers/dashboard-special-chart-types';
 import { AppUserInterface } from '../models/app-user.interface';
+import { AppEventService } from './app.event.service';
 import { AppSleepService } from './app.sleep.service';
 import { AppUserService } from './app.user.service';
 import { DashboardAutoTileRule, DashboardAutoTileService } from './dashboard-auto-tile.service';
@@ -36,6 +40,7 @@ import { LoggerService } from './logger.service';
 describe('DashboardAutoTileService', () => {
   let service: DashboardAutoTileService;
   let mockSleepService: { watchHasAnySleepSession: ReturnType<typeof vi.fn> };
+  let mockEventService: { watchHasAnyPowerCurveEvent: ReturnType<typeof vi.fn> };
   let mockUserService: { updateUserProperties: ReturnType<typeof vi.fn> };
   let mockSnackBar: { open: ReturnType<typeof vi.fn> };
   let mockLogger: { error: ReturnType<typeof vi.fn>; warn: ReturnType<typeof vi.fn> };
@@ -45,6 +50,9 @@ describe('DashboardAutoTileService', () => {
     vi.useRealTimers();
     mockSleepService = {
       watchHasAnySleepSession: vi.fn().mockReturnValue(of(false)),
+    };
+    mockEventService = {
+      watchHasAnyPowerCurveEvent: vi.fn().mockReturnValue(of(false)),
     };
     mockUserService = {
       updateUserProperties: vi.fn().mockResolvedValue(true),
@@ -64,6 +72,7 @@ describe('DashboardAutoTileService', () => {
       providers: [
         DashboardAutoTileService,
         { provide: AppSleepService, useValue: mockSleepService },
+        { provide: AppEventService, useValue: mockEventService },
         { provide: AppUserService, useValue: mockUserService },
         { provide: MatSnackBar, useValue: mockSnackBar },
         { provide: LoggerService, useValue: mockLogger },
@@ -191,12 +200,42 @@ describe('DashboardAutoTileService', () => {
       state: 'added',
       source: 'default-curated',
     });
+    expect(user.settings?.dashboardSettings?.autoTiles?.powerCurve).toMatchObject({
+      state: 'added',
+      source: DASHBOARD_AUTO_TILE_POWER_CURVE_SOURCE,
+    });
     expect(mockUserService.updateUserProperties).toHaveBeenCalledTimes(1);
     expect(mockSnackBar.open).toHaveBeenCalledWith(
-      'Added 5 dashboard charts: Recovery, Form, Freshness Forecast, and 2 more.',
+      'Added 6 dashboard charts: Recovery, Form, Freshness Forecast, and 3 more.',
       'Undo',
       { duration: 7000 },
     );
+  });
+
+  it('adds Power Curve with event filters when eligible power data exists', async () => {
+    const user = createUser([createCustomTile(0)]);
+
+    const result = await service.applyEligibleAutoTiles(user, {
+      [DASHBOARD_AUTO_TILE_POWER_CURVE_ID]: true,
+    });
+
+    expect(result.persisted).toBe(true);
+    expect(result.addedRules.map(rule => rule.id)).toEqual([DASHBOARD_AUTO_TILE_POWER_CURVE_ID]);
+    const powerCurveTile = user.settings?.dashboardSettings?.tiles?.[1] as any;
+    expect(powerCurveTile).toMatchObject({
+      name: 'Power Curve',
+      chartType: DASHBOARD_POWER_CURVE_CHART_TYPE,
+      eventFilters: {
+        range: '1y',
+        activityTypes: [],
+      },
+    });
+    expect(user.settings?.dashboardSettings?.autoTiles?.powerCurve).toMatchObject({
+      state: 'added',
+      source: DASHBOARD_AUTO_TILE_POWER_CURVE_SOURCE,
+    });
+    expectDashboardSettingsOnlyWrite(mockUserService, user);
+    expect(mockSnackBar.open).toHaveBeenCalledWith('Added Power Curve chart to your dashboard.', 'Undo', { duration: 7000 });
   });
 
   it('does not add Recovery when a legacy recovery metric tile already exists', async () => {
@@ -316,6 +355,7 @@ describe('DashboardAutoTileService', () => {
     await flushMicrotasks();
 
     expect(mockSleepService.watchHasAnySleepSession).toHaveBeenCalledWith('user-1');
+    expect(mockEventService.watchHasAnyPowerCurveEvent).toHaveBeenCalledWith('user-1');
     expect(user.settings?.dashboardSettings?.tiles).toHaveLength(13);
     expect((user.settings?.dashboardSettings?.tiles?.[1] as any).chartType).toBe(DASHBOARD_SLEEP_TREND_CHART_TYPE);
     expect((user.settings?.dashboardSettings?.tiles?.[2] as any).chartType).toBe(DASHBOARD_RECOVERY_NOW_CHART_TYPE);
@@ -342,6 +382,9 @@ describe('DashboardAutoTileService', () => {
     expect(user.settings?.dashboardSettings?.tiles?.some(tile => (
       (tile as any).chartType === DASHBOARD_SLEEP_TREND_CHART_TYPE
     ))).toBe(false);
+    expect(user.settings?.dashboardSettings?.tiles?.some(tile => (
+      (tile as any).chartType === DASHBOARD_POWER_CURVE_CHART_TYPE
+    ))).toBe(false);
     expect((user.settings?.dashboardSettings?.tiles?.[1] as any).chartType).toBe(DASHBOARD_RECOVERY_NOW_CHART_TYPE);
     expect((user.settings?.dashboardSettings?.tiles?.[4] as any).chartType).toBe(DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE);
     expect((user.settings?.dashboardSettings?.tiles?.[6] as any).chartType).toBe(DASHBOARD_LOAD_STATUS_KPI_CHART_TYPE);
@@ -351,6 +394,34 @@ describe('DashboardAutoTileService', () => {
       'Undo',
       { duration: 7000 },
     );
+    subscription.unsubscribe();
+  });
+
+  it('adds Power Curve from the eligibility watcher after power data qualifies', async () => {
+    const sleepEligibility = new Subject<boolean>();
+    const powerCurveEligibility = new Subject<boolean>();
+    mockSleepService.watchHasAnySleepSession.mockReturnValueOnce(sleepEligibility.asObservable());
+    mockEventService.watchHasAnyPowerCurveEvent.mockReturnValueOnce(powerCurveEligibility.asObservable());
+    const user = createUser([createCustomTile(0)]);
+
+    const subscription = service.watchForDashboard(user);
+    await flushMicrotasks();
+    mockUserService.updateUserProperties.mockClear();
+    mockSnackBar.open.mockClear();
+
+    powerCurveEligibility.next(true);
+    await flushMicrotasks();
+
+    expect(mockEventService.watchHasAnyPowerCurveEvent).toHaveBeenCalledWith('user-1');
+    expect(user.settings?.dashboardSettings?.tiles?.some(tile => (
+      (tile as any).chartType === DASHBOARD_POWER_CURVE_CHART_TYPE
+    ))).toBe(true);
+    expect(user.settings?.dashboardSettings?.autoTiles?.powerCurve).toMatchObject({
+      state: 'added',
+      source: DASHBOARD_AUTO_TILE_POWER_CURVE_SOURCE,
+    });
+    expect(mockUserService.updateUserProperties).toHaveBeenCalledTimes(1);
+    expect(mockSnackBar.open).toHaveBeenCalledWith('Added Power Curve chart to your dashboard.', 'Undo', { duration: 7000 });
     subscription.unsubscribe();
   });
 

@@ -138,6 +138,12 @@
     [mobileTapFeedbackOptions]="dashboardMobileTapFeedbackOptions">
   </app-sleep-trend-chart>
   }
+  @if (chartType === powerCurveChartType) {
+  <app-power-curve-chart [isLoading]="isLoading || isTileActionSaving" [darkTheme]="darkTheme"
+    [powerCurve]="powerCurve" [infoTooltip]="chartInfoTooltip" [reserveTitleActionSpace]="showHeaderControls"
+    [mobileTapFeedbackOptions]="dashboardMobileTapFeedbackOptions">
+  </app-power-curve-chart>
+  }
   @if (chartType === chartTypes.LinesHorizontal
   || chartType === chartTypes.LinesVertical) {
   <app-xy-chart [isLoading]="isLoading || isTileActionSaving" [data]="data" [darkTheme]="darkTheme" [chartDataType]="dataType"
