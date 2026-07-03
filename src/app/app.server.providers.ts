@@ -112,6 +112,10 @@ class ServerWhatsNewService {
   setAdminMode(): void {
     return undefined;
   }
+
+  requestAdminMode(): () => void {
+    return () => undefined;
+  }
 }
 
 @Injectable()

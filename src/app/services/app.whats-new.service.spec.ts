@@ -86,6 +86,34 @@ describe('AppWhatsNewService', () => {
         expect(service).toBeTruthy();
     });
 
+    it('should keep admin mode enabled while scoped requests are active', () => {
+        service = TestBed.inject(AppWhatsNewService);
+
+        expect(service.isAdminMode()).toBe(false);
+
+        const releaseFirst = service.requestAdminMode();
+        const releaseSecond = service.requestAdminMode();
+
+        expect(service.isAdminMode()).toBe(true);
+
+        releaseFirst();
+        expect(service.isAdminMode()).toBe(true);
+
+        releaseFirst();
+        expect(service.isAdminMode()).toBe(true);
+
+        releaseSecond();
+        expect(service.isAdminMode()).toBe(false);
+
+        service.setAdminMode(true);
+        const releaseScoped = service.requestAdminMode();
+        service.setAdminMode(false);
+        expect(service.isAdminMode()).toBe(true);
+
+        releaseScoped();
+        expect(service.isAdminMode()).toBe(false);
+    });
+
     it('markAsRead should call updateUserProperties for authenticated user', async () => {
         service = TestBed.inject(AppWhatsNewService);
         userSubject.next({ uid: '123' });

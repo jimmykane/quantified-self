@@ -877,6 +877,210 @@ describe('listUsers Cloud Function', () => {
             expect(result.providers['password']).toBe(2);
         });
 
+        it('getUserCount should include paid lifecycle counts', async () => {
+            mockListUsers.mockResolvedValue({ users: [], pageToken: undefined });
+
+            const countSnap = (count: number) => ({ data: () => ({ count }) });
+            const countGet = (count: number) => vi.fn().mockResolvedValue(countSnap(count));
+            const emptyCacheDoc = {
+                get: vi.fn().mockResolvedValue({ exists: false, data: () => undefined }),
+                set: vi.fn().mockResolvedValue(undefined),
+            };
+            const subscriptionDoc = (uid: string, data: Record<string, unknown>) => ({
+                ref: { parent: { parent: { id: uid } } },
+                data: () => data,
+            });
+            const paidHistoryDocs = [
+                ...Array.from({ length: 70 }, (_, index) => subscriptionDoc(
+                    `paid-${index}`,
+                    {
+                        role: index % 2 === 0 ? 'pro' : 'basic',
+                        status: index % 5 === 0 ? 'canceled' : index % 3 === 0 ? 'trialing' : 'active',
+                    }
+                )),
+                subscriptionDoc('paid-0', { role: 'pro', status: 'active' }),
+            ];
+            const invalidPaidHistoryDocs = ['incomplete', 'incomplete_expired'].map((status, index) => subscriptionDoc(
+                `paid-${index}`,
+                { role: index % 2 === 0 ? 'pro' : 'basic', status }
+            ));
+            const activeSubscriptionDocs = [
+                subscriptionDoc('paid-0', { status: 'active', role: 'pro', items: [{ plan: { interval: 'month' } }], cancel_at_period_end: true }),
+                subscriptionDoc('paid-1', { status: 'active', role: 'basic', items: [{ price: { recurring: { interval: 'year' } } }], cancel_at_period_end: true }),
+                subscriptionDoc('paid-2', { status: 'active', role: 'pro', items: [{ plan: { interval: 'month' } }], cancel_at_period_end: true }),
+                subscriptionDoc('legacy-active', { status: 'active', role: 'legacy', items: [{ plan: { interval: 'month' } }], cancel_at_period_end: true }),
+            ];
+            const subscriptionWhereCalls: { field: string; value: unknown }[] = [];
+
+            mockCollection.mockImplementation((path: string) => {
+                if (path === 'users') {
+                    return {
+                        count: vi.fn().mockReturnValue({ get: countGet(120) }),
+                        where: vi.fn((field: string) => {
+                            const count = field === 'onboardingCompleted' ? 90 : 0;
+                            return {
+                                count: vi.fn().mockReturnValue({ get: countGet(count) })
+                            };
+                        })
+                    };
+                }
+
+                if (path === 'subscriptions') {
+                    const conditions: { field: string; value: unknown }[] = [];
+                    const query: any = {
+                        where: vi.fn((field: string, _op: string, value: unknown) => {
+                            conditions.push({ field, value });
+                            subscriptionWhereCalls.push({ field, value });
+                            return query;
+                        }),
+                        count: vi.fn().mockReturnValue({
+                            get: vi.fn().mockImplementation(() => {
+                                const roleCondition = conditions.find(condition => condition.field === 'role');
+                                if (roleCondition?.value === 'pro') {
+                                    return Promise.resolve(countSnap(30));
+                                }
+                                if (roleCondition?.value === 'basic') {
+                                    return Promise.resolve(countSnap(25));
+                                }
+                                return Promise.resolve(countSnap(0));
+                            })
+                        }),
+                        select: vi.fn().mockImplementation((...fields: string[]) => ({
+                            get: vi.fn().mockResolvedValue({
+                                docs: fields.length === 2 && fields.includes('role') && fields.includes('status')
+                                    ? [
+                                        ...paidHistoryDocs,
+                                        ...(
+                                            conditions.some(condition => condition.field === 'status' && Array.isArray(condition.value))
+                                                ? []
+                                                : invalidPaidHistoryDocs
+                                        ),
+                                    ]
+                                    : activeSubscriptionDocs
+                            })
+                        }))
+                    };
+                    return query;
+                }
+
+                if (path === 'adminStats') {
+                    return {
+                        doc: vi.fn().mockReturnValue(emptyCacheDoc)
+                    };
+                }
+
+                if (path === 'events' || path === 'routes') {
+                    return {
+                        count: vi.fn().mockReturnValue({ get: countGet(path === 'events' ? 1000 : 50) })
+                    };
+                }
+
+                return {
+                    count: vi.fn().mockReturnValue({ get: countGet(0) }),
+                    where: vi.fn().mockReturnThis(),
+                    select: vi.fn().mockReturnValue({ get: vi.fn().mockResolvedValue({ docs: [] }) }),
+                };
+            });
+
+            const result: any = await (getUserCount as any)(getAdminRequest());
+
+            expect(result.total).toBe(120);
+            expect(result.pro).toBe(30);
+            expect(result.basic).toBe(25);
+            expect(result.everPaid).toBe(70);
+            expect(result.canceled).toBe(15);
+            expect(result.cancelScheduled).toBe(4);
+            expect(result.monthlyPaid).toBe(2);
+            expect(result.yearlyPaid).toBe(1);
+            expect(subscriptionWhereCalls).toContainEqual({
+                field: 'status',
+                value: expect.arrayContaining(['active', 'trialing', 'past_due', 'canceled', 'unpaid']),
+            });
+        });
+
+        it('getUserCount should count scheduled cancellations even when paid role counts are zero', async () => {
+            mockListUsers.mockResolvedValue({ users: [], pageToken: undefined });
+
+            const countSnap = (count: number) => ({ data: () => ({ count }) });
+            const countGet = (count: number) => vi.fn().mockResolvedValue(countSnap(count));
+            const emptyCacheDoc = {
+                get: vi.fn().mockResolvedValue({ exists: false, data: () => undefined }),
+                set: vi.fn().mockResolvedValue(undefined),
+            };
+            const subscriptionDoc = (uid: string, data: Record<string, unknown>) => ({
+                ref: { parent: { parent: { id: uid } } },
+                data: () => data,
+            });
+            const paidHistoryDocs = [
+                ...Array.from({ length: 4 }, (_, index) => subscriptionDoc(
+                    `paid-${index}`,
+                    { role: index % 2 === 0 ? 'pro' : 'basic', status: index % 2 === 0 ? 'canceled' : 'active' }
+                )),
+                subscriptionDoc('failed-checkout', { role: 'pro', status: 'incomplete' }),
+            ];
+            const activeSubscriptionDocs = [
+                subscriptionDoc('active-1', { status: 'active', cancel_at_period_end: true }),
+                subscriptionDoc('active-2', { status: 'active', cancel_at_period_end: false }),
+            ];
+
+            mockCollection.mockImplementation((path: string) => {
+                if (path === 'users') {
+                    return {
+                        count: vi.fn().mockReturnValue({ get: countGet(10) }),
+                        where: vi.fn(() => ({
+                            count: vi.fn().mockReturnValue({
+                                get: countGet(0)
+                            })
+                        }))
+                    };
+                }
+
+                if (path === 'subscriptions') {
+                    const conditions: { field: string; value: unknown }[] = [];
+                    const query: any = {
+                        where: vi.fn((field: string, _op: string, value: unknown) => {
+                            conditions.push({ field, value });
+                            return query;
+                        }),
+                        count: vi.fn().mockReturnValue({ get: countGet(0) }),
+                        select: vi.fn().mockImplementation((...fields: string[]) => ({
+                            get: vi.fn().mockResolvedValue({
+                                docs: fields.length === 2 && fields.includes('role') && fields.includes('status')
+                                    ? paidHistoryDocs
+                                    : activeSubscriptionDocs
+                            })
+                        }))
+                    };
+                    return query;
+                }
+
+                if (path === 'adminStats') {
+                    return {
+                        doc: vi.fn().mockReturnValue(emptyCacheDoc)
+                    };
+                }
+
+                if (path === 'events' || path === 'routes') {
+                    return {
+                        count: vi.fn().mockReturnValue({ get: countGet(0) })
+                    };
+                }
+
+                return {
+                    count: vi.fn().mockReturnValue({ get: countGet(0) }),
+                    where: vi.fn().mockReturnThis(),
+                    select: vi.fn().mockReturnValue({ get: vi.fn().mockResolvedValue({ docs: [] }) }),
+                };
+            });
+
+            const result: any = await (getUserCount as any)(getAdminRequest());
+
+            expect(result.pro).toBe(0);
+            expect(result.basic).toBe(0);
+            expect(result.cancelScheduled).toBe(1);
+            expect(result.canceled).toBe(4);
+        });
+
         it('getUserCount should handle firestore error', async () => {
             mockCollection.mockReturnValue({
                 count: vi.fn().mockReturnThis(),

@@ -1,6 +1,7 @@
 import { HttpsError } from 'firebase-functions/v2/https';
 import * as logger from 'firebase-functions/logger';
 import * as admin from 'firebase-admin';
+import { FieldValue } from 'firebase-admin/firestore';
 import { onAdminCall } from '../../shared/auth';
 import { GARMIN_API_TOKENS_COLLECTION_NAME } from '../../garmin/constants';
 import { SUUNTOAPP_ACCESS_TOKENS_COLLECTION_NAME } from '../../suunto/constants';
@@ -9,7 +10,9 @@ import { FUNCTIONS_MANIFEST } from '../../../../shared/functions-manifest';
 import {
     ACTIVE_SUBSCRIPTION_STATUSES,
     SUBSCRIPTION_INTERVAL_MONTH,
-    SUBSCRIPTION_INTERVAL_YEAR
+    SUBSCRIPTION_INTERVAL_YEAR,
+    SUBSCRIPTION_ROLE_BASIC,
+    SUBSCRIPTION_ROLE_PRO
 } from '../shared/subscription.constants';
 import { clampListUsersPageSize } from '../shared/date.utils';
 import { enrichUsers } from '../shared/user-enrichment';
@@ -19,6 +22,20 @@ const ADMIN_STATS_COLLECTION = 'adminStats';
 const ADMIN_EVENT_COUNTS_DOC = 'eventCounts';
 const ADMIN_ROUTE_COUNTS_DOC = 'routeCounts';
 const GLOBAL_COLLECTION_COUNT_CACHE_TTL_MS = 60 * 60 * 1000;
+const PAID_LIFECYCLE_SUBSCRIPTION_STATUSES = [...ACTIVE_SUBSCRIPTION_STATUSES, 'canceled', 'unpaid'] as const;
+const PAID_LIFECYCLE_SUBSCRIPTION_STATUS_SET = new Set<string>(PAID_LIFECYCLE_SUBSCRIPTION_STATUSES);
+const PAID_SUBSCRIPTION_ROLE_SET = new Set<string>([SUBSCRIPTION_ROLE_PRO, SUBSCRIPTION_ROLE_BASIC]);
+
+interface SubscriptionOwnerDocSnapshot {
+    data: () => Record<string, unknown>;
+    ref?: {
+        parent?: {
+            parent?: {
+                id?: string;
+            } | null;
+        } | null;
+    } | null;
+}
 
 const resolveSubscriptionInterval = (subscription: Record<string, unknown>): string | null => {
     const items = Array.isArray(subscription.items) ? subscription.items : [];
@@ -56,6 +73,35 @@ function normalizeCount(value: unknown): number {
     }
 
     return Math.max(0, Math.floor(value));
+}
+
+function readSubscriptionOwnerId(doc: SubscriptionOwnerDocSnapshot): string | null {
+    const parentId = doc.ref?.parent?.parent?.id;
+    if (typeof parentId === 'string' && parentId.trim()) {
+        return parentId.trim();
+    }
+
+    const data = doc.data();
+    const uid = data.uid ?? data.userId;
+    return typeof uid === 'string' && uid.trim() ? uid.trim() : null;
+}
+
+function countDistinctPaidSubscriptionOwners(docs: SubscriptionOwnerDocSnapshot[]): number {
+    const ownerIds = new Set<string>();
+    docs.forEach((doc) => {
+        const data = doc.data();
+        if (!PAID_SUBSCRIPTION_ROLE_SET.has(`${data.role || ''}`)) {
+            return;
+        }
+        if (!PAID_LIFECYCLE_SUBSCRIPTION_STATUS_SET.has(`${data.status || ''}`)) {
+            return;
+        }
+        const ownerId = readSubscriptionOwnerId(doc);
+        if (ownerId) {
+            ownerIds.add(ownerId);
+        }
+    });
+    return ownerIds.size;
 }
 
 function toEpochMillis(value: unknown): number | null {
@@ -195,7 +241,7 @@ async function getGlobalCollectionCount(
                     computedAt,
                     expireAt,
                     refreshedBy: options.requestedByUid || null,
-                    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+                    updatedAt: FieldValue.serverTimestamp(),
                 }, { merge: true });
             } catch (error) {
                 logger.warn(`Failed to write admin global ${options.logLabel} count cache`, error);
@@ -446,7 +492,7 @@ export const getUserCount = onAdminCall<UserCountRequest, UserCountResponse>({
 
         // 1. Get stats from Firestore (subscriptions)
         // Parallel efficient count queries
-        const [totalSnapshot, proSnapshot, basicSnapshot, onboardedSnapshot, eventStats, routeStats] = await Promise.all([
+        const [totalSnapshot, proSnapshot, basicSnapshot, onboardedSnapshot, paidSubscriptionHistorySnapshot, eventStats, routeStats] = await Promise.all([
             db.collection('users').count().get(),
             db.collectionGroup('subscriptions')
                 .where('status', 'in', [...ACTIVE_SUBSCRIPTION_STATUSES])
@@ -459,6 +505,10 @@ export const getUserCount = onAdminCall<UserCountRequest, UserCountResponse>({
             db.collection('users')
                 .where('onboardingCompleted', '==', true)
                 .count().get(),
+            db.collectionGroup('subscriptions')
+                .where('status', 'in', [...PAID_LIFECYCLE_SUBSCRIPTION_STATUSES])
+                .select('role', 'status')
+                .get(),
             getGlobalEventCount(db, {
                 forceRefresh: forceRefreshEventCount,
                 requestedByUid: request.auth?.uid || null,
@@ -474,27 +524,34 @@ export const getUserCount = onAdminCall<UserCountRequest, UserCountResponse>({
         const basic = basicSnapshot.data().count;
         const activePaid = pro + basic;
         const onboardingCompleted = onboardedSnapshot.data().count;
+        const everPaid = Math.max(activePaid, countDistinctPaidSubscriptionOwners(paidSubscriptionHistorySnapshot.docs));
+        const canceled = Math.max(0, everPaid - activePaid);
         const free = Math.max(0, total - activePaid);
 
         let monthlyPaid = 0;
         let yearlyPaid = 0;
+        let cancelScheduled = 0;
 
-        if (activePaid > 0) {
-            const activeSubscriptionSnapshot = await db.collectionGroup('subscriptions')
-                .where('status', 'in', [...ACTIVE_SUBSCRIPTION_STATUSES])
-                .select('items')
-                .get();
+        const activeSubscriptionSnapshot = await db.collectionGroup('subscriptions')
+            .where('status', 'in', [...ACTIVE_SUBSCRIPTION_STATUSES])
+            .select('items', 'cancel_at_period_end', 'role')
+            .get();
 
-            activeSubscriptionSnapshot.docs.forEach((doc) => {
-                const subscription = doc.data() as Record<string, unknown>;
-                const interval = resolveSubscriptionInterval(subscription);
-                if (interval === SUBSCRIPTION_INTERVAL_MONTH) {
-                    monthlyPaid += 1;
-                } else if (interval === SUBSCRIPTION_INTERVAL_YEAR) {
-                    yearlyPaid += 1;
-                }
-            });
-        }
+        activeSubscriptionSnapshot.docs.forEach((doc) => {
+            const subscription = doc.data() as Record<string, unknown>;
+            if (subscription.cancel_at_period_end === true) {
+                cancelScheduled += 1;
+            }
+            if (subscription.role !== SUBSCRIPTION_ROLE_PRO && subscription.role !== SUBSCRIPTION_ROLE_BASIC) {
+                return;
+            }
+            const interval = resolveSubscriptionInterval(subscription);
+            if (interval === SUBSCRIPTION_INTERVAL_MONTH) {
+                monthlyPaid += 1;
+            } else if (interval === SUBSCRIPTION_INTERVAL_YEAR) {
+                yearlyPaid += 1;
+            }
+        });
 
         const unknownCadencePaid = Math.max(0, activePaid - monthlyPaid - yearlyPaid);
 
@@ -534,6 +591,9 @@ export const getUserCount = onAdminCall<UserCountRequest, UserCountResponse>({
             free,
             monthlyPaid,
             yearlyPaid,
+            everPaid,
+            canceled,
+            cancelScheduled,
             onboardingCompleted,
             events: eventStats,
             routes: routeStats,

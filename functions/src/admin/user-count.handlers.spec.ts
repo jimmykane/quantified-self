@@ -4,6 +4,7 @@ import {
     getUserCount,
     mockListUsers,
     mockCollection,
+    mockFirestore,
 } from './test-utils/admin-test-harness';
 
 describe('getUserCount Cloud Function', () => {
@@ -30,10 +31,10 @@ describe('getUserCount Cloud Function', () => {
         const mockActiveSubscriptionsGet = vi.fn().mockResolvedValue({
             docs: [
                 ...Array.from({ length: 45 }, () => ({
-                    data: () => ({ items: [{ plan: { interval: 'month' } }] })
+                    data: () => ({ role: 'pro', items: [{ plan: { interval: 'month' } }] })
                 })),
                 ...Array.from({ length: 5 }, () => ({
-                    data: () => ({ items: [{ plan: { interval: 'year' } }] })
+                    data: () => ({ role: 'basic', items: [{ plan: { interval: 'year' } }] })
                 }))
             ]
         });
@@ -126,6 +127,7 @@ describe('getUserCount Cloud Function', () => {
         const mockSubscriptionQuery = {
             where: vi.fn().mockReturnThis(),
             count: vi.fn().mockReturnValue({ get: mockCountGet }),
+            select: vi.fn().mockReturnValue({ get: vi.fn().mockResolvedValue({ docs: [] }) }),
         };
 
         mockCollection.mockImplementation((name) => {
@@ -177,6 +179,7 @@ describe('getUserCount Cloud Function', () => {
         const mockSubscriptionQuery = {
             where: vi.fn().mockReturnThis(),
             count: vi.fn().mockReturnValue({ get: mockCountGet }),
+            select: vi.fn().mockReturnValue({ get: vi.fn().mockResolvedValue({ docs: [] }) }),
         };
 
         mockCollection.mockImplementation((name) => {
@@ -234,6 +237,7 @@ describe('getUserCount Cloud Function', () => {
         const mockSubscriptionQuery = {
             where: vi.fn().mockReturnThis(),
             count: vi.fn().mockReturnValue({ get: mockCountGet }),
+            select: vi.fn().mockReturnValue({ get: vi.fn().mockResolvedValue({ docs: [] }) }),
         };
         const staleComputedAt = '2026-05-07T05:00:00.000Z';
         const staleExpireAt = '2026-05-07T06:00:00.000Z';
@@ -578,5 +582,91 @@ describe('getUserCount Cloud Function', () => {
             refreshedBy: 'admin-uid',
         }), { merge: true });
         expect(mockEventCacheSet).not.toHaveBeenCalled();
+    });
+
+    it('should write refreshed global count caches without depending on admin.firestore.FieldValue', async () => {
+        const firestoreMock = mockFirestore as typeof mockFirestore & { FieldValue?: unknown };
+        const originalFieldValue = firestoreMock.FieldValue;
+        firestoreMock.FieldValue = undefined;
+
+        try {
+            const request = {
+                data: { refreshEventCount: true, refreshRouteCount: true },
+                auth: { uid: 'admin-uid', token: { admin: true } },
+                app: { appId: 'mock-app-id' }
+            } as unknown as CallableRequest<any>;
+            mockListUsers.mockResolvedValue({ users: [], pageToken: undefined });
+
+            const mockCountGet = vi.fn()
+                .mockResolvedValueOnce({ data: () => ({ count: 0 }) })
+                .mockResolvedValueOnce({ data: () => ({ count: 0 }) });
+            const mockEventsCountGet = vi.fn().mockResolvedValue({ data: () => ({ count: 12 }) });
+            const mockRoutesCountGet = vi.fn().mockResolvedValue({ data: () => ({ count: 34 }) });
+            const mockEventCacheSet = vi.fn().mockResolvedValue(undefined);
+            const mockRouteCacheSet = vi.fn().mockResolvedValue(undefined);
+            const mockCacheDoc = vi.fn((docId: string) => ({
+                get: vi.fn().mockResolvedValue({ exists: false, data: () => undefined }),
+                set: docId === 'routeCounts' ? mockRouteCacheSet : mockEventCacheSet,
+            }));
+
+            const mockSubscriptionQuery = {
+                where: vi.fn().mockReturnThis(),
+                count: vi.fn().mockReturnValue({ get: mockCountGet }),
+                select: vi.fn().mockReturnValue({ get: vi.fn().mockResolvedValue({ docs: [] }) }),
+            };
+
+            mockCollection.mockImplementation((name) => {
+                if (name === 'adminStats') {
+                    return { doc: mockCacheDoc };
+                }
+                if (name === 'users') {
+                    return {
+                        where: vi.fn().mockReturnValue({
+                            count: vi.fn().mockReturnValue({
+                                get: vi.fn().mockResolvedValue({ data: () => ({ count: 0 }) })
+                            })
+                        }),
+                        count: vi.fn().mockReturnValue({
+                            get: vi.fn().mockResolvedValue({ data: () => ({ count: 0 }) })
+                        })
+                    };
+                }
+                if (name === 'subscriptions') {
+                    return mockSubscriptionQuery;
+                }
+                if (name === 'events') {
+                    return {
+                        count: vi.fn().mockReturnValue({ get: mockEventsCountGet })
+                    };
+                }
+                if (name === 'routes') {
+                    return {
+                        count: vi.fn().mockReturnValue({ get: mockRoutesCountGet })
+                    };
+                }
+                return {};
+            });
+
+            const result = await (getUserCount as any)(request);
+
+            expect(result.events).toEqual(expect.objectContaining({
+                total: 12,
+                cacheStatus: 'refreshed',
+            }));
+            expect(result.routes).toEqual(expect.objectContaining({
+                total: 34,
+                cacheStatus: 'refreshed',
+            }));
+            expect(mockEventCacheSet).toHaveBeenCalledWith(expect.objectContaining({
+                kind: 'eventCounts',
+                updatedAt: 'mock-timestamp',
+            }), { merge: true });
+            expect(mockRouteCacheSet).toHaveBeenCalledWith(expect.objectContaining({
+                kind: 'routeCounts',
+                updatedAt: 'mock-timestamp',
+            }), { merge: true });
+        } finally {
+            firestoreMock.FieldValue = originalFieldValue;
+        }
     });
 });

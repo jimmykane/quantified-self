@@ -136,6 +136,39 @@ function isUserDeletionGuardReadError(error: unknown): boolean {
   return error instanceof Error && error.name === 'UserDeletionGuardReadError';
 }
 
+const POST_ENQUEUE_DISPATCH_MARKER_MAX_ATTEMPTS = 3;
+const POST_ENQUEUE_DISPATCH_MARKER_RETRY_BASE_DELAY_MS = 25;
+
+function getRetryableDispatchMarkerCause(error: unknown): unknown {
+  if (isUserDeletionGuardReadError(error) && 'originalError' in (error as Record<string, unknown>)) {
+    return (error as { originalError: unknown }).originalError;
+  }
+  return error;
+}
+
+function isRetryableFirestoreDispatchMarkerError(error: unknown): boolean {
+  const cause = getRetryableDispatchMarkerCause(error);
+  const code = (cause as { code?: unknown } | null | undefined)?.code;
+  const details = `${(cause as { details?: unknown } | null | undefined)?.details || ''}`.toLowerCase();
+  const message = `${(cause as { message?: unknown } | null | undefined)?.message || ''}`.toLowerCase();
+  const normalizedCode = typeof code === 'string' ? code.toLowerCase() : code;
+
+  return normalizedCode === 10
+    || normalizedCode === 14
+    || normalizedCode === 4
+    || normalizedCode === 'aborted'
+    || normalizedCode === 'unavailable'
+    || normalizedCode === 'deadline-exceeded'
+    || details.includes('too much contention')
+    || message.includes('too much contention');
+}
+
+function waitForDispatchMarkerRetry(attempt: number): Promise<void> {
+  const delayMs = (POST_ENQUEUE_DISPATCH_MARKER_RETRY_BASE_DELAY_MS * attempt)
+    + Math.floor(Math.random() * POST_ENQUEUE_DISPATCH_MARKER_RETRY_BASE_DELAY_MS);
+  return new Promise((resolve) => setTimeout(resolve, delayMs));
+}
+
 interface WorkoutQueueDispatchContext {
   firebaseUserID: string;
   providerUserID: string;
@@ -292,17 +325,11 @@ export async function dispatchQueueItemTasks(serviceName: ServiceNames) {
         logger.info(`Task not enqueued for ${serviceName} queue item ${doc.id}; leaving dispatch marker unchanged.`);
         return false;
       }
-      const markerContext = await assertWorkoutQueueCanDispatch(
-        doc.ref,
-        Object.assign({}, data, { id: doc.id }) as SuuntoAppWorkoutQueueItemInterface | GarminAPIActivityQueueItemInterface | COROSAPIWorkoutQueueItemInterface,
-        serviceName,
-        `workout_queue_scheduled_mark_dispatched:${serviceName}`,
-      );
-      const didMarkDispatched = await markWorkoutQueueItemDispatched(
+      const didMarkDispatched = await markWorkoutQueueItemDispatchedAfterTaskEnqueue(
         doc.ref,
         doc.id,
         serviceName,
-        markerContext.firebaseUserID,
+        dispatchContext.firebaseUserID,
       );
       if (!didMarkDispatched) {
         logger.info(`Skipped ${serviceName} queue item ${doc.id} dispatch marker because the owning user is missing or deletion is in progress.`);
@@ -930,6 +957,39 @@ async function markWorkoutQueueItemDispatched(
   }
 }
 
+async function markWorkoutQueueItemDispatchedAfterTaskEnqueue(
+  queueItemDocument: admin.firestore.DocumentReference,
+  queueItemId: string,
+  serviceName: ServiceNames,
+  firebaseUserID: string,
+): Promise<boolean> {
+  for (let attempt = 1; attempt <= POST_ENQUEUE_DISPATCH_MARKER_MAX_ATTEMPTS; attempt++) {
+    try {
+      return await markWorkoutQueueItemDispatched(
+        queueItemDocument,
+        queueItemId,
+        serviceName,
+        firebaseUserID,
+      );
+    } catch (error) {
+      if (!isRetryableFirestoreDispatchMarkerError(error)) {
+        throw error;
+      }
+
+      if (attempt < POST_ENQUEUE_DISPATCH_MARKER_MAX_ATTEMPTS) {
+        logger.warn(`Retryable dispatch marker write failure after Cloud Task enqueue for ${serviceName} queue item ${queueItemId}; retrying marker write (${attempt}/${POST_ENQUEUE_DISPATCH_MARKER_MAX_ATTEMPTS}).`, error);
+        await waitForDispatchMarkerRetry(attempt);
+        continue;
+      }
+
+      logger.warn(`Retryable dispatch marker write failure after Cloud Task enqueue for ${serviceName} queue item ${queueItemId}; leaving marker untouched because the task was already accepted.`, error);
+      return true;
+    }
+  }
+
+  return true;
+}
+
 async function backfillWorkoutQueueFirebaseUserID(
   queueItemDocument: admin.firestore.DocumentReference,
   queueItemId: string,
@@ -1105,7 +1165,7 @@ async function addToWorkoutQueue(queueItem: SuuntoAppWorkoutQueueItemInterface |
           duplicateDispatchContext.firebaseUserID,
         );
         if (wasDuplicateTaskEnqueued) {
-          const didMarkDuplicateDispatched = await markWorkoutQueueItemDispatched(
+          const didMarkDuplicateDispatched = await markWorkoutQueueItemDispatchedAfterTaskEnqueue(
             queueItemDocument,
             queueItem.id,
             serviceName,
@@ -1141,7 +1201,7 @@ async function addToWorkoutQueue(queueItem: SuuntoAppWorkoutQueueItemInterface |
       dispatchContext.firebaseUserID,
     );
     if (wasTaskEnqueued) {
-      const didMarkDispatched = await markWorkoutQueueItemDispatched(
+      const didMarkDispatched = await markWorkoutQueueItemDispatchedAfterTaskEnqueue(
         queueItemDocument,
         queueItem.id,
         serviceName,

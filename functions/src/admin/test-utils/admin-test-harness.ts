@@ -194,6 +194,16 @@ vi.mock('firebase-admin', () => {
     };
 });
 
+vi.mock('firebase-admin/firestore', () => ({
+    FieldValue: {
+        serverTimestamp: vi.fn().mockReturnValue('mock-timestamp'),
+        delete: vi.fn().mockReturnValue('mock-delete'),
+    },
+    FieldPath: {
+        documentId: vi.fn(() => '__name__'),
+    },
+}));
+
 vi.mock('firebase-functions/v2/https', () => ({
     onCall: mockOnCall,
     HttpsError: class extends Error {

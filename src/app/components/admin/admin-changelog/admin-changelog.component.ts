@@ -56,6 +56,7 @@ export class AdminChangelogComponent implements OnDestroy {
     editingPost: ChangelogPost | null = null;
     isNew = false;
     saving = false;
+    private releaseChangelogAdminMode: (() => void) | null = null;
 
     form: FormGroup = this.fb.group({
         title: ['', Validators.required],
@@ -83,7 +84,7 @@ export class AdminChangelogComponent implements OnDestroy {
     }
 
     constructor() {
-        this.whatsNewService.setAdminMode(true);
+        this.releaseChangelogAdminMode = this.whatsNewService.requestAdminMode();
     }
 
     // Helper for template to handle Timestamp | Date
@@ -139,7 +140,8 @@ export class AdminChangelogComponent implements OnDestroy {
     }
 
     ngOnDestroy() {
-        this.whatsNewService.setAdminMode(false);
+        this.releaseChangelogAdminMode?.();
+        this.releaseChangelogAdminMode = null;
     }
 
     createNew() {
