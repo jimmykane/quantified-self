@@ -22,6 +22,9 @@ const ADMIN_STATS_COLLECTION = 'adminStats';
 const ADMIN_EVENT_COUNTS_DOC = 'eventCounts';
 const ADMIN_ROUTE_COUNTS_DOC = 'routeCounts';
 const GLOBAL_COLLECTION_COUNT_CACHE_TTL_MS = 60 * 60 * 1000;
+const PAID_LIFECYCLE_SUBSCRIPTION_STATUSES = [...ACTIVE_SUBSCRIPTION_STATUSES, 'canceled', 'unpaid'] as const;
+const PAID_LIFECYCLE_SUBSCRIPTION_STATUS_SET = new Set<string>(PAID_LIFECYCLE_SUBSCRIPTION_STATUSES);
+const PAID_SUBSCRIPTION_ROLE_SET = new Set<string>([SUBSCRIPTION_ROLE_PRO, SUBSCRIPTION_ROLE_BASIC]);
 
 interface SubscriptionOwnerDocSnapshot {
     data: () => Record<string, unknown>;
@@ -83,9 +86,16 @@ function readSubscriptionOwnerId(doc: SubscriptionOwnerDocSnapshot): string | nu
     return typeof uid === 'string' && uid.trim() ? uid.trim() : null;
 }
 
-function countDistinctSubscriptionOwners(docs: SubscriptionOwnerDocSnapshot[]): number {
+function countDistinctPaidSubscriptionOwners(docs: SubscriptionOwnerDocSnapshot[]): number {
     const ownerIds = new Set<string>();
     docs.forEach((doc) => {
+        const data = doc.data();
+        if (!PAID_SUBSCRIPTION_ROLE_SET.has(`${data.role || ''}`)) {
+            return;
+        }
+        if (!PAID_LIFECYCLE_SUBSCRIPTION_STATUS_SET.has(`${data.status || ''}`)) {
+            return;
+        }
         const ownerId = readSubscriptionOwnerId(doc);
         if (ownerId) {
             ownerIds.add(ownerId);
@@ -496,8 +506,8 @@ export const getUserCount = onAdminCall<UserCountRequest, UserCountResponse>({
                 .where('onboardingCompleted', '==', true)
                 .count().get(),
             db.collectionGroup('subscriptions')
-                .where('role', 'in', [SUBSCRIPTION_ROLE_PRO, SUBSCRIPTION_ROLE_BASIC])
-                .select('role')
+                .where('status', 'in', [...PAID_LIFECYCLE_SUBSCRIPTION_STATUSES])
+                .select('role', 'status')
                 .get(),
             getGlobalEventCount(db, {
                 forceRefresh: forceRefreshEventCount,
@@ -514,7 +524,7 @@ export const getUserCount = onAdminCall<UserCountRequest, UserCountResponse>({
         const basic = basicSnapshot.data().count;
         const activePaid = pro + basic;
         const onboardingCompleted = onboardedSnapshot.data().count;
-        const everPaid = Math.max(activePaid, countDistinctSubscriptionOwners(paidSubscriptionHistorySnapshot.docs));
+        const everPaid = Math.max(activePaid, countDistinctPaidSubscriptionOwners(paidSubscriptionHistorySnapshot.docs));
         const canceled = Math.max(0, everPaid - activePaid);
         const free = Math.max(0, total - activePaid);
 

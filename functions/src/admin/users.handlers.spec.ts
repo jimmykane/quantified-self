@@ -890,16 +890,27 @@ describe('listUsers Cloud Function', () => {
                 ref: { parent: { parent: { id: uid } } },
                 data: () => data,
             });
-            const paidHistoryDocs = Array.from({ length: 70 }, (_, index) => subscriptionDoc(
+            const paidHistoryDocs = [
+                ...Array.from({ length: 70 }, (_, index) => subscriptionDoc(
+                    `paid-${index}`,
+                    {
+                        role: index % 2 === 0 ? 'pro' : 'basic',
+                        status: index % 5 === 0 ? 'canceled' : index % 3 === 0 ? 'trialing' : 'active',
+                    }
+                )),
+                subscriptionDoc('paid-0', { role: 'pro', status: 'active' }),
+            ];
+            const invalidPaidHistoryDocs = ['incomplete', 'incomplete_expired'].map((status, index) => subscriptionDoc(
                 `paid-${index}`,
-                { role: index % 2 === 0 ? 'pro' : 'basic' }
+                { role: index % 2 === 0 ? 'pro' : 'basic', status }
             ));
             const activeSubscriptionDocs = [
-                subscriptionDoc('paid-0', { role: 'pro', items: [{ plan: { interval: 'month' } }], cancel_at_period_end: true }),
-                subscriptionDoc('paid-1', { role: 'basic', items: [{ price: { recurring: { interval: 'year' } } }], cancel_at_period_end: true }),
-                subscriptionDoc('paid-2', { role: 'pro', items: [{ plan: { interval: 'month' } }], cancel_at_period_end: true }),
-                subscriptionDoc('legacy-active', { role: 'legacy', items: [{ plan: { interval: 'month' } }], cancel_at_period_end: true }),
+                subscriptionDoc('paid-0', { status: 'active', role: 'pro', items: [{ plan: { interval: 'month' } }], cancel_at_period_end: true }),
+                subscriptionDoc('paid-1', { status: 'active', role: 'basic', items: [{ price: { recurring: { interval: 'year' } } }], cancel_at_period_end: true }),
+                subscriptionDoc('paid-2', { status: 'active', role: 'pro', items: [{ plan: { interval: 'month' } }], cancel_at_period_end: true }),
+                subscriptionDoc('legacy-active', { status: 'active', role: 'legacy', items: [{ plan: { interval: 'month' } }], cancel_at_period_end: true }),
             ];
+            const subscriptionWhereCalls: { field: string; value: unknown }[] = [];
 
             mockCollection.mockImplementation((path: string) => {
                 if (path === 'users') {
@@ -919,6 +930,7 @@ describe('listUsers Cloud Function', () => {
                     const query: any = {
                         where: vi.fn((field: string, _op: string, value: unknown) => {
                             conditions.push({ field, value });
+                            subscriptionWhereCalls.push({ field, value });
                             return query;
                         }),
                         count: vi.fn().mockReturnValue({
@@ -933,10 +945,17 @@ describe('listUsers Cloud Function', () => {
                                 return Promise.resolve(countSnap(0));
                             })
                         }),
-                        select: vi.fn().mockImplementation(() => ({
+                        select: vi.fn().mockImplementation((...fields: string[]) => ({
                             get: vi.fn().mockResolvedValue({
-                                docs: conditions.some(condition => condition.field === 'role' && Array.isArray(condition.value))
-                                    ? paidHistoryDocs
+                                docs: fields.length === 2 && fields.includes('role') && fields.includes('status')
+                                    ? [
+                                        ...paidHistoryDocs,
+                                        ...(
+                                            conditions.some(condition => condition.field === 'status' && Array.isArray(condition.value))
+                                                ? []
+                                                : invalidPaidHistoryDocs
+                                        ),
+                                    ]
                                     : activeSubscriptionDocs
                             })
                         }))
@@ -973,6 +992,10 @@ describe('listUsers Cloud Function', () => {
             expect(result.cancelScheduled).toBe(4);
             expect(result.monthlyPaid).toBe(2);
             expect(result.yearlyPaid).toBe(1);
+            expect(subscriptionWhereCalls).toContainEqual({
+                field: 'status',
+                value: expect.arrayContaining(['active', 'trialing', 'past_due', 'canceled', 'unpaid']),
+            });
         });
 
         it('getUserCount should count scheduled cancellations even when paid role counts are zero', async () => {
@@ -988,13 +1011,16 @@ describe('listUsers Cloud Function', () => {
                 ref: { parent: { parent: { id: uid } } },
                 data: () => data,
             });
-            const paidHistoryDocs = Array.from({ length: 4 }, (_, index) => subscriptionDoc(
-                `paid-${index}`,
-                { role: index % 2 === 0 ? 'pro' : 'basic' }
-            ));
+            const paidHistoryDocs = [
+                ...Array.from({ length: 4 }, (_, index) => subscriptionDoc(
+                    `paid-${index}`,
+                    { role: index % 2 === 0 ? 'pro' : 'basic', status: index % 2 === 0 ? 'canceled' : 'active' }
+                )),
+                subscriptionDoc('failed-checkout', { role: 'pro', status: 'incomplete' }),
+            ];
             const activeSubscriptionDocs = [
-                subscriptionDoc('active-1', { cancel_at_period_end: true }),
-                subscriptionDoc('active-2', { cancel_at_period_end: false }),
+                subscriptionDoc('active-1', { status: 'active', cancel_at_period_end: true }),
+                subscriptionDoc('active-2', { status: 'active', cancel_at_period_end: false }),
             ];
 
             mockCollection.mockImplementation((path: string) => {
@@ -1017,9 +1043,9 @@ describe('listUsers Cloud Function', () => {
                             return query;
                         }),
                         count: vi.fn().mockReturnValue({ get: countGet(0) }),
-                        select: vi.fn().mockImplementation(() => ({
+                        select: vi.fn().mockImplementation((...fields: string[]) => ({
                             get: vi.fn().mockResolvedValue({
-                                docs: conditions.some(condition => condition.field === 'role' && Array.isArray(condition.value))
+                                docs: fields.length === 2 && fields.includes('role') && fields.includes('status')
                                     ? paidHistoryDocs
                                     : activeSubscriptionDocs
                             })
