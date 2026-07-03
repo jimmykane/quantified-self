@@ -131,9 +131,9 @@ describe('admin-dashboard-summary helper', () => {
                     routeDeliverySync: { queueId: 'delivery', pending: 1 },
                     routeSync: { queueId: 'route', pending: 0 },
                     sleepSync: { queueId: 'sleep', pending: 2 },
-                    sportsLibReparse: { queueId: 'reparse', pending: 4 },
-                    sportsLibReparseHeavy: { queueId: 'heavy', pending: 1 },
-                    sportsLibRouteReparse: { queueId: 'route-reparse', pending: 0 },
+                    sportsLibReparse: { queueId: 'reparse', pending: 4, state: 'PAUSED', enabled: false },
+                    sportsLibReparseHeavy: { queueId: 'heavy', pending: 1, state: 'RUNNING', enabled: true },
+                    sportsLibRouteReparse: { queueId: 'route-reparse', pending: 0, state: 'DISABLED', enabled: false },
                     derivedMetrics: { queueId: 'derived', pending: 3 },
                 },
             },
@@ -235,8 +235,15 @@ describe('admin-dashboard-summary helper', () => {
         expect(rows.find(row => row.id === 'derived-metrics')?.maxLagLabel).toBe('-');
         expect(rows.find(row => row.id === 'reparse')?.pendingDb).toBe(6);
         expect(rows.find(row => row.id === 'reparse')?.cloudTasks).toBe(5);
+        expect(rows.find(row => row.id === 'reparse')?.chips).toEqual([
+            'Queue: paused',
+            'Heavy: enabled',
+            'Processing: 2',
+            'Target 9.1.5',
+        ]);
         expect(rows.find(row => row.id === 'route-reparse')?.pendingDb).toBe(7);
         expect(rows.find(row => row.id === 'route-reparse')?.cloudTasks).toBe(0);
+        expect(rows.find(row => row.id === 'route-reparse')?.chips).toContain('Queue: disabled');
         expect(rows.find(row => row.id === 'route-reparse')?.severity).toBe('ok');
         expect(rows.find(row => row.id === 'sleep-sync')?.chips).toContain('Disabled: Garmin');
         expect(rows.find(row => row.id === 'derived-metrics')?.problemLabel).toBe('Stale');

@@ -486,6 +486,7 @@ export async function hasBasicAccess(userID: string): Promise<boolean> {
 export {
   getCloudTaskQueueDepth,
   getCloudTaskQueueDepthForQueue,
+  getCloudTaskQueueStatsForQueue,
   enqueueActivitySyncTask,
   enqueueRouteDeliverySyncTask,
   enqueueRouteSyncTask,

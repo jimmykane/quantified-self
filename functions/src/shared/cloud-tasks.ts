@@ -67,14 +67,48 @@ async function cloudTaskExists(taskName: string): Promise<boolean> {
 
 // Cache for queue depth to reduce API calls
 const CACHE_TTL_MS = 60 * 1000; // 1 minute
-const cachedQueueDepthByQueue = new Map<string, { count: number; timestamp: number }>();
+export type CloudTaskQueueState = 'RUNNING' | 'PAUSED' | 'DISABLED' | 'UNKNOWN';
+
+export interface CloudTaskQueueRuntimeStats {
+    pending: number;
+    state: CloudTaskQueueState;
+    enabled: boolean | null;
+}
+
+const cachedQueueStatsByQueue = new Map<string, { stats: CloudTaskQueueRuntimeStats; timestamp: number }>();
+
+function normalizeCloudTaskQueueState(state: unknown): CloudTaskQueueState {
+    if (state === 'RUNNING' || state === 'PAUSED' || state === 'DISABLED') {
+        return state;
+    }
+    if (state === 1) {
+        return 'RUNNING';
+    }
+    if (state === 2) {
+        return 'PAUSED';
+    }
+    if (state === 3) {
+        return 'DISABLED';
+    }
+    return 'UNKNOWN';
+}
+
+function isCloudTaskQueueEnabled(state: CloudTaskQueueState): boolean | null {
+    if (state === 'RUNNING') {
+        return true;
+    }
+    if (state === 'PAUSED' || state === 'DISABLED') {
+        return false;
+    }
+    return null;
+}
 
 /**
  * Resets the Cloud Task queue depth cache.
  * Note: This is primarily used for unit testing.
  */
 export function resetCloudTaskQueueDepthCache(): void {
-    cachedQueueDepthByQueue.clear();
+    cachedQueueStatsByQueue.clear();
 }
 
 /**
@@ -86,13 +120,13 @@ export function resetCloudTasksClient(): void {
 }
 
 /**
- * Get the current depth (number of tasks) in the specified Cloud Tasks queue.
+ * Get the current runtime stats for the specified Cloud Tasks queue.
  * Uses caching to reduce API calls unless forceRefresh is true.
  */
-export async function getCloudTaskQueueDepthForQueue(queueId: string, forceRefresh = false): Promise<number> {
-    const cached = cachedQueueDepthByQueue.get(queueId);
+export async function getCloudTaskQueueStatsForQueue(queueId: string, forceRefresh = false): Promise<CloudTaskQueueRuntimeStats> {
+    const cached = cachedQueueStatsByQueue.get(queueId);
     if (!forceRefresh && cached && (Date.now() - cached.timestamp < CACHE_TTL_MS)) {
-        return cached.count;
+        return cached.stats;
     }
 
     const client = getCloudTasksClient();
@@ -107,13 +141,27 @@ export async function getCloudTaskQueueDepthForQueue(queueId: string, forceRefre
     const [response] = await client.getQueue({
         name,
         readMask: {
-            paths: ['stats'],
+            paths: ['stats', 'state'],
         },
     });
 
     const tasksCount = Number(response.stats?.tasksCount || 0);
-    cachedQueueDepthByQueue.set(queueId, { count: tasksCount, timestamp: Date.now() });
-    return tasksCount;
+    const state = normalizeCloudTaskQueueState(response.state);
+    const stats = {
+        pending: tasksCount,
+        state,
+        enabled: isCloudTaskQueueEnabled(state),
+    };
+    cachedQueueStatsByQueue.set(queueId, { stats, timestamp: Date.now() });
+    return stats;
+}
+
+/**
+ * Get the current depth (number of tasks) in the specified Cloud Tasks queue.
+ * Uses caching to reduce API calls unless forceRefresh is true.
+ */
+export async function getCloudTaskQueueDepthForQueue(queueId: string, forceRefresh = false): Promise<number> {
+    return (await getCloudTaskQueueStatsForQueue(queueId, forceRefresh)).pending;
 }
 
 /**
