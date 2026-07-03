@@ -95,7 +95,6 @@ export class AdminDashboardComponent implements OnInit, OnDestroy {
     private readonly destroy$ = new Subject<void>();
 
     ngOnInit(): void {
-        this.whatsNewService.setAdminMode(true);
         this.fetchFinancialStats();
         this.fetchUserOverview();
         this.fetchQueueStats();
@@ -183,7 +182,6 @@ export class AdminDashboardComponent implements OnInit, OnDestroy {
     }
 
     ngOnDestroy(): void {
-        this.whatsNewService.setAdminMode(false);
         this.destroy$.next();
         this.destroy$.complete();
     }

@@ -226,11 +226,11 @@ describe('AdminDashboardComponent', () => {
         fixture.detectChanges();
     }
 
-    it('should create and enable changelog admin mode', () => {
+    it('should create without taking ownership of changelog admin mode', () => {
         createComponent();
 
         expect(component).toBeTruthy();
-        expect(whatsNewServiceSpy.setAdminMode).toHaveBeenCalledWith(true);
+        expect(whatsNewServiceSpy.setAdminMode).not.toHaveBeenCalled();
     });
 
     it('should load all dashboard sections independently on init', () => {
@@ -301,12 +301,12 @@ describe('AdminDashboardComponent', () => {
         expect(text).not.toContain('GCP Billing');
     });
 
-    it('should reset changelog admin mode on destroy', () => {
+    it('should not reset changelog admin mode on destroy', () => {
         createComponent();
 
         fixture.destroy();
 
-        expect(whatsNewServiceSpy.setAdminMode).toHaveBeenCalledWith(false);
+        expect(whatsNewServiceSpy.setAdminMode).not.toHaveBeenCalled();
     });
 
     it('should call fetchFinancialStats and update signal state', () => {
