@@ -8,7 +8,6 @@ import { EventJSONInterface } from '@sports-alliance/sports-lib';
 import { ActivityJSONInterface } from '@sports-alliance/sports-lib';
 import { ActivityInterface } from '@sports-alliance/sports-lib';
 import { User } from '@sports-alliance/sports-lib';
-import { AppUserUtilities } from '../utils/app.user.utilities';
 import { AppWindowService } from './app.window.service';
 import {
   EventMetaDataInterface,
@@ -1083,7 +1082,7 @@ export class AppEventService implements OnDestroy {
           return event;
         }
 
-        this.attachParsedStreamsToExistingActivities(event, fullEvent, streamTypes);
+        this.attachParsedStreamsToExistingActivities(event, fullEvent);
         return event;
       }),
       catchError((error) => {
@@ -1100,7 +1099,6 @@ export class AppEventService implements OnDestroy {
   private attachParsedStreamsToExistingActivities(
     event: AppEventInterface,
     parsedEvent: EventInterface,
-    streamTypes?: string[],
   ): void {
     const existingActivities = event.getActivities() || [];
     const parsedActivities = parsedEvent.getActivities() || [];

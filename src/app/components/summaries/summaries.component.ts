@@ -233,7 +233,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
 
   @HostListener('window:resize', ['$event'])
   @HostListener('window:orientationchange', ['$event'])
-  resizeOROrientationChange(event?) {
+  resizeOROrientationChange() {
     this.numberOfCols = this.getNumberOfColumns();
     this.rowHeight = this.getRowHeight();
     this.refreshMainGridTrailingPlaceholders();
@@ -291,7 +291,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
         month: 'long',
         day: 'numeric',
       }).format(date);
-    } catch (_error) {
+    } catch {
       return new Intl.DateTimeFormat(undefined, {
         weekday: 'long',
         year: 'numeric',

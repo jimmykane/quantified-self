@@ -1724,7 +1724,7 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
           data: speedUnits,
         });
       }
-    } catch (_error) {
+    } catch {
       // Ignore invalid speed-unit conversion and keep baseline groups.
     }
 
