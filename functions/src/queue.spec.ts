@@ -1222,6 +1222,59 @@ describe('queue', () => {
             expect(utils.enqueueWorkoutTask).toHaveBeenCalled();
         });
 
+        it('should not fail provider enqueue when post-enqueue dispatch marker guard read has retryable contention', async () => {
+            const utils = await import('./utils');
+            vi.mocked(utils.enqueueWorkoutTask).mockClear();
+            const contentionError: any = new Error('Too much contention on these documents. Please try again.');
+            contentionError.code = 10;
+            contentionError.details = 'Too much contention on these documents. Please try again.';
+            mockGetUserDeletionGuardStateInTransaction.mockRejectedValue(contentionError);
+
+            const { addToQueueForGarmin } = await import('./queue');
+
+            await addToQueueForGarmin({
+                userID: 'u1',
+                startTimeInSeconds: 123,
+                manual: false,
+                activityFileID: 'f1',
+                activityFileType: 'FIT',
+                token: 't1',
+                userAccessToken: 'at1',
+                callbackURL: 'cb1'
+            });
+
+            expect(utils.enqueueWorkoutTask).toHaveBeenCalledTimes(1);
+            expect(mockGetUserDeletionGuardStateInTransaction).toHaveBeenCalledTimes(3);
+            expect(mockDocRef.update).not.toHaveBeenCalledWith({ dispatchedToCloudTask: expect.any(Number) });
+        });
+
+        it('should retry post-enqueue dispatch marker writes when retryable contention clears', async () => {
+            const utils = await import('./utils');
+            vi.mocked(utils.enqueueWorkoutTask).mockClear();
+            const contentionError: any = new Error('Too much contention on these documents. Please try again.');
+            contentionError.code = 10;
+            mockDocRef.update
+                .mockRejectedValueOnce(contentionError)
+                .mockResolvedValue(undefined);
+
+            const { addToQueueForGarmin } = await import('./queue');
+
+            await addToQueueForGarmin({
+                userID: 'u1',
+                startTimeInSeconds: 123,
+                manual: false,
+                activityFileID: 'f1',
+                activityFileType: 'FIT',
+                token: 't1',
+                userAccessToken: 'at1',
+                callbackURL: 'cb1'
+            });
+
+            expect(utils.enqueueWorkoutTask).toHaveBeenCalledTimes(1);
+            expect(mockDocRef.update).toHaveBeenCalledTimes(2);
+            expect(mockDocRef.update).toHaveBeenLastCalledWith({ dispatchedToCloudTask: expect.any(Number) });
+        });
+
         it('should not write the immediate dispatch marker when Cloud Tasks recovery remains blocked', async () => {
             const utils = await import('./utils');
             vi.mocked(utils.enqueueWorkoutTask).mockResolvedValue(false);
