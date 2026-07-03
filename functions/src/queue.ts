@@ -325,17 +325,11 @@ export async function dispatchQueueItemTasks(serviceName: ServiceNames) {
         logger.info(`Task not enqueued for ${serviceName} queue item ${doc.id}; leaving dispatch marker unchanged.`);
         return false;
       }
-      const markerContext = await assertWorkoutQueueCanDispatch(
-        doc.ref,
-        Object.assign({}, data, { id: doc.id }) as SuuntoAppWorkoutQueueItemInterface | GarminAPIActivityQueueItemInterface | COROSAPIWorkoutQueueItemInterface,
-        serviceName,
-        `workout_queue_scheduled_mark_dispatched:${serviceName}`,
-      );
-      const didMarkDispatched = await markWorkoutQueueItemDispatched(
+      const didMarkDispatched = await markWorkoutQueueItemDispatchedAfterTaskEnqueue(
         doc.ref,
         doc.id,
         serviceName,
-        markerContext.firebaseUserID,
+        dispatchContext.firebaseUserID,
       );
       if (!didMarkDispatched) {
         logger.info(`Skipped ${serviceName} queue item ${doc.id} dispatch marker because the owning user is missing or deletion is in progress.`);

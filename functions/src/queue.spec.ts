@@ -856,6 +856,45 @@ describe('queue', () => {
             expect(updateHealthy).toHaveBeenCalledWith({ dispatchedToCloudTask: expect.any(Number) });
         });
 
+        it('should not fail scheduled dispatch when post-enqueue marker guard read has retryable contention', async () => {
+            const utils = await import('./utils');
+            vi.mocked(utils.getCloudTaskQueueDepth).mockResolvedValue(0);
+            const contentionError: any = new Error('Too much contention on these documents. Please try again.');
+            contentionError.code = 10;
+            contentionError.details = 'Too much contention on these documents. Please try again.';
+            mockGetUserDeletionGuardStateInTransaction.mockRejectedValue(contentionError);
+            const { dispatchQueueItemTasks } = await import('./queue');
+            const admin = await import('firebase-admin');
+
+            const updateContended = vi.fn().mockResolvedValue(undefined);
+            const contendedRef = {
+                update: updateContended,
+                path: 'suuntoAppWorkoutQueue/contended-doc',
+                parent: { id: 'suuntoAppWorkoutQueue' },
+            };
+            vi.mocked(admin.firestore().collection('any').get).mockResolvedValue({
+                docs: [{
+                    id: 'contended-doc',
+                    ref: contendedRef,
+                    data: () => ({
+                        dateCreated: Date.now(),
+                        firebaseUserID: 'contended-user',
+                        userName: 'suunto-provider-user-contended',
+                    }),
+                }] as any,
+                size: 1,
+                empty: false,
+                isEqual: vi.fn(),
+            } as any);
+
+            await dispatchQueueItemTasks(ServiceNames.SuuntoApp);
+
+            expect(utils.enqueueWorkoutTask).toHaveBeenCalledWith(ServiceNames.SuuntoApp, 'contended-doc', expect.any(Number), 0, { recoveryTaskKey: 0 });
+            expect(mockGetUserDeletionGuardState).toHaveBeenCalledTimes(1);
+            expect(mockGetUserDeletionGuardStateInTransaction).toHaveBeenCalledTimes(3);
+            expect(updateContended).not.toHaveBeenCalledWith({ dispatchedToCloudTask: expect.any(Number) });
+        });
+
         it('should not write the dispatch marker when deletion starts after Cloud Task enqueue', async () => {
             const utils = await import('./utils');
             vi.mocked(utils.getCloudTaskQueueDepth).mockResolvedValue(0);
