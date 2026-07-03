@@ -16,6 +16,7 @@ describe('AdminChangelogComponent', () => {
     let whatsNewServiceSpy: any;
     let loggerServiceSpy: any;
     let changelogsSignal: WritableSignal<ChangelogPost[]>;
+    let releaseChangelogAdminModeSpy: ReturnType<typeof vi.fn>;
 
     const mockChangelog: ChangelogPost = {
         id: '1',
@@ -31,8 +32,10 @@ describe('AdminChangelogComponent', () => {
         try {
             changelogsSignal = signal([mockChangelog]);
 
+            releaseChangelogAdminModeSpy = vi.fn();
             whatsNewServiceSpy = {
                 setAdminMode: vi.fn(),
+                requestAdminMode: vi.fn(() => releaseChangelogAdminModeSpy),
                 createChangelog: vi.fn(),
                 updateChangelog: vi.fn(),
                 deleteChangelog: vi.fn(),
@@ -72,13 +75,15 @@ describe('AdminChangelogComponent', () => {
         expect(component).toBeTruthy();
     });
 
-    it('should enable admin mode on init', () => {
-        expect(whatsNewServiceSpy.setAdminMode).toHaveBeenCalledWith(true);
+    it('should request scoped admin mode on init', () => {
+        expect(whatsNewServiceSpy.requestAdminMode).toHaveBeenCalledOnce();
+        expect(whatsNewServiceSpy.setAdminMode).not.toHaveBeenCalled();
     });
 
-    it('should disable admin mode on destroy', () => {
+    it('should release scoped admin mode on destroy', () => {
         component.ngOnDestroy();
-        expect(whatsNewServiceSpy.setAdminMode).toHaveBeenCalledWith(false);
+        expect(releaseChangelogAdminModeSpy).toHaveBeenCalledOnce();
+        expect(whatsNewServiceSpy.setAdminMode).not.toHaveBeenCalled();
     });
 
     it('should list changelogs', () => {

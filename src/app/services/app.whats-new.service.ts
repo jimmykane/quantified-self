@@ -71,10 +71,12 @@ export class AppWhatsNewService {
     private readonly changelogsCollection = collection(this.firestore, 'changelogs');
 
     private _isAdminMode = signal(false);
+    private _adminModeRequestCount = signal(0);
+    public readonly isAdminMode = computed(() => this._isAdminMode() || this._adminModeRequestCount() > 0);
 
     // Derived query that changes based on admin mode.
     private changelogsQuery = computed(() => {
-        if (this._isAdminMode()) {
+        if (this.isAdminMode()) {
             // Admin mode: Show all, ordered by date
             return query(this.changelogsCollection, orderBy('date', 'desc'));
         } else {
@@ -175,6 +177,19 @@ export class AppWhatsNewService {
     // Admin Methods
     public setAdminMode(isAdmin: boolean) {
         this._isAdminMode.set(isAdmin);
+    }
+
+    public requestAdminMode(): () => void {
+        let released = false;
+        this._adminModeRequestCount.update(count => count + 1);
+
+        return () => {
+            if (released) {
+                return;
+            }
+            released = true;
+            this._adminModeRequestCount.update(count => Math.max(0, count - 1));
+        };
     }
 
     public async createChangelog(post: Omit<ChangelogPost, 'id'>) {

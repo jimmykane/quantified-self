@@ -32,8 +32,10 @@ describe('AdminDashboardComponent', () => {
     let whatsNewServiceSpy: {
         changelogs: WritableSignal<ChangelogPost[]>;
         setAdminMode: ReturnType<typeof vi.fn>;
+        requestAdminMode: ReturnType<typeof vi.fn>;
     };
     let loggerSpy: { error: ReturnType<typeof vi.fn>; log: ReturnType<typeof vi.fn> };
+    let releaseChangelogAdminModeSpy: ReturnType<typeof vi.fn>;
 
     const mockFinancialStats: FinancialStats = {
         revenue: { total: 1000, currency: 'USD', invoiceCount: 10 },
@@ -200,12 +202,14 @@ describe('AdminDashboardComponent', () => {
             getQueueStats: vi.fn().mockReturnValue(of(mockQueueStats)),
             getMaintenanceStatus: vi.fn().mockReturnValue(of(mockMaintenanceStatus)),
         };
+        releaseChangelogAdminModeSpy = vi.fn();
         whatsNewServiceSpy = {
             changelogs: signal([
                 { id: 'old', title: 'Old', description: '', date: new Date('2026-01-01T00:00:00Z'), published: true, type: 'minor' },
                 { id: 'new', title: 'New Draft', description: '', date: new Date('2026-02-01T00:00:00Z'), published: false, type: 'patch' },
             ] as ChangelogPost[]),
             setAdminMode: vi.fn(),
+            requestAdminMode: vi.fn(() => releaseChangelogAdminModeSpy),
         };
         loggerSpy = { error: vi.fn(), log: vi.fn() };
 
@@ -226,11 +230,12 @@ describe('AdminDashboardComponent', () => {
         fixture.detectChanges();
     }
 
-    it('should create without taking ownership of changelog admin mode', () => {
+    it('should request scoped changelog admin mode', () => {
         createComponent();
 
         expect(component).toBeTruthy();
         expect(whatsNewServiceSpy.setAdminMode).not.toHaveBeenCalled();
+        expect(whatsNewServiceSpy.requestAdminMode).toHaveBeenCalledOnce();
     });
 
     it('should load all dashboard sections independently on init', () => {
@@ -301,12 +306,13 @@ describe('AdminDashboardComponent', () => {
         expect(text).not.toContain('GCP Billing');
     });
 
-    it('should not reset changelog admin mode on destroy', () => {
+    it('should release scoped changelog admin mode on destroy', () => {
         createComponent();
 
         fixture.destroy();
 
         expect(whatsNewServiceSpy.setAdminMode).not.toHaveBeenCalled();
+        expect(releaseChangelogAdminModeSpy).toHaveBeenCalledOnce();
     });
 
     it('should call fetchFinancialStats and update signal state', () => {
