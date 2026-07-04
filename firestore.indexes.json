@@ -549,7 +549,7 @@
           "arrayConfig": "CONTAINS"
         },
         {
-          "fieldPath": "stats.PowerCurve",
+          "fieldPath": "startDate",
           "order": "ASCENDING"
         },
         {
@@ -568,7 +568,7 @@
           "arrayConfig": "CONTAINS"
         },
         {
-          "fieldPath": "startDate",
+          "fieldPath": "stats.PowerCurve",
           "order": "ASCENDING"
         },
         {

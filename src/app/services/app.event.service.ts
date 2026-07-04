@@ -2,7 +2,7 @@ import { inject, Injectable, OnDestroy } from '@angular/core';
 import { ActivityTypes, DataActivityTypes, EventInterface } from '@sports-alliance/sports-lib';
 import { EventImporterJSON } from '@sports-alliance/sports-lib';
 import { combineLatest, from, Observable, of, throwError, zip } from 'rxjs';
-import { Firestore, collection, query, orderBy, where, limit, startAfter, endBefore, collectionData, onSnapshot, doc, docData, getDoc, getDocs, getDocsFromCache, updateDoc, deleteDoc, writeBatch, DocumentSnapshot, QueryDocumentSnapshot, Query, QuerySnapshot, DocumentData, getCountFromServer, documentId } from 'app/firebase/firestore';
+import { Firestore, collection, query, orderBy, where, limit, startAfter, endBefore, collectionData, onSnapshot, doc, docData, getDoc, getDocs, getDocsFromCache, updateDoc, deleteDoc, writeBatch, DocumentSnapshot, QueryDocumentSnapshot, Query, QuerySnapshot, DocumentData, getCountFromServer, documentId, FieldPath } from 'app/firebase/firestore';
 import { catchError, map, switchMap, take, distinctUntilChanged, tap } from 'rxjs/operators';
 import { EventJSONInterface } from '@sports-alliance/sports-lib';
 import { ActivityJSONInterface } from '@sports-alliance/sports-lib';
@@ -2213,11 +2213,12 @@ export class AppEventService implements OnDestroy {
       normalizedActivityTypes,
       AppEventService.FIRESTORE_ARRAY_CONTAINS_ANY_MAX,
     );
+    const activityTypeFieldPath = new FieldPath('stats', DataActivityTypes.type);
     const eligibilityQueries = activityTypeChunks.map(activityTypeChunk => (
       collectionData(query(
         eventsRef,
         where(`stats.${POWER_CURVE_STAT_TYPE}`, '!=', null),
-        where(`stats.\`${DataActivityTypes.type}\``, 'array-contains-any', activityTypeChunk),
+        where(activityTypeFieldPath, 'array-contains-any', activityTypeChunk),
         limit(1),
       )) as Observable<unknown[]>
     ).pipe(

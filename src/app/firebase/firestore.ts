@@ -24,6 +24,7 @@ export {
   doc,
   documentId,
   endBefore,
+  FieldPath,
   getCountFromServer,
   getDoc,
   getDocs,

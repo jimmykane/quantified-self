@@ -1,6 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { AppEventService } from './app.event.service';
-import { Firestore, doc, docData, collection, collectionData, deleteDoc, updateDoc, writeBatch, query, where, limit, getDocs, getDocsFromCache, onSnapshot, documentId } from 'app/firebase/firestore';
+import { Firestore, doc, docData, collection, collectionData, deleteDoc, updateDoc, writeBatch, query, where, limit, getDocs, getDocsFromCache, onSnapshot, documentId, FieldPath } from 'app/firebase/firestore';
 import { Storage } from 'app/firebase/storage';
 import { Auth } from 'app/firebase/auth';
 import { AppAnalyticsService } from './app.analytics.service';
@@ -333,12 +333,12 @@ describe('AppEventService', () => {
 
             expect(collection).toHaveBeenCalledWith(mockFirestore, 'users/user-1/events');
             expect(where).toHaveBeenCalledWith(`stats.${POWER_CURVE_STAT_TYPE}`, '!=', null);
-            expect(where).toHaveBeenCalledWith(`stats.\`${DataActivityTypes.type}\``, 'array-contains-any', [ActivityTypes.Cycling]);
+            expect(where).toHaveBeenCalledWith(new FieldPath('stats', DataActivityTypes.type), 'array-contains-any', [ActivityTypes.Cycling]);
             expect(limit).toHaveBeenCalledWith(1);
             expect(query).toHaveBeenCalledWith(
                 'events-collection',
                 { fieldPath: `stats.${POWER_CURVE_STAT_TYPE}`, opStr: '!=', value: null },
-                { fieldPath: `stats.\`${DataActivityTypes.type}\``, opStr: 'array-contains-any', value: [ActivityTypes.Cycling] },
+                { fieldPath: new FieldPath('stats', DataActivityTypes.type), opStr: 'array-contains-any', value: [ActivityTypes.Cycling] },
                 { limit: 1 },
             );
         });
@@ -357,14 +357,14 @@ describe('AppEventService', () => {
                 1,
                 'events-collection',
                 { fieldPath: `stats.${POWER_CURVE_STAT_TYPE}`, opStr: '!=', value: null },
-                { fieldPath: `stats.\`${DataActivityTypes.type}\``, opStr: 'array-contains-any', value: activityTypes.slice(0, 10) },
+                { fieldPath: new FieldPath('stats', DataActivityTypes.type), opStr: 'array-contains-any', value: activityTypes.slice(0, 10) },
                 { limit: 1 },
             );
             expect(query).toHaveBeenNthCalledWith(
                 2,
                 'events-collection',
                 { fieldPath: `stats.${POWER_CURVE_STAT_TYPE}`, opStr: '!=', value: null },
-                { fieldPath: `stats.\`${DataActivityTypes.type}\``, opStr: 'array-contains-any', value: activityTypes.slice(10) },
+                { fieldPath: new FieldPath('stats', DataActivityTypes.type), opStr: 'array-contains-any', value: activityTypes.slice(10) },
                 { limit: 1 },
             );
         });
