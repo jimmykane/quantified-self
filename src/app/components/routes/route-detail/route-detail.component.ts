@@ -44,6 +44,8 @@ import {
   getRouteServiceDisplayName,
   getRouteSourceSummaryLabel,
   getRouteSyncedDestinationLabels,
+  getSuuntoRouteSendMenuLabel,
+  hasRouteDeliveryForService,
 } from '../../../helpers/route-provenance.helper';
 import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../confirmation-dialog/confirmation-dialog.component';
 import { RouteChartComponent } from '../route-chart/route-chart.component';
@@ -206,6 +208,9 @@ export class RouteDetailComponent {
   });
   readonly garminRouteSendMenuLabel = computed(() => {
     return getGarminRouteSendMenuLabel(this.garminRouteSendDisabledReason());
+  });
+  readonly suuntoRouteSendMenuLabel = computed(() => {
+    return getSuuntoRouteSendMenuLabel(this.routeDocument());
   });
   readonly hasSendableRouteDestination = computed(() => (
     this.canSendRouteToSuunto() || this.canSendRouteToGarmin() || !!this.garminRouteSendDisabledReason()
@@ -432,6 +437,34 @@ export class RouteDetailComponent {
     return getRouteServiceDisplayName(destinationServiceName);
   }
 
+  private getRouteSendSuccessMessage(route: FirestoreRouteJSON, destinationServiceName: ServiceNames): string {
+    if (
+      destinationServiceName === ServiceNames.SuuntoApp
+      && hasRouteDeliveryForService(route, ServiceNames.SuuntoApp)
+    ) {
+      return 'Route copy sent to Suunto.';
+    }
+
+    return `Route sent to ${this.getRouteSendDestinationLabel(destinationServiceName)}.`;
+  }
+
+  private async confirmSuuntoCopySendIfNeeded(route: FirestoreRouteJSON): Promise<boolean> {
+    if (!hasRouteDeliveryForService(route, ServiceNames.SuuntoApp)) {
+      return true;
+    }
+
+    const dialogRef = this.dialog.open(ConfirmationDialogComponent, {
+      data: {
+        title: 'Send updated copy to Suunto?',
+        message: 'This route was already sent to Suunto. Suunto imports route files as new routes, so sending it again will create another copy in Suunto App.',
+        confirmLabel: 'Send copy',
+        confirmColor: 'primary',
+      } as ConfirmationDialogData,
+    });
+
+    return await firstValueFrom(dialogRef.afterClosed()) === true;
+  }
+
   async sendRouteToSuunto(): Promise<void> {
     await this.sendRouteToService(ServiceNames.SuuntoApp);
   }
@@ -459,6 +492,13 @@ export class RouteDetailComponent {
       return;
     }
 
+    if (
+      destinationServiceName === ServiceNames.SuuntoApp
+      && !(await this.confirmSuuntoCopySendIfNeeded(routeDocument))
+    ) {
+      return;
+    }
+
     this.sendingToService.set(true);
     this.snackBar.open(`Sending route to ${destinationLabel}...`, undefined, { duration: 2000 });
     try {
@@ -474,7 +514,7 @@ export class RouteDetailComponent {
         destinationService: destinationServiceName,
       });
       this.snackBar.open(
-        result.successCount > 0 ? `Route sent to ${destinationLabel}.` : getRouteSendResponseMessage(result),
+        result.successCount > 0 ? this.getRouteSendSuccessMessage(routeDocument, destinationServiceName) : getRouteSendResponseMessage(result),
         undefined,
         { duration: result.successCount > 0 ? 2500 : 3500 },
       );

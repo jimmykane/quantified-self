@@ -49,6 +49,8 @@ import {
     getRouteServiceDisplayName,
     getRouteSourceSummary,
     getRouteSyncedDestinationSummaries,
+    getSuuntoRouteSendMenuLabel,
+    hasRouteDeliveryForService,
 } from '../../helpers/route-provenance.helper';
 import {
     beginTableRowPointerTracking,
@@ -127,6 +129,8 @@ interface RoutePageRouteViewModel {
     canExportGPX: boolean;
     canDownloadOriginals: boolean;
     canSendToSuunto: boolean;
+    hasSuuntoDelivery: boolean;
+    suuntoSendMenuLabel: string;
     canSendToGarmin: boolean;
     garminSendDisabledReason: string | null;
     garminSendMenuLabel: string;
@@ -389,6 +393,18 @@ export class RoutesPageComponent implements OnInit {
             && item.canSendToSuunto
         )).length;
     });
+    readonly selectedSuuntoDeliveredRouteCount = computed(() => {
+        const selectedIDs = this.selectedRouteIDSet();
+        return this.visibleRouteViewModels().filter(item => (
+            !!item.route.id
+            && selectedIDs.has(item.route.id)
+            && item.canSendToSuunto
+            && item.hasSuuntoDelivery
+        )).length;
+    });
+    readonly selectedSuuntoSendMenuLabel = computed(() => (
+        this.selectedSuuntoDeliveredRouteCount() > 0 ? 'Suunto (updated copies)' : 'Suunto'
+    ));
     readonly selectedSendableRoutesToGarminCount = computed(() => {
         if (!this.canSendRoutesToGarmin()) {
             return 0;
@@ -1143,6 +1159,38 @@ export class RoutesPageComponent implements OnInit {
         return getRouteServiceDisplayName(destinationServiceName);
     }
 
+    private getRouteSendSuccessMessage(route: FirestoreRouteJSON, destinationServiceName: ServiceNames): string {
+        if (
+            destinationServiceName === ServiceNames.SuuntoApp
+            && hasRouteDeliveryForService(route, ServiceNames.SuuntoApp)
+        ) {
+            return 'Route copy sent to Suunto.';
+        }
+
+        return `Route sent to ${this.getRouteSendDestinationLabel(destinationServiceName)}.`;
+    }
+
+    private async confirmSuuntoCopySendIfNeeded(routes: FirestoreRouteJSON[]): Promise<boolean> {
+        const deliveredRouteCount = routes.filter(route => hasRouteDeliveryForService(route, ServiceNames.SuuntoApp)).length;
+        if (deliveredRouteCount === 0) {
+            return true;
+        }
+
+        const multipleRoutes = deliveredRouteCount > 1;
+        const dialogRef = this.dialog.open(ConfirmationDialogComponent, {
+            data: {
+                title: multipleRoutes ? 'Send updated copies to Suunto?' : 'Send updated copy to Suunto?',
+                message: multipleRoutes
+                    ? `${deliveredRouteCount} selected routes were already sent to Suunto. Suunto imports route files as new routes, so sending them again will create additional copies in Suunto App.`
+                    : 'This route was already sent to Suunto. Suunto imports route files as new routes, so sending it again will create another copy in Suunto App.',
+                confirmLabel: multipleRoutes ? 'Send copies' : 'Send copy',
+                confirmColor: 'primary',
+            } as ConfirmationDialogData,
+        });
+
+        return await firstValueFrom(dialogRef.afterClosed()) === true;
+    }
+
     async sendRouteToSuunto(route: FirestoreRouteJSON, source: 'routes_list_row' | 'routes_list_bulk' = 'routes_list_row'): Promise<void> {
         await this.sendRouteToService(route, ServiceNames.SuuntoApp, source);
     }
@@ -1172,6 +1220,13 @@ export class RoutesPageComponent implements OnInit {
             return;
         }
 
+        if (
+            destinationServiceName === ServiceNames.SuuntoApp
+            && !(await this.confirmSuuntoCopySendIfNeeded([route]))
+        ) {
+            return;
+        }
+
         this.sendingToServiceRouteID.set(routeID);
         this.snackBar.open(`Sending route to ${destinationLabel}...`, undefined, { duration: 2000 });
         try {
@@ -1188,7 +1243,7 @@ export class RoutesPageComponent implements OnInit {
             });
 
             this.snackBar.open(
-                result.successCount > 0 ? `Route sent to ${destinationLabel}.` : getRouteSendResponseMessage(result),
+                result.successCount > 0 ? this.getRouteSendSuccessMessage(route, destinationServiceName) : getRouteSendResponseMessage(result),
                 undefined,
                 { duration: result.successCount > 0 ? 2500 : 3500 },
             );
@@ -1351,6 +1406,13 @@ export class RoutesPageComponent implements OnInit {
             || this.bulkActionInProgress()
             || this.sendingToServiceRouteID() !== null
             || !this.canSendRoutesToDestination(destinationServiceName)
+        ) {
+            return;
+        }
+
+        if (
+            destinationServiceName === ServiceNames.SuuntoApp
+            && !(await this.confirmSuuntoCopySendIfNeeded(sendableRoutes.map(item => item.route)))
         ) {
             return;
         }
@@ -1932,6 +1994,8 @@ export class RoutesPageComponent implements OnInit {
         const provenanceSummary = provenanceItems.map(item => item.label).join(' · ');
         const garminSendDisabledReason = this.getGarminSendDisabledReason(route);
         const garminSendMenuLabel = getGarminRouteSendMenuLabel(garminSendDisabledReason);
+        const hasSuuntoDelivery = hasRouteDeliveryForService(route, ServiceNames.SuuntoApp);
+        const suuntoSendMenuLabel = getSuuntoRouteSendMenuLabel(route);
         return {
             route,
             name: routeName,
@@ -1963,6 +2027,8 @@ export class RoutesPageComponent implements OnInit {
             canExportGPX: this.canManageRoute(route) && originalFiles.length > 0,
             canDownloadOriginals: this.canManageRoute(route) && originalFiles.length > 0,
             canSendToSuunto: this.canSendRouteToSuunto(route),
+            hasSuuntoDelivery,
+            suuntoSendMenuLabel,
             canSendToGarmin: this.canSendRouteToGarmin(route),
             garminSendDisabledReason,
             garminSendMenuLabel,

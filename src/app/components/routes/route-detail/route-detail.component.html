@@ -83,7 +83,7 @@
             [disabled]="sendingToService() || !canSendRoutesToSuunto()"
             (click)="sendRouteToSuunto()">
             <mat-icon>cloud_upload</mat-icon>
-            <span>Suunto</span>
+            <span>{{ suuntoRouteSendMenuLabel() }}</span>
           </button>
           }
           @if (canSendRouteToGarmin() || canSendRoutesToGarmin() || garminRouteSendDisabledReason()) {
