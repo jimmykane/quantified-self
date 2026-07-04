@@ -370,7 +370,10 @@ describe('uploadRoute', () => {
     expect(hoisted.mockSportsLib.importRoutesFromGPX).toHaveBeenCalledWith(
       rawBody.toString(),
       expect.any(Function),
-      expect.objectContaining({ generateUnitStreams: false }),
+      expect.objectContaining({
+        generateUnitStreams: false,
+        gpx: expect.objectContaining({ importTimedTracksAsRoutes: true }),
+      }),
     );
     expect(hoisted.mockStorageSave).toHaveBeenCalledWith(rawBody);
 
@@ -459,7 +462,10 @@ describe('uploadRoute', () => {
     expect(hoisted.mockSportsLib.importRoutesFromGPX).toHaveBeenCalledWith(
       gpxPayload.toString(),
       expect.any(Function),
-      expect.objectContaining({ generateUnitStreams: false }),
+      expect.objectContaining({
+        generateUnitStreams: false,
+        gpx: expect.objectContaining({ importTimedTracksAsRoutes: true }),
+      }),
     );
     expect(hoisted.mockStorageSave).toHaveBeenCalledWith(compressedPayload);
     expect(transactionSetCallForPath(`users/user-1/routes/${expectedRouteID}`)?.[1]).toMatchObject({
@@ -885,7 +891,10 @@ describe('uploadRoute', () => {
 
     expect(hoisted.mockSportsLib.importRoutesFromFit).toHaveBeenCalledWith(
       expect.any(ArrayBuffer),
-      expect.objectContaining({ generateUnitStreams: false }),
+      expect.objectContaining({
+        generateUnitStreams: false,
+        gpx: expect.objectContaining({ importTimedTracksAsRoutes: true }),
+      }),
     );
     expect(response.status).toHaveBeenCalledWith(200);
   });

@@ -210,7 +210,7 @@ export class UploadRoutesComponent extends UploadAbstractDirective implements On
       return 'This FIT file looks like an activity, not a route/course. Use activity upload for workouts, or export a course/route file.';
     }
     if (normalizedMessage.includes('could not parse uploaded route payload')) {
-      return 'Could not read this route file. Upload a FIT course/route or GPX route file and try again.';
+      return 'Could not read this route file. Upload a FIT course/route or GPX route/track file and try again.';
     }
 
     const genericStatusMatch = rawMessage.match(/^Route upload failed \((\d{3})\)\.?$/);
@@ -229,7 +229,7 @@ export class UploadRoutesComponent extends UploadAbstractDirective implements On
       return 'Route upload is not authorized. Please sign in again.';
     }
     if (status === 400) {
-      return 'Could not read this route file. Upload a FIT course/route or GPX route file and try again.';
+      return 'Could not read this route file. Upload a FIT course/route or GPX route/track file and try again.';
     }
 
     return rawMessage;

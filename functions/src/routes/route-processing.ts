@@ -234,14 +234,14 @@ export function getRouteParsingFailureMessage(error: unknown, resolvedExtension:
   }
 
   if (baseExtension === 'gpx') {
-    return 'Could not read this GPX route file. Upload a GPX file with route or track points and try again.';
+    return 'Could not read this GPX route/track file. Upload a GPX file with route or track points and try again.';
   }
 
   if (baseExtension === 'fit') {
     return 'Could not read this FIT route file. Upload a FIT course/route file and try again.';
   }
 
-  return 'Could not read this route file. Upload a FIT course/route or GPX route file and try again.';
+  return 'Could not read this route file. Upload a FIT course/route or GPX route/track file and try again.';
 }
 
 export function generateUploadRouteID(userID: string, payload: Buffer, resolvedExtension: string): string {

@@ -68,7 +68,7 @@ describe('public-seo-pages.content', () => {
     expect(PUBLIC_SEO_PAGES.fitGpxTcxFileAnalyzer.faqItems.some(item => item.question === 'Can I analyze FIT files?')).toBe(true);
 
     expect(PUBLIC_SEO_PAGES.routeFiles.h1).toBe('Save FIT and GPX route files, then send them to Suunto or Garmin Connect');
-    expect(PUBLIC_SEO_PAGES.routeFiles.description).toContain('FIT course files and GPX route files');
+    expect(PUBLIC_SEO_PAGES.routeFiles.description).toContain('FIT course files and GPX route or track files');
     expect(PUBLIC_SEO_PAGES.routeFiles.description).toContain('send saved routes to Suunto');
     expect(PUBLIC_SEO_PAGES.routeFiles.description).toContain('Garmin Connect');
     expect(PUBLIC_SEO_PAGES.routeFiles.description).toContain('import Suunto routes into Routes');
