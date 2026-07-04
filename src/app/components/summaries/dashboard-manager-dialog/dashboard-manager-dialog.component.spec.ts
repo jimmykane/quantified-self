@@ -616,6 +616,48 @@ describe('DashboardManagerDialogComponent', () => {
     });
   });
 
+  it('preserves Running Power Curve scope when editing manually while Cycling Power Curve exists', async () => {
+    dialogData.user.settings.dashboardSettings.tiles = [
+      {
+        type: TileTypes.Chart,
+        order: 0,
+        name: 'Cycling Power Curve',
+        chartType: DASHBOARD_POWER_CURVE_CHART_TYPE,
+        dataType: DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE,
+        dataValueType: ChartDataValueTypes.Total,
+        dataCategoryType: ChartDataCategoryTypes.DateType,
+        dataTimeInterval: TimeIntervals.Weekly,
+        size: { columns: 1, rows: 1 },
+        eventFilters: { range: '1y', activityTypes: getDashboardPowerCurveActivityTypes('cycling') },
+      },
+      {
+        type: TileTypes.Chart,
+        order: 1,
+        name: 'Running Power Curve',
+        chartType: DASHBOARD_POWER_CURVE_CHART_TYPE,
+        dataType: DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE,
+        dataValueType: ChartDataValueTypes.Total,
+        dataCategoryType: ChartDataCategoryTypes.DateType,
+        dataTimeInterval: TimeIntervals.Weekly,
+        size: { columns: 1, rows: 1 },
+        eventFilters: { range: '30d', activityTypes: [ActivityTypes.Running] },
+      },
+    ];
+    component.ngOnInit();
+    component.onModeChange('edit');
+    component.onEditTileSelectionChange(1);
+
+    expect(component.isSaveDisabled).toBe(false);
+
+    await component.save();
+
+    expect(dialogData.user.settings.dashboardSettings.tiles[1]).toMatchObject({
+      name: 'Running Power Curve',
+      chartType: DASHBOARD_POWER_CURVE_CHART_TYPE,
+      eventFilters: { range: '30d', activityTypes: [ActivityTypes.Running] },
+    });
+  });
+
   it('marks Recovery auto-tile and legacy recovery state dismissed when replacing Recovery', async () => {
     dialogData.user.settings.dashboardSettings.tiles = [{
       type: TileTypes.Chart,

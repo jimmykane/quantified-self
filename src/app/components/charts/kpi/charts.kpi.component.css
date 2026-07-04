@@ -343,7 +343,15 @@
 .kpi-layout-row .kpi-sparkline-shell {
   align-self: center;
   height: 38px;
+  justify-self: stretch;
   margin-top: 0;
+  min-height: 38px;
+  min-width: 72px;
+  width: 100%;
+}
+
+.kpi-layout-row .kpi-sparkline {
+  height: 38px;
   min-height: 38px;
 }
 
@@ -393,6 +401,12 @@
   }
 
   .kpi-layout-row .kpi-sparkline-shell {
+    height: 36px;
+    min-height: 36px;
+    min-width: 58px;
+  }
+
+  .kpi-layout-row .kpi-sparkline {
     height: 36px;
     min-height: 36px;
   }

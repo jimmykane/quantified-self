@@ -99,6 +99,10 @@ interface KpiSparklineStyle {
   areaOpacity: number;
 }
 
+const KPI_SPARKLINE_INIT_WIDTH_PX = 96;
+const KPI_SPARKLINE_INIT_HEIGHT_PX = 38;
+const KPI_SINGLE_POINT_X_AXIS_PADDING_MS = 3.5 * 24 * 60 * 60 * 1000;
+
 @Component({
   selector: 'app-kpi-chart',
   templateUrl: './charts.kpi.component.html',
@@ -179,6 +183,10 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
       eChartsLoader: this.eChartsLoader,
       logger: this.logger,
       logPrefix: '[ChartsKpiComponent]',
+      initOptions: {
+        width: KPI_SPARKLINE_INIT_WIDTH_PX,
+        height: KPI_SPARKLINE_INIT_HEIGHT_PX,
+      },
       mobileTapFeedbackOptions: () => this.mobileTapFeedbackOptions,
     });
   }
@@ -282,7 +290,7 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
     const option = this.buildOption(presentation);
     this.chartHost.hideTooltip();
     this.chartHost.setOption(option, ECHARTS_CARTESIAN_IMMEDIATE_UPDATE_SETTINGS);
-    this.chartHost.scheduleResize();
+    this.schedulePostLayoutResize();
   }
 
   private updatePresentationAndOverlay(): KpiPresentation {
@@ -858,6 +866,8 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
     const trendNumericValues = trendData
       .map(([, value]) => value)
       .filter((value): value is number => Number.isFinite(value));
+    const hasSingleTrendPoint = trendNumericValues.length === 1 && trendData.length === 1;
+    const singleTrendPointTime = hasSingleTrendPoint ? trendData[0][0] : null;
     const minTrendValue = trendNumericValues.length ? Math.min(...trendNumericValues) : 0;
     const maxTrendValue = trendNumericValues.length ? Math.max(...trendNumericValues) : 0;
     const yAxisRangePadding = this.resolveYAxisPadding(minTrendValue, maxTrendValue);
@@ -900,8 +910,8 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
       },
       xAxis: {
         type: 'time',
-        min: 'dataMin',
-        max: 'dataMax',
+        min: singleTrendPointTime !== null ? singleTrendPointTime - KPI_SINGLE_POINT_X_AXIS_PADDING_MS : 'dataMin',
+        max: singleTrendPointTime !== null ? singleTrendPointTime + KPI_SINGLE_POINT_X_AXIS_PADDING_MS : 'dataMax',
         boundaryGap: false,
         axisLabel: { show: false },
         axisTick: { show: false },
@@ -925,8 +935,9 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
           silent: this.compactRow,
           data: trendData,
           smooth: true,
-          showSymbol: false,
-          symbol: 'none',
+          showSymbol: hasSingleTrendPoint,
+          symbol: hasSingleTrendPoint ? 'circle' : 'none',
+          symbolSize: hasSingleTrendPoint ? 4 : 0,
           connectNulls: true,
           lineStyle: {
             width: 1,
@@ -983,6 +994,18 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
         },
       ],
     };
+  }
+
+  private schedulePostLayoutResize(): void {
+    this.chartHost.scheduleResize();
+
+    if (typeof requestAnimationFrame === 'undefined') {
+      return;
+    }
+
+    requestAnimationFrame(() => {
+      this.chartHost.scheduleResize();
+    });
   }
 
   private buildTooltipOption(

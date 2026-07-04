@@ -46,6 +46,28 @@ interface PowerCurveRenderSeries {
   }>;
 }
 
+interface PowerCurveBenchmarkChip {
+  duration: number;
+  durationLabel: string;
+  powerLabel: string;
+  primary: boolean;
+}
+
+const PRIMARY_POWER_CURVE_BENCHMARK_DURATION_SECONDS = 1200;
+const POWER_CURVE_BENCHMARK_DURATIONS_SECONDS = [
+  PRIMARY_POWER_CURVE_BENCHMARK_DURATION_SECONDS,
+  300,
+  60,
+] as const;
+
+function formatPowerCurveBenchmarkDurationLabel(seconds: number): string {
+  return formatPowerCurveDurationLabel(seconds).replace(/^0(?=\d+m$)/, '');
+}
+
+function formatPowerCurveBenchmarkPowerLabel(power: number): string {
+  return formatPowerCurvePowerLabel(power, true).replace(/\s+watts?$/i, 'w');
+}
+
 @Component({
   selector: 'app-power-curve-chart',
   templateUrl: './charts.power-curve.component.html',
@@ -66,7 +88,7 @@ export class ChartsPowerCurveComponent implements AfterViewInit, OnChanges, OnDe
 
   private readonly chartHost: EChartsHostController;
 
-  public headlineValueText = '--';
+  public benchmarkChips: PowerCurveBenchmarkChip[] = [];
   public subtitleText = 'Best + latest activity';
   public showNoDataError = false;
   public noDataErrorMessage = 'No power curve data yet';
@@ -120,10 +142,7 @@ export class ChartsPowerCurveComponent implements AfterViewInit, OnChanges, OnDe
   }
 
   private updateHeaderAndErrorState(durations: number[] = this.buildSeries().durations): void {
-    const summaryPoint = this.resolveHeadlineSummaryPoint();
-    this.headlineValueText = summaryPoint
-      ? `${formatPowerCurveDurationLabel(summaryPoint.duration)} ${formatPowerCurvePowerLabel(summaryPoint.power, true)}`
-      : '--';
+    this.benchmarkChips = this.resolveBenchmarkChips();
     const matchedEventCount = this.powerCurve?.matchedEventCount ?? 0;
     this.subtitleText = matchedEventCount > 0
       ? `Best + latest activity · ${matchedEventCount} ${matchedEventCount === 1 ? 'event' : 'events'}`
@@ -131,16 +150,44 @@ export class ChartsPowerCurveComponent implements AfterViewInit, OnChanges, OnDe
     this.showNoDataError = !durations.length || !(this.powerCurve?.series || []).length;
   }
 
-  private resolveHeadlineSummaryPoint(): { duration: number; power: number } | null {
+  private resolveBenchmarkChips(): PowerCurveBenchmarkChip[] {
     const summaryPoints = this.powerCurve?.summaryPoints || [];
-    return summaryPoints.find(point => point.duration === 300)
-      || summaryPoints.find(point => point.duration === 60)
-      || summaryPoints[0]
-      || this.resolveNearestHeadlineSeriesPoint()
-      || null;
+    const chips = POWER_CURVE_BENCHMARK_DURATIONS_SECONDS
+      .map(duration => summaryPoints.find(point => point.duration === duration) || null)
+      .filter((point): point is { duration: number; power: number } => !!point)
+      .map(point => this.buildBenchmarkChip(
+        point,
+        point.duration === PRIMARY_POWER_CURVE_BENCHMARK_DURATION_SECONDS,
+      ));
+
+    if (!chips.length) {
+      const fallbackPoint = this.resolveNearestBenchmarkSeriesPoint(PRIMARY_POWER_CURVE_BENCHMARK_DURATION_SECONDS);
+      return fallbackPoint ? [this.buildBenchmarkChip(fallbackPoint, true)] : [];
+    }
+
+    if (!chips.some(chip => chip.primary)) {
+      chips[0] = {
+        ...chips[0],
+        primary: true,
+      };
+    }
+
+    return chips;
   }
 
-  private resolveNearestHeadlineSeriesPoint(): PowerCurvePoint | null {
+  private buildBenchmarkChip(
+    point: { duration: number; power: number },
+    primary: boolean,
+  ): PowerCurveBenchmarkChip {
+    return {
+      duration: point.duration,
+      durationLabel: formatPowerCurveBenchmarkDurationLabel(point.duration),
+      powerLabel: formatPowerCurveBenchmarkPowerLabel(point.power),
+      primary,
+    };
+  }
+
+  private resolveNearestBenchmarkSeriesPoint(targetDurationSeconds: number): PowerCurvePoint | null {
     const headlineSeries = (this.powerCurve?.series || []).find(series => series.seriesKey === 'best' || series.seriesKey === 'latestAndBest')
       || this.powerCurve?.series?.[0]
       || null;
@@ -152,8 +199,8 @@ export class ChartsPowerCurveComponent implements AfterViewInit, OnChanges, OnDe
     }
 
     return points.reduce((nearestPoint, point) => (
-      Math.abs(Math.log10(point.duration) - Math.log10(300))
-      < Math.abs(Math.log10(nearestPoint.duration) - Math.log10(300))
+      Math.abs(Math.log10(point.duration) - Math.log10(targetDurationSeconds))
+      < Math.abs(Math.log10(nearestPoint.duration) - Math.log10(targetDurationSeconds))
         ? point
         : nearestPoint
     ), points[0]);

@@ -123,6 +123,7 @@ import {
   DASHBOARD_AUTO_TILE_RECOVERY_NOW_ID,
   buildDashboardCuratedAutoTile,
   buildDashboardKpiAutoTile,
+  buildDashboardPowerCurveAutoTile,
   buildDashboardSleepTrendAutoTile,
   getDashboardAutoTileDescriptorForTile,
   isDashboardSleepTrendTile,
@@ -134,6 +135,8 @@ import {
 import {
   getDashboardPowerCurveScopeDefinitions,
   isDashboardPowerCurveTileForScope,
+  resolveDashboardPowerCurveTileScope,
+  type DashboardPowerCurveScope,
 } from '../../../helpers/dashboard-power-curve-scope.helper';
 
 export interface DashboardManagerDialogData {
@@ -364,6 +367,7 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
   public category: DashboardManagerCategory = 'custom';
   public editTileOrder: number | null = null;
   public curatedChartType: DashboardCuratedChartType = DASHBOARD_RECOVERY_NOW_CHART_TYPE;
+  public curatedPowerCurveScope: DashboardPowerCurveScope = 'cycling';
   public kpiChartType: DashboardKpiChartType = DASHBOARD_ACWR_KPI_CHART_TYPE;
   public kpiGroup: DashboardKpiGroup = 'load';
   public presetKpiGroup: DashboardKpiGroup = 'load';
@@ -571,6 +575,7 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
     }
 
     this.category = 'custom';
+    this.curatedPowerCurveScope = 'cycling';
     this.resetCustomEventFilters();
     this.resetMapEventFilters();
     this.ensurePresetSelection();
@@ -604,6 +609,9 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
       const availableCurated = this.curatedChartDefinitions.find(def => !this.isCuratedOptionDisabled(def.chartType));
       if (availableCurated) {
         this.curatedChartType = availableCurated.chartType;
+        if (availableCurated.chartType === DASHBOARD_POWER_CURVE_CHART_TYPE) {
+          this.curatedPowerCurveScope = 'cycling';
+        }
       }
       return;
     }
@@ -744,6 +752,10 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
   }
 
   isCuratedOptionDisabled(chartType: DashboardCuratedChartType): boolean {
+    if (chartType === DASHBOARD_POWER_CURVE_CHART_TYPE) {
+      return this.isPowerCurveScopeOptionDisabled(this.curatedPowerCurveScope);
+    }
+
     const editedOrder = this.mode === 'edit' ? this.editTileOrder : null;
     return this.chartTiles.some((tile) => (
       this.isTileForCuratedChartType(tile, chartType)
@@ -1022,6 +1034,9 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
 
     if (isDashboardCuratedChartType(chartTile.chartType)) {
       this.curatedChartType = chartTile.chartType;
+      if (chartTile.chartType === DASHBOARD_POWER_CURVE_CHART_TYPE) {
+        this.curatedPowerCurveScope = resolveDashboardPowerCurveTileScope(chartTile) || 'cycling';
+      }
       return;
     }
 
@@ -1276,6 +1291,9 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
     let tile: TileChartSettingsInterface;
     if (chartType === DASHBOARD_SLEEP_TREND_CHART_TYPE) {
       tile = buildDashboardSleepTrendAutoTile(order, size);
+    } else if (chartType === DASHBOARD_POWER_CURVE_CHART_TYPE) {
+      const existingScope = resolveDashboardPowerCurveTileScope(existingTile);
+      tile = buildDashboardPowerCurveAutoTile(existingScope || this.curatedPowerCurveScope, order, size);
     } else {
       tile = buildDashboardCuratedAutoTile(chartType as DashboardDefaultCuratedChartType, order, size);
     }

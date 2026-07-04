@@ -1,6 +1,7 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
+import { MatChipsModule } from '@angular/material/chips';
 import { MatIconModule } from '@angular/material/icon';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ChartsPowerCurveComponent } from './charts.power-curve.component';
@@ -47,7 +48,7 @@ describe('ChartsPowerCurveComponent', () => {
 
     await TestBed.configureTestingModule({
       declarations: [ChartsPowerCurveComponent],
-      imports: [MatButtonModule, MatIconModule],
+      imports: [MatButtonModule, MatChipsModule, MatIconModule],
       providers: [
         { provide: EChartsLoaderService, useValue: mockLoader },
         { provide: LoggerService, useValue: { error: vi.fn(), warn: vi.fn() } },
@@ -67,14 +68,32 @@ describe('ChartsPowerCurveComponent', () => {
     }
   });
 
-  it('renders headline and subtitle from summary power-curve data', async () => {
+  it('renders compact benchmark chips with 20m as the primary benchmark', async () => {
     component.powerCurve = makePowerCurveContext();
 
     fixture.detectChanges();
     await fixture.whenStable();
 
-    expect(component.headlineValueText).toContain('5m');
-    expect(component.headlineValueText).toContain('315');
+    expect(component.benchmarkChips).toEqual([
+      expect.objectContaining({
+        duration: 1200,
+        durationLabel: '20m',
+        powerLabel: '245w',
+        primary: true,
+      }),
+      expect.objectContaining({
+        duration: 300,
+        durationLabel: '5m',
+        powerLabel: '315w',
+        primary: false,
+      }),
+      expect.objectContaining({
+        duration: 60,
+        durationLabel: '1m',
+        powerLabel: '420w',
+        primary: false,
+      }),
+    ]);
     expect(component.subtitleText).toBe('Best + latest activity · 2 events');
     expect(component.showNoDataError).toBe(false);
   });
@@ -97,7 +116,7 @@ describe('ChartsPowerCurveComponent', () => {
     expect(component.noDataErrorHint).toContain('longer range');
   });
 
-  it('uses the nearest available duration for the headline when common summary durations are missing', async () => {
+  it('uses the nearest available duration to 20m when benchmark summary durations are missing', async () => {
     component.powerCurve = {
       matchedEventCount: 1,
       sourceEventCount: 1,
@@ -120,8 +139,14 @@ describe('ChartsPowerCurveComponent', () => {
     await fixture.whenStable();
 
     expect(component.showNoDataError).toBe(false);
-    expect(component.headlineValueText).toContain('3m');
-    expect(component.headlineValueText).toContain('410');
+    expect(component.benchmarkChips).toEqual([
+      expect.objectContaining({
+        duration: 900,
+        durationLabel: '15m',
+        powerLabel: '260w',
+        primary: true,
+      }),
+    ]);
   });
 
   it('formats tooltip rows with shared dashboard tooltip chrome', async () => {
@@ -216,6 +241,7 @@ function makePowerCurveContext(): DashboardPowerCurveContext {
     summaryPoints: [
       { duration: 60, power: 420, wattsPerKg: 5.6 },
       { duration: 300, power: 315, wattsPerKg: 4.2 },
+      { duration: 1200, power: 245, wattsPerKg: 3.27 },
     ],
     series: [
       {

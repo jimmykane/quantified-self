@@ -147,6 +147,10 @@ describe('ChartsKpiComponent', () => {
     expect(component.primaryValueText).toBe('1.11');
     expect(component.secondaryLabel).toBe('Acute / Chronic');
     expect(component.secondaryValueText).toBe('210 / 190');
+    expect(mockLoader.init.mock.calls[0]?.[2]).toMatchObject({
+      width: 96,
+      height: 38,
+    });
   });
 
   it('switches presentation for ramp rate', async () => {
@@ -795,11 +799,13 @@ describe('ChartsKpiComponent', () => {
   });
 
   it('renders thinner sparkline with chart-type color accents', async () => {
+    const pointTime = Date.UTC(2025, 11, 1);
+    const xAxisPaddingMs = 3.5 * 24 * 60 * 60 * 1000;
     component.chartType = DASHBOARD_HARD_PERCENT_KPI_CHART_TYPE;
     component.hardPercent = {
       latestWeekStartMs: Date.UTC(2026, 0, 1),
       value: 14.3,
-      trend8Weeks: [{ time: Date.UTC(2025, 11, 1), value: 12.2 }],
+      trend8Weeks: [{ time: pointTime, value: 12.2 }],
     };
 
     fixture.detectChanges();
@@ -814,9 +820,14 @@ describe('ChartsKpiComponent', () => {
     )) as Record<string, any> | undefined;
 
     expect(option).toBeTruthy();
+    expect(option?.xAxis?.min).toBe(pointTime - xAxisPaddingMs);
+    expect(option?.xAxis?.max).toBe(pointTime + xAxisPaddingMs);
     expect(option?.series?.[0]?.lineStyle?.width).toBe(1);
     expect(option?.series?.[0]?.lineStyle?.color).toBe('#e65100');
     expect(option?.series?.[0]?.areaStyle?.color?.type).toBe('linear');
+    expect(option?.series?.[0]?.showSymbol).toBe(true);
+    expect(option?.series?.[0]?.symbol).toBe('circle');
+    expect(option?.series?.[0]?.symbolSize).toBe(4);
   });
 
   it('adds a below-zero band and zero guide line when sparkline includes negative values', async () => {
