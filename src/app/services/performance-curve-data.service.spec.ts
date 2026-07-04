@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   ActivityInterface,
   DataCadence,
+  DataDuration,
   DataHeartRate,
   DataPower,
 } from '@sports-alliance/sports-lib';
@@ -27,6 +28,7 @@ function createActivity(options: {
   type?: string;
   creatorName?: string;
   powerCurve?: RawPoint[] | null;
+  durationSeconds?: number;
   streams?: StreamMap;
 }): ActivityInterface {
   const streamMap = options.streams ?? {};
@@ -43,8 +45,18 @@ function createActivity(options: {
           getValue: () => options.powerCurve,
         } as any;
       }
+      if (statType === DataDuration.type && options.durationSeconds !== undefined) {
+        return {
+          getValue: () => options.durationSeconds,
+        } as any;
+      }
       return null;
     },
+    getDuration: () => (
+      options.durationSeconds === undefined
+        ? null
+        : { getValue: () => options.durationSeconds } as any
+    ),
     getStream: (streamType: string) => {
       if (!(streamType in streamMap)) {
         throw new Error(`Stream ${streamType} missing`);
@@ -161,6 +173,24 @@ describe('PerformanceCurveDataService', () => {
     expect(result[0].points).toEqual([
       { duration: 120, power: 310, wattsPerKg: 4.1 },
     ]);
+  });
+
+  it('should remove power-curve points longer than the activity duration', () => {
+    const activities = [
+      createActivity({
+        id: 'a1',
+        durationSeconds: 1195.27,
+        powerCurve: [
+          { duration: 300, power: 280 },
+          { duration: 900, power: 220 },
+          { duration: 1200, power: 190 },
+        ],
+      }),
+    ];
+
+    const result = service.buildPowerCurveSeries(activities);
+
+    expect(result[0].points.map(point => point.duration)).toEqual([300, 900]);
   });
 
   it('should create deterministic sport labels for non-merge power-curve series', () => {

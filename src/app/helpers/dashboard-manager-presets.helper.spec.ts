@@ -26,16 +26,17 @@ import {
 } from './dashboard-special-chart-types';
 
 describe('dashboard-manager-presets.helper', () => {
-  it('exposes the expanded preset catalog with 29 unique definitions', () => {
+  it('exposes the expanded preset catalog with 30 unique definitions', () => {
     const definitions = getDashboardManagerPresetDefinitions();
 
-    expect(definitions).toHaveLength(29);
-    expect(new Set(definitions.map(definition => definition.id)).size).toBe(29);
-    expect(definitions.filter(definition => definition.category === 'curated')).toHaveLength(6);
+    expect(definitions).toHaveLength(30);
+    expect(new Set(definitions.map(definition => definition.id)).size).toBe(30);
+    expect(definitions.filter(definition => definition.category === 'curated')).toHaveLength(7);
     expect(definitions.filter(definition => definition.category === 'kpi')).toHaveLength(15);
     expect(definitions.filter(definition => definition.category === 'custom')).toHaveLength(7);
     expect(definitions.filter(definition => definition.category === 'map')).toHaveLength(1);
     expect(definitions.map(definition => definition.id)).toContain(DASHBOARD_MANAGER_PRESET_IDS.CURATED_SLEEP);
+    expect(definitions.map(definition => definition.id)).toContain(DASHBOARD_MANAGER_PRESET_IDS.CURATED_POWER_CURVE);
   });
 
   it('returns null for unknown preset ids', () => {

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildPowerCurveEnvelope,
+  filterPowerCurvePointsByMaxDuration,
   normalizePowerCurvePoints,
   toPowerCurveFiniteNumber,
 } from '@shared/power-curve';
@@ -68,6 +69,21 @@ describe('power-curve shared helpers', () => {
       { duration: 300, power: 260 },
     ]);
     expect(envelope[0]).not.toBe(second[0]);
+  });
+
+  it('filters points longer than the owning event or activity duration', () => {
+    const points = [
+      { duration: 300, power: 280 },
+      { duration: 900, power: 220 },
+      { duration: 1200, power: 190 },
+    ];
+
+    expect(filterPowerCurvePointsByMaxDuration(points, 1195.27)).toEqual([
+      { duration: 300, power: 280 },
+      { duration: 900, power: 220 },
+    ]);
+    expect(filterPowerCurvePointsByMaxDuration(points, 1199.2)).toEqual(points);
+    expect(filterPowerCurvePointsByMaxDuration(points, null)).toEqual(points);
   });
 
   it('does not recurse forever on cyclic wrapper objects', () => {

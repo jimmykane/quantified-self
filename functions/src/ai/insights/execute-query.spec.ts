@@ -8,6 +8,7 @@ import {
   ChartTypes,
   DataCadenceAvg,
   DataDistance,
+  DataDuration,
   DataEndPosition,
   DataHeartRateMax,
   DataPowerAvg,
@@ -810,6 +811,48 @@ describe('execute-query', () => {
       { duration: 5, power: 320, wattsPerKg: 4.3 },
       { duration: 60, power: 250, wattsPerKg: 3.6 },
     ]);
+  });
+
+  it('ignores power-curve points longer than the event duration', async () => {
+    const fetchEventDocs = vi.fn(async () => [
+      { id: 'e1', data: () => ({ startDate: new Date('2026-07-02T14:32:41.000Z') }) },
+    ]);
+    const importEvent = vi.fn(() => createMockEvent({
+      id: 'e1',
+      startDate: new Date('2026-07-02T14:32:41.000Z'),
+      activityTypes: [ActivityTypes.Cycling],
+      stats: {
+        [DataDuration.type]: 1195.27,
+        PowerCurve: [
+          { duration: 300, power: 180 },
+          { duration: 900, power: 120 },
+          { duration: 1200, power: 109 },
+        ],
+      },
+    }));
+
+    setExecuteQueryDependenciesForTesting({
+      fetchEventDocs,
+      fetchDebugEventSnapshot: vi.fn(async () => ({
+        totalEventsCount: 1,
+        recentEventsSample: [],
+      })),
+      importEvent,
+      logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } as any,
+    });
+
+    const result = await executeAiInsightsQuery(
+      'user-1',
+      createPowerCurveQuery({ mode: 'best' }),
+      'what is my best power curve',
+    );
+
+    expect(result.resultKind).toBe('power_curve');
+    if (result.resultKind !== 'power_curve') {
+      return;
+    }
+
+    expect(result.powerCurve.series[0]?.points.map(point => point.duration)).toEqual([300, 900]);
   });
 
   it('logs warning diagnostics when malformed power-curve points are dropped', async () => {

@@ -7,6 +7,7 @@ import {
   ChartDataValueTypes,
   ActivityTypesHelper,
   DataActivityTypes,
+  DataDuration,
   DataStartPosition,
   EventImporterJSON,
   EventJSONInterface,
@@ -22,6 +23,7 @@ import type {
 } from '../../../../shared/ai-insights.types';
 import {
   buildPowerCurveEnvelope,
+  filterPowerCurvePointsByMaxDuration,
   normalizePowerCurvePoints,
   POWER_CURVE_DROPPED_POINT_SAMPLE_LIMIT,
   POWER_CURVE_STAT_TYPE,
@@ -688,7 +690,23 @@ function toFiniteNumber(value: unknown): number | null {
 function resolvePowerCurvePoints(event: EventInterface): ResolvedPowerCurvePointsResult {
   const stat = event.getStat?.(POWER_CURVE_STAT_TYPE) as { getValue?: () => unknown } | null | undefined;
   const statValue = stat?.getValue?.();
-  return normalizePowerCurvePoints(statValue);
+  const result = normalizePowerCurvePoints(statValue);
+  return {
+    ...result,
+    points: filterPowerCurvePointsByMaxDuration(
+      result.points,
+      resolveEventDurationSeconds(event),
+    ),
+  };
+}
+
+function resolveEventDurationSeconds(event: EventInterface): number | null {
+  const durationStat = (
+    (event as { getDuration?: () => { getValue?: () => unknown } | null | undefined })?.getDuration?.()
+    || event.getStat?.(DataDuration.type)
+  ) as { getValue?: () => unknown } | null | undefined;
+  const duration = toFiniteNumber(durationStat?.getValue?.());
+  return duration !== null && duration > 0 ? duration : null;
 }
 
 function resolveBucketEndDate(bucketStartDate: Date, timeInterval: TimeIntervals): Date {

@@ -1,6 +1,7 @@
-import type { EventInterface } from '@sports-alliance/sports-lib';
+import { DataDuration, type EventInterface } from '@sports-alliance/sports-lib';
 import {
   buildPowerCurveEnvelope,
+  filterPowerCurvePointsByMaxDuration,
   normalizePowerCurvePoints,
   POWER_CURVE_STAT_TYPE,
   type PowerCurvePoint,
@@ -103,7 +104,11 @@ export function buildDashboardPowerCurveContext(events: EventInterface[]): Dashb
 
 function resolvePowerCurveEvent(event: EventInterface): ResolvedPowerCurveEvent | null {
   const stat = event?.getStat?.(POWER_CURVE_STAT_TYPE) as { getValue?: () => unknown } | null | undefined;
-  const points = normalizePowerCurvePoints(stat?.getValue?.()).points;
+  const durationSeconds = resolveEventDurationSeconds(event);
+  const points = filterPowerCurvePointsByMaxDuration(
+    normalizePowerCurvePoints(stat?.getValue?.()).points,
+    durationSeconds,
+  );
   if (!points.length) {
     return null;
   }
@@ -122,6 +127,37 @@ function resolveEventId(event: EventInterface): string | null {
 
 function resolveEventStartMs(event: EventInterface): number | null {
   const rawValue = (event as { startDate?: unknown })?.startDate;
+  return resolveDateLikeMs(rawValue);
+}
+
+function resolveEventDurationSeconds(event: EventInterface): number | null {
+  const candidates = [
+    (event as { getDuration?: () => { getValue?: () => unknown } | null | undefined })?.getDuration?.()?.getValue?.(),
+    (event?.getStat?.(DataDuration.type) as { getValue?: () => unknown } | null | undefined)?.getValue?.(),
+    (event as { duration?: unknown })?.duration,
+  ];
+
+  for (const candidate of candidates) {
+    const duration = toFinitePositiveNumber(candidate);
+    if (duration !== null) {
+      return duration;
+    }
+  }
+
+  const startMs = resolveEventStartMs(event);
+  const endMs = resolveEventEndMs(event);
+  if (startMs === null || endMs === null || endMs <= startMs) {
+    return null;
+  }
+  return (endMs - startMs) / 1000;
+}
+
+function resolveEventEndMs(event: EventInterface): number | null {
+  const rawValue = (event as { endDate?: unknown })?.endDate;
+  return resolveDateLikeMs(rawValue);
+}
+
+function resolveDateLikeMs(rawValue: unknown): number | null {
   if (rawValue instanceof Date) {
     const time = rawValue.getTime();
     return Number.isFinite(time) ? time : null;
@@ -146,6 +182,17 @@ function resolveEventStartMs(event: EventInterface): number | null {
         ? Math.floor(nanoseconds / 1000000)
         : 0);
     }
+  }
+  return null;
+}
+
+function toFinitePositiveNumber(value: unknown): number | null {
+  if (typeof value === 'number') {
+    return Number.isFinite(value) && value > 0 ? value : null;
+  }
+  if (typeof value === 'string' && value.trim().length > 0) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
   }
   return null;
 }

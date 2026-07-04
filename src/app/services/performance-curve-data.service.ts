@@ -1,6 +1,7 @@
 import { Injectable } from '@angular/core';
-import { ActivityInterface, DataCadence, DataHeartRate, DataPower } from '@sports-alliance/sports-lib';
+import { ActivityInterface, DataCadence, DataDuration, DataHeartRate, DataPower } from '@sports-alliance/sports-lib';
 import {
+  filterPowerCurvePointsByMaxDuration,
   normalizePowerCurvePoints,
   POWER_CURVE_STAT_TYPE,
   type PowerCurvePoint as SharedPowerCurvePoint,
@@ -153,7 +154,10 @@ export class PerformanceCurveDataService {
     const isMerge = options.isMerge === true;
 
     const candidateSeries = activities.map((activity, index) => {
-      const points = normalizePowerCurvePoints(this.getRawPowerCurveStatValue(activity)).points;
+      const points = filterPowerCurvePointsByMaxDuration(
+        normalizePowerCurvePoints(this.getRawPowerCurveStatValue(activity)).points,
+        this.getActivityDurationSeconds(activity),
+      );
 
       return {
         activity,
@@ -516,6 +520,14 @@ export class PerformanceCurveDataService {
     const stat = activity?.getStat?.(POWER_CURVE_STAT_TYPE) as ValueObject | null | undefined;
     const statValue = stat?.getValue?.();
     return statValue;
+  }
+
+  private getActivityDurationSeconds(activity: ActivityInterface): number | null {
+    const durationStat = (
+      activity?.getDuration?.()
+      || activity?.getStat?.(DataDuration.type)
+    ) as ValueObject | null | undefined;
+    return this.toFiniteNumber(durationStat?.getValue?.());
   }
 
   private buildActivityLabels(activities: ActivityInterface[], isMerge: boolean): ActivityLabelDescriptor[] {

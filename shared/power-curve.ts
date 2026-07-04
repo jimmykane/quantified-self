@@ -154,6 +154,19 @@ export function buildPowerCurveEnvelope(pointsCollection: readonly PowerCurvePoi
   return [...pointsByDuration.values()].sort((left, right) => left.duration - right.duration);
 }
 
+export function filterPowerCurvePointsByMaxDuration(
+  points: readonly PowerCurvePoint[],
+  maxDurationSeconds: unknown,
+): PowerCurvePoint[] {
+  const maxDuration = toPowerCurveFiniteNumber(maxDurationSeconds);
+  if (!maxDuration || maxDuration <= 0) {
+    return [...points];
+  }
+
+  const maxAllowedDuration = Math.ceil(maxDuration);
+  return points.filter(point => point.duration <= maxAllowedDuration);
+}
+
 function pushDroppedPowerCurvePointSample(
   samples: DroppedPowerCurvePointSample[],
   sample: DroppedPowerCurvePointSample,
