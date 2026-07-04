@@ -223,6 +223,10 @@ export class TileChartComponent extends TileAbstractDirective {
     );
   }
 
+  get showEventActivityFilter(): boolean {
+    return this.chartType !== this.powerCurveChartType;
+  }
+
   get showDerivedRangeSelector(): boolean {
     return this.chartType === this.intensityDistributionChartType || this.chartType === this.efficiencyTrendChartType;
   }

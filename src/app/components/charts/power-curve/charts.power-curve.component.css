@@ -73,50 +73,54 @@
   color: var(--mat-sys-on-surface-variant);
 }
 
-.power-curve-benchmarks {
+.power-curve-benchmark-summary {
+  align-items: baseline;
   display: flex;
   flex-wrap: wrap;
+  gap: 4px 8px;
+  min-width: 0;
+}
+
+.power-curve-primary-benchmark,
+.power-curve-secondary-benchmarks,
+.power-curve-benchmark-empty {
+  font-family: 'Barlow Condensed', sans-serif;
+  line-height: 1;
+}
+
+.power-curve-primary-benchmark {
+  align-items: baseline;
+  color: var(--mat-sys-on-surface);
+  display: inline-flex;
   gap: 4px;
   min-width: 0;
 }
 
-.power-curve-benchmark-chip {
-  --mat-chip-container-height: 24px;
-  --mat-chip-container-shape-radius: 12px;
-  --mat-chip-label-text-color: var(--mat-sys-on-surface);
-  --mat-chip-outline-color: var(--mat-sys-outline-variant);
-
-  font-family: 'Barlow Condensed', sans-serif;
-  pointer-events: none;
-}
-
-.power-curve-benchmark-chip-primary {
-  --mat-chip-label-text-color: var(--mat-sys-on-primary-container);
-}
-
-.power-curve-benchmark-label {
+.power-curve-benchmark-duration {
   color: var(--mat-sys-on-surface-variant);
-  font-family: 'Barlow Condensed', sans-serif;
   font-size: 0.95rem;
   font-weight: 600;
-  line-height: 1;
-  margin-right: 4px;
 }
 
-.power-curve-benchmark-chip-primary .power-curve-benchmark-label {
-  color: inherit;
-}
-
-.power-curve-benchmark-value,
-.power-curve-benchmarks-empty {
-  font-family: 'Barlow Condensed', sans-serif;
-  font-size: 0.95rem;
+.power-curve-benchmark-power {
+  font-size: 1.12rem;
   font-weight: 700;
-  line-height: 1;
 }
 
-.power-curve-benchmarks-empty {
+.power-curve-secondary-benchmarks {
+  color: var(--mat-sys-on-surface-variant);
+  display: inline-flex;
+  flex-wrap: wrap;
+  font-size: 0.9rem;
+  font-weight: 600;
+  gap: 6px;
+  min-width: 0;
+}
+
+.power-curve-benchmark-empty {
   color: var(--mat-sys-on-surface);
+  font-size: 1rem;
+  font-weight: 700;
 }
 
 .power-curve-subtitle {

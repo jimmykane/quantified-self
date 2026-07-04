@@ -4,6 +4,7 @@
     @if (showEventFilters) {
     <app-dashboard-tile-event-filters class="tile-event-filter-controls" [eventFilters]="eventFilters"
       [canNavigateNewer]="canNavigateTileEventsNewer"
+      [showActivityFilter]="showEventActivityFilter"
       (rangeChange)="eventFilterRangeChange.emit($event)"
       (activityTypesChange)="eventFilterActivityTypesChange.emit($event)"
       (navigate)="eventFilterNavigate.emit($event)">

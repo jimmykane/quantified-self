@@ -86,6 +86,7 @@ class MockTileChartActionsComponent {
 class MockDashboardTileEventFiltersComponent {
   @Input() eventFilters: any;
   @Input() canNavigateNewer = false;
+  @Input() showActivityFilter = true;
   @Output() rangeChange = new EventEmitter<any>();
   @Output() activityTypesChange = new EventEmitter<any>();
   @Output() navigate = new EventEmitter<any>();
@@ -523,6 +524,7 @@ describe('TileChartComponent', () => {
     const filters = getEventFiltersComponent();
     expect(filters.eventFilters).toEqual(component.eventFilters);
     expect(filters.canNavigateNewer).toBe(true);
+    expect(filters.showActivityFilter).toBe(true);
 
     filters.rangeChange.emit('30d');
     filters.activityTypesChange.emit([ActivityTypes.Running]);
@@ -533,7 +535,7 @@ describe('TileChartComponent', () => {
     expect(directions).toEqual(['older']);
   });
 
-  it('should render Power Curve as an event-backed curated tile', () => {
+  it('should render Power Curve as an event-backed curated tile without the generic activity filter', () => {
     const powerCurve = {
       eventCount: 1,
       series: [],
@@ -554,7 +556,9 @@ describe('TileChartComponent', () => {
     expect(chart.powerCurve).toBe(powerCurve);
     expect(chart.infoTooltip).toContain('Power Curve compares');
     expect(chart.reserveTitleActionSpace).toBe(true);
-    expect(getEventFiltersComponent().eventFilters).toEqual(component.eventFilters);
+    const filters = getEventFiltersComponent();
+    expect(filters.eventFilters).toEqual(component.eventFilters);
+    expect(filters.showActivityFilter).toBe(false);
   });
 
   it('should offset chart loading shades when top header controls are shown', () => {

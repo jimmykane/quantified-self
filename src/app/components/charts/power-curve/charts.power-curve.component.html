@@ -14,19 +14,22 @@
           }
         </div>
       </div>
-      @if (benchmarkChips.length) {
-      <mat-chip-set class="power-curve-benchmarks" aria-label="Power curve benchmark powers">
-        @for (chip of benchmarkChips; track chip.duration) {
-        <mat-chip class="power-curve-benchmark-chip"
-          [class.power-curve-benchmark-chip-primary]="chip.primary"
-          [highlighted]="chip.primary" [color]="chip.primary ? 'primary' : null" disableRipple>
-          <span class="power-curve-benchmark-label">{{ chip.durationLabel }}</span>
-          <span class="power-curve-benchmark-value">{{ chip.powerLabel }}</span>
-        </mat-chip>
+      @if (primaryBenchmark) {
+      <div class="power-curve-benchmark-summary" aria-label="Power curve benchmark powers">
+        <div class="power-curve-primary-benchmark">
+          <span class="power-curve-benchmark-duration">{{ primaryBenchmark.durationLabel }}</span>
+          <span class="power-curve-benchmark-power">{{ primaryBenchmark.powerLabel }}</span>
+        </div>
+        @if (secondaryBenchmarks.length) {
+        <div class="power-curve-secondary-benchmarks">
+          @for (benchmark of secondaryBenchmarks; track benchmark.duration) {
+          <span>{{ benchmark.durationLabel }} {{ benchmark.powerLabel }}</span>
+          }
+        </div>
         }
-      </mat-chip-set>
+      </div>
       } @else {
-      <div class="power-curve-benchmarks-empty">--</div>
+      <div class="power-curve-benchmark-empty">--</div>
       }
       <div class="power-curve-subtitle">{{ subtitleText }}</div>
     </header>

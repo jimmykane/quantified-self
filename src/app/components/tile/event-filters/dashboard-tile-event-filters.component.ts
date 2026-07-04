@@ -24,6 +24,7 @@ export class DashboardTileEventFiltersComponent implements OnChanges {
   @Input() eventFilters?: AppDashboardTileEventFiltersInterface | null;
   @Input() disabled = false;
   @Input() canNavigateNewer = false;
+  @Input() showActivityFilter = true;
   @Output() rangeChange = new EventEmitter<AppDashboardTileEventFilterRange>();
   @Output() activityTypesChange = new EventEmitter<ActivityTypes[]>();
   @Output() navigate = new EventEmitter<DashboardTileEventNavigationDirection>();

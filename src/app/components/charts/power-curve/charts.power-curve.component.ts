@@ -46,11 +46,10 @@ interface PowerCurveRenderSeries {
   }>;
 }
 
-interface PowerCurveBenchmarkChip {
+interface PowerCurveBenchmarkStat {
   duration: number;
   durationLabel: string;
   powerLabel: string;
-  primary: boolean;
 }
 
 const PRIMARY_POWER_CURVE_BENCHMARK_DURATION_SECONDS = 1200;
@@ -88,7 +87,9 @@ export class ChartsPowerCurveComponent implements AfterViewInit, OnChanges, OnDe
 
   private readonly chartHost: EChartsHostController;
 
-  public benchmarkChips: PowerCurveBenchmarkChip[] = [];
+  public benchmarkStats: PowerCurveBenchmarkStat[] = [];
+  public primaryBenchmark: PowerCurveBenchmarkStat | null = null;
+  public secondaryBenchmarks: PowerCurveBenchmarkStat[] = [];
   public subtitleText = 'Best + latest activity';
   public showNoDataError = false;
   public noDataErrorMessage = 'No power curve data yet';
@@ -142,7 +143,9 @@ export class ChartsPowerCurveComponent implements AfterViewInit, OnChanges, OnDe
   }
 
   private updateHeaderAndErrorState(durations: number[] = this.buildSeries().durations): void {
-    this.benchmarkChips = this.resolveBenchmarkChips();
+    this.benchmarkStats = this.resolveBenchmarkStats();
+    this.primaryBenchmark = this.benchmarkStats[0] || null;
+    this.secondaryBenchmarks = this.benchmarkStats.slice(1);
     const matchedEventCount = this.powerCurve?.matchedEventCount ?? 0;
     this.subtitleText = matchedEventCount > 0
       ? `Best + latest activity · ${matchedEventCount} ${matchedEventCount === 1 ? 'event' : 'events'}`
@@ -150,40 +153,28 @@ export class ChartsPowerCurveComponent implements AfterViewInit, OnChanges, OnDe
     this.showNoDataError = !durations.length || !(this.powerCurve?.series || []).length;
   }
 
-  private resolveBenchmarkChips(): PowerCurveBenchmarkChip[] {
+  private resolveBenchmarkStats(): PowerCurveBenchmarkStat[] {
     const summaryPoints = this.powerCurve?.summaryPoints || [];
-    const chips = POWER_CURVE_BENCHMARK_DURATIONS_SECONDS
+    const stats = POWER_CURVE_BENCHMARK_DURATIONS_SECONDS
       .map(duration => summaryPoints.find(point => point.duration === duration) || null)
       .filter((point): point is { duration: number; power: number } => !!point)
-      .map(point => this.buildBenchmarkChip(
-        point,
-        point.duration === PRIMARY_POWER_CURVE_BENCHMARK_DURATION_SECONDS,
-      ));
+      .map(point => this.buildBenchmarkStat(point));
 
-    if (!chips.length) {
+    if (!stats.length) {
       const fallbackPoint = this.resolveNearestBenchmarkSeriesPoint(PRIMARY_POWER_CURVE_BENCHMARK_DURATION_SECONDS);
-      return fallbackPoint ? [this.buildBenchmarkChip(fallbackPoint, true)] : [];
+      return fallbackPoint ? [this.buildBenchmarkStat(fallbackPoint)] : [];
     }
 
-    if (!chips.some(chip => chip.primary)) {
-      chips[0] = {
-        ...chips[0],
-        primary: true,
-      };
-    }
-
-    return chips;
+    return stats;
   }
 
-  private buildBenchmarkChip(
+  private buildBenchmarkStat(
     point: { duration: number; power: number },
-    primary: boolean,
-  ): PowerCurveBenchmarkChip {
+  ): PowerCurveBenchmarkStat {
     return {
       duration: point.duration,
       durationLabel: formatPowerCurveBenchmarkDurationLabel(point.duration),
       powerLabel: formatPowerCurveBenchmarkPowerLabel(point.power),
-      primary,
     };
   }
 

@@ -1,7 +1,6 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
-import { MatChipsModule } from '@angular/material/chips';
 import { MatIconModule } from '@angular/material/icon';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ChartsPowerCurveComponent } from './charts.power-curve.component';
@@ -48,7 +47,7 @@ describe('ChartsPowerCurveComponent', () => {
 
     await TestBed.configureTestingModule({
       declarations: [ChartsPowerCurveComponent],
-      imports: [MatButtonModule, MatChipsModule, MatIconModule],
+      imports: [MatButtonModule, MatIconModule],
       providers: [
         { provide: EChartsLoaderService, useValue: mockLoader },
         { provide: LoggerService, useValue: { error: vi.fn(), warn: vi.fn() } },
@@ -68,31 +67,37 @@ describe('ChartsPowerCurveComponent', () => {
     }
   });
 
-  it('renders compact benchmark chips with 20m as the primary benchmark', async () => {
+  it('renders compact benchmark stats with 20m as the primary benchmark', async () => {
     component.powerCurve = makePowerCurveContext();
 
     fixture.detectChanges();
     await fixture.whenStable();
 
-    expect(component.benchmarkChips).toEqual([
+    expect(component.benchmarkStats).toEqual([
       expect.objectContaining({
         duration: 1200,
         durationLabel: '20m',
         powerLabel: '245w',
-        primary: true,
       }),
       expect.objectContaining({
         duration: 300,
         durationLabel: '5m',
         powerLabel: '315w',
-        primary: false,
       }),
       expect.objectContaining({
         duration: 60,
         durationLabel: '1m',
         powerLabel: '420w',
-        primary: false,
       }),
+    ]);
+    expect(component.primaryBenchmark).toEqual(expect.objectContaining({
+      duration: 1200,
+      durationLabel: '20m',
+      powerLabel: '245w',
+    }));
+    expect(component.secondaryBenchmarks).toEqual([
+      expect.objectContaining({ duration: 300, durationLabel: '5m', powerLabel: '315w' }),
+      expect.objectContaining({ duration: 60, durationLabel: '1m', powerLabel: '420w' }),
     ]);
     expect(component.subtitleText).toBe('Best + latest activity · 2 events');
     expect(component.showNoDataError).toBe(false);
@@ -139,14 +144,19 @@ describe('ChartsPowerCurveComponent', () => {
     await fixture.whenStable();
 
     expect(component.showNoDataError).toBe(false);
-    expect(component.benchmarkChips).toEqual([
+    expect(component.benchmarkStats).toEqual([
       expect.objectContaining({
         duration: 900,
         durationLabel: '15m',
         powerLabel: '260w',
-        primary: true,
       }),
     ]);
+    expect(component.primaryBenchmark).toEqual(expect.objectContaining({
+      duration: 900,
+      durationLabel: '15m',
+      powerLabel: '260w',
+    }));
+    expect(component.secondaryBenchmarks).toEqual([]);
   });
 
   it('formats tooltip rows with shared dashboard tooltip chrome', async () => {
