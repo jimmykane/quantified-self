@@ -86,6 +86,7 @@
   --mat-chip-label-text-color: var(--mat-sys-on-surface);
   --mat-chip-outline-color: var(--mat-sys-outline-variant);
 
+  font-family: 'Barlow Condensed', sans-serif;
   pointer-events: none;
 }
 
@@ -95,7 +96,8 @@
 
 .power-curve-benchmark-label {
   color: var(--mat-sys-on-surface-variant);
-  font-size: 0.68rem;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 0.95rem;
   font-weight: 600;
   line-height: 1;
   margin-right: 4px;
@@ -108,7 +110,7 @@
 .power-curve-benchmark-value,
 .power-curve-benchmarks-empty {
   font-family: 'Barlow Condensed', sans-serif;
-  font-size: 1rem;
+  font-size: 0.95rem;
   font-weight: 700;
   line-height: 1;
 }
