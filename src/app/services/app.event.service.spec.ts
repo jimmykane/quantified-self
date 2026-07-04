@@ -15,6 +15,7 @@ import { AppCacheService } from './app.cache.service';
 import { getMetadata } from 'app/firebase/storage';
 import { webcrypto } from 'node:crypto';
 import { POWER_CURVE_STAT_TYPE } from '@shared/power-curve';
+import { ActivityTypes, DataActivityTypes } from '@sports-alliance/sports-lib';
 
 // Polyfill crypto for JSDOM environment
 if (!globalThis.crypto || !globalThis.crypto.subtle) {
@@ -300,15 +301,8 @@ describe('AppEventService', () => {
         expect(service).toBeTruthy();
     });
 
-    describe('watchHasAnyPowerCurveEvent', () => {
-        it('should emit false without a user id and skip Firestore', async () => {
-            await expect(firstValueFrom(service.watchHasAnyPowerCurveEvent(''))).resolves.toBe(false);
-
-            expect(collection).not.toHaveBeenCalled();
-            expect(collectionData).not.toHaveBeenCalled();
-        });
-
-        it('should watch one event with a stored PowerCurve stat', async () => {
+    describe('watchHasAnyPowerCurveEventForActivityTypes', () => {
+        beforeEach(() => {
             (collection as Mock).mockReturnValue('events-collection');
             (where as Mock).mockImplementation((fieldPath: unknown, opStr: unknown, value: unknown) => ({
                 fieldPath,
@@ -320,38 +314,70 @@ describe('AppEventService', () => {
                 collectionRef,
                 constraints,
             }));
+        });
+
+        it('should emit false without a user id or activity filters and skip Firestore', async () => {
+            await expect(firstValueFrom(service.watchHasAnyPowerCurveEventForActivityTypes('', [ActivityTypes.Cycling]))).resolves.toBe(false);
+            await expect(firstValueFrom(service.watchHasAnyPowerCurveEventForActivityTypes('user-1', []))).resolves.toBe(false);
+
+            expect(collection).not.toHaveBeenCalled();
+            expect(collectionData).not.toHaveBeenCalled();
+        });
+
+        it('should watch one scoped PowerCurve event for selected activity types', async () => {
             (collectionData as Mock).mockReturnValue(of([{ id: 'event-1' }]));
 
-            await expect(firstValueFrom(service.watchHasAnyPowerCurveEvent(' user-1 '))).resolves.toBe(true);
+            await expect(firstValueFrom(service.watchHasAnyPowerCurveEventForActivityTypes(' user-1 ', [
+                ActivityTypes.Cycling,
+            ]))).resolves.toBe(true);
 
             expect(collection).toHaveBeenCalledWith(mockFirestore, 'users/user-1/events');
             expect(where).toHaveBeenCalledWith(`stats.${POWER_CURVE_STAT_TYPE}`, '!=', null);
+            expect(where).toHaveBeenCalledWith(`stats.\`${DataActivityTypes.type}\``, 'array-contains-any', [ActivityTypes.Cycling]);
             expect(limit).toHaveBeenCalledWith(1);
             expect(query).toHaveBeenCalledWith(
                 'events-collection',
                 { fieldPath: `stats.${POWER_CURVE_STAT_TYPE}`, opStr: '!=', value: null },
+                { fieldPath: `stats.\`${DataActivityTypes.type}\``, opStr: 'array-contains-any', value: [ActivityTypes.Cycling] },
                 { limit: 1 },
             );
-            expect(collectionData).toHaveBeenCalledWith({
-                collectionRef: 'events-collection',
-                constraints: [
-                    { fieldPath: `stats.${POWER_CURVE_STAT_TYPE}`, opStr: '!=', value: null },
-                    { limit: 1 },
-                ],
-            });
         });
 
-        it('should fail closed when the PowerCurve eligibility watch errors', async () => {
-            (collection as Mock).mockReturnValue('events-collection');
-            (where as Mock).mockReturnValue({ fieldPath: `stats.${POWER_CURVE_STAT_TYPE}`, opStr: '!=', value: null });
-            (limit as Mock).mockReturnValue({ limit: 1 });
-            (query as Mock).mockReturnValue('power-curve-query');
+        it('should chunk scoped activity filters by Firestore array-contains-any limits', async () => {
+            const activityTypes = Array.from({ length: 11 }, (_value, index) => `activity-${index}` as ActivityTypes);
+            (collectionData as Mock).mockImplementation((queryValue: { constraints: Array<{ value?: unknown }> }) => {
+                const activityTypeConstraint = queryValue.constraints[1] as { value?: ActivityTypes[] };
+                return of(activityTypeConstraint.value?.includes('activity-10' as ActivityTypes) ? [{ id: 'event-2' }] : []);
+            });
+
+            await expect(firstValueFrom(service.watchHasAnyPowerCurveEventForActivityTypes('user-1', activityTypes))).resolves.toBe(true);
+
+            expect(collectionData).toHaveBeenCalledTimes(2);
+            expect(query).toHaveBeenNthCalledWith(
+                1,
+                'events-collection',
+                { fieldPath: `stats.${POWER_CURVE_STAT_TYPE}`, opStr: '!=', value: null },
+                { fieldPath: `stats.\`${DataActivityTypes.type}\``, opStr: 'array-contains-any', value: activityTypes.slice(0, 10) },
+                { limit: 1 },
+            );
+            expect(query).toHaveBeenNthCalledWith(
+                2,
+                'events-collection',
+                { fieldPath: `stats.${POWER_CURVE_STAT_TYPE}`, opStr: '!=', value: null },
+                { fieldPath: `stats.\`${DataActivityTypes.type}\``, opStr: 'array-contains-any', value: activityTypes.slice(10) },
+                { limit: 1 },
+            );
+        });
+
+        it('should fail closed when scoped PowerCurve eligibility watch errors', async () => {
             (collectionData as Mock).mockReturnValue(throwError(() => new Error('permission denied')));
 
-            await expect(firstValueFrom(service.watchHasAnyPowerCurveEvent('user-1'))).resolves.toBe(false);
+            await expect(firstValueFrom(service.watchHasAnyPowerCurveEventForActivityTypes('user-1', [
+                ActivityTypes.Running,
+            ]))).resolves.toBe(false);
 
             expect(mockLogger.warn).toHaveBeenCalledWith(
-                '[AppEventService] Failed to watch Power Curve eligibility',
+                '[AppEventService] Failed to watch scoped Power Curve eligibility',
                 expect.any(Error),
             );
         });

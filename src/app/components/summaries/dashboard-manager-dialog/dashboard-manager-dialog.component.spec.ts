@@ -55,7 +55,9 @@ import { AppHapticsService } from '../../../services/app.haptics.service';
 import { AppSleepService } from '../../../services/app.sleep.service';
 import {
   DASHBOARD_AUTO_TILE_POWER_CURVE_SOURCE,
+  DASHBOARD_AUTO_TILE_RUNNING_POWER_CURVE_SOURCE,
 } from '../../../helpers/dashboard-auto-tile.helper';
+import { getDashboardPowerCurveActivityTypes } from '../../../helpers/dashboard-power-curve-scope.helper';
 import { DashboardManagerDialogComponent } from './dashboard-manager-dialog.component';
 
 function createUser(tiles: any[] = []): any {
@@ -374,7 +376,7 @@ describe('DashboardManagerDialogComponent', () => {
     });
   });
 
-  it('adds Power Curve with its event-backed curated defaults', async () => {
+  it('adds Cycling Power Curve with its event-backed curated defaults', async () => {
     dialogData.user.settings.dashboardSettings.autoTiles = {
       powerCurve: {
         state: 'dismissed',
@@ -392,10 +394,10 @@ describe('DashboardManagerDialogComponent', () => {
     expect(tiles).toHaveLength(2);
     expect(tiles[1]).toMatchObject({
       type: TileTypes.Chart,
-      name: 'Power Curve',
+      name: 'Cycling Power Curve',
       chartType: DASHBOARD_POWER_CURVE_CHART_TYPE,
       size: { columns: 1, rows: 1 },
-      eventFilters: { range: '1y', activityTypes: [] },
+      eventFilters: { range: '1y', activityTypes: getDashboardPowerCurveActivityTypes('cycling') },
     });
     expect(dialogData.user.settings.dashboardSettings.autoTiles.powerCurve).toMatchObject({
       state: 'added',
@@ -550,7 +552,7 @@ describe('DashboardManagerDialogComponent', () => {
     dialogData.user.settings.dashboardSettings.tiles = [{
       type: TileTypes.Chart,
       order: 0,
-      name: 'Power Curve',
+      name: 'Cycling Power Curve',
       chartType: DASHBOARD_POWER_CURVE_CHART_TYPE,
       dataType: DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE,
       dataValueType: ChartDataValueTypes.Total,
@@ -587,11 +589,11 @@ describe('DashboardManagerDialogComponent', () => {
     });
   });
 
-  it('preserves saved Power Curve event filters when editing the same tile', async () => {
+  it('preserves saved Power Curve event filters when editing the same scope tile', async () => {
     dialogData.user.settings.dashboardSettings.tiles = [{
       type: TileTypes.Chart,
       order: 0,
-      name: 'Power Curve',
+      name: 'Cycling Power Curve',
       chartType: DASHBOARD_POWER_CURVE_CHART_TYPE,
       dataType: DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE,
       dataValueType: ChartDataValueTypes.Total,
@@ -737,7 +739,7 @@ describe('DashboardManagerDialogComponent', () => {
     });
   });
 
-  it('applies Power Curve preset with its event-backed curated defaults', async () => {
+  it('applies Cycling Power Curve preset with its event-backed curated defaults', async () => {
     component.mode = 'add';
     component.onWorkflowTabChange(1);
     component.onPresetCategoryChange('curated');
@@ -749,14 +751,37 @@ describe('DashboardManagerDialogComponent', () => {
     expect(tiles).toHaveLength(2);
     expect(tiles[1]).toMatchObject({
       type: TileTypes.Chart,
-      name: 'Power Curve',
+      name: 'Cycling Power Curve',
       chartType: DASHBOARD_POWER_CURVE_CHART_TYPE,
       size: { columns: 1, rows: 1 },
-      eventFilters: { range: '1y', activityTypes: [] },
+      eventFilters: { range: '1y', activityTypes: getDashboardPowerCurveActivityTypes('cycling') },
     });
     expect(dialogData.user.settings.dashboardSettings.autoTiles.powerCurve).toMatchObject({
       state: 'added',
       source: DASHBOARD_AUTO_TILE_POWER_CURVE_SOURCE,
+    });
+  });
+
+  it('applies Running Power Curve preset independently from Cycling Power Curve', async () => {
+    component.mode = 'add';
+    component.onWorkflowTabChange(1);
+    component.onPresetCategoryChange('curated');
+    component.onPresetSelectionChange(DASHBOARD_MANAGER_PRESET_IDS.CURATED_RUNNING_POWER_CURVE);
+
+    await component.save();
+
+    const tiles = dialogData.user.settings.dashboardSettings.tiles;
+    expect(tiles).toHaveLength(2);
+    expect(tiles[1]).toMatchObject({
+      type: TileTypes.Chart,
+      name: 'Running Power Curve',
+      chartType: DASHBOARD_POWER_CURVE_CHART_TYPE,
+      size: { columns: 1, rows: 1 },
+      eventFilters: { range: '1y', activityTypes: getDashboardPowerCurveActivityTypes('running') },
+    });
+    expect(dialogData.user.settings.dashboardSettings.autoTiles.runningPowerCurve).toMatchObject({
+      state: 'added',
+      source: DASHBOARD_AUTO_TILE_RUNNING_POWER_CURVE_SOURCE,
     });
   });
 
@@ -830,7 +855,7 @@ describe('DashboardManagerDialogComponent', () => {
     expect(tiles.filter((tile: any) => tile.type === TileTypes.Chart && tile.dataType === DataDistance.type)).toHaveLength(1);
     expect(tiles.some((tile: any) => tile.chartType === DASHBOARD_RECOVERY_NOW_CHART_TYPE)).toBe(true);
     expect(tiles.some((tile: any) => tile.chartType === DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE)).toBe(true);
-    expect(tiles.some((tile: any) => tile.chartType === DASHBOARD_POWER_CURVE_CHART_TYPE)).toBe(true);
+    expect(tiles.some((tile: any) => tile.chartType === DASHBOARD_POWER_CURVE_CHART_TYPE)).toBe(false);
     expect(tiles.some((tile: any) => tile.chartType === DASHBOARD_FORM_NOW_KPI_CHART_TYPE)).toBe(true);
     expect(tiles.some((tile: any) => tile.chartType === DASHBOARD_ACWR_KPI_CHART_TYPE)).toBe(false);
     expect(tiles.some((tile: any) => tile.chartType === ChartTypes.Pie && tile.dataType === DataDuration.type)).toBe(true);
@@ -844,10 +869,8 @@ describe('DashboardManagerDialogComponent', () => {
       state: 'added',
       source: 'default-kpi',
     });
-    expect(dialogData.user.settings.dashboardSettings.autoTiles.powerCurve).toMatchObject({
-      state: 'added',
-      source: DASHBOARD_AUTO_TILE_POWER_CURVE_SOURCE,
-    });
+    expect(dialogData.user.settings.dashboardSettings.autoTiles.powerCurve).toBeUndefined();
+    expect(dialogData.user.settings.dashboardSettings.autoTiles.runningPowerCurve).toBeUndefined();
     expect(dialogData.user.settings.dashboardSettings.dismissedCuratedRecoveryNowTile).toBe(false);
     expect(userServiceMock.updateUserProperties).toHaveBeenCalledTimes(1);
     expectDashboardSettingsOnlyWrite(userServiceMock, dialogData);
@@ -879,7 +902,7 @@ describe('DashboardManagerDialogComponent', () => {
     expect(tiles.some((tile: any) => tile.chartType === DASHBOARD_ACWR_KPI_CHART_TYPE)).toBe(true);
     expect(tiles.some((tile: any) => tile.chartType === DASHBOARD_RAMP_RATE_KPI_CHART_TYPE)).toBe(true);
     expect(tiles.some((tile: any) => tile.chartType === DASHBOARD_FORM_PLUS_7D_KPI_CHART_TYPE)).toBe(true);
-    expect(tiles.some((tile: any) => tile.chartType === DASHBOARD_POWER_CURVE_CHART_TYPE)).toBe(true);
+    expect(tiles.filter((tile: any) => tile.chartType === DASHBOARD_POWER_CURVE_CHART_TYPE)).toHaveLength(2);
     expect(tiles.some((tile: any) => tile.dataType === DataEnergy.type)).toBe(true);
     expect(tiles.some((tile: any) => tile.dataType === DataHeartRateAvg.type)).toBe(true);
     expect(tiles.some((tile: any) => tile.chartType === DASHBOARD_SLEEP_TREND_CHART_TYPE)).toBe(false);
@@ -890,6 +913,10 @@ describe('DashboardManagerDialogComponent', () => {
     expect(dialogData.user.settings.dashboardSettings.autoTiles.powerCurve).toMatchObject({
       state: 'added',
       source: DASHBOARD_AUTO_TILE_POWER_CURVE_SOURCE,
+    });
+    expect(dialogData.user.settings.dashboardSettings.autoTiles.runningPowerCurve).toMatchObject({
+      state: 'added',
+      source: DASHBOARD_AUTO_TILE_RUNNING_POWER_CURVE_SOURCE,
     });
     expect(userServiceMock.updateUserProperties).toHaveBeenCalledTimes(1);
     expectDashboardSettingsOnlyWrite(userServiceMock, dialogData);
@@ -1080,6 +1107,10 @@ describe('DashboardManagerDialogComponent', () => {
     expect(dialogData.user.settings.dashboardSettings.autoTiles.powerCurve).toMatchObject({
       state: 'dismissed',
       source: DASHBOARD_AUTO_TILE_POWER_CURVE_SOURCE,
+    });
+    expect(dialogData.user.settings.dashboardSettings.autoTiles.runningPowerCurve).toMatchObject({
+      state: 'dismissed',
+      source: DASHBOARD_AUTO_TILE_RUNNING_POWER_CURVE_SOURCE,
     });
     expect(dialogData.user.settings.dashboardSettings.autoTiles.kpiAcwr).toMatchObject({
       state: 'dismissed',

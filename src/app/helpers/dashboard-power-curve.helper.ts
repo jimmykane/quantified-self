@@ -31,6 +31,10 @@ export interface DashboardPowerCurveContext {
   summaryPoints: DashboardPowerCurveSummaryPoint[];
 }
 
+export interface DashboardPowerCurveContextOptions {
+  latestSeriesLabel?: string;
+}
+
 interface ResolvedPowerCurveEvent {
   event: EventInterface;
   eventId: string | null;
@@ -40,7 +44,10 @@ interface ResolvedPowerCurveEvent {
 
 const SUMMARY_DURATIONS_SECONDS = [5, 60, 300, 1200, 3600];
 
-export function buildDashboardPowerCurveContext(events: EventInterface[]): DashboardPowerCurveContext {
+export function buildDashboardPowerCurveContext(
+  events: EventInterface[],
+  options: DashboardPowerCurveContextOptions = {},
+): DashboardPowerCurveContext {
   const resolvedEvents = (events || [])
     .map(resolvePowerCurveEvent)
     .filter((entry): entry is ResolvedPowerCurveEvent => entry !== null)
@@ -65,7 +72,7 @@ export function buildDashboardPowerCurveContext(events: EventInterface[]): Dashb
   const latestSeries: DashboardPowerCurveSeries | null = latestEvent
     ? {
       seriesKey: 'latest',
-      label: 'Latest ride',
+      label: options.latestSeriesLabel || 'Latest power activity',
       colorKey: 'latest',
       points: latestEvent.points,
       eventId: latestEvent.eventId,

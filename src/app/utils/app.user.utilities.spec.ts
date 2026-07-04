@@ -33,6 +33,7 @@ import {
     isDashboardSpecialChartType,
 } from '../helpers/dashboard-special-chart-types';
 import { ACTIVITY_SYNC_ROUTE_IDS } from '@shared/activity-sync-routes';
+import { getDashboardPowerCurveActivityTypes } from '../helpers/dashboard-power-curve-scope.helper';
 
 describe('AppUserUtilities', () => {
     const mockUser = { uid: 'u1', settings: {} } as any;
@@ -189,10 +190,13 @@ describe('AppUserUtilities', () => {
     });
 
     describe('fillMissingAppSettings', () => {
-        it('should include all non-sleep curated tiles in default dashboard tiles', () => {
+        it('should include non-sleep and non-power curated tiles in default dashboard tiles', () => {
             const tiles = AppUserUtilities.getDefaultUserDashboardTiles() as any[];
             const curatedDefinitions = getDashboardCuratedChartDefinitions()
-                .filter(definition => definition.chartType !== DASHBOARD_SLEEP_TREND_CHART_TYPE);
+                .filter(definition => (
+                    definition.chartType !== DASHBOARD_SLEEP_TREND_CHART_TYPE
+                    && definition.chartType !== DASHBOARD_POWER_CURVE_CHART_TYPE
+                ));
             const curatedTiles = tiles.filter((tile: any) => (
                 tile?.type === TileTypes.Chart && isDashboardCuratedChartType(tile?.chartType)
             ));
@@ -204,7 +208,6 @@ describe('AppUserUtilities', () => {
                 'Freshness Forecast',
                 'Intensity Distribution',
                 'Efficiency Trend',
-                'Power Curve',
             ]);
             curatedTiles.forEach((tile, index) => {
                 expect(tile).toMatchObject({
@@ -213,11 +216,7 @@ describe('AppUserUtilities', () => {
                     dataCategoryType: ChartDataCategoryTypes.DateType,
                     dataValueType: ChartDataValueTypes.Total,
                 });
-                if (tile.chartType === DASHBOARD_POWER_CURVE_CHART_TYPE) {
-                    expect(tile.eventFilters).toEqual({ range: '1y', activityTypes: [] });
-                } else {
-                    expect(tile.eventFilters).toBeUndefined();
-                }
+                expect(tile.eventFilters).toBeUndefined();
             });
             expect(curatedTiles.find(tile => tile.chartType === DASHBOARD_RECOVERY_NOW_CHART_TYPE)).toMatchObject({
                 dataType: DataRecoveryTime.type,
@@ -266,10 +265,11 @@ describe('AppUserUtilities', () => {
             ));
 
             expect(kpiTiles.map(tile => tile.chartType)).toEqual(kpiDefinitions.map(definition => definition.chartType));
+            const firstKpiOrder = kpiTiles[0]?.order ?? 0;
             kpiTiles.forEach((tile, index) => {
                 expect(tile).toMatchObject({
                     name: kpiDefinitions[index].label,
-                    order: 10 + index,
+                    order: firstKpiOrder + index,
                     size: { columns: 1, rows: 1 },
                     dataType: DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE,
                     dataCategoryType: ChartDataCategoryTypes.DateType,
@@ -495,7 +495,7 @@ describe('AppUserUtilities', () => {
                     expect(tile.eventFilters).toEqual({ range: '90d', activityTypes: [] });
                 });
             const powerCurveTile = dashboardTiles.find(tile => tile.chartType === DASHBOARD_POWER_CURVE_CHART_TYPE) as any;
-            expect(powerCurveTile?.eventFilters).toEqual({ range: '1y', activityTypes: [] });
+            expect(powerCurveTile).toBeUndefined();
         });
 
         it('should add event filters to existing custom chart and map tiles from legacy dashboard filters', () => {
@@ -600,6 +600,18 @@ describe('AppUserUtilities', () => {
                                 order: 1,
                                 size: { columns: 1, rows: 1 },
                                 eventFilters: { range: '30d', activityTypes: [ActivityTypes.Running] }
+                            },
+                            {
+                                type: TileTypes.Chart,
+                                chartType: DASHBOARD_POWER_CURVE_CHART_TYPE,
+                                dataType: DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE,
+                                dataValueType: ChartDataValueTypes.Total,
+                                dataCategoryType: ChartDataCategoryTypes.DateType,
+                                dataTimeInterval: TimeIntervals.Weekly,
+                                name: 'Running Power Curve',
+                                order: 2,
+                                size: { columns: 1, rows: 1 },
+                                eventFilters: { range: '1y', activityTypes: [] }
                             }
                         ]
                     }
@@ -607,15 +619,20 @@ describe('AppUserUtilities', () => {
             } as unknown as User;
 
             const settings = AppUserUtilities.fillMissingAppSettings(user);
-            const [missingFiltersTile, savedFiltersTile] = settings.dashboardSettings?.tiles || [];
+            const [missingFiltersTile, savedFiltersTile, emptyRunningFiltersTile] = settings.dashboardSettings?.tiles || [];
 
+            expect((missingFiltersTile as any).name).toBe('Cycling Power Curve');
             expect((missingFiltersTile as any).eventFilters).toEqual({
                 range: '1y',
-                activityTypes: []
+                activityTypes: getDashboardPowerCurveActivityTypes('cycling')
             });
             expect((savedFiltersTile as any).eventFilters).toEqual({
                 range: '30d',
                 activityTypes: [ActivityTypes.Running]
+            });
+            expect((emptyRunningFiltersTile as any).eventFilters).toEqual({
+                range: '1y',
+                activityTypes: getDashboardPowerCurveActivityTypes('running')
             });
         });
 

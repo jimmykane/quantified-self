@@ -42,6 +42,7 @@ import {
 } from './dashboard-special-chart-types';
 import type { EventStatAggregationResult } from '@shared/event-stat-aggregation.types';
 import { POWER_CURVE_STAT_TYPE } from '@shared/power-curve';
+import { getDashboardPowerCurveActivityTypes } from './dashboard-power-curve-scope.helper';
 
 function makeEvent(options: {
   id: string;
@@ -292,6 +293,55 @@ describe('dashboard-tile-view-model.helper', () => {
     ]);
     expect(powerCurve.series).toHaveLength(1);
     expect(powerCurve.series[0].seriesKey).toBe('latestAndBest');
+  });
+
+  it('should label running Power Curve latest series from the scoped tile filters', () => {
+    const bestRunningEvent = makeEvent({
+      id: 'best-running-event',
+      startDate: '2024-03-01T10:00:00.000Z',
+      activityTypes: [ActivityTypes.Running],
+      stats: {
+        [POWER_CURVE_STAT_TYPE]: [
+          { duration: 300, power: 420 },
+        ],
+      },
+    });
+    const latestRunningEvent = makeEvent({
+      id: 'latest-running-event',
+      startDate: '2024-03-03T10:00:00.000Z',
+      activityTypes: [ActivityTypes.Running],
+      stats: {
+        [POWER_CURVE_STAT_TYPE]: [
+          { duration: 300, power: 390 },
+        ],
+      },
+    });
+
+    const viewModels = buildDashboardTileViewModels({
+      tiles: [{
+        type: TileTypes.Chart,
+        order: 8,
+        name: 'Running Power Curve',
+        chartType: DASHBOARD_POWER_CURVE_CHART_TYPE as any,
+        dataType: DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE,
+        dataValueType: ChartDataValueTypes.Total,
+        dataCategoryType: ChartDataCategoryTypes.DateType,
+        dataTimeInterval: TimeIntervals.Weekly,
+        eventFilters: { range: '1y', activityTypes: getDashboardPowerCurveActivityTypes('running') },
+        size: { columns: 1, rows: 1 },
+      }] as any,
+      events: [],
+      tileEventsByOrder: {
+        8: [bestRunningEvent, latestRunningEvent],
+      },
+    });
+
+    const powerCurve = (viewModels[0] as any).powerCurve;
+    expect(powerCurve.latestEventId).toBe('latest-running-event');
+    expect(powerCurve.series.map((series: any) => series.label)).toEqual([
+      'Best in range',
+      'Latest running activity',
+    ]);
   });
 
   it('should keep intensity-zones tiles as raw sorted event passthrough', () => {

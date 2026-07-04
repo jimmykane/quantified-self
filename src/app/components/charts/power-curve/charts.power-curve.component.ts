@@ -56,6 +56,7 @@ interface PowerCurveRenderSeries {
 export class ChartsPowerCurveComponent implements AfterViewInit, OnChanges, OnDestroy {
   @Input() darkTheme = false;
   @Input() isLoading = false;
+  @Input() title = 'Power Curve';
   @Input() powerCurve?: DashboardPowerCurveContext | null;
   @Input() infoTooltip?: string | null;
   @Input() reserveTitleActionSpace = false;
@@ -66,7 +67,7 @@ export class ChartsPowerCurveComponent implements AfterViewInit, OnChanges, OnDe
   private readonly chartHost: EChartsHostController;
 
   public headlineValueText = '--';
-  public subtitleText = 'Best + latest ride';
+  public subtitleText = 'Best + latest activity';
   public showNoDataError = false;
   public noDataErrorMessage = 'No power curve data yet';
   public noDataErrorHint = 'Choose a longer range or upload an activity with power data.';
@@ -125,8 +126,8 @@ export class ChartsPowerCurveComponent implements AfterViewInit, OnChanges, OnDe
       : '--';
     const matchedEventCount = this.powerCurve?.matchedEventCount ?? 0;
     this.subtitleText = matchedEventCount > 0
-      ? `Best + latest ride · ${matchedEventCount} ${matchedEventCount === 1 ? 'event' : 'events'}`
-      : 'Best + latest ride';
+      ? `Best + latest activity · ${matchedEventCount} ${matchedEventCount === 1 ? 'event' : 'events'}`
+      : 'Best + latest activity';
     this.showNoDataError = !durations.length || !(this.powerCurve?.series || []).length;
   }
 

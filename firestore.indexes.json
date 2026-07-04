@@ -549,6 +549,25 @@
           "arrayConfig": "CONTAINS"
         },
         {
+          "fieldPath": "stats.PowerCurve",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
+        }
+      ],
+      "density": "SPARSE_ALL"
+    },
+    {
+      "collectionGroup": "events",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "stats.`Activity Types`",
+          "arrayConfig": "CONTAINS"
+        },
+        {
           "fieldPath": "startDate",
           "order": "ASCENDING"
         },

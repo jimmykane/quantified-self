@@ -95,6 +95,7 @@ type DashboardRecoveryNowSnapshotStatus = DerivedMetricSnapshotStatus | 'missing
 })
 
 export class TileChartComponent extends TileAbstractDirective {
+  @Input() tileName = '';
   @Input() chartType: DashboardChartType;
   @Input() dataType: string;
   @Input() dataValueType: ChartDataValueTypes;

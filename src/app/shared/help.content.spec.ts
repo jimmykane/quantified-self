@@ -85,15 +85,16 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('removing an auto-added Sleep tile prevents future automatic Sleep tile adds');
     expect(gettingStartedSection?.content).toContain('default curated chart set');
     expect(gettingStartedSection?.content).toContain('KPI row set automatically once');
-    expect(gettingStartedSection?.content).toContain('removing an auto-added curated chart or KPI prevents that chart from being suggested again');
+    expect(gettingStartedSection?.content).toContain('auto-added curated chart or KPI prevents that chart from being suggested again');
     expect(gettingStartedSection?.content).toContain('bulk actions can add the recommended default dashboard');
     expect(gettingStartedSection?.content).toContain('add every available preset tile');
     expect(gettingStartedSection?.content).toContain('**Uploaded activities**');
     expect(gettingStartedSection?.content).toContain('current-state set: **Load Status**, **Form Now**, **Fitness Trend**, **Fatigue Trend**, **Recovery Debt**, and **Training Balance**');
     expect(gettingStartedSection?.content).toContain('Additional KPI rows such as **Fitness (CTL)**, **Fatigue (ATL)**');
-    expect(gettingStartedSection?.content).toContain('**Power Curve** is a curated event-backed chart');
+    expect(gettingStartedSection?.content).toContain('**Cycling Power Curve** and **Running Power Curve** are curated event-backed charts');
     expect(gettingStartedSection?.content).toContain('defaults to **1y**');
-    expect(gettingStartedSection?.content).toContain('Power Curve** joins that auto-add flow only after an event with stored Power Curve data exists');
+    expect(gettingStartedSection?.content).toContain('**Cycling Power Curve** joins that auto-add flow only after a cycling or mountain biking event');
+    expect(gettingStartedSection?.content).toContain('**Running Power Curve** does the same for running or trail running');
   });
 
   it('should document that distance values follow unit preferences across the app', () => {
@@ -211,8 +212,10 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('Freshness Forecast');
     expect(gettingStartedSection?.content).toContain('Intensity Distribution');
     expect(gettingStartedSection?.content).toContain('Efficiency Trend');
-    expect(gettingStartedSection?.content).toContain('Power Curve');
+    expect(gettingStartedSection?.content).toContain('Cycling Power Curve');
+    expect(gettingStartedSection?.content).toContain('Running Power Curve');
     expect(gettingStartedSection?.content).toContain("each event's stored PowerCurve stat");
+    expect(gettingStartedSection?.content).toContain('Cycling and running power data stay in separate tiles');
     expect(gettingStartedSection?.content).toContain('saved per dashboard tile');
     expect(gettingStartedSection?.content).not.toContain('**Sleep** shows connected-source sleep duration');
     expect(gettingStartedSection?.content).toContain('ACWR');

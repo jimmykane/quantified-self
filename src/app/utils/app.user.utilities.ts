@@ -73,6 +73,7 @@ import {
     getDefaultDashboardKpiChartDefinitions,
     getDashboardCuratedChartDefinitions,
     isDashboardEventBackedSpecialChartType,
+    isDashboardPowerCurveChartType,
     isDashboardRecoveryNowChartType,
     isDashboardSpecialChartType,
 } from '../helpers/dashboard-special-chart-types';
@@ -89,6 +90,12 @@ import {
     buildDashboardKpiAutoTile,
     type DashboardDefaultCuratedChartType,
 } from '../helpers/dashboard-auto-tile.helper';
+import {
+    getDashboardPowerCurveEventFiltersForScope,
+    getDashboardPowerCurveScopeDefinition,
+    isLegacyDefaultDashboardPowerCurveTile,
+    resolveDashboardPowerCurveTileScope,
+} from '../helpers/dashboard-power-curve-scope.helper';
 import { normalizeDashboardActionPrompts } from '../helpers/dashboard-action-prompt.helper';
 import { normalizeEventChartOverlayDataTypeByPrimary } from '../helpers/event-chart-overlay.helper';
 import {
@@ -227,7 +234,10 @@ export class AppUserUtilities {
 
     private static getDefaultUserDashboardCuratedTiles(startOrder: number): TileChartSettingsInterface[] {
         return getDashboardCuratedChartDefinitions()
-            .filter(definition => definition.chartType !== DASHBOARD_SLEEP_TREND_CHART_TYPE)
+            .filter(definition => (
+                definition.chartType !== DASHBOARD_SLEEP_TREND_CHART_TYPE
+                && !isDashboardPowerCurveChartType(definition.chartType)
+            ))
             .map((definition, index) => buildDashboardCuratedAutoTile(
                 definition.chartType as DashboardDefaultCuratedChartType,
                 startOrder + index,
@@ -596,7 +606,26 @@ export class AppUserUtilities {
                     AppUserUtilities.normalizeDashboardChartTileDisplaySettings(normalizedRecoveryTile as AppDashboardChartTileSettingsInterface);
                     return normalizedRecoveryTile;
                 }
-                if (!isDashboardSpecialChartType(chartTile.chartType) || isDashboardEventBackedSpecialChartType(chartTile.chartType)) {
+                if (isDashboardPowerCurveChartType(chartTile.chartType)) {
+                    const isLegacyDefaultPowerCurveTile = isLegacyDefaultDashboardPowerCurveTile(chartTile);
+                    const normalizedPowerCurveFilters = normalizeDashboardTileEventFilters(
+                        chartTile.eventFilters,
+                        '1y',
+                        [],
+                    );
+                    const resolvedPowerCurveScope = resolveDashboardPowerCurveTileScope({
+                        ...chartTile,
+                        eventFilters: normalizedPowerCurveFilters,
+                    } as AppDashboardChartTileSettingsInterface);
+                    if (resolvedPowerCurveScope && normalizedPowerCurveFilters.activityTypes.length === 0) {
+                        chartTile.eventFilters = getDashboardPowerCurveEventFiltersForScope(resolvedPowerCurveScope);
+                        if (isLegacyDefaultPowerCurveTile) {
+                            chartTile.name = getDashboardPowerCurveScopeDefinition(resolvedPowerCurveScope).label;
+                        }
+                    } else {
+                        chartTile.eventFilters = normalizedPowerCurveFilters;
+                    }
+                } else if (!isDashboardSpecialChartType(chartTile.chartType) || isDashboardEventBackedSpecialChartType(chartTile.chartType)) {
                     const eventBackedSpecial = isDashboardEventBackedSpecialChartType(chartTile.chartType);
                     chartTile.eventFilters = normalizeDashboardTileEventFilters(
                         chartTile.eventFilters,

@@ -118,7 +118,6 @@ import {
   DASHBOARD_AUTO_TILE_KPI_ID_BY_CHART_TYPE,
   DASHBOARD_AUTO_TILE_KPI_SOURCE,
   DASHBOARD_AUTO_TILE_POWER_CURVE_ID,
-  DASHBOARD_AUTO_TILE_POWER_CURVE_SOURCE,
   DASHBOARD_AUTO_TILE_SLEEP_TREND_ID,
   DASHBOARD_AUTO_TILE_SLEEP_TREND_SOURCE,
   DASHBOARD_AUTO_TILE_RECOVERY_NOW_ID,
@@ -132,6 +131,10 @@ import {
   type DashboardAutoTileDescriptor,
   type DashboardDefaultCuratedChartType,
 } from '../../../helpers/dashboard-auto-tile.helper';
+import {
+  getDashboardPowerCurveScopeDefinitions,
+  isDashboardPowerCurveTileForScope,
+} from '../../../helpers/dashboard-power-curve-scope.helper';
 
 export interface DashboardManagerDialogData {
   user: AppUserInterface;
@@ -305,7 +308,7 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
     [DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE]: 'Weekly easy/moderate/hard intensity split (Power or HR fallback).',
     [DASHBOARD_EFFICIENCY_TREND_CHART_TYPE]: 'Weekly duration-weighted power/heart-rate efficiency trend.',
     [DASHBOARD_SLEEP_TREND_CHART_TYPE]: 'Sleep duration and stages by connected source.',
-    [DASHBOARD_POWER_CURVE_CHART_TYPE]: 'Best power envelope with latest power ride comparison.',
+    [DASHBOARD_POWER_CURVE_CHART_TYPE]: 'Best power envelope with latest power activity comparison.',
   };
   public readonly kpiChartIconByType: Record<DashboardKpiChartType, string> = {
     [DASHBOARD_ACWR_KPI_CHART_TYPE]: 'monitoring',
@@ -668,6 +671,19 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
   }
 
   getPresetDisabledReason(definition: DashboardManagerPresetDefinition): string | null {
+    if (
+      definition.category === 'curated'
+      && definition.curatedChartType === DASHBOARD_POWER_CURVE_CHART_TYPE
+      && definition.powerCurveScope
+      && this.isPowerCurveScopeOptionDisabled(definition.powerCurveScope)
+    ) {
+      return 'Already on dashboard.';
+    }
+
+    if (definition.category === 'curated' && definition.curatedChartType === DASHBOARD_POWER_CURVE_CHART_TYPE) {
+      return null;
+    }
+
     if (definition.category === 'curated' && this.isCuratedOptionDisabled(definition.curatedChartType)) {
       return 'Already on dashboard.';
     }
@@ -731,6 +747,14 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
     const editedOrder = this.mode === 'edit' ? this.editTileOrder : null;
     return this.chartTiles.some((tile) => (
       this.isTileForCuratedChartType(tile, chartType)
+      && (editedOrder === null || tile.order !== editedOrder)
+    ));
+  }
+
+  private isPowerCurveScopeOptionDisabled(scope: 'cycling' | 'running'): boolean {
+    const editedOrder = this.mode === 'edit' ? this.editTileOrder : null;
+    return this.chartTiles.some((tile) => (
+      isDashboardPowerCurveTileForScope(tile, scope)
       && (editedOrder === null || tile.order !== editedOrder)
     ));
   }
@@ -1299,7 +1323,10 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
     } else {
       delete nextChartTile.displaySettings;
     }
-    if (isDashboardEventBackedSpecialChartType(nextChartTile.chartType)) {
+    const nextDescriptor = getDashboardAutoTileDescriptorForTile(nextChartTile);
+    const existingDescriptor = getDashboardAutoTileDescriptorForTile(existingChartTile);
+    const shouldMergeEventFilters = !nextDescriptor || !existingDescriptor || nextDescriptor.id === existingDescriptor.id;
+    if (isDashboardEventBackedSpecialChartType(nextChartTile.chartType) && shouldMergeEventFilters) {
       nextChartTile.eventFilters = cloneDashboardTileEventFilters(existingChartTile.eventFilters)
         || cloneDashboardTileEventFilters(nextChartTile.eventFilters);
     }
@@ -1548,13 +1575,22 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
       nowMs,
     );
 
-    Object.values(DASHBOARD_AUTO_TILE_CURATED_ID_BY_CHART_TYPE).forEach((id) => {
+    Object.values(DASHBOARD_AUTO_TILE_CURATED_ID_BY_CHART_TYPE)
+      .filter(id => id !== DASHBOARD_AUTO_TILE_POWER_CURVE_ID)
+      .forEach((id) => {
+        markDashboardAutoTileDismissed(
+          dashboardSettings,
+          id,
+          DASHBOARD_AUTO_TILE_CURATED_SOURCE,
+          nowMs,
+        );
+      });
+
+    getDashboardPowerCurveScopeDefinitions().forEach((definition) => {
       markDashboardAutoTileDismissed(
         dashboardSettings,
-        id,
-        id === DASHBOARD_AUTO_TILE_POWER_CURVE_ID
-          ? DASHBOARD_AUTO_TILE_POWER_CURVE_SOURCE
-          : DASHBOARD_AUTO_TILE_CURATED_SOURCE,
+        definition.autoTileId,
+        definition.source,
         nowMs,
       );
     });
@@ -1589,6 +1625,10 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
   ): boolean {
     if (chartType === DASHBOARD_RECOVERY_NOW_CHART_TYPE) {
       return getDashboardAutoTileDescriptorForTile(tile)?.id === DASHBOARD_AUTO_TILE_RECOVERY_NOW_ID;
+    }
+
+    if (chartType === DASHBOARD_POWER_CURVE_CHART_TYPE) {
+      return getDashboardAutoTileDescriptorForTile(tile)?.id === DASHBOARD_AUTO_TILE_POWER_CURVE_ID;
     }
 
     return `${tile.chartType}` === `${chartType}`;

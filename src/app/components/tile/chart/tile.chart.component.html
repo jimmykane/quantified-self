@@ -140,6 +140,7 @@
   }
   @if (chartType === powerCurveChartType) {
   <app-power-curve-chart [isLoading]="isLoading || isTileActionSaving" [darkTheme]="darkTheme"
+    [title]="tileName || 'Power Curve'"
     [powerCurve]="powerCurve" [infoTooltip]="chartInfoTooltip" [reserveTitleActionSpace]="showHeaderControls"
     [mobileTapFeedbackOptions]="dashboardMobileTapFeedbackOptions">
   </app-power-curve-chart>

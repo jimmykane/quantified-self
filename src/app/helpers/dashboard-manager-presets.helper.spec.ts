@@ -20,23 +20,26 @@ import {
   DASHBOARD_FITNESS_TREND_KPI_CHART_TYPE,
   DASHBOARD_FORM_NOW_KPI_CHART_TYPE,
   DASHBOARD_FORM_CHART_TYPE,
+  DASHBOARD_POWER_CURVE_CHART_TYPE,
   DASHBOARD_LOAD_STATUS_KPI_CHART_TYPE,
   DASHBOARD_RECOVERY_NOW_CHART_TYPE,
   DASHBOARD_SLEEP_TREND_CHART_TYPE,
 } from './dashboard-special-chart-types';
+import { getDashboardPowerCurveActivityTypes } from './dashboard-power-curve-scope.helper';
 
 describe('dashboard-manager-presets.helper', () => {
-  it('exposes the expanded preset catalog with 30 unique definitions', () => {
+  it('exposes the expanded preset catalog with 31 unique definitions', () => {
     const definitions = getDashboardManagerPresetDefinitions();
 
-    expect(definitions).toHaveLength(30);
-    expect(new Set(definitions.map(definition => definition.id)).size).toBe(30);
-    expect(definitions.filter(definition => definition.category === 'curated')).toHaveLength(7);
+    expect(definitions).toHaveLength(31);
+    expect(new Set(definitions.map(definition => definition.id)).size).toBe(31);
+    expect(definitions.filter(definition => definition.category === 'curated')).toHaveLength(8);
     expect(definitions.filter(definition => definition.category === 'kpi')).toHaveLength(15);
     expect(definitions.filter(definition => definition.category === 'custom')).toHaveLength(7);
     expect(definitions.filter(definition => definition.category === 'map')).toHaveLength(1);
     expect(definitions.map(definition => definition.id)).toContain(DASHBOARD_MANAGER_PRESET_IDS.CURATED_SLEEP);
     expect(definitions.map(definition => definition.id)).toContain(DASHBOARD_MANAGER_PRESET_IDS.CURATED_POWER_CURVE);
+    expect(definitions.map(definition => definition.id)).toContain(DASHBOARD_MANAGER_PRESET_IDS.CURATED_RUNNING_POWER_CURVE);
   });
 
   it('returns null for unknown preset ids', () => {
@@ -94,6 +97,46 @@ describe('dashboard-manager-presets.helper', () => {
       chartType: DASHBOARD_SLEEP_TREND_CHART_TYPE,
       dataType: 'SleepDuration',
       dataTimeInterval: TimeIntervals.Daily,
+    });
+  });
+
+  it('builds scoped Power Curve presets as curated dashboard manager tiles', () => {
+    expect(getDashboardManagerPresetDefinition(DASHBOARD_MANAGER_PRESET_IDS.CURATED_POWER_CURVE)).toMatchObject({
+      label: 'Cycling Power Curve',
+      category: 'curated',
+      curatedChartType: DASHBOARD_POWER_CURVE_CHART_TYPE,
+      powerCurveScope: 'cycling',
+    });
+    expect(getDashboardManagerPresetDefinition(DASHBOARD_MANAGER_PRESET_IDS.CURATED_RUNNING_POWER_CURVE)).toMatchObject({
+      label: 'Running Power Curve',
+      category: 'curated',
+      curatedChartType: DASHBOARD_POWER_CURVE_CHART_TYPE,
+      powerCurveScope: 'running',
+    });
+
+    expect(buildDashboardManagerPresetTile({
+      presetId: DASHBOARD_MANAGER_PRESET_IDS.CURATED_POWER_CURVE,
+      order: 7,
+      size: { columns: 2, rows: 1 },
+    })).toMatchObject({
+      name: 'Cycling Power Curve',
+      type: TileTypes.Chart,
+      order: 7,
+      size: { columns: 2, rows: 1 },
+      chartType: DASHBOARD_POWER_CURVE_CHART_TYPE,
+      eventFilters: { range: '1y', activityTypes: getDashboardPowerCurveActivityTypes('cycling') },
+    });
+    expect(buildDashboardManagerPresetTile({
+      presetId: DASHBOARD_MANAGER_PRESET_IDS.CURATED_RUNNING_POWER_CURVE,
+      order: 8,
+      size: { columns: 1, rows: 1 },
+    })).toMatchObject({
+      name: 'Running Power Curve',
+      type: TileTypes.Chart,
+      order: 8,
+      size: { columns: 1, rows: 1 },
+      chartType: DASHBOARD_POWER_CURVE_CHART_TYPE,
+      eventFilters: { range: '1y', activityTypes: getDashboardPowerCurveActivityTypes('running') },
     });
   });
 

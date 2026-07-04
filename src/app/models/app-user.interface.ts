@@ -51,6 +51,7 @@ export type AppDashboardAutoTileId =
     | 'curatedIntensityDistribution'
     | 'curatedEfficiencyTrend'
     | 'powerCurve'
+    | 'runningPowerCurve'
     | 'kpiAcwr'
     | 'kpiRampRate'
     | 'kpiMonotonyStrain'

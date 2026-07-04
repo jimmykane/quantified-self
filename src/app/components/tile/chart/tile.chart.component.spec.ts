@@ -269,6 +269,7 @@ class MockSleepTrendChartComponent {
 class MockPowerCurveChartComponent {
   @Input() isLoading = false;
   @Input() darkTheme = false;
+  @Input() title = '';
   @Input() powerCurve: any;
   @Input() infoTooltip?: string | null;
   @Input() reserveTitleActionSpace = false;
@@ -541,6 +542,7 @@ describe('TileChartComponent', () => {
       latestEventStartMs: Date.now(),
     };
     component.chartType = DASHBOARD_POWER_CURVE_CHART_TYPE as any;
+    component.tileName = 'Running Power Curve';
     component.powerCurve = powerCurve as any;
     component.showActions = true;
     component.eventFilters = { range: '1y', activityTypes: [] };
@@ -548,6 +550,7 @@ describe('TileChartComponent', () => {
     fixture.detectChanges();
 
     const chart = getPowerCurveComponent();
+    expect(chart.title).toBe('Running Power Curve');
     expect(chart.powerCurve).toBe(powerCurve);
     expect(chart.infoTooltip).toContain('Power Curve compares');
     expect(chart.reserveTitleActionSpace).toBe(true);

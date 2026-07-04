@@ -56,6 +56,10 @@ import {
   type DashboardPowerCurveContext,
 } from './dashboard-power-curve.helper';
 import {
+  getDashboardPowerCurveScopeDefinition,
+  isDashboardPowerCurveTileForScope,
+} from './dashboard-power-curve-scope.helper';
+import {
   DASHBOARD_TILE_EVENT_DEFAULT_RANGE,
   dashboardTileEventRangeDays,
   filterDashboardTileEventsByActivityTypes,
@@ -306,6 +310,20 @@ function resolveEventsForTile(
   };
   const filters = normalizeDashboardTileEventFilters(tileWithFilters.eventFilters);
   return filterDashboardTileEventsByActivityTypes(normalizedTileEvents, filters.activityTypes);
+}
+
+function resolveDashboardPowerCurveLatestSeriesLabel(
+  tile: AppDashboardChartTileSettingsInterface,
+): string {
+  if (isDashboardPowerCurveTileForScope(tile, 'cycling')) {
+    return getDashboardPowerCurveScopeDefinition('cycling').latestSeriesLabel;
+  }
+
+  if (isDashboardPowerCurveTileForScope(tile, 'running')) {
+    return getDashboardPowerCurveScopeDefinition('running').latestSeriesLabel;
+  }
+
+  return 'Latest power activity';
 }
 
 function resolveDashboardCustomChartRequestedTimeInterval(
@@ -613,7 +631,9 @@ export function buildDashboardTileViewModels(
         chartType: DASHBOARD_POWER_CURVE_CHART_TYPE as unknown as ChartTypes,
         timeInterval: TimeIntervals.Auto,
         data: [],
-        powerCurve: buildDashboardPowerCurveContext(tileEvents),
+        powerCurve: buildDashboardPowerCurveContext(tileEvents, {
+          latestSeriesLabel: resolveDashboardPowerCurveLatestSeriesLabel(chartTile),
+        }),
       });
       return viewModels;
     }

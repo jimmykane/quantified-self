@@ -43,15 +43,28 @@ import {
 } from './dashboard-special-chart-types';
 import { DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE } from './dashboard-form.helper';
 import { getDefaultDashboardChartTileDisplaySettingsForChartType } from './dashboard-chart-display-settings.helper';
+import {
+  DASHBOARD_POWER_CURVE_CYCLING_AUTO_TILE_ID,
+  DASHBOARD_POWER_CURVE_CYCLING_SOURCE,
+  DASHBOARD_POWER_CURVE_RUNNING_AUTO_TILE_ID,
+  DASHBOARD_POWER_CURVE_RUNNING_SOURCE,
+  buildDashboardPowerCurveAutoTileForScope,
+  getDashboardPowerCurveScopeDefinition,
+  resolveDashboardPowerCurveTileScope,
+  type DashboardPowerCurveScope,
+} from './dashboard-power-curve-scope.helper';
 
 export const DASHBOARD_AUTO_TILE_SLEEP_TREND_ID: AppDashboardAutoTileId = 'sleepTrend';
 export const DASHBOARD_AUTO_TILE_SLEEP_TREND_SOURCE = 'sleep-sync';
-export const DASHBOARD_AUTO_TILE_POWER_CURVE_ID: AppDashboardAutoTileId = 'powerCurve';
-export const DASHBOARD_AUTO_TILE_POWER_CURVE_SOURCE = 'power-curve';
+export const DASHBOARD_AUTO_TILE_POWER_CURVE_ID = DASHBOARD_POWER_CURVE_CYCLING_AUTO_TILE_ID;
+export const DASHBOARD_AUTO_TILE_POWER_CURVE_SOURCE = DASHBOARD_POWER_CURVE_CYCLING_SOURCE;
+export const DASHBOARD_AUTO_TILE_RUNNING_POWER_CURVE_ID = DASHBOARD_POWER_CURVE_RUNNING_AUTO_TILE_ID;
+export const DASHBOARD_AUTO_TILE_RUNNING_POWER_CURVE_SOURCE = DASHBOARD_POWER_CURVE_RUNNING_SOURCE;
 export const DASHBOARD_AUTO_TILE_CURATED_SOURCE = 'default-curated';
 export const DASHBOARD_AUTO_TILE_KPI_SOURCE = 'default-kpi';
 
 export type DashboardDefaultCuratedChartType = Exclude<DashboardCuratedChartType, typeof DASHBOARD_SLEEP_TREND_CHART_TYPE>;
+export type DashboardDefaultCuratedAutoChartType = Exclude<DashboardDefaultCuratedChartType, typeof DASHBOARD_POWER_CURVE_CHART_TYPE>;
 
 export const DASHBOARD_AUTO_TILE_CURATED_ID_BY_CHART_TYPE: Record<DashboardDefaultCuratedChartType, AppDashboardAutoTileId> = {
   [DASHBOARD_RECOVERY_NOW_CHART_TYPE]: 'curatedRecoveryNow',
@@ -144,15 +157,12 @@ export function buildDashboardCuratedAutoTile(
     [DASHBOARD_FRESHNESS_FORECAST_CHART_TYPE]: 'Freshness Forecast',
     [DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE]: 'Intensity Distribution',
     [DASHBOARD_EFFICIENCY_TREND_CHART_TYPE]: 'Efficiency Trend',
-    [DASHBOARD_POWER_CURVE_CHART_TYPE]: 'Power Curve',
+    [DASHBOARD_POWER_CURVE_CHART_TYPE]: getDashboardPowerCurveScopeDefinition('cycling').label,
   };
   const displaySettings = getDefaultDashboardChartTileDisplaySettingsForChartType(chartType);
-  const eventFilters = chartType === DASHBOARD_POWER_CURVE_CHART_TYPE
-    ? {
-      range: '1y' as const,
-      activityTypes: [],
-    }
-    : undefined;
+  if (chartType === DASHBOARD_POWER_CURVE_CHART_TYPE) {
+    return buildDashboardPowerCurveAutoTileForScope('cycling', order, size);
+  }
 
   return {
     name: chartNameByType[chartType],
@@ -165,8 +175,15 @@ export function buildDashboardCuratedAutoTile(
     dataCategoryType: ChartDataCategoryTypes.DateType,
     dataTimeInterval: TimeIntervals.Weekly,
     ...(displaySettings ? { displaySettings } : {}),
-    ...(eventFilters ? { eventFilters } : {}),
   };
+}
+
+export function buildDashboardPowerCurveAutoTile(
+  scope: DashboardPowerCurveScope,
+  order: number,
+  size: { columns: number; rows: number } = { columns: 1, rows: 1 },
+): AppDashboardChartTileSettingsInterface {
+  return buildDashboardPowerCurveAutoTileForScope(scope, order, size);
 }
 
 export function buildDashboardKpiAutoTile(
@@ -239,6 +256,24 @@ export function getDashboardAutoTileDescriptorForTile(
   }
 
   const chartTile = tile as TileChartSettingsInterface;
+  if (`${chartTile.chartType}` === DASHBOARD_POWER_CURVE_CHART_TYPE) {
+    const powerCurveScope = resolveDashboardPowerCurveTileScope(chartTile);
+    if (powerCurveScope === 'running') {
+      return {
+        id: DASHBOARD_AUTO_TILE_RUNNING_POWER_CURVE_ID,
+        source: DASHBOARD_AUTO_TILE_RUNNING_POWER_CURVE_SOURCE,
+      };
+    }
+    if (powerCurveScope !== 'cycling') {
+      return null;
+    }
+
+    return {
+      id: DASHBOARD_AUTO_TILE_POWER_CURVE_ID,
+      source: DASHBOARD_AUTO_TILE_POWER_CURVE_SOURCE,
+    };
+  }
+
   if (chartTile.dataType === DataRecoveryTime.type) {
     return {
       id: DASHBOARD_AUTO_TILE_RECOVERY_NOW_ID,

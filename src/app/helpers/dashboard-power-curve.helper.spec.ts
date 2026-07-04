@@ -43,7 +43,7 @@ function makePowerCurveEvent(options: {
 }
 
 describe('dashboard-power-curve.helper', () => {
-  it('builds best-in-range and latest-ride series from normalized event power curves', () => {
+  it('builds best-in-range and latest power activity series from normalized event power curves', () => {
     const olderBest = makePowerCurveEvent({
       id: 'older-best',
       startDate: '2026-01-01T10:00:00.000Z',
@@ -72,10 +72,10 @@ describe('dashboard-power-curve.helper', () => {
     ]);
     expect(context.series.map(series => series.seriesKey)).toEqual(['best', 'latest']);
     expect(context.series[0].label).toBe('Best in range');
-    expect(context.series[1].label).toBe('Latest ride');
+    expect(context.series[1].label).toBe('Latest power activity');
   });
 
-  it('uses one latest-and-best series when the latest ride is also the envelope', () => {
+  it('uses one latest-and-best series when the latest activity is also the envelope', () => {
     const latestBest = makePowerCurveEvent({
       id: 'latest-best',
       startDate: '2026-01-03T10:00:00.000Z',

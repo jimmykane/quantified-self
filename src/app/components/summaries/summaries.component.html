@@ -57,7 +57,7 @@
         [cdkDragPreviewContainer]="'parent'"
         [cdkDragDisabled]="!desktopTileDragEnabled"
         [class.desktop-draggable-tile]="desktopTileDragEnabled">
-        <app-tile-chart [user]="user" [type]="tile.type" [chartType]="getChartTile(tile).chartType"
+        <app-tile-chart [user]="user" [type]="tile.type" [tileName]="getChartTile(tile).name || ''" [chartType]="getChartTile(tile).chartType"
           [isLoading]="isTileLoading(tile)" [data]="getChartTile(tile).data" [showActions]="showActions" [darkTheme]="darkTheme"
           [compactKpiRow]="true"
           [dataType]="getChartTile(tile).dataType" [dataValueType]="getChartTile(tile).dataValueType"
@@ -121,7 +121,7 @@
       [rows]="tile.size.rows"
       [maxColumns]="numberOfCols">
       @if (tile.type === tileTypes.Chart) {
-      <app-tile-chart [user]="user" [type]="tile.type" [chartType]="getChartTile(tile).chartType"
+      <app-tile-chart [user]="user" [type]="tile.type" [tileName]="getChartTile(tile).name || ''" [chartType]="getChartTile(tile).chartType"
         [isLoading]="isTileLoading(tile)" [data]="getChartTile(tile).data" [showActions]="showActions" [darkTheme]="darkTheme"
         [dataType]="getChartTile(tile).dataType" [dataValueType]="getChartTile(tile).dataValueType"
         [dataCategoryType]="getChartTile(tile).dataCategoryType" [dataTimeInterval]="getChartTile(tile).timeInterval"

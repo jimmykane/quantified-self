@@ -32,6 +32,7 @@ import {
 	  DASHBOARD_RECOVERY_NOW_CHART_TYPE,
   DASHBOARD_SLEEP_TREND_CHART_TYPE,
 } from '../../helpers/dashboard-special-chart-types';
+import { getDashboardPowerCurveActivityTypes } from '../../helpers/dashboard-power-curve-scope.helper';
 import { SummariesComponent } from './summaries.component';
 import { DashboardTileBoardComponent } from './dashboard-tile-board/dashboard-tile-board.component';
 import { DashboardTileCellComponent } from './dashboard-tile-cell/dashboard-tile-cell.component';
@@ -660,11 +661,12 @@ describe('SummariesComponent', () => {
               type: TileTypes.Chart,
               order: 6,
               chartType: DASHBOARD_POWER_CURVE_CHART_TYPE,
+              name: 'Cycling Power Curve',
               dataType: 'Training Stress Score',
               dataValueType: ChartDataValueTypes.Total,
               dataCategoryType: ChartDataCategoryTypes.DateType,
               size: { columns: 1, rows: 1 },
-              eventFilters: { range: '1y', activityTypes: [] },
+              eventFilters: { range: '1y', activityTypes: getDashboardPowerCurveActivityTypes('cycling') },
             },
           ],
         },

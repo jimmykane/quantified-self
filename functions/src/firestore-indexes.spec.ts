@@ -33,6 +33,30 @@ function loadFirestoreIndexes(): FirestoreIndexesConfig {
 }
 
 describe('firestore indexes', () => {
+    it('keeps scoped dashboard Power Curve auto-tile eligibility query deployable', () => {
+        const config = loadFirestoreIndexes();
+
+        expect(config.indexes).toContainEqual({
+            collectionGroup: 'events',
+            queryScope: 'COLLECTION',
+            fields: [
+                {
+                    fieldPath: 'stats.`Activity Types`',
+                    arrayConfig: 'CONTAINS',
+                },
+                {
+                    fieldPath: 'stats.PowerCurve',
+                    order: 'ASCENDING',
+                },
+                {
+                    fieldPath: '__name__',
+                    order: 'ASCENDING',
+                },
+            ],
+            density: 'SPARSE_ALL',
+        });
+    });
+
     it('keeps route reparse job failure query and TTL config deployable', () => {
         const config = loadFirestoreIndexes();
 

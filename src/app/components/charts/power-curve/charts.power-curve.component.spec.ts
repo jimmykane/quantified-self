@@ -75,7 +75,7 @@ describe('ChartsPowerCurveComponent', () => {
 
     expect(component.headlineValueText).toContain('5m');
     expect(component.headlineValueText).toContain('315');
-    expect(component.subtitleText).toBe('Best + latest ride · 2 events');
+    expect(component.subtitleText).toBe('Best + latest activity · 2 events');
     expect(component.showNoDataError).toBe(false);
   });
 
@@ -157,7 +157,7 @@ describe('ChartsPowerCurveComponent', () => {
       },
       {
         axisValue: 300,
-        seriesName: 'Latest ride',
+        seriesName: 'Latest running activity',
         color: '#f44336',
         data: { value: 292, wattsPerKg: 3.89 },
       },
@@ -168,7 +168,7 @@ describe('ChartsPowerCurveComponent', () => {
     expect(tooltipHtml).toContain('Best in range');
     expect(tooltipHtml).toContain('315');
     expect(tooltipHtml).toContain('4.20 W/kg');
-    expect(tooltipHtml).toContain('Latest ride');
+    expect(tooltipHtml).toContain('Latest running activity');
     expect(tooltipHtml).toContain('292');
     expect(tooltipHtml).toContain('3.89 W/kg');
   });
@@ -230,7 +230,7 @@ function makePowerCurveContext(): DashboardPowerCurveContext {
       },
       {
         seriesKey: 'latest',
-        label: 'Latest ride',
+        label: 'Latest power activity',
         colorKey: 'latest',
         eventId: 'latest-event',
         eventStartMs: Date.UTC(2026, 0, 2),

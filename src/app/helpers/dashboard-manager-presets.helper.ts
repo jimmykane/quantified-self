@@ -51,10 +51,8 @@ import type {
   AppDashboardMapTileSettingsInterface,
 } from '../models/app-user.interface';
 import { AppUserUtilities } from '../utils/app.user.utilities';
-import {
-  buildDashboardCuratedAutoTile,
-  type DashboardDefaultCuratedChartType,
-} from './dashboard-auto-tile.helper';
+import { buildDashboardPowerCurveAutoTile } from './dashboard-auto-tile.helper';
+import type { DashboardPowerCurveScope } from './dashboard-power-curve-scope.helper';
 
 export const DASHBOARD_MANAGER_PRESET_IDS = {
   CURATED_RECOVERY: 'curated-recovery',
@@ -64,6 +62,7 @@ export const DASHBOARD_MANAGER_PRESET_IDS = {
   CURATED_EFFICIENCY_TREND: 'curated-efficiency-trend',
   CURATED_SLEEP: 'curated-sleep',
   CURATED_POWER_CURVE: 'curated-power-curve',
+  CURATED_RUNNING_POWER_CURVE: 'curated-running-power-curve',
   KPI_ACWR: 'kpi-acwr',
   KPI_RAMP_RATE: 'kpi-ramp-rate',
   KPI_MONOTONY_STRAIN: 'kpi-monotony-strain',
@@ -111,6 +110,7 @@ interface DashboardManagerPresetBaseDefinition {
 export interface DashboardManagerCuratedPresetDefinition extends DashboardManagerPresetBaseDefinition {
   category: 'curated';
   curatedChartType: DashboardCuratedChartType;
+  powerCurveScope?: DashboardPowerCurveScope;
 }
 
 export interface DashboardManagerKpiPresetDefinition extends DashboardManagerPresetBaseDefinition {
@@ -205,12 +205,23 @@ const DASHBOARD_MANAGER_PRESET_DEFINITIONS: DashboardManagerPresetDefinition[] =
   },
   {
     id: DASHBOARD_MANAGER_PRESET_IDS.CURATED_POWER_CURVE,
-    label: 'Power Curve',
-    tileName: 'Power Curve',
-    description: 'Best power envelope with latest power ride comparison.',
+    label: 'Cycling Power Curve',
+    tileName: 'Cycling Power Curve',
+    description: 'Cycling and mountain biking power envelope with latest power activity comparison.',
     icon: 'speed',
     category: 'curated',
     curatedChartType: DASHBOARD_POWER_CURVE_CHART_TYPE,
+    powerCurveScope: 'cycling',
+  },
+  {
+    id: DASHBOARD_MANAGER_PRESET_IDS.CURATED_RUNNING_POWER_CURVE,
+    label: 'Running Power Curve',
+    tileName: 'Running Power Curve',
+    description: 'Running and trail running power envelope with latest power activity comparison.',
+    icon: 'directions_run',
+    category: 'curated',
+    curatedChartType: DASHBOARD_POWER_CURVE_CHART_TYPE,
+    powerCurveScope: 'running',
   },
   {
     id: DASHBOARD_MANAGER_PRESET_IDS.KPI_ACWR,
@@ -531,8 +542,8 @@ export function buildDashboardManagerPresetTile(
     }
 
     if (definition.curatedChartType === DASHBOARD_POWER_CURVE_CHART_TYPE) {
-      return buildDashboardCuratedAutoTile(
-        definition.curatedChartType as DashboardDefaultCuratedChartType,
+      return buildDashboardPowerCurveAutoTile(
+        definition.powerCurveScope || 'cycling',
         input.order,
         input.size,
       );
