@@ -216,23 +216,63 @@ function chunkValues<T>(values: readonly T[], chunkSize: number): T[][] {
   return chunks;
 }
 
+function addActivityPrefilterValue(values: Set<string>, value: unknown): void {
+  const stringValue = `${value ?? ''}`.trim();
+  if (stringValue.length > 0) {
+    values.add(stringValue);
+  }
+}
+
+function resolveActivityPrefilterValues(activityTypes: readonly ActivityTypes[]): string[] {
+  const canonicalActivityTypes = new Set<ActivityTypes>();
+  activityTypes.forEach((activityType) => {
+    const resolvedActivityType = ActivityTypesHelper.resolveActivityType(activityType);
+    if (resolvedActivityType) {
+      canonicalActivityTypes.add(resolvedActivityType);
+    }
+  });
+  if (!canonicalActivityTypes.size) {
+    return [];
+  }
+
+  const prefilterValues = new Set<string>();
+  canonicalActivityTypes.forEach(activityType => addActivityPrefilterValue(prefilterValues, activityType));
+  Object.entries(ActivityTypes).forEach(([enumKey, enumValue]) => {
+    const resolvedKey = ActivityTypesHelper.resolveActivityType(enumKey);
+    const resolvedValue = ActivityTypesHelper.resolveActivityType(enumValue);
+    if (
+      (resolvedKey && canonicalActivityTypes.has(resolvedKey))
+      || (resolvedValue && canonicalActivityTypes.has(resolvedValue))
+    ) {
+      addActivityPrefilterValue(prefilterValues, enumKey);
+      addActivityPrefilterValue(prefilterValues, enumValue);
+    }
+  });
+
+  return [...prefilterValues];
+}
+
 function resolveDefaultPrefilterDiagnostics(
-  activityTypes: readonly ActivityTypes[],
+  prefilterValues: readonly string[],
 ): FetchEventDocsPrefilterDiagnostics {
-  if (!activityTypes.length) {
+  if (!prefilterValues.length) {
     return { mode: 'none', chunkCount: 0, dedupedCount: 0 };
   }
-  if (activityTypes.length === 1) {
+  if (prefilterValues.length === 1) {
     return { mode: 'contains', chunkCount: 1, dedupedCount: 0 };
   }
-  if (activityTypes.length <= 10) {
+  if (prefilterValues.length <= 10) {
     return { mode: 'contains_any', chunkCount: 1, dedupedCount: 0 };
   }
   return {
     mode: 'chunked',
-    chunkCount: Math.ceil(activityTypes.length / 10),
+    chunkCount: Math.ceil(prefilterValues.length / 10),
     dedupedCount: 0,
   };
+}
+
+function resolveNoActivityPrefilterDiagnostics(): FetchEventDocsPrefilterDiagnostics {
+  return { mode: 'none', chunkCount: 0, dedupedCount: 0 };
 }
 
 function sortEventDocsByStartDateAndId(
@@ -272,17 +312,11 @@ const defaultExecuteQueryDependencies: ExecuteQueryDependencies = {
       return query;
     };
 
-    const canonicalActivityTypes = Array.from(
-      new Set(
-        activityTypes.filter((activityType): activityType is ActivityTypes => (
-          typeof activityType === 'string' && activityType.trim().length > 0
-        )),
-      ),
-    );
-    const defaultPrefilterDiagnostics = resolveDefaultPrefilterDiagnostics(canonicalActivityTypes);
+    const activityPrefilterValues = resolveActivityPrefilterValues(activityTypes);
+    const defaultPrefilterDiagnostics = resolveDefaultPrefilterDiagnostics(activityPrefilterValues);
     const activityTypeFieldPath = new FieldPath('stats', DataActivityTypes.type);
 
-    if (!canonicalActivityTypes.length) {
+    if (!activityPrefilterValues.length) {
       const snapshot = await baseQuery().get();
       return {
         docs: snapshot.docs,
@@ -290,9 +324,9 @@ const defaultExecuteQueryDependencies: ExecuteQueryDependencies = {
       };
     }
 
-    if (canonicalActivityTypes.length === 1) {
+    if (activityPrefilterValues.length === 1) {
       const snapshot = await baseQuery()
-        .where(activityTypeFieldPath, 'array-contains', canonicalActivityTypes[0])
+        .where(activityTypeFieldPath, 'array-contains', activityPrefilterValues[0])
         .get();
       return {
         docs: snapshot.docs,
@@ -300,9 +334,9 @@ const defaultExecuteQueryDependencies: ExecuteQueryDependencies = {
       };
     }
 
-    if (canonicalActivityTypes.length <= 10) {
+    if (activityPrefilterValues.length <= 10) {
       const snapshot = await baseQuery()
-        .where(activityTypeFieldPath, 'array-contains-any', canonicalActivityTypes)
+        .where(activityTypeFieldPath, 'array-contains-any', activityPrefilterValues)
         .get();
       return {
         docs: snapshot.docs,
@@ -310,7 +344,7 @@ const defaultExecuteQueryDependencies: ExecuteQueryDependencies = {
       };
     }
 
-    const activityTypeChunks = chunkValues(canonicalActivityTypes, 10);
+    const activityTypeChunks = chunkValues(activityPrefilterValues, 10);
     const chunkSnapshots = await Promise.all(
       activityTypeChunks.map(activityTypeChunk => (
         baseQuery()
@@ -1161,7 +1195,7 @@ export function createExecuteQuery(
       } = Array.isArray(fetchEventDocsResult)
         ? {
           docs: fetchEventDocsResult,
-          prefilterDiagnostics: resolveDefaultPrefilterDiagnostics(query.activityTypes),
+          prefilterDiagnostics: resolveNoActivityPrefilterDiagnostics(),
         }
         : fetchEventDocsResult;
 
