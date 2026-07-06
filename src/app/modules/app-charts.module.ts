@@ -7,6 +7,7 @@ import { ChartsFormComponent } from '../components/charts/form/charts.form.compo
 import { ChartsIntensityDistributionComponent } from '../components/charts/intensity-distribution/charts.intensity-distribution.component';
 import { ChartsKpiComponent } from '../components/charts/kpi/charts.kpi.component';
 import { ChartsPieComponent } from '../components/charts/pie/charts.pie.component';
+import { ChartsPowerCurveComponent } from '../components/charts/power-curve/charts.power-curve.component';
 import { ChartRangeSelectorComponent } from '../components/charts/shared/chart-range-selector/chart-range-selector.component';
 import { ChartsSleepTrendComponent } from '../components/charts/sleep-trend/charts.sleep-trend.component';
 import { ChartsXYComponent } from '../components/charts/xy/charts.xy.component';
@@ -23,6 +24,7 @@ import { SharedModule } from './shared.module';
     ChartsColumnsComponent,
     ChartsFormComponent,
     ChartsKpiComponent,
+    ChartsPowerCurveComponent,
     ChartsFreshnessForecastComponent,
     ChartsIntensityDistributionComponent,
     ChartsEfficiencyTrendComponent,
@@ -35,6 +37,7 @@ import { SharedModule } from './shared.module';
     ChartsColumnsComponent,
     ChartsFormComponent,
     ChartsKpiComponent,
+    ChartsPowerCurveComponent,
     ChartsFreshnessForecastComponent,
     ChartsIntensityDistributionComponent,
     ChartsEfficiencyTrendComponent,

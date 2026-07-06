@@ -8,6 +8,7 @@ import {
   ChartTypes,
   DataCadenceAvg,
   DataDistance,
+  DataDuration,
   DataEndPosition,
   DataHeartRateMax,
   DataPowerAvg,
@@ -812,6 +813,48 @@ describe('execute-query', () => {
     ]);
   });
 
+  it('ignores power-curve points longer than the event duration', async () => {
+    const fetchEventDocs = vi.fn(async () => [
+      { id: 'e1', data: () => ({ startDate: new Date('2026-07-02T14:32:41.000Z') }) },
+    ]);
+    const importEvent = vi.fn(() => createMockEvent({
+      id: 'e1',
+      startDate: new Date('2026-07-02T14:32:41.000Z'),
+      activityTypes: [ActivityTypes.Cycling],
+      stats: {
+        [DataDuration.type]: 1195.27,
+        PowerCurve: [
+          { duration: 300, power: 180 },
+          { duration: 900, power: 120 },
+          { duration: 1200, power: 109 },
+        ],
+      },
+    }));
+
+    setExecuteQueryDependenciesForTesting({
+      fetchEventDocs,
+      fetchDebugEventSnapshot: vi.fn(async () => ({
+        totalEventsCount: 1,
+        recentEventsSample: [],
+      })),
+      importEvent,
+      logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } as any,
+    });
+
+    const result = await executeAiInsightsQuery(
+      'user-1',
+      createPowerCurveQuery({ mode: 'best' }),
+      'what is my best power curve',
+    );
+
+    expect(result.resultKind).toBe('power_curve');
+    if (result.resultKind !== 'power_curve') {
+      return;
+    }
+
+    expect(result.powerCurve.series[0]?.points.map(point => point.duration)).toEqual([300, 900]);
+  });
+
   it('logs warning diagnostics when malformed power-curve points are dropped', async () => {
     const loggerStub = { info: vi.fn(), warn: vi.fn(), error: vi.fn() } as any;
     const fetchEventDocs = vi.fn(async () => [
@@ -1378,7 +1421,7 @@ describe('execute-query', () => {
     }));
   });
 
-  it('uses a single numeric startDate Firestore query for bounded requests', async () => {
+  it('uses numeric startDate and expanded activity alias Firestore filters for bounded requests', async () => {
     const where = vi.fn();
     const orderBy = vi.fn();
     const get = vi.fn(async () => ({
@@ -1412,6 +1455,7 @@ describe('execute-query', () => {
     };
 
     vi.spyOn(admin, 'firestore').mockReturnValue(firestore as any);
+    const info = vi.fn();
 
     setExecuteQueryDependenciesForTesting({
       importEvent: vi.fn(() => createMockEvent({
@@ -1420,26 +1464,45 @@ describe('execute-query', () => {
         activityTypes: [ActivityTypes.Cycling],
         stats: { [DataDistance.type]: 40 },
       })),
-      logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } as any,
+      logger: { info, warn: vi.fn(), error: vi.fn() } as any,
     });
 
     const result = await executeAiInsightsQuery('user-1', createQuery(), 'show my cycling distance');
 
-    expect(where).toHaveBeenCalledTimes(3);
-    expect(where).toHaveBeenNthCalledWith(1, 'startDate', '>=', new Date('2026-01-01T00:00:00.000Z').getTime());
-    expect(where).toHaveBeenNthCalledWith(2, 'startDate', '<=', new Date('2026-03-31T23:59:59.999Z').getTime());
-    expect(where).toHaveBeenNthCalledWith(3, expect.anything(), 'array-contains', ActivityTypes.Cycling);
+    const activityFilterCalls = where.mock.calls.filter((call) => (
+      call[1] === 'array-contains' || call[1] === 'array-contains-any'
+    ));
+    const activityPrefilterValues = activityFilterCalls.flatMap((call) => (
+      Array.isArray(call[2]) ? call[2] : [call[2]]
+    ));
+    expect(where.mock.calls.filter(call => call[0] === 'startDate' && call[1] === '>=')).toHaveLength(activityFilterCalls.length);
+    expect(where.mock.calls.filter(call => call[0] === 'startDate' && call[1] === '<=')).toHaveLength(activityFilterCalls.length);
+    expect(where.mock.calls).toEqual(expect.arrayContaining([
+      ['startDate', '>=', new Date('2026-01-01T00:00:00.000Z').getTime()],
+      ['startDate', '<=', new Date('2026-03-31T23:59:59.999Z').getTime()],
+    ]));
+    expect(activityPrefilterValues).toEqual(expect.arrayContaining([
+      ActivityTypes.Cycling,
+      'cycling',
+      'cycling_road',
+      'Ride',
+    ]));
+    expect(new Set(activityPrefilterValues).size).toBe(activityPrefilterValues.length);
     expect(orderBy).toHaveBeenCalledWith('startDate', 'asc');
-    expect(get).toHaveBeenCalledTimes(1);
+    expect(get).toHaveBeenCalledTimes(activityFilterCalls.length);
     expect(result.matchedEventsCount).toBe(1);
+    expect(info).toHaveBeenCalledWith('[aiInsights] Query execution summary', expect.objectContaining({
+      prefilterMode: activityPrefilterValues.length > 10 ? 'chunked' : 'contains_any',
+    }));
   });
 
-  it('uses array-contains-any for activity filters up to ten values', async () => {
+  it('keeps activity filtering after rehydration for multi-activity queries', async () => {
     const where = vi.fn();
     const orderBy = vi.fn();
     const get = vi.fn(async () => ({
       docs: [
         { id: 'e1', data: () => ({ startDate: 1768003200000 }) },
+        { id: 'e2', data: () => ({ startDate: 1768089600000 }) },
       ],
     }));
     const queryChain = {
@@ -1470,48 +1533,48 @@ describe('execute-query', () => {
     vi.spyOn(admin, 'firestore').mockReturnValue(firestore as any);
 
     setExecuteQueryDependenciesForTesting({
-      importEvent: vi.fn(() => createMockEvent({
-        id: 'e1',
-        startDate: new Date('2026-01-10T12:00:00.000Z'),
-        activityTypes: [ActivityTypes.Cycling],
-        stats: { [DataDistance.type]: 40 },
-      })),
+      importEvent: vi
+        .fn()
+        .mockImplementationOnce(() => createMockEvent({
+          id: 'e1',
+          startDate: new Date('2026-01-10T12:00:00.000Z'),
+          activityTypes: [ActivityTypes.Cycling],
+          stats: { [DataDistance.type]: 40 },
+        }))
+        .mockImplementationOnce(() => createMockEvent({
+          id: 'e2',
+          startDate: new Date('2026-01-11T12:00:00.000Z'),
+          activityTypes: [ActivityTypes.Hiking],
+          stats: { [DataDistance.type]: 10 },
+        })),
       logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } as any,
     });
 
-    await executeAiInsightsQuery('user-1', createQuery({
+    const result = await executeAiInsightsQuery('user-1', createQuery({
       activityTypes: [ActivityTypes.Cycling, ActivityTypes.Running],
     }), 'show my distance');
 
-    expect(where).toHaveBeenCalledTimes(3);
-    expect(where).toHaveBeenNthCalledWith(1, 'startDate', '>=', new Date('2026-01-01T00:00:00.000Z').getTime());
-    expect(where).toHaveBeenNthCalledWith(2, 'startDate', '<=', new Date('2026-03-31T23:59:59.999Z').getTime());
-    expect(where).toHaveBeenNthCalledWith(
-      3,
-      expect.anything(),
-      'array-contains-any',
-      [ActivityTypes.Cycling, ActivityTypes.Running],
-    );
-    expect(get).toHaveBeenCalledTimes(1);
+    const activityFilterCalls = where.mock.calls.filter((call) => (
+      call[1] === 'array-contains' || call[1] === 'array-contains-any'
+    ));
+    expect(activityFilterCalls.length).toBeGreaterThan(0);
+    expect(where.mock.calls).toEqual(expect.arrayContaining([
+      ['startDate', '>=', new Date('2026-01-01T00:00:00.000Z').getTime()],
+      ['startDate', '<=', new Date('2026-03-31T23:59:59.999Z').getTime()],
+    ]));
+    expect(get).toHaveBeenCalledTimes(activityFilterCalls.length);
+    expect(result.matchedEventsCount).toBe(1);
+    expect(result.aggregation.buckets[0]?.aggregateValue).toBe(40);
   });
 
-  it('chunks activity-type Firestore filters above ten values, de-dups docs, and sorts by startDate/id', async () => {
+  it('prefilters Firestore with activity aliases so alias-normalized events are fetched and matched', async () => {
     const where = vi.fn();
     const orderBy = vi.fn();
-    const get = vi
-      .fn()
-      .mockResolvedValueOnce({
-        docs: [
-          { id: 'e2', data: () => ({ startDate: Date.UTC(2026, 0, 2, 12, 0, 0) }) },
-          { id: 'e1', data: () => ({ startDate: Date.UTC(2026, 0, 1, 12, 0, 0) }) },
-        ],
-      })
-      .mockResolvedValueOnce({
-        docs: [
-          { id: 'e3', data: () => ({ startDate: Date.UTC(2026, 0, 3, 12, 0, 0) }) },
-          { id: 'e1', data: () => ({ startDate: Date.UTC(2026, 0, 1, 12, 0, 0) }) },
-        ],
-      });
+    const get = vi.fn(async () => ({
+      docs: [
+        { id: 'alias', data: () => ({ startDate: Date.UTC(2026, 0, 2, 12, 0, 0) }) },
+      ],
+    }));
     const queryChain = {
       where,
       orderBy,
@@ -1539,45 +1602,49 @@ describe('execute-query', () => {
 
     vi.spyOn(admin, 'firestore').mockReturnValue(firestore as any);
 
-    const importEvent = vi.fn((eventJSON: { startDate: Date }, eventID: string) => createMockEvent({
-      id: eventID,
-      startDate: eventJSON.startDate,
-      activityTypes: [ActivityTypes.Cycling],
-      stats: { [DataDistance.type]: 40 },
+    const importEvent = vi.fn(() => ({
+      startDate: new Date('2026-01-02T12:00:00.000Z'),
+      getID: () => 'alias',
+      getActivityTypesAsArray: () => ['cycling_road'],
+      getStat: () => ({ getValue: () => 40 }),
     }));
     const info = vi.fn();
+    const warn = vi.fn();
 
     setExecuteQueryDependenciesForTesting({
       importEvent,
-      logger: { info, warn: vi.fn(), error: vi.fn() } as any,
+      logger: { info, warn, error: vi.fn() } as any,
     });
 
-    const manyActivityTypes = [
+    const result = await executeAiInsightsQuery('user-1', createQuery({
+      activityTypes: [ActivityTypes.Cycling],
+    }), 'show my cycling distance');
+
+    const activityFilterCalls = where.mock.calls.filter((call) => (
+      call[1] === 'array-contains' || call[1] === 'array-contains-any'
+    ));
+    const activityPrefilterValues = activityFilterCalls.flatMap((call) => (
+      Array.isArray(call[2]) ? call[2] : [call[2]]
+    ));
+    expect(where.mock.calls).toEqual(expect.arrayContaining([
+      ['startDate', '>=', new Date('2026-01-01T00:00:00.000Z').getTime()],
+      ['startDate', '<=', new Date('2026-03-31T23:59:59.999Z').getTime()],
+    ]));
+    expect(activityPrefilterValues).toEqual(expect.arrayContaining([
       ActivityTypes.Cycling,
-      ActivityTypes.Running,
-      'A' as ActivityTypes,
-      'B' as ActivityTypes,
-      'C' as ActivityTypes,
-      'D' as ActivityTypes,
-      'E' as ActivityTypes,
-      'F' as ActivityTypes,
-      'G' as ActivityTypes,
-      'H' as ActivityTypes,
-      'I' as ActivityTypes,
-      'J' as ActivityTypes,
-    ];
-
-    await executeAiInsightsQuery('user-1', createQuery({
-      activityTypes: manyActivityTypes,
-    }), 'show my distance');
-
-    expect(get).toHaveBeenCalledTimes(2);
-    expect(where).toHaveBeenCalledTimes(6);
-    expect(importEvent.mock.calls.map((call) => call[1])).toEqual(['e1', 'e2', 'e3']);
+      'cycling',
+      'cycling_road',
+      'Ride',
+    ]));
+    expect(get).toHaveBeenCalledTimes(activityFilterCalls.length);
+    expect(result.matchedEventsCount).toBe(1);
+    expect(result.aggregation.buckets[0]?.aggregateValue).toBe(40);
+    expect(warn).toHaveBeenCalledWith('[aiInsights] Normalized non-canonical activity types in AI filtering', expect.objectContaining({
+      normalizedNonCanonicalActivityTypeCount: 1,
+    }));
     expect(info).toHaveBeenCalledWith('[aiInsights] Query execution summary', expect.objectContaining({
-      prefilterMode: 'chunked',
-      prefilterChunkCount: 2,
-      prefilterDedupedCount: 1,
+      prefilterMode: activityPrefilterValues.length > 10 ? 'chunked' : 'contains_any',
+      normalizedNonCanonicalActivityTypeCount: 1,
     }));
   });
 

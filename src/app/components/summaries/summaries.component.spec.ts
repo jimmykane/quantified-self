@@ -26,11 +26,13 @@ import * as dashboardTileViewModelHelper from '../../helpers/dashboard-tile-view
 import {
   DASHBOARD_ACWR_KPI_CHART_TYPE,
   DASHBOARD_EFFICIENCY_TREND_CHART_TYPE,
-  DASHBOARD_FORM_CHART_TYPE,
-  DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE,
-  DASHBOARD_RECOVERY_NOW_CHART_TYPE,
+	  DASHBOARD_FORM_CHART_TYPE,
+	  DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE,
+	  DASHBOARD_POWER_CURVE_CHART_TYPE,
+	  DASHBOARD_RECOVERY_NOW_CHART_TYPE,
   DASHBOARD_SLEEP_TREND_CHART_TYPE,
 } from '../../helpers/dashboard-special-chart-types';
+import { getDashboardPowerCurveActivityTypes } from '../../helpers/dashboard-power-curve-scope.helper';
 import { SummariesComponent } from './summaries.component';
 import { DashboardTileBoardComponent } from './dashboard-tile-board/dashboard-tile-board.component';
 import { DashboardTileCellComponent } from './dashboard-tile-cell/dashboard-tile-cell.component';
@@ -590,7 +592,7 @@ describe('SummariesComponent', () => {
     expect(buildDashboardTileViewModelsSpy.mock.calls[0][0]).not.toHaveProperty('dashboardDateRange');
   });
 
-  it('should subscribe per custom and map tile using the event owner, not derived tiles', async () => {
+  it('should subscribe per custom, map, and event-backed curated tile using the event owner, not derived tiles', async () => {
     const nowMs = Date.UTC(2026, 3, 30, 12, 0, 0);
     vi.useFakeTimers();
     vi.setSystemTime(new Date(nowMs));
@@ -655,6 +657,17 @@ describe('SummariesComponent', () => {
               dataCategoryType: ChartDataCategoryTypes.DateType,
               size: { columns: 1, rows: 1 },
             },
+            {
+              type: TileTypes.Chart,
+              order: 6,
+              chartType: DASHBOARD_POWER_CURVE_CHART_TYPE,
+              name: 'Cycling Power Curve',
+              dataType: 'Training Stress Score',
+              dataValueType: ChartDataValueTypes.Total,
+              dataCategoryType: ChartDataCategoryTypes.DateType,
+              size: { columns: 1, rows: 1 },
+              eventFilters: { range: '1y', activityTypes: getDashboardPowerCurveActivityTypes('cycling') },
+            },
           ],
         },
       },
@@ -676,14 +689,18 @@ describe('SummariesComponent', () => {
       } as any,
     });
 
-    expect(mockEventService.getEventsBy).toHaveBeenCalledTimes(2);
-    expect(mockEventService.getEventsBy.mock.calls.map(call => call[0].uid)).toEqual(['event-owner', 'event-owner']);
+    expect(mockEventService.getEventsBy).toHaveBeenCalledTimes(3);
+    expect(mockEventService.getEventsBy.mock.calls.map(call => call[0].uid)).toEqual(['event-owner', 'event-owner', 'event-owner']);
     expect(mockEventService.getEventsBy.mock.calls[0][1]).toEqual([
       { fieldPath: 'startDate', opStr: '>=', value: nowMs - (90 * 24 * 60 * 60 * 1000) },
       { fieldPath: 'startDate', opStr: '<=', value: nowMs },
     ]);
     expect(mockEventService.getEventsBy.mock.calls[1][1]).toEqual([
       { fieldPath: 'startDate', opStr: '>=', value: nowMs - (30 * 24 * 60 * 60 * 1000) },
+      { fieldPath: 'startDate', opStr: '<=', value: nowMs },
+    ]);
+    expect(mockEventService.getEventsBy.mock.calls[2][1]).toEqual([
+      { fieldPath: 'startDate', opStr: '>=', value: nowMs - (365 * 24 * 60 * 60 * 1000) },
       { fieldPath: 'startDate', opStr: '<=', value: nowMs },
     ]);
   });

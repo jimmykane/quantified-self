@@ -77,7 +77,7 @@ describe('Cloud Tasks Utils', () => {
             expect(mockCloudTasksClient.queuePath).toHaveBeenCalledWith('test-project', 'test-location', 'processWorkoutTask');
             expect(mockCloudTasksClient.getQueue).toHaveBeenCalledWith({
                 name: 'projects/p/locations/l/queues/q',
-                readMask: { paths: ['stats'] }
+                readMask: { paths: ['stats', 'state'] }
             });
         });
 
@@ -92,6 +92,29 @@ describe('Cloud Tasks Utils', () => {
 
             expect(depth).toBe(17);
             expect(mockCloudTasksClient.queuePath).toHaveBeenCalledWith('test-project', 'test-location', 'processSportsLibReparseTask');
+        });
+
+        it('should return queue runtime stats with enabled state', async () => {
+            const { getCloudTaskQueueStatsForQueue } = await import('./cloud-tasks');
+
+            mockCloudTasksClient.getQueue.mockResolvedValue([
+                {
+                    stats: { tasksCount: '7' },
+                    state: 2,
+                }
+            ]);
+
+            const stats = await getCloudTaskQueueStatsForQueue('processSportsLibReparseTask');
+
+            expect(stats).toEqual({
+                pending: 7,
+                state: 'PAUSED',
+                enabled: false,
+            });
+            expect(mockCloudTasksClient.getQueue).toHaveBeenCalledWith({
+                name: 'projects/p/locations/l/queues/q',
+                readMask: { paths: ['stats', 'state'] }
+            });
         });
 
         it('should cache queue depth independently by queue id', async () => {

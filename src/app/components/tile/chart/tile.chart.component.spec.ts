@@ -30,6 +30,7 @@ import {
   DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE,
   DASHBOARD_LOAD_STATUS_KPI_CHART_TYPE,
   DASHBOARD_MONOTONY_STRAIN_KPI_CHART_TYPE,
+  DASHBOARD_POWER_CURVE_CHART_TYPE,
   DASHBOARD_RAMP_RATE_KPI_CHART_TYPE,
   DASHBOARD_RECOVERY_DEBT_KPI_CHART_TYPE,
   DASHBOARD_RECOVERY_NOW_CHART_TYPE,
@@ -85,6 +86,7 @@ class MockTileChartActionsComponent {
 class MockDashboardTileEventFiltersComponent {
   @Input() eventFilters: any;
   @Input() canNavigateNewer = false;
+  @Input() showActivityFilter = true;
   @Output() rangeChange = new EventEmitter<any>();
   @Output() activityTypesChange = new EventEmitter<any>();
   @Output() navigate = new EventEmitter<any>();
@@ -261,6 +263,21 @@ class MockSleepTrendChartComponent {
 }
 
 @Component({
+  selector: 'app-power-curve-chart',
+  template: '',
+  standalone: false
+})
+class MockPowerCurveChartComponent {
+  @Input() isLoading = false;
+  @Input() darkTheme = false;
+  @Input() title = '';
+  @Input() powerCurve: any;
+  @Input() infoTooltip?: string | null;
+  @Input() reserveTitleActionSpace = false;
+  @Input() mobileTapFeedbackOptions?: unknown;
+}
+
+@Component({
   selector: 'app-event-intensity-zones',
   template: '',
   standalone: false
@@ -293,6 +310,7 @@ describe('TileChartComponent', () => {
         MockIntensityDistributionChartComponent,
         MockEfficiencyTrendChartComponent,
         MockSleepTrendChartComponent,
+        MockPowerCurveChartComponent,
         MockEventIntensityZonesComponent,
       ],
       schemas: [NO_ERRORS_SCHEMA]
@@ -367,6 +385,11 @@ describe('TileChartComponent', () => {
   const getSleepTrendComponent = (): MockSleepTrendChartComponent => {
     const debugElement = fixture.debugElement.query(By.directive(MockSleepTrendChartComponent));
     return debugElement.componentInstance as MockSleepTrendChartComponent;
+  };
+
+  const getPowerCurveComponent = (): MockPowerCurveChartComponent => {
+    const debugElement = fixture.debugElement.query(By.directive(MockPowerCurveChartComponent));
+    return debugElement.componentInstance as MockPowerCurveChartComponent;
   };
 
   it('should set vertical=false for LinesHorizontal', () => {
@@ -501,6 +524,7 @@ describe('TileChartComponent', () => {
     const filters = getEventFiltersComponent();
     expect(filters.eventFilters).toEqual(component.eventFilters);
     expect(filters.canNavigateNewer).toBe(true);
+    expect(filters.showActivityFilter).toBe(true);
 
     filters.rangeChange.emit('30d');
     filters.activityTypesChange.emit([ActivityTypes.Running]);
@@ -509,6 +533,32 @@ describe('TileChartComponent', () => {
     expect(ranges).toEqual(['30d']);
     expect(activitySelections).toEqual([[ActivityTypes.Running]]);
     expect(directions).toEqual(['older']);
+  });
+
+  it('should render Power Curve as an event-backed curated tile without the generic activity filter', () => {
+    const powerCurve = {
+      eventCount: 1,
+      series: [],
+      summaryPoints: [],
+      latestEventID: 'event-1',
+      latestEventStartMs: Date.now(),
+    };
+    component.chartType = DASHBOARD_POWER_CURVE_CHART_TYPE as any;
+    component.tileName = 'Running Power Curve';
+    component.powerCurve = powerCurve as any;
+    component.showActions = true;
+    component.eventFilters = { range: '1y', activityTypes: [] };
+
+    fixture.detectChanges();
+
+    const chart = getPowerCurveComponent();
+    expect(chart.title).toBe('Running Power Curve');
+    expect(chart.powerCurve).toBe(powerCurve);
+    expect(chart.infoTooltip).toContain('Power Curve compares');
+    expect(chart.reserveTitleActionSpace).toBe(true);
+    const filters = getEventFiltersComponent();
+    expect(filters.eventFilters).toEqual(component.eventFilters);
+    expect(filters.showActivityFilter).toBe(false);
   });
 
   it('should offset chart loading shades when top header controls are shown', () => {

@@ -4,6 +4,7 @@
     @if (showEventFilters) {
     <app-dashboard-tile-event-filters class="tile-event-filter-controls" [eventFilters]="eventFilters"
       [canNavigateNewer]="canNavigateTileEventsNewer"
+      [showActivityFilter]="showEventActivityFilter"
       (rangeChange)="eventFilterRangeChange.emit($event)"
       (activityTypesChange)="eventFilterActivityTypesChange.emit($event)"
       (navigate)="eventFilterNavigate.emit($event)">
@@ -137,6 +138,13 @@
     [infoTooltip]="chartInfoTooltip" [reserveTitleActionSpace]="showHeaderControls"
     [mobileTapFeedbackOptions]="dashboardMobileTapFeedbackOptions">
   </app-sleep-trend-chart>
+  }
+  @if (chartType === powerCurveChartType) {
+  <app-power-curve-chart [isLoading]="isLoading || isTileActionSaving" [darkTheme]="darkTheme"
+    [title]="tileName || 'Power Curve'"
+    [powerCurve]="powerCurve" [infoTooltip]="chartInfoTooltip" [reserveTitleActionSpace]="showHeaderControls"
+    [mobileTapFeedbackOptions]="dashboardMobileTapFeedbackOptions">
+  </app-power-curve-chart>
   }
   @if (chartType === chartTypes.LinesHorizontal
   || chartType === chartTypes.LinesVertical) {

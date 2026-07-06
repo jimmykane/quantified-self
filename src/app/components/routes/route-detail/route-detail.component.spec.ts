@@ -513,6 +513,56 @@ describe('RouteDetailComponent', () => {
     expect(component.sendingToService()).toBe(false);
   });
 
+  it('labels an already-sent Suunto route as an updated copy on the detail page', () => {
+    component.routeDocument.set({
+      ...routeDocument,
+      syncedDestinationServiceNames: [ServiceNames.SuuntoApp],
+      deliverySummaries: [{
+        serviceName: ServiceNames.SuuntoApp,
+        providerUserIds: ['suunto-user-1'],
+        latestProviderUserId: 'suunto-user-1',
+      }],
+    });
+
+    expect(component.suuntoRouteSendMenuLabel()).toBe('Send updated copy to Suunto');
+  });
+
+  it('confirms before resending a detail route that was already sent to Suunto', async () => {
+    component.routeDocument.set({
+      ...routeDocument,
+      syncedDestinationServiceNames: [ServiceNames.SuuntoApp],
+    });
+    dialogMock.open.mockReturnValueOnce({ afterClosed: () => of(false) });
+
+    await component.sendRouteToSuunto();
+
+    expect(dialogMock.open).toHaveBeenCalledWith(ConfirmationDialogComponent, expect.objectContaining({
+      data: expect.objectContaining({
+        title: 'Send updated copy to Suunto?',
+        confirmLabel: 'Send copy',
+      }),
+    }));
+    expect(routeSendServiceMock.sendRoutesToService).not.toHaveBeenCalled();
+    expect(component.sendingToService()).toBe(false);
+  });
+
+  it('sends an updated Suunto copy from the detail page after confirmation', async () => {
+    component.routeDocument.set({
+      ...routeDocument,
+      deliverySummaries: [{
+        serviceName: ServiceNames.SuuntoApp,
+        providerUserIds: ['suunto-user-1'],
+        latestProviderUserId: 'suunto-user-1',
+      }],
+    });
+
+    await component.sendRouteToSuunto();
+
+    expect(routeSendServiceMock.sendRoutesToService).toHaveBeenCalledWith(['route-1'], ServiceNames.SuuntoApp);
+    expect(snackBarMock.open).toHaveBeenCalledWith('Route copy sent to Suunto.', undefined, { duration: 2500 });
+    expect(component.sendingToService()).toBe(false);
+  });
+
   it('sends the owner route to Garmin from the detail page action when Garmin route delivery is ready', async () => {
     garminRouteSendContext$.next({
       connected: true,

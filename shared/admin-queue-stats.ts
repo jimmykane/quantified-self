@@ -29,6 +29,8 @@ export interface DLQStats {
 export interface CloudTaskQueueStats {
     queueId: string;
     pending: number;
+    state?: 'RUNNING' | 'PAUSED' | 'DISABLED' | 'UNKNOWN';
+    enabled?: boolean | null;
 }
 
 export interface CloudTaskQueueBreakdown {

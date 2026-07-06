@@ -1,14 +1,13 @@
 import { inject, Injectable, OnDestroy } from '@angular/core';
-import { EventInterface } from '@sports-alliance/sports-lib';
+import { ActivityTypes, DataActivityTypes, EventInterface } from '@sports-alliance/sports-lib';
 import { EventImporterJSON } from '@sports-alliance/sports-lib';
 import { combineLatest, from, Observable, of, throwError, zip } from 'rxjs';
-import { Firestore, collection, query, orderBy, where, limit, startAfter, endBefore, collectionData, onSnapshot, doc, docData, getDoc, getDocs, getDocsFromCache, updateDoc, deleteDoc, writeBatch, DocumentSnapshot, QueryDocumentSnapshot, Query, QuerySnapshot, DocumentData, getCountFromServer, documentId } from 'app/firebase/firestore';
+import { Firestore, collection, query, orderBy, where, limit, startAfter, endBefore, collectionData, onSnapshot, doc, docData, getDoc, getDocs, getDocsFromCache, updateDoc, deleteDoc, writeBatch, DocumentSnapshot, QueryDocumentSnapshot, Query, QuerySnapshot, DocumentData, getCountFromServer, documentId, FieldPath } from 'app/firebase/firestore';
 import { catchError, map, switchMap, take, distinctUntilChanged, tap } from 'rxjs/operators';
 import { EventJSONInterface } from '@sports-alliance/sports-lib';
 import { ActivityJSONInterface } from '@sports-alliance/sports-lib';
 import { ActivityInterface } from '@sports-alliance/sports-lib';
 import { User } from '@sports-alliance/sports-lib';
-import { AppUserUtilities } from '../utils/app.user.utilities';
 import { AppWindowService } from './app.window.service';
 import {
   EventMetaDataInterface,
@@ -17,6 +16,7 @@ import {
 import { EventExporterGPX } from '@sports-alliance/sports-lib';
 
 import { sanitizeActivityFirestoreWritePayload, sanitizeEventFirestoreWritePayload } from '@shared/firestore-write-sanitizer';
+import { POWER_CURVE_STAT_TYPE } from '@shared/power-curve';
 import { createParsingOptions } from '@shared/parsing-options';
 import { EventImporterSuuntoJSON } from '@sports-alliance/sports-lib';
 import { EventImporterFIT } from '@sports-alliance/sports-lib';
@@ -118,6 +118,7 @@ export class AppEventService implements OnDestroy {
   private static readonly DEDUPE_TTL_MS = 6 * 60 * 60 * 1000;
   private static readonly SANITIZER_EVENT_TTL_MS = 30 * 60 * 1000;
   private static readonly EVENT_QUERY_SEED_TTL_MS = 30 * 1000;
+  private static readonly FIRESTORE_ARRAY_CONTAINS_ANY_MAX = 10;
   private static readonly FIRESTORE_IN_QUERY_MAX_IDS = 30;
   private static readonly DEDUPE_UNKNOWN_TYPES_MAX = 500;
   private static readonly DEDUPE_SANITIZER_ISSUES_MAX = 5000;
@@ -1082,7 +1083,7 @@ export class AppEventService implements OnDestroy {
           return event;
         }
 
-        this.attachParsedStreamsToExistingActivities(event, fullEvent, streamTypes);
+        this.attachParsedStreamsToExistingActivities(event, fullEvent);
         return event;
       }),
       catchError((error) => {
@@ -1099,7 +1100,6 @@ export class AppEventService implements OnDestroy {
   private attachParsedStreamsToExistingActivities(
     event: AppEventInterface,
     parsedEvent: EventInterface,
-    streamTypes?: string[],
   ): void {
     const existingActivities = event.getActivities() || [];
     const parsedActivities = parsedEvent.getActivities() || [];
@@ -2196,6 +2196,55 @@ export class AppEventService implements OnDestroy {
 
   public hasAnyActivity(user: User): Promise<boolean> {
     return this.hasAnyEvent(user);
+  }
+
+  public watchHasAnyPowerCurveEventForActivityTypes(
+    userID: string | null | undefined,
+    activityTypes: readonly ActivityTypes[] | null | undefined,
+  ): Observable<boolean> {
+    const uid = `${userID || ''}`.trim();
+    const normalizedActivityTypes = this.normalizeActivityTypeFilter(activityTypes);
+    if (!uid || !normalizedActivityTypes.length) {
+      return of(false);
+    }
+
+    const eventsRef = collection(this.firestore, `users/${uid}/events`);
+    const activityTypeChunks = this.chunkValues(
+      normalizedActivityTypes,
+      AppEventService.FIRESTORE_ARRAY_CONTAINS_ANY_MAX,
+    );
+    const activityTypeFieldPath = new FieldPath('stats', DataActivityTypes.type);
+    const eligibilityQueries = activityTypeChunks.map(activityTypeChunk => (
+      collectionData(query(
+        eventsRef,
+        where(`stats.${POWER_CURVE_STAT_TYPE}`, '!=', null),
+        where(activityTypeFieldPath, 'array-contains-any', activityTypeChunk),
+        limit(1),
+      )) as Observable<unknown[]>
+    ).pipe(
+      map((events) => (events || []).length > 0),
+      catchError((error) => {
+        this.logger.warn('[AppEventService] Failed to watch scoped Power Curve eligibility', error);
+        return of(false);
+      }),
+    ));
+
+    return combineLatest(eligibilityQueries).pipe(
+      map(results => results.some(Boolean)),
+      distinctUntilChanged(),
+    );
+  }
+
+  private normalizeActivityTypeFilter(
+    activityTypes: readonly ActivityTypes[] | null | undefined,
+  ): ActivityTypes[] {
+    if (!Array.isArray(activityTypes)) {
+      return [];
+    }
+
+    return [...new Set(activityTypes.filter((activityType): activityType is ActivityTypes => (
+      typeof activityType === 'string' && activityType.trim().length > 0
+    )))];
   }
 
   public async getEventCountBy(

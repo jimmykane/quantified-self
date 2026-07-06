@@ -1,8 +1,15 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { CommonModule } from '@angular/common';
 import { Component, Input, NO_ERRORS_SCHEMA, SimpleChange } from '@angular/core';
 import { By } from '@angular/platform-browser';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { MatTooltip } from '@angular/material/tooltip';
+import { MatButtonModule } from '@angular/material/button';
+import { MatIconModule } from '@angular/material/icon';
+import { MatMenuModule } from '@angular/material/menu';
+import { MatDialog, MatDialogModule, MatDialogRef } from '@angular/material/dialog';
+import { BreakpointObserver, BreakpointState } from '@angular/cdk/layout';
+import { NoopAnimationsModule } from '@angular/platform-browser/animations';
+import { BehaviorSubject, of } from 'rxjs';
 import { ChartsKpiComponent } from './charts.kpi.component';
 import { AppHapticsService } from '../../../services/app.haptics.service';
 import { EChartsLoaderService } from '../../../services/echarts-loader.service';
@@ -53,6 +60,7 @@ describe('ChartsKpiComponent', () => {
     attachMobileSeriesTapFeedback: ReturnType<typeof vi.fn>;
   };
   let hapticsMock: { selection: ReturnType<typeof vi.fn> };
+  let breakpointState$: BehaviorSubject<BreakpointState>;
   let originalResizeObserver: typeof ResizeObserver | undefined;
 
   beforeEach(async () => {
@@ -79,11 +87,24 @@ describe('ChartsKpiComponent', () => {
       attachMobileSeriesTapFeedback: vi.fn(() => () => { }),
     };
     hapticsMock = { selection: vi.fn() };
+    breakpointState$ = new BehaviorSubject<BreakpointState>({
+      matches: false,
+      breakpoints: { '(max-width: 767px)': false },
+    });
 
     await TestBed.configureTestingModule({
+      imports: [
+        CommonModule,
+        MatButtonModule,
+        MatDialogModule,
+        MatIconModule,
+        MatMenuModule,
+        NoopAnimationsModule,
+      ],
       declarations: [ChartsKpiComponent, MockLoadingOverlayComponent],
       providers: [
         { provide: AppHapticsService, useValue: hapticsMock },
+        { provide: BreakpointObserver, useValue: { observe: vi.fn(() => breakpointState$.asObservable()) } },
         { provide: EChartsLoaderService, useValue: mockLoader },
         { provide: LoggerService, useValue: { error: vi.fn(), warn: vi.fn() } },
       ],
@@ -126,6 +147,10 @@ describe('ChartsKpiComponent', () => {
     expect(component.primaryValueText).toBe('1.11');
     expect(component.secondaryLabel).toBe('Acute / Chronic');
     expect(component.secondaryValueText).toBe('210 / 190');
+    expect(mockLoader.init.mock.calls[0]?.[2]).toMatchObject({
+      width: 96,
+      height: 38,
+    });
   });
 
   it('switches presentation for ramp rate', async () => {
@@ -691,31 +716,45 @@ describe('ChartsKpiComponent', () => {
     expect(tooltipHtml).not.toContain('Week of Apr 6');
   });
 
-  it('shows the info tooltip without broad row haptics when clicking the KPI layout', () => {
-    vi.useFakeTimers();
-    const tooltip = {
-      show: vi.fn(),
-      hide: vi.fn(),
-    } as unknown as MatTooltip;
+  it('renders KPI detail rows for the info menu without row-level haptics', async () => {
+    component.chartType = DASHBOARD_LOAD_STATUS_KPI_CHART_TYPE;
     component.infoTooltip = 'KPI info';
-    component.infoTooltipDirective = tooltip;
+    component.formNow = {
+      latestDayMs: Date.UTC(2026, 0, 1),
+      value: -4,
+      trend8Weeks: [],
+    };
+    component.rampRate = {
+      latestDayMs: Date.UTC(2026, 0, 1),
+      ctlToday: 62,
+      ctl7DaysAgo: 58,
+      rampRate: 4,
+      trend8Weeks: [],
+    };
+    component.fitnessCtl = {
+      latestDayMs: Date.UTC(2026, 0, 1),
+      value: 62,
+      trend8Weeks: [],
+    };
+    component.fatigueAtl = {
+      latestDayMs: Date.UTC(2026, 0, 1),
+      value: 66,
+      trend8Weeks: [],
+    };
 
-    component.onKpiLayoutClick(new MouseEvent('click'));
+    fixture.detectChanges();
+    await fixture.whenStable();
 
-    expect((tooltip.show as any)).toHaveBeenCalledWith(0);
+    expect(component.hasKpiDetails).toBe(true);
+    expect(component.kpiDetailsRows).toContainEqual({ label: 'Current label', value: 'Building' });
+    expect(component.kpiDetailsRows).toContainEqual({ label: 'Reason', value: 'Productive load' });
+    expect(component.kpiDetailsRows).toContainEqual({ label: 'Fitness (CTL)', value: '62' });
     expect(hapticsMock.selection).not.toHaveBeenCalled();
-    vi.advanceTimersByTime(2200);
-    expect((tooltip.hide as any)).toHaveBeenCalledWith(0);
-    vi.useRealTimers();
   });
 
   it('triggers haptics when info button is clicked', () => {
     const stopPropagation = vi.fn();
     component.infoTooltip = 'KPI info';
-    component.infoTooltipDirective = {
-      show: vi.fn(),
-      hide: vi.fn(),
-    } as unknown as MatTooltip;
 
     component.onInfoButtonClick({ stopPropagation } as unknown as MouseEvent);
 
@@ -723,12 +762,50 @@ describe('ChartsKpiComponent', () => {
     expect(hapticsMock.selection).toHaveBeenCalledTimes(1);
   });
 
+  it('opens KPI details in a centered dialog on mobile viewport', async () => {
+    breakpointState$.next({
+      matches: true,
+      breakpoints: { '(max-width: 767px)': true },
+    });
+    component.infoTooltip = 'KPI info';
+    component.hasKpiDetails = true;
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    const dialog = TestBed.inject(MatDialog);
+    const dialogRefStub = {
+      afterClosed: () => of(undefined),
+      close: vi.fn(),
+    } as Partial<MatDialogRef<unknown>> as MatDialogRef<unknown>;
+    const openSpy = vi.spyOn(dialog, 'open').mockReturnValue({
+      ...dialogRefStub,
+    });
+
+    const infoButton = fixture.debugElement.query(By.css('.title-info-button')).nativeElement as HTMLButtonElement;
+    infoButton.click();
+
+    expect(openSpy).toHaveBeenCalledTimes(1);
+    expect(openSpy).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        ariaLabel: 'KPI details',
+        autoFocus: false,
+        maxWidth: '340px',
+        restoreFocus: true,
+        width: 'calc(100vw - 32px)',
+      }),
+    );
+    expect(hapticsMock.selection).toHaveBeenCalledTimes(1);
+  });
+
   it('renders thinner sparkline with chart-type color accents', async () => {
+    const pointTime = Date.UTC(2025, 11, 1);
+    const xAxisPaddingMs = 3.5 * 24 * 60 * 60 * 1000;
     component.chartType = DASHBOARD_HARD_PERCENT_KPI_CHART_TYPE;
     component.hardPercent = {
       latestWeekStartMs: Date.UTC(2026, 0, 1),
       value: 14.3,
-      trend8Weeks: [{ time: Date.UTC(2025, 11, 1), value: 12.2 }],
+      trend8Weeks: [{ time: pointTime, value: 12.2 }],
     };
 
     fixture.detectChanges();
@@ -743,9 +820,14 @@ describe('ChartsKpiComponent', () => {
     )) as Record<string, any> | undefined;
 
     expect(option).toBeTruthy();
+    expect(option?.xAxis?.min).toBe(pointTime - xAxisPaddingMs);
+    expect(option?.xAxis?.max).toBe(pointTime + xAxisPaddingMs);
     expect(option?.series?.[0]?.lineStyle?.width).toBe(1);
     expect(option?.series?.[0]?.lineStyle?.color).toBe('#e65100');
     expect(option?.series?.[0]?.areaStyle?.color?.type).toBe('linear');
+    expect(option?.series?.[0]?.showSymbol).toBe(true);
+    expect(option?.series?.[0]?.symbol).toBe('circle');
+    expect(option?.series?.[0]?.symbolSize).toBe(4);
   });
 
   it('adds a below-zero band and zero guide line when sparkline includes negative values', async () => {

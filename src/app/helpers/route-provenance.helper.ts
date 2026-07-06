@@ -37,6 +37,16 @@ function getNormalizedDeliverySummaries(route: FirestoreRouteJSON | null | undef
         .filter(summary => normalizeNonEmptyString(summary.serviceName) !== null);
 }
 
+function getNormalizedSyncedDestinationServiceNames(route: FirestoreRouteJSON | null | undefined): string[] {
+    if (!Array.isArray(route?.syncedDestinationServiceNames)) {
+        return [];
+    }
+
+    return route.syncedDestinationServiceNames
+        .map(serviceName => normalizeNonEmptyString(serviceName))
+        .filter((serviceName): serviceName is string => serviceName !== null);
+}
+
 function normalizeRouteServiceName(serviceName: string | null | undefined): ServiceNames | null {
     switch (serviceName) {
         case ServiceNames.SuuntoApp:
@@ -97,14 +107,8 @@ export function getRouteSyncedDestinationLabels(route: FirestoreRouteJSON | null
 }
 
 export function getRouteSyncedDestinationSummaries(route: FirestoreRouteJSON | null | undefined): RouteProvenanceServiceSummary[] {
-    if (!Array.isArray(route?.syncedDestinationServiceNames)) {
-        return [];
-    }
-
     return Array.from(new Set(
-        route.syncedDestinationServiceNames
-            .map(serviceName => normalizeNonEmptyString(serviceName))
-            .filter((serviceName): serviceName is string => serviceName !== null),
+        getNormalizedSyncedDestinationServiceNames(route),
     )).map(serviceName => {
         const normalizedServiceName = normalizeRouteServiceName(serviceName);
         const presentation = buildDestinationProviderPresentation(normalizedServiceName);
@@ -143,6 +147,25 @@ export function getRouteLatestDeliveryProviderUserId(
         : [];
 
     return providerUserIds[0] || null;
+}
+
+export function hasRouteDeliveryForService(
+    route: FirestoreRouteJSON | null | undefined,
+    serviceName: ServiceNames | string,
+): boolean {
+    const normalizedServiceName = normalizeNonEmptyString(serviceName);
+    if (!normalizedServiceName) {
+        return false;
+    }
+
+    return getRouteDeliverySummaryForService(route, normalizedServiceName) !== null
+        || getNormalizedSyncedDestinationServiceNames(route).includes(normalizedServiceName);
+}
+
+export function getSuuntoRouteSendMenuLabel(route: FirestoreRouteJSON | null | undefined): string {
+    return hasRouteDeliveryForService(route, ServiceNames.SuuntoApp)
+        ? 'Send updated copy to Suunto'
+        : 'Suunto';
 }
 
 function getGarminProviderState(

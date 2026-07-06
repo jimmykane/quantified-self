@@ -18,8 +18,10 @@
   </button>
   }
 
+  @if (showActivityFilter) {
   <app-activity-types-filter-menu class="tile-event-activity-filter" [selectedActivityTypes]="selectedActivityTypes"
     [disabled]="disabled" ariaLabel="Filter tile activities"
     (selectedActivityTypesChange)="onActivityTypesChange($event)">
   </app-activity-types-filter-menu>
+  }
 </nav>

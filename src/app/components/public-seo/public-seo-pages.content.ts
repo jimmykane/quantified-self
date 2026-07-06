@@ -451,10 +451,10 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     path: PUBLIC_FEATURE_PATHS.routeFiles,
     eyebrow: 'Route Files',
     title: 'FIT, GPX Route Files, Suunto Route Sync, and Garmin Course Send',
-    description: `Save FIT course files and GPX route files in a private route library, send saved routes to Suunto or Garmin Connect, import Suunto routes into Routes, and use free-plan storage for up to ${STARTER_ROUTE_LIMIT} saved routes.`,
+    description: `Save FIT course files and GPX route or track files in a private route library, send saved routes to Suunto or Garmin Connect, import Suunto routes into Routes, and use free-plan storage for up to ${STARTER_ROUTE_LIMIT} saved routes.`,
     h1: 'Save FIT and GPX route files, then send them to Suunto or Garmin Connect',
-    intro: `Upload route-only FIT course files or GPX route files, keep the original file attached, send saved routes to Suunto or Garmin Connect, and import new or existing Suunto routes into a private dashboard. Saved-route storage is free for up to ${STARTER_ROUTE_LIMIT} routes; Suunto route sync requires a connected Suunto account, and Garmin route delivery requires a connected Garmin account with COURSE_IMPORT.`,
-    chips: ['FIT course files', 'GPX route files', 'Suunto route sync', 'Garmin course send', 'Saved routes', 'Original files'],
+    intro: `Upload route-only FIT course files or GPX route/track files, keep the original file attached, send saved routes to Suunto or Garmin Connect, and import new or existing Suunto routes into a private dashboard. Saved-route storage is free for up to ${STARTER_ROUTE_LIMIT} routes; Suunto route sync requires a connected Suunto account, and Garmin route delivery requires a connected Garmin account with COURSE_IMPORT.`,
+    chips: ['FIT course files', 'GPX route/track files', 'Suunto route sync', 'Garmin course send', 'Saved routes', 'Original files'],
     actions: [
       routeAction('Start Free', '/login', 'flat', 'arrow_forward'),
       routeAction('Garmin Integration', '/integrations/garmin', 'stroked', 'route'),
@@ -475,7 +475,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
           {
             icon: 'description',
             title: 'Original file retention',
-            copy: 'Keep the uploaded FIT course or GPX route file attached to the saved route so it can be downloaded later.',
+            copy: 'Keep the uploaded FIT course or GPX route/track file attached to the saved route so it can be downloaded later.',
           },
           {
             icon: 'inventory_2',
@@ -518,8 +518,8 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
           },
           {
             icon: 'map',
-            title: 'GPX route support',
-            copy: 'Upload GPX route files and preserve route points, route summaries, waypoints, and source filename context.',
+            title: 'GPX route and track support',
+            copy: 'Upload GPX files with route points or track geometry and preserve route summaries, waypoints, and source filename context.',
           },
           {
             icon: 'download',
@@ -535,8 +535,8 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
         answer: 'Yes. Quantified Self supports route-only FIT uploads for saved route records when the file parses as a route or course instead of a completed activity.',
       },
       {
-        question: 'Can I upload GPX route files?',
-        answer: 'Yes. GPX route files can be uploaded to Routes, where Quantified Self stores route summaries and keeps the original GPX file available for download.',
+        question: 'Can I upload GPX route or track files?',
+        answer: 'Yes. GPX files with route points or track geometry can be uploaded to Routes, where Quantified Self stores route summaries and keeps the original GPX file available for download.',
       },
       {
         question: 'Can I send saved routes to Suunto?',

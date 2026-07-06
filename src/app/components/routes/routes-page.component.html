@@ -154,7 +154,7 @@
               [disabled]="bulkActionInProgress() || sendingToServiceRouteID() !== null || !canSendRoutesToSuunto() || selectedSendableRouteCount() === 0"
               (click)="$event.preventDefault(); $event.stopPropagation(); sendSelectedRoutesToSuunto()">
               <mat-icon>cloud_upload</mat-icon>
-              <span>Suunto</span>
+              <span>{{ selectedSuuntoSendMenuLabel() }}</span>
             </button>
             }
             @if (selectedSendableRoutesToGarminCount() > 0 || canSendRoutesToGarmin()) {
@@ -505,7 +505,7 @@
               [disabled]="bulkActionInProgress() || sendingToServiceRouteID() !== null || !canSendRoutesToSuunto() || !item.canSendToSuunto"
               (click)="sendRouteToSuunto(item.route)">
               <mat-icon>cloud_upload</mat-icon>
-              <span>Suunto</span>
+              <span>{{ item.suuntoSendMenuLabel }}</span>
             </button>
             }
             @if (item.canSendToGarmin || canSendRoutesToGarmin() || item.garminSendDisabledReason) {

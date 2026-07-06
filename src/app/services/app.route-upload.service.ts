@@ -37,7 +37,7 @@ function mapFallbackRouteUploadErrorMessage(statusCode: number): string {
         return 'Route upload is not authorized. Please sign in again.';
     }
     if (statusCode === 400) {
-        return 'Could not read this route file. Upload a FIT course/route or GPX route file and try again.';
+        return 'Could not read this route file. Upload a FIT course/route or GPX route/track file and try again.';
     }
     return `Route upload failed (${statusCode}).`;
 }

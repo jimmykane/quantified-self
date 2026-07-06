@@ -9,6 +9,7 @@ import {
     mockEnqueueSportsLibReparseHeavyTask,
     mockGetAll,
     mockGetCloudTaskQueueDepthForQueue,
+    mockGetCloudTaskQueueStatsForQueue,
     mockRecursiveDelete,
     mockRunTransaction,
     mockTransactionGet,
@@ -24,11 +25,31 @@ function createUserDeletionGuardCollectionMock(collectionName: string) {
     return null;
 }
 
+function expectedQueueStats(
+    queueId: string,
+    pending: number,
+    state: 'RUNNING' | 'PAUSED' | 'DISABLED' | 'UNKNOWN' = 'RUNNING',
+    enabled: boolean | null = true
+) {
+    return {
+        queueId,
+        pending,
+        state,
+        enabled,
+    };
+}
+
 describe('getQueueStats Cloud Function', () => {
     let request: any;
 
     beforeEach(() => {
         vi.clearAllMocks();
+        mockGetCloudTaskQueueStatsForQueue.mockImplementation(async (queueId: string) => ({
+            queueId,
+            pending: await mockGetCloudTaskQueueDepthForQueue(queueId),
+            state: 'RUNNING',
+            enabled: true,
+        }));
         mockCollection.mockImplementation((collectionName: string) => {
             const mockCount = vi.fn().mockReturnValue({
                 get: vi.fn().mockResolvedValue({
@@ -284,42 +305,15 @@ describe('getQueueStats Cloud Function', () => {
         expect(result.cloudTasks).toEqual({
             pending: 66,
             queues: {
-                workout: {
-                    queueId: 'processWorkoutTask',
-                    pending: 42,
-                },
-                activitySync: {
-                    queueId: 'processActivitySyncTask',
-                    pending: 0,
-                },
-                routeDeliverySync: {
-                    queueId: 'processRouteDeliverySyncTask',
-                    pending: 0,
-                },
-                routeSync: {
-                    queueId: 'processRouteSyncTask',
-                    pending: 4,
-                },
-                sleepSync: {
-                    queueId: 'processSleepSyncTask',
-                    pending: 3,
-                },
-                sportsLibReparse: {
-                    queueId: 'processSportsLibReparseTask',
-                    pending: 8,
-                },
-                sportsLibReparseHeavy: {
-                    queueId: 'processSportsLibReparseHeavyTask',
-                    pending: 2,
-                },
-                sportsLibRouteReparse: {
-                    queueId: 'processSportsLibRouteReparseTask',
-                    pending: 1,
-                },
-                derivedMetrics: {
-                    queueId: 'processDerivedMetricsTask',
-                    pending: 6,
-                },
+                workout: expectedQueueStats('processWorkoutTask', 42),
+                activitySync: expectedQueueStats('processActivitySyncTask', 0),
+                routeDeliverySync: expectedQueueStats('processRouteDeliverySyncTask', 0),
+                routeSync: expectedQueueStats('processRouteSyncTask', 4),
+                sleepSync: expectedQueueStats('processSleepSyncTask', 3),
+                sportsLibReparse: expectedQueueStats('processSportsLibReparseTask', 8),
+                sportsLibReparseHeavy: expectedQueueStats('processSportsLibReparseHeavyTask', 2),
+                sportsLibRouteReparse: expectedQueueStats('processSportsLibRouteReparseTask', 1),
+                derivedMetrics: expectedQueueStats('processDerivedMetricsTask', 6),
             },
         });
         expect(result.routeReparse).toEqual(expect.objectContaining({
@@ -432,6 +426,36 @@ describe('getQueueStats Cloud Function', () => {
         });
     });
 
+    it('includes enabled state for reparse Cloud Tasks queues', async () => {
+        mockGetCloudTaskQueueStatsForQueue.mockImplementation(async (queueId: string) => {
+            const pending = await mockGetCloudTaskQueueDepthForQueue(queueId);
+            if (queueId === 'processSportsLibReparseTask') {
+                return expectedQueueStats(queueId, pending, 'PAUSED', false);
+            }
+            if (queueId === 'processSportsLibReparseHeavyTask') {
+                return expectedQueueStats(queueId, pending, 'DISABLED', false);
+            }
+            if (queueId === 'processSportsLibRouteReparseTask') {
+                return expectedQueueStats(queueId, pending, 'RUNNING', true);
+            }
+            return expectedQueueStats(queueId, pending);
+        });
+
+        const result = await (getQueueStats as any)(request);
+
+        expect(result.cloudTasks.queues.sportsLibReparse).toEqual(
+            expectedQueueStats('processSportsLibReparseTask', 8, 'PAUSED', false)
+        );
+        expect(result.cloudTasks.queues.sportsLibReparseHeavy).toEqual(
+            expectedQueueStats('processSportsLibReparseHeavyTask', 2, 'DISABLED', false)
+        );
+        expect(result.cloudTasks.queues.sportsLibRouteReparse).toEqual(
+            expectedQueueStats('processSportsLibRouteReparseTask', 1)
+        );
+        expect(result.reparse.queuePending).toBe(10);
+        expect(result.routeReparse.queuePending).toBe(1);
+    });
+
     it('excludes stale queued and processing coordinators from active counts', async () => {
         const nowMs = Date.now();
         mockCollection.mockImplementation((collectionName: string) => {
@@ -527,7 +551,7 @@ describe('getQueueStats Cloud Function', () => {
         });
     });
 
-    it('should handle single-queue Cloud Task depth error and return 0 for that queue', async () => {
+    it('should handle single-queue Cloud Task stats error and return safe defaults for that queue', async () => {
         mockGetCloudTaskQueueDepthForQueue
             .mockResolvedValueOnce(42)
             .mockRejectedValueOnce(new Error('Queue depth error'))
@@ -540,42 +564,15 @@ describe('getQueueStats Cloud Function', () => {
         expect(result.cloudTasks).toEqual({
             pending: 69,
             queues: {
-                workout: {
-                    queueId: 'processWorkoutTask',
-                    pending: 42,
-                },
-                activitySync: {
-                    queueId: 'processActivitySyncTask',
-                    pending: 0,
-                },
-                routeDeliverySync: {
-                    queueId: 'processRouteDeliverySyncTask',
-                    pending: 3,
-                },
-                routeSync: {
-                    queueId: 'processRouteSyncTask',
-                    pending: 8,
-                },
-                sleepSync: {
-                    queueId: 'processSleepSyncTask',
-                    pending: 2,
-                },
-                sportsLibReparse: {
-                    queueId: 'processSportsLibReparseTask',
-                    pending: 1,
-                },
-                sportsLibReparseHeavy: {
-                    queueId: 'processSportsLibReparseHeavyTask',
-                    pending: 6,
-                },
-                sportsLibRouteReparse: {
-                    queueId: 'processSportsLibRouteReparseTask',
-                    pending: 1,
-                },
-                derivedMetrics: {
-                    queueId: 'processDerivedMetricsTask',
-                    pending: 6,
-                },
+                workout: expectedQueueStats('processWorkoutTask', 42),
+                activitySync: expectedQueueStats('processActivitySyncTask', 0, 'UNKNOWN', null),
+                routeDeliverySync: expectedQueueStats('processRouteDeliverySyncTask', 3),
+                routeSync: expectedQueueStats('processRouteSyncTask', 8),
+                sleepSync: expectedQueueStats('processSleepSyncTask', 2),
+                sportsLibReparse: expectedQueueStats('processSportsLibReparseTask', 1),
+                sportsLibReparseHeavy: expectedQueueStats('processSportsLibReparseHeavyTask', 6),
+                sportsLibRouteReparse: expectedQueueStats('processSportsLibRouteReparseTask', 1),
+                derivedMetrics: expectedQueueStats('processDerivedMetricsTask', 6),
             },
         });
     });
@@ -630,10 +627,7 @@ describe('getQueueStats Cloud Function', () => {
         });
 
         const result = await (getQueueStats as any)(request);
-        expect(result.cloudTasks.queues.derivedMetrics).toEqual({
-            queueId: 'processDerivedMetricsTask',
-            pending: 6,
-        });
+        expect(result.cloudTasks.queues.derivedMetrics).toEqual(expectedQueueStats('processDerivedMetricsTask', 6));
         expect(result.derivedMetrics).toEqual({
             coordinators: {
                 idle: 0,

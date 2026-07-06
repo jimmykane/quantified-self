@@ -76,6 +76,7 @@ import {
   isDashboardMonotonyStrainKpiChartType,
   isDashboardRampRateKpiChartType,
   isDashboardRecoveryNowChartType,
+  isDashboardEventBackedSpecialChartType,
   isDashboardSpecialChartType,
 } from '../../helpers/dashboard-special-chart-types';
 import { MatDialog } from '@angular/material/dialog';
@@ -232,7 +233,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
 
   @HostListener('window:resize', ['$event'])
   @HostListener('window:orientationchange', ['$event'])
-  resizeOROrientationChange(event?) {
+  resizeOROrientationChange() {
     this.numberOfCols = this.getNumberOfColumns();
     this.rowHeight = this.getRowHeight();
     this.refreshMainGridTrailingPlaceholders();
@@ -290,7 +291,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
         month: 'long',
         day: 'numeric',
       }).format(date);
-    } catch (_error) {
+    } catch {
       return new Intl.DateTimeFormat(undefined, {
         weekday: 'long',
         year: 'numeric',
@@ -1032,14 +1033,20 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     if (tile.type === TileTypes.Map) {
       return true;
     }
-    return tile.type === TileTypes.Chart && !isDashboardSpecialChartType((tile as DashboardChartTileViewModel).chartType);
+    return tile.type === TileTypes.Chart && (
+      !isDashboardSpecialChartType((tile as DashboardChartTileViewModel).chartType)
+      || isDashboardEventBackedSpecialChartType((tile as DashboardChartTileViewModel).chartType)
+    );
   }
 
   private isEventDataSettingsTile(tile: TileSettingsInterface): boolean {
     if (tile.type === TileTypes.Map) {
       return true;
     }
-    return tile.type === TileTypes.Chart && !isDashboardSpecialChartType((tile as TileChartSettingsInterface).chartType);
+    return tile.type === TileTypes.Chart && (
+      !isDashboardSpecialChartType((tile as TileChartSettingsInterface).chartType)
+      || isDashboardEventBackedSpecialChartType((tile as TileChartSettingsInterface).chartType)
+    );
   }
 
   private isDisplaySettingsChartTile(tile: TileSettingsInterface): tile is AppDashboardChartTileSettingsInterface {

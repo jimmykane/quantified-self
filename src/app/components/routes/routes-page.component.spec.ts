@@ -1600,6 +1600,65 @@ describe('RoutesPageComponent', () => {
         expect(component.sendingToServiceRouteID()).toBeNull();
     });
 
+    it('labels Suunto resends as updated copies when a route was already sent to Suunto', async () => {
+        const suuntoDeliveredRoute: FirestoreRouteJSON = {
+            ...route,
+            syncedDestinationServiceNames: [ServiceNames.SuuntoApp],
+            deliverySummaries: [{
+                serviceName: ServiceNames.SuuntoApp,
+                providerUserIds: ['suunto-user-1'],
+                latestProviderUserId: 'suunto-user-1',
+            }],
+        };
+        routeServiceMock.getRoutes.mockReturnValueOnce(of([suuntoDeliveredRoute]));
+        await component.ngOnInit();
+        const routes = await firstValueFrom(component.routes$!);
+
+        component.toggleVisibleRouteSelection(true);
+
+        expect(routes[0].hasSuuntoDelivery).toBe(true);
+        expect(routes[0].suuntoSendMenuLabel).toBe('Send updated copy to Suunto');
+        expect(component.selectedSuuntoSendMenuLabel()).toBe('Suunto (updated copies)');
+    });
+
+    it('confirms before resending a row route that was already sent to Suunto', async () => {
+        const suuntoDeliveredRoute: FirestoreRouteJSON = {
+            ...route,
+            syncedDestinationServiceNames: [ServiceNames.SuuntoApp],
+        };
+        dialogMock.open.mockReturnValueOnce({ afterClosed: () => of(false) });
+        await component.ngOnInit();
+
+        await component.sendRouteToSuunto(suuntoDeliveredRoute);
+
+        expect(dialogMock.open).toHaveBeenCalledWith(ConfirmationDialogComponent, expect.objectContaining({
+            data: expect.objectContaining({
+                title: 'Send updated copy to Suunto?',
+                confirmLabel: 'Send copy',
+            }),
+        }));
+        expect(routeSendServiceMock.sendRoutesToService).not.toHaveBeenCalled();
+        expect(component.sendingToServiceRouteID()).toBeNull();
+    });
+
+    it('sends an updated Suunto copy after resend confirmation', async () => {
+        const suuntoDeliveredRoute: FirestoreRouteJSON = {
+            ...route,
+            deliverySummaries: [{
+                serviceName: ServiceNames.SuuntoApp,
+                providerUserIds: ['suunto-user-1'],
+                latestProviderUserId: 'suunto-user-1',
+            }],
+        };
+        await component.ngOnInit();
+
+        await component.sendRouteToSuunto(suuntoDeliveredRoute);
+
+        expect(routeSendServiceMock.sendRoutesToService).toHaveBeenCalledWith(['route-1'], ServiceNames.SuuntoApp);
+        expect(snackBarMock.open).toHaveBeenCalledWith('Route copy sent to Suunto.', undefined, { duration: 2500 });
+        expect(component.sendingToServiceRouteID()).toBeNull();
+    });
+
     it('enables Garmin as a route-send destination when Garmin route delivery is ready', async () => {
         garminRouteSendContext$.next({
             connected: true,
@@ -1851,6 +1910,29 @@ describe('RoutesPageComponent', () => {
             destinationService: ServiceNames.SuuntoApp,
         });
         expect(snackBarMock.open).toHaveBeenCalledWith('Sent 1 route to Suunto. Failed 1.', undefined, { duration: 4000 });
+        expect(component.bulkActionInProgress()).toBe(false);
+    });
+
+    it('confirms before bulk sending selected routes that were already sent to Suunto', async () => {
+        const suuntoDeliveredRoute: FirestoreRouteJSON = {
+            ...route,
+            syncedDestinationServiceNames: [ServiceNames.SuuntoApp],
+        };
+        routeServiceMock.getRoutes.mockReturnValue(of([suuntoDeliveredRoute]));
+        dialogMock.open.mockReturnValueOnce({ afterClosed: () => of(false) });
+        await component.ngOnInit();
+        await firstValueFrom(component.routes$!);
+        component.toggleVisibleRouteSelection(true);
+
+        await component.sendSelectedRoutesToSuunto();
+
+        expect(dialogMock.open).toHaveBeenCalledWith(ConfirmationDialogComponent, expect.objectContaining({
+            data: expect.objectContaining({
+                title: 'Send updated copy to Suunto?',
+                confirmLabel: 'Send copy',
+            }),
+        }));
+        expect(routeSendServiceMock.sendRoutesToService).not.toHaveBeenCalled();
         expect(component.bulkActionInProgress()).toBe(false);
     });
 

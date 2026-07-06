@@ -7,6 +7,7 @@ import {
   ChartDataValueTypes,
   ActivityTypesHelper,
   DataActivityTypes,
+  DataDuration,
   DataStartPosition,
   EventImporterJSON,
   EventJSONInterface,
@@ -17,10 +18,18 @@ import {
 import type {
   AiInsightAdvisoryResult,
   AiInsightPowerCurve,
-  AiInsightPowerCurvePoint,
   AiInsightPowerCurveSeries,
   NormalizedInsightQuery,
 } from '../../../../shared/ai-insights.types';
+import {
+  buildPowerCurveEnvelope,
+  filterPowerCurvePointsByMaxDuration,
+  normalizePowerCurvePoints,
+  POWER_CURVE_DROPPED_POINT_SAMPLE_LIMIT,
+  POWER_CURVE_STAT_TYPE,
+  type DroppedPowerCurvePointSample,
+  type PowerCurvePoint,
+} from '../../../../shared/power-curve';
 import type { FirestoreEventJSON } from '../../../../shared/app-event.interface';
 import {
   AI_INSIGHTS_TOP_RESULTS_DEFAULT,
@@ -183,18 +192,8 @@ interface FetchEventDocsResult {
   prefilterDiagnostics: FetchEventDocsPrefilterDiagnostics;
 }
 
-const POWER_CURVE_STAT_TYPE = 'PowerCurve';
-const POWER_CURVE_DROPPED_POINT_SAMPLE_LIMIT = 5;
-
-interface DroppedPowerCurvePointSample {
-  rawPointType: string;
-  durationType?: string;
-  powerType?: string;
-  wattsPerKgType?: string;
-}
-
 interface ResolvedPowerCurvePointsResult {
-  points: AiInsightPowerCurvePoint[];
+  points: PowerCurvePoint[];
   droppedPointCount: number;
   droppedPointSamples: DroppedPowerCurvePointSample[];
 }
@@ -217,23 +216,63 @@ function chunkValues<T>(values: readonly T[], chunkSize: number): T[][] {
   return chunks;
 }
 
+function addActivityPrefilterValue(values: Set<string>, value: unknown): void {
+  const stringValue = `${value ?? ''}`.trim();
+  if (stringValue.length > 0) {
+    values.add(stringValue);
+  }
+}
+
+function resolveActivityPrefilterValues(activityTypes: readonly ActivityTypes[]): string[] {
+  const canonicalActivityTypes = new Set<ActivityTypes>();
+  activityTypes.forEach((activityType) => {
+    const resolvedActivityType = ActivityTypesHelper.resolveActivityType(activityType);
+    if (resolvedActivityType) {
+      canonicalActivityTypes.add(resolvedActivityType);
+    }
+  });
+  if (!canonicalActivityTypes.size) {
+    return [];
+  }
+
+  const prefilterValues = new Set<string>();
+  canonicalActivityTypes.forEach(activityType => addActivityPrefilterValue(prefilterValues, activityType));
+  Object.entries(ActivityTypes).forEach(([enumKey, enumValue]) => {
+    const resolvedKey = ActivityTypesHelper.resolveActivityType(enumKey);
+    const resolvedValue = ActivityTypesHelper.resolveActivityType(enumValue);
+    if (
+      (resolvedKey && canonicalActivityTypes.has(resolvedKey))
+      || (resolvedValue && canonicalActivityTypes.has(resolvedValue))
+    ) {
+      addActivityPrefilterValue(prefilterValues, enumKey);
+      addActivityPrefilterValue(prefilterValues, enumValue);
+    }
+  });
+
+  return [...prefilterValues];
+}
+
 function resolveDefaultPrefilterDiagnostics(
-  activityTypes: readonly ActivityTypes[],
+  prefilterValues: readonly string[],
 ): FetchEventDocsPrefilterDiagnostics {
-  if (!activityTypes.length) {
+  if (!prefilterValues.length) {
     return { mode: 'none', chunkCount: 0, dedupedCount: 0 };
   }
-  if (activityTypes.length === 1) {
+  if (prefilterValues.length === 1) {
     return { mode: 'contains', chunkCount: 1, dedupedCount: 0 };
   }
-  if (activityTypes.length <= 10) {
+  if (prefilterValues.length <= 10) {
     return { mode: 'contains_any', chunkCount: 1, dedupedCount: 0 };
   }
   return {
     mode: 'chunked',
-    chunkCount: Math.ceil(activityTypes.length / 10),
+    chunkCount: Math.ceil(prefilterValues.length / 10),
     dedupedCount: 0,
   };
+}
+
+function resolveNoActivityPrefilterDiagnostics(): FetchEventDocsPrefilterDiagnostics {
+  return { mode: 'none', chunkCount: 0, dedupedCount: 0 };
 }
 
 function sortEventDocsByStartDateAndId(
@@ -273,17 +312,11 @@ const defaultExecuteQueryDependencies: ExecuteQueryDependencies = {
       return query;
     };
 
-    const canonicalActivityTypes = Array.from(
-      new Set(
-        activityTypes.filter((activityType): activityType is ActivityTypes => (
-          typeof activityType === 'string' && activityType.trim().length > 0
-        )),
-      ),
-    );
-    const defaultPrefilterDiagnostics = resolveDefaultPrefilterDiagnostics(canonicalActivityTypes);
+    const activityPrefilterValues = resolveActivityPrefilterValues(activityTypes);
+    const defaultPrefilterDiagnostics = resolveDefaultPrefilterDiagnostics(activityPrefilterValues);
     const activityTypeFieldPath = new FieldPath('stats', DataActivityTypes.type);
 
-    if (!canonicalActivityTypes.length) {
+    if (!activityPrefilterValues.length) {
       const snapshot = await baseQuery().get();
       return {
         docs: snapshot.docs,
@@ -291,9 +324,9 @@ const defaultExecuteQueryDependencies: ExecuteQueryDependencies = {
       };
     }
 
-    if (canonicalActivityTypes.length === 1) {
+    if (activityPrefilterValues.length === 1) {
       const snapshot = await baseQuery()
-        .where(activityTypeFieldPath, 'array-contains', canonicalActivityTypes[0])
+        .where(activityTypeFieldPath, 'array-contains', activityPrefilterValues[0])
         .get();
       return {
         docs: snapshot.docs,
@@ -301,9 +334,9 @@ const defaultExecuteQueryDependencies: ExecuteQueryDependencies = {
       };
     }
 
-    if (canonicalActivityTypes.length <= 10) {
+    if (activityPrefilterValues.length <= 10) {
       const snapshot = await baseQuery()
-        .where(activityTypeFieldPath, 'array-contains-any', canonicalActivityTypes)
+        .where(activityTypeFieldPath, 'array-contains-any', activityPrefilterValues)
         .get();
       return {
         docs: snapshot.docs,
@@ -311,7 +344,7 @@ const defaultExecuteQueryDependencies: ExecuteQueryDependencies = {
       };
     }
 
-    const activityTypeChunks = chunkValues(canonicalActivityTypes, 10);
+    const activityTypeChunks = chunkValues(activityPrefilterValues, 10);
     const chunkSnapshots = await Promise.all(
       activityTypeChunks.map(activityTypeChunk => (
         baseQuery()
@@ -688,130 +721,26 @@ function toFiniteNumber(value: unknown): number | null {
   return resolve(value, new Set<object>());
 }
 
-function describePowerCurveValueType(value: unknown): string {
-  if (value === null) {
-    return 'null';
-  }
-  if (Array.isArray(value)) {
-    return 'array';
-  }
-  if (value instanceof Date) {
-    return 'date';
-  }
-  return typeof value;
-}
-
-function pushDroppedPowerCurvePointSample(
-  samples: DroppedPowerCurvePointSample[],
-  sample: DroppedPowerCurvePointSample,
-): void {
-  if (samples.length >= POWER_CURVE_DROPPED_POINT_SAMPLE_LIMIT) {
-    return;
-  }
-  samples.push(sample);
-}
-
 function resolvePowerCurvePoints(event: EventInterface): ResolvedPowerCurvePointsResult {
   const stat = event.getStat?.(POWER_CURVE_STAT_TYPE) as { getValue?: () => unknown } | null | undefined;
   const statValue = stat?.getValue?.();
-  if (!Array.isArray(statValue)) {
-    if (statValue === null || statValue === undefined) {
-      return {
-        points: [],
-        droppedPointCount: 0,
-        droppedPointSamples: [],
-      };
-    }
-
-    return {
-      points: [],
-      droppedPointCount: 1,
-      droppedPointSamples: [{
-        rawPointType: `stat_value_${describePowerCurveValueType(statValue)}`,
-      }],
-    };
-  }
-
-  const pointsByDuration = new Map<number, AiInsightPowerCurvePoint>();
-  const droppedPointSamples: DroppedPowerCurvePointSample[] = [];
-  let droppedPointCount = 0;
-  for (const rawPoint of statValue) {
-    if (!rawPoint || typeof rawPoint !== 'object' || Array.isArray(rawPoint)) {
-      droppedPointCount += 1;
-      pushDroppedPowerCurvePointSample(droppedPointSamples, {
-        rawPointType: describePowerCurveValueType(rawPoint),
-      });
-      continue;
-    }
-
-    const point = rawPoint as { duration?: unknown; power?: unknown; wattsPerKg?: unknown };
-    const duration = toFiniteNumber(point.duration);
-    const power = toFiniteNumber(point.power);
-    const wattsPerKg = toFiniteNumber(point.wattsPerKg);
-    if (!duration || duration <= 0 || !power || power <= 0) {
-      droppedPointCount += 1;
-      pushDroppedPowerCurvePointSample(droppedPointSamples, {
-        rawPointType: 'object',
-        durationType: describePowerCurveValueType(point.duration),
-        powerType: describePowerCurveValueType(point.power),
-        wattsPerKgType: describePowerCurveValueType(point.wattsPerKg),
-      });
-      continue;
-    }
-
-    const normalizedDuration = Number(duration);
-    const normalizedPoint: AiInsightPowerCurvePoint = {
-      duration: normalizedDuration,
-      power: Number(power),
-    };
-    if (wattsPerKg && wattsPerKg > 0) {
-      normalizedPoint.wattsPerKg = Number(wattsPerKg);
-    }
-
-    const existingPoint = pointsByDuration.get(normalizedDuration);
-    if (!existingPoint || normalizedPoint.power > existingPoint.power) {
-      pointsByDuration.set(normalizedDuration, normalizedPoint);
-      continue;
-    }
-
-    if (
-      normalizedPoint.power === existingPoint.power
-      && (normalizedPoint.wattsPerKg ?? 0) > (existingPoint.wattsPerKg ?? 0)
-    ) {
-      pointsByDuration.set(normalizedDuration, normalizedPoint);
-    }
-  }
-
+  const result = normalizePowerCurvePoints(statValue);
   return {
-    points: [...pointsByDuration.values()].sort((left, right) => left.duration - right.duration),
-    droppedPointCount,
-    droppedPointSamples,
+    ...result,
+    points: filterPowerCurvePointsByMaxDuration(
+      result.points,
+      resolveEventDurationSeconds(event),
+    ),
   };
 }
 
-function buildPowerCurveEnvelope(pointsCollection: readonly AiInsightPowerCurvePoint[][]): AiInsightPowerCurvePoint[] {
-  const pointsByDuration = new Map<number, AiInsightPowerCurvePoint>();
-
-  pointsCollection.forEach((points) => {
-    points.forEach((point) => {
-      const existingPoint = pointsByDuration.get(point.duration);
-      if (!existingPoint || point.power > existingPoint.power) {
-        pointsByDuration.set(point.duration, point);
-        return;
-      }
-
-      if (
-        point.power === existingPoint.power
-        && (point.wattsPerKg ?? 0) > (existingPoint.wattsPerKg ?? 0)
-      ) {
-        pointsByDuration.set(point.duration, point);
-      }
-    });
-  });
-
-  return [...pointsByDuration.values()]
-    .sort((left, right) => left.duration - right.duration)
-    .map((point) => ({ ...point }));
+function resolveEventDurationSeconds(event: EventInterface): number | null {
+  const durationStat = (
+    (event as { getDuration?: () => { getValue?: () => unknown } | null | undefined })?.getDuration?.()
+    || event.getStat?.(DataDuration.type)
+  ) as { getValue?: () => unknown } | null | undefined;
+  const duration = toFiniteNumber(durationStat?.getValue?.());
+  return duration !== null && duration > 0 ? duration : null;
 }
 
 function resolveBucketEndDate(bucketStartDate: Date, timeInterval: TimeIntervals): Date {
@@ -932,7 +861,7 @@ function buildPowerCurve(
     : query.requestedTimeInterval;
   const bucketEntries = new Map<number, {
     time: number;
-    pointsCollection: AiInsightPowerCurvePoint[][];
+    pointsCollection: PowerCurvePoint[][];
     eventCount: number;
   }>();
 
@@ -1266,7 +1195,7 @@ export function createExecuteQuery(
       } = Array.isArray(fetchEventDocsResult)
         ? {
           docs: fetchEventDocsResult,
-          prefilterDiagnostics: resolveDefaultPrefilterDiagnostics(query.activityTypes),
+          prefilterDiagnostics: resolveNoActivityPrefilterDiagnostics(),
         }
         : fetchEventDocsResult;
 

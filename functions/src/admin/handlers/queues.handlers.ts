@@ -3,7 +3,7 @@ import * as logger from 'firebase-functions/logger';
 import * as admin from 'firebase-admin';
 import { randomUUID } from 'node:crypto';
 import { onAdminCall } from '../../shared/auth';
-import { getCloudTaskQueueDepthForQueue } from '../../utils';
+import { getCloudTaskQueueStatsForQueue } from '../../utils';
 import { GARMIN_API_WORKOUT_QUEUE_COLLECTION_NAME } from '../../garmin/constants';
 import { SUUNTOAPP_WORKOUT_QUEUE_COLLECTION_NAME } from '../../suunto/constants';
 import { COROSAPI_WORKOUT_QUEUE_COLLECTION_NAME } from '../../coros/constants';
@@ -26,6 +26,7 @@ import {
     DerivedMetricsCoordinatorStats,
     DerivedMetricsFailurePreview,
     GetQueueStatsRequest,
+    CloudTaskQueueStats,
     QueueStatsResponse,
     RetrySportsLibReparseHeavyJobRequest,
     RetrySportsLibReparseHeavyJobResponse,
@@ -85,6 +86,23 @@ function toFiniteNumberOrNull(value: unknown): number | null {
     return Number.isFinite(numericValue) ? numericValue : null;
 }
 
+async function getAdminCloudTaskQueueStats(queueId: string): Promise<CloudTaskQueueStats> {
+    try {
+        return {
+            queueId,
+            ...(await getCloudTaskQueueStatsForQueue(queueId)),
+        };
+    } catch (e) {
+        logger.error(`Error getting Cloud Task stats for queue ${queueId}:`, e);
+        return {
+            queueId,
+            pending: 0,
+            state: 'UNKNOWN',
+            enabled: null,
+        };
+    }
+}
+
 /**
  * Gets aggregated statistics for all workout queues.
  * Uses efficient Firestore count() queries.
@@ -114,55 +132,35 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
             derivedMetricsQueue,
         } = config.cloudtasks;
         const [
-            workoutCloudTaskDepth,
-            activitySyncCloudTaskDepth,
-            routeDeliverySyncCloudTaskDepth,
-            routeSyncCloudTaskDepth,
-            sleepSyncCloudTaskDepth,
-            sportsLibReparseCloudTaskDepth,
-            sportsLibReparseHeavyCloudTaskDepth,
-            sportsLibRouteReparseCloudTaskDepth,
-            derivedMetricsCloudTaskDepth,
+            workoutCloudTaskStats,
+            activitySyncCloudTaskStats,
+            routeDeliverySyncCloudTaskStats,
+            routeSyncCloudTaskStats,
+            sleepSyncCloudTaskStats,
+            sportsLibReparseCloudTaskStats,
+            sportsLibReparseHeavyCloudTaskStats,
+            sportsLibRouteReparseCloudTaskStats,
+            derivedMetricsCloudTaskStats,
         ] = await Promise.all([
-            getCloudTaskQueueDepthForQueue(workoutQueue).catch(e => {
-                logger.error(`Error getting Cloud Task depth for queue ${workoutQueue}:`, e);
-                return 0;
-            }),
-            getCloudTaskQueueDepthForQueue(activitySyncQueue).catch(e => {
-                logger.error(`Error getting Cloud Task depth for queue ${activitySyncQueue}:`, e);
-                return 0;
-            }),
-            getCloudTaskQueueDepthForQueue(routeDeliverySyncQueue).catch(e => {
-                logger.error(`Error getting Cloud Task depth for queue ${routeDeliverySyncQueue}:`, e);
-                return 0;
-            }),
-            getCloudTaskQueueDepthForQueue(routeSyncQueue).catch(e => {
-                logger.error(`Error getting Cloud Task depth for queue ${routeSyncQueue}:`, e);
-                return 0;
-            }),
-            getCloudTaskQueueDepthForQueue(sleepSyncQueue).catch(e => {
-                logger.error(`Error getting Cloud Task depth for queue ${sleepSyncQueue}:`, e);
-                return 0;
-            }),
-            getCloudTaskQueueDepthForQueue(sportsLibReparseQueue).catch(e => {
-                logger.error(`Error getting Cloud Task depth for queue ${sportsLibReparseQueue}:`, e);
-                return 0;
-            }),
-            getCloudTaskQueueDepthForQueue(sportsLibReparseHeavyQueue).catch(e => {
-                logger.error(`Error getting Cloud Task depth for queue ${sportsLibReparseHeavyQueue}:`, e);
-                return 0;
-            }),
-            getCloudTaskQueueDepthForQueue(sportsLibRouteReparseQueue).catch(e => {
-                logger.error(`Error getting Cloud Task depth for queue ${sportsLibRouteReparseQueue}:`, e);
-                return 0;
-            }),
-            getCloudTaskQueueDepthForQueue(derivedMetricsQueue).catch(e => {
-                logger.error(`Error getting Cloud Task depth for queue ${derivedMetricsQueue}:`, e);
-                return 0;
-            }),
+            getAdminCloudTaskQueueStats(workoutQueue),
+            getAdminCloudTaskQueueStats(activitySyncQueue),
+            getAdminCloudTaskQueueStats(routeDeliverySyncQueue),
+            getAdminCloudTaskQueueStats(routeSyncQueue),
+            getAdminCloudTaskQueueStats(sleepSyncQueue),
+            getAdminCloudTaskQueueStats(sportsLibReparseQueue),
+            getAdminCloudTaskQueueStats(sportsLibReparseHeavyQueue),
+            getAdminCloudTaskQueueStats(sportsLibRouteReparseQueue),
+            getAdminCloudTaskQueueStats(derivedMetricsQueue),
         ]);
-        const reparseCloudTaskDepth = sportsLibReparseCloudTaskDepth + sportsLibReparseHeavyCloudTaskDepth;
-        const totalCloudTaskDepth = workoutCloudTaskDepth + activitySyncCloudTaskDepth + routeDeliverySyncCloudTaskDepth + routeSyncCloudTaskDepth + sleepSyncCloudTaskDepth + reparseCloudTaskDepth + sportsLibRouteReparseCloudTaskDepth + derivedMetricsCloudTaskDepth;
+        const reparseCloudTaskDepth = sportsLibReparseCloudTaskStats.pending + sportsLibReparseHeavyCloudTaskStats.pending;
+        const totalCloudTaskDepth = workoutCloudTaskStats.pending
+            + activitySyncCloudTaskStats.pending
+            + routeDeliverySyncCloudTaskStats.pending
+            + routeSyncCloudTaskStats.pending
+            + sleepSyncCloudTaskStats.pending
+            + reparseCloudTaskDepth
+            + sportsLibRouteReparseCloudTaskStats.pending
+            + derivedMetricsCloudTaskStats.pending;
         const reparseJobsCollection = db.collection(SPORTS_LIB_REPARSE_JOBS_COLLECTION);
         const routeReparseJobsCollection = db.collection(SPORTS_LIB_ROUTE_REPARSE_JOBS_COLLECTION);
 
@@ -1003,42 +1001,15 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
             cloudTasks: {
                 pending: totalCloudTaskDepth,
                 queues: {
-                    workout: {
-                        queueId: workoutQueue,
-                        pending: workoutCloudTaskDepth,
-                    },
-                    activitySync: {
-                        queueId: activitySyncQueue,
-                        pending: activitySyncCloudTaskDepth,
-                    },
-                    routeDeliverySync: {
-                        queueId: routeDeliverySyncQueue,
-                        pending: routeDeliverySyncCloudTaskDepth,
-                    },
-                    routeSync: {
-                        queueId: routeSyncQueue,
-                        pending: routeSyncCloudTaskDepth,
-                    },
-                    sleepSync: {
-                        queueId: sleepSyncQueue,
-                        pending: sleepSyncCloudTaskDepth,
-                    },
-                    sportsLibReparse: {
-                        queueId: sportsLibReparseQueue,
-                        pending: sportsLibReparseCloudTaskDepth,
-                    },
-                    sportsLibReparseHeavy: {
-                        queueId: sportsLibReparseHeavyQueue,
-                        pending: sportsLibReparseHeavyCloudTaskDepth,
-                    },
-                    sportsLibRouteReparse: {
-                        queueId: sportsLibRouteReparseQueue,
-                        pending: sportsLibRouteReparseCloudTaskDepth,
-                    },
-                    derivedMetrics: {
-                        queueId: derivedMetricsQueue,
-                        pending: derivedMetricsCloudTaskDepth,
-                    },
+                    workout: workoutCloudTaskStats,
+                    activitySync: activitySyncCloudTaskStats,
+                    routeDeliverySync: routeDeliverySyncCloudTaskStats,
+                    routeSync: routeSyncCloudTaskStats,
+                    sleepSync: sleepSyncCloudTaskStats,
+                    sportsLibReparse: sportsLibReparseCloudTaskStats,
+                    sportsLibReparseHeavy: sportsLibReparseHeavyCloudTaskStats,
+                    sportsLibRouteReparse: sportsLibRouteReparseCloudTaskStats,
+                    derivedMetrics: derivedMetricsCloudTaskStats,
                 },
             },
             reparse: {
@@ -1063,7 +1034,7 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
                 recentFailures: recentReparseFailures,
             },
             routeReparse: {
-                queuePending: sportsLibRouteReparseCloudTaskDepth,
+                queuePending: sportsLibRouteReparseCloudTaskStats.pending,
                 targetSportsLibVersion: `${routeCheckpointData?.targetSportsLibVersion || SPORTS_LIB_REPARSE_TARGET_VERSION}`,
                 jobs: {
                     total: routeReparseTotalJobs?.data().count || 0,

@@ -11,6 +11,9 @@ export interface RouteParsingStreamOptionsInput {
 
 export interface RouteParsingOptionsInput {
   streams?: RouteParsingStreamOptionsInput;
+  gpx?: {
+    importTimedTracksAsRoutes?: boolean;
+  };
   generateUnitStreams?: boolean;
 }
 
@@ -22,6 +25,9 @@ export interface RouteParsingOptionsLike {
       gradeSmooth?: boolean;
     };
     includeTypes?: string[];
+  };
+  gpx: {
+    importTimedTracksAsRoutes: boolean;
   };
   generateUnitStreams: boolean;
 }
@@ -68,6 +74,11 @@ export function createRouteParsingOptions(
         gradeSmooth: overrides.streams?.smooth?.gradeSmooth ?? true,
       },
       ...(includeTypes ? { includeTypes: [...includeTypes] } : {}),
+    },
+    gpx: {
+      // Quantified Self route flows are explicit saved-route imports/reparses, so
+      // activity-style GPX track geometry is allowed to become reusable routes.
+      importTimedTracksAsRoutes: overrides.gpx?.importTimedTracksAsRoutes ?? true,
     },
     generateUnitStreams: overrides.generateUnitStreams ?? false,
   };

@@ -381,7 +381,10 @@ describe('reprocessRoute', () => {
     expect(hoisted.mockSportsLib.importRoutesFromGPX).toHaveBeenCalledWith(
       '<gpx><rte></rte></gpx>',
       expect.any(Function),
-      expect.objectContaining({ generateUnitStreams: false }),
+      expect.objectContaining({
+        generateUnitStreams: false,
+        gpx: expect.objectContaining({ importTimedTracksAsRoutes: true }),
+      }),
     );
 
     const routeSetCall = transactionSetCallForPath('users/user-1/routes/route-1');

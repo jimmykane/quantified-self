@@ -19,6 +19,7 @@ const {
     mockBigQueryQuery,
     mockGetCloudTaskQueueDepth,
     mockGetCloudTaskQueueDepthForQueue,
+    mockGetCloudTaskQueueStatsForQueue,
     mockEnqueueSportsLibReparseHeavyTask,
     mockGetAll,
     mockRecursiveDelete,
@@ -117,6 +118,12 @@ const {
         }
         return 0;
     });
+    const mockGetCloudTaskQueueStatsForQueue = vi.fn(async (queueId: string) => ({
+        queueId,
+        pending: await mockGetCloudTaskQueueDepthForQueue(queueId),
+        state: 'RUNNING',
+        enabled: true,
+    }));
 
     return {
         mockListUsers,
@@ -136,6 +143,7 @@ const {
         mockBigQueryQuery,
         mockGetCloudTaskQueueDepth,
         mockGetCloudTaskQueueDepthForQueue,
+        mockGetCloudTaskQueueStatsForQueue,
         mockEnqueueSportsLibReparseHeavyTask,
         mockGetAll,
         mockRecursiveDelete,
@@ -219,6 +227,7 @@ vi.mock('../../utils', () => ({
     ALLOWED_CORS_ORIGINS: ['*'],
     getCloudTaskQueueDepth: mockGetCloudTaskQueueDepth,
     getCloudTaskQueueDepthForQueue: mockGetCloudTaskQueueDepthForQueue,
+    getCloudTaskQueueStatsForQueue: mockGetCloudTaskQueueStatsForQueue,
     enforceAppCheck: vi.fn(),
 }));
 
@@ -261,6 +270,7 @@ export {
     mockBigQueryQuery,
     mockGetCloudTaskQueueDepth,
     mockGetCloudTaskQueueDepthForQueue,
+    mockGetCloudTaskQueueStatsForQueue,
     mockEnqueueSportsLibReparseHeavyTask,
     mockGetAll,
     mockRecursiveDelete,

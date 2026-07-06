@@ -24,6 +24,7 @@ import type {
   DashboardRampRateContext,
 } from '../../../helpers/dashboard-derived-metrics.helper';
 import type { DashboardSleepTrendContext } from '../../../helpers/dashboard-sleep-chart.helper';
+import type { DashboardPowerCurveContext } from '../../../helpers/dashboard-power-curve.helper';
 import type {
   DashboardSleepTrendNavigationDirection,
 } from '../../../helpers/dashboard-sleep-range.helper';
@@ -48,8 +49,10 @@ import {
   DASHBOARD_RECOVERY_DEBT_KPI_CHART_TYPE,
   DASHBOARD_RECOVERY_NOW_CHART_TYPE,
   DASHBOARD_SLEEP_TREND_CHART_TYPE,
+  DASHBOARD_POWER_CURVE_CHART_TYPE,
   DASHBOARD_TRAINING_BALANCE_KPI_CHART_TYPE,
   type DashboardChartType,
+  isDashboardEventBackedSpecialChartType,
   isDashboardSpecialChartType,
 } from '../../../helpers/dashboard-special-chart-types';
 import {
@@ -92,6 +95,7 @@ type DashboardRecoveryNowSnapshotStatus = DerivedMetricSnapshotStatus | 'missing
 })
 
 export class TileChartComponent extends TileAbstractDirective {
+  @Input() tileName = '';
   @Input() chartType: DashboardChartType;
   @Input() dataType: string;
   @Input() dataValueType: ChartDataValueTypes;
@@ -121,6 +125,7 @@ export class TileChartComponent extends TileAbstractDirective {
   @Input() intensityDistribution?: DashboardIntensityDistributionContext | null;
   @Input() efficiencyTrend?: DashboardEfficiencyTrendContext | null;
   @Input() sleepTrend?: DashboardSleepTrendContext | null;
+  @Input() powerCurve?: DashboardPowerCurveContext | null;
   @Input() sleepTrendRange?: AppDashboardSleepTrendRange;
   @Input() sleepTrendWindowLabel?: string | null;
   @Input() sleepTrendCanNavigateOlder = false;
@@ -184,6 +189,7 @@ export class TileChartComponent extends TileAbstractDirective {
   public intensityDistributionChartType = DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE;
   public efficiencyTrendChartType = DASHBOARD_EFFICIENCY_TREND_CHART_TYPE;
   public sleepTrendChartType = DASHBOARD_SLEEP_TREND_CHART_TYPE;
+  public powerCurveChartType = DASHBOARD_POWER_CURVE_CHART_TYPE;
   public isTileActionSaving = false;
   private selectedDerivedChartRange: AppDashboardDerivedChartRange = DASHBOARD_DERIVED_CHART_DEFAULT_RANGE as AppDashboardDerivedChartRange;
   private selectedFormTimelineWindow: AppDashboardFormTimelineWindow = DASHBOARD_FORM_TIMELINE_DEFAULT_WINDOW;
@@ -211,7 +217,14 @@ export class TileChartComponent extends TileAbstractDirective {
   }
 
   get showEventFilters(): boolean {
-    return this.chartType !== undefined && !isDashboardSpecialChartType(this.chartType);
+    return this.chartType !== undefined && (
+      !isDashboardSpecialChartType(this.chartType)
+      || isDashboardEventBackedSpecialChartType(this.chartType)
+    );
+  }
+
+  get showEventActivityFilter(): boolean {
+    return this.chartType !== this.powerCurveChartType;
   }
 
   get showDerivedRangeSelector(): boolean {

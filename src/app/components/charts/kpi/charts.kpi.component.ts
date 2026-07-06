@@ -4,14 +4,19 @@ import {
   ChangeDetectorRef,
   Component,
   ElementRef,
+  inject,
   Input,
   OnChanges,
   OnDestroy,
   SimpleChanges,
+  TemplateRef,
   ViewChild,
 } from '@angular/core';
-import { MatTooltip } from '@angular/material/tooltip';
+import { BreakpointObserver } from '@angular/cdk/layout';
+import { MatDialog, MatDialogRef } from '@angular/material/dialog';
+import { toSignal } from '@angular/core/rxjs-interop';
 import type { EChartsType } from 'echarts/core';
+import { map } from 'rxjs/operators';
 import {
   ECHARTS_CARTESIAN_IMMEDIATE_UPDATE_SETTINGS,
   EChartsHostController,
@@ -65,6 +70,10 @@ import {
   DASHBOARD_TRAINING_BALANCE_KPI_CHART_TYPE,
   type DashboardKpiChartType,
 } from '../../../helpers/dashboard-special-chart-types';
+import {
+  buildDashboardKpiExplanation,
+  type DashboardKpiExplanationRow,
+} from '../../../helpers/dashboard-kpi-explanation.helper';
 import { AppHapticsService } from '../../../services/app.haptics.service';
 import { EChartsLoaderService } from '../../../services/echarts-loader.service';
 import { LoggerService } from '../../../services/logger.service';
@@ -90,6 +99,10 @@ interface KpiSparklineStyle {
   areaOpacity: number;
 }
 
+const KPI_SPARKLINE_INIT_WIDTH_PX = 96;
+const KPI_SPARKLINE_INIT_HEIGHT_PX = 38;
+const KPI_SINGLE_POINT_X_AXIS_PADDING_MS = 3.5 * 24 * 60 * 60 * 1000;
+
 @Component({
   selector: 'app-kpi-chart',
   templateUrl: './charts.kpi.component.html',
@@ -98,6 +111,9 @@ interface KpiSparklineStyle {
   standalone: false,
 })
 export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
+  private readonly breakpointObserver = inject(BreakpointObserver);
+  private readonly dialog = inject(MatDialog);
+
   @Input() darkTheme = false;
   @Input() isLoading = false;
   @Input() chartType: DashboardKpiChartType = DASHBOARD_ACWR_KPI_CHART_TYPE;
@@ -131,10 +147,14 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
   @Input() intensityDistributionStatus?: DashboardDerivedMetricStatus | null;
 
   @ViewChild('chartDiv', { static: true }) chartDiv!: ElementRef<HTMLDivElement>;
-  @ViewChild(MatTooltip) infoTooltipDirective?: MatTooltip;
+  @ViewChild('kpiDetailsDialogTemplate') kpiDetailsDialogTemplate?: TemplateRef<unknown>;
 
   private readonly chartHost: EChartsHostController;
-  private infoTooltipHideTimeoutId: ReturnType<typeof setTimeout> | null = null;
+  private kpiDetailsDialogRef?: MatDialogRef<unknown>;
+  public readonly useKpiDetailsDialog = toSignal(
+    this.breakpointObserver.observe('(max-width: 767px)').pipe(map(state => state.matches)),
+    { initialValue: false },
+  );
 
   public title = 'ACWR';
   public titleDisplay = 'ACWR';
@@ -148,6 +168,10 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
   public noDataErrorMessage = 'No KPI data yet';
   public noDataErrorHint = 'Upload activities with training load to calculate this metric.';
   public noDataErrorIcon = 'insights';
+  public kpiDetailsDescription = '';
+  public kpiDetailsRows: DashboardKpiExplanationRow[] = [];
+  public kpiDetailsMissingHint = '';
+  public hasKpiDetails = false;
 
   constructor(
     private eChartsLoader: EChartsLoaderService,
@@ -159,6 +183,10 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
       eChartsLoader: this.eChartsLoader,
       logger: this.logger,
       logPrefix: '[ChartsKpiComponent]',
+      initOptions: {
+        width: KPI_SPARKLINE_INIT_WIDTH_PX,
+        height: KPI_SPARKLINE_INIT_HEIGHT_PX,
+      },
       mobileTapFeedbackOptions: () => this.mobileTapFeedbackOptions,
     });
   }
@@ -215,25 +243,38 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
   }
 
   ngOnDestroy(): void {
-    this.clearInfoTooltipTimer();
+    this.kpiDetailsDialogRef?.close();
     this.chartHost.dispose();
-  }
-
-  onKpiLayoutClick(event: MouseEvent): void {
-    if (!this.infoTooltip) {
-      return;
-    }
-    const target = event.target as HTMLElement | null;
-    if (target?.closest('.title-info-button')) {
-      return;
-    }
-    this.showInfoTooltip();
   }
 
   onInfoButtonClick(event: MouseEvent): void {
     event.stopPropagation();
     this.hapticsService.selection();
-    this.showInfoTooltip();
+  }
+
+  openKpiDetailsDialog(event: MouseEvent): void {
+    event.stopPropagation();
+    this.hapticsService.selection();
+    if (!this.kpiDetailsDialogTemplate) {
+      return;
+    }
+    if (this.kpiDetailsDialogRef) {
+      return;
+    }
+
+    const dialogRef = this.dialog.open(this.kpiDetailsDialogTemplate, {
+      ariaLabel: 'KPI details',
+      autoFocus: false,
+      maxWidth: '340px',
+      restoreFocus: true,
+      width: 'calc(100vw - 32px)',
+    });
+    this.kpiDetailsDialogRef = dialogRef;
+    dialogRef.afterClosed().subscribe(() => {
+      if (this.kpiDetailsDialogRef === dialogRef) {
+        this.kpiDetailsDialogRef = undefined;
+      }
+    });
   }
 
   private async refreshChart(): Promise<void> {
@@ -249,7 +290,7 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
     const option = this.buildOption(presentation);
     this.chartHost.hideTooltip();
     this.chartHost.setOption(option, ECHARTS_CARTESIAN_IMMEDIATE_UPDATE_SETTINGS);
-    this.chartHost.scheduleResize();
+    this.schedulePostLayoutResize();
   }
 
   private updatePresentationAndOverlay(): KpiPresentation {
@@ -266,6 +307,30 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
       && typeof presentation.primaryValueText === 'string'
       && presentation.primaryValueText.trim().length > 0;
     this.secondaryValueText = presentation.secondaryValueText || '';
+    const activeStatus = this.resolveActiveStatus();
+    const details = buildDashboardKpiExplanation({
+      chartType: this.chartType,
+      primaryValueText: this.primaryValueText,
+      primaryLabel: this.primaryLabel,
+      secondaryValueText: this.secondaryValueText,
+      status: activeStatus,
+      acwr: this.acwr,
+      rampRate: this.rampRate,
+      monotonyStrain: this.monotonyStrain,
+      formNow: this.formNow,
+      fitnessCtl: this.fitnessCtl,
+      fatigueAtl: this.fatigueAtl,
+      formPlus7d: this.formPlus7d,
+      easyPercent: this.easyPercent,
+      hardPercent: this.hardPercent,
+      efficiencyDelta4w: this.efficiencyDelta4w,
+      freshnessForecast: this.freshnessForecast,
+      intensityDistribution: this.intensityDistribution,
+    }, (value, options) => this.formatPrimaryValue(value, options));
+    this.kpiDetailsDescription = details.description;
+    this.kpiDetailsRows = details.rows;
+    this.kpiDetailsMissingHint = details.missingHint;
+    this.hasKpiDetails = !!this.infoTooltip || !!this.kpiDetailsDescription || this.kpiDetailsRows.length > 0;
 
     const hasRenderableValue = presentation.primaryValue !== null || !!presentation.primaryValueText;
     this.showNoDataError = false;
@@ -275,13 +340,14 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
     this.noDataErrorIcon = 'insights';
 
     if (!hasRenderableValue) {
-      const isPending = isDerivedMetricPendingStatus(this.resolveActiveStatus());
+      const isPending = isDerivedMetricPendingStatus(activeStatus);
       this.kpiNoDataState = isPending ? 'pending' : 'missing';
       this.primaryValueText = '--';
       this.primaryValueIsText = false;
       this.primaryLabel = isPending ? 'Updating metrics' : 'Needs training load';
       this.secondaryLabel = '';
       this.secondaryValueText = '';
+      this.noDataErrorHint = this.kpiDetailsMissingHint || this.noDataErrorHint;
       if (isPending) {
         this.noDataErrorMessage = 'Updating KPI data';
         this.noDataErrorHint = 'Training metrics are being recalculated in the background.';
@@ -783,26 +849,6 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
     return this.title;
   }
 
-  private showInfoTooltip(): void {
-    if (!this.infoTooltipDirective || !this.infoTooltip) {
-      return;
-    }
-    this.infoTooltipDirective.show(0);
-    this.clearInfoTooltipTimer();
-    this.infoTooltipHideTimeoutId = setTimeout(() => {
-      this.infoTooltipDirective?.hide(0);
-      this.infoTooltipHideTimeoutId = null;
-    }, 2200);
-  }
-
-  private clearInfoTooltipTimer(): void {
-    if (this.infoTooltipHideTimeoutId === null) {
-      return;
-    }
-    clearTimeout(this.infoTooltipHideTimeoutId);
-    this.infoTooltipHideTimeoutId = null;
-  }
-
   private buildOption(presentation: KpiPresentation): ChartOption {
     const chartWidth = this.chartDiv?.nativeElement?.clientWidth || 0;
     const style = buildDashboardEChartsStyleTokens(this.darkTheme, chartWidth);
@@ -820,6 +866,8 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
     const trendNumericValues = trendData
       .map(([, value]) => value)
       .filter((value): value is number => Number.isFinite(value));
+    const hasSingleTrendPoint = trendNumericValues.length === 1 && trendData.length === 1;
+    const singleTrendPointTime = hasSingleTrendPoint ? trendData[0][0] : null;
     const minTrendValue = trendNumericValues.length ? Math.min(...trendNumericValues) : 0;
     const maxTrendValue = trendNumericValues.length ? Math.max(...trendNumericValues) : 0;
     const yAxisRangePadding = this.resolveYAxisPadding(minTrendValue, maxTrendValue);
@@ -862,8 +910,8 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
       },
       xAxis: {
         type: 'time',
-        min: 'dataMin',
-        max: 'dataMax',
+        min: singleTrendPointTime !== null ? singleTrendPointTime - KPI_SINGLE_POINT_X_AXIS_PADDING_MS : 'dataMin',
+        max: singleTrendPointTime !== null ? singleTrendPointTime + KPI_SINGLE_POINT_X_AXIS_PADDING_MS : 'dataMax',
         boundaryGap: false,
         axisLabel: { show: false },
         axisTick: { show: false },
@@ -887,8 +935,9 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
           silent: this.compactRow,
           data: trendData,
           smooth: true,
-          showSymbol: false,
-          symbol: 'none',
+          showSymbol: hasSingleTrendPoint,
+          symbol: hasSingleTrendPoint ? 'circle' : 'none',
+          symbolSize: hasSingleTrendPoint ? 4 : 0,
           connectNulls: true,
           lineStyle: {
             width: 1,
@@ -945,6 +994,18 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
         },
       ],
     };
+  }
+
+  private schedulePostLayoutResize(): void {
+    this.chartHost.scheduleResize();
+
+    if (typeof requestAnimationFrame === 'undefined') {
+      return;
+    }
+
+    requestAnimationFrame(() => {
+      this.chartHost.scheduleResize();
+    });
   }
 
   private buildTooltipOption(

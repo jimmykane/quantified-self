@@ -52,6 +52,14 @@ import {
   type DashboardSleepTrendWindow,
 } from './dashboard-sleep-chart.helper';
 import {
+  buildDashboardPowerCurveContext,
+  type DashboardPowerCurveContext,
+} from './dashboard-power-curve.helper';
+import {
+  getDashboardPowerCurveScopeDefinition,
+  isDashboardPowerCurveTileForScope,
+} from './dashboard-power-curve-scope.helper';
+import {
   DASHBOARD_TILE_EVENT_DEFAULT_RANGE,
   dashboardTileEventRangeDays,
   filterDashboardTileEventsByActivityTypes,
@@ -76,6 +84,7 @@ import {
   DASHBOARD_RECOVERY_DEBT_KPI_CHART_TYPE,
   DASHBOARD_RECOVERY_NOW_CHART_TYPE,
   DASHBOARD_SLEEP_TREND_CHART_TYPE,
+  DASHBOARD_POWER_CURVE_CHART_TYPE,
   DASHBOARD_TRAINING_BALANCE_KPI_CHART_TYPE,
   DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE,
   isDashboardAcwrKpiChartType,
@@ -98,6 +107,7 @@ import {
   isDashboardRecoveryDebtKpiChartType,
   isDashboardRecoveryNowChartType,
   isDashboardSleepTrendChartType,
+  isDashboardPowerCurveChartType,
   isDashboardTrainingBalanceKpiChartType,
 } from './dashboard-special-chart-types';
 import type { SleepSession } from '@shared/sleep';
@@ -122,6 +132,7 @@ export interface DashboardChartTileViewModel extends AppDashboardChartTileSettin
   intensityDistribution?: DashboardIntensityDistributionContext | null;
   efficiencyTrend?: DashboardEfficiencyTrendContext | null;
   sleepTrend?: DashboardSleepTrendContext | null;
+  powerCurve?: DashboardPowerCurveContext | null;
 }
 
 export type DashboardMapTileSettings = Omit<TileMapSettingsInterface, 'mapType'> & {
@@ -299,6 +310,20 @@ function resolveEventsForTile(
   };
   const filters = normalizeDashboardTileEventFilters(tileWithFilters.eventFilters);
   return filterDashboardTileEventsByActivityTypes(normalizedTileEvents, filters.activityTypes);
+}
+
+function resolveDashboardPowerCurveLatestSeriesLabel(
+  tile: AppDashboardChartTileSettingsInterface,
+): string {
+  if (isDashboardPowerCurveTileForScope(tile, 'cycling')) {
+    return getDashboardPowerCurveScopeDefinition('cycling').latestSeriesLabel;
+  }
+
+  if (isDashboardPowerCurveTileForScope(tile, 'running')) {
+    return getDashboardPowerCurveScopeDefinition('running').latestSeriesLabel;
+  }
+
+  return 'Latest power activity';
 }
 
 function resolveDashboardCustomChartRequestedTimeInterval(
@@ -595,6 +620,20 @@ export function buildDashboardTileViewModels(
         timeInterval: TimeIntervals.Daily,
         data: [],
         sleepTrend: sleepTrendContext,
+      });
+      return viewModels;
+    }
+
+    if (isDashboardPowerCurveChartType(chartTile.chartType)) {
+      const tileEvents = resolveEventsForTile(input, chartTile, normalizedEvents);
+      viewModels.push({
+        ...chartTile,
+        chartType: DASHBOARD_POWER_CURVE_CHART_TYPE as unknown as ChartTypes,
+        timeInterval: TimeIntervals.Auto,
+        data: [],
+        powerCurve: buildDashboardPowerCurveContext(tileEvents, {
+          latestSeriesLabel: resolveDashboardPowerCurveLatestSeriesLabel(chartTile),
+        }),
       });
       return viewModels;
     }

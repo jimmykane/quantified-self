@@ -17,6 +17,7 @@ import {
   DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE,
   DASHBOARD_LOAD_STATUS_KPI_CHART_TYPE,
   DASHBOARD_MONOTONY_STRAIN_KPI_CHART_TYPE,
+  DASHBOARD_POWER_CURVE_CHART_TYPE,
   DASHBOARD_RAMP_RATE_KPI_CHART_TYPE,
   DASHBOARD_RECOVERY_DEBT_KPI_CHART_TYPE,
   DASHBOARD_RECOVERY_NOW_CHART_TYPE,
@@ -27,6 +28,7 @@ import {
   getDashboardKpiChartDefinitions,
   isDashboardCuratedChartType,
   isDashboardFormChartType,
+  isDashboardEventBackedSpecialChartType,
   isDashboardKpiChartType,
   isDashboardRecoveryNowChartType,
   resolveDashboardChartCategory,
@@ -39,12 +41,14 @@ describe('dashboard-special-chart-types', () => {
     expect(isDashboardCuratedChartType(DASHBOARD_RECOVERY_NOW_CHART_TYPE)).toBe(true);
     expect(isDashboardCuratedChartType(DASHBOARD_FORM_CHART_TYPE)).toBe(true);
     expect(isDashboardCuratedChartType(DASHBOARD_SLEEP_TREND_CHART_TYPE)).toBe(true);
+    expect(isDashboardCuratedChartType(DASHBOARD_POWER_CURVE_CHART_TYPE)).toBe(true);
   });
 
   it('classifies curated and custom chart types into categories', () => {
     expect(resolveDashboardChartCategory(DASHBOARD_RECOVERY_NOW_CHART_TYPE)).toBe('curated');
     expect(resolveDashboardChartCategory(DASHBOARD_FORM_CHART_TYPE)).toBe('curated');
     expect(resolveDashboardChartCategory(DASHBOARD_SLEEP_TREND_CHART_TYPE)).toBe('curated');
+    expect(resolveDashboardChartCategory(DASHBOARD_POWER_CURVE_CHART_TYPE)).toBe('curated');
     expect(resolveDashboardChartCategory(DASHBOARD_ACWR_KPI_CHART_TYPE)).toBe('kpi');
     expect(resolveDashboardChartCategory(ChartTypes.ColumnsVertical)).toBe('custom');
   });
@@ -59,7 +63,14 @@ describe('dashboard-special-chart-types', () => {
       DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE,
       DASHBOARD_EFFICIENCY_TREND_CHART_TYPE,
       DASHBOARD_SLEEP_TREND_CHART_TYPE,
+      DASHBOARD_POWER_CURVE_CHART_TYPE,
     ]);
+  });
+
+  it('marks Power Curve as the event-backed curated chart', () => {
+    expect(isDashboardEventBackedSpecialChartType(DASHBOARD_POWER_CURVE_CHART_TYPE)).toBe(true);
+    expect(isDashboardEventBackedSpecialChartType(DASHBOARD_FORM_CHART_TYPE)).toBe(false);
+    expect(isDashboardEventBackedSpecialChartType(DASHBOARD_SLEEP_TREND_CHART_TYPE)).toBe(false);
   });
 
   it('returns KPI chart definitions and guards', () => {

@@ -89,6 +89,9 @@ describe('AppRouteHydrationService', () => {
       expect.any(Function),
       expect.objectContaining({
         generateUnitStreams: false,
+        gpx: expect.objectContaining({
+          importTimedTracksAsRoutes: true,
+        }),
         streams: expect.objectContaining({
           includeTypes: ['Distance'],
         }),
@@ -116,7 +119,10 @@ describe('AppRouteHydrationService', () => {
 
     expect(RouteImporterFIT.getFromArrayBuffer).toHaveBeenCalledWith(
       fitBuffer,
-      expect.objectContaining({ generateUnitStreams: false }),
+      expect.objectContaining({
+        generateUnitStreams: false,
+        gpx: expect.objectContaining({ importTimedTracksAsRoutes: true }),
+      }),
       'Test Route',
     );
   });

@@ -253,6 +253,8 @@ export function buildAdminDashboardQueueRows(stats: QueueStats | null): AdminDas
             dead: 0,
             deadLabel: 'DLQ',
             chips: [
+                ...queueStateChip('Queue', queues?.sportsLibReparse),
+                ...queueStateChip('Heavy', queues?.sportsLibReparseHeavy),
                 ...countChip('Processing', stats.reparse?.jobs.processing),
                 versionChip(stats.reparse?.targetSportsLibVersion),
             ],
@@ -271,6 +273,7 @@ export function buildAdminDashboardQueueRows(stats: QueueStats | null): AdminDas
             dead: 0,
             deadLabel: 'DLQ',
             chips: [
+                ...queueStateChip('Queue', queues?.sportsLibRouteReparse),
                 ...countChip('Processing', stats.routeReparse?.jobs.processing),
                 ...countChip('Skipped', stats.routeReparse?.jobs.skipped),
                 versionChip(stats.routeReparse?.targetSportsLibVersion),
@@ -504,6 +507,24 @@ function finiteNumber(value: unknown): number | null {
 function countChip(label: string, value: unknown): string[] {
     const count = normalizeCount(value);
     return count > 0 ? [`${label}: ${count}`] : [];
+}
+
+function queueStateChip(
+    label: string,
+    queue: { enabled?: boolean | null; state?: string } | null | undefined
+): string[] {
+    if (!queue) {
+        return [];
+    }
+
+    const state = `${queue.state || ''}`.trim().toUpperCase();
+    if (queue.enabled === true) {
+        return [`${label}: enabled`];
+    }
+    if (queue.enabled === false) {
+        return [`${label}: ${state === 'PAUSED' ? 'paused' : 'disabled'}`];
+    }
+    return [`${label}: ${state ? state.toLowerCase() : 'unknown'}`];
 }
 
 function versionChip(version: string | null | undefined): string {

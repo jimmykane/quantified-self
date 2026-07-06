@@ -15,6 +15,7 @@ import { buildAggregatedChartRows } from './aggregated-chart-row.helper';
 import {
   buildDashboardTileViewModels,
 } from './dashboard-tile-view-model.helper';
+import { DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE } from './dashboard-form.helper';
 import {
   DASHBOARD_ACWR_KPI_CHART_TYPE,
   DASHBOARD_EASY_PERCENT_KPI_CHART_TYPE,
@@ -32,6 +33,7 @@ import {
   DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE,
   DASHBOARD_LOAD_STATUS_KPI_CHART_TYPE,
   DASHBOARD_MONOTONY_STRAIN_KPI_CHART_TYPE,
+  DASHBOARD_POWER_CURVE_CHART_TYPE,
   DASHBOARD_RAMP_RATE_KPI_CHART_TYPE,
   DASHBOARD_RECOVERY_DEBT_KPI_CHART_TYPE,
   DASHBOARD_RECOVERY_NOW_CHART_TYPE,
@@ -39,6 +41,8 @@ import {
   DASHBOARD_TRAINING_BALANCE_KPI_CHART_TYPE,
 } from './dashboard-special-chart-types';
 import type { EventStatAggregationResult } from '@shared/event-stat-aggregation.types';
+import { POWER_CURVE_STAT_TYPE } from '@shared/power-curve';
+import { getDashboardPowerCurveActivityTypes } from './dashboard-power-curve-scope.helper';
 
 function makeEvent(options: {
   id: string;
@@ -46,7 +50,7 @@ function makeEvent(options: {
   endDate?: string;
   durationSeconds?: number;
   activityTypes: ActivityTypes[];
-  stats?: Record<string, number | undefined>;
+  stats?: Record<string, unknown>;
   isMerge?: boolean;
 }): any {
   const stats = options.stats || {};
@@ -229,6 +233,115 @@ describe('dashboard-tile-view-model.helper', () => {
     });
 
     expect((viewModels[0] as any).timeInterval).toBe(TimeIntervals.Monthly);
+  });
+
+  it('should build Power Curve tiles from per-tile filtered events', () => {
+    const fallbackEvent = makeEvent({
+      id: 'fallback-best',
+      startDate: '2024-02-01T10:00:00.000Z',
+      activityTypes: [ActivityTypes.Cycling],
+      stats: {
+        [POWER_CURVE_STAT_TYPE]: [{ duration: 300, power: 999 }],
+      },
+    });
+    const cyclingEvent = makeEvent({
+      id: 'cycling-event',
+      startDate: '2024-03-01T10:00:00.000Z',
+      activityTypes: [ActivityTypes.Cycling],
+      stats: {
+        [POWER_CURVE_STAT_TYPE]: [
+          { duration: 60, power: 400 },
+          { duration: 300, power: 320 },
+        ],
+      },
+    });
+    const runningEvent = makeEvent({
+      id: 'running-event',
+      startDate: '2024-03-02T10:00:00.000Z',
+      activityTypes: [ActivityTypes.Running],
+      stats: {
+        [POWER_CURVE_STAT_TYPE]: [{ duration: 300, power: 500 }],
+      },
+    });
+
+    const viewModels = buildDashboardTileViewModels({
+      tiles: [{
+        type: TileTypes.Chart,
+        order: 7,
+        chartType: DASHBOARD_POWER_CURVE_CHART_TYPE as any,
+        dataType: DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE,
+        dataValueType: ChartDataValueTypes.Total,
+        dataCategoryType: ChartDataCategoryTypes.DateType,
+        dataTimeInterval: TimeIntervals.Weekly,
+        eventFilters: { range: '1y', activityTypes: [ActivityTypes.Cycling] },
+        size: { columns: 1, rows: 1 },
+      }] as any,
+      events: [fallbackEvent],
+      tileEventsByOrder: {
+        7: [cyclingEvent, runningEvent],
+      },
+    });
+
+    const powerCurve = (viewModels[0] as any).powerCurve;
+    expect((viewModels[0] as any).chartType).toBe(DASHBOARD_POWER_CURVE_CHART_TYPE);
+    expect((viewModels[0] as any).timeInterval).toBe(TimeIntervals.Auto);
+    expect(powerCurve.matchedEventCount).toBe(1);
+    expect(powerCurve.latestEventId).toBe('cycling-event');
+    expect(powerCurve.summaryPoints).toEqual([
+      { duration: 60, power: 400 },
+      { duration: 300, power: 320 },
+    ]);
+    expect(powerCurve.series).toHaveLength(1);
+    expect(powerCurve.series[0].seriesKey).toBe('latestAndBest');
+  });
+
+  it('should label running Power Curve latest series from the scoped tile filters', () => {
+    const bestRunningEvent = makeEvent({
+      id: 'best-running-event',
+      startDate: '2024-03-01T10:00:00.000Z',
+      activityTypes: [ActivityTypes.Running],
+      stats: {
+        [POWER_CURVE_STAT_TYPE]: [
+          { duration: 300, power: 420 },
+        ],
+      },
+    });
+    const latestRunningEvent = makeEvent({
+      id: 'latest-running-event',
+      startDate: '2024-03-03T10:00:00.000Z',
+      activityTypes: [ActivityTypes.Running],
+      stats: {
+        [POWER_CURVE_STAT_TYPE]: [
+          { duration: 300, power: 390 },
+        ],
+      },
+    });
+
+    const viewModels = buildDashboardTileViewModels({
+      tiles: [{
+        type: TileTypes.Chart,
+        order: 8,
+        name: 'Running Power Curve',
+        chartType: DASHBOARD_POWER_CURVE_CHART_TYPE as any,
+        dataType: DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE,
+        dataValueType: ChartDataValueTypes.Total,
+        dataCategoryType: ChartDataCategoryTypes.DateType,
+        dataTimeInterval: TimeIntervals.Weekly,
+        eventFilters: { range: '1y', activityTypes: getDashboardPowerCurveActivityTypes('running') },
+        size: { columns: 1, rows: 1 },
+      }] as any,
+      events: [],
+      tileEventsByOrder: {
+        8: [bestRunningEvent, latestRunningEvent],
+      },
+    });
+
+    const powerCurve = (viewModels[0] as any).powerCurve;
+    expect(powerCurve.latestEventId).toBe('latest-running-event');
+    expect(powerCurve.series.map((series: any) => series.label)).toEqual([
+      'Best in range',
+      'Latest running activity',
+    ]);
   });
 
   it('should keep intensity-zones tiles as raw sorted event passthrough', () => {

@@ -151,7 +151,7 @@ describe('AppRouteUploadService', () => {
       'Route upload service is temporarily unavailable. Please try again shortly.',
     );
     await expect(service.uploadFitRouteFile(new Uint8Array([1]).buffer)).rejects.toThrow(
-      'Could not read this route file. Upload a FIT course/route or GPX route file and try again.',
+      'Could not read this route file. Upload a FIT course/route or GPX route/track file and try again.',
     );
   });
 });
