@@ -43,6 +43,11 @@ export interface RoutePreviewThumbnailOptions {
   padding?: number;
 }
 
+export interface RoutePreviewMapTrackMetadata {
+  routeId: string;
+  routeUserId: string | null;
+}
+
 export function isRenderableRoutePreview(preview: RoutePreviewJSONInterface | null | undefined): boolean {
   return !!preview
     && preview.version === 1
@@ -77,6 +82,10 @@ export function buildRoutePreviewMapTracks(routes: readonly FirestoreRouteJSON[]
           label: segment.name || route.name || 'Route',
           strokeColor: color,
           positions: decodedPositions,
+          metadata: {
+            routeId: `${route.id || ''}`,
+            routeUserId: route.userID ? `${route.userID}` : null,
+          } satisfies RoutePreviewMapTrackMetadata,
         };
       })
       .filter((track): track is TrackMapRenderData => track !== null);

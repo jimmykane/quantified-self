@@ -40,6 +40,10 @@ describe('route-preview-map.helper', () => {
     expect(tracks).toEqual([expect.objectContaining({
       id: 'route-1-segment-1',
       label: 'Main climb',
+      metadata: {
+        routeId: 'route-1',
+        routeUserId: 'user-1',
+      },
       positions: [
         { latitudeDegrees: 39.1, longitudeDegrees: 20.1 },
         { latitudeDegrees: 39.2, longitudeDegrees: 20.2 },

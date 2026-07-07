@@ -12,23 +12,32 @@ import {
   SimpleChanges,
   ViewChild,
   effect,
+  computed,
   signal,
 } from '@angular/core';
+import { Router } from '@angular/router';
+import { User } from '@sports-alliance/sports-lib';
 import type { FirestoreRouteJSON } from '@shared/app-route.interface';
-import { buildRoutePreviewMapTracks } from '../../../helpers/route-preview-map.helper';
+import {
+  buildRoutePreviewMapTracks,
+  type RoutePreviewMapTrackMetadata,
+} from '../../../helpers/route-preview-map.helper';
+import { buildRouteSummaryMetrics } from '../../../helpers/route-detail.helper';
 import { AppMapStyleName } from '../../../models/app-user.interface';
 import { SharedModule } from '../../../modules/shared.module';
+import { AppAnalyticsService } from '../../../services/app.analytics.service';
 import { LoggerService } from '../../../services/logger.service';
 import { MarkerFactoryService } from '../../../services/map/marker-factory.service';
 import { MapboxAutoResizeService } from '../../../services/map/mapbox-auto-resize.service';
 import { MapboxStyleSynchronizer } from '../../../services/map/mapbox-style-synchronizer';
 import { isStyleReady } from '../../../services/map/mapbox-style-ready.utils';
 import { resolveTrackMapInitialCamera } from '../../../services/map/track-map-view-state.helper';
-import { TrackMapManager, TrackMapRenderData } from '../../../services/map/track-map.manager';
+import { TrackMapClickEvent, TrackMapManager, TrackMapRenderData } from '../../../services/map/track-map.manager';
 import { MapStyleName } from '../../../services/map/map-style.types';
 import { MapStyleService } from '../../../services/map-style.service';
 import { MapboxLoaderService } from '../../../services/mapbox-loader.service';
 import { MapAbstractDirective } from '../../map/map-abstract.directive';
+import { SummaryPrimaryInfoMetric } from '../../shared/summary-primary-info/summary-primary-info.component';
 
 const ROUTE_PREVIEW_ENDPOINT_MARKER_TRACK_LIMIT = 24;
 const ROUTE_PREVIEW_FIT_BOUNDS_DEBOUNCE_MS = 500;
@@ -45,6 +54,7 @@ export class DashboardRoutePreviewMapComponent extends MapAbstractDirective impl
   @ViewChild('mapDiv', { static: false }) mapDiv?: ElementRef<HTMLDivElement>;
 
   @Input() routes: FirestoreRouteJSON[] = [];
+  @Input() user?: User | null;
   @Input() showEndpointMarkers = true;
 
   @Input() set mapStyle(value: AppMapStyleName | MapStyleName | undefined) {
@@ -58,6 +68,11 @@ export class DashboardRoutePreviewMapComponent extends MapAbstractDirective impl
   public apiLoaded = signal(false);
   public mapLoadFailed = false;
   public noMapData = false;
+  public selectedRoute = signal<FirestoreRouteJSON | null>(null);
+  public selectedRouteMetrics = signal<SummaryPrimaryInfoMetric[]>([]);
+  public selectedRouteTitle = computed(() => `${this.selectedRoute()?.name || 'Route'}`.trim() || 'Route');
+  public selectedRouteDate = computed(() => this.resolveRouteDate(this.selectedRoute()));
+  public selectedRouteSourceLabel = computed(() => this.resolveRouteSourceLabel(this.selectedRoute()));
 
   private readonly mapStyleSignal = signal<MapStyleName>('default');
   private readonly mapManager: TrackMapManager;
@@ -78,6 +93,8 @@ export class DashboardRoutePreviewMapComponent extends MapAbstractDirective impl
     private mapboxLoader: MapboxLoaderService,
     private mapboxAutoResizeService: MapboxAutoResizeService,
     private mapStyleService: MapStyleService,
+    private router: Router,
+    private analyticsService: AppAnalyticsService,
     protected logger: LoggerService,
   ) {
     super(changeDetectorRef, logger);
@@ -109,6 +126,27 @@ export class DashboardRoutePreviewMapComponent extends MapAbstractDirective impl
     if (changes.routes || changes.showEndpointMarkers) {
       this.renderRoutePreviews(!!changes.routes);
     }
+  }
+
+  public clearSelectedRoute(): void {
+    this.selectedRoute.set(null);
+    this.selectedRouteMetrics.set([]);
+    this.changeDetectorRef.markForCheck();
+  }
+
+  public openSelectedRoute(): void {
+    const route = this.selectedRoute();
+    const routeID = `${route?.id || ''}`.trim();
+    const userID = `${route?.userID || this.user?.uid || ''}`.trim();
+    if (!routeID || !userID) {
+      return;
+    }
+
+    this.analyticsService.logSavedRouteAction('open_details', {
+      fileType: this.resolvePrimaryRouteFileType(route),
+      source: 'dashboard_route_map',
+    });
+    void this.router.navigate(['/user', userID, 'route', routeID]);
   }
 
   @HostListener('window:resize')
@@ -260,7 +298,9 @@ export class DashboardRoutePreviewMapComponent extends MapAbstractDirective impl
       showEndpointMarkers: this.showEndpointMarkers !== false
         && tracks.length <= ROUTE_PREVIEW_ENDPOINT_MARKER_TRACK_LIMIT,
       strokeWidth: 2.75,
+      onTrackClick: (event) => this.zone.run(() => this.selectRouteFromTrackClick(event)),
     });
+    this.clearSelectedRouteIfMissing();
     this.changeDetectorRef.markForCheck();
 
     if (shouldFitBounds && tracks.length) {
@@ -274,6 +314,43 @@ export class DashboardRoutePreviewMapComponent extends MapAbstractDirective impl
         ...track,
         strokeColor: this.mapStyleService.adjustColorForTheme(track.strokeColor, this.appTheme()),
       }));
+  }
+
+  private selectRouteFromTrackClick(event: TrackMapClickEvent): void {
+    const routeId = this.getTrackRouteId(event.track);
+    if (!routeId) {
+      return;
+    }
+    const route = (this.routes || []).find(candidate => `${candidate?.id || ''}` === routeId);
+    if (!route) {
+      return;
+    }
+
+    this.selectedRoute.set(route);
+    this.selectedRouteMetrics.set(this.buildPopupMetrics(route));
+    this.changeDetectorRef.markForCheck();
+  }
+
+  private clearSelectedRouteIfMissing(): void {
+    const selectedRouteID = `${this.selectedRoute()?.id || ''}`.trim();
+    if (!selectedRouteID) {
+      return;
+    }
+    const stillPresent = (this.routes || []).some(route => `${route?.id || ''}` === selectedRouteID);
+    if (!stillPresent) {
+      this.clearSelectedRoute();
+    }
+  }
+
+  private getTrackRouteId(track: TrackMapRenderData | null | undefined): string {
+    const metadata = track?.metadata as Partial<RoutePreviewMapTrackMetadata> | undefined;
+    return typeof metadata?.routeId === 'string' ? metadata.routeId.trim() : '';
+  }
+
+  private buildPopupMetrics(route: FirestoreRouteJSON): SummaryPrimaryInfoMetric[] {
+    return buildRouteSummaryMetrics(route, this.user?.settings?.unitSettings || null)
+      .filter(metric => ['Distance', 'Ascent', 'Descent'].includes(metric.label))
+      .slice(0, 3);
   }
 
   private scheduleFitBounds(fingerprint: string): void {
@@ -323,6 +400,31 @@ export class DashboardRoutePreviewMapComponent extends MapAbstractDirective impl
 
   private resolveInitialCamera(): { center: [number, number]; zoom: number } {
     return resolveTrackMapInitialCamera(this.buildTracks().flatMap(track => track.positions), { fallbackZoom: 2 });
+  }
+
+  private resolveRouteDate(route: FirestoreRouteJSON | null): Date | number | null {
+    return this.toDateLike(route?.importedAt)
+      || this.toDateLike(route?.createdAt)
+      || this.toDateLike(route?.originalFiles?.[0]?.startDate)
+      || this.toDateLike(route?.originalFile?.startDate);
+  }
+
+  private toDateLike(value: unknown): Date | number | null {
+    if (value instanceof Date || typeof value === 'number') {
+      return value;
+    }
+    if (typeof (value as { toDate?: unknown })?.toDate === 'function') {
+      return (value as { toDate: () => Date }).toDate();
+    }
+    return null;
+  }
+
+  private resolveRouteSourceLabel(route: FirestoreRouteJSON | null): string {
+    return `${route?.srcFileType || route?.sourceSummary?.sourceServiceName || 'Route'}`.trim().toUpperCase();
+  }
+
+  private resolvePrimaryRouteFileType(route: FirestoreRouteJSON): string | undefined {
+    return `${route.srcFileType || route.originalFiles?.[0]?.extension || route.originalFile?.extension || ''}`.trim() || undefined;
   }
 
   private hasRenderableMapContainer(mapElement: HTMLElement): boolean {

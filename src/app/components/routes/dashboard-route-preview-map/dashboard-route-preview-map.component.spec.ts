@@ -1,8 +1,10 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { signal } from '@angular/core';
+import { Router } from '@angular/router';
 import { AppThemes } from '@sports-alliance/sports-lib';
 import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest';
 import { DashboardRoutePreviewMapComponent } from './dashboard-route-preview-map.component';
+import { AppAnalyticsService } from '../../../services/app.analytics.service';
 import { AppThemeService } from '../../../services/app.theme.service';
 import { LoggerService } from '../../../services/logger.service';
 import { MarkerFactoryService } from '../../../services/map/marker-factory.service';
@@ -15,6 +17,8 @@ describe('DashboardRoutePreviewMapComponent', () => {
   let createMapResolve: (map: any) => void;
   let mapboxLoaderMock: { createMap: ReturnType<typeof vi.fn>; loadMapbox: ReturnType<typeof vi.fn> };
   let mapboxAutoResizeMock: { bind: ReturnType<typeof vi.fn>; unbind: ReturnType<typeof vi.fn> };
+  let analyticsMock: { logSavedRouteAction: ReturnType<typeof vi.fn> };
+  let routerMock: { navigate: ReturnType<typeof vi.fn> };
   let mapMock: {
     remove: ReturnType<typeof vi.fn>;
     on: ReturnType<typeof vi.fn>;
@@ -55,15 +59,23 @@ describe('DashboardRoutePreviewMapComponent', () => {
       bind: vi.fn(),
       unbind: vi.fn(),
     };
+    analyticsMock = {
+      logSavedRouteAction: vi.fn(),
+    };
+    routerMock = {
+      navigate: vi.fn().mockResolvedValue(true),
+    };
 
     await TestBed.configureTestingModule({
       imports: [DashboardRoutePreviewMapComponent],
       providers: [
+        { provide: AppAnalyticsService, useValue: analyticsMock },
         { provide: AppThemeService, useValue: { appTheme: signal(AppThemes.Normal) } },
         { provide: LoggerService, useValue: { log: vi.fn(), warn: vi.fn(), error: vi.fn() } },
         { provide: MarkerFactoryService, useValue: {} },
         { provide: MapboxAutoResizeService, useValue: mapboxAutoResizeMock },
         { provide: MapboxLoaderService, useValue: mapboxLoaderMock },
+        { provide: Router, useValue: routerMock },
         {
           provide: MapStyleService,
           useValue: {
@@ -127,6 +139,48 @@ describe('DashboardRoutePreviewMapComponent', () => {
       expect.any(Array),
       expect.objectContaining({ showEndpointMarkers: false })
     );
+  });
+
+  it('selects clicked route previews and opens route details', () => {
+    const component = fixture.componentInstance as any;
+    const renderSpy = vi.spyOn(component.mapManager, 'renderTrackData').mockImplementation(() => undefined);
+
+    component.user = { uid: 'fallback-user', settings: { unitSettings: {} } };
+    component.routes = [
+      buildPreviewRoute('route-1', {
+        userID: 'route-user',
+        srcFileType: 'gpx',
+        stats: {
+          distance: 1234,
+          ascent: 56,
+          descent: 43,
+        },
+      }),
+    ];
+    component.mapReady = true;
+    component.mapInstance.set({ isStyleLoaded: () => true });
+
+    component.renderRoutePreviews(false);
+    const renderOptions = renderSpy.mock.calls[0]?.[1];
+    renderOptions.onTrackClick({
+      track: {
+        metadata: { routeId: 'route-1', routeUserId: 'route-user' },
+      },
+      originalEvent: {},
+      latitudeDegrees: 39.6,
+      longitudeDegrees: 20.8,
+    });
+
+    expect(component.selectedRoute()?.id).toBe('route-1');
+    expect(component.selectedRouteMetrics().map((metric: { label: string }) => metric.label)).toEqual(['Distance', 'Ascent', 'Descent']);
+
+    component.openSelectedRoute();
+
+    expect(analyticsMock.logSavedRouteAction).toHaveBeenCalledWith('open_details', {
+      fileType: 'gpx',
+      source: 'dashboard_route_map',
+    });
+    expect(routerMock.navigate).toHaveBeenCalledWith(['/user', 'route-user', 'route', 'route-1']);
   });
 
   it('debounces automatic route preview bounds fits without animating repeated previews', () => {
@@ -226,10 +280,20 @@ describe('DashboardRoutePreviewMapComponent', () => {
   });
 });
 
-function buildPreviewRoute(id: string): any {
+function buildPreviewRoute(id: string, overrides: Record<string, unknown> = {}): any {
   return {
     id,
+    userID: 'user-1',
     name: id,
+    srcFileType: 'gpx',
+    routes: [],
+    routeCount: 0,
+    waypointCount: 0,
+    pointCount: 2,
+    activityTypes: [],
+    streamTypes: [],
+    createdAt: null,
+    ...overrides,
     preview: {
       version: 1,
       encoding: 'polyline5',
