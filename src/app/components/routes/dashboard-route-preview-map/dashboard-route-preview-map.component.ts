@@ -31,6 +31,7 @@ import { MapboxLoaderService } from '../../../services/mapbox-loader.service';
 import { MapAbstractDirective } from '../../map/map-abstract.directive';
 
 const ROUTE_PREVIEW_ENDPOINT_MARKER_TRACK_LIMIT = 24;
+const ROUTE_PREVIEW_FIT_BOUNDS_DEBOUNCE_MS = 500;
 
 @Component({
   selector: 'app-dashboard-route-preview-map',
@@ -65,6 +66,8 @@ export class DashboardRoutePreviewMapComponent extends MapAbstractDirective impl
   private mapReady = false;
   private hasAppliedInitialBounds = false;
   private pendingFitBoundsTimeout: ReturnType<typeof setTimeout> | null = null;
+  private pendingFitBoundsFingerprint: string | null = null;
+  private lastAppliedFitBoundsFingerprint: string | null = null;
   private mapLifecycleHandlers: Array<{ eventName: string; handler: () => void }> = [];
   private destroyed = false;
 
@@ -104,13 +107,13 @@ export class DashboardRoutePreviewMapComponent extends MapAbstractDirective impl
 
   ngOnChanges(changes: SimpleChanges): void {
     if (changes.routes || changes.showEndpointMarkers) {
-      this.renderRoutePreviews(true);
+      this.renderRoutePreviews(!!changes.routes);
     }
   }
 
   @HostListener('window:resize')
   onResize(): void {
-    this.fitBoundsToRoutes();
+    this.fitBoundsToRoutes(false);
   }
 
   ngOnDestroy(): void {
@@ -177,7 +180,7 @@ export class DashboardRoutePreviewMapComponent extends MapAbstractDirective impl
       this.mapManager.setMap(map, mapboxgl);
       this.mapboxAutoResizeService.bind(map, {
         container: mapElement,
-        onResize: () => this.zone.run(() => this.fitBoundsToRoutes()),
+        onResize: () => this.zone.run(() => this.fitBoundsToRoutes(false)),
         throttleMs: 150,
       });
       map.addControl(new mapboxgl.ScaleControl({ maxWidth: 100, unit: 'metric' }), 'bottom-left');
@@ -261,7 +264,7 @@ export class DashboardRoutePreviewMapComponent extends MapAbstractDirective impl
     this.changeDetectorRef.markForCheck();
 
     if (shouldFitBounds && tracks.length) {
-      this.scheduleFitBounds();
+      this.scheduleFitBounds(this.buildTrackBoundsFingerprint(tracks));
     }
   }
 
@@ -273,24 +276,49 @@ export class DashboardRoutePreviewMapComponent extends MapAbstractDirective impl
       }));
   }
 
-  private scheduleFitBounds(): void {
+  private scheduleFitBounds(fingerprint: string): void {
+    if (fingerprint === this.lastAppliedFitBoundsFingerprint) {
+      return;
+    }
+    if (this.pendingFitBoundsTimeout && this.pendingFitBoundsFingerprint === fingerprint) {
+      return;
+    }
     if (this.pendingFitBoundsTimeout) {
       clearTimeout(this.pendingFitBoundsTimeout);
     }
+    this.pendingFitBoundsFingerprint = fingerprint;
     this.pendingFitBoundsTimeout = setTimeout(() => {
       this.pendingFitBoundsTimeout = null;
-      this.fitBoundsToRoutes();
-    }, 150);
+      this.pendingFitBoundsFingerprint = null;
+      this.fitBoundsToRoutes(false, fingerprint);
+    }, ROUTE_PREVIEW_FIT_BOUNDS_DEBOUNCE_MS);
   }
 
-  private fitBoundsToRoutes(): void {
+  private fitBoundsToRoutes(animate = false, fingerprint: string | null = null): void {
     if (!this.mapReady) {
       return;
     }
-    const didFit = this.mapManager.fitBoundsToTracks(this.hasAppliedInitialBounds);
+    const didFit = this.mapManager.fitBoundsToTracks(animate && this.hasAppliedInitialBounds);
     if (didFit) {
       this.hasAppliedInitialBounds = true;
+      this.lastAppliedFitBoundsFingerprint = fingerprint || this.lastAppliedFitBoundsFingerprint;
     }
+  }
+
+  private buildTrackBoundsFingerprint(tracks: readonly TrackMapRenderData[]): string {
+    return (tracks || []).map(track => {
+      const positions = track.positions || [];
+      const firstPosition = positions[0];
+      const lastPosition = positions[positions.length - 1];
+      return [
+        track.id,
+        positions.length,
+        firstPosition?.latitudeDegrees ?? '',
+        firstPosition?.longitudeDegrees ?? '',
+        lastPosition?.latitudeDegrees ?? '',
+        lastPosition?.longitudeDegrees ?? '',
+      ].join(':');
+    }).join('|');
   }
 
   private resolveInitialCamera(): { center: [number, number]; zoom: number } {

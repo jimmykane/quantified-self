@@ -129,6 +129,34 @@ describe('DashboardRoutePreviewMapComponent', () => {
     );
   });
 
+  it('debounces automatic route preview bounds fits without animating repeated previews', () => {
+    vi.useFakeTimers();
+    try {
+      const component = fixture.componentInstance as any;
+      const fitSpy = vi.spyOn(component.mapManager, 'fitBoundsToTracks').mockReturnValue(true);
+      component.mapReady = true;
+      component.mapInstance.set({ isStyleLoaded: () => true });
+
+      component.routes = [buildPreviewRoute('route-1')];
+      component.renderRoutePreviews(true);
+      component.routes = [buildPreviewRoute('route-1'), buildPreviewRoute('route-2')];
+      component.renderRoutePreviews(true);
+
+      vi.advanceTimersByTime(499);
+      expect(fitSpy).not.toHaveBeenCalled();
+
+      vi.advanceTimersByTime(1);
+      expect(fitSpy).toHaveBeenCalledTimes(1);
+      expect(fitSpy).toHaveBeenCalledWith(false);
+
+      component.renderRoutePreviews(true);
+      vi.advanceTimersByTime(500);
+      expect(fitSpy).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('detaches map lifecycle handlers when destroyed after initialization', async () => {
     fixture.detectChanges();
     createMapResolve(mapMock);
@@ -197,3 +225,22 @@ describe('DashboardRoutePreviewMapComponent', () => {
     expect(fixture.componentInstance.apiLoaded()).toBe(true);
   });
 });
+
+function buildPreviewRoute(id: string): any {
+  return {
+    id,
+    name: id,
+    preview: {
+      version: 1,
+      encoding: 'polyline5',
+      precision: 5,
+      sourcePointCount: 2,
+      pointCount: 2,
+      segments: [{
+        sourcePointCount: 2,
+        pointCount: 2,
+        encodedPolyline: '_p~iF~ps|U_ulLnnqC',
+      }],
+    },
+  };
+}

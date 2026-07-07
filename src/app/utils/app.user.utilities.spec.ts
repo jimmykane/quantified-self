@@ -573,6 +573,46 @@ describe('AppUserUtilities', () => {
             expect((routeMapTile as any).mapSource).toBe('routes');
             expect((routeMapTile as any).eventFilters).toBeUndefined();
             expect((routeMapTile as any).showRouteEndpointMarkers).toBe(true);
+            expect((routeMapTile as any).size).toEqual({ columns: 1, rows: 1 });
+        });
+
+        it('should compact legacy default dashboard map tiles without resizing customized maps', () => {
+            const user = {
+                settings: {
+                    dashboardSettings: {
+                        tiles: [
+                            {
+                                type: TileTypes.Map,
+                                order: 0,
+                                name: 'Clustered HeatMap',
+                                mapSource: 'events',
+                                mapStyle: 'default',
+                                mapTheme: 'normal',
+                                showHeatMap: true,
+                                clusterMarkers: true,
+                                size: { columns: 2, rows: 2 },
+                            },
+                            {
+                                type: TileTypes.Map,
+                                order: 1,
+                                name: 'Custom Routes',
+                                mapSource: 'routes',
+                                mapStyle: 'outdoors',
+                                mapTheme: 'normal',
+                                showHeatMap: false,
+                                clusterMarkers: false,
+                                size: { columns: 2, rows: 2 },
+                            },
+                        ],
+                    },
+                },
+            } as unknown as User;
+
+            const settings = AppUserUtilities.fillMissingAppSettings(user);
+            const [eventMapTile, routeMapTile] = settings.dashboardSettings?.tiles || [];
+
+            expect((eventMapTile as any).size).toEqual({ columns: 1, rows: 1 });
+            expect((routeMapTile as any).size).toEqual({ columns: 2, rows: 2 });
         });
 
         it('should preserve explicit route endpoint marker preferences and drop them from event maps', () => {
