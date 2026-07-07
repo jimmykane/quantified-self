@@ -572,6 +572,48 @@ describe('AppUserUtilities', () => {
 
             expect((routeMapTile as any).mapSource).toBe('routes');
             expect((routeMapTile as any).eventFilters).toBeUndefined();
+            expect((routeMapTile as any).showRouteEndpointMarkers).toBe(true);
+        });
+
+        it('should preserve explicit route endpoint marker preferences and drop them from event maps', () => {
+            const user = {
+                settings: {
+                    dashboardSettings: {
+                        tiles: [
+                            {
+                                type: TileTypes.Map,
+                                order: 0,
+                                name: 'Routes',
+                                mapSource: 'routes',
+                                mapStyle: 'default',
+                                mapTheme: 'normal',
+                                showHeatMap: false,
+                                clusterMarkers: false,
+                                showRouteEndpointMarkers: false,
+                                size: { columns: 2, rows: 2 },
+                            },
+                            {
+                                type: TileTypes.Map,
+                                order: 1,
+                                name: 'Map',
+                                mapSource: 'events',
+                                mapStyle: 'default',
+                                mapTheme: 'normal',
+                                showHeatMap: true,
+                                clusterMarkers: true,
+                                showRouteEndpointMarkers: true,
+                                size: { columns: 1, rows: 1 },
+                            }
+                        ]
+                    }
+                }
+            } as unknown as User;
+
+            const settings = AppUserUtilities.fillMissingAppSettings(user);
+            const [routesMap, eventsMap] = settings.dashboardSettings?.tiles || [];
+
+            expect((routesMap as any).showRouteEndpointMarkers).toBe(false);
+            expect((eventsMap as any).showRouteEndpointMarkers).toBeUndefined();
         });
 
         it('should remove event filters from curated and derived chart tiles', () => {
@@ -1043,6 +1085,7 @@ describe('AppUserUtilities', () => {
             expect(mapTiles[1].name).toBe('Routes-first');
             expect(mapTiles[1].mapSource).toBe('routes');
             expect(mapTiles[1].eventFilters).toBeUndefined();
+            expect(mapTiles[1].showRouteEndpointMarkers).toBe(true);
             expect(chartTiles).toHaveLength(1);
             expect(chartTiles[0].name).toBe('Distance');
         });

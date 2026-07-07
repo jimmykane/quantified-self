@@ -25,6 +25,7 @@ export class TileMapComponent extends TileAbstractDirective {
   @Input() showActions!: boolean;
   @Input() enableDesktopDrag = false;
   @Input() clusterMarkers!: boolean;
+  @Input() showRouteEndpointMarkers = true;
   @Input() events: EventInterface[] = [];
   @Input() routePreviews: FirestoreRouteJSON[] = [];
   @Input() eventFilters?: AppDashboardTileEventFiltersInterface | null;

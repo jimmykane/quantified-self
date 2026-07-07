@@ -390,6 +390,7 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
   public mapStyle: MapStyleName = this.normalizeMapStyle(AppUserUtilities.getDefaultDashboardMapStyle());
   public mapSource: AppDashboardMapTileSource = 'events';
   public mapClusterMarkers = true;
+  public mapShowRouteEndpointMarkers = true;
   public mapEventRange: AppDashboardTileEventFilterRange = AppUserUtilities.getDefaultDashboardTileEventFilters().range || DASHBOARD_TILE_EVENT_DEFAULT_RANGE;
   public mapEventActivityTypes = AppUserUtilities.getDefaultDashboardTileEventFilters().activityTypes;
   public presetCategory: DashboardManagerPresetCategory = 'curated';
@@ -1038,6 +1039,7 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
       this.mapSource = mapTile.mapSource === 'routes' ? 'routes' : 'events';
       this.mapStyle = this.normalizeMapStyle(mapTile.mapStyle);
       this.mapClusterMarkers = mapTile.clusterMarkers !== false;
+      this.mapShowRouteEndpointMarkers = mapTile.showRouteEndpointMarkers !== false;
       const mapFilters = normalizeDashboardTileEventFilters((mapTile as AppDashboardMapTileSettingsInterface).eventFilters);
       this.mapEventRange = mapFilters.range;
       this.mapEventActivityTypes = mapFilters.activityTypes || [];
@@ -1392,12 +1394,17 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
       clusterMarkers: this.mapSource === 'routes' ? false : this.mapClusterMarkers,
       mapTheme: existingMapTile?.mapTheme ?? defaultMapTile.mapTheme,
       showHeatMap: this.mapSource === 'routes' ? false : (existingMapTile?.showHeatMap ?? defaultMapTile.showHeatMap),
+      ...(this.mapSource === 'routes'
+        ? { showRouteEndpointMarkers: this.mapShowRouteEndpointMarkers }
+        : {}),
       ...(this.mapSource === 'events'
         ? { eventFilters: this.buildTileEventFilters(this.mapEventRange, this.mapEventActivityTypes) }
         : {}),
     };
     if (this.mapSource === 'routes') {
       delete mapTile.eventFilters;
+    } else {
+      delete mapTile.showRouteEndpointMarkers;
     }
     return mapTile;
   }

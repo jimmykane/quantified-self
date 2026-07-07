@@ -157,7 +157,7 @@ describe('DashboardAutoTileService', () => {
       mapSource: 'routes',
       mapStyle: 'default',
       clusterMarkers: false,
-      size: { columns: 2, rows: 2 },
+      size: { columns: 1, rows: 1 },
     });
     expect(routeTile).not.toHaveProperty('eventFilters');
     expect(user.settings?.dashboardSettings?.autoTiles?.routePreview).toMatchObject({
@@ -522,8 +522,9 @@ describe('DashboardAutoTileService', () => {
     )) as any;
     expect(routeTile).toMatchObject({
       name: 'Routes',
-      size: { columns: 2, rows: 2 },
+      size: { columns: 1, rows: 1 },
       clusterMarkers: false,
+      showRouteEndpointMarkers: true,
     });
     expect(user.settings?.dashboardSettings?.autoTiles?.routePreview).toMatchObject({
       state: 'added',

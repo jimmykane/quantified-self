@@ -657,7 +657,9 @@ export class AppUserUtilities {
             mapTile.mapStyle = mapTile.mapStyle || AppUserUtilities.getDefaultDashboardMapStyle();
             if (mapTile.mapSource === 'routes') {
                 delete mapTile.eventFilters;
+                mapTile.showRouteEndpointMarkers = mapTile.showRouteEndpointMarkers !== false;
             } else {
+                delete mapTile.showRouteEndpointMarkers;
                 mapTile.eventFilters = normalizeDashboardTileEventFilters(
                     mapTile.eventFilters,
                     legacyTileEventFilterRange,

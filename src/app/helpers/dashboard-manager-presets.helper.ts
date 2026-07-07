@@ -135,6 +135,7 @@ export interface DashboardManagerMapPresetDefinition extends DashboardManagerPre
   mapSource: AppDashboardMapTileSource;
   mapStyle: MapStyleName;
   clusterMarkers: boolean;
+  showRouteEndpointMarkers?: boolean;
 }
 
 export type DashboardManagerPresetDefinition =
@@ -397,6 +398,7 @@ const DASHBOARD_MANAGER_PRESET_DEFINITIONS: DashboardManagerPresetDefinition[] =
     mapSource: 'routes',
     mapStyle: 'default',
     clusterMarkers: false,
+    showRouteEndpointMarkers: true,
   },
   {
     id: DASHBOARD_MANAGER_PRESET_IDS.CUSTOM_DURATION_PIE,
@@ -521,6 +523,9 @@ export function buildDashboardManagerPresetTile(
       mapType: AppUserUtilities.getDefaultMapType(),
       showHeatMap: definition.mapSource === 'events',
       clusterMarkers: definition.clusterMarkers,
+      ...(definition.mapSource === 'routes'
+        ? { showRouteEndpointMarkers: definition.showRouteEndpointMarkers !== false }
+        : {}),
     };
     if (definition.mapSource === 'events') {
       mapTile.eventFilters = AppUserUtilities.getDefaultDashboardTileEventFilters();

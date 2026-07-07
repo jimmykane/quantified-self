@@ -26,7 +26,8 @@
   </header>
   <div class="tile-map-body">
     @if (mapSource === 'routes') {
-    <app-dashboard-route-preview-map [routes]="routePreviews" [isLoading]="isLoading" [mapStyle]="mapStyle">
+    <app-dashboard-route-preview-map [routes]="routePreviews" [isLoading]="isLoading" [mapStyle]="mapStyle"
+      [showEndpointMarkers]="showRouteEndpointMarkers !== false">
     </app-dashboard-route-preview-map>
     } @else if (events) {
     <app-events-map [user]="user" [events]="events" [isLoading]="isLoading" [mapStyle]="mapStyle"

@@ -266,6 +266,12 @@
             <mat-slide-toggle class="dashboard-manager-map-toggle" [checked]="mapClusterMarkers" (change)="mapClusterMarkers = $event.checked">
               Cluster markers
             </mat-slide-toggle>
+            } @else {
+            <mat-slide-toggle class="dashboard-manager-map-toggle" [checked]="mapShowRouteEndpointMarkers" (change)="mapShowRouteEndpointMarkers = $event.checked">
+              Show start/end markers
+            </mat-slide-toggle>
+            }
+            @if (mapSource === 'events') {
             <mat-form-field appearance="outline" class="dashboard-manager-full-width">
               <mat-label>Tile date range</mat-label>
               <mat-icon matPrefix>date_range</mat-icon>

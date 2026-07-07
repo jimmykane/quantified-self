@@ -113,6 +113,22 @@ describe('DashboardRoutePreviewMapComponent', () => {
     expect(loadedSpy).not.toHaveBeenCalled();
   });
 
+  it('passes route endpoint marker visibility into track rendering', () => {
+    const component = fixture.componentInstance as any;
+    const renderSpy = vi.spyOn(component.mapManager, 'renderTrackData').mockImplementation(() => undefined);
+
+    component.showEndpointMarkers = false;
+    component.mapReady = true;
+    component.mapInstance.set({ isStyleLoaded: () => true });
+
+    component.renderRoutePreviews(false);
+
+    expect(renderSpy).toHaveBeenCalledWith(
+      expect.any(Array),
+      expect.objectContaining({ showEndpointMarkers: false })
+    );
+  });
+
   it('detaches map lifecycle handlers when destroyed after initialization', async () => {
     fixture.detectChanges();
     createMapResolve(mapMock);
@@ -129,6 +145,40 @@ describe('DashboardRoutePreviewMapComponent', () => {
       expect(mapMock.off).toHaveBeenCalledWith(eventName, handler);
     });
     expect(mapMock.remove).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not re-render route previews for styledata after the map is already ready', async () => {
+    fixture.detectChanges();
+    createMapResolve(mapMock);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const component = fixture.componentInstance as any;
+    const renderSpy = vi.spyOn(component, 'renderRoutePreviews');
+    const styleDataHandler = mapMock.on.mock.calls.find(([eventName]) => eventName === 'styledata')?.[1];
+
+    expect(styleDataHandler).toBeTruthy();
+    styleDataHandler();
+
+    expect(renderSpy).not.toHaveBeenCalled();
+  });
+
+  it('re-renders route previews for a real style load after the map is ready', async () => {
+    fixture.detectChanges();
+    createMapResolve(mapMock);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const component = fixture.componentInstance as any;
+    const renderSpy = vi.spyOn(component, 'renderRoutePreviews');
+    const styleLoadHandlers = mapMock.on.mock.calls
+      .filter(([eventName]) => eventName === 'style.load')
+      .map(([, handler]) => handler);
+
+    expect(styleLoadHandlers.length).toBeGreaterThanOrEqual(2);
+    styleLoadHandlers[1]();
+
+    expect(renderSpy).toHaveBeenCalledWith(true);
   });
 
   it('cleans up a created map when initialization fails before completion', async () => {

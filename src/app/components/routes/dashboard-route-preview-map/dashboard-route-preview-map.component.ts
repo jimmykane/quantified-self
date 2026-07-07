@@ -30,6 +30,8 @@ import { MapStyleService } from '../../../services/map-style.service';
 import { MapboxLoaderService } from '../../../services/mapbox-loader.service';
 import { MapAbstractDirective } from '../../map/map-abstract.directive';
 
+const ROUTE_PREVIEW_ENDPOINT_MARKER_TRACK_LIMIT = 24;
+
 @Component({
   selector: 'app-dashboard-route-preview-map',
   standalone: true,
@@ -42,6 +44,7 @@ export class DashboardRoutePreviewMapComponent extends MapAbstractDirective impl
   @ViewChild('mapDiv', { static: false }) mapDiv?: ElementRef<HTMLDivElement>;
 
   @Input() routes: FirestoreRouteJSON[] = [];
+  @Input() showEndpointMarkers = true;
 
   @Input() set mapStyle(value: AppMapStyleName | MapStyleName | undefined) {
     this.mapStyleSignal.set(this.mapStyleService.normalizeStyle(value));
@@ -100,7 +103,7 @@ export class DashboardRoutePreviewMapComponent extends MapAbstractDirective impl
   }
 
   ngOnChanges(changes: SimpleChanges): void {
-    if (changes.routes) {
+    if (changes.routes || changes.showEndpointMarkers) {
       this.renderRoutePreviews(true);
     }
   }
@@ -179,21 +182,30 @@ export class DashboardRoutePreviewMapComponent extends MapAbstractDirective impl
       });
       map.addControl(new mapboxgl.ScaleControl({ maxWidth: 100, unit: 'metric' }), 'bottom-left');
 
-      const applyReadyState = () => {
+      const applyReadyState = (rerenderWhenReady = false) => {
         if (!isStyleReady(map)) {
           return;
         }
         const wasReady = this.mapReady;
-        this.mapReady = true;
+        if (wasReady && !rerenderWhenReady) {
+          return;
+        }
         if (!wasReady) {
+          this.mapReady = true;
           this.apiLoaded.set(true);
         }
         this.renderRoutePreviews(true);
         this.changeDetectorRef.markForCheck();
       };
 
-      ['style.load', 'style.import.load', 'styledata', 'idle', 'load'].forEach((eventName) => {
-        const handler = () => this.zone.run(() => applyReadyState());
+      [
+        { eventName: 'style.load', rerenderWhenReady: true },
+        { eventName: 'style.import.load', rerenderWhenReady: false },
+        { eventName: 'styledata', rerenderWhenReady: false },
+        { eventName: 'idle', rerenderWhenReady: false },
+        { eventName: 'load', rerenderWhenReady: false },
+      ].forEach(({ eventName, rerenderWhenReady }) => {
+        const handler = () => this.zone.run(() => applyReadyState(rerenderWhenReady));
         this.mapLifecycleHandlers.push({ eventName, handler });
         map.on(eventName, handler);
       });
@@ -242,7 +254,8 @@ export class DashboardRoutePreviewMapComponent extends MapAbstractDirective impl
     this.noMapData = tracks.length === 0;
     this.mapManager.renderTrackData(tracks, {
       showArrows: false,
-      showEndpointMarkers: tracks.length <= 24,
+      showEndpointMarkers: this.showEndpointMarkers !== false
+        && tracks.length <= ROUTE_PREVIEW_ENDPOINT_MARKER_TRACK_LIMIT,
       strokeWidth: 2.75,
     });
     this.changeDetectorRef.markForCheck();

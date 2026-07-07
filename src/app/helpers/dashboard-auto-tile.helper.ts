@@ -193,7 +193,7 @@ export function buildDashboardPowerCurveAutoTile(
 
 export function buildDashboardRoutePreviewAutoTile(
   order: number,
-  size: { columns: number; rows: number } = { columns: 2, rows: 2 },
+  size: { columns: number; rows: number } = { columns: 1, rows: 1 },
 ): AppDashboardMapTileSettingsInterface {
   return {
     name: 'Routes',
@@ -206,6 +206,7 @@ export function buildDashboardRoutePreviewAutoTile(
     mapType: MapTypes.RoadMap,
     showHeatMap: false,
     clusterMarkers: false,
+    showRouteEndpointMarkers: true,
   } as AppDashboardMapTileSettingsInterface;
 }
 

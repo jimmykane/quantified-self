@@ -146,6 +146,7 @@ export type AppDashboardMapTileSource = 'events' | 'routes';
 export interface AppDashboardMapTileSettingsInterface extends TileMapSettingsInterface {
     mapSource?: AppDashboardMapTileSource;
     mapStyle?: AppMapStyleName;
+    showRouteEndpointMarkers?: boolean;
     eventFilters?: AppDashboardTileEventFiltersInterface;
 }
 

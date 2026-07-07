@@ -192,6 +192,7 @@ describe('dashboard-manager-presets.helper', () => {
       mapSource: 'routes',
       mapStyle: 'default',
       clusterMarkers: false,
+      showRouteEndpointMarkers: true,
       order: 5,
       size: { columns: 2, rows: 2 },
     });

@@ -296,6 +296,7 @@ describe('DashboardManagerDialogComponent', () => {
     component.mapSource = 'routes';
     component.mapStyle = 'default';
     component.mapClusterMarkers = true;
+    component.mapShowRouteEndpointMarkers = false;
     component.mapEventRange = '1y';
     component.mapEventActivityTypes = [ActivityTypes.Cycling];
 
@@ -309,6 +310,7 @@ describe('DashboardManagerDialogComponent', () => {
       mapStyle: 'default',
       clusterMarkers: false,
       showHeatMap: false,
+      showRouteEndpointMarkers: false,
     });
     expect(tile.eventFilters).toBeUndefined();
     expect(userServiceMock.updateUserProperties).toHaveBeenCalledTimes(1);
@@ -1530,6 +1532,7 @@ describe('DashboardManagerDialogComponent', () => {
     component.editTileOrder = 0;
     component.category = 'map' as any;
     component.mapSource = 'routes';
+    component.mapShowRouteEndpointMarkers = true;
 
     await component.save();
 
@@ -1540,6 +1543,7 @@ describe('DashboardManagerDialogComponent', () => {
       mapSource: 'routes',
       clusterMarkers: false,
       showHeatMap: false,
+      showRouteEndpointMarkers: true,
     });
     expect(tile.eventFilters).toBeUndefined();
   });

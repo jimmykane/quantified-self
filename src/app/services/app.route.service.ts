@@ -160,6 +160,7 @@ export class AppRouteService {
                 );
             }),
             catchError(() => of([])),
+            distinctUntilChanged((previous, current) => this.routePreviewFingerprintsEqual(previous, current)),
         );
     }
 
@@ -269,6 +270,35 @@ export class AppRouteService {
 
     private sortRoutesByImportedAtDesc(routes: FirestoreRouteJSON[]): FirestoreRouteJSON[] {
         return [...routes].sort((left, right) => this.toRouteTimestampMs(right.importedAt) - this.toRouteTimestampMs(left.importedAt));
+    }
+
+    private routePreviewFingerprintsEqual(
+        previous: readonly FirestoreRouteJSON[] | null | undefined,
+        current: readonly FirestoreRouteJSON[] | null | undefined,
+    ): boolean {
+        return this.buildRoutePreviewFingerprint(previous) === this.buildRoutePreviewFingerprint(current);
+    }
+
+    private buildRoutePreviewFingerprint(routes: readonly FirestoreRouteJSON[] | null | undefined): string {
+        return (routes || []).map(route => {
+            const preview = route.preview;
+            const segments = (preview?.segments || []).map(segment => [
+                segment?.id || '',
+                segment?.encodedPolyline || '',
+                segment?.pointCount ?? '',
+                segment?.sourcePointCount ?? '',
+            ].join(':')).join('|');
+            return [
+                route.id || '',
+                route.importedAt ? this.toRouteTimestampMs(route.importedAt) : '',
+                preview?.version ?? '',
+                preview?.encoding ?? '',
+                preview?.precision ?? '',
+                preview?.pointCount ?? '',
+                preview?.sourcePointCount ?? '',
+                segments,
+            ].join('~');
+        }).join('\n');
     }
 
     private toRouteTimestampMs(value: unknown): number {

@@ -309,7 +309,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     }
     const mapItem = item as DashboardMapTileViewModel;
     const mapSource = mapItem.mapSource === 'routes' ? 'routes' : 'events';
-    return `${mapItem.clusterMarkers}${mapItem.mapTheme}${mapItem.mapStyle}${mapSource}${mapItem.name}${mapItem.order}${mapItem.showHeatMap}${mapItem.routePreviews?.length || 0}`;
+    return `${mapItem.clusterMarkers}${mapItem.showRouteEndpointMarkers}${mapItem.mapTheme}${mapItem.mapStyle}${mapSource}${mapItem.name}${mapItem.order}${mapItem.showHeatMap}${mapItem.routePreviews?.length || 0}`;
   }
 
   public trackBySection(_index: number, item: DashboardTileSectionViewModel): DashboardTileSectionId {

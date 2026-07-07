@@ -1,5 +1,5 @@
 import { TestBed } from '@angular/core/testing';
-import { firstValueFrom, of } from 'rxjs';
+import { firstValueFrom, of, Subject } from 'rxjs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
     Firestore,
@@ -200,6 +200,25 @@ describe('AppRouteService', () => {
         expect(orderBy).toHaveBeenCalledWith('importedAt', 'desc');
         expect(limit).toHaveBeenCalledWith(8);
         expect(result.map(route => route.id)).toEqual(['route-1', 'route-4']);
+    });
+
+    it('suppresses unchanged recent route preview emissions', () => {
+        const source = new Subject<any[]>();
+        const emissions: any[][] = [];
+        vi.mocked(collectionData).mockReturnValue(source.asObservable());
+
+        const subscription = service.watchRecentRoutePreviews({ uid: 'user-1' }, 2)
+            .subscribe(routes => emissions.push(routes));
+
+        source.next([routeWithPreview('route-1'), routeWithoutPreview('route-2')]);
+        source.next([routeWithPreview('route-1'), routeWithoutPreview('route-2')]);
+        source.next([routeWithPreview('route-1', new Date('2026-02-01T00:00:00.000Z')), routeWithoutPreview('route-2')]);
+        subscription.unsubscribe();
+
+        expect(emissions.map(routes => routes.map(route => route.id))).toEqual([
+            ['route-1'],
+            ['route-1'],
+        ]);
     });
 
     it('fails recent route preview loading closed without a trimmed user id', async () => {
