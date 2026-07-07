@@ -17,6 +17,8 @@ import {
   DASHBOARD_AUTO_TILE_POWER_CURVE_ID,
   DASHBOARD_AUTO_TILE_POWER_CURVE_SOURCE,
   DASHBOARD_AUTO_TILE_RECOVERY_NOW_ID,
+  DASHBOARD_AUTO_TILE_ROUTE_PREVIEW_ID,
+  DASHBOARD_AUTO_TILE_ROUTE_PREVIEW_SOURCE,
   DASHBOARD_AUTO_TILE_RUNNING_POWER_CURVE_SOURCE,
   DASHBOARD_AUTO_TILE_SLEEP_TREND_ID,
   buildDashboardSleepTrendAutoTile,
@@ -34,6 +36,7 @@ import {
 } from '../helpers/dashboard-special-chart-types';
 import { AppUserInterface } from '../models/app-user.interface';
 import { AppEventService } from './app.event.service';
+import { AppRouteService } from './app.route.service';
 import { AppSleepService } from './app.sleep.service';
 import { AppUserService } from './app.user.service';
 import { DashboardAutoTileRule, DashboardAutoTileService } from './dashboard-auto-tile.service';
@@ -43,6 +46,7 @@ describe('DashboardAutoTileService', () => {
   let service: DashboardAutoTileService;
   let mockSleepService: { watchHasAnySleepSession: ReturnType<typeof vi.fn> };
   let mockEventService: { watchHasAnyPowerCurveEventForActivityTypes: ReturnType<typeof vi.fn> };
+  let mockRouteService: { watchHasAnyRoutePreview: ReturnType<typeof vi.fn> };
   let mockUserService: { updateUserProperties: ReturnType<typeof vi.fn> };
   let mockSnackBar: { open: ReturnType<typeof vi.fn> };
   let mockLogger: { error: ReturnType<typeof vi.fn>; warn: ReturnType<typeof vi.fn> };
@@ -55,6 +59,9 @@ describe('DashboardAutoTileService', () => {
     };
     mockEventService = {
       watchHasAnyPowerCurveEventForActivityTypes: vi.fn().mockReturnValue(of(false)),
+    };
+    mockRouteService = {
+      watchHasAnyRoutePreview: vi.fn().mockReturnValue(of(false)),
     };
     mockUserService = {
       updateUserProperties: vi.fn().mockResolvedValue(true),
@@ -75,6 +82,7 @@ describe('DashboardAutoTileService', () => {
         DashboardAutoTileService,
         { provide: AppSleepService, useValue: mockSleepService },
         { provide: AppEventService, useValue: mockEventService },
+        { provide: AppRouteService, useValue: mockRouteService },
         { provide: AppUserService, useValue: mockUserService },
         { provide: MatSnackBar, useValue: mockSnackBar },
         { provide: LoggerService, useValue: mockLogger },
@@ -133,6 +141,52 @@ describe('DashboardAutoTileService', () => {
     expect(mockSnackBar.open).not.toHaveBeenCalled();
   });
 
+  it('adds Routes map once when route previews exist', async () => {
+    const user = createUser([createCustomTile(0)]);
+
+    const result = await service.applyEligibleAutoTiles(user, {
+      [DASHBOARD_AUTO_TILE_ROUTE_PREVIEW_ID]: true,
+    });
+
+    expect(result.persisted).toBe(true);
+    expect(result.addedRules.map(rule => rule.id)).toEqual([DASHBOARD_AUTO_TILE_ROUTE_PREVIEW_ID]);
+    const routeTile = user.settings?.dashboardSettings?.tiles?.[1] as any;
+    expect(routeTile).toMatchObject({
+      name: 'Routes',
+      type: TileTypes.Map,
+      mapSource: 'routes',
+      mapStyle: 'default',
+      clusterMarkers: false,
+      size: { columns: 2, rows: 2 },
+    });
+    expect(routeTile).not.toHaveProperty('eventFilters');
+    expect(user.settings?.dashboardSettings?.autoTiles?.routePreview).toMatchObject({
+      state: 'added',
+      source: DASHBOARD_AUTO_TILE_ROUTE_PREVIEW_SOURCE,
+    });
+    expectDashboardSettingsOnlyWrite(mockUserService, user);
+    expect(mockSnackBar.open).toHaveBeenCalledWith('Added Routes map to your dashboard.', 'Undo', { duration: 7000 });
+  });
+
+  it('does not add Routes map when a route-preview map already exists', async () => {
+    const user = createUser([{
+      type: TileTypes.Map,
+      order: 0,
+      name: 'Routes',
+      mapSource: 'routes',
+      size: { columns: 2, rows: 2 },
+    } as any]);
+
+    const result = await service.applyEligibleAutoTiles(user, {
+      [DASHBOARD_AUTO_TILE_ROUTE_PREVIEW_ID]: true,
+    });
+
+    expect(result.persisted).toBe(false);
+    expect(user.settings?.dashboardSettings?.tiles).toHaveLength(1);
+    expect(mockUserService.updateUserProperties).not.toHaveBeenCalled();
+    expect(mockSnackBar.open).not.toHaveBeenCalled();
+  });
+
   it('batches multiple eligible rules into one settings write and one snackbar', async () => {
     const user = createUser([createCustomTile(0)]);
     const rules = [
@@ -150,7 +204,7 @@ describe('DashboardAutoTileService', () => {
     expect((user.settings?.dashboardSettings?.autoTiles as any).first.state).toBe('added');
     expect((user.settings?.dashboardSettings?.autoTiles as any).second.state).toBe('added');
     expect(mockUserService.updateUserProperties).toHaveBeenCalledTimes(1);
-    expect(mockSnackBar.open).toHaveBeenCalledWith('Added 2 dashboard charts: First, Second.', 'Undo', { duration: 7000 });
+    expect(mockSnackBar.open).toHaveBeenCalledWith('Added 2 dashboard tiles: First, Second.', 'Undo', { duration: 7000 });
   });
 
   it('adds missing default KPI tiles as one auto-tile batch', async () => {
@@ -175,7 +229,7 @@ describe('DashboardAutoTileService', () => {
     });
     expect(mockUserService.updateUserProperties).toHaveBeenCalledTimes(1);
     expect(mockSnackBar.open).toHaveBeenCalledWith(
-      'Added 6 dashboard charts: Load Status, Form Now, Fitness Trend, and 3 more.',
+      'Added 6 dashboard tiles: Load Status, Form Now, Fitness Trend, and 3 more.',
       'Undo',
       { duration: 7000 },
     );
@@ -208,7 +262,7 @@ describe('DashboardAutoTileService', () => {
     expect(user.settings?.dashboardSettings?.autoTiles?.powerCurve).toBeUndefined();
     expect(mockUserService.updateUserProperties).toHaveBeenCalledTimes(1);
     expect(mockSnackBar.open).toHaveBeenCalledWith(
-      'Added 5 dashboard charts: Recovery, Form, Freshness Forecast, and 2 more.',
+      'Added 5 dashboard tiles: Recovery, Form, Freshness Forecast, and 2 more.',
       'Undo',
       { duration: 7000 },
     );
@@ -372,7 +426,7 @@ describe('DashboardAutoTileService', () => {
     expect((user.settings?.dashboardSettings?.tiles?.[7] as any).chartType).toBe(DASHBOARD_LOAD_STATUS_KPI_CHART_TYPE);
     expect(mockUserService.updateUserProperties).toHaveBeenCalledTimes(1);
     expect(mockSnackBar.open).toHaveBeenCalledWith(
-      'Added 12 dashboard charts: Sleep, Recovery, Form, and 9 more.',
+      'Added 12 dashboard tiles: Sleep, Recovery, Form, and 9 more.',
       'Undo',
       { duration: 7000 },
     );
@@ -399,7 +453,7 @@ describe('DashboardAutoTileService', () => {
     expect((user.settings?.dashboardSettings?.tiles?.[6] as any).chartType).toBe(DASHBOARD_LOAD_STATUS_KPI_CHART_TYPE);
     expect(mockUserService.updateUserProperties).toHaveBeenCalledTimes(1);
     expect(mockSnackBar.open).toHaveBeenCalledWith(
-      'Added 11 dashboard charts: Recovery, Form, Freshness Forecast, and 8 more.',
+      'Added 11 dashboard tiles: Recovery, Form, Freshness Forecast, and 8 more.',
       'Undo',
       { duration: 7000 },
     );
@@ -444,6 +498,39 @@ describe('DashboardAutoTileService', () => {
     });
     expect(mockUserService.updateUserProperties).toHaveBeenCalledTimes(1);
     expect(mockSnackBar.open).toHaveBeenCalledWith('Added Cycling Power Curve chart to your dashboard.', 'Undo', { duration: 7000 });
+    subscription.unsubscribe();
+  });
+
+  it('adds Routes map from the route preview eligibility watcher', async () => {
+    const sleepEligibility = new Subject<boolean>();
+    const routePreviewEligibility = new Subject<boolean>();
+    mockSleepService.watchHasAnySleepSession.mockReturnValueOnce(sleepEligibility.asObservable());
+    mockRouteService.watchHasAnyRoutePreview.mockReturnValueOnce(routePreviewEligibility.asObservable());
+    const user = createUser([createCustomTile(0)]);
+
+    const subscription = service.watchForDashboard(user);
+    await flushMicrotasks();
+    mockUserService.updateUserProperties.mockClear();
+    mockSnackBar.open.mockClear();
+
+    routePreviewEligibility.next(true);
+    await flushMicrotasks();
+
+    expect(mockRouteService.watchHasAnyRoutePreview).toHaveBeenCalledWith('user-1');
+    const routeTile = user.settings?.dashboardSettings?.tiles?.find(tile => (
+      tile.type === TileTypes.Map && (tile as any).mapSource === 'routes'
+    )) as any;
+    expect(routeTile).toMatchObject({
+      name: 'Routes',
+      size: { columns: 2, rows: 2 },
+      clusterMarkers: false,
+    });
+    expect(user.settings?.dashboardSettings?.autoTiles?.routePreview).toMatchObject({
+      state: 'added',
+      source: DASHBOARD_AUTO_TILE_ROUTE_PREVIEW_SOURCE,
+    });
+    expect(mockUserService.updateUserProperties).toHaveBeenCalledTimes(1);
+    expect(mockSnackBar.open).toHaveBeenCalledWith('Added Routes map to your dashboard.', 'Undo', { duration: 7000 });
     subscription.unsubscribe();
   });
 
@@ -510,7 +597,7 @@ describe('DashboardAutoTileService', () => {
     expect(user.settings?.dashboardSettings?.autoTiles?.curatedRecoveryNow).toBeUndefined();
     expect(mockUserService.updateUserProperties).toHaveBeenCalledTimes(1);
     expect(mockSnackBar.open).toHaveBeenCalledWith(
-      'Added 10 dashboard charts: Form, Freshness Forecast, Intensity Distribution, and 7 more.',
+      'Added 10 dashboard tiles: Form, Freshness Forecast, Intensity Distribution, and 7 more.',
       'Undo',
       { duration: 7000 },
     );

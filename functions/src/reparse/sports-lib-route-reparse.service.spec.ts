@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+    SPORTS_LIB_ROUTE_REPARSE_RUNTIME_DEFAULTS,
     buildSportsLibRouteReparseJobId,
     extractPrimaryRouteSourceFile,
     parseUidAndRouteIdFromRoutePath,
@@ -19,6 +20,11 @@ function makeRouteRef(processingSnapshot: { exists: boolean; data?: () => Record
 }
 
 describe('sports-lib-route-reparse.service', () => {
+    it('enables the route reparse scanner by default', () => {
+        expect(SPORTS_LIB_ROUTE_REPARSE_RUNTIME_DEFAULTS.enabled).toBe(true);
+        expect(SPORTS_LIB_ROUTE_REPARSE_RUNTIME_DEFAULTS.uidAllowlist).toEqual([]);
+    });
+
     it('builds deterministic route reparse job IDs', () => {
         expect(buildSportsLibRouteReparseJobId('user-1', 'route-1', '16.0.2')).toBe(
             buildSportsLibRouteReparseJobId('user-1', 'route-1', '16.0.2'),

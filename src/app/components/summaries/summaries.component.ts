@@ -83,6 +83,7 @@ import { MatDialog } from '@angular/material/dialog';
 import { DashboardManagerDialogComponent } from './dashboard-manager-dialog/dashboard-manager-dialog.component';
 import { ConfirmationDialogComponent } from '../confirmation-dialog/confirmation-dialog.component';
 import type { SleepSession } from '@shared/sleep';
+import type { FirestoreRouteJSON } from '@shared/app-route.interface';
 import type {
   AppDashboardChartTileDisplaySettingsInterface,
   AppDashboardChartTileSettingsInterface,
@@ -124,6 +125,7 @@ import {
   resolveDashboardTileSection,
 } from '../../helpers/dashboard-tile-section.helper';
 import { AppEventService } from '../../services/app.event.service';
+import { AppRouteService } from '../../services/app.route.service';
 import { DashboardAutoTileService } from '../../services/dashboard-auto-tile.service';
 import { WhereFilterOp } from 'firebase/firestore';
 
@@ -198,6 +200,10 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   private tileEventAnchorEndMsByOrder = new Map<number, number | null>();
   private tileEventsByOrder: Record<number, EventInterface[]> = {};
   public tileEventLoadingByOrder: Record<number, boolean> = {};
+  private routePreviewSubscription: Subscription | null = null;
+  private routePreviewListenerKey: string | null = null;
+  private routePreviewRoutes: FirestoreRouteJSON[] = [];
+  public routePreviewLoading = false;
   public darkTheme = false;
   private logger: LoggerService;
   private dashboardTileSettingsSnapshot: TileSettingsInterface[] = [];
@@ -239,6 +245,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     private dashboardDerivedMetricsService: DashboardDerivedMetricsService,
     private sleepService: AppSleepService,
     private eventService: AppEventService,
+    private routeService: AppRouteService,
     private dashboardAutoTileService: DashboardAutoTileService,
     private dialog: MatDialog,
     changeDetector: ChangeDetectorRef,
@@ -301,7 +308,8 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       return `${item.chartType}${item.dataCategoryType}${item.dataValueType}${item.name}${item.order}${item.timeInterval}`;
     }
     const mapItem = item as DashboardMapTileViewModel;
-    return `${mapItem.clusterMarkers}${mapItem.mapTheme}${mapItem.mapStyle}${mapItem.name}${mapItem.order}${mapItem.showHeatMap}`;
+    const mapSource = mapItem.mapSource === 'routes' ? 'routes' : 'events';
+    return `${mapItem.clusterMarkers}${mapItem.mapTheme}${mapItem.mapStyle}${mapSource}${mapItem.name}${mapItem.order}${mapItem.showHeatMap}${mapItem.routePreviews?.length || 0}`;
   }
 
   public trackBySection(_index: number, item: DashboardTileSectionViewModel): DashboardTileSectionId {
@@ -429,6 +437,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     this.syncSleepSubscription();
     this.syncDashboardAutoTileSubscription();
     this.syncTileEventSubscriptions();
+    this.syncRoutePreviewSubscription();
     await this.rebuildTilesFromCurrentState();
   }
 
@@ -440,6 +449,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       tiles: this.user?.settings?.dashboardSettings?.tiles ?? [],
       events: [],
       tileEventsByOrder: this.tileEventsByOrder,
+      routePreviews: this.routePreviewRoutes,
       sleepSessions: this.sleepSessions,
       sleepTrendWindow: this.sleepTrendWindow,
       preferences: this.getAggregationPreferences(),
@@ -813,6 +823,9 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   }
 
   public isTileLoading(tile: DashboardTileViewModel): boolean {
+    if (this.isRoutePreviewMapTile(tile)) {
+      return this.routePreviewLoading;
+    }
     if (this.isEventDataTile(tile)) {
       return this.tileEventLoadingByOrder[tile.order] === true;
     }
@@ -934,6 +947,50 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
           },
         }));
     });
+  }
+
+  private syncRoutePreviewSubscription(): void {
+    const eventUser = (this.eventUser || this.user) as User | null;
+    const uid = `${eventUser?.uid || ''}`.trim();
+    const hasRouteMapTile = this.getOrderedDashboardSettingsTiles().some(tile => this.isRoutePreviewMapSettingsTile(tile));
+    if (!uid || !hasRouteMapTile) {
+      this.unsubscribeRoutePreviewSubscription();
+      return;
+    }
+
+    const listenerKey = `${uid}:recent-route-previews`;
+    if (this.routePreviewListenerKey === listenerKey && this.routePreviewSubscription) {
+      return;
+    }
+
+    this.unsubscribeRoutePreviewSubscription();
+    this.routePreviewListenerKey = listenerKey;
+    this.routePreviewLoading = true;
+    this.routePreviewSubscription = this.routeService.watchRecentRoutePreviews(eventUser, 50).subscribe({
+      next: (routes) => {
+        this.routePreviewRoutes = routes || [];
+        this.routePreviewLoading = false;
+        void this.rebuildTilesFromCurrentState();
+        this.changeDetector.markForCheck();
+      },
+      error: (error) => {
+        this.routePreviewRoutes = [];
+        this.routePreviewLoading = false;
+        this.logger.error('[SummariesComponent] Failed to load dashboard route previews', error);
+        void this.rebuildTilesFromCurrentState();
+        this.changeDetector.markForCheck();
+      },
+    });
+  }
+
+  private unsubscribeRoutePreviewSubscription(): void {
+    if (this.routePreviewSubscription) {
+      this.routePreviewSubscription.unsubscribe();
+      this.routePreviewSubscription = null;
+    }
+    this.routePreviewListenerKey = null;
+    this.routePreviewRoutes = [];
+    this.routePreviewLoading = false;
   }
 
   private buildTileEventWhereClauses(window: { startMs: number | null; endMs: number | null }): Array<{ fieldPath: string; opStr: WhereFilterOp; value: number }> {
@@ -1063,7 +1120,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
 
   private isEventDataTile(tile: DashboardTileViewModel): boolean {
     if (tile.type === TileTypes.Map) {
-      return true;
+      return !this.isRoutePreviewMapTile(tile);
     }
     return tile.type === TileTypes.Chart && (
       !isDashboardSpecialChartType((tile as DashboardChartTileViewModel).chartType)
@@ -1073,12 +1130,22 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
 
   private isEventDataSettingsTile(tile: TileSettingsInterface): boolean {
     if (tile.type === TileTypes.Map) {
-      return true;
+      return !this.isRoutePreviewMapSettingsTile(tile);
     }
     return tile.type === TileTypes.Chart && (
       !isDashboardSpecialChartType((tile as TileChartSettingsInterface).chartType)
       || isDashboardEventBackedSpecialChartType((tile as TileChartSettingsInterface).chartType)
     );
+  }
+
+  private isRoutePreviewMapTile(tile: DashboardTileViewModel): boolean {
+    return tile.type === TileTypes.Map
+      && (tile as DashboardMapTileViewModel).mapSource === 'routes';
+  }
+
+  private isRoutePreviewMapSettingsTile(tile: TileSettingsInterface): boolean {
+    return tile.type === TileTypes.Map
+      && (tile as AppDashboardMapTileSettingsInterface).mapSource === 'routes';
   }
 
   private isDisplaySettingsChartTile(tile: TileSettingsInterface): tile is AppDashboardChartTileSettingsInterface {
@@ -1483,6 +1550,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     }
     this.unsubscribeDashboardAutoTileSubscription();
     this.unsubscribeTileEventSubscriptions();
+    this.unsubscribeRoutePreviewSubscription();
   }
 
   private unsubscribeTileEventSubscriptions(): void {

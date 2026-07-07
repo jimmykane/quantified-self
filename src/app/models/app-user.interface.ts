@@ -52,6 +52,7 @@ export type AppDashboardAutoTileId =
     | 'curatedEfficiencyTrend'
     | 'powerCurve'
     | 'runningPowerCurve'
+    | 'routePreview'
     | 'kpiAcwr'
     | 'kpiRampRate'
     | 'kpiMonotonyStrain'
@@ -140,7 +141,10 @@ export interface AppDashboardChartTileSettingsInterface extends TileChartSetting
     displaySettings?: AppDashboardChartTileDisplaySettingsInterface;
 }
 
+export type AppDashboardMapTileSource = 'events' | 'routes';
+
 export interface AppDashboardMapTileSettingsInterface extends TileMapSettingsInterface {
+    mapSource?: AppDashboardMapTileSource;
     mapStyle?: AppMapStyleName;
     eventFilters?: AppDashboardTileEventFiltersInterface;
 }

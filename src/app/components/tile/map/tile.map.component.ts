@@ -1,8 +1,10 @@
 import { ChangeDetectionStrategy, Component, EventEmitter, Input, Output } from '@angular/core';
 import { ActivityTypes, EventInterface } from '@sports-alliance/sports-lib';
+import type { FirestoreRouteJSON } from '@shared/app-route.interface';
 import { TileAbstractDirective } from '../tile-abstract.directive';
 import { MapStyleName } from '../../../services/map/map-style.types';
 import type {
+  AppDashboardMapTileSource,
   AppDashboardTileEventFilterRange,
   AppDashboardTileEventFiltersInterface,
 } from '../../../models/app-user.interface';
@@ -17,11 +19,14 @@ import type { DashboardTileEventNavigationDirection } from '../../../helpers/das
 })
 
 export class TileMapComponent extends TileAbstractDirective {
+  @Input() tileName = 'Map';
+  @Input() mapSource: AppDashboardMapTileSource = 'events';
   @Input() mapStyle: MapStyleName = 'default';
   @Input() showActions!: boolean;
   @Input() enableDesktopDrag = false;
   @Input() clusterMarkers!: boolean;
   @Input() events: EventInterface[] = [];
+  @Input() routePreviews: FirestoreRouteJSON[] = [];
   @Input() eventFilters?: AppDashboardTileEventFiltersInterface | null;
   @Input() canNavigateTileEventsNewer = false;
   @Output() editInDashboardManager = new EventEmitter<number>();

@@ -187,6 +187,7 @@ service cloud.firestore {
               'activityTypes',
               'streamTypes',
               'bounds',
+              'preview',
               'sourceSummary',
               'syncedDestinationServiceNames',
               'deliverySummaries'

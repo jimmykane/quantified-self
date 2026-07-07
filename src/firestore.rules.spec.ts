@@ -895,6 +895,14 @@ describe('Firestore Security Rules', () => {
                         minLongitudeDegrees: 0,
                         maxLongitudeDegrees: 0,
                     },
+                    preview: {
+                        version: 1,
+                        encoding: 'polyline5',
+                        precision: 5,
+                        sourcePointCount: 2,
+                        pointCount: 2,
+                        segments: [],
+                    },
                 }));
             });
 

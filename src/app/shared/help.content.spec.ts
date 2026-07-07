@@ -75,17 +75,19 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('KPI');
     expect(gettingStartedSection?.content).toContain('Custom');
     expect(gettingStartedSection?.content).toContain('Map');
-    expect(gettingStartedSection?.content).toContain('one map tile');
+    expect(gettingStartedSection?.content).toContain('one activity map and one saved-routes map');
     expect(gettingStartedSection?.content).toContain('Event search filters only the dashboard event table');
     expect(gettingStartedSection?.content).toContain('Custom** charts use their own tile date-range and activity filters');
-    expect(gettingStartedSection?.content).toContain('Map** tiles use their own tile date-range and activity filters');
+    expect(gettingStartedSection?.content).toContain('Map** tiles can use activity events or saved route previews');
+    expect(gettingStartedSection?.content).toContain('Routes** map tiles show recent saved routes from lightweight route previews');
     expect(gettingStartedSection?.content).toContain('derived tiles stay independent from event table filters and custom/map tile filters');
     expect(gettingStartedSection?.content).toContain('dashboard can add the **Sleep** tile once');
     expect(gettingStartedSection?.content).toContain('add it manually from Dashboard manager');
     expect(gettingStartedSection?.content).toContain('removing an auto-added Sleep tile prevents future automatic Sleep tile adds');
     expect(gettingStartedSection?.content).toContain('default curated chart set');
     expect(gettingStartedSection?.content).toContain('KPI row set automatically once');
-    expect(gettingStartedSection?.content).toContain('auto-added curated chart or KPI prevents that chart from being suggested again');
+    expect(gettingStartedSection?.content).toContain('dashboard can also add a **Routes** map once saved routes have generated previews');
+    expect(gettingStartedSection?.content).toContain('auto-added curated chart, KPI, or Routes map prevents that tile from being suggested again');
     expect(gettingStartedSection?.content).toContain('bulk actions can add the recommended default dashboard');
     expect(gettingStartedSection?.content).toContain('add every available preset tile');
     expect(gettingStartedSection?.content).toContain('**Uploaded activities**');
@@ -309,6 +311,8 @@ describe('help.content', () => {
     expect(uploadsSection?.content).toContain('Saved routes open from **Routes** with the details action.');
     expect(uploadsSection?.content).toContain('waypoints and turn instructions');
     expect(uploadsSection?.content).toContain('parsed points and streams are not saved back to Firestore');
+    expect(uploadsSection?.content).toContain('lightweight encoded route preview for dashboard route maps');
+    expect(uploadsSection?.content).toContain('older saved routes need a reprocess or controlled backfill');
     expect(uploadsSection?.links).toContainEqual({
       label: 'FIT and GPX Route Files',
       icon: 'route',

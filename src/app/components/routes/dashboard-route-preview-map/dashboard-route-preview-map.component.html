@@ -1,0 +1,13 @@
+<app-loading-overlay
+  [isLoading]="isLoading || !apiLoaded()"
+  [hasError]="mapLoadFailed || noMapData"
+  [errorMessage]="mapLoadFailed ? 'Map unavailable' : 'No route previews yet'"
+  [errorHint]="mapLoadFailed ? 'Could not load the map. Try again later.' : 'Reprocess saved routes to generate lightweight previews.'"
+  [errorIcon]="mapLoadFailed ? 'map' : 'route'"
+  [showSkeleton]="false"
+  height="100%"
+  minHeight="100%">
+  <section class="dashboard-route-preview-map-stage">
+    <div #mapDiv class="dashboard-route-preview-map"></div>
+  </section>
+</app-loading-overlay>

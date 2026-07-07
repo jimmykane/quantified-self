@@ -170,7 +170,10 @@
           }
           @if (tile.type === tileTypes.Map) {
           <app-tile-map [user]="user" [type]="tile.type" [isLoading]="isTileLoading(tile)"
-            [showActions]="showActions" [events]="getMapTile(tile).events" [mapStyle]="getMapTile(tile).mapStyle || 'default'"
+            [showActions]="showActions" [tileName]="getMapTile(tile).name || 'Map'"
+            [mapSource]="getMapTile(tile).mapSource || 'events'"
+            [events]="getMapTile(tile).events" [routePreviews]="getMapTile(tile).routePreviews"
+            [mapStyle]="getMapTile(tile).mapStyle || 'default'"
             [clusterMarkers]="getMapTile(tile).clusterMarkers" [size]="tile.size" [order]="tile.order"
             [enableDesktopDrag]="desktopTileDragEnabled && section.tiles.length > 1" [eventFilters]="getTileEventFilters(tile)"
             [canNavigateTileEventsNewer]="canNavigateTileEventsNewer(tile)"

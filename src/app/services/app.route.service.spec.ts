@@ -12,6 +12,7 @@ import {
     orderBy,
     query,
     updateDoc,
+    where,
 } from 'app/firebase/firestore';
 import { ROUTE_NAME_MAX_LENGTH } from '../helpers/route-name.helper';
 import { AppRouteService } from './app.route.service';
@@ -30,6 +31,7 @@ vi.mock('app/firebase/firestore', async (importOriginal) => {
         orderBy: vi.fn((field: string, direction: string) => ({ type: 'orderBy', field, direction })),
         query: vi.fn((collectionRef: unknown, ...constraints: unknown[]) => ({ collectionRef, constraints })),
         updateDoc: vi.fn(),
+        where: vi.fn((field: string, op: string, value: unknown) => ({ type: 'where', field, op, value })),
     };
 });
 
@@ -126,6 +128,7 @@ describe('AppRouteService', () => {
             name: 'Renamed Route',
             creator: { name: 'Injected Device' },
             stats: { Distance: 999 },
+            preview: { version: 1, encoding: 'polyline5', precision: 5, sourcePointCount: 2, pointCount: 2, segments: [] },
             pointCount: 0,
             originalFiles: [{ path: 'users/other/routes/route-1/original.gpx', startDate: new Date() }],
             routes: [],
@@ -140,6 +143,111 @@ describe('AppRouteService', () => {
                 notes: 'Owner note',
             },
         );
+    });
+
+    it('watches route preview eligibility with a bounded preview query', async () => {
+        vi.mocked(collectionData).mockReturnValue(of([routeWithPreview('route-1')]));
+
+        const result = await firstValueFrom(service.watchHasAnyRoutePreview('user-1'));
+
+        expect(collection).toHaveBeenCalledWith(firestoreMock, 'users', 'user-1', 'routes');
+        expect(where).toHaveBeenCalledWith('preview.pointCount', '>', 0);
+        expect(limit).toHaveBeenCalledWith(1);
+        expect(query).toHaveBeenCalledWith(
+            { path: 'users/user-1/routes' },
+            { type: 'where', field: 'preview.pointCount', op: '>', value: 0 },
+            { type: 'limit', value: 1 },
+        );
+        expect(result).toBe(true);
+    });
+
+    it('fails route preview eligibility closed without a user id', async () => {
+        await expect(firstValueFrom(service.watchHasAnyRoutePreview(''))).resolves.toBe(false);
+        await expect(firstValueFrom(service.watchHasAnyRoutePreview('   '))).resolves.toBe(false);
+
+        expect(collectionData).not.toHaveBeenCalled();
+    });
+
+    it('trims route preview watcher user ids before querying', async () => {
+        vi.mocked(collectionData).mockReturnValue(of([routeWithPreview('route-1')]));
+
+        await firstValueFrom(service.watchHasAnyRoutePreview('  user-1  '));
+
+        expect(collection).toHaveBeenCalledWith(firestoreMock, 'users', 'user-1', 'routes');
+    });
+
+    it('loads recent route candidates and keeps only the requested preview-ready documents', async () => {
+        vi.mocked(collectionData).mockReturnValue(of([
+            routeWithPreview('route-1'),
+            routeWithoutPreview('route-2'),
+            {
+                ...routeWithPreview('route-3'),
+                preview: {
+                    version: 1,
+                    encoding: 'polyline5',
+                    precision: 5,
+                    sourcePointCount: 2,
+                    pointCount: 0,
+                    segments: [],
+                },
+            },
+            routeWithPreview('route-4'),
+            routeWithPreview('route-5'),
+        ]));
+
+        const result = await firstValueFrom(service.watchRecentRoutePreviews({ uid: 'user-1' }, 2));
+
+        expect(orderBy).toHaveBeenCalledWith('importedAt', 'desc');
+        expect(limit).toHaveBeenCalledWith(8);
+        expect(result.map(route => route.id)).toEqual(['route-1', 'route-4']);
+    });
+
+    it('fails recent route preview loading closed without a trimmed user id', async () => {
+        await expect(firstValueFrom(service.watchRecentRoutePreviews({ uid: '   ' }, 2))).resolves.toEqual([]);
+
+        expect(collectionData).not.toHaveBeenCalled();
+    });
+
+    it('trims recent route preview user ids before querying candidates', async () => {
+        vi.mocked(collectionData).mockReturnValue(of([routeWithPreview('route-1')]));
+
+        await firstValueFrom(service.watchRecentRoutePreviews({ uid: '  user-1  ' }, 2));
+
+        expect(collection).toHaveBeenCalledWith(firestoreMock, 'users', 'user-1', 'routes');
+        expect(collection).not.toHaveBeenCalledWith(firestoreMock, 'users', '  user-1  ', 'routes');
+    });
+
+    it('falls back to preview-ready route documents when the recent candidate window is sparse', async () => {
+        const recentCandidates = Array.from({ length: 12 }, (_value, index) => routeWithoutPreview(`route-${index}`));
+        recentCandidates[0] = routeWithPreview('recent-preview', new Date('2026-01-01T00:00:00.000Z'));
+        vi.mocked(collectionData)
+            .mockReturnValueOnce(of(recentCandidates))
+            .mockReturnValueOnce(of([
+                routeWithPreview('older-preview', new Date('2024-01-01T00:00:00.000Z')),
+                routeWithPreview('newer-preview', new Date('2025-01-01T00:00:00.000Z')),
+                routeWithPreview('recent-preview', new Date('2026-01-01T00:00:00.000Z')),
+            ]));
+
+        const result = await firstValueFrom(service.watchRecentRoutePreviews({ uid: 'user-1' }, 3));
+
+        expect(limit).toHaveBeenCalledWith(12);
+        expect(where).toHaveBeenCalledWith('preview.pointCount', '>', 0);
+        expect(limit).toHaveBeenCalledWith(3);
+        expect(result.map(route => route.id)).toEqual(['recent-preview', 'newer-preview', 'older-preview']);
+    });
+
+    it('keeps recent preview candidates when the preview-ready fallback query fails', async () => {
+        const recentCandidates = Array.from({ length: 8 }, (_value, index) => routeWithoutPreview(`route-${index}`));
+        recentCandidates[0] = routeWithPreview('recent-preview', new Date('2026-01-01T00:00:00.000Z'));
+        vi.mocked(collectionData)
+            .mockReturnValueOnce(of(recentCandidates))
+            .mockImplementationOnce(() => {
+                throw new Error('preview query failed');
+            });
+
+        const result = await firstValueFrom(service.watchRecentRoutePreviews({ uid: 'user-1' }, 2));
+
+        expect(result.map(route => route.id)).toEqual(['recent-preview']);
     });
 
     it('does not call updateDoc when only server-owned route fields are passed', async () => {
@@ -278,3 +386,48 @@ describe('AppRouteService', () => {
         expect(result.byteLength).toBe(3);
     });
 });
+
+function routeWithPreview(id: string, importedAt?: Date): any {
+    return {
+        id,
+        userID: 'user-1',
+        name: 'Route',
+        srcFileType: 'gpx',
+        createdAt: null,
+        routes: [],
+        routeCount: 1,
+        waypointCount: 0,
+        pointCount: 2,
+        importedAt,
+        activityTypes: [],
+        streamTypes: [],
+        preview: {
+            version: 1,
+            encoding: 'polyline5',
+            precision: 5,
+            sourcePointCount: 2,
+            pointCount: 2,
+            segments: [{
+                sourcePointCount: 2,
+                pointCount: 2,
+                encodedPolyline: 'abc',
+            }],
+        },
+    };
+}
+
+function routeWithoutPreview(id: string): any {
+    return {
+        id,
+        userID: 'user-1',
+        name: 'Route',
+        srcFileType: 'gpx',
+        createdAt: null,
+        routes: [],
+        routeCount: 1,
+        waypointCount: 0,
+        pointCount: 2,
+        activityTypes: [],
+        streamTypes: [],
+    };
+}

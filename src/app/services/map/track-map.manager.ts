@@ -156,11 +156,18 @@ export class TrackMapManager {
   }
 
   public clearAll(): void {
+    this.styleLoadHandlerCleanup?.();
+    this.styleLoadHandlerCleanup = null;
+    this.styleLoadHandler = null;
     this.styleReadyRenderCleanup?.();
     this.styleReadyRenderCleanup = null;
+    clearDeferredTerrainToggleState(this.terrainToggleState);
     this.clearTracksAndMarkers();
     this.clearCursorMarkers();
     this.currentTracks = [];
+    this.map = null;
+    this.mapboxgl = null;
+    this.terrainEnabled = false;
   }
 
   public toggleTerrain(enable: boolean, animate: boolean = true): void {

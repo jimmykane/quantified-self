@@ -49,6 +49,7 @@ import { getDefaultDashboardChartTileDisplaySettingsForChartType } from './dashb
 import type {
   AppDashboardChartTileSettingsInterface,
   AppDashboardMapTileSettingsInterface,
+  AppDashboardMapTileSource,
 } from '../models/app-user.interface';
 import { AppUserUtilities } from '../utils/app.user.utilities';
 import { buildDashboardPowerCurveAutoTile } from './dashboard-auto-tile.helper';
@@ -79,6 +80,7 @@ export const DASHBOARD_MANAGER_PRESET_IDS = {
   KPI_HARD_PERCENT: 'kpi-hard-percent',
   KPI_EFFICIENCY_DELTA_4W: 'kpi-efficiency-delta-4w',
   MAP_DEFAULT_CLUSTERED: 'map-default-clustered',
+  MAP_ROUTES_PREVIEW: 'map-routes-preview',
   CUSTOM_DURATION_PIE: 'custom-duration-pie',
   CUSTOM_DISTANCE_COLUMNS: 'custom-distance-columns',
   CUSTOM_ASCENT_PYRAMIDS: 'custom-ascent-pyramids',
@@ -130,6 +132,7 @@ export interface DashboardManagerCustomPresetDefinition extends DashboardManager
 
 export interface DashboardManagerMapPresetDefinition extends DashboardManagerPresetBaseDefinition {
   category: 'map';
+  mapSource: AppDashboardMapTileSource;
   mapStyle: MapStyleName;
   clusterMarkers: boolean;
 }
@@ -380,8 +383,20 @@ const DASHBOARD_MANAGER_PRESET_DEFINITIONS: DashboardManagerPresetDefinition[] =
     description: 'Default map with clustered markers and heatmap.',
     icon: 'map',
     category: 'map',
+    mapSource: 'events',
     mapStyle: 'default',
     clusterMarkers: true,
+  },
+  {
+    id: DASHBOARD_MANAGER_PRESET_IDS.MAP_ROUTES_PREVIEW,
+    label: 'Routes map',
+    tileName: 'Routes',
+    description: 'Recent saved routes from lightweight route previews.',
+    icon: 'route',
+    category: 'map',
+    mapSource: 'routes',
+    mapStyle: 'default',
+    clusterMarkers: false,
   },
   {
     id: DASHBOARD_MANAGER_PRESET_IDS.CUSTOM_DURATION_PIE,
@@ -500,12 +515,16 @@ export function buildDashboardManagerPresetTile(
       type: TileTypes.Map,
       order: input.order,
       size: input.size,
+      mapSource: definition.mapSource,
       mapStyle: definition.mapStyle,
       mapTheme: MapThemes.Normal,
-      showHeatMap: true,
+      mapType: AppUserUtilities.getDefaultMapType(),
+      showHeatMap: definition.mapSource === 'events',
       clusterMarkers: definition.clusterMarkers,
-      eventFilters: AppUserUtilities.getDefaultDashboardTileEventFilters(),
     };
+    if (definition.mapSource === 'events') {
+      mapTile.eventFilters = AppUserUtilities.getDefaultDashboardTileEventFilters();
+    }
     return mapTile;
   }
 

@@ -542,6 +542,36 @@ describe('AppUserUtilities', () => {
                 range: '1y',
                 activityTypes: [ActivityTypes.Cycling]
             });
+            expect((mapTile as any).mapSource).toBe('events');
+        });
+
+        it('should preserve route map source and remove event filters from route preview map tiles', () => {
+            const user = {
+                settings: {
+                    dashboardSettings: {
+                        tiles: [
+                            {
+                                type: TileTypes.Map,
+                                order: 0,
+                                name: 'Routes',
+                                mapSource: 'routes',
+                                mapStyle: 'default',
+                                mapTheme: 'normal',
+                                showHeatMap: false,
+                                clusterMarkers: false,
+                                size: { columns: 2, rows: 2 },
+                                eventFilters: { range: 'all', activityTypes: [ActivityTypes.Cycling] }
+                            }
+                        ]
+                    }
+                }
+            } as unknown as User;
+
+            const settings = AppUserUtilities.fillMissingAppSettings(user);
+            const [routeMapTile] = settings.dashboardSettings?.tiles || [];
+
+            expect((routeMapTile as any).mapSource).toBe('routes');
+            expect((routeMapTile as any).eventFilters).toBeUndefined();
         });
 
         it('should remove event filters from curated and derived chart tiles', () => {
@@ -937,7 +967,7 @@ describe('AppUserUtilities', () => {
             expect(settings.dashboardSettings?.dismissedCuratedRecoveryNowTile).toBe(true);
         });
 
-        it('should keep only one map tile and preserve the first map by order', () => {
+        it('should keep one map tile per source and preserve the first map by order', () => {
             const user = {
                 settings: {
                     dashboardSettings: {
@@ -967,11 +997,35 @@ describe('AppUserUtilities', () => {
                                 type: TileTypes.Map,
                                 order: 0,
                                 name: 'Map-first',
+                                mapSource: 'events',
                                 mapStyle: 'outdoors',
                                 mapTheme: 'normal',
                                 showHeatMap: true,
                                 clusterMarkers: true,
                                 size: { columns: 1, rows: 1 }
+                            },
+                            {
+                                type: TileTypes.Map,
+                                order: 3,
+                                name: 'Routes-first',
+                                mapSource: 'routes',
+                                mapStyle: 'default',
+                                mapTheme: 'normal',
+                                showHeatMap: false,
+                                clusterMarkers: false,
+                                eventFilters: { range: 'all', activityTypes: [ActivityTypes.Cycling] },
+                                size: { columns: 2, rows: 2 }
+                            },
+                            {
+                                type: TileTypes.Map,
+                                order: 4,
+                                name: 'Routes-later',
+                                mapSource: 'routes',
+                                mapStyle: 'satellite',
+                                mapTheme: 'normal',
+                                showHeatMap: false,
+                                clusterMarkers: false,
+                                size: { columns: 2, rows: 2 }
                             }
                         ]
                     }
@@ -982,9 +1036,13 @@ describe('AppUserUtilities', () => {
             const mapTiles = settings.dashboardSettings?.tiles?.filter((tile: any) => tile?.type === TileTypes.Map) || [];
             const chartTiles = settings.dashboardSettings?.tiles?.filter((tile: any) => tile?.type === TileTypes.Chart) || [];
 
-            expect(mapTiles).toHaveLength(1);
+            expect(mapTiles).toHaveLength(2);
             expect(mapTiles[0].name).toBe('Map-first');
+            expect(mapTiles[0].mapSource).toBe('events');
             expect(mapTiles[0].mapStyle).toBe('outdoors');
+            expect(mapTiles[1].name).toBe('Routes-first');
+            expect(mapTiles[1].mapSource).toBe('routes');
+            expect(mapTiles[1].eventFilters).toBeUndefined();
             expect(chartTiles).toHaveLength(1);
             expect(chartTiles[0].name).toBe('Distance');
         });

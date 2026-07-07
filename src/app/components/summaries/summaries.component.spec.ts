@@ -23,6 +23,7 @@ import { AppUserService } from '../../services/app.user.service';
 import { DashboardDerivedMetricsService } from '../../services/dashboard-derived-metrics.service';
 import { AppSleepService } from '../../services/app.sleep.service';
 import { AppEventService } from '../../services/app.event.service';
+import { AppRouteService } from '../../services/app.route.service';
 import { DashboardAutoTileService } from '../../services/dashboard-auto-tile.service';
 import * as dashboardTileViewModelHelper from '../../helpers/dashboard-tile-view-model.helper';
 import {
@@ -50,6 +51,7 @@ describe('SummariesComponent', () => {
   };
   let mockSleepService: { watchForDashboard: ReturnType<typeof vi.fn> };
   let mockEventService: { getEventsBy: ReturnType<typeof vi.fn> };
+  let mockRouteService: { watchRecentRoutePreviews: ReturnType<typeof vi.fn> };
   let mockDashboardAutoTileService: { watchForDashboard: ReturnType<typeof vi.fn> };
   let mockLogger: { error: ReturnType<typeof vi.fn>; warn: ReturnType<typeof vi.fn>; log: ReturnType<typeof vi.fn> };
   let mockDialog: { open: ReturnType<typeof vi.fn> };
@@ -112,6 +114,9 @@ describe('SummariesComponent', () => {
     mockEventService = {
       getEventsBy: vi.fn().mockReturnValue(of([])),
     };
+    mockRouteService = {
+      watchRecentRoutePreviews: vi.fn().mockReturnValue(of([])),
+    };
     mockDashboardAutoTileService = {
       watchForDashboard: vi.fn().mockImplementation(() => new Subscription()),
     };
@@ -147,6 +152,7 @@ describe('SummariesComponent', () => {
         { provide: DashboardDerivedMetricsService, useValue: mockDashboardDerivedMetricsService },
         { provide: AppSleepService, useValue: mockSleepService },
         { provide: AppEventService, useValue: mockEventService },
+        { provide: AppRouteService, useValue: mockRouteService },
         { provide: DashboardAutoTileService, useValue: mockDashboardAutoTileService },
         { provide: LoggerService, useValue: mockLogger },
         { provide: MatDialog, useValue: mockDialog },
@@ -409,6 +415,7 @@ describe('SummariesComponent', () => {
       tiles: component.user.settings.dashboardSettings.tiles,
       events: [],
       tileEventsByOrder: {},
+      routePreviews: [],
       preferences: {
         removeAscentForEventTypes: [ActivityTypes.Running],
         removeDescentForEventTypes: [ActivityTypes.Cycling],
@@ -800,6 +807,79 @@ describe('SummariesComponent', () => {
         0: [customEvent],
         1: [mapEvent],
       },
+    }));
+  });
+
+  it('should load route preview maps from route previews without event subscriptions', async () => {
+    const routePreviewsSubject = new Subject<any[]>();
+    const previewRoute = {
+      id: 'route-1',
+      preview: {
+        version: 1,
+        encoding: 'polyline5',
+        precision: 5,
+        sourcePointCount: 2,
+        pointCount: 2,
+        segments: [{
+          sourcePointCount: 2,
+          pointCount: 2,
+          encodedPolyline: '_p~iF~ps|U_ulLnnqC',
+        }],
+      },
+    };
+    mockRouteService.watchRecentRoutePreviews.mockReturnValueOnce(routePreviewsSubject.asObservable());
+    buildDashboardTileViewModelsSpy.mockReturnValue([]);
+    component.user = {
+      uid: 'viewer-user',
+      settings: {
+        dashboardSettings: {
+          tiles: [{
+            type: TileTypes.Map,
+            order: 0,
+            name: 'Routes',
+            mapSource: 'routes',
+            mapStyle: 'default',
+            clusterMarkers: false,
+            showHeatMap: false,
+            size: { columns: 2, rows: 2 },
+            eventFilters: { range: '90d', activityTypes: [ActivityTypes.Running] },
+          }],
+        },
+      },
+    } as any;
+    component.eventUser = { uid: 'route-owner' } as any;
+
+    await component.ngOnChanges({
+      user: {
+        currentValue: component.user,
+        previousValue: null,
+        firstChange: true,
+        isFirstChange: () => true,
+      } as any,
+      eventUser: {
+        currentValue: component.eventUser,
+        previousValue: null,
+        firstChange: true,
+        isFirstChange: () => true,
+      } as any,
+    });
+
+    expect(mockEventService.getEventsBy).not.toHaveBeenCalled();
+    expect(mockRouteService.watchRecentRoutePreviews).toHaveBeenCalledWith(component.eventUser, 50);
+    expect(component.routePreviewLoading).toBe(true);
+    expect(component.isTileLoading({
+      type: TileTypes.Map,
+      order: 0,
+      mapSource: 'routes',
+    } as any)).toBe(true);
+
+    routePreviewsSubject.next([previewRoute]);
+    await Promise.resolve();
+
+    expect(component.routePreviewLoading).toBe(false);
+    expect(buildDashboardTileViewModelsSpy).toHaveBeenLastCalledWith(expect.objectContaining({
+      tileEventsByOrder: {},
+      routePreviews: [previewRoute],
     }));
   });
 
@@ -1621,7 +1701,7 @@ describe('SummariesComponent', () => {
     } as any);
 
     expect(chartKey).toBe(`${ChartTypes.ColumnsVertical}${ChartDataCategoryTypes.DateType}${ChartDataValueTypes.Total}Distance2${TimeIntervals.Monthly}`);
-    expect(mapKey).toBe('truenormalstreetsMap3false');
+    expect(mapKey).toBe('truenormalstreetseventsMap3false0');
   });
 
   it('should enable desktop drag only when width, fine pointer, and hover are all available', () => {

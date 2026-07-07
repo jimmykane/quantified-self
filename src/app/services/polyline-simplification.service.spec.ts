@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { PolylineSimplificationService } from './polyline-simplification.service';
 
 function buildSinePolyline(totalPoints: number): number[][] {
@@ -69,23 +69,29 @@ describe('PolylineSimplificationService', () => {
     expect(result.coordinates).toBe(coordinates);
   });
 
-  it('should return original coordinates when vis-why execution fails', () => {
+  it('should ignore invalid coordinates before simplifying', () => {
     const service = new PolylineSimplificationService();
-    const coordinates = buildSinePolyline(180);
-
-    vi.spyOn(service as any, 'runVisvalingamWhyatt').mockImplementation(() => {
-      throw new Error('boom');
-    });
+    const coordinates = [
+      [0, 0],
+      [1, 1],
+      [Number.NaN, 2],
+      [3, 3],
+      [4, 4],
+      [5, 5],
+    ];
 
     const result = service.simplifyVisvalingamWhyatt(coordinates, {
-      keepRatio: 0.25,
+      keepRatio: 0.5,
       minInputPoints: 2,
       minPointsToKeep: 2,
     });
 
-    expect(result.simplified).toBe(false);
-    expect(result.inputPointCount).toBe(180);
-    expect(result.outputPointCount).toBe(180);
-    expect(result.coordinates).toBe(coordinates);
+    expect(result.simplified).toBe(true);
+    expect(result.inputPointCount).toBe(5);
+    expect(result.outputPointCount).toBe(3);
+    expect(result.coordinates).toHaveLength(3);
+    expect(result.coordinates[0]).toEqual([0, 0]);
+    expect(result.coordinates[result.coordinates.length - 1]).toEqual([5, 5]);
+    expect(result.coordinates).not.toContainEqual([Number.NaN, 2]);
   });
 });

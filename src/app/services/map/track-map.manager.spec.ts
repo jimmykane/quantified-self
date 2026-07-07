@@ -108,6 +108,19 @@ describe('TrackMapManager', () => {
     expect(markerFactory.createFlagMarker).toHaveBeenCalledWith('#1e88e5');
   });
 
+  it('detaches style lifecycle handlers when cleared', () => {
+    const styleLoadHandler = map.on.mock.calls.find((call: any[]) => call[0] === 'style.load')?.[1];
+    expect(styleLoadHandler).toEqual(expect.any(Function));
+
+    manager.clearAll();
+
+    expect(map.off).toHaveBeenCalledWith('style.load', styleLoadHandler);
+    map.addSource.mockClear();
+    styleLoadHandler();
+
+    expect(map.addSource).not.toHaveBeenCalled();
+  });
+
   it('defers track layer rendering until the Mapbox style is ready', () => {
     map.isStyleLoaded.mockReturnValue(false);
 

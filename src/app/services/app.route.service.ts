@@ -1,6 +1,6 @@
 import { Injectable, inject } from '@angular/core';
-import { Observable } from 'rxjs';
-import { map } from 'rxjs/operators';
+import { defer, Observable, of } from 'rxjs';
+import { catchError, distinctUntilChanged, map, switchMap } from 'rxjs/operators';
 import {
     Firestore,
     collection,
@@ -13,6 +13,7 @@ import {
     orderBy,
     query,
     updateDoc,
+    where,
 } from 'app/firebase/firestore';
 import { FirestoreRouteJSON, OriginalRouteFileMetaData } from '@shared/app-route.interface';
 import { validateRouteName } from '../helpers/route-name.helper';
@@ -90,9 +91,14 @@ const SERVER_OWNED_ROUTE_UPDATE_FIELDS = [
     'activityTypes',
     'streamTypes',
     'bounds',
+    'preview',
     'sourceSummary',
     'syncedDestinationServiceNames',
+    'deliverySummaries',
 ] as const;
+
+const ROUTE_PREVIEW_CANDIDATE_LIMIT_MULTIPLIER = 4;
+const ROUTE_PREVIEW_MAX_CANDIDATE_LIMIT = 200;
 
 @Injectable({
     providedIn: 'root'
@@ -113,7 +119,48 @@ export class AppRouteService {
             orderBy(ROUTE_LIST_SERVER_SORT_FIELD_BY_COLUMN[resolvedSort.active], resolvedSort.direction),
             limit(limitCount),
         );
-        return collectionData(routesQuery, { idField: 'id' }) as Observable<FirestoreRouteJSON[]>;
+        return defer(() => collectionData(routesQuery, { idField: 'id' }) as Observable<FirestoreRouteJSON[]>);
+    }
+
+    watchHasAnyRoutePreview(userID: string | null | undefined): Observable<boolean> {
+        const uid = `${userID || ''}`.trim();
+        if (!uid) {
+            return of(false);
+        }
+
+        return this.watchRoutePreviewDocuments(uid, 1).pipe(
+            map(routes => routes.some(route => this.hasRoutePreview(route))),
+            catchError(() => of(false)),
+            distinctUntilChanged(),
+        );
+    }
+
+    watchRecentRoutePreviews(user: RouteOwner, limitCount = 50): Observable<FirestoreRouteJSON[]> {
+        const uid = `${user?.uid || ''}`.trim();
+        if (!uid) {
+            return of([]);
+        }
+
+        const requestedLimit = Math.max(1, Math.floor(limitCount));
+        const candidateLimit = Math.min(
+            ROUTE_PREVIEW_MAX_CANDIDATE_LIMIT,
+            Math.max(requestedLimit, requestedLimit * ROUTE_PREVIEW_CANDIDATE_LIMIT_MULTIPLIER),
+        );
+
+        return this.getRoutes({ uid }, candidateLimit).pipe(
+            switchMap((routes) => {
+                const recentPreviewRoutes = this.filterPreviewRoutes(routes).slice(0, requestedLimit);
+                if (recentPreviewRoutes.length >= requestedLimit || (routes || []).length < candidateLimit) {
+                    return of(recentPreviewRoutes);
+                }
+
+                return this.watchRoutePreviewDocuments(uid, requestedLimit).pipe(
+                    map(previewRoutes => this.mergePreviewRoutes(recentPreviewRoutes, previewRoutes).slice(0, requestedLimit)),
+                    catchError(() => of(recentPreviewRoutes)),
+                );
+            }),
+            catchError(() => of([])),
+        );
     }
 
     getRoute(user: RouteOwner, routeID: string): Observable<FirestoreRouteJSON | null> {
@@ -166,6 +213,74 @@ export class AppRouteService {
         return typeof route.originalFile?.path === 'string' && route.originalFile.path.trim().length > 0
             ? [route.originalFile]
             : [];
+    }
+
+    hasRoutePreview(route: FirestoreRouteJSON | null | undefined): boolean {
+        return !!route?.preview
+            && route.preview.version === 1
+            && route.preview.encoding === 'polyline5'
+            && route.preview.precision === 5
+            && typeof route.preview.pointCount === 'number'
+            && route.preview.pointCount > 0
+            && Array.isArray(route.preview.segments)
+            && route.preview.segments.some(segment => (
+                typeof segment?.encodedPolyline === 'string'
+                && segment.encodedPolyline.length > 0
+                && typeof segment.pointCount === 'number'
+                && segment.pointCount > 1
+            ));
+    }
+
+    private watchRoutePreviewDocuments(userID: string, limitCount: number): Observable<FirestoreRouteJSON[]> {
+        return defer(() => {
+            const routesCollection = collection(this.firestore, 'users', userID, 'routes');
+            const routesQuery = query(
+                routesCollection,
+                where('preview.pointCount', '>', 0),
+                limit(Math.max(1, Math.floor(limitCount))),
+            );
+
+            return collectionData(routesQuery, { idField: 'id' }) as Observable<FirestoreRouteJSON[]>;
+        });
+    }
+
+    private filterPreviewRoutes(routes: readonly FirestoreRouteJSON[] | null | undefined): FirestoreRouteJSON[] {
+        return (routes || []).filter(route => this.hasRoutePreview(route));
+    }
+
+    private mergePreviewRoutes(
+        primaryRoutes: readonly FirestoreRouteJSON[],
+        fallbackRoutes: readonly FirestoreRouteJSON[],
+    ): FirestoreRouteJSON[] {
+        const seenIDs = new Set<string>();
+        return [...primaryRoutes, ...this.sortRoutesByImportedAtDesc(this.filterPreviewRoutes(fallbackRoutes))]
+            .filter((route, index) => {
+                const id = `${route?.id || ''}`.trim();
+                if (!id) {
+                    return index < primaryRoutes.length;
+                }
+                if (seenIDs.has(id)) {
+                    return false;
+                }
+                seenIDs.add(id);
+                return true;
+            });
+    }
+
+    private sortRoutesByImportedAtDesc(routes: FirestoreRouteJSON[]): FirestoreRouteJSON[] {
+        return [...routes].sort((left, right) => this.toRouteTimestampMs(right.importedAt) - this.toRouteTimestampMs(left.importedAt));
+    }
+
+    private toRouteTimestampMs(value: unknown): number {
+        if (value instanceof Date) {
+            return value.getTime();
+        }
+        if (typeof (value as { toMillis?: unknown })?.toMillis === 'function') {
+            const millis = (value as { toMillis: () => number }).toMillis();
+            return Number.isFinite(millis) ? millis : 0;
+        }
+        const timestamp = typeof value === 'number' ? value : Number(value);
+        return Number.isFinite(timestamp) ? timestamp : 0;
     }
 
     async downloadFile(path: string, options?: DownloadFileOptions): Promise<ArrayBuffer> {

@@ -111,7 +111,11 @@ import {
   isDashboardTrainingBalanceKpiChartType,
 } from './dashboard-special-chart-types';
 import type { SleepSession } from '@shared/sleep';
-import type { AppDashboardChartTileSettingsInterface } from '../models/app-user.interface';
+import type { FirestoreRouteJSON } from '@shared/app-route.interface';
+import type {
+  AppDashboardChartTileSettingsInterface,
+  AppDashboardMapTileSettingsInterface,
+} from '../models/app-user.interface';
 
 export interface DashboardChartTileViewModel extends AppDashboardChartTileSettingsInterface {
   timeInterval: TimeIntervals;
@@ -135,12 +139,13 @@ export interface DashboardChartTileViewModel extends AppDashboardChartTileSettin
   powerCurve?: DashboardPowerCurveContext | null;
 }
 
-export type DashboardMapTileSettings = Omit<TileMapSettingsInterface, 'mapType'> & {
+export type DashboardMapTileSettings = Omit<TileMapSettingsInterface, 'mapType'> & AppDashboardMapTileSettingsInterface & {
   mapStyle?: MapStyleName;
 };
 
 export interface DashboardMapTileViewModel extends DashboardMapTileSettings {
   events: EventInterface[];
+  routePreviews: FirestoreRouteJSON[];
 }
 
 export type DashboardTileViewModel = DashboardChartTileViewModel | DashboardMapTileViewModel;
@@ -152,6 +157,7 @@ interface BuildDashboardTileViewModelsInput {
   tiles: TileSettingsInterface[];
   events?: EventInterface[] | null;
   tileEventsByOrder?: Record<number, EventInterface[] | undefined> | null;
+  routePreviews?: FirestoreRouteJSON[] | null;
   sleepSessions?: SleepSession[] | null;
   sleepTrendWindow?: DashboardSleepTrendWindow | null;
   preferences?: EventStatAggregationPreferences;
@@ -381,10 +387,15 @@ export function buildDashboardTileViewModels(
   return (input.tiles || []).reduce<DashboardTileViewModel[]>((viewModels, tile) => {
     if (tile.type === TileTypes.Map) {
       const mapTile = tile as DashboardMapTileSettings;
-      const tileEvents = resolveEventsForTile(input, mapTile, normalizedEvents);
+      const mapSource = mapTile.mapSource === 'routes' ? 'routes' : 'events';
+      const tileEvents = mapSource === 'events'
+        ? resolveEventsForTile(input, mapTile, normalizedEvents)
+        : [];
       viewModels.push({
         ...mapTile,
+        mapSource,
         events: tileEvents,
+        routePreviews: mapSource === 'routes' ? [...(input.routePreviews || [])] : [],
       });
       return viewModels;
     }

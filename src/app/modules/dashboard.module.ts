@@ -25,6 +25,7 @@ import { DashboardTileEventFiltersComponent } from '../components/tile/event-fil
 import { DashboardTileBoardComponent } from '../components/summaries/dashboard-tile-board/dashboard-tile-board.component';
 import { DashboardTileCellComponent } from '../components/summaries/dashboard-tile-cell/dashboard-tile-cell.component';
 import { DashboardActionPromptsComponent } from '../components/dashboard/dashboard-action-prompts/dashboard-action-prompts.component';
+import { DashboardRoutePreviewMapComponent } from '../components/routes/dashboard-route-preview-map/dashboard-route-preview-map.component';
 
 @NgModule({
     imports: [
@@ -36,6 +37,7 @@ import { DashboardActionPromptsComponent } from '../components/dashboard/dashboa
         DragDropModule,
         DashboardRoutingModule,
         EventsMapComponent,
+        DashboardRoutePreviewMapComponent,
     ],
     exports: [],
     declarations: [

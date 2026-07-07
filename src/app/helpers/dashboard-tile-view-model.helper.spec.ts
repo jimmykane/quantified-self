@@ -697,6 +697,58 @@ describe('dashboard-tile-view-model.helper', () => {
     expect((viewModels[0] as any).events.map((event: any) => event.getID())).toEqual(['earlier', 'later']);
   });
 
+  it('should build route map tiles from route previews without consuming event data', () => {
+    const event = makeEvent({
+      id: 'event-1',
+      startDate: '2024-01-02T10:00:00.000Z',
+      activityTypes: [ActivityTypes.Cycling],
+      stats: { [DataDistance.type]: 15 },
+    });
+    const tileEvent = makeEvent({
+      id: 'tile-event-1',
+      startDate: '2024-01-03T10:00:00.000Z',
+      activityTypes: [ActivityTypes.Running],
+      stats: { [DataDistance.type]: 5 },
+    });
+    const routePreview = {
+      id: 'route-1',
+      preview: {
+        version: 1,
+        encoding: 'polyline5',
+        precision: 5,
+        sourcePointCount: 2,
+        pointCount: 2,
+        segments: [{
+          sourcePointCount: 2,
+          pointCount: 2,
+          encodedPolyline: '_p~iF~ps|U_ulLnnqC',
+        }],
+      },
+    } as any;
+
+    const viewModels = buildDashboardTileViewModels({
+      tiles: [{
+        type: TileTypes.Map,
+        order: 0,
+        name: 'Routes',
+        mapSource: 'routes',
+        clusterMarkers: true,
+        mapTheme: 'normal',
+        showHeatMap: true,
+        eventFilters: { range: '14d', activityTypes: [ActivityTypes.Running] },
+        size: { columns: 2, rows: 2 },
+      } as any],
+      events: [event],
+      tileEventsByOrder: { 0: [tileEvent] },
+      routePreviews: [routePreview],
+    });
+
+    expect(viewModels).toHaveLength(1);
+    expect((viewModels[0] as any).mapSource).toBe('routes');
+    expect((viewModels[0] as any).events).toEqual([]);
+    expect((viewModels[0] as any).routePreviews).toEqual([routePreview]);
+  });
+
   it('should apply aggregation preferences when building chart tile data', () => {
     const viewModels = buildDashboardTileViewModels({
       tiles: [{

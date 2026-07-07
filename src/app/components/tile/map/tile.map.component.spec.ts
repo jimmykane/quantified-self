@@ -107,6 +107,22 @@ describe('TileMapComponent', () => {
     expect(body.querySelector('app-events-map')).toBeTruthy();
   });
 
+  it('should hide event filters and render the route preview map for routes source tiles', () => {
+    fixture.componentRef.setInput('tileName', 'Routes');
+    fixture.componentRef.setInput('mapSource', 'routes');
+    fixture.componentRef.setInput('routePreviews', [{ id: 'route-1' }]);
+
+    fixture.detectChanges();
+
+    const header = fixture.nativeElement.querySelector('.tile-map-header') as HTMLElement;
+    const body = fixture.nativeElement.querySelector('.tile-map-body') as HTMLElement;
+    expect(header.querySelector('.tile-map-title')?.textContent?.trim()).toBe('Routes');
+    expect(header.querySelector('.tile-event-filter-controls')).toBeNull();
+    expect(fixture.debugElement.query(By.directive(MockDashboardTileEventFiltersComponent))).toBeNull();
+    expect(body.querySelector('app-events-map')).toBeNull();
+    expect(body.querySelector('app-dashboard-route-preview-map')).toBeTruthy();
+  });
+
   it('should align the map body to the shared chart control band height', () => {
     const stylePath = resolve(process.cwd(), 'src/app/components/tile/map/tile.map.component.css');
     const styles = readFileSync(stylePath, 'utf8');
