@@ -1234,7 +1234,7 @@ describe('queue', () => {
                 callbackURL: 'cb1'
             })).rejects.toBeInstanceOf(ProviderQueueUserDeletedOrDeletingError);
 
-            expect(mockDocRef.set).toHaveBeenCalled();
+            expect(mockDocRef.create).toHaveBeenCalled();
             expect(mockRecursiveDelete).toHaveBeenCalledWith(mockDocRef);
             expect(utils.enqueueWorkoutTask).not.toHaveBeenCalled();
             expect(mockDocRef.update).not.toHaveBeenCalledWith({ dispatchedToCloudTask: expect.any(Number) });
@@ -1654,7 +1654,7 @@ describe('queue', () => {
             await expect(addToQueueForSuunto({ userName: 'user1', workoutID: 'work1' })).rejects.toThrow('No document to update');
         });
 
-        it('addToQueueForSuunto should re-dispatch duplicate unprocessed queue items', async () => {
+        it('addToQueueForSuunto should not re-dispatch duplicate unprocessed queue items that already have a dispatch marker', async () => {
             const alreadyExistsError: any = new Error('ALREADY_EXISTS');
             alreadyExistsError.code = 6;
             mockDocRef.create.mockRejectedValueOnce(alreadyExistsError);
@@ -1666,6 +1666,34 @@ describe('queue', () => {
                     processed: false,
                     retryCount: 0,
                     dispatchedToCloudTask: Date.now(),
+                }),
+            });
+
+            const result = await addToQueueForSuunto({ userName: 'user1', workoutID: 'work1' });
+
+            expect(result.id).toBe('mock-doc-id');
+            expect(mockDocRef.create).toHaveBeenCalledWith(expect.objectContaining({
+                id: 'user1-work1',
+                userName: 'user1',
+                workoutID: 'work1'
+            }));
+            expect(mockDocRef.set).not.toHaveBeenCalled();
+            expect(utils.enqueueWorkoutTask).not.toHaveBeenCalled();
+            expect(mockDocRef.update).not.toHaveBeenCalledWith({ dispatchedToCloudTask: expect.any(Number) });
+        });
+
+        it('addToQueueForSuunto should dispatch duplicate unprocessed queue items that have no dispatch marker', async () => {
+            const alreadyExistsError: any = new Error('ALREADY_EXISTS');
+            alreadyExistsError.code = 6;
+            mockDocRef.create.mockRejectedValueOnce(alreadyExistsError);
+            mockDocRef.get.mockResolvedValueOnce({
+                exists: true,
+                data: () => ({
+                    id: 'user1-work1',
+                    dateCreated: 123456,
+                    processed: false,
+                    retryCount: 0,
+                    dispatchedToCloudTask: null,
                 }),
             });
 
@@ -1832,16 +1860,17 @@ describe('queue', () => {
         });
 
         it('addToQueueForCOROS should insert item', async () => {
-            const queueItem: any = { id: 'coros1', openId: 'oid1', workoutID: 'wid1' };
+            const queueItem: any = { id: 'coros1', openId: 'oid1', workoutID: 'wid1', FITFileURI: 'https://coros.test/old.fit' };
             const result = await addToQueueForCOROS(queueItem);
             expect(result.id).toBe('mock-doc-id');
             const admin = await import('firebase-admin');
             const doc = admin.firestore().collection('COROSAPIWorkoutQueue').doc('coros1');
-            expect(doc.set).toHaveBeenCalledWith(expect.objectContaining({
+            expect(doc.create).toHaveBeenCalledWith(expect.objectContaining({
                 id: 'coros1',
                 openId: 'oid1',
                 firebaseUserID: 'mock-user-id',
             }));
+            expect(doc.set).not.toHaveBeenCalled();
         });
 
         it('addToQueueForGarmin should insert item with activityFileID based ID', async () => {
@@ -1859,11 +1888,264 @@ describe('queue', () => {
             expect(result.id).toBe('mock-doc-id');
             const admin = await import('firebase-admin');
             const doc = admin.firestore().collection('garminAPIActivityQueue').doc('u1-file123');
-            expect(doc.set).toHaveBeenCalledWith(expect.objectContaining({
+            expect(doc.create).toHaveBeenCalledWith(expect.objectContaining({
                 id: 'u1-file123',
                 activityFileID: 'file123',
                 firebaseUserID: 'mock-user-id',
             }));
+            expect(doc.set).not.toHaveBeenCalled();
+        });
+
+        it('addToQueueForGarmin should skip duplicate processed items without resetting lifecycle state', async () => {
+            const alreadyExistsError: any = new Error('ALREADY_EXISTS');
+            alreadyExistsError.code = 6;
+            mockDocRef.create.mockRejectedValueOnce(alreadyExistsError);
+            mockDocRef.get.mockResolvedValueOnce({
+                exists: true,
+                data: () => ({
+                    id: 'u1-file123',
+                    dateCreated: 123456,
+                    processed: true,
+                    retryCount: 9,
+                    totalRetryCount: 9,
+                    dispatchedToCloudTask: 1_777_000_000_000,
+                    token: 'old-token',
+                    callbackURL: 'old-callback',
+                    userAccessToken: 'old-access-token',
+                }),
+            });
+
+            const result = await addToQueueForGarmin({
+                userID: 'u1',
+                startTimeInSeconds: 123,
+                manual: false,
+                activityFileID: 'file123',
+                activityFileType: 'FIT',
+                token: 'new-token',
+                userAccessToken: 'new-access-token',
+                callbackURL: 'new-callback',
+            });
+
+            expect(result.id).toBe('mock-doc-id');
+            expect(mockDocRef.create).toHaveBeenCalled();
+            expect(mockDocRef.set).not.toHaveBeenCalled();
+            expect(mockDocRef.update).not.toHaveBeenCalled();
+            expect(utils.enqueueWorkoutTask).not.toHaveBeenCalled();
+        });
+
+        it('addToQueueForGarmin should refresh duplicate pending callback fields without resetting lifecycle state', async () => {
+            const alreadyExistsError: any = new Error('ALREADY_EXISTS');
+            alreadyExistsError.code = 6;
+            mockDocRef.create.mockRejectedValueOnce(alreadyExistsError);
+            mockDocRef.get.mockResolvedValueOnce({
+                exists: true,
+                data: () => ({
+                    id: 'u1-file123',
+                    dateCreated: 123456,
+                    processed: false,
+                    retryCount: 4,
+                    totalRetryCount: 7,
+                    errors: [{ date: 1, error: 'old', atRetryCount: 3 }],
+                    dispatchRecoveryGeneration: 2,
+                    dispatchedToCloudTask: null,
+                    firebaseUserID: 'mock-user-id',
+                    token: 'old-token',
+                    callbackURL: 'old-callback',
+                    userAccessToken: 'old-access-token',
+                    activityFileType: 'TCX',
+                    startTimeInSeconds: 111,
+                }),
+            });
+
+            const result = await addToQueueForGarmin({
+                userID: 'u1',
+                startTimeInSeconds: 123,
+                manual: false,
+                activityFileID: 'file123',
+                activityFileType: 'FIT',
+                token: 'new-token',
+                userAccessToken: 'new-access-token',
+                callbackURL: 'new-callback',
+            });
+
+            expect(result.id).toBe('mock-doc-id');
+            expect(mockDocRef.set).not.toHaveBeenCalled();
+            expect(mockDocRef.update).toHaveBeenCalledWith({
+                token: 'new-token',
+                callbackURL: 'new-callback',
+                userAccessToken: 'new-access-token',
+                activityFileType: 'FIT',
+                startTimeInSeconds: 123,
+            });
+            expect(mockDocRef.update).not.toHaveBeenCalledWith(expect.objectContaining({
+                processed: false,
+                retryCount: 0,
+                totalRetryCount: expect.any(Number),
+                errors: expect.any(Array),
+                dispatchedToCloudTask: null,
+                dispatchRecoveryGeneration: expect.any(Number),
+            }));
+            expect(utils.enqueueWorkoutTask).toHaveBeenCalledWith(ServiceNames.GarminAPI, 'u1-file123', 123456, undefined, { recoveryTaskKey: '7-2' });
+            expect(mockDocRef.update).toHaveBeenCalledWith({ dispatchedToCloudTask: expect.any(Number) });
+        });
+
+        it('addToQueueForGarmin should refresh duplicate in-flight callback fields without duplicate dispatch', async () => {
+            const alreadyExistsError: any = new Error('ALREADY_EXISTS');
+            alreadyExistsError.code = 6;
+            mockDocRef.create.mockRejectedValueOnce(alreadyExistsError);
+            mockDocRef.get.mockResolvedValueOnce({
+                exists: true,
+                data: () => ({
+                    id: 'u1-file123',
+                    dateCreated: 123456,
+                    processed: false,
+                    retryCount: 2,
+                    dispatchedToCloudTask: 1_777_000_000_000,
+                    firebaseUserID: 'mock-user-id',
+                    token: 'old-token',
+                    callbackURL: 'old-callback',
+                    userAccessToken: 'old-access-token',
+                    activityFileType: 'FIT',
+                    startTimeInSeconds: 111,
+                }),
+            });
+
+            const result = await addToQueueForGarmin({
+                userID: 'u1',
+                startTimeInSeconds: 123,
+                manual: false,
+                activityFileID: 'file123',
+                activityFileType: 'FIT',
+                token: 'new-token',
+                userAccessToken: 'new-access-token',
+                callbackURL: 'new-callback',
+            });
+
+            expect(result.id).toBe('mock-doc-id');
+            expect(mockDocRef.update).toHaveBeenCalledWith({
+                token: 'new-token',
+                callbackURL: 'new-callback',
+                userAccessToken: 'new-access-token',
+                startTimeInSeconds: 123,
+            });
+            expect(mockDocRef.update).not.toHaveBeenCalledWith({ dispatchedToCloudTask: expect.any(Number) });
+            expect(utils.enqueueWorkoutTask).not.toHaveBeenCalled();
+        });
+
+        it('addToQueueForGarmin should keep duplicate manual pending items deferred after refreshing callback fields', async () => {
+            const alreadyExistsError: any = new Error('ALREADY_EXISTS');
+            alreadyExistsError.code = 6;
+            mockDocRef.create.mockRejectedValueOnce(alreadyExistsError);
+            mockDocRef.get.mockResolvedValueOnce({
+                exists: true,
+                data: () => ({
+                    id: 'u1-file123',
+                    dateCreated: 123456,
+                    processed: false,
+                    retryCount: 1,
+                    dispatchedToCloudTask: null,
+                    firebaseUserID: 'mock-user-id',
+                    token: 'old-token',
+                    callbackURL: 'old-callback',
+                    userAccessToken: 'old-access-token',
+                    activityFileType: 'FIT',
+                    startTimeInSeconds: 111,
+                }),
+            });
+
+            const result = await addToQueueForGarmin({
+                userID: 'u1',
+                startTimeInSeconds: 123,
+                manual: true,
+                activityFileID: 'file123',
+                activityFileType: 'FIT',
+                token: 'new-token',
+                userAccessToken: 'new-access-token',
+                callbackURL: 'new-callback',
+            });
+
+            expect(result.id).toBe('mock-doc-id');
+            expect(mockDocRef.update).toHaveBeenCalledWith({
+                token: 'new-token',
+                callbackURL: 'new-callback',
+                userAccessToken: 'new-access-token',
+                startTimeInSeconds: 123,
+            });
+            expect(mockDocRef.update).not.toHaveBeenCalledWith({ dispatchedToCloudTask: expect.any(Number) });
+            expect(utils.enqueueWorkoutTask).not.toHaveBeenCalled();
+        });
+
+        it('addToQueueForCOROS should skip duplicate processed items without resetting lifecycle state', async () => {
+            const alreadyExistsError: any = new Error('ALREADY_EXISTS');
+            alreadyExistsError.code = 6;
+            mockDocRef.create.mockRejectedValueOnce(alreadyExistsError);
+            mockDocRef.get.mockResolvedValueOnce({
+                exists: true,
+                data: () => ({
+                    id: 'coros1',
+                    dateCreated: 123456,
+                    processed: true,
+                    retryCount: 3,
+                    dispatchedToCloudTask: 1_777_000_000_000,
+                    FITFileURI: 'https://coros.test/old.fit',
+                }),
+            });
+
+            const result = await addToQueueForCOROS({
+                id: 'coros1',
+                dateCreated: Date.now(),
+                openId: 'oid1',
+                workoutID: 'wid1',
+                FITFileURI: 'https://coros.test/new.fit',
+                retryCount: 0,
+                processed: false,
+                dispatchedToCloudTask: null,
+            });
+
+            expect(result.id).toBe('mock-doc-id');
+            expect(mockDocRef.set).not.toHaveBeenCalled();
+            expect(mockDocRef.update).not.toHaveBeenCalled();
+            expect(utils.enqueueWorkoutTask).not.toHaveBeenCalled();
+        });
+
+        it('addToQueueForCOROS should refresh duplicate pending FIT URL without resetting lifecycle state', async () => {
+            const alreadyExistsError: any = new Error('ALREADY_EXISTS');
+            alreadyExistsError.code = 6;
+            mockDocRef.create.mockRejectedValueOnce(alreadyExistsError);
+            mockDocRef.get.mockResolvedValueOnce({
+                exists: true,
+                data: () => ({
+                    id: 'coros1',
+                    dateCreated: 123456,
+                    processed: false,
+                    retryCount: 2,
+                    dispatchedToCloudTask: null,
+                    firebaseUserID: 'mock-user-id',
+                    FITFileURI: 'https://coros.test/old.fit',
+                }),
+            });
+
+            const result = await addToQueueForCOROS({
+                id: 'coros1',
+                dateCreated: Date.now(),
+                openId: 'oid1',
+                workoutID: 'wid1',
+                FITFileURI: 'https://coros.test/new.fit',
+                retryCount: 0,
+                processed: false,
+                dispatchedToCloudTask: null,
+            });
+
+            expect(result.id).toBe('mock-doc-id');
+            expect(mockDocRef.update).toHaveBeenCalledWith({
+                FITFileURI: 'https://coros.test/new.fit',
+            });
+            expect(mockDocRef.update).not.toHaveBeenCalledWith(expect.objectContaining({
+                retryCount: 0,
+                processed: false,
+                dispatchedToCloudTask: null,
+            }));
+            expect(utils.enqueueWorkoutTask).toHaveBeenCalledWith(ServiceNames.COROSAPI, 'coros1', 123456, undefined, { recoveryTaskKey: 2 });
         });
     });
 
