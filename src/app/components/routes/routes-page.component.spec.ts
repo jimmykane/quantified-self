@@ -9,7 +9,7 @@ import { BehaviorSubject, firstValueFrom, of } from 'rxjs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import { ServiceNames } from '@sports-alliance/sports-lib';
+import { encodeRoutePolyline5, ServiceNames } from '@sports-alliance/sports-lib';
 
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
@@ -88,6 +88,24 @@ describe('RoutesPageComponent', () => {
         pointCount: 2,
         activityTypes: ['Running'],
         streamTypes: [],
+        previewReady: true,
+        preview: {
+            version: 1,
+            encoding: 'polyline5',
+            precision: 5,
+            sourcePointCount: 2,
+            pointCount: 2,
+            segments: [{
+                id: 'segment-1',
+                name: 'Segment',
+                sourcePointCount: 2,
+                pointCount: 2,
+                encodedPolyline: encodeRoutePolyline5([
+                    { latitudeDegrees: 39.1, longitudeDegrees: 20.1 },
+                    { latitudeDegrees: 39.2, longitudeDegrees: 20.2 },
+                ]),
+            }],
+        },
         originalFiles: [{
             path: 'users/user-1/routes/route-1/original.gpx',
             startDate: new Date('2026-01-02T00:00:00.000Z'),
@@ -841,6 +859,7 @@ describe('RoutesPageComponent', () => {
         expect(routes).toHaveLength(1);
         expect(routes[0]).toMatchObject({
             route,
+            routePreview: route.preview,
             sourceServiceLabel: 'Saved route',
             sourceServiceTitle: 'Saved route',
             sourceServiceName: null,
@@ -1195,6 +1214,10 @@ describe('RoutesPageComponent', () => {
         expect(rowDefinition).toContain('(keydown.space)="onRouteRowKeydown(item, $event)"');
         expect(rowDefinition).toContain('tabindex="0"');
         expect(template).toContain('matColumnDef="sourceService"');
+        expect(template).toContain('matColumnDef="preview"');
+        expect(template).toContain('<app-route-preview-thumbnail');
+        expect(template).toContain('[preview]="item.routePreview"');
+        expect(template).toContain('[routeName]="item.name"');
         expect(template).toContain('class="route-source-service-cell"');
         expect(template).toContain('[presentation]="item.sourcePresentation"');
         expect(template).toContain('class="route-original-file-cell"');
@@ -1234,6 +1257,8 @@ describe('RoutesPageComponent', () => {
         expect(styles).toContain('width: 14rem;');
         expect(styles).toContain('min-width: 12rem;');
         expect(styles).toContain('max-width: 16rem;');
+        expect(styles).toContain('.route-table .mat-column-preview');
+        expect(styles).toContain('width: 6.25rem;');
         expect(styles).toContain('.route-table .mat-column-sourceService');
         expect(styles).toContain('.route-source-service-cell');
         expect(styles).toContain('.route-original-file-cell');
@@ -1254,7 +1279,7 @@ describe('RoutesPageComponent', () => {
         expect(template).toContain('class="route-table-shell qs-scrollbar"');
         expect(template).not.toContain('class="route-table-scroll qs-scrollbar"');
         expect(styles).toContain('.route-table-shell');
-        expect(styles).toContain('--route-table-min-width: 108rem;');
+        expect(styles).toContain('--route-table-min-width: 114rem;');
         expect(styles).toContain('max-height: min(72vh, 48rem);');
         expect(styles).toContain('max-width: 100%;');
         expect(styles).toContain('min-width: 0;');

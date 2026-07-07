@@ -311,8 +311,8 @@ describe('help.content', () => {
     expect(uploadsSection?.content).toContain('Saved routes open from **Routes** with the details action.');
     expect(uploadsSection?.content).toContain('waypoints and turn instructions');
     expect(uploadsSection?.content).toContain('parsed points and streams are not saved back to Firestore');
-    expect(uploadsSection?.content).toContain('lightweight encoded route preview for dashboard route maps');
-    expect(uploadsSection?.content).toContain('older saved routes need a reprocess or controlled backfill');
+    expect(uploadsSection?.content).toContain('lightweight encoded route preview for route-table thumbnails and dashboard route maps');
+    expect(uploadsSection?.content).toContain('older saved routes need a reprocess or controlled backfill before they appear with previews');
     expect(uploadsSection?.links).toContainEqual({
       label: 'FIT and GPX Route Files',
       icon: 'route',

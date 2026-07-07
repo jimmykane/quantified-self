@@ -1,0 +1,61 @@
+:host {
+  display: inline-flex;
+  flex: 0 0 auto;
+}
+
+.route-preview-thumbnail {
+  align-items: center;
+  background: var(--mat-sys-surface-container-low, rgba(0, 0, 0, 0.04));
+  border: 1px solid var(--mat-sys-outline-variant, rgba(0, 0, 0, 0.12));
+  border-radius: 6px;
+  box-sizing: border-box;
+  display: inline-flex;
+  height: 44px;
+  justify-content: center;
+  overflow: hidden;
+  width: 76px;
+}
+
+.route-preview-thumbnail-svg {
+  display: block;
+  height: 100%;
+  width: 100%;
+}
+
+.route-preview-thumbnail-line,
+.route-preview-thumbnail-placeholder-line {
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.route-preview-thumbnail-line {
+  stroke-width: 3.8;
+}
+
+.route-preview-thumbnail-endpoint {
+  stroke: var(--mat-sys-surface, #fff);
+  stroke-width: 1.5;
+}
+
+.route-preview-thumbnail-endpoint--start {
+  fill: var(--mat-sys-tertiary, #2e7d32);
+}
+
+.route-preview-thumbnail-endpoint--finish {
+  fill: var(--mat-sys-error, #c62828);
+}
+
+.route-preview-thumbnail--empty {
+  background: var(--mat-sys-surface-container-lowest, rgba(0, 0, 0, 0.02));
+}
+
+.route-preview-thumbnail-placeholder-line {
+  stroke: var(--mat-sys-outline-variant, rgba(0, 0, 0, 0.24));
+  stroke-dasharray: 5 4;
+  stroke-width: 3.2;
+}
+
+.route-preview-thumbnail-placeholder-dot {
+  fill: var(--mat-sys-outline, rgba(0, 0, 0, 0.32));
+}

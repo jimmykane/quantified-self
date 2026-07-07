@@ -223,6 +223,21 @@
           </td>
         </ng-container>
 
+        <ng-container matColumnDef="preview">
+          <th mat-header-cell *matHeaderCellDef>
+            <span class="route-header-label">
+              <mat-icon aria-hidden="true">map</mat-icon>
+              <span>Preview</span>
+            </span>
+          </th>
+          <td mat-cell *matCellDef="let item">
+            <app-route-preview-thumbnail
+              [preview]="item.routePreview"
+              [routeName]="item.name">
+            </app-route-preview-thumbnail>
+          </td>
+        </ng-container>
+
         <ng-container matColumnDef="date">
           <th mat-header-cell *matHeaderCellDef mat-sort-header="date">
             <span class="route-header-label">
