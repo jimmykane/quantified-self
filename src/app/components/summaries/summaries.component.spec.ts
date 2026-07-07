@@ -1693,15 +1693,30 @@ describe('SummariesComponent', () => {
       order: 3,
       name: 'Map',
       clusterMarkers: true,
+      showRouteEndpointMarkers: false,
       mapTheme: 'normal',
       mapStyle: 'streets',
       showHeatMap: false,
       events: [],
       size: { columns: 2, rows: 1 },
     } as any);
+    const routeMapKey = component.trackByTile(2, {
+      type: TileTypes.Map,
+      order: 4,
+      name: 'Routes',
+      clusterMarkers: false,
+      showRouteEndpointMarkers: true,
+      mapTheme: 'normal',
+      mapStyle: 'default',
+      mapSource: 'routes',
+      showHeatMap: false,
+      routePreviews: [{ id: 'route-1' }, { id: 'route-2' }],
+      size: { columns: 1, rows: 1 },
+    } as any);
 
     expect(chartKey).toBe(`${ChartTypes.ColumnsVertical}${ChartDataCategoryTypes.DateType}${ChartDataValueTypes.Total}Distance2${TimeIntervals.Monthly}`);
-    expect(mapKey).toBe('truenormalstreetseventsMap3false0');
+    expect(mapKey).toBe('truefalsenormalstreetseventsMap3false0');
+    expect(routeMapKey).toBe('falsetruenormaldefaultroutesRoutes4false2');
   });
 
   it('should enable desktop drag only when width, fine pointer, and hover are all available', () => {
