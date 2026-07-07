@@ -139,6 +139,7 @@ describe('RouteWriter', () => {
                 }),
             ],
         });
+        expect(payload.previewReady).toBe(true);
     });
 
     it('builds top-level aggregate stats from route summaries', () => {

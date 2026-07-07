@@ -129,6 +129,7 @@ describe('AppRouteService', () => {
             creator: { name: 'Injected Device' },
             stats: { Distance: 999 },
             preview: { version: 1, encoding: 'polyline5', precision: 5, sourcePointCount: 2, pointCount: 2, segments: [] },
+            previewReady: true,
             pointCount: 0,
             originalFiles: [{ path: 'users/other/routes/route-1/original.gpx', startDate: new Date() }],
             routes: [],
@@ -151,11 +152,13 @@ describe('AppRouteService', () => {
         const result = await firstValueFrom(service.watchHasAnyRoutePreview('user-1'));
 
         expect(collection).toHaveBeenCalledWith(firestoreMock, 'users', 'user-1', 'routes');
-        expect(where).toHaveBeenCalledWith('preview.pointCount', '>', 0);
+        expect(where).toHaveBeenCalledWith('previewReady', '==', true);
+        expect(orderBy).toHaveBeenCalledWith('importedAt', 'desc');
         expect(limit).toHaveBeenCalledWith(1);
         expect(query).toHaveBeenCalledWith(
             { path: 'users/user-1/routes' },
-            { type: 'where', field: 'preview.pointCount', op: '>', value: 0 },
+            { type: 'where', field: 'previewReady', op: '==', value: true },
+            { type: 'orderBy', field: 'importedAt', direction: 'desc' },
             { type: 'limit', value: 1 },
         );
         expect(result).toBe(true);
@@ -250,7 +253,13 @@ describe('AppRouteService', () => {
         const result = await firstValueFrom(service.watchRecentRoutePreviews({ uid: 'user-1' }, 3));
 
         expect(limit).toHaveBeenCalledWith(12);
-        expect(where).toHaveBeenCalledWith('preview.pointCount', '>', 0);
+        expect(where).toHaveBeenCalledWith('previewReady', '==', true);
+        expect(query).toHaveBeenLastCalledWith(
+            { path: 'users/user-1/routes' },
+            { type: 'where', field: 'previewReady', op: '==', value: true },
+            { type: 'orderBy', field: 'importedAt', direction: 'desc' },
+            { type: 'limit', value: 3 },
+        );
         expect(limit).toHaveBeenCalledWith(3);
         expect(result.map(route => route.id)).toEqual(['recent-preview', 'newer-preview', 'older-preview']);
     });
@@ -420,6 +429,7 @@ function routeWithPreview(id: string, importedAt?: Date): any {
         importedAt,
         activityTypes: [],
         streamTypes: [],
+        previewReady: true,
         preview: {
             version: 1,
             encoding: 'polyline5',

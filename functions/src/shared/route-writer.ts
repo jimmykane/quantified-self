@@ -12,6 +12,7 @@ import {
 } from '../../../shared/app-route.interface';
 import { RoutePreviewUtilities } from '@sports-alliance/sports-lib';
 import { FirestoreAdapter, LogAdapter, StorageAdapter } from './event-writer';
+import { isRoutePreviewReady } from './route-preview-ready';
 
 export interface OriginalRouteFile {
     data: unknown;
@@ -554,6 +555,7 @@ export function buildFirestoreRoutePayload(userID: string, routeFile: AppRouteIn
         streamTypes,
         bounds: mergeBounds(routeSummaries.map(route => route.bounds)),
         preview: preview || undefined,
+        previewReady: isRoutePreviewReady(preview),
         importedAt: new Date(),
         updatedAt: new Date(),
     });

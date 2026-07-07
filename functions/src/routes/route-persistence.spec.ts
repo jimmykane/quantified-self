@@ -56,6 +56,8 @@ describe('route-persistence', () => {
       id: 'route-1',
       userID: 'user-1',
       name: 'Saved route',
+      preview: buildPreview(),
+      previewReady: true,
       deliverySummaries: [{
         serviceName: ServiceNames.GarminAPI,
         providerUserIds: ['garmin-user-1'],
@@ -67,4 +69,47 @@ describe('route-persistence', () => {
       customField: 'keep-me',
     });
   });
+
+  it('drops stale preview geometry when the new parsed payload has no preview', () => {
+    const routeDocument = buildRouteDocumentForWrite({
+      routeId: 'route-1',
+      userID: 'user-1',
+      parsedPayload: {
+        name: 'Parsed without preview',
+        routeCount: 0,
+        waypointCount: 0,
+        pointCount: 0,
+        activityTypes: [],
+        streamTypes: [],
+        routes: [],
+      } as FirestoreRouteJSON,
+      existingRouteDocument: {
+        id: 'route-1',
+        userID: 'user-1',
+        name: 'Existing route',
+        preview: buildPreview(),
+        previewReady: true,
+        customNote: 'keep-me',
+      } as FirestoreRouteJSON,
+    });
+
+    expect(routeDocument).not.toHaveProperty('preview');
+    expect(routeDocument.previewReady).toBe(false);
+    expect(routeDocument.customNote).toBe('keep-me');
+  });
 });
+
+function buildPreview(): FirestoreRouteJSON['preview'] {
+  return {
+    version: 1,
+    encoding: 'polyline5',
+    precision: 5,
+    sourcePointCount: 2,
+    pointCount: 2,
+    segments: [{
+      sourcePointCount: 2,
+      pointCount: 2,
+      encodedPolyline: '_p~iF~ps|U_ulLnnqC',
+    }],
+  };
+}

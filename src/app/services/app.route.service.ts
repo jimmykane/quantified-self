@@ -92,6 +92,7 @@ const SERVER_OWNED_ROUTE_UPDATE_FIELDS = [
     'streamTypes',
     'bounds',
     'preview',
+    'previewReady',
     'sourceSummary',
     'syncedDestinationServiceNames',
     'deliverySummaries',
@@ -237,7 +238,8 @@ export class AppRouteService {
             const routesCollection = collection(this.firestore, 'users', userID, 'routes');
             const routesQuery = query(
                 routesCollection,
-                where('preview.pointCount', '>', 0),
+                where('previewReady', '==', true),
+                orderBy('importedAt', 'desc'),
                 limit(Math.max(1, Math.floor(limitCount))),
             );
 

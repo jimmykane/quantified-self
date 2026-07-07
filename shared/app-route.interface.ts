@@ -145,6 +145,7 @@ export interface FirestoreRouteJSON {
     streamTypes: string[];
     bounds?: RouteBounds;
     preview?: RoutePreviewJSONInterface;
+    previewReady?: boolean;
     importedAt?: Date;
     updatedAt?: Date;
     /** @deprecated Use originalFiles[0] instead. Kept for event parity. */

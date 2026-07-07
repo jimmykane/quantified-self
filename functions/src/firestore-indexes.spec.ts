@@ -100,6 +100,30 @@ describe('firestore indexes', () => {
         });
     });
 
+    it('keeps dashboard route preview recency query deployable', () => {
+        const config = loadFirestoreIndexes();
+
+        expect(config.indexes).toContainEqual({
+            collectionGroup: 'routes',
+            queryScope: 'COLLECTION',
+            fields: [
+                {
+                    fieldPath: 'previewReady',
+                    order: 'ASCENDING',
+                },
+                {
+                    fieldPath: 'importedAt',
+                    order: 'DESCENDING',
+                },
+                {
+                    fieldPath: '__name__',
+                    order: 'DESCENDING',
+                },
+            ],
+            density: 'SPARSE_ALL',
+        });
+    });
+
     it('keeps route delivery sync queue dispatcher/admin query indexes and TTL config deployable', () => {
         const config = loadFirestoreIndexes();
 

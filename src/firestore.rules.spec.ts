@@ -903,6 +903,7 @@ describe('Firestore Security Rules', () => {
                         pointCount: 2,
                         segments: [],
                     },
+                    previewReady: true,
                 }));
             });
 
