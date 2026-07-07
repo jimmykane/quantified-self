@@ -66,6 +66,11 @@ const hoisted = vi.hoisted(() => {
   };
 });
 
+vi.mock('firebase-functions/logger', () => ({
+  error: vi.fn(),
+  warn: vi.fn(),
+}));
+
 vi.mock('firebase-functions/v2/https', () => ({
   onRequest: hoisted.mockOnRequest,
 }));
@@ -151,6 +156,48 @@ vi.mock('../utils', () => ({
 
 vi.mock('@sports-alliance/sports-lib', () => ({
   SportsLib: hoisted.mockSportsLib,
+  RoutePreviewUtilities: {
+    buildRouteFilePreview: (routeFile: any) => {
+      const routes = Array.isArray(routeFile?.routes)
+        ? routeFile.routes
+        : Array.isArray(routeFile?.toJSON?.()?.routes)
+          ? routeFile.toJSON().routes
+          : [];
+      const segments = routes
+        .map((route: any, index: number) => {
+          const points = Array.isArray(route?.points)
+            ? route.points.filter((point: any) => (
+              Number.isFinite(point?.latitudeDegrees)
+              && Number.isFinite(point?.longitudeDegrees)
+              && (point.latitudeDegrees !== 0 || point.longitudeDegrees !== 0)
+            ))
+            : [];
+          if (points.length < 2) {
+            return null;
+          }
+          return {
+            id: route.id || `segment-${index}`,
+            name: route.name ?? null,
+            activityType: route.activityType ?? null,
+            sourcePointCount: Array.isArray(route?.points) ? route.points.length : points.length,
+            pointCount: points.length,
+            encodedPolyline: 'mock-polyline',
+          };
+        })
+        .filter(Boolean);
+      if (!segments.length) {
+        return null;
+      }
+      return {
+        version: 1,
+        encoding: 'polyline5',
+        precision: 5,
+        sourcePointCount: segments.reduce((sum: number, segment: any) => sum + segment.sourcePointCount, 0),
+        pointCount: segments.reduce((sum: number, segment: any) => sum + segment.pointCount, 0),
+        segments,
+      };
+    },
+  },
 }));
 
 vi.mock('../reparse/sports-lib-reparse.service', () => ({
