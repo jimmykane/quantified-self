@@ -238,7 +238,15 @@ describe('SummariesComponent', () => {
     expect(board?.classList.contains('qs-glass-card-panel')).toBe(true);
     expect(board?.style.getPropertyValue('--dashboard-tile-board-cols')).toBe(`${component.numberOfCols}`);
     expect(nativeElement.querySelectorAll('app-dashboard-tile-cell.dashboard-grid-tile:not(.dashboard-grid-placeholder)')).toHaveLength(2);
-    expect(nativeElement.querySelectorAll('app-dashboard-tile-cell.dashboard-grid-placeholder')).toHaveLength(2);
+    expect(nativeElement.querySelectorAll('app-dashboard-tile-cell.dashboard-grid-placeholder')).toHaveLength(0);
+    expect(component.mainGridSections.every(section => section.trailingPlaceholders.length === 0)).toBe(true);
+    expect(component.mainGridSections.every(section => section.cells[0]?.columns === component.numberOfCols)).toBe(true);
+    const singletonCells = nativeElement.querySelectorAll('app-dashboard-tile-cell.dashboard-grid-tile:not(.dashboard-grid-placeholder)');
+    singletonCells.forEach((cell) => {
+      expect((cell as HTMLElement).style.gridColumn).toBe(`span ${component.numberOfCols}`);
+    });
+    expect(mainGridTile.size.columns).toBe(1);
+    expect(mainMapTile.size.columns).toBe(1);
     const mainChart = board?.querySelector('app-tile-chart') as HTMLElement | null;
     expect(mainChart).not.toBeNull();
     expect(mainChart?.classList.contains('qs-glass-card-panel')).toBe(false);

@@ -120,13 +120,14 @@
         [rowHeight]="rowHeight"
         (cdkDropListSorted)="onTilesSort($event, section.id)"
         (cdkDropListDropped)="onTilesDrop($event)">
-        @for (tile of section.tiles; track trackByTile($index, tile)) {
+        @for (cell of section.cells; track trackByTile($index, cell.tile)) {
+        @let tile = cell.tile;
         <app-dashboard-tile-cell
           cdkDrag
           [cdkDragPreviewContainer]="'global'"
           [cdkDragDisabled]="!desktopTileDragEnabled || section.tiles.length < 2"
           [class.desktop-draggable-tile]="desktopTileDragEnabled && section.tiles.length > 1"
-          [columns]="tile.size.columns"
+          [columns]="cell.columns"
           [rows]="tile.size.rows"
           [maxColumns]="numberOfCols">
           @if (tile.type === tileTypes.Chart) {

@@ -139,7 +139,13 @@ interface DashboardTileSectionViewModel {
   label: string;
   icon: string;
   tiles: DashboardTileViewModel[];
+  cells: DashboardTileSectionCellViewModel[];
   trailingPlaceholders: number[];
+}
+
+interface DashboardTileSectionCellViewModel {
+  tile: DashboardTileViewModel;
+  columns: number;
 }
 
 @Component({
@@ -251,7 +257,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   resizeOROrientationChange() {
     this.numberOfCols = this.getNumberOfColumns();
     this.rowHeight = this.getRowHeight();
-    this.refreshMainGridSectionTrailingPlaceholders();
+    this.refreshMainGridSectionLayout();
     this.updateDesktopTileDragCapability();
   }
 
@@ -1339,22 +1345,45 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
         return {
           ...definition,
           tiles: sectionTiles,
+          cells: this.buildMainGridSectionCells(sectionTiles),
           trailingPlaceholders: this.buildMainGridTrailingPlaceholders(sectionTiles),
         };
       })
       .filter(section => section.tiles.length > 0);
   }
 
-  private refreshMainGridSectionTrailingPlaceholders(): void {
+  private refreshMainGridSectionLayout(): void {
     this.mainGridSections = this.mainGridSections.map(section => ({
       ...section,
+      cells: this.buildMainGridSectionCells(section.tiles),
       trailingPlaceholders: this.buildMainGridTrailingPlaceholders(section.tiles),
     }));
   }
 
+  private buildMainGridSectionCells(tiles: DashboardTileViewModel[]): DashboardTileSectionCellViewModel[] {
+    const singletonColumns = tiles.length === 1 && this.numberOfCols > 1 ? this.numberOfCols : null;
+    return tiles.map(tile => ({
+      tile,
+      columns: singletonColumns || this.getTilePersistedColumns(tile),
+    }));
+  }
+
   private buildMainGridTrailingPlaceholders(tiles: DashboardTileViewModel[]): number[] {
+    if (tiles.length < 2) {
+      return [];
+    }
+
     const placeholderCount = getTrailingDashboardGridPlaceholderCount(tiles, this.numberOfCols);
     return Array.from({ length: placeholderCount }, (_, index) => index);
+  }
+
+  private getTilePersistedColumns(tile: DashboardTileViewModel): number {
+    const columns = Number(tile.size?.columns);
+    if (!Number.isFinite(columns) || columns < 1) {
+      return 1;
+    }
+
+    return Math.floor(columns);
   }
 
   private getFlattenedMainGridSectionTiles(): DashboardTileViewModel[] {
