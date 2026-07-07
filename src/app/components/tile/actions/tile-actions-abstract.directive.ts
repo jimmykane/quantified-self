@@ -9,6 +9,11 @@ import { EventEmitter, Input, Output, Directive, inject } from '@angular/core';
 import { User } from '@sports-alliance/sports-lib';
 import { AppHapticsService } from '../../../services/app.haptics.service';
 import { AppDashboardSettingsInterface } from '../../../models/app-user.interface';
+import {
+  type DashboardTileLaneKey,
+  orderDashboardTilesByIntentSections,
+  resolveDashboardTileLaneKey,
+} from '../../../helpers/dashboard-tile-section.helper';
 
 @Directive()
 export class TileActionsAbstractDirective extends TileAbstractDirective {
@@ -98,26 +103,24 @@ export class TileActionsAbstractDirective extends TileAbstractDirective {
     if (this.user.settings.dashboardSettings.tiles.length === 1) {
       throw new Error('Cannot delete tile there is only one left');
     }
-    // should search and replace order index according to the remaining order indexes after the splice
-    this.user.settings.dashboardSettings.tiles = this.user.settings.dashboardSettings.tiles
-      .filter((chartSetting) => chartSetting.order !== this.order)
-      .map((chartSetting, index) => {
-        chartSetting.order = index;
-        return chartSetting
-      });
+    const remainingTiles = this.getOrderedTiles().filter((chartSetting) => chartSetting.order !== this.order);
+    this.user.settings.dashboardSettings.tiles = orderDashboardTilesByIntentSections(remainingTiles)
+      .map((chartSetting, index) => ({ ...chartSetting, order: index }));
     return this.persistUserSettings();
   }
 
   canMoveTileBackward(): boolean {
     const orderedTiles = this.getOrderedTiles();
-    const currentIndex = orderedTiles.findIndex(tile => tile.order === this.order);
+    const orderedLaneTiles = this.getOrderedLaneTiles(orderedTiles);
+    const currentIndex = orderedLaneTiles.findIndex(tile => tile.order === this.order);
     return currentIndex > 0;
   }
 
   canMoveTileForward(): boolean {
     const orderedTiles = this.getOrderedTiles();
-    const currentIndex = orderedTiles.findIndex(tile => tile.order === this.order);
-    return currentIndex >= 0 && currentIndex < orderedTiles.length - 1;
+    const orderedLaneTiles = this.getOrderedLaneTiles(orderedTiles);
+    const currentIndex = orderedLaneTiles.findIndex(tile => tile.order === this.order);
+    return currentIndex >= 0 && currentIndex < orderedLaneTiles.length - 1;
   }
 
   async moveTileBackward() {
@@ -132,28 +135,65 @@ export class TileActionsAbstractDirective extends TileAbstractDirective {
 
   private async moveTileByOffset(offset: number, analyticsMethod: 'moveTileBackward' | 'moveTileForward') {
     const orderedTiles = this.getOrderedTiles();
-    const currentIndex = orderedTiles.findIndex(tile => tile.order === this.order);
+    const orderedLaneTiles = this.getOrderedLaneTiles(orderedTiles);
+    const currentIndex = orderedLaneTiles.findIndex(tile => tile.order === this.order);
     const targetIndex = currentIndex + offset;
-    if (currentIndex < 0 || targetIndex < 0 || targetIndex >= orderedTiles.length) {
+    if (currentIndex < 0 || targetIndex < 0 || targetIndex >= orderedLaneTiles.length) {
       return;
     }
 
     this.analyticsService.logEvent('dashboard_tile_action', { method: analyticsMethod });
-    const currentTile = orderedTiles[currentIndex];
-    orderedTiles[currentIndex] = orderedTiles[targetIndex];
-    orderedTiles[targetIndex] = currentTile;
-    orderedTiles.forEach((tile, index) => {
+    const currentTile = orderedLaneTiles[currentIndex];
+    orderedLaneTiles[currentIndex] = orderedLaneTiles[targetIndex];
+    orderedLaneTiles[targetIndex] = currentTile;
+    const nextOrderedTiles = this.flattenTilesWithUpdatedLane(
+      orderedTiles,
+      this.getTileActionLaneKey(currentTile),
+      orderedLaneTiles,
+    );
+    nextOrderedTiles.forEach((tile, index) => {
       tile.order = index;
     });
 
-    this.user.settings.dashboardSettings.tiles = orderedTiles;
-    this.order = targetIndex;
+    this.user.settings.dashboardSettings.tiles = nextOrderedTiles;
+    this.order = currentTile.order;
     return this.persistUserSettings();
   }
 
   private getOrderedTiles(): TileSettingsInterface[] {
     return [...(this.user?.settings?.dashboardSettings?.tiles || [])]
       .sort((left, right) => left.order - right.order);
+  }
+
+  private getOrderedLaneTiles(orderedTiles: TileSettingsInterface[]): TileSettingsInterface[] {
+    const currentTile = orderedTiles.find(tile => tile.order === this.order);
+    if (!currentTile) {
+      return [];
+    }
+
+    const laneKey = this.getTileActionLaneKey(currentTile);
+    return orderedTiles.filter(tile => this.getTileActionLaneKey(tile) === laneKey);
+  }
+
+  private flattenTilesWithUpdatedLane(
+    orderedTiles: TileSettingsInterface[],
+    updatedLaneKey: DashboardTileLaneKey,
+    updatedLaneTiles: TileSettingsInterface[],
+  ): TileSettingsInterface[] {
+    let updatedLaneIndex = 0;
+    return orderDashboardTilesByIntentSections(orderedTiles.map((tile) => {
+      if (this.getTileActionLaneKey(tile) !== updatedLaneKey) {
+        return tile;
+      }
+
+      const updatedTile = updatedLaneTiles[updatedLaneIndex];
+      updatedLaneIndex += 1;
+      return updatedTile || tile;
+    }));
+  }
+
+  private getTileActionLaneKey(tile: TileSettingsInterface): DashboardTileLaneKey {
+    return resolveDashboardTileLaneKey(tile);
   }
 
   /**

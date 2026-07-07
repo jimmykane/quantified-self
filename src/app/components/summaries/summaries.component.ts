@@ -116,6 +116,13 @@ import {
 } from '../../helpers/dashboard-chart-display-settings.helper';
 import { normalizeDashboardDerivedChartRange } from '../../helpers/dashboard-derived-chart-range.helper';
 import { getTrailingDashboardGridPlaceholderCount } from '../../helpers/dashboard-grid-layout.helper';
+import {
+  DASHBOARD_TILE_SECTION_ORDER,
+  type DashboardTileSectionId,
+  getDashboardTileSectionDefinition,
+  orderDashboardTilesByIntentSections,
+  resolveDashboardTileSection,
+} from '../../helpers/dashboard-tile-section.helper';
 import { AppEventService } from '../../services/app.event.service';
 import { DashboardAutoTileService } from '../../services/dashboard-auto-tile.service';
 import { WhereFilterOp } from 'firebase/firestore';
@@ -125,6 +132,14 @@ interface DashboardDerivedMetricsBanner {
   title: string;
   description: string;
   showRetry: boolean;
+}
+
+interface DashboardTileSectionViewModel {
+  id: DashboardTileSectionId;
+  label: string;
+  icon: string;
+  tiles: DashboardTileViewModel[];
+  trailingPlaceholders: number[];
 }
 
 @Component({
@@ -152,7 +167,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   public tiles: DashboardTileViewModel[] = [];
   public kpiLaneTiles: DashboardChartTileViewModel[] = [];
   public mainGridTiles: DashboardTileViewModel[] = [];
-  public mainGridTrailingPlaceholders: number[] = [];
+  public mainGridSections: DashboardTileSectionViewModel[] = [];
 
   public tileTypes = TileTypes;
   public desktopTileDragEnabled = false;
@@ -236,7 +251,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   resizeOROrientationChange() {
     this.numberOfCols = this.getNumberOfColumns();
     this.rowHeight = this.getRowHeight();
-    this.refreshMainGridTrailingPlaceholders();
+    this.refreshMainGridSectionTrailingPlaceholders();
     this.updateDesktopTileDragCapability();
   }
 
@@ -283,6 +298,10 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     return `${mapItem.clusterMarkers}${mapItem.mapTheme}${mapItem.mapStyle}${mapItem.name}${mapItem.order}${mapItem.showHeatMap}`;
   }
 
+  public trackBySection(_index: number, item: DashboardTileSectionViewModel): DashboardTileSectionId {
+    return item.id;
+  }
+
   private formatTodayDateSubtitle(date: Date): string {
     try {
       return new Intl.DateTimeFormat(this.locale || undefined, {
@@ -311,12 +330,19 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     await this.persistLaneOrder();
   }
 
-  public onTilesSort(event: CdkDragSortEvent<DashboardTileViewModel[]>): void {
+  public onTilesSort(event: CdkDragSortEvent<DashboardTileViewModel[]>, sectionId: DashboardTileSectionId): void {
     this.ensureTileLanesInitializedFromTiles();
-    if (!this.desktopTileDragEnabled || !this.showActions || this.mainGridTiles.length < 2 || event.previousIndex === event.currentIndex) {
+    const section = this.mainGridSections.find(candidate => candidate.id === sectionId);
+    if (
+      !section
+      || !this.desktopTileDragEnabled
+      || !this.showActions
+      || section.tiles.length < 2
+      || event.previousIndex === event.currentIndex
+    ) {
       return;
     }
-    moveItemInArray(this.mainGridTiles, event.previousIndex, event.currentIndex);
+    moveItemInArray(section.tiles, event.previousIndex, event.currentIndex);
     this.syncTilesFromLanesForPreview();
     this.changeDetector.detectChanges();
   }
@@ -1216,7 +1242,8 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
 
   private updateDesktopTileDragCapability(): void {
     this.ensureTileLanesInitializedFromTiles();
-    const hasDraggableLane = this.mainGridTiles.length > 1 || this.kpiLaneTiles.length > 1;
+    const hasDraggableLane = this.mainGridSections.some(section => section.tiles.length > 1)
+      || this.kpiLaneTiles.length > 1;
     this.desktopTileDragEnabled = this.showActions === true
       && hasDraggableLane
       && this.matchesMediaQuery(SummariesComponent.desktopMinWidthMediaQuery)
@@ -1279,23 +1306,64 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     const orderedTiles = [...this.tiles].sort((left, right) => left.order - right.order);
     this.kpiLaneTiles = orderedTiles.filter((tile): tile is DashboardChartTileViewModel => this.isKpiLaneTile(tile));
     this.mainGridTiles = orderedTiles.filter(tile => !this.isKpiLaneTile(tile));
-    this.refreshMainGridTrailingPlaceholders();
+    this.refreshMainGridSections();
   }
 
   private ensureTileLanesInitializedFromTiles(): void {
-    if ((this.kpiLaneTiles.length + this.mainGridTiles.length) !== this.tiles.length) {
+    const sectionTileCount = this.mainGridSections.reduce((total, section) => total + section.tiles.length, 0);
+    if (
+      (this.kpiLaneTiles.length + this.mainGridTiles.length) !== this.tiles.length
+      || sectionTileCount !== this.mainGridTiles.length
+    ) {
       this.refreshTileLanes();
     }
   }
 
   private syncTilesFromLanesForPreview(): void {
+    this.mainGridTiles = this.getFlattenedMainGridSectionTiles();
     this.tiles = [...this.kpiLaneTiles, ...this.mainGridTiles];
-    this.refreshMainGridTrailingPlaceholders();
+    this.refreshMainGridSections();
   }
 
-  private refreshMainGridTrailingPlaceholders(): void {
-    const placeholderCount = getTrailingDashboardGridPlaceholderCount(this.mainGridTiles, this.numberOfCols);
-    this.mainGridTrailingPlaceholders = Array.from({ length: placeholderCount }, (_, index) => index);
+  private refreshMainGridSections(): void {
+    const tilesBySection = new Map<DashboardTileSectionId, DashboardTileViewModel[]>();
+    this.mainGridTiles.forEach((tile) => {
+      const sectionId = resolveDashboardTileSection(tile);
+      tilesBySection.set(sectionId, [...(tilesBySection.get(sectionId) || []), tile]);
+    });
+
+    this.mainGridSections = DASHBOARD_TILE_SECTION_ORDER
+      .map((sectionId) => {
+        const definition = getDashboardTileSectionDefinition(sectionId);
+        const sectionTiles = tilesBySection.get(sectionId) || [];
+        return {
+          ...definition,
+          tiles: sectionTiles,
+          trailingPlaceholders: this.buildMainGridTrailingPlaceholders(sectionTiles),
+        };
+      })
+      .filter(section => section.tiles.length > 0);
+  }
+
+  private refreshMainGridSectionTrailingPlaceholders(): void {
+    this.mainGridSections = this.mainGridSections.map(section => ({
+      ...section,
+      trailingPlaceholders: this.buildMainGridTrailingPlaceholders(section.tiles),
+    }));
+  }
+
+  private buildMainGridTrailingPlaceholders(tiles: DashboardTileViewModel[]): number[] {
+    const placeholderCount = getTrailingDashboardGridPlaceholderCount(tiles, this.numberOfCols);
+    return Array.from({ length: placeholderCount }, (_, index) => index);
+  }
+
+  private getFlattenedMainGridSectionTiles(): DashboardTileViewModel[] {
+    return orderDashboardTilesByIntentSections(this.mainGridSections.flatMap(section => section.tiles))
+      .filter(tile => !this.isKpiLaneTile(tile));
+  }
+
+  private getOrderedMainSettingsTilesBySection(tiles: TileSettingsInterface[]): TileSettingsInterface[] {
+    return orderDashboardTilesByIntentSections(tiles).filter(tile => !this.isKpiSettingsTile(tile));
   }
 
   private async persistLaneOrder(): Promise<void> {
@@ -1312,10 +1380,10 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     if (!orderedSettingsTiles.length) {
       return;
     }
-    const currentViewOrder = [...this.kpiLaneTiles, ...this.mainGridTiles].map(tile => tile.order);
+    const currentViewOrder = [...this.kpiLaneTiles, ...this.getFlattenedMainGridSectionTiles()].map(tile => tile.order);
     const currentSettingsOrder = [
       ...orderedSettingsTiles.filter(tile => this.isKpiSettingsTile(tile)).map(tile => tile.order),
-      ...orderedSettingsTiles.filter(tile => !this.isKpiSettingsTile(tile)).map(tile => tile.order),
+      ...this.getOrderedMainSettingsTilesBySection(orderedSettingsTiles).map(tile => tile.order),
     ];
     if (this.getOrderSignature(currentViewOrder) === this.getOrderSignature(currentSettingsOrder)) {
       return;
@@ -1327,7 +1395,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     const nextKpiSettingsTiles = this.kpiLaneTiles
       .map(tile => settingsByOrder.get(tile.order))
       .filter((tile): tile is TileSettingsInterface => !!tile);
-    const nextMainGridSettingsTiles = this.mainGridTiles
+    const nextMainGridSettingsTiles = this.getFlattenedMainGridSectionTiles()
       .map(tile => settingsByOrder.get(tile.order))
       .filter((tile): tile is TileSettingsInterface => !!tile);
     const nextSettingsTiles = [...nextKpiSettingsTiles, ...nextMainGridSettingsTiles];
@@ -1342,7 +1410,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     const previousRenderedTilesByPersistedOrder = [...previousRenderedTiles]
       .sort((left, right) => left.order - right.order);
     dashboardSettings.tiles = this.withSequentialOrder(nextSettingsTiles);
-    this.tiles = this.withSequentialOrder(this.cloneDashboardViewModels([...this.kpiLaneTiles, ...this.mainGridTiles]));
+    this.tiles = this.withSequentialOrder(this.cloneDashboardViewModels([...this.kpiLaneTiles, ...this.getFlattenedMainGridSectionTiles()]));
     this.refreshTileLanes();
     this.dashboardTileSettingsSnapshot = this.getDashboardTileSettingsSnapshot();
     this.unsubscribeTileEventSubscriptions();

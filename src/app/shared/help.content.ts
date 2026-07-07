@@ -119,6 +119,8 @@ export const HELP_SECTIONS: HelpSection[] = [
 - KPI rows are shown in the compact **Today** section above the main dashboard grid.
 - The **Today** header can show **Uploaded activities**, which counts current uploaded activity events.
 - On mobile, Today rows stay compact while the chart/map grid stays unchanged below.
+- The main dashboard groups chart and map tiles by intent, such as **Training Load**, **Performance & Power**, **Recovery & Sleep**, **Intensity & Balance**, **Activity Overview**, **Routes & Maps**, and **Custom Charts**.
+- Custom charts are placed in those dashboard sections automatically when their metric intent is obvious; otherwise they appear under **Custom Charts**.
 - KPI choices in Dashboard manager are grouped as **Load**, **Readiness**, and **Execution** for both manual and preset flows.
 - Curated and KPI tiles include an **info** icon beside the title with formulas, interpretation guidance, and KPI detail rows such as metric state, freshness date, source, and the signals behind the current label.
 - On supported mobile devices, dashboard buttons and chart interactions provide lightweight haptic feedback.

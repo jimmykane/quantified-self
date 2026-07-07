@@ -11,7 +11,7 @@ import { MatSelectModule } from '@angular/material/select';
 import { MatIconModule } from '@angular/material/icon';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { FormsModule } from '@angular/forms';
-import { ChartTypes, ChartDataValueTypes, ChartDataCategoryTypes, DataRecoveryTime } from '@sports-alliance/sports-lib';
+import { ChartTypes, ChartDataValueTypes, ChartDataCategoryTypes, DataRecoveryTime, TileTypes } from '@sports-alliance/sports-lib';
 import { vi } from 'vitest';
 import {
   DASHBOARD_ACWR_KPI_CHART_TYPE,
@@ -47,6 +47,9 @@ describe('TileChartActionsComponent', () => {
             {
               order: 1,
               chartType: ChartTypes.Line,
+              dataType: 'Duration',
+              dataValueType: ChartDataValueTypes.Total,
+              dataCategoryType: ChartDataCategoryTypes.ActivityType,
               size: { columns: 1, rows: 1 },
               type: 'Chart',
             },
@@ -181,6 +184,78 @@ describe('TileChartActionsComponent', () => {
     expect(userMock.settings.dashboardSettings.tiles[1].chartType).toBe(ChartTypes.Bar);
     expect(userMock.updateUserProperties).toHaveBeenCalled();
     expect(hapticsMock.selection).toHaveBeenCalledTimes(1);
+  });
+
+  it('should not move a chart tile into another inferred dashboard section', async () => {
+    userMock.settings.dashboardSettings.tiles = [
+      {
+        order: 0,
+        chartType: ChartTypes.Bar,
+        dataType: 'Distance',
+        dataValueType: ChartDataValueTypes.Total,
+        dataCategoryType: ChartDataCategoryTypes.ActivityType,
+        size: { columns: 1, rows: 1 },
+        type: TileTypes.Chart,
+      },
+      {
+        order: 1,
+        mapStyle: 'default',
+        clusterMarkers: true,
+        size: { columns: 1, rows: 1 },
+        type: TileTypes.Map,
+      },
+    ];
+
+    expect(component.canMoveTileForward()).toBe(false);
+
+    await component.moveTileForward();
+
+    expect(userMock.settings.dashboardSettings.tiles[0].type).toBe(TileTypes.Chart);
+    expect(userMock.settings.dashboardSettings.tiles[1].type).toBe(TileTypes.Map);
+    expect(userMock.updateUserProperties).not.toHaveBeenCalled();
+  });
+
+  it('should move KPI tiles within the Today lane before chart sections', async () => {
+    userMock.settings.dashboardSettings.tiles = [
+      {
+        name: 'First KPI',
+        order: 0,
+        chartType: DASHBOARD_ACWR_KPI_CHART_TYPE,
+        size: { columns: 1, rows: 1 },
+        type: TileTypes.Chart,
+      },
+      {
+        name: 'Activity chart',
+        order: 1,
+        chartType: ChartTypes.Bar,
+        dataType: 'Distance',
+        dataValueType: ChartDataValueTypes.Total,
+        dataCategoryType: ChartDataCategoryTypes.ActivityType,
+        size: { columns: 1, rows: 1 },
+        type: TileTypes.Chart,
+      },
+      {
+        name: 'Second KPI',
+        order: 2,
+        chartType: DASHBOARD_ACWR_KPI_CHART_TYPE,
+        size: { columns: 1, rows: 1 },
+        type: TileTypes.Chart,
+      },
+    ];
+    component.order = 0;
+
+    expect(component.canMoveTileForward()).toBe(true);
+
+    await component.moveTileForward();
+
+    expect(userMock.settings.dashboardSettings.tiles.map((tile: any) => tile.name)).toEqual([
+      'Second KPI',
+      'First KPI',
+      'Activity chart',
+    ]);
+    expect(userMock.settings.dashboardSettings.tiles.map((tile: any) => tile.order)).toEqual([0, 1, 2]);
+    expect(component.order).toBe(1);
+    expect(userMock.updateUserProperties).toHaveBeenCalled();
   });
 
   it('should not persist when trying to move the first tile backward', async () => {

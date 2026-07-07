@@ -11,6 +11,8 @@ import {
   ChartDataValueTypes,
   ChartTypes,
   DataAscent,
+  DataDistance,
+  DataDuration,
   AppThemes,
   TileTypes,
   TimeIntervals,
@@ -184,6 +186,7 @@ describe('SummariesComponent', () => {
       type: TileTypes.Chart,
       order: 1,
       chartType: ChartTypes.ColumnsVertical,
+      dataType: DataDistance.type,
       dataCategoryType: ChartDataCategoryTypes.DateType,
       dataValueType: ChartDataValueTypes.Total,
       data: [],
@@ -204,6 +207,7 @@ describe('SummariesComponent', () => {
     component.tiles = [kpiTile, mainGridTile, mainMapTile];
     component.kpiLaneTiles = [kpiTile];
     component.mainGridTiles = [mainGridTile, mainMapTile];
+    (component as any).refreshTileLanes();
 
     fixture.detectChanges();
 
@@ -218,29 +222,32 @@ describe('SummariesComponent', () => {
     expect(dashboardHeader?.querySelector('.dashboard-kpi-lane')).toBeNull();
     const kpiSection = nativeElement.querySelector('.dashboard-kpi-section');
     expect(kpiSection).not.toBeNull();
-    expect(kpiSection?.classList.contains('dashboard-kpi-section--merged')).toBe(true);
     const kpiLane = kpiSection?.querySelector('.dashboard-kpi-lane') as HTMLElement | null;
     expect(kpiLane).not.toBeNull();
     expect(kpiLane?.classList.contains('qs-glass-card-panel')).toBe(true);
-    expect(kpiLane?.classList.contains('dashboard-kpi-lane--merged-with-board')).toBe(true);
     expect(kpiSection?.querySelectorAll('.dashboard-kpi-tile')).toHaveLength(1);
     expect(kpiLane?.querySelector('app-tile-chart')?.classList.contains('qs-glass-card-panel')).toBe(false);
     expect(nativeElement.querySelectorAll('.dashboard-section-divider')).toHaveLength(0);
-    const board = nativeElement.querySelector('app-dashboard-tile-board') as HTMLElement | null;
-    expect(board).not.toBeNull();
+    expect(nativeElement.querySelector('.dashboard-main-sections')).not.toBeNull();
+    const sectionHeadings = Array.from(nativeElement.querySelectorAll('.dashboard-main-section h2'))
+      .map(heading => heading.textContent?.trim());
+    expect(sectionHeadings).toEqual(['Activity Overview', 'Routes & Maps']);
+    const boards = nativeElement.querySelectorAll('app-dashboard-tile-board');
+    expect(boards).toHaveLength(2);
+    const board = boards[0] as HTMLElement | null;
     expect(board?.classList.contains('qs-glass-card-panel')).toBe(true);
-    expect(board?.classList.contains('dashboard-tile-board--merged-after-kpis')).toBe(true);
     expect(board?.style.getPropertyValue('--dashboard-tile-board-cols')).toBe(`${component.numberOfCols}`);
-    expect(nativeElement.querySelectorAll('app-dashboard-tile-cell.dashboard-grid-tile')).toHaveLength(2);
+    expect(nativeElement.querySelectorAll('app-dashboard-tile-cell.dashboard-grid-tile:not(.dashboard-grid-placeholder)')).toHaveLength(2);
+    expect(nativeElement.querySelectorAll('app-dashboard-tile-cell.dashboard-grid-placeholder')).toHaveLength(2);
     const mainChart = board?.querySelector('app-tile-chart') as HTMLElement | null;
     expect(mainChart).not.toBeNull();
     expect(mainChart?.classList.contains('qs-glass-card-panel')).toBe(false);
-    const mainMap = board?.querySelector('app-tile-map') as HTMLElement | null;
+    const mainMap = boards[1]?.querySelector('app-tile-map') as HTMLElement | null;
     expect(mainMap).not.toBeNull();
     expect(mainMap?.classList.contains('qs-glass-card-panel')).toBe(false);
   });
 
-  it('squares loading shades inside the joined KPI lane surface', () => {
+  it('squares loading shades inside the KPI lane surface', () => {
     const stylePath = resolve(process.cwd(), 'src/app/components/summaries/summaries.component.css');
     const styles = readFileSync(stylePath, 'utf8');
 
@@ -248,11 +255,20 @@ describe('SummariesComponent', () => {
     expect(styles).toContain('--loading-shade-border-radius: 0;');
   });
 
+  it('keeps intent section headings compact against the shared dashboard header style', () => {
+    const stylePath = resolve(process.cwd(), 'src/app/components/summaries/summaries.component.css');
+    const styles = readFileSync(stylePath, 'utf8');
+
+    expect(styles).toContain('.dashboard-section-header.dashboard-main-section-header h2');
+    expect(styles).toContain('font-size: 1rem;');
+  });
+
   it('fills partial final chart-grid rows with non-draggable placeholder cells', () => {
     const mainGridTiles = [0, 1, 2].map(order => ({
       type: TileTypes.Chart,
       order,
       chartType: ChartTypes.ColumnsVertical,
+      dataType: DataDistance.type,
       dataCategoryType: ChartDataCategoryTypes.DateType,
       dataValueType: ChartDataValueTypes.Total,
       data: [],
@@ -265,14 +281,14 @@ describe('SummariesComponent', () => {
     component.tiles = mainGridTiles;
     component.kpiLaneTiles = [];
     component.mainGridTiles = mainGridTiles;
-    (component as any).refreshMainGridTrailingPlaceholders();
+    (component as any).refreshTileLanes();
 
     fixture.detectChanges();
 
     const nativeElement = fixture.nativeElement as HTMLElement;
     const board = nativeElement.querySelector('app-dashboard-tile-board') as HTMLElement | null;
     expect(board).not.toBeNull();
-    expect(component.mainGridTrailingPlaceholders).toEqual([0]);
+    expect(component.mainGridSections[0]?.trailingPlaceholders).toEqual([0]);
     expect(board?.querySelectorAll('app-dashboard-tile-cell.dashboard-grid-tile')).toHaveLength(4);
     const placeholder = board?.querySelector('app-dashboard-tile-cell.dashboard-grid-placeholder') as HTMLElement | null;
     expect(placeholder).not.toBeNull();
@@ -1618,8 +1634,8 @@ describe('SummariesComponent', () => {
     }));
     component.showActions = true;
     component.tiles = [
-      { type: TileTypes.Chart, order: 0, size: { columns: 1, rows: 1 } },
-      { type: TileTypes.Map, order: 1, size: { columns: 1, rows: 1 } },
+      { type: TileTypes.Chart, order: 0, size: { columns: 1, rows: 1 }, chartType: ChartTypes.ColumnsVertical, dataType: DataDistance.type },
+      { type: TileTypes.Chart, order: 1, size: { columns: 1, rows: 1 }, chartType: ChartTypes.ColumnsVertical, dataType: DataDuration.type },
     ] as any;
 
     (component as any).updateDesktopTileDragCapability();
@@ -1785,26 +1801,26 @@ describe('SummariesComponent', () => {
       settings: {
         dashboardSettings: {
           tiles: [
-            { type: TileTypes.Chart, order: 0, size: { columns: 1, rows: 1 }, chartType: ChartTypes.ColumnsVertical },
-            { type: TileTypes.Map, order: 1, size: { columns: 1, rows: 1 }, clusterMarkers: true, mapStyle: 'default' },
+            { type: TileTypes.Chart, order: 0, size: { columns: 1, rows: 1 }, chartType: ChartTypes.ColumnsVertical, dataType: DataDistance.type },
+            { type: TileTypes.Chart, order: 1, size: { columns: 1, rows: 1 }, chartType: ChartTypes.ColumnsVertical, dataType: DataDuration.type },
           ],
         },
       },
     } as any;
     component.tiles = [
-      { type: TileTypes.Chart, order: 0, size: { columns: 1, rows: 1 }, chartType: ChartTypes.ColumnsVertical } as any,
-      { type: TileTypes.Map, order: 1, size: { columns: 1, rows: 1 }, clusterMarkers: true, mapStyle: 'default' } as any,
+      { type: TileTypes.Chart, order: 0, size: { columns: 1, rows: 1 }, chartType: ChartTypes.ColumnsVertical, dataType: DataDistance.type } as any,
+      { type: TileTypes.Chart, order: 1, size: { columns: 1, rows: 1 }, chartType: ChartTypes.ColumnsVertical, dataType: DataDuration.type } as any,
     ];
 
-    component.onTilesSort({ previousIndex: 0, currentIndex: 1 } as any);
+    component.onTilesSort({ previousIndex: 0, currentIndex: 1 } as any, 'activityOverview');
     await component.onTilesDrop({ previousIndex: 0, currentIndex: 1 } as any);
 
-    expect(component.user.settings.dashboardSettings.tiles[0].type).toBe(TileTypes.Map);
-    expect(component.user.settings.dashboardSettings.tiles[1].type).toBe(TileTypes.Chart);
+    expect(component.user.settings.dashboardSettings.tiles[0].dataType).toBe(DataDuration.type);
+    expect(component.user.settings.dashboardSettings.tiles[1].dataType).toBe(DataDistance.type);
     expect(component.user.settings.dashboardSettings.tiles[0].order).toBe(0);
     expect(component.user.settings.dashboardSettings.tiles[1].order).toBe(1);
-    expect(component.tiles[0].type).toBe(TileTypes.Map);
-    expect(component.tiles[1].type).toBe(TileTypes.Chart);
+    expect(component.tiles[0].dataType).toBe(DataDuration.type);
+    expect(component.tiles[1].dataType).toBe(DataDistance.type);
     expectDashboardSettingsWrite(component.user, {
       tiles: component.user.settings.dashboardSettings.tiles,
     });
@@ -1833,11 +1849,13 @@ describe('SummariesComponent', () => {
               eventFilters: { range: '14d', activityTypes: [] },
             },
             {
-              type: TileTypes.Map,
+              type: TileTypes.Chart,
               order: 1,
               size: { columns: 1, rows: 1 },
-              clusterMarkers: true,
-              mapStyle: 'default',
+              chartType: ChartTypes.ColumnsVertical,
+              dataType: DataDuration.type,
+              dataValueType: ChartDataValueTypes.Total,
+              dataCategoryType: ChartDataCategoryTypes.DateType,
               eventFilters: { range: '30d', activityTypes: [] },
             },
           ],
@@ -1845,15 +1863,15 @@ describe('SummariesComponent', () => {
       },
     } as any;
     component.tiles = [
-      { type: TileTypes.Chart, order: 0, size: { columns: 1, rows: 1 }, chartType: ChartTypes.ColumnsVertical } as any,
-      { type: TileTypes.Map, order: 1, size: { columns: 1, rows: 1 }, clusterMarkers: true, mapStyle: 'default' } as any,
+      { type: TileTypes.Chart, order: 0, size: { columns: 1, rows: 1 }, chartType: ChartTypes.ColumnsVertical, dataType: DataAscent.type } as any,
+      { type: TileTypes.Chart, order: 1, size: { columns: 1, rows: 1 }, chartType: ChartTypes.ColumnsVertical, dataType: DataDuration.type } as any,
     ];
     (component as any).tileEventsByOrder = {
       0: [{ id: 'old-chart-event' }],
       1: [{ id: 'old-map-event' }],
     };
 
-    component.onTilesSort({ previousIndex: 0, currentIndex: 1 } as any);
+    component.onTilesSort({ previousIndex: 0, currentIndex: 1 } as any, 'activityOverview');
     mockEventService.getEventsBy.mockClear();
     await component.onTilesDrop({ previousIndex: 0, currentIndex: 1 } as any);
 
@@ -1927,24 +1945,24 @@ describe('SummariesComponent', () => {
       settings: {
         dashboardSettings: {
           tiles: [
-            { type: TileTypes.Chart, order: 0, size: { columns: 1, rows: 1 }, chartType: ChartTypes.ColumnsVertical },
-            { type: TileTypes.Map, order: 1, size: { columns: 1, rows: 1 }, clusterMarkers: true, mapStyle: 'default' },
+            { type: TileTypes.Chart, order: 0, size: { columns: 1, rows: 1 }, chartType: ChartTypes.ColumnsVertical, dataType: DataDistance.type },
+            { type: TileTypes.Chart, order: 1, size: { columns: 1, rows: 1 }, chartType: ChartTypes.ColumnsVertical, dataType: DataDuration.type },
           ],
         },
       },
     } as any;
     component.tiles = [
-      { type: TileTypes.Chart, order: 0, size: { columns: 1, rows: 1 }, chartType: ChartTypes.ColumnsVertical } as any,
-      { type: TileTypes.Map, order: 1, size: { columns: 1, rows: 1 }, clusterMarkers: true, mapStyle: 'default' } as any,
+      { type: TileTypes.Chart, order: 0, size: { columns: 1, rows: 1 }, chartType: ChartTypes.ColumnsVertical, dataType: DataDistance.type } as any,
+      { type: TileTypes.Chart, order: 1, size: { columns: 1, rows: 1 }, chartType: ChartTypes.ColumnsVertical, dataType: DataDuration.type } as any,
     ];
 
-    component.onTilesSort({ previousIndex: 0, currentIndex: 1 } as any);
+    component.onTilesSort({ previousIndex: 0, currentIndex: 1 } as any, 'activityOverview');
     await component.onTilesDrop({ previousIndex: 0, currentIndex: 1 } as any);
 
-    expect(component.user.settings.dashboardSettings.tiles[0].type).toBe(TileTypes.Chart);
-    expect(component.user.settings.dashboardSettings.tiles[1].type).toBe(TileTypes.Map);
-    expect(component.tiles[0].type).toBe(TileTypes.Chart);
-    expect(component.tiles[1].type).toBe(TileTypes.Map);
+    expect(component.user.settings.dashboardSettings.tiles[0].dataType).toBe(DataDistance.type);
+    expect(component.user.settings.dashboardSettings.tiles[1].dataType).toBe(DataDuration.type);
+    expect(component.tiles[0].dataType).toBe(DataDistance.type);
+    expect(component.tiles[1].dataType).toBe(DataDuration.type);
     expect(mockLogger.error).toHaveBeenCalledWith(
       '[SummariesComponent] Failed to persist dashboard tile drag order update',
       expect.any(Error)

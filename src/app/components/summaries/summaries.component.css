@@ -6,8 +6,21 @@
   margin: 0 0 1.25rem;
 }
 
-.dashboard-kpi-section--merged {
-  margin-bottom: 0;
+.dashboard-main-sections {
+  display: grid;
+  gap: 1.25rem;
+}
+
+.dashboard-main-section {
+  min-width: 0;
+}
+
+.dashboard-main-section-header {
+  margin-bottom: 0.5rem;
+}
+
+.dashboard-section-header.dashboard-main-section-header h2 {
+  font-size: 1rem;
 }
 
 .dashboard-section-header {
@@ -90,13 +103,6 @@
   align-items: stretch;
   gap: 0;
   overflow: hidden;
-}
-
-.dashboard-kpi-lane--merged-with-board {
-  border-bottom: 0;
-  border-bottom-left-radius: 0 !important;
-  border-bottom-right-radius: 0 !important;
-  box-shadow: none !important;
 }
 
 .dashboard-kpi-tile {
@@ -187,11 +193,6 @@
 
 .dashboard-grid-placeholder {
   pointer-events: none;
-}
-
-app-dashboard-tile-board.dashboard-tile-board--merged-after-kpis {
-  border-top-left-radius: 0 !important;
-  border-top-right-radius: 0 !important;
 }
 
 /* Common style for the tile content components */

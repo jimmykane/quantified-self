@@ -39,15 +39,14 @@
   </div>
   }
   @if (kpiLaneTiles.length) {
-  <section class="dashboard-kpi-section" [class.dashboard-kpi-section--merged]="mainGridTiles.length">
+  <section class="dashboard-kpi-section">
     <div
       class="qs-glass-card-panel dashboard-kpi-lane"
-      [class.dashboard-kpi-lane--merged-with-board]="mainGridTiles.length"
       cdkDropList
       cdkDropListOrientation="mixed"
       [cdkDropListData]="kpiLaneTiles"
-      [cdkDropListDisabled]="!desktopTileDragEnabled"
-      [class.desktop-tile-drop-list]="desktopTileDragEnabled"
+      [cdkDropListDisabled]="!desktopTileDragEnabled || kpiLaneTiles.length < 2"
+      [class.desktop-tile-drop-list]="desktopTileDragEnabled && kpiLaneTiles.length > 1"
       (cdkDropListSorted)="onKpiTilesSort($event)"
       (cdkDropListDropped)="onKpiTilesDrop($event)">
       @for (tile of kpiLaneTiles; track trackByTile($index, tile)) {
@@ -55,8 +54,8 @@
         class="dashboard-kpi-tile"
         cdkDrag
         [cdkDragPreviewContainer]="'parent'"
-        [cdkDragDisabled]="!desktopTileDragEnabled"
-        [class.desktop-draggable-tile]="desktopTileDragEnabled">
+        [cdkDragDisabled]="!desktopTileDragEnabled || kpiLaneTiles.length < 2"
+        [class.desktop-draggable-tile]="desktopTileDragEnabled && kpiLaneTiles.length > 1">
         <app-tile-chart [user]="user" [type]="tile.type" [tileName]="getChartTile(tile).name || ''" [chartType]="getChartTile(tile).chartType"
           [isLoading]="isTileLoading(tile)" [data]="getChartTile(tile).data" [showActions]="showActions" [darkTheme]="darkTheme"
           [compactKpiRow]="true"
@@ -85,7 +84,7 @@
           [sleepTrendCanNavigateNewer]="sleepTrendCanNavigateNewer"
           [powerCurve]="getChartTile(tile).powerCurve"
           [absoluteLatestFormPoint]="getChartTile(tile).absoluteLatestFormPoint"
-          [size]="tile.size" [order]="tile.order" [enableDesktopDrag]="desktopTileDragEnabled"
+          [size]="tile.size" [order]="tile.order" [enableDesktopDrag]="desktopTileDragEnabled && kpiLaneTiles.length > 1"
           (editInDashboardManager)="openDashboardManagerForTileOrder($event)"
           (eventFilterRangeChange)="onTileEventFilterRangeChange(tile.order, $event)"
           (eventFilterActivityTypesChange)="onTileEventFilterActivityTypesChange(tile.order, $event)"
@@ -99,87 +98,100 @@
     </div>
   </section>
   }
-  @if (mainGridTiles.length) {
-  <app-dashboard-tile-board
-    [class.dashboard-tile-board--merged-after-kpis]="kpiLaneTiles.length"
-    cdkDropList
-    cdkDropListOrientation="mixed"
-    [cdkDropListData]="mainGridTiles"
-    [cdkDropListDisabled]="!desktopTileDragEnabled"
-    [class.desktop-tile-drop-list]="desktopTileDragEnabled"
-    [cols]="numberOfCols"
-    [rowHeight]="rowHeight"
-    (cdkDropListSorted)="onTilesSort($event)"
-    (cdkDropListDropped)="onTilesDrop($event)">
-    @for (tile of mainGridTiles; track trackByTile($index, tile)) {
-    <app-dashboard-tile-cell
-      cdkDrag
-      [cdkDragPreviewContainer]="'global'"
-      [cdkDragDisabled]="!desktopTileDragEnabled"
-      [class.desktop-draggable-tile]="desktopTileDragEnabled"
-      [columns]="tile.size.columns"
-      [rows]="tile.size.rows"
-      [maxColumns]="numberOfCols">
-      @if (tile.type === tileTypes.Chart) {
-      <app-tile-chart [user]="user" [type]="tile.type" [tileName]="getChartTile(tile).name || ''" [chartType]="getChartTile(tile).chartType"
-        [isLoading]="isTileLoading(tile)" [data]="getChartTile(tile).data" [showActions]="showActions" [darkTheme]="darkTheme"
-        [dataType]="getChartTile(tile).dataType" [dataValueType]="getChartTile(tile).dataValueType"
-        [dataCategoryType]="getChartTile(tile).dataCategoryType" [dataTimeInterval]="getChartTile(tile).timeInterval"
-        [eventFilters]="getTileEventFilters(tile)" [canNavigateTileEventsNewer]="canNavigateTileEventsNewer(tile)"
-        [recoveryNow]="getChartTile(tile).recoveryNow" [recoveryNowStatus]="getRecoveryNowStatusForTile(tile)"
-        [formStatus]="getFormStatusForTile(tile)"
-        [acwr]="getChartTile(tile).acwr" [acwrStatus]="getAcwrStatusForTile(tile)"
-        [rampRate]="getChartTile(tile).rampRate" [rampRateStatus]="getRampRateStatusForTile(tile)"
-        [monotonyStrain]="getChartTile(tile).monotonyStrain" [monotonyStrainStatus]="getMonotonyStrainStatusForTile(tile)"
-        [formNow]="getChartTile(tile).formNow" [formNowStatus]="getFormNowStatusForTile(tile)"
-        [fitnessCtl]="getChartTile(tile).fitnessCtl" [fitnessCtlStatus]="getFitnessCtlStatusForTile(tile)"
-        [fatigueAtl]="getChartTile(tile).fatigueAtl" [fatigueAtlStatus]="getFatigueAtlStatusForTile(tile)"
-        [formPlus7d]="getChartTile(tile).formPlus7d" [formPlus7dStatus]="getFormPlus7dStatusForTile(tile)"
-        [easyPercent]="getChartTile(tile).easyPercent" [easyPercentStatus]="getEasyPercentStatusForTile(tile)"
-        [hardPercent]="getChartTile(tile).hardPercent" [hardPercentStatus]="getHardPercentStatusForTile(tile)"
-        [efficiencyDelta4w]="getChartTile(tile).efficiencyDelta4w" [efficiencyDelta4wStatus]="getEfficiencyDelta4wStatusForTile(tile)"
-        [freshnessForecast]="getChartTile(tile).freshnessForecast" [freshnessForecastStatus]="getFreshnessForecastStatusForTile(tile)"
-        [intensityDistribution]="getChartTile(tile).intensityDistribution" [intensityDistributionStatus]="getIntensityDistributionStatusForTile(tile)"
-        [efficiencyTrend]="getChartTile(tile).efficiencyTrend" [efficiencyTrendStatus]="getEfficiencyTrendStatusForTile(tile)"
-        [derivedChartRange]="getChartTile(tile).displaySettings?.derivedChartRange"
-        [formTimelineWindow]="getChartTile(tile).displaySettings?.formTimelineWindow"
-        [sleepTrend]="getChartTile(tile).sleepTrend" [sleepTrendRange]="sleepTrendRange"
-        [sleepTrendWindowLabel]="sleepTrendWindowLabel" [sleepTrendCanNavigateOlder]="sleepTrendCanNavigateOlder"
-        [sleepTrendCanNavigateNewer]="sleepTrendCanNavigateNewer"
-        [powerCurve]="getChartTile(tile).powerCurve"
-        [absoluteLatestFormPoint]="getChartTile(tile).absoluteLatestFormPoint"
-        [size]="tile.size" [order]="tile.order" [enableDesktopDrag]="desktopTileDragEnabled"
-        (editInDashboardManager)="openDashboardManagerForTileOrder($event)"
-        (eventFilterRangeChange)="onTileEventFilterRangeChange(tile.order, $event)"
-        (eventFilterActivityTypesChange)="onTileEventFilterActivityTypesChange(tile.order, $event)"
-        (eventFilterNavigate)="onTileEventFilterNavigate(tile.order, $event)"
-        (derivedChartRangeChange)="onTileDerivedChartRangeChange(tile.order, $event)"
-        (formTimelineWindowChange)="onTileFormTimelineWindowChange(tile.order, $event)"
-        (sleepTrendRangeChange)="onSleepTrendRangeChange($event)"
-        (sleepTrendNavigate)="onSleepTrendNavigate($event)"></app-tile-chart>
-      }
-      @if (tile.type === tileTypes.Map) {
-      <app-tile-map [user]="user" [type]="tile.type" [isLoading]="isTileLoading(tile)"
-        [showActions]="showActions" [events]="getMapTile(tile).events" [mapStyle]="getMapTile(tile).mapStyle || 'default'"
-        [clusterMarkers]="getMapTile(tile).clusterMarkers" [size]="tile.size" [order]="tile.order"
-        [enableDesktopDrag]="desktopTileDragEnabled" [eventFilters]="getTileEventFilters(tile)"
-        [canNavigateTileEventsNewer]="canNavigateTileEventsNewer(tile)"
-        (editInDashboardManager)="openDashboardManagerForTileOrder($event)"
-        (eventFilterRangeChange)="onTileEventFilterRangeChange(tile.order, $event)"
-        (eventFilterActivityTypesChange)="onTileEventFilterActivityTypesChange(tile.order, $event)"
-        (eventFilterNavigate)="onTileEventFilterNavigate(tile.order, $event)"></app-tile-map>
-      }
-    </app-dashboard-tile-cell>
+  @if (mainGridSections.length) {
+  <div class="dashboard-main-sections">
+    @for (section of mainGridSections; track trackBySection($index, section)) {
+    <section class="dashboard-main-section" [attr.aria-labelledby]="'dashboard-section-' + section.id">
+      <div class="dashboard-section-header dashboard-main-section-header">
+        <div class="dashboard-section-title-block">
+          <mat-icon aria-hidden="true">{{ section.icon }}</mat-icon>
+          <div class="dashboard-section-title-copy">
+            <h2 [id]="'dashboard-section-' + section.id">{{ section.label }}</h2>
+          </div>
+        </div>
+      </div>
+      <app-dashboard-tile-board
+        cdkDropList
+        cdkDropListOrientation="mixed"
+        [cdkDropListData]="section.tiles"
+        [cdkDropListDisabled]="!desktopTileDragEnabled || section.tiles.length < 2"
+        [class.desktop-tile-drop-list]="desktopTileDragEnabled && section.tiles.length > 1"
+        [cols]="numberOfCols"
+        [rowHeight]="rowHeight"
+        (cdkDropListSorted)="onTilesSort($event, section.id)"
+        (cdkDropListDropped)="onTilesDrop($event)">
+        @for (tile of section.tiles; track trackByTile($index, tile)) {
+        <app-dashboard-tile-cell
+          cdkDrag
+          [cdkDragPreviewContainer]="'global'"
+          [cdkDragDisabled]="!desktopTileDragEnabled || section.tiles.length < 2"
+          [class.desktop-draggable-tile]="desktopTileDragEnabled && section.tiles.length > 1"
+          [columns]="tile.size.columns"
+          [rows]="tile.size.rows"
+          [maxColumns]="numberOfCols">
+          @if (tile.type === tileTypes.Chart) {
+          <app-tile-chart [user]="user" [type]="tile.type" [tileName]="getChartTile(tile).name || ''" [chartType]="getChartTile(tile).chartType"
+            [isLoading]="isTileLoading(tile)" [data]="getChartTile(tile).data" [showActions]="showActions" [darkTheme]="darkTheme"
+            [dataType]="getChartTile(tile).dataType" [dataValueType]="getChartTile(tile).dataValueType"
+            [dataCategoryType]="getChartTile(tile).dataCategoryType" [dataTimeInterval]="getChartTile(tile).timeInterval"
+            [eventFilters]="getTileEventFilters(tile)" [canNavigateTileEventsNewer]="canNavigateTileEventsNewer(tile)"
+            [recoveryNow]="getChartTile(tile).recoveryNow" [recoveryNowStatus]="getRecoveryNowStatusForTile(tile)"
+            [formStatus]="getFormStatusForTile(tile)"
+            [acwr]="getChartTile(tile).acwr" [acwrStatus]="getAcwrStatusForTile(tile)"
+            [rampRate]="getChartTile(tile).rampRate" [rampRateStatus]="getRampRateStatusForTile(tile)"
+            [monotonyStrain]="getChartTile(tile).monotonyStrain" [monotonyStrainStatus]="getMonotonyStrainStatusForTile(tile)"
+            [formNow]="getChartTile(tile).formNow" [formNowStatus]="getFormNowStatusForTile(tile)"
+            [fitnessCtl]="getChartTile(tile).fitnessCtl" [fitnessCtlStatus]="getFitnessCtlStatusForTile(tile)"
+            [fatigueAtl]="getChartTile(tile).fatigueAtl" [fatigueAtlStatus]="getFatigueAtlStatusForTile(tile)"
+            [formPlus7d]="getChartTile(tile).formPlus7d" [formPlus7dStatus]="getFormPlus7dStatusForTile(tile)"
+            [easyPercent]="getChartTile(tile).easyPercent" [easyPercentStatus]="getEasyPercentStatusForTile(tile)"
+            [hardPercent]="getChartTile(tile).hardPercent" [hardPercentStatus]="getHardPercentStatusForTile(tile)"
+            [efficiencyDelta4w]="getChartTile(tile).efficiencyDelta4w" [efficiencyDelta4wStatus]="getEfficiencyDelta4wStatusForTile(tile)"
+            [freshnessForecast]="getChartTile(tile).freshnessForecast" [freshnessForecastStatus]="getFreshnessForecastStatusForTile(tile)"
+            [intensityDistribution]="getChartTile(tile).intensityDistribution" [intensityDistributionStatus]="getIntensityDistributionStatusForTile(tile)"
+            [efficiencyTrend]="getChartTile(tile).efficiencyTrend" [efficiencyTrendStatus]="getEfficiencyTrendStatusForTile(tile)"
+            [derivedChartRange]="getChartTile(tile).displaySettings?.derivedChartRange"
+            [formTimelineWindow]="getChartTile(tile).displaySettings?.formTimelineWindow"
+            [sleepTrend]="getChartTile(tile).sleepTrend" [sleepTrendRange]="sleepTrendRange"
+            [sleepTrendWindowLabel]="sleepTrendWindowLabel" [sleepTrendCanNavigateOlder]="sleepTrendCanNavigateOlder"
+            [sleepTrendCanNavigateNewer]="sleepTrendCanNavigateNewer"
+            [powerCurve]="getChartTile(tile).powerCurve"
+            [absoluteLatestFormPoint]="getChartTile(tile).absoluteLatestFormPoint"
+            [size]="tile.size" [order]="tile.order" [enableDesktopDrag]="desktopTileDragEnabled && section.tiles.length > 1"
+            (editInDashboardManager)="openDashboardManagerForTileOrder($event)"
+            (eventFilterRangeChange)="onTileEventFilterRangeChange(tile.order, $event)"
+            (eventFilterActivityTypesChange)="onTileEventFilterActivityTypesChange(tile.order, $event)"
+            (eventFilterNavigate)="onTileEventFilterNavigate(tile.order, $event)"
+            (derivedChartRangeChange)="onTileDerivedChartRangeChange(tile.order, $event)"
+            (formTimelineWindowChange)="onTileFormTimelineWindowChange(tile.order, $event)"
+            (sleepTrendRangeChange)="onSleepTrendRangeChange($event)"
+            (sleepTrendNavigate)="onSleepTrendNavigate($event)"></app-tile-chart>
+          }
+          @if (tile.type === tileTypes.Map) {
+          <app-tile-map [user]="user" [type]="tile.type" [isLoading]="isTileLoading(tile)"
+            [showActions]="showActions" [events]="getMapTile(tile).events" [mapStyle]="getMapTile(tile).mapStyle || 'default'"
+            [clusterMarkers]="getMapTile(tile).clusterMarkers" [size]="tile.size" [order]="tile.order"
+            [enableDesktopDrag]="desktopTileDragEnabled && section.tiles.length > 1" [eventFilters]="getTileEventFilters(tile)"
+            [canNavigateTileEventsNewer]="canNavigateTileEventsNewer(tile)"
+            (editInDashboardManager)="openDashboardManagerForTileOrder($event)"
+            (eventFilterRangeChange)="onTileEventFilterRangeChange(tile.order, $event)"
+            (eventFilterActivityTypesChange)="onTileEventFilterActivityTypesChange(tile.order, $event)"
+            (eventFilterNavigate)="onTileEventFilterNavigate(tile.order, $event)"></app-tile-map>
+          }
+        </app-dashboard-tile-cell>
+        }
+        @for (placeholder of section.trailingPlaceholders; track placeholder) {
+        <app-dashboard-tile-cell
+          class="dashboard-grid-placeholder"
+          aria-hidden="true"
+          [columns]="1"
+          [rows]="1"
+          [maxColumns]="numberOfCols"></app-dashboard-tile-cell>
+        }
+      </app-dashboard-tile-board>
+    </section>
     }
-    @for (placeholder of mainGridTrailingPlaceholders; track placeholder) {
-    <app-dashboard-tile-cell
-      class="dashboard-grid-placeholder"
-      aria-hidden="true"
-      [columns]="1"
-      [rows]="1"
-      [maxColumns]="numberOfCols"></app-dashboard-tile-cell>
-    }
-  </app-dashboard-tile-board>
+  </div>
   }
 </section>
 }

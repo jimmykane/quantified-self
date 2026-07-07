@@ -28,7 +28,7 @@ describe('TileMapActionsComponent', () => {
         dashboardSettings: {
           tiles: [
             { type: TileTypes.Map, order: 0, mapStyle: 'default', clusterMarkers: false, size: { columns: 1, rows: 1 } },
-            { type: TileTypes.Chart, order: 1, chartType: 'Pie', size: { columns: 1, rows: 1 } },
+            { type: TileTypes.Map, order: 1, mapStyle: 'satellite', clusterMarkers: true, size: { columns: 1, rows: 1 } },
           ],
         },
       },
@@ -146,18 +146,33 @@ describe('TileMapActionsComponent', () => {
 
     expect(analyticsMock.logEvent).toHaveBeenCalledWith('dashboard_tile_action', { method: 'moveTileForward' });
     expect(userMock.settings.dashboardSettings.tiles.map((tile: any) => tile.order)).toEqual([0, 1]);
-    expect(userMock.settings.dashboardSettings.tiles[0].type).toBe(TileTypes.Chart);
-    expect(userMock.settings.dashboardSettings.tiles[1].type).toBe(TileTypes.Map);
+    expect(userMock.settings.dashboardSettings.tiles[0].mapStyle).toBe('satellite');
+    expect(userMock.settings.dashboardSettings.tiles[1].mapStyle).toBe('default');
     expect(userMock.updateUserProperties).toHaveBeenCalled();
     expect(hapticsMock.selection).toHaveBeenCalledTimes(1);
+  });
+
+  it('should not move a map tile into another inferred dashboard section', async () => {
+    userMock.settings.dashboardSettings.tiles = [
+      { type: TileTypes.Map, order: 0, mapStyle: 'default', clusterMarkers: false, size: { columns: 1, rows: 1 } },
+      { type: TileTypes.Chart, order: 1, chartType: 'Pie', size: { columns: 1, rows: 1 } },
+    ];
+
+    expect(component.canMoveTileForward()).toBe(false);
+
+    await component.moveTileForward();
+
+    expect(userMock.settings.dashboardSettings.tiles[0].type).toBe(TileTypes.Map);
+    expect(userMock.settings.dashboardSettings.tiles[1].type).toBe(TileTypes.Chart);
+    expect(userMock.updateUserProperties).not.toHaveBeenCalled();
   });
 
   it('should not persist when trying to move the first tile backward', async () => {
     await component.moveTileBackward();
 
     expect(userMock.settings.dashboardSettings.tiles.map((tile: any) => tile.order)).toEqual([0, 1]);
-    expect(userMock.settings.dashboardSettings.tiles[0].type).toBe(TileTypes.Map);
-    expect(userMock.settings.dashboardSettings.tiles[1].type).toBe(TileTypes.Chart);
+    expect(userMock.settings.dashboardSettings.tiles[0].mapStyle).toBe('default');
+    expect(userMock.settings.dashboardSettings.tiles[1].mapStyle).toBe('satellite');
     expect(userMock.updateUserProperties).not.toHaveBeenCalled();
   });
 });
