@@ -73,13 +73,3 @@ app-loading-overlay {
   z-index: 3;
   pointer-events: auto;
 }
-
-:host ::ng-deep .events-map-popup-anchor app-map-activity-popup .track-start-popup {
-  width: min(250px, calc(100vw - 20px));
-  --qs-glass-panel-bg: var(--mat-sys-surface);
-  --qs-glass-panel-border: var(--mat-sys-outline-variant);
-  --qs-glass-panel-shadow:
-    0 4px 6px -1px rgba(0, 0, 0, 0.05),
-    0 2px 4px -1px rgba(0, 0, 0, 0.03),
-    0 10px 15px -3px rgba(0, 0, 0, 0.05);
-}

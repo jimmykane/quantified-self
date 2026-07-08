@@ -69,6 +69,7 @@ type ResolvedTrackMapRenderOptions = Required<Omit<TrackMapRenderOptions, 'onTra
 interface StoredTrackLayers {
   sourceId: string;
   lineLayerId: string;
+  hitLayerId: string;
   arrowLayerId: string;
 }
 
@@ -76,6 +77,14 @@ export interface TrackMapManagerOptions {
   layerPrefix?: string;
   logPrefix?: string;
 }
+
+const TRACK_CLICK_HIT_STROKE_WIDTH = 18;
+const TRACK_CLICK_HIT_OPACITY = 0.001;
+const TRACK_MARKER_CLICK_CLEANUP = Symbol('trackMarkerClickCleanup');
+
+type ClickableTrackMarkerElement = HTMLElement & {
+  [TRACK_MARKER_CLICK_CLEANUP]?: () => void;
+};
 
 export class TrackMapManager {
   private map: any | null = null;
@@ -169,7 +178,7 @@ export class TrackMapManager {
 
   public clearCursorMarkers(): void {
     this.cursorState.clear();
-    this.cursorMarkers.forEach(marker => marker.remove());
+    this.cursorMarkers.forEach(marker => this.removeMarker(marker));
     this.cursorMarkers.clear();
   }
 
@@ -369,6 +378,7 @@ export class TrackMapManager {
     const safeTrackId = this.buildSafeLayerId(track.id);
     const sourceId = `${this.layerPrefix}-source-${safeTrackId}`;
     const lineLayerId = `${this.layerPrefix}-line-${safeTrackId}`;
+    const hitLayerId = `${this.layerPrefix}-hit-${safeTrackId}`;
     const arrowLayerId = `${this.layerPrefix}-arrow-${safeTrackId}`;
 
     const sourceData = {
@@ -405,7 +415,7 @@ export class TrackMapManager {
       'line-opacity': 1,
       'line-emissive-strength': 1,
     });
-    this.bindTrackClick(track, lineLayerId);
+    this.syncTrackClickLayer(track, hitLayerId, sourceId);
 
     if (this.currentOptions.showArrows) {
       ensureLayer(this.map, {
@@ -440,30 +450,45 @@ export class TrackMapManager {
     this.activeLayersByTrackId.set(track.id, {
       sourceId,
       lineLayerId,
+      hitLayerId,
       arrowLayerId,
     });
 
     this.renderTrackMarkers(track, coordinates);
   }
 
-  private bindTrackClick(track: TrackMapRenderData, lineLayerId: string): void {
-    unbindLayerClicks(this.map, this.lineClickBindings, lineLayerId);
+  private syncTrackClickLayer(track: TrackMapRenderData, hitLayerId: string, sourceId: string): void {
+    unbindLayerClicks(this.map, this.lineClickBindings, hitLayerId);
     const clickHandler = this.currentOptions.onTrackClick;
     if (!clickHandler) {
+      removeLayerIfExists(this.map, hitLayerId);
       return;
     }
 
-    bindLayerClickOnce(this.map, this.lineClickBindings, lineLayerId, (event: unknown) => {
-      const lngLat = (event as { lngLat?: { lng?: unknown; lat?: unknown } } | null | undefined)?.lngLat;
-      const longitudeDegrees = Number(lngLat?.lng);
-      const latitudeDegrees = Number(lngLat?.lat);
-      clickHandler({
-        track,
-        originalEvent: event,
-        latitudeDegrees: Number.isFinite(latitudeDegrees) ? latitudeDegrees : null,
-        longitudeDegrees: Number.isFinite(longitudeDegrees) ? longitudeDegrees : null,
-      });
+    const hitStrokeWidth = Math.max(TRACK_CLICK_HIT_STROKE_WIDTH, (this.currentOptions.strokeWidth || 3) + 12);
+    ensureLayer(this.map, {
+      id: hitLayerId,
+      type: 'line',
+      source: sourceId,
+      layout: {
+        'line-cap': 'round',
+        'line-join': 'round',
+      },
+      paint: {
+        'line-color': '#000000',
+        'line-width': hitStrokeWidth,
+        'line-opacity': TRACK_CLICK_HIT_OPACITY,
+      },
     });
+    setPaintIfLayerExists(this.map, hitLayerId, {
+      'line-width': hitStrokeWidth,
+      'line-opacity': TRACK_CLICK_HIT_OPACITY,
+    });
+    bindLayerClickOnce(this.map, this.lineClickBindings, hitLayerId, (event: unknown) => this.emitTrackClick(
+      track,
+      event,
+      (event as { lngLat?: { lng?: unknown; lat?: unknown } } | null | undefined)?.lngLat,
+    ));
   }
 
   private renderTrackMarkers(track: TrackMapRenderData, coordinates: [number, number][]): void {
@@ -480,12 +505,14 @@ export class TrackMapManager {
         start[0],
         start[1],
         'center',
+        track,
       ));
       this.endMarkers.set(track.id, this.createMarker(
         this.markerFactory.createFlagMarker(track.strokeColor),
         end[0],
         end[1],
         'center',
+        track,
       ));
     }
 
@@ -496,11 +523,13 @@ export class TrackMapManager {
         marker.longitudeDegrees,
         marker.latitudeDegrees,
         marker.anchor || 'center',
+        track,
       ));
     this.extraMarkers.set(track.id, customMarkers);
   }
 
-  private createMarker(element: HTMLElement, lng: number, lat: number, anchor: string): any {
+  private createMarker(element: HTMLElement, lng: number, lat: number, anchor: string, track?: TrackMapRenderData): any {
+    this.bindMarkerClick(element, lng, lat, track);
     const marker = new this.mapboxgl.Marker({
       element,
       anchor,
@@ -510,6 +539,80 @@ export class TrackMapManager {
     return marker;
   }
 
+  private bindMarkerClick(
+    element: HTMLElement,
+    lng: number,
+    lat: number,
+    track?: TrackMapRenderData,
+  ): void {
+    if (!element) {
+      return;
+    }
+
+    this.cleanupMarkerClick(element);
+    const clickableElement = element as ClickableTrackMarkerElement;
+
+    if (!track || !this.currentOptions.onTrackClick) {
+      return;
+    }
+
+    const previousCursor = clickableElement.style.cursor;
+    clickableElement.style.cursor = 'pointer';
+    const clickHandler = (event: MouseEvent) => {
+      event.preventDefault();
+      event.stopPropagation();
+      this.emitTrackClick(track, event, { lng, lat });
+    };
+    clickableElement.addEventListener('click', clickHandler);
+    clickableElement[TRACK_MARKER_CLICK_CLEANUP] = () => {
+      clickableElement.removeEventListener('click', clickHandler);
+      clickableElement.style.cursor = previousCursor;
+    };
+  }
+
+  private cleanupMarkerClick(element: HTMLElement | null | undefined): void {
+    if (!element) {
+      return;
+    }
+
+    const clickableElement = element as ClickableTrackMarkerElement;
+    clickableElement[TRACK_MARKER_CLICK_CLEANUP]?.();
+    delete clickableElement[TRACK_MARKER_CLICK_CLEANUP];
+  }
+
+  private removeMarker(marker: any): void {
+    this.cleanupMarkerClick(this.getMarkerElement(marker));
+    marker?.remove?.();
+  }
+
+  private getMarkerElement(marker: any): HTMLElement | null {
+    const element = typeof marker?.getElement === 'function' ? marker.getElement() : null;
+    if (!element || typeof element.removeEventListener !== 'function') {
+      return null;
+    }
+    return element as HTMLElement;
+  }
+
+  private emitTrackClick(
+    track: TrackMapRenderData,
+    originalEvent: unknown,
+    lngLat: { lng?: unknown; lat?: unknown } | null | undefined,
+  ): void {
+    const clickHandler = this.currentOptions.onTrackClick;
+    if (!clickHandler) {
+      return;
+    }
+
+    const longitudeDegrees = Number(lngLat?.lng);
+    const latitudeDegrees = Number(lngLat?.lat);
+    clickHandler({
+      track,
+      originalEvent,
+      latitudeDegrees: Number.isFinite(latitudeDegrees) ? latitudeDegrees : null,
+      longitudeDegrees: Number.isFinite(longitudeDegrees) ? longitudeDegrees : null,
+    });
+  }
+
   private renderCursorMarkers(): void {
     if (!this.map || !this.mapboxgl) {
       return;
@@ -517,7 +620,7 @@ export class TrackMapManager {
 
     this.cursorMarkers.forEach((marker, trackId) => {
       if (!this.cursorState.has(trackId)) {
-        marker.remove();
+        this.removeMarker(marker);
         this.cursorMarkers.delete(trackId);
       }
     });
@@ -545,20 +648,22 @@ export class TrackMapManager {
     }
 
     this.activeLayersByTrackId.forEach((ids) => {
+      unbindLayerClicks(this.map, this.lineClickBindings, ids.hitLayerId);
       unbindLayerClicks(this.map, this.lineClickBindings, ids.lineLayerId);
       removeLayerIfExists(this.map, ids.arrowLayerId);
+      removeLayerIfExists(this.map, ids.hitLayerId);
       removeLayerIfExists(this.map, ids.lineLayerId);
       removeSourceIfExists(this.map, ids.sourceId);
     });
     unbindLayerClicks(this.map, this.lineClickBindings);
     this.activeLayersByTrackId.clear();
 
-    this.startMarkers.forEach(marker => marker.remove());
+    this.startMarkers.forEach(marker => this.removeMarker(marker));
     this.startMarkers.clear();
-    this.endMarkers.forEach(marker => marker.remove());
+    this.endMarkers.forEach(marker => this.removeMarker(marker));
     this.endMarkers.clear();
 
-    this.extraMarkers.forEach(markers => markers.forEach(marker => marker.remove()));
+    this.extraMarkers.forEach(markers => markers.forEach(marker => this.removeMarker(marker)));
     this.extraMarkers.clear();
   }
 
@@ -568,8 +673,10 @@ export class TrackMapManager {
     }
     const ids = this.activeLayersByTrackId.get(trackId);
     if (ids) {
+      unbindLayerClicks(this.map, this.lineClickBindings, ids.hitLayerId);
       unbindLayerClicks(this.map, this.lineClickBindings, ids.lineLayerId);
       removeLayerIfExists(this.map, ids.arrowLayerId);
+      removeLayerIfExists(this.map, ids.hitLayerId);
       removeLayerIfExists(this.map, ids.lineLayerId);
       removeSourceIfExists(this.map, ids.sourceId);
       this.activeLayersByTrackId.delete(trackId);
@@ -580,17 +687,17 @@ export class TrackMapManager {
   private removeTrackMarkers(trackId: string): void {
     const start = this.startMarkers.get(trackId);
     if (start) {
-      start.remove();
+      this.removeMarker(start);
       this.startMarkers.delete(trackId);
     }
     const end = this.endMarkers.get(trackId);
     if (end) {
-      end.remove();
+      this.removeMarker(end);
       this.endMarkers.delete(trackId);
     }
     const customMarkers = this.extraMarkers.get(trackId);
     if (customMarkers?.length) {
-      customMarkers.forEach((marker) => marker.remove());
+      customMarkers.forEach((marker) => this.removeMarker(marker));
     }
     this.extraMarkers.delete(trackId);
   }

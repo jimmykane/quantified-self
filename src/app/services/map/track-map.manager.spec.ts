@@ -8,8 +8,11 @@ const createMarkerElement = () => document.createElement('div');
 class MockMapboxMarker {
   public lngLat: [number, number] | null = null;
   public added = false;
+  public element: HTMLElement | null;
 
-  constructor(_options?: any) { }
+  constructor(options?: any) {
+    this.element = options?.element || null;
+  }
 
   setLngLat(lngLat: [number, number]) {
     this.lngLat = lngLat;
@@ -23,6 +26,10 @@ class MockMapboxMarker {
 
   remove() {
     this.added = false;
+  }
+
+  getElement() {
+    return this.element;
   }
 }
 
@@ -281,7 +288,7 @@ describe('TrackMapManager', () => {
     expect(new Set(routeSourceIds).size).toBe(2);
   });
 
-  it('binds and cleans track line click handlers', () => {
+  it('binds and cleans wide track hit-area click handlers', () => {
     const onTrackClick = vi.fn();
     manager.renderTrackData([{
       id: 'route-click',
@@ -297,9 +304,21 @@ describe('TrackMapManager', () => {
       onTrackClick,
     });
 
+    const hitLayer = map.addLayer.mock.calls
+      .map((call: any[]) => call[0])
+      .find((layer: any) => String(layer.id).startsWith('route-track-hit-route-click-'));
+    expect(hitLayer).toEqual(expect.objectContaining({
+      type: 'line',
+      paint: expect.objectContaining({
+        'line-width': expect.any(Number),
+        'line-opacity': 0.001,
+      }),
+    }));
+    expect(hitLayer.paint['line-width']).toBeGreaterThanOrEqual(18);
+
     const clickBinding = map.on.mock.calls.find((call: any[]) => (
       call[0] === 'click'
-      && String(call[1]).startsWith('route-track-line-route-click-')
+      && String(call[1]).startsWith('route-track-hit-route-click-')
     ));
     expect(clickBinding).toBeTruthy();
 
@@ -311,12 +330,26 @@ describe('TrackMapManager', () => {
       latitudeDegrees: 40.15,
     }));
 
+    onTrackClick.mockClear();
+    const startMarkerElement = markerFactory.createHomeMarker.mock.results[0]?.value as HTMLElement;
+    startMarkerElement.click();
+    expect(onTrackClick).toHaveBeenCalledWith(expect.objectContaining({
+      track: expect.objectContaining({ id: 'route-click' }),
+      longitudeDegrees: 22.1,
+      latitudeDegrees: 40.1,
+      originalEvent: expect.any(MouseEvent),
+    }));
+
     manager.renderTrackData([], {
       showArrows: false,
       strokeWidth: 3,
     });
 
     expect(map.off).toHaveBeenCalledWith('click', clickBinding?.[1], clickBinding?.[2]);
+    onTrackClick.mockClear();
+    startMarkerElement.click();
+    expect(onTrackClick).not.toHaveBeenCalled();
+    expect(startMarkerElement.style.cursor).toBe('');
   });
 
   it('fits bounds across selected track coordinates and markers', () => {

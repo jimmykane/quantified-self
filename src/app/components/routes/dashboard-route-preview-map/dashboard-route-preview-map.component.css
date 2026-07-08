@@ -121,9 +121,9 @@ app-loading-overlay {
 
 .route-preview-popup-metric strong {
   overflow: hidden;
-  font-family: 'Barlow Condensed', var(--mat-sys-body-large-font);
+  font-family: 'Barlow Condensed', var(--mat-sys-body-large-font), sans-serif;
   font-size: 1.35rem;
-  font-weight: 700;
+  font-weight: 500;
   line-height: 1;
   text-overflow: ellipsis;
   white-space: nowrap;

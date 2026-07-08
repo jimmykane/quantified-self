@@ -15,7 +15,7 @@ import {
 import { firstValueFrom, Subscription, take } from 'rxjs';
 import { EventInterface } from '@sports-alliance/sports-lib';
 import { User } from '@sports-alliance/sports-lib';
-import { CdkDragDrop, CdkDragSortEvent, moveItemInArray } from '@angular/cdk/drag-drop';
+import { CdkDragDrop, moveItemInArray } from '@angular/cdk/drag-drop';
 import { AppThemeService } from '../../services/app.theme.service';
 import { AppThemes } from '@sports-alliance/sports-lib';
 import { LoggerService } from '../../services/logger.service';
@@ -158,6 +158,10 @@ interface DashboardTileSectionCellViewModel {
   columns: number;
 }
 
+interface DashboardTileEventSubscriptionState {
+  order: number;
+}
+
 @Component({
   selector: 'app-summaries',
   templateUrl: './summaries.component.html',
@@ -204,6 +208,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   private dashboardAutoTileUser: AppUserInterface | null = null;
   private sleepTrendAnchorEndMs: number | null = null;
   private tileEventSubscriptions = new Map<number, Subscription>();
+  private tileEventSubscriptionStates = new Map<number, DashboardTileEventSubscriptionState>();
   private tileEventListenerKeys = new Map<number, string>();
   private tileEventAnchorEndMsByOrder = new Map<number, number | null>();
   private tileEventsByOrder: Record<number, EventInterface[]> = {};
@@ -286,6 +291,23 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       simpleChanges.user
       || simpleChanges.eventUser
     ) {
+      const previousUser = (simpleChanges.user?.previousValue ?? this.user) as User | null;
+      const previousEventUser = (simpleChanges.eventUser?.previousValue ?? this.eventUser) as User | null;
+      const previousDependencySnapshot = this.getDashboardInputDependencySnapshot(previousUser, previousEventUser);
+      const currentDependencySnapshot = this.getDashboardInputDependencySnapshot(this.user, this.eventUser);
+      const nextTileSettingsSnapshot = this.getDashboardTileSettingsSnapshot();
+      const isFirstInputChange = simpleChanges.user?.firstChange === true
+        || simpleChanges.eventUser?.firstChange === true
+        || simpleChanges.user?.isFirstChange?.() === true
+        || simpleChanges.eventUser?.isFirstChange?.() === true;
+      if (
+        !isFirstInputChange
+        && equal(previousDependencySnapshot, currentDependencySnapshot)
+        && equal(this.dashboardTileSettingsSnapshot, nextTileSettingsSnapshot)
+      ) {
+        this.syncDashboardAutoTileSubscription();
+        return;
+      }
       return this.unsubscribeAndCreateCharts();
     }
     if (simpleChanges.showActions) {
@@ -342,17 +364,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     }
   }
 
-  public async onTilesDrop(_event: CdkDragDrop<DashboardTileViewModel[]>): Promise<void> {
-    this.ensureTileLanesInitializedFromTiles();
-    await this.persistLaneOrder();
-  }
-
-  public async onKpiTilesDrop(_event: CdkDragDrop<DashboardChartTileViewModel[]>): Promise<void> {
-    this.ensureTileLanesInitializedFromTiles();
-    await this.persistLaneOrder();
-  }
-
-  public onTilesSort(event: CdkDragSortEvent<DashboardTileViewModel[]>, sectionId: DashboardTileSectionId): void {
+  public async onTilesDrop(event: CdkDragDrop<DashboardTileViewModel[]>, sectionId: DashboardTileSectionId): Promise<void> {
     this.ensureTileLanesInitializedFromTiles();
     const section = this.mainGridSections.find(candidate => candidate.id === sectionId);
     if (
@@ -360,23 +372,28 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       || !this.desktopTileDragEnabled
       || !this.showActions
       || section.tiles.length < 2
-      || event.previousIndex === event.currentIndex
+      || !this.isValidDragReorder(section.tiles, event.previousIndex, event.currentIndex)
     ) {
       return;
     }
     moveItemInArray(section.tiles, event.previousIndex, event.currentIndex);
-    this.syncTilesFromLanesForPreview();
-    this.changeDetector.detectChanges();
+    this.syncTilesFromLanesForDrop();
+    await this.persistLaneOrder();
   }
 
-  public onKpiTilesSort(event: CdkDragSortEvent<DashboardChartTileViewModel[]>): void {
+  public async onKpiTilesDrop(event: CdkDragDrop<DashboardChartTileViewModel[]>): Promise<void> {
     this.ensureTileLanesInitializedFromTiles();
-    if (!this.desktopTileDragEnabled || !this.showActions || this.kpiLaneTiles.length < 2 || event.previousIndex === event.currentIndex) {
+    if (
+      !this.desktopTileDragEnabled
+      || !this.showActions
+      || this.kpiLaneTiles.length < 2
+      || !this.isValidDragReorder(this.kpiLaneTiles, event.previousIndex, event.currentIndex)
+    ) {
       return;
     }
     moveItemInArray(this.kpiLaneTiles, event.previousIndex, event.currentIndex);
-    this.syncTilesFromLanesForPreview();
-    this.changeDetector.detectChanges();
+    this.syncTilesFromLanesForDrop();
+    await this.persistLaneOrder();
   }
 
   public async openDashboardManagerDialog(): Promise<void> {
@@ -451,7 +468,6 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
 
   private async rebuildTilesFromCurrentState(): Promise<void> {
     const buildStart = performance.now();
-    this.logRecoveryPipelineState('before_tile_build');
     this.refreshDerivedMetricsBannerState();
     const newTiles = buildDashboardTileViewModels({
       tiles: this.user?.settings?.dashboardSettings?.tiles ?? [],
@@ -515,7 +531,6 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       durationMs: Number((performance.now() - buildStart).toFixed(2)),
       finalTiles: this.tiles.length,
     });
-    this.logRecoveryPipelineState('after_tile_build');
   }
 
   private syncDerivedMetricsSubscription(): void {
@@ -637,7 +652,6 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       this.derivedFreshnessForecastStatus = state.freshnessForecastStatus;
       this.derivedIntensityDistributionStatus = state.intensityDistributionStatus;
       this.derivedEfficiencyTrendStatus = state.efficiencyTrendStatus;
-      this.logRecoveryPipelineState('derived_metrics_update');
       this.refreshDerivedMetricsBannerState();
 
       if (hasTileDataChanged) {
@@ -922,6 +936,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       if (!activeOrders.has(order)) {
         this.tileEventSubscriptions.get(order)?.unsubscribe();
         this.tileEventSubscriptions.delete(order);
+        this.tileEventSubscriptionStates.delete(order);
         this.tileEventListenerKeys.delete(order);
         this.tileEventAnchorEndMsByOrder.delete(order);
         delete this.tileEventsByOrder[order];
@@ -942,22 +957,27 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       }
 
       this.tileEventSubscriptions.get(tile.order)?.unsubscribe();
+      this.tileEventSubscriptionStates.delete(tile.order);
       this.tileEventListenerKeys.set(tile.order, listenerKey);
       this.tileEventLoadingByOrder[tile.order] = true;
+      const subscriptionState: DashboardTileEventSubscriptionState = { order: tile.order };
+      this.tileEventSubscriptionStates.set(tile.order, subscriptionState);
 
       const where = this.buildTileEventWhereClauses(window);
       this.tileEventSubscriptions.set(tile.order, this.eventService
         .getEventsBy(eventUser, where, 'startDate', false, 0)
         .subscribe({
           next: (events) => {
-            this.tileEventsByOrder[tile.order] = (events || []).filter(event => !event.isMerge);
-            this.tileEventLoadingByOrder[tile.order] = false;
+            const currentOrder = subscriptionState.order;
+            this.tileEventsByOrder[currentOrder] = (events || []).filter(event => !event.isMerge);
+            this.tileEventLoadingByOrder[currentOrder] = false;
             void this.rebuildTilesFromCurrentState();
             this.changeDetector.markForCheck();
           },
           error: (error) => {
-            this.tileEventsByOrder[tile.order] = [];
-            this.tileEventLoadingByOrder[tile.order] = false;
+            const currentOrder = subscriptionState.order;
+            this.tileEventsByOrder[currentOrder] = [];
+            this.tileEventLoadingByOrder[currentOrder] = false;
             this.logger.error('[SummariesComponent] Failed to load dashboard tile events', error);
             void this.rebuildTilesFromCurrentState();
             this.changeDetector.markForCheck();
@@ -1042,6 +1062,86 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       range,
       windowKey,
     });
+  }
+
+  private remapTileEventStateForOrderChange(orderRemap: Map<number, number>): void {
+    if (!orderRemap.size) {
+      return;
+    }
+
+    const nextSubscriptions = new Map<number, Subscription>();
+    const nextSubscriptionStates = new Map<number, DashboardTileEventSubscriptionState>();
+    this.tileEventSubscriptions.forEach((subscription, previousOrder) => {
+      const nextOrder = orderRemap.get(previousOrder);
+      if (nextOrder === undefined) {
+        subscription.unsubscribe();
+        return;
+      }
+      nextSubscriptions.set(nextOrder, subscription);
+      const subscriptionState = this.tileEventSubscriptionStates.get(previousOrder);
+      if (subscriptionState) {
+        subscriptionState.order = nextOrder;
+        nextSubscriptionStates.set(nextOrder, subscriptionState);
+      }
+    });
+
+    const nextAnchorEndMsByOrder = new Map<number, number | null>();
+    this.tileEventAnchorEndMsByOrder.forEach((anchorEndMs, previousOrder) => {
+      const nextOrder = orderRemap.get(previousOrder);
+      if (nextOrder !== undefined) {
+        nextAnchorEndMsByOrder.set(nextOrder, anchorEndMs);
+      }
+    });
+
+    const nextEventsByOrder: Record<number, EventInterface[]> = {};
+    Object.entries(this.tileEventsByOrder).forEach(([previousOrderKey, events]) => {
+      const nextOrder = orderRemap.get(Number(previousOrderKey));
+      if (nextOrder !== undefined) {
+        nextEventsByOrder[nextOrder] = events;
+      }
+    });
+
+    const nextLoadingByOrder: Record<number, boolean> = {};
+    Object.entries(this.tileEventLoadingByOrder).forEach(([previousOrderKey, loading]) => {
+      const nextOrder = orderRemap.get(Number(previousOrderKey));
+      if (nextOrder !== undefined) {
+        nextLoadingByOrder[nextOrder] = loading;
+      }
+    });
+
+    this.tileEventSubscriptions = nextSubscriptions;
+    this.tileEventSubscriptionStates = nextSubscriptionStates;
+    this.tileEventAnchorEndMsByOrder = nextAnchorEndMsByOrder;
+    this.tileEventsByOrder = nextEventsByOrder;
+    this.tileEventLoadingByOrder = nextLoadingByOrder;
+    this.refreshTileEventListenerKeysForCurrentSettings();
+  }
+
+  private refreshTileEventListenerKeysForCurrentSettings(): void {
+    const eventUser = (this.eventUser || this.user) as User | null;
+    const uid = `${eventUser?.uid || ''}`.trim();
+    if (!uid) {
+      this.tileEventListenerKeys.clear();
+      return;
+    }
+
+    const nextListenerKeys = new Map<number, string>();
+    this.getOrderedDashboardSettingsTiles()
+      .filter(tile => this.isEventDataSettingsTile(tile))
+      .forEach((tile) => {
+        if (!this.tileEventSubscriptions.has(tile.order)) {
+          return;
+        }
+        const filters = this.getSettingsTileEventFilters(tile);
+        const window = resolveDashboardTileEventWindow(
+          filters,
+          this.user?.settings?.unitSettings?.startOfTheWeek,
+          this.tileEventAnchorEndMsByOrder.get(tile.order) ?? null,
+        );
+        nextListenerKeys.set(tile.order, this.buildTileEventListenerKey(uid, tile.order, filters, window));
+      });
+
+    this.tileEventListenerKeys = nextListenerKeys;
   }
 
   private async updateTileEventFilters(
@@ -1410,10 +1510,20 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     }
   }
 
-  private syncTilesFromLanesForPreview(): void {
+  private syncTilesFromLanesForDrop(): void {
     this.mainGridTiles = this.getFlattenedMainGridSectionTiles();
     this.tiles = [...this.kpiLaneTiles, ...this.mainGridTiles];
     this.refreshMainGridSections();
+  }
+
+  private isValidDragReorder<T>(items: T[], previousIndex: number, currentIndex: number): boolean {
+    return Number.isInteger(previousIndex)
+      && Number.isInteger(currentIndex)
+      && previousIndex !== currentIndex
+      && previousIndex >= 0
+      && currentIndex >= 0
+      && previousIndex < items.length
+      && currentIndex < items.length;
   }
 
   private refreshMainGridSections(): void {
@@ -1620,13 +1730,18 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     const previousRenderedTiles = this.cloneDashboardViewModels(this.tiles);
     const previousRenderedTilesByPersistedOrder = [...previousRenderedTiles]
       .sort((left, right) => left.order - right.order);
+    const nextOrderByPreviousOrder = new Map<number, number>();
+    nextSettingsTiles.forEach((tile, nextOrder) => nextOrderByPreviousOrder.set(tile.order, nextOrder));
+    const previousOrderByNextOrder = new Map<number, number>();
+    nextOrderByPreviousOrder.forEach((nextOrder, previousOrder) => previousOrderByNextOrder.set(nextOrder, previousOrder));
+
     dashboardSettings.tiles = this.withSequentialOrder(nextSettingsTiles);
     this.tiles = this.withSequentialOrder(this.cloneDashboardViewModels([...this.kpiLaneTiles, ...this.getFlattenedMainGridSectionTiles()]));
     this.refreshTileLanes();
     this.dashboardTileSettingsSnapshot = this.getDashboardTileSettingsSnapshot();
-    this.unsubscribeTileEventSubscriptions();
-    this.syncTileEventSubscriptions();
-    await this.rebuildTilesFromCurrentState();
+    this.remapTileEventStateForOrderChange(nextOrderByPreviousOrder);
+    this.loaded();
+    this.changeDetector.markForCheck();
 
     try {
       await this.persistDashboardSettings({
@@ -1638,9 +1753,9 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       this.tiles = this.withSequentialOrder(this.cloneDashboardViewModels(previousRenderedTilesByPersistedOrder));
       this.refreshTileLanes();
       this.dashboardTileSettingsSnapshot = this.getDashboardTileSettingsSnapshot();
-      this.unsubscribeTileEventSubscriptions();
-      this.syncTileEventSubscriptions();
-      await this.rebuildTilesFromCurrentState();
+      this.remapTileEventStateForOrderChange(previousOrderByNextOrder);
+      this.loaded();
+      this.changeDetector.markForCheck();
       this.updateDesktopTileDragCapability();
       this.logger.error('[SummariesComponent] Failed to persist dashboard tile drag order update', error);
     }
@@ -1671,6 +1786,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   private unsubscribeTileEventSubscriptions(): void {
     this.tileEventSubscriptions.forEach(subscription => subscription.unsubscribe());
     this.tileEventSubscriptions.clear();
+    this.tileEventSubscriptionStates.clear();
     this.tileEventListenerKeys.clear();
     this.tileEventAnchorEndMsByOrder.clear();
     this.tileEventsByOrder = {};
@@ -1789,6 +1905,22 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     return {
       removeAscentForEventTypes: this.user?.settings?.summariesSettings?.removeAscentForEventTypes,
       removeDescentForEventTypes: (this.user?.settings?.summariesSettings as { removeDescentForEventTypes?: unknown } | undefined)?.removeDescentForEventTypes as any,
+    };
+  }
+
+  private getDashboardInputDependencySnapshot(user: User | null | undefined, eventUser: User | null | undefined): Record<string, unknown> {
+    const appUser = user as AppUserInterface | null | undefined;
+    const summariesSettings = appUser?.settings?.summariesSettings as {
+      removeAscentForEventTypes?: unknown;
+      removeDescentForEventTypes?: unknown;
+    } | undefined;
+    return {
+      userUID: `${user?.uid || ''}`.trim(),
+      eventUserUID: `${eventUser?.uid || user?.uid || ''}`.trim(),
+      startOfTheWeek: appUser?.settings?.unitSettings?.startOfTheWeek ?? null,
+      sleepTrendRange: normalizeDashboardSleepTrendRange(appUser?.settings?.dashboardSettings?.sleepTrend?.range),
+      removeAscentForEventTypes: summariesSettings?.removeAscentForEventTypes ?? null,
+      removeDescentForEventTypes: summariesSettings?.removeDescentForEventTypes ?? null,
     };
   }
 
@@ -2013,30 +2145,4 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     return null;
   }
 
-  private logRecoveryPipelineState(stage: string): void {
-    const dashboardTiles = this.user?.settings?.dashboardSettings?.tiles ?? [];
-    const hasRecoveryTile = dashboardTiles.some((tile) => {
-      if (tile.type !== TileTypes.Chart) {
-        return false;
-      }
-      const chartTile = tile as TileChartSettingsInterface;
-      return isDashboardRecoveryNowChartType(chartTile.chartType);
-    });
-    if (!hasRecoveryTile) {
-      return;
-    }
-
-    const derivedSegments = Array.isArray(this.derivedRecoveryNowContext?.segments)
-      ? this.derivedRecoveryNowContext?.segments
-      : [];
-    this.logger.log('[debug][recovery-now] summaries_pipeline_state', {
-      stage,
-      hasRecoveryTile,
-      tileEventBuckets: Object.keys(this.tileEventsByOrder).length,
-      derivedStatus: this.derivedRecoveryNowStatus,
-      derivedAvailable: !!this.derivedRecoveryNowContext,
-      derivedTotalSeconds: this.derivedRecoveryNowContext?.totalSeconds ?? null,
-      derivedSegments: derivedSegments.length,
-    });
-  }
 }

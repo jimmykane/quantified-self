@@ -47,7 +47,6 @@
       [cdkDropListData]="kpiLaneTiles"
       [cdkDropListDisabled]="!desktopTileDragEnabled || kpiLaneTiles.length < 2"
       [class.desktop-tile-drop-list]="desktopTileDragEnabled && kpiLaneTiles.length > 1"
-      (cdkDropListSorted)="onKpiTilesSort($event)"
       (cdkDropListDropped)="onKpiTilesDrop($event)">
       @for (tile of kpiLaneTiles; track trackByTile($index, tile)) {
       <div
@@ -120,8 +119,7 @@
         [class.desktop-tile-drop-list]="desktopTileDragEnabled && section.tiles.length > 1"
         [cols]="section.columns"
         [rowHeight]="rowHeight"
-        (cdkDropListSorted)="onTilesSort($event, section.id)"
-        (cdkDropListDropped)="onTilesDrop($event)">
+        (cdkDropListDropped)="onTilesDrop($event, section.id)">
         @for (cell of section.cells; track trackByTile($index, cell.tile)) {
         @let tile = cell.tile;
         <app-dashboard-tile-cell

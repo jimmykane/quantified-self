@@ -11,7 +11,6 @@ import {
 } from '@angular/core';
 import type { EChartsType } from 'echarts/core';
 import {
-  ActivityTypes,
   ActivityTypesHelper,
   ChartDataCategoryTypes,
   ChartDataValueTypes,
@@ -59,7 +58,6 @@ import {
   formatDashboardNumericValue,
   getDashboardAggregateData,
   getDashboardChartSortComparator,
-  getDashboardDataInstanceOrNull,
   getDashboardSummaryMetaLabel
 } from '../../../helpers/dashboard-chart-data.helper';
 import {
@@ -125,7 +123,6 @@ export class ChartsPieComponent implements AfterViewInit, OnChanges, OnDestroy {
     lazyUpdate: false
   };
   private recoveryRefreshIntervalHandle: ReturnType<typeof setInterval> | null = null;
-  private recoveryDebugSignature: string | null = null;
   public showNoDataError = false;
   public noDataErrorMessage = 'No data yet';
   public noDataErrorHint = 'Try a different date range or metric';
@@ -221,7 +218,6 @@ export class ChartsPieComponent implements AfterViewInit, OnChanges, OnDestroy {
   ): ChartOption {
     const chartWidth = this.chartDiv?.nativeElement?.clientWidth || 0;
     const chartStyle = buildDashboardEChartsStyleTokens(this.darkTheme, chartWidth);
-    const darkTheme = chartStyle.darkTheme;
     const textColor = chartStyle.textColor;
     const isCompactLayout = chartStyle.isCompactLayout;
     const isMobileTooltipViewport = isEChartsMobileTooltipViewport();
@@ -528,7 +524,6 @@ export class ChartsPieComponent implements AfterViewInit, OnChanges, OnDestroy {
     itemStyle: { color: string; borderColor: string; borderWidth: number };
   }> | null {
     if (!this.enableRecoveryNowMode || this.chartDataType !== DataRecoveryTime.type) {
-      this.logRecoveryDebugState('mode_disabled');
       return null;
     }
 
@@ -540,7 +535,6 @@ export class ChartsPieComponent implements AfterViewInit, OnChanges, OnDestroy {
       && remainingSeconds !== null;
     if (!hasRenderableRecovery) {
       if (this.recoveryNowStatus === 'ready') {
-        this.logRecoveryDebugState('fully_recovered');
         return [
           {
             name: 'Recovered',
@@ -555,13 +549,6 @@ export class ChartsPieComponent implements AfterViewInit, OnChanges, OnDestroy {
           }
         ];
       }
-      this.logRecoveryDebugState('no_active_recovery', {
-        activeTotalSeconds,
-        remainingSeconds,
-        totalSeconds: this.recoveryNow?.totalSeconds ?? null,
-        segments: Array.isArray(this.recoveryNow?.segments) ? this.recoveryNow?.segments.length : 0,
-        status: this.recoveryNowStatus ?? null,
-      });
       return null;
     }
 
@@ -593,21 +580,6 @@ export class ChartsPieComponent implements AfterViewInit, OnChanges, OnDestroy {
         }
       }
     ];
-  }
-
-  private logRecoveryDebugState(
-    state: string,
-    data?: Record<string, unknown>,
-  ): void {
-    const signature = `${state}:${JSON.stringify(data || {})}`;
-    if (this.recoveryDebugSignature === signature) {
-      return;
-    }
-    this.recoveryDebugSignature = signature;
-    this.logger?.log?.('[debug][recovery-now] pie_series_state', {
-      state,
-      ...(data || {}),
-    });
   }
 
   private updateNoDataErrorState(): void {

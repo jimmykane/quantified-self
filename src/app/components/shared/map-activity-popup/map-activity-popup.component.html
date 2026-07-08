@@ -5,18 +5,42 @@
   </button>
   }
 
-  <app-summary-primary-info
-    [activityType]="activityType || 'Activity'"
-    [iconActivityType]="iconActivityType"
-    [iconEvent]="event || null"
-    [startDate]="startDate"
-    [fallbackTopMetaText]="fallbackTopMetaText"
-    [metrics]="metrics"
-    [forceMobileLayout]="forceMobileLayout">
-    @if (event && user) {
-    <app-service-source-icon summary-top-meta-suffix [event]="event" [user]="user"></app-service-source-icon>
+  <header class="track-start-popup-header" [class.track-start-popup-header--dismissible]="dismissible">
+    <div class="track-start-popup-icon" aria-hidden="true">
+      <app-activity-type-icon [activityType]="iconActivityType || activityType || 'Other'" size="24px"
+        [event]="event || null"></app-activity-type-icon>
+    </div>
+    <div class="track-start-popup-title-stack">
+      <div class="track-start-popup-title">{{ activityType || 'Activity' }}</div>
+      <div class="track-start-popup-meta">
+        @if (startDate) {
+        <span>{{ startDate | date:'d MMM yyyy' }}</span>
+        <span>{{ startDate | date:'shortTime' }}</span>
+        } @else {
+        <span>{{ fallbackTopMetaText }}</span>
+        }
+        @if (event && user) {
+        <app-service-source-icon [event]="event" [user]="user"></app-service-source-icon>
+        }
+      </div>
+    </div>
+  </header>
+
+  @if (metrics && metrics.length > 0) {
+  <div class="track-start-popup-metrics" aria-label="Activity metrics">
+    @for (metric of metrics; track $index) {
+    <div class="track-start-popup-metric">
+      <strong>
+        {{ metric.value }}
+        @if (metric.subValue) {
+        <span>{{ metric.subValue }}</span>
+        }
+      </strong>
+      <span>{{ metric.label }}</span>
+    </div>
     }
-  </app-summary-primary-info>
+  </div>
+  }
 
   @if (actionLabel) {
   <div class="track-start-popup-actions">
