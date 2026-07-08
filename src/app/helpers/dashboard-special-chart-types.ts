@@ -55,6 +55,10 @@ export type DashboardCuratedChartType =
   | DashboardSleepTrendChartType
   | DashboardPowerCurveChartType;
 
+export type DashboardRecommendedCuratedChartType =
+  | DashboardFormChartType
+  | DashboardIntensityDistributionChartType;
+
 export type DashboardKpiChartType =
   | DashboardKpiAcwrChartType
   | DashboardKpiRampRateChartType
@@ -80,6 +84,10 @@ export type DashboardKpiGroup = 'load' | 'readiness' | 'execution';
 export interface DashboardCuratedChartDefinition {
   chartType: DashboardCuratedChartType;
   label: string;
+}
+
+export interface DashboardRecommendedCuratedChartDefinition extends DashboardCuratedChartDefinition {
+  chartType: DashboardRecommendedCuratedChartType;
 }
 
 export interface DashboardKpiChartDefinition {
@@ -117,6 +125,11 @@ const DASHBOARD_CURATED_CHART_DEFINITIONS: DashboardCuratedChartDefinition[] = [
     chartType: DASHBOARD_POWER_CURVE_CHART_TYPE,
     label: 'Power Curve',
   },
+];
+
+const DASHBOARD_DEFAULT_CURATED_CHART_TYPES: DashboardRecommendedCuratedChartType[] = [
+  DASHBOARD_FORM_CHART_TYPE,
+  DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE,
 ];
 
 const DASHBOARD_KPI_CHART_DEFINITIONS: DashboardKpiChartDefinition[] = [
@@ -342,6 +355,16 @@ export function resolveDashboardChartCategory(chartType: unknown): DashboardChar
 
 export function getDashboardCuratedChartDefinitions(): DashboardCuratedChartDefinition[] {
   return [...DASHBOARD_CURATED_CHART_DEFINITIONS];
+}
+
+export function getDefaultDashboardCuratedChartDefinitions(): DashboardRecommendedCuratedChartDefinition[] {
+  return DASHBOARD_DEFAULT_CURATED_CHART_TYPES.map((chartType) => {
+    const definition = DASHBOARD_CURATED_CHART_DEFINITIONS.find(candidate => candidate.chartType === chartType);
+    if (!definition) {
+      throw new Error(`Missing dashboard curated chart definition for ${chartType}`);
+    }
+    return definition as DashboardRecommendedCuratedChartDefinition;
+  });
 }
 
 export function getDashboardKpiChartDefinitions(): DashboardKpiChartDefinition[] {

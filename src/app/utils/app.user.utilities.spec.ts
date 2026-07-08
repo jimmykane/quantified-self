@@ -26,8 +26,8 @@ import {
     DASHBOARD_POWER_CURVE_CHART_TYPE,
     DASHBOARD_RECOVERY_NOW_CHART_TYPE,
     DASHBOARD_SLEEP_TREND_CHART_TYPE,
+    getDefaultDashboardCuratedChartDefinitions,
     getDefaultDashboardKpiChartDefinitions,
-    getDashboardCuratedChartDefinitions,
     isDashboardCuratedChartType,
     isDashboardKpiChartType,
     isDashboardSpecialChartType,
@@ -190,36 +190,25 @@ describe('AppUserUtilities', () => {
     });
 
     describe('fillMissingAppSettings', () => {
-        it('should include non-sleep and non-power curated tiles in default dashboard tiles', () => {
+        it('should include the lean curated tile set in default dashboard tiles', () => {
             const tiles = AppUserUtilities.getDefaultUserDashboardTiles() as any[];
-            const curatedDefinitions = getDashboardCuratedChartDefinitions()
-                .filter(definition => (
-                    definition.chartType !== DASHBOARD_SLEEP_TREND_CHART_TYPE
-                    && definition.chartType !== DASHBOARD_POWER_CURVE_CHART_TYPE
-                ));
+            const curatedDefinitions = getDefaultDashboardCuratedChartDefinitions();
             const curatedTiles = tiles.filter((tile: any) => (
                 tile?.type === TileTypes.Chart && isDashboardCuratedChartType(tile?.chartType)
             ));
 
             expect(curatedTiles.map(tile => tile.chartType)).toEqual(curatedDefinitions.map(definition => definition.chartType));
             expect(curatedTiles.map(tile => tile.name)).toEqual([
-                'Recovery',
                 'Form',
-                'Freshness Forecast',
                 'Intensity Distribution',
-                'Efficiency Trend',
             ]);
             curatedTiles.forEach((tile, index) => {
                 expect(tile).toMatchObject({
-                    order: 4 + index,
+                    order: index,
                     dataCategoryType: ChartDataCategoryTypes.DateType,
                     dataValueType: ChartDataValueTypes.Total,
                 });
                 expect(tile.eventFilters).toBeUndefined();
-            });
-            expect(curatedTiles.find(tile => tile.chartType === DASHBOARD_RECOVERY_NOW_CHART_TYPE)).toMatchObject({
-                dataType: DataRecoveryTime.type,
-                dataTimeInterval: TimeIntervals.Auto,
             });
             expect(curatedTiles.find(tile => tile.chartType === DASHBOARD_FORM_CHART_TYPE)).toMatchObject({
                 dataType: DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE,
@@ -227,29 +216,15 @@ describe('AppUserUtilities', () => {
                 size: { columns: 2, rows: 1 },
                 displaySettings: { formTimelineWindow: 'w' },
             });
-            expect(curatedTiles.find(tile => tile.chartType === DASHBOARD_RECOVERY_NOW_CHART_TYPE)).toMatchObject({
+            expect(curatedTiles.find(tile => tile.chartType === DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE)).toMatchObject({
                 size: { columns: 1, rows: 1 },
+                dataType: DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE,
+                dataTimeInterval: TimeIntervals.Weekly,
+                displaySettings: { derivedChartRange: '1y' },
             });
-            [
-                DASHBOARD_FRESHNESS_FORECAST_CHART_TYPE,
-            ].forEach((chartType) => {
-                expect(curatedTiles.find(tile => tile.chartType === chartType)).toMatchObject({
-                    size: { columns: 1, rows: 1 },
-                    dataType: DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE,
-                    dataTimeInterval: TimeIntervals.Weekly,
-                });
-            });
-            [
-                DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE,
-                DASHBOARD_EFFICIENCY_TREND_CHART_TYPE,
-            ].forEach((chartType) => {
-                expect(curatedTiles.find(tile => tile.chartType === chartType)).toMatchObject({
-                    size: { columns: 1, rows: 1 },
-                    dataType: DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE,
-                    dataTimeInterval: TimeIntervals.Weekly,
-                    displaySettings: { derivedChartRange: '1y' },
-                });
-            });
+            expect(curatedTiles.some(tile => tile.chartType === DASHBOARD_RECOVERY_NOW_CHART_TYPE)).toBe(false);
+            expect(curatedTiles.some(tile => tile.chartType === DASHBOARD_FRESHNESS_FORECAST_CHART_TYPE)).toBe(false);
+            expect(curatedTiles.some(tile => tile.chartType === DASHBOARD_EFFICIENCY_TREND_CHART_TYPE)).toBe(false);
         });
 
         it('should not include sleep tile in default dashboard tiles', () => {
@@ -494,11 +469,7 @@ describe('AppUserUtilities', () => {
 
             expect(defaultChart.eventFilters).toEqual({ range: '90d', activityTypes: [] });
             expect(defaultMap.eventFilters).toEqual({ range: '90d', activityTypes: [] });
-            dashboardTiles
-                .filter(tile => tile.type === TileTypes.Map || !isDashboardSpecialChartType(tile.chartType))
-                .forEach(tile => {
-                    expect(tile.eventFilters).toEqual({ range: '90d', activityTypes: [] });
-                });
+            expect(dashboardTiles.some(tile => tile.type === TileTypes.Map || !isDashboardSpecialChartType(tile.chartType))).toBe(false);
             const powerCurveTile = dashboardTiles.find(tile => tile.chartType === DASHBOARD_POWER_CURVE_CHART_TYPE) as any;
             expect(powerCurveTile).toBeUndefined();
         });

@@ -70,9 +70,8 @@ import {
 } from '../models/app-user.interface';
 import {
     DASHBOARD_RECOVERY_NOW_CHART_TYPE,
-    DASHBOARD_SLEEP_TREND_CHART_TYPE,
+    getDefaultDashboardCuratedChartDefinitions,
     getDefaultDashboardKpiChartDefinitions,
-    getDashboardCuratedChartDefinitions,
     isDashboardEventBackedSpecialChartType,
     isDashboardPowerCurveChartType,
     isDashboardRecoveryNowChartType,
@@ -89,7 +88,6 @@ import {
 import {
     buildDashboardCuratedAutoTile,
     buildDashboardKpiAutoTile,
-    type DashboardDefaultCuratedChartType,
 } from '../helpers/dashboard-auto-tile.helper';
 import {
     getDashboardPowerCurveEventFiltersForScope,
@@ -184,68 +182,17 @@ export class AppUserUtilities {
     }
 
     static getDefaultUserDashboardTiles(): TileSettingsInterface[] {
-        const defaultMainTiles: TileSettingsInterface[] = [<AppDashboardMapTileSettingsInterface><unknown>{
-            name: 'Clustered HeatMap',
-            order: 0,
-            type: TileTypes.Map,
-            mapSource: 'events',
-            mapStyle: this.getDefaultDashboardMapStyle(),
-            mapTheme: MapThemes.Normal,
-            mapType: this.getDefaultMapType(),
-            showHeatMap: true,
-            clusterMarkers: true,
-            size: { columns: 1, rows: 1 },
-            eventFilters: AppUserUtilities.getDefaultDashboardTileEventFilters(),
-        }, <AppDashboardChartTileSettingsInterface>{
-            name: 'Duration',
-            order: 1,
-            type: TileTypes.Chart,
-            chartType: ChartTypes.Pie,
-            dataCategoryType: ChartDataCategoryTypes.ActivityType,
-            dataType: DataDuration.type,
-            dataTimeInterval: TimeIntervals.Auto,
-            dataValueType: ChartDataValueTypes.Total,
-            size: { columns: 1, rows: 1 },
-            eventFilters: AppUserUtilities.getDefaultDashboardTileEventFilters(),
-        }, <AppDashboardChartTileSettingsInterface>{
-            name: 'Distance',
-            order: 2,
-            type: TileTypes.Chart,
-            chartType: ChartTypes.ColumnsHorizontal,
-            dataType: DataDistance.type,
-            dataTimeInterval: TimeIntervals.Auto,
-            dataCategoryType: ChartDataCategoryTypes.ActivityType,
-            dataValueType: ChartDataValueTypes.Total,
-            size: { columns: 1, rows: 1 },
-            eventFilters: AppUserUtilities.getDefaultDashboardTileEventFilters(),
-        }, <AppDashboardChartTileSettingsInterface>{
-            name: 'Ascent',
-            order: 3,
-            type: TileTypes.Chart,
-            chartType: ChartTypes.PyramidsVertical,
-            dataCategoryType: ChartDataCategoryTypes.DateType,
-            dataType: DataAscent.type,
-            dataTimeInterval: TimeIntervals.Auto,
-            dataValueType: ChartDataValueTypes.Total,
-            size: { columns: 1, rows: 1 },
-            eventFilters: AppUserUtilities.getDefaultDashboardTileEventFilters(),
-        }];
-        const defaultCuratedTiles = AppUserUtilities.getDefaultUserDashboardCuratedTiles(defaultMainTiles.length);
+        const defaultCuratedTiles = AppUserUtilities.getDefaultUserDashboardCuratedTiles(0);
         return [
-            ...defaultMainTiles,
             ...defaultCuratedTiles,
-            ...AppUserUtilities.getDefaultUserDashboardKpiTiles(defaultMainTiles.length + defaultCuratedTiles.length),
+            ...AppUserUtilities.getDefaultUserDashboardKpiTiles(defaultCuratedTiles.length),
         ];
     }
 
     private static getDefaultUserDashboardCuratedTiles(startOrder: number): TileChartSettingsInterface[] {
-        return getDashboardCuratedChartDefinitions()
-            .filter(definition => (
-                definition.chartType !== DASHBOARD_SLEEP_TREND_CHART_TYPE
-                && !isDashboardPowerCurveChartType(definition.chartType)
-            ))
+        return getDefaultDashboardCuratedChartDefinitions()
             .map((definition, index) => buildDashboardCuratedAutoTile(
-                definition.chartType as DashboardDefaultCuratedChartType,
+                definition.chartType,
                 startOrder + index,
             ));
     }

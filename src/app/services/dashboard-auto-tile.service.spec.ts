@@ -22,7 +22,6 @@ import {
   DASHBOARD_AUTO_TILE_RUNNING_POWER_CURVE_SOURCE,
   DASHBOARD_AUTO_TILE_SLEEP_TREND_ID,
   buildDashboardSleepTrendAutoTile,
-  type DashboardDefaultCuratedChartType,
 } from '../helpers/dashboard-auto-tile.helper';
 import { getDashboardPowerCurveActivityTypes } from '../helpers/dashboard-power-curve-scope.helper';
 import {
@@ -31,8 +30,8 @@ import {
   DASHBOARD_POWER_CURVE_CHART_TYPE,
   DASHBOARD_RECOVERY_NOW_CHART_TYPE,
   DASHBOARD_SLEEP_TREND_CHART_TYPE,
+  getDefaultDashboardCuratedChartDefinitions,
   getDefaultDashboardKpiChartDefinitions,
-  getDashboardCuratedChartDefinitions,
 } from '../helpers/dashboard-special-chart-types';
 import { AppUserInterface } from '../models/app-user.interface';
 import { AppEventService } from './app.event.service';
@@ -235,15 +234,11 @@ describe('DashboardAutoTileService', () => {
     );
   });
 
-  it('adds missing default curated tiles as one auto-tile batch', async () => {
+  it('adds missing lean default curated tiles as one auto-tile batch', async () => {
     const user = createUser([createCustomTile(0)]);
-    const curatedDefinitions = getDashboardCuratedChartDefinitions()
-      .filter(definition => (
-        definition.chartType !== DASHBOARD_SLEEP_TREND_CHART_TYPE
-        && definition.chartType !== DASHBOARD_POWER_CURVE_CHART_TYPE
-      ));
+    const curatedDefinitions = getDefaultDashboardCuratedChartDefinitions();
     const eligibility = curatedDefinitions.reduce<Record<string, boolean>>((result, definition) => {
-      result[DASHBOARD_AUTO_TILE_CURATED_ID_BY_CHART_TYPE[definition.chartType as DashboardDefaultCuratedChartType]] = true;
+      result[DASHBOARD_AUTO_TILE_CURATED_ID_BY_CHART_TYPE[definition.chartType]] = true;
       return result;
     }, {});
 
@@ -251,18 +246,19 @@ describe('DashboardAutoTileService', () => {
 
     expect(result.persisted).toBe(true);
     expect(result.addedRules.map(rule => rule.id)).toEqual(curatedDefinitions.map(definition => (
-      DASHBOARD_AUTO_TILE_CURATED_ID_BY_CHART_TYPE[definition.chartType as DashboardDefaultCuratedChartType]
+      DASHBOARD_AUTO_TILE_CURATED_ID_BY_CHART_TYPE[definition.chartType]
     )));
     expect(user.settings?.dashboardSettings?.tiles).toHaveLength(1 + curatedDefinitions.length);
-    expect((user.settings?.dashboardSettings?.tiles?.[1] as any).chartType).toBe(DASHBOARD_RECOVERY_NOW_CHART_TYPE);
+    expect((user.settings?.dashboardSettings?.tiles?.[1] as any).name).toBe('Form');
     expect(user.settings?.dashboardSettings?.autoTiles?.curatedIntensityDistribution).toMatchObject({
       state: 'added',
       source: 'default-curated',
     });
+    expect(user.settings?.dashboardSettings?.autoTiles?.curatedRecoveryNow).toBeUndefined();
     expect(user.settings?.dashboardSettings?.autoTiles?.powerCurve).toBeUndefined();
     expect(mockUserService.updateUserProperties).toHaveBeenCalledTimes(1);
     expect(mockSnackBar.open).toHaveBeenCalledWith(
-      'Added 5 dashboard tiles: Recovery, Form, Freshness Forecast, and 2 more.',
+      'Added 2 dashboard tiles: Form, Intensity Distribution.',
       'Undo',
       { duration: 7000 },
     );
@@ -336,24 +332,17 @@ describe('DashboardAutoTileService', () => {
     expectDashboardSettingsOnlyWrite(mockUserService, user);
   });
 
-  it('undo dismisses auto-added Recovery through both auto-tile state and the legacy recovery flag', async () => {
+  it('does not auto-add Recovery as part of the lean default auto-tile set', async () => {
     const user = createUser([createCustomTile(0)]);
-    await service.applyEligibleAutoTiles(user, {
+    const result = await service.applyEligibleAutoTiles(user, {
       [DASHBOARD_AUTO_TILE_RECOVERY_NOW_ID]: true,
     });
-    expect(user.settings?.dashboardSettings?.dismissedCuratedRecoveryNowTile).toBe(false);
-    mockUserService.updateUserProperties.mockClear();
 
-    actionSubject.next();
-    await flushMicrotasks();
-
+    expect(result.persisted).toBe(false);
     expect(user.settings?.dashboardSettings?.tiles?.map(tile => tile.name)).toEqual(['Base']);
-    expect(user.settings?.dashboardSettings?.autoTiles?.curatedRecoveryNow).toMatchObject({
-      state: 'dismissed',
-      source: 'default-curated',
-    });
-    expect(user.settings?.dashboardSettings?.dismissedCuratedRecoveryNowTile).toBe(true);
-    expect(mockUserService.updateUserProperties).toHaveBeenCalledTimes(1);
+    expect(user.settings?.dashboardSettings?.autoTiles?.curatedRecoveryNow).toBeUndefined();
+    expect(user.settings?.dashboardSettings?.dismissedCuratedRecoveryNowTile).toBeUndefined();
+    expect(mockUserService.updateUserProperties).not.toHaveBeenCalled();
   });
 
   it('rolls back in-memory settings when persistence fails', async () => {
@@ -420,14 +409,14 @@ describe('DashboardAutoTileService', () => {
       'user-1',
       getDashboardPowerCurveActivityTypes('running'),
     );
-    expect(user.settings?.dashboardSettings?.tiles).toHaveLength(13);
+    expect(user.settings?.dashboardSettings?.tiles).toHaveLength(10);
     expect((user.settings?.dashboardSettings?.tiles?.[1] as any).chartType).toBe(DASHBOARD_SLEEP_TREND_CHART_TYPE);
-    expect((user.settings?.dashboardSettings?.tiles?.[2] as any).chartType).toBe(DASHBOARD_RECOVERY_NOW_CHART_TYPE);
-    expect((user.settings?.dashboardSettings?.tiles?.[5] as any).chartType).toBe(DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE);
-    expect((user.settings?.dashboardSettings?.tiles?.[7] as any).chartType).toBe(DASHBOARD_LOAD_STATUS_KPI_CHART_TYPE);
+    expect((user.settings?.dashboardSettings?.tiles?.[2] as any).name).toBe('Form');
+    expect((user.settings?.dashboardSettings?.tiles?.[3] as any).chartType).toBe(DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE);
+    expect((user.settings?.dashboardSettings?.tiles?.[4] as any).chartType).toBe(DASHBOARD_LOAD_STATUS_KPI_CHART_TYPE);
     expect(mockUserService.updateUserProperties).toHaveBeenCalledTimes(1);
     expect(mockSnackBar.open).toHaveBeenCalledWith(
-      'Added 12 dashboard tiles: Sleep, Recovery, Form, and 9 more.',
+      'Added 9 dashboard tiles: Sleep, Form, Intensity Distribution, and 6 more.',
       'Undo',
       { duration: 7000 },
     );
@@ -442,19 +431,19 @@ describe('DashboardAutoTileService', () => {
     const subscription = service.watchForDashboard(user);
     await flushMicrotasks();
 
-    expect(user.settings?.dashboardSettings?.tiles).toHaveLength(12);
+    expect(user.settings?.dashboardSettings?.tiles).toHaveLength(9);
     expect(user.settings?.dashboardSettings?.tiles?.some(tile => (
       (tile as any).chartType === DASHBOARD_SLEEP_TREND_CHART_TYPE
     ))).toBe(false);
     expect(user.settings?.dashboardSettings?.tiles?.some(tile => (
       (tile as any).chartType === DASHBOARD_POWER_CURVE_CHART_TYPE
     ))).toBe(false);
-    expect((user.settings?.dashboardSettings?.tiles?.[1] as any).chartType).toBe(DASHBOARD_RECOVERY_NOW_CHART_TYPE);
-    expect((user.settings?.dashboardSettings?.tiles?.[4] as any).chartType).toBe(DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE);
-    expect((user.settings?.dashboardSettings?.tiles?.[6] as any).chartType).toBe(DASHBOARD_LOAD_STATUS_KPI_CHART_TYPE);
+    expect((user.settings?.dashboardSettings?.tiles?.[1] as any).name).toBe('Form');
+    expect((user.settings?.dashboardSettings?.tiles?.[2] as any).chartType).toBe(DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE);
+    expect((user.settings?.dashboardSettings?.tiles?.[3] as any).chartType).toBe(DASHBOARD_LOAD_STATUS_KPI_CHART_TYPE);
     expect(mockUserService.updateUserProperties).toHaveBeenCalledTimes(1);
     expect(mockSnackBar.open).toHaveBeenCalledWith(
-      'Added 11 dashboard tiles: Recovery, Form, Freshness Forecast, and 8 more.',
+      'Added 8 dashboard tiles: Form, Intensity Distribution, Load Status, and 5 more.',
       'Undo',
       { duration: 7000 },
     );
@@ -592,16 +581,16 @@ describe('DashboardAutoTileService', () => {
     const subscription = service.watchForDashboard(user);
     await flushMicrotasks();
 
-    expect(user.settings?.dashboardSettings?.tiles).toHaveLength(11);
+    expect(user.settings?.dashboardSettings?.tiles).toHaveLength(9);
     expect(user.settings?.dashboardSettings?.tiles?.some(tile => (
       (tile as any).chartType === DASHBOARD_RECOVERY_NOW_CHART_TYPE
     ))).toBe(false);
     expect((user.settings?.dashboardSettings?.tiles?.[1] as any).name).toBe('Form');
-    expect((user.settings?.dashboardSettings?.tiles?.[3] as any).chartType).toBe(DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE);
+    expect((user.settings?.dashboardSettings?.tiles?.[2] as any).chartType).toBe(DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE);
     expect(user.settings?.dashboardSettings?.autoTiles?.curatedRecoveryNow).toBeUndefined();
     expect(mockUserService.updateUserProperties).toHaveBeenCalledTimes(1);
     expect(mockSnackBar.open).toHaveBeenCalledWith(
-      'Added 10 dashboard tiles: Form, Freshness Forecast, Intensity Distribution, and 7 more.',
+      'Added 8 dashboard tiles: Form, Intensity Distribution, Load Status, and 5 more.',
       'Undo',
       { duration: 7000 },
     );
@@ -667,7 +656,7 @@ describe('DashboardAutoTileService', () => {
     await flushMicrotasks();
 
     expect(mockLogger.warn).toHaveBeenCalled();
-    expect(user.settings?.dashboardSettings?.tiles).toHaveLength(12);
+    expect(user.settings?.dashboardSettings?.tiles).toHaveLength(9);
     expect(mockUserService.updateUserProperties).toHaveBeenCalledTimes(1);
   });
 });

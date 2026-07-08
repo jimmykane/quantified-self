@@ -38,15 +38,10 @@ import {
   isDashboardSleepTrendTile,
   markDashboardAutoTileAdded,
   markDashboardAutoTileDismissed,
-  type DashboardDefaultCuratedAutoChartType,
-  type DashboardDefaultCuratedChartType,
 } from '../helpers/dashboard-auto-tile.helper';
 import {
-  DASHBOARD_POWER_CURVE_CHART_TYPE,
-  DASHBOARD_RECOVERY_NOW_CHART_TYPE,
-  DASHBOARD_SLEEP_TREND_CHART_TYPE,
+  getDefaultDashboardCuratedChartDefinitions,
   getDefaultDashboardKpiChartDefinitions,
-  getDashboardCuratedChartDefinitions,
 } from '../helpers/dashboard-special-chart-types';
 import { cloneDashboardTileEventFilters } from '../helpers/dashboard-tile-event-filters.helper';
 import { cloneDashboardChartTileDisplaySettingsForChartType } from '../helpers/dashboard-chart-display-settings.helper';
@@ -87,13 +82,9 @@ const DASHBOARD_KPI_AUTO_TILE_RULES: DashboardAutoTileRule[] = getDefaultDashboa
   createTile: (order) => buildDashboardKpiAutoTile(definition.chartType, order),
 }));
 
-const DASHBOARD_DEFAULT_CURATED_AUTO_TILE_RULES: DashboardAutoTileRule[] = getDashboardCuratedChartDefinitions()
-  .filter(definition => (
-    definition.chartType !== DASHBOARD_SLEEP_TREND_CHART_TYPE
-    && definition.chartType !== DASHBOARD_POWER_CURVE_CHART_TYPE
-  ))
+const DASHBOARD_DEFAULT_CURATED_AUTO_TILE_RULES: DashboardAutoTileRule[] = getDefaultDashboardCuratedChartDefinitions()
   .map((definition) => {
-    const chartType = definition.chartType as DashboardDefaultCuratedAutoChartType;
+    const chartType = definition.chartType;
     return {
       id: DASHBOARD_AUTO_TILE_CURATED_ID_BY_CHART_TYPE[chartType],
       label: buildDashboardCuratedAutoTile(chartType, 0).name,
@@ -356,22 +347,17 @@ export class DashboardAutoTileService {
 
   private buildDefaultDashboardEligibility(user: AppUserInterface): DashboardAutoTileEligibility {
     return {
-      ...this.buildDefaultCuratedEligibility(user),
+      ...this.buildDefaultCuratedEligibility(),
       ...this.buildDefaultKpiEligibility(),
     };
   }
 
-  private buildDefaultCuratedEligibility(user: AppUserInterface): DashboardAutoTileEligibility {
-    const hasDismissedLegacyRecovery = user.settings?.dashboardSettings?.dismissedCuratedRecoveryNowTile === true;
-    return getDashboardCuratedChartDefinitions()
-      .filter(definition => (
-        definition.chartType !== DASHBOARD_SLEEP_TREND_CHART_TYPE
-        && definition.chartType !== DASHBOARD_POWER_CURVE_CHART_TYPE
-      ))
+  private buildDefaultCuratedEligibility(): DashboardAutoTileEligibility {
+    return getDefaultDashboardCuratedChartDefinitions()
       .reduce<DashboardAutoTileEligibility>((eligibility, definition) => {
-        const chartType = definition.chartType as DashboardDefaultCuratedChartType;
+        const chartType = definition.chartType;
         const id = DASHBOARD_AUTO_TILE_CURATED_ID_BY_CHART_TYPE[chartType];
-        eligibility[id] = chartType !== DASHBOARD_RECOVERY_NOW_CHART_TYPE || !hasDismissedLegacyRecovery;
+        eligibility[id] = true;
         return eligibility;
       }, {
         [DASHBOARD_AUTO_TILE_ROUTE_PREVIEW_ID]: false,

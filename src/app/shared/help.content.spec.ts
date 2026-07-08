@@ -84,7 +84,8 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('dashboard can add the **Sleep** tile once');
     expect(gettingStartedSection?.content).toContain('add it manually from Dashboard manager');
     expect(gettingStartedSection?.content).toContain('removing an auto-added Sleep tile prevents future automatic Sleep tile adds');
-    expect(gettingStartedSection?.content).toContain('default curated chart set');
+    expect(gettingStartedSection?.content).toContain('recommended default dashboard starts lean with **Form/TSS**, **Intensity Distribution**');
+    expect(gettingStartedSection?.content).toContain('lean default curated chart set');
     expect(gettingStartedSection?.content).toContain('KPI row set automatically once');
     expect(gettingStartedSection?.content).toContain('dashboard can also add a **Routes** map once saved routes have generated previews');
     expect(gettingStartedSection?.content).toContain('auto-added curated chart, KPI, or Routes map prevents that tile from being suggested again');

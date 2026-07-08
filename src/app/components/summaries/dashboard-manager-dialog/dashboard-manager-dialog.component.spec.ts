@@ -961,17 +961,23 @@ describe('DashboardManagerDialogComponent', () => {
     const defaultTiles = AppUserUtilities.getDefaultUserDashboardTiles();
     expect(tiles).toHaveLength(defaultTiles.length);
     expect(tiles.map(dashboardTileSignature)).toEqual(defaultTiles.map(dashboardTileSignature));
-    expect(tiles.filter((tile: any) => tile.type === TileTypes.Map)).toHaveLength(1);
-    expect(tiles.filter((tile: any) => tile.type === TileTypes.Chart && tile.dataType === DataDistance.type)).toHaveLength(1);
-    expect(tiles.some((tile: any) => tile.chartType === DASHBOARD_RECOVERY_NOW_CHART_TYPE)).toBe(true);
+    expect(tiles.filter((tile: any) => tile.type === TileTypes.Map)).toHaveLength(0);
+    expect(tiles.filter((tile: any) => tile.type === TileTypes.Chart && tile.dataType === DataDistance.type)).toHaveLength(0);
+    expect(tiles.some((tile: any) => tile.chartType === DASHBOARD_RECOVERY_NOW_CHART_TYPE)).toBe(false);
+    expect(tiles.some((tile: any) => tile.chartType === DASHBOARD_FORM_CHART_TYPE)).toBe(true);
     expect(tiles.some((tile: any) => tile.chartType === DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE)).toBe(true);
     expect(tiles.some((tile: any) => tile.chartType === DASHBOARD_POWER_CURVE_CHART_TYPE)).toBe(false);
     expect(tiles.some((tile: any) => tile.chartType === DASHBOARD_FORM_NOW_KPI_CHART_TYPE)).toBe(true);
     expect(tiles.some((tile: any) => tile.chartType === DASHBOARD_ACWR_KPI_CHART_TYPE)).toBe(false);
-    expect(tiles.some((tile: any) => tile.chartType === ChartTypes.Pie && tile.dataType === DataDuration.type)).toBe(true);
+    expect(tiles.some((tile: any) => tile.chartType === ChartTypes.Pie && tile.dataType === DataDuration.type)).toBe(false);
     expect(tiles.some((tile: any) => tile.dataType === DataEnergy.type)).toBe(false);
     expect(tiles.some((tile: any) => tile.dataType === DataHeartRateAvg.type)).toBe(false);
-    expect(dialogData.user.settings.dashboardSettings.autoTiles.curatedRecoveryNow).toMatchObject({
+    expect(dialogData.user.settings.dashboardSettings.autoTiles.curatedRecoveryNow).toBeUndefined();
+    expect(dialogData.user.settings.dashboardSettings.autoTiles.curatedForm).toMatchObject({
+      state: 'added',
+      source: 'default-curated',
+    });
+    expect(dialogData.user.settings.dashboardSettings.autoTiles.curatedIntensityDistribution).toMatchObject({
       state: 'added',
       source: 'default-curated',
     });
@@ -981,7 +987,7 @@ describe('DashboardManagerDialogComponent', () => {
     });
     expect(dialogData.user.settings.dashboardSettings.autoTiles.powerCurve).toBeUndefined();
     expect(dialogData.user.settings.dashboardSettings.autoTiles.runningPowerCurve).toBeUndefined();
-    expect(dialogData.user.settings.dashboardSettings.dismissedCuratedRecoveryNowTile).toBe(false);
+    expect(dialogData.user.settings.dashboardSettings.dismissedCuratedRecoveryNowTile).toBeUndefined();
     expect(userServiceMock.updateUserProperties).toHaveBeenCalledTimes(1);
     expectDashboardSettingsOnlyWrite(userServiceMock, dialogData);
     expect(hapticsMock.selection).toHaveBeenCalledTimes(1);

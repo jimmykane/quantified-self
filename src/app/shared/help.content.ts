@@ -114,6 +114,7 @@ export const HELP_SECTIONS: HelpSection[] = [
 - **Curated Recovery** remains a fixed insight and does not react to event table or custom tile date ranges.
 - **Curated Form/TSS** computes from full history and does not react to event table or custom tile date ranges. Its **W / M / Y** view setting is saved on that dashboard tile.
 - New curated charts: **Freshness Forecast**, **Intensity Distribution**, **Efficiency Trend**, **Cycling Power Curve**, and **Running Power Curve**.
+- The recommended default dashboard starts lean with **Form/TSS**, **Intensity Distribution**, and the current-state KPI row set; activity overview charts, maps, Recovery, Freshness Forecast, and Efficiency Trend remain available from Dashboard manager or **Add all**.
 - The default KPI rows are the current-state set: **Load Status**, **Form Now**, **Fitness Trend**, **Fatigue Trend**, **Recovery Debt**, and **Training Balance**.
 - Additional KPI rows such as **Fitness (CTL)**, **Fatigue (ATL)**, **ACWR**, **Ramp Rate**, **Monotony / Strain**, **Form +7d**, **Easy %**, **Hard %**, and **Efficiency Δ (4w)** remain available from Dashboard manager.
 - KPI rows are shown in the compact **Today** section above the main dashboard grid.
@@ -140,11 +141,11 @@ export const HELP_SECTIONS: HelpSection[] = [
 - **Cycling Power Curve** and **Running Power Curve** are curated event-backed charts: each uses its own tile date-range and activity filters, defaults to **1y**, and compares your best power per duration in range with the latest matching activity in range that has stored Power Curve data.
 - Curated, KPI, form, recovery, sleep, and other derived tiles stay independent from event table filters and custom/map tile filters.
 - When sleep sync imports sleep sessions, the dashboard can add the **Sleep** tile once, and you can also add it manually from Dashboard manager; removing an auto-added Sleep tile prevents future automatic Sleep tile adds.
-- Existing dashboards can receive the default curated chart set and core KPI row set automatically once. **Cycling Power Curve** joins that auto-add flow only after a cycling or mountain biking event with stored Power Curve data exists; **Running Power Curve** does the same for running or trail running. The dashboard can also add a **Routes** map once saved routes have generated previews. Removing an auto-added curated chart, KPI, or Routes map prevents that tile from being suggested again.
+- Existing dashboards can receive the lean default curated chart set and core KPI row set automatically once. **Cycling Power Curve** joins that auto-add flow only after a cycling or mountain biking event with stored Power Curve data exists; **Running Power Curve** does the same for running or trail running. The dashboard can also add a **Routes** map once saved routes have generated previews. Removing an auto-added curated chart, KPI, or Routes map prevents that tile from being suggested again.
 - Derived curated and KPI chart types are unique: only one tile per special derived chart type can exist at a time.
 - Map tiles are unique per source: one activity map and one saved-routes map can exist at a time.
 - Map style and cluster-marker settings are edited inside Dashboard manager.
-- Default manager sizes: dashboard tiles start at **1x1**.
+- Default manager sizes are chart-aware: Form/TSS, Power Curve, and Routes map start wider, while simple custom totals, KPIs, and the clustered heatmap stay compact.
 - Dashboard manager bulk actions can add the recommended default dashboard, add every available preset tile, or remove every dashboard chart/map tile and keep automatic suggestions dismissed.
 
 ### Reorder dashboard tiles
@@ -156,7 +157,7 @@ export const HELP_SECTIONS: HelpSection[] = [
 
 ### Recovery tile summary
 
-- The curated **Recovery** pie tile is optional; existing dashboards can receive it once through the default curated auto-add, and removing it prevents future automatic adds.
+- The curated **Recovery** pie tile is optional and can be added from Dashboard manager or **Add all**.
 - The tile shows live recovery split between **Left now** and **Elapsed**.
 - The summary shows **Recovery left**, plus **Active total** and **Latest workout** recovery context.
 - Active totals only include currently active recovery windows, not all historical recovery values.
