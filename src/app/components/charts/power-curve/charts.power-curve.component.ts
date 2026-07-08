@@ -272,6 +272,15 @@ export class ChartsPowerCurveComponent implements AfterViewInit, OnChanges, OnDe
     const valueAxis = buildDashboardValueAxisConfig(values);
     const maxSymbolPoints = isMobileTooltipViewport ? 140 : 240;
     const showLegend = series.length > 1;
+    const mobileAxisPointerHandle = isMobileTooltipViewport
+      ? {
+        show: true,
+        size: 20,
+        margin: 4,
+        throttle: 16,
+        color: style.axisColor,
+      }
+      : { show: false };
 
     return {
       animation: false,
@@ -311,6 +320,13 @@ export class ChartsPowerCurveComponent implements AfterViewInit, OnChanges, OnDe
         type: 'category',
         data: durations,
         boundaryGap: false,
+        axisPointer: {
+          show: true,
+          snap: true,
+          triggerTooltip: true,
+          label: { show: false },
+          handle: mobileAxisPointerHandle,
+        },
         axisLine: { lineStyle: { color: style.axisColor } },
         axisTick: { show: false },
         splitLine: { show: false },

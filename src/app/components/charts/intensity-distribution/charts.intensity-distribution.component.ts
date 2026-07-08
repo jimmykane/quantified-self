@@ -186,6 +186,15 @@ export class ChartsIntensityDistributionComponent implements AfterViewInit, OnCh
     const chartWidth = this.chartDiv?.nativeElement?.clientWidth || 0;
     const style = buildDashboardEChartsStyleTokens(this.darkTheme, chartWidth);
     const isMobileTooltipViewport = isEChartsMobileTooltipViewport();
+    const mobileAxisPointerHandle = isMobileTooltipViewport
+      ? {
+        show: true,
+        size: 20,
+        margin: 4,
+        throttle: 16,
+        color: style.axisColor,
+      }
+      : { show: false };
 
     const categories = weeks.map((week) => week.weekStartMs);
     const xAxisLabelMode = this.resolveXAxisLabelMode(weeks);
@@ -246,6 +255,13 @@ export class ChartsIntensityDistributionComponent implements AfterViewInit, OnCh
       xAxis: {
         type: 'category',
         data: categories,
+        axisPointer: {
+          show: true,
+          snap: true,
+          triggerTooltip: true,
+          label: { show: false },
+          handle: mobileAxisPointerHandle,
+        },
         axisTick: { show: false },
         axisLine: { lineStyle: { color: style.axisColor } },
         splitLine: { show: false },

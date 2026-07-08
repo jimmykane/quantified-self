@@ -298,6 +298,9 @@ describe('ChartsPowerCurveComponent', () => {
       expect(option?.grid?.bottom).toBe(54);
       expect(option?.tooltip?.triggerOn).toBe('click');
       expect(option?.tooltip?.confine).toBe(true);
+      expect(option?.xAxis?.axisPointer?.triggerTooltip).toBe(true);
+      expect(option?.xAxis?.axisPointer?.handle?.show).toBe(true);
+      expect(option?.xAxis?.axisPointer?.handle?.size).toBe(20);
     } finally {
       window.matchMedia = originalMatchMedia;
     }

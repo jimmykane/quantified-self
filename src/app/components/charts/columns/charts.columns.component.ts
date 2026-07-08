@@ -207,6 +207,16 @@ export class ChartsColumnsComponent implements AfterViewInit, OnChanges, OnDestr
     const axisFontSize = chartStyle.axisFontSize;
     const isMobileTooltipViewport = isEChartsMobileTooltipViewport();
     const isDateCategory = this.chartDataCategoryType === ChartDataCategoryTypes.DateType;
+    const showMobileAxisHandle = this.vertical && isDateCategory && isMobileTooltipViewport;
+    const mobileAxisPointerHandle = showMobileAxisHandle
+      ? {
+        show: true,
+        size: 20,
+        margin: 4,
+        throttle: 16,
+        color: axisColor,
+      }
+      : { show: false };
     const supportsAdditiveActivitySegmentation = this.chartDataValueType === ChartDataValueTypes.Total;
     const dateActivitySegmentation = isDateCategory
       ? buildDashboardDateActivitySegmentation({
@@ -312,6 +322,15 @@ export class ChartsColumnsComponent implements AfterViewInit, OnChanges, OnDestr
       type: 'category',
       data: categories,
       inverse: !this.vertical,
+      axisPointer: this.vertical && isDateCategory
+        ? {
+          show: true,
+          snap: true,
+          triggerTooltip: true,
+          label: { show: false },
+          handle: mobileAxisPointerHandle,
+        }
+        : undefined,
       axisLine: {
         show: this.vertical,
         lineStyle: { color: axisColor }
@@ -366,9 +385,9 @@ export class ChartsColumnsComponent implements AfterViewInit, OnChanges, OnDestr
       },
       tooltip: {
         show: true,
-        trigger: useDateActivitySegmentation ? 'axis' : 'item',
+        trigger: useDateActivitySegmentation || showMobileAxisHandle ? 'axis' : 'item',
         triggerOn: resolveEChartsTooltipTriggerOn(true, isMobileTooltipViewport),
-        axisPointer: useDateActivitySegmentation ? { type: 'shadow' } : undefined,
+        axisPointer: useDateActivitySegmentation || showMobileAxisHandle ? { type: 'shadow' } : undefined,
         renderMode: 'html',
         ...resolveEChartsTooltipSurfaceConfig(isMobileTooltipViewport),
         ...buildDashboardEChartsTooltipChrome(chartStyle),
@@ -379,7 +398,7 @@ export class ChartsColumnsComponent implements AfterViewInit, OnChanges, OnDestr
             dateActivityColorMap,
             chartStyle
           )
-          : (params: { dataIndex: number }) => this.formatTooltip(points, params.dataIndex, chartStyle)
+          : (params: unknown) => this.formatTooltip(points, this.resolveTooltipDataIndex(params), chartStyle)
       },
       legend: { show: false },
       xAxis: this.vertical ? categoryAxis : valueAxis,
@@ -772,6 +791,12 @@ export class ChartsColumnsComponent implements AfterViewInit, OnChanges, OnDestr
         ...breakdownRows,
       ],
     });
+  }
+
+  private resolveTooltipDataIndex(params: unknown): number {
+    const entry = Array.isArray(params) ? params[0] : params;
+    const dataIndex = Number((entry as { dataIndex?: unknown } | null | undefined)?.dataIndex);
+    return Number.isFinite(dataIndex) ? dataIndex : -1;
   }
 
   private formatDateActivityTooltip(

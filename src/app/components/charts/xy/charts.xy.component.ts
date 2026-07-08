@@ -189,6 +189,18 @@ export class ChartsXYComponent implements AfterViewInit, OnChanges, OnDestroy {
     const isCompactLayout = chartStyle.isCompactLayout;
     const axisFontSize = chartStyle.axisFontSize;
     const isMobileTooltipViewport = isEChartsMobileTooltipViewport();
+    const showMobileAxisHandle = this.vertical
+      && this.chartDataCategoryType === ChartDataCategoryTypes.DateType
+      && isMobileTooltipViewport;
+    const mobileAxisPointerHandle = showMobileAxisHandle
+      ? {
+        show: true,
+        size: 20,
+        margin: 4,
+        throttle: 16,
+        color: axisColor,
+      }
+      : { show: false };
     const showValueLabels = points.length > 0 && points.length <= 200;
 
     if (!points.length) {
@@ -251,6 +263,15 @@ export class ChartsXYComponent implements AfterViewInit, OnChanges, OnDestroy {
       data: categories,
       boundaryGap: false,
       inverse: !this.vertical,
+      axisPointer: this.vertical && this.chartDataCategoryType === ChartDataCategoryTypes.DateType
+        ? {
+          show: true,
+          snap: true,
+          triggerTooltip: true,
+          label: { show: false },
+          handle: mobileAxisPointerHandle,
+        }
+        : undefined,
       axisLine: {
         lineStyle: { color: axisColor }
       },
@@ -305,12 +326,13 @@ export class ChartsXYComponent implements AfterViewInit, OnChanges, OnDestroy {
       },
       tooltip: {
         show: true,
-        trigger: 'item',
+        trigger: showMobileAxisHandle ? 'axis' : 'item',
         triggerOn: resolveEChartsTooltipTriggerOn(true, isMobileTooltipViewport),
+        axisPointer: showMobileAxisHandle ? { type: 'line' } : undefined,
         renderMode: 'html',
         ...resolveEChartsTooltipSurfaceConfig(isMobileTooltipViewport),
         ...buildDashboardEChartsTooltipChrome(chartStyle),
-        formatter: (params: { dataIndex: number }) => this.formatTooltip(points, params.dataIndex, chartStyle)
+        formatter: (params: unknown) => this.formatTooltip(points, this.resolveTooltipDataIndex(params), chartStyle)
       },
       legend: { show: false },
       xAxis: this.vertical ? categoryAxis : valueAxis,
@@ -473,6 +495,12 @@ export class ChartsXYComponent implements AfterViewInit, OnChanges, OnDestroy {
         ...(point.count > 0 ? [{ label: 'Activities', value: `${point.count}` }] : []),
       ],
     });
+  }
+
+  private resolveTooltipDataIndex(params: unknown): number {
+    const entry = Array.isArray(params) ? params[0] : params;
+    const dataIndex = Number((entry as { dataIndex?: unknown } | null | undefined)?.dataIndex);
+    return Number.isFinite(dataIndex) ? dataIndex : -1;
   }
 
   private getNormalizedUnitSettings(): UserUnitSettingsInterface {

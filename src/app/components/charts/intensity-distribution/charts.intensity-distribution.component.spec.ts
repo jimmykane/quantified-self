@@ -220,6 +220,9 @@ describe('ChartsIntensityDistributionComponent', () => {
       const option = (component as any).buildOption(weeks) as Record<string, any>;
 
       expect(option?.tooltip?.triggerOn).toBe('click');
+      expect(option?.xAxis?.axisPointer?.triggerTooltip).toBe(true);
+      expect(option?.xAxis?.axisPointer?.handle?.show).toBe(true);
+      expect(option?.xAxis?.axisPointer?.handle?.size).toBe(20);
     } finally {
       window.matchMedia = originalMatchMedia;
     }
