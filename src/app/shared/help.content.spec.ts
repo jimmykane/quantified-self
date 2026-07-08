@@ -94,7 +94,7 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('current-state set: **Load Status**, **Form Now**, **Fitness Trend**, **Fatigue Trend**, **Recovery Debt**, and **Training Balance**');
     expect(gettingStartedSection?.content).toContain('Additional KPI rows such as **Fitness (CTL)**, **Fatigue (ATL)**');
     expect(gettingStartedSection?.content).toContain('groups chart and map tiles by intent');
-    expect(gettingStartedSection?.content).toContain('**Training Load**, **Performance & Power**, **Recovery & Sleep**');
+    expect(gettingStartedSection?.content).toContain('**Training State**, **Performance & Power**, **Activity Overview**');
     expect(gettingStartedSection?.content).toContain('Custom charts are placed in those dashboard sections automatically');
     expect(gettingStartedSection?.content).toContain('**Cycling Power Curve** and **Running Power Curve** are curated event-backed charts');
     expect(gettingStartedSection?.content).toContain('defaults to **1y**');

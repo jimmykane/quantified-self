@@ -140,6 +140,7 @@ interface DashboardTileSectionViewModel {
   id: DashboardTileSectionId;
   label: string;
   icon: string;
+  columns: number;
   tiles: DashboardTileViewModel[];
   cells: DashboardTileSectionCellViewModel[];
   trailingPlaceholders: number[];
@@ -1409,39 +1410,94 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       .map((sectionId) => {
         const definition = getDashboardTileSectionDefinition(sectionId);
         const sectionTiles = tilesBySection.get(sectionId) || [];
+        const sectionColumns = this.buildMainGridSectionColumnCount(sectionTiles);
         return {
           ...definition,
+          columns: sectionColumns,
           tiles: sectionTiles,
-          cells: this.buildMainGridSectionCells(sectionTiles),
-          trailingPlaceholders: this.buildMainGridTrailingPlaceholders(sectionTiles),
+          cells: this.buildMainGridSectionCells(sectionTiles, sectionColumns),
+          trailingPlaceholders: this.buildMainGridTrailingPlaceholders(sectionTiles, sectionColumns),
         };
       })
       .filter(section => section.tiles.length > 0);
   }
 
   private refreshMainGridSectionLayout(): void {
-    this.mainGridSections = this.mainGridSections.map(section => ({
-      ...section,
-      cells: this.buildMainGridSectionCells(section.tiles),
-      trailingPlaceholders: this.buildMainGridTrailingPlaceholders(section.tiles),
-    }));
+    this.mainGridSections = this.mainGridSections.map((section) => {
+      const sectionColumns = this.buildMainGridSectionColumnCount(section.tiles);
+      return {
+        ...section,
+        columns: sectionColumns,
+        cells: this.buildMainGridSectionCells(section.tiles, sectionColumns),
+        trailingPlaceholders: this.buildMainGridTrailingPlaceholders(section.tiles, sectionColumns),
+      };
+    });
   }
 
-  private buildMainGridSectionCells(tiles: DashboardTileViewModel[]): DashboardTileSectionCellViewModel[] {
-    const singletonColumns = tiles.length === 1 && this.numberOfCols > 1 ? this.numberOfCols : null;
+  private buildMainGridSectionCells(
+    tiles: DashboardTileViewModel[],
+    sectionColumns: number,
+  ): DashboardTileSectionCellViewModel[] {
     return tiles.map(tile => ({
       tile,
-      columns: singletonColumns || this.getTilePersistedColumns(tile),
+      columns: Math.min(this.getTilePersistedColumns(tile), sectionColumns),
     }));
   }
 
-  private buildMainGridTrailingPlaceholders(tiles: DashboardTileViewModel[]): number[] {
+  private buildMainGridTrailingPlaceholders(
+    tiles: DashboardTileViewModel[],
+    sectionColumns: number,
+  ): number[] {
     if (tiles.length < 2) {
       return [];
     }
 
-    const placeholderCount = getTrailingDashboardGridPlaceholderCount(tiles, this.numberOfCols);
+    const placeholderCount = getTrailingDashboardGridPlaceholderCount(tiles, sectionColumns);
     return Array.from({ length: placeholderCount }, (_, index) => index);
+  }
+
+  private buildMainGridSectionColumnCount(tiles: DashboardTileViewModel[]): number {
+    const maxColumns = this.normalizeGridColumnCount(this.numberOfCols);
+    if (!tiles.length || maxColumns <= 1) {
+      return 1;
+    }
+
+    const tileColumns = tiles.map(tile => Math.min(this.getTilePersistedColumns(tile), maxColumns));
+    if (tileColumns.every(columns => columns === 1)) {
+      return this.getBalancedOneColumnSectionColumnCount(tiles.length, maxColumns);
+    }
+
+    const totalColumns = tileColumns.reduce((total, columns) => total + columns, 0);
+    return Math.min(maxColumns, Math.max(1, totalColumns));
+  }
+
+  private getBalancedOneColumnSectionColumnCount(tileCount: number, maxColumns: number): number {
+    if (tileCount <= maxColumns) {
+      return Math.max(1, tileCount);
+    }
+
+    const candidateColumns = Array.from(new Set([maxColumns, maxColumns - 1]))
+      .filter(columns => columns > 1);
+    return candidateColumns.reduce((bestColumns, columns) => {
+      const bestScore = this.getOneColumnSectionLayoutScore(tileCount, bestColumns, maxColumns);
+      const candidateScore = this.getOneColumnSectionLayoutScore(tileCount, columns, maxColumns);
+      if (candidateScore < bestScore) {
+        return columns;
+      }
+
+      if (candidateScore === bestScore && columns > bestColumns) {
+        return columns;
+      }
+
+      return bestColumns;
+    }, maxColumns);
+  }
+
+  private getOneColumnSectionLayoutScore(tileCount: number, columns: number, maxColumns: number): number {
+    const rowCount = Math.ceil(tileCount / columns);
+    const emptyCells = (rowCount * columns) - tileCount;
+    const columnPenalty = maxColumns - columns;
+    return (emptyCells * 4) + rowCount + columnPenalty;
   }
 
   private getTilePersistedColumns(tile: DashboardTileViewModel): number {
@@ -1451,6 +1507,15 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     }
 
     return Math.floor(columns);
+  }
+
+  private normalizeGridColumnCount(columns: number | string | null | undefined): number {
+    const parsedColumns = Number(columns);
+    if (!Number.isFinite(parsedColumns) || parsedColumns < 1) {
+      return 1;
+    }
+
+    return Math.floor(parsedColumns);
   }
 
   private getFlattenedMainGridSectionTiles(): DashboardTileViewModel[] {

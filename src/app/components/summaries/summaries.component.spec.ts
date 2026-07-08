@@ -242,14 +242,15 @@ describe('SummariesComponent', () => {
     expect(boards).toHaveLength(2);
     const board = boards[0] as HTMLElement | null;
     expect(board?.classList.contains('qs-glass-card-panel')).toBe(true);
-    expect(board?.style.getPropertyValue('--dashboard-tile-board-cols')).toBe(`${component.numberOfCols}`);
+    expect(board?.style.getPropertyValue('--dashboard-tile-board-cols')).toBe('1');
     expect(nativeElement.querySelectorAll('app-dashboard-tile-cell.dashboard-grid-tile:not(.dashboard-grid-placeholder)')).toHaveLength(2);
     expect(nativeElement.querySelectorAll('app-dashboard-tile-cell.dashboard-grid-placeholder')).toHaveLength(0);
     expect(component.mainGridSections.every(section => section.trailingPlaceholders.length === 0)).toBe(true);
-    expect(component.mainGridSections.every(section => section.cells[0]?.columns === component.numberOfCols)).toBe(true);
+    expect(component.mainGridSections.every(section => section.columns === 1)).toBe(true);
+    expect(component.mainGridSections.every(section => section.cells[0]?.columns === 1)).toBe(true);
     const singletonCells = nativeElement.querySelectorAll('app-dashboard-tile-cell.dashboard-grid-tile:not(.dashboard-grid-placeholder)');
     singletonCells.forEach((cell) => {
-      expect((cell as HTMLElement).style.gridColumn).toBe(`span ${component.numberOfCols}`);
+      expect((cell as HTMLElement).style.gridColumn).toBe('span 1');
     });
     expect(mainGridTile.size.columns).toBe(1);
     expect(mainMapTile.size.columns).toBe(1);
@@ -277,7 +278,7 @@ describe('SummariesComponent', () => {
     expect(styles).toContain('font-size: 1rem;');
   });
 
-  it('fills partial final chart-grid rows with non-draggable placeholder cells', () => {
+  it('uses compact section columns instead of placeholders for sparse single-row sections', () => {
     const mainGridTiles = [0, 1, 2].map(order => ({
       type: TileTypes.Chart,
       order,
@@ -291,7 +292,7 @@ describe('SummariesComponent', () => {
     })) as any[];
 
     component.user = { settings: { dashboardSettings: { tiles: [] } } } as any;
-    component.numberOfCols = 2;
+    component.numberOfCols = 4;
     component.tiles = mainGridTiles;
     component.kpiLaneTiles = [];
     component.mainGridTiles = mainGridTiles;
@@ -302,13 +303,102 @@ describe('SummariesComponent', () => {
     const nativeElement = fixture.nativeElement as HTMLElement;
     const board = nativeElement.querySelector('app-dashboard-tile-board') as HTMLElement | null;
     expect(board).not.toBeNull();
+    expect(board?.style.getPropertyValue('--dashboard-tile-board-cols')).toBe('3');
+    expect(component.mainGridSections[0]?.columns).toBe(3);
+    expect(component.mainGridSections[0]?.trailingPlaceholders).toEqual([]);
+    expect(board?.querySelectorAll('app-dashboard-tile-cell.dashboard-grid-tile')).toHaveLength(3);
+    expect(board?.querySelector('app-dashboard-tile-cell.dashboard-grid-placeholder')).toBeNull();
+  });
+
+  it('balances one-column section grids to avoid a lonely final row tile', () => {
+    const mainGridTiles = [0, 1, 2, 3, 4].map(order => ({
+      type: TileTypes.Chart,
+      order,
+      chartType: ChartTypes.ColumnsVertical,
+      dataType: DataDistance.type,
+      dataCategoryType: ChartDataCategoryTypes.DateType,
+      dataValueType: ChartDataValueTypes.Total,
+      data: [],
+      timeInterval: TimeIntervals.Daily,
+      size: { columns: 1, rows: 1 },
+    })) as any[];
+
+    component.user = { settings: { dashboardSettings: { tiles: [] } } } as any;
+    component.numberOfCols = 4;
+    component.tiles = mainGridTiles;
+    component.kpiLaneTiles = [];
+    component.mainGridTiles = mainGridTiles;
+    (component as any).refreshTileLanes();
+
+    fixture.detectChanges();
+
+    const nativeElement = fixture.nativeElement as HTMLElement;
+    const board = nativeElement.querySelector('app-dashboard-tile-board') as HTMLElement | null;
+    expect(board).not.toBeNull();
+    expect(board?.style.getPropertyValue('--dashboard-tile-board-cols')).toBe('3');
+    expect(component.mainGridSections[0]?.columns).toBe(3);
     expect(component.mainGridSections[0]?.trailingPlaceholders).toEqual([0]);
-    expect(board?.querySelectorAll('app-dashboard-tile-cell.dashboard-grid-tile')).toHaveLength(4);
-    const placeholder = board?.querySelector('app-dashboard-tile-cell.dashboard-grid-placeholder') as HTMLElement | null;
-    expect(placeholder).not.toBeNull();
-    expect(placeholder?.hasAttribute('cdkdrag')).toBe(false);
-    expect(placeholder?.style.gridColumn).toBe('span 1');
-    expect(placeholder?.getAttribute('aria-hidden')).toBe('true');
+    expect(board?.querySelectorAll('app-dashboard-tile-cell.dashboard-grid-tile')).toHaveLength(6);
+  });
+
+  it('balances six one-column section tiles as two full rows of three', () => {
+    const mainGridTiles = [0, 1, 2, 3, 4, 5].map(order => ({
+      type: TileTypes.Chart,
+      order,
+      chartType: ChartTypes.ColumnsVertical,
+      dataType: DataDistance.type,
+      dataCategoryType: ChartDataCategoryTypes.DateType,
+      dataValueType: ChartDataValueTypes.Total,
+      data: [],
+      timeInterval: TimeIntervals.Daily,
+      size: { columns: 1, rows: 1 },
+    })) as any[];
+
+    component.user = { settings: { dashboardSettings: { tiles: [] } } } as any;
+    component.numberOfCols = 4;
+    component.tiles = mainGridTiles;
+    component.kpiLaneTiles = [];
+    component.mainGridTiles = mainGridTiles;
+    (component as any).refreshTileLanes();
+
+    fixture.detectChanges();
+
+    const nativeElement = fixture.nativeElement as HTMLElement;
+    const board = nativeElement.querySelector('app-dashboard-tile-board') as HTMLElement | null;
+    expect(board).not.toBeNull();
+    expect(board?.style.getPropertyValue('--dashboard-tile-board-cols')).toBe('3');
+    expect(component.mainGridSections[0]?.columns).toBe(3);
+    expect(component.mainGridSections[0]?.trailingPlaceholders).toEqual([]);
+  });
+
+  it('keeps larger one-column sections at the normal grid width', () => {
+    const mainGridTiles = [0, 1, 2, 3, 4, 5, 6, 7].map(order => ({
+      type: TileTypes.Chart,
+      order,
+      chartType: ChartTypes.ColumnsVertical,
+      dataType: DataDistance.type,
+      dataCategoryType: ChartDataCategoryTypes.DateType,
+      dataValueType: ChartDataValueTypes.Total,
+      data: [],
+      timeInterval: TimeIntervals.Daily,
+      size: { columns: 1, rows: 1 },
+    })) as any[];
+
+    component.user = { settings: { dashboardSettings: { tiles: [] } } } as any;
+    component.numberOfCols = 4;
+    component.tiles = mainGridTiles;
+    component.kpiLaneTiles = [];
+    component.mainGridTiles = mainGridTiles;
+    (component as any).refreshTileLanes();
+
+    fixture.detectChanges();
+
+    const nativeElement = fixture.nativeElement as HTMLElement;
+    const board = nativeElement.querySelector('app-dashboard-tile-board') as HTMLElement | null;
+    expect(board).not.toBeNull();
+    expect(board?.style.getPropertyValue('--dashboard-tile-board-cols')).toBe('4');
+    expect(component.mainGridSections[0]?.columns).toBe(4);
+    expect(component.mainGridSections[0]?.trailingPlaceholders).toEqual([]);
   });
 
   it('renders the dashboard header and manager action when there are no KPI tiles', () => {

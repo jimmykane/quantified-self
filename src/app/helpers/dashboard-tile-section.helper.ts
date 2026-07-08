@@ -27,10 +27,8 @@ import {
 } from './dashboard-form.helper';
 
 export type DashboardTileSectionId =
-  | 'trainingLoad'
+  | 'trainingState'
   | 'performancePower'
-  | 'recoverySleep'
-  | 'intensityBalance'
   | 'activityOverview'
   | 'routesMaps'
   | 'custom';
@@ -44,10 +42,8 @@ export interface DashboardTileSectionDefinition {
 export type DashboardTileLaneKey = 'kpi' | `section:${DashboardTileSectionId}`;
 
 export const DASHBOARD_TILE_SECTION_DEFINITIONS: DashboardTileSectionDefinition[] = [
-  { id: 'trainingLoad', label: 'Training Load', icon: 'fitness_center' },
+  { id: 'trainingState', label: 'Training State', icon: 'fitness_center' },
   { id: 'performancePower', label: 'Performance & Power', icon: 'speed' },
-  { id: 'recoverySleep', label: 'Recovery & Sleep', icon: 'self_improvement' },
-  { id: 'intensityBalance', label: 'Intensity & Balance', icon: 'balance' },
   { id: 'activityOverview', label: 'Activity Overview', icon: 'insights' },
   { id: 'routesMaps', label: 'Routes & Maps', icon: 'map' },
   { id: 'custom', label: 'Custom Charts', icon: 'dashboard_customize' },
@@ -57,13 +53,13 @@ export const DASHBOARD_TILE_SECTION_ORDER: DashboardTileSectionId[] =
   DASHBOARD_TILE_SECTION_DEFINITIONS.map(definition => definition.id);
 
 const SPECIAL_CHART_SECTION_BY_TYPE: Record<string, DashboardTileSectionId> = {
-  [DASHBOARD_FORM_CHART_TYPE]: 'trainingLoad',
+  [DASHBOARD_FORM_CHART_TYPE]: 'trainingState',
   [DASHBOARD_POWER_CURVE_CHART_TYPE]: 'performancePower',
   [DASHBOARD_EFFICIENCY_TREND_CHART_TYPE]: 'performancePower',
-  [DASHBOARD_RECOVERY_NOW_CHART_TYPE]: 'recoverySleep',
-  [DASHBOARD_SLEEP_TREND_CHART_TYPE]: 'recoverySleep',
-  [DASHBOARD_FRESHNESS_FORECAST_CHART_TYPE]: 'recoverySleep',
-  [DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE]: 'intensityBalance',
+  [DASHBOARD_RECOVERY_NOW_CHART_TYPE]: 'trainingState',
+  [DASHBOARD_SLEEP_TREND_CHART_TYPE]: 'trainingState',
+  [DASHBOARD_FRESHNESS_FORECAST_CHART_TYPE]: 'trainingState',
+  [DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE]: 'trainingState',
 };
 
 const ACTIVITY_OVERVIEW_DATA_TYPES = new Set<string>([
@@ -138,7 +134,7 @@ function resolveCustomDashboardChartSection(tile: TileChartSettingsInterface): D
   }
 
   if (isTrainingLoadDataType(dataType)) {
-    return 'trainingLoad';
+    return 'trainingState';
   }
 
   if (isPowerDataType(dataType)) {
@@ -146,7 +142,7 @@ function resolveCustomDashboardChartSection(tile: TileChartSettingsInterface): D
   }
 
   if (dataType === DataRecoveryTime.type) {
-    return 'recoverySleep';
+    return 'trainingState';
   }
 
   if (

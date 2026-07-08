@@ -36,10 +36,8 @@ import {
 describe('dashboard tile section metadata', () => {
   it('keeps the fixed section order aligned with section definitions', () => {
     expect(DASHBOARD_TILE_SECTION_ORDER).toEqual([
-      'trainingLoad',
+      'trainingState',
       'performancePower',
-      'recoverySleep',
-      'intensityBalance',
       'activityOverview',
       'routesMaps',
       'custom',
@@ -50,13 +48,13 @@ describe('dashboard tile section metadata', () => {
 
 describe('resolveDashboardTileSection', () => {
   it('maps curated dashboard chart types to intent sections', () => {
-    expect(resolveDashboardTileSection(createChartTile(DASHBOARD_FORM_CHART_TYPE))).toBe('trainingLoad');
+    expect(resolveDashboardTileSection(createChartTile(DASHBOARD_FORM_CHART_TYPE))).toBe('trainingState');
     expect(resolveDashboardTileSection(createChartTile(DASHBOARD_POWER_CURVE_CHART_TYPE))).toBe('performancePower');
     expect(resolveDashboardTileSection(createChartTile(DASHBOARD_EFFICIENCY_TREND_CHART_TYPE))).toBe('performancePower');
-    expect(resolveDashboardTileSection(createChartTile(DASHBOARD_RECOVERY_NOW_CHART_TYPE))).toBe('recoverySleep');
-    expect(resolveDashboardTileSection(createChartTile(DASHBOARD_SLEEP_TREND_CHART_TYPE))).toBe('recoverySleep');
-    expect(resolveDashboardTileSection(createChartTile(DASHBOARD_FRESHNESS_FORECAST_CHART_TYPE))).toBe('recoverySleep');
-    expect(resolveDashboardTileSection(createChartTile(DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE))).toBe('intensityBalance');
+    expect(resolveDashboardTileSection(createChartTile(DASHBOARD_RECOVERY_NOW_CHART_TYPE))).toBe('trainingState');
+    expect(resolveDashboardTileSection(createChartTile(DASHBOARD_SLEEP_TREND_CHART_TYPE))).toBe('trainingState');
+    expect(resolveDashboardTileSection(createChartTile(DASHBOARD_FRESHNESS_FORECAST_CHART_TYPE))).toBe('trainingState');
+    expect(resolveDashboardTileSection(createChartTile(DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE))).toBe('trainingState');
   });
 
   it('maps map tiles to Routes & Maps', () => {
@@ -88,11 +86,11 @@ describe('resolveDashboardTileSection', () => {
     expect(resolveDashboardTileSection(createChartTile(
       ChartTypes.LinesVertical,
       DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE,
-    ))).toBe('trainingLoad');
+    ))).toBe('trainingState');
   });
 
-  it('maps legacy recovery metric tiles to Recovery & Sleep', () => {
-    expect(resolveDashboardTileSection(createChartTile(ChartTypes.Pie, DataRecoveryTime.type))).toBe('recoverySleep');
+  it('maps legacy recovery metric tiles to Training State', () => {
+    expect(resolveDashboardTileSection(createChartTile(ChartTypes.Pie, DataRecoveryTime.type))).toBe('trainingState');
   });
 
   it('maps unknown custom charts to Custom Charts', () => {

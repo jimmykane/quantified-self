@@ -116,7 +116,7 @@
         [cdkDropListData]="section.tiles"
         [cdkDropListDisabled]="!desktopTileDragEnabled || section.tiles.length < 2"
         [class.desktop-tile-drop-list]="desktopTileDragEnabled && section.tiles.length > 1"
-        [cols]="numberOfCols"
+        [cols]="section.columns"
         [rowHeight]="rowHeight"
         (cdkDropListSorted)="onTilesSort($event, section.id)"
         (cdkDropListDropped)="onTilesDrop($event)">
@@ -129,7 +129,7 @@
           [class.desktop-draggable-tile]="desktopTileDragEnabled && section.tiles.length > 1"
           [columns]="cell.columns"
           [rows]="tile.size.rows"
-          [maxColumns]="numberOfCols">
+          [maxColumns]="section.columns">
           @if (tile.type === tileTypes.Chart) {
           <app-tile-chart [user]="user" [type]="tile.type" [tileName]="getChartTile(tile).name || ''" [chartType]="getChartTile(tile).chartType"
             [isLoading]="isTileLoading(tile)" [data]="getChartTile(tile).data" [showActions]="showActions" [darkTheme]="darkTheme"
@@ -192,7 +192,7 @@
           aria-hidden="true"
           [columns]="1"
           [rows]="1"
-          [maxColumns]="numberOfCols"></app-dashboard-tile-cell>
+          [maxColumns]="section.columns"></app-dashboard-tile-cell>
         }
       </app-dashboard-tile-board>
     </section>
