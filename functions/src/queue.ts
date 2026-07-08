@@ -219,18 +219,46 @@ async function resolveFirebaseUserIDForQueueItem(
     return null;
   }
 
+  return resolveFirebaseUserIDForProviderIdentity(
+    serviceName,
+    providerUserID.fieldName,
+    providerUserID.value,
+    `${serviceName} queue item ${queueItem.id}`,
+  );
+}
+
+async function resolveFirebaseUserIDForProviderIdentity(
+  serviceName: ServiceNames,
+  providerFieldName: 'userName' | 'openId' | 'userID',
+  providerUserID: string,
+  logContext: string,
+): Promise<string | null> {
+  const trimmedProviderUserID = providerUserID.trim();
+  if (trimmedProviderUserID.length === 0) {
+    return null;
+  }
+
   try {
     const tokenSnapshot = await admin.firestore()
       .collectionGroup('tokens')
-      .where(providerUserID.fieldName, '==', providerUserID.value.trim())
+      .where(providerFieldName, '==', trimmedProviderUserID)
       .where('serviceName', '==', serviceName)
       .limit(1)
       .get();
     return tokenSnapshot.docs[0]?.ref.parent.parent?.id || null;
   } catch (error) {
-    logger.error(`Could not resolve Firebase uid for ${serviceName} queue item ${queueItem.id}; rejecting enqueue so provider can retry instead of creating an orphan queue document.`, error);
+    logger.error(`Could not resolve Firebase uid for ${logContext}; rejecting enqueue so provider can retry instead of creating an orphan queue document.`, error);
     throw error;
   }
+}
+
+export function resolveFirebaseUserIDForGarminUserID(userID: string): Promise<string | null> {
+  return resolveFirebaseUserIDForProviderIdentity(
+    ServiceNames.GarminAPI,
+    'userID',
+    userID,
+    `Garmin API user ${userID.trim() || 'unknown'}`,
+  );
 }
 
 async function attachFirebaseUserIDToQueueItem<T extends SuuntoAppWorkoutQueueItemInterface | GarminAPIActivityQueueItemInterface | COROSAPIWorkoutQueueItemInterface>(
@@ -423,12 +451,13 @@ export async function addToQueueForSuunto(queueItem: { userName: string, workout
  * Needed to create and stamp an id
  * @param queueItem
  */
-export async function addToQueueForGarmin(queueItem: { userID: string, startTimeInSeconds: number, manual: boolean, activityFileID: string, activityFileType: 'FIT' | 'TCX' | 'GPX', token: string, userAccessToken: string, callbackURL: string }): Promise<admin.firestore.DocumentReference> {
+export async function addToQueueForGarmin(queueItem: { userID: string, startTimeInSeconds: number, manual: boolean, activityFileID: string, activityFileType: 'FIT' | 'TCX' | 'GPX', token: string, userAccessToken: string, callbackURL: string, firebaseUserID?: string }): Promise<admin.firestore.DocumentReference> {
   const queueID = await generateIDFromParts([queueItem.userID, queueItem.activityFileID]);
   logger.info(`Inserting to queue ${queueID} for ${queueItem.userID} fileID ${queueItem.activityFileID}`);
   return addToWorkoutQueue(await attachFirebaseUserIDToQueueItem({
     id: queueID,
     dateCreated: new Date().getTime(),
+    firebaseUserID: queueItem.firebaseUserID,
     userID: queueItem.userID,
     startTimeInSeconds: queueItem.startTimeInSeconds,
     manual: queueItem.manual,

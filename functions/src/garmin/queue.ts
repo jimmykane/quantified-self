@@ -2,7 +2,7 @@ import * as functions from 'firebase-functions/v1';
 import * as logger from 'firebase-functions/logger';
 import * as admin from 'firebase-admin';
 import { QueueErrors, QueueLogs } from '../shared/constants';
-import { addToQueueForGarmin } from '../queue';
+import { addToQueueForGarmin, resolveFirebaseUserIDForGarminUserID } from '../queue';
 import { isProviderQueueSkippedWithoutRetryError } from '../queue/provider-queue-errors';
 import { deferQueueItemForPendingDisconnect, increaseRetryCountForQueueItem, markQueueItemSkipped, QUEUE_SKIPPED_REASONS, updateToProcessed, moveToDeadLetterQueue, QueueResult } from '../queue-utils';
 
@@ -31,6 +31,72 @@ import { shouldSkipQueueWorkForDeletedUser } from '../queue/user-deletion-skip';
 
 interface RequestError extends Error {
   statusCode?: number;
+}
+
+const GARMIN_CALLBACK_QUEUE_CONCURRENCY = 10;
+
+interface GarminActivityQueueInput {
+  userID: string,
+  startTimeInSeconds: number,
+  manual: boolean,
+  activityFileID: string,
+  activityFileType: 'FIT' | 'TCX' | 'GPX',
+  token: string,
+  userAccessToken: string,
+  callbackURL: string,
+  firebaseUserID?: string,
+}
+
+function parseGarminActivityFileForQueue(activityFile: GarminAPIActivityFileInterface): GarminActivityQueueInput {
+  const callbackQuery = activityFile.callbackURL.split('?')[1];
+  const callbackParams = new URLSearchParams(callbackQuery);
+  const activityFileID = activityFile.summaryId || callbackParams.get('id');
+  if (!activityFileID) {
+    throw new Error('Garmin activity file callback is missing activity file id.');
+  }
+
+  return {
+    userID: activityFile.userId,
+    startTimeInSeconds: activityFile.startTimeInSeconds,
+    manual: activityFile.manual,
+    activityFileID,
+    activityFileType: activityFile.fileType,
+    token: callbackParams.get('token') || 'No token',
+    userAccessToken: activityFile.userAccessToken,
+    callbackURL: activityFile.callbackURL,
+  };
+}
+
+async function mapWithConcurrency<T>(
+  items: readonly T[],
+  concurrency: number,
+  mapper: (item: T, index: number) => Promise<void>,
+): Promise<void> {
+  let nextIndex = 0;
+  let hasFatalError = false;
+  let fatalError: unknown;
+  const workerCount = Math.min(Math.max(1, concurrency), items.length);
+
+  await Promise.all(Array.from({ length: workerCount }, async () => {
+    while (!hasFatalError) {
+      const index = nextIndex++;
+      if (index >= items.length) {
+        return;
+      }
+      try {
+        await mapper(items[index], index);
+      } catch (error) {
+        if (!hasFatalError) {
+          hasFatalError = true;
+          fatalError = error;
+        }
+      }
+    }
+  }));
+
+  if (hasFatalError) {
+    throw fatalError;
+  }
 }
 
 function isTokenRefreshSkippedForDeletedUserError(error: unknown): error is TokenRefreshSkippedForDeletedUserError {
@@ -69,45 +135,70 @@ export const insertGarminAPIActivityFileToQueue = functions.region('europe-west2
   memory: '256MB',
 }).https.onRequest(async (req, res) => {
   const activityFiles: GarminAPIActivityFileInterface[] = req.body.activityFiles;
-  const queueItemRefs: admin.firestore.DocumentReference[] = [];
-  for (const activityFile of activityFiles) {
-    let queueItemDocumentReference;
-    let activityFileID: string | null = null;
-    try {
-      activityFileID = activityFile.summaryId || new URLSearchParams(activityFile.callbackURL.split('?')[1]).get('id');
-      const activityFileToken = new URLSearchParams(activityFile.callbackURL.split('?')[1]).get('token');
-      if (!activityFileID) {
-        res.status(500).send();
-        return;
-      }
-
-      queueItemDocumentReference = await addToQueueForGarmin(
-        {
-          userID: activityFile.userId,
-          startTimeInSeconds: activityFile.startTimeInSeconds,
-          manual: activityFile.manual,
-          activityFileID: activityFileID,
-          activityFileType: activityFile.fileType,
-          token: activityFileToken || 'No token',
-          userAccessToken: activityFile.userAccessToken,
-          callbackURL: activityFile.callbackURL,
-      });
-      queueItemRefs.push(queueItemDocumentReference);
-    } catch (e: unknown) {
-      if (isProviderQueueSkippedWithoutRetryError(e)) {
-        logger.warn('Skipping Garmin activity file webhook because no local token/user is connected or the user is being deleted.', {
-          provider: 'Garmin',
-          reason: e.code,
-          activityFileID,
-        });
-        continue;
-      }
-      logger.error(e);
-      res.status(500).send();
-      return;
-    }
+  let queueItems: GarminActivityQueueInput[];
+  try {
+    queueItems = activityFiles.map(parseGarminActivityFileForQueue);
+  } catch (e: unknown) {
+    logger.error(e);
+    res.status(500).send();
+    return;
   }
-  logger.info(`Inserted to queue ${queueItemRefs.length} Garmin activity files.`);
+
+  const firebaseUserIDByGarminUserID = new Map<string, string | null>();
+  const distinctGarminUserIDs = Array.from(new Set(queueItems.map((queueItem) => queueItem.userID)));
+  try {
+    await mapWithConcurrency(distinctGarminUserIDs, GARMIN_CALLBACK_QUEUE_CONCURRENCY, async (garminUserID) => {
+      firebaseUserIDByGarminUserID.set(
+        garminUserID,
+        await resolveFirebaseUserIDForGarminUserID(garminUserID),
+      );
+    });
+  } catch (e: unknown) {
+    logger.error(e);
+    res.status(500).send();
+    return;
+  }
+
+  const queueableItems = queueItems.flatMap((queueItem) => {
+    const firebaseUserID = firebaseUserIDByGarminUserID.get(queueItem.userID);
+    if (!firebaseUserID) {
+      logger.warn('Skipping Garmin activity file webhook because no local token/user is connected.', {
+        provider: 'Garmin',
+        userID: queueItem.userID,
+        activityFileID: queueItem.activityFileID,
+      });
+      return [];
+    }
+    return [{
+      ...queueItem,
+      firebaseUserID,
+    }];
+  });
+
+  const queueItemRefs: admin.firestore.DocumentReference[] = [];
+  try {
+    await mapWithConcurrency(queueableItems, GARMIN_CALLBACK_QUEUE_CONCURRENCY, async (queueItem) => {
+      try {
+        const queueItemDocumentReference = await addToQueueForGarmin(queueItem);
+        queueItemRefs.push(queueItemDocumentReference);
+      } catch (e: unknown) {
+        if (isProviderQueueSkippedWithoutRetryError(e)) {
+          logger.warn('Skipping Garmin activity file webhook because no local token/user is connected or the user is being deleted.', {
+            provider: 'Garmin',
+            reason: e.code,
+            activityFileID: queueItem.activityFileID,
+          });
+          return;
+        }
+        throw e;
+      }
+    });
+  } catch (e: unknown) {
+    logger.error(e);
+    res.status(500).send();
+    return;
+  }
+  logger.info(`Inserted to queue ${queueItemRefs.length} Garmin activity files. Skipped ${queueItems.length - queueItemRefs.length} files.`);
   res.status(200).send();
 });
 

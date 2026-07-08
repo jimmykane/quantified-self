@@ -296,6 +296,7 @@ import {
     addToQueueForGarmin,
     addToQueueForCOROS,
     parseWorkoutQueueItemForServiceName,
+    resolveFirebaseUserIDForGarminUserID,
     ProviderQueueUserDeletedOrDeletingError,
     ProviderQueueUserNotConnectedError,
 } from './queue';
@@ -1894,6 +1895,40 @@ describe('queue', () => {
                 firebaseUserID: 'mock-user-id',
             }));
             expect(doc.set).not.toHaveBeenCalled();
+        });
+
+        it('addToQueueForGarmin should use supplied firebaseUserID without resolving provider identity again', async () => {
+            mockCollection.where.mockClear();
+            const queueItem = {
+                userID: 'u1',
+                startTimeInSeconds: 123,
+                manual: false,
+                activityFileID: 'file123',
+                activityFileType: 'FIT' as const,
+                token: 't1',
+                userAccessToken: 'ut1',
+                callbackURL: 'cb1',
+                firebaseUserID: 'pre-resolved-user-id',
+            };
+
+            await addToQueueForGarmin(queueItem);
+
+            expect(mockCollection.where).not.toHaveBeenCalled();
+            expect(mockGetUserDeletionGuardState).toHaveBeenCalledWith(expect.anything(), 'pre-resolved-user-id');
+            expect(mockDocRef.create).toHaveBeenCalledWith(expect.objectContaining({
+                id: 'u1-file123',
+                firebaseUserID: 'pre-resolved-user-id',
+            }));
+        });
+
+        it('resolveFirebaseUserIDForGarminUserID should resolve the token owner from Garmin userID', async () => {
+            mockCollection.where.mockClear();
+
+            const firebaseUserID = await resolveFirebaseUserIDForGarminUserID('u1');
+
+            expect(firebaseUserID).toBe('mock-user-id');
+            expect(mockCollection.where).toHaveBeenNthCalledWith(1, 'userID', '==', 'u1');
+            expect(mockCollection.where).toHaveBeenNthCalledWith(2, 'serviceName', '==', ServiceNames.GarminAPI);
         });
 
         it('addToQueueForGarmin should skip duplicate processed items without resetting lifecycle state', async () => {
