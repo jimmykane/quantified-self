@@ -122,18 +122,31 @@
 
 @media (max-width: 640px) {
   .form-chart-header {
-    padding: 6px 8px 0;
+    padding: 4px 8px 0;
   }
 
   .form-status-row {
-    align-items: flex-start;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 4px;
   }
 
   .form-chart-header-reserve-actions .form-status-row {
-    padding-right: 104px;
+    padding-right: 100px;
+  }
+
+  .form-stats-row {
+    gap: 4px;
+    margin-bottom: 4px;
   }
 
   .form-stat-value {
-    font-size: 1.2rem;
+    font-size: 1.08rem;
+  }
+
+  .form-stat-label {
+    margin-top: 1px;
+    font-size: 0.66rem;
+    line-height: 1.08;
   }
 }
