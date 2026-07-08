@@ -108,6 +108,17 @@ export class ChartsPowerCurveComponent implements AfterViewInit, OnChanges, OnDe
     });
   }
 
+  get compactTitle(): string {
+    const normalizedTitle = `${this.title || ''}`.trim();
+    if (/^cycling power curve$/i.test(normalizedTitle)) {
+      return 'Cycling';
+    }
+    if (/^running power curve$/i.test(normalizedTitle)) {
+      return 'Running';
+    }
+    return normalizedTitle.replace(/\s+power\s+curve$/i, '') || normalizedTitle || 'Power Curve';
+  }
+
   async ngAfterViewInit(): Promise<void> {
     await this.refreshChart();
   }
@@ -271,8 +282,8 @@ export class ChartsPowerCurveComponent implements AfterViewInit, OnChanges, OnDe
       },
       legend: {
         show: showLegend,
-        top: 0,
-        right: 4,
+        bottom: 0,
+        left: 'center',
         textStyle: {
           color: style.textColor,
           fontFamily: ECHARTS_GLOBAL_FONT_FAMILY,
@@ -282,8 +293,8 @@ export class ChartsPowerCurveComponent implements AfterViewInit, OnChanges, OnDe
       grid: {
         left: 6,
         right: 6,
-        top: showLegend ? 20 : 8,
-        bottom: 22,
+        top: 8,
+        bottom: showLegend ? (isMobileTooltipViewport ? 54 : 44) : 22,
         containLabel: false,
       },
       tooltip: {

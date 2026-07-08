@@ -103,6 +103,17 @@ describe('ChartsPowerCurveComponent', () => {
     expect(component.showNoDataError).toBe(false);
   });
 
+  it('derives compact mobile titles for scoped Power Curve tiles', () => {
+    component.title = 'Cycling Power Curve';
+    expect(component.compactTitle).toBe('Cycling');
+
+    component.title = 'Running Power Curve';
+    expect(component.compactTitle).toBe('Running');
+
+    component.title = 'Ski Touring Power Curve';
+    expect(component.compactTitle).toBe('Ski Touring');
+  });
+
   it('shows no-data state when no usable power curve series exist', async () => {
     component.powerCurve = {
       matchedEventCount: 0,
@@ -181,6 +192,33 @@ describe('ChartsPowerCurveComponent', () => {
     expect(component.subtitleText).toBe('Best in range vs best last 30d · 2 events');
   });
 
+  it('places the clickable series legend below the chart plot', async () => {
+    component.powerCurve = makePowerCurveContext();
+
+    fixture.detectChanges();
+    await fixture.whenStable();
+    await vi.waitFor(() => {
+      expect(mockLoader.setOption).toHaveBeenCalled();
+    });
+
+    const setOptionCall = mockLoader.setOption.mock.calls.at(-1) || [];
+    const optionCandidate = setOptionCall[1] || setOptionCall[0];
+    const option = optionCandidate as {
+      legend?: { bottom?: number; left?: string; top?: number };
+      grid?: { top?: number; bottom?: number };
+    };
+
+    expect(option.legend).toEqual(expect.objectContaining({
+      bottom: 0,
+      left: 'center',
+    }));
+    expect(option.legend?.top).toBeUndefined();
+    expect(option.grid).toEqual(expect.objectContaining({
+      top: 8,
+      bottom: 44,
+    }));
+  });
+
   it('formats tooltip rows with shared dashboard tooltip chrome', async () => {
     component.powerCurve = makePowerCurveContext();
 
@@ -256,6 +294,8 @@ describe('ChartsPowerCurveComponent', () => {
       const setOptionCall = mockLoader.setOption.mock.calls.at(-1) || [];
       const optionCandidate = setOptionCall[1] || setOptionCall[0];
       const option = optionCandidate as Record<string, any>;
+      expect(option?.legend?.bottom).toBe(0);
+      expect(option?.grid?.bottom).toBe(54);
       expect(option?.tooltip?.triggerOn).toBe('click');
       expect(option?.tooltip?.confine).toBe(true);
     } finally {

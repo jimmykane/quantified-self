@@ -1012,6 +1012,7 @@ describe('TileChartComponent', () => {
     expect(styles).toContain('section > :not(.tile-header-controls) {');
     expect(styles).toContain('z-index: 20;');
     expect(styles).toContain('.tile-has-stacked-mobile-controls {');
-    expect(styles).toContain('--power-curve-mobile-header-top-gutter: 32px;');
+    expect(styles).toContain('--tile-header-controls-height: 48px;');
+    expect(styles).toContain('--power-curve-mobile-header-reserve-right: 214px;');
   });
 });

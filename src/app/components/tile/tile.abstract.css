@@ -131,15 +131,16 @@ section > :not(.tile-header-controls) {
 
 @media (max-width: 640px) {
   .tile-has-stacked-mobile-controls {
-    --tile-header-controls-height: 78px;
+    --tile-header-controls-height: 48px;
   }
 
   .tile-has-stacked-mobile-controls .tile-header-controls {
-    left: 8px;
-    right: 4px;
-    max-width: none;
-    flex-wrap: wrap;
+    right: 2px;
+    top: 8px;
+    max-width: calc(100% - 16px);
+    flex-wrap: nowrap;
     gap: 2px 3px;
+    justify-content: flex-end;
   }
 
   .tile-has-stacked-mobile-controls .tile-event-filter-controls {
@@ -152,7 +153,6 @@ section > :not(.tile-header-controls) {
   }
 
   .tile-has-stacked-mobile-controls app-power-curve-chart {
-    --power-curve-mobile-header-reserve-right: 0px;
-    --power-curve-mobile-header-top-gutter: 32px;
+    --power-curve-mobile-header-reserve-right: 214px;
   }
 }
