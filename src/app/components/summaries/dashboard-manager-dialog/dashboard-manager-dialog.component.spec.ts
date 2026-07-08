@@ -1017,6 +1017,8 @@ describe('DashboardManagerDialogComponent', () => {
     expect(tiles.filter((tile: any) => tile.type === TileTypes.Map)).toHaveLength(2);
     expect(tiles.some((tile: any) => tile.type === TileTypes.Map && tile.mapSource === 'events')).toBe(true);
     expect(tiles.some((tile: any) => tile.type === TileTypes.Map && tile.mapSource === 'routes')).toBe(true);
+    expect(tiles.find((tile: any) => tile.type === TileTypes.Map && tile.mapSource === 'events')?.size).toEqual({ columns: 1, rows: 1 });
+    expect(tiles.find((tile: any) => tile.type === TileTypes.Map && tile.mapSource === 'routes')?.size).toEqual({ columns: 2, rows: 1 });
     expect(tiles.some((tile: any) => tile.chartType === DASHBOARD_ACWR_KPI_CHART_TYPE)).toBe(true);
     expect(tiles.some((tile: any) => tile.chartType === DASHBOARD_RAMP_RATE_KPI_CHART_TYPE)).toBe(true);
     expect(tiles.some((tile: any) => tile.chartType === DASHBOARD_FORM_PLUS_7D_KPI_CHART_TYPE)).toBe(true);

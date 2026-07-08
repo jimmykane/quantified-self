@@ -549,10 +549,10 @@ describe('AppUserUtilities', () => {
             expect((routeMapTile as any).mapSource).toBe('routes');
             expect((routeMapTile as any).eventFilters).toBeUndefined();
             expect((routeMapTile as any).showRouteEndpointMarkers).toBe(true);
-            expect((routeMapTile as any).size).toEqual({ columns: 2, rows: 2 });
+            expect((routeMapTile as any).size).toEqual({ columns: 2, rows: 1 });
         });
 
-        it('should compact legacy default event dashboard map tiles without resizing customized maps', () => {
+        it('should compact generated dashboard map tiles to one row', () => {
             const user = {
                 settings: {
                     dashboardSettings: {
@@ -571,9 +571,9 @@ describe('AppUserUtilities', () => {
                             {
                                 type: TileTypes.Map,
                                 order: 1,
-                                name: 'Custom Routes',
+                                name: 'Routes',
                                 mapSource: 'routes',
-                                mapStyle: 'outdoors',
+                                mapStyle: 'default',
                                 mapTheme: 'normal',
                                 showHeatMap: false,
                                 clusterMarkers: false,
@@ -588,7 +588,46 @@ describe('AppUserUtilities', () => {
             const [eventMapTile, routeMapTile] = settings.dashboardSettings?.tiles || [];
 
             expect((eventMapTile as any).size).toEqual({ columns: 1, rows: 1 });
-            expect((routeMapTile as any).size).toEqual({ columns: 2, rows: 2 });
+            expect((routeMapTile as any).size).toEqual({ columns: 2, rows: 1 });
+        });
+
+        it('should preserve non-generated dashboard map tile sizes', () => {
+            const user = {
+                settings: {
+                    dashboardSettings: {
+                        tiles: [
+                            {
+                                type: TileTypes.Map,
+                                order: 0,
+                                name: 'Routes',
+                                mapSource: 'routes',
+                                mapStyle: 'default',
+                                mapTheme: 'normal',
+                                showHeatMap: false,
+                                clusterMarkers: false,
+                                size: { columns: 3, rows: 2 },
+                            },
+                            {
+                                type: TileTypes.Map,
+                                order: 1,
+                                name: 'Clustered HeatMap',
+                                mapSource: 'events',
+                                mapStyle: 'default',
+                                mapTheme: 'normal',
+                                showHeatMap: true,
+                                clusterMarkers: true,
+                                size: { columns: 3, rows: 2 },
+                            },
+                        ],
+                    },
+                },
+            } as unknown as User;
+
+            const settings = AppUserUtilities.fillMissingAppSettings(user);
+            const [routeMapTile, eventMapTile] = settings.dashboardSettings?.tiles || [];
+
+            expect((routeMapTile as any).size).toEqual({ columns: 3, rows: 2 });
+            expect((eventMapTile as any).size).toEqual({ columns: 3, rows: 2 });
         });
 
         it('should preserve explicit route endpoint marker preferences and drop them from event maps', () => {
@@ -629,6 +668,7 @@ describe('AppUserUtilities', () => {
             const [routesMap, eventsMap] = settings.dashboardSettings?.tiles || [];
 
             expect((routesMap as any).showRouteEndpointMarkers).toBe(false);
+            expect((routesMap as any).size).toEqual({ columns: 2, rows: 1 });
             expect((eventsMap as any).showRouteEndpointMarkers).toBeUndefined();
         });
 
@@ -1102,6 +1142,7 @@ describe('AppUserUtilities', () => {
             expect(mapTiles[1].mapSource).toBe('routes');
             expect(mapTiles[1].eventFilters).toBeUndefined();
             expect(mapTiles[1].showRouteEndpointMarkers).toBe(true);
+            expect(mapTiles[1].size).toEqual({ columns: 2, rows: 2 });
             expect(chartTiles).toHaveLength(1);
             expect(chartTiles[0].name).toBe('Distance');
         });

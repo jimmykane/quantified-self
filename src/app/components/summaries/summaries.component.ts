@@ -116,7 +116,11 @@ import {
   normalizeDashboardFormTimelineWindow,
 } from '../../helpers/dashboard-chart-display-settings.helper';
 import { normalizeDashboardDerivedChartRange } from '../../helpers/dashboard-derived-chart-range.helper';
-import { getTrailingDashboardGridPlaceholderCount } from '../../helpers/dashboard-grid-layout.helper';
+import {
+  getSparseEqualWidthDashboardGridLayout,
+  type SparseEqualWidthDashboardGridLayout,
+  getTrailingDashboardGridPlaceholderCount,
+} from '../../helpers/dashboard-grid-layout.helper';
 import {
   DASHBOARD_TILE_SECTION_ORDER,
   type DashboardTileSectionId,
@@ -1410,13 +1414,14 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       .map((sectionId) => {
         const definition = getDashboardTileSectionDefinition(sectionId);
         const sectionTiles = tilesBySection.get(sectionId) || [];
-        const sectionColumns = this.buildMainGridSectionColumnCount(sectionTiles);
+        const sectionColumns = this.buildMainGridSectionColumnCount(sectionTiles, sectionId);
+        const sectionCells = this.buildMainGridSectionCells(sectionTiles, sectionColumns, sectionId);
         return {
           ...definition,
           columns: sectionColumns,
           tiles: sectionTiles,
-          cells: this.buildMainGridSectionCells(sectionTiles, sectionColumns),
-          trailingPlaceholders: this.buildMainGridTrailingPlaceholders(sectionTiles, sectionColumns),
+          cells: sectionCells,
+          trailingPlaceholders: this.buildMainGridTrailingPlaceholders(sectionCells, sectionColumns),
         };
       })
       .filter(section => section.tiles.length > 0);
@@ -1424,12 +1429,13 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
 
   private refreshMainGridSectionLayout(): void {
     this.mainGridSections = this.mainGridSections.map((section) => {
-      const sectionColumns = this.buildMainGridSectionColumnCount(section.tiles);
+      const sectionColumns = this.buildMainGridSectionColumnCount(section.tiles, section.id);
+      const sectionCells = this.buildMainGridSectionCells(section.tiles, sectionColumns, section.id);
       return {
         ...section,
         columns: sectionColumns,
-        cells: this.buildMainGridSectionCells(section.tiles, sectionColumns),
-        trailingPlaceholders: this.buildMainGridTrailingPlaceholders(section.tiles, sectionColumns),
+        cells: sectionCells,
+        trailingPlaceholders: this.buildMainGridTrailingPlaceholders(sectionCells, sectionColumns),
       };
     });
   }
@@ -1437,29 +1443,48 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   private buildMainGridSectionCells(
     tiles: DashboardTileViewModel[],
     sectionColumns: number,
+    sectionId: DashboardTileSectionId,
   ): DashboardTileSectionCellViewModel[] {
+    const balancedRoutesMapLayout = this.getBalancedRoutesMapSectionLayout(tiles, sectionColumns, sectionId);
     return tiles.map(tile => ({
       tile,
-      columns: Math.min(this.getTilePersistedColumns(tile), sectionColumns),
+      columns: balancedRoutesMapLayout?.itemColumns
+        || Math.min(this.getTilePersistedColumns(tile), sectionColumns),
     }));
   }
 
   private buildMainGridTrailingPlaceholders(
-    tiles: DashboardTileViewModel[],
+    cells: DashboardTileSectionCellViewModel[],
     sectionColumns: number,
   ): number[] {
-    if (tiles.length < 2) {
+    if (cells.length < 2) {
       return [];
     }
 
-    const placeholderCount = getTrailingDashboardGridPlaceholderCount(tiles, sectionColumns);
+    const placeholderCount = getTrailingDashboardGridPlaceholderCount(
+      cells.map(cell => ({
+        size: {
+          columns: cell.columns,
+          rows: cell.tile.size?.rows,
+        },
+      })),
+      sectionColumns,
+    );
     return Array.from({ length: placeholderCount }, (_, index) => index);
   }
 
-  private buildMainGridSectionColumnCount(tiles: DashboardTileViewModel[]): number {
+  private buildMainGridSectionColumnCount(
+    tiles: DashboardTileViewModel[],
+    sectionId: DashboardTileSectionId,
+  ): number {
     const maxColumns = this.normalizeGridColumnCount(this.numberOfCols);
     if (!tiles.length || maxColumns <= 1) {
       return 1;
+    }
+
+    const balancedRoutesMapLayout = this.getBalancedRoutesMapSectionLayout(tiles, maxColumns, sectionId);
+    if (balancedRoutesMapLayout) {
+      return balancedRoutesMapLayout.columns;
     }
 
     const tileColumns = tiles.map(tile => Math.min(this.getTilePersistedColumns(tile), maxColumns));
@@ -1469,6 +1494,18 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
 
     const totalColumns = tileColumns.reduce((total, columns) => total + columns, 0);
     return Math.min(maxColumns, Math.max(1, totalColumns));
+  }
+
+  private getBalancedRoutesMapSectionLayout(
+    tiles: DashboardTileViewModel[],
+    maxColumns: number,
+    sectionId: DashboardTileSectionId,
+  ): SparseEqualWidthDashboardGridLayout | null {
+    if (sectionId !== 'routesMaps') {
+      return null;
+    }
+
+    return getSparseEqualWidthDashboardGridLayout(tiles.length, maxColumns);
   }
 
   private getBalancedOneColumnSectionColumnCount(tileCount: number, maxColumns: number): number {

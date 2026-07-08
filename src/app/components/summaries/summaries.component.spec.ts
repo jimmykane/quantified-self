@@ -311,6 +311,47 @@ describe('SummariesComponent', () => {
     expect(board?.querySelector('app-dashboard-tile-cell.dashboard-grid-placeholder')).toBeNull();
   });
 
+  it('balances sparse map sections so one route map does not consume all leftover columns', () => {
+    const mainGridTiles = [
+      {
+        type: TileTypes.Map,
+        order: 0,
+        name: 'Clustered HeatMap',
+        mapSource: 'events',
+        events: [],
+        size: { columns: 1, rows: 1 },
+      },
+      {
+        type: TileTypes.Map,
+        order: 1,
+        name: 'Routes',
+        mapSource: 'routes',
+        routePreviews: [],
+        size: { columns: 3, rows: 1 },
+      },
+    ] as any[];
+
+    component.user = { settings: { dashboardSettings: { tiles: [] } } } as any;
+    component.numberOfCols = 4;
+    component.tiles = mainGridTiles;
+    component.kpiLaneTiles = [];
+    component.mainGridTiles = mainGridTiles;
+    (component as any).refreshTileLanes();
+
+    fixture.detectChanges();
+
+    const routesSection = component.mainGridSections.find(section => section.id === 'routesMaps');
+    expect(routesSection?.columns).toBe(4);
+    expect(routesSection?.cells.map(cell => cell.columns)).toEqual([2, 2]);
+    expect(routesSection?.trailingPlaceholders).toEqual([]);
+
+    const nativeElement = fixture.nativeElement as HTMLElement;
+    const board = nativeElement.querySelector('app-dashboard-tile-board') as HTMLElement | null;
+    const cells = Array.from(board?.querySelectorAll('app-dashboard-tile-cell.dashboard-grid-tile:not(.dashboard-grid-placeholder)') || []) as HTMLElement[];
+    expect(board?.style.getPropertyValue('--dashboard-tile-board-cols')).toBe('4');
+    expect(cells.map(cell => cell.style.gridColumn)).toEqual(['span 2', 'span 2']);
+  });
+
   it('balances one-column section grids to avoid a lonely final row tile', () => {
     const mainGridTiles = [0, 1, 2, 3, 4].map(order => ({
       type: TileTypes.Chart,

@@ -154,12 +154,12 @@ describe('dashboard-manager-presets.helper', () => {
     const defaultMap = buildDashboardManagerPresetTile({
       presetId: DASHBOARD_MANAGER_PRESET_IDS.MAP_DEFAULT_CLUSTERED,
       order: 4,
-      size: { columns: 2, rows: 2 },
+      size: { columns: 1, rows: 1 },
     });
     const routesMap = buildDashboardManagerPresetTile({
       presetId: DASHBOARD_MANAGER_PRESET_IDS.MAP_ROUTES_PREVIEW,
       order: 5,
-      size: { columns: 2, rows: 2 },
+      size: { columns: 2, rows: 1 },
     });
 
     expect(durationPie).toMatchObject({
@@ -183,7 +183,7 @@ describe('dashboard-manager-presets.helper', () => {
       mapStyle: 'default',
       clusterMarkers: true,
       order: 4,
-      size: { columns: 2, rows: 2 },
+      size: { columns: 1, rows: 1 },
       eventFilters: { range: '90d', activityTypes: [] },
     });
     expect(routesMap).toMatchObject({
@@ -194,7 +194,7 @@ describe('dashboard-manager-presets.helper', () => {
       clusterMarkers: false,
       showRouteEndpointMarkers: true,
       order: 5,
-      size: { columns: 2, rows: 2 },
+      size: { columns: 2, rows: 1 },
     });
     expect(routesMap).not.toHaveProperty('eventFilters');
   });

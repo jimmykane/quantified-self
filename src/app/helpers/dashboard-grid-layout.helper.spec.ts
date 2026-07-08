@@ -1,5 +1,40 @@
 import { describe, expect, it } from 'vitest';
-import { getTrailingDashboardGridPlaceholderCount } from './dashboard-grid-layout.helper';
+import {
+  getSparseEqualWidthDashboardGridLayout,
+  getTrailingDashboardGridPlaceholderCount,
+} from './dashboard-grid-layout.helper';
+
+describe('getSparseEqualWidthDashboardGridLayout', () => {
+  it('splits a sparse four-column row evenly between two items', () => {
+    expect(getSparseEqualWidthDashboardGridLayout(2, 4)).toEqual({
+      columns: 4,
+      itemColumns: 2,
+    });
+  });
+
+  it('shrinks the board instead of stretching one item in a three-column row', () => {
+    expect(getSparseEqualWidthDashboardGridLayout(2, 3)).toEqual({
+      columns: 2,
+      itemColumns: 1,
+    });
+  });
+
+  it('keeps three sparse items equal inside a four-column maximum', () => {
+    expect(getSparseEqualWidthDashboardGridLayout(3, 4)).toEqual({
+      columns: 3,
+      itemColumns: 1,
+    });
+  });
+
+  it('does not apply when the row is not sparse', () => {
+    expect(getSparseEqualWidthDashboardGridLayout(5, 4)).toBeNull();
+  });
+
+  it('does not apply for singleton or single-column boards', () => {
+    expect(getSparseEqualWidthDashboardGridLayout(1, 4)).toBeNull();
+    expect(getSparseEqualWidthDashboardGridLayout(2, 1)).toBeNull();
+  });
+});
 
 describe('getTrailingDashboardGridPlaceholderCount', () => {
   it('does not add placeholders for a single-column board', () => {

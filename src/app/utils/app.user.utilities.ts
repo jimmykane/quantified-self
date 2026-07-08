@@ -227,23 +227,35 @@ export class AppUserUtilities {
         };
     }
 
-    private static normalizeLegacyDefaultEventDashboardMapTileSize(tile: AppDashboardMapTileSettingsInterface): void {
+    private static normalizeGeneratedDashboardMapTileSize(tile: AppDashboardMapTileSettingsInterface): void {
         const size = tile.size;
-        if (!size || (size.columns === 1 && size.rows === 1)) {
+        if (!size || Number(size.rows) === 1) {
             return;
         }
 
+        const hasGeneratedTwoByTwoSize = Number(size.columns) === 2 && Number(size.rows) === 2;
+        if (!hasGeneratedTwoByTwoSize) {
+            return;
+        }
+
+        const isGeneratedDefaultRoutesMap = tile.mapSource === 'routes'
+            && `${tile.name || ''}`.trim() === 'Routes'
+            && (tile.mapStyle || AppUserUtilities.getDefaultDashboardMapStyle()) === AppUserUtilities.getDefaultDashboardMapStyle()
+            && tile.clusterMarkers !== true
+            && tile.showHeatMap !== true;
         const isLegacyDefaultEventMap = tile.mapSource === 'events'
             && `${tile.name || ''}`.trim() === 'Clustered HeatMap'
             && (tile.mapStyle || AppUserUtilities.getDefaultDashboardMapStyle()) === AppUserUtilities.getDefaultDashboardMapStyle()
             && tile.clusterMarkers === true
             && tile.showHeatMap === true;
 
-        if (!isLegacyDefaultEventMap) {
+        if (!isGeneratedDefaultRoutesMap && !isLegacyDefaultEventMap) {
             return;
         }
 
-        tile.size = getDefaultDashboardMapTileSizeForSource('events');
+        tile.size = isGeneratedDefaultRoutesMap
+            ? getDefaultDashboardMapTileSizeForSource('routes')
+            : getDefaultDashboardMapTileSizeForSource('events');
     }
 
     private static normalizeDashboardChartTileDisplaySettings(tile: AppDashboardChartTileSettingsInterface): void {
@@ -622,7 +634,7 @@ export class AppUserUtilities {
             }
             normalizedMapDashboardSources.add(mapTile.mapSource);
             mapTile.mapStyle = mapTile.mapStyle || AppUserUtilities.getDefaultDashboardMapStyle();
-            AppUserUtilities.normalizeLegacyDefaultEventDashboardMapTileSize(mapTile);
+            AppUserUtilities.normalizeGeneratedDashboardMapTileSize(mapTile);
             if (mapTile.mapSource === 'routes') {
                 delete mapTile.eventFilters;
                 mapTile.showRouteEndpointMarkers = mapTile.showRouteEndpointMarkers !== false;
