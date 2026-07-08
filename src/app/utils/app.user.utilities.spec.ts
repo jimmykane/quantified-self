@@ -549,10 +549,10 @@ describe('AppUserUtilities', () => {
             expect((routeMapTile as any).mapSource).toBe('routes');
             expect((routeMapTile as any).eventFilters).toBeUndefined();
             expect((routeMapTile as any).showRouteEndpointMarkers).toBe(true);
-            expect((routeMapTile as any).size).toEqual({ columns: 2, rows: 1 });
+            expect((routeMapTile as any).size).toEqual({ columns: 2, rows: 2 });
         });
 
-        it('should compact legacy default dashboard map tiles without resizing customized maps', () => {
+        it('should compact legacy default event dashboard map tiles without resizing customized maps', () => {
             const user = {
                 settings: {
                     dashboardSettings: {
