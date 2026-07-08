@@ -74,6 +74,7 @@ import {
   isDashboardIntensityDistributionChartType,
   isDashboardKpiChartType,
   isDashboardMonotonyStrainKpiChartType,
+  isDashboardPowerCurveChartType,
   isDashboardRampRateKpiChartType,
   isDashboardRecoveryNowChartType,
   isDashboardEventBackedSpecialChartType,
@@ -90,6 +91,7 @@ import type {
   AppDashboardDerivedChartRange,
   AppDashboardFormTimelineWindow,
   AppDashboardMapTileSettingsInterface,
+  AppDashboardPowerCurveCompareMode,
   AppDashboardSettingsInterface,
   AppDashboardSleepTrendRange,
   AppDashboardTileEventFilterRange,
@@ -116,6 +118,7 @@ import {
   normalizeDashboardFormTimelineWindow,
 } from '../../helpers/dashboard-chart-display-settings.helper';
 import { normalizeDashboardDerivedChartRange } from '../../helpers/dashboard-derived-chart-range.helper';
+import { normalizeDashboardPowerCurveCompareMode } from '../../helpers/dashboard-power-curve.helper';
 import {
   getSparseEqualWidthDashboardGridLayout,
   type SparseEqualWidthDashboardGridLayout,
@@ -896,6 +899,15 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     });
   }
 
+  public async onTilePowerCurveCompareModeChange(
+    order: number,
+    compareMode: AppDashboardPowerCurveCompareMode,
+  ): Promise<void> {
+    await this.updateTileDisplaySettings(order, {
+      powerCurveCompareMode: normalizeDashboardPowerCurveCompareMode(compareMode),
+    });
+  }
+
   private syncTileEventSubscriptions(): void {
     const eventUser = (this.eventUser || this.user) as User | null;
     const uid = `${eventUser?.uid || ''}`.trim();
@@ -1160,7 +1172,8 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     const chartType = (tile as TileChartSettingsInterface).chartType;
     return isDashboardFormChartType(chartType)
       || isDashboardIntensityDistributionChartType(chartType)
-      || isDashboardEfficiencyTrendChartType(chartType);
+      || isDashboardEfficiencyTrendChartType(chartType)
+      || isDashboardPowerCurveChartType(chartType);
   }
 
   private cloneDashboardTiles(tiles: TileSettingsInterface[]): TileSettingsInterface[] {

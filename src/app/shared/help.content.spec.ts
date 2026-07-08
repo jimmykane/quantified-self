@@ -101,6 +101,7 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('Empty editable dashboards show lightweight section guidance');
     expect(gettingStartedSection?.content).toContain('**Cycling Power Curve** and **Running Power Curve** are curated event-backed charts');
     expect(gettingStartedSection?.content).toContain('defaults to **1y**');
+    expect(gettingStartedSection?.content).toContain('latest matching activity or a saved recent-best comparison window');
     expect(gettingStartedSection?.content).toContain('**Cycling Power Curve** joins that auto-add flow only after a cycling or mountain biking event');
     expect(gettingStartedSection?.content).toContain('**Running Power Curve** does the same for running or trail running');
   });
@@ -223,6 +224,7 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('Cycling Power Curve');
     expect(gettingStartedSection?.content).toContain('Running Power Curve');
     expect(gettingStartedSection?.content).toContain("each event's stored PowerCurve stat");
+    expect(gettingStartedSection?.content).toContain('latest matching activity, best last 30d, or best last 90d');
     expect(gettingStartedSection?.content).toContain('Cycling and running power data stay in separate tiles');
     expect(gettingStartedSection?.content).toContain('saved per dashboard tile');
     expect(gettingStartedSection?.content).not.toContain('**Sleep** shows connected-source sleep duration');

@@ -1280,6 +1280,36 @@ describe('SummariesComponent', () => {
     });
   });
 
+  it('should persist Power Curve compare mode changes on the owning tile', async () => {
+    buildDashboardTileViewModelsSpy.mockReturnValue([]);
+    component.user = {
+      uid: 'user-1',
+      settings: {
+        dashboardSettings: {
+          tiles: [{
+            type: TileTypes.Chart,
+            order: 0,
+            chartType: DASHBOARD_POWER_CURVE_CHART_TYPE,
+            dataType: 'Training Stress Score',
+            dataValueType: ChartDataValueTypes.Total,
+            dataCategoryType: ChartDataCategoryTypes.DateType,
+            size: { columns: 1, rows: 1 },
+            displaySettings: { powerCurveCompareMode: 'latest' },
+          }],
+        },
+      },
+    } as any;
+
+    await component.onTilePowerCurveCompareModeChange(0, 'best30d');
+
+    expect(component.user.settings.dashboardSettings.tiles[0].displaySettings).toEqual({
+      powerCurveCompareMode: 'best30d',
+    });
+    expectDashboardSettingsWrite(component.user, {
+      tiles: component.user.settings.dashboardSettings.tiles,
+    });
+  });
+
   it('should rollback tile display settings when persistence fails', async () => {
     buildDashboardTileViewModelsSpy.mockReturnValue([]);
     mockUserService.updateUserProperties.mockRejectedValueOnce(new Error('persist failed'));

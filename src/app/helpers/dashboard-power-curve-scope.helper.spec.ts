@@ -14,6 +14,7 @@ import {
   getDashboardPowerCurveActivityTypes,
   isLegacyDefaultDashboardPowerCurveTile,
   isDashboardPowerCurveTileForScope,
+  resolveDashboardPowerCurveTileDisplayScope,
   resolveDashboardPowerCurveTileScope,
 } from './dashboard-power-curve-scope.helper';
 
@@ -66,6 +67,22 @@ describe('dashboard-power-curve-scope.helper', () => {
     expect(resolveDashboardPowerCurveTileScope(mixedTile)).toBeNull();
     expect(isDashboardPowerCurveTileForScope(mixedTile, 'cycling')).toBe(false);
     expect(isDashboardPowerCurveTileForScope(mixedTile, 'running')).toBe(false);
+  });
+
+  it('uses tile names for display scope when strict filter scope is unresolved', () => {
+    const mixedCyclingTile = makePowerCurveTile({
+      name: 'Cycling Power Curve',
+      eventFilters: { range: '1y', activityTypes: [ActivityTypes.Cycling, ActivityTypes.Running] },
+    });
+    const mixedGenericTile = makePowerCurveTile({
+      name: 'Power Curve',
+      eventFilters: { range: '1y', activityTypes: [ActivityTypes.Cycling, ActivityTypes.Running] },
+    });
+
+    expect(resolveDashboardPowerCurveTileScope(mixedCyclingTile)).toBeNull();
+    expect(resolveDashboardPowerCurveTileDisplayScope(mixedCyclingTile)).toBe('cycling');
+    expect(resolveDashboardPowerCurveTileScope(mixedGenericTile)).toBeNull();
+    expect(resolveDashboardPowerCurveTileDisplayScope(mixedGenericTile)).toBeNull();
   });
 
   it('keeps generated scope filters stable', () => {

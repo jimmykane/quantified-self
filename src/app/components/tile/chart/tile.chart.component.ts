@@ -70,6 +70,7 @@ import type { DashboardDerivedMetricStatus } from '../../../helpers/derived-metr
 import type {
   AppDashboardDerivedChartRange,
   AppDashboardFormTimelineWindow,
+  AppDashboardPowerCurveCompareMode,
   AppDashboardSleepTrendRange,
 } from '../../../models/app-user.interface';
 import {
@@ -83,6 +84,11 @@ import type {
 import type { DashboardTileEventNavigationDirection } from '../../../helpers/dashboard-tile-event-filters.helper';
 import type { ChartRangeSelectorOption } from '../../charts/shared/chart-range-selector/chart-range-selector.component';
 import { DASHBOARD_ECHARTS_MOBILE_TAP_FEEDBACK_OPTIONS } from '../../../helpers/echarts-tooltip-interaction.helper';
+import {
+  DASHBOARD_POWER_CURVE_COMPARE_MODE_OPTIONS,
+  DASHBOARD_POWER_CURVE_DEFAULT_COMPARE_MODE,
+  normalizeDashboardPowerCurveCompareMode,
+} from '../../../helpers/dashboard-power-curve.helper';
 
 type DashboardRecoveryNowSnapshotStatus = DerivedMetricSnapshotStatus | 'missing' | 'queued' | 'processing';
 
@@ -158,9 +164,17 @@ export class TileChartComponent extends TileAbstractDirective {
   get formTimelineWindow(): AppDashboardFormTimelineWindow {
     return this.selectedFormTimelineWindow;
   }
+  @Input()
+  set powerCurveCompareMode(value: AppDashboardPowerCurveCompareMode | null | undefined) {
+    this.selectedPowerCurveCompareMode = normalizeDashboardPowerCurveCompareMode(value);
+  }
+  get powerCurveCompareMode(): AppDashboardPowerCurveCompareMode {
+    return this.selectedPowerCurveCompareMode;
+  }
   @Output() editInDashboardManager = new EventEmitter<number>();
   @Output() derivedChartRangeChange = new EventEmitter<AppDashboardDerivedChartRange>();
   @Output() formTimelineWindowChange = new EventEmitter<AppDashboardFormTimelineWindow>();
+  @Output() powerCurveCompareModeChange = new EventEmitter<AppDashboardPowerCurveCompareMode>();
   @Output() sleepTrendRangeChange = new EventEmitter<AppDashboardSleepTrendRange>();
   @Output() sleepTrendNavigate = new EventEmitter<DashboardSleepTrendNavigationDirection>();
   @Output() eventFilterRangeChange = new EventEmitter<AppDashboardTileEventFilterRange>();
@@ -193,6 +207,7 @@ export class TileChartComponent extends TileAbstractDirective {
   public isTileActionSaving = false;
   private selectedDerivedChartRange: AppDashboardDerivedChartRange = DASHBOARD_DERIVED_CHART_DEFAULT_RANGE as AppDashboardDerivedChartRange;
   private selectedFormTimelineWindow: AppDashboardFormTimelineWindow = DASHBOARD_FORM_TIMELINE_DEFAULT_WINDOW;
+  private selectedPowerCurveCompareMode: AppDashboardPowerCurveCompareMode = DASHBOARD_POWER_CURVE_DEFAULT_COMPARE_MODE;
   public readonly derivedRangeSelectorOptions: ReadonlyArray<ChartRangeSelectorOption> = DASHBOARD_DERIVED_CHART_RANGE_OPTIONS.map(option => ({
     value: option.range,
     label: option.label,
@@ -206,6 +221,12 @@ export class TileChartComponent extends TileAbstractDirective {
   ];
   public readonly sleepRangeSelectorOptions: ReadonlyArray<ChartRangeSelectorOption> = DASHBOARD_SLEEP_TREND_RANGE_OPTIONS.map(option => ({
     value: option.range,
+    label: option.label,
+    shortLabel: option.shortLabel,
+    menuLabel: option.menuLabel,
+  }));
+  public readonly powerCurveCompareModeOptions: ReadonlyArray<ChartRangeSelectorOption> = DASHBOARD_POWER_CURVE_COMPARE_MODE_OPTIONS.map(option => ({
+    value: option.mode,
     label: option.label,
     shortLabel: option.shortLabel,
     menuLabel: option.menuLabel,
@@ -239,8 +260,16 @@ export class TileChartComponent extends TileAbstractDirective {
     return this.chartType === this.sleepTrendChartType;
   }
 
+  get showPowerCurveCompareSelector(): boolean {
+    return this.chartType === this.powerCurveChartType;
+  }
+
   get showSharedRangeControls(): boolean {
-    return this.showEventFilters || this.showDerivedRangeSelector || this.showFormRangeSelector || this.showSleepRangeControls;
+    return this.showEventFilters
+      || this.showDerivedRangeSelector
+      || this.showFormRangeSelector
+      || this.showSleepRangeControls
+      || this.showPowerCurveCompareSelector;
   }
 
   get showHeaderControls(): boolean {
@@ -267,6 +296,15 @@ export class TileChartComponent extends TileAbstractDirective {
 
   onSleepRangeSelection(value: unknown): void {
     this.sleepTrendRangeChange.emit(normalizeDashboardSleepTrendRange(value));
+  }
+
+  onPowerCurveCompareModeSelection(value: unknown): void {
+    const nextMode = normalizeDashboardPowerCurveCompareMode(value);
+    if (nextMode === this.selectedPowerCurveCompareMode) {
+      return;
+    }
+    this.selectedPowerCurveCompareMode = nextMode;
+    this.powerCurveCompareModeChange.emit(nextMode);
   }
 
   onTileActionSaving(isSaving: boolean): void {

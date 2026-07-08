@@ -153,6 +153,35 @@ export function resolveDashboardPowerCurveTileScope(
   return 'cycling';
 }
 
+export function resolveDashboardPowerCurveTileDisplayScope(
+  tile: TileSettingsInterface | null | undefined,
+): DashboardPowerCurveScope | null {
+  const resolvedScope = resolveDashboardPowerCurveTileScope(tile);
+  if (resolvedScope) {
+    return resolvedScope;
+  }
+
+  return resolveDashboardPowerCurveTileNameScope(tile);
+}
+
+export function resolveDashboardPowerCurveTileNameScope(
+  tile: TileSettingsInterface | null | undefined,
+): DashboardPowerCurveScope | null {
+  if (!isDashboardPowerCurveTile(tile)) {
+    return null;
+  }
+
+  const tileName = `${(tile as AppDashboardChartTileSettingsInterface).name || ''}`.trim().toLowerCase();
+  if (tileName.includes('running')) {
+    return 'running';
+  }
+  if (tileName.includes('cycling')) {
+    return 'cycling';
+  }
+
+  return null;
+}
+
 export function isLegacyDefaultDashboardPowerCurveTile(
   tile: TileSettingsInterface | null | undefined,
 ): boolean {

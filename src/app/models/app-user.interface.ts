@@ -130,10 +130,12 @@ export interface AppDashboardTileEventFiltersInterface {
 
 export type AppDashboardDerivedChartRange = '8w' | '12w' | '6m' | '1y' | 'all';
 export type AppDashboardFormTimelineWindow = 'w' | 'm' | 'y';
+export type AppDashboardPowerCurveCompareMode = 'latest' | 'best30d' | 'best90d';
 
 export interface AppDashboardChartTileDisplaySettingsInterface {
     derivedChartRange?: AppDashboardDerivedChartRange;
     formTimelineWindow?: AppDashboardFormTimelineWindow;
+    powerCurveCompareMode?: AppDashboardPowerCurveCompareMode;
 }
 
 export interface AppDashboardChartTileSettingsInterface extends TileChartSettingsInterface {

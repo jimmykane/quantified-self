@@ -57,7 +57,7 @@ import {
 } from './dashboard-power-curve.helper';
 import {
   getDashboardPowerCurveScopeDefinition,
-  isDashboardPowerCurveTileForScope,
+  resolveDashboardPowerCurveTileDisplayScope,
 } from './dashboard-power-curve-scope.helper';
 import {
   DASHBOARD_TILE_EVENT_DEFAULT_RANGE,
@@ -321,12 +321,9 @@ function resolveEventsForTile(
 function resolveDashboardPowerCurveLatestSeriesLabel(
   tile: AppDashboardChartTileSettingsInterface,
 ): string {
-  if (isDashboardPowerCurveTileForScope(tile, 'cycling')) {
-    return getDashboardPowerCurveScopeDefinition('cycling').latestSeriesLabel;
-  }
-
-  if (isDashboardPowerCurveTileForScope(tile, 'running')) {
-    return getDashboardPowerCurveScopeDefinition('running').latestSeriesLabel;
+  const displayScope = resolveDashboardPowerCurveTileDisplayScope(tile);
+  if (displayScope) {
+    return getDashboardPowerCurveScopeDefinition(displayScope).latestSeriesLabel;
   }
 
   return 'Latest power activity';
@@ -644,6 +641,7 @@ export function buildDashboardTileViewModels(
         data: [],
         powerCurve: buildDashboardPowerCurveContext(tileEvents, {
           latestSeriesLabel: resolveDashboardPowerCurveLatestSeriesLabel(chartTile),
+          compareMode: chartTile.displaySettings?.powerCurveCompareMode,
         }),
       });
       return viewModels;

@@ -338,9 +338,171 @@ describe('dashboard-tile-view-model.helper', () => {
 
     const powerCurve = (viewModels[0] as any).powerCurve;
     expect(powerCurve.latestEventId).toBe('latest-running-event');
+    expect(powerCurve.compareMode).toBe('latest');
+    expect(powerCurve.comparisonSeriesLabel).toBe('Latest running activity');
     expect(powerCurve.series.map((series: any) => series.label)).toEqual([
       'Best in range',
       'Latest running activity',
+    ]);
+  });
+
+  it('should label cycling Power Curve latest series from the scoped tile filters', () => {
+    const bestCyclingEvent = makeEvent({
+      id: 'best-cycling-event',
+      startDate: '2024-03-01T10:00:00.000Z',
+      activityTypes: [ActivityTypes.Cycling],
+      stats: {
+        [POWER_CURVE_STAT_TYPE]: [
+          { duration: 300, power: 420 },
+        ],
+      },
+    });
+    const latestCyclingEvent = makeEvent({
+      id: 'latest-cycling-event',
+      startDate: '2024-03-03T10:00:00.000Z',
+      activityTypes: [ActivityTypes.MountainBiking],
+      stats: {
+        [POWER_CURVE_STAT_TYPE]: [
+          { duration: 300, power: 390 },
+        ],
+      },
+    });
+
+    const viewModels = buildDashboardTileViewModels({
+      tiles: [{
+        type: TileTypes.Chart,
+        order: 9,
+        name: 'Cycling Power Curve',
+        chartType: DASHBOARD_POWER_CURVE_CHART_TYPE as any,
+        dataType: DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE,
+        dataValueType: ChartDataValueTypes.Total,
+        dataCategoryType: ChartDataCategoryTypes.DateType,
+        dataTimeInterval: TimeIntervals.Weekly,
+        eventFilters: { range: '1y', activityTypes: getDashboardPowerCurveActivityTypes('cycling') },
+        size: { columns: 1, rows: 1 },
+      }] as any,
+      events: [],
+      tileEventsByOrder: {
+        9: [bestCyclingEvent, latestCyclingEvent],
+      },
+    });
+
+    const powerCurve = (viewModels[0] as any).powerCurve;
+    expect(powerCurve.latestEventId).toBe('latest-cycling-event');
+    expect(powerCurve.latestSeriesLabel).toBe('Latest cycling activity');
+    expect(powerCurve.compareMode).toBe('latest');
+    expect(powerCurve.comparisonSeriesLabel).toBe('Latest cycling activity');
+    expect(powerCurve.series.map((series: any) => series.label)).toEqual([
+      'Best in range',
+      'Latest cycling activity',
+    ]);
+  });
+
+  it('should build Power Curve recent-best comparisons from tile display settings', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2024-01-31T12:00:00.000Z'));
+    try {
+      const olderBest = makeEvent({
+        id: 'older-best',
+        startDate: '2023-12-01T10:00:00.000Z',
+        activityTypes: [ActivityTypes.Cycling],
+        stats: {
+          [POWER_CURVE_STAT_TYPE]: [
+            { duration: 300, power: 430 },
+          ],
+        },
+      });
+      const recentBest = makeEvent({
+        id: 'recent-best',
+        startDate: '2024-01-20T10:00:00.000Z',
+        activityTypes: [ActivityTypes.Cycling],
+        stats: {
+          [POWER_CURVE_STAT_TYPE]: [
+            { duration: 300, power: 360 },
+          ],
+        },
+      });
+
+      const viewModels = buildDashboardTileViewModels({
+        tiles: [{
+          type: TileTypes.Chart,
+          order: 11,
+          name: 'Cycling Power Curve',
+          chartType: DASHBOARD_POWER_CURVE_CHART_TYPE as any,
+          dataType: DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE,
+          dataValueType: ChartDataValueTypes.Total,
+          dataCategoryType: ChartDataCategoryTypes.DateType,
+          dataTimeInterval: TimeIntervals.Weekly,
+          eventFilters: { range: '1y', activityTypes: [ActivityTypes.Cycling] },
+          displaySettings: { powerCurveCompareMode: 'best30d' },
+          size: { columns: 1, rows: 1 },
+        }] as any,
+        events: [],
+        tileEventsByOrder: {
+          11: [olderBest, recentBest],
+        },
+      });
+
+      const powerCurve = (viewModels[0] as any).powerCurve;
+      expect(powerCurve.compareMode).toBe('best30d');
+      expect(powerCurve.comparisonSeriesLabel).toBe('Best last 30d');
+      expect(powerCurve.comparisonEventCount).toBe(1);
+      expect(powerCurve.series.map((series: any) => series.label)).toEqual([
+        'Best in range',
+        'Best last 30d',
+      ]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('should label saved Cycling Power Curve tiles from title when strict filter scope is unresolved', () => {
+    const bestCyclingEvent = makeEvent({
+      id: 'best-cycling-event',
+      startDate: '2024-03-01T10:00:00.000Z',
+      activityTypes: [ActivityTypes.Cycling],
+      stats: {
+        [POWER_CURVE_STAT_TYPE]: [
+          { duration: 300, power: 420 },
+        ],
+      },
+    });
+    const latestCyclingEvent = makeEvent({
+      id: 'latest-cycling-event',
+      startDate: '2024-03-03T10:00:00.000Z',
+      activityTypes: [ActivityTypes.Cycling],
+      stats: {
+        [POWER_CURVE_STAT_TYPE]: [
+          { duration: 300, power: 390 },
+        ],
+      },
+    });
+
+    const viewModels = buildDashboardTileViewModels({
+      tiles: [{
+        type: TileTypes.Chart,
+        order: 10,
+        name: 'Cycling Power Curve',
+        chartType: DASHBOARD_POWER_CURVE_CHART_TYPE as any,
+        dataType: DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE,
+        dataValueType: ChartDataValueTypes.Total,
+        dataCategoryType: ChartDataCategoryTypes.DateType,
+        dataTimeInterval: TimeIntervals.Weekly,
+        eventFilters: { range: '1y', activityTypes: [ActivityTypes.Cycling, ActivityTypes.Running] },
+        size: { columns: 1, rows: 1 },
+      }] as any,
+      events: [],
+      tileEventsByOrder: {
+        10: [bestCyclingEvent, latestCyclingEvent],
+      },
+    });
+
+    const powerCurve = (viewModels[0] as any).powerCurve;
+    expect(powerCurve.latestEventId).toBe('latest-cycling-event');
+    expect(powerCurve.latestSeriesLabel).toBe('Latest cycling activity');
+    expect(powerCurve.series.map((series: any) => series.label)).toEqual([
+      'Best in range',
+      'Latest cycling activity',
     ]);
   });
 

@@ -99,7 +99,7 @@ describe('ChartsPowerCurveComponent', () => {
       expect.objectContaining({ duration: 300, durationLabel: '5m', powerLabel: '315w' }),
       expect.objectContaining({ duration: 60, durationLabel: '1m', powerLabel: '420w' }),
     ]);
-    expect(component.subtitleText).toBe('Best + latest activity · 2 events');
+    expect(component.subtitleText).toBe('Best + latest cycling activity · 2 events');
     expect(component.showNoDataError).toBe(false);
   });
 
@@ -109,6 +109,10 @@ describe('ChartsPowerCurveComponent', () => {
       sourceEventCount: 3,
       latestEventId: null,
       latestEventStartMs: null,
+      latestSeriesLabel: 'Latest running activity',
+      compareMode: 'latest',
+      comparisonSeriesLabel: 'Latest running activity',
+      comparisonEventCount: 0,
       series: [],
       summaryPoints: [],
     };
@@ -127,6 +131,10 @@ describe('ChartsPowerCurveComponent', () => {
       sourceEventCount: 1,
       latestEventId: 'event-1',
       latestEventStartMs: Date.UTC(2026, 0, 1),
+      latestSeriesLabel: 'Latest running activity',
+      compareMode: 'latest',
+      comparisonSeriesLabel: 'Latest running activity',
+      comparisonEventCount: 1,
       summaryPoints: [],
       series: [{
         seriesKey: 'latestAndBest',
@@ -157,6 +165,20 @@ describe('ChartsPowerCurveComponent', () => {
       powerLabel: '260w',
     }));
     expect(component.secondaryBenchmarks).toEqual([]);
+  });
+
+  it('describes recent-best comparison mode as a range-vs-range subtitle', async () => {
+    component.powerCurve = {
+      ...makePowerCurveContext(),
+      compareMode: 'best30d',
+      comparisonSeriesLabel: 'Best last 30d',
+      comparisonEventCount: 4,
+    };
+
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(component.subtitleText).toBe('Best in range vs best last 30d · 2 events');
   });
 
   it('formats tooltip rows with shared dashboard tooltip chrome', async () => {
@@ -248,6 +270,10 @@ function makePowerCurveContext(): DashboardPowerCurveContext {
     sourceEventCount: 4,
     latestEventId: 'latest-event',
     latestEventStartMs: Date.UTC(2026, 0, 2),
+    latestSeriesLabel: 'Latest cycling activity',
+    compareMode: 'latest',
+    comparisonSeriesLabel: 'Latest cycling activity',
+    comparisonEventCount: 1,
     summaryPoints: [
       { duration: 60, power: 420, wattsPerKg: 5.6 },
       { duration: 300, power: 315, wattsPerKg: 4.2 },
@@ -266,7 +292,7 @@ function makePowerCurveContext(): DashboardPowerCurveContext {
       },
       {
         seriesKey: 'latest',
-        label: 'Latest power activity',
+        label: 'Latest cycling activity',
         colorKey: 'latest',
         eventId: 'latest-event',
         eventStartMs: Date.UTC(2026, 0, 2),

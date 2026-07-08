@@ -21,6 +21,12 @@
       (valueChange)="onFormTimelineWindowSelection($event)">
     </app-chart-range-selector>
     }
+    @if (showPowerCurveCompareSelector) {
+    <app-chart-range-selector class="tile-local-range-selector" [options]="powerCurveCompareModeOptions"
+      [value]="powerCurveCompareMode" ariaLabel="Select Power Curve comparison"
+      (valueChange)="onPowerCurveCompareModeSelection($event)">
+    </app-chart-range-selector>
+    }
     @if (showSleepRangeControls) {
     <div class="tile-local-range-navigation" aria-label="Sleep trend range navigation">
       <button mat-icon-button class="tile-local-range-nav-button" appHapticTap [disabled]="!sleepTrendCanNavigateOlder"

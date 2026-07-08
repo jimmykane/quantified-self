@@ -147,10 +147,21 @@ export class ChartsPowerCurveComponent implements AfterViewInit, OnChanges, OnDe
     this.primaryBenchmark = this.benchmarkStats[0] || null;
     this.secondaryBenchmarks = this.benchmarkStats.slice(1);
     const matchedEventCount = this.powerCurve?.matchedEventCount ?? 0;
+    const comparisonLabel = this.resolveComparisonLabel();
+    const subtitlePrefix = this.powerCurve?.compareMode && this.powerCurve.compareMode !== 'latest'
+      ? `Best in range vs ${comparisonLabel}`
+      : `Best + ${comparisonLabel}`;
     this.subtitleText = matchedEventCount > 0
-      ? `Best + latest activity · ${matchedEventCount} ${matchedEventCount === 1 ? 'event' : 'events'}`
-      : 'Best + latest activity';
+      ? `${subtitlePrefix} · ${matchedEventCount} ${matchedEventCount === 1 ? 'event' : 'events'}`
+      : subtitlePrefix;
     this.showNoDataError = !durations.length || !(this.powerCurve?.series || []).length;
+  }
+
+  private resolveComparisonLabel(): string {
+    const comparisonLabel = `${this.powerCurve?.comparisonSeriesLabel || this.powerCurve?.latestSeriesLabel || 'Latest power activity'}`.trim();
+    return comparisonLabel
+      ? comparisonLabel.charAt(0).toLowerCase() + comparisonLabel.slice(1)
+      : 'latest power activity';
   }
 
   private resolveBenchmarkStats(): PowerCurveBenchmarkStat[] {

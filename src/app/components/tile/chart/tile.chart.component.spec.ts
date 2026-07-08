@@ -546,8 +546,11 @@ describe('TileChartComponent', () => {
     component.chartType = DASHBOARD_POWER_CURVE_CHART_TYPE as any;
     component.tileName = 'Running Power Curve';
     component.powerCurve = powerCurve as any;
+    component.powerCurveCompareMode = 'best30d';
     component.showActions = true;
     component.eventFilters = { range: '1y', activityTypes: [] };
+    const compareModes: string[] = [];
+    component.powerCurveCompareModeChange.subscribe(mode => compareModes.push(mode));
 
     fixture.detectChanges();
 
@@ -559,6 +562,11 @@ describe('TileChartComponent', () => {
     const filters = getEventFiltersComponent();
     expect(filters.eventFilters).toEqual(component.eventFilters);
     expect(filters.showActivityFilter).toBe(false);
+    const compareSelector = getRangeSelectorComponents().find(selector => selector.ariaLabel === 'Select Power Curve comparison');
+    expect(compareSelector).toBeTruthy();
+    expect(compareSelector?.value).toBe('best30d');
+    compareSelector?.valueChange.emit('best90d');
+    expect(compareModes).toEqual(['best90d']);
   });
 
   it('should offset chart loading shades when top header controls are shown', () => {

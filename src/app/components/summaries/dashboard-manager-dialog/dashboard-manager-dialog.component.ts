@@ -320,7 +320,7 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
     [DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE]: 'Weekly easy/moderate/hard intensity split (Power or HR fallback).',
     [DASHBOARD_EFFICIENCY_TREND_CHART_TYPE]: 'Weekly duration-weighted power/heart-rate efficiency trend.',
     [DASHBOARD_SLEEP_TREND_CHART_TYPE]: 'Sleep duration and stages by connected source.',
-    [DASHBOARD_POWER_CURVE_CHART_TYPE]: 'Best power envelope with latest power activity comparison.',
+    [DASHBOARD_POWER_CURVE_CHART_TYPE]: 'Best power envelope with latest activity or recent-best comparison.',
   };
   public readonly kpiChartIconByType: Record<DashboardKpiChartType, string> = {
     [DASHBOARD_ACWR_KPI_CHART_TYPE]: 'monitoring',
