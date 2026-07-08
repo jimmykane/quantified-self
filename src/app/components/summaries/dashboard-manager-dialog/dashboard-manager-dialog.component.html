@@ -242,6 +242,18 @@
         <section class="dashboard-manager-section" #mapSection>
           <div class="dashboard-manager-fields-grid">
             <mat-form-field appearance="outline" class="dashboard-manager-full-width">
+              <mat-label>Map source</mat-label>
+              <mat-icon matPrefix>layers</mat-icon>
+              <mat-select [value]="mapSource" (selectionChange)="onMapSourceChange($event.value)">
+                @for (sourceOption of mapSourceOptions; track sourceOption.value) {
+                <mat-option [value]="sourceOption.value">
+                  {{ sourceOption.label }}
+                  <span class="dashboard-manager-option-hint">{{ sourceOption.description }}</span>
+                </mat-option>
+                }
+              </mat-select>
+            </mat-form-field>
+            <mat-form-field appearance="outline" class="dashboard-manager-full-width">
               <mat-label>Map style</mat-label>
               <mat-icon matPrefix>map</mat-icon>
               <mat-select #mapStyleSelect [value]="mapStyle" (selectionChange)="mapStyle = $event.value">
@@ -250,9 +262,16 @@
                 }
               </mat-select>
             </mat-form-field>
+            @if (mapSource === 'events') {
             <mat-slide-toggle class="dashboard-manager-map-toggle" [checked]="mapClusterMarkers" (change)="mapClusterMarkers = $event.checked">
               Cluster markers
             </mat-slide-toggle>
+            } @else {
+            <mat-slide-toggle class="dashboard-manager-map-toggle" [checked]="mapShowRouteEndpointMarkers" (change)="mapShowRouteEndpointMarkers = $event.checked">
+              Show start/end markers
+            </mat-slide-toggle>
+            }
+            @if (mapSource === 'events') {
             <mat-form-field appearance="outline" class="dashboard-manager-full-width">
               <mat-label>Tile date range</mat-label>
               <mat-icon matPrefix>date_range</mat-icon>
@@ -267,6 +286,7 @@
                 (selectedActivityTypesChange)="onMapEventActivityTypesChange($event)">
               </app-activity-types-multi-select>
             </div>
+            }
           </div>
 
           @if (isMapOptionDisabled()) {
@@ -274,7 +294,11 @@
           }
 
           <p class="dashboard-manager-hint">
+            @if (mapSource === 'routes') {
+            Routes maps show recent saved route previews.
+            } @else {
             The map tile stays reactive to dashboard date-range and filters.
+            }
           </p>
         </section>
         }

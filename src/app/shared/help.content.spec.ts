@@ -75,24 +75,33 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('KPI');
     expect(gettingStartedSection?.content).toContain('Custom');
     expect(gettingStartedSection?.content).toContain('Map');
-    expect(gettingStartedSection?.content).toContain('one map tile');
+    expect(gettingStartedSection?.content).toContain('one activity map and one saved-routes map');
     expect(gettingStartedSection?.content).toContain('Event search filters only the dashboard event table');
     expect(gettingStartedSection?.content).toContain('Custom** charts use their own tile date-range and activity filters');
-    expect(gettingStartedSection?.content).toContain('Map** tiles use their own tile date-range and activity filters');
+    expect(gettingStartedSection?.content).toContain('Map** tiles can use activity events or saved route previews');
+    expect(gettingStartedSection?.content).toContain('Routes** map tiles show recent saved routes from lightweight route previews');
     expect(gettingStartedSection?.content).toContain('derived tiles stay independent from event table filters and custom/map tile filters');
     expect(gettingStartedSection?.content).toContain('dashboard can add the **Sleep** tile once');
     expect(gettingStartedSection?.content).toContain('add it manually from Dashboard manager');
     expect(gettingStartedSection?.content).toContain('removing an auto-added Sleep tile prevents future automatic Sleep tile adds');
-    expect(gettingStartedSection?.content).toContain('default curated chart set');
+    expect(gettingStartedSection?.content).toContain('recommended default dashboard starts lean with **Form/TSS**, **Intensity Distribution**');
+    expect(gettingStartedSection?.content).toContain('lean default curated chart set');
     expect(gettingStartedSection?.content).toContain('KPI row set automatically once');
-    expect(gettingStartedSection?.content).toContain('auto-added curated chart or KPI prevents that chart from being suggested again');
+    expect(gettingStartedSection?.content).toContain('dashboard can also add a **Routes** map once saved routes have generated previews');
+    expect(gettingStartedSection?.content).toContain('auto-added curated chart, KPI, or Routes map prevents that tile from being suggested again');
     expect(gettingStartedSection?.content).toContain('bulk actions can add the recommended default dashboard');
     expect(gettingStartedSection?.content).toContain('add every available preset tile');
     expect(gettingStartedSection?.content).toContain('**Uploaded activities**');
     expect(gettingStartedSection?.content).toContain('current-state set: **Load Status**, **Form Now**, **Fitness Trend**, **Fatigue Trend**, **Recovery Debt**, and **Training Balance**');
     expect(gettingStartedSection?.content).toContain('Additional KPI rows such as **Fitness (CTL)**, **Fatigue (ATL)**');
+    expect(gettingStartedSection?.content).toContain('groups chart and map tiles by intent');
+    expect(gettingStartedSection?.content).toContain('**Training State**, **Performance & Power**, **Activity Overview**');
+    expect(gettingStartedSection?.content).toContain('Custom charts are placed in those dashboard sections automatically');
+    expect(gettingStartedSection?.content).toContain('chart-aware default sizes');
+    expect(gettingStartedSection?.content).toContain('Empty editable dashboards show lightweight section guidance');
     expect(gettingStartedSection?.content).toContain('**Cycling Power Curve** and **Running Power Curve** are curated event-backed charts');
     expect(gettingStartedSection?.content).toContain('defaults to **1y**');
+    expect(gettingStartedSection?.content).toContain('latest matching activity or a saved recent-best comparison window');
     expect(gettingStartedSection?.content).toContain('**Cycling Power Curve** joins that auto-add flow only after a cycling or mountain biking event');
     expect(gettingStartedSection?.content).toContain('**Running Power Curve** does the same for running or trail running');
   });
@@ -215,6 +224,7 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('Cycling Power Curve');
     expect(gettingStartedSection?.content).toContain('Running Power Curve');
     expect(gettingStartedSection?.content).toContain("each event's stored PowerCurve stat");
+    expect(gettingStartedSection?.content).toContain('latest matching activity, best last 30d, or best last 90d');
     expect(gettingStartedSection?.content).toContain('Cycling and running power data stay in separate tiles');
     expect(gettingStartedSection?.content).toContain('saved per dashboard tile');
     expect(gettingStartedSection?.content).not.toContain('**Sleep** shows connected-source sleep duration');
@@ -306,6 +316,8 @@ describe('help.content', () => {
     expect(uploadsSection?.content).toContain('Saved routes open from **Routes** with the details action.');
     expect(uploadsSection?.content).toContain('waypoints and turn instructions');
     expect(uploadsSection?.content).toContain('parsed points and streams are not saved back to Firestore');
+    expect(uploadsSection?.content).toContain('lightweight encoded route preview for route-table thumbnails and dashboard route maps');
+    expect(uploadsSection?.content).toContain('older saved routes need a reprocess or controlled backfill before they appear with previews');
     expect(uploadsSection?.links).toContainEqual({
       label: 'FIT and GPX Route Files',
       icon: 'route',

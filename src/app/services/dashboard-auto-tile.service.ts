@@ -19,6 +19,8 @@ import {
   DASHBOARD_AUTO_TILE_CURATED_SOURCE,
   DASHBOARD_AUTO_TILE_POWER_CURVE_ID,
   DASHBOARD_AUTO_TILE_RUNNING_POWER_CURVE_ID,
+  DASHBOARD_AUTO_TILE_ROUTE_PREVIEW_ID,
+  DASHBOARD_AUTO_TILE_ROUTE_PREVIEW_SOURCE,
   DASHBOARD_AUTO_TILE_SLEEP_TREND_ID,
   DASHBOARD_AUTO_TILE_SLEEP_TREND_SOURCE,
   DASHBOARD_AUTO_TILE_KPI_ID_BY_CHART_TYPE,
@@ -27,22 +29,19 @@ import {
   buildDashboardCuratedAutoTile,
   buildDashboardKpiAutoTile,
   buildDashboardPowerCurveAutoTile,
+  buildDashboardRoutePreviewAutoTile,
   buildDashboardSleepTrendAutoTile,
   ensureDashboardAutoTiles,
   isDashboardCuratedAutoTile,
   isDashboardKpiAutoTile,
+  isDashboardRoutePreviewTile,
   isDashboardSleepTrendTile,
   markDashboardAutoTileAdded,
   markDashboardAutoTileDismissed,
-  type DashboardDefaultCuratedAutoChartType,
-  type DashboardDefaultCuratedChartType,
 } from '../helpers/dashboard-auto-tile.helper';
 import {
-  DASHBOARD_POWER_CURVE_CHART_TYPE,
-  DASHBOARD_RECOVERY_NOW_CHART_TYPE,
-  DASHBOARD_SLEEP_TREND_CHART_TYPE,
+  getDefaultDashboardCuratedChartDefinitions,
   getDefaultDashboardKpiChartDefinitions,
-  getDashboardCuratedChartDefinitions,
 } from '../helpers/dashboard-special-chart-types';
 import { cloneDashboardTileEventFilters } from '../helpers/dashboard-tile-event-filters.helper';
 import { cloneDashboardChartTileDisplaySettingsForChartType } from '../helpers/dashboard-chart-display-settings.helper';
@@ -53,6 +52,7 @@ import {
 } from '../helpers/dashboard-power-curve-scope.helper';
 import { AppSleepService } from './app.sleep.service';
 import { AppEventService } from './app.event.service';
+import { AppRouteService } from './app.route.service';
 import { AppUserService } from './app.user.service';
 import { LoggerService } from './logger.service';
 
@@ -62,6 +62,7 @@ export interface DashboardAutoTileRule {
   id: string;
   label: string;
   source: string;
+  noun?: 'chart' | 'map' | 'tile';
   qualifies: (eligibility: DashboardAutoTileEligibility) => boolean;
   isPresent: (tiles: readonly TileSettingsInterface[]) => boolean;
   createTile: (order: number) => TileSettingsInterface;
@@ -81,13 +82,9 @@ const DASHBOARD_KPI_AUTO_TILE_RULES: DashboardAutoTileRule[] = getDefaultDashboa
   createTile: (order) => buildDashboardKpiAutoTile(definition.chartType, order),
 }));
 
-const DASHBOARD_DEFAULT_CURATED_AUTO_TILE_RULES: DashboardAutoTileRule[] = getDashboardCuratedChartDefinitions()
-  .filter(definition => (
-    definition.chartType !== DASHBOARD_SLEEP_TREND_CHART_TYPE
-    && definition.chartType !== DASHBOARD_POWER_CURVE_CHART_TYPE
-  ))
+const DASHBOARD_DEFAULT_CURATED_AUTO_TILE_RULES: DashboardAutoTileRule[] = getDefaultDashboardCuratedChartDefinitions()
   .map((definition) => {
-    const chartType = definition.chartType as DashboardDefaultCuratedAutoChartType;
+    const chartType = definition.chartType;
     return {
       id: DASHBOARD_AUTO_TILE_CURATED_ID_BY_CHART_TYPE[chartType],
       label: buildDashboardCuratedAutoTile(chartType, 0).name,
@@ -115,6 +112,14 @@ export const DASHBOARD_AUTO_TILE_RULES: readonly DashboardAutoTileRule[] = [{
   qualifies: (eligibility) => eligibility[DASHBOARD_AUTO_TILE_SLEEP_TREND_ID] === true,
   isPresent: (tiles) => tiles.some(tile => isDashboardSleepTrendTile(tile)),
   createTile: (order) => buildDashboardSleepTrendAutoTile(order),
+}, {
+  id: DASHBOARD_AUTO_TILE_ROUTE_PREVIEW_ID,
+  label: 'Routes',
+  source: DASHBOARD_AUTO_TILE_ROUTE_PREVIEW_SOURCE,
+  noun: 'map',
+  qualifies: (eligibility) => eligibility[DASHBOARD_AUTO_TILE_ROUTE_PREVIEW_ID] === true,
+  isPresent: (tiles) => tiles.some(tile => isDashboardRoutePreviewTile(tile)),
+  createTile: (order) => buildDashboardRoutePreviewAutoTile(order),
 }, ...DASHBOARD_DEFAULT_CURATED_AUTO_TILE_RULES, ...DASHBOARD_POWER_CURVE_AUTO_TILE_RULES, ...DASHBOARD_KPI_AUTO_TILE_RULES];
 
 @Injectable({
@@ -123,6 +128,7 @@ export const DASHBOARD_AUTO_TILE_RULES: readonly DashboardAutoTileRule[] = [{
 export class DashboardAutoTileService {
   private sleepService = inject(AppSleepService);
   private eventService = inject(AppEventService);
+  private routeService = inject(AppRouteService);
   private userService = inject(AppUserService);
   private snackBar = inject(MatSnackBar);
   private logger = inject(LoggerService);
@@ -166,6 +172,16 @@ export class DashboardAutoTileService {
       },
       error: (error) => {
         this.logger.warn('[DashboardAutoTileService] Failed to watch sleep auto-tile eligibility', error);
+        scheduleApply();
+      },
+    }));
+    subscription.add(this.routeService.watchHasAnyRoutePreview(uid).subscribe({
+      next: (hasRoutePreview) => {
+        eligibility[DASHBOARD_AUTO_TILE_ROUTE_PREVIEW_ID] = hasRoutePreview;
+        scheduleApply();
+      },
+      error: (error) => {
+        this.logger.warn('[DashboardAutoTileService] Failed to watch route preview auto-tile eligibility', error);
         scheduleApply();
       },
     }));
@@ -295,13 +311,13 @@ export class DashboardAutoTileService {
       dashboardSettings.autoTiles = previousAutoTiles as AppDashboardSettingsInterface['autoTiles'];
       dashboardSettings.dismissedCuratedRecoveryNowTile = previousDismissedRecoveryTile;
       this.logger.error('[DashboardAutoTileService] Failed to undo dashboard auto tiles', error);
-      this.snackBar.open('Could not undo dashboard chart update', undefined, { duration: 3000 });
+      this.snackBar.open('Could not undo dashboard tile update', undefined, { duration: 3000 });
     }
   }
 
   private formatAddedMessage(rules: readonly DashboardAutoTileRule[]): string {
     if (rules.length === 1) {
-      return `Added ${rules[0].label} chart to your dashboard.`;
+      return `Added ${rules[0].label} ${rules[0].noun || 'chart'} to your dashboard.`;
     }
 
     const visibleLabels = rules.slice(0, 3).map(rule => rule.label);
@@ -309,7 +325,7 @@ export class DashboardAutoTileService {
     const labelSummary = remainingCount > 0
       ? `${visibleLabels.join(', ')}, and ${remainingCount} more`
       : visibleLabels.join(', ');
-    return `Added ${rules.length} dashboard charts: ${labelSummary}.`;
+    return `Added ${rules.length} dashboard tiles: ${labelSummary}.`;
   }
 
   private persistDashboardTileState(
@@ -331,24 +347,20 @@ export class DashboardAutoTileService {
 
   private buildDefaultDashboardEligibility(user: AppUserInterface): DashboardAutoTileEligibility {
     return {
-      ...this.buildDefaultCuratedEligibility(user),
+      ...this.buildDefaultCuratedEligibility(),
       ...this.buildDefaultKpiEligibility(),
     };
   }
 
-  private buildDefaultCuratedEligibility(user: AppUserInterface): DashboardAutoTileEligibility {
-    const hasDismissedLegacyRecovery = user.settings?.dashboardSettings?.dismissedCuratedRecoveryNowTile === true;
-    return getDashboardCuratedChartDefinitions()
-      .filter(definition => (
-        definition.chartType !== DASHBOARD_SLEEP_TREND_CHART_TYPE
-        && definition.chartType !== DASHBOARD_POWER_CURVE_CHART_TYPE
-      ))
+  private buildDefaultCuratedEligibility(): DashboardAutoTileEligibility {
+    return getDefaultDashboardCuratedChartDefinitions()
       .reduce<DashboardAutoTileEligibility>((eligibility, definition) => {
-        const chartType = definition.chartType as DashboardDefaultCuratedChartType;
+        const chartType = definition.chartType;
         const id = DASHBOARD_AUTO_TILE_CURATED_ID_BY_CHART_TYPE[chartType];
-        eligibility[id] = chartType !== DASHBOARD_RECOVERY_NOW_CHART_TYPE || !hasDismissedLegacyRecovery;
+        eligibility[id] = true;
         return eligibility;
       }, {
+        [DASHBOARD_AUTO_TILE_ROUTE_PREVIEW_ID]: false,
         [DASHBOARD_AUTO_TILE_POWER_CURVE_ID]: false,
         [DASHBOARD_AUTO_TILE_RUNNING_POWER_CURVE_ID]: false,
       });

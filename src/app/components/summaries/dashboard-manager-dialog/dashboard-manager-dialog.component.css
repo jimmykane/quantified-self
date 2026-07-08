@@ -214,6 +214,13 @@
   margin-left: 1.45rem;
 }
 
+.dashboard-manager-option-hint {
+  display: block;
+  color: var(--mat-sys-on-surface-variant);
+  font-size: 0.78rem;
+  line-height: 1.25;
+}
+
 .dashboard-manager-option-warning {
   color: var(--mat-sys-error);
   font-size: 0.74rem;

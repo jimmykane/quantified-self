@@ -23,6 +23,7 @@ import {
   DASHBOARD_RECOVERY_NOW_CHART_TYPE,
   DASHBOARD_SLEEP_TREND_CHART_TYPE,
   DASHBOARD_TRAINING_BALANCE_KPI_CHART_TYPE,
+  getDefaultDashboardCuratedChartDefinitions,
   getDefaultDashboardKpiChartDefinitions,
   getDashboardCuratedChartDefinitions,
   getDashboardKpiChartDefinitions,
@@ -71,6 +72,15 @@ describe('dashboard-special-chart-types', () => {
     expect(isDashboardEventBackedSpecialChartType(DASHBOARD_POWER_CURVE_CHART_TYPE)).toBe(true);
     expect(isDashboardEventBackedSpecialChartType(DASHBOARD_FORM_CHART_TYPE)).toBe(false);
     expect(isDashboardEventBackedSpecialChartType(DASHBOARD_SLEEP_TREND_CHART_TYPE)).toBe(false);
+  });
+
+  it('returns the lean default curated chart definitions', () => {
+    const definitions = getDefaultDashboardCuratedChartDefinitions();
+
+    expect(definitions.map(definition => definition.chartType)).toEqual([
+      DASHBOARD_FORM_CHART_TYPE,
+      DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE,
+    ]);
   });
 
   it('returns KPI chart definitions and guards', () => {

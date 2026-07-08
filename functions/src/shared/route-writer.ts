@@ -10,7 +10,9 @@ import {
     RoutePointSummary,
     RouteStreamsJSON,
 } from '../../../shared/app-route.interface';
+import { RoutePreviewUtilities } from '@sports-alliance/sports-lib';
 import { FirestoreAdapter, LogAdapter, StorageAdapter } from './event-writer';
+import { isRoutePreviewReady } from './route-preview-ready';
 
 export interface OriginalRouteFile {
     data: unknown;
@@ -527,6 +529,7 @@ function summarizeRoute(routeJSON: RouteJSONInterface): FirestoreRouteSegmentJSO
 export function buildFirestoreRoutePayload(userID: string, routeFile: AppRouteInterface): FirestoreRouteJSON {
     const routeFileJSON: RouteFileJSONInterface = routeFile.toJSON();
     const routeSummaries = (Array.isArray(routeFileJSON.routes) ? routeFileJSON.routes : []).map(summarizeRoute);
+    const preview = RoutePreviewUtilities.buildRouteFilePreview(routeFileJSON);
     const stats = buildRouteFileStatsSummary(routeFileJSON.stats, routeSummaries);
     const streamTypes = Array.from(new Set(routeSummaries.flatMap(route => route.streamTypes))).sort();
     const activityTypes = Array.from(new Set(
@@ -551,6 +554,8 @@ export function buildFirestoreRoutePayload(userID: string, routeFile: AppRouteIn
         activityTypes,
         streamTypes,
         bounds: mergeBounds(routeSummaries.map(route => route.bounds)),
+        preview: preview || undefined,
+        previewReady: isRoutePreviewReady(preview),
         importedAt: new Date(),
         updatedAt: new Date(),
     });

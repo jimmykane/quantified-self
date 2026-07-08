@@ -128,3 +128,31 @@ section > :not(.tile-header-controls) {
 .drag-handle-indicator:active {
   cursor: grabbing;
 }
+
+@media (max-width: 640px) {
+  .tile-has-stacked-mobile-controls {
+    --tile-header-controls-height: 48px;
+  }
+
+  .tile-has-stacked-mobile-controls .tile-header-controls {
+    right: 2px;
+    top: 8px;
+    max-width: calc(100% - 16px);
+    flex-wrap: nowrap;
+    gap: 2px 3px;
+    justify-content: flex-end;
+  }
+
+  .tile-has-stacked-mobile-controls .tile-event-filter-controls {
+    flex: 0 0 auto;
+  }
+
+  .tile-has-stacked-mobile-controls .tile-local-range-selector {
+    --chart-range-selector-mobile-min-width: 52px;
+    --chart-range-selector-mobile-horizontal-padding: 7px;
+  }
+
+  .tile-has-stacked-mobile-controls app-power-curve-chart {
+    --power-curve-mobile-header-reserve-right: 214px;
+  }
+}

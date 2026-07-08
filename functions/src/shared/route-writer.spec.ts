@@ -122,6 +122,24 @@ describe('RouteWriter', () => {
         });
         expect(payload.routes[0]).not.toHaveProperty('points');
         expect(payload.routes[0]).not.toHaveProperty('streams');
+        expect(payload.preview).toMatchObject({
+            version: 1,
+            encoding: 'polyline5',
+            precision: 5,
+            sourcePointCount: 2,
+            pointCount: 2,
+            segments: [
+                expect.objectContaining({
+                    id: 'segment-1',
+                    name: 'Hills',
+                    activityType: 'Running',
+                    sourcePointCount: 2,
+                    pointCount: 2,
+                    encodedPolyline: expect.any(String),
+                }),
+            ],
+        });
+        expect(payload.previewReady).toBe(true);
     });
 
     it('builds top-level aggregate stats from route summaries', () => {

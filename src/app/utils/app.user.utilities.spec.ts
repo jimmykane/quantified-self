@@ -26,8 +26,8 @@ import {
     DASHBOARD_POWER_CURVE_CHART_TYPE,
     DASHBOARD_RECOVERY_NOW_CHART_TYPE,
     DASHBOARD_SLEEP_TREND_CHART_TYPE,
+    getDefaultDashboardCuratedChartDefinitions,
     getDefaultDashboardKpiChartDefinitions,
-    getDashboardCuratedChartDefinitions,
     isDashboardCuratedChartType,
     isDashboardKpiChartType,
     isDashboardSpecialChartType,
@@ -190,61 +190,41 @@ describe('AppUserUtilities', () => {
     });
 
     describe('fillMissingAppSettings', () => {
-        it('should include non-sleep and non-power curated tiles in default dashboard tiles', () => {
+        it('should include the lean curated tile set in default dashboard tiles', () => {
             const tiles = AppUserUtilities.getDefaultUserDashboardTiles() as any[];
-            const curatedDefinitions = getDashboardCuratedChartDefinitions()
-                .filter(definition => (
-                    definition.chartType !== DASHBOARD_SLEEP_TREND_CHART_TYPE
-                    && definition.chartType !== DASHBOARD_POWER_CURVE_CHART_TYPE
-                ));
+            const curatedDefinitions = getDefaultDashboardCuratedChartDefinitions();
             const curatedTiles = tiles.filter((tile: any) => (
                 tile?.type === TileTypes.Chart && isDashboardCuratedChartType(tile?.chartType)
             ));
 
             expect(curatedTiles.map(tile => tile.chartType)).toEqual(curatedDefinitions.map(definition => definition.chartType));
             expect(curatedTiles.map(tile => tile.name)).toEqual([
-                'Recovery',
                 'Form',
-                'Freshness Forecast',
                 'Intensity Distribution',
-                'Efficiency Trend',
             ]);
             curatedTiles.forEach((tile, index) => {
                 expect(tile).toMatchObject({
-                    order: 4 + index,
-                    size: { columns: 1, rows: 1 },
+                    order: index,
                     dataCategoryType: ChartDataCategoryTypes.DateType,
                     dataValueType: ChartDataValueTypes.Total,
                 });
                 expect(tile.eventFilters).toBeUndefined();
             });
-            expect(curatedTiles.find(tile => tile.chartType === DASHBOARD_RECOVERY_NOW_CHART_TYPE)).toMatchObject({
-                dataType: DataRecoveryTime.type,
-                dataTimeInterval: TimeIntervals.Auto,
-            });
             expect(curatedTiles.find(tile => tile.chartType === DASHBOARD_FORM_CHART_TYPE)).toMatchObject({
                 dataType: DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE,
                 dataTimeInterval: TimeIntervals.Daily,
+                size: { columns: 2, rows: 1 },
                 displaySettings: { formTimelineWindow: 'w' },
             });
-            [
-                DASHBOARD_FRESHNESS_FORECAST_CHART_TYPE,
-            ].forEach((chartType) => {
-                expect(curatedTiles.find(tile => tile.chartType === chartType)).toMatchObject({
-                    dataType: DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE,
-                    dataTimeInterval: TimeIntervals.Weekly,
-                });
+            expect(curatedTiles.find(tile => tile.chartType === DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE)).toMatchObject({
+                size: { columns: 1, rows: 1 },
+                dataType: DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE,
+                dataTimeInterval: TimeIntervals.Weekly,
+                displaySettings: { derivedChartRange: '1y' },
             });
-            [
-                DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE,
-                DASHBOARD_EFFICIENCY_TREND_CHART_TYPE,
-            ].forEach((chartType) => {
-                expect(curatedTiles.find(tile => tile.chartType === chartType)).toMatchObject({
-                    dataType: DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE,
-                    dataTimeInterval: TimeIntervals.Weekly,
-                    displaySettings: { derivedChartRange: '1y' },
-                });
-            });
+            expect(curatedTiles.some(tile => tile.chartType === DASHBOARD_RECOVERY_NOW_CHART_TYPE)).toBe(false);
+            expect(curatedTiles.some(tile => tile.chartType === DASHBOARD_FRESHNESS_FORECAST_CHART_TYPE)).toBe(false);
+            expect(curatedTiles.some(tile => tile.chartType === DASHBOARD_EFFICIENCY_TREND_CHART_TYPE)).toBe(false);
         });
 
         it('should not include sleep tile in default dashboard tiles', () => {
@@ -489,11 +469,7 @@ describe('AppUserUtilities', () => {
 
             expect(defaultChart.eventFilters).toEqual({ range: '90d', activityTypes: [] });
             expect(defaultMap.eventFilters).toEqual({ range: '90d', activityTypes: [] });
-            dashboardTiles
-                .filter(tile => tile.type === TileTypes.Map || !isDashboardSpecialChartType(tile.chartType))
-                .forEach(tile => {
-                    expect(tile.eventFilters).toEqual({ range: '90d', activityTypes: [] });
-                });
+            expect(dashboardTiles.some(tile => tile.type === TileTypes.Map || !isDashboardSpecialChartType(tile.chartType))).toBe(false);
             const powerCurveTile = dashboardTiles.find(tile => tile.chartType === DASHBOARD_POWER_CURVE_CHART_TYPE) as any;
             expect(powerCurveTile).toBeUndefined();
         });
@@ -542,6 +518,158 @@ describe('AppUserUtilities', () => {
                 range: '1y',
                 activityTypes: [ActivityTypes.Cycling]
             });
+            expect((mapTile as any).mapSource).toBe('events');
+        });
+
+        it('should preserve route map source and remove event filters from route preview map tiles', () => {
+            const user = {
+                settings: {
+                    dashboardSettings: {
+                        tiles: [
+                            {
+                                type: TileTypes.Map,
+                                order: 0,
+                                name: 'Routes',
+                                mapSource: 'routes',
+                                mapStyle: 'default',
+                                mapTheme: 'normal',
+                                showHeatMap: false,
+                                clusterMarkers: false,
+                                size: { columns: 2, rows: 2 },
+                                eventFilters: { range: 'all', activityTypes: [ActivityTypes.Cycling] }
+                            }
+                        ]
+                    }
+                }
+            } as unknown as User;
+
+            const settings = AppUserUtilities.fillMissingAppSettings(user);
+            const [routeMapTile] = settings.dashboardSettings?.tiles || [];
+
+            expect((routeMapTile as any).mapSource).toBe('routes');
+            expect((routeMapTile as any).eventFilters).toBeUndefined();
+            expect((routeMapTile as any).showRouteEndpointMarkers).toBe(true);
+            expect((routeMapTile as any).size).toEqual({ columns: 2, rows: 1 });
+        });
+
+        it('should compact generated dashboard map tiles to one row', () => {
+            const user = {
+                settings: {
+                    dashboardSettings: {
+                        tiles: [
+                            {
+                                type: TileTypes.Map,
+                                order: 0,
+                                name: 'Clustered HeatMap',
+                                mapSource: 'events',
+                                mapStyle: 'default',
+                                mapTheme: 'normal',
+                                showHeatMap: true,
+                                clusterMarkers: true,
+                                size: { columns: 2, rows: 2 },
+                            },
+                            {
+                                type: TileTypes.Map,
+                                order: 1,
+                                name: 'Routes',
+                                mapSource: 'routes',
+                                mapStyle: 'default',
+                                mapTheme: 'normal',
+                                showHeatMap: false,
+                                clusterMarkers: false,
+                                size: { columns: 2, rows: 2 },
+                            },
+                        ],
+                    },
+                },
+            } as unknown as User;
+
+            const settings = AppUserUtilities.fillMissingAppSettings(user);
+            const [eventMapTile, routeMapTile] = settings.dashboardSettings?.tiles || [];
+
+            expect((eventMapTile as any).size).toEqual({ columns: 1, rows: 1 });
+            expect((routeMapTile as any).size).toEqual({ columns: 2, rows: 1 });
+        });
+
+        it('should preserve non-generated dashboard map tile sizes', () => {
+            const user = {
+                settings: {
+                    dashboardSettings: {
+                        tiles: [
+                            {
+                                type: TileTypes.Map,
+                                order: 0,
+                                name: 'Routes',
+                                mapSource: 'routes',
+                                mapStyle: 'default',
+                                mapTheme: 'normal',
+                                showHeatMap: false,
+                                clusterMarkers: false,
+                                size: { columns: 3, rows: 2 },
+                            },
+                            {
+                                type: TileTypes.Map,
+                                order: 1,
+                                name: 'Clustered HeatMap',
+                                mapSource: 'events',
+                                mapStyle: 'default',
+                                mapTheme: 'normal',
+                                showHeatMap: true,
+                                clusterMarkers: true,
+                                size: { columns: 3, rows: 2 },
+                            },
+                        ],
+                    },
+                },
+            } as unknown as User;
+
+            const settings = AppUserUtilities.fillMissingAppSettings(user);
+            const [routeMapTile, eventMapTile] = settings.dashboardSettings?.tiles || [];
+
+            expect((routeMapTile as any).size).toEqual({ columns: 3, rows: 2 });
+            expect((eventMapTile as any).size).toEqual({ columns: 3, rows: 2 });
+        });
+
+        it('should preserve explicit route endpoint marker preferences and drop them from event maps', () => {
+            const user = {
+                settings: {
+                    dashboardSettings: {
+                        tiles: [
+                            {
+                                type: TileTypes.Map,
+                                order: 0,
+                                name: 'Routes',
+                                mapSource: 'routes',
+                                mapStyle: 'default',
+                                mapTheme: 'normal',
+                                showHeatMap: false,
+                                clusterMarkers: false,
+                                showRouteEndpointMarkers: false,
+                                size: { columns: 2, rows: 2 },
+                            },
+                            {
+                                type: TileTypes.Map,
+                                order: 1,
+                                name: 'Map',
+                                mapSource: 'events',
+                                mapStyle: 'default',
+                                mapTheme: 'normal',
+                                showHeatMap: true,
+                                clusterMarkers: true,
+                                showRouteEndpointMarkers: true,
+                                size: { columns: 1, rows: 1 },
+                            }
+                        ]
+                    }
+                }
+            } as unknown as User;
+
+            const settings = AppUserUtilities.fillMissingAppSettings(user);
+            const [routesMap, eventsMap] = settings.dashboardSettings?.tiles || [];
+
+            expect((routesMap as any).showRouteEndpointMarkers).toBe(false);
+            expect((routesMap as any).size).toEqual({ columns: 2, rows: 1 });
+            expect((eventsMap as any).showRouteEndpointMarkers).toBeUndefined();
         });
 
         it('should remove event filters from curated and derived chart tiles', () => {
@@ -937,7 +1065,7 @@ describe('AppUserUtilities', () => {
             expect(settings.dashboardSettings?.dismissedCuratedRecoveryNowTile).toBe(true);
         });
 
-        it('should keep only one map tile and preserve the first map by order', () => {
+        it('should keep one map tile per source and preserve the first map by order', () => {
             const user = {
                 settings: {
                     dashboardSettings: {
@@ -967,11 +1095,35 @@ describe('AppUserUtilities', () => {
                                 type: TileTypes.Map,
                                 order: 0,
                                 name: 'Map-first',
+                                mapSource: 'events',
                                 mapStyle: 'outdoors',
                                 mapTheme: 'normal',
                                 showHeatMap: true,
                                 clusterMarkers: true,
                                 size: { columns: 1, rows: 1 }
+                            },
+                            {
+                                type: TileTypes.Map,
+                                order: 3,
+                                name: 'Routes-first',
+                                mapSource: 'routes',
+                                mapStyle: 'default',
+                                mapTheme: 'normal',
+                                showHeatMap: false,
+                                clusterMarkers: false,
+                                eventFilters: { range: 'all', activityTypes: [ActivityTypes.Cycling] },
+                                size: { columns: 2, rows: 2 }
+                            },
+                            {
+                                type: TileTypes.Map,
+                                order: 4,
+                                name: 'Routes-later',
+                                mapSource: 'routes',
+                                mapStyle: 'satellite',
+                                mapTheme: 'normal',
+                                showHeatMap: false,
+                                clusterMarkers: false,
+                                size: { columns: 2, rows: 2 }
                             }
                         ]
                     }
@@ -982,9 +1134,15 @@ describe('AppUserUtilities', () => {
             const mapTiles = settings.dashboardSettings?.tiles?.filter((tile: any) => tile?.type === TileTypes.Map) || [];
             const chartTiles = settings.dashboardSettings?.tiles?.filter((tile: any) => tile?.type === TileTypes.Chart) || [];
 
-            expect(mapTiles).toHaveLength(1);
+            expect(mapTiles).toHaveLength(2);
             expect(mapTiles[0].name).toBe('Map-first');
+            expect(mapTiles[0].mapSource).toBe('events');
             expect(mapTiles[0].mapStyle).toBe('outdoors');
+            expect(mapTiles[1].name).toBe('Routes-first');
+            expect(mapTiles[1].mapSource).toBe('routes');
+            expect(mapTiles[1].eventFilters).toBeUndefined();
+            expect(mapTiles[1].showRouteEndpointMarkers).toBe(true);
+            expect(mapTiles[1].size).toEqual({ columns: 2, rows: 2 });
             expect(chartTiles).toHaveLength(1);
             expect(chartTiles[0].name).toBe('Distance');
         });

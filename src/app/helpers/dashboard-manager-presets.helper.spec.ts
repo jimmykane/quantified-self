@@ -28,15 +28,15 @@ import {
 import { getDashboardPowerCurveActivityTypes } from './dashboard-power-curve-scope.helper';
 
 describe('dashboard-manager-presets.helper', () => {
-  it('exposes the expanded preset catalog with 31 unique definitions', () => {
+  it('exposes the expanded preset catalog with 32 unique definitions', () => {
     const definitions = getDashboardManagerPresetDefinitions();
 
-    expect(definitions).toHaveLength(31);
-    expect(new Set(definitions.map(definition => definition.id)).size).toBe(31);
+    expect(definitions).toHaveLength(32);
+    expect(new Set(definitions.map(definition => definition.id)).size).toBe(32);
     expect(definitions.filter(definition => definition.category === 'curated')).toHaveLength(8);
     expect(definitions.filter(definition => definition.category === 'kpi')).toHaveLength(15);
     expect(definitions.filter(definition => definition.category === 'custom')).toHaveLength(7);
-    expect(definitions.filter(definition => definition.category === 'map')).toHaveLength(1);
+    expect(definitions.filter(definition => definition.category === 'map')).toHaveLength(2);
     expect(definitions.map(definition => definition.id)).toContain(DASHBOARD_MANAGER_PRESET_IDS.CURATED_SLEEP);
     expect(definitions.map(definition => definition.id)).toContain(DASHBOARD_MANAGER_PRESET_IDS.CURATED_POWER_CURVE);
     expect(definitions.map(definition => definition.id)).toContain(DASHBOARD_MANAGER_PRESET_IDS.CURATED_RUNNING_POWER_CURVE);
@@ -154,7 +154,12 @@ describe('dashboard-manager-presets.helper', () => {
     const defaultMap = buildDashboardManagerPresetTile({
       presetId: DASHBOARD_MANAGER_PRESET_IDS.MAP_DEFAULT_CLUSTERED,
       order: 4,
-      size: { columns: 2, rows: 2 },
+      size: { columns: 1, rows: 1 },
+    });
+    const routesMap = buildDashboardManagerPresetTile({
+      presetId: DASHBOARD_MANAGER_PRESET_IDS.MAP_ROUTES_PREVIEW,
+      order: 5,
+      size: { columns: 2, rows: 1 },
     });
 
     expect(durationPie).toMatchObject({
@@ -174,12 +179,24 @@ describe('dashboard-manager-presets.helper', () => {
     });
     expect(defaultMap).toMatchObject({
       type: TileTypes.Map,
+      mapSource: 'events',
       mapStyle: 'default',
       clusterMarkers: true,
       order: 4,
-      size: { columns: 2, rows: 2 },
+      size: { columns: 1, rows: 1 },
       eventFilters: { range: '90d', activityTypes: [] },
     });
+    expect(routesMap).toMatchObject({
+      type: TileTypes.Map,
+      name: 'Routes',
+      mapSource: 'routes',
+      mapStyle: 'default',
+      clusterMarkers: false,
+      showRouteEndpointMarkers: true,
+      order: 5,
+      size: { columns: 2, rows: 1 },
+    });
+    expect(routesMap).not.toHaveProperty('eventFilters');
   });
 
   it('builds deterministic KPI preset tiles', () => {

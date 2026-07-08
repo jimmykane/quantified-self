@@ -1,4 +1,5 @@
-<section [class.tile-chart-kpi-row]="compactKpiRow" [class.tile-has-header-controls]="showHeaderControls && !compactKpiRow">
+<section [class.tile-chart-kpi-row]="compactKpiRow" [class.tile-has-header-controls]="showHeaderControls && !compactKpiRow"
+  [class.tile-has-stacked-mobile-controls]="showStackedMobileHeaderControls && !compactKpiRow">
   @if (showHeaderControls) {
   <div class="tile-header-controls">
     @if (showEventFilters) {
@@ -19,6 +20,12 @@
     <app-chart-range-selector class="tile-local-range-selector" [options]="formTimelineWindowOptions"
       [value]="formTimelineWindow" ariaLabel="Select Form and TSS timeline window"
       (valueChange)="onFormTimelineWindowSelection($event)">
+    </app-chart-range-selector>
+    }
+    @if (showPowerCurveCompareSelector) {
+    <app-chart-range-selector class="tile-local-range-selector" [options]="powerCurveCompareModeOptions"
+      [value]="powerCurveCompareMode" ariaLabel="Select Power Curve comparison"
+      (valueChange)="onPowerCurveCompareModeSelection($event)">
     </app-chart-range-selector>
     }
     @if (showSleepRangeControls) {

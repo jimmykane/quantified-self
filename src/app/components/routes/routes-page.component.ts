@@ -93,6 +93,7 @@ import { AppUserService, GarminRouteSendContext } from '../../services/app.user.
 import { LoggerService } from '../../services/logger.service';
 import { AppWindowService } from '../../services/app.window.service';
 import { UploadRoutesComponent } from '../upload/upload-routes/upload-routes.component';
+import { RoutePreviewThumbnailComponent } from './route-preview-thumbnail/route-preview-thumbnail.component';
 import { AppAppSettingsInterface, AppUserInterface } from '../../models/app-user.interface';
 import { AppBreakpoints } from '../../constants/breakpoints';
 import { ROUTE_DELIVERY_SYNC_ROUTE_IDS } from '@shared/route-delivery-sync-routes';
@@ -100,6 +101,7 @@ import { isRouteDeliverySyncRouteUIDAllowlisted } from '@shared/route-delivery-s
 
 interface RoutePageRouteViewModel {
     route: FirestoreRouteJSON;
+    routePreview: FirestoreRouteJSON['preview'] | null;
     name: string;
     routeDate: Date | null;
     routeDateSortMs: number | null;
@@ -191,7 +193,7 @@ const PASSIVE_ROUTE_TABLE_TOOLTIP_MEDIA_QUERIES = ['(pointer: coarse)', '(hover:
 @Component({
     selector: 'app-routes-page',
     standalone: true,
-    imports: [SharedModule, UploadRoutesComponent],
+    imports: [SharedModule, UploadRoutesComponent, RoutePreviewThumbnailComponent],
     templateUrl: './routes-page.component.html',
     styleUrls: ['./routes-page.component.scss'],
 })
@@ -445,6 +447,7 @@ export class RoutesPageComponent implements OnInit {
     });
     readonly routeColumns = [
         'select',
+        'preview',
         'date',
         'name',
         'sourceService',
@@ -1998,6 +2001,7 @@ export class RoutesPageComponent implements OnInit {
         const suuntoSendMenuLabel = getSuuntoRouteSendMenuLabel(route);
         return {
             route,
+            routePreview: route.preview || null,
             name: routeName,
             routeDate,
             routeDateSortMs: routeDate ? routeDate.getTime() : null,

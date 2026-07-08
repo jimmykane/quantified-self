@@ -2,6 +2,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { UsageLimitExceededError } from '../utils';
 import { ServiceNames } from '@sports-alliance/sports-lib';
+import type * as admin from 'firebase-admin';
 
 // Mock dependencies using vi.hoisted
 const {
@@ -20,6 +21,7 @@ const {
     mockUploadDebugFile,
     mockCreateParsingOptions,
     mockEnqueueActivitySyncJobsForImportedEvent,
+    mockResolveFirebaseUserIDForGarminUserID,
     MockTerminalServiceAuthError,
     MockTokenRefreshSkippedForDeletedUserError,
     mockShouldSkipQueueWorkForDeletedUser,
@@ -50,6 +52,7 @@ const {
         mockUploadDebugFile: vi.fn(),
         mockCreateParsingOptions: vi.fn(() => ({ generateUnitStreams: false, deviceInfoMode: 'changes' })),
         mockEnqueueActivitySyncJobsForImportedEvent: vi.fn().mockResolvedValue({ queued: 1, skippedByReason: {} }),
+        mockResolveFirebaseUserIDForGarminUserID: vi.fn(),
         MockTerminalServiceAuthError,
         MockTokenRefreshSkippedForDeletedUserError,
         mockShouldSkipQueueWorkForDeletedUser: vi.fn().mockResolvedValue(false),
@@ -146,6 +149,7 @@ vi.mock('../queue-utils', () => ({
 // Mock parent queue functions
 vi.mock('../queue', () => ({
     addToQueueForGarmin: vi.fn(),
+    resolveFirebaseUserIDForGarminUserID: mockResolveFirebaseUserIDForGarminUserID,
     parseQueueItems: vi.fn(),
 }));
 
@@ -207,6 +211,7 @@ describe('Garmin Queue', () => { // Grouping for cleaner output
         mockCollectionGroup.mockReturnValue({ where: vi.fn().mockReturnValue(mockWhereReturn) });
 
         mockRequestGet.mockResolvedValue(new ArrayBuffer(8));
+        mockResolveFirebaseUserIDForGarminUserID.mockResolvedValue('firebase-user-id');
 
         // Force setEvent to fail
         vi.mocked(mockSetEvent).mockRejectedValue(new UsageLimitExceededError('Limit exceeded'));
@@ -248,7 +253,9 @@ describe('Garmin Queue', () => { // Grouping for cleaner output
                 token: 'abc',
                 userAccessToken: 'garmin-access-token',
                 callbackURL: 'https://callback?id=123&token=abc',
+                firebaseUserID: 'firebase-user-id',
             });
+            expect(mockResolveFirebaseUserIDForGarminUserID).toHaveBeenCalledWith('garmin-user-id');
             expect(res.status).toHaveBeenCalledWith(200);
         });
 
@@ -265,11 +272,20 @@ describe('Garmin Queue', () => { // Grouping for cleaner output
             req.body.activityFiles[0].callbackURL = 'https://callback?token=abc'; // No id
             await insertGarminAPIActivityFileToQueue(req, res);
             expect(res.status).toHaveBeenCalledWith(500);
+            expect(addToQueueForGarmin).not.toHaveBeenCalled();
         });
 
         it('should return 500 if addToQueueForGarmin fails', async () => {
             vi.mocked(addToQueueForGarmin).mockRejectedValue(new Error('Queue failure'));
             await insertGarminAPIActivityFileToQueue(req, res);
+            expect(res.status).toHaveBeenCalledWith(500);
+        });
+
+        it('should return 500 if queue insertion rejects with a falsey value', async () => {
+            vi.mocked(addToQueueForGarmin).mockRejectedValue(undefined);
+
+            await insertGarminAPIActivityFileToQueue(req, res);
+
             expect(res.status).toHaveBeenCalledWith(500);
         });
 
@@ -283,6 +299,138 @@ describe('Garmin Queue', () => { // Grouping for cleaner output
 
             await insertGarminAPIActivityFileToQueue(req, res);
 
+            expect(res.status).toHaveBeenCalledWith(200);
+        });
+
+        it('should resolve Firebase uid once for multiple files from the same Garmin user', async () => {
+            req.body.activityFiles = [
+                {
+                    userId: 'garmin-user-id',
+                    userAccessToken: 'garmin-access-token',
+                    fileType: 'FIT',
+                    callbackURL: 'https://callback?id=123&token=abc',
+                    startTimeInSeconds: 1000,
+                    manual: false,
+                },
+                {
+                    userId: 'garmin-user-id',
+                    userAccessToken: 'garmin-access-token',
+                    fileType: 'FIT',
+                    callbackURL: 'https://callback?id=456&token=def',
+                    startTimeInSeconds: 2000,
+                    manual: false,
+                },
+            ];
+
+            await insertGarminAPIActivityFileToQueue(req, res);
+
+            expect(mockResolveFirebaseUserIDForGarminUserID).toHaveBeenCalledTimes(1);
+            expect(mockResolveFirebaseUserIDForGarminUserID).toHaveBeenCalledWith('garmin-user-id');
+            expect(addToQueueForGarmin).toHaveBeenCalledTimes(2);
+            expect(addToQueueForGarmin).toHaveBeenCalledWith(expect.objectContaining({
+                activityFileID: '123',
+                firebaseUserID: 'firebase-user-id',
+            }));
+            expect(addToQueueForGarmin).toHaveBeenCalledWith(expect.objectContaining({
+                activityFileID: '456',
+                firebaseUserID: 'firebase-user-id',
+            }));
+            expect(res.status).toHaveBeenCalledWith(200);
+        });
+
+        it('should resolve Firebase uid once per distinct Garmin user', async () => {
+            req.body.activityFiles = [
+                {
+                    userId: 'garmin-user-1',
+                    userAccessToken: 'garmin-access-token-1',
+                    fileType: 'FIT',
+                    callbackURL: 'https://callback?id=123&token=abc',
+                    startTimeInSeconds: 1000,
+                    manual: false,
+                },
+                {
+                    userId: 'garmin-user-2',
+                    userAccessToken: 'garmin-access-token-2',
+                    fileType: 'FIT',
+                    callbackURL: 'https://callback?id=456&token=def',
+                    startTimeInSeconds: 2000,
+                    manual: false,
+                },
+                {
+                    userId: 'garmin-user-1',
+                    userAccessToken: 'garmin-access-token-1',
+                    fileType: 'FIT',
+                    callbackURL: 'https://callback?id=789&token=ghi',
+                    startTimeInSeconds: 3000,
+                    manual: false,
+                },
+            ];
+            mockResolveFirebaseUserIDForGarminUserID.mockImplementation(async (garminUserID: string) => `firebase-${garminUserID}`);
+
+            await insertGarminAPIActivityFileToQueue(req, res);
+
+            expect(mockResolveFirebaseUserIDForGarminUserID).toHaveBeenCalledTimes(2);
+            expect(addToQueueForGarmin).toHaveBeenCalledTimes(3);
+            expect(addToQueueForGarmin).toHaveBeenCalledWith(expect.objectContaining({
+                userID: 'garmin-user-1',
+                activityFileID: '123',
+                firebaseUserID: 'firebase-garmin-user-1',
+            }));
+            expect(addToQueueForGarmin).toHaveBeenCalledWith(expect.objectContaining({
+                userID: 'garmin-user-2',
+                activityFileID: '456',
+                firebaseUserID: 'firebase-garmin-user-2',
+            }));
+            expect(addToQueueForGarmin).toHaveBeenCalledWith(expect.objectContaining({
+                userID: 'garmin-user-1',
+                activityFileID: '789',
+                firebaseUserID: 'firebase-garmin-user-1',
+            }));
+            expect(res.status).toHaveBeenCalledWith(200);
+        });
+
+        it('should acknowledge and skip files when Garmin user no longer resolves to a Firebase uid', async () => {
+            mockResolveFirebaseUserIDForGarminUserID.mockResolvedValue(null);
+
+            await insertGarminAPIActivityFileToQueue(req, res);
+
+            expect(addToQueueForGarmin).not.toHaveBeenCalled();
+            expect(res.status).toHaveBeenCalledWith(200);
+        });
+
+        it('should return 500 when Firebase uid resolution fails', async () => {
+            mockResolveFirebaseUserIDForGarminUserID.mockRejectedValue(new Error('Firestore unavailable'));
+
+            await insertGarminAPIActivityFileToQueue(req, res);
+
+            expect(addToQueueForGarmin).not.toHaveBeenCalled();
+            expect(res.status).toHaveBeenCalledWith(500);
+        });
+
+        it('should cap concurrent Garmin queue inserts at 10', async () => {
+            req.body.activityFiles = Array.from({ length: 25 }, (_, index) => ({
+                userId: 'garmin-user-id',
+                userAccessToken: 'garmin-access-token',
+                fileType: 'FIT',
+                callbackURL: `https://callback?id=${index}&token=token-${index}`,
+                startTimeInSeconds: 1000 + index,
+                manual: false,
+            }));
+            let active = 0;
+            let maxActive = 0;
+            vi.mocked(addToQueueForGarmin).mockImplementation(async () => {
+                active += 1;
+                maxActive = Math.max(maxActive, active);
+                await new Promise((resolve) => setTimeout(resolve, 5));
+                active -= 1;
+                return { id: 'queued-doc' } as admin.firestore.DocumentReference;
+            });
+
+            await insertGarminAPIActivityFileToQueue(req, res);
+
+            expect(mockResolveFirebaseUserIDForGarminUserID).toHaveBeenCalledTimes(1);
+            expect(addToQueueForGarmin).toHaveBeenCalledTimes(25);
+            expect(maxActive).toBeLessThanOrEqual(10);
             expect(res.status).toHaveBeenCalledWith(200);
         });
     });

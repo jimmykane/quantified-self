@@ -66,6 +66,10 @@ describe('dashboard-power-curve.helper', () => {
     expect(context.matchedEventCount).toBe(2);
     expect(context.sourceEventCount).toBe(2);
     expect(context.latestEventId).toBe('latest');
+    expect(context.latestSeriesLabel).toBe('Latest power activity');
+    expect(context.compareMode).toBe('latest');
+    expect(context.comparisonSeriesLabel).toBe('Latest power activity');
+    expect(context.comparisonEventCount).toBe(1);
     expect(context.summaryPoints).toEqual([
       { duration: 60, power: 420, wattsPerKg: 5.3 },
       { duration: 300, power: 360, wattsPerKg: 4.6 },
@@ -73,6 +77,117 @@ describe('dashboard-power-curve.helper', () => {
     expect(context.series.map(series => series.seriesKey)).toEqual(['best', 'latest']);
     expect(context.series[0].label).toBe('Best in range');
     expect(context.series[1].label).toBe('Latest power activity');
+  });
+
+  it('carries a scoped latest activity series label into the context', () => {
+    const olderBest = makePowerCurveEvent({
+      id: 'older-best',
+      startDate: '2026-01-01T10:00:00.000Z',
+      points: [
+        { duration: 300, power: 360 },
+      ],
+    });
+    const latestRide = makePowerCurveEvent({
+      id: 'latest',
+      startDate: '2026-01-03T10:00:00.000Z',
+      points: [
+        { duration: 300, power: 330 },
+      ],
+    });
+
+    const context = buildDashboardPowerCurveContext([olderBest, latestRide], {
+      latestSeriesLabel: 'Latest cycling activity',
+    });
+
+    expect(context.latestSeriesLabel).toBe('Latest cycling activity');
+    expect(context.comparisonSeriesLabel).toBe('Latest cycling activity');
+    expect(context.series.map(series => series.label)).toEqual([
+      'Best in range',
+      'Latest cycling activity',
+    ]);
+  });
+
+  it('compares all-range best against best power in a recent window', () => {
+    const olderBest = makePowerCurveEvent({
+      id: 'older-best',
+      startDate: '2025-12-01T10:00:00.000Z',
+      points: [
+        { duration: 60, power: 520 },
+        { duration: 300, power: 430 },
+      ],
+    });
+    const recentBestFiveMinutes = makePowerCurveEvent({
+      id: 'recent-best-five',
+      startDate: '2026-01-20T10:00:00.000Z',
+      points: [
+        { duration: 60, power: 390 },
+        { duration: 300, power: 360 },
+      ],
+    });
+    const latestRide = makePowerCurveEvent({
+      id: 'latest',
+      startDate: '2026-01-28T10:00:00.000Z',
+      points: [
+        { duration: 60, power: 410 },
+        { duration: 300, power: 330 },
+      ],
+    });
+
+    const context = buildDashboardPowerCurveContext([olderBest, recentBestFiveMinutes, latestRide], {
+      compareMode: 'best30d',
+      nowMs: Date.UTC(2026, 0, 31, 12, 0, 0),
+    });
+
+    expect(context.compareMode).toBe('best30d');
+    expect(context.comparisonSeriesLabel).toBe('Best last 30d');
+    expect(context.comparisonEventCount).toBe(2);
+    expect(context.series.map(series => series.seriesKey)).toEqual(['best', 'comparisonBest']);
+    expect(context.series[0].points).toEqual([
+      { duration: 60, power: 520 },
+      { duration: 300, power: 430 },
+    ]);
+    expect(context.series[1].points).toEqual([
+      { duration: 60, power: 410 },
+      { duration: 300, power: 360 },
+    ]);
+  });
+
+  it('anchors recent comparison windows to the latest loaded activity by default', () => {
+    const olderBest = makePowerCurveEvent({
+      id: 'older-best',
+      startDate: '2024-01-01T10:00:00.000Z',
+      points: [
+        { duration: 60, power: 520 },
+        { duration: 300, power: 430 },
+      ],
+    });
+    const recentBestFiveMinutes = makePowerCurveEvent({
+      id: 'recent-best-five',
+      startDate: '2024-03-20T10:00:00.000Z',
+      points: [
+        { duration: 60, power: 390 },
+        { duration: 300, power: 360 },
+      ],
+    });
+    const latestRide = makePowerCurveEvent({
+      id: 'latest',
+      startDate: '2024-04-01T10:00:00.000Z',
+      points: [
+        { duration: 60, power: 410 },
+        { duration: 300, power: 330 },
+      ],
+    });
+
+    const context = buildDashboardPowerCurveContext([olderBest, recentBestFiveMinutes, latestRide], {
+      compareMode: 'best30d',
+    });
+
+    expect(context.comparisonEventCount).toBe(2);
+    expect(context.series.map(series => series.seriesKey)).toEqual(['best', 'comparisonBest']);
+    expect(context.series[1].points).toEqual([
+      { duration: 60, power: 410 },
+      { duration: 300, power: 360 },
+    ]);
   });
 
   it('uses one latest-and-best series when the latest activity is also the envelope', () => {
@@ -151,6 +266,10 @@ describe('dashboard-power-curve.helper', () => {
       summaryPoints: [],
       latestEventId: null,
       latestEventStartMs: null,
+      latestSeriesLabel: 'Latest power activity',
+      compareMode: 'latest',
+      comparisonSeriesLabel: 'Latest power activity',
+      comparisonEventCount: 0,
     });
   });
 });

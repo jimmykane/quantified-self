@@ -47,6 +47,7 @@ import type {
   AppDashboardChartTileDisplaySettingsInterface,
   AppDashboardChartTileSettingsInterface,
   AppDashboardMapTileSettingsInterface,
+  AppDashboardMapTileSource,
   AppDashboardSettingsInterface,
   AppDashboardTileEventFilterRange,
   AppDashboardTileEventFiltersInterface,
@@ -109,6 +110,12 @@ import {
   cloneDashboardChartTileDisplaySettingsForChartType,
   normalizeDashboardChartTileDisplaySettingsForChartType,
 } from '../../../helpers/dashboard-chart-display-settings.helper';
+import {
+  getDefaultDashboardChartTileSizeForChartType,
+  getDefaultDashboardMapTileSizeForSource,
+  cloneDashboardTileDefaultSize,
+  DASHBOARD_DEFAULT_TILE_SIZE,
+} from '../../../helpers/dashboard-tile-default-size.helper';
 import { ConfirmationDialogComponent } from '../../confirmation-dialog/confirmation-dialog.component';
 import { firstValueFrom, Subscription } from 'rxjs';
 import { take } from 'rxjs/operators';
@@ -118,6 +125,8 @@ import {
   DASHBOARD_AUTO_TILE_KPI_ID_BY_CHART_TYPE,
   DASHBOARD_AUTO_TILE_KPI_SOURCE,
   DASHBOARD_AUTO_TILE_POWER_CURVE_ID,
+  DASHBOARD_AUTO_TILE_ROUTE_PREVIEW_ID,
+  DASHBOARD_AUTO_TILE_ROUTE_PREVIEW_SOURCE,
   DASHBOARD_AUTO_TILE_SLEEP_TREND_ID,
   DASHBOARD_AUTO_TILE_SLEEP_TREND_SOURCE,
   DASHBOARD_AUTO_TILE_RECOVERY_NOW_ID,
@@ -311,7 +320,7 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
     [DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE]: 'Weekly easy/moderate/hard intensity split (Power or HR fallback).',
     [DASHBOARD_EFFICIENCY_TREND_CHART_TYPE]: 'Weekly duration-weighted power/heart-rate efficiency trend.',
     [DASHBOARD_SLEEP_TREND_CHART_TYPE]: 'Sleep duration and stages by connected source.',
-    [DASHBOARD_POWER_CURVE_CHART_TYPE]: 'Best power envelope with latest power activity comparison.',
+    [DASHBOARD_POWER_CURVE_CHART_TYPE]: 'Best power envelope with latest activity or recent-best comparison.',
   };
   public readonly kpiChartIconByType: Record<DashboardKpiChartType, string> = {
     [DASHBOARD_ACWR_KPI_CHART_TYPE]: 'monitoring',
@@ -352,6 +361,10 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
     { value: 'satellite', label: 'Satellite' },
     { value: 'outdoors', label: 'Outdoors' },
   ];
+  public readonly mapSourceOptions: Array<{ value: AppDashboardMapTileSource; label: string; description: string }> = [
+    { value: 'events', label: 'Activities', description: 'Activity markers and heatmap' },
+    { value: 'routes', label: 'Saved routes', description: 'Recent saved route previews' },
+  ];
   public readonly timeIntervalOptions: Array<{ label: string; value: TimeIntervals }> = [
     { label: 'Auto', value: TimeIntervals.Auto },
     { label: 'Daily', value: TimeIntervals.Daily },
@@ -381,7 +394,9 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
   public customEventActivityTypes = AppUserUtilities.getDefaultDashboardTileEventFilters().activityTypes;
 
   public mapStyle: MapStyleName = this.normalizeMapStyle(AppUserUtilities.getDefaultDashboardMapStyle());
+  public mapSource: AppDashboardMapTileSource = 'events';
   public mapClusterMarkers = true;
+  public mapShowRouteEndpointMarkers = true;
   public mapEventRange: AppDashboardTileEventFilterRange = AppUserUtilities.getDefaultDashboardTileEventFilters().range || DASHBOARD_TILE_EVENT_DEFAULT_RANGE;
   public mapEventActivityTypes = AppUserUtilities.getDefaultDashboardTileEventFilters().activityTypes;
   public presetCategory: DashboardManagerPresetCategory = 'curated';
@@ -700,7 +715,7 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
       return 'Already on dashboard.';
     }
 
-    if (definition.category === 'map' && this.isMapOptionDisabled()) {
+    if (definition.category === 'map' && this.isMapOptionDisabled(definition.mapSource)) {
       return 'Map tile already exists.';
     }
 
@@ -751,6 +766,11 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
     this.mapEventActivityTypes = activityTypes || [];
   }
 
+  onMapSourceChange(source: AppDashboardMapTileSource): void {
+    this.hapticsService.selection();
+    this.mapSource = source === 'routes' ? 'routes' : 'events';
+  }
+
   isCuratedOptionDisabled(chartType: DashboardCuratedChartType): boolean {
     if (chartType === DASHBOARD_POWER_CURVE_CHART_TYPE) {
       return this.isPowerCurveScopeOptionDisabled(this.curatedPowerCurveScope);
@@ -779,10 +799,11 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
     ));
   }
 
-  isMapOptionDisabled(): boolean {
+  isMapOptionDisabled(source: AppDashboardMapTileSource = this.mapSource): boolean {
     const editedOrder = this.mode === 'edit' ? this.editTileOrder : null;
     return this.dashboardTiles.some((tile) => (
       tile.type === TileTypes.Map
+      && ((tile as AppDashboardMapTileSettingsInterface).mapSource || 'events') === source
       && (editedOrder === null || tile.order !== editedOrder)
     ));
   }
@@ -858,7 +879,7 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
       }
 
       if (this.hasDuplicateMapTiles(clonedTiles)) {
-        this.saveError = 'Map tile can only be added once.';
+        this.saveError = 'Each map source can only be added once.';
         this.stopSaving();
         return;
       }
@@ -1021,8 +1042,10 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
     if (tile.type === TileTypes.Map) {
       const mapTile = tile as DashboardMapTileSettings;
       this.category = 'map';
+      this.mapSource = mapTile.mapSource === 'routes' ? 'routes' : 'events';
       this.mapStyle = this.normalizeMapStyle(mapTile.mapStyle);
       this.mapClusterMarkers = mapTile.clusterMarkers !== false;
+      this.mapShowRouteEndpointMarkers = mapTile.showRouteEndpointMarkers !== false;
       const mapFilters = normalizeDashboardTileEventFilters((mapTile as AppDashboardMapTileSettingsInterface).eventFilters);
       this.mapEventRange = mapFilters.range;
       this.mapEventActivityTypes = mapFilters.activityTypes || [];
@@ -1232,7 +1255,7 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
   ): TileSettingsInterface | null {
     if (this.category === 'map') {
       if (this.isMapOptionDisabled()) {
-        this.saveError = 'Map tile can only be added once.';
+        this.saveError = 'This map source already exists.';
         return null;
       }
       return this.buildMapTile(order, size, existingTile);
@@ -1359,20 +1382,37 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
     const defaultMapTile = AppUserUtilities.getDefaultUserDashboardMapTile() as DashboardMapTileSettings;
     const existingMapTile = existingTile?.type === TileTypes.Map ? existingTile as DashboardMapTileSettings : null;
     const existingName = `${existingMapTile?.name || ''}`.trim();
+    const existingMapSource = existingMapTile?.mapSource === 'routes' ? 'routes' : 'events';
+    const fallbackName = this.mapSource === 'routes' ? 'Routes' : `${defaultMapTile.name || 'Map'}`;
+    const tileName = existingMapTile && existingMapSource === this.mapSource && existingName
+      ? existingName
+      : fallbackName;
 
-    return {
+    const mapTile = {
       ...defaultMapTile,
       ...existingMapTile,
-      name: existingName || `${defaultMapTile.name || 'Map'}`,
+      name: tileName,
       type: TileTypes.Map,
       order,
       size,
+      mapSource: this.mapSource,
       mapStyle: this.mapStyle,
-      clusterMarkers: this.mapClusterMarkers,
+      clusterMarkers: this.mapSource === 'routes' ? false : this.mapClusterMarkers,
       mapTheme: existingMapTile?.mapTheme ?? defaultMapTile.mapTheme,
-      showHeatMap: existingMapTile?.showHeatMap ?? defaultMapTile.showHeatMap,
-      eventFilters: this.buildTileEventFilters(this.mapEventRange, this.mapEventActivityTypes),
+      showHeatMap: this.mapSource === 'routes' ? false : (existingMapTile?.showHeatMap ?? defaultMapTile.showHeatMap),
+      ...(this.mapSource === 'routes'
+        ? { showRouteEndpointMarkers: this.mapShowRouteEndpointMarkers }
+        : {}),
+      ...(this.mapSource === 'events'
+        ? { eventFilters: this.buildTileEventFilters(this.mapEventRange, this.mapEventActivityTypes) }
+        : {}),
     };
+    if (this.mapSource === 'routes') {
+      delete mapTile.eventFilters;
+    } else {
+      delete mapTile.showRouteEndpointMarkers;
+    }
+    return mapTile;
   }
 
   private buildCustomTile(
@@ -1416,6 +1456,7 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
   }
 
   private resetMapEventFilters(): void {
+    this.mapSource = 'events';
     const defaultFilters = AppUserUtilities.getDefaultDashboardTileEventFilters();
     this.mapEventRange = defaultFilters.range || DASHBOARD_TILE_EVENT_DEFAULT_RANGE;
     this.mapEventActivityTypes = [...(defaultFilters.activityTypes || [])];
@@ -1476,7 +1517,7 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
       .map((definition, index) => buildDashboardManagerPresetTile({
         presetId: definition.id,
         order: index,
-        size: this.resolveDefaultAddTileSize(),
+        size: this.resolveDefaultAddTileSize(definition),
       }));
   }
 
@@ -1485,7 +1526,9 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
     defaultTile: TileSettingsInterface,
   ): boolean {
     if (defaultTile.type === TileTypes.Map) {
-      return tile.type === TileTypes.Map;
+      return tile.type === TileTypes.Map
+        && ((tile as AppDashboardMapTileSettingsInterface).mapSource || 'events')
+        === ((defaultTile as AppDashboardMapTileSettingsInterface).mapSource || 'events');
     }
 
     if (tile.type !== TileTypes.Chart || defaultTile.type !== TileTypes.Chart) {
@@ -1525,7 +1568,7 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
     }
 
     if (this.hasDuplicateMapTiles(targetTiles)) {
-      return 'Map tile can only be added once.';
+      return 'Each map source can only be added once.';
     }
 
     return null;
@@ -1590,6 +1633,12 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
       dashboardSettings,
       DASHBOARD_AUTO_TILE_SLEEP_TREND_ID,
       DASHBOARD_AUTO_TILE_SLEEP_TREND_SOURCE,
+      nowMs,
+    );
+    markDashboardAutoTileDismissed(
+      dashboardSettings,
+      DASHBOARD_AUTO_TILE_ROUTE_PREVIEW_ID,
+      DASHBOARD_AUTO_TILE_ROUTE_PREVIEW_SOURCE,
       nowMs,
     );
 
@@ -1660,8 +1709,39 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
     return isDashboardSpecialChartType(tile.chartType) ? `${tile.chartType}` : null;
   }
 
-  private resolveDefaultAddTileSize(): { columns: number; rows: number } {
-    return { columns: 1, rows: 1 };
+  private resolveDefaultAddTileSize(
+    presetDefinition?: DashboardManagerPresetDefinition | null,
+  ): { columns: number; rows: number } {
+    const resolvedPresetDefinition = presetDefinition === undefined
+      ? this.selectedPresetDefinition
+      : presetDefinition;
+    if ((presetDefinition !== undefined || this.activeWorkflowTab === 'presets') && resolvedPresetDefinition) {
+      return this.resolveDefaultPresetTileSize(resolvedPresetDefinition);
+    }
+
+    if (this.category === 'map') {
+      return getDefaultDashboardMapTileSizeForSource(this.mapSource);
+    }
+
+    if (this.category === 'curated') {
+      return getDefaultDashboardChartTileSizeForChartType(this.curatedChartType);
+    }
+
+    return cloneDashboardTileDefaultSize(DASHBOARD_DEFAULT_TILE_SIZE);
+  }
+
+  private resolveDefaultPresetTileSize(
+    presetDefinition: DashboardManagerPresetDefinition,
+  ): { columns: number; rows: number } {
+    if (presetDefinition.category === 'map') {
+      return getDefaultDashboardMapTileSizeForSource(presetDefinition.mapSource);
+    }
+
+    if (presetDefinition.category === 'curated') {
+      return getDefaultDashboardChartTileSizeForChartType(presetDefinition.curatedChartType);
+    }
+
+    return cloneDashboardTileDefaultSize(DASHBOARD_DEFAULT_TILE_SIZE);
   }
 
   private resolveKpiGroupForChartType(chartType: DashboardKpiChartType): DashboardKpiGroup {
@@ -1669,15 +1749,16 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
   }
 
   private hasDuplicateMapTiles(tiles: TileSettingsInterface[]): boolean {
-    let mapTileCount = 0;
+    const seenSources = new Set<AppDashboardMapTileSource>();
     for (const tile of tiles) {
       if (tile.type !== TileTypes.Map) {
         continue;
       }
-      mapTileCount += 1;
-      if (mapTileCount > 1) {
+      const source = ((tile as AppDashboardMapTileSettingsInterface).mapSource || 'events') as AppDashboardMapTileSource;
+      if (seenSources.has(source)) {
         return true;
       }
+      seenSources.add(source);
     }
     return false;
   }

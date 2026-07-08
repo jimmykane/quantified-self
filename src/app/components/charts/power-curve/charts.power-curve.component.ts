@@ -108,6 +108,17 @@ export class ChartsPowerCurveComponent implements AfterViewInit, OnChanges, OnDe
     });
   }
 
+  get compactTitle(): string {
+    const normalizedTitle = `${this.title || ''}`.trim();
+    if (/^cycling power curve$/i.test(normalizedTitle)) {
+      return 'Cycling';
+    }
+    if (/^running power curve$/i.test(normalizedTitle)) {
+      return 'Running';
+    }
+    return normalizedTitle.replace(/\s+power\s+curve$/i, '') || normalizedTitle || 'Power Curve';
+  }
+
   async ngAfterViewInit(): Promise<void> {
     await this.refreshChart();
   }
@@ -147,10 +158,21 @@ export class ChartsPowerCurveComponent implements AfterViewInit, OnChanges, OnDe
     this.primaryBenchmark = this.benchmarkStats[0] || null;
     this.secondaryBenchmarks = this.benchmarkStats.slice(1);
     const matchedEventCount = this.powerCurve?.matchedEventCount ?? 0;
+    const comparisonLabel = this.resolveComparisonLabel();
+    const subtitlePrefix = this.powerCurve?.compareMode && this.powerCurve.compareMode !== 'latest'
+      ? `Best in range vs ${comparisonLabel}`
+      : `Best + ${comparisonLabel}`;
     this.subtitleText = matchedEventCount > 0
-      ? `Best + latest activity · ${matchedEventCount} ${matchedEventCount === 1 ? 'event' : 'events'}`
-      : 'Best + latest activity';
+      ? `${subtitlePrefix} · ${matchedEventCount} ${matchedEventCount === 1 ? 'event' : 'events'}`
+      : subtitlePrefix;
     this.showNoDataError = !durations.length || !(this.powerCurve?.series || []).length;
+  }
+
+  private resolveComparisonLabel(): string {
+    const comparisonLabel = `${this.powerCurve?.comparisonSeriesLabel || this.powerCurve?.latestSeriesLabel || 'Latest power activity'}`.trim();
+    return comparisonLabel
+      ? comparisonLabel.charAt(0).toLowerCase() + comparisonLabel.slice(1)
+      : 'latest power activity';
   }
 
   private resolveBenchmarkStats(): PowerCurveBenchmarkStat[] {
@@ -250,6 +272,15 @@ export class ChartsPowerCurveComponent implements AfterViewInit, OnChanges, OnDe
     const valueAxis = buildDashboardValueAxisConfig(values);
     const maxSymbolPoints = isMobileTooltipViewport ? 140 : 240;
     const showLegend = series.length > 1;
+    const mobileAxisPointerHandle = isMobileTooltipViewport
+      ? {
+        show: true,
+        size: 20,
+        margin: 4,
+        throttle: 16,
+        color: style.axisColor,
+      }
+      : { show: false };
 
     return {
       animation: false,
@@ -260,8 +291,8 @@ export class ChartsPowerCurveComponent implements AfterViewInit, OnChanges, OnDe
       },
       legend: {
         show: showLegend,
-        top: 0,
-        right: 4,
+        bottom: 0,
+        left: 'center',
         textStyle: {
           color: style.textColor,
           fontFamily: ECHARTS_GLOBAL_FONT_FAMILY,
@@ -271,8 +302,8 @@ export class ChartsPowerCurveComponent implements AfterViewInit, OnChanges, OnDe
       grid: {
         left: 6,
         right: 6,
-        top: showLegend ? 20 : 8,
-        bottom: 22,
+        top: 8,
+        bottom: showLegend ? (isMobileTooltipViewport ? 54 : 44) : 22,
         containLabel: false,
       },
       tooltip: {
@@ -289,6 +320,13 @@ export class ChartsPowerCurveComponent implements AfterViewInit, OnChanges, OnDe
         type: 'category',
         data: durations,
         boundaryGap: false,
+        axisPointer: {
+          show: true,
+          snap: true,
+          triggerTooltip: true,
+          label: { show: false },
+          handle: mobileAxisPointerHandle,
+        },
         axisLine: { lineStyle: { color: style.axisColor } },
         axisTick: { show: false },
         splitLine: { show: false },

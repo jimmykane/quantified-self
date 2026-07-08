@@ -114,11 +114,16 @@ export const HELP_SECTIONS: HelpSection[] = [
 - **Curated Recovery** remains a fixed insight and does not react to event table or custom tile date ranges.
 - **Curated Form/TSS** computes from full history and does not react to event table or custom tile date ranges. Its **W / M / Y** view setting is saved on that dashboard tile.
 - New curated charts: **Freshness Forecast**, **Intensity Distribution**, **Efficiency Trend**, **Cycling Power Curve**, and **Running Power Curve**.
+- The recommended default dashboard starts lean with **Form/TSS**, **Intensity Distribution**, and the current-state KPI row set; activity overview charts, maps, Recovery, Freshness Forecast, and Efficiency Trend remain available from Dashboard manager or **Add all**.
 - The default KPI rows are the current-state set: **Load Status**, **Form Now**, **Fitness Trend**, **Fatigue Trend**, **Recovery Debt**, and **Training Balance**.
 - Additional KPI rows such as **Fitness (CTL)**, **Fatigue (ATL)**, **ACWR**, **Ramp Rate**, **Monotony / Strain**, **Form +7d**, **Easy %**, **Hard %**, and **Efficiency Δ (4w)** remain available from Dashboard manager.
 - KPI rows are shown in the compact **Today** section above the main dashboard grid.
 - The **Today** header can show **Uploaded activities**, which counts current uploaded activity events.
 - On mobile, Today rows stay compact while the chart/map grid stays unchanged below.
+- The main dashboard groups chart and map tiles by intent, such as **Training State**, **Performance & Power**, **Activity Overview**, **Routes & Maps**, and **Custom Charts**.
+- Custom charts are placed in those dashboard sections automatically when their metric intent is obvious; otherwise they appear under **Custom Charts**.
+- New dashboard tiles use chart-aware default sizes: Form/TSS, Power Curve, and Routes map start wider, while simple custom totals, KPIs, and the clustered heatmap stay compact.
+- Empty editable dashboards show lightweight section guidance until chart or map sections exist.
 - KPI choices in Dashboard manager are grouped as **Load**, **Readiness**, and **Execution** for both manual and preset flows.
 - Curated and KPI tiles include an **info** icon beside the title with formulas, interpretation guidance, and KPI detail rows such as metric state, freshness date, source, and the signals behind the current label.
 - On supported mobile devices, dashboard buttons and chart interactions provide lightweight haptic feedback.
@@ -132,15 +137,15 @@ export const HELP_SECTIONS: HelpSection[] = [
 - Pro users with Suunto plus Garmin and/or COROS connected may see a **Send new activities to Suunto** action prompt when an eligible auto-sync route is still disabled. Enabling it turns on future Garmin/COROS -> Suunto imports only; existing activities can still be queued from **Services** with Manual Catch-up. Dismissing it hides the prompt permanently.
 - If Suunto disconnects server-side or stops accepting the stored token, the dashboard can show a **Reconnect Suunto** action prompt. Reconnecting restarts sleep sync, history imports, and upload tools. Garmin/COROS -> Suunto auto-sync routes stay disabled until you enable them again in **Services**; dismissing the card only hides the reminder.
 - Distance values in dashboards, event charts, activity chips, and CSV exports follow your kilometers or miles preference from **Settings -> Units**; jump distances display in feet when miles are selected.
-- **Map** tiles use their own tile date-range and activity filters, independent from the event table search.
-- **Cycling Power Curve** and **Running Power Curve** are curated event-backed charts: each uses its own tile date-range and activity filters, defaults to **1y**, and compares your best power per duration in range with the latest matching activity in range that has stored Power Curve data.
+- **Map** tiles can use activity events or saved route previews as their source. Activity map tiles use their own tile date-range and activity filters, independent from the event table search; **Routes** map tiles show recent saved routes from lightweight route previews and do not use event filters.
+- **Cycling Power Curve** and **Running Power Curve** are curated event-backed charts: each uses its own tile date-range and activity filters, defaults to **1y**, and compares your best power per duration in range with either the latest matching activity or a saved recent-best comparison window.
 - Curated, KPI, form, recovery, sleep, and other derived tiles stay independent from event table filters and custom/map tile filters.
 - When sleep sync imports sleep sessions, the dashboard can add the **Sleep** tile once, and you can also add it manually from Dashboard manager; removing an auto-added Sleep tile prevents future automatic Sleep tile adds.
-- Existing dashboards can receive the default curated chart set and core KPI row set automatically once. **Cycling Power Curve** joins that auto-add flow only after a cycling or mountain biking event with stored Power Curve data exists; **Running Power Curve** does the same for running or trail running. Removing an auto-added curated chart or KPI prevents that chart from being suggested again.
+- Existing dashboards can receive the lean default curated chart set and core KPI row set automatically once. **Cycling Power Curve** joins that auto-add flow only after a cycling or mountain biking event with stored Power Curve data exists; **Running Power Curve** does the same for running or trail running. The dashboard can also add a **Routes** map once saved routes have generated previews. Removing an auto-added curated chart, KPI, or Routes map prevents that tile from being suggested again.
 - Derived curated and KPI chart types are unique: only one tile per special derived chart type can exist at a time.
-- Map tiles are also unique: only one map tile can exist at a time.
+- Map tiles are unique per source: one activity map and one saved-routes map can exist at a time.
 - Map style and cluster-marker settings are edited inside Dashboard manager.
-- Default manager sizes: dashboard tiles start at **1x1**.
+- Default manager sizes are chart-aware: Form/TSS, Power Curve, and Routes map start wider, while simple custom totals, KPIs, and the clustered heatmap stay compact.
 - Dashboard manager bulk actions can add the recommended default dashboard, add every available preset tile, or remove every dashboard chart/map tile and keep automatic suggestions dismissed.
 
 ### Reorder dashboard tiles
@@ -152,7 +157,7 @@ export const HELP_SECTIONS: HelpSection[] = [
 
 ### Recovery tile summary
 
-- The curated **Recovery** pie tile is optional; existing dashboards can receive it once through the default curated auto-add, and removing it prevents future automatic adds.
+- The curated **Recovery** pie tile is optional and can be added from Dashboard manager or **Add all**.
 - The tile shows live recovery split between **Left now** and **Elapsed**.
 - The summary shows **Recovery left**, plus **Active total** and **Latest workout** recovery context.
 - Active totals only include currently active recovery windows, not all historical recovery values.
@@ -207,7 +212,7 @@ export const HELP_SECTIONS: HelpSection[] = [
 - **Intensity Distribution** uses power zones when available, otherwise heart-rate zones, grouped to Easy/Moderate/Hard by week.
 - Intensity Distribution headline percentages are labeled as **Current week**; when no current-week bucket exists they are labeled **Latest week**.
 - **Efficiency Trend** uses weekly duration-weighted average of avgPower/avgHeartRate.
-- **Cycling Power Curve** and **Running Power Curve** use each event's stored PowerCurve stat to draw the best power envelope and the newest matching power activity inside that tile's filters. Cycling and running power data stay in separate tiles.
+- **Cycling Power Curve** and **Running Power Curve** use each event's stored PowerCurve stat to draw the best power envelope and a selectable comparison: latest matching activity, best last 30d, or best last 90d. Cycling and running power data stay in separate tiles.
 - Intensity Distribution and Efficiency Trend include compact **8w / 12w / 6m / 1y / All** range selectors that only change the visible derived weekly history and are saved per dashboard tile.
 - Training-derived tiles do not fall back to currently loaded dashboard events.
 
@@ -455,7 +460,7 @@ The app accepts these file types for manual activity upload:
 
 The public [Workout File Analyzer](/features/fit-gpx-tcx-file-analyzer) page explains how FIT, GPX, TCX, JSON, and SML activity uploads can be analyzed with maps, charts, statistics, exports, source-file context, and reprocessing. The public [Workout File Comparison](/features/workout-file-comparison) page explains how those files can be compared with provider activities and benchmark reports. The public [FIT and GPX Route Files](/features/fit-gpx-route-files) page explains saved FIT course and GPX route/track uploads, original-file retention, downloads, and route limits.
 
-Saved routes open from **Routes** with the details action. Route details parse the original FIT or GPX file in memory to show the route summary, all segments, map, elevation and grade charts, waypoints and turn instructions, and original-file download. GPX files with route points, untimed tracks, or timed track geometry can be saved as routes from **Routes**. The original uploaded route file remains the canonical source; parsed points and streams are not saved back to Firestore.
+Saved routes open from **Routes** with the details action. Route details parse the original FIT or GPX file in memory to show the route summary, all segments, map, elevation and grade charts, waypoints and turn instructions, and original-file download. GPX files with route points, untimed tracks, or timed track geometry can be saved as routes from **Routes**. The original uploaded route file remains the canonical source; parsed points and streams are not saved back to Firestore. New or reprocessed saved routes store a lightweight encoded route preview for route-table thumbnails and dashboard route maps; older saved routes need a reprocess or controlled backfill before they appear with previews.
 
 ## Activity limits
 

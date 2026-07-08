@@ -68,7 +68,7 @@ export type RouteUploadErrorCategory =
     | 'unsupported_format';
 export type SavedRouteAction = 'view' | 'filter' | 'sort' | 'open_details' | 'rename' | 'download' | 'export_gpx' | 'send_service_route' | 'delete' | 'reprocess';
 export type SavedRouteActionStatus = 'applied' | 'cleared' | 'success' | 'partial_success' | 'failure' | 'missing_file';
-export type SavedRouteActionSource = 'route_detail' | 'routes_list_row' | 'routes_list_bulk';
+export type SavedRouteActionSource = 'route_detail' | 'routes_list_row' | 'routes_list_bulk' | 'dashboard_route_map';
 export type SavedRouteSortColumn =
     | 'activityTypes'
     | 'ascent'

@@ -5,6 +5,32 @@ export interface DashboardGridSizedItem {
   } | null;
 }
 
+export interface SparseEqualWidthDashboardGridLayout {
+  columns: number;
+  itemColumns: number;
+}
+
+export function getSparseEqualWidthDashboardGridLayout(
+  itemCountValue: number | string | null | undefined,
+  columnCount: number | string | null | undefined,
+): SparseEqualWidthDashboardGridLayout | null {
+  const itemCount = normalizePositiveInteger(itemCountValue, 0);
+  const maxColumns = normalizePositiveInteger(columnCount, 1);
+  if (itemCount < 2 || maxColumns <= 1 || itemCount > maxColumns) {
+    return null;
+  }
+
+  const itemColumns = Math.floor(maxColumns / itemCount);
+  if (itemColumns < 1) {
+    return null;
+  }
+
+  return {
+    columns: itemColumns * itemCount,
+    itemColumns,
+  };
+}
+
 export function getTrailingDashboardGridPlaceholderCount(
   items: readonly DashboardGridSizedItem[],
   columnCount: number | string | null | undefined,

@@ -253,7 +253,7 @@ export class ChartsFormComponent implements AfterViewInit, OnChanges, OnDestroy 
       ? {
         show: true,
         size: 20,
-        margin: 4,
+        margin: 2,
         throttle: 16,
         color: chartStyle.axisColor,
       }
@@ -302,6 +302,7 @@ export class ChartsFormComponent implements AfterViewInit, OnChanges, OnDestroy 
         color: chartStyle.textColor,
         fontSize: chartStyle.axisFontSize,
         hideOverlap: true,
+        margin: isMobileTooltipViewport ? 3 : 8,
         formatter: (value: number) => formatDashboardFormXAxisLabel(Number(value), labelConfig.mode),
         rotate: 0,
       },
@@ -357,9 +358,9 @@ export class ChartsFormComponent implements AfterViewInit, OnChanges, OnDestroy 
 
     const gridLeft = chartStyle.isCompactLayout ? 34 : 38;
     const gridRight = chartStyle.isCompactLayout ? 14 : 16;
-    const panelHeight = chartStyle.isCompactLayout ? '39%' : '40%';
-    const topPanelTop = '4%';
-    const bottomPanelTop = chartStyle.isCompactLayout ? '52%' : '51%';
+    const panelHeight = isMobileTooltipViewport ? '36%' : chartStyle.isCompactLayout ? '39%' : '40%';
+    const topPanelTop = isMobileTooltipViewport ? '3%' : '4%';
+    const bottomPanelTop = isMobileTooltipViewport ? '49%' : chartStyle.isCompactLayout ? '52%' : '51%';
 
     return {
       option: {

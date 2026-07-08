@@ -2,6 +2,7 @@ import type {
   AppDashboardChartTileDisplaySettingsInterface,
   AppDashboardDerivedChartRange,
   AppDashboardFormTimelineWindow,
+  AppDashboardPowerCurveCompareMode,
 } from '../models/app-user.interface';
 import {
   DASHBOARD_DERIVED_CHART_DEFAULT_RANGE,
@@ -11,7 +12,12 @@ import {
   isDashboardEfficiencyTrendChartType,
   isDashboardFormChartType,
   isDashboardIntensityDistributionChartType,
+  isDashboardPowerCurveChartType,
 } from './dashboard-special-chart-types';
+import {
+  DASHBOARD_POWER_CURVE_DEFAULT_COMPARE_MODE,
+  normalizeDashboardPowerCurveCompareMode,
+} from './dashboard-power-curve.helper';
 
 export const DASHBOARD_FORM_TIMELINE_DEFAULT_WINDOW: AppDashboardFormTimelineWindow = 'w';
 
@@ -20,6 +26,7 @@ const DASHBOARD_FORM_TIMELINE_WINDOWS = new Set<AppDashboardFormTimelineWindow>(
 interface NormalizeDashboardChartTileDisplaySettingsOptions {
   includeDerivedChartRange?: boolean;
   includeFormTimelineWindow?: boolean;
+  includePowerCurveCompareMode?: boolean;
   includeDefaults?: boolean;
 }
 
@@ -46,6 +53,8 @@ export function normalizeDashboardChartTileDisplaySettings(
     && (hasOwn(source, 'derivedChartRange') || options.includeDefaults === true);
   const shouldNormalizeFormWindow = options.includeFormTimelineWindow !== false
     && (hasOwn(source, 'formTimelineWindow') || options.includeDefaults === true);
+  const shouldNormalizePowerCurveCompareMode = options.includePowerCurveCompareMode !== false
+    && (hasOwn(source, 'powerCurveCompareMode') || options.includeDefaults === true);
 
   if (shouldNormalizeDerivedRange) {
     normalized.derivedChartRange = normalizeDashboardDerivedChartRange(
@@ -57,6 +66,12 @@ export function normalizeDashboardChartTileDisplaySettings(
     normalized.formTimelineWindow = normalizeDashboardFormTimelineWindow(
       source.formTimelineWindow || (options.includeDefaults ? DASHBOARD_FORM_TIMELINE_DEFAULT_WINDOW : undefined),
     );
+  }
+
+  if (shouldNormalizePowerCurveCompareMode) {
+    normalized.powerCurveCompareMode = normalizeDashboardPowerCurveCompareMode(
+      source.powerCurveCompareMode || (options.includeDefaults ? DASHBOARD_POWER_CURVE_DEFAULT_COMPARE_MODE : undefined),
+    ) as AppDashboardPowerCurveCompareMode;
   }
 
   return Object.keys(normalized).length > 0 ? normalized : undefined;
@@ -71,6 +86,7 @@ export function normalizeDashboardChartTileDisplaySettingsForChartType(
     includeDerivedChartRange: isDashboardIntensityDistributionChartType(chartType)
       || isDashboardEfficiencyTrendChartType(chartType),
     includeFormTimelineWindow: isDashboardFormChartType(chartType),
+    includePowerCurveCompareMode: isDashboardPowerCurveChartType(chartType),
     includeDefaults,
   });
 }

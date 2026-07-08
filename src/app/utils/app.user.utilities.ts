@@ -57,6 +57,7 @@ import {
     AppChartSettingsInterface,
     AppDashboardChartTileSettingsInterface,
     AppDashboardMapTileSettingsInterface,
+    AppDashboardMapTileSource,
     AppDashboardAutoTiles,
     AppDashboardAutoTileState,
     AppMapStyleName,
@@ -69,9 +70,8 @@ import {
 } from '../models/app-user.interface';
 import {
     DASHBOARD_RECOVERY_NOW_CHART_TYPE,
-    DASHBOARD_SLEEP_TREND_CHART_TYPE,
+    getDefaultDashboardCuratedChartDefinitions,
     getDefaultDashboardKpiChartDefinitions,
-    getDashboardCuratedChartDefinitions,
     isDashboardEventBackedSpecialChartType,
     isDashboardPowerCurveChartType,
     isDashboardRecoveryNowChartType,
@@ -88,7 +88,6 @@ import {
 import {
     buildDashboardCuratedAutoTile,
     buildDashboardKpiAutoTile,
-    type DashboardDefaultCuratedChartType,
 } from '../helpers/dashboard-auto-tile.helper';
 import {
     getDashboardPowerCurveEventFiltersForScope,
@@ -101,6 +100,7 @@ import { normalizeEventChartOverlayDataTypeByPrimary } from '../helpers/event-ch
 import {
     normalizeDashboardChartTileDisplaySettingsForChartType,
 } from '../helpers/dashboard-chart-display-settings.helper';
+import { getDefaultDashboardMapTileSizeForSource } from '../helpers/dashboard-tile-default-size.helper';
 import { getAppBasicChartDataTypes, getAppCanonicalChartDataTypes } from '../helpers/app-chart-data-types.helper';
 import { ACTIVITY_SYNC_ROUTES, ActivitySyncRouteId } from '@shared/activity-sync-routes';
 import { ROUTE_DELIVERY_SYNC_ROUTES, RouteDeliverySyncRouteId } from '@shared/route-delivery-sync-routes';
@@ -163,8 +163,10 @@ export class AppUserUtilities {
             name: 'Clustered HeatMap',
             order: 0,
             type: TileTypes.Map,
+            mapSource: 'events',
             mapStyle: this.getDefaultDashboardMapStyle(),
             mapTheme: MapThemes.Normal,
+            mapType: this.getDefaultMapType(),
             showHeatMap: true,
             clusterMarkers: true,
             size: { columns: 1, rows: 1 },
@@ -180,66 +182,17 @@ export class AppUserUtilities {
     }
 
     static getDefaultUserDashboardTiles(): TileSettingsInterface[] {
-        const defaultMainTiles: TileSettingsInterface[] = [<AppDashboardMapTileSettingsInterface><unknown>{
-            name: 'Clustered HeatMap',
-            order: 0,
-            type: TileTypes.Map,
-            mapStyle: this.getDefaultDashboardMapStyle(),
-            mapTheme: MapThemes.Normal,
-            showHeatMap: true,
-            clusterMarkers: true,
-            size: { columns: 1, rows: 1 },
-            eventFilters: AppUserUtilities.getDefaultDashboardTileEventFilters(),
-        }, <AppDashboardChartTileSettingsInterface>{
-            name: 'Duration',
-            order: 1,
-            type: TileTypes.Chart,
-            chartType: ChartTypes.Pie,
-            dataCategoryType: ChartDataCategoryTypes.ActivityType,
-            dataType: DataDuration.type,
-            dataTimeInterval: TimeIntervals.Auto,
-            dataValueType: ChartDataValueTypes.Total,
-            size: { columns: 1, rows: 1 },
-            eventFilters: AppUserUtilities.getDefaultDashboardTileEventFilters(),
-        }, <AppDashboardChartTileSettingsInterface>{
-            name: 'Distance',
-            order: 2,
-            type: TileTypes.Chart,
-            chartType: ChartTypes.ColumnsHorizontal,
-            dataType: DataDistance.type,
-            dataTimeInterval: TimeIntervals.Auto,
-            dataCategoryType: ChartDataCategoryTypes.ActivityType,
-            dataValueType: ChartDataValueTypes.Total,
-            size: { columns: 1, rows: 1 },
-            eventFilters: AppUserUtilities.getDefaultDashboardTileEventFilters(),
-        }, <AppDashboardChartTileSettingsInterface>{
-            name: 'Ascent',
-            order: 3,
-            type: TileTypes.Chart,
-            chartType: ChartTypes.PyramidsVertical,
-            dataCategoryType: ChartDataCategoryTypes.DateType,
-            dataType: DataAscent.type,
-            dataTimeInterval: TimeIntervals.Auto,
-            dataValueType: ChartDataValueTypes.Total,
-            size: { columns: 1, rows: 1 },
-            eventFilters: AppUserUtilities.getDefaultDashboardTileEventFilters(),
-        }];
-        const defaultCuratedTiles = AppUserUtilities.getDefaultUserDashboardCuratedTiles(defaultMainTiles.length);
+        const defaultCuratedTiles = AppUserUtilities.getDefaultUserDashboardCuratedTiles(0);
         return [
-            ...defaultMainTiles,
             ...defaultCuratedTiles,
-            ...AppUserUtilities.getDefaultUserDashboardKpiTiles(defaultMainTiles.length + defaultCuratedTiles.length),
+            ...AppUserUtilities.getDefaultUserDashboardKpiTiles(defaultCuratedTiles.length),
         ];
     }
 
     private static getDefaultUserDashboardCuratedTiles(startOrder: number): TileChartSettingsInterface[] {
-        return getDashboardCuratedChartDefinitions()
-            .filter(definition => (
-                definition.chartType !== DASHBOARD_SLEEP_TREND_CHART_TYPE
-                && !isDashboardPowerCurveChartType(definition.chartType)
-            ))
+        return getDefaultDashboardCuratedChartDefinitions()
             .map((definition, index) => buildDashboardCuratedAutoTile(
-                definition.chartType as DashboardDefaultCuratedChartType,
+                definition.chartType,
                 startOrder + index,
             ));
     }
@@ -272,6 +225,37 @@ export class AppUserUtilities {
             order: Number.isFinite(Number(tile.order)) ? Number(tile.order) : 0,
             size: tile.size || { columns: 1, rows: 1 },
         };
+    }
+
+    private static normalizeGeneratedDashboardMapTileSize(tile: AppDashboardMapTileSettingsInterface): void {
+        const size = tile.size;
+        if (!size || Number(size.rows) === 1) {
+            return;
+        }
+
+        const hasGeneratedTwoByTwoSize = Number(size.columns) === 2 && Number(size.rows) === 2;
+        if (!hasGeneratedTwoByTwoSize) {
+            return;
+        }
+
+        const isGeneratedDefaultRoutesMap = tile.mapSource === 'routes'
+            && `${tile.name || ''}`.trim() === 'Routes'
+            && (tile.mapStyle || AppUserUtilities.getDefaultDashboardMapStyle()) === AppUserUtilities.getDefaultDashboardMapStyle()
+            && tile.clusterMarkers !== true
+            && tile.showHeatMap !== true;
+        const isLegacyDefaultEventMap = tile.mapSource === 'events'
+            && `${tile.name || ''}`.trim() === 'Clustered HeatMap'
+            && (tile.mapStyle || AppUserUtilities.getDefaultDashboardMapStyle()) === AppUserUtilities.getDefaultDashboardMapStyle()
+            && tile.clusterMarkers === true
+            && tile.showHeatMap === true;
+
+        if (!isGeneratedDefaultRoutesMap && !isLegacyDefaultEventMap) {
+            return;
+        }
+
+        tile.size = isGeneratedDefaultRoutesMap
+            ? getDefaultDashboardMapTileSizeForSource('routes')
+            : getDefaultDashboardMapTileSizeForSource('events');
     }
 
     private static normalizeDashboardChartTileDisplaySettings(tile: AppDashboardChartTileSettingsInterface): void {
@@ -580,7 +564,7 @@ export class AppUserUtilities {
         settings.dashboardSettings.autoTiles = AppUserUtilities.normalizeDashboardAutoTiles(settings.dashboardSettings.autoTiles);
         settings.dashboardSettings.tiles = settings.dashboardSettings.tiles || AppUserUtilities.getDefaultUserDashboardTiles();
         let hasNormalizedRecoveryDashboardTile = false;
-        let hasNormalizedMapDashboardTile = false;
+        const normalizedMapDashboardSources = new Set<AppDashboardMapTileSource>();
         const legacyTileEventFilterRange = resolveLegacyDashboardTileEventFilterRange(
             settings.dashboardSettings.dateRange,
             settings.dashboardSettings.startDate,
@@ -643,19 +627,26 @@ export class AppUserUtilities {
                 return tile;
             }
 
-            if (hasNormalizedMapDashboardTile) {
+            const mapTile = tile as AppDashboardMapTileSettingsInterface;
+            mapTile.mapSource = mapTile.mapSource === 'routes' ? 'routes' : 'events';
+            if (normalizedMapDashboardSources.has(mapTile.mapSource)) {
                 return null;
             }
-            hasNormalizedMapDashboardTile = true;
-
-            const mapTile = tile as AppDashboardMapTileSettingsInterface;
+            normalizedMapDashboardSources.add(mapTile.mapSource);
             mapTile.mapStyle = mapTile.mapStyle || AppUserUtilities.getDefaultDashboardMapStyle();
-            mapTile.eventFilters = normalizeDashboardTileEventFilters(
-                mapTile.eventFilters,
-                legacyTileEventFilterRange,
-                legacyTileEventFilterActivityTypes,
-            );
-            delete mapTile.mapType;
+            AppUserUtilities.normalizeGeneratedDashboardMapTileSize(mapTile);
+            if (mapTile.mapSource === 'routes') {
+                delete mapTile.eventFilters;
+                mapTile.showRouteEndpointMarkers = mapTile.showRouteEndpointMarkers !== false;
+            } else {
+                delete mapTile.showRouteEndpointMarkers;
+                mapTile.eventFilters = normalizeDashboardTileEventFilters(
+                    mapTile.eventFilters,
+                    legacyTileEventFilterRange,
+                    legacyTileEventFilterActivityTypes,
+                );
+            }
+            mapTile.mapType = mapTile.mapType || AppUserUtilities.getDefaultMapType();
             return mapTile;
         })
             .filter((tile): tile is TileSettingsInterface => tile !== null);

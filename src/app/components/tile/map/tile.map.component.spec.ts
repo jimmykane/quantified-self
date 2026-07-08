@@ -33,13 +33,30 @@ class MockDashboardTileEventFiltersComponent {
   @Output() navigate = new EventEmitter<any>();
 }
 
+@Component({
+  selector: 'app-dashboard-route-preview-map',
+  template: '',
+  standalone: false,
+})
+class MockDashboardRoutePreviewMapComponent {
+  @Input() routes: any[] = [];
+  @Input() isLoading = false;
+  @Input() mapStyle = 'default';
+  @Input() showEndpointMarkers = true;
+}
+
 describe('TileMapComponent', () => {
   let fixture: ComponentFixture<TileMapComponent>;
   let component: TileMapComponent;
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
-      declarations: [TileMapComponent, MockTileMapActionsComponent, MockDashboardTileEventFiltersComponent],
+      declarations: [
+        TileMapComponent,
+        MockTileMapActionsComponent,
+        MockDashboardTileEventFiltersComponent,
+        MockDashboardRoutePreviewMapComponent,
+      ],
       schemas: [NO_ERRORS_SCHEMA],
     }).compileComponents();
 
@@ -105,6 +122,27 @@ describe('TileMapComponent', () => {
     expect(header.querySelector('.tile-map-title')?.textContent?.trim()).toBe('Map');
     expect(header.querySelector('.tile-header-controls')).toBeTruthy();
     expect(body.querySelector('app-events-map')).toBeTruthy();
+  });
+
+  it('should hide event filters and render the route preview map for routes source tiles', () => {
+    fixture.componentRef.setInput('tileName', 'Routes');
+    fixture.componentRef.setInput('mapSource', 'routes');
+    fixture.componentRef.setInput('showRouteEndpointMarkers', false);
+    fixture.componentRef.setInput('routePreviews', [{ id: 'route-1' }]);
+
+    fixture.detectChanges();
+
+    const header = fixture.nativeElement.querySelector('.tile-map-header') as HTMLElement;
+    const body = fixture.nativeElement.querySelector('.tile-map-body') as HTMLElement;
+    expect(header.querySelector('.tile-map-title')?.textContent?.trim()).toBe('Routes');
+    expect(header.querySelector('.tile-event-filter-controls')).toBeNull();
+    expect(fixture.debugElement.query(By.directive(MockDashboardTileEventFiltersComponent))).toBeNull();
+    expect(body.querySelector('app-events-map')).toBeNull();
+    expect(body.querySelector('app-dashboard-route-preview-map')).toBeTruthy();
+    const routeMap = fixture.debugElement.query(By.directive(MockDashboardRoutePreviewMapComponent))
+      .componentInstance as MockDashboardRoutePreviewMapComponent;
+    expect(routeMap.routes).toEqual([{ id: 'route-1' }]);
+    expect(routeMap.showEndpointMarkers).toBe(false);
   });
 
   it('should align the map body to the shared chart control band height', () => {

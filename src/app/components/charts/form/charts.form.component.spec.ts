@@ -3,6 +3,8 @@ import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { readFileSync } from 'fs';
+import { resolve } from 'path';
 import { ChartsFormComponent } from './charts.form.component';
 import { EChartsLoaderService } from '../../../services/echarts-loader.service';
 import { LoggerService } from '../../../services/logger.service';
@@ -452,8 +454,27 @@ describe('ChartsFormComponent', () => {
       expect(option.xAxis?.[0]?.axisPointer?.handle?.show).toBe(false);
       expect(option.xAxis?.[1]?.axisPointer?.handle?.show).toBe(true);
       expect(option.xAxis?.[1]?.axisPointer?.handle?.size).toBe(20);
+      expect(option.xAxis?.[1]?.axisPointer?.handle?.margin).toBe(2);
+      expect(option.xAxis?.[1]?.axisLabel?.margin).toBe(3);
+      expect(option.grid?.[0]?.top).toBe('3%');
+      expect(option.grid?.[0]?.height).toBe('36%');
+      expect(option.grid?.[1]?.top).toBe('49%');
+      expect(option.grid?.[1]?.height).toBe('36%');
     } finally {
       window.matchMedia = originalMatchMedia;
     }
+  });
+
+  it('should keep the mobile stat header compact above the two-pane chart', () => {
+    const stylesPath = resolve(process.cwd(), 'src/app/components/charts/form/charts.form.component.css');
+    const styles = readFileSync(stylesPath, 'utf8');
+
+    expect(styles).toContain('@media (max-width: 640px)');
+    expect(styles).toContain('padding: 4px 8px 0;');
+    expect(styles).toContain('gap: 4px;');
+    expect(styles).toContain('margin-bottom: 4px;');
+    expect(styles).toContain('font-size: 1.08rem;');
+    expect(styles).toContain('font-size: 0.66rem;');
+    expect(styles).toContain('line-height: 1.08;');
   });
 });

@@ -49,6 +49,7 @@ import { getDefaultDashboardChartTileDisplaySettingsForChartType } from './dashb
 import type {
   AppDashboardChartTileSettingsInterface,
   AppDashboardMapTileSettingsInterface,
+  AppDashboardMapTileSource,
 } from '../models/app-user.interface';
 import { AppUserUtilities } from '../utils/app.user.utilities';
 import { buildDashboardPowerCurveAutoTile } from './dashboard-auto-tile.helper';
@@ -79,6 +80,7 @@ export const DASHBOARD_MANAGER_PRESET_IDS = {
   KPI_HARD_PERCENT: 'kpi-hard-percent',
   KPI_EFFICIENCY_DELTA_4W: 'kpi-efficiency-delta-4w',
   MAP_DEFAULT_CLUSTERED: 'map-default-clustered',
+  MAP_ROUTES_PREVIEW: 'map-routes-preview',
   CUSTOM_DURATION_PIE: 'custom-duration-pie',
   CUSTOM_DISTANCE_COLUMNS: 'custom-distance-columns',
   CUSTOM_ASCENT_PYRAMIDS: 'custom-ascent-pyramids',
@@ -130,8 +132,10 @@ export interface DashboardManagerCustomPresetDefinition extends DashboardManager
 
 export interface DashboardManagerMapPresetDefinition extends DashboardManagerPresetBaseDefinition {
   category: 'map';
+  mapSource: AppDashboardMapTileSource;
   mapStyle: MapStyleName;
   clusterMarkers: boolean;
+  showRouteEndpointMarkers?: boolean;
 }
 
 export type DashboardManagerPresetDefinition =
@@ -207,7 +211,7 @@ const DASHBOARD_MANAGER_PRESET_DEFINITIONS: DashboardManagerPresetDefinition[] =
     id: DASHBOARD_MANAGER_PRESET_IDS.CURATED_POWER_CURVE,
     label: 'Cycling Power Curve',
     tileName: 'Cycling Power Curve',
-    description: 'Cycling and mountain biking power envelope with latest power activity comparison.',
+    description: 'Cycling and mountain biking power envelope with latest cycling activity comparison.',
     icon: 'speed',
     category: 'curated',
     curatedChartType: DASHBOARD_POWER_CURVE_CHART_TYPE,
@@ -217,7 +221,7 @@ const DASHBOARD_MANAGER_PRESET_DEFINITIONS: DashboardManagerPresetDefinition[] =
     id: DASHBOARD_MANAGER_PRESET_IDS.CURATED_RUNNING_POWER_CURVE,
     label: 'Running Power Curve',
     tileName: 'Running Power Curve',
-    description: 'Running and trail running power envelope with latest power activity comparison.',
+    description: 'Running and trail running power envelope with latest running activity comparison.',
     icon: 'directions_run',
     category: 'curated',
     curatedChartType: DASHBOARD_POWER_CURVE_CHART_TYPE,
@@ -380,8 +384,21 @@ const DASHBOARD_MANAGER_PRESET_DEFINITIONS: DashboardManagerPresetDefinition[] =
     description: 'Default map with clustered markers and heatmap.',
     icon: 'map',
     category: 'map',
+    mapSource: 'events',
     mapStyle: 'default',
     clusterMarkers: true,
+  },
+  {
+    id: DASHBOARD_MANAGER_PRESET_IDS.MAP_ROUTES_PREVIEW,
+    label: 'Routes map',
+    tileName: 'Routes',
+    description: 'Recent saved routes from lightweight route previews.',
+    icon: 'route',
+    category: 'map',
+    mapSource: 'routes',
+    mapStyle: 'default',
+    clusterMarkers: false,
+    showRouteEndpointMarkers: true,
   },
   {
     id: DASHBOARD_MANAGER_PRESET_IDS.CUSTOM_DURATION_PIE,
@@ -500,12 +517,19 @@ export function buildDashboardManagerPresetTile(
       type: TileTypes.Map,
       order: input.order,
       size: input.size,
+      mapSource: definition.mapSource,
       mapStyle: definition.mapStyle,
       mapTheme: MapThemes.Normal,
-      showHeatMap: true,
+      mapType: AppUserUtilities.getDefaultMapType(),
+      showHeatMap: definition.mapSource === 'events',
       clusterMarkers: definition.clusterMarkers,
-      eventFilters: AppUserUtilities.getDefaultDashboardTileEventFilters(),
+      ...(definition.mapSource === 'routes'
+        ? { showRouteEndpointMarkers: definition.showRouteEndpointMarkers !== false }
+        : {}),
     };
+    if (definition.mapSource === 'events') {
+      mapTile.eventFilters = AppUserUtilities.getDefaultDashboardTileEventFilters();
+    }
     return mapTile;
   }
 

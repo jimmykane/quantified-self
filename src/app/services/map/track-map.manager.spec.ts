@@ -108,6 +108,19 @@ describe('TrackMapManager', () => {
     expect(markerFactory.createFlagMarker).toHaveBeenCalledWith('#1e88e5');
   });
 
+  it('detaches style lifecycle handlers when cleared', () => {
+    const styleLoadHandler = map.on.mock.calls.find((call: any[]) => call[0] === 'style.load')?.[1];
+    expect(styleLoadHandler).toEqual(expect.any(Function));
+
+    manager.clearAll();
+
+    expect(map.off).toHaveBeenCalledWith('style.load', styleLoadHandler);
+    map.addSource.mockClear();
+    styleLoadHandler();
+
+    expect(map.addSource).not.toHaveBeenCalled();
+  });
+
   it('defers track layer rendering until the Mapbox style is ready', () => {
     map.isStyleLoaded.mockReturnValue(false);
 
@@ -266,6 +279,44 @@ describe('TrackMapManager', () => {
       .filter((sourceId: string) => sourceId.startsWith('route-track-source-route-1-'));
     expect(routeSourceIds).toHaveLength(2);
     expect(new Set(routeSourceIds).size).toBe(2);
+  });
+
+  it('binds and cleans track line click handlers', () => {
+    const onTrackClick = vi.fn();
+    manager.renderTrackData([{
+      id: 'route-click',
+      label: 'Clickable route',
+      strokeColor: '#1e88e5',
+      positions: [
+        { latitudeDegrees: 40.1, longitudeDegrees: 22.1 },
+        { latitudeDegrees: 40.2, longitudeDegrees: 22.2 },
+      ],
+    }], {
+      showArrows: false,
+      strokeWidth: 3,
+      onTrackClick,
+    });
+
+    const clickBinding = map.on.mock.calls.find((call: any[]) => (
+      call[0] === 'click'
+      && String(call[1]).startsWith('route-track-line-route-click-')
+    ));
+    expect(clickBinding).toBeTruthy();
+
+    clickBinding?.[2]({ lngLat: { lng: 22.15, lat: 40.15 } });
+
+    expect(onTrackClick).toHaveBeenCalledWith(expect.objectContaining({
+      track: expect.objectContaining({ id: 'route-click' }),
+      longitudeDegrees: 22.15,
+      latitudeDegrees: 40.15,
+    }));
+
+    manager.renderTrackData([], {
+      showArrows: false,
+      strokeWidth: 3,
+    });
+
+    expect(map.off).toHaveBeenCalledWith('click', clickBinding?.[1], clickBinding?.[2]);
   });
 
   it('fits bounds across selected track coordinates and markers', () => {

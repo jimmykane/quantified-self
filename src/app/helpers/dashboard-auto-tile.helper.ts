@@ -3,6 +3,8 @@ import {
   ChartDataValueTypes,
   ChartTypes,
   DataRecoveryTime,
+  MapThemes,
+  MapTypes,
   TileChartSettingsInterface,
   TileSettingsInterface,
   TileTypes,
@@ -12,6 +14,7 @@ import {
   AppDashboardAutoTileId,
   AppDashboardAutoTileState,
   AppDashboardChartTileSettingsInterface,
+  AppDashboardMapTileSettingsInterface,
   AppDashboardSettingsInterface,
 } from '../models/app-user.interface';
 import {
@@ -53,6 +56,10 @@ import {
   resolveDashboardPowerCurveTileScope,
   type DashboardPowerCurveScope,
 } from './dashboard-power-curve-scope.helper';
+import {
+  getDefaultDashboardChartTileSizeForChartType,
+  getDefaultDashboardMapTileSizeForSource,
+} from './dashboard-tile-default-size.helper';
 
 export const DASHBOARD_AUTO_TILE_SLEEP_TREND_ID: AppDashboardAutoTileId = 'sleepTrend';
 export const DASHBOARD_AUTO_TILE_SLEEP_TREND_SOURCE = 'sleep-sync';
@@ -60,6 +67,8 @@ export const DASHBOARD_AUTO_TILE_POWER_CURVE_ID = DASHBOARD_POWER_CURVE_CYCLING_
 export const DASHBOARD_AUTO_TILE_POWER_CURVE_SOURCE = DASHBOARD_POWER_CURVE_CYCLING_SOURCE;
 export const DASHBOARD_AUTO_TILE_RUNNING_POWER_CURVE_ID = DASHBOARD_POWER_CURVE_RUNNING_AUTO_TILE_ID;
 export const DASHBOARD_AUTO_TILE_RUNNING_POWER_CURVE_SOURCE = DASHBOARD_POWER_CURVE_RUNNING_SOURCE;
+export const DASHBOARD_AUTO_TILE_ROUTE_PREVIEW_ID: AppDashboardAutoTileId = 'routePreview';
+export const DASHBOARD_AUTO_TILE_ROUTE_PREVIEW_SOURCE = 'route-preview';
 export const DASHBOARD_AUTO_TILE_CURATED_SOURCE = 'default-curated';
 export const DASHBOARD_AUTO_TILE_KPI_SOURCE = 'default-kpi';
 
@@ -101,7 +110,7 @@ export interface DashboardAutoTileDescriptor {
 
 export function buildDashboardSleepTrendAutoTile(
   order: number,
-  size: { columns: number; rows: number } = { columns: 1, rows: 1 },
+  size: { columns: number; rows: number } = getDefaultDashboardChartTileSizeForChartType(DASHBOARD_SLEEP_TREND_CHART_TYPE),
 ): TileChartSettingsInterface {
   return {
     name: 'Sleep',
@@ -119,7 +128,7 @@ export function buildDashboardSleepTrendAutoTile(
 export function buildDashboardCuratedAutoTile(
   chartType: DashboardDefaultCuratedChartType,
   order: number,
-  size: { columns: number; rows: number } = { columns: 1, rows: 1 },
+  size: { columns: number; rows: number } = getDefaultDashboardChartTileSizeForChartType(chartType),
 ): AppDashboardChartTileSettingsInterface {
   if (chartType === DASHBOARD_RECOVERY_NOW_CHART_TYPE) {
     return {
@@ -181,9 +190,28 @@ export function buildDashboardCuratedAutoTile(
 export function buildDashboardPowerCurveAutoTile(
   scope: DashboardPowerCurveScope,
   order: number,
-  size: { columns: number; rows: number } = { columns: 1, rows: 1 },
+  size: { columns: number; rows: number } = getDefaultDashboardChartTileSizeForChartType(DASHBOARD_POWER_CURVE_CHART_TYPE),
 ): AppDashboardChartTileSettingsInterface {
   return buildDashboardPowerCurveAutoTileForScope(scope, order, size);
+}
+
+export function buildDashboardRoutePreviewAutoTile(
+  order: number,
+  size: { columns: number; rows: number } = getDefaultDashboardMapTileSizeForSource('routes'),
+): AppDashboardMapTileSettingsInterface {
+  return {
+    name: 'Routes',
+    type: TileTypes.Map,
+    order,
+    size,
+    mapSource: 'routes',
+    mapStyle: 'default',
+    mapTheme: MapThemes.Normal,
+    mapType: MapTypes.RoadMap,
+    showHeatMap: false,
+    clusterMarkers: false,
+    showRouteEndpointMarkers: true,
+  } as AppDashboardMapTileSettingsInterface;
 }
 
 export function buildDashboardKpiAutoTile(
@@ -241,6 +269,12 @@ export function isDashboardKpiAutoTile(
   return `${(tile as TileChartSettingsInterface).chartType}` === chartType;
 }
 
+export function isDashboardRoutePreviewTile(tile: TileSettingsInterface | null | undefined): boolean {
+  return !!tile
+    && tile.type === TileTypes.Map
+    && (tile as AppDashboardMapTileSettingsInterface).mapSource === 'routes';
+}
+
 export function getDashboardAutoTileDescriptorForTile(
   tile: TileSettingsInterface | null | undefined,
 ): DashboardAutoTileDescriptor | null {
@@ -248,6 +282,13 @@ export function getDashboardAutoTileDescriptorForTile(
     return {
       id: DASHBOARD_AUTO_TILE_SLEEP_TREND_ID,
       source: DASHBOARD_AUTO_TILE_SLEEP_TREND_SOURCE,
+    };
+  }
+
+  if (isDashboardRoutePreviewTile(tile)) {
+    return {
+      id: DASHBOARD_AUTO_TILE_ROUTE_PREVIEW_ID,
+      source: DASHBOARD_AUTO_TILE_ROUTE_PREVIEW_SOURCE,
     };
   }
 

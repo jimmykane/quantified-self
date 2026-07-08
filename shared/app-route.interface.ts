@@ -1,5 +1,6 @@
 import { OriginalFileMetaData } from './app-event.interface';
 import { RouteDeliverySummary, RouteSourceSummary } from './route-provenance';
+import type { RoutePreviewJSONInterface } from '@sports-alliance/sports-lib';
 
 export interface OriginalRouteFileMetaData extends OriginalFileMetaData {
     extension?: string;
@@ -143,6 +144,8 @@ export interface FirestoreRouteJSON {
     activityTypes: string[];
     streamTypes: string[];
     bounds?: RouteBounds;
+    preview?: RoutePreviewJSONInterface;
+    previewReady?: boolean;
     importedAt?: Date;
     updatedAt?: Date;
     /** @deprecated Use originalFiles[0] instead. Kept for event parity. */

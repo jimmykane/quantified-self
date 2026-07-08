@@ -18,6 +18,7 @@ import {
   getUserDeletionGuardStateInTransaction,
   UserDeletionGuardReadError,
 } from '../shared/user-deletion-guard';
+import { isRoutePreviewReady } from '../shared/route-preview-ready';
 
 export const ROUTE_SERVER_OWNED_FIELDS = [
   'id',
@@ -38,6 +39,8 @@ export const ROUTE_SERVER_OWNED_FIELDS = [
   'activityTypes',
   'streamTypes',
   'bounds',
+  'preview',
+  'previewReady',
   'sourceSummary',
   'syncedDestinationServiceNames',
   'deliverySummaries',
@@ -305,6 +308,7 @@ export function buildRouteDocumentForWrite(params: BuildRouteDocumentForWritePar
     id: params.routeId,
     userID: params.userID,
     name: resolvePersistedRouteName(params),
+    previewReady: isRoutePreviewReady(params.parsedPayload.preview),
     originalFile: originalFile || undefined,
     originalFiles: resolvedOriginalFiles,
     importedAt: params.preserveImportedAt === false

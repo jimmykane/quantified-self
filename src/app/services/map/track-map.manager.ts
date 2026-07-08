@@ -2,10 +2,13 @@ import { MarkerFactoryService } from './marker-factory.service';
 import { LoggerService } from '../logger.service';
 import {
   ensureLayer,
+  bindLayerClickOnce,
+  unbindLayerClicks,
   removeLayerIfExists,
   removeSourceIfExists,
   setPaintIfLayerExists,
   upsertGeoJsonSource,
+  type LayerBindingRegistry,
 } from './mapbox-layer.utils';
 import {
   applyTerrain,
@@ -37,6 +40,14 @@ export interface TrackMapRenderData {
   strokeColor: string;
   positions: TrackMapPosition[];
   markers?: TrackMapExtraMarkerRenderData[];
+  metadata?: Record<string, unknown>;
+}
+
+export interface TrackMapClickEvent {
+  track: TrackMapRenderData;
+  originalEvent: unknown;
+  latitudeDegrees: number | null;
+  longitudeDegrees: number | null;
 }
 
 export interface TrackMapCursorRenderData extends TrackMapPosition {
@@ -48,7 +59,12 @@ export interface TrackMapRenderOptions {
   showArrows: boolean;
   showEndpointMarkers?: boolean;
   strokeWidth: number;
+  onTrackClick?: (event: TrackMapClickEvent) => void;
 }
+
+type ResolvedTrackMapRenderOptions = Required<Omit<TrackMapRenderOptions, 'onTrackClick'>> & {
+  onTrackClick?: (event: TrackMapClickEvent) => void;
+};
 
 interface StoredTrackLayers {
   sourceId: string;
@@ -69,13 +85,14 @@ export class TrackMapManager {
   private styleReadyRenderCleanup: (() => void) | null = null;
 
   private currentTracks: TrackMapRenderData[] = [];
-  private currentOptions: Required<TrackMapRenderOptions> = {
+  private currentOptions: ResolvedTrackMapRenderOptions = {
     showArrows: true,
     showEndpointMarkers: true,
     strokeWidth: 3,
   };
 
   private activeLayersByTrackId = new Map<string, StoredTrackLayers>();
+  private lineClickBindings: LayerBindingRegistry = [];
   private startMarkers = new Map<string, any>();
   private endMarkers = new Map<string, any>();
   private extraMarkers = new Map<string, any[]>();
@@ -133,6 +150,7 @@ export class TrackMapManager {
       showArrows: options?.showArrows !== false,
       showEndpointMarkers: options?.showEndpointMarkers !== false,
       strokeWidth: Number.isFinite(options?.strokeWidth) ? options.strokeWidth : 3,
+      ...(options?.onTrackClick ? { onTrackClick: options.onTrackClick } : {}),
     };
     this.renderTracks();
     this.renderCursorMarkers();
@@ -156,11 +174,18 @@ export class TrackMapManager {
   }
 
   public clearAll(): void {
+    this.styleLoadHandlerCleanup?.();
+    this.styleLoadHandlerCleanup = null;
+    this.styleLoadHandler = null;
     this.styleReadyRenderCleanup?.();
     this.styleReadyRenderCleanup = null;
+    clearDeferredTerrainToggleState(this.terrainToggleState);
     this.clearTracksAndMarkers();
     this.clearCursorMarkers();
     this.currentTracks = [];
+    this.map = null;
+    this.mapboxgl = null;
+    this.terrainEnabled = false;
   }
 
   public toggleTerrain(enable: boolean, animate: boolean = true): void {
@@ -380,6 +405,7 @@ export class TrackMapManager {
       'line-opacity': 1,
       'line-emissive-strength': 1,
     });
+    this.bindTrackClick(track, lineLayerId);
 
     if (this.currentOptions.showArrows) {
       ensureLayer(this.map, {
@@ -418,6 +444,26 @@ export class TrackMapManager {
     });
 
     this.renderTrackMarkers(track, coordinates);
+  }
+
+  private bindTrackClick(track: TrackMapRenderData, lineLayerId: string): void {
+    unbindLayerClicks(this.map, this.lineClickBindings, lineLayerId);
+    const clickHandler = this.currentOptions.onTrackClick;
+    if (!clickHandler) {
+      return;
+    }
+
+    bindLayerClickOnce(this.map, this.lineClickBindings, lineLayerId, (event: unknown) => {
+      const lngLat = (event as { lngLat?: { lng?: unknown; lat?: unknown } } | null | undefined)?.lngLat;
+      const longitudeDegrees = Number(lngLat?.lng);
+      const latitudeDegrees = Number(lngLat?.lat);
+      clickHandler({
+        track,
+        originalEvent: event,
+        latitudeDegrees: Number.isFinite(latitudeDegrees) ? latitudeDegrees : null,
+        longitudeDegrees: Number.isFinite(longitudeDegrees) ? longitudeDegrees : null,
+      });
+    });
   }
 
   private renderTrackMarkers(track: TrackMapRenderData, coordinates: [number, number][]): void {
@@ -499,10 +545,12 @@ export class TrackMapManager {
     }
 
     this.activeLayersByTrackId.forEach((ids) => {
+      unbindLayerClicks(this.map, this.lineClickBindings, ids.lineLayerId);
       removeLayerIfExists(this.map, ids.arrowLayerId);
       removeLayerIfExists(this.map, ids.lineLayerId);
       removeSourceIfExists(this.map, ids.sourceId);
     });
+    unbindLayerClicks(this.map, this.lineClickBindings);
     this.activeLayersByTrackId.clear();
 
     this.startMarkers.forEach(marker => marker.remove());
@@ -520,6 +568,7 @@ export class TrackMapManager {
     }
     const ids = this.activeLayersByTrackId.get(trackId);
     if (ids) {
+      unbindLayerClicks(this.map, this.lineClickBindings, ids.lineLayerId);
       removeLayerIfExists(this.map, ids.arrowLayerId);
       removeLayerIfExists(this.map, ids.lineLayerId);
       removeSourceIfExists(this.map, ids.sourceId);

@@ -392,6 +392,43 @@ describe('ChartsColumnsComponent', () => {
     expect(option.series[0].data).toEqual([10, 0, 30]);
   });
 
+  it('should enable the mobile axis drag handle for vertical date columns', async () => {
+    const originalMatchMedia = window.matchMedia;
+    const matchMediaSpy = vi.fn().mockImplementation(() => ({
+      matches: true,
+      media: '',
+      onchange: null,
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    }));
+    window.matchMedia = matchMediaSpy as unknown as typeof window.matchMedia;
+
+    try {
+      component.chartDataCategoryType = ChartDataCategoryTypes.DateType;
+      component.chartDataTimeInterval = TimeIntervals.Daily;
+      component.vertical = true;
+      component.data = [
+        { time: Date.UTC(2024, 0, 1), [ChartDataValueTypes.Total]: 10, count: 1 },
+        { time: Date.UTC(2024, 0, 2), [ChartDataValueTypes.Total]: 20, count: 1 },
+      ];
+
+      fixture.detectChanges();
+      await waitForChartStabilization();
+
+      const option = getLastOption();
+      expect(option.tooltip.trigger).toBe('axis');
+      expect(option.tooltip.triggerOn).toBe('click');
+      expect(option.xAxis.axisPointer.triggerTooltip).toBe(true);
+      expect(option.xAxis.axisPointer.handle.show).toBe(true);
+      expect(option.xAxis.axisPointer.handle.size).toBe(20);
+    } finally {
+      window.matchMedia = originalMatchMedia;
+    }
+  });
+
   it('should keep missing daily average buckets null and compute the summary from raw data only', async () => {
     component.chartDataCategoryType = ChartDataCategoryTypes.DateType;
     component.chartDataTimeInterval = TimeIntervals.Daily;

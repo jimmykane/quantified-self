@@ -51,6 +51,10 @@
   white-space: nowrap;
 }
 
+.power-curve-title-compact {
+  display: none;
+}
+
 .title-info-button {
   width: 20px;
   min-width: 20px;
@@ -140,6 +144,14 @@
 
 @media (max-width: 640px) {
   .power-curve-header.power-curve-header-reserve-actions {
-    padding-right: 104px;
+    padding-right: var(--power-curve-mobile-header-reserve-right, 104px);
+  }
+
+  .power-curve-title-full {
+    display: none;
+  }
+
+  .power-curve-title-compact {
+    display: inline;
   }
 }

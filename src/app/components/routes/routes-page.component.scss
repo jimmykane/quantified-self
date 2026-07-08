@@ -84,7 +84,7 @@
 
 .route-table-shell,
 .route-table {
-  --route-table-min-width: 108rem;
+  --route-table-min-width: 114rem;
 }
 
 .summary-item {
@@ -259,6 +259,11 @@
   padding-right: 4px;
   text-align: center;
   width: 3.25rem;
+}
+
+.route-table .mat-column-preview {
+  width: 6.25rem;
+  min-width: 6.25rem;
 }
 
 .route-table .mat-column-date {
@@ -478,6 +483,11 @@
   }
 
   .route-table-shell {
-    --route-table-min-width: 980px;
+    --route-table-min-width: 1060px;
+  }
+
+  .route-table .mat-column-preview {
+    min-width: 5.5rem;
+    width: 5.5rem;
   }
 }

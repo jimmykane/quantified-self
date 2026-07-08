@@ -6,9 +6,10 @@ import {
   POWER_CURVE_STAT_TYPE,
   type PowerCurvePoint,
 } from '@shared/power-curve';
+import type { AppDashboardPowerCurveCompareMode } from '../models/app-user.interface';
 
 export interface DashboardPowerCurveSeries {
-  seriesKey: 'best' | 'latest' | 'latestAndBest';
+  seriesKey: 'best' | 'latest' | 'comparisonBest' | 'latestAndBest';
   label: string;
   colorKey: string;
   points: PowerCurvePoint[];
@@ -27,12 +28,18 @@ export interface DashboardPowerCurveContext {
   sourceEventCount: number;
   latestEventId: string | null;
   latestEventStartMs: number | null;
+  latestSeriesLabel: string;
+  compareMode: AppDashboardPowerCurveCompareMode;
+  comparisonSeriesLabel: string;
+  comparisonEventCount: number;
   series: DashboardPowerCurveSeries[];
   summaryPoints: DashboardPowerCurveSummaryPoint[];
 }
 
 export interface DashboardPowerCurveContextOptions {
   latestSeriesLabel?: string;
+  compareMode?: AppDashboardPowerCurveCompareMode | null;
+  nowMs?: number;
 }
 
 interface ResolvedPowerCurveEvent {
@@ -43,6 +50,63 @@ interface ResolvedPowerCurveEvent {
 }
 
 const SUMMARY_DURATIONS_SECONDS = [5, 60, 300, 1200, 3600];
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
+
+export const DASHBOARD_POWER_CURVE_DEFAULT_COMPARE_MODE: AppDashboardPowerCurveCompareMode = 'latest';
+
+export interface DashboardPowerCurveCompareModeOption {
+  mode: AppDashboardPowerCurveCompareMode;
+  label: string;
+  shortLabel: string;
+  menuLabel: string;
+  windowDays?: number;
+}
+
+export const DASHBOARD_POWER_CURVE_COMPARE_MODE_OPTIONS: ReadonlyArray<DashboardPowerCurveCompareModeOption> = [
+  {
+    mode: 'latest',
+    label: 'Latest',
+    shortLabel: 'Latest',
+    menuLabel: 'Latest activity',
+  },
+  {
+    mode: 'best30d',
+    label: '30d',
+    shortLabel: '30d',
+    menuLabel: 'Best last 30d',
+    windowDays: 30,
+  },
+  {
+    mode: 'best90d',
+    label: '90d',
+    shortLabel: '90d',
+    menuLabel: 'Best last 90d',
+    windowDays: 90,
+  },
+];
+
+const DASHBOARD_POWER_CURVE_COMPARE_MODES = new Set<AppDashboardPowerCurveCompareMode>(
+  DASHBOARD_POWER_CURVE_COMPARE_MODE_OPTIONS.map(option => option.mode),
+);
+
+export function normalizeDashboardPowerCurveCompareMode(value: unknown): AppDashboardPowerCurveCompareMode {
+  const stringValue = `${value || ''}`;
+  return DASHBOARD_POWER_CURVE_COMPARE_MODES.has(stringValue as AppDashboardPowerCurveCompareMode)
+    ? stringValue as AppDashboardPowerCurveCompareMode
+    : DASHBOARD_POWER_CURVE_DEFAULT_COMPARE_MODE;
+}
+
+export function resolveDashboardPowerCurveComparisonLabel(
+  mode: AppDashboardPowerCurveCompareMode,
+  latestSeriesLabel: string,
+): string {
+  const normalizedMode = normalizeDashboardPowerCurveCompareMode(mode);
+  if (normalizedMode === 'latest') {
+    return latestSeriesLabel;
+  }
+  return DASHBOARD_POWER_CURVE_COMPARE_MODE_OPTIONS
+    .find(option => option.mode === normalizedMode)?.menuLabel || latestSeriesLabel;
+}
 
 export function buildDashboardPowerCurveContext(
   events: EventInterface[],
@@ -57,6 +121,14 @@ export function buildDashboardPowerCurveContext(
   const envelope = buildPowerCurveEnvelope(resolvedEvents.map(entry => entry.points));
   const summaryPoints = buildDashboardPowerCurveSummaryPoints(envelope);
   const sourceEventCount = Array.isArray(events) ? events.length : 0;
+  const latestSeriesLabel = options.latestSeriesLabel || 'Latest power activity';
+  const compareMode = normalizeDashboardPowerCurveCompareMode(options.compareMode);
+  const comparisonSeriesLabel = resolveDashboardPowerCurveComparisonLabel(compareMode, latestSeriesLabel);
+  const comparisonAnchorMs = options.nowMs ?? latestEvent?.startMs ?? Date.now();
+  const comparisonEvents = resolveComparisonPowerCurveEvents(resolvedEvents, compareMode, comparisonAnchorMs);
+  const comparisonPoints = compareMode === 'latest'
+    ? comparisonEvents[0]?.points || []
+    : buildPowerCurveEnvelope(comparisonEvents.map(entry => entry.points));
 
   if (!resolvedEvents.length || !envelope.length) {
     return {
@@ -64,30 +136,36 @@ export function buildDashboardPowerCurveContext(
       sourceEventCount,
       latestEventId: null,
       latestEventStartMs: null,
+      latestSeriesLabel,
+      compareMode,
+      comparisonSeriesLabel,
+      comparisonEventCount: 0,
       series: [],
       summaryPoints,
     };
   }
 
-  const latestSeries: DashboardPowerCurveSeries | null = latestEvent
+  const comparisonSeries: DashboardPowerCurveSeries | null = comparisonPoints.length
     ? {
-      seriesKey: 'latest',
-      label: options.latestSeriesLabel || 'Latest power activity',
+      seriesKey: compareMode === 'latest' ? 'latest' : 'comparisonBest',
+      label: comparisonSeriesLabel,
       colorKey: 'latest',
-      points: latestEvent.points,
-      eventId: latestEvent.eventId,
-      eventStartMs: latestEvent.startMs,
+      points: comparisonPoints,
+      ...(compareMode === 'latest' ? {
+        eventId: comparisonEvents[0]?.eventId ?? null,
+        eventStartMs: comparisonEvents[0]?.startMs ?? null,
+      } : {}),
     }
     : null;
-  const latestEqualsBest = latestSeries !== null && powerCurvePointsEqual(latestSeries.points, envelope);
-  const series = latestEqualsBest
+  const comparisonEqualsBest = comparisonSeries !== null && powerCurvePointsEqual(comparisonSeries.points, envelope);
+  const series = comparisonEqualsBest
     ? [{
       seriesKey: 'latestAndBest' as const,
-      label: 'Latest and best',
+      label: compareMode === 'latest' ? 'Latest and best' : `${comparisonSeriesLabel} and best`,
       colorKey: 'best',
       points: envelope,
-      eventId: latestSeries.eventId,
-      eventStartMs: latestSeries.eventStartMs,
+      eventId: comparisonSeries.eventId,
+      eventStartMs: comparisonSeries.eventStartMs,
     }]
     : [
       {
@@ -96,7 +174,7 @@ export function buildDashboardPowerCurveContext(
         colorKey: 'best',
         points: envelope,
       },
-      ...(latestSeries ? [latestSeries] : []),
+      ...(comparisonSeries ? [comparisonSeries] : []),
     ];
 
   return {
@@ -104,9 +182,37 @@ export function buildDashboardPowerCurveContext(
     sourceEventCount,
     latestEventId: latestEvent?.eventId ?? null,
     latestEventStartMs: latestEvent?.startMs ?? null,
+    latestSeriesLabel,
+    compareMode,
+    comparisonSeriesLabel,
+    comparisonEventCount: comparisonEvents.length,
     series,
     summaryPoints,
   };
+}
+
+function resolveComparisonPowerCurveEvents(
+  events: ResolvedPowerCurveEvent[],
+  compareMode: AppDashboardPowerCurveCompareMode,
+  nowMs = Date.now(),
+): ResolvedPowerCurveEvent[] {
+  if (compareMode === 'latest') {
+    const latestEvent = events[events.length - 1] || null;
+    return latestEvent ? [latestEvent] : [];
+  }
+
+  const windowDays = DASHBOARD_POWER_CURVE_COMPARE_MODE_OPTIONS
+    .find(option => option.mode === compareMode)?.windowDays ?? null;
+  if (!windowDays || !Number.isFinite(nowMs)) {
+    return [];
+  }
+
+  const cutoffMs = nowMs - (windowDays * MS_PER_DAY);
+  return events.filter(entry => (
+    entry.startMs !== null
+    && entry.startMs >= cutoffMs
+    && entry.startMs <= nowMs
+  ));
 }
 
 function resolvePowerCurveEvent(event: EventInterface): ResolvedPowerCurveEvent | null {

@@ -47,13 +47,21 @@ import {
 import {
   buildDashboardManagerPresetTile,
   DASHBOARD_MANAGER_PRESET_IDS,
+  type DashboardManagerPresetDefinition,
   getDashboardManagerPresetDefinitions,
 } from '../../../helpers/dashboard-manager-presets.helper';
+import {
+  cloneDashboardTileDefaultSize,
+  DASHBOARD_DEFAULT_TILE_SIZE,
+  getDefaultDashboardChartTileSizeForChartType,
+  getDefaultDashboardMapTileSizeForSource,
+} from '../../../helpers/dashboard-tile-default-size.helper';
 import { AppUserUtilities } from '../../../utils/app.user.utilities';
 import { AppUserService } from '../../../services/app.user.service';
 import { AppHapticsService } from '../../../services/app.haptics.service';
 import { AppSleepService } from '../../../services/app.sleep.service';
 import {
+  DASHBOARD_AUTO_TILE_ROUTE_PREVIEW_SOURCE,
   DASHBOARD_AUTO_TILE_POWER_CURVE_SOURCE,
   DASHBOARD_AUTO_TILE_RUNNING_POWER_CURVE_SOURCE,
 } from '../../../helpers/dashboard-auto-tile.helper';
@@ -82,8 +90,10 @@ function dashboardTileSignature(tile: any): Record<string, unknown> {
   return tile?.type === TileTypes.Map
     ? {
       type: tile.type,
+      mapSource: tile.mapSource,
       mapStyle: tile.mapStyle,
       clusterMarkers: tile.clusterMarkers,
+      size: tile.size,
     }
     : {
       type: tile.type,
@@ -92,7 +102,20 @@ function dashboardTileSignature(tile: any): Record<string, unknown> {
       dataValueType: tile.dataValueType,
       dataCategoryType: tile.dataCategoryType,
       dataTimeInterval: tile.dataTimeInterval,
+      size: tile.size,
     };
+}
+
+function getExpectedPresetDefaultSize(definition: DashboardManagerPresetDefinition): { columns: number; rows: number } {
+  if (definition.category === 'map') {
+    return getDefaultDashboardMapTileSizeForSource(definition.mapSource);
+  }
+
+  if (definition.category === 'curated') {
+    return getDefaultDashboardChartTileSizeForChartType(definition.curatedChartType);
+  }
+
+  return cloneDashboardTileDefaultSize(DASHBOARD_DEFAULT_TILE_SIZE);
 }
 
 function expectDashboardSettingsOnlyWrite(
@@ -278,12 +301,40 @@ describe('DashboardManagerDialogComponent', () => {
     const tiles = dialogData.user.settings.dashboardSettings.tiles;
     expect(tiles).toHaveLength(2);
     expect(tiles[1].type).toBe(TileTypes.Map);
+    expect(tiles[1].mapSource).toBe('events');
     expect(tiles[1].mapStyle).toBe('satellite');
     expect(tiles[1].clusterMarkers).toBe(false);
     expect(tiles[1].eventFilters).toEqual({
       range: '1y',
       activityTypes: [ActivityTypes.Cycling],
     });
+    expect(userServiceMock.updateUserProperties).toHaveBeenCalledTimes(1);
+  });
+
+  it('adds a routes map tile without event filters', async () => {
+    component.mode = 'add';
+    component.category = 'map' as any;
+    component.mapSource = 'routes';
+    component.mapStyle = 'default';
+    component.mapClusterMarkers = true;
+    component.mapShowRouteEndpointMarkers = false;
+    component.mapEventRange = '1y';
+    component.mapEventActivityTypes = [ActivityTypes.Cycling];
+
+    await component.save();
+
+    const tile = dialogData.user.settings.dashboardSettings.tiles[1];
+    expect(tile).toMatchObject({
+      name: 'Routes',
+      type: TileTypes.Map,
+      mapSource: 'routes',
+      mapStyle: 'default',
+      size: { columns: 2, rows: 1 },
+      clusterMarkers: false,
+      showHeatMap: false,
+      showRouteEndpointMarkers: false,
+    });
+    expect(tile.eventFilters).toBeUndefined();
     expect(userServiceMock.updateUserProperties).toHaveBeenCalledTimes(1);
   });
 
@@ -396,12 +447,29 @@ describe('DashboardManagerDialogComponent', () => {
       type: TileTypes.Chart,
       name: 'Cycling Power Curve',
       chartType: DASHBOARD_POWER_CURVE_CHART_TYPE,
-      size: { columns: 1, rows: 1 },
+      size: { columns: 2, rows: 1 },
       eventFilters: { range: '1y', activityTypes: getDashboardPowerCurveActivityTypes('cycling') },
     });
     expect(dialogData.user.settings.dashboardSettings.autoTiles.powerCurve).toMatchObject({
       state: 'added',
       source: DASHBOARD_AUTO_TILE_POWER_CURVE_SOURCE,
+    });
+  });
+
+  it('adds curated Form with a wide one-row default size', async () => {
+    component.mode = 'add';
+    component.category = 'curated';
+    component.curatedChartType = DASHBOARD_FORM_CHART_TYPE as any;
+
+    await component.save();
+
+    const tiles = dialogData.user.settings.dashboardSettings.tiles;
+    expect(tiles).toHaveLength(2);
+    expect(tiles[1]).toMatchObject({
+      type: TileTypes.Chart,
+      name: 'Form',
+      chartType: DASHBOARD_FORM_CHART_TYPE,
+      size: { columns: 2, rows: 1 },
     });
   });
 
@@ -795,7 +863,7 @@ describe('DashboardManagerDialogComponent', () => {
       type: TileTypes.Chart,
       name: 'Cycling Power Curve',
       chartType: DASHBOARD_POWER_CURVE_CHART_TYPE,
-      size: { columns: 1, rows: 1 },
+      size: { columns: 2, rows: 1 },
       eventFilters: { range: '1y', activityTypes: getDashboardPowerCurveActivityTypes('cycling') },
     });
     expect(dialogData.user.settings.dashboardSettings.autoTiles.powerCurve).toMatchObject({
@@ -818,7 +886,7 @@ describe('DashboardManagerDialogComponent', () => {
       type: TileTypes.Chart,
       name: 'Running Power Curve',
       chartType: DASHBOARD_POWER_CURVE_CHART_TYPE,
-      size: { columns: 1, rows: 1 },
+      size: { columns: 2, rows: 1 },
       eventFilters: { range: '1y', activityTypes: getDashboardPowerCurveActivityTypes('running') },
     });
     expect(dialogData.user.settings.dashboardSettings.autoTiles.runningPowerCurve).toMatchObject({
@@ -893,17 +961,23 @@ describe('DashboardManagerDialogComponent', () => {
     const defaultTiles = AppUserUtilities.getDefaultUserDashboardTiles();
     expect(tiles).toHaveLength(defaultTiles.length);
     expect(tiles.map(dashboardTileSignature)).toEqual(defaultTiles.map(dashboardTileSignature));
-    expect(tiles.filter((tile: any) => tile.type === TileTypes.Map)).toHaveLength(1);
-    expect(tiles.filter((tile: any) => tile.type === TileTypes.Chart && tile.dataType === DataDistance.type)).toHaveLength(1);
-    expect(tiles.some((tile: any) => tile.chartType === DASHBOARD_RECOVERY_NOW_CHART_TYPE)).toBe(true);
+    expect(tiles.filter((tile: any) => tile.type === TileTypes.Map)).toHaveLength(0);
+    expect(tiles.filter((tile: any) => tile.type === TileTypes.Chart && tile.dataType === DataDistance.type)).toHaveLength(0);
+    expect(tiles.some((tile: any) => tile.chartType === DASHBOARD_RECOVERY_NOW_CHART_TYPE)).toBe(false);
+    expect(tiles.some((tile: any) => tile.chartType === DASHBOARD_FORM_CHART_TYPE)).toBe(true);
     expect(tiles.some((tile: any) => tile.chartType === DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE)).toBe(true);
     expect(tiles.some((tile: any) => tile.chartType === DASHBOARD_POWER_CURVE_CHART_TYPE)).toBe(false);
     expect(tiles.some((tile: any) => tile.chartType === DASHBOARD_FORM_NOW_KPI_CHART_TYPE)).toBe(true);
     expect(tiles.some((tile: any) => tile.chartType === DASHBOARD_ACWR_KPI_CHART_TYPE)).toBe(false);
-    expect(tiles.some((tile: any) => tile.chartType === ChartTypes.Pie && tile.dataType === DataDuration.type)).toBe(true);
+    expect(tiles.some((tile: any) => tile.chartType === ChartTypes.Pie && tile.dataType === DataDuration.type)).toBe(false);
     expect(tiles.some((tile: any) => tile.dataType === DataEnergy.type)).toBe(false);
     expect(tiles.some((tile: any) => tile.dataType === DataHeartRateAvg.type)).toBe(false);
-    expect(dialogData.user.settings.dashboardSettings.autoTiles.curatedRecoveryNow).toMatchObject({
+    expect(dialogData.user.settings.dashboardSettings.autoTiles.curatedRecoveryNow).toBeUndefined();
+    expect(dialogData.user.settings.dashboardSettings.autoTiles.curatedForm).toMatchObject({
+      state: 'added',
+      source: 'default-curated',
+    });
+    expect(dialogData.user.settings.dashboardSettings.autoTiles.curatedIntensityDistribution).toMatchObject({
       state: 'added',
       source: 'default-curated',
     });
@@ -913,7 +987,7 @@ describe('DashboardManagerDialogComponent', () => {
     });
     expect(dialogData.user.settings.dashboardSettings.autoTiles.powerCurve).toBeUndefined();
     expect(dialogData.user.settings.dashboardSettings.autoTiles.runningPowerCurve).toBeUndefined();
-    expect(dialogData.user.settings.dashboardSettings.dismissedCuratedRecoveryNowTile).toBe(false);
+    expect(dialogData.user.settings.dashboardSettings.dismissedCuratedRecoveryNowTile).toBeUndefined();
     expect(userServiceMock.updateUserProperties).toHaveBeenCalledTimes(1);
     expectDashboardSettingsOnlyWrite(userServiceMock, dialogData);
     expect(hapticsMock.selection).toHaveBeenCalledTimes(1);
@@ -935,12 +1009,16 @@ describe('DashboardManagerDialogComponent', () => {
       .map((definition, index) => buildDashboardManagerPresetTile({
         presetId: definition.id,
         order: index,
-        size: { columns: 1, rows: 1 },
+        size: getExpectedPresetDefaultSize(definition),
       }));
 
     expect(tiles).toHaveLength(presetTiles.length);
     expect(tiles.map(dashboardTileSignature)).toEqual(presetTiles.map(dashboardTileSignature));
-    expect(tiles.filter((tile: any) => tile.type === TileTypes.Map)).toHaveLength(1);
+    expect(tiles.filter((tile: any) => tile.type === TileTypes.Map)).toHaveLength(2);
+    expect(tiles.some((tile: any) => tile.type === TileTypes.Map && tile.mapSource === 'events')).toBe(true);
+    expect(tiles.some((tile: any) => tile.type === TileTypes.Map && tile.mapSource === 'routes')).toBe(true);
+    expect(tiles.find((tile: any) => tile.type === TileTypes.Map && tile.mapSource === 'events')?.size).toEqual({ columns: 1, rows: 1 });
+    expect(tiles.find((tile: any) => tile.type === TileTypes.Map && tile.mapSource === 'routes')?.size).toEqual({ columns: 2, rows: 1 });
     expect(tiles.some((tile: any) => tile.chartType === DASHBOARD_ACWR_KPI_CHART_TYPE)).toBe(true);
     expect(tiles.some((tile: any) => tile.chartType === DASHBOARD_RAMP_RATE_KPI_CHART_TYPE)).toBe(true);
     expect(tiles.some((tile: any) => tile.chartType === DASHBOARD_FORM_PLUS_7D_KPI_CHART_TYPE)).toBe(true);
@@ -1141,6 +1219,10 @@ describe('DashboardManagerDialogComponent', () => {
     expect(dialogData.user.settings.dashboardSettings.autoTiles.sleepTrend).toMatchObject({
       state: 'dismissed',
       source: 'sleep-sync',
+    });
+    expect(dialogData.user.settings.dashboardSettings.autoTiles.routePreview).toMatchObject({
+      state: 'dismissed',
+      source: DASHBOARD_AUTO_TILE_ROUTE_PREVIEW_SOURCE,
     });
     expect(dialogData.user.settings.dashboardSettings.autoTiles.curatedRecoveryNow).toMatchObject({
       state: 'dismissed',
@@ -1346,6 +1428,27 @@ describe('DashboardManagerDialogComponent', () => {
     expect(userServiceMock.updateUserProperties).not.toHaveBeenCalled();
   });
 
+  it('allows adding a routes map when an activities map already exists', () => {
+    dialogData.user.settings.dashboardSettings.tiles.push({
+      type: TileTypes.Map,
+      order: 1,
+      name: 'Map',
+      mapSource: 'events',
+      mapStyle: 'default',
+      mapTheme: 'normal',
+      showHeatMap: true,
+      clusterMarkers: true,
+      size: { columns: 1, rows: 1 },
+    });
+
+    component.mode = 'add';
+    component.category = 'map' as any;
+    component.mapSource = 'routes';
+
+    expect(component.isMapOptionDisabled()).toBe(false);
+    expect(component.isSaveDisabled).toBe(false);
+  });
+
   it('disables map preset option when a map tile already exists', () => {
     dialogData.user.settings.dashboardSettings.tiles.push({
       type: TileTypes.Map,
@@ -1365,6 +1468,28 @@ describe('DashboardManagerDialogComponent', () => {
 
     expect(component.selectedPresetDisabledReason).toBe('Map tile already exists.');
     expect(component.isSaveDisabled).toBe(true);
+  });
+
+  it('keeps the routes map preset enabled when only an activities map exists', () => {
+    dialogData.user.settings.dashboardSettings.tiles.push({
+      type: TileTypes.Map,
+      order: 1,
+      name: 'Map',
+      mapSource: 'events',
+      mapStyle: 'default',
+      mapTheme: 'normal',
+      showHeatMap: true,
+      clusterMarkers: true,
+      size: { columns: 1, rows: 1 },
+    });
+
+    component.mode = 'add';
+    component.onWorkflowTabChange(1);
+    component.onPresetCategoryChange('map');
+    component.onPresetSelectionChange(DASHBOARD_MANAGER_PRESET_IDS.MAP_ROUTES_PREVIEW);
+
+    expect(component.selectedPresetDisabledReason).toBeNull();
+    expect(component.isSaveDisabled).toBe(false);
   });
 
   it('edits an existing chart and switches it to curated form', async () => {
@@ -1435,6 +1560,41 @@ describe('DashboardManagerDialogComponent', () => {
     expect(userServiceMock.updateUserProperties).toHaveBeenCalledTimes(1);
   });
 
+  it('renames an event map to Routes when changing its source to saved routes', async () => {
+    dialogData.user.settings.dashboardSettings.tiles = [{
+      type: TileTypes.Map,
+      order: 0,
+      name: 'Clustered HeatMap',
+      mapSource: 'events',
+      mapStyle: 'default',
+      mapTheme: 'normal',
+      showHeatMap: true,
+      clusterMarkers: true,
+      size: { columns: 1, rows: 1 },
+      eventFilters: { range: '90d', activityTypes: [] },
+    }];
+    component.ngOnInit();
+
+    component.mode = 'edit';
+    component.editTileOrder = 0;
+    component.category = 'map' as any;
+    component.mapSource = 'routes';
+    component.mapShowRouteEndpointMarkers = true;
+
+    await component.save();
+
+    const tile = dialogData.user.settings.dashboardSettings.tiles[0];
+    expect(tile).toMatchObject({
+      name: 'Routes',
+      type: TileTypes.Map,
+      mapSource: 'routes',
+      clusterMarkers: false,
+      showHeatMap: false,
+      showRouteEndpointMarkers: true,
+    });
+    expect(tile.eventFilters).toBeUndefined();
+  });
+
   it('converts a chart tile to map in edit mode', async () => {
     component.mode = 'edit';
     component.editTileOrder = 0;
@@ -1446,6 +1606,7 @@ describe('DashboardManagerDialogComponent', () => {
 
     const tile = dialogData.user.settings.dashboardSettings.tiles[0];
     expect(tile.type).toBe(TileTypes.Map);
+    expect(tile.mapSource).toBe('events');
     expect(tile.mapStyle).toBe('satellite');
     expect(tile.clusterMarkers).toBe(true);
     expect(tile.eventFilters).toEqual({ range: '90d', activityTypes: [] });

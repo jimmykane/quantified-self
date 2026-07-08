@@ -7,6 +7,7 @@ import {
 import {
   DASHBOARD_FORM_CHART_TYPE,
   DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE,
+  DASHBOARD_POWER_CURVE_CHART_TYPE,
   DASHBOARD_RECOVERY_NOW_CHART_TYPE,
 } from './dashboard-special-chart-types';
 
@@ -18,12 +19,16 @@ describe('dashboard-chart-display-settings.helper', () => {
     expect(getDefaultDashboardChartTileDisplaySettingsForChartType(DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE)).toEqual({
       derivedChartRange: '1y',
     });
+    expect(getDefaultDashboardChartTileDisplaySettingsForChartType(DASHBOARD_POWER_CURVE_CHART_TYPE)).toEqual({
+      powerCurveCompareMode: 'latest',
+    });
     expect(getDefaultDashboardChartTileDisplaySettingsForChartType(DASHBOARD_RECOVERY_NOW_CHART_TYPE)).toBeUndefined();
   });
 
   it('does not materialize missing defaults when cloning display settings', () => {
     expect(cloneDashboardChartTileDisplaySettingsForChartType(DASHBOARD_FORM_CHART_TYPE, undefined)).toBeUndefined();
     expect(cloneDashboardChartTileDisplaySettingsForChartType(DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE, {})).toBeUndefined();
+    expect(cloneDashboardChartTileDisplaySettingsForChartType(DASHBOARD_POWER_CURVE_CHART_TYPE, {})).toBeUndefined();
   });
 
   it('drops stale settings that do not belong to the chart type', () => {
@@ -36,8 +41,16 @@ describe('dashboard-chart-display-settings.helper', () => {
     expect(cloneDashboardChartTileDisplaySettingsForChartType(DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE, {
       formTimelineWindow: 'y',
       derivedChartRange: '8w',
+      powerCurveCompareMode: 'best30d',
     })).toEqual({
       derivedChartRange: '8w',
+    });
+    expect(cloneDashboardChartTileDisplaySettingsForChartType(DASHBOARD_POWER_CURVE_CHART_TYPE, {
+      formTimelineWindow: 'y',
+      derivedChartRange: '8w',
+      powerCurveCompareMode: 'best90d',
+    })).toEqual({
+      powerCurveCompareMode: 'best90d',
     });
   });
 
@@ -51,6 +64,11 @@ describe('dashboard-chart-display-settings.helper', () => {
       derivedChartRange: 'bad',
     }, false)).toEqual({
       derivedChartRange: '1y',
+    });
+    expect(normalizeDashboardChartTileDisplaySettingsForChartType(DASHBOARD_POWER_CURVE_CHART_TYPE, {
+      powerCurveCompareMode: 'bad',
+    }, false)).toEqual({
+      powerCurveCompareMode: 'latest',
     });
   });
 });

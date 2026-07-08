@@ -1,0 +1,51 @@
+<span
+  class="route-preview-thumbnail"
+  [class.route-preview-thumbnail--empty]="!thumbnail()"
+  role="img"
+  [attr.aria-label]="ariaLabel()">
+  @if (thumbnail(); as previewThumbnail) {
+  <svg
+    class="route-preview-thumbnail-svg"
+    [attr.viewBox]="previewThumbnail.viewBox"
+    aria-hidden="true"
+    focusable="false">
+    @for (path of previewThumbnail.paths; track path.id) {
+    <path
+      class="route-preview-thumbnail-line"
+      [attr.d]="path.d"
+      [attr.stroke]="path.strokeColor">
+      <title>{{ path.label }}</title>
+    </path>
+    }
+    @if (previewThumbnail.startPoint) {
+    <circle
+      class="route-preview-thumbnail-endpoint route-preview-thumbnail-endpoint--start"
+      [attr.cx]="previewThumbnail.startPoint.x"
+      [attr.cy]="previewThumbnail.startPoint.y"
+      r="2.4">
+    </circle>
+    }
+    @if (previewThumbnail.endPoint) {
+    <circle
+      class="route-preview-thumbnail-endpoint route-preview-thumbnail-endpoint--finish"
+      [attr.cx]="previewThumbnail.endPoint.x"
+      [attr.cy]="previewThumbnail.endPoint.y"
+      r="2.4">
+    </circle>
+    }
+  </svg>
+  } @else {
+  <svg
+    class="route-preview-thumbnail-svg"
+    viewBox="0 0 96 56"
+    aria-hidden="true"
+    focusable="false">
+    <path
+      class="route-preview-thumbnail-placeholder-line"
+      d="M 18 38 C 28 18, 42 18, 50 32 S 70 44, 78 20">
+    </path>
+    <circle class="route-preview-thumbnail-placeholder-dot" cx="18" cy="38" r="2.4"></circle>
+    <circle class="route-preview-thumbnail-placeholder-dot" cx="78" cy="20" r="2.4"></circle>
+  </svg>
+  }
+</span>
