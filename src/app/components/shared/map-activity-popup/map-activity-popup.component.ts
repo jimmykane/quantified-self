@@ -19,7 +19,6 @@ export class MapActivityPopupComponent {
   @Input() user?: User | null;
   @Input() actionLabel = 'Open activity';
   @Input() dismissible = false;
-  @Input() forceMobileLayout = true;
 
   @Output() actionClick = new EventEmitter<void>();
   @Output() dismiss = new EventEmitter<void>();
