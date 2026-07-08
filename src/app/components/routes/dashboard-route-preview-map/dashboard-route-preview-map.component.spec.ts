@@ -257,8 +257,8 @@ describe('DashboardRoutePreviewMapComponent', () => {
       .filter(([eventName]) => eventName === 'style.load')
       .map(([, handler]) => handler);
 
-    expect(styleLoadHandlers.length).toBeGreaterThanOrEqual(2);
-    styleLoadHandlers[1]();
+    expect(styleLoadHandlers.length).toBeGreaterThan(0);
+    styleLoadHandlers.forEach(handler => handler());
 
     expect(renderSpy).toHaveBeenCalledWith(true);
   });

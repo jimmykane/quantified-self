@@ -224,6 +224,34 @@ describe('AppRouteService', () => {
         ]);
     });
 
+    it('emits recent route preview updates when visible metadata changes without geometry changes', () => {
+        const source = new Subject<any[]>();
+        const emissions: any[][] = [];
+        const importedAt = new Date('2026-01-01T00:00:00.000Z');
+        vi.mocked(collectionData).mockReturnValue(source.asObservable());
+
+        const subscription = service.watchRecentRoutePreviews({ uid: 'user-1' }, 2)
+            .subscribe(routes => emissions.push(routes));
+
+        source.next([routeWithPreview('route-1', importedAt)]);
+        source.next([{
+            ...routeWithPreview('route-1', importedAt),
+            name: 'Renamed Route',
+        }]);
+        source.next([{
+            ...routeWithPreview('route-1', importedAt),
+            stats: { Distance: 1234, Ascent: 56 },
+        }]);
+        subscription.unsubscribe();
+
+        expect(emissions.map(routes => routes[0]?.name)).toEqual([
+            'Route',
+            'Renamed Route',
+            'Route',
+        ]);
+        expect(emissions[2][0].stats).toEqual({ Distance: 1234, Ascent: 56 });
+    });
+
     it('fails recent route preview loading closed without a trimmed user id', async () => {
         await expect(firstValueFrom(service.watchRecentRoutePreviews({ uid: '   ' }, 2))).resolves.toEqual([]);
 

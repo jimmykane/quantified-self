@@ -282,25 +282,70 @@ export class AppRouteService {
     }
 
     private buildRoutePreviewFingerprint(routes: readonly FirestoreRouteJSON[] | null | undefined): string {
-        return (routes || []).map(route => {
+        return this.stableRoutePreviewFingerprintValue((routes || []).map(route => {
             const preview = route.preview;
-            const segments = (preview?.segments || []).map(segment => [
-                segment?.id || '',
-                segment?.encodedPolyline || '',
-                segment?.pointCount ?? '',
-                segment?.sourcePointCount ?? '',
-            ].join(':')).join('|');
-            return [
-                route.id || '',
-                route.importedAt ? this.toRouteTimestampMs(route.importedAt) : '',
-                preview?.version ?? '',
-                preview?.encoding ?? '',
-                preview?.precision ?? '',
-                preview?.pointCount ?? '',
-                preview?.sourcePointCount ?? '',
-                segments,
-            ].join('~');
-        }).join('\n');
+            return {
+                id: route.id || '',
+                name: route.name || '',
+                srcFileType: route.srcFileType || '',
+                importedAt: route.importedAt ? this.toRouteTimestampMs(route.importedAt) : null,
+                routeCount: route.routeCount ?? null,
+                waypointCount: route.waypointCount ?? null,
+                pointCount: route.pointCount ?? null,
+                activityTypes: route.activityTypes || [],
+                sourceSummary: route.sourceSummary || null,
+                stats: route.stats || null,
+                preview: {
+                    version: preview?.version ?? null,
+                    encoding: preview?.encoding ?? null,
+                    precision: preview?.precision ?? null,
+                    pointCount: preview?.pointCount ?? null,
+                    sourcePointCount: preview?.sourcePointCount ?? null,
+                    segments: (preview?.segments || []).map(segment => ({
+                        id: segment?.id || '',
+                        name: segment?.name || '',
+                        activityType: segment?.activityType || '',
+                        encodedPolyline: segment?.encodedPolyline || '',
+                        pointCount: segment?.pointCount ?? null,
+                        sourcePointCount: segment?.sourcePointCount ?? null,
+                    })),
+                },
+            };
+        }));
+    }
+
+    private stableRoutePreviewFingerprintValue(value: unknown): string {
+        return JSON.stringify(this.normalizeRoutePreviewFingerprintValue(value));
+    }
+
+    private normalizeRoutePreviewFingerprintValue(value: unknown): unknown {
+        if (value === null || typeof value === 'undefined') {
+            return null;
+        }
+        if (value instanceof Date) {
+            return value.getTime();
+        }
+        if (typeof (value as { toMillis?: unknown })?.toMillis === 'function') {
+            return (value as { toMillis: () => number }).toMillis();
+        }
+        if (Array.isArray(value)) {
+            return value.map(item => this.normalizeRoutePreviewFingerprintValue(item));
+        }
+        if (typeof value === 'object') {
+            return Object.fromEntries(Object.entries(value as Record<string, unknown>)
+                .sort(([leftKey], [rightKey]) => leftKey.localeCompare(rightKey))
+                .map(([key, entryValue]) => [key, this.normalizeRoutePreviewFingerprintValue(entryValue)]));
+        }
+        if (typeof value === 'number') {
+            return Number.isFinite(value) ? value : `${value}`;
+        }
+        if (typeof value === 'bigint') {
+            return `${value}`;
+        }
+        if (['boolean', 'string'].includes(typeof value)) {
+            return value;
+        }
+        return `${value}`;
     }
 
     private toRouteTimestampMs(value: unknown): number {
