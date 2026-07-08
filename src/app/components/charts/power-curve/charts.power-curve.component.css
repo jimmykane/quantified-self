@@ -140,6 +140,7 @@
 
 @media (max-width: 640px) {
   .power-curve-header.power-curve-header-reserve-actions {
-    padding-right: 104px;
+    padding-right: var(--power-curve-mobile-header-reserve-right, 104px);
+    padding-top: var(--power-curve-mobile-header-top-gutter, 0);
   }
 }

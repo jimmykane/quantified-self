@@ -276,6 +276,10 @@ export class TileChartComponent extends TileAbstractDirective {
     return this.showSharedRangeControls || this.showActions;
   }
 
+  get showStackedMobileHeaderControls(): boolean {
+    return this.showPowerCurveCompareSelector && this.showEventFilters;
+  }
+
   onDerivedRangeSelection(value: unknown): void {
     const nextRange = normalizeDashboardDerivedChartRange(value) as AppDashboardDerivedChartRange;
     if (nextRange === this.selectedDerivedChartRange) {

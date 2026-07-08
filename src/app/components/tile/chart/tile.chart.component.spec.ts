@@ -565,6 +565,7 @@ describe('TileChartComponent', () => {
     const compareSelector = getRangeSelectorComponents().find(selector => selector.ariaLabel === 'Select Power Curve comparison');
     expect(compareSelector).toBeTruthy();
     expect(compareSelector?.value).toBe('best30d');
+    expect((fixture.nativeElement.querySelector('section') as HTMLElement).classList.contains('tile-has-stacked-mobile-controls')).toBe(true);
     compareSelector?.valueChange.emit('best90d');
     expect(compareModes).toEqual(['best90d']);
   });
@@ -1010,5 +1011,7 @@ describe('TileChartComponent', () => {
     expect(styles).toContain('--loading-overlay-top-offset: var(--tile-header-controls-height);');
     expect(styles).toContain('section > :not(.tile-header-controls) {');
     expect(styles).toContain('z-index: 20;');
+    expect(styles).toContain('.tile-has-stacked-mobile-controls {');
+    expect(styles).toContain('--power-curve-mobile-header-top-gutter: 32px;');
   });
 });
