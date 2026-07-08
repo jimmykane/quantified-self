@@ -179,102 +179,6 @@ interface BuildDashboardTileViewModelsInput {
   } | null;
 }
 
-function logRecoveryNowDebug(
-  logger: EventStatAggregationLogger | undefined,
-  payload: Record<string, unknown>,
-): void {
-  const loggerWithOptionalLog = logger as (EventStatAggregationLogger & {
-    log?: (...args: unknown[]) => void;
-  }) | undefined;
-  loggerWithOptionalLog?.log?.('[debug][recovery-now] dashboard_tile_recovery_context', payload);
-}
-
-function logCustomChartDebug(
-  logger: EventStatAggregationLogger | undefined,
-  payload: Record<string, unknown>,
-): void {
-  const loggerWithOptionalLog = logger as (EventStatAggregationLogger & {
-    log?: (...args: unknown[]) => void;
-  }) | undefined;
-  loggerWithOptionalLog?.log?.('[debug][custom-chart] dashboard_tile_chart_context', payload);
-}
-
-function resolveFiniteMetricValue(value: unknown): number | null {
-  if (value === null || value === undefined || value === '') {
-    return null;
-  }
-  const numericValue = typeof value === 'number' ? value : Number(value);
-  return Number.isFinite(numericValue) ? numericValue : null;
-}
-
-function resolveStatTimeBounds(events: EventInterface[]): { first: number | null; last: number | null } {
-  let first: number | null = null;
-  let last: number | null = null;
-  events.forEach((event) => {
-    const time = resolveEventStartDateTimeMs(event);
-    if (time === null) {
-      return;
-    }
-    if (first === null || time < first) {
-      first = time;
-    }
-    if (last === null || time > last) {
-      last = time;
-    }
-  });
-  return { first, last };
-}
-
-function resolveMetricCoverageDebug(
-  events: EventInterface[],
-  dataType: string | undefined,
-): {
-  withMetricCount: number;
-  withoutMetricCount: number;
-  firstMetricTime: number | null;
-  lastMetricTime: number | null;
-} {
-  if (!dataType) {
-    return {
-      withMetricCount: 0,
-      withoutMetricCount: events.length,
-      firstMetricTime: null,
-      lastMetricTime: null,
-    };
-  }
-
-  let withMetricCount = 0;
-  let withoutMetricCount = 0;
-  let firstMetricTime: number | null = null;
-  let lastMetricTime: number | null = null;
-  events.forEach((event) => {
-    const stat = event?.getStat?.(dataType) as { getValue?: () => unknown } | null | undefined;
-    const value = resolveFiniteMetricValue(stat?.getValue?.());
-    if (value === null) {
-      withoutMetricCount += 1;
-      return;
-    }
-    withMetricCount += 1;
-    const time = resolveEventStartDateTimeMs(event);
-    if (time === null) {
-      return;
-    }
-    if (firstMetricTime === null || time < firstMetricTime) {
-      firstMetricTime = time;
-    }
-    if (lastMetricTime === null || time > lastMetricTime) {
-      lastMetricTime = time;
-    }
-  });
-
-  return {
-    withMetricCount,
-    withoutMetricCount,
-    firstMetricTime,
-    lastMetricTime,
-  };
-}
-
 function resolveEventStartDateTimeMs(event: EventInterface): number | null {
   const startDate = (event as { startDate?: unknown } | null)?.startDate;
   if (startDate instanceof Date) {
@@ -666,17 +570,6 @@ export function buildDashboardTileViewModels(
       : chartTile.chartType;
     if (isCuratedRecoveryTile) {
       const recoveryNowContextForTile = derivedRecoveryNowContext;
-      const segments = Array.isArray(recoveryNowContextForTile?.segments) ? recoveryNowContextForTile.segments : [];
-      logRecoveryNowDebug(input.logger, {
-        tileName: chartTile.name || null,
-        chartType: `${effectiveChartType}`,
-        source: derivedRecoveryNowContext ? 'derived' : 'none',
-        derivedAvailable: !!derivedRecoveryNowContext,
-        filteredEvents: 0,
-        contextTotalSeconds: recoveryNowContextForTile?.totalSeconds ?? null,
-        contextEndTimeMs: recoveryNowContextForTile?.endTimeMs ?? null,
-        contextSegments: segments.length,
-      });
       viewModels.push({
         ...chartTile,
         chartType: effectiveChartType,
@@ -696,37 +589,6 @@ export function buildDashboardTileViewModels(
       preferences: input.preferences,
     }, input.logger);
     const chartRowsForTile = buildAggregatedChartRows(aggregation);
-    const filteredTimeBounds = resolveStatTimeBounds(tileEvents);
-    const metricCoverage = resolveMetricCoverageDebug(tileEvents, chartTile.dataType);
-    const firstBucket = aggregation.buckets[0];
-    const lastBucket = aggregation.buckets[aggregation.buckets.length - 1];
-    logCustomChartDebug(input.logger, {
-      tileName: chartTile.name || null,
-      chartType: `${chartTile.chartType}`,
-      dataType: chartTile.dataType || null,
-      dataValueType: chartTile.dataValueType || null,
-      dataCategoryType: chartTile.dataCategoryType || null,
-      requestedInterval: requestedTimeInterval,
-      resolvedInterval: aggregation.resolvedTimeInterval,
-      totalInputEvents: normalizedEvents.length,
-      filteredEvents: tileEvents.length,
-      filteredFirstEventTime: filteredTimeBounds.first,
-      filteredLastEventTime: filteredTimeBounds.last,
-      metricWithValueEvents: metricCoverage.withMetricCount,
-      metricWithoutValueEvents: metricCoverage.withoutMetricCount,
-      metricFirstEventTime: metricCoverage.firstMetricTime,
-      metricLastEventTime: metricCoverage.lastMetricTime,
-      aggregationBuckets: aggregation.buckets.length,
-      firstBucketKey: firstBucket?.bucketKey ?? null,
-      firstBucketTime: firstBucket?.time ?? null,
-      firstBucketCount: firstBucket?.totalCount ?? null,
-      firstBucketValue: firstBucket?.aggregateValue ?? null,
-      lastBucketKey: lastBucket?.bucketKey ?? null,
-      lastBucketTime: lastBucket?.time ?? null,
-      lastBucketCount: lastBucket?.totalCount ?? null,
-      lastBucketValue: lastBucket?.aggregateValue ?? null,
-      chartRows: chartRowsForTile.length,
-    });
 
     viewModels.push({
       ...chartTile,

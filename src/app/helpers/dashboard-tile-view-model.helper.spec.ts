@@ -167,6 +167,41 @@ describe('dashboard-tile-view-model.helper', () => {
     expect(tile.dataTimeInterval).toBe(TimeIntervals.Auto);
   });
 
+  it('does not emit per-tile debug logs while building dashboard tiles', () => {
+    const logger = { log: vi.fn(), warn: vi.fn(), error: vi.fn() };
+    buildDashboardTileViewModels({
+      tiles: [
+        {
+          type: TileTypes.Chart,
+          order: 0,
+          size: { columns: 1, rows: 1 },
+          chartType: ChartTypes.ColumnsVertical,
+          dataType: DataDistance.type,
+          dataValueType: ChartDataValueTypes.Total,
+          dataCategoryType: ChartDataCategoryTypes.DateType,
+        },
+        {
+          type: TileTypes.Chart,
+          order: 1,
+          size: { columns: 1, rows: 1 },
+          chartType: DASHBOARD_RECOVERY_NOW_CHART_TYPE,
+          dataType: DataRecoveryTime.type,
+        },
+      ] as any,
+      events: [
+        makeEvent({
+          id: 'ride-1',
+          startDate: '2026-01-01T10:00:00.000Z',
+          activityTypes: [ActivityTypes.Cycling],
+          stats: { [DataDistance.type]: 1200 },
+        }),
+      ],
+      logger,
+    });
+
+    expect(logger.log).not.toHaveBeenCalled();
+  });
+
   it('should resolve 90d auto date custom charts to weekly buckets', () => {
     const tile = {
       type: TileTypes.Chart,

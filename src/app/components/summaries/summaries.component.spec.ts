@@ -29,10 +29,11 @@ import * as dashboardTileViewModelHelper from '../../helpers/dashboard-tile-view
 import {
   DASHBOARD_ACWR_KPI_CHART_TYPE,
   DASHBOARD_EFFICIENCY_TREND_CHART_TYPE,
-	  DASHBOARD_FORM_CHART_TYPE,
-	  DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE,
-	  DASHBOARD_POWER_CURVE_CHART_TYPE,
-	  DASHBOARD_RECOVERY_NOW_CHART_TYPE,
+  DASHBOARD_FORM_CHART_TYPE,
+  DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE,
+  DASHBOARD_POWER_CURVE_CHART_TYPE,
+  DASHBOARD_RAMP_RATE_KPI_CHART_TYPE,
+  DASHBOARD_RECOVERY_NOW_CHART_TYPE,
   DASHBOARD_SLEEP_TREND_CHART_TYPE,
 } from '../../helpers/dashboard-special-chart-types';
 import { getDashboardPowerCurveActivityTypes } from '../../helpers/dashboard-power-curve-scope.helper';
@@ -277,6 +278,15 @@ describe('SummariesComponent', () => {
 
     expect(styles).toContain('.dashboard-section-header.dashboard-main-section-header h2');
     expect(styles).toContain('font-size: 1rem;');
+  });
+
+  it('does not mutate dashboard tile arrays during live drag sorting', () => {
+    const templatePath = resolve(process.cwd(), 'src/app/components/summaries/summaries.component.html');
+    const template = readFileSync(templatePath, 'utf8');
+
+    expect(template).not.toContain('cdkDropListSorted');
+    expect(template).toContain('(cdkDropListDropped)="onKpiTilesDrop($event)"');
+    expect(template).toContain('(cdkDropListDropped)="onTilesDrop($event, section.id)"');
   });
 
   it('uses compact section columns instead of placeholders for sparse single-row sections', () => {
@@ -1418,6 +1428,59 @@ describe('SummariesComponent', () => {
     expect(mockSleepService.watchForDashboard).toHaveBeenCalledWith('user-1', nowMs - thirtyDaysMs, nowMs);
   });
 
+  it('should refresh sleep listening when a user input refresh changes only the sleep trend range', async () => {
+    const nowMs = Date.UTC(2026, 3, 30, 12, 0, 0);
+    const thirtyDaysMs = 30 * 24 * 60 * 60 * 1000;
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(nowMs));
+    buildDashboardTileViewModelsSpy.mockReturnValue([]);
+    const originalUser = {
+      uid: 'user-1',
+      settings: {
+        dashboardSettings: {
+          sleepTrend: { range: '14d' },
+          tiles: [],
+        },
+      },
+    } as any;
+    component.user = originalUser;
+
+    await component.ngOnChanges({
+      user: {
+        currentValue: originalUser,
+        previousValue: null,
+        firstChange: true,
+        isFirstChange: () => true,
+      } as any,
+    });
+    mockSleepService.watchForDashboard.mockClear();
+    buildDashboardTileViewModelsSpy.mockClear();
+
+    const refreshedUser = {
+      uid: 'user-1',
+      settings: {
+        dashboardSettings: {
+          sleepTrend: { range: '30d' },
+          tiles: [],
+        },
+      },
+    } as any;
+    component.user = refreshedUser;
+
+    await component.ngOnChanges({
+      user: {
+        currentValue: refreshedUser,
+        previousValue: originalUser,
+        firstChange: false,
+        isFirstChange: () => false,
+      } as any,
+    });
+
+    expect(component.sleepTrendRange).toBe('30d');
+    expect(mockSleepService.watchForDashboard).toHaveBeenCalledWith('user-1', nowMs - thirtyDaysMs, nowMs);
+    expect(buildDashboardTileViewModelsSpy).toHaveBeenCalled();
+  });
+
   it('should page sleep windows by the selected range and cap newer navigation at latest', async () => {
     const nowMs = Date.UTC(2026, 3, 30, 12, 0, 0);
     const fourteenDaysMs = 14 * 24 * 60 * 60 * 1000;
@@ -2083,8 +2146,9 @@ describe('SummariesComponent', () => {
       { type: TileTypes.Chart, order: 1, size: { columns: 1, rows: 1 }, chartType: ChartTypes.ColumnsVertical, dataType: DataDuration.type } as any,
     ];
 
-    component.onTilesSort({ previousIndex: 0, currentIndex: 1 } as any, 'activityOverview');
-    await component.onTilesDrop({ previousIndex: 0, currentIndex: 1 } as any);
+    mockEventService.getEventsBy.mockClear();
+    buildDashboardTileViewModelsSpy.mockClear();
+    await component.onTilesDrop({ previousIndex: 0, currentIndex: 1 } as any, 'activityOverview');
 
     expect(component.user.settings.dashboardSettings.tiles[0].dataType).toBe(DataDuration.type);
     expect(component.user.settings.dashboardSettings.tiles[1].dataType).toBe(DataDistance.type);
@@ -2095,12 +2159,65 @@ describe('SummariesComponent', () => {
     expectDashboardSettingsWrite(component.user, {
       tiles: component.user.settings.dashboardSettings.tiles,
     });
+    expect(mockEventService.getEventsBy).not.toHaveBeenCalled();
+    expect(buildDashboardTileViewModelsSpy).not.toHaveBeenCalled();
+
+    const previousUser = component.user;
+    const echoedUser = JSON.parse(JSON.stringify(previousUser));
+    component.user = echoedUser as any;
+    mockEventService.getEventsBy.mockClear();
+    buildDashboardTileViewModelsSpy.mockClear();
+
+    await component.ngOnChanges({
+      user: {
+        currentValue: echoedUser,
+        previousValue: previousUser,
+        firstChange: false,
+        isFirstChange: () => false,
+      } as any,
+    });
+
+    expect(mockEventService.getEventsBy).not.toHaveBeenCalled();
+    expect(buildDashboardTileViewModelsSpy).not.toHaveBeenCalled();
   });
 
-  it('should reset per-order tile event state after dashboard tile reorder', async () => {
-    const nowMs = Date.UTC(2026, 3, 30, 12, 0, 0);
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date(nowMs));
+  it('should reorder and persist KPI tiles from the drop event without live sort mutation', async () => {
+    component.showActions = true;
+    component.desktopTileDragEnabled = true;
+    component.user = {
+      uid: 'user-1',
+      settings: {
+        dashboardSettings: {
+          tiles: [
+            { type: TileTypes.Chart, order: 0, size: { columns: 1, rows: 1 }, chartType: DASHBOARD_ACWR_KPI_CHART_TYPE },
+            { type: TileTypes.Chart, order: 1, size: { columns: 1, rows: 1 }, chartType: DASHBOARD_RAMP_RATE_KPI_CHART_TYPE },
+          ],
+        },
+      },
+    } as any;
+    component.tiles = [
+      { type: TileTypes.Chart, order: 0, size: { columns: 1, rows: 1 }, chartType: DASHBOARD_ACWR_KPI_CHART_TYPE } as any,
+      { type: TileTypes.Chart, order: 1, size: { columns: 1, rows: 1 }, chartType: DASHBOARD_RAMP_RATE_KPI_CHART_TYPE } as any,
+    ];
+
+    mockEventService.getEventsBy.mockClear();
+    buildDashboardTileViewModelsSpy.mockClear();
+    await component.onKpiTilesDrop({ previousIndex: 0, currentIndex: 1 } as any);
+
+    expect(component.user.settings.dashboardSettings.tiles[0].chartType).toBe(DASHBOARD_RAMP_RATE_KPI_CHART_TYPE);
+    expect(component.user.settings.dashboardSettings.tiles[1].chartType).toBe(DASHBOARD_ACWR_KPI_CHART_TYPE);
+    expect(component.user.settings.dashboardSettings.tiles[0].order).toBe(0);
+    expect(component.user.settings.dashboardSettings.tiles[1].order).toBe(1);
+    expect(component.tiles[0].chartType).toBe(DASHBOARD_RAMP_RATE_KPI_CHART_TYPE);
+    expect(component.tiles[1].chartType).toBe(DASHBOARD_ACWR_KPI_CHART_TYPE);
+    expectDashboardSettingsWrite(component.user, {
+      tiles: component.user.settings.dashboardSettings.tiles,
+    });
+    expect(mockEventService.getEventsBy).not.toHaveBeenCalled();
+    expect(buildDashboardTileViewModelsSpy).not.toHaveBeenCalled();
+  });
+
+  it('should remap per-order tile event state after dashboard tile reorder without refetching', async () => {
     component.showActions = true;
     component.desktopTileDragEnabled = true;
     component.user = {
@@ -2141,21 +2258,97 @@ describe('SummariesComponent', () => {
       0: [{ id: 'old-chart-event' }],
       1: [{ id: 'old-map-event' }],
     };
+    component.tileEventLoadingByOrder = {
+      0: false,
+      1: true,
+    };
+    const firstSubscription = new Subscription();
+    const secondSubscription = new Subscription();
+    const firstUnsubscribeSpy = vi.spyOn(firstSubscription, 'unsubscribe');
+    const secondUnsubscribeSpy = vi.spyOn(secondSubscription, 'unsubscribe');
+    (component as any).tileEventSubscriptions = new Map([
+      [0, firstSubscription],
+      [1, secondSubscription],
+    ]);
 
-    component.onTilesSort({ previousIndex: 0, currentIndex: 1 } as any, 'activityOverview');
     mockEventService.getEventsBy.mockClear();
-    await component.onTilesDrop({ previousIndex: 0, currentIndex: 1 } as any);
+    await component.onTilesDrop({ previousIndex: 0, currentIndex: 1 } as any, 'activityOverview');
 
-    expect((component as any).tileEventsByOrder).toEqual({ 0: [], 1: [] });
+    expect((component as any).tileEventsByOrder).toEqual({
+      0: [{ id: 'old-map-event' }],
+      1: [{ id: 'old-chart-event' }],
+    });
+    expect(component.tileEventLoadingByOrder).toEqual({
+      0: true,
+      1: false,
+    });
+    expect((component as any).tileEventSubscriptions.get(0)).toBe(secondSubscription);
+    expect((component as any).tileEventSubscriptions.get(1)).toBe(firstSubscription);
+    expect(firstUnsubscribeSpy).not.toHaveBeenCalled();
+    expect(secondUnsubscribeSpy).not.toHaveBeenCalled();
+    expect(mockEventService.getEventsBy).not.toHaveBeenCalled();
+  });
+
+  it('should keep late tile event emissions aligned with remapped orders after dashboard tile reorder', async () => {
+    const firstTileEvents = new Subject<any[]>();
+    const secondTileEvents = new Subject<any[]>();
+    mockEventService.getEventsBy
+      .mockReturnValueOnce(firstTileEvents.asObservable())
+      .mockReturnValueOnce(secondTileEvents.asObservable());
+    buildDashboardTileViewModelsSpy.mockReturnValue([]);
+    component.showActions = true;
+    component.desktopTileDragEnabled = true;
+    component.user = {
+      uid: 'user-1',
+      settings: {
+        unitSettings: { startOfTheWeek: 1 },
+        dashboardSettings: {
+          tiles: [
+            {
+              type: TileTypes.Chart,
+              order: 0,
+              size: { columns: 1, rows: 1 },
+              chartType: ChartTypes.ColumnsVertical,
+              dataType: DataAscent.type,
+              dataValueType: ChartDataValueTypes.Total,
+              dataCategoryType: ChartDataCategoryTypes.DateType,
+              eventFilters: { range: '14d', activityTypes: [] },
+            },
+            {
+              type: TileTypes.Chart,
+              order: 1,
+              size: { columns: 1, rows: 1 },
+              chartType: ChartTypes.ColumnsVertical,
+              dataType: DataDuration.type,
+              dataValueType: ChartDataValueTypes.Total,
+              dataCategoryType: ChartDataCategoryTypes.DateType,
+              eventFilters: { range: '30d', activityTypes: [] },
+            },
+          ],
+        },
+      },
+    } as any;
+    component.tiles = [
+      { type: TileTypes.Chart, order: 0, size: { columns: 1, rows: 1 }, chartType: ChartTypes.ColumnsVertical, dataType: DataAscent.type } as any,
+      { type: TileTypes.Chart, order: 1, size: { columns: 1, rows: 1 }, chartType: ChartTypes.ColumnsVertical, dataType: DataDuration.type } as any,
+    ];
+    (component as any).syncTileEventSubscriptions();
     expect(mockEventService.getEventsBy).toHaveBeenCalledTimes(2);
-    expect(mockEventService.getEventsBy.mock.calls[0][1]).toEqual([
-      { fieldPath: 'startDate', opStr: '>=', value: nowMs - (30 * 24 * 60 * 60 * 1000) },
-      { fieldPath: 'startDate', opStr: '<=', value: nowMs },
-    ]);
-    expect(mockEventService.getEventsBy.mock.calls[1][1]).toEqual([
-      { fieldPath: 'startDate', opStr: '>=', value: nowMs - (14 * 24 * 60 * 60 * 1000) },
-      { fieldPath: 'startDate', opStr: '<=', value: nowMs },
-    ]);
+
+    mockEventService.getEventsBy.mockClear();
+    await component.onTilesDrop({ previousIndex: 0, currentIndex: 1 } as any, 'activityOverview');
+
+    const lateFirstTileEvent = { id: 'late-first-tile-event', isMerge: false };
+    const lateSecondTileEvent = { id: 'late-second-tile-event', isMerge: false };
+    firstTileEvents.next([lateFirstTileEvent]);
+    secondTileEvents.next([lateSecondTileEvent]);
+    await Promise.resolve();
+
+    expect((component as any).tileEventsByOrder).toEqual({
+      0: [lateSecondTileEvent],
+      1: [lateFirstTileEvent],
+    });
+    expect(mockEventService.getEventsBy).not.toHaveBeenCalled();
   });
 
   it('should not persist when dropped at the same index', async () => {
@@ -2176,7 +2369,7 @@ describe('SummariesComponent', () => {
       { type: TileTypes.Map, order: 1, size: { columns: 1, rows: 1 }, clusterMarkers: true, mapStyle: 'default' } as any,
     ];
 
-    await component.onTilesDrop({ previousIndex: 1, currentIndex: 1 } as any);
+    await component.onTilesDrop({ previousIndex: 1, currentIndex: 1 } as any, 'activityOverview');
 
     expect(mockUserService.updateUserProperties).not.toHaveBeenCalled();
     expect(component.user.settings.dashboardSettings.tiles[0].type).toBe(TileTypes.Chart);
@@ -2201,7 +2394,7 @@ describe('SummariesComponent', () => {
       { type: TileTypes.Map, order: 1, size: { columns: 1, rows: 1 }, clusterMarkers: true, mapStyle: 'default' } as any,
     ];
 
-    await component.onTilesDrop({ previousIndex: 0, currentIndex: 1 } as any);
+    await component.onTilesDrop({ previousIndex: 0, currentIndex: 1 } as any, 'activityOverview');
 
     expect(mockUserService.updateUserProperties).not.toHaveBeenCalled();
     expect(component.user.settings.dashboardSettings.tiles[0].type).toBe(TileTypes.Chart);
@@ -2227,8 +2420,7 @@ describe('SummariesComponent', () => {
       { type: TileTypes.Chart, order: 1, size: { columns: 1, rows: 1 }, chartType: ChartTypes.ColumnsVertical, dataType: DataDuration.type } as any,
     ];
 
-    component.onTilesSort({ previousIndex: 0, currentIndex: 1 } as any, 'activityOverview');
-    await component.onTilesDrop({ previousIndex: 0, currentIndex: 1 } as any);
+    await component.onTilesDrop({ previousIndex: 0, currentIndex: 1 } as any, 'activityOverview');
 
     expect(component.user.settings.dashboardSettings.tiles[0].dataType).toBe(DataDistance.type);
     expect(component.user.settings.dashboardSettings.tiles[1].dataType).toBe(DataDuration.type);
