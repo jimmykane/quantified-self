@@ -21,6 +21,7 @@ describe('dashboard-power-curve-scope.helper', () => {
   it('resolves generated Cycling and Running Power Curve tiles from their scoped filters', () => {
     expect(resolveDashboardPowerCurveTileScope(buildDashboardPowerCurveAutoTileForScope('cycling', 0))).toBe('cycling');
     expect(resolveDashboardPowerCurveTileScope(buildDashboardPowerCurveAutoTileForScope('running', 1))).toBe('running');
+    expect(buildDashboardPowerCurveAutoTileForScope('cycling', 0).size).toEqual({ columns: 2, rows: 1 });
   });
 
   it('treats partial activity selections from one sport family as that scope', () => {

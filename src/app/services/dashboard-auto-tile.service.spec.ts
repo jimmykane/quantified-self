@@ -157,7 +157,7 @@ describe('DashboardAutoTileService', () => {
       mapSource: 'routes',
       mapStyle: 'default',
       clusterMarkers: false,
-      size: { columns: 1, rows: 1 },
+      size: { columns: 2, rows: 1 },
     });
     expect(routeTile).not.toHaveProperty('eventFilters');
     expect(user.settings?.dashboardSettings?.autoTiles?.routePreview).toMatchObject({
@@ -281,6 +281,7 @@ describe('DashboardAutoTileService', () => {
     expect(powerCurveTile).toMatchObject({
       name: 'Cycling Power Curve',
       chartType: DASHBOARD_POWER_CURVE_CHART_TYPE,
+      size: { columns: 2, rows: 1 },
       eventFilters: {
         range: '1y',
         activityTypes: getDashboardPowerCurveActivityTypes('cycling'),
@@ -487,6 +488,7 @@ describe('DashboardAutoTileService', () => {
     )) as any;
     expect(powerCurveTile).toMatchObject({
       name: 'Cycling Power Curve',
+      size: { columns: 2, rows: 1 },
       eventFilters: {
         range: '1y',
         activityTypes: getDashboardPowerCurveActivityTypes('cycling'),
@@ -522,7 +524,7 @@ describe('DashboardAutoTileService', () => {
     )) as any;
     expect(routeTile).toMatchObject({
       name: 'Routes',
-      size: { columns: 1, rows: 1 },
+      size: { columns: 2, rows: 1 },
       clusterMarkers: false,
       showRouteEndpointMarkers: true,
     });
@@ -562,6 +564,7 @@ describe('DashboardAutoTileService', () => {
     )) as any;
     expect(powerCurveTile).toMatchObject({
       name: 'Running Power Curve',
+      size: { columns: 2, rows: 1 },
       eventFilters: {
         range: '1y',
         activityTypes: getDashboardPowerCurveActivityTypes('running'),

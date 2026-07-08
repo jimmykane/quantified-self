@@ -199,5 +199,16 @@
     }
   </div>
   }
+  @if (showActions && !mainGridSections.length) {
+  <div class="qs-glass-card-panel dashboard-empty-section-guidance" aria-label="Dashboard section guidance">
+    <div class="dashboard-empty-section-guidance-header">
+      <mat-icon aria-hidden="true">info</mat-icon>
+      <div>
+        <h3>Build your dashboard by intent</h3>
+        <p>Add tiles from Dashboard manager. Sections appear automatically when matching charts or maps exist.</p>
+      </div>
+    </div>
+  </div>
+  }
 </section>
 }

@@ -212,7 +212,6 @@ describe('AppUserUtilities', () => {
             curatedTiles.forEach((tile, index) => {
                 expect(tile).toMatchObject({
                     order: 4 + index,
-                    size: { columns: 1, rows: 1 },
                     dataCategoryType: ChartDataCategoryTypes.DateType,
                     dataValueType: ChartDataValueTypes.Total,
                 });
@@ -225,12 +224,17 @@ describe('AppUserUtilities', () => {
             expect(curatedTiles.find(tile => tile.chartType === DASHBOARD_FORM_CHART_TYPE)).toMatchObject({
                 dataType: DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE,
                 dataTimeInterval: TimeIntervals.Daily,
+                size: { columns: 2, rows: 1 },
                 displaySettings: { formTimelineWindow: 'w' },
+            });
+            expect(curatedTiles.find(tile => tile.chartType === DASHBOARD_RECOVERY_NOW_CHART_TYPE)).toMatchObject({
+                size: { columns: 1, rows: 1 },
             });
             [
                 DASHBOARD_FRESHNESS_FORECAST_CHART_TYPE,
             ].forEach((chartType) => {
                 expect(curatedTiles.find(tile => tile.chartType === chartType)).toMatchObject({
+                    size: { columns: 1, rows: 1 },
                     dataType: DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE,
                     dataTimeInterval: TimeIntervals.Weekly,
                 });
@@ -240,6 +244,7 @@ describe('AppUserUtilities', () => {
                 DASHBOARD_EFFICIENCY_TREND_CHART_TYPE,
             ].forEach((chartType) => {
                 expect(curatedTiles.find(tile => tile.chartType === chartType)).toMatchObject({
+                    size: { columns: 1, rows: 1 },
                     dataType: DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE,
                     dataTimeInterval: TimeIntervals.Weekly,
                     displaySettings: { derivedChartRange: '1y' },
@@ -573,7 +578,7 @@ describe('AppUserUtilities', () => {
             expect((routeMapTile as any).mapSource).toBe('routes');
             expect((routeMapTile as any).eventFilters).toBeUndefined();
             expect((routeMapTile as any).showRouteEndpointMarkers).toBe(true);
-            expect((routeMapTile as any).size).toEqual({ columns: 1, rows: 1 });
+            expect((routeMapTile as any).size).toEqual({ columns: 2, rows: 1 });
         });
 
         it('should compact legacy default dashboard map tiles without resizing customized maps', () => {

@@ -20,6 +20,7 @@ import { DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE } from './dashboard-form.help
 import { DASHBOARD_POWER_CURVE_CHART_TYPE } from './dashboard-special-chart-types';
 import { normalizeDashboardTileEventFilters } from './dashboard-tile-event-filters.helper';
 import { getDefaultDashboardChartTileDisplaySettingsForChartType } from './dashboard-chart-display-settings.helper';
+import { getDefaultDashboardChartTileSizeForChartType } from './dashboard-tile-default-size.helper';
 
 export type DashboardPowerCurveScope = 'cycling' | 'running';
 
@@ -89,7 +90,7 @@ export function getDashboardPowerCurveEventFiltersForScope(
 export function buildDashboardPowerCurveAutoTileForScope(
   scope: DashboardPowerCurveScope,
   order: number,
-  size: { columns: number; rows: number } = { columns: 1, rows: 1 },
+  size: { columns: number; rows: number } = getDefaultDashboardChartTileSizeForChartType(DASHBOARD_POWER_CURVE_CHART_TYPE),
 ): AppDashboardChartTileSettingsInterface {
   const definition = getDashboardPowerCurveScopeDefinition(scope);
   const displaySettings = getDefaultDashboardChartTileDisplaySettingsForChartType(DASHBOARD_POWER_CURVE_CHART_TYPE);

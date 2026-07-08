@@ -110,6 +110,12 @@ import {
   cloneDashboardChartTileDisplaySettingsForChartType,
   normalizeDashboardChartTileDisplaySettingsForChartType,
 } from '../../../helpers/dashboard-chart-display-settings.helper';
+import {
+  getDefaultDashboardChartTileSizeForChartType,
+  getDefaultDashboardMapTileSizeForSource,
+  cloneDashboardTileDefaultSize,
+  DASHBOARD_DEFAULT_TILE_SIZE,
+} from '../../../helpers/dashboard-tile-default-size.helper';
 import { ConfirmationDialogComponent } from '../../confirmation-dialog/confirmation-dialog.component';
 import { firstValueFrom, Subscription } from 'rxjs';
 import { take } from 'rxjs/operators';
@@ -1511,7 +1517,7 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
       .map((definition, index) => buildDashboardManagerPresetTile({
         presetId: definition.id,
         order: index,
-        size: this.resolveDefaultAddTileSize(),
+        size: this.resolveDefaultAddTileSize(definition),
       }));
   }
 
@@ -1703,8 +1709,39 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
     return isDashboardSpecialChartType(tile.chartType) ? `${tile.chartType}` : null;
   }
 
-  private resolveDefaultAddTileSize(): { columns: number; rows: number } {
-    return { columns: 1, rows: 1 };
+  private resolveDefaultAddTileSize(
+    presetDefinition?: DashboardManagerPresetDefinition | null,
+  ): { columns: number; rows: number } {
+    const resolvedPresetDefinition = presetDefinition === undefined
+      ? this.selectedPresetDefinition
+      : presetDefinition;
+    if ((presetDefinition !== undefined || this.activeWorkflowTab === 'presets') && resolvedPresetDefinition) {
+      return this.resolveDefaultPresetTileSize(resolvedPresetDefinition);
+    }
+
+    if (this.category === 'map') {
+      return getDefaultDashboardMapTileSizeForSource(this.mapSource);
+    }
+
+    if (this.category === 'curated') {
+      return getDefaultDashboardChartTileSizeForChartType(this.curatedChartType);
+    }
+
+    return cloneDashboardTileDefaultSize(DASHBOARD_DEFAULT_TILE_SIZE);
+  }
+
+  private resolveDefaultPresetTileSize(
+    presetDefinition: DashboardManagerPresetDefinition,
+  ): { columns: number; rows: number } {
+    if (presetDefinition.category === 'map') {
+      return getDefaultDashboardMapTileSizeForSource(presetDefinition.mapSource);
+    }
+
+    if (presetDefinition.category === 'curated') {
+      return getDefaultDashboardChartTileSizeForChartType(presetDefinition.curatedChartType);
+    }
+
+    return cloneDashboardTileDefaultSize(DASHBOARD_DEFAULT_TILE_SIZE);
   }
 
   private resolveKpiGroupForChartType(chartType: DashboardKpiChartType): DashboardKpiGroup {

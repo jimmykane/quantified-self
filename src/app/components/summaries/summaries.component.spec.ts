@@ -235,6 +235,7 @@ describe('SummariesComponent', () => {
     expect(kpiLane?.querySelector('app-tile-chart')?.classList.contains('qs-glass-card-panel')).toBe(false);
     expect(nativeElement.querySelectorAll('.dashboard-section-divider')).toHaveLength(0);
     expect(nativeElement.querySelector('.dashboard-main-sections')).not.toBeNull();
+    expect(nativeElement.querySelector('.dashboard-empty-section-guidance')).toBeNull();
     const sectionHeadings = Array.from(nativeElement.querySelectorAll('.dashboard-main-section h2'))
       .map(heading => heading.textContent?.trim());
     expect(sectionHeadings).toEqual(['Activity Overview', 'Routes & Maps']);
@@ -443,6 +444,11 @@ describe('SummariesComponent', () => {
     expect(nativeElement.querySelector('.dashboard-summary-header')).not.toBeNull();
     expect(nativeElement.querySelector('#dashboard-today-title')?.textContent?.trim()).toBe('Today');
     expect(nativeElement.querySelector('.dashboard-manager-button-desktop span')?.textContent?.trim()).toBe('Dashboard manager');
+    const emptyGuidance = nativeElement.querySelector('.dashboard-empty-section-guidance');
+    expect(emptyGuidance).not.toBeNull();
+    expect(emptyGuidance?.textContent).toContain('Build your dashboard by intent');
+    expect(emptyGuidance?.textContent).not.toContain('Training State');
+    expect(emptyGuidance?.textContent).not.toContain('Performance & Power');
   });
 
   it('does not render an empty read-only dashboard shell', () => {
@@ -457,6 +463,7 @@ describe('SummariesComponent', () => {
     const nativeElement = fixture.nativeElement as HTMLElement;
     expect(nativeElement.querySelector('.pie')).toBeNull();
     expect(nativeElement.querySelector('.dashboard-summary-header')).toBeNull();
+    expect(nativeElement.querySelector('.dashboard-empty-section-guidance')).toBeNull();
   });
 
   it('should delegate tile building with dashboard tiles, events, preferences, and logger on input changes', async () => {

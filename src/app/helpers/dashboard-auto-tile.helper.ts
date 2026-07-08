@@ -56,6 +56,10 @@ import {
   resolveDashboardPowerCurveTileScope,
   type DashboardPowerCurveScope,
 } from './dashboard-power-curve-scope.helper';
+import {
+  getDefaultDashboardChartTileSizeForChartType,
+  getDefaultDashboardMapTileSizeForSource,
+} from './dashboard-tile-default-size.helper';
 
 export const DASHBOARD_AUTO_TILE_SLEEP_TREND_ID: AppDashboardAutoTileId = 'sleepTrend';
 export const DASHBOARD_AUTO_TILE_SLEEP_TREND_SOURCE = 'sleep-sync';
@@ -106,7 +110,7 @@ export interface DashboardAutoTileDescriptor {
 
 export function buildDashboardSleepTrendAutoTile(
   order: number,
-  size: { columns: number; rows: number } = { columns: 1, rows: 1 },
+  size: { columns: number; rows: number } = getDefaultDashboardChartTileSizeForChartType(DASHBOARD_SLEEP_TREND_CHART_TYPE),
 ): TileChartSettingsInterface {
   return {
     name: 'Sleep',
@@ -124,7 +128,7 @@ export function buildDashboardSleepTrendAutoTile(
 export function buildDashboardCuratedAutoTile(
   chartType: DashboardDefaultCuratedChartType,
   order: number,
-  size: { columns: number; rows: number } = { columns: 1, rows: 1 },
+  size: { columns: number; rows: number } = getDefaultDashboardChartTileSizeForChartType(chartType),
 ): AppDashboardChartTileSettingsInterface {
   if (chartType === DASHBOARD_RECOVERY_NOW_CHART_TYPE) {
     return {
@@ -186,14 +190,14 @@ export function buildDashboardCuratedAutoTile(
 export function buildDashboardPowerCurveAutoTile(
   scope: DashboardPowerCurveScope,
   order: number,
-  size: { columns: number; rows: number } = { columns: 1, rows: 1 },
+  size: { columns: number; rows: number } = getDefaultDashboardChartTileSizeForChartType(DASHBOARD_POWER_CURVE_CHART_TYPE),
 ): AppDashboardChartTileSettingsInterface {
   return buildDashboardPowerCurveAutoTileForScope(scope, order, size);
 }
 
 export function buildDashboardRoutePreviewAutoTile(
   order: number,
-  size: { columns: number; rows: number } = { columns: 1, rows: 1 },
+  size: { columns: number; rows: number } = getDefaultDashboardMapTileSizeForSource('routes'),
 ): AppDashboardMapTileSettingsInterface {
   return {
     name: 'Routes',

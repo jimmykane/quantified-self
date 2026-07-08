@@ -47,8 +47,15 @@ import {
 import {
   buildDashboardManagerPresetTile,
   DASHBOARD_MANAGER_PRESET_IDS,
+  type DashboardManagerPresetDefinition,
   getDashboardManagerPresetDefinitions,
 } from '../../../helpers/dashboard-manager-presets.helper';
+import {
+  cloneDashboardTileDefaultSize,
+  DASHBOARD_DEFAULT_TILE_SIZE,
+  getDefaultDashboardChartTileSizeForChartType,
+  getDefaultDashboardMapTileSizeForSource,
+} from '../../../helpers/dashboard-tile-default-size.helper';
 import { AppUserUtilities } from '../../../utils/app.user.utilities';
 import { AppUserService } from '../../../services/app.user.service';
 import { AppHapticsService } from '../../../services/app.haptics.service';
@@ -86,6 +93,7 @@ function dashboardTileSignature(tile: any): Record<string, unknown> {
       mapSource: tile.mapSource,
       mapStyle: tile.mapStyle,
       clusterMarkers: tile.clusterMarkers,
+      size: tile.size,
     }
     : {
       type: tile.type,
@@ -94,7 +102,20 @@ function dashboardTileSignature(tile: any): Record<string, unknown> {
       dataValueType: tile.dataValueType,
       dataCategoryType: tile.dataCategoryType,
       dataTimeInterval: tile.dataTimeInterval,
+      size: tile.size,
     };
+}
+
+function getExpectedPresetDefaultSize(definition: DashboardManagerPresetDefinition): { columns: number; rows: number } {
+  if (definition.category === 'map') {
+    return getDefaultDashboardMapTileSizeForSource(definition.mapSource);
+  }
+
+  if (definition.category === 'curated') {
+    return getDefaultDashboardChartTileSizeForChartType(definition.curatedChartType);
+  }
+
+  return cloneDashboardTileDefaultSize(DASHBOARD_DEFAULT_TILE_SIZE);
 }
 
 function expectDashboardSettingsOnlyWrite(
@@ -308,6 +329,7 @@ describe('DashboardManagerDialogComponent', () => {
       type: TileTypes.Map,
       mapSource: 'routes',
       mapStyle: 'default',
+      size: { columns: 2, rows: 1 },
       clusterMarkers: false,
       showHeatMap: false,
       showRouteEndpointMarkers: false,
@@ -425,12 +447,29 @@ describe('DashboardManagerDialogComponent', () => {
       type: TileTypes.Chart,
       name: 'Cycling Power Curve',
       chartType: DASHBOARD_POWER_CURVE_CHART_TYPE,
-      size: { columns: 1, rows: 1 },
+      size: { columns: 2, rows: 1 },
       eventFilters: { range: '1y', activityTypes: getDashboardPowerCurveActivityTypes('cycling') },
     });
     expect(dialogData.user.settings.dashboardSettings.autoTiles.powerCurve).toMatchObject({
       state: 'added',
       source: DASHBOARD_AUTO_TILE_POWER_CURVE_SOURCE,
+    });
+  });
+
+  it('adds curated Form with a wide one-row default size', async () => {
+    component.mode = 'add';
+    component.category = 'curated';
+    component.curatedChartType = DASHBOARD_FORM_CHART_TYPE as any;
+
+    await component.save();
+
+    const tiles = dialogData.user.settings.dashboardSettings.tiles;
+    expect(tiles).toHaveLength(2);
+    expect(tiles[1]).toMatchObject({
+      type: TileTypes.Chart,
+      name: 'Form',
+      chartType: DASHBOARD_FORM_CHART_TYPE,
+      size: { columns: 2, rows: 1 },
     });
   });
 
@@ -824,7 +863,7 @@ describe('DashboardManagerDialogComponent', () => {
       type: TileTypes.Chart,
       name: 'Cycling Power Curve',
       chartType: DASHBOARD_POWER_CURVE_CHART_TYPE,
-      size: { columns: 1, rows: 1 },
+      size: { columns: 2, rows: 1 },
       eventFilters: { range: '1y', activityTypes: getDashboardPowerCurveActivityTypes('cycling') },
     });
     expect(dialogData.user.settings.dashboardSettings.autoTiles.powerCurve).toMatchObject({
@@ -847,7 +886,7 @@ describe('DashboardManagerDialogComponent', () => {
       type: TileTypes.Chart,
       name: 'Running Power Curve',
       chartType: DASHBOARD_POWER_CURVE_CHART_TYPE,
-      size: { columns: 1, rows: 1 },
+      size: { columns: 2, rows: 1 },
       eventFilters: { range: '1y', activityTypes: getDashboardPowerCurveActivityTypes('running') },
     });
     expect(dialogData.user.settings.dashboardSettings.autoTiles.runningPowerCurve).toMatchObject({
@@ -964,7 +1003,7 @@ describe('DashboardManagerDialogComponent', () => {
       .map((definition, index) => buildDashboardManagerPresetTile({
         presetId: definition.id,
         order: index,
-        size: { columns: 1, rows: 1 },
+        size: getExpectedPresetDefaultSize(definition),
       }));
 
     expect(tiles).toHaveLength(presetTiles.length);

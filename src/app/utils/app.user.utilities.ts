@@ -102,6 +102,7 @@ import { normalizeEventChartOverlayDataTypeByPrimary } from '../helpers/event-ch
 import {
     normalizeDashboardChartTileDisplaySettingsForChartType,
 } from '../helpers/dashboard-chart-display-settings.helper';
+import { getDefaultDashboardMapTileSizeForSource } from '../helpers/dashboard-tile-default-size.helper';
 import { getAppBasicChartDataTypes, getAppCanonicalChartDataTypes } from '../helpers/app-chart-data-types.helper';
 import { ACTIVITY_SYNC_ROUTES, ActivitySyncRouteId } from '@shared/activity-sync-routes';
 import { ROUTE_DELIVERY_SYNC_ROUTES, RouteDeliverySyncRouteId } from '@shared/route-delivery-sync-routes';
@@ -300,7 +301,9 @@ export class AppUserUtilities {
             return;
         }
 
-        tile.size = { columns: 1, rows: 1 };
+        tile.size = isLegacyDefaultRoutesMap
+            ? getDefaultDashboardMapTileSizeForSource('routes')
+            : getDefaultDashboardMapTileSizeForSource('events');
     }
 
     private static normalizeDashboardChartTileDisplaySettings(tile: AppDashboardChartTileSettingsInterface): void {

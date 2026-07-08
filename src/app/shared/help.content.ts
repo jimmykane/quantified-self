@@ -121,6 +121,8 @@ export const HELP_SECTIONS: HelpSection[] = [
 - On mobile, Today rows stay compact while the chart/map grid stays unchanged below.
 - The main dashboard groups chart and map tiles by intent, such as **Training State**, **Performance & Power**, **Activity Overview**, **Routes & Maps**, and **Custom Charts**.
 - Custom charts are placed in those dashboard sections automatically when their metric intent is obvious; otherwise they appear under **Custom Charts**.
+- New dashboard tiles use chart-aware default sizes: Form/TSS, Power Curve, and Routes map start wider, while simple custom totals, KPIs, and the clustered heatmap stay compact.
+- Empty editable dashboards show lightweight section guidance until chart or map sections exist.
 - KPI choices in Dashboard manager are grouped as **Load**, **Readiness**, and **Execution** for both manual and preset flows.
 - Curated and KPI tiles include an **info** icon beside the title with formulas, interpretation guidance, and KPI detail rows such as metric state, freshness date, source, and the signals behind the current label.
 - On supported mobile devices, dashboard buttons and chart interactions provide lightweight haptic feedback.

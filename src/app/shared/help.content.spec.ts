@@ -96,6 +96,8 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('groups chart and map tiles by intent');
     expect(gettingStartedSection?.content).toContain('**Training State**, **Performance & Power**, **Activity Overview**');
     expect(gettingStartedSection?.content).toContain('Custom charts are placed in those dashboard sections automatically');
+    expect(gettingStartedSection?.content).toContain('chart-aware default sizes');
+    expect(gettingStartedSection?.content).toContain('Empty editable dashboards show lightweight section guidance');
     expect(gettingStartedSection?.content).toContain('**Cycling Power Curve** and **Running Power Curve** are curated event-backed charts');
     expect(gettingStartedSection?.content).toContain('defaults to **1y**');
     expect(gettingStartedSection?.content).toContain('**Cycling Power Curve** joins that auto-add flow only after a cycling or mountain biking event');
