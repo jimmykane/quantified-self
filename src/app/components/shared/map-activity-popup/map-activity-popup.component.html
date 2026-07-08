@@ -5,7 +5,7 @@
   </button>
   }
 
-  <header class="track-start-popup-header">
+  <header class="track-start-popup-header" [class.track-start-popup-header--dismissible]="dismissible">
     <div class="track-start-popup-icon" aria-hidden="true">
       <app-activity-type-icon [activityType]="iconActivityType || activityType || 'Other'" size="24px"
         [event]="event || null"></app-activity-type-icon>

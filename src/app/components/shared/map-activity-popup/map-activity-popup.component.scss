@@ -29,6 +29,9 @@
   grid-template-columns: 40px minmax(0, 1fr);
   align-items: center;
   gap: 10px;
+}
+
+.track-start-popup-header--dismissible {
   padding-right: 32px;
 }
 
@@ -120,10 +123,4 @@
 .track-start-popup-actions {
   display: flex;
   justify-content: flex-end;
-}
-
-@media (max-width: 640px) {
-  .track-start-popup {
-    width: 100%;
-  }
 }

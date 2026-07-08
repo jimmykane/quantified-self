@@ -38,6 +38,7 @@ describe('MapActivityPopupComponent', () => {
     const nativeElement = fixture.nativeElement as HTMLElement;
     expect(nativeElement.querySelector('app-summary-primary-info')).toBeNull();
     expect(nativeElement.querySelector('.track-start-popup-header')).toBeTruthy();
+    expect(nativeElement.querySelector('.track-start-popup-header--dismissible')).toBeTruthy();
     expect(nativeElement.querySelector('.track-start-popup-icon app-activity-type-icon')).toBeTruthy();
     expect(nativeElement.querySelector('.track-start-popup-title')?.textContent?.trim()).toBe('Mountain Biking');
     expect(nativeElement.querySelector('.track-start-popup-meta')?.textContent).toContain('8 Jul 2026');
@@ -47,6 +48,17 @@ describe('MapActivityPopupComponent', () => {
       '3.79 km/h',
     ]);
     expect(nativeElement.querySelector('.track-start-popup-actions button')?.textContent?.trim()).toBe('Open activity');
+  });
+
+  it('does not reserve close-button header space for non-dismissible popups', () => {
+    component.activityType = 'Mountain Biking';
+    component.dismissible = false;
+
+    fixture.detectChanges();
+
+    const nativeElement = fixture.nativeElement as HTMLElement;
+    expect(nativeElement.querySelector('.track-start-popup-close')).toBeNull();
+    expect(nativeElement.querySelector('.track-start-popup-header--dismissible')).toBeNull();
   });
 
   it('emits popup actions from the compact controls', () => {
@@ -78,6 +90,7 @@ describe('MapActivityPopupComponent', () => {
     const tracksStyles = readFileSync(tracksStylesPath, 'utf8');
 
     expect(styles).toContain('width: min(280px, calc(100vw - 24px));');
+    expect(styles).not.toMatch(/^\s*width:\s*100%;/m);
     expect(styles).toContain('grid-template-columns: 40px minmax(0, 1fr);');
     expect(styles).toContain('font: var(--mat-sys-title-small);');
     expect(styles).toContain("font-family: 'Barlow Condensed', var(--mat-sys-body-large-font), sans-serif;");
