@@ -1,35 +1,24 @@
 import {
-  TileChartSettingsInterface,
-  TileSettingsInterface,
-  TileTypes,
+  TileSettingsInterface, TileTypes,
 } from '@sports-alliance/sports-lib';
 import { TileAbstractDirective } from '../tile-abstract.directive';
 import { AppUserService } from '../../../services/app.user.service';
 import { AppUserUtilities } from '../../../utils/app.user.utilities';
 import { AppAnalyticsService } from '../../../services/app.analytics.service';
 import { EventEmitter, Input, Output, Directive, inject } from '@angular/core';
+import { User } from '@sports-alliance/sports-lib';
 import { AppHapticsService } from '../../../services/app.haptics.service';
-import {
-  AppDashboardChartTileSettingsInterface,
-  AppDashboardSettingsInterface,
-} from '../../../models/app-user.interface';
+import { AppDashboardSettingsInterface } from '../../../models/app-user.interface';
 import {
   type DashboardTileLaneKey,
   orderDashboardTilesByIntentSections,
   resolveDashboardTileLaneKey,
 } from '../../../helpers/dashboard-tile-section.helper';
-import {
-  DASHBOARD_KPI_GROUP_DEFINITIONS,
-  isDashboardKpiGroup,
-  resolveDashboardKpiTileGroup,
-} from '../../../helpers/dashboard-kpi-group.helper';
-import type { DashboardKpiGroup } from '../../../helpers/dashboard-special-chart-types';
 
 @Directive()
 export class TileActionsAbstractDirective extends TileAbstractDirective {
   protected analyticsService = inject(AppAnalyticsService);
   protected hapticsService = inject(AppHapticsService);
-  public readonly kpiMoveGroupOptions = DASHBOARD_KPI_GROUP_DEFINITIONS;
   @Input() showLayoutControls = true;
   @Output() savingChange = new EventEmitter<boolean>();
 
@@ -70,7 +59,7 @@ export class TileActionsAbstractDirective extends TileAbstractDirective {
     };
   }
 
-  async changeTileType(_event) {
+  async changeTileType(event) {
     this.analyticsService.logEvent('dashboard_tile_action', { method: 'changeTileType' });
     const tileIndex = this.user.settings.dashboardSettings.tiles.findIndex(tile => tile.order === this.order);
     this.user.settings.dashboardSettings.tiles[tileIndex] = this.type === TileTypes.Map ? AppUserUtilities.getDefaultUserDashboardChartTile() : AppUserUtilities.getDefaultUserDashboardMapTile();
@@ -100,7 +89,7 @@ export class TileActionsAbstractDirective extends TileAbstractDirective {
     return this.persistUserSettings();
   }
 
-  async addNewTile(_event: MouseEvent) {
+  async addNewTile($event: MouseEvent) {
     this.analyticsService.logEvent('dashboard_tile_action', { method: 'addNewTile' });
     const chart = Object.assign({}, (<TileSettingsInterface>this.user.settings.dashboardSettings.tiles.find(tile => tile.order === this.order)));
     chart.order = this.user.settings.dashboardSettings.tiles.length;
@@ -108,7 +97,7 @@ export class TileActionsAbstractDirective extends TileAbstractDirective {
     return this.persistUserSettings();
   }
 
-  async deleteTile(_event) {
+  async deleteTile(event) {
     this.analyticsService.logEvent('dashboard_tile_action', { method: 'deleteTile' });
     this.hapticsService.selection();
     if (this.user.settings.dashboardSettings.tiles.length === 1) {
@@ -142,58 +131,6 @@ export class TileActionsAbstractDirective extends TileAbstractDirective {
   async moveTileForward() {
     this.hapticsService.selection();
     return this.moveTileByOffset(1, 'moveTileForward');
-  }
-
-  public isCurrentTileKpi(): boolean {
-    return !!this.getCurrentKpiTile();
-  }
-
-  public getCurrentKpiGroup(): DashboardKpiGroup | null {
-    return this.getCurrentKpiTile()?.group || null;
-  }
-
-  public canMoveTileToKpiGroup(groupId: DashboardKpiGroup): boolean {
-    if (!isDashboardKpiGroup(groupId)) {
-      return false;
-    }
-
-    const currentTile = this.getCurrentKpiTile();
-    return !!currentTile && currentTile.group !== groupId;
-  }
-
-  public async moveTileToKpiGroup(groupId: DashboardKpiGroup): Promise<void> {
-    if (!this.canMoveTileToKpiGroup(groupId)) {
-      return;
-    }
-
-    const orderedTiles = this.getOrderedTiles();
-    const currentTile = this.getCurrentKpiTile(orderedTiles);
-    if (!currentTile) {
-      return;
-    }
-
-    this.analyticsService.logEvent('dashboard_tile_action', {
-      method: 'moveTileToKpiGroup',
-      group: groupId,
-    });
-    this.hapticsService.selection();
-
-    const updatedCurrentTile = {
-      ...currentTile.tile,
-      kpiGroup: groupId,
-    } as AppDashboardChartTileSettingsInterface as TileSettingsInterface;
-    const otherTiles = orderedTiles.filter(tile => tile.order !== this.order);
-    const nextOrderedTiles = orderDashboardTilesByIntentSections([
-      ...otherTiles,
-      updatedCurrentTile,
-    ]);
-    nextOrderedTiles.forEach((tile, index) => {
-      tile.order = index;
-    });
-
-    this.user.settings.dashboardSettings.tiles = nextOrderedTiles;
-    this.order = updatedCurrentTile.order;
-    await this.persistUserSettings();
   }
 
   private async moveTileByOffset(offset: number, analyticsMethod: 'moveTileBackward' | 'moveTileForward') {
@@ -257,21 +194,6 @@ export class TileActionsAbstractDirective extends TileAbstractDirective {
 
   private getTileActionLaneKey(tile: TileSettingsInterface): DashboardTileLaneKey {
     return resolveDashboardTileLaneKey(tile);
-  }
-
-  private getCurrentKpiTile(
-    orderedTiles: TileSettingsInterface[] = this.getOrderedTiles(),
-  ): { tile: TileChartSettingsInterface; group: DashboardKpiGroup } | null {
-    const currentTile = orderedTiles.find(tile => tile.order === this.order);
-    const currentGroup = resolveDashboardKpiTileGroup(currentTile);
-    if (!currentGroup || currentTile?.type !== TileTypes.Chart) {
-      return null;
-    }
-
-    return {
-      tile: currentTile as TileChartSettingsInterface,
-      group: currentGroup,
-    };
   }
 
   /**

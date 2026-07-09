@@ -38,14 +38,6 @@ mat-select {}
   justify-content: flex-start;
 }
 
-.tile-kpi-group-actions {
-  padding-bottom: 2px;
-}
-
-.tile-kpi-group-actions .tile-section-heading {
-  margin-bottom: 0;
-}
-
 .tile-size-fields {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

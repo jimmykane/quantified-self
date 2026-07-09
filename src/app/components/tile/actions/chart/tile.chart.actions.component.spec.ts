@@ -15,7 +15,6 @@ import { ChartTypes, ChartDataValueTypes, ChartDataCategoryTypes, DataRecoveryTi
 import { vi } from 'vitest';
 import {
   DASHBOARD_ACWR_KPI_CHART_TYPE,
-  DASHBOARD_FORM_NOW_KPI_CHART_TYPE,
   DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE,
   DASHBOARD_RECOVERY_NOW_CHART_TYPE,
   DASHBOARD_SLEEP_TREND_CHART_TYPE,
@@ -121,15 +120,6 @@ describe('TileChartActionsComponent', () => {
     expect(template).not.toContain('How to look at the data');
     expect(template).not.toContain('Time interval');
     expect(template).toContain('Edit');
-  });
-
-  it('should expose KPI group move actions for KPI tiles', () => {
-    const templatePath = resolve(process.cwd(), 'src/app/components/tile/actions/chart/tile.chart.actions.component.html');
-    const template = readFileSync(templatePath, 'utf8');
-
-    expect(template).toContain('KPI group');
-    expect(template).toContain('Move to {{ groupOption.label }}');
-    expect(template).toContain('moveTileToKpiGroup(groupOption.id)');
   });
 
   it('should emit editInDashboardManager with current tile order', () => {
@@ -266,57 +256,6 @@ describe('TileChartActionsComponent', () => {
     expect(userMock.settings.dashboardSettings.tiles.map((tile: any) => tile.order)).toEqual([0, 1, 2]);
     expect(component.order).toBe(1);
     expect(userMock.updateUserProperties).toHaveBeenCalled();
-  });
-
-  it('should move a KPI tile to another KPI group and append it there', async () => {
-    userMock.settings.dashboardSettings.tiles = [
-      {
-        name: 'Form now',
-        order: 0,
-        chartType: DASHBOARD_FORM_NOW_KPI_CHART_TYPE,
-        size: { columns: 1, rows: 1 },
-        type: TileTypes.Chart,
-      },
-      {
-        name: 'ACWR',
-        order: 1,
-        chartType: DASHBOARD_ACWR_KPI_CHART_TYPE,
-        size: { columns: 1, rows: 1 },
-        type: TileTypes.Chart,
-      },
-      {
-        name: 'Activity chart',
-        order: 2,
-        chartType: ChartTypes.Bar,
-        dataType: 'Distance',
-        dataValueType: ChartDataValueTypes.Total,
-        dataCategoryType: ChartDataCategoryTypes.ActivityType,
-        size: { columns: 1, rows: 1 },
-        type: TileTypes.Chart,
-      },
-    ];
-    component.order = 1;
-
-    expect(component.getCurrentKpiGroup()).toBe('load');
-    expect(component.canMoveTileToKpiGroup('load')).toBe(false);
-    expect(component.canMoveTileToKpiGroup('readiness')).toBe(true);
-
-    await component.moveTileToKpiGroup('readiness');
-
-    expect(analyticsMock.logEvent).toHaveBeenCalledWith('dashboard_tile_action', {
-      method: 'moveTileToKpiGroup',
-      group: 'readiness',
-    });
-    expect(userMock.settings.dashboardSettings.tiles.map((tile: any) => tile.name)).toEqual([
-      'Form now',
-      'ACWR',
-      'Activity chart',
-    ]);
-    expect(userMock.settings.dashboardSettings.tiles.map((tile: any) => tile.order)).toEqual([0, 1, 2]);
-    expect(userMock.settings.dashboardSettings.tiles[1].kpiGroup).toBe('readiness');
-    expect(component.order).toBe(1);
-    expect(userMock.updateUserProperties).toHaveBeenCalled();
-    expect(hapticsMock.selection).toHaveBeenCalledTimes(1);
   });
 
   it('should not persist when trying to move the first tile backward', async () => {

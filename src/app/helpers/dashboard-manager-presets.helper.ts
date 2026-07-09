@@ -285,7 +285,7 @@ const DASHBOARD_MANAGER_PRESET_DEFINITIONS: DashboardManagerPresetDefinition[] =
     icon: 'fitness_center',
     category: 'kpi',
     kpiChartType: DASHBOARD_FITNESS_CTL_KPI_CHART_TYPE,
-    kpiGroup: 'load',
+    kpiGroup: 'readiness',
   },
   {
     id: DASHBOARD_MANAGER_PRESET_IDS.KPI_FATIGUE_ATL,
@@ -295,7 +295,7 @@ const DASHBOARD_MANAGER_PRESET_DEFINITIONS: DashboardManagerPresetDefinition[] =
     icon: 'battery_alert',
     category: 'kpi',
     kpiChartType: DASHBOARD_FATIGUE_ATL_KPI_CHART_TYPE,
-    kpiGroup: 'load',
+    kpiGroup: 'readiness',
   },
   {
     id: DASHBOARD_MANAGER_PRESET_IDS.KPI_FITNESS_TREND,
@@ -305,7 +305,7 @@ const DASHBOARD_MANAGER_PRESET_DEFINITIONS: DashboardManagerPresetDefinition[] =
     icon: 'trending_up',
     category: 'kpi',
     kpiChartType: DASHBOARD_FITNESS_TREND_KPI_CHART_TYPE,
-    kpiGroup: 'trends',
+    kpiGroup: 'load',
   },
   {
     id: DASHBOARD_MANAGER_PRESET_IDS.KPI_FATIGUE_TREND,
@@ -315,7 +315,7 @@ const DASHBOARD_MANAGER_PRESET_DEFINITIONS: DashboardManagerPresetDefinition[] =
     icon: 'moving',
     category: 'kpi',
     kpiChartType: DASHBOARD_FATIGUE_TREND_KPI_CHART_TYPE,
-    kpiGroup: 'trends',
+    kpiGroup: 'load',
   },
   {
     id: DASHBOARD_MANAGER_PRESET_IDS.KPI_RECOVERY_DEBT,
@@ -345,7 +345,7 @@ const DASHBOARD_MANAGER_PRESET_DEFINITIONS: DashboardManagerPresetDefinition[] =
     icon: 'balance',
     category: 'kpi',
     kpiChartType: DASHBOARD_TRAINING_BALANCE_KPI_CHART_TYPE,
-    kpiGroup: 'intensity',
+    kpiGroup: 'execution',
   },
   {
     id: DASHBOARD_MANAGER_PRESET_IDS.KPI_EASY_PERCENT,
@@ -355,7 +355,7 @@ const DASHBOARD_MANAGER_PRESET_DEFINITIONS: DashboardManagerPresetDefinition[] =
     icon: 'wb_sunny',
     category: 'kpi',
     kpiChartType: DASHBOARD_EASY_PERCENT_KPI_CHART_TYPE,
-    kpiGroup: 'intensity',
+    kpiGroup: 'execution',
   },
   {
     id: DASHBOARD_MANAGER_PRESET_IDS.KPI_HARD_PERCENT,
@@ -365,7 +365,7 @@ const DASHBOARD_MANAGER_PRESET_DEFINITIONS: DashboardManagerPresetDefinition[] =
     icon: 'flash_on',
     category: 'kpi',
     kpiChartType: DASHBOARD_HARD_PERCENT_KPI_CHART_TYPE,
-    kpiGroup: 'intensity',
+    kpiGroup: 'execution',
   },
   {
     id: DASHBOARD_MANAGER_PRESET_IDS.KPI_EFFICIENCY_DELTA_4W,
@@ -375,7 +375,7 @@ const DASHBOARD_MANAGER_PRESET_DEFINITIONS: DashboardManagerPresetDefinition[] =
     icon: 'query_stats',
     category: 'kpi',
     kpiChartType: DASHBOARD_EFFICIENCY_DELTA_4W_KPI_CHART_TYPE,
-    kpiGroup: 'trends',
+    kpiGroup: 'execution',
   },
   {
     id: DASHBOARD_MANAGER_PRESET_IDS.MAP_DEFAULT_CLUSTERED,
@@ -594,7 +594,7 @@ export function buildDashboardManagerPresetTile(
   }
 
   if (definition.category === 'kpi') {
-    const kpiTile: AppDashboardChartTileSettingsInterface = {
+    const kpiTile: TileChartSettingsInterface = {
       name: definition.tileName,
       type: TileTypes.Chart,
       order: input.order,
@@ -604,7 +604,6 @@ export function buildDashboardManagerPresetTile(
       dataValueType: ChartDataValueTypes.Total,
       dataCategoryType: ChartDataCategoryTypes.DateType,
       dataTimeInterval: TimeIntervals.Weekly,
-      kpiGroup: definition.kpiGroup,
     };
     return kpiTile;
   }

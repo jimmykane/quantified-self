@@ -29,7 +29,6 @@ import * as dashboardTileViewModelHelper from '../../helpers/dashboard-tile-view
 import {
   DASHBOARD_ACWR_KPI_CHART_TYPE,
   DASHBOARD_EFFICIENCY_TREND_CHART_TYPE,
-  DASHBOARD_FORM_NOW_KPI_CHART_TYPE,
   DASHBOARD_FORM_CHART_TYPE,
   DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE,
   DASHBOARD_POWER_CURVE_CHART_TYPE,
@@ -233,7 +232,6 @@ describe('SummariesComponent', () => {
     const kpiLane = kpiSection?.querySelector('.dashboard-kpi-lane') as HTMLElement | null;
     expect(kpiLane).not.toBeNull();
     expect(kpiLane?.classList.contains('qs-glass-card-panel')).toBe(true);
-    expect(kpiSection?.querySelector('.dashboard-kpi-group-header')?.textContent).toContain('Load');
     expect(kpiSection?.querySelectorAll('.dashboard-kpi-tile')).toHaveLength(1);
     expect(kpiLane?.querySelector('app-tile-chart')?.classList.contains('qs-glass-card-panel')).toBe(false);
     expect(nativeElement.querySelectorAll('.dashboard-section-divider')).toHaveLength(0);
@@ -287,7 +285,7 @@ describe('SummariesComponent', () => {
     const template = readFileSync(templatePath, 'utf8');
 
     expect(template).not.toContain('cdkDropListSorted');
-    expect(template).toContain('(cdkDropListDropped)="onKpiTilesDrop($event, group.id)"');
+    expect(template).toContain('(cdkDropListDropped)="onKpiTilesDrop($event)"');
     expect(template).toContain('(cdkDropListDropped)="onTilesDrop($event, section.id)"');
   });
 
@@ -2204,7 +2202,7 @@ describe('SummariesComponent', () => {
 
     mockEventService.getEventsBy.mockClear();
     buildDashboardTileViewModelsSpy.mockClear();
-    await component.onKpiTilesDrop({ previousIndex: 0, currentIndex: 1 } as any, 'load');
+    await component.onKpiTilesDrop({ previousIndex: 0, currentIndex: 1 } as any);
 
     expect(component.user.settings.dashboardSettings.tiles[0].chartType).toBe(DASHBOARD_RAMP_RATE_KPI_CHART_TYPE);
     expect(component.user.settings.dashboardSettings.tiles[1].chartType).toBe(DASHBOARD_ACWR_KPI_CHART_TYPE);
@@ -2212,58 +2210,6 @@ describe('SummariesComponent', () => {
     expect(component.user.settings.dashboardSettings.tiles[1].order).toBe(1);
     expect(component.tiles[0].chartType).toBe(DASHBOARD_RAMP_RATE_KPI_CHART_TYPE);
     expect(component.tiles[1].chartType).toBe(DASHBOARD_ACWR_KPI_CHART_TYPE);
-    expectDashboardSettingsWrite(component.user, {
-      tiles: component.user.settings.dashboardSettings.tiles,
-    });
-    expect(mockEventService.getEventsBy).not.toHaveBeenCalled();
-    expect(buildDashboardTileViewModelsSpy).not.toHaveBeenCalled();
-  });
-
-  it('should persist a KPI group change from a cross-group drop', async () => {
-    component.showActions = true;
-    component.desktopTileDragEnabled = true;
-    component.user = {
-      uid: 'user-1',
-      settings: {
-        dashboardSettings: {
-          tiles: [
-            { type: TileTypes.Chart, order: 0, size: { columns: 1, rows: 1 }, chartType: DASHBOARD_FORM_NOW_KPI_CHART_TYPE },
-            { type: TileTypes.Chart, order: 1, size: { columns: 1, rows: 1 }, chartType: DASHBOARD_ACWR_KPI_CHART_TYPE },
-            { type: TileTypes.Chart, order: 2, size: { columns: 1, rows: 1 }, chartType: ChartTypes.ColumnsVertical },
-          ],
-        },
-      },
-    } as any;
-    component.tiles = [
-      { type: TileTypes.Chart, order: 0, size: { columns: 1, rows: 1 }, chartType: DASHBOARD_FORM_NOW_KPI_CHART_TYPE } as any,
-      { type: TileTypes.Chart, order: 1, size: { columns: 1, rows: 1 }, chartType: DASHBOARD_ACWR_KPI_CHART_TYPE } as any,
-      { type: TileTypes.Chart, order: 2, size: { columns: 1, rows: 1 }, chartType: ChartTypes.ColumnsVertical } as any,
-    ];
-    (component as any).refreshTileLanes();
-    const readinessGroup = component.kpiGroups.find(group => group.id === 'readiness');
-    const loadGroup = component.kpiGroups.find(group => group.id === 'load');
-    expect(readinessGroup?.tiles.map(tile => tile.chartType)).toEqual([DASHBOARD_FORM_NOW_KPI_CHART_TYPE]);
-    expect(loadGroup?.tiles.map(tile => tile.chartType)).toEqual([DASHBOARD_ACWR_KPI_CHART_TYPE]);
-
-    mockEventService.getEventsBy.mockClear();
-    buildDashboardTileViewModelsSpy.mockClear();
-    await component.onKpiTilesDrop({
-      previousIndex: 0,
-      currentIndex: 1,
-      previousContainer: { data: readinessGroup?.tiles },
-      container: { data: loadGroup?.tiles },
-    } as any, 'load');
-
-    expect(component.user.settings.dashboardSettings.tiles.map((tile: any) => tile.chartType)).toEqual([
-      DASHBOARD_ACWR_KPI_CHART_TYPE,
-      DASHBOARD_FORM_NOW_KPI_CHART_TYPE,
-      ChartTypes.ColumnsVertical,
-    ]);
-    expect(component.user.settings.dashboardSettings.tiles[1].kpiGroup).toBe('load');
-    expect(component.kpiGroups.find(group => group.id === 'load')?.tiles.map(tile => tile.chartType)).toEqual([
-      DASHBOARD_ACWR_KPI_CHART_TYPE,
-      DASHBOARD_FORM_NOW_KPI_CHART_TYPE,
-    ]);
     expectDashboardSettingsWrite(component.user, {
       tiles: component.user.settings.dashboardSettings.tiles,
     });

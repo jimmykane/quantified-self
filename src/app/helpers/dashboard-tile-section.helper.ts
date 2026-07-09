@@ -20,17 +20,11 @@ import {
   DASHBOARD_RECOVERY_NOW_CHART_TYPE,
   DASHBOARD_SLEEP_TREND_CHART_TYPE,
   isDashboardKpiChartType,
-  type DashboardKpiGroup,
 } from './dashboard-special-chart-types';
 import {
   DASHBOARD_FORM_LEGACY_TRAINING_STRESS_SCORE_TYPE,
   DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE,
 } from './dashboard-form.helper';
-import {
-  DASHBOARD_KPI_GROUP_ORDER,
-  getDashboardKpiGroupLaneKey,
-  resolveDashboardKpiTileGroup,
-} from './dashboard-kpi-group.helper';
 
 export type DashboardTileSectionId =
   | 'trainingState'
@@ -45,8 +39,7 @@ export interface DashboardTileSectionDefinition {
   icon: string;
 }
 
-export type DashboardTileKpiLaneKey = `kpi:${DashboardKpiGroup}`;
-export type DashboardTileLaneKey = DashboardTileKpiLaneKey | `section:${DashboardTileSectionId}`;
+export type DashboardTileLaneKey = 'kpi' | `section:${DashboardTileSectionId}`;
 
 export const DASHBOARD_TILE_SECTION_DEFINITIONS: DashboardTileSectionDefinition[] = [
   { id: 'trainingState', label: 'Training State', icon: 'fitness_center' },
@@ -115,7 +108,7 @@ export function resolveDashboardTileLaneKey(tile: TileSettingsInterface | null |
     tile?.type === TileTypes.Chart
     && isDashboardKpiChartType((tile as TileChartSettingsInterface).chartType)
   ) {
-    return getDashboardKpiGroupLaneKey(resolveDashboardKpiTileGroup(tile) || 'load');
+    return 'kpi';
   }
 
   return `section:${resolveDashboardTileSection(tile)}`;
@@ -129,7 +122,7 @@ export function orderDashboardTilesByIntentSections<T extends TileSettingsInterf
   });
 
   return [
-    ...DASHBOARD_KPI_GROUP_ORDER.flatMap(groupId => tilesByLane.get(getDashboardKpiGroupLaneKey(groupId)) || []),
+    ...(tilesByLane.get('kpi') || []),
     ...DASHBOARD_TILE_SECTION_ORDER.flatMap(sectionId => tilesByLane.get(`section:${sectionId}`) || []),
   ];
 }

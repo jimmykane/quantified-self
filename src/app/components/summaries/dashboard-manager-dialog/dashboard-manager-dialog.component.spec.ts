@@ -897,39 +897,23 @@ describe('DashboardManagerDialogComponent', () => {
 
   it('filters manual KPI options by selected KPI group', () => {
     component.category = 'kpi' as any;
-
-    expect(component.kpiGroup).toBe('readiness');
-    expect(component.presetKpiGroup).toBe('readiness');
-    expect(component.kpiChartType).toBe(DASHBOARD_LOAD_STATUS_KPI_CHART_TYPE);
+    component.onKpiGroupChange('readiness');
 
     expect(component.filteredKpiChartDefinitions.map(definition => definition.chartType)).toEqual([
       DASHBOARD_LOAD_STATUS_KPI_CHART_TYPE,
       DASHBOARD_FORM_NOW_KPI_CHART_TYPE,
+      DASHBOARD_FITNESS_CTL_KPI_CHART_TYPE,
+      DASHBOARD_FATIGUE_ATL_KPI_CHART_TYPE,
       DASHBOARD_RECOVERY_DEBT_KPI_CHART_TYPE,
       DASHBOARD_FORM_PLUS_7D_KPI_CHART_TYPE,
     ]);
 
-    component.onKpiGroupChange('load');
-    expect(component.filteredKpiChartDefinitions.map(definition => definition.chartType)).toEqual([
-      DASHBOARD_ACWR_KPI_CHART_TYPE,
-      DASHBOARD_RAMP_RATE_KPI_CHART_TYPE,
-      DASHBOARD_MONOTONY_STRAIN_KPI_CHART_TYPE,
-      DASHBOARD_FITNESS_CTL_KPI_CHART_TYPE,
-      DASHBOARD_FATIGUE_ATL_KPI_CHART_TYPE,
-    ]);
-
-    component.onKpiGroupChange('trends');
-    expect(component.filteredKpiChartDefinitions.map(definition => definition.chartType)).toEqual([
-      DASHBOARD_FITNESS_TREND_KPI_CHART_TYPE,
-      DASHBOARD_FATIGUE_TREND_KPI_CHART_TYPE,
-      DASHBOARD_EFFICIENCY_DELTA_4W_KPI_CHART_TYPE,
-    ]);
-
-    component.onKpiGroupChange('intensity');
+    component.onKpiGroupChange('execution');
     expect(component.filteredKpiChartDefinitions.map(definition => definition.chartType)).toEqual([
       DASHBOARD_TRAINING_BALANCE_KPI_CHART_TYPE,
       DASHBOARD_EASY_PERCENT_KPI_CHART_TYPE,
       DASHBOARD_HARD_PERCENT_KPI_CHART_TYPE,
+      DASHBOARD_EFFICIENCY_DELTA_4W_KPI_CHART_TYPE,
     ]);
   });
 
@@ -941,6 +925,8 @@ describe('DashboardManagerDialogComponent', () => {
     expect(component.filteredPresetDefinitions.map(definition => definition.id)).toEqual([
       DASHBOARD_MANAGER_PRESET_IDS.KPI_LOAD_STATUS,
       DASHBOARD_MANAGER_PRESET_IDS.KPI_FORM_NOW,
+      DASHBOARD_MANAGER_PRESET_IDS.KPI_FITNESS_CTL,
+      DASHBOARD_MANAGER_PRESET_IDS.KPI_FATIGUE_ATL,
       DASHBOARD_MANAGER_PRESET_IDS.KPI_RECOVERY_DEBT,
       DASHBOARD_MANAGER_PRESET_IDS.KPI_FORM_PLUS_7D,
     ]);

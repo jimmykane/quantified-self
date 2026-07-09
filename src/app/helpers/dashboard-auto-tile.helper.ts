@@ -60,7 +60,6 @@ import {
   getDefaultDashboardChartTileSizeForChartType,
   getDefaultDashboardMapTileSizeForSource,
 } from './dashboard-tile-default-size.helper';
-import { resolveDefaultDashboardKpiGroupForChartType } from './dashboard-kpi-group.helper';
 
 export const DASHBOARD_AUTO_TILE_SLEEP_TREND_ID: AppDashboardAutoTileId = 'sleepTrend';
 export const DASHBOARD_AUTO_TILE_SLEEP_TREND_SOURCE = 'sleep-sync';
@@ -219,7 +218,7 @@ export function buildDashboardKpiAutoTile(
   chartType: DashboardKpiChartType,
   order: number,
   size: { columns: number; rows: number } = { columns: 1, rows: 1 },
-): AppDashboardChartTileSettingsInterface {
+): TileChartSettingsInterface {
   const definition = getDashboardKpiChartDefinitions().find(candidate => candidate.chartType === chartType);
   return {
     name: definition?.label || `${chartType}`,
@@ -231,7 +230,6 @@ export function buildDashboardKpiAutoTile(
     dataValueType: ChartDataValueTypes.Total,
     dataCategoryType: ChartDataCategoryTypes.DateType,
     dataTimeInterval: TimeIntervals.Weekly,
-    kpiGroup: resolveDefaultDashboardKpiGroupForChartType(chartType),
   };
 }
 

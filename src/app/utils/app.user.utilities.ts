@@ -72,16 +72,11 @@ import {
     DASHBOARD_RECOVERY_NOW_CHART_TYPE,
     getDefaultDashboardCuratedChartDefinitions,
     getDefaultDashboardKpiChartDefinitions,
-    isDashboardKpiChartType,
     isDashboardEventBackedSpecialChartType,
     isDashboardPowerCurveChartType,
     isDashboardRecoveryNowChartType,
     isDashboardSpecialChartType,
 } from '../helpers/dashboard-special-chart-types';
-import {
-    normalizeDashboardKpiGroup,
-    resolveDefaultDashboardKpiGroupForChartType,
-} from '../helpers/dashboard-kpi-group.helper';
 import { normalizeDashboardSleepTrendRange } from '../helpers/dashboard-sleep-range.helper';
 import {
     DASHBOARD_EVENT_TABLE_DEFAULT_DATE_RANGE,
@@ -623,14 +618,6 @@ export class AppUserUtilities {
                     );
                 } else {
                     delete chartTile.eventFilters;
-                }
-                if (isDashboardKpiChartType(chartTile.chartType)) {
-                    chartTile.kpiGroup = normalizeDashboardKpiGroup(
-                        chartTile.kpiGroup,
-                        resolveDefaultDashboardKpiGroupForChartType(chartTile.chartType),
-                    );
-                } else {
-                    delete chartTile.kpiGroup;
                 }
                 AppUserUtilities.normalizeDashboardChartTileDisplaySettings(chartTile);
                 return chartTile;

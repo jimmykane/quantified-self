@@ -19,10 +19,8 @@ import {
 } from '@sports-alliance/sports-lib';
 import { DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE } from '../helpers/dashboard-form.helper';
 import {
-    DASHBOARD_ACWR_KPI_CHART_TYPE,
     DASHBOARD_EFFICIENCY_TREND_CHART_TYPE,
     DASHBOARD_FORM_CHART_TYPE,
-    DASHBOARD_FORM_NOW_KPI_CHART_TYPE,
     DASHBOARD_FRESHNESS_FORECAST_CHART_TYPE,
     DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE,
     DASHBOARD_POWER_CURVE_CHART_TYPE,
@@ -257,7 +255,6 @@ describe('AppUserUtilities', () => {
                     dataCategoryType: ChartDataCategoryTypes.DateType,
                     dataValueType: ChartDataValueTypes.Total,
                     dataTimeInterval: TimeIntervals.Weekly,
-                    kpiGroup: kpiDefinitions[index].group,
                 });
                 expect(tile.eventFilters).toBeUndefined();
             });
@@ -297,48 +294,6 @@ describe('AppUserUtilities', () => {
             expect((settings.myTracksSettings as any)?.showJumpHeatmap).toBe(true);
             expect(settings.serviceSyncSettings?.activitySyncRoutes?.[ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp]?.enabled).toBe(false);
             expect(settings.serviceSyncSettings?.activitySyncRoutes?.[ACTIVITY_SYNC_ROUTE_IDS.COROSAPI_to_SuuntoApp]?.enabled).toBe(false);
-        });
-
-        it('should normalize dashboard KPI groups on saved tiles', () => {
-            const user = {
-                settings: {
-                    dashboardSettings: {
-                        tiles: [
-                            {
-                                type: TileTypes.Chart,
-                                order: 0,
-                                chartType: DASHBOARD_FORM_NOW_KPI_CHART_TYPE,
-                                kpiGroup: 'unknown',
-                                size: { columns: 1, rows: 1 },
-                            },
-                            {
-                                type: TileTypes.Chart,
-                                order: 1,
-                                chartType: DASHBOARD_ACWR_KPI_CHART_TYPE,
-                                kpiGroup: 'intensity',
-                                size: { columns: 1, rows: 1 },
-                            },
-                            {
-                                type: TileTypes.Chart,
-                                order: 2,
-                                chartType: ChartTypes.ColumnsVertical,
-                                kpiGroup: 'load',
-                                dataType: DataDistance.type,
-                                dataCategoryType: ChartDataCategoryTypes.DateType,
-                                dataValueType: ChartDataValueTypes.Total,
-                                size: { columns: 1, rows: 1 },
-                            },
-                        ],
-                    },
-                },
-            } as unknown as User;
-
-            const settings = AppUserUtilities.fillMissingAppSettings(user);
-            const [formNowKpi, acwrKpi, customChart] = settings.dashboardSettings?.tiles || [];
-
-            expect((formNowKpi as any).kpiGroup).toBe('readiness');
-            expect((acwrKpi as any).kpiGroup).toBe('intensity');
-            expect((customChart as any).kpiGroup).toBeUndefined();
         });
 
         it('should preserve valid dashboard action prompt dismissal state', () => {
