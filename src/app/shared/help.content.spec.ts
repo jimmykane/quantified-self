@@ -245,13 +245,14 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('Efficiency Δ (4w)');
     expect(gettingStartedSection?.content).toContain('Load');
     expect(gettingStartedSection?.content).toContain('Readiness');
-    expect(gettingStartedSection?.content).toContain('Execution');
+    expect(gettingStartedSection?.content).toContain('**Readiness**, **Load**, **Trends**, and **Intensity**');
+    expect(gettingStartedSection?.content).toContain('Move to Readiness');
     expect(gettingStartedSection?.content).toContain('Current week');
     expect(gettingStartedSection?.content).toContain('Latest week');
     expect(gettingStartedSection?.content).toContain('8w / 12w / 6m / 1y / All');
     expect(gettingStartedSection?.content).toContain('Training-derived tiles do not fall back');
     expect(gettingStartedSection?.content).toContain('**info** icon');
-    expect(gettingStartedSection?.content).toContain('**Today** section');
+    expect(gettingStartedSection?.content).toContain('grouped compact **Today** lanes');
     expect(gettingStartedSection?.content).toContain('Today rows stay compact');
     expect(gettingStartedSection?.content).toContain('KPI detail rows');
     expect(gettingStartedSection?.content).toContain('freshness date');

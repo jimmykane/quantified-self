@@ -87,6 +87,7 @@ import {
   isDashboardSpecialChartType,
   resolveDashboardChartCategory,
 } from '../../../helpers/dashboard-special-chart-types';
+import { DASHBOARD_KPI_GROUP_DEFINITIONS } from '../../../helpers/dashboard-kpi-group.helper';
 import { AppUserUtilities } from '../../../utils/app.user.utilities';
 import type { MapStyleName } from '../../../services/map/map-style.types';
 import {
@@ -182,6 +183,7 @@ interface DashboardManagerSettingsSnapshot {
 }
 
 type DashboardManagerSavingAction = 'save' | 'addDefaults' | 'addAll' | 'removeAll' | null;
+const DEFAULT_DASHBOARD_MANAGER_KPI_GROUP: DashboardKpiGroup = DASHBOARD_KPI_GROUP_DEFINITIONS[0]?.id || 'readiness';
 
 @Component({
   selector: 'app-dashboard-manager-dialog',
@@ -203,26 +205,12 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
   );
   public readonly curatedChartDefinitions = getDashboardCuratedChartDefinitions();
   public readonly kpiChartDefinitions = getDashboardKpiChartDefinitions();
-  public readonly kpiGroupOptions: IconOption<DashboardKpiGroup>[] = [
-    {
-      value: 'load',
-      label: 'Load',
-      icon: 'monitoring',
-      description: 'Workload progression KPIs',
-    },
-    {
-      value: 'readiness',
-      label: 'Readiness',
-      icon: 'self_improvement',
-      description: 'Current and projected form KPIs',
-    },
-    {
-      value: 'execution',
-      label: 'Execution',
-      icon: 'show_chart',
-      description: 'How hard and how efficiently you execute',
-    },
-  ];
+  public readonly kpiGroupOptions: IconOption<DashboardKpiGroup>[] = DASHBOARD_KPI_GROUP_DEFINITIONS.map(definition => ({
+    value: definition.id,
+    label: definition.label,
+    icon: definition.icon,
+    description: definition.description,
+  }));
   public readonly workflowTabOptions: IconOption<DashboardManagerWorkflowTab>[] = [
     {
       value: 'manual',
@@ -381,9 +369,9 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
   public editTileOrder: number | null = null;
   public curatedChartType: DashboardCuratedChartType = DASHBOARD_RECOVERY_NOW_CHART_TYPE;
   public curatedPowerCurveScope: DashboardPowerCurveScope = 'cycling';
-  public kpiChartType: DashboardKpiChartType = DASHBOARD_ACWR_KPI_CHART_TYPE;
-  public kpiGroup: DashboardKpiGroup = 'load';
-  public presetKpiGroup: DashboardKpiGroup = 'load';
+  public kpiChartType: DashboardKpiChartType = DASHBOARD_LOAD_STATUS_KPI_CHART_TYPE;
+  public kpiGroup: DashboardKpiGroup = DEFAULT_DASHBOARD_MANAGER_KPI_GROUP;
+  public presetKpiGroup: DashboardKpiGroup = DEFAULT_DASHBOARD_MANAGER_KPI_GROUP;
 
   public customChartType: ChartTypes = AppUserUtilities.getDefaultUserDashboardChartTile().chartType;
   public customDataType = AppUserUtilities.getDefaultUserDashboardChartTile().dataType;

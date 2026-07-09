@@ -5,7 +5,8 @@
 <mat-menu #chartOptions="matMenu" class="qs-menu-panel qs-menu-panel-form qs-config-menu qs-tile-actions-menu">
   <div class="tile-actions-menu-shell">
     @if (showLayoutControls) {
-    <section class="tile-actions-section tile-size-actions" aria-label="Tile layout" (click)="$event.stopPropagation()">
+    <section class="tile-actions-section tile-size-actions" aria-label="Tile layout" tabindex="-1"
+      (click)="$event.stopPropagation()" (keydown)="$event.stopPropagation()">
       <div class="tile-section-heading">
         <mat-icon aria-hidden="true">dashboard_customize</mat-icon>
         <span>Layout</span>
@@ -45,6 +46,24 @@
       <mat-icon>arrow_forward</mat-icon>
       <span>Move later</span>
     </button>
+
+    @if (isCurrentTileKpi()) {
+    <div class="tile-actions-divider" role="separator"></div>
+    <section class="tile-actions-section tile-kpi-group-actions" aria-label="KPI group">
+      <div class="tile-section-heading">
+        <mat-icon aria-hidden="true">view_column</mat-icon>
+        <span>KPI group</span>
+      </div>
+    </section>
+    @for (groupOption of kpiMoveGroupOptions; track groupOption.id) {
+    <button mat-menu-item type="button" class="tile-action-menu-item" (click)="moveTileToKpiGroup(groupOption.id)"
+      [disabled]="!canMoveTileToKpiGroup(groupOption.id)">
+      <mat-icon>{{ groupOption.icon }}</mat-icon>
+      <span>Move to {{ groupOption.label }}</span>
+    </button>
+    }
+    }
+
     <button mat-menu-item type="button" class="tile-action-menu-item" (click)="openEditInDashboardManager($event)">
       <mat-icon>edit</mat-icon>
       <span>Edit in manager</span>

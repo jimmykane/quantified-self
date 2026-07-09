@@ -20,6 +20,7 @@ import { ActivitySyncRouteId } from '@shared/activity-sync-routes';
 import { RouteDeliverySyncRouteId } from '@shared/route-delivery-sync-routes';
 import { ServiceConnectionMetaFields } from '@shared/service-connection';
 import { UserServiceMetaInterface } from '@sports-alliance/sports-lib';
+import type { DashboardKpiGroup } from '../helpers/dashboard-special-chart-types';
 
 export type AppMapStyleName = 'default' | 'satellite' | 'outdoors';
 
@@ -131,6 +132,7 @@ export interface AppDashboardTileEventFiltersInterface {
 export type AppDashboardDerivedChartRange = '8w' | '12w' | '6m' | '1y' | 'all';
 export type AppDashboardFormTimelineWindow = 'w' | 'm' | 'y';
 export type AppDashboardPowerCurveCompareMode = 'latest' | 'best30d' | 'best90d';
+export type AppDashboardKpiGroupId = DashboardKpiGroup;
 
 export interface AppDashboardChartTileDisplaySettingsInterface {
     derivedChartRange?: AppDashboardDerivedChartRange;
@@ -141,6 +143,7 @@ export interface AppDashboardChartTileDisplaySettingsInterface {
 export interface AppDashboardChartTileSettingsInterface extends TileChartSettingsInterface {
     eventFilters?: AppDashboardTileEventFiltersInterface;
     displaySettings?: AppDashboardChartTileDisplaySettingsInterface;
+    kpiGroup?: AppDashboardKpiGroupId;
 }
 
 export type AppDashboardMapTileSource = 'events' | 'routes';

@@ -117,14 +117,14 @@ export const HELP_SECTIONS: HelpSection[] = [
 - The recommended default dashboard starts lean with **Form/TSS**, **Intensity Distribution**, and the current-state KPI row set; activity overview charts, maps, Recovery, Freshness Forecast, and Efficiency Trend remain available from Dashboard manager or **Add all**.
 - The default KPI rows are the current-state set: **Load Status**, **Form Now**, **Fitness Trend**, **Fatigue Trend**, **Recovery Debt**, and **Training Balance**.
 - Additional KPI rows such as **Fitness (CTL)**, **Fatigue (ATL)**, **ACWR**, **Ramp Rate**, **Monotony / Strain**, **Form +7d**, **Easy %**, **Hard %**, and **Efficiency Δ (4w)** remain available from Dashboard manager.
-- KPI rows are shown in the compact **Today** section above the main dashboard grid.
+- KPI rows are shown in grouped compact **Today** lanes above the main dashboard grid.
 - The **Today** header can show **Uploaded activities**, which counts current uploaded activity events.
 - On mobile, Today rows stay compact while the chart/map grid stays unchanged below.
 - The main dashboard groups chart and map tiles by intent, such as **Training State**, **Performance & Power**, **Activity Overview**, **Routes & Maps**, and **Custom Charts**.
 - Custom charts are placed in those dashboard sections automatically when their metric intent is obvious; otherwise they appear under **Custom Charts**.
 - New dashboard tiles use chart-aware default sizes: Form/TSS, Power Curve, and Routes map start wider, while simple custom totals, KPIs, and the clustered heatmap stay compact.
 - Empty editable dashboards show lightweight section guidance until chart or map sections exist.
-- KPI choices in Dashboard manager are grouped as **Load**, **Readiness**, and **Execution** for both manual and preset flows.
+- KPI choices in Dashboard manager are grouped as **Readiness**, **Load**, **Trends**, and **Intensity** for both manual and preset flows.
 - Curated and KPI tiles include an **info** icon beside the title with formulas, interpretation guidance, and KPI detail rows such as metric state, freshness date, source, and the signals behind the current label.
 - On supported mobile devices, dashboard buttons and chart interactions provide lightweight haptic feedback.
 - Haptics automatically fall back to no-op when vibration support is unavailable or reduced-motion is enabled.
@@ -153,6 +153,7 @@ export const HELP_SECTIONS: HelpSection[] = [
 - On desktop, drag dashboard tiles from the tile action area to reorder them.
 - On mobile and touch devices, open any tile menu with the three-dot button.
 - Use **Move earlier** or **Move later** when drag-and-drop is unavailable.
+- KPI rows can also use **Move to Readiness**, **Move to Load**, **Move to Trends**, or **Move to Intensity** from the tile menu.
 - Tile order is saved automatically to your account.
 
 ### Recovery tile summary

@@ -209,6 +209,7 @@ describe('dashboard-manager-presets.helper', () => {
     expect(kpiTile).toMatchObject({
       type: TileTypes.Chart,
       chartType: DASHBOARD_ACWR_KPI_CHART_TYPE,
+      kpiGroup: 'load',
       dataCategoryType: ChartDataCategoryTypes.DateType,
       dataValueType: ChartDataValueTypes.Total,
       dataTimeInterval: TimeIntervals.Weekly,
@@ -216,7 +217,7 @@ describe('dashboard-manager-presets.helper', () => {
     });
   });
 
-  it('builds readiness KPI preset tiles', () => {
+  it('builds grouped KPI preset tiles', () => {
     const formNowTile = buildDashboardManagerPresetTile({
       presetId: DASHBOARD_MANAGER_PRESET_IDS.KPI_FORM_NOW,
       order: 2,
@@ -226,6 +227,7 @@ describe('dashboard-manager-presets.helper', () => {
     expect(formNowTile).toMatchObject({
       type: TileTypes.Chart,
       chartType: DASHBOARD_FORM_NOW_KPI_CHART_TYPE,
+      kpiGroup: 'readiness',
       dataCategoryType: ChartDataCategoryTypes.DateType,
       dataValueType: ChartDataValueTypes.Total,
       dataTimeInterval: TimeIntervals.Weekly,
@@ -240,6 +242,7 @@ describe('dashboard-manager-presets.helper', () => {
     expect(fitnessTile).toMatchObject({
       type: TileTypes.Chart,
       chartType: DASHBOARD_FITNESS_CTL_KPI_CHART_TYPE,
+      kpiGroup: 'load',
       dataCategoryType: ChartDataCategoryTypes.DateType,
       dataValueType: ChartDataValueTypes.Total,
       dataTimeInterval: TimeIntervals.Weekly,
@@ -254,6 +257,7 @@ describe('dashboard-manager-presets.helper', () => {
     expect(loadStatusTile).toMatchObject({
       type: TileTypes.Chart,
       chartType: DASHBOARD_LOAD_STATUS_KPI_CHART_TYPE,
+      kpiGroup: 'readiness',
       dataCategoryType: ChartDataCategoryTypes.DateType,
       dataValueType: ChartDataValueTypes.Total,
       dataTimeInterval: TimeIntervals.Weekly,
@@ -268,6 +272,7 @@ describe('dashboard-manager-presets.helper', () => {
     expect(fitnessTrendTile).toMatchObject({
       type: TileTypes.Chart,
       chartType: DASHBOARD_FITNESS_TREND_KPI_CHART_TYPE,
+      kpiGroup: 'trends',
       dataCategoryType: ChartDataCategoryTypes.DateType,
       dataValueType: ChartDataValueTypes.Total,
       dataTimeInterval: TimeIntervals.Weekly,

@@ -23,6 +23,8 @@ import {
   DASHBOARD_RECOVERY_NOW_CHART_TYPE,
   DASHBOARD_SLEEP_TREND_CHART_TYPE,
   DASHBOARD_ACWR_KPI_CHART_TYPE,
+  DASHBOARD_FORM_NOW_KPI_CHART_TYPE,
+  DASHBOARD_FITNESS_TREND_KPI_CHART_TYPE,
 } from './dashboard-special-chart-types';
 import { DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE } from './dashboard-form.helper';
 import {
@@ -99,7 +101,8 @@ describe('resolveDashboardTileSection', () => {
   });
 
   it('resolves KPI and section lane keys from the same section rules', () => {
-    expect(resolveDashboardTileLaneKey(createChartTile(DASHBOARD_ACWR_KPI_CHART_TYPE))).toBe('kpi');
+    expect(resolveDashboardTileLaneKey(createChartTile(DASHBOARD_ACWR_KPI_CHART_TYPE))).toBe('kpi:load');
+    expect(resolveDashboardTileLaneKey(createChartTile(DASHBOARD_FORM_NOW_KPI_CHART_TYPE))).toBe('kpi:readiness');
     expect(resolveDashboardTileLaneKey(createChartTile(DASHBOARD_POWER_CURVE_CHART_TYPE))).toBe('section:performancePower');
     expect(resolveDashboardTileLaneKey({
       type: TileTypes.Map,
@@ -108,7 +111,7 @@ describe('resolveDashboardTileSection', () => {
     } as TileSettingsInterface)).toBe('section:routesMaps');
   });
 
-  it('orders tiles as KPI first then fixed intent sections while preserving order inside each lane', () => {
+  it('orders tiles as KPI groups first then fixed intent sections while preserving order inside each lane', () => {
     const mapTile = {
       type: TileTypes.Map,
       order: 0,
@@ -116,19 +119,23 @@ describe('resolveDashboardTileSection', () => {
       size: { columns: 1, rows: 1 },
     } as TileSettingsInterface;
     const secondActivityTile = createChartTile(ChartTypes.ColumnsVertical, DataDuration.type, ChartDataCategoryTypes.DateType, 'Duration');
-    const kpiTile = createChartTile(DASHBOARD_ACWR_KPI_CHART_TYPE, DataDistance.type, ChartDataCategoryTypes.DateType, 'ACWR');
+    const loadKpiTile = createChartTile(DASHBOARD_ACWR_KPI_CHART_TYPE, DataDistance.type, ChartDataCategoryTypes.DateType, 'ACWR');
+    const readinessKpiTile = createChartTile(DASHBOARD_FORM_NOW_KPI_CHART_TYPE, DataDistance.type, ChartDataCategoryTypes.DateType, 'Form Now');
+    const trendKpiTile = createChartTile(DASHBOARD_FITNESS_TREND_KPI_CHART_TYPE, DataDistance.type, ChartDataCategoryTypes.DateType, 'Fitness Trend');
     const powerTile = createChartTile(DASHBOARD_POWER_CURVE_CHART_TYPE, DataPower.type, ChartDataCategoryTypes.DateType, 'Power');
     const firstActivityTile = createChartTile(ChartTypes.ColumnsVertical, DataDistance.type, ChartDataCategoryTypes.DateType, 'Distance');
 
     const orderedNames = orderDashboardTilesByIntentSections([
       mapTile,
       secondActivityTile,
-      kpiTile,
+      trendKpiTile,
+      loadKpiTile,
       powerTile,
+      readinessKpiTile,
       firstActivityTile,
     ]).map(tile => (tile as TileSettingsInterface & { name?: string }).name);
 
-    expect(orderedNames).toEqual(['ACWR', 'Power', 'Duration', 'Distance', 'Map']);
+    expect(orderedNames).toEqual(['Form Now', 'ACWR', 'Fitness Trend', 'Power', 'Duration', 'Distance', 'Map']);
   });
 });
 

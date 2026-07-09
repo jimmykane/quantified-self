@@ -79,7 +79,7 @@ export type DashboardKpiChartType =
 export type DashboardSpecialChartType = DashboardCuratedChartType | DashboardKpiChartType;
 export type DashboardChartType = ChartTypes | DashboardSpecialChartType;
 export type DashboardChartCategory = 'curated' | 'kpi' | 'custom';
-export type DashboardKpiGroup = 'load' | 'readiness' | 'execution';
+export type DashboardKpiGroup = 'readiness' | 'load' | 'trends' | 'intensity';
 
 export interface DashboardCuratedChartDefinition {
   chartType: DashboardCuratedChartType;
@@ -161,22 +161,22 @@ const DASHBOARD_KPI_CHART_DEFINITIONS: DashboardKpiChartDefinition[] = [
   {
     chartType: DASHBOARD_FITNESS_CTL_KPI_CHART_TYPE,
     label: 'Fitness (CTL)',
-    group: 'readiness',
+    group: 'load',
   },
   {
     chartType: DASHBOARD_FATIGUE_ATL_KPI_CHART_TYPE,
     label: 'Fatigue (ATL)',
-    group: 'readiness',
+    group: 'load',
   },
   {
     chartType: DASHBOARD_FITNESS_TREND_KPI_CHART_TYPE,
     label: 'Fitness Trend',
-    group: 'load',
+    group: 'trends',
   },
   {
     chartType: DASHBOARD_FATIGUE_TREND_KPI_CHART_TYPE,
     label: 'Fatigue Trend',
-    group: 'load',
+    group: 'trends',
   },
   {
     chartType: DASHBOARD_RECOVERY_DEBT_KPI_CHART_TYPE,
@@ -191,22 +191,22 @@ const DASHBOARD_KPI_CHART_DEFINITIONS: DashboardKpiChartDefinition[] = [
   {
     chartType: DASHBOARD_TRAINING_BALANCE_KPI_CHART_TYPE,
     label: 'Training Balance',
-    group: 'execution',
+    group: 'intensity',
   },
   {
     chartType: DASHBOARD_EASY_PERCENT_KPI_CHART_TYPE,
     label: 'Easy %',
-    group: 'execution',
+    group: 'intensity',
   },
   {
     chartType: DASHBOARD_HARD_PERCENT_KPI_CHART_TYPE,
     label: 'Hard %',
-    group: 'execution',
+    group: 'intensity',
   },
   {
     chartType: DASHBOARD_EFFICIENCY_DELTA_4W_KPI_CHART_TYPE,
     label: 'Efficiency Δ (4w)',
-    group: 'execution',
+    group: 'trends',
   },
 ];
 

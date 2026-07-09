@@ -40,15 +40,24 @@
   }
   @if (kpiLaneTiles.length) {
   <section class="dashboard-kpi-section">
+    <div class="dashboard-kpi-groups">
+      @for (group of kpiGroups; track trackByKpiGroup($index, group)) {
+      <section class="dashboard-kpi-group" [attr.aria-label]="group.label + ' KPIs'">
+        <div class="dashboard-kpi-group-header">
+          <mat-icon aria-hidden="true">{{ group.icon }}</mat-icon>
+          <span>{{ group.label }}</span>
+        </div>
     <div
       class="qs-glass-card-panel dashboard-kpi-lane"
       cdkDropList
       cdkDropListOrientation="mixed"
-      [cdkDropListData]="kpiLaneTiles"
+      [id]="group.dropListId"
+      [cdkDropListData]="group.tiles"
+      [cdkDropListConnectedTo]="kpiDropListIds"
       [cdkDropListDisabled]="!desktopTileDragEnabled || kpiLaneTiles.length < 2"
       [class.desktop-tile-drop-list]="desktopTileDragEnabled && kpiLaneTiles.length > 1"
-      (cdkDropListDropped)="onKpiTilesDrop($event)">
-      @for (tile of kpiLaneTiles; track trackByTile($index, tile)) {
+      (cdkDropListDropped)="onKpiTilesDrop($event, group.id)">
+      @for (tile of group.tiles; track trackByTile($index, tile)) {
       <div
         class="dashboard-kpi-tile"
         cdkDrag
@@ -95,6 +104,9 @@
           (sleepTrendRangeChange)="onSleepTrendRangeChange($event)"
           (sleepTrendNavigate)="onSleepTrendNavigate($event)"></app-tile-chart>
       </div>
+      }
+    </div>
+      </section>
       }
     </div>
   </section>

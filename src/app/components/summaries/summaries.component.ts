@@ -15,7 +15,7 @@ import {
 import { firstValueFrom, Subscription, take } from 'rxjs';
 import { EventInterface } from '@sports-alliance/sports-lib';
 import { User } from '@sports-alliance/sports-lib';
-import { CdkDragDrop, moveItemInArray } from '@angular/cdk/drag-drop';
+import { CdkDragDrop, moveItemInArray, transferArrayItem } from '@angular/cdk/drag-drop';
 import { AppThemeService } from '../../services/app.theme.service';
 import { AppThemes } from '@sports-alliance/sports-lib';
 import { LoggerService } from '../../services/logger.service';
@@ -98,6 +98,7 @@ import type {
   AppDashboardTileEventFiltersInterface,
   AppUserInterface,
 } from '../../models/app-user.interface';
+import type { DashboardKpiGroup } from '../../helpers/dashboard-special-chart-types';
 import {
   dashboardSleepTrendRangeDays,
   type DashboardSleepTrendNavigationDirection,
@@ -131,6 +132,10 @@ import {
   orderDashboardTilesByIntentSections,
   resolveDashboardTileSection,
 } from '../../helpers/dashboard-tile-section.helper';
+import {
+  DASHBOARD_KPI_GROUP_DEFINITIONS,
+  resolveDashboardKpiTileGroup,
+} from '../../helpers/dashboard-kpi-group.helper';
 import { AppEventService } from '../../services/app.event.service';
 import { AppRouteService } from '../../services/app.route.service';
 import { DashboardAutoTileService } from '../../services/dashboard-auto-tile.service';
@@ -156,6 +161,14 @@ interface DashboardTileSectionViewModel {
 interface DashboardTileSectionCellViewModel {
   tile: DashboardTileViewModel;
   columns: number;
+}
+
+interface DashboardKpiGroupViewModel {
+  id: DashboardKpiGroup;
+  label: string;
+  icon: string;
+  dropListId: string;
+  tiles: DashboardChartTileViewModel[];
 }
 
 interface DashboardTileEventSubscriptionState {
@@ -186,6 +199,8 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
 
   public tiles: DashboardTileViewModel[] = [];
   public kpiLaneTiles: DashboardChartTileViewModel[] = [];
+  public kpiGroups: DashboardKpiGroupViewModel[] = [];
+  public kpiDropListIds: string[] = [];
   public mainGridTiles: DashboardTileViewModel[] = [];
   public mainGridSections: DashboardTileSectionViewModel[] = [];
 
@@ -346,6 +361,10 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     return item.id;
   }
 
+  public trackByKpiGroup(_index: number, item: DashboardKpiGroupViewModel): DashboardKpiGroup {
+    return item.id;
+  }
+
   private formatTodayDateSubtitle(date: Date): string {
     try {
       return new Intl.DateTimeFormat(this.locale || undefined, {
@@ -381,17 +400,37 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     await this.persistLaneOrder();
   }
 
-  public async onKpiTilesDrop(event: CdkDragDrop<DashboardChartTileViewModel[]>): Promise<void> {
+  public async onKpiTilesDrop(
+    event: CdkDragDrop<DashboardChartTileViewModel[]>,
+    groupId: DashboardKpiGroup,
+  ): Promise<void> {
     this.ensureTileLanesInitializedFromTiles();
+    const targetGroup = this.kpiGroups.find(group => group.id === groupId);
+    const targetTiles = event.container?.data || targetGroup?.tiles || [];
+    const sourceTiles = event.previousContainer?.data || targetTiles;
     if (
       !this.desktopTileDragEnabled
       || !this.showActions
       || this.kpiLaneTiles.length < 2
-      || !this.isValidDragReorder(this.kpiLaneTiles, event.previousIndex, event.currentIndex)
+      || !targetGroup
+      || !sourceTiles.length
     ) {
       return;
     }
-    moveItemInArray(this.kpiLaneTiles, event.previousIndex, event.currentIndex);
+
+    if (!event.previousContainer || !event.container || event.previousContainer === event.container) {
+      if (!this.isValidDragReorder(targetTiles, event.previousIndex, event.currentIndex)) {
+        return;
+      }
+      moveItemInArray(targetTiles, event.previousIndex, event.currentIndex);
+    } else {
+      if (!this.isValidDragTransfer(sourceTiles, targetTiles, event.previousIndex, event.currentIndex)) {
+        return;
+      }
+      transferArrayItem(sourceTiles, targetTiles, event.previousIndex, event.currentIndex);
+      targetTiles[event.currentIndex].kpiGroup = groupId;
+    }
+
     this.syncTilesFromLanesForDrop();
     await this.persistLaneOrder();
   }
@@ -1497,13 +1536,16 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     const orderedTiles = [...this.tiles].sort((left, right) => left.order - right.order);
     this.kpiLaneTiles = orderedTiles.filter((tile): tile is DashboardChartTileViewModel => this.isKpiLaneTile(tile));
     this.mainGridTiles = orderedTiles.filter(tile => !this.isKpiLaneTile(tile));
+    this.refreshKpiGroups();
     this.refreshMainGridSections();
   }
 
   private ensureTileLanesInitializedFromTiles(): void {
     const sectionTileCount = this.mainGridSections.reduce((total, section) => total + section.tiles.length, 0);
+    const kpiGroupTileCount = this.kpiGroups.reduce((total, group) => total + group.tiles.length, 0);
     if (
       (this.kpiLaneTiles.length + this.mainGridTiles.length) !== this.tiles.length
+      || kpiGroupTileCount !== this.kpiLaneTiles.length
       || sectionTileCount !== this.mainGridTiles.length
     ) {
       this.refreshTileLanes();
@@ -1511,8 +1553,10 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   }
 
   private syncTilesFromLanesForDrop(): void {
+    this.kpiLaneTiles = this.getFlattenedKpiGroupTiles();
     this.mainGridTiles = this.getFlattenedMainGridSectionTiles();
     this.tiles = [...this.kpiLaneTiles, ...this.mainGridTiles];
+    this.refreshKpiGroups();
     this.refreshMainGridSections();
   }
 
@@ -1524,6 +1568,15 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       && currentIndex >= 0
       && previousIndex < items.length
       && currentIndex < items.length;
+  }
+
+  private isValidDragTransfer<T>(sourceItems: T[], targetItems: T[], previousIndex: number, currentIndex: number): boolean {
+    return Number.isInteger(previousIndex)
+      && Number.isInteger(currentIndex)
+      && previousIndex >= 0
+      && currentIndex >= 0
+      && previousIndex < sourceItems.length
+      && currentIndex <= targetItems.length;
   }
 
   private refreshMainGridSections(): void {
@@ -1548,6 +1601,26 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
         };
       })
       .filter(section => section.tiles.length > 0);
+  }
+
+  private refreshKpiGroups(): void {
+    this.kpiGroups = DASHBOARD_KPI_GROUP_DEFINITIONS
+      .map((definition) => {
+        const tiles = this.kpiLaneTiles.filter(tile => resolveDashboardKpiTileGroup(tile) === definition.id);
+        return {
+          id: definition.id,
+          label: definition.label,
+          icon: definition.icon,
+          dropListId: this.buildKpiDropListId(definition.id),
+          tiles,
+        };
+      })
+      .filter(group => group.tiles.length > 0);
+    this.kpiDropListIds = this.kpiGroups.map(group => group.dropListId);
+  }
+
+  private buildKpiDropListId(groupId: DashboardKpiGroup): string {
+    return `dashboard-kpi-drop-list-${groupId}`;
   }
 
   private refreshMainGridSectionLayout(): void {
@@ -1683,6 +1756,13 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       .filter(tile => !this.isKpiLaneTile(tile));
   }
 
+  private getFlattenedKpiGroupTiles(): DashboardChartTileViewModel[] {
+    return DASHBOARD_KPI_GROUP_DEFINITIONS.flatMap((definition) => {
+      const group = this.kpiGroups.find(candidate => candidate.id === definition.id);
+      return group?.tiles || [];
+    });
+  }
+
   private getOrderedMainSettingsTilesBySection(tiles: TileSettingsInterface[]): TileSettingsInterface[] {
     return orderDashboardTilesByIntentSections(tiles).filter(tile => !this.isKpiSettingsTile(tile));
   }
@@ -1701,23 +1781,25 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     if (!orderedSettingsTiles.length) {
       return;
     }
-    const currentViewOrder = [...this.kpiLaneTiles, ...this.getFlattenedMainGridSectionTiles()].map(tile => tile.order);
+    const flattenedKpiTiles = this.getFlattenedKpiGroupTiles();
+    const flattenedMainGridTiles = this.getFlattenedMainGridSectionTiles();
+    const currentViewOrder = [...flattenedKpiTiles, ...flattenedMainGridTiles];
     const currentSettingsOrder = [
-      ...orderedSettingsTiles.filter(tile => this.isKpiSettingsTile(tile)).map(tile => tile.order),
-      ...this.getOrderedMainSettingsTilesBySection(orderedSettingsTiles).map(tile => tile.order),
+      ...orderDashboardTilesByIntentSections(orderedSettingsTiles).filter(tile => this.isKpiSettingsTile(tile)),
+      ...this.getOrderedMainSettingsTilesBySection(orderedSettingsTiles),
     ];
-    if (this.getOrderSignature(currentViewOrder) === this.getOrderSignature(currentSettingsOrder)) {
+    if (this.getLaneOrderSignature(currentViewOrder) === this.getLaneOrderSignature(currentSettingsOrder)) {
       return;
     }
 
     const settingsByOrder = new Map<number, TileSettingsInterface>(
       orderedSettingsTiles.map(tile => [tile.order, tile])
     );
-    const nextKpiSettingsTiles = this.kpiLaneTiles
-      .map(tile => settingsByOrder.get(tile.order))
+    const nextKpiSettingsTiles = flattenedKpiTiles
+      .map(tile => this.cloneSettingsTileForViewTile(settingsByOrder.get(tile.order), tile))
       .filter((tile): tile is TileSettingsInterface => !!tile);
-    const nextMainGridSettingsTiles = this.getFlattenedMainGridSectionTiles()
-      .map(tile => settingsByOrder.get(tile.order))
+    const nextMainGridSettingsTiles = flattenedMainGridTiles
+      .map(tile => this.cloneSettingsTileForViewTile(settingsByOrder.get(tile.order), tile))
       .filter((tile): tile is TileSettingsInterface => !!tile);
     const nextSettingsTiles = [...nextKpiSettingsTiles, ...nextMainGridSettingsTiles];
 
@@ -1736,7 +1818,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     nextOrderByPreviousOrder.forEach((nextOrder, previousOrder) => previousOrderByNextOrder.set(nextOrder, previousOrder));
 
     dashboardSettings.tiles = this.withSequentialOrder(nextSettingsTiles);
-    this.tiles = this.withSequentialOrder(this.cloneDashboardViewModels([...this.kpiLaneTiles, ...this.getFlattenedMainGridSectionTiles()]));
+    this.tiles = this.withSequentialOrder(this.cloneDashboardViewModels([...flattenedKpiTiles, ...flattenedMainGridTiles]));
     this.refreshTileLanes();
     this.dashboardTileSettingsSnapshot = this.getDashboardTileSettingsSnapshot();
     this.remapTileEventStateForOrderChange(nextOrderByPreviousOrder);
@@ -1761,8 +1843,35 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     }
   }
 
-  private getOrderSignature(orders: number[]): string {
-    return orders.join(',');
+  private getLaneOrderSignature(tiles: Array<TileSettingsInterface | DashboardTileViewModel>): string {
+    return tiles
+      .map((tile) => {
+        const kpiGroup = resolveDashboardKpiTileGroup(tile as TileSettingsInterface);
+        return kpiGroup ? `${tile.order}:${kpiGroup}` : `${tile.order}:main`;
+      })
+      .join(',');
+  }
+
+  private cloneSettingsTileForViewTile(
+    settingsTile: TileSettingsInterface | undefined,
+    viewTile: DashboardTileViewModel,
+  ): TileSettingsInterface | null {
+    if (!settingsTile) {
+      return null;
+    }
+
+    const clonedTile = this.cloneDashboardTile(settingsTile);
+    if (clonedTile.type !== TileTypes.Chart || !isDashboardChartTileViewModel(viewTile)) {
+      return clonedTile;
+    }
+
+    const kpiGroup = resolveDashboardKpiTileGroup(viewTile);
+    if (kpiGroup) {
+      (clonedTile as AppDashboardChartTileSettingsInterface).kpiGroup = kpiGroup;
+    } else {
+      delete (clonedTile as AppDashboardChartTileSettingsInterface).kpiGroup;
+    }
+    return clonedTile;
   }
 
   private unsubscribeFromAll() {
