@@ -59,6 +59,7 @@ export type SportsLibReparseJobStatus = 'pending' | 'processing' | 'completed' |
 const SPORTS_LIB_REPARSE_TERMINAL_ERROR_PATTERNS = [
     /^\[sports-lib-reparse\] Reparse target sports-lib version ".*" does not match runtime sports-lib version ".*"$/,
     /^Event .* was not found for user .*$/,
+    /^Strict original-file reparse failed\. .*: No activities found in GPX; use importRoutesFromGPX for routes$/,
 ] as const;
 
 export function isSportsLibReparseTerminalFailureMessage(errorMessage: string): boolean {

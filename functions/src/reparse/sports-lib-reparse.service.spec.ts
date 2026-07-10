@@ -1479,6 +1479,9 @@ describe('sports-lib-reparse.service', () => {
             '[sports-lib-reparse] Reparse target sports-lib version "11.0.2" does not match runtime sports-lib version "11.0.3"',
         )).toBe(true);
         expect(isSportsLibReparseTerminalFailureMessage('Event e1 was not found for user u1')).toBe(true);
+        expect(isSportsLibReparseTerminalFailureMessage(
+            'Strict original-file reparse failed. users/u1/events/e1/original.gpx.gz: No activities found in GPX; use importRoutesFromGPX for routes',
+        )).toBe(true);
         expect(isSportsLibReparseTerminalFailureMessage('parse failed')).toBe(false);
     });
 
