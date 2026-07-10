@@ -67,7 +67,7 @@ function getUnknownMethodResult(target: Record<string, unknown>, methodName: str
 
   try {
     return method.call(target);
-  } catch (_error) {
+  } catch {
     return undefined;
   }
 }
