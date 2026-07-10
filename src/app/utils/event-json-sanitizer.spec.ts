@@ -312,6 +312,32 @@ describe('EventJSONSanitizer', () => {
         ]));
     });
 
+    it('should remove duplicate stream map entries by canonical alias type', () => {
+        setupMock(['LegacyKnownType']);
+        const json = {
+            activities: [{
+                streams: {
+                    LegacyKnownType: [1, 2],
+                    [mockKnownType]: [3, 4]
+                }
+            }]
+        };
+
+        const { sanitizedJson, issues } = EventJSONSanitizer.sanitize(json);
+
+        expect(sanitizedJson.activities[0].streams).toEqual({
+            [mockKnownType]: [3, 4]
+        });
+        expect(issues).toEqual(expect.arrayContaining([
+            expect.objectContaining({
+                kind: 'malformed_event_payload',
+                location: 'streams',
+                path: 'activities[0].streams.LegacyKnownType',
+                type: 'LegacyKnownType'
+            })
+        ]));
+    });
+
     it('should drop known event types with malformed payloads', () => {
         setupMock([], (type, payload) => type === mockKnownType && payload === undefined);
         const json = {
