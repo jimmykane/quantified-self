@@ -156,7 +156,6 @@ export class EventJSONSanitizer {
         } else if (typeof streams === 'object' && streams !== null) {
             // It's a dictionary of streams
             const sanitizedStreams = { ...streams };
-            const seenCanonicalTypes = new Map<string, string>();
             Object.keys(sanitizedStreams).forEach(type => {
                 let dataClass;
                 try {
@@ -175,30 +174,7 @@ export class EventJSONSanitizer {
                         reason: 'Removed unknown stream data type from map payload'
                     });
                     delete sanitizedStreams[type];
-                    return;
                 }
-
-                const canonicalType = dataClass.type || type;
-                const existingType = seenCanonicalTypes.get(canonicalType);
-                if (existingType) {
-                    const existingIsCanonical = existingType === canonicalType;
-                    const currentIsCanonical = type === canonicalType;
-                    const typeToRemove = currentIsCanonical && !existingIsCanonical ? existingType : type;
-                    issues.push({
-                        kind: 'malformed_event_payload',
-                        location: 'streams',
-                        path: `${pathPrefix}.${typeToRemove}`,
-                        type: typeToRemove,
-                        reason: 'Removed duplicate stream data type from map payload'
-                    });
-                    delete sanitizedStreams[typeToRemove];
-                    if (typeToRemove === existingType) {
-                        seenCanonicalTypes.set(canonicalType, type);
-                    }
-                    return;
-                }
-
-                seenCanonicalTypes.set(canonicalType, type);
             });
             return sanitizedStreams;
         }
