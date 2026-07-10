@@ -59,6 +59,10 @@ import {
   DataJumpSpeedMinKnots,
   DataJumpSpeedMinMetersPerMinute,
   DataJumpSpeedMinMilesPerHour,
+  DataImpactLoadingRateBalanceLeft,
+  DataImpactLoadingRateBalanceRight,
+  DataLegSpringStiffnessBalanceLeft,
+  DataLegSpringStiffnessBalanceRight,
   DataRPE,
   DataStamina,
   DataStaminaAvg,
@@ -69,6 +73,8 @@ import {
   DataVerticalSpeedAvg,
   DataVerticalOscillation,
   DataVerticalOscillationAvg,
+  DataVerticalOscillationBalanceLeft,
+  DataVerticalOscillationBalanceRight,
   DataVerticalOscillationMax,
   DataVerticalOscillationMin
 } from '@sports-alliance/sports-lib';
@@ -162,13 +168,19 @@ describe('DataTypeIconComponent', () => {
     expect(component.getColumnHeaderIcon('Average Ground Contact Time')).toBe('step_over');
     expect(component.getColumnHeaderIcon('Minimum Ground Contact Time')).toBe('step_over');
     expect(component.getColumnHeaderIcon('Maximum Ground Contact Time')).toBe('step_over');
+    expect(component.getColumnHeaderIcon(DataImpactLoadingRateBalanceLeft.type)).toBe('step_over');
+    expect(component.getColumnHeaderIcon(DataImpactLoadingRateBalanceRight.type)).toBe('step_over');
     expect(component.getColumnHeaderIcon(DataVerticalOscillation.type)).toBe('swap_vert');
     expect(component.getColumnHeaderIcon(DataVerticalOscillationAvg.type)).toBe('swap_vert');
     expect(component.getColumnHeaderIcon(DataVerticalOscillationMin.type)).toBe('swap_vert');
     expect(component.getColumnHeaderIcon(DataVerticalOscillationMax.type)).toBe('swap_vert');
+    expect(component.getColumnHeaderIcon(DataVerticalOscillationBalanceLeft.type)).toBe('swap_vert');
+    expect(component.getColumnHeaderIcon(DataVerticalOscillationBalanceRight.type)).toBe('swap_vert');
     expect(component.getColumnHeaderIcon('Vertical Oscillation')).toBe('swap_vert');
     expect(component.getColumnHeaderIcon('Average Vertical Ratio')).toBe('arrows_outward');
     expect(component.getColumnHeaderIcon('Average Leg Stiffness')).toBe('accessibility_new');
+    expect(component.getColumnHeaderIcon(DataLegSpringStiffnessBalanceLeft.type)).toBe('accessibility_new');
+    expect(component.getColumnHeaderIcon(DataLegSpringStiffnessBalanceRight.type)).toBe('accessibility_new');
     expect(component.getColumnHeaderIcon('Stance Time')).toBe('step_over');
     expect(component.getColumnHeaderIcon('Stance Time Balance Left')).toBe('step_over');
   });

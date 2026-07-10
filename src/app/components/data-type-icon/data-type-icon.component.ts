@@ -105,8 +105,16 @@ import { DataJumpSpeedMinMetersPerMinute } from '@sports-alliance/sports-lib';
 import { DataJumpSpeedMinMilesPerHour } from '@sports-alliance/sports-lib';
 import { DataVerticalOscillation } from '@sports-alliance/sports-lib';
 import { DataVerticalOscillationAvg } from '@sports-alliance/sports-lib';
+import { DataVerticalOscillationBalanceLeft } from '@sports-alliance/sports-lib';
+import { DataVerticalOscillationBalanceRight } from '@sports-alliance/sports-lib';
 import { DataVerticalOscillationMax } from '@sports-alliance/sports-lib';
 import { DataVerticalOscillationMin } from '@sports-alliance/sports-lib';
+import {
+  DataImpactLoadingRateBalanceLeft,
+  DataImpactLoadingRateBalanceRight,
+  DataLegSpringStiffnessBalanceLeft,
+  DataLegSpringStiffnessBalanceRight,
+} from '@sports-alliance/sports-lib';
 import {
   DataBeginningPotentialStamina,
   DataEndingPotentialStamina,
@@ -451,11 +459,15 @@ export class DataTypeIconComponent {
       case 'Stance Time Balance Right':
       case 'Ground Contact Time Balance Left':
       case 'Ground Contact Time Balance Right':
+      case DataImpactLoadingRateBalanceLeft.type:
+      case DataImpactLoadingRateBalanceRight.type:
         return 'step_over';
       case DataVerticalOscillation.type:
       case DataVerticalOscillationAvg.type:
       case DataVerticalOscillationMin.type:
       case DataVerticalOscillationMax.type:
+      case DataVerticalOscillationBalanceLeft.type:
+      case DataVerticalOscillationBalanceRight.type:
       case 'Vertical Oscillation':
         return 'swap_vert';
       case 'Vertical Ratio':
@@ -467,6 +479,8 @@ export class DataTypeIconComponent {
       case 'Average Leg Stiffness':
       case 'Minimum Leg Stiffness':
       case 'Maximum Leg Stiffness':
+      case DataLegSpringStiffnessBalanceLeft.type:
+      case DataLegSpringStiffnessBalanceRight.type:
         return 'accessibility_new';
       case 'Satellite 5 Best SNR':
       case 'Average Satellite 5 Best SNR':

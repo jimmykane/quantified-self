@@ -36,13 +36,14 @@ import {
   DataGradeAdjustedSpeedMetersPerMinute,
   DataGradeAdjustedSpeedMilesPerHour,
   DataHeartRateAvg,
-  DataLeftBalance,
   DataPace,
   DataPaceAvg,
   DataPaceMax,
   DataPaceMin,
   DataPaceMinutesPerMile,
   DataPowerAvg,
+  DataPowerBalanceLeft,
+  DataPowerBalanceRight,
   DataPowerIntensityFactor,
   DataPowerNormalized,
   DataPowerTrainingStressScore,
@@ -51,7 +52,6 @@ import {
   DataPowerLeft,
   DataPowerRight,
   DataRecoveryTime,
-  DataRightBalance,
   DataSeaLevelPressure,
   DataSpeed,
   DataSpeedAvg,
@@ -159,8 +159,10 @@ const POWER_GROUP = new Set<string>([
 ]);
 
 const BALANCE_GROUP = new Set<string>([
-  DataLeftBalance.type,
-  DataRightBalance.type,
+  DataPowerBalanceLeft.type,
+  DataPowerBalanceRight.type,
+  'Left Balance',
+  'Right Balance',
 ]);
 
 const DISTANCE_GROUP = new Set<string>([
@@ -221,7 +223,7 @@ export function resolveEventColorGroupKey(streamType: string): string {
     return 'Power';
   }
   if (BALANCE_GROUP.has(streamType)) {
-    return 'Left/Right Balance';
+    return 'Power Balance';
   }
   if (DISTANCE_GROUP.has(streamType)) {
     return 'Distance';

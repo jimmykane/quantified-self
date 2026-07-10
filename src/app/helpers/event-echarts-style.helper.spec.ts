@@ -2,6 +2,7 @@ import {
   DataCadence,
   DataEffortPace,
   DataGradeAdjustedPace,
+  DataPowerBalanceRight,
   DataPowerRight,
   DataSwimPace,
 } from '@sports-alliance/sports-lib';
@@ -17,6 +18,8 @@ import {
 describe('event-echarts-style.helper', () => {
   it('maps stream types to legacy color groups', () => {
     expect(resolveEventColorGroupKey(DataPowerRight.type)).toBe('Power');
+    expect(resolveEventColorGroupKey(DataPowerBalanceRight.type)).toBe('Power Balance');
+    expect(resolveEventColorGroupKey('Right Balance')).toBe('Power Balance');
     expect(resolveEventColorGroupKey(DataGradeAdjustedPace.type)).toBe('Pace');
     expect(resolveEventColorGroupKey(DataEffortPace.type)).toBe('Pace');
     expect(resolveEventColorGroupKey(DataCadence.type)).toBe(DataCadence.type);

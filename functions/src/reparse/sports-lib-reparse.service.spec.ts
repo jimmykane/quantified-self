@@ -193,6 +193,7 @@ vi.mock('../shared/id-generator', () => ({
 
 import {
     hasPaidOrGraceAccess,
+    SPORTS_LIB_REPARSE_RUNTIME_DEFAULTS,
     parseFromOriginalFilesStrict,
     applyPreservedFields,
     resolveActivityEditCarryover,
@@ -295,6 +296,11 @@ describe('sports-lib-reparse.service', () => {
         hoisted.mockGenerateActivityIDFromSourceKey.mockImplementation(
             async (eventID: string, sourceActivityKey: string) => `new-${eventID}-${sourceActivityKey}`,
         );
+    });
+
+    it('enables the event reparse scanner by default', () => {
+        expect(SPORTS_LIB_REPARSE_RUNTIME_DEFAULTS.enabled).toBe(true);
+        expect(SPORTS_LIB_REPARSE_RUNTIME_DEFAULTS.uidAllowlist).toEqual([]);
     });
 
     it('hasPaidOrGraceAccess should return true for basic claim', async () => {
