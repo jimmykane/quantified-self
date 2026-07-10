@@ -32,6 +32,9 @@ import {
 } from '../shared/activity-processing-config';
 
 const SUPPORTED_BASE_EXTENSIONS = new Set(['fit', 'gpx', 'tcx', 'json', 'sml']);
+const ROUTE_OR_COURSE_ACTIVITY_UPLOAD_ERROR_MESSAGE = 'This file looks like a route/course, not a workout activity. Use route upload for routes.';
+const ROUTE_ONLY_PARSER_ERROR_PATTERN = /no activities found in gpx.*importroutesfromgpx.*routes/i;
+const ROUTE_OR_COURSE_ACTIVITY_TYPES = new Set(['route', 'course']);
 
 class HttpStatusError extends Error {
   constructor(public readonly status: number, message: string) {
@@ -46,6 +49,69 @@ function toArrayBuffer(data: Buffer): ArrayBuffer {
 
 function decodeText(data: Buffer): string {
   return new TextDecoder().decode(toArrayBuffer(data));
+}
+
+function normalizeString(value: unknown): string {
+  return typeof value === 'string' ? value.trim().toLowerCase() : '';
+}
+
+function isObjectRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value);
+}
+
+function getUnknownMethodResult(target: Record<string, unknown>, methodName: string): unknown {
+  const method = target[methodName];
+  if (typeof method !== 'function') {
+    return undefined;
+  }
+
+  try {
+    return method.call(target);
+  } catch (_error) {
+    return undefined;
+  }
+}
+
+function isRouteOrCourseActivityType(value: unknown): boolean {
+  return ROUTE_OR_COURSE_ACTIVITY_TYPES.has(normalizeString(value));
+}
+
+function isRouteOrCourseActivity(activity: unknown): boolean {
+  if (!isObjectRecord(activity)) {
+    return false;
+  }
+
+  const activityJSON = getUnknownMethodResult(activity, 'toJSON');
+  const activityJSONRecord = isObjectRecord(activityJSON) ? activityJSON : null;
+
+  return [
+    activity.type,
+    activity.activityType,
+    getUnknownMethodResult(activity, 'getType'),
+    getUnknownMethodResult(activity, 'getActivityType'),
+    activityJSONRecord?.type,
+    activityJSONRecord?.activityType,
+  ].some(isRouteOrCourseActivityType);
+}
+
+function assertUploadedActivitiesAreWorkouts(activities: readonly unknown[]): void {
+  if (activities.some(isRouteOrCourseActivity)) {
+    throw new HttpStatusError(400, ROUTE_OR_COURSE_ACTIVITY_UPLOAD_ERROR_MESSAGE);
+  }
+}
+
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  if (typeof error === 'string') {
+    return error;
+  }
+  return '';
+}
+
+function isRouteOnlyParserError(error: unknown): boolean {
+  return ROUTE_ONLY_PARSER_ERROR_PATTERN.test(getErrorMessage(error));
 }
 
 function hasGzipMagic(data: Buffer): boolean {
@@ -373,9 +439,19 @@ export const uploadActivity = onRequest({
       if (error instanceof HttpStatusError) {
         throw error;
       }
+      if (isRouteOnlyParserError(error)) {
+        logger.warn('[uploadActivity] Rejected route/course file submitted to activity upload', {
+          resolvedExtension,
+          error: getErrorMessage(error),
+        });
+        throw new HttpStatusError(400, ROUTE_OR_COURSE_ACTIVITY_UPLOAD_ERROR_MESSAGE);
+      }
       logger.warn('[uploadActivity] Activity parsing failed', error);
       throw new HttpStatusError(400, 'Could not parse uploaded payload.');
     }
+
+    const activities = event.getActivities();
+    assertUploadedActivitiesAreWorkouts(activities);
 
     event.setID(eventID);
 
@@ -384,7 +460,6 @@ export const uploadActivity = onRequest({
       event.name = resolvedEventName;
     }
 
-    const activities = event.getActivities();
     for (let i = 0; i < activities.length; i++) {
       if (!activities[i].getID()) {
         activities[i].setID(await generateActivityID(eventID, i));

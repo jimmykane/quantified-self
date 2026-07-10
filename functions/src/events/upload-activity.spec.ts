@@ -248,6 +248,8 @@ function expectedUploadEventID(userID: string, payload: Buffer, baseExtension: s
     .digest('hex');
 }
 
+const ROUTE_OR_COURSE_ACTIVITY_UPLOAD_ERROR_MESSAGE = 'This file looks like a route/course, not a workout activity. Use route upload for routes.';
+
 describe('uploadActivity', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -693,6 +695,92 @@ describe('uploadActivity', () => {
     }), response);
 
     expect(response.status).toHaveBeenCalledWith(400);
+  });
+
+  it('should reject route-only GPX files before writing event data', async () => {
+    hoisted.mockGPXImporter.getFromString.mockRejectedValueOnce(
+      new Error('No activities found in GPX; use importRoutesFromGPX for routes'),
+    );
+
+    const response = makeResponse();
+    await invokeUploadActivity(makeRequest({
+      headers: {
+        Authorization: 'Bearer token',
+        'X-Firebase-AppCheck': 'app-check',
+        'X-File-Extension': 'gpx',
+      },
+      rawBody: Buffer.from('<gpx><rte></rte></gpx>'),
+    }), response);
+
+    expect(response.status).toHaveBeenCalledWith(400);
+    expect(response.json).toHaveBeenCalledWith({ error: ROUTE_OR_COURSE_ACTIVITY_UPLOAD_ERROR_MESSAGE });
+    expect(hoisted.mockGenerateActivityID).not.toHaveBeenCalled();
+    expect(hoisted.mockWriteAllEventData).not.toHaveBeenCalled();
+    expect(hoisted.mockDocSet).not.toHaveBeenCalled();
+  });
+
+  it('should reject parsed route activities before assigning ids or writing event data', async () => {
+    const routeActivity = {
+      type: 'Route',
+      getID: vi.fn(() => null),
+      setID: vi.fn(),
+    };
+    const event = {
+      startDate: new Date('2026-01-10T10:00:00.000Z'),
+      name: '',
+      setID: vi.fn(),
+      getActivities: vi.fn(() => [routeActivity]),
+    };
+    hoisted.mockGPXImporter.getFromString.mockResolvedValueOnce(event);
+
+    const response = makeResponse();
+    await invokeUploadActivity(makeRequest({
+      headers: {
+        Authorization: 'Bearer token',
+        'X-Firebase-AppCheck': 'app-check',
+        'X-File-Extension': 'gpx',
+      },
+      rawBody: Buffer.from('<gpx><trk></trk></gpx>'),
+    }), response);
+
+    expect(response.status).toHaveBeenCalledWith(400);
+    expect(response.json).toHaveBeenCalledWith({ error: ROUTE_OR_COURSE_ACTIVITY_UPLOAD_ERROR_MESSAGE });
+    expect(event.setID).not.toHaveBeenCalled();
+    expect(routeActivity.setID).not.toHaveBeenCalled();
+    expect(hoisted.mockGenerateActivityID).not.toHaveBeenCalled();
+    expect(hoisted.mockWriteAllEventData).not.toHaveBeenCalled();
+    expect(hoisted.mockDocSet).not.toHaveBeenCalled();
+  });
+
+  it('should reject parsed course activities from activity upload files', async () => {
+    const courseActivity = {
+      getID: vi.fn(() => null),
+      setID: vi.fn(),
+      toJSON: vi.fn(() => ({ activityType: 'Course' })),
+    };
+    const event = {
+      startDate: new Date('2026-01-10T10:00:00.000Z'),
+      name: '',
+      setID: vi.fn(),
+      getActivities: vi.fn(() => [courseActivity]),
+    };
+    hoisted.mockFITImporter.getFromArrayBuffer.mockResolvedValueOnce(event);
+
+    const response = makeResponse();
+    await invokeUploadActivity(makeRequest({
+      headers: {
+        Authorization: 'Bearer token',
+        'X-Firebase-AppCheck': 'app-check',
+        'X-File-Extension': 'fit',
+      },
+      rawBody: Buffer.from([0x01, 0x02, 0x03]),
+    }), response);
+
+    expect(response.status).toHaveBeenCalledWith(400);
+    expect(response.json).toHaveBeenCalledWith({ error: ROUTE_OR_COURSE_ACTIVITY_UPLOAD_ERROR_MESSAGE });
+    expect(courseActivity.setID).not.toHaveBeenCalled();
+    expect(hoisted.mockWriteAllEventData).not.toHaveBeenCalled();
+    expect(hoisted.mockDocSet).not.toHaveBeenCalled();
   });
 
   it('should return 500 on persistence failures', async () => {
