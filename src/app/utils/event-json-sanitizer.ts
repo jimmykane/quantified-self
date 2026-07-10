@@ -138,7 +138,8 @@ export class EventJSONSanitizer {
                     return false; // Remove this stream
                 }
 
-                if (seenTypes.has(type)) {
+                const canonicalType = dataClass.type || type;
+                if (seenTypes.has(canonicalType)) {
                     issues.push({
                         kind: 'malformed_event_payload',
                         location: 'streams',
@@ -149,7 +150,7 @@ export class EventJSONSanitizer {
                     return false;
                 }
 
-                seenTypes.add(type);
+                seenTypes.add(canonicalType);
                 return true;
             });
         } else if (typeof streams === 'object' && streams !== null) {
