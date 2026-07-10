@@ -61,6 +61,7 @@ import {
   getDashboardSummaryMetaLabel
 } from '../../../helpers/dashboard-chart-data.helper';
 import {
+  RECOVERY_NOW_REFRESH_INTERVAL_MS,
   resolveActiveRecoveryTotalSeconds,
   resolveRemainingRecoverySeconds,
   type DashboardRecoveryNowContext,
@@ -86,7 +87,6 @@ type RecoverySummaryOverride = {
   standalone: false
 })
 export class ChartsPieComponent implements AfterViewInit, OnChanges, OnDestroy {
-  private static readonly RECOVERY_REFRESH_INTERVAL_MS = 60 * 1000;
 
   @Input() data: any;
   @Input() chartDataType?: string;
@@ -486,7 +486,7 @@ export class ChartsPieComponent implements AfterViewInit, OnChanges, OnDestroy {
 
     this.recoveryRefreshIntervalHandle = setInterval(() => {
       void this.refreshChart();
-    }, ChartsPieComponent.RECOVERY_REFRESH_INTERVAL_MS);
+    }, RECOVERY_NOW_REFRESH_INTERVAL_MS);
   }
 
   private clearRecoveryRefreshTimer(): void {

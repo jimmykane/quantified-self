@@ -51,6 +51,7 @@ describe('DashboardDerivedMetricsService', () => {
     freshnessForecast: null,
     intensityDistribution: null,
     efficiencyTrend: null,
+    trainingSummary: null,
     formStatus: 'missing',
     recoveryNowStatus: 'missing',
     acwrStatus: 'missing',
@@ -64,6 +65,7 @@ describe('DashboardDerivedMetricsService', () => {
     freshnessForecastStatus: 'missing',
     intensityDistributionStatus: 'missing',
     efficiencyTrendStatus: 'missing',
+    trainingSummaryStatus: 'missing',
   });
 
   beforeEach(() => {
@@ -138,7 +140,7 @@ describe('DashboardDerivedMetricsService', () => {
 
     expect(doc).toHaveBeenNthCalledWith(1, {}, 'users', uid, DERIVED_METRICS_COLLECTION_ID, getDerivedMetricDocId(DERIVED_METRIC_KINDS.Form));
     expect(doc).toHaveBeenNthCalledWith(2, {}, 'users', uid, DERIVED_METRICS_COLLECTION_ID, getDerivedMetricDocId(DERIVED_METRIC_KINDS.RecoveryNow));
-    expect(doc).toHaveBeenCalledTimes(13);
+    expect(doc).toHaveBeenCalledTimes(14);
     expect(state.formStatus).toBe('ready');
     expect(state.recoveryNowStatus).toBe('ready');
     expect(state.acwrStatus).toBe('missing');
@@ -335,6 +337,7 @@ describe('DashboardDerivedMetricsService', () => {
         DERIVED_METRIC_KINDS.FreshnessForecast,
         DERIVED_METRIC_KINDS.IntensityDistribution,
         DERIVED_METRIC_KINDS.EfficiencyTrend,
+        DERIVED_METRIC_KINDS.TrainingSummary,
       ],
     });
   });
@@ -369,6 +372,7 @@ describe('DashboardDerivedMetricsService', () => {
         DERIVED_METRIC_KINDS.FreshnessForecast,
         DERIVED_METRIC_KINDS.IntensityDistribution,
         DERIVED_METRIC_KINDS.EfficiencyTrend,
+        DERIVED_METRIC_KINDS.TrainingSummary,
       ],
     });
 
@@ -394,6 +398,7 @@ describe('DashboardDerivedMetricsService', () => {
       freshnessForecastStatus: 'ready',
       intensityDistributionStatus: 'ready',
       efficiencyTrendStatus: 'ready',
+      trainingSummaryStatus: 'ready',
     };
 
     service.ensureForDashboard({ uid: 'user-1' }, state);
@@ -414,6 +419,7 @@ describe('DashboardDerivedMetricsService', () => {
         DERIVED_METRIC_KINDS.FreshnessForecast,
         DERIVED_METRIC_KINDS.IntensityDistribution,
         DERIVED_METRIC_KINDS.EfficiencyTrend,
+        DERIVED_METRIC_KINDS.TrainingSummary,
       ],
     });
   });
@@ -436,6 +442,7 @@ describe('DashboardDerivedMetricsService', () => {
       freshnessForecastStatus: 'ready',
       intensityDistributionStatus: 'ready',
       efficiencyTrendStatus: 'ready',
+      trainingSummaryStatus: 'ready',
     };
 
     service.ensureForDashboard({ uid: 'user-1' }, state);
@@ -461,6 +468,7 @@ describe('DashboardDerivedMetricsService', () => {
       freshnessForecastStatus: 'ready',
       intensityDistributionStatus: 'ready',
       efficiencyTrendStatus: 'ready',
+      trainingSummaryStatus: 'ready',
     };
 
     service.ensureForDashboard({ uid: 'user-1' }, state);

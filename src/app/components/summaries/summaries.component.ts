@@ -36,12 +36,19 @@ import {
   type DashboardTileViewModel,
   isDashboardChartTileViewModel,
 } from '../../helpers/dashboard-tile-view-model.helper';
-import type { DashboardSleepTrendWindow } from '../../helpers/dashboard-sleep-chart.helper';
+import {
+  formatSleepDuration,
+  type DashboardSleepTrendWindow,
+} from '../../helpers/dashboard-sleep-chart.helper';
 import { AppUserService } from '../../services/app.user.service';
 import { DashboardDerivedMetricsService } from '../../services/dashboard-derived-metrics.service';
 import { AppSleepService } from '../../services/app.sleep.service';
 import type { DashboardFormPoint } from '../../helpers/dashboard-form.helper';
-import type { DashboardRecoveryNowContext } from '../../helpers/dashboard-recovery-now.helper';
+import {
+  RECOVERY_NOW_REFRESH_INTERVAL_MS,
+  resolveRemainingRecoverySeconds,
+  type DashboardRecoveryNowContext,
+} from '../../helpers/dashboard-recovery-now.helper';
 import type {
   DashboardAcwrContext,
   DashboardEasyPercentContext,
@@ -118,6 +125,7 @@ import {
   normalizeDashboardFormTimelineWindow,
 } from '../../helpers/dashboard-chart-display-settings.helper';
 import { normalizeDashboardDerivedChartRange } from '../../helpers/dashboard-derived-chart-range.helper';
+import { resolveTrainingStateClassification } from '../../helpers/training-state.helper';
 import { normalizeDashboardPowerCurveCompareMode } from '../../helpers/dashboard-power-curve.helper';
 import {
   getSparseEqualWidthDashboardGridLayout,
@@ -141,6 +149,26 @@ interface DashboardDerivedMetricsBanner {
   title: string;
   description: string;
   showRetry: boolean;
+}
+
+interface DashboardCurrentStateViewModel {
+  stateLabel: string;
+  stateCaption: string;
+  formText: string;
+  recoveryText: string;
+  rampText: string;
+  ctlAtlText: string;
+}
+
+function createEmptyDashboardCurrentStateViewModel(): DashboardCurrentStateViewModel {
+  return {
+    stateLabel: 'Awaiting data',
+    stateCaption: 'No current load signals',
+    formText: '--',
+    recoveryText: '--',
+    rampText: '--',
+    ctlAtlText: '-- / --',
+  };
 }
 
 interface DashboardTileSectionViewModel {
@@ -250,7 +278,9 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   private derivedEfficiencyTrendStatus: DashboardDerivedMetricStatus = 'missing';
   private derivedMetricsHydrated = false;
   private derivedPendingBannerTimeout: ReturnType<typeof setTimeout> | null = null;
+  private recoveryRefreshIntervalHandle: ReturnType<typeof setInterval> | null = null;
   public derivedMetricsBanner: DashboardDerivedMetricsBanner | null = null;
+  public dashboardCurrentState = createEmptyDashboardCurrentStateViewModel();
 
   constructor(
     private themeService: AppThemeService,
@@ -652,6 +682,8 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       this.derivedFreshnessForecastStatus = state.freshnessForecastStatus;
       this.derivedIntensityDistributionStatus = state.intensityDistributionStatus;
       this.derivedEfficiencyTrendStatus = state.efficiencyTrendStatus;
+      this.dashboardCurrentState = this.buildDashboardCurrentState();
+      this.updateRecoveryRefreshTimer();
       this.refreshDerivedMetricsBannerState();
 
       if (hasTileDataChanged) {
@@ -1351,6 +1383,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   private resetDerivedMetricsState(): void {
     this.derivedMetricsHydrated = false;
     this.clearDerivedPendingBannerTimeout();
+    this.clearRecoveryRefreshTimer();
     this.derivedFormPoints = null;
     this.derivedRecoveryNowContext = null;
     this.derivedAcwrContext = null;
@@ -1377,7 +1410,58 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     this.derivedFreshnessForecastStatus = 'missing';
     this.derivedIntensityDistributionStatus = 'missing';
     this.derivedEfficiencyTrendStatus = 'missing';
+    this.dashboardCurrentState = createEmptyDashboardCurrentStateViewModel();
     this.refreshDerivedMetricsBannerState();
+  }
+
+  private buildDashboardCurrentState(): DashboardCurrentStateViewModel {
+    const latestPoint = this.derivedFormPoints?.[this.derivedFormPoints.length - 1] || null;
+    const state = resolveTrainingStateClassification({
+      form: this.derivedFormNowContext?.value ?? latestPoint?.formSameDay ?? null,
+      rampRate: this.derivedRampRateContext?.rampRate ?? null,
+      fitness: latestPoint?.ctl ?? null,
+      fatigue: latestPoint?.atl ?? null,
+    });
+    return {
+      stateLabel: state.label || 'Awaiting data',
+      stateCaption: state.caption || 'No current load signals',
+      formText: this.formatDashboardCurrentStateMetric(this.derivedFormNowContext?.value, true),
+      recoveryText: formatSleepDuration(resolveRemainingRecoverySeconds(this.derivedRecoveryNowContext)),
+      rampText: this.formatDashboardCurrentStateMetric(this.derivedRampRateContext?.rampRate, true),
+      ctlAtlText: `${this.formatDashboardCurrentStateMetric(latestPoint?.ctl)} / ${this.formatDashboardCurrentStateMetric(latestPoint?.atl)}`,
+    };
+  }
+
+  private formatDashboardCurrentStateMetric(value: number | null | undefined, signed = false): string {
+    if (value === null || value === undefined || !Number.isFinite(value)) {
+      return '--';
+    }
+    const prefix = signed && value > 0 ? '+' : '';
+    return `${prefix}${new Intl.NumberFormat(this.locale, { maximumFractionDigits: 1 }).format(value)}`;
+  }
+
+  private updateRecoveryRefreshTimer(): void {
+    const remainingSeconds = resolveRemainingRecoverySeconds(this.derivedRecoveryNowContext);
+    if (remainingSeconds === null || remainingSeconds <= 0) {
+      this.clearRecoveryRefreshTimer();
+      return;
+    }
+    if (this.recoveryRefreshIntervalHandle !== null) {
+      return;
+    }
+    this.recoveryRefreshIntervalHandle = setInterval(() => {
+      this.dashboardCurrentState = this.buildDashboardCurrentState();
+      this.updateRecoveryRefreshTimer();
+      this.changeDetector.markForCheck();
+    }, RECOVERY_NOW_REFRESH_INTERVAL_MS);
+  }
+
+  private clearRecoveryRefreshTimer(): void {
+    if (this.recoveryRefreshIntervalHandle === null) {
+      return;
+    }
+    clearInterval(this.recoveryRefreshIntervalHandle);
+    this.recoveryRefreshIntervalHandle = null;
   }
 
   private getDashboardTileSettingsSnapshot(): TileSettingsInterface[] {
@@ -1768,6 +1852,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   private unsubscribeFromAll() {
     this.unsubscribeThemeSubscription();
     this.clearDerivedPendingBannerTimeout();
+    this.clearRecoveryRefreshTimer();
     if (this.derivedMetricsSubscription) {
       this.derivedMetricsSubscription.unsubscribe();
       this.derivedMetricsSubscription = null;
@@ -1812,6 +1897,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       freshnessForecast: this.derivedFreshnessForecastContext,
       intensityDistribution: this.derivedIntensityDistributionContext,
       efficiencyTrend: this.derivedEfficiencyTrendContext,
+      trainingSummary: null,
       formStatus: this.derivedFormStatus,
       recoveryNowStatus: this.derivedRecoveryNowStatus,
       acwrStatus: this.derivedAcwrStatus,
@@ -1825,6 +1911,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       freshnessForecastStatus: this.derivedFreshnessForecastStatus,
       intensityDistributionStatus: this.derivedIntensityDistributionStatus,
       efficiencyTrendStatus: this.derivedEfficiencyTrendStatus,
+      trainingSummaryStatus: 'missing',
     }, { force: true });
   }
 

@@ -6,6 +6,76 @@
   margin: 0 0 0.85rem;
 }
 
+.dashboard-current-state-row {
+  align-items: stretch;
+  background: var(--qs-surface-raised, var(--mat-sys-surface-container-low));
+  border: 1px solid var(--qs-glass-panel-border, var(--mat-sys-outline-variant));
+  border-radius: 8px;
+  display: grid;
+  grid-template-columns: minmax(180px, 0.8fr) minmax(0, 1.2fr);
+  margin: 0 0 0.85rem;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.dashboard-current-state-primary {
+  display: grid;
+  gap: 0.15rem;
+  padding: 0.9rem 1rem;
+}
+
+.dashboard-current-state-primary > span,
+.dashboard-current-state-primary small,
+.dashboard-current-state-row dt {
+  color: var(--mat-sys-on-surface-variant);
+  font-size: 0.75rem;
+  line-height: 1.2;
+}
+
+.dashboard-current-state-primary strong {
+  font-size: 1.15rem;
+  line-height: 1.25;
+}
+
+.dashboard-current-state-row dl {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin: 0;
+}
+
+.dashboard-current-state-row dl > div {
+  border-left: 1px solid var(--qs-glass-panel-border, var(--mat-sys-outline-variant));
+  min-width: 0;
+  padding: 0.9rem 0.75rem;
+}
+
+.dashboard-current-state-row dd {
+  font-size: 0.95rem;
+  font-weight: 650;
+  line-height: 1.25;
+  margin: 0.3rem 0 0;
+  overflow-wrap: anywhere;
+}
+
+.dashboard-training-link {
+  margin-right: 0.5rem;
+}
+
+@media (max-width: 720px) {
+  .dashboard-current-state-row {
+    grid-template-columns: 1fr;
+  }
+
+  .dashboard-current-state-row dl {
+    border-top: 1px solid var(--qs-glass-panel-border, var(--mat-sys-outline-variant));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .dashboard-current-state-row dl > div:nth-child(odd) {
+    border-left: 0;
+  }
+}
+
 .dashboard-main-sections {
   display: grid;
   gap: 0.9rem;

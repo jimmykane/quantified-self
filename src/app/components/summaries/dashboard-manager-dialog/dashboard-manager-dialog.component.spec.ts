@@ -938,7 +938,7 @@ describe('DashboardManagerDialogComponent', () => {
     const template = readFileSync(templatePath, 'utf8');
     const styles = readFileSync(stylesPath, 'utf8');
 
-    expect(template).toContain('Add defaults');
+    expect(template).toContain('Simplify dashboard');
     expect(template).toContain('Add all');
     expect(template).toContain('Remove all');
     expect(template).toContain('Preset category');
@@ -952,50 +952,13 @@ describe('DashboardManagerDialogComponent', () => {
     expect(styles).toContain('.dashboard-manager-button-content mat-spinner');
   });
 
-  it('adds all missing new-user default dashboard tiles in one save', async () => {
+  it('starts a new dashboard clean rather than adding default training tiles', () => {
     dialogData.user.settings.dashboardSettings.tiles = [];
 
-    await component.addDefaultTiles();
-
-    const tiles = dialogData.user.settings.dashboardSettings.tiles;
-    const defaultTiles = AppUserUtilities.getDefaultUserDashboardTiles();
-    expect(tiles).toHaveLength(defaultTiles.length);
-    expect(tiles.map(dashboardTileSignature)).toEqual(defaultTiles.map(dashboardTileSignature));
-    expect(tiles.filter((tile: any) => tile.type === TileTypes.Map)).toHaveLength(0);
-    expect(tiles.filter((tile: any) => tile.type === TileTypes.Chart && tile.dataType === DataDistance.type)).toHaveLength(0);
-    expect(tiles.some((tile: any) => tile.chartType === DASHBOARD_RECOVERY_NOW_CHART_TYPE)).toBe(false);
-    expect(tiles.some((tile: any) => tile.chartType === DASHBOARD_FORM_CHART_TYPE)).toBe(true);
-    expect(tiles.some((tile: any) => tile.chartType === DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE)).toBe(true);
-    expect(tiles.some((tile: any) => tile.chartType === DASHBOARD_POWER_CURVE_CHART_TYPE)).toBe(false);
-    expect(tiles.some((tile: any) => tile.chartType === DASHBOARD_FORM_NOW_KPI_CHART_TYPE)).toBe(true);
-    expect(tiles.some((tile: any) => tile.chartType === DASHBOARD_ACWR_KPI_CHART_TYPE)).toBe(false);
-    expect(tiles.some((tile: any) => tile.chartType === ChartTypes.Pie && tile.dataType === DataDuration.type)).toBe(false);
-    expect(tiles.some((tile: any) => tile.dataType === DataEnergy.type)).toBe(false);
-    expect(tiles.some((tile: any) => tile.dataType === DataHeartRateAvg.type)).toBe(false);
-    expect(dialogData.user.settings.dashboardSettings.autoTiles.curatedRecoveryNow).toBeUndefined();
-    expect(dialogData.user.settings.dashboardSettings.autoTiles.curatedForm).toMatchObject({
-      state: 'added',
-      source: 'default-curated',
-    });
-    expect(dialogData.user.settings.dashboardSettings.autoTiles.curatedIntensityDistribution).toMatchObject({
-      state: 'added',
-      source: 'default-curated',
-    });
-    expect(dialogData.user.settings.dashboardSettings.autoTiles.kpiFormNow).toMatchObject({
-      state: 'added',
-      source: 'default-kpi',
-    });
-    expect(dialogData.user.settings.dashboardSettings.autoTiles.powerCurve).toBeUndefined();
-    expect(dialogData.user.settings.dashboardSettings.autoTiles.runningPowerCurve).toBeUndefined();
-    expect(dialogData.user.settings.dashboardSettings.dismissedCuratedRecoveryNowTile).toBeUndefined();
-    expect(userServiceMock.updateUserProperties).toHaveBeenCalledTimes(1);
-    expectDashboardSettingsOnlyWrite(userServiceMock, dialogData);
-    expect(hapticsMock.selection).toHaveBeenCalledTimes(1);
-    expect(hapticsMock.success).toHaveBeenCalledTimes(1);
-    expect(component.isAddDefaultsDisabled).toBe(true);
+    expect(AppUserUtilities.getDefaultUserDashboardTiles()).toEqual([]);
+    expect(component.dashboardTiles).toEqual([]);
     expect(component.isAddAllDisabled).toBe(false);
-    expect(component.isRemoveAllDisabled).toBe(false);
-    expect(dialogRefMock.close).toHaveBeenCalledWith({ saved: true });
+    expect(component.isRemoveAllDisabled).toBe(true);
   });
 
   it('adds every available dashboard manager preset tile when adding all', async () => {
@@ -1043,28 +1006,25 @@ describe('DashboardManagerDialogComponent', () => {
     expect(dialogRefMock.close).toHaveBeenCalledWith({ saved: true });
   });
 
-  it('shows an Add defaults loading state while bulk default add is saving', async () => {
-    dialogData.user.settings.dashboardSettings.tiles = [];
-    const saveDeferred = createDeferred<boolean>();
-    userServiceMock.updateUserProperties.mockReturnValueOnce(saveDeferred.promise);
+  it('previews legacy training tiles without selecting or removing them implicitly', () => {
+    dialogData.user.settings.dashboardSettings.tiles = [{
+      type: TileTypes.Chart,
+      order: 0,
+      name: 'Form',
+      chartType: DASHBOARD_FORM_CHART_TYPE,
+      dataType: DataDistance.type,
+      dataValueType: ChartDataValueTypes.Total,
+      dataCategoryType: ChartDataCategoryTypes.DateType,
+      dataTimeInterval: TimeIntervals.Daily,
+      size: { columns: 2, rows: 1 },
+    }];
 
-    const addDefaultsPromise = component.addDefaultTiles();
-    await Promise.resolve();
-    await Promise.resolve();
-    fixture.detectChanges();
+    component.toggleSimplifyDashboardPreview();
 
-    const addDefaultsButton: HTMLElement = fixture.nativeElement.querySelector('[data-testid="dashboard-manager-add-defaults-button"]');
-    expect(component.isAddDefaultsSaving).toBe(true);
-    expect(component.savingAction).toBe('addDefaults');
-    expect(addDefaultsButton.getAttribute('aria-busy')).toBe('true');
-    expect(addDefaultsButton.textContent).toContain('Adding...');
-    expect(addDefaultsButton.querySelector('mat-spinner')).toBeTruthy();
-
-    saveDeferred.resolve(true);
-    await addDefaultsPromise;
-
-    expect(component.isSaving).toBe(false);
-    expect(component.savingAction).toBeNull();
+    expect(component.isSimplifyDashboardPreviewOpen).toBe(true);
+    expect(component.legacyTrainingTiles).toHaveLength(1);
+    expect(component.hasSelectedLegacyTrainingTiles).toBe(false);
+    expect(userServiceMock.updateUserProperties).not.toHaveBeenCalled();
   });
 
   it('shows an Add all loading state while bulk all add is saving', async () => {
@@ -1091,31 +1051,6 @@ describe('DashboardManagerDialogComponent', () => {
     expect(component.savingAction).toBeNull();
   });
 
-  it('adds the Sleep tile with the default tiles only when sleep data exists', async () => {
-    dialogData.user.settings.dashboardSettings.tiles = [];
-    sleepEligibilitySubject.next(true);
-
-    await component.addDefaultTiles();
-
-    const defaultTiles = AppUserUtilities.getDefaultUserDashboardTiles();
-    const tiles = dialogData.user.settings.dashboardSettings.tiles;
-    const sleepTiles = tiles.filter((tile: any) => tile.chartType === DASHBOARD_SLEEP_TREND_CHART_TYPE || tile.dataType === 'SleepDuration');
-
-    expect(tiles).toHaveLength(defaultTiles.length + 1);
-    expect(sleepTiles).toHaveLength(1);
-    expect(sleepTiles[0]).toMatchObject({
-      name: 'Sleep',
-      order: defaultTiles.length,
-      size: { columns: 1, rows: 1 },
-    });
-    expect(dialogData.user.settings.dashboardSettings.autoTiles.sleepTrend).toMatchObject({
-      state: 'added',
-      source: 'sleep-sync',
-    });
-    expect(userServiceMock.updateUserProperties).toHaveBeenCalledTimes(1);
-    expect(dialogRefMock.close).toHaveBeenCalledWith({ saved: true });
-  });
-
   it('refreshes sleep eligibility when adding all tiles', async () => {
     dialogData.user.settings.dashboardSettings.tiles = [];
     sleepServiceMock.watchHasAnySleepSession.mockReturnValueOnce(of(true));
@@ -1127,38 +1062,40 @@ describe('DashboardManagerDialogComponent', () => {
     expect(sleepServiceMock.watchHasAnySleepSession).toHaveBeenCalledWith('user-1');
   });
 
-  it('does not duplicate existing default dashboard tiles when adding defaults', async () => {
-    dialogData.user.settings.dashboardSettings.tiles = AppUserUtilities.getDefaultUserDashboardTiles();
-    await component.addDefaultTiles();
-
-    expect(userServiceMock.updateUserProperties).not.toHaveBeenCalled();
-    expect(dialogRefMock.close).not.toHaveBeenCalledWith({ saved: true });
-  });
-
-  it('treats a legacy recovery metric tile as the Recovery preset when adding defaults', async () => {
+  it('removes only explicitly selected legacy training tiles during simplification', async () => {
     dialogData.user.settings.dashboardSettings.tiles = [{
       type: TileTypes.Chart,
       order: 0,
-      name: 'Recovery',
-      chartType: ChartTypes.LinesVertical,
-      dataType: DataRecoveryTime.type,
+      name: 'Form',
+      chartType: DASHBOARD_FORM_CHART_TYPE,
+      dataType: DataDistance.type,
       dataValueType: ChartDataValueTypes.Total,
       dataCategoryType: ChartDataCategoryTypes.DateType,
-      dataTimeInterval: TimeIntervals.Auto,
+      dataTimeInterval: TimeIntervals.Daily,
+      size: { columns: 1, rows: 1 },
+    }, {
+      type: TileTypes.Chart,
+      order: 1,
+      name: 'Distance',
+      chartType: ChartTypes.ColumnsVertical,
+      dataType: DataDistance.type,
+      dataValueType: ChartDataValueTypes.Total,
+      dataCategoryType: ChartDataCategoryTypes.DateType,
+      dataTimeInterval: TimeIntervals.Daily,
       size: { columns: 1, rows: 1 },
     }];
-    component.ngOnInit();
+    dialogMock.open.mockReturnValueOnce({ afterClosed: () => of(true) });
 
-    await component.addDefaultTiles();
+    component.toggleSimplifyDashboardPreview();
+    component.toggleLegacyTrainingTileSelection(0, true);
+    await component.removeSelectedLegacyTrainingTiles();
 
     const tiles = dialogData.user.settings.dashboardSettings.tiles;
-    const recoveryLikeTiles = tiles.filter((tile: any) => (
-      tile.chartType === DASHBOARD_RECOVERY_NOW_CHART_TYPE
-      || tile.dataType === DataRecoveryTime.type
-    ));
-    expect(recoveryLikeTiles).toHaveLength(1);
-    expect(recoveryLikeTiles[0].chartType).toBe(ChartTypes.LinesVertical);
-    expect(dialogData.user.settings.dashboardSettings.autoTiles.curatedRecoveryNow).toBeUndefined();
+    expect(tiles).toHaveLength(1);
+    expect(tiles[0].name).toBe('Distance');
+    expect(tiles[0].order).toBe(0);
+    expect(userServiceMock.updateUserProperties).toHaveBeenCalledTimes(1);
+    expect(dialogRefMock.close).toHaveBeenCalledWith({ saved: true });
   });
 
   it('restores dashboard settings when adding all fails', async () => {

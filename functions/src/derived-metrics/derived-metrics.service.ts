@@ -2,6 +2,9 @@ import * as admin from 'firebase-admin';
 import * as logger from 'firebase-functions/logger';
 import {
     DataDuration,
+    DataActivityTypes,
+    DataCriticalPower,
+    DataFTP,
     DataHeartRateAvg,
     DataHeartRateZoneFiveDuration,
     DataHeartRateZoneFourDuration,
@@ -19,6 +22,7 @@ import {
     DataPowerZoneThreeDuration,
     DataPowerZoneTwoDuration,
     DataRecoveryTime,
+    DataVO2Max,
 } from '@sports-alliance/sports-lib';
 import {
     buildDerivedFormDailyLoads,
@@ -48,6 +52,10 @@ import {
     type DerivedMonotonyStrainMetricPayload,
     type DerivedRampRateMetricPayload,
     type DerivedRecoveryNowMetricPayload,
+    type DerivedTrainingCapacityMetric,
+    type DerivedTrainingDiscipline,
+    type DerivedTrainingDisciplineSummary,
+    type DerivedTrainingSummaryMetricPayload,
     getDerivedMetricDocId,
     normalizeDerivedMetricKinds,
     normalizeDerivedMetricKindsStrict,
@@ -64,12 +72,14 @@ import { getDerivedMetricsUidAllowlist, isDerivedMetricsUidAllowed } from './der
 
 const FORM_STAT_TYPE = 'Training Stress Score';
 const LEGACY_FORM_STAT_TYPE = 'Power Training Stress Score';
-const DERIVED_METRICS_EVENT_FIELDS = ['startDate', 'endDate', 'stats', 'isMerge', 'mergeType'] as const;
+const DERIVED_METRICS_EVENT_FIELDS = ['startDate', 'endDate', 'stats', 'isMerge', 'mergeType', 'creator', 'serviceName', 'sourceServiceName'] as const;
 const DAY_MS = 24 * 60 * 60 * 1000;
 const CTL_TIME_CONSTANT_DAYS = 42;
 const ATL_TIME_CONSTANT_DAYS = 7;
 const HISTORY_TREND_WEEKS = 8;
 const FORECAST_DAYS = 7;
+const TRAINING_SUMMARY_CURRENT_WINDOW_DAYS = 28;
+const TRAINING_SUMMARY_BASELINE_WINDOW_DAYS = 84;
 const DERIVED_METRICS_STUCK_QUEUED_THRESHOLD_MS = 10 * 60 * 1000;
 const DERIVED_METRICS_STUCK_PROCESSING_THRESHOLD_MS = 15 * 60 * 1000;
 const POWER_ZONE_STAT_TYPES = [
@@ -139,6 +149,7 @@ interface DerivedMetricBuildExecutionContext {
     getKpiDerivedLoadPoints: () => DerivedLoadPoint[];
     getIntensityDistributionBuildResult: () => DerivedMetricBuildResult<DerivedIntensityDistributionMetricPayload>;
     getEfficiencyTrendBuildResult: () => DerivedMetricBuildResult<DerivedEfficiencyTrendMetricPayload>;
+    getTrainingSummaryBuildResult: () => DerivedMetricBuildResult<DerivedTrainingSummaryMetricPayload>;
 }
 
 interface DerivedMetricBuildDefinition {
@@ -336,16 +347,32 @@ function resolveRawStats(eventData: Record<string, unknown>): Record<string, unk
     return stats as Record<string, unknown>;
 }
 
-function resolveRawStatNumericValue(
+function resolveRawStatValue(
     eventData: Record<string, unknown>,
     statType: string,
-): number | null {
+): unknown {
     const stats = resolveRawStats(eventData);
     if (!Object.prototype.hasOwnProperty.call(stats, statType)) {
         return null;
     }
 
     const rawStat = stats[statType];
+    if (!rawStat || typeof rawStat !== 'object' || Array.isArray(rawStat)) {
+        return rawStat;
+    }
+
+    const statObject = rawStat as Record<string, unknown>;
+    return statObject.value
+        ?? statObject.rawValue
+        ?? statObject._value
+        ?? rawStat;
+}
+
+function resolveRawStatNumericValue(
+    eventData: Record<string, unknown>,
+    statType: string,
+): number | null {
+    const rawStat = resolveRawStatValue(eventData, statType);
     const directValue = toFiniteNumber(rawStat);
     if (directValue !== null) {
         return directValue;
@@ -904,6 +931,268 @@ function resolveZoneDurations(
     });
 }
 
+type TrainingCapacityKind = 'vo2Max' | 'ftp' | 'criticalPower';
+
+interface TrainingCapacityObservation {
+    sourceKey: string | null;
+    timeMs: number;
+    value: number;
+}
+
+interface TrainingSummaryWindowAccumulator {
+    activityCount: number;
+    durationSeconds: number;
+    easySeconds: number;
+    moderateSeconds: number;
+    hardSeconds: number;
+}
+
+interface TrainingSummaryDisciplineAccumulator {
+    current: TrainingSummaryWindowAccumulator;
+    baseline: TrainingSummaryWindowAccumulator;
+    capacities: Record<TrainingCapacityKind, TrainingCapacityObservation[]>;
+}
+
+function createTrainingSummaryWindowAccumulator(): TrainingSummaryWindowAccumulator {
+    return {
+        activityCount: 0,
+        durationSeconds: 0,
+        easySeconds: 0,
+        moderateSeconds: 0,
+        hardSeconds: 0,
+    };
+}
+
+function createTrainingSummaryDisciplineAccumulator(): TrainingSummaryDisciplineAccumulator {
+    return {
+        current: createTrainingSummaryWindowAccumulator(),
+        baseline: createTrainingSummaryWindowAccumulator(),
+        capacities: {
+            vo2Max: [],
+            ftp: [],
+            criticalPower: [],
+        },
+    };
+}
+
+function resolveTrainingDiscipline(eventData: Record<string, unknown>): DerivedTrainingDiscipline | null {
+    const rawActivityTypes = resolveRawStatValue(eventData, DataActivityTypes.type);
+    const values = Array.isArray(rawActivityTypes)
+        ? rawActivityTypes
+        : [rawActivityTypes];
+    const normalized = values
+        .map(value => `${value ?? ''}`.trim().toLowerCase())
+        .filter(Boolean);
+
+    if (normalized.some(value => value.includes('treadmill') || value.includes('trail run') || value.includes('running'))) {
+        return 'running';
+    }
+    if (normalized.some(value => value.includes('indoor cycling') || value.includes('mountain biking') || value.includes('cycling') || value.includes('biking'))) {
+        return 'cycling';
+    }
+    return null;
+}
+
+function resolveTrainingSourceKey(eventData: Record<string, unknown>): string | null {
+  const creator = eventData.creator && typeof eventData.creator === 'object' && !Array.isArray(eventData.creator)
+    ? eventData.creator as Record<string, unknown>
+    : {};
+  const normalize = (value: unknown): string => toSafeString(value)
+    .trim()
+    .replace(/\s+/g, ' ')
+    .toLowerCase();
+  const provider = [
+    eventData.sourceServiceName,
+    eventData.serviceName,
+    creator.serviceName,
+    creator.manufacturer,
+  ]
+    .map(normalize)
+    .find(Boolean) || '';
+  const device = [creator.name, creator.deviceName, creator.productName]
+    .map(normalize)
+    .find(Boolean) || '';
+
+  // Provider-only values (for example, "Garmin") can combine more than one
+  // device. Capacity trends need a device-level source to stay comparable.
+  if (!device) {
+    return null;
+  }
+
+  if (!provider || device === provider || device.startsWith(`${provider} `)) {
+    return device;
+  }
+  return `${provider} / ${device}`;
+}
+
+function buildTrainingSummaryWindow(
+    accumulator: TrainingSummaryWindowAccumulator,
+    windowStartDayMs: number,
+    windowEndDayMs: number,
+    normalizationFactor = 1,
+): DerivedTrainingSummaryMetricPayload['disciplines'][number]['current28d'] {
+    return {
+        periodDays: TRAINING_SUMMARY_CURRENT_WINDOW_DAYS,
+        windowStartDayMs,
+        windowEndDayMs,
+        activityCount: toRoundedNumber(accumulator.activityCount * normalizationFactor, 2),
+        durationSeconds: toRoundedNumber(accumulator.durationSeconds * normalizationFactor, 2),
+        easySeconds: toRoundedNumber(accumulator.easySeconds * normalizationFactor, 2),
+        moderateSeconds: toRoundedNumber(accumulator.moderateSeconds * normalizationFactor, 2),
+        hardSeconds: toRoundedNumber(accumulator.hardSeconds * normalizationFactor, 2),
+    };
+}
+
+function median(values: readonly number[]): number | null {
+    if (!values.length) {
+        return null;
+    }
+    const sorted = [...values].sort((left, right) => left - right);
+    const middle = Math.floor(sorted.length / 2);
+    return sorted.length % 2 === 0
+        ? (sorted[middle - 1] + sorted[middle]) / 2
+        : sorted[middle];
+}
+
+function buildTrainingCapacityMetric(
+    observations: readonly TrainingCapacityObservation[],
+    currentStartDayMs: number,
+    baselineStartDayMs: number,
+    baselineEndDayMs: number,
+): DerivedTrainingCapacityMetric | null {
+    if (!observations.length) {
+        return null;
+    }
+
+    const sourceKeys = new Set(observations.map(observation => observation.sourceKey));
+    const latest = [...observations].sort((left, right) => right.timeMs - left.timeMs)[0];
+    const current = observations.filter(observation => observation.timeMs >= currentStartDayMs);
+    const baseline = observations.filter(observation => observation.timeMs >= baselineStartDayMs && observation.timeMs <= baselineEndDayMs);
+
+    if (sourceKeys.size !== 1 || sourceKeys.has(null)) {
+        return {
+            sourceKey: null,
+            latestAtMs: latest.timeMs,
+            latestValue: latest.value,
+            currentMedian: null,
+            baselineMedian: null,
+            currentSampleCount: current.length,
+            baselineSampleCount: baseline.length,
+            deltaPct: null,
+            trend: null,
+        };
+    }
+
+    const currentMedian = median(current.map(observation => observation.value));
+    const baselineMedian = median(baseline.map(observation => observation.value));
+    const deltaPct = currentMedian !== null && baselineMedian !== null && baselineMedian > 0
+        ? toRoundedNumber(((currentMedian - baselineMedian) / baselineMedian) * 100, 2)
+        : null;
+    const hasComparison = currentMedian !== null && baselineMedian !== null && current.length >= 1 && baseline.length >= 2;
+    const trend = hasComparison && deltaPct !== null
+        ? (deltaPct > 2 ? 'improving' : (deltaPct < -2 ? 'declining' : 'stable'))
+        : null;
+
+    return {
+        sourceKey: observations[0].sourceKey,
+        latestAtMs: latest.timeMs,
+        latestValue: latest.value,
+        currentMedian,
+        baselineMedian,
+        currentSampleCount: current.length,
+        baselineSampleCount: baseline.length,
+        deltaPct,
+        trend,
+    };
+}
+
+export function buildTrainingSummaryMetricPayload(
+    docs: readonly FirestoreQueryDocumentSnapshot[],
+    nowMs = Date.now(),
+): DerivedMetricBuildResult<DerivedTrainingSummaryMetricPayload> {
+    const asOfDayMs = resolveUtcDayStartMs(nowMs);
+    const currentStartDayMs = asOfDayMs - ((TRAINING_SUMMARY_CURRENT_WINDOW_DAYS - 1) * DAY_MS);
+    const baselineEndDayMs = currentStartDayMs - DAY_MS;
+    const baselineStartDayMs = baselineEndDayMs - ((TRAINING_SUMMARY_BASELINE_WINDOW_DAYS - 1) * DAY_MS);
+    const accumulators: Record<DerivedTrainingDiscipline, TrainingSummaryDisciplineAccumulator> = {
+        running: createTrainingSummaryDisciplineAccumulator(),
+        cycling: createTrainingSummaryDisciplineAccumulator(),
+    };
+    let sourceEventCount = 0;
+
+    docs.forEach((doc) => {
+        const eventData = (doc.data() || {}) as Record<string, unknown>;
+        if (isMergedEvent(eventData)) {
+            return;
+        }
+        const startTimeMs = toMillis(eventData.startDate);
+        const discipline = resolveTrainingDiscipline(eventData);
+        if (startTimeMs === null || discipline === null) {
+            return;
+        }
+        const eventDayMs = resolveUtcDayStartMs(startTimeMs);
+        if (eventDayMs < baselineStartDayMs || eventDayMs > asOfDayMs) {
+            return;
+        }
+
+        const accumulator = accumulators[discipline];
+        const window = eventDayMs >= currentStartDayMs ? accumulator.current : accumulator.baseline;
+        const powerZones = resolveZoneDurations(eventData, POWER_ZONE_STAT_TYPES);
+        const heartRateZones = resolveZoneDurations(eventData, HEART_RATE_ZONE_STAT_TYPES);
+        const zones = powerZones.reduce((sum, value) => sum + value, 0) > 0
+            ? powerZones
+            : heartRateZones;
+        window.activityCount += 1;
+        window.durationSeconds += toFinitePositiveNumber(resolveRawStatNumericValue(eventData, DataDuration.type)) || 0;
+        window.easySeconds += (zones[0] || 0) + (zones[1] || 0);
+        window.moderateSeconds += (zones[2] || 0) + (zones[3] || 0);
+        window.hardSeconds += (zones[4] || 0) + (zones[5] || 0) + (zones[6] || 0);
+
+        const sourceKey = resolveTrainingSourceKey(eventData);
+        const capacities: Array<[TrainingCapacityKind, string]> = [
+            ['vo2Max', DataVO2Max.type],
+            ['ftp', DataFTP.type],
+            ['criticalPower', DataCriticalPower.type],
+        ];
+        capacities.forEach(([kind, statType]) => {
+            const value = toFinitePositiveNumber(resolveRawStatNumericValue(eventData, statType));
+            if (value !== null) {
+                accumulator.capacities[kind].push({ sourceKey, timeMs: startTimeMs, value });
+            }
+        });
+        sourceEventCount += 1;
+    });
+
+    const disciplines: DerivedTrainingDisciplineSummary[] = (['running', 'cycling'] as const).map((discipline) => {
+        const accumulator = accumulators[discipline];
+        return {
+            discipline,
+            current28d: buildTrainingSummaryWindow(accumulator.current, currentStartDayMs, asOfDayMs),
+            baseline28d: buildTrainingSummaryWindow(
+                accumulator.baseline,
+                baselineStartDayMs,
+                baselineEndDayMs,
+                TRAINING_SUMMARY_CURRENT_WINDOW_DAYS / TRAINING_SUMMARY_BASELINE_WINDOW_DAYS,
+            ),
+            vo2Max: buildTrainingCapacityMetric(accumulator.capacities.vo2Max, currentStartDayMs, baselineStartDayMs, baselineEndDayMs),
+            ftp: buildTrainingCapacityMetric(accumulator.capacities.ftp, currentStartDayMs, baselineStartDayMs, baselineEndDayMs),
+            criticalPower: buildTrainingCapacityMetric(accumulator.capacities.criticalPower, currentStartDayMs, baselineStartDayMs, baselineEndDayMs),
+        };
+    });
+
+    return {
+        sourceEventCount,
+        payload: {
+            dayBoundary: 'UTC',
+            asOfDayMs,
+            currentWindowDays: TRAINING_SUMMARY_CURRENT_WINDOW_DAYS,
+            baselineWindowDays: TRAINING_SUMMARY_BASELINE_WINDOW_DAYS,
+            disciplines,
+            excludesMergedEvents: true,
+        },
+    };
+}
+
 function buildIntensityDistributionMetricPayload(
     docs: readonly FirestoreQueryDocumentSnapshot[],
 ): DerivedMetricBuildResult<DerivedIntensityDistributionMetricPayload> {
@@ -1327,6 +1616,10 @@ const DERIVED_METRIC_BUILD_REGISTRY: Record<DerivedMetricKind, DerivedMetricBuil
         sourceDependencies: ['formDocs'],
         build: (context) => context.getEfficiencyTrendBuildResult(),
     },
+    [DERIVED_METRIC_KINDS.TrainingSummary]: {
+        sourceDependencies: ['formDocs'],
+        build: (context) => context.getTrainingSummaryBuildResult(),
+    },
 };
 
 function createDerivedMetricBuildExecutionContext(
@@ -1347,6 +1640,7 @@ function createDerivedMetricBuildExecutionContext(
     let kpiDerivedLoadPointsCache: DerivedLoadPoint[] | null = null;
     let intensityDistributionBuildResultCache: DerivedMetricBuildResult<DerivedIntensityDistributionMetricPayload> | null = null;
     let efficiencyTrendBuildResultCache: DerivedMetricBuildResult<DerivedEfficiencyTrendMetricPayload> | null = null;
+    let trainingSummaryBuildResultCache: DerivedMetricBuildResult<DerivedTrainingSummaryMetricPayload> | null = null;
 
     const getDailyLoadContext = (): ReturnType<typeof buildDailyLoadContext> => {
         if (dailyLoadContextCache) {
@@ -1398,6 +1692,14 @@ function createDerivedMetricBuildExecutionContext(
         return efficiencyTrendBuildResultCache;
     };
 
+    const getTrainingSummaryBuildResult = (): DerivedMetricBuildResult<DerivedTrainingSummaryMetricPayload> => {
+        if (trainingSummaryBuildResultCache) {
+            return trainingSummaryBuildResultCache;
+        }
+        trainingSummaryBuildResultCache = buildTrainingSummaryMetricPayload(formDocs, nowMs);
+        return trainingSummaryBuildResultCache;
+    };
+
     return {
         nowMs,
         formDocs,
@@ -1407,6 +1709,7 @@ function createDerivedMetricBuildExecutionContext(
         getKpiDerivedLoadPoints,
         getIntensityDistributionBuildResult,
         getEfficiencyTrendBuildResult,
+        getTrainingSummaryBuildResult,
     };
 }
 

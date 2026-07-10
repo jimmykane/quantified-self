@@ -13,6 +13,10 @@
     </div>
     @if (showActions) {
     <div class="dashboard-section-actions">
+      <a mat-stroked-button class="dashboard-training-link" routerLink="/training">
+        <mat-icon>monitoring</mat-icon>
+        <span>Open Training</span>
+      </a>
       <button mat-flat-button class="qs-mat-primary dashboard-manager-button dashboard-manager-button-desktop" appHapticTap
         (click)="openDashboardManagerDialog()" [disabled]="isDashboardManagerOpen">
         <mat-icon>add_chart</mat-icon>
@@ -26,6 +30,19 @@
     }
   </div>
   }
+  <section class="dashboard-current-state-row" aria-label="Current training state">
+    <div class="dashboard-current-state-primary">
+      <span>Current state</span>
+      <strong>{{ dashboardCurrentState.stateLabel }}</strong>
+      <small>{{ dashboardCurrentState.stateCaption }}</small>
+    </div>
+    <dl>
+      <div><dt>Form</dt><dd>{{ dashboardCurrentState.formText }}</dd></div>
+      <div><dt>Recovery</dt><dd>{{ dashboardCurrentState.recoveryText }}</dd></div>
+      <div><dt>Ramp</dt><dd>{{ dashboardCurrentState.rampText }}</dd></div>
+      <div><dt>CTL / ATL</dt><dd>{{ dashboardCurrentState.ctlAtlText }}</dd></div>
+    </dl>
+  </section>
   @if (derivedMetricsBanner) {
   <div class="derived-metrics-banner" [class.pending]="derivedMetricsBanner.type === 'pending'"
     [class.warning]="derivedMetricsBanner.type === 'warning'">

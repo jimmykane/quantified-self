@@ -16,6 +16,7 @@ import type {
   DashboardIntensityDistributionContext,
   DashboardMonotonyStrainContext,
   DashboardRampRateContext,
+  DashboardTrainingSummaryContext,
 } from '../helpers/dashboard-derived-metrics.helper';
 import {
   resolveDashboardAcwrContext,
@@ -29,6 +30,7 @@ import {
   resolveDashboardIntensityDistributionContext,
   resolveDashboardMonotonyStrainContext,
   resolveDashboardRampRateContext,
+  resolveDashboardTrainingSummaryContext,
 } from '../helpers/dashboard-derived-metrics.helper';
 import type { DashboardRecoveryNowContext } from '../helpers/dashboard-recovery-now.helper';
 import type { DashboardDerivedMetricStatus } from '../helpers/derived-metric-status.helper';
@@ -60,6 +62,7 @@ export interface DashboardDerivedMetricsState {
   freshnessForecast: DashboardFreshnessForecastContext | null;
   intensityDistribution: DashboardIntensityDistributionContext | null;
   efficiencyTrend: DashboardEfficiencyTrendContext | null;
+  trainingSummary: DashboardTrainingSummaryContext | null;
   formStatus: DashboardDerivedMetricStatus;
   recoveryNowStatus: DashboardDerivedMetricStatus;
   acwrStatus: DashboardDerivedMetricStatus;
@@ -73,6 +76,40 @@ export interface DashboardDerivedMetricsState {
   freshnessForecastStatus: DashboardDerivedMetricStatus;
   intensityDistributionStatus: DashboardDerivedMetricStatus;
   efficiencyTrendStatus: DashboardDerivedMetricStatus;
+  trainingSummaryStatus: DashboardDerivedMetricStatus;
+}
+
+export function createDashboardDerivedMetricsMissingState(): DashboardDerivedMetricsState {
+  return {
+    formPoints: null,
+    recoveryNow: null,
+    acwr: null,
+    rampRate: null,
+    monotonyStrain: null,
+    formNow: null,
+    formPlus7d: null,
+    easyPercent: null,
+    hardPercent: null,
+    efficiencyDelta4w: null,
+    freshnessForecast: null,
+    intensityDistribution: null,
+    efficiencyTrend: null,
+    trainingSummary: null,
+    formStatus: 'missing',
+    recoveryNowStatus: 'missing',
+    acwrStatus: 'missing',
+    rampRateStatus: 'missing',
+    monotonyStrainStatus: 'missing',
+    formNowStatus: 'missing',
+    formPlus7dStatus: 'missing',
+    easyPercentStatus: 'missing',
+    hardPercentStatus: 'missing',
+    efficiencyDelta4wStatus: 'missing',
+    freshnessForecastStatus: 'missing',
+    intensityDistributionStatus: 'missing',
+    efficiencyTrendStatus: 'missing',
+    trainingSummaryStatus: 'missing',
+  };
 }
 
 type UserUIDCarrier = { uid?: string | null } | null | undefined;
@@ -91,7 +128,8 @@ type DerivedMetricStateContextKey =
   | 'efficiencyDelta4w'
   | 'freshnessForecast'
   | 'intensityDistribution'
-  | 'efficiencyTrend';
+  | 'efficiencyTrend'
+  | 'trainingSummary';
 
 type DerivedMetricStateStatusKey =
   | 'formStatus'
@@ -106,7 +144,8 @@ type DerivedMetricStateStatusKey =
   | 'efficiencyDelta4wStatus'
   | 'freshnessForecastStatus'
   | 'intensityDistributionStatus'
-  | 'efficiencyTrendStatus';
+  | 'efficiencyTrendStatus'
+  | 'trainingSummaryStatus';
 
 interface DerivedMetricStateDescriptor {
   kind: DerivedMetricKind;
@@ -206,6 +245,11 @@ export class DashboardDerivedMetricsService {
         statusKey: 'efficiencyTrendStatus',
         resolveContext: (snapshot) => resolveDashboardEfficiencyTrendContext(this.resolveSnapshotPayload(snapshot)),
       },
+      [DERIVED_METRIC_KINDS.TrainingSummary]: {
+        contextKey: 'trainingSummary',
+        statusKey: 'trainingSummaryStatus',
+        resolveContext: (snapshot) => resolveDashboardTrainingSummaryContext(this.resolveSnapshotPayload(snapshot)),
+      },
     };
   private readonly metricDescriptors: readonly DerivedMetricStateDescriptor[] = DASHBOARD_DERIVED_METRIC_KINDS
     .map((kind) => ({
@@ -213,47 +257,16 @@ export class DashboardDerivedMetricsService {
       ...this.metricDescriptorByKind[kind],
     }));
 
-  private buildMissingState(): DashboardDerivedMetricsState {
-    return {
-      formPoints: null,
-      recoveryNow: null,
-      acwr: null,
-      rampRate: null,
-      monotonyStrain: null,
-      formNow: null,
-      formPlus7d: null,
-      easyPercent: null,
-      hardPercent: null,
-      efficiencyDelta4w: null,
-      freshnessForecast: null,
-      intensityDistribution: null,
-      efficiencyTrend: null,
-      formStatus: 'missing',
-      recoveryNowStatus: 'missing',
-      acwrStatus: 'missing',
-      rampRateStatus: 'missing',
-      monotonyStrainStatus: 'missing',
-      formNowStatus: 'missing',
-      formPlus7dStatus: 'missing',
-      easyPercentStatus: 'missing',
-      hardPercentStatus: 'missing',
-      efficiencyDelta4wStatus: 'missing',
-      freshnessForecastStatus: 'missing',
-      intensityDistributionStatus: 'missing',
-      efficiencyTrendStatus: 'missing',
-    };
-  }
-
   watch(user: UserUIDCarrier): Observable<DashboardDerivedMetricsState> {
     const uid = `${user?.uid || ''}`.trim();
     if (!uid) {
-      return of(this.buildMissingState());
+      return of(createDashboardDerivedMetricsMissingState());
     }
     const snapshotStreams = this.metricDescriptors
       .map(descriptor => this.watchMetricSnapshot(uid, descriptor.kind));
     return combineLatest(snapshotStreams).pipe(
       map((snapshots) => {
-        const nextState = this.buildMissingState();
+        const nextState = createDashboardDerivedMetricsMissingState();
         const mutableState = nextState as unknown as Record<
           DerivedMetricStateStatusKey | DerivedMetricStateContextKey,
           unknown

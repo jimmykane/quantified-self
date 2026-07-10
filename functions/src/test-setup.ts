@@ -164,7 +164,10 @@ vi.mock('@sports-alliance/sports-lib', () => ({
         'Weight Training': 'Weight Training',
         'Mountain Biking': 'Mountain Biking',
     },
+    DataActivityTypes: { type: 'Activity Types' },
+    DataCriticalPower: { type: 'Critical Power' },
     DataDuration: { type: 'Duration' },
+    DataFTP: { type: 'FTP' },
     DataHeartRateAvg: { type: 'Heart Rate Avg' },
     DataHeartRateZoneOneDuration: { type: 'Heart Rate Zone 1 Duration' },
     DataHeartRateZoneTwoDuration: { type: 'Heart Rate Zone 2 Duration' },
@@ -182,6 +185,7 @@ vi.mock('@sports-alliance/sports-lib', () => ({
     DataPowerZoneSixDuration: { type: 'Power Zone 6 Duration' },
     DataPowerZoneSevenDuration: { type: 'Power Zone 7 Duration' },
     DataRecoveryTime: { type: 'Recovery Time' },
+    DataVO2Max: { type: 'VO2 Max' },
     RoutePreviewUtilities: {
         buildRouteFilePreview: (routeFile: any) => {
             const routes = Array.isArray(routeFile?.routes)

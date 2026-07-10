@@ -92,6 +92,7 @@ export const HELP_SECTIONS: HelpSection[] = [
 ## Where things live
 
 - **Dashboard** is your main activity overview.
+- **Training** is your fixed workspace for baseline comparisons, load trajectory, training mix, capacity evidence, efficiency, sleep, and power interpretation.
 - **My Tracks** maps positional activities and supports date range, custom date, and activity type filters.
 - **Services** is where you connect Garmin, Suunto, and COROS.
 - **Settings** is where you manage profile details, consent options, charts, maps, and units.
@@ -114,13 +115,12 @@ export const HELP_SECTIONS: HelpSection[] = [
 - **Curated Recovery** remains a fixed insight and does not react to event table or custom tile date ranges.
 - **Curated Form/TSS** computes from full history and does not react to event table or custom tile date ranges. Its **W / M / Y** view setting is saved on that dashboard tile.
 - New curated charts: **Freshness Forecast**, **Intensity Distribution**, **Efficiency Trend**, **Cycling Power Curve**, and **Running Power Curve**.
-- The recommended default dashboard starts lean with **Form/TSS**, **Intensity Distribution**, and the current-state KPI row set; activity overview charts, maps, Recovery, Freshness Forecast, and Efficiency Trend remain available from Dashboard manager or **Add all**.
-- The default KPI rows are the current-state set: **Load Status**, **Form Now**, **Fitness Trend**, **Fatigue Trend**, **Recovery Debt**, and **Training Balance**.
-- Additional KPI rows such as **Fitness (CTL)**, **Fatigue (ATL)**, **ACWR**, **Ramp Rate**, **Monotony / Strain**, **Form +7d**, **Easy %**, **Hard %**, and **Efficiency Δ (4w)** remain available from Dashboard manager.
-- KPI rows are shown in the compact **Today** section above the main dashboard grid.
+- New dashboards start clean. The Dashboard **Today** header has a flat current-state row and an **Open Training** action.
+- Load and recovery interpretation lives in **Training**: Form/TSS, freshness forecast, ACWR, ramp rate, monotony and strain, CTL/ATL, intensity distribution, efficiency, sleep context, and discipline-specific power curves.
+- Existing curated and KPI tiles are preserved. Use **Simplify dashboard** in Dashboard manager to preview and explicitly remove legacy training tiles without affecting activity, map, or custom tiles.
 - The **Today** header can show **Uploaded activities**, which counts current uploaded activity events.
 - On mobile, Today rows stay compact while the chart/map grid stays unchanged below.
-- The main dashboard groups chart and map tiles by intent, such as **Training State**, **Performance & Power**, **Activity Overview**, **Routes & Maps**, and **Custom Charts**.
+- The main dashboard groups chart and map tiles by intent, such as **Activity Overview**, **Routes & Maps**, and **Custom Charts**.
 - Custom charts are placed in those dashboard sections automatically when their metric intent is obvious; otherwise they appear under **Custom Charts**.
 - New dashboard tiles use chart-aware default sizes: Form/TSS, Power Curve, and Routes map start wider, while simple custom totals, KPIs, and the clustered heatmap stay compact.
 - Empty editable dashboards show lightweight section guidance until chart or map sections exist.
@@ -140,13 +140,19 @@ export const HELP_SECTIONS: HelpSection[] = [
 - **Map** tiles can use activity events or saved route previews as their source. Activity map tiles use their own tile date-range and activity filters, independent from the event table search; **Routes** map tiles show recent saved routes from lightweight route previews and do not use event filters.
 - **Cycling Power Curve** and **Running Power Curve** are curated event-backed charts: each uses its own tile date-range and activity filters, defaults to **1y**, and compares your best power per duration in range with either the latest matching activity or a saved recent-best comparison window.
 - Curated, KPI, form, recovery, sleep, and other derived tiles stay independent from event table filters and custom/map tile filters.
-- When sleep sync imports sleep sessions, the dashboard can add the **Sleep** tile once, and you can also add it manually from Dashboard manager; removing an auto-added Sleep tile prevents future automatic Sleep tile adds.
-- Existing dashboards can receive the lean default curated chart set and core KPI row set automatically once. **Cycling Power Curve** joins that auto-add flow only after a cycling or mountain biking event with stored Power Curve data exists; **Running Power Curve** does the same for running or trail running. The dashboard can also add a **Routes** map once saved routes have generated previews. Removing an auto-added curated chart, KPI, or Routes map prevents that tile from being suggested again.
+- The Dashboard does not automatically add sleep, KPI, curated training, or power-curve tiles. It can add a **Routes** map once saved routes have generated previews.
 - Derived curated and KPI chart types are unique: only one tile per special derived chart type can exist at a time.
 - Map tiles are unique per source: one activity map and one saved-routes map can exist at a time.
 - Map style and cluster-marker settings are edited inside Dashboard manager.
 - Default manager sizes are chart-aware: Form/TSS, Power Curve, and Routes map start wider, while simple custom totals, KPIs, and the clustered heatmap stay compact.
-- Dashboard manager bulk actions can add the recommended default dashboard, add every available preset tile, or remove every dashboard chart/map tile and keep automatic suggestions dismissed.
+- Dashboard manager bulk actions can add every available preset tile, simplify selected legacy training tiles, or remove every dashboard chart/map tile and keep automatic suggestions dismissed.
+
+### Training workspace
+
+- **Training** has a fixed analytical layout rather than draggable dashboard tiles: a **28-day status** compared with your usual training, **Notable changes**, **Load trajectory**, **Training mix**, and **Capacity evidence**.
+- Training Mix compares the latest 28 days with a normalized 84-day baseline for running and cycling. Running includes running, trail running, treadmill, and indoor running; cycling includes cycling, mountain biking, and indoor cycling.
+- Capacity evidence is separated by activity family and source. **Device VO2 Max** is shown as a labelled personal device trend, never as a readiness score. FTP and critical power follow the same source rule.
+- Missing or mixed device/provider sources show no capacity trend. Training does not infer LT1/LT2, race readiness, a universal athlete score, or workout-execution scoring.
 
 ### Reorder dashboard tiles
 
@@ -270,6 +276,7 @@ export const HELP_SECTIONS: HelpSection[] = [
     links: [
       { label: 'Login', icon: 'login', kind: 'route', target: '/login' },
       { label: 'Dashboard', icon: 'space_dashboard', kind: 'route', target: '/dashboard' },
+      { label: 'Training', icon: 'monitoring', kind: 'route', target: '/training' },
       { label: 'Membership', icon: 'card_membership', kind: 'route', target: '/pricing' },
       { label: 'Release Notes', icon: 'campaign', kind: 'route', target: '/releases' },
     ],

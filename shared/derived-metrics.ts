@@ -12,6 +12,7 @@ export const DERIVED_METRIC_KINDS = {
   FreshnessForecast: 'freshness_forecast',
   IntensityDistribution: 'intensity_distribution',
   EfficiencyTrend: 'efficiency_trend',
+  TrainingSummary: 'training_summary',
 } as const;
 
 export type DerivedMetricKind = typeof DERIVED_METRIC_KINDS[keyof typeof DERIVED_METRIC_KINDS];
@@ -30,6 +31,7 @@ export const DEFAULT_DERIVED_METRIC_KINDS: DerivedMetricKind[] = [
   DERIVED_METRIC_KINDS.FreshnessForecast,
   DERIVED_METRIC_KINDS.IntensityDistribution,
   DERIVED_METRIC_KINDS.EfficiencyTrend,
+  DERIVED_METRIC_KINDS.TrainingSummary,
 ];
 
 export const PROJECTION_SENSITIVE_DERIVED_METRIC_KINDS: DerivedMetricKind[] = [
@@ -43,7 +45,7 @@ export const PROJECTION_SENSITIVE_DERIVED_METRIC_KINDS: DerivedMetricKind[] = [
 
 export const DERIVED_METRICS_COLLECTION_ID = 'derivedMetrics';
 export const DERIVED_METRICS_COORDINATOR_DOC_ID = 'coordinator';
-export const DERIVED_METRIC_SCHEMA_VERSION = 7;
+export const DERIVED_METRIC_SCHEMA_VERSION = 8;
 export const DERIVED_RECOVERY_MAX_SUPPORTED_SECONDS = 14 * 24 * 60 * 60;
 export const DERIVED_RECOVERY_QUERY_DURATION_BUFFER_SECONDS = 2 * 24 * 60 * 60;
 export const DERIVED_RECOVERY_LOOKBACK_WINDOW_SECONDS =
@@ -266,6 +268,51 @@ export interface DerivedEfficiencyTrendMetricPayload {
   latestValue: number | null;
 }
 
+export type DerivedTrainingDiscipline = 'running' | 'cycling';
+
+export type DerivedTrainingCapacityTrend = 'improving' | 'stable' | 'declining';
+
+export interface DerivedTrainingSummaryWindow {
+  periodDays: number;
+  windowStartDayMs: number;
+  windowEndDayMs: number;
+  activityCount: number;
+  durationSeconds: number;
+  easySeconds: number;
+  moderateSeconds: number;
+  hardSeconds: number;
+}
+
+export interface DerivedTrainingCapacityMetric {
+  sourceKey: string | null;
+  latestAtMs: number | null;
+  latestValue: number | null;
+  currentMedian: number | null;
+  baselineMedian: number | null;
+  currentSampleCount: number;
+  baselineSampleCount: number;
+  deltaPct: number | null;
+  trend: DerivedTrainingCapacityTrend | null;
+}
+
+export interface DerivedTrainingDisciplineSummary {
+  discipline: DerivedTrainingDiscipline;
+  current28d: DerivedTrainingSummaryWindow;
+  baseline28d: DerivedTrainingSummaryWindow;
+  vo2Max: DerivedTrainingCapacityMetric | null;
+  ftp: DerivedTrainingCapacityMetric | null;
+  criticalPower: DerivedTrainingCapacityMetric | null;
+}
+
+export interface DerivedTrainingSummaryMetricPayload {
+  dayBoundary: 'UTC';
+  asOfDayMs: number;
+  currentWindowDays: number;
+  baselineWindowDays: number;
+  disciplines: DerivedTrainingDisciplineSummary[];
+  excludesMergedEvents: boolean;
+}
+
 export type DerivedFormMetricSnapshot = DerivedMetricSnapshotBase<DerivedFormMetricPayload>;
 export type DerivedRecoveryNowMetricSnapshot = DerivedMetricSnapshotBase<DerivedRecoveryNowMetricPayload>;
 export type DerivedAcwrMetricSnapshot = DerivedMetricSnapshotBase<DerivedAcwrMetricPayload>;
@@ -279,6 +326,7 @@ export type DerivedEfficiencyDelta4wMetricSnapshot = DerivedMetricSnapshotBase<D
 export type DerivedFreshnessForecastMetricSnapshot = DerivedMetricSnapshotBase<DerivedFreshnessForecastMetricPayload>;
 export type DerivedIntensityDistributionMetricSnapshot = DerivedMetricSnapshotBase<DerivedIntensityDistributionMetricPayload>;
 export type DerivedEfficiencyTrendMetricSnapshot = DerivedMetricSnapshotBase<DerivedEfficiencyTrendMetricPayload>;
+export type DerivedTrainingSummaryMetricSnapshot = DerivedMetricSnapshotBase<DerivedTrainingSummaryMetricPayload>;
 export type DerivedMetricSnapshot =
   | DerivedFormMetricSnapshot
   | DerivedRecoveryNowMetricSnapshot
@@ -292,7 +340,8 @@ export type DerivedMetricSnapshot =
   | DerivedEfficiencyDelta4wMetricSnapshot
   | DerivedFreshnessForecastMetricSnapshot
   | DerivedIntensityDistributionMetricSnapshot
-  | DerivedEfficiencyTrendMetricSnapshot;
+  | DerivedEfficiencyTrendMetricSnapshot
+  | DerivedTrainingSummaryMetricSnapshot;
 
 export interface EnsureDerivedMetricsRequest {
   metricKinds?: DerivedMetricKind[];

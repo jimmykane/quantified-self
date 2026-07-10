@@ -4,7 +4,10 @@ import {
     DERIVED_RECOVERY_LOOKBACK_WINDOW_SECONDS,
 } from '../../../shared/derived-metrics';
 import {
+    DataActivityTypes,
+    DataCriticalPower,
     DataDuration,
+    DataFTP,
     DataHeartRateAvg,
     DataHeartRateZoneFiveDuration,
     DataHeartRateZoneFourDuration,
@@ -18,6 +21,7 @@ import {
     DataPowerZoneThreeDuration,
     DataPowerZoneTwoDuration,
     DataRecoveryTime,
+    DataVO2Max,
 } from '@sports-alliance/sports-lib';
 
 const hoisted = vi.hoisted(() => {
@@ -221,6 +225,175 @@ describe('resolveDerivedMetricSourceRequirements', () => {
         ).toEqual({
             needsFormDocs: true,
             needsRecoveryNowDocs: true,
+        });
+    });
+
+    it('uses the event source for the training summary snapshot', async () => {
+        const { resolveDerivedMetricSourceRequirements } = await import('./derived-metrics.service');
+
+        expect(resolveDerivedMetricSourceRequirements([DERIVED_METRIC_KINDS.TrainingSummary])).toEqual({
+            needsFormDocs: true,
+            needsRecoveryNowDocs: false,
+        });
+    });
+});
+
+describe('buildTrainingSummaryMetricPayload', () => {
+    const nowMs = Date.UTC(2026, 6, 10, 12, 0, 0);
+    const createDoc = (data: Record<string, unknown>) => ({ data: () => data });
+    const createEvent = (
+        dayMs: number,
+        activityType: string,
+        source: string,
+        overrides: Record<string, unknown> = {},
+        sourceMetadata: Record<string, unknown> = {},
+    ) => createDoc({
+        startDate: dayMs,
+        serviceName: source,
+        creator: { name: `${source} device` },
+        ...sourceMetadata,
+        stats: {
+            [DataActivityTypes.type]: [activityType],
+            [DataDuration.type]: 3600,
+            [DataHeartRateZoneOneDuration.type]: 1200,
+            [DataHeartRateZoneThreeDuration.type]: 1200,
+            [DataHeartRateZoneFiveDuration.type]: 600,
+            ...overrides,
+        },
+    });
+
+    it('separates activity families, normalizes the 84-day baseline, and excludes merged events', async () => {
+        const { buildTrainingSummaryMetricPayload } = await import('./derived-metrics.service');
+        const currentRunningDay = Date.UTC(2026, 6, 8);
+        const baselineRunningDay = Date.UTC(2026, 5, 1);
+        const baselineRunningDayTwo = Date.UTC(2026, 4, 1);
+        const docs = [
+            createEvent(currentRunningDay, 'Running', 'Garmin', {
+                [DataVO2Max.type]: 51,
+                [DataFTP.type]: 250,
+            }),
+            createEvent(baselineRunningDay, 'Trail Running', 'Garmin', {
+                [DataVO2Max.type]: 49,
+                [DataFTP.type]: 230,
+            }),
+            createEvent(baselineRunningDayTwo, 'Treadmill', 'Garmin', {
+                [DataVO2Max.type]: 50,
+                [DataFTP.type]: 240,
+            }),
+            createEvent(currentRunningDay, 'Mountain Biking', 'Wahoo', {
+                [DataFTP.type]: 270,
+                [DataCriticalPower.type]: 300,
+            }),
+            createDoc({
+                isMerge: true,
+                startDate: currentRunningDay,
+                stats: {
+                    [DataActivityTypes.type]: ['Running'],
+                    [DataDuration.type]: 7200,
+                },
+            }),
+        ];
+
+        const result = buildTrainingSummaryMetricPayload(docs as never, nowMs);
+        const running = result.payload.disciplines.find(summary => summary.discipline === 'running');
+        const cycling = result.payload.disciplines.find(summary => summary.discipline === 'cycling');
+
+        expect(result.sourceEventCount).toBe(4);
+        expect(running?.current28d).toMatchObject({ activityCount: 1, durationSeconds: 3600, easySeconds: 1200, moderateSeconds: 1200, hardSeconds: 600 });
+        expect(running?.baseline28d).toMatchObject({ activityCount: 0.67, durationSeconds: 2400, easySeconds: 800, moderateSeconds: 800, hardSeconds: 400 });
+        expect(running?.vo2Max).toMatchObject({ sourceKey: 'garmin device', currentMedian: 51, baselineMedian: 49.5, trend: 'improving' });
+        expect(running?.ftp).toMatchObject({ sourceKey: 'garmin device', currentMedian: 250, baselineMedian: 235, trend: 'improving' });
+        expect(cycling?.current28d.activityCount).toBe(1);
+        expect(cycling?.vo2Max).toBeNull();
+        expect(cycling?.ftp).toMatchObject({ sourceKey: 'wahoo device', latestValue: 270, trend: null });
+    });
+
+    it('does not fabricate a capacity trend when the available source changes or the data is sparse', async () => {
+        const { buildTrainingSummaryMetricPayload } = await import('./derived-metrics.service');
+        const currentRunningDay = Date.UTC(2026, 6, 8);
+        const baselineRunningDay = Date.UTC(2026, 5, 1);
+        const docs = [
+            createEvent(currentRunningDay, 'Indoor Running', 'Garmin', { [DataVO2Max.type]: 52 }),
+            createEvent(baselineRunningDay, 'Running', 'Suunto', { [DataVO2Max.type]: 45 }),
+        ];
+
+        const result = buildTrainingSummaryMetricPayload(docs as never, nowMs);
+        const running = result.payload.disciplines.find(summary => summary.discipline === 'running');
+
+        expect(running?.vo2Max).toMatchObject({
+            sourceKey: null,
+            latestValue: 52,
+            currentMedian: null,
+            baselineMedian: null,
+            deltaPct: null,
+            trend: null,
+        });
+    });
+
+    it('keeps capacity evidence separate when the provider is the same but the device changes', async () => {
+        const { buildTrainingSummaryMetricPayload } = await import('./derived-metrics.service');
+        const currentRunningDay = Date.UTC(2026, 6, 8);
+        const baselineRunningDay = Date.UTC(2026, 5, 1);
+        const docs = [
+            createEvent(
+                currentRunningDay,
+                'Running',
+                'Garmin API',
+                { [DataVO2Max.type]: 52 },
+                { creator: { name: 'Forerunner 965' } },
+            ),
+            createEvent(
+                baselineRunningDay,
+                'Running',
+                'Garmin API',
+                { [DataVO2Max.type]: 48 },
+                { creator: { name: 'Fenix 7' } },
+            ),
+        ];
+
+        const result = buildTrainingSummaryMetricPayload(docs as never, nowMs);
+        const running = result.payload.disciplines.find(summary => summary.discipline === 'running');
+
+        expect(running?.vo2Max).toMatchObject({
+            sourceKey: null,
+            latestValue: 52,
+            currentMedian: null,
+            baselineMedian: null,
+            trend: null,
+        });
+    });
+
+    it('does not infer a capacity trend when the device source is unavailable', async () => {
+        const { buildTrainingSummaryMetricPayload } = await import('./derived-metrics.service');
+        const currentRunningDay = Date.UTC(2026, 6, 8);
+        const baselineRunningDay = Date.UTC(2026, 5, 1);
+        const docs = [
+            createEvent(
+                currentRunningDay,
+                'Running',
+                'Garmin API',
+                { [DataVO2Max.type]: 52 },
+                { creator: {} },
+            ),
+            createEvent(
+                baselineRunningDay,
+                'Running',
+                'Garmin API',
+                { [DataVO2Max.type]: 48 },
+                { creator: {} },
+            ),
+        ];
+
+        const result = buildTrainingSummaryMetricPayload(docs as never, nowMs);
+        const running = result.payload.disciplines.find(summary => summary.discipline === 'running');
+
+        expect(running?.vo2Max).toMatchObject({
+            sourceKey: null,
+            latestValue: 52,
+            currentMedian: null,
+            baselineMedian: null,
+            deltaPct: null,
+            trend: null,
         });
     });
 });

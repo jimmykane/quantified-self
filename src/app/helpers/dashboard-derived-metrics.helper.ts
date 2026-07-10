@@ -10,6 +10,10 @@ import type {
   DerivedIntensityDistributionMetricPayload,
   DerivedMonotonyStrainMetricPayload,
   DerivedRampRateMetricPayload,
+  DerivedTrainingCapacityMetric,
+  DerivedTrainingDisciplineSummary,
+  DerivedTrainingSummaryMetricPayload,
+  DerivedTrainingSummaryWindow,
 } from '@shared/derived-metrics';
 import {
   extendDashboardFormPointsWithZeroLoadUntil,
@@ -134,6 +138,31 @@ export interface DashboardEfficiencyDelta4wContext {
   trend8Weeks: DashboardDerivedTrendPoint[];
 }
 
+export interface DashboardTrainingSummaryWindow {
+  periodDays: number;
+  windowStartDayMs: number;
+  windowEndDayMs: number;
+  activityCount: number;
+  durationSeconds: number;
+  easySeconds: number;
+  moderateSeconds: number;
+  hardSeconds: number;
+}
+
+export type DashboardTrainingCapacityMetric = DerivedTrainingCapacityMetric;
+
+export interface DashboardTrainingDisciplineSummary extends Omit<DerivedTrainingDisciplineSummary, 'current28d' | 'baseline28d'> {
+  current28d: DashboardTrainingSummaryWindow;
+  baseline28d: DashboardTrainingSummaryWindow;
+}
+
+export interface DashboardTrainingSummaryContext {
+  asOfDayMs: number;
+  currentWindowDays: number;
+  baselineWindowDays: number;
+  disciplines: DashboardTrainingDisciplineSummary[];
+}
+
 function toFiniteNumber(value: unknown): number | null {
   if (value === null || value === undefined || value === '') {
     return null;
@@ -237,6 +266,106 @@ export function resolveDashboardAcwrContext(payload: unknown): DashboardAcwrCont
     chronicLoad28,
     ratio: toFiniteNumber(normalized.ratio),
     trend8Weeks: normalizeTrendPoints(normalized.trend8Weeks, 'weekStartMs', 'ratio'),
+  };
+}
+
+function resolveDashboardTrainingSummaryWindow(value: unknown): DashboardTrainingSummaryWindow | null {
+  const raw = (value || {}) as Partial<DerivedTrainingSummaryWindow>;
+  const periodDays = toFiniteNumber(raw.periodDays);
+  const windowStartDayMs = toFiniteNumber(raw.windowStartDayMs);
+  const windowEndDayMs = toFiniteNumber(raw.windowEndDayMs);
+  const activityCount = toFiniteNumber(raw.activityCount);
+  const durationSeconds = toFiniteNumber(raw.durationSeconds);
+  const easySeconds = toFiniteNumber(raw.easySeconds);
+  const moderateSeconds = toFiniteNumber(raw.moderateSeconds);
+  const hardSeconds = toFiniteNumber(raw.hardSeconds);
+  if (
+    periodDays === null
+    || windowStartDayMs === null
+    || windowEndDayMs === null
+    || activityCount === null
+    || durationSeconds === null
+    || easySeconds === null
+    || moderateSeconds === null
+    || hardSeconds === null
+  ) {
+    return null;
+  }
+  return {
+    periodDays,
+    windowStartDayMs,
+    windowEndDayMs,
+    activityCount,
+    durationSeconds,
+    easySeconds,
+    moderateSeconds,
+    hardSeconds,
+  };
+}
+
+function resolveDashboardTrainingCapacityMetric(value: unknown): DashboardTrainingCapacityMetric | null {
+  if (!value || typeof value !== 'object') {
+    return null;
+  }
+  const raw = value as Partial<DerivedTrainingCapacityMetric>;
+  const currentSampleCount = toFiniteNumber(raw.currentSampleCount);
+  const baselineSampleCount = toFiniteNumber(raw.baselineSampleCount);
+  if (currentSampleCount === null || baselineSampleCount === null) {
+    return null;
+  }
+  const trend = raw.trend === 'improving' || raw.trend === 'stable' || raw.trend === 'declining'
+    ? raw.trend
+    : null;
+  return {
+    sourceKey: typeof raw.sourceKey === 'string' && raw.sourceKey.trim().length ? raw.sourceKey : null,
+    latestAtMs: toFiniteNumber(raw.latestAtMs),
+    latestValue: toFiniteNumber(raw.latestValue),
+    currentMedian: toFiniteNumber(raw.currentMedian),
+    baselineMedian: toFiniteNumber(raw.baselineMedian),
+    currentSampleCount,
+    baselineSampleCount,
+    deltaPct: toFiniteNumber(raw.deltaPct),
+    trend,
+  };
+}
+
+export function resolveDashboardTrainingSummaryContext(payload: unknown): DashboardTrainingSummaryContext | null {
+  const raw = (payload || {}) as Partial<DerivedTrainingSummaryMetricPayload>;
+  const asOfDayMs = toFiniteNumber(raw.asOfDayMs);
+  const currentWindowDays = toFiniteNumber(raw.currentWindowDays);
+  const baselineWindowDays = toFiniteNumber(raw.baselineWindowDays);
+  if (asOfDayMs === null || currentWindowDays === null || baselineWindowDays === null || !Array.isArray(raw.disciplines)) {
+    return null;
+  }
+  const disciplines = raw.disciplines
+    .map((discipline) => {
+      if (!discipline || typeof discipline !== 'object') {
+        return null;
+      }
+      const source = discipline as Partial<DerivedTrainingDisciplineSummary>;
+      if (source.discipline !== 'running' && source.discipline !== 'cycling') {
+        return null;
+      }
+      const current28d = resolveDashboardTrainingSummaryWindow(source.current28d);
+      const baseline28d = resolveDashboardTrainingSummaryWindow(source.baseline28d);
+      if (!current28d || !baseline28d) {
+        return null;
+      }
+      return {
+        discipline: source.discipline,
+        current28d,
+        baseline28d,
+        vo2Max: resolveDashboardTrainingCapacityMetric(source.vo2Max),
+        ftp: resolveDashboardTrainingCapacityMetric(source.ftp),
+        criticalPower: resolveDashboardTrainingCapacityMetric(source.criticalPower),
+      };
+    })
+    .filter((discipline): discipline is DashboardTrainingDisciplineSummary => !!discipline);
+  return {
+    asOfDayMs,
+    currentWindowDays,
+    baselineWindowDays,
+    disciplines,
   };
 }
 
