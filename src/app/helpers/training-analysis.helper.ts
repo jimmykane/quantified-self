@@ -3,6 +3,10 @@ import type {
   DashboardTrainingDisciplineSummary,
 } from './dashboard-derived-metrics.helper';
 import {
+  isDerivedMetricPendingStatus,
+  type DashboardDerivedMetricStatus,
+} from './derived-metric-status.helper';
+import {
   resolveTrainingStateClassification,
   type TrainingStateClassification,
   type TrainingStateSignalInput,
@@ -31,6 +35,14 @@ export interface TrainingAnalysisInput {
   stateSignals: TrainingStateSignalInput;
   disciplines: readonly DashboardTrainingDisciplineSummary[];
 }
+
+export type TrainingComparisonState =
+  | 'preparing'
+  | 'updating'
+  | 'unavailable'
+  | 'empty'
+  | 'building-baseline'
+  | 'ready';
 
 const MEANINGFUL_VOLUME_CHANGE_PERCENT = 10;
 const MEANINGFUL_SESSION_CHANGE = 2;
@@ -117,6 +129,33 @@ function resolveIntensityInsight(
     title: 'Intensity mix',
     description: `Hard work is ${formatPercent(deltaPoints)} percentage points ${direction} prominent than in your usual 28 days.`,
   };
+}
+
+export function resolveTrainingComparisonState(
+  status: DashboardDerivedMetricStatus,
+  hasTrainingSummary: boolean,
+  currentActivityCount: number,
+  baselineActivityCount: number,
+): TrainingComparisonState {
+  if (status === 'failed') {
+    return 'unavailable';
+  }
+  if (!hasTrainingSummary && (status === 'missing' || isDerivedMetricPendingStatus(status))) {
+    return 'preparing';
+  }
+  if (!hasTrainingSummary) {
+    return 'unavailable';
+  }
+  if (isDerivedMetricPendingStatus(status)) {
+    return 'updating';
+  }
+  if (currentActivityCount <= 0) {
+    return 'empty';
+  }
+  if (baselineActivityCount <= 0) {
+    return 'building-baseline';
+  }
+  return 'ready';
 }
 
 export function buildTrainingAnalysis({ stateSignals, disciplines }: TrainingAnalysisInput): TrainingAnalysis {

@@ -24,6 +24,12 @@ describe('TrainingWorkspaceComponent', () => {
       easyPercentStatus: 'ready', hardPercentStatus: 'ready', efficiencyDelta4wStatus: 'ready',
       freshnessForecastStatus: 'ready', intensityDistributionStatus: 'ready', efficiencyTrendStatus: 'ready',
       trainingSummaryStatus: 'ready',
+      trainingSummary: {
+        asOfDayMs: 0,
+        currentWindowDays: 28,
+        baselineWindowDays: 84,
+        disciplines: [],
+      },
     };
     const derivedMetrics = { watch: vi.fn(() => of(derivedState)), ensureForDashboard: vi.fn() };
 
@@ -54,8 +60,7 @@ describe('TrainingWorkspaceComponent', () => {
     expect(element.querySelector('app-tile-chart')).toBeNull();
     expect(element.querySelector('.training-mix-panel')).toBeNull();
     expect(element.querySelector('.training-capacity-panel')).toBeNull();
-    expect(element.textContent).toContain('Keep training to build a baseline');
-    expect(element.textContent).toContain('No supported running or cycling activity in the comparison window.');
+    expect(element.textContent).toContain('No eligible running or cycling sessions in the last 28 days.');
     expect(element.textContent).toContain('No capacity trend yet.');
     expect(derivedMetrics.ensureForDashboard).toHaveBeenCalledTimes(1);
   });
@@ -80,6 +85,7 @@ describe('TrainingWorkspaceComponent', () => {
 
     expect(fixture.componentInstance.isLoading).toBe(false);
     expect(fixture.nativeElement.querySelector('#training-title')?.textContent?.trim()).toBe('Training');
+    expect(fixture.nativeElement.textContent).toContain('Preparing your training comparison');
     expect(derivedMetrics.ensureForDashboard).toHaveBeenCalledWith(
       { uid: 'user-1' },
       expect.objectContaining({ trainingSummaryStatus: 'missing' }),
@@ -111,9 +117,18 @@ describe('TrainingWorkspaceComponent', () => {
       monotonyStrainStatus: 'ready', formNowStatus: 'ready', formPlus7dStatus: 'ready',
       easyPercentStatus: 'ready', hardPercentStatus: 'ready', efficiencyDelta4wStatus: 'ready',
       freshnessForecastStatus: 'ready', intensityDistributionStatus: 'ready', efficiencyTrendStatus: 'ready',
-      trainingSummaryStatus: 'ready',
+      trainingSummaryStatus: 'stale',
+      trainingSummary: {
+        asOfDayMs: 0,
+        currentWindowDays: 28,
+        baselineWindowDays: 84,
+        disciplines: [],
+      },
     });
 
+    fixture.detectChanges();
     expect(fixture.componentInstance.derivedState.formNow?.value).toBe(8.5);
+    expect(fixture.componentInstance.trainingComparisonState).toBe('updating');
+    expect(fixture.nativeElement.textContent).toContain('Updating your training comparison');
   });
 });

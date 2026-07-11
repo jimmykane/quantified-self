@@ -43,13 +43,28 @@
         <h2 id="training-insights-title">What changed from your normal</h2>
       </div>
       <div class="training-insights-grid">
-        @for (insight of trainingInsights; track insight.title) {
-          <article class="training-insight-panel qs-glass-card-panel">
-            <span class="training-metric-label">{{ insight.title }}</span>
-            <p>{{ insight.description }}</p>
-          </article>
-        } @empty {
-          <p class="training-empty-state">Keep training to build a baseline; meaningful changes will appear here when your recent work differs from it.</p>
+        @if (trainingComparisonState === 'preparing') {
+          <p class="training-empty-state" role="status">Preparing your training comparison from recent running and cycling sessions…</p>
+        } @else if (trainingComparisonState === 'unavailable') {
+          <p class="training-empty-state">Training comparison is unavailable right now. Refresh to request another snapshot.</p>
+        } @else {
+          @if (trainingComparisonState === 'updating') {
+            <p class="training-empty-state" role="status">Updating your training comparison. The latest available values remain visible.</p>
+          }
+          @for (insight of trainingInsights; track insight.title) {
+            <article class="training-insight-panel qs-glass-card-panel">
+              <span class="training-metric-label">{{ insight.title }}</span>
+              <p>{{ insight.description }}</p>
+            </article>
+          } @empty {
+            @if (trainingComparisonState === 'empty') {
+              <p class="training-empty-state">No eligible running or cycling sessions in the last 28 days. Add one to start your comparison.</p>
+            } @else if (trainingComparisonState === 'building-baseline') {
+              <p class="training-empty-state">Your baseline is building. Keep training to compare your next 28 days with your usual pattern.</p>
+            } @else {
+              <p class="training-empty-state">No meaningful differences from your usual 28 days yet.</p>
+            }
+          }
         }
       </div>
     </section>
@@ -85,18 +100,27 @@
         <h2 id="training-mix-title">Where your effort is going</h2>
       </div>
       <div class="training-mix-grid">
-        @for (discipline of trainingMixDisciplines; track discipline.summary.discipline) {
-          <article class="training-mix-panel qs-glass-card-panel">
-            <header><h3 class="qs-dashboard-chart-title">{{ discipline.summary.discipline === 'running' ? 'Running' : 'Cycling' }}</h3><span>28d / normalized 84d</span></header>
-            <div class="training-mix-summary"><strong>{{ discipline.activityCountText }}</strong><span>activities</span><strong>{{ discipline.durationText }}</strong><span>time</span></div>
-            <dl>
-              <div><dt>Easy</dt><dd>{{ discipline.easyText }} <span>/ {{ discipline.baselineEasyText }}</span></dd></div>
-              <div><dt>Moderate</dt><dd>{{ discipline.moderateText }} <span>/ {{ discipline.baselineModerateText }}</span></dd></div>
-              <div><dt>Hard</dt><dd>{{ discipline.hardText }} <span>/ {{ discipline.baselineHardText }}</span></dd></div>
-            </dl>
-          </article>
-        } @empty {
-          <p class="training-empty-state">No supported running or cycling activity in the comparison window.</p>
+        @if (trainingComparisonState === 'preparing') {
+          <p class="training-empty-state" role="status">Preparing your running and cycling comparison…</p>
+        } @else if (trainingComparisonState === 'unavailable') {
+          <p class="training-empty-state">Running and cycling comparison is unavailable right now.</p>
+        } @else {
+          @if (trainingComparisonState === 'updating') {
+            <p class="training-empty-state" role="status">Updating your running and cycling comparison. The latest available values remain visible.</p>
+          }
+          @for (discipline of trainingMixDisciplines; track discipline.summary.discipline) {
+            <article class="training-mix-panel qs-glass-card-panel">
+              <header><h3 class="qs-dashboard-chart-title">{{ discipline.summary.discipline === 'running' ? 'Running' : 'Cycling' }}</h3><span>28d / normalized 84d</span></header>
+              <div class="training-mix-summary"><strong>{{ discipline.activityCountText }}</strong><span>activities</span><strong>{{ discipline.durationText }}</strong><span>time</span></div>
+              <dl>
+                <div><dt>Easy</dt><dd>{{ discipline.easyText }} <span>/ {{ discipline.baselineEasyText }}</span></dd></div>
+                <div><dt>Moderate</dt><dd>{{ discipline.moderateText }} <span>/ {{ discipline.baselineModerateText }}</span></dd></div>
+                <div><dt>Hard</dt><dd>{{ discipline.hardText }} <span>/ {{ discipline.baselineHardText }}</span></dd></div>
+              </dl>
+            </article>
+          } @empty {
+            <p class="training-empty-state">No eligible running or cycling sessions in the last 28 days.</p>
+          }
         }
         <article class="training-chart-panel training-intensity-chart qs-glass-card-panel">
           <app-intensity-distribution-chart [distribution]="derivedState.intensityDistribution" [status]="derivedState.intensityDistributionStatus" [darkTheme]="isDarkTheme()" range="6m"></app-intensity-distribution-chart>
@@ -110,19 +134,28 @@
         <h2 id="performance-title">Progress with provenance</h2>
       </div>
       <div class="training-performance-grid">
-        @for (discipline of capacityDisciplines; track discipline.summary.discipline) {
-          <article class="training-capacity-panel qs-glass-card-panel">
-            <header><h3 class="qs-dashboard-chart-title">{{ discipline.summary.discipline === 'running' ? 'Running capacity' : 'Cycling capacity' }}</h3></header>
-            @for (item of discipline.metrics; track item.label) {
-              <div class="training-capacity-row">
-                <span>{{ item.label }}</span>
-                <strong>{{ item.latestValueText }}</strong>
-                <small>{{ item.trendLabel }} @if (item.sourceKey) { <span>· {{ item.sourceKey }}</span> }</small>
-              </div>
-            }
-          </article>
-        } @empty {
-          <p class="training-empty-state">No capacity trend yet. Trends appear after repeated readings from one named device.</p>
+        @if (trainingComparisonState === 'preparing') {
+          <p class="training-empty-state" role="status">Preparing capacity evidence from your device readings…</p>
+        } @else if (trainingComparisonState === 'unavailable') {
+          <p class="training-empty-state">Capacity evidence is unavailable until the training comparison is prepared.</p>
+        } @else {
+          @if (trainingComparisonState === 'updating') {
+            <p class="training-empty-state" role="status">Updating capacity evidence. The latest available values remain visible.</p>
+          }
+          @for (discipline of capacityDisciplines; track discipline.summary.discipline) {
+            <article class="training-capacity-panel qs-glass-card-panel">
+              <header><h3 class="qs-dashboard-chart-title">{{ discipline.summary.discipline === 'running' ? 'Running capacity' : 'Cycling capacity' }}</h3></header>
+              @for (item of discipline.metrics; track item.label) {
+                <div class="training-capacity-row">
+                  <span>{{ item.label }}</span>
+                  <strong>{{ item.latestValueText }}</strong>
+                  <small>{{ item.trendLabel }} @if (item.sourceKey) { <span>· {{ item.sourceKey }}</span> }</small>
+                </div>
+              }
+            </article>
+          } @empty {
+            <p class="training-empty-state">No capacity trend yet. Trends appear after repeated readings from one named device.</p>
+          }
         }
         <article class="training-chart-panel qs-glass-card-panel">
           <app-efficiency-trend-chart [trend]="derivedState.efficiencyTrend" [status]="derivedState.efficiencyTrendStatus" [darkTheme]="isDarkTheme()" range="1y"></app-efficiency-trend-chart>

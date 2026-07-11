@@ -15,7 +15,10 @@ import {
 import {
   buildTrainingAnalysis,
   type TrainingAnalysisInsight,
+  type TrainingAnalysis,
+  type TrainingComparisonState,
   type TrainingWindowComparison,
+  resolveTrainingComparisonState,
 } from '../../helpers/training-analysis.helper';
 import { AppSleepService } from '../../services/app.sleep.service';
 import { AppEventService } from '../../services/app.event.service';
@@ -81,9 +84,9 @@ function createEmptyTrainingStatusViewModel(): TrainingStatusViewModel {
     stateLabel: 'Awaiting data',
     stateCaption: 'No current load signals',
     volumeText: '--',
-    volumeCaption: 'No baseline comparison yet',
+    volumeCaption: 'Preparing your training comparison…',
     sessionsText: '--',
-    sessionsCaption: 'No baseline comparison yet',
+    sessionsCaption: 'Preparing your training comparison…',
   };
 }
 
@@ -114,6 +117,7 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
   public cyclingPowerCurve: DashboardPowerCurveContext | null = null;
   public runningPowerCurve: DashboardPowerCurveContext | null = null;
   public trainingStatus = createEmptyTrainingStatusViewModel();
+  public trainingComparisonState: TrainingComparisonState = 'preparing';
   public trainingInsights: TrainingAnalysisInsight[] = [];
   public loadMetrics = createEmptyTrainingLoadMetricsViewModel();
   public trainingMixDisciplines: TrainingMixDisciplineViewModel[] = [];
@@ -230,6 +234,7 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
     this.cyclingPowerCurve = null;
     this.runningPowerCurve = null;
     this.trainingStatus = createEmptyTrainingStatusViewModel();
+    this.trainingComparisonState = 'preparing';
     this.trainingInsights = [];
     this.loadMetrics = createEmptyTrainingLoadMetricsViewModel();
     this.trainingMixDisciplines = [];
@@ -284,14 +289,13 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
     const latestCurrentPoint = [...forecastPoints].reverse().find(point => !point.isForecast);
     const finalForecastPoint = [...forecastPoints].reverse().find(point => point.isForecast);
 
-    this.trainingStatus = {
-      stateLabel: analysis.state.label || 'Awaiting data',
-      stateCaption: analysis.state.caption || 'No current load signals',
-      volumeText: analysis.duration.current > 0 ? formatSleepDuration(analysis.duration.current) : '0h',
-      volumeCaption: this.formatVolumeComparison(analysis.duration),
-      sessionsText: `${this.formatNumber(analysis.activities.current, 0)} sessions`,
-      sessionsCaption: this.formatSessionsComparison(analysis.activities),
-    };
+    this.trainingComparisonState = resolveTrainingComparisonState(
+      this.derivedState.trainingSummaryStatus,
+      !!this.derivedState.trainingSummary,
+      analysis.activities.current,
+      analysis.activities.baseline,
+    );
+    this.trainingStatus = this.buildTrainingStatus(analysis, this.trainingComparisonState);
     this.trainingInsights = analysis.insights;
     this.loadMetrics = {
       ctlText: this.formatNumber(latestFormPoint?.ctl),
@@ -302,6 +306,59 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
       strainText: this.formatNumber(this.derivedState.monotonyStrain?.strain, 0),
       freshnessNowText: this.formatNumber(latestCurrentPoint?.formSameDay ?? this.derivedState.formNow?.value, 1, true),
       freshnessPlusSevenDaysText: this.formatNumber(finalForecastPoint?.formSameDay ?? this.derivedState.formPlus7d?.value, 1, true),
+    };
+  }
+
+  private buildTrainingStatus(
+    analysis: TrainingAnalysis,
+    comparisonState: TrainingComparisonState,
+  ): TrainingStatusViewModel {
+    const currentState = {
+      stateLabel: analysis.state.label || 'Awaiting data',
+      stateCaption: analysis.state.caption || 'No current load signals',
+    };
+    if (comparisonState === 'preparing') {
+      return {
+        ...currentState,
+        volumeText: '--',
+        volumeCaption: 'Preparing your training comparison…',
+        sessionsText: '--',
+        sessionsCaption: 'Preparing your training comparison…',
+      };
+    }
+    if (comparisonState === 'unavailable') {
+      return {
+        ...currentState,
+        volumeText: '--',
+        volumeCaption: 'Training comparison unavailable',
+        sessionsText: '--',
+        sessionsCaption: 'Training comparison unavailable',
+      };
+    }
+    if (comparisonState === 'updating') {
+      return {
+        ...currentState,
+        volumeText: analysis.duration.current > 0 ? formatSleepDuration(analysis.duration.current) : '0h',
+        volumeCaption: 'Updating your training comparison…',
+        sessionsText: `${this.formatNumber(analysis.activities.current, 0)} sessions`,
+        sessionsCaption: 'Updating your training comparison…',
+      };
+    }
+    if (comparisonState === 'empty') {
+      return {
+        ...currentState,
+        volumeText: '0h',
+        volumeCaption: 'No eligible running or cycling sessions in the last 28 days',
+        sessionsText: '0 sessions',
+        sessionsCaption: 'No eligible running or cycling sessions in the last 28 days',
+      };
+    }
+    return {
+      ...currentState,
+      volumeText: analysis.duration.current > 0 ? formatSleepDuration(analysis.duration.current) : '0h',
+      volumeCaption: this.formatVolumeComparison(analysis.duration),
+      sessionsText: `${this.formatNumber(analysis.activities.current, 0)} sessions`,
+      sessionsCaption: this.formatSessionsComparison(analysis.activities),
     };
   }
 

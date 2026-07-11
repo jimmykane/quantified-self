@@ -91,6 +91,7 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('**Uploaded activities**');
     expect(gettingStartedSection?.content).toContain('Load and recovery interpretation lives in **Training**');
     expect(gettingStartedSection?.content).toContain('Notable changes');
+    expect(gettingStartedSection?.content).toContain('zero-session result');
     expect(gettingStartedSection?.content).toContain('groups chart and map tiles by intent');
     expect(gettingStartedSection?.content).toContain('**Activity Overview**, **Routes & Maps**, and **Custom Charts**');
     expect(gettingStartedSection?.content).toContain('Custom charts are placed in those dashboard sections automatically');

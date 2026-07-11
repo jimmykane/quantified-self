@@ -26,8 +26,9 @@ h3 { margin-bottom: 0; }
 dt { color: var(--mat-sys-on-surface-variant); font-size: 12px; font-weight: 600; }
 dd { margin: 5px 0 0; font-size: 19px; font-weight: 700; overflow-wrap: anywhere; }
 .training-load-grid { grid-template-columns: minmax(0, 1.25fr) minmax(300px, .75fr); }
-.training-chart-panel { --loading-shade-error-padding: 0; --loading-shade-error-border: 0; --loading-shade-error-radius: 0; --loading-shade-error-background: transparent; min-width: 0; overflow: hidden; }
-.training-chart-panel-wide { grid-row: span 2; }
+.training-chart-panel { --loading-shade-error-padding: 0; --loading-shade-error-border: 0; --loading-shade-error-radius: 0; --loading-shade-error-background: transparent; display: flex; flex-direction: column; min-width: 0; min-height: 300px; overflow: hidden; }
+.training-chart-panel > * { flex: 1 1 auto; min-height: 0; }
+.training-chart-panel-wide { grid-row: span 2; min-height: 380px; }
 .training-load-metrics { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .training-mix-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
 .training-mix-panel { padding: 20px; }
@@ -48,5 +49,5 @@ dd { margin: 5px 0 0; font-size: 19px; font-weight: 700; overflow-wrap: anywhere
 .training-empty-state { color: var(--mat-sys-on-surface-variant); grid-column: 1 / -1; margin: 0; padding: 0.5rem 0; }
 .training-loading { min-height: 340px; display: grid; place-items: center; }
 
-@media (max-width: 960px) { .training-load-grid, .training-mix-grid, .training-performance-grid { grid-template-columns: 1fr; } .training-insights-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .training-chart-panel-wide { grid-row: auto; } .training-intensity-chart { grid-column: auto; } }
-@media (max-width: 640px) { .training-workspace { padding: 20px 14px 48px; } .training-page-header { margin-bottom: 24px; align-items: flex-start; } .training-page-header a { min-width: 0; } h1 { font-size: 28px; } h2 { font-size: 20px; } .training-status-grid, .training-insights-grid { grid-template-columns: 1fr; } .training-metric-panel, .training-load-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); } .training-metric-panel div:nth-child(odd) { border-left: 0; } .training-metric-panel div:nth-child(even) { border-left: 1px solid var(--qs-glass-panel-border, var(--mat-sys-outline-variant)); } .training-section { padding: 24px 0 30px; } }
+@media (max-width: 960px) { .training-load-grid, .training-mix-grid, .training-performance-grid { grid-template-columns: 1fr; } .training-insights-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .training-chart-panel-wide { grid-row: auto; min-height: 360px; } .training-intensity-chart { grid-column: auto; } }
+@media (max-width: 640px) { .training-workspace { padding: 20px 14px 48px; } .training-page-header { margin-bottom: 24px; align-items: flex-start; } .training-page-header a { min-width: 0; } h1 { font-size: 28px; } h2 { font-size: 20px; } .training-status-grid, .training-insights-grid { grid-template-columns: 1fr; } .training-metric-panel, .training-load-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); } .training-metric-panel div:nth-child(odd) { border-left: 0; } .training-metric-panel div:nth-child(even) { border-left: 1px solid var(--qs-glass-panel-border, var(--mat-sys-outline-variant)); } .training-chart-panel { min-height: 280px; } .training-chart-panel-wide { min-height: 340px; } .training-section { padding: 24px 0 30px; } }
