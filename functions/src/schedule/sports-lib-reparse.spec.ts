@@ -444,7 +444,7 @@ describe('scheduleSportsLibReparseScan', () => {
         const eventRef = createEventRef('u1', 'e1', { originalFile: { path: 'x.fit' } });
         hoisted.resolveSportsLibReparseRoutingDecision.mockReturnValueOnce({
             processingTier: 'heavy',
-            heavyReason: 'duration_gt_32h',
+            heavyReason: 'duration_gte_24h',
             eventDurationMs: 33 * 60 * 60 * 1000,
         });
         hoisted.processingDocs.push(createProcessingDoc(eventRef, {
@@ -459,7 +459,7 @@ describe('scheduleSportsLibReparseScan', () => {
         const pendingWriteCall = hoisted.jobSet.mock.calls.find((call: any[]) => call[0] === 'job-1');
         expect(pendingWriteCall?.[1]).toEqual(expect.objectContaining({
             processingTier: 'heavy',
-            heavyReason: 'duration_gt_32h',
+            heavyReason: 'duration_gte_24h',
             eventDurationMs: 33 * 60 * 60 * 1000,
         }));
     });

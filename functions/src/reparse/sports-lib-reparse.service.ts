@@ -259,7 +259,7 @@ export function getSportsLibReparseEventDurationMs(eventData: FirestoreEventJSON
 export function isSportsLibReparseDurationHeavy(eventDurationMs: number | null | undefined): boolean {
     return typeof eventDurationMs === 'number'
         && Number.isFinite(eventDurationMs)
-        && eventDurationMs > SPORTS_LIB_REPARSE_HEAVY_DURATION_THRESHOLD_MS;
+        && eventDurationMs >= SPORTS_LIB_REPARSE_HEAVY_DURATION_THRESHOLD_MS;
 }
 
 export function resolveSportsLibReparseRoutingDecision(

@@ -209,9 +209,12 @@ import {
     shouldEventBeReparsed,
     writeReparseStatus,
     buildSportsLibReparseJobId,
+    isSportsLibReparseDurationHeavy,
     isSportsLibReparseTerminalFailureMessage,
+    resolveSportsLibReparseRoutingDecision,
     getEventAndActivitiesForReparse,
     reparseEventFromOriginalFiles,
+    SPORTS_LIB_REPARSE_HEAVY_DURATION_THRESHOLD_MS,
     SPORTS_LIB_REPARSE_SKIP_REASON_NO_ORIGINAL_FILES,
     SPORTS_LIB_PRIMARY_BUCKET,
     applyAutoHealedSourceBucketMetadata,
@@ -301,6 +304,25 @@ describe('sports-lib-reparse.service', () => {
     it('enables the event reparse scanner by default', () => {
         expect(SPORTS_LIB_REPARSE_RUNTIME_DEFAULTS.enabled).toBe(true);
         expect(SPORTS_LIB_REPARSE_RUNTIME_DEFAULTS.uidAllowlist).toEqual([]);
+    });
+
+    it('routes events at or above 24h to the heavy reparse worker', () => {
+        expect(SPORTS_LIB_REPARSE_HEAVY_DURATION_THRESHOLD_MS).toBe(24 * 60 * 60 * 1000);
+        expect(isSportsLibReparseDurationHeavy((24 * 60 * 60 * 1000) - 1)).toBe(false);
+        expect(isSportsLibReparseDurationHeavy(24 * 60 * 60 * 1000)).toBe(true);
+
+        const incidentDurationMs = 89625000;
+        const startDate = new Date('2026-07-01T00:00:00.000Z');
+        const routingDecision = resolveSportsLibReparseRoutingDecision({
+            startDate,
+            endDate: new Date(startDate.getTime() + incidentDurationMs),
+        });
+
+        expect(routingDecision).toEqual({
+            processingTier: 'heavy',
+            heavyReason: 'duration_gte_24h',
+            eventDurationMs: incidentDurationMs,
+        });
     });
 
     it('hasPaidOrGraceAccess should return true for basic claim', async () => {
