@@ -27,7 +27,7 @@ interface DerivedMetricsTaskPayload {
 
 export const processDerivedMetricsTask = onTaskDispatched({
     retryConfig: CLOUD_TASK_RETRY_CONFIG,
-    memory: '512MiB',
+    memory: '1GiB',
     timeoutSeconds: 540,
     region: FUNCTIONS_MANIFEST.ensureDerivedMetrics.region,
 }, async (request) => {
