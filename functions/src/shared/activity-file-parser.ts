@@ -48,7 +48,7 @@ export async function parseActivityFilePayload(
     if (baseExtension === 'json') {
         try {
             return await EventImporterSuuntoJSON.getFromJSONString(text, options);
-        } catch (_jsonError) {
+        } catch {
             return EventImporterSuuntoSML.getFromJSONString(text, options);
         }
     }
