@@ -51,7 +51,7 @@ const hoisted = vi.hoisted(() => {
     const gpxImporter = { getFromString: vi.fn() };
     const tcxImporter = { getFromXML: vi.fn() };
     const suuntoJSONImporter = { getFromJSONString: vi.fn() };
-    const suuntoSMLImporter = { getFromXML: vi.fn() };
+    const suuntoSMLImporter = { getFromXML: vi.fn(), getFromJSONString: vi.fn() };
     const mergeEvents = vi.fn((events: any[]) => events[0]);
     const reGenerateStatsForEvent = vi.fn();
     const generateMissingStreamsAndStatsForActivity = vi.fn();
@@ -295,6 +295,7 @@ describe('sports-lib-reparse.service', () => {
         hoisted.tcxImporter.getFromXML.mockResolvedValue(makeEvent());
         hoisted.suuntoJSONImporter.getFromJSONString.mockResolvedValue(makeEvent());
         hoisted.suuntoSMLImporter.getFromXML.mockResolvedValue(makeEvent());
+        hoisted.suuntoSMLImporter.getFromJSONString.mockResolvedValue(makeEvent());
         hoisted.generateMissingStreamsAndStatsForActivity.mockImplementation(() => { });
         hoisted.mockGenerateActivityIDFromSourceKey.mockImplementation(
             async (eventID: string, sourceActivityKey: string) => `new-${eventID}-${sourceActivityKey}`,
@@ -623,6 +624,20 @@ describe('sports-lib-reparse.service', () => {
         expect(hoisted.suuntoJSONImporter.getFromJSONString).toHaveBeenCalledTimes(1);
         expect(hoisted.suuntoSMLImporter.getFromXML).toHaveBeenCalledTimes(1);
         expect(hoisted.mergeEvents).toHaveBeenCalledTimes(1);
+    });
+
+    it('parseFromOriginalFilesStrict should use the Suunto SML JSON fallback for samples-only JSON files', async () => {
+        const fallbackParsedEvent = makeEvent();
+        hoisted.suuntoJSONImporter.getFromJSONString.mockRejectedValueOnce(new Error('missing DeviceLog'));
+        hoisted.suuntoSMLImporter.getFromJSONString.mockResolvedValueOnce(fallbackParsedEvent);
+
+        const result = await parseFromOriginalFilesStrict([
+            { path: 'users/u1/events/e1/original.json' },
+        ]);
+
+        expect(hoisted.suuntoJSONImporter.getFromJSONString).toHaveBeenCalledTimes(1);
+        expect(hoisted.suuntoSMLImporter.getFromJSONString).toHaveBeenCalledTimes(1);
+        expect(result.parsedEvents).toEqual([fallbackParsedEvent]);
     });
 
     it('parseFromOriginalFilesStrict should stamp source keys deterministically when parsed order changes', async () => {

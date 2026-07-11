@@ -2,21 +2,12 @@ import { onRequest } from 'firebase-functions/v2/https';
 import * as logger from 'firebase-functions/logger';
 import * as admin from 'firebase-admin';
 import { FieldValue } from 'firebase-admin/firestore';
-import {
-  EventImporterFIT,
-  EventImporterGPX,
-  EventImporterSuuntoJSON,
-  EventImporterSuuntoSML,
-  EventImporterTCX,
-  EventInterface,
-} from '@sports-alliance/sports-lib';
+import { EventInterface } from '@sports-alliance/sports-lib';
 import { createHash } from 'node:crypto';
 import { basename } from 'node:path';
 import { gunzipSync } from 'node:zlib';
-import * as xmldom from 'xmldom';
 
 import { ALLOWED_CORS_ORIGINS, ENFORCE_APP_CHECK, hasBasicAccess, hasProAccess } from '../utils';
-import { createParsingOptions } from '../../../shared/parsing-options';
 import { EventWriter, FirestoreAdapter, StorageAdapter, OriginalFile } from '../shared/event-writer';
 import { generateActivityID } from '../shared/id-generator';
 import { EVENT_PROCESSING_ENTITY, ProcessingMetaData } from '../shared/processing-metadata.interface';
@@ -30,6 +21,7 @@ import {
   MAX_ACTIVITY_DECOMPRESSED_BYTES_LABEL,
   MAX_ACTIVITY_UPLOAD_BYTES,
 } from '../shared/activity-processing-config';
+import { parseActivityFilePayload } from '../shared/activity-file-parser';
 
 const SUPPORTED_BASE_EXTENSIONS = new Set(['fit', 'gpx', 'tcx', 'json', 'sml']);
 const ROUTE_OR_COURSE_ACTIVITY_UPLOAD_ERROR_MESSAGE = 'This file looks like a route/course, not a workout activity. Use route upload for routes.';
@@ -41,14 +33,6 @@ class HttpStatusError extends Error {
     super(message);
     this.name = 'HttpStatusError';
   }
-}
-
-function toArrayBuffer(data: Buffer): ArrayBuffer {
-  return data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) as ArrayBuffer;
-}
-
-function decodeText(data: Buffer): string {
-  return new TextDecoder().decode(toArrayBuffer(data));
 }
 
 function normalizeString(value: unknown): string {
@@ -314,36 +298,6 @@ async function eventExistsForUser(userID: string, eventID: string): Promise<bool
   return snapshot.exists;
 }
 
-async function parseUploadedEvent(payload: Buffer, resolvedExtension: string): Promise<EventInterface> {
-  const parsingOptions = createParsingOptions();
-  const baseExtension = getBaseExtension(resolvedExtension);
-
-  if (baseExtension === 'fit') {
-    return EventImporterFIT.getFromArrayBuffer(toArrayBuffer(payload), parsingOptions);
-  }
-
-  const text = decodeText(payload);
-  if (baseExtension === 'gpx') {
-    return EventImporterGPX.getFromString(text, xmldom.DOMParser, parsingOptions);
-  }
-  if (baseExtension === 'tcx') {
-    const xml = new xmldom.DOMParser().parseFromString(text, 'application/xml');
-    return EventImporterTCX.getFromXML(xml, parsingOptions);
-  }
-  if (baseExtension === 'json') {
-    try {
-      return await EventImporterSuuntoJSON.getFromJSONString(text, parsingOptions);
-    } catch (_jsonError) {
-      return await EventImporterSuuntoSML.getFromJSONString(text, parsingOptions);
-    }
-  }
-  if (baseExtension === 'sml') {
-    return EventImporterSuuntoSML.getFromXML(text, parsingOptions);
-  }
-
-  throw new HttpStatusError(400, `Unsupported file extension: ${baseExtension}.`);
-}
-
 function generateUploadEventID(userID: string, payload: Buffer, resolvedExtension: string): string {
   const baseExtension = getBaseExtension(resolvedExtension);
 
@@ -434,7 +388,7 @@ export const uploadActivity = onRequest({
 
     let event: EventInterface;
     try {
-      event = await parseUploadedEvent(payloadForParsing, resolvedExtension);
+      event = await parseActivityFilePayload(payloadForParsing, resolvedExtension);
     } catch (error) {
       if (error instanceof HttpStatusError) {
         throw error;
