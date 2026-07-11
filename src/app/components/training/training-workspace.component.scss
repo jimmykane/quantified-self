@@ -13,10 +13,12 @@ h3 { margin-bottom: 0; }
 .training-section-heading p { margin-bottom: 0; }
 .training-status-grid, .training-insights-grid, .training-load-grid, .training-performance-grid { display: grid; gap: 14px; }
 .training-status-grid, .training-insights-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-.training-state-panel, .training-comparison-panel { min-height: 146px; padding: 24px; display: grid; align-content: center; gap: 5px; }
+.training-state-panel, .training-comparison-panel { min-height: 128px; padding: 20px; display: grid; align-content: center; gap: 5px; }
 .training-state-panel { --qs-glass-panel-bg: var(--mat-sys-secondary-container); --qs-glass-panel-border: var(--mat-sys-secondary); }
-.training-state-panel strong, .training-comparison-panel strong { font-size: 28px; line-height: 1.1; overflow-wrap: anywhere; }
-.training-state-panel > span:last-child, .training-comparison-panel > span:last-child, .training-mix-panel header span, .training-capacity-row small, .training-mix-panel dd span { color: var(--mat-sys-on-surface-variant); }
+.training-comparison-status-panel { grid-column: span 2; }
+.training-state-panel strong, .training-comparison-panel strong { font-size: 24px; line-height: 1.1; overflow-wrap: anywhere; }
+.training-comparison-status-panel strong { font-size: 20px; }
+.training-state-panel > span:last-child, .training-comparison-panel > span:last-child, .training-mix-panel header span, .training-capacity-row small, .training-mix-panel dd span { color: var(--mat-sys-on-surface-variant); font-size: 14px; line-height: 1.3; }
 .training-metric-label { color: var(--mat-sys-on-surface-variant); font-size: 13px; font-weight: 650; }
 .training-insight-panel { padding: 20px; }
 .training-insight-panel p { margin: 9px 0 0; line-height: 1.45; }
@@ -50,4 +52,4 @@ dd { margin: 5px 0 0; font-size: 19px; font-weight: 700; overflow-wrap: anywhere
 .training-loading { min-height: 340px; display: grid; place-items: center; }
 
 @media (max-width: 960px) { .training-load-grid, .training-mix-grid, .training-performance-grid { grid-template-columns: 1fr; } .training-insights-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .training-chart-panel-wide { grid-row: auto; min-height: 360px; } .training-intensity-chart { grid-column: auto; } }
-@media (max-width: 640px) { .training-workspace { padding: 20px 14px 48px; } .training-page-header { margin-bottom: 24px; align-items: flex-start; } .training-page-header a { min-width: 0; } h1 { font-size: 28px; } h2 { font-size: 20px; } .training-status-grid, .training-insights-grid { grid-template-columns: 1fr; } .training-metric-panel, .training-load-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); } .training-metric-panel div:nth-child(odd) { border-left: 0; } .training-metric-panel div:nth-child(even) { border-left: 1px solid var(--qs-glass-panel-border, var(--mat-sys-outline-variant)); } .training-chart-panel { min-height: 280px; } .training-chart-panel-wide { min-height: 340px; } .training-section { padding: 24px 0 30px; } }
+@media (max-width: 640px) { .training-workspace { padding: 20px 14px 48px; } .training-page-header { margin-bottom: 24px; align-items: flex-start; } .training-page-header a { min-width: 0; } h1 { font-size: 28px; } h2 { font-size: 20px; } .training-status-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .training-insights-grid { grid-template-columns: 1fr; } .training-state-panel { grid-column: 1 / -1; min-height: 110px; } .training-comparison-panel { min-height: 120px; padding: 18px; } .training-state-panel strong, .training-comparison-panel strong { font-size: 22px; } .training-comparison-status-panel strong { font-size: 19px; } .training-state-panel > span:last-child, .training-comparison-panel > span:last-child { font-size: 12px; } .training-metric-panel, .training-load-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); } .training-metric-panel div:nth-child(odd) { border-left: 0; } .training-metric-panel div:nth-child(even) { border-left: 1px solid var(--qs-glass-panel-border, var(--mat-sys-outline-variant)); } .training-chart-panel { min-height: 280px; } .training-chart-panel-wide { min-height: 340px; } .training-section { padding: 24px 0 30px; } }

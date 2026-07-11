@@ -85,7 +85,9 @@ describe('TrainingWorkspaceComponent', () => {
 
     expect(fixture.componentInstance.isLoading).toBe(false);
     expect(fixture.nativeElement.querySelector('#training-title')?.textContent?.trim()).toBe('Training');
-    expect(fixture.nativeElement.textContent).toContain('Preparing your training comparison');
+    expect(fixture.nativeElement.textContent).toContain('Reading your recent running and cycling sessions.');
+    expect(fixture.nativeElement.querySelectorAll('[role="status"]').length).toBe(1);
+    expect(fixture.nativeElement.textContent).not.toContain('What changed from your normal');
     expect(derivedMetrics.ensureForDashboard).toHaveBeenCalledWith(
       { uid: 'user-1' },
       expect.objectContaining({ trainingSummaryStatus: 'missing' }),
