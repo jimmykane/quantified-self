@@ -2,6 +2,7 @@ import { z } from 'genkit';
 import type { AiInsightsUnsupportedReasonCode } from '../../../../shared/ai-insights.types';
 import { aiInsightsGenkit } from './genkit';
 import { getSuggestedInsightPrompts } from './metric-catalog';
+import { traceInsightModelCall } from './ai-tracing';
 
 export type PromptLanguage = 'english' | 'non_english' | 'uncertain';
 
@@ -81,7 +82,7 @@ const SanitizePromptOutputSchema = z.object({
 
 const defaultPromptLanguageSanitizationDependencies: PromptLanguageSanitizationDependencies = {
   sanitizeWithModel: async ({ prompt }) => {
-    const { output } = await aiInsightsGenkit.generate({
+    const { output } = await traceInsightModelCall('sanitize', () => aiInsightsGenkit.generate({
       system: [
         'You convert non-English fitness analytics prompts into concise English.',
         'Preserve metric intent, aggregation words, date constraints, activity filters, exclusions, and chart hints exactly.',
@@ -90,7 +91,7 @@ const defaultPromptLanguageSanitizationDependencies: PromptLanguageSanitizationD
       ].join(' '),
       prompt: JSON.stringify({ prompt }),
       output: { schema: SanitizePromptOutputSchema },
-    });
+    }));
 
     return output ?? null;
   },

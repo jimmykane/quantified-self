@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "skills": {
+    "agentpond": {
+      "source": "marcusschiesser/agentpond",
+      "sourceType": "github",
+      "skillPath": "skills/agentpond/SKILL.md",
+      "computedHash": "702f2f5e3ba4decc4e77147e9583a14d4910a29d3b5b73964a3ccd74e081b1c8"
+    },
+    "agentpond-instrumentation": {
+      "source": "marcusschiesser/agentpond",
+      "sourceType": "github",
+      "skillPath": "skills/agentpond-instrumentation/SKILL.md",
+      "computedHash": "4f31bb5d92817278a8273e76e042c4120f59dcc768bad10b82dc1d303f7b8a1e"
+    }
+  }
+}

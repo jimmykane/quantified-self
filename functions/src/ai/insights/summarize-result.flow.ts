@@ -29,6 +29,7 @@ import type { EventStatAggregationResult } from '../../../../shared/event-stat-a
 import { resolveMetricSemantics, resolveMetricSummarySemantics } from '../../../../shared/metric-semantics';
 import { formatUnitAwareDataValue } from '../../../../shared/unit-aware-display';
 import { aiInsightsGenkit } from './genkit';
+import { traceInsightModelCall } from './ai-tracing';
 import { buildExecutionPromptLogContext } from './execute-query.logging';
 import {
   buildDeterministicNarrativeLead,
@@ -1179,7 +1180,7 @@ const defaultSummarizeInsightDependencies: SummarizeInsightDependencies = {
     const fallback = buildNarrativeFallback(input);
     const dateRangeLabel = formatLocalizedDateRange(input.query, input.clientLocale);
     const narrativeLead = buildDeterministicNarrativeLead(input.query, dateRangeLabel);
-    const { output } = await aiInsightsGenkit.generate({
+    const { output } = await traceInsightModelCall('summarize', () => aiInsightsGenkit.generate({
       system: [
         'You write concise fitness insight summaries.',
         'Use only the supplied facts.',
@@ -1195,7 +1196,7 @@ const defaultSummarizeInsightDependencies: SummarizeInsightDependencies = {
       ].join(' '),
       prompt: JSON.stringify(buildNarrativeFacts(input)),
       output: { schema: SummarizeInsightResultOutputSchema },
-    });
+    }));
 
     const continuation = output?.continuation
       ?.replace(/^[\s,;:.!-]+/, '')

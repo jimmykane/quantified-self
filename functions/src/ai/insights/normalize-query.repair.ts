@@ -5,6 +5,7 @@ import type {
   AiInsightsUnsupportedReasonCode,
 } from '../../../../shared/ai-insights.types';
 import { aiInsightsGenkit } from './genkit';
+import { traceInsightModelCall } from './ai-tracing';
 import {
   buildNormalizeQueryPromptContext,
   resolveNormalizedInsightQueryFromIntent,
@@ -130,7 +131,7 @@ const RepairInsightIntentSchema = z.object({
 
 const defaultRepairInsightQueryDependencies: RepairInsightQueryDependencies = {
   repairIntent: async (input) => {
-    const { output } = await aiInsightsGenkit.generate({
+    const { output } = await traceInsightModelCall('repair', () => aiInsightsGenkit.generate({
       system: [
         'You repair unsupported fitness insight prompts into a strict structured intent.',
         'Always return a routing object with routeId, resultKind, source, and reason.',
@@ -148,7 +149,7 @@ const defaultRepairInsightQueryDependencies: RepairInsightQueryDependencies = {
         supportedActivityTypeGroups: CANONICAL_ACTIVITY_TYPE_GROUPS,
       }),
       output: { schema: RepairInsightIntentSchema },
-    });
+    }));
 
     return output ?? null;
   },
