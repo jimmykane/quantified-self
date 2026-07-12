@@ -17,6 +17,7 @@ import { SPORTS_LIB_VERSION } from './shared/sports-lib-version.node';
 import { EVENT_PROCESSING_ENTITY, ProcessingMetaData } from './shared/processing-metadata.interface';
 import { sportsLibVersionToCode } from './reparse/sports-lib-reparse.service';
 import { OriginalFileMetaData } from '../../shared/app-event.interface';
+import { preserveEventTagsOnRewrite } from '../../shared/event-tags';
 import {
   getUserDeletionGuardState,
   getUserDeletionGuardStateInTransaction,
@@ -187,6 +188,10 @@ export async function setEventDocumentIfUserActive(
   docRef: admin.firestore.DocumentReference,
   data: unknown,
   options?: admin.firestore.SetOptions,
+  transformExistingData?: (
+    incomingData: admin.firestore.DocumentData,
+    existingData: admin.firestore.DocumentData | null,
+  ) => admin.firestore.DocumentData,
 ): Promise<void> {
   const db = admin.firestore();
   await db.runTransaction(async (transaction) => {
@@ -202,12 +207,22 @@ export async function setEventDocumentIfUserActive(
       throw new EventWriteSkippedForDeletedUserError(userID, phase);
     }
 
+    const incomingData = data as admin.firestore.DocumentData;
+    let resolvedData = incomingData;
+    if (transformExistingData) {
+      const existingSnapshot = await transaction.get(docRef);
+      resolvedData = transformExistingData(
+        incomingData,
+        existingSnapshot.exists ? existingSnapshot.data() || null : null,
+      );
+    }
+
     if (options) {
-      transaction.set(docRef, data as admin.firestore.DocumentData, options);
+      transaction.set(docRef, resolvedData, options);
       return;
     }
 
-    transaction.set(docRef, data as admin.firestore.DocumentData);
+    transaction.set(docRef, resolvedData);
   });
 }
 
@@ -253,7 +268,15 @@ export async function setEvent(userID: string, eventID: string, event: EventInte
       for (let i = 2; i < path.length; i += 2) {
         docRef = docRef.collection(path[i]).doc(path[i + 1]);
       }
-      await setEventDocumentIfUserActive(userID, `event_writer:${path.join('/')}`, docRef, data);
+      const isEventDocument = path.length === 4 && path[0] === 'users' && path[2] === 'events';
+      await setEventDocumentIfUserActive(
+        userID,
+        `event_writer:${path.join('/')}`,
+        docRef,
+        data,
+        undefined,
+        isEventDocument ? preserveEventTagsOnRewrite : undefined,
+      );
     },
     createBlob: (data: Uint8Array) => {
       return Buffer.from(data);

@@ -2,6 +2,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { EventSummaryComponent } from './event-summary.component';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatBottomSheet } from '@angular/material/bottom-sheet';
+import { MatDialog } from '@angular/material/dialog';
 import { ChangeDetectorRef, NO_ERRORS_SCHEMA } from '@angular/core';
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
@@ -22,6 +23,9 @@ import {
 } from '@sports-alliance/sports-lib';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { AppBenchmarkFlowService } from '../../services/app.benchmark-flow.service';
+import { EventTagService } from '../../services/event-tag.service';
+import { EventTagsDialogComponent } from '../event-tags/event-tags-dialog.component';
+import { from, of, Subject } from 'rxjs';
 
 
 describe('EventSummaryComponent', () => {
@@ -29,6 +33,8 @@ describe('EventSummaryComponent', () => {
     let fixture: ComponentFixture<EventSummaryComponent>;
     let mockBottomSheet: any;
     let mockBenchmarkFlowService: any;
+    let mockDialog: any;
+    let mockEventTagService: any;
 
     const mockUser: User = {
         uid: 'test-user-id',
@@ -53,6 +59,14 @@ describe('EventSummaryComponent', () => {
             generateAndOpenReport: vi.fn().mockResolvedValue(undefined),
             openBenchmarkReport: vi.fn(),
         };
+        mockDialog = { open: vi.fn().mockReturnValue({ afterClosed: () => of(null) }) };
+        mockEventTagService = {
+            getTags: vi.fn((event: any) => event.tags || event.benchmarkReviewTags || []),
+            saveTags: vi.fn(async (_user: unknown, event: any, tags: string[]) => {
+                event.tags = tags;
+                return tags;
+            }),
+        };
 
         await TestBed.configureTestingModule({
             declarations: [
@@ -63,6 +77,8 @@ describe('EventSummaryComponent', () => {
                 { provide: MatSnackBar, useValue: { open: vi.fn() } },
                 { provide: ChangeDetectorRef, useValue: { markForCheck: vi.fn() } },
                 { provide: AppBenchmarkFlowService, useValue: mockBenchmarkFlowService },
+                { provide: MatDialog, useValue: mockDialog },
+                { provide: EventTagService, useValue: mockEventTagService },
             ],
             schemas: [NO_ERRORS_SCHEMA]
         }).compileComponents();
@@ -77,6 +93,31 @@ describe('EventSummaryComponent', () => {
 
     it('should create', () => {
         expect(component).toBeTruthy();
+    });
+
+    it('renders event tags read-only for public viewers', () => {
+        fixture.componentRef.setInput('event', { ...mockEvent, tags: ['Race', '2026'] } as any);
+        fixture.componentRef.setInput('isOwner', false);
+        fixture.detectChanges();
+
+        const banner = fixture.nativeElement.querySelector('.event-tags-banner') as HTMLElement;
+        const chipSet = banner?.querySelector('mat-chip-set');
+        expect(banner?.textContent).toContain('Race');
+        expect(banner?.textContent).toContain('2026');
+        expect(banner?.querySelector('button')).toBeNull();
+        expect(chipSet?.getAttribute('aria-label')).toBe('Event tags');
+        expect(chipSet?.hasAttribute('aria-hidden')).toBe(false);
+    });
+
+    it('keeps decorative owner tag chips out of the labelled edit button accessibility tree', () => {
+        fixture.componentRef.setInput('event', { ...mockEvent, tags: ['Race'] } as any);
+        fixture.componentRef.setInput('isOwner', true);
+        fixture.detectChanges();
+
+        const button = fixture.nativeElement.querySelector('.event-tags-button') as HTMLButtonElement;
+        const chipSet = button?.querySelector('mat-chip-set');
+        expect(button?.getAttribute('aria-label')).toBe('Edit event tags');
+        expect(chipSet?.getAttribute('aria-hidden')).toBe('true');
     });
 
     describe('open... methods', () => {
@@ -123,6 +164,106 @@ describe('EventSummaryComponent', () => {
                 user: component.user,
                 initialSelection: component.selectedActivities,
             }));
+        });
+
+        it('refreshes cached details tags when the benchmark sheet saves them in place', async () => {
+            (component.event as any).tags = ['Original'];
+            fixture.detectChanges();
+
+            await component.openBenchmark();
+            const benchmarkConfig = mockBenchmarkFlowService.openBenchmarkEntry.mock.calls[0][0];
+            benchmarkConfig.onEventTagsSaved(['Updated']);
+
+            expect((component.event as any).tags).toEqual(['Updated']);
+            expect(component.eventTags).toEqual(['Updated']);
+        });
+
+        it('opens the shared tag editor for owners and applies saved tags', async () => {
+            component.isOwner = true;
+            mockDialog.open.mockImplementation((_component: unknown, config: any) => {
+                const saved = config.data.save(['Race', '2026']);
+                return { afterClosed: () => from(saved) };
+            });
+
+            await component.openTags();
+
+            expect(mockDialog.open).toHaveBeenCalledWith(EventTagsDialogComponent, expect.objectContaining({
+                data: expect.objectContaining({ title: 'Event tags' }),
+            }));
+            expect((component.event as any).tags).toEqual(['Race', '2026']);
+        });
+
+        it('does not overwrite a newer same-event refresh after the tag save completes', async () => {
+            component.isOwner = true;
+            const originalEvent = { ...mockEvent, getID: () => 'event-a', tags: ['Original'] } as any;
+            const refreshedEvent = { ...mockEvent, getID: () => 'event-a', tags: ['Concurrent'] } as any;
+            component.event = originalEvent;
+            fixture.detectChanges();
+
+            const closed = new Subject<string[] | null>();
+            let dialogData: any;
+            mockDialog.open.mockImplementation((_component: unknown, config: any) => {
+                dialogData = config.data;
+                return { afterClosed: () => closed.asObservable() };
+            });
+
+            const openPromise = component.openTags();
+            const savedTags = await dialogData.save(['Updated']);
+            component.event = refreshedEvent;
+            fixture.detectChanges();
+            closed.next(savedTags);
+            closed.complete();
+            await openPromise;
+
+            expect(originalEvent.tags).toEqual(['Updated']);
+            expect(refreshedEvent.tags).toEqual(['Concurrent']);
+            expect(component.eventTags).toEqual(['Concurrent']);
+        });
+
+        it('keeps an open tag dialog pinned to the event that opened it', async () => {
+            component.isOwner = true;
+            const originalEvent = { ...mockEvent, getID: () => 'event-a', tags: ['Original'] } as any;
+            const replacementEvent = {
+                ...mockEvent,
+                getID: () => 'event-b',
+                tags: ['Replacement'],
+                benchmarkReviewTags: ['Replacement legacy'],
+            } as any;
+            component.event = originalEvent;
+            fixture.detectChanges();
+
+            const closed = new Subject<string[] | null>();
+            let dialogData: any;
+            mockDialog.open.mockImplementation((_component: unknown, config: any) => {
+                dialogData = config.data;
+                return { afterClosed: () => closed.asObservable() };
+            });
+
+            const openPromise = component.openTags();
+            component.event = replacementEvent;
+            fixture.detectChanges();
+            const savedTags = await dialogData.save(['Updated']);
+            closed.next(savedTags);
+            closed.complete();
+            await openPromise;
+
+            expect(mockEventTagService.saveTags).toHaveBeenCalledWith(
+                mockUser,
+                originalEvent,
+                ['Updated'],
+                ['Original'],
+            );
+            expect(originalEvent.tags).toEqual(['Updated']);
+            expect(replacementEvent.tags).toEqual(['Replacement']);
+            expect(replacementEvent.benchmarkReviewTags).toEqual(['Replacement legacy']);
+        });
+
+        it('does not open tag editing for public viewers', async () => {
+            component.isOwner = false;
+
+            await component.openTags();
+
+            expect(mockDialog.open).not.toHaveBeenCalled();
         });
     });
 

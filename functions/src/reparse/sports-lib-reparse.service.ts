@@ -33,6 +33,7 @@ import {
     UserDeletionGuardReadError,
 } from '../shared/user-deletion-guard';
 import { parseActivityFilePayload } from '../shared/activity-file-parser';
+import { getEventTags, preserveEventTagsOnRewrite } from '../../../shared/event-tags';
 
 export const SPORTS_LIB_REPARSE_CHECKPOINT_PATH = 'systemJobs/sportsLibReparse';
 export const SPORTS_LIB_REPARSE_JOBS_COLLECTION = 'sportsLibReparseJobs';
@@ -633,6 +634,9 @@ export function applyPreservedFields(parsedEvent: EventInterface, existingEventD
     }
     if (Object.prototype.hasOwnProperty.call(existingAny, 'feeling')) {
         parsedAny.feeling = existingAny.feeling;
+    }
+    if (Array.isArray(existingAny.tags) || Array.isArray(existingAny.benchmarkReviewTags)) {
+        parsedAny.tags = getEventTags(existingAny);
     }
 }
 
@@ -1277,11 +1281,24 @@ async function setReparseDocIfUserActive(
     docRef: admin.firestore.DocumentReference,
     data: unknown,
     options?: admin.firestore.SetOptions,
+    transformExistingData?: (
+        incomingData: admin.firestore.DocumentData,
+        existingData: admin.firestore.DocumentData | null,
+    ) => admin.firestore.DocumentData,
 ): Promise<void> {
     const db = admin.firestore();
     await db.runTransaction(async (transaction) => {
         await assertReparsePersistenceUserActiveInTransaction(db, transaction, uid, phase);
-        transaction.set(docRef, data as admin.firestore.DocumentData, options as admin.firestore.SetOptions);
+        const incomingData = data as admin.firestore.DocumentData;
+        let resolvedData = incomingData;
+        if (transformExistingData) {
+            const existingSnapshot = await transaction.get(docRef);
+            resolvedData = transformExistingData(
+                incomingData,
+                existingSnapshot.exists ? existingSnapshot.data() || null : null,
+            );
+        }
+        transaction.set(docRef, resolvedData, options as admin.firestore.SetOptions);
     });
 }
 
@@ -1289,11 +1306,14 @@ function getFirestoreAdapter(uid: string): FirestoreAdapter {
     return {
         setDoc: async (path: string[], data: unknown) => {
             const documentPath = path.join('/');
+            const isEventDocument = path.length === 4 && path[0] === 'users' && path[2] === 'events';
             await setReparseDocIfUserActive(
                 uid,
                 `sports_lib_reparse_writer:${documentPath}`,
                 admin.firestore().doc(documentPath),
                 data,
+                undefined,
+                isEventDocument ? preserveEventTagsOnRewrite : undefined,
             );
         },
         createBlob: (data: Uint8Array) => Buffer.from(data),

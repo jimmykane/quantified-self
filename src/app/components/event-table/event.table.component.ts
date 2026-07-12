@@ -52,6 +52,10 @@ import { AppEventUtilities } from '../../utils/app.event.utilities';
 import { AppBenchmarkFlowService } from '../../services/app.benchmark-flow.service';
 import { MergeOptionsDialogComponent } from './merge-options-dialog/merge-options-dialog.component';
 import { AppEventMergeService, MergeEventResponse, MergeType } from '../../services/app.event-merge.service';
+import { EventTagService } from '../../services/event-tag.service';
+import { EVENT_TAG_BULK_LIMIT, getEventTags, normalizeEventTagSuggestions } from '@shared/event-tags';
+import { EventTagsDialogComponent } from '../event-tags/event-tags-dialog.component';
+import { EventTagsBulkDialogComponent } from '../event-tags/event-tags-bulk-dialog.component';
 
 interface EventTableRowCacheEntry {
   event: EventInterface;
@@ -101,7 +105,17 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
   private breakpointSubscription!: Subscription;
   private isHandset = false;
   private readonly defaultSelectedColumns = AppUserUtilities.getDefaultSelectedTableColumns();
-  private readonly nonSearchableRowKeys = new Set(['Color', 'Gradient', 'Event', 'Device Name Items', 'Shared Title']);
+  private readonly nonSearchableRowKeys = new Set([
+    'Color',
+    'Gradient',
+    'Event',
+    'Device Name Items',
+    'Shared Title',
+    'Tag Values',
+    'Tags Title',
+    'Tag Action Label',
+    'Tags Accessible Label',
+  ]);
   private readonly duplicateSourceFilesMessage = 'Selected events include identical source files. Deselect duplicates and try again.';
   readonly sharedEventTooltip = 'Public link enabled. Anyone with the link can view this event, comparison data, and original files.';
   private rowCache = new Map<string, EventTableRowCacheEntry>();
@@ -109,6 +123,10 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
 
   private searchSubject: Subject<string> = new Subject();
   private analyticsService = inject(AppAnalyticsService);
+  private eventTagService = inject(EventTagService);
+  public tagFilter = '';
+  public tagFilterOptions: string[] = [];
+  public isBulkTagSaving = false;
 
   constructor(private snackBar: MatSnackBar,
     private eventService: AppEventService,
@@ -184,7 +202,16 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       return (statRowElement as any)[`sort.${header}`];
     };
     this.data.filterPredicate = (row: any, filter: string) => {
-      const terms = filter
+      const filterState = this.parseTableFilter(filter);
+      if (filterState.tag) {
+        const tagKey = filterState.tag.toLowerCase();
+        const rowTags = Array.isArray(row['Tag Values']) ? row['Tag Values'] : [];
+        if (!rowTags.some((tag: string) => tag.toLowerCase() === tagKey)) {
+          return false;
+        }
+      }
+
+      const terms = filterState.text
         .split(',')
         .map(term => term.trim())
         .filter(term => term.length > 0);
@@ -732,13 +759,14 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
 
   private updateDisplayedColumns() {
     const sortedSelectedColumns = (this.selectedColumns || [])
-      .filter(column => column !== 'Description' && column !== 'Shared')
+      .filter(column => column !== 'Description' && column !== 'Shared' && column !== 'Tags')
       .sort((a, b) => this.defaultSelectedColumns.indexOf(a) - this.defaultSelectedColumns.indexOf(b));
 
     const columns = [
       'Checkbox',
       'Start Date',
       ...sortedSelectedColumns,
+      'Tags',
       'Description',
       'Shared',
       'Actions',
@@ -791,7 +819,122 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
 
   search(searchTerm: string) {
     this.searchTerm = searchTerm;
-    this.data.filter = searchTerm.trim().toLowerCase();
+    this.applyTableFilter();
+  }
+
+  updateTagFilter(tag: string): void {
+    const requestedTag = `${tag || ''}`;
+    this.tagFilter = requestedTag
+      ? this.tagFilterOptions.find(option => option.toLowerCase() === requestedTag.toLowerCase()) || ''
+      : '';
+    this.applyTableFilter();
+  }
+
+  async openEventTagsDialog(domEvent: Event, event: AppEventInterface): Promise<void> {
+    domEvent.preventDefault();
+    domEvent.stopPropagation();
+    if (!this.showActions || !this.user || !event?.getID?.()) {
+      return;
+    }
+    const originalTags = this.eventTagService.getTags(event);
+
+    const dialogRef = this.dialog.open(EventTagsDialogComponent, {
+      width: 'min(34rem, calc(100vw - 32px))',
+      maxWidth: 'calc(100vw - 32px)',
+      data: {
+        title: 'Event tags',
+        tags: originalTags,
+        suggestions: this.tagFilterOptions,
+        save: async (tags: string[]) => {
+          const savedTags = await this.eventTagService.saveTags(this.user, event, tags, originalTags);
+          this.applySavedTagsToLoadedEvent(event.getID(), savedTags, event);
+          return savedTags;
+        },
+      },
+    });
+    const savedTags = await firstValueFrom(dialogRef.afterClosed());
+    if (!Array.isArray(savedTags)) {
+      return;
+    }
+
+    this.processChanges('event_tags_saved');
+    this.snackBar.open('Tags saved.', undefined, { duration: 2000 });
+  }
+
+  async openBulkEventTagsDialog(domEvent: Event): Promise<void> {
+    domEvent.preventDefault();
+    domEvent.stopPropagation();
+    if (this.isBulkTagSaving || !this.user || !this.selection.selected.length) {
+      return;
+    }
+    if (this.selection.selected.length > EVENT_TAG_BULK_LIMIT) {
+      this.snackBar.open(
+        `Select up to ${EVENT_TAG_BULK_LIMIT} events to update tags.`,
+        undefined,
+        { duration: 3000 },
+      );
+      return;
+    }
+
+    const selectedEvents = this.selection.selected
+      .map(row => row?.Event as AppEventInterface | undefined)
+      .filter((event): event is AppEventInterface => !!event?.getID?.());
+    const selectedEventIDs = selectedEvents.map(event => event.getID());
+    if (!selectedEventIDs.length) {
+      this.snackBar.open('Select at least one valid event to update tags.', undefined, { duration: 2500 });
+      return;
+    }
+    const removeSuggestions = normalizeEventTagSuggestions(selectedEvents.flatMap(event => getEventTags(event)));
+    let savedResults: Record<string, string[]> | null = null;
+
+    const dialogRef = this.dialog.open(EventTagsBulkDialogComponent, {
+      width: 'min(38rem, calc(100vw - 32px))',
+      maxWidth: 'calc(100vw - 32px)',
+      data: {
+        selectedCount: selectedEvents.length,
+        addSuggestions: this.tagFilterOptions,
+        removeSuggestions,
+        save: async (changes: { add: string[]; remove: string[] }) => {
+          this.isBulkTagSaving = true;
+          try {
+            savedResults = await this.eventTagService.applyBulkChanges(this.user, selectedEventIDs, changes);
+            selectedEvents.forEach((event) => {
+              const eventID = event.getID();
+              this.applySavedTagsToLoadedEvent(eventID, savedResults?.[eventID] || getEventTags(event), event);
+            });
+            return savedResults;
+          } finally {
+            this.isBulkTagSaving = false;
+          }
+        },
+      },
+    });
+
+    const didSave = await firstValueFrom(dialogRef.afterClosed());
+    if (!didSave || !savedResults) {
+      return;
+    }
+    this.processChanges('bulk_event_tags_saved');
+    this.snackBar.open(
+      `Tags updated on ${selectedEvents.length} ${selectedEvents.length === 1 ? 'event' : 'events'}.`,
+      undefined,
+      { duration: 2500 },
+    );
+  }
+
+  private applySavedTagsToLoadedEvent(
+    eventID: string,
+    tags: string[],
+    fallbackEvent: AppEventInterface,
+  ): void {
+    fallbackEvent.tags = tags;
+    delete fallbackEvent.benchmarkReviewTags;
+    const loadedEvent = this.events.find(event => event.getID() === eventID) as AppEventInterface | undefined;
+    if (loadedEvent && loadedEvent !== fallbackEvent) {
+      loadedEvent.tags = tags;
+      delete loadedEvent.benchmarkReviewTags;
+    }
+    this.invalidateRowCacheForEvent(loadedEvent || fallbackEvent);
   }
 
   onSearchInput(event: Event) {
@@ -803,6 +946,25 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
   clearSearch() {
     this.searchTerm = '';
     this.search('');
+  }
+
+  private applyTableFilter(): void {
+    this.data.filter = JSON.stringify({
+      text: this.searchTerm.trim().toLowerCase(),
+      tag: this.tagFilter,
+    });
+  }
+
+  private parseTableFilter(filter: string): { text: string; tag: string } {
+    try {
+      const parsed = JSON.parse(filter || '{}') as { text?: unknown; tag?: unknown };
+      return {
+        text: typeof parsed.text === 'string' ? parsed.text : '',
+        tag: typeof parsed.tag === 'string' ? parsed.tag : '',
+      };
+    } catch {
+      return { text: `${filter || ''}`, tag: '' };
+    }
   }
 
   onKeyUp(event: KeyboardEvent) {
@@ -913,6 +1075,17 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     }
     this.rowCache = nextRowCache;
     this.data.data = rows;
+    this.tagFilterOptions = normalizeEventTagSuggestions(
+      rows.flatMap(row => row['Tag Values'] || []),
+    ).sort((first, second) => first.localeCompare(second));
+    if (this.tagFilter) {
+      const selectedTagKey = this.tagFilter.toLowerCase();
+      const matchingTagOption = this.tagFilterOptions.find(tag => tag.toLowerCase() === selectedTagKey) || '';
+      if (matchingTagOption !== this.tagFilter) {
+        this.tagFilter = matchingTagOption;
+        this.applyTableFilter();
+      }
+    }
     this.logger.info('[perf] event_table_process_changes', {
       durationMs: Number((performance.now() - processStart).toFixed(2)),
       trigger,
@@ -963,6 +1136,13 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     statRowElement['Activity Types'] = event.getActivityTypesAsString();
     statRowElement['Merged Event'] = event.isMerge;
     statRowElement['Description'] = event.description;
+    const tags = getEventTags(event as AppEventInterface);
+    statRowElement['Tags'] = tags.join(' ');
+    statRowElement['Tag Values'] = tags;
+    statRowElement['Tags Title'] = tags.join('\n');
+    const eventLabel = event.name || 'event';
+    statRowElement['Tag Action Label'] = `${tags.length ? 'Edit' : 'Add'} event tags for ${eventLabel}`;
+    statRowElement['Tags Accessible Label'] = `Event tags for ${eventLabel}: ${tags.join(', ')}`;
     statRowElement['Device Names'] = event.getDeviceNamesAsString();
     statRowElement['Device Name Items'] = this.buildDeviceNameDisplayItems(event);
     statRowElement['Color'] = this.eventColorService.getColorForActivityTypeByActivityTypeGroup(
@@ -1098,6 +1278,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     return JSON.stringify({
       name: event.name ?? null,
       description: event.description ?? null,
+      tags: getEventTags(event as AppEventInterface),
       privacy: event.privacy ?? null,
       isMerge: event.isMerge ?? false,
       startDate,

@@ -13,6 +13,16 @@
       </mat-form-field>
 
       <div class="table-toolbar-filters">
+        <mat-form-field appearance="outline" class="tag-filter-field" subscriptSizing="dynamic">
+          <mat-label>Tags</mat-label>
+          <mat-select [value]="tagFilter" [disabled]="tagFilterOptions.length === 0"
+            (selectionChange)="updateTagFilter($event.value)">
+            <mat-option value="">All tags</mat-option>
+            @for (tag of tagFilterOptions; track tag) {
+            <mat-option [value]="tag">{{ tag }}</mat-option>
+            }
+          </mat-select>
+        </mat-form-field>
         <ng-content select="[event-table-filters]"></ng-content>
       </div>
     </div>
@@ -25,6 +35,17 @@
         </div>
 
         <div class="selection-actions">
+          <button mat-button
+            class="bulk-action-button"
+            [disabled]="isBulkTagSaving"
+            [attr.aria-label]="'Update tags on ' + selection.selected.length + ' selected events'"
+            (click)="openBulkEventTagsDialog($event)">
+            <span class="bulk-action-button-content">
+              <mat-icon>sell</mat-icon>
+              <span class="bulk-action-label">Tags</span>
+            </span>
+          </button>
+
           <button mat-button
             class="bulk-action-button"
             [disabled]="selection.selected.length < 2"
@@ -156,7 +177,30 @@
               }
             </span>
             }
-            @if (column !== 'Checkbox' && column !== 'Actions' && column !== 'Activity Types' && column !== 'Shared' && column!=='Privacy') {
+            @if (column === 'Tags') {
+            @if (showActions) {
+            <button mat-button type="button" class="event-tags-cell-button"
+              [matTooltip]="row['Tags Title']" [matTooltipDisabled]="!row['Tags Title']"
+              [attr.aria-label]="row['Tag Action Label']"
+              (click)="openEventTagsDialog($event, row.Event)">
+              @if (row['Tag Values']?.length) {
+              <mat-chip-set class="event-tags-chip-set" aria-hidden="true">
+                @for (tag of row['Tag Values'].slice(0, 2); track tag) { <mat-chip>{{ tag }}</mat-chip> }
+                @if (row['Tag Values'].length > 2) { <mat-chip>+{{ row['Tag Values'].length - 2 }}</mat-chip> }
+              </mat-chip-set>
+              } @else {
+              <span class="event-tags-add-label"><mat-icon>sell</mat-icon><span>Add tags</span></span>
+              }
+            </button>
+            } @else if (row['Tag Values']?.length) {
+            <mat-chip-set class="event-tags-chip-set" [matTooltip]="row['Tags Title']"
+              [attr.aria-label]="row['Tags Accessible Label']">
+              @for (tag of row['Tag Values'].slice(0, 2); track tag) { <mat-chip>{{ tag }}</mat-chip> }
+              @if (row['Tag Values'].length > 2) { <mat-chip>+{{ row['Tag Values'].length - 2 }}</mat-chip> }
+            </mat-chip-set>
+            } @else { <span aria-label="No tags">-</span> }
+            }
+            @if (column !== 'Checkbox' && column !== 'Actions' && column !== 'Activity Types' && column !== 'Shared' && column !== 'Tags' && column!=='Privacy') {
             <span class="data-cell" [class.description-cell]="column === 'Description'" [class.device-names-cell]="column === 'Device Names'">
               @if (column === 'Description') {
               <span class="description-text">{{ row[column] }}</span>

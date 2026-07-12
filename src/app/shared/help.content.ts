@@ -129,6 +129,7 @@ export const HELP_SECTIONS: HelpSection[] = [
 - On supported mobile devices, dashboard buttons and chart interactions provide lightweight haptic feedback.
 - Haptics automatically fall back to no-op when vibration support is unavailable or reduced-motion is enabled.
 - Event search filters only the dashboard event table.
+- Event tags can be added from an event row or event details. The table supports an exact tag filter, and up to 250 selected events can receive atomic add/remove tag changes in bulk. Each event supports up to 10 tags of 32 characters; tags are visible on public event and comparison links.
 - **Custom** charts use their own tile date-range and activity filters, with matching controls in Dashboard manager.
 - If your account has no activities yet, the dashboard shows **No activities yet** with actions to **Upload activity** or **Connect service**. Uploads support FIT, GPX, TCX, JSON, and SML files; service connections support Garmin, Suunto, and COROS.
 - Dashboard **Action prompts** are contextual setup cards shown above your dashboard when an account action needs attention after activity data exists.

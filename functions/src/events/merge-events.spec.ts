@@ -19,6 +19,8 @@ const hoisted = vi.hoisted(() => {
 
   const mockHasProAccess = vi.fn();
   const mockHasBasicAccess = vi.fn();
+  const mockAssertEventWriteUserActive = vi.fn();
+  const mockSetEventDocumentIfUserActive = vi.fn();
   const mockDocSet = vi.fn();
   const mockWriteAllEventData = vi.fn();
   const mockSportsLibVersionToCode = vi.fn(() => 9001004);
@@ -91,6 +93,8 @@ const hoisted = vi.hoisted(() => {
       state,
       mockHasProAccess,
       mockHasBasicAccess,
+      mockAssertEventWriteUserActive,
+      mockSetEventDocumentIfUserActive,
       mockDocSet,
       mockWriteAllEventData,
       mockSportsLibVersionToCode,
@@ -232,6 +236,7 @@ vi.mock('@sports-alliance/sports-lib', () => ({
 
 vi.mock('../utils', () => ({
   ALLOWED_CORS_ORIGINS: [],
+  assertEventWriteUserActive: (...args: unknown[]) => hoisted.mockAssertEventWriteUserActive(...args),
   enforceAppCheck: (request: { app?: unknown }) => {
     if (!request.app) {
       throw new Error('App Check verification failed.');
@@ -239,6 +244,7 @@ vi.mock('../utils', () => ({
   },
   hasProAccess: (...args: unknown[]) => hoisted.mockHasProAccess(...args),
   hasBasicAccess: (...args: unknown[]) => hoisted.mockHasBasicAccess(...args),
+  setEventDocumentIfUserActive: (...args: unknown[]) => hoisted.mockSetEventDocumentIfUserActive(...args),
 }));
 
 vi.mock('../shared/event-writer', () => ({
@@ -357,7 +363,13 @@ describe('mergeEvents', () => {
 
     hoisted.mockHasProAccess.mockResolvedValue(false);
     hoisted.mockHasBasicAccess.mockResolvedValue(false);
+    hoisted.mockAssertEventWriteUserActive.mockResolvedValue(undefined);
     hoisted.mockDocSet.mockResolvedValue(undefined);
+    hoisted.mockSetEventDocumentIfUserActive.mockImplementation(
+      async (_userID: unknown, _phase: unknown, _docRef: unknown, data: unknown, options?: unknown) => (
+        hoisted.mockDocSet(data, options)
+      ),
+    );
     hoisted.mockWriteAllEventData.mockResolvedValue(undefined);
     hoisted.mockStorageSave.mockResolvedValue(undefined);
     hoisted.mockStorageGetMetadata.mockResolvedValue([{ generation: 'storage-generation-1' }]);
@@ -373,6 +385,22 @@ describe('mergeEvents', () => {
       timeoutSeconds: 3600,
       maxInstances: 20,
     });
+  });
+
+  it('should fail closed before reads, parsing, storage, or writes when account deletion starts', async () => {
+    hoisted.mockAssertEventWriteUserActive.mockRejectedValueOnce(new Error('deletion in progress'));
+
+    await expect(mergeEvents({
+      auth: { uid: 'u1' },
+      app: { appId: 'app-id' },
+      data: { eventIds: ['e1', 'e2'], mergeType: 'benchmark' },
+    } as never)).rejects.toMatchObject({ code: 'internal' });
+
+    expect(hoisted.mockAssertEventWriteUserActive).toHaveBeenCalledWith('u1', 'merge_event_start');
+    expect(hoisted.mockEventImporterJSON.getEventFromJSON).not.toHaveBeenCalled();
+    expect(hoisted.mockWriteAllEventData).not.toHaveBeenCalled();
+    expect(hoisted.mockStorageSave).not.toHaveBeenCalled();
+    expect(hoisted.mockSetEventDocumentIfUserActive).not.toHaveBeenCalled();
   });
 
   it('should reject unauthenticated requests', async () => {
@@ -646,6 +674,20 @@ describe('mergeEvents', () => {
       isMerge: false,
       mergeType: 'multi',
     }, { merge: true });
+    expect(hoisted.mockSetEventDocumentIfUserActive).toHaveBeenCalledWith(
+      'u1',
+      'merge_event_metadata',
+      expect.anything(),
+      { isMerge: false, mergeType: 'multi' },
+      { merge: true },
+    );
+    expect(hoisted.mockSetEventDocumentIfUserActive).toHaveBeenCalledWith(
+      'u1',
+      'merge_event_processing_metadata',
+      expect.anything(),
+      expect.objectContaining({ processingEntity: 'event' }),
+      { merge: true },
+    );
   });
 
   it('should surface merge classification finalization failures after writing the merged event', async () => {
@@ -842,7 +884,17 @@ describe('mergeEvents', () => {
       data: { eventIds: ['e1', 'e2'], mergeType: 'benchmark' },
     } as any);
 
-    expect(hoisted.mockDocSet).toHaveBeenCalledWith({ probe: true });
+    expect(hoisted.mockSetEventDocumentIfUserActive).toHaveBeenCalledWith(
+      'u1',
+      'merge_event_writer:users/u1/events/adapter-probe',
+      expect.anything(),
+      { probe: true },
+    );
+    expect(hoisted.mockDocSet).toHaveBeenCalledWith({ probe: true }, undefined);
+    expect(hoisted.mockAssertEventWriteUserActive).toHaveBeenCalledWith(
+      'u1',
+      'merge_event_original_file_upload:users/probe/events/adapter-probe/original.fit',
+    );
     expect(hoisted.mockStorageSave).toHaveBeenCalled();
   });
 });

@@ -53,6 +53,25 @@
       </div>
     </div>
   </app-summary-primary-info>
+  @if (eventTags.length > 0 || isOwner) {
+  <div class="event-tags-banner">
+    @if (isOwner) {
+    <button mat-button type="button" class="event-tags-button" (click)="openTags()"
+      [attr.aria-label]="eventTags.length ? 'Edit event tags' : 'Add event tags'">
+      <mat-icon>sell</mat-icon>
+      @if (eventTags.length) {
+      <mat-chip-set aria-hidden="true">
+        @for (tag of eventTags; track tag) { <mat-chip>{{ tag }}</mat-chip> }
+      </mat-chip-set>
+      } @else { <span>Add tags</span> }
+    </button>
+    } @else {
+    <mat-chip-set aria-label="Event tags">
+      @for (tag of eventTags; track tag) { <mat-chip>{{ tag }}</mat-chip> }
+    </mat-chip-set>
+    }
+  </div>
+  }
   @if (showDeviceChip) {
   <div class="device-info-banner" [matTooltip]="deviceChipTooltip" [matTooltipDisabled]="!deviceChipTooltip">
     <div class="device-info-banner-primary">

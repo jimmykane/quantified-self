@@ -77,6 +77,11 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('Map');
     expect(gettingStartedSection?.content).toContain('one activity map and one saved-routes map');
     expect(gettingStartedSection?.content).toContain('Event search filters only the dashboard event table');
+    expect(gettingStartedSection?.content).toContain('Event tags can be added from an event row or event details');
+    expect(gettingStartedSection?.content).toContain('exact tag filter');
+    expect(gettingStartedSection?.content).toContain('up to 250 selected events');
+    expect(gettingStartedSection?.content).toContain('atomic add/remove tag changes in bulk');
+    expect(gettingStartedSection?.content).toContain('tags are visible on public event and comparison links');
     expect(gettingStartedSection?.content).toContain('Custom** charts use their own tile date-range and activity filters');
     expect(gettingStartedSection?.content).toContain('Map** tiles can use activity events or saved route previews');
     expect(gettingStartedSection?.content).toContain('Routes** map tiles show recent saved routes from lightweight route previews');

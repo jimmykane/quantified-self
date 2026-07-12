@@ -65,6 +65,8 @@ import {
 } from '../../helpers/suunto-service-connection.helper';
 import { AppSleepService } from '../../services/app.sleep.service';
 import { SLEEP_PROVIDERS, SleepSyncState } from '@shared/sleep';
+import { AppEventInterface } from '@shared/app-event.interface';
+import { getEventTags } from '@shared/event-tags';
 import { GARMIN_SLEEP_BACKFILL_REQUIRED_PERMISSIONS } from '@shared/sleep-backfill';
 
 
@@ -1379,7 +1381,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
       const currentEvent = currentEvents[index];
       return this.getEventStableID(previousEvent) === this.getEventStableID(currentEvent)
         && previousEvent?.name === currentEvent?.name
-        && this.getEventStableStartDate(previousEvent) === this.getEventStableStartDate(currentEvent);
+        && this.getEventStableStartDate(previousEvent) === this.getEventStableStartDate(currentEvent)
+        && JSON.stringify(getEventTags(previousEvent as AppEventInterface))
+          === JSON.stringify(getEventTags(currentEvent as AppEventInterface));
     });
   }
 

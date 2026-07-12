@@ -695,6 +695,92 @@ describe('Firestore Security Rules', () => {
                 }));
             });
 
+            it('should allow only the owner to update event tags', async () => {
+                const ownerDb = testEnv.authenticatedContext(userId).firestore();
+                const otherDb = testEnv.authenticatedContext(otherId).firestore();
+                await testEnv.withSecurityRulesDisabled(async (context) => {
+                    await context.firestore().doc(`users/${userId}/events/${eventId}`).set({
+                        name: 'Morning Run',
+                        privacy: 'public',
+                        tags: ['Race'],
+                    });
+                });
+
+                await assertSucceeds(ownerDb.collection(`users/${userId}/events`).doc(eventId).update({
+                    tags: ['Race pace', '2026', '🏃'.repeat(16)],
+                }));
+                await assertSucceeds(ownerDb.collection(`users/${userId}/events`).doc(eventId).update({
+                    tags: Array.from({ length: 10 }, (_, index) => `Tag ${index}`),
+                }));
+                await assertFails(otherDb.collection(`users/${userId}/events`).doc(eventId).update({
+                    tags: ['Spoofed'],
+                }));
+            });
+
+            it('should deny invalid event tag values', async () => {
+                const db = testEnv.authenticatedContext(userId).firestore();
+                const eventRef = db.collection(`users/${userId}/events`).doc(eventId);
+                await testEnv.withSecurityRulesDisabled(async (context) => {
+                    await context.firestore().doc(`users/${userId}/events/${eventId}`).set({
+                        name: 'Morning Run',
+                        privacy: 'private',
+                    });
+                });
+
+                await assertFails(eventRef.update({
+                    tags: Array.from({ length: 11 }, (_, index) => `Tag ${index}`),
+                }));
+                await assertFails(eventRef.update({
+                    tags: ['x'.repeat(33)],
+                }));
+                await assertFails(eventRef.update({
+                    tags: ['🏃'.repeat(17)],
+                }));
+                await assertFails(eventRef.update({
+                    tags: ['Race', 2026],
+                }));
+                await assertFails(eventRef.update({
+                    tags: [''],
+                }));
+                await assertFails(eventRef.update({
+                    tags: ['   '],
+                }));
+                await assertFails(eventRef.update({
+                    tags: [' padded'],
+                }));
+                await assertFails(eventRef.update({
+                    tags: ['double  space'],
+                }));
+                await assertFails(eventRef.update({
+                    tags: ['Race', 'Race'],
+                }));
+            });
+
+            it('should validate legacy comparison tags while allowing unrelated updates to older documents', async () => {
+                const { deleteField } = await import('firebase/firestore');
+                const db = testEnv.authenticatedContext(userId).firestore();
+                const eventRef = db.collection(`users/${userId}/events`).doc(eventId);
+                await testEnv.withSecurityRulesDisabled(async (context) => {
+                    await context.firestore().doc(`users/${userId}/events/${eventId}`).set({
+                        name: 'Legacy comparison',
+                        privacy: 'private',
+                        tags: ['Canonical'],
+                        benchmarkReviewTags: [' legacy padded '],
+                    });
+                });
+
+                await assertSucceeds(eventRef.update({ name: 'Renamed comparison' }));
+                await assertFails(eventRef.update({ tags: deleteField() }));
+                await assertFails(eventRef.update({ benchmarkReviewTags: [' padded '] }));
+                await assertFails(eventRef.update({ benchmarkReviewTags: ['x'.repeat(33)] }));
+                await assertSucceeds(eventRef.update({ benchmarkReviewTags: ['Firmware', 'GPS route'] }));
+                await assertSucceeds(eventRef.update({ tags: deleteField() }));
+                await assertSucceeds(eventRef.update({
+                    tags: ['Migrated'],
+                    benchmarkReviewTags: deleteField(),
+                }));
+            });
+
             it('should deny owner updating event privacy directly', async () => {
                 const db = testEnv.authenticatedContext(userId).firestore();
                 await testEnv.withSecurityRulesDisabled(async (context) => {

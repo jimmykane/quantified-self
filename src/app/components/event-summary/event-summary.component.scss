@@ -107,6 +107,24 @@
   font-size: 0.82rem;
 }
 
+.event-tags-banner {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 6px 24px;
+  border-top: 1px solid var(--mat-sys-outline-variant);
+  background: var(--mat-sys-surface-container-lowest);
+}
+
+.event-tags-button {
+  justify-content: flex-start;
+  min-width: 0;
+}
+
+.event-tags-button mat-chip-set {
+  margin-inline-start: 4px;
+}
+
 .device-info-banner-primary {
   display: block;
   min-width: 0;
@@ -149,6 +167,11 @@
   }
 
   .device-info-banner {
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+
+  .event-tags-banner {
     padding-left: 12px;
     padding-right: 12px;
   }

@@ -13,9 +13,10 @@ import { AppFileService } from '../../services/app.file.service';
 import { AppProcessingService } from '../../services/app.processing.service';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { LoggerService } from '../../services/logger.service';
+import { EventTagService } from '../../services/event-tag.service';
 import { DatePipe } from '@angular/common';
 import { NO_ERRORS_SCHEMA } from '@angular/core';
-import { of, Subject } from 'rxjs';
+import { from, of, Subject } from 'rxjs';
 import { User, DataPace, DataSpeedAvg, ActivityTypes, DataDeviceNames } from '@sports-alliance/sports-lib';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { Analytics } from 'app/firebase/analytics';
@@ -105,6 +106,7 @@ describe('EventTableComponent', () => {
     let mockEventMergeService: any;
     let mockAnalyticsService: any;
     let mockLogger: any;
+    let mockEventTagService: any;
 
     const mockUser = new User('testUser');
     mockUser.settings = {
@@ -258,6 +260,14 @@ describe('EventTableComponent', () => {
             error: vi.fn(),
             captureException: vi.fn(),
         };
+        mockEventTagService = {
+            getTags: vi.fn((event: any) => event.tags || event.benchmarkReviewTags || []),
+            saveTags: vi.fn(async (_user: any, event: any, tags: string[]) => {
+                event.tags = tags;
+                return tags;
+            }),
+            applyBulkChanges: vi.fn().mockResolvedValue({}),
+        };
 
         await TestBed.configureTestingModule({
             imports: [NoopAnimationsModule],
@@ -276,6 +286,7 @@ describe('EventTableComponent', () => {
                 { provide: AppFileService, useValue: mockFileService },
                 { provide: AppProcessingService, useValue: mockProcessingService },
                 { provide: LoggerService, useValue: mockLogger },
+                { provide: EventTagService, useValue: mockEventTagService },
                 DatePipe
             ],
             schemas: [NO_ERRORS_SCHEMA]
@@ -356,7 +367,7 @@ describe('EventTableComponent', () => {
         expect(selectionToolbar.textContent).toContain('1 event selected');
         expect(mainRow.contains(selectionToolbar)).toBe(false);
         expect(mainRow.querySelector('.selection-actions')).toBeNull();
-        expect(actionButtons.length).toBe(6);
+        expect(actionButtons.length).toBe(7);
     });
 
     it('should keep selected-event actions accessible without hover tooltip overlays', () => {
@@ -370,6 +381,7 @@ describe('EventTableComponent', () => {
         ) as HTMLButtonElement[];
 
         expect(actionButtons.map((button) => button.getAttribute('aria-label'))).toEqual([
+            'Update tags on 2 selected events',
             'Merge 2 events',
             'Download CSV for 2 events',
             'Download GPX for 2 events',
@@ -658,6 +670,187 @@ describe('EventTableComponent', () => {
         expect(component.data.filterPredicate(row, 'missing,unknown')).toBe(false);
         expect(component.data.filterPredicate(row, 'shared')).toBe(true);
         expect(component.data.filterPredicate(row, 'anyone with the link')).toBe(false);
+    });
+
+    it('should build tag rows and filter by one exact tag without disabling text search', () => {
+        (component.events[0] as any).tags = ['Race', 'Long run'];
+        (component.events[1] as any).tags = ['Recovery'];
+        (component as any).processChanges('spec_tags');
+        component.ngAfterViewInit();
+
+        const raceRow = component.data.data[0] as any;
+        const recoveryRow = component.data.data[1] as any;
+        component.updateTagFilter('race');
+
+        expect(component.tagFilterOptions).toEqual(['Long run', 'Race', 'Recovery']);
+        expect(component.tagFilter).toBe('Race');
+        expect(raceRow['Tag Values']).toEqual(['Race', 'Long run']);
+        expect(component.data.filterPredicate(raceRow, component.data.filter)).toBe(true);
+        expect(component.data.filterPredicate(recoveryRow, component.data.filter)).toBe(false);
+
+        component.search('long');
+        expect(component.data.filterPredicate(raceRow, component.data.filter)).toBe(true);
+
+        (component.events[0] as any).tags = ['race', 'Long run'];
+        (component as any).processChanges('spec_recased_selected_tag');
+        expect(component.tagFilterOptions).toEqual(['Long run', 'race', 'Recovery']);
+        expect(component.tagFilter).toBe('race');
+
+        (component.events[0] as any).tags = ['Long run'];
+        (component as any).processChanges('spec_removed_selected_tag');
+        expect(component.tagFilter).toBe('');
+    });
+
+    it('should identify tag controls by event and expose every read-only tag', () => {
+        (component.events[0] as any).tags = ['Race', 'Long run', '2026'];
+        (component as any).processChanges('spec_tag_accessibility');
+        const row = component.data.data[0] as any;
+
+        expect(row['Tag Action Label']).toBe('Edit event tags for Test Run');
+        expect(row['Tags Accessible Label']).toBe('Event tags for Test Run: Race, Long run, 2026');
+    });
+
+    it('should save tags from a row dialog without navigating the row', async () => {
+        const event = component.events[0] as any;
+        const domEvent = { preventDefault: vi.fn(), stopPropagation: vi.fn() } as any;
+        component.showActions = true;
+        mockDialog.open.mockImplementation((_component: unknown, config: any) => {
+            const saved = config.data.save(['Race']);
+            return { afterClosed: () => from(saved.then(() => ['Race'])) };
+        });
+
+        await component.openEventTagsDialog(domEvent, event);
+
+        expect(domEvent.preventDefault).toHaveBeenCalled();
+        expect(domEvent.stopPropagation).toHaveBeenCalled();
+        expect(mockEventTagService.saveTags).toHaveBeenCalledWith(mockUser, event, ['Race'], []);
+        expect(event.tags).toEqual(['Race']);
+    });
+
+    it('should apply saved row tags to a refreshed event instance with the same ID', async () => {
+        const originalEvent = component.events[0] as any;
+        const refreshedEvent = new MockEvent(originalEvent.getID()) as any;
+        originalEvent.benchmarkReviewTags = ['Original legacy'];
+        refreshedEvent.benchmarkReviewTags = ['Refreshed legacy'];
+        const domEvent = { preventDefault: vi.fn(), stopPropagation: vi.fn() } as any;
+        const closed = new Subject<string[] | null>();
+        let dialogData: any;
+        component.showActions = true;
+        mockDialog.open.mockImplementation((_component: unknown, config: any) => {
+            dialogData = config.data;
+            return { afterClosed: () => closed.asObservable() };
+        });
+
+        const openPromise = component.openEventTagsDialog(domEvent, originalEvent);
+        component.events = [refreshedEvent, ...component.events.slice(1)];
+        const savedTags = await dialogData.save(['Race']);
+        closed.next(savedTags);
+        closed.complete();
+        await openPromise;
+
+        expect(originalEvent.tags).toEqual(['Race']);
+        expect(refreshedEvent.tags).toEqual(['Race']);
+        expect(originalEvent.benchmarkReviewTags).toBeUndefined();
+        expect(refreshedEvent.benchmarkReviewTags).toBeUndefined();
+        expect((component.data.data[0] as any)['Tag Values']).toEqual(['Race']);
+    });
+
+    it('should not overwrite a newer row refresh that arrives after the tag save completes', async () => {
+        const originalEvent = component.events[0] as any;
+        const refreshedEvent = new MockEvent(originalEvent.getID()) as any;
+        refreshedEvent.tags = ['Concurrent'];
+        const closed = new Subject<string[] | null>();
+        let dialogData: any;
+        component.showActions = true;
+        mockDialog.open.mockImplementation((_component: unknown, config: any) => {
+            dialogData = config.data;
+            return { afterClosed: () => closed.asObservable() };
+        });
+
+        const openPromise = component.openEventTagsDialog(
+            { preventDefault: vi.fn(), stopPropagation: vi.fn() } as any,
+            originalEvent,
+        );
+        const savedTags = await dialogData.save(['Race']);
+        component.events = [refreshedEvent, ...component.events.slice(1)];
+        closed.next(savedTags);
+        closed.complete();
+        await openPromise;
+
+        expect(originalEvent.tags).toEqual(['Race']);
+        expect(refreshedEvent.tags).toEqual(['Concurrent']);
+        expect((component.data.data[0] as any)['Tag Values']).toEqual(['Concurrent']);
+    });
+
+    it('should apply bulk add/remove changes and update selected event rows', async () => {
+        const selectedRows = component.data.data.slice(0, 2) as any[];
+        component.selection.select(...selectedRows);
+        mockEventTagService.applyBulkChanges.mockResolvedValue({
+            event1: ['Race'],
+            event2: ['Recovery'],
+        });
+        mockDialog.open.mockImplementation((_component: unknown, config: any) => {
+            const saved = config.data.save({ add: ['Race'], remove: ['Old'] });
+            return { afterClosed: () => from(saved.then(() => true)) };
+        });
+
+        await component.openBulkEventTagsDialog({ preventDefault: vi.fn(), stopPropagation: vi.fn() } as any);
+
+        expect(mockEventTagService.applyBulkChanges).toHaveBeenCalledWith(
+            mockUser,
+            ['event1', 'event2'],
+            { add: ['Race'], remove: ['Old'] },
+        );
+        expect((component.events[0] as any).tags).toEqual(['Race']);
+        expect((component.events[1] as any).tags).toEqual(['Recovery']);
+        expect(component.selection.isEmpty()).toBe(true);
+    });
+
+    it('should not overwrite a newer row refresh after a bulk tag save completes', async () => {
+        const selectedRow = component.data.data[0] as any;
+        const selectedEvent = selectedRow.Event as any;
+        const refreshedEvent = new MockEvent(selectedEvent.getID()) as any;
+        refreshedEvent.tags = ['Concurrent'];
+        const closed = new Subject<boolean>();
+        let dialogData: any;
+        component.selection.select(selectedRow);
+        mockEventTagService.applyBulkChanges.mockResolvedValue({
+            [selectedEvent.getID()]: ['Race'],
+        });
+        mockDialog.open.mockImplementation((_component: unknown, config: any) => {
+            dialogData = config.data;
+            return { afterClosed: () => closed.asObservable() };
+        });
+
+        const openPromise = component.openBulkEventTagsDialog(
+            { preventDefault: vi.fn(), stopPropagation: vi.fn() } as any,
+        );
+        await dialogData.save({ add: ['Race'], remove: [] });
+        component.events = [refreshedEvent, ...component.events.slice(1)];
+        closed.next(true);
+        closed.complete();
+        await openPromise;
+
+        expect(selectedEvent.tags).toEqual(['Race']);
+        expect(refreshedEvent.tags).toEqual(['Concurrent']);
+        expect((component.data.data[0] as any)['Tag Values']).toEqual(['Concurrent']);
+    });
+
+    it('should reject oversized bulk tag selections before opening the dialog', async () => {
+        const selectedRows = Array.from({ length: 251 }, (_value, index) => ({
+            Event: new MockEvent(`event-${index}`),
+        })) as any[];
+        component.selection.select(...selectedRows);
+
+        await component.openBulkEventTagsDialog({ preventDefault: vi.fn(), stopPropagation: vi.fn() } as any);
+
+        expect(mockDialog.open).not.toHaveBeenCalled();
+        expect(mockEventTagService.applyBulkChanges).not.toHaveBeenCalled();
+        expect(mockSnackBar.open).toHaveBeenCalledWith(
+            'Select up to 250 events to update tags.',
+            undefined,
+            { duration: 3000 },
+        );
     });
 
     it('should treat all filtered rows as selected even when full data has additional hidden rows', () => {

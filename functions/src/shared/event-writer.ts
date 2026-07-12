@@ -1,5 +1,6 @@
 import { AppEventInterface, FirestoreActivityJSON, FirestoreEventJSON, OriginalFileMetaData } from '../../../shared/app-event.interface';
 import { sanitizeActivityFirestoreWritePayload, sanitizeEventFirestoreWritePayload } from '../../../shared/firestore-write-sanitizer';
+import { preserveEventTagsOnRewrite } from '../../../shared/event-tags';
 
 /**
  * Logger adapter interface for cross-environment compatibility.
@@ -193,8 +194,12 @@ export class EventWriter {
 
             // Write Event
             // Mandatory shared write policy: all event payloads are sanitized via helper.
-            const eventJSON = sanitizeEventFirestoreWritePayload(
+            const sanitizedEventJSON = sanitizeEventFirestoreWritePayload(
                 event.toJSON()
+            ) as FirestoreEventJSON;
+            const eventJSON = preserveEventTagsOnRewrite(
+                sanitizedEventJSON,
+                event,
             ) as FirestoreEventJSON;
 
             // Normalize input to array or single

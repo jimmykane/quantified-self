@@ -25,6 +25,8 @@ const hoisted = vi.hoisted(() => {
   const mockGenerateActivityID = vi.fn();
   const mockHasProAccess = vi.fn();
   const mockHasBasicAccess = vi.fn();
+  const mockAssertEventWriteUserActive = vi.fn();
+  const mockSetEventDocumentIfUserActive = vi.fn();
   const mockEnforceAppCheckFlag = { value: true };
   const mockFITImporter = { getFromArrayBuffer: vi.fn() };
   const mockGPXImporter = { getFromString: vi.fn() };
@@ -52,6 +54,8 @@ const hoisted = vi.hoisted(() => {
     mockGenerateActivityID,
     mockHasProAccess,
     mockHasBasicAccess,
+    mockAssertEventWriteUserActive,
+    mockSetEventDocumentIfUserActive,
     mockEnforceAppCheckFlag,
     mockFITImporter,
     mockGPXImporter,
@@ -139,6 +143,8 @@ vi.mock('../utils', () => ({
   },
   hasProAccess: (...args: unknown[]) => hoisted.mockHasProAccess(...args),
   hasBasicAccess: (...args: unknown[]) => hoisted.mockHasBasicAccess(...args),
+  assertEventWriteUserActive: (...args: unknown[]) => hoisted.mockAssertEventWriteUserActive(...args),
+  setEventDocumentIfUserActive: (...args: unknown[]) => hoisted.mockSetEventDocumentIfUserActive(...args),
 }));
 
 vi.mock('../shared/event-writer', () => ({
@@ -268,6 +274,8 @@ describe('uploadActivity', () => {
     hoisted.mockGenerateActivityID.mockResolvedValue('activity-1');
     hoisted.mockHasProAccess.mockResolvedValue(false);
     hoisted.mockHasBasicAccess.mockResolvedValue(false);
+    hoisted.mockAssertEventWriteUserActive.mockResolvedValue(undefined);
+    hoisted.mockSetEventDocumentIfUserActive.mockResolvedValue(undefined);
     hoisted.mockEnforceAppCheckFlag.value = true;
 
     hoisted.mockFITImporter.getFromArrayBuffer.mockResolvedValue(makeParsedEvent());
@@ -285,6 +293,25 @@ describe('uploadActivity', () => {
       concurrency: 1,
       timeoutSeconds: 3600,
     }));
+  });
+
+  it('should fail closed before parsing or writing when the user deletion guard rejects the upload', async () => {
+    hoisted.mockAssertEventWriteUserActive.mockRejectedValueOnce(new Error('deletion in progress'));
+    const response = makeResponse();
+
+    await invokeUploadActivity(makeRequest({
+      headers: {
+        Authorization: 'Bearer token',
+        'X-Firebase-AppCheck': 'app-check',
+        'X-File-Extension': 'fit',
+      },
+    }), response);
+
+    expect(response.status).toHaveBeenCalledWith(500);
+    expect(hoisted.mockFITImporter.getFromArrayBuffer).not.toHaveBeenCalled();
+    expect(hoisted.mockWriteAllEventData).not.toHaveBeenCalled();
+    expect(hoisted.mockStorageSave).not.toHaveBeenCalled();
+    expect(hoisted.mockSetEventDocumentIfUserActive).not.toHaveBeenCalled();
   });
 
   it('should reject non-POST methods', async () => {
@@ -485,12 +512,19 @@ describe('uploadActivity', () => {
     await invokeUploadActivity(request, response);
 
     expect(response.status).toHaveBeenCalledWith(200);
-    expect(hoisted.mockDocSet).toHaveBeenCalledWith(expect.objectContaining({
-      processingEntity: 'event',
-      sportsLibVersion: expect.any(String),
-      sportsLibVersionCode: 9001004,
-      processedAt: expect.anything(),
-    }), { merge: true });
+    expect(hoisted.mockAssertEventWriteUserActive).toHaveBeenCalledWith('user-1', 'activity_upload_start');
+    expect(hoisted.mockSetEventDocumentIfUserActive).toHaveBeenCalledWith(
+      'user-1',
+      'activity_upload_processing_metadata',
+      expect.anything(),
+      expect.objectContaining({
+        processingEntity: 'event',
+        sportsLibVersion: expect.any(String),
+        sportsLibVersionCode: 9001004,
+        processedAt: expect.anything(),
+      }),
+      { merge: true },
+    );
     expect(hoisted.mockWriteAllEventData).toHaveBeenCalledWith(
       'user-1',
       expect.objectContaining({ name: 'lowercase' }),
@@ -1155,14 +1189,44 @@ describe('uploadActivity', () => {
     expect(storageAdapter).toBeTruthy();
 
     await firestoreAdapter.setDoc(['users', 'user-1', 'events', 'adapter-test'], { ok: true });
-    expect(hoisted.mockDocSet).toHaveBeenCalledWith({ ok: true });
+    expect(hoisted.mockSetEventDocumentIfUserActive).toHaveBeenCalledWith(
+      'user-1',
+      'activity_upload_writer:users/user-1/events/adapter-test',
+      expect.anything(),
+      { ok: true },
+      undefined,
+      expect.any(Function),
+    );
+
+    await firestoreAdapter.setDoc(['users', 'user-1', 'activities', 'activity-test'], { ok: true });
+    expect(hoisted.mockSetEventDocumentIfUserActive).toHaveBeenCalledWith(
+      'user-1',
+      'activity_upload_writer:users/user-1/activities/activity-test',
+      expect.anything(),
+      { ok: true },
+      undefined,
+      undefined,
+    );
+    expect(hoisted.mockDocSet).not.toHaveBeenCalled();
 
     expect(firestoreAdapter.createBlob(Uint8Array.from([7, 8, 9]))).toEqual(Buffer.from([7, 8, 9]));
     expect(firestoreAdapter.generateID()).toBe('tmp-generated-id');
 
     await storageAdapter.uploadFile('users/user-1/events/adapter-test/original.fit', Buffer.from([0xaa]));
+    expect(hoisted.mockAssertEventWriteUserActive).toHaveBeenCalledWith(
+      'user-1',
+      'activity_upload_original_file:users/user-1/events/adapter-test/original.fit',
+    );
     expect(hoisted.mockStorageSave).toHaveBeenCalledWith(Buffer.from([0xaa]));
     expect(hoisted.mockStorageGetMetadata).toHaveBeenCalled();
     expect(storageAdapter.getBucketName()).toBe('test-bucket');
+
+    hoisted.mockStorageSave.mockClear();
+    hoisted.mockAssertEventWriteUserActive.mockRejectedValueOnce(new Error('deletion in progress'));
+    await expect(storageAdapter.uploadFile(
+      'users/user-1/events/adapter-test/original.fit',
+      Buffer.from([0xbb]),
+    )).rejects.toThrow('deletion in progress');
+    expect(hoisted.mockStorageSave).not.toHaveBeenCalled();
   });
 });
