@@ -15,7 +15,7 @@ if (process.env.FIREBASE_CONFIG) {
     if (firebaseConfig.projectId) {
       firebaseConfigProjectId = `${firebaseConfig.projectId}`;
     }
-  } catch (e) {
+  } catch {
     logger.warn('Could not parse FIREBASE_CONFIG while resolving Firebase configuration');
   }
 }
@@ -29,7 +29,7 @@ if (firebaseConfigStorageBucket && firebaseConfigStorageBucket !== PRIMARY_STORA
 
 try {
   admin.app();
-} catch (e) {
+} catch {
   const projectId = process.env.GCLOUD_PROJECT || process.env.GCP_PROJECT || firebaseConfigProjectId || undefined;
   try {
     const serviceAccountPath = resolveServiceAccountPath();
@@ -45,7 +45,7 @@ try {
     } else {
       throw new Error('service-account.json not found');
     }
-  } catch (error) {
+  } catch {
     logger.warn('Service account not found, initializing with default credentials');
     admin.initializeApp({
       projectId,
