@@ -5,7 +5,6 @@ import {
     DataDuration,
     DataDistance,
     DataActivityTypes,
-    DataCriticalPower,
     DataFTP,
     DataHeartRateAvg,
     DataHeartRateZoneFiveDuration,
@@ -67,7 +66,9 @@ import {
     type DerivedPowerCurveScope,
     type DerivedRampRateMetricPayload,
     type DerivedRecoveryNowMetricPayload,
-    type DerivedTrainingCapacityMetric,
+    type DerivedTrainingCapacityImportedMetric,
+    type DerivedTrainingCapacityImportedMetricKind,
+    type DerivedTrainingCapacityMetricPayload,
     type DerivedTrainingDiscipline,
     type DerivedTrainingDisciplineSummary,
     type DerivedTrainingBuildBenchmarkReference,
@@ -108,6 +109,11 @@ const HISTORY_TREND_WEEKS = 8;
 const FORECAST_DAYS = 7;
 const TRAINING_SUMMARY_CURRENT_WINDOW_DAYS = 28;
 const TRAINING_SUMMARY_BASELINE_WINDOW_DAYS = 84;
+const TRAINING_CAPACITY_MODEL_WINDOW_DAYS = 90 as const;
+const TRAINING_CAPACITY_MODEL_ANCHOR_DURATIONS_SECONDS = [180, 300, 600, 900, 1200] as const;
+const TRAINING_CAPACITY_SESSION_FTP_FACTOR = 0.95;
+const TRAINING_CAPACITY_MAX_INTERPOLATION_DURATION_RATIO = 1.25;
+const TRAINING_CAPACITY_MAX_IMPLIED_WEIGHT_RATIO = 1.05;
 const POWER_CURVE_MAX_STORED_POINTS = 128;
 const POWER_CURVE_BENCHMARK_DURATIONS_SECONDS = [5, 60, 300, 1200, 3600] as const;
 type PowerCurveDurationRange = Exclude<DerivedPowerCurveRange, 'thisWeek' | 'thisMonth' | 'all'>;
@@ -200,6 +206,7 @@ interface DerivedMetricBuildExecutionContext {
     getIntensityDistributionBuildResult: () => DerivedMetricBuildResult<DerivedIntensityDistributionMetricPayload>;
     getEfficiencyTrendBuildResult: () => DerivedMetricBuildResult<DerivedEfficiencyTrendMetricPayload>;
     getTrainingSummaryBuildResult: () => DerivedMetricBuildResult<DerivedTrainingSummaryMetricPayload>;
+    getTrainingCapacityBuildResult: () => DerivedMetricBuildResult<DerivedTrainingCapacityMetricPayload>;
     getPowerCurveBuildResult: () => DerivedMetricBuildResult<DerivedPowerCurveMetricPayload>;
     getTrainingBuildComparisonBuildResult: () => DerivedMetricBuildResult<DerivedTrainingBuildComparisonMetricPayload>;
 }
@@ -983,9 +990,8 @@ function resolveZoneDurations(
     });
 }
 
-type TrainingCapacityKind = 'vo2Max' | 'ftp' | 'criticalPower';
-
 interface TrainingCapacityObservation {
+    eventId: string;
     sourceKey: string | null;
     timeMs: number;
     value: number;
@@ -1002,7 +1008,6 @@ interface TrainingSummaryWindowAccumulator {
 interface TrainingSummaryDisciplineAccumulator {
     current: TrainingSummaryWindowAccumulator;
     baseline: TrainingSummaryWindowAccumulator;
-    capacities: Record<TrainingCapacityKind, TrainingCapacityObservation[]>;
 }
 
 function createTrainingSummaryWindowAccumulator(): TrainingSummaryWindowAccumulator {
@@ -1019,11 +1024,6 @@ function createTrainingSummaryDisciplineAccumulator(): TrainingSummaryDiscipline
     return {
         current: createTrainingSummaryWindowAccumulator(),
         baseline: createTrainingSummaryWindowAccumulator(),
-        capacities: {
-            vo2Max: [],
-            ftp: [],
-            criticalPower: [],
-        },
     };
 }
 
@@ -1292,6 +1292,336 @@ export function buildPowerCurveMetricPayload(
     };
 }
 
+function normalizeTrainingCapacityImportedValue(
+    kind: DerivedTrainingCapacityImportedMetricKind,
+    value: number,
+): number {
+    return kind === 'ftp-setting'
+        ? Math.round(value)
+        : toRoundedNumber(value, 1);
+}
+
+function buildTrainingCapacityImportedMetric(
+    kind: DerivedTrainingCapacityImportedMetricKind,
+    observations: readonly TrainingCapacityObservation[],
+): DerivedTrainingCapacityImportedMetric | null {
+    const sorted = observations
+        .map(observation => ({
+            ...observation,
+            value: normalizeTrainingCapacityImportedValue(kind, observation.value),
+        }))
+        .sort((left, right) => (
+            left.timeMs - right.timeMs
+            || left.eventId.localeCompare(right.eventId)
+        ));
+    if (!sorted.length) {
+        return null;
+    }
+
+    const latest = sorted[sorted.length - 1];
+    let currentRunStartIndex = sorted.length - 1;
+    while (currentRunStartIndex > 0) {
+        const previous = sorted[currentRunStartIndex - 1];
+        if (previous.value !== latest.value || previous.sourceKey !== latest.sourceKey) {
+            break;
+        }
+        currentRunStartIndex -= 1;
+    }
+
+    const currentRun = sorted.slice(currentRunStartIndex);
+    const previous = currentRunStartIndex > 0 ? sorted[currentRunStartIndex - 1] : null;
+    const hasComparablePrevious = previous !== null
+        && previous.sourceKey !== null
+        && previous.sourceKey === latest.sourceKey
+        && previous.value > 0;
+
+    return {
+        kind,
+        value: latest.value,
+        sourceKey: latest.sourceKey,
+        provenance: 'imported-activity-stat',
+        firstSeenAtMs: currentRun[0].timeMs,
+        lastSeenAtMs: latest.timeMs,
+        observationCount: currentRun.length,
+        previousValue: previous?.value ?? null,
+        previousAtMs: previous?.timeMs ?? null,
+        previousSourceKey: previous?.sourceKey ?? null,
+        changePct: hasComparablePrevious
+            ? toRoundedNumber(((latest.value - previous.value) / previous.value) * 100, 2)
+            : null,
+    };
+}
+
+function deserializeTrainingCapacityPowerCurve(series: DerivedPowerCurvePointSeries): PowerCurvePoint[] {
+    const points: PowerCurvePoint[] = [];
+    for (let index = 0; index < series.length; index += 3) {
+        const duration = toFinitePositiveNumber(series[index]);
+        const power = toFinitePositiveNumber(series[index + 1]);
+        const wattsPerKg = toFinitePositiveNumber(series[index + 2]);
+        if (duration === null || power === null) {
+            continue;
+        }
+        points.push({
+            duration,
+            power,
+            ...(wattsPerKg !== null ? { wattsPerKg } : {}),
+        });
+    }
+    return points.sort((left, right) => left.duration - right.duration);
+}
+
+function interpolateTrainingCapacityPowerCurveValue(
+    points: readonly PowerCurvePoint[],
+    duration: number,
+    key: 'power' | 'wattsPerKg',
+): number | null {
+    const exact = points.find(point => point.duration === duration);
+    const exactValue = exact?.[key];
+    if (Number.isFinite(exactValue)) {
+        return exactValue as number;
+    }
+
+    const rightIndex = points.findIndex(point => point.duration > duration);
+    if (rightIndex <= 0) {
+        return null;
+    }
+    const left = points[rightIndex - 1];
+    const right = points[rightIndex];
+    if ((right.duration / left.duration) > TRAINING_CAPACITY_MAX_INTERPOLATION_DURATION_RATIO) {
+        return null;
+    }
+    const leftValue = left[key];
+    const rightValue = right[key];
+    if (!Number.isFinite(leftValue) || !Number.isFinite(rightValue)) {
+        return null;
+    }
+
+    // CP is linear in reciprocal duration, so interpolate anchors in the same
+    // domain instead of biasing the fit with wall-clock spacing.
+    const leftX = 1 / left.duration;
+    const rightX = 1 / right.duration;
+    const targetX = 1 / duration;
+    const ratio = (targetX - leftX) / (rightX - leftX);
+    return (leftValue as number) + (((rightValue as number) - (leftValue as number)) * ratio);
+}
+
+interface CriticalPowerModelFit {
+    criticalPower: number;
+    wPrime: number;
+    rSquared: number;
+    normalizedRmse: number;
+}
+
+function fitTrainingCapacityCriticalPowerModel(
+    samples: readonly { duration: number; value: number }[],
+): CriticalPowerModelFit | null {
+    if (samples.length < 3) {
+        return null;
+    }
+    const xValues = samples.map(sample => 1 / sample.duration);
+    const meanX = xValues.reduce((sum, value) => sum + value, 0) / samples.length;
+    const meanY = samples.reduce((sum, sample) => sum + sample.value, 0) / samples.length;
+    const covariance = samples.reduce((sum, sample, index) => (
+        sum + ((xValues[index] - meanX) * (sample.value - meanY))
+    ), 0);
+    const varianceX = xValues.reduce((sum, value) => sum + Math.pow(value - meanX, 2), 0);
+    if (!Number.isFinite(varianceX) || varianceX <= 0 || !Number.isFinite(meanY) || meanY <= 0) {
+        return null;
+    }
+
+    const wPrime = covariance / varianceX;
+    const criticalPower = meanY - (wPrime * meanX);
+    if (!Number.isFinite(wPrime) || !Number.isFinite(criticalPower) || wPrime <= 0 || criticalPower <= 0) {
+        return null;
+    }
+
+    const residualSumSquares = samples.reduce((sum, sample) => {
+        const predicted = criticalPower + (wPrime / sample.duration);
+        return sum + Math.pow(sample.value - predicted, 2);
+    }, 0);
+    const totalSumSquares = samples.reduce((sum, sample) => sum + Math.pow(sample.value - meanY, 2), 0);
+    if (!Number.isFinite(residualSumSquares) || totalSumSquares <= 0) {
+        return null;
+    }
+
+    const rSquared = 1 - (residualSumSquares / totalSumSquares);
+    const normalizedRmse = Math.sqrt(residualSumSquares / samples.length) / meanY;
+    if (!Number.isFinite(rSquared) || !Number.isFinite(normalizedRmse)) {
+        return null;
+    }
+    return { criticalPower, wPrime, rSquared, normalizedRmse };
+}
+
+function buildModeledCriticalPower(
+    snapshot: DerivedPowerCurveRangeSnapshot | null | undefined,
+): DerivedTrainingCapacityMetricPayload['disciplines'][number]['modeledCriticalPower'] {
+    const points = deserializeTrainingCapacityPowerCurve(snapshot?.bestPoints || []);
+    const minDurationSeconds = points.length ? points[0].duration : null;
+    const maxDurationSeconds = points.length ? points[points.length - 1].duration : null;
+    const wattAnchors = TRAINING_CAPACITY_MODEL_ANCHOR_DURATIONS_SECONDS.flatMap((duration) => {
+        const value = interpolateTrainingCapacityPowerCurveValue(points, duration, 'power');
+        return value === null ? [] : [{ duration, value }];
+    });
+    const base = {
+        windowDays: TRAINING_CAPACITY_MODEL_WINDOW_DAYS,
+        sourceEventCount: snapshot?.matchedEventCount || 0,
+        anchorPointCount: wattAnchors.length,
+        minDurationSeconds,
+        maxDurationSeconds,
+    } as const;
+    if (wattAnchors.length !== TRAINING_CAPACITY_MODEL_ANCHOR_DURATIONS_SECONDS.length) {
+        return {
+            ...base,
+            status: 'insufficient-evidence',
+            valueWatts: null,
+            valueWattsPerKg: null,
+            wPrimeJoules: null,
+            confidence: null,
+            rSquared: null,
+            normalizedRmse: null,
+        };
+    }
+
+    const fit = fitTrainingCapacityCriticalPowerModel(wattAnchors);
+    const lowestAnchorPower = Math.min(...wattAnchors.map(anchor => anchor.value));
+    if (!fit || fit.criticalPower >= lowestAnchorPower) {
+        return {
+            ...base,
+            status: 'poor-fit',
+            valueWatts: null,
+            valueWattsPerKg: null,
+            wPrimeJoules: null,
+            confidence: 'low',
+            rSquared: fit ? toRoundedNumber(fit.rSquared, 4) : null,
+            normalizedRmse: fit ? toRoundedNumber(fit.normalizedRmse, 4) : null,
+        };
+    }
+
+    const sourceEventCount = snapshot?.matchedEventCount || 0;
+    const confidence = sourceEventCount >= 3 && fit.rSquared >= 0.97 && fit.normalizedRmse <= 0.04
+        ? 'high'
+        : sourceEventCount >= 1 && fit.rSquared >= 0.9 && fit.normalizedRmse <= 0.07
+            ? 'medium'
+            : 'low';
+    if (confidence === 'low') {
+        return {
+            ...base,
+            status: 'poor-fit',
+            valueWatts: null,
+            valueWattsPerKg: null,
+            wPrimeJoules: null,
+            confidence,
+            rSquared: toRoundedNumber(fit.rSquared, 4),
+            normalizedRmse: toRoundedNumber(fit.normalizedRmse, 4),
+        };
+    }
+
+    const wattsPerKgAnchors = TRAINING_CAPACITY_MODEL_ANCHOR_DURATIONS_SECONDS.flatMap((duration) => {
+        const value = interpolateTrainingCapacityPowerCurveValue(points, duration, 'wattsPerKg');
+        return value === null ? [] : [{ duration, value }];
+    });
+    const wattsPerKgFit = wattsPerKgAnchors.length === TRAINING_CAPACITY_MODEL_ANCHOR_DURATIONS_SECONDS.length
+        ? fitTrainingCapacityCriticalPowerModel(wattsPerKgAnchors)
+        : null;
+    const impliedWeights = wattsPerKgAnchors.map((anchor, index) => (
+        wattAnchors[index].value / anchor.value
+    ));
+    const minImpliedWeight = impliedWeights.length ? Math.min(...impliedWeights) : null;
+    const maxImpliedWeight = impliedWeights.length ? Math.max(...impliedWeights) : null;
+    const hasConsistentImpliedWeight = minImpliedWeight !== null
+        && maxImpliedWeight !== null
+        && minImpliedWeight > 0
+        && (maxImpliedWeight / minImpliedWeight) <= TRAINING_CAPACITY_MAX_IMPLIED_WEIGHT_RATIO;
+    const wattsPerKgFitIsReliable = !!wattsPerKgFit
+        && hasConsistentImpliedWeight
+        && wattsPerKgFit.criticalPower < Math.min(...wattsPerKgAnchors.map(anchor => anchor.value))
+        && wattsPerKgFit.rSquared >= 0.9
+        && wattsPerKgFit.normalizedRmse <= 0.07;
+
+    return {
+        ...base,
+        status: 'ready',
+        valueWatts: Math.round(fit.criticalPower),
+        valueWattsPerKg: wattsPerKgFitIsReliable
+            ? toRoundedNumber(wattsPerKgFit.criticalPower, 2)
+            : null,
+        wPrimeJoules: Math.round(fit.wPrime),
+        confidence,
+        rSquared: toRoundedNumber(fit.rSquared, 4),
+        normalizedRmse: toRoundedNumber(fit.normalizedRmse, 4),
+    };
+}
+
+function isTrainingCapacitySessionDerivedFtp(
+    eventData: Record<string, unknown>,
+    ftp: number,
+): boolean {
+    const twentyMinutePoint = normalizePowerCurvePoints(
+        resolveRawStatValue(eventData, POWER_CURVE_STAT_TYPE),
+    ).points.find(point => point.duration === 1_200);
+    if (!twentyMinutePoint) {
+        return false;
+    }
+    return Math.round(twentyMinutePoint.power * TRAINING_CAPACITY_SESSION_FTP_FACTOR) === Math.round(ftp);
+}
+
+export function buildTrainingCapacityMetricPayload(
+    docs: readonly FirestoreQueryDocumentSnapshot[],
+    powerCurvePayload: DerivedPowerCurveMetricPayload,
+    nowMs = Date.now(),
+): DerivedMetricBuildResult<DerivedTrainingCapacityMetricPayload> {
+    const observations: Record<DerivedTrainingDiscipline, {
+        ftpSetting: TrainingCapacityObservation[];
+        importedVo2Max: TrainingCapacityObservation[];
+    }> = {
+        running: { ftpSetting: [], importedVo2Max: [] },
+        cycling: { ftpSetting: [], importedVo2Max: [] },
+    };
+    let sourceEventCount = 0;
+
+    docs.forEach((doc) => {
+        const eventData = (doc.data() || {}) as Record<string, unknown>;
+        if (isMergedEvent(eventData)) {
+            return;
+        }
+        const timeMs = toMillis(eventData.startDate);
+        const discipline = resolveTrainingDiscipline(eventData);
+        if (timeMs === null || timeMs > nowMs || discipline === null) {
+            return;
+        }
+        const sourceKey = resolveTrainingSourceKey(eventData);
+        const ftp = toFinitePositiveNumber(resolveRawStatNumericValue(eventData, DataFTP.type));
+        const vo2Max = toFinitePositiveNumber(resolveRawStatNumericValue(eventData, DataVO2Max.type));
+        const eventId = `${doc.id || ''}`.trim();
+        if (ftp !== null && !isTrainingCapacitySessionDerivedFtp(eventData, ftp)) {
+            observations[discipline].ftpSetting.push({ eventId, sourceKey, timeMs, value: ftp });
+        }
+        if (vo2Max !== null) {
+            observations[discipline].importedVo2Max.push({ eventId, sourceKey, timeMs, value: vo2Max });
+        }
+        sourceEventCount += 1;
+    });
+
+    const disciplines = (['running', 'cycling'] as const).map((discipline) => ({
+        discipline,
+        ftpSetting: buildTrainingCapacityImportedMetric('ftp-setting', observations[discipline].ftpSetting),
+        importedVo2Max: buildTrainingCapacityImportedMetric('vo2-max', observations[discipline].importedVo2Max),
+        modeledCriticalPower: buildModeledCriticalPower(
+            powerCurvePayload.scopes[discipline].ranges['90d'],
+        ),
+    }));
+
+    return {
+        sourceEventCount,
+        payload: {
+            dayBoundary: 'UTC',
+            asOfDayMs: resolveUtcDayStartMs(nowMs),
+            excludesMergedEvents: true,
+            disciplines,
+        },
+    };
+}
+
 function resolveTrainingSourceKey(eventData: Record<string, unknown>): string | null {
   const creator = eventData.creator && typeof eventData.creator === 'object' && !Array.isArray(eventData.creator)
     ? eventData.creator as Record<string, unknown>
@@ -1312,10 +1642,10 @@ function resolveTrainingSourceKey(eventData: Record<string, unknown>): string | 
     .map(normalize)
     .find(Boolean) || '';
 
-  // Provider-only values (for example, "Garmin") can combine more than one
-  // device. Capacity trends need a device-level source to stay comparable.
+  // A provider-only source is still useful provenance for an imported setting.
+  // Keep device detail when it exists, without hiding the provider when it does not.
   if (!device) {
-    return null;
+    return provider || null;
   }
 
   if (!provider || device === provider || device.startsWith(`${provider} `)) {
@@ -1339,69 +1669,6 @@ function buildTrainingSummaryWindow(
         easySeconds: toRoundedNumber(accumulator.easySeconds * normalizationFactor, 2),
         moderateSeconds: toRoundedNumber(accumulator.moderateSeconds * normalizationFactor, 2),
         hardSeconds: toRoundedNumber(accumulator.hardSeconds * normalizationFactor, 2),
-    };
-}
-
-function median(values: readonly number[]): number | null {
-    if (!values.length) {
-        return null;
-    }
-    const sorted = [...values].sort((left, right) => left - right);
-    const middle = Math.floor(sorted.length / 2);
-    return sorted.length % 2 === 0
-        ? (sorted[middle - 1] + sorted[middle]) / 2
-        : sorted[middle];
-}
-
-function buildTrainingCapacityMetric(
-    observations: readonly TrainingCapacityObservation[],
-    currentStartDayMs: number,
-    baselineStartDayMs: number,
-    baselineEndDayMs: number,
-): DerivedTrainingCapacityMetric | null {
-    if (!observations.length) {
-        return null;
-    }
-
-    const sourceKeys = new Set(observations.map(observation => observation.sourceKey));
-    const latest = [...observations].sort((left, right) => right.timeMs - left.timeMs)[0];
-    const current = observations.filter(observation => observation.timeMs >= currentStartDayMs);
-    const baseline = observations.filter(observation => observation.timeMs >= baselineStartDayMs && observation.timeMs <= baselineEndDayMs);
-
-    if (sourceKeys.size !== 1 || sourceKeys.has(null)) {
-        return {
-            sourceKey: null,
-            latestAtMs: latest.timeMs,
-            latestValue: latest.value,
-            currentMedian: null,
-            baselineMedian: null,
-            currentSampleCount: current.length,
-            baselineSampleCount: baseline.length,
-            deltaPct: null,
-            trend: null,
-        };
-    }
-
-    const currentMedian = median(current.map(observation => observation.value));
-    const baselineMedian = median(baseline.map(observation => observation.value));
-    const deltaPct = currentMedian !== null && baselineMedian !== null && baselineMedian > 0
-        ? toRoundedNumber(((currentMedian - baselineMedian) / baselineMedian) * 100, 2)
-        : null;
-    const hasComparison = currentMedian !== null && baselineMedian !== null && current.length >= 1 && baseline.length >= 2;
-    const trend = hasComparison && deltaPct !== null
-        ? (deltaPct > 2 ? 'improving' : (deltaPct < -2 ? 'declining' : 'stable'))
-        : null;
-
-    return {
-        sourceKey: observations[0].sourceKey,
-        latestAtMs: latest.timeMs,
-        latestValue: latest.value,
-        currentMedian,
-        baselineMedian,
-        currentSampleCount: current.length,
-        baselineSampleCount: baseline.length,
-        deltaPct,
-        trend,
     };
 }
 
@@ -1447,18 +1714,6 @@ export function buildTrainingSummaryMetricPayload(
         window.moderateSeconds += (zones[2] || 0) + (zones[3] || 0);
         window.hardSeconds += (zones[4] || 0) + (zones[5] || 0) + (zones[6] || 0);
 
-        const sourceKey = resolveTrainingSourceKey(eventData);
-        const capacities: Array<[TrainingCapacityKind, string]> = [
-            ['vo2Max', DataVO2Max.type],
-            ['ftp', DataFTP.type],
-            ['criticalPower', DataCriticalPower.type],
-        ];
-        capacities.forEach(([kind, statType]) => {
-            const value = toFinitePositiveNumber(resolveRawStatNumericValue(eventData, statType));
-            if (value !== null) {
-                accumulator.capacities[kind].push({ sourceKey, timeMs: startTimeMs, value });
-            }
-        });
         sourceEventCount += 1;
     });
 
@@ -1473,9 +1728,6 @@ export function buildTrainingSummaryMetricPayload(
                 baselineEndDayMs,
                 TRAINING_SUMMARY_CURRENT_WINDOW_DAYS / TRAINING_SUMMARY_BASELINE_WINDOW_DAYS,
             ),
-            vo2Max: buildTrainingCapacityMetric(accumulator.capacities.vo2Max, currentStartDayMs, baselineStartDayMs, baselineEndDayMs),
-            ftp: buildTrainingCapacityMetric(accumulator.capacities.ftp, currentStartDayMs, baselineStartDayMs, baselineEndDayMs),
-            criticalPower: buildTrainingCapacityMetric(accumulator.capacities.criticalPower, currentStartDayMs, baselineStartDayMs, baselineEndDayMs),
         };
     });
 
@@ -2303,6 +2555,10 @@ const DERIVED_METRIC_BUILD_REGISTRY: Record<DerivedMetricKind, DerivedMetricBuil
         sourceDependencies: ['formDocs'],
         build: (context) => context.getTrainingSummaryBuildResult(),
     },
+    [DERIVED_METRIC_KINDS.TrainingCapacity]: {
+        sourceDependencies: ['formDocs'],
+        build: (context) => context.getTrainingCapacityBuildResult(),
+    },
     [DERIVED_METRIC_KINDS.PowerCurve]: {
         sourceDependencies: ['formDocs'],
         build: (context) => context.getPowerCurveBuildResult(),
@@ -2334,6 +2590,7 @@ function createDerivedMetricBuildExecutionContext(
     let intensityDistributionBuildResultCache: DerivedMetricBuildResult<DerivedIntensityDistributionMetricPayload> | null = null;
     let efficiencyTrendBuildResultCache: DerivedMetricBuildResult<DerivedEfficiencyTrendMetricPayload> | null = null;
     let trainingSummaryBuildResultCache: DerivedMetricBuildResult<DerivedTrainingSummaryMetricPayload> | null = null;
+    let trainingCapacityBuildResultCache: DerivedMetricBuildResult<DerivedTrainingCapacityMetricPayload> | null = null;
     let powerCurveBuildResultCache: DerivedMetricBuildResult<DerivedPowerCurveMetricPayload> | null = null;
     let trainingBuildComparisonBuildResultCache: DerivedMetricBuildResult<DerivedTrainingBuildComparisonMetricPayload> | null = null;
 
@@ -2403,6 +2660,18 @@ function createDerivedMetricBuildExecutionContext(
         return powerCurveBuildResultCache;
     };
 
+    const getTrainingCapacityBuildResult = (): DerivedMetricBuildResult<DerivedTrainingCapacityMetricPayload> => {
+        if (trainingCapacityBuildResultCache) {
+            return trainingCapacityBuildResultCache;
+        }
+        trainingCapacityBuildResultCache = buildTrainingCapacityMetricPayload(
+            formDocs,
+            getPowerCurveBuildResult().payload,
+            nowMs,
+        );
+        return trainingCapacityBuildResultCache;
+    };
+
     const getTrainingBuildComparisonBuildResult = (): DerivedMetricBuildResult<DerivedTrainingBuildComparisonMetricPayload> => {
         if (trainingBuildComparisonBuildResultCache) {
             return trainingBuildComparisonBuildResultCache;
@@ -2425,6 +2694,7 @@ function createDerivedMetricBuildExecutionContext(
         getIntensityDistributionBuildResult,
         getEfficiencyTrendBuildResult,
         getTrainingSummaryBuildResult,
+        getTrainingCapacityBuildResult,
         getPowerCurveBuildResult,
         getTrainingBuildComparisonBuildResult,
     };

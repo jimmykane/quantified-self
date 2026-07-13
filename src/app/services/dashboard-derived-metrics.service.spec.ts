@@ -54,6 +54,7 @@ describe('DashboardDerivedMetricsService', () => {
     efficiencyTrend: null,
     trainingSummary: null,
     trainingBuildComparison: null,
+    trainingCapacity: null,
     powerCurve: null,
     formStatus: 'missing',
     recoveryNowStatus: 'missing',
@@ -70,6 +71,7 @@ describe('DashboardDerivedMetricsService', () => {
     efficiencyTrendStatus: 'missing',
     trainingSummaryStatus: 'missing',
     trainingBuildComparisonStatus: 'missing',
+    trainingCapacityStatus: 'missing',
     powerCurveStatus: 'missing',
   });
 
@@ -376,6 +378,53 @@ describe('DashboardDerivedMetricsService', () => {
     expect(state.powerCurveStatus).toBe('stale');
   });
 
+  it('maps a valid Training capacity snapshot and marks malformed ready payloads stale', async () => {
+    const uid = 'user-1';
+    const today = new Date();
+    const asOfDayMs = Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate());
+    const emptyModel = {
+      status: 'insufficient-evidence' as const,
+      valueWatts: null,
+      valueWattsPerKg: null,
+      wPrimeJoules: null,
+      confidence: null,
+      windowDays: 90,
+      sourceEventCount: 0,
+      anchorPointCount: 0,
+      minDurationSeconds: null,
+      maxDurationSeconds: null,
+      rSquared: null,
+      normalizedRmse: null,
+    };
+    const validPayload = {
+      dayBoundary: 'UTC',
+      asOfDayMs,
+      excludesMergedEvents: true,
+      disciplines: [
+        { discipline: 'running', ftpSetting: null, importedVo2Max: null, modeledCriticalPower: emptyModel },
+        { discipline: 'cycling', ftpSetting: null, importedVo2Max: null, modeledCriticalPower: emptyModel },
+      ],
+    };
+    hoisted.docMock.mockImplementation((_firestore, ...segments: string[]) => ({ path: segments.join('/') }));
+    hoisted.docDataMock.mockReturnValue(of({
+      status: 'ready',
+      schemaVersion: DERIVED_METRIC_SCHEMA_VERSION,
+      payload: validPayload,
+    }));
+
+    const state = await firstValueFrom(service.watch({ uid }, {
+      metricKinds: [DERIVED_METRIC_KINDS.TrainingCapacity],
+    }));
+
+    expect(state.trainingCapacityStatus).toBe('ready');
+    expect(state.trainingCapacity?.disciplines.map(item => item.discipline)).toEqual(['running', 'cycling']);
+    expect((service as any).resolveSnapshotStatus(DERIVED_METRIC_KINDS.TrainingCapacity, {
+      status: 'ready',
+      schemaVersion: DERIVED_METRIC_SCHEMA_VERSION,
+      payload: { ...validPayload, disciplines: validPayload.disciplines.slice(0, 1) },
+    })).toBe('stale');
+  });
+
   it('marks a ready build comparison stale when its current window is from yesterday', () => {
     vi.useFakeTimers();
     try {
@@ -574,7 +623,10 @@ describe('DashboardDerivedMetricsService', () => {
 
     expect(mockFunctionsService.call).toHaveBeenCalledTimes(2);
     expect(mockFunctionsService.call).toHaveBeenLastCalledWith<EnsureDerivedMetricsRequest, unknown>('ensureDerivedMetrics', {
-      metricKinds: [DERIVED_METRIC_KINDS.TrainingBuildComparison],
+      metricKinds: [
+        DERIVED_METRIC_KINDS.TrainingCapacity,
+        DERIVED_METRIC_KINDS.TrainingBuildComparison,
+      ],
     });
     resolveDashboardProbe?.({ data: { accepted: true } });
   });

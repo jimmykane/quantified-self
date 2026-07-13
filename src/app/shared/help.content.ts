@@ -150,13 +150,16 @@ export const HELP_SECTIONS: HelpSection[] = [
 
 ### Training workspace
 
-- **Training** has a fixed analytical layout rather than draggable dashboard tiles: a **28-day status** compared with your usual training, **Notable changes**, **Load trajectory**, **Training mix**, and **Capacity evidence**.
+- **Training** has a fixed analytical layout rather than draggable dashboard tiles: a **28-day status** compared with your usual training, **Notable changes**, **Load trajectory**, **Training mix**, and **Settings vs recent evidence**.
 - **Best build vs now** is a curated Training comparison for running and cycling. Set one saved benchmark per sport from a manual end date, a prior event tagged exactly **Race** (case-insensitive), or another eligible historical event. Tagged races are shown first; selecting another event clearly adds the **Race** tag and saves the benchmark together. The picker identifies its latest 100 historical events by distance, duration, and TSS when available, and can order them by latest, longest, or highest load. An event is only an anchor: its workload is excluded from the benchmark.
 - Choose an 8, 10, or 12-week build (12 weeks by default). The saved benchmark must finish before the matching current window, so comparisons never overlap. Merged events are excluded; missing TSS, zones, power, or heart-rate data remains unavailable instead of being counted as zero.
 - Training Mix compares the latest 28 days with a normalized 84-day baseline for running and cycling. Running includes running, trail running, treadmill, and indoor running; cycling includes cycling, mountain biking, and indoor cycling.
 - When that derived comparison is missing or rebuilding, Training says it is preparing rather than showing a zero-session result. A confirmed empty state means no eligible running or cycling session was found in the latest 28 days.
-- Capacity evidence is separated by activity family and source. **Device VO2 Max** is shown as a labelled personal device trend, never as a readiness score. FTP and critical power follow the same source rule.
-- Missing or mixed device/provider sources show no capacity trend. Training does not infer LT1/LT2, race readiness, a universal athlete score, or workout-execution scoring.
+- Capacity markers are separated by sport, meaning, source, and time window. **FTP setting** is the latest positive FTP imported with an eligible activity; repeated carried values are deduplicated and shown with when that setting was first and last seen. A value that exactly matches the session-derived estimate of 95% of that activity's 20-minute best is not presented as an imported setting.
+- **Modeled critical power** comes from the aggregate best 3–20 minute power curve over the latest 90 days, never from one activity's Critical Power field. It appears only when the curve covers the required durations without large interpolation gaps and passes fit-quality checks. The fit-quality label and number of activities with usable power curves stay visible; neither is a guarantee that every effort was maximal.
+- FTP and modeled critical power are interpreted as setting versus recent performance evidence. A lower model means recent efforts have not validated the setting; it does not by itself mean fitness declined, especially when the window lacks recent maximal efforts.
+- **Imported VO₂ max** is a separate aerobic marker, never a readiness score. Training does not call it a lab result or compare it numerically with power thresholds unless the source provides that methodological provenance.
+- Relative modeled power is withheld when its anchors imply inconsistent body weights. Other missing or unreliable inputs also remain explicit. Training does not infer LT1/LT2, race readiness, a universal athlete score, or workout-execution scoring.
 
 ### Reorder dashboard tiles
 

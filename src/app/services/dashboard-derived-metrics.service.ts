@@ -18,6 +18,7 @@ import type {
   DashboardRampRateContext,
   DashboardTrainingSummaryContext,
   DashboardTrainingBuildComparisonContext,
+  DashboardTrainingCapacityContext,
 } from '../helpers/dashboard-derived-metrics.helper';
 import {
   resolveDashboardAcwrContext,
@@ -33,6 +34,7 @@ import {
   resolveDashboardRampRateContext,
   resolveDashboardTrainingSummaryContext,
   resolveDashboardTrainingBuildComparisonContext,
+  resolveDashboardTrainingCapacityContext,
 } from '../helpers/dashboard-derived-metrics.helper';
 import type { DashboardRecoveryNowContext } from '../helpers/dashboard-recovery-now.helper';
 import { resolveDashboardPowerCurveMetricPayload } from '../helpers/dashboard-power-curve.helper';
@@ -67,6 +69,7 @@ export interface DashboardDerivedMetricsState {
   efficiencyTrend: DashboardEfficiencyTrendContext | null;
   trainingSummary: DashboardTrainingSummaryContext | null;
   trainingBuildComparison: DashboardTrainingBuildComparisonContext | null;
+  trainingCapacity: DashboardTrainingCapacityContext | null;
   powerCurve: DerivedPowerCurveMetricPayload | null;
   formStatus: DashboardDerivedMetricStatus;
   recoveryNowStatus: DashboardDerivedMetricStatus;
@@ -83,6 +86,7 @@ export interface DashboardDerivedMetricsState {
   efficiencyTrendStatus: DashboardDerivedMetricStatus;
   trainingSummaryStatus: DashboardDerivedMetricStatus;
   trainingBuildComparisonStatus: DashboardDerivedMetricStatus;
+  trainingCapacityStatus: DashboardDerivedMetricStatus;
   powerCurveStatus: DashboardDerivedMetricStatus;
 }
 
@@ -103,6 +107,7 @@ export function createDashboardDerivedMetricsMissingState(): DashboardDerivedMet
     efficiencyTrend: null,
     trainingSummary: null,
     trainingBuildComparison: null,
+    trainingCapacity: null,
     powerCurve: null,
     formStatus: 'missing',
     recoveryNowStatus: 'missing',
@@ -119,6 +124,7 @@ export function createDashboardDerivedMetricsMissingState(): DashboardDerivedMet
     efficiencyTrendStatus: 'missing',
     trainingSummaryStatus: 'missing',
     trainingBuildComparisonStatus: 'missing',
+    trainingCapacityStatus: 'missing',
     powerCurveStatus: 'missing',
   };
 }
@@ -142,6 +148,7 @@ type DerivedMetricStateContextKey =
   | 'efficiencyTrend'
   | 'trainingSummary'
   | 'trainingBuildComparison'
+  | 'trainingCapacity'
   | 'powerCurve';
 
 type DerivedMetricStateStatusKey =
@@ -160,6 +167,7 @@ type DerivedMetricStateStatusKey =
   | 'efficiencyTrendStatus'
   | 'trainingSummaryStatus'
   | 'trainingBuildComparisonStatus'
+  | 'trainingCapacityStatus'
   | 'powerCurveStatus';
 
 interface DerivedMetricStateDescriptor {
@@ -171,11 +179,12 @@ interface DerivedMetricStateDescriptor {
 
 const ALL_DERIVED_METRIC_KINDS = Object.values(DERIVED_METRIC_KINDS) as DerivedMetricKind[];
 
-// Best Build vs Now is a curated Training-only insight. Keep it out of the
-// dashboard's subscriptions and freshness probes so opening a dashboard neither
-// creates a hidden dependency nor queues an otherwise unnecessary rebuild.
+// These are curated Training-only insights. Keep them out of the dashboard's
+// subscriptions and freshness probes so opening a dashboard neither creates a
+// hidden dependency nor queues an otherwise unnecessary rebuild.
 const DASHBOARD_DERIVED_METRIC_KINDS = ALL_DERIVED_METRIC_KINDS.filter(
-  kind => kind !== DERIVED_METRIC_KINDS.TrainingBuildComparison,
+  kind => kind !== DERIVED_METRIC_KINDS.TrainingBuildComparison
+    && kind !== DERIVED_METRIC_KINDS.TrainingCapacity,
 );
 
 export const TRAINING_WORKSPACE_DERIVED_METRIC_KINDS = [...ALL_DERIVED_METRIC_KINDS];
@@ -282,6 +291,11 @@ export class DashboardDerivedMetricsService {
         contextKey: 'trainingBuildComparison',
         statusKey: 'trainingBuildComparisonStatus',
         resolveContext: (snapshot) => resolveDashboardTrainingBuildComparisonContext(this.resolveSnapshotPayload(snapshot)),
+      },
+      [DERIVED_METRIC_KINDS.TrainingCapacity]: {
+        contextKey: 'trainingCapacity',
+        statusKey: 'trainingCapacityStatus',
+        resolveContext: (snapshot) => resolveDashboardTrainingCapacityContext(this.resolveSnapshotPayload(snapshot)),
       },
       [DERIVED_METRIC_KINDS.PowerCurve]: {
         contextKey: 'powerCurve',
@@ -466,6 +480,14 @@ export class DashboardDerivedMetricsService {
       status === 'ready'
       && metricKind === DERIVED_METRIC_KINDS.TrainingBuildComparison
       && !resolveDashboardTrainingBuildComparisonContext(this.resolveSnapshotPayload(snapshot))
+    ) {
+      return 'stale';
+    }
+
+    if (
+      status === 'ready'
+      && metricKind === DERIVED_METRIC_KINDS.TrainingCapacity
+      && !resolveDashboardTrainingCapacityContext(this.resolveSnapshotPayload(snapshot))
     ) {
       return 'stale';
     }

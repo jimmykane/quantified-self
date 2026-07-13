@@ -15,6 +15,7 @@ import {
   resolveDashboardRampRateContext,
   resolveDashboardTrainingSummaryContext,
   resolveDashboardTrainingBuildComparisonContext,
+  resolveDashboardTrainingCapacityContext,
 } from './dashboard-derived-metrics.helper';
 
 describe('dashboard-derived-metrics.helper', () => {
@@ -197,7 +198,7 @@ describe('dashboard-derived-metrics.helper', () => {
     expect(context?.trend8Weeks[0]).toEqual({ time: Date.UTC(2025, 11, 1), value: 1.7 });
   });
 
-  it('normalizes source-separated training summary context without inventing a capacity trend', () => {
+  it('normalizes the training summary without mixing in capacity markers', () => {
     const context = resolveDashboardTrainingSummaryContext({
       asOfDayMs: Date.UTC(2026, 6, 10),
       currentWindowDays: 28,
@@ -212,18 +213,112 @@ describe('dashboard-derived-metrics.helper', () => {
           periodDays: 28, windowStartDayMs: Date.UTC(2026, 2, 21), windowEndDayMs: Date.UTC(2026, 5, 12),
           activityCount: 3, durationSeconds: 10_800, easySeconds: 7_200, moderateSeconds: 2_400, hardSeconds: 1_200,
         },
-        vo2Max: {
-          sourceKey: null, latestAtMs: Date.UTC(2026, 6, 8), latestValue: 51,
-          currentMedian: null, baselineMedian: null, currentSampleCount: 1, baselineSampleCount: 2,
-          deltaPct: null, trend: null,
-        },
-        ftp: null,
-        criticalPower: null,
       }],
     });
 
     expect(context?.disciplines[0]?.current28d.activityCount).toBe(4);
-    expect(context?.disciplines[0]?.vo2Max).toMatchObject({ sourceKey: null, latestValue: 51, trend: null });
+    expect(context?.disciplines[0]).not.toHaveProperty('vo2Max');
+  });
+
+  it('normalizes imported capacity markers separately from modeled critical power', () => {
+    const context = resolveDashboardTrainingCapacityContext({
+      dayBoundary: 'UTC',
+      asOfDayMs: Date.UTC(2026, 6, 13),
+      excludesMergedEvents: true,
+      disciplines: [{
+        discipline: 'running',
+        ftpSetting: null,
+        importedVo2Max: {
+          kind: 'vo2-max', value: 55.9, sourceKey: 'garmin', provenance: 'imported-activity-stat',
+          firstSeenAtMs: Date.UTC(2026, 0, 1), lastSeenAtMs: Date.UTC(2026, 6, 12), observationCount: 14,
+          previousValue: null, previousAtMs: null, previousSourceKey: null, changePct: null,
+        },
+        modeledCriticalPower: {
+          status: 'insufficient-evidence', valueWatts: null, valueWattsPerKg: null, wPrimeJoules: null,
+          confidence: null, windowDays: 90, sourceEventCount: 0, anchorPointCount: 0,
+          minDurationSeconds: null, maxDurationSeconds: null, rSquared: null, normalizedRmse: null,
+        },
+      }, {
+        discipline: 'cycling',
+        ftpSetting: {
+          kind: 'ftp-setting', value: 222, sourceKey: 'garmin', provenance: 'imported-activity-stat',
+          firstSeenAtMs: Date.UTC(2025, 10, 1), lastSeenAtMs: Date.UTC(2026, 6, 12), observationCount: 28,
+          previousValue: 215, previousAtMs: Date.UTC(2025, 9, 30), previousSourceKey: 'garmin', changePct: 3.26,
+        },
+        importedVo2Max: null,
+        modeledCriticalPower: {
+          status: 'ready', valueWatts: 240, valueWattsPerKg: 3.2, wPrimeJoules: 18_000,
+          confidence: 'high', windowDays: 90, sourceEventCount: 5, anchorPointCount: 5,
+          minDurationSeconds: 180, maxDurationSeconds: 1_200, rSquared: 0.99, normalizedRmse: 0.02,
+        },
+      }],
+    });
+
+    expect(context?.disciplines[0].importedVo2Max?.value).toBe(55.9);
+    expect(context?.disciplines[1].ftpSetting).toMatchObject({ value: 222, observationCount: 28 });
+    expect(context?.disciplines[1].modeledCriticalPower).toMatchObject({
+      status: 'ready', valueWatts: 240, confidence: 'high', sourceEventCount: 5,
+    });
+  });
+
+  it('rejects malformed capacity snapshots so they can self-heal', () => {
+    const emptyDiscipline = (discipline: 'running' | 'cycling') => ({
+      discipline,
+      ftpSetting: null,
+      importedVo2Max: null,
+      modeledCriticalPower: {
+        status: 'insufficient-evidence', valueWatts: null, valueWattsPerKg: null, wPrimeJoules: null,
+        confidence: null, windowDays: 90, sourceEventCount: 0, anchorPointCount: 0,
+        minDurationSeconds: null, maxDurationSeconds: null, rSquared: null, normalizedRmse: null,
+      },
+    });
+
+    expect(resolveDashboardTrainingCapacityContext({
+      dayBoundary: 'UTC', asOfDayMs: Date.UTC(2026, 6, 13), excludesMergedEvents: true,
+      disciplines: [emptyDiscipline('running'), emptyDiscipline('running')],
+    })).toBeNull();
+    expect(resolveDashboardTrainingCapacityContext({
+      dayBoundary: 'UTC', asOfDayMs: Date.UTC(2026, 6, 13), excludesMergedEvents: true,
+      disciplines: [emptyDiscipline('running'), {
+        ...emptyDiscipline('cycling'),
+        modeledCriticalPower: {
+          ...emptyDiscipline('cycling').modeledCriticalPower,
+          status: 'ready', valueWatts: 240, confidence: 'low',
+        },
+      }],
+    })).toBeNull();
+    expect(resolveDashboardTrainingCapacityContext({
+      dayBoundary: 'UTC', asOfDayMs: Date.UTC(2026, 6, 13), excludesMergedEvents: true,
+      disciplines: [{
+        ...emptyDiscipline('running'),
+        modeledCriticalPower: {
+          ...emptyDiscipline('running').modeledCriticalPower,
+          valueWatts: 200,
+        },
+      }, emptyDiscipline('cycling')],
+    })).toBeNull();
+    expect(resolveDashboardTrainingCapacityContext({
+      dayBoundary: 'UTC', asOfDayMs: Date.UTC(2026, 6, 13), excludesMergedEvents: true,
+      disciplines: [emptyDiscipline('running'), {
+        ...emptyDiscipline('cycling'),
+        modeledCriticalPower: {
+          status: 'ready', valueWatts: 240, valueWattsPerKg: null, wPrimeJoules: 18_000,
+          confidence: 'high', windowDays: 90, sourceEventCount: 1, anchorPointCount: 5,
+          minDurationSeconds: 180, maxDurationSeconds: 1_200, rSquared: 0.99, normalizedRmse: 0.02,
+        },
+      }],
+    })).toBeNull();
+    expect(resolveDashboardTrainingCapacityContext({
+      dayBoundary: 'UTC', asOfDayMs: Date.UTC(2026, 6, 13), excludesMergedEvents: true,
+      disciplines: [emptyDiscipline('running'), {
+        ...emptyDiscipline('cycling'),
+        modeledCriticalPower: {
+          ...emptyDiscipline('cycling').modeledCriticalPower,
+          minDurationSeconds: 1_200,
+          maxDurationSeconds: 180,
+        },
+      }],
+    })).toBeNull();
   });
 
   it('normalizes separate sport build comparisons and preserves unavailable optional metrics', () => {

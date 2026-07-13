@@ -4,10 +4,13 @@ import { AppThemes, DataDistance, type UserUnitSettingsInterface } from '@sports
 import { Subscription } from 'rxjs';
 import { AppAuthService } from '../../authentication/app.auth.service';
 import type {
-  DashboardTrainingCapacityMetric,
   DashboardTrainingBuildComparisonDiscipline,
   DashboardTrainingDisciplineSummary,
 } from '../../helpers/dashboard-derived-metrics.helper';
+import {
+  buildTrainingCapacityViewModels,
+  type TrainingCapacityDisciplineViewModel,
+} from '../../helpers/training-capacity.helper';
 import { resolveUnitAwareDisplayStat } from '@shared/unit-aware-display';
 import {
   getTrainingBuildBenchmarkSelectionKey,
@@ -46,14 +49,6 @@ import {
 } from '../../services/dashboard-derived-metrics.service';
 import type { SleepSession } from '@shared/sleep';
 
-interface CapacityMetricViewModel {
-  label: string;
-  metric: DashboardTrainingCapacityMetric;
-  latestValueText: string;
-  trendLabel: string;
-  sourceKey: string | null;
-}
-
 interface TrainingMixDisciplineViewModel {
   summary: DashboardTrainingDisciplineSummary;
   currentZoneSeconds: number;
@@ -66,11 +61,6 @@ interface TrainingMixDisciplineViewModel {
   baselineEasyText: string;
   baselineModerateText: string;
   baselineHardText: string;
-}
-
-interface TrainingCapacityDisciplineViewModel {
-  summary: DashboardTrainingDisciplineSummary;
-  metrics: CapacityMetricViewModel[];
 }
 
 interface TrainingStatusViewModel {
@@ -258,20 +248,6 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
     return `${this.formatNumber((numerator / denominator) * 100, 0)}%`;
   }
 
-  private resolveCapacityMetrics(discipline: DashboardTrainingDisciplineSummary): CapacityMetricViewModel[] {
-    return [
-      { label: 'Device VO2 Max', metric: discipline.vo2Max },
-      { label: 'FTP', metric: discipline.ftp },
-      { label: 'Critical power', metric: discipline.criticalPower },
-    ].filter((item): item is { label: string; metric: DashboardTrainingCapacityMetric } => item.metric !== null)
-      .map((item) => ({
-        ...item,
-        latestValueText: this.formatNumber(item.metric.latestValue),
-        trendLabel: resolveCapacityTrendLabel(item.metric),
-        sourceKey: item.metric.sourceKey,
-      }));
-  }
-
   private resetWorkspace(): void {
     const activeDialogRef = this.trainingBuildBenchmarkDialogRef;
     this.trainingBuildBenchmarkDialogRef = null;
@@ -327,9 +303,7 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
         };
       })
       .filter(view => view.summary.current28d.activityCount > 0 || view.summary.baseline28d.activityCount > 0);
-    this.capacityDisciplines = summaries
-      .map((summary) => ({ summary, metrics: this.resolveCapacityMetrics(summary) }))
-      .filter(view => view.metrics.length > 0);
+    this.capacityDisciplines = buildTrainingCapacityViewModels(state.trainingCapacity);
     this.refreshTrainingBuildCards();
   }
 
@@ -783,17 +757,4 @@ function resolveTrainingZoneSeconds(
   summary: DashboardTrainingDisciplineSummary['current28d'],
 ): number {
   return summary.easySeconds + summary.moderateSeconds + summary.hardSeconds;
-}
-
-function resolveCapacityTrendLabel(metric: DashboardTrainingCapacityMetric): string {
-  if (metric.trend === 'improving') {
-    return 'Improving';
-  }
-  if (metric.trend === 'declining') {
-    return 'Declining';
-  }
-  if (metric.trend === 'stable') {
-    return 'Stable';
-  }
-  return 'No source-matched trend';
 }

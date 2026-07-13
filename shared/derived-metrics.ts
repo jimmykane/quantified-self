@@ -13,6 +13,7 @@ export const DERIVED_METRIC_KINDS = {
   IntensityDistribution: 'intensity_distribution',
   EfficiencyTrend: 'efficiency_trend',
   TrainingSummary: 'training_summary',
+  TrainingCapacity: 'training_capacity',
   PowerCurve: 'power_curve',
   TrainingBuildComparison: 'training_build_comparison',
 } as const;
@@ -34,6 +35,7 @@ export const DEFAULT_DERIVED_METRIC_KINDS: DerivedMetricKind[] = [
   DERIVED_METRIC_KINDS.IntensityDistribution,
   DERIVED_METRIC_KINDS.EfficiencyTrend,
   DERIVED_METRIC_KINDS.TrainingSummary,
+  DERIVED_METRIC_KINDS.TrainingCapacity,
   DERIVED_METRIC_KINDS.PowerCurve,
   DERIVED_METRIC_KINDS.TrainingBuildComparison,
 ];
@@ -53,6 +55,7 @@ export const PROJECTION_SENSITIVE_DERIVED_METRIC_KINDS: DerivedMetricKind[] = [
 // of the projection-only list used by the worker's Form-snapshot fast path.
 export const CALENDAR_SENSITIVE_DERIVED_METRIC_KINDS: DerivedMetricKind[] = [
   ...PROJECTION_SENSITIVE_DERIVED_METRIC_KINDS,
+  DERIVED_METRIC_KINDS.TrainingCapacity,
   DERIVED_METRIC_KINDS.TrainingBuildComparison,
 ];
 
@@ -382,8 +385,6 @@ export function getTrainingBuildBenchmarkSelectionKey(value: unknown): string | 
   return null;
 }
 
-export type DerivedTrainingCapacityTrend = 'improving' | 'stable' | 'declining';
-
 export interface DerivedTrainingSummaryWindow {
   periodDays: number;
   windowStartDayMs: number;
@@ -395,25 +396,10 @@ export interface DerivedTrainingSummaryWindow {
   hardSeconds: number;
 }
 
-export interface DerivedTrainingCapacityMetric {
-  sourceKey: string | null;
-  latestAtMs: number | null;
-  latestValue: number | null;
-  currentMedian: number | null;
-  baselineMedian: number | null;
-  currentSampleCount: number;
-  baselineSampleCount: number;
-  deltaPct: number | null;
-  trend: DerivedTrainingCapacityTrend | null;
-}
-
 export interface DerivedTrainingDisciplineSummary {
   discipline: DerivedTrainingDiscipline;
   current28d: DerivedTrainingSummaryWindow;
   baseline28d: DerivedTrainingSummaryWindow;
-  vo2Max: DerivedTrainingCapacityMetric | null;
-  ftp: DerivedTrainingCapacityMetric | null;
-  criticalPower: DerivedTrainingCapacityMetric | null;
 }
 
 export interface DerivedTrainingSummaryMetricPayload {
@@ -423,6 +409,54 @@ export interface DerivedTrainingSummaryMetricPayload {
   baselineWindowDays: number;
   disciplines: DerivedTrainingDisciplineSummary[];
   excludesMergedEvents: boolean;
+}
+
+export type DerivedTrainingCapacityImportedMetricKind = 'ftp-setting' | 'vo2-max';
+
+export interface DerivedTrainingCapacityImportedMetric {
+  kind: DerivedTrainingCapacityImportedMetricKind;
+  value: number;
+  sourceKey: string | null;
+  provenance: 'imported-activity-stat';
+  firstSeenAtMs: number;
+  lastSeenAtMs: number;
+  observationCount: number;
+  previousValue: number | null;
+  previousAtMs: number | null;
+  previousSourceKey: string | null;
+  changePct: number | null;
+}
+
+export type DerivedModeledCriticalPowerStatus = 'ready' | 'insufficient-evidence' | 'poor-fit';
+export type DerivedModeledCriticalPowerConfidence = 'high' | 'medium' | 'low' | null;
+
+export interface DerivedModeledCriticalPower {
+  status: DerivedModeledCriticalPowerStatus;
+  valueWatts: number | null;
+  valueWattsPerKg: number | null;
+  wPrimeJoules: number | null;
+  confidence: DerivedModeledCriticalPowerConfidence;
+  windowDays: 90;
+  sourceEventCount: number;
+  anchorPointCount: number;
+  minDurationSeconds: number | null;
+  maxDurationSeconds: number | null;
+  rSquared: number | null;
+  normalizedRmse: number | null;
+}
+
+export interface DerivedTrainingCapacityDiscipline {
+  discipline: DerivedTrainingDiscipline;
+  ftpSetting: DerivedTrainingCapacityImportedMetric | null;
+  importedVo2Max: DerivedTrainingCapacityImportedMetric | null;
+  modeledCriticalPower: DerivedModeledCriticalPower;
+}
+
+export interface DerivedTrainingCapacityMetricPayload {
+  dayBoundary: 'UTC';
+  asOfDayMs: number;
+  excludesMergedEvents: boolean;
+  disciplines: DerivedTrainingCapacityDiscipline[];
 }
 
 export interface DerivedTrainingBuildEventSuggestion {
@@ -547,6 +581,7 @@ export type DerivedFreshnessForecastMetricSnapshot = DerivedMetricSnapshotBase<D
 export type DerivedIntensityDistributionMetricSnapshot = DerivedMetricSnapshotBase<DerivedIntensityDistributionMetricPayload>;
 export type DerivedEfficiencyTrendMetricSnapshot = DerivedMetricSnapshotBase<DerivedEfficiencyTrendMetricPayload>;
 export type DerivedTrainingSummaryMetricSnapshot = DerivedMetricSnapshotBase<DerivedTrainingSummaryMetricPayload>;
+export type DerivedTrainingCapacityMetricSnapshot = DerivedMetricSnapshotBase<DerivedTrainingCapacityMetricPayload>;
 export type DerivedPowerCurveMetricSnapshot = DerivedMetricSnapshotBase<DerivedPowerCurveMetricPayload>;
 export type DerivedTrainingBuildComparisonMetricSnapshot = DerivedMetricSnapshotBase<DerivedTrainingBuildComparisonMetricPayload>;
 export type DerivedMetricSnapshot =
@@ -564,6 +599,7 @@ export type DerivedMetricSnapshot =
   | DerivedIntensityDistributionMetricSnapshot
   | DerivedEfficiencyTrendMetricSnapshot
   | DerivedTrainingSummaryMetricSnapshot
+  | DerivedTrainingCapacityMetricSnapshot
   | DerivedPowerCurveMetricSnapshot
   | DerivedTrainingBuildComparisonMetricSnapshot;
 

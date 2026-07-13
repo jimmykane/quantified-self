@@ -272,6 +272,16 @@ describe('resolveDerivedMetricSourceRequirements', () => {
         });
     });
 
+    it('uses the event source for the training capacity snapshot', async () => {
+        const { resolveDerivedMetricSourceRequirements } = await import('./derived-metrics.service');
+
+        expect(resolveDerivedMetricSourceRequirements([DERIVED_METRIC_KINDS.TrainingCapacity])).toEqual({
+            needsFormDocs: true,
+            needsRecoveryNowDocs: false,
+            needsTrainingBuildBenchmarkSettings: false,
+        });
+    });
+
     it('uses the event source for the Power Curve snapshot', async () => {
         const { resolveDerivedMetricSourceRequirements } = await import('./derived-metrics.service');
 
@@ -645,6 +655,291 @@ describe('buildPowerCurveMetricPayload', () => {
     });
 });
 
+describe('buildTrainingCapacityMetricPayload', () => {
+    const nowMs = Date.UTC(2026, 6, 10, 12, 0, 0);
+    const modeledCurve = [180, 300, 600, 900, 1200].map(duration => ({
+        duration,
+        power: 240 + (18_000 / duration),
+        wattsPerKg: 3.2 + (240 / duration),
+    }));
+    const createDoc = (
+        id: string,
+        dayMs: number,
+        overrides: Record<string, unknown> = {},
+        curve: unknown = modeledCurve,
+        creatorName = 'Edge 1050',
+    ) => ({
+        id,
+        data: () => ({
+            startDate: dayMs,
+            serviceName: 'Garmin',
+            creator: { name: creatorName },
+            stats: {
+                [DataActivityTypes.type]: [ActivityTypes.Cycling],
+                [DataDuration.type]: 3600,
+                [POWER_CURVE_STAT_TYPE]: curve,
+                ...overrides,
+            },
+        }),
+    });
+
+    it('deduplicates carried settings and models CP from the 90-day aggregate curve', async () => {
+        const { buildPowerCurveMetricPayload, buildTrainingCapacityMetricPayload } = await import('./derived-metrics.service');
+        const docs = [
+            createDoc('old-setting', Date.UTC(2026, 0, 1), {
+                [DataFTP.type]: 210,
+                [DataVO2Max.type]: 54,
+            }, null),
+            createDoc('new-setting', Date.UTC(2026, 1, 1), {
+                [DataFTP.type]: 222,
+                [DataVO2Max.type]: 55.9,
+            }, null),
+            createDoc('recent-one', Date.UTC(2026, 6, 1), {
+                [DataFTP.type]: 222,
+                [DataVO2Max.type]: 55.9,
+                [DataCriticalPower.type]: 120,
+            }),
+            createDoc('recent-two', Date.UTC(2026, 6, 5), {
+                [DataFTP.type]: 222,
+                [DataVO2Max.type]: 55.9,
+                [DataCriticalPower.type]: 500,
+            }),
+            createDoc('recent-three', Date.UTC(2026, 6, 8), {
+                [DataFTP.type]: 222,
+                [DataVO2Max.type]: 55.9,
+                [DataCriticalPower.type]: 100,
+            }),
+        ];
+        const powerCurve = buildPowerCurveMetricPayload(docs as never, nowMs);
+
+        const result = buildTrainingCapacityMetricPayload(docs as never, powerCurve.payload, nowMs);
+        const cycling = result.payload.disciplines.find(item => item.discipline === 'cycling');
+
+        expect(cycling?.ftpSetting).toMatchObject({
+            kind: 'ftp-setting',
+            value: 222,
+            sourceKey: 'garmin / edge 1050',
+            firstSeenAtMs: Date.UTC(2026, 1, 1),
+            lastSeenAtMs: Date.UTC(2026, 6, 8),
+            observationCount: 4,
+            previousValue: 210,
+            changePct: 5.71,
+        });
+        expect(cycling?.importedVo2Max).toMatchObject({
+            kind: 'vo2-max',
+            value: 55.9,
+            firstSeenAtMs: Date.UTC(2026, 1, 1),
+            observationCount: 4,
+            previousValue: 54,
+        });
+        expect(cycling?.modeledCriticalPower).toMatchObject({
+            status: 'ready',
+            valueWatts: 240,
+            valueWattsPerKg: 3.2,
+            wPrimeJoules: 18_000,
+            confidence: 'high',
+            sourceEventCount: 3,
+            anchorPointCount: 5,
+            rSquared: 1,
+            normalizedRmse: 0,
+        });
+    });
+
+    it('withholds modeled CP when the aggregate curve lacks long-duration evidence', async () => {
+        const { buildPowerCurveMetricPayload, buildTrainingCapacityMetricPayload } = await import('./derived-metrics.service');
+        const docs = [
+            createDoc('short-only', Date.UTC(2026, 6, 8), {
+                [DataCriticalPower.type]: 400,
+            }, [
+                { duration: 180, power: 350 },
+                { duration: 300, power: 310 },
+                { duration: 600, power: 275 },
+            ]),
+        ];
+        const powerCurve = buildPowerCurveMetricPayload(docs as never, nowMs);
+
+        const result = buildTrainingCapacityMetricPayload(docs as never, powerCurve.payload, nowMs);
+        const cycling = result.payload.disciplines.find(item => item.discipline === 'cycling');
+
+        expect(cycling?.modeledCriticalPower).toMatchObject({
+            status: 'insufficient-evidence',
+            valueWatts: null,
+            confidence: null,
+            sourceEventCount: 1,
+            anchorPointCount: 3,
+            minDurationSeconds: 180,
+            maxDurationSeconds: 600,
+        });
+    });
+
+    it('does not call a source change a comparable setting change', async () => {
+        const { buildPowerCurveMetricPayload, buildTrainingCapacityMetricPayload } = await import('./derived-metrics.service');
+        const docs = [
+            createDoc('garmin', Date.UTC(2026, 5, 1), { [DataFTP.type]: 210 }, null, 'Edge 1050'),
+            createDoc('wahoo', Date.UTC(2026, 6, 1), { [DataFTP.type]: 230 }, null, 'Wahoo Kickr'),
+        ];
+        const powerCurve = buildPowerCurveMetricPayload(docs as never, nowMs);
+
+        const result = buildTrainingCapacityMetricPayload(docs as never, powerCurve.payload, nowMs);
+        const cycling = result.payload.disciplines.find(item => item.discipline === 'cycling');
+
+        expect(cycling?.ftpSetting).toMatchObject({
+            value: 230,
+            sourceKey: 'garmin / wahoo kickr',
+            previousValue: 210,
+            previousSourceKey: 'garmin / edge 1050',
+            changePct: null,
+        });
+    });
+
+    it('keeps provider-only provenance when device metadata is unavailable', async () => {
+        const { buildPowerCurveMetricPayload, buildTrainingCapacityMetricPayload } = await import('./derived-metrics.service');
+        const docs = [createDoc('provider-only', Date.UTC(2026, 6, 8), { [DataFTP.type]: 222 }, null, '')];
+        const powerCurve = buildPowerCurveMetricPayload(docs as never, nowMs);
+
+        const result = buildTrainingCapacityMetricPayload(docs as never, powerCurve.payload, nowMs);
+        const cycling = result.payload.disciplines.find(item => item.discipline === 'cycling');
+
+        expect(cycling?.ftpSetting).toMatchObject({ sourceKey: 'garmin', value: 222 });
+    });
+
+    it('does not present a session-derived 20-minute FTP estimate as an imported setting', async () => {
+        const { buildPowerCurveMetricPayload, buildTrainingCapacityMetricPayload } = await import('./derived-metrics.service');
+        const docs = [createDoc('derived-ftp', Date.UTC(2026, 6, 8), {
+            [DataFTP.type]: Math.round(modeledCurve.find(point => point.duration === 1_200)!.power * 0.95),
+        })];
+        const powerCurve = buildPowerCurveMetricPayload(docs as never, nowMs);
+
+        const result = buildTrainingCapacityMetricPayload(docs as never, powerCurve.payload, nowMs);
+        const cycling = result.payload.disciplines.find(item => item.discipline === 'cycling');
+
+        expect(cycling?.ftpSetting).toBeNull();
+        expect(cycling?.modeledCriticalPower.status).toBe('ready');
+    });
+
+    it('resolves equal-timestamp imported settings deterministically by event id', async () => {
+        const { buildPowerCurveMetricPayload, buildTrainingCapacityMetricPayload } = await import('./derived-metrics.service');
+        const timestamp = Date.UTC(2026, 6, 8);
+        const docs = [
+            createDoc('setting-b', timestamp, { [DataFTP.type]: 220 }, null),
+            createDoc('setting-a', timestamp, { [DataFTP.type]: 210 }, null),
+        ];
+        const powerCurve = buildPowerCurveMetricPayload(docs as never, nowMs);
+
+        const result = buildTrainingCapacityMetricPayload(docs as never, powerCurve.payload, nowMs);
+        const cycling = result.payload.disciplines.find(item => item.discipline === 'cycling');
+
+        expect(cycling?.ftpSetting).toMatchObject({
+            value: 220,
+            previousValue: 210,
+            previousAtMs: timestamp,
+        });
+    });
+
+    it('uses activity groups for sport capacity and excludes merged events', async () => {
+        const { buildPowerCurveMetricPayload, buildTrainingCapacityMetricPayload } = await import('./derived-metrics.service');
+        const docs = [
+            createDoc('trail-run', Date.UTC(2026, 6, 7), {
+                [DataActivityTypes.type]: [ActivityTypes.TrailRunning],
+                [DataFTP.type]: 190,
+            }, null),
+            createDoc('mountain-bike', Date.UTC(2026, 6, 8), {
+                [DataActivityTypes.type]: ['Mountain Biking'],
+                [DataFTP.type]: 250,
+            }, null),
+            {
+                id: 'merged-ride',
+                data: () => ({
+                    isMerge: true,
+                    startDate: Date.UTC(2026, 6, 9),
+                    stats: {
+                        [DataActivityTypes.type]: [ActivityTypes.Cycling],
+                        [DataFTP.type]: 500,
+                    },
+                }),
+            },
+        ];
+        const powerCurve = buildPowerCurveMetricPayload(docs as never, nowMs);
+
+        const result = buildTrainingCapacityMetricPayload(docs as never, powerCurve.payload, nowMs);
+        const running = result.payload.disciplines.find(item => item.discipline === 'running');
+        const cycling = result.payload.disciplines.find(item => item.discipline === 'cycling');
+
+        expect(running?.ftpSetting?.value).toBe(190);
+        expect(cycling?.ftpSetting?.value).toBe(250);
+        expect(result.sourceEventCount).toBe(2);
+    });
+
+    it('ignores future settings and withholds an unreliable relative-power fit', async () => {
+        const { buildPowerCurveMetricPayload, buildTrainingCapacityMetricPayload } = await import('./derived-metrics.service');
+        const relativePower = [4, 3.4, 3.6, 3.1, 3.3];
+        const unreliableRelativeCurve = modeledCurve.map((point, index) => ({
+            ...point,
+            wattsPerKg: relativePower[index],
+        }));
+        const docs = [
+            createDoc('recent-one', Date.UTC(2026, 6, 1), { [DataFTP.type]: 222 }, unreliableRelativeCurve),
+            createDoc('recent-two', Date.UTC(2026, 6, 5), { [DataFTP.type]: 222 }, unreliableRelativeCurve),
+            createDoc('recent-three', Date.UTC(2026, 6, 8), { [DataFTP.type]: 222 }, unreliableRelativeCurve),
+            createDoc('future', Date.UTC(2026, 6, 20), { [DataFTP.type]: 300 }, modeledCurve),
+        ];
+        const powerCurve = buildPowerCurveMetricPayload(docs as never, nowMs);
+
+        const result = buildTrainingCapacityMetricPayload(docs as never, powerCurve.payload, nowMs);
+        const cycling = result.payload.disciplines.find(item => item.discipline === 'cycling');
+
+        expect(cycling?.ftpSetting).toMatchObject({ value: 222, observationCount: 3 });
+        expect(cycling?.modeledCriticalPower).toMatchObject({
+            status: 'ready',
+            valueWatts: 240,
+            valueWattsPerKg: null,
+        });
+    });
+
+    it('does not manufacture a model by interpolating across a sparse duration gap', async () => {
+        const { buildPowerCurveMetricPayload, buildTrainingCapacityMetricPayload } = await import('./derived-metrics.service');
+        const sparseCurve = modeledCurve.filter(point => point.duration === 180 || point.duration === 1_200);
+        const docs = [
+            createDoc('sparse-one', Date.UTC(2026, 6, 1), {}, sparseCurve),
+            createDoc('sparse-two', Date.UTC(2026, 6, 5), {}, sparseCurve),
+            createDoc('sparse-three', Date.UTC(2026, 6, 8), {}, sparseCurve),
+        ];
+        const powerCurve = buildPowerCurveMetricPayload(docs as never, nowMs);
+
+        const result = buildTrainingCapacityMetricPayload(docs as never, powerCurve.payload, nowMs);
+        const cycling = result.payload.disciplines.find(item => item.discipline === 'cycling');
+
+        expect(cycling?.modeledCriticalPower).toMatchObject({
+            status: 'insufficient-evidence',
+            valueWatts: null,
+            anchorPointCount: 2,
+        });
+    });
+
+    it('withholds W/kg when aggregate anchors imply inconsistent body weights', async () => {
+        const { buildPowerCurveMetricPayload, buildTrainingCapacityMetricPayload } = await import('./derived-metrics.service');
+        const inconsistentWeightCurve = modeledCurve.map(point => ({
+            ...point,
+            wattsPerKg: 3.2 + (180 / point.duration),
+        }));
+        const docs = [
+            createDoc('weight-one', Date.UTC(2026, 6, 1), {}, inconsistentWeightCurve),
+            createDoc('weight-two', Date.UTC(2026, 6, 5), {}, inconsistentWeightCurve),
+            createDoc('weight-three', Date.UTC(2026, 6, 8), {}, inconsistentWeightCurve),
+        ];
+        const powerCurve = buildPowerCurveMetricPayload(docs as never, nowMs);
+
+        const result = buildTrainingCapacityMetricPayload(docs as never, powerCurve.payload, nowMs);
+        const cycling = result.payload.disciplines.find(item => item.discipline === 'cycling');
+
+        expect(cycling?.modeledCriticalPower).toMatchObject({
+            status: 'ready',
+            valueWatts: 240,
+            valueWattsPerKg: null,
+        });
+    });
+});
+
 describe('buildTrainingSummaryMetricPayload', () => {
     const nowMs = Date.UTC(2026, 6, 10, 12, 0, 0);
     const createDoc = (data: Record<string, unknown>) => ({ data: () => data });
@@ -708,100 +1003,10 @@ describe('buildTrainingSummaryMetricPayload', () => {
         expect(result.sourceEventCount).toBe(4);
         expect(running?.current28d).toMatchObject({ activityCount: 1, durationSeconds: 3600, easySeconds: 1200, moderateSeconds: 1200, hardSeconds: 600 });
         expect(running?.baseline28d).toMatchObject({ activityCount: 0.67, durationSeconds: 2400, easySeconds: 800, moderateSeconds: 800, hardSeconds: 400 });
-        expect(running?.vo2Max).toMatchObject({ sourceKey: 'garmin device', currentMedian: 51, baselineMedian: 49.5, trend: 'improving' });
-        expect(running?.ftp).toMatchObject({ sourceKey: 'garmin device', currentMedian: 250, baselineMedian: 235, trend: 'improving' });
         expect(cycling?.current28d.activityCount).toBe(1);
-        expect(cycling?.vo2Max).toBeNull();
-        expect(cycling?.ftp).toMatchObject({ sourceKey: 'wahoo device', latestValue: 270, trend: null });
-    });
-
-    it('does not fabricate a capacity trend when the available source changes or the data is sparse', async () => {
-        const { buildTrainingSummaryMetricPayload } = await import('./derived-metrics.service');
-        const currentRunningDay = Date.UTC(2026, 6, 8);
-        const baselineRunningDay = Date.UTC(2026, 5, 1);
-        const docs = [
-            createEvent(currentRunningDay, 'Indoor Running', 'Garmin', { [DataVO2Max.type]: 52 }),
-            createEvent(baselineRunningDay, 'Running', 'Suunto', { [DataVO2Max.type]: 45 }),
-        ];
-
-        const result = buildTrainingSummaryMetricPayload(docs as never, nowMs);
-        const running = result.payload.disciplines.find(summary => summary.discipline === 'running');
-
-        expect(running?.vo2Max).toMatchObject({
-            sourceKey: null,
-            latestValue: 52,
-            currentMedian: null,
-            baselineMedian: null,
-            deltaPct: null,
-            trend: null,
-        });
-    });
-
-    it('keeps capacity evidence separate when the provider is the same but the device changes', async () => {
-        const { buildTrainingSummaryMetricPayload } = await import('./derived-metrics.service');
-        const currentRunningDay = Date.UTC(2026, 6, 8);
-        const baselineRunningDay = Date.UTC(2026, 5, 1);
-        const docs = [
-            createEvent(
-                currentRunningDay,
-                'Running',
-                'Garmin API',
-                { [DataVO2Max.type]: 52 },
-                { creator: { name: 'Forerunner 965' } },
-            ),
-            createEvent(
-                baselineRunningDay,
-                'Running',
-                'Garmin API',
-                { [DataVO2Max.type]: 48 },
-                { creator: { name: 'Fenix 7' } },
-            ),
-        ];
-
-        const result = buildTrainingSummaryMetricPayload(docs as never, nowMs);
-        const running = result.payload.disciplines.find(summary => summary.discipline === 'running');
-
-        expect(running?.vo2Max).toMatchObject({
-            sourceKey: null,
-            latestValue: 52,
-            currentMedian: null,
-            baselineMedian: null,
-            trend: null,
-        });
-    });
-
-    it('does not infer a capacity trend when the device source is unavailable', async () => {
-        const { buildTrainingSummaryMetricPayload } = await import('./derived-metrics.service');
-        const currentRunningDay = Date.UTC(2026, 6, 8);
-        const baselineRunningDay = Date.UTC(2026, 5, 1);
-        const docs = [
-            createEvent(
-                currentRunningDay,
-                'Running',
-                'Garmin API',
-                { [DataVO2Max.type]: 52 },
-                { creator: {} },
-            ),
-            createEvent(
-                baselineRunningDay,
-                'Running',
-                'Garmin API',
-                { [DataVO2Max.type]: 48 },
-                { creator: {} },
-            ),
-        ];
-
-        const result = buildTrainingSummaryMetricPayload(docs as never, nowMs);
-        const running = result.payload.disciplines.find(summary => summary.discipline === 'running');
-
-        expect(running?.vo2Max).toMatchObject({
-            sourceKey: null,
-            latestValue: 52,
-            currentMedian: null,
-            baselineMedian: null,
-            deltaPct: null,
-            trend: null,
-        });
+        expect(running).not.toHaveProperty('vo2Max');
+        expect(running).not.toHaveProperty('ftp');
+        expect(cycling).not.toHaveProperty('criticalPower');
     });
 });
 

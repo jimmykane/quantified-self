@@ -57,12 +57,12 @@ describe('TrainingWorkspaceComponent', () => {
     expect(element.textContent).toContain('Notable changes');
     expect(element.textContent).toContain('How your load is changing');
     expect(element.textContent).toContain('Where your effort is going');
-    expect(element.textContent).toContain('Progress with provenance');
+    expect(element.textContent).toContain('Settings vs recent evidence');
     expect(element.querySelector('app-tile-chart')).toBeNull();
     expect(element.querySelector('.training-mix-panel')).toBeNull();
     expect(element.querySelector('.training-capacity-panel')).toBeNull();
     expect(element.textContent).toContain('No eligible running or cycling sessions in the last 28 days.');
-    expect(element.textContent).toContain('No capacity trend yet.');
+    expect(element.textContent).toContain('Preparing capacity evidence');
     expect(derivedMetrics.ensureForDashboard).toHaveBeenCalledTimes(1);
   });
 
@@ -87,13 +87,72 @@ describe('TrainingWorkspaceComponent', () => {
     expect(fixture.componentInstance.isLoading).toBe(false);
     expect(fixture.nativeElement.querySelector('#training-title')?.textContent?.trim()).toBe('Training');
     expect(fixture.nativeElement.textContent).toContain('Reading your recent running and cycling sessions.');
-    expect(fixture.nativeElement.querySelectorAll('[role="status"]').length).toBe(1);
+    expect(fixture.nativeElement.querySelectorAll('[role="status"]').length).toBe(2);
     expect(fixture.nativeElement.textContent).not.toContain('What changed from your normal');
     expect(derivedMetrics.ensureForDashboard).toHaveBeenCalledWith(
       { uid: 'user-1' },
       expect.objectContaining({ trainingSummaryStatus: 'missing' }),
       { metricKinds: TRAINING_WORKSPACE_DERIVED_METRIC_KINDS },
     );
+  });
+
+  it('renders FTP as an imported setting and a lower modeled CP as unvalidated evidence', async () => {
+    const derivedState: DashboardDerivedMetricsState = {
+      ...createDashboardDerivedMetricsMissingState(),
+      trainingSummaryStatus: 'ready',
+      trainingSummary: { asOfDayMs: 0, currentWindowDays: 28, baselineWindowDays: 84, disciplines: [] },
+      trainingCapacityStatus: 'ready',
+      trainingCapacity: {
+        asOfDayMs: Date.UTC(2026, 6, 13),
+        disciplines: [{
+          discipline: 'running', ftpSetting: null, importedVo2Max: null,
+          modeledCriticalPower: {
+            status: 'insufficient-evidence', valueWatts: null, valueWattsPerKg: null, wPrimeJoules: null,
+            confidence: null, windowDays: 90, sourceEventCount: 0, anchorPointCount: 0,
+            minDurationSeconds: null, maxDurationSeconds: null, rSquared: null, normalizedRmse: null,
+          },
+        }, {
+          discipline: 'cycling',
+          ftpSetting: {
+            kind: 'ftp-setting', value: 222, sourceKey: 'garmin', provenance: 'imported-activity-stat',
+            firstSeenAtMs: Date.UTC(2026, 0, 1), lastSeenAtMs: Date.UTC(2026, 6, 12), observationCount: 12,
+            previousValue: null, previousAtMs: null, previousSourceKey: null, changePct: null,
+          },
+          importedVo2Max: null,
+          modeledCriticalPower: {
+            status: 'ready', valueWatts: 186, valueWattsPerKg: null, wPrimeJoules: 18_000,
+            confidence: 'high', windowDays: 90, sourceEventCount: 4, anchorPointCount: 5,
+            minDurationSeconds: 180, maxDurationSeconds: 1_200, rSquared: 0.98, normalizedRmse: 0.03,
+          },
+        }],
+      },
+    };
+    const derivedMetrics = { watch: vi.fn(() => of(derivedState)), ensureForDashboard: vi.fn() };
+
+    await TestBed.configureTestingModule({
+      declarations: [TrainingWorkspaceComponent],
+      providers: [
+        { provide: AppAuthService, useValue: { user$: of({ uid: 'user-1' }) } },
+        { provide: DashboardDerivedMetricsService, useValue: derivedMetrics },
+        { provide: AppEventService, useValue: { getEventsBy: vi.fn(() => of([])) } },
+        { provide: AppSleepService, useValue: { watchForDashboard: vi.fn(() => of([])) } },
+        { provide: AppThemeService, useValue: { appTheme: () => AppThemes.Normal } },
+      ],
+      schemas: [NO_ERRORS_SCHEMA],
+    }).compileComponents();
+
+    const fixture = TestBed.createComponent(TrainingWorkspaceComponent);
+    fixture.detectChanges();
+
+    const text = fixture.nativeElement.textContent as string;
+    expect(text).toContain('FTP setting');
+    expect(text).toContain('Cycling capacity evidence');
+    expect(text).toContain('222 W');
+    expect(text).toContain('Modeled critical power');
+    expect(text).toContain('186 W');
+    expect(text).toContain('Recent efforts have not validated this FTP yet');
+    expect(text).toContain('16% below the imported setting');
+    expect(text).toContain('does not show that fitness declined.');
   });
 
   it('distinguishes benchmark card states and formats comparison deltas without a chart', () => {

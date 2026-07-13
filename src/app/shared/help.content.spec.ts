@@ -105,8 +105,13 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('**Cycling Power Curve** and **Running Power Curve** are curated derived snapshots');
     expect(gettingStartedSection?.content).toContain('defaults to **1y**');
     expect(gettingStartedSection?.content).toContain('latest activity or a saved recent-best comparison window');
-    expect(gettingStartedSection?.content).toContain('Device VO2 Max');
-    expect(gettingStartedSection?.content).toContain('never as a readiness score');
+    expect(gettingStartedSection?.content).toContain('Imported VO₂ max');
+    expect(gettingStartedSection?.content).toContain('aggregate best 3–20 minute power curve');
+    expect(gettingStartedSection?.content).toContain("95% of that activity's 20-minute best");
+    expect(gettingStartedSection?.content).toContain('without large interpolation gaps');
+    expect(gettingStartedSection?.content).toContain('inconsistent body weights');
+    expect(gettingStartedSection?.content).toContain('does not by itself mean fitness declined');
+    expect(gettingStartedSection?.content).toContain('never a readiness score');
   });
 
   it('should document that distance values follow unit preferences across the app', () => {

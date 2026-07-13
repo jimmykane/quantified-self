@@ -1,7 +1,4 @@
-import type {
-  DashboardTrainingCapacityMetric,
-  DashboardTrainingDisciplineSummary,
-} from './dashboard-derived-metrics.helper';
+import type { DashboardTrainingDisciplineSummary } from './dashboard-derived-metrics.helper';
 import {
   isDerivedMetricPendingStatus,
   type DashboardDerivedMetricStatus,
@@ -64,43 +61,6 @@ function formatAbsolute(value: number): string {
 
 function formatPercent(value: number): string {
   return new Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(Math.abs(value));
-}
-
-function resolveCapacityInsight(disciplines: readonly DashboardTrainingDisciplineSummary[]): TrainingAnalysisInsight | null {
-  const metrics: Array<{ label: string; metric: DashboardTrainingCapacityMetric }> = [];
-  disciplines.forEach((discipline) => {
-    if (discipline.vo2Max) {
-      metrics.push({ label: 'Device VO2 Max', metric: discipline.vo2Max });
-    }
-    if (discipline.ftp) {
-      metrics.push({ label: 'FTP', metric: discipline.ftp });
-    }
-    if (discipline.criticalPower) {
-      metrics.push({ label: 'Critical power', metric: discipline.criticalPower });
-    }
-  });
-
-  const trendingMetric = metrics.find(({ metric }) => metric.sourceKey && metric.trend);
-  if (trendingMetric) {
-    const direction = trendingMetric.metric.trend === 'improving'
-      ? 'is improving'
-      : trendingMetric.metric.trend === 'declining'
-        ? 'is declining'
-        : 'is stable';
-    return {
-      title: 'Capacity evidence',
-      description: `${trendingMetric.label} ${direction} in readings from ${trendingMetric.metric.sourceKey}.`,
-    };
-  }
-
-  if (metrics.some(({ metric }) => metric.latestValue !== null && !metric.sourceKey)) {
-    return {
-      title: 'Capacity evidence',
-      description: 'Latest capacity values are available, but a trend needs repeated readings from one named device.',
-    };
-  }
-
-  return null;
 }
 
 function resolveIntensityInsight(
@@ -213,11 +173,6 @@ export function buildTrainingAnalysis({ stateSignals, disciplines }: TrainingAna
   );
   if (intensityInsight) {
     insights.push(intensityInsight);
-  }
-
-  const capacityInsight = resolveCapacityInsight(disciplines);
-  if (capacityInsight) {
-    insights.push(capacityInsight);
   }
 
   return {

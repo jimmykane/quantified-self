@@ -25,9 +25,6 @@ function createDiscipline(overrides: Partial<DashboardTrainingDisciplineSummary>
       moderateSeconds: 90 * 60,
       hardSeconds: 30 * 60,
     },
-    vo2Max: null,
-    ftp: null,
-    criticalPower: null,
     ...overrides,
   };
 }
@@ -58,35 +55,4 @@ describe('buildTrainingAnalysis', () => {
     ]);
   });
 
-  it('keeps capacity evidence conservative when a source-matched trend is unavailable', () => {
-    const analysis = buildTrainingAnalysis({
-      stateSignals: { form: null, rampRate: null, fitness: null, fatigue: null },
-      disciplines: [createDiscipline({
-        current28d: {
-          periodDays: 28, windowStartDayMs: 0, windowEndDayMs: 1, activityCount: 0, durationSeconds: 0,
-          easySeconds: 0, moderateSeconds: 0, hardSeconds: 0,
-        },
-        baseline28d: {
-          periodDays: 28, windowStartDayMs: 0, windowEndDayMs: 1, activityCount: 0, durationSeconds: 0,
-          easySeconds: 0, moderateSeconds: 0, hardSeconds: 0,
-        },
-        ftp: {
-          sourceKey: null,
-          latestAtMs: 1,
-          latestValue: 250,
-          currentMedian: null,
-          baselineMedian: null,
-          currentSampleCount: 1,
-          baselineSampleCount: 0,
-          deltaPct: null,
-          trend: null,
-        },
-      })],
-    });
-
-    expect(analysis.insights).toEqual([{
-      title: 'Capacity evidence',
-      description: 'Latest capacity values are available, but a trend needs repeated readings from one named device.',
-    }]);
-  });
 });

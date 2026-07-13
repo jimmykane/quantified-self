@@ -10,7 +10,9 @@ import type {
   DerivedIntensityDistributionMetricPayload,
   DerivedMonotonyStrainMetricPayload,
   DerivedRampRateMetricPayload,
-  DerivedTrainingCapacityMetric,
+  DerivedTrainingCapacityDiscipline,
+  DerivedTrainingCapacityImportedMetric,
+  DerivedTrainingCapacityMetricPayload,
   DerivedTrainingBuildBenchmarkReference,
   DerivedTrainingBuildComparisonDiscipline,
   DerivedTrainingBuildComparisonMetricPayload,
@@ -155,8 +157,6 @@ export interface DashboardTrainingSummaryWindow {
   hardSeconds: number;
 }
 
-export type DashboardTrainingCapacityMetric = DerivedTrainingCapacityMetric;
-
 export interface DashboardTrainingDisciplineSummary extends Omit<DerivedTrainingDisciplineSummary, 'current28d' | 'baseline28d'> {
   current28d: DashboardTrainingSummaryWindow;
   baseline28d: DashboardTrainingSummaryWindow;
@@ -167,6 +167,14 @@ export interface DashboardTrainingSummaryContext {
   currentWindowDays: number;
   baselineWindowDays: number;
   disciplines: DashboardTrainingDisciplineSummary[];
+}
+
+export type DashboardTrainingCapacityImportedMetric = DerivedTrainingCapacityImportedMetric;
+export type DashboardTrainingCapacityDiscipline = DerivedTrainingCapacityDiscipline;
+
+export interface DashboardTrainingCapacityContext {
+  asOfDayMs: number;
+  disciplines: DashboardTrainingCapacityDiscipline[];
 }
 
 export type DashboardTrainingBuildWindow = DerivedTrainingBuildWindow;
@@ -327,32 +335,6 @@ function resolveDashboardTrainingSummaryWindow(value: unknown): DashboardTrainin
   };
 }
 
-function resolveDashboardTrainingCapacityMetric(value: unknown): DashboardTrainingCapacityMetric | null {
-  if (!value || typeof value !== 'object') {
-    return null;
-  }
-  const raw = value as Partial<DerivedTrainingCapacityMetric>;
-  const currentSampleCount = toFiniteNumber(raw.currentSampleCount);
-  const baselineSampleCount = toFiniteNumber(raw.baselineSampleCount);
-  if (currentSampleCount === null || baselineSampleCount === null) {
-    return null;
-  }
-  const trend = raw.trend === 'improving' || raw.trend === 'stable' || raw.trend === 'declining'
-    ? raw.trend
-    : null;
-  return {
-    sourceKey: typeof raw.sourceKey === 'string' && raw.sourceKey.trim().length ? raw.sourceKey : null,
-    latestAtMs: toFiniteNumber(raw.latestAtMs),
-    latestValue: toFiniteNumber(raw.latestValue),
-    currentMedian: toFiniteNumber(raw.currentMedian),
-    baselineMedian: toFiniteNumber(raw.baselineMedian),
-    currentSampleCount,
-    baselineSampleCount,
-    deltaPct: toFiniteNumber(raw.deltaPct),
-    trend,
-  };
-}
-
 export function resolveDashboardTrainingSummaryContext(payload: unknown): DashboardTrainingSummaryContext | null {
   const raw = (payload || {}) as Partial<DerivedTrainingSummaryMetricPayload>;
   const asOfDayMs = toFiniteNumber(raw.asOfDayMs);
@@ -379,9 +361,6 @@ export function resolveDashboardTrainingSummaryContext(payload: unknown): Dashbo
         discipline: source.discipline,
         current28d,
         baseline28d,
-        vo2Max: resolveDashboardTrainingCapacityMetric(source.vo2Max),
-        ftp: resolveDashboardTrainingCapacityMetric(source.ftp),
-        criticalPower: resolveDashboardTrainingCapacityMetric(source.criticalPower),
       };
     })
     .filter((discipline): discipline is DashboardTrainingDisciplineSummary => !!discipline);
@@ -391,6 +370,190 @@ export function resolveDashboardTrainingSummaryContext(payload: unknown): Dashbo
     baselineWindowDays,
     disciplines,
   };
+}
+
+function resolveDashboardTrainingCapacityImportedMetric(
+  value: unknown,
+  expectedKind: DerivedTrainingCapacityImportedMetric['kind'],
+): DashboardTrainingCapacityImportedMetric | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return null;
+  }
+  const raw = value as Partial<DerivedTrainingCapacityImportedMetric>;
+  const metricValue = toFiniteNumber(raw.value);
+  const firstSeenAtMs = toFiniteNumber(raw.firstSeenAtMs);
+  const lastSeenAtMs = toFiniteNumber(raw.lastSeenAtMs);
+  const observationCount = toFiniteNumber(raw.observationCount);
+  const previousValue = toFiniteNumber(raw.previousValue);
+  const previousAtMs = toFiniteNumber(raw.previousAtMs);
+  const changePct = toFiniteNumber(raw.changePct);
+  if (
+    raw.kind !== expectedKind
+    || raw.provenance !== 'imported-activity-stat'
+    || metricValue === null
+    || metricValue <= 0
+    || firstSeenAtMs === null
+    || lastSeenAtMs === null
+    || lastSeenAtMs < firstSeenAtMs
+    || observationCount === null
+    || observationCount < 1
+    || !Number.isInteger(observationCount)
+    || (previousValue !== null && previousValue <= 0)
+    || (previousAtMs !== null && previousAtMs > firstSeenAtMs)
+    || ((previousValue === null) !== (previousAtMs === null))
+    || (changePct !== null && (previousValue === null || raw.previousSourceKey !== raw.sourceKey))
+  ) {
+    return null;
+  }
+  return {
+    kind: expectedKind,
+    value: metricValue,
+    sourceKey: typeof raw.sourceKey === 'string' && raw.sourceKey.trim().length ? raw.sourceKey : null,
+    provenance: 'imported-activity-stat',
+    firstSeenAtMs,
+    lastSeenAtMs,
+    observationCount: Math.floor(observationCount),
+    previousValue,
+    previousAtMs,
+    previousSourceKey: typeof raw.previousSourceKey === 'string' && raw.previousSourceKey.trim().length
+      ? raw.previousSourceKey
+      : null,
+    changePct,
+  };
+}
+
+function resolveDashboardModeledCriticalPower(
+  value: unknown,
+): DashboardTrainingCapacityDiscipline['modeledCriticalPower'] | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return null;
+  }
+  const raw = value as Partial<DashboardTrainingCapacityDiscipline['modeledCriticalPower']>;
+  const valueWatts = toFiniteNumber(raw.valueWatts);
+  const valueWattsPerKg = toFiniteNumber(raw.valueWattsPerKg);
+  const wPrimeJoules = toFiniteNumber(raw.wPrimeJoules);
+  const sourceEventCount = toFiniteNumber(raw.sourceEventCount);
+  const anchorPointCount = toFiniteNumber(raw.anchorPointCount);
+  const minDurationSeconds = toFiniteNumber(raw.minDurationSeconds);
+  const maxDurationSeconds = toFiniteNumber(raw.maxDurationSeconds);
+  const rSquared = toFiniteNumber(raw.rSquared);
+  const normalizedRmse = toFiniteNumber(raw.normalizedRmse);
+  const status = raw.status === 'ready' || raw.status === 'insufficient-evidence' || raw.status === 'poor-fit'
+    ? raw.status
+    : null;
+  const confidence = raw.confidence === 'high' || raw.confidence === 'medium' || raw.confidence === 'low'
+    ? raw.confidence
+    : null;
+  if (
+    status === null
+    || raw.windowDays !== 90
+    || sourceEventCount === null
+    || sourceEventCount < 0
+    || !Number.isInteger(sourceEventCount)
+    || anchorPointCount === null
+    || anchorPointCount < 0
+    || !Number.isInteger(anchorPointCount)
+    || (valueWattsPerKg !== null && valueWattsPerKg <= 0)
+    || (minDurationSeconds !== null && minDurationSeconds <= 0)
+    || (maxDurationSeconds !== null && maxDurationSeconds <= 0)
+    || (minDurationSeconds !== null && maxDurationSeconds !== null && minDurationSeconds > maxDurationSeconds)
+    || (rSquared !== null && (rSquared < -1 || rSquared > 1))
+    || (normalizedRmse !== null && normalizedRmse < 0)
+  ) {
+    return null;
+  }
+  if (
+    status === 'ready'
+    && (
+      valueWatts === null
+      || valueWatts <= 0
+      || wPrimeJoules === null
+      || wPrimeJoules <= 0
+      || (confidence !== 'high' && confidence !== 'medium')
+      || sourceEventCount < (confidence === 'high' ? 3 : 1)
+      || anchorPointCount !== 5
+      || minDurationSeconds === null
+      || minDurationSeconds > 180
+      || maxDurationSeconds === null
+      || maxDurationSeconds < 1_200
+      || rSquared === null
+      || rSquared < 0.9
+      || normalizedRmse === null
+      || normalizedRmse > 0.07
+    )
+  ) {
+    return null;
+  }
+  if (
+    status === 'insufficient-evidence'
+    && (
+      raw.valueWatts !== null
+      || raw.valueWattsPerKg !== null
+      || raw.wPrimeJoules !== null
+      || raw.confidence !== null
+      || anchorPointCount >= 5
+    )
+  ) {
+    return null;
+  }
+  if (
+    status === 'poor-fit'
+    && (
+      raw.valueWatts !== null
+      || raw.valueWattsPerKg !== null
+      || raw.wPrimeJoules !== null
+      || confidence !== 'low'
+      || anchorPointCount !== 5
+    )
+  ) {
+    return null;
+  }
+  return {
+    status,
+    valueWatts: status === 'ready' ? valueWatts : null,
+    valueWattsPerKg: status === 'ready' && valueWattsPerKg !== null && valueWattsPerKg > 0 ? valueWattsPerKg : null,
+    wPrimeJoules: status === 'ready' && wPrimeJoules !== null && wPrimeJoules > 0 ? wPrimeJoules : null,
+    confidence,
+    windowDays: 90,
+    sourceEventCount: Math.floor(sourceEventCount),
+    anchorPointCount: Math.floor(anchorPointCount),
+    minDurationSeconds,
+    maxDurationSeconds,
+    rSquared,
+    normalizedRmse,
+  };
+}
+
+export function resolveDashboardTrainingCapacityContext(payload: unknown): DashboardTrainingCapacityContext | null {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+    return null;
+  }
+  const raw = payload as Partial<DerivedTrainingCapacityMetricPayload>;
+  const asOfDayMs = toFiniteNumber(raw.asOfDayMs);
+  if (raw.dayBoundary !== 'UTC' || raw.excludesMergedEvents !== true || asOfDayMs === null || !Array.isArray(raw.disciplines)) {
+    return null;
+  }
+  const disciplines = raw.disciplines.flatMap((candidate) => {
+    if (!candidate || (candidate.discipline !== 'running' && candidate.discipline !== 'cycling')) {
+      return [];
+    }
+    const ftpSetting = candidate.ftpSetting === null
+      ? null
+      : resolveDashboardTrainingCapacityImportedMetric(candidate.ftpSetting, 'ftp-setting');
+    const importedVo2Max = candidate.importedVo2Max === null
+      ? null
+      : resolveDashboardTrainingCapacityImportedMetric(candidate.importedVo2Max, 'vo2-max');
+    const modeledCriticalPower = resolveDashboardModeledCriticalPower(candidate.modeledCriticalPower);
+    if ((candidate.ftpSetting !== null && !ftpSetting) || (candidate.importedVo2Max !== null && !importedVo2Max) || !modeledCriticalPower) {
+      return [];
+    }
+    return [{ discipline: candidate.discipline, ftpSetting, importedVo2Max, modeledCriticalPower }];
+  });
+  const disciplineKinds = new Set(disciplines.map(discipline => discipline.discipline));
+  if (disciplines.length !== 2 || disciplineKinds.size !== 2) {
+    return null;
+  }
+  return { asOfDayMs, disciplines };
 }
 
 function resolveDashboardTrainingBuildWindow(value: unknown): DashboardTrainingBuildWindow | null {
