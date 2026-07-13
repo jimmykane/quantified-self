@@ -41,6 +41,7 @@ describe('TrainingBuildBenchmarkDialogComponent', () => {
     });
     functionsService.call.mockResolvedValueOnce({ data: { accepted: false } });
 
+    component.selectEvent('race-1');
     await component.save();
 
     expect(dialogRef.close).not.toHaveBeenCalled();
@@ -83,7 +84,7 @@ describe('TrainingBuildBenchmarkDialogComponent', () => {
     });
   });
 
-  it('keeps an eligible tagged race selected when switching from a manual period', () => {
+  it('requires an explicit event choice when switching from a manual period', () => {
     const { component } = createDialog({
       discipline: 'running',
       asOfDayMs: Date.UTC(2026, 0, 1),
@@ -97,7 +98,9 @@ describe('TrainingBuildBenchmarkDialogComponent', () => {
     component.selectDurationWeeks(12);
     component.selectMode('event');
 
-    expect(component.eventId).toBe('valid-for-12');
+    expect(component.eventId).toBeNull();
+    expect(component.selectedEvent).toBeNull();
+    expect(component.canSave).toBe(false);
     expect(component.visibleSuggestedRaces).toEqual([
       expect.objectContaining({ eventId: 'valid-for-8-only', isEligible: false }),
       expect.objectContaining({ eventId: 'valid-for-12', isEligible: true }),
@@ -131,7 +134,7 @@ describe('TrainingBuildBenchmarkDialogComponent', () => {
   it('orders recognizable activity summaries without relying on generic event names', () => {
     const { component } = createDialog({
       discipline: 'cycling',
-      asOfDayMs: Date.UTC(2026, 0, 1),
+      asOfDayMs: Date.UTC(2026, 3, 1),
       selection: null,
       suggestedRaces: [{
         eventId: 'race-1', startDayMs: Date.UTC(2025, 7, 12), label: 'Gran fondo',
@@ -168,6 +171,33 @@ describe('TrainingBuildBenchmarkDialogComponent', () => {
     expect(component.visibleSuggestedEvents.map(event => event.eventId)).toEqual(['event-2']);
   });
 
+  it('keeps overlapping and factless generic events out of the event picker', () => {
+    const { component } = createDialog({
+      discipline: 'running',
+      asOfDayMs: Date.UTC(2026, 0, 1),
+      selection: null,
+      suggestedRaces: [],
+      suggestedEvents: [
+        {
+          eventId: 'overlapping', startDayMs: Date.UTC(2025, 10, 1), label: 'New event',
+          distanceMeters: 15_000, durationSeconds: 5_400, trainingStressScore: 100,
+        },
+        {
+          eventId: 'factless', startDayMs: Date.UTC(2025, 8, 15), label: 'New event',
+          distanceMeters: 0.01, durationSeconds: 30, trainingStressScore: 0.4,
+        },
+        {
+          eventId: 'eligible', startDayMs: Date.UTC(2025, 8, 1), label: 'New event',
+          distanceMeters: 20_000, durationSeconds: 7_200, trainingStressScore: 120,
+        },
+      ],
+    });
+
+    expect(component.visibleSuggestedEvents.map(event => event.eventId)).toEqual(['eligible']);
+    expect(component.hiddenOverlappingEventCount).toBe(1);
+    expect(component.eventEligibilityCutoffDayMs).toBe(Date.UTC(2025, 9, 10));
+  });
+
   it('replaces loading suggestions when the derived snapshot arrives while the dialog is open', () => {
     const { component, changeDetector } = createDialog({
       discipline: 'cycling',
@@ -200,7 +230,9 @@ describe('TrainingBuildBenchmarkDialogComponent', () => {
         displayLabel: null,
       }),
     ]);
-    expect(component.eventId).toBe('event-1');
+    expect(component.eventId).toBeNull();
+    expect(component.selectedEvent).toBeNull();
+    expect(component.canSave).toBe(false);
     expect(changeDetector.markForCheck).toHaveBeenCalledTimes(1);
   });
 

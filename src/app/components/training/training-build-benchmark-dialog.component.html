@@ -1,75 +1,83 @@
 <h2 mat-dialog-title>Set {{ data.discipline === 'running' ? 'running' : 'cycling' }} benchmark</h2>
 
 <mat-dialog-content>
-  <p class="dialog-intro">Compare a historical build with the same number of weeks. Event day is excluded when it is the anchor.</p>
+  <p class="dialog-intro">Compare matching historical and current builds. Event day is excluded.</p>
 
-  <div class="dialog-field">
-    <span class="field-label">Build length</span>
-    <mat-button-toggle-group [value]="durationWeeks" (change)="selectDurationWeeks($event.value)" [disabled]="isSaving" aria-label="Build length">
-      <mat-button-toggle [value]="8">8 weeks</mat-button-toggle>
-      <mat-button-toggle [value]="10">10 weeks</mat-button-toggle>
-      <mat-button-toggle [value]="12">12 weeks</mat-button-toggle>
-    </mat-button-toggle-group>
-  </div>
+  <div class="dialog-controls">
+    <div class="dialog-field">
+      <span class="field-label">Build length</span>
+      <mat-button-toggle-group [value]="durationWeeks" (change)="selectDurationWeeks($event.value)" [disabled]="isSaving" aria-label="Build length">
+        <mat-button-toggle [value]="8"><span class="full-toggle-label">8 weeks</span><span class="compact-toggle-label">8</span></mat-button-toggle>
+        <mat-button-toggle [value]="10"><span class="full-toggle-label">10 weeks</span><span class="compact-toggle-label">10</span></mat-button-toggle>
+        <mat-button-toggle [value]="12"><span class="full-toggle-label">12 weeks</span><span class="compact-toggle-label">12</span></mat-button-toggle>
+      </mat-button-toggle-group>
+    </div>
 
-  <div class="dialog-field">
-    <span class="field-label">Reference</span>
-    <mat-button-toggle-group [value]="mode" (change)="selectMode($event.value)" [disabled]="isSaving" aria-label="Benchmark reference type">
-      <mat-button-toggle value="event">Race or event</mat-button-toggle>
-      <mat-button-toggle value="period">Manual period</mat-button-toggle>
-    </mat-button-toggle-group>
+    <div class="dialog-field">
+      <span class="field-label">Reference</span>
+      <mat-button-toggle-group [value]="mode" (change)="selectMode($event.value)" [disabled]="isSaving" aria-label="Benchmark reference type">
+        <mat-button-toggle value="event"><span class="full-toggle-label">Race or event</span><span class="compact-toggle-label">Event</span></mat-button-toggle>
+        <mat-button-toggle value="period"><span class="full-toggle-label">Manual period</span><span class="compact-toggle-label">Dates</span></mat-button-toggle>
+      </mat-button-toggle-group>
+    </div>
   </div>
 
   @if (mode === 'event') {
     @if (eventSuggestionsState === 'ready') {
       <div class="event-picker" aria-label="Race and event suggestions">
-        <section class="event-picker-section" aria-label="Tagged races">
-          <div class="event-picker-heading">
-            <div>
-              <span class="field-label">Your tagged races</span>
-              <p>Choose an existing <strong>Race</strong>-tagged event.</p>
+        @if (visibleSuggestedRaces.length) {
+          <section class="event-picker-section" aria-label="Tagged races">
+            <div class="event-picker-heading">
+              <div>
+                <span class="field-label">Your tagged races</span>
+                <p>Use an existing <strong>Race</strong>-tagged event.</p>
+              </div>
+              @if (visibleSuggestedRaces.length > displayedSuggestedRaces.length) {
+                <button mat-button type="button" (click)="toggleRaceList()" [disabled]="isSaving">Show all</button>
+              } @else if (isRaceListExpanded && visibleSuggestedRaces.length > 3) {
+                <button mat-button type="button" (click)="toggleRaceList()" [disabled]="isSaving">Show less</button>
+              }
             </div>
-            @if (visibleSuggestedRaces.length > displayedSuggestedRaces.length) {
-              <button mat-button type="button" (click)="toggleRaceList()" [disabled]="isSaving">Show all</button>
-            } @else if (isRaceListExpanded && visibleSuggestedRaces.length > 3) {
-              <button mat-button type="button" (click)="toggleRaceList()" [disabled]="isSaving">Show less</button>
-            }
-          </div>
-          <div class="event-option-list">
-            @for (race of displayedSuggestedRaces; track race.eventId) {
-              <button
-                mat-stroked-button
-                type="button"
-                class="event-option"
-                [class.event-option-selected]="race.eventId === eventId"
-                (click)="selectEvent(race.eventId)"
-                [disabled]="isSaving || !race.isEligible"
-              >
-                <span class="event-option-copy">
-                  <span class="event-option-details">{{ race.detailsText }}</span>
-                  @if (race.displayLabel) { <small>{{ race.displayLabel }}</small> }
-                  @if (!race.isEligible) { <small>Not available for this build length</small> }
-                </span>
-                <small class="event-option-date">{{ race.startDayMs | date:'mediumDate':'UTC' }}</small>
-              </button>
-            } @empty {
-              <p class="dialog-empty">No historical events are tagged exactly <strong>Race</strong> for this sport yet.</p>
-            }
-          </div>
-        </section>
+            <div class="event-option-list">
+              @for (race of displayedSuggestedRaces; track race.eventId) {
+                <button
+                  mat-stroked-button
+                  type="button"
+                  class="event-option"
+                  [class.event-option-selected]="race.eventId === eventId"
+                  (click)="selectEvent(race.eventId)"
+                  [disabled]="isSaving || !race.isEligible"
+                >
+                  <span class="event-option-copy">
+                    <span class="event-option-title">{{ race.displayLabel || (race.startDayMs | date:'mediumDate':'UTC') }}</span>
+                    <span class="event-option-details">
+                      @if (race.displayLabel) { {{ race.startDayMs | date:'mediumDate':'UTC' }} · }
+                      {{ race.detailsText }}
+                    </span>
+                    @if (!race.isEligible) { <small>Not available for this build length</small> }
+                  </span>
+                </button>
+              }
+            </div>
+          </section>
+        }
 
         <section class="event-picker-section" aria-label="Other historical events">
           <div class="event-picker-heading">
             <div>
-              <span class="field-label">Choose another event</span>
-              <p>Pick by activity facts. Selecting one adds the <strong>Race</strong> tag when you save.</p>
+              <span class="field-label">Choose an event</span>
+              @if (visibleSuggestedRaces.length) {
+                <p>Or pick by activity facts. We will add the <strong>Race</strong> tag when you save.</p>
+              } @else {
+                <p>Pick an event. If needed, we will add the <strong>Race</strong> tag when you save.</p>
+              }
             </div>
           </div>
           <div class="event-picker-filters">
             <mat-form-field appearance="outline" subscriptSizing="dynamic" class="event-date-filter">
-              <mat-label>Date</mat-label>
+              <mat-label>History</mat-label>
               <mat-select [value]="eventDateFilter" (selectionChange)="selectEventDateFilter($event.value)" [disabled]="isSaving">
-                <mat-option value="all">All shown</mat-option>
+                <mat-option value="all">All history</mat-option>
                 <mat-option value="recent">Past year</mat-option>
                 <mat-option value="earlier">Earlier history</mat-option>
               </mat-select>
@@ -83,6 +91,22 @@
               </mat-button-toggle-group>
             </div>
           </div>
+          <div class="event-eligibility-note">
+            <strong>{{ visibleSuggestedEvents.length }} eligible {{ visibleSuggestedEvents.length === 1 ? 'event' : 'events' }} through {{ eventEligibilityCutoffDayMs | date:'mediumDate':'UTC' }}</strong>
+            @if (hiddenOverlappingEventCount) {
+              <span>{{ hiddenOverlappingEventCount }} newer {{ hiddenOverlappingEventCount === 1 ? 'event is' : 'events are' }} hidden because the build would overlap your current one.</span>
+            }
+          </div>
+          @if (selectedEvent && selectedBuildStartDayMs !== null && selectedBenchmarkEndDayMs !== null) {
+            <div class="event-selection-preview">
+              <strong>{{ selectedEvent.detailsText }}</strong>
+              @if (selectedEvent.displayLabel) { <span>{{ selectedEvent.displayLabel }}</span> }
+              <span>{{ durationWeeks }}-week build: {{ selectedBuildStartDayMs | date:'mediumDate':'UTC' }} – {{ selectedBenchmarkEndDayMs | date:'mediumDate':'UTC' }} · event day excluded</span>
+              @if (selectedEventNeedsRaceTag) {
+                <span>This will add the <strong>Race</strong> tag and use this event as the anchor.</span>
+              }
+            </div>
+          }
           <div class="event-option-list event-option-list-scroll">
             @for (event of visibleSuggestedEvents; track event.eventId) {
               <button
@@ -94,31 +118,22 @@
                 [disabled]="isSaving || !event.isEligible"
               >
                 <span class="event-option-copy">
-                  <span class="event-option-details">{{ event.detailsText }}</span>
-                  @if (event.displayLabel) { <small>{{ event.displayLabel }}</small> }
-                  @if (!event.isEligible) { <small>Overlaps the current build at this length</small> }
+                  <span class="event-option-title">{{ event.displayLabel || (event.startDayMs | date:'mediumDate':'UTC') }}</span>
+                  <span class="event-option-details">
+                    @if (event.displayLabel) { {{ event.startDayMs | date:'mediumDate':'UTC' }} · }
+                    {{ event.detailsText }}
+                  </span>
                 </span>
-                <small class="event-option-date">{{ event.startDayMs | date:'mediumDate':'UTC' }}</small>
               </button>
             } @empty {
-              <p class="dialog-empty">No historical {{ data.discipline }} events in this time range.</p>
+              <p class="dialog-empty">No eligible {{ data.discipline }} events with activity details in this time range.</p>
             }
           </div>
           @if (visibleSuggestedEvents.length) {
-            <p class="event-picker-hint">Showing the latest 100 historical events for this sport.</p>
+            <p class="event-picker-hint">Choose a row to preview its exact build dates before saving.</p>
           }
         </section>
 
-        @if (selectedEvent && selectedBuildStartDayMs !== null && selectedBenchmarkEndDayMs !== null) {
-          <div class="event-selection-preview">
-            <strong>{{ selectedEvent.detailsText }}</strong>
-            @if (selectedEvent.displayLabel) { <span>{{ selectedEvent.displayLabel }}</span> }
-            <span>{{ durationWeeks }}-week build: {{ selectedBuildStartDayMs | date:'mediumDate':'UTC' }} – {{ selectedBenchmarkEndDayMs | date:'mediumDate':'UTC' }} · event day excluded</span>
-            @if (selectedEventNeedsRaceTag) {
-              <span>This will add the <strong>Race</strong> tag and use this event as the anchor.</span>
-            }
-          </div>
-        }
       </div>
     } @else {
       <div class="event-suggestions-status">

@@ -27,6 +27,7 @@ interface TrainingBuildEventOption extends DerivedTrainingBuildEventSuggestion {
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const TAGGED_RACES_COLLAPSED_LIMIT = 3;
+const EVENT_DETAILS_UNAVAILABLE = 'Activity details unavailable';
 
 export interface TrainingBuildBenchmarkDialogData {
   discipline: DerivedTrainingDiscipline;
@@ -62,6 +63,8 @@ export class TrainingBuildBenchmarkDialogComponent {
   public visibleSuggestedRaces: TrainingBuildEventOption[] = [];
   public displayedSuggestedRaces: TrainingBuildEventOption[] = [];
   public visibleSuggestedEvents: TrainingBuildEventOption[] = [];
+  public eventEligibilityCutoffDayMs = 0;
+  public hiddenOverlappingEventCount = 0;
   public eventSuggestionsState: TrainingBuildEventSuggestionsState;
   public eventDateFilter: TrainingBuildEventDateFilter = 'all';
   public eventSort: TrainingBuildEventSort = 'latest';
@@ -88,22 +91,10 @@ export class TrainingBuildBenchmarkDialogComponent {
       ? this.formatDateInput(selection.endDayMs)
       : this.formatDateInput(this.defaultPeriodEndDayMs());
     this.refreshEventOptions();
-    if (this.mode === 'event' && !this.selectedEvent) {
-      this.eventId = this.visibleSuggestedRaces.find(event => event.isEligible)?.eventId
-        || this.visibleSuggestedEvents.find(event => event.isEligible)?.eventId
-        || null;
-      this.refreshSelectedEvent();
-    }
   }
 
   public selectMode(mode: TrainingBuildReferenceMode): void {
     this.mode = mode;
-    if (mode === 'event' && !this.selectedEvent) {
-      this.eventId = this.visibleSuggestedRaces.find(event => event.isEligible)?.eventId
-        || this.visibleSuggestedEvents.find(event => event.isEligible)?.eventId
-        || null;
-      this.refreshSelectedEvent();
-    }
     this.refreshSaveActionLabel();
     this.errorMessage = null;
   }
@@ -114,12 +105,6 @@ export class TrainingBuildBenchmarkDialogComponent {
     this.data.suggestedEvents = update.suggestedEvents;
     this.eventSuggestionsState = update.state;
     this.refreshEventOptions();
-    if (this.mode === 'event' && !this.selectedEvent) {
-      this.eventId = this.visibleSuggestedRaces.find(event => event.isEligible)?.eventId
-        || this.visibleSuggestedEvents.find(event => event.isEligible)?.eventId
-        || null;
-      this.refreshSelectedEvent();
-    }
     this.changeDetector.markForCheck();
   }
 
@@ -218,9 +203,14 @@ export class TrainingBuildBenchmarkDialogComponent {
   }
 
   private refreshEventOptions(): void {
+    this.eventEligibilityCutoffDayMs = this.resolveCurrentBuildStartDayMs();
     this.visibleSuggestedRaces = this.toEventOptions(this.data.suggestedRaces);
-    this.visibleSuggestedEvents = this.toEventOptions(this.data.suggestedEvents || [])
+    const filteredEventOptions = this.toEventOptions(this.data.suggestedEvents || [])
       .filter(event => this.matchesEventPickerDateFilter(event))
+      .filter(event => this.hasUsefulEventIdentity(event));
+    this.hiddenOverlappingEventCount = filteredEventOptions.filter(event => !event.isEligible).length;
+    this.visibleSuggestedEvents = filteredEventOptions
+      .filter(event => event.isEligible)
       .sort((left, right) => this.compareSuggestedEvents(left, right));
     this.refreshDisplayedSuggestedRaces();
     this.refreshSelectedEvent();
@@ -247,6 +237,10 @@ export class TrainingBuildBenchmarkDialogComponent {
       return event.startDayMs < recentBoundaryDayMs;
     }
     return true;
+  }
+
+  private hasUsefulEventIdentity(event: TrainingBuildEventOption): boolean {
+    return !!event.displayLabel || event.detailsText !== EVENT_DETAILS_UNAVAILABLE;
   }
 
   private compareSuggestedEvents(left: TrainingBuildEventOption, right: TrainingBuildEventOption): number {
@@ -284,16 +278,18 @@ export class TrainingBuildBenchmarkDialogComponent {
   private formatEventDetails(event: DerivedTrainingBuildEventSuggestion): string {
     const details = [
       this.formatEventDistance(event.distanceMeters),
-      Number.isFinite(event.durationSeconds) ? formatSleepDuration(event.durationSeconds) : null,
-      Number.isFinite(event.trainingStressScore) ? `${new Intl.NumberFormat(undefined, {
+      Number.isFinite(event.durationSeconds) && event.durationSeconds >= 60
+        ? formatSleepDuration(event.durationSeconds)
+        : null,
+      Number.isFinite(event.trainingStressScore) && event.trainingStressScore >= 0.5 ? `${new Intl.NumberFormat(undefined, {
         maximumFractionDigits: 0,
       }).format(event.trainingStressScore)} TSS` : null,
     ].filter((detail): detail is string => !!detail && detail !== '--');
-    return details.join(' · ') || 'Activity details unavailable';
+    return details.join(' · ') || EVENT_DETAILS_UNAVAILABLE;
   }
 
   private formatEventDistance(value: number | null): string | null {
-    if (value === null || !Number.isFinite(value)) {
+    if (value === null || !Number.isFinite(value) || value < 0.5) {
       return null;
     }
     return resolveUnitAwareDisplayStat(new DataDistance(value), this.data.unitSettings, { stripRepeatedUnit: true })?.text
